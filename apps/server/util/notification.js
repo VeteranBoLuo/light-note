@@ -1,3 +1,5 @@
+import { ensureBrowserPushTables } from './browserPushSchema.js';
+import { browserPushEnabled } from './browserPushPolicy.js';
 import pool from '../db/index.js';
 // 使用无路由副作用的数据工具，避免业务 service -> common.js -> router -> Agent 的循环依赖。
 import { insertData } from './agent/data.js';
@@ -44,6 +46,14 @@ async function ensureIndex(table, indexName, ddl) {
 // 应用启动时确保通知表存在 + 补齐后续新增列(免手动 migration,与 ensureSecurityTables 同思路)
 export async function ensureNotificationTable() {
   await pool.query(CREATE_SQL);
+  await ensureColumn('notification', 'browser_push_pending', 'browser_push_pending tinyint NOT NULL DEFAULT 0');
+  await ensureColumn('notification', 'browser_push_created_at', 'browser_push_created_at datetime(6) DEFAULT NULL');
+  await ensureIndex(
+    'notification',
+    'idx_notification_push',
+    'KEY idx_notification_push (browser_push_pending, browser_push_created_at)',
+  );
+  await ensureBrowserPushTables(pool);
   // batch_id:群发批次标识(同一次发送共享),供后台「发送记录/撤回」按批聚合与操作
   await ensureColumn('notification', 'batch_id', "batch_id char(36) DEFAULT NULL COMMENT '发送批次(同批同 id)'");
   await ensureIndex('notification', 'idx_batch', 'KEY idx_batch (batch_id)');
@@ -76,12 +86,22 @@ export async function ensureNotificationTable() {
  * - 传 conn 时复用外部事务(升级通知与经验同事务,要么都成功要么都回滚,保证"升级即有通知")。
  * - userId 为空或游客直接跳过。
  * @param {string} userId 接收者
- * @param {{type:string,title:string,content?:string,link?:string,meta?:object,batchId?:string,sourceType?:string,sourceId?:string}} payload
+ * @param {{type:string,title:string,content?:string,link?:string,meta?:object,batchId?:string,sourceType?:string,sourceId?:string,id?:string}} payload
  * @param {import('mysql2/promise').PoolConnection|null} conn
  */
 export async function createNotification(
   userId,
-  { type, title, content = null, link = null, meta = null, batchId = null, sourceType = null, sourceId = null },
+  {
+    type,
+    title,
+    content = null,
+    link = null,
+    meta = null,
+    batchId = null,
+    sourceType = null,
+    sourceId = null,
+    id = null,
+  },
   conn = null,
 ) {
   if (!userId || userId === 'visitor') return;
@@ -98,9 +118,14 @@ export async function createNotification(
     sourceId,
     isRead: 0,
   });
+  if (id) row.id = id;
+  row.browser_push_pending = browserPushEnabled() ? 1 : 0;
+  // Use a database microsecond timestamp, shared with subscription eligibility.
   // 只有携带来源键的系统事实才允许幂等忽略；普通通知仍保留原先的严格 INSERT 语义。
   const [result] = await db.query(
-    sourceType && sourceId ? 'INSERT IGNORE INTO notification SET ?' : 'INSERT INTO notification SET ?',
+    id || (sourceType && sourceId)
+      ? 'INSERT IGNORE INTO notification SET ?, browser_push_created_at = CURRENT_TIMESTAMP(6)'
+      : 'INSERT INTO notification SET ?, browser_push_created_at = CURRENT_TIMESTAMP(6)',
     [row],
   );
   return Number(result?.affectedRows || 0) > 0 ? row.id : null;

@@ -375,7 +375,9 @@ export async function runRuleBatch(db) {
         const summary = {
           ...json(live.summary_json),
           aiTotal: entries.filter((e) => e.aiKinds.length).length,
-          ruleTotal: entries.filter((e) => e.suggestions.some((s) => ['empty', 'duplicate'].includes(s.kind))).length,
+          ruleTotal: entries.filter((e) =>
+            e.suggestions.some((s) => ['empty', 'duplicate', 'archive'].includes(s.kind)),
+          ).length,
           files: {
             parsed: entries.filter((e) => e.snapshot.type === 'file' && e.snapshot.evidenceLevel === 'parsed').length,
             metadata: entries.filter((e) => e.snapshot.type === 'file' && e.snapshot.evidenceLevel === 'metadata')
@@ -463,7 +465,7 @@ export async function refreshPendingSource(db, job, current) {
       const owner = items.find(
         (i) => i.resource_type === resource.snapshot.type && i.resource_id === resource.snapshot.id,
       );
-      for (const suggestion of resource.suggestions.filter((s) => ['empty', 'duplicate'].includes(s.kind))) {
+      for (const suggestion of resource.suggestions.filter((s) => ['empty', 'duplicate', 'archive'].includes(s.kind))) {
         await c.query(
           "UPDATE organize_suggestions SET status=?,payload_json=? WHERE item_id=? AND kind=? AND status IN ('pending','info','conflict')",
           [suggestion.status, JSON.stringify(suggestion), owner.id, suggestion.kind],

@@ -30,3 +30,12 @@ export const TIER_GRADIENTS: Record<Tier, string> = {
 export function tierGradient(level: number): string {
   return TIER_GRADIENTS[tierOf(level)];
 }
+
+/** 小尺寸段位胶囊：同档色相，分别保证浅色和深色表面的文字可读性。 */
+export const TIER_CHIP_COLORS: Record<Tier, { light: string; dark: string }> = {
+  1: { light: '#4b5563', dark: '#d1d5db' },
+  2: { light: '#1d4ed8', dark: '#93c5fd' },
+  3: { light: '#6d28d9', dark: '#c4b5fd' },
+  4: { light: '#92400e', dark: '#fcd34d' },
+  5: { light: '#be185d', dark: '#f9a8d4' },
+};

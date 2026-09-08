@@ -30,11 +30,16 @@ const resources = Array.from({ length: 25 }, (_, i) => ({ type, id: String(i), t
 document.documentElement.dataset.theme = params.get('theme') === 'night' ? 'night' : 'day';
 document.documentElement.classList.toggle('light-note-mobile-rendering', params.get('renderProfile') === 'mobile');
 let run: SuggestionRun | null = null;
+let archiveSubmitted = false;
 request.defaults.adapter = async (config) => {
   const url = String(config.url);
   const body = typeof config.data === 'string' ? JSON.parse(config.data) : config.data;
   let data: unknown = [];
-  if (url.endsWith('/summary')) data = null;
+  if (url.endsWith('/snapshot')) data = { archiveTask: { status: 'pending', attempts: 0 }, failedCount: 0 };
+  else if (url.endsWith('/actions') && state === 'archive') {
+    archiveSubmitted = true;
+    data = { status: 'applied', applied: 'queued' };
+  } else if (url.endsWith('/summary')) data = null;
   else if (url.endsWith('/batchSelectionPreview')) data = { resolvedItems: resources, unavailableItems: [] };
   else if (url.endsWith('/previews')) {
     counters.value.previews++;
@@ -71,16 +76,30 @@ request.defaults.adapter = async (config) => {
           resource: { ...resources[0], tags: [{ id: 'old', name: '已有标签' }], source: { folder: '' }, guards: {} },
           aiStatus: 'completed',
           ruleStatus: 'completed',
-          suggestions: [
-            {
-              id: 'suggestion',
-              kind: 'tags',
-              status: 'pending',
-              before: [{ id: 'old', name: '已有标签' }],
-              after: [{ id: 'new', name: '开发工具' }],
-              reason: '根据资料内容建议的核心主题标签',
-            },
-          ],
+          suggestions:
+            state === 'archive'
+              ? [
+                  {
+                    id: 'archive-suggestion',
+                    kind: 'archive',
+                    status: archiveSubmitted ? 'applied' : 'pending',
+                    action: 'archive',
+                    applied: archiveSubmitted ? 'queued' : undefined,
+                    before: null,
+                    after: null,
+                    reason: '尚无当前网址的正文存档；确认后在后台读取，不消耗 AI 额度',
+                  },
+                ]
+              : [
+                  {
+                    id: 'suggestion',
+                    kind: 'tags',
+                    status: 'pending',
+                    before: [{ id: 'old', name: '已有标签' }],
+                    after: [{ id: 'new', name: '开发工具' }],
+                    reason: '根据资料内容建议的核心主题标签',
+                  },
+                ],
         },
       ],
       nextCursor: null,

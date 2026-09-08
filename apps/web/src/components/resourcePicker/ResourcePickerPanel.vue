@@ -42,7 +42,10 @@
         {{
           selectAllMatching
             ? t('organizePicker.selectMatching', { count: resultTotal })
-            : batchLabel || t('toolbox.workbench.addCurrentResults')
+            : batchLabel ||
+              (exhaustive
+                ? t('toolbox.project.loaded', { count: selectableFlatItems.length })
+                : t('toolbox.workbench.addCurrentResults'))
         }}
       </BButton>
     </div>
@@ -93,7 +96,11 @@
           <span v-else class="resource-picker-panel__dot" :style="{ background: typeColor(entry.item.type) }" />
           <span class="resource-picker-panel__copy">
             <span class="resource-picker-panel__title">{{ entry.item.title }}</span>
-            <small v-if="entry.item.path">{{ entry.item.path }}</small>
+            <small v-if="exhaustive"
+              >{{ typeLabel(entry.item.type)
+              }}<template v-if="entry.item.path"> · {{ entry.item.path }}</template></small
+            >
+            <small v-else-if="entry.item.path">{{ entry.item.path }}</small>
           </span>
         </BButton>
         <BButton
@@ -279,6 +286,7 @@
       limit?: number;
       /** 单类型筛选时使用游标分页与虚拟列表浏览完整结果。 */
       exhaustiveSingleType?: boolean;
+      exhaustive?: boolean;
       singleTypePageSize?: number;
       autoFocus?: boolean;
       placeholder?: string;
@@ -373,9 +381,12 @@
     limit: props.limit,
     perType: props.perType,
     exhaustiveSingleType: props.exhaustiveSingleType,
+    exhaustive: props.exhaustive,
     singleTypePageSize: props.singleTypePageSize,
   });
-  const virtualizedMode = computed(() => props.exhaustiveSingleType && (props.allowedTypes || []).length === 1);
+  const virtualizedMode = computed(
+    () => props.exhaustive || (props.exhaustiveSingleType && (props.allowedTypes || []).length === 1),
+  );
 
   function beginPageScrollTransition() {
     const panel = panelRef.value;
@@ -687,8 +698,8 @@
     return entries;
   });
   const virtualTotalCount = computed(() =>
-    hasMore.value && !loadMoreFailed.value
-      ? Math.max(resultTotal.value, virtualOptions.value.length)
+    hasMore.value || loadMoreFailed.value
+      ? Math.max(resultTotal.value + scopeEntries.value.length, virtualOptions.value.length)
       : virtualOptions.value.length,
   );
 

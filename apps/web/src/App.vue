@@ -42,6 +42,7 @@
         <AndroidDownloadProgress v-if="isAndroidApp && !publicStandaloneRoute" />
         <DisplayScaleSuggestion v-if="!publicStandaloneRoute" />
         <ResourceBatchTagsHost v-if="!publicStandaloneRoute" />
+        <ResourceProjectHost v-if="!publicStandaloneRoute" />
         <ResourceSelectionDrawer v-if="!publicStandaloneRoute" />
         <AdminContextBanner v-if="user.adminContext && !publicStandaloneRoute" />
         <QuickCaptureModal
@@ -54,9 +55,14 @@
   </div>
 </template>
 <script setup lang="ts">
+  import { syncBrowserPushOwner } from '@/composables/useBrowserPush';
+  import { openNotificationPanel } from '@/utils/notificationEntry';
+  import { useNotification } from '@/composables/useNotification';
+  import ResourceProjectHost from '@/components/resourceActions/ResourceProjectHost.vue';
   import ResourceBatchTagsHost from '@/components/resourceActions/ResourceBatchTagsHost.vue';
   import ResourceSelectionDrawer from '@/components/resourceActions/ResourceSelectionDrawer.vue';
   import { useResourceSelectionRuntime } from '@/composables/useResourceSelection';
+  import { useUserActivity } from '@/composables/useUserActivity';
   import { bookmarkStore, inboxStore, useUserStore } from '@/store';
   import { useGrowth } from '@/composables/useGrowth';
   import { onMounted, onBeforeUnmount, watch, computed, defineAsyncComponent, nextTick, provide, ref } from 'vue';
@@ -129,6 +135,7 @@
 
   const router = useRouter();
   const user = useUserStore();
+  useUserActivity();
   useResourceSelectionRuntime();
   const bookmark = bookmarkStore();
   const inbox = inboxStore();
@@ -349,6 +356,35 @@
     'noteShare',
   ];
   const applicationAuthStatus = ref<ApplicationAuthStatus>('pending');
+  watch(
+    () => [applicationAuthStatus.value, user.id, user.role] as const,
+    ([status, id, role]) => {
+      if (status === 'ready' && !user.adminContext && !isAdminLoginPreview())
+        void syncBrowserPushOwner(role === 'visitor' ? '' : String(id || ''));
+    },
+    { immediate: true },
+  );
+  function onBrowserPushMessage(event: MessageEvent) {
+    if (event.data?.userId !== user.id || applicationAuthStatus.value !== 'ready') return;
+    if (event.data?.type === 'push.received') void useNotification().refreshUnread();
+    if (event.data?.type === 'push.open') {
+      const id = String(event.data.notificationId || '');
+      if (!/^[a-f0-9-]{36}$/i.test(id)) return;
+      if (router.currentRoute.value.name === 'notifications') {
+        void router.replace({ name: 'notifications', query: { notificationId: id, pushOwner: user.id } });
+        openNotificationPanel(id);
+      } else if (bookmark.isMobile) {
+        void router.push({ name: 'notifications', query: { notificationId: id, pushOwner: user.id } });
+      } else {
+        if (!openNotificationPanel(id))
+          void router.push({ name: 'notifications', query: { notificationId: id, pushOwner: user.id } });
+      }
+      event.ports[0]?.postMessage('handled');
+    }
+  }
+  onMounted(() => navigator.serviceWorker?.addEventListener('message', onBrowserPushMessage));
+  onBeforeUnmount(() => navigator.serviceWorker?.removeEventListener('message', onBrowserPushMessage));
+
   const applicationAuthGateVisible = computed(() => {
     const route = router.currentRoute.value;
     const routeName = String(route.name || '');

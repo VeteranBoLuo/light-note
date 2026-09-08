@@ -3,6 +3,7 @@ import mysql from 'mysql2/promise';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { createReadOnlyPool } from '../util/readOnlyDatabase.js';
 import { assertDatabaseConnectionSafety } from '../util/databaseConnectionSafety.js';
 
 // 优先加载 .env（无论谁先导入本模块，都保证 env 已就绪）
@@ -13,11 +14,12 @@ const databaseSafety = assertDatabaseConnectionSafety(process.env);
 
 if (!isTestRuntime) {
   console.log(
-    '[database-safety] runtime=%s source=%s database=%s remoteOverride=%s',
+    '[database-safety] runtime=%s source=%s database=%s remoteOverride=%s access=%s',
     databaseSafety.runtime,
     databaseSafety.runtimeSource,
     databaseSafety.databaseScope,
     databaseSafety.remoteWriteOverride ? 'enabled' : 'disabled',
+    databaseSafety.readOnly ? 'read-only' : 'read-write',
   );
 }
 
@@ -27,7 +29,7 @@ function testDatabaseDisabled() {
   throw error;
 }
 
-const pool = isTestRuntime
+const basePool = isTestRuntime
   ? {
       query: testDatabaseDisabled,
       execute: testDatabaseDisabled,
@@ -47,6 +49,8 @@ const pool = isTestRuntime
       keepAliveInitialDelay: 10000,
     });
 
+const pool = databaseSafety.readOnly && !isTestRuntime ? createReadOnlyPool(basePool) : basePool;
+
 if (!isTestRuntime) {
   pool
     .getConnection()
@@ -62,7 +66,7 @@ if (!isTestRuntime) {
       } else if (err.code === 'ECONNREFUSED') {
         console.error('Database connection was refused.');
       } else {
-        console.error(err.message);
+        console.error('Database connection failed code=%s', String(err?.code || 'DATABASE_UNAVAILABLE'));
       }
     });
 }

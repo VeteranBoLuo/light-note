@@ -891,3 +891,5 @@ export const OFFICIAL_HOST = 'boluo66.top';
  * 对外传播（群聊、文档、二维码）只发这一个；它 302 到当前版本的实际文件。
  */
 export const ANDROID_LATEST_APK_PATH = '/api/app/android/latest.apk';
+
+export * from './imagePreviewProtocol.js';

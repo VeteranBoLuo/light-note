@@ -134,7 +134,7 @@ export function analyzeKnowledgeStructure(
   for (const node of nodes) {
     const updatedTime = new Date(node.updatedAt || 0).getTime();
     if (node.invalidParent) issueItems.push(issue('invalid_parent', 'high', node, '父级目录缺失或结构形成循环'));
-    if (node.contentEmpty) issueItems.push(issue('empty', 'high', node, '正文没有可阅读内容'));
+    if (node.contentEmpty && node.childCount === 0) issueItems.push(issue('empty', 'high', node, '正文没有可阅读内容'));
     if (!normalizeTitle(node.title) || ['未命名文档', 'untitled'].includes(normalizeTitle(node.title))) {
       issueItems.push(issue('untitled', 'medium', node, '标题无法帮助检索与识别内容'));
     }

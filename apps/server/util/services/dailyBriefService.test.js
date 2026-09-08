@@ -501,7 +501,7 @@ describe('dailyBriefService', () => {
     const [todoSql, todoParams] = database.query.mock.calls[0];
     expect(todoParams[2]).toBe('2026-09-04');
     expect(todoSql).toContain('id, title, due_at, occurrence_date');
-    expect(facts).toHaveLength(11);
+    expect(facts).toHaveLength(14);
     expect(facts.find((fact) => fact.id === 'note_created_today')).toMatchObject({ count: 6, revision: '123:456' });
     const [inventorySql] = database.query.mock.calls.find(([sql]) => sql.includes('organize_issue_suppressions'));
     expect(inventorySql).toContain("SELECT 'file' AS resource_type");

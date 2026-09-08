@@ -24,7 +24,8 @@ Vite 开发服务器的 REST、上传写入、Worker 和实时代理固定指向
 ### 数据库环境隔离
 
 - HTTP、Worker 和脚本都通过 `apps/server/db/index.js` 建立数据库连接。
-- 本地只允许回环地址或 Unix Socket；远程地址默认以 `REMOTE_DATABASE_WRITE_BLOCKED` 失败关闭。
+- 本地默认只允许回环地址或 Unix Socket；远程地址默认以 `REMOTE_DATABASE_WRITE_BLOCKED` 失败关闭。
+- 当前任务明确授权远程只读检查时，可在一次性进程环境设置 `ALLOW_REMOTE_DATABASE_READS=true`（同时保持 `ALLOW_REMOTE_DATABASE_WRITES=false`）。连接适配器仅开放 SELECT/SHOW/DESCRIBE/EXPLAIN SELECT，并在每次连接借出前设置 MySQL 只读事务模式；拒绝写入、导出文件、锁定读取和多语句。只读与写入开关同时启用时失败关闭，不把授权写入 `.env` 或用于启动业务后端/Worker。
 - 本地使用 `LIGHTNOTE_RUNTIME_ENV=local` 与 `ALLOW_REMOTE_DATABASE_WRITES=false`；生产必须显式设置 `LIGHTNOTE_RUNTIME_ENV=production`。
 - 远程写入只允许在当前任务明确授权后，用一次性进程环境开启；不得写回本地 `.env`。
 - 测试环境禁用真实数据库适配器，不加载真实凭据。代码默认主机固定为 `127.0.0.1`，禁止提交生产地址或账号。
@@ -126,7 +127,7 @@ try {
 - 异步请求绑定业务目标和请求世代；筛选、身份或目标变化时取消/忽略旧响应。
 - 乐观更新必须有完整回滚；写操作后只失效受影响读模型，不用全页刷新掩盖缓存问题。
 - 持续增长的列表由服务端分页/游标和前端虚拟化共同约束；虚拟化不能代替慢查询治理。
-- 静默刷新保留旧数据，不闪骨架、不清空列表；页面隐藏时停止轮询。
+- 切换与刷新遵守[视觉稳定性](./design.md#切换与刷新时的视觉稳定性)，加载状态不得导致无关区域闪动；页面隐藏时停止轮询。
 
 ### 国际化、主题与层级
 

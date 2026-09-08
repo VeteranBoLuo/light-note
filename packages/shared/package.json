@@ -64,6 +64,10 @@
     "./ai-usage-modules": {
       "types": "./aiUsageModules.d.ts",
       "default": "./aiUsageModules.js"
+    },
+    "./notification-presentation": {
+      "types": "./notificationPresentation.d.ts",
+      "default": "./notificationPresentation.js"
     }
   },
   "devDependencies": {

@@ -147,3 +147,19 @@ it('追加模式只接受显式范围并在归一化后保留，旧选项不改�
   expect(() => normalizeRunInput({ ...input, scope: 'all', items: [], tagMode: 'append' })).toThrow();
   expect(() => normalizeRunInput({ ...input, tagMode: 'replace' })).toThrow();
 });
+
+it('仅正文存档也可创建书签整理，排除笔记与文件且不调用 AI', () => {
+  expect(
+    normalizeRunInput({ resourceTypes: ['bookmark', 'note', 'file'], checks: ['archive'], scope: 'all' }).resourceTypes,
+  ).toEqual(['bookmark']);
+  const rows = buildRuleSuggestions(
+    [
+      buildSnapshot('bookmark', { id: 'b', url: 'https://example.com' }),
+      buildSnapshot('bookmark', { id: 'saved', url: 'https://example.org', hasArchive: true }),
+    ],
+    ['archive'],
+  );
+  expect(rows[0].suggestions[0]).toMatchObject({ kind: 'archive', status: 'pending', action: 'archive' });
+  expect(rows[0].aiKinds).toEqual([]);
+  expect(rows[1].suggestions[0]).toMatchObject({ status: 'no_suggestion' });
+});

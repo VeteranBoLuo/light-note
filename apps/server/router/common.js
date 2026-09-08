@@ -12,6 +12,8 @@ import {
 import { getAdminOperationAudits } from '../router_handle/adminAuditHandle.js';
 import { updateAdminAiFeedbackTriage } from '../router_handle/adminAiFeedbackHandle.js';
 import { getAdminGovernance, getAdminProductInsights } from '../router_handle/adminInsightsHandle.js';
+import { recordUserActivity, getAdminOverviewActiveUsers } from '../router_handle/userActivityHandle.js';
+import { userActivityRateLimiter } from '../util/requestRateLimit.js';
 import { recordAiEvent } from '../router_handle/aiTelemetryHandle.js';
 
 router.post('/getApiLogs', commonHandle.getApiLogs);
@@ -23,6 +25,8 @@ router.post('/clearApiLogs', commonHandle.clearApiLogs);
 router.post('/recordOperationLogs', commonHandle.recordOperationLogs);
 
 router.post('/recordAiEvent', recordAiEvent);
+router.post('/recordUserActivity', userActivityRateLimiter, recordUserActivity);
+router.post('/getAdminOverviewActiveUsers', getAdminOverviewActiveUsers);
 
 router.post('/recordConversion', commonHandle.recordConversion);
 

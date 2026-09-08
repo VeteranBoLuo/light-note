@@ -1,3 +1,4 @@
+import { validatePushSubscription } from '../browserPushPolicy.js';
 import { MAX_BOOKMARK_INPUT_LENGTH } from '@lightnote/shared';
 import { DRAWING_SCENE_MAX_BYTES } from '@lightnote/shared/drawing-note';
 import {
@@ -43,6 +44,55 @@ const policy = ({
 // 这里只声明“通用安全检测如何理解字段”，不取代业务 handler 的权威内容校验。
 // 路由、字段、语义和容量预算必须一起命中；形态不符或超限时仍回到通用签名/异常检测。
 const REQUEST_FIELD_POLICIES = new Map([
+  [
+    'POST /notification/browser/subscribe',
+    new Map([
+      [
+        'body.subscription.endpoint',
+        policy({
+          semantic: 'web-push-provider-endpoint',
+          maxSize: 2048,
+          accepts: (_value, context) => {
+            try {
+              validatePushSubscription(context.body?.subscription);
+              return true;
+            } catch {
+              return false;
+            }
+          },
+          skipSignatureRules: '*',
+          fallbackContext: 'identifier',
+        }),
+      ],
+      [
+        'body.subscription.keys.p256dh',
+        policy({
+          semantic: 'web-push-p256dh',
+          maxSize: 87,
+          accepts: (value) =>
+            typeof value === 'string' &&
+            /^[A-Za-z0-9_-]{87}$/.test(value) &&
+            Buffer.from(value, 'base64url').length === 65 &&
+            Buffer.from(value, 'base64url')[0] === 4,
+          skipSignatureRules: '*',
+          fallbackContext: 'identifier',
+        }),
+      ],
+      [
+        'body.subscription.keys.auth',
+        policy({
+          semantic: 'web-push-auth',
+          maxSize: 22,
+          accepts: (value) =>
+            typeof value === 'string' &&
+            /^[A-Za-z0-9_-]{22}$/.test(value) &&
+            Buffer.from(value, 'base64url').length === 16,
+          skipSignatureRules: '*',
+          fallbackContext: 'identifier',
+        }),
+      ],
+    ]),
+  ],
   [
     'POST /daily-review/items/:id/action',
     new Map([

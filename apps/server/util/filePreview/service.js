@@ -662,8 +662,8 @@ export async function cleanupStaleFilePreviewArtifacts() {
     : 30;
   let cleaned = 0;
   const [failedOutputs] = await pool.query(
-    `SELECT id, output_object_key FROM file_preview_jobs
-     WHERE status = 'failed' AND output_object_key IS NOT NULL LIMIT 100`,
+    `SELECT j.id, j.output_object_key FROM file_preview_jobs j JOIN file_preview_artifacts a ON a.id=j.artifact_id
+     WHERE a.source_type <> 'image_asset' AND j.status = 'failed' AND output_object_key IS NOT NULL LIMIT 100`,
   );
   for (const job of failedOutputs) {
     try {
@@ -690,11 +690,10 @@ export async function cleanupStaleFilePreviewArtifacts() {
              AND chat_file.status = 'attached' AND chat_file.object_key IS NOT NULL AND chat_file.expires_at > NOW()
        WHERE (a.source_type = 'cloud_file' AND cloud_file.id IS NULL)
           OR (a.source_type = 'community_chat_file' AND chat_file.id IS NULL)
-          OR (a.source_type NOT IN ('cloud_file', 'community_chat_file'))
-          OR a.strategy IN ('image_thumbnail', 'image_display')
+          OR (a.source_type NOT IN ('cloud_file', 'community_chat_file', 'image_asset'))
           OR a.error_code = ?
           OR (
-         COALESCE(a.last_access_at, a.update_time) < DATE_SUB(NOW(), INTERVAL ${retentionDays} DAY)
+         a.source_type <> 'image_asset' AND COALESCE(a.last_access_at, a.update_time) < DATE_SUB(NOW(), INTERVAL ${retentionDays} DAY)
          AND a.status IN ('ready', 'failed')
        )
        ORDER BY a.update_time ASC LIMIT 100`,
@@ -717,11 +716,10 @@ export async function cleanupStaleFilePreviewArtifacts() {
          WHERE a.id = ? AND (
            (a.source_type = 'cloud_file' AND cloud_file.id IS NULL)
            OR (a.source_type = 'community_chat_file' AND chat_file.id IS NULL)
-           OR (a.source_type NOT IN ('cloud_file', 'community_chat_file'))
-          OR a.strategy IN ('image_thumbnail', 'image_display')
+           OR (a.source_type NOT IN ('cloud_file', 'community_chat_file', 'image_asset'))
            OR a.error_code = ?
            OR (
-             COALESCE(a.last_access_at, a.update_time) < DATE_SUB(NOW(), INTERVAL ${retentionDays} DAY)
+             a.source_type <> 'image_asset' AND COALESCE(a.last_access_at, a.update_time) < DATE_SUB(NOW(), INTERVAL ${retentionDays} DAY)
              AND a.status IN ('ready', 'failed')
            )
          )`,

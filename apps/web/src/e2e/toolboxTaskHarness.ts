@@ -5,10 +5,11 @@ import { createI18n } from 'vue-i18n';
 import { createMemoryHistory, createRouter, RouterView } from 'vue-router';
 import globalDirect from '@/config/globalDirect';
 import { RoleEnum } from '@/config/bookmarkCfg';
-import request from '@/http/request';
+import request from '@/http/request.ts';
 import enUS from '@/i18n/locales/en-US';
 import zhCN from '@/i18n/locales/zh-CN';
 import { bookmarkStore, useUserStore } from '@/store';
+import BViewer from '@/components/base/Viewer/BViewer.vue';
 import ToolboxTask from '@/view/toolbox/ToolboxTask.vue';
 import '@/assets/css/index.less';
 
@@ -16,6 +17,12 @@ const params = new URLSearchParams(window.location.search);
 const state = ['queued', 'retrying', 'processing', 'success', 'partial', 'failed'].includes(params.get('state') || '')
   ? String(params.get('state'))
   : 'partial';
+const toolId =
+  params.get('tool') === 'study_kit'
+    ? 'study_kit'
+    : params.get('tool') === 'concept_map'
+      ? 'concept_map'
+      : 'research_brief';
 const theme = params.get('theme') === 'night' ? 'night' : 'day';
 const locale = params.get('locale') === 'en-US' ? 'en-US' : 'zh-CN';
 const now = new Date('2026-08-29T01:20:00+08:00').toISOString();
@@ -39,7 +46,8 @@ function jobFixture() {
             : state;
   return {
     id: 'visual-toolbox-job',
-    toolId: 'research_brief',
+    sourceWorkspaceId: params.has('source') ? 'visual-project' : null,
+    toolId,
     status,
     stage:
       state === 'queued'
@@ -89,26 +97,31 @@ function artifactFixture() {
   return {
     id: 'visual-toolbox-artifact',
     jobId: 'visual-toolbox-job',
-    toolId: 'research_brief',
+    toolId,
     type: 'research_brief',
     version: 1,
     title: '小团队知识库方案研究简报',
-    content: [
-      '> 草稿已生成 · 待核验',
-      '',
-      '# 核心判断',
-      '',
-      '对于十人以内、重视部署可控性的团队，优先选择维护成本可预测的方案 [1]。如果更看重协作生态，再评估托管服务 [2]。',
-      '',
-      '## 判断依据',
-      '',
-      '- 自托管方案的数据边界更清晰，但需要承担升级与备份成本。[1]',
-      '- 托管方案上线更快，但长期成本与数据迁移能力需要单独核验。[2] [3]',
-      '',
-      '> 建议先用两周试点验证权限、检索质量和导出能力。',
-      '',
-      '代码示例中的 `rows[1]` 应继续保留。',
-    ].join('\n'),
+    content:
+      toolId === 'concept_map'
+        ? params.get('invalid')
+          ? '```mermaid\ngraph TD; A --> [\n```'
+          : '```mermaid\ngraph TD; A[所选资料] --> B[核心概念]; A --> C[证据]; B --> D[结论]\n```'
+        : [
+            '> 草稿已生成 · 待核验',
+            '',
+            '# 核心判断',
+            '',
+            '对于十人以内、重视部署可控性的团队，优先选择维护成本可预测的方案 [1]。如果更看重协作生态，再评估托管服务 [2]。',
+            '',
+            '## 判断依据',
+            '',
+            '- 自托管方案的数据边界更清晰，但需要承担升级与备份成本。[1]',
+            '- 托管方案上线更快，但长期成本与数据迁移能力需要单独核验。[2] [3]',
+            '',
+            '> 建议先用两周试点验证权限、检索质量和导出能力。',
+            '',
+            '代码示例中的 `rows[1]` 应继续保留。',
+          ].join('\n'),
     contentType: 'markdown',
     sources: [
       {
@@ -197,7 +210,31 @@ function artifactFixture() {
           : []),
       ],
     },
-    meta: { draftState: 'needs_verification', sourceCount: 3 },
+    meta: {
+      draftState: 'needs_verification',
+      sourceCount: 3,
+      ...(toolId === 'study_kit'
+        ? {
+            study: {
+              version: 1,
+              cards: [
+                {
+                  id: 'card-a',
+                  kind: 'flashcard',
+                  question: '为什么要验证来源？',
+                  answer: '确认结论是否有可核对的依据。',
+                },
+                {
+                  id: 'card-b',
+                  kind: 'quiz',
+                  question: '部分读取可以代表全文吗？',
+                  answer: '不能，需要保留读取范围与限制。',
+                },
+              ],
+            },
+          }
+        : {}),
+    },
     save: { status: 'unsaved' },
     createdAt: now,
     expiresAt: new Date('2026-11-27T01:20:00+08:00').toISOString(),
@@ -215,7 +252,30 @@ function response(config: any, data: unknown) {
   };
 }
 
+let joinAttempts = 0;
 request.defaults.adapter = async (config) => {
+  if (config.url === '/api/toolbox/artifacts/visual-toolbox-artifact/study') {
+    const key = 'workshop-visual-study';
+    const mastered = JSON.parse(sessionStorage.getItem(key) || '{}');
+    if (config.method === 'post') {
+      const input = JSON.parse(String(config.data));
+      mastered[input.cardId] = input.mastered;
+      sessionStorage.setItem(key, JSON.stringify(mastered));
+    }
+    return response(config, { cards: Object.entries(mastered).map(([id, value]) => ({ id, mastered: value })) });
+  }
+  if (config.url === '/api/toolbox/workspaces')
+    return response(config, {
+      items: params.has('source')
+        ? [{ id: 'visual-project', title: '来源研究项目', kind: 'research', status: 'active' }]
+        : [],
+    });
+  if (config.url === '/api/toolbox/workspaces/visual-project/resources') {
+    if (params.has('linkFailure') && joinAttempts++ === 0) throw new Error('Simulated link failure');
+    return response(config, { workspace: {}, resources: [] });
+  }
+  if (String(config.url).includes('/note/')) return response(config, { items: [], total: 0 });
+  if (String(config.url).includes('telemetry')) return response(config, {});
   if (config.url === '/api/toolbox/jobs/visual-toolbox-job') return response(config, jobFixture());
   if (config.url === '/api/toolbox/artifacts/visual-toolbox-artifact') return response(config, artifactFixture());
   if (config.url === '/api/toolbox/artifacts/visual-toolbox-artifact/save') {
@@ -253,7 +313,7 @@ const router = createRouter({
 await router.push('/toolbox/task/visual-toolbox-job');
 
 const pinia = createPinia();
-const app = createApp({ render: () => h(RouterView) });
+const app = createApp({ render: () => [h(RouterView), ...(bookmarkStore(pinia).viewerKey ? [h(BViewer)] : [])] });
 app.use(pinia);
 app.use(router);
 app.use(

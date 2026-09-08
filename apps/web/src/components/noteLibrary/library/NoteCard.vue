@@ -36,20 +36,8 @@
           {{ previewTextBeforeImage }}
         </div>
         <div class="note-preview-media" aria-hidden="true">
-          <img
-            class="note-preview-image"
-            :class="{ 'is-loaded': previewImageLoaded }"
-            :src="displayPreviewImageUrl"
-            alt=""
-            width="720"
-            height="405"
-            loading="lazy"
-            decoding="async"
-            fetchpriority="low"
-            draggable="false"
-            @load="previewImageLoaded = true"
-            @error="handlePreviewImageError"
-          />
+          <ManagedImagePreview class="note-preview-image is-loaded"
+            :source="{ sourceType: 'note', sourceId: String(note.id) }" :initial="note.imagePreview" />
         </div>
         <div v-if="previewTextAfterImage" class="note-content note-content--segment">
           {{ previewTextAfterImage }}
@@ -122,7 +110,7 @@
   import NoteParentLink from '@/components/noteLibrary/library/NoteParentLink.vue';
   import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
   import { useNoteCardPreview } from '@/composables/useNoteSummary';
-  import { notePreviewOriginalImageUrl } from '@/utils/noteSummary';
+  import ManagedImagePreview from '@/components/imagePreview/ManagedImagePreview.vue';
   import { getNoteParentPathText, getNoteParentTargetId } from '@/utils/noteTree';
   import { prefetchResolvedRoute } from '@/utils/routePrefetch';
   import { prefetchNoteDetail } from '@/api/noteDetailPrefetch';
@@ -177,36 +165,7 @@
   const drawingPreviewContent = computed(() => String(props.note?.content || props.note?.previewSummary || '').trim());
   const parentPathText = computed(() => getNoteParentPathText(props.note || {}));
   const parentTargetId = computed(() => getNoteParentTargetId(props.note || {}));
-  const previewImageFailed = ref(false);
-  const previewImageLoaded = ref(false);
-  const previewImageUrl = computed(() => String(props.note?.previewImageUrl || '').trim());
-  const displayPreviewImageUrl = ref('');
-  const hasPreviewImage = computed(
-    () => !isDrawingNote.value && Boolean(previewImageUrl.value) && !previewImageFailed.value,
-  );
-
-  watch(
-    previewImageUrl,
-    (url) => {
-      displayPreviewImageUrl.value = url;
-      previewImageFailed.value = false;
-      previewImageLoaded.value = false;
-    },
-    { immediate: true },
-  );
-
-  function handlePreviewImageError() {
-    const hostname = typeof window === 'undefined' ? '' : window.location.hostname;
-    const isLocalDevelopment = import.meta.env.DEV && ['localhost', '127.0.0.1', '::1', '[::1]'].includes(hostname);
-    const originalImageUrl = notePreviewOriginalImageUrl(previewImageUrl.value);
-    if (isLocalDevelopment && originalImageUrl && displayPreviewImageUrl.value !== originalImageUrl) {
-      // 本机通常没有生产 /www 缩略图目录；仅开发环境回退原图，线上/App 始终使用压缩图。
-      displayPreviewImageUrl.value = originalImageUrl;
-      previewImageLoaded.value = false;
-      return;
-    }
-    previewImageFailed.value = true;
-  }
+  const hasPreviewImage = computed(() => !isDrawingNote.value && Boolean(props.note?.imagePreview || props.note?.previewImageUrl));
 
   const MAX_VISIBLE_TAGS = 3;
   const visibleTags = computed(() => (props.note.tags || []).slice(0, MAX_VISIBLE_TAGS));

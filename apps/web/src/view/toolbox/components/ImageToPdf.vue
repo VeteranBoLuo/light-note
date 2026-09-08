@@ -159,6 +159,10 @@
     previewUrl: string;
   }
 
+  import { usePdfSession } from './pdfSession';
+  const publishPdf = usePdfSession(async () =>
+    result.value ? [new File([result.value.blob], result.value.fileName, { type: 'application/pdf' })] : [],
+  );
   const { t } = useI18n();
   const entries = ref<ImageEntry[]>([]);
   const pageSize = ref<ImagePdfPageSize>('a4');
@@ -240,6 +244,7 @@
         { pageSize: pageSize.value, orientation: orientation.value, margin: margin.value, quality: quality.value },
         (completed) => (progress.value = completed),
       );
+      publishPdf();
       message.success(t('toolbox.local.pdfGenerated'));
     } catch (error) {
       showError(error);

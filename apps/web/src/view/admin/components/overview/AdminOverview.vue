@@ -176,11 +176,23 @@
       运行与待办健康 <span class="ov-section-tip">系统运行、事项积压与完成情况</span>
     </p>
     <ul v-if="data" class="admin-stats ov-health-stats">
-      <li class="admin-stat-card">
-        <span class="admin-stat-label">活跃用户</span>
-        <strong class="admin-stat-value">{{ n(data?.active.today) }}</strong>
-        <span class="admin-stat-hint">{{ t('adminOverview.activeUserHint') }}</span>
-        <span v-if="baselineText('activeUsers')" class="ov-today__baseline">{{ baselineText('activeUsers') }}</span>
+      <li class="admin-stat-card ov-today__stat-card">
+        <BButton
+          block
+          class="ov-today__stat-action"
+          :aria-label="t('adminActivity.view')"
+          @click="activeDrawerOpen = true"
+        >
+          <span class="admin-stat-label">活跃用户</span>
+          <strong class="admin-stat-value">{{ n(data?.active.today) }}</strong>
+          <span class="admin-stat-hint">{{ t('adminOverview.activeUserHint') }}</span>
+          <span class="ov-today__baseline">{{ baselineText('activeUsers') || t('adminActivity.noBaseline') }}</span>
+          <span v-if="data.active?.available === false" class="admin-stat-hint">{{
+            t('adminActivity.unavailable')
+          }}</span>
+          <span v-else-if="data.active?.partialToday" class="admin-stat-hint">{{ t('adminActivity.partial') }}</span>
+          <span class="ov-today__stat-link">{{ t('adminActivity.view') }}</span>
+        </BButton>
       </li>
       <li class="admin-stat-card">
         <span class="admin-stat-label">AI 模型动作</span>
@@ -269,6 +281,12 @@
         @filter-change="changeRecentFilter"
       />
     </div>
+    <AdminActiveUsersDrawer
+      :open="activeDrawerOpen"
+      :hide-internal="hideInternal"
+      @close="activeDrawerOpen = false"
+      @snapshot="syncActiveSnapshot"
+    />
   </AdminDataPage>
 </template>
 
@@ -281,6 +299,8 @@
   import router from '@/router';
   import { bookmarkStore } from '@/store';
   import AdminGrowthTrendCard from './AdminGrowthTrendCard.vue';
+  import AdminActiveUsersDrawer from './AdminActiveUsersDrawer.vue';
+  import type { ActiveUsersPage } from '@/api/userActivity';
   import AdminRecentAdditions from './AdminRecentAdditions.vue';
   import {
     buildAdminTodayInsights,
@@ -310,6 +330,21 @@
   const { t } = useI18n();
   const data = ref<any>(null);
   const hideInternal = ref(true);
+  const activeDrawerOpen = ref(false);
+  let activeDetailSnapshot: ActiveUsersPage | null = null;
+  function syncActiveSnapshot(page: ActiveUsersPage) {
+    if (!data.value || page.hideInternal !== hideInternal.value) return;
+    if (data.value.active?.snapshotAt && data.value.active.snapshotAt > page.snapshotAt) return;
+    activeDetailSnapshot = page;
+    data.value.active = {
+      ...data.value.active,
+      snapshotAt: page.snapshotAt,
+      available: true,
+      today: page.total,
+      partialToday: page.partialToday,
+      startedAt: page.startedAt,
+    };
+  }
   const loading = ref(false);
   const loadError = ref(false);
   const trendLoading = ref(false);
@@ -531,6 +566,15 @@
         },
         todayBaseline: previousHistory?.todayBaseline || response.data.todayBaseline,
       };
+      if (
+        data.value.active?.available &&
+        data.value.active?.snapshotAt &&
+        activeDetailSnapshot &&
+        activeDetailSnapshot.hideInternal === hideInternalValue &&
+        activeDetailSnapshot.snapshotAt >= (data.value.active?.snapshotAt || '')
+      ) {
+        syncActiveSnapshot(activeDetailSnapshot);
+      }
       trendCache.clear();
       // 核心快照先落屏；历史分析与最近新增随后并发，二者失败都不会清空核心数据。
       void loadTrend();
@@ -547,6 +591,7 @@
   }
 
   function changeOverviewScope() {
+    activeDetailSnapshot = null;
     void load({ force: true, resetScope: true });
   }
 

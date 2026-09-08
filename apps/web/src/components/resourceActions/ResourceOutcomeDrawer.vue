@@ -413,7 +413,9 @@
     defineProps<{
       open: boolean;
       resources: readonly ResourceOutcomeResource[];
-      surface: 'cloud_space' | 'search' | 'bookmark_manage' | 'note_library';
+      surface: 'cloud_space' | 'search' | 'bookmark_manage' | 'note_library' | 'workspace';
+      sourceWorkspaceId?: string;
+      initialToolId?: string;
       quickActions?: readonly ResourceOutcomeQuickAction[];
       initialQuickActionId?: string;
     }>(),
@@ -686,6 +688,8 @@
       const result = await fetchToolboxCatalog();
       if (version !== stateVersion) return;
       catalog.value = result.tools;
+      const initial = toolOptions.value.find((option) => option.tool.id === props.initialToolId && option.eligible);
+      if (initial) selectTool(initial.tool);
     } catch {
       if (version === stateVersion) catalogError.value = true;
     } finally {
@@ -756,6 +760,7 @@
     try {
       const job = await createToolboxJob({
         quoteId: activeQuote.id,
+        sourceWorkspaceId: props.sourceWorkspaceId,
         clientRequestId: createToolboxClientRequestId('job'),
       });
       if (version !== stateVersion) return;

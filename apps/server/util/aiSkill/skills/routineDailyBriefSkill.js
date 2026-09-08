@@ -1,3 +1,4 @@
+import { WORKSHOP_BRIEF_DEFINITIONS } from '../../services/dailyBriefWorkshop.js';
 import { AI_SKILL_AUTHENTICATED_ROLES } from '../accessPolicy.js';
 import { aiSkillError } from '../errors.js';
 import { callStructuredSkillModel } from '../structuredModel.js';
@@ -5,7 +6,11 @@ import { DAILY_BRIEF_FACT_DEFINITIONS } from '../../services/dailyBriefFacts.js'
 import { DAILY_BRIEF_CONNECTION_DEFINITION } from '../../services/dailyBriefConnections.js';
 
 const REQUIRED_FACT_IDS = DAILY_BRIEF_FACT_DEFINITIONS.map(([id]) => id);
-const DAILY_BRIEF_FACT_IDS = Object.freeze([...REQUIRED_FACT_IDS, DAILY_BRIEF_CONNECTION_DEFINITION[0]]);
+const DAILY_BRIEF_FACT_IDS = Object.freeze([
+  ...REQUIRED_FACT_IDS,
+  DAILY_BRIEF_CONNECTION_DEFINITION[0],
+  ...WORKSHOP_BRIEF_DEFINITIONS.map(([id]) => id),
+]);
 const DAILY_BRIEF_FACT_ID_SET = new Set(DAILY_BRIEF_FACT_IDS);
 const DAILY_BRIEF_TEMPLATE_TOKEN = /\{\{([a-z_]+)\.(count|sample)\}\}/gu;
 const ENGLISH_NUMBER_WORD =
@@ -372,6 +377,16 @@ export function validateDailyBriefArguments(args, facts, unchangedFactIds = []) 
         ),
     );
   selected.sort((left, right) => priority(left) - priority(right));
+  let workshopCount = 0;
+  selected = selected.filter((insight) => {
+    const workshop = insight.factIds.filter((id) => id.startsWith('workshop_'));
+    if (!workshop.length) return true;
+    if (workshop.every((id) => unchangedFactIds.includes(id))) return false;
+    if (workshop.includes('workshop_result') && !String(insight.text).includes('{{workshop_result.sample}}'))
+      return false;
+    workshopCount += 1;
+    return workshopCount <= 2;
+  });
   return Object.freeze({
     kind: 'structured_draft',
     draftType: 'daily_brief_narrative',
@@ -453,8 +468,8 @@ const routineDailyBriefSkill = Object.freeze({
         {
           role: 'system',
           content: english
-            ? 'Turn authoritative facts into a thoughtful daily brief, not a dashboard. Produce a short headline, selected complete-sentence insights following the editorial policy, and a practical recommendation in English. Distinguish today’s activity from yesterday’s background. Counts and representative titles MUST use exact {{fact_id.count}} or {{fact_id.sample}} placeholders; never copy titles or write numbers directly. Declare all fact IDs used by each insight. Include a positive-count fact whenever present. Do not invent absent topics, dates, causes, trends or private facts.'
-            : '请把权威事实提炼成有判断的当日动态简报，而不是仪表盘。输出短标题、遵循编辑规则取舍的完整洞察句和可执行建议，使用中文。区分今天活动与昨日背景。数量及代表标题必须引用精确 {{fact_id.count}} 或 {{fact_id.sample}} 占位符，禁止自行书写数字或复制标题。每条声明所用全部事实 ID；存在正数事实时至少覆盖其中一项。不得编造缺失的主题、日期、原因、趋势或私人内容。',
+            ? 'Turn authoritative facts into a thoughtful daily brief, not a dashboard. Produce a short headline, selected complete-sentence insights following the editorial policy, and a practical recommendation in English. Distinguish today’s activity from yesterday’s background. Counts and representative titles MUST use exact {{fact_id.count}} or {{fact_id.sample}} placeholders; never copy titles or write numbers directly. Declare all fact IDs used by each insight. Include a positive-count fact whenever present. Do not invent absent topics, dates, causes, trends or private facts. Include at most two valuable workshop insights. Result insights must reference {{workshop_result.sample}} and preserve partial-source limitations; never imply online verification.'
+            : '请把权威事实提炼成有判断的当日动态简报，而不是仪表盘。输出短标题、遵循编辑规则取舍的完整洞察句和可执行建议，使用中文。区分今天活动与昨日背景。数量及代表标题必须引用精确 {{fact_id.count}} 或 {{fact_id.sample}} 占位符，禁止自行书写数字或复制标题。每条声明所用全部事实 ID；存在正数事实时至少覆盖其中一项。不得编造缺失的主题、日期、原因、趋势或私人内容。工坊信息最多两条，无明确价值时省略；成果必须引用 {{workshop_result.sample}} 保留部分读取限制，不得暗示已经联网核实。',
         },
         {
           role: 'user',

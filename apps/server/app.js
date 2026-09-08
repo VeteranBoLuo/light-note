@@ -1,3 +1,5 @@
+import imagePreviewRouter from './router/imagePreview.js';
+import { ensureBookmarkArchiveSchema } from './util/bookmarkArchiveJobs.js';
 import express from 'express';
 import bodyParser from 'body-parser';
 import { logFunction } from './util/log.js';
@@ -17,7 +19,6 @@ import { ensureDailyReviewSchema } from './util/dailyReviewSchema.js';
 import { assertPointsEarningActivationReady, getPointsEarningRuntime } from './util/pointsEarningPolicy.js';
 import { getPointsCampaignRuntime } from './util/pointsCampaignService.js';
 import { generateGrowthNudges } from './util/growth.js';
-import { ensureBookmarkSnapshotTable } from './util/snapshot.js';
 import { ensureOrganizeSchema } from './util/organizeSchema.js';
 import { startTodoReminderScheduler } from './util/todoReminder.js';
 import { startTodoReminderV2Scheduler } from './util/todoReminderV2.js';
@@ -89,6 +90,7 @@ app.use(logFunction);
 app.use(globalRateLimiter);
 // 路由感知的安全检测放在限流之后，避免过量请求先消耗正则、画像和事件计算。
 app.use(attackMonitor);
+app.use('/api/image-previews', imagePreviewRouter);
 
 const allRouter = [
   ...baseRouter,
@@ -159,7 +161,9 @@ try {
   process.exit(1);
 }
 ensureNoteTreeSchema().catch((err) => console.error('笔记页面树初始化失败 code=%s', stableAgentErrorCode(err)));
-ensureBookmarkSnapshotTable().catch((err) => console.error('书签快照表初始化失败 code=%s', stableAgentErrorCode(err)));
+await ensureBookmarkArchiveSchema().catch((err) =>
+  console.error('书签快照表初始化失败 code=%s', stableAgentErrorCode(err)),
+);
 await ensureOrganizeSchema().catch((err) => {
   console.error('整理中心 Schema 初始化失败 code=%s，整理接口将失败关闭', stableAgentErrorCode(err));
 });

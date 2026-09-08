@@ -14,6 +14,7 @@
     "worker:resource-governance:dev": "node --watch --watch-preserve-output resourceGovernanceWorker.js",
     "check:bookmark-icons": "node scripts/checkBookmarkIconRuntime.js",
     "check:resource-governance": "node scripts/checkResourceGovernanceRuntime.js",
+    "check:image-previews": "node scripts/checkImagePreviewRuntime.js",
     "check:file-previews": "node scripts/checkFilePreviewRuntime.js",
     "check:schema": "node scripts/checkSchemaAssertions.js",
     "migrate:toolbox-schema": "node scripts/ensureToolboxSchema.js",
@@ -25,10 +26,14 @@
     "check:ocr": "node scripts/checkOcrRuntime.js",
     "check:web-renderer": "node scripts/checkWebPageRendererRuntime.js",
     "check:ai-model-access": "node scripts/checkAiModelAccess.js",
+    "backfill:image-assets": "node scripts/backfillImageAssets.js",
     "backfill:note-thumbnails": "node scripts/backfillNoteImageThumbnails.js",
     "backfill:community-chat-identities": "node scripts/backfillCommunityChatIdentities.js",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "worker:browser-push": "node browserPushWorker.js",
+    "worker:browser-push:dev": "node --watch --watch-preserve-output browserPushWorker.js",
+    "check:browser-push": "node scripts/checkBrowserPushRuntime.js"
   },
   "keywords": [],
   "author": "",
@@ -56,6 +61,7 @@
     "playwright-core": "1.57.0",
     "redis": "^5.6.0",
     "sanitize-html": "2.17.5",
+    "web-push": "^3.6.7",
     "ws": "^8.18.0"
   },
   "devDependencies": {

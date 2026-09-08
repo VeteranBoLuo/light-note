@@ -69,7 +69,7 @@ function parseNotificationMeta(meta) {
   }
 }
 
-async function attachTodoStates(items, userId) {
+async function attachTodoStates(items, userId, db = pool) {
   const reminderItems = items
     .filter((item) => item.type === 'todo_reminder')
     .map((item) => ({ item, todoId: String(parseNotificationMeta(item.meta)?.todoId || '').trim() }));
@@ -82,7 +82,7 @@ async function attachTodoStates(items, userId) {
   }
 
   const placeholders = todoIds.map(() => '?').join(',');
-  const [todos] = await pool.query(
+  const [todos] = await db.query(
     `SELECT id, status FROM todo_items
      WHERE user_id = ? AND del_flag = 0 AND id IN (${placeholders})`,
     [userId, ...todoIds],
@@ -124,10 +124,18 @@ export const list = async (req, res) => {
   if (!userId || req.user?.role === 'visitor') {
     return res.send(resultData({ items: [], total: 0, unreadTotal: 0, currentPage: 1, pageSize: 20 }));
   }
+  let readConnection = null;
   try {
+    const targetId = String(req.body?.notificationId || '').slice(0, 36);
+    if (targetId) {
+      readConnection = await pool.getConnection();
+      await readConnection.query('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY');
+      await readConnection.beginTransaction();
+    }
+    const db = readConnection || pool;
     const pageSize = Math.min(Math.max(Number(req.body?.pageSize) || 20, 1), 50);
-    const currentPage = Math.max(Number(req.body?.currentPage) || 1, 1);
-    const offset = (currentPage - 1) * pageSize;
+    let currentPage = Math.max(Number(req.body?.currentPage) || 1, 1);
+    let offset = (currentPage - 1) * pageSize;
     const type = req.body?.type;
     const excludeCommunityChat = req.body?.excludeCommunityChat === true;
 
@@ -136,16 +144,33 @@ export const list = async (req, res) => {
     if (excludeCommunityChat) where.push(COMMUNITY_CHAT_EXCLUDED_SQL);
     appendNotificationTypeFilter(type, where, params);
     const whereSql = where.join(' AND ');
+    let targetFound = null;
+    if (targetId) {
+      const [[target]] = await db.query(`SELECT id, create_time FROM notification WHERE ${whereSql} AND id = ?`, [
+        ...params,
+        targetId,
+      ]);
+      targetFound = Boolean(target);
+      if (target) {
+        const [[position]] = await db.query(
+          `SELECT COUNT(*) AS ahead FROM notification WHERE ${whereSql}
+          AND (create_time > ? OR (create_time = ? AND id > ?))`,
+          [...params, target.create_time, target.create_time, target.id],
+        );
+        currentPage = Math.floor(Number(position.ahead) / pageSize) + 1;
+        offset = (currentPage - 1) * pageSize;
+      }
+    }
 
-    const [items] = await pool.query(
+    const [items] = await db.query(
       `SELECT id, type, title, content, link, meta, is_read, create_time
        FROM notification WHERE ${whereSql}
-       ORDER BY create_time DESC LIMIT ? OFFSET ?`,
+       ORDER BY create_time DESC, id DESC LIMIT ? OFFSET ?`,
       [...params, pageSize, offset],
     );
-    await attachTodoStates(items, userId);
-    const [[{ total }]] = await pool.query(`SELECT COUNT(*) AS total FROM notification WHERE ${whereSql}`, params);
-    const [[{ unreadTotal }]] = await pool.query(
+    await attachTodoStates(items, userId, db);
+    const [[{ total }]] = await db.query(`SELECT COUNT(*) AS total FROM notification WHERE ${whereSql}`, params);
+    const [[{ unreadTotal }]] = await db.query(
       `SELECT COUNT(*) AS unreadTotal
         FROM notification
         WHERE user_id = ? AND is_read = 0 AND del_flag = 0
@@ -153,10 +178,14 @@ export const list = async (req, res) => {
           ${excludeCommunityChat ? `AND ${COMMUNITY_CHAT_EXCLUDED_SQL}` : ''}`,
       [userId],
     );
-    res.send(resultData({ items, total, unreadTotal, currentPage, pageSize }));
+    if (readConnection) await readConnection.commit();
+    res.send(resultData({ items, total, unreadTotal, currentPage, pageSize, targetFound }));
   } catch (error) {
+    if (readConnection) await readConnection.rollback().catch(() => {});
     console.error('[notification] 列表查询失败 code=%s', error?.code || 'UNKNOWN');
     res.send(resultData(null, 500, '获取通知列表失败'));
+  } finally {
+    readConnection?.release();
   }
 };
 

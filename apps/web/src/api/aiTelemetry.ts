@@ -1,6 +1,11 @@
 import { apiBasePost } from '@/http/request.ts';
 
 export type AiProductEventName =
+  | 'workshop_entry_impression'
+  | 'workshop_entry_opened'
+  | 'workshop_project_created'
+  | 'workshop_resources_added'
+  | 'workshop_project_opened'
   | 'ai_entry_impression'
   | 'ai_entry_opened'
   | 'ai_material_added'
@@ -48,6 +53,7 @@ export type AiProductEventName =
   | 'note_branch_ai_answered';
 
 export type AiProductEventDimensions = Partial<{
+  entrySource: 'workbench' | 'workshop' | 'resource_menu' | 'resource_batch' | 'project' | 'result';
   surface:
     | 'edge'
     | 'shortcut'

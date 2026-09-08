@@ -1,7 +1,7 @@
 import { apiBaseGet, apiBasePost } from '@/http/request';
 import type { OrganizeAiSuggestionTag } from './organizeApi';
 export type ResourceType = 'bookmark' | 'note' | 'file';
-export type CheckKind = 'tags' | 'title' | 'empty' | 'duplicate';
+export type CheckKind = 'tags' | 'title' | 'empty' | 'duplicate' | 'archive';
 export interface RunOptions {
   tagMode?: 'untagged' | 'append';
   resourceTypes: ResourceType[];

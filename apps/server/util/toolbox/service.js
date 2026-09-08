@@ -1,3 +1,4 @@
+import { prepareFreeOcrInputs, reserveFreeOcr, getFreeOcrUsage, FREE_OCR_POLICY } from './freeOcr.js';
 import crypto from 'node:crypto';
 import { stripAiAnalysisCitations } from '@lightnote/shared/ai-citation-presentation';
 import pool from '../../db/index.js';
@@ -91,9 +92,11 @@ function formatJobError(row) {
     return {
       code,
       message:
-        String(row.billing_medium || 'points') === 'ai_quota'
-          ? '多次尝试后仍未完成，未产生可用成果的 AI 额度已按规则释放；请稍后重新发起。'
-          : '多次尝试后仍未完成，预占积分已退回；请稍后重新发起。',
+        row.billing_medium === 'free'
+          ? '多次尝试后仍未完成，未处理的免费识别页数已释放；请稍后重新发起。'
+          : String(row.billing_medium || 'points') === 'ai_quota'
+            ? '多次尝试后仍未完成，未产生可用成果的 AI 额度已按规则释放；请稍后重新发起。'
+            : '多次尝试后仍未完成，预占积分已退回；请稍后重新发起。',
     };
   }
   return { code, message: storedMessage || '任务处理失败' };
@@ -119,6 +122,7 @@ function formatJob(row, { includeArtifactSummary = true } = {}) {
   const billingStatus = String(row.billing_status || '');
   const hasSettledRefund = ['partially_settled', 'released', 'refunded'].includes(billingStatus);
   return {
+    sourceWorkspaceId: parseJson(row.options_json)?.sourceWorkspaceId || null,
     id: row.id,
     toolId: row.tool_id,
     status: row.status,
@@ -136,7 +140,9 @@ function formatJob(row, { includeArtifactSummary = true } = {}) {
     error: formatJobError(row),
     artifact: includeArtifactSummary ? artifact : null,
     artifactState,
-    canCancel: row.status === 'queued' && !Number(row.external_cost_committed || 0),
+    canCancel:
+      (row.billing_medium === 'free' && ['queued', 'processing'].includes(row.status)) ||
+      (row.status === 'queued' && !Number(row.external_cost_committed || 0)),
     createdAt: row.create_time,
     updatedAt: row.updated_at,
     startedAt: row.started_at,
@@ -255,8 +261,12 @@ async function resolveOwnedToolboxInput({ userId, toolId, rawInput, database = p
   };
 }
 
+export async function getToolboxOcrUsage(userId) {
+  return getFreeOcrUsage(pool, userId);
+}
+
 export function getToolboxCatalog() {
-  return getPublicToolboxCatalog({ disabledToolIds: getDisabledToolIds() });
+  return { ...getPublicToolboxCatalog({ disabledToolIds: getDisabledToolIds() }), ocrPolicy: FREE_OCR_POLICY };
 }
 
 export async function createToolboxQuote({
@@ -269,7 +279,7 @@ export async function createToolboxQuote({
 }) {
   const definition = assertToolAvailable(toolId);
   if (definition.billingMedium === 'free') {
-    throw toolboxError('TOOLBOX_QUOTE_NOT_REQUIRED', '该工具免费在浏览器本地运行，无需报价');
+    throw toolboxError('TOOLBOX_QUOTE_NOT_REQUIRED', '该工具免费使用，无需报价');
   }
   const normalizedBillingMedium = normalizeToolboxBillingMedium(toolId, billingMedium);
   const requestId = normalizeToolboxRequestId(clientRequestId, '报价请求标识');
@@ -357,7 +367,76 @@ async function selectJobWithArtifact(database, userId, jobId, lock = false) {
   return rows[0] || null;
 }
 
-export async function createToolboxJob({ userId, quoteId, clientRequestId, database = pool }) {
+export async function createFreeOcrJob({ userId, rawInput, clientRequestId, database = pool }) {
+  assertToolAvailable('ocr_to_text');
+  const requestId = normalizeToolboxRequestId(clientRequestId, '任务请求标识');
+  const resolved = await resolveOwnedToolboxInput({ userId, toolId: 'ocr_to_text', rawInput, database });
+  const [existing] = await database.query('SELECT * FROM toolbox_jobs WHERE user_id = ? AND client_request_id = ?', [
+    userId,
+    requestId,
+  ]);
+  if (existing[0]) {
+    if (existing[0].input_digest !== resolved.inputDigest || existing[0].billing_medium !== 'free')
+      throw toolboxError('TOOLBOX_IDEMPOTENCY_KEY_REUSED', '请求标识已使用', 409);
+    return formatJob(existing[0]);
+  }
+  const inputs = await prepareFreeOcrInputs(database, userId, resolved.snapshot);
+  const connection = await database.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [owners] = await connection.query('SELECT id FROM user WHERE id = ? AND del_flag = 0 FOR UPDATE', [userId]);
+    if (!owners.length) throw toolboxError('TOOLBOX_USER_REQUIRED', '账号不可用', 403);
+    const [raced] = await connection.query(
+      'SELECT * FROM toolbox_jobs WHERE user_id = ? AND client_request_id = ? FOR UPDATE',
+      [userId, requestId],
+    );
+    if (raced[0]) {
+      if (raced[0].input_digest !== resolved.inputDigest || raced[0].billing_medium !== 'free')
+        throw toolboxError('TOOLBOX_IDEMPOTENCY_KEY_REUSED', '请求标识已使用', 409);
+      await connection.commit();
+      return formatJob(raced[0]);
+    }
+    const id = crypto.randomUUID();
+    await reserveFreeOcr(connection, userId, id, inputs);
+    await connection.query(
+      `INSERT INTO toolbox_jobs (id,user_id,client_request_id,tool_id,billing_medium,input_digest,options_json,status,billing_status,quoted_points,expires_at)
+      VALUES (?,?,?,'ocr_to_text','free',?,?,'queued','reserved',0,?)`,
+      [
+        id,
+        userId,
+        requestId,
+        resolved.inputDigest,
+        JSON.stringify(resolved.snapshot.options || {}),
+        new Date(Date.now() + JOB_RETENTION_DAYS * 86400_000),
+      ],
+    );
+    let index = 0;
+    for (const ref of resolved.snapshot.resourceRefs)
+      await connection.query(
+        `INSERT INTO toolbox_job_inputs (job_id,input_index,input_type,resource_type,resource_id,resource_version) VALUES (?,?,'resource',?,?,?)`,
+        [id, index++, ref.type, ref.id, ref.version],
+      );
+    for (const sourceId of resolved.snapshot.sourceIds)
+      await connection.query(
+        `INSERT INTO toolbox_job_inputs (job_id,input_index,input_type,document_source_id) VALUES (?,?,'document_source',?)`,
+        [id, index++, sourceId],
+      );
+    const row = await selectJobWithArtifact(connection, userId, id);
+    await connection.commit();
+    return formatJob(row);
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+export async function createToolboxJob({ userId, quoteId, clientRequestId, sourceWorkspaceId, database = pool }) {
+  if (sourceWorkspaceId != null && typeof sourceWorkspaceId !== 'string')
+    throw toolboxError('TOOLBOX_WORKSPACE_INVALID', '项目标识无效', 400);
+  const sourceId = String(sourceWorkspaceId || '').trim();
+  if (sourceId.length > 64) throw toolboxError('TOOLBOX_WORKSPACE_INVALID', '项目标识无效', 400);
   const normalizedQuoteId = String(quoteId || '').trim();
   if (!normalizedQuoteId) throw toolboxError('TOOLBOX_QUOTE_REQUIRED', '请先获取并确认报价');
   const requestId = normalizeToolboxRequestId(clientRequestId, '任务请求标识');
@@ -370,7 +449,10 @@ export async function createToolboxJob({ userId, quoteId, clientRequestId, datab
     );
     if (existingRows.length) {
       const existing = existingRows[0];
-      if (String(existing.quote_id || '') !== normalizedQuoteId) {
+      if (
+        String(existing.quote_id || '') !== normalizedQuoteId ||
+        String(parseJson(existing.options_json)?.sourceWorkspaceId || '') !== sourceId
+      ) {
         throw toolboxError('TOOLBOX_IDEMPOTENCY_KEY_REUSED', '该任务标识已用于其他报价，请刷新后重试', 409);
       }
       const hydrated = await selectJobWithArtifact(connection, userId, existing.id, true);
@@ -391,8 +473,13 @@ export async function createToolboxJob({ userId, quoteId, clientRequestId, datab
     if (quote.status === 'consumed' && quote.consumed_job_id) {
       const existing = await selectJobWithArtifact(connection, userId, quote.consumed_job_id, true);
       if (!existing) throw toolboxError('TOOLBOX_QUOTE_STATE_INVALID', '报价关联任务暂不可用，请联系客服', 500);
+      if (String(parseJson(existing.options_json)?.sourceWorkspaceId || '') !== sourceId)
+        throw toolboxError('TOOLBOX_IDEMPOTENCY_KEY_REUSED', '报价已用于其他项目', 409);
       await connection.commit();
       return formatJob(existing);
+    }
+    if (quote.tool_id === 'ocr_to_text') {
+      throw toolboxError('TOOLBOX_PRICING_CHANGED', '文字识别已免费，请重新发起识别', 409, { refresh: true });
     }
     if (quote.status !== 'active' || new Date(quote.expires_at).getTime() <= Date.now()) {
       if (quote.status === 'active') {
@@ -407,6 +494,13 @@ export async function createToolboxJob({ userId, quoteId, clientRequestId, datab
       throw toolboxError('TOOLBOX_QUOTE_SNAPSHOT_INVALID', '报价快照校验失败，请重新报价', 500);
     }
 
+    if (sourceId) {
+      const [projects] = await connection.query(
+        "SELECT id FROM toolbox_workspaces WHERE id = ? AND user_id = ? AND status IN ('active', 'paused') LOCK IN SHARE MODE",
+        [sourceId, userId],
+      );
+      if (!projects.length) throw toolboxError('TOOLBOX_WORKSPACE_UNAVAILABLE', '项目已不可用', 409);
+    }
     const billingMedium = normalizeToolboxBillingMedium(quote.tool_id, quote.billing_medium || 'points');
     const jobId = crypto.randomUUID();
     const reservation =
@@ -435,7 +529,7 @@ export async function createToolboxJob({ userId, quoteId, clientRequestId, datab
         quote.id,
         billingMedium,
         quote.input_digest,
-        JSON.stringify(snapshot.options || {}),
+        JSON.stringify({ ...(snapshot.options || {}), ...(sourceId ? { sourceWorkspaceId: sourceId } : {}) }),
         initialBillingStatus,
         reservation.reservedPoints,
         reservation.operationId,
@@ -465,6 +559,7 @@ export async function createToolboxJob({ userId, quoteId, clientRequestId, datab
     ]);
     await connection.commit();
     return formatJob({
+      options_json: { sourceWorkspaceId: sourceId || null },
       id: jobId,
       user_id: userId,
       tool_id: quote.tool_id,
@@ -568,7 +663,7 @@ export async function cancelToolboxJob({ userId, jobId, database = pool }) {
       await connection.commit();
       return formatJob(job);
     }
-    if (job.status !== 'queued' || Number(job.external_cost_committed || 0)) {
+    if (job.billing_medium !== 'free' && (job.status !== 'queued' || Number(job.external_cost_committed || 0))) {
       throw toolboxError('TOOLBOX_JOB_CANNOT_CANCEL', '任务已开始消耗处理资源，当前不能取消', 409);
     }
     const settlement = await settleToolboxBilling(connection, job, {
@@ -650,6 +745,33 @@ export async function getToolboxArtifact({ userId, artifactId, database = pool }
   };
 }
 
+export async function getStudyProgress({ userId, artifactId, database = pool }) {
+  const artifact = await getToolboxArtifact({ userId, artifactId, database });
+  const [rows] = await database.query(
+    'SELECT card_id, mastered FROM toolbox_study_progress WHERE user_id = ? AND artifact_id = ? AND artifact_version = ?',
+    [userId, artifact.id, artifact.version],
+  );
+  return {
+    version: artifact.version,
+    cards: rows.map((row) => ({ id: row.card_id, mastered: Boolean(row.mastered) })),
+  };
+}
+export async function saveStudyProgress({ userId, artifactId, input, database = pool }) {
+  const artifact = await getToolboxArtifact({ userId, artifactId, database });
+  if (
+    input?.version !== artifact.version ||
+    typeof input?.mastered !== 'boolean' ||
+    !artifact.meta?.study?.cards?.some((card) => card.id === input.cardId)
+  )
+    throw toolboxError('TOOLBOX_STUDY_CARD_INVALID', '学习卡片已变化，请刷新后重试', 409);
+  await database.query(
+    `INSERT INTO toolbox_study_progress (user_id,artifact_id,artifact_version,card_id,mastered) VALUES (?,?,?,?,?)
+    ON DUPLICATE KEY UPDATE mastered = VALUES(mastered)`,
+    [userId, artifact.id, artifact.version, input.cardId, input.mastered ? 1 : 0],
+  );
+  return { id: input.cardId, mastered: input.mastered };
+}
+
 function saveReceiptKey({ userId, artifactId, version, targetType }) {
   return toolboxInputDigest({ userId, artifactId, version, targetType });
 }
@@ -721,6 +843,8 @@ export async function saveToolboxArtifactToNote({
   artifactId,
   clientRequestId,
   action = 'save',
+  title,
+  parentId,
   request,
   database = pool,
   createNoteFn = createNote,
@@ -841,7 +965,12 @@ export async function saveToolboxArtifactToNote({
     const note = await createNoteFn({
       userId,
       userRole,
-      note: { title: artifact.title, content: stripAiAnalysisCitations(artifact.content), type: 'markdown' },
+      note: {
+        title: typeof title === 'string' && title.trim() ? title.trim() : artifact.title,
+        parentId: parentId || null,
+        content: stripAiAnalysisCitations(artifact.content),
+        type: 'markdown',
+      },
       request,
       suppressUserRewards: true,
       idempotencyKey: noteSaveIdempotencyKey(artifact, saveGeneration),

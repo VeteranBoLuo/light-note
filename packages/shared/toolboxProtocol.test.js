@@ -23,11 +23,8 @@ const ACTIVE_TOOL_IDS = [
   "knowledge_audit",
   "pdf_organizer",
   "image_optimizer",
-  "text_diff",
   "table_converter",
   "data_workbench",
-  "text_batch",
-  "markdown_checker",
   "docx_to_markdown",
   "knowledge_structure_audit",
   "ocr_to_text",
@@ -99,7 +96,7 @@ describe("toolbox protocol", () => {
       availability: { enabled: true },
       input: { minItems: 1, maxItems: 2, maxBytes: 30 * 1024 * 1024 },
     });
-    expect(ACTIVE_TOOL_IDS).toHaveLength(20);
+    expect(ACTIVE_TOOL_IDS).toHaveLength(17);
   });
 
   it("does not treat browser-local utilities as paid jobs", () => {
@@ -126,7 +123,7 @@ describe("toolbox protocol", () => {
       "points",
       "ai_quota",
     ]);
-    expect(getToolboxTool("ocr_to_text")?.billingMedia).toEqual(["points"]);
+    expect(getToolboxTool("ocr_to_text")?.billingMedia).toEqual(["free"]);
     expect(getToolboxTool("idea_to_draft")?.input).toMatchObject({
       kind: "prompt",
       minItems: 0,

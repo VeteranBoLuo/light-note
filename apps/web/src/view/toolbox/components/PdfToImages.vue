@@ -138,6 +138,14 @@
   } from '@/utils/pdfToImages';
   import { downloadToolboxBlob, formatToolboxBytes } from '@/utils/toolboxLocal';
 
+  import { usePdfSession } from './pdfSession';
+  const publishPdf = usePdfSession(
+    async () => files.value,
+    (incoming) => {
+      files.value = incoming;
+      clearResults();
+    },
+  );
   const { t } = useI18n();
   const files = ref<File[]>([]);
   const format = ref<PdfImageFormat>('image/jpeg');
@@ -189,6 +197,7 @@
     try {
       validatePdfToImageFiles([...files.value, ...additions]);
       files.value.push(...additions);
+      publishPdf();
       clearResults();
     } catch (error) {
       showError(error);

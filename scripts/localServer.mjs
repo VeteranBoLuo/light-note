@@ -165,6 +165,9 @@ async function main() {
   console.log(
     `[本地后端] 4/4 启动资源治理 Worker${watchMode ? "（监听模式）" : ""}…`,
   );
+  const pushWorker = runPnpm("浏览器推送 Worker", ["--filter", "server", "run", "worker:browser-push"]);
+  await ensureChildStable(pushWorker, "浏览器推送 Worker");
+
   const governanceWorker = runPnpm("资源治理 Worker", [
     "--filter",
     "server",

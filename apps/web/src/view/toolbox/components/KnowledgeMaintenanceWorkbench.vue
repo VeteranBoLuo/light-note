@@ -44,15 +44,8 @@
 
       <template v-else-if="overview">
         <section class="audit-overview">
-          <div class="audit-score" :style="scoreStyle">
-            <div
-              ><strong>{{ overview.summary.healthScore }}</strong
-              ><span>/ 100</span></div
-            >
-            <small>{{ healthLabel }}</small>
-          </div>
           <div class="audit-overview__copy">
-            <BChip :tone="healthTone">{{ t('toolbox.maintenance.audit.completed') }}</BChip>
+            <BChip tone="success">{{ t('toolbox.maintenance.audit.completed') }}</BChip>
             <h2>{{ t('toolbox.maintenance.audit.title') }}</h2>
             <p>{{ t('toolbox.maintenance.audit.description', { count: overview.summary.total }) }}</p>
             <small>{{ t('toolbox.maintenance.scannedAt', { time: formatDateTime(overview.scannedAt) }) }}</small>
@@ -100,6 +93,15 @@
         </section>
 
         <section class="audit-issues">
+          <BButton
+            :type="includeOptional ? 'primary' : undefined"
+            :aria-pressed="includeOptional"
+            @click="
+              includeOptional = !includeOptional;
+              activeIssueKind = 'all';
+            "
+            >{{ t('toolbox.maintenance.optionalSuggestions') }}</BButton
+          >
           <header>
             <div>
               <span class="maintenance-index">02</span>
@@ -183,22 +185,17 @@
   const activeIssueKind = ref('all');
   const issueLimit = ref(30);
 
-  const scoreStyle = computed(() => ({ '--audit-score': `${overview.value?.summary.healthScore || 0}%` }));
-  const healthTone = computed(
-    () =>
-      ((overview.value?.summary.healthScore || 0) >= 80
-        ? 'success'
-        : (overview.value?.summary.healthScore || 0) >= 60
-          ? 'pending'
-          : 'danger') as 'success' | 'pending' | 'danger',
+  const includeOptional = ref(false);
+  const actionableIssues = computed(() =>
+    (overview.value?.issues || []).filter(
+      (item) => item.kind !== 'unlinked' && (includeOptional.value || !['untagged', 'stale'].includes(item.kind)),
+    ),
   );
-  const healthLabel = computed(() => {
-    const score = overview.value?.summary.healthScore || 0;
-    return t(`toolbox.maintenance.audit.health.${score >= 80 ? 'good' : score >= 60 ? 'attention' : 'risk'}`);
-  });
-  const actionableIssues = computed(() => (overview.value?.issues || []).filter((item) => item.kind !== 'unlinked'));
   const actionableRecommendations = computed(() =>
-    (overview.value?.recommendations || []).filter((item) => item.code !== 'build_links'),
+    (overview.value?.recommendations || []).filter(
+      (item) =>
+        item.code !== 'build_links' && (includeOptional.value || !['add_tags', 'review_stale'].includes(item.code)),
+    ),
   );
   const highPriorityCount = computed(() => actionableIssues.value.filter((item) => item.severity === 'high').length);
   const auditFacts = computed(() => {
@@ -234,7 +231,11 @@
     return [
       { value: 'all', label: t('toolbox.maintenance.issue.all'), count: actionableIssues.value.length },
       ...issueKindOrder
-        .filter((kind) => Number(overview.value?.issueCounts[kind] || 0) > 0)
+        .filter(
+          (kind) =>
+            (includeOptional.value || !['untagged', 'stale'].includes(kind)) &&
+            Number(overview.value?.issueCounts[kind] || 0) > 0,
+        )
         .map((kind) => ({
           value: kind,
           label: t(`toolbox.maintenance.issue.${kind}.label`),
@@ -382,7 +383,7 @@
     min-height: 190px;
     padding: clamp(22px, 3vw, 36px);
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
     gap: clamp(20px, 4vw, 46px);
     overflow: hidden;
@@ -391,49 +392,6 @@
     background:
       radial-gradient(circle at 85% 20%, rgba(38, 174, 132, 0.13), transparent 28%),
       radial-gradient(circle at 12% 85%, rgba(97, 92, 237, 0.1), transparent 32%), var(--card-background);
-  }
-
-  .audit-score {
-    position: relative;
-    width: 126px;
-    height: 126px;
-    display: grid;
-    place-items: center;
-    border-radius: 50%;
-    background: conic-gradient(var(--success-color) var(--audit-score), var(--workspace-panel-bg-color) 0);
-  }
-
-  .audit-score::before {
-    position: absolute;
-    inset: 9px;
-    border: 1px solid var(--surface-border-color);
-    border-radius: inherit;
-    background: var(--card-background);
-    content: '';
-  }
-
-  .audit-score > div,
-  .audit-score > small {
-    position: relative;
-    z-index: 1;
-  }
-  .audit-score > div {
-    margin-top: 12px;
-    display: flex;
-    align-items: baseline;
-    gap: 3px;
-  }
-  .audit-score strong {
-    font-size: 35px;
-    letter-spacing: -0.05em;
-  }
-  .audit-score span,
-  .audit-score small {
-    color: var(--desc-color);
-    font-size: 10px;
-  }
-  .audit-score > small {
-    margin-top: -24px;
   }
 
   .audit-overview__copy {
@@ -731,9 +689,6 @@
     .audit-overview {
       display: flex;
       text-align: left;
-    }
-    .audit-score {
-      align-self: center;
     }
     .audit-facts,
     .audit-recommendations > div {

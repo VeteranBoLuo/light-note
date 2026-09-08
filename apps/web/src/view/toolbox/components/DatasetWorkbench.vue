@@ -308,7 +308,7 @@
                 <label id="dataset-chart-value">{{ t('toolbox.dataset.valueColumn') }}</label>
                 <BSelect
                   v-model:value="chartValue"
-                  :options="numericHeaderOptions"
+                  :options="chartNumericHeaderOptions"
                   aria-labelledby="dataset-chart-value"
                 />
               </div>
@@ -334,14 +334,23 @@
                 <h2>{{ canvasTitle }}</h2>
                 <p>{{ canvasDescription }}</p>
               </div>
-              <div v-if="hasOutcome" class="dataset-canvas__actions">
+              <div class="dataset-canvas__actions">
+                <BButton v-if="appliedHistory.length" @click="restoreOriginal">{{
+                  t('toolbox.dataset.restoreOriginal')
+                }}</BButton>
+                <BButton v-if="appliedHistory.length" @click="undoApplied">{{
+                  t('toolbox.dataset.undoApplied')
+                }}</BButton>
+                <BButton v-if="resultDataset && resultDataset !== primaryDataset" @click="applyPreview">{{
+                  t('toolbox.dataset.applyPreview')
+                }}</BButton>
                 <BSelect
                   v-if="canExportDataset"
                   v-model:value="exportFormat"
                   :options="exportFormatOptions"
                   :aria-label="t('toolbox.local.outputFormat')"
                 />
-                <BButton @click="exportOutcome"
+                <BButton v-if="hasOutcome" @click="exportOutcome"
                   ><SvgIcon :src="icon.toolbox.download" size="15" />{{ exportLabel }}</BButton
                 >
               </div>
@@ -479,18 +488,8 @@
                   ><strong>{{ chartValue }}</strong
                   ><span>{{ t('toolbox.dataset.chartRows', { count: chartData.length }) }}</span></header
                 >
-                <div
-                  class="dataset-chart__plot"
-                  role="img"
-                  :aria-label="t('toolbox.dataset.chartAria', { category: chartCategory, value: chartValue })"
-                >
-                  <article v-for="point in chartData" :key="point.label" :title="`${point.label}: ${point.value}`">
-                    <span v-if="chartType === 'horizontal'" class="dataset-chart__label">{{ point.label }}</span>
-                    <i :style="chartBarStyle(point.value)"></i>
-                    <b>{{ point.value }}</b>
-                    <span v-if="chartType === 'vertical'" class="dataset-chart__label">{{ point.label }}</span>
-                  </article>
-                </div>
+                <!-- Escaped, deterministic data visualization; also used for image export. -->
+                <div class="dataset-chart__image" v-html="chartSvg"></div>
               </div>
             </template>
 
@@ -526,10 +525,12 @@
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
   import type { Column } from '@/components/base/BasicComponents/BTable/config';
   import BUpload from '@/components/base/BasicComponents/BUpload.vue';
+  import Alert from '@/components/base/BasicComponents/BModal/Alert';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
-  import { downloadToolboxBlob } from '@/utils/toolboxLocal';
+  import { buildToolboxChart } from '@/utils/toolboxChart';
+  import { downloadToolboxBlob, toolboxSvgToPng } from '@/utils/toolboxLocal';
   import {
     anonymizeToolboxDataset,
     cleanToolboxDataset,
@@ -599,6 +600,8 @@
   const datasetAccept =
     '.csv,.tsv,.json,.xlsx,text/csv,text/tab-separated-values,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
   const datasets = ref<ToolboxDataset[]>([]);
+  const originalDatasets = ref<ToolboxDataset[]>([]);
+  const appliedHistory = ref<ToolboxDataset[][]>([]);
   const datasetSizes = ref<number[]>([]);
   const loading = ref(false);
   const running = ref(false);
@@ -703,6 +706,15 @@
       [],
   );
   const numericHeaderOptions = computed(() => numericHeaders.value.map((value) => ({ value, label: value })));
+  const chartNumericHeaderOptions = computed(() =>
+    (primaryDataset.value?.headers || [])
+      .filter((_header, index) =>
+        primaryDataset.value?.rows.some(
+          (row) => String(row[index] ?? '').trim() !== '' && Number.isFinite(Number(row[index])),
+        ),
+      )
+      .map((value) => ({ value, label: value })),
+  );
   const validationTypeOptions = computed(() =>
     (['any', 'text', 'number', 'date', 'email', 'url'] as DatasetValidationType[]).map((value) => ({
       value,
@@ -750,11 +762,14 @@
     const categoryIndex = primaryDataset.value.headers.indexOf(chartCategory.value);
     const valueIndex = primaryDataset.value.headers.indexOf(chartValue.value);
     return primaryDataset.value.rows
+      .filter((row) => String(row[valueIndex] ?? '').trim() !== '')
       .map((row) => ({ label: row[categoryIndex] || '—', value: Number(row[valueIndex]) }))
       .filter((point) => Number.isFinite(point.value))
       .slice(0, 20);
   });
-  const chartMax = computed(() => Math.max(1, ...chartData.value.map((point) => Math.abs(point.value))));
+  const chartSvg = computed(() =>
+    buildToolboxChart(chartData.value, chartType.value, `${chartCategory.value} × ${chartValue.value}`),
+  );
 
   const copyByTool: Record<DatasetModeId, { emptyTitle: string; controlTitle: string; run: string }> = {
     data_quality_report: { emptyTitle: 'qualityEmptyTitle', controlTitle: 'qualityControlTitle', run: 'qualityRun' },
@@ -784,7 +799,11 @@
     isQualityTool.value && running.value
       ? t('toolbox.dataset.qualityRunningTitle')
       : hasOutcome.value
-        ? t('toolbox.dataset.resultTitle')
+        ? t(
+            resultDataset.value && resultDataset.value !== primaryDataset.value
+              ? 'toolbox.dataset.pendingResult'
+              : 'toolbox.dataset.resultTitle',
+          )
         : t('toolbox.dataset.previewTitle'),
   );
   const canvasDescription = computed(() =>
@@ -827,11 +846,45 @@
   });
 
   function sourceLabel(index: number) {
-    if (maxFiles.value === 1) return t('toolbox.dataset.source');
+    if (maxFiles.value === 1) return t('toolbox.dataset.currentData');
     return index === 0 ? t('toolbox.dataset.beforeSource') : t('toolbox.dataset.afterSource');
   }
 
   function selectMode(mode: DatasetModeId) {
+    if (resultDataset.value && resultDataset.value !== primaryDataset.value) {
+      Alert.alert({
+        title: t('toolbox.dataset.pendingTitle'),
+        content: t('toolbox.dataset.pendingHint'),
+        okText: t('toolbox.dataset.discardPreview'),
+        cancelText: t('common.cancel'),
+        onOk: () => changeMode(mode),
+      });
+      return;
+    }
+    changeMode(mode);
+  }
+  function applyPreview() {
+    if (!resultDataset.value) return;
+    appliedHistory.value = [...appliedHistory.value.slice(-4), datasets.value];
+    datasets.value = [resultDataset.value, ...datasets.value.slice(1)];
+    resetOutcome();
+    initializeControls();
+  }
+  function restoreOriginal() {
+    appliedHistory.value = [...appliedHistory.value.slice(-4), datasets.value];
+    datasets.value = originalDatasets.value;
+    resetOutcome();
+    initializeControls();
+  }
+  function undoApplied() {
+    const previous = appliedHistory.value.at(-1);
+    if (!previous) return;
+    datasets.value = previous;
+    appliedHistory.value = appliedHistory.value.slice(0, -1);
+    resetOutcome();
+    initializeControls();
+  }
+  function changeMode(mode: DatasetModeId) {
     if (activeToolId.value === mode) return;
     activeToolId.value = mode;
     const query = { ...route.query };
@@ -860,7 +913,7 @@
     keyColumn.value = common[0] || headers[0] || '';
     splitColumn.value = headers[0] || '';
     chartCategory.value = headers[0] || '';
-    chartValue.value = numeric[0] || '';
+    chartValue.value = chartNumericHeaderOptions.value[0]?.value || '';
     anonymizeColumns.value = [];
   }
 
@@ -884,6 +937,8 @@
     try {
       const loaded = await Promise.all(files.map(readToolboxDatasetFile));
       datasets.value = appendSecond ? [datasets.value[0]!, loaded[0]!] : loaded;
+      originalDatasets.value = datasets.value;
+      appliedHistory.value = [];
       datasetSizes.value = nextSizes;
       initializeControls();
       if (isQualityTool.value) await runTool();
@@ -923,6 +978,8 @@
       ],
     };
     datasets.value = maxFiles.value === 2 ? [first, second] : [first];
+    originalDatasets.value = datasets.value;
+    appliedHistory.value = [];
     datasetSizes.value = datasets.value.map(() => 0);
     resetOutcome();
     initializeControls();
@@ -931,6 +988,8 @@
 
   function clearAll() {
     datasets.value = [];
+    originalDatasets.value = [];
+    appliedHistory.value = [];
     datasetSizes.value = [];
     validationRules.value = [];
     resetOutcome();
@@ -1049,53 +1108,10 @@
     );
   }
 
-  function chartBarStyle(value: number) {
-    const percent = Math.max(2, Math.round((Math.abs(value) / chartMax.value) * 100));
-    return chartType.value === 'horizontal' ? { width: `${percent}%` } : { height: `${percent}%` };
-  }
-
-  function exportChartPng() {
+  async function exportChartPng() {
     if (!chartData.value.length) return;
-    const width = 1400;
-    const height = 820;
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const context = canvas.getContext('2d');
-    if (!context) return;
-    context.fillStyle = '#ffffff';
-    context.fillRect(0, 0, width, height);
-    context.fillStyle = '#171824';
-    context.font = '600 34px system-ui, sans-serif';
-    context.fillText(`${chartCategory.value} × ${chartValue.value}`, 70, 70);
-    const items = chartData.value.slice(0, 16);
-    const plotTop = 130;
-    const plotHeight = 560;
-    const gap = 18;
-    const barWidth = Math.max(20, (width - 140 - gap * (items.length - 1)) / items.length);
-    items.forEach((point, index) => {
-      const barHeight = (Math.abs(point.value) / chartMax.value) * plotHeight;
-      const x = 70 + index * (barWidth + gap);
-      const y = plotTop + plotHeight - barHeight;
-      const gradient = context.createLinearGradient(0, y, 0, plotTop + plotHeight);
-      gradient.addColorStop(0, '#7772f3');
-      gradient.addColorStop(1, '#4e46d9');
-      context.fillStyle = gradient;
-      context.fillRect(x, y, barWidth, barHeight);
-      context.fillStyle = '#4b4d5d';
-      context.font = '500 18px system-ui, sans-serif';
-      context.save();
-      context.translate(x + barWidth / 2, plotTop + plotHeight + 26);
-      context.rotate(-Math.PI / 5);
-      context.fillText(point.label.slice(0, 12), 0, 0);
-      context.restore();
-      context.fillStyle = '#171824';
-      context.font = '600 17px system-ui, sans-serif';
-      context.fillText(String(point.value), x, Math.max(115, y - 10));
-    });
-    canvas.toBlob((blob) => {
-      if (blob) downloadToolboxBlob(blob, `${safeFileBase(primaryDataset.value?.name || '')}-chart.png`);
-    }, 'image/png');
+    const blob = await toolboxSvgToPng(chartSvg.value, 1);
+    downloadToolboxBlob(blob, `${safeFileBase(primaryDataset.value?.name || '')}-chart.png`);
   }
 
   watch(activeToolId, async () => {
@@ -1114,6 +1130,15 @@
 </script>
 
 <style scoped lang="less">
+  .dataset-chart__image {
+    overflow-x: auto;
+  }
+  .dataset-chart__image :deep(svg) {
+    display: block;
+    width: 100%;
+    min-width: 700px;
+    height: auto;
+  }
   .dataset-workbench {
     display: grid;
     grid-template-columns: minmax(224px, 248px) minmax(0, 1fr);

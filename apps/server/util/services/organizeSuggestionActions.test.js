@@ -1,3 +1,5 @@
+vi.mock('../bookmarkArchiveJobs.js', () => ({ enqueueBookmarkArchiveInTransaction: vi.fn() }));
+import { enqueueBookmarkArchiveInTransaction } from '../bookmarkArchiveJobs.js';
 import { beforeEach, expect, it, vi } from 'vitest';
 vi.mock('./resourceTagWriteService.js', () => ({ batchWriteResourceTags: vi.fn().mockResolvedValue({}) }));
 vi.mock('./tagService.js', () => ({ ensureTag: vi.fn().mockResolvedValue({ id: 'new', name: 'Vue' }) }));
@@ -117,4 +119,42 @@ it('标签复用统一写入服务，新标签只在应用时创建', async () =
     action: 'add',
     source: 'manual',
   });
+});
+
+it('正文存档应用与建议共用事务，不在事务内抓取外网', async () => {
+  const c = db();
+  enqueueBookmarkArchiveInTransaction.mockResolvedValue({ ok: true, status: 'pending' });
+  expect(
+    await applySuggestionMutation(
+      c,
+      input({ current: { type: 'bookmark', id: 'b' }, kind: 'archive', payload: { action: 'archive' } }),
+    ),
+  ).toEqual({ applied: 'queued' });
+  expect(enqueueBookmarkArchiveInTransaction).toHaveBeenCalledWith(c, 'u', 'b');
+});
+it('已有正文不重复排队；其他资源不能提交网页存档', async () => {
+  enqueueBookmarkArchiveInTransaction.mockClear();
+  expect(
+    await applySuggestionMutation(
+      db(),
+      input({
+        current: { type: 'bookmark', id: 'b', hasArchive: true },
+        kind: 'archive',
+        payload: { action: 'archive' },
+      }),
+    ),
+  ).toEqual({ applied: 'already_saved' });
+  expect(enqueueBookmarkArchiveInTransaction).not.toHaveBeenCalled();
+  await expect(
+    applySuggestionMutation(db(), input({ kind: 'archive', payload: { action: 'archive' } })),
+  ).rejects.toMatchObject({ code: 'ORGANIZE_ARCHIVE_UNSUPPORTED' });
+});
+it('入队失败不把建议误标为已应用', async () => {
+  enqueueBookmarkArchiveInTransaction.mockResolvedValue({ ok: false, msg: '队列满' });
+  await expect(
+    applySuggestionMutation(
+      db(),
+      input({ current: { type: 'bookmark', id: 'b' }, kind: 'archive', payload: { action: 'archive' } }),
+    ),
+  ).rejects.toMatchObject({ code: 'ORGANIZE_ARCHIVE_QUEUE_FAILED' });
 });

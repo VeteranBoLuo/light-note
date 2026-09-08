@@ -621,3 +621,5 @@ describe('账号注销后台清理', () => {
     expect(poolQuery.mock.calls.some(([sql]) => sql.includes("SET status = 'completed'"))).toBe(false);
   });
 });
+
+vi.mock('./imagePreview/cleanup.js', () => ({ deferCloudImageDeletion: vi.fn(), deleteUnmanagedObject: (...args) => deleteObjectFromObs(...args) }));

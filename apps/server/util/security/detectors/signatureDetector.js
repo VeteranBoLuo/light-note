@@ -1,3 +1,4 @@
+import { isBrowserPushSubscriptionRequest } from '../../browserPushPolicy.js';
 import { getFieldContext } from '../fieldContext.js';
 import { MALICIOUS_FILE_EXTENSIONS, SENSITIVE_PATHS, SIGNATURE_RULES } from '../rules.js';
 import { flattenObject, safeJsonStringify, truncateText } from '../payloadSanitizer.js';
@@ -308,10 +309,15 @@ const detectParameterAnomaly = (context) => {
   return evidence;
 };
 
-export const detectSignatures = (context) => [
-  ...detectSensitivePath(context),
-  ...detectPayloadSignatures(context),
-  ...detectHeaderInjection(context),
-  ...detectFileUpload(context),
-  ...detectParameterAnomaly(context),
-];
+export const detectSignatures = (context) =>
+  [
+    ...detectSensitivePath(context),
+    ...detectPayloadSignatures(context),
+    ...detectHeaderInjection(context),
+    ...detectFileUpload(context),
+    ...detectParameterAnomaly(context),
+  ].map((item) =>
+    isBrowserPushSubscriptionRequest(context) && item.matchedField?.startsWith('body.subscription')
+      ? { ...item, matchedValuePreview: '[PUSH_CREDENTIALS_REDACTED]' }
+      : item,
+  );

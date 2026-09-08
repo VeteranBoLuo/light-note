@@ -222,6 +222,9 @@ async function main() {
   await ensureChildStable(worker, "文档与文件预览 Worker");
 
   console.log("\n[本地预览] 3/4 启动资源治理 Worker…");
+  const pushWorker = runPnpm("浏览器推送 Worker", ["--filter", "server", "run", "worker:browser-push"]);
+  await ensureChildStable(pushWorker, "浏览器推送 Worker");
+
   const governanceWorker = runPnpm("资源治理 Worker", [
     "--filter",
     "server",

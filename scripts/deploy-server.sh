@@ -58,6 +58,9 @@ ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/migrateHelpCenterSections.js
 echo "🔎  执行只读 Schema 发布门禁…"
 ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/checkSchemaAssertions.js"
 
+echo "🔎  检查浏览器推送 Schema 与配置…"
+ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/checkBrowserPushRuntime.js"
+
 echo "🔎  检查文件预览 Schema、7-Zip 与 LibreOffice 运行时…"
 ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/checkFilePreviewRuntime.js"
 
@@ -82,6 +85,11 @@ ssh -i "$KEY" "$HOST" "if pm2 describe '$DOCUMENT_WORKER_PM2' >/dev/null 2>&1; t
     pm2 restart '$RESOURCE_GOVERNANCE_WORKER_PM2' --update-env; \
   else \
     cd '$REMOTE' && pm2 start resourceGovernanceWorker.js --name '$RESOURCE_GOVERNANCE_WORKER_PM2'; \
+  fi && \
+  if pm2 describe 'light-note-browser-push' >/dev/null 2>&1; then \
+    pm2 restart 'light-note-browser-push' --update-env; \
+  else \
+    cd '$REMOTE' && pm2 start browserPushWorker.js --name 'light-note-browser-push'; \
   fi && \
   pm2 restart $PM2 --update-env && pm2 save"
 

@@ -1,3 +1,4 @@
+import { queryActivitySummary, queryActivityBaseline, activityFailure } from '../util/services/userActivityService.js';
 import { resultData, snakeCaseKeys, insertData, generateUUID, INTERNAL_ROLES } from '../util/common.js';
 import { isLocalIp } from '../util/ipFilter.js';
 import { isSelfTraffic, listLogExclude, addLogExclude, removeLogExclude } from '../util/logExclude.js';
@@ -247,7 +248,7 @@ export const getConversionFunnel = async (req, res) => {
   }
 };
 
-const ensureRootRole = async (req, res) => {
+export const ensureRootRole = async (req, res) => {
   try {
     const userId = req.user?.id;
     if (!userId || req.user?.role !== 'root') {
@@ -1444,7 +1445,7 @@ function buildAdminTodayBaseline(rows, dates, cutoffTime) {
   }
 
   const daily = new Map(
-    dates.map((date) => [date, { users: 0, bookmarks: 0, notes: 0, files: 0, todos: 0, activeUsers: 0, aiCalls: 0 }]),
+    dates.map((date) => [date, { users: 0, bookmarks: 0, notes: 0, files: 0, todos: 0, aiCalls: 0 }]),
   );
   rows.forEach((row) => {
     const bucket = daily.get(String(row.d || ''));
@@ -1482,7 +1483,6 @@ function buildAdminTodayBaseline(rows, dates, cutoffTime) {
       notes: metric('notes'),
       files: metric('files'),
       todos: metric('todos'),
-      activeUsers: metric('activeUsers'),
       aiCalls: metric('aiCalls'),
     },
   };
@@ -1562,14 +1562,17 @@ async function queryAdminOverviewSnapshot({ hideInternal, now = new Date() }) {
   const scope = buildAdminOverviewScope(hideInternal);
   const { formatDate, formatDateTime } = adminOverviewDateHelpers(now);
   const today = formatDate(now);
-  const weekAgo = formatDate(new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000));
   const apiPredicates = buildAdminApiLogPredicates('api_log');
-  const activeApiInternalRole = hideInternal ? ` AND active_user.role NOT IN (${scope.irSql})` : '';
 
   // 首屏只读取当前快照。每张事实表至多扫描一次，且所有查询在同一批次发出，不再让 AI 汇总形成第二段瀑布。
-  const [resourceRows, conversionAgg, opinionAgg, securityAgg, todoAgg, activitySystemAgg, aiAgg] = await Promise.all([
-    pool.query(
-      `SELECT kind, total, today, storageMb, trashMb, trashCount
+  const [activity, resourceRows, conversionAgg, opinionAgg, securityAgg, todoAgg, activitySystemAgg, aiAgg] =
+    await Promise.all([
+      queryActivitySummary({ hideInternal, now }).catch((error) => {
+        activityFailure(error);
+        return { available: false, today: null, period: null };
+      }),
+      pool.query(
+        `SELECT kind, total, today, storageMb, trashMb, trashCount
          FROM (
            SELECT 'user' AS kind,
                   COUNT(*) AS total,
@@ -1601,25 +1604,25 @@ async function queryAdminOverviewSnapshot({ hideInternal, now = new Date() }) {
            FROM files
            WHERE del_flag IN (0, 1)${scope.notIntCreateBy}${scope.notOnboardingFile}
          ) admin_overview_snapshot_resources`,
-      [today, today, today, today],
-    ),
-    pool.query(
-      `SELECT
+        [today, today, today, today],
+      ),
+      pool.query(
+        `SELECT
            COUNT(DISTINCT CASE WHEN event = 'page_view' THEN fingerprint END) AS visitors,
            COUNT(DISTINCT CASE WHEN event = 'register' THEN fingerprint END) AS registers
          FROM conversion_events`,
-    ),
-    pool.query('SELECT COUNT(*) AS pending FROM opinion WHERE del_flag = 0 AND status = ?' + scope.notIntUser, [
-      OPINION_STATUS.PENDING,
-    ]),
-    pool
-      .query(
-        "SELECT COUNT(*) AS unhandled FROM security_events WHERE handled_status = 'unhandled' AND severity IN ('high','critical')",
-      )
-      .catch(() => [[{ unhandled: 0 }]]),
-    pool
-      .query(
-        `SELECT
+      ),
+      pool.query('SELECT COUNT(*) AS pending FROM opinion WHERE del_flag = 0 AND status = ?' + scope.notIntUser, [
+        OPINION_STATUS.PENDING,
+      ]),
+      pool
+        .query(
+          "SELECT COUNT(*) AS unhandled FROM security_events WHERE handled_status = 'unhandled' AND severity IN ('high','critical')",
+        )
+        .catch(() => [[{ unhandled: 0 }]]),
+      pool
+        .query(
+          `SELECT
              COUNT(*) AS total,
              COALESCE(SUM(create_time >= ? AND NOT EXISTS (
                SELECT 1 FROM onboarding_seed_resources osr
@@ -1633,48 +1636,35 @@ async function queryAdminOverviewSnapshot({ hideInternal, now = new Date() }) {
              COALESCE(SUM(status = 'completed' AND completed_at >= ? AND completed_at < DATE_ADD(?, INTERVAL 1 DAY)), 0) AS completedToday
            FROM todo_items
            WHERE del_flag = 0${scope.notIntUser}`,
-        [today, today, today, today],
-      )
-      .catch(() => [[{ total: 0, createdToday: 0, pending: 0, dueToday: 0, overdue: 0, completedToday: 0 }]]),
-    // 活跃用户和系统健康复用同一次 7 日有界日志扫描；活跃口径也必须应用“有效业务请求”判定。
-    pool
-      .query(
-        `SELECT
-             COUNT(DISTINCT CASE
-               WHEN api_log.request_time >= ? AND ${apiPredicates.validRequest}
-                AND active_user.id IS NOT NULL AND active_user.del_flag = 0
-                AND active_user.role <> 'visitor'${activeApiInternalRole}
-               THEN api_log.user_id END) AS activeToday,
-             COUNT(DISTINCT CASE
-               WHEN ${apiPredicates.validRequest}
-                AND active_user.id IS NOT NULL AND active_user.del_flag = 0
-                AND active_user.role <> 'visitor'${activeApiInternalRole}
-               THEN api_log.user_id END) AS active7d,
+          [today, today, today, today],
+        )
+        .catch(() => [[{ total: 0, createdToday: 0, pending: 0, dueToday: 0, overdue: 0, completedToday: 0 }]]),
+      // API health retains its request-log source; real activity has its own daily fact table.
+      pool
+        .query(
+          `SELECT
              COALESCE(SUM(api_log.request_time >= ? AND ${apiPredicates.validRequest}), 0) AS total,
              COALESCE(SUM(api_log.request_time >= ? AND ${apiPredicates.business4xx}), 0) AS businessErrors,
              COALESCE(SUM(api_log.request_time >= ? AND ${apiPredicates.invalid4xx}), 0) AS invalidRequests,
              COALESCE(SUM(api_log.request_time >= ? AND ${apiPredicates.server5xx}), 0) AS serverErrors
            FROM api_logs api_log
-           LEFT JOIN \`user\` active_user ON active_user.id = api_log.user_id
            WHERE api_log.del_flag = '0' AND api_log.request_time >= ?`,
-        [today, today, today, today, today, weekAgo],
-      )
-      .catch(() => [
-        [{ activeToday: 0, active7d: 0, total: 0, businessErrors: 0, invalidRequests: 0, serverErrors: 0 }],
-      ]),
-    pool
-      .query(
-        `SELECT
+          [today, today, today, today, today],
+        )
+        .catch(() => [[{ total: 0, businessErrors: 0, invalidRequests: 0, serverErrors: 0 }]]),
+      pool
+        .query(
+          `SELECT
              COUNT(*) AS totalCount,
              COALESCE(SUM(provider_tokens), 0) AS totalTokens,
              COALESCE(SUM(created_at >= ? AND created_at < DATE_ADD(?, INTERVAL 1 DAY)), 0) AS todayCount,
              COALESCE(SUM(CASE WHEN created_at >= ? AND created_at < DATE_ADD(?, INTERVAL 1 DAY) THEN provider_tokens ELSE 0 END), 0) AS todayTokens
            FROM ai_executions
            WHERE model_called = 1${scope.notIntAiActor}`,
-        [today, today, today, today],
-      )
-      .catch(() => [[{ todayCount: 0, todayTokens: 0, totalCount: 0, totalTokens: 0 }]]),
-  ]);
+          [today, today, today, today],
+        )
+        .catch(() => [[{ todayCount: 0, todayTokens: 0, totalCount: 0, totalTokens: 0 }]]),
+    ]);
 
   const resourceByKind = Object.fromEntries((resourceRows[0] || []).map((row) => [String(row.kind), row]));
   const user = resourceByKind.user || {};
@@ -1690,7 +1680,7 @@ async function queryAdminOverviewSnapshot({ hideInternal, now = new Date() }) {
 
   return {
     users: { total: Number(user.total || 0), today: Number(user.today || 0) },
-    active: { today: Number(activitySystem.activeToday || 0), week: Number(activitySystem.active7d || 0) },
+    active: { ...activity, week: activity.period },
     resources: {
       bookmarkTotal: Number(bookmark.total || 0),
       noteTotal: Number(note.total || 0),
@@ -1732,8 +1722,6 @@ async function queryAdminOverviewSnapshot({ hideInternal, now = new Date() }) {
 async function queryAdminOverviewTrend({ days, hideInternal, now = new Date() }) {
   const { formatDate, formatTime } = adminOverviewDateHelpers(now);
   const scope = buildAdminOverviewScope(hideInternal);
-  const apiPredicates = buildAdminApiLogPredicates('api_log');
-  const activeApiInternalRole = hideInternal ? ` AND active_user.role NOT IN (${scope.irSql})` : '';
   const dates = [];
   for (let offset = days - 1; offset >= 0; offset -= 1) {
     const date = new Date(now.getTime() - offset * 24 * 60 * 60 * 1000);
@@ -1748,7 +1736,7 @@ async function queryAdminOverviewTrend({ days, hideInternal, now = new Date() })
   const baselineStart = baselineDates[0];
   const baselineCutoffTime = formatTime(now);
 
-  const [trendRows, activeRows, sameTimeBaselineRows] = await Promise.all([
+  const [trendRows, activity, activeBaseline, sameTimeBaselineRows] = await Promise.all([
     pool.query(
       `SELECT d, kind, SUM(c) AS c FROM (
          SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, 'user' AS kind, COUNT(*) AS c
@@ -1774,19 +1762,16 @@ async function queryAdminOverviewTrend({ days, hideInternal, now = new Date() })
        GROUP BY d, kind`,
       [startDate, startDate, startDate, startDate],
     ),
-    pool
-      .query(
-        `SELECT COUNT(DISTINCT api_log.user_id) AS activeUsers
-         FROM api_logs api_log
-         INNER JOIN \`user\` active_user ON active_user.id = api_log.user_id
-         WHERE api_log.del_flag = '0'
-           AND api_log.request_time >= ?
-           AND ${apiPredicates.validRequest}
-           AND active_user.del_flag = 0
-           AND active_user.role <> 'visitor'${activeApiInternalRole}`,
-        [startDate],
-      )
-      .catch(() => [[{ activeUsers: 0 }]]),
+    queryActivitySummary({ hideInternal, now, days }).catch((error) => {
+      activityFailure(error);
+      return { available: false, period: null };
+    }),
+    queryActivityBaseline({ hideInternal, now, dates: baselineDates, cutoffTime: baselineCutoffTime }).catch(
+      (error) => {
+        activityFailure(error);
+        return null;
+      },
+    ),
     // 同期基线与趋势属于历史分析读模型；失败只让同期信息降级，不阻断趋势和核心快照。
     pool
       .query(
@@ -1821,17 +1806,6 @@ async function queryAdminOverviewTrend({ days, hideInternal, now = new Date() })
              AND create_time >= ? AND create_time < ? AND TIME(create_time) <= ?${scope.notIntUser}${scope.notOnboardingTodo}
            GROUP BY d
            UNION ALL
-           SELECT DATE_FORMAT(api_log.request_time, '%Y-%m-%d') AS d, 'activeUsers' AS kind,
-                  COUNT(DISTINCT api_log.user_id) AS c
-           FROM api_logs api_log
-           INNER JOIN \`user\` active_user ON active_user.id = api_log.user_id
-           WHERE api_log.del_flag = '0'
-             AND api_log.request_time >= ? AND api_log.request_time < ? AND TIME(api_log.request_time) <= ?
-             AND ${apiPredicates.validRequest}
-             AND active_user.del_flag = 0
-             AND active_user.role <> 'visitor'${activeApiInternalRole}
-           GROUP BY d
-           UNION ALL
            SELECT DATE_FORMAT(created_at, '%Y-%m-%d') AS d, 'aiCalls' AS kind, COUNT(*) AS c
            FROM ai_executions
            WHERE model_called = 1
@@ -1839,7 +1813,7 @@ async function queryAdminOverviewTrend({ days, hideInternal, now = new Date() })
            GROUP BY d
          ) same_time_baseline
          GROUP BY d, kind`,
-        Array.from({ length: 7 }, () => [baselineStart, today, baselineCutoffTime]).flat(),
+        Array.from({ length: 6 }, () => [baselineStart, today, baselineCutoffTime]).flat(),
       )
       .catch((error) => {
         console.error('[AdminOverviewTrend] 同期基线统计失败(忽略) code=%s', stableAgentErrorCode(error));
@@ -1894,9 +1868,14 @@ async function queryAdminOverviewTrend({ days, hideInternal, now = new Date() })
   return {
     days,
     granularity,
-    activeUsers: Number(activeRows[0]?.[0]?.activeUsers || 0),
+    activeUsers: activity.period,
+    activeCoverage: activity,
     trend,
-    todayBaseline: buildAdminTodayBaseline(sameTimeBaselineRows?.[0], baselineDates, baselineCutoffTime),
+    todayBaseline: (() => {
+      const baseline = buildAdminTodayBaseline(sameTimeBaselineRows?.[0], baselineDates, baselineCutoffTime);
+      if (activeBaseline) baseline.metrics.activeUsers = activeBaseline;
+      return baseline;
+    })(),
   };
 }
 

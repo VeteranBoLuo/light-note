@@ -1,3 +1,4 @@
+import { compileWorkshopBriefFacts } from './dailyBriefWorkshop.js';
 import { summarizeUntaggedResources } from './resourceInventoryService.js';
 import { compileBriefConnection } from './dailyBriefConnections.js';
 
@@ -100,5 +101,9 @@ export async function compileDailyBriefFacts(database, userId, calendar) {
       };
     }),
   );
-  return [...entries, await compileBriefConnection(database, userId, calendar)];
+  return [
+    ...entries,
+    await compileBriefConnection(database, userId, calendar),
+    ...(await compileWorkshopBriefFacts(database, userId, calendar)),
+  ];
 }

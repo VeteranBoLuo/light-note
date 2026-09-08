@@ -229,11 +229,6 @@
               </label>
             </div>
           </div>
-
-          <label>
-            <span>{{ t('inbox.todoQuietPolicy') }}</span>
-            <BSelect v-model:value="form.quietPolicy" :options="quietPolicyOptions" />
-          </label>
         </div>
       </template>
     </section>
@@ -503,10 +498,6 @@
   const nudgeStopOptions = computed(() => [
     { value: 'completion_or_due', label: t('inbox.todoNudgeStopCompletionOrDue') },
     { value: 'max_count', label: t('inbox.todoNudgeStopMaxCount') },
-  ]);
-  const quietPolicyOptions = computed(() => [
-    { value: 'defer_once', label: t('inbox.todoQuietDefer') },
-    { value: 'skip', label: t('inbox.todoQuietSkip') },
   ]);
   const pastPolicyOptions = computed(() => [
     { value: 'keep_overdue' as const, label: t('inbox.todoPastKeep') },

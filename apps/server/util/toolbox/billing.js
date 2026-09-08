@@ -1,3 +1,4 @@
+import { settleFreeOcr } from './freeOcr.js';
 import { createHash } from 'node:crypto';
 import { POINTS_ECONOMY_VERSION } from '../pointsEconomyCatalog.js';
 import { toolboxInputDigest } from './catalog.js';
@@ -125,6 +126,7 @@ export async function settleToolboxBilling(
       replay: true,
     };
   }
+  if (billingMedium === 'free' && job.tool_id === 'ocr_to_text') return settleFreeOcr(connection, job);
   if (billingMedium === 'ai_quota') {
     if (currentStatus !== 'quoted') {
       throw toolboxError('TOOLBOX_BILLING_STATE_INVALID', '任务计费状态异常，已停止自动结算', 500);

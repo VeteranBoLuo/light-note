@@ -2,6 +2,12 @@ import crypto from 'node:crypto';
 import pool from '../db/index.js';
 
 export const AI_PRODUCT_EVENTS = Object.freeze([
+  'workshop_entry_impression',
+  'workshop_entry_opened',
+  'workshop_project_created',
+  'workshop_resources_added',
+  'workshop_project_opened',
+
   'ai_entry_impression',
   'ai_entry_opened',
   'ai_material_added',
@@ -51,6 +57,7 @@ export const AI_PRODUCT_EVENTS = Object.freeze([
 
 const EVENT_SET = new Set(AI_PRODUCT_EVENTS);
 const ENUM_DIMENSIONS = Object.freeze({
+  entrySource: new Set(['workbench', 'workshop', 'resource_menu', 'resource_batch', 'project', 'result']),
   surface: new Set([
     'edge',
     'shortcut',

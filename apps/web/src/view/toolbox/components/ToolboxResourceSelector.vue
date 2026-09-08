@@ -29,7 +29,7 @@
     >
       <span v-if="!selectedGroups.length" class="toolbox-resource-selector__empty-selection">
         <SvgIcon :src="icon.toolbox.locate" size="16" aria-hidden="true" />
-        {{ t('toolbox.workbench.selectHint') }}
+        {{ t(expandNoteBranches ? 'toolbox.workbench.selectHint' : 'toolbox.project.selectResourcesHint') }}
       </span>
       <template v-else>
         <article v-for="group in selectedGroups" :key="group.key" class="toolbox-resource-selector__selected-item">
@@ -88,12 +88,12 @@
         :resources-disabled="totalCount >= max"
         :scopes-disabled="totalCount >= max"
         :disabled="disabled || branchLoading"
-        :include-note-scopes="pickerAllowedTypes.includes('note')"
+        :include-note-scopes="expandNoteBranches && pickerAllowedTypes.includes('note')"
         :limit="8"
         :per-type="8"
         :single-type-page-size="40"
         :page-scroll="pageScroll"
-        exhaustive-single-type
+        exhaustive
         fill
         :placeholder="t('toolbox.workbench.resourceSearchPlaceholder')"
         multi-select
@@ -166,6 +166,7 @@
       existingResourceKeys?: string[];
       disabled?: boolean;
       pageScroll?: boolean;
+      expandNoteBranches?: boolean;
     }>(),
     {
       allowedTypes: () => ['bookmark', 'note', 'file'],
@@ -173,6 +174,7 @@
       existingResourceKeys: () => [],
       disabled: false,
       pageScroll: true,
+      expandNoteBranches: true,
     },
   );
   const emit = defineEmits<{ 'update:modelValue': [value: ToolboxSelectedResource[]] }>();
@@ -276,7 +278,7 @@
 
   function addMany(items: ResourcePickerItem[]) {
     if (props.disabled) return;
-    const existing = new Set(selectedKeys.value);
+    const existing = new Set(pickerSelectedKeys.value);
     const additions = items.filter((item) => {
       const key = resourceItemKey(item);
       if (existing.has(key)) return false;
@@ -284,9 +286,11 @@
       return true;
     });
     const remaining = Math.max(0, props.max - totalCount.value);
-    const accepted = additions.slice(0, remaining);
-    if (accepted.length) emit('update:modelValue', [...props.modelValue, ...accepted]);
-    if (accepted.length < additions.length) message.warning(t('toolbox.workbench.batchReachedMax', { max: props.max }));
+    if (additions.length > remaining) {
+      message.warning(t('toolbox.workbench.batchReachedMax', { max: props.max }));
+      return;
+    }
+    if (additions.length) emit('update:modelValue', [...props.modelValue, ...additions]);
   }
 
   function removeItem(item: ResourcePickerItem) {
@@ -615,5 +619,13 @@
   html.light-note-mobile-rendering .toolbox-resource-selector__filters :deep(.b_btn.is-selected) {
     border-color: var(--primary-color);
     color: var(--primary-color);
+  }
+  @media (max-width: 767px) {
+    .toolbox-resource-selector:not(.is-page-scroll) .toolbox-resource-selector__picker {
+      flex: none;
+      height: 48vh;
+      min-height: 286px;
+      max-height: 480px;
+    }
   }
 </style>

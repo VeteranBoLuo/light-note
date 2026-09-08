@@ -15,13 +15,16 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, ref, watch } from 'vue';
+  import { computed, provide, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import type { ToolboxToolId } from '@lightnote/shared/toolbox-protocol';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import DocumentTextWorkbench from './DocumentTextWorkbench.vue';
   import PdfImageConverter from './PdfImageConverter.vue';
   import PdfOrganizer from './PdfOrganizer.vue';
+
+  import { pdfSessionKey } from './pdfSession';
+  provide(pdfSessionKey, { owner: null, read: async () => [] });
 
   type PdfWorkbenchToolId = Extract<
     ToolboxToolId,

@@ -5,7 +5,6 @@ import MarkdownConverter from './components/MarkdownConverter.vue';
 import MermaidEditor from './components/MermaidEditor.vue';
 import PdfWorkbench from './components/PdfWorkbench.vue';
 import TableConverter from './components/TableConverter.vue';
-import TextDiff from './components/TextDiff.vue';
 import DatasetWorkbench from './components/DatasetWorkbench.vue';
 import KnowledgeTextWorkbench from './components/KnowledgeTextWorkbench.vue';
 import DocumentTextWorkbench from './components/DocumentTextWorkbench.vue';
@@ -18,7 +17,6 @@ export const TOOLBOX_LOCAL_COMPONENTS: Partial<Record<ToolboxToolId, Component>>
   image_to_pdf: PdfWorkbench,
   pdf_to_images: PdfWorkbench,
   markdown_converter: MarkdownConverter,
-  text_diff: TextDiff,
   table_converter: TableConverter,
   mermaid_editor: MermaidEditor,
   data_workbench: DatasetWorkbench,
@@ -30,9 +28,7 @@ export const TOOLBOX_LOCAL_COMPONENTS: Partial<Record<ToolboxToolId, Component>>
   table_merge_split: DatasetWorkbench,
   data_anonymizer: DatasetWorkbench,
   data_chart: DatasetWorkbench,
-  text_batch: KnowledgeTextWorkbench,
   regex_extractor: KnowledgeTextWorkbench,
-  markdown_checker: KnowledgeTextWorkbench,
   frontmatter_batch: KnowledgeTextWorkbench,
   citation_converter: KnowledgeTextWorkbench,
   structured_data_lab: KnowledgeTextWorkbench,

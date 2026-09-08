@@ -114,46 +114,91 @@
                 </BButton>
               </div>
 
-              <BTabs v-model:active-tab="activeContinueTab" variant="pill" :options="continueTabOptions" />
+              <BTabs v-model:active-tab="activeContinueTab" variant="pill" :options="continueTabOptions">
+                <template #label="{ tab }">
+                  <span class="continue-tab-label" :class="{ 'is-project': tab.key === 'projects' }">
+                    <SvgIcon
+                      v-if="tab.key === 'projects'"
+                      class="continue-tab-label__icon"
+                      :src="icon.toolbox.study"
+                      size="15"
+                    />{{ tab.label }}
+                  </span>
+                </template>
+              </BTabs>
 
-              <div v-if="summaryLoading" class="content-list content-list--loading content-list--distributed">
-                <div
-                  v-for="index in CONTINUE_ITEM_LIMIT"
-                  :key="`content-skeleton-${index}`"
-                  class="content-skeleton-row"
-                >
-                  <span class="skeleton-block skeleton-row-icon"></span>
-                  <span class="content-skeleton-copy">
-                    <span class="skeleton-block content-skeleton-title"></span>
-                    <span class="skeleton-block content-skeleton-subtitle"></span>
-                  </span>
-                  <span class="skeleton-block skeleton-row-meta"></span>
-                </div>
-              </div>
-              <div
-                v-else-if="activeContinueItems.length"
-                class="content-list"
-                :class="{ 'content-list--distributed': activeContinueItems.length === CONTINUE_ITEM_LIMIT }"
-              >
-                <BButton
-                  v-for="item in activeContinueItems"
-                  :key="item.key"
-                  class="content-row"
-                  @click="openContinueItem(item)"
-                >
-                  <span class="content-row-icon" :class="`content-row-icon--${item.type}`">
-                    <SvgIcon :src="item.icon" size="18" />
-                  </span>
-                  <span class="content-row-main">
-                    <strong>{{ item.title }}</strong>
-                    <span>{{ item.description }}</span>
-                  </span>
-                  <span class="content-row-meta">{{ item.meta }}</span>
-                </BButton>
-              </div>
-              <div v-else class="compact-empty compact-empty--continue">
-                <strong>{{ t('workbench.empty.continueTitle') }}</strong>
-                <span>{{ t('workbench.empty.continueDesc') }}</span>
+              <div class="today-continue__body">
+                <WorkshopProjectEntry
+                  v-show="activeContinueTab === 'projects'"
+                  inline
+                  tab-panel
+                  @state="projectEntryVisible = $event.visible"
+                />
+                <template v-if="activeContinueTab !== 'projects'">
+                  <div v-if="summaryLoading" class="content-list content-list--loading content-list--distributed">
+                    <div
+                      v-for="index in CONTINUE_ITEM_LIMIT"
+                      :key="`content-skeleton-${index}`"
+                      class="content-skeleton-row"
+                    >
+                      <span class="skeleton-block skeleton-row-icon"></span>
+                      <span class="content-skeleton-copy">
+                        <span class="skeleton-block content-skeleton-title"></span>
+                        <span class="skeleton-block content-skeleton-subtitle"></span>
+                      </span>
+                      <span class="skeleton-block skeleton-row-meta"></span>
+                    </div>
+                  </div>
+                  <div
+                    v-else-if="activeContinueItems.length"
+                    class="content-list"
+                    :class="{ 'content-list--distributed': activeContinueItems.length === CONTINUE_ITEM_LIMIT }"
+                  >
+                    <BButton
+                      v-for="item in activeContinueItems"
+                      :key="item.key"
+                      class="content-row"
+                      @click="openContinueItem(item)"
+                    >
+                      <span class="content-row-icon" :class="`content-row-icon--${item.type}`">
+                        <SvgIcon :src="item.icon" size="18" />
+                      </span>
+                      <span class="content-row-main">
+                        <strong>{{ item.title }}</strong>
+                        <span>{{ item.description }}</span>
+                      </span>
+                      <span class="content-row-meta">{{ item.meta }}</span>
+                    </BButton>
+                  </div>
+                  <div v-else class="compact-empty compact-empty--continue">
+                    <strong>{{ t('workbench.empty.continueTitle') }}</strong>
+                    <span>{{ t('workbench.empty.continueDesc') }}</span>
+                    <BButton
+                      type="primary"
+                      @click="
+                        openQuickCapture(
+                          activeContinueTab === 'files'
+                            ? 'file'
+                            : activeContinueTab === 'bookmarks'
+                              ? 'bookmark'
+                              : 'note',
+                        )
+                      "
+                    >
+                      {{
+                        quickCreateActions.find(
+                          (action) =>
+                            action.type ===
+                            (activeContinueTab === 'files'
+                              ? 'file'
+                              : activeContinueTab === 'bookmarks'
+                                ? 'bookmark'
+                                : 'note'),
+                        )?.label
+                      }}
+                    </BButton>
+                  </div>
+                </template>
               </div>
             </article>
           </div>
@@ -436,6 +481,7 @@
 </template>
 
 <script lang="ts" setup>
+  import WorkshopProjectEntry from '@/components/workbenches/WorkshopProjectEntry.vue';
   import { computed, defineAsyncComponent, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
@@ -467,7 +513,7 @@
   import { openNotificationPanel } from '@/utils/notificationEntry';
   import { resolveDailyQuestRoute } from '@/utils/growthNavigation';
 
-  type ContinueTab = 'notes' | 'files' | 'bookmarks';
+  type ContinueTab = 'projects' | 'notes' | 'files' | 'bookmarks';
   type ContinueItemType = 'note' | 'file' | 'bookmark';
 
   interface ContinueItem {
@@ -547,6 +593,10 @@
   const recentFileTable = ref<any[]>([]);
   const updateLogList = ref<UpdateLogItem[]>([]);
   const activeContinueTab = ref<ContinueTab>('notes');
+  const projectEntryVisible = ref(false);
+  watch(projectEntryVisible, (visible) => {
+    if (!visible && activeContinueTab.value === 'projects') activeContinueTab.value = 'notes';
+  });
   const fileVisible = ref(false);
   const activeFile = ref<any>(null);
 
@@ -671,6 +721,7 @@
     { key: 'notes', label: t('workbench.tabs.recentNotes'), badge: recentNoteTable.value.length },
     { key: 'files', label: t('workbench.tabs.recentFiles'), badge: recentFileTable.value.length },
     { key: 'bookmarks', label: t('workbench.tabs.frequentBookmarks'), badge: commonBookmarkTable.value.length },
+    ...(projectEntryVisible.value ? [{ key: 'projects', label: t('toolbox.project.myProjects') }] : []),
   ]);
 
   const activeContinueItems = computed<ContinueItem[]>(() => {
@@ -865,7 +916,11 @@
   }
 
   function openActiveCollection() {
-    const routeMap: Record<ContinueTab, string> = {
+    if (activeContinueTab.value === 'projects') {
+      void router.push('/toolbox/research_workspace?entry=workbench');
+      return;
+    }
+    const routeMap: Record<Exclude<ContinueTab, 'projects'>, string> = {
       notes: '/noteLibrary',
       files: '/cloudSpace',
       bookmarks: '/manage/bookmarkMg',
@@ -1220,7 +1275,7 @@
   .workbench-first-fold {
     min-width: 0;
     display: grid;
-    grid-template-columns: minmax(0, 1.36fr) minmax(390px, 1fr);
+    grid-template-columns: minmax(0, 1.65fr) minmax(340px, 1fr);
     align-items: stretch;
     gap: 12px;
   }
@@ -1311,7 +1366,7 @@
   .today-summary-body {
     --today-work-area-height: 196px;
     display: grid;
-    grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr);
+    grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
     align-items: stretch;
     gap: 10px;
     padding: 0 12px 12px;
@@ -1371,6 +1426,7 @@
   }
 
   .today-continue {
+    --continue-row-height: 38px;
     min-width: 0;
     min-height: var(--today-work-area-height);
     padding: 8px 10px;
@@ -1382,6 +1438,15 @@
     background: var(--menu-body-bg-color, var(--card-background));
   }
 
+  .today-continue__body {
+    min-height: calc(var(--continue-row-height) * 5);
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+  }
+  .today-continue__body > :deep(.workshop-entry) {
+    flex: 1 1 auto;
+  }
   .today-continue__header {
     margin-bottom: 4px;
   }
@@ -1392,10 +1457,13 @@
 
   .today-continue :deep(.tab-container) {
     margin-bottom: 4px;
+    flex-wrap: wrap;
+    overflow: visible;
   }
 
   .today-continue :deep(.is-pill .tab) {
     min-height: 30px;
+    font-weight: 500;
     padding: 4px 8px;
   }
 
@@ -2020,7 +2088,7 @@
 
   .content-row {
     width: 100%;
-    height: 38px;
+    height: var(--continue-row-height);
     padding: 0 7px;
     gap: 8px;
     justify-content: flex-start;
@@ -2031,7 +2099,7 @@
 
   .content-list--distributed > .content-row,
   .content-list--distributed > .content-skeleton-row {
-    min-height: 38px;
+    min-height: var(--continue-row-height);
     height: auto;
     flex: 1 1 0;
   }
@@ -2636,5 +2704,17 @@
     .summary-card:hover {
       transform: none;
     }
+  }
+  .continue-tab-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .continue-tab-label.is-project {
+    margin-left: 3px;
+  }
+  .continue-tab-label__icon {
+    color: var(--primary-color);
+    flex-shrink: 0;
   }
 </style>

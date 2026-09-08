@@ -31,7 +31,7 @@
               class="bookmark-generate-button"
               :class="{ 'bookmark-generate-button--stop': generating }"
               :loading="resolvingUrl"
-              :disabled="resolvingUrl"
+              :disabled="resolvingUrl || saving"
               @click="handleGenerateClick"
               v-click-log="{
                 module: '书签详情',
@@ -57,7 +57,22 @@
         </div>
         <span v-if="errors.url" class="bookmark-field__error">{{ errors.url }}</span>
         <div class="bookmark-field__hints">
-          <div class="bookmark-ai-note">{{ $t('bookmarkEditor.aiHint') }}</div>
+          <div v-if="updatedFields.length" class="bookmark-meta-feedback" role="status">
+            <span>{{
+              $t(
+                updatedFields.length === 2
+                  ? 'bookmarkMeta.updatedBoth'
+                  : updatedFields[0] === 'name'
+                    ? 'bookmarkMeta.updatedName'
+                    : 'bookmarkMeta.updatedDescription',
+              )
+            }}</span>
+            <span aria-hidden="true" class="bookmark-meta-feedback__separator">·</span>
+            <BButton class="bookmark-meta-undo" :disabled="!canUndoMeta || saving" @click="$emit('undoMeta')">{{
+              $t('bookmarkMeta.undo')
+            }}</BButton>
+          </div>
+          <div v-else class="bookmark-ai-note">{{ $t('bookmarkEditor.aiHint') }}</div>
           <!-- 编辑时:网页快照入口紧挨网址(快照存的就是该网址的正文),比原来藏在页面右上角更易发现 -->
           <button
             v-if="handleType === 'edit'"
@@ -149,6 +164,7 @@
           class="bookmark-editor__save-button"
           type="primary"
           :loading="saving"
+          :disabled="resolvingUrl || generating"
           @click="$emit('submit')"
         >
           {{ saveLabel }}
@@ -178,6 +194,8 @@
       saving: boolean;
       resolvingUrl: boolean;
       generating: boolean;
+      updatedFields: ('name' | 'description')[];
+      canUndoMeta: boolean;
       errors: BookmarkEditorErrors;
       tagOptions: BookmarkTagOption[];
     }>(),
@@ -189,6 +207,7 @@
 
   const emit = defineEmits<{
     generate: [];
+    undoMeta: [];
     stopGenerate: [];
     submit: [];
     cancel: [];
@@ -197,12 +216,50 @@
   }>();
 
   function handleGenerateClick() {
-    if (props.resolvingUrl) return;
+    if (props.resolvingUrl || props.saving) return;
     emit(props.generating ? 'stopGenerate' : 'generate');
   }
 </script>
 
 <style lang="less" scoped>
+  .bookmark-meta-feedback {
+    display: flex;
+    align-items: center;
+    flex-wrap: nowrap;
+    flex-shrink: 0;
+    gap: 6px;
+    color: var(--desc-color);
+    font-size: 12px;
+    line-height: 1.55;
+    min-width: 0;
+  }
+
+  .bookmark-meta-feedback__separator {
+    color: var(--desc-color);
+  }
+
+  .bookmark-meta-undo {
+    height: 28px;
+    padding: 0 2px;
+    background: transparent !important;
+    border: 0;
+    box-shadow: none;
+    color: var(--primary-color);
+    font-size: inherit;
+    line-height: inherit;
+
+    &:hover:not(:disabled) {
+      color: var(--primary-color);
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+
+    &:disabled {
+      color: var(--desc-color);
+      opacity: 0.55;
+    }
+  }
+
   .bookmark-editor {
     width: min(800px, calc(100% - 48px));
     min-height: 100%;
@@ -262,6 +319,7 @@
 
   .bookmark-field__hints {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
     gap: 12px;
@@ -465,6 +523,10 @@
       background: transparent;
       box-shadow: none;
       gap: 16px;
+    }
+
+    .bookmark-meta-feedback :deep(button) {
+      min-height: 44px;
     }
 
     .bookmark-url-row {

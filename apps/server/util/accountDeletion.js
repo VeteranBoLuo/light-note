@@ -1,3 +1,4 @@
+import { deferCloudImageDeletion, deleteUnmanagedObject } from './imagePreview/cleanup.js';
 import crypto from 'node:crypto';
 import pool from '../db/index.js';
 import redisClient from './redisClient.js';
@@ -50,6 +51,7 @@ const DIRECT_DELETE_TABLES = Object.freeze([
   ['ai_daily_bonus', 'user_id'],
   ['user_item', 'user_id'],
   ['bookmark_snapshot', 'user_id'],
+  ['bookmark_archive_jobs', 'user_id'],
   ['bookmark_health_scan_items', 'user_id'],
   ['bookmark_health_scan_jobs', 'user_id'],
   ['bookmark_health', 'user_id'],
@@ -523,6 +525,9 @@ export async function purgeToolboxWorkspace(connection, tables, userId) {
       [userId],
     );
   }
+  await deleteIfPresent(connection, tables, 'toolbox_study_progress', 'DELETE FROM toolbox_study_progress WHERE user_id = ?', [userId]);
+  await deleteIfPresent(connection, tables, 'toolbox_ocr_inputs', 'DELETE FROM toolbox_ocr_inputs WHERE user_id = ?', [userId]);
+  await deleteIfPresent(connection, tables, 'toolbox_ocr_usage', 'DELETE FROM toolbox_ocr_usage WHERE user_id = ?', [userId]);
   await deleteIfPresent(connection, tables, 'toolbox_jobs', 'DELETE FROM toolbox_jobs WHERE user_id = ?', [userId]);
   await deleteIfPresent(connection, tables, 'toolbox_quotes', 'DELETE FROM toolbox_quotes WHERE user_id = ?', [userId]);
 }
@@ -681,6 +686,15 @@ async function purgeFeatureRequests(connection, tables, userId) {
 }
 
 export async function purgeOwnedResources(connection, tables, userId) {
+  if (tables.has('image_assets') && tables.has('image_asset_refs')) {
+    if(tables.has('files')) {
+      const [images]=await connection.query('SELECT * FROM files WHERE create_by=?',[userId]);
+      await deferCloudImageDeletion(connection,images);
+    }
+    await connection.query('DELETE r FROM image_asset_refs r JOIN image_assets a ON a.id=r.asset_id WHERE a.owner_user_id=?',[userId]);
+    await connection.query("UPDATE image_assets SET status='pending_delete',cleanup_after=DATE_ADD(NOW(),INTERVAL 24 HOUR) WHERE owner_user_id=? AND status<>'deleting'",[userId]);
+  }
+
   if (tables.has('note_resource_refs')) {
     const targetClauses = [];
     const params = [userId];
@@ -1152,7 +1166,7 @@ async function deleteObsObjects(objectKeys) {
   const failed = [];
   for (let index = 0; index < keys.length; index += 4) {
     const chunk = keys.slice(index, index + 4);
-    const results = await Promise.allSettled(chunk.map((key) => deleteObjectFromObs(key)));
+    const results = await Promise.allSettled(chunk.map((key) => deleteUnmanagedObject(key)));
     results.forEach((result, resultIndex) => {
       if (result.status === 'rejected') failed.push(chunk[resultIndex]);
     });

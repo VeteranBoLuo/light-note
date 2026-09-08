@@ -1,7 +1,6 @@
 import { ref, unref, type MaybeRef } from 'vue';
 import notificationApi from '@/api/notificationApi.ts';
 import { useUserStore } from '@/store';
-import { isLightNoteAndroidApp } from '@/utils/androidBridge';
 
 export interface NotificationItem {
   id: string;
@@ -21,22 +20,19 @@ export interface NotificationPage {
   unreadTotal: number;
   currentPage: number;
   pageSize: number;
+  targetFound?: boolean | null;
 }
 
 // 模块级单例:铃铛角标与通知面板共享未读数,切号作废
 const unreadTotal = ref(0);
 const unreadByType = ref<Record<string, number>>({}); // 分类型未读数(各 tab 角标)
 let ownerId: string | null = null;
-let browserNotificationBaselineReady = false;
-const browserSeenIds = new Set<string>();
 
 /** 登出/切号时作废未读缓存 */
 export function resetNotification() {
   unreadTotal.value = 0;
   unreadByType.value = {};
   ownerId = null;
-  browserNotificationBaselineReady = false;
-  browserSeenIds.clear();
 }
 
 export function useNotification(options: { excludeCommunityChat?: MaybeRef<boolean> } = {}) {
@@ -61,76 +57,22 @@ export function useNotification(options: { excludeCommunityChat?: MaybeRef<boole
       unreadTotal.value = 0;
       unreadByType.value = {};
       ownerId = uid;
-      browserNotificationBaselineReady = false;
-      browserSeenIds.clear();
     }
     try {
       const res = await notificationApi.getUnreadCount(notificationScope());
+      if (useUserStore().id !== uid || isGuest()) return;
       if (res?.status === 200 && res.data) {
-        const previousUnread = unreadTotal.value;
         unreadTotal.value = Number(res.data.unreadTotal) || 0;
         unreadByType.value = res.data.byType || {};
-        if (
-          (!browserNotificationBaselineReady || unreadTotal.value > previousUnread) &&
-          useUserStore().preferences.notificationsBrowser === true &&
-          !isLightNoteAndroidApp() &&
-          typeof Notification !== 'undefined' &&
-          Notification.permission === 'granted'
-        ) {
-          void notifyNewestUnreadInBrowser();
-        }
       }
     } catch {
       /* 忽略,下次轮询再试 */
     }
   }
 
-  async function notifyNewestUnreadInBrowser() {
-    try {
-      const res = await notificationApi.getNotificationList({
-        currentPage: 1,
-        pageSize: 5,
-        type: 'all',
-        ...notificationScope(),
-      });
-      const items = Array.isArray(res?.data?.items) ? (res.data.items as NotificationItem[]) : [];
-      if (!browserNotificationBaselineReady) {
-        items.forEach((item) => browserSeenIds.add(item.id));
-        browserNotificationBaselineReady = true;
-        return;
-      }
-      for (const item of [...items].reverse()) {
-        if (item.isRead || browserSeenIds.has(item.id)) continue;
-        browserSeenIds.add(item.id);
-        const meta = (() => {
-          if (item.meta && typeof item.meta === 'object') return item.meta;
-          try {
-            return item.meta ? JSON.parse(item.meta) : {};
-          } catch {
-            return {};
-          }
-        })();
-        // 聊天室当前只开放站内提醒。即使用户全局开启了浏览器通知，也不能越过频道级渠道约束。
-        if (meta?.delivery === 'in_app_only') continue;
-        const notification = new Notification(item.title || '轻笺', {
-          body: item.content || undefined,
-          tag: `light-note:${item.id}`,
-        });
-        notification.onclick = () => {
-          window.focus();
-          if (item.link) window.location.assign(item.link);
-          notification.close();
-        };
-      }
-      while (browserSeenIds.size > 100) browserSeenIds.delete(browserSeenIds.values().next().value as string);
-    } catch {
-      // 浏览器通知只是附加渠道，失败不影响站内角标。
-    }
-  }
-
   // 拉取分页列表(顺带同步未读数)
   async function fetchList(
-    params: { currentPage?: number; pageSize?: number; type?: string } = {},
+    params: { currentPage?: number; pageSize?: number; type?: string; notificationId?: string } = {},
   ): Promise<NotificationPage> {
     const empty: NotificationPage = {
       items: [],
@@ -140,8 +82,10 @@ export function useNotification(options: { excludeCommunityChat?: MaybeRef<boole
       pageSize: 20,
     };
     if (isGuest()) return empty;
+    const uid = useUserStore().id;
     try {
       const res = await notificationApi.getNotificationList({ ...params, ...notificationScope() });
+      if (useUserStore().id !== uid || isGuest()) return empty;
       if (res?.status === 200 && res.data) {
         unreadTotal.value = Number(res.data.unreadTotal ?? unreadTotal.value) || 0;
         return {
@@ -150,11 +94,13 @@ export function useNotification(options: { excludeCommunityChat?: MaybeRef<boole
           unreadTotal: unreadTotal.value,
           currentPage: Number(res.data.currentPage) || empty.currentPage,
           pageSize: Number(res.data.pageSize) || empty.pageSize,
+          targetFound: res.data.targetFound,
         };
       }
-    } catch {
-      /* 忽略 */
+    } catch (error) {
+      if (params.notificationId) throw error;
     }
+    if (params.notificationId) throw new Error('NOTIFICATION_LOCATE_FAILED');
     return empty;
   }
 

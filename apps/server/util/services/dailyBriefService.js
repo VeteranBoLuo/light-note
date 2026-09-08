@@ -158,8 +158,9 @@ function buildBrief(calendar, facts, narrative) {
       id: `insight_${index + 1}`,
       text,
       factIds: Object.freeze(factIds),
+      ...(factIds.some((id) => id.startsWith('workshop_')) ? { sources: factIds.flatMap((id) => byId.get(id)?.sources || []) } : {}),
       ...(connection?.count
-        ? { sources: connection.sources, tagName: connection.tagName, tagRoute: connection.route }
+        ? { sources: [...connection.sources, ...factIds.filter((id) => id.startsWith('workshop_')).flatMap((id) => byId.get(id)?.sources || [])], tagName: connection.tagName, tagRoute: connection.route }
         : {}),
     });
   });
@@ -177,7 +178,7 @@ function buildBrief(calendar, facts, narrative) {
       Object.freeze({
         id: 'today_actions',
         title: titles.today_actions,
-        items: Object.freeze(items('todo_overdue', 'todo_due_today')),
+        items: Object.freeze(items('todo_overdue', 'todo_due_today', ...facts.filter((fact) => fact.id.startsWith('workshop_')).map((fact) => fact.id))),
       }),
       Object.freeze({
         id: 'new_content',

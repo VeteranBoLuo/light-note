@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  compareTextLines,
   convertMarkup,
   convertTable,
   parseDelimitedTable,
@@ -10,30 +9,6 @@ import {
 } from './toolboxTextTools';
 
 describe('工具箱文本与表格本地内核', () => {
-  it('按行对比文本，并把相邻删除和新增配对为修改', () => {
-    const result = compareTextLines('标题\n旧结论\n保留', '标题\n新结论\n保留\n补充', {
-      ignoreCase: false,
-      ignoreWhitespace: false,
-    });
-
-    expect(result.rows.map((row) => row.kind)).toEqual(['equal', 'changed', 'equal', 'added']);
-    expect(result.rows[1]).toMatchObject({ leftLine: 2, rightLine: 2, left: '旧结论', right: '新结论' });
-    expect(result.stats).toEqual({ unchanged: 2, changed: 1, added: 1, removed: 0 });
-  });
-
-  it('可忽略大小写与多余空白，并限制过于复杂的对比', () => {
-    const result = compareTextLines('Light   Note', ' light note ', {
-      ignoreCase: true,
-      ignoreWhitespace: true,
-    });
-    expect(result.stats.unchanged).toBe(1);
-
-    const large = Array.from({ length: 1_500 }, (_, index) => `line-${index}`).join('\n');
-    expect(() => compareTextLines(large, large, { ignoreCase: false, ignoreWhitespace: false })).toThrowError(
-      expect.objectContaining<ToolboxTextError>({ code: 'DIFF_TOO_COMPLEX' }),
-    );
-  });
-
   it('正确解析包含逗号、换行和双引号的 CSV', () => {
     expect(parseDelimitedTable('名称,说明\n"轻笺,工具箱","第一行\n第二行"\n"双""引号",完成', ',')).toEqual([
       ['名称', '说明'],

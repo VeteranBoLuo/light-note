@@ -56,9 +56,6 @@
         <span class="community-notification-settings__compact-result" :class="{ 'is-active': settings.enabled }">
           <i aria-hidden="true"></i>{{ currentCompactInAppChannelLabel }}
         </span>
-        <span class="community-notification-settings__compact-result">
-          <i aria-hidden="true"></i>{{ t('communityChat.notifications.compactSystemChannel') }}
-        </span>
       </div>
 
       <div v-else class="community-notification-settings__explanation" aria-live="polite">
@@ -70,7 +67,6 @@
         <span :class="{ 'is-active': settings.enabled }">
           <i aria-hidden="true"></i>{{ currentInAppChannelLabel }}
         </span>
-        <span> <i aria-hidden="true"></i>{{ t('communityChat.notifications.appChannelLater') }} </span>
       </div>
       <p v-if="!compact" class="community-notification-settings__hint">
         {{ t('communityChat.notifications.visibilityHint') }}
@@ -201,7 +197,7 @@
         ...DEFAULT_SETTINGS.channels,
         ...(value?.channels || {}),
         inApp: { available: true, enabled },
-        browser: { available: false, enabled: false },
+        browser: value?.channels?.browser || DEFAULT_SETTINGS.channels.browser,
         android: { available: false, enabled: false },
       },
     } as CommunityChatNotificationSettings;

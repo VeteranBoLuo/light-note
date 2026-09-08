@@ -67,3 +67,6 @@ it('启动失败也释放连接池', async () => {
   expect(process.exitCode).toBe(1);
   expect(mocks.item).not.toHaveBeenCalled();
 });
+
+vi.mock('./util/imagePreview/worker.js',()=>({runSingleImagePreviewJob:vi.fn(async()=>false),cleanupImageAssets:vi.fn()}));
+vi.mock('./util/imagePreview/runtime.js',()=>({inspectImagePreviewRuntime:vi.fn(async()=>({ready:true}))}));

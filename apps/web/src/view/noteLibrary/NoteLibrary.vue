@@ -594,7 +594,7 @@
     <MobilePageActionsDrawer
       v-if="bookmark.isMobile"
       v-model:open="mobilePageActionsOpen"
-      :title="t('common.more')"
+      :title="t('note.mobileActionsTitle')"
       :actions="mobilePageActions"
       @action="handleMobilePageAction"
     />
@@ -609,6 +609,8 @@
 </template>
 
 <script lang="ts" setup>
+  import { useProjectResourceAction } from '@/composables/useProjectResourceAction';
+  const { canJoinProject, joinProject } = useProjectResourceAction();
   import { MAX_NOTE_BATCH_ACTION_ITEMS } from '@lightnote/shared/resource-selection';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -1304,6 +1306,9 @@
         label: note.isPending ? t('inbox.removeExisting') : t('inbox.addExisting'),
         icon: icon.contextMenu.inbox,
       },
+      ...(canJoinProject.value
+        ? [{ key: 'joinProject', label: t('toolbox.project.join'), icon: icon.toolbox.research }]
+        : []),
       { key: 'aiSummary', label: t('note.aiSummarize'), icon: icon.ai.summary },
       ...(noteTreeWriteEnabled.value
         ? [
@@ -1919,6 +1924,10 @@
   }
 
   function handleNoteMenuSelect(action: string, note: any) {
+    if (action === 'joinProject') {
+      joinProject([{ type: 'note', id: String(note.id), title: note.title }]);
+      return;
+    }
     if (action === 'toggleTop') toggleNoteTop(note);
     else if (action === 'relateTags') openNoteTagConfig(note);
     else if (action === 'toggleInbox') toggleNoteInbox(note);
@@ -2508,7 +2517,7 @@
     },
     {
       key: 'batch',
-      label: t(batchMode.value ? 'note.exitBatch' : 'inbox.mobileBatchSelect'),
+      label: t(batchMode.value ? 'common.exitBatch' : 'common.batchActions'),
       icon: icon.filterPanel.check,
     },
   ]);

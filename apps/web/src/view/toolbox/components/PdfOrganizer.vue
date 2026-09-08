@@ -193,6 +193,23 @@
   import { downloadToolboxBlob } from '@/utils/toolboxLocal';
   import PdfPageThumbnail from './PdfPageThumbnail.vue';
 
+  import { usePdfSession } from './pdfSession';
+  const publishPdf = usePdfSession(
+    async () => {
+      if (!pages.value.length) return [];
+      const result = await exportPdfPages(
+        sources.value,
+        pages.value.map((page) => ({ ...page })),
+      );
+      return [new File([result.blob], result.fileName, { type: 'application/pdf' })];
+    },
+    async (files) => {
+      releaseThumbnails();
+      sources.value = [];
+      pages.value = [];
+      await handleFiles(files);
+    },
+  );
   const { t } = useI18n();
   const sources = ref<PdfOrganizerSource[]>([]);
   const pages = ref<PdfOrganizerPage[]>([]);
@@ -240,6 +257,7 @@
         throw new PdfOrganizerError('TOO_MANY_PAGES');
       sources.value.push(...parsed.sources);
       pages.value.push(...parsed.pages);
+      publishPdf();
     } catch (error) {
       showError(error);
     } finally {

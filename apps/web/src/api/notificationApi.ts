@@ -6,7 +6,12 @@ export interface NotificationScopeOptions {
 
 // 通知列表(分页 + 未读数;可按 type 筛选:all/level_up/opinion_reply/system)
 export const getNotificationList = (
-  params: { currentPage?: number; pageSize?: number; type?: string } & NotificationScopeOptions = {},
+  params: {
+    currentPage?: number;
+    pageSize?: number;
+    type?: string;
+    notificationId?: string;
+  } & NotificationScopeOptions = {},
 ) => apiBasePost('/api/notification/list', params);
 
 // 仅未读数(铃铛角标轮询用,轻量)
@@ -46,10 +51,8 @@ export const getAdminList = (params: { currentPage?: number; pageSize?: number }
   apiBasePost('/api/notification/admin/list', params);
 
 // 后台通知中心(仅 root):撤回一个批次
-export const recallNotification = (
-  batchId: string,
-  action: { reason: string; confirmed: true; confirmText: string },
-) => apiBasePost('/api/notification/admin/recall', { batchId, ...action });
+export const recallNotification = (batchId: string, action: { reason: string; confirmed: true; confirmText: string }) =>
+  apiBasePost('/api/notification/admin/recall', { batchId, ...action });
 
 // 后台通知中心(仅 root):删除一个批次(同时撤回并从发送记录移除)
 export const deleteAdminNotification = (

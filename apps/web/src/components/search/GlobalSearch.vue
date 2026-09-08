@@ -52,6 +52,12 @@
           </header>
 
           <div class="global-search-dialog__body">
+            <BButton v-if="workshopMatch" class="global-search__workshop" @click="openWorkshop">
+              <SvgIcon :src="icon.toolbox.home" size="20" /><span
+                ><strong>{{ t('toolbox.title') }}</strong
+                ><small>{{ t('toolbox.project.introHint') }}</small></span
+              >
+            </BButton>
             <div v-if="loading" class="global-search__loading" aria-live="polite">
               <div v-for="n in 6" :key="n" class="global-search__skeleton"></div>
             </div>
@@ -171,6 +177,13 @@
   const placeholder = computed(() =>
     route.path.includes('/search') ? t('resourceCenter.continueSearch') : t('resourceCenter.searchPlaceholder'),
   );
+  const workshopMatch = computed(() =>
+    /工坊|项目|研究|学习|写作|资料|图片|扫描|workshop|project|research|study|learn|writ|pdf|ocr/i.test(keyword.value),
+  );
+  function openWorkshop() {
+    close({ restoreFocus: false });
+    void router.push('/toolbox');
+  }
   const flatItems = computed(() => suggestGroups.value.flatMap((group) => group.items));
 
   function escapeHtml(input: string) {
@@ -389,6 +402,23 @@
   .global-search__trigger[aria-expanded='true'] {
     color: var(--primary-color);
     background: color-mix(in srgb, var(--primary-color) 10%, var(--background-color));
+  }
+  .global-search__workshop.b_btn {
+    width: 100%;
+    height: auto;
+    padding: 12px;
+    gap: 12px;
+    text-align: left;
+    white-space: normal;
+    margin-bottom: 12px;
+    border: 1px solid var(--surface-border-color);
+  }
+  .global-search__workshop span {
+    display: grid;
+    gap: 4px;
+  }
+  .global-search__workshop small {
+    color: var(--desc-color);
   }
 </style>
 

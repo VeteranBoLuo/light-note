@@ -5,6 +5,8 @@ import { aiActionRateLimiter, localProcessingRateLimiter } from '../util/request
 const router = express.Router();
 
 router.get('/catalog', toolboxHandle.getCatalog);
+router.get('/project-entry', toolboxHandle.getProjectEntry);
+router.post('/project-entry/dismiss', localProcessingRateLimiter, toolboxHandle.dismissProjectEntry);
 router.get('/home', localProcessingRateLimiter, toolboxHandle.getHome);
 router.get('/knowledge-overview', localProcessingRateLimiter, toolboxHandle.getKnowledgeOverview);
 router.get('/workspaces', localProcessingRateLimiter, toolboxHandle.listWorkspaces);
@@ -30,5 +32,7 @@ router.get('/jobs/:jobId', toolboxHandle.getJob);
 router.post('/jobs/:jobId/cancel', toolboxHandle.cancelJob);
 router.get('/artifacts/:artifactId', toolboxHandle.getArtifact);
 router.post('/artifacts/:artifactId/save', toolboxHandle.saveArtifact);
+router.get('/artifacts/:artifactId/study', toolboxHandle.readStudy);
+router.post('/artifacts/:artifactId/study', localProcessingRateLimiter, toolboxHandle.writeStudy);
 
 export default router;

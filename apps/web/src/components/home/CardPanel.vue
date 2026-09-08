@@ -96,6 +96,8 @@
 </template>
 
 <script lang="ts" setup>
+  import { useProjectResourceAction } from '@/composables/useProjectResourceAction';
+  const { canJoinProject, joinProject } = useProjectResourceAction();
   import { VueDraggable } from 'vue-draggable-plus';
   import TagCard from '@/components/home/TagCard.vue';
   import { bookmarkStore } from '@/store';
@@ -218,6 +220,9 @@
       },
       { key: 'edit', label: t('common.edit'), icon: icon.table_edit },
       { key: 'copyLink', label: t('common.copyLink'), icon: icon.cloudSpace.preview.copy },
+      ...(canJoinProject.value
+        ? [{ key: 'joinProject', label: t('toolbox.project.join'), icon: icon.toolbox.research }]
+        : []),
       { key: 'analyzeBookmark', label: t('bookmarkMg.aiUseBookmark'), icon: icon.ai.summary },
       {
         key: 'toggleInbox',
@@ -230,6 +235,10 @@
   }
 
   function rightMenuClick(action: string, item: any) {
+    if (action === 'joinProject') {
+      joinProject([{ type: 'bookmark', id: String(item.id), title: item.name }]);
+      return;
+    }
     const actionLabel = menuFor(item).find((menuItem: any) => menuItem.key === action)?.label || action;
     recordOperation({ module: '首页', operation: `右键${actionLabel}书签【${item.name}】` });
     if (action === 'toggleTop') {

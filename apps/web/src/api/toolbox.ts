@@ -1,3 +1,5 @@
+import { invalidateToolboxProjects } from '@/utils/toolboxProjectState';
+import { recordAiProductEvent, type AiProductEventDimensions } from '@/api/aiTelemetry';
 import type { ToolboxToolDefinition } from '@lightnote/shared/toolbox-protocol';
 import { apiBaseGet, apiBasePatch, apiBasePost } from '@/http/request';
 import type { ResourcePickerItem } from '@/composables/useResourcePickerSearch';
@@ -20,6 +22,8 @@ export type ToolboxCatalogItem = ToolboxToolDefinition & {
 };
 
 export type ToolboxCatalog = {
+  ocrUsage?: { remainingPages: number; resetsAt: string };
+  ocrPolicy?: { maxFiles: number; maxBytes: number; maxPages: number; dailyPages: number };
   protocolVersion: number;
   pricingVersion: string;
   chargeRule: 'single_medium_per_execution';
@@ -35,6 +39,7 @@ export type ToolboxWorkspaceResource = {
   id: number;
   type: 'note' | 'bookmark' | 'file';
   resourceId: string;
+  available?: boolean;
   version: string;
   title: string;
   createdAt: string;
@@ -143,12 +148,13 @@ export type ToolboxQuote = {
 };
 
 export type ToolboxJob = {
+  sourceWorkspaceId?: string | null;
   id: string;
   toolId: string;
   status: 'queued' | 'processing' | 'succeeded' | 'partial_succeeded' | 'failed' | 'cancelled' | 'expired';
   stage: string;
   billing: {
-    medium: 'points' | 'ai_quota';
+    medium: 'points' | 'ai_quota' | 'free';
     status: string;
     quotedPoints: number;
     actualPoints: number;
@@ -256,8 +262,17 @@ export async function fetchToolboxKnowledgeOverview(): Promise<ToolboxKnowledgeO
   return response.data as ToolboxKnowledgeOverview;
 }
 
+export type ProjectEntrySource = NonNullable<AiProductEventDimensions['entrySource']>;
+function projectEvent(source: ProjectEntrySource) {
+  return {
+    surface: window.matchMedia('(max-width: 767px)').matches ? ('mobile' as const) : ('desktop' as const),
+    entrySource: source,
+    outcome: 'success' as const,
+  };
+}
+
 export async function fetchToolboxWorkspaces(
-  kind: ToolboxWorkspaceKind,
+  kind?: ToolboxWorkspaceKind,
   status?: ToolboxWorkspaceStatus,
 ): Promise<ToolboxWorkspaceSummary[]> {
   const response = await apiBaseGet(
@@ -269,16 +284,21 @@ export async function fetchToolboxWorkspaces(
   return Array.isArray(response.data?.items) ? response.data.items : [];
 }
 
-export async function createToolboxWorkspace(input: {
-  kind: ToolboxWorkspaceKind;
-  title: string;
-  description?: string;
-  goal?: string;
-  targetDate?: string | null;
-  nextStep?: string;
-}): Promise<ToolboxWorkspace> {
+export async function createToolboxWorkspace(
+  input: {
+    kind: ToolboxWorkspaceKind;
+    title: string;
+    description?: string;
+    goal?: string;
+    targetDate?: string | null;
+    nextStep?: string;
+  },
+  entrySource: ProjectEntrySource = 'project',
+): Promise<ToolboxWorkspace> {
   const response = await apiBasePost('/api/toolbox/workspaces', input, { silent: true });
   if (![200, 201].includes(Number(response.status))) throw apiFailure(response, 'TOOLBOX_WORKSPACE_CREATE_FAILED');
+  invalidateToolboxProjects();
+  void recordAiProductEvent('workshop_project_created', projectEvent(entrySource));
   return response.data as ToolboxWorkspace;
 }
 
@@ -290,11 +310,16 @@ export async function fetchToolboxWorkspace(workspaceId: string): Promise<Toolbo
   return response.data as ToolboxWorkspace;
 }
 
-export async function markToolboxWorkspaceOpened(workspaceId: string): Promise<ToolboxHomeWorkspaceSummary> {
+export async function markToolboxWorkspaceOpened(
+  workspaceId: string,
+  entrySource: ProjectEntrySource = 'project',
+): Promise<ToolboxHomeWorkspaceSummary> {
   const response = await apiBasePost(`/api/toolbox/workspaces/${encodeURIComponent(workspaceId)}/open`, undefined, {
     silent: true,
   });
   if (response.status !== 200) throw apiFailure(response, 'TOOLBOX_WORKSPACE_OPEN_FAILED');
+  invalidateToolboxProjects();
+  void recordAiProductEvent('workshop_project_opened', projectEvent(entrySource));
   return response.data as ToolboxHomeWorkspaceSummary;
 }
 
@@ -308,12 +333,14 @@ export async function updateToolboxWorkspace(
     silent: true,
   });
   if (response.status !== 200) throw apiFailure(response, 'TOOLBOX_WORKSPACE_UPDATE_FAILED');
+  invalidateToolboxProjects();
   return response.data as ToolboxWorkspace;
 }
 
 export async function addToolboxWorkspaceResources(
   workspaceId: string,
   resourceRefs: Array<{ type: 'note' | 'bookmark' | 'file'; id: string; title?: string }>,
+  entrySource: ProjectEntrySource = 'project',
 ): Promise<ToolboxWorkspace> {
   const response = await apiBasePost(
     `/api/toolbox/workspaces/${encodeURIComponent(workspaceId)}/resources`,
@@ -321,6 +348,8 @@ export async function addToolboxWorkspaceResources(
     { silent: true },
   );
   if (response.status !== 200) throw apiFailure(response, 'TOOLBOX_WORKSPACE_RESOURCES_FAILED');
+  invalidateToolboxProjects();
+  void recordAiProductEvent('workshop_resources_added', projectEvent(entrySource));
   return response.data as ToolboxWorkspace;
 }
 
@@ -334,6 +363,7 @@ export async function removeToolboxWorkspaceResource(
     { silent: true },
   );
   if (response.status !== 200) throw apiFailure(response, 'TOOLBOX_WORKSPACE_RESOURCE_REMOVE_FAILED');
+  invalidateToolboxProjects();
   return response.data as ToolboxWorkspace;
 }
 
@@ -345,6 +375,7 @@ export async function createToolboxWorkspaceItem(
     silent: true,
   });
   if (![200, 201].includes(Number(response.status))) throw apiFailure(response, 'TOOLBOX_WORKSPACE_ITEM_CREATE_FAILED');
+  invalidateToolboxProjects();
   return response.data as ToolboxWorkspace;
 }
 
@@ -359,6 +390,7 @@ export async function updateToolboxWorkspaceItem(
     { silent: true },
   );
   if (response.status !== 200) throw apiFailure(response, 'TOOLBOX_WORKSPACE_ITEM_UPDATE_FAILED');
+  invalidateToolboxProjects();
   return response.data as ToolboxWorkspace;
 }
 
@@ -370,6 +402,7 @@ export async function createToolboxWorkspaceSession(
     silent: true,
   });
   if (![200, 201].includes(Number(response.status))) throw apiFailure(response, 'TOOLBOX_WORKSPACE_SESSION_FAILED');
+  invalidateToolboxProjects();
   return response.data as ToolboxWorkspace;
 }
 
@@ -384,7 +417,21 @@ export async function createToolboxQuote(input: {
   return response.data as ToolboxQuote;
 }
 
-export async function createToolboxJob(input: { quoteId: string; clientRequestId: string }): Promise<ToolboxJob> {
+export async function createFreeOcrJob(input: {
+  toolId: 'ocr_to_text';
+  clientRequestId: string;
+  input: { resourceRefs: { type: string; id: string }[]; sourceIds: string[] };
+}): Promise<ToolboxJob> {
+  const response = await apiBasePost('/api/toolbox/jobs', input, { silent: true });
+  if (response.status !== 202 && response.status !== 200) throw apiFailure(response, 'TOOLBOX_START_FAILED');
+  return response.data as ToolboxJob;
+}
+
+export async function createToolboxJob(input: {
+  quoteId: string;
+  clientRequestId: string;
+  sourceWorkspaceId?: string;
+}): Promise<ToolboxJob> {
   const response = await apiBasePost('/api/toolbox/jobs', input, { silent: true });
   if (response.status !== 200) throw apiFailure(response, 'TOOLBOX_JOB_CREATE_FAILED');
   return response.data as ToolboxJob;
@@ -420,10 +467,11 @@ export async function saveToolboxArtifact(
   artifactId: string,
   clientRequestId: string,
   action: 'save' | 'recreate_missing_target' = 'save',
+  placement: { title?: string; parentId?: string | null } = {},
 ) {
   const response = await apiBasePost(
     `/api/toolbox/artifacts/${encodeURIComponent(artifactId)}/save`,
-    { clientRequestId, action },
+    { clientRequestId, action, ...placement },
     { silent: true },
   );
   if (response.status !== 200) throw apiFailure(response, 'TOOLBOX_SAVE_FAILED');

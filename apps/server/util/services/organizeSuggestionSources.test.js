@@ -90,3 +90,29 @@ it.each(['bookmark', 'note', 'file'])('预检 %s 只读 ID 和名称，查询包
   expect(args).toEqual(['u', ['a'], 100]);
   expect(sql).not.toMatch(/r\.\*|content|snapshot|ai_document|note_resource_refs/);
 });
+
+it('正文存档检查只认可当前网址的非空存档，读取阶段不抓网页', async () => {
+  const db = {
+    query: vi.fn(async (sql) =>
+      sql.startsWith('SELECT r.*')
+        ? [
+            [
+              { id: 'a', url: 'https://a.com' },
+              { id: 'b', url: 'https://b.com' },
+            ],
+          ]
+        : sql.includes('FROM bookmark_snapshot')
+          ? [
+              [
+                { bookmark_id: 'a', url: 'https://a.com', content: '正文'.repeat(80) },
+                { bookmark_id: 'b', url: 'https://old.com', content: '旧正文'.repeat(80) },
+              ],
+            ]
+          : [[]],
+    ),
+  };
+  const [a, b] = await readSuggestionSources(db, 'u', 'bookmark');
+  expect(a.hasArchive).toBe(true);
+  expect(b.hasArchive).toBe(false);
+  expect(db.query.mock.calls.every(([sql]) => sql.startsWith('SELECT'))).toBe(true);
+});

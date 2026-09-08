@@ -28,11 +28,6 @@ const alertAlert = vi.fn();
 vi.mock('@/components/base/BasicComponents/BModal/Alert', () => ({
   default: { alert: (...a: any[]) => alertAlert(...a), destroy: vi.fn() },
 }));
-const requestBookmarkMetaOverwriteDecision = vi.fn();
-vi.mock('@/utils/bookmarkMetaOverwriteDecision', () => ({
-  requestBookmarkMetaOverwriteDecision: (...args: any[]) => requestBookmarkMetaOverwriteDecision(...args),
-}));
-
 const { BOOKMARK_META_GENERATION_TIMEOUT_MS, useBookmarkMeta } = await import('@/composables/useBookmarkMeta');
 
 function setup(tagOpts: any[] = []) {
@@ -69,7 +64,6 @@ describe('useBookmarkMeta.generateBookmarkMeta', () => {
     apiBasePost.mockReset();
     preflightBookmarkUrl.mockClear();
     alertAlert.mockReset();
-    requestBookmarkMetaOverwriteDecision.mockReset();
     messageSuccess.mockReset();
     messageWarning.mockReset();
     messageError.mockReset();
@@ -86,37 +80,103 @@ describe('useBookmarkMeta.generateBookmarkMeta', () => {
     expect(alertAlert).not.toHaveBeenCalled();
   });
 
-  it('已有内容不被 AI 静默覆盖,用户可选择保留当前内容', async () => {
-    mockSkillSuccess({ name: 'AI 名称', description: 'AI 描述', matchedTagIds: [], newTags: [] });
-    const t = setup([]);
-    t.bookmarkData.value.name = '当前名称';
-    t.bookmarkData.value.description = '当前描述';
-
-    requestBookmarkMetaOverwriteDecision.mockResolvedValueOnce(null);
+  it('直接覆盖已有内容，撤销准确恢复且不影响标签', async () => {
+    mockSkillSuccess({ name: 'AI 名称', description: 'AI 描述', matchedTagIds: ['t1'] });
+    const t = setup([{ label: '标签', value: 't1' }]);
+    t.bookmarkData.value.name = ' 原名称 ';
     await t.generateBookmarkMeta();
-
-    expect(t.bookmarkData.value.name).toBe('当前名称');
-    expect(t.bookmarkData.value.description).toBe('当前描述');
-    expect(requestBookmarkMetaOverwriteDecision).toHaveBeenCalledWith(
-      [
-        { id: 'name', currentValue: '当前名称', generatedValue: 'AI 名称' },
-        { id: 'description', currentValue: '当前描述', generatedValue: 'AI 描述' },
-      ],
-      { signal: expect.any(AbortSignal) },
-    );
+    expect(t.bookmarkData.value.name).toBe('AI 名称');
+    expect(t.updatedFields.value).toEqual(['name', 'description']);
+    expect(alertAlert).not.toHaveBeenCalled();
+    t.undoBookmarkMeta();
+    expect(t.bookmarkData.value.name).toBe(' 原名称 ');
+    expect(t.bookmarkData.value.description).toBe('');
+    expect(t.bookmarkData.value.relatedTags).toEqual(['t1']);
+    expect(t.canUndoMeta.value).toBe(false);
   });
 
-  it('覆盖预览支持逐字段选择，只应用用户勾选的识别结果', async () => {
-    mockSkillSuccess({ name: 'AI 名称', description: 'AI 描述', matchedTagIds: [], newTags: [] });
-    const t = setup([]);
-    t.bookmarkData.value.name = '当前名称';
-    t.bookmarkData.value.description = '当前描述';
-
-    requestBookmarkMetaOverwriteDecision.mockResolvedValueOnce(['name']);
+  it('空结果保留原文，相同结果不产生撤销；手写或改网址清除撤销', async () => {
+    const t = setup();
+    t.bookmarkData.value.name = '原文';
+    mockSkillSuccess({ name: '原文', description: '' });
     await t.generateBookmarkMeta();
+    expect(t.canUndoMeta.value).toBe(false);
+    mockSkillSuccess({ name: '', description: '描述' });
+    await t.generateBookmarkMeta();
+    expect(t.bookmarkData.value.name).toBe('原文');
+    expect(t.updatedFields.value).toEqual(['description']);
+    t.bookmarkData.value.relatedTags = ['manual'];
+    expect(t.canUndoMeta.value).toBe(true);
+    t.bookmarkData.value.name = '手写';
+    expect(t.canUndoMeta.value).toBe(false);
+    mockSkillSuccess({ name: '新名称' });
+    await t.generateBookmarkMeta();
+    t.bookmarkData.value.url = 'https://new.example';
+    expect(t.canUndoMeta.value).toBe(false);
+  });
 
-    expect(t.bookmarkData.value.name).toBe('AI 名称');
-    expect(t.bookmarkData.value.description).toBe('当前描述');
+  it('再次识别失败保留旧撤销，成功替换后只撤销最近一次', async () => {
+    const t = setup();
+    mockSkillSuccess({ name: '第一次' });
+    await t.generateBookmarkMeta();
+    apiBasePost.mockRejectedValueOnce(new Error('failed'));
+    await t.generateBookmarkMeta();
+    expect(t.canUndoMeta.value).toBe(true);
+    mockSkillSuccess({ name: '第二次' });
+    await t.generateBookmarkMeta();
+    t.undoBookmarkMeta();
+    expect(t.bookmarkData.value.name).toBe('第一次');
+  });
+
+  it.each(['edit', 'url', 'dispose', 'stop'])('慢请求期间 %s 不会覆盖更新后的目标或手写字段', async (action) => {
+    const t = setup();
+    mockSkillSuccess({ name: 'AI', description: '描述', newTags: ['新标签'] });
+    const success = apiBasePost.getMockImplementation()!;
+    let finish!: () => void;
+    apiBasePost.mockImplementation(
+      (...args) =>
+        new Promise((resolve) => {
+          finish = async () => resolve(await success(...args));
+        }),
+    );
+    const pending = t.generateBookmarkMeta();
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+    if (action === 'edit') {
+      t.bookmarkData.value.name = '手写';
+      t.bookmarkData.value.name = ''; // 改回原值仍视为手动编辑
+    } else if (action === 'url') t.bookmarkData.value.url = 'https://new.example';
+    else if (action === 'dispose') t.disposeBookmarkMeta();
+    else t.stopBookmarkMetaGeneration();
+    finish();
+    await pending;
+    expect(t.bookmarkData.value.name).toBe('');
+    expect(t.bookmarkData.value.description).toBe(action === 'edit' ? '描述' : '');
+    if (action !== 'edit') expect(alertAlert).not.toHaveBeenCalled();
+    else expect(messageInfo).toHaveBeenCalledWith('已保留你刚修改的内容');
+  });
+
+  it('旧撤销在新请求期间禁用，停止后恢复', async () => {
+    const t = setup();
+    mockSkillSuccess({ name: 'AI' });
+    await t.generateBookmarkMeta();
+    let finish!: (value: any) => void;
+    preflightBookmarkUrl.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const pending = t.generateBookmarkMeta();
+    expect(t.canUndoMeta.value).toBe(false);
+    t.undoBookmarkMeta();
+    expect(t.bookmarkData.value.name).toBe('AI');
+    t.stopBookmarkMetaGeneration();
+    expect(t.canUndoMeta.value).toBe(true);
+    finish({ ok: true, url: 'https://stale.example' });
+    await pending;
+    expect(t.bookmarkData.value.url).toBe('https://x.com');
+    t.undoBookmarkMeta();
+    expect(t.bookmarkData.value.name).toBe('');
   });
 
   it('勾选标签遵守 ≤4 上限', async () => {

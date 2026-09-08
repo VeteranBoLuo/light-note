@@ -765,30 +765,142 @@ describe('globalSearch 快捷模式', () => {
 });
 
 describe('previewBatchSelection resolved items contract', () => {
-  beforeEach(() => { vi.clearAllMocks(); mocks.pool.query.mockReset(); });
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.pool.query.mockReset();
+  });
   it('显式核对使用管理员当前资源主体，且不返回其他账号或软删除资源', async () => {
-    mocks.pool.query.mockResolvedValueOnce([[{ id: 'owned' }]])
+    mocks.pool.query
+      .mockResolvedValueOnce([[{ id: 'owned' }]])
       .mockResolvedValueOnce([[{ id: 'owned', title: 'Note', noteType: 'html' }]]);
     const res = createResponse();
-    await previewBatchSelection({ user: { id: 'admin' }, resourceUser: { id: 'target' }, body: { includeResolvedItems: true, selection: { mode: 'explicit', items: [{ type: 'note', id: 'owned' }, { type: 'note', id: 'unavailable' }] } } }, res);
+    await previewBatchSelection(
+      {
+        user: { id: 'admin' },
+        resourceUser: { id: 'target' },
+        body: {
+          includeResolvedItems: true,
+          selection: {
+            mode: 'explicit',
+            items: [
+              { type: 'note', id: 'owned' },
+              { type: 'note', id: 'unavailable' },
+            ],
+          },
+        },
+      },
+      res,
+    );
     expect(mocks.pool.query.mock.calls.every(([, args]) => args[0] === 'target')).toBe(true);
-    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200, data: expect.objectContaining({ resolvedItems: [expect.objectContaining({ id: 'owned', noteType: 'html' })], unavailableItems: [{ type: 'note', id: 'unavailable' }] }) }));
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 200,
+        data: expect.objectContaining({
+          resolvedItems: [expect.objectContaining({ id: 'owned', noteType: 'html' })],
+          unavailableItems: [{ type: 'note', id: 'unavailable' }],
+        }),
+      }),
+    );
   });
   it('全部失效也返回 200 的空核对结果', async () => {
-    mocks.pool.query.mockResolvedValueOnce([[]]); const res = createResponse();
-    await previewBatchSelection({ user: { id: 'u' }, body: { includeResolvedItems: true, selection: { mode: 'explicit', items: [{ type: 'file', id: 'gone' }] } } }, res);
-    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200, data: expect.objectContaining({ resolvedItems: [], total: 0 }) }));
+    mocks.pool.query.mockResolvedValueOnce([[]]);
+    const res = createResponse();
+    await previewBatchSelection(
+      {
+        user: { id: 'u' },
+        body: { includeResolvedItems: true, selection: { mode: 'explicit', items: [{ type: 'file', id: 'gone' }] } },
+      },
+      res,
+    );
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 200, data: expect.objectContaining({ resolvedItems: [], total: 0 }) }),
+    );
   });
   it('旧显式协议维持汇总形状，不额外查询资源', async () => {
-    const res = createResponse(); await previewBatchSelection({ user: { id: 'u' }, body: { selection: { mode: 'explicit', items: [{ type: 'note', id: 'a' }] } } }, res);
+    const res = createResponse();
+    await previewBatchSelection(
+      { user: { id: 'u' }, body: { selection: { mode: 'explicit', items: [{ type: 'note', id: 'a' }] } } },
+      res,
+    );
     expect(res.send.mock.calls[0][0].status).toBe(200);
-    expect(res.send.mock.calls[0][0].data).not.toHaveProperty('resolvedItems'); expect(mocks.pool.query).not.toHaveBeenCalled();
+    expect(res.send.mock.calls[0][0].data).not.toHaveProperty('resolvedItems');
+    expect(mocks.pool.query).not.toHaveBeenCalled();
   });
   it('新模式拒绝查询全选展开及超限输入', async () => {
-    for (const selection of [{ mode: 'allMatching', query: {} }, { mode: 'explicit', items: Array.from({ length: 1001 }, (_, i) => ({ type: 'note', id: String(i) })) }]) {
-      const res = createResponse(); await previewBatchSelection({ user: { id: 'u' }, body: { includeResolvedItems: true, selection } }, res);
+    for (const selection of [
+      { mode: 'allMatching', query: {} },
+      { mode: 'explicit', items: Array.from({ length: 1001 }, (_, i) => ({ type: 'note', id: String(i) })) },
+    ]) {
+      const res = createResponse();
+      await previewBatchSelection({ user: { id: 'u' }, body: { includeResolvedItems: true, selection } }, res);
       expect(res.send.mock.calls[0][0].status).toBe(400);
     }
     expect(mocks.pool.query).not.toHaveBeenCalled();
+  });
+});
+
+describe('complete material pagination', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+  it('uses a single global stable cursor and preserves cross-type order', async () => {
+    mocks.pool.query.mockImplementation(async (sql) => {
+      if (sql.includes('UNION ALL'))
+        return [
+          [
+            { id: 'n1', type: 'note', activity: '2026-09-08 10:00:00', score: 0 },
+            { id: 'b1', type: 'bookmark', activity: '2026-09-08 10:00:00', score: 0 },
+            { id: 'f1', type: 'file', activity: '2026-09-08 09:00:00', score: 0 },
+          ],
+        ];
+      if (sql.includes('FROM bookmark b')) return [[{ id: 'b1', name: 'Bookmark', create_time: '2026-09-08' }]];
+      if (sql.includes('FROM note n')) return [[{ id: 'n1', title: 'Note', create_time: '2026-09-08' }]];
+      return [[]];
+    });
+    const res = createResponse();
+    await globalSearch(
+      {
+        headers: {},
+        user: { id: 'owner' },
+        body: {
+          types: ['note', 'bookmark', 'file'],
+          paginationMode: 'global',
+          pageSize: 2,
+          limit: 2,
+          includeMetadata: false,
+        },
+      },
+      res,
+    );
+    const reply = res.send.mock.calls[0][0];
+    expect(reply.status).toBe(200);
+    expect(reply.data.items.map((i) => i.type + ':' + i.id)).toEqual(['note:n1', 'bookmark:b1']);
+    expect(reply.data.nextCursor).toMatchObject({
+      type: 'all',
+      resourceType: 'bookmark',
+      id: 'b1',
+      time: '2026-09-08 10:00:00',
+    });
+    const query = mocks.pool.query.mock.calls.find(([sql]) => sql.includes('UNION ALL'));
+    expect(query[0]).toContain('ORDER BY score DESC, activity DESC, type DESC, id DESC');
+    expect(query[1].filter((v) => v === 'owner')).toHaveLength(3);
+  });
+  it('rejects malformed cursors as client errors', async () => {
+    mocks.pool.query.mockResolvedValue([[]]);
+    const res = createResponse();
+    await globalSearch(
+      {
+        headers: {},
+        user: { id: 'owner' },
+        body: {
+          paginationMode: 'global',
+          types: ['note'],
+          includeMetadata: false,
+          cursor: { type: 'all', id: 'bad', score: 0, time: 'invalid', resourceType: 'note' },
+        },
+      },
+      res,
+    );
+    expect(res.send.mock.calls[0][0].status).toBe(400);
   });
 });

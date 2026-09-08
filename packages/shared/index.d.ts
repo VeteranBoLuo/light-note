@@ -255,3 +255,5 @@ export declare const OFFICIAL_HOST: string;
 
 /** 永不变化的安装包地址（相对路径），302 到当前版本的实际文件。 */
 export declare const ANDROID_LATEST_APK_PATH: string;
+
+export * from './imagePreviewProtocol.js';

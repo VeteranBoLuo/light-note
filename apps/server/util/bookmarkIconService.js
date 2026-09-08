@@ -9,6 +9,7 @@
  */
 
 import pool from '../db/index.js';
+import { isManagedImage } from './imagePreview/cleanup.js';
 import { bookmarkIconLimiter } from './bookmarkIconLimiter.js';
 import { fetchFaviconFromApi, normalizeOrigin, isRetryableError, isPermanentError } from './bookmarkIconClient.js';
 import path from 'path';
@@ -293,7 +294,7 @@ export async function cleanupBookmarkIconFiles(bookmarks = [], { db = pool } = {
   let kept = 0;
   let failed = 0;
   for (const candidate of candidates.values()) {
-    if (referencedFileNames.has(candidate.fileName)) {
+    if (referencedFileNames.has(candidate.fileName) || await isManagedImage('local', candidate.fileName, db)) {
       kept += 1;
       continue;
     }

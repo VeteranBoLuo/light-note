@@ -1,3 +1,4 @@
+import { readProjectEntry, dismissProjectIntro } from '../util/toolbox/projectEntry.js';
 import { ensureNotVisitor, ensureUserOrAdminPolicy } from '../util/auth.js';
 import { resultData } from '../util/common.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
@@ -7,6 +8,10 @@ import { getToolboxKnowledgeOverview } from '../util/toolbox/knowledgeStructure.
 import {
   cancelToolboxJob,
   createToolboxJob,
+  createFreeOcrJob,
+  getToolboxOcrUsage,
+  getStudyProgress,
+  saveStudyProgress,
   createToolboxQuote,
   getToolboxArtifact,
   getToolboxCatalog,
@@ -56,8 +61,14 @@ async function recordToolboxOperation(req, operation) {
   }
 }
 
-export function getCatalog(_req, res) {
-  return res.send(resultData(getToolboxCatalog()));
+export async function getCatalog(req, res) {
+  try {
+    const catalog = getToolboxCatalog();
+    if (req.user?.id && req.user.role !== 'visitor') catalog.ocrUsage = await getToolboxOcrUsage(readUserId(req));
+    return res.send(resultData(catalog));
+  } catch (error) {
+    return sendError(res, error);
+  }
 }
 
 export async function getKnowledgeOverview(req, res) {
@@ -265,11 +276,19 @@ export async function prepareUpload(req, res) {
 export async function createJob(req, res) {
   if (!requireWrite(req, res)) return;
   try {
-    const job = await createToolboxJob({
-      userId: req.user.id,
-      quoteId: req.body?.quoteId,
-      clientRequestId: req.body?.clientRequestId,
-    });
+    const job =
+      req.body?.toolId === 'ocr_to_text'
+        ? await createFreeOcrJob({
+            userId: req.user.id,
+            rawInput: req.body?.input,
+            clientRequestId: req.body?.clientRequestId,
+          })
+        : await createToolboxJob({
+            userId: req.user.id,
+            quoteId: req.body?.quoteId,
+            sourceWorkspaceId: req.body?.sourceWorkspaceId,
+            clientRequestId: req.body?.clientRequestId,
+          });
     await recordToolboxOperation(req, `创建处理任务【${job.toolId || 'unknown'}】`);
     return res.status(202).send(resultData(job));
   } catch (error) {
@@ -329,6 +348,8 @@ export async function saveArtifact(req, res) {
       artifactId: req.params.artifactId,
       clientRequestId: req.body?.clientRequestId,
       action: req.body?.action,
+      title: req.body?.title,
+      parentId: req.body?.parentId,
       request: req,
     });
     if (!receipt.idempotent) {
@@ -338,6 +359,42 @@ export async function saveArtifact(req, res) {
       );
     }
     return res.send(resultData(receipt));
+  } catch (error) {
+    return sendError(res, error);
+  }
+}
+
+export async function readStudy(req, res) {
+  if (!requireRead(req, res)) return;
+  try {
+    return res.send(resultData(await getStudyProgress({ userId: readUserId(req), artifactId: req.params.artifactId })));
+  } catch (error) {
+    return sendError(res, error);
+  }
+}
+export async function writeStudy(req, res) {
+  if (!requireWrite(req, res)) return;
+  try {
+    return res.send(
+      resultData(await saveStudyProgress({ userId: req.user.id, artifactId: req.params.artifactId, input: req.body })),
+    );
+  } catch (error) {
+    return sendError(res, error);
+  }
+}
+
+export async function getProjectEntry(req, res) {
+  if (!requireRead(req, res)) return;
+  try {
+    return res.send(resultData(await readProjectEntry(readUserId(req))));
+  } catch (error) {
+    return sendError(res, error);
+  }
+}
+export async function dismissProjectEntry(req, res) {
+  if (!requireWrite(req, res)) return;
+  try {
+    return res.send(resultData(await dismissProjectIntro(req.user.id)));
   } catch (error) {
     return sendError(res, error);
   }

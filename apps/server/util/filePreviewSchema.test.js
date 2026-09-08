@@ -24,7 +24,7 @@ describe('ensureFilePreviewSchema', () => {
     expect(statements[0]).toContain('source_type VARCHAR(32)');
     expect(statements[0]).toContain('file_id BIGINT UNSIGNED');
     expect(statements[0]).toContain(
-      'UNIQUE KEY uk_file_preview_artifact (source_type, file_id, strategy, strategy_version)',
+      'UNIQUE KEY uk_file_preview_artifact (source_type, file_id, strategy, strategy_version, source_revision)',
     );
     expect(statements).toContainEqual(
       expect.stringContaining(
@@ -35,7 +35,7 @@ describe('ensureFilePreviewSchema', () => {
     expect(statements).toContainEqual(expect.stringContaining('DROP INDEX uk_file_preview_artifact'));
     expect(statements).toContainEqual(
       expect.stringContaining(
-        'ADD UNIQUE KEY uk_file_preview_artifact (source_type, file_id, strategy, strategy_version)',
+        'ADD UNIQUE KEY uk_file_preview_artifact (source_type, file_id, strategy, strategy_version, source_revision)',
       ),
     );
   });

@@ -23,7 +23,12 @@ export function resolveBriefOrganizeActions(insight: DailyBriefInsight, brief: D
 }
 
 export function resolveBriefSourceTarget(source: NonNullable<DailyBriefInsight['sources']>[number]) {
-  if (!source.id || !['bookmark', 'note', 'file'].includes(source.type)) return null;
+  if (!source.id) return null;
+  if (source.type === 'toolbox_task')
+    return { external: null, route: { path: `/toolbox/task/${encodeURIComponent(source.id)}` } };
+  if (['research_workspace', 'learning_workspace', 'writing_workspace'].includes(source.type))
+    return { external: null, route: { path: `/toolbox/${source.type}`, query: { workspace: source.id } } };
+  if (!['bookmark', 'note', 'file'].includes(source.type)) return null;
   if (source.type === 'bookmark') {
     const resolved = resolveBookmarkUrlInput(source.url, { allowTextExtraction: false });
     return resolved.state === BOOKMARK_URL_STATE.VALID || resolved.state === BOOKMARK_URL_STATE.NORMALIZED

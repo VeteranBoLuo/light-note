@@ -1,4 +1,4 @@
-import { computed, ref, type Ref } from 'vue';
+import { computed, ref, watch, type Ref } from 'vue';
 import { apiBasePost } from '@/http/request';
 import { createAiSkillRequest, executeAiSkill, getAiSkillPublicErrorMessage } from '@/api/aiSkillApi';
 import { recordAiSkillApplied } from '@/api/aiTelemetry';
@@ -8,11 +8,6 @@ import Alert from '@/components/base/BasicComponents/BModal/Alert';
 import i18n from '@/i18n';
 import { preflightBookmarkUrl } from '@/composables/useBookmarkUrlResolution';
 import { resolveBookmarkUrlInput } from '@lightnote/shared';
-import {
-  requestBookmarkMetaOverwriteDecision,
-  type BookmarkMetaOverwriteField,
-  type BookmarkMetaOverwriteFieldId,
-} from '@/utils/bookmarkMetaOverwriteDecision';
 import { appendSessionAiTagSelection, replaceSessionAiTagSelection } from '@/utils/aiTagSelection';
 import { getAiQuotaErrorPresentation } from '@/utils/aiQuotaErrorPresentation';
 
@@ -56,33 +51,57 @@ export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBo
   const resolvingUrl = computed(() => phase.value === 'resolving-url');
   const generating = computed(() => phase.value === 'generating');
   let activeGeneration: ActiveGeneration | null = null;
-  let activeOverwriteController: AbortController | null = null;
+  type TextField = 'name' | 'description';
+  const undoSnapshot = ref<Partial<Record<TextField, string>> | null>(null);
+  const updatedFields = computed(() => Object.keys(undoSnapshot.value || {}) as TextField[]);
+  const canUndoMeta = computed(() => updatedFields.value.length > 0 && phase.value === 'idle');
+  let internalWrite = false;
+  let editedFields = new Set<TextField>();
+  let sessionVersion = 0;
+
+  function writeInternally(write: () => void) {
+    internalWrite = true;
+    try {
+      write();
+    } finally {
+      internalWrite = false;
+    }
+  }
+  function clearMetaUndo() {
+    undoSnapshot.value = null;
+  }
+  function undoBookmarkMeta() {
+    if (!canUndoMeta.value || !undoSnapshot.value) return;
+    const snapshot = undoSnapshot.value;
+    writeInternally(() => {
+      for (const field of updatedFields.value) bookmarkData.value[field] = snapshot[field];
+    });
+    clearMetaUndo();
+  }
+  for (const field of ['name', 'description'] as const) {
+    watch(
+      () => bookmarkData.value[field],
+      () => {
+        if (internalWrite) return;
+        editedFields.add(field);
+        clearMetaUndo();
+      },
+      { flush: 'sync' },
+    );
+  }
+  watch(
+    () => [bookmarkData.value.id, bookmarkData.value.url],
+    () => {
+      if (internalWrite) return;
+      sessionVersion++;
+      stopBookmarkMetaGeneration({ notify: false });
+      clearMetaUndo();
+    },
+    { flush: 'sync' },
+  );
   // 只记录本次编辑会话中由 AI 新增到选择区的标签。再次识别时替换这些标签，
   // 已保存标签和用户手动选择的标签不做静默删除。
   let aiSelectedTagIds: string[] = [];
-
-  async function selectFieldsToApply(
-    name: string,
-    description: string,
-    signal?: AbortSignal,
-  ): Promise<BookmarkMetaOverwriteFieldId[] | null> {
-    const currentName = String(bookmarkData.value.name || '').trim();
-    const currentDescription = String(bookmarkData.value.description || '').trim();
-    const fields: BookmarkMetaOverwriteField[] = [];
-
-    if (name && name !== currentName) {
-      fields.push({ id: 'name', currentValue: currentName, generatedValue: name });
-    }
-    if (description && description !== currentDescription) {
-      fields.push({ id: 'description', currentValue: currentDescription, generatedValue: description });
-    }
-    if (!fields.length) return [];
-
-    // 当前两个字段都为空时直接补全；只要其中一项会覆盖已有内容，就完整展示本次变更，
-    // 让用户逐项决定，同时也能看见另一个原本为空、即将被补全的字段。
-    if (!fields.some((field) => field.currentValue)) return fields.map((field) => field.id);
-    return requestBookmarkMetaOverwriteDecision(fields, { signal });
-  }
 
   function clearActiveGeneration(controller: AbortController) {
     if (activeGeneration?.controller !== controller) return;
@@ -102,15 +121,10 @@ export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBo
 
   function stopBookmarkMetaGeneration({ notify = true }: { notify?: boolean } = {}) {
     const current = activeGeneration;
-    const overwriteController = activeOverwriteController;
     let stopped = false;
     if (current && !current.controller.signal.aborted) {
       current.controller.abort();
       clearActiveGeneration(current.controller);
-      stopped = true;
-    }
-    if (overwriteController && !overwriteController.signal.aborted) {
-      overwriteController.abort();
       stopped = true;
     }
     if (stopped && notify) message.info(i18n.global.t('bookmarkMeta.generationStopped'));
@@ -141,15 +155,14 @@ export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBo
 
   async function generateBookmarkMeta() {
     if (activeGeneration || phase.value !== 'idle') return;
-    if (activeOverwriteController && !activeOverwriteController.signal.aborted) {
-      activeOverwriteController.abort();
-    }
     const rawUrl = String(bookmarkData.value.url || '').trim();
     if (!rawUrl) {
       message.warning(i18n.global.t('bookmarkMeta.fillUrlFirst'));
       return;
     }
     const controller = new AbortController();
+    const version = ++sessionVersion;
+    editedFields = new Set();
     activeGeneration = { controller, timeoutId: null };
     phase.value = 'resolving-url';
     try {
@@ -157,8 +170,10 @@ export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBo
         checkLiveness: false,
         signal: controller.signal,
       });
-      if (!urlResult.ok || !urlResult.url) return;
-      bookmarkData.value.url = urlResult.url;
+      if (controller.signal.aborted || version !== sessionVersion || !urlResult.ok || !urlResult.url) return;
+      writeInternally(() => {
+        bookmarkData.value.url = urlResult.url;
+      });
       if (controller.signal.aborted) return;
       phase.value = 'generating';
       const submittedUrl = bookmarkData.value.url;
@@ -192,28 +207,25 @@ export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBo
       }).canonicalUrl;
       // 请求期间用户可能手动改过地址；只在输入仍是本次提交值时回写短链的真实落地地址。
       if (returnedUrl && bookmarkData.value.url === submittedUrl) {
-        bookmarkData.value.url = returnedUrl;
+        writeInternally(() => {
+          bookmarkData.value.url = returnedUrl;
+        });
       }
       const generatedName = String(generatedData.name || '').trim();
       const generatedDescription = String(generatedData.description || '').trim();
-      // 远端工作已经结束，比较弹框属于用户决策阶段，不应继续显示“生成中”或触发超时。
-      clearActiveGeneration(controller);
-      const overwriteController = new AbortController();
-      activeOverwriteController = overwriteController;
-      let selectedFields: BookmarkMetaOverwriteFieldId[] | null;
-      try {
-        selectedFields = await selectFieldsToApply(generatedName, generatedDescription, overwriteController.signal);
-      } finally {
-        if (activeOverwriteController === overwriteController) activeOverwriteController = null;
-      }
-      if (selectedFields === null) return;
-
-      if (generatedName && selectedFields.includes('name')) {
-        bookmarkData.value.name = generatedName;
-      }
-      if (generatedDescription && selectedFields.includes('description')) {
-        bookmarkData.value.description = generatedDescription;
-      }
+      const selectedFields: TextField[] = [];
+      const snapshot: Partial<Record<TextField, string>> = {};
+      const generated = { name: generatedName, description: generatedDescription };
+      writeInternally(() => {
+        for (const field of ['name', 'description'] as const) {
+          if (editedFields.has(field) || !generated[field] || generated[field] === bookmarkData.value[field]) continue;
+          snapshot[field] = bookmarkData.value[field];
+          bookmarkData.value[field] = generated[field];
+          selectedFields.push(field);
+        }
+      });
+      if (selectedFields.length) undoSnapshot.value = snapshot;
+      if (editedFields.size) message.info(i18n.global.t('bookmarkMeta.manualEditsKept'));
 
       // 只勾选确实存在于候选里的标签（后端已保证，这里再兜底一次，避免勾中不存在的 id 无法显示）
       const validIds = new Set(tagOptions.value.map((o) => o.value));
@@ -245,7 +257,7 @@ export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBo
         0,
         availableTagSlots,
       );
-      if (creatableTags.length) confirmCreateTags(creatableTags);
+      if (creatableTags.length) confirmCreateTags(creatableTags, version);
     } catch (error: any) {
       if (isRequestCancelled(error, controller)) return;
       // Skill API 使用 silent 请求，页面必须展示其已经过服务端脱敏的公开错误；
@@ -259,7 +271,7 @@ export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBo
   }
 
   // 新标签属于账号级持久对象，必须显式确认；允许它与强相关已有标签同时出现。
-  function confirmCreateTags(names: string[]) {
+  function confirmCreateTags(names: string[], version: number) {
     const displayNames = names.join('、');
     Alert.alert({
       title: i18n.global.t('bookmarkMeta.suggestTagTitle'),
@@ -274,6 +286,7 @@ export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBo
           type: 'primary',
           function: async () => {
             Alert.destroy();
+            if (version !== sessionVersion) return;
             const createdNames: string[] = [];
             for (const name of names) {
               const res = await apiBasePost('/api/bookmark/addTag', { name }).catch(() => null);
@@ -288,7 +301,9 @@ export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBo
               message.error(i18n.global.t('bookmarkMeta.createTagFailed'));
               return;
             }
+            if (version !== sessionVersion) return;
             await refreshTags();
+            if (version !== sessionVersion) return;
             const createdIds = tagOptions.value
               .filter((option) => createdNames.includes(option.label))
               .map((option) => option.value);
@@ -306,5 +321,21 @@ export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBo
     });
   }
 
-  return { resolvingUrl, generating, generateBookmarkMeta, stopBookmarkMetaGeneration };
+  function disposeBookmarkMeta() {
+    sessionVersion++;
+    stopBookmarkMetaGeneration({ notify: false });
+    clearMetaUndo();
+  }
+
+  return {
+    resolvingUrl,
+    generating,
+    generateBookmarkMeta,
+    stopBookmarkMetaGeneration,
+    updatedFields,
+    canUndoMeta,
+    undoBookmarkMeta,
+    clearMetaUndo,
+    disposeBookmarkMeta,
+  };
 }

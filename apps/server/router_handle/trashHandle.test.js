@@ -234,3 +234,17 @@ describe('回收站与待整理关系', () => {
     expect(connection.commit).not.toHaveBeenCalled();
   });
 });
+
+vi.mock('../util/imagePreview/references.js', () => ({
+  queuePreview: vi.fn(async () => undefined),
+  registerAsset: vi.fn(async () => ({id:'asset-1'})),
+  replaceReferences: vi.fn(async () => undefined),
+  syncContentReferences: vi.fn(async () => undefined),
+  syncNoteImageReferences: vi.fn(async () => undefined),
+  registerCloudImage: vi.fn(async () => undefined),
+  syncCloudImageById: vi.fn(async () => undefined),
+  removeImageReferences: vi.fn(async () => undefined),
+  generationEnabled: () => true,
+}));
+
+vi.mock('../util/imagePreview/cleanup.js', () => ({ deferCloudImageDeletion: vi.fn(), deleteUnmanagedObject: vi.fn() }));

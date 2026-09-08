@@ -13,10 +13,7 @@ import {
   resolveNoteBreadcrumbFromSnapshot,
 } from '../util/services/noteTreeService.js';
 import { appendResourceTagFilters } from '../util/services/resourceInventoryService.js';
-import {
-  batchWriteResourceTags,
-  queryOwnedResourceIds,
-} from '../util/services/resourceTagWriteService.js';
+import { batchWriteResourceTags, queryOwnedResourceIds } from '../util/services/resourceTagWriteService.js';
 import {
   DELETABLE_RESOURCE_TYPES,
   runResourceDeleteSideEffects,
@@ -371,6 +368,10 @@ function buildBookmarkSearchFilter(userId, options) {
   const { keyword, tagNames, untagged, date } = options;
   const where = ['b.user_id = ?', 'b.del_flag = 0'];
   const params = [userId];
+  if (options.materialIds?.length) {
+    where.push(`b.id IN (${options.materialIds.map(() => '?').join(',')})`);
+    params.push(...options.materialIds);
+  }
   const like = buildLike(keyword);
   if (keyword) {
     where.push(`
@@ -411,6 +412,10 @@ function buildNoteSearchFilter(userId, options) {
   const { keyword, tagNames, untagged, date } = options;
   const where = ['n.create_by = ?', 'n.del_flag = 0'];
   const params = [userId];
+  if (options.materialIds?.length) {
+    where.push(`n.id IN (${options.materialIds.map(() => '?').join(',')})`);
+    params.push(...options.materialIds);
+  }
   const like = buildLike(keyword);
   if (keyword) {
     where.push(`
@@ -450,6 +455,10 @@ function buildFileSearchFilter(userId, options) {
   const { keyword, tagNames, untagged, date } = options;
   const where = ['files.create_by = ?', 'files.del_flag = 0'];
   const params = [userId];
+  if (options.materialIds?.length) {
+    where.push(`files.id IN (${options.materialIds.map(() => '?').join(',')})`);
+    params.push(...options.materialIds);
+  }
   const like = buildLike(keyword);
   if (keyword) {
     where.push(`
@@ -1008,6 +1017,97 @@ const SEARCH_QUERY_BY_TYPE = {
   todo: queryTodos,
 };
 
+// Full material browsing: rank before pagination, then hydrate only the returned page.
+async function queryGlobalMaterialItems({ userId, options, lang, selectedTypes, cursor, pageSize }) {
+  const definitions = {
+    bookmark: { time: 'b.create_time', title: 'b.name', description: 'b.description', url: 'b.url' },
+    note: {
+      time: 'COALESCE(n.update_time, n.create_time)',
+      title: 'n.title',
+      description: "IF(n.type = 'drawing', '', n.content)",
+    },
+    file: { time: 'files.create_time', title: 'files.file_name' },
+  };
+  const types = selectedTypes.filter((type) => definitions[type]);
+  const params = [];
+  const keyword = options.keyword;
+  const union = types.map((type) => {
+    const filter = SEARCH_FILTER_BY_TYPE[type](userId, options);
+    const definition = definitions[type];
+    // Same relevance tiers as global search, evaluated before LIMIT rather than sorting a sampled page.
+    let score = '0';
+    if (keyword) {
+      const tags = `EXISTS (SELECT 1 FROM resource_tag_relations rank_rel INNER JOIN tag rank_tag ON rank_tag.id = rank_rel.tag_id WHERE rank_rel.resource_type = '${type}' AND rank_rel.resource_id = ${filter.idColumn} AND rank_rel.user_id = ? AND rank_tag.user_id = ? AND rank_tag.del_flag = 0 AND LOWER(rank_tag.name) LIKE LOWER(?))`;
+      score = `CASE WHEN LOWER(${definition.title}) = LOWER(?) THEN 100 WHEN LOWER(${definition.title}) LIKE LOWER(?) THEN 80 WHEN LOWER(${definition.title}) LIKE LOWER(?) THEN 60 WHEN ${tags} THEN 50`;
+      params.push(keyword, `${keyword}%`, buildLike(keyword), userId, userId, buildLike(keyword));
+      if (definition.url) {
+        score += ` WHEN LOWER(${definition.url}) LIKE LOWER(?) THEN 40`;
+        params.push(buildLike(keyword));
+      }
+      if (definition.description) {
+        score += ` WHEN LOWER(${definition.description}) LIKE LOWER(?) THEN 30`;
+        params.push(buildLike(keyword));
+      }
+      score += ' ELSE 10 END';
+    }
+    params.push(...filter.params);
+    return `SELECT CONVERT(${filter.idColumn} USING utf8mb4) COLLATE utf8mb4_unicode_ci AS id, CONVERT('${type}' USING utf8mb4) COLLATE utf8mb4_unicode_ci AS type, COALESCE(${definition.time}, '1970-01-01 00:00:00') AS activity, ${score} AS score FROM ${filter.fromSql} WHERE ${filter.whereSql}`;
+  });
+  if (!union.length) return { items: [], nextCursor: null };
+  let seek = '';
+  if (cursor) {
+    const { score, time, resourceType, id } = cursor;
+    if (
+      ![0, 10, 30, 40, 50, 60, 80, 100].includes(score) ||
+      !/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(String(time)) ||
+      !types.includes(resourceType) ||
+      typeof id !== 'string' ||
+      !id ||
+      id.length > 255
+    ) {
+      throw Object.assign(new Error('Invalid material cursor'), { code: 'SEARCH_CURSOR_INVALID' });
+    }
+    seek =
+      'WHERE score < ? OR (score = ? AND (activity < ? OR (activity = ? AND (type < ? OR (type = ? AND id < ?)))))';
+    params.push(score, score, time, time, resourceType, resourceType, id);
+  }
+  const [rows] = await pool.query(
+    `SELECT id, type, DATE_FORMAT(activity, '%Y-%m-%d %H:%i:%s') AS activity, score FROM (${union.join(' UNION ALL ')}) material ${seek} ORDER BY score DESC, activity DESC, type DESC, id DESC LIMIT ?`,
+    [...params, pageSize + 1],
+  );
+  const page = rows.slice(0, pageSize);
+  const hydrated = await Promise.all(
+    types.map((type) => {
+      const ids = page.filter((item) => item.type === type).map((item) => item.id);
+      return ids.length
+        ? SEARCH_QUERY_BY_TYPE[type](
+            userId,
+            { ...options, materialIds: ids, pageSize: ids.length, offset: 0 },
+            lang,
+            true,
+            false,
+          )
+        : { items: [] };
+    }),
+  );
+  const byKey = new Map(hydrated.flatMap((result) => result.items).map((item) => [`${item.type}:${item.id}`, item]));
+  const last = page.at(-1);
+  return {
+    items: page.map((item) => byKey.get(`${item.type}:${item.id}`)).filter(Boolean),
+    nextCursor:
+      rows.length > pageSize && last
+        ? {
+            type: 'all',
+            offset: 0,
+            score: Number(last.score),
+            time: last.activity,
+            resourceType: last.type,
+            id: last.id,
+          }
+        : null,
+  };
+}
+
 async function queryOrderedSearchItems({ userId, options, lang, selectedTypes, cursor, pageSize }) {
   const orderedTypes = selectedTypes;
   let typeIndex = Math.max(0, orderedTypes.indexOf(cursor.type));
@@ -1154,17 +1254,19 @@ export const globalSearch = async (req, res) => {
 
     const keyword = toText(req.body?.keyword || req.body?.filters?.keyword).slice(0, 200);
     const mode = req.body?.mode === 'suggest' ? 'suggest' : 'full';
-    const paginationMode = req.body?.paginationMode === 'ordered' ? 'ordered' : 'perType';
+    const paginationMode = ['ordered', 'global'].includes(req.body?.paginationMode)
+      ? req.body.paginationMode
+      : 'perType';
     const page = normalizePage(req.body?.page ?? req.body?.currentPage);
     const pageSize = normalizeLimit(
       req.body?.pageSize ?? req.body?.limitPerType,
-      paginationMode === 'ordered' ? 40 : 12,
-      paginationMode === 'ordered' ? 40 : 50,
+      paginationMode !== 'perType' ? 40 : 12,
+      paginationMode !== 'perType' ? 40 : 50,
     );
     const separateTagMatches =
       mode === 'full' && (req.body?.separateTagMatches === true || String(req.body?.separateTagMatches || '') === '1');
     const requestedTypes = normalizeSearchTypes(req.body?.types, req.body?.type);
-    const selectedTypes = separateTagMatches
+    const selectedTypes = separateTagMatches || paginationMode === 'global'
       ? requestedTypes.filter((type) => BATCH_EDITABLE_TYPES.includes(type))
       : requestedTypes;
     // 独立标签匹配模式用于资源中心。即使旧客户端漏传 types（或误传标签/待办），
@@ -1200,28 +1302,31 @@ export const globalSearch = async (req, res) => {
       );
     }
 
-    if (paginationMode === 'ordered') {
+    if (paginationMode !== 'perType') {
       const cursor = normalizeOrderedCursor(req.body?.cursor, selectedTypes);
       const includeMetadata = req.body?.includeMetadata !== false;
       const useGlobalRelevance = Boolean(keyword) && options.sort === 'relevance' && selectedTypes.length > 1;
       const relevanceOffset = req.body?.cursor?.type === 'all' ? normalizeSearchOffset(req.body.cursor.offset) : 0;
-      const orderedItemsPromise = useGlobalRelevance
-        ? queryRelevantSearchItems({
-            userId,
-            options,
-            lang,
-            offset: relevanceOffset,
-            pageSize,
-            selectedTypes,
-          })
-        : queryOrderedSearchItems({
-            userId,
-            options,
-            lang,
-            selectedTypes,
-            cursor,
-            pageSize,
-          });
+      const orderedItemsPromise =
+        paginationMode === 'global'
+          ? queryGlobalMaterialItems({ userId, options, lang, selectedTypes, cursor: req.body?.cursor, pageSize })
+          : useGlobalRelevance
+            ? queryRelevantSearchItems({
+                userId,
+                options,
+                lang,
+                offset: relevanceOffset,
+                pageSize,
+                selectedTypes,
+              })
+            : queryOrderedSearchItems({
+                userId,
+                options,
+                lang,
+                selectedTypes,
+                cursor,
+                pageSize,
+              });
       const metadataPromise = includeMetadata
         ? Promise.all([
             queryBookmarks(userId, options, lang, false),
@@ -1256,7 +1361,10 @@ export const globalSearch = async (req, res) => {
           todo: todoResult.total,
         };
         Object.assign(response, {
-          total: Object.values(typeTotals).reduce((sum, count) => sum + Number(count || 0), 0),
+          total: (paginationMode === 'global'
+            ? selectedTypes.map((type) => typeTotals[type])
+            : Object.values(typeTotals)
+          ).reduce((sum, count) => sum + Number(count || 0), 0),
           typeTotals,
           tagOptions,
           tagMatches,
@@ -1312,6 +1420,7 @@ export const globalSearch = async (req, res) => {
       }),
     );
   } catch (error) {
+    if (error?.code === 'SEARCH_CURSOR_INVALID') return res.send(resultData(null, 400, '搜索分页标识无效，请重新搜索'));
     console.error('[search] global search failed code=%s', String(error?.code || 'GLOBAL_SEARCH_FAILED'));
     return res.send(resultData(null, 500, '统一搜索暂时不可用，请稍后重试'));
   }
@@ -1328,12 +1437,16 @@ export const previewBatchSelection = async (req, res) => {
         includeDescendants: req.body.folderScope.includeDescendants === true,
         database: pool,
       });
-      return res.send(resultData({ mode: 'explicit', ...summarizeSelectionItems(resolved.resolvedItems), ...resolved }));
+      return res.send(
+        resultData({ mode: 'explicit', ...summarizeSelectionItems(resolved.resolvedItems), ...resolved }),
+      );
     }
     if (req.body?.includeResolvedItems === true) {
       if (req.body?.selection?.mode !== 'explicit') return res.send(resultData(null, 400, '只支持核对逐项选择'));
       const resolved = await resolveExplicitResourceSelection(pool, userId, req.body.selection.items);
-      return res.send(resultData({ mode: 'explicit', ...summarizeSelectionItems(resolved.resolvedItems), ...resolved }));
+      return res.send(
+        resultData({ mode: 'explicit', ...summarizeSelectionItems(resolved.resolvedItems), ...resolved }),
+      );
     }
     const resolved = await resolveBatchSelection(pool, {
       userId,

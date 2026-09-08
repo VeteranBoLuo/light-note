@@ -1,5 +1,5 @@
 <template>
-  <div class="run-wizard" :aria-busy="busy || undefined">
+  <div class="run-wizard" :class="{ 'is-check-step': step === 1 }" :aria-busy="busy || undefined">
     <Teleport :to="headerTarget || 'body'" :disabled="!headerTarget">
       <nav class="wizard-nav" :aria-label="t('organizeWizard.navigation')">
         <ol>
@@ -74,17 +74,13 @@
                   : `organizeWizard.checkHints.${check}`,
               )
             }}</small>
-            <span class="option-bottom"
-              ><span class="check-method">{{
-                t(check === 'tags' || check === 'title' ? 'organizeWizard.ai' : 'organizeWizard.rule')
-              }}</span>
+            <span class="option-bottom">
               <span>{{
                 resourceNames(modelValue.resourceTypes.filter((type) => supportsOrganizeCheck(type, check)))
               }}</span></span
             >
           </BButton>
         </div>
-        <p class="wizard-hint">{{ t('organizeWizard.applicabilityHint') }}</p>
       </template>
 
       <template v-else-if="step === 2">
@@ -286,7 +282,7 @@
     content = ref<HTMLElement | null>(null);
   const steps = ['resources', 'checks', 'scope', 'confirm'] as const;
   const types: ResourceType[] = ['bookmark', 'note', 'file'];
-  const checks: CheckKind[] = ['tags', 'title', 'empty', 'duplicate'];
+  const checks: CheckKind[] = ['tags', 'title', 'empty', 'duplicate', 'archive'];
   const scopes: RunOptions['scope'][] = ['recent', 'all', 'selected', 'untagged'];
   const resourceIcons = { bookmark: icon.resource.bookmark, note: icon.resource.note, file: icon.resource.file };
   const availableChecks = computed(() =>
@@ -457,6 +453,19 @@
     min-height: 100%;
     display: flex;
     flex-direction: column;
+  }
+  @media (min-width: 761px) {
+    .is-check-step .wizard-content {
+      padding: 22px 28px;
+      gap: 14px;
+    }
+    .is-check-step .check-option.b_btn {
+      padding: 14px 16px;
+      gap: 9px;
+    }
+    .is-check-step .wizard-heading {
+      gap: 6px;
+    }
   }
   .wizard-nav {
     padding: 0;
@@ -669,12 +678,6 @@
     font-size: 11px;
     color: var(--desc-color);
     flex-wrap: wrap;
-  }
-  .check-method {
-    padding: 3px 7px;
-    border-radius: 5px;
-    background: var(--background-color);
-    color: var(--text-color);
   }
   .wizard-context {
     display: flex;

@@ -1,3 +1,5 @@
+import { inspectImagePreviewRuntime } from './util/imagePreview/runtime.js';
+import { runSingleImagePreviewJob, cleanupImageAssets } from './util/imagePreview/worker.js';
 import { runOrganizeCompletionNotifications } from './util/services/organizeCompletionNotification.js';
 import os from 'node:os';
 import pool from './db/index.js';
@@ -37,6 +39,8 @@ async function run() {
       : ocrRuntime.errorCode || '运行环境不可用';
     console.warn(`[AI 文档] 本地 OCR 暂不可用: ${detail}`);
   }
+  const imageRuntime = await inspectImagePreviewRuntime();
+  if(!imageRuntime.ready) console.warn('[image-preview] runtime unavailable');
   const previewRuntime = await inspectAllFilePreviewRuntimes();
   for (const [name, state] of Object.entries({ archive: previewRuntime.archive, office: previewRuntime.office })) {
     if (state.errorCode === 'FILE_PREVIEW_DISABLED') console.log('[文件预览] %s 预览已通过配置关闭', name);
@@ -49,12 +53,14 @@ async function run() {
       if (now - lastCleanupAt > 60 * 60 * 1000) {
         await cleanupExpiredDocumentSources();
         await cleanupStaleFilePreviewArtifacts();
+        await cleanupImageAssets();
         await cleanupExpiredToolboxData();
         lastCleanupAt = now;
       }
       const queues = [
         runSingleDocumentJob,
         runSingleFilePreviewJob,
+        runSingleImagePreviewJob,
         runSingleToolboxJob,
         runSingleOrganizeAiSuggestionBatch,
         runSingleSuggestionItem,

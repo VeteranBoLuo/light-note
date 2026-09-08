@@ -1,3 +1,8 @@
+import {
+  enqueueBookmarkArchive,
+  getBookmarkArchiveStatus,
+  retryFailedBookmarkArchives,
+} from '../util/bookmarkArchiveJobs.js';
 import pool from '../db/index.js';
 import { resultData, snakeCaseKeys, mergeExistingProperties, insertData } from '../util/common.js';
 import { getDerivedRelatedTags } from '../util/services/tagRelationService.js';
@@ -15,12 +20,7 @@ import {
 import { promises as fs } from 'fs';
 import { ensureNotVisitor, ensureUserOrAdminPolicy } from '../util/auth.js';
 import { grantExp } from '../util/growth.js';
-import {
-  archiveAndSummarizeBookmark,
-  archiveBookmark,
-  getBookmarkSnapshot,
-  summarizeBookmark,
-} from '../util/snapshot.js';
+import { archiveAndSummarizeBookmark, getBookmarkSnapshot, summarizeBookmark } from '../util/snapshot.js';
 import {
   checkBookmarkHealth,
   getHealthSummary,
@@ -771,11 +771,12 @@ export const doArchiveBookmark = async (req, res) => {
   try {
     const { id } = req.body || {};
     if (!id) return res.send(resultData(null, 400, '缺少书签 id'));
-    const result = await archiveBookmark(req.user.id, id);
+    const result = await enqueueBookmarkArchive((req.resourceUser || req.user).id, id);
+    if (!result) return res.send(resultData(null, 404, '书签不存在'));
     res.send(resultData(result));
   } catch (error) {
-    console.error('归档网页失败:', error);
-    res.send(resultData(null, 500, '归档失败: ' + error.message));
+    console.error('[bookmark-archive] enqueue failed code=%s', stableAgentErrorCode(error));
+    res.send(resultData(null, 500, '存档任务提交失败，请稍后重试'));
   }
 };
 
@@ -786,11 +787,11 @@ export const getSnapshot = async (req, res) => {
   try {
     const { id } = req.body || {};
     if (!id) return res.send(resultData(null, 400, '缺少书签 id'));
-    const snap = await getBookmarkSnapshot(req.user?.id, id);
-    res.send(resultData(snap));
+    const snap = await getBookmarkSnapshot((req.resourceUser || req.user)?.id, id);
+    res.send(resultData({ ...snap, ...(await getBookmarkArchiveStatus((req.resourceUser || req.user)?.id, id)) }));
   } catch (error) {
-    console.error('获取快照失败:', error);
-    res.send(resultData(null, 500, '获取快照失败: ' + error.message));
+    console.error('[bookmark-archive] read failed code=%s', stableAgentErrorCode(error));
+    res.send(resultData(null, 500, '获取存档失败，请稍后重试'));
   }
 };
 
@@ -1706,5 +1707,15 @@ export const retryIconBatchFailuresHandler = async (req, res) => {
   } catch (err) {
     console.error('[icon-batch] 重试失败 code=%s', stableAgentErrorCode(err));
     res.send(resultData(null, 500, '重试失败'));
+  }
+};
+
+export const retryFailedArchives = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    res.send(resultData(await retryFailedBookmarkArchives((req.resourceUser || req.user).id)));
+  } catch (error) {
+    console.error('[bookmark-archive] retry failed code=%s', stableAgentErrorCode(error));
+    res.send(resultData(null, 500, '重试任务提交失败，请稍后重试'));
   }
 };

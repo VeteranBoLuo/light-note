@@ -13,6 +13,10 @@ export type SearchType = ResourceSearchType;
 export type { GlobalSearchType };
 
 export interface SearchCursor {
+  score?: number;
+  time?: string;
+  resourceType?: string;
+  id?: string;
   type: GlobalSearchType | 'all';
   offset: number;
 }
@@ -88,7 +92,7 @@ export interface GlobalSearchQuery {
   date?: 'all' | '7d' | '30d' | '365d';
   tags?: string[];
   untagged?: boolean;
-  paginationMode?: 'perType' | 'ordered';
+  paginationMode?: 'perType' | 'ordered' | 'global';
   cursor?: SearchCursor | null;
   includeMetadata?: boolean;
   /** 将标签从资源结果剥离，并在首屏元数据中返回 tagMatches。 */
@@ -169,6 +173,13 @@ function normalizeSearchCursor(value: unknown): SearchCursor | null {
   return {
     type: raw.type as GlobalSearchType | 'all',
     offset: Math.floor(offset),
+    ...(raw.type === 'all' &&
+    typeof raw.id === 'string' &&
+    typeof raw.time === 'string' &&
+    typeof raw.resourceType === 'string' &&
+    Number.isFinite(raw.score)
+      ? { id: raw.id, time: raw.time, resourceType: raw.resourceType, score: raw.score }
+      : {}),
   };
 }
 
@@ -180,7 +191,8 @@ export async function fetchGlobalSearch(
 ): Promise<GlobalSearchResponse> {
   const normalizedKeyword = keyword.trim();
   const locale = i18n.global.locale.value;
-  const paginationMode = query.paginationMode === 'ordered' ? 'ordered' : 'perType';
+  const paginationMode =
+    query.paginationMode === 'global' ? 'global' : query.paginationMode === 'ordered' ? 'ordered' : 'perType';
   const normalizedCursor = normalizeSearchCursor(query.cursor);
   const normalizedTypes = [...new Set(query.types || [])].filter((type) => GLOBAL_SEARCH_TYPES.includes(type)).sort();
   const includesTodo = normalizedTypes.includes('todo');
@@ -204,9 +216,9 @@ export async function fetchGlobalSearch(
           todoDue: query.todoDue || 'all',
         }
       : {}),
-    ...(paginationMode === 'ordered'
+    ...(paginationMode !== 'perType'
       ? {
-          paginationMode: 'ordered' as const,
+          paginationMode,
           cursor: normalizedCursor,
           includeMetadata: query.includeMetadata !== false,
         }
@@ -216,13 +228,13 @@ export async function fetchGlobalSearch(
   };
   const cacheKey = `${locale}::${normalizedKeyword}::${pageSize}::${JSON.stringify(normalizedQuery)}`;
 
-  if (!force && cache.has(cacheKey)) {
+  if (paginationMode !== 'global' && !force && cache.has(cacheKey)) {
     return cache.get(cacheKey) as GlobalSearchResponse;
   }
 
   const res = await apiBasePost('/api/search/global', {
     keyword: normalizedKeyword,
-    ...(paginationMode === 'ordered' ? { pageSize } : { limitPerType: pageSize }),
+    ...(paginationMode !== 'perType' ? { pageSize } : { limitPerType: pageSize }),
     ...normalizedQuery,
   });
 
@@ -299,7 +311,7 @@ export async function fetchGlobalSearch(
     ...(hasMoreByType ? { hasMoreByType } : {}),
   };
 
-  cache.set(cacheKey, data);
+  if (paginationMode !== 'global') cache.set(cacheKey, data);
   return data;
 }
 
@@ -376,7 +388,10 @@ export function clearGlobalSearchCache() {
 }
 
 export function previewSearchBatchSelection(selection: BatchSelection, includeResolvedItems = false) {
-  return apiBasePost('/api/search/batchSelectionPreview', { selection, ...(includeResolvedItems ? { includeResolvedItems } : {}) });
+  return apiBasePost('/api/search/batchSelectionPreview', {
+    selection,
+    ...(includeResolvedItems ? { includeResolvedItems } : {}),
+  });
 }
 
 export function batchAddSearchResourcesToInbox(selection: BatchSelection) {

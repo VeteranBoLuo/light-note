@@ -1,3 +1,4 @@
+import { createNotification } from './notification.js';
 /**
  * 成长周报(每周一生成上周报告,推送一条「系统」分类通知,meta 带完整数据供前端点击看大图)。
  *
@@ -324,12 +325,14 @@ export async function generateWeeklyReports() {
           ? `This week +${report.exp} EXP · ${report.bookmarks} bookmarks / ${report.notes} notes / ${report.files} files · ${report.todos} todos completed / ${report.organized} items organized · ${report.checkinDays} check-in days`
           : `本周 +${report.exp} 经验 · 新增书签 ${report.bookmarks} / 笔记 ${report.notes} / 文件 ${report.files} · 完成待办 ${report.todos} / 整理资源 ${report.organized} · 签到 ${report.checkinDays} 天`;
         const title = isEn ? '📊 Your weekly growth report' : '📊 你的本周成长周报';
-        await pool.query(
-          `INSERT INTO notification (id, user_id, type, title, content, link, meta, is_read)
-           VALUES (?, ?, 'system', ?, ?, '/growth', ?, 0)
-           ON DUPLICATE KEY UPDATE id = id`,
-          [notificationId, userId, title, content, JSON.stringify({ weeklyReport: report })],
-        );
+        await createNotification(userId, {
+          id: notificationId,
+          type: 'system',
+          title,
+          content,
+          link: '/growth',
+          meta: { weeklyReport: report },
+        });
         count++;
       } catch (e) {
         console.error('[周报] 单用户生成失败(跳过) code=%s', stableAgentErrorCode(e));

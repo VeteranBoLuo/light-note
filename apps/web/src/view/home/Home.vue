@@ -139,7 +139,7 @@
     <MobilePageActionsDrawer
       v-if="bookmark.isMobile"
       v-model:open="mobilePageActionsOpen"
-      :title="$t('common.more')"
+      :title="$t('home.mobileActionsTitle')"
       :actions="mobilePageActions"
       @action="handleMobilePageAction"
     />
@@ -271,7 +271,7 @@
     ...createMobileResourceHubActions(t),
     {
       key: 'batch',
-      label: t('bookmarkMg.batchSelect'),
+      label: t('common.batchActions'),
       icon: icon.filterPanel.check,
       dividerBefore: true,
     },

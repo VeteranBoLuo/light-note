@@ -1,3 +1,6 @@
+import { deleteUnmanagedObject } from '../util/imagePreview/cleanup.js';
+import { previewDescriptor, hydrateImagePreviewStates } from '../util/imagePreview/service.js';
+import { registerCloudImage, removeImageReferences } from '../util/imagePreview/references.js';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import multer from 'multer';
@@ -106,6 +109,7 @@ const formatFileRecord = (file) => {
     ext: getFileExtension(file.file_name),
     category,
     fileSize: file.file_size,
+    imagePreview: category === 'image' ? previewDescriptor('cloud_file',file.id) : null,
     fileUrl: file.obs_key ? buildSignedDownloadUrl(file.obs_key) : file.directory + file.file_name,
     uploadTime: file.create_time,
     folderId: file.folder_id,
@@ -359,11 +363,13 @@ router.post('/confirmUpload', async (req, res) => {
         });
         await purgeDocumentSourcesForCloudFiles(connection, userId, [existingRows[0].id]);
         const deleteSql = 'DELETE FROM files WHERE id = ?';
+        await removeImageReferences(connection,'cloud_file',[existingRows[0].id]);
         await connection.query(deleteSql, [existingRows[0].id]);
       }
 
       const insertSql = 'INSERT INTO files SET ?';
       const [insertResult] = await connection.query(insertSql, [snakeCaseKeys(fileInfo)]);
+      await registerCloudImage(connection, { ...fileInfo,id:insertResult.insertId });
 
       if (addToInbox === true) {
         await enqueueResources(connection, {
@@ -384,7 +390,7 @@ router.post('/confirmUpload', async (req, res) => {
     transactionStarted = false;
     if (supersededObjectKeys.size) {
       const cleanupKeys = [...supersededObjectKeys];
-      const cleanupResults = await Promise.allSettled(cleanupKeys.map((objectKey) => deleteObjectFromObs(objectKey)));
+      const cleanupResults = await Promise.allSettled(cleanupKeys.map((objectKey) => deleteUnmanagedObject(objectKey)));
       cleanupResults.forEach((result) => {
         if (result.status === 'rejected') {
           console.warn('[file] superseded object cleanup failed code=%s', stableAgentErrorCode(result.reason));
@@ -503,6 +509,7 @@ router.post('/queryFiles', async (req, res) => {
       console.warn('[待整理角标] 文件状态回填失败(忽略) code=%s', String(error?.code || 'INBOX_STATUS_FAILED'));
     }
 
+    await hydrateImagePreviewStates(formattedFiles,userId);
     if (!pagination.enabled) {
       return res.send(resultData(formattedFiles));
     }

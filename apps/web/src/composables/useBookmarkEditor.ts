@@ -109,11 +109,26 @@ export function useBookmarkEditor() {
     return tagOptions.value;
   }
 
-  const { resolvingUrl, generating, generateBookmarkMeta, stopBookmarkMetaGeneration } = useBookmarkMeta({
+  const {
+    resolvingUrl,
+    generating,
+    generateBookmarkMeta: generateMeta,
+    stopBookmarkMetaGeneration,
+    updatedFields,
+    canUndoMeta,
+    undoBookmarkMeta,
+    clearMetaUndo,
+    disposeBookmarkMeta,
+  } = useBookmarkMeta({
     bookmarkData,
     tagOptions,
     refreshTags: getTagSelect,
   });
+
+  function generateBookmarkMeta() {
+    if (loading.value || saving.value) return;
+    return generateMeta();
+  }
 
   function validate(): boolean {
     const name = bookmarkData.value.name.trim();
@@ -131,7 +146,7 @@ export function useBookmarkEditor() {
       )
     )
       return;
-    if (loading.value || saving.value || !validate()) return;
+    if (loading.value || saving.value || resolvingUrl.value || generating.value || !validate()) return;
 
     submitting.value = true;
     try {
@@ -157,6 +172,7 @@ export function useBookmarkEditor() {
       }
       const res = await apiBasePost(endpoint, params);
       if (res.status !== 200) return;
+      clearMetaUndo();
       recordOperation({
         module: '书签详情',
         operation: `${handleType.value === 'add' ? '新增' : '保存'}书签成功【${bookmarkData.value.name || params.url}】`,
@@ -297,7 +313,7 @@ export function useBookmarkEditor() {
 
   onBeforeUnmount(() => {
     window.removeEventListener('beforeunload', handleBeforeUnload);
-    stopBookmarkMetaGeneration({ notify: false });
+    disposeBookmarkMeta();
   });
 
   return {
@@ -316,6 +332,9 @@ export function useBookmarkEditor() {
     saveLabel,
     saving,
     generateBookmarkMeta,
+    updatedFields,
+    canUndoMeta,
+    undoBookmarkMeta,
     stopBookmarkMetaGeneration,
     submit,
     requestCancel,

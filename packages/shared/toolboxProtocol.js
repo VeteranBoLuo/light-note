@@ -150,7 +150,7 @@ export const TOOLBOX_TOOL_CATALOG = Object.freeze([
     billingMedia: ["points", "ai_quota"],
     input: {
       kind: "resources",
-      minItems: 2,
+      minItems: 1,
       maxItems: 20,
       resourceTypes: TOOLBOX_RESOURCE_TYPES,
     },
@@ -386,7 +386,7 @@ export const TOOLBOX_TOOL_CATALOG = Object.freeze([
       contentType: "text/plain",
       canSaveToNote: false,
     },
-    availability: { enabled: true },
+    availability: { enabled: false },
   }),
   tool({
     id: "table_converter",
@@ -660,7 +660,7 @@ export const TOOLBOX_TOOL_CATALOG = Object.freeze([
       contentType: "text/plain",
       canSaveToNote: false,
     },
-    availability: { enabled: true },
+    availability: { enabled: false },
   }),
   tool({
     id: "regex_extractor",
@@ -717,7 +717,7 @@ export const TOOLBOX_TOOL_CATALOG = Object.freeze([
       contentType: "application/json",
       canSaveToNote: false,
     },
-    availability: { enabled: true },
+    availability: { enabled: false },
   }),
   tool({
     id: "frontmatter_batch",
@@ -856,7 +856,7 @@ export const TOOLBOX_TOOL_CATALOG = Object.freeze([
     id: "ocr_to_text",
     phase: "next",
     executionMode: "worker",
-    billingMedium: "points",
+    billingMedium: "free",
     input: {
       kind: "documents",
       minItems: 1,

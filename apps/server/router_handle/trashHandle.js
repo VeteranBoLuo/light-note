@@ -1,3 +1,5 @@
+import { deferCloudImageDeletion, deleteUnmanagedObject } from '../util/imagePreview/cleanup.js';
+import { removeImageReferences } from '../util/imagePreview/references.js';
 import pool from '../db/index.js';
 import { resultData } from '../util/common.js';
 import { deleteObjectFromObs, buildObjectKey } from '../util/obsClient.js';
@@ -17,6 +19,7 @@ async function purgeNoteImages(connection, noteIds) {
   if (!noteIds || noteIds.length === 0) return [];
   const ph = noteIds.map(() => '?').join(',');
   const [imgs] = await connection.query(`SELECT url FROM note_images WHERE note_id IN (${ph})`, noteIds);
+  await removeImageReferences(connection,'note',noteIds);
   if (imgs.length) await connection.query(`DELETE FROM note_images WHERE note_id IN (${ph})`, noteIds);
   return imgs.map((r) => r.url).filter(Boolean);
 }
@@ -25,6 +28,8 @@ async function purgeNoteImages(connection, noteIds) {
 async function purgeNoteVersions(connection, noteIds) {
   if (!noteIds || noteIds.length === 0) return;
   const ph = noteIds.map(() => '?').join(',');
+  const [versions]=await connection.query(`SELECT id FROM note_versions WHERE note_id IN (${ph})`,noteIds);
+  await removeImageReferences(connection,'note_version',versions.map(v=>v.id));
   await connection.query(`DELETE FROM note_versions WHERE note_id IN (${ph})`, noteIds);
 }
 
@@ -103,12 +108,13 @@ async function cleanupExpiredFiles(connection, userId = null) {
   for (const [ownerId, ownerFileIds] of byUser) {
     await purgeDocumentSourcesForCloudFiles(connection, ownerId, ownerFileIds);
   }
+  await deferCloudImageDeletion(connection,rows);
   await connection.query(`DELETE FROM files WHERE id IN (${placeholders})`, ids);
 
   // 异步删 OBS，不阻塞
   for (const f of rows) {
     const key = f.obs_key || buildObjectKey(f.create_by, f.file_name);
-    deleteObjectFromObs(key).catch((e) =>
+    deleteUnmanagedObject(key).catch((e) =>
       console.error('[trash] expired OBS cleanup failed code=%s', stableAgentErrorCode(e)),
     );
   }
@@ -454,6 +460,7 @@ export const permanentDelete = async (req, res) => {
       bookmarkIcons = bookmarks || [];
     }
 
+    if(resourceType==='file') await deferCloudImageDeletion(connection,objsToDelete);
     const [result] = await connection.query(
       `DELETE FROM \`${cfg.table}\` WHERE id IN (${placeholders}) AND ${cfg.userIdField} = ? AND del_flag = 1`,
       [...targetIds, userId],
@@ -464,7 +471,7 @@ export const permanentDelete = async (req, res) => {
 
     for (const f of objsToDelete) {
       const key = f.obs_key || buildObjectKey(f.create_by, f.file_name);
-      deleteObjectFromObs(key).catch((e) =>
+      deleteUnmanagedObject(key).catch((e) =>
         console.error('[trash] OBS delete failed code=%s', stableAgentErrorCode(e)),
       );
     }
@@ -515,6 +522,7 @@ export const emptyTrash = async (req, res) => {
       files.map((file) => file.id),
     );
     // 笔记图片:先拿待清笔记的图片 URL 并删 note_images 行(下面循环会删 note 行)
+    await deferCloudImageDeletion(connection,files);
     const [delNotes] = await connection.query(`SELECT id FROM note WHERE create_by = ? AND del_flag = 1`, [userId]);
     const preparedNotes = delNotes.length
       ? await prepareOwnedNotePhysicalDelete(connection, {
@@ -560,7 +568,7 @@ export const emptyTrash = async (req, res) => {
     // 事务提交后删 OBS
     for (const f of files) {
       const key = f.obs_key || buildObjectKey(f.create_by, f.file_name);
-      deleteObjectFromObs(key).catch((e) =>
+      deleteUnmanagedObject(key).catch((e) =>
         console.error('[trash] OBS delete failed code=%s', stableAgentErrorCode(e)),
       );
     }

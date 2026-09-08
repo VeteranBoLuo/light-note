@@ -49,10 +49,11 @@ describe('笔记模板 handler', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    poolQuery.mockReset();
     ensureNotVisitor.mockReturnValue(true);
     connection = {
       beginTransaction: vi.fn().mockResolvedValue(undefined),
-      query: vi.fn(),
+      query: vi.fn(async()=>[{affectedRows:1}]),
       commit: vi.fn().mockResolvedValue(undefined),
       rollback: vi.fn().mockResolvedValue(undefined),
       release: vi.fn(),
@@ -110,7 +111,7 @@ describe('笔记模板 handler', () => {
   });
 
   it('addNoteTemplate 成功返回新 id,md 归一化为 markdown,titleTemplate 入库', async () => {
-    poolQuery.mockResolvedValueOnce([[{ n: 3 }]]).mockResolvedValueOnce([{}]);
+    poolQuery.mockResolvedValueOnce([[{ n: 3 }]]);
     const res = mockRes();
     await addNoteTemplate(
       {
@@ -122,7 +123,7 @@ describe('笔记模板 handler', () => {
     const sent = lastSent(res);
     expect(sent.status).toBe(200);
     expect(sent.data.id).toBe('tpl-new-id');
-    const insertPayload = poolQuery.mock.calls[1][1][0];
+    const insertPayload = connection.query.mock.calls.find(([sql])=>sql==='INSERT INTO note_template SET ?')[1][0];
     expect(insertPayload.type).toBe('markdown');
     expect(insertPayload.content).toBe('> 本周摘要');
     expect(insertPayload.createBy).toBe('u1');
@@ -269,3 +270,15 @@ describe('笔记模板 handler', () => {
     expect(cleanupSpy).toHaveBeenCalledWith(['https://boluo66.top/uploads/note-1-x.png']);
   });
 });
+
+vi.mock('../util/imagePreview/references.js', () => ({
+  queuePreview: vi.fn(async () => undefined),
+  registerAsset: vi.fn(async () => ({id:'asset-1'})),
+  replaceReferences: vi.fn(async () => undefined),
+  syncContentReferences: vi.fn(async () => undefined),
+  syncNoteImageReferences: vi.fn(async () => undefined),
+  registerCloudImage: vi.fn(async () => undefined),
+  syncCloudImageById: vi.fn(async () => undefined),
+  removeImageReferences: vi.fn(async () => undefined),
+  generationEnabled: () => true,
+}));

@@ -1,4 +1,6 @@
+import { STUDY_SCHEMA } from './toolbox/studyCards.js';
 import pool from '../db/index.js';
+import { FREE_OCR_SCHEMA } from './toolbox/freeOcr.js';
 
 async function pointsOperationStatusTooShort(database = pool) {
   const [rows] = await database.query(
@@ -28,6 +30,8 @@ async function toolboxColumnMissing(database, tableName, columnName) {
  * 工具箱长任务的 Schema 必须在 HTTP 与 Worker 接单前完整就绪。
  */
 export async function ensureToolboxSchema(database = pool) {
+  await database.query(STUDY_SCHEMA);
+  for (const statement of FREE_OCR_SCHEMA) await database.query(statement);
   if (await pointsOperationStatusTooShort(database)) {
     await database.query(
       "ALTER TABLE points_economy_operations MODIFY COLUMN status VARCHAR(24) NOT NULL DEFAULT 'pending'",
@@ -98,6 +102,12 @@ export async function ensureToolboxSchema(database = pool) {
       KEY idx_toolbox_job_billing (billing_status, updated_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='工具箱异步任务与三状态机快照'
   `);
+
+  const [quoteColumns] = await database.query(
+    "SELECT is_nullable FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'toolbox_jobs' AND column_name = 'quote_id'",
+  );
+  if (quoteColumns[0]?.is_nullable === 'NO')
+    await database.query('ALTER TABLE toolbox_jobs MODIFY COLUMN quote_id CHAR(36) DEFAULT NULL');
 
   if (await toolboxColumnMissing(database, 'toolbox_quotes', 'billing_medium')) {
     try {

@@ -275,11 +275,11 @@ describe('ensureCommunityChatSchema', () => {
       "`source_type` varchar(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'cloud_file'",
     );
     expect(baseline).toContain(
-      'UNIQUE KEY `uk_file_preview_artifact` (`source_type`,`file_id`,`strategy`,`strategy_version`)',
+      'UNIQUE KEY `uk_file_preview_artifact` (`source_type`,`file_id`,`strategy`,`strategy_version`,`source_revision`)',
     );
     expect(assertions).toContain('missing_community_chat_attachment_table');
     expect(assertions).toContain('invalid_community_chat_attachment_expiry');
-    expect(assertions).toContain("actual.cols<>'source_type,file_id,strategy,strategy_version'");
+    expect(assertions).toContain("actual.cols<>'source_type,file_id,strategy,strategy_version,source_revision'");
     expect(COMMUNITY_CHAT_TABLE_SQL.join('\n')).toContain('CREATE TABLE IF NOT EXISTS community_chat_message_files');
     expect(textMigration).toContain('uk_community_chat_message_request');
     expect(textMigration).toContain('last_read_message_id');

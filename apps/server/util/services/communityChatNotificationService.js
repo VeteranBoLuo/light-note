@@ -1,3 +1,4 @@
+import { browserPushEnabled } from '../browserPushPolicy.js';
 import pool from '../../db/index.js';
 import { COMMUNITY_CHAT_PRIMARY_ROOM_SLUG, getCommunityChatFeatureState } from '../communityChatFeature.js';
 import { CommunityChatError } from './communityChatAccessService.js';
@@ -30,7 +31,7 @@ function toPublicSettings(row = null) {
     replyCountsAsMention: true,
     channels: {
       inApp: { available: true, enabled },
-      browser: { available: false, enabled: false },
+      browser: { available: browserPushEnabled(), enabled: false },
       android: { available: false, enabled: false },
     },
   };
@@ -124,7 +125,7 @@ export async function updateCommunityChatNotificationSettings({ user, enabled, l
  * - 普通新消息不会进入 PC / 移动端通用通知中心；回复与 @ 使用相同的总开关、档位和屏蔽规则。
  * - 主开关缺省开启；用户主动关闭后，回复和 @ 都不生成通知。
  * - 通知使用 message public id 作为稳定来源键；同一消息同时回复并 @ 同一成员也只投递一次。
- * - 浏览器与 Android 通知尚未开放，meta 明确标记为 in_app_only。
+ * - 浏览器推送从通知事实异步派发，Android 原生推送尚未开放。
  */
 export async function deliverCommunityChatMessageNotifications({
   messagePublicId,
@@ -167,7 +168,7 @@ export async function deliverCommunityChatMessageNotifications({
 
   const [result] = await db.query(
     `INSERT IGNORE INTO notification
-       (id, user_id, type, title, content, link, meta, is_read, source_type, source_id)
+       (id, user_id, type, title, content, link, meta, is_read, source_type, source_id, browser_push_pending, browser_push_created_at)
      SELECT UUID(), recipient.id, 'community_chat',
             CASE WHEN reply.user_id = recipient.id THEN '有人回复了你' ELSE '有人提及了你' END,
             CONCAT(
@@ -190,7 +191,7 @@ export async function deliverCommunityChatMessageNotifications({
             CONCAT('/community-chat?message=', message.public_id),
             JSON_OBJECT(
               'version', 1,
-              'delivery', 'in_app_only',
+              'delivery', 'notification_center',
               'kind', CASE WHEN reply.user_id = recipient.id THEN 'reply' ELSE 'mention' END,
               'mentionEveryone', IF(message.mention_everyone = 1, 1, 0),
               'messagePublicId', message.public_id,
@@ -199,7 +200,8 @@ export async function deliverCommunityChatMessageNotifications({
             ),
             0,
             'community_chat_message',
-            message.public_id
+            message.public_id,
+            ${browserPushEnabled(env) ? 1 : 0}, CURRENT_TIMESTAMP(6)
        FROM community_chat_messages message
        JOIN community_chat_rooms room ON room.id = message.room_id AND room.status = 'active'
        JOIN user sender ON sender.id = message.user_id AND sender.del_flag = 0

@@ -274,6 +274,25 @@ export function classifyWebPageSnapshot({
   const evidence = boundedDiagnosticText(
     `${diagnosticText}\n${noscriptText}\n${normalizedTitle}\n${normalizedDescription}\n${normalizedBody}`,
   );
+  // 错误接口偶尔以 HTTP 200/text/plain 返回；不能把超过字数门槛的错误 JSON 当正文。
+  try {
+    const payload = JSON.parse(normalizedBody);
+    if (payload && !Array.isArray(payload) && typeof payload === 'object' && payload.error) {
+      return 'ACCESS_DENIED';
+    }
+  } catch {
+    /* 普通网页文字不是 JSON。 */
+  }
+  if ([404, 410].includes(Number(status))) return 'NOT_FOUND';
+  if (
+    normalizedBody.length < 600 &&
+    /^(?:404|410)\s*(?:this page|page|not found|页面)|^(?:this page could not be found|page not found)/iu.test(
+      normalizedBody,
+    )
+  )
+    return 'NOT_FOUND';
+  if (normalizedBody.length < 600 && /请求存在异常|暂时限制本次访问|访问过于频繁/iu.test(normalizedBody))
+    return 'ACCESS_DENIED';
   const hasUsefulMetadata = normalizedTitle.length >= 3 && normalizedDescription.length >= 8;
   const hasUsefulBody = normalizedBody.length >= 40;
   const lowInformation = normalizedBody.length < 600 && !hasUsefulMetadata;

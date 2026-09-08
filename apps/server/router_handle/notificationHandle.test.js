@@ -292,3 +292,41 @@ describe('通知中心邮件发送记录', () => {
     );
   });
 });
+
+describe('浏览器通知定位', () => {
+  beforeEach(() => {
+    query.mockReset();
+    getConnection.mockResolvedValue({
+      query: (sql, params) => (sql.startsWith('SET TRANSACTION') ? Promise.resolve([]) : query(sql, params)),
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+    });
+  });
+  it('按 owner 定位目标所在页，稳定处理相同时间并不执行已读或待办写入', async () => {
+    query
+      .mockResolvedValueOnce([[{ id: 'n-target', create_time: '2026-09-08 08:00:00' }]])
+      .mockResolvedValueOnce([[{ ahead: 43 }]])
+      .mockResolvedValueOnce([[{ id: 'n-target', type: 'system', meta: {}, is_read: 0 }]])
+      .mockResolvedValueOnce([[{ total: 50 }]])
+      .mockResolvedValueOnce([[{ unreadTotal: 4 }]]);
+    const res = mockRes();
+    await list({ user: { id: 'u1', role: 'user' }, body: { notificationId: 'n-target', pageSize: 20 } }, res);
+    expect(res.send.mock.calls[0][0].data).toMatchObject({ currentPage: 3, targetFound: true });
+    expect(query.mock.calls[0][1]).toEqual(['u1', 'n-target']);
+    expect(query.mock.calls[2][1]).toEqual(['u1', 20, 40]);
+    expect(query.mock.calls.every(([sql]) => /^\s*SELECT/.test(sql))).toBe(true);
+  });
+  it('不存在或无权访问时回到通知列表，不泄露其他账号信息', async () => {
+    query
+      .mockResolvedValueOnce([[]])
+      .mockResolvedValueOnce([[]])
+      .mockResolvedValueOnce([[{ total: 0 }]])
+      .mockResolvedValueOnce([[{ unreadTotal: 0 }]]);
+    const res = mockRes();
+    await list({ user: { id: 'u1', role: 'user' }, body: { notificationId: 'someone-elses' } }, res);
+    expect(res.send.mock.calls[0][0].data).toMatchObject({ targetFound: false, items: [] });
+    expect(query).toHaveBeenCalledTimes(4);
+  });
+});

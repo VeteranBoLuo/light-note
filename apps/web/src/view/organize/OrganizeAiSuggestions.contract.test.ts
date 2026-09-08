@@ -8,10 +8,10 @@ const center = read('view/organize/OrganizeCenter.vue');
 const api = read('api/organizeApi.ts');
 
 describe('整理中心 AI 建议流契约', () => {
-  it('仅在桌面整理中心出现，移动导航仍保持原有任务集合', () => {
-    expect(center).toContain("activeView === 'ai_suggestions' && bookmark.isDesktop");
-    expect(center).toMatch(/\.\.\.\(bookmark\.isDesktop[\s\S]*key: 'ai_suggestions'/);
-    expect(component).not.toMatch(/@media \(max-width:/);
+  it('整理中心接入共享建议工作区，桌面和移动使用相同入口', () => {
+    expect(center).toContain("activeView === 'ai_suggestions'");
+    expect(center).toContain("@/view/organize/OrganizeSuggestionWorkspace.vue");
+    expect(center).not.toContain("activeView === 'ai_suggestions' && bookmark.isDesktop");
   });
 
   it('生成前只在批量成本决策点请求估算，批次创建后可恢复和轮询', () => {

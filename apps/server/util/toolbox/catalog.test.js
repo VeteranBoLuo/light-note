@@ -86,10 +86,10 @@ describe('toolbox catalog', () => {
       'points',
       'ai_quota',
     ]);
-    expect(catalog.tools.find((item) => item.id === 'ocr_to_text')?.billingMedia).toEqual(['points']);
+    expect(catalog.tools.find((item) => item.id === 'ocr_to_text')?.billingMedia).toEqual(['free']);
     expect(catalog.tools).toHaveLength(41);
-    expect(getPublicToolboxCatalog().tools.filter((item) => item.availability.enabled)).toHaveLength(20);
-    expect(catalog.tools.filter((item) => item.availability.enabled)).toHaveLength(19);
+    expect(getPublicToolboxCatalog().tools.filter((item) => item.availability.enabled)).toHaveLength(17);
+    expect(catalog.tools.filter((item) => item.availability.enabled)).toHaveLength(16);
     expect(catalog.tools.find((item) => item.id === 'action_plan')?.availability.enabled).toBe(false);
     expect(catalog.tools.find((item) => item.id === 'browser_sql')?.availability.enabled).toBe(false);
     expect(catalog.tools.filter((item) => item.executionMode === 'browser')).toHaveLength(27);
@@ -127,7 +127,7 @@ describe('toolbox catalog', () => {
     ).toThrowError(expect.objectContaining({ code: 'TOOLBOX_RESOURCE_DUPLICATED' }));
     expect(() =>
       normalizeToolboxInput('material_to_note', {
-        resourceRefs: [{ type: 'note', id: 'note-1' }],
+        resourceRefs: [],
       }),
     ).toThrowError(expect.objectContaining({ code: 'TOOLBOX_INPUT_COUNT_INVALID' }));
   });

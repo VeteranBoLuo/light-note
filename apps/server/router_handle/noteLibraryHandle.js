@@ -1,3 +1,6 @@
+import { previewDescriptor, hydrateImagePreviewStates } from '../util/imagePreview/service.js';
+import { registerAsset, syncNoteImageReferences, syncContentReferences, removeImageReferences } from '../util/imagePreview/references.js';
+import { localImageLocator } from '../util/imagePreview/sources.js';
 import { MAX_NOTE_BATCH_ACTION_ITEMS } from '@lightnote/shared/resource-selection';
 import pool from '../db/index.js';
 import { normalizeMarkdownBlockquoteEntities, normalizeNoteType } from '@lightnote/shared';
@@ -202,8 +205,13 @@ export const uploadNoteImage = async (req, res) => {
         discardUploadedFile(req.file);
         return res.send(resultData(null, 404, '笔记不存在'));
       }
-      await pool.query('INSERT INTO note_images SET ?', [insertData({ noteId, url: fileUrl })]);
-      void ensureNoteImageThumbnail(fileUrl).catch(() => {});
+      const c=await pool.getConnection();
+      try {
+        await c.beginTransaction();
+        await c.query('INSERT INTO note_images SET ?', [insertData({ noteId,url:fileUrl })]);
+        await registerAsset(c,{owner:userId,sourceType:'note_image',sourceId:req.file.filename,locator:req.file.filename,storage:'local',reconciled:true});
+        await c.commit();
+      } catch(e) { await c.rollback(); throw e; } finally { c.release(); }
       return res.send(resultData({ url: fileUrl }));
     }
 
@@ -216,6 +224,7 @@ export const uploadNoteImage = async (req, res) => {
       noteData.sort = placement.sort;
       await connection.query('INSERT INTO note SET ?', [noteData]);
       await connection.query('INSERT INTO note_images SET ?', [insertData({ noteId: noteData.id, url: fileUrl })]);
+      await registerAsset(connection,{owner:userId,sourceType:'note_image',sourceId:req.file.filename,locator:req.file.filename,storage:'local',reconciled:true});
       await connection.commit();
     } catch (error) {
       await connection.rollback();
@@ -223,7 +232,6 @@ export const uploadNoteImage = async (req, res) => {
     } finally {
       connection.release();
     }
-    void ensureNoteImageThumbnail(fileUrl).catch(() => {});
     await triggerResourceCreateEffects({
       request: req,
       userId,
@@ -435,6 +443,7 @@ async function pruneNoteVersions(connection, noteId, keep = NOTE_VERSION_KEEP) {
   if (oldRows.length === 0) return;
   const ids = oldRows.map((r) => r.id);
   const placeholders = ids.map(() => '?').join(',');
+  await removeImageReferences(connection,'note_version',ids);
   await connection.query(`DELETE FROM note_versions WHERE id IN (${placeholders})`, ids);
 }
 
@@ -455,6 +464,7 @@ async function insertCurrentNoteVersion(connection, { noteId, userId, currentNot
   });
   const [result] = await connection.query('INSERT INTO note_versions SET ?', [versionData]);
   await pruneNoteVersions(connection, noteId, keep);
+  await syncContentReferences(connection,{owner:userId,refType:'note_version',refId:result.insertId,content:versionData.content,type:currentNote.type});
   return result.insertId;
 }
 
@@ -701,6 +711,7 @@ export const updateNote = async (req, res) => {
     if (hasSubmittedContent || hasSubmittedType) {
       const refs = extractOwnedResourceRefs({ content: finalContent, type: finalType });
       await syncNoteResourceRefs(connection, { userId, noteId, refs });
+      await syncNoteImageReferences(connection,noteId);
     }
     await connection.commit();
     transactionStarted = false;
@@ -922,6 +933,7 @@ export const convertNoteMode = async (req, res) => {
     );
     const refs = extractOwnedResourceRefs({ content: finalContent, type: targetType });
     await syncNoteResourceRefs(connection, { userId, noteId, refs });
+      await syncNoteImageReferences(connection,noteId);
     const [updatedRows] = await connection.query('SELECT update_time FROM note WHERE id=? AND create_by=?', [
       noteId,
       userId,
@@ -1105,6 +1117,7 @@ export const queryNoteList = async (req, res) => {
       if (pagination.enabled) {
         const previewSource = drawing ? '' : cardPreview?.imageUrl || '';
         note.previewImageUrl = previewSource ? noteImageThumbnailPathname(previewSource) : '';
+        note.imagePreview = previewSource && localImageLocator(previewSource) ? previewDescriptor('note',note.id) : null;
         if (drawing) {
           note.previewSummary = '';
           note.previewTextBeforeImage = '';
@@ -1130,6 +1143,7 @@ export const queryNoteList = async (req, res) => {
           .join(' / ');
       }
     });
+    await hydrateImagePreviewStates(result,userId);
     try {
       await attachPendingStatus(pool, { userId, resourceType: 'note', items: result });
     } catch (error) {
@@ -1325,6 +1339,8 @@ export const getNoteImageThumbnail = async (req, res) => {
   if (!match) return res.status(404).end();
   const key = match[1];
   try {
+    const ownedSource = await resolveOwnedNoteThumbnailSource({ key, sourceUrl:req.query?.source, userId:req.user?.id, db:pool });
+    if (!ownedSource) return res.status(404).end();
     let filePath = await getExistingNoteImageThumbnailPath(key);
     if (!filePath) {
       const sourceUrl = await resolveOwnedNoteThumbnailSource({
@@ -1334,7 +1350,7 @@ export const getNoteImageThumbnail = async (req, res) => {
         db: pool,
       });
       if (!sourceUrl) return res.status(404).end();
-      filePath = await ensureNoteImageThumbnail(sourceUrl);
+      filePath = await getExistingNoteImageThumbnailPath(key);
     }
     if (!filePath) return res.status(404).end();
     const image = await fsP.readFile(filePath);
@@ -2074,7 +2090,8 @@ export const restoreNoteVersion = async (req, res) => {
       reason: 'restore',
       createBy: userId,
     });
-    await connection.query('INSERT INTO note_versions SET ?', [curSnap]);
+    const [snapshotResult]=await connection.query('INSERT INTO note_versions SET ?', [curSnap]);
+    await syncContentReferences(connection,{owner:userId,refType:'note_version',refId:snapshotResult.insertId,content:curSnap.content,type:curRows[0].type});
     // 覆盖为目标版本(含 type:恢复时 md/html 模式一并回到该版本)。
     await connection.query(
       'UPDATE note SET title=?, content=?, type=?, update_by=?, revision=? WHERE id=? AND create_by=?',
@@ -2090,6 +2107,7 @@ export const restoreNoteVersion = async (req, res) => {
     // 笔记内联提及(N0):恢复版本会用目标版本正文覆盖当前正文,必须同步引用(§4.6 恢复不能漏)。
     const restoredRefs = extractOwnedResourceRefs({ content: String(verContent), type: verType });
     await syncNoteResourceRefs(connection, { userId, noteId, refs: restoredRefs });
+      await syncNoteImageReferences(connection,noteId);
     await connection.commit();
     transactionStarted = false;
     await invalidatePersonalKnowledgeCache(userId);
@@ -2228,7 +2246,13 @@ export const addNoteTemplate = async (req, res) => {
       ...input,
       createBy: userId,
     });
-    await pool.query('INSERT INTO note_template SET ?', [data]);
+    const c=await pool.getConnection();
+    try {
+      await c.beginTransaction();
+      await c.query('INSERT INTO note_template SET ?', [data]);
+      await syncContentReferences(c,{owner:userId,refType:'note_template',refId:data.id,content:input.content,type:input.type});
+      await c.commit();
+    } catch(e) { await c.rollback(); throw e; } finally { c.release(); }
     res.send(resultData({ id: data.id, name: input.name, revision: 1 }));
   } catch (e) {
     sendTemplateServerError(res, '保存模板', e);
@@ -2307,6 +2331,7 @@ export const updateNoteTemplate = async (req, res) => {
       transactionStarted = false;
       return res.send(resultData({ code: 'NOTE_TEMPLATE_VERSION_CONFLICT' }, 409, '模板状态已变化'));
     }
+    await syncContentReferences(connection,{owner:userId,refType:'note_template',refId:templateId,content:input.content,type:current.type});
     await connection.commit();
     transactionStarted = false;
     const nextRevision = baseRevision + 1;
@@ -2383,6 +2408,7 @@ export const duplicateNoteTemplate = async (req, res) => {
       createBy: userId,
     });
     await connection.query('INSERT INTO note_template SET ?', [data]);
+    await syncContentReferences(connection,{owner:userId,refType:'note_template',refId:data.id,content:data.content,type:data.type});
     await connection.commit();
     transactionStarted = false;
     return res.send(resultData({ id: data.id, name, revision: 1 }));
@@ -2418,7 +2444,14 @@ export const delNoteTemplate = async (req, res) => {
       return res.send(resultData(null, 404, '模板不存在'));
     }
     const imageUrls = extractNoteImageUrls(rows[0].content);
-    const [result] = await pool.query('DELETE FROM note_template WHERE id = ? AND create_by = ?', [templateId, userId]);
+    const c=await pool.getConnection();
+    let result;
+    try {
+      await c.beginTransaction();
+      [result]=await c.query('DELETE FROM note_template WHERE id=? AND create_by=?',[templateId,userId]);
+      if (result.affectedRows) await removeImageReferences(c,'note_template',[templateId]);
+      await c.commit();
+    } catch(e) { await c.rollback(); throw e; } finally { c.release(); }
     if (result.affectedRows === 0) {
       return res.send(resultData(null, 404, '模板不存在'));
     }

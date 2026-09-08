@@ -18,6 +18,9 @@
             :saving="saving"
             :resolving-url="resolvingUrl"
             :generating="generating"
+            :updated-fields="updatedFields"
+            :can-undo-meta="canUndoMeta"
+            @undo-meta="undoBookmarkMeta"
             :errors="fieldErrors"
             :tag-options="tagOptions"
             :show-actions="false"
@@ -28,11 +31,7 @@
             @add-tag="goAddTag"
             @view-snapshot="snapVisible = true"
           />
-          <ResourceBacklinks
-            v-if="isEdit && bookmarkId"
-            target-type="bookmark"
-            :target-id="bookmarkId"
-          />
+          <ResourceBacklinks v-if="isEdit && bookmarkId" target-type="bookmark" :target-id="bookmarkId" />
         </BLoading>
       </div>
       <footer class="bookmark-edit-page__footer">
@@ -44,6 +43,7 @@
             class="bookmark-edit-page__save"
             type="primary"
             :loading="saving"
+            :disabled="resolvingUrl || generating"
             @click="submit"
           >
             {{ saveLabel }}
@@ -72,6 +72,9 @@
     loading,
     resolvingUrl,
     generating,
+    updatedFields,
+    canUndoMeta,
+    undoBookmarkMeta,
     fieldErrors,
     handleType,
     isEdit,

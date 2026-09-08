@@ -121,10 +121,8 @@
         v-else
         class="tag-space-workspace"
         :class="{
-          'is-switching': detailRefreshing,
           'has-ai': bookmark.isDesktop,
         }"
-        :aria-busy="detailRefreshing"
       >
         <aside class="tag-directory-rail" :aria-label="t('tagSpace.sidebarTitle')">
           <div class="rail-overview" :aria-label="t('tagSpace.allTags')">
@@ -159,7 +157,7 @@
           </div>
         </aside>
 
-        <main class="tag-space-main">
+        <main class="tag-space-main" :aria-busy="detailRefreshing">
           <BCard as="section" variant="card" padding="18px" class="tag-profile-card">
             <div class="tag-profile-main">
               <BButton class="workspace-back" :aria-label="t('common.back')" @click="router.back()">
@@ -234,6 +232,7 @@
               class="space-primary-tab"
               :class="{ 'is-active': viewMode === tabOption.value }"
               :aria-selected="viewMode === tabOption.value"
+              :disabled="detailRefreshing"
               @click="setViewMode(tabOption.value)"
             >
               {{ tabOption.label }}
@@ -281,6 +280,7 @@
               ref="resourceScrollRef"
               v-auto-scrollbar
               class="resource-scroll-region"
+              :inert="detailRefreshing"
               @scroll.passive="scheduleResourceAutoLoad"
             >
               <div v-if="resourceError && resourceItems.length" class="inline-error" role="alert">
@@ -341,7 +341,14 @@
             </div>
           </BCard>
 
-          <BCard v-else-if="viewMode === 'related'" as="section" variant="card" padding="18px" class="related-panel">
+          <BCard
+            v-else-if="viewMode === 'related'"
+            as="section"
+            variant="card"
+            padding="18px"
+            class="related-panel"
+            :inert="detailRefreshing"
+          >
             <div class="panel-heading">
               <div>
                 <strong>{{ t('tagSpace.relatedSpaceTitle', { name: tag.name }) }}</strong>
@@ -380,7 +387,7 @@
             </div>
           </BCard>
 
-          <BCard v-else as="section" variant="card" padding="0" class="graph-panel">
+          <BCard v-else as="section" variant="card" padding="0" class="graph-panel" :inert="detailRefreshing">
             <div v-if="graphError" class="graph-error" role="alert">
               <span>{{ t('tagSpace.graphLoadFailed') }}</span>
               <BButton size="small" @click="loadGraph">{{ t('common.retry') }}</BButton>
@@ -412,6 +419,10 @@
               />
             </div>
           </BCard>
+
+          <div v-if="detailRefreshing" class="tag-switching-status" role="status" aria-live="polite">
+            <BLoading inline loading :title="t('common.loading')" />
+          </div>
         </main>
 
         <aside v-if="bookmark.isDesktop" class="tag-ai-rail" :aria-label="t('tagManage.aiSkillTitle')">
@@ -471,10 +482,6 @@
             </template>
           </AiSkillPanel>
         </aside>
-
-        <div v-if="detailRefreshing" class="tag-switching-overlay" role="status" aria-live="polite">
-          <BLoading inline loading :title="t('common.loading')" />
-        </div>
       </div>
     </div>
 
@@ -2200,6 +2207,7 @@
   }
 
   .tag-space-main {
+    position: relative;
     height: 100%;
     min-width: 0;
     min-height: 0;
@@ -2739,16 +2747,16 @@
     overflow: hidden;
   }
 
-  .tag-switching-overlay {
+  .tag-switching-status {
     position: absolute;
     z-index: 8;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    right: 12px;
+    bottom: 12px;
+    padding: 8px 12px;
+    pointer-events: none;
     border: 1px solid var(--surface-border-color);
-    border-radius: 14px;
-    background: var(--background-color);
+    border-radius: 10px;
+    background: var(--card-background);
   }
 
   .related-panel {

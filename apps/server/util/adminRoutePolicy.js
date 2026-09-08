@@ -14,6 +14,9 @@ export const ADMIN_POLICIES = Object.freeze({
 
 const routePolicies = new Map();
 
+// Telemetry must never attribute administrator preview/maintenance to the subject.
+declare(ADMIN_POLICIES.BACKGROUND_WRITE, 'activity', [['POST', '/common/recordUserActivity']]);
+
 function declare(policy, resourceType, routes) {
   for (const [method, path] of routes) {
     routePolicies.set(`${method.toUpperCase()} ${path}`, { policy, resourceType });
@@ -52,6 +55,7 @@ declare(ADMIN_POLICIES.CONTENT_WRITE, 'bookmark', [
   ['POST', '/bookmark/importBookmarksHtml'],
   ['POST', '/bookmark/importBookmarksExcel'],
   ['POST', '/bookmark/archive'],
+  ['POST', '/bookmark/archive/retry-failed'],
   ['POST', '/bookmark/health/ignore'],
   // AI 整理"应用"是对 subject 的真实内容写(建标签/加关系/补书签名称),必须 maintain-only、readonly 阻断,
   // 不能归 AI_USE(否则只读预览代管也能落库,违反"readonly 阻断写")。
@@ -73,6 +77,7 @@ declare(ADMIN_POLICIES.CONTENT_DESTRUCTIVE, 'bookmark', [
 ]);
 
 declare(ADMIN_POLICIES.READ, 'note', [
+  ['POST', '/image-previews/resolve'],
   ['POST', '/note/queryNoteList'],
   ['POST', '/note/queryDrawingPreviews'],
   ['GET', '/note/drawing-thumbnail/:noteId/:fileName'],
@@ -312,6 +317,7 @@ declare(ADMIN_POLICIES.AI_USE, 'ai_skill', [
 declare(ADMIN_POLICIES.READ, 'toolbox', [
   ['GET', '/toolbox/catalog'],
   ['GET', '/toolbox/home'],
+  ['GET', '/toolbox/project-entry'],
   ['GET', '/toolbox/knowledge-overview'],
   ['GET', '/toolbox/workspaces'],
   ['GET', '/toolbox/workspaces/:workspaceId'],
@@ -319,11 +325,13 @@ declare(ADMIN_POLICIES.READ, 'toolbox', [
   ['GET', '/toolbox/jobs'],
   ['GET', '/toolbox/jobs/:jobId'],
   ['GET', '/toolbox/artifacts/:artifactId'],
+  ['GET', '/toolbox/artifacts/:artifactId/study'],
 ]);
 // 报价会持久化快照，任务会预占操作者积分，保存会创建真实笔记；这些都不能在管理员
 // 代管上下文中替数据主体执行，哪怕当前模式是 maintain。
 declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'toolbox', [
   ['POST', '/toolbox/quotes'],
+  ['POST', '/toolbox/project-entry/dismiss'],
   ['POST', '/toolbox/workspaces'],
   ['PATCH', '/toolbox/workspaces/:workspaceId'],
   ['POST', '/toolbox/workspaces/:workspaceId/open'],
@@ -336,6 +344,7 @@ declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'toolbox', [
   ['POST', '/toolbox/jobs'],
   ['POST', '/toolbox/jobs/:jobId/cancel'],
   ['POST', '/toolbox/artifacts/:artifactId/save'],
+  ['POST', '/toolbox/artifacts/:artifactId/study'],
 ]);
 // 安装包永久地址：只做一次 302 到静态文件，不读用户数据，代管上下文下同样放行
 declare(ADMIN_POLICIES.READ, 'app', [['GET', '/app/android/latest.apk']]);
@@ -421,6 +430,13 @@ declare(ADMIN_POLICIES.ADMIN_ONLY, 'support', [
   ['POST', '/support/admin/orders/:providerOrderNo/reconcile'],
   ['POST', '/support/admin/orders/:providerOrderNo/reward-approve'],
   ['POST', '/support/admin/supporters/:userId/identity-visibility'],
+]);
+
+declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'notification', [
+  ['POST', '/notification/browser/config'],
+  ['POST', '/notification/browser/subscribe'],
+  ['POST', '/notification/browser/activate'],
+  ['POST', '/notification/browser/unsubscribe'],
 ]);
 
 declare(ADMIN_POLICIES.READ, 'notification', [
@@ -550,6 +566,7 @@ declare(ADMIN_POLICIES.ADMIN_ONLY, 'admin', [
   ['POST', '/common/updateAdminAiFeedbackTriage'],
   ['POST', '/common/getDeepSeekBalance'],
   ['POST', '/common/getAdminOverviewSnapshot'],
+  ['POST', '/common/getAdminOverviewActiveUsers'],
   ['POST', '/common/getAdminOverview'],
   ['POST', '/common/getAdminOverviewRecent'],
   ['POST', '/todo/v2/admin/diagnostics'],
@@ -786,6 +803,8 @@ function resolvePolicy(method, path) {
   if (/^\/toolbox\/artifacts\/[^/]+$/.test(path)) {
     return routePolicies.get(`${method} /toolbox/artifacts/:artifactId`);
   }
+  if (/^\/toolbox\/artifacts\/[^/]+\/study$/.test(path))
+    return routePolicies.get(`${method} /toolbox/artifacts/:artifactId/study`);
   if (/^\/toolbox\/artifacts\/[^/]+\/save$/.test(path)) {
     return routePolicies.get(`${method} /toolbox/artifacts/:artifactId/save`);
   }

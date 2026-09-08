@@ -1,3 +1,4 @@
+import { clearBrowserPush } from '@/composables/useBrowserPush';
 import { apiBaseGet, apiBasePost } from '@/http/request';
 
 const userApi = {
@@ -33,7 +34,8 @@ const userApi = {
   restoreAdminUser(userId: string, action: { reason: string; confirmed: true; confirmText: string }) {
     return apiBasePost('/api/user/admin/restore', { userId, ...action });
   },
-  logout() {
+  async logout() {
+    await clearBrowserPush().catch(() => {});
     return apiBasePost('/api/user/logout');
   },
   startAdminContext(targetUserId: string, mode: 'readonly' | 'maintain') {

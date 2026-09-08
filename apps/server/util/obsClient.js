@@ -119,7 +119,8 @@ export const getObjectMetadataFromObs = async (objectKey) => {
   };
 };
 
-async function readObsBinaryContent(content) {
+async function readObsBinaryContent(content, maxBytes = Infinity) {
+  if (content?.byteLength > maxBytes) throw Object.assign(new Error("OBS_DOWNLOAD_SIZE_LIMIT"), { code: "OBS_DOWNLOAD_SIZE_LIMIT" });
   if (Buffer.isBuffer(content)) return Buffer.from(content);
   if (content instanceof Uint8Array) return Buffer.from(content);
   if (!content || typeof content[Symbol.asyncIterator] !== 'function') {
@@ -137,13 +138,17 @@ async function readObsBinaryContent(content) {
       throw error;
     }
     const binaryChunk = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-    chunks.push(binaryChunk);
     totalBytes += binaryChunk.length;
+    if (totalBytes > maxBytes) {
+      content.destroy?.();
+      throw Object.assign(new Error("OBS_DOWNLOAD_SIZE_LIMIT"), { code: "OBS_DOWNLOAD_SIZE_LIMIT" });
+    }
+    chunks.push(binaryChunk);
   }
   return Buffer.concat(chunks, totalBytes);
 }
 
-export const getObjectBufferFromObs = async (objectKey) => {
+export const getObjectBufferFromObs = async (objectKey, { maxBytes = Infinity } = {}) => {
   const result = await wrapObsCall(obsClient.getObject.bind(obsClient), {
     Bucket: bucketName,
     Key: objectKey,
@@ -151,7 +156,7 @@ export const getObjectBufferFromObs = async (objectKey) => {
     SaveAsStream: true,
   });
   const interfaceResult = result?.InterfaceResult || {};
-  const buffer = await readObsBinaryContent(interfaceResult.Content);
+  const buffer = await readObsBinaryContent(interfaceResult.Content, maxBytes);
   const contentLength = Number(interfaceResult.ContentLength);
   if (Number.isFinite(contentLength) && contentLength >= 0 && buffer.length !== contentLength) {
     const error = new Error(

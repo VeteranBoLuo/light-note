@@ -400,10 +400,10 @@ describe('file preview service', () => {
     expect(obsMocks.getObjectBufferFromObs).not.toHaveBeenCalled();
   });
 
-  it('回收退役图片缓存时只删派生对象，直显原件不进入删除集合', async () => {
+  it('文档清理器只删派生对象，并将图片资产生命周期交给图片清理器', async () => {
     poolMocks.query.mockImplementation(async sql => {
       const text = String(sql);
-      if (text.includes('SELECT id, output_object_key')) return [[]];
+      if (text.includes('SELECT j.id, j.output_object_key')) return [[]];
       if (text.includes('SELECT a.id, a.artifact_object_key')) return [[
         { id: 20, artifact_object_key: 'file-previews/photo.webp', output_object_key: null, source_object_key: 'original.jpg' },
         { id: 21, artifact_object_key: null, output_object_key: null, source_object_key: 'small-original.png', output_mode: 'source' },
@@ -414,7 +414,10 @@ describe('file preview service', () => {
     expect(obsMocks.deleteObjectFromObs.mock.calls).toEqual([['file-previews/photo.webp']]);
     const claims = poolMocks.query.mock.calls.filter(([sql]) => String(sql).includes("SET a.status = 'failed'"));
     expect(claims).toHaveLength(2);
-    for (const [sql] of claims) expect(sql).toContain("a.strategy IN ('image_thumbnail', 'image_display')");
+    for (const [sql] of claims) {
+      expect(sql).not.toContain("a.strategy IN ('image_thumbnail', 'image_display')");
+      expect(sql).toContain("a.source_type <> 'image_asset'");
+    }
   });
 
 });

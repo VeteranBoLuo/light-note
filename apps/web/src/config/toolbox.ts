@@ -26,25 +26,24 @@ export type ToolboxHomeGroup = {
   toolIds: readonly ToolboxToolId[];
 };
 
-export const TOOLBOX_DEFAULT_QUICK_TOOL_IDS = [
-  'knowledge_structure_audit',
-  'image_optimizer',
+export const TOOLBOX_DEFAULT_QUICK_TOOL_IDS: ToolboxToolId[] = [
+  'material_to_note',
+  'research_brief',
+  'study_kit',
   'pdf_organizer',
+  'image_optimizer',
   'ocr_to_text',
-  'text_diff',
-  'table_converter',
-  'data_workbench',
-  'docx_to_markdown',
-  'text_batch',
-] as const satisfies readonly ToolboxToolId[];
+];
 
-/**
- * “知识库整理”是常用区的固定首项；账号或访客已有的固定工具从第二项开始排列。
- * 去重在这里完成，避免旧的本地固定记录再次把默认首项挤到后面。
- */
+/** User pins take priority; removed tools never return through older preferences. */
 export function resolveToolboxQuickToolIds(pinnedToolIds: readonly string[]): string[] {
-  const [leadToolId, ...remainingDefaultToolIds] = TOOLBOX_DEFAULT_QUICK_TOOL_IDS;
-  return [...new Set([leadToolId, ...pinnedToolIds, ...remainingDefaultToolIds])];
+  return [
+    ...new Set(
+      [...pinnedToolIds, ...TOOLBOX_DEFAULT_QUICK_TOOL_IDS].map((id) =>
+        ['learning_workspace', 'writing_workspace'].includes(id) ? 'research_workspace' : id,
+      ),
+    ),
+  ].filter((id) => !['text_batch', 'text_diff', 'markdown_checker'].includes(id));
 }
 
 export const TOOLBOX_STARTER_TOOL_IDS = [
@@ -62,7 +61,7 @@ export const TOOLBOX_PRIMARY_OUTCOME_TOOL_IDS = [
   'material_to_note',
   'research_brief',
   'source_comparison',
-  'data_workbench',
+  'study_kit',
 ] as const satisfies readonly ToolboxToolId[];
 
 export const TOOLBOX_PRESENTATION: Record<
@@ -171,7 +170,7 @@ export const TOOLBOX_HOME_GROUPS = [
     id: 'maintain',
     icon: icon.toolbox.audit,
     accent: 'teal',
-    toolIds: ['knowledge_structure_audit', 'knowledge_audit', 'markdown_checker'],
+    toolIds: ['knowledge_structure_audit', 'knowledge_audit'],
   },
   {
     id: 'prepare',
@@ -183,7 +182,7 @@ export const TOOLBOX_HOME_GROUPS = [
     id: 'data',
     icon: icon.toolbox.table,
     accent: 'blue',
-    toolIds: ['data_workbench', 'table_converter', 'text_batch', 'text_diff'],
+    toolIds: ['data_workbench', 'table_converter'],
   },
 ] as const satisfies readonly ToolboxHomeGroup[];
 

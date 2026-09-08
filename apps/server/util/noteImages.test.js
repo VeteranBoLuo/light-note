@@ -74,45 +74,51 @@ describe('collectUsedImageNames', () => {
     poolQuery
       .mockResolvedValueOnce([[{ icon_url: 'https://boluo66.top/uploads/bookmark-1.png?v=2' }]])
       .mockResolvedValueOnce([[{ url: 'https://boluo66.top/uploads/note-2-b.jpg' }]])
-      .mockResolvedValueOnce([[{ content: '<img src="https://boluo66.top/uploads/note-3-only-tpl.png">' }]]);
+      .mockResolvedValueOnce([[{ content: '<img src="https://boluo66.top/uploads/note-3-only-tpl.png">' }]])
+      .mockResolvedValueOnce([[{content:'<img src="https://boluo66.top/uploads/history.png">'}]])
+      .mockResolvedValueOnce([[{source_locator:'managed.png'}]]);
     const names = await collectUsedImageNames();
     expect(names.has('bookmark-1')).toBe(true); // 查询串裁剪
     expect(names.has('note-2-b')).toBe(true);
     expect(names.has('note-3-only-tpl')).toBe(true); // 仅被模板引用也算已使用
     expect(names.has('unrelated')).toBe(false);
+    expect(names.has('history')).toBe(true);
+    expect(names.has('managed')).toBe(true);
   });
 });
 
 describe('cleanupOrphanNoteImages', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    poolQuery.mockReset();
     unlink.mockResolvedValue();
   });
 
   it('URL 仍被其他笔记引用时不删物理文件', async () => {
-    poolQuery.mockResolvedValueOnce([[{ n: 2 }]]); // note_images 残留引用
+    poolQuery.mockResolvedValueOnce([[]]).mockResolvedValueOnce([[{ n: 2 }]]); // note_images 残留引用
     await cleanupOrphanNoteImages(['https://boluo66.top/uploads/note-1-a.png']);
     expect(unlink).not.toHaveBeenCalled();
-    expect(poolQuery).toHaveBeenCalledTimes(1); // 笔记引用命中即短路,不再查模板
+    expect(poolQuery).toHaveBeenCalledTimes(2); // 笔记引用命中即短路,不再查模板
   });
 
   it('URL 仍被模板正文引用时不删物理文件', async () => {
-    poolQuery.mockResolvedValueOnce([[{ n: 0 }]]).mockResolvedValueOnce([[{ n: 1 }]]);
+    poolQuery.mockResolvedValueOnce([[]]).mockResolvedValueOnce([[{ n: 0 }]]).mockResolvedValueOnce([[{ n: 1 }]]);
     await cleanupOrphanNoteImages(['https://boluo66.top/uploads/note-1-a.png']);
     expect(unlink).not.toHaveBeenCalled();
   });
 
   it('两处均无引用才删除,且 LIKE 通配符已转义', async () => {
-    poolQuery.mockResolvedValueOnce([[{ n: 0 }]]).mockResolvedValueOnce([[{ n: 0 }]]);
+    poolQuery.mockResolvedValueOnce([[]]).mockResolvedValueOnce([[{ n: 0 }]]).mockResolvedValueOnce([[{ n: 0 }]]);
     await cleanupOrphanNoteImages(['https://boluo66.top/uploads/note-100%_a.png']);
     expect(unlink).toHaveBeenCalledTimes(1);
-    const likeParam = poolQuery.mock.calls[1][1][0];
+    const likeParam = poolQuery.mock.calls[2][1][0];
     expect(likeParam).toBe('%note-100\\%\\_a.png%');
   });
 
   it('重复 URL 去重,单个失败不影响其余', async () => {
     poolQuery
       .mockRejectedValueOnce(new Error('db down')) // 第一个 URL 查询失败被吞
+      .mockResolvedValueOnce([[]])
       .mockResolvedValueOnce([[{ n: 0 }]])
       .mockResolvedValueOnce([[{ n: 0 }]]);
     await cleanupOrphanNoteImages([
@@ -124,7 +130,7 @@ describe('cleanupOrphanNoteImages', () => {
   });
 
   it('严格清理模式返回失败计数，供账号注销任务重试', async () => {
-    poolQuery.mockResolvedValueOnce([[{ n: 0 }]]).mockResolvedValueOnce([[{ n: 0 }]]);
+    poolQuery.mockResolvedValueOnce([[]]).mockResolvedValueOnce([[{ n: 0 }]]).mockResolvedValueOnce([[{ n: 0 }]]);
     unlink.mockRejectedValueOnce(Object.assign(new Error('disk busy'), { code: 'EBUSY' }));
 
     await expect(
@@ -135,3 +141,5 @@ describe('cleanupOrphanNoteImages', () => {
     });
   });
 });
+
+vi.mock('./imagePreview/cleanup.js',()=>({protectManagedNoteImage:vi.fn(async()=>false)}));

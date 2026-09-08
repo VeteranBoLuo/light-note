@@ -4,12 +4,7 @@ import { OPERATION_LOG_MAP } from '@/config/logMap';
 import { isLightNoteAndroidApp } from '@/utils/androidBridge';
 
 export type PwaGuidePlatform = 'harmony' | 'ios' | 'android' | 'desktop';
-export type PwaInstallSource =
-  | 'landing'
-  | 'landing-final'
-  | 'person-center'
-  | 'settings'
-  | 'download-android';
+export type PwaInstallSource = 'landing' | 'landing-final' | 'person-center' | 'settings' | 'download-android';
 export type PwaBrowserFamily =
   | 'huawei'
   | 'quark'
@@ -115,7 +110,7 @@ function updateStandaloneState() {
 async function registerServiceWorker() {
   if (!('serviceWorker' in navigator) || (!window.isSecureContext && window.location.hostname !== 'localhost')) return;
   try {
-    await navigator.serviceWorker.register('/light-note-sw.js?v=2', {
+    await navigator.serviceWorker.register('/light-note-sw.js?v=3', {
       scope: '/',
       updateViaCache: 'none',
     });
@@ -177,10 +172,7 @@ function recordInstallResult(source: PwaInstallSource, result: Exclude<PwaInstal
 export function usePwaInstall() {
   const canPrompt = computed(
     () =>
-      !nativeAndroidApp &&
-      Boolean(deferredPrompt.value) &&
-      !standalone.value &&
-      hasReliableDirectInstallCapability(),
+      !nativeAndroidApp && Boolean(deferredPrompt.value) && !standalone.value && hasReliableDirectInstallCapability(),
   );
   const installState = computed<'installed' | 'prompt-ready' | 'manual'>(() =>
     standalone.value ? 'installed' : canPrompt.value ? 'prompt-ready' : 'manual',

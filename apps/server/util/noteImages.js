@@ -60,10 +60,14 @@ export async function collectUsedImageNames() {
   const [bookmarkRows] = await pool.query('SELECT icon_url FROM bookmark');
   const [noteRows] = await pool.query('SELECT url FROM note_images');
   const [templateRows] = await pool.query('SELECT content FROM note_template');
+  const [versionRows] = await pool.query('SELECT content FROM note_versions');
+  const [assetRows] = await pool.query("SELECT source_locator FROM image_assets WHERE storage_kind='local'");
   const urls = [
     ...bookmarkRows.map((r) => r.icon_url),
     ...noteRows.map((r) => r.url),
     ...templateRows.flatMap((r) => extractNoteImageUrls(r.content)),
+    ...versionRows.flatMap((r) => extractNoteImageUrls(r.content)),
+    ...assetRows.map(r=>`https://boluo66.top/uploads/${r.source_locator}`),
   ];
   const usedNames = new Set();
   for (const url of urls) {
@@ -90,6 +94,10 @@ export async function cleanupOrphanNoteImages(urls, { strict = false } = {}) {
   let failed = 0;
   for (const u of unique) {
     try {
+      const { protectManagedNoteImage } = await import('./imagePreview/cleanup.js');
+      if (await protectManagedNoteImage(u)) { kept += 1; continue; }
+      const [history] = await pool.query('SELECT id FROM note_versions WHERE content LIKE ? LIMIT 1', [`%${escapeLikePattern(u)}%`]);
+      if (history.length) { kept += 1; continue; }
       const fileName = new URL(u).pathname.split('/').pop();
       if (!fileName) {
         skipped += 1;

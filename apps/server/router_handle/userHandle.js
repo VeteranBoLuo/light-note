@@ -1,3 +1,4 @@
+import { preserveWorkshopPreference } from '../util/toolbox/projectPreference.js';
 import pool from '../db/index.js';
 import { normalizeMarkdownBlockquoteEntities, normalizeNoteType } from '@lightnote/shared';
 import { serializeDrawingScene } from '@lightnote/shared/drawing-note';
@@ -82,10 +83,7 @@ import {
   GITHUB_OAUTH_NONCE_COOKIE,
   readGitHubOAuthNonce,
 } from '../util/githubOAuthState.js';
-import {
-  consumeExtensionAuthorizationCode,
-  createExtensionAuthorizationCode,
-} from '../util/extensionAuth.js';
+import { consumeExtensionAuthorizationCode, createExtensionAuthorizationCode } from '../util/extensionAuth.js';
 import {
   FeatureAnnouncementError,
   markFeatureAnnouncementSeen as persistFeatureAnnouncementSeen,
@@ -1153,6 +1151,7 @@ export const saveUserInfo = async (req, res) => {
           return res.send(resultData(null, 404, L(req, '用户不存在', 'User not found')));
         }
         finalBody.preferences = preserveFeatureAnnouncementReads(finalBody.preferences, persistedUser.preferences);
+        finalBody.preferences = preserveWorkshopPreference(finalBody.preferences, persistedUser.preferences);
         finalBody.preferences = preserveDailyBriefPreference(finalBody.preferences, persistedUser.preferences);
         [result] = await connection.query('update user set ? where id=?', [finalBody, id]);
         await connection.commit();
@@ -1197,11 +1196,7 @@ export const markFeatureAnnouncementSeen = async (req, res) => {
   } catch (error) {
     if (error instanceof FeatureAnnouncementError) {
       return res.send(
-        resultData(
-          { code: error.code },
-          error.status,
-          L(req, '上新提示状态无效', 'Invalid announcement state'),
-        ),
+        resultData({ code: error.code }, error.status, L(req, '上新提示状态无效', 'Invalid announcement state')),
       );
     }
     console.error('[feature-announcement] persist failed code=%s', String(error?.code || 'UNKNOWN'));
@@ -1306,10 +1301,9 @@ export const exchangeExtensionAuthorization = async (req, res) => {
       redirectUri: req.body?.redirectUri,
       deviceId,
     });
-    const [rows] = await pool.query(
-      'SELECT id, alias, role, head_picture, del_flag FROM user WHERE id = ? LIMIT 1',
-      [authorization.userId],
-    );
+    const [rows] = await pool.query('SELECT id, alias, role, head_picture, del_flag FROM user WHERE id = ? LIMIT 1', [
+      authorization.userId,
+    ]);
     const user = rows[0];
     if (!user || user.role === 'visitor') {
       const error = new Error(L(req, '授权账号已失效，请重新登录', 'The authorized account is no longer available.'));

@@ -102,6 +102,8 @@
 </template>
 
 <script lang="ts" setup>
+  import { useProjectResourceAction } from '@/composables/useProjectResourceAction';
+  const { canJoinProject, joinProject } = useProjectResourceAction();
   import { useResourceSelection } from '@/composables/useResourceSelection';
   import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
@@ -192,6 +194,9 @@
       { key: 'edit', label: t('common.edit'), icon: icon.table_edit },
       ...(item.hasSnapshot || item.hasSummary
         ? [{ key: 'snapshot', label: t('bookmarkMg.badgeArchived'), icon: icon.contextMenu.archive }]
+        : []),
+      ...(canJoinProject.value
+        ? [{ key: 'joinProject', label: t('toolbox.project.join'), icon: icon.toolbox.research }]
         : []),
       { key: 'ai', label: t('bookmarkMg.aiUseBookmark'), icon: icon.settings.ai },
       {
@@ -377,7 +382,8 @@
   function handleMobilePageAction(action: MobilePageActionItem) {
     const item = activeBookmark.value;
     if (!item) return;
-    if (action.key === 'edit') edit(String(item.id));
+    if (action.key === 'joinProject') joinProject([{ type: 'bookmark', id: String(item.id), title: item.name }]);
+    else if (action.key === 'edit') edit(String(item.id));
     else if (action.key === 'snapshot') openSnap(String(item.id));
     else if (action.key === 'ai') openBookmarksInAi([item]);
     else if (action.key === 'delete') deleteBookmark(item);

@@ -3344,7 +3344,7 @@ LEFT JOIN (
 ) actual ON 1=1
 WHERE actual.cols IS NULL
    OR actual.non_unique<>0
-   OR actual.cols<>'source_type,file_id,strategy,strategy_version';
+   OR actual.cols<>'source_type,file_id,strategy,strategy_version,source_revision';
 
 SELECT '[67] invalid_community_chat_attachment_expiry' AS check_name,
   CONCAT(attachment_kind, ':', public_id) AS detail
@@ -3532,3 +3532,96 @@ SELECT 'missing_organize_usage_index' AS check_name
 FROM (SELECT 1) expected
 WHERE NOT EXISTS (SELECT 1 FROM information_schema.statistics WHERE table_schema=DATABASE()
  AND table_name='ai_executions' AND index_name='idx_ai_execution_organize');
+
+-- 书签正文存档持久任务
+SELECT 'bookmark_archive_missing_column' AS check_name, e.col AS detail FROM (
+SELECT 'bookmark_id' col
+ UNION ALL SELECT 'user_id'
+ UNION ALL SELECT 'url'
+ UNION ALL SELECT 'status'
+ UNION ALL SELECT 'attempts'
+ UNION ALL SELECT 'next_attempt_at'
+ UNION ALL SELECT 'lease_token'
+ UNION ALL SELECT 'lease_expires_at'
+ UNION ALL SELECT 'reason_code'
+ UNION ALL SELECT 'source'
+ UNION ALL SELECT 'char_count'
+ UNION ALL SELECT 'create_time'
+ UNION ALL SELECT 'update_time'
+) e LEFT JOIN information_schema.columns c ON c.table_schema=DATABASE() AND c.table_name='bookmark_archive_jobs' AND c.column_name=e.col WHERE c.column_name IS NULL;
+SELECT 'bookmark_archive_index_contract' AS check_name, e.idx AS detail FROM (
+ SELECT 'PRIMARY' idx, 'bookmark_id' cols UNION ALL SELECT 'idx_archive_due','status,next_attempt_at'
+ UNION ALL SELECT 'idx_archive_owner','user_id,status' UNION ALL SELECT 'idx_archive_lease','lease_token'
+) e LEFT JOIN (SELECT index_name,GROUP_CONCAT(column_name ORDER BY seq_in_index) cols FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='bookmark_archive_jobs' GROUP BY index_name) s ON s.index_name=e.idx WHERE s.index_name IS NULL OR s.cols<>e.cols;
+
+SELECT 'bookmark_snapshot_source_missing' AS check_name FROM (SELECT 1) e WHERE NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='bookmark_snapshot' AND column_name='source');
+
+-- Knowledge workshop free OCR and learning progress.
+SELECT 'missing_toolbox_free_ocr_or_study_table' AS check_name FROM (SELECT 1) expected
+WHERE (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE()
+  AND table_name IN ('toolbox_ocr_usage','toolbox_ocr_inputs','toolbox_study_progress')) <> 3;
+SELECT 'missing_toolbox_free_ocr_or_study_primary_key' AS check_name FROM (SELECT 1) expected
+WHERE (SELECT COUNT(DISTINCT table_name) FROM information_schema.statistics WHERE table_schema = DATABASE()
+  AND table_name IN ('toolbox_ocr_usage','toolbox_ocr_inputs','toolbox_study_progress') AND index_name = 'PRIMARY') <> 3;
+
+SELECT 'toolbox_free_ocr_quote_must_be_nullable' AS check_name FROM information_schema.columns
+WHERE table_schema = DATABASE() AND table_name = 'toolbox_jobs' AND column_name = 'quote_id' AND is_nullable <> 'YES';
+
+SELECT 'toolbox_free_ocr_or_study_missing_column' AS check_name, CONCAT(e.tab,'.',e.col) AS detail FROM (
+ SELECT 'toolbox_ocr_usage' tab, 'used_pages' col UNION ALL SELECT 'toolbox_ocr_usage','reserved_pages'
+ UNION ALL SELECT 'toolbox_ocr_usage','usage_date' UNION ALL SELECT 'toolbox_ocr_inputs','attempted_pages'
+ UNION ALL SELECT 'toolbox_ocr_inputs','content_hash' UNION ALL SELECT 'toolbox_ocr_inputs','result_json'
+ UNION ALL SELECT 'toolbox_ocr_inputs','source_json' UNION ALL SELECT 'toolbox_ocr_inputs','pages'
+ UNION ALL SELECT 'toolbox_study_progress','mastered' UNION ALL SELECT 'toolbox_study_progress','artifact_version'
+ UNION ALL SELECT 'toolbox_study_progress','card_id'
+) e LEFT JOIN information_schema.columns c ON c.table_schema=DATABASE() AND c.table_name=e.tab AND c.column_name=e.col
+WHERE c.column_name IS NULL;
+
+-- Real interaction activity tables and query indexes. Expected 0 rows.
+SELECT '[activity] missing_column' AS check_name, CONCAT(e.tn, '.', e.cn) AS detail
+FROM (SELECT 'user_activity_daily' tn, 'activity_date' cn UNION ALL SELECT 'user_activity_daily', 'user_id'
+UNION ALL SELECT 'user_activity_daily', 'first_active_at' UNION ALL SELECT 'user_activity_daily', 'last_active_at'
+UNION ALL SELECT 'user_activity_metadata', 'started_at') e
+LEFT JOIN information_schema.COLUMNS c ON c.TABLE_SCHEMA = DATABASE() AND c.TABLE_NAME = e.tn AND c.COLUMN_NAME = e.cn
+WHERE c.COLUMN_NAME IS NULL;
+SELECT '[activity] missing_index' AS check_name, e.ix AS detail
+FROM (SELECT 'idx_activity_date_first_user' ix UNION ALL SELECT 'idx_activity_user_date') e
+LEFT JOIN information_schema.STATISTICS s ON s.TABLE_SCHEMA = DATABASE() AND s.TABLE_NAME = 'user_activity_daily' AND s.INDEX_NAME = e.ix
+WHERE s.INDEX_NAME IS NULL;
+SELECT '[activity] invalid_time_precision' AS check_name, CONCAT(TABLE_NAME, '.', COLUMN_NAME) AS detail
+FROM information_schema.COLUMNS
+WHERE TABLE_SCHEMA = DATABASE() AND ((TABLE_NAME = 'user_activity_daily' AND COLUMN_NAME IN ('first_active_at', 'last_active_at'))
+OR (TABLE_NAME = 'user_activity_metadata' AND COLUMN_NAME = 'started_at'))
+AND (DATA_TYPE <> 'datetime' OR DATETIME_PRECISION <> 3 OR IS_NULLABLE <> 'NO');
+SELECT '[activity] invalid_key' AS check_name, e.ix AS detail
+FROM (SELECT 'PRIMARY' ix, 'activity_date,user_id' cols, 0 non_unique UNION ALL
+SELECT 'idx_activity_date_first_user', 'activity_date,first_active_at,user_id', 1 UNION ALL
+SELECT 'idx_activity_user_date', 'user_id,activity_date', 1) e
+LEFT JOIN (SELECT INDEX_NAME, NON_UNIQUE, GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX) cols FROM information_schema.STATISTICS
+WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'user_activity_daily' GROUP BY INDEX_NAME, NON_UNIQUE) s
+ON s.INDEX_NAME = e.ix
+WHERE s.INDEX_NAME IS NULL OR s.cols <> e.cols OR s.NON_UNIQUE <> e.non_unique;
+SELECT '[activity] missing_start' AS check_name, 'user_activity_metadata.id=1' AS detail
+FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM user_activity_metadata WHERE id = 1);
+
+-- Browser push: notification row is the transactional outbox; historical rows stay disabled.
+SELECT 'browser_push_missing_column' AS check_name, CONCAT(e.tn, '.', e.cn) AS detail FROM (
+ SELECT 'notification' tn, 'browser_push_pending' cn UNION ALL
+ SELECT 'notification', 'browser_push_created_at' UNION ALL
+ SELECT 'browser_push_subscriptions', 'generation' UNION ALL
+ SELECT 'browser_push_subscriptions', 'enabled_at' UNION ALL
+ SELECT 'browser_push_jobs', 'lease_until' UNION ALL
+ SELECT 'browser_push_jobs', 'expires_at'
+) e LEFT JOIN information_schema.COLUMNS c ON c.TABLE_SCHEMA = DATABASE() AND c.TABLE_NAME = e.tn AND c.COLUMN_NAME = e.cn
+WHERE c.COLUMN_NAME IS NULL;
+SELECT 'browser_push_missing_index' AS check_name, CONCAT(e.tn, '.', e.idx) AS detail FROM (
+ SELECT 'notification' tn, 'idx_notification_push' idx UNION ALL
+ SELECT 'browser_push_subscriptions', 'uk_push_endpoint' UNION ALL
+ SELECT 'browser_push_jobs', 'uk_push_delivery' UNION ALL
+ SELECT 'browser_push_jobs', 'idx_push_claim'
+) e LEFT JOIN information_schema.STATISTICS s ON s.TABLE_SCHEMA = DATABASE() AND s.TABLE_NAME = e.tn AND s.INDEX_NAME = e.idx
+WHERE s.INDEX_NAME IS NULL;
+
+-- Unified image lifecycle contract
+SELECT 'image_lifecycle_missing_table' AS check_name, required.t AS detail FROM (SELECT 'image_assets' t UNION ALL SELECT 'image_asset_refs') required LEFT JOIN information_schema.TABLES actual ON actual.TABLE_SCHEMA=DATABASE() AND actual.TABLE_NAME=required.t WHERE actual.TABLE_NAME IS NULL;
+SELECT 'image_preview_missing_revision' AS check_name, 'file_preview_artifacts.source_revision' AS detail WHERE NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='file_preview_artifacts' AND COLUMN_NAME='source_revision');

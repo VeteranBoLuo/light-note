@@ -3,6 +3,8 @@ import { createApp, nextTick } from 'vue';
 import { createI18n } from 'vue-i18n';
 import zhCN from '@/i18n/locales/zh-CN';
 
+vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
+
 const mocks = vi.hoisted(() => ({
   getSettings: vi.fn(),
   updateSettings: vi.fn(),
@@ -160,15 +162,14 @@ describe('CommunityChatNotificationSettingsPanel', () => {
     expect(host.textContent).toContain('全部消息角标');
     expect(host.textContent).toContain('角标：任何新消息');
     expect(host.textContent).toContain('通知中心：只接收该档允许的回复或提及');
-    expect(host.textContent).toContain('系统通知：不发送');
   });
 
-  it('紧凑模式把角标、通知中心与系统通知合并为一条提醒结果栏', async () => {
+  it('紧凑模式展示角标和通知中心提醒结果', async () => {
     const host = await mountPanel(true);
 
     expect(host.querySelector('.community-notification-settings')?.classList.contains('is-compact')).toBe(true);
     expect(host.querySelector('.community-notification-settings__compact-results')).not.toBeNull();
-    expect(host.querySelectorAll('.community-notification-settings__compact-result')).toHaveLength(3);
+    expect(host.querySelectorAll('.community-notification-settings__compact-result')).toHaveLength(2);
     expect(host.querySelector('.community-notification-settings__compact-summary')).toBeNull();
     expect(host.querySelector('.community-notification-settings__compact-meta')).toBeNull();
     expect(host.querySelector('.community-notification-settings__explanation')).toBeNull();

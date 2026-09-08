@@ -43,6 +43,7 @@ interface UserInfo {
   location: UserLocation;
   storageUsed: number; // 已使用单位：MB
   preferences: {
+    workshopIntroDismissed?: boolean;
     theme: 'day' | 'night' | 'system' | string; // 主题
     noteViewMode: 'card' | 'list'; // 笔记展示模式：卡片/列表
     noteSidebarMode?: 'directory' | 'tags'; // 笔记库默认侧栏：目录/标签
@@ -66,8 +67,8 @@ interface UserInfo {
     notificationsOrganize?: boolean; // 长时间整理完成后的站内通知，默认开启
     notificationsInApp?: boolean; // 待办等站内通知总开关
     notificationsEmail?: boolean; // 待办等邮件通知总开关
-    notificationsBrowser?: boolean; // 前台页面浏览器系统通知
-    notificationsDnd?: boolean; // 是否启用免打扰时段
+    notificationsBrowser?: boolean; // 旧版账号偏好，仅保留兼容；设备推送状态由订阅接口提供
+    notificationsDnd?: boolean; // 是否启用浏览器推送免打扰（不影响站内和邮件）
     notificationsDndStart?: string; // 免打扰开始时间，HH:mm
     notificationsDndEnd?: string; // 免打扰结束时间，HH:mm
     notificationsTimezoneOffset?: number; // 保存免打扰设置时的客户端时区偏移（分钟）
@@ -125,7 +126,7 @@ const createDefaultUserState = (): UserState => ({
     notificationsInApp: true,
     notificationsOrganize: true,
     notificationsEmail: true,
-    notificationsBrowser: false,
+    notificationsBrowser: true,
     notificationsDnd: false,
     notificationsDndStart: '22:00',
     notificationsDndEnd: '08:00',

@@ -5,11 +5,17 @@ import { createMemoryHistory, createRouter, RouterView } from 'vue-router';
 import { getToolboxTool, TOOLBOX_TOOL_CATALOG } from '@lightnote/shared/toolbox-protocol';
 import globalDirect from '@/config/globalDirect';
 import { RoleEnum } from '@/config/bookmarkCfg';
-import request from '@/http/request';
+import request from '@/http/request.ts';
 import enUS from '@/i18n/locales/en-US';
 import zhCN from '@/i18n/locales/zh-CN';
 import { bookmarkStore, useUserStore } from '@/store';
 import ToolboxWorkbench from '@/view/toolbox/ToolboxWorkbench.vue';
+import DesktopWorkbenchView from '@/view/workbenches/DesktopWorkbenchView.vue';
+import MobileTodayView from '@/view/workbenches/MobileTodayView.vue';
+import WorkshopProjectEntry from '@/components/workbenches/WorkshopProjectEntry.vue';
+import ResourceProjectHost from '@/components/resourceActions/ResourceProjectHost.vue';
+import BButton from '@/components/base/BasicComponents/BButton.vue';
+import { useProjectResourceAction } from '@/composables/useProjectResourceAction';
 import ToolboxHome from '@/view/toolbox/ToolboxHome.vue';
 import type { ToolboxHomeWorkspaceSummary, ToolboxWorkspace } from '@/api/toolbox';
 import '@/assets/css/index.less';
@@ -20,11 +26,13 @@ const locale = params.get('locale') === 'en-US' ? 'en-US' : 'zh-CN';
 const state = ['populated', 'empty', 'error'].includes(params.get('state') || '')
   ? String(params.get('state'))
   : 'populated';
-const view = ['home', 'detail'].includes(params.get('view') || '') ? String(params.get('view')) : 'list';
+const view = ['home', 'detail', 'entry', 'join', 'desktop', 'mobile'].includes(params.get('view') || '')
+  ? String(params.get('view'))
+  : 'list';
 const kind = ['research', 'learning', 'writing'].includes(params.get('kind') || '')
   ? String(params.get('kind'))
   : 'research';
-const toolId = `${kind}_workspace`;
+const toolId = params.get('tool') || `${kind}_workspace`;
 const now = '2026-08-29T14:30:00.000Z';
 
 document.documentElement.dataset.theme = theme;
@@ -261,20 +269,102 @@ function response(config: any, data: unknown, status = 200) {
   };
 }
 
+let entryDismissed = false;
 request.defaults.adapter = async (config) => {
   const url = String(config.url || '');
+  if (url === '/api/workbench/summary')
+    return response(config, {
+      today: { todoPendingTotal: 4, inboxPendingTotal: 186 },
+      recentNotes: Array.from({ length: 5 }, (_, i) => ({
+        id: 'fixture-note-' + i,
+        noteTitle: '项目资料与实践记录 ' + (i + 1),
+        title: '项目资料与实践记录 ' + (i + 1),
+        updatedAt: now,
+      })),
+      generatedAt: now,
+    });
+  if (url === '/api/toolbox/knowledge-overview')
+    return response(config, {
+      scannedAt: now,
+      policy: { staleAfterDays: 180, deepNoteDepth: 8 },
+      summary: {
+        total: 2,
+        roots: 2,
+        maxDepth: 1,
+        tagged: 1,
+        linked: 0,
+        empty: 1,
+        stale: 0,
+        invalidParents: 0,
+        duplicateGroups: 0,
+        duplicateNotes: 0,
+        healthScore: 60,
+      },
+      issueCounts: { empty: 1, untagged: 1 },
+      issueTotal: 2,
+      issues: [
+        { kind: 'empty', severity: 'high', noteId: 'empty-note', title: '待补充的笔记', path: '待补充的笔记' },
+        { kind: 'untagged', severity: 'low', noteId: 'untagged-note', title: '未分类笔记', path: '未分类笔记' },
+      ],
+      recommendations: [
+        { code: 'review_empty', count: 1, priority: 'high' },
+        { code: 'add_tags', count: 1, priority: 'low' },
+      ],
+    });
+  if (url === '/api/toolbox/project-entry') {
+    if (state === 'error') return response(config, {}, 500);
+    return response(config, {
+      hasProjects: state !== 'empty',
+      dismissed: entryDismissed,
+      projects: state === 'empty' ? [] : homeWorkspaceFixtures.slice(0, 3),
+    });
+  }
+  if (url === '/api/toolbox/project-entry/dismiss') {
+    entryDismissed = true;
+    return response(config, { dismissed: true });
+  }
+  if (url === '/api/search/global') {
+    const count = Number(params.get('materials')) || (state === 'empty' ? 0 : 1);
+    const body = typeof config.data === 'string' ? JSON.parse(config.data) : config.data || {};
+    const all = Array.from({ length: count }, (_, i) => ({
+      type: ['note', 'bookmark', 'file'][i % 3],
+      id: `material-${i}`,
+      title: `材料 ${i + 1} · Complete material ${i + 1}`,
+      description: 'Fixture',
+      tags: [],
+    }));
+    const matches = all.filter(
+      (item) =>
+        (!body.types?.length || body.types.includes(item.type)) &&
+        (!body.keyword || item.title.toLowerCase().includes(body.keyword.toLowerCase())),
+    );
+    const start = body.cursor ? Math.max(0, matches.findIndex((item) => item.id === body.cursor.id) + 1) : 0;
+    const items = matches.slice(start, start + (body.pageSize || body.limitPerType || 40));
+    const last = items.at(-1);
+    const hasMore = start + items.length < matches.length;
+    return response(config, {
+      items,
+      groups: [],
+      total: matches.length,
+      typeTotals: Object.fromEntries(
+        ['note', 'bookmark', 'file'].map((type) => [type, matches.filter((item) => item.type === type).length]),
+      ),
+      hasMore,
+      nextCursor:
+        hasMore && last
+          ? { type: 'all', offset: 0, id: last.id, resourceType: last.type, score: 0, time: '2026-09-08 10:00:00' }
+          : null,
+    });
+  }
   if (state === 'error' && url.startsWith('/api/toolbox/workspaces')) {
     return response(config, { code: 'VISUAL_WORKSPACE_ERROR' }, 500);
   }
   if (url === '/api/toolbox/catalog') {
     const definition = getToolboxTool(toolId);
-    const definitions =
-      view === 'home'
-        ? TOOLBOX_TOOL_CATALOG.filter((item) => item.availability.enabled)
-        : definition
-          ? [definition]
-          : [];
+    const definitions = TOOLBOX_TOOL_CATALOG.filter((item) => item.availability.enabled);
     return response(config, {
+      ocrUsage: { remainingPages: 50, resetsAt: '2026-09-08T16:00:00Z' },
+      ocrPolicy: { maxFiles: 5, maxBytes: 20971520, maxPages: 20, dailyPages: 50 },
       protocolVersion: 1,
       pricingVersion: 'toolbox-points-v1',
       chargeRule: 'single_medium_per_execution',
@@ -319,6 +409,7 @@ request.defaults.adapter = async (config) => {
       tasks: { active: [], ready: [], recent: [] },
     });
   }
+  if (view === 'desktop' || view === 'mobile') return response(config, {});
   throw Object.assign(new Error(`Unexpected workspace visual fixture request: ${url}`), {
     code: 'VISUAL_FIXTURE_UNEXPECTED_REQUEST',
   });
@@ -339,7 +430,30 @@ await router.push(
 );
 
 const pinia = createPinia();
-const app = createApp({ render: () => h(RouterView) });
+const app = createApp({
+  setup() {
+    const { joinProject } = useProjectResourceAction();
+    return () =>
+      h('div', { style: { height: '100%', minHeight: '0' } }, [
+        view === 'desktop'
+          ? h(DesktopWorkbenchView)
+          : view === 'mobile'
+            ? h(MobileTodayView)
+            : view === 'entry'
+              ? h(WorkshopProjectEntry)
+              : view === 'join'
+                ? h(
+                    BButton,
+                    {
+                      onClick: () => joinProject([{ type: 'note', id: 'visual-note', title: '明确选择的一篇父笔记' }]),
+                    },
+                    () => '加入项目验收',
+                  )
+                : h(RouterView),
+        h(ResourceProjectHost),
+      ]);
+  },
+});
 app.use(pinia);
 app.use(router);
 app.use(

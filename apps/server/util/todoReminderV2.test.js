@@ -60,14 +60,14 @@ describe('todoReminderV2', () => {
 
     expect(claimed).toMatchObject({ id: 'job-1', userId: 'user-1', todoId: 'todo-1', channel: 'in_app' });
     expect(claimed.leaseToken).toEqual(expect.any(String));
-    expect(connection.query.mock.calls[0][0]).toContain("DATE_FORMAT(j.stop_at_utc");
+    expect(connection.query.mock.calls[0][0]).toContain('DATE_FORMAT(j.stop_at_utc');
     expect(connection.query.mock.calls[1][0]).toContain("SET status = 'processing'");
     expect(connection.query.mock.calls[1][0]).toContain('lease_until');
     expect(connection.commit).toHaveBeenCalledOnce();
     expect(connection.release).toHaveBeenCalledOnce();
   });
 
-  it('免打扰期间只延期一次并合并同项同渠道积压任务', async () => {
+  it.each(['in_app', 'email'])('浏览器免打扰不延期 %s 待办任务', async (channel) => {
     const now = new Date();
     const minute = now.getUTCHours() * 60 + now.getUTCMinutes();
     const preferences = {
@@ -83,7 +83,7 @@ describe('todoReminderV2', () => {
       release: vi.fn(),
       query: vi
         .fn()
-        .mockResolvedValueOnce([[validJob({ preferences: JSON.stringify(preferences), rule_id: 'rule-1' })]])
+        .mockResolvedValueOnce([[validJob({ preferences: JSON.stringify(preferences), rule_id: 'rule-1', channel })]])
         .mockResolvedValueOnce([{ affectedRows: 1 }])
         .mockResolvedValueOnce([{ affectedRows: 1 }])
         .mockResolvedValueOnce([{ affectedRows: 2 }])
@@ -93,9 +93,9 @@ describe('todoReminderV2', () => {
 
     const claimed = await todoReminderV2Internals.claimJob('job-1');
 
-    expect(claimed).toBeNull();
-    expect(connection.query.mock.calls[1][0]).toContain("cancel_reason = 'quiet_hours_deferred'");
-    expect(connection.query.mock.calls[3][0]).toContain("cancel_reason = 'quiet_hours_coalesced'");
+    expect(claimed).toMatchObject({ channel });
+    expect(connection.query.mock.calls[1][0]).toContain("SET status = 'processing'");
+    expect(connection.query).toHaveBeenCalledTimes(2);
     expect(connection.commit).toHaveBeenCalledOnce();
   });
 

@@ -138,3 +138,23 @@ describe('请求字段安全策略', () => {
     ).toBeNull();
   });
 });
+
+it('浏览器推送凭据豁免绑定精确 POST 和字段形态', () => {
+  const value = Buffer.concat([Buffer.from([4]), Buffer.alloc(64, 1)]).toString('base64url');
+  const context = {
+    method: 'POST',
+    path: '/notification/browser/subscribe',
+    body: { subscription: { keys: { p256dh: value } } },
+  };
+  expect(resolveRequestFieldPolicy(context, 'body.subscription.keys.p256dh')?.trustedEnvelope).toBe(true);
+  expect(resolveRequestFieldPolicy({ ...context, method: 'GET' }, 'body.subscription.keys.p256dh')).toBeNull();
+  expect(
+    resolveRequestFieldPolicy({ ...context, path: '/notification/send' }, 'body.subscription.keys.p256dh'),
+  ).toBeNull();
+  expect(
+    resolveRequestFieldPolicy(
+      { ...context, body: { subscription: { keys: { p256dh: "' OR 1=1" } } } },
+      'body.subscription.keys.p256dh',
+    )?.trustedEnvelope,
+  ).toBe(false);
+});

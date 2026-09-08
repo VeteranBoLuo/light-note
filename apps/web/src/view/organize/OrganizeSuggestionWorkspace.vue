@@ -235,6 +235,7 @@
                     :key="suggestion.id"
                     :run-id="run.id"
                     :resource-title="item.resource.title"
+                    :resource-id="item.resource.id"
                     :suggestion="suggestion"
                     :analyzing="['queued', 'running'].includes(item.aiStatus)"
                     @changed="changed"
@@ -341,7 +342,7 @@
     emit = defineEmits<{ 'refresh-summary': []; 'run-status': [status: string] }>();
   const wizardHeader = ref<HTMLElement | null>(null);
   const resourceTypes: ResourceType[] = ['bookmark', 'note', 'file'],
-    checks: CheckKind[] = ['tags', 'title', 'empty', 'duplicate'];
+    checks: CheckKind[] = ['tags', 'title', 'empty', 'duplicate', 'archive'];
   const resourceIcons = { bookmark: icon.resource.bookmark, note: icon.resource.note, file: icon.organize.file };
   const defaults = (): RunOptions => ({
     resourceTypes: [...resourceTypes],
@@ -584,7 +585,8 @@
   const visibleSuggestions = (item: WorkspaceItem) =>
     item.suggestions.filter((s) => displayedKind.value === 'all' || s.kind === displayedKind.value);
   const isSecondary = (s: WorkspaceItem['suggestions'][number]) =>
-    ['not_applicable', 'applied', 'ignored', 'closed'].includes(s.status) ||
+    (['not_applicable', 'applied', 'ignored', 'closed'].includes(s.status) &&
+      !(s.kind === 'archive' && s.status === 'applied')) ||
     (s.status === 'no_suggestion' && !['tags', 'title'].includes(s.kind));
   const primarySuggestions = (item: WorkspaceItem) => visibleSuggestions(item).filter((s) => !isSecondary(s));
   const secondarySuggestions = (item: WorkspaceItem) => visibleSuggestions(item).filter(isSecondary);
@@ -731,7 +733,8 @@
           saved.id === result[0].id && result[0].options.resourceTypes.includes(saved.type as ResourceType)
             ? (saved.type as ResourceType)
             : result[0].options.resourceTypes[0];
-        if (saved.id === result[0].id && ['all', ...checks].includes(saved.kind || '')) kind.value = saved.kind || 'all';
+        if (saved.id === result[0].id && ['all', ...checks].includes(saved.kind || ''))
+          kind.value = saved.kind || 'all';
       }
       if (run.value) await loadPage();
     } catch (e) {

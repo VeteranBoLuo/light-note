@@ -399,6 +399,20 @@
                 </div>
 
                 <div v-if="!selectionMode" class="bookmark-card__footer bookmark-actions" @click.stop>
+                  <BDropdown
+                    v-if="canJoinProject"
+                    trigger="click"
+                    :menu-options="[
+                      {
+                        label: $t('toolbox.project.join'),
+                        icon: icon.toolbox.research,
+                        function: () =>
+                          joinProject([{ type: 'bookmark', id: String(bookmarkItem.id), title: bookmarkItem.name }]),
+                      },
+                    ]"
+                  >
+                    <BButton :aria-label="$t('common.more')"><SvgIcon :src="icon.common.more" size="16" /></BButton>
+                  </BDropdown>
                   <BButton
                     class="bookmark-ai-action"
                     :aria-label="$t('bookmarkMg.aiUseBookmark')"
@@ -619,6 +633,8 @@
 </template>
 
 <script lang="ts" setup>
+  import { useProjectResourceAction } from '@/composables/useProjectResourceAction';
+  const { canJoinProject, joinProject } = useProjectResourceAction();
   import { useResourceSelection } from '@/composables/useResourceSelection';
   import { bookmarkStore, useUserStore } from '@/store';
   import { computed, defineAsyncComponent, ref, onMounted, onUnmounted, watch } from 'vue';
@@ -642,6 +658,7 @@
   import BookmarkCapabilityBadge from '@/components/manage/bookmarkMg/BookmarkCapabilityBadge.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BUpload from '@/components/base/BasicComponents/BUpload.vue';
+  import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
   import BActionButton from '@/components/base/BasicComponents/BActionButton.vue';
   import BActionMenu from '@/components/base/BasicComponents/BActionMenu.vue';
   import type {

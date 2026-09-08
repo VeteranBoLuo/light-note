@@ -4,7 +4,7 @@
       <MobileStickyActionBar
         v-if="open && mobile"
         class="resource-batch-action-bar--mobile"
-        :class="{ 'has-selection-session': !!selectionModule }"
+        :class="{ 'has-selection-session': !!selectionModule, 'has-project-action': canAddProject }"
         :above-navigation="aboveNavigation"
       >
         <div class="resource-batch-action-bar__selection">
@@ -24,6 +24,9 @@
             <small v-if="detail">{{ detail }}</small>
           </div>
         </div>
+        <BButton v-if="canAddProject" :disabled="!!selectionStore?.busy" @click="addToProject">{{
+          translate('toolbox.project.join')
+        }}</BButton>
         <BButton v-if="showMore" class="resource-batch-action-bar__mobile-more" @click="emit('more')">
           <SvgIcon :src="icon.common.more" size="17" aria-hidden="true" />
           <span>{{ moreLabel }}</span>
@@ -73,6 +76,7 @@
           :inert="selectionStore?.busy || undefined"
           :aria-disabled="selectionStore?.busy || undefined"
         >
+          <BButton v-if="canAddProject" @click="addToProject">{{ translate('toolbox.project.join') }}</BButton>
           <slot name="actions" />
         </div>
         <BButton
@@ -103,6 +107,7 @@
 </template>
 
 <script setup lang="ts">
+  import { useProjectResourceAction } from '@/composables/useProjectResourceAction';
   import { computed } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useResourceSelectionStore, type SelectionModule } from '@/store/resourceSelection';
@@ -165,6 +170,18 @@
               other: Math.max(0, (selectionStore?.items.length || 0) - props.selectionVisibleCount),
             }),
   );
+
+  const { canJoinProject, joinProject } = useProjectResourceAction();
+  const canAddProject = computed(
+    () =>
+      canJoinProject.value &&
+      selectionStore?.module === props.selectionModule &&
+      !selectionStore?.query &&
+      !!selectionStore?.items.length,
+  );
+  function addToProject() {
+    if (canAddProject.value && !selectionStore?.busy) joinProject(selectionStore!.items, 'resource_batch');
+  }
 
   const emit = defineEmits<{
     clear: [];
@@ -300,6 +317,17 @@
     gap: 7px;
   }
 
+  .resource-batch-action-bar--mobile.has-project-action {
+    flex-wrap: wrap;
+  }
+  .resource-batch-action-bar--mobile.has-project-action .resource-batch-action-bar__selection {
+    flex: 1 0 100%;
+  }
+  .resource-batch-action-bar--mobile.has-project-action :deep(.b_btn) {
+    height: auto;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
   .resource-batch-action-bar--mobile .resource-batch-action-bar__selection {
     min-width: 0;
     gap: 4px;

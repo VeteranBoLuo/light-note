@@ -1,3 +1,5 @@
+import { extractStudyCards } from './studyCards.js';
+import { executeFreeOcr } from './freeOcr.js';
 import crypto from 'node:crypto';
 import { AI_QUOTA_ERROR_CODES } from '@lightnote/shared/ai-quota-protocol';
 import pool from '../../db/index.js';
@@ -64,7 +66,7 @@ const AI_TOOL_STRATEGIES = Object.freeze({
   knowledge_audit: Object.freeze({
     skillId: 'toolbox.knowledge_audit',
     artifactType: 'knowledge_audit',
-    defaultTitle: '知识库体检报告',
+    defaultTitle: '所选资料内容检查报告',
     draftState: 'needs_verification',
   }),
 });
@@ -543,6 +545,7 @@ async function executeAiTool(job, inputs, identity) {
     sources: Array.isArray(response.sources) ? response.sources : [],
     coverage: response.coverage || { complete: false, warnings: ['coverage_missing'] },
     meta: {
+      ...(job.tool_id === 'study_kit' ? { study: extractStudyCards(content) } : {}),
       draftState: strategy.draftState,
       sourceCount: Array.isArray(response.sources) ? response.sources.length : 0,
     },
@@ -758,6 +761,7 @@ export async function runSingleToolboxJob(workerId, database = pool) {
         await updateToolboxJobStage(job, leaseOwner, 'validating', 16, database);
         const identity = await loadWorkerIdentity(job.user_id, database);
         await assertResourceVersionsCurrent(job, inputs, database);
+        if (job.tool_id === 'ocr_to_text' && job.billing_medium === 'free') return executeFreeOcr(job, database);
         const promptOnly = job.tool_id === 'idea_to_draft';
         await updateToolboxJobStage(job, leaseOwner, promptOnly ? 'preparing_prompt' : 'reading_sources', 28, database);
         let documentState = { sourceIds: [], statuses: [] };
@@ -839,6 +843,10 @@ export async function cleanupExpiredToolboxData(database = pool) {
         SET status = 'expired', content = '', source_json = NULL, coverage_json = NULL, meta_json = NULL
       WHERE status = 'ready' AND expires_at <= NOW()`,
   );
+  await database.query(`DELETE input FROM toolbox_ocr_inputs input JOIN toolbox_jobs job ON job.id COLLATE utf8mb4_unicode_ci = input.job_id
+    WHERE job.expires_at <= NOW() AND job.status NOT IN ('queued', 'processing')`);
+  await database.query(`DELETE progress FROM toolbox_study_progress progress JOIN toolbox_artifacts artifact ON artifact.id COLLATE utf8mb4_unicode_ci = progress.artifact_id
+    WHERE artifact.status = 'expired'`);
   return { expiredJobs: expiredJobCount, expiredArtifacts: Number(expiredArtifacts.affectedRows || 0) };
 }
 

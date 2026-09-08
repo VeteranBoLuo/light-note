@@ -8,29 +8,49 @@
         <h1 id="toolbox-title">{{ t('toolbox.title') }}</h1>
         <p>{{ t('toolbox.subtitle') }}</p>
       </div>
-      <div v-if="!isGuest" class="toolbox-overview__assets" role="group" :aria-label="t('toolbox.capabilityOverview')">
-        <BButton class="toolbox-asset is-points" @click="router.push({ name: 'pointsUsage' })">
-          <span class="toolbox-asset__icon" aria-hidden="true">
-            <SvgIcon :src="icon.growth.coin" size="22" />
-          </span>
-          <span class="toolbox-asset__copy">
-            <small>{{ t('toolbox.pointsBalance') }}</small>
-            <strong>{{ growth?.points == null ? '—' : Number(growth.points).toLocaleString() }}</strong>
-          </span>
-        </BButton>
-        <BButton class="toolbox-asset is-ai" @click="router.push({ name: 'aiUsage' })">
-          <span class="toolbox-asset__icon" aria-hidden="true">
-            <SvgIcon :src="icon.settings.ai" size="22" />
-          </span>
-          <span class="toolbox-asset__copy">
-            <small>{{ t('toolbox.aiQuotaBalance') }}</small>
-            <strong>{{ aiQuotaBalanceLabel }}</strong>
-          </span>
-        </BButton>
+      <div class="toolbox-home__header-actions">
+        <BButton v-if="!isGuest" type="primary" @click="openProjects(true)">{{
+          t('toolbox.project.newProject')
+        }}</BButton>
+        <BDropdown
+          v-if="!isGuest"
+          trigger="click"
+          :menu-options="[
+            {
+              label: t('toolbox.pointsBalance') + ' · ' + (growth?.points ?? '—'),
+              function: () => router.push({ name: 'pointsUsage' }),
+            },
+            {
+              label: t('toolbox.aiQuotaBalance') + ' · ' + aiQuotaBalanceLabel,
+              function: () => router.push({ name: 'aiUsage' }),
+            },
+          ]"
+          ><BButton>{{ t('toolbox.project.quota') }}</BButton></BDropdown
+        >
       </div>
     </section>
 
-    <section v-if="isGuest" class="toolbox-guest-guide" aria-labelledby="toolbox-guest-title">
+    <nav
+      class="workshop-view-switch"
+      :aria-label="t('toolbox.title')"
+      :class="{ 'is-catalog': homeView === 'catalog' }"
+    >
+      <span class="workshop-view-switch__indicator" aria-hidden="true"></span>
+      <BTabs
+        v-model:active-tab="homeView"
+        variant="segment"
+        :options="[
+          { key: 'work', label: t('toolbox.project.overview') },
+          { key: 'catalog', label: t('toolbox.home.allToolsTitle') },
+        ]"
+      />
+    </nav>
+
+    <section
+      v-if="!user.id || user.role === 'visitor'"
+      class="toolbox-guest-guide"
+      aria-labelledby="toolbox-guest-title"
+    >
       <span class="toolbox-guest-guide__icon"><SvgIcon :src="icon.noteDetail.history" size="22" /></span>
       <div>
         <h2 id="toolbox-guest-title">{{ t('toolbox.home.guestTitle') }}</h2>
@@ -39,99 +59,111 @@
       <BButton type="primary" @click="router.push({ name: 'login' })">{{ t('toolbox.home.guestAction') }}</BButton>
     </section>
 
-    <section v-if="!isGuest" class="toolbox-section toolbox-continue" aria-labelledby="toolbox-continue-title">
-      <header class="toolbox-section__head">
-        <span>01</span>
-        <h2 id="toolbox-continue-title">{{ t('toolbox.home.continueTitle') }}</h2>
-        <p>{{ t('toolbox.home.continueDescription') }}</p>
-      </header>
-      <div v-if="overviewLoading" class="toolbox-home__state">
-        <BLoading inline loading :title="t('common.loading')" />
-      </div>
-      <div v-else-if="overviewFailed" class="toolbox-home__state is-error" role="alert">
-        <span class="toolbox-home__state-icon"><SvgIcon :src="icon.toolbox.audit" size="20" /></span>
-        <span class="toolbox-home__state-copy">
-          <strong>{{ t('toolbox.home.loadFailed') }}</strong>
-          <small>{{ t('toolbox.home.loadFailedHint') }}</small>
-        </span>
-        <BButton size="small" @click="loadOverview">{{ t('common.retry') }}</BButton>
-      </div>
-      <div v-else-if="!hasContinue" class="toolbox-home__state is-empty">
-        <span class="toolbox-home__state-icon"><SvgIcon :src="icon.toolbox.actionPlan" size="20" /></span>
-        <span class="toolbox-home__state-copy">
-          <strong>{{ t('toolbox.home.continueEmpty') }}</strong>
-          <small>{{ t('toolbox.home.continueEmptyHint') }}</small>
-        </span>
-      </div>
-      <div v-else class="toolbox-activity-grid">
-        <BButton
-          v-for="workspace in continueWorkspaces"
-          :key="`workspace-${workspace.id}`"
-          class="toolbox-activity-card is-workspace"
-          @click="openWorkspace(workspace)"
-        >
-          <span class="toolbox-activity-card__icon">
-            <SvgIcon :src="presentation(toolboxWorkspaceToolId(workspace.kind)).icon" size="21" />
+    <div :key="homeView" class="workshop-view-content">
+      <section
+        v-if="!isGuest && homeView === 'work'"
+        class="toolbox-section toolbox-continue"
+        aria-labelledby="toolbox-continue-title"
+      >
+        <header class="toolbox-section__head">
+          <h2 id="toolbox-continue-title">{{ t('toolbox.project.continueTitle') }}</h2>
+          <BButton @click="openProjects(false)">{{ t('toolbox.project.allProjects') }}</BButton>
+        </header>
+        <div v-if="overviewLoading" class="toolbox-home__state">
+          <BLoading inline loading :title="t('common.loading')" />
+        </div>
+        <div v-else-if="overviewFailed" class="toolbox-home__state is-error" role="alert">
+          <span class="toolbox-home__state-icon"><SvgIcon :src="icon.toolbox.audit" size="20" /></span>
+          <span class="toolbox-home__state-copy">
+            <strong>{{ t('toolbox.home.loadFailed') }}</strong>
+            <small>{{ t('toolbox.home.loadFailedHint') }}</small>
           </span>
-          <span class="toolbox-activity-card__copy">
-            <span class="toolbox-activity-card__topline">
-              <span class="toolbox-activity-card__badges">
-                <BChip tone="neutral" class="toolbox-activity-card__type">
-                  {{ toolName(toolboxWorkspaceToolId(workspace.kind)) }}
-                </BChip>
-                <BChip tone="success">{{ t('toolbox.workspace.status.active') }}</BChip>
+          <BButton size="small" @click="loadOverview">{{ t('common.retry') }}</BButton>
+        </div>
+        <div v-else-if="!continueWorkspaces.length" class="toolbox-home__state is-empty">
+          <span class="toolbox-home__state-icon"><SvgIcon :src="icon.toolbox.actionPlan" size="20" /></span>
+          <span class="toolbox-home__state-copy">
+            <strong>{{ t('toolbox.project.intro') }}</strong>
+            <small>{{ t('toolbox.project.introHint') }}</small>
+          </span>
+        </div>
+        <div v-else class="toolbox-activity-grid">
+          <BButton
+            v-for="workspace in continueWorkspaces"
+            :key="`workspace-${workspace.id}`"
+            class="toolbox-activity-card is-workspace"
+            @click="openWorkspace(workspace)"
+          >
+            <span class="toolbox-activity-card__icon">
+              <SvgIcon :src="presentation(toolboxWorkspaceToolId(workspace.kind)).icon" size="21" />
+            </span>
+            <span class="toolbox-activity-card__copy">
+              <span class="toolbox-activity-card__topline">
+                <span class="toolbox-activity-card__badges">
+                  <BChip tone="neutral" class="toolbox-activity-card__type">
+                    {{ toolName(toolboxWorkspaceToolId(workspace.kind)) }}
+                  </BChip>
+                  <BChip tone="success">{{ t('toolbox.workspace.status.active') }}</BChip>
+                </span>
+                <small>{{
+                  formatRelativeDate(Math.max(dateValue(workspace.lastOpenedAt), dateValue(workspace.updatedAt)))
+                }}</small>
               </span>
-              <small>{{ formatRelativeDate(workspace.lastOpenedAt || workspace.updatedAt) }}</small>
+              <strong>{{ workspace.title }}</strong>
+              <small>{{ t('toolbox.workspace.nextStep') }}</small>
+              <span>{{ workspace.nextStep || t('toolbox.workspace.noNextStep') }}</span>
+              <small>
+                {{
+                  t('toolbox.home.workspaceMeta', {
+                    resources: workspace.resourceCount,
+                    open: workspace.openItemCount,
+                  })
+                }}
+              </small>
             </span>
-            <strong>{{ workspace.title }}</strong>
-            <small>{{ t('toolbox.workspace.nextStep') }}</small>
-            <span>{{ workspace.nextStep || t('toolbox.workspace.noNextStep') }}</span>
-            <small>
-              {{
-                t('toolbox.home.workspaceMeta', {
-                  resources: workspace.resourceCount,
-                  open: workspace.openItemCount,
-                })
-              }}
-            </small>
-          </span>
-          <span class="toolbox-activity-card__action">
-            {{ workspace.nextStep ? t('toolbox.home.continueAction') : t('toolbox.home.addNextStepAction') }}
-          </span>
-        </BButton>
-        <BButton
-          v-for="job in continueJobs"
-          :key="`task-${job.id}`"
-          class="toolbox-activity-card is-task"
-          :class="{ 'is-ready': isReadyTask(job) }"
-          @click="openTask(job)"
-        >
-          <span class="toolbox-activity-card__icon">
-            <SvgIcon :src="presentation(job.toolId).icon" size="21" />
-          </span>
-          <span class="toolbox-activity-card__copy">
-            <span class="toolbox-activity-card__topline">
-              <BChip :tone="jobTone(job.status)">{{ taskStateLabel(job) }}</BChip>
-              <small>{{ formatRelativeDate(job.updatedAt) }}</small>
+            <span class="toolbox-activity-card__action">
+              {{ t('toolbox.home.continueAction') }}
             </span>
-            <strong>{{ job.artifact?.title || toolName(job.toolId) }}</strong>
-            <span>{{ taskContinueDescription(job) }}</span>
-            <small>{{ toolName(job.toolId) }}</small>
-          </span>
-          <span class="toolbox-activity-card__action">
-            {{ isReadyTask(job) ? t('toolbox.home.viewResultAction') : t('toolbox.home.viewProgressAction') }}
-          </span>
-        </BButton>
-      </div>
-    </section>
+          </BButton>
+        </div>
+      </section>
 
-    <section class="toolbox-section toolbox-start toolbox-outcomes" aria-labelledby="toolbox-outcomes-title">
-      <header class="toolbox-section__head">
-        <span>{{ isGuest ? '01' : '02' }}</span>
-        <h2 id="toolbox-outcomes-title">{{ t('toolbox.home.outcomesTitle') }}</h2>
-        <p>{{ t('toolbox.home.outcomesDescription') }}</p>
-      </header>
-      <div class="toolbox-start-content">
+      <section v-if="!isGuest && homeView === 'work' && continueJobs.length" class="toolbox-section toolbox-tasks">
+        <header class="toolbox-section__head"
+          ><h2>{{ t('toolbox.project.tasks') }}</h2></header
+        >
+        <div class="toolbox-task-list">
+          <BButton
+            v-for="job in continueJobs"
+            :key="`task-${job.id}`"
+            class="toolbox-activity-card is-task"
+            :class="{ 'is-ready': isReadyTask(job) }"
+            @click="openTask(job)"
+          >
+            <span class="toolbox-activity-card__icon">
+              <SvgIcon :src="presentation(job.toolId).icon" size="21" />
+            </span>
+            <span class="toolbox-activity-card__copy">
+              <span class="toolbox-activity-card__topline">
+                <BChip :tone="jobTone(job.status)">{{ taskStateLabel(job) }}</BChip>
+                <small>{{ formatRelativeDate(job.updatedAt) }}</small>
+              </span>
+              <strong>{{ job.artifact?.title || toolName(job.toolId) }}</strong>
+              <span>{{ taskContinueDescription(job) }}</span>
+              <small>{{ toolName(job.toolId) }}</small>
+            </span>
+            <span class="toolbox-activity-card__action">
+              {{ isReadyTask(job) ? t('toolbox.home.viewResultAction') : t('toolbox.home.viewProgressAction') }}
+            </span>
+          </BButton>
+        </div>
+      </section>
+
+      <section v-if="homeView === 'work'" class="toolbox-section toolbox-quick" aria-labelledby="toolbox-quick-title">
+        <header class="toolbox-section__head">
+          <h2 id="toolbox-quick-title">{{ t('toolbox.project.quick') }}</h2>
+          <p>{{ t('toolbox.project.quickHint') }}</p>
+        </header>
         <div v-if="catalogLoading" class="toolbox-home__state">
           <BLoading inline loading :title="t('common.loading')" />
         </div>
@@ -142,240 +174,202 @@
           </span>
           <BButton size="small" @click="loadCatalog">{{ t('common.retry') }}</BButton>
         </div>
-        <div v-else class="toolbox-start-grid">
+        <div v-else-if="quickView === 'common' && quickTools.length" class="toolbox-quick-grid">
           <BButton
-            v-for="tool in primaryOutcomeTools"
-            :key="'outcome-' + tool.id"
-            class="toolbox-start-card"
-            :class="'is-' + presentation(tool.id).accent"
-            :aria-label="toolAccessibleLabel(tool)"
+            v-for="tool in quickTools"
+            :key="`quick-${tool.id}`"
+            class="toolbox-quick-card"
+            :class="`is-${presentation(tool.id).accent}`"
             @click="openTool(tool)"
           >
-            <span class="toolbox-start-card__icon">
-              <SvgIcon :src="presentation(tool.id).icon" size="22" />
-            </span>
-            <span class="toolbox-start-card__copy">
-              <span class="toolbox-start-card__meta">
-                <BChip tone="neutral">
-                  {{ t('toolbox.tool.' + tool.id + '.output') }}
-                </BChip>
-              </span>
-              <strong>{{ toolName(tool.id) }}</strong>
-              <small>{{ toolDescription(tool.id) }}</small>
-            </span>
-            <span class="toolbox-start-card__action">
-              {{ t('toolbox.home.startOutcomeAction') }}
+            <span class="toolbox-quick-card__icon"><SvgIcon :src="presentation(tool.id).icon" size="21" /></span>
+            <span class="toolbox-quick-card__copy">
+              <strong>{{
+                tool.id === 'research_workspace' ? t('toolbox.workspace.myProjects') : toolName(tool.id)
+              }}</strong>
             </span>
           </BButton>
         </div>
-      </div>
-    </section>
-
-    <section class="toolbox-section toolbox-quick" aria-labelledby="toolbox-quick-title">
-      <header class="toolbox-section__head">
-        <span>{{ isGuest ? '02' : '03' }}</span>
-        <h2 id="toolbox-quick-title">{{ t('toolbox.home.quickTitle') }}</h2>
-        <p>{{ t('toolbox.home.quickDescription') }}</p>
-      </header>
-      <div class="toolbox-quick__switch" :aria-label="t('toolbox.home.quickViewLabel')">
-        <BChip tone="neutral" interactive :selected="quickView === 'common'" @click="quickView = 'common'">
-          {{ t('toolbox.home.quickCommon') }}
-        </BChip>
-        <BChip tone="neutral" interactive :selected="quickView === 'recent'" @click="quickView = 'recent'">
-          {{ t('toolbox.home.quickRecent') }}
-        </BChip>
-      </div>
-      <div v-if="catalogLoading" class="toolbox-home__state">
-        <BLoading inline loading :title="t('common.loading')" />
-      </div>
-      <div v-else-if="catalogFailed" class="toolbox-home__state is-error" role="alert">
-        <span class="toolbox-home__state-copy">
-          <strong>{{ t('toolbox.home.loadFailed') }}</strong>
-          <small>{{ t('toolbox.home.loadFailedHint') }}</small>
-        </span>
-        <BButton size="small" @click="loadCatalog">{{ t('common.retry') }}</BButton>
-      </div>
-      <div v-else-if="quickView === 'common' && quickTools.length" class="toolbox-quick-grid">
-        <BButton
-          v-for="tool in quickTools"
-          :key="`quick-${tool.id}`"
-          class="toolbox-quick-card"
-          :class="`is-${presentation(tool.id).accent}`"
-          @click="openTool(tool)"
-        >
-          <span class="toolbox-quick-card__icon"><SvgIcon :src="presentation(tool.id).icon" size="21" /></span>
-          <span class="toolbox-quick-card__copy">
-            <strong>{{ toolName(tool.id) }}</strong>
-            <small>{{ billingLabel(tool) }}</small>
+        <div v-else-if="quickView === 'common'" class="toolbox-home__state is-empty">
+          <span class="toolbox-home__state-copy">
+            <strong>{{ t('toolbox.home.quickEmpty') }}</strong>
+            <small>{{ t('toolbox.home.quickEmptyHint') }}</small>
           </span>
-        </BButton>
-      </div>
-      <div v-else-if="quickView === 'common'" class="toolbox-home__state is-empty">
-        <span class="toolbox-home__state-copy">
-          <strong>{{ t('toolbox.home.quickEmpty') }}</strong>
-          <small>{{ t('toolbox.home.quickEmptyHint') }}</small>
-        </span>
-      </div>
-      <div v-else-if="overviewLoading && !recentEntries.length" class="toolbox-home__state">
-        <BLoading inline loading :title="t('common.loading')" />
-      </div>
-      <div v-else-if="overviewFailed && !recentEntries.length" class="toolbox-home__state is-error" role="alert">
-        <span class="toolbox-home__state-icon"><SvgIcon :src="icon.toolbox.audit" size="20" /></span>
-        <span class="toolbox-home__state-copy">
-          <strong>{{ t('toolbox.home.loadFailed') }}</strong>
-          <small>{{ t('toolbox.home.loadFailedHint') }}</small>
-        </span>
-      </div>
-      <div v-else-if="!recentEntries.length" class="toolbox-home__state is-empty">
-        <span class="toolbox-home__state-icon"><SvgIcon :src="icon.common.time" size="20" /></span>
-        <span class="toolbox-home__state-copy">
-          <strong>{{ t('toolbox.home.recentEmpty') }}</strong>
-          <small>{{ t('toolbox.home.recentEmptyHint') }}</small>
-        </span>
-      </div>
-      <div v-else class="toolbox-recent-list">
-        <BButton
-          v-for="entry in recentEntries"
-          :key="entry.key"
-          class="toolbox-recent-row"
-          @click="openRecentEntry(entry)"
-        >
-          <span class="toolbox-recent-row__icon"><SvgIcon :src="presentation(entry.toolId).icon" size="19" /></span>
-          <span class="toolbox-recent-row__copy">
-            <strong>{{ entry.title }}</strong>
-            <small>{{ entry.detail }}</small>
+        </div>
+        <div v-else-if="overviewLoading && !recentEntries.length" class="toolbox-home__state">
+          <BLoading inline loading :title="t('common.loading')" />
+        </div>
+        <div v-else-if="overviewFailed && !recentEntries.length" class="toolbox-home__state is-error" role="alert">
+          <span class="toolbox-home__state-icon"><SvgIcon :src="icon.toolbox.audit" size="20" /></span>
+          <span class="toolbox-home__state-copy">
+            <strong>{{ t('toolbox.home.loadFailed') }}</strong>
+            <small>{{ t('toolbox.home.loadFailedHint') }}</small>
           </span>
-          <small class="toolbox-recent-row__time">{{ formatRelativeDate(entry.usedAt) }}</small>
-        </BButton>
-      </div>
-    </section>
+        </div>
+        <div v-else-if="!recentEntries.length" class="toolbox-home__state is-empty">
+          <span class="toolbox-home__state-icon"><SvgIcon :src="icon.common.time" size="20" /></span>
+          <span class="toolbox-home__state-copy">
+            <strong>{{ t('toolbox.home.recentEmpty') }}</strong>
+            <small>{{ t('toolbox.home.recentEmptyHint') }}</small>
+          </span>
+        </div>
+        <div v-else class="toolbox-recent-list">
+          <BButton
+            v-for="entry in recentEntries"
+            :key="entry.key"
+            class="toolbox-recent-row"
+            @click="openRecentEntry(entry)"
+          >
+            <span class="toolbox-recent-row__icon"><SvgIcon :src="presentation(entry.toolId).icon" size="19" /></span>
+            <span class="toolbox-recent-row__copy">
+              <strong>{{ entry.title }}</strong>
+              <small>{{ entry.detail }}</small>
+            </span>
+            <small class="toolbox-recent-row__time">{{ formatRelativeDate(entry.usedAt) }}</small>
+          </BButton>
+        </div>
+      </section>
 
-    <section class="toolbox-section toolbox-catalog" aria-labelledby="toolbox-catalog-title">
-      <header class="toolbox-section__head toolbox-catalog__head">
-        <span>{{ isGuest ? '03' : '04' }}</span>
-        <h2 id="toolbox-catalog-title">{{ t('toolbox.home.allToolsTitle') }}</h2>
-        <p>{{ t('toolbox.home.allToolsDescription') }}</p>
-      </header>
-      <div class="toolbox-group-filter" :aria-label="t('toolbox.home.toolCategoryLabel')">
-        <BChip
-          v-for="group in groupOptions"
-          :key="group.value"
-          tone="neutral"
-          size="medium"
-          interactive
-          :selected="activeToolGroup === group.value"
-          @click="navigateToToolGroup(group.value)"
-        >
-          {{ group.label }}
-          <small>{{ groupToolCount(group.value) }}</small>
-        </BChip>
-      </div>
-      <div class="toolbox-catalog__controls">
-        <div class="toolbox-catalog__search">
-          <BInput
-            ref="searchInput"
-            v-model:value="keyword"
-            clearable
-            :placeholder="t('toolbox.searchPlaceholder')"
-            height="42px"
-          >
-            <template #prefix><SvgIcon :src="icon.navigation.search" size="18" /></template>
-          </BInput>
-          <span v-if="!keyword" aria-hidden="true">⌘ K</span>
-        </div>
-        <div class="toolbox-category-filter" :aria-label="t('toolbox.home.allToolsTitle')">
-          <BChip
-            v-for="category in categoryOptions"
-            :key="category.value"
-            tone="neutral"
-            size="medium"
-            interactive
-            :selected="activeCategory === category.value"
-            @click="activeCategory = category.value"
-          >
-            {{ category.label }}
-          </BChip>
-        </div>
-      </div>
-      <div v-if="catalogDegraded" class="toolbox-catalog__notice" role="status">
-        <SvgIcon :src="icon.toolbox.audit" size="16" />
-        <span>{{ t('toolbox.home.catalogFallback') }}</span>
-        <BButton size="small" @click="loadCatalog">{{ t('common.retry') }}</BButton>
-      </div>
-      <div v-if="catalogLoading" class="toolbox-home__state">
-        <BLoading inline loading :title="t('common.loading')" />
-      </div>
-      <div v-else-if="catalogFailed" class="toolbox-home__state is-error" role="alert">
-        <span>{{ t('common.requestFailedDescription') }}</span>
-        <BButton size="small" @click="loadCatalog">{{ t('common.retry') }}</BButton>
-      </div>
-      <div v-else-if="!visibleGroups.length" class="toolbox-home__state is-empty">
-        <span>{{ t('toolbox.emptySearch') }}</span>
-        <BButton size="small" @click="clearFilters">{{ t('toolbox.clearSearch') }}</BButton>
-      </div>
-      <div v-else class="toolbox-home-groups">
-        <section
-          v-for="group in visibleGroups"
-          :key="group.id"
-          :id="`toolbox-home-group-${group.id}`"
-          class="toolbox-home-group"
-          :class="[`is-${group.id}`, `is-${group.accent}`]"
-          :aria-labelledby="`toolbox-group-${group.id}`"
-        >
-          <header class="toolbox-home-group__head">
-            <span><SvgIcon :src="group.icon" size="20" /></span>
-            <div>
-              <h3 :id="`toolbox-group-${group.id}`">{{ t(`toolbox.homeGroup.${group.id}.title`) }}</h3>
-              <p>{{ t(`toolbox.homeGroup.${group.id}.description`) }}</p>
-            </div>
-            <BChip tone="neutral">{{ t('toolbox.home.groupToolCount', { count: group.tools.length }) }}</BChip>
-          </header>
-          <div class="toolbox-grid">
-            <div v-for="tool in group.tools" :key="tool.id" class="toolbox-card-wrap">
-              <BButton
-                class="toolbox-card"
-                :class="`is-${presentation(tool.id).accent}`"
-                :aria-label="toolAccessibleLabel(tool)"
-                @click="openTool(tool)"
-              >
-                <span class="toolbox-card__icon"><SvgIcon :src="presentation(tool.id).icon" size="23" /></span>
-                <span class="toolbox-card__copy">
-                  <strong>{{ toolName(tool.id) }}</strong>
-                  <span>{{ toolDescription(tool.id) }}</span>
-                  <small>{{ t('toolbox.outputLabel') }} · {{ t('toolbox.tool.' + tool.id + '.output') }}</small>
-                </span>
-                <span class="toolbox-card__aside">
-                  <BChip :tone="tool.billingMedium === 'free' ? 'success' : 'pending'">{{ billingLabel(tool) }}</BChip>
-                </span>
-              </BButton>
-              <BTooltip
-                v-if="!isGuest"
-                class="toolbox-card__pin-wrap"
-                :class="{ 'is-pinned': isPinned(tool.id) }"
-                :title="t(isPinned(tool.id) ? 'toolbox.home.unpinTool' : 'toolbox.home.pinTool')"
-              >
-                <BButton
-                  class="toolbox-card__pin"
-                  :class="{ 'is-pinned': isPinned(tool.id) }"
-                  :aria-label="t(isPinned(tool.id) ? 'toolbox.home.unpinTool' : 'toolbox.home.pinTool')"
-                  @click.stop="togglePinnedTool(tool.id)"
+      <section
+        v-if="homeView === 'catalog'"
+        class="toolbox-section toolbox-catalog"
+        aria-labelledby="toolbox-catalog-title"
+      >
+        <header class="toolbox-section__head toolbox-catalog__head">
+          <span>{{ isGuest ? '03' : '04' }}</span>
+          <h2 id="toolbox-catalog-title">{{ t('toolbox.home.allToolsTitle') }}</h2>
+          <p>{{ t('toolbox.home.allToolsDescription') }}</p>
+        </header>
+        <div class="toolbox-catalog__layout">
+          <div ref="groupNavRef" class="toolbox-group-filter" :aria-label="t('toolbox.home.toolCategoryLabel')">
+            <BChip
+              v-for="group in groupOptions"
+              :key="group.value"
+              tone="neutral"
+              size="medium"
+              interactive
+              :selected="activeToolGroup === group.value"
+              :data-group="group.value"
+              :aria-current="activeToolGroup === group.value ? 'location' : undefined"
+              @click="navigateToToolGroup(group.value)"
+            >
+              {{ group.label }}
+              <small>{{ groupToolCount(group.value) }}</small>
+            </BChip>
+          </div>
+          <div class="toolbox-catalog__content">
+            <div class="toolbox-catalog__controls">
+              <div class="toolbox-catalog__search">
+                <BInput
+                  ref="searchInput"
+                  v-model:value="keyword"
+                  clearable
+                  :placeholder="t('toolbox.searchPlaceholder')"
+                  height="42px"
                 >
-                  <SvgIcon :src="isPinned(tool.id) ? icon.contextMenu.unpin : icon.contextMenu.pin" size="15" />
-                </BButton>
-              </BTooltip>
+                  <template #prefix><SvgIcon :src="icon.navigation.search" size="18" /></template>
+                </BInput>
+                <span v-if="!keyword" aria-hidden="true">⌘ K</span>
+              </div>
+              <div class="toolbox-category-filter" :aria-label="t('toolbox.home.allToolsTitle')">
+                <BChip
+                  v-for="category in categoryOptions"
+                  :key="category.value"
+                  tone="neutral"
+                  size="medium"
+                  interactive
+                  :selected="activeCategory === category.value"
+                  @click="activeCategory = category.value"
+                >
+                  {{ category.label }}
+                </BChip>
+              </div>
+            </div>
+            <div v-if="catalogDegraded" class="toolbox-catalog__notice" role="status">
+              <SvgIcon :src="icon.toolbox.audit" size="16" />
+              <span>{{ t('toolbox.home.catalogFallback') }}</span>
+              <BButton size="small" @click="loadCatalog">{{ t('common.retry') }}</BButton>
+            </div>
+            <div v-if="catalogLoading" class="toolbox-home__state">
+              <BLoading inline loading :title="t('common.loading')" />
+            </div>
+            <div v-else-if="catalogFailed" class="toolbox-home__state is-error" role="alert">
+              <span>{{ t('common.requestFailedDescription') }}</span>
+              <BButton size="small" @click="loadCatalog">{{ t('common.retry') }}</BButton>
+            </div>
+            <div v-else-if="!visibleGroups.length" class="toolbox-home__state is-empty">
+              <span>{{ t('toolbox.emptySearch') }}</span>
+              <BButton size="small" @click="clearFilters">{{ t('toolbox.clearSearch') }}</BButton>
+            </div>
+            <div v-else class="toolbox-home-groups">
+              <section
+                v-for="group in visibleGroups"
+                :key="group.id"
+                :id="`toolbox-home-group-${group.id}`"
+                class="toolbox-home-group"
+                :class="[`is-${group.id}`, `is-${group.accent}`]"
+                :aria-labelledby="`toolbox-group-${group.id}`"
+              >
+                <header class="toolbox-home-group__head">
+                  <span><SvgIcon :src="group.icon" size="20" /></span>
+                  <div>
+                    <h3 :id="`toolbox-group-${group.id}`">{{ t(`toolbox.homeGroup.${group.id}.title`) }}</h3>
+                    <p>{{ t(`toolbox.homeGroup.${group.id}.description`) }}</p>
+                  </div>
+                  <BChip tone="neutral">{{ t('toolbox.home.groupToolCount', { count: group.tools.length }) }}</BChip>
+                </header>
+                <div class="toolbox-grid">
+                  <div v-for="tool in group.tools" :key="tool.id" class="toolbox-card-wrap">
+                    <BButton
+                      class="toolbox-card"
+                      :class="`is-${presentation(tool.id).accent}`"
+                      :aria-label="toolAccessibleLabel(tool)"
+                      @click="openTool(tool)"
+                    >
+                      <span class="toolbox-card__icon"><SvgIcon :src="presentation(tool.id).icon" size="23" /></span>
+                      <span class="toolbox-card__copy">
+                        <strong>{{
+                          tool.id === 'research_workspace' ? t('toolbox.workspace.myProjects') : toolName(tool.id)
+                        }}</strong>
+                        <span>{{ toolDescription(tool.id) }}</span>
+                        <small>{{ t('toolbox.outputLabel') }} · {{ t('toolbox.tool.' + tool.id + '.output') }}</small>
+                      </span>
+                      <span class="toolbox-card__aside"> </span>
+                    </BButton>
+                    <BTooltip
+                      v-if="!isGuest"
+                      class="toolbox-card__pin-wrap"
+                      :class="{ 'is-pinned': isPinned(tool.id) }"
+                      :title="t(isPinned(tool.id) ? 'toolbox.home.unpinTool' : 'toolbox.home.pinTool')"
+                    >
+                      <BButton
+                        class="toolbox-card__pin"
+                        :class="{ 'is-pinned': isPinned(tool.id) }"
+                        :aria-label="t(isPinned(tool.id) ? 'toolbox.home.unpinTool' : 'toolbox.home.pinTool')"
+                        @click.stop="togglePinnedTool(tool.id)"
+                      >
+                        <SvgIcon :src="isPinned(tool.id) ? icon.contextMenu.unpin : icon.contextMenu.pin" size="15" />
+                      </BButton>
+                    </BTooltip>
+                  </div>
+                </div>
+              </section>
             </div>
           </div>
-        </section>
-      </div>
-    </section>
+        </div>
+      </section>
+    </div>
   </main>
 </template>
 
 <script setup lang="ts">
+  import { findScrollContainer } from '@/utils/scrollContainer';
+  import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { useRouter } from 'vue-router';
+  import { useRoute, useRouter } from 'vue-router';
   import { TOOLBOX_TOOL_CATALOG, type ToolboxToolId } from '@lightnote/shared/toolbox-protocol';
+  import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BChip from '@/components/base/BasicComponents/BChip.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
@@ -399,7 +393,6 @@
   import {
     TOOLBOX_HOME_GROUPS,
     TOOLBOX_DEFAULT_QUICK_TOOL_IDS,
-    TOOLBOX_PRIMARY_OUTCOME_TOOL_IDS,
     TOOLBOX_PRESENTATION,
     resolveToolboxQuickToolIds,
     toolboxToolPath,
@@ -433,6 +426,7 @@
 
   const { t, locale } = useI18n();
   const router = useRouter();
+  const route = useRoute();
   const user = useUserStore();
   const { growth, load: loadGrowth } = useGrowth();
   const { status: aiQuotaStatus, load: loadAiQuota } = useAiQuotaStatus({ autoLoad: false });
@@ -440,6 +434,13 @@
   const overview = ref<ToolboxHomeOverview | null>(null);
   const localRecentUses = ref<ToolboxRecentUse[]>([]);
   const pinnedToolIds = ref<string[]>([]);
+  const homeView = computed({
+    get: () => (route.query.view === 'catalog' ? 'catalog' : 'work'),
+    set: (view: string) => {
+      rememberHomeScroll();
+      void router.replace({ query: { ...route.query, view } });
+    },
+  });
   const catalogLoading = ref(true);
   const catalogFailed = ref(false);
   const catalogDegraded = ref(false);
@@ -455,7 +456,7 @@
 
   useMobileTopBar(['toolboxHome'], { searchMode: 'icon' });
 
-  const isGuest = computed(() => !user.id || user.role === 'visitor');
+  const isGuest = computed(() => !user.id || user.role === 'visitor' || !!user.adminContext || !!user.visitorWorkspace);
   const identityKey = computed(() => toolboxRecentUseIdentityKey(user));
   const aiQuotaBalanceLabel = computed(() =>
     aiQuotaStatus.value?.exempt
@@ -473,16 +474,19 @@
       label: t(`toolbox.homeGroup.${group.id}.title`),
     })),
   );
-  const continueWorkspaces = computed(() => overview.value?.workspaces?.continue || []);
+  const continueWorkspaces = computed(() =>
+    (overview.value?.workspaces?.continue || []).filter((item) => item.status === 'active').slice(0, 6),
+  );
   const continueJobs = computed(() => {
     const seen = new Set<string>();
-    return [...(overview.value?.tasks?.active || []), ...(overview.value?.tasks?.ready || [])].filter((job) => {
-      if (seen.has(job.id)) return false;
-      seen.add(job.id);
-      return true;
-    });
+    return [...(overview.value?.tasks?.active || []), ...(overview.value?.tasks?.ready || [])]
+      .filter((job) => {
+        if (seen.has(job.id)) return false;
+        seen.add(job.id);
+        return true;
+      })
+      .slice(0, 3);
   });
-  const hasContinue = computed(() => continueWorkspaces.value.length > 0 || continueJobs.value.length > 0);
   const enabledToolIds = computed(() => new Set(tools.value.map((tool) => tool.id)));
   const recentEntries = computed<RecentEntry[]>(() => {
     const workspaceEntries = (overview.value?.workspaces?.recent || []).map((workspace) => ({
@@ -503,7 +507,9 @@
     }));
     const seen = new Set<string>();
     return [...workspaceEntries, ...localEntries]
-      .filter((entry) => Number.isFinite(dateValue(entry.usedAt)))
+      .filter(
+        (entry) => enabledToolIds.value.has(entry.toolId as ToolboxToolId) && Number.isFinite(dateValue(entry.usedAt)),
+      )
       .sort((left, right) => dateValue(right.usedAt) - dateValue(left.usedAt))
       .filter((entry) => {
         if (seen.has(entry.dedupeKey)) return false;
@@ -531,12 +537,6 @@
       })
       .slice(0, TOOLBOX_PINNED_TOOL_LIMIT);
   });
-  const primaryOutcomeTools = computed(() => {
-    const byId = new Map(tools.value.map((tool) => [tool.id, tool]));
-    return TOOLBOX_PRIMARY_OUTCOME_TOOL_IDS.map((toolId) => byId.get(toolId)).filter(
-      (tool): tool is ToolboxCatalogItem => Boolean(tool),
-    );
-  });
   const visibleTools = computed(() => {
     const query = keyword.value.trim().toLocaleLowerCase(locale.value);
     return tools.value.filter((tool) => {
@@ -553,7 +553,9 @@
     const byId = new Map(visibleTools.value.map((tool) => [tool.id, tool]));
     return TOOLBOX_HOME_GROUPS.map((group) => ({
       ...group,
-      tools: group.toolIds.map((id) => byId.get(id)).filter((tool): tool is ToolboxCatalogItem => Boolean(tool)),
+      tools: (group.id === 'workspace' ? group.toolIds.slice(0, 1) : group.toolIds)
+        .map((id) => byId.get(id))
+        .filter((tool): tool is ToolboxCatalogItem => Boolean(tool)),
     })).filter((group) => group.tools.length > 0);
   });
 
@@ -561,10 +563,63 @@
     return visibleGroups.value.find((group) => group.id === groupId)?.tools.length || 0;
   }
 
-  function navigateToToolGroup(groupId: ToolboxHomeGroupId) {
-    activeToolGroup.value = groupId;
-    document.getElementById(`toolbox-home-group-${groupId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const groupNavRef = ref<HTMLElement | null>(null);
+  let groupScrollFrame = 0;
+  function groupScrollContext() {
+    const nav = groupNavRef.value;
+    if (!nav) return null;
+    const owner = findScrollContainer(nav);
+    const documentOwner = owner === document.scrollingElement;
+    const scale = documentOwner ? 1 : owner.getBoundingClientRect().height / owner.offsetHeight || 1;
+    const top = documentOwner ? 0 : owner.getBoundingClientRect().top;
+    const rail = getComputedStyle(nav).flexDirection === 'column';
+    const inset = (parseFloat(getComputedStyle(nav).top) || 0) + (rail ? 0 : nav.offsetHeight) + 20;
+    return { nav, owner, scale, top, inset };
   }
+  function syncToolGroup() {
+    groupScrollFrame = 0;
+    if (homeView.value !== 'catalog') return;
+    const context = groupScrollContext();
+    if (!context) return;
+    const { nav, owner, scale, top, inset } = context;
+    const sections = visibleGroups.value
+      .map((group) => ({
+        id: group.id,
+        element: document.getElementById(`toolbox-home-group-${group.id}`),
+      }))
+      .filter((item) => item.element);
+    let current = sections[0];
+    for (const section of sections) {
+      if (section.element!.getBoundingClientRect().top <= top + (inset + 4) * scale) current = section;
+    }
+    if (owner.scrollTop > 0 && owner.scrollTop + owner.clientHeight >= owner.scrollHeight - 4)
+      current = sections.at(-1);
+    if (!current) return;
+    activeToolGroup.value = current.id;
+    const selected = nav.querySelector<HTMLElement>(`[data-group="${current.id}"]`);
+    if (selected && nav.scrollWidth > nav.clientWidth) {
+      const left = selected.offsetLeft;
+      if (left < nav.scrollLeft) nav.scrollLeft = left;
+      else if (left + selected.offsetWidth > nav.scrollLeft + nav.clientWidth)
+        nav.scrollLeft = left + selected.offsetWidth - nav.clientWidth;
+    }
+  }
+  function onToolGroupScroll(event?: Event) {
+    if (event?.target === groupNavRef.value) return;
+    if (!groupScrollFrame) groupScrollFrame = requestAnimationFrame(syncToolGroup);
+  }
+  function navigateToToolGroup(groupId: ToolboxHomeGroupId) {
+    const context = groupScrollContext();
+    const section = document.getElementById(`toolbox-home-group-${groupId}`);
+    if (!context || !section) return;
+    const { owner, scale, top, inset } = context;
+    owner.scrollTo({
+      top: Math.max(0, owner.scrollTop + (section.getBoundingClientRect().top - top) / scale - inset),
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+    });
+    onToolGroupScroll();
+  }
+  watch([homeView, visibleGroups], () => nextTick(onToolGroupScroll));
 
   function presentation(toolId: string) {
     return TOOLBOX_PRESENTATION[toolId as ToolboxToolId] || TOOLBOX_PRESENTATION.material_to_note;
@@ -617,9 +672,16 @@
   }
   function rememberHomeScroll() {
     saveToolboxScrollSnapshot({
-      routeFullPath: '/toolbox',
+      routeFullPath: route.fullPath,
       identityKey: identityKey.value,
       element: pageRef.value,
+    });
+  }
+  function openProjects(create: boolean) {
+    rememberHomeScroll();
+    void router.push({
+      path: '/toolbox/research_workspace',
+      query: create ? { create: '1', entry: 'workshop' } : { entry: 'workshop' },
     });
   }
   function openTool(tool: ToolboxCatalogItem) {
@@ -634,7 +696,7 @@
     rememberHomeScroll();
     void router.push({
       path: toolboxToolPath(toolboxWorkspaceToolId(workspace.kind)),
-      query: { workspace: workspace.id },
+      query: { workspace: workspace.id, entry: 'workshop' },
     });
   }
   function openTask(job: ToolboxJob) {
@@ -728,22 +790,44 @@
     await nextTick();
     window.requestAnimationFrame(() => {
       restoreToolboxScrollSnapshot({
-        routeFullPath: '/toolbox',
+        routeFullPath: route.fullPath,
         identityKey: identityKey.value,
         element: pageRef.value,
       });
     });
   }
   onMounted(() => {
+    document.addEventListener('scroll', onToolGroupScroll, { capture: true, passive: true });
+    window.addEventListener('resize', onToolGroupScroll, { passive: true });
     void initializeHome();
   });
   onBeforeUnmount(() => {
+    document.removeEventListener('scroll', onToolGroupScroll, true);
+    window.removeEventListener('resize', onToolGroupScroll);
+    cancelAnimationFrame(groupScrollFrame);
     overviewRequestVersion += 1;
     window.removeEventListener('keydown', handleSearchShortcut);
   });
 </script>
 
 <style scoped lang="less">
+  .toolbox-home__views {
+    display: flex;
+    gap: 8px;
+    margin: 16px 0 20px;
+  }
+  .toolbox-home .toolbox-overview {
+    min-height: 0;
+    padding: 20px 24px;
+    background: var(--card-background);
+  }
+  .toolbox-home .toolbox-overview__eyebrow {
+    display: none;
+  }
+  .toolbox-home .toolbox-start-card.b_btn {
+    background: var(--card-background);
+  }
+
   @import './toolboxPageScroll.less';
 
   .toolbox-home {
@@ -1869,5 +1953,175 @@
   :global(html.light-note-mobile-rendering .toolbox-home-group__head > span) {
     border-color: var(--surface-border-color);
     background: var(--workspace-panel-bg-color);
+  }
+  .toolbox-overview {
+    padding: 22px 24px;
+    min-height: 0;
+    box-shadow: none;
+  }
+  .toolbox-overview h1 {
+    font-size: 28px;
+  }
+  .toolbox-overview__eyebrow {
+    display: none;
+  }
+  .toolbox-home__header-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+  .toolbox-activity-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .toolbox-activity-card {
+    min-height: 155px;
+    padding: 20px;
+  }
+  .toolbox-task-list {
+    display: grid;
+    gap: 8px;
+  }
+  .toolbox-task-list .toolbox-activity-card {
+    min-height: 0;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    gap: 12px;
+  }
+  .toolbox-task-list .toolbox-activity-card__copy {
+    flex: 1;
+  }
+  .toolbox-task-list .toolbox-activity-card__copy > span:not(.toolbox-activity-card__topline),
+  .toolbox-task-list .toolbox-activity-card__copy > small {
+    display: none;
+  }
+  .toolbox-task-list .toolbox-activity-card__action {
+    position: static;
+  }
+  .toolbox-section__head {
+    align-items: center;
+  }
+  .toolbox-section__head > .b_btn {
+    margin-left: auto;
+  }
+  .toolbox-activity-card strong {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  @media (max-width: 767px) {
+    .toolbox-activity-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .toolbox-overview {
+      padding: 16px;
+    }
+    .toolbox-home__header-actions {
+      width: 100%;
+    }
+    .toolbox-task-list .toolbox-activity-card {
+      flex-wrap: wrap;
+    }
+  }
+
+  .workshop-view-switch {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: min(380px, 100%);
+    padding: 5px;
+    margin: 24px 0 28px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 15px;
+    background: var(--workspace-panel-bg-color);
+    isolation: isolate;
+    box-sizing: border-box;
+  }
+  .workshop-view-switch__indicator {
+    position: absolute;
+    inset: 5px auto 5px 5px;
+    width: calc(50% - 5px);
+    border-radius: 10px;
+    background: var(--card-background);
+    border: 1px solid var(--primary-color);
+    box-shadow: 0 3px 10px rgba(20, 24, 40, 0.07);
+    transition: transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    z-index: -1;
+    box-sizing: border-box;
+  }
+  .workshop-view-switch.is-catalog .workshop-view-switch__indicator {
+    transform: translateX(100%);
+  }
+  .workshop-view-switch :deep(.tab-container) {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+  .workshop-view-switch :deep(.tab) {
+    width: 100%;
+    justify-content: center;
+    min-height: 44px;
+    background: transparent;
+    border: 0;
+    color: var(--desc-color);
+    font-weight: 600;
+  }
+  .workshop-view-switch :deep(.tab.is-active) {
+    background: transparent;
+    box-shadow: none;
+    color: var(--primary-color);
+  }
+  .workshop-view-content {
+    animation: workshop-view-appear 180ms ease-out;
+  }
+  @keyframes workshop-view-appear {
+    from {
+      opacity: 0.5;
+      transform: translateY(5px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .workshop-view-switch__indicator {
+      transition: none;
+    }
+    .workshop-view-content {
+      animation: none;
+    }
+  }
+  .toolbox-catalog__content {
+    min-width: 0;
+  }
+  @media (min-width: 1200px) {
+    .toolbox-catalog__layout {
+      display: grid;
+      grid-template-columns: 180px minmax(0, 1fr);
+      gap: 24px;
+      align-items: start;
+    }
+    .toolbox-catalog__layout > .toolbox-group-filter {
+      flex-direction: column;
+      top: 16px;
+      margin: 0;
+      padding: 8px;
+      overflow: visible;
+    }
+    .toolbox-catalog__layout > .toolbox-group-filter :deep(.b-chip) {
+      width: 100%;
+      justify-content: space-between;
+      min-height: 42px;
+      border-radius: 8px;
+    }
+    .toolbox-catalog__controls {
+      grid-template-columns: minmax(0, 1fr);
+    }
   }
 </style>

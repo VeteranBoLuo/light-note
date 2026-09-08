@@ -125,7 +125,7 @@ afterEach(() => {
   document.body.innerHTML = '';
   sessionStorage.clear();
 });
-it('每次重新整理都重新选择范围，默认三类资源和四项检查', async () => {
+it('每次重新整理都重新选择范围，默认三类资源和五项检查', async () => {
   await mount();
   button('重新整理').click();
   await settle();
@@ -139,7 +139,7 @@ it('每次重新整理都重新选择范围，默认三类资源和四项检查'
     expect.objectContaining({
       scope: 'recent',
       resourceTypes: ['bookmark', 'note', 'file'],
-      checks: ['tags', 'title', 'empty', 'duplicate'],
+      checks: ['tags', 'title', 'empty', 'duplicate', 'archive'],
     }),
     expect.any(String),
   );
@@ -217,7 +217,7 @@ it('标题单项仅预检笔记，手动选择器和范围摘要同步排除其�
   await settle();
   button('下一步：选项目').click();
   await settle();
-  for (const name of ['标签建议', '空内容检查', '重复检查']) {
+  for (const name of ['标签建议', '空内容检查', '重复检查', '网页正文存档']) {
     button(name).click();
     await settle();
   }
@@ -246,7 +246,7 @@ it('仅书签不展示标题和空内容，空选择禁止继续且不发起预�
   await settle();
   expect(button('笔记标题')).toBeUndefined();
   expect(button('空内容检查')).toBeUndefined();
-  for (const name of ['标签建议', '重复检查']) {
+  for (const name of ['标签建议', '重复检查', '网页正文存档']) {
     button(name).click();
     await settle();
   }
@@ -896,4 +896,24 @@ it('消费交接后替换当前历史地址，移除一次性参数', async () =
   await mount();
   expect(api.replace).toHaveBeenCalledWith(expect.objectContaining({ query: {} }));
   expect(api.startRun).not.toHaveBeenCalled();
+});
+
+it('网页正文存档单项限定书签，移除重复适用说明，预检不调用保存接口', async () => {
+  await mount();
+  button('重新整理').click();
+  await settle();
+  button('下一步：选项目').click();
+  await settle();
+  expect(button('网页正文存档')).toBeDefined();
+  expect(document.body.textContent).not.toContain('标题建议仅用于笔记');
+  for (const name of ['标签建议', '笔记标题', '空内容检查', '重复检查']) {
+    button(name).click();
+    await settle();
+  }
+  button('下一步：定范围').click();
+  await settle();
+  button('确认整理范围').click();
+  await settle();
+  expect(api.previewRun.mock.calls.at(-1)![0]).toMatchObject({ resourceTypes: ['bookmark'], checks: ['archive'] });
+  expect(api.actOnRunSuggestion).not.toHaveBeenCalled();
 });

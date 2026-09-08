@@ -2,6 +2,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { parse } from '@vue/compiler-sfc';
 
 function read(relativePath: string) {
   return readFileSync(resolve(process.cwd(), 'src', relativePath), 'utf8');
@@ -176,9 +177,17 @@ describe('统一标签模块交互契约', () => {
     expect(detail).toContain('fetchTagSpaceResources({\n          id: tagId');
     expect(detail).toContain('if (sequence !== detailSequence) return');
     expect(detail).toContain(':aria-busy="detailRefreshing"');
-    expect(detail).toContain('v-if="detailRefreshing" class="tag-switching-overlay"');
+    const { descriptor } = parse(detail);
+    const template = descriptor.template!.content;
+    const main = template.match(/<main class="tag-space-main"[^>]*>[\s\S]*?<\/main>/u)?.[0] || '';
+    expect(main).toContain(':aria-busy="detailRefreshing"');
+    expect(main).toContain('v-if="detailRefreshing" class="tag-switching-status"');
+    expect(template.replace(main, '')).not.toContain('class="tag-switching-status"');
+    expect(detail).toMatch(/\.tag-space-main\s*\{[\s\S]*?position:\s*relative/u);
     expect(detail).toContain('<BLoading inline loading');
-    expect(detail).toMatch(/\.tag-switching-overlay\s*\{[\s\S]*?background:\s*var\(--background-color\)/u);
+    expect(detail).toMatch(/\.tag-switching-status\s*\{[\s\S]*?background:\s*var\(--card-background\)/u);
+    expect(main).toContain(':inert="detailRefreshing"');
+    expect(detail).not.toContain('tag-switching-overlay');
     expect(detail).toContain('switchingTagId ?');
     expect(detail).toContain('displayedTagId === String(sidebarTag.id)');
     expect(detail).toContain('const tags = new Map(sidebarTags.value.map');

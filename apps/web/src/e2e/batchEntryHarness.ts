@@ -1,4 +1,4 @@
-import { createApp, h } from 'vue';
+import { createApp, h, ref } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { createRouter, createMemoryHistory, RouterView } from 'vue-router';
 import { createI18n } from 'vue-i18n';
@@ -9,6 +9,7 @@ import en from '@/i18n/locales/en-US';
 import { bookmarkStore, useUserStore } from '@/store';
 import { useResourceSelectionRuntime } from '@/composables/useResourceSelection';
 import MobileAppShell from '@/components/mobile/MobileAppShell.vue';
+import Snapshot from '@/components/manage/bookmarkEditMg/BookmarkSnapshotModal.vue';
 import Host from '@/components/resourceActions/ResourceBatchTagsHost.vue';
 import '@/assets/css/index.less';
 
@@ -38,7 +39,30 @@ request.defaults.adapter = async (config) => {
   const url = String(config.url);
   const body = typeof config.data === 'string' ? JSON.parse(config.data) : config.data || {};
   let data: any = [];
-  if (url.endsWith('/getBookmarkList') || url.endsWith('/queryNoteList'))
+  if (url.endsWith('/snapshot')) {
+    const state = params.get('state') || 'failed';
+    data = {
+      content: state === 'empty' || state === 'pending' ? null : '这是此前保存的网页正文。'.repeat(60),
+      title: '网页存档示例',
+      update_time: '2026-09-07 20:00:00',
+      source: 'rendered_dom',
+      failedCount: state === 'failed' ? 3 : 0,
+      archiveTask:
+        state === 'empty'
+          ? null
+          : {
+              status: state,
+              attempts: state === 'pending' ? 0 : 1,
+              msg:
+                state === 'failed'
+                  ? '网站拒绝自动读取，请在浏览器中查看'
+                  : state === 'retry_wait'
+                    ? '读取网页超时，可稍后重试'
+                    : null,
+            },
+    };
+  } else if (url.endsWith('/archive')) data = { ok: true, status: 'pending' };
+  else if (url.endsWith('/getBookmarkList') || url.endsWith('/queryNoteList'))
     data = { items, total: items.length, page: 1, hasMore: false };
   else if (url.endsWith('/getNoteTreeFeatures')) data = { readEnabled: false, writeEnabled: false };
   else if (url.endsWith('/batchSelectionPreview'))
@@ -78,6 +102,7 @@ request.defaults.adapter = async (config) => {
 const { default: Home } = await import('@/view/home/Home.vue');
 const { default: Notes } = await import('@/view/noteLibrary/NoteLibrary.vue');
 const { default: Center } = await import('@/view/organize/OrganizeCenter.vue');
+const { default: CloudActions } = await import('@/components/cloudSpace/MobileCloudSpaceActionsDrawer.vue');
 const { default: Layout } = await import('@/view/index.vue');
 const router = createRouter({
   history: createMemoryHistory(),
@@ -89,6 +114,26 @@ const router = createRouter({
         { path: 'home', name: 'home', component: Home },
         { path: 'noteLibrary', name: 'noteLibrary', component: Notes },
         { path: 'organize', name: 'organizeCenter', component: Center },
+        {
+          path: 'cloud-menu',
+          component: {
+            setup() {
+              const open = ref(true);
+              const sort = ref('latest');
+              return () =>
+                h(CloudActions, {
+                  open: open.value,
+                  'onUpdate:open': (value: boolean) => (open.value = value),
+                  sortValue: sort.value,
+                  sortOptions: [
+                    { value: 'latest', label: '最新上传' },
+                    { value: 'name', label: '文件名称' },
+                  ],
+                  onSort: (value: string) => (sort.value = value),
+                });
+            },
+          },
+        },
       ],
     },
   ],
@@ -108,7 +153,7 @@ for (const el of [document.documentElement, document.body, document.getElementBy
   el.style.height = '100%';
   el.style.margin = '0';
 }
-await router.push(type === 'note' ? '/noteLibrary' : '/home');
+await router.push(params.get('module') === 'cloud' ? '/cloud-menu' : type === 'note' ? '/noteLibrary' : '/home');
 const app = createApp({
   setup() {
     useResourceSelectionRuntime();
@@ -117,6 +162,7 @@ const app = createApp({
         h(RouterView),
       ),
       h(Host),
+      ...(params.get('snapshot') ? [h(Snapshot, { visible: true, bookmarkId: 'fixture-bookmark' })] : []),
     ];
   },
 });

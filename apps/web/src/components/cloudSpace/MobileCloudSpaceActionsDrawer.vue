@@ -32,44 +32,44 @@
       </BButton>
     </template>
 
-    <div v-if="!hasSubView" class="mobile-cloud-actions" role="menu" :aria-label="drawerTitle">
+    <div v-if="!hasSubView" class="mobile-page-actions" role="menu" :aria-label="drawerTitle">
       <BButton
         v-for="action in resourceHubActions"
         :key="action.key"
-        class="mobile-cloud-actions__item"
+        class="mobile-page-actions__item"
         role="menuitem"
         @click="selectResourceHubAction(action.key)"
       >
-        <span class="mobile-cloud-actions__icon" aria-hidden="true">
-          <SvgIcon :src="action.icon" size="21" />
+        <span class="mobile-page-actions__icon" aria-hidden="true">
+          <SvgIcon :src="action.icon" size="20" />
         </span>
-        <span class="mobile-cloud-actions__copy"><strong>{{ action.label }}</strong></span>
+        <span class="mobile-page-actions__copy"
+          ><strong>{{ action.label }}</strong></span
+        >
       </BButton>
-      <BButton class="mobile-cloud-actions__item has-divider" role="menuitem" @click="openManageFolders">
-        <span class="mobile-cloud-actions__icon mobile-cloud-actions__icon--folder" aria-hidden="true">
-          <SvgIcon :src="icon.common.folder" size="22" />
+      <BButton class="mobile-page-actions__item has-divider" role="menuitem" @click="openManageFolders">
+        <span class="mobile-page-actions__icon" aria-hidden="true">
+          <SvgIcon :src="icon.common.folderOutline" size="20" />
         </span>
-        <span class="mobile-cloud-actions__copy">
+        <span class="mobile-page-actions__copy">
           <strong>{{ t('cloudSpace.manageFolders') }}</strong>
-          <small>{{ t('cloudSpace.manageFoldersDescription') }}</small>
         </span>
       </BButton>
-      <BButton class="mobile-cloud-actions__item" role="menuitem" @click="view = 'sort'">
-        <span class="mobile-cloud-actions__icon" aria-hidden="true">
-          <SvgIcon :src="icon.cloudSpace.sort" size="21" />
+      <BButton class="mobile-page-actions__item has-description" role="menuitem" @click="view = 'sort'">
+        <span class="mobile-page-actions__icon" aria-hidden="true">
+          <SvgIcon :src="icon.cloudSpace.sort" size="20" />
         </span>
-        <span class="mobile-cloud-actions__copy">
+        <span class="mobile-page-actions__copy">
           <strong>{{ t('cloudSpace.sort') }}</strong>
           <small>{{ currentSortLabel }}</small>
         </span>
       </BButton>
-      <BButton class="mobile-cloud-actions__item" role="menuitem" @click="selectBatchAction">
-        <span class="mobile-cloud-actions__icon" aria-hidden="true">
-          <SvgIcon :src="icon.filterPanel.check" size="19" />
+      <BButton class="mobile-page-actions__item" role="menuitem" @click="selectBatchAction">
+        <span class="mobile-page-actions__icon" aria-hidden="true">
+          <SvgIcon :src="icon.filterPanel.check" size="20" />
         </span>
-        <span class="mobile-cloud-actions__copy">
-          <strong>{{ t(batchMode ? 'cloudSpace.exitBatch' : 'cloudSpace.batchAction') }}</strong>
-          <small>{{ t('cloudSpace.batchActionDescription') }}</small>
+        <span class="mobile-page-actions__copy">
+          <strong>{{ t(batchMode ? 'common.exitBatch' : 'common.batchActions') }}</strong>
         </span>
       </BButton>
     </div>
@@ -444,77 +444,9 @@
 </script>
 
 <style lang="less" scoped>
-  .mobile-cloud-actions {
-    display: grid;
-    gap: 6px;
-    padding: 12px 16px max(18px, env(safe-area-inset-bottom));
-  }
-
-  .mobile-cloud-actions__item {
-    position: relative;
-    width: 100%;
-    min-height: 64px;
-    height: auto;
-    justify-content: flex-start;
-    gap: 12px;
-    padding: 10px 14px;
-    border: 1px solid transparent;
-    border-radius: var(--mobile-control-radius, 10px);
-    background: var(--workspace-panel-bg-color) !important;
-  }
-
-  .mobile-cloud-actions__item:active {
-    border-color: var(--resource-file-color, #ff8a00);
-  }
-
-  .mobile-cloud-actions__item.has-divider {
-    margin-top: 10px;
-  }
-
-  .mobile-cloud-actions__item.has-divider::before {
-    position: absolute;
-    right: 0;
-    bottom: calc(100% + 5px);
-    left: 0;
-    height: 1px;
-    background: var(--mobile-row-divider, var(--surface-divider-color));
-    content: '';
-  }
-
-  .mobile-cloud-actions__icon {
-    width: 24px;
-    display: inline-flex;
-    flex: 0 0 24px;
-    justify-content: center;
-    color: var(--resource-file-color, #ff8a00);
-  }
-
-  .mobile-cloud-actions__icon--folder {
-    transform: translateY(-1px);
-  }
-
-  .mobile-cloud-actions__copy {
-    min-width: 0;
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 2px;
-    line-height: 1.35;
-    text-align: left;
-    white-space: normal;
-  }
-
-  .mobile-cloud-actions__copy strong {
-    color: var(--text-color);
-    font-size: 15px;
-    font-weight: 600;
-  }
-
-  .mobile-cloud-actions__copy small {
-    color: var(--desc-color);
-    font-size: 12px;
-    font-weight: 400;
+  @import '../mobile/mobilePageActions.less';
+  .mobile-page-actions {
+    padding: 10px 16px max(18px, env(safe-area-inset-bottom));
   }
 
   .mobile-cloud-sort {
@@ -754,7 +686,6 @@
     border-radius: var(--mobile-control-radius, 10px);
   }
 
-  html.light-note-mobile-rendering .mobile-cloud-actions__item:active,
   html.light-note-mobile-rendering .mobile-folder-form :deep(.b-input:focus-visible) {
     border-color: var(--resource-file-color, #ff8a00) !important;
   }

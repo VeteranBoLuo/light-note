@@ -233,3 +233,42 @@ describe('useResourcePickerSearch', () => {
     expect(picker.searchFailed.value).toBe(false);
   });
 });
+
+describe('complete mixed material browsing', () => {
+  it('keeps global result order and totals while recovering from a failed next page', async () => {
+    const cursor = {
+      type: 'all' as const,
+      offset: 0,
+      score: 0,
+      time: '2026-09-08 10:00:00',
+      resourceType: 'file',
+      id: 'f1',
+    };
+    fetchGlobalSearchMock
+      .mockReset()
+      .mockResolvedValueOnce({
+        items: [item('note', 'n1'), item('bookmark', 'b1'), item('file', 'f1')],
+        typeTotals: { note: 2, bookmark: 1, file: 1 },
+        total: 4,
+        hasMore: true,
+        nextCursor: cursor,
+      } as any)
+      .mockRejectedValueOnce(new Error('network'))
+      .mockResolvedValueOnce({ items: [item('note', 'n2')], hasMore: false, nextCursor: null } as any);
+    const picker = useResourcePickerSearch({
+      exhaustive: true,
+      allowedTypes: ['note', 'bookmark', 'file'],
+      singleTypePageSize: 40,
+    });
+    await picker.searchNow('');
+    expect(picker.results.value.map(resourceItemKey)).toEqual(['note:n1', 'bookmark:b1', 'file:f1']);
+    expect(fetchGlobalSearchMock.mock.calls[0][3]).toMatchObject({ paginationMode: 'global' });
+    await picker.loadMore();
+    expect(picker.loadMoreFailed.value).toBe(true);
+    expect(picker.total.value).toBe(4);
+    expect(picker.results.value).toHaveLength(3);
+    await picker.loadMore();
+    expect(picker.results.value.map(resourceItemKey)).toEqual(['note:n1', 'bookmark:b1', 'file:f1', 'note:n2']);
+    expect(picker.hasMore.value).toBe(false);
+  });
+});

@@ -1,4 +1,5 @@
 import pool from '../db/index.js';
+import { archiveFailure } from './bookmarkArchivePolicy.js';
 import { EXPLICIT_WEB_READ_MAX_BYTES, fetchWebMeta } from './fetchWebMeta.js';
 import { requestAi } from './agent/aiGateway.js';
 import { classifyAiQuotaErrorCode } from '@lightnote/shared/ai-quota-protocol';
@@ -11,76 +12,6 @@ import { invalidatePersonalKnowledgeCache } from './personalKnowledgeSearch.js';
 const SNAPSHOT_LIMIT = 200_000; // 存档正文上限 ~200K 字符,够完整留存又不至于爆库
 const MIN_SNAPSHOT_CHARS = 100; // 正文少于此视为没真正抓到(SPA 空壳/纯导航残渣),不存空快照骗人
 const SNAPSHOT_FETCH_TIMEOUT = 15000; // 快照是后台/手动任务、不阻塞用户,给更宽松超时(实时 AI 抓取仍用默认 8s)
-
-function boundedPositiveInteger(value, fallback, maximum) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
-  return Math.min(maximum, Math.floor(parsed));
-}
-
-/**
- * 自动存档是免费旁路，不能因为用户批量收藏而无限创建外网连接。队列只约束后台抓取，
- * 满载时返回 false 让书签主事务照常成功；手动“生成网页存档”另有 HTTP 级限频。
- */
-export function createBackgroundArchiveScheduler({
-  run,
-  concurrency = 3,
-  maxOutstanding = 100,
-  maxOutstandingPerActor = 20,
-  onDrop,
-} = {}) {
-  const execute = typeof run === 'function' ? run : async () => undefined;
-  const queue = [];
-  const actorOutstanding = new Map();
-  let active = 0;
-
-  const totalOutstanding = () => active + queue.length;
-  const decrementActor = (actorId) => {
-    const next = Math.max(0, Number(actorOutstanding.get(actorId) || 0) - 1);
-    if (next) actorOutstanding.set(actorId, next);
-    else actorOutstanding.delete(actorId);
-  };
-  const pump = () => {
-    while (active < concurrency && queue.length) {
-      const job = queue.shift();
-      active += 1;
-      Promise.resolve()
-        .then(() => execute(job.actorId, job.resourceId))
-        .catch(() => undefined)
-        .finally(() => {
-          active -= 1;
-          decrementActor(job.actorId);
-          pump();
-        });
-    }
-  };
-
-  return Object.freeze({
-    schedule(actorId, resourceId) {
-      const normalizedActor = String(actorId || '').trim();
-      const normalizedResource = String(resourceId || '').trim();
-      if (!normalizedActor || !normalizedResource) return false;
-      const actorCount = Number(actorOutstanding.get(normalizedActor) || 0);
-      const reason =
-        totalOutstanding() >= maxOutstanding
-          ? 'global_limit'
-          : actorCount >= maxOutstandingPerActor
-            ? 'actor_limit'
-            : '';
-      if (reason) {
-        onDrop?.(reason);
-        return false;
-      }
-      actorOutstanding.set(normalizedActor, actorCount + 1);
-      queue.push({ actorId: normalizedActor, resourceId: normalizedResource });
-      pump();
-      return true;
-    },
-    status() {
-      return { active, queued: queue.length, total: totalOutstanding() };
-    },
-  });
-}
 
 function waitForSnapshotRetry(delayMs, signal) {
   return new Promise((resolve, reject) => {
@@ -122,12 +53,18 @@ export async function ensureBookmarkSnapshotTable() {
       title VARCHAR(512) DEFAULT NULL,
       content LONGTEXT,
       char_count INT NOT NULL DEFAULT 0,
+      source VARCHAR(20) DEFAULT NULL,
+      summary TEXT DEFAULT NULL,
+      summary_at DATETIME DEFAULT NULL,
       create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       PRIMARY KEY (bookmark_id),
       KEY idx_user (user_id)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='书签网页正文存档(防死链)'
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='书签网页正文存档(防死链)'
   `);
+  if (await columnMissing('bookmark_snapshot', 'source')) {
+    await pool.query('ALTER TABLE bookmark_snapshot ADD COLUMN source VARCHAR(20) DEFAULT NULL');
+  }
   // AI 摘要(I 批):基于存档正文生成,缓存复用
   if (await columnMissing('bookmark_snapshot', 'summary')) {
     await pool.query('ALTER TABLE `bookmark_snapshot` ADD COLUMN `summary` TEXT DEFAULT NULL COMMENT "AI 摘要"');
@@ -140,7 +77,7 @@ export async function ensureBookmarkSnapshotTable() {
 }
 
 // 归档指定书签的网页正文(抓取 + 落库,幂等覆盖)。校验书签归属当前用户。
-export async function archiveBookmark(userId, bookmarkId, { signal } = {}) {
+export async function archiveBookmark(userId, bookmarkId, { signal, persist = true, retry = true } = {}) {
   const [rows] = await pool.query('SELECT id, url, name FROM bookmark WHERE id = ? AND user_id = ? AND del_flag = 0', [
     bookmarkId,
     userId,
@@ -157,7 +94,7 @@ export async function archiveBookmark(userId, bookmarkId, { signal } = {}) {
     signal,
   });
   // 抓取类失败(网络抖动/反爬/超时偶发)短暂重试一次:很多站"时好时坏",一次重试能明显提升成功率
-  if (!meta.ok && meta.reason === 'FETCH_FAILED') {
+  if (retry && !meta.ok && archiveFailure(meta.reason).retryable) {
     await waitForSnapshotRetry(1500, signal);
     meta = await fetchWebMeta(url, {
       bodyLimit: SNAPSHOT_LIMIT,
@@ -168,69 +105,56 @@ export async function archiveBookmark(userId, bookmarkId, { signal } = {}) {
       signal,
     });
   }
-  if (!meta.ok) {
-    // 归档失败给出更贴切的原因(SPA/需登录常见)
-    const MSG = {
-      EMPTY_CONTENT: '该网页正文为空(多为需 JS 渲染的单页应用或需登录),无法存档',
-      JS_REQUIRED: '该网页需要脚本渲染，但未能提取到正文，无法存档',
-      AUTH_REQUIRED: '该网页需要登录后查看，无法在不使用站点账号的情况下存档',
-      ACCESS_CHALLENGE: '该网页触发了访问验证，暂时无法存档',
-      ACCESS_DENIED: '该网页拒绝自动读取，暂时无法存档',
-      RENDERER_UNAVAILABLE: '网页渲染服务暂不可用，无法存档',
-      RENDERER_BUSY: '网页渲染任务较多，请稍后重试存档',
-      RENDER_TIMEOUT: '网页渲染超时，请稍后重试存档',
-      NOT_HTML: '该链接不是网页(文件/图片等),无法存档',
-      FETCH_FAILED: '网页无法访问(可能反爬、需登录或已失效),归档失败',
-      BLOCKED_HOST: '拒绝访问该地址',
-      INVALID_URL: '网址格式无效',
-    };
-    return { ok: false, reason: meta.reason || 'fetch_failed', msg: MSG[meta.reason] || '归档失败' };
-  }
+  if (!meta.ok) return archiveFailure(meta.reason);
   const content = meta.bodyText || '';
   // 正文太短(SPA 需 JS 渲染、纯导航/空壳)→ 不存空快照,明确返回失败,避免「有快照却打开是空的」
   if (content.trim().length < MIN_SNAPSHOT_CHARS) {
-    return { ok: false, reason: 'empty_content', msg: '未能提取到正文(可能是需 JS 渲染的页面),未生成快照' };
+    return archiveFailure('EMPTY_CONTENT');
   }
   const title = (meta.title || rows[0].name || '').slice(0, 512);
   const u = String(url).slice(0, 2048);
-  await pool.query(
-    `INSERT INTO bookmark_snapshot (bookmark_id, user_id, url, title, content, char_count) VALUES (?, ?, ?, ?, ?, ?)
-     ON DUPLICATE KEY UPDATE url = ?, title = ?, content = ?, char_count = ?,
+  if (!persist) return { ok: true, content, title, url, source: meta.source, charCount: content.length };
+  const [saved] = await pool.query(
+    `INSERT INTO bookmark_snapshot (bookmark_id, user_id, url, title, content, char_count, source)
+     SELECT ?, ?, ?, ?, ?, ?, ? FROM bookmark WHERE id = ? AND user_id = ? AND del_flag = 0 AND BINARY url = BINARY ?
+     ON DUPLICATE KEY UPDATE url = ?, title = ?, content = ?, char_count = ?, source = VALUES(source),
        summary = NULL, summary_at = NULL, update_time = CURRENT_TIMESTAMP`,
-    [bookmarkId, userId, u, title, content, content.length, u, title, content, content.length],
+    [
+      bookmarkId,
+      userId,
+      u,
+      title,
+      content,
+      content.length,
+      meta.source || 'static_html',
+      bookmarkId,
+      userId,
+      url,
+      u,
+      title,
+      content,
+      content.length,
+    ],
   );
+  if (!saved.affectedRows) return archiveFailure('RESOURCE_CHANGED');
   await invalidatePersonalKnowledgeCache(userId);
   return { ok: true, charCount: content.length, title };
 }
 
-async function runBackgroundArchive(userId, bookmarkId) {
+// 入库完成后排队；任务状态持久化，由资源治理 Worker 续跑。
+export async function archiveBookmarkBackground(userId, bookmarkId) {
   try {
-    // 抓取失败的重试已下沉到 archiveBookmark 内部,这里只负责吞异常 + 记 warn,不阻塞新增流程
-    const r = await archiveBookmark(userId, bookmarkId);
-    if (!r.ok) {
-      console.warn(`[snapshot] 书签 ${bookmarkId} 归档失败: ${r.reason || 'unknown'} ${r.msg || ''}`.trim());
-    }
-  } catch (e) {
-    console.warn(`[snapshot] 书签 ${bookmarkId} 归档异常:`, safeAgentError(e));
+    const { enqueueBookmarkArchive } = await import('./bookmarkArchiveJobs.js');
+    return Boolean((await enqueueBookmarkArchive(userId, bookmarkId))?.ok);
+  } catch (error) {
+    console.warn('[snapshot] enqueue failed code=%s', error.code || 'QUEUE_FAILED');
+    return false;
   }
-}
-
-const backgroundArchiveScheduler = createBackgroundArchiveScheduler({
-  run: runBackgroundArchive,
-  concurrency: boundedPositiveInteger(process.env.BOOKMARK_ARCHIVE_BACKGROUND_CONCURRENCY, 3, 10),
-  maxOutstanding: boundedPositiveInteger(process.env.BOOKMARK_ARCHIVE_BACKGROUND_MAX_OUTSTANDING, 100, 1_000),
-  maxOutstandingPerActor: boundedPositiveInteger(process.env.BOOKMARK_ARCHIVE_BACKGROUND_MAX_PER_ACCOUNT, 20, 200),
-  onDrop: (reason) => console.warn('[snapshot] 后台归档队列已保护性降级 reason=%s', reason),
-});
-
-// 新增书签时只进入有界后台队列。返回 false 仅表示本次自动存档未排队，书签保存不得因此失败。
-export function archiveBookmarkBackground(userId, bookmarkId) {
-  return backgroundArchiveScheduler.schedule(userId, bookmarkId);
 }
 
 export async function getBookmarkSnapshot(userId, bookmarkId) {
   const [rows] = await pool.query(
-    'SELECT bookmark_id, url, title, content, char_count, summary, summary_at, update_time FROM bookmark_snapshot WHERE bookmark_id = ? AND user_id = ? LIMIT 1',
+    'SELECT bookmark_id, url, title, content, char_count, source, summary, summary_at, update_time FROM bookmark_snapshot WHERE bookmark_id = ? AND user_id = ? LIMIT 1',
     [bookmarkId, userId],
   );
   return rows[0] || null;
@@ -304,7 +228,7 @@ export async function summarizeBookmark(
   if (!summary) return { ok: false, reason: 'empty', msg: '摘要生成失败' };
   if (persist) {
     await pool.query(
-      'UPDATE bookmark_snapshot SET summary = ?, summary_at = CURRENT_TIMESTAMP WHERE bookmark_id = ? AND user_id = ?',
+      'UPDATE bookmark_snapshot SET summary = ?, summary_at = CURRENT_TIMESTAMP, update_time = update_time WHERE bookmark_id = ? AND user_id = ?',
       [summary, bookmarkId, userId],
     );
   }

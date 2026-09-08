@@ -1,7 +1,15 @@
+import * as browserPush from '../router_handle/browserPushHandle.js';
+import rateLimit from 'express-rate-limit';
 import express from 'express';
 import * as notificationHandle from '../router_handle/notificationHandle.js';
 
 const router = express.Router();
+
+const pushLimit = rateLimit({ windowMs: 60000, limit: 30 });
+router.post('/browser/config', pushLimit, browserPush.config);
+router.post('/browser/subscribe', pushLimit, browserPush.subscribe);
+router.post('/browser/activate', pushLimit, browserPush.activate);
+router.post('/browser/unsubscribe', pushLimit, browserPush.unsubscribe);
 
 router.post('/list', notificationHandle.list);
 router.post('/unreadCount', notificationHandle.unreadCount);

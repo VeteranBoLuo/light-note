@@ -291,7 +291,21 @@ describe('resolveHelpSources 旧来源安全补全', () => {
   });
 });
 
+function mockActivityStatement(sql) {
+  const text = String(sql);
+  if (text.includes('FROM user_activity_metadata')) return [[{ startedAt: '2026-01-01 00:00:00.000000' }]];
+  if (text.includes('FROM user_activity_daily') && text.includes('GROUP BY a.activity_date')) {
+    return [
+      Array.from({ length: 7 }, (_, i) => ({ d: `2026-08-${String(i + 5).padStart(2, '0')}`, c: i === 6 ? 6 : 3 })),
+    ];
+  }
+  if (text.includes('FROM user_activity_daily')) return [[{ today: 19, period: 23 }]];
+  return null;
+}
+
 function mockAdminOverviewSnapshotStatement(sql) {
+  const activity = mockActivityStatement(sql);
+  if (activity) return activity;
   const statement = String(sql);
   if (statement.includes('admin_overview_snapshot_resources')) {
     return [
@@ -309,7 +323,7 @@ function mockAdminOverviewSnapshotStatement(sql) {
   if (statement.includes('FROM todo_items') && !statement.includes('same_time_baseline')) {
     return [[{ total: 188, createdToday: 6, pending: 63, dueToday: 3, overdue: 17, completedToday: 9 }]];
   }
-  if (statement.includes('AS activeToday')) {
+  if (statement.includes('AS businessErrors')) {
     return [[{ activeToday: 19, active7d: 31, total: 4359, businessErrors: 46, invalidRequests: 0, serverErrors: 0 }]];
   }
   if (statement.includes('AS totalCount') && statement.includes('FROM ai_executions')) {
@@ -321,13 +335,13 @@ function mockAdminOverviewSnapshotStatement(sql) {
 describe('getAdminOverviewSnapshot 首屏快照', () => {
   beforeEach(() => query.mockReset());
 
-  it('只用一批七个查询返回核心指标，不等待趋势、同期或最近列表', async () => {
+  it('以每日汇总和有界健康查询返回核心指标，不等待趋势、同期或最近列表', async () => {
     query.mockImplementation(async (sql) => mockAdminOverviewSnapshotStatement(sql) || [[]]);
     const res = mockRes();
 
     await getAdminOverviewSnapshot({ user: { role: 'root' }, body: { hideInternal: true } }, res);
 
-    expect(query).toHaveBeenCalledTimes(7);
+    expect(query).toHaveBeenCalledTimes(9);
     const resourceSql = String(
       query.mock.calls.find(([sql]) => String(sql).includes('admin_overview_snapshot_resources'))?.[0],
     );
@@ -339,10 +353,10 @@ describe('getAdminOverviewSnapshot 首屏快照', () => {
     expect(todoSql).toContain("osr.resource_type = 'todo'");
     expect(todoSql).toContain('AS createdToday');
 
-    const activitySql = String(query.mock.calls.find(([sql]) => String(sql).includes('AS activeToday'))?.[0]);
+    const activitySql = String(query.mock.calls.find(([sql]) => String(sql).includes('FROM user_activity_daily'))?.[0]);
     expect(activitySql).toContain('COUNT(DISTINCT CASE');
-    expect(activitySql).toContain('"routeMatched":true');
-    expect(activitySql).toContain('api_log.request_time >= ?');
+    expect(activitySql).not.toContain('api_logs');
+    expect(activitySql).toContain('a.activity_date >= ?');
     expect(activitySql).not.toContain('user_sessions');
 
     const aiCalls = query.mock.calls.filter(([sql]) => String(sql).includes('FROM ai_executions'));
@@ -360,7 +374,7 @@ describe('getAdminOverviewSnapshot 首屏快照', () => {
     expect(payload.data).toMatchObject({
       users: { total: 206, today: 1 },
       resources: { bookmarkTotal: 1069, noteTotal: 399, fileTotal: 195, trashCount: 82 },
-      active: { today: 19, week: 31 },
+      active: { today: 19, week: 23 },
       ai: { todayCount: 31, totalCount: 31 },
       pending: { opinion: 3, security: 4 },
     });
@@ -413,6 +427,8 @@ describe('getAdminOverviewTrend 历史分析', () => {
 
     try {
       query.mockImplementation(async (sql) => {
+        const activity = mockActivityStatement(sql);
+        if (activity) return activity;
         const statement = String(sql);
         if (statement.includes('same_time_baseline')) return [baselineRows];
         if (statement.includes('admin_overview_trend')) return [[]];
@@ -423,15 +439,14 @@ describe('getAdminOverviewTrend 历史分析', () => {
 
       await getAdminOverviewTrend({ user: { role: 'root' }, body: { days: 7, hideInternal: true } }, res);
 
-      expect(query).toHaveBeenCalledTimes(3);
+      expect(query).toHaveBeenCalledTimes(6);
       const baselineCall = query.mock.calls.find(([sql]) => String(sql).includes('same_time_baseline'));
       expect(baselineCall?.[0]).toContain('TIME(create_time) <= ?');
-      expect(baselineCall?.[0]).toContain('COUNT(DISTINCT api_log.user_id)');
-      expect(baselineCall?.[0]).toContain('"routeMatched":true');
+      expect(baselineCall?.[0]).not.toContain('api_logs');
       expect(baselineCall?.[0]).toContain('onboarding_seed_resources');
       expect(baselineCall?.[0]).toContain("osr.resource_type = 'todo'");
       expect(baselineCall?.[1]).toEqual(
-        Array.from({ length: 7 }, () => ['2026-08-05', '2026-08-12', '17:40:30']).flat(),
+        Array.from({ length: 6 }, () => ['2026-08-05', '2026-08-12', '17:40:30']).flat(),
       );
 
       const payload = res.send.mock.calls[0][0].data;
@@ -457,11 +472,13 @@ describe('getAdminOverviewTrend 历史分析', () => {
     }
   });
 
-  it('90 天按周聚合，活跃用户使用有效业务 API 日志而不是会话表', async () => {
+  it('90 天按周聚合，活跃用户使用每日交互汇总而不是日志或会话表', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-08-06T12:00:00+08:00'));
     try {
       query.mockImplementation(async (sql) => {
+        const activity = mockActivityStatement(sql);
+        if (activity) return activity;
         const statement = String(sql);
         if (statement.includes('same_time_baseline')) return [[]];
         if (statement.includes('admin_overview_trend')) {
@@ -480,10 +497,10 @@ describe('getAdminOverviewTrend 历史分析', () => {
       await getAdminOverviewTrend({ user: { role: 'root' }, body: { days: 90, hideInternal: true } }, res);
 
       const payload = res.send.mock.calls[0][0];
-      const activeSql = String(query.mock.calls.find(([sql]) => String(sql).includes('AS activeUsers'))?.[0]);
+      const activeSql = String(query.mock.calls.find(([sql]) => String(sql).includes('FROM user_activity_daily'))?.[0]);
       expect(payload.status).toBe(200);
-      expect(activeSql).toContain('FROM api_logs api_log');
-      expect(activeSql).toContain('"routeMatched":true');
+      expect(activeSql).toContain('FROM user_activity_daily');
+      expect(activeSql).not.toContain('api_logs');
       expect(activeSql).not.toContain('user_sessions');
       expect(payload.data).toMatchObject({ days: 90, granularity: 'week', activeUsers: 23 });
       expect(payload.data.trend).toHaveLength(13);
@@ -511,6 +528,8 @@ describe('getAdminOverview 兼容接口', () => {
       query.mockImplementation(async (sql) => {
         const snapshotResult = mockAdminOverviewSnapshotStatement(sql);
         if (snapshotResult) return snapshotResult;
+        const activity = mockActivityStatement(sql);
+        if (activity) return activity;
         const statement = String(sql);
         if (statement.includes('same_time_baseline')) return [[]];
         if (statement.includes('admin_overview_trend')) {
@@ -523,7 +542,7 @@ describe('getAdminOverview 兼容接口', () => {
 
       await getAdminOverview({ user: { role: 'root' }, body: { hideInternal: true } }, res);
 
-      expect(query).toHaveBeenCalledTimes(10);
+      expect(query).toHaveBeenCalledTimes(15);
       const payload = res.send.mock.calls[0][0];
       expect(payload.status).toBe(200);
       expect(payload.data.trend.at(-1)).toMatchObject({
@@ -874,6 +893,8 @@ describe('getAgentLogs 请求摘要', () => {
 
   it('保留短提问、识别旧隐私占位符，并截断过长文本', async () => {
     query.mockImplementation(async (sql) => {
+      const activity = mockActivityStatement(sql);
+      if (activity) return activity;
       const statement = String(sql);
       if (statement.includes('SELECT a.*')) {
         return [
@@ -1150,6 +1171,8 @@ describe('getConversionFunnel', () => {
 
   it('主漏斗展示独立事件总人数，同时返回严格时序路径用于诊断', async () => {
     query.mockImplementation((sql) => {
+      const activity = mockActivityStatement(sql);
+      if (activity) return activity;
       const statement = String(sql);
       if (statement.includes('COUNT(DISTINCT p.fingerprint) AS pageView')) {
         return [[{ pageView: 100, signupOpen: 40, signupSubmit: 25, registerSuccess: 20 }]];
@@ -1541,6 +1564,8 @@ describe('getAiFeedback AI 回答反馈看板', () => {
 
   it('只读取仍保留且未删除会话中的反馈，并返回列表、汇总和原因分布', async () => {
     query.mockImplementation((sql) => {
+      const activity = mockActivityStatement(sql);
+      if (activity) return activity;
       const statement = String(sql);
       if (statement.includes('GROUP BY f.reason')) return Promise.resolve([[{ reason: 'incorrect', count: 1 }]]);
       if (statement.includes('SUM(f.rating')) {

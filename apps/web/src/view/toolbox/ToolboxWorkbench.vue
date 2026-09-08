@@ -2,7 +2,10 @@
   <main
     ref="pageRef"
     class="toolbox-workbench"
-    :class="{ 'is-resource-workspace': resourceWorkspaceActive }"
+    :class="{
+      'is-resource-workspace': resourceWorkspaceActive,
+      'is-project-detail': routeToolId.endsWith('_workspace') && Boolean(route.query.workspace),
+    }"
     data-mobile-resource-scroll
   >
     <div class="toolbox-workbench__inner">
@@ -14,12 +17,22 @@
         ><BLoading inline loading :title="t('common.loading')"
       /></div>
       <div v-else-if="!tool" class="toolbox-workbench__state is-error" role="alert">
-        <span>{{ t('toolbox.unavailable') }}</span>
+        <span>{{
+          t(
+            ['text_batch', 'text_diff', 'markdown_checker'].includes(routeToolId)
+              ? 'toolbox.retired'
+              : 'toolbox.unavailable',
+          )
+        }}</span>
         <BButton size="small" @click="returnToToolboxParent">{{ t('toolbox.back') }}</BButton>
       </div>
 
       <template v-else>
-        <header class="toolbox-workbench__hero" :class="`is-${presentation.accent}`">
+        <header
+          v-if="!tool.id.endsWith('_workspace')"
+          class="toolbox-workbench__hero"
+          :class="`is-${presentation.accent}`"
+        >
           <span class="toolbox-workbench__icon"><SvgIcon :src="presentation.icon" size="30" /></span>
           <div class="toolbox-workbench__hero-copy">
             <span class="toolbox-workbench__category">{{ t(`toolbox.category.${presentation.category}`) }}</span>
@@ -33,28 +46,43 @@
               </span>
             </span>
           </div>
-          <span class="toolbox-workbench__price" :class="{ 'is-free': tool.price.kind === 'free' }">
-            <small>{{ t('toolbox.workbench.runCost') }}</small>
-            <strong>{{ workbenchCostLabel }}</strong>
-          </span>
         </header>
+        <p v-if="tool.id === 'ocr_to_text' && ocrUsage" class="toolbox-ocr-usage" role="status">{{
+          t('toolbox.workbench.ocrRemaining', {
+            pages: ocrUsage.remainingPages,
+            time: new Date(ocrUsage.resetsAt).toLocaleString(),
+          })
+        }}</p>
 
         <section v-if="tool.executionMode === 'browser' && localToolComponent" class="toolbox-workbench__surface">
           <component :is="localToolComponent" :tool-id="routeToolId" />
         </section>
         <section v-else-if="tool.executionMode === 'browser'" class="toolbox-workbench__state is-error" role="alert">
-          <span>{{ t('toolbox.unavailable') }}</span>
+          <span>{{
+            t(
+              ['text_batch', 'text_diff', 'markdown_checker'].includes(routeToolId)
+                ? 'toolbox.retired'
+                : 'toolbox.unavailable',
+            )
+          }}</span>
           <BButton size="small" @click="returnToToolboxParent">{{ t('toolbox.back') }}</BButton>
         </section>
 
         <section
           v-else-if="tool.executionMode === 'service' && serviceToolComponent"
           class="toolbox-workbench__surface"
+          :class="{ 'is-project': tool.id.endsWith('_workspace') }"
         >
-          <component :is="serviceToolComponent" :tool-id="tool.id" />
+          <component :is="serviceToolComponent" :tool-id="tool.id" @return-to-workshop="returnToToolboxParent" />
         </section>
         <section v-else-if="tool.executionMode === 'service'" class="toolbox-workbench__state is-error" role="alert">
-          <span>{{ t('toolbox.unavailable') }}</span>
+          <span>{{
+            t(
+              ['text_batch', 'text_diff', 'markdown_checker'].includes(routeToolId)
+                ? 'toolbox.retired'
+                : 'toolbox.unavailable',
+            )
+          }}</span>
           <BButton size="small" @click="returnToToolboxParent">{{ t('toolbox.back') }}</BButton>
         </section>
 
@@ -62,7 +90,7 @@
           <div class="toolbox-paid-panel">
             <template v-if="!quote">
               <nav
-                v-if="!isPromptTool"
+                v-if="!isPromptTool && tool.id !== 'ocr_to_text'"
                 ref="workflowSwitchRef"
                 class="toolbox-workflow-switch"
                 :aria-label="t('toolbox.workbench.stepInput')"
@@ -318,11 +346,22 @@
                         >
                       </BButton>
                     </div>
+                    <p v-if="!isPromptTool && tool.executionMode === 'ai_skill'" class="toolbox-reading-scope">{{
+                      t('toolbox.workbench.readingScope')
+                    }}</p>
                     <div class="toolbox-billing-note"
                       ><SvgIcon :src="selectedBillingIcon" size="16" /><span>{{ selectedBillingRule }}</span></div
                     >
                     <BButton type="primary" :loading="quoting || uploading" :disabled="!canQuote" @click="requestQuote">
-                      {{ quoting ? t('toolbox.workbench.quoting') : t('toolbox.workbench.getQuote') }}
+                      {{
+                        quoting
+                          ? t('common.loading')
+                          : t(
+                              tool.id === 'ocr_to_text'
+                                ? 'toolbox.workbench.startFreeOcr'
+                                : 'toolbox.workbench.getQuote',
+                            )
+                      }}
                       <SvgIcon :src="icon.toolbox.arrow" size="15" />
                     </BButton>
                   </section>
@@ -385,6 +424,34 @@
         </section>
       </template>
     </div>
+    <section v-if="tool && ['ai_skill', 'worker'].includes(tool.executionMode)" class="toolbox-mobile-execute">
+      <span>{{
+        isPromptTool
+          ? selectedBillingSummary
+          : t('toolbox.workbench.runSummarySelected', { count: selectedCount, max: tool.input.maxItems })
+      }}</span>
+      <BButton v-if="quote" type="primary" :loading="starting" :disabled="insufficientBilling" @click="startJob">{{
+        t('toolbox.workbench.start')
+      }}</BButton>
+      <BButton
+        v-else
+        type="primary"
+        :loading="quoting || uploading"
+        :disabled="
+          compactWorkflowStep === 'sources' && !isPromptTool && tool.id !== 'ocr_to_text' ? !selectedCount : !canQuote
+        "
+        @click="
+          compactWorkflowStep === 'sources' && !isPromptTool && tool.id !== 'ocr_to_text'
+            ? selectCompactWorkflowStep('design')
+            : requestQuote()
+        "
+        >{{
+          compactWorkflowStep === 'sources' && !isPromptTool && tool.id !== 'ocr_to_text'
+            ? t('toolbox.workbench.designStep')
+            : t(tool.id === 'ocr_to_text' ? 'toolbox.workbench.startFreeOcr' : 'toolbox.workbench.getQuote')
+        }}</BButton
+      >
+    </section>
   </main>
 </template>
 
@@ -403,11 +470,13 @@
   import {
     createToolboxClientRequestId,
     createToolboxJob,
+    createFreeOcrJob,
     createToolboxQuote,
     fetchToolboxCatalog,
     inferToolboxDocumentMime,
     uploadToolboxDocument,
     type ToolboxCatalogItem,
+    type ToolboxCatalog,
     type ToolboxQuote,
   } from '@/api/toolbox';
   import type { ResourcePickerType } from '@/composables/useResourcePickerSearch';
@@ -423,11 +492,7 @@
     TOOLBOX_WORKFLOW_PRESENTATION,
   } from '@/config/toolbox';
   import { useUserStore } from '@/store';
-  import {
-    createLocalId,
-    formatToolboxBytes,
-    TOOLBOX_LOCAL_DELIVERY_EVENT,
-  } from '@/utils/toolboxLocal';
+  import { createLocalId, formatToolboxBytes, TOOLBOX_LOCAL_DELIVERY_EVENT } from '@/utils/toolboxLocal';
   import {
     restoreToolboxScrollSnapshot,
     returnFromToolboxPage,
@@ -455,6 +520,15 @@
   const user = useUserStore();
   const { growth, load: loadGrowth } = useGrowth();
   const { status: aiQuotaStatus, load: loadAiQuota } = useAiQuotaStatus({ autoLoad: false });
+  const ocrUsage = ref<ToolboxCatalog['ocrUsage']>();
+  const ocrPolicy = ref<ToolboxCatalog['ocrPolicy']>();
+  const freeOcrDescription = computed(() =>
+    t('toolbox.workbench.freeOcrHint', {
+      pages: ocrPolicy.value?.maxPages ?? '—',
+      size: ocrPolicy.value ? ocrPolicy.value.maxBytes / 1024 / 1024 : '—',
+      daily: ocrPolicy.value?.dailyPages ?? '—',
+    }),
+  );
   const tool = ref<ToolboxCatalogItem | null>(null);
   const pageRef = ref<HTMLElement | null>(null);
   const paidPanelRef = ref<HTMLElement | null>(null);
@@ -518,29 +592,32 @@
       ? t('settings.ai.quotaUnlimited')
       : formatAiQuotaTokens(aiQuotaStatus.value?.availableRemaining ?? aiQuotaStatus.value?.remaining, locale.value),
   );
-  const workbenchCostLabel = computed(() => {
-    if (!tool.value || tool.value.price.kind === 'free') return t('toolbox.free');
-    if (supportsAiQuota.value) return t('toolbox.billingChoiceLabel');
-    return t('toolbox.points', { min: tool.value.price.min, max: tool.value.price.max });
-  });
   const selectedBillingIcon = computed(() =>
-    selectedBillingMedium.value === 'ai_quota' ? icon.settings.ai : icon.toolbox.coin,
+    tool.value?.id === 'ocr_to_text'
+      ? icon.toolbox.ocr
+      : selectedBillingMedium.value === 'ai_quota'
+        ? icon.settings.ai
+        : icon.toolbox.coin,
   );
   const selectedBillingSummary = computed(() =>
-    t(
-      selectedBillingMedium.value === 'ai_quota'
-        ? 'toolbox.workbench.runSummaryAiQuotaBillingValue'
-        : 'toolbox.workbench.runSummaryPointsBillingValue',
-    ),
+    tool.value?.id === 'ocr_to_text'
+      ? t('toolbox.free')
+      : t(
+          selectedBillingMedium.value === 'ai_quota'
+            ? 'toolbox.workbench.runSummaryAiQuotaBillingValue'
+            : 'toolbox.workbench.runSummaryPointsBillingValue',
+        ),
   );
   const selectedBillingRule = computed(() =>
-    t(
-      selectedBillingMedium.value === 'ai_quota'
-        ? 'toolbox.aiQuotaRule'
-        : isPromptTool.value
-          ? 'toolbox.promptPointsRule'
-          : 'toolbox.pointsRule',
-    ),
+    tool.value?.id === 'ocr_to_text'
+      ? freeOcrDescription.value
+      : t(
+          selectedBillingMedium.value === 'ai_quota'
+            ? 'toolbox.aiQuotaRule'
+            : isPromptTool.value
+              ? 'toolbox.promptPointsRule'
+              : 'toolbox.pointsRule',
+        ),
   );
   const billingChoices = computed(() => [
     {
@@ -588,7 +665,7 @@
   const executionDescription = computed(() => {
     if (tool.value?.executionMode === 'browser') return t('toolbox.workbench.localExecutionDescription');
     if (tool.value?.executionMode === 'service') return t('toolbox.workbench.serviceExecutionDescription');
-    if (tool.value?.executionMode === 'worker') return t('toolbox.workbench.workerExecutionDescription');
+    if (tool.value?.executionMode === 'worker') return freeOcrDescription.value;
     if (supportsAiQuota.value) return t('toolbox.workbench.flexibleBillingExecutionDescription');
     if (isPromptTool.value) return t('toolbox.workbench.promptPointsExecutionDescription');
     return t('toolbox.workbench.pointsExecutionDescription');
@@ -635,7 +712,12 @@
   }
 
   useMobileTopBar(['toolboxWorkbench'], {
-    title: () => (tool.value ? t(`toolbox.tool.${tool.value.id}.name`) : t('toolbox.title')),
+    title: () =>
+      tool.value?.id.endsWith('_workspace')
+        ? t('toolbox.workspace.myProjects')
+        : tool.value
+          ? t(`toolbox.tool.${tool.value.id}.name`)
+          : t('toolbox.title'),
     onBack: returnToToolboxParent,
     searchMode: 'icon',
     showNotification: false,
@@ -670,11 +752,12 @@
     const requestedToolId = toolId.value;
     loading.value = true;
     try {
-      const loaded =
-        (await fetchToolboxCatalog()).tools.find((item) => item.id === requestedToolId && item.availability.enabled) ||
-        null;
+      const catalog = await fetchToolboxCatalog();
+      const loaded = catalog.tools.find((item) => item.id === requestedToolId && item.availability.enabled) || null;
       if (version === stateVersion) {
         tool.value = loaded;
+        ocrUsage.value = catalog.ocrUsage;
+        ocrPolicy.value = catalog.ocrPolicy;
         if (loaded) {
           selectedBillingMedium.value = loaded.billingMedia.includes('ai_quota') ? 'ai_quota' : 'points';
           if (loaded.billingMedia.includes('ai_quota')) void loadAiQuota();
@@ -738,6 +821,7 @@
       if (version === stateVersion) uploading.value = false;
     }
   }
+  let freeOcrRequest: { key: string; id: string } | null = null;
   async function requestQuote() {
     if (!tool.value || !canQuote.value || quoting.value) return;
     if (blockGuestWrite('toolbox-paid', t('inbox.guestPrompt'))) return;
@@ -747,6 +831,21 @@
     try {
       const sourceIds = await ensureUploadedSources(activeTool, version);
       if (version !== stateVersion) return;
+      if (activeTool.id === 'ocr_to_text') {
+        const input = { resourceRefs: selectedResources.value.map(({ type, id }) => ({ type, id })), sourceIds };
+        const key = JSON.stringify([toolboxRecentUseIdentityKey(user), input]);
+        if (freeOcrRequest?.key !== key) freeOcrRequest = { key, id: createToolboxClientRequestId('job') };
+        const job = await createFreeOcrJob({
+          toolId: 'ocr_to_text',
+          clientRequestId: freeOcrRequest.id,
+          input,
+        });
+        if (version === stateVersion) {
+          rememberWorkbenchScroll();
+          await router.push(`/toolbox/task/${job.id}`);
+        }
+        return;
+      }
       const result = await createToolboxQuote({
         toolId: activeTool.id,
         billingMedium: selectedBillingMedium.value,
@@ -769,6 +868,7 @@
       ]);
     } catch (error: any) {
       if (version === stateVersion) {
+        if (error.code === 'TOOLBOX_OCR_DAILY_LIMIT' && error.data?.resetsAt) ocrUsage.value = error.data;
         message.error(
           uploadFiles.value.some((entry) => entry.status === 'failed')
             ? t('toolbox.workbench.uploadFailed')
@@ -801,6 +901,7 @@
       await router.push(`/toolbox/task/${job.id}`);
     } catch (error: any) {
       if (version === stateVersion) {
+        if (error.code === 'TOOLBOX_OCR_DAILY_LIMIT' && error.data?.resetsAt) ocrUsage.value = error.data;
         message.error(t(toolboxErrorMessageKey(error, 'toolbox.workbench.startFailed')));
       }
     } finally {
@@ -860,6 +961,9 @@
 </script>
 
 <style scoped lang="less">
+  .toolbox-mobile-execute {
+    display: none;
+  }
   @import './toolboxPageScroll.less';
 
   .toolbox-workbench {
@@ -1184,9 +1288,8 @@
   }
   .toolbox-billing-choice__item strong,
   .toolbox-billing-choice__item small {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
+    white-space: normal;
   }
   .toolbox-billing-choice__item strong {
     font-size: 11px;
@@ -1290,6 +1393,26 @@
     gap: 9px;
   }
   @media (max-width: 767px) {
+    .toolbox-workbench__inner {
+      padding-bottom: 110px;
+    }
+    .toolbox-mobile-execute {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      position: fixed;
+      bottom: 12px;
+      bottom: max(12px, env(safe-area-inset-bottom));
+      left: 12px;
+      right: 12px;
+      z-index: 40;
+      padding: 12px;
+      border: 1px solid var(--surface-border-color);
+      border-radius: 14px;
+      background: var(--card-background);
+    }
+
     .toolbox-workbench {
       padding: 10px 12px calc(24px + env(safe-area-inset-bottom));
     }
@@ -1975,7 +2098,7 @@
       box-shadow: none;
     }
     .toolbox-workbench.is-resource-workspace .toolbox-paid-panel__footer.has-billing-choice {
-      grid-template-columns: minmax(0, 1fr) minmax(128px, 0.3fr);
+      grid-template-columns: minmax(0, 1fr);
       align-items: stretch;
     }
     .toolbox-workbench.is-resource-workspace .toolbox-billing-choice__item.b_btn {
@@ -2178,6 +2301,29 @@
   @media (prefers-reduced-motion: reduce) {
     .toolbox-upload-list__status.is-uploading::before {
       animation: none;
+    }
+  }
+  .toolbox-workbench__surface.is-project {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+  .toolbox-reading-scope {
+    margin: 0;
+    color: var(--desc-color);
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  .toolbox-workbench.is-project-detail .toolbox-workbench__back {
+    display: none;
+  }
+  @media (min-width: 1200px) {
+    .toolbox-workbench.is-project-detail .toolbox-workbench__inner {
+      max-width: 1440px;
+    }
+    .toolbox-workbench.is-project-detail .toolbox-workbench__back {
+      display: none;
     }
   }
 </style>

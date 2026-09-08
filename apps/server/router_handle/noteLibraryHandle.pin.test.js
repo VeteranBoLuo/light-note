@@ -965,3 +965,5 @@ describe('页面树写入 handler', () => {
     expect(lastSent(res).status).toBe(200);
   });
 });
+
+vi.mock('../util/imagePreview/service.js',()=>({previewDescriptor:(sourceType,sourceId)=>({sourceType,sourceId,status:'queued'}),hydrateImagePreviewStates:vi.fn()}));

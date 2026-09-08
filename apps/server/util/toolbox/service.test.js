@@ -4,6 +4,14 @@ const mocks = vi.hoisted(() => ({
   createNote: vi.fn(),
   createTemporaryDocumentSource: vi.fn(),
   resolvePersonalKnowledgeResourceVersions: vi.fn(),
+  prepareFreeOcrInputs: vi.fn(),
+  reserveFreeOcr: vi.fn(),
+}));
+
+vi.mock('./freeOcr.js', async (importOriginal) => ({
+  ...(await importOriginal()),
+  prepareFreeOcrInputs: mocks.prepareFreeOcrInputs,
+  reserveFreeOcr: mocks.reserveFreeOcr,
 }));
 
 vi.mock('../../db/index.js', () => ({ default: { query: vi.fn(), getConnection: vi.fn() } }));
@@ -17,8 +25,11 @@ vi.mock('../personalKnowledgeSearch.js', () => ({
 
 const {
   createToolboxJob,
+  createFreeOcrJob,
   createToolboxQuote,
   getToolboxArtifact,
+  getStudyProgress,
+  saveStudyProgress,
   listToolboxHomeTasks,
   saveToolboxArtifactToNote,
   toolboxServiceInternals,
@@ -28,6 +39,122 @@ const { toolboxInputDigest } = await import('./catalog.js');
 describe('toolbox service boundaries', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('creates OCR without a quote, financial balance check or financial ledger write', async () => {
+    mocks.resolvePersonalKnowledgeResourceVersions.mockResolvedValue([{ type: 'file', id: 'file-1', version: 'v1' }]);
+    mocks.prepareFreeOcrInputs.mockResolvedValue([{ descriptor: { id: 'file-1' }, pages: 1, hash: 'hash' }]);
+    const connection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      query: vi.fn(async (sql) => {
+        if (sql.startsWith('SELECT id FROM user')) return [[{ id: 'owner', points: 0 }]];
+        if (sql.includes('FROM toolbox_jobs job'))
+          return [
+            [
+              {
+                id: 'free-job',
+                tool_id: 'ocr_to_text',
+                billing_medium: 'free',
+                status: 'queued',
+                billing_status: 'reserved',
+              },
+            ],
+          ];
+        return [[]];
+      }),
+    };
+    const database = {
+      getConnection: vi.fn(async () => connection),
+      query: vi.fn(async (sql) =>
+        sql.includes('FROM files')
+          ? [[{ id: 'file-1', file_name: 'scan.png', file_type: 'image/png', file_size: 1024 }]]
+          : [[]],
+      ),
+    };
+    const job = await createFreeOcrJob({
+      userId: 'owner',
+      rawInput: { resourceRefs: [{ type: 'file', id: 'file-1' }] },
+      clientRequestId: 'free-ocr-request-1',
+      database,
+    });
+    expect(job.billing).toMatchObject({ medium: 'free', quotedPoints: 0, actualPoints: 0 });
+    expect(mocks.reserveFreeOcr).toHaveBeenCalledOnce();
+    expect(connection.commit).toHaveBeenCalledOnce();
+    const statements = [...connection.query.mock.calls, ...database.query.mock.calls].map(([sql]) => sql).join('\n');
+    expect(statements).not.toMatch(/toolbox_quotes|user_growth|points_economy|ai_quota|ai_execution/);
+  });
+
+  it('does not create a new paid OCR job from an old active quote', async () => {
+    const connection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      query: vi.fn(async (sql) =>
+        sql.includes('FROM toolbox_quotes')
+          ? [
+              [
+                {
+                  id: 'old-quote',
+                  tool_id: 'ocr_to_text',
+                  status: 'active',
+                  pricing_version: 'toolbox-billing-v2',
+                  expires_at: new Date(Date.now() + 60000),
+                },
+              ],
+            ]
+          : [[]],
+      ),
+    };
+    await expect(
+      createToolboxJob({
+        userId: 'owner',
+        quoteId: 'old-quote',
+        clientRequestId: 'paid-ocr-request',
+        database: { getConnection: async () => connection },
+      }),
+    ).rejects.toMatchObject({ code: 'TOOLBOX_PRICING_CHANGED' });
+    expect(connection.query.mock.calls.every(([sql]) => !sql.includes('INSERT'))).toBe(true);
+    expect(connection.rollback).toHaveBeenCalledOnce();
+  });
+
+  it('scopes learning state to the owner and rejects stale versions and unknown cards', async () => {
+    const row = { id: 'study', artifact_version: 2, meta_json: { study: { version: 1, cards: [{ id: 'card' }] } } };
+    const database = { query: vi.fn(async (sql) => (sql.includes('FROM toolbox_artifacts') ? [[row]] : [[]])) };
+    for (const input of [
+      { version: 1, cardId: 'card', mastered: true },
+      { version: 2, cardId: 'other', mastered: true },
+    ]) {
+      await expect(saveStudyProgress({ userId: 'owner', artifactId: 'study', input, database })).rejects.toMatchObject({
+        code: 'TOOLBOX_STUDY_CARD_INVALID',
+      });
+    }
+    expect(database.query.mock.calls.every(([sql]) => !sql.includes('INSERT'))).toBe(true);
+    await saveStudyProgress({
+      userId: 'owner',
+      artifactId: 'study',
+      input: { version: 2, cardId: 'card', mastered: true },
+      database,
+    });
+    await saveStudyProgress({
+      userId: 'owner',
+      artifactId: 'study',
+      input: { version: 2, cardId: 'card', mastered: true },
+      database,
+    });
+    const writes = database.query.mock.calls.filter(([sql]) => sql.includes('INSERT'));
+    expect(writes).toHaveLength(2);
+    expect(writes[0][1]).toEqual(['owner', 'study', 2, 'card', 1]);
+    expect(writes[1][1]).toEqual(writes[0][1]);
+    expect(writes[0][0]).toContain('ON DUPLICATE KEY UPDATE mastered');
+    database.query.mockResolvedValueOnce([[]]);
+    await expect(getStudyProgress({ userId: 'other-owner', artifactId: 'study', database })).rejects.toMatchObject({
+      code: 'TOOLBOX_ARTIFACT_NOT_FOUND',
+    });
+    expect(database.query.mock.lastCall[1]).toEqual(['study', 'other-owner']);
   });
 
   it('validates cloud OCR files against the same MIME and per-file size limits as uploads', async () => {
@@ -1165,5 +1292,102 @@ describe('toolbox service boundaries', () => {
     expect(failedFinalizationConnection.commit).not.toHaveBeenCalled();
     expect(failedFinalizationConnection.rollback).toHaveBeenCalledOnce();
     expect(failedStateConnection.rollback).toHaveBeenCalledOnce();
+  });
+});
+
+describe('source project context', () => {
+  it('returns optional historical context without changing billing', () => {
+    expect(toolboxServiceInternals.formatJob({ id: 'job', options_json: '{}' }).sourceWorkspaceId).toBeNull();
+    expect(
+      toolboxServiceInternals.formatJob({ id: 'job', options_json: '{"sourceWorkspaceId":"project"}' })
+        .sourceWorkspaceId,
+    ).toBe('project');
+  });
+  it('rejects request reuse with another project before reservations', async () => {
+    const connection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      query: vi
+        .fn()
+        .mockResolvedValue([[{ id: 'job', quote_id: 'quote', options_json: '{"sourceWorkspaceId":"first"}' }]]),
+    };
+    await expect(
+      createToolboxJob({
+        userId: 'owner',
+        quoteId: 'quote',
+        clientRequestId: 'job-request-1234',
+        sourceWorkspaceId: 'second',
+        database: { getConnection: async () => connection },
+      }),
+    ).rejects.toMatchObject({ code: 'TOOLBOX_IDEMPOTENCY_KEY_REUSED' });
+    expect(connection.rollback).toHaveBeenCalledOnce();
+    expect(connection.query).toHaveBeenCalledTimes(1);
+  });
+  it('rejects non-string source context before opening a transaction', async () => {
+    const database = { getConnection: vi.fn() };
+    await expect(createToolboxJob({ userId: 'owner', sourceWorkspaceId: {}, database })).rejects.toMatchObject({
+      code: 'TOOLBOX_WORKSPACE_INVALID',
+    });
+    expect(database.getConnection).not.toHaveBeenCalled();
+  });
+});
+
+describe('source project transaction boundary', () => {
+  it.each([true, false])('checks project ownership before inserting task rows (available=%s)', async (available) => {
+    const snapshot = {
+      resourceRefs: [{ type: 'note', id: 'n', version: 'v1' }],
+      sourceIds: [],
+      options: { detailLevel: 'balanced' },
+    };
+    const quote = {
+      id: 'q',
+      pricing_version: 'toolbox-billing-v2',
+      tool_id: 'research_brief',
+      billing_medium: 'ai_quota',
+      input_digest: toolboxInputDigest({ toolId: 'research_brief', input: snapshot }),
+      input_snapshot_json: JSON.stringify(snapshot),
+      status: 'active',
+      expires_at: new Date(Date.now() + 60_000),
+      quoted_points: 0,
+    };
+    const connection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      query: vi
+        .fn()
+        .mockResolvedValueOnce([[]])
+        .mockResolvedValueOnce([[quote]])
+        .mockResolvedValueOnce([available ? [{ id: 'source' }] : []])
+        .mockResolvedValue([{ affectedRows: 1 }]),
+    };
+    const operation = createToolboxJob({
+      userId: 'owner',
+      quoteId: 'q',
+      clientRequestId: 'source-job-request-1234',
+      sourceWorkspaceId: 'source',
+      database: { getConnection: async () => connection },
+    });
+    if (!available) {
+      await expect(operation).rejects.toMatchObject({ code: 'TOOLBOX_WORKSPACE_UNAVAILABLE' });
+      expect(connection.query).toHaveBeenCalledTimes(3);
+      expect(connection.rollback).toHaveBeenCalledOnce();
+    } else {
+      await expect(operation).resolves.toMatchObject({
+        sourceWorkspaceId: 'source',
+        billing: { medium: 'ai_quota', quotedPoints: 0 },
+      });
+      const insert = connection.query.mock.calls.find(([sql]) => sql.includes('INSERT INTO toolbox_jobs'));
+      expect(insert[1]).toContain(JSON.stringify({ detailLevel: 'balanced', sourceWorkspaceId: 'source' }));
+      expect(snapshot.options).toEqual({ detailLevel: 'balanced' });
+      expect(connection.commit).toHaveBeenCalledOnce();
+    }
+    expect(connection.query.mock.calls[2]).toEqual([
+      expect.stringContaining('LOCK IN SHARE MODE'),
+      ['source', 'owner'],
+    ]);
   });
 });

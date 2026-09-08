@@ -6,7 +6,7 @@ import { marked } from 'marked';
 import { parseNoteContent, renderNoteForAi } from '../noteSemantic.js';
 import { createBookmarkExactUrlHash } from './bookmarkExactUrlService.js';
 
-export const SUGGESTION_TYPES = ['tags', 'title', 'empty', 'duplicate'];
+export const SUGGESTION_TYPES = ['tags', 'title', 'empty', 'duplicate', 'archive'];
 export const RESOURCE_TYPES = ['bookmark', 'note', 'file'];
 export const hash = (value) => crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
 export const normalizeName = (value) =>
@@ -160,6 +160,7 @@ export function buildSnapshot(type, row, tags = [], now = Date.now()) {
     source,
     ...(type === 'bookmark'
       ? {
+          hasArchive: Boolean(row.hasArchive),
           bookmarkMeta: {
             url: row.url,
             name: row.name || '',
@@ -242,6 +243,14 @@ export function buildRuleSuggestions(snapshots, checks, { tagMode = 'untagged' }
       else if (s.empty)
         add('empty', 'info', s.protected ? '内容为空，但仍被使用或有子页面，建议保留' : '内容为空，仍在 7 天保护期内');
       else add('empty', 'no_suggestion', '没有发现空内容问题');
+    }
+    if (checks.includes('archive') && supportsOrganizeCheck(s.type, 'archive')) {
+      if (s.hasArchive) add('archive', 'no_suggestion', '当前网址已有正文存档，无需重复读取');
+      else if (!s.source.url) add('archive', 'info', '书签没有有效网址，无法保存正文');
+      else
+        add('archive', 'pending', '尚无当前网址的正文存档；确认后在后台读取，失败保留已有内容，不消耗 AI 额度', {
+          action: 'archive',
+        });
     }
     if (checks.includes('duplicate') && supportsOrganizeCheck(s.type, 'duplicate')) {
       const members = duplicates.get(`${s.type}:${s.duplicateKey}`) || [];

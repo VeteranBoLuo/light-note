@@ -103,7 +103,7 @@ describe('资源批量操作与成果抽屉契约', () => {
     expect(bookmarkTable).toContain('@click.stop="handleBookmarkUrlClick($event, bookmarkItem)"');
     expect(bookmarkTable).toContain('<BookmarkAiDialog');
     expect(bookmarkTable).toContain('openBookmarksInAi([bookmarkItem])');
-    expect(bookmarkTable).toContain(':selected-ids="selectedAiOrganizeIds"');
+    expect(bookmarkTable).toContain('selection-module="bookmarks"');
     expect(bookmarkTable).not.toContain('<BButton v-if="selectedRows.length > 0" type="danger"');
 
     expect(bookmarkTableMobile).toContain(':show-mobile-primary="false"');

@@ -1,3 +1,4 @@
+import { syncCloudImageById } from '../imagePreview/references.js';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import pool from '../../db/index.js';
@@ -295,6 +296,7 @@ export async function confirmManagedCloudUpload({
         source: inboxSource,
       });
     }
+    await syncCloudImageById(connection, createdFile.id);
     commitAttempted = true;
     await connection.commit();
   } catch (error) {

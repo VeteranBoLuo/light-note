@@ -15,6 +15,7 @@
       </BButton>
     </div>
 
+    <slot name="browser-push-prompt" />
     <div class="nt-tabs" role="tablist" :aria-label="t('notification.categoryLabel')">
       <BButton
         v-for="tab in tabs"
@@ -46,6 +47,20 @@
       </BButton>
     </div>
 
+    <div v-if="locateState !== 'idle'" class="nt-locate-state" role="status">
+      <span>{{
+        locateState === 'loading'
+          ? t('notification.loading')
+          : locateState === 'found'
+            ? t('browserPush.located')
+            : locateState === 'error'
+              ? t('browserPush.locateFailed')
+              : t('browserPush.unavailable')
+      }}</span>
+      <BButton v-if="locateState === 'error'" size="small" @click="emit('retry-locate')">{{
+        t('browserPush.retry')
+      }}</BButton>
+    </div>
     <div class="nt-list">
       <div v-if="loading && !items.length" class="nt-state">{{ t('notification.loading') }}</div>
       <div v-else-if="!items.length" class="nt-state">
@@ -60,7 +75,8 @@
               v-for="item in group.items"
               :key="item.id"
               class="nt-item"
-              :class="{ unread: !item.isRead }"
+              :class="{ unread: !item.isRead, 'is-target': item.id === targetId }"
+              :data-notification-id="item.id"
               @click="emit('item-click', item)"
               v-click-log="{ module: '通知中心', operation: `查看通知【${renderTitle(item)}】` }"
             >
@@ -136,6 +152,8 @@
 
   withDefaults(
     defineProps<{
+      targetId?: string;
+      locateState?: 'idle' | 'loading' | 'found' | 'unavailable' | 'error';
       items: NotificationItem[];
       groups: NotificationGroup[];
       tabs: NotificationTab[];
@@ -155,9 +173,10 @@
       todoId: (item: NotificationItem) => string;
       todoActionState: (item: NotificationItem) => 'pending' | 'completed' | 'unavailable';
     }>(),
-    { mobile: false, desktopPage: false, wideDesktopPage: false, showHeader: true },
+    { targetId: '', locateState: 'idle', mobile: false, desktopPage: false, wideDesktopPage: false, showHeader: true },
   );
   const emit = defineEmits<{
+    'retry-locate': [];
     'mark-all': [];
     'switch-tab': [value: string];
     'item-click': [item: NotificationItem];
@@ -180,6 +199,22 @@
 </script>
 
 <style scoped lang="less">
+  .nt-locate-state {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    font-size: 12px;
+    color: var(--primary-color);
+  }
+  .nt-item.is-target {
+    outline: 2px solid var(--primary-color);
+    outline-offset: -2px;
+  }
+  .nt-item.is-target .nt-item-title {
+    color: var(--primary-color);
+  }
+
   .nt-panel {
     width: 370px;
     max-width: calc(100vw - 24px);

@@ -61,17 +61,21 @@ pnpm preview
 pnpm --filter server check:schema
 ```
 
+已获当前任务远程只读授权的 Schema 检查可使用[数据库只读模式](./development.md#数据库环境隔离)，不需要开启远程写入。
+
 任何断言输出都表示未就绪；先处理明确获授权的 migration，再重新检查。发布授权不自动扩展为未说明的线上数据迁移、批量修复或破坏性操作。
 
 按变更选择额外门禁：
 
 | 范围 | 检查 |
 | --- | --- |
-| AI 文档、OCR、文件预览 | `check:ocr`、`check:file-previews` |
+| AI 文档、OCR、文件预览 | `check:ocr`、`check:file-previews`；托管图片另执行 `check:image-previews` |
 | 书签图标 | `check:bookmark-icons` |
 | 动态网页识别与快照 | `check:web-renderer` |
 | 资源治理 | `check:resource-governance` |
 | 模块化 AI | `check:ai-model-access` |
+
+浏览器推送需先经授权应用 `apps/server/migrations/20260908_browser_push.sql`，再运行 `pnpm --filter server check:browser-push` 验证 Schema 与 VAPID 配置。API 与 `browserPushWorker.js` 使用同一持久 VAPID 密钥和站点 Origin；默认服务开关关闭，启动本地预览及部署脚本均纳入该 Worker。密钥不由部署过程临时生成，服务开关关闭不影响站内通知。推送凭据不进入日志，测试应区分厂商受理、设备展示及点击定位，不能用模拟推送替代真实网络与设备验收。
 
 涉及相应异步流程时确认对应 Worker 随项目脚本或 PM2 正常运行。任务状态以领域任务表、租约和错误码为准，不用 API 日志代替 Worker 验收。
 
@@ -135,3 +139,7 @@ Web 发布先把新产物完整解包到独立 staging 目录，通过基本产�
 - 日志无新错误、敏感信息或请求风暴。
 
 健康检查失败不会自动证明已经回滚。依据部署脚本输出的精确快照和回滚命令处理，不对宽泛目录执行删除，不在原因不明时连续重启掩盖问题。
+
+### 托管图片预览迁移
+
+上线前执行图片预览加法迁移与 Schema 门禁；后台 `backfill:image-assets` 默认只读，受授权执行时使用 `--apply --checkpoint=绝对路径` 保存可恢复游标。回填包含上传登记、正文、版本、模板、云文件及书签保留引用，所有阶段完成并对账前不得打开图片清理开关。归属歧义的物理位置保持保留。生成与读取可分模块启用，关闭时卡片显示占位，不回退原图；回滚保留表、对象及待清理账本，详见 [图片预览回滚说明](../apps/server/migrations/20260908_common_image_previews_rollback.md)。

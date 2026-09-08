@@ -3,7 +3,6 @@
     <section v-if="files.length === 0" class="document-text-empty">
       <span><SvgIcon :src="toolIcon" size="36" /></span>
       <div>
-        <BChip tone="success">{{ t('toolbox.localFreeLabel') }}</BChip>
         <h2>{{ emptyTitle }}</h2>
         <p>{{ toolDescription }}</p>
       </div>
@@ -67,6 +66,7 @@
               <BButton :disabled="!activeOutput" @click="copyActive"
                 ><SvgIcon :src="icon.toolbox.copy" size="15" />{{ t('toolbox.local.copyResult') }}</BButton
               >
+              <BButton :disabled="!activeOutput" @click="saveAsNote">{{ t('toolbox.task.saveToNote') }}</BButton>
               <BButton @click="downloadResults"
                 ><SvgIcon :src="icon.toolbox.download" size="15" />{{ downloadLabel }}</BButton
               >
@@ -124,6 +124,8 @@
 
 <script setup lang="ts">
   import { computed, reactive, ref, watch } from 'vue';
+  import { useRouter } from 'vue-router';
+  import { stageAiNoteDraft } from '@/utils/aiNoteDraft';
   import { useI18n } from 'vue-i18n';
   import type { ToolboxToolId } from '@lightnote/shared/toolbox-protocol';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -146,7 +148,26 @@
 
   type DocumentTextToolId = Extract<ToolboxToolId, 'pdf_text_extractor' | 'docx_to_markdown'>;
   const props = defineProps<{ toolId: DocumentTextToolId }>();
+  import { usePdfSession } from './pdfSession';
+  const publishPdf = usePdfSession(
+    async () => files.value,
+    (incoming) => {
+      if (isPdf.value) {
+        clearAll();
+        loadFiles(incoming);
+      }
+    },
+  );
   const { t } = useI18n();
+  const router = useRouter();
+  function saveAsNote() {
+    const token = stageAiNoteDraft({
+      title: activeFileName.value.replace(/\.[^.]+$/, ''),
+      content: activeOutput.value,
+      type: 'markdown',
+    });
+    void router.push({ path: '/noteLibrary/add', query: { type: 'markdown', aiDraft: token } });
+  }
   const files = ref<File[]>([]);
   const pdfResults = ref<PdfTextFileResult[]>([]);
   const docxResults = ref<DocxMarkdownResult[]>([]);
@@ -261,6 +282,7 @@
       return message.warning(t('toolbox.documentText.tooLarge'));
     }
     files.value = selected;
+    if (isPdf.value) publishPdf();
     activeFile.value = 0;
     resetResults();
   }

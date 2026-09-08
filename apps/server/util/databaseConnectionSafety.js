@@ -59,16 +59,20 @@ export function assertDatabaseConnectionSafety(env = process.env) {
   const runtime = resolveLightNoteRuntime(env);
   const databaseScope = isLocalDatabaseHost(env.DB_HOST) ? 'local' : 'remote';
   const remoteWriteOverride = explicitTrue(env.ALLOW_REMOTE_DATABASE_WRITES);
+  const readOnly = explicitTrue(env.ALLOW_REMOTE_DATABASE_READS);
+  if (readOnly && remoteWriteOverride)
+    throw safetyError('DATABASE_ACCESS_MODE_CONFLICT', '远程只读与远程写入开关不能同时启用');
 
   if (
     runtime.runtime !== 'production' &&
     runtime.runtime !== 'test' &&
     databaseScope === 'remote' &&
-    !remoteWriteOverride
+    !remoteWriteOverride &&
+    !readOnly
   ) {
     throw safetyError(
       'REMOTE_DATABASE_WRITE_BLOCKED',
-      '本地运行时拒绝连接远程数据库；请改用本地数据库。确需远程写入时必须显式设置 ALLOW_REMOTE_DATABASE_WRITES=true',
+      '本地运行时拒绝连接远程数据库；授权只读检查可显式设置 ALLOW_REMOTE_DATABASE_READS=true，写入仍须独立授权',
     );
   }
 
@@ -77,5 +81,6 @@ export function assertDatabaseConnectionSafety(env = process.env) {
     runtimeSource: runtime.source,
     databaseScope,
     remoteWriteOverride,
+    readOnly,
   });
 }

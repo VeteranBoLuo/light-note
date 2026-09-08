@@ -37,9 +37,10 @@
               @update:checked="(val: boolean) => toggleRow(item.id, val)"
             />
           </span>
-          <img
+          <ManagedImagePreview
             v-if="isPreviewableImage(item)"
-            :src="item.fileUrl"
+            :source="{ sourceType: 'cloud_file', sourceId: String(item.id) }"
+            :initial="item.imagePreview"
             class="file-card-thumb"
             :alt="item.fileName"
             loading="lazy"
@@ -107,6 +108,15 @@
                   icon: icon.manage_categoryBtn_tag,
                   function: () => openTagDialog(item),
                 },
+                ...(canJoinProject
+                  ? [
+                      {
+                        label: $t('toolbox.project.join'),
+                        icon: icon.toolbox.research,
+                        function: () => joinProject([{ type: 'file', id: String(item.id), title: item.fileName }]),
+                      },
+                    ]
+                  : []),
                 ...(isAiDocumentFileNameSupported(item.fileName)
                   ? [
                       {
@@ -362,6 +372,15 @@
                         label: $t('cloudSpace.relateTags'),
                         icon: icon.manage_categoryBtn_tag,
                         function: () => openTagDialog(item),
+                      },
+                    ]
+                  : []),
+                ...(canJoinProject
+                  ? [
+                      {
+                        label: $t('toolbox.project.join'),
+                        icon: icon.toolbox.research,
+                        function: () => joinProject([{ type: 'file', id: String(item.id), title: item.fileName }]),
                       },
                     ]
                   : []),
@@ -719,6 +738,9 @@
   </div>
 </template>
 <script setup lang="ts">
+  import ManagedImagePreview from '@/components/imagePreview/ManagedImagePreview.vue';
+  import { useProjectResourceAction } from '@/composables/useProjectResourceAction';
+  const { canJoinProject, joinProject } = useProjectResourceAction();
   import { useResourceSelection } from '@/composables/useResourceSelection';
   import type { SelectionOperation } from '@/store/resourceSelection';
   import { computed, defineAsyncComponent, nextTick, ref, watch } from 'vue';
@@ -824,6 +846,9 @@
     const file = mobileActionFile.value;
     if (!file) return [];
     return [
+      ...(canJoinProject.value
+        ? [{ key: 'joinProject', label: t('toolbox.project.join'), icon: icon.toolbox.research }]
+        : []),
       { key: 'rename', label: t('common.reName'), icon: icon.cloudSpace.rename },
       { key: 'download', label: t('cloudSpace.download'), icon: icon.cloudSpace.download },
       { key: 'tags', label: t('cloudSpace.relateTags'), icon: icon.manage_categoryBtn_tag },
@@ -849,7 +874,8 @@
   function handleMobileFileAction(action: MobilePageActionItem) {
     const file = mobileActionFile.value;
     if (!file) return;
-    if (action.key === 'rename') openRenameModal(file);
+    if (action.key === 'joinProject') joinProject([{ type: 'file', id: String(file.id), title: file.fileName }]);
+    else if (action.key === 'rename') openRenameModal(file);
     else if (action.key === 'download') void handleDownloadFile(file);
     else if (action.key === 'tags') void openTagDialog(file);
     else if (action.key === 'ai') openFilesInAi([file]);

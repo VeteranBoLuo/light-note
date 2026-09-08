@@ -1,6 +1,11 @@
 type ErrorLike = { code?: unknown; status?: unknown } | null | undefined;
 
 const EXACT_ERROR_KEYS: Readonly<Record<string, string>> = Object.freeze({
+  TOOLBOX_OCR_BUSY: 'toolbox.error.ocrBusy',
+  TOOLBOX_OCR_DAILY_LIMIT: 'toolbox.error.ocrDailyLimit',
+  TOOLBOX_OCR_PAGE_LIMIT: 'toolbox.error.ocrPageLimit',
+  TOOLBOX_OCR_FILE_LIMIT: 'toolbox.error.ocrFileLimit',
+  TOOLBOX_OCR_EMPTY: 'toolbox.error.ocrEmpty',
   AI_SKILL_SCOPE_STALE: 'toolbox.error.sourceChanged',
   TOOLBOX_RESOURCE_STALE: 'toolbox.error.sourceChanged',
   TOOLBOX_RESOURCE_UNAVAILABLE: 'toolbox.error.sourceUnavailable',

@@ -14,6 +14,20 @@
       </div>
 
       <template v-else>
+        <BButton
+          v-if="sourceProjectAvailable"
+          @click="
+            router.push({
+              path: '/toolbox/research_workspace',
+              query: { workspace: job.sourceWorkspaceId, tab: 'resources', entry: 'result' },
+            })
+          "
+          >{{ t('toolbox.project.source') }}</BButton
+        >
+        <div v-if="pendingProjectLink" class="toolbox-task__refresh-warning" role="alert">
+          <span>{{ t('toolbox.project.linkFailed') }}</span>
+          <BButton :loading="linkingProject" @click="retryProjectLink">{{ t('toolbox.project.retryLink') }}</BButton>
+        </div>
         <header class="toolbox-task__header">
           <span class="toolbox-task__tool-icon"><SvgIcon :src="presentation.icon" size="24" /></span>
           <div class="toolbox-task__title">
@@ -105,6 +119,12 @@
             >
           </section>
 
+          <p
+            v-if="sourceReviewCount || coverageWarnings.length"
+            class="toolbox-task__coverage-persistent"
+            role="status"
+            >{{ t('toolbox.task.partialReading') }}</p
+          >
           <section class="toolbox-result">
             <BTabs v-model:active-tab="activeTab" variant="line" :options="tabOptions" />
 
@@ -112,10 +132,28 @@
               <div class="toolbox-result__document">
                 <div class="toolbox-result__document-head">
                   <span>{{ t('toolbox.task.resultEyebrow') }}</span>
-                  <h2>{{ artifact.title }}</h2>
                   <p>{{ resultMaterialSummary }}</p>
+                  <div class="toolbox-result__deliver"
+                    ><BButton size="small" @click="copyResult">{{ t('toolbox.local.copyResult') }}</BButton
+                    ><BButton size="small" @click="downloadResult">{{
+                      t('toolbox.local.downloadResult')
+                    }}</BButton></div
+                  >
                 </div>
-                <article class="toolbox-result__markdown" v-html="renderedContent"></article>
+                <StudyResultCards
+                  v-if="artifact.meta?.study?.cards?.length"
+                  :artifact-id="artifact.id"
+                  :version="artifact.version"
+                  :cards="artifact.meta.study.cards"
+                >
+                  <article ref="resultContentRef" class="toolbox-result__markdown" v-html="renderedContent"></article>
+                </StudyResultCards>
+                <article
+                  v-else
+                  ref="resultContentRef"
+                  class="toolbox-result__markdown"
+                  v-html="renderedContent"
+                ></article>
               </div>
               <aside class="toolbox-result__rail">
                 <section v-if="!isPromptCreation" class="toolbox-result__evidence-note">
@@ -149,11 +187,11 @@
                     v-if="savedTargetUnavailable"
                     type="primary"
                     :loading="saving"
-                    @click="saveArtifact('recreate_missing_target')"
+                    @click="openSaveDialog('recreate_missing_target')"
                   >
                     {{ saving ? t('toolbox.task.saving') : t('toolbox.task.saveAsNewNote') }}
                   </BButton>
-                  <BButton v-else-if="!artifactSaved" type="primary" :loading="saving" @click="saveArtifact('save')">
+                  <BButton v-else-if="!artifactSaved" type="primary" :loading="saving" @click="openSaveDialog('save')">
                     {{ saving ? t('toolbox.task.saving') : t('toolbox.task.saveToNote') }}
                   </BButton>
                   <BButton v-else type="primary" :loading="openingSavedNote" @click="openSavedNote">
@@ -183,7 +221,10 @@
                     <SvgIcon :src="source.icon" size="18" />
                   </span>
                   <span class="toolbox-source-list__copy">
-                    <strong>{{ source.title }}</strong>
+                    <BButton v-if="source.target" class="toolbox-source-link" @click="router.push(source.target)">{{
+                      source.title
+                    }}</BButton
+                    ><strong v-else>{{ source.title }}</strong>
                     <span class="toolbox-source-list__meta">
                       <small v-for="meta in source.meta" :key="meta">{{ meta }}</small>
                     </span>
@@ -201,7 +242,7 @@
               <div v-else class="toolbox-result__empty">{{ t('toolbox.task.noSources') }}</div>
             </div>
 
-            <div v-else-if="!usesAiQuota" class="toolbox-result__billing">
+            <div v-else-if="!usesAiQuota && job?.billing.medium !== 'free'" class="toolbox-result__billing">
               <div
                 ><span>{{ t('toolbox.task.quoted') }}</span
                 ><strong>{{ job.billing.quotedPoints }}</strong></div
@@ -258,14 +299,57 @@
         </div>
       </template>
     </div>
+    <BModal
+      v-model:visible="saveDialogVisible"
+      :title="t('toolbox.task.saveToNote')"
+      :show-footer="false"
+      fullscreen-mobile
+    >
+      <div class="toolbox-save-form">
+        <BInput v-model:value="saveTitle" :maxlength="120" :aria-label="t('toolbox.task.noteTitle')" />
+        <label>{{ t('toolbox.task.saveLocation') }}</label>
+        <BSelect
+          v-model:value="saveParentId"
+          :options="saveParentOptions"
+          :placeholder="t('toolbox.task.rootLocation')"
+        />
+        <div>
+          <BButton @click="loadSaveParents(null)">{{ t('toolbox.task.rootLocation') }}</BButton>
+          <BButton :disabled="!saveParentId" @click="loadSaveParents(saveParentId)">{{
+            t('toolbox.task.browseChildren')
+          }}</BButton>
+        </div>
+        <label v-if="saveProjectOptions.length"
+          >{{ t('toolbox.task.linkProject')
+          }}<BSelect
+            v-model:value="saveProjectId"
+            :options="saveProjectOptions"
+            :placeholder="t('toolbox.task.noProject')"
+        /></label>
+        <BButton
+          type="primary"
+          :loading="saving"
+          :disabled="!saveTitle.trim() || saveProjectsLoading"
+          @click="confirmSaveDialog"
+          >{{ t('toolbox.task.saveToNote') }}</BButton
+        >
+      </div>
+    </BModal>
   </main>
 </template>
 
 <script setup lang="ts">
+  import StudyResultCards from './components/StudyResultCards.vue';
   import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+  import { resolveResourceRoute } from '@/utils/resourceNavigation';
+  import { copyTextToClipboard } from '@/utils/clipboard';
+  import { downloadToolboxBlob, safeDownloadBaseName } from '@/utils/toolboxLocal';
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
   import type { ToolboxToolId } from '@lightnote/shared/toolbox-protocol';
+  import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import BSelect from '@/components/base/BasicComponents/BSelect.vue';
+  import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
@@ -278,6 +362,8 @@
     fetchToolboxArtifact,
     fetchToolboxJob,
     saveToolboxArtifact,
+    fetchToolboxWorkspaces,
+    addToolboxWorkspaceResources,
     type ToolboxArtifact,
     type ToolboxJob,
   } from '@/api/toolbox';
@@ -288,6 +374,7 @@
   import { useNoteWorkspaceStore, useUserStore } from '@/store';
   import { buildNoteDetailRequestScope } from '@/api/noteDetailPrefetch';
   import { stripAiAnalysisCitations } from '@/utils/aiAnalysisContent';
+  import { renderMermaidBlocks } from '@/utils/mermaidRender';
   import { renderStreamingMarkdown } from '@/utils/aiMessageRender';
   import { toolboxErrorMessageKey } from '@/utils/toolboxErrorPresentation';
   import {
@@ -326,6 +413,68 @@
   const saving = ref(false);
   const openingSavedNote = ref(false);
   const savedNoteId = ref('');
+  const sourceProjectAvailable = ref(false);
+  const pendingProjectLink = ref<{ projectId: string; noteId: string } | null>(null);
+  const linkingProject = ref(false);
+  function persistProjectLink() {
+    const pending = pendingProjectLink.value;
+    window.history.replaceState(
+      {
+        ...window.history.state,
+        workshopPendingLink: pending
+          ? {
+              owner: toolboxRecentUseIdentityKey(user),
+              jobId: jobId.value,
+              ...pending,
+            }
+          : null,
+      },
+      '',
+    );
+  }
+  function restoreProjectLink() {
+    const pending = window.history.state?.workshopPendingLink;
+    pendingProjectLink.value =
+      pending?.owner === toolboxRecentUseIdentityKey(user) &&
+      pending.jobId === jobId.value &&
+      pending.noteId === savedNoteId.value &&
+      typeof pending.projectId === 'string'
+        ? { projectId: pending.projectId, noteId: pending.noteId }
+        : null;
+  }
+  async function retryProjectLink() {
+    const pending = pendingProjectLink.value;
+    if (!pending || linkingProject.value) return;
+    const owner = toolboxRecentUseIdentityKey(user);
+    linkingProject.value = true;
+    try {
+      await addToolboxWorkspaceResources(pending.projectId, [{ type: 'note', id: pending.noteId }], 'result');
+      if (owner === toolboxRecentUseIdentityKey(user) && pendingProjectLink.value === pending) {
+        pendingProjectLink.value = null;
+        persistProjectLink();
+        message.success(t('toolbox.project.added'));
+      }
+    } catch {
+      if (owner === toolboxRecentUseIdentityKey(user)) message.warning(t('toolbox.project.linkFailed'));
+    } finally {
+      if (owner === toolboxRecentUseIdentityKey(user)) linkingProject.value = false;
+    }
+  }
+  watch(
+    () => job.value?.sourceWorkspaceId,
+    async (id) => {
+      sourceProjectAvailable.value = false;
+      if (!id) return;
+      const owner = toolboxRecentUseIdentityKey(user);
+      try {
+        const projects = await fetchToolboxWorkspaces();
+        if (owner === toolboxRecentUseIdentityKey(user) && job.value?.sourceWorkspaceId === id)
+          sourceProjectAvailable.value = projects.some((p) => p.id === id && p.status !== 'archived');
+      } catch {
+        /* Saving remains available without a source project. */
+      }
+    },
+  );
   const activeTab = ref('output');
   let pollTimer = 0;
   let pollFailureCount = 0;
@@ -410,6 +559,10 @@
       const state = toolboxSourceState(source);
       return {
         key: sourceKey(source, index),
+        target: resolveResourceRoute(
+          { type, id: String(source.resourceId || source.id || '').replace(new RegExp(`^${type}:`), '') },
+          { noteReturnPath: route.fullPath },
+        ),
         type,
         icon: resourceIcon(type),
         title: sourceTitle(source, index),
@@ -450,6 +603,14 @@
         })
       : t('toolbox.task.sourceSummary', { count: sourcePresentations.value.length }),
   );
+  const resultContentRef = ref<HTMLElement | null>(null);
+  watch(
+    resultContentRef,
+    (root) => {
+      void renderMermaidBlocks(root, { interactive: true });
+    },
+    { flush: 'post' },
+  );
   const renderedContent = computed(() => {
     const content = stripAiAnalysisCitations(artifact.value?.content).replace(
       /^>\s*草稿已生成\s*·\s*待核验\s*\n+/u,
@@ -457,18 +618,37 @@
     );
     return renderStreamingMarkdown(content);
   });
+  watch(
+    renderedContent,
+    async () => {
+      await nextTick();
+      void renderMermaidBlocks(resultContentRef.value, { interactive: true });
+    },
+    { flush: 'post' },
+  );
   const tabOptions = computed(() => [
     { key: 'output', label: t('toolbox.task.outputTab') },
     ...(!isPromptCreation.value
       ? [{ key: 'sources', label: t('toolbox.task.sourcesTab'), badge: sourcePresentations.value.length }]
       : []),
-    { key: 'billing', label: t('toolbox.task.billingTab') },
+    ...(job.value?.billing.medium === 'free' ? [] : [{ key: 'billing', label: t('toolbox.task.billingTab') }]),
   ]);
 
   function returnToToolboxParent() {
     returnFromToolboxPage(router, 'task');
   }
 
+  async function copyResult() {
+    const ok = await copyTextToClipboard(String(artifact.value?.content || ''));
+    message[ok ? 'success' : 'error'](t(ok ? 'toolbox.local.copySuccess' : 'toolbox.local.copyFailed'));
+  }
+  function downloadResult() {
+    if (!artifact.value) return;
+    downloadToolboxBlob(
+      new Blob([artifact.value.content], { type: 'text/markdown;charset=utf-8' }),
+      `${safeDownloadBaseName(artifact.value.title)}.md`,
+    );
+  }
   function openAiUsage() {
     void router.push('/ai-usage');
   }
@@ -548,6 +728,7 @@
         (value.save.targetAvailability || (value.save.targetId ? 'available' : 'none')) === 'available'
           ? String(value.save.targetId || '')
           : '';
+      restoreProjectLink();
     } catch {
       if (version === requestVersion) {
         artifactLoadFailed.value = true;
@@ -582,17 +763,88 @@
       cancelling.value = false;
     }
   }
+  const saveDialogVisible = ref(false);
+  const saveProjectId = ref('');
+  const saveProjectsLoading = ref(false);
+  const saveProjectOptions = ref<{ value: string; label: string }[]>([]);
+  const saveTitle = ref('');
+  const saveParentId = ref('');
+  const saveAction = ref<'save' | 'recreate_missing_target'>('save');
+  const saveParentOptions = ref<{ value: string; label: string }[]>([]);
+  async function loadSaveParents(parentId: string | null) {
+    const ownerKey = toolboxRecentUseIdentityKey(user);
+    const currentJobId = jobId.value;
+    noteWorkspace.ensureOwner(buildNoteDetailRequestScope(user));
+    const items = await noteWorkspace.loadChildren(parentId);
+    if (ownerKey !== toolboxRecentUseIdentityKey(user) || currentJobId !== jobId.value) return;
+    saveParentOptions.value = [
+      { value: '', label: t('toolbox.task.rootLocation') },
+      ...(parentId ? saveParentOptions.value.filter((item) => item.value === parentId) : []),
+      ...items.map((item) => ({ value: item.id, label: item.title })),
+    ];
+    saveParentId.value = parentId || '';
+  }
+  async function openSaveDialog(action: 'save' | 'recreate_missing_target') {
+    saveAction.value = action;
+    saveProjectId.value = '';
+    saveProjectOptions.value = [];
+    saveProjectsLoading.value = true;
+    const ownerKey = toolboxRecentUseIdentityKey(user);
+    const currentJobId = jobId.value;
+    void fetchToolboxWorkspaces()
+      .then((projects) => {
+        if (ownerKey !== toolboxRecentUseIdentityKey(user) || currentJobId !== jobId.value) return;
+        saveProjectId.value = projects.some(
+          (p) => p.id === job.value?.sourceWorkspaceId && ['active', 'paused'].includes(p.status),
+        )
+          ? job.value!.sourceWorkspaceId!
+          : '';
+        saveProjectOptions.value = [
+          { value: '', label: t('toolbox.task.noProject') },
+          ...projects
+            .filter((project) => ['active', 'paused'].includes(project.status))
+            .map((project) => ({ value: project.id, label: project.title })),
+        ];
+      })
+      .catch(() => {
+        if (ownerKey === toolboxRecentUseIdentityKey(user) && currentJobId === jobId.value)
+          saveProjectOptions.value = [];
+      })
+      .finally(() => {
+        if (ownerKey === toolboxRecentUseIdentityKey(user) && currentJobId === jobId.value)
+          saveProjectsLoading.value = false;
+      });
+    saveTitle.value = artifact.value?.title || '';
+    saveParentId.value = '';
+    saveParentOptions.value = [{ value: '', label: t('toolbox.task.rootLocation') }];
+    saveDialogVisible.value = true;
+    try {
+      await loadSaveParents(null);
+    } catch {
+      message.warning(t('toolbox.task.locationUnavailable'));
+    }
+  }
+  async function confirmSaveDialog() {
+    const id = await saveArtifact(saveAction.value);
+    if (id) saveDialogVisible.value = false;
+  }
   async function saveArtifact(action: 'save' | 'recreate_missing_target' = 'save') {
     if (!artifact.value) return '';
     if (saving.value) return savedNoteId.value;
     if (action === 'save' && savedNoteId.value) return savedNoteId.value;
+    const ownerKey = toolboxRecentUseIdentityKey(user);
+    const currentArtifactId = artifact.value.id;
+    const selectedProjectId = saveProjectId.value;
+    const isCurrent = () => ownerKey === toolboxRecentUseIdentityKey(user) && artifact.value?.id === currentArtifactId;
     saving.value = true;
     try {
       const result = await saveToolboxArtifact(
         artifact.value.id,
         createToolboxArtifactSaveRequestId(artifact.value.id, artifact.value.version),
         action,
+        { title: saveTitle.value || artifact.value.title, parentId: saveParentId.value || null },
       );
+      if (!isCurrent()) return '';
       savedNoteId.value = result.targetId;
       artifact.value.save = {
         status: 'saved',
@@ -601,13 +853,24 @@
         targetAvailability: 'available',
       };
       registerSavedNoteInWorkspace(result.targetId);
-      message.success(t('toolbox.task.saved'));
+      if (selectedProjectId) {
+        try {
+          await addToolboxWorkspaceResources(selectedProjectId, [{ type: 'note', id: result.targetId }], 'result');
+        } catch {
+          if (isCurrent()) {
+            pendingProjectLink.value = { projectId: selectedProjectId, noteId: result.targetId };
+            persistProjectLink();
+          }
+        }
+      }
+      if (!isCurrent()) return '';
+      if (!pendingProjectLink.value) message.success(t('toolbox.task.saved'));
       return result.targetId;
     } catch (error: any) {
-      message.error(t(toolboxErrorMessageKey(error, 'toolbox.task.saveFailed')));
+      if (isCurrent()) message.error(t(toolboxErrorMessageKey(error, 'toolbox.task.saveFailed')));
       return '';
     } finally {
-      saving.value = false;
+      if (isCurrent()) saving.value = false;
     }
   }
   function registerSavedNoteInWorkspace(noteId: string) {
@@ -616,8 +879,8 @@
     noteWorkspace.ensureOwner(buildNoteDetailRequestScope(user));
     noteWorkspace.insertCreatedNote({
       id: normalizedId,
-      parentId: null,
-      title: artifact.value.title,
+      parentId: saveParentId.value || null,
+      title: saveTitle.value || artifact.value.title,
       type: 'markdown',
     });
     noteWorkspace.seedBreadcrumb(normalizedId, [{ id: normalizedId, title: artifact.value.title }]);
@@ -704,8 +967,7 @@
     window.requestAnimationFrame(() => pageRef.value?.scrollTo({ top: 0, left: 0, behavior: 'auto' }));
   }
 
-  watch(jobId, (current, previous) => {
-    if (current === previous) return;
+  watch([jobId, () => toolboxRecentUseIdentityKey(user)], () => {
     requestVersion += 1;
     clearPoll();
     job.value = null;
@@ -713,6 +975,12 @@
     artifactLoadFailed.value = false;
     artifactLoading.value = false;
     savedNoteId.value = '';
+    pendingProjectLink.value = null;
+    sourceProjectAvailable.value = false;
+    saveProjectsLoading.value = false;
+    linkingProject.value = false;
+    saving.value = false;
+    saveDialogVisible.value = false;
     activeTab.value = 'output';
     loadFailed.value = false;
     refreshFailed.value = false;
@@ -745,6 +1013,29 @@
 </script>
 
 <style scoped lang="less">
+  .toolbox-source-link {
+    width: 100%;
+    height: auto;
+    min-height: 32px;
+    padding: 0;
+    justify-content: flex-start;
+    text-align: left;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.5;
+    color: var(--primary-color);
+    background: transparent;
+  }
+  .toolbox-task__coverage-persistent {
+    padding: 12px 16px;
+    border: 1px solid var(--warning-color);
+    border-radius: 10px;
+    color: var(--text-color);
+  }
+  .toolbox-save-form {
+    display: grid;
+    gap: 16px;
+  }
   @import './toolboxPageScroll.less';
 
   .toolbox-task {
@@ -1135,6 +1426,23 @@
     line-height: 1.55;
   }
   @media (max-width: 767px) {
+    .toolbox-task__inner {
+      padding-bottom: 110px;
+    }
+    .toolbox-result__actions {
+      position: fixed;
+      z-index: 40;
+      left: 12px;
+      right: 12px;
+      bottom: 12px;
+      bottom: max(12px, env(safe-area-inset-bottom));
+      background: var(--card-background);
+      border: 1px solid var(--surface-border-color);
+    }
+    .toolbox-result__save-copy {
+      display: none;
+    }
+
     .toolbox-task {
       padding: 10px 12px calc(24px + env(safe-area-inset-bottom));
     }
@@ -1363,6 +1671,12 @@
     display: grid;
     gap: 3px;
     border-bottom: 1px solid var(--surface-divider-color);
+  }
+  .toolbox-result__deliver {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
   }
   .toolbox-result__document-head > span {
     color: var(--primary-color);

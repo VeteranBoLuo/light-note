@@ -197,11 +197,14 @@ CREATE TABLE `file_preview_artifacts` (
   `source_type` varchar(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'cloud_file',
   `file_id` bigint(20) unsigned NOT NULL,
   `owner_user_id` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `strategy` enum('archive_manifest','converted_pdf') COLLATE utf8mb4_unicode_ci NOT NULL,
+  `strategy` enum('archive_manifest','converted_pdf','image_thumbnail','image_display') COLLATE utf8mb4_unicode_ci NOT NULL,
   `strategy_version` smallint(5) unsigned NOT NULL,
   `format_id` varchar(40) COLLATE utf8mb4_unicode_ci NOT NULL,
   `source_etag` varchar(160) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
   `source_size` bigint(20) unsigned NOT NULL,
+  `source_revision` char(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT '',
+  `image_width` int unsigned NOT NULL DEFAULT 0,
+  `image_height` int unsigned NOT NULL DEFAULT 0,
   `status` enum('queued','processing','ready','failed') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'queued',
   `artifact_object_key` varchar(1024) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `artifact_size` bigint(20) unsigned NOT NULL DEFAULT '0',
@@ -215,7 +218,7 @@ CREATE TABLE `file_preview_artifacts` (
   `create_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `update_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_file_preview_artifact` (`source_type`,`file_id`,`strategy`,`strategy_version`),
+  UNIQUE KEY `uk_file_preview_artifact` (`source_type`,`file_id`,`strategy`,`strategy_version`,`source_revision`),
   KEY `idx_file_preview_owner_status` (`owner_user_id`,`status`,`update_time`),
   KEY `idx_file_preview_cleanup` (`last_access_at`,`update_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文件派生预览缓存';
@@ -230,6 +233,7 @@ CREATE TABLE `file_preview_jobs` (
   `locked_by` varchar(96) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `error_code` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `output_object_key` varchar(1024) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `output_keys_json` mediumtext COLLATE utf8mb4_unicode_ci,
   `create_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `update_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
@@ -1696,3 +1700,74 @@ CREATE TABLE IF NOT EXISTS `daily_content_review_items` (
   COMMENT='每日回顾会话中的稳定资源条目';
 
 SET FOREIGN_KEY_CHECKS = 1;
+
+-- Real interaction activity, Beijing wall-clock DATETIME, no historical API-log backfill.
+CREATE TABLE IF NOT EXISTS user_activity_daily (
+  activity_date DATE NOT NULL,
+  user_id VARCHAR(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+  first_active_at DATETIME(3) NOT NULL,
+  last_active_at DATETIME(3) NOT NULL,
+  PRIMARY KEY (activity_date, user_id),
+  KEY idx_activity_date_first_user (activity_date, first_active_at, user_id),
+  KEY idx_activity_user_date (user_id, activity_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+CREATE TABLE IF NOT EXISTS user_activity_metadata (
+  id TINYINT UNSIGNED NOT NULL,
+  started_at DATETIME(3) NOT NULL,
+  PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+INSERT IGNORE INTO user_activity_metadata (id, started_at)
+VALUES (1, DATE_ADD(UTC_TIMESTAMP(3), INTERVAL 8 HOUR));
+
+CREATE TABLE IF NOT EXISTS browser_push_subscriptions (
+ id char(36) NOT NULL PRIMARY KEY, user_id char(36) NOT NULL,
+ endpoint_hash char(64) NOT NULL, endpoint varchar(2048) NOT NULL,
+ p256dh varchar(128) NOT NULL, auth varchar(64) NOT NULL,
+ generation char(36) NOT NULL, locale varchar(16) NOT NULL DEFAULT 'zh-CN',
+ active tinyint NOT NULL DEFAULT 2 COMMENT '0 disabled, 1 enabled, 2 awaiting client binding', enabled_at datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+ UNIQUE KEY uk_push_endpoint(endpoint_hash), KEY idx_push_user(user_id, active, enabled_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+CREATE TABLE IF NOT EXISTS browser_push_jobs (
+ id bigint unsigned NOT NULL AUTO_INCREMENT PRIMARY KEY,
+ notification_id char(36) NOT NULL, subscription_id char(36) NOT NULL, generation char(36) NOT NULL,
+ status varchar(16) NOT NULL DEFAULT 'pending', attempts int NOT NULL DEFAULT 0,
+ available_at datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6), expires_at datetime(6) NOT NULL,
+ lease_token char(36) DEFAULT NULL, lease_until datetime(6) DEFAULT NULL,
+ last_code varchar(32) DEFAULT NULL, created_at datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+ UNIQUE KEY uk_push_delivery(notification_id, subscription_id),
+ KEY idx_push_claim(status, available_at, id), KEY idx_push_subscription(subscription_id, status),
+ KEY idx_push_lease(lease_token), KEY idx_push_expiry(status, expires_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Common managed image assets and authoritative usage references.
+CREATE TABLE IF NOT EXISTS image_assets (
+ id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+ owner_user_id VARCHAR(255) NOT NULL,
+ source_type VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ source_id VARCHAR(255) NOT NULL,
+ identity_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ storage_kind ENUM('local','obs') NOT NULL,
+ source_locator VARCHAR(1024) NOT NULL,
+ source_version CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ source_size BIGINT UNSIGNED NOT NULL DEFAULT 0,
+ status ENUM('active','pending_delete','deleting') NOT NULL DEFAULT 'active',
+ reconciled TINYINT NOT NULL DEFAULT 0,
+ cleanup_after DATETIME NULL,
+ delete_started_at DATETIME NULL,
+ cleanup_attempts INT UNSIGNED NOT NULL DEFAULT 0,
+ cleanup_error VARCHAR(64) NULL,
+ create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+ UNIQUE KEY uk_image_identity(identity_hash),
+ KEY idx_image_cleanup(status,cleanup_after),
+ KEY idx_image_owner(owner_user_id(191))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS image_asset_refs (
+ asset_id BIGINT UNSIGNED NOT NULL,
+ ref_type VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ ref_id VARCHAR(255) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ PRIMARY KEY(asset_id,ref_type,ref_id),
+ KEY idx_image_ref(ref_type,ref_id),
+ CONSTRAINT fk_image_ref_asset FOREIGN KEY(asset_id) REFERENCES image_assets(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -17,6 +17,9 @@
         :saving="saving"
         :resolving-url="resolvingUrl"
         :generating="generating"
+        :updated-fields="updatedFields"
+        :can-undo-meta="canUndoMeta"
+        @undo-meta="undoBookmarkMeta"
         :errors="fieldErrors"
         :tag-options="tagOptions"
         @generate="generateBookmarkMeta"
@@ -48,6 +51,9 @@
     loading,
     resolvingUrl,
     generating,
+    updatedFields,
+    canUndoMeta,
+    undoBookmarkMeta,
     fieldErrors,
     handleType,
     isEdit,

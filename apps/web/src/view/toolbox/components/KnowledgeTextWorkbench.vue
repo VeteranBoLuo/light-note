@@ -93,7 +93,7 @@
             <article v-for="file in sourceFiles.slice(0, 40)" :key="file.name">
               <SvgIcon :src="icon.toolbox.markdown" size="15" />
               <span>{{ file.name }}</span>
-              <small>{{ formatToolboxBytes(file.file?.size || new Blob([file.content]).size) }}</small>
+              <small>{{ formatToolboxBytes(file.file?.size || contentBytes(file.content)) }}</small>
             </article>
             <small v-if="sourceFiles.length > 40">{{
               t('toolbox.knowledgeText.moreFiles', { count: sourceFiles.length - 40 })
@@ -143,45 +143,7 @@
               ><SvgIcon :src="icon.message.info" size="18" /><span>{{ error }}</span></div
             >
 
-            <template v-if="markdownIssues">
-              <div class="knowledge-result-summary" :class="{ 'is-success': markdownIssues.length === 0 }">
-                <span
-                  ><SvgIcon :src="markdownIssues.length ? icon.toolbox.audit : icon.toolbox.local" size="24"
-                /></span>
-                <div
-                  ><strong>{{
-                    markdownIssues.length
-                      ? t('toolbox.knowledgeText.markdownIssues', { count: markdownIssues.length })
-                      : t('toolbox.knowledgeText.markdownHealthy')
-                  }}</strong
-                  ><small>{{
-                    markdownIssues.length
-                      ? t('toolbox.knowledgeText.markdownIssuesHint')
-                      : t('toolbox.knowledgeText.markdownHealthyHint')
-                  }}</small></div
-                >
-                <BButton v-if="markdownIssues.length" @click="downloadMarkdownReport"
-                  ><SvgIcon :src="icon.toolbox.download" size="15" />{{
-                    t('toolbox.knowledgeText.downloadReport')
-                  }}</BButton
-                >
-              </div>
-              <BTable
-                v-if="markdownIssues.length"
-                :data="markdownIssueRows"
-                :columns="markdownIssueColumns"
-                row-key="id"
-              >
-                <template #bodyCell="{ record, column }">
-                  <BChip v-if="column.key === 'severity'" :tone="record.severity === 'error' ? 'danger' : 'pending'">{{
-                    severityLabel(record.severity)
-                  }}</BChip>
-                  <span v-else>{{ record[column.key] }}</span>
-                </template>
-              </BTable>
-            </template>
-
-            <template v-else-if="frontmatterResults.length">
+            <template v-if="frontmatterResults.length">
               <div class="knowledge-result-summary is-success">
                 <span><SvgIcon :src="icon.toolbox.local" size="24" /></span>
                 <div
@@ -215,41 +177,8 @@
     </template>
 
     <template v-else>
-      <section class="knowledge-text-controls" :class="{ 'is-text-batch': toolId === 'text_batch' }">
-        <template v-if="toolId === 'text_batch'">
-          <div class="knowledge-checkbox-group is-batch-options">
-            <BCheckbox v-model="batchOptions.trimLines">{{ t('toolbox.knowledgeText.trimLines') }}</BCheckbox>
-            <BCheckbox v-model="batchOptions.normalizeWhitespace">{{
-              t('toolbox.knowledgeText.normalizeWhitespace')
-            }}</BCheckbox>
-            <BCheckbox v-model="batchOptions.removeBlankLines">{{
-              t('toolbox.knowledgeText.removeBlankLines')
-            }}</BCheckbox>
-            <BCheckbox v-model="batchOptions.deduplicate">{{ t('toolbox.knowledgeText.deduplicate') }}</BCheckbox>
-          </div>
-          <div class="knowledge-field">
-            <label id="text-batch-sort">{{ t('toolbox.knowledgeText.sortLines') }}</label>
-            <BSelect v-model:value="batchOptions.sort" :options="sortOptions" aria-labelledby="text-batch-sort" />
-          </div>
-          <div class="knowledge-field"
-            ><label for="text-batch-find">{{ t('toolbox.knowledgeText.find') }}</label
-            ><BInput id="text-batch-find" v-model:value="batchOptions.find"
-          /></div>
-          <div class="knowledge-field"
-            ><label for="text-batch-replace">{{ t('toolbox.knowledgeText.replacement') }}</label
-            ><BInput id="text-batch-replace" v-model:value="batchOptions.replacement"
-          /></div>
-          <div class="knowledge-field"
-            ><label for="text-batch-prefix">{{ t('toolbox.knowledgeText.prefix') }}</label
-            ><BInput id="text-batch-prefix" v-model:value="batchOptions.prefix"
-          /></div>
-          <div class="knowledge-field"
-            ><label for="text-batch-suffix">{{ t('toolbox.knowledgeText.suffix') }}</label
-            ><BInput id="text-batch-suffix" v-model:value="batchOptions.suffix"
-          /></div>
-        </template>
-
-        <template v-else-if="toolId === 'regex_extractor'">
+      <section class="knowledge-text-controls">
+        <template v-if="toolId === 'regex_extractor'">
           <div class="knowledge-field is-grow"
             ><label for="regex-pattern">{{ t('toolbox.knowledgeText.regexPattern') }}</label
             ><BInput
@@ -387,7 +316,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, reactive, ref, watch } from 'vue';
+  import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import type { ToolboxToolId } from '@lightnote/shared/toolbox-protocol';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -405,29 +334,20 @@
   import { copyTextToClipboard } from '@/utils/clipboard';
   import { downloadToolboxBlob, formatToolboxBytes } from '@/utils/toolboxLocal';
   import {
-    checkMarkdownKnowledgeBase,
     extractRegexMatches,
     formatCitations,
     parseCitations,
-    processTextBatch,
     transformStructuredData,
     updateFrontmatterDocument,
     type CitationRecord,
-    type MarkdownCheckIssue,
     type MarkdownSourceFile,
     type RegexMatchResult,
-    type TextBatchOptions,
     ToolboxKnowledgeTextError,
   } from '@/utils/toolboxKnowledgeText';
 
   type KnowledgeTextToolId = Extract<
     ToolboxToolId,
-    | 'text_batch'
-    | 'regex_extractor'
-    | 'markdown_checker'
-    | 'frontmatter_batch'
-    | 'citation_converter'
-    | 'structured_data_lab'
+    'regex_extractor' | 'frontmatter_batch' | 'citation_converter' | 'structured_data_lab'
   >;
   interface SourceFileEntry extends MarkdownSourceFile {
     file?: File;
@@ -435,6 +355,7 @@
 
   const props = defineProps<{ toolId: KnowledgeTextToolId }>();
   const { t } = useI18n();
+  const contentBytes = (content: string) => new Blob([content]).size;
   const source = ref('');
   const output = ref('');
   const error = ref('');
@@ -442,7 +363,6 @@
   const loading = ref(false);
   const resultSummary = ref('');
   const sourceFiles = ref<SourceFileEntry[]>([]);
-  const markdownIssues = ref<MarkdownCheckIssue[] | null>(null);
   const frontmatterResults = ref<Array<{ name: string; content: string }>>([]);
   const regexMatches = ref<RegexMatchResult[]>([]);
   const citationRecords = ref<CitationRecord[]>([]);
@@ -450,17 +370,6 @@
   const frontmatterValue = ref('ready');
   const frontmatterRemove = ref('');
 
-  const batchOptions = reactive<TextBatchOptions>({
-    trimLines: true,
-    normalizeWhitespace: true,
-    removeBlankLines: true,
-    deduplicate: false,
-    sort: 'none',
-    find: '',
-    replacement: '',
-    prefix: '',
-    suffix: '',
-  });
   const regexPattern = ref('(?<key>\\w+)=(?<value>[^\\s]+)');
   const regexIgnoreCase = ref(false);
   const regexMultiline = ref(true);
@@ -471,7 +380,7 @@
   const structuredOperation = ref<'format' | 'minify' | 'sort_keys' | 'flatten' | 'query'>('format');
   const structuredPath = ref('$.items[0]');
 
-  const isFileTool = computed(() => ['markdown_checker', 'frontmatter_batch'].includes(props.toolId));
+  const isFileTool = computed(() => props.toolId === 'frontmatter_batch');
   const toolName = computed(() => t(`toolbox.tool.${props.toolId}.name`));
   const toolDescription = computed(() => t(`toolbox.tool.${props.toolId}.description`));
   const presentationIcon = computed(() => TOOLBOX_PRESENTATION[props.toolId].icon);
@@ -480,7 +389,6 @@
     isFileTool.value ? String(sourceFiles.value.length) : source.value ? source.value.length.toLocaleString() : '—',
   );
   const resultFact = computed(() => {
-    if (markdownIssues.value) return String(markdownIssues.value.length);
     if (frontmatterResults.value.length) return String(frontmatterResults.value.length);
     if (regexMatches.value.length) return String(regexMatches.value.length);
     return output.value ? output.value.length.toLocaleString() : '—';
@@ -513,11 +421,6 @@
     return true;
   });
 
-  const sortOptions = computed(() => [
-    { value: 'none', label: t('toolbox.knowledgeText.sortNone') },
-    { value: 'asc', label: t('toolbox.knowledgeText.sortAsc') },
-    { value: 'desc', label: t('toolbox.knowledgeText.sortDesc') },
-  ]);
   const regexTemplates: Record<string, string> = {
     custom: regexPattern.value,
     email: '[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}',
@@ -558,31 +461,12 @@
     { key: 'match', title: t('toolbox.knowledgeText.match'), width: 'minmax(160px, 1fr)' },
     { key: 'groups', title: t('toolbox.knowledgeText.captureGroups'), width: 'minmax(160px, 1fr)' },
   ];
-  const markdownIssueRows = computed(() =>
-    (markdownIssues.value || []).slice(0, 300).map((issue, index) => ({
-      id: index + 1,
-      file: issue.file,
-      line: issue.line,
-      severity: issue.severity,
-      issue: t(`toolbox.knowledgeText.markdownIssue.${issue.code}`),
-      detail: issue.detail || '—',
-    })),
-  );
-  const markdownIssueColumns: Column[] = [
-    { key: 'file', title: t('toolbox.knowledgeText.file'), width: 'minmax(150px, 1fr)' },
-    { key: 'line', title: t('toolbox.knowledgeText.line'), width: '68px' },
-    { key: 'severity', title: t('toolbox.knowledgeText.severity'), width: '90px' },
-    { key: 'issue', title: t('toolbox.knowledgeText.issue'), width: 'minmax(130px, 0.8fr)' },
-    { key: 'detail', title: t('toolbox.knowledgeText.detail'), width: 'minmax(130px, 1fr)' },
-  ];
-
   function resetResult() {
     output.value = '';
     error.value = '';
     resultSummary.value = '';
     regexMatches.value = [];
     citationRecords.value = [];
-    markdownIssues.value = null;
     frontmatterResults.value = [];
   }
 
@@ -605,8 +489,7 @@
 
   function loadSample() {
     resetResult();
-    if (props.toolId === 'text_batch') source.value = '  苹果  \n香蕉\n苹果\n\n  橙子';
-    else if (props.toolId === 'regex_extractor')
+    if (props.toolId === 'regex_extractor')
       source.value = 'user=alice@example.com status=active\nuser=bob@example.com status=pending';
     else if (props.toolId === 'citation_converter')
       source.value =
@@ -637,15 +520,7 @@
     resetResult();
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     try {
-      if (props.toolId === 'text_batch') {
-        const result = processTextBatch(source.value, batchOptions);
-        output.value = result.output;
-        resultSummary.value = t('toolbox.knowledgeText.batchSummary', {
-          before: result.beforeLines,
-          after: result.afterLines,
-          changed: result.changedLines,
-        });
-      } else if (props.toolId === 'regex_extractor') {
+      if (props.toolId === 'regex_extractor') {
         regexMatches.value = extractRegexMatches(source.value, regexPattern.value, regexFlags());
         output.value = regexMatches.value.map((match) => match.value).join('\n');
         resultSummary.value = t('toolbox.knowledgeText.regexSummary', { count: regexMatches.value.length });
@@ -671,8 +546,7 @@
     resetResult();
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     try {
-      if (props.toolId === 'markdown_checker') markdownIssues.value = checkMarkdownKnowledgeBase(sourceFiles.value);
-      else {
+      {
         const updates = frontmatterKey.value.trim() ? { [frontmatterKey.value.trim()]: frontmatterValue.value } : {};
         const removeKeys = frontmatterRemove.value
           .split(',')
@@ -714,13 +588,6 @@
     downloadToolboxBlob(
       new Blob([output.value], { type: 'text/plain;charset=utf-8' }),
       `lightnote-${props.toolId}.${extension}`,
-    );
-  }
-
-  function downloadMarkdownReport() {
-    downloadToolboxBlob(
-      new Blob([JSON.stringify(markdownIssues.value, null, 2)], { type: 'application/json;charset=utf-8' }),
-      'lightnote-markdown-report.json',
     );
   }
 
@@ -824,12 +691,6 @@
     background: var(--card-background);
   }
 
-  .knowledge-text-controls.is-text-batch {
-    display: grid;
-    grid-template-columns: repeat(5, minmax(112px, 1fr));
-    align-items: end;
-  }
-
   .knowledge-field {
     min-width: 130px;
     display: grid;
@@ -859,38 +720,6 @@
     padding: 5px 8px;
     border: 1px solid var(--surface-border-color);
     border-radius: 9px;
-  }
-
-  .knowledge-checkbox-group.is-batch-options {
-    grid-column: 1 / -1;
-    display: grid;
-    grid-template-columns: repeat(4, minmax(132px, 1fr));
-    gap: 8px;
-  }
-
-  .knowledge-checkbox-group.is-batch-options :deep(.b-checkbox) {
-    min-width: 0;
-    padding: 7px 10px;
-    justify-content: flex-start;
-    white-space: nowrap;
-    background: var(--workspace-panel-bg-color);
-    transition:
-      border-color 0.16s ease,
-      background 0.16s ease;
-  }
-
-  .knowledge-checkbox-group.is-batch-options :deep(.b-checkbox__label) {
-    white-space: nowrap;
-  }
-
-  .knowledge-checkbox-group.is-batch-options :deep(.b-checkbox.is-checked) {
-    border-color: var(--primary-color);
-    background: color-mix(in srgb, var(--primary-color) 7%, var(--card-background));
-  }
-
-  .knowledge-checkbox-group.is-batch-options :deep(.b-checkbox:focus-visible) {
-    outline: 2px solid var(--primary-color);
-    outline-offset: 2px;
   }
 
   .knowledge-checkbox-group.is-flags {
@@ -1263,10 +1092,6 @@
       flex-wrap: wrap;
     }
 
-    .knowledge-text-controls.is-text-batch {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-
     .knowledge-file-studio {
       grid-template-columns: 1fr;
     }
@@ -1308,10 +1133,6 @@
       min-width: 0;
     }
 
-    .knowledge-checkbox-group.is-batch-options {
-      grid-template-columns: 1fr;
-    }
-
     .knowledge-editor-card :deep(textarea) {
       min-height: 280px;
     }
@@ -1342,10 +1163,5 @@
   html.light-note-mobile-rendering .knowledge-file-main,
   html.light-note-mobile-rendering .knowledge-editor-card {
     box-shadow: none;
-  }
-
-  :global(html.light-note-mobile-rendering .knowledge-checkbox-group.is-batch-options .b-checkbox.is-checked) {
-    border: 2px solid var(--primary-color);
-    background: var(--card-background);
   }
 </style>

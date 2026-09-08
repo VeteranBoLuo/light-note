@@ -296,3 +296,36 @@ describe('fetchGlobalSearchSuggestions', () => {
     await expect(fetchGlobalSearchSuggestions('备案')).rejects.toThrow('统一搜索暂时不可用');
   });
 });
+
+describe('global material cursor transport', () => {
+  it('preserves stable cross-type cursor fields in both directions and avoids reusing cached pages', async () => {
+    const cursor = {
+      type: 'all' as const,
+      offset: 0,
+      score: 80,
+      time: '2026-09-08 10:00:00',
+      resourceType: 'note',
+      id: 'note-last',
+    };
+    mocks.apiBasePost.mockResolvedValue({ status: 200, data: { items: [], nextCursor: cursor, hasMore: true } });
+    const result = await fetchGlobalSearch('project', 40, true, {
+      paginationMode: 'global',
+      types: ['note', 'file'],
+      cursor,
+      includeMetadata: false,
+    });
+    expect(mocks.apiBasePost).toHaveBeenLastCalledWith(
+      '/api/search/global',
+      expect.objectContaining({ paginationMode: 'global', pageSize: 40, cursor }),
+    );
+    expect(result.nextCursor).toEqual(cursor);
+    mocks.apiBasePost.mockClear();
+    await fetchGlobalSearch('project', 40, false, {
+      paginationMode: 'global',
+      types: ['note', 'file'],
+      cursor,
+      includeMetadata: false,
+    });
+    expect(mocks.apiBasePost).toHaveBeenCalledOnce();
+  });
+});

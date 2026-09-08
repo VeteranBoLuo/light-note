@@ -49,6 +49,9 @@
       :wide-desktop-page="bookmark.isDesktop"
       :show-header="false"
       :items="items"
+      :target-id="locateState === 'found' ? targetId : ''"
+      :locate-state="locateState"
+      @retry-locate="locateNotification(targetId)"
       :groups="groupedItems"
       :tabs="tabs"
       :active-tab="activeTab"
@@ -69,7 +72,8 @@
       @more="openNotificationActions"
       @delete="onDelete"
       @load-more="loadMore"
-    />
+      ><template #browser-push-prompt><BrowserPushPrompt /></template
+    ></NotificationCenterPanel>
   </section>
   <BPopover
     v-else-if="!isMobileLayout"
@@ -95,6 +99,9 @@
       <div class="nt-popover-content">
         <NotificationCenterPanel
           :items="items"
+          :target-id="locateState === 'found' ? targetId : ''"
+          :locate-state="locateState"
+          @retry-locate="locateNotification(targetId)"
           :groups="groupedItems"
           :tabs="tabs"
           :active-tab="activeTab"
@@ -114,7 +121,8 @@
           @complete-todo="completeReminderTodo"
           @delete="onDelete"
           @load-more="loadMore"
-        />
+          ><template #browser-push-prompt><BrowserPushPrompt /></template
+        ></NotificationCenterPanel>
         <BButton class="nt-open-page" @click="openNotificationPage">
           {{ t('notification.viewAll') }}
           <SvgIcon :src="icon.arrow_right" size="14" aria-hidden="true" />
@@ -156,7 +164,9 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+  import BrowserPushPrompt from './BrowserPushPrompt.vue';
+  import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+  import { notificationPresentation } from '@lightnote/shared/notification-presentation';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
   import { bookmarkStore, inboxStore, useUserStore } from '@/store';
@@ -189,6 +199,10 @@
     useNotification();
 
   const open = ref(false);
+  const targetId = ref('');
+  const locateState = ref<'idle' | 'loading' | 'found' | 'unavailable' | 'error'>('idle');
+  let listGeneration = 0;
+  let skippedItems = 0;
   const wrVisible = ref(false);
   const wrData = ref<any>(null);
   const detailVisible = ref(false);
@@ -287,16 +301,10 @@
   }
   // 升级通知按 type+meta 渲染 i18n(国际化);其余(反馈回复/系统/其他)用后端原文
   function renderTitle(n: NotificationItem): string {
-    if (n.type === 'level_up') {
-      const m = parseMeta(n.meta);
-      return t('notification.levelUpTitle', { level: m.level, name: t('growth.ranks.' + m.level) });
-    }
-    if (n.type === 'opinion_reply') return t('notification.opinionReplyTitle');
-    return n.title;
+    return notificationPresentation(n, locale.value).title;
   }
   function renderContent(n: NotificationItem): string {
-    if (n.type === 'level_up') return '';
-    return n.content || '';
+    return notificationPresentation(n, locale.value).content;
   }
 
   function fmtTime(ts: string): string {
@@ -318,12 +326,49 @@
   }
 
   async function load(reset = true) {
+    const generation = ++listGeneration;
     loading.value = true;
-    if (reset) currentPage.value = 1;
-    const page = await fetchList({ currentPage: currentPage.value, pageSize, type: activeTab.value });
-    items.value = reset ? page.items : [...items.value, ...page.items];
-    total.value = page.total;
-    loading.value = false;
+    if (reset) {
+      skippedItems = 0;
+      currentPage.value = 1;
+      targetId.value = '';
+      locateState.value = 'idle';
+    }
+    try {
+      const page = await fetchList({ currentPage: currentPage.value, pageSize, type: activeTab.value });
+      if (generation !== listGeneration) return;
+      items.value = reset ? page.items : [...items.value, ...page.items];
+      total.value = Math.max(0, page.total - skippedItems);
+    } finally {
+      if (generation === listGeneration) loading.value = false;
+    }
+  }
+  async function locateNotification(id: string) {
+    if (!id) return;
+    const generation = ++listGeneration;
+    const owner = user.id;
+    targetId.value = id;
+    locateState.value = 'loading';
+    loading.value = true;
+    activeTab.value = 'all';
+    try {
+      const page = await fetchList({ notificationId: id, pageSize, type: 'all' });
+      if (generation !== listGeneration || owner !== user.id) return;
+      items.value = page.items;
+      skippedItems = (page.currentPage - 1) * page.pageSize;
+      total.value = Math.max(0, page.total - skippedItems);
+      currentPage.value = page.currentPage;
+      locateState.value = page.targetFound && page.items.some((item) => item.id === id) ? 'found' : 'unavailable';
+      await nextTick();
+      // Scoped through the unique notification ID; no item click or markRead is dispatched.
+      Array.from(document.querySelectorAll<HTMLElement>('[data-notification-id]'))
+        .find((element) => element.dataset.notificationId === id && element.getClientRects().length > 0)
+        ?.scrollIntoView({ block: 'nearest', behavior: 'auto' });
+    } catch {
+      if (generation === listGeneration) locateState.value = 'error';
+    } finally {
+      if (generation === listGeneration) loading.value = false;
+    }
   }
   function switchTab(v: string) {
     if (activeTab.value === v) return;
@@ -335,7 +380,12 @@
     load(false);
   }
   function onOpenChange(v: boolean) {
-    if (v) load(true);
+    if (v && locateState.value !== 'loading' && !targetId.value) load(true);
+    if (!v) {
+      listGeneration++;
+      targetId.value = '';
+      locateState.value = 'idle';
+    }
   }
   function openMobileNotifications() {
     void router.push({ name: 'notifications' });
@@ -344,18 +394,36 @@
   async function openNotificationPage() {
     await closePanelThen(() => router.push({ name: 'notifications' }));
   }
-  function handleExternalOpen() {
-    if (props.page) {
-      void load(true);
+  function handleExternalOpen(event?: Event) {
+    const id = String((event as CustomEvent)?.detail?.notificationId || '');
+    if (!props.page && router.currentRoute.value.name === 'notifications') return;
+    event?.preventDefault();
+    if (!props.page && isMobileLayout.value) {
+      void router.push({ name: 'notifications', query: id ? { notificationId: id } : {} });
       return;
     }
-    if (isMobileLayout.value) {
-      openMobileNotifications();
+    if (id) {
+      targetId.value = id;
+      locateState.value = 'loading';
+    }
+    if (!props.page) open.value = true;
+    if (id) void nextTick().then(() => locateNotification(id));
+    else void load(true);
+  }
+  function locateFromRoute() {
+    if (!props.page) return;
+    const query = router.currentRoute.value.query;
+    if ((!user.id || user.role === 'visitor') && query.notificationId) {
+      bookmark.openAuthModal('登录', 'preview_guide', router.currentRoute.value.fullPath);
       return;
     }
-    if (open.value) return;
-    open.value = true;
-    void load(true);
+    const id = String(query.notificationId || '');
+    if (query.pushOwner && query.pushOwner !== user.id) {
+      void load(true).then(() => {
+        locateState.value = 'unavailable';
+      });
+    } else if (id) void locateNotification(id);
+    else void load(true);
   }
 
   function leaveNotificationPage() {
@@ -485,7 +553,7 @@
   let timer: ReturnType<typeof setInterval> | null = null;
   onMounted(() => {
     refreshUnread();
-    if (props.page) void load(true);
+    if (props.page) locateFromRoute();
     timer = setInterval(() => refreshUnread(), 120000);
     window.addEventListener(NOTIFICATION_PANEL_OPEN_EVENT, handleExternalOpen);
   });
@@ -495,8 +563,16 @@
   });
   watch(
     () => user.id,
-    () => refreshUnread(),
+    () => {
+      listGeneration++;
+      items.value = [];
+      targetId.value = '';
+      locateState.value = 'idle';
+      void refreshUnread();
+      if (props.page) locateFromRoute();
+    },
   );
+  watch(() => router.currentRoute.value.query.notificationId, locateFromRoute);
   watch(useWidePageCategories, () => {
     if (!tabs.value.some((tab) => tab.value === activeTab.value)) {
       activeTab.value = 'all';

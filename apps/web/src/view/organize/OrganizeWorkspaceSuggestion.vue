@@ -9,11 +9,13 @@
         ><SvgIcon
           class="suggestion-kind-icon"
           :src="
-            suggestion.kind === 'tags'
-              ? icon.resource.tag
-              : suggestion.kind === 'title'
-                ? icon.resource.note
-                : icon.organize.priority
+            suggestion.kind === 'archive'
+              ? icon.resource.bookmark
+              : suggestion.kind === 'tags'
+                ? icon.resource.tag
+                : suggestion.kind === 'title'
+                  ? icon.resource.note
+                  : icon.organize.priority
           "
           size="15"
         /><strong>{{
@@ -30,7 +32,15 @@
                 ? 'danger'
                 : 'neutral'
           "
-          >{{ t(`organizeWorkspace.status.${suggestion.status}`) }}</BChip
+          >{{
+            suggestion.kind === 'archive' && suggestion.status === 'applied'
+              ? t(
+                  suggestion.applied === 'already_saved'
+                    ? 'organizeWorkspace.archiveAlreadySaved'
+                    : 'organizeWorkspace.archiveQueued',
+                )
+              : t(`organizeWorkspace.status.${suggestion.status}`)
+          }}</BChip
         ></div
       >
       <div v-if="suggestion.kind === 'title' && suggestion.after" class="suggestion-change"
@@ -47,7 +57,11 @@
         <span>{{ beforeTags.length ? t('organizeWizard.appendTags') : '→' }}</span
         ><ResourceTagChip v-for="tag in suggestion.after" :key="tag.name" :tag="{ ...tag, id: tag.id || tag.name }"
       /></div>
-      <p>{{ suggestion.reason }}</p>
+      <p>{{
+        suggestion.kind === 'archive' && suggestion.status === 'applied'
+          ? t('organizeWorkspace.archiveAppliedHint')
+          : suggestion.reason
+      }}</p>
       <div v-if="suggestion.members" class="comparison" :aria-label="t('organizeWorkspace.compare')">
         <article v-for="member in suggestion.members" :key="member.id"
           ><BButton @click="openMember(member)">{{ member.title || t('organizeWorkspace.unnamed') }}</BButton
@@ -84,7 +98,20 @@
         ></div
       >
     </div>
+    <div
+      v-else-if="suggestion.kind === 'archive' && suggestion.status === 'applied' && resourceId"
+      class="suggestion-actions"
+    >
+      <BButton @click="archiveVisible = true">{{ t('bookmarkMg.snapshot') }}</BButton>
+    </div>
     <div v-else-if="canReview" class="suggestion-actions">
+      <BButton
+        v-if="suggestion.kind === 'archive' && suggestion.action === 'archive'"
+        type="primary"
+        :disabled="busy || analyzing"
+        @click="apply(null)"
+        >{{ t('organizeWorkspace.archiveSave') }}</BButton
+      >
       <BButton v-if="isMetadata" :disabled="busy || analyzing" @click="edit">{{
         manual ? t(`organizeWorkspace.manualAction.${suggestion.kind}`) : t('common.edit')
       }}</BButton>
@@ -111,10 +138,12 @@
         >{{ t('organizeWorkspace.resolveDuplicates') }}</BButton
       >
     </div>
+    <BookmarkSnapshotModal v-if="archiveVisible" v-model:visible="archiveVisible" :bookmark-id="resourceId" />
     <p v-if="error" class="suggestion-error" role="alert">{{ error }}</p>
   </section>
 </template>
 <script setup lang="ts">
+  import BookmarkSnapshotModal from '@/components/manage/bookmarkEditMg/BookmarkSnapshotModal.vue';
   import { computed, ref, watch } from 'vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
@@ -133,12 +162,14 @@
   const props = defineProps<{
     runId: string;
     resourceTitle: string;
+    resourceId?: string;
     suggestion: WorkspaceSuggestion;
     analyzing: boolean;
   }>();
   const emit = defineEmits<{ changed: [] }>();
   const { t, locale } = useI18n(),
     router = useRouter();
+  const archiveVisible = ref(false);
   const editing = ref(false),
     busy = ref(false),
     error = ref(''),

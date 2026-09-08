@@ -148,7 +148,7 @@ describe('笔记卡片缩略图', () => {
     document.body.innerHTML = '';
   });
 
-  it('独立懒加载缩略图，加载失败时无布局阻塞地退化为纯文本卡片', async () => {
+  it('独立懒加载压缩图，失败后保留占位并且不读取原图', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const previewImageUrl = '/api/note/image-thumbnail/hash.webp?source=note';
@@ -170,9 +170,11 @@ describe('笔记卡片缩略图', () => {
     cleanup = () => app.unmount();
     await nextTick();
 
-    const image = host.querySelector<HTMLImageElement>('.note-preview-image');
+    await new Promise(resolve=>setTimeout(resolve,20));
+    await nextTick();
+    const image = host.querySelector<HTMLImageElement>('.note-preview-image img');
     const previewBodyChildren = [...host.querySelectorAll('.note-preview-body > *')];
-    expect(image?.getAttribute('src')).toBe(previewImageUrl);
+    expect(image?.getAttribute('src')).toBe('/fixture-small.webp');
     expect(image?.getAttribute('loading')).toBe('lazy');
     expect(image?.getAttribute('decoding')).toBe('async');
     expect(image?.getAttribute('fetchpriority')).toBe('low');
@@ -181,15 +183,16 @@ describe('笔记卡片缩略图', () => {
 
     image?.dispatchEvent(new Event('load'));
     await nextTick();
-    expect(image?.classList.contains('is-loaded')).toBe(true);
+    expect(host.querySelector('.note-preview-image')?.classList.contains('is-loaded')).toBe(true);
 
     image?.dispatchEvent(new Event('error'));
     await nextTick();
-    expect(host.querySelector('.note-preview-media')).toBeNull();
+    expect(host.querySelector('.note-preview-media')).not.toBeNull();
+    expect(host.querySelector('.note-preview-media img')).toBeNull();
     expect(host.querySelector('.note-content')?.textContent).toBe('摘要');
   });
 
-  it('localhost 缩略图目录缺失时只在开发环境回退到本站原图', async () => {
+  it('localhost 缩略图失败也不允许回退到本站原图', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const originalImageUrl = 'https://boluo66.top/uploads/note-local-fallback.jpg';
@@ -212,14 +215,19 @@ describe('笔记卡片缩略图', () => {
     cleanup = () => app.unmount();
     await nextTick();
 
-    const image = host.querySelector<HTMLImageElement>('.note-preview-image')!;
+    await new Promise(resolve=>setTimeout(resolve,20));
+    await nextTick();
+    const image = host.querySelector<HTMLImageElement>('.note-preview-image img')!;
     image.dispatchEvent(new Event('error'));
     await nextTick();
-    expect(image.getAttribute('src')).toBe(originalImageUrl);
+    expect(image.getAttribute('src')).not.toBe(originalImageUrl);
     expect(host.querySelector('.note-preview-media')).not.toBeNull();
 
     image.dispatchEvent(new Event('error'));
     await nextTick();
-    expect(host.querySelector('.note-preview-media')).toBeNull();
+    expect(host.querySelector('.note-preview-media')).not.toBeNull();
+    expect(host.querySelector('.note-preview-media img')).toBeNull();
   });
 });
+
+vi.mock('@/api/imagePreview',()=>({resolveImagePreviews:vi.fn(async(items)=>items.map(item=>({...item,status:'ready',url:'/fixture-small.webp',expiresAt:Date.now()+600000})))}));

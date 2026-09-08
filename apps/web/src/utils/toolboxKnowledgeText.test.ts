@@ -1,31 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
-  checkMarkdownKnowledgeBase,
   extractRegexMatches,
   formatCitations,
   parseCitations,
-  processTextBatch,
   queryStructuredPath,
   transformStructuredData,
   updateFrontmatterDocument,
 } from './toolboxKnowledgeText';
 
 describe('toolbox knowledge text utilities', () => {
-  it('batches line cleanup deterministically', () => {
-    const result = processTextBatch('  B  \nA\nA\n\n', {
-      trimLines: true,
-      normalizeWhitespace: true,
-      removeBlankLines: true,
-      deduplicate: true,
-      sort: 'asc',
-      find: '',
-      replacement: '',
-      prefix: '',
-      suffix: '',
-    });
-    expect(result.output).toBe('A\nB');
-    expect(result.removedLines).toBe(3);
-  });
 
   it('extracts regex matches with lines and groups', () => {
     const matches = extractRegexMatches('alpha=12\nbeta=35', '(?<key>\\w+)=(\\d+)', 'gu');
@@ -34,16 +17,6 @@ describe('toolbox knowledge text utilities', () => {
     expect(matches[0]?.namedGroups).toEqual({ key: 'alpha' });
   });
 
-  it('finds heading and link problems across a Markdown vault', () => {
-    const issues = checkMarkdownKnowledgeBase([
-      { name: 'index.md', content: '# Home\n### Jump\n[Good](note.md)\n[Bad](missing.md)\n[[Ghost]]' },
-      { name: 'note.md', content: '## No H1' },
-    ]);
-    expect(issues.some((issue) => issue.code === 'heading_jump')).toBe(true);
-    expect(issues.some((issue) => issue.code === 'broken_link')).toBe(true);
-    expect(issues.some((issue) => issue.code === 'broken_wikilink')).toBe(true);
-    expect(issues.some((issue) => issue.file === 'note.md' && issue.code === 'missing_h1')).toBe(true);
-  });
 
   it('updates simple frontmatter while preserving the body', () => {
     const updated = updateFrontmatterDocument(

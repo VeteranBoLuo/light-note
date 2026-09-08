@@ -1,3 +1,4 @@
+import { syncNoteImageReferences, removeImageReferences, syncContentReferences } from '../imagePreview/references.js';
 import pool from '../../db/index.js';
 import { insertData } from '../agent/data.js';
 import { normalizeMarkdownBlockquoteEntities, normalizeNoteType } from '@lightnote/shared';
@@ -39,7 +40,7 @@ export async function snapshotOwnedNoteVersion(
       : currentType === 'markdown'
         ? normalizeMarkdownBlockquoteEntities(current.content || '')
         : sanitizePersistedNoteContent(current.content || '', 'html', 'snapshot-owned-note-version');
-  await connection.query('INSERT INTO note_versions SET ?', [
+  const [imageVersionResult]=await connection.query('INSERT INTO note_versions SET ?', [
     insertData({
       noteId: String(noteId),
       title: String(current.title || ''),
@@ -58,8 +59,10 @@ export async function snapshotOwnedNoteVersion(
   const staleVersionIds = versionRows.slice(NOTE_VERSION_KEEP).map((row) => row.id);
   if (staleVersionIds.length) {
     const placeholders = staleVersionIds.map(() => '?').join(',');
+    await removeImageReferences(connection,'note_version',staleVersionIds);
     await connection.query(`DELETE FROM note_versions WHERE id IN (${placeholders})`, staleVersionIds);
   }
+  await syncContentReferences(connection,{owner:userId,refType:'note_version',refId:imageVersionResult.insertId,content:currentContent,type:currentType});
   return true;
 }
 
@@ -187,6 +190,7 @@ export async function createNote({
     const createdRefs = extractOwnedResourceRefs({ content, type });
     if (createdRefs.length) {
       await syncNoteResourceRefs(connection, { userId, noteId: data.id, refs: createdRefs });
+      await syncNoteImageReferences(connection,data.id);
     }
     commitAttempted = true;
     await connection.commit();
@@ -350,6 +354,7 @@ export async function applyOwnedNoteContentChange(
   // apply 是更新语义,正文可能从"有链接"变为"无链接",故无条件 sync(差异同步会正确删除旧引用)。
   const nextRefs = extractOwnedResourceRefs({ content: nextContent, type: nextType });
   await syncNoteResourceRefs(connection, { userId: String(userId), noteId: String(noteId), refs: nextRefs });
+  await syncNoteImageReferences(connection,noteId);
 
   return { title: current.title, content: nextContent, type: nextType, revision: current.revision + 1 };
 }

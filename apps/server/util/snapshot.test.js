@@ -50,6 +50,34 @@ describe('archiveBookmark 网页读取预算', () => {
   });
 });
 
+describe('archive result persistence boundaries', () => {
+  beforeEach(() => vi.clearAllMocks());
+  it('worker fetch does not write content before lease validation', async () => {
+    mocks.poolQuery.mockResolvedValueOnce([[{ url: 'https://example.com', name: 'fixture' }]]);
+    mocks.fetchWebMeta.mockResolvedValueOnce({ ok: true, bodyText: 'content '.repeat(30), source: 'rendered_dom' });
+    expect(await archiveBookmark('u', 'b', { persist: false, retry: false })).toMatchObject({
+      ok: true,
+      source: 'rendered_dom',
+    });
+    expect(mocks.poolQuery).toHaveBeenCalledTimes(1);
+    expect(mocks.invalidatePersonalKnowledgeCache).not.toHaveBeenCalled();
+  });
+  it('a failed refresh leaves saved content untouched', async () => {
+    mocks.poolQuery.mockResolvedValueOnce([[{ url: 'https://example.com' }]]);
+    mocks.fetchWebMeta.mockResolvedValueOnce({ ok: false, reason: 'ACCESS_DENIED' });
+    expect(await archiveBookmark('u', 'b')).toMatchObject({ ok: false, reason: 'ACCESS_DENIED', retryable: false });
+    expect(mocks.poolQuery).toHaveBeenCalledTimes(1);
+  });
+  it('does not report success when the guarded write rejects a changed bookmark', async () => {
+    mocks.poolQuery
+      .mockResolvedValueOnce([[{ url: 'https://example.com' }]])
+      .mockResolvedValueOnce([{ affectedRows: 0 }]);
+    mocks.fetchWebMeta.mockResolvedValueOnce({ ok: true, bodyText: 'content '.repeat(30) });
+    expect(await archiveBookmark('u', 'b')).toMatchObject({ ok: false, reason: 'RESOURCE_CHANGED' });
+    expect(mocks.invalidatePersonalKnowledgeCache).not.toHaveBeenCalled();
+  });
+});
+
 describe('archiveAndSummarizeBookmark 网页存档', () => {
   beforeEach(() => {
     vi.clearAllMocks();

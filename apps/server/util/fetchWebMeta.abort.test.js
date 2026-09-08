@@ -319,3 +319,37 @@ describe('fetchWebMeta', () => {
     expect(destroy).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('archive error page quality', () => {
+  it('rejects an error JSON returned with HTTP 200 regardless of useful metadata', () => {
+    expect(
+      classifyWebPageSnapshot({
+        title: '知乎',
+        description: '有问题就会有答案',
+        bodyText: JSON.stringify({
+          error: { message: '您当前请求存在异常，暂时限制本次访问。'.repeat(6), code: 40362 },
+        }),
+        minimumBodyLength: 100,
+      }),
+    ).toBe('ACCESS_DENIED');
+  });
+  it('recognizes a rendered framework 404 with no whitespace', () => {
+    expect(
+      classifyWebPageSnapshot({
+        title: 'Hoppscotch',
+        bodyText: '404This page could not be foundHome',
+        scriptCount: 8,
+        minimumBodyLength: 100,
+      }),
+    ).toBe('NOT_FOUND');
+  });
+  it('keeps an article discussing errors readable', () => {
+    expect(
+      classifyWebPageSnapshot({
+        title: '错误处理指南',
+        bodyText: '本文介绍如何处理 404 页面以及 error JSON 返回值。'.repeat(30),
+        minimumBodyLength: 100,
+      }),
+    ).toBe('');
+  });
+});

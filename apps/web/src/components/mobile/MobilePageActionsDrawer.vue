@@ -17,6 +17,7 @@
           'is-danger': action.danger,
           'is-selected': action.selected,
           'has-divider': action.dividerBefore,
+          'has-description': Boolean(action.description),
         }"
         :type="action.danger ? 'danger' : undefined"
         :disabled="action.disabled || actionHandoffPending"
@@ -25,7 +26,7 @@
         @click="runAction(action)"
       >
         <span class="mobile-page-actions__icon" aria-hidden="true">
-          <SvgIcon v-if="action.icon" :src="action.icon" size="19" />
+          <SvgIcon v-if="action.icon" :src="action.icon" size="20" />
         </span>
         <span class="mobile-page-actions__copy">
           <strong>{{ action.label }}</strong>
@@ -112,81 +113,5 @@
 </script>
 
 <style scoped lang="less">
-  .mobile-page-actions {
-    display: grid;
-    gap: 4px;
-  }
-  .mobile-page-actions__item {
-    position: relative;
-    width: 100%;
-    min-height: var(--mobile-sheet-item-height, 52px);
-    justify-content: flex-start;
-    gap: 10px;
-    padding-inline: 14px;
-    border: 1px solid transparent;
-    border-radius: var(--mobile-control-radius, 10px);
-    background: var(--workspace-panel-bg-color) !important;
-    font-size: 15px;
-  }
-
-  .mobile-page-actions__item.has-divider {
-    margin-top: 10px;
-  }
-
-  .mobile-page-actions__item.has-divider::before {
-    position: absolute;
-    right: 0;
-    bottom: calc(100% + 5px);
-    left: 0;
-    height: 1px;
-    background: var(--mobile-row-divider, var(--surface-divider-color));
-    content: '';
-  }
-
-  .mobile-page-actions__item.is-selected {
-    border-color: var(--primary-color);
-    color: var(--primary-color);
-    background: var(--mobile-selected-bg) !important;
-    font-weight: 650;
-  }
-
-  .mobile-page-actions__item.is-danger {
-    border-color: var(--mobile-sheet-danger-border);
-    color: var(--danger-color);
-    background: var(--mobile-sheet-danger-bg) !important;
-  }
-
-  .mobile-page-actions__icon {
-    width: 22px;
-    display: inline-flex;
-    flex: 0 0 22px;
-    justify-content: center;
-  }
-
-  .mobile-page-actions__copy {
-    min-width: 0;
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 1px;
-    line-height: 1.35;
-    text-align: left;
-    white-space: normal;
-  }
-
-  .mobile-page-actions__copy strong {
-    font-size: 14px;
-    font-weight: 600;
-  }
-
-  .mobile-page-actions__copy small {
-    color: var(--desc-color);
-    font-size: 12px;
-    font-weight: 400;
-  }
-
-  .mobile-page-actions.is-compact .mobile-page-actions__item {
-    min-height: 48px;
-  }
+  @import './mobilePageActions.less';
 </style>

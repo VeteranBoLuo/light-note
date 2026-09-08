@@ -1,3 +1,4 @@
+import { isBrowserPushSubscriptionRequest } from '../browserPushPolicy.js';
 import { sanitizeObject } from './payloadSanitizer.js';
 
 export const getClientIp = (req) => {
@@ -25,7 +26,7 @@ export const buildRequestContext = (req) => {
     headers: req.headers || {},
     payloadSummary: sanitizeObject({
       query: req.query || {},
-      body: req.body || {},
+      body: isBrowserPushSubscriptionRequest(req) ? { subscription: '[PUSH_CREDENTIALS_REDACTED]' } : req.body || {},
       params: req.params || {},
     }),
     headersSummary: sanitizeObject({

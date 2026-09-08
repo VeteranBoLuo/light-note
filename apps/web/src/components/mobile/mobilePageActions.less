@@ -1,0 +1,90 @@
+.mobile-page-actions {
+  display: grid;
+  gap: 6px;
+}
+.mobile-page-actions__item {
+  position: relative;
+  width: 100%;
+  min-height: 52px;
+  height: auto;
+  color: var(--text-color);
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: var(--workspace-panel-bg-color) !important;
+  font-size: 15px;
+}
+
+.mobile-page-actions__item.has-divider {
+  margin-top: 10px;
+}
+
+.mobile-page-actions__item.has-divider::before {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 5px);
+  left: 0;
+  height: 1px;
+  background: var(--mobile-row-divider, var(--surface-divider-color));
+  content: '';
+}
+
+.mobile-page-actions__item.is-selected {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+  background: var(--mobile-selected-bg) !important;
+  font-weight: 650;
+}
+
+.mobile-page-actions__item.is-danger {
+  border-color: var(--mobile-sheet-danger-border);
+  color: var(--danger-color);
+  background: var(--mobile-sheet-danger-bg) !important;
+}
+
+.mobile-page-actions__icon {
+  width: 24px;
+  display: inline-flex;
+  flex: 0 0 24px;
+  color: inherit;
+  justify-content: center;
+}
+
+.mobile-page-actions__copy {
+  min-width: 0;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  line-height: 1.35;
+  text-align: left;
+  white-space: normal;
+}
+
+.mobile-page-actions__copy strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.mobile-page-actions__copy small {
+  color: var(--desc-color);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.mobile-page-actions.is-compact .mobile-page-actions__item {
+  min-height: 48px;
+}
+.mobile-page-actions__item.has-description {
+  min-height: 64px;
+}
+.mobile-page-actions__item:not(:disabled):not(.is-selected):not(.is-danger):hover,
+.mobile-page-actions__item:not(:disabled):not(.is-selected):not(.is-danger):focus-visible {
+  border-color: var(--desc-color);
+}
+.mobile-page-actions__item:not(:disabled):not(.is-selected):not(.is-danger):active {
+  border-color: var(--primary-color);
+}

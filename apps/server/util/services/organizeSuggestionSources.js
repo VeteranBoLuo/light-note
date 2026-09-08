@@ -1,3 +1,4 @@
+import { classifyWebPageSnapshot } from '../fetchWebMeta.js';
 import { buildSnapshot } from './organizeSuggestionRules.js';
 const comparisonText = (column) => `CONVERT(${column} USING utf8mb4) COLLATE utf8mb4_unicode_ci`;
 const tables = { bookmark: ['bookmark', 'user_id'], note: ['note', 'create_by'], file: ['files', 'create_by'] };
@@ -106,13 +107,18 @@ export async function readSuggestionSources(
   );
   if (type === 'bookmark') {
     const [archives] = await db.query(
-      'SELECT bookmark_id, content FROM bookmark_snapshot WHERE user_id=? AND bookmark_id IN (?)',
+      'SELECT bookmark_id, url, content FROM bookmark_snapshot WHERE user_id=? AND bookmark_id IN (?)',
       [userId, resourceIds],
     );
     rows.forEach((r) => {
       const archive = archives.find((a) => String(a.bookmark_id) === String(r.id));
+      r.hasArchive = Boolean(
+        archive?.url === r.url &&
+        String(archive?.content || '').trim().length >= 100 &&
+        !classifyWebPageSnapshot({ bodyText: archive.content, minimumBodyLength: 100 }),
+      );
       r.original_description = r.description || '';
-      r.description = [r.description, archive?.content].filter(Boolean).join('\n');
+      r.description = [r.description, r.hasArchive ? archive.content : null].filter(Boolean).join('\n');
     });
   }
   if (type === 'file') {

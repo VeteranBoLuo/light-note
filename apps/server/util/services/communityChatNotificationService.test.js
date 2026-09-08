@@ -149,7 +149,7 @@ describe('communityChatNotificationService', () => {
     const text = String(sql);
     expect(text).toContain('INSERT IGNORE INTO notification');
     expect(text).toContain("'community_chat_message'");
-    expect(text).toContain("'delivery', 'in_app_only'");
+    expect(text).toContain("'delivery', 'notification_center'");
     expect(text).toContain("'kind', CASE WHEN reply.user_id = recipient.id THEN 'reply' ELSE 'mention' END");
     expect(text).toContain("'mentionEveryone', IF(message.mention_everyone = 1, 1, 0)");
     expect(text).toContain('LEFT JOIN community_chat_messages reply ON reply.id = message.reply_to_id');

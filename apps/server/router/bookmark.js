@@ -60,6 +60,8 @@ router.post('/importBookmarksExcel', bookmarkHandle.importBookmarksExcel);
 
 router.post('/archive', expensiveFreeActionRateLimiter, bookmarkHandle.doArchiveBookmark);
 
+router.post('/archive/retry-failed', expensiveFreeActionRateLimiter, bookmarkHandle.retryFailedArchives);
+
 router.post('/snapshot', bookmarkHandle.getSnapshot);
 
 router.post('/summarize', aiActionRateLimiter, bookmarkHandle.doSummarizeBookmark);

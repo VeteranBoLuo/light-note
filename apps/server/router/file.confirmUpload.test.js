@@ -365,3 +365,7 @@ describe('云空间普通上传覆盖随机 OBS 对象', () => {
     );
   });
 });
+
+vi.mock('../util/imagePreview/references.js',()=>({registerCloudImage:vi.fn(),removeImageReferences:vi.fn()}));
+
+vi.mock('../util/imagePreview/cleanup.js',()=>({deleteUnmanagedObject:(...args)=>mocks.deleteObjectFromObs(...args)}));

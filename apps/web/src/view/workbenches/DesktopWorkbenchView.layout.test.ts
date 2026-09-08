@@ -26,7 +26,7 @@ describe('桌面工作台头部布局稳定性', () => {
     expect(firstFoldSource).toContain('<WorkbenchGrowth expanded />');
     expect(resourceOverviewStart).toBeGreaterThan(firstFoldEnd);
     expect(desktopSource).toMatch(
-      /\.workbench-first-fold\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0, 1\.36fr\) minmax\(390px, 1fr\)/,
+      /\.workbench-first-fold\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0, 1\.65fr\) minmax\(340px, 1fr\)/,
     );
     expect(desktopSource).toMatch(
       /\.workbench-first-fold__rail\s*\{[\s\S]*?grid-template-rows:\s*auto minmax\(0, 1fr\)[\s\S]*?align-content:\s*stretch/,
@@ -60,7 +60,7 @@ describe('桌面工作台头部布局稳定性', () => {
     expect(desktopSource).toContain('item.list.slice(0, LATEST_UPDATE_ITEM_LIMIT)');
   });
 
-  it('待处理明细与继续工作区域共享 196px 的紧凑首屏高度并允许内容自然增高', () => {
+  it('待处理明细与继续工作区域共享紧凑基线并允许内容自然增高', () => {
     expect(desktopSource).toContain('--today-work-area-height: 196px;');
     expect(desktopSource).toMatch(/\.today-summary-details\s*\{[\s\S]*?min-height:\s*var\(--today-work-area-height\)/);
     expect(desktopSource).toMatch(/\.today-continue\s*\{[\s\S]*?min-height:\s*var\(--today-work-area-height\)/);
@@ -130,7 +130,7 @@ describe('桌面工作台头部布局稳定性', () => {
     expect(desktopSource).toContain('dailyBriefCardRef.value?.refresh()');
   });
 
-  it('继续处理默认最多展示五条，满五条时均分面板剩余高度', () => {
+  it('继续处理资源页签默认最多展示五条', () => {
     expect(desktopSource).toContain('const CONTINUE_ITEM_LIMIT = 5;');
     expect(desktopSource).toContain('slice(0, CONTINUE_ITEM_LIMIT)');
     expect(desktopSource).toContain('activeContinueItems.length === CONTINUE_ITEM_LIMIT');

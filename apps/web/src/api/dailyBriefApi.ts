@@ -15,7 +15,7 @@ export interface DailyBriefInsight {
   id: string;
   text: string;
   factIds: string[];
-  sources?: Array<{ type: 'bookmark' | 'note' | 'file'; id: string; title: string; url?: string }>;
+  sources?: Array<{ type: 'bookmark' | 'note' | 'file' | 'toolbox_task' | 'research_workspace' | 'learning_workspace' | 'writing_workspace'; id: string; title: string; url?: string }>;
   tagName?: string;
   tagRoute?: string;
 }

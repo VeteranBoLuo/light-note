@@ -68,6 +68,8 @@ const baseReq = (extra = {}) => ({
 describe('uploadNoteImage 归属与事务', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    poolQuery.mockReset();
+    connection.query.mockReset();
     ensureNotVisitor.mockReturnValue(true);
     validateNoteImageUpload.mockResolvedValue({ width: 100, height: 100 });
     ensureNoteImageThumbnail.mockResolvedValue('/tmp/preview.webp');
@@ -109,22 +111,25 @@ describe('uploadNoteImage 归属与事务', () => {
   });
 
   it('noteId 属于本人时登记图片并返回 url,不误删落盘文件', async () => {
-    poolQuery.mockResolvedValueOnce([[{ id: 'my-note' }]]).mockResolvedValueOnce([{}]);
+    poolQuery.mockResolvedValueOnce([[{ id: 'my-note' }]]);
     const res = mockRes();
     await uploadNoteImage(baseReq({ body: { noteId: 'my-note' } }), res);
     const sent = lastSent(res);
     expect(sent.status).toBe(200);
     expect(sent.data.url).toContain('note-123-a.png');
-    const insertPayload = poolQuery.mock.calls[1][1][0];
+    const insertPayload = connection.query.mock.calls[0][1][0];
     expect(insertPayload.noteId).toBe('my-note');
-    expect(ensureNoteImageThumbnail).toHaveBeenCalledWith(expect.stringContaining('note-123-a.png'));
+    expect(ensureNoteImageThumbnail).not.toHaveBeenCalled();
+    const {registerAsset}=await import('../util/imagePreview/references.js');
+    expect(registerAsset).toHaveBeenCalledWith(connection,expect.objectContaining({owner:'u1',locator:'note-123-a.png'}));
     expect(unlinkSpy).not.toHaveBeenCalled();
   });
 
   it('noteId 分支 note_images 写入失败时也删除已落盘文件', async () => {
     poolQuery
       .mockResolvedValueOnce([[{ id: 'my-note' }]]) // 归属通过
-      .mockRejectedValueOnce(new Error('insert failed')); // 登记失败
+;
+    connection.query.mockRejectedValueOnce(new Error('insert failed')); // 登记失败
     const res = mockRes();
     await uploadNoteImage(baseReq({ body: { noteId: 'my-note' } }), res);
     expect(lastSent(res).status).toBe(500);
@@ -168,3 +173,15 @@ describe('uploadNoteImage 归属与事务', () => {
     expect(unlinkSpy).toHaveBeenCalledWith(UPLOADED_PATH);
   });
 });
+
+vi.mock('../util/imagePreview/references.js', () => ({
+  queuePreview: vi.fn(async () => undefined),
+  registerAsset: vi.fn(async () => ({id:'asset-1'})),
+  replaceReferences: vi.fn(async () => undefined),
+  syncContentReferences: vi.fn(async () => undefined),
+  syncNoteImageReferences: vi.fn(async () => undefined),
+  registerCloudImage: vi.fn(async () => undefined),
+  syncCloudImageById: vi.fn(async () => undefined),
+  removeImageReferences: vi.fn(async () => undefined),
+  generationEnabled: () => true,
+}));

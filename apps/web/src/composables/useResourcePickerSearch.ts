@@ -35,6 +35,7 @@ export interface UseResourcePickerSearchOptions {
   perType?: number;
   /** 只浏览一种资源时，改用游标分页连续加载完整结果。 */
   exhaustiveSingleType?: boolean;
+  exhaustive?: boolean;
   /** 单类型连续加载的页大小；服务端当前最大支持 40。 */
   singleTypePageSize?: number;
   /** 输入防抖毫秒数 */
@@ -156,7 +157,8 @@ export function useResourcePickerSearch(options: UseResourcePickerSearchOptions 
     const currentRequest = ++requestId;
     const normalizedKeyword = String(keyword || '');
     const allowedTypes = resolveAllowedTypes();
-    const useOrderedBrowse = options.exhaustiveSingleType === true && allowedTypes.length === 1;
+    const useOrderedBrowse =
+      options.exhaustive === true || (options.exhaustiveSingleType === true && allowedTypes.length === 1);
     const sort = resolveResourcePickerSort(normalizedKeyword);
     loading.value = true;
     searchFailed.value = false;
@@ -171,7 +173,7 @@ export function useResourcePickerSearch(options: UseResourcePickerSearchOptions 
         types: allowedTypes,
         ...(useOrderedBrowse
           ? {
-              paginationMode: 'ordered' as const,
+              paginationMode: options.exhaustive ? ('global' as const) : ('ordered' as const),
               cursor: null,
               includeMetadata: true,
             }
@@ -189,7 +191,12 @@ export function useResourcePickerSearch(options: UseResourcePickerSearchOptions 
       nextCursor = useOrderedBrowse ? data.nextCursor || null : null;
       hasMore.value = Boolean(useOrderedBrowse && data.hasMore && nextCursor);
       total.value = useOrderedBrowse
-        ? Math.max(results.value.length, Number(data.typeTotals?.[allowedTypes[0]] ?? data.total ?? 0))
+        ? Math.max(
+            results.value.length,
+            Number(
+              allowedTypes.reduce((sum, type) => sum + Number(data.typeTotals?.[type] || 0), 0) || data.total || 0,
+            ),
+          )
         : results.value.length;
       activeIndex.value = 0;
     } catch {
@@ -215,7 +222,7 @@ export function useResourcePickerSearch(options: UseResourcePickerSearchOptions 
       const data = await fetchGlobalSearch(browseKeyword, singleTypePageSize, false, {
         sort: browseSort,
         types: browseTypes,
-        paginationMode: 'ordered',
+        paginationMode: options.exhaustive ? 'global' : 'ordered',
         cursor,
         includeMetadata: false,
       });
@@ -264,7 +271,7 @@ export function useResourcePickerSearch(options: UseResourcePickerSearchOptions 
       const data = await fetchGlobalSearch(keyword, singleTypePageSize, false, {
         sort,
         types,
-        paginationMode: 'ordered',
+        paginationMode: options.exhaustive ? 'global' : 'ordered',
         cursor,
         includeMetadata: false,
       });

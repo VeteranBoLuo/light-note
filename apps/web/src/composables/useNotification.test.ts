@@ -102,63 +102,17 @@ describe('useNotification.fetchList', () => {
     expect(markAllNotificationsRead).toHaveBeenCalledWith({ excludeCommunityChat: true });
   });
 
-  it('浏览器通知先建立基线，只对页面打开后出现的新未读项提示', async () => {
-    const created: Array<{ title: string; options: NotificationOptions }> = [];
-    const close = vi.fn();
-    class MockNotification {
-      static permission = 'granted';
-      onclick: (() => void) | null = null;
-      constructor(
-        public title: string,
-        public options: NotificationOptions,
-      ) {
-        created.push({ title, options });
-      }
-      close = close;
-    }
-    vi.stubGlobal('Notification', MockNotification);
+  it('页面未读刷新不再创建系统通知，避免与 Service Worker 重复投递', async () => {
+    const notificationConstructor = vi.fn();
+    vi.stubGlobal('Notification', notificationConstructor);
     user.preferences.notificationsBrowser = true;
     getUnreadCount
-      .mockResolvedValueOnce({ status: 200, data: { unreadTotal: 1, byType: { todo_reminder: 1 } } })
-      .mockResolvedValueOnce({
-        status: 200,
-        data: { unreadTotal: 3, byType: { todo_reminder: 2, community_chat: 1 } },
-      });
-    getNotificationList
-      .mockResolvedValueOnce({
-        status: 200,
-        data: { items: [{ id: 'old', title: '旧提醒', isRead: 0 }], total: 1 },
-      })
-      .mockResolvedValueOnce({
-        status: 200,
-        data: {
-          items: [
-            { id: 'new', title: '新提醒', content: '待办内容', isRead: 0, link: '/inbox' },
-            {
-              id: 'chat-new',
-              title: '聊天室有新消息',
-              content: '有人回复了你',
-              isRead: 0,
-              link: '/community-chat?message=message-1',
-              meta: JSON.stringify({ delivery: 'in_app_only' }),
-            },
-            { id: 'old', title: '旧提醒', isRead: 0 },
-          ],
-          total: 3,
-        },
-      });
-
-    const notification = useNotification();
-    await notification.refreshUnread();
-    await vi.waitFor(() => expect(getNotificationList).toHaveBeenCalledTimes(1));
-    expect(created).toHaveLength(0);
-
-    await notification.refreshUnread();
-    await vi.waitFor(() => expect(created).toHaveLength(1));
-    expect(created[0]).toEqual({
-      title: '新提醒',
-      options: expect.objectContaining({ body: '待办内容', tag: 'light-note:new' }),
-    });
+      .mockResolvedValueOnce({ status: 200, data: { unreadTotal: 1 } })
+      .mockResolvedValueOnce({ status: 200, data: { unreadTotal: 2 } });
+    await useNotification().refreshUnread();
+    await useNotification().refreshUnread();
+    expect(notificationConstructor).not.toHaveBeenCalled();
+    expect(getNotificationList).not.toHaveBeenCalled();
     vi.unstubAllGlobals();
   });
 

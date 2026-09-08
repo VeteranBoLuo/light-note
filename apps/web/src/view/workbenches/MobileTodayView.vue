@@ -26,12 +26,12 @@
     </div>
 
     <div class="mobile-today__brief">
-    <DailyBriefCard
-      compact
-      :eligible="Boolean(user.id && user.role !== 'visitor')"
-      :owner-key="dailyBriefOwnerKey"
-      :read-only="growthReadOnly"
-    />
+      <DailyBriefCard
+        compact
+        :eligible="Boolean(user.id && user.role !== 'visitor')"
+        :owner-key="dailyBriefOwnerKey"
+        :read-only="growthReadOnly"
+      />
     </div>
 
     <section class="mobile-today__pending" :aria-label="t('workbench.panel.todaySummary')">
@@ -94,12 +94,43 @@
       </div>
     </section>
 
-    <section v-if="todaySettled && continueItems.length" class="mobile-today__continue">
+    <section v-if="todaySettled" v-show="continueItems.length || projectEntryVisible" class="mobile-today__continue">
       <div class="mobile-today__continue-head">
         <strong>{{ t('workbench.mobileToday.continueTitle') }}</strong>
-        <span>{{ t('workbench.mobileToday.continueHint') }}</span>
+        <BButton
+          v-if="continueTab === 'projects'"
+          size="small"
+          @click="router.push('/toolbox/research_workspace?entry=workbench')"
+          >{{ t('toolbox.project.allProjects') }}</BButton
+        >
+        <span v-else>{{ t('workbench.mobileToday.continueHint') }}</span>
       </div>
-      <div class="mobile-today__continue-list">
+      <BTabs
+        v-model:active-tab="continueTab"
+        variant="pill"
+        :options="[
+          ...(continueItems.length ? [{ key: 'resources', label: t('toolbox.project.resources') }] : []),
+          ...(projectEntryVisible ? [{ key: 'projects', label: t('toolbox.project.myProjects') }] : []),
+        ]"
+      >
+        <template #label="{ tab }"
+          ><span class="continue-tab-label"
+            ><SvgIcon
+              v-if="tab.key === 'projects'"
+              class="continue-tab-label__icon"
+              :src="icon.toolbox.study"
+              size="15"
+            />{{ tab.label }}</span
+          ></template
+        >
+      </BTabs>
+      <WorkshopProjectEntry
+        v-show="continueTab === 'projects'"
+        inline
+        tab-panel
+        @state="projectEntryVisible = $event.visible"
+      />
+      <div v-if="continueTab === 'resources'" class="mobile-today__continue-list">
         <BButton
           v-for="item in continueItems"
           :key="`${item.type}-${item.id}`"
@@ -150,6 +181,8 @@
 </template>
 
 <script setup lang="ts">
+  import BTabs from '@/components/base/BasicComponents/BTabs.vue';
+  import WorkshopProjectEntry from '@/components/workbenches/WorkshopProjectEntry.vue';
   import { computed, onActivated, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
@@ -198,7 +231,9 @@
   const { dashboard, growthTasks, loadDashboard, loadGrowthTasks, loadClaimable } = useGrowth();
   const growthReadOnly = computed(() => Boolean(user.adminContext));
   const dailyBriefOwnerKey = computed(() =>
-    [user.id || 'visitor', user.role || '', user.adminContext?.subjectUserId || '', user.adminContext?.mode || ''].join('|'),
+    [user.id || 'visitor', user.role || '', user.adminContext?.subjectUserId || '', user.adminContext?.mode || ''].join(
+      '|',
+    ),
   );
   const { loadDailyReview } = useDailyReview();
 
@@ -221,7 +256,13 @@
   const overdueTodos = ref<TodoItem[]>([]);
   const dueTodayTodos = ref<TodoItem[]>([]);
   const inboxItems = ref<TodayInboxItem[]>([]);
+  const continueTab = ref('resources');
+  const projectEntryVisible = ref(false);
   const continueItems = ref<TodayContinueItem[]>([]);
+  watch([projectEntryVisible, () => continueItems.value.length], ([visible, count]) => {
+    if (visible && !count) continueTab.value = 'projects';
+    else if (!visible) continueTab.value = 'resources';
+  });
   const counts = ref({ overdue: 0, dueToday: 0, inbox: 0, todoPending: 0, unreadNotification: 0 });
   const organizeOwnerKey = computed(() =>
     [user.id || 'visitor', user.role || '', user.adminContext?.subjectUserId || '', user.adminContext?.mode || ''].join(
@@ -942,5 +983,14 @@
     color: var(--desc-color);
     font-size: 12px;
     line-height: 1.3;
+  }
+  .continue-tab-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .continue-tab-label__icon {
+    color: var(--primary-color);
+    flex-shrink: 0;
   }
 </style>

@@ -32,7 +32,12 @@
               @click="onItemClick(item)"
             >
               <svg-icon v-if="item.icon" :src="item.icon" size="15" />
-              <span class="b-dropdown-item__label">{{ item.label }}</span>
+              <span class="b-dropdown-item__label"
+                >{{ item.label
+                }}<small v-if="item.description" class="b-dropdown-item__description">{{
+                  item.description
+                }}</small></span
+              >
               <span v-if="item.unread" class="b-dropdown-item__unread-dot" aria-hidden="true" />
             </BButton>
           </template>
@@ -53,6 +58,7 @@
   interface BDropdownOption {
     key?: string;
     label?: string;
+    description?: string;
     icon?: string;
     danger?: boolean;
     active?: boolean;
@@ -351,5 +357,15 @@
   .b-dropdown-fade-leave-to {
     opacity: 0;
     transform: translateY(-4px);
+  }
+  .b-dropdown-item__description {
+    display: block;
+    max-width: 240px;
+    margin-top: 4px;
+    color: var(--desc-color);
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 </style>

@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h, ref } from 'vue';
 
+const alertMock = vi.hoisted(() => vi.fn());
+vi.mock('@/components/base/BasicComponents/BModal/Alert.ts', () => ({ default: { alert: alertMock } }));
 const requestMocks = vi.hoisted(() => ({ apiBasePost: vi.fn() }));
 const messageMocks = vi.hoisted(() => ({ success: vi.fn(), info: vi.fn(), warning: vi.fn() }));
 
@@ -63,6 +65,8 @@ function mountModal(bookmarkId = 'bookmark-1') {
 }
 
 afterEach(() => {
+  vi.useRealTimers();
+  alertMock.mockReset();
   cleanup?.();
   cleanup = undefined;
   requestMocks.apiBasePost.mockReset();
@@ -191,13 +195,68 @@ describe('BookmarkSnapshotModal 网页存档生命周期', () => {
     );
     summaryButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
-    await vi.waitFor(() =>
-      expect(messageMocks.warning).toHaveBeenCalledWith('aiQuotaErrors.insufficientWithAmounts'),
-    );
+    await vi.waitFor(() => expect(messageMocks.warning).toHaveBeenCalledWith('aiQuotaErrors.insufficientWithAmounts'));
     expect(requestMocks.apiBasePost).toHaveBeenCalledWith(
       '/api/bookmark/summarize',
       { id: 'bookmark-1', force: true },
       { silent: true },
     );
+  });
+  it('后台任务完成后刷新正文，轮询不重复触发存档或 AI', async () => {
+    vi.useFakeTimers();
+    let reads = 0;
+    requestMocks.apiBasePost.mockImplementation(async () => ({
+      status: 200,
+      data:
+        ++reads === 1
+          ? { archiveTask: { status: 'running', attempts: 1 } }
+          : { content: '后台读取正文', source: 'rendered_dom', archiveTask: { status: 'succeeded', attempts: 1 } },
+    }));
+    const host = mountModal();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(host.textContent).toContain('bookmarkMg.archiveState_running');
+    expect([...host.querySelectorAll('button')].filter((b) => b.disabled)).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(2500);
+    expect(host.textContent).toContain('后台读取正文');
+    expect(host.textContent).toContain('bookmarkMg.archiveSourceRendered');
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(requestMocks.apiBasePost).toHaveBeenCalledTimes(2);
+  });
+
+  it('读取失败时显示原因并保留已有正文', async () => {
+    requestMocks.apiBasePost.mockResolvedValue({
+      status: 200,
+      data: {
+        content: '旧正文',
+        archiveTask: { status: 'failed', attempts: 1, msg: '网站拒绝自动读取' },
+        failedCount: 2,
+      },
+    });
+    const host = mountModal();
+    await vi.waitFor(() => expect(host.textContent).toContain('网站拒绝自动读取'));
+    expect(host.textContent).toContain('旧正文');
+    expect(host.textContent).toContain('bookmarkMg.archivePreserved');
+    const retry = [...host.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('bookmarkMg.archiveRetryFailed'),
+    );
+    retry?.click();
+    expect(alertMock).toHaveBeenCalledTimes(1);
+    expect(requestMocks.apiBasePost).toHaveBeenCalledTimes(1);
+    requestMocks.apiBasePost.mockImplementation(async (path) =>
+      path.endsWith('retry-failed') ? { status: 200, data: { ok: true, queued: 2 } } : { status: 200, data: {} },
+    );
+    await alertMock.mock.calls[0][0].onOk();
+    expect(requestMocks.apiBasePost).toHaveBeenCalledWith('/api/bookmark/archive/retry-failed', {});
+  });
+
+  it('卸载时停止轮询，不显示迟到的结果', async () => {
+    vi.useFakeTimers();
+    requestMocks.apiBasePost.mockResolvedValue({ status: 200, data: { archiveTask: { status: 'pending' } } });
+    mountModal();
+    await vi.advanceTimersByTimeAsync(0);
+    cleanup?.();
+    cleanup = undefined;
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(requestMocks.apiBasePost).toHaveBeenCalledTimes(1);
   });
 });

@@ -210,9 +210,11 @@
                     >
                       {{ authorName(chatMessage) }}
                     </BButton>
-                    <span class="community-message__level">
-                      Lv.{{ chatMessage.author.level }} {{ chatMessage.author.levelName }}
-                    </span>
+                    <GrowthLevelChip
+                      class="community-message__level"
+                      :level="chatMessage.author.level"
+                      :name="chatMessage.author.levelName"
+                    />
                     <span v-if="chatMessage.author.role !== 'member'" class="community-message__role">
                       {{ authorRoleLabel(chatMessage.author.role) }}
                     </span>
@@ -822,6 +824,7 @@
 </template>
 
 <script setup lang="ts">
+  import GrowthLevelChip from '@/components/growth/GrowthLevelChip.vue';
   import {
     COMMUNITY_CHAT_ATTACHMENT_MAX_COUNT,
     COMMUNITY_CHAT_ATTACHMENT_MAX_TOTAL_BYTES,
@@ -5829,17 +5832,6 @@
     border-radius: 999px;
     color: var(--primary-color);
     font-size: 9px;
-  }
-
-  .community-message__level {
-    padding: 1px 6px;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 999px;
-    color: var(--primary-color);
-    background: var(--card-background);
-    font-size: 9px;
-    font-weight: 700;
-    white-space: nowrap;
   }
 
   .community-message__reply {

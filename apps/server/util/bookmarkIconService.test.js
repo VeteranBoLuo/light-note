@@ -110,6 +110,13 @@ describe('bookmarkIconService 内容寻址与清理', () => {
     await expect(readFile(saved.newFilePath)).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
+  it('已登记的图片资产由引用生命周期保护，不直接删除', async () => {
+    const saved = await saveIconToDisk({ id: 'bookmark-1' }, { buffer: Buffer.from('retained'), contentType: 'image/png' });
+    mocks.pool.query.mockResolvedValueOnce([[]]).mockResolvedValueOnce([[{ id: 1 }]]);
+    expect(await cleanupBookmarkIconFiles([{ id: 'bookmark-1', iconUrl: saved.iconUrl }])).toMatchObject({ kept: 1, deleted: 0 });
+    await expect(readFile(saved.newFilePath)).resolves.toBeInstanceOf(Buffer);
+  });
+
   it('远端内容与现有共享图标一致时仍推进检查时间', async () => {
     const buffer = Buffer.from('unchanged favicon bytes'.repeat(4));
     const saved = await saveIconToDisk({ id: 'bookmark-1', icon_url: '' }, { buffer, contentType: 'image/png' });

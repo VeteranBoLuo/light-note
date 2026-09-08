@@ -17,9 +17,19 @@ const {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  resolvePersonalKnowledgeResourceMetadata.mockResolvedValue([]);
 });
 
 describe('工具箱持续工作区', () => {
+  it('我的项目可省略模板，但所有聚合仍限定当前账号', async () => {
+    const database = { query: vi.fn().mockResolvedValue([[]]) };
+    await listToolboxWorkspaces({ userId: 'owner', database });
+    expect(database.query.mock.calls[0][1]).toEqual(['owner', 'owner', 'owner']);
+    expect(database.query.mock.calls[0][0]).not.toContain('AND w.kind = ?');
+    await expect(listToolboxWorkspaces({ userId: 'owner', kind: 'invalid', database })).rejects.toMatchObject({
+      code: 'TOOLBOX_WORKSPACE_FIELD_INVALID',
+    });
+  });
   it('连续推进允许今天或昨天作为最近一天，但会在断档处停止', () => {
     const today = new Date('2026-08-29T08:00:00Z');
     expect(calculateWorkspaceStreak(['2026-08-29', '2026-08-28', '2026-08-27'], today)).toBe(3);
@@ -119,7 +129,7 @@ describe('工具箱持续工作区', () => {
 
     const result = await listToolboxHomeWorkspaces({ userId: 'user-1', database });
 
-    expect(result.continue.map((item) => item.id)).toEqual(['active-1', 'paused-1']);
+    expect(result.continue.map((item) => item.id)).toEqual(['active-1']);
     expect(result.recent.map((item) => item.id)).toEqual(['completed-1', 'paused-1', 'active-1']);
     expect(result.recent.map((item) => item.id)).toEqual(expect.arrayContaining(['paused-1', 'active-1']));
     expect(result.continue[0]).toEqual({
@@ -256,4 +266,61 @@ describe('工具箱持续工作区', () => {
       }),
     ).rejects.toMatchObject({ code: 'TOOLBOX_WORKSPACE_SESSION_EMPTY' });
   });
+});
+
+describe('project material atomic limits', () => {
+  it.each(['completed', 'archived'])('rejects adding to a %s project before reading sources', async (status) => {
+    const query = vi.fn().mockResolvedValue([[{ id: 'w', status }]]);
+    await expect(
+      addToolboxWorkspaceResources({
+        userId: 'owner',
+        workspaceId: 'w',
+        resourceRefs: [{ type: 'note', id: 'n' }],
+        database: { query },
+      }),
+    ).rejects.toMatchObject({ code: 'TOOLBOX_WORKSPACE_UNAVAILABLE' });
+    expect(query).toHaveBeenCalledTimes(1);
+  });
+  it.each([true, false])(
+    'deduplicates a full project or rejects the entire extra batch (duplicate=%s)',
+    async (duplicate) => {
+      const id = duplicate ? 'n0' : 'extra';
+      resolvePersonalKnowledgeResourceMetadata.mockResolvedValueOnce([
+        { type: 'note', id, version: 'v1', title: 'Note' },
+      ]);
+      const connection = {
+        beginTransaction: vi.fn(),
+        commit: vi.fn(),
+        rollback: vi.fn(),
+        release: vi.fn(),
+        query: vi
+          .fn()
+          .mockResolvedValueOnce([[{ id: 'w', status: 'active' }]])
+          .mockResolvedValueOnce([
+            Array.from({ length: 100 }, (_, i) => ({ resource_type: 'note', resource_id: `n${i}` })),
+          ]),
+      };
+      const database = {
+        getConnection: async () => connection,
+        query: vi.fn(async (sql) => [
+          sql.includes('FROM toolbox_workspaces') ? [{ id: 'w', kind: 'research', status: 'active' }] : [],
+        ]),
+      };
+      const operation = addToolboxWorkspaceResources({
+        userId: 'owner',
+        workspaceId: 'w',
+        resourceRefs: [{ type: 'note', id }],
+        database,
+      });
+      if (duplicate) {
+        await expect(operation).resolves.toMatchObject({ id: 'w' });
+        expect(connection.commit).toHaveBeenCalledOnce();
+      } else {
+        await expect(operation).rejects.toMatchObject({ code: 'TOOLBOX_WORKSPACE_RESOURCE_LIMIT' });
+        expect(connection.rollback).toHaveBeenCalledOnce();
+      }
+      expect(connection.query).toHaveBeenCalledTimes(2);
+      expect(connection.query.mock.calls.some(([sql]) => sql.includes('INSERT'))).toBe(false);
+    },
+  );
 });

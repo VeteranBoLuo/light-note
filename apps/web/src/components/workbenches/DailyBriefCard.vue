@@ -3,176 +3,209 @@
     <header class="daily-brief-card__header">
       <span class="daily-brief-card__ai-mark" aria-hidden="true">AI</span>
       <div class="daily-brief-card__heading">
-        <div class="daily-brief-card__title-row"><h2>{{ t('workbench.dailyBrief.title') }}</h2></div>
-        <p role="status">{{ guestSample ? t('workbench.dailyBrief.guestSubtitle') : statusText || (readyBrief ? t('workbench.dailyBrief.generatedMeta', { time: generatedTime }) : t('workbench.dailyBrief.subtitle')) }}</p>
+        <div class="daily-brief-card__title-row"
+          ><h2>{{ t('workbench.dailyBrief.title') }}</h2></div
+        >
+        <p role="status">{{
+          guestSample
+            ? t('workbench.dailyBrief.guestSubtitle')
+            : statusText ||
+              (readyBrief
+                ? t('workbench.dailyBrief.generatedMeta', { time: generatedTime })
+                : t('workbench.dailyBrief.subtitle'))
+        }}</p>
       </div>
-      <BButton v-if="!readOnly && !guestSample" size="small" :loading="briefUpdating" :disabled="busy" :aria-label="t('workbench.dailyBrief.updateAction')" @click="update">
+      <BButton
+        v-if="!readOnly && !guestSample"
+        size="small"
+        :loading="briefUpdating"
+        :disabled="busy"
+        :aria-label="t('workbench.dailyBrief.updateAction')"
+        @click="update"
+      >
         <SvgIcon v-if="!briefUpdating" :src="icon.infrastructure.refresh" size="18" aria-hidden="true" />
       </BButton>
     </header>
     <div class="daily-brief-card__summary-copy">
-      <p class="daily-brief-card__headline">{{ displayBrief?.headline || t(errorMessage ? 'workbench.dailyBrief.failedTitle' : 'workbench.dailyBrief.subtitle') }}</p>
+      <p class="daily-brief-card__headline">{{
+        displayBrief?.headline || t(errorMessage ? 'workbench.dailyBrief.failedTitle' : 'workbench.dailyBrief.subtitle')
+      }}</p>
       <BButton size="small" @click="detailsVisible = true">
         {{ t('workbench.dailyBrief.viewBrief') }}<span v-if="briefInsights.length"> · {{ briefInsights.length }}</span>
         <SvgIcon :src="icon.ai.sourceArrow" size="13" aria-hidden="true" />
       </BButton>
     </div>
   </article>
-  <component :is="compact ? BModal : BriefInline" v-model:visible="detailsVisible" :title="t('workbench.dailyBrief.title')" :show-footer="false" content-class="daily-brief-detail-content" fullscreen-mobile>
-  <article v-if="showCard" v-bind="compact ? {} : $attrs" class="daily-brief-card" :class="{ 'daily-brief-card--detail': compact }" :aria-busy="busy || undefined">
-    <header class="daily-brief-card__header">
-      <span class="daily-brief-card__ai-mark" aria-hidden="true">AI</span>
-      <div class="daily-brief-card__heading">
-        <div class="daily-brief-card__title-row">
-          <h2>{{ t('workbench.dailyBrief.title') }}</h2>
-          <BChip v-if="briefInsights.length" tone="primary">{{ briefInsights.length }}</BChip>
-          <BChip v-if="readOnly" tone="neutral">{{ t('workbench.dailyBrief.previewMode') }}</BChip>
-        </div>
-        <p v-if="guestSample">{{ t('workbench.dailyBrief.guestSubtitle') }}</p>
-        <p
-          v-else-if="readyBrief"
-          role="status"
-          :title="t('workbench.dailyBrief.generatedMeta', { time: generatedTime })"
-        >
-          <template v-if="statusText">{{ statusText }}</template>
-          <template v-else>
-            {{ t('workbench.dailyBrief.generatedMeta', { time: generatedTime }) }} ·
-            {{ t(state?.autoUpdate === false ? 'workbench.dailyBrief.manualMode' : 'workbench.dailyBrief.autoMode') }}
-          </template>
-        </p>
-        <p v-else>{{ t('workbench.dailyBrief.subtitle') }}</p>
-      </div>
-      <div v-if="!readOnly && !guestSample" class="daily-brief-card__actions">
-        <BButton
-          v-if="readyBrief"
-          size="small"
-          class="daily-brief-card__update"
-          :loading="briefUpdating"
-          :disabled="busy"
-          :title="t('workbench.dailyBrief.updateAction')"
-          :aria-label="t('workbench.dailyBrief.updateAction')"
-          @click="update"
-        >
-          <SvgIcon v-if="!briefUpdating" :src="icon.infrastructure.refresh" size="18" aria-hidden="true" />
-        </BButton>
-      </div>
-    </header>
-
-    <div
-      v-if="(loading || state?.status === 'generating') && !readyBrief"
-      class="daily-brief-card__state"
-      role="status"
+  <component
+    :is="compact ? BModal : BriefInline"
+    v-model:visible="detailsVisible"
+    :title="t('workbench.dailyBrief.title')"
+    :show-footer="false"
+    content-class="daily-brief-detail-content"
+    fullscreen-mobile
+  >
+    <article
+      v-if="showCard"
+      v-bind="compact ? {} : $attrs"
+      class="daily-brief-card"
+      :class="{ 'daily-brief-card--detail': compact }"
+      :aria-busy="busy || undefined"
     >
-      <div class="daily-brief-card__state-surface">
-        <div class="daily-brief-card__state-main">
-          <BLoading :loading="true" inline :title="t('workbench.dailyBrief.generating')" />
-          <span>{{ t('workbench.dailyBrief.generatingHint') }}</span>
-        </div>
-        <small class="daily-brief-card__state-foot">
-          <i aria-hidden="true"></i>
-          {{ t('workbench.dailyBrief.autoGenerateHint') }}
-        </small>
-      </div>
-    </div>
-
-    <div
-      v-else-if="(errorMessage || state?.status === 'failed') && !readyBrief"
-      class="daily-brief-card__state is-error"
-      role="alert"
-    >
-      <div class="daily-brief-card__state-surface">
-        <div class="daily-brief-card__state-main">
-          <span class="daily-brief-card__state-icon" aria-hidden="true">
-            <SvgIcon :src="icon.message.warning" size="22" />
-          </span>
-          <div class="daily-brief-card__state-copy">
-            <strong>{{ t('workbench.dailyBrief.failedTitle') }}</strong>
-            <span>{{ errorMessage || t('workbench.dailyBrief.failedHint') }}</span>
+      <header class="daily-brief-card__header">
+        <span class="daily-brief-card__ai-mark" aria-hidden="true">AI</span>
+        <div class="daily-brief-card__heading">
+          <div class="daily-brief-card__title-row">
+            <h2>{{ t('workbench.dailyBrief.title') }}</h2>
+            <BChip v-if="briefInsights.length" tone="primary">{{ briefInsights.length }}</BChip>
+            <BChip v-if="readOnly" tone="neutral">{{ t('workbench.dailyBrief.previewMode') }}</BChip>
           </div>
-          <BButton v-if="!readOnly" type="primary" size="small" :loading="briefUpdating" @click="update">
-            {{ t('workbench.dailyBrief.retryAction') }}
+          <p v-if="guestSample">{{ t('workbench.dailyBrief.guestSubtitle') }}</p>
+          <p
+            v-else-if="readyBrief"
+            role="status"
+            :title="t('workbench.dailyBrief.generatedMeta', { time: generatedTime })"
+          >
+            <template v-if="statusText">{{ statusText }}</template>
+            <template v-else>
+              {{ t('workbench.dailyBrief.generatedMeta', { time: generatedTime }) }} ·
+              {{ t(state?.autoUpdate === false ? 'workbench.dailyBrief.manualMode' : 'workbench.dailyBrief.autoMode') }}
+            </template>
+          </p>
+          <p v-else>{{ t('workbench.dailyBrief.subtitle') }}</p>
+        </div>
+        <div v-if="!readOnly && !guestSample" class="daily-brief-card__actions">
+          <BButton
+            v-if="readyBrief"
+            size="small"
+            class="daily-brief-card__update"
+            :loading="briefUpdating"
+            :disabled="busy"
+            :title="t('workbench.dailyBrief.updateAction')"
+            :aria-label="t('workbench.dailyBrief.updateAction')"
+            @click="update"
+          >
+            <SvgIcon v-if="!briefUpdating" :src="icon.infrastructure.refresh" size="18" aria-hidden="true" />
           </BButton>
         </div>
-        <small class="daily-brief-card__state-foot">
-          <i aria-hidden="true"></i>
-          {{ t('workbench.dailyBrief.autoGenerateHint') }}
-        </small>
-      </div>
-    </div>
+      </header>
 
-    <div v-else-if="displayBrief" class="daily-brief-card__narrative">
-      <div v-if="errorMessage || state?.status === 'failed'" class="daily-brief-card__refresh-error" role="alert">
-        <SvgIcon :src="icon.message.warning" size="14" />
-        <span>{{ errorMessage || t('workbench.dailyBrief.refreshFailedHint') }}</span>
-      </div>
-      <p class="daily-brief-card__headline">{{ displayBrief.headline }}</p>
-
-      <div class="daily-brief-card__insights">
-        <article
-          v-for="insight in briefInsights"
-          :key="insight.id"
-          class="daily-brief-insight"
-          :class="`is-${insightTone(insight)}`"
-        >
-          <span class="daily-brief-insight__marker" aria-hidden="true">{{ insightMarker(insight) }}</span>
-          <div class="daily-brief-insight__copy">
-            <p>
-              {{ insight.text }}
-              <small v-if="insightChanged(insight)" class="daily-brief-insight__changed">{{
-                t('workbench.dailyBrief.changed')
-              }}</small>
-            </p>
-            <div v-if="organizeActions(insight).length" class="daily-brief-insight__organize-actions">
-              <BButton
-                v-for="action in organizeActions(insight)"
-                :key="action.id"
-                size="small"
-                @click="router.push(action.route)"
-              >
-                {{ t(`workbench.dailyBrief.${action.label}`) }}
-                <SvgIcon :src="icon.ai.sourceArrow" size="13" />
-              </BButton>
-            </div>
-            <div v-if="insight.sources?.length" class="daily-brief-insight__sources">
-              <span>{{ t('workbench.dailyBrief.sharedTag', { tag: insight.tagName }) }}</span>
-              <BButton
-                v-for="(source, index) in insight.sources"
-                :key="`${source.type}:${source.id}`"
-                size="small"
-                :title="source.title"
-                :disabled="insightChanged(insight)"
-                @click="openSource(source)"
-              >
-                {{ t(index === 0 ? 'workbench.dailyBrief.recentSource' : 'workbench.dailyBrief.olderSource') }} ·
-                {{ source.title }}
-                <SvgIcon :src="icon.ai.sourceArrow" size="13" aria-hidden="true" />
-              </BButton>
-            </div>
+      <div
+        v-if="(loading || state?.status === 'generating') && !readyBrief"
+        class="daily-brief-card__state"
+        role="status"
+      >
+        <div class="daily-brief-card__state-surface">
+          <div class="daily-brief-card__state-main">
+            <BLoading :loading="true" inline :title="t('workbench.dailyBrief.generating')" />
+            <span>{{ t('workbench.dailyBrief.generatingHint') }}</span>
           </div>
-        </article>
+          <small class="daily-brief-card__state-foot">
+            <i aria-hidden="true"></i>
+            {{ t('workbench.dailyBrief.autoGenerateHint') }}
+          </small>
+        </div>
       </div>
 
-      <aside class="daily-brief-card__recommendation">
-        <strong>{{
-          t(state?.stale ? 'workbench.dailyBrief.previousRecommendation' : 'workbench.dailyBrief.aiRecommendation')
-        }}</strong>
-        <p>{{ briefRecommendation || t('workbench.dailyBrief.noRecommendation') }}</p>
-      </aside>
-    </div>
-    <div v-else class="daily-brief-card__state">
-      <div class="daily-brief-card__state-surface">
-        <div class="daily-brief-card__state-main">
+      <div
+        v-else-if="(errorMessage || state?.status === 'failed') && !readyBrief"
+        class="daily-brief-card__state is-error"
+        role="alert"
+      >
+        <div class="daily-brief-card__state-surface">
+          <div class="daily-brief-card__state-main">
+            <span class="daily-brief-card__state-icon" aria-hidden="true">
+              <SvgIcon :src="icon.message.warning" size="22" />
+            </span>
+            <div class="daily-brief-card__state-copy">
+              <strong>{{ t('workbench.dailyBrief.failedTitle') }}</strong>
+              <span>{{ errorMessage || t('workbench.dailyBrief.failedHint') }}</span>
+            </div>
+            <BButton v-if="!readOnly" type="primary" size="small" :loading="briefUpdating" @click="update">
+              {{ t('workbench.dailyBrief.retryAction') }}
+            </BButton>
+          </div>
+          <small class="daily-brief-card__state-foot">
+            <i aria-hidden="true"></i>
+            {{ t('workbench.dailyBrief.autoGenerateHint') }}
+          </small>
+        </div>
+      </div>
+
+      <div v-else-if="displayBrief" class="daily-brief-card__narrative">
+        <div v-if="errorMessage || state?.status === 'failed'" class="daily-brief-card__refresh-error" role="alert">
+          <SvgIcon :src="icon.message.warning" size="14" />
+          <span>{{ errorMessage || t('workbench.dailyBrief.refreshFailedHint') }}</span>
+        </div>
+        <p class="daily-brief-card__headline">{{ displayBrief.headline }}</p>
+
+        <div class="daily-brief-card__insights">
+          <article
+            v-for="insight in briefInsights"
+            :key="insight.id"
+            class="daily-brief-insight"
+            :class="`is-${insightTone(insight)}`"
+          >
+            <span class="daily-brief-insight__marker" aria-hidden="true">{{ insightMarker(insight) }}</span>
+            <div class="daily-brief-insight__copy">
+              <p>
+                {{ insight.text }}
+                <small v-if="insightChanged(insight)" class="daily-brief-insight__changed">{{
+                  t('workbench.dailyBrief.changed')
+                }}</small>
+              </p>
+              <div v-if="organizeActions(insight).length" class="daily-brief-insight__organize-actions">
+                <BButton
+                  v-for="action in organizeActions(insight)"
+                  :key="action.id"
+                  size="small"
+                  @click="router.push(action.route)"
+                >
+                  {{ t(`workbench.dailyBrief.${action.label}`) }}
+                  <SvgIcon :src="icon.ai.sourceArrow" size="13" />
+                </BButton>
+              </div>
+              <div v-if="insight.sources?.length" class="daily-brief-insight__sources">
+                <span v-if="insight.tagName">{{ t('workbench.dailyBrief.sharedTag', { tag: insight.tagName }) }}</span>
+                <BButton
+                  v-for="(source, index) in insight.sources"
+                  :key="`${source.type}:${source.id}`"
+                  size="small"
+                  :title="source.title"
+                  :disabled="insightChanged(insight)"
+                  @click="openSource(source)"
+                >
+                  <template v-if="insight.tagName"
+                    >{{ t(index === 0 ? 'workbench.dailyBrief.recentSource' : 'workbench.dailyBrief.olderSource') }} ·
+                  </template>
+                  {{ source.title }}
+                  <SvgIcon :src="icon.ai.sourceArrow" size="13" aria-hidden="true" />
+                </BButton>
+              </div>
+            </div>
+          </article>
+        </div>
+
+        <aside class="daily-brief-card__recommendation">
           <strong>{{
-            t(readOnly ? 'workbench.dailyBrief.previewEmptyTitle' : 'workbench.dailyBrief.manualTitle')
+            t(state?.stale ? 'workbench.dailyBrief.previousRecommendation' : 'workbench.dailyBrief.aiRecommendation')
           }}</strong>
-          <span>{{ t(readOnly ? 'workbench.dailyBrief.previewEmptyHint' : 'workbench.dailyBrief.manualHint') }}</span>
-          <BButton v-if="!readOnly" type="primary" size="small" @click="update">
-            {{ t('workbench.dailyBrief.generateAction') }}
-          </BButton>
+          <p>{{ briefRecommendation || t('workbench.dailyBrief.noRecommendation') }}</p>
+        </aside>
+      </div>
+      <div v-else class="daily-brief-card__state">
+        <div class="daily-brief-card__state-surface">
+          <div class="daily-brief-card__state-main">
+            <strong>{{
+              t(readOnly ? 'workbench.dailyBrief.previewEmptyTitle' : 'workbench.dailyBrief.manualTitle')
+            }}</strong>
+            <span>{{ t(readOnly ? 'workbench.dailyBrief.previewEmptyHint' : 'workbench.dailyBrief.manualHint') }}</span>
+            <BButton v-if="!readOnly" type="primary" size="small" @click="update">
+              {{ t('workbench.dailyBrief.generateAction') }}
+            </BButton>
+          </div>
         </div>
       </div>
-    </div>
-  </article>
+    </article>
   </component>
 </template>
 
@@ -190,14 +223,28 @@
   import icon from '@/config/icon';
   import { resolveBriefSourceTarget, resolveBriefOrganizeActions } from '@/utils/dailyBriefNavigation';
 
-  const props = withDefaults(defineProps<{ eligible: boolean; ownerKey: string; readOnly?: boolean; compact?: boolean }>(), {
-    readOnly: false,
-    compact: false,
-  });
+  const props = withDefaults(
+    defineProps<{ eligible: boolean; ownerKey: string; readOnly?: boolean; compact?: boolean }>(),
+    {
+      readOnly: false,
+      compact: false,
+    },
+  );
   defineOptions({ inheritAttrs: false });
-  const BriefInline = defineComponent({ inheritAttrs: false, setup: (_, { slots }) => () => slots.default?.() });
+  const BriefInline = defineComponent({
+    inheritAttrs: false,
+    setup:
+      (_, { slots }) =>
+      () =>
+        slots.default?.(),
+  });
   const detailsVisible = ref(false);
-  watch(() => props.ownerKey, () => { detailsVisible.value = false; });
+  watch(
+    () => props.ownerKey,
+    () => {
+      detailsVisible.value = false;
+    },
+  );
   const { t, locale } = useI18n();
   const router = useRouter();
   const guestSample = computed(() => !props.eligible && !props.readOnly);

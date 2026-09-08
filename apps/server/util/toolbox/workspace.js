@@ -11,7 +11,7 @@ export const TOOLBOX_WORKSPACE_ITEM_STATUSES = Object.freeze(['open', 'in_progre
 const MAX_WORKSPACES = 50;
 const MAX_RESOURCES = 100;
 const MAX_ITEMS = 500;
-const HOME_CONTINUE_WORKSPACE_LIMIT = 4;
+const HOME_CONTINUE_WORKSPACE_LIMIT = 6;
 const HOME_RECENT_WORKSPACE_LIMIT = 6;
 const HOME_WORKSPACE_SCAN_LIMIT = 50;
 const WORKSPACE_OPEN_TOUCH_INTERVAL_MINUTES = 5;
@@ -114,7 +114,10 @@ function mapHomeWorkspaceSummary(row) {
 }
 
 function workspaceActivityTime(workspace) {
-  const time = new Date(workspace.lastOpenedAt || workspace.updatedAt || 0).getTime();
+  const time = Math.max(
+    new Date(workspace.lastOpenedAt || 0).getTime() || 0,
+    new Date(workspace.updatedAt || 0).getTime() || 0,
+  );
   return Number.isFinite(time) ? time : 0;
 }
 
@@ -208,7 +211,7 @@ async function requireWorkspace(database, userId, workspaceId) {
 async function lockWorkspace(database, userId, workspaceId) {
   const id = requiredText(workspaceId, 'workspaceId', 36);
   const [rows] = await database.query(
-    `SELECT id FROM toolbox_workspaces WHERE id = ? AND user_id = ? LIMIT 1 FOR UPDATE`,
+    `SELECT id, status FROM toolbox_workspaces WHERE id = ? AND user_id = ? LIMIT 1 FOR UPDATE`,
     [id, userId],
   );
   if (!rows[0]) throw toolboxError('TOOLBOX_WORKSPACE_NOT_FOUND', '工作区不存在或已不可访问', 404);
@@ -252,8 +255,8 @@ export function calculateWorkspaceStreak(sessionDates = [], today = new Date()) 
 
 export async function listToolboxWorkspaces({ userId, kind, status, database = pool } = {}) {
   const ownerId = requiredUserId(userId);
-  const workspaceKind = oneOf(kind, TOOLBOX_WORKSPACE_KINDS, 'kind');
-  const params = [ownerId, workspaceKind];
+  const workspaceKind = kind == null || kind === '' ? null : oneOf(kind, TOOLBOX_WORKSPACE_KINDS, 'kind');
+  const params = workspaceKind ? [ownerId, workspaceKind] : [ownerId];
   const statusSql = status ? 'AND w.status = ?' : "AND w.status <> 'archived'";
   if (status) params.push(oneOf(status, TOOLBOX_WORKSPACE_STATUSES, 'status'));
   const [rows] = await database.query(
@@ -276,7 +279,7 @@ export async function listToolboxWorkspaces({ userId, kind, status, database = p
           WHERE user_id = ?
           GROUP BY workspace_id
        ) items ON items.workspace_id = w.id
-      WHERE w.user_id = ? AND w.kind = ? ${statusSql}
+      WHERE w.user_id = ? ${workspaceKind ? 'AND w.kind = ?' : ''} ${statusSql}
       ORDER BY FIELD(w.status, 'active', 'paused', 'completed', 'archived'), w.updated_at DESC
       LIMIT ${MAX_WORKSPACES}`,
     [ownerId, ownerId, ...params],
@@ -307,13 +310,13 @@ export async function listToolboxHomeWorkspaces({ userId, database = pool } = {}
           GROUP BY workspace_id
        ) items ON items.workspace_id = w.id
       WHERE w.user_id = ? AND w.status <> 'archived'
-      ORDER BY COALESCE(w.last_opened_at, w.updated_at, w.create_time) DESC, w.id DESC
+      ORDER BY GREATEST(COALESCE(w.last_opened_at, w.create_time), COALESCE(w.updated_at, w.create_time)) DESC, w.id DESC
       LIMIT ${HOME_WORKSPACE_SCAN_LIMIT}`,
     [ownerId, ownerId, ownerId],
   );
   const summaries = rows.map(mapHomeWorkspaceSummary);
   const continuation = summaries
-    .filter((workspace) => workspace.status === 'active' || workspace.status === 'paused')
+    .filter((workspace) => workspace.status === 'active')
     .sort((left, right) => {
       const statusDifference = Number(left.status === 'paused') - Number(right.status === 'paused');
       return statusDifference || workspaceActivityTime(right) - workspaceActivityTime(left);
@@ -393,6 +396,19 @@ export async function getToolboxWorkspace({ userId, workspaceId, database = pool
     ),
   ]);
   const resources = resourcesResult[0].map(mapResource);
+  if (resources.length) {
+    const accessible = await resolvePersonalKnowledgeResourceMetadata({
+      userId: ownerId,
+      resourceRefs: resources.map((ref) => ({ type: ref.type, id: ref.resourceId })),
+      database,
+    });
+    const available = new Map(accessible.map((ref) => [`${ref.type}:${ref.id}`, ref]));
+    for (const resource of resources) {
+      const current = available.get(`${resource.type}:${resource.resourceId}`);
+      resource.available = Boolean(current);
+      if (current) resource.title = current.title || resource.title;
+    }
+  }
   const items = itemsResult[0].map(mapItem);
   const sessions = sessionsResult[0].map(mapSession);
   return {
@@ -443,7 +459,9 @@ export async function addToolboxWorkspaceResources({ userId, workspaceId, resour
   const ownerId = requiredUserId(userId);
   const refs = normalizeResourceRefs(resourceRefs);
   await withTransaction(database, async (connection) => {
-    await lockWorkspace(connection, ownerId, workspaceId);
+    const locked = await lockWorkspace(connection, ownerId, workspaceId);
+    if (['completed', 'archived'].includes(locked.status))
+      throw toolboxError('TOOLBOX_WORKSPACE_UNAVAILABLE', '项目已完成或归档', 409);
     // 归属与版本校验必须和引用写入处于同一事务快照，避免资源在校验后、落库前被删除。
     const verified = await resolvePersonalKnowledgeResourceMetadata({
       userId: ownerId,

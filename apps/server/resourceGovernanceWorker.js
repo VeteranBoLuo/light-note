@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import os from 'node:os';
+import { ensureBookmarkArchiveSchema, processBookmarkArchive } from './util/bookmarkArchiveJobs.js';
 import pool from './db/index.js';
 import { processBookmarkHealthScanBatch } from './util/linkHealth.js';
 import { ensureOrganizeSchema } from './util/organizeSchema.js';
@@ -17,7 +18,7 @@ let stopping = false;
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function run() {
-  await Promise.all([ensureResourceGovernanceSchema(), ensureOrganizeSchema()]);
+  await Promise.all([ensureResourceGovernanceSchema(), ensureOrganizeSchema(), ensureBookmarkArchiveSchema()]);
   console.log(
     '[resource-governance-worker] started id=%s scan=%s cleanup=%s bookmarkHealth=true',
     workerId,
@@ -42,6 +43,7 @@ async function run() {
         }
       }
       if (await processBookmarkHealthScanBatch(workerId)) handled = true;
+      if (await processBookmarkArchive()) handled = true;
       if (!handled) await wait(pollMs);
     } catch (error) {
       console.error('[resource-governance-worker] loop failed code=%s', stableAgentErrorCode(error));

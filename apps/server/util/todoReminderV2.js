@@ -3,9 +3,8 @@ import { Temporal } from '@js-temporal/polyfill';
 import pool from '../db/index.js';
 import { sendTrackedEmail } from './emailDelivery.js';
 import { createNotification } from './notification.js';
-import { buildTodoReminderEmail, notificationQuietUntil } from './todoReminder.js';
+import { buildTodoReminderEmail } from './todoReminder.js';
 import { normalizeTodoLocale } from './todoDateFormat.js';
-import { incrementTodoPlanMetric } from './todoPlanMetrics.js';
 
 const POLL_INTERVAL_MS = 60_000;
 const LEASE_MINUTES = 10;
@@ -70,7 +69,7 @@ async function claimJob(id) {
   try {
     await connection.beginTransaction();
     const [rows] = await connection.query(
-      `SELECT j.*, r.quiet_policy AS quietPolicy, r.target_email AS targetEmail,
+      `SELECT j.*, r.target_email AS targetEmail,
               DATE_FORMAT(j.stop_at_utc, '%Y-%m-%d %H:%i:%s') AS stopAtUtc,
               i.title, i.description, i.due_at AS dueAt, i.status AS todoStatus,
               i.del_flag AS todoDeleted, i.instance_state AS instanceState,
@@ -80,7 +79,7 @@ async function claimJob(id) {
          LEFT JOIN todo_reminder_rules r ON r.id = j.rule_id
          LEFT JOIN todo_series s ON s.id = j.series_id
          JOIN user u ON u.id = j.user_id AND u.del_flag = 0
-        WHERE j.id = ? AND j.status = 'pending' AND j.scheduled_at_utc <= UTC_TIMESTAMP()
+        WHERE j.id = ? AND j.status = 'pending' AND (j.scheduled_at_utc <= UTC_TIMESTAMP() OR j.cancel_reason = 'quiet_hours_deferred')
         LIMIT 1 FOR UPDATE`,
       [id],
     );
@@ -118,38 +117,10 @@ async function claimJob(id) {
       await connection.commit();
       return null;
     }
-    const quietUntil = notificationQuietUntil(preferences);
-    if (quietUntil) {
-      const deferredUtc = sqlUtc(quietUntil);
-      const beyondStop = job.stopAtUtc && deferredUtc > job.stopAtUtc;
-      if (job.quietPolicy === 'skip' || beyondStop) {
-        await markClaimSkipped(connection, id, beyondStop ? 'quiet_window_expired' : 'quiet_policy_skip');
-        await incrementTodoPlanMetric(connection, 'quiet_hours_skipped');
-      } else {
-        await connection.query(
-          `UPDATE todo_reminder_jobs
-              SET scheduled_at_utc = ?, scheduled_at_local = ?, cancel_reason = 'quiet_hours_deferred'
-            WHERE id = ?`,
-          [deferredUtc, sqlLocal(quietUntil, job.timezone), id],
-        );
-        await incrementTodoPlanMetric(connection, 'quiet_hours_deferred');
-        // 同一项同一渠道在免打扰期间积压的催办合并为一次，避免静默时段结束后瞬间轰炸。
-        const [coalesced] = await connection.query(
-          `UPDATE todo_reminder_jobs
-              SET status = 'skipped', cancel_reason = 'quiet_hours_coalesced'
-            WHERE todo_id = ? AND rule_id = ? AND channel = ? AND id <> ? AND status = 'pending'
-              AND scheduled_at_utc <= ?`,
-          [job.todo_id, job.rule_id, job.channel, id, deferredUtc],
-        );
-        await incrementTodoPlanMetric(connection, 'quiet_hours_skipped', Number(coalesced?.affectedRows || 0));
-      }
-      await connection.commit();
-      return null;
-    }
     const leaseToken = crypto.randomUUID();
     await connection.query(
       `UPDATE todo_reminder_jobs
-          SET status = 'processing', lease_token = ?, lease_until = DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? MINUTE)
+          SET status = 'processing', cancel_reason = NULL, lease_token = ?, lease_until = DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? MINUTE)
         WHERE id = ?`,
       [leaseToken, LEASE_MINUTES, id],
     );
@@ -271,7 +242,7 @@ export async function processDueTodoReminderJobs() {
     );
     const [rows] = await pool.query(
       `SELECT id FROM todo_reminder_jobs
-        WHERE status = 'pending' AND scheduled_at_utc <= UTC_TIMESTAMP()
+        WHERE status = 'pending' AND (scheduled_at_utc <= UTC_TIMESTAMP() OR cancel_reason = 'quiet_hours_deferred')
         ORDER BY scheduled_at_utc, id LIMIT ?`,
       [BATCH_SIZE],
     );

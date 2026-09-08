@@ -435,11 +435,11 @@
 <style scoped lang="less">
   .image-tool {
     display: grid;
-    gap: 18px;
+    gap: 14px;
   }
   .image-tool__drop-zone {
-    min-height: 350px;
-    padding: 42px 24px;
+    min-height: 260px;
+    padding: 28px 24px;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -520,7 +520,7 @@
     color: var(--primary-color);
   }
   .image-tool__summary {
-    min-height: 78px;
+    min-height: 66px;
     padding: 11px 12px 11px 15px;
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;

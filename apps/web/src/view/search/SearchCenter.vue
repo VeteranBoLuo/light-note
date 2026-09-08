@@ -650,6 +650,8 @@
 </template>
 
 <script setup lang="ts">
+  import { useProjectResourceAction } from '@/composables/useProjectResourceAction';
+  const { canJoinProject, joinProject } = useProjectResourceAction();
   import { useResourceSelection } from '@/composables/useResourceSelection';
   import { useResourceSelectionStore } from '@/store/resourceSelection';
   import { buildNoteDetailRequestScope } from '@/api/noteDetailPrefetch';
@@ -1220,6 +1222,9 @@
     return [
       openItem,
       { key: 'resource-open-divider', divider: true },
+      ...(canJoinProject.value
+        ? [{ key: 'joinProject', label: t('toolbox.project.join'), icon: icon.toolbox.research }]
+        : []),
       { key: 'ai', label: t('resourceCenter.analyzeResourceMenu'), icon: icon.ai.organize },
       { key: 'addInbox', label: t('inbox.addExisting'), icon: icon.contextMenu.inbox },
       { key: 'resource-actions-divider', divider: true },
@@ -1926,6 +1931,10 @@
   }
 
   function handleItemMenu(action: string, item: DisplaySearchItem) {
+    if (action === 'joinProject') {
+      joinProject([{ type: item.type as any, id: String(item.id), title: item.title }]);
+      return;
+    }
     if (action === 'open') {
       openItem(item);
       return;

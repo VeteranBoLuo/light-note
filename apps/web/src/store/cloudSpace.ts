@@ -65,6 +65,7 @@ export default defineStore('dom', {
           isRename?: boolean;
           fileType: string;
           fileUrl: string;
+          imagePreview?: import('@/api/imagePreview').ImagePreviewState;
           tags?: { id: string; name: string }[];
           isPending?: boolean;
         }[];
