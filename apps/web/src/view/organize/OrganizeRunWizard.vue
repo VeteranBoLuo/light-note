@@ -208,8 +208,16 @@
             >{{ entry.reason }} · {{ entry.count }}</li
           ></ul
         >
-        <p v-if="preview.summary.skipped" class="wizard-hint">{{
-          t('organizeWorkspace.skipped', { count: preview.summary.skipped })
+        <template v-if="preview.summary.skippedReasons">
+          <p v-if="preview.summary.skippedReasons.customIcon" class="wizard-hint">{{
+            t('organizeIcons.skippedCustom', { count: preview.summary.skippedReasons.customIcon })
+          }}</p>
+          <p v-if="preview.summary.skippedReasons.unavailable" class="wizard-hint">{{
+            t('organizeWorkspace.skipped', { count: preview.summary.skippedReasons.unavailable })
+          }}</p>
+        </template>
+        <p v-else-if="preview.summary.skipped" class="wizard-hint">{{
+          t('organizeIcons.skippedUnknown', { count: preview.summary.skipped })
         }}</p>
         <p
           v-if="!preview.summary.aiEnabled && preview.options.checks.some((check) => ['tags', 'title'].includes(check))"

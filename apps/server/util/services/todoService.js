@@ -1,3 +1,9 @@
+import {
+  writeTodoOrganization,
+  copyTodoOrganization,
+  hydrateTodoOrganization,
+  todoOrganizationFilters,
+} from './todoOrganizationService.js';
 import { insertData } from '../agent/data.js';
 import crypto from 'crypto';
 import { invalidatePersonalKnowledgeCache } from '../personalKnowledgeSearch.js';
@@ -521,6 +527,7 @@ export async function createTodo(
     delFlag: 0,
   });
   await connection.query('INSERT INTO todo_items SET ?', [row]);
+  await writeTodoOrganization(connection, userId, [row.id], values);
   await syncReminder(connection, { todoId: row.id, userId, reminder: todo.reminder });
   // 参考资料与待办主记录同事务写入,任一引用越权即整体回滚
   const resourceRefs = normalizeTodoResourceRefs(values?.resourceRefs);
@@ -539,9 +546,11 @@ export async function updateTodo(connection, userId, id, values) {
   );
   const current = rows[0];
   if (!current) return null;
+  if (current.status === 'completed') throw todoStatusError('TODO_COMPLETED_READ_ONLY', '已完成的待办不能编辑', 409);
+  await writeTodoOrganization(connection, userId, [id], values);
   if (Number(current.plan_version || 1) === 2) {
     const keys = Object.keys(values || {}).filter((key) => !['id'].includes(key));
-    const inlineKeys = new Set(['checklist', 'priority']);
+    const inlineKeys = new Set(['checklist', 'priority', 'listId', 'tagIds']);
     if (!keys.length || keys.some((key) => !inlineKeys.has(key))) {
       throw todoStatusError(
         'TODO_V2_SCOPE_REQUIRED',
@@ -597,7 +606,9 @@ export async function updateTodo(connection, userId, id, values) {
       userId,
     ],
   );
-  await syncReminder(connection, { todoId: id, userId, reminder: todo.reminder });
+  if (['reminder', 'reminderAt', 'dueAt', 'recurrence'].some((key) => hasOwn(values, key))) {
+    await syncReminder(connection, { todoId: id, userId, reminder: todo.reminder });
+  }
   // 只有显式传了 resourceRefs 才整体替换,未传表示本次不改动关系
   const nextRefs = normalizeTodoResourceRefs(values?.resourceRefs);
   if (nextRefs !== null) {
@@ -666,6 +677,7 @@ export async function setTodoStatus(connection, userId, id, status, { undoComple
       if (Number(nextResult?.affectedRows || 0) === 1) {
         // 下一实例沿用同一批参考资料,顺序保持一致
         await copyTodoResourceRefs(connection, { userId, fromTodoId: current.id, toTodoId: nextId });
+        await copyTodoOrganization(connection, userId, current.id, nextId);
       }
       if (Number(nextResult?.affectedRows || 0) === 1 && reminder) {
         const currentDueMs = new Date(String(current.due_at).replace(' ', 'T')).getTime();
@@ -1241,6 +1253,9 @@ export async function listTodoPage(db, userId, input = {}) {
     normalizeTodoListOptions(input);
   const where = ['user_id = ?', 'del_flag = 0', "COALESCE(instance_state, 'normal') = 'normal'"];
   const params = [userId];
+  const organization = todoOrganizationFilters(input);
+  where.push(...organization.where);
+  params.push(...organization.params);
   if (ids !== null) {
     if (ids.length) {
       where.push('todo_items.id IN (?)');
@@ -1287,9 +1302,17 @@ export async function listTodoPage(db, userId, input = {}) {
             instance_timezone AS instanceTimezone, is_exception AS isException,
             instance_state AS instanceState, generated_by_todo_id AS generatedByTodoId,
             create_time AS createdAt, update_time AS updatedAt, ${ACTION_AT_SQL} AS actionAt`;
+  const groupedOrder =
+    input.organization &&
+    sort === 'smart' &&
+    status !== 'completed' &&
+    input.listId === undefined &&
+    (!input.scope || input.scope === 'all')
+      ? `CASE WHEN status = 'completed' THEN 2 WHEN priority = 2 OR due_at < NOW() THEN 0 ELSE 1 END, CASE WHEN status = 'pending' AND priority <> 2 AND (due_at IS NULL OR due_at >= NOW()) THEN COALESCE(list_id, '') ELSE '' END, `
+      : '';
   const pageSql = `SELECT ${fields}
      FROM todo_items WHERE ${where.join(' AND ')}
-     ORDER BY ${todoOrderSql(status, sort)}${paginated ? ' LIMIT ? OFFSET ?' : ''}`;
+     ORDER BY ${groupedOrder}${todoOrderSql(status, sort)}${paginated ? ' LIMIT ? OFFSET ?' : ''}`;
   const pageParams = paginated ? [...params, limit + 1, offset] : params;
   const [[rows], countResult] = await Promise.all([
     db.query(pageSql, pageParams),
@@ -1368,7 +1391,7 @@ export async function listTodoPage(db, userId, input = {}) {
     };
   });
   return {
-    items: mappedItems,
+    items: input.organization ? await hydrateTodoOrganization(db, userId, mappedItems) : mappedItems,
     total: includeTotal ? Number(countResult?.[0]?.[0]?.total || 0) : mappedItems.length,
     nextCursor: hasMore ? encodeOffsetCursor(TODO_PAGE_CURSOR_SCOPE, offset + items.length) : null,
   };

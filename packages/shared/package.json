@@ -68,6 +68,10 @@
     "./notification-presentation": {
       "types": "./notificationPresentation.d.ts",
       "default": "./notificationPresentation.js"
+    },
+    "./workspace-board": {
+      "types": "./workspaceBoard.d.ts",
+      "default": "./workspaceBoard.js"
     }
   },
   "devDependencies": {

@@ -53,6 +53,12 @@
           >
             <span>{{ metric.label }}</span>
             <strong>{{ metric.value }}</strong>
+            <BProgress
+              v-if="embedded && metric.key === 'daily' && aiQuotaStatus && aiQuotaStatus.dailyQuota > 0"
+              :percent="(aiQuotaStatus.dailyRemaining / aiQuotaStatus.dailyQuota) * 100"
+              size="small"
+              :aria-label="metric.label"
+            />
             <small>{{ metric.hint }}</small>
             <BButton
               v-if="metric.key === 'permanent'"
@@ -94,7 +100,7 @@
       </BCard>
 
       <BCard as="section" class="ai-usage-panel" padding="18px 20px" radius="16px">
-        <AiUsageCenter />
+        <AiUsageCenter :settings-layout="embedded" />
       </BCard>
     </main>
     <EntitlementAcquireModal v-model:visible="acquireVisible" asset="ai" />
@@ -108,6 +114,7 @@
   import AiUsageCenter from '@/components/aiSkills/AiUsageCenter.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BCard from '@/components/base/BasicComponents/BCard.vue';
+  import BProgress from '@/components/base/BasicComponents/BProgress.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import EntitlementAcquireModal from '@/components/support/EntitlementAcquireModal.vue';
@@ -444,5 +451,62 @@
   html.light-note-mobile-rendering .ai-usage-heading__icon,
   html.light-note-mobile-rendering .ai-quota-state {
     box-shadow: none;
+  }
+
+  .ai-usage-page.is-embedded {
+    .ai-usage-shell {
+      gap: 18px;
+    }
+    .ai-quota-panel,
+    .ai-usage-panel {
+      padding: 22px;
+      border-radius: 14px;
+      background: var(--card-background);
+      box-shadow: none;
+    }
+    .ai-quota-panel__head {
+      padding-bottom: 18px;
+      margin-bottom: 18px;
+      border-bottom: 1px solid var(--card-border-color);
+    }
+    .ai-quota-panel__head h2 {
+      font-size: 16px;
+    }
+    .ai-quota-panel__head p {
+      font-size: 13px;
+    }
+    .ai-quota-metrics {
+      gap: 12px;
+    }
+    .ai-quota-metric {
+      padding: 16px;
+      min-height: 130px;
+      background: transparent;
+    }
+    .ai-quota-metric > strong {
+      font-size: 23px;
+    }
+    .ai-quota-metric > span,
+    .ai-quota-metric > small {
+      font-size: 12px;
+    }
+  }
+  @media (max-width: 767px) {
+    .ai-usage-page.is-embedded {
+      .ai-quota-panel,
+      .ai-usage-panel {
+        padding: 16px;
+        border-radius: 12px;
+      }
+      .ai-usage-shell {
+        gap: 14px;
+      }
+      .ai-quota-metrics {
+        grid-template-columns: 1fr;
+      }
+      .ai-quota-metric {
+        min-height: 100px;
+      }
+    }
   }
 </style>

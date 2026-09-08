@@ -23,6 +23,7 @@
     "prettier": "prettier --write",
     "typecheck": "tsc --noEmit --skipLibCheck",
     "test": "vitest run",
+    "check:workspace-surfaces": "node scripts/check-workspace-surfaces.mjs",
     "test:watch": "vitest"
   },
   "dependencies": {

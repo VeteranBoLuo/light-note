@@ -1,3 +1,4 @@
+import { operateBoard, readBoardItem } from '../util/toolbox/board.js';
 import { readProjectEntry, dismissProjectIntro } from '../util/toolbox/projectEntry.js';
 import { ensureNotVisitor, ensureUserOrAdminPolicy } from '../util/auth.js';
 import { resultData } from '../util/common.js';
@@ -395,6 +396,27 @@ export async function dismissProjectEntry(req, res) {
   if (!requireWrite(req, res)) return;
   try {
     return res.send(resultData(await dismissProjectIntro(req.user.id)));
+  } catch (error) {
+    return sendError(res, error);
+  }
+}
+
+export async function operateWorkspaceBoard(req, res) {
+  if (!requireWrite(req, res)) return;
+  try {
+    const result = await operateBoard({ userId: req.user.id, workspaceId: req.params.workspaceId, input: req.body });
+    return res.send(resultData(result));
+  } catch (error) {
+    return sendError(res, error);
+  }
+}
+export async function getWorkspaceBoardItem(req, res) {
+  try {
+    return res.send(
+      resultData(
+        await readBoardItem({ userId: req.user.id, workspaceId: req.params.workspaceId, itemId: req.params.itemId }),
+      ),
+    );
   } catch (error) {
     return sendError(res, error);
   }

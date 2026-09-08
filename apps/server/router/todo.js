@@ -3,6 +3,12 @@ import * as todoHandle from '../router_handle/todoHandle.js';
 
 const router = express.Router();
 
+router.post('/workspace', todoHandle.todoWorkspace);
+router.post('/lists', todoHandle.todoLists);
+router.post('/lists/save', todoHandle.saveList);
+router.post('/lists/delete', todoHandle.removeList);
+router.post('/organization', todoHandle.organizeTodos);
+
 router.post('/list', todoHandle.listTodo);
 router.post('/count', todoHandle.countTodo);
 router.post('/create', todoHandle.createTodo);

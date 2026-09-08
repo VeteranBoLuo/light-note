@@ -247,6 +247,8 @@ declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'organize_ai_suggestions', [
 ]);
 declare(ADMIN_POLICIES.READ, 'todo', [
   ['POST', '/todo/list'],
+  ['POST', '/todo/workspace'],
+  ['POST', '/todo/lists'],
   ['POST', '/todo/count'],
   ['POST', '/todo/v2/config'],
   ['POST', '/todo/v2/preview'],
@@ -260,6 +262,9 @@ declare(ADMIN_POLICIES.READ, 'todo', [
 declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'todo', [
   ['POST', '/todo/create'],
   ['POST', '/todo/update'],
+  ['POST', '/todo/lists/save'],
+  ['POST', '/todo/lists/delete'],
+  ['POST', '/todo/organization'],
   ['POST', '/todo/complete'],
   ['POST', '/todo/reopen'],
   ['POST', '/todo/delete'],
@@ -321,6 +326,7 @@ declare(ADMIN_POLICIES.READ, 'toolbox', [
   ['GET', '/toolbox/knowledge-overview'],
   ['GET', '/toolbox/workspaces'],
   ['GET', '/toolbox/workspaces/:workspaceId'],
+  ['GET', '/toolbox/workspaces/:workspaceId/items/:itemId'],
   ['GET', '/toolbox/tasks'],
   ['GET', '/toolbox/jobs'],
   ['GET', '/toolbox/jobs/:jobId'],
@@ -338,6 +344,7 @@ declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'toolbox', [
   ['POST', '/toolbox/workspaces/:workspaceId/resources'],
   ['POST', '/toolbox/workspaces/:workspaceId/resources/remove'],
   ['POST', '/toolbox/workspaces/:workspaceId/items'],
+  ['POST', '/toolbox/workspaces/:workspaceId/board'],
   ['PATCH', '/toolbox/workspaces/:workspaceId/items/:itemId'],
   ['POST', '/toolbox/workspaces/:workspaceId/sessions'],
   ['POST', '/toolbox/uploads'],
@@ -784,6 +791,9 @@ function resolvePolicy(method, path) {
   }
   if (/^\/toolbox\/workspaces\/[^/]+\/resources\/remove$/.test(path)) {
     return routePolicies.get(`${method} /toolbox/workspaces/:workspaceId/resources/remove`);
+  }
+  if (/^\/toolbox\/workspaces\/[^/]+\/board$/.test(path)) {
+    return routePolicies.get(`${method} /toolbox/workspaces/:workspaceId/board`);
   }
   if (/^\/toolbox\/workspaces\/[^/]+\/items$/.test(path)) {
     return routePolicies.get(`${method} /toolbox/workspaces/:workspaceId/items`);

@@ -1,6 +1,10 @@
 <template>
   <section class="todo-matrix" :class="{ 'is-mobile': mobile }" :aria-label="t('inbox.todoMatrixLabel')">
-    <p v-if="!mobile" class="todo-matrix__guide">{{ t('inbox.todoMatrixGuide') }}</p>
+    <div v-if="!mobile" class="todo-matrix__guide-compact"
+      ><BTooltip :title="t('inbox.todoMatrixGuide')"
+        ><BButton size="small">{{ t('todoWorkspace.matrixGuide') }}</BButton></BTooltip
+      ></div
+    >
 
     <section v-if="mobile" class="todo-matrix__overview" :aria-label="t('inbox.todoMatrixLabel')">
       <BButton
@@ -77,7 +81,15 @@
                 :title="item.title"
                 @click.stop="emit('preview', item)"
               >
-                <span class="todo-matrix-card__title">{{ item.title }}</span>
+                <span class="todo-matrix-card__title"
+                  >{{ item.title }}
+                  <small v-if="item.checklist?.length"
+                    >{{ t('todoWorkspace.subitems') }} {{ item.checklist.filter((check) => check.done).length }}/{{
+                      item.checklist.length
+                    }}
+                    ›</small
+                  ></span
+                >
               </BButton>
               <span class="todo-matrix-card__meta">
                 <span class="todo-matrix-card__priority" :class="`is-priority-${item.priority}`">
@@ -159,7 +171,7 @@
       @toggle-complete="(item, completed) => emit('toggle-complete', item, completed)"
       @update-checklist="(item, checklist) => emit('update-checklist', item, checklist)"
       @preview="(item) => emit('preview', item)"
-      @edit="(item) => emit('edit', item)"
+      @edit="(item, section) => emit('edit', item, section)"
       @delete="(item) => emit('delete', item)"
       @add-to-calendar="(item) => emit('add-to-calendar', item)"
       @snooze="(item, preset) => emit('snooze', item, preset)"
@@ -175,6 +187,7 @@
   import type { TodoChecklistItem, TodoItem, TodoPriority, TodoSeriesAction } from '@/api/todoApi';
   import BActionMenu from '@/components/base/BasicComponents/BActionMenu.vue';
   import type { BActionMenuItem } from '@/components/base/BasicComponents/actionMenu';
+  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -207,7 +220,7 @@
   );
   const emit = defineEmits<{
     preview: [item: TodoItem];
-    edit: [item: TodoItem];
+    edit: [item: TodoItem, section?: 'checklist'];
     delete: [item: TodoItem];
     'toggle-complete': [item: TodoItem, completed: boolean];
     'update-checklist': [item: TodoItem, checklist: TodoChecklistItem[]];
@@ -852,6 +865,18 @@
 
     .todo-matrix__overview-title strong {
       font-size: 11px;
+    }
+  }
+  .todo-matrix__guide-compact {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 6px;
+  }
+  @media (min-width: 768px) and (max-height: 819px) {
+    .todo-matrix:not(.is-mobile) .todo-matrix__quadrant {
+      min-height: 140px;
+      padding: 12px;
+      gap: 8px;
     }
   }
 </style>

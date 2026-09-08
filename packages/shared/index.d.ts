@@ -257,3 +257,18 @@ export declare const OFFICIAL_HOST: string;
 export declare const ANDROID_LATEST_APK_PATH: string;
 
 export * from './imagePreviewProtocol.js';
+
+/** 待办组织关系独立于资料类型：省略保留，null/空集合解除。 */
+export interface TodoOrganizationPatch {
+  listId?: string | null;
+  tagIds?: string[] | null;
+}
+export interface TodoListSummary {
+  id: string;
+  name: string;
+  color: string;
+  pendingTotal?: number;
+  completedTotal?: number;
+}
+export interface TodoTagSummary { id: string; name: string }
+export type TodoOrganizationScope = 'current' | 'future' | 'series';

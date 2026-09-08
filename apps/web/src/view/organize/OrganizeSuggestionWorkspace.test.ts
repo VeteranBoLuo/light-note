@@ -945,3 +945,21 @@ it('标签可独立整理，自动选择免费图标检查与全部标签范围'
   });
   expect(api.actOnRunSuggestion).not.toHaveBeenCalled();
 });
+
+it('确认页不会把已有图标的 34 个标签误报为不存在', async () => {
+  api.previewRun.mockResolvedValue(
+    ok({
+      ...result(),
+      status: 'preview',
+      summary: { ...result().summary, skipped: 34, skippedReasons: { customIcon: 34, unavailable: 0 } },
+    }),
+  );
+  await mount();
+  button('重新整理').click();
+  await settle();
+  await toScope();
+  button('确认整理范围').click();
+  await settle();
+  expect(document.body.textContent).toContain('有 34 个标签已有图标，无需补全，已跳过。');
+  expect(document.body.textContent).not.toContain('34 项不存在');
+});

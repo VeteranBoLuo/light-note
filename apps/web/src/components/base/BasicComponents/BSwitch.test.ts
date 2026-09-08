@@ -59,3 +59,16 @@ describe('BSwitch semantics', () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 });
+
+it('controlled mode emits intent without changing the displayed state before parent confirmation', async () => {
+  const host = document.createElement('div'); document.body.append(host);
+  const checked = ref(false); const onChange = vi.fn();
+  const app = createApp({ render: () => h(BSwitch, { checked: checked.value, controlled: true, onChange }) });
+  app.mount(host); cleanup = () => { app.unmount(); host.remove(); };
+  const control = host.querySelector<HTMLElement>('[role="switch"]')!;
+  control.click(); await nextTick();
+  expect(onChange).toHaveBeenCalledWith(true);
+  expect(control.getAttribute('aria-checked')).toBe('false');
+  checked.value = true; await nextTick();
+  expect(control.getAttribute('aria-checked')).toBe('true');
+});

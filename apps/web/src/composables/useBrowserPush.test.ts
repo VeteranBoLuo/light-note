@@ -17,6 +17,7 @@ class Channel {
   }
 }
 beforeEach(() => {
+  vi.stubGlobal('innerWidth', 1440);
   vi.resetModules();
   localStorage.clear();
   post.mockReset();
@@ -157,5 +158,47 @@ describe('browser subscription lifecycle', () => {
     expect(binding).toBeNull();
     expect(subscription).toBeNull();
     expect(subscribe).toHaveBeenCalledOnce();
+  });
+});
+it('never authorizes or subscribes on mobile and revokes an existing device binding', async () => {
+  document.documentElement.classList.add('light-note-mobile-rendering');
+  try {
+    binding = { userId: 'u1', id: 'existing', generation: 'old' };
+    subscription = { unsubscribe: vi.fn(async () => true) };
+    const oldSubscription = subscription;
+    const { syncBrowserPushOwner, useBrowserPush } = await import('./useBrowserPush');
+    await syncBrowserPushOwner('u1');
+    expect(oldSubscription.unsubscribe).toHaveBeenCalledOnce();
+    expect(useBrowserPush().state.value).toBe('unsupported');
+    expect(requestPermission).not.toHaveBeenCalled();
+    expect(subscribe).not.toHaveBeenCalled();
+  } finally {
+    document.documentElement.classList.remove('light-note-mobile-rendering');
+  }
+});
+
+describe('read-only browser push diagnostics', () => {
+  it('derives authorization and connection from actual checks', async () => {
+    const module = await import('./useBrowserPush');
+    await module.refreshBrowserPush();
+    expect(module.useBrowserPush().diagnostics.value).toMatchObject({permission:'default',subscription:'absent',bindingActive:false,stale:false});
+    permission='granted';
+    await module.useBrowserPush().setEnabled(true,'zh-CN');
+    expect(module.useBrowserPush().diagnostics.value).toMatchObject({permission:'granted',subscription:'present',bindingActive:true,stale:false});
+  });
+  it('a failed check marks the snapshot stale instead of claiming permission or subscription is absent', async () => {
+    const module = await import('./useBrowserPush');await module.refreshBrowserPush();permission='granted';await module.useBrowserPush().setEnabled(true,'zh-CN');
+    post.mockRejectedValueOnce(new Error('offline'));await module.refreshBrowserPush();
+    expect(module.useBrowserPush().diagnostics.value).toMatchObject({permission:'granted',subscription:'present',bindingActive:true,stale:true});
+    expect(module.useBrowserPush().state.value).toBe('error');
+  });
+  it('a new owner can be checked while an old owner check is unresolved', async () => {
+    let resolveOld!: (value: any) => void;
+    post.mockImplementationOnce(() => new Promise(resolve => { resolveOld = resolve; })).mockResolvedValue({status:200,data:{available:true,enabled:false,userId:'u2',publicKey:key}});
+    const module=await import('./useBrowserPush');const old=module.refreshBrowserPush();await vi.waitFor(()=>expect(post).toHaveBeenCalledOnce());
+    await module.syncBrowserPushOwner('u2');
+    expect(module.useBrowserPush().state.value).toBe('pending');
+    resolveOld({status:200,data:{available:true,enabled:true,userId:'u1',publicKey:key}});await old;
+    expect(module.useBrowserPush().diagnostics.value).toMatchObject({bindingActive:false,stale:false});expect(module.useBrowserPush().state.value).toBe('pending');
   });
 });

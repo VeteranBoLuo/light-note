@@ -32,7 +32,7 @@ describe('待办创建页原型布局', () => {
     expect(modalSource).toContain('width="min(1280px, 94vw)"');
     expect(simpleSource).toContain('class="todo-simple-editor__preview"');
     expect(simpleSource).toMatch(/\.todo-simple-editor__body[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\) 390px/);
-    expect(simpleSource).toMatch(/\.todo-simple-editor__preview-sticky[\s\S]*?position:\s*sticky/);
+    expect(simpleSource).toMatch(/\.todo-simple-editor__preview\s*\{[^}]*overflow-y:\s*auto/);
     expect(simpleSource).toContain('todoSinglePreviewAdvancedHint');
     expect(simpleSource).toMatch(/todo-simple-editor__preview-note[\s\S]*?workspace-panel-bg-color/);
   });
@@ -45,7 +45,7 @@ describe('待办创建页原型布局', () => {
     expect(simpleSource).toMatch(
       /\.todo-simple-editor\s*\{[\s\S]*?grid-template-rows:\s*minmax\(0, 1fr\) auto[\s\S]*?overflow:\s*hidden/,
     );
-    expect(simpleSource).toMatch(/\.todo-simple-editor__body[\s\S]*?min-height:\s*0[\s\S]*?overflow-y:\s*auto/);
+    expect(simpleSource).toMatch(/\.todo-simple-editor__main\s*\{[^}]*min-height:\s*0[^}]*overflow-y:\s*auto/);
     expect(simpleSource).toMatch(/\.todo-simple-editor__footer[\s\S]*?position:\s*relative[\s\S]*?min-height:\s*56px/);
   });
 
@@ -53,18 +53,6 @@ describe('待办创建页原型布局', () => {
     expect(simpleSource).toMatch(/todo-simple-editor__priority[\s\S]*?v-for="option in priorityOptions"/);
     expect(reminderSource).toMatch(/todo-reminder-editor-v3__mode[\s\S]*?v-for="option in modeOptions"/);
     expect(simpleSource).toContain('<BSwitch v-model:checked="draft.independentTasks.enabled" />');
-  });
-
-  it('新建时主动展示待办清单，编辑无清单任务时保留渐进披露', () => {
-    expect(simpleSource).toContain("<small>{{ t('inbox.todoChecklistHint') }}</small>");
-    expect(simpleSource).toContain("t('inbox.todoShowChecklist')");
-    expect(simpleSource).toContain('const checklistOpen = ref(true)');
-    expect(simpleSource).toMatch(
-      /const hasChecklist = Boolean[\s\S]*?checklistOpen\.value = !props\.item \|\| hasChecklist/,
-    );
-    expect(simpleSource).toMatch(
-      /\.todo-simple-editor__optional-head\s*\{[\s\S]*?border:\s*1px solid[\s\S]*?background:\s*var\(--workspace-panel-bg-color\)/,
-    );
   });
 
   it('直接输入 @ 复用光标浮层，显式按钮才打开完整搜索弹框', () => {
@@ -158,13 +146,15 @@ describe('待办创建页原型布局', () => {
     expect(independentSource).toContain('moreSettingsOpen');
     expect(independentSource).toContain('todo-independent-plan-more-fields');
     expect(independentSource).toMatch(
-      /\.todo-independent-plan label,[\s\S]*?\.todo-independent-plan__field[\s\S]*?align-content:\s*start/,
+      /\.todo-independent-plan label:not\(\.b-checkbox\),[\s\S]*?\.todo-independent-plan__field[\s\S]*?align-content:\s*start/,
     );
   });
 
   it('开启高级功能后回到编辑器顶部，让用户先看到模式变化提示', () => {
     expect(simpleSource).toContain('ref="editorBodyRef"');
-    expect(simpleSource).toMatch(/if \(enabled && previous === false\)[\s\S]*?nextTick\(scrollEditorToTop\)/);
+    expect(simpleSource).toMatch(
+      /if \(enabled && previous === false && !advancedInitialized\)[\s\S]*?nextTick\(scrollEditorToTop\)/,
+    );
     expect(simpleSource).toMatch(
       /function scrollEditorToTop\(\)[\s\S]*?editorBody\.scrollTop = 0[\s\S]*?parent\.scrollTop = 0/,
     );
@@ -183,22 +173,6 @@ describe('待办创建页原型布局', () => {
     expect(simpleSource).toMatch(/todo-simple-editor__mode-exit\.b_btn\)[\s\S]*?min-height:\s*44px/);
   });
 
-  it('高级计划默认按日期结束，并完整配置固定时刻和长期运行语义', () => {
-    expect(draftSource).toContain("end: { mode: 'until', untilDate: suggestTodoPlanEndDate() }");
-    expect(suggestTodoPlanEndDate('2026-08-07 09:00')).toBe('2026-09-06');
-    expect(independentSource).toContain('<BTimePicker v-model:value="fixedTime" block');
-    expect(independentSource).toContain("t('inbox.todoReminderFixedTimeHint')");
-    expect(independentSource).toContain("t('inbox.todoPlanNoEndHint')");
-    expect(independentSource).toContain("t('inbox.todoPlanEndByDateHint')");
-    expect(independentSource).toContain("t('inbox.todoPlanEndByCountHint')");
-    expect(independentSource).not.toContain('v-model:value="untilAt"');
-    expect(independentSource).toContain('autoFilledUntilDueAt');
-    expect(independentSource).toContain('todoTodayInTimezone(props.draft.timing.timezone)');
-    expect(independentTemplate.indexOf("t('inbox.todoGuidedEndTitle')")).toBeLessThan(
-      independentTemplate.indexOf("t('inbox.todoStartAt')"),
-    );
-  });
-
   it('所有待办固定时刻入口都复用共享时间组件，不再回退旧输入框', () => {
     expect(independentSource).toContain('<BTimePicker v-model:value="fixedTime" block');
     expect(legacyScheduleSource).toContain('v-model:value="form.fixedTime"');
@@ -213,10 +187,6 @@ describe('待办创建页原型布局', () => {
     expect(independentSource).toContain('v-model:value="nudgeMaxCount"');
     expect(independentSource).toContain('v-model:value="nudgeStop"');
     expect(independentSource).toContain("t('inbox.todoNudgeConfigHint')");
-  });
-
-  it('开启高级功能后连续编号为任务内容 1、独立计划 2', () => {
-    expect(simpleSource).toContain('{{ draft.independentTasks.enabled ? 2 : 4 }}');
   });
 
   it('移动端编辑页复用新建页的无边框短输入与日期视觉', () => {
@@ -243,11 +213,10 @@ describe('待办创建页原型布局', () => {
 
   it('开始和截止按结束方式与提醒时机防呆，并就近解释每个时间字段', () => {
     expect(simpleSource).toMatch(/todoStartAt[\s\S]*?v-model:value="startAt"/);
-    expect(independentSource).toContain('v-else-if="triggerType === \'at_start\'"');
-    expect(independentSource).toContain('v-if="!scheduledEndUsesDueAt"');
-    expect(independentSource).toContain("t('inbox.todoGuidedUsesEndDue')");
+    expect(independentSource).toContain('todoWorkspace.reminderUsesStart');
+
     expect(simpleSource).not.toMatch(/v-model:value="startAt"[\s\S]{0,120}todoStartAtOptional/);
-    expect(independentSource).toContain("t('inbox.todoPlanStartTimePurpose')");
+    expect(independentSource).toContain('todoWorkspace.reminderUsesDue');
     expect(independentSource).toContain('reminderTriggerHint');
     expect(independentSource).toContain("t('inbox.todoPlanTimezoneHint')");
     expect(independentTemplate.indexOf("triggerType === 'fixed_time'")).toBeLessThan(

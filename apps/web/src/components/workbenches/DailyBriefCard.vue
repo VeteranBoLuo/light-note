@@ -177,7 +177,11 @@
                   <template v-if="insight.tagName"
                     >{{ t(index === 0 ? 'workbench.dailyBrief.recentSource' : 'workbench.dailyBrief.olderSource') }} ·
                   </template>
-                  {{ source.title }}
+                  {{
+                    ['research_workspace', 'learning_workspace', 'writing_workspace'].includes(source.type)
+                      ? t('toolbox.project.continueProjectLink', { title: source.title })
+                      : source.title
+                  }}
                   <SvgIcon :src="icon.ai.sourceArrow" size="13" aria-hidden="true" />
                 </BButton>
               </div>

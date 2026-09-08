@@ -7,6 +7,7 @@ vi.mock('../../db/index.js', () => ({ default: { query: vi.fn() } }));
 
 const {
   addToolboxWorkspaceResources,
+  createToolboxWorkspaceItem,
   calculateWorkspaceStreak,
   createToolboxWorkspaceSession,
   listToolboxHomeWorkspaces,
@@ -324,3 +325,19 @@ describe('project material atomic limits', () => {
     },
   );
 });
+
+ describe('学习知识创建状态', () => {
+  it.each([['learning', 'knowledge', 'done'], ['learning', 'inbox', 'open'], ['learning', 'action', 'open'], ['research', 'knowledge', 'done'], ['writing', 'knowledge', 'done']])('%s / %s 创建为 %s', async (kind, lane, status) => {
+    const database = { query: vi.fn(async (sql) => {
+      if (sql.includes('FROM toolbox_workspaces')) return [[{ id: 'workspace-1', user_id: 'owner', kind, status: 'active' }]];
+      if (sql.includes('COUNT(*)')) return [[{ total: 0 }]];
+      if (sql.includes('MAX(position)')) return [[{ next_position: 0 }]];
+      return [[]];
+    }) };
+    await createToolboxWorkspaceItem({ userId: 'owner', workspaceId: 'workspace-1', input: { lane, title: '知识' }, database });
+    const insert = database.query.mock.calls.find(([sql]) => sql.includes('INSERT INTO toolbox_workspace_items'));
+    expect(insert[1][6]).toBe(status);
+    expect(Boolean(insert[1][9])).toBe(status === 'done');
+    expect(insert[1].slice(1, 4)).toEqual(['workspace-1', 'owner', lane]);
+  });
+ });

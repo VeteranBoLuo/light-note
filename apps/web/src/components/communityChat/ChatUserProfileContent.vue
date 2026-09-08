@@ -333,6 +333,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import AchievementEmblem from '@/components/growth/AchievementEmblem.vue';
   import AvatarFramePreview from '@/components/growth/AvatarFramePreview.vue';
+  import GrowthLevelChip from '@/components/growth/GrowthLevelChip.vue';
   import icon from '@/config/icon';
   import { frameVariant } from '@/config/growthFrames';
   import type { CommunityChatProfileUpdateInput } from '@/composables/useCommunityChatProfile';
@@ -441,7 +442,13 @@
               src: profile.avatar || icon.communityChat.defaultAvatar,
               size: 68,
             });
-        const tags = [h('span', { class: 'chat-profile-content__level' }, `Lv.${profile.level} ${profile.levelName}`)];
+        const tags = [
+          h(GrowthLevelChip, {
+            class: 'chat-profile-content__level',
+            level: profile.level,
+            name: profile.levelName,
+          }),
+        ];
         if (profile.role !== 'member') {
           tags.push(h('span', { class: 'chat-profile-content__role' }, t(`communityChat.authorRole.${profile.role}`)));
         }
@@ -773,7 +780,12 @@
     gap: 6px;
   }
 
-  .chat-profile-content__level,
+  .chat-profile-content__level.growth-level-chip {
+    min-height: 22px;
+    padding: 2px 8px;
+    font-size: 10px;
+  }
+
   .chat-profile-content__role,
   .chat-profile-content__rarity {
     min-height: 22px;

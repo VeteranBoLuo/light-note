@@ -8,9 +8,12 @@
       <BButton :aria-label="t('inbox.todoNextMonth')" @click="moveMonth(1)">
         <SvgIcon :src="icon.arrow_right" size="15" aria-hidden="true" />
       </BButton>
+      <small v-if="!scheduledItems.length" class="todo-calendar-empty-hint">{{ t('inbox.todoScheduleEmpty') }}</small>
     </header>
 
-    <p v-if="!scheduledItems.length" class="todo-schedule-empty">{{ t('inbox.todoScheduleEmpty') }}</p>
+    <p v-if="view !== 'calendar' && !scheduledItems.length" class="todo-schedule-empty">{{
+      t('inbox.todoScheduleEmpty')
+    }}</p>
 
     <div v-if="view === 'calendar'" class="todo-calendar-grid">
       <span v-for="label in weekdayLabels" :key="label" class="todo-calendar-weekday">{{ label }}</span>
@@ -47,7 +50,10 @@
               {{ t('inbox.todoRecurringInstance') }}
             </small>
             <small :class="todoStateClass(item)">{{ todoStateLabel(item) }}</small>
-            <small>{{ t(`inbox.todoPriority${item.priority}`) }}</small>
+            <small>{{ t(`inbox.todoPriority${item.priority}`) }}</small
+            ><small v-if="item.checklist?.length"
+              >{{ item.checklist.filter((check) => check.done).length }}/{{ item.checklist.length }}</small
+            >
           </span>
         </BButton>
         <small v-if="day.items.length > 3">{{ t('inbox.todoMoreInDay', { count: day.items.length - 3 }) }}</small>
@@ -126,6 +132,12 @@
               </span>
             </span>
           </BButton>
+          <TodoSubitems
+            :item="entry.item"
+            :disabled="disabled"
+            @update-checklist="$emit('update-checklist', entry.item, $event)"
+            @edit="$emit('edit', entry.item, $event)"
+          />
         </MobileSwipeDelete>
       </article>
       <BButton v-if="agendaHasMore" class="todo-agenda__more" @click="agendaHorizonDays += 14">
@@ -136,6 +148,7 @@
 </template>
 
 <script setup lang="ts">
+  import TodoSubitems from './TodoSubitems.vue';
   import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -156,7 +169,8 @@
   }>();
   const emit = defineEmits<{
     preview: [item: TodoItem];
-    edit: [item: TodoItem];
+    edit: [item: TodoItem, section?: 'checklist'];
+    'update-checklist': [item: TodoItem, checklist: TodoItem['checklist']];
     delete: [item: TodoItem];
     'range-change': [range: { startDate: string; endDate: string }];
   }>();
@@ -359,6 +373,7 @@
 </script>
 
 <style scoped lang="less">
+  @import (reference) '@/assets/css/workspace-surfaces.less';
   /* 日历视图直接贴在滚动容器顶沿,补出与列表视图一致的上留白 */
   .todo-calendar-head {
     display: flex;
@@ -385,17 +400,16 @@
   }
   .todo-calendar-weekday {
     padding: 7px 5px;
-    background: var(--workspace-panel-bg-color, var(--background-color));
     color: var(--desc-color);
     font-size: 11px;
     text-align: center;
   }
   .todo-calendar-day {
     min-height: 104px;
+    box-sizing: border-box;
     padding: 6px;
     border: 0;
     border-radius: 0;
-    background: var(--card-background, var(--background-color));
   }
   .todo-calendar-day > span {
     display: flex;
@@ -662,7 +676,6 @@
     box-sizing: border-box;
     border: 1px solid var(--surface-border-color, var(--card-border-color));
     border-radius: 13px;
-    background: var(--card-background, var(--background-color));
     box-shadow: 0 12px 30px -28px rgba(30, 40, 80, 0.5);
     justify-content: flex-start;
     gap: 8px;
@@ -762,6 +775,30 @@
     .todo-schedule-empty {
       margin: 0 14px 8px;
       padding: 8px 10px;
+    }
+  }
+
+  // 共享工作区表面：仅改变颜色，布局与滚动由原组件负责。
+  .todo-calendar-weekday {
+    .workspace-canvas-surface();
+  }
+  .todo-calendar-day,
+  .todo-schedule-view .todo-agenda-card {
+    .workspace-content-surface();
+  }
+  .todo-calendar-empty-hint {
+    color: var(--desc-color);
+    font-size: 12px;
+  }
+  .todo-calendar-head {
+    flex-wrap: wrap;
+    padding-top: 0;
+    margin-bottom: 8px;
+  }
+  @media (min-width: 768px) and (max-height: 819px) {
+    .todo-calendar-day {
+      min-height: 64px;
+      min-height: clamp(64px, calc((100vh - 320px) / 6), 104px);
     }
   }
 </style>

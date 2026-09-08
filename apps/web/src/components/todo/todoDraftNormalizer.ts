@@ -16,6 +16,8 @@ export { todoTodayInTimezone } from '@/utils/todoPlanning';
 
 export interface TodoCreateDraftV3 {
   task: {
+    listId?: string | null;
+    tagIds?: string[];
     title: string;
     description: string;
     priority: TodoPriority;
@@ -30,6 +32,7 @@ export interface TodoCreateDraftV3 {
   reminder: TodoSingleTaskReminderSchedule;
   independentTasks: {
     enabled: boolean;
+    timing?: TodoPlanTiming;
     plan: TodoPlanConfig;
     reminder: TodoReminderV2Config;
   };
@@ -58,31 +61,16 @@ export function suggestTodoPlanEndDate(anchorAt?: string | null) {
 }
 
 function normalizeTiming(draft: TodoCreateDraftV3): TodoPlanTiming {
+  if (draft.independentTasks.enabled && draft.independentTasks.timing) {
+    return { ...draft.independentTasks.timing };
+  }
   const startDate = datePart(draft.timing.startAt);
   const dueDate = datePart(draft.timing.dueAt);
   const timezone = draft.timing.timezone || 'Asia/Shanghai';
-  const dueDateEndsScheduledPlan = Boolean(
-    draft.independentTasks.enabled &&
-    draft.independentTasks.plan.type === 'scheduled' &&
-    draft.independentTasks.plan.end?.mode === 'until' &&
-    dueDate,
-  );
-  // 独立重复计划仍需要日期来确定“每天/每周”的第一项，但日期不代表开始时刻。
-  // “按日期结束”的截止日期表示计划末日，不能被误当成首项日期；没有开始日期时从计划时区的今天生成。
-  const anchorDate =
-    startDate ||
-    (dueDateEndsScheduledPlan ? null : dueDate) ||
-    (draft.independentTasks.enabled ? todoTodayInTimezone(timezone) : null);
+  const anchorDate = startDate || dueDate || (draft.independentTasks.enabled ? todoTodayInTimezone(timezone) : null);
   const startTime = startDate ? timePart(draft.timing.startAt) : null;
   const dueTime = dueDate ? timePart(draft.timing.dueAt) : null;
-  const dueDayOffset =
-    startDate && dueDate
-      ? dueDateEndsScheduledPlan
-        ? startTime && dueTime && dueTime < startTime
-          ? 1
-          : 0
-        : localDayDiff(startDate, dueDate)
-      : 0;
+  const dueDayOffset = startDate && dueDate ? localDayDiff(startDate, dueDate) : 0;
   return {
     timezone,
     anchorDate,
@@ -136,16 +124,10 @@ function normalizeSingleReminder(
 
 export function normalizeTodoCreateDraft(draft: TodoCreateDraftV3): TodoPlanDraft {
   const timing = normalizeTiming(draft);
-  const plan =
-    draft.independentTasks.enabled &&
-    draft.independentTasks.plan.type === 'scheduled' &&
-    draft.independentTasks.plan.end?.mode === 'until'
-      ? {
-          ...draft.independentTasks.plan,
-          end: { mode: 'until' as const, untilDate: datePart(draft.timing.dueAt) },
-        }
-      : draft.independentTasks.plan;
+  const plan = draft.independentTasks.plan;
   const base = {
+    ...(draft.task.listId !== undefined ? { listId: draft.task.listId } : {}),
+    ...(draft.task.tagIds !== undefined ? { tagIds: draft.task.tagIds } : {}),
     title: draft.task.title.trim(),
     description: draft.task.description.trim(),
     priority: draft.task.priority,

@@ -49,6 +49,9 @@ const LIVE_RESOURCE_STATS_JOIN = `
   ) stats ON stats.tag_id = t.id
 `;
 
+const TODO_TAG_COUNT = `(SELECT COUNT(*) FROM todo_tag_relations tr INNER JOIN todo_items ti ON ti.id = tr.target_id AND ti.user_id = tr.user_id AND ti.del_flag = 0 AND COALESCE(ti.instance_state, 'normal') = 'normal' WHERE tr.target_type = 'todo' AND tr.tag_id = t.id AND tr.user_id = t.user_id)`;
+const TODO_TAG_PENDING = TODO_TAG_COUNT.slice(0, -1) + " AND ti.status = 'pending')";
+
 const TAG_BASE_COLUMNS = `
   t.id,
   t.name,
@@ -59,7 +62,9 @@ const TAG_BASE_COLUMNS = `
   COALESCE(stats.bookmark_count, 0) AS bookmark_count,
   COALESCE(stats.note_count, 0) AS note_count,
   COALESCE(stats.file_count, 0) AS file_count,
-  stats.last_activity_time
+  stats.last_activity_time,
+  ${TODO_TAG_COUNT} AS todo_count,
+  ${TODO_TAG_PENDING} AS todo_pending_count
 `;
 
 const TAG_PREVIEW_COLUMNS = `
@@ -205,6 +210,7 @@ function normalizeSummaryRow(row) {
     sort: Number(row?.sort || 0),
     createTime: row?.create_time || null,
     lastActivityTime: row?.last_activity_time || null,
+    todoCounts: { total: Number(row?.todo_count || 0), pending: Number(row?.todo_pending_count || 0) },
     counts: {
       bookmark,
       note,
@@ -234,13 +240,13 @@ function filterCondition(filter) {
     return `(
       COALESCE(stats.bookmark_count, 0)
       + COALESCE(stats.note_count, 0)
-      + COALESCE(stats.file_count, 0)
+      + COALESCE(stats.file_count, 0) + ${TODO_TAG_COUNT}
     ) = 0`;
   }
   return `(
     COALESCE(stats.bookmark_count, 0)
     + COALESCE(stats.note_count, 0)
-    + COALESCE(stats.file_count, 0)
+    + COALESCE(stats.file_count, 0) + ${TODO_TAG_COUNT}
   ) > 0`;
 }
 
@@ -269,7 +275,7 @@ async function queryFacetSummary(db, { userId, keyword = '' }) {
        SUM(CASE WHEN (
          COALESCE(stats.bookmark_count, 0)
          + COALESCE(stats.note_count, 0)
-         + COALESCE(stats.file_count, 0)
+         + COALESCE(stats.file_count, 0) + ${TODO_TAG_COUNT}
        ) > 0 THEN 1 ELSE 0 END) AS active_count,
        SUM(CASE WHEN COALESCE(stats.bookmark_count, 0) > 0 THEN 1 ELSE 0 END) AS bookmark_count,
        SUM(CASE WHEN COALESCE(stats.note_count, 0) > 0 THEN 1 ELSE 0 END) AS note_count,

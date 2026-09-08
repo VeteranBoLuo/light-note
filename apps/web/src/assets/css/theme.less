@@ -7,6 +7,29 @@ html[data-theme='night'] {
 }
 
 [data-theme='day'] {
+  --workspace-purple-stat: var(--resource-bookmark-color);
+  --workspace-note-stat: var(--resource-note-color);
+  --workspace-file-stat: var(--resource-file-color);
+  --workspace-tag-stat: var(--resource-tag-color);
+
+  /* 工作区专用表面；浅色目录白底、深色目录与画布同层，不替代菜单/全局卡片 Token。 */
+  --workspace-canvas: #f6f7fb;
+  --workspace-content: #ffffff;
+  --workspace-open-canvas: var(--workspace-content);
+  --workspace-border: #e6e9f2;
+  --workspace-divider: #edf0f6;
+  --workspace-hover: #eceef5;
+  --workspace-text: var(--text-color);
+  --workspace-muted: var(--desc-color);
+  --workspace-purple-text: #5146d9;
+  --workspace-note-text: #087f68;
+  --workspace-file-text: #9b5600;
+  --workspace-tag-text: #b42365;
+  --workspace-purple-selected: #eeecff;
+  --workspace-note-selected: #edf8f4;
+  --workspace-file-selected: #fff3e3;
+  --workspace-tag-selected: #fcecf3;
+
   /* 状态语义色。此前全站 123 处在用 var(--danger-color) / --warning-color /
      --success-color / --error-color，但这几个变量从未定义过，全部落到各自的 fallback：
      同一个"危险红"散出 6 种取值(#e5484d/#d14343/#dc2626/#f04455/#ff4d4f/#f0445e)，
@@ -199,6 +222,8 @@ html[data-theme='night'] {
   --notification-secondary-action-hover-bg: rgba(97, 92, 237, 0.12);
 
   --resource-bookmark-color: #615ced;
+  --todo-workspace-accent: #6950ff;
+  --todo-workspace-selected: #efedff;
   --resource-note-color: #00a884;
   --resource-file-color: #ff8a00;
   --resource-tag-color: #ec4899;
@@ -312,6 +337,29 @@ html[data-theme='night'] {
 }
 
 [data-theme='night'] {
+  --workspace-purple-stat: var(--workspace-purple-text);
+  --workspace-note-stat: var(--workspace-note-text);
+  --workspace-file-stat: var(--workspace-file-text);
+  --workspace-tag-stat: var(--workspace-tag-text);
+
+  /* 工作区专用表面；浅色目录白底、深色目录与画布同层，不替代菜单/全局卡片 Token。 */
+  --workspace-canvas: #25272e;
+  --workspace-content: #2e3038;
+  --workspace-open-canvas: var(--workspace-canvas);
+  --workspace-border: #414550;
+  --workspace-divider: #383c46;
+  --workspace-hover: #353842;
+  --workspace-text: var(--text-color);
+  --workspace-muted: var(--desc-color);
+  --workspace-purple-text: #aaa6ff;
+  --workspace-note-text: #51d4b0;
+  --workspace-file-text: #ffb45c;
+  --workspace-tag-text: #ff8ec3;
+  --workspace-purple-selected: #37334c;
+  --workspace-note-selected: #273e38;
+  --workspace-file-selected: #443729;
+  --workspace-tag-selected: #452e3b;
+
   /* 深色主题下语义色需要提亮，否则在深底上对比度不足（day 的 #1f8f55 在 #1c1e24 上仅 3:1 左右）。
      同样按最差表面校准：--surface-raised-background 的亮端 #353b47 是最难的底色，
      原先的 #ff6b6b 在它上面只有 4.05、#6aa1ff 只有 4.37。 */
@@ -514,6 +562,8 @@ html[data-theme='night'] {
   --notification-secondary-action-hover-bg: rgba(139, 134, 255, 0.14);
 
   --resource-bookmark-color: #615ced;
+  --todo-workspace-accent: #aaa0ff;
+  --todo-workspace-selected: #34304e;
   --resource-note-color: #00a884;
   --resource-file-color: #ff8a00;
   --resource-tag-color: #ec4899;

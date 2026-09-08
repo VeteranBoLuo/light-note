@@ -27,7 +27,7 @@
           @toggle-complete="emit('toggle-complete', item, $event)"
           @update-checklist="emit('update-checklist', item, $event)"
           @preview="openPreview(item)"
-          @edit="openEditor(item)"
+          @edit="openEditor(item, $event)"
           @delete="emit('delete', item)"
           @add-to-calendar="emit('add-to-calendar', item)"
           @snooze="emit('snooze', item, $event)"
@@ -74,7 +74,7 @@
     'toggle-complete': [item: TodoItemType, completed: boolean];
     'update-checklist': [item: TodoItemType, checklist: TodoChecklistItem[]];
     preview: [item: TodoItemType];
-    edit: [item: TodoItemType];
+    edit: [item: TodoItemType, section?: 'checklist'];
     delete: [item: TodoItemType];
     'add-to-calendar': [item: TodoItemType];
     snooze: [item: TodoItemType, preset: TodoSnoozePreset];
@@ -100,10 +100,10 @@
     );
   }
 
-  function openEditor(item: TodoItemType) {
+  function openEditor(item: TodoItemType, section?: 'checklist') {
     void closeCurrentMobileOverlayThen(
       () => emit('update:open', false),
-      () => emit('edit', item),
+      () => emit('edit', item, section),
     );
   }
 

@@ -16,6 +16,7 @@ export interface RunSummary {
   aiTotal: number | null;
   ruleTotal: number | null;
   skipped: number;
+  skippedReasons?: { customIcon: number; unavailable: number };
   files: { parsed: number | null; metadata: number | null };
   estimatedTokensLower: number | null;
   estimatedTokensUpper: number | null;

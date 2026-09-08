@@ -54,7 +54,7 @@
   .pdf-image-converter {
     min-width: 0;
     display: grid;
-    gap: 18px;
+    gap: 12px;
   }
 
   .pdf-image-converter__switcher {
@@ -64,22 +64,30 @@
 
   .pdf-image-converter__switcher :deep(.tab-container) {
     width: min(100%, 520px);
+    padding: 3px;
+    gap: 3px;
     border-radius: 12px;
   }
 
   .pdf-image-converter__switcher :deep(.tab) {
     min-width: 0;
-    min-height: 40px;
+    min-height: 34px;
     flex: 1;
     justify-content: center;
-    line-height: 40px;
+    line-height: 34px;
+    border: 1px solid transparent;
+    border-radius: 8px;
   }
 
   .pdf-image-converter__switcher :deep(.tab.is-active) {
     color: var(--primary-color);
-    box-shadow:
-      inset 0 0 0 1px var(--primary-color),
-      inset 0 -2px 0 var(--primary-color);
+    border: 1px solid var(--primary-color);
+    box-shadow: none;
+  }
+
+  .pdf-image-converter__switcher :deep(.tab:focus-visible) {
+    outline: 2px solid var(--primary-color);
+    outline-offset: -3px;
   }
 
   .pdf-image-converter__content {

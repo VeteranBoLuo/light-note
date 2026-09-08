@@ -621,6 +621,7 @@
 </script>
 
 <style lang="less" scoped>
+  @import (reference) "@/assets/css/workspace-surfaces.less";
   .folder-list {
     position: relative;
     height: 100%;
@@ -936,10 +937,21 @@
     }
   }
 
-  html.light-note-mobile-rendering .cloud-folder-row.is-current,
   html.light-note-mobile-rendering .cloud-folder-row.is-file-drop-target,
   html.light-note-mobile-rendering .cloud-folder-row.is-folder-drop-target {
     border-color: var(--resource-file-color, #ff8a00);
     color: var(--resource-file-color, #ff8a00);
   }
+
+  // 共享工作区表面：仅改变颜色，布局与滚动由原组件负责。
+  .folder-list {
+    .workspace-open-surface();
+  }
+
+  .folder-list { .workspace-navigation-colors(file); }
+  .cloud-folder-row { .workspace-navigation-default(); }
+  .cloud-folder-row:hover { .workspace-navigation-hover(); }
+  .cloud-folder-row.is-current { .workspace-navigation-selected(); }
+  .cloud-folder-row.cloud-folder-row--all .cloud-folder-row__count { color: var(--workspace-file-stat); }
+  .cloud-folder-row.cloud-folder-row--all.is-current { border-color: var(--workspace-file-stat); }
 </style>

@@ -3,7 +3,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-const source = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), 'Settings.vue'), 'utf8');
+const source = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), 'components/SettingsGeneralSection.vue'), 'utf8');
 const zhLocaleSource = readFileSync(resolve(process.cwd(), 'src/i18n/locales/zh-CN.ts'), 'utf8');
 const enLocaleSource = readFileSync(resolve(process.cwd(), 'src/i18n/locales/en-US.ts'), 'utf8');
 
@@ -13,8 +13,6 @@ describe('设置页浏览器收集入口', () => {
     expect(source).toContain('browser-capture-card--extension');
     expect(source).toContain('browser-capture-card--bookmarklet');
     expect(source).toContain('openBrowserExtensionStore');
-    expect(source).toContain('openBrowserExtensionDetails');
-    expect(source).toContain('BROWSER_EXTENSION_LANDING_PATH');
     expect(source).toContain('openChromeWebStore');
     expect(source).toContain("from '@/config/browserExtension.ts'");
     expect(source).not.toContain('hfdpgaiggloacopnkihfkloicjepldig');

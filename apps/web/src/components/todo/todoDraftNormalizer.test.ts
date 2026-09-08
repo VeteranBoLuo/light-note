@@ -21,6 +21,7 @@ function scheduledDraft(startAt: string, dueAt: string): TodoCreateDraftV3 {
     reminder: { version: 1, mode: 'none', channels: [] },
     independentTasks: {
       enabled: true,
+      timing: { timezone: 'Asia/Shanghai', anchorDate: startAt.slice(0,10) || todoTodayInTimezone('Asia/Shanghai'), startTime: startAt.slice(11,16) || null, dueTime: dueAt.slice(11,16) || null, dueDayOffset: startAt && dueAt && dueAt.slice(11,16) < startAt.slice(11,16) ? 1 : 0 },
       plan: {
         type: 'scheduled',
         frequency: 'daily',
@@ -73,7 +74,7 @@ describe('todoDraftNormalizer', () => {
     expect(todoTodayInTimezone('America/New_York', nearBeijingMidnight)).toBe('2026-08-05');
   });
 
-  it('按日期结束时把截止日期作为计划末日，截止时刻应用到每一项', () => {
+  it('独立日期草稿分别保留首次日期、计划末日和每项时刻', () => {
     const normalized = normalizeTodoCreateDraft(scheduledDraft('2026-08-07 09:15', '2026-08-24 18:30'));
 
     expect(normalized.plan.end).toEqual({ mode: 'until', untilDate: '2026-08-24' });
@@ -99,11 +100,11 @@ describe('todoDraftNormalizer', () => {
     });
   });
 
-  it('按日期结束只认页面上的截止日期，不保留隐藏的旧结束日期', () => {
+  it('独立计划结束日期不被普通草稿的空截止日期覆盖', () => {
     const draft = scheduledDraft('', '');
     draft.independentTasks.plan.end = { mode: 'until', untilDate: '2026-09-30' };
 
-    expect(normalizeTodoCreateDraft(draft).plan.end).toEqual({ mode: 'until', untilDate: null });
+    expect(normalizeTodoCreateDraft(draft).plan.end).toEqual({ mode: 'until', untilDate: '2026-09-30' });
   });
 
   it('每项截止时刻早于开始时刻时保留跨夜语义', () => {

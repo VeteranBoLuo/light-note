@@ -308,15 +308,16 @@
   });
 </script>
 <style scoped lang="less">
+  @import (reference) "@/assets/css/workspace-surfaces.less";
   .governance-summary {
-    --summary-surface: var(--surface-card-bg);
+    --summary-surface: var(--workspace-content);
     display: grid;
     gap: 20px;
     min-width: 0;
     color: var(--text-color);
   }
   :global([data-theme='night'] .governance-summary) {
-    --summary-surface: var(--surface-panel-bg);
+    --summary-surface: var(--workspace-content);
   }
   .governance-summary h2,
   .governance-summary h3,
@@ -585,5 +586,13 @@
     .governance-summary__panel footer {
       margin-top: 8px;
     }
+  }
+
+  // 共享工作区表面：仅改变颜色，布局与滚动由原组件负责。
+  .governance-summary {
+    .workspace-canvas-surface();
+  }
+  .governance-summary__panel {
+    .workspace-content-surface();
   }
 </style>

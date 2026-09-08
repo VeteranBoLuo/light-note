@@ -353,3 +353,51 @@ it('图标匹配在写入事务外完成，批次交付后汇总不会再次搜�
   expect(recommendTagIcons).toHaveBeenCalledTimes(1);
   expect(db.query.mock.calls.find(([sql]) => sql.includes("rule_phase='completed'"))[1][1]).toBe('completed');
 });
+
+it.each([0, 2])('选中标签将已有图标与不可访问分别统计：缺失 %i 项', async (missing) => {
+  const items = Array.from({ length: 46 + missing }, (_, i) => ({ type: 'tag', id: String(i) }));
+  readSuggestionCandidates.mockResolvedValue(
+    items.slice(0, 46).map((item, i) => ({ ...item, title: '标签', hasCustomIcon: i >= 12 })),
+  );
+  const db = dbFor((sql) => (sql.includes('request_id=?') ? [[]] : undefined));
+  const result = await previewV2(db, {
+    userId: 'u',
+    requestId: id,
+    input: { resourceTypes: ['tag'], checks: ['tag_icon'], scope: 'selected', items },
+  });
+  expect(result.summary).toMatchObject({
+    total: 12,
+    skipped: 34 + missing,
+    skippedReasons: { customIcon: 34, unavailable: missing },
+  });
+  const writes = db.query.mock.calls.filter(([sql]) => sql.startsWith('INSERT INTO organize_suggestion_items'));
+  expect(writes[0][1][0]).toHaveLength(12);
+  expect(readSuggestionSources).not.toHaveBeenCalled();
+});
+
+it.each([34, 134])('全部标签范围统计 %i 个已有图标标签，分页不因过滤后数量不足而提前结束', async (customCount) => {
+  const rows = Array.from({ length: customCount + 12 }, (_, i) => ({
+    type: 'tag',
+    id: String(i + 1),
+    title: '标签',
+    hasCustomIcon: i < customCount,
+  }));
+  readSuggestionCandidates.mockImplementation(async (_db, _user, _type, { after, limit, includeCustomIcons }) => {
+    expect(includeCustomIcons).toBe(true);
+    return rows.slice(Number(after || 0), Number(after || 0) + limit);
+  });
+  const db = dbFor((sql) => (sql.includes('request_id=?') ? [[]] : undefined));
+  const result = await previewV2(db, {
+    userId: 'u',
+    requestId: id,
+    input: { resourceTypes: ['tag'], checks: ['tag_icon'], scope: 'all' },
+  });
+  expect(result.summary).toMatchObject({
+    total: 12,
+    skipped: customCount,
+    skippedReasons: { customIcon: customCount, unavailable: 0 },
+  });
+  expect(readSuggestionCandidates).toHaveBeenCalledTimes(Math.ceil(rows.length / 100));
+  const writes = db.query.mock.calls.filter(([sql]) => sql.startsWith('INSERT INTO organize_suggestion_items'));
+  expect(writes[0][1][0]).toHaveLength(12);
+});

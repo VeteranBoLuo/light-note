@@ -8,26 +8,26 @@
         <h1 id="toolbox-title">{{ t('toolbox.title') }}</h1>
         <p>{{ t('toolbox.subtitle') }}</p>
       </div>
-      <div class="toolbox-home__header-actions">
-        <BButton v-if="!isGuest" type="primary" @click="openProjects(true)">{{
-          t('toolbox.project.newProject')
-        }}</BButton>
-        <BDropdown
-          v-if="!isGuest"
-          trigger="click"
-          :menu-options="[
-            {
-              label: t('toolbox.pointsBalance') + ' · ' + (growth?.points ?? '—'),
-              function: () => router.push({ name: 'pointsUsage' }),
-            },
-            {
-              label: t('toolbox.aiQuotaBalance') + ' · ' + aiQuotaBalanceLabel,
-              function: () => router.push({ name: 'aiUsage' }),
-            },
-          ]"
-          ><BButton>{{ t('toolbox.project.quota') }}</BButton></BDropdown
-        >
+      <div v-if="!isGuest" class="toolbox-home__balances">
+        <BButton class="toolbox-home__balance is-ai" @click="router.push({ name: 'aiUsage' })">
+          <span class="balance-label"
+            ><SvgIcon :src="icon.ai.summary" size="17" aria-hidden="true" />{{ t('toolbox.aiQuotaBalance') }}</span
+          >
+          <strong>{{ aiQuotaBalanceLabel }}</strong>
+          <SvgIcon class="balance-arrow" :src="icon.ai.sourceArrow" size="15" aria-hidden="true" />
+        </BButton>
+        <BButton class="toolbox-home__balance is-points" @click="router.push({ name: 'pointsUsage' })">
+          <span class="balance-label"
+            ><SvgIcon :src="icon.toolbox.coin" size="17" aria-hidden="true" />{{ t('toolbox.pointsBalance') }}</span
+          >
+          <strong>{{ pointsBalanceLabel }}</strong>
+          <SvgIcon class="balance-arrow" :src="icon.ai.sourceArrow" size="15" aria-hidden="true" />
+        </BButton>
       </div>
+      <BButton v-if="!isGuest" class="toolbox-home__create" type="primary" @click="openProjects(true)">
+        <SvgIcon :src="icon.common.plus" size="16" aria-hidden="true" />
+        {{ t('toolbox.project.newProject') }}
+      </BButton>
     </section>
 
     <nav
@@ -91,38 +91,40 @@
           <BButton
             v-for="workspace in continueWorkspaces"
             :key="`workspace-${workspace.id}`"
-            class="toolbox-activity-card is-workspace"
+            class="workshop-project"
+            :class="`is-${presentation(toolboxWorkspaceToolId(workspace.kind)).accent}`"
             @click="openWorkspace(workspace)"
           >
-            <span class="toolbox-activity-card__icon">
-              <SvgIcon :src="presentation(toolboxWorkspaceToolId(workspace.kind)).icon" size="21" />
+            <span class="workshop-project__head">
+              <span class="workshop-project__icon">
+                <SvgIcon
+                  :src="presentation(toolboxWorkspaceToolId(workspace.kind)).icon"
+                  size="24"
+                  aria-hidden="true"
+                />
+              </span>
+              <span class="workshop-project__identity">
+                <strong :title="workspace.title">{{ workspace.title }}</strong>
+                <span class="toolbox-activity-card__type">{{ toolName(toolboxWorkspaceToolId(workspace.kind)) }}</span>
+              </span>
+              <BChip tone="success">{{ t('toolbox.workspace.status.active') }}</BChip>
             </span>
-            <span class="toolbox-activity-card__copy">
-              <span class="toolbox-activity-card__topline">
-                <span class="toolbox-activity-card__badges">
-                  <BChip tone="neutral" class="toolbox-activity-card__type">
-                    {{ toolName(toolboxWorkspaceToolId(workspace.kind)) }}
-                  </BChip>
-                  <BChip tone="success">{{ t('toolbox.workspace.status.active') }}</BChip>
-                </span>
+            <span class="workshop-project__next" :class="{ 'is-empty': !workspace.nextStep }">
+              <small>{{ t('toolbox.workspace.nextStep') }}</small>
+              <span>{{ workspace.nextStep || t('toolbox.workspace.noNextStep') }}</span>
+            </span>
+            <span class="workshop-project__foot">
+              <span class="workshop-project__meta">
+                <span>{{
+                  t('toolbox.home.workspaceMeta', { resources: workspace.resourceCount, open: workspace.openItemCount })
+                }}</span>
                 <small>{{
                   formatRelativeDate(Math.max(dateValue(workspace.lastOpenedAt), dateValue(workspace.updatedAt)))
                 }}</small>
               </span>
-              <strong>{{ workspace.title }}</strong>
-              <small>{{ t('toolbox.workspace.nextStep') }}</small>
-              <span>{{ workspace.nextStep || t('toolbox.workspace.noNextStep') }}</span>
-              <small>
-                {{
-                  t('toolbox.home.workspaceMeta', {
-                    resources: workspace.resourceCount,
-                    open: workspace.openItemCount,
-                  })
-                }}
-              </small>
-            </span>
-            <span class="toolbox-activity-card__action">
-              {{ t('toolbox.home.continueAction') }}
+              <span class="workshop-project__action"
+                >{{ t('toolbox.home.continueAction') }}<SvgIcon :src="icon.ai.sourceArrow" size="15" aria-hidden="true"
+              /></span>
             </span>
           </BButton>
         </div>
@@ -146,14 +148,16 @@
             <span class="toolbox-activity-card__copy">
               <span class="toolbox-activity-card__topline">
                 <BChip :tone="jobTone(job.status)">{{ taskStateLabel(job) }}</BChip>
-                <small>{{ formatRelativeDate(job.updatedAt) }}</small>
               </span>
               <strong>{{ job.artifact?.title || toolName(job.toolId) }}</strong>
               <span>{{ taskContinueDescription(job) }}</span>
               <small>{{ toolName(job.toolId) }}</small>
             </span>
-            <span class="toolbox-activity-card__action">
-              {{ isReadyTask(job) ? t('toolbox.home.viewResultAction') : t('toolbox.home.viewProgressAction') }}
+            <span class="toolbox-task-meta">
+              <small class="toolbox-task-time">{{ formatRelativeDate(job.updatedAt) }}</small>
+              <span class="toolbox-activity-card__action">
+                {{ isReadyTask(job) ? t('toolbox.home.viewResultAction') : t('toolbox.home.viewProgressAction') }}
+              </span>
             </span>
           </BButton>
         </div>
@@ -334,7 +338,9 @@
                         <span>{{ toolDescription(tool.id) }}</span>
                         <small>{{ t('toolbox.outputLabel') }} · {{ t('toolbox.tool.' + tool.id + '.output') }}</small>
                       </span>
-                      <span class="toolbox-card__aside"> </span>
+                      <span class="toolbox-card__aside"
+                        ><BChip tone="neutral">{{ billingLabel(tool) }}</BChip></span
+                      >
                     </BButton>
                     <BTooltip
                       v-if="!isGuest"
@@ -369,7 +375,6 @@
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
   import { TOOLBOX_TOOL_CATALOG, type ToolboxToolId } from '@lightnote/shared/toolbox-protocol';
-  import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BChip from '@/components/base/BasicComponents/BChip.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
@@ -460,9 +465,17 @@
   const identityKey = computed(() => toolboxRecentUseIdentityKey(user));
   const aiQuotaBalanceLabel = computed(() =>
     aiQuotaStatus.value?.exempt
-      ? t('settings.ai.quotaUnlimited')
+      ? t('toolbox.aiQuotaUnlimited')
       : formatAiQuotaTokens(aiQuotaStatus.value?.availableRemaining ?? aiQuotaStatus.value?.remaining, locale.value),
   );
+  const pointsBalanceLabel = computed(() => {
+    const points = growth.value?.points;
+    if (points == null) return '—';
+    return new Intl.NumberFormat(locale.value, {
+      notation: points >= 10_000 ? 'compact' : 'standard',
+      maximumFractionDigits: 1,
+    }).format(points);
+  });
   const categoryOptions = computed(() => [
     { value: 'all' as const, label: t('toolbox.allTools') },
     { value: 'free' as const, label: t('toolbox.freeTools') },
@@ -811,15 +824,11 @@
 </script>
 
 <style scoped lang="less">
+  @import (reference) '@/assets/css/workspace-surfaces.less';
   .toolbox-home__views {
     display: flex;
     gap: 8px;
     margin: 16px 0 20px;
-  }
-  .toolbox-home .toolbox-overview {
-    min-height: 0;
-    padding: 20px 24px;
-    background: var(--card-background);
   }
   .toolbox-home .toolbox-overview__eyebrow {
     display: none;
@@ -836,34 +845,19 @@
     color: var(--text-color);
   }
   .toolbox-home > section {
-    width: min(1720px, 100%);
+    width: 100%;
     margin-right: auto;
     margin-left: auto;
   }
   .toolbox-overview {
     position: relative;
-    min-height: 132px;
-    padding: 20px 24px;
+    padding: 8px 0 24px;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(390px, 440px);
+    grid-template-columns: minmax(0, 1fr) auto auto;
     align-items: center;
-    gap: clamp(20px, 4vw, 48px);
-    overflow: hidden;
+    gap: 24px;
     box-sizing: border-box;
-    border: 1px solid color-mix(in srgb, var(--primary-color) 20%, var(--surface-border-color));
-    border-radius: 21px;
-    background:
-      radial-gradient(
-        circle at 92% 10%,
-        color-mix(in srgb, var(--resource-note-color) 10%, transparent),
-        transparent 34%
-      ),
-      linear-gradient(
-        125deg,
-        color-mix(in srgb, var(--primary-color) 6%, var(--card-background)),
-        var(--card-background)
-      );
-    box-shadow: 0 22px 58px -48px color-mix(in srgb, var(--primary-color) 70%, transparent);
+    border-bottom: 1px solid var(--workspace-border);
   }
   .toolbox-overview.is-guest {
     grid-template-columns: minmax(0, 1fr);
@@ -886,13 +880,7 @@
     font-weight: 700;
     letter-spacing: 0.04em;
   }
-  .toolbox-overview h1 {
-    margin: 0;
-    font-size: clamp(31px, 2.7vw, 38px);
-    font-weight: 780;
-    letter-spacing: -0.052em;
-    line-height: 1.08;
-  }
+
   .toolbox-overview p {
     max-width: 700px;
     margin: 0;
@@ -994,15 +982,9 @@
     line-height: 1.55;
   }
   .toolbox-section {
-    margin-top: 25px;
+    margin-top: 28px;
   }
-  .toolbox-section__head {
-    margin-bottom: 12px;
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: end;
-    gap: 2px 9px;
-  }
+
   .toolbox-section__head > span:first-child {
     grid-row: 1 / 3;
     align-self: start;
@@ -1132,7 +1114,6 @@
     overflow-x: auto;
     border: 1px solid var(--surface-border-color);
     border-radius: 13px;
-    background: color-mix(in srgb, var(--card-background) 96%, transparent);
     box-shadow: 0 8px 22px -18px rgba(17, 19, 32, 0.5);
     backdrop-filter: blur(14px);
     overscroll-behavior-inline: contain;
@@ -1150,24 +1131,6 @@
     font-size: 9px;
     text-align: center;
   }
-  .toolbox-quick-card.b_btn {
-    --tool-accent: var(--primary-color);
-    width: 100%;
-    min-width: 0;
-    min-height: 72px;
-    height: auto;
-    padding: 10px 12px;
-    display: grid;
-    grid-template-columns: 38px minmax(0, 1fr);
-    align-items: center;
-    gap: 10px;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 14px;
-    color: var(--text-color);
-    background: var(--card-background);
-    box-shadow: var(--surface-card-shadow);
-    text-align: left;
-  }
   .toolbox-quick-card.is-amber {
     --tool-accent: var(--warning-color);
   }
@@ -1177,26 +1140,12 @@
   .toolbox-quick-card.is-rose {
     --tool-accent: var(--danger-color);
   }
-  .toolbox-quick-card__icon {
-    width: 38px;
-    height: 38px;
-    display: grid;
-    place-items: center;
-    border: 1px solid color-mix(in srgb, var(--tool-accent) 24%, var(--surface-border-color));
-    border-radius: 11px;
-    color: var(--tool-accent);
-    background: color-mix(in srgb, var(--tool-accent) 8%, var(--card-background));
-  }
   .toolbox-quick-card__copy {
     min-width: 0;
     display: grid;
     gap: 3px;
   }
-  .toolbox-quick-card__copy small {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
+
   .toolbox-quick-card__copy strong {
     display: -webkit-box;
     overflow: hidden;
@@ -1208,6 +1157,9 @@
     line-height: 1.25;
   }
   .toolbox-quick-card__copy small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     color: var(--desc-color);
     font-size: 9.5px;
   }
@@ -1244,11 +1196,6 @@
   .toolbox-home__state.is-error .toolbox-home__state-icon,
   .toolbox-home__state.is-error .toolbox-home__state-copy strong {
     color: var(--danger-color);
-  }
-  .toolbox-activity-grid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 11px;
   }
   .toolbox-activity-card.b_btn {
     width: 100%;
@@ -1468,17 +1415,6 @@
     display: grid;
     gap: 18px;
   }
-  .toolbox-home-group {
-    --group-accent: var(--primary-color);
-    scroll-margin-top: 76px;
-    padding: 16px;
-    display: grid;
-    gap: 13px;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 18px;
-    background: color-mix(in srgb, var(--group-accent) 2.2%, var(--card-background));
-    box-shadow: var(--surface-card-shadow);
-  }
   .toolbox-home-group.is-teal {
     --group-accent: var(--success-color);
   }
@@ -1489,7 +1425,7 @@
     align-items: center;
     gap: 10px;
   }
-  .toolbox-home-group__head > span {
+  .toolbox-home-group__head > span:first-child {
     width: 38px;
     height: 38px;
     display: grid;
@@ -1509,34 +1445,9 @@
     font-size: 10.5px;
     line-height: 1.45;
   }
-  .toolbox-grid {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 10px;
-  }
   .toolbox-card-wrap {
     position: relative;
     min-width: 0;
-  }
-  .toolbox-card.b_btn {
-    --tool-accent: var(--primary-color);
-    width: 100%;
-    min-width: 0;
-    min-height: 124px;
-    height: auto;
-    padding: 12px 13px;
-    display: grid;
-    grid-template-columns: 42px minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 11px;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 13px;
-    color: var(--text-color);
-    background: var(--card-background);
-    box-shadow: var(--surface-card-shadow);
-    line-height: 1.35;
-    text-align: left;
-    white-space: normal;
   }
   .toolbox-card.is-violet {
     --tool-accent: var(--focus-ring-color);
@@ -1550,49 +1461,11 @@
   .toolbox-card.is-rose {
     --tool-accent: var(--danger-color);
   }
-  .toolbox-card__icon {
-    width: 42px;
-    height: 42px;
-    display: grid;
-    place-items: center;
-    border: 1px solid color-mix(in srgb, var(--tool-accent) 22%, var(--surface-border-color));
-    border-radius: 12px;
-    color: var(--tool-accent);
-    background: color-mix(in srgb, var(--tool-accent) 7%, var(--card-background));
-  }
-  .toolbox-card__copy {
-    min-width: 0;
-    display: grid;
-    gap: 4px;
-  }
   .toolbox-card__copy strong,
   .toolbox-card__copy > span,
   .toolbox-card__copy small {
     overflow: hidden;
     text-overflow: ellipsis;
-  }
-  .toolbox-card__copy strong {
-    font-size: 13.5px;
-    white-space: nowrap;
-  }
-  .toolbox-card__copy > span {
-    display: -webkit-box;
-    color: var(--desc-color);
-    font-size: 10.5px;
-    line-height: 1.45;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-  }
-  .toolbox-card__copy small {
-    color: var(--desc-color);
-    font-size: 9.5px;
-    white-space: nowrap;
-  }
-  .toolbox-card__aside {
-    display: grid;
-    justify-items: end;
-    gap: 9px;
-    color: var(--tool-accent);
   }
   .toolbox-card__pin-wrap {
     position: absolute;
@@ -1661,10 +1534,6 @@
   }
 
   @media (max-width: 900px) {
-    .toolbox-overview {
-      grid-template-columns: minmax(0, 1fr);
-      gap: 20px;
-    }
     .toolbox-catalog__controls {
       grid-template-columns: 1fr;
     }
@@ -1677,18 +1546,9 @@
     .toolbox-quick-grid {
       grid-template-columns: repeat(3, minmax(0, 1fr));
     }
-    .toolbox-activity-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-    .toolbox-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
   }
 
   @media (min-width: 901px) and (max-width: 1380px) {
-    .toolbox-grid {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
   }
 
   @media (max-width: 767px) {
@@ -1697,10 +1557,9 @@
     }
     .toolbox-overview {
       min-height: 0;
-      padding: 16px 15px 14px;
+      padding: 4px 0 16px;
       grid-template-columns: 1fr;
       gap: 12px;
-      border-radius: 18px;
     }
     .toolbox-overview h1 {
       font-size: 28px;
@@ -1738,7 +1597,7 @@
       min-height: 44px;
     }
     .toolbox-section {
-      margin-top: 21px;
+      margin-top: 24px;
     }
     .toolbox-start-grid {
       grid-template-columns: 1fr;
@@ -1782,18 +1641,8 @@
       border-left: 0;
       border-radius: 0;
     }
-    .toolbox-quick-card.b_btn {
-      min-height: 68px;
-      padding: 8px 9px;
-      grid-template-columns: 34px minmax(0, 1fr);
-      gap: 7px;
-    }
     .toolbox-quick-card:nth-child(n + 5) {
       display: none;
-    }
-    .toolbox-quick-card__icon {
-      width: 34px;
-      height: 34px;
     }
     .toolbox-section__head h2 {
       font-size: 18px;
@@ -1806,13 +1655,6 @@
     }
     .toolbox-home__state > .b_btn {
       min-height: 44px;
-    }
-    .toolbox-activity-grid {
-      display: block;
-      overflow: hidden;
-      border: 1px solid var(--surface-border-color);
-      border-radius: 15px;
-      background: var(--card-background);
     }
     .toolbox-activity-card.b_btn {
       min-height: 104px;
@@ -1866,38 +1708,12 @@
     .toolbox-home-groups {
       gap: 20px;
     }
-    .toolbox-home-group {
-      margin-right: -12px;
-      margin-left: -12px;
-      padding: 13px 12px;
-      border-right: 0;
-      border-left: 0;
-      border-radius: 0;
-      box-shadow: none;
-    }
     .toolbox-home-group__head {
       grid-template-columns: 36px minmax(0, 1fr) auto;
     }
-    .toolbox-home-group__head > span {
+    .toolbox-home-group__head > span:first-child {
       width: 36px;
       height: 36px;
-    }
-    .toolbox-grid {
-      display: block;
-      overflow: hidden;
-      border: 1px solid var(--surface-border-color);
-      border-radius: 15px;
-      background: var(--card-background);
-    }
-    .toolbox-card-wrap + .toolbox-card-wrap {
-      border-top: 1px solid var(--surface-divider-color);
-    }
-    .toolbox-card.b_btn {
-      min-height: 90px;
-      padding: 10px 11px;
-      border: 0;
-      border-radius: 0;
-      box-shadow: none;
     }
     .toolbox-card__pin-wrap {
       top: 4px;
@@ -1909,30 +1725,18 @@
       min-width: 44px;
       height: 44px;
     }
-    .toolbox-card__aside {
-      padding-top: 38px;
-    }
-    .toolbox-card__copy > span {
-      -webkit-line-clamp: 1;
-    }
-    .toolbox-card__aside :deep(.b-chip) {
-      max-width: 96px;
-    }
   }
 
-  :global(html.light-note-mobile-rendering .toolbox-overview),
   :global(html.light-note-mobile-rendering .toolbox-asset.b_btn),
   :global(html.light-note-mobile-rendering .toolbox-start-card.b_btn),
   :global(html.light-note-mobile-rendering .toolbox-quick-card.b_btn),
   :global(html.light-note-mobile-rendering .toolbox-guest-guide),
   :global(html.light-note-mobile-rendering .toolbox-home__state),
-  :global(html.light-note-mobile-rendering .toolbox-activity-grid),
   :global(html.light-note-mobile-rendering .toolbox-activity-card.b_btn),
   :global(html.light-note-mobile-rendering .toolbox-recent-row.b_btn),
-  :global(html.light-note-mobile-rendering .toolbox-grid),
   :global(html.light-note-mobile-rendering .toolbox-card.b_btn) {
-    border-color: var(--surface-border-color);
-    background: var(--card-background);
+    border-color: var(--workspace-border);
+    background: var(--workspace-content);
     box-shadow: none;
   }
   :global([data-theme='night'] .toolbox-asset__icon) {
@@ -1950,33 +1754,19 @@
   :global(html.light-note-mobile-rendering .toolbox-quick-card__icon),
   :global(html.light-note-mobile-rendering .toolbox-recent-row__icon),
   :global(html.light-note-mobile-rendering .toolbox-card__icon),
-  :global(html.light-note-mobile-rendering .toolbox-home-group__head > span) {
+  :global(html.light-note-mobile-rendering .toolbox-home-group__head > span:first-child) {
     border-color: var(--surface-border-color);
     background: var(--workspace-panel-bg-color);
   }
-  .toolbox-overview {
-    padding: 22px 24px;
-    min-height: 0;
-    box-shadow: none;
-  }
   .toolbox-overview h1 {
+    margin: 0;
     font-size: 28px;
+    font-weight: 780;
+    letter-spacing: -0.052em;
+    line-height: 1.08;
   }
   .toolbox-overview__eyebrow {
     display: none;
-  }
-  .toolbox-home__header-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    align-items: center;
-  }
-  .toolbox-activity-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .toolbox-activity-card {
-    min-height: 155px;
-    padding: 20px;
   }
   .toolbox-task-list {
     display: grid;
@@ -2000,9 +1790,7 @@
   .toolbox-task-list .toolbox-activity-card__action {
     position: static;
   }
-  .toolbox-section__head {
-    align-items: center;
-  }
+
   .toolbox-section__head > .b_btn {
     margin-left: auto;
   }
@@ -2011,45 +1799,11 @@
     overflow-wrap: anywhere;
   }
   @media (max-width: 767px) {
-    .toolbox-activity-grid {
-      grid-template-columns: minmax(0, 1fr);
-    }
-    .toolbox-overview {
-      padding: 16px;
-    }
-    .toolbox-home__header-actions {
-      width: 100%;
-    }
     .toolbox-task-list .toolbox-activity-card {
       flex-wrap: wrap;
     }
   }
 
-  .workshop-view-switch {
-    position: relative;
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    width: min(380px, 100%);
-    padding: 5px;
-    margin: 24px 0 28px;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 15px;
-    background: var(--workspace-panel-bg-color);
-    isolation: isolate;
-    box-sizing: border-box;
-  }
-  .workshop-view-switch__indicator {
-    position: absolute;
-    inset: 5px auto 5px 5px;
-    width: calc(50% - 5px);
-    border-radius: 10px;
-    background: var(--card-background);
-    border: 1px solid var(--primary-color);
-    box-shadow: 0 3px 10px rgba(20, 24, 40, 0.07);
-    transition: transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
-    z-index: -1;
-    box-sizing: border-box;
-  }
   .workshop-view-switch.is-catalog .workshop-view-switch__indicator {
     transform: translateX(100%);
   }
@@ -2062,20 +1816,7 @@
     border: 0;
     background: transparent;
   }
-  .workshop-view-switch :deep(.tab) {
-    width: 100%;
-    justify-content: center;
-    min-height: 44px;
-    background: transparent;
-    border: 0;
-    color: var(--desc-color);
-    font-weight: 600;
-  }
-  .workshop-view-switch :deep(.tab.is-active) {
-    background: transparent;
-    box-shadow: none;
-    color: var(--primary-color);
-  }
+
   .workshop-view-content {
     animation: workshop-view-appear 180ms ease-out;
   }
@@ -2122,6 +1863,511 @@
     }
     .toolbox-catalog__controls {
       grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  // 共享工作区表面：仅改变颜色，布局与滚动由原组件负责。
+  .toolbox-group-filter,
+  .toolbox-home-group,
+  .toolbox-catalog__content {
+    .workspace-open-surface();
+  }
+  .toolbox-card.b_btn,
+  .toolbox-activity-card,
+  .toolbox-quick-card {
+    .workspace-content-surface();
+  }
+
+  .toolbox-group-filter {
+    .workspace-navigation-colors();
+  }
+  .toolbox-group-filter :deep(.b-chip:not(.b-chip--selected):hover) {
+    .workspace-navigation-hover();
+  }
+  .toolbox-group-filter :deep(.b-chip.b-chip--selected) {
+    .workspace-navigation-selected();
+  }
+  // 首页层级：资产、项目、工具各自使用稳定的内容表面。
+  .toolbox-home__balances {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(160px, max-content));
+    gap: 10px;
+  }
+  .toolbox-home__balance.b_btn {
+    .workspace-content-surface();
+    --balance-accent: var(--workspace-purple-text);
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 16px;
+    gap: 7px 8px;
+    width: 100%;
+    min-width: 0;
+    height: auto;
+    min-height: 74px;
+    padding: 12px 14px;
+    border: 1px solid var(--workspace-border);
+    border-radius: 14px;
+    text-align: left;
+    line-height: 1.25;
+    white-space: normal;
+  }
+  .toolbox-home__balance.is-points {
+    --balance-accent: var(--warning-color);
+  }
+  .balance-label {
+    grid-column: 1;
+    grid-row: 1;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--workspace-muted);
+    font-size: 12px;
+  }
+  .balance-label > :first-child {
+    color: var(--balance-accent);
+  }
+  .toolbox-home__balance strong {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    color: var(--workspace-text);
+    font-size: 21px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .balance-arrow {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: center;
+    color: var(--workspace-muted);
+  }
+  .toolbox-home__create.b_btn {
+    height: 40px;
+    gap: 6px;
+    border-radius: 10px;
+  }
+  .workshop-view-switch {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: min(300px, 100%);
+    padding: 4px;
+    margin: 24px 0 28px;
+    border: 0;
+    border-radius: 12px;
+    background: var(--workspace-canvas);
+    isolation: isolate;
+  }
+  .workshop-view-switch__indicator {
+    position: absolute;
+    inset: 4px auto 4px 4px;
+    width: calc(50% - 4px);
+    border-radius: 9px;
+    background: var(--workspace-content);
+    border: 1px solid var(--workspace-border);
+    box-shadow: none;
+    transition: transform 220ms ease;
+    z-index: -1;
+    box-sizing: border-box;
+  }
+  .workshop-view-switch :deep(.tab) {
+    width: 100%;
+    justify-content: center;
+    font-weight: 600;
+    min-height: 36px;
+    padding: 8px 14px;
+    border: 0;
+    background: transparent;
+    color: var(--workspace-muted);
+  }
+  .workshop-view-switch :deep(.tab.is-active) {
+    color: var(--workspace-purple-text);
+    background: transparent;
+    box-shadow: none;
+  }
+  .toolbox-section__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+    margin-bottom: 16px;
+  }
+  .toolbox-section__head > .b_btn {
+    background: transparent;
+    color: var(--workspace-muted);
+  }
+  .toolbox-activity-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+  }
+  .workshop-project.b_btn {
+    .workspace-content-surface();
+    --project-accent: var(--workspace-purple-text);
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    width: 100%;
+    min-width: 0;
+    height: auto;
+    padding: 20px;
+    gap: 18px;
+    border: 1px solid var(--workspace-border);
+    border-radius: 16px;
+    color: var(--workspace-text);
+    text-align: left;
+    white-space: normal;
+    line-height: 1.5;
+  }
+  .workshop-project.is-blue {
+    --project-accent: var(--info-color);
+  }
+  .workshop-project.is-teal {
+    --project-accent: var(--workspace-note-text);
+  }
+  .workshop-project__head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+  }
+  .workshop-project__icon {
+    flex: 0 0 42px;
+    height: 42px;
+    display: grid;
+    place-items: center;
+    border-radius: 12px;
+    color: var(--project-accent);
+    background: var(--workspace-hover);
+    background: color-mix(in srgb, var(--project-accent) 9%, var(--workspace-content));
+  }
+  .workshop-project__identity {
+    flex: 1;
+    min-width: 0;
+    display: grid;
+    gap: 4px;
+  }
+  .workshop-project__identity strong {
+    font-size: 17px;
+    font-weight: 650;
+    line-height: 1.45;
+  }
+  .workshop-project__identity strong,
+  .workshop-project__next > span {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+  }
+  .workshop-project__identity .toolbox-activity-card__type {
+    max-width: none;
+    color: var(--project-accent);
+    font-size: 11px;
+  }
+  .workshop-project__head :deep(.b-chip) {
+    flex-shrink: 0;
+  }
+  .workshop-project__next {
+    display: grid;
+    gap: 5px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: var(--workspace-canvas);
+  }
+  .workshop-project__next small {
+    color: var(--workspace-muted);
+    font-size: 11px;
+  }
+  .workshop-project__next > span {
+    font-size: 13px;
+  }
+  .workshop-project__next.is-empty > span {
+    color: var(--workspace-muted);
+  }
+  .workshop-project__foot {
+    margin-top: auto;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .workshop-project__meta {
+    display: grid;
+    gap: 3px;
+    color: var(--workspace-muted);
+    font-size: 11px;
+  }
+  .workshop-project__meta small {
+    font-size: 10px;
+  }
+  .workshop-project__action {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--workspace-purple-text);
+    font-size: 12px;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+  .toolbox-task-list .toolbox-activity-card.b_btn {
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr) auto;
+    gap: 14px;
+    padding: 16px;
+    border: 1px solid var(--workspace-border);
+    border-radius: 14px;
+    box-shadow: none;
+  }
+  .toolbox-task-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+  }
+  .toolbox-task-time {
+    align-self: center;
+    color: var(--desc-color);
+    font-size: 11px;
+    white-space: nowrap;
+  }
+  .toolbox-task-list .toolbox-activity-card__action {
+    grid-column: auto;
+    color: var(--workspace-purple-text);
+    font-size: 12px;
+  }
+  .toolbox-activity-card__icon {
+    border: 0;
+    background: var(--workspace-canvas);
+  }
+  .toolbox-quick-card.b_btn {
+    .workspace-content-surface();
+    width: 100%;
+    min-width: 0;
+    height: auto;
+    min-height: 76px;
+    padding: 14px 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid var(--workspace-divider);
+    border-radius: 14px;
+    text-align: left;
+    white-space: normal;
+    line-height: 1.4;
+    box-shadow: none;
+  }
+  .toolbox-quick-card__icon,
+  .toolbox-card__icon {
+    flex-shrink: 0;
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    border: 0;
+    border-radius: 11px;
+    color: var(--tool-accent, var(--workspace-purple-text));
+    background: var(--workspace-canvas);
+  }
+  .toolbox-home-group {
+    --group-accent: var(--workspace-purple-text);
+    scroll-margin-top: 76px;
+    padding: 0;
+    display: grid;
+    gap: 16px;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .toolbox-home-groups {
+    display: grid;
+    gap: 28px;
+  }
+  .toolbox-home-group__head > span:first-child {
+    border: 0;
+    background: var(--workspace-canvas);
+  }
+  .toolbox-home-group__head h3 {
+    font-size: 16px;
+  }
+  .toolbox-home-group__head p {
+    font-size: 12px;
+  }
+  .toolbox-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+    gap: 12px;
+  }
+  .toolbox-card.b_btn {
+    .workspace-content-surface();
+    --tool-accent: var(--workspace-purple-text);
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr);
+    align-items: start;
+    gap: 12px;
+    width: 100%;
+    min-width: 0;
+    height: 100%;
+    padding: 18px;
+    border: 1px solid var(--workspace-border);
+    border-radius: 14px;
+    text-align: left;
+    white-space: normal;
+    line-height: 1.5;
+    box-shadow: none;
+  }
+  .toolbox-card.is-teal {
+    --tool-accent: var(--workspace-note-text);
+  }
+  .toolbox-card.is-amber {
+    --tool-accent: var(--warning-color);
+  }
+  .toolbox-card.is-blue {
+    --tool-accent: var(--info-color);
+  }
+  .toolbox-card__copy {
+    display: grid;
+    gap: 8px;
+    min-width: 0;
+    padding-right: 16px;
+  }
+  .toolbox-card__copy strong {
+    font-size: 14px;
+    white-space: normal;
+  }
+  .toolbox-card__copy > span {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    color: var(--workspace-muted);
+    font-size: 12px;
+  }
+  .toolbox-card__copy small {
+    font-size: 11px;
+    color: var(--workspace-muted);
+    white-space: normal;
+  }
+  .toolbox-card__aside {
+    grid-column: 2;
+    align-self: end;
+    justify-self: start;
+  }
+  .toolbox-group-filter {
+    box-shadow: none;
+    backdrop-filter: none;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .workshop-project.b_btn:hover {
+      border-color: var(--project-accent);
+      background: var(--workspace-content);
+    }
+    .toolbox-home__balance.b_btn:hover {
+      border-color: var(--balance-accent);
+      background: var(--workspace-content);
+    }
+    .toolbox-card.b_btn:hover,
+    .toolbox-quick-card.b_btn:hover {
+      background: var(--workspace-content);
+      border-color: var(--workspace-purple-text);
+    }
+  }
+  @media (max-width: 767px) {
+    .toolbox-overview {
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 16px 10px;
+    }
+    .toolbox-overview__copy {
+      display: contents;
+    }
+    .toolbox-overview__copy h1 {
+      grid-column: 1;
+      grid-row: 1;
+    }
+    .toolbox-overview__copy p {
+      grid-column: 1 / -1;
+      grid-row: 2;
+    }
+    .toolbox-home__create.b_btn {
+      grid-column: 2;
+      grid-row: 1;
+      height: 44px;
+      padding: 0 12px;
+    }
+    .toolbox-home__balances {
+      grid-column: 1 / -1;
+      grid-row: 3;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .toolbox-home__balance.b_btn {
+      padding: 10px 12px;
+    }
+    .toolbox-home__balance strong {
+      font-size: 18px;
+    }
+    .toolbox-overview h1 {
+      font-size: 25px;
+      overflow-wrap: anywhere;
+    }
+    .toolbox-activity-grid {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 12px;
+    }
+    .workshop-project.b_btn {
+      padding: 16px;
+      gap: 14px;
+    }
+    .workshop-project__head {
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .workshop-project__identity {
+      min-width: 140px;
+    }
+    .workshop-project__identity strong {
+      font-size: 16px;
+    }
+    .workshop-project__head :deep(.b-chip) {
+      margin-left: 52px;
+    }
+    .workshop-project__foot {
+      flex-wrap: wrap;
+    }
+    .workshop-project__action {
+      margin-left: auto;
+    }
+    .workshop-view-switch :deep(.tab) {
+      min-height: 44px;
+    }
+    .toolbox-task-list .toolbox-activity-card.b_btn {
+      grid-template-columns: 40px minmax(0, 1fr);
+    }
+    .toolbox-task-meta {
+      grid-column: 2;
+      min-width: 0;
+      flex-wrap: wrap;
+      gap: 6px 12px;
+    }
+    .toolbox-task-list .toolbox-activity-card__action {
+      grid-column: 2;
+    }
+    .toolbox-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .toolbox-card__pin.b_btn {
+      min-width: 44px;
+      width: 44px;
+      height: 44px;
+      box-shadow: none;
+    }
+    .toolbox-card__copy {
+      padding-right: 26px;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .workshop-view-switch__indicator {
+      transition: none;
     }
   }
 </style>

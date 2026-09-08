@@ -97,7 +97,7 @@ describe('tagSpaceService', () => {
         .mockResolvedValueOnce([[{ bookmark_count: 0, note_count: 0, file_count: 0 }]]),
     };
     await queryTagSpaceList(listDb, { userId: 'user-1' });
-    expect(listDb.query.mock.calls[0][0]).toContain('COALESCE(stats.file_count, 0)\n  ) > 0');
+    expect(listDb.query.mock.calls[0][0]).toMatch(/COALESCE\(stats.file_count, 0\) \+ [\s\S]*todo_tag_relations[\s\S]*\) > 0/);
     expect(listDb.query.mock.calls[0][0]).toContain('ORDER BY stats.last_activity_time IS NULL ASC');
 
     const detailDb = {
@@ -146,7 +146,7 @@ describe('tagSpaceService', () => {
       includeEmpty: true,
       filter: 'empty',
     });
-    expect(db.query.mock.calls[0][0]).toContain('COALESCE(stats.file_count, 0)\n    ) = 0');
+    expect(db.query.mock.calls[0][0]).toMatch(/COALESCE\(stats.file_count, 0\) \+ [\s\S]*todo_tag_relations[\s\S]*\) = 0/);
     expect(result).toMatchObject({
       total: 2,
       filter: 'empty',

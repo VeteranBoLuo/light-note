@@ -595,6 +595,7 @@
 </script>
 
 <style scoped lang="less">
+  @import (reference) "@/assets/css/workspace-surfaces.less";
   .knowledge-map-page {
     display: flex;
     flex-direction: column;
@@ -760,7 +761,6 @@
     padding: 15px;
     border: 1px solid var(--card-border-color);
     border-radius: 12px;
-    background: var(--card-background);
     box-sizing: border-box;
   }
 
@@ -1142,5 +1142,13 @@
         font-size: 9px;
       }
     }
+  }
+
+  // 共享工作区表面：仅改变颜色，布局与滚动由原组件负责。
+  .knowledge-map-page, .km-canvas-wrap {
+    .workspace-canvas-surface();
+  }
+  .km-panel {
+    .workspace-content-surface();
   }
 </style>

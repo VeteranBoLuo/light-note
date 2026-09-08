@@ -1,10 +1,10 @@
 <template>
   <label
     class="b-switch"
-    :class="{ 'is-checked': localChecked, 'is-disabled': disabled }"
+    :class="{ 'is-checked': displayedChecked, 'is-disabled': disabled }"
     role="switch"
     :tabindex="disabled ? -1 : 0"
-    :aria-checked="localChecked"
+    :aria-checked="displayedChecked"
     :aria-disabled="disabled || undefined"
     @click="toggle"
     @keydown.enter.prevent="toggle"
@@ -17,15 +17,18 @@
 </template>
 
 <script setup lang="ts">
-  import { ref, watch } from 'vue';
+  import { computed, ref, watch } from 'vue';
 
   const props = withDefaults(
     defineProps<{
       checked?: boolean;
+      /** Defer visual changes to the parent, for confirmed or queued writes. */
+      controlled?: boolean;
       disabled?: boolean;
     }>(),
     {
       checked: false,
+      controlled: false,
       disabled: false,
     },
   );
@@ -36,6 +39,7 @@
   }>();
 
   const localChecked = ref(props.checked);
+  const displayedChecked = computed(() => props.controlled ? props.checked : localChecked.value);
 
   watch(
     () => props.checked,
@@ -47,8 +51,8 @@
 
   function toggle() {
     if (props.disabled) return;
-    const newVal = !localChecked.value;
-    localChecked.value = newVal;
+    const newVal = !displayedChecked.value;
+    if (!props.controlled) localChecked.value = newVal;
     emit('update:checked', newVal);
     emit('change', newVal);
   }

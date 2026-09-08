@@ -52,6 +52,11 @@
         </div>
       </label>
 
+      <TodoOrganizationFields
+        v-model:list-id="organizationListId"
+        v-model:tag-ids="organizationTagIds"
+        :disabled="saving"
+      />
       <div class="todo-editor-form__advanced-head">
         <span>{{ t('inbox.todoAdvancedContentHint') }}</span>
         <BButton size="small" @click="advancedContentOpen = !advancedContentOpen">
@@ -90,10 +95,10 @@
           />
         </div>
       </section>
-      <section v-if="advancedContentOpen" class="todo-checklist-editor">
+      <section v-if="advancedContentOpen" ref="checklistSectionRef" class="todo-checklist-editor">
         <div class="todo-checklist-editor__header">
           <div>
-            <span>{{ t('inbox.todoChecklist') }}</span>
+            <span>{{ t('todoWorkspace.subitems') }}</span>
             <small>{{ t('inbox.todoChecklistHint') }}</small>
           </div>
           <div class="todo-checklist-editor__actions">
@@ -157,6 +162,7 @@
       <BButton @click="cancelLegacyConversion">{{ t('inbox.todoLegacyPlanKeep') }}</BButton>
     </section>
     <TodoPlanScheduleEditor
+      ref="planEditorRef"
       v-if="!legacyMode"
       v-show="!mobileWizard || mobileStep > 1"
       :item="item"
@@ -281,6 +287,7 @@
 </template>
 
 <script setup lang="ts">
+  import TodoOrganizationFields from './TodoOrganizationFields.vue';
   import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
@@ -313,7 +320,9 @@
   const props = withDefaults(
     defineProps<{
       item?: TodoItem | null;
-      initialValues?: Partial<Pick<TodoPayload, 'title' | 'description' | 'priority' | 'dueAt' | 'checklist'>>;
+      initialValues?: Partial<
+        Pick<TodoPayload, 'title' | 'description' | 'priority' | 'dueAt' | 'checklist' | 'listId' | 'tagIds'>
+      >;
       saving?: boolean;
       resetKey?: number;
       /** 移动抽屉使用三步渐进表单，避免一次展开全部高级配置。 */
@@ -345,6 +354,15 @@
   const checklistItems = ref<TodoChecklistItem[]>([]);
   const reminderEditorRef = ref<HTMLElement | null>(null);
   const mobileStep = ref<1 | 2 | 3>(1);
+  const organizationListId = ref<string | null>(null);
+  const organizationTagIds = ref<string[]>([]);
+  const checklistSectionRef = ref<HTMLElement | null>(null);
+  async function revealChecklist() {
+    mobileStep.value = 1;
+    advancedContentOpen.value = true;
+    await nextTick();
+    checklistSectionRef.value?.scrollIntoView({ block: 'start', behavior: 'auto' });
+  }
   const advancedContentOpen = ref(false);
   const planOccurrenceCount = ref(1);
   watch(mobileStep, (step) => emit('mobile-step-change', step), { immediate: true });
@@ -492,9 +510,10 @@
     () =>
       Boolean(form.title.trim()) &&
       !props.saving &&
-      (legacyMode.value
-        ? !reminderValidationMessage.value && !recurrenceValidationMessage.value
-        : Boolean(planSubmission.value)),
+      (organizationOnly.value ||
+        (legacyMode.value
+          ? !reminderValidationMessage.value && !recurrenceValidationMessage.value
+          : Boolean(planSubmission.value))),
   );
 
   const normalizedChecklist = computed(() =>
@@ -506,6 +525,35 @@
   );
   const resourceRefInputs = computed(() => resourceRefs.value.map((ref) => ({ type: ref.type, id: ref.id })));
 
+  const planEditorRef = ref<{
+    isDirty: () => boolean;
+    isScheduleDirty: () => boolean;
+    getScope: () => TodoPlanScope;
+  } | null>(null);
+  let initialFingerprint = '';
+  let initialContentFingerprint = '';
+  const contentFingerprint = () =>
+    JSON.stringify({ form, checklist: normalizedChecklist.value, refs: resourceRefInputs.value });
+  const organizationOnly = computed(() =>
+    Boolean(
+      props.item &&
+      contentFingerprint() === initialContentFingerprint &&
+      !planEditorRef.value?.isScheduleDirty() &&
+      fingerprint() !== initialFingerprint,
+    ),
+  );
+  const fingerprint = () =>
+    JSON.stringify({
+      form,
+      checklist: normalizedChecklist.value,
+      refs: resourceRefInputs.value,
+      list: organizationListId.value,
+      tags: organizationTagIds.value,
+    });
+  defineExpose({
+    revealChecklist,
+    isDirty: () => fingerprint() !== initialFingerprint || Boolean(planEditorRef.value?.isDirty()),
+  });
   watch(
     () => [props.item, props.initialValues, props.resetKey, props.v2Enabled] as const,
     () => reset(),
@@ -553,11 +601,15 @@
     form.recurrenceEndAt = toTodoLocalInput(props.item?.recurrence?.endAt);
     planSubmission.value = null;
     planOccurrenceCount.value = 1;
+    organizationListId.value = props.item?.listId ?? props.initialValues?.listId ?? null;
+    organizationTagIds.value = props.item?.tags?.map((tag) => tag.id) ?? props.initialValues?.tagIds ?? [];
     const initialChecklist = props.item?.checklist || initialValues?.checklist;
     checklistItems.value = initialChecklist?.length
       ? initialChecklist.map((item) => ({ ...item }))
       : [createChecklistItem()];
     advancedContentOpen.value = Boolean(resourceRefs.value.length || initialChecklist?.length);
+    initialFingerprint = fingerprint();
+    initialContentFingerprint = contentFingerprint();
   }
 
   function createChecklistItem(): TodoChecklistItem {
@@ -603,6 +655,14 @@
 
   function submit() {
     if (!canSubmit.value) return;
+    if (organizationOnly.value) {
+      emit('submit', {
+        kind: 'organization',
+        scope: planEditorRef.value?.getScope() || 'current',
+        payload: { title: form.title, listId: organizationListId.value, tagIds: organizationTagIds.value },
+      });
+      return;
+    }
     const checklist = normalizedChecklist.value;
     if (!legacyMode.value) {
       if (!planSubmission.value) return;
@@ -612,6 +672,8 @@
         ...(legacyConversion.value && props.item ? { convertLegacyTodoId: props.item.id } : {}),
         payload: {
           ...planSubmission.value.payload,
+          listId: organizationListId.value,
+          tagIds: organizationTagIds.value,
           title: form.title.trim(),
           description: form.description.trim(),
           priority: form.priority,
@@ -627,6 +689,8 @@
     emit('submit', {
       kind: 'legacy',
       payload: {
+        listId: organizationListId.value,
+        tagIds: organizationTagIds.value,
         title: form.title.trim(),
         description: form.description.trim(),
         resourceRefs: resourceRefInputs.value,
@@ -894,6 +958,7 @@
     gap: 10px;
   }
   .todo-checklist-editor {
+    scroll-margin-top: 16px;
     display: flex;
     flex-direction: column;
     gap: 9px;
@@ -1127,6 +1192,7 @@
       width: auto;
     }
     .todo-checklist-editor {
+      scroll-margin-top: 16px;
       padding: 10px;
     }
     .todo-checklist-editor__header {

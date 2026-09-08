@@ -5,7 +5,17 @@
     class="workshop-entry"
     :class="{ 'is-inline': inline, 'is-tab-panel': tabPanel, 'is-empty': !data?.projects.length }"
   >
-    <p v-if="loading">{{ t('toolbox.project.loading') }}</p>
+    <div v-if="!eligible" class="workshop-entry__row">
+      <div
+        ><strong>{{ t('toolbox.project.myProjects') }}</strong
+        ><p>{{ t('toolbox.project.guestHint') }}</p></div
+      >
+      <div class="workshop-entry__actions">
+        <BButton type="primary" @click="router.push({ name: 'login' })">{{ t('toolbox.home.guestAction') }}</BButton>
+        <BButton @click="openProjects(false)">{{ t('toolbox.project.learn') }}</BButton>
+      </div>
+    </div>
+    <p v-else-if="loading">{{ t('toolbox.project.loading') }}</p>
     <div v-else-if="failed" class="workshop-entry__row" role="alert"
       ><span>{{ t('toolbox.project.failed') }}</span
       ><BButton @click="load(true)">{{ t('common.retry') }}</BButton></div
@@ -23,13 +33,6 @@
           <BButton @click="openProjects(false)">{{
             t(data.hasProjects ? 'toolbox.project.allProjects' : 'toolbox.project.learn')
           }}</BButton>
-          <BButton
-            v-if="!data.hasProjects"
-            :aria-label="t('toolbox.project.dismiss')"
-            :loading="dismissing"
-            @click="dismissIntro"
-            ><SvgIcon :src="icon.common.close" size="16"
-          /></BButton>
         </div>
       </header>
       <div v-if="data.projects.length" class="workshop-entry__projects">
@@ -59,23 +62,19 @@
   import { useRouter } from 'vue-router';
   import { useToolboxProjectEntry } from '@/composables/useToolboxProjectEntry';
   import { recordAiProductEvent } from '@/api/aiTelemetry';
+  import { useUserStore } from '@/store';
   import { useMobileLayout } from '@/composables/useMobileLayout';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
-  import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import icon from '@/config/icon';
   defineProps<{ inline?: boolean; tabPanel?: boolean }>();
   const emit = defineEmits<{ state: [value: { visible: boolean; count: number }] }>();
   const { t } = useI18n();
   const router = useRouter();
   const mobile = useMobileLayout();
-  const { data, loading, failed, eligible, owner, load, dismiss } = useToolboxProjectEntry();
-  const visible = computed(() =>
-    Boolean(
-      eligible.value &&
-      (loading.value || failed.value || (data.value && (data.value.hasProjects || !data.value.dismissed))),
-    ),
-  );
+  const { data, loading, failed, eligible, owner, load } = useToolboxProjectEntry();
+  const user = useUserStore();
+  const visible = computed(() => !user.adminContext);
   watch(
     [visible, data, failed, loading],
     () =>
@@ -91,7 +90,6 @@
     writing: icon.toolbox.materialNote,
   };
   const root = ref<HTMLElement | null>(null);
-  const dismissing = ref(false);
   let observer: IntersectionObserver | undefined;
   let seen = false;
   watch(owner, () => {
@@ -129,17 +127,6 @@
       path: '/toolbox/research_workspace',
       query: { workspace: id, entry: 'workbench' },
     });
-  }
-  async function dismissIntro() {
-    if (dismissing.value) return;
-    dismissing.value = true;
-    try {
-      await dismiss();
-    } catch {
-      message.error(t('toolbox.workspace.operationFailed'));
-    } finally {
-      dismissing.value = false;
-    }
   }
 </script>
 <style scoped lang="less">

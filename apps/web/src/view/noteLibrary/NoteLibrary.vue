@@ -3239,6 +3239,7 @@
 </script>
 
 <style lang="less" scoped>
+  @import (reference) "@/assets/css/workspace-surfaces.less";
   @media (min-width: 1200px) {
     .note-library-shell {
       background: var(--background-color);
@@ -3731,7 +3732,6 @@
     overflow: hidden;
     border: 1px solid var(--note-workspace-frame-color);
     border-radius: 14px;
-    background: var(--workspace-panel-bg-color, var(--menu-body-bg-color));
     box-shadow: 0 12px 30px -28px color-mix(in srgb, var(--text-color) 38%, transparent);
     container-type: inline-size;
 
@@ -3767,7 +3767,6 @@
     flex: 0 0 auto;
     padding: 12px 16px 11px;
     border-bottom: 1px solid color-mix(in srgb, var(--card-border-color) 72%, transparent);
-    background: var(--workspace-panel-bg-color, var(--menu-body-bg-color));
   }
 
   .note-directory-breadcrumbs {
@@ -4063,7 +4062,6 @@
       border: 0;
       border-radius: 0;
       box-shadow: none;
-      background: transparent;
     }
 
     .note-library-body {
@@ -4103,5 +4101,10 @@
     .note-library-body {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
+  }
+
+  // 共享工作区表面：仅改变颜色，布局与滚动由原组件负责。
+  .note-workspace, .note-directory-header, .note-main-panel {
+    .workspace-canvas-surface();
   }
 </style>

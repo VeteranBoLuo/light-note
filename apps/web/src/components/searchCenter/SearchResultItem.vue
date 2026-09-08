@@ -160,11 +160,11 @@
 </script>
 
 <style scoped lang="less">
+  @import (reference) "@/assets/css/workspace-surfaces.less";
   .result-item {
     position: relative;
     border: 1px solid var(--surface-border-color, var(--card-border-color));
     border-radius: 14px;
-    background: var(--card-background, var(--background-color));
     box-shadow: var(--surface-card-shadow, none);
     transition:
       border-color 0.2s,
@@ -527,5 +527,10 @@
     border-radius: 3px;
     padding: 0 2px;
     font-weight: 700;
+  }
+
+  // 共享工作区表面：仅改变颜色，布局与滚动由原组件负责。
+  .result-item {
+    .workspace-content-surface();
   }
 </style>

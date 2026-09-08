@@ -119,6 +119,7 @@
 </script>
 
 <style scoped lang="less">
+  @import (reference) "@/assets/css/workspace-surfaces.less";
   .resource-inspector-panel {
     min-height: 0;
     display: flex;
@@ -135,9 +136,6 @@
     padding: 14px;
     border: 1px solid var(--surface-border-color);
     border-radius: 14px;
-    background:
-      linear-gradient(145deg, color-mix(in srgb, var(--inspector-accent) 10%, transparent), transparent 62%),
-      var(--card-background);
   }
 
   .resource-inspector-hero.is-bookmark {
@@ -331,5 +329,10 @@
       padding: 10px 0 0;
       background: var(--background-color);
     }
+  }
+
+  // 共享工作区表面：仅改变颜色，布局与滚动由原组件负责。
+  .resource-inspector-panel, .resource-inspector-hero {
+    .workspace-content-surface();
   }
 </style>

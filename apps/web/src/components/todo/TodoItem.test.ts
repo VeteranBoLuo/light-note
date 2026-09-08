@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h, nextTick, ref } from 'vue';
 import { createI18n } from 'vue-i18n';
+import { createPinia } from 'pinia';
 import TodoItem from './TodoItem.vue';
 import type { TodoItem as TodoItemType } from '@/api/todoApi';
 
@@ -10,7 +11,8 @@ const todoItemSource = readFileSync(resolve(process.cwd(), 'src/components/todo/
 
 const routerPush = vi.fn();
 const { recordOperation } = vi.hoisted(() => ({ recordOperation: vi.fn() }));
-vi.mock('vue-router', () => ({
+vi.mock('vue-router', async (importOriginal) => ({
+  ...await importOriginal<typeof import('vue-router')>(),
   useRouter: () => ({ push: routerPush, currentRoute: { value: { fullPath: '/inbox?tab=todo' } } }),
 }));
 vi.mock('@/api/commonApi', () => ({ recordOperation }));
@@ -51,6 +53,8 @@ function pointerEvent(type: string, x: number, y: number, pointerId = 1) {
 
 function mountTodoItem(item: TodoItemType = todo, options: { selectable?: boolean; swipeEnabled?: boolean } = {}) {
   const onPreview = vi.fn();
+  const onSelect = vi.fn();
+  const selected = ref(false);
   const onEdit = vi.fn();
   const onDelete = vi.fn();
   const onSeriesAction = vi.fn();
@@ -66,6 +70,8 @@ function mountTodoItem(item: TodoItemType = todo, options: { selectable?: boolea
           swipeEnabled: options.swipeEnabled,
           swipeOpen: swipeOpen.value,
           onPreview,
+          selected: selected.value,
+          onSelect: (value: boolean) => { selected.value = value; onSelect(value); },
           onEdit,
           onDelete,
           onSeriesAction,
@@ -73,6 +79,7 @@ function mountTodoItem(item: TodoItemType = todo, options: { selectable?: boolea
         });
     },
   });
+  app.use(createPinia());
   app.use(
     createI18n({
       legacy: false,
@@ -133,7 +140,7 @@ function mountTodoItem(item: TodoItemType = todo, options: { selectable?: boolea
     app.unmount();
     host.remove();
   };
-  return { host, onPreview, onEdit, onDelete, onSeriesAction, swipeOpen };
+  return { host, onSelect, onPreview, onEdit, onDelete, onSeriesAction, swipeOpen };
 }
 
 afterEach(() => {
@@ -148,6 +155,15 @@ afterEach(() => {
 });
 
 describe('TodoItem card preview', () => {
+  it('子事项编辑携带定位目标且不触发详情预览', async () => {
+    const { host, onEdit, onPreview } = mountTodoItem();
+    host.querySelector<HTMLButtonElement>('.todo-subitems > button')!.click();
+    await nextTick();
+    host.querySelector<HTMLButtonElement>('.todo-subitems__edit')!.click();
+    expect(onEdit).toHaveBeenCalledWith('checklist');
+    expect(onPreview).not.toHaveBeenCalled();
+  });
+
   it('桌面操作区靠右上单行展示，窄桌面空间不足时落到正文下方', () => {
     expect(todoItemSource).toMatch(
       /\.todo-item__actions--desktop\s*\{[\s\S]*?align-self:\s*start;[\s\S]*?flex-wrap:\s*nowrap;[\s\S]*?margin-top:\s*5px;/,
@@ -165,7 +181,7 @@ describe('TodoItem card preview', () => {
     expect(onPreview).toHaveBeenCalledTimes(1);
     expect(onEdit).not.toHaveBeenCalled();
 
-    host.querySelector<HTMLElement>('.todo-checklist')!.click();
+    host.querySelector<HTMLElement>('.todo-subitems')!.click();
     host.querySelector<HTMLElement>('.todo-resource-refs')!.click();
     host.querySelector<HTMLElement>('.todo-item__main-check')!.click();
     host.querySelector<HTMLButtonElement>('.todo-item__actions--desktop button:last-child')!.click();
@@ -187,11 +203,16 @@ describe('TodoItem card preview', () => {
   });
 
   it('批量选择态不通过正文打开预览', async () => {
-    const { host, onPreview } = mountTodoItem(todo, { selectable: true });
+    const { host, onSelect, onPreview } = mountTodoItem(todo, { selectable: true });
     await nextTick();
 
     host.querySelector<HTMLElement>('.todo-item__body')!.click();
     expect(onPreview).not.toHaveBeenCalled();
+    expect(onSelect).toHaveBeenLastCalledWith(true);
+    await nextTick();
+    host.querySelector<HTMLElement>('.todo-item')!.click();
+    expect(onSelect).toHaveBeenLastCalledWith(false);
+    expect(onSelect).toHaveBeenCalledTimes(2);
   });
 
   it('批量选择框位于标题行的正常布局流中，不占用截止时间区域', async () => {

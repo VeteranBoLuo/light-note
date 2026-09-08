@@ -2161,6 +2161,7 @@
 </script>
 
 <style scoped lang="less">
+  @import (reference) "@/assets/css/workspace-surfaces.less";
   .search-center-route {
     width: 100%;
     height: 100%;
@@ -2172,11 +2173,11 @@
      其下的 ResourcePageShell 需要相应让出高度。 */
 
   .search-page {
-    --search-hero-bg: var(--surface-raised-background);
-    --search-panel-bg: var(--workspace-panel-bg-color);
-    --search-card-bg: var(--card-background);
-    --search-border-color: var(--surface-border-color);
-    --search-muted-bg: color-mix(in srgb, var(--surface-panel-bg) 88%, var(--card-background));
+    --search-hero-bg: var(--workspace-content);
+    --search-panel-bg: var(--workspace-canvas);
+    --search-card-bg: var(--workspace-content);
+    --search-border-color: var(--workspace-border);
+    --search-muted-bg: var(--workspace-canvas);
 
     height: 100%;
     min-height: 0;
@@ -2201,11 +2202,11 @@
   }
 
   .search-page--night {
-    --search-hero-bg: var(--surface-raised-background);
-    --search-panel-bg: var(--workspace-panel-bg-color);
-    --search-card-bg: var(--card-background);
-    --search-border-color: var(--surface-border-color);
-    --search-muted-bg: color-mix(in srgb, var(--surface-panel-bg) 88%, var(--card-background));
+    --search-hero-bg: var(--workspace-content);
+    --search-panel-bg: var(--workspace-canvas);
+    --search-card-bg: var(--workspace-content);
+    --search-border-color: var(--workspace-border);
+    --search-muted-bg: var(--workspace-canvas);
   }
 
   .search-header {
@@ -2775,7 +2776,7 @@
     border: 1px dashed color-mix(in srgb, var(--danger-color, #dc2626) 30%, var(--card-border-color));
     border-radius: 14px;
     text-align: center;
-    background: color-mix(in srgb, var(--danger-color, #dc2626) 4%, var(--card-background));
+    background: color-mix(in srgb, var(--danger-color, #dc2626) 4%, var(--workspace-content));
   }
 
   .result-error-state h3,
@@ -3601,13 +3602,13 @@
     border: 1px solid var(--search-border-color);
     border-radius: 10px;
     color: var(--text-color);
-    background: var(--card-background) !important;
+    background: var(--workspace-content) !important;
     font-size: 13px;
   }
 
   .mobile-filter-type.active {
     border-color: color-mix(in srgb, var(--primary-color) 55%, transparent);
-    background: color-mix(in srgb, var(--primary-color) 10%, var(--card-background)) !important;
+    background: color-mix(in srgb, var(--primary-color) 10%, var(--workspace-content)) !important;
   }
 
   .mobile-filter-type .filter-count {
@@ -3631,4 +3632,13 @@
     width: 100%;
     min-height: 40px;
   }
+
+  // 共享工作区表面：仅改变颜色，布局与滚动由原组件负责。
+  .resource-scope-pane, .result-panel, .result-scroll-area, .resource-center-map {
+    .workspace-open-surface();
+  }
+
+  .resource-scope-pane { .workspace-navigation-colors(); }
+  .resource-scope-item:hover { .workspace-navigation-hover(); }
+  .resource-scope-item.active { .workspace-navigation-selected(); }
 </style>

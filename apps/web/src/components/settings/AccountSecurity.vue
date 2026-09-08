@@ -1,104 +1,141 @@
 <template>
   <div class="acc-sec">
-    <!-- 绑定状态 -->
-    <div class="field">
-      <div class="field-head">
-        <span class="field-label">账号绑定</span>
-        <span class="field-desc">登录方式与绑定信息</span>
-      </div>
-      <div class="binding">
-        <span class="bind-item">邮箱：{{ acc.email || '未绑定' }}</span>
-        <span class="bind-item">GitHub：{{ acc.githubBound ? '已绑定' : '未绑定' }}</span>
-        <span class="bind-item">登录方式：{{ loginTypeText }}</span>
-      </div>
-    </div>
-
-    <!-- 修改密码 -->
-    <div class="field">
-      <div class="field-head">
-        <span class="field-label">{{ hasPassword ? '修改密码' : '设置密码' }}</span>
-        <span class="field-desc">{{
-          hasPassword ? '修改后需重新登录' : 'GitHub 登录用户可设置密码,之后也能用邮箱+密码登录'
-        }}</span>
-      </div>
-      <BButton size="small" @click="pwVisible = true">{{ hasPassword ? '修改密码' : '设置密码' }}</BButton>
-    </div>
-
-    <!-- 登录设备 / 会话 -->
-    <div class="field field--col">
-      <div class="field-head field-head--row">
-        <span class="field-label">登录设备</span>
-        <div class="sess-actions">
-          <BButton size="small" :disabled="loading" @click="loadSessions">刷新</BButton>
-          <BButton size="small" type="primary" :disabled="revoking || otherCount === 0" @click="revokeOthers">
-            下线其他设备{{ otherCount > 0 ? `(${otherCount})` : '' }}
-          </BButton>
+    <SettingsSectionCard :title="t('accountSettings.binding')" :description="t('accountSettings.bindingDesc')">
+      <div v-if="accountFailed" role="alert" class="account-error"
+        >{{ t('accountSettings.accountFailed') }} <BButton @click="loadAccount">{{ t('common.retry') }}</BButton></div
+      >
+      <!-- 绑定状态 -->
+      <div class="account-field">
+        <div class="binding">
+          <span class="bind-item">{{ t('accountSettings.email') }}{{ acc.email || t('accountSettings.unbound') }}</span>
+          <span class="bind-item"
+            >GitHub：{{ acc.githubBound ? t('accountSettings.bound') : t('accountSettings.unbound') }}</span
+          >
+          <span class="bind-item">{{ t('accountSettings.method') }}{{ loginTypeText }}</span>
         </div>
       </div>
-      <div v-if="!sessions.length" class="sess-empty">{{ loading ? '加载中…' : '暂无会话' }}</div>
-      <div v-for="s in sessions" :key="s.id" class="sess-item" :class="{ 'is-current': s.current }">
-        <div class="sess-main">
-          <span class="sess-device">{{ parseUA(s.userAgent) }}</span>
-          <span class="sess-meta">{{ s.ip || '未知 IP' }} · 最近在线 {{ fmt(s.lastActiveTime) }}</span>
+
+      <!-- 修改密码 -->
+      <div class="account-field">
+        <div class="field-head">
+          <span class="field-label">{{
+            hasPassword ? t('accountSettings.changePassword') : t('accountSettings.setPassword')
+          }}</span>
+          <span class="field-desc">{{
+            hasPassword ? t('accountSettings.passwordDesc') : t('accountSettings.setPasswordDesc')
+          }}</span>
         </div>
-        <span v-if="s.current" class="sess-badge">本机</span>
-        <span v-else class="sess-revoke dom-hover" @click="revokeOne(s.id)">下线</span>
+        <BButton size="small" :disabled="accountLoading || accountFailed" @click="pwVisible = true">{{
+          hasPassword ? t('accountSettings.changePassword') : t('accountSettings.setPassword')
+        }}</BButton>
       </div>
-    </div>
-
-    <!-- 账号注销 -->
-    <div class="field danger-zone">
-      <div class="field-head">
-        <span class="field-label danger-zone__title">注销账号</span>
-        <span class="field-desc">永久删除账号及云端内容，操作完成后无法恢复</span>
+    </SettingsSectionCard>
+    <SettingsSectionCard>
+      <!-- 登录设备 / 会话 -->
+      <div class="account-field account-field--col">
+        <div class="field-head field-head--row">
+          <span class="field-label">{{ t('accountSettings.devices') }}</span>
+          <div class="sess-actions">
+            <BButton size="small" :loading="loading" @click="loadSessions">{{ t('accountSettings.refresh') }}</BButton>
+            <BButton
+              size="small"
+              :loading="revoking"
+              :disabled="revoking || loading || otherCount === 0"
+              @click="revokeOthers"
+            >
+              {{ t('accountSettings.revokeOthers', { n: otherCount }) }}
+            </BButton>
+          </div>
+        </div>
+        <p v-if="sessionsError" role="alert" class="account-error">{{ sessionsError }}</p>
+        <div v-if="!sessions.length && !sessionsError" class="sess-empty">{{
+          loading ? t('accountSettings.loading') : t('accountSettings.empty')
+        }}</div>
+        <div v-for="s in sessions" :key="s.id" class="sess-item" :class="{ 'is-current': s.current }">
+          <div class="sess-main">
+            <span class="sess-device">{{ parseUA(s.userAgent) }}</span>
+            <span class="sess-meta"
+              >{{ s.ip || t('accountSettings.unknownIP') }} · {{ t('accountSettings.recent') }}
+              {{ fmt(s.lastActiveTime) }}</span
+            >
+          </div>
+          <span v-if="s.current" class="sess-badge">{{ t('accountSettings.current') }}</span>
+          <BButton
+            v-else
+            class="sess-revoke"
+            :loading="revokingId === s.id"
+            :disabled="revoking || loading"
+            @click="revokeOne(s.id)"
+            >{{ t('accountSettings.revoke') }}</BButton
+          >
+        </div>
       </div>
-      <BButton size="small" type="danger" @click="openDeletion">注销账号</BButton>
-    </div>
-
+    </SettingsSectionCard>
+    <SettingsSectionCard class="account-danger-card">
+      <!-- 账号注销 -->
+      <div class="account-field danger-zone">
+        <div class="field-head">
+          <span class="field-label danger-zone__title">{{ t('accountSettings.delete') }}</span>
+          <span class="field-desc">{{ t('accountSettings.deleteDesc') }}</span>
+        </div>
+        <BButton size="small" type="danger" :disabled="accountLoading || accountFailed" @click="openDeletion">{{
+          t('accountSettings.delete')
+        }}</BButton>
+      </div>
+    </SettingsSectionCard>
     <!-- 改密弹窗 -->
     <BModal
       v-model:visible="pwVisible"
-      :title="hasPassword ? '修改密码' : '设置密码'"
+      :title="hasPassword ? t('accountSettings.changePassword') : t('accountSettings.setPassword')"
       :mask-closable="false"
+      :close-disabled="passwordSaving"
       @ok="submitPassword"
     >
       <div class="pw-form">
         <div v-if="hasPassword" class="pw-row">
-          <label>当前密码</label>
+          <label>{{ t('accountSettings.oldPassword') }}</label>
           <BInput
             v-model:value="oldPwd"
             type="password"
             maxlength="64"
             autocomplete="current-password"
-            placeholder="请输入当前密码"
+            :placeholder="t('accountSettings.oldPlaceholder')"
           />
         </div>
         <div class="pw-row">
-          <label>新密码</label>
+          <label>{{ t('accountSettings.newPassword') }}</label>
           <BInput
             v-model:value="newPwd"
             type="password"
             maxlength="64"
             autocomplete="new-password"
-            placeholder="6-64 位"
+            :placeholder="t('accountSettings.newPlaceholder')"
           />
         </div>
         <div class="pw-row">
-          <label>确认新密码</label>
+          <label>{{ t('accountSettings.confirmPassword') }}</label>
           <BInput
             v-model:value="confirmPwd"
             type="password"
             maxlength="64"
             autocomplete="new-password"
-            placeholder="再次输入新密码"
+            :placeholder="t('accountSettings.confirmPlaceholder')"
           />
         </div>
       </div>
+      <template #footer
+        ><div class="password-actions"
+          ><BButton :disabled="passwordSaving" @click="pwVisible = false">{{ t('common.cancel') }}</BButton
+          ><BButton type="primary" :loading="passwordSaving" @click="submitPassword">{{
+            t('common.confirm')
+          }}</BButton></div
+        ></template
+      >
     </BModal>
 
     <BModal
       v-model:visible="deletionVisible"
-      title="注销账号"
+      :title="t('accountSettings.delete')"
       width="520px"
       :show-footer="false"
       :mask-closable="!deleting"
@@ -107,50 +144,52 @@
     >
       <div v-if="deletionStep === 'intro'" class="deletion-flow">
         <div class="deletion-warning">
-          <strong>这是不可撤销的永久操作</strong>
+          <strong>{{ t('accountSettings.irreversible') }}</strong>
           <ul>
-            <li>所有设备会立即退出，原账号无法再次登录。</li>
-            <li>书签、笔记、待办、AI 会话及云空间内容会被永久删除。</li>
-            <li>备份只包含云文件的名称等元信息；需要保留的文件请先逐个下载原文件。</li>
+            <li>{{ t('accountSettings.deleteDevices') }}</li>
+            <li>{{ t('accountSettings.deleteContent') }}</li>
+            <li>{{ t('accountSettings.backupScope') }}</li>
           </ul>
         </div>
         <div class="deletion-backup">
           <div>
-            <span class="deletion-backup__title">建议先导出个人元数据</span>
-            <span class="field-desc">书签、笔记和标签可恢复；AI 数据与云文件清单仅供导出，文件本体不包含</span>
+            <span class="deletion-backup__title">{{ t('accountSettings.backupTitle') }}</span>
+            <span class="field-desc">{{ t('accountSettings.backupDesc') }}</span>
           </div>
-          <BButton :loading="exporting" :disabled="codeSending" @click="exportAll">先导出元数据</BButton>
+          <BButton :loading="exporting" :disabled="codeSending" @click="exportAll">{{
+            t('accountSettings.export')
+          }}</BButton>
         </div>
         <div class="deletion-actions">
-          <BButton :disabled="codeSending" @click="closeDeletion">取消</BButton>
+          <BButton :disabled="codeSending" @click="closeDeletion">{{ t('accountSettings.cancel') }}</BButton>
           <BButton type="danger" :loading="codeSending" :disabled="exporting" @click="sendDeletionCode">
-            获取验证码并继续
+            {{ t('accountSettings.getCode') }}
           </BButton>
         </div>
       </div>
 
       <div v-else class="deletion-flow">
         <p class="deletion-code-tip">
-          <span>6 位验证码已发送至 </span>
+          <span>{{ t('accountSettings.codePrefix') }} </span>
           <strong>{{ deletionMaskedEmail || acc.email }}</strong>
-          <span>，5 分钟内有效。</span>
+          <span>{{ t('accountSettings.codeSuffix') }}</span>
         </p>
         <div class="deletion-form-row">
-          <label for="account-deletion-code">邮箱验证码</label>
+          <label for="account-deletion-code">{{ t('accountSettings.emailCode') }}</label>
           <BInput
             id="account-deletion-code"
             v-model:value="deletionCode"
             type="tel"
             maxlength="6"
-            placeholder="请输入 6 位验证码"
+            :placeholder="t('accountSettings.codePlaceholder')"
             @enter="submitDeletion"
           />
         </div>
         <div class="deletion-form-row">
           <label for="account-deletion-confirmation">
-            <span>输入“</span>
+            <span>{{ t('accountSettings.confirmationPrefix') }}</span>
             <strong>{{ DELETION_CONFIRMATION_TEXT }}</strong>
-            <span>”确认</span>
+            <span>{{ t('accountSettings.confirmationSuffix') }}</span>
           </label>
           <BInput
             id="account-deletion-confirmation"
@@ -162,16 +201,20 @@
         </div>
         <div class="deletion-resend">
           <BButton size="small" :disabled="deletionCountdown > 0 || codeSending || deleting" @click="sendDeletionCode">
-            {{ deletionCountdown > 0 ? `${deletionCountdown} 秒后可重新发送` : '重新发送验证码' }}
+            {{
+              deletionCountdown > 0
+                ? t('accountSettings.resendIn', { n: deletionCountdown })
+                : t('accountSettings.resend')
+            }}
           </BButton>
         </div>
         <p class="deletion-policy-note">
-          为履行安全和法定义务必须保留的有限审计记录，将按隐私政策限定期限保存并与账号身份解除关联。
+          {{ t('accountSettings.retention') }}
         </p>
         <div class="deletion-actions">
-          <BButton :disabled="deleting" @click="deletionStep = 'intro'">上一步</BButton>
+          <BButton :disabled="deleting" @click="deletionStep = 'intro'">{{ t('accountSettings.previous') }}</BButton>
           <BButton type="danger" :loading="deleting" :disabled="!canSubmitDeletion" @click="submitDeletion">
-            永久注销账号
+            {{ t('accountSettings.deleteForever') }}
           </BButton>
         </div>
       </div>
@@ -180,7 +223,11 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+  import { computed, onBeforeUnmount, ref, watch } from 'vue';
+  import { useI18n } from 'vue-i18n';
+  import { useUserStore } from '@/store';
+  import Alert from '@/components/base/BasicComponents/BModal/Alert';
+  import SettingsSectionCard from '@/view/settings/components/SettingsSectionCard.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
@@ -188,14 +235,27 @@
   import { apiBaseGet, apiBasePost } from '@/http/request';
   import { clearLoginHistory } from '@/utils/authStorage';
 
+  const { t } = useI18n();
+  const user = useUserStore();
+  let generation = 0;
+  const accountFailed = ref(false);
+  const accountLoading = ref(true);
+  const passwordSaving = ref(false);
   // 账号信息从 /me 拉(store 未存 github_id/login_type;password 用 sanitizeUser 的 '******'/'' 判断是否已设)
   const acc = ref({ email: '', githubBound: false, loginType: 'local', hasPassword: true });
   const hasPassword = computed(() => acc.value.hasPassword);
-  const loginTypeText = computed(() => (acc.value.loginType === 'github' ? 'GitHub' : '邮箱密码'));
+  const loginTypeText = computed(() =>
+    acc.value.loginType === 'github' ? 'GitHub' : t('accountSettings.emailPassword'),
+  );
 
   async function loadAccount() {
+    const owner = generation;
+    accountFailed.value = false;
+    accountLoading.value = true;
     try {
       const res = await apiBaseGet('/api/user/me');
+      if (owner !== generation) return;
+      if (res?.status !== 200) throw new Error('ACCOUNT_LOAD_FAILED');
       const d: any = res?.data || {};
       acc.value = {
         email: d.email || '',
@@ -204,7 +264,9 @@
         hasPassword: !!d.password,
       };
     } catch {
-      /* 忽略,展示用默认 */
+      if (owner === generation) accountFailed.value = true;
+    } finally {
+      if (owner === generation) accountLoading.value = false;
     }
   }
 
@@ -232,7 +294,7 @@
   }
   // 轻量 UA 解析,仅用于展示设备
   function parseUA(ua: string) {
-    if (!ua) return '未知设备';
+    if (!ua) return t('accountSettings.unknownDevice');
     const os = /Windows/i.test(ua)
       ? 'Windows'
       : /iPhone|iPad/i.test(ua)
@@ -252,38 +314,71 @@
           ? 'Firefox'
           : /Safari/i.test(ua)
             ? 'Safari'
-            : '浏览器';
-    return [os, br].filter(Boolean).join(' · ') || '未知设备';
+            : t('accountSettings.browser');
+    return [os, br].filter(Boolean).join(' · ') || t('accountSettings.unknownDevice');
   }
 
+  const sessionsError = ref('');
+  const revokingId = ref<string | null>(null);
+  let sessionRequest = 0;
   async function loadSessions() {
+    const owner = generation;
+    const requestId = ++sessionRequest;
     loading.value = true;
+    sessionsError.value = '';
     try {
       const res = await apiBasePost('/api/user/getMySessions', {});
-      if (res.status === 200) sessions.value = res.data || [];
+      if (owner !== generation || requestId !== sessionRequest) return;
+      if (res.status !== 200) throw new Error('SESSIONS_FAILED');
+      sessions.value = res.data || [];
+    } catch {
+      if (owner === generation && requestId === sessionRequest)
+        sessionsError.value = t('accountSettings.sessionsFailed');
     } finally {
-      loading.value = false;
+      if (owner === generation && requestId === sessionRequest) loading.value = false;
     }
   }
-  async function revokeOne(id: string) {
-    const res = await apiBasePost('/api/user/revokeSession', { id });
-    if (res.status === 200) {
-      message.success('已下线该设备');
-      await loadSessions();
-    }
+  function confirmRevoke(body: { id?: string; others?: boolean }, content: string) {
+    const owner = generation;
+    Alert.alert({
+      title: t('accountSettings.revoke'),
+      content,
+      okText: t('accountSettings.revoke'),
+      cancelText: t('common.cancel'),
+      onOk: async () => {
+        if (owner !== generation || revoking.value) return;
+        revoking.value = true;
+        revokingId.value = body.id || null;
+        sessionsError.value = '';
+        try {
+          const res = await apiBasePost('/api/user/revokeSession', body);
+          if (owner !== generation) return;
+          if (res.status !== 200) throw new Error('REVOKE_FAILED');
+          message.success(
+            body.others
+              ? t('accountSettings.revokedOthers', { n: res.data?.revoked ?? 0 })
+              : t('accountSettings.revoked'),
+          );
+          await loadSessions();
+        } catch {
+          if (owner === generation) sessionsError.value = t('accountSettings.revokeFailed');
+        } finally {
+          if (owner === generation) {
+            revoking.value = false;
+            revokingId.value = null;
+          }
+        }
+      },
+    });
   }
-  async function revokeOthers() {
-    if (otherCount.value === 0) return;
-    revoking.value = true;
-    try {
-      const res = await apiBasePost('/api/user/revokeSession', { others: true });
-      if (res.status === 200) {
-        message.success(`已下线其他 ${res.data?.revoked ?? ''} 台设备`);
-        await loadSessions();
-      }
-    } finally {
-      revoking.value = false;
-    }
+  function revokeOne(id: string) {
+    const session = sessions.value.find((item) => item.id === id);
+    if (!session || session.current || revoking.value) return;
+    confirmRevoke({ id }, t('accountSettings.confirmOne', { device: parseUA(session.userAgent) }));
+  }
+  function revokeOthers() {
+    if (!otherCount.value || revoking.value) return;
+    confirmRevoke({ others: true }, t('accountSettings.confirmOthers', { n: otherCount.value }));
   }
 
   // —— 改密 ——
@@ -293,25 +388,36 @@
   const confirmPwd = ref('');
 
   async function submitPassword() {
-    if (hasPassword.value && !oldPwd.value) return message.warning('请输入当前密码');
-    if (!newPwd.value || newPwd.value.length < 6) return message.warning('新密码至少 6 位');
-    if (newPwd.value !== confirmPwd.value) return message.warning('两次输入的新密码不一致');
+    if (hasPassword.value && !oldPwd.value) return message.warning(t('accountSettings.oldPlaceholder'));
+    if (!newPwd.value || newPwd.value.length < 6) return message.warning(t('accountSettings.minPassword'));
+    if (newPwd.value !== confirmPwd.value) return message.warning(t('accountSettings.mismatch'));
     const body: any = { password: newPwd.value };
     if (hasPassword.value) {
       body.type = 'update';
       body.oldPassword = oldPwd.value;
     }
-    const res = await apiBasePost('/api/user/configPassword', body);
-    if (res.status === 200) {
-      pwVisible.value = false;
-      oldPwd.value = newPwd.value = confirmPwd.value = '';
-      // 后端改密后会清所有会话,提示并跳登录
-      message.success('密码已更新,请重新登录');
-      setTimeout(() => {
-        window.dispatchEvent(new CustomEvent('light-note:auth-expired'));
-      }, 800);
-    } else {
-      message.error(res.msg || '修改失败');
+    if (passwordSaving.value) return;
+    const owner = generation;
+    passwordSaving.value = true;
+    try {
+      const res = await apiBasePost('/api/user/configPassword', body);
+      if (owner !== generation) return;
+      if (res.status === 200) {
+        pwVisible.value = false;
+        oldPwd.value = newPwd.value = confirmPwd.value = '';
+        // 后端改密后会清所有会话,提示并跳登录
+        message.success(t('accountSettings.passwordUpdated'));
+        setTimeout(() => {
+          if (owner !== generation) return;
+          window.dispatchEvent(new CustomEvent('light-note:auth-expired'));
+        }, 800);
+      } else {
+        message.error(res.msg || t('accountSettings.updateFailed'));
+      }
+    } catch {
+      if (owner === generation) message.error(t('accountSettings.updateFailed'));
+    } finally {
+      if (owner === generation) passwordSaving.value = false;
     }
   }
 
@@ -391,10 +497,12 @@
   async function exportAll() {
     if (exporting.value) return;
     exporting.value = true;
+    const owner = generation;
     try {
       const res = await apiBasePost('/api/user/exportData', {}, { silent: true });
+      if (owner !== generation) return;
       if (res?.status !== 200 || !res.data) {
-        message.error(res?.msg || '导出失败，请稍后重试');
+        message.error(res?.msg || t('accountSettings.exportFailed'));
         return;
       }
       const blob = new Blob([JSON.stringify(res.data, null, 2)], { type: 'application/json' });
@@ -408,41 +516,46 @@
       download.click();
       document.body.removeChild(download);
       URL.revokeObjectURL(url);
-      message.success('备份已开始下载');
+      message.success(t('accountSettings.downloaded'));
     } catch {
-      message.error('导出失败，请稍后重试');
+      if (owner !== generation) return;
+      message.error(t('accountSettings.exportFailed'));
     } finally {
-      exporting.value = false;
+      if (owner === generation) exporting.value = false;
     }
   }
 
   async function sendDeletionCode() {
     if (codeSending.value) return;
     codeSending.value = true;
+    const owner = generation;
     try {
       const res = await apiBasePost('/api/user/requestAccountDeletionCode', {}, { silent: true });
+      if (owner !== generation) return;
       if (res?.status !== 200) {
-        message.error(res?.msg || '验证码发送失败，请稍后重试');
+        message.error(res?.msg || t('accountSettings.sendFailed'));
         return;
       }
       deletionMaskedEmail.value = String(res.data?.maskedEmail || '');
       deletionStep.value = 'verify';
       deletionCode.value = '';
       startDeletionCountdown();
-      message.success('注销验证码已发送');
+      message.success(t('accountSettings.codeSent'));
     } catch (error) {
-      showDeletionTransportError(error, '验证码发送失败，请检查网络后重试');
+      if (owner !== generation) return;
+      showDeletionTransportError(error, t('accountSettings.sendNetwork'));
     } finally {
-      codeSending.value = false;
+      if (owner === generation) codeSending.value = false;
     }
   }
 
   async function submitDeletion() {
     if (!canSubmitDeletion.value) {
-      message.warning(`请输入 6 位验证码，并输入“${DELETION_CONFIRMATION_TEXT}”确认`);
+      message.warning(t('accountSettings.confirmRequired', { text: DELETION_CONFIRMATION_TEXT }));
       return;
     }
     deleting.value = true;
+    const owner = generation;
     try {
       const res = await apiBasePost(
         '/api/user/deleteMyAccount',
@@ -452,8 +565,9 @@
         },
         { silent: true },
       );
+      if (owner !== generation) return;
       if (res?.status !== 200) {
-        message.error(res?.msg || '账号注销失败，请稍后重试');
+        message.error(res?.msg || t('accountSettings.deleteFailed'));
         return;
       }
 
@@ -461,23 +575,42 @@
       stopDeletionCountdown();
       clearLoginHistory();
       sessionStorage.setItem('manualLogout', '1');
-      message.success('账号已注销，云端数据正在安全清理');
+      message.success(t('accountSettings.deleted'));
       window.setTimeout(() => {
+        if (owner !== generation) return;
         window.dispatchEvent(new CustomEvent('light-note:auth-expired'));
       }, 500);
     } catch (error) {
-      showDeletionTransportError(error, '账号注销失败，请检查网络后重试');
+      if (owner !== generation) return;
+      showDeletionTransportError(error, t('accountSettings.deleteNetwork'));
     } finally {
-      deleting.value = false;
+      if (owner === generation) deleting.value = false;
     }
   }
 
-  onMounted(() => {
-    loadAccount();
-    loadSessions();
-  });
+  watch(
+    () => [user.id, user.role, user.adminContext?.id, user.adminContext?.subjectUserId],
+    () => {
+      generation++;
+      sessions.value = [];
+      acc.value = { email: '', githubBound: false, loginType: 'local', hasPassword: true };
+      revoking.value = false;
+      passwordSaving.value = false;
+      exporting.value = false;
+      deleting.value = false;
+      revokingId.value = null;
+      pwVisible.value = false;
+      oldPwd.value = newPwd.value = confirmPwd.value = '';
+      deletionVisible.value = false;
+      resetDeletionFlow();
+      void loadAccount();
+      void loadSessions();
+    },
+    { immediate: true, flush: 'sync' },
+  );
 
   onBeforeUnmount(() => {
+    generation++;
     stopDeletionCountdown();
   });
 </script>
@@ -486,16 +619,26 @@
   .acc-sec {
     display: flex;
     flex-direction: column;
-    gap: 16px;
-    padding-top: 14px;
+    gap: 14px;
+    padding-top: 0;
   }
-  .field {
+  .acc-sec .account-field {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: 16px;
+    box-sizing: border-box;
+    min-height: 56px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--card-border-color);
+    &:last-child {
+      border-bottom: 0;
+    }
   }
-  .field--col {
+  .acc-sec .account-field--col {
+    gap: 0;
+    padding: 0;
+    min-height: 0;
     flex-direction: column;
     align-items: stretch;
   }
@@ -504,7 +647,14 @@
     flex-direction: column;
     gap: 3px;
   }
-  .field-head--row {
+  .acc-sec .field-head--row {
+    margin-bottom: 8px;
+    gap: 8px;
+    width: 100%;
+    max-width: none;
+    flex: 0 0 auto;
+    display: flex;
+    flex-wrap: wrap;
     flex-direction: row;
     align-items: center;
     justify-content: space-between;
@@ -521,8 +671,9 @@
     display: flex;
     flex-wrap: wrap;
     gap: 6px 16px;
-    justify-content: flex-end;
-    font-size: 12px;
+    justify-content: flex-start;
+    width: 100%;
+    font-size: 14px;
     color: var(--desc-color);
   }
   .sess-actions {
@@ -534,19 +685,30 @@
     color: var(--desc-color);
     padding: 6px 0;
   }
-  .sess-item {
+  .acc-sec .sess-item {
+    width: 100%;
+    background: transparent;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 10px;
-    padding: 8px 12px;
-    border-radius: 8px;
-    background: color-mix(in srgb, var(--card-border-color) 14%, transparent);
+    box-sizing: border-box;
+    padding: 10px 0;
+    min-height: 58px;
+    border-bottom: 1px solid var(--card-border-color);
+  }
+  .sess-item:last-child {
+    border-bottom: 0;
+  }
+  .acc-sec :deep(.settings-section-card__head) {
+    padding-bottom: 10px;
   }
   .sess-item.is-current {
-    border: 1px solid color-mix(in srgb, var(--primary-color) 45%, transparent);
+    .sess-device {
+      font-weight: 600;
+    }
   }
-  .sess-main {
+  .acc-sec .sess-main {
     display: flex;
     flex-direction: column;
     gap: 2px;
@@ -557,6 +719,7 @@
     color: var(--text-color);
   }
   .sess-meta {
+    overflow-wrap: anywhere;
     font-size: 12px;
     color: var(--desc-color);
   }
@@ -569,9 +732,25 @@
   }
   .sess-revoke {
     font-size: 12px;
-    color: #ec4899;
+    color: var(--primary-color);
     cursor: pointer;
     flex-shrink: 0;
+  }
+  .account-danger-card {
+    border-color: var(--danger-color);
+  }
+  .account-error {
+    color: var(--danger-color);
+    font-size: 13px;
+  }
+  .sess-actions {
+    flex-wrap: wrap;
+  }
+  .password-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 12px 20px 18px;
   }
   .pw-form {
     display: flex;
@@ -588,7 +767,7 @@
     color: var(--desc-color);
   }
   .danger-zone {
-    border-top: 1px solid color-mix(in srgb, var(--danger-color, #e5484d) 28%, transparent);
+    border-top: 0;
     padding-top: 16px;
   }
   .danger-zone__title {

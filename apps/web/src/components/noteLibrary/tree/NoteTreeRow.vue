@@ -273,6 +273,7 @@
 </script>
 
 <style lang="less" scoped>
+  @import (reference) "@/assets/css/workspace-surfaces.less";
   .note-tree-node,
   .note-tree-children {
     margin: 0;
@@ -536,4 +537,10 @@
       transition: none;
     }
   }
+
+  // 共享工作区表面：仅改变颜色，布局与滚动由原组件负责。
+
+  .note-tree-row { .workspace-navigation-colors(note); }
+  .note-tree-row:hover { .workspace-navigation-hover(); }
+  .note-tree-row.is-active, .note-tree-row.is-browse-scope { .workspace-navigation-selected(); }
 </style>

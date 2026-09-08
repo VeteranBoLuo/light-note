@@ -4,13 +4,15 @@
     class="toolbox-workbench"
     :class="{
       'is-resource-workspace': resourceWorkspaceActive,
+      'is-local-workspace': Boolean(localToolComponent),
       'is-project-detail': routeToolId.endsWith('_workspace') && Boolean(route.query.workspace),
+      'is-project-list': routeToolId.endsWith('_workspace') && !route.query.workspace,
     }"
     data-mobile-resource-scroll
   >
     <div class="toolbox-workbench__inner">
-      <BButton class="toolbox-workbench__back" @click="returnToToolboxParent">
-        <SvgIcon :src="icon.toolbox.back" size="16" />{{ t('toolbox.back') }}
+      <BButton class="toolbox-workbench__back" :aria-label="t('toolbox.back')" @click="returnToToolboxParent">
+        <SvgIcon :src="icon.toolbox.back" size="16" /><span class="toolbox-workbench__back-label">{{ t('toolbox.back') }}</span>
       </BButton>
 
       <div v-if="loading" class="toolbox-workbench__state"
@@ -961,6 +963,7 @@
 </script>
 
 <style scoped lang="less">
+  @import (reference) "@/assets/css/workspace-surfaces.less";
   .toolbox-mobile-execute {
     display: none;
   }
@@ -976,6 +979,7 @@
     margin: 0 auto;
   }
   .toolbox-workbench__back {
+    transition: none;
     position: sticky;
     z-index: 8;
     top: 8px;
@@ -1959,7 +1963,9 @@
       color: var(--desc-color);
       background: transparent;
       box-shadow: none;
-      font-size: 0;
+    }
+    .toolbox-workbench.is-resource-workspace .toolbox-workbench__back-label {
+      display: none;
     }
     .toolbox-workbench.is-resource-workspace .toolbox-workbench__hero {
       min-height: 72px;
@@ -2315,6 +2321,53 @@
     font-size: 12px;
     line-height: 1.6;
   }
+  .toolbox-workbench.is-local-workspace {
+    padding-top: 16px;
+    padding-bottom: 20px;
+  }
+  .is-local-workspace .toolbox-workbench__back {
+    position: static;
+    margin-bottom: 10px;
+    box-shadow: none;
+  }
+  .is-local-workspace .toolbox-workbench__hero {
+    min-height: 0;
+    padding: 14px 18px;
+    gap: 14px;
+    grid-template-columns: 44px minmax(0, 1fr);
+    border-radius: 16px;
+    box-shadow: none;
+  }
+  .is-local-workspace .toolbox-workbench__icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    box-shadow: none;
+  }
+  .is-local-workspace .toolbox-workbench__hero h1 {
+    margin: 2px 0 4px;
+    font-size: 22px;
+  }
+  .is-local-workspace .toolbox-workbench__execution {
+    margin-top: 6px;
+    align-items: center;
+  }
+  .is-local-workspace .toolbox-workbench__execution > span {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 10px;
+  }
+  .is-local-workspace .toolbox-workbench__surface {
+    margin-top: 12px;
+    padding: 14px;
+    border-radius: 16px;
+  }
+  .toolbox-workbench.is-project-list .toolbox-workbench__back {
+    position: static;
+    margin-bottom: 12px;
+    box-shadow: none;
+  }
   .toolbox-workbench.is-project-detail .toolbox-workbench__back {
     display: none;
   }
@@ -2325,5 +2378,10 @@
     .toolbox-workbench.is-project-detail .toolbox-workbench__back {
       display: none;
     }
+  }
+
+  // 共享工作区表面：仅改变颜色，布局与滚动由原组件负责。
+  .toolbox-workbench__surface:not(.is-project) {
+    .workspace-content-surface();
   }
 </style>

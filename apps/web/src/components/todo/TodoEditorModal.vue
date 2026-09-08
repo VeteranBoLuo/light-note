@@ -9,7 +9,7 @@
     width="min(1280px, 94vw)"
     height="100%"
     body-padding="0"
-    :mask-closable="false"
+    :mask-closable="true"
     @close="close"
   >
     <div
@@ -19,6 +19,7 @@
       :style="{ '--todo-editor-sticky-gutter': bookmark.isMobile ? '16px' : '22px' }"
     >
       <TodoSimpleEditorForm
+        ref="simpleFormRef"
         v-if="useSimpleEditor"
         :item="item"
         :initial-values="initialValues"
@@ -32,6 +33,7 @@
         @cancel="close"
       />
       <TodoEditorForm
+        ref="legacyFormRef"
         v-else
         :item="item"
         :initial-values="initialValues"
@@ -51,7 +53,9 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, ref, watch } from 'vue';
+  import useTodoStore from '@/store/todo';
+  import { computed, nextTick, ref, watch } from 'vue';
+  import { confirmTodoDiscard } from './confirmTodoDiscard';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
   import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
@@ -59,6 +63,7 @@
   import TodoSimpleEditorForm from '@/components/todo/TodoSimpleEditorForm.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import {
+    organizeTodos,
     createTodo,
     createTodoPlanV2,
     convertLegacyTodoPlanV2,
@@ -80,6 +85,7 @@
   const props = defineProps<{
     item?: TodoItem | null;
     initialValues?: TodoCreateInitialValues;
+    initialSection?: 'checklist';
   }>();
   const visible = defineModel<boolean>('visible');
   const emit = defineEmits<{
@@ -90,6 +96,26 @@
   const router = useRouter();
   const bookmark = bookmarkStore();
   const saving = ref(false);
+  const simpleFormRef = ref<{ isDirty: () => boolean; revealChecklist: () => Promise<void> } | null>(null);
+  const legacyFormRef = ref<{ isDirty: () => boolean; revealChecklist: () => Promise<void> } | null>(null);
+  // 表单挂载或灰度配置切换表单后，定位到本次入口指定的内容区域。
+  watch(
+    [visible, simpleFormRef, legacyFormRef, () => props.initialSection],
+    async () => {
+      if (!visible.value || props.initialSection !== 'checklist') return;
+      await nextTick();
+      if (!visible.value || props.initialSection !== 'checklist') return;
+      await (useSimpleEditor.value ? simpleFormRef.value : legacyFormRef.value)?.revealChecklist();
+    },
+    { flush: 'post' },
+  );
+  let confirmingClose = false;
+  async function mayClose() {
+    return confirmTodoDiscard(
+      Boolean((useSimpleEditor.value ? simpleFormRef.value : legacyFormRef.value)?.isDirty()),
+      t,
+    );
+  }
   const mobileStep = ref<1 | 2 | 3>(1);
   const simpleAdvanced = ref(false);
   const formKey = ref(0);
@@ -120,6 +146,7 @@
 
   watch(visible, async (open) => {
     if (!open) return;
+    formKey.value += 1;
     mobileStep.value = 1;
     simpleAdvanced.value = false;
     try {
@@ -132,7 +159,6 @@
     } catch {
       // 配置查询失败时保留随版本发布的默认值；后端仍会做最终开关校验。
     }
-    if (visible.value) formKey.value += 1;
   });
 
   async function save(submission: TodoEditorSubmission) {
@@ -141,16 +167,24 @@
     saving.value = true;
     try {
       const res =
-        submission.kind === 'v2'
-          ? submission.convertLegacyTodoId
-            ? await convertLegacyTodoPlanV2(submission.convertLegacyTodoId, submission.payload)
-            : props.item?.planVersion === 2
-              ? await updateTodoPlanV2(props.item.id, submission.scope, submission.payload)
-              : await createTodoPlanV2(submission.payload)
-          : props.item
-            ? await updateTodo(props.item.id, submission.payload)
-            : await createTodo(submission.payload);
+        submission.kind === 'organization'
+          ? await organizeTodos({
+              ids: [props.item!.id],
+              scope: submission.scope,
+              listId: submission.payload.listId,
+              tagIds: submission.payload.tagIds,
+            })
+          : submission.kind === 'v2'
+            ? submission.convertLegacyTodoId
+              ? await convertLegacyTodoPlanV2(submission.convertLegacyTodoId, submission.payload)
+              : props.item?.planVersion === 2
+                ? await updateTodoPlanV2(props.item.id, submission.scope, submission.payload)
+                : await createTodoPlanV2(submission.payload)
+            : props.item
+              ? await updateTodo(props.item.id, submission.payload)
+              : await createTodo(submission.payload);
       if (res.status !== 200) throw new Error(res.msg || t('inbox.todoSaveFailed'));
+      useTodoStore().organizationEpoch++;
       message.success(t('inbox.todoSaved'));
       emit('saved', {
         id: String(res.data?.todoId || res.data?.id || props.item?.id || ''),
@@ -164,7 +198,8 @@
     }
   }
 
-  function openResourceRef(resource: TodoResourceRefView) {
+  async function openResourceRef(resource: TodoResourceRefView) {
+    if (saving.value || !(await mayClose())) return;
     const noteReturnPath = resolveTodoResourceReturnPath(
       router.currentRoute.value.fullPath,
       String(props.item?.id || ''),
@@ -181,10 +216,17 @@
     );
   }
 
-  function close() {
-    if (saving.value) return;
-    visible.value = false;
-    emit('closed');
+  async function close() {
+    if (saving.value || confirmingClose) return;
+    confirmingClose = true;
+    try {
+      if (await mayClose()) {
+        visible.value = false;
+        emit('closed');
+      }
+    } finally {
+      confirmingClose = false;
+    }
   }
 </script>
 

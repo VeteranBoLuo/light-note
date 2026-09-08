@@ -1,3 +1,4 @@
+import { writeTodoOrganization, copyTodoOrganization, readTodoOrganization } from './todoOrganizationService.js';
 import crypto from 'crypto';
 import { Temporal } from '@js-temporal/polyfill';
 import { insertData } from '../agent/data.js';
@@ -448,6 +449,7 @@ async function createFromPreview(
       creationHash: preview.previewHash,
     });
     await connection.query('INSERT INTO todo_series SET ?', [series]);
+    await writeTodoOrganization(connection, userId, [seriesId], input, 'series');
   }
 
   const rule = ruleRow(userId, {
@@ -459,7 +461,15 @@ async function createFromPreview(
     itemRow(userId, content, occurrence, { seriesId, seriesVersion: series ? series.version : null }),
   );
   if (!seriesId && rule) rule.todo_id = items[0].id;
-  for (const item of items) await connection.query('INSERT INTO todo_items SET ?', [item]);
+  for (const item of items) {
+    await connection.query('INSERT INTO todo_items SET ?', [item]);
+  }
+  await writeTodoOrganization(
+    connection,
+    userId,
+    items.map((item) => item.id),
+    input,
+  );
   if (rule) await connection.query('INSERT INTO todo_reminder_rules SET ?', [rule]);
 
   const jobs = [];
@@ -534,6 +544,7 @@ export async function convertLegacyTodoPlan(connection, userId, input = {}, opti
   const legacy = rows[0];
   if (!legacy) throw serviceError('TODO_LEGACY_NOT_FOUND', '旧版待办不存在、已转换或无权操作', 404);
 
+  input = { ...(await readTodoOrganization(connection, userId, legacyTodoId)), ...input };
   // 转换只替换已有待办的计划语义，不属于“创建一个待办”，不得完成每日创建任务。
   const response = await createTodoPlan(connection, userId, input, { ...options, suppressUserRewards: true });
   if (response.replayed) {
@@ -919,6 +930,7 @@ export async function generateAfterCompletionNext(connection, userId, current, c
     await connection.query('INSERT INTO todo_items SET ?', [item]);
   }
   await copySeriesRefsToItem(connection, series.id, userId, item.id);
+  await copyTodoOrganization(connection, userId, series.id, item.id, 'series');
   const rule = await loadSeriesRule(connection, series.id, userId);
   const reminder = reminderFromRule(rule);
   const moments = reminderMomentsForAdHocOccurrence(occurrence, reminder);
@@ -1074,7 +1086,10 @@ export async function ensureSeriesBuffer(connection, seriesId, { now = new Date(
       }),
     );
   }
-  for (const item of items) await copySeriesRefsToItem(connection, series.id, series.user_id, item.id);
+  for (const item of items) {
+    await copySeriesRefsToItem(connection, series.id, series.user_id, item.id);
+    await copyTodoOrganization(connection, series.user_id, series.id, item.id, 'series');
+  }
   const reminderJobsCreated = await insertReminderJobs(connection, jobs);
   await connection.query(
     `UPDATE todo_series SET next_occurrence_no = ?, generated_through_date = ?, last_generation_error = NULL WHERE id = ?`,
@@ -1302,6 +1317,7 @@ export async function updateTodoPlan(connection, userId, input = {}, options = {
   );
   const current = rows[0];
   if (!current) throw serviceError('TODO_NOT_FOUND', '待办不存在或无权操作', 404);
+  if (current.status === 'completed') throw serviceError('TODO_COMPLETED_READ_ONLY', '已完成的待办不能编辑', 409);
   const preview = assertTodoPlanReady(previewTodoPlan(input, options));
   if (!input.previewHash || input.previewHash !== preview.previewHash) {
     throw serviceError('TODO_PREVIEW_STALE', '任务计划预览已变化，请重新确认', 409);
@@ -1309,6 +1325,7 @@ export async function updateTodoPlan(connection, userId, input = {}, options = {
   if (scope === 'current' && current.series_id && preview.normalizedPlan.plan.type !== 'once') {
     throw serviceError('TODO_CURRENT_SCOPE_PLAN_INVALID', '仅修改当前实例时不能创建新的重复计划，请改选“当前及以后”');
   }
+  input = { ...(await readTodoOrganization(connection, userId, current.id)), ...input };
   if (scope === 'current' && !current.series_id && preview.normalizedPlan.plan.type !== 'once') {
     await connection.query(
       `UPDATE todo_items SET del_flag = 1, deleted_at = NOW(), update_time = NOW()
@@ -1336,6 +1353,7 @@ export async function updateTodoPlan(connection, userId, input = {}, options = {
     };
   }
   if (scope === 'current') {
+    await writeTodoOrganization(connection, userId, [current.id], input);
     const content = normalizeContent(input, preview.normalizedPlan);
     const occurrence = preview.occurrences[0];
     const [ruleVersions] = await connection.query(

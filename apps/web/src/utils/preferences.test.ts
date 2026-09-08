@@ -122,14 +122,15 @@ describe('笔记默认打开方式', () => {
 
   it('设置项仅在 PC 展示，笔记库统一通过偏好裁决打开方式', () => {
     const here = dirname(fileURLToPath(import.meta.url));
-    const settings = readFileSync(resolve(here, '../view/settings/Settings.vue'), 'utf8');
+    const settings = readFileSync(resolve(here, '../view/settings/components/SettingsGeneralSection.vue'), 'utf8');
     const noteLibrary = readFileSync(resolve(here, '../view/noteLibrary/NoteLibrary.vue'), 'utf8');
 
     expect(settings).toMatch(
-      /<div v-if="!bookmark\.isMobile" class="field">[\s\S]*?t\('settings\.noteDirectEdit'\)[\s\S]*?set\('noteDirectEdit', \$event\)/u,
+      /pref-key="noteDirectEdit"[\s\S]*?v-if="!bookmark\.isMobile"/u,
     );
-    expect(settings).toContain(':checked="user.preferences.noteDirectEdit === true"');
-    expect(settings).toContain('@change="set(\'noteDirectEdit\', $event)"');
+    const field = readFileSync(resolve(here, '../view/settings/components/SettingsPreferenceField.vue'), 'utf8');
+    expect(field).toContain('await updatePreference({ [props.prefKey]: next })');
+    expect(settings).toMatch(/pref-key="noteDirectEdit"[\s\S]*?:default-value="false"/u);
     expect(noteLibrary).toContain('shouldOpenNoteDirectly(user.preferences, bookmark.isMobile)');
     expect(noteLibrary).toContain('return openDirectoryPage(noteId);');
   });
@@ -143,11 +144,11 @@ describe('笔记默认打开方式', () => {
 
   it('父页面打开设置复用账号偏好保存链路，并在新账号默认值中显式写入 children', () => {
     const here = dirname(fileURLToPath(import.meta.url));
-    const settings = readFileSync(resolve(here, '../view/settings/Settings.vue'), 'utf8');
+    const settings = readFileSync(resolve(here, '../view/settings/components/SettingsGeneralSection.vue'), 'utf8');
     const noteLibrary = readFileSync(resolve(here, '../view/noteLibrary/NoteLibrary.vue'), 'utf8');
     const backend = readFileSync(resolve(here, '../../../server/router_handle/userHandle.js'), 'utf8');
 
-    expect(settings).toMatch(/v-for="o in noteParentOpenOpts"[\s\S]*?set\('noteParentOpenMode', o\.v\)/u);
+    expect(settings).toMatch(/pref-key="noteParentOpenMode"[\s\S]*?:options="noteParentOpenOpts"/u);
     expect(settings).toContain('user.preferences.noteParentOpenMode || DEFAULT_NOTE_PARENT_OPEN_MODE');
     expect(noteLibrary).toContain('getNoteParentOpenMode(user.preferences, bookmark.isMobile)');
     expect(noteLibrary).toMatch(

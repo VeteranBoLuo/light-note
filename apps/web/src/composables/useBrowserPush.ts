@@ -1,6 +1,7 @@
-import { ref } from 'vue';
+import { ref, readonly } from 'vue';
 import { apiBasePost } from '@/http/request';
 import { isLightNoteAndroidApp } from '@/utils/androidBridge';
+import { isBrowserPushDesktop } from '@/utils/browserPushPlatform';
 
 interface Binding {
   id: string;
@@ -10,6 +11,24 @@ interface Binding {
 export type BrowserPushState =
   'loading' | 'pending' | 'off' | 'on' | 'denied' | 'unsupported' | 'unavailable' | 'error';
 const state = ref<BrowserPushState>('loading');
+export interface PushDiagnostics {
+  permission: NotificationPermission | null;
+  subscription: 'present' | 'absent' | null;
+  bindingActive: boolean | null;
+  available: boolean | null;
+  checkedAt: number | null;
+  stale: boolean;
+}
+const emptyDiagnostics = (): PushDiagnostics => ({
+  permission: null,
+  subscription: null,
+  bindingActive: null,
+  available: null,
+  checkedAt: null,
+  stale: false,
+});
+const diagnostics = ref<PushDiagnostics>(emptyDiagnostics());
+let refreshingGeneration: number | null = null;
 const busy = ref(false);
 const enabled = ref(false);
 // Device preference is separate from browser permission and an active subscription.
@@ -31,13 +50,15 @@ function savePreference(value: boolean) {
 let config: { available: boolean; publicKey: string; userId: string; enabled: boolean } | null = null;
 let currentOwner = '';
 let generation = 0;
-const supported = () =>
+let ownerGeneration = 0;
+const platformSupported = () =>
   typeof window !== 'undefined' &&
   window.isSecureContext &&
   !isLightNoteAndroidApp() &&
   'serviceWorker' in navigator &&
   'PushManager' in window &&
   'Notification' in window;
+const supported = () => isBrowserPushDesktop() && platformSupported();
 async function registration() {
   const result = await navigator.serviceWorker.register('/light-note-sw.js?v=3', {
     scope: '/',
@@ -85,8 +106,9 @@ async function post(path: string, body: unknown = {}) {
   return response.data;
 }
 export async function clearBrowserPush(): Promise<void> {
-  generation++;
-  if (!supported()) {
+  const clearingGeneration = ++generation;
+  diagnostics.value = emptyDiagnostics();
+  if (!platformSupported()) {
     enabled.value = false;
     state.value = 'off';
     return;
@@ -106,15 +128,28 @@ export async function clearBrowserPush(): Promise<void> {
   await subscription?.unsubscribe();
   if (binding) await post('unsubscribe', binding);
   if (clearError && !subscription) throw clearError;
+  if (clearingGeneration !== generation) return;
   enabled.value = false;
   state.value = 'off';
+  diagnostics.value = {
+    permission: typeof Notification !== 'undefined' ? Notification.permission : null,
+    subscription: 'absent',
+    bindingActive: false,
+    available: config?.available ?? null,
+    checkedAt: Date.now(),
+    stale: false,
+  };
 }
 export async function syncBrowserPushOwner(userId: string) {
+  const ownerEpoch = ++ownerGeneration;
+  diagnostics.value = emptyDiagnostics();
   currentOwner = userId;
+  config = null;
   enabled.value = false;
   preferred.value = readPreference(userId);
   const requestGeneration = ++generation;
   if (!supported()) {
+    if (!isBrowserPushDesktop() && platformSupported()) await clearBrowserPush().catch(() => {});
     state.value = 'unsupported';
     return;
   }
@@ -123,7 +158,7 @@ export async function syncBrowserPushOwner(userId: string) {
     if (requestGeneration !== generation) return;
     if (binding && binding.userId !== userId) {
       await clearBrowserPush();
-      if (!userId) return;
+      if (ownerEpoch !== ownerGeneration || !userId) return;
     }
     if (!userId) {
       state.value = 'off';
@@ -131,15 +166,18 @@ export async function syncBrowserPushOwner(userId: string) {
     }
     await refreshBrowserPush();
   } catch {
-    state.value = 'error';
+    if (ownerEpoch === ownerGeneration) state.value = 'error';
   }
 }
 export async function refreshBrowserPush() {
+  if (refreshingGeneration === generation || busy.value) return;
   if (!supported()) {
     state.value = 'unsupported';
     return;
   }
   const requestGeneration = generation;
+  refreshingGeneration = requestGeneration;
+  diagnostics.value = { ...diagnostics.value, stale: true };
   state.value = 'loading';
   try {
     const binding = await bindingMessage('push.binding.get');
@@ -151,6 +189,14 @@ export async function refreshBrowserPush() {
     preferred.value = readPreference(next.userId);
     const subscription = await (await registration()).pushManager.getSubscription();
     if (requestGeneration !== generation) return;
+    diagnostics.value = {
+      permission: Notification.permission,
+      subscription: subscription ? 'present' : 'absent',
+      bindingActive: Boolean(next.enabled && binding?.userId === next.userId),
+      available: next.available,
+      checkedAt: Date.now(),
+      stale: false,
+    };
     enabled.value = Boolean(
       next.enabled && binding?.userId === next.userId && subscription && Notification.permission === 'granted',
     );
@@ -168,7 +214,12 @@ export async function refreshBrowserPush() {
       await setEnabled(true, navigator.language, false);
     }
   } catch {
-    if (requestGeneration === generation) state.value = 'error';
+    if (requestGeneration === generation) {
+      state.value = 'error';
+      diagnostics.value = { ...diagnostics.value, stale: true };
+    }
+  } finally {
+    if (refreshingGeneration === requestGeneration) refreshingGeneration = null;
   }
 }
 function applicationKey(value: string) {
@@ -195,6 +246,8 @@ async function setEnabled(nextEnabled: boolean, locale: string, requestPermissio
       Notification.permission === 'granted' || !requestPermission
         ? Notification.permission
         : await Notification.requestPermission();
+    if (owner !== currentOwner || requestGeneration !== generation) return;
+    diagnostics.value = { ...diagnostics.value, permission, stale: true };
     if (permission !== 'granted') {
       state.value = permission === 'denied' ? 'denied' : 'pending';
       return;
@@ -221,13 +274,33 @@ async function setEnabled(nextEnabled: boolean, locale: string, requestPermissio
       return;
     }
     enabled.value = true;
+    diagnostics.value = {
+      permission,
+      subscription: 'present',
+      bindingActive: true,
+      available: true,
+      checkedAt: Date.now(),
+      stale: false,
+    };
     state.value = 'on';
   } catch {
-    state.value = 'error';
+    if (owner === currentOwner && requestGeneration === generation) {
+      state.value = 'error';
+      diagnostics.value = { ...diagnostics.value, stale: true };
+    }
   } finally {
     busy.value = false;
+    if (owner !== currentOwner && currentOwner) void refreshBrowserPush();
   }
 }
 export function useBrowserPush() {
-  return { state, busy, enabled, preferred, refresh: refreshBrowserPush, setEnabled };
+  return {
+    state,
+    busy,
+    enabled,
+    preferred,
+    diagnostics: readonly(diagnostics),
+    refresh: refreshBrowserPush,
+    setEnabled,
+  };
 }

@@ -397,6 +397,7 @@
 </script>
 
 <style lang="less" scoped>
+  @import (reference) "@/assets/css/workspace-surfaces.less";
   .filter-panel {
     min-width: 0;
     width: 100%;
@@ -796,4 +797,12 @@
       }
     }
   }
+
+  // 共享工作区表面：仅改变颜色，布局与滚动由原组件负责。
+
+  .filter-panel { .workspace-navigation-colors(); }
+  .filter-panel .category-item:hover, .filter-all-entry:hover { .workspace-navigation-hover(); }
+  .filter-panel .category-item.is-current, .filter-all-entry.active { .workspace-navigation-selected(); }
+  .filter-all-count { color: var(--workspace-purple-stat); }
+  .filter-all-entry.active { border-color: var(--workspace-purple-stat); }
 </style>

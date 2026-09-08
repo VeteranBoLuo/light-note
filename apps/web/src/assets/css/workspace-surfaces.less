@@ -1,0 +1,33 @@
+// 只管理工作区的颜色。用 reference 导入，不生成全局选择器或改动几何/滚动。
+// 菜单、浮层、媒体舞台、代码和用户正文自定义色不使用这些 mixin。
+.workspace-canvas-surface() {
+  background: var(--workspace-canvas);
+  border-color: var(--workspace-border);
+}
+// 浅色保留原白色区域；深色仍与目录/画布共用中性底色。
+.workspace-open-surface() {
+  background: var(--workspace-open-canvas);
+  border-color: var(--workspace-border);
+}
+.workspace-content-surface() {
+  background: var(--workspace-content);
+  border-color: var(--workspace-border);
+}
+.workspace-navigation-colors(@kind: purple) {
+  --workspace-nav-text: ~"var(--workspace-@{kind}-text)";
+  --workspace-nav-selected: ~"var(--workspace-@{kind}-selected)";
+}
+.workspace-navigation-default() {
+  background: transparent;
+  border-color: transparent;
+  color: var(--workspace-muted);
+}
+.workspace-navigation-hover() {
+  background: var(--workspace-hover);
+  color: var(--workspace-text);
+}
+.workspace-navigation-selected() {
+  background: var(--workspace-nav-selected, var(--workspace-purple-selected));
+  border-color: var(--workspace-nav-text, var(--workspace-purple-text));
+  color: var(--workspace-nav-text, var(--workspace-purple-text));
+}

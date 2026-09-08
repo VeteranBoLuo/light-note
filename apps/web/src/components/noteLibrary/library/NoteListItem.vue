@@ -254,6 +254,7 @@
 </script>
 
 <style lang="less" scoped>
+  @import (reference) "@/assets/css/workspace-surfaces.less";
   .note-list-item {
     // 标题与右侧时间共用同一行高,时间不再靠写死的 line-height 去凑基线
     --note-row-line: 22px;
@@ -264,7 +265,6 @@
     align-items: flex-start;
     padding: 11px 14px;
     margin-bottom: 8px;
-    background: var(--card-background);
     border: 1px solid var(--surface-border-color);
     border-radius: 8px;
     cursor: pointer;
@@ -467,5 +467,10 @@
       line-height: var(--note-row-line);
       font-variant-numeric: tabular-nums;
     }
+  }
+
+  // 共享工作区表面：仅改变颜色，布局与滚动由原组件负责。
+  .note-list-item {
+    .workspace-content-surface();
   }
 </style>

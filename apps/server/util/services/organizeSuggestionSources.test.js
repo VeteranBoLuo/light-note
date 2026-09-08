@@ -127,3 +127,18 @@ it('标签预检按 owner 与默认图标筛选，完整快照不读取资料关
   expect(db.query).toHaveBeenCalledTimes(1);
   expect(snapshots[0]).toMatchObject({ type: 'tag', id: 't', title: '阅读', iconUrl: '' });
 });
+
+it('显式标签范围读取图标存在标记，仍限制归属与回收站且不读取图标内容', async () => {
+  const db = {
+    query: vi.fn().mockResolvedValue([
+      [
+        { id: 'a', title: '已有', has_custom_icon: 1 },
+        { id: 'b', title: '默认', has_custom_icon: 0 },
+      ],
+    ]),
+  };
+  const rows = await readSuggestionCandidates(db, 'u', 'tag', { ids: ['a', 'b'], includeCustomIcons: true });
+  expect(rows.map((r) => r.hasCustomIcon)).toEqual([true, false]);
+  expect(db.query.mock.calls[0][0]).toContain('AS has_custom_icon');
+  expect(db.query.mock.calls[0][0]).toContain('WHERE r.user_id=? AND r.del_flag=0 AND r.id IN (?) ORDER BY');
+});

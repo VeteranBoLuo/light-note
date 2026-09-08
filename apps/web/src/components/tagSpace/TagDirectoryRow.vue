@@ -11,18 +11,27 @@
     <span class="tag-directory-row__icon" aria-hidden="true">
       <SvgIcon :src="iconSrc || icon.resource.tag" :size="iconSize" />
     </span>
-    <span class="tag-directory-row__label">{{ label }}</span>
+    <span class="tag-directory-row__content"
+      ><span class="tag-directory-row__label">{{ label }}</span>
+      <small v-if="todoCount">{{
+        t('todoWorkspace.tagTodoCount', { total: todoCount, pending: todoPending || 0 })
+      }}</small></span
+    >
     <strong class="tag-directory-row__count">{{ count }}</strong>
   </BButton>
 </template>
 
 <script setup lang="ts">
+  import { useI18n } from 'vue-i18n';
+  const { t } = useI18n();
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
 
   withDefaults(
     defineProps<{
+      todoCount?: number;
+      todoPending?: number;
       label: string;
       count: number | string;
       iconSrc?: string;
@@ -48,6 +57,7 @@
 </script>
 
 <style scoped lang="less">
+  @import (reference) "@/assets/css/workspace-surfaces.less";
   .tag-directory-row {
     --tag-directory-accent: var(--primary-color);
     --tag-directory-icon-color: var(--resource-tag-color, #ec4899);
@@ -131,4 +141,23 @@
       transition: none;
     }
   }
+  .tag-directory-row__content {
+    display: grid;
+    flex: 1;
+    min-width: 0;
+    text-align: left;
+    gap: 3px;
+  }
+  .tag-directory-row__content small {
+    white-space: normal;
+    font-size: 10px;
+    color: var(--desc-color);
+    line-height: 1.4;
+  }
+
+  // 共享工作区表面：仅改变颜色，布局与滚动由原组件负责。
+
+  .tag-directory-row { .workspace-navigation-colors(tag); .workspace-navigation-default(); }
+  .tag-directory-row:hover { .workspace-navigation-hover(); }
+  .tag-directory-row.is-active { .workspace-navigation-selected(); }
 </style>

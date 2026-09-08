@@ -1011,6 +1011,7 @@
 </script>
 
 <style lang="less" scoped>
+  @import (reference) "@/assets/css/workspace-surfaces.less";
   .cloud-count-chip {
     height: 22px;
     padding: 0 8px;
@@ -1229,7 +1230,6 @@
     box-sizing: border-box;
     border: 1px solid color-mix(in srgb, var(--card-border-color) 72%, transparent);
     border-radius: 14px;
-    background: var(--workspace-panel-bg-color, var(--menu-body-bg-color));
     box-shadow: 0 12px 30px -28px color-mix(in srgb, var(--text-color) 38%, transparent);
   }
 
@@ -1239,7 +1239,6 @@
     overflow: hidden;
     border: 1px solid color-mix(in srgb, var(--card-border-color) 72%, transparent);
     border-radius: 14px;
-    background: var(--workspace-panel-bg-color, var(--menu-body-bg-color));
     box-shadow: 0 12px 30px -28px color-mix(in srgb, var(--text-color) 38%, transparent);
   }
 
@@ -1350,7 +1349,14 @@
     .content-area :deep(.field-list) {
       border: 0;
       box-shadow: none;
-      background: transparent;
     }
+  }
+
+  // 共享工作区表面：仅改变颜色，布局与滚动由原组件负责。
+  .content-area :deep(.folder-list) {
+    .workspace-open-surface();
+  }
+  .content-area :deep(.field-list) {
+    .workspace-open-surface();
   }
 </style>

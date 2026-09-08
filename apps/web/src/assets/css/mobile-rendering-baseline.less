@@ -130,8 +130,8 @@ html.light-note-mobile-rendering {
 
   // 书签真实卡片：不用混色渐变和混色阴影。
   .card-body {
-    border-color: var(--surface-border-color, var(--card-border-color)) !important;
-    background: var(--menu-body-bg-color) !important;
+    border-color: var(--workspace-border);
+    background: var(--workspace-content);
     box-shadow: none !important;
   }
 
@@ -226,6 +226,11 @@ html.light-note-mobile-rendering {
   .acc-sec .sess-badge {
     background: var(--bl-input-noBorder-bg-color, var(--background-color)) !important;
     box-shadow: none !important;
+  }
+
+  // 设置中的设备使用平铺行，不再用输入框底色形成卡片套卡片。
+  .settings-page .acc-sec .sess-item {
+    background: var(--card-background) !important;
   }
 
   // 设置页：外层卡片与返回按钮使用稳定主题边框，避开 color-mix() 被绘制成纯黑。

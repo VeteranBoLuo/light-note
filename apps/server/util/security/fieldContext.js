@@ -33,6 +33,7 @@ export const FIELD_CONTEXT = {
     'handledBy',
     'tagId',
     'tagIds',
+    'listId',
     'relatedTagIds',
     'resourceId',
     'resourceIds',

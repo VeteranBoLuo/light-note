@@ -79,24 +79,22 @@ export async function prepareInitialLocale(): Promise<void> {
 }
 
 // 切换语言的方法
-export function setLocale(lang: AppLocale): Promise<void> {
-  if (isAdminLoginPreview()) {
-    return ensureLocaleMessages(lang).then(() => {
-      applyLocale(lang);
-    });
-  }
-  try {
-    localStorage.setItem(
-      'preferences',
-      JSON.stringify({
-        ...JSON.parse(localStorage.getItem('preferences') || '{}'),
-        lang,
-      }),
-    );
-  } catch {
-    // 存储不可用时仍允许本次会话切换语言。
-  }
+export function setLocale(lang: AppLocale, options: { shouldApply?: () => boolean } = {}): Promise<void> {
   return ensureLocaleMessages(lang).then(() => {
+    if (options.shouldApply && !options.shouldApply()) return;
+    if (!isAdminLoginPreview()) {
+      try {
+        localStorage.setItem(
+          'preferences',
+          JSON.stringify({
+            ...JSON.parse(localStorage.getItem('preferences') || '{}'),
+            lang,
+          }),
+        );
+      } catch {
+        /* Local storage may be unavailable; the language still applies for this session. */
+      }
+    }
     applyLocale(lang);
   });
 }

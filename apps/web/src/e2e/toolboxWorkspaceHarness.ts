@@ -1,3 +1,4 @@
+import { applyBoardOperation } from '@lightnote/shared/workspace-board';
 import { createApp, h } from 'vue';
 import { createPinia } from 'pinia';
 import { createI18n } from 'vue-i18n';
@@ -17,13 +18,13 @@ import ResourceProjectHost from '@/components/resourceActions/ResourceProjectHos
 import BButton from '@/components/base/BasicComponents/BButton.vue';
 import { useProjectResourceAction } from '@/composables/useProjectResourceAction';
 import ToolboxHome from '@/view/toolbox/ToolboxHome.vue';
-import type { ToolboxHomeWorkspaceSummary, ToolboxWorkspace } from '@/api/toolbox';
+import type { ToolboxHomeWorkspaceSummary, ToolboxWorkspace, ToolboxJob } from '@/api/toolbox';
 import '@/assets/css/index.less';
 
 const params = new URLSearchParams(window.location.search);
 const theme = params.get('theme') === 'night' ? 'night' : 'day';
 const locale = params.get('locale') === 'en-US' ? 'en-US' : 'zh-CN';
-const state = ['populated', 'empty', 'error'].includes(params.get('state') || '')
+const state = ['populated', 'empty', 'error', 'loading', 'long'].includes(params.get('state') || '')
   ? String(params.get('state'))
   : 'populated';
 const view = ['home', 'detail', 'entry', 'join', 'desktop', 'mobile'].includes(params.get('view') || '')
@@ -33,6 +34,7 @@ const kind = ['research', 'learning', 'writing'].includes(params.get('kind') || 
   ? String(params.get('kind'))
   : 'research';
 const toolId = params.get('tool') || `${kind}_workspace`;
+const quotaCase = params.get('quota') || 'normal';
 const now = '2026-08-29T14:30:00.000Z';
 
 document.documentElement.dataset.theme = theme;
@@ -186,6 +188,12 @@ const workspaceFixture: ToolboxWorkspace = {
   ],
 };
 
+if (params.get('legacyLearning') === '1') workspaceFixture.items[0].status = 'done';
+
+if (params.get('boardEmpty') === '1') workspaceFixture.items = [];
+if (params.get('emptyLane')) workspaceFixture.items = workspaceFixture.items.filter(item => item.lane !== params.get('emptyLane'));
+
+const boardReceipts = new Map<string, { before: typeof workspaceFixture.items; afterVersion: number; hash: string; focusItemId: string | null }>();
 const listFixture = [
   workspaceFixture,
   {
@@ -258,6 +266,39 @@ const homeWorkspaceFixtures = [
   }),
 ];
 
+if (state === 'long') {
+  if (workspaceFixture.items[0]) {
+    workspaceFixture.items[0].title = '跨团队持续研究与知识实践：' + 'LongUnbrokenProjectItemTitle'.repeat(6);
+    workspaceFixture.items[0].content = '长说明需要在卡片中截断，进入编辑后仍可完整查看。'.repeat(20);
+  }
+  homeWorkspaceFixtures[0].title =
+    '从知识收集到持续研究：建立可复用的产品策略与跨团队协作方法 / A comprehensive research project with a deliberately long title';
+  homeWorkspaceFixtures[0].nextStep =
+    '梳理现有访谈材料、对照用户的实际工作流程，并将关键结论整理为可验证的研究问题，准备下一轮访谈。';
+  homeWorkspaceFixtures[1].nextStep = '';
+  homeWorkspaceFixtures[1].resourceCount = 0;
+  homeWorkspaceFixtures[1].openItemCount = 0;
+}
+const homeTaskFixtures = (['processing', 'succeeded', 'failed'] as const).map((status, index): ToolboxJob => ({
+  id: `visual-job-${index}`,
+  toolId: 'research_brief',
+  status,
+  stage: status,
+  billing: { medium: 'points', status: 'settled', quotedPoints: 8, actualPoints: 8, refundedPoints: 0 },
+  save: { status: 'unsaved' },
+  error: status === 'failed' ? { code: 'VISUAL_ERROR', message: 'Fixture error' } : null,
+  artifact:
+    status === 'succeeded'
+      ? { id: 'visual-artifact', type: 'note', title: '知识产品研究简报', contentType: 'text/markdown', version: 1 }
+      : null,
+  artifactState: status === 'succeeded' ? 'ready' : 'none',
+  canCancel: status === 'processing',
+  startedAt: now,
+  completedAt: status === 'processing' ? null : now,
+  createdAt: now,
+  updatedAt: now,
+}));
+
 function response(config: any, data: unknown, status = 200) {
   return {
     data: { status, msg: 'ok', data },
@@ -272,6 +313,20 @@ function response(config: any, data: unknown, status = 200) {
 let entryDismissed = false;
 request.defaults.adapter = async (config) => {
   const url = String(config.url || '');
+  if (
+    view === 'home' &&
+    state === 'loading' &&
+    ['/api/toolbox/home', '/api/toolbox/catalog', '/api/growth/me', '/api/chat/aiQuota'].includes(url)
+  ) {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
+  if (url === '/api/chat/aiQuota') {
+    if (quotaCase === 'unavailable') return response(config, { unavailable: true }, 503);
+    if (quotaCase === 'unlimited') return response(config, { exempt: true });
+    const remaining = quotaCase === 'zero' ? 0 : quotaCase === 'large' ? 12412000 : 286400;
+    return response(config, { used: 0, quota: remaining, remaining, availableRemaining: remaining });
+  }
+
   if (url === '/api/workbench/summary')
     return response(config, {
       today: { todoPendingTotal: 4, inboxPendingTotal: 186 },
@@ -360,6 +415,7 @@ request.defaults.adapter = async (config) => {
     return response(config, { code: 'VISUAL_WORKSPACE_ERROR' }, 500);
   }
   if (url === '/api/toolbox/catalog') {
+    if (params.get('catalogState') === 'error') return response(config, { code: 'VISUAL_CATALOG_ERROR' }, 500);
     const definition = getToolboxTool(toolId);
     const definitions = TOOLBOX_TOOL_CATALOG.filter((item) => item.availability.enabled);
     return response(config, {
@@ -380,12 +436,61 @@ request.defaults.adapter = async (config) => {
   if (url === '/api/toolbox/workspaces' && String(config.method).toLowerCase() === 'get') {
     return response(config, { items: state === 'empty' ? [] : listFixture });
   }
+  if (url === '/api/toolbox/workspaces/visual-workspace/board') {
+    const body = typeof config.data === 'string' ? JSON.parse(config.data) : config.data;
+    const { command, requestId, expectedVersion } = body;
+    if (params.get('boardDelay') === '1') await new Promise(resolve => setTimeout(resolve, 800));
+    const hash=JSON.stringify({command,expectedVersion});
+    const version=workspaceFixture.boardVersion || 0;
+    const existing=boardReceipts.get(requestId);
+    if(existing && existing.hash!==hash) return response(config,{code:'BOARD_REQUEST_REUSED'},409);
+    if(!existing) {
+      if(params.get('itemMutation') === 'error') return response(config,{code:'BOARD_OPERATION_FAILED'},500);
+      if(params.get('boardConflict') === '1' && version === 0) { workspaceFixture.boardVersion = 1; return response(config,{code:'BOARD_VERSION_CONFLICT'},409); }
+      if(expectedVersion!==version) return response(config,{code:'BOARD_VERSION_CONFLICT'},409);
+      const before=structuredClone(workspaceFixture.items);
+      let focusItemId=null;
+      if(command.type==='undo') {
+        const receipt=boardReceipts.get(command.undoId);
+        if(!receipt||receipt.afterVersion!==version)return response(config,{code:'BOARD_VERSION_CONFLICT'},409);
+        workspaceFixture.items=structuredClone(receipt.before);
+      } else {
+        const applied=applyBoardOperation(workspaceFixture.items,command,{id:crypto.randomUUID(),now:new Date().toISOString()});
+        workspaceFixture.items=applied.items;focusItemId=applied.focusItemId;
+      }
+      workspaceFixture.boardVersion=version+1;
+      boardReceipts.set(requestId,{before,afterVersion:version+1,hash,focusItemId});
+    }
+    workspaceFixture.openItemCount=workspaceFixture.items.filter(x=>x.lane!=='knowledge'&&['open','in_progress'].includes(x.status)).length;
+    workspaceFixture.completedItemCount=workspaceFixture.items.filter(x=>x.lane==='action'&&x.status==='done').length;
+    const receipt=boardReceipts.get(requestId)!;
+    return response(config,{workspace:JSON.parse(JSON.stringify({...workspaceFixture,items:workspaceFixture.items.filter(x=>x.status!=='archived')})),undoId:command.type!=='undo'&&receipt.afterVersion===workspaceFixture.boardVersion?requestId:null,focusItemId:receipt.focusItemId});
+  }
+  const sourceMatch=url.match(/^\/api\/toolbox\/workspaces\/visual-workspace\/items\/([^/]+)$/);
+  if(sourceMatch && String(config.method).toLowerCase()==='get') {
+    const item=workspaceFixture.items.find(x=>x.id===sourceMatch[1]);
+    return response(config,item||{},item?200:404);
+  }
+  if (url === '/api/toolbox/workspaces/visual-workspace/items' && String(config.method).toLowerCase() === 'post') {
+    const input = typeof config.data === 'string' ? JSON.parse(config.data) : config.data;
+    workspaceFixture.items.push({ ...input, id: `new-${workspaceFixture.items.length}`, status: kind === 'learning' && input.lane === 'knowledge' ? 'done' : 'open', position: workspaceFixture.items.length, createdAt: now, updatedAt: now, completedAt: null });
+    return response(config, JSON.parse(JSON.stringify(workspaceFixture)), 201);
+  }
+  if (params.get('itemMutation') === 'error' && url.includes('/items')) return response(config, { code: 'VISUAL_ITEM_ERROR' }, 500);
+  const itemMatch = url.match(/^\/api\/toolbox\/workspaces\/visual-workspace\/items\/([^/]+)$/);
+  if (itemMatch && String(config.method).toLowerCase() === 'patch') {
+    const item = workspaceFixture.items.find((entry) => entry.id === itemMatch[1]);
+    if (item) Object.assign(item, typeof config.data === 'string' ? JSON.parse(config.data) : config.data);
+    workspaceFixture.items = workspaceFixture.items.filter((entry) => entry.status !== 'archived');
+    return response(config, JSON.parse(JSON.stringify(workspaceFixture)));
+  }
   if (url === '/api/toolbox/workspaces/visual-workspace') return response(config, workspaceFixture);
   if (url.startsWith('/api/toolbox/workspaces/')) return response(config, workspaceFixture);
   if (url === '/api/toolbox/workspaces' && String(config.method).toLowerCase() === 'post') {
     return response(config, workspaceFixture, 201);
   }
   if (url === '/api/growth/me') {
+    if (quotaCase === 'unavailable') return response(config, {}, 503);
     return response(config, {
       exp: 1200,
       level: 8,
@@ -393,7 +498,7 @@ request.defaults.adapter = async (config) => {
       spaceMb: 2048,
       aiTokenDaily: 0,
       streak: 9,
-      points: 1342,
+      points: quotaCase === 'zero' ? 0 : quotaCase === 'large' ? 123456789 : 1342,
       checkedInToday: true,
       levelStartExp: 1000,
       nextLevelExp: 1500,
@@ -403,10 +508,18 @@ request.defaults.adapter = async (config) => {
     });
   }
   if (url === '/api/toolbox/home') {
+    if (state === 'error') return response(config, { code: 'VISUAL_HOME_ERROR' }, 500);
     return response(config, {
       schemaVersion: 2,
-      workspaces: { continue: homeWorkspaceFixtures, recent: homeWorkspaceFixtures },
-      tasks: { active: [], ready: [], recent: [] },
+      workspaces: {
+        continue: state === 'empty' ? [] : homeWorkspaceFixtures,
+        recent: state === 'empty' ? [] : homeWorkspaceFixtures,
+      },
+      tasks: {
+        active: state === 'empty' ? [] : homeTaskFixtures.filter((job) => job.status !== 'succeeded'),
+        ready: state === 'empty' ? [] : homeTaskFixtures.filter((job) => job.status === 'succeeded'),
+        recent: [],
+      },
     });
   }
   if (view === 'desktop' || view === 'mobile') return response(config, {});
@@ -418,14 +531,33 @@ request.defaults.adapter = async (config) => {
 const router = createRouter({
   history: createMemoryHistory(),
   routes: [
-    { path: '/toolbox', component: ToolboxHome },
-    { path: '/toolbox/:toolId', component: ToolboxWorkbench },
+    { path: '/toolbox', name: 'toolboxHome', meta: { mobileShell: 'toolbox' }, component: ToolboxHome },
+    {
+      path: '/ai-usage',
+      name: 'aiUsage',
+      component: { render: () => h('p', { 'data-fixture-destination': 'aiUsage' }, 'AI usage destination') },
+    },
+    {
+      path: '/points-usage',
+      name: 'pointsUsage',
+      component: { render: () => h('p', { 'data-fixture-destination': 'pointsUsage' }, 'Points usage destination') },
+    },
+    {
+      path: '/toolbox/:toolId',
+      name: 'toolboxWorkbench',
+      meta: { mobileShell: 'toolbox' },
+      component: ToolboxWorkbench,
+    },
     { path: '/:pathMatch(.*)*', component: { render: () => null } },
   ],
 });
+// Memory history lacks browser back metadata; mirror it for the shared return guard.
+router.afterEach((_to, from) => {
+  router.options.history.state.back = from.fullPath;
+});
 await router.push(
   view === 'home'
-    ? { path: '/toolbox' }
+    ? { path: '/toolbox', query: params.get('tab') === 'catalog' ? { view: 'catalog' } : {} }
     : { path: `/toolbox/${toolId}`, query: view === 'detail' ? { workspace: 'visual-workspace' } : {} },
 );
 
@@ -467,7 +599,7 @@ app.use(
 const user = useUserStore(pinia);
 user.setUserInfo({
   id: 'visual-user',
-  role: RoleEnum.USER,
+  role: params.get('account') === 'guest' ? RoleEnum.VISITOR : RoleEnum.USER,
   userName: '视觉验收用户',
   alias: '视觉验收用户',
   preferences: { theme, lang: locale, noteViewMode: 'card' },

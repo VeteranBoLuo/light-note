@@ -93,7 +93,7 @@ describe('TodoPreviewDrawer', () => {
     const drawer = document.querySelector('.todo-preview')!;
     expect(drawer.querySelector('h2')?.textContent).toBe(todo.title);
     expect(drawer.querySelector('.todo-preview__description')?.textContent).toContain(todo.description);
-    expect(drawer.querySelector('.todo-preview__checklist')?.textContent).toContain('检查关联资料');
+    expect(drawer.querySelector('.todo-subitems')?.textContent).toContain('检查关联资料');
     expect(drawer.querySelector('.todo-preview__schedule')?.textContent).toContain('下一次提醒');
     expect(drawer.querySelector('.todo-resource-link__title')?.textContent).toBe('开发文档');
   });
@@ -114,7 +114,7 @@ describe('TodoPreviewDrawer', () => {
     const { visible, onEdit, onDelete, onUpdateChecklist } = mountPreview();
     await nextTick();
 
-    document.querySelector<HTMLElement>('.todo-preview__checklist-items .b-checkbox')!.click();
+    document.querySelector<HTMLElement>('.todo-subitems__panel .b-checkbox')!.click();
     expect(onUpdateChecklist).toHaveBeenCalledWith(todo, [{ ...todo.checklist[0], done: true }]);
 
     const deleteButton = document.querySelector<HTMLButtonElement>('.todo-preview__delete')!;

@@ -86,6 +86,7 @@ request.defaults.adapter = async (config) => {
   if (url.endsWith('/runs')) data = params.has('empty') ? [] : [run];
   else if (url.endsWith('/previews')) {
     run = { ...run, options: body, status: 'preview' };
+    if (params.has('skipped')) run.summary = { ...run.summary, total: 12, types: { tag: 12 }, ruleTotal: 12, skipped: 34, skippedReasons: { customIcon: 34, unavailable: 0 } };
     data = run;
   } else if (url.endsWith('/start')) {
     run.status = 'completed';

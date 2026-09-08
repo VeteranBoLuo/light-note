@@ -2,6 +2,14 @@ const achievementGlyph = (content: string) =>
   `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round">${content}</g></svg>`;
 
 export default {
+  todoWorkspace: {
+    calendar: achievementGlyph('<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M7 3v4M17 3v4M3 11h18M7 15h2M15 15h2M7 18h2"/>'),
+    clock: achievementGlyph('<circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/>'),
+    checkSquare: achievementGlyph('<rect x="3" y="3" width="18" height="18" rx="3"/><path d="m7 12 3.5 3.5L17 8"/>'),
+    star: achievementGlyph('<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9Z"/>'),
+    quick: achievementGlyph('<path d="m13 2-8 12h6l-1 8 9-13h-7Z"/>'),
+    focus: achievementGlyph('<circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 17v.1"/>'),
+  },
   organize: {
     priority: achievementGlyph('<path d="M12 5v9M12 18v.2"/>'),
     manual: achievementGlyph('<path d="M8.5 8a3.5 3.5 0 1 1 6 2.45C13 11.5 12 12 12 14M12 18v.2"/>'),

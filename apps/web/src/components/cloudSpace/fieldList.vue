@@ -2128,6 +2128,7 @@
 </script>
 
 <style scoped lang="less">
+  @import (reference) "@/assets/css/workspace-surfaces.less";
   .field-list {
     --file-card-min-width: 260px;
 
@@ -2166,7 +2167,6 @@
     box-sizing: border-box;
     border-bottom: 1px solid var(--surface-divider-color);
     color: var(--desc-color);
-    background: var(--cloud-file-list-header-bg, var(--card-background));
     font-weight: 650;
     font-size: 12px;
   }
@@ -2311,7 +2311,6 @@
     box-sizing: border-box;
     overflow-y: auto;
     scrollbar-gutter: stable;
-    background: var(--workspace-panel-bg-color);
   }
 
   .file-load-more {
@@ -2335,7 +2334,6 @@
     display: flex;
     align-items: center;
     border-bottom: 1px solid var(--surface-divider-color);
-    background: var(--card-background);
     content-visibility: auto;
     contain-intrinsic-size: 58px;
     transition:
@@ -2586,7 +2584,6 @@
     min-height: 278px;
     border-radius: 13px;
     border: 1px solid var(--surface-border-color);
-    background: var(--card-background);
     cursor: pointer;
     transition:
       box-shadow 0.2s ease,
@@ -3017,5 +3014,19 @@
         box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary-color) 40%, transparent);
       }
     }
+  }
+
+  // 共享工作区表面：仅改变颜色，布局与滚动由原组件负责。
+  .file-container {
+    .workspace-open-surface();
+  }
+  .field-header, .field-item, .file-card {
+    .workspace-content-surface();
+  }
+
+  .field-item:hover { background: var(--workspace-hover); }
+  .field-item.field-item--selected {
+    background: var(--workspace-file-selected);
+    box-shadow: inset 3px 0 0 var(--workspace-file-text);
   }
 </style>

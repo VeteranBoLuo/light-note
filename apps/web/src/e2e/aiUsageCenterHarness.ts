@@ -1,12 +1,11 @@
-import { createApp } from 'vue';
+import { createApp, watch } from 'vue';
+import { applyDisplaySettings } from '@/utils/savePreference';
 import { createPinia } from 'pinia';
-import { createI18n } from 'vue-i18n';
+import i18n, { setLocale } from '@/i18n';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import globalDirect from '@/config/globalDirect';
 import { RoleEnum } from '@/config/bookmarkCfg';
 import request from '@/http/request';
-import enUS from '@/i18n/locales/en-US';
-import zhCN from '@/i18n/locales/zh-CN';
 import { bookmarkStore, useUserStore } from '@/store';
 import '@/assets/css/index.less';
 import AiUsageCenterHarness from './AiUsageCenterHarness.vue';
@@ -21,8 +20,54 @@ let usageRequestCount = 0;
 
 document.documentElement.dataset.theme = theme;
 document.documentElement.lang = locale;
-document.documentElement.classList.toggle('light-note-mobile-rendering', window.innerWidth <= 600);
+document.documentElement.classList.toggle(
+  'light-note-mobile-rendering',
+  params.get('renderProfile') === 'mobile' || window.innerWidth <= 767,
+);
 document.body.dataset.visualState = state;
+
+const pushFixture = params.get('push') || 'connected';
+let fixtureBinding: any =
+  pushFixture === 'connected' ? { id: 'fixture', generation: 'fixture-generation', userId: 'visual-user' } : null;
+let fixtureSubscription: any = fixtureBinding
+  ? {
+      options: {},
+      toJSON: () => ({ endpoint: 'https://example.invalid/push' }),
+      unsubscribe: async () => {
+        fixtureSubscription = null;
+        return true;
+      },
+    }
+  : null;
+Object.defineProperty(window, 'Notification', {
+  configurable: true,
+  value: {
+    permission: pushFixture === 'denied' ? 'denied' : pushFixture === 'pending' ? 'default' : 'granted',
+    requestPermission: async () => {
+      throw new Error('FIXTURE_PERMISSION_REQUEST_FORBIDDEN');
+    },
+  },
+});
+Object.defineProperty(window, 'PushManager', { configurable: true, value: class {} });
+const worker = {
+  postMessage: (data: any, ports: any[]) => {
+    if (data.type === 'push.binding.set') fixtureBinding = data.binding;
+    ports[0].postMessage({ binding: fixtureBinding });
+  },
+};
+const registration = {
+  active: worker,
+  pushManager: {
+    getSubscription: async () => fixtureSubscription,
+    subscribe: async () => {
+      throw new Error('FIXTURE_SUBSCRIBE_FORBIDDEN');
+    },
+  },
+};
+Object.defineProperty(navigator, 'serviceWorker', {
+  configurable: true,
+  value: { register: async () => registration, getRegistration: async () => registration },
+});
 
 const tokenActions = [
   ['search.answer', 'search', 'searchAnswer'],
@@ -360,7 +405,104 @@ function makeDetailFixture(payload: Record<string, unknown>) {
   };
 }
 
+const fixtureWrites: Array<{ url: string; body: unknown }> = [];
+Object.assign(window, { __settingsFixture: { writes: fixtureWrites } });
+let fixtureSessions = [
+  {
+    id: 'session-current',
+    current: true,
+    ip: '192.0.2.10',
+    userAgent: 'Macintosh Chrome',
+    lastActiveTime: '2026-09-08T06:35:00Z',
+  },
+  {
+    id: 'session-other',
+    current: false,
+    ip: '192.0.2.11',
+    userAgent: 'Windows Chrome',
+    lastActiveTime: '2026-09-08T05:34:00Z',
+  },
+  {
+    id: 'session-phone',
+    current: false,
+    ip: '192.0.2.12',
+    userAgent: 'Android Chrome',
+    lastActiveTime: '2026-09-07T23:00:00Z',
+  },
+];
+let chatPreference = {
+  enabled: true,
+  level: 'all',
+  channels: {
+    inApp: { enabled: true, available: true },
+    browser: { enabled: true, available: true },
+    android: { enabled: false, available: false },
+  },
+};
 request.defaults.adapter = async (config) => {
+  const url = config.url || '';
+  const body = parsePayload(config.data);
+  const ok = (data: unknown) => ({
+    data: { status: 200, msg: 'ok', data },
+    status: 200,
+    statusText: 'OK',
+    headers: {},
+    config,
+    request: null,
+  });
+  if (url === '/api/notification/browser/config') {
+    if (pushFixture === 'error') throw new Error('FIXTURE_PUSH_CHECK_FAILED');
+    return ok({ available: true, enabled: Boolean(fixtureBinding), userId: 'visual-user', publicKey: '' });
+  }
+  if (url === '/api/notification/browser/unsubscribe') return ok(null);
+  if (url === '/api/user/importData') {
+    fixtureWrites.push({ url, body });
+    if (body.mode === 'preflight') return ok({ canImport:true, willRestore:{bookmarks:1,notes:1,tags:1},exportOnly:{files:2,aiConversations:1} });
+    return ok({bookmarks:{added:1},notes:{added:1}});
+  }
+  if (url === '/api/user/saveUserInfo') {
+    fixtureWrites.push({ url, body });
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    if (state === 'save-error') throw new Error('FIXTURE_SAVE_FAILED');
+    return ok(null);
+  }
+  if (url.includes('/common/recordOperation')) return ok(null);
+  if (url === '/api/workbench/daily-brief/preference')
+    return ok({ enabled: true, autoUpdate: true, featureEnabled: true, ...body });
+  if (url === '/api/community-chat/settings/notifications') {
+    if (config.method !== 'get') {
+      fixtureWrites.push({ url, body });
+      chatPreference = { ...chatPreference, ...body };
+    }
+    return ok(chatPreference);
+  }
+  if (url === '/api/user/revokeSession') {
+    fixtureWrites.push({ url, body });
+    if (state === 'revoke-error') throw new Error('FIXTURE_REVOKE_FAILED');
+    const before = fixtureSessions.length;
+    fixtureSessions = fixtureSessions.filter((s) => s.current || (!body.others && s.id !== body.id));
+    return ok({ revoked: before - fixtureSessions.length });
+  }
+  if (url === '/api/growth/points/summary') {
+    if (state === 'loading') await new Promise(() => {});
+    if (state === 'error') throw new Error('FIXTURE_POINTS_FAILED');
+    return ok({ balance: 1778, today: { stableEarned: 75 }, week: { stableEarned: 175, spent: 510 } });
+  }
+  if (url.startsWith('/api/growth/points/log?')) {
+    if (state === 'loading') await new Promise(() => {});
+    if (state === 'error') throw new Error('FIXTURE_POINTS_FAILED');
+    const query = new URL(url, window.location.origin).searchParams;
+    const rows = [
+      { id: 1, delta: 15, reason: 'quest', sourceType: 'quest', createTime: '2026-09-08T04:02:00Z' },
+      { id: 2, delta: 40, reason: 'weekly', createTime: '2026-09-08T02:27:00Z' },
+      { id: 3, delta: -510, reason: 'buy', createTime: '2026-09-07T05:11:00Z' },
+      { id: 4, delta: 0, reason: 'admin', createTime: '2026-09-06T05:11:00Z' },
+    ].filter((row) =>
+      query.get('filter') === 'earned' ? row.delta > 0 : query.get('filter') === 'spent' ? row.delta < 0 : true,
+    );
+    return ok({ rows: state === 'empty' ? [] : rows, hasMore: false, nextCursor: null });
+  }
+
   if (config.url === '/api/user/me') {
     return {
       data: {
@@ -377,7 +519,7 @@ request.defaults.adapter = async (config) => {
   }
   if (config.url === '/api/user/getMySessions') {
     return {
-      data: { status: 200, msg: 'ok', data: [] },
+      data: { status: 200, msg: 'ok', data: state === 'empty' ? [] : fixtureSessions },
       status: 200,
       statusText: 'OK',
       headers: {},
@@ -471,20 +613,24 @@ const router = createRouter({
   history: createMemoryHistory(),
   routes: [{ path: '/:pathMatch(.*)*', component: { render: () => null } }],
 });
-await router.push(view === 'settings' ? '/settings' : '/ai-usage');
+await router.push(
+  view === 'settings'
+    ? {
+        path: '/settings',
+        query: {
+          ...(params.has('section') ? { section: params.get('section')! } : {}),
+          ...(params.has('panel') ? { panel: params.get('panel')! } : {}),
+        },
+      }
+    : '/ai-usage',
+);
 
 const pinia = createPinia();
 const app = createApp(AiUsageCenterHarness, { visualState: state, view });
 app.use(pinia);
 app.use(router);
-app.use(
-  createI18n({
-    legacy: false,
-    locale,
-    fallbackLocale: 'zh-CN',
-    messages: { 'zh-CN': zhCN, 'en-US': enUS },
-  }),
-);
+await setLocale(locale);
+app.use(i18n);
 const user = useUserStore(pinia);
 user.setUserInfo({
   id: 'visual-user',
@@ -493,6 +639,11 @@ user.setUserInfo({
   alias: '视觉验收用户',
   preferences: { theme, lang: locale, noteViewMode: 'card' },
 });
+watch(() => user.preferences.theme, () => {document.documentElement.dataset.theme = user.preferences.theme === 'system' ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'night' : 'day') : user.preferences.theme;});
+watch(() => user.preferences.uiScale, () => applyDisplaySettings());
 bookmarkStore(pinia).screenWidth = window.innerWidth;
+window.addEventListener('resize', () => {
+  bookmarkStore(pinia).screenWidth = window.innerWidth;
+});
 globalDirect(app);
 app.mount('#app');

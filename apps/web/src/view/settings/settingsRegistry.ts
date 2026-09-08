@@ -6,14 +6,7 @@
  */
 
 export type SettingsSectionId =
-  | 'appearance'
-  | 'general'
-  | 'notification'
-  | 'ai'
-  | 'points'
-  | 'account'
-  | 'install'
-  | 'privacy';
+  'appearance' | 'general' | 'notification' | 'ai' | 'points' | 'account' | 'install' | 'privacy';
 
 /** 两端共用的一级分类；桌面独有的安装/快捷键等能力归入「通用」，不再自成目录项。 */
 export type SettingsIndexSectionId = Exclude<SettingsSectionId, 'install'>;
@@ -158,13 +151,19 @@ export const NOTIFICATION_TOGGLE_KEYS: { key: string; defaultOn: boolean }[] = [
 ];
 
 /** 已开启的通知项数。总数取自清单长度而不是写死，加减开关时摘要自动跟着变。 */
-export function countEnabledNotifications(preferences: Record<string, unknown> | null | undefined): {
+export function countEnabledNotifications(
+  preferences: Record<string, unknown> | null | undefined,
+  scope: { browserPush?: boolean; guest?: boolean } = {},
+): {
   on: number;
   total: number;
 } {
   const prefs = preferences || {};
-  const on = NOTIFICATION_TOGGLE_KEYS.filter(({ key, defaultOn }) =>
-    defaultOn ? prefs[key] !== false : prefs[key] === true,
-  ).length;
-  return { on, total: NOTIFICATION_TOGGLE_KEYS.length };
+  const visible = NOTIFICATION_TOGGLE_KEYS.filter(
+    ({ key }) =>
+      (scope.browserPush !== false || key !== 'notificationsBrowser') &&
+      (!scope.guest || key !== 'notificationsOrganize'),
+  );
+  const on = visible.filter(({ key, defaultOn }) => (defaultOn ? prefs[key] !== false : prefs[key] === true)).length;
+  return { on, total: visible.length };
 }

@@ -13,16 +13,16 @@
       <BButton size="small" :disabled="busy" @click="dismiss">{{ t('browserPush.promptDismiss') }}</BButton>
     </div>
   </aside>
-  <div v-if="allowed && preferred && enabled" class="push-prompt-help"><BrowserPushHelp /></div>
 </template>
 <script setup lang="ts">
-  import BrowserPushHelp from './BrowserPushHelp.vue';
+  import { useBrowserPushDesktop } from '@/utils/browserPushPlatform';
   import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useUserStore } from '@/store';
   import { isAdminLoginPreview } from '@/utils/authStorage';
   import { useBrowserPush } from '@/composables/useBrowserPush';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  const browserPushDesktop = useBrowserPushDesktop();
   const { t, locale } = useI18n();
   const user = useUserStore();
   const { state, busy, preferred, enabled, refresh, setEnabled } = useBrowserPush();
@@ -30,7 +30,12 @@
   const attempted = ref(false);
   const owner = computed(() => String(user.id || ''));
   const allowed = computed(
-    () => Boolean(owner.value) && user.role !== 'visitor' && !user.adminContext && !isAdminLoginPreview(),
+    () =>
+      browserPushDesktop.value &&
+      Boolean(owner.value) &&
+      user.role !== 'visitor' &&
+      !user.adminContext &&
+      !isAdminLoginPreview(),
   );
   const key = (id: string) => `light-note:push-prompt-dismissed:${id}`;
   watch(
@@ -72,9 +77,6 @@
   }
 </script>
 <style scoped lang="less">
-  .push-prompt-help {
-    padding: 8px 12px;
-  }
   .push-prompt {
     margin: 8px 12px;
     padding: 12px;

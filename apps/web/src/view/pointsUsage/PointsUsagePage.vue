@@ -66,7 +66,7 @@
       </BCard>
 
       <BCard as="section" class="points-ledger-panel" padding="18px 20px" radius="16px">
-        <PointsLedger />
+        <PointsLedger :settings-layout="embedded" />
         <p class="points-ledger-note">
           <SvgIcon :src="icon.message.info" size="15" aria-hidden="true" />
           {{ t('growth.pointsUsageSettlementHint') }}
@@ -411,5 +411,62 @@
   html.light-note-mobile-rendering .points-overview-state,
   html.light-note-mobile-rendering .points-usage-workshop__icon {
     box-shadow: none;
+  }
+
+  .points-usage-page.is-embedded {
+    .points-usage-shell {
+      gap: 18px;
+    }
+    .points-overview-panel,
+    .points-ledger-panel {
+      padding: 22px;
+      border-radius: 14px;
+      background: var(--card-background);
+      box-shadow: none;
+    }
+    .points-overview-panel__head {
+      padding-bottom: 18px;
+      margin-bottom: 18px;
+      border-bottom: 1px solid var(--card-border-color);
+    }
+    .points-overview-panel__head h2 {
+      font-size: 16px;
+    }
+    .points-overview-panel__head p {
+      font-size: 13px;
+    }
+    .points-usage-metrics {
+      gap: 12px;
+    }
+    .points-usage-metric {
+      padding: 16px;
+      background: transparent;
+      min-height: 100px;
+    }
+    .points-usage-metric > strong {
+      font-size: 23px;
+    }
+    .points-usage-metric > span,
+    .points-usage-metric > small {
+      font-size: 12px;
+    }
+    .points-usage-workshop {
+      margin-top: 22px;
+    }
+  }
+  @media (max-width: 767px) {
+    .points-usage-page.is-embedded {
+      .points-overview-panel,
+      .points-ledger-panel {
+        padding: 16px;
+        border-radius: 12px;
+      }
+      .points-usage-shell {
+        gap: 14px;
+      }
+      .points-usage-metrics {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
   }
 </style>

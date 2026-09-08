@@ -1,3 +1,4 @@
+import { BOARD_COLUMNS, BOARD_OPERATIONS_SCHEMA } from './toolbox/boardSchema.js';
 import { STUDY_SCHEMA } from './toolbox/studyCards.js';
 import pool from '../db/index.js';
 import { FREE_OCR_SCHEMA } from './toolbox/freeOcrSchema.js';
@@ -290,6 +291,10 @@ export async function ensureToolboxSchema(database = pool) {
       KEY idx_toolbox_workspace_session_user (user_id, create_time)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='持续工作区推进记录与连续活跃依据'
   `);
+  for (const [table, column, definition] of BOARD_COLUMNS) {
+    if (await toolboxColumnMissing(database, table, column)) await database.query(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
+  await database.query(BOARD_OPERATIONS_SCHEMA);
 }
 
 export const toolboxSchemaInternals = Object.freeze({

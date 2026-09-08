@@ -919,8 +919,7 @@ function buildTodoExtra(item, text) {
   return parts.filter(Boolean).join(' · ');
 }
 
-// 待办只按 user_id + del_flag 归属过滤;它是行动对象而非资料对象,
-// 因此不参与标签筛选、无标签筛选和任何资源批量语义。
+// 待办使用独立标签关系参与全局搜索；不进入资料批量语义。
 async function queryTodos(userId, options, lang, includeItems, includeTotal = true) {
   const { keyword, tagNames, untagged, date, sort, pageSize, offset } = options;
   const todoStatus = normalizeTodoStatus(options.todoStatus);
@@ -930,11 +929,18 @@ async function queryTodos(userId, options, lang, includeItems, includeTotal = tr
   const params = [userId];
   if (keyword) {
     const like = buildLike(keyword);
-    where.push('(t.title LIKE ? OR t.description LIKE ?)');
-    params.push(like, like);
+    where.push(
+      `(t.title LIKE ? OR t.description LIKE ? OR EXISTS (SELECT 1 FROM todo_tag_relations tr INNER JOIN tag tg ON tg.id = tr.tag_id AND tg.user_id = tr.user_id AND tg.del_flag = 0 WHERE tr.target_type = 'todo' AND tr.target_id = t.id AND tr.user_id = t.user_id AND tg.name LIKE ?))`,
+    );
+    params.push(like, like, like);
   }
-  // 按标签或无标签筛选时待办整体退出结果，而不是被当成"无标签资源"混进来
-  if (tagNames.length || untagged) where.push('1 = 0');
+  // 全局搜索沿用资料的任一标签命中语义；工作区采用全部标签命中。
+  const tagExists = `SELECT 1 FROM todo_tag_relations tr INNER JOIN tag tg ON tg.id = tr.tag_id AND tg.user_id = tr.user_id AND tg.del_flag = 0 WHERE tr.target_type = 'todo' AND tr.target_id = t.id AND tr.user_id = t.user_id`;
+  if (tagNames.length) {
+    where.push(`EXISTS (${tagExists} AND tg.name IN (${tagNames.map(() => '?').join(', ')}))`);
+    params.push(...tagNames);
+  }
+  if (untagged) where.push(`NOT EXISTS (${tagExists})`);
   if (todoStatus !== 'all') {
     where.push('t.status = ?');
     params.push(todoStatus);
@@ -974,6 +980,7 @@ async function queryTodos(userId, options, lang, includeItems, includeTotal = tr
           t.due_at,
           t.completed_at,
           t.update_time,
+          (SELECT JSON_ARRAYAGG(JSON_OBJECT('id', tg.id, 'name', tg.name)) FROM todo_tag_relations tr INNER JOIN tag tg ON tg.id = tr.tag_id AND tg.user_id = tr.user_id AND tg.del_flag = 0 WHERE tr.target_type = 'todo' AND tr.target_id = t.id AND tr.user_id = t.user_id) AS tags,
           (
             SELECT COUNT(*)
             FROM todo_resource_refs r
@@ -995,6 +1002,7 @@ async function queryTodos(userId, options, lang, includeItems, includeTotal = tr
     items: rows.map((item) => ({
       id: toText(item.id),
       type: 'todo',
+      tags: Array.isArray(item.tags) ? item.tags : typeof item.tags === 'string' ? JSON.parse(item.tags) : [],
       title: toText(item.title) || text.unnamedTodo,
       description: buildSnippet(toText(item.description), keyword),
       extra: buildTodoExtra(item, text),
@@ -1004,7 +1012,10 @@ async function queryTodos(userId, options, lang, includeItems, includeTotal = tr
       completedAt: item.completed_at ? formatDateTime(new Date(item.completed_at)) : null,
       referenceCount: Number(item.reference_count || 0),
       route: `/inbox?tab=todo&todoId=${encodeURIComponent(toText(item.id))}`,
-      raw: item,
+      raw: {
+        ...item,
+        tags: Array.isArray(item.tags) ? item.tags : typeof item.tags === 'string' ? JSON.parse(item.tags) : [],
+      },
     })),
   };
 }
@@ -1266,9 +1277,10 @@ export const globalSearch = async (req, res) => {
     const separateTagMatches =
       mode === 'full' && (req.body?.separateTagMatches === true || String(req.body?.separateTagMatches || '') === '1');
     const requestedTypes = normalizeSearchTypes(req.body?.types, req.body?.type);
-    const selectedTypes = separateTagMatches || paginationMode === 'global'
-      ? requestedTypes.filter((type) => BATCH_EDITABLE_TYPES.includes(type))
-      : requestedTypes;
+    const selectedTypes =
+      separateTagMatches || paginationMode === 'global'
+        ? requestedTypes.filter((type) => BATCH_EDITABLE_TYPES.includes(type))
+        : requestedTypes;
     // 独立标签匹配模式用于资源中心。即使旧客户端漏传 types（或误传标签/待办），
     // 也不能退回“导航对象也是资源结果”的旧语义。
     if (!selectedTypes.length) selectedTypes.push(...BATCH_EDITABLE_TYPES);

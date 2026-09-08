@@ -26,12 +26,12 @@
           <SvgIcon v-if="!deleting" :src="icon.table_delete" size="17" aria-hidden="true" />
         </BButton>
       </BTooltip>
-      <BTooltip :title="t('inbox.editTodo')" :disabled="bookmark.isMobile || disabled || deleting" :delay="80">
+      <BTooltip v-if="item.status !== 'completed'" :title="t('inbox.editTodo')" :disabled="bookmark.isMobile || disabled || deleting" :delay="80">
         <BButton
           class="todo-preview__action todo-preview__edit"
           :aria-label="t('inbox.editTodo')"
           :disabled="disabled || deleting"
-          @click="openEditor"
+          @click="openEditor()"
         >
           <SvgIcon :src="icon.table_edit" size="17" aria-hidden="true" />
         </BButton>
@@ -57,26 +57,13 @@
         <p>{{ item.description }}</p>
       </section>
 
-      <section v-if="item.checklist.length" class="todo-preview__section todo-preview__checklist">
-        <header class="todo-preview__section-head">
-          <h3>{{ t('inbox.todoChecklist') }}</h3>
-          <span>{{
-            t('inbox.todoChecklistProgress', { done: completedChecklistCount, total: item.checklist.length })
-          }}</span>
-        </header>
-        <div class="todo-preview__checklist-items">
-          <BCheckbox
-            v-for="check in item.checklist"
-            :key="check.id"
-            :model-value="check.done"
-            :disabled="disabled || item.status === 'completed'"
-            @update:model-value="toggleChecklist(check.id, $event)"
-          >
-            <span :class="{ 'is-done': check.done }">{{ check.text }}</span>
-          </BCheckbox>
-        </div>
-      </section>
-
+      <TodoSubitems
+        :item="item"
+        detail
+        :disabled="disabled"
+        @update-checklist="emit('update-checklist', item, $event)"
+        @edit="openEditor('checklist')"
+      />
       <section class="todo-preview__section todo-preview__schedule">
         <h3>
           <SvgIcon :src="icon.common.calendar" size="15" aria-hidden="true" />
@@ -119,12 +106,12 @@
 </template>
 
 <script setup lang="ts">
+  import TodoSubitems from './TodoSubitems.vue';
   import { computed, nextTick, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
   import type { TodoChecklistItem, TodoItem, TodoResourceRefView } from '@/api/todoApi';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
-  import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -146,7 +133,7 @@
   );
   const visible = defineModel<boolean>('visible');
   const emit = defineEmits<{
-    edit: [item: TodoItem];
+    edit: [item: TodoItem, section?: 'checklist'];
     delete: [item: TodoItem];
     'update-checklist': [item: TodoItem, checklist: TodoChecklistItem[]];
     closed: [];
@@ -177,7 +164,6 @@
     t(props.item.status === 'completed' ? 'inbox.todoCompleted' : 'inbox.todoPending'),
   );
   const priorityLabel = computed(() => t(`inbox.todoPriority${props.item.priority}`));
-  const completedChecklistCount = computed(() => props.item.checklist.filter((check) => check.done).length);
   const scheduleRows = computed(() => {
     const rows: Array<{ key: string; label: string; value: string }> = [];
     if (props.item.startAt) {
@@ -259,14 +245,6 @@
     return t('inbox.todoReminderOnceSummary', { channels });
   }
 
-  function toggleChecklist(id: string, done: boolean) {
-    emit(
-      'update-checklist',
-      props.item,
-      props.item.checklist.map((check) => (check.id === id ? { ...check, done } : check)),
-    );
-  }
-
   function close() {
     visible.value = false;
   }
@@ -279,11 +257,12 @@
     emit('delete', props.item);
   }
 
-  function openEditor() {
+  function openEditor(section?: 'checklist') {
+    if (props.item.status === 'completed') return;
     const itemSnapshot = JSON.parse(JSON.stringify(props.item)) as TodoItem;
     void closeCurrentMobileOverlayThen(
       () => (visible.value = false),
-      () => emit('edit', itemSnapshot),
+      () => section ? emit('edit', itemSnapshot, section) : emit('edit', itemSnapshot),
     );
   }
 
@@ -353,15 +332,15 @@
 
   .todo-preview__hero {
     display: grid;
-    gap: 12px;
-    padding: 20px;
+    gap: 8px;
+    padding: 12px 16px;
     border-top: 3px solid var(--todo-accent-color, var(--primary-color));
   }
 
   .todo-preview__hero h2 {
     margin: 0;
     color: var(--text-color);
-    font-size: clamp(22px, 4vw, 30px);
+    font-size: 20px;
     line-height: 1.3;
     overflow-wrap: anywhere;
   }
@@ -451,25 +430,6 @@
     font-size: 11px;
   }
 
-  .todo-preview__checklist-items {
-    display: grid;
-    gap: 5px;
-  }
-
-  .todo-preview__checklist-items :deep(.b-checkbox) {
-    width: 100%;
-    min-height: 36px;
-    box-sizing: border-box;
-    padding: 7px 8px;
-    border: 1px solid var(--surface-divider-color, var(--surface-border-color));
-    border-radius: 9px;
-  }
-
-  .todo-preview__checklist-items .is-done {
-    color: var(--desc-color);
-    text-decoration: line-through;
-  }
-
   .todo-preview__schedule dl {
     display: grid;
     gap: 0;
@@ -525,11 +485,11 @@
     }
 
     .todo-preview__hero {
-      padding: 17px 16px;
+      padding: 12px 14px;
     }
 
     .todo-preview__hero h2 {
-      font-size: 23px;
+      font-size: 20px;
     }
 
     .todo-preview__section {

@@ -3625,3 +3625,21 @@ WHERE s.INDEX_NAME IS NULL;
 -- Unified image lifecycle contract
 SELECT 'image_lifecycle_missing_table' AS check_name, required.t AS detail FROM (SELECT 'image_assets' t UNION ALL SELECT 'image_asset_refs') required LEFT JOIN information_schema.TABLES actual ON actual.TABLE_SCHEMA=DATABASE() AND actual.TABLE_NAME=required.t WHERE actual.TABLE_NAME IS NULL;
 SELECT 'image_preview_missing_revision' AS check_name, 'file_preview_artifacts.source_revision' AS detail FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='file_preview_artifacts' AND COLUMN_NAME='source_revision');
+
+-- Todo workspace additive schema
+SELECT 'todo_workspace_table' AS check_name, required.name AS detail FROM (SELECT 'todo_lists' AS name UNION ALL SELECT 'todo_tag_relations') required LEFT JOIN information_schema.TABLES actual ON actual.TABLE_SCHEMA = DATABASE() AND actual.TABLE_NAME = required.name WHERE actual.TABLE_NAME IS NULL;
+SELECT 'todo_workspace_column' AS check_name, required.name AS detail FROM (SELECT 'todo_items' AS name UNION ALL SELECT 'todo_series') required LEFT JOIN information_schema.COLUMNS actual ON actual.TABLE_SCHEMA = DATABASE() AND actual.TABLE_NAME = required.name AND actual.COLUMN_NAME = 'list_id' WHERE actual.COLUMN_NAME IS NULL;
+
+SELECT 'todo_workspace_index' AS check_name, CONCAT(required.t, '.', required.i) AS detail
+FROM (SELECT 'todo_items' t, 'idx_todo_items_list' i UNION ALL SELECT 'todo_series', 'idx_todo_series_list' UNION ALL SELECT 'todo_tag_relations', 'idx_todo_tags_tag' UNION ALL SELECT 'todo_lists', 'idx_todo_lists_owner') required
+LEFT JOIN information_schema.STATISTICS actual ON actual.TABLE_SCHEMA = DATABASE() AND actual.TABLE_NAME = required.t AND actual.INDEX_NAME = required.i
+WHERE actual.INDEX_NAME IS NULL;
+
+-- 项目看板版本与来源关系。
+SELECT 'toolbox_board_missing_column' AS check_name, CONCAT(required.table_name, '.', required.column_name) AS detail FROM (
+ SELECT 'toolbox_workspaces' AS table_name, 'board_version' AS column_name UNION ALL
+ SELECT 'toolbox_workspace_items', 'source_item_id' UNION ALL
+ SELECT 'toolbox_workspace_items', 'source_title' UNION ALL
+ SELECT 'toolbox_workspace_items', 'source_content'
+) required LEFT JOIN information_schema.columns actual ON actual.table_schema=DATABASE() AND actual.table_name=required.table_name AND actual.column_name=required.column_name WHERE actual.column_name IS NULL;
+SELECT 'toolbox_board_missing_receipts' AS check_name, 'toolbox_board_operations' AS detail FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='toolbox_board_operations');

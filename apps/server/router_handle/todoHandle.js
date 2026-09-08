@@ -1,3 +1,12 @@
+import { listTodoPage } from '../util/services/todoService.js';
+import {
+  listTodoLists,
+  saveTodoList,
+  deleteTodoList,
+  updateTodoOrganization,
+  todoWorkspaceCounts,
+  validateTodoOrganization,
+} from '../util/services/todoOrganizationService.js';
 import pool from '../db/index.js';
 import { resultData, L } from '../util/common.js';
 import { ensureNotVisitor } from '../util/auth.js';
@@ -101,7 +110,7 @@ export async function listTodo(req, res) {
       .trim()
       .slice(0, 100);
     const [items, pendingTotal] = await Promise.all([
-      listTodos(pool, req.user.id, { status, sort, keyword }),
+      listTodos(pool, req.user.id, { status, sort, keyword, organization: true }),
       queryTodoPendingCount(pool, req.user.id),
     ]);
     return res.send(resultData({ items, total: items.length, pendingTotal }));
@@ -560,4 +569,38 @@ export async function downloadTodoCalendarFile(req, res) {
       .type('text/plain')
       .send(L(req, '下载失败，请重新导出', 'Download failed, please export again'));
   }
+}
+
+export async function todoLists(req, res) {
+  try {
+    return res.send(resultData({ items: await listTodoLists(pool, req.user.id) }));
+  } catch (error) {
+    return sendTodoError(res, error);
+  }
+}
+export async function todoWorkspace(req, res) {
+  try {
+    const input = req.body || {};
+    await validateTodoOrganization(pool, req.user.id, input, { lock: false });
+    const [page, counts, lists] = await Promise.all([
+      listTodoPage(pool, req.user.id, { ...input, limit: input.limit || 50, organization: true }),
+      todoWorkspaceCounts(pool, req.user.id, input),
+      listTodoLists(pool, req.user.id),
+    ]);
+    return res.send(resultData({ ...page, ...counts, lists }));
+  } catch (error) {
+    return sendTodoError(res, error);
+  }
+}
+export async function saveList(req, res) {
+  if (!ensureNotVisitor(req, res)) return;
+  return withTransaction(res, (connection) => saveTodoList(connection, req.user.id, req.body || {}));
+}
+export async function removeList(req, res) {
+  if (!ensureNotVisitor(req, res)) return;
+  return withTransaction(res, (connection) => deleteTodoList(connection, req.user.id, String(req.body?.id || '')));
+}
+export async function organizeTodos(req, res) {
+  if (!ensureNotVisitor(req, res)) return;
+  return withTransaction(res, (connection) => updateTodoOrganization(connection, req.user.id, req.body || {}));
 }

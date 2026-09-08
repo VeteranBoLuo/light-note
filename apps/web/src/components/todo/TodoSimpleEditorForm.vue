@@ -1,7 +1,7 @@
 <template>
   <div class="todo-simple-editor" :class="{ 'is-mobile': mobile }">
-    <div ref="editorBodyRef" class="todo-simple-editor__body">
-      <main class="todo-simple-editor__main">
+    <div class="todo-simple-editor__body">
+      <main ref="editorBodyRef" class="todo-simple-editor__main">
         <div v-if="draft.independentTasks.enabled" class="todo-simple-editor__mode-notice">
           <div class="todo-simple-editor__mode-head">
             <strong>{{ t('inbox.todoIndependentEnabled') }}</strong>
@@ -14,7 +14,6 @@
 
         <section class="todo-simple-editor__section todo-simple-editor__content">
           <header>
-            <span class="todo-simple-editor__step">1</span>
             <div>
               <strong>{{ t('inbox.todoPlanStepContent') }}</strong>
               <small>{{ t('inbox.todoContentHint') }}</small>
@@ -59,6 +58,12 @@
               @close="resourcePickerVisible = false"
             />
           </BModal>
+          <TodoOrganizationFields
+            v-model:list-id="draft.task.listId"
+            v-model:tag-ids="draft.task.tagIds"
+            @selection-summary="organizationSummary = $event"
+            :disabled="saving"
+          />
           <div class="todo-simple-editor__priority">
             <span>{{ t('inbox.todoPriority') }}</span>
             <div role="group" :aria-label="t('inbox.todoPriority')">
@@ -73,9 +78,9 @@
               </BButton>
             </div>
           </div>
-          <div class="todo-simple-editor__optional-head">
+          <div ref="checklistSectionRef" class="todo-simple-editor__optional-head">
             <div>
-              <strong>{{ t('inbox.todoChecklist') }}</strong>
+              <strong>{{ t('todoWorkspace.subitems') }}</strong>
               <small>{{ t('inbox.todoChecklistHint') }}</small>
             </div>
             <div class="todo-simple-editor__optional-actions">
@@ -105,9 +110,11 @@
           </div>
         </section>
 
-        <section v-if="!draft.independentTasks.enabled" class="todo-simple-editor__section todo-simple-editor__time">
+        <section
+          v-if="!draft.independentTasks.enabled"
+          class="todo-simple-editor__section todo-simple-editor__time"
+        >
           <header>
-            <span class="todo-simple-editor__step">2</span>
             <div>
               <strong>{{ t('inbox.todoTime') }}</strong>
               <small>{{ t('inbox.todoTimeHint') }}</small>
@@ -131,7 +138,6 @@
 
         <section v-if="!draft.independentTasks.enabled" class="todo-simple-editor__section">
           <header>
-            <span class="todo-simple-editor__step">3</span>
             <div>
               <strong>{{ t('inbox.todoReminder') }}</strong>
               <small>{{ t('inbox.todoSingleReminderHint') }}</small>
@@ -146,7 +152,6 @@
           :class="{ 'is-enabled': draft.independentTasks.enabled }"
         >
           <header>
-            <span class="todo-simple-editor__step">{{ draft.independentTasks.enabled ? 2 : 4 }}</span>
             <div>
               <strong>{{ t('inbox.todoAdvanced') }}</strong>
               <small>{{ t('inbox.todoIndependentEntryHint') }}</small>
@@ -167,24 +172,34 @@
         <TodoPlanPreviewCard
           v-if="mobile"
           class="todo-simple-editor__mobile-preview"
-          :preview="preview"
+          :preview="displayedPreview"
           :loading="previewLoading"
           :error="previewError"
           :independent="draft.independentTasks.enabled"
           :task="draft.task"
           :resources="resourceRefs"
+          :organization="organizationSummary"
+          :due-next-day="
+            draft.independentTasks.enabled &&
+            Boolean(draft.independentTasks.timing?.dueTime && draft.independentTasks.timing?.dueDayOffset)
+          "
         />
       </main>
 
       <aside v-if="!mobile" class="todo-simple-editor__preview">
         <div class="todo-simple-editor__preview-sticky">
           <TodoPlanPreviewCard
-            :preview="preview"
+            :preview="displayedPreview"
             :loading="previewLoading"
             :error="previewError"
             :independent="draft.independentTasks.enabled"
             :task="draft.task"
             :resources="resourceRefs"
+            :organization="organizationSummary"
+            :due-next-day="
+              draft.independentTasks.enabled &&
+              Boolean(draft.independentTasks.timing?.dueTime && draft.independentTasks.timing?.dueDayOffset)
+            "
           />
           <div class="todo-simple-editor__preview-note">
             <span>{{
@@ -210,6 +225,8 @@
 </template>
 
 <script setup lang="ts">
+  import TodoOrganizationFields from './TodoOrganizationFields.vue';
+  import { todoTodayInTimezone } from '@/utils/todoPlanning';
   import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -259,9 +276,34 @@
   }>();
   const { t } = useI18n();
   const { draft, reset } = useTodoCreateDraft();
+  let advancedInitialized = false;
+  let initialFingerprint = '';
+  let initialContentFingerprint = '';
+  const contentFingerprint = () => {
+    const { listId, tagIds, ...task } = draft.task;
+    return JSON.stringify({ ...draft, task });
+  };
+  const organizationOnly = computed(() =>
+    Boolean(
+      props.item && contentFingerprint() === initialContentFingerprint && JSON.stringify(draft) !== initialFingerprint,
+    ),
+  );
+  let submissionFingerprint = '';
+  let submissionKey = '';
   const preview = ref<TodoPlanPreview | null>(null);
+  const displayedPreview = ref<TodoPlanPreview | null>(null);
+  const organizationSummary = ref<{ listName: string; tags: Array<{ id: string; name: string }> }>({
+    listName: '',
+    tags: [],
+  });
   const previewError = ref('');
   const previewLoading = ref(false);
+  const checklistSectionRef = ref<HTMLElement | null>(null);
+  async function revealChecklist() {
+    checklistOpen.value = true;
+    await nextTick();
+    checklistSectionRef.value?.scrollIntoView({ block: 'start', behavior: 'auto' });
+  }
   const checklistOpen = ref(true);
   const resourcePickerVisible = ref(false);
   const resourceRefs = ref<TodoResourceRefView[]>([]);
@@ -288,13 +330,21 @@
     set: (value) => (draft.timing.dueAt = value || null),
   });
   const canSubmit = computed(() =>
-    Boolean(draft.task.title.trim() && preview.value?.previewHash && !previewError.value && !props.saving),
+    Boolean(
+      draft.task.title.trim() &&
+      !props.saving &&
+      (organizationOnly.value ||
+        (preview.value?.previewHash &&
+          !preview.value.requiredChoices?.length &&
+          !previewError.value &&
+          !previewLoading.value)),
+    ),
   );
   const submitLabel = computed(() => {
     if (props.item) return t('common.save');
-    if (draft.independentTasks.enabled && preview.value) {
+    if (draft.independentTasks.enabled && displayedPreview.value) {
       return t('inbox.todoCreateIndependentCount', {
-        count: preview.value.occurrenceCount ?? `${preview.value.generatedNowCount}+`,
+        count: displayedPreview.value.occurrenceCount ?? `${displayedPreview.value.generatedNowCount}+`,
       });
     }
     return props.mobile ? t('inbox.todoCreateNow') : t('inbox.todoCreateSingle');
@@ -306,27 +356,39 @@
   watch(
     () => [props.item, props.initialValues, props.resetKey] as const,
     () => {
+      displayedPreview.value = null;
       reset(props.item, props.initialValues);
       resourceRefs.value = [...(props.item?.resourceRefs || [])];
       const hasChecklist = Boolean(props.item?.checklist?.length || props.initialValues?.checklist?.length);
-      checklistOpen.value = !props.item || hasChecklist;
+      checklistOpen.value = hasChecklist;
+      advancedInitialized = false;
+      initialFingerprint = JSON.stringify(draft);
+      initialContentFingerprint = contentFingerprint();
       schedulePreview();
     },
     { immediate: true },
   );
-  watch(draft, schedulePreview, { deep: true });
+  watch(draft, schedulePreview, { deep: true, flush: 'sync' });
   watch(
     () => draft.independentTasks.enabled,
     (enabled, previous) => {
-      if (enabled && previous === false) {
+      if (enabled && previous === false && !advancedInitialized) {
+        advancedInitialized = true;
+        const normalTiming = normalizeTodoCreateDraft({
+          ...draft,
+          independentTasks: { ...draft.independentTasks, enabled: false },
+        }).timing;
+        draft.independentTasks.timing = {
+          ...normalTiming,
+          anchorDate: normalTiming.anchorDate || todoTodayInTimezone(draft.timing.timezone),
+        };
         mapSingleReminderToIndependent();
         const plan = draft.independentTasks.plan;
         if (plan.type === 'scheduled' && plan.end?.mode === 'until') {
           const dueDate = String(draft.timing.dueAt || '').slice(0, 10);
           plan.end = {
             mode: 'until',
-            untilDate:
-              dueDate || plan.end.untilDate || suggestTodoPlanEndDate(draft.timing.startAt || draft.timing.dueAt),
+            untilDate: plan.end.untilDate || suggestTodoPlanEndDate(draft.timing.startAt || draft.timing.dueAt),
           };
         }
         void nextTick(scrollEditorToTop);
@@ -339,7 +401,12 @@
 
   function schedulePreview() {
     if (previewTimer) clearTimeout(previewTimer);
+    previewSequence += 1;
+    preview.value = null;
+    previewError.value = '';
+    previewLoading.value = Boolean(draft.task.title.trim());
     if (!draft.task.title.trim()) {
+      displayedPreview.value = null;
       preview.value = null;
       previewError.value = '';
       previewLoading.value = false;
@@ -383,6 +450,7 @@
       if (sequence !== previewSequence) return;
       if (response.status !== 200 || !response.data) throw new Error(response.msg || t('inbox.todoPlanPreviewFailed'));
       preview.value = response.data as TodoPlanPreview;
+      displayedPreview.value = preview.value;
     } catch (error: any) {
       if (sequence !== previewSequence) return;
       preview.value = null;
@@ -477,19 +545,33 @@
   }
 
   function submit() {
-    if (!canSubmit.value || !preview.value) return;
+    if (!canSubmit.value) return;
+    if (organizationOnly.value) {
+      emit('submit', {
+        kind: 'organization',
+        scope: 'current',
+        payload: { title: draft.task.title, listId: draft.task.listId, tagIds: draft.task.tagIds },
+      });
+      return;
+    }
+    if (!preview.value) return;
+    const signature = JSON.stringify(normalizeTodoCreateDraft(draft));
+    if (signature !== submissionFingerprint) {
+      submissionFingerprint = signature;
+      submissionKey = generateUUID();
+    }
     emit('submit', {
       kind: 'v2',
       scope: 'current',
       payload: {
         ...normalizeTodoCreateDraft(draft),
         previewHash: preview.value.previewHash,
-        idempotencyKey: generateUUID(),
+        idempotencyKey: submissionKey,
       },
     });
   }
 
-  defineExpose({ submit });
+  defineExpose({ submit, revealChecklist, isDirty: () => JSON.stringify(draft) !== initialFingerprint });
 </script>
 
 <style scoped lang="less">
@@ -507,12 +589,14 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) 390px;
     min-height: 0;
-    overflow-y: auto;
-    overscroll-behavior: contain;
+    overflow: hidden;
   }
 
   .todo-simple-editor__main {
     min-width: 0;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
     padding: 20px 22px 36px;
   }
 
@@ -600,7 +684,7 @@
     white-space: nowrap;
   }
 
-  .todo-simple-editor label,
+  .todo-simple-editor label:not(.b-checkbox),
   .todo-simple-editor__priority {
     display: grid;
     gap: 7px;
@@ -721,6 +805,9 @@
     text-align: right;
   }
 
+  .todo-simple-editor__optional-head {
+    scroll-margin-top: 16px;
+  }
   .todo-simple-editor__checklist {
     display: grid;
     gap: 9px;
@@ -734,14 +821,15 @@
 
   .todo-simple-editor__preview {
     min-width: 0;
-    padding: 24px 24px 100px;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 24px;
     border-left: 1px solid var(--surface-divider-color);
     background: var(--card-background);
   }
 
   .todo-simple-editor__preview-sticky {
-    position: sticky;
-    top: 18px;
     display: grid;
     gap: 14px;
   }
@@ -806,6 +894,7 @@
 
   .is-mobile .todo-simple-editor__main {
     display: grid;
+    overflow: visible;
     gap: 12px;
     padding: 12px 12px 24px;
   }

@@ -65,6 +65,8 @@ pnpm --filter server check:schema
 
 任何断言输出都表示未就绪；先处理明确获授权的 migration，再重新检查。发布授权不自动扩展为未说明的线上数据迁移、批量修复或破坏性操作。
 
+待办工作区通过 `node scripts/ensureTodoWorkspaceSchema.js` 显式应用幂等结构迁移；后端发布脚本在 Schema 断言前执行，应用启动不自动建表。帮助正文迁移独立执行，不混入结构门禁。
+
 按变更选择额外门禁：
 
 | 范围 | 检查 |
@@ -76,6 +78,8 @@ pnpm --filter server check:schema
 | 模块化 AI | `check:ai-model-access` |
 
 浏览器推送需先经授权应用 `apps/server/migrations/20260908_browser_push.sql`，再运行 `pnpm --filter server check:browser-push` 验证 Schema 与 VAPID 配置。API 与 `browserPushWorker.js` 使用同一持久 VAPID 密钥和站点 Origin；默认服务开关关闭，启动本地预览及部署脚本均纳入该 Worker。密钥不由部署过程临时生成，服务开关关闭不影响站内通知。推送凭据不进入日志，测试应区分厂商受理、设备展示及点击定位，不能用模拟推送替代真实网络与设备验收。
+
+FCM 备用出口使用 `scripts/browser-push-relay/worker.mjs`，以独立托管实例配置主、备用地址与各自的服务端凭据（`BROWSER_PUSH_RELAYS`）。实例需设置 `RELAY_TOKEN`，关闭请求正文与凭据日志；示例 `wrangler.jsonc` 只提供部署结构，不含线上地址或密钥。每条出口上线前分别验证生产服务器到实际中转域名、中转到厂商以及真实设备展示；官网可访问或模拟测试不算出口验收。未配置中转保持直连，停用中转清空该配置即可；不得为验证而重开本地队列消费者。
 
 涉及相应异步流程时确认对应 Worker 随项目脚本或 PM2 正常运行。任务状态以领域任务表、租约和错误码为准，不用 API 日志代替 Worker 验收。
 

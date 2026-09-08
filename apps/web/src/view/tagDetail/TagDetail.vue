@@ -146,6 +146,8 @@
               <TagDirectoryRow
                 :label="sidebarTag.name"
                 :count="sidebarTag.counts.total"
+                :todo-count="sidebarTag.todoCounts?.total"
+                :todo-pending="sidebarTag.todoCounts?.pending"
                 :icon-src="sidebarTag.iconUrl || icon.resource.tag"
                 :icon-size="15"
                 :active="
@@ -216,6 +218,11 @@
                   <span>{{ t('tagSpace.totalResources') }}</span>
                   <strong>{{ tag.counts.total }}</strong>
                 </div>
+                <div class="profile-stat"
+                  ><span>{{ t('todoWorkspace.tagTodos') }}</span
+                  ><strong>{{ tag.todoCounts?.total || 0 }}</strong
+                  ><small>{{ t('todoWorkspace.pendingHint', { count: tag.todoCounts?.pending || 0 }) }}</small></div
+                >
                 <div v-for="metric in overviewMetrics" :key="metric.key" class="profile-stat">
                   <span>{{ metric.label }}</span>
                   <strong>{{ metric.value }}</strong>
@@ -240,7 +247,8 @@
             </BButton>
           </div>
 
-          <BCard v-if="viewMode === 'resources'" as="section" variant="card" padding="0" class="resources-panel">
+          <TagTodoPanel v-if="viewMode === 'todos' && tag" :key="tag.id" :tag-id="tag.id" />
+          <BCard v-else-if="viewMode === 'resources'" as="section" variant="card" padding="0" class="resources-panel">
             <div class="resource-toolbar">
               <div class="resource-tabs no-scrollbar" :aria-label="t('tagSpace.resourceFilters')">
                 <BButton
@@ -462,7 +470,7 @@
                     {{ t('ai.maximize') }}
                   </BButton>
                   <BButton size="small" @click="copyTagAiAnswer(response)">
-                    <SvgIcon :src="icon.common.copy" size="14" aria-hidden="true" />
+                    <SvgIcon :src="icon.toolbox.copy" size="14" aria-hidden="true" />
                     {{ t('ai.copy') }}
                   </BButton>
                   <BButton
@@ -538,7 +546,7 @@
     >
       <template #result-actions="{ response, result }">
         <BButton size="small" @click="copyTagAiAnswer(response)">
-          <SvgIcon :src="icon.common.copy" size="14" aria-hidden="true" />
+          <SvgIcon :src="icon.toolbox.copy" size="14" aria-hidden="true" />
           {{ t('ai.copy') }}
         </BButton>
         <BButton
@@ -565,7 +573,7 @@
       <div v-if="expandedTagAiResponse?.result" class="tag-ai-preview">
         <div class="tag-ai-preview__tools">
           <BButton size="small" @click="copyTagAiAnswer(expandedTagAiResponse)">
-            <SvgIcon :src="icon.common.copy" size="14" aria-hidden="true" />
+            <SvgIcon :src="icon.toolbox.copy" size="14" aria-hidden="true" />
             {{ t('ai.copy') }}
           </BButton>
           <BButton
@@ -589,7 +597,9 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+  import TagTodoPanel from '@/components/todo/TagTodoPanel.vue';
+  import useTodoStore from '@/store/todo';
+  import { computed, onActivated, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
   import { apiBasePost } from '@/http/request.ts';
@@ -663,7 +673,7 @@
   const detailRefreshing = ref(false);
   const detailError = ref(false);
   const switchingTagId = ref('');
-  type TagSpaceViewMode = 'resources' | 'related' | 'graph';
+  type TagSpaceViewMode = 'resources' | 'related' | 'graph' | 'todos';
   const viewMode = ref<TagSpaceViewMode>('resources');
   const sidebarTags = ref<TagSpaceSummary[]>([]);
   const sidebarTotal = ref(0);
@@ -773,6 +783,7 @@
   });
   const viewTabs = computed<Array<{ value: TagSpaceViewMode; label: string; count?: number }>>(() => [
     { value: 'resources', label: t('tagSpace.relatedResourcesTab'), count: tag.value?.counts.total || 0 },
+    { value: 'todos', label: t('todoWorkspace.tagTodos'), count: tag.value?.todoCounts?.total || 0 },
     { value: 'related', label: t('tagSpace.relatedTagsTab'), count: relatedTags.value.length },
     { value: 'graph', label: t('tagSpace.graphTab') },
   ]);
@@ -1389,6 +1400,14 @@
   );
 
   onMounted(loadDetail);
+  const todoOrganization = useTodoStore();
+  watch(
+    () => todoOrganization.organizationEpoch,
+    () => loadDetail({ force: true }),
+  );
+  onActivated(() => {
+    if (!detailLoading.value) void loadDetail({ force: true });
+  });
   onBeforeUnmount(() => {
     detailSequence += 1;
     sidebarSequence += 1;
@@ -1400,6 +1419,7 @@
 </script>
 
 <style scoped lang="less">
+  @import (reference) "@/assets/css/workspace-surfaces.less";
   .tag-space-detail {
     height: 100%;
     min-height: 0;
@@ -2108,7 +2128,6 @@
     flex-direction: column;
     border: 1px solid var(--surface-border-color);
     border-radius: 14px;
-    background: var(--card-background, var(--background-color));
   }
 
   .rail-footer {
@@ -2187,7 +2206,6 @@
     position: sticky;
     top: 0;
     z-index: 1;
-    background: var(--card-background, var(--background-color));
   }
 
   .rail-section__label {
@@ -2323,7 +2341,7 @@
 
   .tag-profile-stats {
     display: grid;
-    grid-template-columns: 1.25fr repeat(3, 1fr);
+    grid-template-columns: 1.25fr repeat(4, 1fr);
   }
 
   .profile-stat {
@@ -2571,7 +2589,6 @@
     overflow: hidden;
     border: 1px solid var(--surface-divider-color, var(--card-border-color));
     border-radius: 11px;
-    background: var(--card-background);
   }
 
   .resource-stream :deep(.tag-space-resource-row) {
@@ -2579,7 +2596,6 @@
     border: 0;
     border-bottom: 1px solid var(--surface-divider-color, var(--card-border-color));
     border-radius: 0;
-    background: var(--card-background);
     box-shadow: none;
   }
 
@@ -2939,7 +2955,7 @@
 
   .skeleton-profile-stats {
     display: grid;
-    grid-template-columns: 1.25fr repeat(3, 1fr);
+    grid-template-columns: 1.25fr repeat(4, 1fr);
   }
 
   .skeleton-profile-stat {
@@ -3494,5 +3510,18 @@
     .skeleton-row {
       animation: none;
     }
+  }
+  .profile-stat small {
+    color: var(--desc-color);
+    font-size: 10px;
+    line-height: 1.4;
+  }
+
+  // 共享工作区表面：仅改变颜色，布局与滚动由原组件负责。
+  .tag-directory-rail, .tag-space-main, .rail-section--directory .rail-section__label {
+    .workspace-open-surface();
+  }
+  .tag-profile-card, .tag-ai-panel, .resource-stream, .resource-stream :deep(.tag-space-resource-row), .skeleton-profile-card, .skeleton-ai-panel {
+    .workspace-content-surface();
   }
 </style>

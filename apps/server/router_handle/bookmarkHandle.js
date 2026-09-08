@@ -50,10 +50,7 @@ import crypto from 'node:crypto';
 import { AI_QUOTA_ERROR_CODES, isAiQuotaErrorCode } from '@lightnote/shared/ai-quota-protocol';
 import { createUserAiExecutionConfig } from '../util/aiBillingCatalog.js';
 import { runAiExecution } from '../util/aiExecution/service.js';
-import {
-  publicAiExecutionErrorData,
-  resolvePublicAiExecutionError,
-} from '../util/aiExecution/publicError.js';
+import { publicAiExecutionErrorData, resolvePublicAiExecutionError } from '../util/aiExecution/publicError.js';
 import { createRequestAbortContext } from '../util/requestAbort.js';
 import { createBookmarkExactUrlHash } from '../util/services/bookmarkExactUrlService.js';
 import { runResourceDeleteSideEffects, softDeleteResources } from '../util/services/resourceDeleteService.js';
@@ -67,9 +64,7 @@ function resolveBookmarkAiResultOutcome(result) {
     return {
       status: 'quota_blocked',
       errorCode:
-        reason === 'quota_exceeded'
-          ? AI_QUOTA_ERROR_CODES.EXHAUSTED
-          : AI_QUOTA_ERROR_CODES.INSUFFICIENT_FOR_REQUEST,
+        reason === 'quota_exceeded' ? AI_QUOTA_ERROR_CODES.EXHAUSTED : AI_QUOTA_ERROR_CODES.INSUFFICIENT_FOR_REQUEST,
     };
   }
   if (reason === 'ai_error') return { status: 'failed', errorCode: 'AI_PROVIDER_ERROR' };
@@ -378,21 +373,24 @@ export const addTag = async (req, res) => {
   }
 };
 
-export const delTag = (req, res) => {
+export const delTag = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
+  let connection;
   try {
-    const userId = req.user.id;
-    const id = req.body.id;
-    pool
-      .query(`DELETE FROM tag WHERE id = ? AND user_id = ?`, [id, userId])
-      .then(([result]) => {
-        res.send(resultData(result));
-      })
-      .catch((e) => {
-        return res.send(resultData(null, 500, '服务器内部错误: ' + e));
-      });
-  } catch (e) {
-    res.send(resultData(null, 400, '客户端请求异常' + e));
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    const userId = req.user.id,
+      id = req.body.id;
+    await connection.query('SELECT id FROM tag WHERE id = ? AND user_id = ? FOR UPDATE', [id, userId]);
+    await connection.query('DELETE FROM todo_tag_relations WHERE tag_id = ? AND user_id = ?', [id, userId]);
+    const [result] = await connection.query('DELETE FROM tag WHERE id = ? AND user_id = ?', [id, userId]);
+    await connection.commit();
+    res.send(resultData(result));
+  } catch {
+    if (connection) await connection.rollback();
+    res.send(resultData(null, 500, '删除标签失败'));
+  } finally {
+    connection?.release();
   }
 };
 
@@ -652,7 +650,9 @@ export const doSummarizeBookmark = async (req, res) => {
   } catch (error) {
     const failure = resolvePublicAiExecutionError(error, 'AI 摘要暂时不可用，请稍后重试');
     if (failure.status >= 500) console.error('[bookmark] AI summary failed code=%s', failure.code);
-    return res.status(failure.status).send(resultData(publicAiExecutionErrorData(failure), failure.status, failure.message));
+    return res
+      .status(failure.status)
+      .send(resultData(publicAiExecutionErrorData(failure), failure.status, failure.message));
   } finally {
     abortContext.complete();
   }
@@ -699,7 +699,9 @@ export const doArchiveAndSummarizeBookmark = async (req, res) => {
   } catch (error) {
     const failure = resolvePublicAiExecutionError(error, '网页存档暂时无法生成，请稍后重试');
     if (failure.status >= 500) console.error('[bookmark] archive summary failed code=%s', failure.code);
-    return res.status(failure.status).send(resultData(publicAiExecutionErrorData(failure), failure.status, failure.message));
+    return res
+      .status(failure.status)
+      .send(resultData(publicAiExecutionErrorData(failure), failure.status, failure.message));
   } finally {
     abortContext.complete();
   }
@@ -884,23 +886,14 @@ export const updateBookmark = async (req, res) => {
       delete req.body.iconUrl;
       delete req.body.iconCheckedAt;
     }
-    const updateFields = mergeExistingProperties(snakeCaseKeys(req.body), [], [
-      'related_tags',
-      'id',
-      'user_id',
-      'del_flag',
-      'deleted_at',
-      'create_time',
-      'update_time',
-      'url_exact_hash',
-    ]);
+    const updateFields = mergeExistingProperties(
+      snakeCaseKeys(req.body),
+      [],
+      ['related_tags', 'id', 'user_id', 'del_flag', 'deleted_at', 'create_time', 'update_time', 'url_exact_hash'],
+    );
     if (req.body.url !== undefined) updateFields.url_exact_hash = createBookmarkExactUrlHash(req.body.url);
     const sql = `update bookmark set ? where id=? and user_id=? and del_flag=0`;
-    const [updateResult] = await connection.query(sql, [
-      updateFields,
-      id,
-      userId,
-    ]);
+    const [updateResult] = await connection.query(sql, [updateFields, id, userId]);
     if (req.body.relatedTags && req.body.relatedTags.length > 4) {
       throw new Error('最多选择4个关联标签');
     }
@@ -1520,27 +1513,25 @@ export const doOrganizeRun = async (req, res) => {
       });
     }
     if (quotaLimited) {
-      return res
-        .status(429)
-        .send(
-          resultData(
-            {
-              ok: false,
-              code: quotaErrorCode || AI_QUOTA_ERROR_CODES.INSUFFICIENT_FOR_REQUEST,
-              ...(Number.isFinite(quotaRequiredTokens)
-                ? { requiredTokens: quotaRequiredTokens, availableTokens: quotaAvailableTokens }
-                : {}),
-              processed: suggestions.length,
-              suggestions,
-            },
-            429,
-            suggestions.length
-              ? '本次可用 AI 额度不足，已保留完成的建议'
-              : quotaErrorCode === AI_QUOTA_ERROR_CODES.EXHAUSTED
-                ? '当前 AI 额度已用完，请等待每日额度重置或补充永久额度'
-                : '当前仍有 AI 额度，但不足以继续处理本批内容，请减少选择数量或补充额度',
-          ),
-        );
+      return res.status(429).send(
+        resultData(
+          {
+            ok: false,
+            code: quotaErrorCode || AI_QUOTA_ERROR_CODES.INSUFFICIENT_FOR_REQUEST,
+            ...(Number.isFinite(quotaRequiredTokens)
+              ? { requiredTokens: quotaRequiredTokens, availableTokens: quotaAvailableTokens }
+              : {}),
+            processed: suggestions.length,
+            suggestions,
+          },
+          429,
+          suggestions.length
+            ? '本次可用 AI 额度不足，已保留完成的建议'
+            : quotaErrorCode === AI_QUOTA_ERROR_CODES.EXHAUSTED
+              ? '当前 AI 额度已用完，请等待每日额度重置或补充永久额度'
+              : '当前仍有 AI 额度，但不足以继续处理本批内容，请减少选择数量或补充额度',
+        ),
+      );
     }
     if (batchResult.failedItems > 0 && batchResult.successfulItems === 0) {
       return res

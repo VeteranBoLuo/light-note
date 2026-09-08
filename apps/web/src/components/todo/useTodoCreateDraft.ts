@@ -7,6 +7,8 @@ import { applyQuickPreset, suggestTodoPlanEndDate, type TodoCreateDraftV3 } from
 function baseDraft(): TodoCreateDraftV3 {
   return {
     task: {
+      listId: null,
+      tagIds: [],
       title: '',
       description: '',
       priority: 1,
@@ -17,6 +19,7 @@ function baseDraft(): TodoCreateDraftV3 {
     reminder: { version: 1, mode: 'none', channels: [] },
     independentTasks: {
       enabled: false,
+      timing: { timezone: 'Asia/Shanghai', anchorDate: null, startTime: null, dueTime: null, dueDayOffset: 0 },
       plan: {
         type: 'scheduled',
         frequency: 'daily',
@@ -38,6 +41,8 @@ export function useTodoCreateDraft() {
 
   function reset(item?: TodoItem | null, initial?: TodoCreateInitialValues) {
     const next = baseDraft();
+    next.task.listId = item?.listId ?? initial?.listId ?? null;
+    next.task.tagIds = item?.tags?.map((tag) => tag.id) ?? initial?.tagIds ?? [];
     next.task.title = item?.title || initial?.title || '';
     next.task.description = item?.description || initial?.description || '';
     next.task.priority = item?.priority ?? initial?.priority ?? 1;

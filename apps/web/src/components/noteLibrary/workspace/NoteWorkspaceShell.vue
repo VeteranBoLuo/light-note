@@ -23,16 +23,22 @@
       <div class="note-workspace-shell__sidebar-content">
         <slot name="sidebar" />
       </div>
-      <BButton
+      <BTooltip
         v-if="sidebarOpen"
-        class="note-workspace-shell__resizer"
+        class="note-workspace-shell__resize-tooltip"
         :title="t('note.resetPageSidebarWidthHint')"
-        :aria-label="t('note.resizePageSidebar')"
-        @pointerdown="startSidebarResize"
-        @dblclick.stop.prevent="resetSidebarWidth"
-        @keydown.left.prevent="resizeSidebarBy(-12)"
-        @keydown.right.prevent="resizeSidebarBy(12)"
-      />
+        :delay="1000"
+        follow-cursor
+      >
+        <BButton
+          class="note-workspace-shell__resizer"
+          :aria-label="t('note.resizePageSidebar')"
+          @pointerdown="startSidebarResize"
+          @dblclick.stop.prevent="resetSidebarWidth"
+          @keydown.left.prevent="resizeSidebarBy(-12)"
+          @keydown.right.prevent="resizeSidebarBy(12)"
+        />
+      </BTooltip>
       <BButton
         v-if="sidebarOpen"
         class="note-workspace-shell__sidebar-boundary-toggle note-workspace-shell__sidebar-boundary-toggle--close"
@@ -118,6 +124,7 @@
   import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
   import { NOTE_WORKSPACE_DEFAULT_SIDEBAR_WIDTH, resolveNoteWorkspaceLayout } from '@/utils/noteWorkspaceLayout';
@@ -291,6 +298,7 @@
 </script>
 
 <style scoped lang="less">
+  @import (reference) "@/assets/css/workspace-surfaces.less";
   .note-workspace-shell {
     position: relative;
     display: grid;
@@ -298,7 +306,6 @@
     min-width: 0;
     min-height: 0;
     overflow: hidden;
-    background: var(--color-background-soft, #f6f7fb);
     transition: grid-template-columns 240ms cubic-bezier(0.22, 1, 0.36, 1);
   }
 
@@ -359,7 +366,6 @@
   .note-workspace-shell__sidebar--dock {
     z-index: 3;
     box-sizing: border-box;
-    background: var(--menu-body-bg-color, #fff);
     visibility: visible;
     transition: visibility 0s linear 0s;
 
@@ -405,6 +411,13 @@
   .note-workspace-shell__sidebar--dock.is-collapsed .note-workspace-shell__sidebar-content {
     opacity: 0;
     transform: translateX(-12px);
+  }
+
+  .note-workspace-shell__resize-tooltip {
+    position: static;
+    display: flex;
+    width: 0;
+    height: 0;
   }
 
   .note-workspace-shell__resizer.b_btn {
@@ -545,7 +558,6 @@
     width: min(var(--note-workspace-sidebar-width), calc(100% - 56px));
     transform: translateX(-104%);
     border-right: 1px solid var(--surface-border-color, #e4e7ef);
-    background: var(--menu-body-bg-color, #fff);
   }
 
   .note-workspace-shell__ai--overlay {
@@ -575,5 +587,16 @@
     .note-workspace-shell__sidebar--dock.is-collapsed {
       transition-delay: 0s;
     }
+  }
+
+  // 共享工作区表面：仅改变颜色，布局与滚动由原组件负责。
+  .note-workspace-shell {
+    .workspace-canvas-surface();
+  }
+  .note-workspace-shell__sidebar--dock, .note-workspace-shell__sidebar--overlay {
+    .workspace-open-surface();
+  }
+  .note-workspace-shell__ai {
+    .workspace-content-surface();
   }
 </style>

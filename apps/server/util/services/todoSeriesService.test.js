@@ -764,6 +764,8 @@ describe('todoSeriesService v2', () => {
         if (sql.includes('SELECT * FROM todo_items')) {
           return [[{ id: 'old-todo', series_id: null, plan_version: 2 }]];
         }
+        if (sql.includes('SELECT list_id AS listId')) return [[{ listId: null }]];
+        if (sql.includes('SELECT r.tag_id AS id')) return [[]];
         if (sql.includes("cancel_reason = 'single_replaced_by_series'")) return [{ affectedRows: 2 }];
         return [{ affectedRows: 1 }];
       }),

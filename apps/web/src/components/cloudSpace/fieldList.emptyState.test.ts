@@ -101,8 +101,8 @@ describe('cloud file empty state layout', () => {
   });
 
   it('列表表头与普通行 hover 使用稳定主题色，不再动态混入资源橙色', () => {
-    expect(source).toContain('background: var(--cloud-file-list-header-bg, var(--card-background));');
-    expect(source).toContain('background: var(--cloud-file-list-row-hover-bg, var(--card-background));');
+    expect(source).toMatch(/\.field-header, \.field-item, \.file-card\s*\{\s*\.workspace-content-surface\(\);/);
+    expect(source).toContain('.field-item:hover { background: var(--workspace-hover); }');
     expect(themeSource).toContain('--cloud-file-list-header-bg: #fffefc;');
     expect(themeSource).toContain('--cloud-file-list-row-hover-bg: #fffcf8;');
     expect(themeSource).toContain('--cloud-file-list-header-bg: #30343d;');

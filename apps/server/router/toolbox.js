@@ -20,6 +20,8 @@ router.post(
   localProcessingRateLimiter,
   toolboxHandle.removeWorkspaceResource,
 );
+router.post('/workspaces/:workspaceId/board', localProcessingRateLimiter, toolboxHandle.operateWorkspaceBoard);
+router.get('/workspaces/:workspaceId/items/:itemId', localProcessingRateLimiter, toolboxHandle.getWorkspaceBoardItem);
 router.post('/workspaces/:workspaceId/items', localProcessingRateLimiter, toolboxHandle.createWorkspaceItem);
 router.patch('/workspaces/:workspaceId/items/:itemId', localProcessingRateLimiter, toolboxHandle.updateWorkspaceItem);
 router.post('/workspaces/:workspaceId/sessions', localProcessingRateLimiter, toolboxHandle.createWorkspaceSession);

@@ -16,6 +16,7 @@ vi.mock('@/components/base/BasicComponents/BButton.vue', () => ({
 }));
 let app: ReturnType<typeof createApp>, host: HTMLElement;
 beforeEach(() => {
+  vi.stubGlobal('innerWidth', 1440);
   localStorage.clear();
   vi.stubGlobal('Notification', { permission: 'default' });
   mocks.user = reactive({ id: 'u1', role: 'user', adminContext: null });
@@ -50,6 +51,7 @@ it('requests permission only after clicking allow, then disappears on success', 
   await nextTick();
   expect(mocks.push.setEnabled).toHaveBeenCalledWith(true, 'zh-CN');
   expect(host.querySelector('aside')).toBeNull();
+  expect(host.querySelector('button')).toBeNull();
 });
 it('dismissal is remembered per account without disabling notifications', async () => {
   mount();
@@ -86,4 +88,27 @@ it('shows a retry after subscription failure', async () => {
   await nextTick();
   expect(host.textContent).toContain('browserPush.state.error');
   expect(host.querySelector('aside')).not.toBeNull();
+});
+it('hides authorization and help on the shared mobile rendering profile', async () => {
+  document.documentElement.classList.add('light-note-mobile-rendering');
+  try {
+    mount();
+    expect(host.querySelector('aside')).toBeNull();
+    expect(mocks.push.refresh).not.toHaveBeenCalled();
+    mocks.push.state.value = 'on';
+    mocks.push.enabled.value = true;
+    await nextTick();
+    expect(host.querySelector('.push-prompt-help')).toBeNull();
+  } finally {
+    document.documentElement.classList.remove('light-note-mobile-rendering');
+  }
+});
+
+it('hides the prompt when resizing to mobile without a rendering marker', async () => {
+  mount();
+  expect(host.querySelector('aside')).not.toBeNull();
+  vi.stubGlobal('innerWidth', 390);
+  window.dispatchEvent(new Event('resize'));
+  await nextTick();
+  expect(host.querySelector('aside')).toBeNull();
 });

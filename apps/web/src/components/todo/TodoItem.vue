@@ -9,11 +9,16 @@
     @update:open="emit('update:swipe-open', $event)"
     @delete="emit('delete')"
   >
-    <article class="todo-item" :class="{ 'is-overdue': overdue, 'is-completed': item.status === 'completed' }">
-      <div class="todo-item__body" :class="{ 'is-editable': cardPreviewable }" @click="openPreviewFromCard">
+    <article
+      class="todo-item"
+      @click="selectable && openPreviewFromCard($event)"
+      :class="{ 'is-overdue': overdue, 'is-completed': item.status === 'completed', 'is-workspace': workspace, 'is-selectable': selectable && !disabled }"
+    >
+      <div class="todo-item__body" :class="{ 'is-editable': cardPreviewable }" @click.stop="openPreviewFromCard">
         <!-- 标题始终独立于勾选框:完成/恢复只能点方框,点名字不触发状态切换 -->
         <div v-if="!selectable" class="todo-item__main-line">
           <BCheckbox
+            controlled
             class="todo-item__main-check"
             :model-value="item.status === 'completed'"
             :disabled="disabled"
@@ -52,26 +57,22 @@
           <span v-for="label in legacyLabels" :key="label" class="todo-legacy-label">{{ label }}</span>
         </div>
         <p v-if="item.description" class="todo-item__description">{{ item.description }}</p>
-        <section v-if="item.checklist?.length" class="todo-checklist" @click.stop>
-          <header class="todo-checklist__header">
-            <span>{{ t('inbox.todoChecklist') }}</span>
-            <span>{{
-              t('inbox.todoChecklistProgress', { done: completedChecklistCount, total: item.checklist.length })
-            }}</span>
-          </header>
-          <div class="todo-checklist__items">
-            <BCheckbox
-              v-for="check in item.checklist"
-              :key="check.id"
-              class="todo-checklist__item"
-              :model-value="check.done"
-              :disabled="disabled || item.status === 'completed'"
-              @update:model-value="toggleChecklist(check.id, $event)"
-            >
-              <span :class="{ done: check.done }">{{ check.text }}</span>
-            </BCheckbox>
-          </div>
-        </section>
+        <TodoSubitems
+          :item="item"
+          :disabled="disabled || selectable"
+          @update-checklist="emit('update-checklist', $event)"
+          @edit="emit('edit', 'checklist')"
+        />
+        <div v-if="item.list || item.tags?.length" class="todo-item__organization" @click.stop>
+          <span v-if="item.list"><SvgIcon :src="icon.common.folderOutline" size="15" />{{ item.list.name }}</span>
+          <ResourceTagChip
+            v-for="tag in item.tags"
+            :key="tag.id"
+            :tag="tag"
+            interactive
+            @click="router.push({ name: 'tagDetail', params: { id: tag.id } })"
+          />
+        </div>
         <!-- 参考资料:共享紧凑胶囊最多展示 3 个,失效目标标注不可用且不可点击 -->
         <section v-if="item.resourceRefs?.length" class="todo-resource-refs" @click.stop>
           <span class="todo-resource-refs__label">{{ t('inbox.todoResourceRefsTitle') }}</span>
@@ -97,6 +98,7 @@
             @change="changePriority"
           />
           <BPopover
+            v-if="!workspace"
             trigger="click"
             placement="bottom-right"
             :open="openMenu === 'desktopSnooze'"
@@ -166,6 +168,8 @@
 </template>
 
 <script setup lang="ts">
+  import TodoSubitems from './TodoSubitems.vue';
+  import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
   import { computed, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { recordOperation } from '@/api/commonApi';
@@ -194,6 +198,7 @@
 
   const props = defineProps<{
     item: TodoItem;
+    workspace?: boolean;
     disabled?: boolean;
     deleting?: boolean;
     selectable?: boolean;
@@ -202,10 +207,11 @@
     swipeOpen?: boolean;
   }>();
   const emit = defineEmits<{
+    organize: [];
     'toggle-complete': [completed: boolean];
     'update-checklist': [checklist: TodoChecklistItem[]];
     preview: [];
-    edit: [];
+    edit: [section?: 'checklist'];
     delete: [];
     'add-to-calendar': [];
     select: [selected: boolean];
@@ -376,8 +382,25 @@
   const priorityOptions = computed(() => [0, 1, 2].map((value) => ({ value, label: t(`inbox.todoPriority${value}`) })));
   const cardPreviewable = computed(() => !props.selectable && !props.disabled);
   const desktopMoreMenuItems = computed<BActionMenuItem[]>(() => {
-    const actions: BActionMenuItem[] = [];
+    const actions: BActionMenuItem[] = props.workspace && props.item.status !== 'completed'
+      ? [
+          {
+            key: 'organize',
+            label: t('todoWorkspace.organization'),
+            icon: icon.organize.check,
+            disabled: props.selectable,
+          },
+        ]
+      : [];
     if (props.item.status === 'pending') {
+      if (props.workspace)
+        actions.push(
+          ...(['tenMinutes', 'oneHour', 'threeHours', 'oneDay'] as const).map((preset) => ({
+            key: `snooze-${preset}`,
+            label: t(`inbox.todoSnooze${preset[0].toUpperCase()}${preset.slice(1)}`),
+            icon: icon.todoWorkspace.clock,
+          })),
+        );
       actions.push(
         { key: 'edit', label: t('inbox.editTodo'), icon: icon.table_edit },
         { key: 'calendar', label: t('inbox.addToCalendar'), icon: icon.common.calendar },
@@ -444,6 +467,16 @@
             { key: 'calendar', label: t('inbox.addToCalendar'), icon: icon.common.calendar },
           ]
         : []),
+      ...(props.workspace && props.item.status !== 'completed'
+        ? [
+            {
+              key: 'organize',
+              label: t('todoWorkspace.organization'),
+              icon: icon.organize.check,
+              disabled: props.selectable,
+            },
+          ]
+        : []),
       ...seriesActions,
       {
         key: 'delete',
@@ -473,7 +506,9 @@
   }
 
   function handleMoreAction(key: string) {
-    if (key === 'edit') emit('edit');
+    if (key.startsWith('snooze-')) emit('snooze', key.slice(7) as TodoSnoozePreset);
+    else if (key === 'edit') emit('edit');
+    else if (key === 'organize') emit('organize');
     else if (key === 'calendar') {
       void recordOperation(OPERATION_LOG_MAP.inbox.openCalendarExport);
       emit('add-to-calendar');
@@ -484,25 +519,23 @@
   }
 
   function openPreviewFromCard(event: MouseEvent) {
-    if (!cardPreviewable.value) return;
+    if (props.disabled) return;
     const target = event.target as HTMLElement | null;
     if (
       target?.closest(
-        'button, a, input, textarea, select, [role="button"], [role="checkbox"], .todo-checklist, .todo-resource-refs',
+        'button, a, input, textarea, select, [role="button"], [role="checkbox"], [role="combobox"], .todo-checklist, .todo-resource-refs',
       )
     ) {
       return;
     }
-    emit('preview');
+    if (props.selectable) emit('select', !props.selected);
+    else emit('preview');
   }
 
   function openResourceRef(ref: TodoResourceRefView) {
     if (!ref.available) return;
     const noteReturnPath = resolveTodoResourceReturnPath(router.currentRoute.value.fullPath, props.item.id, ref);
-    const target = resolveResourceRoute(
-      { type: ref.type, id: ref.id, title: ref.title },
-      { noteReturnPath },
-    );
+    const target = resolveResourceRoute({ type: ref.type, id: ref.id, title: ref.title }, { noteReturnPath });
     if (target) router.push(target);
   }
 
@@ -519,6 +552,13 @@
 </script>
 
 <style scoped lang="less">
+  .todo-item__organization {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
+    align-items: center;
+  }
   .todo-item {
     position: relative;
     overflow: hidden;
@@ -596,6 +636,7 @@
   .todo-item__body {
     min-width: 0;
   }
+  .todo-item.is-selectable,
   .todo-item__body.is-editable {
     cursor: pointer;
   }

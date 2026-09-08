@@ -133,7 +133,7 @@ describe('TodoMatrixView', () => {
 
     expect(host.querySelectorAll('.todo-matrix__quadrant')).toHaveLength(1);
     expect(host.querySelector('.todo-matrix__quadrant')?.getAttribute('data-quadrant')).toBe('otherNotUrgent');
-    expect(host.querySelector('.todo-matrix-card__title')?.textContent).toBe('低优先无日期');
+    expect(host.querySelector('.todo-matrix-card__title')?.textContent?.trim()).toBe('低优先无日期');
   });
 
   it('跨日任务已经开始但尚未截止时仍显示未来截止，不显示已逾期', async () => {

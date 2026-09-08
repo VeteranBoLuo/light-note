@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 
 const listTodos = vi.fn();
+const getTodoWorkspace = vi.fn();
 const countTodos = vi.fn();
 const completeTodo = vi.fn();
 const reopenTodo = vi.fn();
@@ -17,6 +18,7 @@ const snoozeTodo = vi.fn();
 
 vi.mock('@/api/todoApi', () => ({
   listTodos,
+  getTodoWorkspace,
   countTodos,
   completeTodo,
   reopenTodo,
@@ -127,5 +129,83 @@ describe('todo store', () => {
     listTodos.mockResolvedValueOnce({ status: 200, data: { items: [], total: 0, pendingTotal: 0 } });
     await expect(store.restoreMany(['todo-1', 'todo-2'])).resolves.toBe(false);
     expect(batchRestoreTodos).toHaveBeenCalledWith(['todo-1', 'todo-2']);
+  });
+});
+
+describe('workspace subitem safety', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setActivePinia(createPinia());
+  });
+  it('locks each parent, retains checked values on failure and retries the requested payload', async () => {
+    const store = useTodoStore();
+    store.resetForOwner('owner');
+    const item = { id: 'task', status: 'pending', checklist: [{ id: 'child', text: 'child', done: false }] } as any;
+    store.items = [item];
+    const next = [{ ...item.checklist[0], done: true }];
+    let fail!: (value: unknown) => void;
+    updateTodo.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          fail = resolve;
+        }),
+    );
+    const pending = store.updateChecklist(item, next);
+    expect(await store.updateChecklist(item, next)).toBe(false);
+    expect(updateTodo).toHaveBeenCalledTimes(1);
+    expect(item.checklist[0].done).toBe(false);
+    fail({ status: 500 });
+    await pending;
+    expect(store.checklistErrors.task).toEqual(next);
+    expect(item.checklist[0].done).toBe(false);
+    updateTodo.mockResolvedValueOnce({ status: 200 });
+    expect(await store.updateChecklist(item, store.checklistErrors.task)).toBe(true);
+    expect(item.checklist[0].done).toBe(true);
+    expect(store.checklistErrors.task).toBeUndefined();
+  });
+  it('completed parents and responses from a previous owner cannot change children', async () => {
+    const store = useTodoStore();
+    store.resetForOwner('owner');
+    const item = { id: 'task', status: 'completed', checklist: [] } as any;
+    expect(await store.updateChecklist(item, [])).toBe(false);
+    expect(updateTodo).not.toHaveBeenCalled();
+    item.status = 'pending';
+    let finish!: (v: unknown) => void;
+    updateTodo.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const request = store.updateChecklist(item, [{ id: 'a', text: 'a', done: true }]);
+    store.resetForOwner('other');
+    finish({ status: 200 });
+    await request;
+    expect(item.checklist).toEqual([]);
+    expect(store.checklistPending).toEqual({});
+  });
+  it('workspace totals come from the server and pagination deduplicates parents', async () => {
+    const store = useTodoStore();
+    store.workspaceEnabled = true;
+    getTodoWorkspace.mockResolvedValueOnce({
+      status: 200,
+      data: {
+        items: [{ id: 'a' }],
+        nextCursor: 'next',
+        total: 80,
+        overview: { allTotal: 100 },
+        statusTotals: { pending: 80, completed: 9, all: 89 },
+      },
+    });
+    await store.refreshList({ status: 'pending' });
+    expect(store.total).toBe(80);
+    expect(store.pendingTotal).toBe(100);
+    expect(store.statusTotals.completed).toBe(9);
+    getTodoWorkspace.mockResolvedValueOnce({
+      status: 200,
+      data: { items: [{ id: 'a' }, { id: 'b' }], nextCursor: null },
+    });
+    await store.loadMore();
+    expect(store.items.map((item) => item.id)).toEqual(['a', 'b']);
   });
 });

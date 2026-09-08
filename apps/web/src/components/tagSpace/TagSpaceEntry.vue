@@ -123,6 +123,7 @@
 </script>
 
 <style scoped lang="less">
+  @import (reference) "@/assets/css/workspace-surfaces.less";
   .tag-space-entry-route {
     width: 100%;
     height: 100%;
@@ -175,5 +176,10 @@
     background: var(--workspace-panel-bg-color);
     font-size: 20px;
     font-weight: 750;
+  }
+
+  // 共享工作区表面：仅改变颜色，布局与滚动由原组件负责。
+  .tag-space-entry__state {
+    .workspace-content-surface();
   }
 </style>

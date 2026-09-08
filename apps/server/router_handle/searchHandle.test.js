@@ -497,6 +497,7 @@ describe('globalSearch 待办', () => {
       completed_at: null,
       update_time: '2026-07-31 10:00:00',
       reference_count: 0,
+      tags: JSON.stringify([{ id: 'tag-1', name: '工作' }]),
       ...overrides,
     }));
   }
@@ -532,7 +533,7 @@ describe('globalSearch 待办', () => {
     );
     expect(todoListCall[0]).toContain('t.user_id = ?');
     expect(todoListCall[0]).toContain('t.del_flag = 0');
-    expect(todoListCall[0]).toContain('(t.title LIKE ? OR t.description LIKE ?)');
+    expect(todoListCall[0]).toContain('(t.title LIKE ? OR t.description LIKE ? OR EXISTS');
     // 参考资料计数也必须按归属过滤，不能只按 todo_id
     expect(todoListCall[0]).toContain('r.todo_id = t.id AND r.user_id = ?');
     expect(todoListCall[1][0]).toBe('user-1');
@@ -546,25 +547,29 @@ describe('globalSearch 待办', () => {
       priority: 1,
       referenceCount: 0,
       route: '/inbox?tab=todo&todoId=todo-1',
+      tags: [{ id: 'tag-1', name: '工作' }],
+      raw: { tags: [{ id: 'tag-1', name: '工作' }] },
     });
     expect(payload.data.typeTotals.todo).toBe(9);
   });
 
-  it('按标签或无标签筛选时待办整体退出结果', async () => {
+  it('标签筛选使用独立待办关系，沿用全局任一标签命中规则', async () => {
     const res = createResponse();
 
     await globalSearch(
       {
         user: { id: 'user-1' },
-        body: { keyword: '备案', types: ['todo'], tags: ['工作'] },
+        body: { keyword: '备案', types: ['todo'], tags: ['工作', '产品'] },
         headers: { 'x-lang': 'zh-CN' },
       },
       res,
     );
 
     const todoCall = mocks.pool.query.mock.calls.find(([sql]) => String(sql).includes('FROM todo_items t'));
-    expect(todoCall[0]).toContain('1 = 0');
-    // 待办不进标签体系，不得混进 resource_tag_relations 条件
+    expect(todoCall[0]).not.toContain('1 = 0');
+    expect(todoCall[0]).toContain('tg.name IN (?, ?)');
+    expect(todoCall[1]).toEqual(expect.arrayContaining(['工作', '产品']));
+    // 归属独立于资料关系
     expect(todoCall[0]).not.toContain('resource_tag_relations');
   });
 

@@ -1,3 +1,4 @@
+import { getTodoWorkspace, type TodoList, type TodoWorkspaceQuery } from '@/api/todoApi';
 import { defineStore } from 'pinia';
 import {
   completeTodo,
@@ -25,6 +26,19 @@ function resolveTodoMutationResult(response: { status?: unknown }, succeeded: bo
 export default defineStore('todo', {
   state: () => ({
     items: [] as TodoItem[],
+    workspaceEnabled: false,
+    filters: { scope: 'all', tagIds: [] } as TodoWorkspaceQuery,
+    lists: [] as TodoList[],
+    overview: {} as Record<string, number>,
+    navigationCounts: {} as Partial<Record<'pending' | 'completed', Record<string, number>>>,
+    groupCounts: {} as Record<string, number>,
+    statusTotals: { pending: 0, completed: 0, all: 0 },
+    nextCursor: null as string | null,
+    loadingMore: false,
+    expandedSubitems: {} as Record<string, boolean>,
+    checklistPending: {} as Record<string, boolean>,
+    checklistErrors: {} as Record<string, TodoItem['checklist']>,
+    organizationEpoch: 0,
     pendingTotal: 0,
     total: 0,
     loading: false,
@@ -47,6 +61,18 @@ export default defineStore('todo', {
     resetForOwner(ownerId: string) {
       if (this.ownerId === ownerId) return;
       this.ownerId = ownerId;
+      this.filters = { scope: 'all', tagIds: [] };
+      this.lists = [];
+      this.overview = {};
+      this.navigationCounts = {};
+      this.nextCursor = null;
+      this.loading = false;
+      this.loadingMore = false;
+      this.expandedSubitems = {};
+      this.checklistPending = {};
+      this.checklistErrors = {};
+      this.groupCounts = {};
+      this.statusTotals = { pending: 0, completed: 0, all: 0 };
       this.items = [];
       this.pendingTotal = 0;
       this.total = 0;
@@ -61,7 +87,7 @@ export default defineStore('todo', {
       try {
         const res = await countTodos();
         if (res.status !== 200) return false;
-        this.pendingTotal = Number(res.data?.pendingTotal || 0);
+        this.pendingTotal = Number(res.data?.pendingTotal ?? res.data?.overview?.allTotal ?? 0);
         return true;
       } catch {
         return false;
@@ -86,15 +112,29 @@ export default defineStore('todo', {
       if (!options.silent) this.loading = true;
       this.loadFailed = false;
       try {
-        const res = await listTodos({ status: requestStatus, keyword: this.keyword, sort: this.sort });
+        const query = {
+          ...(this.workspaceEnabled ? this.filters : {}),
+          status: requestStatus,
+          keyword: this.keyword,
+          sort: this.sort,
+        };
+        const res = this.workspaceEnabled ? await getTodoWorkspace(query) : await listTodos(query);
         if (requestId !== this.requestId) return false;
         if (res.status !== 200) {
           this.loadFailed = true;
           return false;
         }
+        if (this.workspaceEnabled) {
+          this.lists = res.data?.lists || [];
+          this.overview = res.data?.overview || {};
+          this.navigationCounts = res.data?.navigationCounts || {};
+          this.groupCounts = res.data?.groupCounts || {};
+          this.statusTotals = res.data?.statusTotals || { pending: 0, completed: 0, all: 0 };
+          this.nextCursor = res.data?.nextCursor || null;
+        }
         this.items = Array.isArray(res.data?.items) ? res.data.items : [];
         this.total = Number(res.data?.total || 0);
-        this.pendingTotal = Number(res.data?.pendingTotal || 0);
+        this.pendingTotal = Number(res.data?.pendingTotal ?? res.data?.overview?.allTotal ?? 0);
         return true;
       } catch {
         if (requestId === this.requestId) this.loadFailed = true;
@@ -107,20 +147,65 @@ export default defineStore('todo', {
       const res = completed ? await completeTodo(item.id) : await reopenTodo(item.id);
       const result = resolveTodoMutationResult(res, res.status === 200);
       if (result !== true) return result;
+      this.organizationEpoch++;
       await this.refreshList();
       return true;
     },
+    async loadMore() {
+      if (!this.nextCursor || this.loadingMore) return;
+      const generation = this.requestId;
+      this.loadingMore = true;
+      try {
+        const res = await getTodoWorkspace({
+          ...this.filters,
+          status: this.effectiveStatus,
+          keyword: this.keyword,
+          sort: this.sort,
+          cursor: this.nextCursor,
+        });
+        if (generation !== this.requestId) return;
+        if (res.status !== 200) {
+          this.loadFailed = true;
+          return;
+        }
+        const seen = new Set(this.items.map((item) => item.id));
+        this.items.push(...(res.data.items as TodoItem[]).filter((item) => !seen.has(item.id)));
+        this.nextCursor = res.data.nextCursor || null;
+      } catch {
+        if (generation === this.requestId) this.loadFailed = true;
+      } finally {
+        if (generation === this.requestId) this.loadingMore = false;
+      }
+    },
     async updateChecklist(item: TodoItem, checklist: TodoItem['checklist']) {
-      const res = await updateTodo(item.id, { checklist });
-      const result = resolveTodoMutationResult(res, res.status === 200);
-      if (result !== true) return result;
-      item.checklist = checklist;
-      return true;
+      if (this.checklistPending[item.id] || item.status === 'completed') return false;
+      const owner = this.ownerId;
+      this.checklistPending[item.id] = true;
+      delete this.checklistErrors[item.id];
+      try {
+        const res = await updateTodo(item.id, { checklist });
+        const result = resolveTodoMutationResult(res, res.status === 200);
+        if (owner !== this.ownerId) return false;
+        if (result !== true) {
+          if (result === false) this.checklistErrors[item.id] = checklist;
+          return result;
+        }
+        item.checklist = checklist;
+        const current = this.items.find((entry) => entry.id === item.id);
+        if (current) current.checklist = checklist;
+        return true;
+      } catch {
+        if (owner === this.ownerId) this.checklistErrors[item.id] = checklist;
+        return false;
+      } finally {
+        if (owner === this.ownerId) delete this.checklistPending[item.id];
+      }
     },
     async remove(item: TodoItem) {
       const res = await deleteTodo(item.id);
       const result = resolveTodoMutationResult(res, res.status === 200 && Number(res.data?.affected || 0) > 0);
       if (result !== true) return result;
+      this.organizationEpoch++;
       await this.refreshList();
       return true;
     },
@@ -128,6 +213,7 @@ export default defineStore('todo', {
       const res = await batchSetTodoStatus(ids, 'completed');
       const result = resolveTodoMutationResult(res, res.status === 200);
       if (result !== true) return result;
+      this.organizationEpoch++;
       await this.refreshList();
       return true;
     },
@@ -135,6 +221,7 @@ export default defineStore('todo', {
       const res = await batchDeleteTodos(ids);
       const result = resolveTodoMutationResult(res, res.status === 200);
       if (result !== true) return result;
+      this.organizationEpoch++;
       await this.refreshList();
       return true;
     },
@@ -155,6 +242,7 @@ export default defineStore('todo', {
       const res = await reorderTodos(items);
       const result = resolveTodoMutationResult(res, res.status === 200);
       if (result !== true) return result;
+      this.organizationEpoch++;
       await this.refreshList();
       return true;
     },
@@ -162,6 +250,7 @@ export default defineStore('todo', {
       const res = await snoozeTodo(item.id, targetAt);
       const result = resolveTodoMutationResult(res, res.status === 200);
       if (result !== true) return result;
+      this.organizationEpoch++;
       await this.refreshList();
       return true;
     },

@@ -6,7 +6,7 @@
     <template #extra>
       <span v-if="loading" class="todo-plan-preview__loading">{{ t('common.loading') }}</span>
     </template>
-    <div v-if="preview" class="todo-plan-preview__content">
+    <div class="todo-plan-preview__content">
       <section v-if="task?.title" class="todo-plan-preview__task">
         <div class="todo-plan-preview__task-head">
           <strong>{{ task.title }}</strong>
@@ -32,6 +32,10 @@
             {{ t('inbox.todoPlanPreviewMoreItems', { count: hiddenChecklistCount }) }}
           </small>
         </div>
+        <div v-if="organization" class="todo-plan-preview__organization">
+          <span>{{ t('todoWorkspace.list') }}：{{ organization.listName || t('todoWorkspace.unassigned') }}</span>
+          <div><ResourceTagChip v-for="tag in organization.tags" :key="tag.id" :tag="tag" /></div>
+        </div>
         <div v-if="resources.length" class="todo-plan-preview__resources">
           <span>{{ t('inbox.todoResourceRefs', { count: resources.length }) }}</span>
           <div>
@@ -41,13 +45,19 @@
           </div>
         </div>
       </section>
-      <section class="todo-plan-preview__schedule">
+      <p v-if="error" class="todo-plan-preview__error" role="alert">{{ error }}</p>
+      <section v-if="preview" class="todo-plan-preview__schedule">
         <strong>{{ preview.displaySummary.title }}</strong>
         <p>{{ preview.displaySummary.range }}</p>
-        <p v-if="preview.displaySummary.timing">{{ preview.displaySummary.timing }}</p>
+        <p v-if="preview.displaySummary.timing"
+          >{{ preview.displaySummary.timing
+          }}<strong v-if="dueNextDay" class="todo-plan-preview__next-day">
+            · {{ t('todoWorkspace.dueNextDay') }}</strong
+          ></p
+        >
         <p>{{ preview.displaySummary.reminder }}</p>
       </section>
-      <dl>
+      <dl v-if="preview">
         <div>
           <dt>{{ t('inbox.todoPlanPreviewTasks') }}</dt>
           <dd>{{ preview.occurrenceCount ?? `${preview.generatedNowCount}+` }}</dd>
@@ -61,10 +71,10 @@
           <dd>{{ preview.nextReminderAt || t('inbox.todoReminderNone') }}</dd>
         </div>
       </dl>
-    </div>
-    <div v-else class="todo-plan-preview__empty">
-      <strong>{{ fallbackTitle }}</strong>
-      <p>{{ error || t('inbox.todoPlanPreviewFillHint') }}</p>
+      <div v-if="!preview" class="todo-plan-preview__empty">
+        <strong>{{ fallbackTitle }}</strong>
+        <p v-if="!error">{{ t('inbox.todoPlanPreviewFillHint') }}</p>
+      </div>
     </div>
   </BCard>
 </template>
@@ -72,6 +82,7 @@
 <script setup lang="ts">
   import { computed } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
   import BCard from '@/components/base/BasicComponents/BCard.vue';
   import type { TodoChecklistItem, TodoPlanPreview, TodoPriority, TodoResourceRefView } from '@/api/todoApi';
 
@@ -79,6 +90,8 @@
     defineProps<{
       preview?: TodoPlanPreview | null;
       loading?: boolean;
+      dueNextDay?: boolean;
+      organization?: { listName: string; tags: Array<{ id: string; name: string }> };
       error?: string;
       independent?: boolean;
       task?: {
@@ -109,6 +122,24 @@
     --b-card-shadow: none;
   }
 
+  .todo-plan-preview__organization {
+    display: grid;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--desc-color);
+  }
+  .todo-plan-preview__organization > div {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .todo-plan-preview__error {
+    color: var(--error-color);
+  }
+  .todo-plan-preview__next-day {
+    font-size: inherit;
+    color: var(--primary-color);
+  }
   .todo-plan-preview__loading {
     color: var(--primary-color);
     font-size: 12px;

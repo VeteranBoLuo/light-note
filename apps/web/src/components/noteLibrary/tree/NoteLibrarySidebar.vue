@@ -273,6 +273,7 @@
 </script>
 
 <style lang="less" scoped>
+  @import (reference) "@/assets/css/workspace-surfaces.less";
   .note-library-sidebar {
     height: 100%;
     min-height: 0;
@@ -467,4 +468,12 @@
       animation: none;
     }
   }
+
+  // 共享工作区表面：仅改变颜色，布局与滚动由原组件负责。
+
+  .note-library-sidebar { .workspace-navigation-colors(note); }
+  .note-tree-root:hover { .workspace-navigation-hover(); }
+  .note-tree-root.is-browse-scope { .workspace-navigation-selected(); }
+  .note-tree-root-count { color: var(--workspace-note-stat); }
+  .note-tree-root.is-browse-scope { border-color: var(--workspace-note-stat); }
 </style>

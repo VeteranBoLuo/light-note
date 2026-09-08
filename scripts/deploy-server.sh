@@ -55,6 +55,9 @@ ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/ensureDailyReviewSchema.js"
 echo "🧭  幂等迁移帮助中心栏目元数据…"
 ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/migrateHelpCenterSections.js"
 
+echo "🔎  幂等初始化待办工作区 Schema…"
+ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/ensureTodoWorkspaceSchema.js"
+
 echo "🔎  执行只读 Schema 发布门禁…"
 ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/checkSchemaAssertions.js"
 

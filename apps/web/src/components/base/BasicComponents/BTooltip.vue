@@ -4,6 +4,8 @@
     class="b-tooltip-wrap"
     @mouseenter="show"
     @mouseleave="hide"
+    @mousemove="trackCursor"
+    @pointerdown.capture="dismissCursorTooltip"
     @click.capture="dismissAfterActivation"
   >
     <slot />
@@ -16,7 +18,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
+  import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
   import { getRootZoom } from '@/utils/zoom';
 
   const props = defineProps<{
@@ -24,6 +26,7 @@
     always?: boolean;
     disabled?: boolean;
     delay?: number;
+    followCursor?: boolean;
     zIndex?: number;
   }>();
 
@@ -34,6 +37,8 @@
   const resolvedPopupStyle = computed(() => ({ ...popupStyle, zIndex: props.zIndex ?? 1100 }));
   let timer: ReturnType<typeof setTimeout> | null = null;
   let suppressedUntilPointerLeaves = false;
+  let cursorX = 0;
+  let cursorY = 0;
 
   function clearTimer() {
     if (!timer) return;
@@ -41,35 +46,57 @@
     timer = null;
   }
 
-  function show() {
+  function updatePosition() {
+    const wrap = wrapRef.value;
+    const popup = popupRef.value;
+    if (!visible.value || !wrap || !popup) return;
+    // 鼠标和 DOMRect 为视觉坐标；fixed 浮层使用根 zoom 下的布局坐标。
+    const zoom = getRootZoom();
+    const pW = popup.offsetWidth;
+    const pH = popup.offsetHeight;
+    const viewportWidth = document.documentElement.clientWidth / zoom;
+    const viewportHeight = document.documentElement.clientHeight / zoom;
+    if (props.followCursor) {
+      const x = cursorX / zoom;
+      const y = cursorY / zoom;
+      const gap = 12 / zoom;
+      const left = x + gap + pW <= viewportWidth - 4 ? x + gap : x - gap - pW;
+      const top = y + gap + pH <= viewportHeight - 4 ? y + gap : y - gap - pH;
+      popupStyle.left = `${Math.max(4, Math.min(left, viewportWidth - pW - 4))}px`;
+      popupStyle.top = `${Math.max(4, Math.min(top, viewportHeight - pH - 4))}px`;
+      return;
+    }
+    const rect = wrap.getBoundingClientRect();
+    const top = rect.top / zoom;
+    const centerX = (rect.left + rect.width / 2) / zoom - pW / 2;
+    popupStyle.top = `${top > pH + 10 ? top - pH - 6 : rect.bottom / zoom + 6}px`;
+    popupStyle.left = `${Math.max(4, Math.min(centerX, viewportWidth - pW - 4))}px`;
+  }
+
+  function trackCursor(event: MouseEvent) {
+    if (!props.followCursor) return;
+    cursorX = event.clientX;
+    cursorY = event.clientY;
+    if (event.buttons) {
+      dismissAfterActivation();
+      return;
+    }
+    updatePosition();
+  }
+
+  function dismissCursorTooltip() {
+    if (props.followCursor) dismissAfterActivation();
+  }
+
+  function show(event: MouseEvent) {
+    trackCursor(event);
     if (suppressedUntilPointerLeaves || props.disabled || (!props.always && window.innerWidth < 1024)) return;
     clearTimer();
-    timer = setTimeout(() => {
+    timer = setTimeout(async () => {
       timer = null;
       visible.value = true;
-      // 等待 DOM 更新后计算位置
-      requestAnimationFrame(() => {
-        const wrap = wrapRef.value;
-        const popup = popupRef.value;
-        if (!wrap || !popup) return;
-        // 界面缩放(html zoom):gBCR 含 zoom → ÷ zoom 换布局坐标;popup 尺寸用 offsetWidth/Height(布局像素)
-        const zoom = getRootZoom();
-        const wrapRect = wrap.getBoundingClientRect();
-        const wTop = wrapRect.top / zoom;
-        const wBottom = wrapRect.bottom / zoom;
-        const wLeft = wrapRect.left / zoom;
-        const wWidth = wrapRect.width / zoom;
-        const pW = popup.offsetWidth;
-        const pH = popup.offsetHeight;
-        const centerX = wLeft + wWidth / 2 - pW / 2;
-        if (wTop > pH + 10) {
-          popupStyle.top = `${wTop - pH - 6}px`;
-        } else {
-          popupStyle.top = `${wBottom + 6}px`;
-        }
-        // documentElement.clientWidth 是视口宽(视觉像素),÷zoom 换布局坐标再与 centerX/pW(布局)比较
-        popupStyle.left = `${Math.max(4, Math.min(centerX, document.documentElement.clientWidth / zoom - pW - 4))}px`;
-      });
+      await nextTick();
+      updatePosition();
     }, props.delay ?? 0);
   }
   function hide() {
@@ -94,6 +121,19 @@
       clearTimer();
       suppressedUntilPointerLeaves = false;
       visible.value = false;
+    },
+  );
+
+  watch(
+    () => visible.value && props.followCursor,
+    (tracking, _, onCleanup) => {
+      if (!tracking) return;
+      window.addEventListener('resize', updatePosition);
+      window.addEventListener('scroll', updatePosition, true);
+      onCleanup(() => {
+        window.removeEventListener('resize', updatePosition);
+        window.removeEventListener('scroll', updatePosition, true);
+      });
     },
   );
 

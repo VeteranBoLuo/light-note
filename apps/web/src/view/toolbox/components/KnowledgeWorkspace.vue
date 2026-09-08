@@ -65,11 +65,11 @@
           >
             <span class="workspace-card__top">
               <span class="workspace-card__icon"><SvgIcon :src="templateIcons[item.kind]" size="21" /></span>
+              <span class="workspace-card__copy">
+                <strong :title="item.title">{{ item.title }}</strong>
+                <small>{{ item.goal || item.description || t(`toolbox.tool.${item.kind}_workspace.name`) }}</small>
+              </span>
               <BChip :tone="statusTone(item.status)">{{ statusLabel(item.status) }}</BChip>
-            </span>
-            <span class="workspace-card__copy">
-              <strong>{{ item.title }}</strong>
-              <small>{{ item.goal || item.description || t(`toolbox.tool.${item.kind}_workspace.name`) }}</small>
             </span>
             <span class="workspace-card__next">
               <small>{{ t('toolbox.workspace.nextStep') }}</small>
@@ -87,7 +87,7 @@
     </template>
 
     <template v-else>
-      <section class="workspace-detail-head">
+      <section ref="projectHead" class="workspace-detail-head" :class="{ 'is-pinned': headerPinned }">
         <nav class="project-breadcrumb" :aria-label="t('toolbox.project.myProjects')">
           <BButton class="project-breadcrumb__workshop" @click="emit('return-to-workshop')">{{
             t('toolbox.title')
@@ -106,6 +106,19 @@
         }}</BButton>
       </section>
 
+      <nav ref="sectionNav" class="project-section-navigation" :aria-label="t('toolbox.workspace.sectionNavigation')">
+        <BButton
+          v-for="(section, index) in projectTabs"
+          :key="section.key"
+          :aria-current="activeSection === section.key ? 'location' : undefined"
+          :class="{ 'is-current': activeSection === section.key }"
+          @click="selectProjectTab(section.key)"
+        >
+          <span class="project-section-navigation__number">{{ String(index + 1).padStart(2, '0') }}</span>
+          <span class="project-section-navigation__label">{{ section.label }}</span>
+        </BButton>
+        <BButton class="project-settings-trigger project-settings-trigger--mobile" :disabled="mutating" :aria-label="t('toolbox.project.manage')" :title="t('toolbox.project.manage')" @click="openEditModal"><SvgIcon :src="icon.userCenter.menu.settings" size="18" /></BButton>
+      </nav>
       <section class="workspace-summary">
         <div class="workspace-summary__main">
           <span class="workspace-summary__icon"><SvgIcon :src="templateIcon" size="27" /></span>
@@ -157,18 +170,7 @@
         <BButton @click="focusProgressForm">{{ templateText('recordAction') }}</BButton>
       </section>
 
-      <nav ref="sectionNav" class="project-section-navigation" :aria-label="t('toolbox.workspace.sectionNavigation')">
-        <BButton
-          v-for="(section, index) in projectTabs"
-          :key="section.key"
-          :aria-current="activeSection === section.key ? 'location' : undefined"
-          :class="{ 'is-current': activeSection === section.key }"
-          @click="selectProjectTab(section.key)"
-        >
-          <span class="project-section-navigation__number">{{ String(index + 1).padStart(2, '0') }}</span>
-          <span>{{ section.label }}</span>
-        </BButton>
-      </nav>
+
       <section ref="progressSection" class="workspace-section workspace-progress-section">
         <header class="workspace-section__head"
           ><div>
@@ -243,11 +245,17 @@
         <p v-if="workspace.resources.length && !filteredResources.length">{{ t('toolbox.project.noResources') }}</p>
         <p v-if="workspace.resources.length && !outcomeResources.length">{{ t('toolbox.project.selectHint') }}</p>
         <div v-if="workspace.resources.length" class="workspace-resource-grid">
-          <article v-for="resource in filteredResources" :key="`${resource.type}:${resource.resourceId}`">
+          <article
+            v-for="resource in filteredResources"
+            :key="`${resource.type}:${resource.resourceId}`"
+            :class="{ 'is-selected': selectedResourceKeys.includes(`${resource.type}:${resource.resourceId}`), 'is-unavailable': resource.available === false }"
+            @click="selectResourceRow(resource, $event)"
+          >
             <BCheckbox
               :model-value="selectedResourceKeys.includes(`${resource.type}:${resource.resourceId}`)"
               :disabled="resource.available === false"
               :aria-label="resource.title"
+              @click.stop
               @update:model-value="toggleResource(resource, $event)"
             />
             <span class="workspace-resource-grid__icon" :class="`is-${resource.type}`">
@@ -257,7 +265,7 @@
               <BButton
                 class="workspace-resource-link"
                 :disabled="resource.available === false"
-                @click="openLinkedResource(resource)"
+                @click.stop="openLinkedResource(resource)"
                 >{{ resource.title || resource.resourceId }}</BButton
               >
               <small>{{
@@ -269,7 +277,7 @@
             <BButton
               :aria-label="t('toolbox.workspace.removeResource', { title: resource.title || resource.resourceId })"
               :disabled="mutating"
-              @click="removeResource(resource)"
+              @click.stop="confirmRemoveResource(resource)"
               ><SvgIcon :src="icon.toolbox.delete" size="15"
             /></BButton>
           </article>
@@ -284,69 +292,7 @@
             <p>{{ templateText('boardDescription') }}</p>
           </div>
         </header>
-        <BSelect v-if="isMobileLayout" v-model:value="mobileLane" :options="laneOptions" />
-        <div class="workspace-board">
-          <section v-for="lane in visibleLanes" :key="lane" class="workspace-lane" :class="`is-${lane}`">
-            <header>
-              <span></span>
-              <div>
-                <h4>{{ laneText(lane, 'title') }}</h4>
-                <p>{{ laneText(lane, 'description') }}</p>
-              </div>
-              <BChip tone="neutral">{{ itemsByLane[lane].length }}</BChip>
-            </header>
-            <div v-if="!itemsByLane[lane].length" class="workspace-lane__empty">
-              {{ laneText(lane, 'empty') }}
-            </div>
-            <article
-              v-for="item in itemsByLane[lane]"
-              :key="item.id"
-              class="workspace-item"
-              :class="[`is-${item.status}`]"
-            >
-              <div class="workspace-item__head">
-                <BChip v-if="item.status === 'in_progress'" tone="pending">{{
-                  t('toolbox.workspace.inProgress')
-                }}</BChip>
-                <BChip v-else-if="item.status === 'done'" tone="success">{{ t('toolbox.workspace.done') }}</BChip>
-                <span v-else></span>
-                <BButton
-                  :aria-label="t('toolbox.workspace.archiveItem', { title: item.title })"
-                  :disabled="mutating"
-                  @click="setItemStatus(item, 'archived')"
-                  ><SvgIcon :src="icon.toolbox.delete" size="14"
-                /></BButton>
-              </div>
-              <strong>{{ item.title }}</strong>
-              <p v-if="item.content">{{ item.content }}</p>
-              <small v-if="item.dueOn"
-                ><SvgIcon :src="icon.common.calendar" size="13" />{{ formatDate(item.dueOn) }}</small
-              >
-              <div class="workspace-item__actions">
-                <BButton
-                  v-if="item.status === 'open'"
-                  size="small"
-                  :disabled="mutating"
-                  @click="setItemStatus(item, 'in_progress')"
-                  >{{ t('toolbox.workspace.startItem') }}</BButton
-                >
-                <BButton
-                  v-if="item.status !== 'done'"
-                  size="small"
-                  :disabled="mutating"
-                  @click="setItemStatus(item, 'done')"
-                  >{{ t('toolbox.workspace.completeItem') }}</BButton
-                >
-                <BButton v-else size="small" :disabled="mutating" @click="setItemStatus(item, 'open')">{{
-                  t('toolbox.workspace.reopenItem')
-                }}</BButton>
-              </div>
-            </article>
-            <BButton class="workspace-lane__add" block @click="openItemModal(lane)">
-              <SvgIcon :src="icon.common.plus" size="14" />{{ t('toolbox.workspace.addItem') }}
-            </BButton>
-          </section>
-        </div>
+        <WorkspaceBoard :key="workspace.id" v-model:lane="mobileLane" :workspace="workspace" :mobile="isMobileLayout" @updated="handleBoardUpdated" />
       </section>
 
       <section ref="timelineSection" class="workspace-section workspace-timeline-section">
@@ -495,51 +441,13 @@
       </template>
     </BModal>
 
-    <BModal
-      v-model:visible="itemModalVisible"
-      :title="t('toolbox.workspace.addItemTo', { lane: laneText(itemForm.lane, 'title') })"
-      width="560px"
-      :show-footer="false"
-      fullscreen-mobile
-      initial-focus=".workspace-item-title"
-    >
-      <div class="workspace-modal-form">
-        <label>
-          <span>{{ t('toolbox.workspace.itemTitleLabel') }}</span>
-          <BInput
-            v-model:value="itemForm.title"
-            class="workspace-item-title"
-            :maxlength="255"
-            height="42px"
-            :placeholder="laneText(itemForm.lane, 'itemPlaceholder')"
-          />
-        </label>
-        <label>
-          <span>{{ t('toolbox.workspace.itemNoteLabel') }}</span>
-          <BInput
-            v-model:value="itemForm.content"
-            type="textarea"
-            :rows="3"
-            :maxlength="5000"
-            :placeholder="t('toolbox.workspace.itemNotePlaceholder')"
-          />
-        </label>
-        <label>
-          <span>{{ t('toolbox.workspace.itemDueLabel') }}</span>
-          <BDateTimePicker v-model:value="itemForm.dueOn" :show-time="false" />
-        </label>
-        <div class="workspace-modal-actions">
-          <BButton @click="itemModalVisible = false">{{ t('common.cancel') }}</BButton>
-          <BButton type="primary" :loading="mutating" :disabled="!itemForm.title.trim()" @click="createItem">
-            {{ t('toolbox.workspace.addItem') }}
-          </BButton>
-        </div>
-      </div>
-    </BModal>
+
   </div>
 </template>
 
 <script setup lang="ts">
+  import WorkspaceBoard from './WorkspaceBoard.vue';
+  import Alert from '@/components/base/BasicComponents/BModal/Alert';
   import { resolveResourceRoute } from '@/utils/resourceNavigation';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import ResourceOutcomeDrawer from '@/components/resourceActions/ResourceOutcomeDrawer.vue';
@@ -563,18 +471,14 @@
   import {
     addToolboxWorkspaceResources as requestaddToolboxWorkspaceResources,
     createToolboxWorkspace as requestcreateToolboxWorkspace,
-    createToolboxWorkspaceItem as requestcreateToolboxWorkspaceItem,
     createToolboxWorkspaceSession as requestcreateToolboxWorkspaceSession,
     fetchToolboxWorkspace,
     fetchToolboxWorkspaces as requestfetchToolboxWorkspaces,
     markToolboxWorkspaceOpened,
     removeToolboxWorkspaceResource as requestremoveToolboxWorkspaceResource,
     updateToolboxWorkspace as requestupdateToolboxWorkspace,
-    updateToolboxWorkspaceItem as requestupdateToolboxWorkspaceItem,
     type ProjectEntrySource,
     type ToolboxWorkspace,
-    type ToolboxWorkspaceItem,
-    type ToolboxWorkspaceItemStatus,
     type ToolboxWorkspaceKind,
     type ToolboxWorkspaceLane,
     type ToolboxWorkspaceResource,
@@ -622,7 +526,6 @@
   const createModalVisible = ref(false);
   const workspaceFormMode = ref<'create' | 'edit'>('create');
   const resourceModalVisible = ref(false);
-  const itemModalVisible = ref(false);
   const pendingResources = ref<ToolboxSelectedResource[]>([]);
   const progressSummary = ref('');
   const progressNextStep = ref('');
@@ -645,16 +548,13 @@
   const timelineSection = ref<HTMLElement | null>(null);
   const progressInput = ref<InstanceType<typeof BInput> | null>(null);
   const activeSection = ref('progress');
+  const projectHead = ref<HTMLElement | null>(null);
+  const headerPinned = ref(false);
   const sectionNav = ref<HTMLElement | null>(null);
   const progressSection = ref<HTMLElement | null>(null);
   let initializationVersion = 0;
   const createForm = reactive({ title: '', goal: '', targetDate: '', nextStep: '' });
-  const itemForm = reactive<{ lane: ToolboxWorkspaceLane; title: string; content: string; dueOn: string }>({
-    lane: 'inbox',
-    title: '',
-    content: '',
-    dueOn: '',
-  });
+
   const workspaceQuery = computed(() => String(route.query.workspace || '').trim());
   const durationOptions = computed(() =>
     [0, 15, 25, 45, 60, 90].map((value) => ({
@@ -669,11 +569,7 @@
     { key: 'next', icon: icon.noteTemplate.project },
     { key: 'rhythm', icon: icon.noteTemplate.review },
   ]);
-  const itemsByLane = computed<Record<ToolboxWorkspaceLane, ToolboxWorkspaceItem[]>>(() => ({
-    inbox: workspace.value?.items.filter((item) => item.lane === 'inbox') || [],
-    knowledge: workspace.value?.items.filter((item) => item.lane === 'knowledge') || [],
-    action: workspace.value?.items.filter((item) => item.lane === 'action') || [],
-  }));
+
   const existingResourceKeys = computed(
     () => workspace.value?.resources.map((item) => `${item.type}:${item.resourceId}`) || [],
   );
@@ -684,8 +580,6 @@
   const rootRef = ref<HTMLElement | null>(null);
   const goalExpanded = ref(false);
   const mobileLane = ref<ToolboxWorkspaceLane>('inbox');
-  const visibleLanes = computed(() => (isMobileLayout.value ? [mobileLane.value] : lanes));
-  const laneOptions = computed(() => lanes.map((value) => ({ value, label: laneText(value, 'title') })));
   const projectTabs = computed(() =>
     ['progress', 'resources', 'board', 'timeline'].map((key) => ({
       key,
@@ -745,6 +639,18 @@
       ? [...new Set([...selectedResourceKeys.value, key])]
       : selectedResourceKeys.value.filter((value) => value !== key);
   }
+  let chromeObserver: ResizeObserver | null = null;
+  function stickyInset() {
+    const head = projectHead.value?.offsetHeight ?? 48;
+    const rail = sectionNav.value && getComputedStyle(sectionNav.value).getPropertyValue('--project-nav-layout').trim() === 'rail';
+    const scrollPadding = scrollOwner ? parseFloat(getComputedStyle(scrollOwner).paddingTop) || 0 : 0;
+    return scrollPadding + head + (rail ? 0 : sectionNav.value?.offsetHeight || 0) + 20;
+  }
+  function measureProjectChrome() {
+    rootRef.value?.style.setProperty('--project-scroll-padding', `${scrollOwner ? parseFloat(getComputedStyle(scrollOwner).paddingTop) || 0 : 0}px`);
+    rootRef.value?.style.setProperty('--project-head-height', `${projectHead.value?.offsetHeight ?? 48}px`);
+    rootRef.value?.style.setProperty('--project-sticky-inset', `${stickyInset()}px`);
+  }
   let scrollOwner: HTMLElement | null = null;
   let scrollFrame = 0;
   let locationTimer = 0;
@@ -754,12 +660,10 @@
   function syncSection() {
     scrollFrame = 0;
     if (!workspace.value || !sectionNav.value || !scrollOwner) return;
-    const navStyle = getComputedStyle(sectionNav.value);
-    const rail = navStyle.getPropertyValue('--project-nav-layout').trim() === 'rail';
+    measureProjectChrome();
+    headerPinned.value = !!projectHead.value && projectHead.value.getBoundingClientRect().top <= scrollOwner.getBoundingClientRect().top + (parseFloat(getComputedStyle(scrollOwner).paddingTop) || 0) + 1;
     const scale = scrollOwner.getBoundingClientRect().height / scrollOwner.offsetHeight || 1;
-    const threshold = rail
-      ? scrollOwner.getBoundingClientRect().top + ((parseFloat(navStyle.top) || 0) + 28) * scale
-      : sectionNav.value.getBoundingClientRect().bottom + 28;
+    const threshold = scrollOwner.getBoundingClientRect().top + (stickyInset() + 4) * scale;
     const elements = sectionElements();
     let index = 0;
     elements.forEach((element, i) => {
@@ -778,6 +682,8 @@
     if (!scrollFrame) scrollFrame = window.requestAnimationFrame(syncSection);
   }
   function detachProjectScroll() {
+    chromeObserver?.disconnect();
+    chromeObserver = null;
     scrollOwner?.removeEventListener('scroll', onProjectScroll);
     window.removeEventListener('resize', onProjectScroll);
     window.cancelAnimationFrame(scrollFrame);
@@ -789,6 +695,12 @@
     detachProjectScroll();
     if (!rootRef.value || !workspace.value) return;
     scrollOwner = findScrollContainer(rootRef.value);
+    measureProjectChrome();
+    if (typeof ResizeObserver !== 'undefined') {
+      chromeObserver = new ResizeObserver(measureProjectChrome);
+      if (projectHead.value) chromeObserver.observe(projectHead.value);
+      if (sectionNav.value) chromeObserver.observe(sectionNav.value);
+    }
     scrollOwner.addEventListener('scroll', onProjectScroll, { passive: true });
     window.addEventListener('resize', onProjectScroll, { passive: true });
     onProjectScroll();
@@ -799,9 +711,7 @@
     if (!section || !rootRef.value || !sectionNav.value) return;
     const container = findScrollContainer(rootRef.value);
     const scale = container.getBoundingClientRect().height / container.offsetHeight || 1;
-    const navStyle = getComputedStyle(sectionNav.value);
-    const rail = navStyle.getPropertyValue('--project-nav-layout').trim() === 'rail';
-    const inset = (parseFloat(navStyle.top) || 0) + (rail ? 0 : sectionNav.value.offsetHeight) + 20;
+    const inset = stickyInset();
     const top =
       container.scrollTop +
       (section.getBoundingClientRect().top - container.getBoundingClientRect().top) / scale -
@@ -817,9 +727,6 @@
   }
   function stepText(section: WorkspaceSectionKey, key: WorkspaceStepTextKey) {
     return templateText(`steps.${section}.${key}`);
-  }
-  function laneText(lane: ToolboxWorkspaceLane, key: string) {
-    return t(`toolbox.workspace.template.${kind.value}.lanes.${lane}.${key}`);
   }
   function statusLabel(status: ToolboxWorkspaceStatus) {
     return t(`toolbox.workspace.status.${status}`);
@@ -877,12 +784,10 @@
   }
   const addToolboxWorkspaceResources = scopedRequest(requestaddToolboxWorkspaceResources);
   const createToolboxWorkspace = scopedRequest(requestcreateToolboxWorkspace);
-  const createToolboxWorkspaceItem = scopedRequest(requestcreateToolboxWorkspaceItem);
   const createToolboxWorkspaceSession = scopedRequest(requestcreateToolboxWorkspaceSession);
   const fetchToolboxWorkspaces = scopedRequest(requestfetchToolboxWorkspaces);
   const removeToolboxWorkspaceResource = scopedRequest(requestremoveToolboxWorkspaceResource);
   const updateToolboxWorkspace = scopedRequest(requestupdateToolboxWorkspace);
-  const updateToolboxWorkspaceItem = scopedRequest(requestupdateToolboxWorkspaceItem);
   function applyWorkspace(value: ToolboxWorkspace) {
     workspace.value = value;
     if (!progressDraftEdited.value) progressNextStep.value = value.nextStep || '';
@@ -1115,6 +1020,16 @@
     );
     if (target) void router.push(target);
   }
+  function confirmRemoveResource(resource: ToolboxWorkspaceResource) {
+    const version = initializationVersion;
+    Alert.alert({
+      title: t('toolbox.workspace.removeResource', { title: resource.title || resource.resourceId }),
+      content: t('toolbox.workspace.removeResourceConfirm'),
+      okText: t('common.confirm'),
+      cancelText: t('common.cancel'),
+      onOk: () => { if (version === initializationVersion) return removeResource(resource); },
+    });
+  }
   async function removeResource(resource: ToolboxWorkspaceResource) {
     if (!workspace.value || mutating.value) return;
     const mutationVersion = initializationVersion;
@@ -1130,46 +1045,13 @@
       if (mutationVersion === initializationVersion) mutating.value = false;
     }
   }
-  function openItemModal(lane: ToolboxWorkspaceLane) {
-    itemForm.lane = lane;
-    itemForm.title = '';
-    itemForm.content = '';
-    itemForm.dueOn = '';
-    itemModalVisible.value = true;
+  function selectResourceRow(resource: ToolboxWorkspaceResource, event: MouseEvent) {
+    if (resource.available === false || (event.target as HTMLElement).closest('button, input, label, [role="checkbox"]')) return;
+    toggleResource(resource, !selectedResourceKeys.value.includes(`${resource.type}:${resource.resourceId}`));
   }
-  async function createItem() {
-    if (!workspace.value || !itemForm.title.trim() || mutating.value) return;
-    const mutationVersion = initializationVersion;
-    mutating.value = true;
-    try {
-      applyWorkspace(
-        await createToolboxWorkspaceItem(workspace.value.id, {
-          lane: itemForm.lane,
-          title: itemForm.title,
-          content: itemForm.content,
-          dueOn: itemForm.dueOn || null,
-        }),
-      );
-      itemModalVisible.value = false;
-      await loadWorkspaceList();
-    } catch (error) {
-      showMutationError(error);
-    } finally {
-      if (mutationVersion === initializationVersion) mutating.value = false;
-    }
-  }
-  async function setItemStatus(item: ToolboxWorkspaceItem, status: ToolboxWorkspaceItemStatus) {
-    if (!workspace.value || mutating.value) return;
-    const mutationVersion = initializationVersion;
-    mutating.value = true;
-    try {
-      applyWorkspace(await updateToolboxWorkspaceItem(workspace.value.id, item.id, { status }));
-      await loadWorkspaceList();
-    } catch (error) {
-      showMutationError(error);
-    } finally {
-      if (mutationVersion === initializationVersion) mutating.value = false;
-    }
+  function handleBoardUpdated(value: ToolboxWorkspace) {
+    applyWorkspace(value);
+    void loadWorkspaceList();
   }
 
   watch([() => props.toolId, workspaceQuery, ownerKey], () => {
@@ -1179,7 +1061,7 @@
     progressSummary.value = '';
     progressNextStep.value = '';
     progressDuration.value = 0;
-    createModalVisible.value = resourceModalVisible.value = itemModalVisible.value = outcomeOpen.value = false;
+    createModalVisible.value = resourceModalVisible.value = outcomeOpen.value = false;
     creating.value = mutating.value = savingProgress.value = false;
     workspace.value = null;
     selectedResourceKeys.value = [];
@@ -1196,10 +1078,12 @@
 </script>
 
 <style lang="less" scoped>
+  @import (reference) "@/assets/css/workspace-surfaces.less";
   .knowledge-workspace {
     --workspace-accent: #615ced;
     --workspace-accent-soft: rgba(97, 92, 237, 0.09);
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     gap: 20px;
     min-width: 0;
     color: var(--text-color);
@@ -1310,21 +1194,22 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .workspace-list-section,
   .workspace-section,
   .workspace-summary,
   .workspace-resume {
     border: 1px solid var(--surface-border-color);
     border-radius: 18px;
-    background: var(--card-background);
     box-shadow: var(--surface-card-shadow);
   }
-  .workspace-list-section,
+  :deep(.board-card) { scroll-margin-top: var(--project-sticky-inset, 150px); }
   .workspace-section {
     padding: 22px;
   }
+  .workspace-list-section {
+    padding: 0;
+  }
   .workspace-section {
-    scroll-margin-top: 150px;
+    scroll-margin-top: var(--project-sticky-inset, 150px);
     transition:
       border-color 0.2s ease,
       box-shadow 0.2s ease;
@@ -1335,26 +1220,24 @@
   }
   .workspace-card-grid {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 14px;
-    margin-top: 18px;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+    gap: 12px;
+    margin-top: 12px;
   }
   .workspace-card-grid :deep(.workspace-card) {
     width: 100%;
     height: auto;
-    min-height: 230px;
-    padding: 18px;
+    padding: 14px 16px;
+    line-height: 1.4;
     display: flex;
     flex-direction: column;
     align-items: stretch;
     justify-content: flex-start;
-    gap: 16px;
+    gap: 12px;
     text-align: left;
     white-space: normal;
     border: 1px solid var(--surface-border-color);
-    border-top: 3px solid var(--workspace-accent);
     border-radius: 15px;
-    background: var(--workspace-panel-bg-color);
   }
   .workspace-card__top,
   .workspace-card__meta,
@@ -1365,12 +1248,20 @@
     gap: 9px;
   }
   .workspace-card__top {
-    justify-content: space-between;
+    align-items: center;
+    min-width: 0;
+  }
+  .workspace-card__top :deep(.b-chip) {
+    flex-shrink: 0;
+  }
+  .workspace-card__copy {
+    flex: 1;
+    min-width: 0;
   }
   .workspace-card__icon {
-    width: 42px;
-    height: 42px;
-    border-radius: 12px;
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
   }
   .workspace-card__copy,
   .workspace-card__next {
@@ -1378,8 +1269,13 @@
     gap: 6px;
   }
   .workspace-card__copy > strong {
-    font-size: 18px;
-    line-height: 1.35;
+    font-size: 15px;
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    overflow-wrap: anywhere;
   }
   .workspace-card__copy small,
   .workspace-card__next small,
@@ -1387,28 +1283,42 @@
     color: var(--desc-color);
   }
   .workspace-card__copy small {
-    min-height: 44px;
-    line-height: 1.55;
+    font-size: 11px;
+    line-height: 1.4;
     display: -webkit-box;
     overflow: hidden;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
   }
   .workspace-card__next {
-    padding: 11px 12px;
-    border-radius: 10px;
-    background: var(--workspace-accent-soft);
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 9px 10px;
+    border-radius: 8px;
+    background: var(--workspace-canvas);
+  }
+  .workspace-card__next small {
+    flex-shrink: 0;
+    font-size: 11px;
   }
   .workspace-card__next strong {
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.5;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
   }
   .workspace-card__meta {
     margin-top: auto;
-    font-size: 12px;
+    flex-wrap: wrap;
+    gap: 4px 8px;
+    font-size: 11px;
   }
-  .workspace-card__meta svg {
+  .workspace-card__meta > :last-child {
     margin-left: auto;
     color: var(--workspace-accent);
   }
@@ -1441,8 +1351,18 @@
     line-height: 1.6;
   }
   .workspace-detail-head {
-    min-height: 34px;
+    position: sticky;
+    top: 0;
+    z-index: 14;
+    align-self: start;
+    min-height: 48px;
+    min-width: 0;
+    padding: 6px 0;
+    background: var(--workspace-open-canvas, var(--card-background));
+    border-bottom: 1px solid var(--surface-border-color);
   }
+  .workspace-detail-head::before { content: ''; position: absolute; bottom: 100%; left: 0; right: 0; height: var(--project-scroll-padding, 0px); background: inherit; pointer-events: none; }
+  .workspace-detail-head.is-pinned { box-shadow: 0 5px 12px -10px rgba(20, 24, 40, .35); }
   .workspace-detail-head__actions {
     display: flex;
     flex-wrap: wrap;
@@ -1458,8 +1378,6 @@
     display: grid;
     grid-template-columns: minmax(0, 1.6fr) minmax(420px, 1fr);
     gap: 24px;
-    background:
-      radial-gradient(circle at 92% 10%, var(--workspace-accent-soft), transparent 34%), var(--card-background);
   }
   .workspace-summary__main {
     display: flex;
@@ -1718,6 +1636,11 @@
     width: 32px;
     padding: 0;
   }
+  .workspace-resource-grid article:not(.is-unavailable) { cursor: pointer; }
+  .workspace-resource-grid article.is-selected { border-color: var(--workspace-accent); }
+  .workspace-resource-grid article:focus-within { outline: 2px solid var(--workspace-accent); outline-offset: 2px; }
+  .workspace-resource-link.b_btn,
+  .workspace-resource-link.b_btn:hover { background: transparent; }
   .workspace-resource-link {
     display: block;
     width: 100%;
@@ -1742,109 +1665,6 @@
     border: 1px dashed var(--surface-border-color);
     border-radius: 12px;
     background: var(--workspace-panel-bg-color);
-  }
-  .workspace-board {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    align-items: start;
-    gap: 12px;
-    margin-top: 18px;
-  }
-  .workspace-lane {
-    min-width: 0;
-    padding: 13px;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 14px;
-    background: var(--workspace-panel-bg-color);
-  }
-  .workspace-lane > header {
-    display: grid;
-    grid-template-columns: 4px minmax(0, 1fr) auto;
-    gap: 10px;
-    align-items: start;
-    margin-bottom: 12px;
-  }
-  .workspace-lane > header > span:first-child {
-    width: 4px;
-    height: 34px;
-    border-radius: 999px;
-    background: var(--workspace-accent);
-  }
-  .workspace-lane > header h4,
-  .workspace-lane > header p {
-    margin: 0;
-  }
-  .workspace-lane > header p {
-    margin-top: 3px;
-    color: var(--desc-color);
-    font-size: 11px;
-    line-height: 1.45;
-  }
-  .workspace-lane__empty {
-    padding: 22px 10px;
-    color: var(--desc-color);
-    text-align: center;
-    font-size: 12px;
-    border: 1px dashed var(--surface-border-color);
-    border-radius: 10px;
-  }
-  .workspace-item {
-    display: grid;
-    gap: 8px;
-    padding: 12px;
-    margin-bottom: 9px;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 11px;
-    background: var(--card-background);
-  }
-  .workspace-item.is-in_progress {
-    border-color: var(--workspace-accent);
-    box-shadow: inset 3px 0 0 var(--workspace-accent);
-  }
-  .workspace-item.is-done {
-    border-style: dashed;
-  }
-  .workspace-item.is-done > strong {
-    color: var(--desc-color);
-    text-decoration: line-through;
-  }
-  .workspace-item__head,
-  .workspace-item__actions {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 6px;
-  }
-  .workspace-item__head :deep(.b_btn) {
-    width: 28px;
-    height: 28px;
-    padding: 0;
-    margin-left: auto;
-  }
-  .workspace-item > p,
-  .workspace-item > small {
-    margin: 0;
-    color: var(--desc-color);
-    line-height: 1.5;
-  }
-  .workspace-item > p {
-    display: -webkit-box;
-    overflow: hidden;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 3;
-  }
-  .workspace-item > small {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-  }
-  .workspace-item__actions {
-    justify-content: flex-end;
-  }
-  :deep(.workspace-lane__add) {
-    margin-top: 10px;
-    border: 1px dashed var(--surface-border-color);
-    background: transparent;
   }
   .workspace-timeline {
     display: grid;
@@ -1954,7 +1774,6 @@
     }
   }
   @media (max-width: 1180px) {
-    .workspace-card-grid,
     .workspace-resource-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
@@ -1976,12 +1795,8 @@
     }
   }
   @media (max-width: 860px) {
-    .workspace-loop,
-    .workspace-board {
+    .workspace-loop {
       grid-template-columns: 1fr;
-    }
-    .workspace-lane {
-      padding: 14px;
     }
   }
   @media (max-width: 767px) {
@@ -2020,7 +1835,6 @@
     .workspace-loop article {
       padding: 12px;
     }
-    .workspace-list-section,
     .workspace-section,
     .workspace-summary {
       padding: 16px;
@@ -2037,7 +1851,7 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
     .workspace-section {
-      scroll-margin-top: 92px;
+      scroll-margin-top: var(--project-sticky-inset, 148px);
     }
     .workspace-section-nav :deep(.workspace-section-nav__item) {
       min-width: 0;
@@ -2046,9 +1860,6 @@
     .workspace-progress-form__summary,
     .workspace-progress-form__hint {
       grid-column: auto;
-    }
-    .workspace-card-grid :deep(.workspace-card) {
-      min-height: 210px;
     }
     .workspace-detail-head {
       align-items: flex-start;
@@ -2091,10 +1902,6 @@
     .workspace-resource-grid article {
       min-height: 52px;
     }
-    .workspace-item__actions :deep(.b_btn),
-    :deep(.workspace-lane__add) {
-      min-height: 40px;
-    }
     .workspace-modal-actions {
       position: sticky;
       bottom: 0;
@@ -2106,10 +1913,6 @@
       width: auto;
       min-height: 44px;
     }
-  }
-  :global(html.light-note-mobile-rendering .workspace-item.is-in_progress) {
-    border: 2px solid var(--workspace-accent);
-    box-shadow: none;
   }
   :global(html.light-note-mobile-rendering .workspace-section.is-section-focused) {
     border: 2px solid var(--workspace-accent);
@@ -2132,7 +1935,6 @@
   }
   .workspace-summary {
     grid-template-columns: minmax(0, 1fr);
-    background: var(--card-background);
     padding: 20px;
   }
   .workspace-summary__main p.is-collapsed {
@@ -2147,24 +1949,6 @@
   .workspace-resume__lead strong {
     white-space: normal;
     overflow-wrap: anywhere;
-  }
-  .workspace-card-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .workspace-card-grid :deep(.workspace-card) {
-    min-height: 170px;
-    border-top-width: 1px;
-    background: var(--card-background);
-  }
-  .workspace-card__copy small {
-    min-height: 0;
-  }
-  .workspace-card__next {
-    background: transparent;
-    padding: 0;
-  }
-  .workspace-card__next strong {
-    white-space: normal;
   }
   .workspace-resource-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2227,7 +2011,7 @@
 
   .project-section-navigation {
     position: sticky;
-    top: 48px;
+    top: var(--project-head-height, 48px);
     z-index: 12;
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -2235,7 +2019,6 @@
     padding: 7px;
     border: 1px solid var(--surface-border-color);
     border-radius: 15px;
-    background: var(--card-background);
     box-shadow: 0 6px 22px rgba(20, 24, 40, 0.06);
   }
   .project-section-navigation > .b_btn {
@@ -2332,9 +2115,12 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
+  @media (max-width: 1199px) {
+    .project-section-navigation { margin-top: -20px; border-top: 0; border-radius: 0 0 14px 14px; }
+  }
   @media (max-width: 767px) {
     .project-section-navigation {
-      top: 8px;
+      top: var(--project-head-height, 48px);
       gap: 3px;
       padding: 4px;
     }
@@ -2395,6 +2181,7 @@
     }
   }
   .project-breadcrumb {
+    flex: 1;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -2416,15 +2203,33 @@
   .project-breadcrumb__mobile-back {
     display: none;
   }
+  .project-section-navigation > .project-settings-trigger--mobile { display: none; }
   @media (max-width: 767px) {
-    .project-breadcrumb__workshop.b_btn,
-    .project-breadcrumb__separator,
-    .project-breadcrumb__current {
-      display: none;
+    .project-breadcrumb { display: none; }
+    .workspace-detail-head { display: none; }
+    .project-section-navigation {
+      top: 0;
+      margin-top: 0;
+      grid-template-columns: repeat(4, minmax(0, 1fr)) 40px;
+      border: 1px solid var(--surface-border-color);
+      border-radius: 12px;
     }
-    .project-breadcrumb__mobile-back {
-      display: inline-flex;
+    .project-section-navigation::before { content: ''; position: absolute; bottom: 100%; left: 0; right: 0; height: var(--project-scroll-padding, 0px); background: inherit; pointer-events: none; }
+    .project-section-navigation__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .project-section-navigation > .project-settings-trigger--mobile { display: inline-flex; width: 40px; padding: 0; border: 0; border-left: 1px solid var(--surface-border-color); border-radius: 0; }
+
+    .project-settings-trigger.b_btn { padding: 0 10px; font-size: 11px; min-height: 36px; }
+    .project-section-navigation > .b_btn {
+      flex-direction: row;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      gap: 0;
+      min-height: 40px;
+      padding: 4px 2px;
+      line-height: 1.3;
     }
+    .project-section-navigation__number { display: none; }
   }
   .project-settings-status {
     padding: 16px;
@@ -2433,6 +2238,7 @@
     background: var(--workspace-panel-bg-color);
   }
   .project-settings-trigger.b_btn {
+    flex-shrink: 0;
     background: transparent;
     border: 1px solid var(--surface-border-color);
     border-radius: 999px;
@@ -2442,4 +2248,18 @@
       padding: 16px;
     }
   }
+
+  // 共享工作区表面：仅改变颜色，布局与滚动由原组件负责。
+  .knowledge-workspace, .project-section-navigation {
+    .workspace-open-surface();
+  }
+  .workspace-list-section, .workspace-section, .workspace-summary, .workspace-resume, .workspace-card-grid :deep(.workspace-card), .workspace-resource-grid > article {
+    .workspace-content-surface();
+  }
+
+  .knowledge-workspace { .workspace-navigation-colors(); }
+  .knowledge-workspace.is-learning { .workspace-navigation-colors(note); }
+  .project-section-navigation > .b_btn:hover { .workspace-navigation-hover(); }
+  .project-section-navigation > .b_btn.is-current { .workspace-navigation-selected(); }
+  .workspace-kicker, .workspace-section__kicker { color: var(--workspace-nav-text); }
 </style>

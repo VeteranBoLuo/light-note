@@ -121,6 +121,7 @@
 </script>
 
 <style lang="less" scoped>
+  @import (reference) "@/assets/css/workspace-surfaces.less";
   .card-body {
     border: 1px solid color-mix(in srgb, var(--card-border-color) 78%, transparent);
     height: 164px;
@@ -129,11 +130,6 @@
     box-sizing: border-box;
     cursor: pointer;
     position: relative;
-    background: linear-gradient(
-      145deg,
-      color-mix(in srgb, var(--resource-bookmark-color, #615ced) 2.5%, var(--card-background)),
-      var(--card-background) 52%
-    );
     box-shadow: 0 10px 24px -24px color-mix(in srgb, var(--text-color) 38%, transparent);
     transition:
       border-color 0.2s,
@@ -253,5 +249,10 @@
       -webkit-line-clamp: 3;
       line-clamp: 3;
     }
+  }
+
+  // 共享工作区表面：仅改变颜色，布局与滚动由原组件负责。
+  .card-body {
+    .workspace-content-surface();
   }
 </style>

@@ -80,6 +80,7 @@ function localDateOnly(value) {
 function mapWorkspace(row) {
   return {
     id: String(row.id),
+    boardVersion: Number(row.board_version || 0),
     kind: String(row.kind),
     title: String(row.title || ''),
     description: String(row.description || ''),
@@ -127,10 +128,10 @@ async function selectHomeWorkspaceSummary(database, ownerId, workspaceId) {
             (SELECT COUNT(*)
                FROM toolbox_workspace_resources resource
               WHERE resource.workspace_id = w.id AND resource.user_id = w.user_id) AS resource_count,
-            (SELECT COALESCE(SUM(item.status IN ('open', 'in_progress')), 0)
+            (SELECT COALESCE(SUM(item.lane <> 'knowledge' AND item.status IN ('open', 'in_progress')), 0)
                FROM toolbox_workspace_items item
               WHERE item.workspace_id = w.id AND item.user_id = w.user_id) AS open_item_count,
-            (SELECT COALESCE(SUM(item.status = 'done'), 0)
+            (SELECT COALESCE(SUM(item.lane = 'action' AND item.status = 'done'), 0)
                FROM toolbox_workspace_items item
               WHERE item.workspace_id = w.id AND item.user_id = w.user_id) AS completed_item_count
        FROM toolbox_workspaces w
@@ -155,6 +156,9 @@ function mapResource(row) {
 function mapItem(row) {
   return {
     id: String(row.id),
+    sourceItemId: row.source_item_id || null,
+    sourceTitle: row.source_title || '',
+    sourceContent: row.source_content || '',
     lane: String(row.lane),
     title: String(row.title || ''),
     content: String(row.content || ''),
@@ -273,8 +277,8 @@ export async function listToolboxWorkspaces({ userId, kind, status, database = p
        ) resources ON resources.workspace_id = w.id
        LEFT JOIN (
          SELECT workspace_id,
-                SUM(status IN ('open', 'in_progress')) AS open_item_count,
-                SUM(status = 'done') AS completed_item_count
+                SUM(lane <> 'knowledge' AND status IN ('open', 'in_progress')) AS open_item_count,
+                SUM(lane = 'action' AND status = 'done') AS completed_item_count
            FROM toolbox_workspace_items
           WHERE user_id = ?
           GROUP BY workspace_id
@@ -303,8 +307,8 @@ export async function listToolboxHomeWorkspaces({ userId, database = pool } = {}
        ) resources ON resources.workspace_id = w.id
        LEFT JOIN (
          SELECT workspace_id,
-                SUM(status IN ('open', 'in_progress')) AS open_item_count,
-                SUM(status = 'done') AS completed_item_count
+                SUM(lane <> 'knowledge' AND status IN ('open', 'in_progress')) AS open_item_count,
+                SUM(lane = 'action' AND status = 'done') AS completed_item_count
            FROM toolbox_workspace_items
           WHERE user_id = ?
           GROUP BY workspace_id
@@ -415,8 +419,8 @@ export async function getToolboxWorkspace({ userId, workspaceId, database = pool
     ...mapWorkspace({
       ...workspace,
       resource_count: resources.length,
-      open_item_count: items.filter((item) => ['open', 'in_progress'].includes(item.status)).length,
-      completed_item_count: items.filter((item) => item.status === 'done').length,
+      open_item_count: items.filter((item) => item.lane !== 'knowledge' && ['open', 'in_progress'].includes(item.status)).length,
+      completed_item_count: items.filter((item) => item.lane === 'action' && item.status === 'done').length,
     }),
     streakDays: calculateWorkspaceStreak(datesResult[0].map((row) => row.session_date)),
     resources,
@@ -521,79 +525,12 @@ export async function removeToolboxWorkspaceResource({ userId, workspaceId, reso
 }
 
 export async function createToolboxWorkspaceItem({ userId, workspaceId, input = {}, database = pool } = {}) {
-  const ownerId = requiredUserId(userId);
-  await requireWorkspace(database, ownerId, workspaceId);
-  const lane = oneOf(input.lane, TOOLBOX_WORKSPACE_LANES, 'lane');
-  const title = requiredText(input.title, 'title', 255);
-  const content = optionalText(input.content, 'content', 5000);
-  const dueOn = optionalDate(input.dueOn, 'dueOn');
-  const id = crypto.randomUUID();
-  await withTransaction(database, async (connection) => {
-    await lockWorkspace(connection, ownerId, workspaceId);
-    const [countRows] = await connection.query(
-      `SELECT COUNT(*) AS total FROM toolbox_workspace_items
-        WHERE workspace_id = ? AND user_id = ? AND status <> 'archived'`,
-      [workspaceId, ownerId],
-    );
-    if (Number(countRows[0]?.total || 0) >= MAX_ITEMS) {
-      throw toolboxError('TOOLBOX_WORKSPACE_ITEM_LIMIT', `单个工作区最多保留 ${MAX_ITEMS} 个事项`, 409);
-    }
-    const [positionRows] = await connection.query(
-      `SELECT COALESCE(MAX(position), -1) + 1 AS next_position
-         FROM toolbox_workspace_items WHERE workspace_id = ? AND user_id = ? AND lane = ?`,
-      [workspaceId, ownerId, lane],
-    );
-    await connection.query(
-      `INSERT INTO toolbox_workspace_items
-        (id, workspace_id, user_id, lane, title, content, status, position, due_on)
-       VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?)`,
-      [id, workspaceId, ownerId, lane, title, content, Number(positionRows[0]?.next_position || 0), dueOn],
-    );
-    await connection.query(
-      `UPDATE toolbox_workspaces SET updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?`,
-      [workspaceId, ownerId],
-    );
-  });
-  return getToolboxWorkspace({ userId: ownerId, workspaceId, database });
+  const { operateBoard } = await import('./board.js');
+  return (await operateBoard({ userId, workspaceId, database, legacy: true, input: { requestId: crypto.randomUUID(), command: { ...input, type: 'create' } } })).workspace;
 }
-
 export async function updateToolboxWorkspaceItem({ userId, workspaceId, itemId, input = {}, database = pool } = {}) {
-  const ownerId = requiredUserId(userId);
-  await requireWorkspace(database, ownerId, workspaceId);
-  const [rows] = await database.query(
-    `SELECT * FROM toolbox_workspace_items WHERE id = ? AND workspace_id = ? AND user_id = ? LIMIT 1`,
-    [requiredText(itemId, 'itemId', 36), workspaceId, ownerId],
-  );
-  if (!rows[0]) throw toolboxError('TOOLBOX_WORKSPACE_ITEM_NOT_FOUND', '事项不存在或已不可访问', 404);
-  const setters = [];
-  const params = [];
-  const fields = [
-    ['title', 'title', (value) => requiredText(value, 'title', 255)],
-    ['content', 'content', (value) => optionalText(value, 'content', 5000)],
-    ['lane', 'lane', (value) => oneOf(value, TOOLBOX_WORKSPACE_LANES, 'lane')],
-    ['status', 'status', (value) => oneOf(value, TOOLBOX_WORKSPACE_ITEM_STATUSES, 'status')],
-    ['dueOn', 'due_on', (value) => optionalDate(value, 'dueOn')],
-    ['position', 'position', (value) => Math.max(0, Math.min(100_000, Number(value) || 0))],
-  ];
-  for (const [inputKey, column, normalize] of fields) {
-    if (!Object.prototype.hasOwnProperty.call(input, inputKey)) continue;
-    setters.push(`${column} = ?`);
-    params.push(normalize(input[inputKey]));
-  }
-  if (!setters.length) throw toolboxError('TOOLBOX_WORKSPACE_ITEM_UPDATE_EMPTY', '没有可更新的事项字段', 400);
-  const nextStatus = Object.prototype.hasOwnProperty.call(input, 'status') ? input.status : rows[0].status;
-  setters.push("completed_at = CASE WHEN ? = 'done' THEN COALESCE(completed_at, CURRENT_TIMESTAMP) ELSE NULL END");
-  params.push(nextStatus, itemId, workspaceId, ownerId);
-  await database.query(
-    `UPDATE toolbox_workspace_items SET ${setters.join(', ')}, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ? AND workspace_id = ? AND user_id = ?`,
-    params,
-  );
-  await database.query(`UPDATE toolbox_workspaces SET updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?`, [
-    workspaceId,
-    ownerId,
-  ]);
-  return getToolboxWorkspace({ userId: ownerId, workspaceId, database });
+  const { operateBoard } = await import('./board.js');
+  return (await operateBoard({ userId, workspaceId, database, legacy: true, input: { requestId: crypto.randomUUID(), command: { ...input, itemId, type: 'edit' } } })).workspace;
 }
 
 export async function createToolboxWorkspaceSession({ userId, workspaceId, input = {}, database = pool } = {}) {

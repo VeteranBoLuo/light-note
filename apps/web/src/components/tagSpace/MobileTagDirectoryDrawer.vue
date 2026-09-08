@@ -104,6 +104,7 @@
               </span>
             </span>
           </span>
+          <small v-if="tagItem.todoCounts?.total">{{ t('todoWorkspace.tagTodoCount', tagItem.todoCounts) }}</small>
           <strong class="mobile-tag-directory__row-total">{{ tagItem.counts.total }}</strong>
         </BButton>
       </div>

@@ -64,12 +64,12 @@
   .pdf-workbench {
     min-width: 0;
     display: grid;
-    gap: 20px;
+    gap: 14px;
   }
 
   .pdf-workbench__navigation {
     min-width: 0;
-    padding: 7px;
+    padding: 4px;
     overflow-x: auto;
     border: 1px solid var(--surface-border-color);
     border-radius: 14px;
@@ -87,7 +87,7 @@
   }
 
   .pdf-workbench__navigation :deep(.tab) {
-    min-height: 38px;
+    min-height: 34px;
     flex: 1;
     justify-content: center;
     padding-right: 18px;

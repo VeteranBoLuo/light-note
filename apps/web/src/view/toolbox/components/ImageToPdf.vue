@@ -281,8 +281,8 @@
     gap: 16px;
   }
   .image-pdf-tool__drop-zone {
-    min-height: 300px;
-    padding: 36px;
+    min-height: 200px;
+    padding: 20px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -301,8 +301,8 @@
     background: var(--card-background);
   }
   .image-pdf-tool__drop-zone > span {
-    width: 68px;
-    height: 68px;
+    width: 44px;
+    height: 44px;
     display: grid;
     place-items: center;
     border-radius: 18px;
@@ -422,8 +422,8 @@
   }
   @media (max-width: 767px) {
     .image-pdf-tool__drop-zone {
-      min-height: 250px;
-      padding: 28px 18px;
+      min-height: 220px;
+      padding: 20px 16px;
     }
     .image-pdf-tool__settings {
       grid-template-columns: 1fr;

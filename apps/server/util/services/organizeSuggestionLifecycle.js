@@ -56,13 +56,18 @@ export async function previewV2(db, { userId, input, requestId }) {
     };
     if (existing.length) return prior(existing[0]);
     const candidates = [];
+    let customIconCount = 0;
     for (const type of options.resourceTypes) {
       if (options.scope === 'selected') {
         const ids = options.items.filter((item) => item.type === type).map((item) => item.id);
-        for (let offset = 0; offset < ids.length; offset += 100)
-          candidates.push(
-            ...(await readSuggestionCandidates(c, userId, type, { ids: ids.slice(offset, offset + 100) })),
-          );
+        for (let offset = 0; offset < ids.length; offset += 100) {
+          const rows = await readSuggestionCandidates(c, userId, type, {
+            ids: ids.slice(offset, offset + 100),
+            ...(type === 'tag' ? { includeCustomIcons: true } : {}),
+          });
+          customIconCount += rows.filter((row) => row.hasCustomIcon).length;
+          candidates.push(...rows.filter((row) => !row.hasCustomIcon));
+        }
       } else {
         let after = '';
         while (true) {
@@ -71,8 +76,10 @@ export async function previewV2(db, { userId, input, requestId }) {
             recent: options.scope === 'recent',
             untagged: options.scope === 'untagged',
             limit: options.scope === 'recent' ? 20 : 100,
+            ...(type === 'tag' && options.scope === 'all' ? { includeCustomIcons: true } : {}),
           });
-          candidates.push(...page);
+          customIconCount += page.filter((row) => row.hasCustomIcon).length;
+          candidates.push(...page.filter((row) => !row.hasCustomIcon));
           if (options.scope === 'recent' || page.length < 100) break;
           after = page.at(-1).id;
         }
@@ -94,7 +101,11 @@ export async function previewV2(db, { userId, input, requestId }) {
       aiTotal: options.resourceTypes.every((type) => type === 'tag') ? 0 : null,
       ruleTotal: options.resourceTypes.every((type) => type === 'tag') ? candidates.length : null,
       files: { parsed: null, metadata: null },
-      skipped: options.scope === 'selected' ? options.items.length - candidates.length : 0,
+      skipped: options.scope === 'selected' ? options.items.length - candidates.length : customIconCount,
+      skippedReasons: {
+        customIcon: customIconCount,
+        unavailable: options.scope === 'selected' ? options.items.length - candidates.length - customIconCount : 0,
+      },
       estimatedTokensLower: null,
       estimatedTokensUpper: null,
       aiEnabled: isOrganizeAiSuggestionsEnabled(),

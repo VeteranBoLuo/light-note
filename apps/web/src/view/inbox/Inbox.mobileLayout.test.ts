@@ -140,7 +140,7 @@ describe('移动端待办页签布局', () => {
     expect(inboxSource.match(/v-if="todoView === 'list' && \(todo\.items\.length \|\| pageLoading\)"/g)).toHaveLength(
       2,
     );
-    expect(inboxSource.match(/:active="todoSelectionMode"/g)).toHaveLength(2);
+    expect(inboxSource.match(/:active="todoSelectionMode"/g)).toHaveLength(3);
     expect(inboxSource).toContain('<ResourceBatchActionBar');
     expect(inboxSource).toContain(':open="isTodoFocused && todoView === \'list\' && todoSelectionMode"');
     expect(inboxSource).toContain(':checked="allTodoItemsSelected"');
@@ -198,14 +198,14 @@ describe('移动端待办页签布局', () => {
     expect(inboxSource).toMatch(/:deep\(\.todo-workspace-toolbar__views\.tab-container\)[\s\S]*?min-height:\s*40px/);
   });
 
-  it('PC 端用胶囊状态与文字视图区分两套切换，并保持在同一行', () => {
+  it('PC 端视图与状态分组使用胶囊，并支持窄屏换行', () => {
     expect(inboxSource).toContain("t('inbox.todoStatusGroupLabel')");
     expect(inboxSource).toContain("t('inbox.todoViewGroupLabel')");
     expect(inboxSource).toContain('class="inbox-toolbar__todo-status"');
     expect(inboxSource).not.toContain('class="inbox-toolbar__todo-group-label"');
     expect(inboxSource).not.toContain('class="inbox-toolbar__todo-divider"');
     expect(inboxSource).toMatch(/class="inbox-toolbar__todo-status"[\s\S]*?variant="pill"/);
-    expect(inboxSource).toMatch(/class="inbox-toolbar__todo-views"[\s\S]*?variant="line"/);
+    expect(inboxSource).toMatch(/class="inbox-toolbar__todo-views"[\s\S]*?variant="pill"/);
     expect(inboxSource).toContain("'inbox-toolbar--todo-desktop': isTodoFocused && !isMobileTodoPrimary");
     expect(inboxSource).toMatch(
       /\.inbox-toolbar--todo-desktop\s*\{[\s\S]*?padding:\s*3px 0[\s\S]*?background:\s*transparent/,
@@ -222,10 +222,10 @@ describe('移动端待办页签布局', () => {
   });
 
   it('桌面概览使用语义图标和独立深浅主题 Token', () => {
-    expect(inboxSource).toContain('icon.todoSummary.overdue');
-    expect(inboxSource).toContain('icon.todoSummary.today');
-    expect(inboxSource).toContain('icon.todoSummary.week');
-    expect(inboxSource).toContain('color="var(--todo-summary-icon-fg)"');
+    expect(inboxSource).toContain('icon.todoWorkspace.clock');
+    expect(inboxSource).toContain('icon.navigation.sun');
+    expect(inboxSource).toContain('icon.todoWorkspace.calendar');
+    expect(inboxSource).toContain(':src="card.icon"');
     expect(inboxSource).toMatch(
       /\.todo-summary-card__icon[\s\S]*?border:\s*1px solid var\(--todo-summary-icon-border\)/,
     );
@@ -263,7 +263,7 @@ describe('移动端待办页签布局', () => {
   it('移动端保留页面标题和独立卡片，新建只使用顶栏入口', () => {
     expect(inboxSource).toContain('class="mobile-todo-heading"');
     expect(inboxSource).not.toContain('class="mobile-todo-create-fab"');
-    expect(inboxSource).toContain("router.push({ name: 'todoCreate' })");
+    expect(inboxSource).toMatch(/router.push\(\{\s*name: 'todoCreate',[\s\S]*?todoInitialValues/);
     expect(inboxSource).toMatch(/\.inbox-page--mobile-todo \.todo-group\s*\{[\s\S]*?border:\s*0;/);
     expect(inboxSource).toMatch(
       /\.inbox-page--mobile-todo \.todo-group__items :deep\(\.todo-item\)\s*\{[\s\S]*?border-left:\s*4px solid/,
@@ -275,7 +275,7 @@ describe('移动端待办页签布局', () => {
     expect(inboxSource).toContain("['smart', 'action', 'priority', 'newest']");
     expect(inboxSource).not.toContain("inbox.sort = 'due' as any");
     expect(inboxSource).not.toContain('todo.sort = inbox.sort as TodoSort');
-    expect(inboxSource.match(/v-model:value="todo\.sort"/g)).toHaveLength(2);
+    expect(inboxSource.match(/v-model:value="todo\.sort"/g)).toHaveLength(1);
     expect(inboxSource).toContain('if (isTodoFocused.value) applyDefaultTodoSort()');
   });
 });

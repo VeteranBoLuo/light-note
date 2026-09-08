@@ -1,5 +1,5 @@
 <template>
-  <section class="ai-usage-center" aria-labelledby="ai-usage-center-title">
+  <section class="ai-usage-center" :class="{ 'is-settings': settingsLayout }" aria-labelledby="ai-usage-center-title">
     <div class="usage-head">
       <div>
         <h3 id="ai-usage-center-title">{{ t('settings.ai.usage.title') }}</h3>
@@ -69,7 +69,24 @@
         </article>
       </div>
 
-      <section v-if="data?.modules.length" class="usage-section" aria-labelledby="usage-modules-title">
+      <BButton
+        v-if="settingsLayout && data?.modules.length"
+        class="usage-disclosure"
+        :aria-expanded="breakdownOpen"
+        aria-controls="settings-usage-modules"
+        @click="breakdownOpen = !breakdownOpen"
+        ><SvgIcon
+          :src="icon.arrow_right"
+          :style="{ transform: breakdownOpen ? 'rotate(90deg)' : undefined }"
+          size="14"
+        />{{ t('settings.ai.usage.moduleBreakdown') }}</BButton
+      >
+      <section
+        v-if="data?.modules.length && (!settingsLayout || breakdownOpen)"
+        id="settings-usage-modules"
+        class="usage-section"
+        aria-labelledby="usage-modules-title"
+      >
         <div class="usage-section-head">
           <div>
             <h4 id="usage-modules-title">{{ t('settings.ai.usage.moduleBreakdown') }}</h4>
@@ -88,7 +105,22 @@
         </div>
       </section>
 
-      <section class="usage-section" aria-labelledby="usage-trend-title">
+      <BButton
+        v-if="settingsLayout"
+        class="usage-disclosure"
+        :aria-expanded="trendOpen"
+        aria-controls="settings-usage-trend"
+        @click="trendOpen = !trendOpen"
+        ><SvgIcon :src="icon.arrow_right" :style="{ transform: trendOpen ? 'rotate(90deg)' : undefined }" size="14" />{{
+          t('settings.ai.usage.dailyTrend')
+        }}</BButton
+      >
+      <section
+        v-if="!settingsLayout || trendOpen"
+        id="settings-usage-trend"
+        class="usage-section"
+        aria-labelledby="usage-trend-title"
+      >
         <div class="usage-section-head">
           <div>
             <h4 id="usage-trend-title">{{ t('settings.ai.usage.dailyTrend') }}</h4>
@@ -156,7 +188,7 @@
                 </span>
               </div>
               <div class="record-meta">
-                <span>{{ formatDateTime(item.createdAt) }}</span>
+                <span :class="{ 'record-time-inline': settingsLayout }">{{ formatDateTime(item.createdAt) }}</span>
                 <span>{{ moduleLabel(item.module) }}</span>
                 <span v-if="item.organizeRunId">{{
                   t('settings.ai.usage.runResources', { n: item.resourceCount })
@@ -170,6 +202,7 @@
                 {{ t('settings.ai.usage.settlementPending') }}
               </small>
             </div>
+            <time v-if="settingsLayout" class="record-time">{{ formatDateTime(item.createdAt) }}</time>
             <div class="record-charge">
               <strong>{{ formatExactTokens(item.chargedTokens) }}</strong>
               <span>tokens</span>
@@ -285,6 +318,10 @@
   import { AI_USAGE_FILTER_MODULE_KEYS, aiUsageModuleKey } from '@/components/aiSkills/aiUsageModules';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
+
+  withDefaults(defineProps<{ settingsLayout?: boolean }>(), { settingsLayout: false });
+  const breakdownOpen = ref(false);
+  const trendOpen = ref(false);
 
   interface UsageSummary {
     chargedTokens: number;
@@ -1158,6 +1195,72 @@
     .rule-groups,
     .free-grid {
       grid-template-columns: 1fr;
+    }
+  }
+
+  .ai-usage-center.is-settings {
+    .usage-head {
+      padding-bottom: 18px;
+      border-bottom: 1px solid var(--card-border-color);
+    }
+    .usage-head h3 {
+      font-size: 16px;
+    }
+    .usage-head p {
+      font-size: 13px;
+    }
+    .usage-summary {
+      gap: 12px;
+    }
+    .summary-card {
+      background: transparent;
+    }
+    .usage-disclosure {
+      align-self: flex-start;
+      justify-content: flex-start;
+      width: auto;
+      gap: 8px;
+      padding: 8px 0;
+      border: 0;
+      background: transparent;
+    }
+    .usage-records {
+      gap: 0;
+    }
+    .usage-record {
+      grid-template-columns: minmax(0, 1fr) minmax(130px, 19%) minmax(75px, 12%) 16px;
+      min-height: 90px;
+      padding: 18px 0;
+      border: 0;
+      border-bottom: 1px solid var(--card-border-color);
+      border-radius: 0;
+      background: transparent;
+    }
+    .record-icon {
+      display: none;
+    }
+    .record-time-inline {
+      display: none;
+    }
+    .record-time {
+      font-size: 12px;
+      color: var(--desc-color);
+    }
+  }
+  @media (max-width: 767px) {
+    .ai-usage-center.is-settings {
+      .usage-record {
+        grid-template-columns: minmax(0, 1fr) auto 16px;
+      }
+      .record-time {
+        display: none;
+      }
+      .record-time-inline {
+        display: inline;
+      }
+      .usage-filters {
+        flex-wrap: wrap;
+      }
     }
   }
 </style>

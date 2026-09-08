@@ -16,17 +16,6 @@ describe('设置页端型与深链接状态矩阵', () => {
     expect(source).not.toContain('const anchors = computed');
   });
 
-  it('仅完整桌面放宽设置画布，并把 AI 偏好拆成页头与独立设置卡', () => {
-    expect(source).toMatch(/\.settings-container\.is-full-desktop\s*\{[\s\S]*?max-width:\s*1380px/);
-    expect(source).toMatch(
-      /\.settings-container\.is-full-desktop \.settings-desktop-sidebar\s*\{[\s\S]*?min-height:\s*520px/,
-    );
-    expect(source).toMatch(
-      /\.settings-container\.is-full-desktop \.settings-card--ai\s*\{[\s\S]*?background:\s*transparent/,
-    );
-    expect(source).toContain('class="field ai-daily-brief-field"');
-  });
-
   it('桌面选中态直接解析 section query，刷新和深链接不依赖本地状态', () => {
     expect(source).toContain('parseSettingsSection(route.query.section, settingsEnv.value)');
     expect(source).toMatch(
@@ -44,7 +33,7 @@ describe('设置页端型与深链接状态矩阵', () => {
     );
     expect(settingsRecord).not.toContain('beforeEnter');
     expect(commonRouterSource).toContain("path: '/ai-usage'");
-    expect(source).toContain("<AiUsagePage v-if=\"aiSettingsPanel === 'usage'\"");
+    expect(source).toContain('<AiUsagePage v-if="aiSettingsPanel === \'usage\'"');
     expect(source).toContain("route.query.panel === 'routines' ? 'routines' : 'usage'");
     expect(source).not.toContain("router.push('/ai-usage')");
   });
@@ -54,7 +43,9 @@ describe('设置页端型与深链接状态矩阵', () => {
     expect(source).toContain(
       'const showMobileIndex = computed(() => bookmark.isMobile && mobileSection.value === null)',
     );
-    expect(source).toContain("router.push({ path: '/settings', query: { section: id, ...(id === 'ai' ? { panel: 'usage' } : {}) } })");
+    expect(source).toContain(
+      "router.push({ path: '/settings', query: { section: id, ...(id === 'ai' ? { panel: 'usage' } : {}) } })",
+    );
     expect(source).toContain("function selectAiSettingsPanel(panel: 'usage' | 'routines')");
     expect(source).not.toMatch(/section === 'ai'[\s\S]{0,180}\/ai-usage/);
   });
@@ -68,12 +59,6 @@ describe('设置页端型与深链接状态矩阵', () => {
     expect(source).toMatch(
       /<div v-if="dailyBriefPreferenceWritable" class="field ai-daily-brief-field">\s*<div class="field-head">[\s\S]*?<span class="field-label">\{\{ t\('settings\.ai\.dailyBriefTitle'\)/,
     );
-    expect(source).toMatch(
-      /<div v-if="!bookmark\.isMobile" class="field">\s*<div class="field-head">\s*<span class="field-label">\{\{ t\('settings\.uiScale'\)/,
-    );
-    expect(source).toMatch(
-      /<div v-if="!bookmark\.isMobile" class="field">\s*<div class="field-head">\s*<span class="field-label">\{\{ t\('settings\.noteDirectEdit'\)/,
-    );
     expect(source).toContain(
       ':disabled="dailyBriefPreferenceLoading || dailyBriefPreferenceSaving || !dailyBriefFeatureEnabled"',
     );
@@ -81,6 +66,5 @@ describe('设置页端型与深链接状态矩阵', () => {
       /async function save[\s\S]*?const previous = enabled\.value[\s\S]*?enabled\.value = previous[\s\S]*?message\.warning/,
     );
     expect(source).not.toMatch(/dailyBrief[\s\S]{0,120}(estimated|tokens|cost)/i);
-    expect(source).toMatch(/\.ai-brief-detail\s*\{\s*grid-column: 2;/);
   });
 });

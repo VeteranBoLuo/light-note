@@ -341,6 +341,7 @@
 </script>
 
 <style scoped lang="less">
+  @import (reference) "@/assets/css/workspace-surfaces.less";
   .global-graph-canvas {
     position: relative;
     width: 100%;
@@ -349,13 +350,6 @@
     overflow: hidden;
     border-radius: 10px;
     border: 1px solid var(--card-border-color);
-    background:
-      radial-gradient(
-        circle at 20% 15%,
-        color-mix(in srgb, var(--resource-tag-color, #615ced) 8%, transparent),
-        transparent 34%
-      ),
-      linear-gradient(135deg, color-mix(in srgb, var(--background-color) 96%, white), var(--background-color));
     animation: gg-fade 0.8s ease both;
   }
   /* 环境光:缓慢漂移的极光,给暗底一点"活着"的氛围(在画布之下) */
@@ -425,4 +419,11 @@
       transform: rotate(360deg);
     }
   }
+
+  // 共享工作区表面：仅改变颜色，布局与滚动由原组件负责。
+  .global-graph-canvas {
+    .workspace-canvas-surface();
+  }
+
+  .global-graph-canvas::after { background: none; }
 </style>

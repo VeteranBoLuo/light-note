@@ -45,3 +45,32 @@ describe('useTodoCreateDraft', () => {
     });
   });
 });
+
+it('普通和高级时间、提醒草稿独立保存，切换不覆盖公共清单和标签', () => {
+  const { draft, reset } = useTodoCreateDraft();
+  reset(null, { title: '两个草稿', listId: 'list', tagIds: ['tag'] });
+  draft.timing.dueAt = '2026-09-09 18:00';
+  draft.reminder = { version: 1, mode: 'once', once: { type: 'at_due' }, channels: ['in_app'] };
+  draft.independentTasks.timing = {
+    timezone: 'Asia/Shanghai',
+    anchorDate: '2026-09-10',
+    startTime: '22:00',
+    dueTime: '06:00',
+    dueDayOffset: 1,
+  };
+  draft.independentTasks.plan.end = { mode: 'count', count: 3 };
+  for (let i = 0; i < 3; i++) {
+    draft.independentTasks.enabled = true;
+    expect(normalizeTodoCreateDraft(draft)).toMatchObject({
+      listId: 'list',
+      tagIds: ['tag'],
+      timing: { anchorDate: '2026-09-10', dueDayOffset: 1 },
+      plan: { end: { mode: 'count', count: 3 } },
+    });
+    draft.independentTasks.enabled = false;
+    expect(normalizeTodoCreateDraft(draft)).toMatchObject({
+      timing: { anchorDate: '2026-09-09', dueTime: '18:00' },
+      singleTaskReminder: { mode: 'once', once: { type: 'at_due' } },
+    });
+  }
+});

@@ -14,7 +14,7 @@
       @toggle-complete="emit('toggle-complete', representative, $event)"
       @update-checklist="emit('update-checklist', representative, $event)"
       @preview="emit('preview', representative)"
-      @edit="emit('edit', representative)"
+      @edit="emit('edit', representative, $event)"
       @delete="emit('delete', representative)"
       @add-to-calendar="emit('add-to-calendar', representative)"
       @snooze="emit('snooze', representative, $event)"
@@ -50,7 +50,7 @@
         @toggle-complete="emit('toggle-complete', item, $event)"
         @update-checklist="emit('update-checklist', item, $event)"
         @preview="emit('preview', item)"
-        @edit="emit('edit', item)"
+        @edit="emit('edit', item, $event)"
         @delete="emit('delete', item)"
         @add-to-calendar="emit('add-to-calendar', item)"
         @snooze="emit('snooze', item, $event)"
@@ -68,7 +68,7 @@
       @toggle-complete="(item, completed) => emit('toggle-complete', item, completed)"
       @update-checklist="(item, checklist) => emit('update-checklist', item, checklist)"
       @preview="(item) => emit('preview', item)"
-      @edit="(item) => emit('edit', item)"
+      @edit="(item, section) => emit('edit', item, section)"
       @delete="(item) => emit('delete', item)"
       @add-to-calendar="(item) => emit('add-to-calendar', item)"
       @snooze="(item, preset) => emit('snooze', item, preset)"
@@ -119,7 +119,7 @@
     'toggle-complete': [item: TodoItemType, completed: boolean];
     'update-checklist': [item: TodoItemType, checklist: TodoChecklistItem[]];
     preview: [item: TodoItemType];
-    edit: [item: TodoItemType];
+    edit: [item: TodoItemType, section?: 'checklist'];
     delete: [item: TodoItemType];
     'add-to-calendar': [item: TodoItemType];
     snooze: [item: TodoItemType, preset: TodoSnoozePreset];

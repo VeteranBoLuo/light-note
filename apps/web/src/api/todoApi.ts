@@ -1,3 +1,4 @@
+import type { TodoListSummary, TodoOrganizationPatch } from '@lightnote/shared';
 import { apiBasePost } from '@/http/request';
 
 export type TodoPriority = 0 | 1 | 2;
@@ -122,6 +123,8 @@ export interface TodoPlanConfig {
 }
 
 export interface TodoPlanDraft {
+  listId?: string | null;
+  tagIds?: string[];
   title: string;
   description?: string;
   checklist?: TodoChecklistItem[];
@@ -188,6 +191,9 @@ export interface TodoResourceRefView extends TodoResourceRefInput {
 }
 
 export interface TodoItem {
+  listId?: string | null;
+  list?: TodoList | null;
+  tags?: Array<{ id: string; name: string }>;
   id: string;
   title: string;
   description?: string;
@@ -220,6 +226,8 @@ export interface TodoItem {
 }
 
 export interface TodoPayload {
+  listId?: string | null;
+  tagIds?: string[];
   title: string;
   description?: string;
   checklist?: TodoChecklistItem[];
@@ -236,7 +244,7 @@ export interface TodoPayload {
 export type TodoQuickReminderPreset = 'none' | 'before_due_1h' | 'daily' | 'daily_0900';
 
 export interface TodoCreateInitialValues extends Partial<
-  Pick<TodoPayload, 'title' | 'description' | 'priority' | 'dueAt' | 'checklist'>
+  Pick<TodoPayload, 'title' | 'description' | 'priority' | 'dueAt' | 'checklist' | 'listId' | 'tagIds'>
 > {
   quickReminderPreset?: TodoQuickReminderPreset;
   /** 快速创建的每日提醒时间；旧版 daily_0900 未传时仍回退 09:00。 */
@@ -244,6 +252,7 @@ export interface TodoCreateInitialValues extends Partial<
 }
 
 export type TodoEditorSubmission =
+  | { kind: 'organization'; scope: TodoPlanScope; payload: TodoOrganizationPatch & { title: string } }
   | { kind: 'legacy'; payload: TodoPayload }
   | { kind: 'v2'; scope: TodoPlanScope; payload: TodoPlanWritePayload; convertLegacyTodoId?: string };
 
@@ -296,3 +305,27 @@ export const reorderTodos = (items: Array<{ id: string; dueAt?: string | null; p
   apiBasePost('/api/todo/reorder', { items });
 export const snoozeTodo = (id: string, targetAt: string, options?: { silent?: boolean }) =>
   apiBasePost('/api/todo/snooze', { id, targetAt }, options);
+
+export type TodoList = TodoListSummary;
+export interface TodoWorkspaceQuery {
+  status?: TodoFilterStatus;
+  keyword?: string;
+  sort?: TodoSort;
+  scope?: string;
+  listId?: string | null;
+  tagIds?: string[];
+  priority?: number | '';
+  limit?: number;
+  cursor?: string | null;
+  rangeStart?: string;
+  rangeEnd?: string;
+  ids?: string[];
+}
+export const getTodoWorkspace = (params: TodoWorkspaceQuery) =>
+  apiBasePost('/api/todo/workspace', params, { silent: true });
+export const getTodoLists = () => apiBasePost('/api/todo/lists', {}, { silent: true });
+export const saveTodoList = (input: { id?: string; name: string; color: string }) =>
+  apiBasePost('/api/todo/lists/save', input);
+export const removeTodoList = (id: string) => apiBasePost('/api/todo/lists/delete', { id });
+export const organizeTodos = (input: TodoOrganizationPatch & { ids: string[]; scope?: TodoPlanScope; tagMode?: 'add' | 'remove' }) =>
+  apiBasePost('/api/todo/organization', input);

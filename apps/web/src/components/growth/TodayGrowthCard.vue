@@ -67,7 +67,7 @@
           :disabled="readOnly || claiming || Number(data?.count || 0) <= 0"
           @click="$emit('claim-all')"
         >
-          {{ t('growth.claimAllCount', { n: data?.count || 0 }) }}
+          {{ Number(data?.count || 0) > 0 ? t('growth.claimAllCount', { n: data?.count }) : t('growth.claimAllNone') }}
         </BButton>
       </div>
 
@@ -234,7 +234,7 @@
     display: none;
   }
   .today-growth--compact .today-growth__claim-compact {
-    align-self: stretch;
+    align-self: center;
     white-space: nowrap;
   }
   .today-growth__error {

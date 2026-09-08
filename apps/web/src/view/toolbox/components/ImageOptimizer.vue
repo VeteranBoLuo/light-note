@@ -438,8 +438,8 @@
     gap: 14px;
   }
   .image-tool__drop-zone {
-    min-height: 260px;
-    padding: 28px 24px;
+    min-height: 200px;
+    padding: 20px;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -460,13 +460,13 @@
     background: color-mix(in srgb, var(--primary-color) 8%, var(--card-background));
   }
   .image-tool__drop-icon {
-    width: 64px;
-    height: 64px;
-    margin-bottom: 14px;
+    width: 44px;
+    height: 44px;
+    margin-bottom: 10px;
     display: grid;
     place-items: center;
     border: 1px solid color-mix(in srgb, var(--primary-color) 20%, var(--surface-border-color));
-    border-radius: 19px;
+    border-radius: 12px;
     color: var(--primary-color);
     background: var(--card-background);
     box-shadow: 0 12px 30px rgba(38, 35, 82, 0.08);
@@ -476,7 +476,7 @@
     font-size: 21px;
   }
   .image-tool__drop-zone p {
-    margin: 9px 0 20px;
+    margin: 8px 0 14px;
     color: var(--desc-color);
     line-height: 1.65;
   }
@@ -729,8 +729,8 @@
       gap: 13px;
     }
     .image-tool__drop-zone {
-      min-height: 280px;
-      padding: 30px 18px;
+      min-height: 220px;
+      padding: 20px 16px;
       border-radius: 16px;
     }
     .image-tool__settings {

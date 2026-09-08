@@ -183,7 +183,7 @@ describe('todoHandle', () => {
     listTodos.mockResolvedValueOnce(items);
     queryTodoPendingCount.mockResolvedValueOnce(1);
     await listTodo({ user: { id: 'visitor', role: 'visitor' }, body: {} }, res);
-    expect(listTodos).toHaveBeenCalledWith(expect.anything(), 'visitor', { status: 'all', sort: 'smart', keyword: '' });
+    expect(listTodos).toHaveBeenCalledWith(expect.anything(), 'visitor', { status: 'all', sort: 'smart', keyword: '', organization: true });
     expect(queryTodoPendingCount).toHaveBeenCalledWith(expect.anything(), 'visitor');
     expect(res.send).toHaveBeenCalledWith({ data: { items, total: 1, pendingTotal: 1 }, status: 200, msg: '' });
   });
@@ -198,7 +198,7 @@ describe('todoHandle', () => {
 
   it('待处理列表默认查询全部完成状态', async () => {
     await listTodo({ user: { id: 'u1', role: 'user' }, body: {} }, mockRes());
-    expect(listTodos).toHaveBeenCalledWith(expect.anything(), 'u1', { status: 'all', sort: 'smart', keyword: '' });
+    expect(listTodos).toHaveBeenCalledWith(expect.anything(), 'u1', { status: 'all', sort: 'smart', keyword: '', organization: true });
   });
 
   it('撤销完成的批量状态请求只信任布尔标记并在事务内执行', async () => {

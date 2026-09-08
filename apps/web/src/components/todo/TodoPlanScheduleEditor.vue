@@ -423,14 +423,16 @@
     ];
     return values.filter(Boolean).map((value) => ({ value, label: value }));
   });
-  const planTypeOptions = computed(() => [
-    ...(props.legacyConversion && props.item?.recurrence
-      ? [{ value: '', label: t('inbox.todoLegacyChooseNewPlan') }]
-      : []),
-    { value: 'once', label: t('inbox.todoPlanOnce') },
-    { value: 'scheduled', label: t('inbox.todoPlanScheduled') },
-    { value: 'after_completion', label: t('inbox.todoPlanAfterCompletion') },
-  ]);
+  const planTypeOptions = computed<Array<{ value: '' | 'once' | 'scheduled' | 'after_completion'; label: string }>>(
+    () => [
+      ...(props.legacyConversion && props.item?.recurrence
+        ? [{ value: '' as const, label: t('inbox.todoLegacyChooseNewPlan') }]
+        : []),
+      { value: 'once', label: t('inbox.todoPlanOnce') },
+      { value: 'scheduled', label: t('inbox.todoPlanScheduled') },
+      { value: 'after_completion', label: t('inbox.todoPlanAfterCompletion') },
+    ],
+  );
   const frequencyOptions = computed(() => [
     { value: 'daily', label: t('inbox.todoRecurrenceDaily') },
     { value: 'weekly', label: t('inbox.todoRecurrenceWeekly') },
@@ -485,7 +487,7 @@
     { value: 'week', label: t('inbox.todoReminderWeeks') },
     { value: 'month', label: t('inbox.todoPlanMonths') },
   ]);
-  const reminderModeOptions = computed(() => [
+  const reminderModeOptions = computed<Array<{ value: 'none' | 'once_per_instance' | 'nudge'; label: string }>>(() => [
     { value: 'none', label: t('inbox.todoReminderNone') },
     { value: 'once_per_instance', label: t('inbox.todoReminderOnce') },
     { value: 'nudge', label: t('inbox.todoNudge') },
@@ -680,6 +682,18 @@
     previewTimer = window.setTimeout(() => void refreshPreview(), 350);
   }
 
+  let initialFingerprint = '';
+  let initialScheduleFingerprint = '';
+  const fingerprint = () => JSON.stringify({ form, weekdayState });
+  const scheduleFingerprint = () => {
+    const { scope, ...schedule } = form;
+    return JSON.stringify({ schedule, weekdayState });
+  };
+  defineExpose({
+    isDirty: () => fingerprint() !== initialFingerprint,
+    isScheduleDirty: () => scheduleFingerprint() !== initialScheduleFingerprint,
+    getScope: () => form.scope,
+  });
   function reset() {
     idempotencyKey = generateUUID();
     idempotencyFingerprint = '';
@@ -729,6 +743,8 @@
     form.nudgeStop = v2Reminder?.nudge?.stop || 'completion_or_due';
     form.quietPolicy = v2Reminder?.quietPolicy || 'defer_once';
     needsPastPolicy.value = false;
+    initialFingerprint = fingerprint();
+    initialScheduleFingerprint = scheduleFingerprint();
     schedulePreview();
   }
 
@@ -744,7 +760,7 @@
       () => ({ ...weekdayState }),
     ],
     schedulePreview,
-    { deep: true },
+    { deep: true, flush: 'sync' },
   );
   watch(
     () => [form.startAt, form.dueAt],

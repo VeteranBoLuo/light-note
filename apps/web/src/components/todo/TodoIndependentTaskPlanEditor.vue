@@ -1,22 +1,24 @@
 <template>
   <div class="todo-independent-plan">
-    <section class="todo-independent-plan__intro" role="note">
-      <div>
-        <strong>{{ t('inbox.todoGuidedIntroTitle') }}</strong>
-        <span>{{ t('inbox.todoGuidedIntroHint') }}</span>
+    <div ref="timingFieldsRef" class="todo-independent-plan__timing">
+      <label class="todo-independent-plan__date">
+        <span>{{ t('todoWorkspace.firstDate') }}</span>
+        <BDateTimePicker v-model:value="anchorDate" :show-time="false" />
+      </label>
+      <label ref="startFieldRef" class="todo-independent-plan__time-target">
+        <span>{{ t('todoWorkspace.eachStart') }}</span>
+        <BTimePicker v-model:value="eachStart" />
+      </label>
+      <div ref="dueFieldRef" class="todo-independent-plan__field todo-independent-plan__time-target">
+        <span>{{ t('todoWorkspace.eachDue') }}</span>
+        <div class="todo-independent-plan__due">
+          <BTimePicker v-model:value="eachDue" />
+          <BCheckbox controlled :model-value="nextDay" @update:model-value="nextDay = $event">{{ t('todoWorkspace.dueNextDay') }}</BCheckbox>
+        </div>
       </div>
-      <div class="todo-independent-plan__flow" aria-hidden="true">
-        <span>1 {{ t('inbox.todoGuidedFlowRepeat') }}</span>
-        <i>→</i>
-        <span>2 {{ t('inbox.todoGuidedFlowEnd') }}</span>
-        <i>→</i>
-        <span>3 {{ t('inbox.todoGuidedFlowReminder') }}</span>
-      </div>
-    </section>
-
+    </div>
     <section class="todo-independent-plan__step">
       <header class="todo-independent-plan__step-head">
-        <span class="todo-independent-plan__step-index">1</span>
         <div>
           <strong>{{ t('inbox.todoGuidedRepeatTitle') }}</strong>
           <small>{{ t('inbox.todoGuidedRepeatHint') }}</small>
@@ -83,7 +85,6 @@
 
     <section class="todo-independent-plan__step">
       <header class="todo-independent-plan__step-head">
-        <span class="todo-independent-plan__step-index">2</span>
         <div>
           <strong>{{ t('inbox.todoGuidedEndTitle') }}</strong>
           <small>{{ t('inbox.todoGuidedEndHint') }}</small>
@@ -102,10 +103,10 @@
       </div>
       <p class="todo-independent-plan__selection-hint">{{ endModeHint }}</p>
       <div v-if="endMode !== 'never'" class="todo-independent-plan__fields">
-        <label v-if="scheduledEndUsesDueAt" class="todo-independent-plan__wide">
-          <span>{{ t('inbox.todoGuidedEndUntilLabel') }}</span>
-          <BDateTimePicker v-model:value="dueAt" />
-          <small class="todo-independent-plan__field-hint">{{ t('inbox.todoGuidedEndUntilFieldHint') }}</small>
+        <label v-if="endMode === 'until'" class="todo-independent-plan__wide">
+          <span>{{ t('todoWorkspace.endDate') }}</span>
+          <BDateTimePicker class="todo-independent-plan__date" v-model:value="untilDate" :show-time="false" />
+          <small class="todo-independent-plan__field-hint">{{ t('inbox.todoPlanEndByDateHint') }}</small>
         </label>
         <label v-else-if="endMode === 'count'">
           <span>{{ t('inbox.todoPlanEndCount') }}</span>
@@ -117,7 +118,6 @@
 
     <section class="todo-independent-plan__step">
       <header class="todo-independent-plan__step-head">
-        <span class="todo-independent-plan__step-index">3</span>
         <div>
           <strong>{{ t('inbox.todoGuidedReminderTitle') }}</strong>
           <small>{{ t('inbox.todoGuidedReminderHint') }}</small>
@@ -159,29 +159,22 @@
             <BTimePicker v-model:value="fixedTime" block :aria-label="t('inbox.todoReminderFixedTime')" />
             <small class="todo-independent-plan__field-hint">{{ t('inbox.todoReminderFixedTimeHint') }}</small>
           </label>
-          <label v-else-if="triggerType === 'at_start'">
-            <span>{{ t('inbox.todoGuidedRequiredStartLabel') }}</span>
-            <BDateTimePicker v-model:value="startAt" />
-            <small class="todo-independent-plan__field-hint">{{ t('inbox.todoPlanStartTimePurpose') }}</small>
-          </label>
-          <template v-else>
-            <label v-if="!scheduledEndUsesDueAt">
-              <span>{{ t('inbox.todoGuidedRequiredDueLabel') }}</span>
-              <BDateTimePicker v-model:value="dueAt" />
-              <small class="todo-independent-plan__field-hint">{{ t('inbox.todoPlanDueTimePurpose') }}</small>
-            </label>
-            <div v-else class="todo-independent-plan__linked-note" role="note">
-              {{ t('inbox.todoGuidedUsesEndDue') }}
+          <div v-else class="todo-independent-plan__linked-note todo-independent-plan__wide">
+            <span>{{
+              t(triggerType === 'at_start' ? 'todoWorkspace.reminderUsesStart' : 'todoWorkspace.reminderUsesDue', {
+                time: (triggerType === 'at_start' ? eachStart : eachDue) || t('todoWorkspace.timeNotSet'),
+              })
+            }}</span>
+            <BButton size="small" @click="goToTiming">{{ t('todoWorkspace.editTaskTiming') }}</BButton>
+          </div>
+          <label v-if="triggerType === 'before_due'">
+            <span>{{ t('inbox.todoReminderOffsetMinutes') }}</span>
+            <div class="todo-independent-plan__inline">
+              <BInput v-model:value="offsetMinutes" type="number" />
+              <span>{{ t('inbox.todoReminderMinutes') }}</span>
             </div>
-            <label>
-              <span>{{ t('inbox.todoReminderOffsetMinutes') }}</span>
-              <div class="todo-independent-plan__inline">
-                <BInput v-model:value="offsetMinutes" type="number" />
-                <span>{{ t('inbox.todoReminderMinutes') }}</span>
-              </div>
-              <small class="todo-independent-plan__field-hint">{{ t('inbox.todoReminderOffsetHint') }}</small>
-            </label>
-          </template>
+            <small class="todo-independent-plan__field-hint">{{ t('inbox.todoReminderOffsetHint') }}</small>
+          </label>
 
           <template v-if="reminderMode === 'nudge'">
             <small class="todo-independent-plan__wide todo-independent-plan__nudge-hint">
@@ -234,7 +227,6 @@
       <div class="todo-independent-plan__more-head">
         <div>
           <strong>{{ t('inbox.todoGuidedMoreTitle') }}</strong>
-          <small>{{ moreSettingsHint }}</small>
         </div>
         <BButton
           size="small"
@@ -246,19 +238,9 @@
         </BButton>
       </div>
       <div v-if="moreSettingsOpen" id="todo-independent-plan-more-fields" class="todo-independent-plan__fields">
-        <label v-if="reminderMode === 'none' || triggerType !== 'at_start'">
-          <span>{{ t('inbox.todoStartAt') }}</span>
-          <BDateTimePicker v-model:value="startAt" />
-          <small class="todo-independent-plan__field-hint">{{ t('inbox.todoPlanStartTimePurpose') }}</small>
-        </label>
-        <label v-if="(reminderMode === 'none' || triggerType !== 'before_due') && !scheduledEndUsesDueAt">
-          <span>{{ t('inbox.todoDueAt') }}</span>
-          <BDateTimePicker v-model:value="dueAt" />
-          <small class="todo-independent-plan__field-hint">{{ t('inbox.todoPlanDueTimePurpose') }}</small>
-        </label>
         <label class="todo-independent-plan__wide">
           <span>{{ t('inbox.todoPlanTimezone') }}</span>
-          <BSelect v-model:value="props.draft.timing.timezone" :options="timezoneOptions" />
+          <BSelect v-model:value="planTiming.timezone" :options="timezoneOptions" />
           <small class="todo-independent-plan__field-hint">{{ t('inbox.todoPlanTimezoneHint') }}</small>
         </label>
       </div>
@@ -269,6 +251,7 @@
 <script setup lang="ts">
   import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BDateTimePicker from '@/components/base/BasicComponents/BDateTimePicker.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
@@ -287,6 +270,14 @@
   const props = withDefaults(defineProps<{ draft: TodoCreateDraftV3; needsPastPolicy?: boolean }>(), {
     needsPastPolicy: false,
   });
+  const timingFieldsRef = ref<HTMLElement | null>(null);
+  const startFieldRef = ref<HTMLElement | null>(null);
+  const dueFieldRef = ref<HTMLElement | null>(null);
+  function goToTiming() {
+    const field = triggerType.value === 'before_due' ? dueFieldRef.value : startFieldRef.value;
+    field?.scrollIntoView({ block: 'center', behavior: 'auto' });
+    field?.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true });
+  }
   const needsPastPolicy = computed(() => props.needsPastPolicy);
   const { t } = useI18n();
   const planTypeOptions = computed<Array<{ value: Exclude<TodoPlanType, 'once'>; label: string }>>(() => [
@@ -387,15 +378,56 @@
     get: () => props.draft.independentTasks.plan.monthDay || 1,
     set: (value) => (props.draft.independentTasks.plan.monthDay = Number(value || 1)),
   });
-  const startAt = computed({
-    get: () => props.draft.timing.startAt || '',
-    set: (value) => (props.draft.timing.startAt = value || null),
+  const planTiming = computed(() => props.draft.independentTasks.timing!);
+  const anchorDate = computed({
+    get: () => planTiming.value?.anchorDate || '',
+    set: (value) => {
+      planTiming.value.anchorDate = String(value).slice(0, 10);
+    },
   });
-  const dueAt = computed({
-    get: () => props.draft.timing.dueAt || '',
-    set: (value) => (props.draft.timing.dueAt = value || null),
+  const eachStart = computed({
+    get: () => planTiming.value?.startTime || '',
+    set: (value) => {
+      planTiming.value.startTime = value || null;
+      syncOvernight();
+    },
   });
-  let autoFilledUntilDueAt = '';
+  const eachDue = computed({
+    get: () => planTiming.value?.dueTime || '',
+    set: (value) => {
+      planTiming.value.dueTime = value || null;
+      syncOvernight();
+    },
+  });
+  let automaticallyOvernight = false;
+  const crossesMidnight = computed(() =>
+    Boolean(
+      planTiming.value?.startTime && planTiming.value?.dueTime && planTiming.value.dueTime < planTiming.value.startTime,
+    ),
+  );
+  function syncOvernight() {
+    if (crossesMidnight.value) {
+      if (!planTiming.value.dueDayOffset) automaticallyOvernight = true;
+      planTiming.value.dueDayOffset = 1;
+    } else if (automaticallyOvernight) {
+      planTiming.value.dueDayOffset = 0;
+      automaticallyOvernight = false;
+    }
+  }
+  const nextDay = computed({
+    get: () => Boolean(planTiming.value?.dueDayOffset),
+    set: (value) => {
+      if (!value && crossesMidnight.value) return;
+      automaticallyOvernight = false;
+      planTiming.value.dueDayOffset = value ? 1 : 0;
+    },
+  });
+  const untilDate = computed({
+    get: () => props.draft.independentTasks.plan.end?.untilDate || '',
+    set: (value) => {
+      props.draft.independentTasks.plan.end = { mode: 'until', untilDate: String(value).slice(0, 10) || null };
+    },
+  });
   const endMode = computed<TodoPlanEndMode>({
     get: () =>
       props.draft.independentTasks.plan.end?.mode ||
@@ -403,7 +435,7 @@
     set: (mode) => {
       const untilDate =
         endMode.value === 'until'
-          ? planDueDate() || props.draft.independentTasks.plan.end?.untilDate || recommendedEndDate()
+          ? props.draft.independentTasks.plan.end?.untilDate || recommendedEndDate()
           : recommendedEndDate();
       props.draft.independentTasks.plan.end = {
         mode,
@@ -412,7 +444,6 @@
       };
     },
   });
-  const scheduledEndUsesDueAt = computed(() => planType.value === 'scheduled' && endMode.value === 'until');
   const endModeHint = computed(() => {
     if (endMode.value === 'until') return t('inbox.todoPlanEndByDateHint');
     if (endMode.value === 'count') return t('inbox.todoPlanEndByCountHint');
@@ -477,19 +508,10 @@
   });
   const moreSettingsOpen = ref(
     Boolean(
-      (props.draft.timing.startAt && triggerType.value !== 'at_start') ||
-      (props.draft.timing.dueAt && triggerType.value !== 'before_due' && !scheduledEndUsesDueAt.value),
+      (planTiming.value?.startTime && triggerType.value !== 'at_start') ||
+      (planTiming.value?.dueTime && triggerType.value !== 'before_due'),
     ),
   );
-  const moreSettingsHint = computed(() => {
-    if (reminderMode.value !== 'none' && triggerType.value === 'at_start') {
-      return scheduledEndUsesDueAt.value ? t('inbox.todoGuidedMoreStartUntilHint') : t('inbox.todoGuidedMoreStartHint');
-    }
-    if (reminderMode.value !== 'none' && triggerType.value === 'before_due') {
-      return scheduledEndUsesDueAt.value ? t('inbox.todoGuidedMoreUntilHint') : t('inbox.todoGuidedMoreDueHint');
-    }
-    return scheduledEndUsesDueAt.value ? t('inbox.todoGuidedMoreUntilHint') : t('inbox.todoGuidedMoreHint');
-  });
   const nudgeIntervalUnit = computed<'minute' | 'hour' | 'day'>({
     get: () => naturalIntervalUnit(props.draft.independentTasks.reminder.nudge?.intervalMinutes || 60),
     set: (unit) => {
@@ -517,16 +539,12 @@
   });
 
   function recommendedEndDate() {
-    return suggestTodoPlanEndDate(props.draft.timing.startAt || props.draft.timing.dueAt);
-  }
-
-  function planDueDate() {
-    return String(props.draft.timing.dueAt || '').slice(0, 10);
+    return suggestTodoPlanEndDate(planTiming.value?.anchorDate);
   }
 
   function defaultReminderTrigger() {
-    if (props.draft.timing.startAt) return { type: 'at_start' as const };
-    if (props.draft.timing.dueAt && !scheduledEndUsesDueAt.value) {
+    if (planTiming.value?.startTime) return { type: 'at_start' as const };
+    if (planTiming.value?.dueTime) {
       return { type: 'before_due' as const, offsetMinutes: 0 };
     }
     return { type: 'fixed_time' as const, fixedTime: '09:00' };
@@ -559,51 +577,6 @@
       ...patch,
     };
   }
-
-  watch(
-    [() => planType.value, () => endMode.value],
-    ([currentType, currentEndMode], previous) => {
-      const usesCombinedDueAt = currentType === 'scheduled' && currentEndMode === 'until';
-      const hasPrevious = previous?.[0] !== undefined || previous?.[1] !== undefined;
-      const previouslyUsedCombinedDueAt = hasPrevious && previous[0] === 'scheduled' && previous[1] === 'until';
-
-      if (usesCombinedDueAt && !previouslyUsedCombinedDueAt) {
-        if (!hasPrevious && planDueDate()) return;
-        const untilDate = props.draft.independentTasks.plan.end?.untilDate || recommendedEndDate();
-        const existingTime = String(props.draft.timing.dueAt || '').slice(11, 16);
-        const nextDueAt = `${untilDate} ${existingTime || '23:59'}`;
-        autoFilledUntilDueAt = props.draft.timing.dueAt ? '' : nextDueAt;
-        props.draft.timing.dueAt = nextDueAt;
-        return;
-      }
-
-      if (!usesCombinedDueAt && previouslyUsedCombinedDueAt) {
-        const currentDueAt = String(props.draft.timing.dueAt || '');
-        if (!currentDueAt || currentDueAt === autoFilledUntilDueAt) {
-          props.draft.timing.dueAt = null;
-        } else {
-          const anchorDate =
-            String(props.draft.timing.startAt || '').slice(0, 10) || todoTodayInTimezone(props.draft.timing.timezone);
-          const dueTime = currentDueAt.slice(11, 16);
-          props.draft.timing.dueAt = dueTime ? `${anchorDate} ${dueTime}` : null;
-        }
-        autoFilledUntilDueAt = '';
-      }
-    },
-    { immediate: true },
-  );
-
-  watch(
-    () => props.draft.timing.dueAt,
-    () => {
-      if (autoFilledUntilDueAt && props.draft.timing.dueAt !== autoFilledUntilDueAt) autoFilledUntilDueAt = '';
-      if (planType.value !== 'scheduled' || endMode.value !== 'until') return;
-      const untilDate = planDueDate();
-      if (props.draft.independentTasks.plan.end?.untilDate === untilDate) return;
-      props.draft.independentTasks.plan.end = { mode: 'until', untilDate: untilDate || null };
-    },
-    { immediate: true },
-  );
 </script>
 
 <style scoped lang="less">
@@ -750,6 +723,36 @@
     line-height: 1.55;
   }
 
+  .todo-independent-plan__timing {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 16px;
+    scroll-margin-top: 16px;
+  }
+  .todo-independent-plan__time-target:focus-within {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 5px;
+    border-radius: 6px;
+  }
+  .todo-independent-plan__date {
+    width: 220px;
+    max-width: 100%;
+  }
+  .todo-independent-plan__due {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .todo-independent-plan .b-checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 36px;
+    box-sizing: border-box;
+    white-space: nowrap;
+  }
   .todo-independent-plan__fields {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -757,7 +760,7 @@
     padding-top: 2px;
   }
 
-  .todo-independent-plan label,
+  .todo-independent-plan label:not(.b-checkbox),
   .todo-independent-plan__field {
     display: grid;
     align-content: start;
@@ -788,6 +791,9 @@
   }
 
   .todo-independent-plan__linked-note {
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
     display: flex;
     align-items: center;
     padding: 9px 11px;

@@ -238,13 +238,13 @@
 
 <style lang="less" scoped>
   .note-card {
-    --note-card-bg: var(--card-background);
+    --note-card-bg: var(--workspace-content);
     display: flex;
     flex-direction: column;
     height: 282px;
     position: relative;
     border-radius: 12px;
-    border: 1px solid var(--surface-border-color);
+    border: 1px solid var(--workspace-border);
     padding: 16px 20px 16px;
     box-sizing: border-box;
     cursor: pointer;
@@ -258,7 +258,7 @@
     &:hover,
     &:focus-visible {
       box-shadow: var(--surface-hover-shadow);
-      border-color: color-mix(in srgb, var(--resource-note-color, #00a884) 34%, var(--surface-border-color));
+      border-color: color-mix(in srgb, var(--resource-note-color, #00a884) 34%, var(--workspace-border));
     }
 
     @media (hover: none) and (pointer: coarse) {
@@ -278,7 +278,7 @@
 
     &.is-selected {
       --note-card-bg: color-mix(in srgb, var(--resource-note-color, #00a884) 4%, var(--card-background));
-      border-color: color-mix(in srgb, var(--resource-note-color, #00a884) 62%, var(--surface-border-color));
+      border-color: color-mix(in srgb, var(--resource-note-color, #00a884) 62%, var(--workspace-border));
       box-shadow: 0 0 0 1px color-mix(in srgb, var(--resource-note-color, #00a884) 18%, transparent);
     }
 
@@ -361,7 +361,7 @@
     width: 100%;
     height: 112px;
     overflow: hidden;
-    border: 1px solid var(--surface-border-color);
+    border: 1px solid var(--workspace-border);
     border-radius: 9px;
     background: var(--surface-panel-bg);
     box-sizing: border-box;
@@ -449,7 +449,7 @@
     height: 24px;
     padding: 0 6px;
     gap: 3px;
-    border: 1px solid var(--surface-border-color);
+    border: 1px solid var(--workspace-border);
     border-radius: 7px;
     color: var(--resource-note-color, #00a884);
     background: transparent;
@@ -511,7 +511,7 @@
       height: 44px;
     }
     .note-card {
-      border-color: var(--surface-border-color) !important;
+      border-color: var(--workspace-border) !important;
       box-shadow: none;
       min-width: 0;
       overflow: hidden;

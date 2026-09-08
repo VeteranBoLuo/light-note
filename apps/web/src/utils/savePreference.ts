@@ -1,5 +1,6 @@
 import { useUserStore } from '@/store';
 import { setLocale } from '@/i18n';
+import { effectScope, reactive, readonly, watch } from 'vue';
 
 /**
  * 本地应用并持久化用户偏好(主题/语言/视图模式等),不触发后端。
@@ -50,42 +51,178 @@ export function applyDisplaySettings(options: { forceStandard?: boolean } = {}):
   root.removeAttribute('data-density');
 }
 
-/**
- * 统一偏好写入口 —— 收口原先散落多套的 theme / lang / noteViewMode / homePage 写逻辑。
- * 顺序:本地立即生效 + localStorage → lang 变化同步 i18n → 游客到此为止
- * (homePage 会被过滤，其余偏好只存本地)→
- * 登录用户以「整对象 preferences JSON」同步后端(权威口径),失败回滚本地。
- * 所有偏好入口(设置中心 / 头像下拉 / 各切换组件)都应只调这一个,避免口径漂移。
- */
-export async function updatePreference(patch: Record<string, any>): Promise<void> {
-  const user = useUserStore();
-  const previous = { ...user.preferences };
-  applyPreferenceLocally(patch);
-  if (patch.lang) {
-    try {
-      await setLocale(patch.lang); // 英文词典按需加载完成后再切换，避免短暂显示翻译 key
-      document.documentElement.lang = patch.lang; // 同步 <html lang> 供 a11y / CSS :lang 使用
-    } catch {
-      /* i18n 尚未就绪时忽略 */
+export type PreferenceSavePhase = 'queued' | 'saving' | 'saved' | 'failed';
+export type PreferencePersistence = 'account' | 'local' | 'session';
+export interface PreferenceSaveState {
+  phase: PreferenceSavePhase;
+  persistence?: PreferencePersistence;
+  sequence: number;
+}
+export class PreferenceSaveCancelled extends Error {
+  constructor() {
+    super('PREFERENCE_OWNER_CHANGED');
+  }
+}
+export const isPreferenceSaveCancelled = (error: unknown) => error instanceof PreferenceSaveCancelled;
+
+type Patch = Record<string, any>;
+type User = ReturnType<typeof useUserStore>;
+type SaveJob = {
+  patch: Patch;
+  owner: string;
+  generation: number;
+  sequence: number;
+  resolve: () => void;
+  reject: (error: unknown) => void;
+};
+const owners = new WeakMap<object, ReturnType<typeof createCoordinator>>();
+const identity = (user: User) =>
+  [
+    user.id,
+    user.role,
+    user.visitorWorkspace,
+    user.adminContext?.id,
+    user.adminContext?.subjectUserId,
+    user.adminContext?.mode,
+  ].join('|');
+
+function persist(user: User): boolean {
+  try {
+    localStorage.setItem('preferences', JSON.stringify(user.preferences));
+    return true;
+  } catch {
+    return false;
+  }
+}
+function createCoordinator(user: User) {
+  const states = reactive<Record<string, PreferenceSaveState>>({});
+  const retries = new Map<number, SaveJob>();
+  let owner = identity(user),
+    generation = 0,
+    sequence = 0,
+    running = false;
+  const queue: SaveJob[] = [];
+  function syncOwner() {
+    if (owner === identity(user)) return;
+    owner = identity(user);
+    generation++;
+    for (const key of Object.keys(states)) delete states[key];
+    retries.clear();
+    for (const job of queue.splice(0)) job.reject(new PreferenceSaveCancelled());
+  }
+  // The coordinator outlives individual settings cards and observes A → B → A transitions.
+  effectScope(true).run(() => watch(() => identity(user), syncOwner, { flush: 'sync' }));
+  function current(job: SaveJob) {
+    syncOwner();
+    return owner === job.owner && generation === job.generation;
+  }
+  function mark(job: SaveJob, phase: PreferenceSavePhase, persistence?: PreferencePersistence) {
+    for (const key of Object.keys(job.patch)) {
+      if (states[key]?.sequence === job.sequence) states[key] = { phase, persistence, sequence: job.sequence };
     }
   }
-  if (isGuestUser()) return; // 游客本地化即可,不调后端、不触发注册墙
-  try {
-    // 动态引入:userApi 经请求拦截器牵入 BMessage(.vue),放顶层会拖累本文件的纯逻辑单测转换
-    const { default: userApi } = await import('@/api/userApi.ts');
-    await userApi.updateUserInfo({ id: user.id, preferences: JSON.stringify(user.preferences) });
-  } catch (err) {
-    // 后端失败:回滚本地,保持前后端一致
-    applyPreferenceLocally(previous);
-    if (patch.lang && previous.lang) {
-      try {
-        await setLocale(previous.lang as 'zh-CN' | 'en-US');
-        document.documentElement.lang = previous.lang;
-      } catch {
-        /* ignore */
+  async function drain() {
+    if (running) return;
+    running = true;
+    try {
+      while (queue.length) {
+        const job = queue.shift()!;
+        if (!current(job)) {
+          job.reject(new PreferenceSaveCancelled());
+          continue;
+        }
+        const previous = { ...user.preferences };
+        const guest = !user.id || user.role === 'visitor';
+        const userId = user.id;
+        mark(job, 'saving');
+        try {
+          const next = { ...previous, ...job.patch };
+          if (guest) delete next.homePage;
+          user.preferences = next;
+          let local = persist(user);
+          if (job.patch.lang) await setLocale(job.patch.lang, { shouldApply: () => current(job) });
+          if (!current(job)) throw new PreferenceSaveCancelled();
+          if (!guest) {
+            const { default: userApi } = await import('@/api/userApi.ts');
+            if (!current(job)) throw new PreferenceSaveCancelled();
+            const response = await userApi.updateUserInfo({ id: userId, preferences: JSON.stringify(next) });
+            if (response?.status !== 200) throw new Error('PREFERENCE_SAVE_FAILED');
+          }
+          if (!current(job)) throw new PreferenceSaveCancelled();
+          local = persist(user) && local;
+          mark(job, 'saved', guest ? (local ? 'local' : 'session') : 'account');
+          job.resolve();
+        } catch (error) {
+          if (!current(job)) {
+            job.reject(new PreferenceSaveCancelled());
+            continue;
+          }
+          // Replace, rather than merge: a failed newly introduced field must disappear too.
+          user.preferences = previous;
+          persist(user);
+          if (job.patch.lang) {
+            try {
+              await setLocale(previous.lang || 'zh-CN', { shouldApply: () => current(job) });
+            } catch {
+              /* retain error */
+            }
+          }
+          if (!current(job)) {
+            job.reject(new PreferenceSaveCancelled());
+            continue;
+          }
+          mark(job, 'failed');
+          if (Object.keys(job.patch).every((key) => states[key]?.sequence === job.sequence))
+            retries.set(job.sequence, job);
+          job.reject(error);
+        }
+      }
+    } finally {
+      running = false;
+    }
+  }
+  function enqueue(patch: Patch): Promise<void> {
+    syncOwner();
+    const copied = { ...patch };
+    for (const [id, failed] of retries) {
+      if (Object.keys(copied).some((key) => key in failed.patch)) {
+        retries.delete(id);
+        for (const key of Object.keys(failed.patch)) if (states[key]?.sequence === id) delete states[key];
       }
     }
-    console.error('保存偏好失败,已回滚:', err);
-    throw err;
+    return new Promise((resolve, reject) => {
+      const job = { patch: copied, owner, generation, sequence: ++sequence, resolve, reject };
+      for (const key of Object.keys(copied)) states[key] = { phase: 'queued', sequence: job.sequence };
+      queue.push(job);
+      void drain();
+    });
   }
+  function retry(key: string) {
+    syncOwner();
+    const job = retries.get(states[key]?.sequence);
+    if (!job || !current(job)) return Promise.resolve();
+    return enqueue(job.patch);
+  }
+  return { states: readonly(states), enqueue, retry };
+}
+function coordinator() {
+  const user = useUserStore();
+  let result = owners.get(user);
+  if (!result) {
+    result = createCoordinator(user);
+    owners.set(user, result);
+  }
+  return result;
+}
+/** Shared by settings, menus and view switches; no component-local write queues. */
+export function updatePreference(patch: Patch): Promise<void> {
+  return coordinator().enqueue(patch);
+}
+export function usePreferenceSaveState() {
+  const service = coordinator();
+  return {
+    states: service.states,
+    retry: service.retry,
+    pending: (key: string) => ['queued', 'saving'].includes(service.states[key]?.phase),
+  };
 }

@@ -46,6 +46,9 @@ export type ToolboxWorkspaceResource = {
 };
 
 export type ToolboxWorkspaceItem = {
+  sourceItemId?: string | null;
+  sourceTitle?: string;
+  sourceContent?: string;
   id: string;
   lane: ToolboxWorkspaceLane;
   title: string;
@@ -85,6 +88,7 @@ export type ToolboxWorkspaceSummary = {
 };
 
 export type ToolboxWorkspace = ToolboxWorkspaceSummary & {
+  boardVersion?: number;
   streakDays: number;
   resources: ToolboxWorkspaceResource[];
   items: ToolboxWorkspaceItem[];
@@ -535,4 +539,29 @@ export function inferToolboxDocumentMime(file: Pick<File, 'name' | 'type'>) {
   if (extension === 'png') return 'image/png';
   if (extension === 'webp') return 'image/webp';
   return 'application/octet-stream';
+}
+
+export async function operateToolboxBoard(
+  workspaceId: string,
+  input: {
+    requestId: string;
+    expectedVersion: number;
+    command: import('@lightnote/shared/workspace-board').BoardCommand;
+  },
+): Promise<{ workspace: ToolboxWorkspace; undoId: string | null; focusItemId: string | null }> {
+  const response = await apiBasePost(`/api/toolbox/workspaces/${encodeURIComponent(workspaceId)}/board`, input, {
+    silent: true,
+  });
+  if (response.status !== 200) throw apiFailure(response, 'BOARD_OPERATION_FAILED');
+  invalidateToolboxProjects();
+  return response.data;
+}
+export async function readToolboxBoardItem(workspaceId: string, itemId: string): Promise<ToolboxWorkspaceItem> {
+  const response = await apiBaseGet(
+    `/api/toolbox/workspaces/${encodeURIComponent(workspaceId)}/items/${encodeURIComponent(itemId)}`,
+    {},
+    { silent: true },
+  );
+  if (response.status !== 200) throw apiFailure(response, 'BOARD_ITEM_UNAVAILABLE');
+  return response.data;
 }

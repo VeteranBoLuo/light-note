@@ -12,7 +12,7 @@ export async function readSuggestionCandidates(
   db,
   userId,
   type,
-  { ids, after = '', limit = 100, recent = false, untagged = false } = {},
+  { ids, after = '', limit = 100, recent = false, untagged = false, includeCustomIcons = false } = {},
 ) {
   const [table, owner] = tables[type];
   const where = [`r.${owner}=?`, 'r.del_flag=0'];
@@ -25,7 +25,7 @@ export async function readSuggestionCandidates(
     where.push('CAST(r.id AS CHAR)>?');
     params.push(after);
   }
-  if (type === 'tag') where.push("(r.icon_url IS NULL OR r.icon_url REGEXP '^[[:space:]]*$')");
+  if (type === 'tag' && !includeCustomIcons) where.push("(r.icon_url IS NULL OR r.icon_url REGEXP '^[[:space:]]*$')");
   if (untagged) {
     where.push(
       `NOT EXISTS(SELECT 1 FROM resource_tag_relations tr JOIN tag t ON t.id=tr.tag_id AND t.del_flag=0 AND t.user_id=? WHERE tr.user_id=? AND tr.resource_type=? AND tr.resource_id=${comparisonText('r.id')})`,
@@ -34,10 +34,11 @@ export async function readSuggestionCandidates(
   }
   const title = { bookmark: 'name', note: 'title', file: 'file_name', tag: 'name' }[type];
   const [rows] = await db.query(
-    `SELECT r.id,r.${title} AS title FROM ${table} r WHERE ${where.join(' AND ')} ORDER BY ${recent ? 'r.create_time DESC,r.id DESC' : 'CAST(r.id AS CHAR)'} LIMIT ?`,
+    `SELECT r.id,r.${title} AS title${type === 'tag' && includeCustomIcons ? ", NOT (r.icon_url IS NULL OR r.icon_url REGEXP '^[[:space:]]*$') AS has_custom_icon" : ''} FROM ${table} r WHERE ${where.join(' AND ')} ORDER BY ${recent ? 'r.create_time DESC,r.id DESC' : 'CAST(r.id AS CHAR)'} LIMIT ?`,
     [...params, limit],
   );
   return rows.map((row) => ({
+    ...(type === 'tag' && includeCustomIcons ? { hasCustomIcon: !!Number(row.has_custom_icon) } : {}),
     id: String(row.id),
     type,
     title: String(row.title || ''),

@@ -360,8 +360,9 @@
   }
 
   .document-text-empty {
-    min-height: 390px;
-    padding: 46px 22px;
+    min-height: 230px;
+    box-sizing: border-box;
+    padding: 20px;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -374,12 +375,12 @@
   }
 
   .document-text-empty > span {
-    width: 76px;
-    height: 76px;
+    width: 44px;
+    height: 44px;
     display: grid;
     place-items: center;
     border: 1px solid rgba(97, 92, 237, 0.42);
-    border-radius: 22px;
+    border-radius: 12px;
     color: var(--primary-color);
     background: var(--card-background);
     box-shadow: 0 18px 50px rgba(73, 67, 190, 0.14);
@@ -400,7 +401,7 @@
   }
 
   .document-text-empty h2 {
-    font-size: clamp(23px, 2.2vw, 31px);
+    font-size: 21px;
   }
 
   .document-text-empty p,

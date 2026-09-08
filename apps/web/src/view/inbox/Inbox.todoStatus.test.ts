@@ -9,6 +9,7 @@ const { listTodos } = vi.hoisted(() => ({ listTodos: vi.fn() }));
 vi.mock('@/api/todoApi', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api/todoApi')>()),
   listTodos,
+  getTodoWorkspace: listTodos,
 }));
 import useTodoStore from '@/store/todo';
 
@@ -36,7 +37,8 @@ function pageRefresh(todo: ReturnType<typeof useTodoStore>, view: string) {
     'nextTick',
     'scrollContainer',
     'updateScrollFade',
-    `${executable}; return refreshList;`,
+    'isUnscopedTodoView', 'user', 'fetchSelectableTags', 'workspaceTags', 'getTodoWorkspace', 'recentCompleted',
+    `let savedTodoRange = null; ${executable}; return refreshList;`,
   )(
     todo,
     { value: view },
@@ -48,6 +50,8 @@ function pageRefresh(todo: ReturnType<typeof useTodoStore>, view: string) {
     async () => {},
     { value: null },
     () => {},
+    { value: view === 'calendar' || view === 'matrix' },
+    { id: 'test-owner' }, async () => [], { value: [] }, async () => ({ status: 200, data: { items: [] } }), { value: [] },
   ) as () => Promise<boolean>;
 }
 

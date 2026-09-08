@@ -48,6 +48,7 @@
 </script>
 
 <style scoped lang="less">
+  @import (reference) "@/assets/css/workspace-surfaces.less";
   .note-editor-warmup {
     position: absolute;
     z-index: 3;
@@ -76,5 +77,10 @@
     font-weight: 400;
     line-height: 22px;
     tab-size: 4;
+  }
+
+  // 共享工作区表面：仅改变颜色，布局与滚动由原组件负责。
+  .note-editor-warmup {
+    .workspace-content-surface();
   }
 </style>

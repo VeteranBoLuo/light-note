@@ -9,6 +9,7 @@
     </header>
     <div v-auto-scrollbar class="todo-create-page__body">
       <TodoSimpleEditorForm
+        ref="formRef"
         mobile
         :initial-values="initialValues"
         :saving="saving"
@@ -21,9 +22,11 @@
 </template>
 
 <script setup lang="ts">
+  import useTodoStore from '@/store/todo';
   import { onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { useRouter } from 'vue-router';
+  import { useRouter, onBeforeRouteLeave } from 'vue-router';
+  import { confirmTodoDiscard } from '@/components/todo/confirmTodoDiscard';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
@@ -41,6 +44,9 @@
   const { t } = useI18n();
   const router = useRouter();
   const saving = ref(false);
+  const formRef = ref<{ isDirty: () => boolean } | null>(null);
+  let saved = false;
+  onBeforeRouteLeave(() => saved || (!saving.value && confirmTodoDiscard(Boolean(formRef.value?.isDirty()), t)));
   const initialValues = (router.options.history.state.todoInitialValues || {}) as TodoCreateInitialValues;
   const todoPlanFeatures = ref<TodoPlanFeatureState>({
     enabled: true,
@@ -81,7 +87,9 @@
     try {
       const response = await createTodoPlanV2(submission.payload);
       if (response.status !== 200) throw new Error(response.msg || t('inbox.todoSaveFailed'));
+      useTodoStore().organizationEpoch++;
       message.success(t('inbox.todoSaved'));
+      saved = true;
       await router.replace({ name: 'inbox', query: { tab: 'todo' } });
     } catch (error: any) {
       message.error(error?.message || t('inbox.todoSaveFailed'));
