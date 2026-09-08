@@ -84,10 +84,24 @@ describe('OBS 二进制下载', () => {
       expect.objectContaining({
         Bucket: 'test-bucket',
         Key: 'files/user/system/onboarding-v1.md',
-        Body: Buffer.from('# 轻笺', 'utf8'),
+        Body: expect.any(Readable),
+        ContentLength: Buffer.byteLength('# 轻笺'),
         ContentType: 'text/markdown',
       }),
       expect.any(Function),
     );
+  });
+  it('上传二进制流原样保留高位字节与零字节', async () => {
+    const original = Buffer.from([0x52, 0x49, 0x46, 0x46, 0xff, 0x80, 0x00, 0xfe]);
+    let received;
+    sdk.putObject.mockImplementationOnce(async (params, callback) => {
+      const chunks = [];
+      for await (const chunk of params.Body) chunks.push(chunk);
+      received = Buffer.concat(chunks);
+      expect(params.ContentLength).toBe(original.length);
+      callback(null, { CommonMsg: { Status: 200 } });
+    });
+    await putObjectBodyToObs('image-previews/test.webp', original, 'image/webp');
+    expect(received).toEqual(original);
   });
 });

@@ -1,3 +1,5 @@
+import { Readable } from 'node:stream';
+import { createHash } from 'node:crypto';
 import ObsClientSdk from 'esdk-obs-nodejs';
 import 'dotenv/config';
 
@@ -99,13 +101,22 @@ export const putObjectToObs = async (objectKey, filePath, contentType = 'applica
     ContentType: contentType,
   });
 
-export const putObjectBodyToObs = async (objectKey, body, contentType = 'application/octet-stream') =>
-  wrapObsCall(obsClient.putObject.bind(obsClient), {
+export const putObjectBodyToObs = async (objectKey, body, contentType = 'application/octet-stream') => {
+  const bytes = Buffer.isBuffer(body)
+    ? body
+    : body instanceof Uint8Array
+      ? Buffer.from(body)
+      : Buffer.from(String(body ?? ''), 'utf8');
+  // OBS SDK converts non-stream Body values through String(), corrupting binary bytes.
+  return wrapObsCall(obsClient.putObject.bind(obsClient), {
     Bucket: bucketName,
     Key: objectKey,
-    Body: Buffer.isBuffer(body) ? body : Buffer.from(String(body ?? ''), 'utf8'),
+    Body: Readable.from([bytes]),
+    ContentLength: bytes.length,
+    ContentMD5: createHash('md5').update(bytes).digest('base64'),
     ContentType: contentType,
   });
+};
 
 export const getObjectMetadataFromObs = async (objectKey) => {
   const result = await wrapObsCall(obsClient.getObjectMetadata.bind(obsClient), {
@@ -120,7 +131,8 @@ export const getObjectMetadataFromObs = async (objectKey) => {
 };
 
 async function readObsBinaryContent(content, maxBytes = Infinity) {
-  if (content?.byteLength > maxBytes) throw Object.assign(new Error("OBS_DOWNLOAD_SIZE_LIMIT"), { code: "OBS_DOWNLOAD_SIZE_LIMIT" });
+  if (content?.byteLength > maxBytes)
+    throw Object.assign(new Error('OBS_DOWNLOAD_SIZE_LIMIT'), { code: 'OBS_DOWNLOAD_SIZE_LIMIT' });
   if (Buffer.isBuffer(content)) return Buffer.from(content);
   if (content instanceof Uint8Array) return Buffer.from(content);
   if (!content || typeof content[Symbol.asyncIterator] !== 'function') {
@@ -141,7 +153,7 @@ async function readObsBinaryContent(content, maxBytes = Infinity) {
     totalBytes += binaryChunk.length;
     if (totalBytes > maxBytes) {
       content.destroy?.();
-      throw Object.assign(new Error("OBS_DOWNLOAD_SIZE_LIMIT"), { code: "OBS_DOWNLOAD_SIZE_LIMIT" });
+      throw Object.assign(new Error('OBS_DOWNLOAD_SIZE_LIMIT'), { code: 'OBS_DOWNLOAD_SIZE_LIMIT' });
     }
     chunks.push(binaryChunk);
   }
