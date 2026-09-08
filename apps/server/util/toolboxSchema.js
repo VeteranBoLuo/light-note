@@ -1,6 +1,6 @@
 import { STUDY_SCHEMA } from './toolbox/studyCards.js';
 import pool from '../db/index.js';
-import { FREE_OCR_SCHEMA } from './toolbox/freeOcr.js';
+import { FREE_OCR_SCHEMA } from './toolbox/freeOcrSchema.js';
 
 async function pointsOperationStatusTooShort(database = pool) {
   const [rows] = await database.query(
