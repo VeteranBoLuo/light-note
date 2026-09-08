@@ -64,6 +64,9 @@ ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/checkBrowserPushRuntime.js"
 echo "🔎  检查文件预览 Schema、7-Zip 与 LibreOffice 运行时…"
 ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/checkFilePreviewRuntime.js"
 
+echo "🔎  检查图片预览 Schema 与 WebP 压缩运行时…"
+ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/checkImagePreviewRuntime.js"
+
 echo "🔎  检查 OCR 运行时与语言包…"
 ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/checkOcrRuntime.js"
 

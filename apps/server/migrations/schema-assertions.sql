@@ -3624,4 +3624,4 @@ WHERE s.INDEX_NAME IS NULL;
 
 -- Unified image lifecycle contract
 SELECT 'image_lifecycle_missing_table' AS check_name, required.t AS detail FROM (SELECT 'image_assets' t UNION ALL SELECT 'image_asset_refs') required LEFT JOIN information_schema.TABLES actual ON actual.TABLE_SCHEMA=DATABASE() AND actual.TABLE_NAME=required.t WHERE actual.TABLE_NAME IS NULL;
-SELECT 'image_preview_missing_revision' AS check_name, 'file_preview_artifacts.source_revision' AS detail WHERE NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='file_preview_artifacts' AND COLUMN_NAME='source_revision');
+SELECT 'image_preview_missing_revision' AS check_name, 'file_preview_artifacts.source_revision' AS detail FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='file_preview_artifacts' AND COLUMN_NAME='source_revision');
