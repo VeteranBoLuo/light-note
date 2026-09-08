@@ -1,4 +1,5 @@
 import webpush from 'web-push';
+import { browserPushRelays } from './browserPushTransport.js';
 import { browserPushEnabled } from './browserPushPolicy.js';
 export async function assertBrowserPushRuntime(db, env = process.env) {
   await db.query('SELECT browser_push_pending, browser_push_created_at FROM notification LIMIT 0');
@@ -12,6 +13,7 @@ export async function assertBrowserPushRuntime(db, env = process.env) {
     (origin.protocol !== 'https:' && !['localhost', '127.0.0.1'].includes(origin.hostname))
   )
     throw new Error('BROWSER_PUSH_ORIGIN_INVALID');
+  browserPushRelays(env);
   webpush.setVapidDetails(
     env.BROWSER_PUSH_VAPID_SUBJECT,
     env.BROWSER_PUSH_VAPID_PUBLIC_KEY,

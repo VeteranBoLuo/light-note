@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 export function browserPushEnabled(env = process.env) {
   return (
+    env.LIGHTNOTE_RUNTIME_ENV !== 'local' &&
     env.BROWSER_PUSH_ENABLED === 'true' &&
     Boolean(
       env.BROWSER_PUSH_ORIGIN &&

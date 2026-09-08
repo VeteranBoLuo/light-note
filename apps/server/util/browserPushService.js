@@ -2,8 +2,7 @@ import { browserPushQuietUntil } from './browserPushQuietHours.js';
 import { browserNotificationPresentation } from '@lightnote/shared/notification-presentation';
 import { randomUUID } from 'node:crypto';
 import pool from '../db/index.js';
-import webpush from 'web-push';
-import { guardedHttpsAgent } from './webUrlSafety.js';
+import { deliverBrowserPush } from './browserPushTransport.js';
 import {
   browserPushEnabled,
   validatePushSubscription,
@@ -139,18 +138,7 @@ export async function expandPushOutbox(db = pool) {
 }
 
 export async function sendWebPush(subscription, payload, ttl, env = process.env) {
-  validatePushSubscription(subscription);
-  return webpush.sendNotification(subscription, JSON.stringify(payload), {
-    vapidDetails: {
-      subject: env.BROWSER_PUSH_VAPID_SUBJECT,
-      publicKey: env.BROWSER_PUSH_VAPID_PUBLIC_KEY,
-      privateKey: env.BROWSER_PUSH_VAPID_PRIVATE_KEY,
-    },
-    TTL: ttl,
-    timeout: 10000,
-    agent: guardedHttpsAgent,
-    urgency: 'normal',
-  });
+  return deliverBrowserPush(subscription, payload, ttl, env);
 }
 
 export async function processNextPush({ db = pool, send = sendWebPush, env = process.env } = {}) {
@@ -229,7 +217,7 @@ export async function processNextPush({ db = pool, send = sendWebPush, env = pro
     }
   } catch (error) {
     const httpCode = Number(error?.statusCode || 0);
-    status = pushFailure(httpCode, job.attempts);
+    status = error?.code === 'PUSH_EXPIRED' ? 'expired' : pushFailure(httpCode, job.attempts);
     code = httpCode ? `HTTP_${httpCode}` : 'PUSH_TRANSPORT_ERROR';
     if (status === 'invalid')
       await db.query('UPDATE browser_push_subscriptions SET active = 0 WHERE id = ? AND generation = ?', [
