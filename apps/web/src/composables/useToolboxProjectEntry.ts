@@ -10,9 +10,7 @@ const cache = new Map<string, { value?: Entry; at: number; revision: number; pen
 export function useToolboxProjectEntry() {
   const user = useUserStore();
   const owner = computed(() => toolboxRecentUseIdentityKey(user));
-  const eligible = computed(
-    () => Boolean(user.id) && user.role !== 'visitor' && !user.adminContext && !user.visitorWorkspace,
-  );
+  const eligible = computed(() => Boolean(user.id) && !user.adminContext && !user.visitorWorkspace);
   const data = ref<Entry | null>(null);
   const loading = ref(false);
   const failed = ref(false);
@@ -66,7 +64,7 @@ export function useToolboxProjectEntry() {
   }
   async function dismiss() {
     const key = owner.value;
-    if (!eligible.value) return;
+    if (!eligible.value || user.role === 'visitor') return;
     const response = await apiBasePost('/api/toolbox/project-entry/dismiss', {}, { silent: true });
     if (response.status !== 200) throw new Error('project-entry-dismiss');
     if (key !== owner.value || !eligible.value) return;

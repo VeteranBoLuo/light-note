@@ -179,7 +179,8 @@
             <p>{{ stepText('progress', 'description') }}</p>
           </div></header
         >
-        <div class="workspace-progress-form">
+        <p v-if="visitorPreview">{{ t('toolbox.project.previewHint') }}</p>
+        <div v-else class="workspace-progress-form">
           <label class="workspace-progress-form__summary">
             <span>{{ stepText('progress', 'summaryLabel') }}</span>
             <BInput
@@ -292,7 +293,7 @@
             <p>{{ templateText('boardDescription') }}</p>
           </div>
         </header>
-        <WorkspaceBoard :key="workspace.id" v-model:lane="mobileLane" :workspace="workspace" :mobile="isMobileLayout" @updated="handleBoardUpdated" />
+        <WorkspaceBoard :key="workspace.id" v-model:lane="mobileLane" :workspace="workspace" :readonly="visitorPreview" :mobile="isMobileLayout" @updated="handleBoardUpdated" />
       </section>
 
       <section ref="timelineSection" class="workspace-section workspace-timeline-section">
@@ -446,6 +447,7 @@
 </template>
 
 <script setup lang="ts">
+  import { blockGuestWrite } from '@/composables/useGuestGuard';
   import WorkspaceBoard from './WorkspaceBoard.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert';
   import { resolveResourceRoute } from '@/utils/resourceNavigation';
@@ -497,6 +499,7 @@
   const route = useRoute();
   const router = useRouter();
   const user = useUserStore();
+  const visitorPreview = computed(() => user.role === 'visitor' && !user.adminContext);
   const entrySource = computed<ProjectEntrySource>(() =>
     ['workbench', 'workshop', 'resource_menu', 'resource_batch', 'result'].includes(String(route.query.entry))
       ? (route.query.entry as ProjectEntrySource)
@@ -858,7 +861,7 @@
       workspaces.value = workspaceList;
       if (workspaceDetail) {
         applyWorkspace(workspaceDetail);
-        void markToolboxWorkspaceOpened(requestedWorkspaceId, entrySource.value).catch(() => undefined);
+        if (!visitorPreview.value) void markToolboxWorkspaceOpened(requestedWorkspaceId, entrySource.value).catch(() => undefined);
       } else {
         workspace.value = null;
         if (!requestedWorkspaceId && String(route.query.create || '') === '1') {
@@ -888,11 +891,13 @@
     createForm.nextStep = '';
   }
   function openCreateModal() {
+    if (blockGuestWrite('toolbox-project')) return;
     workspaceFormMode.value = 'create';
     resetCreateForm();
     createModalVisible.value = true;
   }
   function openEditModal() {
+    if (blockGuestWrite('toolbox-project')) return;
     if (!workspace.value) return;
     workspaceFormMode.value = 'edit';
     editStatus.value = workspace.value.status;
@@ -903,6 +908,7 @@
     createModalVisible.value = true;
   }
   async function saveWorkspaceForm() {
+    if (blockGuestWrite('toolbox-project')) return;
     if (!createForm.title.trim() || creating.value) return;
     const mutationVersion = initializationVersion;
     creating.value = true;
@@ -957,11 +963,13 @@
     await router.push({ query });
   }
   async function focusProgressForm() {
+    if (blockGuestWrite('toolbox-project')) return;
     progressDraftEdited.value = true;
     await selectProjectTab('progress');
     progressInput.value?.$el?.querySelector('textarea')?.focus({ preventScroll: true });
   }
   async function saveProgress() {
+    if (blockGuestWrite('toolbox-project')) return;
     if (!workspace.value || !canSaveProgress.value || savingProgress.value) return;
     const mutationVersion = initializationVersion;
     savingProgress.value = true;
@@ -985,10 +993,12 @@
     }
   }
   function openResourceModal() {
+    if (blockGuestWrite('toolbox-project')) return;
     pendingResources.value = [];
     resourceModalVisible.value = true;
   }
   async function saveResources() {
+    if (blockGuestWrite('toolbox-project')) return;
     if (!workspace.value || !pendingResources.value.length || mutating.value) return;
     const mutationVersion = initializationVersion;
     mutating.value = true;
@@ -1021,6 +1031,7 @@
     if (target) void router.push(target);
   }
   function confirmRemoveResource(resource: ToolboxWorkspaceResource) {
+    if (blockGuestWrite('toolbox-project')) return;
     const version = initializationVersion;
     Alert.alert({
       title: t('toolbox.workspace.removeResource', { title: resource.title || resource.resourceId }),
@@ -1031,6 +1042,7 @@
     });
   }
   async function removeResource(resource: ToolboxWorkspaceResource) {
+    if (blockGuestWrite('toolbox-project')) return;
     if (!workspace.value || mutating.value) return;
     const mutationVersion = initializationVersion;
     mutating.value = true;

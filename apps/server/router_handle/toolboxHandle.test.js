@@ -19,7 +19,17 @@ const mocks = vi.hoisted(() => ({
   updateToolboxWorkspaceItem: vi.fn(),
   createToolboxWorkspaceSession: vi.fn(),
   getToolboxKnowledgeOverview: vi.fn(),
+  getToolboxWorkspace: vi.fn(),
+  listToolboxWorkspaces: vi.fn(),
+  readProjectEntry: vi.fn(),
+  readBoardItem: vi.fn(),
 }));
+
+vi.mock('../util/toolbox/projectEntry.js', () => ({
+  readProjectEntry: mocks.readProjectEntry,
+  dismissProjectIntro: vi.fn(),
+}));
+vi.mock('../util/toolbox/board.js', () => ({ readBoardItem: mocks.readBoardItem, operateBoard: vi.fn() }));
 
 vi.mock('../util/auth.js', () => ({
   ensureNotVisitor: mocks.ensureNotVisitor,
@@ -57,9 +67,9 @@ vi.mock('../util/toolbox/workspace.js', () => ({
   createToolboxWorkspace: mocks.createToolboxWorkspace,
   createToolboxWorkspaceItem: mocks.createToolboxWorkspaceItem,
   createToolboxWorkspaceSession: mocks.createToolboxWorkspaceSession,
-  getToolboxWorkspace: vi.fn(),
+  getToolboxWorkspace: mocks.getToolboxWorkspace,
   listToolboxHomeWorkspaces: mocks.listToolboxHomeWorkspaces,
-  listToolboxWorkspaces: vi.fn(),
+  listToolboxWorkspaces: mocks.listToolboxWorkspaces,
   markToolboxWorkspaceOpened: mocks.markToolboxWorkspaceOpened,
   removeToolboxWorkspaceResource: mocks.removeToolboxWorkspaceResource,
   updateToolboxWorkspace: mocks.updateToolboxWorkspace,
@@ -74,6 +84,10 @@ const {
   createWorkspaceItem,
   createWorkspaceSession,
   getHome,
+  getProjectEntry,
+  getWorkspaceBoardItem,
+  getWorkspace,
+  listWorkspaces,
   getKnowledgeOverview,
   openWorkspace,
   removeWorkspaceResource,
@@ -328,5 +342,70 @@ describe('toolbox home handlers', () => {
     });
     expect(consoleError).toHaveBeenCalledWith('[toolbox] operation log failed code=%s', 'OPERATION_LOG_FAILED');
     consoleError.mockRestore();
+  });
+});
+
+describe('visitor project previews', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.ensureUserOrAdminPolicy.mockReturnValue(false);
+    mocks.ensureNotVisitor.mockReturnValue(false);
+  });
+  it('reads visitor-owned project list and detail without granting general tool access', async () => {
+    const req = {
+      user: { id: 'visitor-owner', role: 'visitor' },
+      query: { userId: 'other-owner' },
+      params: { workspaceId: 'example' },
+    };
+    mocks.listToolboxWorkspaces.mockResolvedValue([{ id: 'example' }]);
+    mocks.getToolboxWorkspace.mockResolvedValue({ id: 'example' });
+    const res = createResponse();
+    await listWorkspaces(req, res);
+    await getWorkspace(req, res);
+    expect(mocks.listToolboxWorkspaces).toHaveBeenCalledWith({
+      userId: 'visitor-owner',
+      kind: undefined,
+      status: undefined,
+    });
+    expect(mocks.getToolboxWorkspace).toHaveBeenCalledWith({ userId: 'visitor-owner', workspaceId: 'example' });
+    expect(mocks.ensureUserOrAdminPolicy).not.toHaveBeenCalled();
+    await getKnowledgeOverview(req, res);
+    expect(mocks.getToolboxKnowledgeOverview).not.toHaveBeenCalled();
+  });
+  it('returns projects with an empty task collection and does not mark a project opened', async () => {
+    const req = { user: { id: 'visitor-owner', role: 'visitor' }, params: { workspaceId: 'example' } };
+    mocks.listToolboxHomeWorkspaces.mockResolvedValue({ continue: [{ id: 'example' }], recent: [] });
+    const res = createResponse();
+    await getHome(req, res);
+    expect(mocks.listToolboxHomeTasks).not.toHaveBeenCalled();
+    expect(res.send.mock.calls[0][0].data.tasks).toEqual({ active: [], ready: [], recent: [] });
+    await openWorkspace(req, res);
+    await createWorkspace(req, res);
+    expect(mocks.markToolboxWorkspaceOpened).not.toHaveBeenCalled();
+    expect(mocks.createToolboxWorkspace).not.toHaveBeenCalled();
+  });
+  it('does not bypass managed-context policy or accept an anonymous request', async () => {
+    await listWorkspaces(
+      { user: { id: 'visitor-owner', role: 'visitor' }, adminContext: { mode: 'readonly' } },
+      createResponse(),
+    );
+    await listWorkspaces({ user: {} }, createResponse());
+    expect(mocks.listToolboxWorkspaces).not.toHaveBeenCalled();
+    expect(mocks.ensureUserOrAdminPolicy).toHaveBeenCalledTimes(2);
+  });
+});
+
+it('uses the authorized owner for visitor entry and source-item reads', async () => {
+  vi.clearAllMocks();
+  const req = { user: { id: 'visitor-owner', role: 'visitor' }, params: { workspaceId: 'example', itemId: 'source' } };
+  mocks.readProjectEntry.mockResolvedValue({ hasProjects: true, projects: [] });
+  mocks.readBoardItem.mockResolvedValue({ id: 'source', status: 'archived' });
+  await getProjectEntry(req, createResponse());
+  await getWorkspaceBoardItem(req, createResponse());
+  expect(mocks.readProjectEntry).toHaveBeenCalledWith('visitor-owner');
+  expect(mocks.readBoardItem).toHaveBeenCalledWith({
+    userId: 'visitor-owner',
+    workspaceId: 'example',
+    itemId: 'source',
   });
 });

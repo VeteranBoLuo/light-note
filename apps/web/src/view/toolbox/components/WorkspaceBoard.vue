@@ -10,7 +10,9 @@
           :options="BOARD_LANES.map((lane) => ({ value: lane, label: laneText(lane) }))"
         />
       </div>
-      <span class="project-board__hint">{{ t(mobile ? 'toolbox.board.mobileHint' : 'toolbox.board.dragHint') }}</span>
+      <span v-if="!readonly" class="project-board__hint">{{
+        t(mobile ? 'toolbox.board.mobileHint' : 'toolbox.board.dragHint')
+      }}</span>
       <BButton v-if="undoId" size="small" :disabled="busy" @click="send({ type: 'undo', undoId })">{{
         t('toolbox.board.undo')
       }}</BButton>
@@ -37,7 +39,7 @@
           handle=".board-drag"
           direction="vertical"
           :fallback-on-body="true"
-          :disabled="busy || workspace.status === 'archived'"
+          :disabled="readonly || busy || workspace.status === 'archived'"
           :animation="reducedMotion ? 0 : 150"
           :delay="mobile ? 200 : 0"
           :delay-on-touch-only="true"
@@ -54,8 +56,9 @@
             :key="item.id"
             :item="item"
             :hovered="hoveredId === item.id"
+            :readonly="readonly"
             :type-label="laneText(item.lane)"
-            :disabled="busy || workspace.status === 'archived'"
+            :disabled="readonly || busy || workspace.status === 'archived'"
             :state="stateText(item)"
             :primary="primary(item)"
             :menu="menu(item, index)"
@@ -66,8 +69,9 @@
         </VueDraggable>
         <p v-if="!lists[lane].length" class="project-board__empty">{{ laneText(lane, 'empty') }}</p>
         <BButton
+          v-if="!readonly"
           class="project-board__add"
-          :disabled="busy || workspace.status === 'archived'"
+          :disabled="readonly || busy || workspace.status === 'archived'"
           block
           @click="create(lane)"
           ><SvgIcon :src="icon.common.plus" size="14" />{{ bt(`add_${lane}`) }}</BButton
@@ -84,7 +88,7 @@
         ['convert', 'repeat'].includes(editor.command.type) ? editor.item?.title : editor.item?.sourceTitle
       "
       :initial="editor.initial"
-      :readonly="workspace.status === 'archived'"
+      :readonly="readonly || workspace.status === 'archived'"
       :busy="busy"
       :error="error"
       @close="editor = null"
@@ -108,7 +112,7 @@
       :source-title="sourceView.sourceTitle"
       :state="stateText(sourceView) || t('toolbox.board.notStarted')"
       :initial="{ title: sourceView.title, content: sourceView.content, dueOn: sourceView.dueOn }"
-      :readonly="sourceView.status === 'archived'"
+      :readonly="readonly || sourceView.status === 'archived'"
       :busy="busy"
       :error="error"
       @save="saveSource"
@@ -137,7 +141,7 @@
   import icon from '@/config/icon';
   import WorkspaceBoardCard from './WorkspaceBoardCard.vue';
   import WorkspaceItemEditor from './WorkspaceItemEditor.vue';
-  const props = defineProps<{ workspace: ToolboxWorkspace; mobile: boolean }>();
+  const props = defineProps<{ workspace: ToolboxWorkspace; mobile: boolean; readonly?: boolean }>();
   const emit = defineEmits<{ updated: [workspace: ToolboxWorkspace] }>();
   const { t } = useI18n();
   const mobileLane = defineModel<BoardLane>('lane', { default: 'inbox' });
@@ -295,7 +299,7 @@
     error.value = '';
     editor.value = {
       key: crypto.randomUUID(),
-      title: t('common.edit'),
+      title: props.readonly ? t('toolbox.project.itemDetails') : t('common.edit'),
       command: { type: 'edit', itemId: item.id },
       item,
       initial: { title: item.title, content: item.content, dueOn: item.dueOn },
@@ -386,6 +390,7 @@
     if (editor.value) await send({ ...editor.value.command, ...data }, true);
   }
   async function send(command: BoardCommand, closeEditor = false) {
+    if (props.readonly) return;
     if (busy.value || !alive) return;
     const owner = props.workspace.id;
     const fingerprint = JSON.stringify(command);

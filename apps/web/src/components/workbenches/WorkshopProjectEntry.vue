@@ -27,7 +27,7 @@
           ><p v-if="!data.hasProjects">{{ t('toolbox.project.introHint') }}</p></div
         >
         <div class="workshop-entry__actions">
-          <BButton v-if="!data.projects.length" type="primary" @click="openProjects(true)">{{
+          <BButton v-if="!data.projects.length && user.role !== 'visitor'" type="primary" @click="openProjects(true)">{{
             t('toolbox.project.newProject')
           }}</BButton>
           <BButton @click="openProjects(false)">{{

@@ -57,7 +57,7 @@ it('coalesces requests across consumers and refreshes only after invalidation or
   await settle();
   expect(mocks.get).toHaveBeenCalledTimes(2);
 });
-it('does not treat a failed load as an empty account and excludes visitor/managed contexts', async () => {
+it('does not treat a failed load as an empty account and allows visitor reads but excludes managed contexts', async () => {
   mocks.get.mockRejectedValue(new Error('network'));
   mount();
   await settle();
@@ -70,8 +70,10 @@ it('does not treat a failed load as an empty account and excludes visitor/manage
   expect(mocks.get).not.toHaveBeenCalled();
   mocks.user.adminContext = null;
   mocks.user.role = 'visitor';
+  mocks.get.mockResolvedValue({ status: 200, data: { hasProjects: true, projects: [{ id: 'example' }] } });
   await settle();
-  expect(mocks.get).not.toHaveBeenCalled();
+  expect(mocks.get).toHaveBeenCalledTimes(1);
+  expect(states[0].data.value?.projects[0].id).toBe('example');
   await states[0].dismiss();
   expect(mocks.post).not.toHaveBeenCalled();
 });

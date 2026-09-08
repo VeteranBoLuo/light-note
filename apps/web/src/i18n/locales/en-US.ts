@@ -1554,9 +1554,9 @@ export default {
     coreToolsTitle: 'Start with a task',
     coreToolsDescription: 'Focused tools for creating knowledge, maintaining your library, and preparing sources',
     home: {
-      guestTitle: 'Sign in and the Knowledge Workshop will remember where you left off',
+      guestTitle: 'Explore how knowledge grows through example projects',
       guestDescription:
-        'Local tools are free to use now. Sign in to keep workspaces moving, track processing, and return to recent work.',
+        'Explore goals, resources, boards and activity in these examples. Sign up to create and edit your own projects.',
       guestAction: 'Sign in or register',
       outcomesTitle: 'Create a deliverable',
       outcomesDescription:
@@ -1614,6 +1614,10 @@ export default {
       toolCategoryLabel: 'Tool capability groups',
     },
     project: {
+      viewExample: 'View example',
+      itemDetails: 'Item details',
+      examples: 'Example projects',
+      previewHint: 'Explore goals, resources, boards and activity in these examples. Sign up to create and edit your own projects.',
       overview: 'Workshop overview',
       selectResourcesHint: 'Select materials to add. Selecting a parent note adds only that note.',
       myProjects: 'My projects',
@@ -12610,6 +12614,8 @@ export default {
     ctaCreateSpace: 'Sign up free and get started',
     ctaTryDemo: 'Explore the demo first',
     ctaEnterApp: 'Open my LightNote',
+    ctaAccount: 'Sign up / Log in',
+    entryHint: 'Explore examples without signing up. Log in to manage your own content.',
     ctaStart: 'Get started with LightNote',
     navigationOpeningApp: 'Opening LightNote…',
     navigationPreparingRegistration: 'Preparing sign-up…',

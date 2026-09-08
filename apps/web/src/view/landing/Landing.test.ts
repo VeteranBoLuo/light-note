@@ -98,11 +98,15 @@ vi.mock('@/components/base/BasicComponents/BModal/BModal.vue', () => ({
 
 const { default: Landing } = await import('./Landing.vue');
 
+let currentAuthStatus: ReturnType<typeof ref<'pending' | 'authenticated' | 'anonymous' | 'error'>>;
 let cleanup: (() => void) | undefined;
 let canvasContextSpy: ReturnType<typeof vi.spyOn> | undefined;
 
 beforeEach(() => {
   mocks.hasLoginHint = true;
+  mocks.user.id = '';
+  mocks.user.role = 'visitor';
+  mocks.retryAuth.mockImplementation(() => Promise.resolve());
   mocks.routerPush.mockImplementation(() => Promise.resolve());
   mocks.loadUserAuthModal.mockImplementation(() => Promise.resolve());
   const context = {
@@ -124,10 +128,15 @@ beforeEach(() => {
   vi.stubGlobal('cancelAnimationFrame', vi.fn());
 });
 
-async function mountLanding(authState: 'pending' | 'authenticated' | 'anonymous' | 'error' = 'pending') {
+async function mountLanding(authState: 'pending' | 'authenticated' | 'anonymous' | 'error' = 'authenticated') {
   const host = document.createElement('div');
   document.body.append(host);
   const authStatus = ref(authState);
+  currentAuthStatus = authStatus;
+  if (authState === 'authenticated') {
+    mocks.user.id = 'signed-in';
+    mocks.user.role = 'user';
+  }
   const app = createApp({
     setup() {
       provide(LANDING_AUTH_CONTEXT, {
@@ -185,10 +194,47 @@ describe('Landing CTA', () => {
     expect(landingSource).toMatch(/\.hero-brand\s*\{[^}]*background-position:\s*0% center;/su);
   });
 
-  it('近期登录用户在身份恢复完成前首次点击也能进入应用', async () => {
+  it('身份恢复后进入示例，两个位置的文案始终保持不变', async () => {
+    const host = await mountLanding('pending');
+    const labels = () =>
+      Array.from(host.querySelectorAll('button'))
+        .map((b) => b.textContent?.trim())
+        .filter((t) => t === 'landing.ctaStart' || t === 'landing.ctaAccount');
+    const before = labels();
+    expect(before).toHaveLength(4);
+    mocks.retryAuth.mockImplementation(async () => {
+      currentAuthStatus.value = 'anonymous';
+    });
+    const button = Array.from(host.querySelectorAll('button')).find((b) => b.textContent?.includes('landing.ctaStart'));
+    button?.click();
+    await Promise.resolve();
+    await Promise.resolve();
+    await nextTick();
+    expect(mocks.routerPush).toHaveBeenCalledWith('/workbenches');
+    expect(labels()).toEqual(before);
+    expect(mocks.bookmark.openAuthModal).not.toHaveBeenCalled();
+  });
+
+  it('用户信息尚未确认时，不凭残留的账号 ID 绕过检查', async () => {
+    mocks.user.id = 'stale-account';
+    mocks.user.role = 'user';
+    const host = await mountLanding('error');
+    mocks.retryAuth.mockRejectedValueOnce(new Error('offline'));
+    Array.from(host.querySelectorAll('button'))
+      .find((b) => b.textContent?.includes('landing.ctaAccount'))
+      ?.click();
+    await Promise.resolve();
+    await Promise.resolve();
+    await nextTick();
+    expect(mocks.routerPush).not.toHaveBeenCalled();
+    expect(mocks.bookmark.openAuthModal).not.toHaveBeenCalled();
+    expect(mocks.retryAuth).toHaveBeenCalledOnce();
+  });
+
+  it('确认已登录后主按钮进入应用', async () => {
     const host = await mountLanding();
     const enterButton = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) =>
-      button.textContent?.includes('landing.ctaEnterApp'),
+      button.textContent?.includes('landing.ctaStart'),
     );
 
     expect(enterButton).not.toBeUndefined();
@@ -208,13 +254,13 @@ describe('Landing CTA', () => {
     );
     const host = await mountLanding();
     const enterButton = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) =>
-      button.textContent?.includes('landing.ctaEnterApp'),
+      button.textContent?.includes('landing.ctaStart'),
     );
 
     enterButton?.click();
     await nextTick();
 
-    expect(enterButton?.textContent).toContain('landing.ctaEnterApp');
+    expect(enterButton?.textContent).toContain('landing.ctaStart');
     expect(enterButton?.disabled).toBe(true);
     expect(enterButton?.getAttribute('aria-busy')).toBe('true');
     expect(enterButton?.querySelector('.btn-arrow--loading')).not.toBeNull();
@@ -233,7 +279,7 @@ describe('Landing CTA', () => {
     mocks.routerPush.mockRejectedValueOnce(new Error('route load failed'));
     const host = await mountLanding();
     const enterButton = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) =>
-      button.textContent?.includes('landing.ctaEnterApp'),
+      button.textContent?.includes('landing.ctaStart'),
     );
 
     enterButton?.click();
@@ -244,7 +290,7 @@ describe('Landing CTA', () => {
     expect(enterButton?.querySelector('.btn-arrow--loading')).toBeNull();
   });
 
-  it('首次访客统一显示“开始使用轻笺”，加载注册弹窗后再打开', async () => {
+  it('首次访客主按钮进入示例工作台，不打开账号弹窗', async () => {
     mocks.hasLoginHint = false;
     const host = await mountLanding('anonymous');
     const startButton = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) =>
@@ -254,16 +300,14 @@ describe('Landing CTA', () => {
     expect(startButton).not.toBeUndefined();
     expect(host.textContent).not.toContain('landing.ctaCreateSpace');
     startButton?.click();
-    await vi.waitFor(() => expect(mocks.bookmark.openAuthModal).toHaveBeenCalledWith('注册', 'landing_primary'));
-
-    expect(mocks.loadUserAuthModal).toHaveBeenCalledTimes(1);
-    expect(mocks.routerPush).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(mocks.routerPush).toHaveBeenCalledWith('/workbenches'));
+    expect(mocks.bookmark.openAuthModal).not.toHaveBeenCalled();
   });
 
-  it('体验示例加载时使用不参与排版的原位图标，不插入会撑宽按钮的基础 loading', async () => {
+  it('账号弹窗加载时文案与按钮占位保持稳定', async () => {
     let finishNavigation!: () => void;
     mocks.hasLoginHint = false;
-    mocks.routerPush.mockImplementationOnce(
+    mocks.loadUserAuthModal.mockImplementationOnce(
       () =>
         new Promise<void>((resolve) => {
           finishNavigation = resolve;
@@ -278,7 +322,7 @@ describe('Landing CTA', () => {
     demoButton?.click();
     await nextTick();
 
-    expect(demoButton?.textContent).toContain('landing.ctaTryDemo');
+    expect(demoButton?.textContent).toContain('landing.ctaAccount');
     expect(demoButton?.disabled).toBe(true);
     expect(demoButton?.getAttribute('aria-busy')).toBe('true');
     expect(demoButton?.querySelector('.btn-ghost__loading-indicator.is-visible')).not.toBeNull();
@@ -302,7 +346,7 @@ describe('Landing CTA', () => {
     );
     const host = await mountLanding();
     const enterButton = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) =>
-      button.textContent?.includes('landing.ctaEnterApp'),
+      button.textContent?.includes('landing.ctaStart'),
     );
 
     enterButton?.click();
@@ -320,6 +364,40 @@ describe('Landing CTA', () => {
     await nextTick();
     await vi.advanceTimersByTimeAsync(200);
     expect(host.querySelector('.landing-navigation-feedback')).toBeNull();
+  });
+
+  it('过期登录线索不能绕过身份检查；失败可再次点击', async () => {
+    const host = await mountLanding('error');
+    const button = host.querySelector<HTMLButtonElement>('.s-cover .btn-primary')!;
+    button.click();
+    await vi.waitFor(() => expect(mocks.messageWarning).toHaveBeenCalled());
+    expect(mocks.retryAuth).toHaveBeenCalledTimes(1);
+    expect(mocks.routerPush).not.toHaveBeenCalled();
+    expect(mocks.bookmark.openAuthModal).not.toHaveBeenCalled();
+    expect(button.textContent).toContain('landing.ctaStart');
+    expect(host.querySelectorAll('.hero-actions .btn-ghost, .cta-actions .btn-ghost')).toHaveLength(2);
+    expect(button.disabled).toBe(false);
+  });
+
+  it('检查期间等待且阻止重复点击，不把未知状态当游客', async () => {
+    let finish!: () => void;
+    mocks.retryAuth.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const host = await mountLanding('pending');
+    const button = host.querySelector<HTMLButtonElement>('.s-cover .btn-primary')!;
+    button.click();
+    await nextTick();
+    button.click();
+    expect(mocks.retryAuth).toHaveBeenCalledTimes(1);
+    expect(mocks.routerPush).not.toHaveBeenCalled();
+    expect(button.textContent).toContain('landing.ctaStart');
+    finish();
+    await vi.waitFor(() => expect(button.disabled).toBe(false));
+    expect(mocks.bookmark.openAuthModal).not.toHaveBeenCalled();
   });
 
   it('把官网的支持入口收敛到站内说明页', async () => {

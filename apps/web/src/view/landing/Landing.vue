@@ -35,7 +35,7 @@
                   @focus="prefetchPrimaryIntent"
                   @click="handlePrimaryAction('landing_primary')"
                 >
-                  <span>{{ t(landingCtaMode === 'enter' ? 'landing.ctaEnterApp' : 'landing.ctaStart') }}</span>
+                  <span>{{ t('landing.ctaStart') }}</span>
                   <SvgIcon
                     :class="['btn-arrow', { 'btn-arrow--loading': startingApp }]"
                     :src="startingApp ? icon.message.loading : icon.arrow_right"
@@ -44,24 +44,20 @@
                   />
                 </BButton>
                 <BButton
-                  v-if="landingCtaMode !== 'enter'"
                   class="btn-ghost"
                   :disabled="navigationPending"
-                  :aria-busy="tryingDemo || undefined"
-                  @pointerdown="prefetchDemoIntent"
-                  @focus="prefetchDemoIntent"
-                  @click="goHome"
-                  v-click-log="{ module: '官网首页', operation: '先体验示例' }"
+                  :aria-busy="openingAccount || undefined"
+                  @pointerdown="prefetchAccountIntent"
+                  @focus="prefetchAccountIntent"
+                  @click="handleAccountAction"
                 >
-                  <span
-                    :class="['btn-ghost__loading-indicator', { 'is-visible': tryingDemo }]"
-                    aria-hidden="true"
-                  >
+                  <span :class="['btn-ghost__loading-indicator', { 'is-visible': openingAccount }]" aria-hidden="true">
                     <SvgIcon :src="icon.message.loading" size="18" />
                   </span>
-                  <span>{{ t('landing.ctaTryDemo') }}</span>
+                  <span>{{ t('landing.ctaAccount') }}</span>
                 </BButton>
               </div>
+              <p class="landing-entry-hint">{{ t('landing.entryHint') }}</p>
               <div v-if="!isAndroidApp" class="pwa-install-strip">
                 <span class="pwa-install-strip__icon">
                   <SvgIcon :src="icon.pwa.device" size="22" aria-hidden="true" />
@@ -351,7 +347,7 @@
                 @focus="prefetchPrimaryIntent"
                 @click="handlePrimaryAction('landing_final')"
               >
-                {{ t(landingCtaMode === 'enter' ? 'landing.ctaEnterApp' : 'landing.ctaStart') }}
+                {{ t('landing.ctaStart') }}
                 <SvgIcon
                   :class="['btn-arrow', { 'btn-arrow--loading': startingApp }]"
                   :src="startingApp ? icon.message.loading : icon.arrow_right"
@@ -360,24 +356,20 @@
                 />
               </BButton>
               <BButton
-                v-if="landingCtaMode !== 'enter'"
                 class="btn-ghost"
                 :disabled="navigationPending"
-                :aria-busy="tryingDemo || undefined"
-                @pointerdown="prefetchDemoIntent"
-                @focus="prefetchDemoIntent"
-                @click="goHome"
-                v-click-log="{ module: '官网首页', operation: '先体验示例' }"
+                :aria-busy="openingAccount || undefined"
+                @pointerdown="prefetchAccountIntent"
+                @focus="prefetchAccountIntent"
+                @click="handleAccountAction"
               >
-                <span
-                  :class="['btn-ghost__loading-indicator', { 'is-visible': tryingDemo }]"
-                  aria-hidden="true"
-                >
+                <span :class="['btn-ghost__loading-indicator', { 'is-visible': openingAccount }]" aria-hidden="true">
                   <SvgIcon :src="icon.message.loading" size="18" />
                 </span>
-                <span>{{ t('landing.ctaTryDemo') }}</span>
+                <span>{{ t('landing.ctaAccount') }}</span>
               </BButton>
             </div>
+            <p class="landing-entry-hint">{{ t('landing.entryHint') }}</p>
             <ul class="trust-badges">
               <li>{{ t('landing.trustUnified') }}</li>
               <li>{{ t('landing.trustAi') }}</li>
@@ -521,8 +513,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
   import { usePwaInstall } from '@/composables/usePwaInstall';
-  import { LANDING_AUTH_CONTEXT, resolveLandingCtaMode } from './landingAuth.ts';
-  import { hasLoggedInBefore } from '@/utils/authStorage.ts';
+  import { LANDING_AUTH_CONTEXT } from './landingAuth.ts';
   import { isLightNoteAndroidApp } from '@/utils/androidBridge';
   import { resolveLightNoteRuntime } from '@/utils/appRuntime.ts';
   import { markMobileLandingVisited } from '@/utils/mobileLandingVisit.ts';
@@ -551,14 +542,9 @@
   const { isStandalone, openGuide } = usePwaInstall();
   const isLoggedIn = computed(() => !!user.id && user.role !== 'visitor');
   const landingAuth = inject(LANDING_AUTH_CONTEXT, null);
-  // 只在挂载时读一次：本地记录用于消除首屏 CTA 闪烁，不参与后续登录态判断
-  const hasLoginHint = hasLoggedInBefore();
-  const landingCtaMode = computed(() =>
-    resolveLandingCtaMode(landingAuth?.status.value || 'pending', isLoggedIn.value, hasLoginHint),
-  );
   const LANDING_OPERATION_LOG = {
     enter: { module: '官网首页', operation: '进入我的轻笺' },
-    register: { module: '官网首页', operation: '免费注册开始使用' },
+    register: { module: '官网首页', operation: '打开注册或登录' },
   } as const;
   const theme = ref(user.preferences?.theme || 'day');
   const slidesRef = ref<HTMLElement>();
@@ -574,7 +560,7 @@
   const showContactModal = ref(false);
   const feedbackContent = ref('');
   const submitting = ref(false);
-  type LandingNavigationAction = 'primary' | 'demo' | 'support' | 'extension' | 'document';
+  type LandingNavigationAction = 'primary' | 'account' | 'support' | 'extension' | 'document';
   type LandingNavigationKind = 'app' | 'registration' | 'page';
   const activeLandingAction = ref<LandingNavigationAction | null>(null);
   const navigationFeedbackKind = ref<LandingNavigationKind>('app');
@@ -583,7 +569,7 @@
   const navigationFeedbackSlow = ref(false);
   const navigationPending = computed(() => activeLandingAction.value !== null);
   const startingApp = computed(() => activeLandingAction.value === 'primary');
-  const tryingDemo = computed(() => activeLandingAction.value === 'demo');
+  const openingAccount = computed(() => activeLandingAction.value === 'account');
   const openingExtension = computed(() => activeLandingAction.value === 'extension');
   const navigationFeedbackTitle = computed(() => {
     if (navigationFeedbackSlow.value) return t('landing.navigationStillLoading');
@@ -719,16 +705,15 @@
   }
 
   function preloadPrimaryTarget() {
-    if (landingCtaMode.value === 'enter') return preloadRoute(applicationEntryTarget());
-    return loadUserAuthModal();
+    return preloadRoute(isLoggedIn.value ? applicationEntryTarget() : '/workbenches');
   }
 
   function prefetchPrimaryIntent() {
     void preloadPrimaryTarget().catch(() => undefined);
   }
 
-  function prefetchDemoIntent() {
-    void preloadRoute('/home').catch(() => undefined);
+  function prefetchAccountIntent() {
+    void loadUserAuthModal().catch(() => undefined);
   }
 
   function prefetchSupportIntent() {
@@ -740,20 +725,7 @@
   }
 
   async function preloadSecondaryTargets() {
-    await Promise.allSettled([preloadRoute('/home'), loadUserAuthModal()]);
-  }
-
-  async function goHome() {
-    if (!beginLandingNavigation('demo', 'app')) return;
-    // 次 CTA「先体验示例」:进入游客共享示例空间,记 demo_enter
-    trackConversion('demo_enter', 'landing_demo');
-    try {
-      await router.push('/home');
-    } catch {
-      warnNavigationFailed();
-    } finally {
-      finishLandingNavigation();
-    }
+    await Promise.allSettled([preloadRoute('/workbenches'), loadUserAuthModal()]);
   }
 
   async function openExtensionDetails() {
@@ -770,12 +742,12 @@
   function trackExtensionStoreOpen() {
     void recordOperation({ module: '官网首页', operation: '打开 Chrome 扩展商店' });
   }
-  // 首次访客可见文案统一为「开始使用轻笺」，实际动作仍是打开注册弹窗。
+  // 账号弹窗只响应独立的账号入口。
   function goRegister(source: string) {
     bookmark.openAuthModal('注册', source);
   }
   // 统一进入 /app，再由稳定应用入口按设备与首页偏好分发。
-  // 「进入」可能来自本机近期登录记录，此时 Pinia 身份仍在恢复；不能再用 isLoggedIn 二次拦截。
+  // 仅在身份检查确认登录后进入，近期登录记录不作为跳转依据。
   async function enterApp() {
     void recordOperation(LANDING_OPERATION_LOG.enter);
     await router.push('/app');
@@ -787,24 +759,24 @@
     goRegister(source);
   }
 
-  async function handlePrimaryAction(source: string) {
-    if (!beginLandingNavigation('primary', landingCtaMode.value === 'register' ? 'registration' : 'app')) return;
+  async function resolveConfirmedIdentity() {
+    if (landingAuth?.status.value === 'authenticated' && isLoggedIn.value) return 'authenticated';
+    if (landingAuth?.status.value === 'anonymous') return 'anonymous';
+    await landingAuth?.retry();
+    if (landingAuth?.status.value === 'authenticated' && isLoggedIn.value) return 'authenticated';
+    return landingAuth?.status.value === 'anonymous' ? 'anonymous' : 'error';
+  }
+
+  async function navigateWithIdentity(action: 'primary' | 'account', source: string) {
+    if (!beginLandingNavigation(action, 'app')) return;
     try {
-      const initialMode = landingCtaMode.value;
-      if (initialMode === 'enter') {
+      const identity = await resolveConfirmedIdentity();
+      if (identity === 'authenticated') {
         await enterApp();
-        return;
-      }
-
-      if (initialMode === 'register' || !landingAuth) {
-        await openRegistration(source);
-        return;
-      }
-
-      await landingAuth.retry();
-      if (isLoggedIn.value || landingCtaMode.value === 'enter') {
-        await enterApp();
-      } else if (landingAuth.status.value === 'anonymous') {
+      } else if (identity === 'anonymous' && action === 'primary') {
+        trackConversion('demo_enter', source);
+        await router.push('/workbenches');
+      } else if (identity === 'anonymous') {
         await openRegistration(source);
       } else {
         warnNavigationFailed();
@@ -814,6 +786,14 @@
     } finally {
       finishLandingNavigation();
     }
+  }
+
+  function handlePrimaryAction(source: string) {
+    return navigateWithIdentity('primary', source);
+  }
+
+  function handleAccountAction() {
+    return navigateWithIdentity('account', 'landing_account');
   }
 
   function isPlainLeftClick(event: MouseEvent) {
@@ -1057,6 +1037,12 @@
 </script>
 
 <style scoped>
+  .landing-entry-hint {
+    margin: 12px 0;
+    color: var(--desc-color);
+    font-size: 13px;
+    line-height: 1.6;
+  }
   .landing {
     height: 100vh;
     width: 100%;

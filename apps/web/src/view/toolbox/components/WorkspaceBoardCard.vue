@@ -9,7 +9,12 @@
     @keydown.space.self.prevent="$emit('edit')"
   >
     <div class="board-card__heading">
-      <BButton class="board-drag" :disabled="disabled" :aria-label="t('toolbox.board.sort')" @click.stop
+      <BButton
+        v-if="!readonly"
+        class="board-drag"
+        :disabled="disabled"
+        :aria-label="t('toolbox.board.sort')"
+        @click.stop
         ><SvgIcon :src="icon.todo.drag" size="16"
       /></BButton>
       <div class="board-card__identity">
@@ -22,7 +27,13 @@
         >
         <strong>{{ item.title }}</strong>
       </div>
-      <BActionMenu :items="menu" :disabled="disabled" @select="(key) => $emit('action', key)" @click.stop>
+      <BActionMenu
+        v-if="!readonly"
+        :items="menu"
+        :disabled="disabled"
+        @select="(key) => $emit('action', key)"
+        @click.stop
+      >
         <BButton class="board-card__menu" :aria-label="t('toolbox.board.actions')"
           ><SvgIcon :src="icon.common.more" size="18"
         /></BButton>
@@ -50,7 +61,7 @@
           ><time :datetime="item.dueOn">{{ item.dueOn }}</time></span
         ></span
       >
-      <BButton size="small" :disabled="disabled" @click.stop="$emit('action', primary.key)">{{
+      <BButton v-if="!readonly" size="small" :disabled="disabled" @click.stop="$emit('action', primary.key)">{{
         primary.label
       }}</BButton></div
     >
@@ -68,6 +79,7 @@
   defineProps<{
     item: ToolboxWorkspaceItem;
     disabled: boolean;
+    readonly?: boolean;
     hovered: boolean;
     typeLabel: string;
     menu: BActionMenuItem[];

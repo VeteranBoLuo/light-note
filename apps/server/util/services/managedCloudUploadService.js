@@ -3,12 +3,7 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import pool from '../../db/index.js';
 import { getUserSpaceMb } from '../growth.js';
-import {
-  bucketBaseUrl,
-  createUploadSignedUrl,
-  deleteObjectFromObs,
-  getObjectMetadataFromObs,
-} from '../obsClient.js';
+import { bucketBaseUrl, createUploadSignedUrl, deleteObjectFromObs, getObjectMetadataFromObs } from '../obsClient.js';
 import { BYTES_PER_MB, getAccountedStorageBytes, storageBytesToMb } from '../storageUsage.js';
 import { enqueueResources } from '../resourceInbox.js';
 import { triggerResourceCreateEffects } from './resourceCreateEffects.js';
@@ -223,6 +218,43 @@ export async function abortManagedCloudUpload({ userId, objectKey } = {}) {
   return { deleted: true, alreadyConfirmed: false };
 }
 
+/** Caller holds the owner row lock and owns commit/rollback. Metadata and quota stay authoritative. */
+export async function insertVerifiedCloudFile(
+  connection,
+  { userId, objectKey, fileName, fileType, folderId, quotaMB },
+) {
+  const ownedKey = assertOwnedManagedObjectKey(userId, objectKey);
+  const metadata = await getObjectMetadataFromObs(ownedKey);
+  const verifiedSize = normalizeFileSize(metadata?.contentLength);
+  const targetFolderId = await assertOwnedFolder(connection, userId, folderId);
+  const usedBytes = await getAccountedStorageBytes(connection, userId);
+  if (usedBytes + verifiedSize > Number(quotaMB) * BYTES_PER_MB) {
+    throw quotaError(quotaMB, usedBytes, verifiedSize);
+  }
+  const finalName = await uniqueCloudFileName(connection, userId, normalizeFileName(fileName));
+  const [insertResult] = await connection.query('INSERT INTO files SET ?', [
+    {
+      create_by: userId,
+      file_name: finalName,
+      file_type: normalizeFileType(fileType),
+      file_size: verifiedSize,
+      directory: `${bucketBaseUrl}/files/${userId}/`,
+      folder_id: targetFolderId,
+      del_flag: 0,
+      obs_key: ownedKey,
+    },
+  ]);
+  const createdFile = {
+    id: insertResult.insertId,
+    file_name: finalName,
+    file_type: normalizeFileType(fileType),
+    file_size: verifiedSize,
+    folder_id: targetFolderId,
+    obs_key: ownedKey,
+  };
+  return createdFile;
+}
+
 export async function confirmManagedCloudUpload({
   userId,
   userRole,
@@ -247,7 +279,6 @@ export async function confirmManagedCloudUpload({
   let createdFile = null;
   let alreadyConfirmedInTransaction = false;
   let transactionError = null;
-  let verifiedSize = 0;
   let inbox = null;
   try {
     await connection.beginTransaction();
@@ -259,35 +290,14 @@ export async function confirmManagedCloudUpload({
       createdFile = confirmedWhileWaiting;
       alreadyConfirmedInTransaction = true;
     } else {
-      // 元数据核验放在与 abort 共用的账号锁内，避免“HEAD 已成功 → abort 删除 → DB 再落库”的竞态。
-      const metadata = await getObjectMetadataFromObs(ownedKey);
-      verifiedSize = normalizeFileSize(metadata?.contentLength);
-      const targetFolderId = await assertOwnedFolder(connection, userId, folderId);
-      const usedBytes = await getAccountedStorageBytes(connection, userId);
-      if (usedBytes + verifiedSize > Number(quotaMB) * BYTES_PER_MB) {
-        throw quotaError(quotaMB, usedBytes, verifiedSize);
-      }
-      const finalName = await uniqueCloudFileName(connection, userId, normalizedName);
-      const [insertResult] = await connection.query('INSERT INTO files SET ?', [
-        {
-          create_by: userId,
-          file_name: finalName,
-          file_type: normalizedType,
-          file_size: verifiedSize,
-          directory: `${bucketBaseUrl}/files/${userId}/`,
-          folder_id: targetFolderId,
-          del_flag: 0,
-          obs_key: ownedKey,
-        },
-      ]);
-      createdFile = {
-        id: insertResult.insertId,
-        file_name: finalName,
-        file_type: normalizedType,
-        file_size: verifiedSize,
-        folder_id: targetFolderId,
-        obs_key: ownedKey,
-      };
+      createdFile = await insertVerifiedCloudFile(connection, {
+        userId,
+        objectKey: ownedKey,
+        fileName: normalizedName,
+        fileType: normalizedType,
+        folderId,
+        quotaMB,
+      });
     }
     if (addToInbox) {
       inbox = await enqueueResources(connection, {

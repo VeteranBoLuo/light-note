@@ -61,12 +61,14 @@
 
     <div :key="homeView" class="workshop-view-content">
       <section
-        v-if="!isGuest && homeView === 'work'"
+        v-if="canReadProjects && homeView === 'work'"
         class="toolbox-section toolbox-continue"
         aria-labelledby="toolbox-continue-title"
       >
         <header class="toolbox-section__head">
-          <h2 id="toolbox-continue-title">{{ t('toolbox.project.continueTitle') }}</h2>
+          <h2 id="toolbox-continue-title">{{
+            t(isGuest ? 'toolbox.project.examples' : 'toolbox.project.continueTitle')
+          }}</h2>
           <BButton @click="openProjects(false)">{{ t('toolbox.project.allProjects') }}</BButton>
         </header>
         <div v-if="overviewLoading" class="toolbox-home__state">
@@ -123,7 +125,8 @@
                 }}</small>
               </span>
               <span class="workshop-project__action"
-                >{{ t('toolbox.home.continueAction') }}<SvgIcon :src="icon.ai.sourceArrow" size="15" aria-hidden="true"
+                >{{ t(isGuest ? 'toolbox.project.viewExample' : 'toolbox.home.continueAction')
+                }}<SvgIcon :src="icon.ai.sourceArrow" size="15" aria-hidden="true"
               /></span>
             </span>
           </BButton>
@@ -461,6 +464,7 @@
 
   useMobileTopBar(['toolboxHome'], { searchMode: 'icon' });
 
+  const canReadProjects = computed(() => !user.adminContext && !user.visitorWorkspace);
   const isGuest = computed(() => !user.id || user.role === 'visitor' || !!user.adminContext || !!user.visitorWorkspace);
   const identityKey = computed(() => toolboxRecentUseIdentityKey(user));
   const aiQuotaBalanceLabel = computed(() =>
@@ -698,7 +702,13 @@
     });
   }
   function openTool(tool: ToolboxCatalogItem) {
-    if (tool.executionMode === 'service' && isGuest.value && blockGuestWrite('toolbox-account')) return;
+    if (
+      tool.executionMode === 'service' &&
+      !['research_workspace', 'learning_workspace', 'writing_workspace'].includes(tool.id) &&
+      isGuest.value &&
+      blockGuestWrite('toolbox-account')
+    )
+      return;
     if (tool.billingMedium !== 'free' && isGuest.value && blockGuestWrite('toolbox-paid')) return;
     recordToolboxRecentUse(user, tool.id);
     rememberHomeScroll();
@@ -761,7 +771,11 @@
   }
   async function loadOverview() {
     const version = ++overviewRequestVersion;
-    if (isGuest.value) return;
+    if (!canReadProjects.value) {
+      overviewLoading.value = false;
+      overviewFailed.value = false;
+      return;
+    }
     overviewLoading.value = true;
     overviewFailed.value = false;
     try {
@@ -784,19 +798,14 @@
     refreshLocalRecentUses();
     refreshPinnedTools();
     overview.value = null;
-    if (isGuest.value) {
-      overviewRequestVersion += 1;
-      overviewLoading.value = false;
-      overviewFailed.value = false;
-    } else {
-      void Promise.all([loadOverview(), loadGrowth(), loadAiQuota()]);
-    }
+    void loadOverview();
+    if (!isGuest.value) void Promise.all([loadGrowth(), loadAiQuota()]);
   });
   async function initializeHome() {
     window.addEventListener('keydown', handleSearchShortcut);
     await Promise.all([
       loadCatalog(),
-      isGuest.value ? Promise.resolve() : loadOverview(),
+      loadOverview(),
       isGuest.value ? Promise.resolve() : loadGrowth(),
       isGuest.value ? Promise.resolve() : loadAiQuota(),
     ]);

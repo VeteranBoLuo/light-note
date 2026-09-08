@@ -49,6 +49,12 @@ function requireRead(req, res) {
   return ensureUserOrAdminPolicy(req, res, ['read']);
 }
 
+// Project previews use the authenticated visitor owner; paid tools keep their existing guard.
+function requireProjectRead(req, res) {
+  if (!req.adminContext && req.user?.id && req.user.role === 'visitor') return true;
+  return requireRead(req, res);
+}
+
 function readUserId(req) {
   return (req.resourceUser || req.user)?.id;
 }
@@ -86,12 +92,14 @@ export async function getKnowledgeOverview(req, res) {
 }
 
 export async function getHome(req, res) {
-  if (!requireRead(req, res)) return;
+  if (!requireProjectRead(req, res)) return;
   try {
     const userId = readUserId(req);
     const [workspaces, tasks] = await Promise.all([
       listToolboxHomeWorkspaces({ userId }),
-      listToolboxHomeTasks({ userId }),
+      req.user.role === 'visitor'
+        ? Promise.resolve({ active: [], ready: [], recent: [] })
+        : listToolboxHomeTasks({ userId }),
     ]);
     return res.send(resultData({ schemaVersion: 2, workspaces, tasks }));
   } catch (error) {
@@ -100,7 +108,7 @@ export async function getHome(req, res) {
 }
 
 export async function listWorkspaces(req, res) {
-  if (!requireRead(req, res)) return;
+  if (!requireProjectRead(req, res)) return;
   try {
     const items = await listToolboxWorkspaces({
       userId: readUserId(req),
@@ -125,7 +133,7 @@ export async function createWorkspace(req, res) {
 }
 
 export async function getWorkspace(req, res) {
-  if (!requireRead(req, res)) return;
+  if (!requireProjectRead(req, res)) return;
   try {
     const workspace = await getToolboxWorkspace({
       userId: readUserId(req),
@@ -385,7 +393,7 @@ export async function writeStudy(req, res) {
 }
 
 export async function getProjectEntry(req, res) {
-  if (!requireRead(req, res)) return;
+  if (!requireProjectRead(req, res)) return;
   try {
     return res.send(resultData(await readProjectEntry(readUserId(req))));
   } catch (error) {
@@ -411,10 +419,15 @@ export async function operateWorkspaceBoard(req, res) {
   }
 }
 export async function getWorkspaceBoardItem(req, res) {
+  if (!requireProjectRead(req, res)) return;
   try {
     return res.send(
       resultData(
-        await readBoardItem({ userId: req.user.id, workspaceId: req.params.workspaceId, itemId: req.params.itemId }),
+        await readBoardItem({
+          userId: readUserId(req),
+          workspaceId: req.params.workspaceId,
+          itemId: req.params.itemId,
+        }),
       ),
     );
   } catch (error) {
