@@ -3650,7 +3650,7 @@
     }
     .inbox-page :deep(.is-workspace .todo-item__body) {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(120px, 19%) 76px 150px;
+      grid-template-columns: minmax(0, 1fr) minmax(280px, 32%) 76px 150px;
       gap: 5px 16px;
       align-items: center;
     }
@@ -3670,13 +3670,16 @@
     .inbox-page :deep(.is-workspace .todo-item__organization) {
       grid-column: 2;
       grid-row: 1 / span 2;
+      min-width: 0;
       margin: 0;
       gap: 8px;
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      white-space: nowrap;
       font-size: 12px;
     }
     .inbox-page :deep(.is-workspace .todo-item__organization > span) {
-      max-width: 100%;
-      overflow-wrap: anywhere;
+      flex: 0 0 auto;
       color: var(--desc-color);
     }
     .inbox-page :deep(.is-workspace .todo-item__chips) {
@@ -3885,7 +3888,8 @@
     display: grid;
     grid-template-columns: minmax(120px, 1fr) 76px 150px;
     gap: 16px;
-    width: calc(19% + 258px);
+    width: calc(32% + 258px);
+    min-width: 538px;
     padding-right: 44px;
     box-sizing: content-box;
     color: var(--todo-workspace-muted);
