@@ -3671,11 +3671,11 @@
       grid-column: 2;
       grid-row: 1 / span 2;
       margin: 0;
-      gap: 5px;
+      gap: 8px;
       font-size: 12px;
     }
     .inbox-page :deep(.is-workspace .todo-item__organization > span) {
-      width: 100%;
+      max-width: 100%;
       overflow-wrap: anywhere;
       color: var(--desc-color);
     }
