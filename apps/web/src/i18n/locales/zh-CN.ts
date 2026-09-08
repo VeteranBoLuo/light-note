@@ -1,13 +1,45 @@
 import { notificationMessages } from '@lightnote/shared/notification-presentation';
 export default {
+  organizeIcons: {
+    allTags: '全部标签',
+    scopeHints: {
+      recent: '最近新增的 20 个默认图标标签。',
+      all: '检查全部默认图标标签，包含尚未关联资料的标签。',
+      selected: '选择标签后自动排除已有自定义图标的标签。',
+    },
+    noSuggestion: '待手动选择',
+    searchFailed: '搜索失败',
+    partialFailure: '检查结束 · 存在未成功项',
+    previousPage: '上一页',
+    nextPage: '下一页',
+    noAi: '本次无需 AI 分析',
+    free: '图标匹配 · 免费',
+    change: '换一个',
+    aiExpand: 'AI 扩展搜索',
+    aiHint: '仅点击 AI 扩展时可能消耗 AI 额度；普通搜索免费。',
+    selectNamed: '选择「{name}」',
+    current: '默认图标',
+    proposed: '推荐图标',
+    applied: '已应用图标',
+    noMatch: '暂无合适推荐，可手动选择',
+    failed: '图标搜索失败，可重新搜索',
+    sharedImpact: '应用后，所有引用此标签的位置都会使用新图标。',
+    selectAvailable: '勾选已加载推荐',
+    clearSelection: '取消勾选',
+    applySelected: '应用已选 {count} 项',
+    batchResult: '已应用 {success} 项，失败 {failed} 项；失败项可重试。',
+  },
   browserPush: {
-    helpAndroid: 'Android：用支持推送的浏览器打开轻笺，点击「允许提醒」并允许授权。若被拦截，在 Chrome → 设置 → 网站设置 → 通知中允许轻笺；再到手机设置 → 应用 → Chrome → 通知，开启系统通知（菜单名称因机型而异）。',
-    helpIos: 'iPhone／iPad（iOS／iPadOS 16.4 及以上）：用 Safari 打开轻笺 → 分享 → 添加到主屏幕，然后从主屏幕图标打开，点击「允许提醒」并授权。已拒绝时，到系统设置 → 通知 → 轻笺，开启「允许通知」。普通浏览器标签页不支持这条推送流程。',
+    helpAndroid:
+      'Android：用支持推送的浏览器打开轻笺，点击「允许提醒」并允许授权。若被拦截，在 Chrome → 设置 → 网站设置 → 通知中允许轻笺；再到手机设置 → 应用 → Chrome → 通知，开启系统通知（菜单名称因机型而异）。',
+    helpIos:
+      'iPhone／iPad（iOS／iPadOS 16.4 及以上）：用 Safari 打开轻笺 → 分享 → 添加到主屏幕，然后从主屏幕图标打开，点击「允许提醒」并授权。已拒绝时，到系统设置 → 通知 → 轻笺，开启「允许通知」。普通浏览器标签页不支持这条推送流程。',
     helpTitle: '收不到提醒？',
     helpLimit: '站点已授权或订阅成功，不代表系统允许显示通知。网页无法检测系统通知开关，请同时检查以下设置。',
     helpMac: 'macOS：系统设置 → 通知 → 你使用的浏览器（例如 Google Chrome），开启「允许通知」，选择横幅或提醒。',
     helpWindows: 'Windows：设置 → 系统 → 通知，开启通知总开关和对应浏览器的通知。',
-    helpFocus: '同时检查专注模式／勿扰模式和后台运行限制。轻笺 Android 原生 App 本次未接入推送，请使用支持推送的浏览器。',
+    helpFocus:
+      '同时检查专注模式／勿扰模式和后台运行限制。轻笺 Android 原生 App 本次未接入推送，请使用支持推送的浏览器。',
 
     promptTitle: '接收浏览器提醒',
     promptDescription: '允许后，新通知会同步提醒你，关闭网页后也能接收。',
@@ -41,32 +73,34 @@ export default {
 
     navigation: '整理步骤',
     steps: {
-      resources: '选资源',
+      resources: '选对象',
       checks: '选项目',
       scope: '定范围',
       confirm: '确认',
     },
     stepCount: '第 {current} 步 / 共 4 步',
     headings: {
-      resources: '想整理哪些资料？',
+      resources: '想整理哪些对象？',
       checks: '这次想改善什么？',
       scope: '从哪些资料开始？',
       confirm: '确认这次整理',
     },
     descriptions: {
-      resources: '先选择资源类型，下一步只展示适用的整理项目。',
+      resources: '先选择整理对象，下一步只展示适用的整理项目。',
       checks: '按需选择，后续范围会自动排除没有适用项目的资源。',
       scope: '只处理所选类型与项目，确认前可随时返回调整。',
       confirm: '确认资源数量与整理项目，开始后在后台检查并生成建议。',
     },
     resourceHints: {
+      tag: '补全默认标签图标',
       bookmark: '补齐标签，检查重复网址',
       note: '补齐标签、完善标题，检查空内容与重复',
       file: '补齐标签，检查零字节与疑似重复文件',
     },
-    forResources: '已选资源：{names}',
+    forResources: '已选对象：{names}',
     archiveMethod: '后台存档 · 免费',
     checks: {
+      tag_icon: '补全标签图标',
       archive: '网页正文存档',
       tags: '标签建议',
       title: '笔记标题',
@@ -74,6 +108,7 @@ export default {
       duplicate: '重复检查',
     },
     checkHints: {
+      tag_icon: '根据标签名推荐图标，仅处理默认图标，确认后应用。',
       archive: '补齐缺失或失败的正文存档，已有正文自动跳过。',
       tags: '只为无标签资料推荐标签，优先使用已有标签。',
       title: '根据正文改善默认或重复标题，保留正常标题。',
@@ -92,12 +127,12 @@ export default {
       checks: '下一步：定范围',
     },
     required: {
-      resources: '至少选择一种资源',
+      resources: '至少选择一种对象',
       checks: '至少选择一个适用项目',
       scope: '请选择需要整理的资料',
       confirm: '请返回调整范围',
     },
-    resourceCount: '已选 {count} 种资源',
+    resourceCount: '已选 {count} 种对象',
     checkCount: '已选 {count} 个项目',
     previewFree: '预检不调用 AI，不消耗额度',
     reviewFirst: '生成建议后，由你审核应用',
@@ -147,7 +182,7 @@ export default {
     limit: '本次加入将超过 1000 项，未加入任何资料。请减少选择后重试。',
   },
   organizeWorkspace: {
-    openOriginal: { bookmark: '新标签页打开网页', note: '新标签页打开笔记', file: '预览文件' },
+    openOriginal: { tag: '打开标签', bookmark: '新标签页打开网页', note: '新标签页打开笔记', file: '预览文件' },
     groups: {
       priority: '优先处理',
       manual: '需要手动补充',
@@ -242,6 +277,7 @@ export default {
     startCount: '开始整理 {count} 项',
     allChecks: '全部建议类型',
     resources: {
+      tag: '标签',
       bookmark: '书签',
       note: '笔记',
       file: '文件',
@@ -251,6 +287,7 @@ export default {
     archiveQueued: '已提交',
     archiveAppliedHint: '可打开网页存档查看正文、读取进度和结果。',
     checks: {
+      tag_icon: '标签图标',
       archive: '网页正文存档',
       tags: '标签',
       title: '标题／名称',
@@ -7917,11 +7954,13 @@ export default {
     notificationsEmail: '邮件通知总开关',
     notificationsEmailDesc: '关闭后不再发送待办等邮件提醒。',
     notificationsBrowser: '浏览器通知',
-    notificationsBrowserDesc: '浏览器通知默认开启。首次使用仍需授权，授权成功后同步新站内通知；点击进入通知中心，不自动执行操作。',
+    notificationsBrowserDesc:
+      '浏览器通知默认开启。首次使用仍需授权，授权成功后同步新站内通知；点击进入通知中心，不自动执行操作。',
     notificationsBrowserUnsupported: '当前浏览器不支持系统通知。',
     notificationsBrowserDenied: '浏览器未授予通知权限，请在站点设置中允许后重试。',
     notificationsDnd: '浏览器通知免打扰',
-    notificationsDndDesc: '仅延后浏览器推送，站内通知和邮件照常发送。推送在时段结束后恢复，超过 24 小时有效期的不再发送。',
+    notificationsDndDesc:
+      '仅延后浏览器推送，站内通知和邮件照常发送。推送在时段结束后恢复，超过 24 小时有效期的不再发送。',
     notificationsDndStart: '免打扰开始时间',
     notificationsDndEnd: '免打扰结束时间',
     weeklyReport: '每周成长周报',

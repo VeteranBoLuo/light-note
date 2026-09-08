@@ -119,3 +119,69 @@ describe('tagIconService', () => {
     expect(() => sanitizeIconifySvg('<svg><path onclick="alert(1)" d="M0 0"/></svg>')).toThrow('ICON_SVG_UNSAFE');
   });
 });
+
+describe('默认图标补全', () => {
+  it('未知中文不请求通用 tag，也不调用模型', async () => {
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
+    const result = await searchTagIcons({ query: '虚构词条壹', mode: 'recommend' });
+    expect(result.icons).toEqual([]);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(mocks.requestAi).not.toHaveBeenCalled();
+  });
+  it('主题优先线性匹配，排除品牌与通用占位', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue({
+          ok: true,
+          json: async () => ({
+            icons: [
+              'simple-icons:database',
+              'material-symbols:database',
+              'lucide:database',
+              'lucide:tag',
+              'lucide:unrelated',
+            ],
+          }),
+        }),
+    );
+    const result = await searchTagIcons({ query: '数据库专题', mode: 'recommend' });
+    expect(result.icons).toEqual(['lucide:database', 'material-symbols:database']);
+    expect(mocks.requestAi).not.toHaveBeenCalled();
+  });
+  it('明确品牌命中优先品牌标识', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ icons: ['lucide:github', 'simple-icons:github'] }) }),
+    );
+    expect((await searchTagIcons({ query: 'GitHub', mode: 'recommend' })).icons[0]).toBe('simple-icons:github');
+  });
+  it('只交付能解析的候选，并把颜色写入服务端生成的图标', async () => {
+    const { recommendTagIcons, prepareTagIconChoice } = await import('./tagIconService.js');
+    const svg = '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M0 0h24v24H0z"/></svg>';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url) =>
+        String(url).includes('/search')
+          ? { ok: true, json: async () => ({ icons: ['lucide:book-open', 'tabler:book-open'] }) }
+          : String(url).includes('/lucide/')
+            ? { ok: false, status: 404 }
+            : { ok: true, text: async () => svg },
+      ),
+    );
+    const candidates = await recommendTagIcons('阅读专题');
+    expect(candidates.map((c) => c.iconName)).toEqual(['tabler:book-open']);
+    const chosen = await prepareTagIconChoice({
+      iconName: candidates[0].iconName,
+      color: '#EC4899',
+      iconUrl: '<script />',
+    });
+    expect(Buffer.from(chosen.iconUrl.split(',')[1], 'base64').toString()).toContain('data-light-note-color="#EC4899"');
+    expect(chosen.iconUrl).not.toContain('script');
+    await expect(prepareTagIconChoice({ iconName: 'lucide:book', color: 'url(evil)' })).rejects.toMatchObject({
+      code: 'ORGANIZE_ICON_INVALID',
+    });
+  });
+});

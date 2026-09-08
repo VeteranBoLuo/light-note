@@ -1,3 +1,4 @@
+import { prepareTagIconChoice } from '../tagIconService.js';
 import {
   previewV2,
   startV2,
@@ -140,8 +141,24 @@ export async function getSuggestionRun(db = pool, { userId, id, after = '', reso
         [id],
       )
     : [[]];
+  let groupTotals;
+  if (resourceType === 'tag') {
+    const [groups] = await db.query(
+      `SELECT CASE
+      WHEN s.status IN ('pending','info') THEN 'priority'
+      WHEN s.status IN ('failed','conflict','cancelled') OR i.rule_status NOT IN ('completed','removed') THEN 'analysis'
+      WHEN s.status IN ('insufficient','no_suggestion') THEN 'manual'
+      WHEN s.status IN ('applied','ignored','closed') OR i.rule_status='removed' THEN 'reviewed'
+      ELSE 'clear' END AS bucket, COUNT(*) AS total
+      FROM organize_suggestion_items i LEFT JOIN organize_suggestions s ON s.item_id=i.id AND s.kind='tag_icon'
+      WHERE i.user_id=? AND i.run_id=? AND i.resource_type='tag' GROUP BY bucket`,
+      [userId, id],
+    );
+    groupTotals = Object.fromEntries(groups.map((row) => [row.bucket, Number(row.total)]));
+  }
   return {
     ...mapRun(run),
+    ...(groupTotals ? { groupTotals } : {}),
     ...lifecycleState(run, progress, ruleProgress),
     progress,
     counts,
@@ -183,6 +200,17 @@ export async function cancelSuggestionRun(db = pool, { userId, id }) {
 export async function actOnSuggestion(db = pool, { userId, runId, suggestionId, action, value, requestId }) {
   if (!['apply', 'ignore'].includes(action) || !uuid(requestId))
     throw suggestionError('ORGANIZE_ACTION_INVALID', '操作无效');
+  let preparedIcon;
+  if (action === 'apply' && value?.iconName) {
+    const [rows] = await db.query(
+      'SELECT kind,status,payload_json FROM organize_suggestions WHERE id=? AND run_id=? AND user_id=?',
+      [suggestionId, runId, userId],
+    );
+    if (!rows.length || rows[0].kind !== 'tag_icon')
+      throw suggestionError('ORGANIZE_SUGGESTION_NOT_FOUND', '建议不存在', 404);
+    if (['applied', 'ignored'].includes(rows[0].status)) return { status: rows[0].status };
+    preparedIcon = await prepareTagIconChoice(value, json(rows[0].payload_json)?.candidates || []);
+  }
   let cleanup;
   const result = await transaction(db, async (c) => {
     await lockActiveUserForUpdate(c, userId);
@@ -195,7 +223,10 @@ export async function actOnSuggestion(db = pool, { userId, runId, suggestionId, 
     const suggestion = rows[0];
     if (!suggestion) throw suggestionError('ORGANIZE_SUGGESTION_NOT_FOUND', '建议不存在', 404);
     if (['applied', 'ignored'].includes(suggestion.status)) return { status: suggestion.status };
-    if (!['pending', 'insufficient', 'no_suggestion', 'info'].includes(suggestion.status))
+    if (
+      !['pending', 'insufficient', 'no_suggestion', 'info'].includes(suggestion.status) &&
+      !(suggestion.kind === 'tag_icon' && suggestion.status === 'failed')
+    )
       throw suggestionError('ORGANIZE_SUGGESTION_STATE', '当前建议不能操作', 409);
     const payload = json(suggestion.payload_json);
     if (action === 'ignore') {
@@ -211,6 +242,7 @@ export async function actOnSuggestion(db = pool, { userId, runId, suggestionId, 
     ]);
     const item = itemRows[0];
     const [table, owner] = {
+      tag: ['tag', 'user_id'],
       note: ['note', 'create_by'],
       bookmark: ['bookmark', 'user_id'],
       file: ['files', 'create_by'],
@@ -248,6 +280,7 @@ export async function actOnSuggestion(db = pool, { userId, runId, suggestionId, 
       value,
       kind: suggestion.kind,
       runId,
+      preparedIcon,
     });
     cleanup = mutation.cleanup;
     if (mutation.deleted) {
@@ -271,7 +304,7 @@ export async function actOnSuggestion(db = pool, { userId, runId, suggestionId, 
       JSON.stringify({
         ...payload,
         proposedAfter: payload.after,
-        after: ['tags', 'title'].includes(suggestion.kind) ? mutation.applied : payload.after,
+        after: ['tags', 'title', 'tag_icon'].includes(suggestion.kind) ? mutation.applied : payload.after,
         applied: mutation.applied,
       }),
       requestId,

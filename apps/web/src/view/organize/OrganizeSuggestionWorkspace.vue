@@ -30,7 +30,7 @@
               :tone="
                 run.status === 'paused' || activeAi
                   ? 'pending'
-                  : aiFailed
+                  : aiFailed || countStatuses(['failed', 'conflict'])
                     ? 'danger'
                     : run.status === 'ended'
                       ? 'neutral'
@@ -87,7 +87,11 @@
               >{{ run.counts ? countStatuses(['pending']) : '—'
               }}<small> {{ t('organizeWorkspace.suggestionUnit') }}</small></strong
             >
-            <small>{{ t('organizeWorkspace.manualCount', { count: countStatuses(['insufficient']) }) }}</small>
+            <small>{{
+              t('organizeWorkspace.manualCount', {
+                count: countStatuses(['insufficient', ...(resourceType === 'tag' ? ['no_suggestion'] : [])]),
+              })
+            }}</small>
           </div>
         </div>
         <p v-if="run.ruleRetrying" class="workspace-ai-warning" role="status">{{
@@ -111,6 +115,25 @@
         </BTabs>
         <BSelect v-model:value="kind" :options="kindOptions" :aria-label="t('organizeWorkspace.checkFilter')" />
       </nav>
+      <div v-if="resourceType === 'tag'" class="icon-batch-toolbar">
+        <span>{{ t('organizeIcons.sharedImpact') }}</span>
+        <BButton :disabled="iconReview.batchBusy.value" @click="iconReview.selectAvailable">{{
+          t('organizeIcons.selectAvailable')
+        }}</BButton>
+        <BButton :disabled="iconReview.batchBusy.value" @click="iconReview.selected.clear()">{{
+          t('organizeIcons.clearSelection')
+        }}</BButton>
+        <BButton
+          type="primary"
+          :loading="iconReview.batchBusy.value"
+          :disabled="!iconReview.selectedCount.value"
+          @click="iconReview.applySelected"
+          >{{ t('organizeIcons.applySelected', { count: iconReview.selectedCount.value }) }}</BButton
+        >
+        <p v-if="iconReview.outcome.value" role="status">{{
+          t('organizeIcons.batchResult', iconReview.outcome.value)
+        }}</p>
+      </div>
       <div class="workspace-list-heading">
         <span>{{ t('organizeWorkspace.resultsLabel') }}</span>
         <small>{{ t('organizeWorkspace.resultsHint') }}</small>
@@ -142,7 +165,9 @@
               <span class="group-copy"
                 ><strong
                   >{{ t(`organizeWorkspace.groups.${group.key}`) }}
-                  <span class="group-count">{{ group.items.length }}</span></strong
+                  <span class="group-count">{{
+                    resourceType === 'tag' ? (run.groupTotals?.[group.key] ?? group.items.length) : group.items.length
+                  }}</span></strong
                 ><small>{{ t(`organizeWorkspace.groupHints.${group.key}`) }}</small></span
               >
               <SvgIcon
@@ -169,14 +194,17 @@
                       resourceOpenLabel(item) + '：' + (item.resource.title || t('organizeWorkspace.unnamed'))
                     "
                     @click.stop="openOriginal(item)"
-                    ><SvgIcon :src="resourceIcons[item.resource.type]" size="21" /></BButton
+                    ><SvgIcon :src="item.resource.iconUrl || resourceIcons[item.resource.type]" size="21" /></BButton
                   ><div class="resource-identity"
                     ><h4
                       ><BButton class="resource-title-link" @click.stop="openOriginal(item)">{{
                         item.resource.title || t('organizeWorkspace.unnamed')
                       }}</BButton></h4
                     ><small
-                      >{{ item.resource.source.folder || t('organizeWorkspace.root')
+                      >{{
+                        item.resource.type === 'tag'
+                          ? t('organizeIcons.free')
+                          : item.resource.source.folder || t('organizeWorkspace.root')
                       }}<template v-if="item.resource.type === 'file'">
                         ·
                         {{
@@ -230,8 +258,15 @@
                       shares: item.resource.guards.shares || 0,
                     })
                   }}</p
-                  ><OrganizeWorkspaceSuggestion
-                    v-for="suggestion in primarySuggestions(item)"
+                  ><OrganizeTagIconSuggestion
+                    v-for="suggestion in primarySuggestions(item).filter((s) => s.kind === 'tag_icon')"
+                    :key="suggestion.id"
+                    :suggestion="suggestion"
+                    :title="item.resource.title"
+                    :review="iconReview"
+                  />
+                  <OrganizeWorkspaceSuggestion
+                    v-for="suggestion in primarySuggestions(item).filter((s) => s.kind !== 'tag_icon')"
                     :key="suggestion.id"
                     :run-id="run.id"
                     :resource-title="item.resource.title"
@@ -252,8 +287,17 @@
               </BCard>
             </div>
           </section>
+          <BButton
+            v-if="resourceType === 'tag' && tagPageIndex > 0"
+            :disabled="loading || iconReview.batchBusy.value"
+            @click="
+              tagPageIndex--;
+              loadPage();
+            "
+            >{{ t('organizeIcons.previousPage') }}</BButton
+          >
           <BButton v-if="nextCursor" class="workspace-more" :loading="loading" @click="loadPage(true)">{{
-            t('organize.loadMore')
+            t(resourceType === 'tag' ? 'organizeIcons.nextPage' : 'organize.loadMore')
           }}</BButton>
         </div>
       </div>
@@ -288,6 +332,10 @@
   </section>
 </template>
 <script setup lang="ts">
+  import OrganizeTagIconSuggestion from './OrganizeTagIconSuggestion.vue';
+  import useBookmarkStore from '@/store/bookmark';
+  import { useOrganizeIconReview } from '@/composables/useOrganizeIconReview';
+  import { supportsOrganizeCheck } from '@lightnote/shared/organize-capabilities';
   import { useUserStore } from '@/store';
   import { buildNoteDetailRequestScope } from '@/api/noteDetailPrefetch';
   import { consumeOrganizeHandoff } from '@/utils/organizeHandoff';
@@ -341,18 +389,27 @@
   const { t, locale } = useI18n(),
     emit = defineEmits<{ 'refresh-summary': []; 'run-status': [status: string] }>();
   const wizardHeader = ref<HTMLElement | null>(null);
-  const resourceTypes: ResourceType[] = ['bookmark', 'note', 'file'],
-    checks: CheckKind[] = ['tags', 'title', 'empty', 'duplicate', 'archive'];
-  const resourceIcons = { bookmark: icon.resource.bookmark, note: icon.resource.note, file: icon.organize.file };
+  const resourceTypes: ResourceType[] = ['bookmark', 'note', 'file', 'tag'],
+    checks: CheckKind[] = ['tags', 'title', 'empty', 'duplicate', 'archive', 'tag_icon'];
+  const resourceIcons = {
+    tag: icon.resource.tag,
+    bookmark: icon.resource.bookmark,
+    note: icon.resource.note,
+    file: icon.organize.file,
+  };
   const defaults = (): RunOptions => ({
-    resourceTypes: [...resourceTypes],
-    checks: [...checks],
+    resourceTypes: resourceTypes.filter((type) => type !== 'tag'),
+    checks: checks.filter((check) => check !== 'tag_icon'),
     scope: 'recent',
     items: [],
   });
   const run = ref<SuggestionRun | null>(null),
     items = ref<WorkspaceItem[]>([]),
     nextCursor = ref<string | null>(null);
+  const bookmark = useBookmarkStore();
+  const iconReview = useOrganizeIconReview(run, items, changed);
+  const tagPageStarts = ref(['']);
+  const tagPageIndex = ref(0);
   const loading = ref(false),
     error = ref(''),
     pageError = ref(''),
@@ -419,7 +476,7 @@
       return 'analysis';
     if (
       suggestions.some(
-        (s) => ['insufficient', 'no_suggestion'].includes(s.status) && ['tags', 'title'].includes(s.kind),
+        (s) => ['insufficient', 'no_suggestion'].includes(s.status) && ['tags', 'title', 'tag_icon'].includes(s.kind),
       ) ||
       item.resource.unsupported
     )
@@ -460,6 +517,10 @@
   } | null>(null);
   const openingFile = ref('');
   async function openOriginal(item: WorkspaceItem) {
+    if (item.resource.type === 'tag') {
+      void router.push(`/tag/${encodeURIComponent(item.resource.id)}`);
+      return;
+    }
     if (item.resource.type === 'file') {
       if (openingFile.value) return;
       openingFile.value = item.id;
@@ -520,7 +581,9 @@
       .reduce((n, row) => n + Number(row.total), 0);
   const kindOptions = computed(() => [
     { value: 'all', label: t('organizeWorkspace.allChecks') },
-    ...checks.map((k) => ({ value: k, label: t(`organizeWorkspace.checks.${k}`) })),
+    ...checks
+      .filter((k) => supportsOrganizeCheck(resourceType.value, k))
+      .map((k) => ({ value: k, label: t(`organizeWorkspace.checks.${k}`) })),
   ]);
   const aiDone = computed(() =>
     (run.value?.progress || []).filter((p) => p.aiStatus === 'completed').reduce((n, p) => n + Number(p.total), 0),
@@ -554,6 +617,7 @@
   const aiProcessed = computed(() => aiDone.value + aiFailed.value);
   const aiProgressText = computed(() => {
     const current = run.value;
+    if (current?.summary.aiTotal === 0) return t('organizeIcons.noAi');
     if (!current?.progress) return t('organizeLifecycle.undetermined');
     if (current.status === 'completed' && aiFailed.value)
       return t('organizeWorkspace.aiFinishedWithFailures', { done: aiDone.value, failed: aiFailed.value });
@@ -574,9 +638,11 @@
     if (['preparing', 'paused', 'ended'].includes(run.value?.status || ''))
       return t(`organizeLifecycle.states.${run.value?.status}`);
     if (activeAi.value) return t('organizeWorkspace.status.running');
-    if (run.value?.status === 'completed' && aiFailed.value)
+    if (run.value?.status === 'completed' && run.value.summary.aiTotal === 0 && countStatuses(['failed', 'conflict']))
+      return t('organizeIcons.partialFailure');
+    if (run.value?.status === 'completed' && (aiFailed.value || countStatuses(['failed', 'conflict'])))
       return t(
-        aiFailed.value >= (run.value.summary.aiTotal || 0)
+        Math.max(aiFailed.value, countStatuses(['failed', 'conflict'])) >= run.value.summary.total
           ? 'organizeWorkspace.status.failed'
           : 'organizeWorkspace.partialFailure',
       );
@@ -585,9 +651,10 @@
   const visibleSuggestions = (item: WorkspaceItem) =>
     item.suggestions.filter((s) => displayedKind.value === 'all' || s.kind === displayedKind.value);
   const isSecondary = (s: WorkspaceItem['suggestions'][number]) =>
-    (['not_applicable', 'applied', 'ignored', 'closed'].includes(s.status) &&
+    s.kind !== 'tag_icon' &&
+    ((['not_applicable', 'applied', 'ignored', 'closed'].includes(s.status) &&
       !(s.kind === 'archive' && s.status === 'applied')) ||
-    (s.status === 'no_suggestion' && !['tags', 'title'].includes(s.kind));
+      (s.status === 'no_suggestion' && !['tags', 'title', 'tag_icon'].includes(s.kind)));
   const primarySuggestions = (item: WorkspaceItem) => visibleSuggestions(item).filter((s) => !isSecondary(s));
   const secondarySuggestions = (item: WorkspaceItem) => visibleSuggestions(item).filter(isSecondary);
   function resourceConclusion(item: WorkspaceItem) {
@@ -745,6 +812,9 @@
   }
   async function loadPage(append = false) {
     if (!run.value) return;
+    if (resourceType.value === 'tag' && append && nextCursor.value) {
+      tagPageStarts.value[++tagPageIndex.value] = nextCursor.value;
+    }
     const request = ++sequence,
       id = run.value.id,
       requestedKind = kind.value,
@@ -756,13 +826,18 @@
         await getRun(id, {
           resourceType: requestedType,
           kind: kind.value === 'all' ? '' : kind.value,
-          after: append ? nextCursor.value || '' : '',
+          after:
+            requestedType === 'tag'
+              ? tagPageStarts.value[tagPageIndex.value] || ''
+              : append
+                ? nextCursor.value || ''
+                : '',
         }),
       ) as SuggestionRun;
       const collected = [...(result.items || [])];
       let cursor = result.nextCursor;
       const seenCursors = new Set<string>();
-      while (cursor) {
+      while (cursor && requestedType !== 'tag') {
         if (disposed || request !== sequence) return;
         if (seenCursors.has(cursor)) throw new Error(t('organize.actionFailed'));
         seenCursors.add(cursor);
@@ -777,7 +852,7 @@
         cursor = page.nextCursor;
       }
       result.items = [...new Map(collected.map((item) => [item.id, item])).values()];
-      result.nextCursor = null;
+      result.nextCursor = requestedType === 'tag' ? cursor : null;
       if (disposed || request !== sequence) return;
       run.value = result;
       displayedKind.value = requestedKind;
@@ -793,9 +868,10 @@
         else if (choice === false) expanded.value.delete(item.id);
       }
       switching.value = false;
-      items.value = append
-        ? [...items.value, ...(result.items || []).filter((i) => !items.value.some((v) => v.id === i.id))]
-        : result.items || [];
+      items.value =
+        append && requestedType !== 'tag'
+          ? [...items.value, ...(result.items || []).filter((i) => !items.value.some((v) => v.id === i.id))]
+          : result.items || [];
       nextCursor.value = result.nextCursor || null;
       saveView();
     } catch (e) {
@@ -844,13 +920,24 @@
   }
   function changed() {
     void refresh();
+    bookmark.refreshTag();
     emit('refresh-summary');
   }
   function visibility() {
     if (document.hidden) clearTimeout(timer);
     else if (activeAi.value) void refresh();
   }
+  watch(
+    () => run.value?.id,
+    () => {
+      tagPageStarts.value = [''];
+      tagPageIndex.value = 0;
+    },
+    { flush: 'sync' },
+  );
   watch([resourceType, kind], () => {
+    tagPageStarts.value = [''];
+    tagPageIndex.value = 0;
     // 保留旧列表几何；空结果也至少填满当前可见区域，避免浏览器压缩 scrollTop。
     if (scrollRoot.value && listShell.value) {
       const offset = listShell.value.getBoundingClientRect().top - scrollRoot.value.getBoundingClientRect().top;
@@ -885,6 +972,20 @@
     }
   }
   watch(() => router.currentRoute.value.query.organizeSelection, receiveHandoff);
+  watch(
+    () => buildNoteDetailRequestScope(user),
+    () => {
+      sequence++;
+      draftSequence++;
+      iconReview.reset();
+      run.value = null;
+      items.value = [];
+      drawer.value = false;
+      clearTimeout(timer);
+      if (active) void loadLatest();
+    },
+    { flush: 'sync' },
+  );
   onMounted(() => {
     active = true;
     void loadLatest();
@@ -898,6 +999,7 @@
     receiveHandoff();
   });
   onDeactivated(() => {
+    iconReview.reset();
     active = false;
     sequence++;
     viewState = {};
@@ -1173,6 +1275,19 @@
     gap: 10px;
     padding-top: 50px;
     color: var(--ow-muted);
+  }
+  .icon-batch-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .icon-batch-toolbar > span,
+  .icon-batch-toolbar > p {
+    flex-basis: 100%;
+    color: var(--text-secondary-color);
+    font-size: 13px;
   }
   .result-group {
     border: 1px solid var(--ow-border);

@@ -129,7 +129,7 @@ it('每次重新整理都重新选择范围，默认三类资源和五项检查'
   await mount();
   button('重新整理').click();
   await settle();
-  expect(document.body.textContent).toContain('想整理哪些资料？');
+  expect(document.body.textContent).toContain('想整理哪些对象？');
   expect(button('确认整理范围')).toBeUndefined();
   await toScope();
   expect(document.body.textContent).toContain('最近新增');
@@ -290,7 +290,7 @@ it('重新打开从资源开始；手动范围未选资料不能预检', async (
   await settle();
   button('重新整理').click();
   await settle();
-  expect(document.body.textContent).toContain('想整理哪些资料？');
+  expect(document.body.textContent).toContain('想整理哪些对象？');
   expect(button('下一步：选项目').disabled).toBe(false);
 });
 
@@ -762,7 +762,7 @@ it('快捷预检关闭后丢弃迟到结果，再次打开从正常第一步开�
   expect(document.querySelector('.run-wizard')).toBeNull();
   button('重新整理').click();
   await settle();
-  expect(document.querySelector('[aria-current="step"]')?.textContent).toContain('选资源');
+  expect(document.querySelector('[aria-current="step"]')?.textContent).toContain('选对象');
   expect(api.startRun).not.toHaveBeenCalled();
 });
 it('快捷入口主动改成非显式范围时恢复无标签模式，并重新预检', async () => {
@@ -915,5 +915,33 @@ it('网页正文存档单项限定书签，移除重复适用说明，预检不�
   button('确认整理范围').click();
   await settle();
   expect(api.previewRun.mock.calls.at(-1)![0]).toMatchObject({ resourceTypes: ['bookmark'], checks: ['archive'] });
+  expect(api.actOnRunSuggestion).not.toHaveBeenCalled();
+});
+
+it('标签可独立整理，自动选择免费图标检查与全部标签范围', async () => {
+  await mount();
+  button('重新整理').click();
+  await settle();
+  button('标签').click();
+  await settle();
+  for (const name of ['书签', '笔记', '文件']) {
+    button(name).click();
+    await settle();
+  }
+  button('下一步：选项目').click();
+  await settle();
+  expect(button('补全标签图标').getAttribute('aria-pressed')).toBe('true');
+  expect(button('标签建议')).toBeUndefined();
+  button('下一步：定范围').click();
+  await settle();
+  expect(button('全部标签').getAttribute('aria-pressed')).toBe('true');
+  expect(button('无标签资源')).toBeUndefined();
+  button('确认整理范围').click();
+  await settle();
+  expect(api.previewRun.mock.calls.at(-1)![0]).toMatchObject({
+    resourceTypes: ['tag'],
+    checks: ['tag_icon'],
+    scope: 'all',
+  });
   expect(api.actOnRunSuggestion).not.toHaveBeenCalled();
 });

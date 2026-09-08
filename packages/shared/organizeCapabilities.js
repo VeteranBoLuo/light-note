@@ -1,6 +1,7 @@
 // New organizing runs share this applicability policy across the wizard and preflight.
 // Existing suggestions remain readable and actionable independently of this policy.
 const resourcesByCheck = Object.freeze({
+  tag_icon: ['tag'],
   archive: ['bookmark'],
   tags: ['bookmark', 'note', 'file'],
   title: ['note'],

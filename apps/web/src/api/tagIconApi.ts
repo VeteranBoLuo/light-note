@@ -10,8 +10,8 @@ export interface TagIconSearchResult {
   aiExpanded: boolean;
 }
 
-export async function searchTagIcons(query: string, page = 0, useAi = false) {
-  return apiBasePost('/api/tagIcon/search', { query, page, useAi }, { silent: true });
+export async function searchTagIcons(query: string, page = 0, useAi = false, mode: 'browse' | 'recommend' = 'browse') {
+  return apiBasePost('/api/tagIcon/search', { query, page, useAi, mode }, { silent: true });
 }
 
 export async function resolveTagIcon(icon: string) {

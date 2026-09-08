@@ -116,3 +116,14 @@ it('正文存档检查只认可当前网址的非空存档，读取阶段不抓�
   expect(b.hasArchive).toBe(false);
   expect(db.query.mock.calls.every(([sql]) => sql.startsWith('SELECT'))).toBe(true);
 });
+
+it('标签预检按 owner 与默认图标筛选，完整快照不读取资料关系', async () => {
+  const db = { query: vi.fn().mockResolvedValue([[{ id: 't', name: '阅读', title: '阅读', icon_url: '' }]]) };
+  await readSuggestionCandidates(db, 'owner', 'tag', { recent: true, limit: 20 });
+  expect(db.query.mock.calls[0][0]).toContain("(r.icon_url IS NULL OR r.icon_url REGEXP '^[[:space:]]*$')");
+  expect(db.query.mock.calls[0][1]).toEqual(['owner', 20]);
+  db.query.mockClear();
+  const snapshots = await readSuggestionSources(db, 'owner', 'tag', { ids: ['t'] });
+  expect(db.query).toHaveBeenCalledTimes(1);
+  expect(snapshots[0]).toMatchObject({ type: 'tag', id: 't', title: '阅读', iconUrl: '' });
+});

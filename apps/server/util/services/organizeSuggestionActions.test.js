@@ -1,8 +1,12 @@
+import { updateOwnedTagIcon } from './tagService.js';
 vi.mock('../bookmarkArchiveJobs.js', () => ({ enqueueBookmarkArchiveInTransaction: vi.fn() }));
 import { enqueueBookmarkArchiveInTransaction } from '../bookmarkArchiveJobs.js';
 import { beforeEach, expect, it, vi } from 'vitest';
 vi.mock('./resourceTagWriteService.js', () => ({ batchWriteResourceTags: vi.fn().mockResolvedValue({}) }));
-vi.mock('./tagService.js', () => ({ ensureTag: vi.fn().mockResolvedValue({ id: 'new', name: 'Vue' }) }));
+vi.mock('./tagService.js', () => ({
+  updateOwnedTagIcon: vi.fn().mockResolvedValue(undefined),
+  ensureTag: vi.fn().mockResolvedValue({ id: 'new', name: 'Vue' }),
+}));
 vi.mock('./noteService.js', () => ({ snapshotOwnedNoteVersion: vi.fn().mockResolvedValue(true) }));
 vi.mock('./noteTreeService.js', () => ({ deleteOwnedNoteSubtrees: vi.fn().mockResolvedValue({}) }));
 vi.mock('./cloudFileDeletionService.js', () => ({ softDeleteOwnedCloudFiles: vi.fn().mockResolvedValue({}) }));
@@ -157,4 +161,16 @@ it('入队失败不把建议误标为已应用', async () => {
       input({ current: { type: 'bookmark', id: 'b' }, kind: 'archive', payload: { action: 'archive' } }),
     ),
   ).rejects.toMatchObject({ code: 'ORGANIZE_ARCHIVE_QUEUE_FAILED' });
+});
+
+it('补全图标只调用图标写入领域能力，不替换关联且保护已有图标', async () => {
+  const c = db();
+  const preparedIcon = { iconName: 'lucide:book', iconUrl: 'safe', color: 'currentColor' };
+  const args = input({ kind: 'tag_icon', current: { type: 'tag', id: 't', iconUrl: '' }, preparedIcon });
+  expect(await applySuggestionMutation(c, args)).toEqual({ applied: preparedIcon });
+  expect(updateOwnedTagIcon).toHaveBeenCalledWith(c, { userId: 'u', tagId: 't', iconUrl: 'safe' });
+  expect(batchWriteResourceTags).not.toHaveBeenCalled();
+  await expect(
+    applySuggestionMutation(c, { ...args, current: { ...args.current, iconUrl: 'custom' } }),
+  ).rejects.toThrow();
 });

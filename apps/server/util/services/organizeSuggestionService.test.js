@@ -432,3 +432,72 @@ it.each(['unchanged', 'changed', 'ended', 'lease_lost'])('书签材料在外发�
       ),
     ).toBe(true);
 });
+
+describe('标签图标应用一致性', () => {
+  const safeSvg =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M0 0h1v1"/></svg>';
+  const choice = {
+    iconName: 'lucide:book',
+    iconUrl: `data:image/svg+xml;base64,${Buffer.from(safeSvg).toString('base64')}`,
+    color: 'currentColor',
+  };
+  const original = buildSnapshot('tag', { id: 'tag1', name: '阅读', icon_url: '' });
+  const row = {
+    id: 'suggestion1',
+    kind: 'tag_icon',
+    status: 'pending',
+    item_id: 'item1',
+    payload_json: { candidates: [choice], after: choice },
+  };
+  const args = {
+    userId: 'u',
+    runId: 'run',
+    suggestionId: row.id,
+    requestId,
+    action: 'apply',
+    value: { iconName: choice.iconName, color: choice.color },
+  };
+  function tagDb(status = 'pending') {
+    return database((sql, params) => {
+      if (sql.includes('FROM organize_suggestions')) {
+        expect(params).toContain('u');
+        return [[{ ...row, status }]];
+      }
+      if (sql.includes('FROM organize_suggestion_runs')) return [[{ ...run, status: 'completed' }]];
+      if (sql.includes('FROM organize_suggestion_items'))
+        return [[{ id: 'item1', resource_type: 'tag', resource_id: 'tag1', version_hash: original.version }]];
+      if (sql.startsWith('SELECT id FROM tag')) {
+        expect(params).toEqual(['tag1', 'u']);
+        return [[{ id: 'tag1' }]];
+      }
+    });
+  }
+  it.each([null, { ...original, version: 'renamed' }, { ...original, version: 'icon_changed' }])(
+    '标签删除、改名或改图标时拒绝旧建议',
+    async (current) => {
+      readCurrentSuggestionSource.mockResolvedValue(current);
+      const db = tagDb();
+      await expect(actOnSuggestion(db, args)).rejects.toMatchObject({ code: 'ORGANIZE_RESOURCE_CHANGED' });
+      expect(applySuggestionMutation).not.toHaveBeenCalled();
+      expect(db.rollback).toHaveBeenCalledOnce();
+    },
+  );
+  it('使用已保存候选，不依赖外部网络，更新结果与建议同事务', async () => {
+    readCurrentSuggestionSource.mockResolvedValue(original);
+    applySuggestionMutation.mockResolvedValue({ applied: choice });
+    const db = tagDb();
+    expect(await actOnSuggestion(db, args)).toMatchObject({ status: 'applied' });
+    expect(applySuggestionMutation).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({
+        kind: 'tag_icon',
+        preparedIcon: expect.objectContaining({ iconName: choice.iconName }),
+      }),
+    );
+    expect(db.commit).toHaveBeenCalledOnce();
+  });
+  it('重复应用不解析或再次写入图标', async () => {
+    expect(await actOnSuggestion(tagDb('applied'), args)).toEqual({ status: 'applied' });
+    expect(applySuggestionMutation).not.toHaveBeenCalled();
+  });
+});

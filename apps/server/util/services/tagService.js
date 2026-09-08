@@ -64,3 +64,14 @@ export async function createTag({
 export async function ensureTag({ userId, name, connection = pool } = {}) {
   return createTag({ userId, name, connection, existingIsSuccess: true });
 }
+
+/** 只更新标签图标，调用方持有标签锁并在同一事务内保存审核结果。 */
+export async function updateOwnedTagIcon(connection, { userId, tagId, iconUrl }) {
+  const [result] = await connection.query('UPDATE tag SET icon_url=? WHERE id=? AND user_id=? AND del_flag=0', [
+    iconUrl,
+    tagId,
+    userId,
+  ]);
+  if (!result.affectedRows)
+    throw Object.assign(new Error('标签已变化'), { code: 'ORGANIZE_RESOURCE_CHANGED', status: 409 });
+}

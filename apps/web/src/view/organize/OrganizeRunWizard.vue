@@ -75,6 +75,7 @@
               )
             }}</small>
             <span class="option-bottom">
+              <span v-if="check === 'tag_icon'">{{ t('organizeIcons.free') }}</span>
               <span>{{
                 resourceNames(modelValue.resourceTypes.filter((type) => supportsOrganizeCheck(type, check)))
               }}</span></span
@@ -99,18 +100,18 @@
             class="wizard-option scope-option"
             :class="{ chosen: modelValue.scope === scope }"
             :aria-pressed="modelValue.scope === scope"
-            :aria-label="t(`organizeWorkspace.scopes.${scope}`)"
+            :aria-label="scopeLabel(scope)"
             :disabled="busy"
             @click="chooseScope(scope)"
           >
             <span class="option-copy"
               ><strong
-                >{{ t(`organizeWorkspace.scopes.${scope}`) }}
+                >{{ scopeLabel(scope) }}
                 <span v-if="scope === 'recent'" class="scope-recommend">{{
                   t('organizeWizard.recommended')
                 }}</span></strong
               >
-              <small>{{ t(`organizeWorkspace.scopeHints.${scope}`) }}</small></span
+              <small>{{ scopeHint(scope) }}</small></span
             >
             <span class="option-check radio" aria-hidden="true"></span>
           </BButton>
@@ -171,7 +172,7 @@
       <template v-else-if="preview">
         <div class="wizard-context"
           ><strong>{{ resourceNames(preview.options.resourceTypes) }}</strong
-          ><span>{{ checkNames }} · {{ t(`organizeWorkspace.scopes.${preview.options.scope}`) }}</span></div
+          ><span>{{ checkNames }} · {{ scopeLabel(preview.options.scope) }}</span></div
         >
         <section class="wizard-summary">
           <div class="scan-total"
@@ -281,10 +282,17 @@
     heading = ref<HTMLElement | null>(null),
     content = ref<HTMLElement | null>(null);
   const steps = ['resources', 'checks', 'scope', 'confirm'] as const;
-  const types: ResourceType[] = ['bookmark', 'note', 'file'];
-  const checks: CheckKind[] = ['tags', 'title', 'empty', 'duplicate', 'archive'];
-  const scopes: RunOptions['scope'][] = ['recent', 'all', 'selected', 'untagged'];
-  const resourceIcons = { bookmark: icon.resource.bookmark, note: icon.resource.note, file: icon.resource.file };
+  const types: ResourceType[] = ['bookmark', 'note', 'file', 'tag'];
+  const checks: CheckKind[] = ['tags', 'title', 'empty', 'duplicate', 'archive', 'tag_icon'];
+  const scopes = computed<RunOptions['scope'][]>(() =>
+    effectiveTypes.value.includes('tag') ? ['recent', 'all', 'selected'] : ['recent', 'all', 'selected', 'untagged'],
+  );
+  const resourceIcons = {
+    tag: icon.resource.tag,
+    bookmark: icon.resource.bookmark,
+    note: icon.resource.note,
+    file: icon.resource.file,
+  };
   const availableChecks = computed(() =>
     checks.filter((check) => props.modelValue.resourceTypes.some((type) => supportsOrganizeCheck(type, check))),
   );
@@ -294,6 +302,11 @@
   const effectiveItems = computed(() =>
     props.modelValue.items.filter((item) => effectiveTypes.value.includes(item.type)),
   );
+  const onlyTags = computed(() => effectiveTypes.value.length === 1 && effectiveTypes.value[0] === 'tag');
+  const scopeLabel = (scope: RunOptions['scope']) =>
+    t(onlyTags.value && scope === 'all' ? 'organizeIcons.allTags' : `organizeWorkspace.scopes.${scope}`);
+  const scopeHint = (scope: RunOptions['scope']) =>
+    t(onlyTags.value ? `organizeIcons.scopeHints.${scope}` : `organizeWorkspace.scopeHints.${scope}`);
   const scopeChoices = ref(false),
     reviewSelection = ref(false),
     browseType = ref('bookmark'),
@@ -380,10 +393,18 @@
       : [...props.modelValue.resourceTypes, type];
     update({
       resourceTypes,
+      ...(resourceTypes.length === 1 && resourceTypes[0] === 'tag'
+        ? { scope: 'all' as const }
+        : resourceTypes.includes('tag') && props.modelValue.scope === 'untagged'
+          ? { scope: 'recent' as const }
+          : {}),
       items: props.modelValue.items.filter((item) => resourceTypes.includes(item.type)),
-      checks: props.modelValue.checks.filter((check) =>
-        resourceTypes.some((type) => supportsOrganizeCheck(type, check)),
-      ),
+      checks: [
+        ...new Set([
+          ...props.modelValue.checks,
+          ...(type === 'tag' && resourceTypes.includes('tag') ? ['tag_icon' as const] : []),
+        ]),
+      ].filter((check) => resourceTypes.some((type) => supportsOrganizeCheck(type, check))),
     });
   }
   function toggleCheck(check: CheckKind) {

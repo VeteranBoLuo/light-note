@@ -38,8 +38,10 @@ export async function runOrganizeCompletionNotifications(_workerId, db = pool, n
       const run = runs[0];
       if (!run || run.status !== 'completed' || json(run.summary_json).completionNotification !== 'pending') return;
       const [counts] = await c.query(
-        `SELECT SUM(ai_status IN ('failed','conflict')) AS failed
-        FROM organize_suggestion_items WHERE run_id=?`,
+        `SELECT SUM(ai_status IN ('failed','conflict') OR EXISTS (
+          SELECT 1 FROM organize_suggestions s WHERE s.item_id=i.id AND s.kind='tag_icon' AND s.status='failed'
+        )) AS failed
+        FROM organize_suggestion_items i WHERE run_id=?`,
         [run.id],
       );
       const payload = users.length ? completionMessage(run, counts[0] || {}, json(users[0].preferences) || {}) : null;

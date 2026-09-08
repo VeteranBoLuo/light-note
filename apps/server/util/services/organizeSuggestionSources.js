@@ -1,7 +1,12 @@
 import { classifyWebPageSnapshot } from '../fetchWebMeta.js';
 import { buildSnapshot } from './organizeSuggestionRules.js';
 const comparisonText = (column) => `CONVERT(${column} USING utf8mb4) COLLATE utf8mb4_unicode_ci`;
-const tables = { bookmark: ['bookmark', 'user_id'], note: ['note', 'create_by'], file: ['files', 'create_by'] };
+const tables = {
+  bookmark: ['bookmark', 'user_id'],
+  note: ['note', 'create_by'],
+  file: ['files', 'create_by'],
+  tag: ['tag', 'user_id'],
+};
 // 范围确认仅冻结 ID 与显示名称，禁止读正文、解析片段及引用关系。
 export async function readSuggestionCandidates(
   db,
@@ -20,13 +25,14 @@ export async function readSuggestionCandidates(
     where.push('CAST(r.id AS CHAR)>?');
     params.push(after);
   }
+  if (type === 'tag') where.push("(r.icon_url IS NULL OR r.icon_url REGEXP '^[[:space:]]*$')");
   if (untagged) {
     where.push(
       `NOT EXISTS(SELECT 1 FROM resource_tag_relations tr JOIN tag t ON t.id=tr.tag_id AND t.del_flag=0 AND t.user_id=? WHERE tr.user_id=? AND tr.resource_type=? AND tr.resource_id=${comparisonText('r.id')})`,
     );
     params.push(userId, userId, type);
   }
-  const title = { bookmark: 'name', note: 'title', file: 'file_name' }[type];
+  const title = { bookmark: 'name', note: 'title', file: 'file_name', tag: 'name' }[type];
   const [rows] = await db.query(
     `SELECT r.id,r.${title} AS title FROM ${table} r WHERE ${where.join(' AND ')} ORDER BY ${recent ? 'r.create_time DESC,r.id DESC' : 'CAST(r.id AS CHAR)'} LIMIT ?`,
     [...params, limit],
@@ -78,6 +84,7 @@ export async function readSuggestionSources(
     [...params, limit],
   );
   if (!rows.length) return [];
+  if (type === 'tag') return rows.map((row) => buildSnapshot(type, row));
   const resourceIds = rows.map((r) => String(r.id));
   if (type === 'note') {
     const [tree] = await db.query('SELECT id,parent_id FROM note WHERE create_by=? AND del_flag=0', [userId]);

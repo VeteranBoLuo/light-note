@@ -1,7 +1,7 @@
 import { apiBaseGet, apiBasePost } from '@/http/request';
 import type { OrganizeAiSuggestionTag } from './organizeApi';
-export type ResourceType = 'bookmark' | 'note' | 'file';
-export type CheckKind = 'tags' | 'title' | 'empty' | 'duplicate' | 'archive';
+export type ResourceType = 'bookmark' | 'note' | 'file' | 'tag';
+export type CheckKind = 'tags' | 'title' | 'empty' | 'duplicate' | 'archive' | 'tag_icon';
 export interface RunOptions {
   tagMode?: 'untagged' | 'append';
   resourceTypes: ResourceType[];
@@ -33,13 +33,19 @@ export interface SuggestionMember {
   excerpt?: string;
   protected?: boolean;
 }
+export interface TagIconChoice {
+  iconName: string;
+  iconUrl: string;
+  color: string;
+}
 export interface WorkspaceSuggestion {
+  candidates?: TagIconChoice[];
   id: string;
   kind: CheckKind;
   status: string;
   reason: string;
-  before: string | OrganizeAiSuggestionTag[] | null;
-  after: string | OrganizeAiSuggestionTag[] | null;
+  before: string | OrganizeAiSuggestionTag[] | TagIconChoice | null;
+  after: string | OrganizeAiSuggestionTag[] | TagIconChoice | null;
   applied?: unknown;
   action?: string;
   members?: SuggestionMember[];
@@ -47,6 +53,7 @@ export interface WorkspaceSuggestion {
 export interface WorkspaceItem {
   id: string;
   resource: SuggestionMember & {
+    iconUrl?: string;
     tags: OrganizeAiSuggestionTag[];
     source: { folder: string; url?: string };
     guards: Record<string, number>;
@@ -59,6 +66,7 @@ export interface WorkspaceItem {
   suggestions: WorkspaceSuggestion[];
 }
 export interface SuggestionRun {
+  groupTotals?: Record<string, number>;
   runVersion?: number;
   rulePhase?: string;
   ruleRetrying?: boolean;

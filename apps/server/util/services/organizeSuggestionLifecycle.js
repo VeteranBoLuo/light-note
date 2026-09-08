@@ -1,3 +1,4 @@
+import { recommendTagIcons } from '../tagIconService.js';
 import crypto from 'node:crypto';
 import { transaction, json } from './organizeSuggestionStorage.js';
 import { normalizeRunInput, buildRuleSuggestions, hash, suggestionError } from './organizeSuggestionRules.js';
@@ -90,8 +91,8 @@ export async function previewV2(db, { userId, input, requestId }) {
       types: Object.fromEntries(
         options.resourceTypes.map((type) => [type, candidates.filter((item) => item.type === type).length]),
       ),
-      aiTotal: null,
-      ruleTotal: null,
+      aiTotal: options.resourceTypes.every((type) => type === 'tag') ? 0 : null,
+      ruleTotal: options.resourceTypes.every((type) => type === 'tag') ? candidates.length : null,
       files: { parsed: null, metadata: null },
       skipped: options.scope === 'selected' ? options.items.length - candidates.length : 0,
       estimatedTokensLower: null,
@@ -262,7 +263,11 @@ async function writeSuggestions(c, run, entries, { emptyOnly = false } = {}) {
   const rows = [];
   for (const entry of entries)
     for (const suggestion of entry.suggestions) {
-      if (emptyOnly && suggestion.kind !== 'empty') continue;
+      if (
+        emptyOnly &&
+        (!['empty', 'tag_icon'].includes(suggestion.kind) || !json(run.options_json).checks.includes(suggestion.kind))
+      )
+        continue;
       rows.push([
         crypto.randomUUID(),
         entry.itemId,
@@ -296,19 +301,33 @@ export async function runRuleBatch(db) {
   if (!claim) return false;
   try {
     const [items] = await db.query(
-      "SELECT * FROM organize_suggestion_items WHERE run_id=? AND rule_status='pending' ORDER BY id LIMIT 100",
+      `SELECT * FROM organize_suggestion_items WHERE run_id=? AND rule_status='pending' ORDER BY id LIMIT ${json(claim.options_json).resourceTypes.includes('tag') ? 10 : 100}`,
       [claim.id],
     );
     let entries = [];
     if (items.length) {
-      for (const type of ['bookmark', 'note', 'file']) {
+      for (const type of ['bookmark', 'note', 'file', 'tag']) {
         const selected = items.filter((i) => i.resource_type === type);
         if (!selected.length) continue;
         const sources = await readSuggestionSources(db, claim.user_id, type, {
           ids: selected.map((i) => i.resource_id),
           limit: 100,
         });
-        for (const entry of buildRuleSuggestions(sources, ['empty'])) {
+        for (const entry of buildRuleSuggestions(sources, type === 'tag' ? ['tag_icon'] : ['empty'])) {
+          if (type === 'tag' && !entry.snapshot.iconUrl.trim()) {
+            const suggestion = entry.suggestions[0];
+            try {
+              const candidates = await recommendTagIcons(entry.snapshot.title);
+              Object.assign(suggestion, {
+                candidates,
+                after: candidates[0] || null,
+                status: candidates.length ? 'pending' : 'no_suggestion',
+                reason: candidates.length ? '根据标签名称匹配图标' : '暂无合适推荐，可手动选择',
+              });
+            } catch {
+              Object.assign(suggestion, { status: 'failed', reason: '图标服务暂不可用，可重新搜索或手动选择' });
+            }
+          }
           entry.itemId = selected.find((i) => i.resource_id === entry.snapshot.id).id;
           entries.push(entry);
         }
@@ -342,7 +361,7 @@ export async function runRuleBatch(db) {
             "UPDATE organize_suggestion_items SET rule_status='skipped',error_code='ORGANIZE_RESOURCE_UNAVAILABLE' WHERE id IN (?)",
             [missing],
           );
-        if (json(claim.options_json).checks.includes('empty'))
+        if (json(claim.options_json).checks.some((kind) => ['empty', 'tag_icon'].includes(kind)))
           await writeSuggestions(c, claim, entries, { emptyOnly: true });
       } else {
         // 独立规则已可审核；在最终分组落库前重读快照，防止已清理资源重新生成建议。
@@ -376,7 +395,7 @@ export async function runRuleBatch(db) {
           ...json(live.summary_json),
           aiTotal: entries.filter((e) => e.aiKinds.length).length,
           ruleTotal: entries.filter((e) =>
-            e.suggestions.some((s) => ['empty', 'duplicate', 'archive'].includes(s.kind)),
+            e.suggestions.some((s) => ['empty', 'duplicate', 'archive', 'tag_icon'].includes(s.kind)),
           ).length,
           files: {
             parsed: entries.filter((e) => e.snapshot.type === 'file' && e.snapshot.evidenceLevel === 'parsed').length,

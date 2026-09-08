@@ -2,12 +2,18 @@ import { enqueueBookmarkArchiveInTransaction } from '../bookmarkArchiveJobs.js';
 import { normalizeName, suggestionError } from './organizeSuggestionRules.js';
 import { readCurrentSuggestionSource } from './organizeSuggestionSources.js';
 import { batchWriteResourceTags } from './resourceTagWriteService.js';
-import { ensureTag } from './tagService.js';
+import { ensureTag, updateOwnedTagIcon } from './tagService.js';
 import { snapshotOwnedNoteVersion } from './noteService.js';
 import { deleteOwnedNoteSubtrees } from './noteTreeService.js';
 import { softDeleteOwnedCloudFiles } from './cloudFileDeletionService.js';
 import { renameOwnedCloudFile } from './cloudFileRenameService.js';
-export async function applySuggestionMutation(c, { userId, current, payload, value, kind, runId }) {
+export async function applySuggestionMutation(c, { userId, current, payload, value, kind, runId, preparedIcon }) {
+  if (kind === 'tag_icon') {
+    if (current.type !== 'tag' || current.iconUrl.trim() || !preparedIcon)
+      throw suggestionError('ORGANIZE_ICON_INVALID', '请选择图标，且仅能补全默认图标');
+    await updateOwnedTagIcon(c, { userId, tagId: current.id, iconUrl: preparedIcon.iconUrl });
+    return { applied: preparedIcon };
+  }
   if (kind === 'archive') {
     if (current.type !== 'bookmark' || payload.action !== 'archive')
       throw suggestionError('ORGANIZE_ARCHIVE_UNSUPPORTED', '仅支持为书签保存网页正文');

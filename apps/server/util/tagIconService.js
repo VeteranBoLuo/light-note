@@ -11,8 +11,48 @@ const MAX_CACHE_SIZE = 500;
 
 const searchCache = new Map();
 const keywordCache = new Map();
+const svgCache = new Map();
+// 所有图标请求共用有界并发，批量补全不会瞬间冲击外部服务。
+let activeRequests = 0;
+const requestWaiters = [];
+async function withIconRequest(work) {
+  if (requestWaiters.length >= 100)
+    throw Object.assign(new Error('图标服务繁忙，请稍后重试'), { code: 'ICON_SERVICE_BUSY', status: 503 });
+  if (activeRequests >= 3) await new Promise((resolve) => requestWaiters.push(resolve));
+  else activeRequests++;
+  try {
+    return await work();
+  } finally {
+    const next = requestWaiters.shift();
+    if (next) next();
+    else activeRequests--;
+  }
+}
+const BRAND_ALIASES = new Map([
+  ['github', 'github'],
+  ['gitlab', 'gitlab'],
+  ['redis', 'redis'],
+  ['mysql', 'mysql'],
+  ['python', 'python'],
+  ['javascript', 'javascript'],
+  ['typescript', 'typescript'],
+  ['docker', 'docker'],
+  ['react', 'react'],
+  ['vue', 'vuedotjs'],
+  ['vue.js', 'vuedotjs'],
+  ['微信', 'wechat'],
+  ['wechat', 'wechat'],
+  ['支付宝', 'alipay'],
+  ['alipay', 'alipay'],
+]);
 
 const LOCAL_KEYWORDS = new Map([
+  ['证书', ['award', 'badge']],
+  ['证件', ['id-card', 'contact']],
+  ['网络安全', ['shield', 'lock']],
+  ['法律', ['scale', 'gavel']],
+  ['健康', ['heart', 'activity']],
+  ['阅读', ['book-open', 'book']],
   ['代码', ['code', 'terminal']],
   ['开发', ['code', 'developer']],
   ['数据库', ['database', 'server']],
@@ -148,12 +188,14 @@ async function translateToIconKeywords(query, trace, signal) {
 }
 
 async function fetchIconifyJson(url) {
-  const response = await fetch(url, {
-    headers: { Accept: 'application/json' },
-    signal: AbortSignal.timeout(6_000),
+  return withIconRequest(async () => {
+    const response = await fetch(url, {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(6_000),
+    });
+    if (!response.ok) throw new Error(`Iconify 请求失败：${response.status}`);
+    return await response.json();
   });
-  if (!response.ok) throw new Error(`Iconify 请求失败：${response.status}`);
-  return response.json();
 }
 
 async function searchOneKeyword(keyword) {
@@ -193,12 +235,14 @@ function rankIcons(icons, keywords) {
     .map((item) => item.icon);
 }
 
-export async function searchTagIcons({ query, page = 0, useAi = false, signal, trace } = {}) {
+export async function searchTagIcons({ query, page = 0, useAi = false, signal, trace, mode = 'browse' } = {}) {
   const normalizedQuery = normalizeIconQuery(query);
   if (!normalizedQuery) throw new Error('ICON_QUERY_REQUIRED');
   const normalizedPage = Math.max(0, Math.min(20, Number(page) || 0));
   const aiExpanded = useAi === true && containsCjk(normalizedQuery);
-  const cacheKey = `${aiExpanded ? 'ai' : 'direct'}:${normalizedQuery.toLowerCase()}`;
+  const recommend = mode === 'recommend';
+  const brand = BRAND_ALIASES.get(normalizedQuery.toLowerCase());
+  const cacheKey = `${mode}:${aiExpanded ? 'ai' : 'direct'}:${normalizedQuery.toLowerCase()}`;
   let result = getCached(searchCache, cacheKey);
   const cacheHit = !!result;
 
@@ -210,11 +254,20 @@ export async function searchTagIcons({ query, page = 0, useAi = false, signal, t
           ...getLocalKeywords(normalizedQuery),
         ]);
     const asciiWords = normalizedQuery.match(/[a-z][a-z0-9.+#-]{1,}/gi) || [];
-    const searchTerms = uniqueKeywords([...asciiWords, ...keywords, 'tag']).slice(0, 3);
+    const searchTerms = uniqueKeywords([
+      ...(brand ? [brand] : []),
+      ...asciiWords,
+      ...keywords,
+      ...(recommend ? [] : ['tag']),
+    ]).slice(0, 3);
     const settled = await Promise.allSettled(searchTerms.map(searchOneKeyword));
     const icons = settled.flatMap((item) => (item.status === 'fulfilled' ? item.value : []));
-    if (!icons.length && settled.every((item) => item.status === 'rejected')) throw settled[0].reason;
-    result = { icons: rankIcons(icons, searchTerms), keywords, translatedQuery: searchTerms.join(' ') };
+    if (settled.length && !icons.length && settled.every((item) => item.status === 'rejected')) throw settled[0].reason;
+    result = {
+      icons: recommend ? rankRecommendedIcons(icons, searchTerms, brand) : rankIcons(icons, searchTerms),
+      keywords,
+      translatedQuery: searchTerms.join(' '),
+    };
     setCached(searchCache, cacheKey, result);
   }
 
@@ -262,17 +315,92 @@ export function sanitizeIconifySvg(value) {
 
 export async function resolveTagIcon(iconName) {
   const { icon, prefix, name } = validateIconName(iconName);
+  const cached = getCached(svgCache, icon);
+  if (cached) return cached;
   const url = `${ICONIFY_API}/${encodeURIComponent(prefix)}/${encodeURIComponent(name)}.svg`;
-  const response = await fetch(url, {
-    headers: { Accept: 'image/svg+xml' },
-    signal: AbortSignal.timeout(6_000),
+  const svg = await withIconRequest(async () => {
+    const response = await fetch(url, {
+      headers: { Accept: 'image/svg+xml' },
+      signal: AbortSignal.timeout(6_000),
+    });
+    if (!response.ok)
+      throw new Error(response.status === 404 ? 'ICON_NOT_FOUND' : `Iconify 请求失败：${response.status}`);
+    return sanitizeIconifySvg(await response.text());
   });
-  if (!response.ok)
-    throw new Error(response.status === 404 ? 'ICON_NOT_FOUND' : `Iconify 请求失败：${response.status}`);
-  const svg = sanitizeIconifySvg(await response.text());
-  return {
+  const result = {
     icon,
     svg,
     iconUrl: `data:image/svg+xml;base64,${Buffer.from(svg, 'utf8').toString('base64')}`,
+  };
+  setCached(svgCache, icon, result);
+  return result;
+}
+
+// 自动推荐不能依赖图标库的热门度或泛化 tag 兜底。
+export function rankRecommendedIcons(icons, keywords, brand) {
+  const terms = keywords.map((term) => term.toLowerCase().replace(/\s+/g, '-'));
+  const styleScore = { lucide: 5, tabler: 4, 'material-symbols': 3, 'material-symbols-light': 2 };
+  return [...new Set(icons)]
+    .flatMap((icon) => {
+      try {
+        validateIconName(icon);
+      } catch {
+        return [];
+      }
+      const [prefix, name] = icon.split(':');
+      if (prefix === 'simple-icons') return brand && name === brand ? [{ icon, score: 1000 }] : [];
+      if (/^(?:tag|tags|label)(?:-|$)/.test(name)) return [];
+      const matches = terms.map((term, index) => {
+        if (name === term) return 200 - index * 10;
+        if (name.startsWith(`${term}-`) || name.endsWith(`-${term}`)) return 100 - index * 10;
+        return 0;
+      });
+      const semantic = Math.max(0, ...matches);
+      return semantic ? [{ icon, score: semantic + (styleScore[prefix] || 0) }] : [];
+    })
+    .sort((a, b) => b.score - a.score || a.icon.localeCompare(b.icon))
+    .map((item) => item.icon);
+}
+
+export async function recommendTagIcons(query) {
+  const result = await searchTagIcons({ query, mode: 'recommend', useAi: false });
+  const candidates = [];
+  for (const iconName of result.icons.slice(0, 6)) {
+    try {
+      const resolved = await resolveTagIcon(iconName);
+      candidates.push({ iconName, iconUrl: resolved.iconUrl, color: 'currentColor' });
+      if (candidates.length === 3) break;
+    } catch {
+      /* 不可解析的候选不展示，继续尝试有限备选。 */
+    }
+  }
+  if (result.icons.length && !candidates.length) throw new Error('ICON_RESOLVE_FAILED');
+  return candidates;
+}
+
+export async function prepareTagIconChoice(value, candidates = []) {
+  if (!value || typeof value !== 'object' || typeof value.iconName !== 'string')
+    throw Object.assign(new Error('请选择有效图标'), { code: 'ORGANIZE_ICON_INVALID', status: 400 });
+  const color = value.color || 'currentColor';
+  if (typeof color !== 'string' || (color !== 'currentColor' && !/^#[0-9a-f]{6}$/i.test(color)))
+    throw Object.assign(new Error('请选择有效颜色'), { code: 'ORGANIZE_ICON_INVALID', status: 400 });
+  let icon;
+  try {
+    icon = validateIconName(value.iconName).icon;
+  } catch {
+    throw Object.assign(new Error('请选择有效图标'), { code: 'ORGANIZE_ICON_INVALID', status: 400 });
+  }
+  const saved = candidates.find((candidate) => candidate.iconName === icon);
+  const resolved = saved
+    ? {
+        icon,
+        svg: sanitizeIconifySvg(Buffer.from(String(saved.iconUrl).split(',')[1] || '', 'base64').toString('utf8')),
+      }
+    : await resolveTagIcon(icon);
+  const svg = resolved.svg.replace(/currentColor/gi, color).replace('<svg', `<svg data-light-note-color="${color}"`);
+  return {
+    iconName: resolved.icon,
+    color,
+    iconUrl: `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`,
   };
 }

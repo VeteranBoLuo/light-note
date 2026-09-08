@@ -46,7 +46,7 @@ const ICON_SVG = '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M4 4h16v
 let cleanup: (() => void) | undefined;
 const model = ref<string | undefined>('');
 
-async function mountPicker() {
+async function mountPicker(extra: Record<string, unknown> = {}) {
   searchTagIcons.mockResolvedValue({
     status: 200,
     data: { icons: ['mdi:home', 'mdi:book'], translatedQuery: 'home', page: 0, hasMore: false },
@@ -56,7 +56,12 @@ async function mountPicker() {
   document.body.append(host);
   const app = createApp({
     render: () =>
-      h(TagIconPicker, { tagName: '阅读', value: model.value, 'onUpdate:value': (v: string) => (model.value = v) }),
+      h(TagIconPicker, {
+        ...extra,
+        tagName: '阅读',
+        value: model.value,
+        'onUpdate:value': (v: string) => (model.value = v),
+      }),
   });
   app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
   app.mount(host);
@@ -193,4 +198,19 @@ describe('TagIconPicker 选图后的停留行为', () => {
     expect(error).toHaveBeenCalledWith(zhCN.tagManage.iconAiSearchFailed);
     expect(host.querySelectorAll('.icon-option').length).toBe(2);
   });
+});
+
+it('整理入口普通搜索免费，AI 扩展必须显式点击且保持候选', async () => {
+  const host = await mountPicker({ freeSearch: true, libraryOnly: true });
+  await openPicker(host);
+  expect(searchTagIcons).not.toHaveBeenCalled();
+  await searchIcons(host);
+  expect(searchTagIcons).toHaveBeenLastCalledWith('阅读', 0, false, 'recommend');
+  const ai = [...host.querySelectorAll('button')].find((button) => button.textContent?.includes('AI 扩展搜索'))!;
+  ai.click();
+  await Promise.resolve();
+  await Promise.resolve();
+  await nextTick();
+  expect(searchTagIcons).toHaveBeenLastCalledWith('阅读', 0, true, 'recommend');
+  expect(host.querySelector('.picker-upload')).toBeNull();
 });

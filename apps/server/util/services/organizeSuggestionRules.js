@@ -6,8 +6,8 @@ import { marked } from 'marked';
 import { parseNoteContent, renderNoteForAi } from '../noteSemantic.js';
 import { createBookmarkExactUrlHash } from './bookmarkExactUrlService.js';
 
-export const SUGGESTION_TYPES = ['tags', 'title', 'empty', 'duplicate', 'archive'];
-export const RESOURCE_TYPES = ['bookmark', 'note', 'file'];
+export const SUGGESTION_TYPES = ['tags', 'title', 'empty', 'duplicate', 'archive', 'tag_icon'];
+export const RESOURCE_TYPES = ['bookmark', 'note', 'file', 'tag'];
 export const hash = (value) => crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
 export const normalizeName = (value) =>
   String(value || '')
@@ -36,6 +36,8 @@ export function normalizeRunInput(input = {}) {
   const scope = input.scope || 'recent';
   if (!['recent', 'all', 'selected', 'untagged'].includes(scope))
     throw suggestionError('ORGANIZE_SCOPE_INVALID', '处理范围无效');
+  if (scope === 'untagged' && resourceTypes.includes('tag'))
+    throw suggestionError('ORGANIZE_SCOPE_INVALID', '标签不适用无标签资料范围');
   const tagMode = input.tagMode || 'untagged';
   if (!['untagged', 'append'].includes(tagMode) || (tagMode === 'append' && scope !== 'selected'))
     throw suggestionError('ORGANIZE_OPTIONS_INVALID', '追加标签仅支持明确选择的资料');
@@ -111,6 +113,21 @@ export function inspectNote(row) {
   };
 }
 export function buildSnapshot(type, row, tags = [], now = Date.now()) {
+  if (type === 'tag') {
+    const iconUrl = String(row.icon_url || '');
+    return {
+      type,
+      id: String(row.id),
+      title: String(row.name || ''),
+      iconUrl,
+      version: hash([row.name, iconUrl]),
+      tags: [],
+      source: { folder: '' },
+      guards: {},
+      evidenceLevel: 'metadata',
+      modifiedAt: row.create_time,
+    };
+  }
   const title = String(type === 'file' ? row.file_name || '' : type === 'bookmark' ? row.name || '' : row.title || '');
   const note = type === 'note' ? inspectNote(row) : null;
   const guards =
@@ -215,6 +232,16 @@ export function buildRuleSuggestions(snapshots, checks, { tagMode = 'untagged' }
       });
     const sameTitle = titles.get(`${s.type}:${normalizeName(s.title).toLowerCase()}`) || [];
     const aiKinds = [];
+    if (s.type === 'tag') {
+      if (checks.includes('tag_icon'))
+        add(
+          'tag_icon',
+          s.iconUrl.trim() ? 'not_applicable' : 'no_suggestion',
+          s.iconUrl.trim() ? '已有自定义图标' : '暂无合适推荐，可手动选择',
+          { before: s.iconUrl },
+        );
+      return { snapshot: s, suggestions: results, aiKinds };
+    }
     if (checks.includes('tags') && supportsOrganizeCheck(s.type, 'tags')) {
       if (s.tags.length && tagMode !== 'append') add('tags', 'not_applicable', '已有标签，本次仅补齐无标签资料');
       else if (s.unsupported || s.empty || (s.type === 'note' && !s.hasTitleEvidence))

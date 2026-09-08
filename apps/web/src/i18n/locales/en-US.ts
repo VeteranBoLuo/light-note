@@ -1,13 +1,47 @@
 import { notificationMessages } from '@lightnote/shared/notification-presentation';
 export default {
+  organizeIcons: {
+    allTags: 'All tags',
+    scopeHints: {
+      recent: 'The 20 most recently created tags with default icons.',
+      all: 'Check all default-icon tags, including tags without linked resources.',
+      selected: 'Select tags; custom icons are automatically excluded.',
+    },
+    noSuggestion: 'Choose manually',
+    searchFailed: 'Search failed',
+    partialFailure: 'Checks finished · Some items unsuccessful',
+    previousPage: 'Previous page',
+    nextPage: 'Next page',
+    noAi: 'No AI analysis needed',
+    free: 'Icon matching · Free',
+    change: 'Choose another',
+    aiExpand: 'Expand search with AI',
+    aiHint: 'Only AI expansion may use your AI allowance. Regular search is free.',
+    selectNamed: 'Select “{name}”',
+    current: 'Default icon',
+    proposed: 'Suggested icon',
+    applied: 'Applied icon',
+    noMatch: 'No suitable suggestion. Choose an icon manually.',
+    failed: 'Icon search failed. Try searching again.',
+    sharedImpact: 'Applying changes the icon everywhere this tag is used.',
+    selectAvailable: 'Select loaded suggestions',
+    clearSelection: 'Clear selection',
+    applySelected: 'Apply {count} selected',
+    batchResult: 'Applied {success}; failed {failed}. Failed items can be retried.',
+  },
   browserPush: {
-    helpAndroid: 'Android: Open Light Note in a push-capable browser, tap Allow alerts, and grant permission. If blocked, allow Light Note under Chrome → Settings → Site settings → Notifications. Also enable notifications in phone Settings → Apps → Chrome → Notifications; menu names vary by device.',
-    helpIos: 'iPhone / iPad (iOS / iPadOS 16.4 or later): Open Light Note in Safari → Share → Add to Home Screen. Open the Home Screen icon, tap Allow alerts, and grant permission. If previously denied, enable Allow Notifications in Settings → Notifications → Light Note. Regular browser tabs do not support this push flow.',
+    helpAndroid:
+      'Android: Open Light Note in a push-capable browser, tap Allow alerts, and grant permission. If blocked, allow Light Note under Chrome → Settings → Site settings → Notifications. Also enable notifications in phone Settings → Apps → Chrome → Notifications; menu names vary by device.',
+    helpIos:
+      'iPhone / iPad (iOS / iPadOS 16.4 or later): Open Light Note in Safari → Share → Add to Home Screen. Open the Home Screen icon, tap Allow alerts, and grant permission. If previously denied, enable Allow Notifications in Settings → Notifications → Light Note. Regular browser tabs do not support this push flow.',
     helpTitle: 'Not receiving alerts?',
-    helpLimit: 'Site permission or an active subscription does not guarantee that system notifications are allowed. Websites cannot detect this system setting. Check the following.',
-    helpMac: 'macOS: System Settings → Notifications → your browser (such as Google Chrome). Allow notifications and choose banners or alerts.',
+    helpLimit:
+      'Site permission or an active subscription does not guarantee that system notifications are allowed. Websites cannot detect this system setting. Check the following.',
+    helpMac:
+      'macOS: System Settings → Notifications → your browser (such as Google Chrome). Allow notifications and choose banners or alerts.',
     helpWindows: 'Windows: Settings → System → Notifications. Enable notifications globally and for your browser.',
-    helpFocus: 'Also check Focus / Do Not Disturb and background restrictions. Push is not integrated into the native Light Note Android app; use a push-capable browser.',
+    helpFocus:
+      'Also check Focus / Do Not Disturb and background restrictions. Push is not integrated into the native Light Note Android app; use a push-capable browser.',
 
     promptTitle: 'Receive browser alerts',
     promptDescription: 'Get alerts for new notifications, even after closing this page.',
@@ -60,6 +94,7 @@ export default {
       confirm: 'Confirm resource counts and checks. Processing begins in the background after you start.',
     },
     resourceHints: {
+      tag: 'Fill in default tag icons',
       bookmark: 'Add tags and check duplicate URLs',
       note: 'Add tags, improve titles, check empty or duplicate content',
       file: 'Add tags, check zero-byte files and possible duplicates',
@@ -67,6 +102,7 @@ export default {
     forResources: 'Selected resources: {names}',
     archiveMethod: 'Background archive · Free',
     checks: {
+      tag_icon: 'Tag icons',
       archive: 'Webpage archive',
       tags: 'Tag suggestions',
       title: 'Note titles',
@@ -74,6 +110,7 @@ export default {
       duplicate: 'Duplicates',
     },
     checkHints: {
+      tag_icon: 'Suggest icons from tag names. Only default icons are included; review before applying.',
       archive: 'Save missing or failed page archives. Skip existing saved content.',
       tags: 'Suggest tags for untagged resources, preferring existing tags.',
       title: 'Improve default or duplicate titles using note content. Keep normal titles.',
@@ -151,7 +188,12 @@ export default {
     limit: 'This would exceed 1000 items. Nothing was added. Reduce your selection and try again.',
   },
   organizeWorkspace: {
-    openOriginal: { bookmark: 'Open website in new tab', note: 'Open note in new tab', file: 'Preview file' },
+    openOriginal: {
+      tag: 'Open tag',
+      bookmark: 'Open website in new tab',
+      note: 'Open note in new tab',
+      file: 'Preview file',
+    },
     groups: {
       priority: 'Ready for review',
       manual: 'Needs your input',
@@ -248,6 +290,7 @@ export default {
     startCount: 'Organize {count} resources',
     allChecks: 'All suggestion types',
     resources: {
+      tag: 'Tags',
       bookmark: 'Bookmarks',
       note: 'Notes',
       file: 'Files',
@@ -257,6 +300,7 @@ export default {
     archiveQueued: 'Submitted',
     archiveAppliedHint: 'Open the web archive to view saved content, progress and results.',
     checks: {
+      tag_icon: 'Tag icon',
       archive: 'Webpage archive',
       tags: 'Tags',
       title: 'Title / name',
@@ -8318,11 +8362,13 @@ export default {
     notificationsEmail: 'Email notifications',
     notificationsEmailDesc: 'Turn off todo and other email reminders.',
     notificationsBrowser: 'Browser notifications',
-    notificationsBrowserDesc: 'Browser notifications are enabled by default. Permission is required before new inbox alerts can arrive. Clicking opens the notification center without performing actions.',
+    notificationsBrowserDesc:
+      'Browser notifications are enabled by default. Permission is required before new inbox alerts can arrive. Clicking opens the notification center without performing actions.',
     notificationsBrowserUnsupported: 'This browser does not support system notifications.',
     notificationsBrowserDenied: 'Browser notification permission was denied. Allow it in site settings and retry.',
     notificationsDnd: 'Browser notification quiet hours',
-    notificationsDndDesc: 'Only browser push is deferred. Inbox and email notifications arrive as usual. Push resumes after quiet hours; alerts expire after 24 hours.',
+    notificationsDndDesc:
+      'Only browser push is deferred. Inbox and email notifications arrive as usual. Push resumes after quiet hours; alerts expire after 24 hours.',
     notificationsDndStart: 'Do-not-disturb start',
     notificationsDndEnd: 'Do-not-disturb end',
     weeklyReport: 'Weekly report',

@@ -1,17 +1,18 @@
 <template>
   <div class="tag-icon-picker">
-    <span class="picker-label">{{ t('tagManage.icon') }}</span>
+    <span v-if="!libraryOnly" class="picker-label">{{ t('tagManage.icon') }}</span>
     <div class="picker-controls">
       <span class="icon-preview" :class="{ empty: !previewSrc }">
         <SvgIcon :src="previewSrc || icon.nullImg" :color="savedPreviewColor" size="20" />
       </span>
 
-      <BButton class="picker-smart" type="primary" @click="openPicker">
-        {{ t('tagManage.smartChooseIcon') }}
+      <BButton class="picker-smart" :disabled="disabled" type="primary" @click="openPicker">
+        {{ t(libraryOnly ? 'organizeIcons.change' : 'tagManage.smartChooseIcon') }}
       </BButton>
-      <BButton class="picker-upload" @click="uploadIcon">{{ t('tagManage.uploadIcon') }}</BButton>
+      <BButton v-if="!libraryOnly" class="picker-upload" @click="uploadIcon">{{ t('tagManage.uploadIcon') }}</BButton>
 
       <BInput
+        v-if="!libraryOnly"
         v-model:value="value"
         class="advanced-input"
         :placeholder="t('tagManage.iconPlaceholder')"
@@ -40,6 +41,10 @@
           }}</BButton>
         </div>
 
+        <BButton v-if="freeSearch" :loading="searching" @click="runSearch(0, true)">{{
+          t('organizeIcons.aiExpand')
+        }}</BButton>
+        <p v-if="freeSearch" class="translation-hint">{{ t('organizeIcons.aiHint') }}</p>
         <div v-if="translatedQuery" class="translation-hint">
           {{ t('tagManage.iconSearchKeywords', { keywords: translatedQuery }) }}
         </div>
@@ -161,10 +166,12 @@
 
         <div class="picker-footer">
           <div class="page-actions">
-            <BButton v-if="page > 0" size="small" @click="runSearch(page - 1)">{{
+            <BButton v-if="page > 0" size="small" @click="runSearch(page - 1, aiMode)">{{
               t('tagManage.previousIcons')
             }}</BButton>
-            <BButton v-if="hasMore" size="small" @click="runSearch(page + 1)">{{ t('tagManage.nextIcons') }}</BButton>
+            <BButton v-if="hasMore" size="small" @click="runSearch(page + 1, aiMode)">{{
+              t('tagManage.nextIcons')
+            }}</BButton>
           </div>
           <a href="https://icon-sets.iconify.design/" target="_blank" rel="noopener noreferrer">
             {{ t('tagManage.openIconify') }}
@@ -176,7 +183,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, reactive, ref, watch } from 'vue';
+  import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { Icon } from '@iconify/vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -201,7 +208,14 @@
     type HsvColor,
   } from './tagIconColor.ts';
 
-  const props = defineProps<{ tagName?: string }>();
+  const props = defineProps<{
+    tagName?: string;
+    freeSearch?: boolean;
+    libraryOnly?: boolean;
+    initialIconName?: string;
+    disabled?: boolean;
+  }>();
+  const emit = defineEmits<{ choice: [value: { iconName: string; iconUrl: string; color: string }] }>();
   const value = defineModel<string | undefined>('value', { default: '' });
   const { t } = useI18n();
   const pickerVisible = ref(false);
@@ -215,6 +229,27 @@
   const page = ref(0);
   const hasMore = ref(false);
   const lastAutoQuery = ref('');
+  const aiMode = ref(false);
+  let requestGeneration = 0;
+  watch(
+    () => props.tagName,
+    () => {
+      requestGeneration++;
+      searching.value = false;
+      resolving.value = false;
+      pickerVisible.value = false;
+    },
+  );
+  watch(pickerVisible, (visible) => {
+    if (!visible) {
+      requestGeneration++;
+      searching.value = false;
+      resolving.value = false;
+    }
+  });
+  onBeforeUnmount(() => {
+    requestGeneration++;
+  });
   const selectedColor = ref<string>(DEFAULT_TAG_ICON_COLOR);
   const colorOptions = [DEFAULT_TAG_ICON_COLOR, ...TAG_ICON_COLOR_OPTIONS];
   const customColorOpen = ref(false);
@@ -254,7 +289,9 @@
   function selectIconColor(color: string) {
     selectedColor.value = color;
     if (getTagIconColor(value.value || '') !== null) {
-      value.value = applyTagIconColor(value.value || '', color);
+      const next = applyTagIconColor(value.value || '', color);
+      value.value = next;
+      if (selectedIcon.value) emit('choice', { iconName: selectedIcon.value, iconUrl: next, color });
     }
   }
 
@@ -326,6 +363,8 @@
 
   function openPicker() {
     const tagName = String(props.tagName || '').trim();
+    if (props.disabled) return;
+    selectedIcon.value = props.initialIconName || '';
     pickerVisible.value = true;
     selectedColor.value = getTagIconColor(value.value || '') || DEFAULT_TAG_ICON_COLOR;
     const currentQuery = String(searchQuery.value || '').trim();
@@ -346,13 +385,18 @@
     hasMore.value = false;
   }
 
-  async function runSearch(targetPage = 0) {
+  async function runSearch(targetPage = 0, useAi = !props.freeSearch) {
     const query = String(searchQuery.value || '').trim();
-    if (!query || searching.value) return;
+    if (!query || searching.value || resolving.value) return;
+    const generation = ++requestGeneration;
     searching.value = true;
     try {
       // 只保留统一语义搜索入口。服务端会让中文走 AI 关键词转换，英文仍直接匹配 Iconify。
-      const res = await searchTagIcons(query, targetPage, true);
+      const res = props.freeSearch
+        ? await searchTagIcons(query, targetPage, useAi, 'recommend')
+        : await searchTagIcons(query, targetPage, useAi);
+      if (generation !== requestGeneration) return;
+      aiMode.value = useAi;
       if (res.status !== 200) throw new Error(res.msg || 'search failed');
       const data = (res.data || {}) as TagIconSearchResult;
       resultIcons.value = data.icons || [];
@@ -360,8 +404,9 @@
       page.value = data.page || 0;
       hasMore.value = !!data.hasMore;
       searched.value = true;
-      recordOperation({ module: '标签详情', operation: `搜索标签图标【${query}】` });
+      if (!props.libraryOnly) recordOperation({ module: '标签详情', operation: `搜索标签图标【${query}】` });
     } catch (error: any) {
+      if (generation !== requestGeneration) return;
       console.error('search tag icons failed', error);
       const quotaFailure = getAiQuotaErrorPresentation(error, (key, params) => t(key, params));
       if (quotaFailure) {
@@ -370,29 +415,34 @@
         message.error(t('tagManage.iconAiSearchFailed'));
       }
     } finally {
-      searching.value = false;
+      if (generation === requestGeneration) searching.value = false;
     }
   }
 
   async function chooseIcon(iconName: string) {
-    if (resolving.value) return;
+    if (resolving.value || searching.value) return;
+    const generation = requestGeneration;
     resolving.value = true;
     selectedIcon.value = iconName;
     try {
       const res = await resolveTagIcon(iconName);
+      if (generation !== requestGeneration) return;
       const iconUrl = String(res?.data?.iconUrl || '');
       if (res.status !== 200 || !iconUrl) throw new Error(res.msg || 'resolve failed');
-      value.value = applyTagIconColor(iconUrl, selectedColor.value);
+      const next = applyTagIconColor(iconUrl, selectedColor.value);
+      value.value = next;
+      emit('choice', { iconName, iconUrl: next, color: selectedColor.value });
       // 选图不是终点：用户挑完图往往还要调颜色、或者换一个再比较，所以既不关弹框也不弹「成功」。
       // 选中态已经由候选图的 selected 描边表达；图标真正生效要用户点「保存标签」，
       // 这里提前说「成功」会让人以为已经存下了。
-      recordOperation({ module: '标签详情', operation: `选择标签图标【${iconName}】` });
+      if (!props.libraryOnly) recordOperation({ module: '标签详情', operation: `选择标签图标【${iconName}】` });
     } catch (error) {
+      if (generation !== requestGeneration) return;
       selectedIcon.value = '';
       console.error('resolve tag icon failed', error);
       message.error(t('tagManage.iconResolveFailed'));
     } finally {
-      resolving.value = false;
+      if (generation === requestGeneration) resolving.value = false;
     }
   }
 
