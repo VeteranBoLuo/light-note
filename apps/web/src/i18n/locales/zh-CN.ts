@@ -5,6 +5,7 @@ export default {
   accountSettings: accountSettingsZh,
   settingsRefine: settingsRefineZh,
   todoWorkspace: {
+    tagLimit: '最多 4 个标签',
     moveToList: '移动到清单',
     modifyTags: '修改标签',
     addTags: '添加标签',

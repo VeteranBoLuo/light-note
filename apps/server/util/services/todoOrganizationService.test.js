@@ -20,6 +20,12 @@ const dbReturning = (...responses) => ({
 });
 
 describe('todo organization', () => {
+  it('允许四个标签，拒绝第五个且不修改已有关系', async () => {
+    expect(normalizeTodoOrganization({ tagIds: ['a', 'b', 'c', 'd'] }).tagIds).toHaveLength(4);
+    const db = dbReturning();
+    await expect(writeTodoOrganization(db, 'owner', ['todo'], { tagIds: ['a', 'b', 'c', 'd', 'e'] })).rejects.toMatchObject({ code: 'TODO_TAGS_INVALID' });
+    expect(db.query).not.toHaveBeenCalled();
+  });
   it('旧载荷省略组织字段零写入，显式 null/空数组解除关联', async () => {
     const db = dbReturning();
     expect(normalizeTodoOrganization({})).toEqual({});

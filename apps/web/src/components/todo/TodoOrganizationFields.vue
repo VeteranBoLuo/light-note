@@ -11,7 +11,7 @@
       />
     </label>
     <div v-if="showTags" class="todo-organization-fields__tags">
-      <span>{{ t('todoWorkspace.tags') }}</span>
+      <span>{{ t('todoWorkspace.tags') }} · {{ t('todoWorkspace.tagLimit') }}</span>
       <BSelect
         :value="tagIds"
         mode="multiple"
@@ -23,10 +23,10 @@
         show-search
         :loading="loading"
         :disabled="disabled || loading || failed || tagDialogOpen"
-        @change="!disabled && emit('update:tagIds', $event)"
+        @change="changeTags"
       >
         <template #dropdown-footer>
-          <BButton class="todo-organization-fields__add-tag" :disabled="disabled" @click="tagDialogOpen = true">
+          <BButton class="todo-organization-fields__add-tag" :disabled="disabled || tagIds.length >= 4" @click="tagDialogOpen = true">
             <SvgIcon :src="icon.common.add" size="16" />
             <span>{{ t('navigation.newTag') }}</span>
           </BButton>
@@ -86,7 +86,12 @@
     { value: '', label: t('todoWorkspace.unassigned') },
     ...lists.value.map((list) => ({ value: list.id, label: list.name })),
   ]);
-  const tagOptions = computed(() => tags.value.map((tag) => ({ value: tag.id, label: tag.name })));
+  const tagOptions = computed(() => tags.value.map((tag) => ({
+    value: tag.id, label: tag.name, disabled: props.tagIds.length >= 4 && !props.tagIds.includes(tag.id),
+  })));
+  function changeTags(value: string[]) {
+    if (!props.disabled && (value.length <= 4 || value.length < props.tagIds.length)) emit('update:tagIds', value);
+  }
   async function load() {
     const current = ++sequence;
     loading.value = true;
@@ -106,7 +111,7 @@
   async function tagCreated(id: string) {
     const owner = user.id;
     await load();
-    if (owner === user.id) emit('update:tagIds', [...new Set([...props.tagIds, id])]);
+    if (owner === user.id && !props.disabled && props.tagIds.length < 4) emit('update:tagIds', [...new Set([...props.tagIds, id])]);
   }
   watch(
     () => user.id,

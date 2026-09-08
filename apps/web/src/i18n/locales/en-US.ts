@@ -5,6 +5,7 @@ export default {
   accountSettings: accountSettingsEn,
   settingsRefine: settingsRefineEn,
   todoWorkspace: {
+    tagLimit: 'Up to 4 tags',
     moveToList: 'Move to list',
     modifyTags: 'Modify tags',
     addTags: 'Add tags',

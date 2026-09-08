@@ -17,10 +17,10 @@ export function normalizeTodoOrganization(input = {}) {
     if (
       input.tagIds !== null &&
       (!Array.isArray(input.tagIds) ||
-        input.tagIds.length > 50 ||
+        input.tagIds.length > 4 ||
         input.tagIds.some((id) => typeof id !== 'string' || !id.trim() || id.length > 255))
     ) {
-      throw organizationError('TODO_TAGS_INVALID', '标签格式无效，最多关联 50 个标签');
+      throw organizationError('TODO_TAGS_INVALID', '标签格式无效，最多关联 4 个标签');
     }
     output.tagIds = [...new Set((input.tagIds || []).map((id) => id.trim()))];
   }
