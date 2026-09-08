@@ -1,5 +1,5 @@
 -- Explicit help synchronization; requires help_section migration. No automatic production execution.
-SET NAMES utf8mb4;
+SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci;
 START TRANSACTION;
 SET @todo_workspace_help_id = 'a6145750-8e78-48c0-8ed7-68fb5b977007';
 SET @todo_workspace_help_title = '待办工作区：清单、标签与子事项';
