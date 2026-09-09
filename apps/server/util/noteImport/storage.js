@@ -43,3 +43,11 @@ export async function localImportTaskIds({ readyOnly = false } = {}) {
     throw error;
   }
 }
+
+// Staging files remain private (0600). Published note images use the same
+// readable permissions as other files served through the existing /uploads path.
+export async function publishImportImage(source, destination) {
+  await fs.mkdir(path.dirname(destination), { recursive: true });
+  await fs.copyFile(source, destination);
+  await fs.chmod(destination, 0o644);
+}

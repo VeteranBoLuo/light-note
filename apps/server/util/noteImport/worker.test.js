@@ -20,6 +20,7 @@ vi.mock('../noteImages.js', () => ({ NOTE_IMAGE_DIR: '/tmp/unused-import-images'
 vi.mock('./storage.js', () => ({
   taskDirectory: () => '/tmp/unused',
   localImportTaskIds: async () => s.localIds,
+  publishImportImage: vi.fn(),
   readJson: async () => ({ content: 'Hello', images: [] }),
   importError: (code, status = 400) => Object.assign(new Error(code), { code, status }),
 }));

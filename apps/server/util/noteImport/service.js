@@ -10,7 +10,7 @@ import { listActiveInheritedNoteShares } from '../services/noteShareService.js';
 import { loadOwnedNoteTree, assertValidNoteParentFromSnapshot } from '../services/noteTreeService.js';
 import { NOTE_IMAGE_DIR } from '../noteImages.js';
 import { NOTE_IMPORT_LIMITS } from '@lightnote/shared/note-transfer';
-import { taskDirectory, localImportTaskIds, readJson, importError } from './storage.js';
+import { taskDirectory, localImportTaskIds, publishImportImage, readJson, importError } from './storage.js';
 
 export async function transaction(fn) {
   const db = await pool.getConnection();
@@ -257,8 +257,7 @@ export async function processImportTask() {
     let content = payload.content;
     for (const key of payload.images) {
       const filename = `import-${id}-${key}`;
-      await fs.mkdir(NOTE_IMAGE_DIR, { recursive: true });
-      await fs.copyFile(path.join(directory, 'assets', key), path.join(NOTE_IMAGE_DIR, filename));
+      await publishImportImage(path.join(directory, 'assets', key), path.join(NOTE_IMAGE_DIR, filename));
       const url = `https://boluo66.top/uploads/${filename}`;
       content = content.replaceAll(`https://note-import.invalid/${key}`, url);
       const size = (await fs.stat(path.join(NOTE_IMAGE_DIR, filename))).size;
