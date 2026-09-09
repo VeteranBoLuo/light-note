@@ -110,7 +110,7 @@
   const { t, locale } = useI18n();
 
   const isCampaign = computed(() => 'campaignSkuId' in props.item);
-  const isRecommended = computed(() => !isCampaign.value && props.index === 1);
+  const isRecommended = computed(() => !isCampaign.value && props.index === (props.item.category === 'ai' ? 0 : 1));
   const campaignItem = computed(() => props.item as SupportCampaignPackage);
   const regularItem = computed(() => props.item as SupportPackage);
   const tierKey = computed(() => ['light', 'regular', 'frequent', 'heavy'][Math.min(Math.max(props.index, 0), 3)]);

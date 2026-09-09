@@ -326,6 +326,7 @@ export async function createAfdianPackageCheckoutIntent({
     await connection.commit();
     return {
       url: buildPackageCheckoutUrl({ creatorId: apiConfig.creatorUserId, amount }, token),
+      intentId: id,
       expiresIn,
       firstPurchaseCandidate,
     };

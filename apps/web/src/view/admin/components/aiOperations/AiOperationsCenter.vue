@@ -764,6 +764,7 @@
   }
 
   function formatCost(value: unknown) {
+    if (value === null) return '—';
     const number = Number(value || 0);
     return (Number.isFinite(number) ? Math.max(0, number) : 0).toLocaleString(locale.value, {
       minimumFractionDigits: 2,

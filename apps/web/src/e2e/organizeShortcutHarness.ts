@@ -31,13 +31,27 @@ document.documentElement.dataset.theme = params.get('theme') === 'night' ? 'nigh
 document.documentElement.classList.toggle('light-note-mobile-rendering', params.get('renderProfile') === 'mobile');
 let run: SuggestionRun | null = null;
 let archiveSubmitted = false;
+const batchApplied = new Set<string>();
 const archiveOutcome = params.get('archiveResult') || 'succeeded';
 const archiveContent = '这是整理阶段自动生成的网页正文。\n\n可以先预览这份内容，点击应用后才正式保存到书签。';
 request.defaults.adapter = async (config) => {
   const url = String(config.url);
   const body = typeof config.data === 'string' ? JSON.parse(config.data) : config.data;
   let data: unknown = [];
-  if (url.endsWith('/snapshot') || url.endsWith('/archive-preview')) {
+  if (url.endsWith('/apply-batch')) {
+    data = {
+      results: body.items.map((item: { suggestionId: string }) => {
+        const failed = params.has('batchFailure') && item.suggestionId === 'mixed-tags';
+        if (!failed) batchApplied.add(item.suggestionId);
+        return {
+          suggestionId: item.suggestionId,
+          status: failed ? 'failed' : 'applied',
+          applied: 'saved',
+          message: failed ? '资料已变化，请检查后重试' : undefined,
+        };
+      }),
+    };
+  } else if (url.endsWith('/snapshot') || url.endsWith('/archive-preview')) {
     data = {
       title: '网页正文预览',
       content: archiveContent,
@@ -171,6 +185,13 @@ request.defaults.adapter = async (config) => {
       nextCursor: null,
     };
   else if (url.includes('resolve')) data = { items: resources };
+  if (data && typeof data === 'object' && 'items' in data && Array.isArray(data.items))
+    for (const item of data.items)
+      for (const suggestion of item.suggestions || [])
+        if (batchApplied.has(suggestion.id)) {
+          suggestion.status = 'applied';
+          suggestion.applied = 'saved';
+        }
   return { config, status: 200, statusText: 'OK', headers: {}, data: { status: 200, data } };
 };
 const Source = defineComponent({

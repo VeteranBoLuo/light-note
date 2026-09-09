@@ -202,7 +202,7 @@ function mapProviders(rows) {
     model: String(row.model || '').slice(0, 96) || null,
     calls: safeNumber(row.calls),
     tokens: safeNumber(row.tokens),
-    estimatedCost: safeDecimal(row.estimated_cost),
+    estimatedCost: Number(row.unknown_cost_calls || 0) > 0 ? null : safeDecimal(row.estimated_cost),
     failedCalls: safeNumber(row.failed_calls),
     missingUsageCalls: safeNumber(row.missing_usage_calls),
     platformCalls: safeNumber(row.platform_calls),
@@ -256,7 +256,10 @@ function aggregateExecutionSpans(rows) {
     const summary = summaries.get(executionId) || emptySpanSummary();
     if (row.provider) summary.providers.add(String(row.provider).slice(0, 32));
     if (row.model) summary.models.add(String(row.model).slice(0, 96));
-    summary.estimatedCost += safeDecimal(row.estimated_cost);
+    summary.estimatedCost =
+      row.estimated_cost === null || summary.estimatedCost === null
+        ? null
+        : summary.estimatedCost + safeDecimal(row.estimated_cost);
     if (row.status === 'failed') summary.failedCalls += 1;
     if (row.usage_status !== 'reported') summary.missingUsageCalls += 1;
     if (
@@ -287,7 +290,7 @@ function mapAdminExecution(row, spanSummary = emptySpanSummary()) {
     validationRuleVersion: row.validation_rule_version == null ? null : safeNumber(row.validation_rule_version),
     providers: [...spanSummary.providers],
     models: [...spanSummary.models],
-    estimatedCost: safeDecimal(spanSummary.estimatedCost),
+    estimatedCost: spanSummary.estimatedCost === null ? null : safeDecimal(spanSummary.estimatedCost),
     failedProviderCalls: safeNumber(spanSummary.failedCalls),
     missingUsageCalls: safeNumber(spanSummary.missingUsageCalls),
     platformCalls: safeNumber(spanSummary.platformCalls),
@@ -389,6 +392,7 @@ export async function getAdminAiOperationsOverview(rawQuery = {}, database = poo
         `SELECT span.provider, span.model, COUNT(*) AS calls,
                 COALESCE(SUM(span.total_tokens), 0) AS tokens,
                 COALESCE(SUM(span.estimated_cost), 0) AS estimated_cost,
+                SUM(span.estimated_cost IS NULL) AS unknown_cost_calls,
                 COALESCE(SUM(span.status = 'failed'), 0) AS failed_calls,
                 COALESCE(SUM(span.usage_status <> 'reported'), 0) AS missing_usage_calls,
                 COALESCE(SUM(span.billing_scope = 'platform' OR RIGHT(span.stage, 7) = '_repair'), 0)
@@ -442,7 +446,9 @@ export async function getAdminAiOperationsOverview(rawQuery = {}, database = poo
         providerTokens: safeNumber(summaryRow.provider_tokens),
         chargedTokens: safeNumber(summaryRow.charged_tokens),
         platformCoveredTokens: safeNumber(summaryRow.platform_covered_tokens),
-        estimatedCost: safeDecimal(providers.reduce((total, item) => total + item.estimatedCost, 0)),
+        estimatedCost: providers.some((item) => item.estimatedCost === null)
+          ? null
+          : safeDecimal(providers.reduce((total, item) => total + item.estimatedCost, 0)),
         delivered,
         succeeded,
         partial,
@@ -582,7 +588,7 @@ export async function getAdminAiExecutionDetail(executionId, database = pool) {
       execution,
       calls: spans.map((span, index) => ({
         ...mapAiUsageProviderSpan(span, index + 1, { waiveUserCharge }),
-        estimatedCost: safeDecimal(span.estimated_cost),
+        estimatedCost: span.estimated_cost === null ? null : safeDecimal(span.estimated_cost),
       })),
       privacy: 'governance_metadata_only',
     };

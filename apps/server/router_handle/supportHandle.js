@@ -1,3 +1,4 @@
+import { normalizeEntitlementEvent, recordEntitlementEvent } from '../util/entitlementEvents.js';
 import { L, resultData } from '../util/common.js';
 import { ensureNotVisitor } from '../util/auth.js';
 import pool from '../db/index.js';
@@ -172,15 +173,27 @@ export async function checkout(req, res) {
       );
   }
   try {
-    const { url } = await createAfdianPackageCheckoutIntent({
+    const { url, intentId } = await createAfdianPackageCheckoutIntent({
       userId: req.user.id,
       skuId: req.query.skuId,
       catalogVersion: req.query.catalogVersion,
     });
+    await recordEntitlementEvent(
+      req,
+      { event: 'checkout_created', flowId: req.query.flowId, skuId: req.query.skuId },
+      { server: true, intentId },
+    );
     return res.redirect(302, url);
   } catch (error) {
     return sendError(req, res, error);
   }
+}
+
+export async function events(req, res) {
+  if (!ensurePrivateSupportAccess(req, res)) return;
+  if (!normalizeEntitlementEvent(req.body)) return res.status(400).send(resultData(null, 400, 'Invalid event'));
+  await recordEntitlementEvent(req, req.body);
+  return res.send(resultData(null));
 }
 
 export async function oauthStart(req, res) {

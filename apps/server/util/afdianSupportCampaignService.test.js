@@ -17,7 +17,7 @@ function activeSku(overrides = {}) {
     sku_id: 'anniversary-combo',
     title: '周年组合包',
     category: 'combo',
-    amount: '30.00',
+    amount: '60.00',
     ai_tokens: 2_000_000,
     storage_mb: 512,
     per_user_limit: 1,
@@ -54,7 +54,7 @@ function lifecycleConnection({ status = 'draft', endsAt = '2026-09-01T00:00:00.0
     {
       skuId: 'anniversary-combo',
       title: '周年组合包',
-      amount: 30,
+      amount: 60,
       aiTokens: 2_000_000,
       storageMb: 512,
     },
@@ -64,7 +64,7 @@ function lifecycleConnection({ status = 'draft', endsAt = '2026-09-01T00:00:00.0
     sku_id: 'anniversary-combo',
     title: '周年组合包',
     category: 'combo',
-    amount: '30.00',
+    amount: '60.00',
     ai_tokens: 2_000_000,
     storage_mb: 512,
     per_user_limit: 1,
@@ -118,9 +118,9 @@ describe('爱发电独立限时套餐', () => {
     expect(supportCampaignCatalogVersion(CAMPAIGN_ID, 3)).toBe(VERSION);
     expect(
       previewSupportCampaignCosts([
-        { skuId: 'campaign-ai', title: '活动 AI 包', amount: 20, aiTokens: 2_000_000, storageMb: 0 },
+        { skuId: 'campaign-ai', title: '活动 AI 包', amount: 50, aiTokens: 2_000_000, storageMb: 0 },
       ]),
-    ).toMatchObject({ policyVersion: 'support-cost-v1', minimumMarginBps: 4000, passes: true });
+    ).toMatchObject({ policyVersion: 'support-cost-v2', minimumMarginBps: 4000, passes: true });
     expect(
       previewSupportCampaignCosts([
         { skuId: 'campaign-loss', title: '亏损活动包', amount: 1, aiTokens: 10_000_000, storageMb: 0 },

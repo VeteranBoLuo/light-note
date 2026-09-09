@@ -139,3 +139,6 @@ export const getOrganizeArchiveDraft = (runId: string, suggestionId: string) =>
     undefined,
     opts,
   );
+
+export const applyRunSuggestionBatch = (runId: string, items: Array<{ suggestionId: string; requestId: string }>) =>
+  apiBasePost(`${root}/runs/${encodeURIComponent(runId)}/apply-batch`, { items }, opts);

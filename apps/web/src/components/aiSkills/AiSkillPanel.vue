@@ -73,6 +73,7 @@
     <div v-else-if="error" class="ai-skill-panel__state is-error" role="alert">
       <strong>{{ errorTitle }}</strong>
       <span>{{ error.message }}</span>
+      <BButton v-if="quotaBlocked" @click="acquireVisible = true">{{ t('entitlementJourney.acquire') }}</BButton>
       <BButton
         v-if="autoRunAction && error.retryable"
         size="small"
@@ -106,7 +107,10 @@
         <span v-for="detail in coverageDetails" :key="detail">{{ detail }}</span>
         <span v-for="warning in coverageWarnings" :key="warning">{{ warning }}</span>
       </div>
-      <div v-if="response.availableActions.length || $slots['result-actions']" class="ai-skill-panel__result-actions">
+      <div
+        v-if="showResultActions && (response.availableActions.length || $slots['result-actions'])"
+        class="ai-skill-panel__result-actions"
+      >
         <slot
           name="result-actions"
           :response="response"
@@ -127,11 +131,23 @@
     <div v-else-if="emptyText" class="ai-skill-panel__state is-empty">
       {{ emptyText }}
     </div>
+    <EntitlementAcquireModal
+      v-if="acquireVisible"
+      v-model:visible="acquireVisible"
+      asset="ai"
+      :source="surface"
+      :recovery-key="recoveryKey"
+      :prompt="prompt"
+    />
   </section>
 </template>
 
 <script setup lang="ts">
   import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+  import { useUserStore } from '@/store';
+  import EntitlementAcquireModal from '@/components/support/EntitlementAcquireModal.vue';
+  import { readEntitlementJourney, saveEntitlementJourney } from '@/utils/entitlementJourney';
+  import { recordEntitlementEvent } from '@/api/entitlementEvents';
   import { useI18n } from 'vue-i18n';
   import type { AiSkillRequest, AiSkillResourceRef, AiSkillResponse } from '@lightnote/shared/ai-skill-protocol';
   import { createAiSkillRequest, executeAiSkill } from '@/api/aiSkillApi';
@@ -175,6 +191,7 @@
       autoRunActionId?: string;
       iconSrc?: string;
       showGrounding?: boolean;
+      showResultActions?: boolean;
       clearPromptOnSuccess?: boolean;
       reserveResultSpace?: boolean;
       disabled?: boolean;
@@ -201,6 +218,7 @@
       autoRunActionId: '',
       iconSrc: '',
       showGrounding: true,
+      showResultActions: true,
       clearPromptOnSuccess: false,
       reserveResultSpace: false,
       disabled: false,
@@ -214,7 +232,14 @@
     'result-action': [action: Record<string, unknown>, response: AiSkillResponse];
   }>();
   const { t } = useI18n();
-  const prompt = ref(props.initialPrompt);
+  const user = useUserStore();
+  const acquireVisible = ref(false);
+  const quotaBlocked = ref(false);
+  const recoveryKey = computed(() => JSON.stringify([props.skillId, props.resourceRefs, props.scopeSelector]));
+  const savedJourney = readEntitlementJourney(user.id);
+  const prompt = ref(
+    savedJourney?.recoveryKey === recoveryKey.value ? savedJourney.prompt || props.initialPrompt : props.initialPrompt,
+  );
   const loading = ref(false);
   const response = ref<AiSkillResponse | null>(null);
   const error = ref<{ code: string; message: string; title?: string; retryable: boolean } | null>(null);
@@ -349,6 +374,28 @@
       if (current !== sequence || requestController.signal.aborted) return null;
       if (recoverableThreadErrorCodes.has(String(cause?.code || ''))) threads.delete(threadKey);
       const quotaFailure = getAiQuotaErrorPresentation(cause, (key, params) => t(key, params));
+      quotaBlocked.value = Boolean(quotaFailure);
+      if (quotaFailure) {
+        const journey = saveEntitlementJourney({
+          userId: user.id,
+          asset: 'ai',
+          source: props.surface,
+          returnPath: window.location.pathname + window.location.search,
+          recoveryKey: recoveryKey.value,
+          prompt: prompt.value,
+          task: {
+            title: props.title,
+            showGrounding: props.showGrounding,
+            promptKey: props.showPrompt ? props.promptKey : undefined,
+            skillId,
+            surface: props.surface,
+            input,
+            resourceRefs: [...props.resourceRefs],
+            scopeSelector: props.scopeSelector,
+          },
+        });
+        recordEntitlementEvent('quota_insufficient', journey);
+      }
       const failure = quotaFailure || {
         code: String(cause?.code || 'AI_SKILL_FAILED'),
         message: String(cause?.message || t('aiSkills.retryLater')),
@@ -389,6 +436,7 @@
     cancel();
     response.value = null;
     error.value = null;
+    quotaBlocked.value = false;
     prompt.value = props.initialPrompt;
   });
 
@@ -396,7 +444,14 @@
   watch(
     [() => feature.loading.value, skillAvailable, autoRunKey],
     ([featureLoading, available, key]) => {
-      if (featureLoading || !available || !key || key === handledAutoRunKey) return;
+      if (
+        savedJourney?.recoveryKey === recoveryKey.value ||
+        featureLoading ||
+        !available ||
+        !key ||
+        key === handledAutoRunKey
+      )
+        return;
       const action = autoRunAction.value;
       if (!action) return;
       handledAutoRunKey = key;

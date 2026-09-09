@@ -8,6 +8,10 @@
   >
     <div class="entitlement-acquire">
       <p class="entitlement-acquire__intro">{{ t('support.acquire.description') }}</p>
+      <p v-if="asset === 'ai' && status" class="entitlement-acquire__intro"
+        >{{ t('entitlementJourney.daily') }} {{ formatAiQuotaTokens(status.dailyRemaining) }} ·
+        {{ t('entitlementJourney.permanent') }} {{ formatAiQuotaTokens(status.bonusTokens) }}</p
+      >
       <div class="entitlement-acquire__options">
         <BButton class="entitlement-acquire__option" @click="goToPoints">
           <span class="entitlement-acquire__icon is-points" aria-hidden="true">
@@ -24,7 +28,7 @@
             <SvgIcon :src="icon.support.store" size="21" />
           </span>
           <span class="entitlement-acquire__copy">
-            <strong>{{ t('support.acquire.storeTitle') }}</strong>
+            <strong>{{ t(asset === 'ai' ? 'entitlementJourney.buyAi' : 'entitlementJourney.buyStorage') }}</strong>
             <small>{{ t('support.acquire.storeDescription') }}</small>
           </span>
           <SvgIcon :src="icon.arrow_right" size="14" aria-hidden="true" />
@@ -36,6 +40,11 @@
 </template>
 
 <script setup lang="ts">
+  import { watch } from 'vue';
+  import { useUserStore } from '@/store';
+  import { useAiQuotaStatus, formatAiQuotaTokens } from '@/composables/useAiQuotaStatus';
+  import { readEntitlementJourney, saveEntitlementJourney } from '@/utils/entitlementJourney';
+  import { recordEntitlementEvent } from '@/api/entitlementEvents';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -44,10 +53,46 @@
   import icon from '@/config/icon';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
 
-  const props = defineProps<{ asset: 'ai' | 'storage' }>();
+  const props = defineProps<{
+    asset: 'ai' | 'storage';
+    source?: string;
+    returnPath?: string;
+    recoveryKey?: string;
+    prompt?: string;
+  }>();
   const visible = defineModel<boolean>('visible', { default: false });
   const { t } = useI18n();
   const router = useRouter();
+
+  const user = useUserStore();
+  const { status, load } = useAiQuotaStatus({ autoLoad: false });
+  watch(
+    visible,
+    (open) => {
+      if (open && props.asset === 'ai') void load({ force: true });
+    },
+    { immediate: true },
+  );
+  function begin(event: 'enter_points' | 'enter_store') {
+    const existing = readEntitlementJourney(user.id);
+    const routePath = router.currentRoute?.value?.fullPath || '/aiUsage';
+    const journey =
+      existing &&
+      existing.asset === props.asset &&
+      ((existing.recoveryKey === props.recoveryKey && Boolean(props.recoveryKey)) ||
+        existing.returnPath === (props.returnPath || routePath))
+        ? existing
+        : saveEntitlementJourney({
+            userId: user.id,
+            source: props.source || router.currentRoute?.value?.path?.split('/')[1] || 'other',
+            asset: props.asset,
+            returnPath: props.returnPath || routePath,
+            recoveryKey: props.recoveryKey,
+            prompt: props.prompt,
+          });
+    if (props.source === 'organize') recordEntitlementEvent('quota_insufficient', journey);
+    recordEntitlementEvent(event, journey);
+  }
 
   function navigate(to: Parameters<typeof router.push>[0]) {
     void closeCurrentMobileOverlayThen(
@@ -59,6 +104,7 @@
   }
 
   function goToPoints() {
+    begin('enter_points');
     navigate({
       path: '/growth',
       query: { section: 'rewards', reward: 'shop', focus: props.asset },
@@ -66,6 +112,7 @@
   }
 
   function goToStore() {
+    begin('enter_store');
     navigate({ path: '/store', query: { category: props.asset } });
   }
 </script>

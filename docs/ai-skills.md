@@ -66,6 +66,7 @@
 - Provider 阶段计划可在 Context Resolver 得到权威材料规模后、首次调用前重编译；一旦开始占位或访问 Provider 就锁定，避免聚合选择器被按“一项材料”错误计费或放宽调用上限。
 - 主调用、图片识别、结构修复和 Provider 失败分别记录 Span，并由根 Execution 形成唯一终态；用户额度只结算明确属于用户的真实 usage。
 - 平台协议修复由平台承担。usage 缺失按已声明预算保守结算，不能让已发出的调用变成免费，也不能超过预占。
+- 等级每日上限由 `growth.js` 的 `RANKS` 唯一定义，Lv.1 为 10 万、Lv.10 为 30 万、Lv.15 为 50 万。新上限不清零当日已用量，不追扣历史消耗；在途请求按预占快照结算。页面仍显示 AI 额度和原 Token 数值。
 - 每日等级额度与永久 AI 余额是两个可解释资产，按服务端固定顺序消耗；Root 不获得隐形免费调用。
 - `system` 计费覆盖只允许受信任的服务端调用方显式注入固定系统主体，公开请求、页面字段和客户端 Header 均不能选择该策略；执行仍保留完整 Execution、Span 与 usage 审计。
 - Registry 同时支持公开与 internal-only Skill。internal-only Skill 不得出现在 `/ai/skills/config` 或被公开执行，但为了让用户理解真实 AI 消耗，其可读动作名可以进入用量目录。只有服务端传入的已登记调用者身份与该 Skill 允许的计费策略同时成立时才能执行；客户端 `surface`、body、query 或 Header 都不是内部身份。

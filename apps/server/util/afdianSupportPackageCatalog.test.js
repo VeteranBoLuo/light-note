@@ -146,13 +146,13 @@ describe('爱发电 v3 常驻与活动套餐目录', () => {
     ).toMatchObject({ catalogEnabled: true, checkoutEnabled: true, grantEnabled: true });
   });
 
-  it('首充最重套餐仍通过 40% 成本门禁，低价活动套餐被阻断', () => {
+  it('新保守成本揭示常驻套餐风险但不修改合同，低价活动被阻断', () => {
     const costs = SUPPORT_PACKAGE_CATALOG.map((item) => ({
       skuId: item.skuId,
       ...calculateSupportPackageCost({ amount: item.amount, ...item.firstPurchase }),
     }));
-    expect(costs.every((item) => item.passes)).toBe(true);
-    expect(costs.find((item) => item.skuId === 'combo-168')?.marginBps).toBeGreaterThanOrEqual(4_000);
+    expect(costs.some((item) => !item.passes)).toBe(true);
+    expect(costs.find((item) => item.skuId === 'combo-168')?.policyVersion).toBe('support-cost-v2');
     expect(() =>
       normalizeSupportCampaignSkus(
         [{ skuId: 'bad-ai', title: '过量低价包', amount: 1, aiTokens: 10_000_000, storageMb: 0 }],

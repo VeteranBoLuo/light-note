@@ -212,6 +212,7 @@ describe('adminRoutePolicyMiddleware', () => {
       expect(detailRes.json).not.toHaveBeenCalled();
 
       for (const [method, path] of [
+        ['POST', '/organize/suggestions/runs/run-1/apply-batch'],
         ['POST', '/organize/ai-suggestions/batches'],
         ['PUT', '/organize/ai-suggestions/batches/batch-1/suggestions/suggestion-1'],
         ['POST', '/organize/ai-suggestions/batches/batch-1/suggestions/suggestion-1/accept'],

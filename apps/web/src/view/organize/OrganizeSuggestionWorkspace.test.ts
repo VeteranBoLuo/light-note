@@ -18,6 +18,7 @@ const api = vi.hoisted(() => ({
   resumeRun: vi.fn(),
   actOnRunSuggestion: vi.fn(),
   getOrganizeArchiveDraft: vi.fn(),
+  applyRunSuggestionBatch: vi.fn(),
 }));
 vi.mock('@/components/base/BasicComponents/BModal/Alert', () => ({
   default: { alert: api.alert },
@@ -99,7 +100,7 @@ async function mount() {
   await settle();
 }
 async function openGroup(key: string) {
-  const el = document.querySelector<HTMLButtonElement>(`.group-${key} > button`)!;
+  const el = document.querySelector<HTMLButtonElement>(`.group-${key} .group-toggle`)!;
   if (el.getAttribute('aria-expanded') !== 'true') el.click();
   await settle();
 }

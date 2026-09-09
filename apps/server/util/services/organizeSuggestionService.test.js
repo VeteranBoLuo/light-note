@@ -31,6 +31,7 @@ import { getActiveAiExecution } from '../aiExecution/context.js';
 import { runAiExecution } from '../aiExecution/service.js';
 import { isOrganizeAiSuggestionsEnabled } from '../organizeAiSuggestionFeature.js';
 import {
+  applySuggestionBatch,
   getArchiveDraft,
   getSuggestionRun,
   previewSuggestionRun,
@@ -527,4 +528,20 @@ it('整理列表只返回草稿摘要，完整正文留给独立预览', async (
   const result = await getSuggestionRun(db, { userId: 'u', id: 'run' });
   expect(result.items[0].suggestions[0]).toMatchObject({ archivePreview: { excerpt: '短摘录' } });
   expect(JSON.stringify(result)).not.toContain('完整私有正文');
+});
+
+it('批量限制范围与大小，逐项错误隔离且身份不可由条目覆盖', async () => {
+  await expect(applySuggestionBatch(database(), { userId: 'u', runId: 'run', items: [] })).rejects.toMatchObject({ code: 'ORGANIZE_BATCH_INVALID' });
+  const ids = [requestId, 'd56a4180-65aa-42ec-a945-5fd21dec0538'];
+  const db = database((sql, args) => {
+    if (sql.includes('FROM organize_suggestion_runs')) return [[{ ...run, status: 'completed' }]];
+    if (sql.includes('FROM organize_suggestions')) {
+      expect(args.slice(1)).toEqual(['run', 'u']);
+      return [[{ kind: args[0] === ids[0] ? 'empty' : 'archive', status: args[0] === ids[0] ? 'pending' : 'applied' }]];
+    }
+  });
+  const result = await applySuggestionBatch(db, { userId: 'u', runId: 'run', items: ids.map(suggestionId => ({ suggestionId, requestId, userId: 'foreign', runId: 'foreign' })) });
+  expect(result.results.map(r => r.status)).toEqual(['failed', 'applied']);
+  expect(applySuggestionMutation).not.toHaveBeenCalled();
+  await expect(applySuggestionBatch(db, { userId: 'u', runId: 'run', items: Array(21).fill({ suggestionId: ids[0], requestId }) })).rejects.toMatchObject({ code: 'ORGANIZE_BATCH_INVALID' });
 });

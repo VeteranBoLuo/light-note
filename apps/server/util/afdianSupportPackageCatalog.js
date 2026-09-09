@@ -1,12 +1,10 @@
+import { getConservativeAiUnitCost } from './aiCostPolicy.js';
 import crypto from 'node:crypto';
-import {
-  SUPPORT_PACKAGE_CATALOG,
-  SUPPORT_PACKAGE_CATALOG_VERSION,
-} from '@lightnote/shared';
+import { SUPPORT_PACKAGE_CATALOG, SUPPORT_PACKAGE_CATALOG_VERSION } from '@lightnote/shared';
 import pool from '../db/index.js';
 import { afdianError } from './afdianConfig.js';
 
-export const SUPPORT_COST_POLICY_VERSION = 'support-cost-v1';
+export const SUPPORT_COST_POLICY_VERSION = 'support-cost-v2';
 export const SUPPORT_CAMPAIGN_MIN_MARGIN_BPS = 4_000;
 
 const PACKAGE_BY_SKU = new Map(SUPPORT_PACKAGE_CATALOG.map((item) => [item.skuId, item]));
@@ -47,8 +45,7 @@ export function getSupportPackageFeatureState(env = process.env) {
   return {
     catalogVersion: SUPPORT_PACKAGE_CATALOG_VERSION,
     catalogEnabled,
-    checkoutEnabled:
-      catalogEnabled && grantEnabled && runtimeFlag(env.SUPPORT_PACKAGES_CHECKOUT_ENABLED, false),
+    checkoutEnabled: catalogEnabled && grantEnabled && runtimeFlag(env.SUPPORT_PACKAGES_CHECKOUT_ENABLED, false),
     grantEnabled,
     campaignsEnabled: catalogEnabled && runtimeFlag(env.SUPPORT_CAMPAIGNS_ENABLED, false),
   };
@@ -85,7 +82,7 @@ function normalizedBenefit(value, field, max) {
 }
 
 /**
- * 保守直接成本口径：渠道费 6%；AI 按 ¥2/百万输出并预留 20%；
+ * 保守直接成本口径：渠道费 6%；AI 按已配置模型最高单价并预留 20%；
  * 空间按 ¥0.099/GB/月满额使用 8 年并预留 30%。
  */
 export function calculateSupportPackageCost({ amount, aiTokens = 0, storageMb = 0 }) {
@@ -93,7 +90,10 @@ export function calculateSupportPackageCost({ amount, aiTokens = 0, storageMb = 
   const normalizedAi = normalizedBenefit(aiTokens, 'aiTokens', 1_000_000_000);
   const normalizedStorage = normalizedBenefit(storageMb, 'storageMb', 1_048_576);
   const channelNet = price * 0.94;
-  const aiCost = (normalizedAi / 1_000_000) * 2 * 1.2;
+  const aiUnitCost = getConservativeAiUnitCost();
+  if (normalizedAi > 0 && aiUnitCost === null)
+    throw afdianError('SUPPORT_COST_PRICE_UNKNOWN', '当前模型价格未配置，无法核价', 422);
+  const aiCost = (normalizedAi / 1_000_000) * (aiUnitCost || 0);
   const storageCost = (normalizedStorage / 1024) * 0.099 * 96 * 1.3;
   const directCost = aiCost + storageCost;
   const margin = channelNet - directCost;
@@ -241,7 +241,13 @@ async function loadActiveCampaignPackages({ userId, db, now }) {
   });
 }
 
-export async function getSupportCatalog({ userId = '', authenticated = false, db = pool, env = process.env, now = new Date() } = {}) {
+export async function getSupportCatalog({
+  userId = '',
+  authenticated = false,
+  db = pool,
+  env = process.env,
+  now = new Date(),
+} = {}) {
   const feature = getSupportPackageFeatureState(env);
   const effectiveUserId = authenticated && userId ? String(userId) : '';
   if (!feature.catalogEnabled) {
@@ -249,9 +255,7 @@ export async function getSupportCatalog({ userId = '', authenticated = false, db
   }
   const [usedSkuIds, campaigns] = await Promise.all([
     loadUsedSkuIds({ userId: effectiveUserId, db }),
-    feature.campaignsEnabled
-      ? loadActiveCampaignPackages({ userId: effectiveUserId, db, now })
-      : Promise.resolve([]),
+    feature.campaignsEnabled ? loadActiveCampaignPackages({ userId: effectiveUserId, db, now }) : Promise.resolve([]),
   ]);
   return {
     ...feature,

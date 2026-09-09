@@ -5,6 +5,7 @@ import { createMemoryHistory, createRouter } from 'vue-router';
 import type { InternalAxiosRequestConfig } from 'axios';
 import type { AiSkillResponse } from '@lightnote/shared/ai-skill-protocol';
 import { AI_QUOTA_ERROR_CODES } from '@lightnote/shared/ai-quota-protocol';
+import { useUserStore } from '@/store';
 import globalDirect from '@/config/globalDirect';
 import request from '@/http/request';
 import enUS from '@/i18n/locales/en-US';
@@ -97,13 +98,9 @@ request.defaults.adapter = async (config) => {
     if (state === 'loading') await new Promise(() => {});
     if (state === 'quota-exhausted' || state === 'quota-insufficient') {
       const code =
-        state === 'quota-exhausted'
-          ? AI_QUOTA_ERROR_CODES.EXHAUSTED
-          : AI_QUOTA_ERROR_CODES.INSUFFICIENT_FOR_REQUEST;
+        state === 'quota-exhausted' ? AI_QUOTA_ERROR_CODES.EXHAUSTED : AI_QUOTA_ERROR_CODES.INSUFFICIENT_FOR_REQUEST;
       const data =
-        state === 'quota-insufficient'
-          ? { code, requiredTokens: 26_900, availableTokens: 21_700 }
-          : { code };
+        state === 'quota-insufficient' ? { code, requiredTokens: 26_900, availableTokens: 21_700 } : { code };
       throw Object.assign(new Error('Visual quota fixture'), { code, status: 429, data, config });
     }
     if (state === 'error') {
@@ -118,6 +115,19 @@ request.defaults.adapter = async (config) => {
       data: completedResponse(parsePayload(config.data)),
     });
   }
+  if (config.url === '/api/support/events') return axiosResponse(config, { status: 200, data: null });
+  if (config.url === '/api/chat/aiQuota')
+    return axiosResponse(config, {
+      status: 200,
+      data: {
+        used: 100000,
+        quota: 100000,
+        remaining: state === 'quota-insufficient' ? 21700 : 0,
+        dailyQuota: 100000,
+        dailyRemaining: state === 'quota-insufficient' ? 21700 : 0,
+        bonusTokens: 0,
+      },
+    });
   if (config.url === '/api/note/addNote') {
     document.body.dataset.noteCreated = 'true';
     return axiosResponse(config, { status: 200, msg: 'ok', data: { id: 'visual-note' } });
@@ -140,7 +150,9 @@ await router.push('/');
 await router.isReady();
 
 const app = createApp(BookmarkAiHarness);
-app.use(createPinia());
+const pinia = createPinia();
+app.use(pinia);
+useUserStore(pinia).setUserInfo({ id: 'visual-ai-user', role: 'user' });
 app.use(router);
 app.use(
   createI18n({

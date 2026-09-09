@@ -59,4 +59,6 @@ router.post('/suggestions/runs/:id/items/:suggestionId/actions', localProcessing
 
 router.get('/suggestions/runs/:id/items/:suggestionId/archive-preview', suggestions.archiveDraft);
 
+router.post('/suggestions/runs/:id/apply-batch', localProcessingRateLimiter, suggestions.applyBatch);
+
 export default router;

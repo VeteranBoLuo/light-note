@@ -42,6 +42,7 @@
         <AndroidDownloadProgress v-if="isAndroidApp && !publicStandaloneRoute" />
         <DisplayScaleSuggestion v-if="!publicStandaloneRoute" />
         <ResourceBatchTagsHost v-if="!publicStandaloneRoute" />
+        <EntitlementReturnHost v-if="!publicStandaloneRoute" />
         <ResourceProjectHost v-if="!publicStandaloneRoute" />
         <ResourceSelectionDrawer v-if="!publicStandaloneRoute" />
         <AdminContextBanner v-if="user.adminContext && !publicStandaloneRoute" />
@@ -58,6 +59,7 @@
   import { syncBrowserPushOwner } from '@/composables/useBrowserPush';
   import { openNotificationPanel } from '@/utils/notificationEntry';
   import { useNotification } from '@/composables/useNotification';
+  import EntitlementReturnHost from '@/components/support/EntitlementReturnHost.vue';
   import ResourceProjectHost from '@/components/resourceActions/ResourceProjectHost.vue';
   import ResourceBatchTagsHost from '@/components/resourceActions/ResourceBatchTagsHost.vue';
   import ResourceSelectionDrawer from '@/components/resourceActions/ResourceSelectionDrawer.vue';

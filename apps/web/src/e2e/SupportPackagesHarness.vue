@@ -1,9 +1,14 @@
 <template>
-  <EntitlementStore :data-visual-state="visualState" />
+  <EntitlementStore v-if="route.path === '/store'" :data-visual-state="visualState" />
+  <main v-else style="padding: 24px">原书签任务 · 视觉验收</main>
+  <EntitlementReturnHost />
 </template>
 
 <script setup lang="ts">
   import EntitlementStore from '@/view/entitlementStore/EntitlementStore.vue';
+  import EntitlementReturnHost from '@/components/support/EntitlementReturnHost.vue';
+  import { useRoute } from 'vue-router';
+  const route = useRoute();
 
   defineProps<{ visualState: string }>();
 </script>

@@ -17,6 +17,7 @@ import type {
 } from '@/api/supportApi';
 import '@/assets/css/index.less';
 import SupportPackagesHarness from './SupportPackagesHarness.vue';
+import { saveEntitlementJourney, clearEntitlementJourney } from '@/utils/entitlementJourney';
 
 const params = new URLSearchParams(window.location.search);
 const visualState = params.get('state') || 'default';
@@ -187,6 +188,11 @@ function catalogFixture() {
 }
 
 request.defaults.adapter = async (config) => {
+  if (config.url === '/api/search/batchSelectionPreview') {
+    return apiResponse(config, {
+      unavailableItems: visualState === 'return-deleted' ? [{ type: 'bookmark', id: 'visual-bookmark' }] : [],
+    });
+  }
   if (config.url === '/api/support/catalog') {
     if (visualState === 'loading') await new Promise(() => {});
     if (visualState === 'error') {
@@ -197,10 +203,15 @@ request.defaults.adapter = async (config) => {
   if (config.url === '/api/support/store/state') {
     if (visualState === 'state-loading') await new Promise(() => {});
     if (visualState === 'state-error') {
-      throw Object.assign(new Error('Visual store state fixture failed'), { code: 'ENTITLEMENT_STORE_STATE_UNAVAILABLE' });
+      throw Object.assign(new Error('Visual store state fixture failed'), {
+        code: 'ENTITLEMENT_STORE_STATE_UNAVAILABLE',
+      });
     }
     return apiResponse(config, storeState());
   }
+  if (config.url === '/api/support/events') return apiResponse(config, null);
+  if (config.url === '/api/chat/aiQuota')
+    return apiResponse(config, { used: 0, quota: 500000, remaining: 500000, dailyRemaining: 500000, bonusTokens: 0 });
   if (config.url === '/api/common/recordOperationLogs') return apiResponse(config, null);
   if (config.url === '/api/user/me') return apiResponse(config, { id: isGuest ? '' : 'visual-support-user' });
   if (config.url === '/api/growth/me') {
@@ -210,7 +221,7 @@ request.defaults.adapter = async (config) => {
       name: '拾光者',
       spaceMb: 5_120,
       spaceBonusMb: 2_048,
-      aiTokenDaily: 800_000,
+      aiTokenDaily: 500_000,
       streak: 8,
       points: 1_860,
       checkedInToday: true,
@@ -254,5 +265,23 @@ user.setUserInfo({
   preferences: { theme, lang: locale, noteViewMode: 'card' },
 });
 bookmarkStore(pinia).screenWidth = window.innerWidth;
+clearEntitlementJourney();
+if (visualState.startsWith('return-')) {
+  saveEntitlementJourney({
+    userId: user.id,
+    source: 'bookmark',
+    asset: 'ai',
+    returnPath: '/bookmark-task',
+    task: {
+      title: '继续整理阅读材料',
+      skillId: 'bookmark.analyze',
+      surface: 'bookmark.dialog',
+      promptKey: 'question',
+      input: { question: '请保留我刚才输入的整理要求' },
+      resourceRefs: [{ type: 'bookmark', id: 'visual-bookmark' }],
+      showGrounding: false,
+    },
+  });
+}
 globalDirect(app);
 app.mount('#app');

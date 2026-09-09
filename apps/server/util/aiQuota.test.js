@@ -452,6 +452,24 @@ describe('AI quota abuse hardening', () => {
     expect(state.wallets.get('user-wallet')).toBe(29_000);
   });
 
+  it('下调每日上限不追扣旧任务，旧预占按快照结算，新请求才使用永久余额', async () => {
+    const { rankOf } = await import('./growth.js');
+    const now = new Date();
+    const day = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+    state.wallets.set('cutover', 50_000);
+    state.usage.set(usageKey('user', 'cutover', day), { tokens: 150_000, calls: 1 });
+    rankOf.mockReturnValueOnce({ aiTokenDaily: 200_000 });
+    const request = visitorRequest();
+    const context = { userId: 'cutover', userRole: 'user', requestId: 'before-cutover' };
+    const old = await aiQuota.reserve(request, { ...context, reserveTokens: 40_000 });
+    await aiQuota.reconcile(old, 10_000);
+    expect(state.wallets.get('cutover')).toBe(50_000);
+    await expect(aiQuota.getStatus(request, context)).resolves.toMatchObject({ dailyRemaining: 0, bonusTokens: 50_000 });
+    const next = await aiQuota.reserve(request, { ...context, requestId: 'after-cutover', reserveTokens: 10_000 });
+    await aiQuota.reconcile(next, 5_000);
+    expect(state.wallets.get('cutover')).toBe(45_000);
+  });
+
   it('状态页把在途预留与已结算余额分开，不再在模型生成期间把余额显示为零', async () => {
     const request = visitorRequest();
     const context = { userId: 'user-status', userRole: 'user', requestId: 'status-running' };

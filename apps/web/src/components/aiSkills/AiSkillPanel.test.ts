@@ -1,8 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h, nextTick, ref } from 'vue';
+import { createPinia } from 'pinia';
 import { createI18n } from 'vue-i18n';
 import type { AiSkillResponse } from '@lightnote/shared/ai-skill-protocol';
 import type { AiSkillPanelAction } from './types';
+
+vi.mock('@/api/entitlementEvents', () => ({ recordEntitlementEvent: vi.fn() }));
 
 const executeAiSkill = vi.hoisted(() => vi.fn());
 
@@ -97,6 +100,7 @@ function mountPromptPanel(overrides: Record<string, unknown> = {}) {
       },
     }),
   );
+  app.use(createPinia());
   app.mount(host);
   cleanup = () => {
     app.unmount();
@@ -173,7 +177,8 @@ describe('AiSkillPanel 自动执行预设动作', () => {
         },
       }),
     );
-    app.mount(host);
+    app.use(createPinia());
+  app.mount(host);
     cleanup = () => {
       app.unmount();
       host.remove();
@@ -254,7 +259,8 @@ describe('AiSkillPanel 自动执行预设动作', () => {
         },
       }),
     );
-    app.mount(host);
+    app.use(createPinia());
+  app.mount(host);
     cleanup = () => {
       app.unmount();
       host.remove();
@@ -327,7 +333,8 @@ describe('AiSkillPanel 自动执行预设动作', () => {
         },
       }),
     );
-    app.mount(host);
+    app.use(createPinia());
+  app.mount(host);
     cleanup = () => {
       app.unmount();
       host.remove();
@@ -401,7 +408,8 @@ describe('AiSkillPanel 手动提问草稿', () => {
         },
       }),
     );
-    app.mount(host);
+    app.use(createPinia());
+  app.mount(host);
     cleanup = () => {
       app.unmount();
       host.remove();
@@ -479,7 +487,8 @@ describe('AiSkillPanel 手动提问草稿', () => {
         },
       }),
     );
-    app.mount(host);
+    app.use(createPinia());
+  app.mount(host);
     cleanup = () => {
       app.unmount();
       host.remove();

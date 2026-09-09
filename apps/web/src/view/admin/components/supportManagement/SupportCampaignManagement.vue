@@ -8,6 +8,8 @@
       <BButton type="primary" @click="openCreate">{{ t('adminSupport.campaigns.create') }}</BButton>
     </header>
 
+    <EntitlementCampaignSection draft :title="t('entitlementJourney.title')" :description="t('entitlementJourney.description')" />
+    <p>{{ t('entitlementJourney.costAssumptions') }}</p>
     <div v-if="loading" class="campaign-admin__state"><BLoading inline loading /></div>
     <div v-else-if="loadError" class="campaign-admin__state is-error">
       <span>{{ t('adminSupport.campaigns.loadFailed') }}</span>
@@ -229,6 +231,7 @@
 </template>
 
 <script setup lang="ts">
+  import EntitlementCampaignSection from '@/components/support/EntitlementCampaignSection.vue';
   import { computed, onMounted, reactive, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import Alert from '@/components/base/BasicComponents/BModal/Alert';

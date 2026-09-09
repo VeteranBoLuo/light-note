@@ -6,7 +6,14 @@
   >
     <div class="suggestion-copy">
       <div class="suggestion-heading"
-        ><SvgIcon
+        ><BCheckbox
+          v-if="batchSelecting && canBatchApply(suggestion)"
+          controlled
+          :model-value="batchSelected"
+          :disabled="batchBusy"
+          :aria-label="t(`organizeWorkspace.checks.${suggestion.kind}`)"
+          @update:model-value="emit('batch-select', $event)"
+        /><SvgIcon
           class="suggestion-kind-icon"
           :src="
             suggestion.kind === 'archive'
@@ -115,7 +122,7 @@
         >
       </div>
     </div>
-    <div v-if="editing" class="suggestion-edit">
+    <div v-if="editing" :inert="batchBusy || undefined" class="suggestion-edit">
       <OrganizeSuggestionTagEditor v-if="suggestion.kind === 'tags'" v-model:tags="tags" :disabled="busy" />
       <div v-else class="title-editor">
         <label :for="`organize-title-${suggestion.id}`">{{ t('organizeWorkspace.checks.title') }}</label>
@@ -128,7 +135,7 @@
           :disabled="busy"
         />
       </div>
-      <div class="suggestion-actions"
+      <div class="suggestion-actions" :inert="batchBusy || undefined"
         ><BButton :disabled="busy" @click="editing = false">{{ t('common.cancel') }}</BButton
         ><BButton
           type="primary"
@@ -144,10 +151,11 @@
         suggestion.kind === 'archive' && ['applied', 'no_suggestion'].includes(suggestion.status) && resourceId
       "
       class="suggestion-actions"
+      :inert="batchBusy || undefined"
     >
       <BButton @click="emit('preview-archive', resourceId)">{{ t('organizeWorkspace.archivePreview') }}</BButton>
     </div>
-    <div v-else-if="canReview" class="suggestion-actions">
+    <div v-else-if="canReview" class="suggestion-actions" :inert="batchBusy || undefined">
       <BButton
         v-if="suggestion.kind === 'archive' && suggestion.archivePreview && resourceId"
         @click="emit('preview-archive', resourceId, suggestion.id)"
@@ -183,10 +191,15 @@
         >{{ t('organizeWorkspace.resolveDuplicates') }}</BButton
       >
     </div>
+    <p v-if="batchError !== undefined" class="suggestion-error" role="alert">{{
+      batchError || t('organize.actionFailed')
+    }}</p>
     <p v-if="error" class="suggestion-error" role="alert">{{ error }}</p>
   </section>
 </template>
 <script setup lang="ts">
+  import { canBatchApply } from '@/composables/useOrganizeBatchApply';
+  import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import { fileReadingReasonKey } from '@/utils/organizeFileReading';
   import { computed, ref, watch } from 'vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -215,8 +228,16 @@
     resourceId?: string;
     suggestion: WorkspaceSuggestion;
     analyzing: boolean;
+    batchBusy?: boolean;
+    batchSelecting?: boolean;
+    batchSelected?: boolean;
+    batchError?: string;
   }>();
-  const emit = defineEmits<{ changed: []; 'preview-archive': [resourceId: string, suggestionId?: string] }>();
+  const emit = defineEmits<{
+    'batch-select': [checked: boolean];
+    changed: [];
+    'preview-archive': [resourceId: string, suggestionId?: string];
+  }>();
   const { t, locale } = useI18n(),
     router = useRouter();
   const editing = ref(false),

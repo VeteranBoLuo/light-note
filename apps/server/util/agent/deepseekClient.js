@@ -1,3 +1,4 @@
+import { getAiModelPrice } from '../aiCostPolicy.js';
 /**
  * Agent LLM 客户端（OpenAI 兼容接口，支持 DeepSeek / 千问双供应商）
  *
@@ -38,14 +39,13 @@
  * @property {DeepSeekToolCall[]} toolCalls - 工具调用列表
  */
 
-// 供应商配置表:baseUrl/密钥与模型的环境变量名/默认模型/单价(元/百万 tokens，非 Batch 标准价)
+// 供应商配置表:baseUrl/密钥与模型的环境变量名/默认模型；单价统一由 aiCostPolicy 管理
 const PROVIDERS = {
   deepseek: {
     baseUrl: 'https://api.deepseek.com/v1/chat/completions',
     apiKeyEnv: 'DEEPSEEK_API_KEY',
     modelEnv: 'DEEPSEEK_MODEL',
     defaultModel: 'deepseek-v4-flash',
-    price: { input: 1, output: 2 },
     // 笔记改写、翻译等场景的结果通常接近原文长度，默认给足 8K 输出空间；可用环境变量下调。
     noteAssistMaxTokens: 8192,
     // DeepSeek V4 默认开启思考模式，但 thinking 模式不接受 tool_choice。
@@ -59,7 +59,6 @@ const PROVIDERS = {
     apiKeyEnv: 'DASHSCOPE_API_KEY', // 千问备用供应商密钥；所有业务入口统一经 AI Gateway 调用
     modelEnv: 'QWEN_MODEL',
     defaultModel: 'qwen3.5-flash',
-    price: { input: 0.2, output: 2 },
     noteAssistMaxTokens: 8192,
     // qwen3.5-flash 默认开深度思考:实测一句简单问答就产生 1223/1255 的思考 token(占 97%),
     // 又慢又贵。它是应急备用模型,回复速度优先,强制关闭思考模式。
@@ -166,7 +165,7 @@ export function getNoteAssistMaxTokens(cfg = getProviderConfig()) {
 // 供 agentHandle.js 的用量日志按当前生效供应商计费(不同供应商单价不同)
 export function getActiveProviderPricing() {
   const cfg = getProviderConfig();
-  return { provider: cfg.name, price: cfg.price };
+  return { provider: cfg.name, price: getAiModelPrice(cfg.name, getModel(cfg)) || null };
 }
 
 export function getActiveProviderInfo(providerOverride, modelOverride) {
@@ -174,7 +173,7 @@ export function getActiveProviderInfo(providerOverride, modelOverride) {
   return {
     provider: cfg.name,
     model: getModel(cfg, modelOverride),
-    price: cfg.price,
+    price: getAiModelPrice(cfg.name, getModel(cfg, modelOverride)) || null,
     noteAssistMaxTokens: getNoteAssistMaxTokens(cfg),
   };
 }
@@ -277,6 +276,7 @@ export async function requestDeepSeek(messages, options = {}) {
     toolCalls: msg?.tool_calls || [],
     usage: {
       promptTokens: usage.prompt_tokens || 0,
+      ...(usage.prompt_cache_hit_tokens != null ? { cachedPromptTokens: Number(usage.prompt_cache_hit_tokens) } : {}),
       completionTokens: usage.completion_tokens || 0,
       totalTokens: usage.total_tokens || 0,
     },
@@ -405,6 +405,8 @@ export async function requestDeepSeekStream(messages, options = {}) {
 
         if (chunk.usage) {
           usage.promptTokens = Number(chunk.usage.prompt_tokens || 0);
+          if (chunk.usage.prompt_cache_hit_tokens != null)
+            usage.cachedPromptTokens = Number(chunk.usage.prompt_cache_hit_tokens);
           usage.completionTokens = Number(chunk.usage.completion_tokens || 0);
           usage.totalTokens = Number(chunk.usage.total_tokens || 0);
         }

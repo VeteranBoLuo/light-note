@@ -145,3 +145,48 @@ describe('积分永久空间每档一次', () => {
     expect(mocks.query).toHaveBeenCalledOnce();
   });
 });
+
+describe('C6 AI 入门包复用限兑事务', () => {
+  afterAll(() => {
+    delete process.env.POINTS_ECONOMY_C6_ENABLED;
+  });
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.POINTS_ECONOMY_C6_ENABLED = 'true';
+  });
+  it('60 积分只兑换一次 5 万永久额度，余额不足不登记领取', async () => {
+    let connection = purchaseConnection({ points: 60 });
+    const args = { clientRequestId: 'c6-starter-request-0001', economyVersion: 'points-economy-c6', expectedCost: 60 };
+    await expect(buyItem('user-1', 'ai_pack_starter', args)).resolves.toMatchObject({ ok: true, purchaseLimit: 1 });
+    expect(mocks.creditAiBonusTokens).toHaveBeenCalledWith(
+      connection,
+      expect.objectContaining({ amountTokens: 50_000 }),
+    );
+    expect(connection.commit).toHaveBeenCalledOnce();
+    mocks.creditAiBonusTokens.mockClear();
+    connection = purchaseConnection({ claimed: true });
+    await expect(
+      buyItem('user-1', 'ai_pack_starter', { ...args, clientRequestId: 'c6-starter-request-0002' }),
+    ).resolves.toMatchObject({ ok: false, code: 'POINTS_ITEM_PURCHASE_LIMIT_REACHED' });
+    expect(mocks.creditAiBonusTokens).not.toHaveBeenCalled();
+    connection = purchaseConnection({ points: 59 });
+    await expect(
+      buyItem('user-1', 'ai_pack_starter', { ...args, clientRequestId: 'c6-starter-request-0003' }),
+    ).resolves.toMatchObject({ ok: false });
+    expect(
+      connection.query.mock.calls.some(([sql]) => String(sql).includes('INSERT IGNORE INTO points_shop_item_claims')),
+    ).toBe(false);
+  });
+  it('并发领取唯一键竞争失败时不扣分不发放', async () => {
+    const connection = purchaseConnection({ claimInsertAffectedRows: 0 });
+    await expect(
+      buyItem('user-1', 'ai_pack_starter', {
+        clientRequestId: 'c6-starter-race-0001',
+        economyVersion: 'points-economy-c6',
+        expectedCost: 60,
+      }),
+    ).resolves.toMatchObject({ ok: false });
+    expect(mocks.creditAiBonusTokens).not.toHaveBeenCalled();
+    expect(connection.rollback).toHaveBeenCalledOnce();
+  });
+});

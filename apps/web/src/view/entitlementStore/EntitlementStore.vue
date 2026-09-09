@@ -8,6 +8,10 @@
           <span>{{ t('common.back') }}</span>
         </BButton>
 
+        <BCard v-if="journey" padding="16px">
+          <p>{{ t('entitlementJourney.pending') }}</p>
+          <BButton @click="returnToTask">{{ t('entitlementJourney.returnTask') }}</BButton>
+        </BCard>
         <header class="store-hero">
           <div class="store-hero__intro">
             <div class="store-kicker">
@@ -99,25 +103,20 @@
             <span>{{ t('entitlementStore.catalogUnavailable') }}</span>
           </div>
           <template v-else>
-            <section v-if="campaignPackages.length" class="campaign-block" aria-labelledby="campaign-title">
-              <div class="campaign-heading">
-                <div>
-                  <h3 id="campaign-title">{{ t('entitlementStore.campaigns.title') }}</h3>
-                  <p>{{ t('entitlementStore.campaigns.description') }}</p>
-                </div>
-                <BChip tone="pending">{{ t('entitlementStore.campaigns.limited') }}</BChip>
-              </div>
-              <div class="package-grid">
-                <EntitlementPackageCard
-                  v-for="item in campaignPackages"
-                  :key="item.campaignSkuId"
-                  :item="item"
-                  :action-label="actionLabel(item)"
-                  :disabled="!canCheckout(item)"
-                  @select="openCheckoutModal"
-                />
-              </div>
-            </section>
+            <EntitlementCampaignSection
+              v-if="campaignPackages.length"
+              :title="t('entitlementStore.campaigns.title')"
+              :description="t('entitlementStore.campaigns.description')"
+            >
+              <EntitlementPackageCard
+                v-for="item in campaignPackages"
+                :key="item.campaignSkuId"
+                :item="item"
+                :action-label="actionLabel(item)"
+                :disabled="!canCheckout(item)"
+                @select="openCheckoutModal"
+              />
+            </EntitlementCampaignSection>
 
             <BTabs v-model:active-tab="activeCategory" class="store-tabs" variant="solid" :options="categoryTabs" />
             <div class="package-grid">
@@ -181,11 +180,23 @@
                   <span>{{ formatDate(order.confirmedAt) }}</span>
                 </div>
                 <div class="purchase-order__amount">¥{{ order.amount }}</div>
-                <BChip :tone="order.rewardStatus === 'credited' ? 'success' : 'pending'">
+                <BChip
+                  :tone="
+                    order.rewardStatus === 'credited'
+                      ? 'success'
+                      : order.rewardStatus === 'ineligible'
+                        ? 'danger'
+                        : 'pending'
+                  "
+                >
                   {{
                     order.rewardStatus === 'credited'
                       ? t('entitlementStore.credited')
-                      : t('entitlementStore.processing')
+                      : ['manual_review', 'reversal_review'].includes(order.rewardStatus || '')
+                        ? t('entitlementJourney.review')
+                        : order.rewardStatus === 'ineligible'
+                          ? t('entitlementJourney.failed')
+                          : t('entitlementStore.processing')
                   }}
                 </BChip>
               </BCard>
@@ -217,6 +228,10 @@
 </template>
 
 <script setup lang="ts">
+  import EntitlementCampaignSection from '@/components/support/EntitlementCampaignSection.vue';
+  import { readEntitlementJourney, prepareEntitlementReturn } from '@/utils/entitlementJourney';
+  import { recordEntitlementEvent } from '@/api/entitlementEvents';
+  import { useAiQuotaStatus } from '@/composables/useAiQuotaStatus';
   import { computed, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
@@ -264,6 +279,18 @@
     grantedStorageMb: 0,
     recentOrders: [],
   };
+  const journey = ref(readEntitlementJourney(user.id));
+  const { load: refreshQuota } = useAiQuotaStatus({ autoLoad: false });
+  async function returnToTask() {
+    const current = prepareEntitlementReturn(user.id);
+    if (!current) {
+      journey.value = null;
+      return;
+    }
+    recordEntitlementEvent('return_task', current);
+    await router.push(current.returnPath);
+    message.info(t('entitlementJourney.returnHint'));
+  }
   const catalog = ref<SupportCatalog | null>(null);
   const catalogLoading = ref(true);
   const catalogError = ref(false);
@@ -285,7 +312,9 @@
     { key: 'combo', label: t('entitlementStore.tabs.combo') },
   ]);
   const visiblePackages = computed(() =>
-    (catalog.value?.packages || []).filter((item) => item.category === activeCategory.value),
+    (catalog.value?.packages || [])
+      .filter((item) => item.category === activeCategory.value)
+      .sort((a, b) => Number(a.amount) - Number(b.amount)),
   );
   const campaignPackages = computed(() => catalog.value?.campaigns || []);
   const accountName = computed(() => {
@@ -427,6 +456,7 @@
   }
   function openCheckoutModal(item: StoreItem) {
     if (!canCheckout(item)) return message.warning(unavailableMessage(item));
+    recordEntitlementEvent('select_item', { ...journey.value, skuId: item.skuId });
     selectedItem.value = item;
     checkoutModalVisible.value = true;
   }
@@ -439,7 +469,9 @@
     const skuId = 'campaignSkuId' in item ? item.campaignSkuId : item.skuId;
     const catalogVersion = 'catalogVersion' in item ? item.catalogVersion : String(catalog.value?.catalogVersion || '');
     // 保持在确认按钮的同步点击栈中打开外部页面，避免浏览器或 App WebView 拦截新窗口。
-    const opened = openTrackedEntitlementCheckout(skuId, catalogVersion);
+    const opened = journey.value?.flowId
+      ? openTrackedEntitlementCheckout(skuId, catalogVersion, undefined, journey.value.flowId)
+      : openTrackedEntitlementCheckout(skuId, catalogVersion);
     if (!opened) return message.warning(t('entitlementStore.unavailable'));
     checkoutModalVisible.value = false;
     void recordOperation({ module: '资源商店', operation: '打开资源购买:' + item.skuId });
@@ -466,49 +498,69 @@
     selectedItem.value = nextItem;
   }
   async function loadCatalog() {
+    const owner = user.id;
     catalogLoading.value = true;
     catalogError.value = false;
     try {
       const nextCatalog = await getEntitlementStoreCatalog();
+      if (owner !== user.id) return;
       catalog.value = nextCatalog;
       syncSelectedItem(nextCatalog);
     } catch {
+      if (owner !== user.id) return;
       catalogError.value = true;
     } finally {
-      catalogLoading.value = false;
+      if (owner === user.id) catalogLoading.value = false;
     }
   }
   async function loadState() {
+    const owner = user.id;
     stateLoading.value = true;
     stateError.value = false;
     try {
-      storeState.value = { ...emptyStoreState, ...(await getEntitlementStoreState()) };
+      const nextState = await getEntitlementStoreState();
+      if (owner !== user.id) return;
+      storeState.value = { ...emptyStoreState, ...nextState };
     } catch {
+      if (owner !== user.id) return;
       stateError.value = true;
     } finally {
-      stateReady.value = true;
-      stateLoading.value = false;
+      if (owner === user.id) {
+        stateReady.value = true;
+        stateLoading.value = false;
+      }
     }
   }
   async function refreshStore() {
-    await Promise.all([loadCatalog(), loadState()]);
+    await Promise.all([loadCatalog(), loadState(), refreshQuota({ force: true })]);
   }
 
   useMobileTopBar(['store'], { title: () => t('entitlementStore.pageTitle'), onBack: goBack, showNotification: false });
   const { markLoaded } = useForegroundRefresh({
     refresh: refreshStore,
-    staleMs: 30_000,
+    staleMs: 0,
     enabled: () => stateReady.value,
   });
   onMounted(() => {
     void refreshStore().then(markLoaded);
     void recordOperation({ module: '资源商店', operation: '查看资源商店' });
+    recordEntitlementEvent('enter_store', journey.value || { source: 'store' });
   });
   watch(
     () => route.query.category,
     (value) => {
       const category = String(value || '');
       if (['ai', 'storage', 'combo'].includes(category)) activeCategory.value = category as SupportPackageCategory;
+    },
+  );
+  watch(
+    () => user.id,
+    () => {
+      journey.value = readEntitlementJourney(user.id);
+      checkoutModalVisible.value = false;
+      storeState.value = { ...emptyStoreState };
+      stateReady.value = false;
+      void refreshStore();
     },
   );
   watch(activeCategory, (category) => {

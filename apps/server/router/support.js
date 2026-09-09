@@ -23,6 +23,7 @@ const readLimiter = limiter({ prefix: 'afdian-read', windowMs: 60 * 1000, limit:
 const preferenceLimiter = limiter({ prefix: 'afdian-preference', windowMs: 10 * 60 * 1000, limit: 20 });
 const adminActionLimiter = limiter({ prefix: 'afdian-admin-action', windowMs: 10 * 60 * 1000, limit: 20 });
 
+router.post('/events', readLimiter, handle.events);
 router.get('/state', handle.state);
 router.get('/store/state', readLimiter, handle.storeState);
 router.get('/catalog', readLimiter, handle.catalog);

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   C4_POINTS_ECONOMY_VERSION,
+  C5_POINTS_ECONOMY_VERSION,
   freeDrawsFor,
   getEconomyCatalogSnapshot,
   getEconomyRuntime,
@@ -8,12 +9,13 @@ import {
   POINTS_ECONOMY_VERSION,
 } from './pointsEconomyCatalog.js';
 
-describe('积分经济 C5 单一目录', () => {
+describe('积分经济 C6 单一目录', () => {
   const snapshot = getEconomyCatalogSnapshot();
 
-  it('固定经济版本并完整覆盖 5 个实用商品和 13 个积分框', () => {
+  it('固定经济版本并完整覆盖 6 个实用商品和 13 个积分框', () => {
     expect(snapshot.version).toBe(POINTS_ECONOMY_VERSION);
     expect(snapshot.utilityItems.map(({ id, cost, purchaseLimit }) => [id, cost, purchaseLimit])).toEqual([
+      ['ai_pack_starter', 60, 1],
       ['ai_pack_small', 240, null],
       ['ai_pack', 420, null],
       ['storage_128', 500, 1],
@@ -21,9 +23,9 @@ describe('积分经济 C5 单一目录', () => {
       ['storage_2g', 5200, 1],
     ]);
     expect(snapshot.frameItems.map(({ id, cost, minLevel }) => [id, cost, minLevel])).toEqual([
-      ['frame_mint', 220, 0],
-      ['frame_ink', 320, 0],
-      ['frame_moonstone', 480, 0],
+      ['frame_mint', 80, 0],
+      ['frame_ink', 160, 0],
+      ['frame_moonstone', 240, 0],
       ['frame_gold', 700, 0],
       ['frame_sakura', 1000, 0],
       ['frame_sunset', 1400, 0],
@@ -35,17 +37,22 @@ describe('积分经济 C5 单一目录', () => {
       ['frame_dragon', 12000, 5],
       ['frame_celestial', 16000, 6],
     ]);
-    expect(snapshot.frameItems.reduce((sum, item) => sum + item.cost, 0)).toBe(55720);
+    expect(snapshot.frameItems.reduce((sum, item) => sum + item.cost, 0)).toBe(55180);
+  });
+
+  it('C6 保留 C5 价格快照与限购能力', () => {
+    expect(getEconomyCatalogSnapshot(C5_POINTS_ECONOMY_VERSION).frameItems[0].cost).toBe(220);
+    expect(getEconomyRuntime({ POINTS_ECONOMY_C6_ENABLED: 'true' })).toMatchObject({
+      economyVersion: POINTS_ECONOMY_VERSION,
+      c5Active: true,
+      requireWriteVersion: true,
+    });
   });
 
   it('保留已发布 C4 快照，限兑规则只进入 C5', () => {
-    expect(getEconomyCatalogSnapshot(C4_POINTS_ECONOMY_VERSION).utilityItems.map((item) => item.purchaseLimit)).toEqual([
-      null,
-      null,
-      null,
-      null,
-      null,
-    ]);
+    expect(getEconomyCatalogSnapshot(C4_POINTS_ECONOMY_VERSION).utilityItems.map((item) => item.purchaseLimit)).toEqual(
+      [null, null, null, null, null],
+    );
   });
 
   it('免费池仅发积分与 AI，付费池权重严格为 1000 且保底权重为 170', () => {
@@ -53,9 +60,9 @@ describe('积分经济 C5 单一目录', () => {
     expect(new Set(snapshot.freePolicy.pool.map((item) => item.kind))).toEqual(new Set(['points', 'ai_pack']));
     expect(snapshot.freePolicy.countsPaidPity).toBe(false);
     expect(snapshot.paidPolicy.pool.reduce((sum, item) => sum + item.weight, 0)).toBe(1000);
-    expect(snapshot.paidPolicy.pool.filter((item) => item.tier === 'rare').reduce((sum, item) => sum + item.weight, 0)).toBe(
-      170,
-    );
+    expect(
+      snapshot.paidPolicy.pool.filter((item) => item.tier === 'rare').reduce((sum, item) => sum + item.weight, 0),
+    ).toBe(170);
     expect(snapshot.paidPolicy).toMatchObject({ singleCost: 170, tenCost: 1600, cardOverflowPoints: 120 });
   });
 

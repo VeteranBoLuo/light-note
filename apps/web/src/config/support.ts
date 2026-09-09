@@ -159,11 +159,13 @@ export function openTrackedSupportPackageCheckout(
   skuId: string,
   catalogVersion: string,
   openWindow?: ExternalWindowOpener,
+  flowId?: string,
 ): boolean {
   if (!/^[A-Za-z0-9_-]{3,64}$/.test(String(skuId || '')) || !/^[-A-Za-z0-9:]{3,64}$/.test(catalogVersion)) {
     return false;
   }
   const query = new URLSearchParams({ skuId, catalogVersion });
+  if (flowId && /^[a-f0-9-]{36}$/.test(flowId)) query.set('flowId', flowId);
   return openNewPage(`/api/support/checkout?${query.toString()}`, openWindow);
 }
 

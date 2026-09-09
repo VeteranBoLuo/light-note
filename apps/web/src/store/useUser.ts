@@ -1,3 +1,4 @@
+import { clearEntitlementJourney, readEntitlementJourney } from '@/utils/entitlementJourney';
 import { defineStore } from 'pinia';
 import icon from '@/config/icon.ts';
 import bookmarkStore from './bookmark.ts';
@@ -183,6 +184,7 @@ export default defineStore('user', {
       // 账号发生切换时,作废上一账号的资源缓存,
       // 避免游客浏览后登录/注册，首帧仍显示游客的书签、文件夹或文件。
       if (previousResourceIdentity !== getResourceIdentityKey(this)) {
+        readEntitlementJourney(this.id);
         bookmarkStore().reset();
         cloudSpaceStore().reset({ showLoading: true });
         useNoteLibraryCacheStore().reset();
@@ -192,6 +194,7 @@ export default defineStore('user', {
      * 重置用户信息
      */
     resetUserInfo(): void {
+      clearEntitlementJourney();
       Object.assign(this, createDefaultUserState());
       // 登出时一并清空资源缓存,避免下一个账号看到上一个账号残留的数据。
       bookmarkStore().reset();

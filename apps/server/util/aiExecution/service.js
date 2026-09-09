@@ -1,7 +1,7 @@
+import { estimateAiUsageCost } from '../aiCostPolicy.js';
 import crypto from 'node:crypto';
 import { AI_QUOTA_ERROR_CODES, isAiQuotaErrorCode } from '@lightnote/shared/ai-quota-protocol';
 import * as aiQuota from '../aiQuota.js';
-import { getActiveProviderInfo } from '../agent/deepseekClient.js';
 import { stableAgentErrorCode } from '../agent/logSafety.js';
 import { getActiveAiExecution, runWithAiExecutionContext } from './context.js';
 import { defaultAiExecutionPersistence } from './persistence.js';
@@ -544,19 +544,15 @@ export async function finishAiProviderSpan(span, { result, error } = {}) {
     execution.missingBillableUsageSpans += 1;
     execution.missingBillableUsageTokens += span.estimatedTokens;
   }
-  let providerInfo = { price: { input: 0, output: 0 } };
-  try {
-    providerInfo = getActiveProviderInfo(result?.provider, result?.model);
-  } catch {
-    // 未知供应商仍记录原始 usage，成本保持 0，不能影响额度结算。
-  }
-  const price = providerInfo.price || { input: 0, output: 0 };
-  const estimatedCost = Number(
-    (
-      (usage.promptTokens / 1_000_000) * Number(price.input || 0) +
-      (usage.completionTokens / 1_000_000) * Number(price.output || 0)
-    ).toFixed(6),
-  );
+  const estimatedCost =
+    usageStatus === 'missing'
+      ? null
+      : estimateAiUsageCost({
+          provider: result?.provider,
+          model: result?.model,
+          usage: { ...usage, cachedPromptTokens: result?.usage?.cachedPromptTokens },
+          at: span.startedAt,
+        });
   await persistSafely(execution, 'insertAiProviderSpan', {
     ...span,
     provider: result?.provider || null,

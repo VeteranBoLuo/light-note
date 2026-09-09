@@ -33,7 +33,7 @@ export interface AiOperationsExecution {
   validationRuleVersion: number | null;
   providers: string[];
   models: string[];
-  estimatedCost: number;
+  estimatedCost: number | null;
   failedProviderCalls: number;
   missingUsageCalls: number;
   platformCalls: number;
@@ -52,7 +52,7 @@ export interface AiOperationsSummary {
   providerTokens: number;
   chargedTokens: number;
   platformCoveredTokens: number;
-  estimatedCost: number;
+  estimatedCost: number | null;
   delivered: number;
   succeeded: number;
   partial: number;
@@ -94,7 +94,7 @@ export interface AiOperationsProvider {
   model: string | null;
   calls: number;
   tokens: number;
-  estimatedCost: number;
+  estimatedCost: number | null;
   failedCalls: number;
   missingUsageCalls: number;
   platformCalls: number;

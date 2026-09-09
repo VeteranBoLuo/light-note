@@ -1,6 +1,6 @@
 <template>
   <section ref="scrollRoot" class="organize-suggestion-workspace">
-    <header class="workspace-header"
+    <header :inert="batch.busy.value || undefined" class="workspace-header"
       ><div
         ><h2>{{ t('organizeWorkspace.title') }}</h2
         ><p>{{ t('organizeWorkspace.description') }}</p></div
@@ -39,7 +39,7 @@
               >{{ runStatusLabel }}</BChip
             >
           </div>
-          <div class="workspace-tools">
+          <div class="workspace-tools" :inert="batch.busy.value || undefined">
             <BButton v-if="run.summary.types.file" :disabled="loading || draftBusy" @click="retryFiles">{{
               t('organizeFile.retry')
             }}</BButton>
@@ -106,9 +106,11 @@
         <p v-if="run.status === 'paused'" class="workspace-background">{{
           t(run.inFlight ? 'organizeLifecycle.pausing' : `organizeLifecycle.reasons.${run.pauseReason || 'user'}`)
         }}</p>
+        <BButton v-if="run.status === 'paused' && run.pauseReason === 'quota'" @click="acquireQuotaVisible = true">{{ t('entitlementJourney.acquire') }}</BButton>
+        <EntitlementAcquireModal v-if="acquireQuotaVisible" v-model:visible="acquireQuotaVisible" asset="ai" source="organize" :return-path="acquireReturnPath" />
         <p v-if="activeAi" class="workspace-background">{{ t('organizeWorkspace.background') }}</p>
       </BCard>
-      <nav class="workspace-filters" :aria-label="t('organizeWorkspace.filter')">
+      <nav :inert="batch.busy.value || undefined" class="workspace-filters" :aria-label="t('organizeWorkspace.filter')">
         <BTabs v-model:active-tab="resourceType" :options="resourceTabs" variant="pill" class="workspace-tabs">
           <template #label="{ tab }"
             ><span class="resource-tab-label" :class="tab.key"
@@ -137,6 +139,9 @@
           t('organizeIcons.batchResult', iconReview.outcome.value)
         }}</p>
       </div>
+      <p v-if="batch.outcome.value" class="batch-outcome" role="status">{{
+        t('organizeWorkspace.batch.result', batch.outcome.value)
+      }}</p>
       <div class="workspace-list-heading">
         <span>{{ t('organizeWorkspace.resultsLabel') }}</span>
         <small>{{ t('organizeWorkspace.resultsHint') }}</small>
@@ -158,28 +163,72 @@
             t(loading ? 'organizeWorkspace.loading' : 'organizeWorkspace.noMatching')
           }}</div>
           <section v-for="group in resultGroups" :key="group.key" class="result-group" :class="`group-${group.key}`">
-            <BButton
-              class="group-toggle"
-              :aria-expanded="openGroups.has(group.key)"
-              :aria-controls="`group-${group.key}`"
-              @click="toggleGroup(group.key)"
+            <div
+              class="group-heading"
+              :class="{
+                'has-batch-action': group.key === 'priority' && batch.applicable.value.length && !batch.selecting.value,
+              }"
             >
-              <span class="group-symbol"><SvgIcon :src="group.icon" size="22" /></span>
-              <span class="group-copy"
-                ><strong
-                  >{{ t(`organizeWorkspace.groups.${group.key}`) }}
-                  <span class="group-count">{{
-                    resourceType === 'tag' ? (run.groupTotals?.[group.key] ?? group.items.length) : group.items.length
-                  }}</span></strong
-                ><small>{{ t(`organizeWorkspace.groupHints.${group.key}`) }}</small></span
+              <BButton
+                class="group-toggle"
+                :aria-expanded="openGroups.has(group.key)"
+                :aria-controls="`group-${group.key}`"
+                @click="toggleGroup(group.key)"
               >
-              <SvgIcon
-                :src="icon.noteTree.chevron"
-                size="18"
-                class="expand-chevron"
-                :class="{ 'is-open': openGroups.has(group.key) }"
-              />
-            </BButton>
+                <span class="group-symbol"><SvgIcon :src="group.icon" size="22" /></span>
+                <span class="group-copy"
+                  ><strong
+                    >{{ t(`organizeWorkspace.groups.${group.key}`) }}
+                    <span class="group-count">{{
+                      resourceType === 'tag' ? (run.groupTotals?.[group.key] ?? group.items.length) : group.items.length
+                    }}</span></strong
+                  ><small>{{ t(`organizeWorkspace.groupHints.${group.key}`) }}</small></span
+                >
+                <SvgIcon
+                  :src="icon.noteTree.chevron"
+                  size="18"
+                  class="expand-chevron"
+                  :class="{ 'is-open': openGroups.has(group.key) }"
+                />
+              </BButton>
+              <BButton
+                v-if="group.key === 'priority' && batch.applicable.value.length && !batch.selecting.value"
+                class="batch-entry"
+                size="small"
+                @click="batch.start"
+                >{{ t('organizeWorkspace.batch.start') }}</BButton
+              >
+            </div>
+            <div v-if="group.key === 'priority' && batch.selecting.value" class="resource-batch-toolbar">
+              <div class="batch-selection-info">
+                <BCheckbox
+                  controlled
+                  :model-value="
+                    batch.selectedCount.value === batch.applicable.value.length && batch.selectedCount.value > 0
+                  "
+                  :indeterminate="
+                    batch.selectedCount.value > 0 && batch.selectedCount.value < batch.applicable.value.length
+                  "
+                  :disabled="batch.busy.value"
+                  @update:model-value="batch.selectAll"
+                  >{{ t('organizeWorkspace.batch.all') }}</BCheckbox
+                >
+                <span>{{ t('organizeWorkspace.batch.scope') }}</span>
+              </div>
+              <div class="batch-selection-actions">
+                <BButton
+                  type="primary"
+                  :loading="batch.busy.value"
+                  :disabled="!batch.selectedCount.value || loading"
+                  @click="batch.apply"
+                  >{{ t('organizeWorkspace.batch.apply', { count: batch.selectedCount.value }) }}</BButton
+                >
+                <BButton :disabled="batch.busy.value" @click="batch.reset">{{ t('common.cancel') }}</BButton>
+                <span v-if="batch.busy.value" role="status">{{
+                  t('organizeWorkspace.batch.progress', { done: batch.progress.value, total: batch.total.value })
+                }}</span>
+              </div>
+            </div>
             <div v-if="openGroups.has(group.key)" :id="`group-${group.key}`" class="group-content">
               <BCard
                 v-for="item in group.items"
@@ -189,9 +238,27 @@
                 :class="{ 'is-quiet': !primarySuggestions(item).length, 'is-expanded': expanded.has(item.id) }"
                 class="workspace-resource"
                 ><header
-                  :class="{ 'is-expandable': item.suggestions.length }"
+                  :class="{
+                    'is-expandable': item.suggestions.length,
+                    'has-selection':
+                      batch.selecting.value &&
+                      item.suggestions.some((s) => batch.applicable.value.some((a) => a.id === s.id)),
+                  }"
                   @click="item.suggestions.length && toggleDetails(item.id)"
-                  ><BButton
+                  ><BCheckbox
+                    v-if="
+                      batch.selecting.value &&
+                      item.suggestions.some((s) => batch.applicable.value.some((a) => a.id === s.id))
+                    "
+                    controlled
+                    :model-value="resourceSelected(item)"
+                    :indeterminate="resourceMixed(item)"
+                    :disabled="batch.busy.value"
+                    :aria-label="t('organizeWorkspace.batch.select', { title: item.resource.title })"
+                    @click.stop
+                    @update:model-value="selectResource(item, $event)"
+                  />
+                  <BButton
                     class="resource-symbol"
                     :class="item.resource.type"
                     :loading="openingFile === item.id"
@@ -283,6 +350,13 @@
                     :resource-title="item.resource.title"
                     :resource-id="item.resource.id"
                     :suggestion="suggestion"
+                    :batch-busy="batch.busy.value"
+                    :batch-selecting="batch.selecting.value"
+                    :batch-selected="batch.selected.has(suggestion.id)"
+                    :batch-error="batch.errors.get(suggestion.id)"
+                    @batch-select="
+                      (checked) => (checked ? batch.selected.add(suggestion.id) : batch.selected.delete(suggestion.id))
+                    "
                     :analyzing="['queued', 'running', 'waiting_content', 'preparing_content'].includes(item.aiStatus)"
                     @changed="changed"
                     @preview-archive="openArchive"
@@ -360,6 +434,8 @@
   </section>
 </template>
 <script setup lang="ts">
+  import EntitlementAcquireModal from '@/components/support/EntitlementAcquireModal.vue';
+  const acquireQuotaVisible = ref(false);
   import OrganizeTagIconSuggestion from './OrganizeTagIconSuggestion.vue';
   import useBookmarkStore from '@/store/bookmark';
   import { useOrganizeIconReview } from '@/composables/useOrganizeIconReview';
@@ -397,6 +473,8 @@
   import BProgress from '@/components/base/BasicComponents/BProgress.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
+  import { useOrganizeBatchApply } from '@/composables/useOrganizeBatchApply';
+  import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import { fileReadingReasonKey } from '@/utils/organizeFileReading';
   import OrganizeRunWizard from './OrganizeRunWizard.vue';
   import BookmarkSnapshotModal from '@/components/manage/bookmarkEditMg/BookmarkSnapshotModal.vue';
@@ -576,6 +654,7 @@
     })),
   );
   const router = useRouter();
+  const acquireReturnPath = computed(() => router.currentRoute.value.fullPath);
   const resourceOpenLabel = (item: WorkspaceItem) => t(`organizeWorkspace.openOriginal.${item.resource.type}`);
   const filePreviewVisible = ref(false);
   const previewFile = ref<{
@@ -988,7 +1067,7 @@
   }
   // 已展开多页时刷新每页，避免轮询把后续资料移出界面。
   async function refresh() {
-    if (!run.value) return;
+    if (!run.value || batch.busy.value) return;
     const count = items.value.length;
     await loadPage();
     while (!disposed && !pageError.value && nextCursor.value && items.value.length < count) await loadPage(true);
@@ -1013,6 +1092,26 @@
     } finally {
       controlling.value = false;
     }
+  }
+  const batchRows = computed(() => items.value.map((item) => ({ ...item, suggestions: visibleSuggestions(item) })));
+  const batch = useOrganizeBatchApply(
+    computed(() => [run.value?.id, resourceType.value, kind.value, buildNoteDetailRequestScope(user)].join(':')),
+    computed(() => run.value?.id || ''),
+    batchRows,
+    computed(() => !user.adminContext && user.role !== 'visitor' && resourceType.value !== 'tag'),
+    changed,
+  );
+  function selectResource(item: WorkspaceItem, checked: boolean) {
+    for (const s of item.suggestions.filter((s) => batch.applicable.value.some((a) => a.id === s.id)))
+      if (checked) batch.selected.add(s.id);
+      else batch.selected.delete(s.id);
+  }
+  function resourceSelected(item: WorkspaceItem) {
+    const entries = item.suggestions.filter((s) => batch.applicable.value.some((a) => a.id === s.id));
+    return entries.length > 0 && entries.every((s) => batch.selected.has(s.id));
+  }
+  function resourceMixed(item: WorkspaceItem) {
+    return !resourceSelected(item) && item.suggestions.some((s) => batch.selected.has(s.id));
   }
   function changed() {
     void refresh();
@@ -1385,6 +1484,58 @@
     color: var(--text-secondary-color);
     font-size: 13px;
   }
+  .group-heading {
+    position: relative;
+  }
+  .group-heading.has-batch-action .group-copy {
+    padding-right: 110px;
+  }
+  .batch-entry.b_btn {
+    position: absolute;
+    right: 34px;
+    top: 50%;
+    transform: translateY(-50%);
+    height: 32px;
+    padding: 0 12px;
+    font-size: 12px;
+    color: var(--ow-purple);
+    background: var(--ow-purple-soft);
+    border: 1px solid transparent;
+  }
+  .batch-entry.b_btn:hover {
+    border-color: var(--ow-purple);
+  }
+  .resource-batch-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    border-radius: 8px;
+    background: var(--workspace-content);
+  }
+  .batch-selection-info,
+  .batch-selection-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .batch-selection-actions {
+    margin-left: auto;
+  }
+  .batch-selection-actions .b_btn {
+    height: 32px;
+    font-size: 12px;
+  }
+  .batch-selection-info > span,
+  .batch-selection-actions > span,
+  .batch-outcome {
+    color: var(--ow-muted);
+    font-size: 12px;
+  }
   .result-group {
     margin-bottom: 20px;
     padding: 12px 16px 16px;
@@ -1497,11 +1648,6 @@
   }
   .workspace-resource > header.is-expandable {
     cursor: pointer;
-  }
-  @media (hover: hover) {
-    .workspace-resource > header.is-expandable:hover {
-      background: color-mix(in srgb, var(--workspace-hover) 45%, var(--workspace-content));
-    }
   }
   .resource-title-link.b_btn {
     height: auto;
@@ -1734,6 +1880,17 @@
       padding: 8px 0 12px;
       gap: 10px;
     }
+    .group-heading.has-batch-action .group-copy {
+      padding-right: 88px;
+    }
+    .batch-entry.b_btn {
+      right: 26px;
+      padding: 0 9px;
+      font-size: 11px;
+    }
+    .batch-selection-info > span {
+      flex-basis: 100%;
+    }
     .group-copy small {
       font-size: 10px;
     }
@@ -1747,6 +1904,14 @@
     }
     .resource-identity {
       flex-basis: calc(100% - 44px);
+    }
+    .workspace-resource > header.has-selection {
+      display: grid;
+      grid-template-columns: 20px 36px minmax(0, 1fr);
+    }
+    .workspace-resource > header.has-selection .resource-conclusion-tools {
+      grid-column: 2 / -1;
+      padding-left: 44px;
     }
     .resource-conclusion-tools {
       width: 100%;

@@ -3677,3 +3677,11 @@ WHERE (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABA
 SELECT 'note_import_progress_columns' AS check_name, 'missing progress or result columns' AS detail FROM DUAL
 WHERE (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='note_import_tasks' AND COLUMN_NAME IN ('progress_json','finished_at')) <> 2
 OR (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='note_import_items' AND COLUMN_NAME='warning_details') <> 1;
+
+-- 未知模型成本必须能够记为 NULL，而非伪装为零成本。
+SELECT 'ai_cost_nullable' AS check_name, 'apply 20260909_ai_cost_unknown.sql' AS detail FROM DUAL
+WHERE NOT EXISTS (
+  SELECT 1 FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_provider_spans'
+    AND COLUMN_NAME = 'estimated_cost' AND IS_NULLABLE = 'YES'
+);

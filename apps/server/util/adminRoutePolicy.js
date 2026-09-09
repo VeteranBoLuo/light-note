@@ -245,6 +245,7 @@ declare(ADMIN_POLICIES.CONTENT_WRITE, 'organize', [
   ['DELETE', '/organize/bookmark-health/:bookmarkId/mark-normal'],
 ]);
 declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'organize_ai_suggestions', [
+  ['POST', '/organize/suggestions/runs/:id/apply-batch'],
   ['POST', '/organize/suggestions/previews'],
   ['POST', '/organize/suggestions/runs/:id/retry-preview'],
   ['POST', '/organize/suggestions/runs/:id/start'],
@@ -427,6 +428,7 @@ declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'support', [
   ['POST', '/support/public-preference'],
   ['GET', '/support/donation/checkout'],
   ['GET', '/support/checkout'],
+  ['POST', '/support/events'],
   ['GET', '/support/afdian/oauth/start'],
   ['GET', '/support/afdian/oauth/callback'],
   ['POST', '/support/afdian/oauth/unlink'],
@@ -764,7 +766,7 @@ function resolvePolicy(method, path) {
   if (/^\/organize\/suggestions\/runs\/[^/]+$/.test(path)) {
     return routePolicies.get(`${method} /organize/suggestions/runs/:id`);
   }
-  if (/^\/organize\/suggestions\/runs\/[^/]+\/(?:start|cancel|pause|resume|retry-preview)$/.test(path)) {
+  if (/^\/organize\/suggestions\/runs\/[^/]+\/(?:start|cancel|pause|resume|retry-preview|apply-batch)$/.test(path)) {
     return routePolicies.get(`${method} /organize/suggestions/runs/:id/${path.split('/').pop()}`);
   }
   if (/^\/organize\/suggestions\/runs\/[^/]+\/items\/[^/]+\/actions$/.test(path)) {

@@ -1223,7 +1223,7 @@ export async function buyItem(
           ok: false,
           reason: 'purchase_limit',
           code: 'POINTS_ITEM_PURCHASE_LIMIT_REACHED',
-          msg: '该扩容包每个账号限兑一次',
+          msg: '该商品每个账号限兑一次',
         };
       }
     }
@@ -1244,7 +1244,7 @@ export async function buyItem(
           ok: false,
           reason: 'purchase_limit',
           code: 'POINTS_ITEM_PURCHASE_LIMIT_REACHED',
-          msg: '该扩容包每个账号限兑一次',
+          msg: '该商品每个账号限兑一次',
         };
       }
     }

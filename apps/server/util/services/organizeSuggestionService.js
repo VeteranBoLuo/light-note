@@ -223,7 +223,7 @@ export async function cancelSuggestionRun(db = pool, { userId, id }) {
     return { id, status: 'cancelled' };
   });
 }
-export async function actOnSuggestion(db = pool, { userId, runId, suggestionId, action, value, requestId }) {
+export async function actOnSuggestion(db = pool, { userId, runId, suggestionId, action, value, requestId, batchOnly = false }) {
   if (!['apply', 'ignore'].includes(action) || !uuid(requestId))
     throw suggestionError('ORGANIZE_ACTION_INVALID', '操作无效');
   let preparedIcon;
@@ -248,6 +248,8 @@ export async function actOnSuggestion(db = pool, { userId, runId, suggestionId, 
     );
     const suggestion = rows[0];
     if (!suggestion) throw suggestionError('ORGANIZE_SUGGESTION_NOT_FOUND', '建议不存在', 404);
+    if (batchOnly && !['archive', 'tags', 'title'].includes(suggestion.kind))
+      throw suggestionError('ORGANIZE_BATCH_UNSUPPORTED', '此建议需要单独处理', 409);
     if (['applied', 'ignored'].includes(suggestion.status)) return { status: suggestion.status };
     if (
       !['pending', 'insufficient', 'no_suggestion', 'info'].includes(suggestion.status) &&
@@ -255,6 +257,11 @@ export async function actOnSuggestion(db = pool, { userId, runId, suggestionId, 
     )
       throw suggestionError('ORGANIZE_SUGGESTION_STATE', '当前建议不能操作', 409);
     const payload = json(suggestion.payload_json);
+    if (batchOnly && (suggestion.status !== 'pending' ||
+      (suggestion.kind === 'archive' ? payload.archiveDraft?.status !== 'ready' :
+        suggestion.kind === 'tags' ? !Array.isArray(payload.after) || !payload.after.length :
+        typeof payload.after !== 'string' || !payload.after.trim())))
+      throw suggestionError('ORGANIZE_SUGGESTION_STATE', '此建议没有可直接应用的结果', 409);
     if (action === 'ignore') {
       await c.query("UPDATE organize_suggestions SET status='ignored',applied_request_id=? WHERE id=?", [
         requestId,
@@ -746,4 +753,22 @@ export async function previewFileRetry(db = pool, { userId, id, requestId }) {
     retryFrom: id,
     input: { resourceTypes: ['file'], checks: ['tags'], scope: 'untagged', items: [] },
   });
+}
+
+export async function applySuggestionBatch(db = pool, { userId, runId, items }) {
+  if (!Array.isArray(items) || !items.length || items.length > 20 ||
+      items.some((item) => !item || !uuid(item.suggestionId) || !uuid(item.requestId)) ||
+      new Set(items.map((item) => item.suggestionId)).size !== items.length)
+    throw suggestionError('ORGANIZE_BATCH_INVALID', '每批请选择 1 至 20 条不同建议');
+  const results = [];
+  for (const item of items) {
+    try {
+      const result = await actOnSuggestion(db, { userId, runId, suggestionId: item.suggestionId, requestId: item.requestId, action: 'apply', batchOnly: true });
+      results.push({ suggestionId: item.suggestionId, ...result });
+    } catch (error) {
+      const known = [400, 403, 404, 409].includes(error.status);
+      results.push({ suggestionId: item.suggestionId, status: 'failed', message: known ? error.message : '应用失败，请稍后重试' });
+    }
+  }
+  return { results };
 }

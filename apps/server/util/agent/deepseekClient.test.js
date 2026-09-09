@@ -18,14 +18,16 @@ describe('Agent LLM 供应商切换(AGENT_LLM_PROVIDER)', () => {
     globalThis.fetch = ORIGINAL_FETCH;
   });
 
-  it('未设置 AGENT_LLM_PROVIDER 时默认走 deepseek,单价 1/2', () => {
+  it('未设置 AGENT_LLM_PROVIDER 时默认走 deepseek,价格按峰谷时段', () => {
     delete process.env.AGENT_LLM_PROVIDER;
-    expect(getActiveProviderPricing()).toEqual({ provider: 'deepseek', price: { input: 1, output: 2 } });
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-09T02:00:00Z'));
+    expect(getActiveProviderPricing()).toEqual({ provider: 'deepseek', price: { input: 3, output: 9, cached: 0.1 } });
   });
 
-  it('AGENT_LLM_PROVIDER=qwen 时单价切换为 0.2/2', () => {
+  it('未登记价格的备用模型明确返回未知', () => {
     process.env.AGENT_LLM_PROVIDER = 'qwen';
-    expect(getActiveProviderPricing()).toEqual({ provider: 'qwen', price: { input: 0.2, output: 2 } });
+    expect(getActiveProviderPricing()).toEqual({ provider: 'qwen', price: null });
   });
 
   it('显式 providerOverride 只作用于当前调用，不改写全局供应商', () => {

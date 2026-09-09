@@ -67,3 +67,7 @@ export const retryFiles = handler(true, (req, userId) =>
 export const archiveDraft = handler(false, (req, userId) =>
   service.getArchiveDraft(pool, { userId, runId: req.params.id, suggestionId: req.params.suggestionId }),
 );
+
+export const applyBatch = handler(true, (req, userId) =>
+  service.applySuggestionBatch(pool, { userId, runId: req.params.id, items: req.body?.items }),
+);

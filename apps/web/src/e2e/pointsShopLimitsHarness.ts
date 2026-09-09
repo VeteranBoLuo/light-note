@@ -33,7 +33,7 @@ function shopItem(item: Partial<ShopItem> & Pick<ShopItem, 'id' | 'name' | 'desc
 }
 
 const fixture: Shop = {
-  economyVersion: 'points-economy-c5',
+  economyVersion: 'points-economy-c6',
   purchaseEnabled: true,
   points: 2000,
   level: 8,
@@ -43,6 +43,17 @@ const fixture: Shop = {
   isVisitor: false,
   frames: [],
   items: [
+    shopItem({
+      id: 'ai_pack_starter',
+      name: 'AI 入门包',
+      desc: '+5 万 tokens · 永久有效，每账号限兑一次',
+      cost: 60,
+      effect: 'ai_pack',
+      bonusTokens: 50000,
+      purchaseLimit: 1,
+      purchaseCount: state === 'redeemed' ? 1 : 0,
+      limitReached: state === 'redeemed',
+    }),
     shopItem({
       id: 'ai_pack_small',
       effect: 'ai_pack',

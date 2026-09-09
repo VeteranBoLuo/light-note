@@ -1,5 +1,6 @@
 <template>
   <div ref="shopRoot" class="ps">
+    <BButton v-if="journey && !readOnly" @click="returnToTask">{{ t('entitlementJourney.returnTask') }}</BButton>
     <div v-if="!shop && (shopLoading || !shopError)" class="ps-state"><BLoading size="small" /></div>
     <div v-else-if="shopError && !shop" class="ps-state ps-state--error">
       <span>{{ t('growth.shopLoadFailed') }}</span>
@@ -174,6 +175,8 @@
 </template>
 
 <script setup lang="ts">
+  import { readEntitlementJourney, prepareEntitlementReturn } from '@/utils/entitlementJourney';
+  import { recordEntitlementEvent } from '@/api/entitlementEvents';
   import { computed, nextTick, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
@@ -200,6 +203,23 @@
   const readOnly = computed(() => props.readOnly);
   const { dashboard, shop, shopLoading, shopError, loadShop, buyItem, equipFrame, claimAchievement } = useGrowth();
   const user = useUserStore();
+  const journey = ref(readEntitlementJourney(user.id));
+  function returnToTask() {
+    const current = prepareEntitlementReturn(user.id);
+    if (!current) {
+      journey.value = null;
+      return;
+    }
+    recordEntitlementEvent('return_task', current);
+    void router.push(current.returnPath);
+    message.info(t('entitlementJourney.returnHint'));
+  }
+  watch(
+    () => user.id,
+    () => {
+      journey.value = readEntitlementJourney(user.id);
+    },
+  );
   const avatarSrc = computed(() => user.headPicture || icon.navigation.user);
   const shopRoot = ref<HTMLElement | null>(null);
 
@@ -271,7 +291,12 @@
     return te(key) ? t(key) : '';
   }
 
-  const consumables = computed(() => shop.value?.items.filter((i) => i.type === 'consumable') || []);
+  const consumables = computed(
+    () =>
+      shop.value?.items
+        .filter((i) => i.type === 'consumable')
+        .sort((a, b) => Number(isLimitReached(a)) - Number(isLimitReached(b))) || [],
+  );
   const frames = computed(() =>
     sortFramesByRarity(shop.value?.frames || shop.value?.items.filter((i) => i.type === 'cosmetic') || []),
   );
@@ -390,6 +415,7 @@
 
   function askBuy(it: ShopItem) {
     if (readOnly.value || !canBuyNow(it)) return;
+    recordEntitlementEvent('select_item', { ...journey.value, skuId: it.id });
     pending.value = it;
     confirmVisible.value = true;
   }

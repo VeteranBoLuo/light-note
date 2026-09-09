@@ -3,7 +3,8 @@
 
 export const LEGACY_POINTS_ECONOMY_VERSION = 'points-economy-c3';
 export const C4_POINTS_ECONOMY_VERSION = 'points-economy-c4';
-export const POINTS_ECONOMY_VERSION = 'points-economy-c5';
+export const C5_POINTS_ECONOMY_VERSION = 'points-economy-c5';
+export const POINTS_ECONOMY_VERSION = 'points-economy-c6';
 
 const LEGACY_UTILITY_ITEMS = [
   {
@@ -174,10 +175,36 @@ export const ECONOMY_CATALOGS = Object.freeze({
       pool: C4_PAID_POOL,
     }),
   }),
-  [POINTS_ECONOMY_VERSION]: Object.freeze({
-    version: POINTS_ECONOMY_VERSION,
+  [C5_POINTS_ECONOMY_VERSION]: Object.freeze({
+    version: C5_POINTS_ECONOMY_VERSION,
     utilityItems: freezeItems(C5_UTILITY_ITEMS),
     frameItems: freezeItems(buildFrames(C4_FRAME_COSTS, C4_FRAME_LEVELS)),
+    freePolicy: freezePolicy({ poolVersion: 'c4-free-v1', pool: C4_FREE_POOL, countsPaidPity: false }),
+    paidPolicy: freezePolicy({
+      poolVersion: 'c4-paid-v1',
+      singleCost: 170,
+      tenCost: 1600,
+      pityEvery: 10,
+      cardOverflowPoints: 120,
+      pool: C4_PAID_POOL,
+    }),
+  }),
+  [POINTS_ECONOMY_VERSION]: Object.freeze({
+    version: POINTS_ECONOMY_VERSION,
+    utilityItems: freezeItems([
+      {
+        id: 'ai_pack_starter',
+        type: 'consumable',
+        name: 'AI 入门包',
+        desc: '+5 万 tokens · 永久有效，每账号限兑一次',
+        cost: 60,
+        effect: 'ai_pack',
+        bonusTokens: 50_000,
+        purchaseLimit: 1,
+      },
+      ...C5_UTILITY_ITEMS,
+    ]),
+    frameItems: freezeItems(buildFrames([80, 160, 240, ...C4_FRAME_COSTS.slice(3)], C4_FRAME_LEVELS)),
     freePolicy: freezePolicy({ poolVersion: 'c4-free-v1', pool: C4_FREE_POOL, countsPaidPity: false }),
     paidPolicy: freezePolicy({
       poolVersion: 'c4-paid-v1',
@@ -198,7 +225,8 @@ export function parseRuntimeFlag(value, defaultValue) {
 }
 
 export function getActiveEconomyVersion(env = process.env) {
-  if (parseRuntimeFlag(env.POINTS_ECONOMY_C5_ENABLED, false)) return POINTS_ECONOMY_VERSION;
+  if (parseRuntimeFlag(env.POINTS_ECONOMY_C6_ENABLED, false)) return POINTS_ECONOMY_VERSION;
+  if (parseRuntimeFlag(env.POINTS_ECONOMY_C5_ENABLED, false)) return C5_POINTS_ECONOMY_VERSION;
   if (parseRuntimeFlag(env.POINTS_ECONOMY_C4_ENABLED, false)) return C4_POINTS_ECONOMY_VERSION;
   return LEGACY_POINTS_ECONOMY_VERSION;
 }
@@ -214,7 +242,7 @@ export function getEconomyRuntime(env = process.env) {
     catalog,
     economyVersion: catalog.version,
     c4Active: versionedEconomyActive,
-    c5Active: catalog.version === POINTS_ECONOMY_VERSION,
+    c5Active: [C5_POINTS_ECONOMY_VERSION, POINTS_ECONOMY_VERSION].includes(catalog.version),
     // C4 及其后续版本激活后协议不可降级；该开关只用于 C3 兼容代码提前上线时主动收紧旧写入口。
     requireWriteVersion: versionedEconomyActive || parseRuntimeFlag(env.POINTS_ECONOMY_REQUIRE_WRITE_VERSION, false),
     purchaseEnabled: parseRuntimeFlag(env.POINTS_SHOP_PURCHASE_ENABLED, true),

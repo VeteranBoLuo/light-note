@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp, nextTick } from 'vue';
+import { createPinia } from 'pinia';
 import { createI18n } from 'vue-i18n';
 import zhCN from '@/i18n/locales/zh-CN';
 
@@ -37,6 +38,7 @@ async function mount(asset: 'ai' | 'storage') {
   host = document.createElement('div');
   document.body.append(host);
   app = createApp(EntitlementAcquireModal, { asset, visible: true });
+  app.use(createPinia());
   app.use(
     createI18n({
       legacy: false,
