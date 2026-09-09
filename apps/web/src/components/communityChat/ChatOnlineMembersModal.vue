@@ -5,7 +5,7 @@
     width="min(520px, 92vw)"
     :show-footer="false"
   >
-    <div class="chat-online-members-modal">
+    <div class="chat-online-members-modal" :style="{ '--chat-online-members-row-height': `${memberRowHeight}px` }">
       <p class="chat-online-members-modal__summary">
         {{ t('communityChat.onlineMembers.summary', { count: snapshot?.onlineCount ?? onlineCount }) }}
       </p>
@@ -92,6 +92,7 @@
     CommunityChatOnlineMembersSnapshot,
   } from '@/composables/useCommunityChatSocket';
   import icon from '@/config/icon';
+  import { AVATAR_FRAME_ARTWORK } from '@/config/avatarFrameArtwork';
 
   const props = withDefaults(
     defineProps<{
@@ -110,6 +111,12 @@
   const emit = defineEmits<{ retry: [] }>();
   const visible = defineModel<boolean>('visible', { default: false });
   const { t } = useI18n();
+  // 38px 头像按 64px 设计基准缩放；预留目录最大外径及行内边距、边框。
+  // 骨架与结果必须用同一行高，不能让真实头像框在请求完成后撑高居中弹框。
+  const memberRowHeight = Math.max(
+    62,
+    Math.round((Math.max(...Object.values(AVATAR_FRAME_ARTWORK).map((artwork) => artwork.outerSize)) * 38) / 64) + 18,
+  );
   const reservedRowCount = ref(1);
   function boundedRowCount(value: number) {
     const count = Number.isFinite(value) ? Math.round(value) : 0;
@@ -127,7 +134,7 @@
   const loadingRowCount = computed(() => reservedRowCount.value);
   function listMinHeight(rowCount: number) {
     const boundedCount = boundedRowCount(rowCount);
-    const rowsHeight = boundedCount * 62 + (boundedCount - 1) * 7;
+    const rowsHeight = boundedCount * memberRowHeight + (boundedCount - 1) * 7;
     return `min(${Math.min(rowsHeight, 430)}px, 54vh)`;
   }
   const loadingListMinHeight = computed(() => {
@@ -193,7 +200,7 @@
     margin: 0;
     padding: 0;
     display: grid;
-    grid-auto-rows: minmax(62px, max-content);
+    grid-auto-rows: minmax(var(--chat-online-members-row-height), max-content);
     align-content: start;
     gap: 7px;
     overflow-y: auto;
@@ -203,7 +210,7 @@
   .chat-online-members-modal__list li,
   .chat-online-members-modal__skeleton-row {
     min-width: 0;
-    min-height: 62px;
+    min-height: var(--chat-online-members-row-height);
     padding: 8px 10px;
     box-sizing: border-box;
     display: grid;
@@ -220,7 +227,7 @@
   }
 
   .chat-online-members-modal__skeleton-row {
-    height: 62px;
+    height: var(--chat-online-members-row-height);
   }
 
   .chat-online-members-modal__skeleton-avatar,

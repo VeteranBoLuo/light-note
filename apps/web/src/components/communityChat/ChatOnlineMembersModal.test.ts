@@ -103,7 +103,7 @@ describe('ChatOnlineMembersModal', () => {
 
     const loadingList = host.querySelector('.chat-online-members-modal__list') as HTMLElement;
     expect(host.querySelectorAll('.chat-online-members-modal__skeleton-row')).toHaveLength(6);
-    expect(loadingList.style.minHeight).toBe('min(407px, 54vh)');
+    expect(loadingList.style.minHeight).toBe('min(430px, 54vh)');
 
     snapshot.value = {
       onlineCount: 6,
@@ -117,7 +117,7 @@ describe('ChatOnlineMembersModal', () => {
     const resultList = host.querySelector('.chat-online-members-modal__list') as HTMLElement;
     expect(host.querySelectorAll('.chat-online-members-modal__list li')).toHaveLength(2);
     expect(host.textContent).toContain('游客 5 人');
-    expect(resultList.style.minHeight).toBe('min(131px, 54vh)');
+    expect(resultList.style.minHeight).toBe('min(191px, 54vh)');
   });
 
   it('空名单只显示紧凑空态，不额外渲染空列表占位', () => {

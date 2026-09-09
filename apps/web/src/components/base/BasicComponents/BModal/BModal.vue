@@ -12,6 +12,7 @@
         :class="[
           {
             out: isOut,
+            'has-custom-top': props.top !== '50%',
             'is-mobile-fullscreen': isMobileFullscreen,
             'has-mobile-header-slot': isMobileFullscreen && Boolean($slots.mobileHeader),
           },
@@ -285,6 +286,9 @@
     /* 用 inset:0 而非 100vw/100vh:界面缩放(html zoom)下 vw/vh 会算出比可视视口更小的尺寸,
        导致遮罩盖不满、右/下露白;inset:0 由固定定位的包含块(视口)约束,缩放下始终铺满。 */
     inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     background-color: rgba(0, 0, 0, 0.5);
     /* 必须高于 BDrawer(600):否则从抽屉里打开的弹框(如 AI「选段应用到笔记」)会被抽屉整个遮住、全屏时完全看不见。
        仍低于弹框内浮层 BPopover/BDropdown(800)、BSelect(900)、BAlert(1300),使这些下拉/确认框在弹框内照常盖在弹框之上。 */
@@ -293,10 +297,9 @@
   }
 
   .modal-view {
-    position: absolute;
-    left: 50%;
-    top: v-bind(cssTop);
-    transform: translate(-50%, -50%);
+    /* 默认居中交给布局，不让百分比位移参与浏览器的变换合成。 */
+    position: relative;
+    flex-shrink: 0;
     box-sizing: border-box;
     background-color: var(--background-color);
     padding: 0;
@@ -309,8 +312,15 @@
     display: flex;
     flex-direction: column;
     z-index: 700;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    box-shadow: var(--modal-shadow);
     animation: in-animation 0.25s ease;
+  }
+
+  .modal-view.has-custom-top {
+    position: absolute;
+    left: 50%;
+    top: v-bind(cssTop);
+    transform: translate(-50%, -50%);
   }
 
   .modal-header {
@@ -391,14 +401,13 @@
     }
   }
 
+  /* 入场只淡入，避免缩放动画参与弹框定位。 */
   @keyframes in-animation {
     0% {
       opacity: 0;
-      transform: translate(-50%, -50%) scale(0.95);
     }
     100% {
       opacity: 1;
-      transform: translate(-50%, -50%) scale(1);
     }
   }
 
@@ -420,9 +429,11 @@
 
   @media (max-width: 767px) {
     .modal-view {
-      top: 50%;
       min-width: 80%;
       max-height: calc(100% - 20px);
+    }
+    .modal-view.has-custom-top {
+      top: 50%;
     }
     .modal-content {
       padding: 12px 16px 16px;
@@ -440,6 +451,7 @@
     }
 
     .modal-view.is-mobile-fullscreen {
+      position: absolute;
       inset: 0;
       width: 100%;
       height: 100%;

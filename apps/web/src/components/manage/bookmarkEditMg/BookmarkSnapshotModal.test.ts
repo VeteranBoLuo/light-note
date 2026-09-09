@@ -1,8 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h, ref } from 'vue';
 
-const alertMock = vi.hoisted(() => vi.fn());
-vi.mock('@/components/base/BasicComponents/BModal/Alert.ts', () => ({ default: { alert: alertMock } }));
 const requestMocks = vi.hoisted(() => ({ apiBasePost: vi.fn() }));
 const messageMocks = vi.hoisted(() => ({ success: vi.fn(), info: vi.fn(), warning: vi.fn() }));
 
@@ -66,7 +64,6 @@ function mountModal(bookmarkId = 'bookmark-1') {
 
 afterEach(() => {
   vi.useRealTimers();
-  alertMock.mockReset();
   cleanup?.();
   cleanup = undefined;
   requestMocks.apiBasePost.mockReset();
@@ -239,17 +236,29 @@ describe('BookmarkSnapshotModal 网页存档生命周期', () => {
     expect(host.textContent).toContain('旧正文');
     expect(host.textContent).toContain('organizeWorkspace.archiveRetryCurrent');
     expect(host.textContent).toContain('bookmarkMg.archivePreserved');
+    expect(host.textContent).not.toContain('bookmarkMg.archiveFailedCount');
+    expect(host.textContent).not.toContain('bookmarkMg.archiveRetryFailed');
     const retry = [...host.querySelectorAll('button')].find((b) =>
-      b.textContent?.includes('bookmarkMg.archiveRetryFailed'),
+      b.textContent?.includes('organizeWorkspace.archiveRetryCurrent'),
     );
+    requestMocks.apiBasePost.mockResolvedValue({ status: 200, data: { ok: true } });
     retry?.click();
-    expect(alertMock).toHaveBeenCalledTimes(1);
-    expect(requestMocks.apiBasePost).toHaveBeenCalledTimes(1);
-    requestMocks.apiBasePost.mockImplementation(async (path) =>
-      path.endsWith('retry-failed') ? { status: 200, data: { ok: true, queued: 2 } } : { status: 200, data: {} },
+    await vi.waitFor(() =>
+      expect(requestMocks.apiBasePost).toHaveBeenCalledWith('/api/bookmark/archive', { id: 'bookmark-1' }),
     );
-    await alertMock.mock.calls[0][0].onOk();
-    expect(requestMocks.apiBasePost).toHaveBeenCalledWith('/api/bookmark/archive/retry-failed', {});
+    expect(requestMocks.apiBasePost).not.toHaveBeenCalledWith('/api/bookmark/archive/retry-failed', {});
+  });
+
+  it('已成功存档不展示其他书签的失败数量或批量重试入口', async () => {
+    requestMocks.apiBasePost.mockResolvedValue({
+      status: 200,
+      data: { content: '已存档正文', failedCount: 3, archiveTask: { status: 'succeeded' } },
+    });
+    const host = mountModal();
+    await vi.waitFor(() => expect(host.textContent).toContain('已存档正文'));
+    expect(host.textContent).not.toContain('bookmarkMg.archiveFailedCount');
+    expect(host.textContent).not.toContain('bookmarkMg.archiveRetryFailed');
+    expect(requestMocks.apiBasePost).toHaveBeenCalledTimes(1);
   });
 
   it('卸载时停止轮询，不显示迟到的结果', async () => {

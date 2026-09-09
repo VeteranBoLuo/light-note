@@ -62,12 +62,6 @@
         <p v-if="snap.archiveTask.msg">{{ snap.archiveTask.msg }}</p>
         <p v-if="snap.content && snap.archiveTask.status !== 'succeeded'">{{ $t('bookmarkMg.archivePreserved') }}</p>
       </div>
-      <div v-if="!isGuest && !isReadonlyAdminContext && snap?.failedCount" class="bsnap-retry">
-        <span>{{ $t('bookmarkMg.archiveFailedCount', { count: snap.failedCount }) }}</span>
-        <BButton size="small" :disabled="busy || retrying" @click="retryFailures">{{
-          $t('bookmarkMg.archiveRetryFailed')
-        }}</BButton>
-      </div>
       <div v-if="loadError" class="bsnap-task bsnap-task--failed" role="alert"
         >{{ $t('bookmarkMg.archiveLoadError') }}
         <BButton size="small" @click="loadSnap()">{{ $t('common.retry') }}</BButton>
@@ -116,7 +110,6 @@
 <script lang="ts" setup>
   import { getOrganizeArchiveDraft } from '@/api/organizeSuggestionApi';
   import { computed, onBeforeUnmount, ref, watch } from 'vue';
-  import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { useI18n } from 'vue-i18n';
   import { apiBasePost } from '@/http/request.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
@@ -144,7 +137,6 @@
   const summarizing = ref(false);
   const taskActive = computed(() => ['pending', 'running', 'retry_wait'].includes(snap.value?.archiveTask?.status));
   const busy = computed(() => archiving.value || summarizing.value || taskActive.value);
-  const retrying = ref(false);
   const loadError = ref(false);
   let pollTimer: ReturnType<typeof setTimeout> | undefined;
   let contextVersion = 0;
@@ -213,31 +205,6 @@
     }
   }
 
-  function retryFailures() {
-    if (busy.value || retrying.value || isGuest.value || isReadonlyAdminContext.value) return;
-    const version = contextVersion;
-    Alert.alert({
-      title: t('bookmarkMg.archiveRetryFailed'),
-      content: t('bookmarkMg.archiveRetryConfirm', { count: Math.min(20, snap.value?.failedCount || 0) }),
-      async onOk() {
-        if (version !== contextVersion || !visible.value) return;
-        retrying.value = true;
-        try {
-          const res = await apiBasePost('/api/bookmark/archive/retry-failed', {});
-          if (version !== contextVersion) return;
-          if (res?.status === 200 && res.data?.ok) {
-            message.success(t('bookmarkMg.archiveRetryQueued', { count: res.data.queued }));
-            await loadSnap();
-          } else message.info(t('bookmarkMg.snapshotFail'));
-        } catch {
-          if (version === contextVersion) message.info(t('bookmarkMg.snapshotFail'));
-        } finally {
-          if (version === contextVersion) retrying.value = false;
-        }
-      },
-    });
-  }
-
   async function generateSummary() {
     if (!props.bookmarkId || !snap.value?.content || busy.value) return;
     const bookmarkId = props.bookmarkId;
@@ -279,7 +246,6 @@
       stopPolling();
       archiving.value = false;
       summarizing.value = false;
-      retrying.value = false;
       loadError.value = false;
       if (!isVisible || !bookmarkId) return;
       snap.value = null;
@@ -320,15 +286,6 @@
     strong {
       color: var(--danger-color, #d43845);
     }
-  }
-  .bsnap-retry {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 8px;
-    font-size: 12px;
-    color: var(--desc-color);
   }
   .bsnap-bar {
     display: flex;
@@ -470,7 +427,6 @@
       flex: 1 1 auto;
       min-height: 44px;
     }
-    .bsnap-retry :deep(.b_btn),
     .bsnap-task :deep(.b_btn) {
       min-height: 44px;
     }
