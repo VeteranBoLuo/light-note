@@ -184,6 +184,7 @@ describe('adminRoutePolicyMiddleware', () => {
   it('整理中心查询在 readonly 与 maintain 模式放行，动态问题路径也能命中声明', () => {
     for (const mode of ['readonly', 'maintain']) {
       for (const [method, path] of [
+        ['GET', '/organize/suggestions/runs/run-1/items/suggestion-1/archive-preview'],
         ['GET', '/organize/summary'],
         ['GET', '/organize/issues/untagged'],
         ['GET', '/organize/duplicate-bookmarks/group-1/preview'],

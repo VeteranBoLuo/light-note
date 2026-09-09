@@ -222,6 +222,7 @@ declare(ADMIN_POLICIES.CONTENT_WRITE, 'inbox', [
 declare(ADMIN_POLICIES.READ, 'organize', [
   ['GET', '/organize/suggestions/runs'],
   ['GET', '/organize/suggestions/runs/:id'],
+  ['GET', '/organize/suggestions/runs/:id/items/:suggestionId/archive-preview'],
   ['GET', '/organize/summary'],
   ['GET', '/organize/knowledge-structure/summary'],
   ['GET', '/organize/issues/:issueType'],
@@ -768,6 +769,9 @@ function resolvePolicy(method, path) {
   }
   if (/^\/organize\/suggestions\/runs\/[^/]+\/items\/[^/]+\/actions$/.test(path)) {
     return routePolicies.get(`${method} /organize/suggestions/runs/:id/items/:suggestionId/actions`);
+  }
+  if (/^\/organize\/suggestions\/runs\/[^/]+\/items\/[^/]+\/archive-preview$/.test(path)) {
+    return routePolicies.get(`${method} /organize/suggestions/runs/:id/items/:suggestionId/archive-preview`);
   }
   if (/^\/organize\/issues\/[^/]+$/.test(path)) {
     return routePolicies.get(`${method} /organize/issues/:issueType`);

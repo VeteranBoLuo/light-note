@@ -373,7 +373,7 @@
         ];
       return actions[insight.id] || [];
     }
-    return resolveBriefOrganizeActions(insight, readyBrief.value, readOnly.value);
+    return resolveBriefOrganizeActions(insight, readyBrief.value);
   }
   function openSource(source: NonNullable<DailyBriefInsight['sources']>[number]) {
     const target = resolveBriefSourceTarget(source);

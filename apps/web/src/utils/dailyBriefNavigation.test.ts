@@ -38,9 +38,6 @@ describe('简报整理入口', () => {
     expect(resolveBriefOrganizeActions(insight, brief(0, NaN))).toEqual([]);
     expect(resolveBriefOrganizeActions(insight, null)).toEqual([]);
   });
-  it('仅查看不提供离开代看上下文的整理入口', () => {
-    expect(resolveBriefOrganizeActions(insight, brief(58, 12), true)).toEqual([]);
-  });
 });
 describe('简报来源导航', () => {
   it('笔记保留工作台返回来源，文件定位到云空间', () => {

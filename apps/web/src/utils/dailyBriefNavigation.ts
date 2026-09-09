@@ -8,9 +8,8 @@ const organizeActions = [
 ] as const;
 
 /** 只使用结构化事实；旧简报入口打开最新列表，不携带过期数量或模型生成的地址。 */
-export function resolveBriefOrganizeActions(insight: DailyBriefInsight, brief: DailyBrief | null, readOnly = false) {
-  // 管理员代看不提供会离开当前账号上下文的操作入口。
-  if (readOnly) return [];
+export function resolveBriefOrganizeActions(insight: DailyBriefInsight, brief: DailyBrief | null) {
+  // 站内导航沿用全局管理员上下文；只读权限由目标接口继续约束。
   const items = brief?.sections?.find((section) => section.id === 'organize')?.items || [];
   return organizeActions.filter(
     (action) =>

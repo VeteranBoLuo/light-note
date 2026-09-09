@@ -114,6 +114,32 @@ describe('今日简报游客示例', () => {
     expect(host.textContent).not.toContain('账号私有简报');
     await vi.waitFor(() => expect(host.textContent).toContain(sample.brief.headline));
   });
+  it('管理员预览允许进入整理列表且不生成或刷新简报', async () => {
+    mocks.get.mockResolvedValue({
+      status: 200,
+      data: {
+        enabled: true,
+        featureEnabled: true,
+        status: 'ready',
+        shouldGenerate: false,
+        brief: {
+          version: 2,
+          headline: '预览简报',
+          recommendation: '',
+          insights: [{ id: 'organize', factIds: ['organize_untagged'], text: '19 条无标签内容' }],
+          sections: [{ id: 'organize', items: [{ id: 'organize_untagged', count: 19 }] }],
+        },
+      },
+    });
+    const { host, props } = mount();
+    Object.assign(props, { eligible: true, readOnly: true, ownerKey: 'admin-preview' });
+    await vi.waitFor(() => expect(host.querySelector('.daily-brief-insight__organize-actions button')).not.toBeNull());
+    host.querySelector<HTMLButtonElement>('.daily-brief-insight__organize-actions button')!.click();
+    expect(mocks.push).toHaveBeenCalledWith('/organize?issue=untagged');
+    expect(props.readOnly).toBe(true);
+    expect(mocks.ensure).not.toHaveBeenCalled();
+    expect(mocks.refresh).not.toHaveBeenCalled();
+  });
   it('administrator formal-account preview remains passive and shows only saved results', async () => {
     mocks.get.mockResolvedValue({ status: 200, data: { enabled: false, featureEnabled: true, brief: null } });
     const { host, props } = mount();
