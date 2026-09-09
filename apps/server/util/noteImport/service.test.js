@@ -16,7 +16,7 @@ vi.mock('../services/noteTreeService.js', () => ({
 }));
 vi.mock('../imagePreview/references.js', () => ({ registerAsset: vi.fn() }));
 vi.mock('../noteImages.js', () => ({ NOTE_IMAGE_DIR: '/tmp/unused-import-images' }));
-const { startImport, ownedTask } = await import('./service.js');
+const { startImport, ownedTask, dismissImport, getImportTask } = await import('./service.js');
 beforeEach(() => {
   vi.clearAllMocks();
   state.task = {
@@ -79,5 +79,35 @@ describe('import confirmation', () => {
   it('does not retry expired staging', async () => {
     state.task.expires_at = new Date(0);
     await expect(startImport('owner', 'task', {})).rejects.toMatchObject({ code: 'NOTE_IMPORT_STATE' });
+  });
+});
+
+describe('import task dismissal', () => {
+  it.each(['uploading', 'review', 'paused', 'completed', 'failed', 'expired'])('hides %s without deleting notes or idempotency records', async (status) => {
+    state.task.status = status;
+    await dismissImport('owner', 'task');
+    expect(db.commit).toHaveBeenCalled();
+    const writes = state.queries.filter(([sql]) => /^(UPDATE|DELETE|INSERT)/.test(sql));
+    expect(writes).toHaveLength(1);
+    expect(writes[0][0]).toContain("error_code='NOTE_IMPORT_DISMISSED'");
+  });
+  it.each(['parsing', 'queued', 'running'])('rejects active %s tasks', async (status) => {
+    state.task.status = status;
+    await expect(dismissImport('owner', 'task')).rejects.toMatchObject({ code: 'NOTE_IMPORT_ACTIVE' });
+    expect(db.rollback).toHaveBeenCalled();
+  });
+  it('rejects active leases and cross-account deletion', async () => {
+    state.task.lease_until = new Date(Date.now() + 60000);
+    await expect(dismissImport('owner', 'task')).rejects.toMatchObject({ code: 'NOTE_IMPORT_ACTIVE' });
+    await expect(dismissImport('other', 'task')).rejects.toMatchObject({ code: 'NOTE_IMPORT_NOT_FOUND' });
+  });
+  it('prevents dismissed tasks from being accessed or restarted', async () => {
+    state.task.error_code = 'NOTE_IMPORT_DISMISSED';
+    await expect(startImport('owner', 'task', {})).rejects.toMatchObject({ code: 'NOTE_IMPORT_NOT_FOUND' });
+  });
+  it('exposes upload bytes and expired staging accurately', async () => {
+    state.task.upload_bytes = 23;
+    state.task.expires_at = new Date(0);
+    expect(await getImportTask('owner', 'task')).toMatchObject({ status: 'expired', uploadBytes: 23 });
   });
 });

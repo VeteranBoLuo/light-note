@@ -28,6 +28,7 @@ const node = {
   revision: 1,
 };
 let status = params.get('state') || 'review';
+let dismissed = false;
 let items = [
   {
     id: 'a',
@@ -66,13 +67,25 @@ request.defaults.adapter = async (config) => {
   const body = typeof config.data === 'string' ? JSON.parse(config.data) : config.data || {};
   let data: any = {};
   if (url.endsWith('/list'))
-    data = params.has('empty') ? [] : [{ id: 'task', status, createTime: new Date().toISOString() }];
+    data =
+      params.has('empty') || dismissed
+        ? []
+        : [
+            {
+              id: 'task',
+              status,
+              title: '发布预览', itemCount: 1, completedCount: status === 'completed' ? 1 : 0, failedCount: items.filter((i) => i.status === 'failed').length,
+              createTime: new Date().toISOString(),
+            },
+          ];
+  else if (url.endsWith('/dismiss')) dismissed = true;
   else if (url.endsWith('/detail'))
     data = {
       id: 'task',
       status,
       parentId: null,
-      errorCode: null,
+      uploadBytes: Number(params.get('bytes') || 0),
+      errorCode: status === 'failed' ? 'NOTE_IMPORT_PARSE_FAILED' : null,
       createTime: new Date().toISOString(),
       items: structuredClone(items),
     };
@@ -131,7 +144,6 @@ const app = createApp({
           {
             items: [
               { key: 'import', label: '导入笔记' },
-              { key: 'records', label: '导入记录' },
               { key: 'divider', divider: true },
               { key: 'templates', label: '模板管理' },
             ],
@@ -144,6 +156,7 @@ const app = createApp({
         h('ul', { style: 'padding:16px;width:280px' }, [
           h(NoteTreeRow as any, {
             node,
+            depth: 0,
             childrenByParent: new Map(),
             expandedIds: new Set(),
             loadingKeys: new Set(),

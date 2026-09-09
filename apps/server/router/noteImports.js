@@ -1,14 +1,14 @@
 import express from 'express';
-import multer from 'multer';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import pool from '../db/index.js';
 import { ensureNotVisitor } from '../util/auth.js';
 import { resultData, L } from '../util/common.js';
-import { NOTE_IMPORT_EXTENSIONS, NOTE_IMPORT_LIMITS as LIMIT } from '@lightnote/shared/note-transfer';
-import { createImportTask, getImportTask, startImport, ownedTask, transaction } from '../util/noteImport/service.js';
+import { NOTE_IMPORT_LIMITS as LIMIT } from '@lightnote/shared/note-transfer';
+import { createImportTask, dismissImport, getImportTask, startImport, ownedTask, transaction } from '../util/noteImport/service.js';
 import { taskDirectory, importError, readJson, writeJson } from '../util/noteImport/storage.js';
+import { receiveImportUpload } from '../util/noteImport/upload.js';
 const router = express.Router();
 const handler = (fn) => async (req, res) => {
   try {
@@ -36,7 +36,7 @@ router.post(
   '/list',
   handler(async (req) => {
     const [rows] = await pool.query(
-      "SELECT t.id,t.status,t.parent_id,t.error_code,t.create_time,(SELECT COUNT(*) FROM note_import_items i WHERE i.task_id=t.id AND i.status='failed') AS failed_count FROM note_import_tasks t WHERE owner_id=? ORDER BY create_time DESC LIMIT 30",
+      "SELECT t.id,CASE WHEN t.expires_at<NOW() AND t.status NOT IN ('parsing','queued','running') THEN 'expired' ELSE t.status END AS status,t.parent_id,t.error_code,t.create_time,t.upload_bytes,(SELECT title FROM note_import_items i WHERE i.task_id=t.id ORDER BY position LIMIT 1) AS title,(SELECT COUNT(*) FROM note_import_items i WHERE i.task_id=t.id) AS item_count,(SELECT COUNT(*) FROM note_import_items i WHERE i.task_id=t.id AND i.status='completed') AS completed_count,(SELECT COUNT(*) FROM note_import_items i WHERE i.task_id=t.id AND i.status='failed') AS failed_count FROM note_import_tasks t WHERE owner_id=? AND (error_code IS NULL OR error_code<>'NOTE_IMPORT_DISMISSED') ORDER BY create_time DESC LIMIT 30",
       [owner(req)],
     );
     return rows;
@@ -88,24 +88,8 @@ router.post('/upload', writeGuard, async (req, res) => {
   try {
     const task = await ownedTask(pool, owner(req), id);
     if (task.status !== 'uploading') throw importError('NOTE_IMPORT_STATE', 409);
-    if (Number(req.headers['content-length'] || 0) > LIMIT.uploadBytes + 1024 * 1024)
-      throw importError('NOTE_IMPORT_UPLOAD_LIMIT', 413);
-    let receivedBytes = 0;
-    req.on('data', (chunk) => {
-      receivedBytes += chunk.length;
-      if (receivedBytes > LIMIT.uploadBytes + 1024 * 1024) req.destroy();
-    });
     temporary = path.join(taskDirectory(id), `incoming-${randomUUID()}`);
-    await fs.mkdir(temporary, { recursive: true, mode: 0o700 });
-    const upload = multer({
-      dest: temporary,
-      limits: { fileSize: LIMIT.uploadBytes, files: LIMIT.documents, fields: 0 },
-      fileFilter: (req, file, cb) =>
-        NOTE_IMPORT_EXTENSIONS.includes(path.extname(file.originalname).toLowerCase())
-          ? cb(null, true)
-          : cb(importError('NOTE_IMPORT_UNSUPPORTED_FORMAT')),
-    }).array('files', LIMIT.documents);
-    await new Promise((resolve, reject) => upload(req, res, (e) => (e ? reject(e) : resolve())));
+    await receiveImportUpload(req, res, temporary);
     await transaction(async (db) => {
       const current = await ownedTask(db, owner(req), id, true);
       const files = req.files || [];
@@ -181,4 +165,8 @@ router.post(
     }),
   ),
 );
+router.post('/dismiss', writeGuard, handler(async (req) => {
+  await dismissImport(owner(req), req.body.id);
+  return { id: req.body.id };
+}));
 export default router;

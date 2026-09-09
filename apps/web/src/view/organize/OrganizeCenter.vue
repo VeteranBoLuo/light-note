@@ -1774,7 +1774,7 @@
       padding: 12px 10px;
       border: 1px solid var(--surface-divider-color);
       border-radius: 14px;
-      background: var(--workspace-panel-bg-color);
+      background: var(--workspace-open-canvas);
     }
 
     .organize-sidebar__heading {

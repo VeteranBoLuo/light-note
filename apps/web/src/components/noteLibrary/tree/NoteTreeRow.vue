@@ -554,5 +554,10 @@
 
   .note-tree-row { .workspace-navigation-colors(note); }
   .note-tree-row:hover { .workspace-navigation-hover(); }
-  .note-tree-row.is-active, .note-tree-row.is-browse-scope { .workspace-navigation-selected(); }
+  .note-tree-row.is-active, .note-tree-row.is-browse-scope {
+    .workspace-navigation-selected();
+    border-color: var(--workspace-note-stat);
+
+    .note-tree-count { color: var(--workspace-note-stat); }
+  }
 </style>

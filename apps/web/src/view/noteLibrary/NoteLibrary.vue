@@ -618,14 +618,12 @@
   import { useProjectResourceAction } from '@/composables/useProjectResourceAction';
   const transferMenuItems = computed(() => [
     ...(user.adminContext?.mode === 'readonly' ? [] : [{ key: 'import', label: t('noteTransfer.import'), icon: icon.file_upload }]),
-    { key: 'importRecords', label: t('noteTransfer.records'), icon: icon.noteDetail.history },
     { key: 'divider', divider: true },
     { key: 'templates', label: t('note.templateManager.title'), icon: icon.noteDetail.template },
   ]);
   function refreshAfterImport() { noteLibraryCache.markListsStale(noteCacheScope.value); void Promise.all([reloadNotes(true), refreshTree()]); }
   function handleTransferMenu(key: string) {
     if (key === 'import') { if (!blockGuestWrite('import-notes')) transferDialog.value?.openImport(currentParentId.value); }
-    else if (key === 'importRecords') transferDialog.value?.openRecords();
     else if (key === 'templates') void openTemplateManager();
   }
   const transferDialog = ref<InstanceType<typeof NoteTransferDialog> | null>(null);
@@ -2528,7 +2526,6 @@
   const selectedVisibleCount = computed(() => selection.items.value.length);
   const mobilePageActions = computed<MobilePageActionItem[]>(() => [
     ...(user.adminContext?.mode === 'readonly' ? [] : [{ key: 'import', label: t('noteTransfer.import'), icon: icon.file_upload }]),
-    { key: 'importRecords', label: t('noteTransfer.records'), icon: icon.noteDetail.history },
     ...createMobileResourceHubActions(t),
     {
       key: 'templates',
@@ -2734,7 +2731,7 @@
   }
 
   function handleMobilePageAction(action: MobilePageActionItem) {
-    if (action.key === 'import' || action.key === 'importRecords') {
+    if (action.key === 'import') {
       void closeCurrentMobileOverlayThen(() => { mobilePageActionsOpen.value = false; }, () => handleTransferMenu(action.key));
       return;
     }

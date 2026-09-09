@@ -10,7 +10,7 @@ import { listActiveInheritedNoteShares } from '../services/noteShareService.js';
 import { loadOwnedNoteTree, assertValidNoteParentFromSnapshot } from '../services/noteTreeService.js';
 import { NOTE_IMAGE_DIR } from '../noteImages.js';
 import { NOTE_IMPORT_LIMITS } from '@lightnote/shared/note-transfer';
-import { taskDirectory, readJson, importError } from './storage.js';
+import { taskDirectory, localImportTaskIds, readJson, importError } from './storage.js';
 
 export async function transaction(fn) {
   const db = await pool.getConnection();
@@ -31,7 +31,7 @@ export async function ownedTask(db, owner, id, lock = false) {
     `SELECT * FROM note_import_tasks WHERE id=? AND owner_id=?${lock ? ' FOR UPDATE' : ''}`,
     [id, owner],
   );
-  if (!task) throw importError('NOTE_IMPORT_NOT_FOUND', 404);
+  if (!task || task.error_code === 'NOTE_IMPORT_DISMISSED') throw importError('NOTE_IMPORT_NOT_FOUND', 404);
   return task;
 }
 export async function targetFingerprint(db, owner, parentId) {
@@ -53,7 +53,8 @@ export async function getImportTask(owner, id) {
   );
   return {
     id: task.id,
-    status: task.status,
+    status: !['parsing', 'queued', 'running'].includes(task.status) && new Date(task.expires_at) < new Date() ? 'expired' : task.status,
+    uploadBytes: Number(task.upload_bytes),
     parentId: task.parent_id,
     errorCode: task.error_code,
     createTime: task.create_time,
@@ -71,6 +72,19 @@ export async function getImportTask(owner, id) {
     })),
   };
 }
+// Hide task history without removing notes or the idempotency evidence.
+export async function dismissImport(owner, id) {
+  await transaction(async (db) => {
+    const task = await ownedTask(db, owner, id, true);
+    if (['parsing', 'queued', 'running'].includes(task.status) ||
+        (task.lease_until && new Date(task.lease_until) > new Date()))
+      throw importError('NOTE_IMPORT_ACTIVE', 409);
+    await db.query(
+      "UPDATE note_import_tasks SET status='failed',error_code='NOTE_IMPORT_DISMISSED',expires_at=DATE_ADD(NOW(),INTERVAL 7 DAY) WHERE id=?",
+      [id],
+    );
+  });
+}
 export async function createImportTask(owner) {
   const id = randomUUID();
   await transaction(async (db) => {
@@ -84,6 +98,7 @@ export async function createImportTask(owner) {
       'INSERT INTO note_import_tasks (id,owner_id,expires_at) VALUES (?,?,DATE_ADD(NOW(),INTERVAL 24 HOUR))',
       [id, owner],
     );
+    await fs.mkdir(taskDirectory(id), { recursive: true, mode: 0o700 });
   });
   return { id };
 }
@@ -167,9 +182,12 @@ async function parseIsolated(directory) {
   });
 }
 export async function processImportTask() {
+  const localIds = await localImportTaskIds({ readyOnly: true });
+  if (!localIds.length) return false;
   const claimed = await transaction(async (db) => {
     const [[task]] = await db.query(
-      "SELECT * FROM note_import_tasks WHERE status IN ('parsing','queued','running') AND (lease_until IS NULL OR lease_until<NOW()) ORDER BY create_time LIMIT 1 FOR UPDATE",
+      "SELECT * FROM note_import_tasks WHERE id IN (?) AND status IN ('parsing','queued','running') AND (lease_until IS NULL OR lease_until<NOW()) ORDER BY create_time LIMIT 1 FOR UPDATE",
+      [localIds],
     );
     if (!task) return null;
     const token = randomUUID();
@@ -311,9 +329,11 @@ export async function processImportTask() {
   return true;
 }
 export async function cleanupImports() {
-  const [tasks] = await pool.query(
-    "SELECT id FROM note_import_tasks WHERE expires_at<NOW() AND (lease_until IS NULL OR lease_until<NOW()) AND status NOT IN ('queued','running','parsing','expired') LIMIT 20",
-  );
+  const localIds = await localImportTaskIds();
+  const [tasks] = localIds.length ? await pool.query(
+    "SELECT id FROM note_import_tasks WHERE id IN (?) AND expires_at<NOW() AND (lease_until IS NULL OR lease_until<NOW()) AND status NOT IN ('queued','running','parsing','expired') LIMIT 20",
+    [localIds],
+  ) : [[]];
   for (const t of tasks) {
     await transaction(async (db) => {
       const [[task]] = await db.query('SELECT * FROM note_import_tasks WHERE id=? FOR UPDATE', [t.id]);

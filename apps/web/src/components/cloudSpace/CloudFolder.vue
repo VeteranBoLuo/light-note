@@ -951,7 +951,10 @@
   .folder-list { .workspace-navigation-colors(file); }
   .cloud-folder-row { .workspace-navigation-default(); }
   .cloud-folder-row:hover { .workspace-navigation-hover(); }
-  .cloud-folder-row.is-current { .workspace-navigation-selected(); }
+  .cloud-folder-row.is-current {
+    .workspace-navigation-selected();
+    border-color: var(--workspace-file-stat);
+  }
+  .cloud-folder-row.is-current .cloud-folder-row__count { color: var(--workspace-file-stat); }
   .cloud-folder-row.cloud-folder-row--all .cloud-folder-row__count { color: var(--workspace-file-stat); }
-  .cloud-folder-row.cloud-folder-row--all.is-current { border-color: var(--workspace-file-stat); }
 </style>

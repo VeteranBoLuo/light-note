@@ -19,3 +19,27 @@ export const readJson = async (file) => JSON.parse(await fs.readFile(file, 'utf8
 export function importError(code, status = 400) {
   return Object.assign(new Error(code), { code, status });
 }
+
+// A shared database is not proof of shared staging storage. Only the host that
+// can see the private task directory may consume or clean up that task.
+export async function localImportTaskIds({ readyOnly = false } = {}) {
+  try {
+    const ids = (await fs.readdir(importRoot, { withFileTypes: true }))
+      .filter((entry) => entry.isDirectory() && /^[a-f0-9-]{36}$/i.test(entry.name))
+      .map((entry) => entry.name);
+    if (!readyOnly) return ids;
+    const ready = await Promise.all(ids.map(async (id) => {
+      try {
+        const entries = await fs.readdir(path.join(taskDirectory(id), 'uploads'));
+        return entries.some((name) => name.endsWith('.json')) ? id : null;
+      } catch (error) {
+        if (error.code === 'ENOENT') return null;
+        throw error;
+      }
+    }));
+    return ready.filter(Boolean);
+  } catch (error) {
+    if (error.code === 'ENOENT') return [];
+    throw error;
+  }
+}

@@ -1,5 +1,5 @@
 import { beforeEach, describe, it, expect, vi } from 'vitest';
-const s = vi.hoisted(() => ({ task: null, item: null, writes: [], seen: new Map() }));
+const s = vi.hoisted(() => ({ task: null, item: null, writes: [], seen: new Map(), localIds: ['task'] }));
 const db = vi.hoisted(() => ({
   query: vi.fn(),
   beginTransaction: vi.fn(),
@@ -19,6 +19,7 @@ vi.mock('../imagePreview/references.js', () => ({ registerAsset: vi.fn() }));
 vi.mock('../noteImages.js', () => ({ NOTE_IMAGE_DIR: '/tmp/unused-import-images' }));
 vi.mock('./storage.js', () => ({
   taskDirectory: () => '/tmp/unused',
+  localImportTaskIds: async () => s.localIds,
   readJson: async () => ({ content: 'Hello', images: [] }),
   importError: (code, status = 400) => Object.assign(new Error(code), { code, status }),
 }));
@@ -26,6 +27,7 @@ const { processImportTask, targetFingerprint } = await import('./service.js');
 beforeEach(async () => {
   vi.clearAllMocks();
   s.writes = [];
+  s.localIds = ['task'];
   s.seen.clear();
   s.task = { id: 'task', owner_id: 'owner', status: 'queued', stop_requested: 0, parent_id: null, lease_token: null };
   s.item = { id: 'item', title: 'Hello', type: 'markdown' };
@@ -48,6 +50,18 @@ beforeEach(async () => {
   });
 });
 describe('import worker recovery', () => {
+  it('does not claim shared database tasks without local staging', async () => {
+    s.localIds = [];
+    expect(await processImportTask()).toBe(false);
+    expect(createNote).not.toHaveBeenCalled();
+    expect(s.writes).toHaveLength(0);
+  });
+  it('limits lease acquisition to locally staged task IDs', async () => {
+    await processImportTask();
+    const claim = db.query.mock.calls.find(([sql]) => sql.includes('LIMIT 1 FOR UPDATE'));
+    expect(claim[0]).toContain('id IN (?)');
+    expect(claim[1]).toEqual([['task']]);
+  });
   it('uses a stable idempotency identity on a reclaimed item', async () => {
     await processImportTask();
     await processImportTask();

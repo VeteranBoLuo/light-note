@@ -115,7 +115,7 @@ declare(ADMIN_POLICIES.READ, 'note', [
 ]);
 
 declare(ADMIN_POLICIES.CONTENT_WRITE, 'note', [
-  ...['create','upload','parse','start','stop'].map(action => ['POST', `/note/imports/${action}`]),
+  ...['create','upload','parse','start','stop','dismiss'].map(action => ['POST', `/note/imports/${action}`]),
   ['POST', '/note/uploadImage'],
   ['POST', '/note/updateNote'],
   ['POST', '/note/updateDrawingNote'],

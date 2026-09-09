@@ -314,6 +314,8 @@
     display: grid;
     gap: 20px;
     min-width: 0;
+    padding: 20px;
+    box-sizing: border-box;
     color: var(--text-color);
   }
   :global([data-theme='night'] .governance-summary) {
@@ -557,6 +559,7 @@
   @media (max-width: 767px) {
     .governance-summary {
       gap: 16px;
+      padding: 12px;
     }
     .governance-summary__metrics {
       gap: 10px;
@@ -589,9 +592,6 @@
   }
 
   // 共享工作区表面：仅改变颜色，布局与滚动由原组件负责。
-  .governance-summary {
-    .workspace-canvas-surface();
-  }
   .governance-summary__panel {
     .workspace-content-surface();
   }

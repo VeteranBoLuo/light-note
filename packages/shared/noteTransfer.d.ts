@@ -23,6 +23,7 @@ export interface NoteImportItem {
 export interface NoteImportTask {
   id: string;
   status: string;
+  uploadBytes?: number;
   parentId: string | null;
   errorCode: string | null;
   createTime: string;
