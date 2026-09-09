@@ -1,3 +1,5 @@
+vi.mock('../snapshot.js', () => ({ archiveBookmark: vi.fn(), saveBookmarkSnapshotInTransaction: vi.fn() }));
+import { archiveBookmark } from '../snapshot.js';
 vi.mock('../tagIconService.js', () => ({ recommendTagIcons: vi.fn() }));
 import { recommendTagIcons } from '../tagIconService.js';
 import { readFileSync } from 'node:fs';
@@ -422,4 +424,34 @@ it('重试不能访问其他账号的任务', async () => {
   const db = dbFor(sql => sql.startsWith('SELECT') ? [[]] : undefined);
   await expect(previewV2(db, { userId: 'u', requestId: id, retryFrom: 'foreign', input: { resourceTypes: ['file'], checks: ['tags'], scope: 'untagged' } })).rejects.toMatchObject({ code: 'ORGANIZE_RUN_NOT_FOUND' });
   expect(db.query.mock.calls.some(([sql]) => sql.startsWith('INSERT'))).toBe(false);
+});
+
+it.each([true, false])('网页存档在规则阶段生成并持久化结果，成功=%s，汇总不重复抓取', async (success) => {
+  const row = { ...run(), options_json: { resourceTypes: ['bookmark'], checks: ['archive'], scope: 'all' } };
+  const snapshot = buildSnapshot('bookmark', { id: 'b', url: 'https://example.com' });
+  const record = { id: 'i', resource_type: 'bookmark', resource_id: 'b', snapshot_json: snapshot, rule_status: 'loaded' };
+  let loaded = false;
+  const db = dbFor((sql, args) => {
+    if (sql.includes('FROM organize_suggestion_runs')) return [[row]];
+    if (sql.includes("rule_status='pending'")) return [loaded ? [] : [record]];
+    if (sql.includes("rule_status IN ('loaded','completed')")) return [[record]];
+    if (sql.startsWith('UPDATE organize_suggestion_runs SET rule_lease_token=?')) row.rule_lease_token = args[0];
+  });
+  readSuggestionSources.mockResolvedValue([snapshot]);
+  archiveBookmark.mockImplementation(async () => {
+    expect(db.commit).toHaveBeenCalledTimes(1);
+    return success ? { ok: true, url: snapshot.source.url, title: '网页', content: '正文'.repeat(100) } : { ok: false, reason: 'AUTH_REQUIRED' };
+  });
+  await runRuleBatch(db);
+  const writes = db.query.mock.calls.filter(([sql]) => sql.startsWith('INSERT IGNORE INTO organize_suggestions'));
+  const payload = JSON.parse(writes[0][1][0][0][6]);
+  expect(payload.status).toBe(success ? 'pending' : 'failed');
+  if (success) expect(payload.archiveDraft.content).toBe('正文'.repeat(100));
+  else expect(payload.reason).toContain('登录');
+  expect(snapshot.archivePreparation.content).toBeUndefined();
+  expect(archiveBookmark).toHaveBeenCalledWith('u', 'b', { persist: false, retry: false });
+  loaded = true;
+  await runRuleBatch(db);
+  expect(archiveBookmark).toHaveBeenCalledTimes(1);
+  expect(db.query.mock.calls.find(([sql]) => sql.includes("rule_phase='completed'"))[1][1]).toBe('completed');
 });

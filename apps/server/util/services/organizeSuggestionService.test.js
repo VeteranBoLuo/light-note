@@ -31,6 +31,8 @@ import { getActiveAiExecution } from '../aiExecution/context.js';
 import { runAiExecution } from '../aiExecution/service.js';
 import { isOrganizeAiSuggestionsEnabled } from '../organizeAiSuggestionFeature.js';
 import {
+  getArchiveDraft,
+  getSuggestionRun,
   previewSuggestionRun,
   createSuggestionRun,
   actOnSuggestion,
@@ -500,4 +502,29 @@ describe('标签图标应用一致性', () => {
     expect(await actOnSuggestion(tagDb('applied'), args)).toEqual({ status: 'applied' });
     expect(applySuggestionMutation).not.toHaveBeenCalled();
   });
+});
+
+it('草稿预览按用户、任务和建议读取，缺失或越权不返回正文', async () => {
+  const draft = { status: 'ready', content: '草稿正文', title: '网页', charCount: 4, generatedAt: 'now' };
+  const db = database((sql, args) => {
+    if (sql.includes('SELECT s.payload_json')) {
+      expect(args).toEqual(['s', 'run', 'u']);
+      return [[{ payload_json: { archiveDraft: draft } }]];
+    }
+  });
+  expect(await getArchiveDraft(db, { userId: 'u', runId: 'run', suggestionId: 's' })).toMatchObject({ content: '草稿正文', char_count: 4 });
+  const missing = database(sql => sql.includes('SELECT s.payload_json') ? [[]] : undefined);
+  await expect(getArchiveDraft(missing, { userId: 'other', runId: 'run', suggestionId: 's' })).rejects.toMatchObject({ status: 404 });
+});
+
+it('整理列表只返回草稿摘要，完整正文留给独立预览', async () => {
+  const db = database(sql => {
+    if (sql.includes('FROM organize_suggestion_runs')) return [[{ ...run, run_version: 1 }]];
+    if (sql.includes('GROUP BY')) return [[]];
+    if (sql.includes('SELECT i.*')) return [[{ id: 'i', snapshot_json: { id: 'b' } }]];
+    if (sql.includes('SELECT * FROM organize_suggestions')) return [[{ id: 's', item_id: 'i', status: 'pending', payload_json: { kind: 'archive', archiveDraft: { content: '完整私有正文' }, archivePreview: { excerpt: '短摘录' } } }]];
+  });
+  const result = await getSuggestionRun(db, { userId: 'u', id: 'run' });
+  expect(result.items[0].suggestions[0]).toMatchObject({ archivePreview: { excerpt: '短摘录' } });
+  expect(JSON.stringify(result)).not.toContain('完整私有正文');
 });

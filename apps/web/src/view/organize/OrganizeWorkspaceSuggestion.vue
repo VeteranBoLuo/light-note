@@ -33,13 +33,18 @@
                 : 'neutral'
           "
           >{{
-            suggestion.kind === 'archive' && suggestion.status === 'applied'
-              ? t(
-                  suggestion.applied === 'already_saved'
-                    ? 'organizeWorkspace.archiveAlreadySaved'
-                    : 'organizeWorkspace.archiveQueued',
-                )
-              : t(`organizeWorkspace.status.${suggestion.status}`)
+            suggestion.kind === 'archive' && suggestion.status === 'pending'
+              ? t(suggestion.archivePreview ? 'organizeWorkspace.archiveReady' : 'organizeWorkspace.archiveLegacy')
+              : suggestion.kind === 'archive' && ['applied', 'no_suggestion'].includes(suggestion.status)
+                ? t(
+                    suggestion.status === 'no_suggestion' ||
+                      ['already_saved', 'saved'].includes(String(suggestion.applied))
+                      ? 'organizeWorkspace.archiveAlreadySaved'
+                      : 'organizeWorkspace.archiveQueued',
+                  )
+                : suggestion.kind === 'archive' && suggestion.status === 'failed'
+                  ? t('organizeWorkspace.archiveFailed')
+                  : t(`organizeWorkspace.status.${suggestion.status}`)
           }}</BChip
         ></div
       >
@@ -62,24 +67,35 @@
                 v-if="suggestion.status === 'pending' && suggestedTagSource(tag) === 'new'"
                 class="suggested-tag-source"
                 :title="t('organizeFile.tagSourceHint.new')"
-              ><span class="suggested-tag-dot">·</span> <span>{{ t('organizeFile.tagSource.new') }}</span></span>
+                ><span class="suggested-tag-dot">·</span> <span>{{ t('organizeFile.tagSource.new') }}</span></span
+              >
             </template>
           </ResourceTagChip>
         </span></div
       >
       <p>{{
-        suggestion.kind === 'archive' && suggestion.status === 'applied'
-          ? t('organizeWorkspace.archiveAppliedHint')
-          : suggestion.reading && !suggestion.reading.complete
-            ? t(fileReadingReasonKey(suggestion.reading.reasonCode))
-            : suggestion.reading &&
-                suggestion.reasonCode &&
-                ['suggested', 'filtered', 'no_suggestion', 'no_evidence', 'already_associated'].includes(
-                  suggestion.reasonCode,
-                )
-              ? t(`organizeFile.outcomes.${suggestion.reasonCode}`)
-              : suggestion.reason
+        suggestion.kind === 'archive' && suggestion.status === 'pending'
+          ? t(suggestion.archivePreview ? 'organizeWorkspace.archiveReadyHint' : 'organizeWorkspace.archiveLegacyHint')
+          : suggestion.kind === 'archive' && suggestion.status === 'applied'
+            ? t(
+                ['already_saved', 'saved'].includes(String(suggestion.applied))
+                  ? 'organizeWorkspace.archiveSavedHint'
+                  : 'organizeWorkspace.archiveAppliedHint',
+              )
+            : suggestion.reading && !suggestion.reading.complete
+              ? t(fileReadingReasonKey(suggestion.reading.reasonCode))
+              : suggestion.reading &&
+                  suggestion.reasonCode &&
+                  ['suggested', 'filtered', 'no_suggestion', 'no_evidence', 'already_associated'].includes(
+                    suggestion.reasonCode,
+                  )
+                ? t(`organizeFile.outcomes.${suggestion.reasonCode}`)
+                : suggestion.reason
       }}</p>
+      <p
+        v-if="suggestion.kind === 'archive' && suggestion.status === 'pending' && suggestion.archivePreview?.excerpt"
+        >{{ suggestion.archivePreview.excerpt }}</p
+      >
       <div v-if="suggestion.kind === 'tags' && Array.isArray(suggestion.after)" class="tag-evidence">
         <p v-for="tag in suggestion.after.filter((entry) => entry.evidence)" :key="tag.name">
           <strong>{{ tag.name }}</strong> · {{ t(`organizeFile.evidence.${tag.evidenceType || 'text'}`) }}
@@ -124,25 +140,29 @@
       >
     </div>
     <div
-      v-else-if="suggestion.kind === 'archive' && suggestion.status === 'applied' && resourceId"
+      v-else-if="
+        suggestion.kind === 'archive' && ['applied', 'no_suggestion'].includes(suggestion.status) && resourceId
+      "
       class="suggestion-actions"
     >
-      <BButton @click="archiveVisible = true">{{ t('bookmarkMg.snapshot') }}</BButton>
+      <BButton @click="emit('preview-archive', resourceId)">{{ t('organizeWorkspace.archivePreview') }}</BButton>
     </div>
     <div v-else-if="canReview" class="suggestion-actions">
       <BButton
-        v-if="suggestion.kind === 'archive' && suggestion.action === 'archive'"
+        v-if="suggestion.kind === 'archive' && suggestion.archivePreview && resourceId"
+        @click="emit('preview-archive', resourceId, suggestion.id)"
+        >{{ t('organizeWorkspace.archivePreviewDraft') }}</BButton
+      >
+      <BButton v-if="isMetadata" class="suggestion-edit-action" :disabled="busy || analyzing" @click="edit">{{
+        manual ? t(`organizeWorkspace.manualAction.${suggestion.kind}`) : t('common.edit')
+      }}</BButton>
+      <BButton
+        v-if="suggestion.kind === 'archive' && suggestion.archivePreview && resourceId"
         type="primary"
         :disabled="busy || analyzing"
         @click="apply(null)"
-        >{{ t('organizeWorkspace.archiveSave') }}</BButton
+        >{{ t('organizeWorkspace.archiveApply') }}</BButton
       >
-      <BButton v-if="isMetadata" :disabled="busy || analyzing" @click="edit">{{
-        manual ? t(`organizeWorkspace.manualAction.${suggestion.kind}`) : t('common.edit')
-      }}</BButton>
-      <BButton class="suggestion-dismiss" :disabled="busy" @click="submit('ignore')">{{
-        t('organizeWorkspace.dismiss')
-      }}</BButton>
       <BButton
         v-if="isMetadata && suggestion.status === 'pending'"
         type="primary"
@@ -163,13 +183,11 @@
         >{{ t('organizeWorkspace.resolveDuplicates') }}</BButton
       >
     </div>
-    <BookmarkSnapshotModal v-if="archiveVisible" v-model:visible="archiveVisible" :bookmark-id="resourceId" />
     <p v-if="error" class="suggestion-error" role="alert">{{ error }}</p>
   </section>
 </template>
 <script setup lang="ts">
   import { fileReadingReasonKey } from '@/utils/organizeFileReading';
-  import BookmarkSnapshotModal from '@/components/manage/bookmarkEditMg/BookmarkSnapshotModal.vue';
   import { computed, ref, watch } from 'vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
@@ -198,10 +216,9 @@
     suggestion: WorkspaceSuggestion;
     analyzing: boolean;
   }>();
-  const emit = defineEmits<{ changed: [] }>();
+  const emit = defineEmits<{ changed: []; 'preview-archive': [resourceId: string, suggestionId?: string] }>();
   const { t, locale } = useI18n(),
     router = useRouter();
-  const archiveVisible = ref(false);
   const editing = ref(false),
     busy = ref(false),
     error = ref(''),
@@ -215,7 +232,10 @@
   const canReview = computed(
     () =>
       ['pending', 'insufficient', 'info', 'no_suggestion'].includes(props.suggestion.status) &&
-      (isMetadata.value || props.suggestion.status !== 'no_suggestion'),
+      (isMetadata.value ||
+        (props.suggestion.kind === 'archive'
+          ? Boolean(props.suggestion.archivePreview && props.resourceId)
+          : ['trash', 'duplicate_bookmarks'].includes(String(props.suggestion.action)))),
   );
   watch(
     () => props.suggestion.id,
@@ -242,7 +262,7 @@
   // 请求重试沿用同一标识；服务端还以建议独立状态保证只写一次。
   let requestId = '',
     requestPayload = '';
-  async function submit(action: 'apply' | 'ignore', value?: unknown) {
+  async function submit(action: 'apply', value?: unknown) {
     if (busy.value) return;
     const signature = JSON.stringify([props.suggestion.id, action, value]);
     if (signature !== requestPayload) {
@@ -280,24 +300,27 @@
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
     gap: 12px;
-    padding: 12px 14px;
-    border-bottom: 1px solid var(--ow-border, var(--surface-border-color));
+    padding: 16px 0;
+    border-bottom: 1px solid var(--workspace-divider);
     font-size: 12px;
     min-width: 0;
   }
-  .workspace-suggestion:last-child {
+  .workspace-suggestion:first-child {
+    padding-top: 4px;
+  }
+  .workspace-suggestion:last-of-type {
     border-bottom: 0;
   }
   .suggestion-copy {
     display: grid;
     grid-template-columns: 130px minmax(0, 1fr);
-    align-items: center;
-    gap: 6px 14px;
+    align-items: start;
+    gap: 8px 18px;
     min-width: 0;
   }
   .suggestion-heading {
     grid-column: 1;
-    grid-row: 1/3;
+    grid-row: 1 / span 4;
     display: flex;
     align-items: center;
     gap: 7px;
@@ -366,19 +389,24 @@
   }
   .suggestion-actions .b_btn {
     font-size: 11px;
-    min-height: 29px;
-    height: 29px;
+    min-height: 32px;
+    height: 32px;
     padding: 0 12px;
     border-radius: 6px;
-    border: 1px solid var(--ow-border, var(--surface-border-color));
-    background: var(--ow-surface, var(--card-background));
+    border: 1px solid transparent;
+    background: transparent;
+  }
+  .suggestion-actions .b_btn:not(.primary_btn):hover:not(:disabled) {
+    background: var(--workspace-hover);
   }
   .suggestion-actions .b_btn.primary_btn {
     background: var(--primary-color);
     color: white;
   }
-  .suggestion-actions .suggestion-dismiss {
-    color: var(--ow-muted, var(--desc-color));
+  .suggestion-actions .suggestion-edit-action {
+    color: var(--text-color);
+    background: var(--workspace-canvas);
+    border-color: var(--workspace-border);
   }
   .trash-action {
     color: var(--danger-color);
@@ -460,7 +488,7 @@
   @media (max-width: 760px) {
     .workspace-suggestion {
       grid-template-columns: 1fr;
-      padding: 12px;
+      padding: 14px 0;
       gap: 10px;
     }
     .suggestion-copy {

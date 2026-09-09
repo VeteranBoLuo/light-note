@@ -60,6 +60,7 @@ export interface WorkspaceSuggestion {
   reason: string;
   before: string | OrganizeAiSuggestionTag[] | TagIconChoice | null;
   after: string | OrganizeAiSuggestionTag[] | TagIconChoice | null;
+  archivePreview?: { status: 'ready'; title: string; charCount: number; generatedAt: string; excerpt?: string };
   applied?: unknown;
   action?: string;
   members?: SuggestionMember[];
@@ -131,3 +132,10 @@ export const resumeRun = (id: string) => apiBasePost(`${root}/runs/${encodeURICo
 
 export const previewFileRetry = (id: string, requestId: string) =>
   apiBasePost(`${root}/runs/${encodeURIComponent(id)}/retry-preview`, { requestId }, opts);
+
+export const getOrganizeArchiveDraft = (runId: string, suggestionId: string) =>
+  apiBaseGet(
+    `${root}/runs/${encodeURIComponent(runId)}/items/${encodeURIComponent(suggestionId)}/archive-preview`,
+    undefined,
+    opts,
+  );

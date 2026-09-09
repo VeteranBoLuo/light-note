@@ -76,6 +76,25 @@ export async function ensureBookmarkSnapshotTable() {
   }
 }
 
+// 调用方持有用户、书签锁并复核 URL；与建议应用或后台任务终态原子提交。
+export async function saveBookmarkSnapshotInTransaction(connection, userId, bookmarkId, result) {
+  await connection.query(
+    `INSERT INTO bookmark_snapshot (bookmark_id, user_id, url, title, content, char_count, source)
+     VALUES (?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE url = VALUES(url), title = VALUES(title),
+     content = VALUES(content), char_count = VALUES(char_count), source = VALUES(source), summary = NULL, summary_at = NULL,
+     update_time = CURRENT_TIMESTAMP`,
+    [
+      bookmarkId,
+      userId,
+      result.url,
+      result.title,
+      result.content,
+      result.content.length,
+      result.source || 'static_html',
+    ],
+  );
+}
+
 // 归档指定书签的网页正文(抓取 + 落库,幂等覆盖)。校验书签归属当前用户。
 export async function archiveBookmark(userId, bookmarkId, { signal, persist = true, retry = true } = {}) {
   const [rows] = await pool.query('SELECT id, url, name FROM bookmark WHERE id = ? AND user_id = ? AND del_flag = 0', [

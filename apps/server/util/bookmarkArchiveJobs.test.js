@@ -20,7 +20,7 @@ vi.mock('../db/index.js', () => ({
     }),
   },
 }));
-vi.mock('./snapshot.js', () => ({ archiveBookmark: mocks.archive, ensureBookmarkSnapshotTable: vi.fn() }));
+vi.mock('./snapshot.js', async (original) => ({ ...(await original()), archiveBookmark: mocks.archive, ensureBookmarkSnapshotTable: vi.fn() }));
 vi.mock('./personalKnowledgeSearch.js', () => ({ invalidatePersonalKnowledgeCache: mocks.invalidate }));
 const {
   archiveRetryDelay,

@@ -408,12 +408,9 @@
           ? { scope: 'recent' as const }
           : {}),
       items: props.modelValue.items.filter((item) => resourceTypes.includes(item.type)),
-      checks: [
-        ...new Set([
-          ...props.modelValue.checks,
-          ...(type === 'tag' && resourceTypes.includes('tag') ? ['tag_icon' as const] : []),
-        ]),
-      ].filter((check) => resourceTypes.some((type) => supportsOrganizeCheck(type, check))),
+      checks: props.modelValue.checks.filter((check) =>
+        resourceTypes.some((type) => supportsOrganizeCheck(type, check)),
+      ),
     });
   }
   function toggleCheck(check: CheckKind) {

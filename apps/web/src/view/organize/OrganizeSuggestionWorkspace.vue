@@ -186,9 +186,11 @@
                 :key="item.id"
                 as="article"
                 padding="0"
-                :class="{ 'is-quiet': !primarySuggestions(item).length }"
+                :class="{ 'is-quiet': !primarySuggestions(item).length, 'is-expanded': expanded.has(item.id) }"
                 class="workspace-resource"
                 ><header
+                  :class="{ 'is-expandable': item.suggestions.length }"
+                  @click="item.suggestions.length && toggleDetails(item.id)"
                   ><BButton
                     class="resource-symbol"
                     :class="item.resource.type"
@@ -239,9 +241,13 @@
                       class="resource-detail-toggle"
                       :aria-expanded="expanded.has(item.id)"
                       :aria-controls="`checks-${item.id}`"
-                      @click="toggleDetails(item.id)"
+                      :aria-label="
+                        t(expanded.has(item.id) ? 'organizeWorkspace.hideChecks' : 'organizeWorkspace.showChecks') +
+                        '：' +
+                        (item.resource.title || t('organizeWorkspace.unnamed'))
+                      "
+                      @click.stop="toggleDetails(item.id)"
                     >
-                      {{ t(expanded.has(item.id) ? 'organizeWorkspace.hideChecks' : 'organizeWorkspace.showChecks') }}
                       <SvgIcon
                         :src="icon.noteTree.chevron"
                         size="16"
@@ -267,32 +273,8 @@
                     :title="item.resource.title"
                     :review="iconReview"
                   />
-                  <p v-if="item.resource.reading" class="file-reading-details">
-                    <span v-if="item.resource.reading.totalPages">{{
-                      t('organizeFile.pages', {
-                        read: item.resource.reading.readPages || 0,
-                        total: item.resource.reading.totalPages,
-                      })
-                    }}</span>
-                    <span v-if="item.resource.reading.missingPages?.length">{{
-                      t('organizeFile.missing', { pages: item.resource.reading.missingPages.join(', ') })
-                    }}</span>
-                    <span v-if="item.resource.reading.reasonCode">{{
-                      t(fileReadingReasonKey(item.resource.reading.reasonCode))
-                    }}</span>
-                    <span
-                      v-for="(range, index) in (item.resource.reading.failedRanges || []).filter(
-                        (r) => r.unit !== 'pages',
-                      )"
-                      :key="index"
-                      >{{
-                        t('organizeFile.range', {
-                          type: t(`organizeFile.rangeTypes.${range.unit}`),
-                          start: range.start,
-                          end: range.end,
-                        })
-                      }}</span
-                    >
+                  <p v-if="fileReadingDetails(item).length" class="file-reading-details">
+                    <span v-for="detail in fileReadingDetails(item)" :key="detail">{{ detail }}</span>
                   </p>
                   <OrganizeWorkspaceSuggestion
                     v-for="suggestion in primarySuggestions(item).filter((s) => s.kind !== 'tag_icon')"
@@ -303,6 +285,7 @@
                     :suggestion="suggestion"
                     :analyzing="['queued', 'running', 'waiting_content', 'preparing_content'].includes(item.aiStatus)"
                     @changed="changed"
+                    @preview-archive="openArchive"
                   />
                   <div v-if="expanded.has(item.id) && secondarySuggestions(item).length" class="resource-check-summary">
                     <div class="resource-check-details">
@@ -368,6 +351,12 @@
         @start="start"
       />
     </BDrawer>
+    <BookmarkSnapshotModal
+      v-if="archiveVisible"
+      v-model:visible="archiveVisible"
+      :bookmark-id="archiveResourceId"
+      :draft-context="archiveDraftContext"
+    />
   </section>
 </template>
 <script setup lang="ts">
@@ -410,6 +399,7 @@
   import icon from '@/config/icon';
   import { fileReadingReasonKey } from '@/utils/organizeFileReading';
   import OrganizeRunWizard from './OrganizeRunWizard.vue';
+  import BookmarkSnapshotModal from '@/components/manage/bookmarkEditMg/BookmarkSnapshotModal.vue';
   import OrganizeWorkspaceSuggestion from './OrganizeWorkspaceSuggestion.vue';
   import { generateUUID } from '@/utils/common';
   import {
@@ -429,9 +419,16 @@
   } from '@/api/organizeSuggestionApi';
   const { t, locale } = useI18n(),
     emit = defineEmits<{ 'refresh-summary': []; 'run-status': [status: string] }>();
+  const archiveVisible = ref(false);
+  const archiveResourceId = ref('');
+  const archiveDraftContext = ref<{ runId: string; suggestionId: string }>();
+  function openArchive(resourceId: string, suggestionId?: string) {
+    archiveDraftContext.value = suggestionId && run.value ? { runId: run.value.id, suggestionId } : undefined;
+    archiveResourceId.value = resourceId;
+    archiveVisible.value = true;
+  }
   const wizardHeader = ref<HTMLElement | null>(null);
-  const resourceTypes: ResourceType[] = ['bookmark', 'note', 'file', 'tag'],
-    checks: CheckKind[] = ['tags', 'title', 'empty', 'duplicate', 'archive', 'tag_icon'];
+  const checks: CheckKind[] = ['tags', 'title', 'empty', 'duplicate', 'archive', 'tag_icon'];
   const resourceIcons = {
     tag: icon.resource.tag,
     bookmark: icon.resource.bookmark,
@@ -439,8 +436,8 @@
     file: icon.organize.file,
   };
   const defaults = (): RunOptions => ({
-    resourceTypes: resourceTypes.filter((type) => type !== 'tag'),
-    checks: checks.filter((check) => check !== 'tag_icon'),
+    resourceTypes: [],
+    checks: [],
     scope: 'recent',
     items: [],
   });
@@ -505,11 +502,41 @@
     openGroups.value = next;
     saveView();
   }
+  const archiveWithoutResult = (s: WorkspaceItem['suggestions'][number]) =>
+    s.kind === 'archive' && ['pending', 'info'].includes(s.status) && !s.archivePreview;
+  function fileReadingDetails(item: WorkspaceItem) {
+    const reading = item.resource.reading;
+    if (!reading) return [];
+    const details: string[] = [];
+    if (reading.totalPages)
+      details.push(t('organizeFile.pages', { read: reading.readPages || 0, total: reading.totalPages }));
+    if (reading.missingPages?.length)
+      details.push(t('organizeFile.missing', { pages: reading.missingPages.join(', ') }));
+    if (reading.reasonCode) {
+      const reason = t(fileReadingReasonKey(reading.reasonCode));
+      const shownInSuggestion = primarySuggestions(item).some(
+        (s) =>
+          (s.reading && !s.reading.complete && t(fileReadingReasonKey(s.reading.reasonCode)) === reason) ||
+          s.reason === reason,
+      );
+      if (!shownInSuggestion) details.push(reason);
+    }
+    for (const range of (reading.failedRanges || []).filter((r) => r.unit !== 'pages'))
+      details.push(
+        t('organizeFile.range', {
+          type: t(`organizeFile.rangeTypes.${range.unit}`),
+          start: range.start,
+          end: range.end,
+        }),
+      );
+    return [...new Set(details)];
+  }
   function groupFor(item: WorkspaceItem) {
     if (item.ruleStatus === 'removed') return 'reviewed';
     const suggestions = visibleSuggestions(item);
-    if (suggestions.some((s) => ['pending', 'info'].includes(s.status))) return 'priority';
+    if (suggestions.some((s) => ['pending', 'info'].includes(s.status) && !archiveWithoutResult(s))) return 'priority';
     if (
+      suggestions.some(archiveWithoutResult) ||
       suggestions.some((s) => ['queued', 'running', 'failed', 'conflict', 'cancelled'].includes(s.status)) ||
       ['queued', 'running', 'waiting_content', 'preparing_content', 'failed', 'conflict', 'cancelled'].includes(
         item.aiStatus,
@@ -703,7 +730,7 @@
     s.kind !== 'tag_icon' &&
     ((['not_applicable', 'applied', 'ignored', 'closed'].includes(s.status) &&
       !(s.kind === 'archive' && s.status === 'applied')) ||
-      (s.status === 'no_suggestion' && !['tags', 'title', 'tag_icon'].includes(s.kind)));
+      (s.status === 'no_suggestion' && !['tags', 'title', 'tag_icon', 'archive'].includes(s.kind)));
   const primarySuggestions = (item: WorkspaceItem) => visibleSuggestions(item).filter((s) => !isSecondary(s));
   const secondarySuggestions = (item: WorkspaceItem) => visibleSuggestions(item).filter(isSecondary);
   function resourceConclusion(item: WorkspaceItem) {
@@ -1359,32 +1386,27 @@
     font-size: 13px;
   }
   .result-group {
-    border: 1px solid var(--ow-border);
-    border-radius: 10px;
-    overflow: hidden;
-    margin-bottom: 10px;
-    background: var(--ow-surface);
+    margin-bottom: 20px;
+    padding: 12px 16px 16px;
+    border-radius: 16px;
+    background: var(--workspace-canvas);
   }
   .group-toggle.b_btn {
     width: 100%;
     height: auto;
-    min-height: 64px;
-    padding: 12px 16px;
+    min-height: 60px;
+    padding: 10px 2px 14px;
     display: flex;
-    gap: 12px;
+    gap: 10px;
     align-items: center;
     text-align: left;
     white-space: normal;
     background: transparent;
     border: 0;
-    border-radius: 0;
     color: var(--text-color);
   }
-  .group-toggle.b_btn:hover {
-    background: var(--ow-inset);
-  }
-  .group-priority > .group-toggle {
-    background: linear-gradient(100deg, var(--ow-red-soft), var(--ow-surface) 68%);
+  .group-toggle.b_btn:hover .group-copy strong {
+    color: var(--ow-purple);
   }
   .group-symbol {
     display: grid;
@@ -1395,7 +1417,6 @@
     flex-shrink: 0;
     background: #9297aa;
     color: #fff;
-    box-shadow: 0 3px 8px #9297aa20;
   }
   .group-priority .group-symbol {
     background: #fa4d72;
@@ -1454,26 +1475,33 @@
     color: var(--ow-green);
   }
   .group-content {
-    border-top: 1px solid var(--ow-border);
-    padding: 0 10px 8px;
+    display: grid;
+    gap: 12px;
   }
   .group-content .workspace-resource {
     margin: 0;
-    border: 0;
-    border-bottom: 1px solid var(--ow-border);
-    border-radius: 0;
-    --b-card-background: transparent;
+    --b-card-border-color: var(--workspace-border);
+    --b-card-background: var(--workspace-content);
     --b-card-shadow: none;
-    background: transparent;
-  }
-  .group-content .workspace-resource:last-child {
-    border-bottom: 0;
   }
   .workspace-resource > header {
     display: flex;
     align-items: center;
     gap: 11px;
-    padding: 12px 5px;
+    padding: 16px 18px;
+    border-radius: 13px;
+    transition: background-color 0.15s;
+  }
+  .workspace-resource.is-expanded > header {
+    border-radius: 13px 13px 0 0;
+  }
+  .workspace-resource > header.is-expandable {
+    cursor: pointer;
+  }
+  @media (hover: hover) {
+    .workspace-resource > header.is-expandable:hover {
+      background: color-mix(in srgb, var(--workspace-hover) 45%, var(--workspace-content));
+    }
   }
   .resource-title-link.b_btn {
     height: auto;
@@ -1505,6 +1533,8 @@
     color: var(--text-color);
   }
   .file-reading-details {
+    margin: 0;
+    padding: 12px 0;
     display: flex;
     flex-direction: column;
     gap: 4px;
@@ -1519,9 +1549,7 @@
     padding: 0;
     border: 0;
   }
-  .resource-symbol.b_btn:hover {
-    box-shadow: inset 0 0 0 1px var(--primary-color);
-  }
+
   .resource-symbol {
     display: grid;
     place-items: center;
@@ -1571,7 +1599,7 @@
     gap: 5px;
     align-items: center;
     font-size: 11px;
-    color: var(--ow-purple);
+    color: var(--ow-muted);
     background: transparent;
     padding: 4px;
     min-height: 28px;
@@ -1588,20 +1616,16 @@
     transform: rotate(180deg);
   }
   .resource-expanded {
-    background: var(--ow-inset);
-    border: 1px solid var(--ow-border);
-    border-radius: 9px;
-    overflow: hidden;
-    margin: 0 2px 10px;
+    margin: 0 18px 16px 65px;
   }
   .resource-guards {
-    padding: 10px 12px;
+    padding: 10px 0;
     color: var(--ow-muted);
     font-size: 11px;
   }
   .resource-check-summary {
-    padding: 9px 12px;
-    border-top: 1px solid var(--ow-border);
+    padding: 12px 0 0;
+    color: var(--ow-muted);
   }
   .resource-check-details {
     display: flex;
@@ -1615,7 +1639,7 @@
     line-height: 1.5;
   }
   .resource-check-details > div > span {
-    font-weight: 600;
+    font-weight: 400;
   }
   .resource-check-details p {
     color: var(--ow-muted);
@@ -1703,20 +1727,23 @@
     .workspace-list-heading small {
       display: none;
     }
+    .result-group {
+      padding: 8px 12px 12px;
+    }
     .group-toggle.b_btn {
-      padding: 12px;
+      padding: 8px 0 12px;
       gap: 10px;
     }
     .group-copy small {
       font-size: 10px;
     }
-    .group-content {
-      padding: 0 8px 8px;
-    }
     .workspace-resource > header {
       flex-wrap: wrap;
-      padding: 12px 3px;
+      padding: 12px 11px;
       gap: 8px;
+    }
+    .resource-expanded {
+      margin: 0 12px 14px;
     }
     .resource-identity {
       flex-basis: calc(100% - 44px);
@@ -1730,6 +1757,9 @@
     }
     .resource-issue-label {
       font-size: 10px;
+    }
+    .file-reading-details {
+      padding: 12px 0;
     }
     .resource-check-details {
       display: grid;

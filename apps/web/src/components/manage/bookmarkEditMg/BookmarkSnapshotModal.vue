@@ -1,27 +1,32 @@
 <template>
   <BModal v-model:visible="visible" :title="$t('bookmarkMg.snapshotTitle')" :show-footer="false" width="auto">
     <div class="bsnap">
+      <p v-if="draftContext" class="bsnap-time">{{ $t('organizeWorkspace.archiveReadyHint') }}</p>
       <div class="bsnap-bar">
         <span v-if="snap?.update_time" class="bsnap-time">{{
-          $t('bookmarkMg.snapshotUpdatedAt', { t: fmtTime(snap.update_time) })
+          $t(draftContext ? 'organizeWorkspace.archiveGeneratedAt' : 'bookmarkMg.snapshotUpdatedAt', {
+            t: fmtTime(snap.update_time),
+          })
         }}</span>
         <span v-else class="bsnap-time"></span>
-        <BSpace v-if="!isGuest">
+        <BSpace v-if="!isGuest && !draftContext">
           <BButton
             v-if="!isReadonlyAdminContext"
             class="bsnap-generate-button"
             size="small"
-            :loading="archiving"
+            :loading="archiving || taskActive"
             :disabled="busy || loading"
             @click="generateArchive"
           >
             <SvgIcon :src="icon.bookmarkManage.snapshot" size="15" />
             {{
-              archiving
+              archiving || taskActive
                 ? $t('bookmarkMg.snapshotArchiving')
-                : snap?.content
-                  ? $t('bookmarkMg.snapshotArchive')
-                  : $t('bookmarkMg.snapshotCreateArchive')
+                : snap?.archiveTask?.status === 'failed'
+                  ? $t('organizeWorkspace.archiveRetryCurrent')
+                  : snap?.content
+                    ? $t('bookmarkMg.snapshotArchive')
+                    : $t('bookmarkMg.snapshotCreateArchive')
             }}
           </BButton>
           <BButton
@@ -68,7 +73,10 @@
         <BButton size="small" @click="loadSnap()">{{ $t('common.retry') }}</BButton>
       </div>
       <div v-if="snap?.content" class="bsnap-time"
-        >{{ $t('bookmarkMg.archiveCharacters', { count: snap.char_count || snap.content.length })
+        >{{
+          $t(draftContext ? 'organizeWorkspace.archiveGeneratedCharacters' : 'bookmarkMg.archiveCharacters', {
+            count: snap.char_count || snap.content.length,
+          })
         }}<template v-if="snap.source">
           ·
           {{
@@ -92,17 +100,21 @@
           <span class="bsnap-heading-icon bsnap-heading-icon--snapshot"
             ><SvgIcon :src="icon.bookmarkManage.snapshot" size="14"
           /></span>
-          <span>{{ $t('bookmarkMg.snapshotFullText') }}</span>
+          <span>{{ $t(draftContext ? 'organizeWorkspace.archiveDraftText' : 'bookmarkMg.snapshotFullText') }}</span>
         </div>
         <div v-if="snap.title" class="bsnap-doc-title">{{ snap.title }}</div>
         <div class="bsnap-text">{{ snap.content }}</div>
       </div>
-      <div v-else class="bsnap-empty">{{ $t('bookmarkMg.snapshotEmpty') }}</div>
+      <div v-else-if="taskActive" class="bsnap-empty">{{ $t('organizeWorkspace.archiveWaitingPreview') }}</div>
+      <div v-else-if="!loadError && snap?.archiveTask?.status !== 'failed'" class="bsnap-empty">{{
+        $t('bookmarkMg.snapshotEmpty')
+      }}</div>
     </div>
   </BModal>
 </template>
 
 <script lang="ts" setup>
+  import { getOrganizeArchiveDraft } from '@/api/organizeSuggestionApi';
   import { computed, onBeforeUnmount, ref, watch } from 'vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { useI18n } from 'vue-i18n';
@@ -118,7 +130,7 @@
   import { recordOperation } from '@/api/commonApi.ts';
 
   const { t } = useI18n();
-  const props = defineProps<{ bookmarkId?: string }>();
+  const props = defineProps<{ bookmarkId?: string; draftContext?: { runId: string; suggestionId: string } }>();
   const visible = defineModel<boolean>('visible');
 
   // 游客(共享 visitor 账号)可查看快照,但「归档 / AI 摘要」是写/消耗操作,对游客隐藏,避免点了被后端拦。
@@ -161,7 +173,9 @@
     stopPolling();
     if (!background) loading.value = true;
     try {
-      const res = await apiBasePost('/api/bookmark/snapshot', { id: bookmarkId });
+      const res = props.draftContext
+        ? await getOrganizeArchiveDraft(props.draftContext.runId, props.draftContext.suggestionId)
+        : await apiBasePost('/api/bookmark/snapshot', { id: bookmarkId });
       if (current !== loadSequence || bookmarkId !== props.bookmarkId || !visible.value) return null;
       loadError.value = res?.status !== 200;
       if (res?.status === 200) snap.value = res.data;
@@ -258,7 +272,7 @@
   }
 
   watch(
-    [() => visible.value, () => props.bookmarkId],
+    [() => visible.value, () => props.bookmarkId, () => props.draftContext],
     async ([isVisible, bookmarkId]) => {
       loadSequence += 1;
       contextVersion++;

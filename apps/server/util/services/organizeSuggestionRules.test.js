@@ -159,7 +159,7 @@ it('仅正文存档也可创建书签整理，排除笔记与文件且不调用 
     ],
     ['archive'],
   );
-  expect(rows[0].suggestions[0]).toMatchObject({ kind: 'archive', status: 'pending', action: 'archive' });
+  expect(rows[0].suggestions[0]).toMatchObject({ kind: 'archive', status: 'queued' });
   expect(rows[0].aiKinds).toEqual([]);
   expect(rows[1].suggestions[0]).toMatchObject({ status: 'no_suggestion' });
 });

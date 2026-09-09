@@ -274,11 +274,13 @@ export function buildRuleSuggestions(snapshots, checks, { tagMode = 'untagged' }
     }
     if (checks.includes('archive') && supportsOrganizeCheck(s.type, 'archive')) {
       if (s.hasArchive) add('archive', 'no_suggestion', '当前网址已有正文存档，无需重复读取');
-      else if (!s.source.url) add('archive', 'info', '书签没有有效网址，无法保存正文');
-      else
-        add('archive', 'pending', '尚无当前网址的正文存档；确认后在后台读取，失败保留已有内容，不消耗 AI 额度', {
+      else if (s.archivePreparation?.status === 'failed') add('archive', 'failed', s.archivePreparation.reason);
+      else if (s.archivePreparation?.status === 'ready')
+        add('archive', 'pending', '网页正文已生成，可预览后应用保存', {
           action: 'archive',
+          archivePreview: s.archivePreparation,
         });
+      else add('archive', 'queued', '正在准备网页正文');
     }
     if (checks.includes('duplicate') && supportsOrganizeCheck(s.type, 'duplicate')) {
       const members = duplicates.get(`${s.type}:${s.duplicateKey}`) || [];

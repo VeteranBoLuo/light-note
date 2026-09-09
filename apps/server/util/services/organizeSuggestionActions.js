@@ -1,4 +1,4 @@
-import { enqueueBookmarkArchiveInTransaction } from '../bookmarkArchiveJobs.js';
+import { applyOrganizeArchive } from './organizeArchiveDraft.js';
 import { normalizeName, suggestionError } from './organizeSuggestionRules.js';
 import { readCurrentSuggestionSource } from './organizeSuggestionSources.js';
 import { batchWriteResourceTags } from './resourceTagWriteService.js';
@@ -18,10 +18,7 @@ export async function applySuggestionMutation(c, { userId, current, payload, val
     if (current.type !== 'bookmark' || payload.action !== 'archive')
       throw suggestionError('ORGANIZE_ARCHIVE_UNSUPPORTED', '仅支持为书签保存网页正文');
     if (current.hasArchive) return { applied: 'already_saved' };
-    const queued = await enqueueBookmarkArchiveInTransaction(c, userId, current.id);
-    if (!queued?.ok)
-      throw suggestionError('ORGANIZE_ARCHIVE_QUEUE_FAILED', queued?.msg || '无法提交存档任务，请稍后重试', 409);
-    return { applied: 'queued' };
+    return applyOrganizeArchive(c, userId, current, payload.archiveDraft);
   }
   if (kind === 'tags') {
     const requested = value ?? payload.after;

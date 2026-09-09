@@ -1,4 +1,5 @@
 import net from "node:net";
+import { findLocalDocumentWorkers } from "./localWorkerGuard.mjs";
 import { spawn } from "node:child_process";
 import path from "node:path";
 import process from "node:process";
@@ -133,6 +134,10 @@ async function stopAll(exitCode) {
 }
 
 async function main() {
+  if (process.platform !== "win32") {
+    const workers = findLocalDocumentWorkers(path.join(rootDir, "apps/server"));
+    if (workers.length) throw new Error(`当前仓库仍有文档整理 Worker（PID ${workers.join(", ")}）。请先结束原来的本地后端或 Worker，再启动，避免新旧代码同时领取任务。`);
+  }
   console.log("\n[本地后端] 1/4 释放旧的 HTTP 服务端口…");
   const freePort = runChild(
     "端口清理",

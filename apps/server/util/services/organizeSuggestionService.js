@@ -172,11 +172,35 @@ export async function getSuggestionRun(db = pool, { userId, id, after = '', reso
       errorCode: i.error_code,
       suggestions: suggestions
         .filter((s) => s.item_id === i.id)
-        .map((s) => ({ ...json(s.payload_json), id: s.id, status: s.status })),
+        .map((s) => {
+          const { archiveDraft, ...payload } = json(s.payload_json);
+          return { ...payload, id: s.id, status: s.status };
+        }),
     })),
     nextCursor: items.length > 30 ? page.at(-1).id : null,
   };
 }
+export async function getArchiveDraft(db = pool, { userId, runId, suggestionId }) {
+  const [rows] = await db.query(
+    `SELECT s.payload_json FROM organize_suggestions s
+     JOIN organize_suggestion_items i ON i.id=s.item_id AND i.user_id=s.user_id
+     JOIN bookmark b ON CONVERT(b.id USING utf8mb4) COLLATE utf8mb4_unicode_ci=i.resource_id
+       AND CONVERT(b.user_id USING utf8mb4) COLLATE utf8mb4_unicode_ci=i.user_id AND b.del_flag=0
+     WHERE s.id=? AND s.run_id=? AND s.user_id=? AND s.kind='archive' AND i.resource_type='bookmark'`,
+    [suggestionId, runId, userId],
+  );
+  const draft = rows[0] && json(rows[0].payload_json).archiveDraft;
+  if (!draft || draft.status !== 'ready')
+    throw suggestionError('ORGANIZE_ARCHIVE_NOT_READY', '没有可预览的网页正文，请重新整理', 404);
+  return {
+    title: draft.title,
+    content: draft.content,
+    char_count: draft.charCount,
+    source: draft.source,
+    update_time: draft.generatedAt,
+  };
+}
+
 export async function cancelSuggestionRun(db = pool, { userId, id }) {
   return transaction(db, async (c) => {
     const run = await ownedRun(c, userId, id, true);

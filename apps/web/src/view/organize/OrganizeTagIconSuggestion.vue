@@ -56,7 +56,6 @@
         library-only
         @choice="review.drafts.set(suggestion.id, $event)"
       />
-      <BButton :disabled="busy" @click="review.act(suggestion, 'ignore')">{{ t('organizeWorkspace.dismiss') }}</BButton>
       <BButton
         type="primary"
         :loading="review.busy.has(suggestion.id)"

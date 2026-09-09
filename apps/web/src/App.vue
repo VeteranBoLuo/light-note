@@ -1174,43 +1174,14 @@
     height: 100%;
   }
   .app-loading {
-    height: 100vh;
-    height: 100dvh;
-    width: 100vw;
-    background: var(--surface-raised-background, var(--background-color));
+    /* 固定边界随视口铺满，避免根节点 zoom 再次缩小 vw/vh 尺寸。 */
+    position: fixed;
+    inset: 0;
+    background: var(--surface-page-bg, var(--background-color));
     display: flex;
     align-items: center;
     justify-content: center;
-    position: relative;
-    overflow: hidden;
-  }
-
-  .app-loading::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: var(--surface-page-bg, var(--background-color));
-    opacity: 0.28;
-    animation: backgroundShift 8s ease-in-out infinite;
-  }
-
-  @keyframes backgroundShift {
-    0%,
-    100% {
-      transform: translateX(0) translateY(0);
-    }
-    25% {
-      transform: translateX(-10px) translateY(10px);
-    }
-    50% {
-      transform: translateX(10px) translateY(-10px);
-    }
-    75% {
-      transform: translateX(-5px) translateY(-5px);
-    }
+    overflow: auto;
   }
 
   .loading-container {

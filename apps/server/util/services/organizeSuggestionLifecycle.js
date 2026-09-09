@@ -1,3 +1,4 @@
+import { prepareOrganizeArchive } from './organizeArchiveDraft.js';
 import { recommendTagIcons } from '../tagIconService.js';
 import crypto from 'node:crypto';
 import { transaction, json } from './organizeSuggestionStorage.js';
@@ -303,13 +304,14 @@ export function lifecycleState(run, progress = [], rules = []) {
     canEnd: resumable.includes(run.status),
   };
 }
-async function writeSuggestions(c, run, entries, { emptyOnly = false } = {}) {
+async function writeSuggestions(c, run, entries, { independentOnly = false } = {}) {
   const rows = [];
   for (const entry of entries)
     for (const suggestion of entry.suggestions) {
       if (
-        emptyOnly &&
-        (!['empty', 'tag_icon'].includes(suggestion.kind) || !json(run.options_json).checks.includes(suggestion.kind))
+        independentOnly &&
+        (!['empty', 'tag_icon', 'archive'].includes(suggestion.kind) ||
+          !json(run.options_json).checks.includes(suggestion.kind))
       )
         continue;
       rows.push([
@@ -344,8 +346,9 @@ export async function runRuleBatch(db) {
   });
   if (!claim) return false;
   try {
+    // 网页读取逐项占用租约，避免一批外网请求累计超过租约期限。
     const [items] = await db.query(
-      `SELECT * FROM organize_suggestion_items WHERE run_id=? AND rule_status='pending' ORDER BY id LIMIT ${json(claim.options_json).resourceTypes.includes('tag') ? 10 : 100}`,
+      `SELECT * FROM organize_suggestion_items WHERE run_id=? AND rule_status='pending' ORDER BY id LIMIT ${json(claim.options_json).checks.includes('archive') ? 1 : json(claim.options_json).resourceTypes.includes('tag') ? 10 : 100}`,
       [claim.id],
     );
     let entries = [];
@@ -357,7 +360,25 @@ export async function runRuleBatch(db) {
           ids: selected.map((i) => i.resource_id),
           limit: 100,
         });
-        for (const entry of buildRuleSuggestions(sources, type === 'tag' ? ['tag_icon'] : ['empty'])) {
+        const archiveDrafts = new Map();
+        if (type === 'bookmark' && json(claim.options_json).checks.includes('archive')) {
+          for (const source of sources) {
+            const draft = await prepareOrganizeArchive(claim.user_id, source);
+            if (draft) {
+              const { content, ...metadata } = draft;
+              source.archivePreparation = metadata;
+              archiveDrafts.set(source.id, draft);
+            }
+          }
+        }
+        for (const entry of buildRuleSuggestions(
+          sources,
+          type === 'tag'
+            ? ['tag_icon']
+            : ['empty', ...(json(claim.options_json).checks.includes('archive') ? ['archive'] : [])],
+        )) {
+          const draft = archiveDrafts.get(entry.snapshot.id);
+          if (draft?.status === 'ready') entry.suggestions.find((s) => s.kind === 'archive').archiveDraft = draft;
           if (type === 'tag' && !entry.snapshot.iconUrl.trim()) {
             const suggestion = entry.suggestions[0];
             try {
@@ -405,8 +426,8 @@ export async function runRuleBatch(db) {
             "UPDATE organize_suggestion_items SET rule_status='skipped',error_code='ORGANIZE_RESOURCE_UNAVAILABLE' WHERE id IN (?)",
             [missing],
           );
-        if (json(claim.options_json).checks.some((kind) => ['empty', 'tag_icon'].includes(kind)))
-          await writeSuggestions(c, claim, entries, { emptyOnly: true });
+        if (json(claim.options_json).checks.some((kind) => ['empty', 'tag_icon', 'archive'].includes(kind)))
+          await writeSuggestions(c, claim, entries, { independentOnly: true });
       } else {
         // 独立规则已可审核；在最终分组落库前重读快照，防止已清理资源重新生成建议。
         const [all] = await c.query(
@@ -528,7 +549,8 @@ export async function refreshPendingSource(db, job, current) {
       const owner = items.find(
         (i) => i.resource_type === resource.snapshot.type && i.resource_id === resource.snapshot.id,
       );
-      for (const suggestion of resource.suggestions.filter((s) => ['empty', 'duplicate', 'archive'].includes(s.kind))) {
+      // 网页草稿已独立交付；元信息刷新不得丢弃正文或改回未生成状态。应用时另行复核草稿 URL。
+      for (const suggestion of resource.suggestions.filter((s) => ['empty', 'duplicate'].includes(s.kind))) {
         await c.query(
           "UPDATE organize_suggestions SET status=?,payload_json=? WHERE item_id=? AND kind=? AND status IN ('pending','info','conflict')",
           [suggestion.status, JSON.stringify(suggestion), owner.id, suggestion.kind],

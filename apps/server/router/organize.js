@@ -57,4 +57,6 @@ router.post('/suggestions/runs/:id/pause', suggestions.pause);
 router.post('/suggestions/runs/:id/resume', localProcessingRateLimiter, suggestions.resume);
 router.post('/suggestions/runs/:id/items/:suggestionId/actions', localProcessingRateLimiter, suggestions.act);
 
+router.get('/suggestions/runs/:id/items/:suggestionId/archive-preview', suggestions.archiveDraft);
+
 export default router;

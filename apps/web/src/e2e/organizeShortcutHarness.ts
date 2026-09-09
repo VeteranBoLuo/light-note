@@ -7,7 +7,7 @@ import globalDirect from '@/config/globalDirect';
 import zh from '@/i18n/locales/zh-CN';
 import en from '@/i18n/locales/en-US';
 import { useResourceSelection, useResourceSelectionRuntime } from '@/composables/useResourceSelection';
-import { bookmarkStore } from '@/store';
+import { bookmarkStore, useUserStore } from '@/store';
 import Workspace from '@/view/organize/OrganizeSuggestionWorkspace.vue';
 import Center from '@/view/organize/OrganizeCenter.vue';
 import MainLayout from '@/view/index.vue';
@@ -31,14 +31,22 @@ document.documentElement.dataset.theme = params.get('theme') === 'night' ? 'nigh
 document.documentElement.classList.toggle('light-note-mobile-rendering', params.get('renderProfile') === 'mobile');
 let run: SuggestionRun | null = null;
 let archiveSubmitted = false;
+const archiveOutcome = params.get('archiveResult') || 'succeeded';
+const archiveContent = '这是整理阶段自动生成的网页正文。\n\n可以先预览这份内容，点击应用后才正式保存到书签。';
 request.defaults.adapter = async (config) => {
   const url = String(config.url);
   const body = typeof config.data === 'string' ? JSON.parse(config.data) : config.data;
   let data: unknown = [];
-  if (url.endsWith('/snapshot')) data = { archiveTask: { status: 'pending', attempts: 0 }, failedCount: 0 };
-  else if (url.endsWith('/actions') && state === 'archive') {
+  if (url.endsWith('/snapshot') || url.endsWith('/archive-preview')) {
+    data = {
+      title: '网页正文预览',
+      content: archiveContent,
+      update_time: '2026-09-09T09:30:00Z',
+      char_count: archiveContent.length,
+    };
+  } else if (url.endsWith('/actions') && state === 'archive') {
     archiveSubmitted = true;
-    data = { status: 'applied', applied: 'queued' };
+    data = { status: 'applied', applied: 'saved' };
   } else if (url.endsWith('/summary')) data = null;
   else if (url.endsWith('/batchSelectionPreview')) data = { resolvedItems: resources, unavailableItems: [] };
   else if (url.endsWith('/previews')) {
@@ -73,33 +81,91 @@ request.defaults.adapter = async (config) => {
       items: [
         {
           id: 'fixture-item',
-          resource: { ...resources[0], tags: [{ id: 'old', name: '已有标签' }], source: { folder: '' }, guards: {} },
+          resource: {
+            ...resources[0],
+            ...(state === 'unreadable'
+              ? {
+                  type: 'file',
+                  title: '示例视频.mp4',
+                  reading: {
+                    state: 'metadata',
+                    complete: false,
+                    reasonCode: 'UNSUPPORTED_FILE_TYPE',
+                    ...(params.has('pages') ? { totalPages: 5, readPages: 2, missingPages: [3, 4, 5] } : {}),
+                  },
+                }
+              : {}),
+            tags: [{ id: 'old', name: '已有标签' }],
+            source: { folder: '' },
+            guards: {},
+          },
           aiStatus: 'completed',
           ruleStatus: 'completed',
           suggestions:
-            state === 'archive'
+            state === 'unreadable'
               ? [
                   {
-                    id: 'archive-suggestion',
-                    kind: 'archive',
-                    status: archiveSubmitted ? 'applied' : 'pending',
-                    action: 'archive',
-                    applied: archiveSubmitted ? 'queued' : undefined,
+                    id: 'file-suggestion',
+                    kind: 'tags',
+                    status: 'failed',
                     before: null,
                     after: null,
-                    reason: '尚无当前网址的正文存档；确认后在后台读取，不消耗 AI 额度',
+                    reason: '暂不支持读取此格式，可完善文件名或手动添加标签。',
+                    reading: { state: 'metadata', complete: false, reasonCode: 'UNSUPPORTED_FILE_TYPE' },
                   },
                 ]
-              : [
-                  {
-                    id: 'suggestion',
-                    kind: 'tags',
-                    status: 'pending',
-                    before: [{ id: 'old', name: '已有标签' }],
-                    after: [{ id: 'new', name: '开发工具' }],
-                    reason: '根据资料内容建议的核心主题标签',
-                  },
-                ],
+              : state === 'archive'
+                ? [
+                    {
+                      id: 'archive-suggestion',
+                      kind: 'archive',
+                      status: archiveSubmitted ? 'applied' : archiveOutcome === 'failed' ? 'failed' : 'pending',
+                      action: 'archive',
+                      applied: archiveSubmitted ? 'saved' : undefined,
+                      before: null,
+                      after: null,
+                      reason: archiveOutcome === 'failed' ? '页面需要登录，无法读取正文。' : '网页正文已生成',
+                      archivePreview: ['failed', 'missing'].includes(archiveOutcome)
+                        ? undefined
+                        : {
+                            status: 'ready',
+                            title: '网页正文预览',
+                            charCount: archiveContent.length,
+                            generatedAt: '2026-09-09T09:30:00Z',
+                            excerpt: archiveContent.slice(0, 50),
+                          },
+                    },
+                    ...(params.has('mixed')
+                      ? [
+                          {
+                            id: 'mixed-tags',
+                            kind: 'tags',
+                            status: 'pending',
+                            before: [],
+                            after: [
+                              {
+                                id: 'new',
+                                name: '开源项目',
+                                evidence: 'GitHub 上的字体项目页面',
+                                evidenceType: 'text',
+                              },
+                            ],
+                            reason: '根据资料内容建议的核心主题标签',
+                          },
+                          { id: 'mixed-clear', kind: 'duplicate', status: 'no_suggestion', reason: '没有发现重复问题' },
+                        ]
+                      : []),
+                  ]
+                : [
+                    {
+                      id: 'suggestion',
+                      kind: 'tags',
+                      status: 'pending',
+                      before: [{ id: 'old', name: '已有标签' }],
+                      after: [{ id: 'new', name: '开发工具' }],
+                      reason: '根据资料内容建议的核心主题标签',
+                    },
+                  ],
         },
       ],
       nextCursor: null,
@@ -146,6 +212,7 @@ const router = createRouter({
 const app = createApp({
   setup() {
     useResourceSelectionRuntime();
+    if (state === 'archive') useUserStore().$patch({ id: 'archive-fixture-user', role: 'user' });
     const bookmark = bookmarkStore();
     const sync = () => {
       bookmark.screenWidth = innerWidth;

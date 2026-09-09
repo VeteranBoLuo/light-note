@@ -1138,6 +1138,14 @@
 
 <style lang="less" scoped>
   .workbenches-container {
+    --workbench-content-border: var(--card-border-color);
+    --workbench-action-border: color-mix(in srgb, var(--card-border-color) 64%, transparent);
+
+    [data-theme='night'] & {
+      --workbench-content-border: var(--workbench-border-color);
+      --workbench-action-border: var(--workbench-border-color);
+    }
+
     width: 100%;
     height: 100%;
     box-sizing: border-box;
@@ -1422,7 +1430,7 @@
 
   .today-summary-details :deep(.today-actions--contained),
   .today-continue {
-    border-color: var(--card-border-color);
+    border-color: var(--workbench-content-border);
     background: var(--menu-body-bg-color, var(--card-background));
   }
 
@@ -1435,7 +1443,7 @@
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    border: 1px solid var(--card-border-color);
+    border: 1px solid var(--workbench-content-border);
     border-radius: 12px;
     background: var(--menu-body-bg-color, var(--card-background));
   }
@@ -1478,7 +1486,7 @@
     height: auto;
     padding: 9px 12px;
     display: block;
-    border: 1px solid var(--card-border-color);
+    border: 1px solid var(--workbench-content-border);
     border-radius: 11px;
     background: var(--menu-body-bg-color, var(--card-background));
     color: var(--text-color);
@@ -2242,12 +2250,12 @@
     gap: 10px;
     justify-content: flex-start;
     line-height: 1.2;
-    border: 1px solid color-mix(in srgb, var(--card-border-color) 64%, transparent);
+    border: 1px solid var(--workbench-action-border);
     background: color-mix(in srgb, var(--primary-color) 3%, var(--menu-body-bg-color));
   }
 
   .quick-create-action:hover {
-    border-color: color-mix(in srgb, var(--primary-color) 24%, var(--card-border-color));
+    border-color: color-mix(in srgb, var(--primary-color) 24%, var(--workbench-content-border));
     background: color-mix(in srgb, var(--primary-color) 7%, var(--menu-body-bg-color));
   }
 

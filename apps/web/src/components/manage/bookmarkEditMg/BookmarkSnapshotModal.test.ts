@@ -215,6 +215,8 @@ describe('BookmarkSnapshotModal 网页存档生命周期', () => {
     const host = mountModal();
     await vi.advanceTimersByTimeAsync(0);
     expect(host.textContent).toContain('bookmarkMg.archiveState_running');
+    expect(host.textContent).toContain('organizeWorkspace.archiveWaitingPreview');
+    expect(host.textContent).not.toContain('bookmarkMg.snapshotEmpty');
     expect([...host.querySelectorAll('button')].filter((b) => b.disabled)).toHaveLength(2);
     await vi.advanceTimersByTimeAsync(2500);
     expect(host.textContent).toContain('后台读取正文');
@@ -235,6 +237,7 @@ describe('BookmarkSnapshotModal 网页存档生命周期', () => {
     const host = mountModal();
     await vi.waitFor(() => expect(host.textContent).toContain('网站拒绝自动读取'));
     expect(host.textContent).toContain('旧正文');
+    expect(host.textContent).toContain('organizeWorkspace.archiveRetryCurrent');
     expect(host.textContent).toContain('bookmarkMg.archivePreserved');
     const retry = [...host.querySelectorAll('button')].find((b) =>
       b.textContent?.includes('bookmarkMg.archiveRetryFailed'),

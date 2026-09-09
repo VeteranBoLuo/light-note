@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import pool from '../db/index.js';
-import { archiveBookmark, ensureBookmarkSnapshotTable } from './snapshot.js';
+import { archiveBookmark, ensureBookmarkSnapshotTable, saveBookmarkSnapshotInTransaction } from './snapshot.js';
 import { archiveFailure } from './bookmarkArchivePolicy.js';
 import { invalidatePersonalKnowledgeCache } from './personalKnowledgeSearch.js';
 
@@ -156,21 +156,7 @@ export async function finishBookmarkArchive(job, result) {
       result = archiveFailure('RESOURCE_CHANGED');
     }
     if (result.ok) {
-      await connection.query(
-        `INSERT INTO bookmark_snapshot (bookmark_id, user_id, url, title, content, char_count, source)
-        VALUES (?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE url = VALUES(url), title = VALUES(title),
-        content = VALUES(content), char_count = VALUES(char_count), source = VALUES(source), summary = NULL, summary_at = NULL,
-        update_time = CURRENT_TIMESTAMP`,
-        [
-          job.bookmark_id,
-          job.user_id,
-          job.url,
-          result.title,
-          result.content,
-          result.charCount,
-          result.source || 'static_html',
-        ],
-      );
+      await saveBookmarkSnapshotInTransaction(connection, job.user_id, job.bookmark_id, result);
       saved = true;
     }
     const delay = result.ok ? null : archiveRetryDelay(result.reason, job.attempts);

@@ -63,3 +63,7 @@ export const act = handler(true, (req, userId) =>
 export const retryFiles = handler(true, (req, userId) =>
   service.previewFileRetry(pool, { userId, id: req.params.id, requestId: req.body?.requestId }),
 );
+
+export const archiveDraft = handler(false, (req, userId) =>
+  service.getArchiveDraft(pool, { userId, runId: req.params.id, suggestionId: req.params.suggestionId }),
+);

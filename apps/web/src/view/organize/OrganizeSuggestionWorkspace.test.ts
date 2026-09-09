@@ -17,6 +17,7 @@ const api = vi.hoisted(() => ({
   pauseRun: vi.fn(),
   resumeRun: vi.fn(),
   actOnRunSuggestion: vi.fn(),
+  getOrganizeArchiveDraft: vi.fn(),
 }));
 vi.mock('@/components/base/BasicComponents/BModal/Alert', () => ({
   default: { alert: api.alert },
@@ -102,9 +103,20 @@ async function openGroup(key: string) {
   if (el.getAttribute('aria-expanded') !== 'true') el.click();
   await settle();
 }
-async function toScope() {
+async function selectOptions(names: string[]) {
+  for (const name of names) {
+    button(name).click();
+    await settle();
+  }
+}
+async function toChecks() {
+  await selectOptions(['书签', '笔记', '文件']);
   button('下一步：选项目').click();
   await settle();
+}
+async function toScope() {
+  await toChecks();
+  await selectOptions(['标签建议', '笔记标题', '空内容检查', '重复检查', '网页正文存档']);
   button('下一步：定范围').click();
   await settle();
 }
@@ -126,13 +138,20 @@ afterEach(() => {
   document.body.innerHTML = '';
   sessionStorage.clear();
 });
-it('每次重新整理都重新选择范围，默认三类资源和五项检查', async () => {
+it('对象和项目默认不勾选，手动选择后返回保留选择', async () => {
   await mount();
   button('重新整理').click();
   await settle();
   expect(document.body.textContent).toContain('想整理哪些对象？');
   expect(button('确认整理范围')).toBeUndefined();
-  await toScope();
+  expect(button('下一步：选项目').disabled).toBe(true);
+  expect(document.querySelectorAll('[aria-pressed="true"]').length).toBe(0);
+  await toChecks();
+  expect(button('下一步：定范围').disabled).toBe(true);
+  expect(document.querySelectorAll('[aria-pressed="true"]').length).toBe(0);
+  await selectOptions(['标签建议', '笔记标题', '空内容检查', '重复检查', '网页正文存档']);
+  button('下一步：定范围').click();
+  await settle();
   expect(document.body.textContent).toContain('最近新增');
   button('确认整理范围').click();
   await settle();
@@ -216,12 +235,8 @@ it('标题单项仅预检笔记，手动选择器和范围摘要同步排除其�
   await mount();
   button('重新整理').click();
   await settle();
-  button('下一步：选项目').click();
-  await settle();
-  for (const name of ['标签建议', '空内容检查', '重复检查', '网页正文存档']) {
-    button(name).click();
-    await settle();
-  }
+  await toChecks();
+  await selectOptions(['笔记标题']);
   expect(document.body.textContent).toContain('书签 · 文件没有适用');
   button('下一步：定范围').click();
   await settle();
@@ -239,10 +254,7 @@ it('仅书签不展示标题和空内容，空选择禁止继续且不发起预�
   await mount();
   button('重新整理').click();
   await settle();
-  for (const name of ['笔记', '文件']) {
-    button(name).click();
-    await settle();
-  }
+  await selectOptions(['书签']);
   button('下一步：选项目').click();
   await settle();
   expect(button('笔记标题')).toBeUndefined();
@@ -251,6 +263,7 @@ it('仅书签不展示标题和空内容，空选择禁止继续且不发起预�
     button(name).click();
     await settle();
   }
+  await selectOptions(['标签建议', '重复检查', '网页正文存档']);
   expect(button('下一步：定范围').disabled).toBe(true);
   expect(document.body.textContent).toContain('至少选择一个适用项目');
   expect(api.previewRun).not.toHaveBeenCalled();
@@ -292,7 +305,7 @@ it('重新打开从资源开始；手动范围未选资料不能预检', async (
   button('重新整理').click();
   await settle();
   expect(document.body.textContent).toContain('想整理哪些对象？');
-  expect(button('下一步：选项目').disabled).toBe(false);
+  expect(button('下一步：选项目').disabled).toBe(true);
 });
 
 it('零资源确认不能开始，返回后必须重新预检', async () => {
@@ -371,7 +384,7 @@ it('正常检查折叠为摘要，依据不足仍保留手动补充并可展开�
   api.getRun.mockResolvedValue(ok(run));
   await mount();
   await openGroup('manual');
-  expect(button('收起详情')).toBeDefined();
+  expect(document.querySelector('.resource-detail-toggle[aria-expanded="true"]')?.getAttribute('aria-label')).toContain('收起详情');
   expect(button('添加标签')).toBeDefined();
   expect(document.body.textContent).toContain('有图片，不是空笔记');
 });
@@ -903,14 +916,10 @@ it('网页正文存档单项限定书签，移除重复适用说明，预检不�
   await mount();
   button('重新整理').click();
   await settle();
-  button('下一步：选项目').click();
-  await settle();
+  await toChecks();
   expect(button('网页正文存档')).toBeDefined();
   expect(document.body.textContent).not.toContain('标题建议仅用于笔记');
-  for (const name of ['标签建议', '笔记标题', '空内容检查', '重复检查']) {
-    button(name).click();
-    await settle();
-  }
+  await selectOptions(['网页正文存档']);
   button('下一步：定范围').click();
   await settle();
   button('确认整理范围').click();
@@ -919,19 +928,18 @@ it('网页正文存档单项限定书签，移除重复适用说明，预检不�
   expect(api.actOnRunSuggestion).not.toHaveBeenCalled();
 });
 
-it('标签可独立整理，自动选择免费图标检查与全部标签范围', async () => {
+it('标签可独立整理，图标检查需手动勾选', async () => {
   await mount();
   button('重新整理').click();
   await settle();
   button('标签').click();
   await settle();
-  for (const name of ['书签', '笔记', '文件']) {
-    button(name).click();
-    await settle();
-  }
+
   button('下一步：选项目').click();
   await settle();
-  expect(button('补全标签图标').getAttribute('aria-pressed')).toBe('true');
+  expect(button('补全标签图标').getAttribute('aria-pressed')).toBe('false');
+  expect(button('下一步：定范围').disabled).toBe(true);
+  await selectOptions(['补全标签图标']);
   expect(button('标签建议')).toBeUndefined();
   button('下一步：定范围').click();
   await settle();
@@ -1003,4 +1011,95 @@ it.each(['pending', 'applied'])('标签来源标记与 %s 状态一致，不把�
     expect(marks[0].closest('.resource-tag-chip')).not.toBeNull();
     expect(marks[0].classList.contains('b-chip')).toBe(false);
   }
+});
+
+
+it('存档生成后先预览，应用才保存且不会再次生成', async () => {
+  const suggestion = { id: 'archive', kind: 'archive', status: 'pending', action: 'archive', archivePreview: { status: 'ready', excerpt: '正文开头', charCount: 120 }, reason: '旧说明：失败保留已有内容' };
+  const run = { ...result(), items: [{ id: 'archive-item', aiStatus: 'not_needed', ruleStatus: 'completed', resource: { id: 'b', type: 'bookmark', title: '网页', source: { folder: '' }, guards: {}, tags: [] }, suggestions: [suggestion] }] };
+  api.listRuns.mockResolvedValue(ok([run]));
+  api.getRun.mockImplementation(async () => ok(JSON.parse(JSON.stringify(run))));
+  api.getOrganizeArchiveDraft.mockResolvedValue(ok({ content: '预览完整正文', update_time: '2026-09-09' }));
+  api.actOnRunSuggestion.mockImplementation(async () => { suggestion.status = 'applied'; return ok({ status: 'applied', applied: 'saved' }); });
+  await mount();
+  expect(document.body.textContent).toContain('生成成功 · 待应用');
+  expect(document.body.textContent).toContain('正文开头');
+  expect(document.body.textContent).not.toContain('旧说明');
+  button('预览正文').click(); await settle();
+  expect(document.body.textContent).toContain('预览完整正文');
+  expect(document.body.textContent).not.toContain('已保存的网页正文');
+  expect(api.getOrganizeArchiveDraft).toHaveBeenCalledWith('r', 'archive');
+  expect(api.actOnRunSuggestion).not.toHaveBeenCalled();
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await settle();
+  button('应用').click(); await settle();
+  expect(api.actOnRunSuggestion).toHaveBeenCalledTimes(1);
+  expect(api.getOrganizeArchiveDraft).toHaveBeenCalledTimes(1);
+});
+
+it('存档生成失败直接显示原因，没有应用按钮', async () => {
+  const run = { ...result(), items: [{ id: 'failed-item', aiStatus: 'not_needed', ruleStatus: 'completed', resource: { id: 'b', type: 'bookmark', title: '网页', source: { folder: '' }, guards: {}, tags: [] }, suggestions: [{ id: 'failed', kind: 'archive', status: 'failed', reason: '页面需要登录' }] }] };
+  api.listRuns.mockResolvedValue(ok([run])); api.getRun.mockResolvedValue(ok(run));
+  await mount(); await openGroup('analysis');
+  document.querySelector<HTMLButtonElement>('[aria-controls="checks-failed-item"]')?.click(); await settle();
+  expect(document.body.textContent).toContain('生成失败');
+  expect(document.body.textContent).toContain('页面需要登录');
+  expect(button('应用')).toBeUndefined();
+});
+
+it('已有存档的检查结果保留可打开的预览入口', async () => {
+  const run = { ...result(), items: [{ id: 'saved-item', aiStatus: 'not_needed', ruleStatus: 'completed', resource: { id: 'b', type: 'bookmark', title: '已有存档网页', source: { folder: '' }, guards: {}, tags: [] }, suggestions: [{ id: 'saved', kind: 'archive', status: 'no_suggestion', reason: '当前网址已有正文存档，无需重复读取' }] }] };
+  api.listRuns.mockResolvedValue(ok([run])); api.getRun.mockResolvedValue(ok(run));
+  vi.mocked(apiBasePost).mockResolvedValue(ok({ content: '之前保存的正文' }));
+  await mount(); await openGroup('clear');
+  const details = document.querySelector('[aria-controls="checks-saved-item"]') as HTMLButtonElement;
+  if (details?.getAttribute('aria-expanded') !== 'true') details?.click();
+  await settle();
+  button('预览存档').click(); await settle();
+  expect(document.body.textContent).toContain('之前保存的正文');
+  expect(api.actOnRunSuggestion).not.toHaveBeenCalled();
+});
+
+
+it.each([false, true])('无正文存档按真实可审核成果分组，另有标签建议=%s', async (hasTags) => {
+  const suggestions = [{ id: 'archive', kind: 'archive', status: 'pending', action: 'archive', reason: '尚无正文' }, ...(hasTags ? [{ id: 'tags', kind: 'tags', status: 'pending', after: [{ id: 't', name: '开发' }], reason: '推荐标签' }] : [])];
+  const run = { ...result(), items: [{ id: 'legacy-item', aiStatus: 'not_needed', ruleStatus: 'completed', resource: { id: 'b', type: 'bookmark', title: '无正文网页', source: { folder: '' }, guards: {}, tags: [] }, suggestions }] };
+  api.listRuns.mockResolvedValue(ok([run])); api.getRun.mockResolvedValue(ok(run));
+  await mount();
+  const target = hasTags ? 'priority' : 'analysis';
+  await openGroup(target);
+  expect(document.querySelector(`.group-${target}`)?.textContent).toContain('无正文网页');
+  if (!hasTags) expect(document.querySelector('.group-priority')).toBeNull();
+});
+
+it.each([false, true])('文件读取原因只显示一次，独立页数信息保留=%s', async (pages) => {
+  const reading = { state: 'metadata', complete: false, reasonCode: 'UNSUPPORTED_FILE_TYPE', ...(pages ? { totalPages: 5, readPages: 2, missingPages: [3, 4, 5] } : {}) };
+  const run = { ...result(), items: [{ id: 'unreadable-item', aiStatus: 'failed', ruleStatus: 'completed', resource: { id: 'f', type: 'file', title: '视频.mp4', reading, source: { folder: '' }, guards: {}, tags: [] }, suggestions: [{ id: 'tags', kind: 'tags', status: 'failed', reading, reason: '不能读取' }] }] };
+  api.listRuns.mockResolvedValue(ok([run])); api.getRun.mockResolvedValue(ok(run));
+  await mount(); await openGroup('analysis');
+  document.querySelector<HTMLButtonElement>('[aria-controls="checks-unreadable-item"]')?.click(); await settle();
+  const reason = zh.organizeFile.reasons.unsupported;
+  expect(document.body.textContent?.split(reason).length).toBe(2);
+  expect(Boolean(document.querySelector('.file-reading-details'))).toBe(pages);
+  if (pages) expect(document.querySelector('.file-reading-details')?.textContent).toContain('3, 4, 5');
+});
+
+
+it('点击资源行空白展开收起；详情和资源入口不触发展开', async () => {
+  const run = { ...result(), items: [{ id: 'row-item', aiStatus: 'not_needed', ruleStatus: 'completed', resource: { id: 'b', type: 'bookmark', title: '可展开网页', source: { folder: '' }, guards: {}, tags: [] }, suggestions: [{ id: 'a', kind: 'archive', status: 'pending', reason: '尚无正文' }] }] };
+  api.listRuns.mockResolvedValue(ok([run])); api.getRun.mockResolvedValue(ok(run));
+  await mount(); await openGroup('analysis');
+  const header = document.querySelector('.workspace-resource > header') as HTMLElement;
+  const toggle = header.querySelector('.resource-detail-toggle') as HTMLButtonElement;
+  expect(toggle.textContent?.trim()).toBe('');
+  expect(toggle.getAttribute('aria-label')).toContain('可展开网页');
+  header.click(); await settle();
+  expect(toggle.getAttribute('aria-expanded')).toBe('true');
+  (document.querySelector('.resource-expanded') as HTMLElement).click(); await settle();
+  expect(toggle.getAttribute('aria-expanded')).toBe('true');
+  header.querySelector<HTMLButtonElement>('.resource-title-link')!.click(); await settle();
+  expect(toggle.getAttribute('aria-expanded')).toBe('true');
+  header.querySelector<HTMLButtonElement>('.resource-symbol')!.click(); await settle();
+  expect(toggle.getAttribute('aria-expanded')).toBe('true');
+  toggle.click(); await settle();
+  expect(toggle.getAttribute('aria-expanded')).toBe('false');
 });
