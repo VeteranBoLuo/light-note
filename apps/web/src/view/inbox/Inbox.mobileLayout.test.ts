@@ -138,7 +138,7 @@ describe('移动端待办页签布局', () => {
 
   it('待办列表复用稳定批量入口与共享底栏，移动端动作收进更多抽屉', () => {
     expect(inboxSource.match(/v-if="todoView === 'list' && \(todo\.items\.length \|\| pageLoading\)"/g)).toHaveLength(
-      2,
+      1,
     );
     expect(inboxSource.match(/:active="todoSelectionMode"/g)).toHaveLength(3);
     expect(inboxSource).toContain('<ResourceBatchActionBar');
@@ -238,20 +238,9 @@ describe('移动端待办页签布局', () => {
     expect(nightThemeSource).toContain('--todo-summary-icon-border: #514d76');
   });
 
-  it('桌面待办复用移动端独立卡片边界，移动端规则保持独立', () => {
-    expect(inboxSource).toMatch(/\.inbox-content\s*\{[\s\S]*?border:\s*0;[\s\S]*?background:\s*transparent;/);
-    expect(inboxSource).toMatch(
-      /@media \(min-width: 768px\)[\s\S]*?\.inbox-page--todo-focused \.todo-group\s*\{[\s\S]*?border:\s*0;[\s\S]*?background:\s*transparent;/,
-    );
-    expect(inboxSource).toMatch(
-      /@media \(min-width: 768px\)[\s\S]*?\.inbox-page--todo-focused \.todo-group__items :deep\(\.todo-item\)\s*\{[\s\S]*?border:\s*1px solid var\(--surface-border-color\);[\s\S]*?border-left:\s*4px solid/,
-    );
-    expect(inboxSource).toMatch(
-      /\.inbox-page--todo-focused \.todo-group__items :deep\(\.todo-item\.is-completed\)\s*\{[\s\S]*?border-left-color:\s*var\(--success-color/,
-    );
-    expect(inboxSource).toMatch(
-      /\.inbox-page--mobile-todo \.todo-group__items :deep\(\.todo-item\)\s*\{[\s\S]*?border-left:\s*4px solid/,
-    );
+  it('待办分组使用紧凑列表边界，系列正文不重复分隔', () => {
+    expect(inboxSource).toMatch(/\.todo-group__items :deep\(\.todo-item\)\s*\{[\s\S]*?border-bottom:\s*1px solid var\(--surface-divider-color\);/);
+    expect(inboxSource).toMatch(/\.todo-group__items :deep\(\.todo-series-group \.todo-item\)\s*\{\s*border-bottom:\s*0;/);
     expect(inboxSource).toMatch(/\.inbox-toolbar\s*\{[\s\S]*?border:\s*0;[\s\S]*?box-shadow:\s*none;/);
   });
 
@@ -260,14 +249,11 @@ describe('移动端待办页签布局', () => {
     expect(inboxSource).toContain("'has-bottom-fade': showBottomFade && !isTodoFocused");
   });
 
-  it('移动端保留页面标题和独立卡片，新建只使用顶栏入口', () => {
+  it('移动端保留页面标题，新建只使用顶栏入口', () => {
     expect(inboxSource).toContain('class="mobile-todo-heading"');
     expect(inboxSource).not.toContain('class="mobile-todo-create-fab"');
     expect(inboxSource).toMatch(/router.push\(\{\s*name: 'todoCreate',[\s\S]*?todoInitialValues/);
     expect(inboxSource).toMatch(/\.inbox-page--mobile-todo \.todo-group\s*\{[\s\S]*?border:\s*0;/);
-    expect(inboxSource).toMatch(
-      /\.inbox-page--mobile-todo \.todo-group__items :deep\(\.todo-item\)\s*\{[\s\S]*?border-left:\s*4px solid/,
-    );
   });
 
   it('进入待办时保留有效选择，旧排序回退到默认智能排序', () => {

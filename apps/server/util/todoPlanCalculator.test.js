@@ -1014,3 +1014,21 @@ describe('todoPlanCalculator', () => {
     ).toThrow(`超过 ${TODO_SINGLE_TASK_MAX_REMINDER_JOBS} 个上限`);
   });
 });
+
+it('独立待办截止时刻可空：仅过去的开始时刻要求处理选择，确认后可创建', () => {
+  const input = dailyPlan({
+    timing: { timezone: 'Asia/Shanghai', anchorDate: '2026-08-06', startTime: '07:00', dueTime: null, dueDayOffset: 0 },
+    plan: { type: 'scheduled', frequency: 'daily', interval: 1, end: { mode: 'count', count: 3 } },
+    reminder: { mode: 'none', channels: [] },
+  });
+  const past = calculateTodoPlan(input, { now: NOW });
+  expect(past.requiredChoices).toEqual(['pastPolicy']);
+  const confirmed = calculateTodoPlan({ ...input, plan: { ...input.plan, pastPolicy: 'keep_overdue' } }, { now: NOW });
+  expect(confirmed.requiredChoices).toEqual([]);
+  expect(confirmed.occurrenceCount).toBe(3);
+  for (const reminder of [input.reminder, { mode: 'once_per_instance', trigger: { type: 'at_start' }, channels: ['in_app'] }]) {
+    const future = calculateTodoPlan({ ...input, timing: { ...input.timing, startTime: '09:00' }, reminder }, { now: NOW });
+    expect(future.requiredChoices).toEqual([]);
+    expect(future.occurrenceCount).toBe(3);
+  }
+});

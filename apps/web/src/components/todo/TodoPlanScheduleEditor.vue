@@ -234,59 +234,61 @@
     </section>
 
     <section v-show="mobileStep !== 2" class="todo-plan-preview" :class="{ 'has-error': previewError }">
-      <header>
-        <div>
-          <strong>{{ t('inbox.todoPlanPreview') }}</strong>
-          <small>{{ t('inbox.todoPlanPreviewServer') }}</small>
-        </div>
-        <BLoading v-if="previewLoading" inline loading :title="t('common.loading')" />
-      </header>
-      <p v-if="previewError" class="todo-plan-preview__error">{{ previewError }}</p>
-      <template v-else-if="preview">
-        <strong class="todo-plan-preview__headline">{{ preview.displaySummary.title }}</strong>
-        <div class="todo-plan-preview__summary-list">
+      <div class="todo-plan-preview__content">
+        <header>
           <div>
-            <span>{{ t('inbox.todoPlanPreviewRange') }}</span>
-            <strong>{{ preview.displaySummary.range }}</strong>
+            <strong>{{ t('inbox.todoPlanPreview') }}</strong>
+            <small>{{ t('inbox.todoPlanPreviewServer') }}</small>
           </div>
-          <div v-if="preview.displaySummary.timing">
-            <span>{{ t('inbox.todoPlanPreviewTiming') }}</span>
-            <strong>{{ preview.displaySummary.timing }}</strong>
+          <BLoading v-if="previewLoading" inline loading :title="t('common.loading')" />
+        </header>
+        <p v-if="previewError" class="todo-plan-preview__error">{{ previewError }}</p>
+        <template v-else-if="preview">
+          <strong class="todo-plan-preview__headline">{{ preview.displaySummary.title }}</strong>
+          <div class="todo-plan-preview__summary-list">
+            <div>
+              <span>{{ t('inbox.todoPlanPreviewRange') }}</span>
+              <strong>{{ preview.displaySummary.range }}</strong>
+            </div>
+            <div v-if="preview.displaySummary.timing">
+              <span>{{ t('inbox.todoPlanPreviewTiming') }}</span>
+              <strong>{{ preview.displaySummary.timing }}</strong>
+            </div>
+            <div>
+              <span>{{ t('inbox.todoPlanPreviewReminder') }}</span>
+              <strong>{{ preview.displaySummary.reminder }}</strong>
+            </div>
           </div>
+          <div class="todo-plan-preview__facts">
+            <span>{{
+              t('inbox.todoPlanInstances', { count: preview.occurrenceCount ?? preview.generatedNowCount })
+            }}</span>
+            <span>{{ t('inbox.todoPlanReminderJobs', { count: preview.reminderJobCount }) }}</span>
+            <span v-if="preview.nextReminderAt">{{
+              t('inbox.todoPlanNextReminder', { time: preview.nextReminderAt })
+            }}</span>
+          </div>
+        </template>
+        <p v-else>{{ t('inbox.todoPlanPreviewWaiting') }}</p>
+        <div v-if="needsPastPolicy" class="todo-plan-editor__past">
           <div>
-            <span>{{ t('inbox.todoPlanPreviewReminder') }}</span>
-            <strong>{{ preview.displaySummary.reminder }}</strong>
+            <strong>{{ t('inbox.todoPastChoiceTitle') }}</strong>
+            <small>{{ t('inbox.todoPastChoiceHint') }}</small>
+          </div>
+          <div class="todo-plan-editor__past-options" role="group" :aria-label="t('inbox.todoPastChoose')">
+            <BButton
+              v-for="option in pastPolicyOptions"
+              :key="option.value"
+              :class="{ active: form.pastPolicy === option.value }"
+              @click="selectPastPolicy(option.value)"
+            >
+              <strong>{{ option.label }}</strong>
+              <small>{{ pastPolicyHint(option.value) }}</small>
+            </BButton>
           </div>
         </div>
-        <div class="todo-plan-preview__facts">
-          <span>{{
-            t('inbox.todoPlanInstances', { count: preview.occurrenceCount ?? preview.generatedNowCount })
-          }}</span>
-          <span>{{ t('inbox.todoPlanReminderJobs', { count: preview.reminderJobCount }) }}</span>
-          <span v-if="preview.nextReminderAt">{{
-            t('inbox.todoPlanNextReminder', { time: preview.nextReminderAt })
-          }}</span>
-        </div>
-      </template>
-      <p v-else>{{ t('inbox.todoPlanPreviewWaiting') }}</p>
-      <div v-if="needsPastPolicy" class="todo-plan-editor__past">
-        <div>
-          <strong>{{ t('inbox.todoPastChoiceTitle') }}</strong>
-          <small>{{ t('inbox.todoPastChoiceHint') }}</small>
-        </div>
-        <div class="todo-plan-editor__past-options" role="group" :aria-label="t('inbox.todoPastChoose')">
-          <BButton
-            v-for="option in pastPolicyOptions"
-            :key="option.value"
-            :class="{ active: form.pastPolicy === option.value }"
-            @click="selectPastPolicy(option.value)"
-          >
-            <strong>{{ option.label }}</strong>
-            <small>{{ pastPolicyHint(option.value) }}</small>
-          </BButton>
-        </div>
+        <slot name="preview-actions" />
       </div>
-      <slot name="preview-actions" />
     </section>
   </div>
 </template>
@@ -797,7 +799,7 @@
   }
   .todo-plan-editor__section > header,
   .todo-plan-editor__scope,
-  .todo-plan-preview > header {
+  .todo-plan-preview__content > header {
     flex-direction: row;
     align-items: flex-start;
     justify-content: space-between;
@@ -943,6 +945,21 @@
     border-radius: 0;
     background: var(--workspace-panel-bg-color);
   }
+  .todo-plan-preview__content {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  @media (min-width: 981px) {
+    .todo-plan-editor.is-desktop-layout .todo-plan-preview__content {
+      position: sticky;
+      top: 20px;
+      max-height: calc(100vh - 110px);
+      max-height: calc(100dvh - 110px);
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
+  }
   .todo-plan-preview.has-error {
     border-color: var(--danger-color, #e5484d);
   }
@@ -1057,7 +1074,7 @@
     }
     .todo-plan-editor__section > header,
     .todo-plan-editor__scope,
-    .todo-plan-preview > header,
+    .todo-plan-preview__content > header,
     .todo-plan-editor__past {
       flex-direction: column;
     }

@@ -3,6 +3,8 @@ import { createPinia, setActivePinia } from 'pinia';
 
 const listTodos = vi.fn();
 const getTodoWorkspace = vi.fn();
+const getTodoWorkspaceGroup = vi.fn();
+const getTodoWorkspaceSeries = vi.fn();
 const countTodos = vi.fn();
 const completeTodo = vi.fn();
 const reopenTodo = vi.fn();
@@ -19,6 +21,8 @@ const snoozeTodo = vi.fn();
 vi.mock('@/api/todoApi', () => ({
   listTodos,
   getTodoWorkspace,
+  getTodoWorkspaceGroup,
+  getTodoWorkspaceSeries,
   countTodos,
   completeTodo,
   reopenTodo,
@@ -207,5 +211,116 @@ describe('workspace subitem safety', () => {
     });
     await store.loadMore();
     expect(store.items.map((item) => item.id)).toEqual(['a', 'b']);
+  });
+});
+
+describe('series workspace pagination', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    setActivePinia(createPinia());
+  });
+  const summary = {
+    status: 200,
+    data: {
+      groups: [
+        { key: 'focus', nodeCount: 40, instanceCount: 200 },
+        { key: 'unassigned', nodeCount: 1, instanceCount: 1 },
+      ],
+      statusTotals: { pending: 201, completed: 0, all: 201 },
+    },
+  };
+  const node = (id: string) => ({ kind: 'item', key: id, item: { id, status: 'pending' } });
+  async function setup() {
+    const store = useTodoStore();
+    store.workspaceEnabled = true;
+    store.seriesPresentation = true;
+    getTodoWorkspace.mockResolvedValue(summary);
+    await store.refreshList({ status: 'pending' });
+    return store;
+  }
+  it('loads groups lazily, independently and deduplicates repeated pages', async () => {
+    const store = await setup();
+    expect(store.items).toEqual([]);
+    expect(store.total).toBe(201);
+    expect(getTodoWorkspaceGroup).not.toHaveBeenCalled();
+    getTodoWorkspaceGroup.mockResolvedValueOnce({
+      status: 200,
+      data: { nodes: [node('a')], nextCursor: 'next', total: 40 },
+    });
+    await store.loadGroup('focus');
+    expect(store.groups[1].loaded).toBe(false);
+    getTodoWorkspaceGroup.mockResolvedValueOnce({ status: 200, data: { nodes: [node('a'), node('b')], total: 40 } });
+    await store.loadGroup('focus');
+    expect(store.items.map((item) => item.id)).toEqual(['a', 'b']);
+  });
+  it('blocks duplicate requests, retains rows on failure and retries only explicitly', async () => {
+    const store = await setup();
+    let resolve: (value: unknown) => void = () => {};
+    getTodoWorkspaceGroup.mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    const first = store.loadGroup('focus');
+    await store.loadGroup('focus');
+    expect(getTodoWorkspaceGroup).toHaveBeenCalledTimes(1);
+    resolve({ status: 200, data: { nodes: [node('a')], nextCursor: 'next' } });
+    await first;
+    getTodoWorkspaceGroup.mockResolvedValueOnce({ status: 500 });
+    await store.loadGroup('focus');
+    await store.loadGroup('focus');
+    expect(getTodoWorkspaceGroup).toHaveBeenCalledTimes(2);
+    expect(store.items[0].id).toBe('a');
+    getTodoWorkspaceGroup.mockResolvedValueOnce({ status: 200, data: { nodes: [node('b')] } });
+    await store.loadGroup('focus', true);
+    expect(store.items.map((item) => item.id)).toEqual(['a', 'b']);
+  });
+  it('discards a page after an owner switch', async () => {
+    const store = await setup();
+    let resolve: (value: unknown) => void = () => {};
+    getTodoWorkspaceGroup.mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    const pending = store.loadGroup('focus');
+    store.resetForOwner('new-owner');
+    resolve({ status: 200, data: { nodes: [node('private')] } });
+    await pending;
+    expect(store.items).toEqual([]);
+    expect(store.groups).toEqual([]);
+  });
+  it('refreshes the loaded prefix atomically and preserves it if verification fails', async () => {
+    const store = await setup();
+    getTodoWorkspaceGroup.mockResolvedValueOnce({
+      status: 200,
+      data: { nodes: [node('a'), node('b')], nextCursor: 'next' },
+    });
+    await store.loadGroup('focus');
+    getTodoWorkspaceGroup.mockResolvedValueOnce({ status: 500 });
+    expect(await store.refreshList()).toBe(false);
+    expect(store.items.map((item) => item.id)).toEqual(['a', 'b']);
+    getTodoWorkspaceGroup.mockResolvedValueOnce({ status: 200, data: { nodes: [node('b')], nextCursor: 'next' } });
+    getTodoWorkspaceGroup.mockResolvedValueOnce({ status: 200, data: { nodes: [node('c')] } });
+    expect(await store.refreshList()).toBe(true);
+    expect(store.items.map((item) => item.id)).toEqual(['b', 'c']);
+  });
+  it('keeps independent series scopes and ignores replaced in-flight series pages', async () => {
+    const store = await setup();
+    let resolve: (value: unknown) => void = () => {};
+    getTodoWorkspaceSeries.mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    const old = store.loadSeriesPage('scope-a', { seriesId: 'a' }, true);
+    getTodoWorkspaceSeries.mockResolvedValueOnce({ status: 200, data: { items: [{ id: 'new' }], total: 1 } });
+    await store.loadSeriesPage('scope-a', { seriesId: 'a' }, true);
+    resolve({ status: 200, data: { items: [{ id: 'old' }], total: 1 } });
+    await old;
+    expect(store.seriesPages['scope-a'].items[0].id).toBe('new');
   });
 });

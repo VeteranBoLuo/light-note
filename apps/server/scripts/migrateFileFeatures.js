@@ -6,6 +6,7 @@ const files = [
   '20260909_image_preview_metadata.sql',
   '20260909_organize_file_evidence.sql',
   '20260909_note_import_tasks.sql',
+  '20260909_note_import_progress.sql',
   '20260909_visitor_examples.sql',
   '20260909_note_transfer_knowledge.sql',
   '20260909_organize_file_knowledge.sql',

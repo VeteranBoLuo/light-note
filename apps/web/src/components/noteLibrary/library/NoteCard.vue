@@ -21,7 +21,9 @@
       v-if="parentPathText && parentTargetId"
       class="note-parent-path"
       :path-text="parentPathText"
-      @activate="handleParentActivate(parentTargetId)"
+      :path="note.path"
+      :parent-id="parentTargetId"
+      @activate="handleParentActivate"
     />
     <div class="note-preview-body" :class="{ 'has-image': hasPreviewImage }">
       <!-- 正文仍只做纯文本插值；压缩首图按正文原顺序插入，绝不恢复 v-html。 -->

@@ -1,23 +1,23 @@
 <template>
   <div class="todo-independent-plan">
     <div ref="timingFieldsRef" class="todo-independent-plan__timing">
-      <label class="todo-independent-plan__date">
-        <span>{{ t('todoWorkspace.firstDate') }}</span>
-        <BDateTimePicker v-model:value="anchorDate" :show-time="false" />
-      </label>
+      <div class="todo-independent-plan__field todo-independent-plan__date">
+        <span>{{ t(currentOnly ? 'todoWorkspace.occurrenceDate' : 'todoWorkspace.firstDate') }}</span>
+        <BDateTimePicker v-model:value="anchorDate" :show-time="false" :aria-label="t(currentOnly ? 'todoWorkspace.occurrenceDate' : 'todoWorkspace.firstDate')" />
+      </div>
       <label ref="startFieldRef" class="todo-independent-plan__time-target">
-        <span>{{ t('todoWorkspace.eachStart') }}</span>
+        <span>{{ t(currentOnly ? 'inbox.todoStartAt' : 'todoWorkspace.eachStart') }}</span>
         <BTimePicker v-model:value="eachStart" />
       </label>
       <div ref="dueFieldRef" class="todo-independent-plan__field todo-independent-plan__time-target">
-        <span>{{ t('todoWorkspace.eachDue') }}</span>
+        <span>{{ t(currentOnly ? 'inbox.todoDueAt' : 'todoWorkspace.eachDue') }}</span>
         <div class="todo-independent-plan__due">
           <BTimePicker v-model:value="eachDue" />
           <BCheckbox controlled :model-value="nextDay" @update:model-value="nextDay = $event">{{ t('todoWorkspace.dueNextDay') }}</BCheckbox>
         </div>
       </div>
     </div>
-    <section class="todo-independent-plan__step">
+    <section v-if="!currentOnly" class="todo-independent-plan__step">
       <header class="todo-independent-plan__step-head">
         <div>
           <strong>{{ t('inbox.todoGuidedRepeatTitle') }}</strong>
@@ -83,7 +83,7 @@
       </div>
     </section>
 
-    <section class="todo-independent-plan__step">
+    <section v-if="!currentOnly" class="todo-independent-plan__step">
       <header class="todo-independent-plan__step-head">
         <div>
           <strong>{{ t('inbox.todoGuidedEndTitle') }}</strong>
@@ -103,11 +103,11 @@
       </div>
       <p class="todo-independent-plan__selection-hint">{{ endModeHint }}</p>
       <div v-if="endMode !== 'never'" class="todo-independent-plan__fields">
-        <label v-if="endMode === 'until'" class="todo-independent-plan__wide">
+        <div v-if="endMode === 'until'" class="todo-independent-plan__field todo-independent-plan__wide">
           <span>{{ t('todoWorkspace.endDate') }}</span>
-          <BDateTimePicker class="todo-independent-plan__date" v-model:value="untilDate" :show-time="false" />
+          <BDateTimePicker class="todo-independent-plan__date" v-model:value="untilDate" :show-time="false" :aria-label="t('todoWorkspace.endDate')" />
           <small class="todo-independent-plan__field-hint">{{ t('inbox.todoPlanEndByDateHint') }}</small>
-        </label>
+        </div>
         <label v-else-if="endMode === 'count'">
           <span>{{ t('inbox.todoPlanEndCount') }}</span>
           <BInput v-model:value="endCount" type="number" />
@@ -267,7 +267,7 @@
   } from '@/api/todoApi';
   import { suggestTodoPlanEndDate, todoTodayInTimezone, type TodoCreateDraftV3 } from './todoDraftNormalizer';
 
-  const props = withDefaults(defineProps<{ draft: TodoCreateDraftV3; needsPastPolicy?: boolean }>(), {
+  const props = withDefaults(defineProps<{ draft: TodoCreateDraftV3; needsPastPolicy?: boolean; currentOnly?: boolean }>(), {
     needsPastPolicy: false,
   });
   const timingFieldsRef = ref<HTMLElement | null>(null);
@@ -342,11 +342,13 @@
   const planType = computed<TodoPlanType>({
     get: () => props.draft.independentTasks.plan.type,
     set: (type) => {
+      const pastPolicy = props.draft.independentTasks.plan.pastPolicy || 'keep_overdue';
       props.draft.independentTasks.plan =
         type === 'after_completion'
-          ? { type, interval: 1, unit: 'day', end: { mode: 'count', count: 30 } }
+          ? { type, pastPolicy, interval: 1, unit: 'day', end: { mode: 'count', count: 30 } }
           : {
               type: 'scheduled',
+              pastPolicy,
               frequency: 'daily',
               interval: 1,
               end: { mode: 'until', untilDate: recommendedEndDate() },
@@ -864,16 +866,17 @@
     justify-content: center;
     flex-direction: column;
     gap: 2px;
-    padding: 9px 11px;
-    border: 1px solid var(--surface-border-color) !important;
+    padding: 8px 10px;
+    border: 2px solid var(--surface-border-color) !important;
     background: var(--workspace-panel-bg-color);
     line-height: 1.4;
     text-align: left;
     white-space: normal;
+    transition: border-color 0.2s, background-color 0.2s, color 0.2s;
   }
 
   .todo-independent-plan__past-options :deep(.b_btn.is-active) {
-    border: 2px solid var(--primary-color) !important;
+    border-color: var(--primary-color) !important;
     background: var(--mobile-selected-bg, var(--workspace-panel-bg-color));
   }
 

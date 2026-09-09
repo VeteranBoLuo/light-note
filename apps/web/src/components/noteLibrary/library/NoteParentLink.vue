@@ -1,26 +1,55 @@
 <template>
-  <BButton
-    class="note-parent-link"
-    :title="pathText"
-    :aria-label="`${$t('note.parentPage')}：${pathText}`"
-    @click.stop="emit('activate')"
-  >
-    <span class="note-parent-link__icon-shell" aria-hidden="true">
-      <SvgIcon :src="icon.resource.note" size="12" />
-    </span>
-    <span class="note-parent-link__label">{{ $t('note.parentPage') }}</span>
+  <span class="note-parent-link" :title="pathText" @click.stop>
+    <BButton
+      class="note-parent-link__prefix"
+      :aria-label="`${$t('note.parentPage')}：${segments.at(-1)?.title || pathText}`"
+      @click.stop="emit('activate', parentId)"
+    >
+      <span class="note-parent-link__icon-shell" aria-hidden="true">
+        <SvgIcon :src="icon.resource.note" size="12" />
+      </span>
+      <span class="note-parent-link__label">{{ $t('note.parentPage') }}</span>
+    </BButton>
     <span class="note-parent-link__separator" aria-hidden="true">›</span>
-    <span class="note-parent-link__text">{{ pathText }}</span>
-  </BButton>
+    <template v-for="(segment, index) in segments" :key="index">
+      <span v-if="index" class="note-parent-link__separator" aria-hidden="true">/</span>
+      <BButton
+        v-if="segment.id"
+        class="note-parent-link__text"
+        :title="segment.title"
+        @click.stop="emit('activate', segment.id)"
+      >{{ segment.title }}</BButton>
+      <span v-else class="note-parent-link__text">{{ segment.title }}</span>
+    </template>
+  </span>
 </template>
 
 <script lang="ts" setup>
+  import { computed } from 'vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
 
-  defineProps<{ pathText: string }>();
-  const emit = defineEmits<{ activate: [] }>();
+  const props = defineProps<{
+    pathText: string;
+    parentId: string;
+    path?: Array<{ id?: unknown; title?: unknown }> | null;
+  }>();
+  const emit = defineEmits<{ activate: [id: string] }>();
+  const segments = computed(() => {
+    if (Array.isArray(props.path) && props.path.length > 1) {
+      return props.path.slice(0, -1).map((item, index, parents) => ({
+        id: String(item.id || (index === parents.length - 1 ? props.parentId : '')).trim(),
+        title: String(item.title || '').trim(),
+      })).filter((item) => item.title);
+    }
+    // 旧响应没有祖先 ID 时，只让直接父级可点击，不能把整条路径误指向它。
+    const titles = props.pathText.split(' / ').map((title) => title.trim()).filter(Boolean);
+    return titles.map((title, index) => ({
+      title,
+      id: index === titles.length - 1 ? props.parentId : '',
+    }));
+  });
 </script>
 
 <style lang="less" scoped>
@@ -49,14 +78,37 @@
     text-align: left;
     white-space: nowrap;
 
-    &:focus-visible {
-      outline-color: var(--resource-note-color, #00a884);
+    &__prefix,
+    &__text.b_btn {
+      min-width: 0;
+      height: 24px;
+      padding: 0 2px;
+      border: 0;
+      background: transparent;
+      font-size: inherit;
+      line-height: inherit;
+      color: var(--desc-color);
+      border-radius: 4px;
 
-      .note-parent-link__text {
+      &:focus-visible {
+        outline-offset: -2px;
+      }
+
+      &:hover,
+      &:focus-visible {
         color: var(--text-color);
         text-decoration: underline;
         text-underline-offset: 2px;
       }
+    }
+
+    &__text.b_btn {
+      display: block;
+    }
+
+    &__prefix {
+      flex: 0 0 auto;
+      gap: 5px;
     }
 
     &__icon-shell {
@@ -94,13 +146,4 @@
     }
   }
 
-  @media (hover: hover) and (pointer: fine) {
-    .note-parent-link:hover {
-      .note-parent-link__text {
-        color: var(--text-color);
-        text-decoration: underline;
-        text-underline-offset: 2px;
-      }
-    }
-  }
 </style>

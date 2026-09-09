@@ -84,7 +84,8 @@ function decode(buffer) {
     throw importError('NOTE_IMPORT_ENCODING');
   }
 }
-export async function parseImportFiles(directory) {
+export async function parseImportFiles(directory, onProgress = () => {}) {
+  await onProgress({ stage: 'reading', filesDone: 0, filesTotal: null, imagesDone: 0, imagesTotal: null });
   const uploads = await fs.readdir(path.join(directory, 'uploads'));
   const budget = { bytes: 0, entries: 0 };
   const groups = [];
@@ -126,12 +127,34 @@ export async function parseImportFiles(directory) {
       sourceName: doc.name.slice(0, 1024),
       type: /\.(md|markdown)$/i.test(doc.name) ? 'markdown' : 'html',
       warnings: [],
+      warningDetails: [],
       images: [],
       position,
     };
-    const warn = (code) => {
+    const warn = (code, source = '') => {
       if (!item.warnings.includes(code)) item.warnings.push(code);
+      let detail = item.warningDetails.find((entry) => entry.code === code);
+      if (!detail) item.warningDetails.push((detail = { code, count: 0, sources: [] }));
+      detail.count++;
+      // Only a basename is exposed, never data URLs, credentials or absolute paths.
+      const name = /^(data:|https?:)/i.test(source)
+        ? ''
+        : path.posix.basename(String(source).replaceAll('\\', '/').split(/[?#]/)[0]).slice(0, 120);
+      if (name && !detail.sources.includes(name) && detail.sources.length < 5) detail.sources.push(name);
     };
+    let imagesDone = 0,
+      imagesTotal = null;
+    const report = (stage) =>
+      onProgress({
+        stage,
+        currentFile: path.posix.basename(doc.name),
+        currentItemId: item.id,
+        filesDone: position,
+        filesTotal: documents.length,
+        imagesDone,
+        imagesTotal,
+      });
+    await report('reading');
     const image = async (buffer) => {
       try {
         if (buffer.length > NOTE_IMAGE_MAX_BYTES) throw new Error();
@@ -155,20 +178,36 @@ export async function parseImportFiles(directory) {
       }
     };
     const resolveImage = async (src) => {
-      if (/^https?:\/\//i.test(src)) return src;
+      if (!src.trim()) {
+        warn('image_source_missing');
+        return '';
+      }
+      if (
+        src.startsWith('https://note-import.invalid/') &&
+        item.images.includes(src.slice('https://note-import.invalid/'.length))
+      )
+        return src;
+      if (/^https?:\/\//i.test(src)) {
+        warn('external_image');
+        return src;
+      }
       if (/^data:image\/(png|jpeg|gif|webp);base64,/i.test(src)) return image(Buffer.from(src.split(',')[1], 'base64'));
+      if (/^data:/i.test(src)) {
+        warn('unsupported_image');
+        return '';
+      }
       let target;
       try {
         const decoded = decodeURIComponent(src.split(/[?#]/)[0]);
         if (/^[a-z][a-z\d+.-]*:/i.test(decoded) || decoded.startsWith('/')) throw new Error();
         target = safeArchivePath(path.posix.normalize(path.posix.join(path.posix.dirname(doc.name), decoded)));
       } catch {
-        warn('missing_image');
+        warn('missing_image', src);
         return '';
       }
       const bytes = doc.files.get(target);
       if (!bytes) {
-        warn('missing_image');
+        warn('missing_image', src);
         return '';
       }
       return image(bytes);
@@ -182,7 +221,12 @@ export async function parseImportFiles(directory) {
           {
             externalFileAccess: false,
             includeEmbeddedStyleMap: false,
-            convertImage: mammoth.images.imgElement(async (img) => ({ src: await image(await img.read()) })),
+            convertImage: mammoth.images.imgElement(async (img) => {
+              const src = await image(await img.read());
+              imagesDone++;
+              await report('extracting_images');
+              return { src };
+            }),
           },
         );
         content = converted.value;
@@ -190,19 +234,44 @@ export async function parseImportFiles(directory) {
       } else content = decode(doc.buffer);
       if (content.length > LIMIT.contentLength * 6) throw importError('NOTE_IMPORT_CONTENT_LIMIT');
       if (item.type === 'html') {
+        imagesDone = 0;
         const $ = load(content);
         // Never preview active original HTML or styles from a full exported document.
         if ($('script,style,iframe,object,embed,base,link,meta').length) warn('format_simplified');
         $('script,style,iframe,object,embed,base,link,meta').remove();
+        // Closed lightbox scaffolding is not document content. Preserve dialogs with text or sourced media.
+        $('dialog:not([open])').each((_, element) => {
+          const dialog = $(element);
+          const copy = dialog.clone();
+          copy.find('button,img').remove();
+          if (
+            dialog.find('img').length &&
+            !copy.text().trim() &&
+            !dialog
+              .find('img')
+              .toArray()
+              .some((img) => ['src', 'srcset', 'data-src'].some((attr) => $(img).attr(attr)?.trim())) &&
+            !dialog
+              .find('*')
+              .toArray()
+              .some((node) => !['button', 'img', 'div', 'span'].includes(node.tagName))
+          )
+            dialog.remove();
+        });
+        imagesTotal = $('img').length;
+        await report('extracting_images');
         for (const element of $('img').toArray()) {
           const src = await resolveImage($(element).attr('src') || '');
           if (src) $(element).attr('src', src);
           else $(element).replaceWith($('<span>').text(`[${$(element).attr('alt') || 'Image unavailable'}]`));
+          imagesDone++;
+          await report('extracting_images');
         }
         $('a[href]').each((_, e) => {
           const href = $(e).attr('href');
           if (href && !/^(https?:|mailto:|tel:|#)/i.test(href)) warn('local_link');
         });
+        await report('sanitizing');
         const result = sanitizeNoteHtml($('body').html() || '');
         content = result.html;
         if (result.report.changed) warn('format_simplified');
@@ -218,6 +287,8 @@ export async function parseImportFiles(directory) {
             cursor = index + token.raw.length;
             if (token.type === 'image') {
               const src = await resolveImage(token.href);
+              imagesDone++;
+              await report('extracting_images');
               replacements.push({
                 start: index,
                 end: cursor,
@@ -230,6 +301,8 @@ export async function parseImportFiles(directory) {
               const $ = load(token.raw, {}, false);
               for (const e of $('img').toArray()) {
                 const src = await resolveImage($(e).attr('src') || '');
+                imagesDone++;
+                await report('extracting_images');
                 if (src) $(e).attr('src', src);
                 else $(e).replaceWith('[Image unavailable]');
               }
@@ -251,11 +324,19 @@ export async function parseImportFiles(directory) {
       }
       if (content.length > LIMIT.contentLength) throw importError('NOTE_IMPORT_CONTENT_LIMIT');
       if (!content.trim()) warn('empty_document');
+      await report('sanitizing');
       await writeJson(path.join(directory, `${item.id}.json`), { content, images: item.images });
     } catch (e) {
       item.errorCode = String(e.code || 'NOTE_IMPORT_PARSE_FAILED').slice(0, 80);
     }
     items.push(item);
+    await onProgress({
+      stage: 'parsed',
+      filesDone: position + 1,
+      filesTotal: documents.length,
+      imagesDone,
+      imagesTotal,
+    });
   }
   await writeJson(path.join(directory, 'parsed.json'), items);
   return items;

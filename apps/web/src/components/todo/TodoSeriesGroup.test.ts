@@ -33,9 +33,11 @@ function item(id: string, occurrenceNo: number): TodoItem {
   };
 }
 
-function mountGroup(selectable = false) {
+function mountGroup(selectable = false, workspace = false) {
   const items = [item('day-1', 1), item('day-2', 2)];
   const onPreview = vi.fn();
+  const onViewSeries = vi.fn();
+  const onSelect = vi.fn();
   const host = document.createElement('div');
   document.body.append(host);
   const app = createApp({
@@ -46,6 +48,12 @@ function mountGroup(selectable = false) {
           representative: items[0],
           items,
           selectable,
+          workspace,
+          instanceCount: 114,
+          overdueCount: 3,
+          futureCount: 110,
+          onViewSeries,
+          onSelect,
           onPreview,
         });
     },
@@ -58,7 +66,7 @@ function mountGroup(selectable = false) {
     app.unmount();
     host.remove();
   };
-  return { host, items, onPreview };
+  return { host, items, onPreview, onViewSeries, onSelect };
 }
 
 afterEach(() => {
@@ -93,4 +101,19 @@ describe('TodoSeriesGroup', () => {
     host.querySelector<HTMLElement>('.todo-item__body')!.click();
     expect(onPreview).toHaveBeenCalledWith(items[0]);
   });
+});
+
+it('workspace batch mode selects only the representative and opens a centrally owned series drawer', async () => {
+  const { host, items, onViewSeries, onSelect } = mountGroup(true, true);
+  await nextTick();
+  expect(host.querySelectorAll('.todo-item')).toHaveLength(1);
+  expect(host.textContent).toContain('选择仅作用于本次');
+  expect(host.textContent).toContain('114');
+  host.querySelector<HTMLElement>('.todo-item__select')!.click();
+  await nextTick();
+  expect(onSelect).toHaveBeenCalledWith(items[0], true);
+  host.querySelector<HTMLButtonElement>('.todo-series-group__view')!.click();
+  await nextTick();
+  expect(onViewSeries).toHaveBeenCalledTimes(1);
+  expect(document.querySelector('.b-drawer-wrapper')).toBeNull();
 });

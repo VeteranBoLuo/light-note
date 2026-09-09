@@ -1,7 +1,11 @@
 <template>
   <BModal
     v-model:visible="visible"
-    :title="t(`noteTransfer.${mode === 'export' ? 'export' : mode === 'records' ? 'records' : 'import'}`)"
+    :title="
+      t(
+        `noteTransfer.${mode === 'export' ? 'export' : mode === 'records' ? 'records' : resultView ? 'resultTitle' : executionView ? 'executionTitle' : 'import'}`,
+      )
+    "
     :width="dialogWidth"
     fullscreen-mobile
     :close-disabled="busy"
@@ -9,7 +13,14 @@
     :history-closable="!busy"
     :esc-closable="!busy"
   >
-    <div class="note-transfer" :class="{ 'is-mobile': device.isMobile }" :aria-busy="busy">
+    <div
+      ref="contentRef"
+      tabindex="-1"
+      class="note-transfer"
+      :class="{ 'is-mobile': device.isMobile }"
+      :aria-busy="busy"
+    >
+      <p v-if="stale" class="note-transfer__notice" role="status">{{ t('noteTransfer.stale') }}</p>
       <p v-if="error" class="note-transfer__error" role="alert">{{ error }}</p>
       <template v-if="mode === 'export'">
         <div class="note-transfer__subject">
@@ -65,9 +76,11 @@
               ><strong>{{ record.title || t('noteTransfer.importBatch') }}</strong>
               <small>{{ formatTime(record.createTime) }}</small>
               <span class="note-transfer__record-summary">{{
-                record.itemCount
-                  ? t('noteTransfer.done', { done: record.completedCount || 0, total: record.itemCount })
-                  : t(`noteTransfer.status.${record.status}`)
+                record.status === 'review'
+                  ? t('noteTransfer.awaitingReview', { count: record.itemCount })
+                  : record.itemCount
+                    ? t('noteTransfer.done', { done: record.completedCount || 0, total: record.itemCount })
+                    : t(`noteTransfer.status.${record.status}`)
               }}</span>
             </span>
             <span class="note-transfer__record-aside">
@@ -81,20 +94,20 @@
                 }}</span
               >
               <span class="note-transfer__record-open"
-                >{{ t('noteTransfer.viewTask') }} <SvgIcon :src="icon.noteTree.chevron" size="12"
+                >{{ t(`noteTransfer.${recordAction(record.status)}`) }} <SvgIcon :src="icon.noteTree.chevron" size="12"
               /></span>
             </span>
           </BButton>
         </div>
       </template>
       <template v-else>
-        <div class="note-transfer__task-entry">
+        <div v-if="!task && !detailLoading" class="note-transfer__task-entry">
           <BButton :disabled="busy" @click="openRecords"
             >{{ t('noteTransfer.records') }}<span v-if="pendingCount"> ({{ pendingCount }})</span></BButton
           >
         </div>
         <ol
-          v-if="!task || !['expired', 'failed'].includes(task.status)"
+          v-if="!detailLoading && !detailFailed && !executionView && !resultView"
           class="note-transfer__steps"
           :aria-label="t('noteTransfer.import')"
         >
@@ -107,7 +120,28 @@
             ><span>{{ t(`noteTransfer.${step}`) }}</span></li
           >
         </ol>
-        <template v-if="!task || (task.status === 'uploading' && !task.uploadBytes)">
+        <div v-if="detailLoading" class="note-transfer__skeleton" aria-busy="true"
+          ><BLoading inline loading :title="t('noteTransfer.loadingTask')" /><div /><div /><div
+        /></div>
+        <div v-else-if="detailFailed" class="note-transfer__skeleton"
+          ><p>{{ t('noteTransfer.failed') }}</p
+          ><BButton @click="openRecords">{{ t('noteTransfer.back') }}</BButton></div
+        >
+        <NoteImportProgress
+          v-else-if="uploadState || (task && task.status === 'parsing')"
+          :task="task"
+          :upload="uploadState"
+        />
+        <NoteImportResult
+          v-else-if="task && resultView"
+          :task="task"
+          :destination="parentLabel"
+          :celebrate="celebrate"
+          :mobile="device.isMobile"
+          @open-note="openNote"
+        />
+        <NoteImportProgress v-else-if="task && executionView" :task="task" />
+        <template v-else-if="!task || (task.status === 'uploading' && !task.uploadBytes)">
           <p v-if="task" class="note-transfer__notice">{{ t('noteTransfer.uploadPending') }}</p>
           <div
             class="note-transfer__drop"
@@ -144,19 +178,6 @@
             ><span>{{ t('noteTransfer.noOverwrite') }}</span></div
           >
           <p class="note-transfer__footnote">{{ t('noteTransfer.stayOpen') }}</p>
-        </template>
-        <template v-else-if="['expired', 'failed'].includes(task.status)">
-          <div class="note-transfer__failure">
-            <span class="note-transfer__failure-symbol"><SvgIcon :src="icon.resource.note" size="28" /></span>
-            <h3>{{ t(task.status === 'expired' ? 'noteTransfer.expiredTitle' : 'noteTransfer.failedTitle') }}</h3>
-            <p>{{ t(task.status === 'expired' ? 'noteTransfer.expiredHint' : 'noteTransfer.failedHint') }}</p>
-            <div v-if="task.errorCode" class="note-transfer__failure-detail"
-              ><span>{{ t('noteTransfer.failureReason') }}</span
-              ><strong>{{ failureReason }}</strong
-              ><small>{{ task.errorCode }}</small></div
-            >
-            <div class="note-transfer__retained">{{ t('noteTransfer.notesRetained') }}</div>
-          </div>
         </template>
         <template v-else>
           <div class="note-transfer__section-head">
@@ -231,11 +252,7 @@
                     t('noteTransfer.imageCount', { count: item.imageCount })
                   }}</span></div
                 >
-                <div v-if="item.warnings.length" class="note-transfer__warnings"
-                  ><span v-for="warning in item.warnings" :key="warning">{{
-                    t(`noteTransfer.warning.${warning}`)
-                  }}</span></div
-                >
+                <NoteImportWarnings :item="item" />
                 <p v-if="item.errorCode" class="note-transfer__error"
                   >{{ t('noteTransfer.failed') }} ({{ item.errorCode }})</p
                 >
@@ -285,13 +302,25 @@
           >{{ t('noteTransfer.exportStart') }}</BButton
         >
         <template v-if="mode === 'import' && task">
-          <BButton v-if="canDismiss" :disabled="busy" @click="dismissTask">{{
-            t(
-              ['uploading', 'review', 'paused'].includes(task.status)
-                ? 'noteTransfer.abandon'
-                : 'noteTransfer.deleteRecord',
-            )
-          }}</BButton>
+          <BActionMenu
+            v-if="canDismiss"
+            :disabled="busy"
+            :z-index="800"
+            :items="[
+              {
+                key: 'dismiss',
+                label: t(
+                  ['uploading', 'review', 'paused'].includes(task.status)
+                    ? 'noteTransfer.abandon'
+                    : 'noteTransfer.deleteRecord',
+                ),
+                danger: true,
+              },
+            ]"
+            @select="dismissTask"
+          >
+            <BButton :disabled="busy">{{ t('noteTransfer.more') }}</BButton>
+          </BActionMenu>
           <BButton
             v-if="['expired', 'failed'].includes(task.status)"
             type="primary"
@@ -350,7 +379,7 @@
   </BModal>
 </template>
 <script setup lang="ts">
-  import { computed, onBeforeUnmount, ref, watch } from 'vue';
+  import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
   import { useI18n } from 'vue-i18n';
@@ -359,6 +388,11 @@
   import { apiBasePost } from '@/http/request';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import BActionMenu from '@/components/base/BasicComponents/BActionMenu.vue';
+  import NoteImportProgress from './NoteImportProgress.vue';
+  import NoteImportResult from './NoteImportResult.vue';
+  import NoteImportWarnings from './NoteImportWarnings.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
@@ -392,6 +426,24 @@
     busy = ref(false),
     error = ref(''),
     mode = ref<'import' | 'records' | 'export'>('import');
+  const contentRef = ref<HTMLElement>();
+  const detailFailed = ref(false);
+  const detailLoading = ref(false),
+    stale = ref(false),
+    celebrate = ref(false);
+  const uploadState = ref<{ name: string; percent: number | null; received: boolean } | null>(null);
+  const executionView = computed(() => !!task.value && ['queued', 'running'].includes(task.value.status));
+  const resultView = computed(
+    () => !!task.value && ['completed', 'paused', 'failed', 'expired'].includes(task.value.status),
+  );
+  const recordAction = (status: string) =>
+    status === 'review' || status === 'uploading'
+      ? 'reviewContinue'
+      : status === 'paused'
+        ? 'continue'
+        : ['queued', 'running', 'parsing'].includes(status)
+          ? 'viewProgress'
+          : 'viewResult';
   const task = ref<NoteImportTask | null>(null),
     records = ref<any[]>([]),
     parentId = ref<string | null>(null),
@@ -417,6 +469,9 @@
   const stepIndex = computed(() =>
     !task.value || ['uploading', 'parsing'].includes(task.value.status) ? 0 : task.value.status === 'review' ? 1 : 2,
   );
+  let taskRevision = 0;
+  let taskFlight: symbol | null = null,
+    recordsFlight: symbol | null = null;
   let generation = 0,
     timer: ReturnType<typeof setTimeout> | undefined;
   const scopeOptions = computed(() => [
@@ -431,6 +486,11 @@
   ]);
   const formatTime = (value: string) => new Date(value).toLocaleString(locale.value);
   async function call(action: string, data: any = {}) {
+    if (['start', 'stop', 'parse'].includes(action)) {
+      taskRevision++;
+      taskFlight = null;
+      clearTimeout(timer);
+    }
     const r = await apiBasePost(`/api/note/imports/${action}`, data, { silent: true });
     if (r.status !== 200) throw Object.assign(new Error(r.msg), { code: r.data?.errorCode });
     return r.data;
@@ -449,11 +509,23 @@
           (/^NOTE_IMPORT_[A-Z_]+$/.test(cause?.code || '') ? ` (${cause.code})` : '');
       }
     } finally {
-      busy.value = false;
+      if (g === generation) {
+        busy.value = false;
+        uploadState.value = null;
+        schedule();
+      }
     }
   }
   function reset() {
     generation++;
+    taskFlight = null;
+    recordsFlight = null;
+    busy.value = false;
+    detailLoading.value = false;
+    detailFailed.value = false;
+    uploadState.value = null;
+    stale.value = false;
+    celebrate.value = false;
     clearTimeout(timer);
     task.value = null;
     previewVisible.value = false;
@@ -485,18 +557,25 @@
       scheduleRecords();
       return;
     }
+    if (recordsFlight) return;
+    const flight = Symbol();
+    recordsFlight = flight;
     const requestGeneration = generation;
     const fetchRecords = async () => {
       const g = generation;
       const result = await call('list');
-      if (g === generation) records.value = result;
+      if (g === generation) {
+        records.value = result;
+        stale.value = false;
+      }
     };
     try {
       if (initial) await guard(fetchRecords);
       else await fetchRecords();
     } catch {
-      /* Retain the last list through transient polling errors. */
+      if (requestGeneration === generation) stale.value = true;
     }
+    if (recordsFlight === flight) recordsFlight = null;
     if (requestGeneration === generation && visible.value && mode.value === 'records') {
       clearTimeout(timer);
       timer = setTimeout(() => {
@@ -511,6 +590,8 @@
   async function selectTask(id: string) {
     reset();
     mode.value = 'import';
+    detailLoading.value = true;
+    const selectionGeneration = generation;
     await guard(async () => {
       const g = generation;
       const result = await call('detail', { id });
@@ -521,6 +602,10 @@
       await loadParentLabel();
       schedule();
     });
+    if (selectionGeneration === generation) {
+      detailLoading.value = false;
+      detailFailed.value = !task.value;
+    }
   }
   async function loadParentLabel() {
     if (!parentId.value) {
@@ -547,18 +632,25 @@
   }
   async function refreshTask() {
     const id = task.value?.id;
-    if (!id) return;
-    const g = generation;
+    if (!id || taskFlight) return;
+    const flight = Symbol();
+    taskFlight = flight;
+    const g = generation,
+      revision = taskRevision;
     try {
       const next = await call('detail', { id });
-      if (g !== generation) return;
+      if (g !== generation || revision !== taskRevision) return;
       const previous = task.value?.items.filter((i) => i.status === 'completed').length || 0;
+      celebrate.value =
+        task.value?.status === 'running' || task.value?.status === 'queued' ? next.status === 'completed' : false;
       task.value = next;
+      stale.value = false;
       if (next.items.filter((i: NoteImportItem) => i.status === 'completed').length !== previous) emit('changed');
     } catch {
-      if (g === generation) error.value = t('noteTransfer.failed');
+      if (g === generation && revision === taskRevision) stale.value = true;
     } finally {
-      if (g === generation) schedule();
+      if (taskFlight === flight) taskFlight = null;
+      if (g === generation && revision === taskRevision) schedule();
     }
   }
   async function uploadFiles(files: File[]) {
@@ -572,15 +664,24 @@
       const g = generation;
       const created = task.value?.status === 'uploading' && !task.value.uploadBytes ? task.value : await call('create');
       if (g !== generation) return;
+      uploadState.value = { name: files.map((file) => file.name).join('、'), percent: null, received: false };
       const form = new FormData();
       files.forEach((file) => form.append('files', file));
       try {
         const r = await apiBasePost(`/api/note/imports/upload?id=${encodeURIComponent(created.id)}`, form, {
           silent: true,
           timeout: 180000,
+          onUploadProgress: (event) => {
+            if (g !== generation || !uploadState.value) return;
+            uploadState.value.percent = event.total
+              ? Math.min(100, Math.round((event.loaded / event.total) * 100))
+              : null;
+            uploadState.value.received = !!event.total && event.loaded >= event.total;
+          },
         });
         if (r.status !== 200) throw Object.assign(new Error(), { code: r.data?.errorCode });
       } catch (cause: any) {
+        if (g === generation) uploadState.value = null;
         throw Object.assign(new Error(), { uploadFailure: true, code: cause?.code });
       }
       if (g !== generation) return;
@@ -589,6 +690,7 @@
       const detail = await call('detail', { id: created.id });
       if (g !== generation) return;
       task.value = detail;
+      uploadState.value = null;
       schedule();
     });
   }
@@ -631,15 +733,6 @@
       }
     });
   }
-  const failureReason = computed(() =>
-    t(
-      task.value?.errorCode === 'NOTE_IMPORT_PARSE_TIMEOUT'
-        ? 'noteTransfer.parseTimeout'
-        : task.value?.errorCode === 'NOTE_IMPORT_SOURCE_UNAVAILABLE'
-          ? 'noteTransfer.sourceUnavailable'
-          : 'noteTransfer.parseFailed',
-    ),
-  );
   const pendingCount = computed(
     () => records.value.filter((r) => !['completed', 'failed', 'expired'].includes(r.status)).length,
   );
@@ -814,17 +907,44 @@
       clearTimeout(timer);
     }
   });
+  function handleVisibility() {
+    if (document.hidden || !visible.value || busy.value) return;
+    clearTimeout(timer);
+    if (mode.value === 'records') void loadRecords(false);
+    else if (task.value && ['parsing', 'queued', 'running'].includes(task.value.status)) void refreshTask();
+  }
+  document.addEventListener('visibilitychange', handleVisibility);
   onBeforeUnmount(() => {
+    document.removeEventListener('visibilitychange', handleVisibility);
     generation++;
     clearTimeout(timer);
   });
+  watch(
+    () => `${mode.value}:${detailLoading.value}:${task.value?.status || 'pick'}`,
+    async () => {
+      await nextTick();
+      if (visible.value && !detailLoading.value) contentRef.value?.focus({ preventScroll: true });
+    },
+  );
   defineExpose({ openImport, openRecords, openExport });
 </script>
 <style scoped lang="less">
+  .note-transfer__skeleton {
+    min-height: 260px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+  .note-transfer__skeleton > div {
+    height: 42px;
+    border-radius: 8px;
+    background: var(--surface-divider-color);
+  }
+
   .note-transfer__task-entry {
     display: flex;
     justify-content: flex-end;
-    margin-bottom: 16px;
+    margin-bottom: 0;
   }
   .note-transfer,
   .note-transfer *,
@@ -838,6 +958,7 @@
     overflow-y: auto;
   }
   .note-transfer {
+    outline: none;
     display: flex;
     flex-direction: column;
     gap: 20px;
@@ -1107,18 +1228,6 @@
   .note-transfer__file-meta > :last-child {
     white-space: nowrap;
   }
-  .note-transfer__warnings {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px 12px;
-    margin-top: 7px;
-    color: var(--chip-pending-fg);
-    font-size: 11px;
-  }
-  .note-transfer__warnings span::before {
-    content: '•';
-    margin-right: 5px;
-  }
   .note-transfer__subject {
     display: flex;
     align-items: center;
@@ -1172,21 +1281,23 @@
   .note-transfer__records {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 0;
+    border-top: 1px solid var(--surface-border-color);
   }
   .note-transfer__record {
     height: auto;
-    min-height: 106px;
+    min-height: 88px;
     white-space: normal;
     line-height: 1.5;
     display: flex;
     align-items: center;
     gap: 12px;
     width: 100%;
-    padding: 16px;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 12px;
-    background: var(--card-background);
+    padding: 12px 8px;
+    border: 0;
+    border-bottom: 1px solid var(--surface-border-color);
+    border-radius: 0;
+    background: transparent;
   }
   .note-transfer__record-title {
     flex: 1;
@@ -1255,53 +1366,6 @@
     color: var(--workspace-note-text);
     font-size: 11px;
     white-space: nowrap;
-  }
-  .note-transfer__failure {
-    text-align: center;
-    padding: 10px 0 16px;
-  }
-  .note-transfer__failure-symbol {
-    display: inline-flex;
-    padding: 16px;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 18px;
-    color: var(--warning-color);
-    background: var(--workspace-open-canvas);
-  }
-  .note-transfer__failure h3 {
-    font-size: 19px;
-    margin: 18px 0 10px;
-  }
-  .note-transfer__failure p {
-    color: var(--desc-color);
-    font-size: 13px;
-    line-height: 1.7;
-  }
-  .note-transfer__failure-detail {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    text-align: left;
-    padding: 14px 16px;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 12px;
-    margin-top: 20px;
-  }
-  .note-transfer__failure-detail span,
-  .note-transfer__failure-detail small {
-    font-size: 11px;
-    color: var(--desc-color);
-    overflow-wrap: anywhere;
-  }
-  .note-transfer__failure-detail strong {
-    font-size: 13px;
-    font-weight: 500;
-    line-height: 1.7;
-  }
-  .note-transfer__retained {
-    font-size: 12px;
-    color: var(--workspace-note-text);
-    margin-top: 18px;
   }
   .note-transfer.is-mobile .note-transfer__live {
     display: none;

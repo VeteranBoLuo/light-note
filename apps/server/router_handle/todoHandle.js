@@ -1,3 +1,4 @@
+import { todoWorkspaceGroups, todoWorkspaceGroupPage, todoWorkspaceSeriesPage } from '../util/services/todoWorkspaceService.js';
 import { listTodoPage } from '../util/services/todoService.js';
 import {
   listTodoLists,
@@ -583,7 +584,7 @@ export async function todoWorkspace(req, res) {
     const input = req.body || {};
     await validateTodoOrganization(pool, req.user.id, input, { lock: false });
     const [page, counts, lists] = await Promise.all([
-      listTodoPage(pool, req.user.id, { ...input, limit: input.limit || 50, organization: true }),
+      input.presentation === 'series' ? todoWorkspaceGroups(pool, req.user.id, input) : listTodoPage(pool, req.user.id, { ...input, limit: input.limit || 50, organization: true }),
       todoWorkspaceCounts(pool, req.user.id, input),
       listTodoLists(pool, req.user.id),
     ]);
@@ -603,4 +604,17 @@ export async function removeList(req, res) {
 export async function organizeTodos(req, res) {
   if (!ensureNotVisitor(req, res)) return;
   return withTransaction(res, (connection) => updateTodoOrganization(connection, req.user.id, req.body || {}));
+}
+
+export async function todoWorkspaceGroup(req, res) {
+  try {
+    await validateTodoOrganization(pool, req.user.id, req.body || {}, { lock: false });
+    return res.send(resultData(await todoWorkspaceGroupPage(pool, req.user.id, req.body || {})));
+  } catch (error) { return sendTodoError(res, error); }
+}
+export async function todoWorkspaceSeries(req, res) {
+  try {
+    await validateTodoOrganization(pool, req.user.id, req.body || {}, { lock: false });
+    return res.send(resultData(await todoWorkspaceSeriesPage(pool, req.user.id, req.body || {})));
+  } catch (error) { return sendTodoError(res, error); }
 }

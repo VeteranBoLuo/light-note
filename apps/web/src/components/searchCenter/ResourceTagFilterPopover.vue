@@ -42,7 +42,6 @@
         </header>
 
         <BInput
-          ref="searchInput"
           v-model:value="search"
           :placeholder="t('resourceCenter.tagSearchPlaceholder')"
           clearable
@@ -85,7 +84,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, nextTick, ref, watch } from 'vue';
+  import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
@@ -106,7 +105,6 @@
   const { t } = useI18n();
   const open = ref(false);
   const search = ref('');
-  const searchInput = ref<InstanceType<typeof BInput> | null>(null);
 
   const filteredItems = computed(() => {
     const keyword = search.value.trim().toLocaleLowerCase();
@@ -127,9 +125,7 @@
   watch(open, (visible) => {
     if (!visible) {
       search.value = '';
-      return;
     }
-    void nextTick(() => searchInput.value?.focus());
   });
 </script>
 

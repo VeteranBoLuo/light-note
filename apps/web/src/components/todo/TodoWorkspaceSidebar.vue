@@ -23,19 +23,40 @@
         >+</BButton
       ></header
     >
-    <div v-for="list in store.lists" :key="list.id" class="todo-workspace-sidebar__list">
-      <BButton :class="{ active: current === list.id }" :aria-pressed="current === list.id" @click="select(list.id)"
+    <BActionMenu
+      v-for="list in store.lists"
+      :key="list.id"
+      class="todo-workspace-sidebar__list"
+      :items="listActions"
+      :triggers="bookmark.isMobile ? [] : ['hover', 'contextmenu']"
+      placement="right-start"
+      :z-index="650"
+      :disabled="user.adminContext?.mode === 'readonly'"
+      @select="handleListAction(list, $event)"
+    >
+      <BButton
+        class="todo-workspace-sidebar__list-title"
+        :class="{ active: current === list.id }"
+        :aria-pressed="current === list.id"
+        @click="select(list.id)"
         ><i :style="{ background: list.color }"></i><span>{{ list.name }}</span
         ><small>{{ store.loadFailed ? '—' : countForStatus(list.pendingTotal, list.completedTotal) }}</small></BButton
       >
-      <BButton
-        size="small"
+      <BActionMenu
+        v-if="bookmark.isMobile"
+        :items="listActions"
+        :triggers="['click']"
+        :z-index="650"
         :disabled="user.adminContext?.mode === 'readonly'"
-        :aria-label="`${t('todoWorkspace.editList')} ${list.name}`"
-        @click="edit(list)"
-        >…</BButton
+        @select="handleListAction(list, $event)"
+        ><BButton
+          class="todo-workspace-sidebar__mobile-more"
+          size="small"
+          :aria-label="`${t('common.more')} ${list.name}`"
+          >…</BButton
+        ></BActionMenu
       >
-    </div>
+    </BActionMenu>
     <BButton
       :class="{ active: current === 'unassigned' }"
       :aria-pressed="current === 'unassigned'"
@@ -43,6 +64,15 @@
       ><SvgIcon :src="icon.contextMenu.inbox" size="20" /><span>{{ t('todoWorkspace.unassigned') }}</span
       ><small>{{ store.loadFailed ? '—' : scopeCount('unassigned') }}</small></BButton
     >
+    <TodoListAssociations
+      v-if="associationList"
+      v-model:open="associationsOpen"
+      :list="associationList"
+      @changed="
+        store.organizationEpoch++;
+        emit('changed');
+      "
+    />
     <BModal
       v-model:visible="editing"
       :title="t(form.id ? 'todoWorkspace.editList' : 'todoWorkspace.newList')"
@@ -53,7 +83,7 @@
         <label>{{ t('todoWorkspace.listName') }}<BInput v-model:value="form.name" :maxlength="40" /></label>
         <label>{{ t('todoWorkspace.color') }}<BSelect v-model:value="form.color" :options="colors" /></label>
         <footer
-          ><BButton v-if="form.id" :disabled="saving" @click="remove">{{ t('todoWorkspace.deleteList') }}</BButton
+          ><BButton v-if="form.id" :disabled="saving" @click="remove()">{{ t('todoWorkspace.deleteList') }}</BButton
           ><BButton type="primary" :loading="saving" :disabled="!form.name.trim()" @click="save">{{
             t('common.save')
           }}</BButton></footer
@@ -63,8 +93,12 @@
   </aside>
 </template>
 <script setup lang="ts">
-  import { computed, reactive, ref } from 'vue';
+  import { computed, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import BActionMenu from '@/components/base/BasicComponents/BActionMenu.vue';
+  import type { BActionMenuItem } from '@/components/base/BasicComponents/actionMenu';
+  import TodoListAssociations from './TodoListAssociations.vue';
+  import { bookmarkStore } from '@/store';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
@@ -79,6 +113,32 @@
   import { saveTodoList, removeTodoList, type TodoList } from '@/api/todoApi';
   const emit = defineEmits<{ changed: [] }>();
   const user = useUserStore();
+  const bookmark = bookmarkStore();
+  const associationsOpen = ref(false),
+    associationList = ref<TodoList | null>(null);
+  const listActions = computed<BActionMenuItem[]>(() => [
+    { key: 'edit', label: t('common.edit'), icon: icon.table_edit },
+    { key: 'associate', label: t('todoWorkspace.manageAssociations'), icon: icon.manage_categoryBtn_bookmark },
+    { key: 'delete', label: t('common.delete'), icon: icon.table_delete, danger: true },
+  ]);
+  function handleListAction(list: TodoList, action: string) {
+    if (user.adminContext?.mode === 'readonly' || blockGuestWrite('todo-update', t('inbox.guestPrompt'))) return;
+    if (action === 'edit') edit(list);
+    else if (action === 'delete') remove(list);
+    else {
+      associationList.value = { ...list };
+      associationsOpen.value = true;
+    }
+  }
+  watch(
+    () => user.id,
+    () => {
+      editing.value = false;
+      saving.value = false;
+      associationsOpen.value = false;
+      associationList.value = null;
+    },
+  );
   const store = useTodoStore();
   const { t } = useI18n();
   const editing = ref(false),
@@ -131,40 +191,50 @@
     editing.value = true;
   }
   async function save() {
-    if (saving.value) return;
+    if (saving.value || user.adminContext?.mode === 'readonly') return;
+    const owner = user.id;
     saving.value = true;
     try {
       const res = await saveTodoList({ ...form, id: form.id || undefined });
+      if (owner !== user.id) return;
+      if (res.status !== 200) throw new Error();
       if (res.status === 200) {
         editing.value = false;
         store.organizationEpoch++;
         emit('changed');
       }
     } catch {
-      message.error(t('todoWorkspace.saveFailed'));
+      if (owner === user.id) message.error(t('todoWorkspace.saveFailed'));
     } finally {
-      saving.value = false;
+      if (owner === user.id) saving.value = false;
     }
   }
-  function remove() {
+  function remove(list?: TodoList) {
+    const targetId = list?.id || form.id;
+    const owner = user.id;
     Alert.alert({
       title: t('todoWorkspace.deleteList'),
+      okText: t('common.delete'),
+      okType: 'danger',
+      cancelText: t('common.cancel'),
       content: t('todoWorkspace.deleteListHint'),
       onOk: async () => {
-        if (saving.value) return;
+        if (saving.value || owner !== user.id || user.adminContext?.mode === 'readonly') return;
         saving.value = true;
         try {
-          const res = await removeTodoList(form.id);
+          const res = await removeTodoList(targetId);
+          if (owner !== user.id) return;
+          if (res.status !== 200) throw new Error();
           if (res.status === 200) {
-            if (store.filters.listId === form.id) delete store.filters.listId;
+            if (store.filters.listId === targetId) delete store.filters.listId;
             editing.value = false;
             store.organizationEpoch++;
             emit('changed');
           }
         } catch {
-          message.error(t('todoWorkspace.saveFailed'));
+          if (owner === user.id) message.error(t('todoWorkspace.saveFailed'));
         } finally {
-          saving.value = false;
+          if (owner === user.id) saving.value = false;
         }
       },
     });
@@ -185,7 +255,7 @@
     border-radius: 16px;
   }
   .todo-workspace-sidebar > :deep(button),
-  .todo-workspace-sidebar__list > :first-child {
+  .todo-workspace-sidebar__list-title {
     width: 100%;
     min-width: 0;
     min-height: 40px;
@@ -267,25 +337,15 @@
     position: relative;
     min-width: 0;
   }
-  .todo-workspace-sidebar__list > :last-child {
-    position: absolute;
-    right: 5px;
-    top: 50%;
-    transform: translateY(-50%);
-    min-width: 28px;
-    padding: 0;
-    opacity: 0;
-    color: var(--desc-color);
-    background: var(--workspace-panel-bg-color);
-    box-shadow: none;
+  .todo-workspace-sidebar__list {
+    display: flex;
+    align-items: center;
   }
-  .todo-workspace-sidebar__list:hover > :last-child,
-  .todo-workspace-sidebar__list:focus-within > :last-child {
-    opacity: 1;
+  .todo-workspace-sidebar__list-title {
+    flex: 1;
   }
-  .todo-workspace-sidebar__list:hover small,
-  .todo-workspace-sidebar__list:focus-within small {
-    visibility: hidden;
+  .todo-workspace-sidebar__mobile-more {
+    padding: 0 8px;
   }
   .todo-workspace-sidebar i {
     width: 9px;
@@ -304,19 +364,6 @@
     gap: 10px;
     justify-content: flex-end;
   }
-  @media (hover: none) {
-    .todo-workspace-sidebar__list > :first-child {
-      padding-right: 38px;
-    }
-    .todo-workspace-sidebar__list > :last-child {
-      opacity: 1;
-    }
-    .todo-workspace-sidebar__list:hover small,
-    .todo-workspace-sidebar__list:focus-within small {
-      visibility: visible;
-    }
-  }
-
   // 共享工作区表面：仅改变颜色，布局与滚动由原组件负责。
   .todo-workspace-sidebar {
     .workspace-open-surface();

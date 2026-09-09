@@ -2,7 +2,7 @@ import { reactive } from 'vue';
 import { generateUUID } from '@/utils/common';
 import { toTodoLocalInput } from '@/utils/todoPlanning';
 import type { TodoCreateInitialValues, TodoItem } from '@/api/todoApi';
-import { applyQuickPreset, suggestTodoPlanEndDate, type TodoCreateDraftV3 } from './todoDraftNormalizer';
+import { applyQuickPreset, normalizeCurrentTodoPlanDraft, suggestTodoPlanEndDate, type TodoCreateDraftV3 } from './todoDraftNormalizer';
 
 function baseDraft(): TodoCreateDraftV3 {
   return {
@@ -22,15 +22,14 @@ function baseDraft(): TodoCreateDraftV3 {
       timing: { timezone: 'Asia/Shanghai', anchorDate: null, startTime: null, dueTime: null, dueDayOffset: 0 },
       plan: {
         type: 'scheduled',
+        pastPolicy: 'keep_overdue',
         frequency: 'daily',
         interval: 1,
         end: { mode: 'until', untilDate: suggestTodoPlanEndDate() },
       },
       reminder: {
-        mode: 'once_per_instance',
-        trigger: { type: 'at_start' },
-        channels: ['in_app'],
-        quietPolicy: 'defer_once',
+        mode: 'none',
+        channels: [],
       },
     },
   };
@@ -50,9 +49,18 @@ export function useTodoCreateDraft() {
     next.task.contextRefs = (item?.resourceRefs || []).map(({ type, id }) => ({ type, id }));
     next.timing.startAt = toTodoLocalInput(item?.startAt) || null;
     next.timing.dueAt = toTodoLocalInput(item?.dueAt || initial?.dueAt) || null;
-    next.timing.timezone = item?.instanceTimezone || 'Asia/Shanghai';
+    next.timing.timezone = item?.instanceTimezone || item?.series?.timezone || 'Asia/Shanghai';
     if (item?.planVersion === 2 && !item.seriesId && item.reminder && 'version' in item.reminder) {
       next.reminder = JSON.parse(JSON.stringify(item.reminder));
+    }
+    if (item?.planVersion === 2 && (item.seriesId || (item.reminder && !('version' in item.reminder) && item.reminder.mode !== 'none'))) {
+      const current = normalizeCurrentTodoPlanDraft(item);
+      next.independentTasks = {
+        enabled: true,
+        timing: { ...current.timing, timezone: next.timing.timezone, anchorDate: item.occurrenceDate || current.timing.anchorDate },
+        plan: JSON.parse(JSON.stringify(item.series?.plan || { type: item.series?.repeatMode || 'once' })),
+        reminder: JSON.parse(JSON.stringify(current.reminder)),
+      };
     }
     applyQuickPreset(next, initial);
     Object.assign(draft.task, next.task);

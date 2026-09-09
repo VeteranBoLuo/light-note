@@ -45,7 +45,7 @@ describe.each([
     document.body.innerHTML = '';
   });
 
-  it('点击父级入口只打开直接父页面，不触发当前笔记打开', async () => {
+  it('路径各级按自身 ID 导航，父页面前缀打开直接父级且不冒泡', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const open = vi.fn();
@@ -71,8 +71,17 @@ describe.each([
     cleanup = () => app.unmount();
     await nextTick();
 
-    host.querySelector<HTMLButtonElement>('.note-parent-path')!.click();
+    host.querySelector<HTMLButtonElement>('.note-parent-link__prefix')!.click();
     expect(openParent).toHaveBeenCalledWith('direct-parent');
+    openParent.mockClear();
+    const links = host.querySelectorAll<HTMLButtonElement>('button.note-parent-link__text');
+    expect([...links].map((link) => link.textContent?.trim())).toEqual(['笔记库', '开发文档']);
+    links[0].click();
+    expect(openParent).toHaveBeenCalledExactlyOnceWith('root');
+    openParent.mockClear();
+    links[1].click();
+    expect(openParent).toHaveBeenCalledExactlyOnceWith('direct-parent');
+
     expect(open).not.toHaveBeenCalled();
 
     host.querySelector<HTMLElement>(rootSelector)!.click();
@@ -130,7 +139,7 @@ describe.each([
     cleanup = () => app.unmount();
     await nextTick();
 
-    host.querySelector<HTMLButtonElement>('.note-parent-path')!.click();
+    host.querySelector<HTMLButtonElement>('button.note-parent-link__text')!.click();
     await nextTick();
 
     expect(note.isCheck).toBe(true);

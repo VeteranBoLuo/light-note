@@ -308,6 +308,7 @@ export const snoozeTodo = (id: string, targetAt: string, options?: { silent?: bo
 
 export type TodoList = TodoListSummary;
 export interface TodoWorkspaceQuery {
+  presentation?: 'series';
   status?: TodoFilterStatus;
   keyword?: string;
   sort?: TodoSort;
@@ -327,5 +328,33 @@ export const getTodoLists = () => apiBasePost('/api/todo/lists', {}, { silent: t
 export const saveTodoList = (input: { id?: string; name: string; color: string }) =>
   apiBasePost('/api/todo/lists/save', input);
 export const removeTodoList = (id: string) => apiBasePost('/api/todo/lists/delete', { id });
-export const organizeTodos = (input: TodoOrganizationPatch & { ids: string[]; scope?: TodoPlanScope; tagMode?: 'add' | 'remove' }) =>
-  apiBasePost('/api/todo/organization', input);
+export const organizeTodos = (
+  input: TodoOrganizationPatch & { ids: string[]; scope?: TodoPlanScope; tagMode?: 'add' | 'remove' },
+  options?: { silent?: boolean },
+) => apiBasePost('/api/todo/organization', input, options);
+
+export type TodoWorkspaceNode =
+  | { kind: 'item'; key: string; item: TodoItem }
+  | {
+      kind: 'series';
+      key: string;
+      seriesId: string;
+      representative: TodoItem;
+      instanceCount: number;
+      overdueCount: number;
+      futureCount: number;
+    };
+export interface TodoWorkspaceGroup {
+  key: string;
+  nodeCount: number;
+  instanceCount: number;
+}
+export interface TodoSeriesQuery extends TodoWorkspaceQuery {
+  seriesId: string;
+  groupKey?: string;
+  wholeSeries?: boolean;
+}
+export const getTodoWorkspaceGroup = (params: TodoWorkspaceQuery & { groupKey: string }) =>
+  apiBasePost('/api/todo/workspace/group', params, { silent: true });
+export const getTodoWorkspaceSeries = (params: TodoSeriesQuery) =>
+  apiBasePost('/api/todo/workspace/series', params, { silent: true });

@@ -29,7 +29,7 @@ describe('Inbox todo preview integration', () => {
 
   it('删除成功后关闭当前详情，普通待办与系列仍走既有确认分支', () => {
     expect(inboxSource).toMatch(
-      /function confirmDeleteTodo[\s\S]*?todoSeriesDeleteChoice[\s\S]*?removeTodoV2[\s\S]*?deleteTodoConfirm[\s\S]*?removeTodo\(item\)/,
+      /function confirmDeleteTodo[\s\S]*?todoDeleteScope[\s\S]*?removeTodoV2[\s\S]*?deleteTodoConfirm[\s\S]*?removeTodo\(item\)/,
     );
     expect(inboxSource).toMatch(
       /async function removeTodo\([\s\S]*?result === true[\s\S]*?closeTodoPreview\(item\.id\)[\s\S]*?showTodoUndo/,

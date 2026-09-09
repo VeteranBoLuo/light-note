@@ -132,16 +132,12 @@
 
   const useSimpleEditor = computed(
     () =>
-      todoPlanFeatures.value.simpleCreateEnabled &&
-      todoPlanFeatures.value.singleTaskScheduleEnabled &&
-      (!props.item ||
-        (Number(props.item.planVersion || 1) === 2 &&
-          !props.item.seriesId &&
-          (!props.item.reminder || 'version' in props.item.reminder))),
+      props.item?.planVersion === 2 ||
+      (!props.item && todoPlanFeatures.value.simpleCreateEnabled && todoPlanFeatures.value.singleTaskScheduleEnabled),
   );
 
   const shellTitle = computed(() =>
-    simpleAdvanced.value ? t('inbox.todoIndependentPlan') : props.item ? t('inbox.editTodo') : t('inbox.createTodo'),
+    props.item ? t('inbox.editTodo') : simpleAdvanced.value ? t('inbox.todoIndependentPlan') : t('inbox.createTodo'),
   );
 
   watch(visible, async (open) => {

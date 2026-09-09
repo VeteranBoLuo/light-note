@@ -27,6 +27,8 @@ export const NOTE_IMPORT_STATES = Object.freeze([
 export const NOTE_IMPORT_WARNINGS = Object.freeze([
   "format_simplified",
   "missing_image",
+  "image_source_missing",
+  "external_image",
   "unsupported_image",
   "local_link",
   "empty_document",

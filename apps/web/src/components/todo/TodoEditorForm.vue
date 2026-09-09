@@ -95,47 +95,16 @@
           />
         </div>
       </section>
-      <section v-if="advancedContentOpen" ref="checklistSectionRef" class="todo-checklist-editor">
-        <div class="todo-checklist-editor__header">
-          <div>
-            <span>{{ t('todoWorkspace.subitems') }}</span>
-            <small>{{ t('inbox.todoChecklistHint') }}</small>
-          </div>
-          <div class="todo-checklist-editor__actions">
-            <TodoBreakdownButton
-              :todo-id="item?.id"
-              :title="form.title"
-              :description="form.description"
-              :checklist="checklistItems"
-              :disabled="saving"
-              @apply="checklistItems = $event"
-            />
-            <BButton size="small" :disabled="checklistItems.length >= 50" @click="addChecklistItem()">
-              {{ t('inbox.todoAddChecklistItem') }}
-            </BButton>
-          </div>
-        </div>
-        <div class="todo-checklist-editor__list">
-          <div v-for="(check, index) in checklistItems" :key="check.id" class="todo-checklist-editor__row">
-            <span class="todo-checklist-editor__index">{{ index + 1 }}</span>
-            <BInput
-              :ref="(component) => setChecklistInputRef(check.id, component)"
-              v-model:value="check.text"
-              :maxlength="200"
-              :placeholder="t('inbox.todoChecklistPlaceholder')"
-              @enter="handleChecklistEnter(index)"
-            />
-            <BButton
-              size="small"
-              class="todo-checklist-editor__remove"
-              :disabled="saving"
-              @click="removeChecklistItem(index)"
-            >
-              {{ t('inbox.todoRemoveChecklistItem') }}
-            </BButton>
-          </div>
-        </div>
-      </section>
+      <div v-if="advancedContentOpen" ref="checklistSectionRef">
+        <TodoChecklistEditor
+          v-model="checklistItems"
+          v-model:open="checklistOpen"
+          :todo-id="item?.id"
+          :title="form.title"
+          :description="form.description"
+          :disabled="saving"
+        />
+      </div>
       <div v-if="legacyMode" class="todo-editor-form__grid">
         <label v-if="legacyMode">
           <span>{{ t('inbox.todoDueAt') }}</span>
@@ -314,7 +283,7 @@
   import { toTodoLocalInput } from '@/utils/todoPlanning';
   import TodoPlanScheduleEditor from '@/components/todo/TodoPlanScheduleEditor.vue';
   import TodoResourceLinks from '@/components/todo/TodoResourceLinks.vue';
-  import TodoBreakdownButton from '@/components/todo/TodoBreakdownButton.vue';
+  import TodoChecklistEditor from './TodoChecklistEditor.vue';
   import TodoResourceMentionInput from '@/components/todo/TodoResourceMentionInput.vue';
 
   const props = withDefaults(
@@ -360,6 +329,7 @@
   async function revealChecklist() {
     mobileStep.value = 1;
     advancedContentOpen.value = true;
+    checklistOpen.value = true;
     await nextTick();
     checklistSectionRef.value?.scrollIntoView({ block: 'start', behavior: 'auto' });
   }
@@ -402,7 +372,7 @@
     resourceRefs.value = resourceRefs.value.filter((ref) => !(ref.type === target.type && ref.id === target.id));
   }
 
-  const checklistInputRefs = new Map<string, { focus: () => void }>();
+  const checklistOpen = ref(true);
   const planSubmission = ref<{ scope: TodoPlanScope; payload: TodoPlanWritePayload } | null>(null);
   const legacyConversion = ref(false);
   const legacyItem = computed(() => Boolean(props.item && Number(props.item.planVersion || 1) !== 2));
@@ -614,43 +584,6 @@
 
   function createChecklistItem(): TodoChecklistItem {
     return { id: generateUUID(), text: '', done: false };
-  }
-
-  function setChecklistInputRef(id: string, component: any) {
-    if (component) checklistInputRefs.set(id, component);
-    else checklistInputRefs.delete(id);
-  }
-
-  function focusChecklistItem(id?: string) {
-    if (!id) return;
-    nextTick(() => checklistInputRefs.get(id)?.focus());
-  }
-
-  function addChecklistItem(afterIndex = checklistItems.value.length - 1) {
-    if (checklistItems.value.length >= 50) return;
-    const current = checklistItems.value[afterIndex];
-    if (current && !current.text.trim()) {
-      focusChecklistItem(current.id);
-      return;
-    }
-    const item = createChecklistItem();
-    checklistItems.value.splice(Math.max(0, afterIndex + 1), 0, item);
-    focusChecklistItem(item.id);
-  }
-
-  function handleChecklistEnter(index: number) {
-    if (!checklistItems.value[index]?.text.trim()) return;
-    addChecklistItem(index);
-  }
-
-  function removeChecklistItem(index: number) {
-    if (checklistItems.value.length === 1) {
-      checklistItems.value[0] = createChecklistItem();
-      focusChecklistItem(checklistItems.value[0].id);
-      return;
-    }
-    checklistItems.value.splice(index, 1);
-    focusChecklistItem(checklistItems.value[Math.min(index, checklistItems.value.length - 1)]?.id);
   }
 
   function submit() {
@@ -957,71 +890,10 @@
     grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr);
     gap: 10px;
   }
-  .todo-checklist-editor {
-    scroll-margin-top: 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 9px;
-    padding: 12px;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 12px;
-    background: var(--workspace-panel-bg-color);
-  }
-  .todo-checklist-editor__header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
-  }
-
-  .todo-checklist-editor__actions {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    gap: 8px;
-  }
-  .todo-checklist-editor__header > div {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    min-width: 0;
-    color: var(--text-color);
-    font-size: 13px;
-  }
-  .todo-checklist-editor__header small {
-    color: var(--desc-color);
-    font-size: 12px;
-  }
-  .todo-checklist-editor__list {
-    display: flex;
-    flex-direction: column;
-    gap: 7px;
-  }
-  .todo-checklist-editor__row {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 6px;
-  }
-  .todo-checklist-editor__remove {
-    color: var(--desc-color);
-  }
   .todo-editor-form__grid {
     display: grid;
     grid-template-columns: 0.8fr 1.4fr;
     gap: 10px;
-  }
-  .todo-checklist-editor__index {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 24px;
-    height: 24px;
-    border-radius: 8px;
-    background: color-mix(in srgb, var(--primary-color) 10%, var(--background-color));
-    color: var(--primary-color);
-    font-size: 11px;
-    font-weight: 600;
   }
   .todo-reminder-editor {
     display: flex;
@@ -1190,20 +1062,6 @@
     .todo-editor-form__actions :deep(.b_btn) {
       flex: 1;
       width: auto;
-    }
-    .todo-checklist-editor {
-      scroll-margin-top: 16px;
-      padding: 10px;
-    }
-    .todo-checklist-editor__header {
-      align-items: center;
-    }
-    .todo-checklist-editor__row {
-      grid-template-columns: auto minmax(0, 1fr);
-    }
-    .todo-checklist-editor__remove {
-      grid-column: 2;
-      justify-self: end;
     }
     .todo-reminder-editor__title {
       align-items: flex-start;

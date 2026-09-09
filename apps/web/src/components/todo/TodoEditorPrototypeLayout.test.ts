@@ -19,13 +19,9 @@ const todoCreateRouteSource = readFileSync(resolve(process.cwd(), 'src/router/mo
 const quickCaptureSource = readFileSync(resolve(process.cwd(), 'src/components/inbox/QuickCaptureModal.vue'), 'utf8');
 
 describe('待办创建页原型布局', () => {
-  it('版本化 v2 单任务使用新版编辑器，不因稍后提醒回退到兼容表单', () => {
-    expect(modalSource).toMatch(
-      /Number\(props\.item\.planVersion \|\| 1\) === 2[\s\S]*?!props\.item\.seriesId[\s\S]*?'version' in props\.item\.reminder/,
-    );
-    expect(draftSource).toContain(
-      "item?.planVersion === 2 && !item.seriesId && item.reminder && 'version' in item.reminder",
-    );
+  it('所有 v2 待办共用新增编辑器，重复实例不回退到另一套表单', () => {
+    expect(modalSource).toContain("props.item?.planVersion === 2 ||");
+    expect(modalSource).not.toContain('!props.item.seriesId');
   });
 
   it('PC 使用宽幅编辑区，并将服务端计划预览固定为独立右栏', () => {
@@ -52,7 +48,7 @@ describe('待办创建页原型布局', () => {
   it('计划方式、提醒方式和优先级均使用原型中的分段按钮而不是下拉框', () => {
     expect(simpleSource).toMatch(/todo-simple-editor__priority[\s\S]*?v-for="option in priorityOptions"/);
     expect(reminderSource).toMatch(/todo-reminder-editor-v3__mode[\s\S]*?v-for="option in modeOptions"/);
-    expect(simpleSource).toContain('<BSwitch v-model:checked="draft.independentTasks.enabled" />');
+    expect(simpleSource).toContain('v-model:checked="draft.independentTasks.enabled"');
   });
 
   it('直接输入 @ 复用光标浮层，显式按钮才打开完整搜索弹框', () => {
@@ -128,7 +124,7 @@ describe('待办创建页原型布局', () => {
     expect(independentSource).toContain('v-if="needsPastPolicy"');
     expect(independentSource).toContain("t('inbox.todoGuidedPastTitle')");
     expect(independentSource).toContain('pastPolicyHint(option.value)');
-    expect(simpleSource).toContain("preview?.requiredChoices?.includes('pastPolicy')");
+    expect(simpleSource).toContain("displayedPreview.value?.requiredChoices?.includes('pastPolicy')");
   });
 
   it('高级计划改为重复、结束、提醒三步引导，并把低频时间项折叠', () => {

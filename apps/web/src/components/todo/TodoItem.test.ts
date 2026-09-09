@@ -12,7 +12,7 @@ const todoItemSource = readFileSync(resolve(process.cwd(), 'src/components/todo/
 const routerPush = vi.fn();
 const { recordOperation } = vi.hoisted(() => ({ recordOperation: vi.fn() }));
 vi.mock('vue-router', async (importOriginal) => ({
-  ...await importOriginal<typeof import('vue-router')>(),
+  ...(await importOriginal<typeof import('vue-router')>()),
   useRouter: () => ({ push: routerPush, currentRoute: { value: { fullPath: '/inbox?tab=todo' } } }),
 }));
 vi.mock('@/api/commonApi', () => ({ recordOperation }));
@@ -51,7 +51,10 @@ function pointerEvent(type: string, x: number, y: number, pointerId = 1) {
   return event;
 }
 
-function mountTodoItem(item: TodoItemType = todo, options: { selectable?: boolean; swipeEnabled?: boolean } = {}) {
+function mountTodoItem(
+  item: TodoItemType = todo,
+  options: { selectable?: boolean; swipeEnabled?: boolean; seriesDetail?: boolean } = {},
+) {
   const onPreview = vi.fn();
   const onSelect = vi.fn();
   const selected = ref(false);
@@ -67,11 +70,15 @@ function mountTodoItem(item: TodoItemType = todo, options: { selectable?: boolea
         h(TodoItem, {
           item,
           selectable: options.selectable,
+          seriesDetail: options.seriesDetail,
           swipeEnabled: options.swipeEnabled,
           swipeOpen: swipeOpen.value,
           onPreview,
           selected: selected.value,
-          onSelect: (value: boolean) => { selected.value = value; onSelect(value); },
+          onSelect: (value: boolean) => {
+            selected.value = value;
+            onSelect(value);
+          },
           onEdit,
           onDelete,
           onSeriesAction,
@@ -155,6 +162,14 @@ afterEach(() => {
 });
 
 describe('TodoItem card preview', () => {
+  it('子事项旁空白打开详情，子事项按钮不打开详情', async () => {
+    const { host, onPreview } = mountTodoItem();
+    host.querySelector<HTMLElement>('.todo-subitems')!.click();
+    expect(onPreview).toHaveBeenCalledTimes(1);
+    host.querySelector<HTMLButtonElement>('.todo-subitems > button')!.click();
+    await nextTick();
+    expect(onPreview).toHaveBeenCalledTimes(1);
+  });
   it('子事项编辑携带定位目标且不触发详情预览', async () => {
     const { host, onEdit, onPreview } = mountTodoItem();
     host.querySelector<HTMLButtonElement>('.todo-subitems > button')!.click();
@@ -181,7 +196,7 @@ describe('TodoItem card preview', () => {
     expect(onPreview).toHaveBeenCalledTimes(1);
     expect(onEdit).not.toHaveBeenCalled();
 
-    host.querySelector<HTMLElement>('.todo-subitems')!.click();
+    host.querySelector<HTMLButtonElement>('.todo-subitems > button')!.click();
     host.querySelector<HTMLElement>('.todo-resource-refs')!.click();
     host.querySelector<HTMLElement>('.todo-item__main-check')!.click();
     host.querySelector<HTMLButtonElement>('.todo-item__actions--desktop button:last-child')!.click();
@@ -421,4 +436,16 @@ describe('TodoItem card preview', () => {
     expect(panel?.querySelectorAll('[role="separator"]')).toHaveLength(0);
     expect(panel?.textContent).toContain('删除');
   });
+});
+
+it('series detail stays in place and exposes direct single-occurrence deletion', async () => {
+  const { host, onPreview, onEdit, onDelete } = mountTodoItem(todo, { seriesDetail: true });
+  host.querySelector<HTMLElement>('.todo-item__body')!.click();
+  await nextTick();
+  expect(onPreview).not.toHaveBeenCalled();
+  expect(onEdit).not.toHaveBeenCalled();
+  expect(host.querySelector('.todo-more-button')).toBeNull();
+  host.querySelector<HTMLButtonElement>('.todo-occurrence-delete')!.click();
+  await nextTick();
+  expect(onDelete).toHaveBeenCalledOnce();
 });

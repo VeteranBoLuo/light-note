@@ -6,11 +6,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { todoCalendarOwnerKey } from '@/utils/todoCalendarAccess';
 import { buildTodoListNodes } from '@/utils/todoSeriesGrouping';
 
-const { listTodos } = vi.hoisted(() => ({ listTodos: vi.fn() }));
+const { listTodos, groupPage } = vi.hoisted(() => ({ listTodos: vi.fn(), groupPage: vi.fn() }));
 vi.mock('@/api/todoApi', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api/todoApi')>()),
   listTodos,
   getTodoWorkspace: listTodos,
+  getTodoWorkspaceGroup: groupPage,
 }));
 import useTodoStore from '@/store/todo';
 
@@ -39,7 +40,12 @@ function pageRefresh(todo: ReturnType<typeof useTodoStore>, view: string) {
     'nextTick',
     'scrollContainer',
     'updateScrollFade',
-    'isUnscopedTodoView', 'user', 'fetchSelectableTags', 'workspaceTags', 'getTodoWorkspace', 'recentCompleted',
+    'isUnscopedTodoView',
+    'user',
+    'fetchSelectableTags',
+    'workspaceTags',
+    'getTodoWorkspace',
+    'recentCompleted',
     `let savedTodoRange = null; ${executable}; return refreshList;`,
   )(
     todoCalendarOwnerKey,
@@ -54,7 +60,11 @@ function pageRefresh(todo: ReturnType<typeof useTodoStore>, view: string) {
     { value: null },
     () => {},
     { value: view === 'calendar' || view === 'matrix' },
-    { id: 'test-owner' }, async () => [], { value: [] }, async () => ({ status: 200, data: { items: [] } }), { value: [] },
+    { id: 'test-owner' },
+    async () => [],
+    { value: [] },
+    async () => ({ status: 200, data: { items: [] } }),
+    { value: [] },
   ) as () => Promise<boolean>;
 }
 
@@ -66,9 +76,23 @@ const items = [
 beforeEach(() => {
   setActivePinia(createPinia());
   listTodos.mockReset();
-  listTodos.mockImplementation(async ({ status }) => ({
+  groupPage.mockImplementation(async ({ status }) => ({
     status: 200,
-    data: { items: items.filter((item) => status === 'all' || item.status === status) },
+    data: {
+      nodes: items
+        .filter((item) => status === 'all' || item.status === status)
+        .map((item) => ({ kind: 'item', key: item.id, item })),
+      nextCursor: null,
+    },
+  }));
+  listTodos.mockImplementation(async ({ status, presentation }) => ({
+    status: 200,
+    data: {
+      items: items.filter((item) => status === 'all' || item.status === status),
+      ...(presentation
+        ? { groups: [{ key: 'all', nodeCount: status === 'all' ? 2 : 1, instanceCount: status === 'all' ? 2 : 1 }] }
+        : {}),
+    },
   }));
 });
 
@@ -79,6 +103,7 @@ describe('待办页签请求与列表分组一致', () => {
     for (const status of ['pending', 'completed', 'all', 'pending'] as const) {
       todo.status = status;
       expect(await refresh()).toBe(true);
+      if (view === 'list') await todo.loadGroup('all');
       expect(listTodos).toHaveBeenLastCalledWith(expect.objectContaining({ status }));
       expect(todo.items.map((item) => item.id)).toEqual(
         items.filter((item) => status === 'all' || item.status === status).map((item) => item.id),
@@ -95,6 +120,7 @@ describe('待办页签请求与列表分组一致', () => {
     expect(todo.effectiveStatus).toBe('all');
     expect(todo.items).toHaveLength(2);
     await pageRefresh(todo, 'list')();
+    await todo.loadGroup('all');
     expect(todo.items.map((item) => item.id)).toEqual(['completed']);
   });
 

@@ -12,7 +12,12 @@
     <article
       class="todo-item"
       @click="selectable && openPreviewFromCard($event)"
-      :class="{ 'is-overdue': overdue, 'is-completed': item.status === 'completed', 'is-workspace': workspace, 'is-selectable': selectable && !disabled }"
+      :class="{
+        'is-overdue': overdue,
+        'is-completed': item.status === 'completed',
+        'is-workspace': workspace,
+        'is-selectable': selectable && !disabled,
+      }"
     >
       <div class="todo-item__body" :class="{ 'is-editable': cardPreviewable }" @click.stop="openPreviewFromCard">
         <!-- 标题始终独立于勾选框:完成/恢复只能点方框,点名字不触发状态切换 -->
@@ -60,6 +65,7 @@
         <TodoSubitems
           :item="item"
           :disabled="disabled || selectable"
+          :editable="!seriesDetail"
           @update-checklist="emit('update-checklist', $event)"
           @edit="emit('edit', 'checklist')"
         />
@@ -123,7 +129,17 @@
             </template>
           </BPopover>
         </template>
+        <BButton
+          v-if="seriesDetail"
+          class="todo-occurrence-delete"
+          size="small"
+          :disabled="disabled || deleting"
+          :loading="deleting"
+          @click.stop="emit('delete')"
+          >{{ t('todoWorkspace.deleteOccurrence') }}</BButton
+        >
         <BActionMenu
+          v-else
           :items="desktopMoreMenuItems"
           :triggers="['click']"
           placement="bottom-right"
@@ -137,28 +153,50 @@
         </BActionMenu>
       </div>
       <div class="todo-item__actions todo-item__actions--mobile">
-        <template v-if="item.status === 'pending'">
-          <BButton
-            class="todo-mobile-action todo-mobile-action--priority"
+        <template v-if="seriesDetail">
+          <BSelect
+            v-if="item.status === 'pending'"
+            class="todo-occurrence-priority"
+            :value="item.priority"
+            :options="priorityOptions"
             :disabled="disabled"
-            @click="openMobileMenu('priority')"
+            :aria-label="t('inbox.todoPriority')"
+            @change="changePriority"
+          />
+          <BButton
+            class="todo-occurrence-delete"
+            size="small"
+            :disabled="disabled || deleting"
+            :loading="deleting"
+            @click.stop="emit('delete')"
+            >{{ t('todoWorkspace.deleteOccurrence') }}</BButton
           >
-            {{ priorityLabel }}
-          </BButton>
-          <BButton class="todo-mobile-action" :disabled="disabled" @click="openMobileMenu('snooze')">
-            {{ t('inbox.todoSnooze') }}
-          </BButton>
-          <BButton class="todo-mobile-action" :disabled="disabled" @click="openMobileMenu('more')">
+        </template>
+        <template v-else>
+          <template v-if="item.status === 'pending'">
+            <BButton
+              class="todo-mobile-action todo-mobile-action--priority"
+              :disabled="disabled"
+              @click="openMobileMenu('priority')"
+            >
+              {{ priorityLabel }}
+            </BButton>
+            <BButton class="todo-mobile-action" :disabled="disabled" @click="openMobileMenu('snooze')">
+              {{ t('inbox.todoSnooze') }}
+            </BButton>
+            <BButton class="todo-mobile-action" :disabled="disabled" @click="openMobileMenu('more')">
+              {{ t('common.more') }}
+            </BButton>
+          </template>
+          <BButton v-else class="todo-mobile-action" :disabled="disabled" @click="openMobileMenu('more')">
             {{ t('common.more') }}
           </BButton>
         </template>
-        <BButton v-else class="todo-mobile-action" :disabled="disabled" @click="openMobileMenu('more')">
-          {{ t('common.more') }}
-        </BButton>
       </div>
     </article>
   </MobileSwipeDelete>
   <MobilePageActionsDrawer
+    v-if="!seriesDetail"
     v-model:open="mobileMenuOpen"
     :object-title="item.title"
     :title="mobileMenuTitle"
@@ -199,6 +237,7 @@
   const props = defineProps<{
     item: TodoItem;
     workspace?: boolean;
+    seriesDetail?: boolean;
     disabled?: boolean;
     deleting?: boolean;
     selectable?: boolean;
@@ -380,18 +419,19 @@
     return labels;
   });
   const priorityOptions = computed(() => [0, 1, 2].map((value) => ({ value, label: t(`inbox.todoPriority${value}`) })));
-  const cardPreviewable = computed(() => !props.selectable && !props.disabled);
+  const cardPreviewable = computed(() => !props.seriesDetail && !props.selectable && !props.disabled);
   const desktopMoreMenuItems = computed<BActionMenuItem[]>(() => {
-    const actions: BActionMenuItem[] = props.workspace && props.item.status !== 'completed'
-      ? [
-          {
-            key: 'organize',
-            label: t('todoWorkspace.organization'),
-            icon: icon.organize.check,
-            disabled: props.selectable,
-          },
-        ]
-      : [];
+    const actions: BActionMenuItem[] =
+      props.workspace && props.item.status !== 'completed'
+        ? [
+            {
+              key: 'organize',
+              label: t('todoWorkspace.organization'),
+              icon: icon.organize.check,
+              disabled: props.selectable,
+            },
+          ]
+        : [];
     if (props.item.status === 'pending') {
       if (props.workspace)
         actions.push(
@@ -529,7 +569,7 @@
       return;
     }
     if (props.selectable) emit('select', !props.selected);
-    else emit('preview');
+    else if (!props.seriesDetail) emit('preview');
   }
 
   function openResourceRef(ref: TodoResourceRefView) {
@@ -571,6 +611,13 @@
     border-radius: 15px;
     background: var(--card-background, var(--background-color));
     box-shadow: 0 12px 30px -28px rgba(30, 40, 80, 0.5);
+  }
+  .todo-item .todo-item__actions .todo-occurrence-delete.b_btn {
+    color: var(--danger-color);
+    white-space: nowrap;
+  }
+  .todo-occurrence-priority {
+    width: 100px;
   }
   .todo-item__select {
     flex: 0 0 auto;

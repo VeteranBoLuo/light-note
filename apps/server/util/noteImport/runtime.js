@@ -2,10 +2,10 @@ import { resolveLightNoteRuntime } from '../databaseConnectionSafety.js';
 
 export async function assertNoteImportSchema(db) {
   await db.query(
-    'SELECT id,owner_id,status,parent_id,share_fingerprint,upload_bytes,lease_token,lease_until,stop_requested,error_code,create_time,update_time,expires_at FROM note_import_tasks LIMIT 0',
+    'SELECT progress_json,finished_at,id,owner_id,status,parent_id,share_fingerprint,upload_bytes,lease_token,lease_until,stop_requested,error_code,create_time,update_time,expires_at FROM note_import_tasks LIMIT 0',
   );
   await db.query(
-    'SELECT id,task_id,title,source_name,type,status,selected,warnings,image_count,error_code,note_id,position FROM note_import_items LIMIT 0',
+    'SELECT warning_details,id,task_id,title,source_name,type,status,selected,warnings,image_count,error_code,note_id,position FROM note_import_items LIMIT 0',
   );
 }
 
@@ -33,7 +33,7 @@ export async function waitForNoteImportSchema(
         throw error;
       if (!warned) {
         warn(
-          '[note-import-worker] NOTE_IMPORT_SCHEMA_NOT_READY：笔记导入暂不可用，等待显式迁移 20260909_note_import_tasks.sql；其他本地服务可继续运行。',
+          '[note-import-worker] NOTE_IMPORT_SCHEMA_NOT_READY：笔记导入暂不可用，等待显式迁移 20260909_note_import_tasks.sql 和 20260909_note_import_progress.sql；其他本地服务可继续运行。',
         );
         warned = true;
       }

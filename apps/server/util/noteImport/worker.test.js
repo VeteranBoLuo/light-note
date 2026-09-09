@@ -96,3 +96,29 @@ describe('import worker recovery', () => {
     expect(s.writes.some(([, args]) => args[0] === 'paused')).toBe(true);
   });
 });
+
+it('publishes running before creating the first note and persists lease-bound phases', async () => {
+  createNote.mockImplementation(async (input) => {
+    expect(s.writes.some(([sql]) => sql.includes("SET status='running',progress_json=NULL"))).toBe(true);
+    expect(
+      s.writes.filter(([sql]) => sql.includes('SET progress_json=?')).map(([, args]) => JSON.parse(args[0]).stage),
+    ).toEqual(['publishing_images', 'writing_note']);
+    await input.beforeCreate(db);
+    return { id: 'note' };
+  });
+  await processImportTask();
+  expect(createNote).toHaveBeenCalledTimes(1);
+  for (const [sql, args] of s.writes.filter(([sql]) => sql.includes('SET progress_json=?'))) {
+    expect(sql).toContain('lease_token=?');
+    expect(sql).toContain('lease_until>NOW()');
+    expect(args[2]).toBe(s.task.lease_token);
+  }
+});
+it('does not create notes after progress loses its lease', async () => {
+  const original = db.query.getMockImplementation();
+  db.query.mockImplementation((sql, args) =>
+    sql.includes('SET progress_json=?') ? Promise.resolve([{ affectedRows: 0 }]) : original(sql, args),
+  );
+  await processImportTask();
+  expect(createNote).not.toHaveBeenCalled();
+});

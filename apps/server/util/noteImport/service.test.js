@@ -83,14 +83,17 @@ describe('import confirmation', () => {
 });
 
 describe('import task dismissal', () => {
-  it.each(['uploading', 'review', 'paused', 'completed', 'failed', 'expired'])('hides %s without deleting notes or idempotency records', async (status) => {
-    state.task.status = status;
-    await dismissImport('owner', 'task');
-    expect(db.commit).toHaveBeenCalled();
-    const writes = state.queries.filter(([sql]) => /^(UPDATE|DELETE|INSERT)/.test(sql));
-    expect(writes).toHaveLength(1);
-    expect(writes[0][0]).toContain("error_code='NOTE_IMPORT_DISMISSED'");
-  });
+  it.each(['uploading', 'review', 'paused', 'completed', 'failed', 'expired'])(
+    'hides %s without deleting notes or idempotency records',
+    async (status) => {
+      state.task.status = status;
+      await dismissImport('owner', 'task');
+      expect(db.commit).toHaveBeenCalled();
+      const writes = state.queries.filter(([sql]) => /^(UPDATE|DELETE|INSERT)/.test(sql));
+      expect(writes).toHaveLength(1);
+      expect(writes[0][0]).toContain("error_code='NOTE_IMPORT_DISMISSED'");
+    },
+  );
   it.each(['parsing', 'queued', 'running'])('rejects active %s tasks', async (status) => {
     state.task.status = status;
     await expect(dismissImport('owner', 'task')).rejects.toMatchObject({ code: 'NOTE_IMPORT_ACTIVE' });
@@ -110,4 +113,26 @@ describe('import task dismissal', () => {
     state.task.expires_at = new Date(0);
     expect(await getImportTask('owner', 'task')).toMatchObject({ status: 'expired', uploadBytes: 23 });
   });
+});
+
+it('returns null progress and warning details for legacy tasks', async () => {
+  const original = db.query.getMockImplementation();
+  db.query.mockImplementation((sql, args) =>
+    sql.includes('source_name,type,status,selected,warnings')
+      ? Promise.resolve([[{ id: 'item', warnings: '["missing_image"]', image_count: 15 }]])
+      : original(sql, args),
+  );
+  const task = await getImportTask('owner', 'task');
+  expect(task.progress).toBeNull();
+  expect(task.finishedAt).toBeNull();
+  expect(task.items[0].warningDetails).toBeNull();
+  expect(task.items[0].warnings).toEqual(['missing_image']);
+});
+it('clears execution progress on retry without reselecting successful items', async () => {
+  state.task.status = 'completed';
+  await startImport('owner', 'task', { parentId: null });
+  const updates = state.queries.filter(([sql]) => sql.startsWith('UPDATE note_import_items'));
+  expect(updates).toHaveLength(1);
+  expect(updates[0][0]).toContain("status='failed'");
+  expect(state.queries.some(([sql]) => sql.includes("progress_json=NULL,finished_at=NULL,status='queued'"))).toBe(true);
 });

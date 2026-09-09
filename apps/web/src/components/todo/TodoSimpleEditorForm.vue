@@ -1,8 +1,8 @@
 <template>
-  <div class="todo-simple-editor" :class="{ 'is-mobile': mobile }">
+  <div class="todo-simple-editor" :class="{ 'is-mobile': mobile }" :style="{ '--todo-footer-height': `${footerHeight}px` }">
     <div class="todo-simple-editor__body">
       <main ref="editorBodyRef" class="todo-simple-editor__main">
-        <div v-if="draft.independentTasks.enabled" class="todo-simple-editor__mode-notice">
+        <div v-if="draft.independentTasks.enabled && !item" class="todo-simple-editor__mode-notice">
           <div class="todo-simple-editor__mode-head">
             <strong>{{ t('inbox.todoIndependentEnabled') }}</strong>
             <BButton v-if="mobile" class="todo-simple-editor__mode-exit" size="small" @click="disableAdvancedMode">
@@ -12,6 +12,10 @@
           <span>{{ t('inbox.todoIndependentEnabledHint') }}</span>
         </div>
 
+        <section v-if="item?.seriesId" class="todo-simple-editor__section todo-simple-editor__scope">
+          <header><div><strong>{{ t('inbox.todoPlanEditScope') }}</strong><small>{{ t(scope === 'current' ? 'inbox.todoPlanScopeCurrentHint' : scope === 'future' ? 'inbox.todoPlanScopeFutureHint' : 'inbox.todoPlanScopeSeriesHint') }}</small></div></header>
+          <BSelect v-model:value="scope" :options="scopeOptions" :disabled="saving" />
+        </section>
         <section class="todo-simple-editor__section todo-simple-editor__content">
           <header>
             <div>
@@ -78,35 +82,8 @@
               </BButton>
             </div>
           </div>
-          <div ref="checklistSectionRef" class="todo-simple-editor__optional-head">
-            <div>
-              <strong>{{ t('todoWorkspace.subitems') }}</strong>
-              <small>{{ t('inbox.todoChecklistHint') }}</small>
-            </div>
-            <div class="todo-simple-editor__optional-actions">
-              <TodoBreakdownButton
-                :todo-id="item?.id"
-                :title="draft.task.title"
-                :description="draft.task.description"
-                :checklist="draft.task.checklist"
-                :disabled="saving"
-                @apply="applyAiBreakdown"
-              />
-              <BButton
-                class="todo-simple-editor__checklist-toggle"
-                size="small"
-                @click="checklistOpen = !checklistOpen"
-              >
-                {{ checklistOpen ? t('common.collapse') : t('inbox.todoShowChecklist') }}
-              </BButton>
-            </div>
-          </div>
-          <div v-if="checklistOpen" class="todo-simple-editor__checklist">
-            <div v-for="(item, index) in draft.task.checklist" :key="item.id">
-              <BInput v-model:value="item.text" :placeholder="t('inbox.todoChecklistPlaceholder')" />
-              <BButton size="small" @click="removeChecklist(index)">{{ t('common.delete') }}</BButton>
-            </div>
-            <BButton size="small" @click="addChecklist">{{ t('inbox.todoAddChecklistItem') }}</BButton>
+          <div ref="checklistSectionRef">
+            <TodoChecklistEditor v-model="draft.task.checklist" v-model:open="checklistOpen" :todo-id="item?.id" :title="draft.task.title" :description="draft.task.description" :disabled="saving" />
           </div>
         </section>
 
@@ -147,16 +124,16 @@
         </section>
 
         <section
-          v-if="advancedEnabled"
+          v-if="advancedEnabled || draft.independentTasks.enabled"
           class="todo-simple-editor__section todo-simple-editor__advanced"
           :class="{ 'is-enabled': draft.independentTasks.enabled }"
         >
           <header>
             <div>
-              <strong>{{ t('inbox.todoAdvanced') }}</strong>
-              <small>{{ t('inbox.todoIndependentEntryHint') }}</small>
+              <strong>{{ t(item ? 'inbox.todoPlanTitle' : 'inbox.todoAdvanced') }}</strong>
+              <small>{{ t(item ? 'inbox.todoPlanHint' : 'inbox.todoIndependentEntryHint') }}</small>
             </div>
-            <BSwitch v-model:checked="draft.independentTasks.enabled" />
+            <BSwitch v-if="!item || (!item.seriesId && draft.independentTasks.plan.type !== 'once')" v-model:checked="draft.independentTasks.enabled" />
           </header>
           <div v-if="!draft.independentTasks.enabled" class="todo-simple-editor__advanced-summary">
             <strong>{{ t('inbox.todoIndependentToggleTitle') }}</strong>
@@ -165,7 +142,8 @@
           <TodoIndependentTaskPlanEditor
             v-else
             :draft="draft"
-            :needs-past-policy="Boolean(preview?.requiredChoices?.includes('pastPolicy'))"
+            :current-only="!!item && scope === 'current' && (!!item.seriesId || draft.independentTasks.plan.type === 'once')"
+            :needs-past-policy="needsPastPolicy"
           />
         </section>
 
@@ -212,8 +190,10 @@
       </aside>
     </div>
 
-    <footer class="todo-simple-editor__footer">
-      <span v-if="!mobile" class="todo-simple-editor__footer-hint">{{ footerHint }}</span>
+    <footer ref="footerRef" class="todo-simple-editor__footer">
+      <section v-if="!mobile || submitBlockedReason" class="todo-simple-editor__footer-status" aria-live="polite">
+        <span class="todo-simple-editor__footer-hint">{{ submitBlockedReason || footerHint }}</span>
+      </section>
       <div>
         <BButton v-if="!mobile" :disabled="saving" @click="emit('cancel')">{{ t('common.cancel') }}</BButton>
         <BButton type="primary" :loading="saving" :disabled="!canSubmit" @click="submit">
@@ -241,7 +221,7 @@
   import TodoIndependentTaskPlanEditor from './TodoIndependentTaskPlanEditor.vue';
   import TodoPlanPreviewCard from './TodoPlanPreviewCard.vue';
   import TodoReminderEditor from './TodoReminderEditor.vue';
-  import TodoBreakdownButton from './TodoBreakdownButton.vue';
+  import TodoChecklistEditor from './TodoChecklistEditor.vue';
   import TodoResourceMentionInput from './TodoResourceMentionInput.vue';
   import { normalizeTodoCreateDraft, suggestTodoPlanEndDate } from './todoDraftNormalizer';
   import { useTodoCreateDraft } from './useTodoCreateDraft';
@@ -252,6 +232,8 @@
     type TodoEditorSubmission,
     type TodoItem,
     type TodoPlanPreview,
+    type TodoPlanScope,
+    type TodoPlanTiming,
     type TodoPriority,
     type TodoResourceRefView,
   } from '@/api/todoApi';
@@ -276,6 +258,14 @@
   }>();
   const { t } = useI18n();
   const { draft, reset } = useTodoCreateDraft();
+  const scope = ref<TodoPlanScope>('current');
+  let scopeTimings: Partial<Record<TodoPlanScope, TodoPlanTiming>> = {};
+  const scopeOptions = computed(() => ['current', 'future', 'series'].map(value => ({value, label: t(value === 'current' ? 'inbox.todoPlanScopeCurrent' : value === 'future' ? 'inbox.todoPlanScopeFuture' : 'inbox.todoPlanScopeSeries')})));
+  function buildDraft() {
+    const payload = normalizeTodoCreateDraft(draft);
+    if (props.item?.seriesId && scope.value === 'current' && draft.independentTasks.enabled) payload.plan = { type: 'once', pastPolicy: payload.plan.pastPolicy };
+    return payload;
+  }
   let advancedInitialized = false;
   let initialFingerprint = '';
   let initialContentFingerprint = '';
@@ -298,6 +288,14 @@
   });
   const previewError = ref('');
   const previewLoading = ref(false);
+  const footerRef = ref<HTMLElement | null>(null);
+  const footerHeight = ref(76);
+  watch(footerRef, (element, _, onCleanup) => {
+    if (!element || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => { footerHeight.value = element.offsetHeight; });
+    observer.observe(element);
+    onCleanup(() => observer.disconnect());
+  });
   const checklistSectionRef = ref<HTMLElement | null>(null);
   async function revealChecklist() {
     checklistOpen.value = true;
@@ -340,6 +338,21 @@
           !previewLoading.value)),
     ),
   );
+  // 展示沿用最近一次结果；提交仍只接受当前草稿的有效 preview。
+  const needsPastPolicy = computed(() =>
+    Boolean(draft.independentTasks.enabled && (
+      displayedPreview.value?.requiredChoices?.includes('pastPolicy') ||
+      displayedPreview.value?.warnings?.some(({ code }) => code === 'PAST_OCCURRENCE' || code === 'PAST_SCHEDULE_RESTARTED')
+    )),
+  );
+  const submitBlockedReason = computed(() => {
+    if (canSubmit.value || props.saving) return '';
+    if (!draft.task.title.trim()) return t('inbox.todoTitleRequired');
+    if (previewError.value) return previewError.value;
+    if (previewLoading.value) return t('inbox.todoCreatePreviewUpdating');
+    if (preview.value?.requiredChoices?.length) return t('inbox.todoPastChoose');
+    return t('inbox.todoPlanPreviewFailed');
+  });
   const submitLabel = computed(() => {
     if (props.item) return t('common.save');
     if (draft.independentTasks.enabled && displayedPreview.value) {
@@ -350,24 +363,37 @@
     return props.mobile ? t('inbox.todoCreateNow') : t('inbox.todoCreateSingle');
   });
   const footerHint = computed(() =>
-    draft.independentTasks.enabled ? t('inbox.todoIndependentFooterHint') : t('inbox.todoSingleFooterHint'),
+    props.item?.seriesId ? t(scope.value === 'current' ? 'inbox.todoPlanScopeCurrentHint' : scope.value === 'future' ? 'inbox.todoPlanScopeFutureHint' : 'inbox.todoPlanScopeSeriesHint') : draft.independentTasks.enabled ? t('inbox.todoIndependentFooterHint') : t('inbox.todoSingleFooterHint'),
   );
 
   watch(
     () => [props.item, props.initialValues, props.resetKey] as const,
     () => {
       displayedPreview.value = null;
+      scope.value = 'current';
       reset(props.item, props.initialValues);
+      scopeTimings = { current: JSON.parse(JSON.stringify(draft.independentTasks.timing)) };
       resourceRefs.value = [...(props.item?.resourceRefs || [])];
       const hasChecklist = Boolean(props.item?.checklist?.length || props.initialValues?.checklist?.length);
       checklistOpen.value = hasChecklist;
-      advancedInitialized = false;
+      advancedInitialized = !!props.item;
       initialFingerprint = JSON.stringify(draft);
       initialContentFingerprint = contentFingerprint();
       schedulePreview();
     },
     { immediate: true },
   );
+  watch(scope, (next, previous) => {
+    if (props.item?.series?.timing) {
+      scopeTimings[previous] = JSON.parse(JSON.stringify(draft.independentTasks.timing));
+      const timing = props.item.series.timing;
+      draft.independentTasks.timing = JSON.parse(JSON.stringify(scopeTimings[next] || {
+        ...timing,
+        anchorDate: next === 'series' ? timing.anchorDate : props.item.occurrenceDate || timing.anchorDate,
+      }));
+    }
+    schedulePreview();
+  }, { flush: 'sync' });
   watch(draft, schedulePreview, { deep: true, flush: 'sync' });
   watch(
     () => draft.independentTasks.enabled,
@@ -443,9 +469,9 @@
     previewLoading.value = true;
     previewError.value = '';
     try {
-      const payload = normalizeTodoCreateDraft(draft);
+      const payload = buildDraft();
       const response = props.item
-        ? await previewTodoPlanUpdateV2(props.item.id, 'current', payload)
+        ? await previewTodoPlanUpdateV2(props.item.id, scope.value, payload)
         : await previewTodoPlanV2(payload);
       if (sequence !== previewSequence) return;
       if (response.status !== 200 || !response.data) throw new Error(response.msg || t('inbox.todoPlanPreviewFailed'));
@@ -458,21 +484,6 @@
     } finally {
       if (sequence === previewSequence) previewLoading.value = false;
     }
-  }
-
-  function addChecklist() {
-    if (draft.task.checklist.length >= 50) return;
-    draft.task.checklist.push({ id: generateUUID(), text: '', done: false });
-  }
-
-  function removeChecklist(index: number) {
-    draft.task.checklist.splice(index, 1);
-    if (!draft.task.checklist.length) addChecklist();
-  }
-
-  function applyAiBreakdown(items: TodoItem['checklist']) {
-    draft.task.checklist = items;
-    checklistOpen.value = true;
   }
 
   function applyResourceRef(item: { type: string; id: string; title: string }) {
@@ -501,10 +512,8 @@
   function mapSingleReminderToIndependent() {
     if (draft.reminder.mode === 'none') {
       draft.independentTasks.reminder = {
-        mode: 'once_per_instance',
-        trigger: defaultIndependentReminderTrigger(),
-        channels: ['in_app'],
-        quietPolicy: 'defer_once',
+        mode: 'none',
+        channels: [],
       };
       return;
     }
@@ -549,29 +558,29 @@
     if (organizationOnly.value) {
       emit('submit', {
         kind: 'organization',
-        scope: 'current',
+        scope: scope.value,
         payload: { title: draft.task.title, listId: draft.task.listId, tagIds: draft.task.tagIds },
       });
       return;
     }
     if (!preview.value) return;
-    const signature = JSON.stringify(normalizeTodoCreateDraft(draft));
+    const signature = JSON.stringify([scope.value, buildDraft()]);
     if (signature !== submissionFingerprint) {
       submissionFingerprint = signature;
       submissionKey = generateUUID();
     }
     emit('submit', {
       kind: 'v2',
-      scope: 'current',
+      scope: scope.value,
       payload: {
-        ...normalizeTodoCreateDraft(draft),
+        ...buildDraft(),
         previewHash: preview.value.previewHash,
         idempotencyKey: submissionKey,
       },
     });
   }
 
-  defineExpose({ submit, revealChecklist, isDirty: () => JSON.stringify(draft) !== initialFingerprint });
+  defineExpose({ submit, revealChecklist, isDirty: () => scope.value !== 'current' || JSON.stringify(draft) !== initialFingerprint });
 </script>
 
 <style scoped lang="less">
@@ -748,52 +757,11 @@
     grid-column: 1 / -1;
   }
 
-  .todo-simple-editor__optional-head,
   .todo-simple-editor__advanced-summary {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-  }
-
-  .todo-simple-editor__optional-head {
-    padding: 10px 12px;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 12px;
-    background: var(--workspace-panel-bg-color);
-  }
-
-  .todo-simple-editor__optional-head > div {
-    display: grid;
-    min-width: 0;
-    gap: 2px;
-  }
-
-  .todo-simple-editor__optional-actions {
-    display: flex !important;
-    min-width: auto !important;
-    grid-auto-flow: column;
-    align-items: center;
-    gap: 8px !important;
-  }
-
-  .todo-simple-editor__optional-head strong {
-    color: var(--text-color);
-    font-size: 14px;
-  }
-
-  .todo-simple-editor__optional-head small {
-    color: var(--desc-color);
-    font-size: 12px;
-    font-weight: 400;
-    line-height: 1.45;
-  }
-
-  .todo-simple-editor__optional-head :deep(.todo-simple-editor__checklist-toggle.b_btn) {
-    flex: 0 0 auto;
-    border-color: var(--primary-color) !important;
-    color: var(--primary-color);
-    background: var(--card-background);
   }
 
   .todo-simple-editor__advanced-summary {
@@ -803,20 +771,6 @@
   .todo-simple-editor__advanced-summary > span {
     max-width: 420px;
     text-align: right;
-  }
-
-  .todo-simple-editor__optional-head {
-    scroll-margin-top: 16px;
-  }
-  .todo-simple-editor__checklist {
-    display: grid;
-    gap: 9px;
-  }
-
-  .todo-simple-editor__checklist > div {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 8px;
   }
 
   .todo-simple-editor__preview {
@@ -867,6 +821,14 @@
     gap: 9px;
   }
 
+  .todo-simple-editor__footer-status {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+    min-width: 0;
+  }
+
   .todo-simple-editor__footer-hint {
     color: var(--desc-color);
     font-size: 12px;
@@ -882,7 +844,7 @@
     height: auto;
     min-height: 100%;
     overflow: visible;
-    padding-bottom: calc(76px + env(safe-area-inset-bottom));
+    padding-bottom: calc(var(--todo-footer-height, 76px) + 20px);
     background: var(--workspace-panel-bg-color);
   }
 
@@ -950,6 +912,9 @@
   }
 
   .is-mobile .todo-simple-editor__footer {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
     position: fixed;
     right: 0;
     bottom: 0;

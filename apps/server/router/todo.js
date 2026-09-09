@@ -4,6 +4,8 @@ import * as todoHandle from '../router_handle/todoHandle.js';
 const router = express.Router();
 
 router.post('/workspace', todoHandle.todoWorkspace);
+router.post('/workspace/group', todoHandle.todoWorkspaceGroup);
+router.post('/workspace/series', todoHandle.todoWorkspaceSeries);
 router.post('/lists', todoHandle.todoLists);
 router.post('/lists/save', todoHandle.saveList);
 router.post('/lists/delete', todoHandle.removeList);

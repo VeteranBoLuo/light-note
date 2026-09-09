@@ -58,3 +58,43 @@ it('提醒引用唯一任务时刻，切换提醒不改写时刻；次日截止�
   expect(timing.scrollIntoView).toHaveBeenCalled();
   expect(document.activeElement).toBe(timing.querySelector('button'));
 });
+
+it('点击日期字段标题、说明和空白后保持关闭，再次点击日期仍可打开', async () => {
+  const draft = reactive<TodoCreateDraftV3>({
+    task: { title: '', description: '', priority: 1, checklist: [], contextRefs: [] },
+    timing: { startAt: null, dueAt: null, timezone: 'Asia/Shanghai' },
+    reminder: { version: 1, mode: 'none', channels: [] },
+    independentTasks: {
+      enabled: true,
+      timing: { timezone: 'Asia/Shanghai', anchorDate: '2026-09-09', startTime: '09:00', dueTime: null, dueDayOffset: 0 },
+      plan: { type: 'scheduled', frequency: 'daily', interval: 1, end: { mode: 'until', untilDate: '2026-10-09' } },
+      reminder: { mode: 'none', channels: ['in_app'] },
+    },
+  });
+  const host = document.createElement('div');
+  document.body.append(host);
+  const app = createApp({ render: () => h(Editor, { draft }) });
+  app.use(createPinia());
+  app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
+  app.mount(host);
+  cleanup = () => { app.unmount(); host.remove(); };
+  const click = async (element: HTMLElement) => {
+    element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    await nextTick();
+    element.click();
+    await nextTick();
+    await new Promise(resolve => setTimeout(resolve, 250));
+  };
+  const triggers = host.querySelectorAll<HTMLElement>('.b-datetime-trigger');
+  expect(triggers).toHaveLength(2);
+  for (const trigger of triggers) {
+    const field = trigger.closest('.todo-independent-plan__field')!;
+    for (const target of [field, field.querySelector('span'), field.querySelector('small')].filter(Boolean)) {
+      await click(trigger);
+      expect(document.body.querySelector('.b-datetime-popover')).not.toBeNull();
+      await click(target as HTMLElement);
+      expect(document.body.querySelector('.b-datetime-popover')).toBeNull();
+    }
+  }
+  expect(draft.independentTasks.plan.end).toEqual({ mode: 'until', untilDate: '2026-10-09' });
+});

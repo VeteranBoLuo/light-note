@@ -12,22 +12,34 @@ div.setAttribute('class', 'alert-container');
 document.body.appendChild(div);
 let modalParams;
 function sendInfo(params) {
-  const { title, okText, okType, cancelText, content, onOk, footer } = params;
+  const { title, okText, okType, cancelText, content, onOk, footer, choices, defaultChoice, choiceLabel, choiceHint } =
+    params;
   modalParams = params;
   const divs: any = document.getElementsByClassName('bAlert');
   if (divs.length > 0) {
     render(null, div);
   }
   // 创建虚拟节点   第一个参数为要创建的虚拟节点  第二个参数为props的参数
-  const vNode = createVNode(modal, { title, okText, okType, cancelText, content, footer });
+  const vNode = createVNode(modal, {
+    title,
+    okText,
+    okType,
+    cancelText,
+    content,
+    footer,
+    choices,
+    defaultChoice,
+    choiceLabel,
+    choiceHint,
+  });
   // 把虚拟节点渲染DOM容器中
   render(vNode, div);
 }
 function destroy() {
   render(null, div);
 }
-function onOk() {
-  modalParams.onOk?.();
+function onOk(value?: string) {
+  modalParams.onOk?.(value);
   destroy();
 }
 function onCancel() {
@@ -41,6 +53,10 @@ export default {
     okType?: 'primary' | 'danger' | 'success' | 'function';
     cancelText?: string;
     content: string;
+    choices?: { value: string; label: string; description?: string; confirmText?: string }[];
+    defaultChoice?: string;
+    choiceLabel?: string;
+    choiceHint?: string;
     onOk?: any;
     onCancel?: any;
     footer?: {

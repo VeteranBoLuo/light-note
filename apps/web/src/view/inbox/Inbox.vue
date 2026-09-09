@@ -88,10 +88,12 @@
         <header v-if="isMobileTodoPrimary" class="mobile-todo-heading">
           <div class="mobile-todo-heading__row">
             <h1>{{ t('inbox.todoPageTitle') }}</h1>
-            <BButton v-if="!embedded && !showTodoSidebar && !isUnscopedTodoView"
+            <BButton
+              v-if="!embedded && !showTodoSidebar && !isUnscopedTodoView"
               class="mobile-todo-heading__scope"
               :aria-label="`${t('todoWorkspace.chooseScope')} · ${todoScopeLabel}`"
-              @click="scopeDrawerOpen = true">
+              @click="scopeDrawerOpen = true"
+            >
               {{ t('todoWorkspace.chooseScope') }} · {{ todoScopeLabel }}
             </BButton>
           </div>
@@ -187,7 +189,7 @@
                   @change="changeTodoStatus"
                 />
                 <BBatchToggle
-                  v-if="todoView === 'list' && (todo.items.length || pageLoading)"
+                  v-if="embedded && todoView === 'list' && (todo.items.length || pageLoading)"
                   class="todo-workspace-toolbar__select"
                   size="small"
                   @click="toggleTodoSelectionMode"
@@ -342,11 +344,23 @@
           <template #actions>
             <BButton
               :disabled="!selectedTodoIds.length || todo.status === 'completed'"
-              @click="openOrganization(todo.items.filter((item) => selectedTodoIds.includes(item.id)), 'list')"
+              @click="
+                openOrganization(
+                  selectedTodoItems.filter((item) => selectedTodoIds.includes(item.id)),
+                  'list',
+                )
+              "
               >{{ t('todoWorkspace.moveToList') }}</BButton
             >
-            <BButton :disabled="!selectedTodoIds.length || todo.status === 'completed'"
-              @click="openOrganization(todo.items.filter((item) => selectedTodoIds.includes(item.id)), 'tags')">
+            <BButton
+              :disabled="!selectedTodoIds.length || todo.status === 'completed'"
+              @click="
+                openOrganization(
+                  selectedTodoItems.filter((item) => selectedTodoIds.includes(item.id)),
+                  'tags',
+                )
+              "
+            >
               {{ t('todoWorkspace.modifyTags') }}
             </BButton>
             <BButton
@@ -360,6 +374,14 @@
             </BButton>
           </template>
         </ResourceBatchActionBar>
+
+        <MobilePageActionsDrawer
+          v-if="isMobileTodoPrimary && !embedded"
+          v-model:open="todoPageActionsOpen"
+          :title="t('common.more')"
+          :actions="todoPageActions"
+          @action="toggleTodoSelectionMode"
+        />
 
         <MobilePageActionsDrawer
           v-if="bookmark.isMobile && isTodoFocused"
@@ -449,6 +471,7 @@
                 v-else-if="
                   !pageLoading &&
                   actionItems.length === 0 &&
+                  !(isTodoFocused && todo.seriesPresentation && todo.groups.length) &&
                   !recentCompleted.length &&
                   !(isTodoFocused && todoView === 'calendar')
                 "
@@ -491,6 +514,7 @@
                 @range-change="ensureCalendarRange"
               />
               <div v-else-if="isTodoFocused" class="todo-group-list">
+                <small class="todo-count-hint">{{ t('todoWorkspace.instanceCountHint') }}</small>
                 <section v-for="group in todoGroupLists" :key="group.key" class="todo-group">
                   <header @click="collapsedGroups[group.key] = !collapsedGroups[group.key]">
                     <BButton
@@ -514,7 +538,14 @@
                       /></span>
                       {{ group.label || t(`inbox.todoGroups.${group.key}`) }}</BButton
                     >
-                    <span v-if="todo.groupCounts[group.key] !== undefined">{{ todo.groupCounts[group.key] }}</span>
+                    <span>{{
+                      t(
+                        group.instanceCount === group.nodeCount
+                          ? 'todoWorkspace.groupSimpleCount'
+                          : 'todoWorkspace.groupCount',
+                        { count: group.instanceCount, rows: group.nodeCount },
+                      )
+                    }}</span>
                     <div v-if="bookmark.isDesktop" class="todo-group__columns" aria-hidden="true"
                       ><span>{{ t('todoWorkspace.organization') }}</span
                       ><span>{{ t('todoWorkspace.priority') }}</span
@@ -522,57 +553,80 @@
                     >
                   </header>
                   <div v-show="!collapsedGroups[group.key]" class="todo-group__items">
-                    <template v-for="node in group.items" :key="node.key">
-                      <TodoSeriesGroup
-                        v-if="node.kind === 'series'"
-                        :series-id="node.seriesId"
-                        :representative="node.representative"
-                        :items="node.items"
-                        :series-items="node.seriesItems"
-                        :selectable="todoSelectionMode"
-                        :selected-ids="selectedTodoIds"
-                        :disabled="hasPendingOperation || todoBatchMutating"
-                        :deleting-id="deletingTodoId"
-                        :swipe-enabled="bookmark.isMobile"
-                        :open-swipe-id="openSwipeTodoId"
-                        @swipe-start="beginTodoSwipe"
-                        @update-swipe-open="(item, open) => updateTodoSwipe(item.id, open)"
-                        @select="(item, selected) => toggleTodoSelected(item.id, selected)"
-                        @toggle-complete="toggleTodo"
-                        @update-checklist="updateTodoChecklist"
-                        @preview="openTodoPreview"
-                        @edit="openTodoEditor"
-                        @delete="confirmDeleteTodo"
-                        @add-to-calendar="openTodoCalendar"
-                        @snooze="snoozeTodoItem"
-                        @update-priority="updateTodoPriority"
-                        @series-action="handleTodoSeriesAction"
-                      />
-                      <TodoItem
-                        workspace
-                        v-else
-                        :item="node.item"
-                        :selectable="todoSelectionMode"
-                        :selected="selectedTodoIds.includes(node.item.id)"
-                        :disabled="hasPendingOperation || todoBatchMutating"
-                        :deleting="deletingTodoId === node.item.id"
-                        :swipe-enabled="bookmark.isMobile"
-                        :swipe-open="openSwipeTodoId === node.item.id"
-                        @swipe-start="beginTodoSwipe(node.item.id)"
-                        @update:swipe-open="updateTodoSwipe(node.item.id, $event)"
-                        @select="toggleTodoSelected(node.item.id, $event)"
-                        @toggle-complete="toggleTodo(node.item, $event)"
-                        @update-checklist="updateTodoChecklist(node.item, $event)"
-                        @preview="openTodoPreview(node.item)"
-                        @edit="openTodoEditor(node.item, $event)"
-                        @organize="openOrganization([node.item])"
-                        @delete="confirmDeleteTodo(node.item)"
-                        @add-to-calendar="openTodoCalendar(node.item)"
-                        @snooze="snoozeTodoItem(node.item, $event)"
-                        @update-priority="updateTodoPriority(node.item, $event)"
-                        @series-action="handleTodoSeriesAction(node.item, $event)"
-                      />
-                    </template>
+                    <BVirtualList
+                      :items="seriesRows(group)"
+                      item-key="key"
+                      dynamic-height
+                      :item-height="140"
+                      scroll-mode="ancestor"
+                      :paused="!!collapsedGroups[group.key] || group.failed || todo.refreshing"
+                      :loading="group.loading"
+                      :has-more="!group.loaded || !!group.nextCursor"
+                      @load-more="todo.loadGroup(group.key)"
+                    >
+                      <template #default="{ item: node }">
+                        <div v-if="node.kind === 'more'" class="todo-page-tail" role="status">
+                          <BButton v-if="group.failed" @click="todo.loadGroup(group.key, true)">{{
+                            t('todoWorkspace.loadFailed')
+                          }}</BButton>
+                          <BLoading v-else inline :loading="true" :title="t('todoWorkspace.loadingNext')" />
+                        </div>
+                        <TodoSeriesGroup
+                          v-else-if="node.kind === 'series'"
+                          :series-id="node.seriesId"
+                          :representative="node.representative"
+                          :items="[node.representative]"
+                          workspace
+                          :instance-count="node.instanceCount"
+                          :overdue-count="node.overdueCount"
+                          :future-count="node.futureCount"
+                          @view-series="viewSeries(node, group.key)"
+                          @organize="openOrganization([$event])"
+                          :selectable="todoSelectionMode"
+                          :selected-ids="selectedTodoIds"
+                          :disabled="hasPendingOperation || todoBatchMutating"
+                          :deleting-id="deletingTodoId"
+                          :swipe-enabled="bookmark.isMobile"
+                          :open-swipe-id="openSwipeTodoId"
+                          @swipe-start="beginTodoSwipe"
+                          @update-swipe-open="(item, open) => updateTodoSwipe(item.id, open)"
+                          @select="(item, selected) => toggleTodoSelected(item.id, selected)"
+                          @toggle-complete="toggleTodo"
+                          @update-checklist="updateTodoChecklist"
+                          @preview="openTodoPreview"
+                          @edit="openTodoEditor"
+                          @delete="confirmDeleteTodo"
+                          @add-to-calendar="openTodoCalendar"
+                          @snooze="snoozeTodoItem"
+                          @update-priority="updateTodoPriority"
+                          @series-action="handleTodoSeriesAction"
+                        />
+                        <TodoItem
+                          workspace
+                          v-else
+                          :item="node.item"
+                          :selectable="todoSelectionMode"
+                          :selected="selectedTodoIds.includes(node.item.id)"
+                          :disabled="hasPendingOperation || todoBatchMutating"
+                          :deleting="deletingTodoId === node.item.id"
+                          :swipe-enabled="bookmark.isMobile"
+                          :swipe-open="openSwipeTodoId === node.item.id"
+                          @swipe-start="beginTodoSwipe(node.item.id)"
+                          @update:swipe-open="updateTodoSwipe(node.item.id, $event)"
+                          @select="toggleTodoSelected(node.item.id, $event)"
+                          @toggle-complete="toggleTodo(node.item, $event)"
+                          @update-checklist="updateTodoChecklist(node.item, $event)"
+                          @preview="openTodoPreview(node.item)"
+                          @edit="openTodoEditor(node.item, $event)"
+                          @organize="openOrganization([node.item])"
+                          @delete="confirmDeleteTodo(node.item)"
+                          @add-to-calendar="openTodoCalendar(node.item)"
+                          @snooze="snoozeTodoItem(node.item, $event)"
+                          @update-priority="updateTodoPriority(node.item, $event)"
+                          @series-action="handleTodoSeriesAction(node.item, $event)"
+                        />
+                      </template>
+                    </BVirtualList>
                   </div>
                 </section>
 
@@ -648,9 +702,12 @@
                   />
                 </template>
               </div>
-              <BButton v-if="isTodoFocused && todo.nextCursor" :loading="todo.loadingMore" @click="loadMoreTodos">{{
-                t('todoWorkspace.more')
-              }}</BButton>
+              <BButton
+                v-if="isTodoFocused && !todo.seriesPresentation && todo.nextCursor"
+                :loading="todo.loadingMore"
+                @click="loadMoreTodos"
+                >{{ t('todoWorkspace.more') }}</BButton
+              >
             </BLoading>
           </div>
         </section>
@@ -734,6 +791,28 @@
         </aside>
       </div>
     </div>
+    <TodoSeriesDrawer
+      v-if="activeSeries"
+      v-model:open="seriesDrawerOpen"
+      :representative="activeSeries.representative"
+      :items="[]"
+      :query="activeSeries.query"
+      :disabled="hasPendingOperation || todoBatchMutating"
+      :selectable="todoSelectionMode"
+      :selected-ids="selectedTodoIds"
+      :deleting-id="deletingTodoId"
+      @select="selectSeriesItem"
+      @toggle-complete="toggleTodo"
+      @update-checklist="updateTodoChecklist"
+      @preview="openTodoPreview"
+      @edit="openTodoEditor"
+      @delete="confirmDeleteSeriesOccurrence"
+      @organize="openOrganization([$event])"
+      @add-to-calendar="openTodoCalendar"
+      @snooze="snoozeTodoItem"
+      @update-priority="updateTodoPriority"
+      @series-action="handleTodoSeriesAction"
+    />
     <TodoPreviewDrawer
       v-if="previewTodo"
       v-model:visible="todoPreviewVisible"
@@ -746,10 +825,29 @@
       @update-checklist="updateTodoChecklist"
       @closed="clearTodoPreview"
     />
-    <BModal v-model:visible="organizationOpen" :title="t(organizationField === 'both' ? 'todoWorkspace.organization' : organizationField === 'list' ? 'todoWorkspace.moveToList' : 'todoWorkspace.modifyTags')" width="480px">
+    <BModal
+      v-model:visible="organizationOpen"
+      :title="
+        t(
+          organizationField === 'both'
+            ? 'todoWorkspace.organization'
+            : organizationField === 'list'
+              ? 'todoWorkspace.moveToList'
+              : 'todoWorkspace.modifyTags',
+        )
+      "
+      width="480px"
+    >
       <div class="todo-organization-dialog">
-        <BSelect v-if="organizationField === 'tags'" v-model:value="organizationTagMode" :disabled="organizationSaving"
-          :options="[{value: 'add', label: t('todoWorkspace.addTags')}, {value: 'remove', label: t('todoWorkspace.removeTags')}]" />
+        <BSelect
+          v-if="organizationField === 'tags'"
+          v-model:value="organizationTagMode"
+          :disabled="organizationSaving"
+          :options="[
+            { value: 'add', label: t('todoWorkspace.addTags') },
+            { value: 'remove', label: t('todoWorkspace.removeTags') },
+          ]"
+        />
         <TodoOrganizationFields
           v-model:list-id="organizationDraft.listId"
           v-model:tag-ids="organizationDraft.tagIds"
@@ -759,7 +857,10 @@
         />
         <BSelect
           v-if="
-            organizationField === 'both' && organizationItems.length === 1 && organizationItems[0].seriesId && organizationItems[0].planVersion === 2
+            organizationField === 'both' &&
+            organizationItems.length === 1 &&
+            organizationItems[0].seriesId &&
+            organizationItems[0].planVersion === 2
           "
           v-model:value="organizationDraft.scope"
           :options="organizationScopes"
@@ -768,9 +869,23 @@
       <template #footer>
         <div class="todo-organization-dialog__footer">
           <BButton :disabled="organizationSaving" @click="organizationOpen = false">{{ t('common.cancel') }}</BButton>
-          <BButton type="primary" :loading="organizationSaving" :disabled="organizationField === 'tags' && !organizationDraft.tagIds.length" @click="saveOrganization">{{
-            t(organizationField === 'both' ? 'todoWorkspace.apply' : organizationField === 'list' ? 'todoWorkspace.moveToList' : organizationTagMode === 'add' ? 'todoWorkspace.addTags' : 'todoWorkspace.removeTags')
-          }}</BButton>
+          <BButton
+            type="primary"
+            :loading="organizationSaving"
+            :disabled="organizationField === 'tags' && !organizationDraft.tagIds.length"
+            @click="saveOrganization"
+            >{{
+              t(
+                organizationField === 'both'
+                  ? 'todoWorkspace.apply'
+                  : organizationField === 'list'
+                    ? 'todoWorkspace.moveToList'
+                    : organizationTagMode === 'add'
+                      ? 'todoWorkspace.addTags'
+                      : 'todoWorkspace.removeTags',
+              )
+            }}</BButton
+          >
         </div>
       </template>
     </BModal>
@@ -862,7 +977,9 @@
   import { useAndroidPullRefresh } from '@/composables/useAndroidPullRefresh';
   import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
   import { todoSnoozeAt, type TodoSnoozePreset } from '@/utils/todoPlanning';
-  import { type TodoListNode } from '@/utils/todoSeriesGrouping';
+  import type { TodoWorkspaceNode, TodoSeriesQuery } from '@/api/todoApi';
+  import BVirtualList from '@/components/base/BasicComponents/BVirtualList.vue';
+  import TodoSeriesDrawer from '@/components/todo/TodoSeriesDrawer.vue';
   import { updatePreference } from '@/utils/savePreference';
   import { generateUUID } from '@/utils/common';
   import icon from '@/config/icon';
@@ -1041,9 +1158,61 @@
   const selectedTodoIds = ref<string[]>([]);
   const todoBatchMutating = ref(false);
   const todoBatchActionsOpen = ref(false);
+  const todoPageActionsOpen = ref(false);
+  const todoPageActions = computed<MobilePageActionItem[]>(() => [
+    {
+      key: 'batch',
+      label: t('common.batchActions'),
+      icon: icon.common.batchSelect,
+      disabled: todoView.value !== 'list' || (!todo.items.length && !pageLoading.value),
+    },
+  ]);
   const todoUndo = ref<{ kind: 'complete' | 'delete'; ids: string[] } | null>(null);
   const todoUndoing = ref(false);
-  const todoGroupLists = ref<Array<{ key: string; label?: string; count: number; items: TodoListNode[] }>>([]);
+  const todoGroupLists = computed(() =>
+    todo.groups.map((group) => ({
+      ...group,
+      label:
+        group.key === 'all'
+          ? t('todoWorkspace.all')
+          : group.key === 'focus'
+            ? t('todoWorkspace.focus')
+            : group.key === 'completed'
+              ? t('inbox.todoCompleted')
+              : todo.lists.find((list) => list.id === group.key)?.name || t('todoWorkspace.unassigned'),
+    })),
+  );
+  const activeSeries = ref<{ representative: TodoItemType; query: TodoSeriesQuery } | null>(null);
+  const seriesDrawerOpen = ref(false);
+  const selectedTodoItems = computed(() => [
+    ...new Map([...todo.items, ...Object.values(todo.selectedSeriesItems)].map((item) => [item.id, item])).values(),
+  ]);
+  function seriesRows(group: (typeof todo.groups)[number]): Array<TodoWorkspaceNode | { kind: 'more'; key: string }> {
+    return [
+      ...group.nodes,
+      ...(!group.loaded || group.nextCursor || group.failed
+        ? [{ kind: 'more' as const, key: `more:${group.key}` }]
+        : []),
+    ];
+  }
+  function viewSeries(node: Extract<TodoWorkspaceNode, { kind: 'series' }>, groupKey: string) {
+    activeSeries.value = {
+      representative: node.representative,
+      query: { ...todo.groupQuery, seriesId: node.seriesId, groupKey },
+    };
+    seriesDrawerOpen.value = true;
+  }
+  watch(
+    () => Object.keys(todo.selectedSeriesItems),
+    (keys) => {
+      if (todo.seriesPresentation) selectedTodoIds.value = selectedTodoIds.value.filter((id) => keys.includes(id));
+    },
+  );
+  function selectSeriesItem(item: TodoItemType, selected: boolean) {
+    if (selected) todo.selectedSeriesItems[item.id] = item;
+    else delete todo.selectedSeriesItems[item.id];
+    toggleTodoSelected(item.id, selected);
+  }
   let todoUndoTimer = 0;
   let todoMidnightTimer = 0;
   const ensuredCalendarRanges = new Set<string>();
@@ -1151,7 +1320,7 @@
     () => selectedItems.value.length > 0 && selectedItems.value.length < inbox.items.length,
   );
   const allTodoItemsSelected = computed(
-    () => todo.items.length > 0 && selectedTodoIds.value.length === todo.items.length,
+    () => todo.items.length > 0 && todo.items.every((item) => selectedTodoIds.value.includes(item.id)),
   );
   const someTodoItemsSelected = computed(
     () => selectedTodoIds.value.length > 0 && selectedTodoIds.value.length < todo.items.length,
@@ -1164,8 +1333,18 @@
   const todoMobileBatchActions = computed<MobilePageActionItem[]>(() => {
     const disabled = !selectedTodoIds.value.length || todoBatchMutating.value;
     const actions: MobilePageActionItem[] = [
-      { key: 'list', label: t('todoWorkspace.moveToList'), icon: icon.organize.check, disabled: disabled || todo.status === 'completed' },
-      { key: 'tags', label: t('todoWorkspace.modifyTags'), icon: icon.organize.check, disabled: disabled || todo.status === 'completed' },
+      {
+        key: 'list',
+        label: t('todoWorkspace.moveToList'),
+        icon: icon.organize.check,
+        disabled: disabled || todo.status === 'completed',
+      },
+      {
+        key: 'tags',
+        label: t('todoWorkspace.modifyTags'),
+        icon: icon.organize.check,
+        disabled: disabled || todo.status === 'completed',
+      },
     ];
     if (todo.status !== 'completed') {
       actions.push({
@@ -1200,7 +1379,8 @@
       batchCompleting.value ||
       batchDeleting.value ||
       updatingTodoId.value ||
-      deletingTodoId.value,
+      deletingTodoId.value ||
+      (todo.seriesPresentation && todo.refreshing),
     ),
   );
   const pageLoading = computed(() => {
@@ -1353,6 +1533,8 @@
       savedTodoRange = null;
       ensuredCalendarRanges.clear();
       collapsedGroups.value = {};
+      seriesDrawerOpen.value = false;
+      activeSeries.value = null;
       recentCompleted.value = [];
       recentOpen.value = false;
       overviewOverride.value = null;
@@ -1620,6 +1802,12 @@
     // 待整理分区自画顶栏（返回 + 搜索 + 创建），待办分区仍用共享顶栏
     ownTopBar: () => isMobileResourceInbox.value,
     searchSourceType: 'todo',
+    onAuxiliaryAction: () => {
+      if (todoSelectionMode.value) toggleTodoSelectionMode();
+      else todoPageActionsOpen.value = true;
+    },
+    auxiliaryActionLabel: () => t(todoSelectionMode.value ? 'common.exitBatch' : 'common.more'),
+    auxiliaryActionIcon: () => (todoSelectionMode.value ? icon.common.close : icon.common.more),
     onAdd: () => {
       if (isMobileTodoPrimary.value) openTodoEditor();
       else openCapture();
@@ -1684,7 +1872,12 @@
         todo.filters.scope = 'all';
         delete todo.filters.listId;
       }
+      if (resetScroll) {
+        selectedTodoIds.value = [];
+        seriesDrawerOpen.value = false;
+      }
       todo.workspaceEnabled = true;
+      todo.seriesPresentation = todoView.value === 'list';
       const owner = todoCalendarOwnerKey(user);
       const freshTags = await fetchSelectableTags().catch(() => workspaceTags.value);
       if (owner !== todoCalendarOwnerKey(user)) return false;
@@ -1775,61 +1968,31 @@
     }
   }
   function syncTodoGroups() {
-    const groups = new Map<string, { key: string; label: string; count: number; items: TodoListNode[] }>();
-    const grouped =
-      todo.sort === 'smart' &&
-      todo.status !== 'completed' &&
-      !todo.filters.listId &&
-      todo.filters.listId !== null &&
-      (todo.filters.scope || 'all') === 'all';
-    for (const item of todo.items) {
-      const needsAttention =
-        item.status === 'pending' &&
-        (item.priority === 2 || Boolean(item.dueAt && new Date(item.dueAt).getTime() <= Date.now()));
-      const key = !grouped
-        ? 'all'
-        : item.status === 'completed'
-          ? 'completed'
-          : needsAttention
-            ? 'focus'
-            : item.listId || 'unassigned';
-      const label =
-        key === 'all'
-          ? t('todoWorkspace.all')
-          : key === 'focus'
-            ? t('todoWorkspace.focus')
-            : key === 'completed'
-              ? t('inbox.todoCompleted')
-              : item.list?.name || t('todoWorkspace.unassigned');
-      if (!groups.has(key)) groups.set(key, { key, label, count: 0, items: [] });
-      const group = groups.get(key)!;
-      group.items.push({ kind: 'item', key: item.id, item, bucket: 'noDate' });
-      group.count++;
-    }
-    todoGroupLists.value = [...groups.values()].sort((a, b) => (a.key === 'focus' ? -1 : b.key === 'focus' ? 1 : 0));
-
-    selectedTodoIds.value = selectedTodoIds.value.filter((id) => todo.items.some((item) => item.id === id));
+    if (!todo.seriesPresentation)
+      selectedTodoIds.value = selectedTodoIds.value.filter((id) => todo.items.some((item) => item.id === id));
   }
+
   function scheduleTodoMidnightRefresh() {
     window.clearTimeout(todoMidnightTimer);
     const now = new Date();
     const nextDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 100);
     todoMidnightTimer = window.setTimeout(() => {
-      syncTodoGroups();
+      if (todo.seriesPresentation) void todo.refreshList({ silent: true });
+      else syncTodoGroups();
       scheduleTodoMidnightRefresh();
     }, nextDay.getTime() - now.getTime());
   }
   async function updateTodoPriority(item: TodoItemType, priority: TodoPriority) {
     if (item.priority === priority) return;
-    const payload = todo.items.map((candidate) => ({
-      id: candidate.id,
-      dueAt: candidate.dueAt || null,
-      priority: candidate.id === item.id ? priority : candidate.priority,
-    }));
+    const payload = [{ id: item.id, dueAt: item.dueAt || null, priority }];
     const result = await todo.reorder(payload);
     if (result === false) message.error(t('inbox.todoReorderFailed'));
   }
   function toggleTodoSelected(id: string, selected: boolean) {
+    if (selected) {
+      const item = selectedTodoItems.value.find((item) => item.id === id);
+      if (item) todo.selectedSeriesItems[id] = item;
+    } else delete todo.selectedSeriesItems[id];
     selectedTodoIds.value = selected
       ? [...new Set([...selectedTodoIds.value, id])]
       : selectedTodoIds.value.filter((value) => value !== id);
@@ -1838,18 +2001,25 @@
     openSwipeTodoId.value = '';
     todoBatchActionsOpen.value = false;
     todoSelectionMode.value = !todoSelectionMode.value;
-    if (!todoSelectionMode.value) selectedTodoIds.value = [];
+    if (!todoSelectionMode.value) {
+      selectedTodoIds.value = [];
+      todo.selectedSeriesItems = {};
+    }
   }
   function clearTodoSelection() {
     selectedTodoIds.value = [];
+    todo.selectedSeriesItems = {};
   }
   function toggleSelectAllTodos(selected: boolean) {
-    selectedTodoIds.value = selected ? todo.items.map((item) => item.id) : [];
+    for (const item of todo.items) toggleTodoSelected(item.id, selected);
   }
   function handleTodoMobileBatchAction(action: MobilePageActionItem) {
     if (action.key === 'list' || action.key === 'tags') {
       todoBatchActionsOpen.value = false;
-      openOrganization(todo.items.filter((item) => selectedTodoIds.value.includes(item.id)), action.key);
+      openOrganization(
+        selectedTodoItems.value.filter((item) => selectedTodoIds.value.includes(item.id)),
+        action.key,
+      );
       return;
     }
     if (action.key === 'complete') {
@@ -2110,8 +2280,11 @@
       const result = await todo.setCompleted(item, completed);
       if (result === true) {
         await inbox.refreshCount();
-        if (completed) showTodoUndo('complete', [item.id]);
-        else message.success(t('inbox.todoReopenedSuccess'));
+        if (completed) {
+          toggleTodoSelected(item.id, false);
+          delete todo.selectedSeriesItems[item.id];
+          showTodoUndo('complete', [item.id]);
+        } else message.success(t('inbox.todoReopenedSuccess'));
       } else if (result !== 'preview') message.error(t('inbox.todoSaveFailed'));
     } finally {
       updatingTodoId.value = '';
@@ -2126,19 +2299,36 @@
       message.error(t('inbox.todoSaveFailed'));
     }
   }
+  function confirmDeleteSeriesOccurrence(item: TodoItemType) {
+    if (hasPendingOperation.value) return;
+    Alert.alert({
+      title: t('todoWorkspace.deleteOccurrence'),
+      content: t('todoWorkspace.deleteOccurrenceConfirm', { title: item.title }),
+      okText: t('common.delete'),
+      okType: 'danger',
+      cancelText: t('common.cancel'),
+      onOk: () => (item.planVersion === 2 && item.seriesId ? removeTodoV2(item, 'current') : removeTodo(item)),
+    });
+  }
   function confirmDeleteTodo(item: TodoItemType) {
     if (hasPendingOperation.value) return;
     openSwipeTodoId.value = '';
     if (item.planVersion === 2 && item.seriesId) {
       Alert.alert({
         title: t('inbox.deleteTodo'),
-        content: t('inbox.todoSeriesDeleteChoice', { name: item.title }),
-        footer: [
-          { label: t('common.cancel') },
-          { label: t('inbox.todoSeriesDeleteCurrent'), function: () => removeTodoV2(item, 'current') },
-          { label: t('inbox.todoSeriesDeleteFuture'), type: 'primary', function: () => removeTodoV2(item, 'future') },
-          { label: t('inbox.todoSeriesDeleteSeries'), type: 'danger', function: () => removeTodoV2(item, 'series') },
-        ],
+        content: item.title,
+        defaultChoice: 'current',
+        choiceLabel: t('inbox.todoDeleteScope'),
+        choiceHint: item.status === 'completed' ? t('inbox.todoDeleteCompletedHint') : t('inbox.todoDeleteHistoryHint'),
+        choices: ['current', 'future', 'series'].map((scope) => ({
+          value: scope,
+          label: t(`inbox.todoDeleteScope_${scope}`),
+          description: t(`inbox.todoDeleteScopeHint_${scope}`),
+          confirmText: t(`inbox.todoDeleteConfirm_${scope}`),
+        })),
+        okType: 'danger',
+        cancelText: t('common.cancel'),
+        onOk: (scope: 'current' | 'future' | 'series') => removeTodoV2(item, scope),
       });
       return;
     }
@@ -2286,21 +2476,24 @@
   }
 
   async function removeTodoV2(item: TodoItemType, scope: TodoPlanScope) {
+    const owner = todoCalendarOwnerKey(user);
     deletingTodoId.value = item.id;
     try {
       const response = await deleteTodoPlanV2(item.id, scope, generateUUID());
+      if (owner !== todoCalendarOwnerKey(user)) return;
       if (response.status !== 200) {
         message.error(response.msg || t('inbox.todoSaveFailed'));
         return;
       }
       await Promise.all([todo.refreshList(), inbox.refreshCount()]);
+      if (owner !== todoCalendarOwnerKey(user)) return;
       if (scope === 'current' || item.status === 'pending') closeTodoPreview(item.id);
       if (scope === 'current') showTodoUndo('delete', [item.id]);
       else message.success(t('inbox.todoSeriesChanged'));
     } catch (error: any) {
-      message.error(error?.message || t('inbox.todoSaveFailed'));
+      if (owner === todoCalendarOwnerKey(user)) message.error(error?.message || t('inbox.todoSaveFailed'));
     } finally {
-      deletingTodoId.value = '';
+      if (owner === todoCalendarOwnerKey(user)) deletingTodoId.value = '';
     }
   }
 
@@ -2611,6 +2804,17 @@
   .todo-undo-banner > span {
     flex: 1;
   }
+  .todo-page-tail {
+    min-height: 40px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 8px;
+  }
+  .todo-count-hint {
+    color: var(--desc-color);
+    padding: 0 4px;
+  }
   .todo-group-list {
     display: grid;
     gap: 14px;
@@ -2658,11 +2862,12 @@
     border-radius: 0;
     box-shadow: none;
   }
-  .todo-group__items :deep(.todo-item:last-child) {
+  .todo-group__items :deep(.todo-series-group .todo-item) {
     border-bottom: 0;
   }
   .todo-group__items :deep(.todo-series-group) {
     border: 0;
+    border-bottom: 1px solid var(--workspace-divider);
     border-radius: 0;
   }
   .inbox-hero h1 {
@@ -3265,67 +3470,6 @@
     }
   }
 
-  /* 桌面列表也沿用移动端已验证过的独立卡片层级，避免完成态在整块面板中连成一片。
-     只放在桌面断点，移动浏览器与 App 保持现有布局和触控密度。 */
-  @media (min-width: 768px) {
-    .inbox-page--todo-focused .todo-group {
-      gap: 9px;
-      overflow: visible;
-      border: 0;
-      border-radius: 0;
-      background: transparent;
-    }
-    .inbox-page--todo-focused .todo-group > header {
-    cursor: pointer;
-    transition: background-color 0.15s;
-      min-height: 40px;
-      padding: 8px 16px;
-      border-bottom: 0;
-    }
-    .inbox-page--todo-focused .todo-group__items {
-      gap: 10px;
-    }
-    .inbox-page--todo-focused .todo-group__items :deep(.todo-item) {
-      border: 1px solid var(--surface-border-color);
-      border-left: 4px solid var(--todo-accent-color, var(--primary-color));
-      border-radius: 17px;
-      background: var(--card-background);
-      box-shadow: none;
-    }
-    .inbox-page--todo-focused .todo-group__items :deep(.todo-item::before) {
-      display: none;
-    }
-    .inbox-page--todo-focused .todo-group__items :deep(.todo-item.is-overdue) {
-      border-color: var(--surface-border-color);
-      border-left-color: var(--danger-color, #d83c45);
-    }
-    .inbox-page--todo-focused .todo-group__items :deep(.todo-item.is-completed) {
-      border-color: var(--surface-border-color);
-      border-left-color: var(--success-color, #00a884);
-      background: var(--card-background);
-    }
-    .inbox-page--todo-focused .todo-group__items :deep(.todo-series-group) {
-      overflow: hidden;
-      border: 1px solid var(--surface-border-color);
-      border-radius: 17px;
-      background: var(--card-background);
-    }
-    .inbox-page--todo-focused .todo-group__items :deep(.todo-series-group .todo-item) {
-      border: 0;
-      border-bottom: 1px solid var(--surface-divider-color);
-      border-left: 4px solid var(--todo-accent-color, var(--primary-color));
-      border-radius: 0;
-    }
-    .inbox-page--todo-focused .todo-group__items :deep(.todo-series-group .todo-item:last-child) {
-      border-bottom: 0;
-    }
-    .inbox-page--todo-focused .todo-group__items :deep(.todo-series-group .todo-item.is-overdue) {
-      border-left-color: var(--danger-color, #d83c45);
-    }
-    .inbox-page--todo-focused .todo-group__items :deep(.todo-series-group .todo-item.is-completed) {
-      border-left-color: var(--success-color, #00a884);
-    }
-  }
   .inbox-empty {
     min-height: 100%;
     box-sizing: border-box;
@@ -3423,7 +3567,7 @@
       font-size: 12px;
       line-height: 1.5;
     }
-    /* 视图切换独占一行，完成状态与批量操作位于下方。 */
+    /* 视图和完成状态分别占一行，批量入口由共享顶栏承载。 */
     .todo-workspace-toolbar {
       align-items: center;
       gap: 8px;
@@ -3596,44 +3740,19 @@
       padding-bottom: 110px;
     }
     .inbox-page--mobile-todo .todo-group {
-      gap: 9px;
+      gap: 0;
       padding: 0;
-      border: 0;
-      border-radius: 0;
-      background: transparent;
+      overflow: hidden;
+      border: 1px solid var(--workspace-border);
+      border-radius: 12px;
+      background: var(--workspace-content);
     }
     .inbox-page--mobile-todo .todo-group__items {
-      gap: 10px;
-    }
-    .inbox-page--mobile-todo .todo-group__items :deep(.todo-item) {
-      border: 1px solid var(--surface-border-color);
-      border-left: 4px solid var(--todo-accent-color, var(--primary-color));
-      border-radius: 17px;
-    }
-    .inbox-page--mobile-todo .todo-group__items :deep(.todo-item.is-overdue) {
-      border-left-color: var(--danger-color, #d83c45);
-    }
-    .inbox-page--mobile-todo .todo-group__items :deep(.todo-item.is-completed) {
-      border-left-color: var(--success-color, #00a884);
-    }
-    .inbox-page--mobile-todo .todo-group__items :deep(.todo-series-group) {
-      border: 1px solid var(--surface-border-color);
-      border-radius: 17px;
-    }
-    .inbox-page--mobile-todo .todo-group__items :deep(.todo-series-group .todo-item) {
-      border: 0;
-      border-bottom: 1px solid var(--surface-divider-color);
-      border-left: 4px solid var(--todo-accent-color, var(--primary-color));
-      border-radius: 0;
-    }
-    .inbox-page--mobile-todo .todo-group__items :deep(.todo-series-group .todo-item.is-overdue) {
-      border-left-color: var(--danger-color, #d83c45);
-    }
-    .inbox-page--mobile-todo .todo-group__items :deep(.todo-series-group .todo-item.is-completed) {
-      border-left-color: var(--success-color, #00a884);
+      gap: 0;
     }
     .inbox-page--mobile-todo .todo-group > header {
-      padding: 0 2px;
+      padding: 10px;
+      flex-wrap: wrap;
       justify-content: space-between;
       font-size: 16px;
     }
@@ -3690,21 +3809,27 @@
   .inbox-page.inbox-page--mobile-todo .todo-workspace-filters > .resource-tag-filter {
     width: auto;
     max-width: 100%;
-    flex: 0 1 auto;
+    flex: 1 1 0;
+    order: 2;
+  }
+  .inbox-page--mobile-todo .todo-workspace-filters {
+    flex-wrap: nowrap;
+    gap: 6px;
   }
   .inbox-page--mobile-todo .todo-workspace-filters :deep(.resource-tag-filter__trigger) {
-    grid-template-columns: 30px minmax(0, auto) 14px;
+    grid-template-columns: minmax(0, 1fr) 14px;
+    height: 40px;
+    min-height: 40px;
+    gap: 4px;
+    padding: 4px 6px;
+  }
+  .inbox-page--mobile-todo .todo-workspace-filters :deep(.resource-tag-filter__trigger-icon) {
+    display: none;
   }
   .inbox-page.todo-sidebar-layout .todo-group {
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     overflow: hidden;
-  }
-  .inbox-page.todo-sidebar-layout :deep(.todo-item.is-workspace) {
-    border: 0;
-    border-bottom: 1px solid var(--surface-border-color);
-    border-radius: 0;
-    box-shadow: none;
   }
   @media (min-width: 1100px) {
     .inbox-page :deep(.todo-item.is-workspace) {
@@ -3776,7 +3901,7 @@
       grid-column: 2;
       grid-row: 1;
       margin: 0;
-      align-self: center;
+      align-self: start;
     }
     .inbox-page :deep(.is-workspace .todo-item__priority-select) {
       display: none;
@@ -4107,8 +4232,22 @@
   .todo-filter-controls > * {
     width: 160px;
   }
-  .inbox-page--mobile-todo .todo-workspace-filters > .todo-filter-controls {
+  .inbox-page.inbox-page--mobile-todo .todo-workspace-filters > .todo-filter-controls {
     margin-left: 0;
+    flex: 2 1 0;
+    min-width: 0;
+    gap: 6px;
+    flex-wrap: nowrap;
+  }
+  .inbox-page--mobile-todo .todo-filter-controls > * {
+    width: 0;
+    min-width: 0;
+    flex: 1 1 0;
+  }
+  .inbox-page--mobile-todo .todo-filter-controls :deep(.select-trigger) {
+    padding: 0 8px;
+    gap: 4px;
+    font-size: 12px;
   }
   .todo-filter-controls :deep(.select-trigger) {
     border-radius: 10px;

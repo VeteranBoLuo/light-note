@@ -5,6 +5,8 @@
     class="b-virtual-list"
     :class="{ 'is-ancestor-scroll': props.scrollMode === 'ancestor' }"
     :aria-busy="props.loading"
+    @focusin="rememberFocus"
+    @focusout="releaseFocus"
     @scroll.passive="handleScroll"
   >
     <div class="b-virtual-list__sizer" :style="sizerStyle">
@@ -14,7 +16,9 @@
           :key="entry.loaded ? (entry.item?.[props.itemKey] ?? entry.index) : `placeholder:${entry.index}`"
           class="b-virtual-list__item"
           :class="{ 'is-placeholder': !entry.loaded }"
-          :style="itemStyle"
+          :style="entryStyle(entry.index)"
+          :ref="(element) => measureRow(element, entry.index)"
+          :data-virtual-index="entry.index"
         >
           <slot v-if="entry.loaded" :item="entry.item" :index="entry.index" />
           <span v-else class="b-virtual-list__placeholder" aria-hidden="true" />
@@ -36,6 +40,7 @@
     type ResourceListScrollAnchor,
     type ResourceListScrollPosition,
   } from '@/utils/resourceListScroll';
+  import { getRootZoom } from '@/utils/zoom';
   import { findScrollContainer } from '@/utils/scrollContainer';
 
   const props = defineProps({
@@ -47,6 +52,8 @@
      */
     totalCount: { type: Number, default: 0 },
     itemHeight: { type: Number, default: 80 },
+    dynamicHeight: { type: Boolean, default: false },
+    paused: { type: Boolean, default: false },
     gap: { type: Number, default: 0 },
     overscan: { type: Number, default: 6 },
     loading: { type: Boolean, default: false },
@@ -69,28 +76,110 @@
   const logicalItemCount = computed(() =>
     Math.max(props.items.length, Math.max(0, Math.trunc(Number(props.totalCount) || 0))),
   );
-  const start = computed(() => Math.max(0, Math.floor(scrollTop.value / pitch.value) - props.overscan));
-  const end = computed(() =>
-    Math.min(logicalItemCount.value, start.value + Math.ceil(viewportHeight.value / pitch.value) + props.overscan * 2),
-  );
-  const visibleItems = computed(() =>
-    Array.from({ length: Math.max(0, end.value - start.value) }, (_, offset) => {
-      const index = start.value + offset;
-      return { item: props.items[index], index, loaded: index < props.items.length };
-    }),
-  );
-  const sizerStyle = computed(() => {
-    const itemCount = logicalItemCount.value;
-    const totalHeight = itemCount
-      ? itemCount * Math.max(1, props.itemHeight) + Math.max(0, itemCount - 1) * Math.max(0, props.gap)
-      : 0;
-    return { height: `${totalHeight}px` };
+  const measuredHeights = ref(new Map<string | number, number>());
+  const focusedKey = ref<string | number | null>(null);
+  const rowKey = (index: number) => props.items[index]?.[props.itemKey] ?? index;
+  const offsets = computed(() => {
+    const values = [0];
+    for (let i = 0; i < logicalItemCount.value; i++)
+      values.push(
+        values[i] +
+          (props.dynamicHeight ? measuredHeights.value.get(rowKey(i)) || props.itemHeight : props.itemHeight) +
+          Math.max(0, props.gap),
+      );
+    return values;
   });
+  function indexAt(top: number) {
+    let low = 0,
+      high = logicalItemCount.value;
+    while (low < high) {
+      const mid = Math.floor((low + high + 1) / 2);
+      if (offsets.value[mid] <= top) low = mid;
+      else high = mid - 1;
+    }
+    return Math.min(low, Math.max(0, logicalItemCount.value - 1));
+  }
+  const start = computed(() =>
+    Math.max(
+      0,
+      (props.dynamicHeight ? indexAt(scrollTop.value) : Math.floor(scrollTop.value / pitch.value)) - props.overscan,
+    ),
+  );
+  const end = computed(() =>
+    Math.min(
+      logicalItemCount.value,
+      props.dynamicHeight
+        ? indexAt(scrollTop.value + viewportHeight.value) + props.overscan + 1
+        : start.value + Math.ceil(viewportHeight.value / pitch.value) + props.overscan * 2,
+    ),
+  );
+  const visibleItems = computed(() => {
+    const indices = Array.from({ length: Math.max(0, end.value - start.value) }, (_, offset) => start.value + offset);
+    if (props.dynamicHeight && focusedKey.value !== null) {
+      const index = props.items.findIndex((item) => item[props.itemKey] === focusedKey.value);
+      if (index >= 0 && !indices.includes(index)) indices.push(index);
+    }
+    return indices.map((index) => ({ item: props.items[index], index, loaded: index < props.items.length }));
+  });
+  const sizerStyle = computed(() => ({
+    height: `${Math.max(0, offsets.value[logicalItemCount.value] - (logicalItemCount.value ? props.gap : 0))}px`,
+  }));
   const windowStyle = computed(() => ({
     gap: `${Math.max(0, props.gap)}px`,
-    transform: `translateY(${start.value * pitch.value}px)`,
+    transform: `translateY(${offsets.value[start.value] || 0}px)`,
   }));
-  const itemStyle = computed(() => ({ height: `${Math.max(1, props.itemHeight)}px` }));
+  function entryStyle(index: number) {
+    return props.dynamicHeight
+      ? {
+          position: 'absolute' as const,
+          width: '100%',
+          top: `${offsets.value[index] - (offsets.value[start.value] || 0)}px`,
+          overflow: 'visible',
+        }
+      : { height: `${Math.max(1, props.itemHeight)}px` };
+  }
+  const rowElements = new Map<HTMLElement, number>();
+  let rowObserver: ResizeObserver | null = null;
+  function measureRow(element: unknown, index: number) {
+    if (!props.dynamicHeight || !(element instanceof HTMLElement)) return;
+    rowElements.set(element, index);
+    rowObserver?.observe(element);
+  }
+  function rememberFocus(event: FocusEvent) {
+    const row = (event.target as HTMLElement)?.closest<HTMLElement>('[data-virtual-index]');
+    if (row) focusedKey.value = rowKey(Number(row.dataset.virtualIndex));
+  }
+  function releaseFocus() {
+    nextTick(() => {
+      if (!scrollerRef.value?.contains(document.activeElement)) focusedKey.value = null;
+    });
+  }
+  function measureEntries(entries: ResizeObserverEntry[]) {
+    const anchor = props.dynamicHeight ? captureScrollAnchor() : null;
+    let changed = false;
+    const heights = new Map(measuredHeights.value);
+    for (const entry of entries) {
+      const element = entry.target as HTMLElement;
+      if (!element.isConnected) {
+        rowObserver?.unobserve(element);
+        rowElements.delete(element);
+        continue;
+      }
+      const index = Number(element.dataset.virtualIndex);
+      const height = entry.borderBoxSize?.[0]?.blockSize || element.offsetHeight;
+      if (height > 0 && Math.abs((heights.get(rowKey(index)) || 0) - height) > 0.5) {
+        heights.set(rowKey(index), height);
+        changed = true;
+      }
+    }
+    if (changed) {
+      measuredHeights.value = heights;
+      nextTick(() => {
+        if (anchor) restoreScrollAnchor(anchor);
+        updateViewport();
+      });
+    }
+  }
   const showLoadingFooter = computed(() => props.loading && logicalItemCount.value <= props.items.length);
 
   let resizeObserver: ResizeObserver | null = null;
@@ -104,11 +193,12 @@
     const listRect = list.getBoundingClientRect();
     const documentScroller = ancestor === document.documentElement || ancestor === document.body;
     const ancestorRect = documentScroller ? { top: 0, bottom: window.innerHeight } : ancestor.getBoundingClientRect();
-    const top = Math.max(0, ancestorRect.top - listRect.top);
-    const bottom = Math.max(0, Math.min(listRect.height, ancestorRect.bottom - listRect.top));
+    const zoom = props.dynamicHeight ? getRootZoom() : 1;
+    const top = Math.max(0, ancestorRect.top - listRect.top) / zoom;
+    const bottom = Math.max(0, Math.min(listRect.height, ancestorRect.bottom - listRect.top)) / zoom;
     return {
       ancestor,
-      listOffset: listRect.top - ancestorRect.top + ancestor.scrollTop,
+      listOffset: (listRect.top - ancestorRect.top) / zoom + ancestor.scrollTop,
       top,
       height: Math.max(0, bottom - top),
     };
@@ -129,11 +219,10 @@
 
   function maybeLoadMore() {
     const scroller = scrollerRef.value;
-    if (!scroller || props.loading || !props.hasMore || loadQueued) return;
+    if (!scroller || props.paused || props.loading || !props.hasMore || loadQueued) return;
+    if (props.scrollMode === 'ancestor' && !ancestorViewport()?.height) return;
     const loadedCount = props.items.length;
-    const loadedHeight = loadedCount
-      ? loadedCount * Math.max(1, props.itemHeight) + Math.max(0, loadedCount - 1) * Math.max(0, props.gap)
-      : 0;
+    const loadedHeight = Math.max(0, (offsets.value[loadedCount] || 0) - (loadedCount ? props.gap : 0));
     const remaining =
       loadedHeight -
       (props.scrollMode === 'ancestor'
@@ -183,6 +272,18 @@
 
   function captureScrollAnchor(): ResourceListScrollAnchor | null {
     updateViewport();
+    if (props.dynamicHeight) {
+      if (!props.items.length) return null;
+      const viewport = props.scrollMode === 'ancestor' ? ancestorViewport() : null;
+      if (props.scrollMode === 'ancestor' && (!viewport?.height || viewport.listOffset > viewport.ancestor.scrollTop))
+        return null;
+      const index = indexAt(scrollTop.value);
+      return {
+        key: String(rowKey(index)),
+        index,
+        offset: scrollTop.value - offsets.value[index],
+      } as ResourceListScrollAnchor;
+    }
     return captureResourceListScrollAnchor({
       items: props.items,
       itemKey: props.itemKey,
@@ -192,6 +293,12 @@
   }
 
   function restoreScrollAnchor(anchor: ResourceListScrollAnchor) {
+    if (props.dynamicHeight) {
+      const found = props.items.findIndex((item) => String(item[props.itemKey]) === anchor.key);
+      const index = found >= 0 ? found : Math.min(anchor.index, Math.max(0, props.items.length - 1));
+      setRelativeScrollTop((offsets.value[index] || 0) + anchor.offset);
+      return found >= 0;
+    }
     const resolved = resolveResourceListScrollAnchor({
       items: props.items,
       itemKey: props.itemKey,
@@ -208,8 +315,8 @@
     const scroller = scrollerRef.value;
     if (!scroller || !props.items.length) return;
     const normalizedIndex = Math.min(props.items.length - 1, Math.max(0, Math.trunc(Number(index) || 0)));
-    const itemTop = normalizedIndex * pitch.value;
-    const itemBottom = itemTop + Math.max(1, props.itemHeight);
+    const itemTop = offsets.value[normalizedIndex];
+    const itemBottom = offsets.value[normalizedIndex + 1] - props.gap;
     const ancestor = props.scrollMode === 'ancestor' ? ancestorViewport() : null;
     const viewportTop = ancestor?.top ?? scroller.scrollTop;
     const currentViewportHeight = ancestor?.height ?? scroller.clientHeight;
@@ -246,7 +353,7 @@
   }
 
   watch(
-    () => [props.items.length, props.hasMore, props.loading],
+    () => [props.items.length, props.hasMore, props.loading, props.paused],
     () =>
       nextTick(() => {
         updateViewport();
@@ -264,11 +371,61 @@
       }),
   );
 
+  watch(
+    () => props.items,
+    (items, previous) => {
+      if (!props.dynamicHeight) return;
+      const viewport = props.scrollMode === 'ancestor' ? ancestorViewport() : null;
+      const shouldAnchor =
+        props.scrollMode === 'self' || Boolean(viewport?.height && viewport.listOffset <= viewport.ancestor.scrollTop);
+      let offset = 0,
+        index = 0;
+      while (index < previous.length - 1) {
+        const height = (measuredHeights.value.get(previous[index][props.itemKey]) || props.itemHeight) + props.gap;
+        if (offset + height > scrollTop.value) break;
+        offset += height;
+        index++;
+      }
+      const anchor =
+        shouldAnchor && previous.length
+          ? { key: String(previous[index][props.itemKey]), index, offset: scrollTop.value - offset }
+          : null;
+      const live = new Set(items.map((item) => item[props.itemKey]));
+      measuredHeights.value = new Map([...measuredHeights.value].filter(([key]) => live.has(key)));
+      nextTick(() => {
+        for (const element of rowElements.keys())
+          if (!element.isConnected) {
+            rowObserver?.unobserve(element);
+            rowElements.delete(element);
+          }
+        if (anchor) restoreScrollAnchor(anchor);
+      });
+    },
+    { flush: 'pre' },
+  );
+
   onMounted(() => {
+    if (props.dynamicHeight && typeof ResizeObserver !== 'undefined') {
+      rowObserver = new ResizeObserver(measureEntries);
+      for (const element of rowElements.keys()) rowObserver.observe(element);
+    }
     bindScrollAncestor();
     updateViewport();
     if (typeof ResizeObserver !== 'undefined' && scrollerRef.value) {
-      resizeObserver = new ResizeObserver(updateViewport);
+      let lastWidth = scrollerRef.value.clientWidth;
+      resizeObserver = new ResizeObserver(() => {
+        const width = scrollerRef.value?.clientWidth || 0;
+        if (props.dynamicHeight && width && width !== lastWidth) {
+          const anchor = captureScrollAnchor();
+          lastWidth = width;
+          measuredHeights.value = new Map();
+          nextTick(() => {
+            if (anchor) restoreScrollAnchor(anchor);
+          });
+        }
+        updateViewport();
+        maybeLoadMore();
+      });
       resizeObserver.observe(scrollerRef.value);
       if (scrollAncestor) resizeObserver.observe(scrollAncestor);
     }
@@ -278,6 +435,8 @@
   onBeforeUnmount(() => {
     unbindScrollAncestor();
     resizeObserver?.disconnect();
+    rowObserver?.disconnect();
+    rowElements.clear();
   });
   defineExpose({ captureScrollAnchor, restoreScrollAnchor, scrollToTop, scrollToIndex });
 </script>

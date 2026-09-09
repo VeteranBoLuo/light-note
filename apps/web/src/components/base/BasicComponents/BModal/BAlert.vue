@@ -2,12 +2,21 @@
   <Teleport to="body" v-if="isMobileLayout">
     <div class="bAlert-bg">
       <!-- 移动端弹框使用正常 flex 流；三个以上操作改为整宽纵向排列，避免窄屏下长文案被压成多行。 -->
-      <div class="bAlert bAlert--mobile" :class="{ out: isExit, 'bAlert--stacked-actions': footer.length > 2 }">
+      <div
+        class="bAlert bAlert--mobile"
+        :class="{ out: isExit, 'bAlert--stacked-actions': footer.length > 2, 'bAlert--choices': choices.length > 0 }"
+      >
         <div class="bAlert-m-body">
           <slot name="title">
             <div class="bAlert-m-title">{{ title }}</div>
           </slot>
-          <div class="bAlert-m-content" v-html="safeContent" />
+          <div v-if="choices.length" class="bAlert-m-content bAlert-choices-content">
+            <p class="bAlert-choice-task">{{ content }}</p>
+            <p class="bAlert-choice-label">{{ choiceLabel }}</p>
+            <BRadio v-model:value="selectedChoice" vertical :options="choices" :aria-label="choiceLabel" />
+            <p v-if="choiceHint" class="bAlert-choice-hint">{{ choiceHint }}</p>
+          </div>
+          <div v-else class="bAlert-m-content" v-html="safeContent" />
         </div>
         <div class="bAlert-m-footer">
           <slot name="footer" v-if="footer?.length > 0">
@@ -34,7 +43,7 @@
               }"
               :type="okType"
               @click="onOk"
-              >{{ okText || $t('common.confirm') }}</BButton
+              >{{ selectedConfirmText || okText || $t('common.confirm') }}</BButton
             >
           </template>
         </div>
@@ -44,11 +53,20 @@
 
   <Teleport to="body" v-else>
     <div class="bAlert-bg">
-      <div class="bAlert" :class="{ out: isExit, 'bAlert--multi-action': footer.length > 2 }">
+      <div
+        class="bAlert"
+        :class="{ out: isExit, 'bAlert--multi-action': footer.length > 2, 'bAlert--choices': choices.length > 0 }"
+      >
         <slot name="title">
           <div class="bAlert-title">{{ title }}</div>
         </slot>
-        <div class="bAlert-content" v-html="safeContent" />
+        <div v-if="choices.length" class="bAlert-content bAlert-choices-content">
+          <p class="bAlert-choice-task">{{ content }}</p>
+          <p class="bAlert-choice-label">{{ choiceLabel }}</p>
+          <BRadio v-model:value="selectedChoice" vertical :options="choices" :aria-label="choiceLabel" />
+          <p v-if="choiceHint" class="bAlert-choice-hint">{{ choiceHint }}</p>
+        </div>
+        <div v-else class="bAlert-content" v-html="safeContent" />
         <div class="bAlert-footer">
           <slot name="footer" v-if="footer?.length > 0">
             <b-space :wrap="footer.length > 2">
@@ -63,7 +81,9 @@
           </slot>
           <b-space v-else>
             <b-button class="btn" @click="cancelAlert">{{ cancelText || $t('common.cancel') }}</b-button>
-            <b-button class="btn" :type="okType" @click="onOk">{{ okText || $t('common.confirm') }}</b-button>
+            <b-button class="btn" :type="okType" @click="onOk">{{
+              selectedConfirmText || okText || $t('common.confirm')
+            }}</b-button>
           </b-space>
         </div>
       </div>
@@ -76,6 +96,7 @@
   import bAlert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
   import DOMPurify from 'dompurify';
+  import BRadio from '../BRadio.vue';
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import i18n from '@/i18n';
   import { useMobileLayout } from '@/composables/useMobileLayout';
@@ -102,6 +123,10 @@
       cancelText: string;
       content: string;
       footer: ButtonItem[];
+      choices?: { value: string; label: string; description?: string; confirmText?: string }[];
+      defaultChoice?: string;
+      choiceLabel?: string;
+      choiceHint?: string;
     }>(),
     {
       title: '',
@@ -110,11 +135,21 @@
       cancelText: '',
       content: '',
       footer: () => [],
+      choices: () => [],
+      defaultChoice: '',
+      choiceLabel: '',
+      choiceHint: '',
     },
   );
   // 弹框内容在桌面端以 v-html 渲染;部分调用方会拼入用户可控文本(文件/书签/会话标题),必须净化防 XSS:
   // 保留 <br>/<div> 等良性格式,剥离 <script>/onerror 等脚本与事件处理器。
   const safeContent = computed(() => DOMPurify.sanitize(String(props.content || '')));
+  const selectedChoice = ref(
+    props.choices.find((choice) => choice.value === props.defaultChoice)?.value || props.choices[0]?.value || '',
+  );
+  const selectedConfirmText = computed(
+    () => props.choices.find((choice) => choice.value === selectedChoice.value)?.confirmText,
+  );
   const isExit = ref(false);
   let historyHandle: MobileOverlayHistoryHandle | null = null;
   let pendingHistoryAction: (() => void) | null = null;
@@ -152,7 +187,7 @@
   }
 
   function onOk() {
-    runAfterHistory(() => bAlert.onOk());
+    runAfterHistory(() => bAlert.onOk(props.choices.length ? selectedChoice.value : undefined));
   }
 
   function btnFunc(func) {
@@ -402,5 +437,38 @@
     & + .btn {
       border-top: 1px solid var(--phone-menu-item-border-color);
     }
+  }
+  .bAlert-choices-content.bAlert-content {
+    max-height: 65vh;
+  }
+  .bAlert-choices-content p {
+    margin: 0;
+  }
+  .bAlert-choice-task {
+    color: var(--text-color);
+    font-weight: 500;
+  }
+  .bAlert-choices-content .bAlert-choice-label {
+    margin: 16px 0 8px;
+    font-size: 12px;
+  }
+  .bAlert-choices-content .bAlert-choice-hint {
+    margin-top: 12px;
+    font-size: 12px;
+  }
+  .bAlert.bAlert--mobile.bAlert--choices {
+    width: 360px;
+    max-width: 100%;
+  }
+  .bAlert--mobile.bAlert--choices .bAlert-m-body {
+    min-height: 0;
+    align-items: stretch;
+  }
+  .bAlert--mobile.bAlert--choices .bAlert-m-title {
+    text-align: left;
+  }
+  .bAlert--mobile.bAlert--choices .bAlert-m-content {
+    text-align: left;
+    max-height: 65vh;
   }
 </style>

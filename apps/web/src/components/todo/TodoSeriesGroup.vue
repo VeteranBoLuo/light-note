@@ -1,6 +1,8 @@
 <template>
-  <section class="todo-series-group" :class="{ 'is-selecting': selectable }">
+  <section class="todo-series-group" :class="{ 'is-selecting': selectable, 'is-workspace': workspace }">
     <TodoItem
+      :workspace="workspace"
+      @organize="emit('organize', representative)"
       :item="representative"
       :selectable="selectable"
       :selected="selectedIds.includes(representative.id)"
@@ -22,8 +24,20 @@
       @series-action="emit('series-action', representative, $event)"
     />
 
+    <div v-if="workspace" class="todo-series-group__summary">
+      <SvgIcon :src="icon.todo.repeat" size="14" aria-hidden="true" />
+      <span
+        >{{ t('todoWorkspace.seriesCount', { count: instanceCount })
+        }}<template v-if="overdueCount"> · {{ t('todoWorkspace.seriesOverdue', { count: overdueCount }) }}</template
+        ><template v-if="futureCount"> · {{ t('todoWorkspace.seriesFuture', { count: futureCount }) }}</template></span
+      >
+      <BButton class="todo-series-group__view" :disabled="disabled" @click="openSeriesDrawer">{{
+        t('todoWorkspace.viewSeries')
+      }}</BButton>
+      <small v-if="selectable">{{ t('todoWorkspace.onlyThisOccurrence') }}</small>
+    </div>
     <BButton
-      v-if="allSeriesItems.length > 1 && !selectable"
+      v-else-if="allSeriesItems.length > 1 && !selectable"
       class="todo-series-group__toggle"
       :aria-expanded="drawerOpen"
       :disabled="disabled"
@@ -33,7 +47,7 @@
       <span>{{ t('inbox.todoSeriesViewAll', { count: allSeriesItems.length }) }}</span>
     </BButton>
 
-    <div v-if="selectable" class="todo-series-group__children">
+    <div v-if="selectable && !workspace" class="todo-series-group__children">
       <TodoItem
         v-for="item in hiddenItems"
         :key="item.id"
@@ -60,6 +74,7 @@
     </div>
 
     <TodoSeriesDrawer
+      v-if="!workspace"
       v-model:open="drawerOpen"
       :representative="representative"
       :items="allSeriesItems"
@@ -91,6 +106,10 @@
 
   const props = withDefaults(
     defineProps<{
+      workspace?: boolean;
+      instanceCount?: number;
+      overdueCount?: number;
+      futureCount?: number;
       seriesId: string;
       representative: TodoItemType;
       items: TodoItemType[];
@@ -113,6 +132,8 @@
     },
   );
   const emit = defineEmits<{
+    'view-series': [];
+    organize: [item: TodoItemType];
     'swipe-start': [id: string];
     'update-swipe-open': [item: TodoItemType, open: boolean];
     select: [item: TodoItemType, selected: boolean];
@@ -132,7 +153,8 @@
   const allSeriesItems = computed(() => (props.seriesItems.length ? props.seriesItems : props.items));
 
   function openSeriesDrawer() {
-    drawerOpen.value = true;
+    if (props.workspace) emit('view-series');
+    else drawerOpen.value = true;
   }
 
   watch(
@@ -166,6 +188,40 @@
     border-radius: 0;
     color: var(--desc-color);
     background: var(--workspace-panel-bg-color, var(--hover-background));
+  }
+
+  .todo-series-group.is-workspace {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    border-bottom: 1px solid var(--workspace-divider);
+  }
+  .todo-series-group__summary {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px 7px;
+    padding: 0 16px 10px 40px;
+    color: var(--desc-color);
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  .todo-series-group__view {
+    min-height: 28px;
+    height: auto;
+    padding: 0 4px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--todo-workspace-accent);
+    font-size: 12px;
+    &:hover {
+      text-decoration: underline;
+    }
+    &:focus-visible {
+      outline: 2px solid var(--todo-workspace-accent);
+      outline-offset: 2px;
+    }
   }
 
   .todo-series-group__children {

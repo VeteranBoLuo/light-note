@@ -44,7 +44,9 @@
           v-if="parentPathText && parentTargetId"
           class="note-parent-path"
           :path-text="parentPathText"
-          @activate="handleParentActivate(parentTargetId)"
+          :path="note.path"
+          :parent-id="parentTargetId"
+          @activate="handleParentActivate"
         />
         <div class="note-description" v-if="!bookmark.isMobile || description">{{ description }}</div>
         <!--

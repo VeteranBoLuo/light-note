@@ -122,3 +122,47 @@ describe('note import parser', () => {
     expect(content).toContain('<p>Hello Word</p>');
   });
 });
+
+describe('image source diagnostics', () => {
+  it('ignores only empty closed lightbox scaffolding and preserves dialog prose', async () => {
+    await upload(
+      'test.html',
+      '<p>Body</p><dialog><button>Close</button><img alt="Zoom"></dialog><dialog><p>Keep me</p><img></dialog>',
+    );
+    const [item] = await parseImportFiles(dir);
+    const output = await readJson(path.join(dir, `${item.id}.json`));
+    expect(item.warnings).not.toContain('missing_image');
+    expect(item.warnings).toContain('image_source_missing');
+    expect(output.content).not.toContain('Zoom');
+    expect(output.content).not.toContain('Close');
+    expect(output.content).toContain('Keep me');
+  });
+  it('distinguishes missing files, source-less nodes and external links with safe detail', async () => {
+    await upload('test.html', '<img src="/private/secret/photo.png"><img><img src="https://example.com/a.png">');
+    const [item] = await parseImportFiles(dir);
+    expect(item.warnings).toEqual(expect.arrayContaining(['missing_image', 'image_source_missing', 'external_image']));
+    expect(item.warningDetails.find((d) => d.code === 'missing_image')).toEqual({
+      code: 'missing_image',
+      count: 1,
+      sources: ['photo.png'],
+    });
+    expect(JSON.stringify(item.warningDetails)).not.toContain('/private');
+    expect(item.images).toHaveLength(0);
+  });
+  it('reports document and image stages without executing source scripts', async () => {
+    await upload('test.html', '<p>Hello</p><img src="https://example.com/a.png"><script>throw Error()</script>');
+    const progress = [];
+    await parseImportFiles(dir, (value) => progress.push(value));
+    expect(progress.map((p) => p.stage)).toEqual(
+      expect.arrayContaining(['reading', 'extracting_images', 'sanitizing', 'parsed']),
+    );
+    expect(progress.at(-1)).toMatchObject({ filesDone: 1, filesTotal: 1, imagesDone: 1, imagesTotal: 1 });
+  });
+});
+
+it('does not label unsupported embedded formats as missing local files', async () => {
+  await upload('image.html', '<img src="data:image/svg+xml;base64,PHN2Zy8+">');
+  const [item] = await parseImportFiles(dir);
+  expect(item.warnings).toContain('unsupported_image');
+  expect(item.warnings).not.toContain('missing_image');
+});

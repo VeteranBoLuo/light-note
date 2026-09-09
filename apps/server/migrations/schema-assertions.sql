@@ -3673,3 +3673,7 @@ WHERE (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABA
 SELECT 'note_import_items_columns' AS check_name, 'missing required columns' AS detail FROM DUAL
 WHERE (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='note_import_items'
  AND COLUMN_NAME IN ('id','task_id','title','source_name','type','status','selected','warnings','image_count','error_code','note_id','position')) <> 12;
+
+SELECT 'note_import_progress_columns' AS check_name, 'missing progress or result columns' AS detail FROM DUAL
+WHERE (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='note_import_tasks' AND COLUMN_NAME IN ('progress_json','finished_at')) <> 2
+OR (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='note_import_items' AND COLUMN_NAME='warning_details') <> 1;

@@ -59,8 +59,8 @@ describe('BAlert 多操作布局', () => {
     );
     expect(alertSource).toMatch(/\.bAlert--mobile \.btn:hover\s*\{[\s\S]*?background:\s*transparent;/);
     expect(alertApiSource).toContain('okType?:');
-    expect(alertApiSource).toContain('{ title, okText, okType, cancelText, content, onOk, footer }');
-    expect(alertApiSource).toContain('{ title, okText, okType, cancelText, content, footer }');
-    expect(inboxSource.match(/okType:\s*'danger'/g)).toHaveLength(2);
+    expect(alertApiSource).toContain('defaultChoice');
+    expect(alertApiSource).toContain('choices');
+    expect(inboxSource).toMatch(/function confirmDeleteTodo[\s\S]*?okType: 'danger'/);
   });
 });

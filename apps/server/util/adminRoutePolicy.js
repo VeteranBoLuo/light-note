@@ -259,6 +259,8 @@ declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'organize_ai_suggestions', [
 declare(ADMIN_POLICIES.READ, 'todo', [
   ['POST', '/todo/list'],
   ['POST', '/todo/workspace'],
+  ['POST', '/todo/workspace/group'],
+  ['POST', '/todo/workspace/series'],
   ['POST', '/todo/lists'],
   ['POST', '/todo/count'],
   ['POST', '/todo/v2/config'],

@@ -1,5 +1,5 @@
 <template>
-  <section v-if="item.checklist?.length" class="todo-subitems" @click.stop>
+  <section v-if="item.checklist?.length" class="todo-subitems">
     <BButton
       v-if="!detail"
       size="small"
@@ -13,6 +13,7 @@
       v-if="open || detail"
       :id="panelId"
       class="todo-subitems__panel"
+      @click.stop
       role="group"
       :aria-label="t('todoWorkspace.subitems')"
     >
@@ -44,7 +45,7 @@
             : t('todoWorkspace.moreSubitems', { count: item.checklist.length - 5 })
         }}</BButton>
         <BButton
-          v-if="item.status !== 'completed'"
+          v-if="editable !== false && item.status !== 'completed'"
           class="todo-subitems__edit"
           size="small"
           :disabled="disabled || pending || item.status === 'completed'"
@@ -66,7 +67,7 @@
   import icon from '@/config/icon';
   import useTodoStore from '@/store/todo';
   import type { TodoItem, TodoChecklistItem } from '@/api/todoApi';
-  const props = defineProps<{ item: TodoItem; disabled?: boolean; detail?: boolean }>();
+  const props = defineProps<{ item: TodoItem; disabled?: boolean; detail?: boolean; editable?: boolean }>();
   const emit = defineEmits<{ 'update-checklist': [items: TodoChecklistItem[]]; edit: [] }>();
   const { t } = useI18n();
   const store = useTodoStore();
@@ -86,7 +87,6 @@
   }
 </script>
 <style scoped lang="less">
-  @import (reference) '@/assets/css/workspace-surfaces.less';
   .todo-subitems {
     min-width: 0;
     margin-top: 8px;
@@ -96,9 +96,9 @@
     gap: 0;
     padding: 4px 12px;
     margin-top: 8px;
-    .workspace-canvas-surface();
-    border-left: 2px solid var(--primary-color);
-    border-radius: 0 8px 8px 0;
+    background: transparent;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 8px;
   }
   .todo-subitems__panel .todo-subitems__row {
     box-sizing: border-box;
@@ -118,7 +118,7 @@
   }
   .todo-subitems footer {
     display: flex;
-    justify-content: flex-end;
+    justify-content: flex-start;
     gap: 8px;
     flex-wrap: wrap;
     border-top: 1px solid var(--workspace-divider);

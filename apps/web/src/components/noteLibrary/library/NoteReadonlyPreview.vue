@@ -813,10 +813,20 @@
     }
 
     :deep(pre) {
+      max-width: 100%;
+      box-sizing: border-box;
       overflow: auto;
       padding: 14px;
       border-radius: 9px;
-      background: var(--menu-body-bg-color);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      tab-size: 4;
+    }
+
+    :deep(pre code) {
+      padding: 0;
+      white-space: inherit;
+      overflow-wrap: inherit;
     }
   }
 

@@ -272,3 +272,81 @@ describe('virtual list scroll layout', () => {
     expect(host.querySelectorAll('.b-virtual-list__item').length).toBeLessThan(100);
   });
 });
+
+describe('dynamic BVirtualList', () => {
+  it('measures expanded rows without fixing their height and preserves the visible anchor', async () => {
+    const original = globalThis.ResizeObserver;
+    const callbacks: ResizeObserverCallback[] = [];
+    globalThis.ResizeObserver = class {
+      constructor(callback: ResizeObserverCallback) {
+        callbacks.push(callback);
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    } as any;
+    try {
+      const host = mount(
+        BVirtualList,
+        { items: Array.from({ length: 1000 }, (_, id) => ({ id })), dynamicHeight: true, itemHeight: 40, overscan: 2 },
+        { default: ({ item }: any) => `row-${item.id}` } as any,
+      );
+      await nextTick();
+      const scroller = host.querySelector<HTMLElement>('.b-virtual-list')!;
+      Object.defineProperty(scroller, 'clientHeight', { configurable: true, value: 120 });
+      scroller.scrollTop = 80;
+      scroller.dispatchEvent(new Event('scroll'));
+      await nextTick();
+      const first = host.querySelector<HTMLElement>('[data-virtual-index="0"]')!;
+      expect(first.style.height).toBe('');
+      callbacks[0]([{ target: first, borderBoxSize: [{ blockSize: 140 }] }] as any, {} as any);
+      await nextTick();
+      await nextTick();
+      expect(scroller.scrollTop).toBe(180);
+      expect(host.querySelector<HTMLElement>('[data-virtual-index="1"]')!.style.top).toBe('140px');
+      expect(host.querySelectorAll('.b-virtual-list__item').length).toBeLessThan(15);
+    } finally {
+      globalThis.ResizeObserver = original;
+    }
+  });
+  it('does not auto-load a paused group', async () => {
+    const load = vi.fn();
+    const paused = ref(true);
+    const host = mount(
+      {
+        setup: () => () =>
+          h(BVirtualList, {
+            items: [{ id: 'tail' }],
+            dynamicHeight: true,
+            hasMore: true,
+            paused: paused.value,
+            onLoadMore: load,
+          }),
+      },
+      {},
+    );
+    await nextTick();
+    expect(load).not.toHaveBeenCalled();
+    paused.value = false;
+    await nextTick();
+    await nextTick();
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(host.querySelectorAll('.b-virtual-list__item').length).toBe(1);
+  });
+  it('keeps a focused row mounted outside the window without rendering all intervening rows', async () => {
+    const host = mount(
+      BVirtualList,
+      { items: Array.from({ length: 1000 }, (_, id) => ({ id })), dynamicHeight: true, itemHeight: 40, overscan: 2 },
+      { default: ({ item }: any) => h('button', `row-${item.id}`) } as any,
+    );
+    await nextTick();
+    const scroller = host.querySelector<HTMLElement>('.b-virtual-list')!;
+    const button = host.querySelector<HTMLButtonElement>('button')!;
+    button.focus();
+    scroller.scrollTop = 10000;
+    scroller.dispatchEvent(new Event('scroll'));
+    await nextTick();
+    expect(document.activeElement).toBe(button);
+    expect(host.querySelectorAll('.b-virtual-list__item').length).toBeLessThan(15);
+  });
+});

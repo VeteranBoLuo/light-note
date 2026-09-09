@@ -1,3 +1,4 @@
+import { createProgressReporter } from './progress.js';
 import { registerAsset } from '../imagePreview/references.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -48,13 +49,18 @@ export async function targetFingerprint(db, owner, parentId) {
 export async function getImportTask(owner, id) {
   const task = await ownedTask(pool, owner, id);
   const [items] = await pool.query(
-    'SELECT id,title,source_name,type,status,selected,warnings,image_count,error_code,note_id FROM note_import_items WHERE task_id=? ORDER BY position',
+    'SELECT id,title,source_name,type,status,selected,warnings,warning_details,image_count,error_code,note_id FROM note_import_items WHERE task_id=? ORDER BY position',
     [id],
   );
   return {
     id: task.id,
-    status: !['parsing', 'queued', 'running'].includes(task.status) && new Date(task.expires_at) < new Date() ? 'expired' : task.status,
+    status:
+      !['parsing', 'queued', 'running'].includes(task.status) && new Date(task.expires_at) < new Date()
+        ? 'expired'
+        : task.status,
     uploadBytes: Number(task.upload_bytes),
+    progress: task.progress_json ? JSON.parse(task.progress_json) : null,
+    finishedAt: task.finished_at || null,
     parentId: task.parent_id,
     errorCode: task.error_code,
     createTime: task.create_time,
@@ -66,6 +72,7 @@ export async function getImportTask(owner, id) {
       status: i.status,
       selected: !!i.selected,
       warnings: JSON.parse(i.warnings),
+      warningDetails: i.warning_details ? JSON.parse(i.warning_details) : null,
       imageCount: i.image_count,
       errorCode: i.error_code,
       noteId: i.note_id,
@@ -76,8 +83,10 @@ export async function getImportTask(owner, id) {
 export async function dismissImport(owner, id) {
   await transaction(async (db) => {
     const task = await ownedTask(db, owner, id, true);
-    if (['parsing', 'queued', 'running'].includes(task.status) ||
-        (task.lease_until && new Date(task.lease_until) > new Date()))
+    if (
+      ['parsing', 'queued', 'running'].includes(task.status) ||
+      (task.lease_until && new Date(task.lease_until) > new Date())
+    )
       throw importError('NOTE_IMPORT_ACTIVE', 409);
     await db.query(
       "UPDATE note_import_tasks SET status='failed',error_code='NOTE_IMPORT_DISMISSED',expires_at=DATE_ADD(NOW(),INTERVAL 7 DAY) WHERE id=?",
@@ -150,12 +159,12 @@ export async function startImport(owner, id, input) {
       );
     }
     await db.query(
-      "UPDATE note_import_tasks SET status='queued',parent_id=?,share_fingerprint=?,stop_requested=0,error_code=NULL,expires_at=DATE_ADD(NOW(),INTERVAL 7 DAY) WHERE id=?",
+      "UPDATE note_import_tasks SET progress_json=NULL,finished_at=NULL,status='queued',parent_id=?,share_fingerprint=?,stop_requested=0,error_code=NULL,expires_at=DATE_ADD(NOW(),INTERVAL 7 DAY) WHERE id=?",
       [parentId, target.fingerprint, id],
     );
   });
 }
-async function parseIsolated(directory) {
+async function parseIsolated(directory, report) {
   return new Promise((resolve, reject) => {
     // No application credentials or unrestricted filesystem/network helpers are supplied to the parser.
     const child = fork(fileURLToPath(new URL('./parseProcess.js', import.meta.url)), [directory], {
@@ -169,7 +178,8 @@ async function parseIsolated(directory) {
       child.kill('SIGKILL');
     }, 60000);
     child.on('message', (m) => {
-      if (m.errorCode) failure = m.errorCode;
+      if (m?.errorCode) failure = m.errorCode;
+      if (m?.progress) report(m.progress);
     });
     child.once('error', () => {
       clearTimeout(timeout);
@@ -200,21 +210,32 @@ export async function processImportTask() {
   if (!claimed) return false;
   const { id, owner_id: owner, lease_token: token } = claimed;
   const directory = taskDirectory(id);
+  const report = createProgressReporter(async (progress) => {
+    const [result] = await pool.query(
+      "UPDATE note_import_tasks SET progress_json=? WHERE id=? AND lease_token=? AND lease_until>NOW() AND status IN ('parsing','running')",
+      [JSON.stringify(progress), id, token],
+    );
+    if (!result.affectedRows) throw importError('NOTE_IMPORT_LEASE_LOST', 409);
+  });
   const update = async (status, code = null) =>
     pool.query(
-      'UPDATE note_import_tasks SET status=?,error_code=?,lease_token=NULL,lease_until=NULL WHERE id=? AND lease_token=?',
-      [status, code, id, token],
+      "UPDATE note_import_tasks SET status=?,error_code=?,progress_json=NULL,finished_at=IF(? IN ('completed','failed'),NOW(),finished_at),lease_token=NULL,lease_until=NULL WHERE id=? AND lease_token=?",
+      [status, code, status, id, token],
     );
   try {
     if (claimed.status === 'parsing') {
-      await parseIsolated(directory);
+      try {
+        await parseIsolated(directory, report);
+      } finally {
+        await report.flush();
+      }
       const items = await readJson(path.join(directory, 'parsed.json'));
       await transaction(async (db) => {
         const task = await ownedTask(db, owner, id, true);
         if (task.lease_token !== token) throw importError('NOTE_IMPORT_LEASE_LOST', 409);
         for (const item of items)
           await db.query(
-            'INSERT IGNORE INTO note_import_items (id,task_id,title,source_name,type,status,selected,warnings,image_count,error_code,position) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+            'INSERT IGNORE INTO note_import_items (id,task_id,title,source_name,type,status,selected,warnings,image_count,error_code,position,warning_details) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
             [
               item.id,
               id,
@@ -227,10 +248,11 @@ export async function processImportTask() {
               item.images.length,
               item.errorCode || null,
               item.position,
+              JSON.stringify(item.warningDetails || []),
             ],
           );
         await db.query(
-          "UPDATE note_import_tasks SET status='review',lease_token=NULL,lease_until=NULL WHERE id=? AND lease_token=?",
+          "UPDATE note_import_tasks SET status='review',progress_json=NULL,lease_token=NULL,lease_until=NULL WHERE id=? AND lease_token=?",
           [id, token],
         );
       });
@@ -240,6 +262,11 @@ export async function processImportTask() {
       await update('paused');
       return true;
     }
+    const [started] = await pool.query(
+      "UPDATE note_import_tasks SET status='running',progress_json=NULL WHERE id=? AND lease_token=? AND lease_until>NOW()",
+      [id, token],
+    );
+    if (!started.affectedRows) throw importError('NOTE_IMPORT_LEASE_LOST', 409);
     const [[item]] = await pool.query(
       "SELECT * FROM note_import_items WHERE task_id=? AND selected=1 AND status='ready' ORDER BY position LIMIT 1",
       [id],
@@ -253,6 +280,19 @@ export async function processImportTask() {
       return true;
     }
     const payload = await readJson(path.join(directory, `${item.id}.json`));
+    const [[counts]] = await pool.query(
+      "SELECT COUNT(*) AS total,SUM(status IN ('completed','failed')) AS done FROM note_import_items WHERE task_id=? AND selected=1",
+      [id],
+    );
+    const progress = {
+      currentItemId: item.id,
+      currentFile: item.source_name,
+      filesDone: Number(counts?.done || 0),
+      filesTotal: Number(counts?.total || 0),
+      imagesDone: 0,
+      imagesTotal: payload.images.length,
+    };
+    await report({ ...progress, stage: 'publishing_images' });
     const assets = [];
     let content = payload.content;
     for (const key of payload.images) {
@@ -273,7 +313,10 @@ export async function processImportTask() {
         }),
       );
       assets.push({ filename, url, size });
+      progress.imagesDone++;
+      await report({ ...progress, stage: 'publishing_images' });
     }
+    await report({ ...progress, stage: 'writing_note' });
     const result = await createNote({
       userId: owner,
       note: { title: item.title, type: item.type, content, parentId: claimed.parent_id },
@@ -300,7 +343,7 @@ export async function processImportTask() {
         [result.id, item.id, id],
       );
       await db.query(
-        "UPDATE note_import_tasks SET status=IF(stop_requested=1,'paused','running'),lease_token=NULL,lease_until=NULL WHERE id=? AND lease_token=?",
+        "UPDATE note_import_tasks SET status=IF(stop_requested=1,'paused','running'),progress_json=NULL,lease_token=NULL,lease_until=NULL WHERE id=? AND lease_token=?",
         [id, token],
       );
     });
@@ -319,7 +362,7 @@ export async function processImportTask() {
           [code, id],
         );
         await db.query(
-          "UPDATE note_import_tasks SET status='running',error_code=?,lease_token=NULL,lease_until=NULL WHERE id=? AND lease_token=?",
+          "UPDATE note_import_tasks SET status='running',error_code=?,progress_json=NULL,lease_token=NULL,lease_until=NULL WHERE id=? AND lease_token=?",
           [code, id, token],
         );
       });
@@ -329,10 +372,12 @@ export async function processImportTask() {
 }
 export async function cleanupImports() {
   const localIds = await localImportTaskIds();
-  const [tasks] = localIds.length ? await pool.query(
-    "SELECT id FROM note_import_tasks WHERE id IN (?) AND expires_at<NOW() AND (lease_until IS NULL OR lease_until<NOW()) AND status NOT IN ('queued','running','parsing','expired') LIMIT 20",
-    [localIds],
-  ) : [[]];
+  const [tasks] = localIds.length
+    ? await pool.query(
+        "SELECT id FROM note_import_tasks WHERE id IN (?) AND expires_at<NOW() AND (lease_until IS NULL OR lease_until<NOW()) AND status NOT IN ('queued','running','parsing','expired') LIMIT 20",
+        [localIds],
+      )
+    : [[]];
   for (const t of tasks) {
     await transaction(async (db) => {
       const [[task]] = await db.query('SELECT * FROM note_import_tasks WHERE id=? FOR UPDATE', [t.id]);
