@@ -25,7 +25,7 @@ try {
   }
 } catch (error) {
   if (connection) await connection.rollback();
-  console.error('[file-features-migration] failed code=%s', /^[A-Z_]+$/.test(error?.code || '') ? error.code : 'MIGRATION_FAILED');
+  console.error('[file-features-migration] failed code=%s', /^[A-Z0-9_]+$/.test(error?.code || '') ? error.code : 'MIGRATION_FAILED');
   process.exitCode = 1;
 } finally {
   connection?.release();
