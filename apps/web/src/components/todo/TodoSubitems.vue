@@ -2,12 +2,20 @@
   <section v-if="item.checklist?.length" class="todo-subitems">
     <BButton
       v-if="!detail"
+      class="todo-subitems__toggle"
       size="small"
       :aria-expanded="open"
       :aria-controls="panelId"
       @click="store.expandedSubitems[item.id] = !open"
     >
-      {{ t('todoWorkspace.subitems') }} {{ done }}/{{ item.checklist.length }} {{ open ? '⌃' : '⌄' }}
+      <span>{{ t('todoWorkspace.subitems') }} {{ done }}/{{ item.checklist.length }}</span>
+      <SvgIcon
+        class="todo-subitems__chevron"
+        :class="{ 'is-open': open }"
+        :src="icon.noteTree.chevron"
+        size="14"
+        aria-hidden="true"
+      />
     </BButton>
     <div
       v-if="open || detail"
@@ -90,6 +98,18 @@
   .todo-subitems {
     min-width: 0;
     margin-top: 8px;
+  }
+  .todo-subitems__toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .todo-subitems__chevron {
+    flex: 0 0 14px;
+    transform-origin: center;
+  }
+  .todo-subitems__chevron.is-open {
+    transform: rotate(180deg);
   }
   .todo-subitems__panel {
     display: grid;
