@@ -29,8 +29,8 @@ describe('帮助中心栏目迁移', () => {
 
   it('发布先执行幂等迁移，再运行只读断言并重启服务', async () => {
     const deploy = await readFile(path.resolve(repositoryRoot, 'scripts/deploy-server.sh'), 'utf8');
-    const migrationIndex = deploy.indexOf('node scripts/migrateHelpCenterSections.js');
-    const assertionIndex = deploy.indexOf('node scripts/checkSchemaAssertions.js');
+    const migrationIndex = deploy.indexOf('scripts/migrateHelpCenterSections.js');
+    const assertionIndex = deploy.indexOf('scripts/checkSchemaAssertions.js');
     const restartIndex = deploy.indexOf('pm2 restart $PM2');
 
     expect(migrationIndex).toBeGreaterThanOrEqual(0);

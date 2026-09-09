@@ -13,9 +13,9 @@ describe('安全中心 V2 发布门禁', () => {
   it('在重启应用前先迁移并执行只读 Schema 检查', async () => {
     const deployScript = await readProjectFile('scripts/deploy-server.sh');
     const uploadIndex = deployScript.indexOf('rsync -az');
-    const preflightIndex = deployScript.indexOf('node scripts/preflightSecurityV2Migration.js');
-    const migrationIndex = deployScript.indexOf('node util/security/migrate.js');
-    const schemaCheckIndex = deployScript.indexOf('node scripts/checkSchemaAssertions.js');
+    const preflightIndex = deployScript.indexOf('scripts/preflightSecurityV2Migration.js');
+    const migrationIndex = deployScript.indexOf('util/security/migrate.js');
+    const schemaCheckIndex = deployScript.indexOf('scripts/checkSchemaAssertions.js');
     const restartIndex = deployScript.indexOf('pm2 restart $PM2');
 
     expect(uploadIndex).toBeGreaterThanOrEqual(0);

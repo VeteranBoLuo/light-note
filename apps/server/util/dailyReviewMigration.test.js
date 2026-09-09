@@ -10,8 +10,8 @@ const readProjectFile = (filePath) => readFile(path.resolve(repositoryRoot, file
 describe('daily review migration and release order', () => {
   it('发布先幂等升级每日回顾 Schema，再执行只读断言，最后重启进程', async () => {
     const deployScript = await readProjectFile('scripts/deploy-server.sh');
-    const ensureIndex = deployScript.indexOf('node scripts/ensureDailyReviewSchema.js');
-    const assertionIndex = deployScript.indexOf('node scripts/checkSchemaAssertions.js');
+    const ensureIndex = deployScript.indexOf('scripts/ensureDailyReviewSchema.js');
+    const assertionIndex = deployScript.indexOf('scripts/checkSchemaAssertions.js');
     const restartIndex = deployScript.indexOf('pm2 restart $PM2');
 
     expect(ensureIndex).toBeGreaterThanOrEqual(0);

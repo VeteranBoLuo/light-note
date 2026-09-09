@@ -4,7 +4,7 @@
 
 文件整理涉及队列状态与视觉缓存结构时，发布顺序为停止旧文档／整理 Worker、执行已授权的加法迁移、更新 API 与 Worker、检查 Schema 后启用新任务。结构更新不重跑历史任务、不回填生产内容；文件理解验收需分别记录读取完整性、建议产出、耗时及用量，确定性 Provider 测试不代替真实模型质量评估。
 
-后端部署要求 Node.js 20 及以上；独立运行时通过 `LIGHTNOTE_REMOTE_NODE` 指定绝对路径，并由 PM2 保存解释器路径。包含文件理解、图片预览、笔记导入及游客示例结构更新的已授权发布，设置 `LIGHTNOTE_APPLY_FEATURE_MIGRATIONS=1`，部署脚本会在旧文档 Worker 停止后通过 `scripts/migrateFileFeatures.js --apply` 执行固定的幂等迁移，再运行 Schema 与运行时门禁。游客示例内容仍需按下文独立执行维护工具。
+后端部署要求 Node.js 20.19 及以上；独立运行时通过 `LIGHTNOTE_REMOTE_NODE` 指定绝对路径，并由 PM2 保存解释器路径。包含文件理解、图片预览、笔记导入及游客示例结构更新的已授权发布，设置 `LIGHTNOTE_APPLY_FEATURE_MIGRATIONS=1`，部署脚本会在旧文档 Worker 停止后通过 `scripts/migrateFileFeatures.js --apply` 执行固定的幂等迁移，再运行 Schema 与运行时门禁。游客示例内容仍需按下文独立执行维护工具。
 
 ## 本地开发与生产预览
 
@@ -158,7 +158,7 @@ Web 发布先把新产物完整解包到独立 staging 目录，通过基本产�
 
 图片策略 v2 依赖 `20260909_image_preview_metadata.sql` 的加法结构迁移。旧版图片 Worker 不过滤策略版本，禁止和 v2 入队端混跑：先停止所有旧文档 Worker，应用已授权迁移并部署新 API/Worker，再开放新任务。回滚时保留产物和任务表，暂停图片生成，不让旧 Worker 消费新任务。
 
-除常规预览门禁外，发布环境须运行 `pnpm --filter server check:image-previews:large`，实测真彩大图、JPEG 和长图的转换时间、峰值 RSS 与采样磁盘占用。该探针不访问业务数据库或用户原图。大图失败或超过预算时阻止发布，不能仅调整错误提示绕过。
+除常规预览门禁外，发布环境须运行 `pnpm --filter server check:image-previews:large`，实测真彩大图、JPEG 和长图的转换时间、峰值 RSS 与采样磁盘占用。该探针不访问业务数据库或用户原图。大图失败或超过预算时阻止发布，不能仅调整错误提示绕过。ImageMagick 的系统宽高策略须容纳 34,000 像素长图（可配置为 64KP）；变更前保留策略备份，不放开 URL、PDF 等编码器限制，应用仍按 128MiB 内存、256MiB 映射及 2GiB 磁盘预算执行。
 
 历史恢复工具 `pnpm --filter server repair:image-previews` 默认只读，最多列出 500 条候选，可用 `--ids=任务ID列表` 缩小范围。实际执行要求独立授权，以及 `--apply --workers-v2-confirmed --checkpoint=绝对路径 --ids=任务ID列表`；首批默认 5 条，后续 `--batch-size` 不超过 10。仅旧像素限制任务自动具备恢复资格，其他错误需先确认根因已修复，并通过 `--verified-ids=任务ID列表` 明确记录核验范围。工具不清除历史失败事实；按当前资产版本去重创建任务，记录新任务结果，超时保留 pending 检查点供下次继续，同类服务故障连续三次后停止。每批确认产物及实际卡片显示后再推进。
 

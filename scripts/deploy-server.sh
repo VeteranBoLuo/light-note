@@ -18,7 +18,7 @@ OUT="/tmp/ln-server-deploy"
 TS="$(date +%Y%m%d%H%M%S)"
 cd "$(dirname "$0")/.."
 
-ssh -i "$KEY" "$HOST" "'$REMOTE_NODE' -e 'if(Number(process.versions.node.split(\".\")[0]) < 20) process.exit(1)'" || { echo 'Node.js 20+ required; set LIGHTNOTE_REMOTE_NODE to the verified server runtime'; exit 1; }
+ssh -i "$KEY" "$HOST" "'$REMOTE_NODE' -e 'const [major,minor]=process.versions.node.split(\".\").map(Number); if(major<20 || (major===20 && minor<19)) process.exit(1)'" || { echo 'Node.js 20.19+ required; set LIGHTNOTE_REMOTE_NODE to the verified server runtime'; exit 1; }
 
 echo "📦  pnpm deploy(--legacy,含 @lightnote/shared)…"
 rm -rf "$OUT"
