@@ -2447,6 +2447,7 @@
     }
     handledLibraryRootEntryRequestToken = requestToken;
     clearNoteLibraryRootViewState();
+    if (!bookmark.isMobile) void resetNoteLibrary();
   }
 
   watch([libraryRootEntryRequestToken, () => router.currentRoute.value.path], applyPendingLibraryRootEntryRequest, {
