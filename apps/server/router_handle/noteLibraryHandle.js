@@ -1,3 +1,4 @@
+import { insertNoteVersion } from '../util/insertNoteVersion.js';
 import { readNoteExportScope, readScopedNotesForExport } from '../util/services/noteExportService.js';
 import { previewDescriptor, hydrateImagePreviewStates } from '../util/imagePreview/service.js';
 import { registerAsset, syncNoteImageReferences, syncContentReferences, removeImageReferences } from '../util/imagePreview/references.js';
@@ -464,10 +465,10 @@ async function insertCurrentNoteVersion(connection, { noteId, userId, currentNot
     reason,
     createBy: userId,
   });
-  const [result] = await connection.query('INSERT INTO note_versions SET ?', [versionData]);
+  const versionId = await insertNoteVersion(connection, versionData);
   await pruneNoteVersions(connection, noteId, keep);
-  await syncContentReferences(connection,{owner:userId,refType:'note_version',refId:result.insertId,content:versionData.content,type:currentNote.type});
-  return result.insertId;
+  await syncContentReferences(connection,{owner:userId,refType:'note_version',refId:versionId,content:versionData.content,type:currentNote.type});
+  return versionId;
 }
 
 // 覆盖笔记前,把"改动前"的旧内容存为一个历史版本(按闸门策略决定是否真正落库)
@@ -2095,8 +2096,8 @@ export const restoreNoteVersion = async (req, res) => {
       reason: 'restore',
       createBy: userId,
     });
-    const [snapshotResult]=await connection.query('INSERT INTO note_versions SET ?', [curSnap]);
-    await syncContentReferences(connection,{owner:userId,refType:'note_version',refId:snapshotResult.insertId,content:curSnap.content,type:curRows[0].type});
+    const snapshotId = await insertNoteVersion(connection, curSnap);
+    await syncContentReferences(connection,{owner:userId,refType:'note_version',refId:snapshotId,content:curSnap.content,type:curRows[0].type});
     // 覆盖为目标版本(含 type:恢复时 md/html 模式一并回到该版本)。
     await connection.query(
       'UPDATE note SET title=?, content=?, type=?, update_by=?, revision=? WHERE id=? AND create_by=?',

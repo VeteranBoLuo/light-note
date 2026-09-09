@@ -1,3 +1,4 @@
+import { insertNoteVersion } from '../insertNoteVersion.js';
 import { registerAsset, syncNoteImageReferences, removeImageReferences, syncContentReferences } from '../imagePreview/references.js';
 import pool from '../../db/index.js';
 import { insertData } from '../agent/data.js';
@@ -40,9 +41,7 @@ export async function snapshotOwnedNoteVersion(
       : currentType === 'markdown'
         ? normalizeMarkdownBlockquoteEntities(current.content || '')
         : sanitizePersistedNoteContent(current.content || '', 'html', 'snapshot-owned-note-version');
-  const [imageVersionResult]=await connection.query('INSERT INTO note_versions SET ?', [
-    insertData({
-      id: null, // note_versions uses an auto-increment key.
+  const imageVersionId = await insertNoteVersion(connection, insertData({
       noteId: String(noteId),
       title: String(current.title || ''),
       content: currentContent,
@@ -50,8 +49,7 @@ export async function snapshotOwnedNoteVersion(
       sourceRevision: Math.max(1, Number(current.revision || 1)),
       reason: String(reason || 'manual').slice(0, 32),
       createBy: String(userId),
-    }),
-  ]);
+    }));
 
   const [versionRows] = await connection.query(
     'SELECT id FROM note_versions WHERE note_id = ? ORDER BY create_time DESC, id DESC',
@@ -63,7 +61,7 @@ export async function snapshotOwnedNoteVersion(
     await removeImageReferences(connection,'note_version',staleVersionIds);
     await connection.query(`DELETE FROM note_versions WHERE id IN (${placeholders})`, staleVersionIds);
   }
-  await syncContentReferences(connection,{owner:userId,refType:'note_version',refId:imageVersionResult.insertId,content:currentContent,type:currentType});
+  await syncContentReferences(connection,{owner:userId,refType:'note_version',refId:imageVersionId,content:currentContent,type:currentType});
   return true;
 }
 
