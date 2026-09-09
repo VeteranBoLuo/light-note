@@ -57,7 +57,6 @@
                   <span>{{ t('landing.ctaAccount') }}</span>
                 </BButton>
               </div>
-              <p class="landing-entry-hint">{{ t('landing.entryHint') }}</p>
               <div v-if="!isAndroidApp" class="pwa-install-strip">
                 <span class="pwa-install-strip__icon">
                   <SvgIcon :src="icon.pwa.device" size="22" aria-hidden="true" />
@@ -369,7 +368,6 @@
                 <span>{{ t('landing.ctaAccount') }}</span>
               </BButton>
             </div>
-            <p class="landing-entry-hint">{{ t('landing.entryHint') }}</p>
             <ul class="trust-badges">
               <li>{{ t('landing.trustUnified') }}</li>
               <li>{{ t('landing.trustAi') }}</li>
@@ -446,7 +444,8 @@
         @click="goTo(i)"
         v-click-log="{ module: '官网首页', operation: '切换幻灯片' }"
       >
-        <span class="dot-tooltip">{{ navLabels[i] }}</span>
+        <span class="dot-marker" aria-hidden="true"></span>
+        <span class="dot-tooltip" aria-hidden="true">{{ navLabels[i] }}</span>
       </BButton>
     </div>
     <div class="slide-counter" :class="{ pulse: animating }">{{ navLabels[current] }}</div>
@@ -1037,12 +1036,6 @@
 </script>
 
 <style scoped>
-  .landing-entry-hint {
-    margin: 12px 0;
-    color: var(--desc-color);
-    font-size: 13px;
-    line-height: 1.6;
-  }
   .landing {
     height: 100vh;
     width: 100%;
@@ -2374,51 +2367,76 @@
   /* ============ Nav ============ */
   .nav-dots {
     position: fixed;
-    right: 20px;
+    right: 10px;
     top: 50%;
     transform: translateY(-50%);
     display: flex;
     flex-direction: column;
-    gap: 14px;
     z-index: 100;
   }
   .nav-dot.b_btn {
-    width: 8px;
-    min-width: 8px;
-    height: 8px;
-    min-height: 8px;
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+    min-height: 32px;
     line-height: 1;
-    border-radius: 50%;
-    background: #333;
+    border-radius: 8px;
+    color: inherit;
+    background: transparent;
     border: none;
-    cursor: pointer;
-    transition: all 0.4s ease;
     padding: 0;
     position: relative;
   }
-  .nav-dot.b_btn:hover {
-    background: #555;
+  .dot-marker {
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: currentColor;
+    opacity: 0.4;
+    transition:
+      height 0.2s ease,
+      background-color 0.2s ease,
+      opacity 0.2s ease;
   }
-  .nav-dot.b_btn.active {
-    background: #615ced;
-    width: 12px;
-    height: 12px;
-    box-shadow: 0 0 16px rgba(99, 92, 237, 0.4);
+  .nav-dot.b_btn.active .dot-marker {
+    height: 18px;
+    background: var(--primary-color);
+    opacity: 1;
   }
   .dot-tooltip {
     position: absolute;
-    right: 18px;
+    right: calc(100% + 4px);
     top: 50%;
     transform: translateY(-50%);
-    font-size: 11px;
-    color: #666;
+    font-size: 12px;
+    color: inherit;
     white-space: nowrap;
     opacity: 0;
     transition: opacity 0.2s ease;
     pointer-events: none;
   }
-  .nav-dot:hover .dot-tooltip {
+  .nav-dot:focus-visible .dot-tooltip {
     opacity: 1;
+  }
+  .nav-dot:focus-visible .dot-marker {
+    opacity: 1;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .nav-dot.b_btn:hover {
+      background: transparent;
+    }
+    .nav-dot:hover .dot-tooltip,
+    .nav-dot:hover .dot-marker {
+      opacity: 1;
+    }
+  }
+  @media (pointer: coarse) {
+    .nav-dot.b_btn {
+      width: 44px;
+      min-width: 44px;
+      height: 44px;
+      min-height: 44px;
+    }
   }
   .slide-counter {
     position: fixed;
@@ -3037,6 +3055,8 @@
     .landing-navigation-feedback__spinner {
       animation-duration: 1.4s;
     }
+    .dot-marker,
+    .dot-tooltip,
     .landing-navigation-status-enter-active,
     .landing-navigation-status-leave-active {
       transition: none;

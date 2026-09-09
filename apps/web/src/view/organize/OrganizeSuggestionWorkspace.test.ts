@@ -9,6 +9,7 @@ const api = vi.hoisted(() => ({
   replace: vi.fn().mockResolvedValue(undefined),
   alert: vi.fn(),
   previewRun: vi.fn(),
+  previewFileRetry: vi.fn(),
   startRun: vi.fn(),
   getRun: vi.fn(),
   listRuns: vi.fn(),
@@ -962,4 +963,44 @@ it('确认页不会把已有图标的 34 个标签误报为不存在', async () 
   await settle();
   expect(document.body.textContent).toContain('有 34 个标签已有图标，无需补全，已跳过。');
   expect(document.body.textContent).not.toContain('34 项不存在');
+});
+
+
+it('预览加载仅显示转圈，成功后恢复图标', async () => {
+  const run = { ...result(), items: [{ id: 'i', aiStatus: 'not_needed', resource: { id: 'f', type: 'file', title: '文档.pdf', source: { folder: '' }, guards: {}, tags: [] }, suggestions: [] }] };
+  api.listRuns.mockResolvedValue(ok([run])); api.getRun.mockResolvedValue(ok(run));
+  let resolve!: (value: any) => void;
+  vi.mocked(apiBasePost).mockReturnValue(new Promise(done => { resolve = done; }) as any);
+  await mount(); await openGroup('clear'); await settle();
+  const preview = document.querySelector('.resource-symbol.b_btn') as HTMLButtonElement;
+  preview.click(); await nextTick();
+  expect(preview.querySelector('.btn-spinner')).toBeTruthy();
+  expect(preview.querySelector('.svg-icon')).toBeNull();
+  resolve(ok({ id: 'f', file_name: '文档.pdf', file_type: 'pdf' })); await settle();
+  expect(preview.querySelector('.btn-spinner')).toBeNull();
+});
+it('重新分析使用服务端冻结的完整范围并等待确认', async () => {
+  const run = { ...result(), summary: { ...result().summary, types: { file: 1201 } } };
+  api.listRuns.mockResolvedValue(ok([run])); api.getRun.mockResolvedValue(ok(run));
+  api.previewFileRetry.mockResolvedValue(ok({ ...run, id: 'retry', status: 'preview', summary: { ...run.summary, total: 1201 } }));
+  await mount(); button('重新分析未推荐文件')!.click(); await settle();
+  expect(api.previewFileRetry.mock.calls[0][0]).toBe(run.id);
+  expect(api.previewRun).not.toHaveBeenCalled();
+  expect(document.body.textContent).toContain('将重新分析 1201 个文件');
+  expect(api.startRun).not.toHaveBeenCalled();
+});
+
+it.each(['pending', 'applied'])('标签来源标记与 %s 状态一致，不把创建建议当成已创建', async (status) => {
+  const run = { ...result(), items: [{ id: 'tag-source-item', aiStatus: 'completed', resource: { id: 'f', type: 'file', title: '资料.pdf', source: { folder: '' }, guards: {}, tags: [] }, suggestions: [{ id: 'source-suggestion', kind: 'tags', status, before: [], after: [{ id: null, name: '网络安全', source: 'new' }, { id: 'known', name: '法律法规', source: 'existing' }], reason: '主题建议' }] }] };
+  api.listRuns.mockResolvedValue(ok([run])); api.getRun.mockResolvedValue(ok(run));
+  await mount(); if (status === 'applied') { await openGroup('reviewed'); (document.querySelector('[aria-controls="checks-tag-source-item"]') as HTMLButtonElement).click(); } await settle();
+  if (status === 'pending') expect(document.querySelector('.suggestion-change')?.textContent).toContain('网络安全');
+  else expect(document.querySelector('.group-reviewed')?.textContent).toContain('资料.pdf');
+  const marks = [...document.querySelectorAll('.suggested-tag-source')];
+  expect(marks.map(mark => mark.textContent?.trim())).toEqual(status === 'pending' ? ['· 新'] : []);
+  if (status === 'pending') {
+    expect(marks[0].getAttribute('title')).toBe('应用建议时创建此标签');
+    expect(marks[0].closest('.resource-tag-chip')).not.toBeNull();
+    expect(marks[0].classList.contains('b-chip')).toBe(false);
+  }
 });

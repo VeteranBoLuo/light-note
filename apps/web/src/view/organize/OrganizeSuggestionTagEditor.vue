@@ -121,7 +121,7 @@
       )
       .map(([value, tag]) => ({
         value,
-        label: tag.name,
+        label: tag.id ? tag.name : `${tag.name} · ${t('organizeFile.tagSource.new')}`,
         disabled: tags.value.length >= 3 && !selectedKeys.value.includes(value),
       }));
     return values;

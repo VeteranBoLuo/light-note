@@ -33,6 +33,7 @@ describe('inbox store', () => {
     store.selectedKeys = ['note:n1'];
     store.quickCaptureVisible = true;
     store.quickCaptureType = 'file';
+    store.quickCaptureTypeExplicit = true;
     store.countReady = true;
     store.countFailed = true;
     const before = store.requestId;
@@ -43,6 +44,7 @@ describe('inbox store', () => {
     expect(store.selectedKeys).toEqual([]);
     expect(store.quickCaptureVisible).toBe(false);
     expect(store.quickCaptureType).toBe('bookmark');
+    expect(store.quickCaptureTypeExplicit).toBe(false);
     expect(store.countReady).toBe(false);
     expect(store.countLoading).toBe(false);
     expect(store.countFailed).toBe(false);
@@ -54,14 +56,16 @@ describe('inbox store', () => {
     const store = useInboxStore();
     store.openQuickCapture('todo');
     expect(store.quickCaptureType).toBe('todo');
+    expect(store.quickCaptureTypeExplicit).toBe(true);
     expect(store.quickCaptureVisible).toBe(true);
   });
 
   it('无上下文的快速添加默认打开第一个书签入口', () => {
     const store = useInboxStore();
-    store.quickCaptureType = 'note';
+    store.openQuickCapture('note');
     store.openQuickCapture();
     expect(store.quickCaptureType).toBe('bookmark');
+    expect(store.quickCaptureTypeExplicit).toBe(false);
     expect(store.quickCaptureVisible).toBe(true);
   });
 

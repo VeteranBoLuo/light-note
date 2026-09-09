@@ -39,7 +39,20 @@ export interface TagIconChoice {
   iconUrl: string;
   color: string;
 }
+export interface FileReading {
+  failedRanges?: Array<{ unit: string; start: number; end: number; code: string }>;
+  state: 'waiting' | 'text' | 'visual' | 'partial' | 'metadata';
+  complete: boolean;
+  totalPages?: number;
+  readPages?: number;
+  missingPages?: number[];
+  truncated?: boolean;
+  reasonCode?: string | null;
+  evidenceKinds?: string[];
+}
 export interface WorkspaceSuggestion {
+  reasonCode?: string;
+  reading?: FileReading;
   candidates?: TagIconChoice[];
   id: string;
   kind: CheckKind;
@@ -59,6 +72,7 @@ export interface WorkspaceItem {
     source: { folder: string; url?: string };
     guards: Record<string, number>;
     evidenceLevel: string;
+    reading?: FileReading;
     unsupported?: boolean;
   };
   aiStatus: string;
@@ -114,3 +128,6 @@ export const actOnRunSuggestion = (
 
 export const pauseRun = (id: string) => apiBasePost(`${root}/runs/${encodeURIComponent(id)}/pause`, {}, opts);
 export const resumeRun = (id: string) => apiBasePost(`${root}/runs/${encodeURIComponent(id)}/resume`, {}, opts);
+
+export const previewFileRetry = (id: string, requestId: string) =>
+  apiBasePost(`${root}/runs/${encodeURIComponent(id)}/retry-preview`, { requestId }, opts);

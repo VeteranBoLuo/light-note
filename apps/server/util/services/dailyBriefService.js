@@ -150,20 +150,45 @@ function buildBrief(calendar, facts, narrative) {
   const byId = new Map(facts.map((fact) => [fact.id, fact]));
   const items = (...ids) => ids.map((id) => byId.get(id));
   const titles = SECTION_TITLES[calendar.locale] || SECTION_TITLES['zh-CN'];
-  const insights = (Array.isArray(narrative.insights) ? narrative.insights : []).map((insight, index) => {
-    const factIds = [...insight.factIds];
-    const text = renderNarrativeTemplate(insight.text, byId);
-    const connection = factIds.includes('resource_connection') ? byId.get('resource_connection') : null;
-    return Object.freeze({
-      id: `insight_${index + 1}`,
-      text,
-      factIds: Object.freeze(factIds),
-      ...(factIds.some((id) => id.startsWith('workshop_')) ? { sources: factIds.flatMap((id) => byId.get(id)?.sources || []) } : {}),
-      ...(connection?.count
-        ? { sources: [...connection.sources, ...factIds.filter((id) => id.startsWith('workshop_')).flatMap((id) => byId.get(id)?.sources || [])], tagName: connection.tagName, tagRoute: connection.route }
-        : {}),
+  const selected = [...(Array.isArray(narrative.insights) ? narrative.insights : [])];
+  const due = byId.get('workshop_due');
+  if (due?.count > 0 && due.urgency === 'today' && !selected.some((item) => item.factIds.includes('workshop_due'))) {
+    selected.unshift({ factIds: ['workshop_due'], text: '{{workshop_due.sample}}' });
+  }
+  selected.sort((a, b) => Number(b.factIds.includes('workshop_due')) - Number(a.factIds.includes('workshop_due')));
+  let workshopCount = 0;
+  const insights = selected
+    .filter((item) => !item.factIds.some((id) => id.startsWith('workshop_')) || ++workshopCount <= 2)
+    .slice(0, 5)
+    .map((insight, index) => {
+      const factIds = [...insight.factIds];
+      const text = renderNarrativeTemplate(insight.text, byId);
+      const connection = factIds.includes('resource_connection') ? byId.get('resource_connection') : null;
+      return Object.freeze({
+        id: `insight_${index + 1}`,
+        text,
+        factIds: Object.freeze(factIds),
+        ...(factIds.some((id) => id.startsWith('workshop_'))
+          ? {
+              sources: [
+                ...new Map(
+                  factIds.flatMap((id) => byId.get(id)?.sources || []).map((s) => [`${s.type}:${s.id}`, s]),
+                ).values(),
+              ],
+            }
+          : {}),
+        ...(connection?.count
+          ? {
+              sources: [
+                ...connection.sources,
+                ...factIds.filter((id) => id.startsWith('workshop_')).flatMap((id) => byId.get(id)?.sources || []),
+              ],
+              tagName: connection.tagName,
+              tagRoute: connection.route,
+            }
+          : {}),
+      });
     });
-  });
   const headline = renderNarrativeTemplate(narrative.headline, byId);
   const recommendation = renderNarrativeTemplate(narrative.recommendation, byId);
   return Object.freeze({
@@ -178,7 +203,13 @@ function buildBrief(calendar, facts, narrative) {
       Object.freeze({
         id: 'today_actions',
         title: titles.today_actions,
-        items: Object.freeze(items('todo_overdue', 'todo_due_today', ...facts.filter((fact) => fact.id.startsWith('workshop_')).map((fact) => fact.id))),
+        items: Object.freeze(
+          items(
+            'todo_overdue',
+            'todo_due_today',
+            ...facts.filter((fact) => ['workshop_due', 'workshop_next_step'].includes(fact.id)).map((fact) => fact.id),
+          ),
+        ),
       }),
       Object.freeze({
         id: 'new_content',
@@ -186,6 +217,7 @@ function buildBrief(calendar, facts, narrative) {
         items: Object.freeze(
           items(
             'bookmark_created_yesterday',
+            ...facts.filter((fact) => fact.id === 'workshop_result').map((fact) => fact.id),
             'note_created_yesterday',
             'file_created_yesterday',
             'bookmark_created_today',

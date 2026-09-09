@@ -241,7 +241,10 @@
   }
   @media (max-width: 767px) {
     .workshop-entry.is-inline .workshop-entry__actions .b_btn {
-      min-height: 44px;
+      height: 32px;
+      min-height: 32px;
+      padding: 0 10px;
+      line-height: normal;
     }
   }
   .workshop-entry.is-tab-panel {

@@ -36,6 +36,7 @@
         class="capture-tabs"
         :options="typeOptions"
         variant="segment"
+        @select="manualType = true"
         @change="handleTypeChange"
       />
 
@@ -249,7 +250,7 @@
   const pastedFileKeys = new Set<string>();
   const submitting = ref(false);
   const successText = ref('');
-  const manualType = ref(false);
+  const manualType = ref(inbox.quickCaptureTypeExplicit);
   const todoFormKey = ref(0);
   const todoDetailsVisible = ref(false);
   const quickReminderPresetsEnabled = ref(true);
@@ -304,7 +305,7 @@
     if (value) {
       void loadTodoPlanConfig();
       captureType.value = normalizeQuickCaptureType(inbox.quickCaptureType, bookmark.isMobile);
-      manualType.value = false;
+      manualType.value = inbox.quickCaptureTypeExplicit;
       if (captureType.value === 'todo') todoFormKey.value += 1;
     } else {
       reset();

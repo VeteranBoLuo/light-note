@@ -118,7 +118,7 @@ describe('任务状态', () => {
     const db = dbFor();
     await endV2(db, run());
     expect(db.query.mock.calls.some(([sql]) => sql.startsWith('DELETE'))).toBe(false);
-    expect(db.query.mock.calls[0][0]).toContain("i.ai_status='queued'");
+    expect(db.query.mock.calls[0][0]).toContain("i.ai_status IN ('queued','waiting_content','preparing_content')");
     expect(lifecycleState({ ...run(), status: 'ended' })).toMatchObject({ canResume: false, canEnd: false });
   });
   it('额度不足时继续保持暂停，恢复后只有明确调用继续才激活', async () => {
@@ -400,4 +400,26 @@ it.each([34, 134])('全部标签范围统计 %i 个已有图标标签，分页�
   expect(readSuggestionCandidates).toHaveBeenCalledTimes(Math.ceil(rows.length / 100));
   const writes = db.query.mock.calls.filter(([sql]) => sql.startsWith('INSERT INTO organize_suggestion_items'));
   expect(writes[0][1][0]).toHaveLength(12);
+});
+
+it('重试预检从原任务服务端完整范围冻结超过首屏的未推荐文件', async () => {
+  const db = dbFor(sql => {
+    if (sql.includes('request_id=?')) return [[]];
+    if (sql.startsWith('SELECT id FROM organize_suggestion_runs')) return [[{ id: 'original' }]];
+    if (sql.startsWith('SELECT DISTINCT f.id')) return [Array.from({ length: 1201 }, (_, i) => ({ id: i + 1, title: '文件.md' }))];
+  });
+  const result = await previewV2(db, { userId: 'u', requestId: id, retryFrom: 'original', input: { resourceTypes: ['file'], checks: ['tags'], scope: 'untagged' } });
+  expect(result.summary.total).toBe(1201);
+  expect(readSuggestionCandidates).not.toHaveBeenCalled();
+  expect(readSuggestionSources).not.toHaveBeenCalled();
+  const [sql, args] = db.query.mock.calls.find(([sql]) => sql.startsWith('SELECT DISTINCT f.id'));
+  expect(sql).not.toMatch(/LIMIT/);
+  expect(sql).toContain("s.status IN ('failed','insufficient','no_suggestion')");
+  expect(sql).toContain('NOT EXISTS');
+  expect(args).toEqual(['u', 'original', 'u', 'u', 'u']);
+});
+it('重试不能访问其他账号的任务', async () => {
+  const db = dbFor(sql => sql.startsWith('SELECT') ? [[]] : undefined);
+  await expect(previewV2(db, { userId: 'u', requestId: id, retryFrom: 'foreign', input: { resourceTypes: ['file'], checks: ['tags'], scope: 'untagged' } })).rejects.toMatchObject({ code: 'ORGANIZE_RUN_NOT_FOUND' });
+  expect(db.query.mock.calls.some(([sql]) => sql.startsWith('INSERT'))).toBe(false);
 });

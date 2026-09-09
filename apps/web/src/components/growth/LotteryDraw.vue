@@ -180,16 +180,18 @@
           <BButton
             v-if="freeDaily > 0"
             class="lt-draw-button lt-draw-button--free"
+            :aria-busy="rolling && activePoolMode === 'free' || undefined"
             type="success"
             :disabled="readOnly || !canFree"
             :title="readOnly ? t('growth.adminContextActionUnavailable') : ''"
             @click="onDraw(1, true)"
           >
             <span class="lt-draw-button__icon" aria-hidden="true">
-              <SvgIcon :src="icon.growth.reward" :size="21" />
+              <BLoading v-if="rolling && activePoolMode === 'free'" inline :loading="true" />
+              <SvgIcon v-else :src="icon.growth.reward" :size="21" />
             </span>
             <span class="lt-draw-button__copy">
-              <strong>{{ t('growth.lotteryFreeDraw') }}</strong>
+              <strong>{{ rolling && activePoolMode === 'free' ? t('growth.lotteryRolling') : t('growth.lotteryFreeDrawAction') }}</strong>
               <small>{{
                 freeRemaining > 0 ? t('growth.lotteryFreeLeft', { n: freeRemaining }) : t('growth.lotteryFreeUsedUp')
               }}</small>
@@ -1114,9 +1116,9 @@
   }
 
   .lt-draw-options :deep(.lt-draw-button--free.b_btn) {
-    border-color: var(--chip-success-border, #bee1ca) !important;
-    color: var(--chip-success-fg, #1a7d4a);
-    background: var(--chip-success-bg, #eef8f2);
+    border-color: #16834d !important;
+    color: #fff;
+    background: #16834d;
   }
 
   .lt-draw-options :deep(.lt-draw-button--paid.b_btn) {
@@ -1145,7 +1147,17 @@
   }
 
   .lt-draw-button--free .lt-draw-button__icon {
-    background: var(--background-color);
+    background: rgba(255, 255, 255, 0.16);
+  }
+
+  .lt-draw-options :deep(.lt-draw-button--free.b_btn:focus-visible) {
+    outline: 2px solid #16834d;
+    outline-offset: 3px;
+  }
+
+  .lt-draw-options :deep(.lt-draw-button--free.b_btn:not(.disabled):active) {
+    transform: translateY(0);
+    filter: brightness(0.9);
   }
 
   .lt-draw-button__copy {

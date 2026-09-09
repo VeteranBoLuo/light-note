@@ -1,3 +1,4 @@
+import { getVisitorBrief } from '../util/services/visitorBriefService.js';
 import pool from '../db/index.js';
 import { resultData } from '../util/common.js';
 import { buildObjectUrl, createDownloadSignedUrl } from '../util/obsClient.js';
@@ -42,7 +43,9 @@ function sendDailyBriefError(res, error) {
     const reason = knownReasons.has(details.reason) ? details.reason : 'UNCLASSIFIED';
     const field = /^(?:draft|headline|recommendation|insights(?:\[[0-4]\](?:\.(?:text|factIds))?)?)$/u.test(
       details.field || '',
-    ) ? details.field : 'unknown';
+    )
+      ? details.field
+      : 'unknown';
     const lengths = ['actualLength', 'maxLength', 'unknownFactCount']
       .filter((key) => Number.isSafeInteger(details[key]) && details[key] >= 0)
       .map((key) => `${key}=${details[key]}`)
@@ -50,9 +53,13 @@ function sendDailyBriefError(res, error) {
     console.error('[daily-brief] request failed code=%s reason=%s field=%s %s', code, reason, field, lengths);
     if (reason === 'NUMERIC_LITERAL' && details.numericSummary) {
       const summary = details.numericSummary;
-      console.error('[daily-brief] numeric classification sourceLiteral=%s countLiteral=%s englishNumberWord=%s literalCount=%s',
-        summary.sourceLiteral === true, summary.countLiteral === true, summary.englishNumberWord === true,
-        Number.isSafeInteger(summary.literalCount) ? summary.literalCount : 0);
+      console.error(
+        '[daily-brief] numeric classification sourceLiteral=%s countLiteral=%s englishNumberWord=%s literalCount=%s',
+        summary.sourceLiteral === true,
+        summary.countLiteral === true,
+        summary.englishNumberWord === true,
+        Number.isSafeInteger(summary.literalCount) ? summary.literalCount : 0,
+      );
     }
   }
   return res
@@ -554,7 +561,13 @@ export const getWorkbenchDailyBriefPreference = async (req, res) => {
     return res.status(401).send(resultData({ code: 'DAILY_BRIEF_AUTH_REQUIRED' }, 401, '登录后才能查看每日简报设置'));
   try {
     const preference = await getDailyBriefPreference(pool, current.id);
-    return res.send(resultData({ featureEnabled: isDailyBriefFeatureEnabled(), enabled: preference.enabled, autoUpdate: preference.autoUpdate }));
+    return res.send(
+      resultData({
+        featureEnabled: isDailyBriefFeatureEnabled(),
+        enabled: preference.enabled,
+        autoUpdate: preference.autoUpdate,
+      }),
+    );
   } catch (error) {
     return sendDailyBriefError(res, error);
   }
@@ -565,6 +578,21 @@ export const putWorkbenchDailyBriefPreference = async (req, res) => {
   try {
     const preference = await updateDailyBriefPreference(pool, req.user.id, req.body?.enabled, req.body?.autoUpdate);
     return res.send(resultData({ featureEnabled: isDailyBriefFeatureEnabled(), ...preference }));
+  } catch (error) {
+    return sendDailyBriefError(res, error);
+  }
+};
+
+export const getWorkbenchVisitorBrief = async (req, res) => {
+  const current = workbenchSubject(req);
+  if (!current?.id || current.role !== 'visitor')
+    return res.status(403).send(resultData({ code: 'VISITOR_OWNER_INVALID' }, 403, '仅可查看游客示例'));
+  try {
+    return res.send(
+      resultData(
+        await getVisitorBrief(pool, { userId: current.id, locale: req.query?.locale === 'en-US' ? 'en-US' : 'zh-CN' }),
+      ),
+    );
   } catch (error) {
     return sendDailyBriefError(res, error);
   }

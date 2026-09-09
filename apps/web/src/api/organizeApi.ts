@@ -247,6 +247,10 @@ export interface OrganizeAiSuggestionEstimate {
 }
 
 export interface OrganizeAiSuggestionTag {
+  evidence?: string;
+  evidenceRef?: string;
+  evidenceType?: 'text' | 'visual' | 'filename';
+  locator?: string;
   id: string | null;
   name: string;
   source?: 'existing' | 'new';

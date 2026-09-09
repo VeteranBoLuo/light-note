@@ -3643,3 +3643,33 @@ SELECT 'toolbox_board_missing_column' AS check_name, CONCAT(required.table_name,
  SELECT 'toolbox_workspace_items', 'source_content'
 ) required LEFT JOIN information_schema.columns actual ON actual.table_schema=DATABASE() AND actual.table_name=required.table_name AND actual.column_name=required.column_name WHERE actual.column_name IS NULL;
 SELECT 'toolbox_board_missing_receipts' AS check_name, 'toolbox_board_operations' AS detail FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='toolbox_board_operations');
+
+-- Explicitly installed visitor examples; runtime must not create or enroll accounts.
+SELECT 'visitor_example_maintenance_missing' AS check_name, 'visitor_example_maintenance' AS detail FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='visitor_example_maintenance');
+SELECT 'visitor_example_maintenance_column_missing' AS check_name, expected.col AS detail
+FROM (SELECT 'user_id' col UNION ALL SELECT 'version' UNION ALL SELECT 'enabled' UNION ALL SELECT 'manifest_json' UNION ALL SELECT 'last_success_date') expected
+LEFT JOIN information_schema.columns c ON c.table_schema=DATABASE() AND c.table_name='visitor_example_maintenance' AND c.column_name=expected.col
+WHERE c.column_name IS NULL;
+
+SELECT 'file_preview_artifacts.preview_metadata_json missing' AS assertion_failure FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE()
+  AND TABLE_NAME='file_preview_artifacts' AND COLUMN_NAME='preview_metadata_json');
+
+-- AI organize file evidence (additive migration required before Worker startup).
+SELECT 'ai_document_sources.visual_evidence_json missing' AS issue FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='ai_document_sources' AND COLUMN_NAME='visual_evidence_json');
+SELECT 'ai_document_sources.visual_lease_token missing' AS issue FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='ai_document_sources' AND COLUMN_NAME='visual_lease_token');
+SELECT 'ai_document_sources.visual_lease_expires_at missing' AS issue FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='ai_document_sources' AND COLUMN_NAME='visual_lease_expires_at');
+SELECT 'organize_suggestion_items.next_check_at missing' AS issue FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='organize_suggestion_items' AND COLUMN_NAME='next_check_at');
+
+-- Note import task schema is installed explicitly before starting its Worker.
+SELECT 'note_import_schema_missing' AS check_name, required.name AS detail
+FROM (SELECT 'note_import_tasks' AS name UNION ALL SELECT 'note_import_items') required
+LEFT JOIN information_schema.TABLES t ON t.TABLE_SCHEMA=DATABASE() AND t.TABLE_NAME=required.name
+WHERE t.TABLE_NAME IS NULL;
+SELECT 'note_import_tasks_columns' AS check_name, 'missing required columns' AS detail FROM DUAL
+WHERE (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='note_import_tasks'
+ AND COLUMN_NAME IN ('id','owner_id','status','parent_id','share_fingerprint','upload_bytes','lease_token','lease_until','stop_requested','error_code','create_time','update_time','expires_at')) <> 13;
+SELECT 'note_import_items_columns' AS check_name, 'missing required columns' AS detail FROM DUAL
+WHERE (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='note_import_items'
+ AND COLUMN_NAME IN ('id','task_id','title','source_name','type','status','selected','warnings','image_count','error_code','note_id','position')) <> 12;

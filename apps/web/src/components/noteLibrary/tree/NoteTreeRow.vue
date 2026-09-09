@@ -103,6 +103,8 @@
             @move="emit('move', $event)"
             @rename="emit('rename', $event)"
             @share="emit('share', $event)"
+            @import="emit('import', $event)"
+            @export="emit('export', $event)"
             @delete="emit('delete', $event)"
             @drag-start="(childNode, event) => emit('dragStart', childNode, event)"
             @drag-end="emit('dragEnd')"
@@ -168,6 +170,8 @@
     move: [node: NoteTreeItem];
     rename: [node: NoteTreeItem];
     share: [node: NoteTreeItem];
+    import: [node: NoteTreeItem];
+    export: [node: NoteTreeItem];
     delete: [node: NoteTreeItem];
     dragStart: [node: NoteTreeItem, event: DragEvent];
     dragEnd: [];
@@ -212,6 +216,11 @@
             icon: icon.common.add,
           },
           {
+            key: 'import',
+            label: t('noteTransfer.importHere'),
+            icon: icon.file_upload,
+          },
+          {
             key: 'attach',
             label: t('note.addExistingPages'),
             icon: icon.noteTree.move,
@@ -241,6 +250,7 @@
           },
         ]
       : []),
+    { key: 'export', label: t('noteTransfer.export'), icon: icon.noteDetail.exportLine },
     ...(props.writeEnabled
       ? [
           {
@@ -266,6 +276,8 @@
       rename: () => emit('rename', props.node),
       move: () => emit('move', props.node),
       share: () => emit('share', props.node),
+      import: () => emit('import', props.node),
+      export: () => emit('export', props.node),
       delete: () => emit('delete', props.node),
     };
     actions[action]?.();

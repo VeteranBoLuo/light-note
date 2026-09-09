@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import ts from 'typescript';
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { todoCalendarOwnerKey } from '@/utils/todoCalendarAccess';
 import { buildTodoListNodes } from '@/utils/todoSeriesGrouping';
 
 const { listTodos } = vi.hoisted(() => ({ listTodos: vi.fn() }));
@@ -31,6 +32,7 @@ const executable = ts.transpile(`${viewNode.getText(ast)}\n${refreshNode.getText
 
 function pageRefresh(todo: ReturnType<typeof useTodoStore>, view: string) {
   return new Function(
+    'todoCalendarOwnerKey',
     'todo',
     'todoView',
     'inbox',
@@ -40,6 +42,7 @@ function pageRefresh(todo: ReturnType<typeof useTodoStore>, view: string) {
     'isUnscopedTodoView', 'user', 'fetchSelectableTags', 'workspaceTags', 'getTodoWorkspace', 'recentCompleted',
     `let savedTodoRange = null; ${executable}; return refreshList;`,
   )(
+    todoCalendarOwnerKey,
     todo,
     { value: view },
     {

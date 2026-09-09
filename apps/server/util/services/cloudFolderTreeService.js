@@ -141,18 +141,21 @@ async function loadOwnedFolderSnapshot(connection, userId, { lock = false } = {}
 
 async function runLockedMutation({ userId, database = pool, mutate }) {
   const normalizedUserId = normalizeOwnerId(userId);
-  const connection = await database.getConnection();
+  const ownsTransaction = typeof database.getConnection === 'function';
+  const connection = ownsTransaction ? await database.getConnection() : database;
   let transactionStarted = false;
   try {
-    await connection.beginTransaction();
-    transactionStarted = true;
+    if (ownsTransaction) {
+      await connection.beginTransaction();
+      transactionStarted = true;
+    }
     const [userRows] = await connection.query('SELECT id FROM user WHERE id = ? LIMIT 1 FOR UPDATE', [
       normalizedUserId,
     ]);
     if (!userRows.length) throw serviceError('USER_NOT_FOUND', '用户不存在', 404);
     const rows = await loadOwnedFolderSnapshot(connection, normalizedUserId, { lock: true });
     const result = await mutate({ connection, rows, userId: normalizedUserId });
-    await connection.commit();
+    if (ownsTransaction) await connection.commit();
     transactionStarted = false;
     return result;
   } catch (error) {
@@ -165,7 +168,7 @@ async function runLockedMutation({ userId, database = pool, mutate }) {
     }
     throw error;
   } finally {
-    connection.release();
+    if (ownsTransaction) connection.release();
   }
 }
 

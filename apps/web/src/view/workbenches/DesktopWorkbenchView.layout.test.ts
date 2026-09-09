@@ -60,10 +60,7 @@ describe('桌面工作台头部布局稳定性', () => {
     expect(desktopSource).toContain('item.list.slice(0, LATEST_UPDATE_ITEM_LIMIT)');
   });
 
-  it('待处理明细与继续工作区域共享紧凑基线并允许内容自然增高', () => {
-    expect(desktopSource).toContain('--today-work-area-height: 196px;');
-    expect(desktopSource).toMatch(/\.today-summary-details\s*\{[\s\S]*?min-height:\s*var\(--today-work-area-height\)/);
-    expect(desktopSource).toMatch(/\.today-continue\s*\{[\s\S]*?min-height:\s*var\(--today-work-area-height\)/);
+  it('待处理空态复用通用快速创建入口', () => {
     expect(desktopSource).toContain(':show-empty-action="true"');
     expect(desktopSource).toContain('@quick-create="openQuickCapture()"');
     expect(desktopSource).toMatch(
@@ -130,8 +127,8 @@ describe('桌面工作台头部布局稳定性', () => {
     expect(desktopSource).toContain('dailyBriefCardRef.value?.refresh()');
   });
 
-  it('继续处理资源页签默认最多展示五条', () => {
-    expect(desktopSource).toContain('const CONTINUE_ITEM_LIMIT = 5;');
+  it('继续处理资源页签默认最多展示四条', () => {
+    expect(desktopSource).toContain('const CONTINUE_ITEM_LIMIT = 4;');
     expect(desktopSource).toContain('slice(0, CONTINUE_ITEM_LIMIT)');
     expect(desktopSource).toContain('activeContinueItems.length === CONTINUE_ITEM_LIMIT');
     expect(desktopSource).toMatch(

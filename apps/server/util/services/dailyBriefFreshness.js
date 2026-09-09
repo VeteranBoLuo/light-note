@@ -53,6 +53,7 @@ export function briefFreshness({ row, facts, calendar, preference, now, automati
   const urgent = staleFactIds.some(
     (id) =>
       id.startsWith('todo_') ||
+      id === 'workshop_due' ||
       (id.startsWith('organize_') &&
         Number(facts?.find((fact) => fact.id === id)?.count) < Number(oldFacts.find((fact) => fact.id === id)?.count)),
   );

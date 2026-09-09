@@ -40,6 +40,9 @@
             >
           </div>
           <div class="workspace-tools">
+            <BButton v-if="run.summary.types.file" :disabled="loading || draftBusy" @click="retryFiles">{{
+              t('organizeFile.retry')
+            }}</BButton>
             <BButton :disabled="loading" @click="loadLatest">{{ t('organize.refresh') }}</BButton>
             <BButton v-if="run.canPause" :disabled="loading || controlling" @click="controlRun('pause')">{{
               t('organizeLifecycle.pause')
@@ -194,7 +197,10 @@
                       resourceOpenLabel(item) + '：' + (item.resource.title || t('organizeWorkspace.unnamed'))
                     "
                     @click.stop="openOriginal(item)"
-                    ><SvgIcon :src="item.resource.iconUrl || resourceIcons[item.resource.type]" size="21" /></BButton
+                    ><SvgIcon
+                      v-if="openingFile !== item.id"
+                      :src="item.resource.iconUrl || resourceIcons[item.resource.type]"
+                      size="21" /></BButton
                   ><div class="resource-identity"
                     ><h4
                       ><BButton class="resource-title-link" @click.stop="openOriginal(item)">{{
@@ -209,11 +215,7 @@
                         ·
                         {{
                           t(
-                            item.resource.evidenceLevel === 'pending'
-                              ? 'organizeLifecycle.resourceChecking'
-                              : item.resource.evidenceLevel === 'parsed'
-                                ? 'organizeWorkspace.parsed'
-                                : 'organizeWorkspace.metadataOnly',
+                            `organizeFile.${item.resource.reading?.state || (['waiting_content', 'preparing_content'].includes(item.aiStatus) ? 'waiting' : 'legacy')}`,
                           )
                         }}</template
                       ></small
@@ -265,6 +267,33 @@
                     :title="item.resource.title"
                     :review="iconReview"
                   />
+                  <p v-if="item.resource.reading" class="file-reading-details">
+                    <span v-if="item.resource.reading.totalPages">{{
+                      t('organizeFile.pages', {
+                        read: item.resource.reading.readPages || 0,
+                        total: item.resource.reading.totalPages,
+                      })
+                    }}</span>
+                    <span v-if="item.resource.reading.missingPages?.length">{{
+                      t('organizeFile.missing', { pages: item.resource.reading.missingPages.join(', ') })
+                    }}</span>
+                    <span v-if="item.resource.reading.reasonCode">{{
+                      t(fileReadingReasonKey(item.resource.reading.reasonCode))
+                    }}</span>
+                    <span
+                      v-for="(range, index) in (item.resource.reading.failedRanges || []).filter(
+                        (r) => r.unit !== 'pages',
+                      )"
+                      :key="index"
+                      >{{
+                        t('organizeFile.range', {
+                          type: t(`organizeFile.rangeTypes.${range.unit}`),
+                          start: range.start,
+                          end: range.end,
+                        })
+                      }}</span
+                    >
+                  </p>
                   <OrganizeWorkspaceSuggestion
                     v-for="suggestion in primarySuggestions(item).filter((s) => s.kind !== 'tag_icon')"
                     :key="suggestion.id"
@@ -272,7 +301,7 @@
                     :resource-title="item.resource.title"
                     :resource-id="item.resource.id"
                     :suggestion="suggestion"
-                    :analyzing="['queued', 'running'].includes(item.aiStatus)"
+                    :analyzing="['queued', 'running', 'waiting_content', 'preparing_content'].includes(item.aiStatus)"
                     @changed="changed"
                   />
                   <div v-if="expanded.has(item.id) && secondarySuggestions(item).length" class="resource-check-summary">
@@ -316,10 +345,20 @@
       @close="closeDrawer"
     >
       <template #header-actions><div ref="wizardHeader" /></template>
+      <div v-if="retryConfirmation" class="file-retry-confirmation">
+        <p>{{ t('organizeFile.retryHint') }}</p>
+        <p>{{ t('organizeFile.automatic') }}</p>
+        <p v-if="draftError" role="alert">{{ draftError }}</p>
+        <p v-if="preview">{{ t('organizeFile.confirmCount', { count: preview.summary.total }) }}</p>
+        <BButton v-if="preview" type="primary" :loading="draftBusy" @click="start">{{
+          t('organizeWorkspace.start')
+        }}</BButton>
+        <BLoading v-else-if="draftBusy" :loading="true" inline />
+      </div>
       <OrganizeRunWizard
         :header-target="wizardHeader"
         :initial-step="initialStep"
-        v-if="drawer"
+        v-if="drawer && !retryConfirmation"
         v-model="draft"
         v-model:preview="preview"
         :busy="draftBusy"
@@ -369,11 +408,13 @@
   import BProgress from '@/components/base/BasicComponents/BProgress.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
+  import { fileReadingReasonKey } from '@/utils/organizeFileReading';
   import OrganizeRunWizard from './OrganizeRunWizard.vue';
   import OrganizeWorkspaceSuggestion from './OrganizeWorkspaceSuggestion.vue';
   import { generateUUID } from '@/utils/common';
   import {
     previewRun,
+    previewFileRetry,
     startRun,
     getRun,
     listRuns,
@@ -470,7 +511,9 @@
     if (suggestions.some((s) => ['pending', 'info'].includes(s.status))) return 'priority';
     if (
       suggestions.some((s) => ['queued', 'running', 'failed', 'conflict', 'cancelled'].includes(s.status)) ||
-      ['queued', 'running', 'failed', 'conflict', 'cancelled'].includes(item.aiStatus) ||
+      ['queued', 'running', 'waiting_content', 'preparing_content', 'failed', 'conflict', 'cancelled'].includes(
+        item.aiStatus,
+      ) ||
       (item.ruleStatus !== undefined && item.ruleStatus !== 'completed')
     )
       return 'analysis';
@@ -524,13 +567,15 @@
     if (item.resource.type === 'file') {
       if (openingFile.value) return;
       openingFile.value = item.id;
+      const previewIdentity = buildNoteDetailRequestScope(user);
+      const stillCurrent = () => !disposed && previewIdentity === buildNoteDetailRequestScope(user);
       try {
         const response = await apiBasePost(
           '/api/file/getFileInfo',
           { id: item.resource.id },
           { silent: true, feedback: false },
         );
-        if (disposed) return;
+        if (!stillCurrent()) return;
         if (response.status !== 200 || !response.data) {
           message.warning(t('cloudSpace.fileUnavailable'));
           return;
@@ -545,7 +590,7 @@
         };
         filePreviewVisible.value = true;
       } catch {
-        if (!disposed) message.warning(t('cloudSpace.fileUnavailable'));
+        if (stillCurrent()) message.warning(t('cloudSpace.fileUnavailable'));
       } finally {
         openingFile.value = '';
       }
@@ -602,12 +647,16 @@
       (run.value?.status === 'paused' && run.value?.rulePhase !== 'completed') ||
       (run.value?.progress || []).some(
         (p) =>
-          (p.aiStatus === 'running' || (p.aiStatus === 'queued' && run.value?.status === 'running')) &&
+          (p.aiStatus === 'running' ||
+            (['queued', 'waiting_content', 'preparing_content'].includes(p.aiStatus) &&
+              run.value?.status === 'running')) &&
           Number(p.total) > 0,
       ),
   );
   const queuedCount = computed(() =>
-    (run.value?.progress || []).filter((p) => p.aiStatus === 'queued').reduce((n, p) => n + Number(p.total), 0),
+    (run.value?.progress || [])
+      .filter((p) => ['queued', 'waiting_content', 'preparing_content'].includes(p.aiStatus))
+      .reduce((n, p) => n + Number(p.total), 0),
   );
   const aiFailed = computed(() =>
     (run.value?.progress || [])
@@ -686,7 +735,27 @@
       ? e.message
       : t('organize.actionFailed');
   const keyOf = (i: { type: string; id: string | number }) => `${i.type}:${i.id}`;
+  const retryConfirmation = ref(false);
+  async function retryFiles() {
+    if (!run.value || draftBusy.value) return;
+    const runId = run.value.id;
+    resetDraft();
+    retryConfirmation.value = true;
+    draftBusy.value = true;
+    const ticket = ++draftSequence;
+    const identity = buildNoteDetailRequestScope(user);
+    try {
+      const result = readResponse(await previewFileRetry(runId, generateUUID()));
+      if (!disposed && drawer.value && ticket === draftSequence && identity === buildNoteDetailRequestScope(user))
+        preview.value = result;
+    } catch (error) {
+      if (ticket === draftSequence) draftError.value = failure(error);
+    } finally {
+      if (ticket === draftSequence) draftBusy.value = false;
+    }
+  }
   function resetDraft() {
+    retryConfirmation.value = false;
     draftSequence++;
     initialStep.value = 0;
     draftBusy.value = false;
@@ -1424,6 +1493,27 @@
   .resource-symbol.b_btn:focus-visible {
     outline: 2px solid var(--primary-color);
     outline-offset: 3px;
+  }
+  .file-retry-confirmation {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 24px;
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--text-color);
+  }
+  .file-reading-details {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    color: var(--desc-color);
+    overflow-wrap: anywhere;
+    font-size: 12px;
+  }
+  .resource-symbol.b_btn :deep(.btn-spinner) {
+    margin: 0;
   }
   .resource-symbol.b_btn {
     padding: 0;

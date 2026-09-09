@@ -10,7 +10,9 @@ const desktop = read('view/workbenches/DesktopWorkbenchView.vue');
 describe('今日简报展示契约', () => {
   it('复用统一生命周期，不在组件内另建生成与计费决策', () => {
     expect(card).toContain('useDailyBrief({');
-    expect(card).toContain('defineExpose({ refresh })');
+    expect(card).toContain('defineExpose({');
+    expect(card).toContain('refresh:');
+    expect(card).toContain('useVisitorBrief({');
     expect(card).not.toContain('setTimeout');
   });
   it('桌面与获授权的移动入口共用身份与只读边界', () => {

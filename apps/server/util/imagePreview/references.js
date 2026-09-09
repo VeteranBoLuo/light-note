@@ -1,3 +1,4 @@
+import { CARD_IMAGE_PROFILE } from '@lightnote/shared';
 import { extractManagedImages } from './extract.js';
 import { localImageLocator, hash } from './sources.js';
 import { imageError } from './compress.js';
@@ -8,14 +9,14 @@ export async function queuePreview(db, asset) {
   await db.query(
     `INSERT INTO file_preview_artifacts
     (source_type,file_id,owner_user_id,strategy,strategy_version,format_id,source_etag,source_size,source_revision)
-    VALUES ('image_asset',?,?,'image_thumbnail',1,'card',?,?,?)
+    VALUES ('image_asset',?,?,'image_thumbnail',${CARD_IMAGE_PROFILE.version},'card',?,?,?)
     ON DUPLICATE KEY UPDATE id=LAST_INSERT_ID(id)`,
     [asset.id, asset.owner_user_id, asset.source_version, asset.source_size || 0, asset.source_version],
   );
   await db.query(
     `INSERT IGNORE INTO file_preview_jobs (artifact_id)
     SELECT id FROM file_preview_artifacts WHERE source_type='image_asset' AND file_id=?
-      AND strategy='image_thumbnail' AND strategy_version=1 AND source_revision=?`,
+      AND strategy='image_thumbnail' AND strategy_version=${CARD_IMAGE_PROFILE.version} AND source_revision=?`,
     [asset.id, asset.source_version],
   );
 }

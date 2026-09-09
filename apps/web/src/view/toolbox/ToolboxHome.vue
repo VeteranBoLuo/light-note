@@ -2346,8 +2346,16 @@
     .workshop-project__action {
       margin-left: auto;
     }
+    .workshop-view-switch {
+      width: 100%;
+      box-sizing: border-box;
+    }
     .workshop-view-switch :deep(.tab) {
-      min-height: 44px;
+      box-sizing: border-box;
+      height: 36px;
+      min-height: 36px;
+      padding: 0 8px;
+      line-height: 1.4;
     }
     .toolbox-task-list .toolbox-activity-card.b_btn {
       grid-template-columns: 40px minmax(0, 1fr);

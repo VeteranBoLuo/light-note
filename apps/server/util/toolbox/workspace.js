@@ -574,3 +574,5 @@ export const toolboxWorkspaceInternals = Object.freeze({
   optionalDate,
   localDateOnly,
 });
+
+export { optionalDate as normalizeWorkspaceDate };

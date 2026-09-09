@@ -6,7 +6,8 @@ import mammoth from 'mammoth';
 import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 import { parse as parseCsv } from 'csv-parse/sync';
 import { AI_DOCUMENT_SUPPORTED_EXTENSIONS } from '@lightnote/shared';
-import { localOcrProvider } from './localOcr.js';
+import { localOcrProvider, AI_OCR_MAX_PAGES } from './localOcr.js';
+import { inspectRecognitionText } from '../imageRecognition/quality.js';
 import { imageRecognitionProvider } from '../imageRecognition/service.js';
 
 export const AI_DOCUMENT_MAX_BYTES = 20 * 1024 * 1024;
@@ -380,6 +381,7 @@ export async function parseDocumentBuffer(buffer, descriptor, options = {}) {
   let parsedPages = 1;
   let missingPageNumbers = [];
   let recognitionMetadata = null;
+  let pdfCoverage = null;
 
   try {
     if (meta.extension === '.pdf') {
@@ -387,83 +389,73 @@ export async function parseDocumentBuffer(buffer, descriptor, options = {}) {
         throw documentError('FILE_CONTENT_INVALID', '文件内容与 PDF 格式不一致');
       }
       const pages = [];
+      const blankPages = [];
       const result = await pdfParser(buffer, {
         pagerender: async (pageData) => {
+          const index = Number(pageData.pageIndex ?? pages.length);
           const content = await pageData.getTextContent();
           const pageText = cleanText(content.items.map((item) => item.str || '').join(' '));
-          pages.push(pageText);
+          pages[index] = pageText;
+          if (!pageText && typeof pageData.getOperatorList === 'function') {
+            const operators = await pageData.getOperatorList();
+            if (!operators.fnArray.length) blankPages.push(index + 1);
+          }
           return pageText;
         },
       });
       totalPages = Number(result.numpages || pages.length);
       coverageSeed.totalPages = totalPages;
-      if (totalPages > 300) {
-        const message = 'PDF 页数不能超过 300 页';
-        throw documentError(
-          'DOCUMENT_TOO_LONG',
-          message,
-          buildFailedCoverage({ code: 'DOCUMENT_TOO_LONG', message, totalPages }),
-        );
-      }
-      const embeddedText = cleanText(result.text || pages.join('\n\n'));
-      if (embeddedText) {
-        const prepared = prepareText(embeddedText);
-        fullText = prepared.fullText;
-        text = prepared.text;
-        coverageSeed.totalChars = fullText.length;
-        if (pages.some((page) => cleanText(page))) {
-          fullSegments = pages
-            .map((content, index) => ({
-              content: cleanText(content),
-              locatorType: 'page',
-              locatorValue: `第 ${index + 1} 页`,
-            }))
-            .filter((item) => item.content);
-          let remainingChars = AI_DOCUMENT_MAX_CHARS;
-          segments = fullSegments
-            .map((segment) => {
-              const pageText = segment.content.slice(0, Math.max(0, remainingChars));
-              remainingChars -= pageText.length;
-              return { ...segment, content: pageText };
-            })
-            .filter((item) => item.content);
-          parsedPages = prepared.truncated ? Math.min(totalPages, segments.length) : totalPages;
-        } else {
-          const locatorValue = totalPages > 1 ? `第 1-${totalPages} 页` : '第 1 页';
-          fullSegments = [{ content: fullText, locatorType: 'page', locatorValue }];
-          segments = [{ content: text, locatorType: 'page', locatorValue }];
-          parsedPages = prepared.truncated ? 1 : totalPages;
+      if (!Number.isInteger(totalPages) || totalPages < 1 || totalPages > 300)
+        throw documentError('DOCUMENT_TOO_LONG', 'PDF 页数必须在 1 至 300 页内');
+      // Test/custom parser compatibility: without individual pages its text is one located segment.
+      if (!pages.length && cleanText(result.text)) pages[0] = cleanText(result.text);
+      const needsOcr = Array.from({ length: totalPages }, (_, i) => i + 1).filter(
+        (page) => !blankPages.includes(page) && inspectRecognitionText(pages[page - 1]).suspicious,
+      );
+      let ocrErrorCode = null;
+      if (needsOcr.length) {
+        if (needsOcr.length > AI_OCR_MAX_PAGES) ocrErrorCode = 'OCR_PAGE_LIMIT';
+        else {
+          try {
+            const recognized = await ocrProvider.recognizePdf(buffer, {
+              pageCount: totalPages,
+              pageNumbers: needsOcr,
+              signal,
+            });
+            for (const page of recognized || []) {
+              if (needsOcr.includes(page.pageNumber) && !inspectRecognitionText(page.content).suspicious)
+                pages[page.pageNumber - 1] = cleanText(page.content);
+            }
+          } catch (error) {
+            if (signal?.aborted || error.name === 'AbortError') throw error;
+            ocrErrorCode = error.code || 'OCR_PAGE_FAILED';
+          }
         }
-      } else {
-        const ocrPages = await ocrProvider.recognizePdf(buffer, { pageCount: totalPages, signal });
-        const normalizedPages = (Array.isArray(ocrPages) ? ocrPages : [])
-          .map((page) => ({ pageNumber: Number(page.pageNumber), content: cleanText(page.content) }))
-          .filter((page) => Number.isInteger(page.pageNumber) && page.pageNumber > 0 && page.content)
-          .sort((left, right) => left.pageNumber - right.pageNumber);
-        const parsedPageNumbers = new Set(normalizedPages.map((page) => page.pageNumber));
-        missingPageNumbers = Array.from({ length: totalPages }, (_, index) => index + 1).filter(
-          (page) => !parsedPageNumbers.has(page),
-        );
-        fullText = cleanText(normalizedPages.map((page) => page.content).join('\n\n'));
-        if (!fullText) throw documentError('EMPTY_DOCUMENT', 'OCR 未能从 PDF 图片中识别出文字');
-        coverageSeed.totalChars = fullText.length;
-        const prepared = prepareText(fullText);
-        text = prepared.text;
-        fullSegments = normalizedPages.map((page) => ({
-          content: page.content,
-          locatorType: 'page',
-          locatorValue: `第 ${page.pageNumber} 页`,
-        }));
-        let remainingChars = AI_DOCUMENT_MAX_CHARS;
-        segments = fullSegments
-          .map((segment) => {
-            const pageText = segment.content.slice(0, Math.max(0, remainingChars));
-            remainingChars -= pageText.length;
-            return { ...segment, content: pageText };
-          })
-          .filter((item) => item.content);
-        parsedPages = segments.length;
       }
+      missingPageNumbers = needsOcr.filter((page) => inspectRecognitionText(pages[page - 1]).suspicious);
+      pdfCoverage = { policyVersion: 2, blankPages, missingPages: missingPageNumbers, ocrErrorCode };
+      fullSegments = Array.from({ length: totalPages }, (_, i) => ({
+        content: inspectRecognitionText(pages[i]).suspicious ? '' : cleanText(pages[i]),
+        locatorType: 'page',
+        locatorValue: `第 ${i + 1} 页`,
+      })).filter((segment) => segment.content);
+      fullText = cleanText(fullSegments.map((s) => s.content).join('\n\n'));
+      if (!fullText)
+        throw documentError(
+          blankPages.length === totalPages ? 'EMPTY_DOCUMENT' : 'PDF_NO_RELIABLE_TEXT',
+          blankPages.length === totalPages ? 'PDF 页面均为空白' : 'PDF 没有可靠文字，需补充视觉理解',
+        );
+      coverageSeed.totalChars = fullText.length;
+      text = prepareText(fullText).text;
+      let remainingChars = AI_DOCUMENT_MAX_CHARS;
+      segments = fullSegments
+        .map((segment) => {
+          const content = segment.content.slice(0, Math.max(0, remainingChars));
+          remainingChars -= content.length;
+          return { ...segment, content };
+        })
+        .filter((segment) => segment.content);
+      parsedPages = segments.length + blankPages.length;
     } else if (meta.extension === '.docx') {
       if (buffer[0] !== 0x50 || buffer[1] !== 0x4b) {
         throw documentError('FILE_CONTENT_INVALID', '文件内容与 DOCX 格式不一致');
@@ -559,14 +551,21 @@ export async function parseDocumentBuffer(buffer, descriptor, options = {}) {
       text,
       chunks: finalized.chunks,
       extractedChars: processedChars,
-      coverage: recognitionMetadata ? { ...coverage, recognition: recognitionMetadata } : coverage,
+      coverage: {
+        ...coverage,
+        ...(recognitionMetadata ? { recognition: recognitionMetadata } : {}),
+        ...(pdfCoverage ? { pdf: pdfCoverage } : {}),
+      },
     };
   } catch (error) {
+    if (error.name === 'PasswordException') error.code = 'PDF_ENCRYPTED';
+    else if (['InvalidPDFException', 'MissingPDFException'].includes(error.name)) error.code = 'FILE_CONTENT_INVALID';
     if (!error.coverage) {
       const code = error.code || 'DOCUMENT_PARSE_FAILED';
       const message = String(error.message || '文件解析失败').replace(/^[A-Z][A-Z0-9_]+:\s*/, '');
       error.coverage = buildFailedCoverage({ code, message, ...coverageSeed });
     }
+    if (pdfCoverage) error.coverage = { ...error.coverage, pdf: pdfCoverage };
     throw error;
   }
 }

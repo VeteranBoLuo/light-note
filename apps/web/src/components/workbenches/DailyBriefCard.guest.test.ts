@@ -1,12 +1,13 @@
 import { createApp, h, nextTick, reactive } from 'vue';
 import { createI18n } from 'vue-i18n';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import zhCN from '@/i18n/locales/zh-CN';
 import enUS from '@/i18n/locales/en-US';
 import DailyBriefCard from './DailyBriefCard.vue';
 
-const mocks = vi.hoisted(() => ({ get: vi.fn(), ensure: vi.fn(), refresh: vi.fn(), push: vi.fn() }));
+const mocks = vi.hoisted(() => ({ visitor: vi.fn(), get: vi.fn(), ensure: vi.fn(), refresh: vi.fn(), push: vi.fn() }));
 vi.mock('@/api/dailyBriefApi', () => ({
+  getVisitorBrief: mocks.visitor,
   getDailyBrief: mocks.get,
   ensureDailyBrief: mocks.ensure,
   refreshDailyBrief: mocks.refresh,
@@ -33,36 +34,66 @@ function mount(locale = 'zh-CN') {
   return { host, props };
 }
 
+const sample = {
+  kind: 'visitor_example',
+  dataDate: '2026-09-09',
+  stale: false,
+  brief: {
+    version: 2,
+    generatedBy: 'example',
+    headline: '来自实际示例的标题',
+    insights: [
+      {
+        id: 'sample-todo',
+        factIds: ['todo_due_today', 'workshop_due'],
+        text: '实际行动',
+        sources: [{ type: 'research_workspace', id: 'project-real', title: '研究项目' }],
+      },
+      { id: 'sample-content', factIds: ['visitor_content'], text: '形式展示' },
+      { id: 'sample-connection', factIds: ['resource_connection'], text: '实际资料关联' },
+      { id: 'sample-organize', factIds: ['organize_untagged', 'organize_pending'], text: '整理真实资料' },
+    ],
+    recommendation: '浏览建议',
+  },
+};
+beforeEach(() => mocks.visitor.mockResolvedValue({ status: 200, data: sample }));
 describe('今日简报游客示例', () => {
-  it('游客只保留待办与无标签整理入口，不读取或生成简报', async () => {
+  it('reads the visitor API and uses verified project and organize links without AI generation', async () => {
     const { host } = mount();
-    expect(host.textContent).toContain('串联待办、收藏与笔记');
-    expect(host.textContent).not.toContain('示例');
-    expect(host.querySelectorAll('.daily-brief-insight')).toHaveLength(4);
-    expect(host.querySelectorAll('button')).toHaveLength(2);
-    const actions = host.querySelectorAll<HTMLButtonElement>('.daily-brief-insight__organize-actions button');
-    const targets = ['/inbox?tab=todo', '/organize?issue=untagged'];
-    actions.forEach((button, index) => {
-      button.click();
-      expect(mocks.push).toHaveBeenLastCalledWith(targets[index]);
+    await vi.waitFor(() => expect(host.querySelectorAll('.daily-brief-insight')).toHaveLength(4));
+    expect(host.textContent).toContain('2026-09-09');
+    const project = host.querySelector<HTMLButtonElement>('.daily-brief-insight__sources button');
+    project?.click();
+    expect(mocks.push).toHaveBeenLastCalledWith({
+      path: '/toolbox/research_workspace',
+      query: { workspace: 'project-real' },
     });
-    window.dispatchEvent(new Event('focus'));
-    document.dispatchEvent(new Event('visibilitychange'));
-    await nextTick();
+    const actions = host.querySelectorAll<HTMLButtonElement>('.daily-brief-insight__organize-actions button');
+    const targets = ['/inbox?tab=todo', '/organize?issue=untagged', '/organize?issue=pending'];
+    actions.forEach((b, i) => {
+      b.click();
+      expect(mocks.push).toHaveBeenLastCalledWith(targets[i]);
+    });
     expect(mocks.get).not.toHaveBeenCalled();
     expect(mocks.ensure).not.toHaveBeenCalled();
     expect(mocks.refresh).not.toHaveBeenCalled();
   });
-  it('英文游客内容显示正常简报说明', () => {
-    const { host } = mount('en-US');
-    expect(host.textContent).toContain('Connect tasks, bookmarks and notes');
-    expect(host.textContent).not.toContain('Sample');
-    expect(Array.from(host.querySelectorAll('button'), (button) => button.textContent?.trim())).toEqual([
-      'View tasks',
-      'Organize untagged content',
-    ]);
+  it('shows a retry on initial failure, preserves saved content on refresh failure', async () => {
+    mocks.visitor.mockRejectedValueOnce(new Error('network'));
+    const { host } = mount();
+    await vi.waitFor(() => expect(host.textContent).toContain('暂时无法加载'));
+    host.querySelector<HTMLButtonElement>('.daily-brief-card__state button')?.click();
+    await vi.waitFor(() => expect(host.textContent).toContain(sample.brief.headline));
   });
-  it('登录后移除示例，退出登录后不泄露上一账号正文', async () => {
+  it('reads examples for administrator visitor preview, never the formal brief', async () => {
+    const { host, props } = mount();
+    Object.assign(props, { eligible: true, readOnly: true, visitor: true, ownerKey: 'admin-visitor' });
+    await vi.waitFor(() => expect(host.textContent).toContain(sample.brief.headline));
+    expect(mocks.ensure).not.toHaveBeenCalled();
+    expect(mocks.refresh).not.toHaveBeenCalled();
+    expect(mocks.get).not.toHaveBeenCalled();
+  });
+  it('removes private content immediately when switching identities', async () => {
     mocks.get.mockResolvedValue({
       status: 200,
       data: {
@@ -77,22 +108,17 @@ describe('今日简报游客示例', () => {
     props.eligible = true;
     props.ownerKey = 'user-1';
     await vi.waitFor(() => expect(host.textContent).toContain('账号私有简报'));
-    expect(host.textContent).not.toContain('串联待办、收藏与笔记');
     props.eligible = false;
     props.ownerKey = 'visitor';
     await nextTick();
-    expect(host.textContent).toContain('串联待办、收藏与笔记');
-    expect(host.textContent).not.toContain('示例');
     expect(host.textContent).not.toContain('账号私有简报');
+    await vi.waitFor(() => expect(host.textContent).toContain(sample.brief.headline));
   });
-  it('管理员只读默认态不显示游客示例或登录入口', async () => {
+  it('administrator formal-account preview remains passive and shows only saved results', async () => {
     mocks.get.mockResolvedValue({ status: 200, data: { enabled: false, featureEnabled: true, brief: null } });
     const { host, props } = mount();
-    props.readOnly = true;
-    props.eligible = true;
-    props.ownerKey = 'admin-preview';
+    Object.assign(props, { eligible: true, readOnly: true, ownerKey: 'admin-preview' });
     await vi.waitFor(() => expect(host.textContent).toContain('管理员预览只展示已保存结果'));
-    expect(host.textContent).not.toContain('串联待办、收藏与笔记');
     expect(host.querySelector('button')).toBeNull();
     expect(mocks.ensure).not.toHaveBeenCalled();
     expect(mocks.refresh).not.toHaveBeenCalled();

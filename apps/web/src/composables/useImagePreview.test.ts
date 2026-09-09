@@ -8,7 +8,13 @@ function mount(component: Component) {
   document.body.append(el);
   const app = createApp(component);
   app.mount(el);
-  return { text: () => el.textContent, unmount: () => { app.unmount(); el.remove(); } };
+  return {
+    text: () => el.textContent,
+    unmount: () => {
+      app.unmount();
+      el.remove();
+    },
+  };
 }
 afterEach(() => {
   vi.useRealTimers();
@@ -48,7 +54,7 @@ describe('shared visible-image scheduler', () => {
     await vi.advanceTimersByTimeAsync(600000);
     expect(resolveImagePreviews).toHaveBeenCalledTimes(1);
   });
-  it('stops polling after one minute and clears subscriptions on unmount', async () => {
+  it('keeps checking slow uploads and displays their thumbnail without a page refresh', async () => {
     vi.useFakeTimers();
     vi.mocked(resolveImagePreviews).mockImplementation(async (items) =>
       items.map((i) => ({ ...i, status: 'processing' })),
@@ -58,13 +64,45 @@ describe('shared visible-image scheduler', () => {
         setup() {
           return { state: useImagePreview(ref({ sourceType: 'cloud_file' as const, sourceId: '1' }), ref(true)) };
         },
-        template: '<div/>',
+        template: '<div>{{state?.status}}</div>',
       }),
     );
     await vi.advanceTimersByTimeAsync(70000);
     const count = vi.mocked(resolveImagePreviews).mock.calls.length;
+    expect(c.text()).toBe('processing');
+    await vi.advanceTimersByTimeAsync(30000);
+    expect(resolveImagePreviews).toHaveBeenCalledTimes(count + 1);
+    vi.mocked(resolveImagePreviews).mockImplementation(async (items) =>
+      items.map((i) => ({ ...i, status: 'ready', url: 'https://preview.invalid/new.webp' })),
+    );
+    await vi.advanceTimersByTimeAsync(30000);
+    expect(c.text()).toBe('ready');
+    c.unmount();
+    const finalCount = vi.mocked(resolveImagePreviews).mock.calls.length;
     await vi.advanceTimersByTimeAsync(120000);
-    expect(resolveImagePreviews).toHaveBeenCalledTimes(count);
+    expect(resolveImagePreviews).toHaveBeenCalledTimes(finalCount);
+  });
+  it('pauses offscreen polling and resumes when the upload card becomes visible', async () => {
+    vi.useFakeTimers();
+    const visible = ref(true);
+    vi.mocked(resolveImagePreviews).mockImplementation(async (items) => items.map((i) => ({ ...i, status: 'queued' })));
+    const c = mount(
+      defineComponent({
+        setup() {
+          return { state: useImagePreview(ref({ sourceType: 'cloud_file' as const, sourceId: 'new' }), visible) };
+        },
+        template: '<div>{{state?.status}}</div>',
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    visible.value = false;
+    await nextTick();
+    await vi.advanceTimersByTimeAsync(120000);
+    expect(resolveImagePreviews).toHaveBeenCalledTimes(1);
+    visible.value = true;
+    await nextTick();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(resolveImagePreviews).toHaveBeenCalledTimes(2);
     c.unmount();
   });
 });

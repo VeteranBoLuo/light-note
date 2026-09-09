@@ -72,6 +72,10 @@
     "./workspace-board": {
       "types": "./workspaceBoard.d.ts",
       "default": "./workspaceBoard.js"
+    },
+    "./note-transfer": {
+      "types": "./noteTransfer.d.ts",
+      "default": "./noteTransfer.js"
     }
   },
   "devDependencies": {

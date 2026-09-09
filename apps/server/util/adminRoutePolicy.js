@@ -14,6 +14,8 @@ export const ADMIN_POLICIES = Object.freeze({
 
 const routePolicies = new Map();
 
+declare(ADMIN_POLICIES.BACKGROUND_WRITE, 'note', [['POST', '/image-previews/retry']]);
+
 // Telemetry must never attribute administrator preview/maintenance to the subject.
 declare(ADMIN_POLICIES.BACKGROUND_WRITE, 'activity', [['POST', '/common/recordUserActivity']]);
 
@@ -88,7 +90,13 @@ declare(ADMIN_POLICIES.READ, 'note', [
   ['POST', '/note/queryNoteTree'],
   ['POST', '/note/queryNoteBreadcrumb'],
   ['POST', '/note/getNoteDetail'],
+  ['GET', '/note/imports/image'],
+  ['HEAD', '/note/imports/image'],
+  ['POST', '/note/imports/list'],
+  ['POST', '/note/imports/detail'],
+  ['POST', '/note/imports/preview'],
   ['POST', '/note/getNotesForExport'],
+  ['POST', '/note/previewExportScope'],
   ['POST', '/note/resolveResourceRefs'],
   ['POST', '/note/resourceBacklinks'],
   ['POST', '/note/queryNoteTagList'],
@@ -107,6 +115,7 @@ declare(ADMIN_POLICIES.READ, 'note', [
 ]);
 
 declare(ADMIN_POLICIES.CONTENT_WRITE, 'note', [
+  ...['create','upload','parse','start','stop'].map(action => ['POST', `/note/imports/${action}`]),
   ['POST', '/note/uploadImage'],
   ['POST', '/note/updateNote'],
   ['POST', '/note/updateDrawingNote'],
@@ -192,6 +201,7 @@ declare(ADMIN_POLICIES.READ, 'search', [
   // 移动端「今日」轻量聚合，与工作台概览同属只读
   ['POST', '/workbench/today'],
   ['GET', '/workbench/daily-brief'],
+  ['GET', '/workbench/visitor-brief'],
   ['GET', '/workbench/daily-brief/preference'],
 ]);
 
@@ -235,6 +245,7 @@ declare(ADMIN_POLICIES.CONTENT_WRITE, 'organize', [
 ]);
 declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'organize_ai_suggestions', [
   ['POST', '/organize/suggestions/previews'],
+  ['POST', '/organize/suggestions/runs/:id/retry-preview'],
   ['POST', '/organize/suggestions/runs/:id/start'],
   ['POST', '/organize/suggestions/runs/:id/cancel'],
   ['POST', '/organize/suggestions/runs/:id/pause'],
@@ -750,7 +761,7 @@ function resolvePolicy(method, path) {
   if (/^\/organize\/suggestions\/runs\/[^/]+$/.test(path)) {
     return routePolicies.get(`${method} /organize/suggestions/runs/:id`);
   }
-  if (/^\/organize\/suggestions\/runs\/[^/]+\/(?:start|cancel|pause|resume)$/.test(path)) {
+  if (/^\/organize\/suggestions\/runs\/[^/]+\/(?:start|cancel|pause|resume|retry-preview)$/.test(path)) {
     return routePolicies.get(`${method} /organize/suggestions/runs/:id/${path.split('/').pop()}`);
   }
   if (/^\/organize\/suggestions\/runs\/[^/]+\/items\/[^/]+\/actions$/.test(path)) {

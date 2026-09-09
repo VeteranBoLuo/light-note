@@ -55,13 +55,38 @@
         /></template>
         <span v-else>{{ t('organizeWorkspace.noTags') }}</span>
         <span>{{ beforeTags.length ? t('organizeWizard.appendTags') : '→' }}</span
-        ><ResourceTagChip v-for="tag in suggestion.after" :key="tag.name" :tag="{ ...tag, id: tag.id || tag.name }"
-      /></div>
+        ><span v-for="tag in suggestion.after" :key="tag.name" class="suggested-tag">
+          <ResourceTagChip :tag="{ ...tag, id: tag.id || tag.name }">
+            <template #suffix>
+              <span
+                v-if="suggestion.status === 'pending' && suggestedTagSource(tag) === 'new'"
+                class="suggested-tag-source"
+                :title="t('organizeFile.tagSourceHint.new')"
+              ><span class="suggested-tag-dot">·</span> <span>{{ t('organizeFile.tagSource.new') }}</span></span>
+            </template>
+          </ResourceTagChip>
+        </span></div
+      >
       <p>{{
         suggestion.kind === 'archive' && suggestion.status === 'applied'
           ? t('organizeWorkspace.archiveAppliedHint')
-          : suggestion.reason
+          : suggestion.reading && !suggestion.reading.complete
+            ? t(fileReadingReasonKey(suggestion.reading.reasonCode))
+            : suggestion.reading &&
+                suggestion.reasonCode &&
+                ['suggested', 'filtered', 'no_suggestion', 'no_evidence', 'already_associated'].includes(
+                  suggestion.reasonCode,
+                )
+              ? t(`organizeFile.outcomes.${suggestion.reasonCode}`)
+              : suggestion.reason
       }}</p>
+      <div v-if="suggestion.kind === 'tags' && Array.isArray(suggestion.after)" class="tag-evidence">
+        <p v-for="tag in suggestion.after.filter((entry) => entry.evidence)" :key="tag.name">
+          <strong>{{ tag.name }}</strong> · {{ t(`organizeFile.evidence.${tag.evidenceType || 'text'}`) }}
+          <span v-if="tag.locator"> · {{ tag.locator }}</span
+          >：{{ tag.evidence }}
+        </p>
+      </div>
       <div v-if="suggestion.members" class="comparison" :aria-label="t('organizeWorkspace.compare')">
         <article v-for="member in suggestion.members" :key="member.id"
           ><BButton @click="openMember(member)">{{ member.title || t('organizeWorkspace.unnamed') }}</BButton
@@ -143,6 +168,7 @@
   </section>
 </template>
 <script setup lang="ts">
+  import { fileReadingReasonKey } from '@/utils/organizeFileReading';
   import BookmarkSnapshotModal from '@/components/manage/bookmarkEditMg/BookmarkSnapshotModal.vue';
   import { computed, ref, watch } from 'vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -159,6 +185,12 @@
   import type { OrganizeAiSuggestionTag } from '@/api/organizeApi';
   import { generateUUID } from '@/utils/common';
   import { resolveAiSourceNavigation } from '@/utils/aiSourceNavigation';
+  function suggestedTagSource(tag: { id?: string | null; source?: string }) {
+    if (tag.source === 'new' || tag.source === 'existing') return tag.source;
+    if (tag.id) return 'existing';
+    return tag.id === null ? 'new' : '';
+  }
+
   const props = defineProps<{
     runId: string;
     resourceTitle: string;
@@ -298,6 +330,28 @@
     flex-wrap: wrap;
     min-width: 0;
   }
+  .suggested-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 100%;
+    min-width: 0;
+  }
+  .suggested-tag :deep(.resource-tag-chip) {
+    flex-shrink: 1;
+    min-width: 0;
+  }
+  .suggested-tag-source {
+    display: inline-flex;
+    align-items: baseline;
+    flex-shrink: 0;
+    font-size: 0.85em;
+    font-weight: 400;
+  }
+  .suggested-tag-dot {
+    margin-inline: 3px;
+    font-weight: 700;
+  }
   .suggestion-change > span:first-child {
     color: var(--ow-muted, var(--desc-color));
   }
@@ -346,6 +400,17 @@
   .suggestion-error {
     grid-column: 1/-1;
     color: var(--danger-color);
+  }
+  .tag-evidence {
+    grid-column: 2;
+    min-width: 0;
+    color: var(--ow-muted, var(--desc-color));
+    font-size: 11px;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+  }
+  .tag-evidence p {
+    margin: 4px 0 0;
   }
   .comparison {
     grid-column: 2;
@@ -408,6 +473,7 @@
     }
     .suggestion-copy > p,
     .suggestion-change,
+    .tag-evidence,
     .comparison {
       grid-column: 1;
     }

@@ -166,14 +166,19 @@ function pageNumberFromFileName(fileName) {
 
 export async function recognizePdfWithLocalOcr(
   buffer,
-  { pageCount, signal, onPageStart, runner = runCommand, tempRoot = os.tmpdir() } = {},
+  { pageCount, pageNumbers, signal, onPageStart, runner = runCommand, tempRoot = os.tmpdir() } = {},
 ) {
   throwIfAborted(signal);
   const totalPages = Number(pageCount || 0);
   if (!Number.isInteger(totalPages) || totalPages <= 0) {
     throw ocrError('FILE_CONTENT_INVALID', '无法确认 PDF 页数');
   }
-  if (totalPages > AI_OCR_MAX_PAGES) {
+  const selected = pageNumbers
+    ? [...new Set(pageNumbers)].sort((a, b) => a - b)
+    : Array.from({ length: totalPages }, (_, i) => i + 1);
+  if (selected.some((p) => !Number.isInteger(p) || p < 1 || p > totalPages))
+    throw ocrError('FILE_CONTENT_INVALID', '无效页码');
+  if (selected.length > AI_OCR_MAX_PAGES) {
     throw ocrError('OCR_PAGE_LIMIT', `图片型 PDF 最多支持 ${AI_OCR_MAX_PAGES} 页 OCR`);
   }
 
@@ -182,24 +187,43 @@ export async function recognizePdfWithLocalOcr(
     const inputPath = path.join(tempDir, 'input.pdf');
     const pagePrefix = path.join(tempDir, 'page');
     await writeFile(inputPath, buffer, { mode: 0o600 });
-    await runner(
-      PDFTOPPM_BIN,
-      ['-png', '-r', String(AI_OCR_PDF_DPI), '-f', '1', '-l', String(totalPages), inputPath, pagePrefix],
-      { timeout: RENDER_TIMEOUT_MS, signal },
-    );
+    const ranges = pageNumbers ? selected.map((p) => [p, p]) : [[1, totalPages]];
+    const renderFailures = [];
+    for (const [first, last] of ranges) {
+      try {
+        await runner(
+          PDFTOPPM_BIN,
+          ['-png', '-r', String(AI_OCR_PDF_DPI), '-f', String(first), '-l', String(last), inputPath, pagePrefix],
+          { timeout: RENDER_TIMEOUT_MS, signal },
+        );
+      } catch (error) {
+        throwIfAborted(signal);
+        if (!pageNumbers) throw error;
+        renderFailures.push({ pageNumber: first, content: '', errorCode: error.code || 'OCR_PDF_RENDER_FAILED' });
+      }
+    }
     const pageFiles = (await readdir(tempDir))
       .filter((fileName) => /^page-\d+\.png$/i.test(fileName))
       .sort((left, right) => pageNumberFromFileName(left) - pageNumberFromFileName(right));
     if (!pageFiles.length) throw ocrError('OCR_PDF_RENDER_FAILED', 'PDF 没有生成可识别的页面');
 
-    const pages = [];
+    const pages = [...renderFailures];
     for (const fileName of pageFiles) {
       throwIfAborted(signal);
       const pagePath = path.join(tempDir, fileName);
-      inspectOcrImage(await readFile(pagePath), '.png');
-      await onPageStart?.(pageNumberFromFileName(fileName));
-      const content = await recognizeImagePath(pagePath, { signal, runner });
-      if (content) pages.push({ pageNumber: pageNumberFromFileName(fileName), content });
+      try {
+        inspectOcrImage(await readFile(pagePath), '.png');
+        await onPageStart?.(pageNumberFromFileName(fileName));
+        const content = await recognizeImagePath(pagePath, { signal, runner });
+        if (content) pages.push({ pageNumber: pageNumberFromFileName(fileName), content });
+      } catch (error) {
+        throwIfAborted(signal);
+        pages.push({
+          pageNumber: pageNumberFromFileName(fileName),
+          content: '',
+          errorCode: error.code || 'OCR_PAGE_FAILED',
+        });
+      }
     }
     if (!pages.length) throw ocrError('EMPTY_DOCUMENT', 'OCR 未能从 PDF 图片中识别出文字');
     return pages;
@@ -327,3 +351,38 @@ export const localOcrProvider = Object.freeze({
   recognizePdf: recognizePdfWithLocalOcr,
   recognizeImage: recognizeImageWithLocalOcr,
 });
+
+/** Render only requested pages, releasing private temporary files after the callback. */
+export async function withRenderedPdfPages(buffer, pageNumbers, callback, { signal, runner = runCommand } = {}) {
+  const pages = [...new Set(pageNumbers)];
+  if (pages.length > AI_OCR_MAX_PAGES || pages.some((p) => !Number.isInteger(p) || p < 1 || p > 300))
+    throw ocrError('OCR_PAGE_LIMIT', 'PDF 补读页数超过限制');
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'light-note-visual-'));
+  try {
+    const input = path.join(tempDir, 'input.pdf');
+    await writeFile(input, buffer, { mode: 0o600 });
+    const failures = [];
+    for (const page of pages) {
+      throwIfAborted(signal);
+      const prefix = path.join(tempDir, 'page');
+      let image;
+      try {
+        await runner(
+          PDFTOPPM_BIN,
+          ['-png', '-singlefile', '-r', String(AI_OCR_PDF_DPI), '-f', String(page), '-l', String(page), input, prefix],
+          { timeout: RENDER_TIMEOUT_MS, signal },
+        );
+        image = await readFile(`${prefix}.png`);
+        inspectOcrImage(image, '.png');
+      } catch (error) {
+        throwIfAborted(signal);
+        failures.push({ page, code: error.code || 'OCR_PDF_RENDER_FAILED' });
+        continue;
+      }
+      await callback(image, page);
+    }
+    return failures;
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+}

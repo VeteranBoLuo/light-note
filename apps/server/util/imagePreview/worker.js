@@ -1,20 +1,12 @@
-import fs from 'node:fs/promises';
-import { getExistingNoteImageThumbnailPath, thumbnailKeyForNoteImageUrl } from '../noteImageThumbnail.js';
+import { CARD_IMAGE_PROFILE } from '@lightnote/shared';
+import { classifyImageError, imageFailure } from './errors.js';
 import { randomUUID } from 'node:crypto';
 import pool from '../../db/index.js';
 import { putObjectBodyToObs, deleteObjectFromObs } from '../obsClient.js';
-import { compressCardImage, imageError, validatePreview } from './compress.js';
+import { compressCardImage, imageError } from './compress.js';
 import { readSource, storageAdapters, hash } from './sources.js';
 import { generationEnabled } from './references.js';
-import { stableAgentErrorCode } from '../agent/logSafety.js';
 
-const permanent = new Set([
-  'IMAGE_SOURCE_SIZE_LIMIT',
-  'IMAGE_SOURCE_PIXEL_LIMIT',
-  'IMAGE_SOURCE_UNSUPPORTED',
-  'IMAGE_OUTPUT_SIZE_LIMIT',
-  'IMAGE_SOURCE_INVALID',
-]);
 export async function runSingleImagePreviewJob(
   workerId,
   {
@@ -29,6 +21,7 @@ export async function runSingleImagePreviewJob(
   if (!generationEnabled()) return false;
   const connection = await db.getConnection();
   let job;
+  let stage = 'processing';
   const lease = `${String(workerId).slice(0, 40)}:${randomUUID()}`;
   try {
     await connection.beginTransaction();
@@ -36,7 +29,7 @@ export async function runSingleImagePreviewJob(
       await connection.query(`SELECT j.id AS job_id,j.attempts,j.output_object_key,a.id AS artifact_id,a.file_id,
       i.* FROM file_preview_jobs j JOIN file_preview_artifacts a ON a.id=j.artifact_id
       JOIN image_assets i ON i.id=a.file_id AND a.source_type='image_asset'
-      WHERE a.strategy='image_thumbnail' AND i.status<>'deleting' AND j.attempts<3 AND
+      WHERE a.strategy='image_thumbnail' AND a.strategy_version=${CARD_IMAGE_PROFILE.version} AND a.source_revision=i.source_version AND i.status<>'deleting' AND j.attempts<3 AND
       ((j.status='queued' AND j.available_at<=NOW()) OR
        (j.status='processing' AND j.locked_at<DATE_SUB(NOW(),INTERVAL 2 MINUTE)))
       ORDER BY j.available_at,j.id LIMIT 1 FOR UPDATE`);
@@ -55,29 +48,20 @@ export async function runSingleImagePreviewJob(
     await connection.commit();
     // Retain the previous key until its removal succeeds, including after a crash.
     if (job.output_object_key) await remove(job.output_object_key);
+    stage = 'source';
     const source = await read(job);
-    let output;
-    if (job.storage_kind === 'local') {
-      const legacy = await getExistingNoteImageThumbnailPath(
-        thumbnailKeyForNoteImageUrl(`https://boluo66.top/uploads/${job.source_locator}`),
-      );
-      if (legacy && source.modifiedAt && (await fs.stat(legacy)).mtimeMs >= source.modifiedAt)
-        try {
-          const body = await fs.readFile(legacy);
-          output = { body, ...validatePreview(body) };
-        } catch {
-          /* Re-encode invalid or oversized old previews. */
-        }
-    }
-    output ||= await compress(source.body);
+    stage = 'decode';
+    const output = await compress(source.body);
     const version = hash(source.body);
-    const key = `image-previews/${job.id}/card-v1/${version}/${lease.slice(-36)}.webp`;
+    const key = `image-previews/${job.id}/card-v${CARD_IMAGE_PROFILE.version}/${version}/${lease.slice(-36)}.webp`;
     const [registered] = await connection.query(
       "UPDATE file_preview_jobs SET output_object_key=?,output_keys_json=JSON_ARRAY_APPEND(COALESCE(output_keys_json,JSON_ARRAY()), '$', ?) WHERE id=? AND locked_by=? AND status='processing'",
       [key, key, job.job_id, lease],
     );
     if (!registered.affectedRows) return true;
+    stage = 'upload';
     await put(key, output.body, 'image/webp');
+    stage = 'source';
     const currentMeta = await metadata(job);
     if (currentMeta.version !== source.version) throw imageError('IMAGE_SOURCE_CHANGED');
     await connection.beginTransaction();
@@ -103,8 +87,18 @@ export async function runSingleImagePreviewJob(
     ]);
     await connection.query(
       `UPDATE file_preview_artifacts SET status='ready',artifact_object_key=?,artifact_size=?,
-      image_width=?,image_height=?,source_revision=?,source_etag=?,source_size=?,error_code=NULL WHERE id=?`,
-      [key, output.body.length, output.width, output.height, version, version, source.body.length, job.artifact_id],
+      image_width=?,image_height=?,preview_metadata_json=?,source_revision=?,source_etag=?,source_size=?,error_code=NULL WHERE id=?`,
+      [
+        key,
+        output.body.length,
+        output.width,
+        output.height,
+        JSON.stringify({ presentation: output.presentation || 'full' }),
+        version,
+        version,
+        source.body.length,
+        job.artifact_id,
+      ],
     );
     await connection.query(
       "UPDATE file_preview_jobs SET status='completed',locked_at=NULL,locked_by=NULL,output_object_key=NULL,error_code=NULL WHERE id=? AND locked_by=?",
@@ -121,8 +115,8 @@ export async function runSingleImagePreviewJob(
   } catch (error) {
     await connection.rollback();
     if (!job) throw error;
-    const code = stableAgentErrorCode(error);
-    const stop = permanent.has(error.code) || Number(job.attempts) + 1 >= 3;
+    const code = classifyImageError(error, stage);
+    const stop = !imageFailure(code).retryable || Number(job.attempts) + 1 >= 3;
     await connection.query(
       `UPDATE file_preview_artifacts a JOIN file_preview_jobs j ON j.artifact_id=a.id
       SET a.status=?,a.error_code=? WHERE j.id=? AND j.locked_by=?`,
@@ -234,7 +228,7 @@ export async function cleanupImageAssets({
     } catch (error) {
       await c.rollback();
       await c.query('UPDATE image_assets SET cleanup_attempts=cleanup_attempts+1,cleanup_error=? WHERE id=?', [
-        stableAgentErrorCode(error),
+        classifyImageError(error, 'upload'),
         candidate.id,
       ]);
     } finally {

@@ -1,7 +1,13 @@
+import { noteTransferZh } from './noteTransfer';
+import { organizeFileZh } from './organizeFile';
+import { imagePreviewZh } from './imagePreview';
 import { accountSettingsZh } from './accountSettings';
 import { settingsRefineZh } from './settingsRefine';
 import { notificationMessages } from '@lightnote/shared/notification-presentation';
 export default {
+  noteTransfer: noteTransferZh,
+  organizeFile: organizeFileZh,
+  imagePreview: imagePreviewZh,
   accountSettings: accountSettingsZh,
   settingsRefine: settingsRefineZh,
   todoWorkspace: {
@@ -5153,18 +5159,13 @@ export default {
       guestSubtitle: '串联待办、收藏与笔记，找到今天值得推进的一步',
       viewTodos: '查看待办',
 
-      sampleHeadline: '今天适合把「收集资料」往前推进一步，变成可以实践的学习计划。',
-      sampleTodo:
-        '今天有 2 项待办，「整理读书笔记」与「制定本周学习计划」可以一起推进。先用 15 分钟提炼笔记中的 3 个要点，再选一个放进本周计划，减少在资料和任务之间来回切换。',
-      sampleContent:
-        '最近收藏的 3 篇文章聚焦专注与学习。「间隔复习」关注记忆的保持，「主动回忆」强调对知识的理解，两者共同构成了从阅读到长期掌握的学习路径。',
-      sampleConnection:
-        '新收藏的复习方法与已有的读书笔记主题相呼应：前者解释怎样记得更牢，后者记录已经理解的内容。这些资料逐渐串起了「阅读、提炼、回顾」的知识脉络。',
-      sampleOrganize:
-        '还有 4 条收藏未添加标签，其中 3 条与学习方法有关，适合归入同一个主题；另一条旅行攻略可单独整理。先按用途分组，比一次建立很多细碎标签更容易坚持。',
-      sampleRecommendation:
-        '今天的重点可以收拢为两件事：推进已有的学习待办，让计划更具体；为零散收藏补齐标签，让相关资料更容易汇聚。已有内容足够支撑下一步，不必急着继续收集。',
-
+      exampleMark: '示例',
+      sampleFailed: '示例暂时无法加载，请重试。',
+      sampleEmpty: '示例资料尚未准备好。',
+      sampleMeta: '教学示例 · 日期维护于 {date}',
+      sampleStale: '日期维护暂未更新，按现有日程展示',
+      sampleSuggestion: '浏览建议',
+      organizePending: '查看待整理资料',
       title: '今日简报',
       subtitle: 'AI 正在结合今天的行动、沉淀与整理状态生成简报。',
       settings: '简报设置',
@@ -9155,7 +9156,8 @@ export default {
     prizeCard: '补签卡 ×{n}',
     prizeAiPack: 'AI 加油包',
     lotteryFreeDraw: '免费抽',
-    lotteryFreeLeft: '剩 {n}',
+    lotteryFreeDrawAction: '立即免费抽一次',
+    lotteryFreeLeft: '今日剩余 {n} 次',
     lotteryFreeTitle: '今日免费权益',
     lotteryLevelBenefit: 'Lv.{level} 权益',
     lotteryTodayAvailability: '今日可用 {remaining}/{total}',
@@ -12063,7 +12065,6 @@ export default {
     ctaTryDemo: '先体验示例',
     ctaEnterApp: '进入我的轻笺',
     ctaAccount: '注册 / 登录',
-    entryHint: '无需注册即可浏览示例，登录后管理自己的内容。',
     ctaStart: '开始使用轻笺',
     navigationOpeningApp: '正在打开轻笺…',
     navigationPreparingRegistration: '正在准备注册…',

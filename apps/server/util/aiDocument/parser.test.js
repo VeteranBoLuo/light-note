@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { parseDocumentBuffer, validateDocumentDescriptor } from './parser.js';
 
 describe('AI 文档解析器', () => {
@@ -205,4 +205,45 @@ describe('AI 文档解析器', () => {
       expect.arrayContaining([expect.objectContaining({ code: 'EMPTY_DOCUMENT' })]),
     );
   });
+});
+
+it('混合 PDF 按页补 OCR，保留文字页并准确跳过确认空白页', async () => {
+  const recognizePdf = vi.fn(async (_buffer, { pageNumbers }) => pageNumbers.map((pageNumber) => ({ pageNumber, content: `第${pageNumber}页门窗设计` })));
+  const buffer = Buffer.from('%PDF-mixed');
+  const result = await parseDocumentBuffer(buffer, { fileName: '窗户图纸.pdf', fileType: 'application/pdf', fileSize: buffer.length }, {
+    pdfParser: async (_buffer, { pagerender }) => {
+      for (let i = 0; i < 4; i++) await pagerender({ pageIndex: i, getTextContent: async () => ({ items: i === 0 ? [{ str: '门窗图纸确认单' }] : [] }), getOperatorList: async () => ({ fnArray: i === 2 ? [] : [1] }) });
+      return { numpages: 4, text: '门窗图纸确认单' };
+    }, ocrProvider: { recognizePdf },
+  });
+  expect(recognizePdf.mock.calls[0][1].pageNumbers).toEqual([2, 4]);
+  expect(result.chunks.map((c) => c.locatorValue)).toEqual(['第 1 页', '第 2 页', '第 4 页']);
+  expect(result.coverage).toMatchObject({ complete: true, processed: { pages: 4 }, pdf: { blankPages: [3], missingPages: [] } });
+});
+it('部分页面 OCR 失败仍保留可靠文字，记录需要视觉补读的页码', async () => {
+  const buffer = Buffer.from('%PDF-mixed');
+  const result = await parseDocumentBuffer(buffer, { fileName: 'scan.pdf', fileType: 'application/pdf', fileSize: buffer.length }, {
+    pdfParser: async (_buffer, { pagerender }) => {
+      for (let i = 0; i < 2; i++) await pagerender({ pageIndex: i, getTextContent: async () => ({ items: i === 0 ? [{ str: '可靠文字' }] : [] }) });
+      return { numpages: 2 };
+    }, ocrProvider: { recognizePdf: async () => { throw Object.assign(new Error('missing OCR'), { code: 'OCR_ENGINE_UNAVAILABLE' }); } },
+  });
+  expect(result.text).toBe('可靠文字');
+  expect(result.coverage).toMatchObject({ complete: false, pdf: { missingPages: [2], ocrErrorCode: 'OCR_ENGINE_UNAVAILABLE' } });
+});
+it('纯文字 PDF 不额外调用 OCR', async () => {
+  const recognizePdf = vi.fn();
+  const buffer = Buffer.from('%PDF-text');
+  await parseDocumentBuffer(buffer, { fileName: 'text.pdf', fileType: 'application/pdf', fileSize: buffer.length }, {
+    pdfParser: async (_buffer, { pagerender }) => { await pagerender({ pageIndex: 0, getTextContent: async () => ({ items: [{ str: '文本内容' }] }) }); return { numpages: 1 }; },
+    ocrProvider: { recognizePdf },
+  });
+  expect(recognizePdf).not.toHaveBeenCalled();
+});
+
+it('加密 PDF 返回加密原因，不冒充空文件', async () => {
+  await expect(parseDocumentBuffer(Buffer.from('%PDF-encrypted'), { fileName: '资料.pdf', fileType: 'application/pdf', fileSize: 14 }, { pdfParser: async () => { throw Object.assign(new Error('password'), { name: 'PasswordException' }); } })).rejects.toMatchObject({ code: 'PDF_ENCRYPTED' });
+});
+it('无可靠文字的非空 PDF 保留待视觉补读页码', async () => {
+  await expect(parseDocumentBuffer(Buffer.from('%PDF-scan'), { fileName: '图纸.pdf', fileType: 'application/pdf', fileSize: 9 }, { pdfParser: async (_buffer, opts) => { await opts.pagerender({ pageIndex: 0, getTextContent: async () => ({ items: [] }), getOperatorList: async () => ({ fnArray: [85] }) }); return { numpages: 1 }; }, ocrProvider: { recognizePdf: async () => [] } })).rejects.toMatchObject({ code: 'PDF_NO_RELIABLE_TEXT', coverage: { pdf: { missingPages: [1], blankPages: [] } } });
 });

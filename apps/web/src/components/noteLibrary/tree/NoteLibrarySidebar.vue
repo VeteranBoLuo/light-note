@@ -71,6 +71,8 @@
           @move="emit('move', $event)"
           @rename="emit('rename', $event)"
           @share="emit('share', $event)"
+            @import="emit('import', $event)"
+            @export="emit('export', $event)"
           @delete="emit('delete', $event)"
           @drag-start="(node, event) => emit('dragStart', node, event)"
           @drag-end="emit('dragEnd')"
@@ -164,6 +166,8 @@
     move: [node: NoteTreeItem];
     rename: [node: NoteTreeItem];
     share: [node: NoteTreeItem];
+    import: [node: NoteTreeItem];
+    export: [node: NoteTreeItem];
     delete: [node: NoteTreeItem];
     search: [value: string];
     dragStart: [node: NoteTreeItem, event: DragEvent];

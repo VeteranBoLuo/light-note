@@ -20,6 +20,7 @@
     />
     <span v-if="showHash" aria-hidden="true">#</span>
     <span class="resource-tag-chip__text">{{ tag.name }}</span>
+    <slot name="suffix" />
   </BChip>
 
   <BChip

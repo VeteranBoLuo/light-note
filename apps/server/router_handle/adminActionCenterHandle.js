@@ -1,3 +1,4 @@
+import { imageFailure } from '../util/imagePreview/errors.js';
 import pool from '../db/index.js';
 import { resultData } from '../util/common.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
@@ -781,7 +782,7 @@ export async function getAdminFilePreviewDiagnostic(req, res) {
       `SELECT j.id, j.artifact_id, j.status AS job_status, j.attempts, j.available_at,
               j.locked_at, j.error_code AS job_error_code, j.create_time AS job_create_time,
               j.update_time AS job_update_time,
-              a.file_id, a.owner_user_id, a.strategy, a.strategy_version, a.format_id,
+              a.file_id, a.source_type, a.owner_user_id, a.strategy, a.strategy_version, a.format_id,
               a.source_size, a.status AS artifact_status, a.artifact_size, a.entry_count,
               a.total_uncompressed_size, a.contains_encrypted, a.suspicious_expansion,
               a.error_code AS artifact_error_code, a.last_access_at,
@@ -789,7 +790,9 @@ export async function getAdminFilePreviewDiagnostic(req, res) {
               COALESCE(NULLIF(u.alias, ''), u.id) AS owner_label
          FROM file_preview_jobs j
          JOIN file_preview_artifacts a ON a.id = j.artifact_id
-         LEFT JOIN files f ON f.id = a.file_id
+         LEFT JOIN image_assets ia ON a.source_type = 'image_asset' AND ia.id = a.file_id
+         LEFT JOIN files f ON (a.source_type = 'cloud_file' AND f.id = a.file_id)
+           OR (a.source_type = 'image_asset' AND ia.source_type = 'cloud_file' AND f.id = ia.source_id AND f.create_by = a.owner_user_id)
          LEFT JOIN user u ON u.id = a.owner_user_id
         WHERE j.id = ?
         LIMIT 1`,
@@ -815,6 +818,7 @@ export async function getAdminFilePreviewDiagnostic(req, res) {
           availableAt: row.available_at || null,
           lockedAt: row.locked_at || null,
           errorCode: row.job_error_code || row.artifact_error_code || null,
+          ...imageFailure(row.job_error_code || row.artifact_error_code),
           createdAt: row.job_create_time || null,
           updatedAt: row.job_update_time || null,
         },
@@ -825,7 +829,7 @@ export async function getAdminFilePreviewDiagnostic(req, res) {
           strategyVersion: number(row.strategy_version),
           formatId: row.format_id,
           sourceSize: number(row.source_size),
-          artifactSize: number(row.artifact_size),
+          artifactSize: row.artifact_status === 'ready' ? number(row.artifact_size) : 0,
           entryCount: number(row.entry_count),
           totalUncompressedSize: number(row.total_uncompressed_size),
           containsEncrypted: Boolean(row.contains_encrypted),
@@ -958,11 +962,13 @@ async function loadFilePreviewJobs(limit) {
     ),
     pool.query(
       `SELECT j.id, j.status, j.attempts, j.available_at, j.locked_at, j.error_code,
-              j.create_time, j.update_time, a.file_id, a.format_id, a.owner_user_id,
+              j.create_time, j.update_time, a.file_id, a.source_type, a.format_id, a.owner_user_id,
               f.file_name, u.alias
          FROM file_preview_jobs j
          JOIN file_preview_artifacts a ON a.id = j.artifact_id
-         LEFT JOIN files f ON f.id = a.file_id
+         LEFT JOIN image_assets ia ON a.source_type = 'image_asset' AND ia.id = a.file_id
+         LEFT JOIN files f ON (a.source_type = 'cloud_file' AND f.id = a.file_id)
+           OR (a.source_type = 'image_asset' AND ia.source_type = 'cloud_file' AND f.id = ia.source_id AND f.create_by = a.owner_user_id)
          LEFT JOIN user u ON u.id = a.owner_user_id
         WHERE j.status IN ('queued', 'processing', 'failed')
         ORDER BY (j.status = 'failed') DESC, j.update_time DESC, j.id DESC
@@ -991,6 +997,7 @@ async function loadFilePreviewJobs(limit) {
         createdAt: row.create_time,
         updatedAt: row.update_time,
         errorCode: row.error_code || null,
+        failureKind: imageFailure(row.error_code).failureKind,
         canRetry: false,
       };
     }),

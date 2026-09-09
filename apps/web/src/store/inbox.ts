@@ -49,6 +49,7 @@ export default defineStore('inbox', {
     selectedKeys: [] as string[],
     quickCaptureVisible: false,
     quickCaptureType: 'bookmark' as ActionCaptureType,
+    quickCaptureTypeExplicit: false,
     ownerId: '',
     countReady: false,
     countLoading: false,
@@ -76,6 +77,7 @@ export default defineStore('inbox', {
       this.selectedKeys = [];
       this.quickCaptureVisible = false;
       this.quickCaptureType = 'bookmark';
+      this.quickCaptureTypeExplicit = false;
       this.countReady = false;
       this.countLoading = false;
       this.countFailed = false;
@@ -83,8 +85,10 @@ export default defineStore('inbox', {
       this.loadFailed = false;
       this.requestId += 1;
     },
-    openQuickCapture(type: ActionCaptureType = 'bookmark') {
-      this.quickCaptureType = type;
+    openQuickCapture(type?: ActionCaptureType) {
+      this.quickCaptureType = type ?? 'bookmark';
+      // 明确的资源入口保留用户意图；只有通用入口才自动识别文本类型。
+      this.quickCaptureTypeExplicit = type !== undefined;
       this.quickCaptureVisible = true;
     },
     async refreshCount() {

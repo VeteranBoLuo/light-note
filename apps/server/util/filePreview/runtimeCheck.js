@@ -19,7 +19,7 @@ export async function checkFilePreviewRuntime() {
        WHERE table_schema = DATABASE() AND table_name = ?`,
       [table],
     );
-    const actual = new Set(rows.map((row) => String(row.column_name)));
+    const actual = new Set(rows.map((row) => String(row.column_name ?? row.COLUMN_NAME)));
     if (!actual.size) missing.push(`table:${table}`);
     for (const column of columns) if (!actual.has(column)) missing.push(`column:${table}.${column}`);
   }
@@ -29,7 +29,7 @@ export async function checkFilePreviewRuntime() {
        WHERE table_schema = DATABASE() AND table_name = ?`,
       [table],
     );
-    const actual = new Set(rows.map((row) => String(row.index_name)));
+    const actual = new Set(rows.map((row) => String(row.index_name ?? row.INDEX_NAME)));
     for (const index of indexes) if (!actual.has(index)) missing.push(`index:${table}.${index}`);
   }
   const runtimes = await inspectAllFilePreviewRuntimes({ force: true });

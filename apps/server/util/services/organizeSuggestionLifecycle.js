@@ -26,11 +26,11 @@ export async function insertBatches(db, sql, rows) {
   }
   if (batch.length) await db.query(sql, [batch]);
 }
-export async function previewV2(db, { userId, input, requestId }) {
+export async function previewV2(db, { userId, input, requestId, retryFrom }) {
   const began = Date.now();
   let queryCount = 0,
     batchWrites = 0;
-  const options = normalizeRunInput(input);
+  const options = { ...normalizeRunInput(input), ...(retryFrom ? { retryFrom } : {}) };
   const result = await transaction(db, async (connection) => {
     const c = {
       query: (...args) => {
@@ -44,7 +44,12 @@ export async function previewV2(db, { userId, input, requestId }) {
       requestId,
     ]);
     const prior = (row) => {
-      if (hash(normalizeRunInput(json(row.options_json))) !== hash(options))
+      if (
+        hash({
+          ...normalizeRunInput(json(row.options_json)),
+          ...(json(row.options_json).retryFrom ? { retryFrom: json(row.options_json).retryFrom } : {}),
+        }) !== hash(options)
+      )
         throw suggestionError('ORGANIZE_REQUEST_CONFLICT', '请求标识已用于其他范围', 409);
       return {
         id: row.id,
@@ -57,7 +62,35 @@ export async function previewV2(db, { userId, input, requestId }) {
     if (existing.length) return prior(existing[0]);
     const candidates = [];
     let customIconCount = 0;
-    for (const type of options.resourceTypes) {
+    if (retryFrom) {
+      const [owned] = await c.query('SELECT id FROM organize_suggestion_runs WHERE id=? AND user_id=?', [
+        retryFrom,
+        userId,
+      ]);
+      if (!owned.length) throw suggestionError('ORGANIZE_RUN_NOT_FOUND', '整理任务不存在', 404);
+      const [retryFiles] = await c.query(
+        `SELECT DISTINCT f.id,f.file_name AS title FROM organize_suggestion_items i
+        JOIN organize_suggestions s ON s.item_id=i.id AND s.kind='tags'
+        JOIN files f ON CONVERT(f.id USING utf8mb4) COLLATE utf8mb4_unicode_ci=CONVERT(i.resource_id USING utf8mb4) COLLATE utf8mb4_unicode_ci AND f.create_by=? AND f.del_flag=0
+        WHERE i.run_id=? AND i.user_id=? AND i.resource_type='file' AND s.status IN ('failed','insufficient','no_suggestion')
+        AND NOT EXISTS (SELECT 1 FROM resource_tag_relations tr JOIN tag t ON t.id=tr.tag_id AND t.user_id=? AND t.del_flag=0
+          WHERE tr.user_id=? AND tr.resource_type='file' AND CONVERT(tr.resource_id USING utf8mb4) COLLATE utf8mb4_unicode_ci=CONVERT(f.id USING utf8mb4) COLLATE utf8mb4_unicode_ci) ORDER BY f.id`,
+        [userId, retryFrom, userId, userId, userId],
+      );
+      candidates.push(
+        ...retryFiles.map((row) => ({
+          type: 'file',
+          id: String(row.id),
+          title: row.title,
+          tags: [],
+          source: { folder: '' },
+          guards: {},
+          evidenceLevel: 'pending',
+        })),
+      );
+      if (!candidates.length) throw suggestionError('ORGANIZE_SCOPE_EMPTY', '没有需要重新分析的未推荐文件');
+    }
+    for (const type of retryFrom ? [] : options.resourceTypes) {
       if (options.scope === 'selected') {
         const ids = options.items.filter((item) => item.type === type).map((item) => item.id);
         for (let offset = 0; offset < ids.length; offset += 100) {
@@ -154,11 +187,11 @@ async function lockedRun(c, userId, id) {
 }
 export async function endV2(c, run) {
   await c.query(
-    "UPDATE organize_suggestions s JOIN organize_suggestion_items i ON i.id=s.item_id SET s.status='cancelled' WHERE i.run_id=? AND i.ai_status='queued' AND s.status='queued'",
+    "UPDATE organize_suggestions s JOIN organize_suggestion_items i ON i.id=s.item_id SET s.status='cancelled' WHERE i.run_id=? AND i.ai_status IN ('queued','waiting_content','preparing_content') AND s.status IN ('queued','running')",
     [run.id],
   );
   await c.query(
-    "UPDATE organize_suggestion_items SET ai_status=IF(ai_status='queued','cancelled',ai_status),rule_status=IF(rule_status IN ('pending','loaded'),'cancelled',rule_status) WHERE run_id=?",
+    "UPDATE organize_suggestion_items SET ai_status=IF(ai_status IN ('queued','waiting_content','preparing_content'),'cancelled',ai_status),rule_status=IF(rule_status IN ('pending','loaded'),'cancelled',rule_status) WHERE run_id=?",
     [run.id],
   );
   await c.query(
@@ -251,7 +284,7 @@ export function lifecycleState(run, progress = [], rules = []) {
   if (!isRunV2(run)) return { runVersion: 1, canEnd: run.status === 'running', canPause: false, canResume: false };
   const sum = (state) =>
     progress.filter((p) => (p.ai_status || p.aiStatus) === state).reduce((n, p) => n + Number(p.total), 0);
-  const queued = sum('queued'),
+  const queued = sum('queued') + sum('waiting_content') + sum('preparing_content'),
     inFlight = sum('running');
   const scanning = run.rule_phase !== 'completed' && !['ended', 'completed'].includes(run.status);
   return {

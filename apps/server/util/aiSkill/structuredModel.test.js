@@ -86,3 +86,11 @@ describe('structured skill model', () => {
     expect(requestAi.mock.calls[1][1].repairReasonCode).toBe('AI_SKILL_STRUCTURED_OUTPUT_MISSING');
   });
 });
+
+it('结构化修复前重新检查租约，失效不得二次外发', async () => {
+  requestAi.mockReset();
+  requestAi.mockResolvedValueOnce({ content: 'bad', toolCalls: [] });
+  const beforeRequest = vi.fn().mockResolvedValueOnce().mockRejectedValueOnce(Object.assign(new Error('lost'), { code: 'ORGANIZE_LEASE_LOST' }));
+  await expect(callStructuredSkillModel({ messages: [], structuredTool: tool, validateArguments: x => x, modelPolicy: { maxTokens: 300 }, beforeRequest })).rejects.toMatchObject({ code: 'ORGANIZE_LEASE_LOST' });
+  expect(requestAi).toHaveBeenCalledTimes(1);
+});

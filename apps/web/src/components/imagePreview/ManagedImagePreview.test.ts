@@ -1,0 +1,79 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createApp, h, nextTick, ref } from 'vue';
+import { createI18n } from 'vue-i18n';
+import { createPinia } from 'pinia';
+import ManagedImagePreview from './ManagedImagePreview.vue';
+import { imagePreviewZh } from '@/i18n/locales/imagePreview';
+import { useImagePreview, refreshImagePreview } from '@/composables/useImagePreview';
+import { resolveImagePreviews, retryImagePreview } from '@/api/imagePreview';
+import type { ImagePreviewState } from '@/api/imagePreview';
+vi.mock('@/composables/useImagePreview', () => ({ useImagePreview: vi.fn(), refreshImagePreview: vi.fn() }));
+vi.mock('@/api/imagePreview', () => ({ resolveImagePreviews: vi.fn(), retryImagePreview: vi.fn() }));
+const cleanups: Array<() => void> = [];
+afterEach(() => {
+  cleanups.splice(0).forEach((fn) => fn());
+  vi.useRealTimers();
+  vi.clearAllMocks();
+});
+function mount(state: ImagePreviewState) {
+  const source = ref({ sourceType: 'note' as const, sourceId: 'one' });
+  const current = ref(state);
+  vi.mocked(useImagePreview).mockReturnValue(current);
+  const element = document.createElement('div');
+  document.body.append(element);
+  const app = createApp({ render: () => h(ManagedImagePreview, { source: source.value }) });
+  app
+    .use(createPinia())
+    .use(createI18n({ legacy: false, locale: 'zh', messages: { zh: { imagePreview: imagePreviewZh } } }));
+  app.mount(element);
+  cleanups.push(() => {
+    app.unmount();
+    element.remove();
+  });
+  return { element, current, source };
+}
+const base = { sourceType: 'note' as const, sourceId: 'one' };
+describe('managed image feedback', () => {
+  it('explains a long wait and automatically replaces it with the completed thumbnail', async () => {
+    vi.useFakeTimers();
+    const { element, current } = mount({ ...base, status: 'queued' });
+    await nextTick();
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(element.textContent).toContain('仍在处理');
+    expect(element.textContent).not.toContain('暂不可用');
+    current.value = { ...base, status: 'ready', url: 'https://preview.test/completed.webp' };
+    await nextTick();
+    expect(element.querySelector('img')?.getAttribute('src')).toBe('https://preview.test/completed.webp');
+    expect(element.textContent).not.toContain('仍在处理');
+  });
+  it('keeps processing distinct from errors and labels tall-image previews', async () => {
+    const { element, current } = mount({ ...base, status: 'processing' });
+    expect(element.textContent).toContain('正在生成');
+    current.value = { ...base, status: 'ready', presentation: 'long_top', url: 'https://preview.test/small.webp' };
+    await nextTick();
+    expect(element.textContent).toContain('长图');
+  });
+  it('shows the full reason on explicit click and does not offer retry for missing sources', async () => {
+    const { element } = mount({ ...base, status: 'failed', errorCode: 'IMAGE_SOURCE_MISSING', retryable: false });
+    expect(element.textContent).toContain('查看原因');
+    element.querySelector('button')!.click();
+    await nextTick();
+    expect(document.body.textContent).toContain('无法找到原文件');
+    expect(document.body.textContent).not.toContain('重试预览');
+  });
+  it('refreshes a broken image address once without requeueing generation', async () => {
+    const { element } = mount({ ...base, status: 'ready', url: 'https://preview.test/old.webp' });
+    vi.mocked(resolveImagePreviews).mockResolvedValue([
+      { ...base, status: 'ready', url: 'https://preview.test/new.webp' },
+    ]);
+    element.querySelector('img')!.dispatchEvent(new Event('error'));
+    await vi.waitFor(() => expect(resolveImagePreviews).toHaveBeenCalledWith([base], true));
+    await vi.waitFor(() => expect(refreshImagePreview).toHaveBeenCalled());
+    await nextTick();
+    element.querySelector('img')!.dispatchEvent(new Event('error'));
+    await nextTick();
+    expect(resolveImagePreviews).toHaveBeenCalledTimes(1);
+    expect(retryImagePreview).not.toHaveBeenCalled();
+    expect(element.textContent).toContain('缩略图暂不可用');
+  });
+});

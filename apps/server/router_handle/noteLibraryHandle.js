@@ -1,3 +1,4 @@
+import { readNoteExportScope, readScopedNotesForExport } from '../util/services/noteExportService.js';
 import { previewDescriptor, hydrateImagePreviewStates } from '../util/imagePreview/service.js';
 import { registerAsset, syncNoteImageReferences, syncContentReferences, removeImageReferences } from '../util/imagePreview/references.js';
 import { localImageLocator } from '../util/imagePreview/sources.js';
@@ -451,6 +452,7 @@ async function insertCurrentNoteVersion(connection, { noteId, userId, currentNot
   const type = normalizeNoteType(currentNote.type);
   const canonicalContent = normalizeCanonicalMarkdownContent(currentNote.content ?? '', type);
   const versionData = insertData({
+    id: null,
     noteId,
     title: currentNote.title,
     content:
@@ -1434,6 +1436,7 @@ const BATCH_NOTE_EXPORT_LIMIT = MAX_NOTE_BATCH_ACTION_ITEMS;
 // 批量导出只读取转换所需的最小字段，一次请求替代逐篇 getNoteDetail，避免列表选择较多时产生请求风暴。
 export const getNotesForExport = async (req, res) => {
   try {
+    if (req.body?.rootNoteId !== undefined) return res.send(resultData(await readScopedNotesForExport(req.user.id, req.body)));
     const rawIds = req.body?.ids;
     if (!Array.isArray(rawIds)) {
       return res.send(resultData(null, 400, L(req, '笔记 ID 列表无效', 'Invalid note ID list')));
@@ -1478,6 +1481,7 @@ export const getNotesForExport = async (req, res) => {
       }),
     );
   } catch (e) {
+    if (e instanceof NoteTreeError) return sendNoteTreeError(req, res, 'batch-export-notes', e);
     return sendNoteServerError(res, 'batch-export-notes', e);
   }
 };
@@ -2077,6 +2081,7 @@ export const restoreNoteVersion = async (req, res) => {
     const nextRevision = currentRevision + 1;
     // 后悔药:恢复前把当前内容强制存为一版(不受时间合并限制),恢复错了还能回来。
     const curSnap = insertData({
+      id: null,
       noteId,
       title: curRows[0].title,
       content:
@@ -2593,5 +2598,15 @@ export const downloadNoteExportFile = async (req, res) => {
       .status(500)
       .type('text/plain')
       .send(L(req, '下载失败,请重新导出', 'Download failed, please export again'));
+  }
+};
+
+export const previewNoteExportScope = async (req, res) => {
+  try {
+    const { nodes, ...scope } = await readNoteExportScope(req.user.id, req.body || {});
+    return res.send(resultData(scope));
+  } catch (e) {
+    if (e instanceof NoteTreeError) return sendNoteTreeError(req, res, 'preview-export', e);
+    return sendNoteServerError(res, 'preview-export', e);
   }
 };

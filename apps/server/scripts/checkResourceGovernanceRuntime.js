@@ -9,7 +9,7 @@ import { resourceGovernanceCleanupEnabled } from '../util/resourceGovernance/reg
 let failed = false;
 try {
   await Promise.all([ensureResourceGovernanceSchema(), ensureOrganizeSchema(), ensureBookmarkArchiveSchema()]);
-  const requiredTables = [...RESOURCE_GOVERNANCE_TABLES, ...ORGANIZE_BACKGROUND_TABLES, 'bookmark_archive_jobs'];
+  const requiredTables = [...RESOURCE_GOVERNANCE_TABLES, ...ORGANIZE_BACKGROUND_TABLES, 'bookmark_archive_jobs', 'visitor_example_maintenance'];
   const [tables] = await pool.query(
     `SELECT table_name FROM information_schema.tables
       WHERE table_schema = DATABASE() AND table_name IN (${requiredTables.map(() => '?').join(',')})`,

@@ -1,3 +1,4 @@
+import { prepareOrganizeFile, understandOrganizeFile, applyVisualEvidence } from './organizeFileEvidence.js';
 import { prepareTagIconChoice } from '../tagIconService.js';
 import {
   previewV2,
@@ -25,6 +26,7 @@ import {
   suggestResourceMetadata,
   estimateResourceMetadataTokens,
   prepareResourceMetadata,
+  compileFileMetadataPlan,
 } from './organizeSuggestionModel.js';
 import { applySuggestionMutation } from './organizeSuggestionActions.js';
 import { invalidatePersonalKnowledgeCache } from '../personalKnowledgeSearch.js';
@@ -78,7 +80,7 @@ export async function createSuggestionRun(db = pool, { userId, id, requestId = i
         [id],
       );
       await c.query(
-        "UPDATE organize_suggestion_items SET ai_status='failed',error_code='ORGANIZE_AI_DISABLED' WHERE run_id=? AND ai_status='queued'",
+        "UPDATE organize_suggestion_items SET ai_status='failed',error_code='ORGANIZE_AI_DISABLED' WHERE run_id=? AND ai_status IN ('queued','waiting_content','preparing_content')",
         [id],
       );
     }
@@ -294,6 +296,7 @@ export async function actOnSuggestion(db = pool, { userId, runId, suggestionId, 
       );
     } else {
       const next = await readCurrentSuggestionSource(c, userId, current.type, current.id);
+      if (current.type === 'file' && json(item.snapshot_json)?.reading) next.reading = json(item.snapshot_json).reading;
       await c.query('UPDATE organize_suggestion_items SET version_hash=?,snapshot_json=? WHERE id=?', [
         next.version,
         JSON.stringify(next),
@@ -318,7 +321,9 @@ export async function actOnSuggestion(db = pool, { userId, runId, suggestionId, 
   return result;
 }
 async function finishItem(c, job, status, result, errorCode = null) {
-  await ownedRun(c, job.user_id, job.run_id, true);
+  const run = await ownedRun(c, job.user_id, job.run_id, true);
+  if (job.resource_type === 'file' && status === 'completed' && !['running', 'paused'].includes(run.status))
+    return false;
   const [live] = await c.query('SELECT lease_token FROM organize_suggestion_items WHERE id=? FOR UPDATE', [job.id]);
   if (live[0]?.lease_token !== job.lease_token) return false;
   const [rows] = await c.query(
@@ -331,13 +336,22 @@ async function finishItem(c, job, status, result, errorCode = null) {
     const hasValue = Array.isArray(value) ? value.length > 0 : Boolean(value);
     const covered = row.kind === 'tags' && result?.tagOutcome === 'already_associated';
     const nextStatus =
-      status === 'completed' ? (hasValue ? 'pending' : covered ? 'not_applicable' : 'insufficient') : status;
+      status === 'completed'
+        ? hasValue
+          ? 'pending'
+          : covered
+            ? 'not_applicable'
+            : result?.reading && !result.reading.complete
+              ? 'failed'
+              : 'insufficient'
+        : status;
     const after = row.kind === 'title' ? value?.name || null : value || null;
     await c.query('UPDATE organize_suggestions SET status=?,payload_json=? WHERE id=?', [
       nextStatus,
       JSON.stringify({
         ...payload,
         after,
+        ...(result?.reading ? { reading: result.reading } : {}),
         ...(row.kind === 'tags' && result?.tagOutcome ? { reasonCode: result.tagOutcome } : {}),
         reason:
           status === 'completed'
@@ -365,10 +379,16 @@ async function finishItem(c, job, status, result, errorCode = null) {
   }
   await c.query(
     'UPDATE organize_suggestion_items SET ai_status=?,error_code=?,lease_token=NULL,lease_expires_at=NULL WHERE id=?',
-    [status, errorCode, job.id],
+    [
+      status === 'completed' && result?.reading && !result.reading.complete && !(result.tags || []).length
+        ? 'failed'
+        : status,
+      errorCode || (result?.reading?.complete === false ? result.reading.reasonCode : null),
+      job.id,
+    ],
   );
   const [pending] = await c.query(
-    "SELECT COUNT(*) AS total FROM organize_suggestion_items WHERE run_id=? AND ai_status IN ('queued','running')",
+    "SELECT COUNT(*) AS total FROM organize_suggestion_items WHERE run_id=? AND ai_status IN ('queued','running','waiting_content','preparing_content')",
     [job.run_id],
   );
   if (!Number(pending[0].total))
@@ -387,12 +407,12 @@ export async function runSingleSuggestionItem(workerId, db = pool, dependencies 
       const [runs] = await c.query(`SELECT r.id,r.status,r.run_version FROM organize_suggestion_runs r
         WHERE r.status IN ('running','paused','ended','cancelled') AND EXISTS (
           SELECT 1 FROM organize_suggestion_items i WHERE i.run_id=r.id AND
-          ((r.status='running' AND i.ai_status='queued') OR (i.ai_status='running' AND i.lease_expires_at<NOW()))
+          ((r.status='running' AND (i.ai_status='queued' OR (i.ai_status='waiting_content' AND (i.next_check_at IS NULL OR i.next_check_at<=NOW())))) OR (i.ai_status IN ('running','preparing_content') AND i.lease_expires_at<NOW()))
         ) ORDER BY r.created_at,r.id LIMIT 1 FOR UPDATE`);
       if (!runs.length) return null;
       const [rows] = await c.query(
         `SELECT i.* FROM organize_suggestion_items i WHERE i.run_id=? AND
-        ((?='running' AND i.ai_status='queued') OR (i.ai_status='running' AND i.lease_expires_at<NOW()))
+        ((?='running' AND (i.ai_status='queued' OR (i.ai_status='waiting_content' AND (i.next_check_at IS NULL OR i.next_check_at<=NOW())))) OR (i.ai_status IN ('running','preparing_content') AND i.lease_expires_at<NOW()))
         ORDER BY i.id LIMIT 1 FOR UPDATE`,
         [runs[0].id, runs[0].status],
       );
@@ -403,10 +423,17 @@ export async function runSingleSuggestionItem(workerId, db = pool, dependencies 
         await finishItem(c, item, 'failed', null, 'ORGANIZE_WORKER_INTERRUPTED');
         return { recovered: true };
       }
+      if (item.ai_status === 'preparing_content' && runs[0].status !== 'running') {
+        await c.query(
+          'UPDATE organize_suggestion_items SET ai_status=?,lease_token=NULL,lease_expires_at=NULL WHERE id=?',
+          [runs[0].status === 'paused' ? 'waiting_content' : 'cancelled', item.id],
+        );
+        return { recovered: true };
+      }
       item.run_version = runs[0].run_version;
       item.lease_token = crypto.randomUUID();
       await c.query(
-        "UPDATE organize_suggestion_items SET ai_status='running',lease_token=?,lease_expires_at=DATE_ADD(NOW(),INTERVAL 10 MINUTE) WHERE id=?",
+        `UPDATE organize_suggestion_items SET ai_status='${item.resource_type === 'file' ? 'preparing_content' : 'running'}',lease_token=?,lease_expires_at=DATE_ADD(NOW(),INTERVAL 10 MINUTE) WHERE id=?`,
         [item.lease_token, item.id],
       );
       await c.query(
@@ -421,10 +448,11 @@ export async function runSingleSuggestionItem(workerId, db = pool, dependencies 
   }
   if (!job) return false;
   if (job.recovered) return true;
+  const analysisStartedAt = Date.now();
   let executionRecord;
   let providerStarted = false;
   try {
-    const current = await readCurrentSuggestionSource(db, job.user_id, job.resource_type, job.resource_id);
+    let current = await readCurrentSuggestionSource(db, job.user_id, job.resource_type, job.resource_id);
     if (!current) throw suggestionError('ORGANIZE_RESOURCE_CHANGED', '资料已变化', 409);
     if (current.version !== job.version_hash) {
       if (!isRunV2(job)) throw suggestionError('ORGANIZE_RESOURCE_CHANGED', '资料已变化', 409);
@@ -435,6 +463,45 @@ export async function runSingleSuggestionItem(workerId, db = pool, dependencies 
       }
     }
     if (!isOrganizeAiSuggestionsEnabled()) throw suggestionError('ORGANIZE_AI_DISABLED', 'AI 建议暂不可用', 503);
+    let filePrepared;
+    if (current.type === 'file') {
+      filePrepared = await (dependencies.prepareFile || prepareOrganizeFile)(
+        db,
+        job.user_id,
+        current,
+        json(job.snapshot_json)?.reading,
+      );
+      if (filePrepared.waiting) {
+        current.reading = filePrepared.reading;
+        await transaction(db, async (c) => {
+          const run = await ownedRun(c, job.user_id, job.run_id, true);
+          await c.query(
+            `UPDATE organize_suggestion_items SET ai_status=?,snapshot_json=?,next_check_at=DATE_ADD(NOW(),INTERVAL 3 SECOND),lease_token=NULL,lease_expires_at=NULL WHERE id=? AND lease_token=?`,
+            [
+              ['running', 'paused'].includes(run.status) ? 'waiting_content' : 'cancelled',
+              JSON.stringify(current),
+              job.id,
+              job.lease_token,
+            ],
+          );
+        });
+        return true;
+      }
+      // Parsing can complete between queue passes; never reuse the rule-phase text snapshot.
+      const refreshed = await readCurrentSuggestionSource(db, job.user_id, job.resource_type, job.resource_id);
+      if (!refreshed || refreshed.version !== current.version)
+        throw suggestionError('ORGANIZE_RESOURCE_CHANGED', '资料已变化', 409);
+      current = applyVisualEvidence(refreshed, filePrepared);
+      await transaction(db, async (c) => {
+        const run = await ownedRun(c, job.user_id, job.run_id, true);
+        if (!['running', 'paused'].includes(run.status)) throw suggestionError('ORGANIZE_RUN_ENDED', '整理已结束', 409);
+        const [updated] = await c.query(
+          "UPDATE organize_suggestion_items SET ai_status='running',snapshot_json=? WHERE id=? AND lease_token=? AND ai_status='preparing_content' AND lease_expires_at>NOW()",
+          [JSON.stringify(current), job.id, job.lease_token],
+        );
+        if (!updated.affectedRows) throw suggestionError('ORGANIZE_LEASE_LOST', '执行租约已失效', 409);
+      });
+    }
     // 网页读取不持有外发用户锁；进入外发屏障后再次复核准备期间的变化。
     const prepared =
       current.type === 'bookmark' ? await (dependencies.prepare || prepareResourceMetadata)(current) : null;
@@ -469,6 +536,26 @@ export async function runSingleSuggestionItem(workerId, db = pool, dependencies 
         method: 'POST',
         ip: 'organize-worker',
       };
+      const beforeCall = async () => {
+        if (current.type !== 'file') return;
+        if (!isOrganizeAiSuggestionsEnabled()) throw suggestionError('ORGANIZE_AI_DISABLED', 'AI 建议暂不可用', 503);
+        const liveRun = await ownedRun(db, job.user_id, job.run_id);
+        if (!['running', 'paused'].includes(liveRun.status))
+          throw suggestionError('ORGANIZE_RUN_ENDED', '整理已结束', 409);
+        const latest = await readCurrentSuggestionSource(db, job.user_id, job.resource_type, job.resource_id);
+        if (!latest || latest.version !== current.version)
+          throw suggestionError('ORGANIZE_RESOURCE_CHANGED', '资料已变化', 409);
+        const restrictions = await (dependencies.restrictions || getActiveSecurityRestrictions)(job.user_id);
+        if (restrictions.some((r) => ['full_lock', 'login_lock', 'ai_lock'].includes(r.restriction_type)))
+          throw suggestionError('AI_ACCESS_RESTRICTED', 'AI 权限暂不可用', 403);
+        const [renewed] = await db.query(
+          "UPDATE organize_suggestion_items SET lease_expires_at=DATE_ADD(NOW(),INTERVAL 10 MINUTE) WHERE id=? AND lease_token=? AND ai_status='running' AND lease_expires_at>NOW()",
+          [job.id, job.lease_token],
+        );
+        if (!renewed.affectedRows) throw suggestionError('ORGANIZE_LEASE_LOST', '执行租约已失效', 409);
+      };
+      const filePlan =
+        current.type === 'file' ? compileFileMetadataPlan(current, tags, filePrepared.visualPages.length) : null;
       await (dependencies.runExecution || runAiExecution)(
         createUserAiExecutionConfig('organize.metadata', {
           requestId: job.lease_token,
@@ -480,18 +567,83 @@ export async function runSingleSuggestionItem(workerId, db = pool, dependencies 
           surface: 'organize_center',
           reservationTokens: estimateResourceMetadataTokens(current, json(job.ai_kinds_json), tags, prepared),
           maxUserProviderCalls: 1,
+          ...(filePlan || {}),
+          ...(filePlan
+            ? {
+                resolveResultOutcome: (result) =>
+                  result.reading?.complete === false
+                    ? {
+                        status: result.tags?.length ? 'partial' : 'failed',
+                        errorCode: result.reading.reasonCode || 'CONTENT_UNREADABLE',
+                      }
+                    : { status: 'success' },
+              }
+            : {}),
         }),
         async () => {
           executionRecord = getActiveAiExecution();
+          if (filePrepared) {
+            try {
+              current = await (dependencies.understandFile || understandOrganizeFile)(
+                db,
+                job.user_id,
+                current,
+                filePrepared,
+                beforeCall,
+              );
+            } catch (error) {
+              // Deterministic capability/input failures may still leave useful native text or filename.
+              if (
+                ![
+                  'VISION_UNAVAILABLE',
+                  'OCR_PAGE_LIMIT',
+                  'OCR_ENGINE_UNAVAILABLE',
+                  'OCR_PDF_RENDER_FAILED',
+                  'OCR_IMAGE_TOO_LARGE',
+                  'FILE_CONTENT_INVALID',
+                ].includes(error.code)
+              )
+                throw error;
+              current.reading = {
+                ...current.reading,
+                complete: false,
+                state: current.source.text ? 'partial' : 'metadata',
+                reasonCode: error.code,
+              };
+            }
+          }
           const result = await (dependencies.model || suggestResourceMetadata)(
             current,
             json(job.ai_kinds_json),
             tags,
             prepared,
+            beforeCall,
           );
+          await beforeCall();
+          if (filePrepared) result.reading = current.reading;
           // Provider 成果在根 Execution 成功前入库，使用外发屏障事务保证注销互斥。
-          const delivered = await transaction(db, (c) => finishItem(c, job, 'completed', result));
+          const delivered = await transaction(db, async (c) => {
+            if (filePrepared)
+              await c.query('UPDATE organize_suggestion_items SET snapshot_json=? WHERE id=? AND lease_token=?', [
+                JSON.stringify(current),
+                job.id,
+                job.lease_token,
+              ]);
+            return finishItem(c, job, 'completed', result);
+          });
           if (!delivered) throw suggestionError('ORGANIZE_LEASE_LOST', '执行租约已失效', 409);
+          if (filePrepared)
+            console.info(
+              '[organize-file]',
+              JSON.stringify({
+                durationMs: Date.now() - analysisStartedAt,
+                reading: current.reading?.state,
+                complete: current.reading?.complete,
+                outcome: result.tagOutcome,
+                suggested: result.tags?.length || 0,
+                providerCalls: executionRecord?.providerCallCount || 0,
+              }),
+            );
           return result;
         },
       );
@@ -561,3 +713,13 @@ export async function runSingleSuggestionItem(workerId, db = pool, dependencies 
 
 export const pauseSuggestionRun = (db = pool, args) => pauseV2(db, args);
 export const resumeSuggestionRun = (db = pool, args) => resumeV2(db, args);
+
+export async function previewFileRetry(db = pool, { userId, id, requestId }) {
+  if (!uuid(requestId) || !uuid(id)) throw suggestionError('ORGANIZE_REQUEST_INVALID', '请求标识无效');
+  return previewV2(db, {
+    userId,
+    requestId,
+    retryFrom: id,
+    input: { resourceTypes: ['file'], checks: ['tags'], scope: 'untagged', items: [] },
+  });
+}

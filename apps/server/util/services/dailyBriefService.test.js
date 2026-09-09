@@ -512,3 +512,11 @@ describe('dailyBriefService', () => {
     ]);
   });
 });
+
+describe('workshop due fallback',()=>{
+ it('keeps a factual today reminder when the model omits it, with at most two workshop insights',()=>{
+  const facts=['workshop_due','workshop_next_step','workshop_result'].map((id,i)=>({id,count:1,urgency:i===0?'today':undefined,samples:['项目 · 今天到期'],sources:[{type:'research_workspace',id:`p${i}`,title:'项目'}]}));
+  const brief=dailyBriefServiceInternals.buildBrief({date:'2026-09-09',locale:'zh-CN'},facts,{headline:'H',recommendation:'R',insights:[{factIds:['workshop_result'],text:'成果'},{factIds:['workshop_next_step'],text:'下一步'}]});
+  expect(brief.insights).toHaveLength(2);expect(brief.insights[0]).toMatchObject({factIds:['workshop_due'],text:'项目 · 今天到期',sources:facts[0].sources});
+ });
+});

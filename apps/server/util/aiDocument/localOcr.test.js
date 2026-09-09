@@ -113,3 +113,20 @@ describe('本地 OCR', () => {
     expect(runner).not.toHaveBeenCalled();
   });
 });
+
+it('逐页补读只渲染指定页，单页渲染失败仍保留成功页', async () => {
+  const tempRoot = await createTempRoot();
+  const runner = vi.fn(async (command, args) => {
+    if (command === 'pdftoppm') {
+      const page = Number(args[args.indexOf('-f') + 1]);
+      if (page === 3) throw Object.assign(new Error('broken page'), { code: 'OCR_PDF_RENDER_FAILED' });
+      await writeFile(`${args.at(-1)}-${page}.png`, ONE_PIXEL_PNG);
+      return { stdout: '', stderr: '' };
+    }
+    return { stdout: '门窗图纸可靠文字', stderr: '' };
+  });
+  const pages = await recognizePdfWithLocalOcr(Buffer.from('%PDF-fixture'), { pageCount: 4, pageNumbers: [2, 3], runner, tempRoot });
+  expect(runner.mock.calls.filter(([command]) => command === 'pdftoppm').map(([, args]) => args[args.indexOf('-f') + 1])).toEqual(['2', '3']);
+  expect(pages).toEqual(expect.arrayContaining([{ pageNumber: 2, content: '门窗图纸可靠文字' }, { pageNumber: 3, content: '', errorCode: 'OCR_PDF_RENDER_FAILED' }]));
+  expect(await readdir(tempRoot)).toEqual([]);
+});

@@ -1,4 +1,4 @@
-import { syncNoteImageReferences, removeImageReferences, syncContentReferences } from '../imagePreview/references.js';
+import { registerAsset, syncNoteImageReferences, removeImageReferences, syncContentReferences } from '../imagePreview/references.js';
 import pool from '../../db/index.js';
 import { insertData } from '../agent/data.js';
 import { normalizeMarkdownBlockquoteEntities, normalizeNoteType } from '@lightnote/shared';
@@ -42,6 +42,7 @@ export async function snapshotOwnedNoteVersion(
         : sanitizePersistedNoteContent(current.content || '', 'html', 'snapshot-owned-note-version');
   const [imageVersionResult]=await connection.query('INSERT INTO note_versions SET ?', [
     insertData({
+      id: null, // note_versions uses an auto-increment key.
       noteId: String(noteId),
       title: String(current.title || ''),
       content: currentContent,
@@ -106,6 +107,8 @@ export async function createNote({
   suppressUserRewards = false,
   maxContentLength = NOTE_CONTENT_MAX_LENGTH,
   trustedImageUrls = [],
+  managedImportImages = [],
+  beforeCreate = null,
   idempotencyKey = null,
   shareExposureAcknowledged = false,
 } = {}) {
@@ -161,6 +164,10 @@ export async function createNote({
       parentId: note.parentId ?? null,
       ...(shareExposureAcknowledged ? { shareExposureAcknowledged: true } : {}),
     });
+    if (beforeCreate) await beforeCreate(connection);
+    for (const image of managedImportImages) {
+      await registerAsset(connection, { owner: userId, sourceType: "note_image", sourceId: image.filename, locator: image.filename, storage: "local", size: image.size, reconciled: true });
+    }
     data.parent_id = placement.parentId;
     data.sort = placement.sort;
     await connection.query('INSERT INTO note SET ?', [data]);
@@ -192,6 +199,7 @@ export async function createNote({
       await syncNoteResourceRefs(connection, { userId, noteId: data.id, refs: createdRefs });
       await syncNoteImageReferences(connection,data.id);
     }
+    if (managedImportImages.length) await syncNoteImageReferences(connection, data.id);
     commitAttempted = true;
     await connection.commit();
   } catch (error) {

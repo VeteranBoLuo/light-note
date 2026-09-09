@@ -46,8 +46,8 @@
                 @keydown="onResultKeydown"
               >
                 <template #prefix><SvgIcon :src="icon.navigation.search" size="19" /></template>
+                <template #suffix><kbd>{{ searchShortcutLabel }}</kbd></template>
               </BInput>
-              <kbd>{{ searchShortcutLabel }}</kbd>
             </div>
           </header>
 
@@ -488,11 +488,7 @@
     background: var(--surface-subtle-bg, var(--hover-background));
     font-size: 15px;
   }
-  .global-search-dialog__input > kbd {
-    position: absolute;
-    top: 50%;
-    right: 12px;
-    transform: translateY(-50%);
+  .global-search-dialog__input kbd {
     padding: 3px 6px;
     border: 1px solid var(--surface-border-color);
     border-radius: 6px;

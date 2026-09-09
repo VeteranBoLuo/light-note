@@ -41,10 +41,9 @@
           <SvgIcon :src="icon.common.add" size="16" />
           {{ $t('note.newNote') }}
         </BButton>
-        <BButton class="note-action-button" @click="openTemplateManager">
-          <SvgIcon :src="icon.noteDetail.template" size="16" />
-          {{ $t('note.templateManager.title') }}
-        </BButton>
+        <BActionMenu :items="transferMenuItems" :triggers="['click']" @select="handleTransferMenu">
+          <BButton class="note-action-button">{{ $t('noteTransfer.more') }}</BButton>
+        </BActionMenu>
         <ViewModeToggle />
         <BBatchToggle class="note-batch-toggle" @click="toggleBatchMode" :active="batchMode" />
         <TagFilterSelector :all-tags="visibleNoteTags" @select="handleTagFilterSelect" />
@@ -122,6 +121,8 @@
             @move="openMoveNote"
             @rename="openRenameNote"
             @share="openNoteShare"
+            @import="transferDialog?.openImport($event.id)"
+            @export="transferDialog?.openExport($event)"
             @delete="deleteSingleNote"
             @search="treeSearchValue = $event"
             @drag-start="onTreeDragStart"
@@ -582,6 +583,8 @@
       @toggle-top="toggleTreeNoteTop"
       @move="openMoveNote"
       @share="openNoteShare"
+            @import="transferDialog?.openImport($event.id)"
+            @export="transferDialog?.openExport($event)"
       @delete="deleteSingleNote"
     />
     <MobilePageActionsDrawer
@@ -605,11 +608,27 @@
       :actions="mobileBatchActions"
       @action="handleMobileBatchAction"
     />
+    <NoteTransferDialog ref="transferDialog" @changed="refreshAfterImport" />
   </ResourcePageShell>
 </template>
 
 <script lang="ts" setup>
+  import BActionMenu from '@/components/base/BasicComponents/BActionMenu.vue';
+  import NoteTransferDialog from '@/components/noteLibrary/transfer/NoteTransferDialog.vue';
   import { useProjectResourceAction } from '@/composables/useProjectResourceAction';
+  const transferMenuItems = computed(() => [
+    ...(user.adminContext?.mode === 'readonly' ? [] : [{ key: 'import', label: t('noteTransfer.import'), icon: icon.file_upload }]),
+    { key: 'importRecords', label: t('noteTransfer.records'), icon: icon.noteDetail.history },
+    { key: 'divider', divider: true },
+    { key: 'templates', label: t('note.templateManager.title'), icon: icon.noteDetail.template },
+  ]);
+  function refreshAfterImport() { noteLibraryCache.markListsStale(noteCacheScope.value); void Promise.all([reloadNotes(true), refreshTree()]); }
+  function handleTransferMenu(key: string) {
+    if (key === 'import') { if (!blockGuestWrite('import-notes')) transferDialog.value?.openImport(currentParentId.value); }
+    else if (key === 'importRecords') transferDialog.value?.openRecords();
+    else if (key === 'templates') void openTemplateManager();
+  }
+  const transferDialog = ref<InstanceType<typeof NoteTransferDialog> | null>(null);
   const { canJoinProject, joinProject } = useProjectResourceAction();
   import { MAX_NOTE_BATCH_ACTION_ITEMS } from '@lightnote/shared/resource-selection';
   import icon from '@/config/icon.ts';
@@ -2508,6 +2527,8 @@
 
   const selectedVisibleCount = computed(() => selection.items.value.length);
   const mobilePageActions = computed<MobilePageActionItem[]>(() => [
+    ...(user.adminContext?.mode === 'readonly' ? [] : [{ key: 'import', label: t('noteTransfer.import'), icon: icon.file_upload }]),
+    { key: 'importRecords', label: t('noteTransfer.records'), icon: icon.noteDetail.history },
     ...createMobileResourceHubActions(t),
     {
       key: 'templates',
@@ -2713,6 +2734,10 @@
   }
 
   function handleMobilePageAction(action: MobilePageActionItem) {
+    if (action.key === 'import' || action.key === 'importRecords') {
+      void closeCurrentMobileOverlayThen(() => { mobilePageActionsOpen.value = false; }, () => handleTransferMenu(action.key));
+      return;
+    }
     const hubPath = mobileResourceHubPath(action.key);
     if (hubPath) {
       void router.push(hubPath);

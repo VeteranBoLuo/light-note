@@ -1,7 +1,13 @@
+import { noteTransferEn } from './noteTransfer';
+import { organizeFileEn } from './organizeFile';
+import { imagePreviewEn } from './imagePreview';
 import { accountSettingsEn } from './accountSettings';
 import { settingsRefineEn } from './settingsRefine';
 import { notificationMessages } from '@lightnote/shared/notification-presentation';
 export default {
+  noteTransfer: noteTransferEn,
+  organizeFile: organizeFileEn,
+  imagePreview: imagePreviewEn,
   accountSettings: accountSettingsEn,
   settingsRefine: settingsRefineEn,
   todoWorkspace: {
@@ -5468,18 +5474,13 @@ export default {
       guestSubtitle: 'Connect tasks, bookmarks and notes to find your next step.',
       viewTodos: 'View tasks',
 
-      sampleHeadline: 'Turn your collected reading into a learning plan you can put into practice today.',
-      sampleTodo:
-        'Two tasks are due today: organize reading notes and plan this week’s learning. Spend 15 minutes extracting three key ideas, then put one into your weekly plan to reduce switching between notes and tasks.',
-      sampleContent:
-        'Your three recent saves focus on concentration and learning. Spaced repetition supports retention, while active recall strengthens understanding. Together, they outline a path from reading to lasting knowledge.',
-      sampleConnection:
-        'The recently saved review methods complement your reading notes: one explains how to remember more, while the other records what you have understood. Together, they connect reading, reflection and review.',
-      sampleOrganize:
-        'Four bookmarks still need tags. Three relate to learning methods and fit one topic; the travel guide belongs separately. Grouping by purpose is easier to maintain than creating many narrow tags at once.',
-      sampleRecommendation:
-        'Two priorities stand out today: move your existing learning tasks forward and give untagged bookmarks a clear home. Your current collection already offers enough material for the next step.',
-
+      exampleMark: 'EX',
+      sampleFailed: 'The example could not be loaded. Please retry.',
+      sampleEmpty: 'The example materials are not ready yet.',
+      sampleMeta: 'Demonstration · Dates maintained on {date}',
+      sampleStale: 'Date maintenance is delayed; showing the saved schedule',
+      sampleSuggestion: 'Explore next',
+      organizePending: 'View pending resources',
       title: 'Daily Brief',
       subtitle: "AI is connecting today's actions, recent additions, and organizing signals.",
       settings: 'Brief Settings',
@@ -9597,7 +9598,8 @@ export default {
     prizeCard: 'Make-up card ×{n}',
     prizeAiPack: 'AI Boost Pack',
     lotteryFreeDraw: 'Free Draw',
-    lotteryFreeLeft: '{n} left',
+    lotteryFreeDrawAction: 'Draw once for free',
+    lotteryFreeLeft: '{n} remaining today',
     lotteryFreeTitle: "Today's free benefit",
     lotteryLevelBenefit: 'Lv.{level} benefit',
     lotteryTodayAvailability: '{remaining}/{total} available today',
@@ -12615,7 +12617,6 @@ export default {
     ctaTryDemo: 'Explore the demo first',
     ctaEnterApp: 'Open my LightNote',
     ctaAccount: 'Sign up / Log in',
-    entryHint: 'Explore examples without signing up. Log in to manage your own content.',
     ctaStart: 'Get started with LightNote',
     navigationOpeningApp: 'Opening LightNote…',
     navigationPreparingRegistration: 'Preparing sign-up…',

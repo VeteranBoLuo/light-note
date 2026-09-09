@@ -3,7 +3,7 @@ import mysql from 'mysql2/promise';
 import fs from 'node:fs/promises';
 import { imageSchemaStatements } from './schema.js';
 import { registerAsset, replaceReferences, syncContentReferences, removeImageReferences } from './references.js';
-import { resolveImagePreviews, validateResolveItems } from './service.js';
+import { resolveImagePreviews, validateResolveItems, retryImagePreview } from './service.js';
 import { runSingleImagePreviewJob, cleanupImageAssets } from './worker.js';
 import { hash } from './sources.js';
 const socket = process.env.IMAGE_PREVIEW_TEST_SOCKET;
@@ -59,6 +59,12 @@ describe.skipIf(!socket)('image lifecycle on isolated local MySQL', () => {
     );
     await db.query(migration);
     await db.query(migration);
+    const metadataMigration = await fs.readFile(
+      new URL('../../migrations/20260909_image_preview_metadata.sql', import.meta.url),
+      'utf8',
+    );
+    await db.query(metadataMigration);
+    await db.query(metadataMigration);
     await db.query(
       'CREATE TABLE note(id VARCHAR(255) PRIMARY KEY,create_by VARCHAR(255),content TEXT,type VARCHAR(20),del_flag INT DEFAULT 0)',
     );
@@ -196,5 +202,87 @@ describe.skipIf(!socket)('image lifecycle on isolated local MySQL', () => {
     removeSource.mockResolvedValue(undefined);
     await cleanupImageAssets({ db, removeSource, remove: vi.fn() });
     expect((await db.query('SELECT * FROM image_assets'))[0]).toHaveLength(0);
+  });
+  it('records missing sources as a terminal source failure without invoking conversion', async () => {
+    await asset();
+    const compress = vi.fn();
+    await runSingleImagePreviewJob('missing', {
+      db,
+      read: async () => {
+        throw Object.assign(new Error('private path'), { code: 'ENOENT' });
+      },
+      compress,
+    });
+    const [[job]] = await db.query('SELECT status,error_code,attempts FROM file_preview_jobs');
+    expect(job).toMatchObject({ status: 'failed', error_code: 'IMAGE_SOURCE_MISSING', attempts: 1 });
+    expect(compress).not.toHaveBeenCalled();
+  });
+  it('claims a queued job once across concurrent workers and stores the long-image presentation', async () => {
+    await asset();
+    let release;
+    const barrier = new Promise((resolve) => {
+      release = resolve;
+    });
+    const compress = vi.fn(async () => {
+      await barrier;
+      return { body: Buffer.from('webp'), width: 480, height: 720, presentation: 'long_top' };
+    });
+    const deps = {
+      db,
+      read: async () => ({ body: Buffer.from('input'), version: 'meta' }),
+      compress,
+      put: vi.fn(),
+      remove: vi.fn(),
+      metadata: async () => ({ version: 'meta' }),
+    };
+    const first = runSingleImagePreviewJob('first', deps);
+    await vi.waitFor(() => expect(compress).toHaveBeenCalledTimes(1));
+    expect(await runSingleImagePreviewJob('second', deps)).toBe(false);
+    release();
+    await first;
+    const [[out]] = await db.query('SELECT status,preview_metadata_json FROM file_preview_artifacts');
+    expect(out.status).toBe('ready');
+    expect(JSON.parse(out.preview_metadata_json)).toEqual({ presentation: 'long_top' });
+  });
+  it('does not claim unsupported future strategies and never publishes a changed source', async () => {
+    const a = await asset();
+    await db.query('UPDATE file_preview_artifacts SET strategy_version=99');
+    const read = vi.fn();
+    expect(await runSingleImagePreviewJob('old', { db, read })).toBe(false);
+    expect(read).not.toHaveBeenCalled();
+    await db.query('UPDATE file_preview_artifacts SET strategy_version=2');
+    await runSingleImagePreviewJob('changed', {
+      db,
+      read: async () => ({ body: Buffer.from('input'), version: 'old' }),
+      compress: async () => ({ body: Buffer.from('webp'), width: 1, height: 1 }),
+      put: vi.fn(),
+      remove: vi.fn(),
+      metadata: async () => ({ version: 'new' }),
+    });
+    const [[out]] = await db.query('SELECT status,error_code FROM file_preview_artifacts');
+    expect(out.status).not.toBe('ready');
+    expect(out.error_code).toBe('IMAGE_SOURCE_CHANGED');
+  });
+
+  it('serializes duplicate user retries and preserves server cooldown', async () => {
+    await asset();
+    await db.query(
+      "INSERT INTO files (id,create_by,obs_key,file_name,file_size) VALUES (1,'u1','test-image.png','image.png',10)",
+    );
+    await db.query(
+      "UPDATE file_preview_jobs SET status='failed',attempts=3,error_code='IMAGE_STORAGE_UNAVAILABLE',available_at=DATE_SUB(NOW(),INTERVAL 1 SECOND)",
+    );
+    await db.query("UPDATE file_preview_artifacts SET status='failed',error_code='IMAGE_STORAGE_UNAVAILABLE'");
+    await Promise.all([
+      retryImagePreview('u1', { sourceType: 'cloud_file', sourceId: '1' }, { db }),
+      retryImagePreview('u1', { sourceType: 'cloud_file', sourceId: '1' }, { db }),
+    ]);
+    const [[job]] = await db.query(
+      'SELECT status,attempts,TIMESTAMPDIFF(SECOND,NOW(),available_at) AS delay_seconds FROM file_preview_jobs',
+    );
+    expect(job.status).toBe('queued');
+    expect(job.attempts).toBe(0);
+    expect(job.delay_seconds).toBeGreaterThan(55);
+    expect((await db.query('SELECT id FROM file_preview_jobs'))[0]).toHaveLength(1);
   });
 });

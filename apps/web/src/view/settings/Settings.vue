@@ -1152,22 +1152,22 @@
       top: 0;
       flex-shrink: 0;
       z-index: 100;
-      box-shadow: 0 -14px 0 var(--card-background);
+      box-shadow: 0 -14px 0 var(--workspace-panel-bg-color);
       margin: -14px -14px 0;
       padding: 8px 10px;
-      background: var(--card-background);
-      border-bottom: 1px solid var(--surface-border-color);
+      background: var(--workspace-panel-bg-color);
+      border-bottom: 0;
     }
     .settings-hero {
       position: sticky;
       top: 0;
       z-index: 10;
       flex-shrink: 0;
-      box-shadow: 0 -14px 0 var(--card-background);
+      box-shadow: 0 -14px 0 var(--workspace-panel-bg-color);
       margin: -14px -14px 0;
       padding: 10px 14px;
-      background: var(--card-background);
-      border-bottom: 1px solid var(--surface-border-color);
+      background: var(--workspace-panel-bg-color);
+      border-bottom: 0;
     }
     .settings-subhead-title {
       font-size: 18px;

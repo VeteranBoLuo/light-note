@@ -152,6 +152,8 @@
     toggleTop: [node: NoteTreeItem];
     move: [node: NoteTreeItem];
     share: [node: NoteTreeItem];
+    import: [node: NoteTreeItem];
+    export: [node: NoteTreeItem];
     delete: [node: NoteTreeItem];
   }>();
   const { t } = useI18n();
@@ -217,7 +219,7 @@
   }
 
   async function closeAndEmit(
-    kind: 'openPage' | 'create' | 'attach' | 'toggleTop' | 'move' | 'share' | 'delete',
+    kind: 'openPage' | 'create' | 'attach' | 'toggleTop' | 'move' | 'share' | 'import' | 'export' | 'delete',
     node: NoteTreeItem,
   ) {
     await closeThen(() => {
@@ -226,6 +228,8 @@
       else if (kind === 'attach') emit('attach', node);
       else if (kind === 'toggleTop') emit('toggleTop', node);
       else if (kind === 'move') emit('move', node);
+      else if (kind === 'import') emit('import', node);
+      else if (kind === 'export') emit('export', node);
       else if (kind === 'share') emit('share', node);
       else emit('delete', node);
     });
@@ -253,6 +257,9 @@
               icon: icon.common.add,
             },
             {
+              key: 'import', label: t('noteTransfer.importHere'), icon: icon.file_upload,
+            },
+            {
               key: 'attach',
               label: t('note.addExistingPages'),
               icon: icon.noteTree.move,
@@ -269,6 +276,7 @@
             },
           ]
         : []),
+      { key: 'export', label: t('noteTransfer.export'), icon: icon.noteDetail.exportLine },
       ...(props.writeEnabled
         ? [
             {
@@ -297,6 +305,8 @@
       action.key === 'attach' ||
       action.key === 'toggleTop' ||
       action.key === 'move' ||
+      action.key === 'import' ||
+      action.key === 'export' ||
       action.key === 'share' ||
       action.key === 'delete'
     ) {

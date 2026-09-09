@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { createVisitorExampleMaintenancePoller } from './util/services/visitorExampleScheduleService.js';
 import os from 'node:os';
 import { ensureBookmarkArchiveSchema, processBookmarkArchive } from './util/bookmarkArchiveJobs.js';
 import pool from './db/index.js';
@@ -14,6 +15,7 @@ import { stableAgentErrorCode } from './util/agent/logSafety.js';
 const workerId = `${os.hostname()}:${process.pid}`;
 const pollMs = Math.max(500, Number.parseInt(process.env.RESOURCE_GOVERNANCE_WORKER_POLL_MS || '1500', 10));
 let stopping = false;
+const pollVisitorExamples = createVisitorExampleMaintenancePoller(pool);
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -27,6 +29,7 @@ async function run() {
   );
   while (!stopping) {
     try {
+      await pollVisitorExamples();
       let handled = false;
       if (resourceGovernanceScanEnabled()) {
         const scan = await claimGovernanceScan(workerId);

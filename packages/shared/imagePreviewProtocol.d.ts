@@ -1,6 +1,6 @@
 export declare const CARD_IMAGE_PROFILE: Readonly<{
   id: "card";
-  version: 1;
+  version: 2;
   maxEdge: 720;
   maxBytes: number;
 }>;
@@ -26,4 +26,7 @@ export type ImagePreviewState = ImagePreviewSource & {
   height?: number;
   bytes?: number;
   errorCode?: string | null;
+  failureKind?: "source" | "resource_limit" | "service" | null;
+  retryable?: boolean;
+  presentation?: "full" | "long_top";
 };

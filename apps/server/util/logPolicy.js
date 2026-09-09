@@ -13,6 +13,8 @@ const API_LOG_SKIP_SUBSTRINGS = Object.freeze([
 ]);
 
 const PASSIVE_API_PATHS = new Set([
+  '/note/imports/list', '/note/imports/detail', '/note/imports/preview', '/note/imports/image',
+  '/note/previewExportScope',
   '/notification/browser/config',
   '/notification/browser/subscribe',
   '/notification/browser/activate',
@@ -70,6 +72,7 @@ function optionalScalar(value, maxLength = 255) {
  */
 export function summarizeApiLogPayload(originalUrl, payload) {
   const path = normalizeApiPath(originalUrl);
+  if (path.startsWith('/note/imports/')) return { payloadSummary: 'note_import_omitted', itemCount: Array.isArray(payload?.items) ? payload.items.length : undefined };
   if (
     !NOTE_CONTENT_MUTATION_PATHS.has(path) ||
     payload == null ||

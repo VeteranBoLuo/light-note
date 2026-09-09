@@ -87,6 +87,8 @@
               @move="openMoveSelf"
               @rename="openRenamePage"
               @share="openNoteShare"
+            @import="transferDialog?.openImport($event.id)"
+            @export="transferDialog?.openExport($event)"
               @delete="deleteSidebarPage"
               @go-library="openLibraryRoot"
               @search="detailTreeSearchValue = $event"
@@ -255,6 +257,8 @@
         @move="openMoveSelf"
         @rename="openRenamePage"
         @share="openNoteShare"
+            @import="transferDialog?.openImport($event.id)"
+            @export="transferDialog?.openExport($event)"
         @delete="deleteSidebarPage"
         @markdown-heading-click="scrollToMarkdownHeading"
       />
@@ -322,10 +326,12 @@
       @save-copy="saveConflictAsCopy"
       @overwrite="overwriteConflictWithLocal"
     />
+  <NoteTransferDialog ref="transferDialog" @changed="refreshTree()" />
   </div>
 </template>
 
 <script lang="ts" setup>
+  import NoteTransferDialog from '@/components/noteLibrary/transfer/NoteTransferDialog.vue';
   import {
     computed,
     defineAsyncComponent,
@@ -402,6 +408,7 @@
   import AsyncFeatureLoadingOverlay from '@/components/base/AsyncFeatureLoadingOverlay.vue';
   import { confirmNoteCreateShareExposure, confirmNoteShareExposure } from '@/utils/noteShareExposure';
 
+  const transferDialog = ref<InstanceType<typeof NoteTransferDialog> | null>(null);
   const createDeferredDetailFeature = (loader: () => Promise<any>) =>
     defineAsyncComponent({
       loader,

@@ -59,3 +59,7 @@ export const act = handler(true, (req, userId) =>
     requestId: req.body?.requestId,
   }),
 );
+
+export const retryFiles = handler(true, (req, userId) =>
+  service.previewFileRetry(pool, { userId, id: req.params.id, requestId: req.body?.requestId }),
+);

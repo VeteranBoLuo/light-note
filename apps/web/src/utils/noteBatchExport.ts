@@ -21,6 +21,7 @@ interface BuildBatchExportOptions {
   fallbackTitle: string;
   lang?: string;
   onProgress?: (completed: number, total: number) => void;
+  paths?: Map<string, string>;
   pdfGenerator?: (html: string) => Promise<Blob>;
 }
 
@@ -141,7 +142,7 @@ export async function buildBatchNoteExportArchive(
 
   const { default: JSZip } = await import('jszip');
   const archive = new JSZip();
-  entries.forEach((entry) => archive.file(entry.fileName, entry.content));
+  entries.forEach((entry) => archive.file(options.paths?.has(entry.noteId) ? `${options.paths.get(entry.noteId)}.${entry.format}` : entry.fileName, entry.content));
   const blob = await archive.generateAsync({
     type: 'blob',
     mimeType: 'application/zip',

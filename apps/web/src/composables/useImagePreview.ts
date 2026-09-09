@@ -8,6 +8,7 @@ type Entry = {
   next: number;
   attempts: number;
   busy: boolean;
+  generation: number;
 };
 const entries = new Map<string, Entry>();
 let timer: ReturnType<typeof setTimeout> | undefined;
@@ -27,10 +28,11 @@ async function tick() {
   batch.forEach((e) => {
     e.busy = true;
   });
+  const generations = new Map(batch.map((e) => [e, e.generation]));
   try {
     const states = await resolveImagePreviews(batch.map((e) => e.source));
     batch.forEach((e) => {
-      if (entries.get(keyOf(e.source)) !== e) return;
+      if (entries.get(keyOf(e.source)) !== e || e.generation !== generations.get(e)) return;
       const state = states.find((s) => keyOf(s) === keyOf(e.source));
       if (state) {
         e.state = state;
@@ -39,21 +41,23 @@ async function tick() {
     });
   } catch {
     batch.forEach((e) => {
+      if (entries.get(keyOf(e.source)) !== e || e.generation !== generations.get(e)) return;
       if (Date.now() - e.start >= 60000) {
-        e.state = { ...e.source, status: 'failed' };
+        e.state = { ...e.source, status: 'failed', errorCode: 'IMAGE_STATUS_UNAVAILABLE' };
         e.listeners.forEach((fn) => fn(e.state));
       }
     });
   } finally {
     batch.forEach((e) => {
       e.busy = false;
+      if (e.generation !== generations.get(e)) return;
       e.attempts++;
       const pending = ['queued', 'processing'].includes(e.state.status);
       e.next =
         e.state.status === 'ready' && e.state.expiresAt
           ? Math.max(Date.now() + 1000, e.state.expiresAt - 5000)
-          : pending && Date.now() - e.start < 60000
-            ? Date.now() + [2000, 5000, 10000][Math.min(e.attempts - 1, 2)]
+          : pending
+            ? Date.now() + (Date.now() - e.start < 60000 ? [2000, 5000, 10000][Math.min(e.attempts - 1, 2)] : 30000)
             : Infinity;
     });
     schedule();
@@ -100,6 +104,7 @@ export function useImagePreview(
           next,
           attempts: 0,
           busy: false,
+          generation: 0,
         };
         entries.set(key, entry);
       }
@@ -128,4 +133,18 @@ export function useImagePreview(
   );
   onBeforeUnmount(() => release());
   return state;
+}
+
+export function refreshImagePreview(source: ImagePreviewSource, state?: ImagePreviewState) {
+  const entry = entries.get(keyOf(source));
+  if (!entry) return;
+  if (state) {
+    entry.state = state;
+    entry.listeners.forEach((fn) => fn(state));
+  }
+  entry.generation++;
+  entry.start = Date.now();
+  entry.attempts = 0;
+  entry.next = Date.now();
+  schedule();
 }

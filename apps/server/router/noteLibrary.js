@@ -1,6 +1,8 @@
+import noteImports from './noteImports.js';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 const router = express.Router();
+router.use('/imports', noteImports);
 import multer from 'multer';
 import { randomUUID } from 'node:crypto';
 import * as noteLibraryHandle from '../router_handle/noteLibraryHandle.js';
@@ -96,6 +98,7 @@ router.post('/queryNoteBreadcrumb', noteLibraryHandle.queryNoteBreadcrumb);
 router.post('/moveNoteNode', noteLibraryHandle.moveNoteNode);
 router.post('/moveNoteNodes', noteLibraryHandle.moveNoteNodes);
 router.post('/getNoteDetail', noteLibraryHandle.getNoteDetail);
+router.post('/previewExportScope', noteLibraryHandle.previewNoteExportScope);
 router.post('/getNotesForExport', noteLibraryHandle.getNotesForExport);
 router.post('/resolveResourceRefs', noteLibraryHandle.resolveResourceRefs);
 router.post('/resourceBacklinks', noteLibraryHandle.resourceBacklinks);

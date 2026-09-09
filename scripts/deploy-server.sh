@@ -9,6 +9,7 @@ HOST="${LIGHTNOTE_DEPLOY_HOST:?请设置 LIGHTNOTE_DEPLOY_HOST，例如 deploy-u
 KEY="$(resolve_deploy_ssh_key "${LIGHTNOTE_DEPLOY_SSH_KEY:?请设置 LIGHTNOTE_DEPLOY_SSH_KEY 为本机 SSH 私钥路径}")"
 [ -f "$KEY" ] || { echo "SSH 私钥不存在: $KEY" >&2; exit 1; }
 REMOTE="/www/wwwroot/light-note-back"
+REMOTE_NODE="${LIGHTNOTE_REMOTE_NODE:-node}"
 PM2="app"                     # pm2 进程名(实测,非 light-note-back)
 DOCUMENT_WORKER_PM2="light-note-document-worker"
 BOOKMARK_ICON_WORKER_PM2="light-note-bookmark-icon-worker"
@@ -16,6 +17,8 @@ RESOURCE_GOVERNANCE_WORKER_PM2="light-note-resource-governance-worker"
 OUT="/tmp/ln-server-deploy"
 TS="$(date +%Y%m%d%H%M%S)"
 cd "$(dirname "$0")/.."
+
+ssh -i "$KEY" "$HOST" "'$REMOTE_NODE' -e 'if(Number(process.versions.node.split(\".\")[0]) < 20) process.exit(1)'" || { echo 'Node.js 20+ required; set LIGHTNOTE_REMOTE_NODE to the verified server runtime'; exit 1; }
 
 echo "📦  pnpm deploy(--legacy,含 @lightnote/shared)…"
 rm -rf "$OUT"
@@ -27,77 +30,98 @@ pnpm --filter server deploy --prod --legacy "$OUT"
 echo "🗄  服务器端备份现有目录(硬链接快照,不占额外磁盘;滚动保留最新 1 份)…"
 ssh -i "$KEY" "$HOST" "{ [ -d '$REMOTE' ] && cp -al '$REMOTE' '${REMOTE}_bak_$TS'; }; ls -1dt ${REMOTE}_bak_* 2>/dev/null | tail -n +2 | xargs -r rm -rf"
 
+# Old queue consumers must not run against the new image strategy or organize states.
+echo "⏸  停止旧文档 Worker，等待当前任务释放…"
+ssh -i "$KEY" "$HOST" "if pm2 describe '$DOCUMENT_WORKER_PM2' >/dev/null 2>&1; then pm2 stop '$DOCUMENT_WORKER_PM2'; fi"
+
 echo "🚚  rsync 增量(保留软链;不传 owner/group;保护服务器专属文件)…"
 rsync -az --no-owner --no-group --delete \
   --exclude '.env' \
+  --exclude '.runtime/' \
   --exclude 'light_note_back_start.sh' \
   --exclude 'sql/' \
   -e "ssh -i $KEY" "$OUT"/ "$HOST:$REMOTE/"
 
+if [ "${LIGHTNOTE_APPLY_FEATURE_MIGRATIONS:-0}" = "1" ]; then
+  echo "🗃  执行已授权的文件、笔记导入与游客示例迁移…"
+  ssh -i "$KEY" "$HOST" "cd '$REMOTE' && '$REMOTE_NODE' scripts/migrateFileFeatures.js --apply"
+fi
+
 echo "🔎  预检安全中心 V2 历史控制迁移影响范围（仅聚合数量）…"
-ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/preflightSecurityV2Migration.js"
+ssh -i "$KEY" "$HOST" "cd '$REMOTE' && '$REMOTE_NODE' scripts/preflightSecurityV2Migration.js"
 
 echo "🛡  执行安全中心 V2 幂等 Schema 与历史控制迁移…"
-ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node util/security/migrate.js"
+ssh -i "$KEY" "$HOST" "cd '$REMOTE' && '$REMOTE_NODE' util/security/migrate.js"
 
 echo "🔎  使用生产环境检查书签图标任务 Schema、favicon-api 与图标目录…"
-ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/checkBookmarkIconRuntime.js"
+ssh -i "$KEY" "$HOST" "cd '$REMOTE' && '$REMOTE_NODE' scripts/checkBookmarkIconRuntime.js"
 
 echo "🔎  幂等初始化并检查资源治理 Schema、目录与清理开关…"
-ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/checkResourceGovernanceRuntime.js"
+ssh -i "$KEY" "$HOST" "cd '$REMOTE' && '$REMOTE_NODE' scripts/checkResourceGovernanceRuntime.js"
 
 echo "🧰  幂等初始化知识工具箱 Schema…"
-ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/ensureToolboxSchema.js"
+ssh -i "$KEY" "$HOST" "cd '$REMOTE' && '$REMOTE_NODE' scripts/ensureToolboxSchema.js"
 
 echo "🔁  幂等初始化每日回顾 Schema…"
-ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/ensureDailyReviewSchema.js"
+ssh -i "$KEY" "$HOST" "cd '$REMOTE' && '$REMOTE_NODE' scripts/ensureDailyReviewSchema.js"
 
 echo "🧭  幂等迁移帮助中心栏目元数据…"
-ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/migrateHelpCenterSections.js"
+ssh -i "$KEY" "$HOST" "cd '$REMOTE' && '$REMOTE_NODE' scripts/migrateHelpCenterSections.js"
 
 echo "🔎  幂等初始化待办工作区 Schema…"
-ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/ensureTodoWorkspaceSchema.js"
+ssh -i "$KEY" "$HOST" "cd '$REMOTE' && '$REMOTE_NODE' scripts/ensureTodoWorkspaceSchema.js"
 
 echo "🔎  执行只读 Schema 发布门禁…"
-ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/checkSchemaAssertions.js"
+ssh -i "$KEY" "$HOST" "cd '$REMOTE' && '$REMOTE_NODE' scripts/checkSchemaAssertions.js"
 
 echo "🔎  检查浏览器推送 Schema 与配置…"
-ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/checkBrowserPushRuntime.js"
+ssh -i "$KEY" "$HOST" "cd '$REMOTE' && '$REMOTE_NODE' scripts/checkBrowserPushRuntime.js"
 
 echo "🔎  检查文件预览 Schema、7-Zip 与 LibreOffice 运行时…"
-ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/checkFilePreviewRuntime.js"
+ssh -i "$KEY" "$HOST" "cd '$REMOTE' && '$REMOTE_NODE' scripts/checkFilePreviewRuntime.js"
 
 echo "🔎  检查图片预览 Schema 与 WebP 压缩运行时…"
-ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/checkImagePreviewRuntime.js"
+ssh -i "$KEY" "$HOST" "cd '$REMOTE' && '$REMOTE_NODE' scripts/checkImagePreviewRuntime.js"
+
+echo "🔎  检查大图转换资源预算…"
+ssh -i "$KEY" "$HOST" "cd '$REMOTE' && '$REMOTE_NODE' scripts/checkLargeImagePreviews.js"
 
 echo "🔎  检查 OCR 运行时与语言包…"
-ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/checkOcrRuntime.js"
+ssh -i "$KEY" "$HOST" "cd '$REMOTE' && '$REMOTE_NODE' scripts/checkOcrRuntime.js"
 
 echo "🔎  检查通用网页 Chromium 渲染运行时与低权限配置…"
-ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/checkWebPageRendererRuntime.js"
+ssh -i "$KEY" "$HOST" "cd '$REMOTE' && '$REMOTE_NODE' scripts/checkWebPageRendererRuntime.js"
+
+echo "🔎  检查笔记导入 Schema 与暂存目录…"
+ssh -i "$KEY" "$HOST" "cd '$REMOTE' && '$REMOTE_NODE' scripts/checkNoteImportRuntime.js"
 
 echo "♻️  先重启 Worker，再重启 ${PM2}…"
 ssh -i "$KEY" "$HOST" "if pm2 describe '$DOCUMENT_WORKER_PM2' >/dev/null 2>&1; then \
-    pm2 restart '$DOCUMENT_WORKER_PM2' --update-env; \
+    pm2 restart '$DOCUMENT_WORKER_PM2' --update-env --interpreter '$REMOTE_NODE'; \
   else \
-    cd '$REMOTE' && pm2 start documentWorker.js --name '$DOCUMENT_WORKER_PM2'; \
+    cd '$REMOTE' && pm2 start documentWorker.js --interpreter '$REMOTE_NODE' --name '$DOCUMENT_WORKER_PM2'; \
   fi && \
   if pm2 describe '$BOOKMARK_ICON_WORKER_PM2' >/dev/null 2>&1; then \
-    pm2 restart '$BOOKMARK_ICON_WORKER_PM2' --update-env; \
+    pm2 restart '$BOOKMARK_ICON_WORKER_PM2' --update-env --interpreter '$REMOTE_NODE'; \
   else \
-    cd '$REMOTE' && pm2 start bookmarkIconWorker.js --name '$BOOKMARK_ICON_WORKER_PM2'; \
+    cd '$REMOTE' && pm2 start bookmarkIconWorker.js --interpreter '$REMOTE_NODE' --name '$BOOKMARK_ICON_WORKER_PM2'; \
   fi && \
   if pm2 describe '$RESOURCE_GOVERNANCE_WORKER_PM2' >/dev/null 2>&1; then \
-    pm2 restart '$RESOURCE_GOVERNANCE_WORKER_PM2' --update-env; \
+    pm2 restart '$RESOURCE_GOVERNANCE_WORKER_PM2' --update-env --interpreter '$REMOTE_NODE'; \
   else \
-    cd '$REMOTE' && pm2 start resourceGovernanceWorker.js --name '$RESOURCE_GOVERNANCE_WORKER_PM2'; \
+    cd '$REMOTE' && pm2 start resourceGovernanceWorker.js --interpreter '$REMOTE_NODE' --name '$RESOURCE_GOVERNANCE_WORKER_PM2'; \
+  fi && \
+  if pm2 describe 'light-note-imports' >/dev/null 2>&1; then \
+    pm2 restart 'light-note-imports' --update-env --interpreter '$REMOTE_NODE'; \
+  else \
+    cd '$REMOTE' && pm2 start noteImportWorker.js --interpreter '$REMOTE_NODE' --name 'light-note-imports'; \
   fi && \
   if pm2 describe 'light-note-browser-push' >/dev/null 2>&1; then \
-    pm2 restart 'light-note-browser-push' --update-env; \
+    pm2 restart 'light-note-browser-push' --update-env --interpreter '$REMOTE_NODE'; \
   else \
-    cd '$REMOTE' && pm2 start browserPushWorker.js --name 'light-note-browser-push'; \
+    cd '$REMOTE' && pm2 start browserPushWorker.js --interpreter '$REMOTE_NODE' --name 'light-note-browser-push'; \
   fi && \
-  pm2 restart $PM2 --update-env && pm2 save"
+  pm2 restart $PM2 --update-env --interpreter '$REMOTE_NODE' && pm2 save"
 
 echo "⏳  等待后端重启就绪并健康检查(重启窗口会短暂 502,属正常)…"
 code=000

@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS organize_suggestion_items (
  ai_status VARCHAR(24) NOT NULL,
  lease_token CHAR(36) DEFAULT NULL,
  lease_expires_at DATETIME DEFAULT NULL,
+ next_check_at DATETIME DEFAULT NULL,
  error_code VARCHAR(80) DEFAULT NULL,
  UNIQUE KEY uk_organize_run_resource(run_id,resource_type,resource_id),
  KEY idx_organize_item_queue(ai_status,lease_expires_at,run_id),

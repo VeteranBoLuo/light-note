@@ -170,6 +170,7 @@
       </template>
 
       <template v-else-if="preview">
+        <p v-if="preview.options.resourceTypes.includes('file')">{{ t('organizeFile.automatic') }}</p>
         <div class="wizard-context"
           ><strong>{{ resourceNames(preview.options.resourceTypes) }}</strong
           ><span>{{ checkNames }} · {{ scopeLabel(preview.options.scope) }}</span></div

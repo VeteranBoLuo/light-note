@@ -19,7 +19,7 @@
         </div>
         <div class="today-actions__skeleton-rows">
           <div
-            v-for="index in contained ? 4 : 3"
+            v-for="index in contained ? CONTAINED_ACTION_LIMIT : 3"
             :key="`today-action-skeleton-${index}`"
             class="today-actions__skeleton-row"
           >
@@ -56,7 +56,7 @@
               <span class="today-action-row__title">{{ todo.title }}</span>
               <span class="today-action-row__meta">
                 <span v-if="todo.overdue" class="is-overdue">{{ t('workbench.today.overdueBadge') }}</span>
-                <span :class="{ 'is-overdue': todo.overdue }">{{ todo.dueLabel }}</span>
+                <span>{{ todo.dueLabel }}</span>
               </span>
             </div>
             <div class="today-action-row__actions">
@@ -67,7 +67,12 @@
                   isRecurringTodo(todo) ? t('workbench.today.snoozeReminderOnly') : t('workbench.today.snoozeTomorrow')
                 }}
               </BButton>
-              <BButton size="small" :disabled="mutatingTodoId === todo.id" @click="editTodo(todo)">
+              <BButton
+                size="small"
+                class="today-action-row__secondary"
+                :disabled="mutatingTodoId === todo.id"
+                @click="editTodo(todo)"
+              >
                 {{ t('inbox.editTodo') }}
               </BButton>
             </div>
@@ -98,6 +103,7 @@
               </BButton>
               <BButton
                 v-if="!compactActions"
+                class="today-action-row__secondary"
                 size="small"
                 :loading="mutatingInboxKey === inboxKey(item)"
                 @click="completeInboxItem(item)"
@@ -460,11 +466,10 @@
     min-width: 0;
   }
 
-  /* 桌面工作台使用单一紧凑外框；条目在 contained 模式下采用明确行高，
-     让 4 条摘要完整显示且不产生内部滚动。 */
+  /* 桌面外框跟随父级网格等高，空态在剩余内容区域居中。 */
   .today-actions--contained {
     width: 100%;
-    min-height: 100%;
+    min-height: 0;
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
@@ -477,7 +482,9 @@
 
   .today-actions--contained .today-actions__content {
     flex: 1 1 auto;
-    display: block;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
     overflow: visible;
   }
 
@@ -487,22 +494,17 @@
     box-shadow: none;
   }
 
-  .today-actions--contained .today-actions__group + .today-actions__group {
-    border-top: 0;
+  .today-actions--contained .today-actions__group + .today-actions__group .today-action-row:first-child {
+    border-top: 1px solid var(--surface-divider-color, var(--card-border-color));
   }
 
   .today-actions--contained .today-actions__group-head {
     display: none;
   }
 
-  .today-actions--contained .today-action-row {
-    height: 48px;
-    min-height: 48px;
-    padding-block: 5px;
-  }
-
   .today-actions--contained .today-actions__empty {
-    min-height: 100%;
+    flex: 1 1 auto;
+    min-height: 0;
     box-sizing: border-box;
     align-content: center;
     border: 0;
@@ -590,8 +592,8 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    min-height: 52px;
-    padding: 8px 14px;
+    min-height: 64px;
+    padding: 12px 14px;
     box-sizing: border-box;
 
     & + .today-action-row {
@@ -600,7 +602,10 @@
   }
 
   .today-action-row__check {
-    flex: 0 0 auto;
+    width: 28px;
+    box-sizing: border-box;
+    justify-content: center;
+    flex: 0 0 28px;
   }
 
   .today-action-row__icon {
@@ -626,7 +631,7 @@
 
   .today-action-row__main {
     display: grid;
-    gap: 2px;
+    gap: 4px;
     min-width: 0;
     flex: 1 1 auto;
   }
@@ -634,7 +639,8 @@
   .today-action-row__title {
     color: var(--text-color);
     font-size: 14px;
-    font-weight: 600;
+    font-weight: 500;
+    line-height: 20px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -645,6 +651,8 @@
     gap: 8px;
     color: var(--desc-color);
     font-size: 12px;
+    line-height: 16px;
+    flex-wrap: wrap;
 
     .is-overdue {
       color: var(--danger-color, #e5484d);
@@ -658,17 +666,27 @@
     flex: 0 0 auto;
   }
 
-  /* 默认按钮的灰底在浅色下像原生 button、在暗色下又与行背景糊在一起。
-     统一改用主题色淡染 + 同色系描边:两个主题都自适应,也与站内 chip 语言一致。 */
-  .today-action-row__actions :deep(.b_btn) {
-    border: 1px solid color-mix(in srgb, var(--primary-color) 20%, transparent);
-    background: color-mix(in srgb, var(--primary-color) 7%, transparent) !important;
-    color: var(--primary-color);
+  .today-action-row__actions .b_btn {
+    height: 32px;
+    min-height: 32px;
+    padding: 0 10px;
+    line-height: normal;
+    border: 1px solid var(--surface-border-color);
+    background: var(--card-background);
+    color: var(--workspace-purple-text);
     font-weight: 500;
   }
-  .today-action-row__actions :deep(.b_btn:hover) {
-    border-color: color-mix(in srgb, var(--primary-color) 34%, transparent);
-    background: color-mix(in srgb, var(--primary-color) 13%, transparent) !important;
+
+  .today-action-row__actions .today-action-row__secondary {
+    color: var(--desc-color);
+    border-color: transparent;
+    background: transparent;
+  }
+
+  .today-action-row__actions .b_btn:not(:disabled):hover {
+    border-color: var(--surface-border-color);
+    background: var(--hover-background);
+    color: var(--text-color);
   }
 
   .today-actions__empty {
@@ -792,8 +810,8 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    height: 48px;
-    padding: 5px 14px;
+    min-height: 64px;
+    padding: 12px 14px;
     box-sizing: border-box;
   }
 
@@ -838,7 +856,7 @@
 
   .skeleton-row-button {
     width: 48px;
-    height: 24px;
+    height: 32px;
     border-radius: 6px;
   }
 
@@ -861,8 +879,8 @@
     /* 内容与操作保持同一行：换行会让每张卡片凭空高出一整行、右侧留下大片空白，
        也让左侧的图标和标题看起来贴在卡片上部。按钮改用紧凑尺寸腾出标题宽度。 */
     .today-action-row {
-      min-height: 56px;
-      padding: 9px 12px;
+      min-height: 64px;
+      padding: 12px;
       gap: 8px;
     }
 
@@ -877,8 +895,8 @@
     }
 
     .today-action-row__actions :deep(.b_btn) {
-      height: 30px;
-      min-height: 30px;
+      height: 32px;
+      min-height: 32px;
       padding: 0 9px;
       font-size: 12px;
     }

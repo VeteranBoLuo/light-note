@@ -150,11 +150,20 @@ function transformLegacyRichTextEffects(tagName, attribs) {
   if (!style) return { tagName, attribs: next };
   const compactStyle = style.toLowerCase().replace(/\s+/gu, '');
 
+  const variables = Object.fromEntries(
+    style.split(';').map((part) => part.split(':').map((value) => value.trim().toLowerCase())),
+  );
+  const semanticGradient =
+    SAFE_GRADIENT_COLOR.test(variables['--ln-gradient-from'] || '') &&
+    SAFE_GRADIENT_COLOR.test(variables['--ln-gradient-to'] || '') &&
+    SAFE_GRADIENT_ANGLE.test(variables['--ln-gradient-angle'] || '');
   const gradient = parseLegacyLinearGradient(style);
   // 如果旧示例曾在受限白名单上线期间被自动保存，background/background-clip 已经
   // 丢失，只剩 color:transparent。透明正文没有合法可见用途，因此可安全恢复为默认渐变。
   const degradedTextGradient =
-    !gradient && compactStyle.includes('color:transparent') ? degradedTextGradientFor(tagName) : null;
+    !gradient && !semanticGradient && compactStyle.includes('color:transparent')
+      ? degradedTextGradientFor(tagName)
+      : null;
   const textGradient = gradient || degradedTextGradient;
   const hasTextGradient = Boolean(
     degradedTextGradient || (gradient && /(?:^|;)\s*(?:-webkit-)?background-clip\s*:\s*text\b/iu.test(style)),
@@ -179,6 +188,7 @@ function transformLegacyRichTextEffects(tagName, attribs) {
   const isDegradedGradientCard =
     tagName === 'p' &&
     !gradient &&
+    !semanticGradient &&
     (compactStyle.includes('color:#fff') || compactStyle.includes('color:#ffffff')) &&
     compactStyle.includes('padding:20px24px');
   const isGradientCard = isLegacyGradientCard || isDegradedGradientCard;
@@ -192,6 +202,7 @@ function transformLegacyRichTextEffects(tagName, attribs) {
   const isDegradedGradientFill =
     tagName === 'th' &&
     !gradient &&
+    !semanticGradient &&
     (compactStyle.includes('color:#fff') || compactStyle.includes('color:#ffffff')) &&
     !compactStyle.includes('background-color:');
   if (tagName === 'th' && (gradient || isDegradedGradientFill)) {
@@ -203,6 +214,7 @@ function transformLegacyRichTextEffects(tagName, attribs) {
 
   const isDegradedBreathe =
     tagName === 'span' &&
+    !semanticGradient &&
     compactStyle.includes('display:inline-block') &&
     compactStyle.includes('padding:6px18px') &&
     (compactStyle.includes('color:#fff') || compactStyle.includes('color:#ffffff')) &&

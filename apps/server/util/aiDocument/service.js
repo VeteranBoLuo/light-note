@@ -181,6 +181,20 @@ function parseCoverageMetadata(value) {
       message: String(item?.message || '文档覆盖范围受限').slice(0, 300),
     })),
     ...(recognition ? { recognition } : {}),
+    ...(parsed.pdf
+      ? {
+          pdf: {
+            policyVersion: Number(parsed.pdf.policyVersion || 0),
+            blankPages: (Array.isArray(parsed.pdf.blankPages) ? parsed.pdf.blankPages : []).filter(
+              (p) => Number.isInteger(p) && p > 0 && p <= 300,
+            ),
+            missingPages: (Array.isArray(parsed.pdf.missingPages) ? parsed.pdf.missingPages : []).filter(
+              (p) => Number.isInteger(p) && p > 0 && p <= 300,
+            ),
+            ocrErrorCode: String(parsed.pdf.ocrErrorCode || '').slice(0, 64) || null,
+          },
+        }
+      : {}),
   };
 }
 
@@ -456,7 +470,7 @@ export async function confirmTemporaryDocumentSource({ userId, sourceId }) {
   });
 }
 
-export async function attachCloudDocumentSource({ userId, fileId, sessionId = '' }) {
+export async function attachCloudDocumentSource({ userId, fileId, sessionId = '', refresh = false }) {
   const [rows] = await pool.query(
     `SELECT id, file_name, file_type, file_size, obs_key
      FROM files WHERE id = ? AND create_by = ? AND del_flag = 0 LIMIT 1`,
@@ -487,7 +501,11 @@ export async function attachCloudDocumentSource({ userId, fileId, sessionId = ''
         Number(existing.file_size || 0) === descriptor.fileSize;
       // 同一云文件已经完成或正在解析时直接复用。尤其游客共享展示空间不能因为多人反复点击
       // 就清空分块并重置同一任务，否则会让正在运行的解析永远无法完成。
-      if (sameCloudObject && ['ready', 'queued', 'parsing'].includes(existing.status)) {
+      if (
+        sameCloudObject &&
+        ['ready', 'queued', 'parsing'].includes(existing.status) &&
+        !(refresh && existing.status === 'ready')
+      ) {
         await connection.query('UPDATE ai_document_sources SET session_id = ? WHERE id = ?', [
           String(sessionId || '').slice(0, 96) || null,
           sourceId,
@@ -511,6 +529,11 @@ export async function attachCloudDocumentSource({ userId, fileId, sessionId = ''
           sourceId,
         ],
       );
+      if (!sameCloudObject)
+        await connection.query(
+          'UPDATE ai_document_sources SET visual_evidence_json=NULL,visual_lease_token=NULL,visual_lease_expires_at=NULL WHERE id=?',
+          [sourceId],
+        );
       await clearCoverageMetadata(connection, sourceId);
       await resetJob(connection, sourceId);
       await connection.commit();
@@ -763,7 +786,8 @@ export async function recognizeCloudImageDocumentSource({
       throw error;
     }
     const parsedError = parseError(error);
-    if (parsedError.code === 'EMPTY_DOCUMENT') await markJobNoText(job, error.coverage, leaseId);
+    if (['EMPTY_DOCUMENT', 'PDF_NO_RELIABLE_TEXT'].includes(parsedError.code))
+      await markJobNoText(job, error.coverage, leaseId);
     else await markJobFailure(job, error, leaseId);
   }
   const [rows] = await pool.query('SELECT * FROM ai_document_sources WHERE id = ? AND user_id = ? LIMIT 1', [
@@ -1656,7 +1680,7 @@ export async function runSingleDocumentJob(workerId) {
     }
   } catch (error) {
     const parsedError = parseError(error);
-    if (parsedError.code === 'EMPTY_DOCUMENT') {
+    if (['EMPTY_DOCUMENT', 'PDF_NO_RELIABLE_TEXT'].includes(parsedError.code)) {
       const persisted = await markJobNoText(job, error.coverage, workerId);
       if (persisted) console.info(`[AI 文档] 解析任务 ${job.id} 完成，未提取到文字`);
     } else {

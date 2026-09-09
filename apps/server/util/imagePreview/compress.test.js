@@ -36,7 +36,7 @@ describe('managed image compression', () => {
     await expect(
       compressCardImage(stdout, {
         now: () => {
-          now += 31000;
+          now += 61000;
           return now;
         },
       }),
@@ -60,5 +60,85 @@ describe('saved-content image references', () => {
         '<img src="https://external.test/a.png"><img src="https://boluo66.top/uploads/hello%20world.png">',
       ),
     ).toEqual(['https://boluo66.top/uploads/hello%20world.png']);
+  });
+});
+
+describe('large and tall real-image regression', () => {
+  it.each(['7999x8000', '8000x8000', '8001x8000', '10000x10000'])(
+    'converts actual %s PNG above and below the old pixel limit',
+    async (size) => {
+      const { stdout } = await exec('convert', ['-size', size, 'xc:#6495ed', '-depth', '8', 'png:-'], {
+        encoding: 'buffer',
+        maxBuffer: 50 * 1024 * 1024,
+      });
+      const result = await compressCardImage(stdout);
+      expect(result.presentation).toBe('full');
+      expect(validatePreview(result.body).type).toBe('webp');
+      expect(result.width).toBeLessThanOrEqual(720);
+    },
+    120000,
+  );
+  it.each([300, 301])('crops only above the 3:1 boundary (%s)', async (height) => {
+    const { stdout } = await exec(
+      'convert',
+      ['-size', `100x${height}`, 'xc:red', '-fill', 'blue', '-draw', `rectangle 0,150 99,${height - 1}`, 'png:-'],
+      { encoding: 'buffer' },
+    );
+    const result = await compressCardImage(stdout);
+    expect(result.presentation).toBe(height === 300 ? 'full' : 'long_top');
+    expect(result.height).toBe(height === 300 ? 300 : 150);
+  });
+});
+
+describe('orientation, first frame, pixels and runtime failure', () => {
+  async function color(body) {
+    const job = exec('convert', ['webp:-', '-format', '%[fx:mean.r] %[fx:mean.b]', 'info:']);
+    job.child.stdin.end(body);
+    return String((await job).stdout)
+      .split(' ')
+      .map(Number);
+  }
+  it('auto-orients EXIF before choosing and cropping the tall region', async () => {
+    const { stdout: jpeg } = await exec(
+      'convert',
+      ['-size', '400x100', 'xc:red', '-fill', 'blue', '-draw', 'rectangle 200,0 399,99', 'jpg:-'],
+      { encoding: 'buffer' },
+    );
+    const exif = Buffer.from('45786966000049492a0008000000010012010300010000000600000000000000', 'hex');
+    const prefix = Buffer.alloc(4);
+    prefix[0] = 255;
+    prefix[1] = 225;
+    prefix.writeUInt16BE(exif.length + 2, 2);
+    const result = await compressCardImage(Buffer.concat([jpeg.subarray(0, 2), prefix, exif, jpeg.subarray(2)]));
+    expect(result.presentation).toBe('long_top');
+    expect([result.width, result.height]).toEqual([100, 150]);
+    const [red, blue] = await color(result.body);
+    expect(red).toBeGreaterThan(0.9);
+    expect(blue).toBeLessThan(0.1);
+  });
+  it('uses only the first animation frame', async () => {
+    const { stdout } = await exec(
+      'convert',
+      ['-size', '40x40', 'xc:red', '-size', '40x40', 'xc:blue', '-delay', '20', 'gif:-'],
+      { encoding: 'buffer' },
+    );
+    const result = await compressCardImage(stdout);
+    const [red, blue] = await color(result.body);
+    expect(red).toBeGreaterThan(0.9);
+    expect(blue).toBeLessThan(0.1);
+  });
+  it('cleans temporary input after a missing runtime and classifies it independently of source files', async () => {
+    const fs = await import('node:fs/promises');
+    const { stdout } = await exec('convert', ['-size', '8x8', 'xc:red', 'png:-'], { encoding: 'buffer' });
+    let directory;
+    await expect(
+      compressCardImage(stdout, {
+        runner: async (_bin, _args, options) => {
+          directory = options.env.TMPDIR;
+          throw Object.assign(new Error('private executable path'), { code: 'ENOENT' });
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'IMAGE_RUNTIME_UNAVAILABLE' });
+    await expect(fs.access(directory)).rejects.toMatchObject({ code: 'ENOENT' });
   });
 });

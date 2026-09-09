@@ -14,6 +14,8 @@
     "worker:resource-governance:dev": "node --watch --watch-preserve-output resourceGovernanceWorker.js",
     "check:bookmark-icons": "node scripts/checkBookmarkIconRuntime.js",
     "check:resource-governance": "node scripts/checkResourceGovernanceRuntime.js",
+    "check:image-previews:large": "node scripts/checkLargeImagePreviews.js",
+    "repair:image-previews": "node scripts/repairImagePreviews.js",
     "check:image-previews": "node scripts/checkImagePreviewRuntime.js",
     "check:file-previews": "node scripts/checkFilePreviewRuntime.js",
     "check:schema": "node scripts/checkSchemaAssertions.js",
@@ -33,7 +35,10 @@
     "test:watch": "vitest",
     "worker:browser-push": "node browserPushWorker.js",
     "worker:browser-push:dev": "node --watch --watch-preserve-output browserPushWorker.js",
-    "check:browser-push": "node scripts/checkBrowserPushRuntime.js"
+    "check:browser-push": "node scripts/checkBrowserPushRuntime.js",
+    "worker:note-imports": "node noteImportWorker.js",
+    "worker:note-imports:dev": "node --watch --watch-preserve-output noteImportWorker.js",
+    "check:note-imports": "node scripts/checkNoteImportRuntime.js"
   },
   "keywords": [],
   "author": "",
@@ -62,7 +67,8 @@
     "redis": "^5.6.0",
     "sanitize-html": "2.17.5",
     "web-push": "^3.6.7",
-    "ws": "^8.18.0"
+    "ws": "^8.18.0",
+    "yauzl": "3.2.0"
   },
   "devDependencies": {
     "prettier": "^3.4.2",

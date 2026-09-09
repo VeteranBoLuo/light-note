@@ -1,7 +1,9 @@
 <template>
   <article v-if="compact && showCard" v-bind="$attrs" class="daily-brief-card daily-brief-card--summary">
     <header class="daily-brief-card__header">
-      <span class="daily-brief-card__ai-mark" aria-hidden="true">AI</span>
+      <span class="daily-brief-card__ai-mark" aria-hidden="true">{{
+        guestSample ? t('workbench.dailyBrief.exampleMark') : 'AI'
+      }}</span>
       <div class="daily-brief-card__heading">
         <div class="daily-brief-card__title-row"
           ><h2>{{ t('workbench.dailyBrief.title') }}</h2></div
@@ -28,8 +30,23 @@
     </header>
     <div class="daily-brief-card__summary-copy">
       <p class="daily-brief-card__headline">{{
-        displayBrief?.headline || t(errorMessage ? 'workbench.dailyBrief.failedTitle' : 'workbench.dailyBrief.subtitle')
+        displayBrief?.headline ||
+        t(
+          guestSample
+            ? visitorLoading
+              ? 'common.loading'
+              : visitorFailed
+                ? 'workbench.dailyBrief.sampleFailed'
+                : 'workbench.dailyBrief.sampleEmpty'
+            : errorMessage
+              ? 'workbench.dailyBrief.failedTitle'
+              : 'workbench.dailyBrief.subtitle',
+        )
       }}</p>
+      <p v-if="guestSample && visitorState" class="daily-brief-card__sample-status"
+        >{{ t('workbench.dailyBrief.sampleMeta', { date: visitorState.dataDate || '—' })
+        }}<span v-if="visitorState.stale"> · {{ t('workbench.dailyBrief.sampleStale') }}</span></p
+      >
       <BButton size="small" @click="detailsVisible = true">
         {{ t('workbench.dailyBrief.viewBrief') }}<span v-if="briefInsights.length"> · {{ briefInsights.length }}</span>
         <SvgIcon :src="icon.ai.sourceArrow" size="13" aria-hidden="true" />
@@ -49,10 +66,12 @@
       v-bind="compact ? {} : $attrs"
       class="daily-brief-card"
       :class="{ 'daily-brief-card--detail': compact }"
-      :aria-busy="busy || undefined"
+      :aria-busy="busy || visitorLoading || undefined"
     >
       <header class="daily-brief-card__header">
-        <span class="daily-brief-card__ai-mark" aria-hidden="true">AI</span>
+        <span class="daily-brief-card__ai-mark" aria-hidden="true">{{
+          guestSample ? t('workbench.dailyBrief.exampleMark') : 'AI'
+        }}</span>
         <div class="daily-brief-card__heading">
           <div class="daily-brief-card__title-row">
             <h2>{{ t('workbench.dailyBrief.title') }}</h2>
@@ -90,7 +109,20 @@
       </header>
 
       <div
-        v-if="(loading || state?.status === 'generating') && !readyBrief"
+        v-if="guestSample && !displayBrief"
+        class="daily-brief-card__state"
+        :role="visitorFailed ? 'alert' : 'status'"
+      >
+        <div class="daily-brief-card__state-main">
+          <BLoading v-if="visitorLoading" :loading="true" inline :title="t('common.loading')" />
+          <template v-else>
+            <span>{{ t(visitorFailed ? 'workbench.dailyBrief.sampleFailed' : 'workbench.dailyBrief.sampleEmpty') }}</span>
+            <BButton size="small" @click="refreshVisitor">{{ t('common.retry') }}</BButton>
+          </template>
+        </div>
+      </div>
+      <div
+        v-else-if="(loading || state?.status === 'generating') && !readyBrief"
         class="daily-brief-card__state"
         role="status"
       >
@@ -136,6 +168,14 @@
           <SvgIcon :src="icon.message.warning" size="14" />
           <span>{{ errorMessage || t('workbench.dailyBrief.refreshFailedHint') }}</span>
         </div>
+        <p v-if="guestSample" class="daily-brief-card__sample-status" role="status"
+          >{{ t('workbench.dailyBrief.sampleMeta', { date: visitorState?.dataDate || '—' })
+          }}<span v-if="visitorState?.stale"> · {{ t('workbench.dailyBrief.sampleStale') }}</span
+          ><span v-if="visitorFailed">
+            · {{ t('workbench.dailyBrief.sampleFailed') }}
+            <BButton size="small" @click="refreshVisitor">{{ t('common.retry') }}</BButton></span
+          ></p
+        >
         <p class="daily-brief-card__headline">{{ displayBrief.headline }}</p>
 
         <div class="daily-brief-card__insights">
@@ -191,7 +231,13 @@
 
         <aside class="daily-brief-card__recommendation">
           <strong>{{
-            t(state?.stale ? 'workbench.dailyBrief.previousRecommendation' : 'workbench.dailyBrief.aiRecommendation')
+            t(
+              guestSample
+                ? 'workbench.dailyBrief.sampleSuggestion'
+                : state?.stale
+                  ? 'workbench.dailyBrief.previousRecommendation'
+                  : 'workbench.dailyBrief.aiRecommendation',
+            )
           }}</strong>
           <p>{{ briefRecommendation || t('workbench.dailyBrief.noRecommendation') }}</p>
         </aside>
@@ -219,6 +265,7 @@
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
   import type { DailyBrief, DailyBriefInsight } from '@/api/dailyBriefApi';
+  import { useVisitorBrief } from '@/composables/useVisitorBrief';
   import { useDailyBrief } from '@/composables/useDailyBrief';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BChip from '@/components/base/BasicComponents/BChip.vue';
@@ -228,7 +275,7 @@
   import { resolveBriefSourceTarget, resolveBriefOrganizeActions } from '@/utils/dailyBriefNavigation';
 
   const props = withDefaults(
-    defineProps<{ eligible: boolean; ownerKey: string; readOnly?: boolean; compact?: boolean }>(),
+    defineProps<{ eligible: boolean; ownerKey: string; readOnly?: boolean; compact?: boolean; visitor?: boolean }>(),
     {
       readOnly: false,
       compact: false,
@@ -251,37 +298,21 @@
   );
   const { t, locale } = useI18n();
   const router = useRouter();
-  const guestSample = computed(() => !props.eligible && !props.readOnly);
+  const guestSample = computed(() => props.visitor || (!props.eligible && !props.readOnly));
+  const {
+    state: visitorState,
+    loading: visitorLoading,
+    failed: visitorFailed,
+    refresh: refreshVisitor,
+  } = useVisitorBrief({ enabled: () => guestSample.value, owner: () => props.ownerKey, locale: () => locale.value });
   const readOnly = computed(() => props.readOnly);
   const { state, loading, updating, errorCode, confirmedCurrent, refresh, update } = useDailyBrief({
-    eligible: () => props.eligible,
+    eligible: () => props.eligible && !guestSample.value,
     ownerKey: () => props.ownerKey,
     passive: () => readOnly.value,
   });
   const readyBrief = computed<DailyBrief | null>(() => (state.value?.brief?.version === 2 ? state.value.brief : null));
-  // 示例仅参与展示，不写入账号简报状态，也不触发生成。
-  const displayBrief = computed(() =>
-    guestSample.value
-      ? {
-          headline: t('workbench.dailyBrief.sampleHeadline'),
-          insights: [
-            { id: 'sample-todo', factIds: ['todo_today'], text: t('workbench.dailyBrief.sampleTodo') },
-            {
-              id: 'sample-content',
-              factIds: ['bookmark_created_today'],
-              text: t('workbench.dailyBrief.sampleContent'),
-            },
-            {
-              id: 'sample-connection',
-              factIds: ['resource_connection'],
-              text: t('workbench.dailyBrief.sampleConnection'),
-            },
-            { id: 'sample-organize', factIds: ['organize_untagged'], text: t('workbench.dailyBrief.sampleOrganize') },
-          ],
-          recommendation: t('workbench.dailyBrief.sampleRecommendation'),
-        }
-      : readyBrief.value,
-  );
+  const displayBrief = computed(() => (guestSample.value ? visitorState.value?.brief : readyBrief.value));
   const briefUpdating = computed(() => updating.value || state.value?.status === 'generating');
   const busy = computed(() => loading.value || briefUpdating.value);
   const showCard = computed(
@@ -330,8 +361,16 @@
     if (guestSample.value) {
       const actions: Record<string, Array<{ id: string; label: string; route: string }>> = {
         'sample-todo': [{ id: 'todos', label: 'viewTodos', route: '/inbox?tab=todo' }],
-        'sample-organize': [{ id: 'untagged', label: 'organizeUntagged', route: '/organize?issue=untagged' }],
       };
+      if (insight.id === 'sample-organize')
+        return [
+          ...(insight.factIds.includes('organize_untagged')
+            ? [{ id: 'untagged', label: 'organizeUntagged', route: '/organize?issue=untagged' }]
+            : []),
+          ...(insight.factIds.includes('organize_pending')
+            ? [{ id: 'pending', label: 'organizePending', route: '/organize?issue=pending' }]
+            : []),
+        ];
       return actions[insight.id] || [];
     }
     return resolveBriefOrganizeActions(insight, readyBrief.value, readOnly.value);
@@ -344,7 +383,9 @@
   function insightTone(insight: DailyBriefInsight) {
     const ids = insight.factIds || [];
     if (ids.includes('resource_connection')) return 'connection';
-    if (ids.some((id) => id.startsWith('todo_'))) return 'action';
+    if (ids.some((id) => id.startsWith('todo_') || ['workshop_due', 'workshop_next_step'].includes(id)))
+      return 'action';
+    if (ids.includes('workshop_result') || ids.includes('visitor_content')) return 'new';
     if (ids.some((id) => id.includes('_created_'))) return 'new';
     if (ids.some((id) => id.startsWith('organize_'))) return 'organize';
     return 'insight';
@@ -352,10 +393,17 @@
   function insightMarker(insight: DailyBriefInsight) {
     return t(`workbench.dailyBrief.markers.${insightTone(insight)}`);
   }
-  defineExpose({ refresh });
+  defineExpose({ refresh: () => (guestSample.value ? refreshVisitor() : refresh()) });
 </script>
 
 <style scoped lang="less">
+  .daily-brief-card__sample-status {
+    margin: 0 0 12px;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+  }
+
   .daily-brief-card__summary-copy {
     padding: 0 13px 12px;
     :deep(.b_btn) {

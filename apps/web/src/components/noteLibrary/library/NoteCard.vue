@@ -35,9 +35,12 @@
         <div v-if="previewTextBeforeImage" class="note-content note-content--segment">
           {{ previewTextBeforeImage }}
         </div>
-        <div class="note-preview-media" aria-hidden="true">
-          <ManagedImagePreview class="note-preview-image is-loaded"
-            :source="{ sourceType: 'note', sourceId: String(note.id) }" :initial="note.imagePreview" />
+        <div class="note-preview-media">
+          <ManagedImagePreview
+            class="note-preview-image is-loaded"
+            :source="{ sourceType: 'note', sourceId: String(note.id) }"
+            :initial="note.imagePreview"
+          />
         </div>
         <div v-if="previewTextAfterImage" class="note-content note-content--segment">
           {{ previewTextAfterImage }}
@@ -165,7 +168,9 @@
   const drawingPreviewContent = computed(() => String(props.note?.content || props.note?.previewSummary || '').trim());
   const parentPathText = computed(() => getNoteParentPathText(props.note || {}));
   const parentTargetId = computed(() => getNoteParentTargetId(props.note || {}));
-  const hasPreviewImage = computed(() => !isDrawingNote.value && Boolean(props.note?.imagePreview || props.note?.previewImageUrl));
+  const hasPreviewImage = computed(
+    () => !isDrawingNote.value && Boolean(props.note?.imagePreview || props.note?.previewImageUrl),
+  );
 
   const MAX_VISIBLE_TAGS = 3;
   const visibleTags = computed(() => (props.note.tags || []).slice(0, MAX_VISIBLE_TAGS));

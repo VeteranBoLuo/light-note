@@ -102,3 +102,15 @@ describe('DeepSeek Vision 适配器', () => {
     ).rejects.toMatchObject({ code: 'VISION_OUTPUT_INVALID' });
   });
 });
+
+it('内容理解接受无文字主体，独立于严格转录协议', async () => {
+  const request = vi.fn(async () => ({ content: JSON.stringify({ text: '', subject: '吐舌的狗', scene: '室内', purpose: '表情包', uncertainSegments: ['品种未知'], blank: false }) }));
+  const result = await recognizeImageWithDeepSeekVision(Buffer.from('dog'), { purpose: 'understanding', prepare: async () => prepared, request });
+  expect(result).toMatchObject({ subject: '吐舌的狗', text: '', purpose: '表情包', blank: false });
+  expect(result).not.toHaveProperty('content');
+});
+it('图像预处理后再次检查授权，失效不外发', async () => {
+  const request = vi.fn();
+  await expect(recognizeImageWithDeepSeekVision(Buffer.from('dog'), { purpose: 'understanding', prepare: async () => prepared, request, beforeRequest: async () => { throw Object.assign(new Error('ended'), { code: 'ORGANIZE_RUN_ENDED' }); } })).rejects.toMatchObject({ code: 'ORGANIZE_RUN_ENDED' });
+  expect(request).not.toHaveBeenCalled();
+});

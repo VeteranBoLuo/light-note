@@ -32,6 +32,7 @@ export async function callStructuredSkillModel({
   signal,
   repairableErrorCodes = ['AI_SKILL_STRUCTURED_OUTPUT_MISSING', 'AI_SKILL_STRUCTURED_OUTPUT_INVALID'],
   buildRepairInstruction,
+  beforeRequest,
 }) {
   const options = {
     tools: [{ type: 'function', function: structuredTool }],
@@ -42,6 +43,7 @@ export async function callStructuredSkillModel({
     trace,
     signal,
   };
+  await beforeRequest?.();
   let response = await requestAi(messages, options);
   let parsedArguments = null;
   try {
@@ -54,6 +56,7 @@ export async function callStructuredSkillModel({
       typeof buildRepairInstruction === 'function'
         ? buildRepairInstruction({ error, toolName: structuredTool.name, invalidArguments: parsedArguments })
         : `上一版没有按协议返回。必须且只能调用 ${structuredTool.name} 一次，不要输出解释文本。`;
+    await beforeRequest?.();
     response = await requestAi(
       [
         ...messages,

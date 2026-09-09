@@ -16,6 +16,7 @@ const statements = [
     source_size BIGINT UNSIGNED NOT NULL,
     source_revision CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT '',
     image_width INT UNSIGNED NOT NULL DEFAULT 0,
+    preview_metadata_json MEDIUMTEXT NULL,
     image_height INT UNSIGNED NOT NULL DEFAULT 0,
     status ENUM('queued', 'processing', 'ready', 'failed') NOT NULL DEFAULT 'queued',
     artifact_object_key VARCHAR(1024) NULL,
@@ -71,14 +72,26 @@ async function ensurePreviewSourceContract() {
   if (!String(columns.get('file_id') || '').includes('bigint')) {
     await pool.query('ALTER TABLE file_preview_artifacts MODIFY COLUMN file_id bigint unsigned NOT NULL');
   }
-  const [imageColumns] = await pool.query("SELECT column_name AS name,column_type AS type FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='file_preview_artifacts'");
-  const present = new Set(imageColumns.map(row => row.name));
-  for (const [name, definition] of Object.entries({ source_revision: "CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT ''", image_width: 'INT UNSIGNED NOT NULL DEFAULT 0', image_height: 'INT UNSIGNED NOT NULL DEFAULT 0' })) {
+  const [imageColumns] = await pool.query(
+    "SELECT column_name AS name,column_type AS type FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='file_preview_artifacts'",
+  );
+  const present = new Set(imageColumns.map((row) => row.name));
+  for (const [name, definition] of Object.entries({
+    source_revision: "CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT ''",
+    image_width: 'INT UNSIGNED NOT NULL DEFAULT 0',
+    image_height: 'INT UNSIGNED NOT NULL DEFAULT 0',
+    preview_metadata_json: 'MEDIUMTEXT NULL',
+  })) {
     if (!present.has(name)) await pool.query(`ALTER TABLE file_preview_artifacts ADD COLUMN ${name} ${definition}`);
   }
-  if(!String(imageColumns.find(row=>row.name==='strategy')?.type||'').includes('image_thumbnail')) await pool.query("ALTER TABLE file_preview_artifacts MODIFY COLUMN strategy ENUM('archive_manifest','converted_pdf','image_thumbnail','image_display') NOT NULL");
-  const [jobColumns]=await pool.query("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='file_preview_jobs' AND COLUMN_NAME='output_keys_json'");
-  if(!jobColumns.length) await pool.query('ALTER TABLE file_preview_jobs ADD COLUMN output_keys_json MEDIUMTEXT NULL');
+  if (!String(imageColumns.find((row) => row.name === 'strategy')?.type || '').includes('image_thumbnail'))
+    await pool.query(
+      "ALTER TABLE file_preview_artifacts MODIFY COLUMN strategy ENUM('archive_manifest','converted_pdf','image_thumbnail','image_display') NOT NULL",
+    );
+  const [jobColumns] = await pool.query(
+    "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='file_preview_jobs' AND COLUMN_NAME='output_keys_json'",
+  );
+  if (!jobColumns.length) await pool.query('ALTER TABLE file_preview_jobs ADD COLUMN output_keys_json MEDIUMTEXT NULL');
   const [indexRows] = await pool.query(
     `SELECT column_name AS columnName
        FROM information_schema.STATISTICS

@@ -146,11 +146,12 @@ export function buildSnapshot(type, row, tags = [], now = Date.now()) {
     type === 'note'
       ? note.text
       : type === 'file'
-        ? String(row.parsed_text || '').slice(0, 6000)
+        ? String(row.parsed_text || '').slice(0, 300000)
         : String(row.description || '').slice(0, 6000);
   const source = {
     title,
     text,
+    ...(type === 'file' ? { evidenceSegments: row.evidence_segments || [] } : {}),
     url: type === 'bookmark' ? row.url : undefined,
     folder: String(row.folder_name || ''),
     fileType: type === 'file' ? row.file_type : undefined,

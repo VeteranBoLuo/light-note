@@ -72,7 +72,7 @@
           <SvgIcon :src="icon.cloudSpace.preview.unknown" size="64" class="error-icon" />
           <h3>{{ t('cloudSpace.previewPanel.loadFailed') }}</h3>
           <p>{{ errorMessage }}</p>
-          <BButton type="primary" @click="retry" class="retry-btn">
+          <BButton v-if="canRetryPreview" type="primary" @click="retry" class="retry-btn">
             <SvgIcon :src="icon.cloudSpace.preview.retry" size="16" />
             {{ t('cloudSpace.previewPanel.retry') }}
           </BButton>
@@ -327,6 +327,7 @@
   import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
   import type { CSSProperties } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import { imagePreviewMessageKey } from '@/utils/imagePreviewMessage';
   import VideoPreview from '@/components/base/VideoPreview.vue';
   import PdfPreview from '@/components/cloudSpace/PdfPreview.vue';
   import ArchivePreview from '@/components/cloudSpace/ArchivePreview.vue';
@@ -409,6 +410,22 @@
   const loading = ref(false);
   const error = ref(false);
   const errorMessage = ref('');
+  const previewFailureCode = ref('');
+  const canRetryPreview = computed(
+    () =>
+      ![
+        'IMAGE_SOURCE_MISSING',
+        'IMAGE_SOURCE_UNSUPPORTED',
+        'IMAGE_DECODE_FAILED',
+        'IMAGE_SOURCE_SIZE_LIMIT',
+        'IMAGE_RESOURCE_LIMIT',
+        'IMAGE_OUTPUT_SIZE_LIMIT',
+        'FILE_CONTENT_INVALID',
+        'FILE_SIZE_INVALID',
+        'ARCHIVE_PASSWORD_REQUIRED',
+        'ARCHIVE_MULTIPART_OR_DAMAGED',
+      ].includes(previewFailureCode.value),
+  );
   const rotate = ref(0);
   const scale = ref(1);
   const isDragging = ref(false);
@@ -658,6 +675,7 @@
     loading.value = true;
     error.value = false;
     errorMessage.value = '';
+    previewFailureCode.value = '';
     textContent.value = '';
     markdownContent.value = '';
     resetImageView();
@@ -718,7 +736,10 @@
         return;
       }
       error.value = true;
-      errorMessage.value = (err as Error)?.message || t('cloudSpace.previewPanel.loadFailed');
+      previewFailureCode.value = String((err as { code?: string })?.code || '');
+      errorMessage.value = previewFailureCode.value
+        ? derivedFailureMessage(previewFailureCode.value)
+        : t('cloudSpace.previewPanel.loadFailed');
       loading.value = false;
     }
   }
@@ -752,6 +773,7 @@
   }
 
   function derivedFailureMessage(code: string) {
+    if (code?.startsWith('IMAGE_')) return t(imagePreviewMessageKey(code));
     const keyByCode: Record<string, string> = {
       ARCHIVE_PASSWORD_REQUIRED: 'cloudSpace.previewPanel.archivePasswordUnsupported',
       ARCHIVE_MULTIPART_OR_DAMAGED: 'cloudSpace.previewPanel.archiveMultipartOrDamaged',
@@ -935,7 +957,8 @@
     console.error('预览加载失败:', err);
     loading.value = false;
     error.value = true;
-    errorMessage.value = err?.message || t('cloudSpace.previewPanel.genericLoadFailed');
+    errorMessage.value =
+      previewType.value === 'image' ? t('imagePreview.network') : t('cloudSpace.previewPanel.genericLoadFailed');
   }
 
   function onImageLoad(event: Event) {

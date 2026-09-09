@@ -131,7 +131,7 @@ export async function readSuggestionSources(
   }
   if (type === 'file') {
     const [chunks] = await db.query(
-      `SELECT ds.file_id, ds.object_key, dc.content, dc.chunk_index FROM ai_document_sources ds JOIN ai_document_chunks dc ON dc.source_id=ds.id WHERE ds.user_id=? AND ds.file_id IN (?) AND ds.status='ready' AND dc.chunk_index < 5 ORDER BY ds.file_id, dc.chunk_index`,
+      `SELECT ds.file_id, ds.object_key, dc.content, dc.chunk_index, dc.locator_type, dc.locator_value FROM ai_document_sources ds JOIN ai_document_chunks dc ON dc.source_id=ds.id WHERE ds.user_id=? AND ds.file_id IN (?) AND ds.status='ready' AND dc.chunk_index < 220 ORDER BY ds.file_id, dc.chunk_index`,
       [userId, resourceIds],
     );
     rows.forEach((r) => {
@@ -139,7 +139,15 @@ export async function readSuggestionSources(
         .filter((c) => String(c.file_id) === String(r.id) && c.object_key === r.obs_key)
         .map((c) => c.content)
         .join('\n')
-        .slice(0, 6000);
+        .slice(0, 300000);
+      r.evidence_segments = chunks
+        .filter((c) => String(c.file_id) === String(r.id) && c.object_key === r.obs_key)
+        .map((c, index) => ({
+          id: `text:${c.chunk_index ?? index}`,
+          kind: 'text',
+          locator: c.locator_value || '',
+          content: c.content,
+        }));
     });
   }
   return rows.map((row) =>

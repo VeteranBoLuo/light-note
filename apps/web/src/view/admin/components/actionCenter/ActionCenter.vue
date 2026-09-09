@@ -61,6 +61,7 @@
         :options="sourceOptions"
         @change="onSourceChange"
       />
+      <BSelect v-if="activeSection === 'jobs'" v-model:value="failureFilter" :options="failureOptions" />
       <BSelect
         v-if="activeSection === 'jobs'"
         v-model:value="statusFilter"
@@ -432,7 +433,12 @@
         <section class="action-center__diagnostic-primary">
           <div>
             <span>{{ t('adminActionCenter.filePreviewDiagnostic.result') }}</span>
-            <strong>{{ filePreviewReasonLabel(filePreviewDiagnostic.job.attentionReason) }}</strong>
+            <strong>{{
+              filePreviewDiagnostic.artifact.strategy === 'image_thumbnail' ||
+              filePreviewDiagnostic.job.errorCode?.startsWith('IMAGE_')
+                ? t(imagePreviewMessageKey(filePreviewDiagnostic.job.errorCode))
+                : filePreviewReasonLabel(filePreviewDiagnostic.job.attentionReason)
+            }}</strong>
             <small v-if="filePreviewDiagnostic.job.errorCode"
               ><code>{{ filePreviewDiagnostic.job.errorCode }}</code></small
             >
@@ -537,6 +543,7 @@
 </template>
 
 <script setup lang="ts">
+  import { imagePreviewMessageKey } from '@/utils/imagePreviewMessage';
   import { computed, onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import router from '@/router';
@@ -570,6 +577,7 @@
     source: string;
     status: ItemStatus;
     rawStatus?: string;
+    failureKind?: 'source' | 'resource_limit' | 'service' | null;
     severity?: string;
     title: string;
     ownerLabel?: string;
@@ -732,6 +740,13 @@
   const loading = ref(false);
   const hasLoaded = ref(false);
   const activeSection = ref<Section>(initialSection);
+  const failureFilter = ref('all');
+  const failureOptions = computed(() => [
+    { value: 'all', label: t('imagePreview.allFailures') },
+    { value: 'source', label: t('imagePreview.sourceFailures') },
+    { value: 'resource_limit', label: t('imagePreview.resourceFailures') },
+    { value: 'service', label: t('imagePreview.serviceFailures') },
+  ]);
   const sourceFilter = ref(
     requestedSource === 'all' || (initialSources as readonly string[]).includes(requestedSource)
       ? requestedSource
@@ -816,6 +831,8 @@
   const filteredItems = computed(() => {
     const search = keyword.value.trim().toLocaleLowerCase();
     return currentItems.value.filter((item) => {
+      if (activeSection.value === 'jobs' && failureFilter.value !== 'all' && item.failureKind !== failureFilter.value)
+        return false;
       if (sourceFilter.value !== 'all' && item.source !== sourceFilter.value) return false;
       if (activeSection.value === 'jobs' && statusFilter.value !== 'all' && item.status !== statusFilter.value)
         return false;

@@ -1447,3 +1447,6 @@ export async function queryTodoAttentionCounts(db, userId) {
     todoAttentionTotal: todoOverdueTotal + todoDueTodayTotal,
   };
 }
+
+// Internal maintenance uses the same date normalization as ordinary task edits.
+export { normalizeDate as normalizeTodoDate };

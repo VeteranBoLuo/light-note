@@ -101,6 +101,22 @@ export function createImageRecognitionProvider({
   hasExecution = () => Boolean(getActiveAiExecution()),
 } = {}) {
   return Object.freeze({
+    async understandImage(buffer, options = {}) {
+      if (recognitionMode(env) !== 'vision_primary' || !hasExecution())
+        throw Object.assign(new Error('图片内容理解暂不可用'), { code: 'VISION_UNAVAILABLE' });
+      const identity = `deepseek:${String(options.model || env.DEEPSEEK_VISION_MODEL || visionProvider.model || DEFAULT_DEEPSEEK_VISION_MODEL)}`;
+      if ((await circuitBreaker.isOpen(identity)).open)
+        throw Object.assign(new Error('图片内容理解暂不可用'), { code: 'VISION_UNAVAILABLE' });
+      try {
+        const result = await visionProvider.understandImage(buffer, options);
+        await circuitBreaker.recordSuccess(identity);
+        return result;
+      } catch (error) {
+        if (!aborted(error, options.signal) && CIRCUIT_FAILURES.has(stableAgentErrorCode(error)))
+          await circuitBreaker.recordFailure(identity, stableAgentErrorCode(error));
+        throw error;
+      }
+    },
     async recognizeImage(buffer, options = {}) {
       const mode = recognitionMode(env);
       const runLocal = async (fallbackReason = '') =>

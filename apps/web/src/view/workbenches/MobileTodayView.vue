@@ -30,6 +30,7 @@
         compact
         :eligible="Boolean(user.id && user.role !== 'visitor')"
         :owner-key="dailyBriefOwnerKey"
+        :visitor="Boolean(user.visitorWorkspace || user.role === 'visitor' || user.adminContext?.subjectRole === 'visitor')"
         :read-only="growthReadOnly"
       />
     </div>
@@ -107,6 +108,7 @@
       </div>
       <BTabs
         v-model:active-tab="continueTab"
+        class="mobile-today__continue-tabs"
         variant="pill"
         :options="[
           ...(continueItems.length ? [{ key: 'resources', label: t('toolbox.project.resources') }] : []),
@@ -894,10 +896,12 @@
   }
 
   .mobile-today__continue-head {
+    // 提示文字与「全部项目」按钮切换时，标题行和下方页签保持原位。
+    min-height: 24px;
     margin-bottom: 8px;
     padding: 0 2px;
     display: flex;
-    align-items: baseline;
+    align-items: center;
     justify-content: space-between;
     gap: 8px;
   }
@@ -913,6 +917,10 @@
     text-overflow: ellipsis;
     color: var(--desc-color);
     font-size: 11px;
+  }
+
+  .mobile-today__continue .mobile-today__continue-tabs {
+    margin-bottom: 10px;
   }
 
   .mobile-today__continue-list {

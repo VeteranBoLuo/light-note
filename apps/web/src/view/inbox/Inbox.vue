@@ -72,7 +72,7 @@
       <TodoWorkspaceSidebar v-if="showTodoSidebar" class="todo-side-panel" @changed="changeOrganizationScope" />
       <div class="inbox-workspace-main">
         <template v-if="isTodoFocused && !embedded && !showTodoSidebar && !isUnscopedTodoView">
-          <BButton v-if="!bookmark.isDesktop" @click="scopeDrawerOpen = true"
+          <BButton v-if="!bookmark.isDesktop && !isMobileTodoPrimary" @click="scopeDrawerOpen = true"
             >{{ t('todoWorkspace.chooseScope') }} · {{ todoScopeLabel }}</BButton
           >
           <BDrawer
@@ -86,7 +86,15 @@
         </template>
 
         <header v-if="isMobileTodoPrimary" class="mobile-todo-heading">
-          <h1>{{ t('inbox.todoPageTitle') }}</h1>
+          <div class="mobile-todo-heading__row">
+            <h1>{{ t('inbox.todoPageTitle') }}</h1>
+            <BButton v-if="!embedded && !showTodoSidebar && !isUnscopedTodoView"
+              class="mobile-todo-heading__scope"
+              :aria-label="`${t('todoWorkspace.chooseScope')} · ${todoScopeLabel}`"
+              @click="scopeDrawerOpen = true">
+              {{ t('todoWorkspace.chooseScope') }} · {{ todoScopeLabel }}
+            </BButton>
+          </div>
           <p>{{ t('inbox.todoPageSubtitle') }}</p>
         </header>
 
@@ -148,7 +156,19 @@
         </aside>
 
         <div class="todo-controls-row" :class="{ 'is-desktop': isTodoFocused && !bookmark.isMobile && !embedded }">
+          <!-- 移动端先选择视图，再选择该视图的完成状态。 -->
+          <section v-if="isTodoFocused && bookmark.isMobile" class="todo-workspace-toolbar">
+            <BTabs
+              v-model:active-tab="todoView"
+              class="todo-workspace-toolbar__views"
+              :aria-label="t('inbox.todoViewGroupLabel')"
+              :options="todoViewOptions"
+              variant="pill"
+            />
+          </section>
+
           <section
+            v-if="!isMobileTodoPrimary || todoViewUsesStatusFilter(todoView)"
             class="inbox-toolbar"
             :class="{
               'inbox-toolbar--todo-primary': isMobileTodoPrimary,
@@ -162,8 +182,16 @@
                 <BTabs
                   v-model:active-tab="todo.status"
                   :options="todoStatusTabOptions"
+                  :aria-label="t('inbox.todoStatusGroupLabel')"
                   variant="pill"
                   @change="changeTodoStatus"
+                />
+                <BBatchToggle
+                  v-if="todoView === 'list' && (todo.items.length || pageLoading)"
+                  class="todo-workspace-toolbar__select"
+                  size="small"
+                  @click="toggleTodoSelectionMode"
+                  :active="todoSelectionMode"
                 />
               </template>
               <template v-else>
@@ -238,23 +266,6 @@
                 </BButton>
               </div>
             </template>
-          </section>
-
-          <!-- 桌面搜索、新建和批量入口位于统一标题右侧；移动端批量入口随视图切换行展示。 -->
-          <section v-if="isTodoFocused && bookmark.isMobile" class="todo-workspace-toolbar">
-            <BTabs
-              v-model:active-tab="todoView"
-              class="todo-workspace-toolbar__views"
-              :options="todoViewOptions"
-              variant="pill"
-            />
-            <BBatchToggle
-              v-if="todoView === 'list' && (todo.items.length || pageLoading)"
-              class="todo-workspace-toolbar__select"
-              size="small"
-              @click="toggleTodoSelectionMode"
-              :active="todoSelectionMode"
-            />
           </section>
 
           <div v-if="isTodoFocused" class="todo-workspace-filters">
@@ -782,6 +793,11 @@
 </template>
 
 <script setup lang="ts">
+  import {
+    canEnsureTodoCalendarRange,
+    todoCalendarOwnerKey,
+    isCalendarPermissionError,
+  } from '@/utils/todoCalendarAccess';
   import TodoWorkspaceSidebar from '@/components/todo/TodoWorkspaceSidebar.vue';
   import TodoOrganizationFields from '@/components/todo/TodoOrganizationFields.vue';
   import ResourceTagFilterPopover from '@/components/searchCenter/ResourceTagFilterPopover.vue';
@@ -1031,6 +1047,7 @@
   let todoUndoTimer = 0;
   let todoMidnightTimer = 0;
   const ensuredCalendarRanges = new Set<string>();
+  let calendarRangeGeneration = 0;
   const scrollContainer = ref<HTMLElement | null>(null);
   const showTopFade = ref(false);
   const showBottomFade = ref(false);
@@ -1323,8 +1340,10 @@
   });
 
   watch(
-    () => user.id,
-    async (id) => {
+    () => todoCalendarOwnerKey(user),
+    async () => {
+      const id = todoCalendarOwnerKey(user);
+      calendarRangeGeneration++;
       todoPreviewVisible.value = false;
       previewTodoId.value = '';
       previewTodoSeed.value = null;
@@ -1356,8 +1375,8 @@
   );
   onMounted(async () => {
     window.addEventListener('resize', updateViewportHeight);
-    inbox.resetForOwner(user.id || 'visitor');
-    todo.resetForOwner(user.id || 'visitor');
+    inbox.resetForOwner(todoCalendarOwnerKey(user));
+    todo.resetForOwner(todoCalendarOwnerKey(user));
     resourceSelectionMode.value = false;
     if (bookmark.isMobile) syncRequestedMobileMode();
     else inbox.filterType = resolveCurrentResourceFilter();
@@ -1666,9 +1685,9 @@
         delete todo.filters.listId;
       }
       todo.workspaceEnabled = true;
-      const owner = user.id;
+      const owner = todoCalendarOwnerKey(user);
       const freshTags = await fetchSelectableTags().catch(() => workspaceTags.value);
-      if (owner !== user.id) return false;
+      if (owner !== todoCalendarOwnerKey(user)) return false;
       workspaceTags.value = freshTags;
       todo.filters.tagIds = (todo.filters.tagIds || []).filter((id) => freshTags.some((tag) => tag.id === id));
       // 列表与四象限按当前页签查询；议程和日历读取全量并保留页签选择。
@@ -1677,6 +1696,7 @@
         status: todoViewUsesStatusFilter(todoView.value) ? todo.status : 'all',
         preserveStatus: !todoViewUsesStatusFilter(todoView.value),
       });
+      if (owner !== todoCalendarOwnerKey(user)) return false;
       if (refreshed && todoView.value === 'calendar') {
         const generation = todo.requestId;
         while (todo.nextCursor && generation === todo.requestId && !todo.loadFailed) {
@@ -1720,27 +1740,35 @@
   }
   async function ensureCalendarRange(range: { startDate: string; endDate: string }) {
     if (todoView.value !== 'calendar') return;
+    const requestGeneration = ++calendarRangeGeneration;
     const changed = todo.filters.rangeStart !== range.startDate || todo.filters.rangeEnd !== range.endDate;
     todo.filters.rangeStart = range.startDate;
     todo.filters.rangeEnd = range.endDate;
-    const owner = user.id;
+    const owner = todoCalendarOwnerKey(user);
     const key = `${owner}:${range.startDate}:${range.endDate}`;
+    const isCurrentRange = () =>
+      requestGeneration === calendarRangeGeneration &&
+      owner === todoCalendarOwnerKey(user) &&
+      todoView.value === 'calendar' &&
+      todo.filters.rangeStart === range.startDate &&
+      todo.filters.rangeEnd === range.endDate;
     let created = false;
-    if (owner && !ensuredCalendarRanges.has(key)) {
+    if (canEnsureTodoCalendarRange(user) && !ensuredCalendarRanges.has(key)) {
       ensuredCalendarRanges.add(key);
       try {
         const response = await ensureTodoCalendarRangeV2(range.endDate);
         if (response?.status !== 200) throw new Error('calendar range failed');
         created = Number(response.data?.createdCount || 0) > 0;
-      } catch {
+      } catch (error) {
         ensuredCalendarRanges.delete(key);
-        message.warning(t('inbox.todoCalendarRangeFailed'));
+        if (isCurrentRange() && !isCalendarPermissionError(error)) message.warning(t('inbox.todoCalendarRangeFailed'));
       }
     }
-    if (owner !== user.id || todoView.value !== 'calendar' || todo.filters.rangeStart !== range.startDate) return;
+    if (!isCurrentRange()) return;
     if (changed || created) await todo.refreshList({ status: 'all', preserveStatus: true, silent: true });
+    if (!isCurrentRange()) return;
     const generation = todo.requestId;
-    while (todo.nextCursor && generation === todo.requestId && !todo.loadFailed) {
+    while (isCurrentRange() && todo.nextCursor && generation === todo.requestId && !todo.loadFailed) {
       const cursor = todo.nextCursor;
       await todo.loadMore();
       if (cursor === todo.nextCursor) break;
@@ -2550,8 +2578,8 @@
     box-shadow: 0 0 0 5px color-mix(in srgb, var(--desc-color) 10%, transparent);
   }
   .inbox-page--todo-focused .inbox-hero__accent {
-    background: var(--todo-accent-color, #0ea5e9);
-    box-shadow: 0 0 0 5px color-mix(in srgb, var(--todo-accent-color, #0ea5e9) 10%, transparent);
+    background: var(--todo-module-color);
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--todo-module-color) 10%, transparent);
   }
   .todo-workspace-toolbar {
     display: flex;
@@ -3352,6 +3380,35 @@
       margin: 2px 2px 15px;
       flex-shrink: 0;
     }
+    .mobile-todo-heading__row {
+      min-height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-width: 0;
+    }
+    .mobile-todo-heading__row h1 {
+      flex-shrink: 0;
+    }
+    .mobile-todo-heading__scope {
+      min-width: 0;
+      max-width: 72%;
+      min-height: 36px;
+      height: 36px;
+      padding: 4px 10px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 12px;
+      border-radius: 10px;
+    }
+    .inbox-page--mobile-todo .todo-workspace-toolbar__select.b-batch-toggle.b_btn {
+      height: 36px;
+      min-height: 36px;
+      padding: 0 10px;
+      border-radius: 10px;
+    }
     .mobile-todo-heading h1 {
       margin: 0;
       color: var(--text-color);
@@ -3366,7 +3423,7 @@
       font-size: 12px;
       line-height: 1.5;
     }
-    /* 视图切换与「批量选择」保持同一行,不再各占一行 */
+    /* 视图切换独占一行，完成状态与批量操作位于下方。 */
     .todo-workspace-toolbar {
       align-items: center;
       gap: 8px;
@@ -3590,10 +3647,12 @@
     }
 
     .inbox-page--mobile-todo .todo-workspace-toolbar {
+      width: 100%;
       margin-bottom: 12px;
     }
     .inbox-page--mobile-todo .todo-workspace-toolbar__views {
-      max-width: 220px;
+      width: 100%;
+      max-width: none;
     }
     /* BTabs 的 class 直接落在组件根节点 .tab-container 上，不能用后代选择器。 */
     .inbox-page--mobile-todo :deep(.todo-workspace-toolbar__views.tab-container) {
@@ -3627,6 +3686,14 @@
     width: 240px;
     flex: 0 1 240px;
     min-width: 0;
+  }
+  .inbox-page.inbox-page--mobile-todo .todo-workspace-filters > .resource-tag-filter {
+    width: auto;
+    max-width: 100%;
+    flex: 0 1 auto;
+  }
+  .inbox-page--mobile-todo .todo-workspace-filters :deep(.resource-tag-filter__trigger) {
+    grid-template-columns: 30px minmax(0, auto) 14px;
   }
   .inbox-page.todo-sidebar-layout .todo-group {
     border: 1px solid var(--surface-border-color);
@@ -3757,17 +3824,14 @@
     width: 224px;
   }
   .inbox-page--todo-focused .inbox-hero {
-    margin-bottom: 18px;
+    min-height: 54px;
+    margin-bottom: 14px;
     gap: 16px;
     flex-wrap: wrap;
     min-width: 0;
   }
-  .inbox-page--todo-focused .inbox-hero h1 {
-    font-size: 30px;
-  }
   .inbox-page--todo-focused .inbox-hero p {
-    color: var(--todo-workspace-muted);
-    font-size: 14px;
+    margin-top: 5px;
   }
   .todo-summary-grid {
     gap: 16px;

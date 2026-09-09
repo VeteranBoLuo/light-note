@@ -44,6 +44,7 @@ const policy = ({
 // 这里只声明“通用安全检测如何理解字段”，不取代业务 handler 的权威内容校验。
 // 路由、字段、语义和容量预算必须一起命中；形态不符或超限时仍回到通用签名/异常检测。
 const REQUEST_FIELD_POLICIES = new Map([
+  ['POST /note/imports/start', new Map(Array.from({ length: 200 }, (_, i) => [`body.items.${i}.title`, policy({ semantic: 'note-import-title', maxSize: 255, skipSignatureRules: '*' })]))],
   [
     'POST /notification/browser/subscribe',
     new Map([
