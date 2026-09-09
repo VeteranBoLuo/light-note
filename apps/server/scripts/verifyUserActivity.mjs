@@ -133,7 +133,7 @@ try {
     [today, today],
   );
   const [explainPage] = await db.query(
-    'EXPLAIN SELECT a.user_id FROM user_activity_daily a STRAIGHT_JOIN user u ON u.id = a.user_id WHERE a.activity_date = ? AND a.first_active_at <= ? ORDER BY a.first_active_at DESC, a.user_id DESC LIMIT 21',
+    'EXPLAIN SELECT a.user_id FROM user_activity_daily a STRAIGHT_JOIN user u ON u.id = a.user_id WHERE a.activity_date = ? AND a.first_active_at <= ? ORDER BY a.last_active_at DESC, a.user_id DESC LIMIT 21',
     [today, activityTime(new Date())],
   );
   report.results = {

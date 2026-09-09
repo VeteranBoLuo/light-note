@@ -1,3 +1,4 @@
+import useUserStore from '@/store/useUser';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -162,6 +163,22 @@ afterEach(() => {
 });
 
 describe('TodoItem card preview', () => {
+  it('只读预览禁用修改但保留详情与子事项展开，退出预览恢复操作', async () => {
+    const { host, onPreview } = mountTodoItem();
+    const user = useUserStore();
+    user.adminContext = { id: 'preview', mode: 'readonly' } as any;
+    await nextTick();
+    expect(host.querySelector('.todo-item__main-check')?.getAttribute('aria-disabled')).toBe('true');
+    expect(host.querySelector<HTMLButtonElement>('.todo-more-button')?.disabled).toBe(true);
+    host.querySelector<HTMLElement>('.todo-item__main-line')!.click();
+    expect(onPreview).toHaveBeenCalledOnce();
+    host.querySelector<HTMLButtonElement>('.todo-subitems > button')!.click();
+    await nextTick();
+    expect(host.querySelector('.todo-subitems__panel [role=checkbox]')?.getAttribute('aria-disabled')).toBe('true');
+    user.adminContext = null;
+    await nextTick();
+    expect(host.querySelector<HTMLButtonElement>('.todo-more-button')?.disabled).toBe(false);
+  });
   it('子事项旁空白打开详情，子事项按钮不打开详情', async () => {
     const { host, onPreview } = mountTodoItem();
     host.querySelector<HTMLElement>('.todo-subitems')!.click();

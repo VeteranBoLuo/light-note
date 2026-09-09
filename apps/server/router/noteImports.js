@@ -6,7 +6,7 @@ import pool from '../db/index.js';
 import { ensureNotVisitor } from '../util/auth.js';
 import { resultData, L } from '../util/common.js';
 import { NOTE_IMPORT_LIMITS as LIMIT } from '@lightnote/shared/note-transfer';
-import { createImportTask, dismissImport, getImportTask, startImport, ownedTask, transaction } from '../util/noteImport/service.js';
+import { createImportTask, clearImportHistory, dismissImport, getImportTask, startImport, ownedTask, transaction } from '../util/noteImport/service.js';
 import { taskDirectory, importError, readJson, writeJson } from '../util/noteImport/storage.js';
 import { receiveImportUpload } from '../util/noteImport/upload.js';
 const router = express.Router();
@@ -165,6 +165,7 @@ router.post(
     }),
   ),
 );
+router.post('/clear-history', writeGuard, handler((req) => clearImportHistory(owner(req))));
 router.post('/dismiss', writeGuard, handler(async (req) => {
   await dismissImport(owner(req), req.body.id);
   return { id: req.body.id };

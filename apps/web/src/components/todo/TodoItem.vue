@@ -2,7 +2,7 @@
   <MobileSwipeDelete
     :enabled="swipeEnabled && !selectable"
     :open="swipeOpen"
-    :disabled="disabled"
+    :disabled="writeDisabled"
     :loading="deleting"
     :label="t('inbox.deleteTodo')"
     @swipe-start="emit('swipe-start')"
@@ -16,7 +16,7 @@
         'is-overdue': overdue,
         'is-completed': item.status === 'completed',
         'is-workspace': workspace,
-        'is-selectable': selectable && !disabled,
+        'is-selectable': selectable && !writeDisabled,
       }"
     >
       <div class="todo-item__body" :class="{ 'is-editable': cardPreviewable }" @click.stop="openPreviewFromCard">
@@ -26,7 +26,7 @@
             controlled
             class="todo-item__main-check"
             :model-value="item.status === 'completed'"
-            :disabled="disabled"
+            :disabled="writeDisabled"
             :aria-label="t('inbox.todoSelect', { title: item.title })"
             @click.stop
             @update:model-value="$emit('toggle-complete', $event)"
@@ -37,7 +37,7 @@
           <BCheckbox
             class="todo-item__select"
             :model-value="selected"
-            :disabled="disabled"
+            :disabled="writeDisabled"
             :aria-label="t('inbox.todoSelect', { title: item.title })"
             @click.stop
             @update:model-value="$emit('select', $event)"
@@ -64,7 +64,7 @@
         <p v-if="item.description" class="todo-item__description">{{ item.description }}</p>
         <TodoSubitems
           :item="item"
-          :disabled="disabled || selectable"
+          :disabled="writeDisabled || selectable"
           :editable="!seriesDetail"
           @update-checklist="emit('update-checklist', $event)"
           @edit="emit('edit', 'checklist')"
@@ -99,7 +99,7 @@
             class="todo-item__priority-select"
             :value="item.priority"
             :options="priorityOptions"
-            :disabled="disabled"
+            :disabled="writeDisabled"
             :aria-label="t('inbox.todoPriority')"
             @change="changePriority"
           />
@@ -110,7 +110,7 @@
             :open="openMenu === 'desktopSnooze'"
             @update:open="(visible: boolean) => setMenu('desktopSnooze', visible)"
           >
-            <BButton size="small" :disabled="disabled">{{ t('inbox.todoSnooze') }}</BButton>
+            <BButton size="small" :disabled="writeDisabled">{{ t('inbox.todoSnooze') }}</BButton>
             <template #content>
               <div class="todo-snooze-menu">
                 <BButton @click="runMenuAction(() => emit('snooze', 'tenMinutes'))">
@@ -133,7 +133,7 @@
           v-if="seriesDetail"
           class="todo-occurrence-delete"
           size="small"
-          :disabled="disabled || deleting"
+          :disabled="writeDisabled || deleting"
           :loading="deleting"
           @click.stop="emit('delete')"
           >{{ t('todoWorkspace.deleteOccurrence') }}</BButton
@@ -143,11 +143,11 @@
           :items="desktopMoreMenuItems"
           :triggers="['click']"
           placement="bottom-right"
-          :disabled="disabled"
+          :disabled="writeDisabled"
           :aria-label="t('common.more')"
           @select="handleDesktopMoreAction"
         >
-          <BButton class="todo-more-button" size="small" :disabled="disabled" :aria-label="t('common.more')">
+          <BButton class="todo-more-button" size="small" :disabled="writeDisabled" :aria-label="t('common.more')">
             <SvgIcon :src="icon.common.more" size="18" aria-hidden="true" />
           </BButton>
         </BActionMenu>
@@ -159,14 +159,14 @@
             class="todo-occurrence-priority"
             :value="item.priority"
             :options="priorityOptions"
-            :disabled="disabled"
+            :disabled="writeDisabled"
             :aria-label="t('inbox.todoPriority')"
             @change="changePriority"
           />
           <BButton
             class="todo-occurrence-delete"
             size="small"
-            :disabled="disabled || deleting"
+            :disabled="writeDisabled || deleting"
             :loading="deleting"
             @click.stop="emit('delete')"
             >{{ t('todoWorkspace.deleteOccurrence') }}</BButton
@@ -176,19 +176,19 @@
           <template v-if="item.status === 'pending'">
             <BButton
               class="todo-mobile-action todo-mobile-action--priority"
-              :disabled="disabled"
+              :disabled="writeDisabled"
               @click="openMobileMenu('priority')"
             >
               {{ priorityLabel }}
             </BButton>
-            <BButton class="todo-mobile-action" :disabled="disabled" @click="openMobileMenu('snooze')">
+            <BButton class="todo-mobile-action" :disabled="writeDisabled" @click="openMobileMenu('snooze')">
               {{ t('inbox.todoSnooze') }}
             </BButton>
-            <BButton class="todo-mobile-action" :disabled="disabled" @click="openMobileMenu('more')">
+            <BButton class="todo-mobile-action" :disabled="writeDisabled" @click="openMobileMenu('more')">
               {{ t('common.more') }}
             </BButton>
           </template>
-          <BButton v-else class="todo-mobile-action" :disabled="disabled" @click="openMobileMenu('more')">
+          <BButton v-else class="todo-mobile-action" :disabled="writeDisabled" @click="openMobileMenu('more')">
             {{ t('common.more') }}
           </BButton>
         </template>
@@ -209,6 +209,7 @@
   import TodoSubitems from './TodoSubitems.vue';
   import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
   import { computed, ref } from 'vue';
+  import useUserStore from '@/store/useUser';
   import { useI18n } from 'vue-i18n';
   import { recordOperation } from '@/api/commonApi';
   import BActionMenu from '@/components/base/BasicComponents/BActionMenu.vue';
@@ -273,6 +274,7 @@
   }
 
   function runMenuAction(action: () => void) {
+    if (writeDisabled.value) return;
     openMenu.value = '';
     action();
   }
@@ -419,6 +421,8 @@
     return labels;
   });
   const priorityOptions = computed(() => [0, 1, 2].map((value) => ({ value, label: t(`inbox.todoPriority${value}`) })));
+  const user = useUserStore();
+  const writeDisabled = computed(() => props.disabled || user.adminContext?.mode === 'readonly');
   const cardPreviewable = computed(() => !props.seriesDetail && !props.selectable && !props.disabled);
   const desktopMoreMenuItems = computed<BActionMenuItem[]>(() => {
     const actions: BActionMenuItem[] =
@@ -535,6 +539,7 @@
   }
 
   function handleMobileMenuAction(action: MobilePageActionItem) {
+    if (writeDisabled.value) return;
     if (action.key.startsWith('priority-')) changePriority(action.key.slice('priority-'.length));
     else if (action.key.startsWith('snooze-')) {
       emit('snooze', action.key.slice('snooze-'.length) as TodoSnoozePreset);
@@ -546,6 +551,7 @@
   }
 
   function handleMoreAction(key: string) {
+    if (writeDisabled.value) return;
     if (key.startsWith('snooze-')) emit('snooze', key.slice(7) as TodoSnoozePreset);
     else if (key === 'edit') emit('edit');
     else if (key === 'organize') emit('organize');
@@ -586,6 +592,7 @@
     );
   }
   function changePriority(value: unknown) {
+    if (writeDisabled.value) return;
     const priority = Number(value);
     if (priority === 0 || priority === 1 || priority === 2) emit('update-priority', priority);
   }

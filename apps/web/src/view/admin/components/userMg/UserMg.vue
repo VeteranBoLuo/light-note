@@ -83,6 +83,7 @@
             {{ record.adminRemark || '-' }}
           </span>
         </template>
+        <template v-else-if="column.key === 'lastActiveTime' && !record.lastActiveTime">-</template>
         <template v-else-if="column.key === 'operation'">
           <!--
             五个操作平铺时这一列又挤又难扫。只把最常用的「预览用户」留在外面

@@ -1,3 +1,4 @@
+import { USER_LAST_INTERACTION_JOIN } from '../util/services/userActivityService.js';
 import { preserveWorkshopPreference } from '../util/toolbox/projectPreference.js';
 import pool from '../db/index.js';
 import { normalizeMarkdownBlockquoteEntities, normalizeNoteType } from '@lightnote/shared';
@@ -699,7 +700,7 @@ export const getUserList = async (req, res) => {
     const requestedSort = req.body?.sort || {};
     const sortField = requestedSort.field === 'lastActiveTime' ? 'lastActiveTime' : 'createTime';
     const sortOrder = String(requestedSort.order || 'desc').toLowerCase() === 'asc' ? 'asc' : 'desc';
-    const sortColumn = sortField === 'lastActiveTime' ? 'u.last_active_time' : 'u.create_time';
+    const sortColumn = sortField === 'lastActiveTime' ? 'ua.last_active_at' : 'u.create_time';
     const direction = sortOrder.toUpperCase();
     const operator = sortOrder === 'asc' ? '>' : '<';
     const conditions = [
@@ -714,11 +715,16 @@ export const getUserList = async (req, res) => {
       conditions.push('u.role = ?');
       filterParams.push(role);
     }
-    if (activityWindow === 'day1') conditions.push('u.last_active_time >= DATE_SUB(NOW(), INTERVAL 1 DAY)');
-    if (activityWindow === 'day7') conditions.push('u.last_active_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)');
-    if (activityWindow === 'day30') conditions.push('u.last_active_time >= DATE_SUB(NOW(), INTERVAL 30 DAY)');
+    if (activityWindow === 'day1')
+      conditions.push('ua.last_active_at >= DATE_SUB(DATE_ADD(UTC_TIMESTAMP(3), INTERVAL 8 HOUR), INTERVAL 1 DAY)');
+    if (activityWindow === 'day7')
+      conditions.push('ua.last_active_at >= DATE_SUB(DATE_ADD(UTC_TIMESTAMP(3), INTERVAL 8 HOUR), INTERVAL 7 DAY)');
+    if (activityWindow === 'day30')
+      conditions.push('ua.last_active_at >= DATE_SUB(DATE_ADD(UTC_TIMESTAMP(3), INTERVAL 8 HOUR), INTERVAL 30 DAY)');
     if (activityWindow === 'inactive30') {
-      conditions.push('(u.last_active_time IS NULL OR u.last_active_time < DATE_SUB(NOW(), INTERVAL 30 DAY))');
+      conditions.push(
+        '(ua.last_active_at IS NULL OR ua.last_active_at < DATE_SUB(DATE_ADD(UTC_TIMESTAMP(3), INTERVAL 8 HOUR), INTERVAL 30 DAY))',
+      );
     }
     if (createFrom) {
       conditions.push('u.create_time >= ?');
@@ -729,7 +735,7 @@ export const getUserList = async (req, res) => {
       filterParams.push(createTo);
     }
     const whereSql = conditions.join(' AND ');
-    const scope = adminCursorScope('users', [
+    const scope = adminCursorScope('users-real-activity', [
       key,
       role,
       status,
@@ -740,12 +746,19 @@ export const getUserList = async (req, res) => {
       sortOrder,
     ]);
     const cursor = cursorMode ? decodeAdminListCursor(req.body?.cursor, scope) : null;
-    const cursorFilter = cursor
-      ? ` AND (${sortColumn} ${operator} ? OR (${sortColumn} = ? AND u.id ${operator} ?))`
-      : '';
-    const cursorParams = cursor
-      ? [new Date(adminCursorTime(cursor.value)), new Date(adminCursorTime(cursor.value)), cursor.id]
-      : [];
+    // Unknown interaction times stay last in both directions, including across cursor pages.
+    const activitySort = sortField === 'lastActiveTime';
+    const nullCursor = activitySort && cursor?.value === '';
+    const cursorFilter = !cursor
+      ? ''
+      : nullCursor
+        ? ` AND (${sortColumn} IS NULL AND u.id ${operator} ?)`
+        : ` AND ((${sortColumn} ${operator} ? OR (${sortColumn} = ? AND u.id ${operator} ?))${activitySort ? ` OR ${sortColumn} IS NULL` : ''})`;
+    const cursorParams = !cursor
+      ? []
+      : nullCursor
+        ? [cursor.id]
+        : [new Date(adminCursorTime(cursor.value)), new Date(adminCursorTime(cursor.value)), cursor.id];
     const take = cursorMode ? pageSize + 1 : pageSize;
     // 用户列表头像只用于 30px 左右的缩略展示，不能把历史 Base64 原图带进排序接口。
     // 外部头像地址保留；较大的内嵌头像交给列表使用默认头像，详情接口仍保留完整头像。
@@ -757,15 +770,16 @@ export const getUserList = async (req, res) => {
                 ELSE NULL
               END AS head_picture,
               u.phone_number, u.role, u.ip,
-              u.create_time, u.last_active_time, u.del_flag,
+              u.create_time, ua.last_active_at AS last_active_time, u.del_flag,
               COALESCE(ug.level, 1) AS level, ug.equipped_frame,
               COALESCE(aur.remark_name, '') AS admin_remark
        FROM user u
+       ${USER_LAST_INTERACTION_JOIN}
        LEFT JOIN user_growth ug ON ug.user_id = u.id
        LEFT JOIN admin_user_remarks aur
          ON aur.admin_user_id = ? AND aur.target_user_id = u.id
        WHERE ${whereSql}${cursorFilter}
-       ORDER BY ${sortColumn} ${direction}, u.id ${direction}
+       ORDER BY ${activitySort ? `${sortColumn} IS NULL ASC, ` : ''}${sortColumn} ${direction}, u.id ${direction}
        LIMIT ?${cursorMode ? '' : ' OFFSET ?'}`,
       [req.user.id, ...filterParams, ...cursorParams, take, ...(cursorMode ? [] : [skip])],
     );
@@ -831,6 +845,7 @@ export const getUserList = async (req, res) => {
       const [totalRes] = await pool.query(
         `SELECT COUNT(*) AS total
          FROM user u
+         ${USER_LAST_INTERACTION_JOIN}
          LEFT JOIN admin_user_remarks aur
            ON aur.admin_user_id = ? AND aur.target_user_id = u.id
          WHERE ${whereSql}`,
@@ -847,7 +862,10 @@ export const getUserList = async (req, res) => {
         hasMore,
         nextCursor:
           cursorMode && hasMore && last
-            ? encodeAdminListCursor(scope, { value: adminCursorTime(cursorValue), id: last.id })
+            ? encodeAdminListCursor(scope, {
+                value: activitySort && cursorValue == null ? '' : adminCursorTime(cursorValue),
+                id: last.id,
+              })
             : null,
       }),
     );
@@ -878,9 +896,10 @@ export const getUserAdminDetail = async (req, res) => {
 
     const [profileRows] = await pool.query(
       `SELECT u.id, u.alias, u.email, u.phone_number, u.role, u.ip, u.location,
-              u.login_type, u.del_flag, u.create_time, u.last_active_time,
+              u.login_type, u.del_flag, u.create_time, ua.last_active_at AS last_active_time,
               COALESCE(aur.remark_name, '') AS admin_remark
        FROM user u
+       ${USER_LAST_INTERACTION_JOIN}
        LEFT JOIN admin_user_remarks aur
          ON aur.admin_user_id = ? AND aur.target_user_id = u.id
        WHERE u.id = ?

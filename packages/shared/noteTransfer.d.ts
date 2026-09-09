@@ -27,6 +27,7 @@ export interface NoteImportTask {
   uploadBytes?: number;
   progress?: NoteImportProgress | null;
   finishedAt?: string | null;
+  expiresAt?: string | null;
   parentId: string | null;
   errorCode: string | null;
   createTime: string;

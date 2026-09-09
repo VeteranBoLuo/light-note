@@ -516,7 +516,7 @@
               <div v-else-if="isTodoFocused" class="todo-group-list">
                 <small class="todo-count-hint">{{ t('todoWorkspace.instanceCountHint') }}</small>
                 <section v-for="group in todoGroupLists" :key="group.key" class="todo-group">
-                  <header @click="collapsedGroups[group.key] = !collapsedGroups[group.key]">
+                  <header :class="{ 'is-collapsed': collapsedGroups[group.key] }" @click="collapsedGroups[group.key] = !collapsedGroups[group.key]">
                     <BButton
                       :aria-expanded="!collapsedGroups[group.key]"
                       @click.stop="collapsedGroups[group.key] = !collapsedGroups[group.key]"
@@ -631,7 +631,7 @@
                 </section>
 
                 <section v-if="recentCompleted.length" class="todo-group">
-                  <header @click="recentOpen = !recentOpen"
+                  <header :class="{ 'is-collapsed': !recentOpen }" @click="recentOpen = !recentOpen"
                     ><BButton :aria-expanded="recentOpen" @click.stop="recentOpen = !recentOpen"
                       ><span class="todo-group-chevron" :class="{ 'is-open': recentOpen }" aria-hidden="true"
                         ><SvgIcon :src="icon.noteTree.chevron" size="16" /></span
@@ -818,7 +818,7 @@
       v-model:visible="todoPreviewVisible"
       :item="previewTodo"
       :focus-ref="previewTodoFocusRef"
-      :disabled="hasPendingOperation || todoBatchMutating"
+      :disabled="hasPendingOperation || todoBatchMutating || user.adminContext?.mode === 'readonly'"
       :deleting="deletingTodoId === previewTodo.id"
       @edit="openTodoEditor"
       @delete="confirmDeleteTodo"
@@ -1983,7 +1983,7 @@
     }, nextDay.getTime() - now.getTime());
   }
   async function updateTodoPriority(item: TodoItemType, priority: TodoPriority) {
-    if (item.priority === priority) return;
+    if (item.priority === priority || user.adminContext?.mode === 'readonly') return;
     const payload = [{ id: item.id, dueAt: item.dueAt || null, priority }];
     const result = await todo.reorder(payload);
     if (result === false) message.error(t('inbox.todoReorderFailed'));
@@ -2239,7 +2239,7 @@
   }
   const todoEditorSection = ref<'checklist'>();
   function openTodoEditor(item: TodoItemType | null = null, section?: 'checklist') {
-    if (item?.status === 'completed') return;
+    if (item?.status === 'completed' || user.adminContext?.mode === 'readonly') return;
     todoEditorSection.value = section;
     openSwipeTodoId.value = '';
     scheduleViewRef.value?.closeSwipe();
@@ -2300,7 +2300,7 @@
     }
   }
   function confirmDeleteSeriesOccurrence(item: TodoItemType) {
-    if (hasPendingOperation.value) return;
+    if (hasPendingOperation.value || user.adminContext?.mode === 'readonly') return;
     Alert.alert({
       title: t('todoWorkspace.deleteOccurrence'),
       content: t('todoWorkspace.deleteOccurrenceConfirm', { title: item.title }),
@@ -2311,7 +2311,7 @@
     });
   }
   function confirmDeleteTodo(item: TodoItemType) {
-    if (hasPendingOperation.value) return;
+    if (hasPendingOperation.value || user.adminContext?.mode === 'readonly') return;
     openSwipeTodoId.value = '';
     if (item.planVersion === 2 && item.seriesId) {
       Alert.alert({
@@ -4039,9 +4039,13 @@
   .inbox-page--todo-focused .todo-group > header:hover {
     background: color-mix(in srgb, var(--primary-color) 7%, var(--todo-workspace-panel));
   }
-  .inbox-page--todo-focused .todo-group > header:focus-within {
-    outline: 2px solid var(--primary-color);
-    outline-offset: -2px;
+  .inbox-page--todo-focused .todo-group > header {
+    border-top-left-radius: inherit;
+    border-top-right-radius: inherit;
+  }
+  .inbox-page--todo-focused .todo-group > header.is-collapsed {
+    border-bottom-left-radius: inherit;
+    border-bottom-right-radius: inherit;
   }
   .inbox-page--todo-focused .todo-group > header > .b_btn {
     background: transparent;

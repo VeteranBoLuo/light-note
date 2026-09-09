@@ -418,7 +418,20 @@
         if (props.dynamicHeight && width && width !== lastWidth) {
           const anchor = captureScrollAnchor();
           lastWidth = width;
-          measuredHeights.value = new Map();
+          // Width changes invalidate offscreen measurements. Visible rows must be
+          // measured immediately: their height may stay unchanged, so ResizeObserver
+          // will not necessarily deliver another row entry after this cache reset.
+          const visibleHeights = new Map<string | number, number>();
+          for (const element of rowElements.keys()) {
+            if (!element.isConnected) {
+              rowObserver?.unobserve(element);
+              rowElements.delete(element);
+              continue;
+            }
+            const height = element.offsetHeight;
+            if (height > 0) visibleHeights.set(rowKey(Number(element.dataset.virtualIndex)), height);
+          }
+          measuredHeights.value = visibleHeights;
           nextTick(() => {
             if (anchor) restoreScrollAnchor(anchor);
           });

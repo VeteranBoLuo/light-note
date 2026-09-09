@@ -309,6 +309,44 @@ describe('dynamic BVirtualList', () => {
       globalThis.ResizeObserver = original;
     }
   });
+  it('remeasures visible rows when only the container width changes', async () => {
+    const original = globalThis.ResizeObserver;
+    const callbacks: ResizeObserverCallback[] = [];
+    globalThis.ResizeObserver = class {
+      constructor(callback: ResizeObserverCallback) {
+        callbacks.push(callback);
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    } as any;
+    try {
+      const host = mount(
+        BVirtualList,
+        {
+          items: [{ id: 'a' }, { id: 'b' }, { id: 'c' }],
+          dynamicHeight: true,
+          itemHeight: 160,
+          gap: 12,
+        },
+        { default: () => 'row' } as any,
+      );
+      await nextTick();
+      const rows = [...host.querySelectorAll<HTMLElement>('.b-virtual-list__item')];
+      for (const row of rows) Object.defineProperty(row, 'offsetHeight', { configurable: true, value: 242 });
+      callbacks[0](rows.map((target) => ({ target, borderBoxSize: [{ blockSize: 242 }] })) as any, {} as any);
+      await nextTick();
+      const scroller = host.querySelector<HTMLElement>('.b-virtual-list')!;
+      Object.defineProperty(scroller, 'clientWidth', { configurable: true, value: 599 });
+      // Row heights did not change: the browser only notifies the container observer.
+      callbacks[1]([{ target: scroller }] as any, {} as any);
+      await nextTick();
+      expect(rows[1].style.top).toBe('254px');
+      expect(rows[2].style.top).toBe('508px');
+    } finally {
+      globalThis.ResizeObserver = original;
+    }
+  });
   it('does not auto-load a paused group', async () => {
     const load = vi.fn();
     const paused = ref(true);

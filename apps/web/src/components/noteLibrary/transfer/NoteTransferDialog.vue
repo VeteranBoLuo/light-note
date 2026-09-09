@@ -1,18 +1,34 @@
 <template>
-  <BModal
+  <NoteTransferShell
     v-model:visible="visible"
-    :title="
-      t(
-        `noteTransfer.${mode === 'export' ? 'export' : mode === 'records' ? 'records' : resultView ? 'resultTitle' : executionView ? 'executionTitle' : 'import'}`,
-      )
-    "
+    :title="t(mode === 'export' ? 'noteTransfer.export' : 'noteTransfer.importCenter')"
     :width="dialogWidth"
-    fullscreen-mobile
-    :close-disabled="busy"
-    :mask-closable="!busy"
-    :history-closable="!busy"
-    :esc-closable="!busy"
+    :export-mode="mode === 'export'"
+    :busy="busy"
+    :can-back="backStack.length > 0"
+    @back="goBack"
   >
+    <template #navigation>
+      <nav class="note-transfer__navigation" :aria-label="t('noteTransfer.importCenter')">
+        <BButton v-if="backStack.length" :disabled="busy" @click="goBack">{{
+          t('noteTransfer.returnTo', {
+            view: t(
+              backStack[backStack.length - 1].mode === 'records' ? 'noteTransfer.records' : 'noteTransfer.import',
+            ),
+          })
+        }}</BButton>
+        <strong v-else>{{ t(mode === 'records' ? 'noteTransfer.records' : 'noteTransfer.newImport') }}</strong>
+        <BButton
+          v-if="mode !== 'records' && backStack[backStack.length - 1]?.mode !== 'records'"
+          :disabled="busy"
+          @click="openRecords"
+          >{{ t('noteTransfer.records') }}<span v-if="pendingCount"> · {{ pendingCount }}</span></BButton
+        >
+        <BButton v-else-if="mode === 'records'" :disabled="busy" @click="openImport()">{{
+          t('noteTransfer.newImport')
+        }}</BButton>
+      </nav>
+    </template>
     <div
       ref="contentRef"
       tabindex="-1"
@@ -20,6 +36,11 @@
       :class="{ 'is-mobile': device.isMobile }"
       :aria-busy="busy"
     >
+      <p
+        v-if="mode === 'import' && task?.expiresAt && !['parsing', 'queued', 'running'].includes(task.status)"
+        class="note-transfer__muted"
+        >{{ t('noteTransfer.expiresAt', { time: formatTime(task.expiresAt) }) }}</p
+      >
       <p v-if="stale" class="note-transfer__notice" role="status">{{ t('noteTransfer.stale') }}</p>
       <p v-if="error" class="note-transfer__error" role="alert">{{ error }}</p>
       <template v-if="mode === 'export'">
@@ -51,6 +72,12 @@
         <p class="note-transfer__muted">{{ t('noteTransfer.exportTip') }}</p>
       </template>
       <template v-else-if="mode === 'records'">
+        <div class="note-transfer__retention">
+          <BButton :aria-expanded="retentionOpen" @click="retentionOpen = !retentionOpen">{{
+            t('noteTransfer.retentionTitle')
+          }}</BButton>
+          <p v-if="retentionOpen" class="note-transfer__muted">{{ t('noteTransfer.retentionHint') }}</p>
+        </div>
         <div class="note-transfer__history-head">
           <span class="note-transfer__history-symbol"><SvgIcon :src="icon.noteDetail.history" size="22" /></span>
           <div
@@ -101,11 +128,6 @@
         </div>
       </template>
       <template v-else>
-        <div v-if="!task && !detailLoading" class="note-transfer__task-entry">
-          <BButton :disabled="busy" @click="openRecords"
-            >{{ t('noteTransfer.records') }}<span v-if="pendingCount"> ({{ pendingCount }})</span></BButton
-          >
-        </div>
         <ol
           v-if="!detailLoading && !detailFailed && !executionView && !resultView"
           class="note-transfer__steps"
@@ -125,7 +147,7 @@
         /></div>
         <div v-else-if="detailFailed" class="note-transfer__skeleton"
           ><p>{{ t('noteTransfer.failed') }}</p
-          ><BButton @click="openRecords">{{ t('noteTransfer.back') }}</BButton></div
+          ><BButton @click="goBack">{{ t('noteTransfer.back') }}</BButton></div
         >
         <NoteImportProgress
           v-else-if="uploadState || (task && task.status === 'parsing')"
@@ -277,21 +299,13 @@
     </div>
     <template #footer>
       <div class="note-transfer__footer" :class="{ 'is-mobile': device.isMobile }">
+        <span class="note-transfer__footer-spacer" />
         <BButton
-          v-if="mode === 'import' && task"
-          class="note-transfer__footer-back"
+          v-if="mode === 'records' && records.length && user.adminContext?.mode !== 'readonly'"
           :disabled="busy"
-          @click="openRecords"
-          >{{ t('noteTransfer.back') }}</BButton
+          @click="clearHistory"
+          >{{ t('noteTransfer.clearHistory') }}</BButton
         >
-        <BButton
-          v-else-if="mode === 'records'"
-          class="note-transfer__footer-back"
-          :disabled="busy"
-          @click="openImport()"
-          >{{ t('noteTransfer.newImport') }}</BButton
-        >
-        <span v-else class="note-transfer__footer-spacer" />
         <BButton :disabled="busy" @click="visible = false">{{ t('noteTransfer.close') }}</BButton>
         <BButton
           v-if="mode === 'export'"
@@ -302,25 +316,15 @@
           >{{ t('noteTransfer.exportStart') }}</BButton
         >
         <template v-if="mode === 'import' && task">
-          <BActionMenu
-            v-if="canDismiss"
-            :disabled="busy"
-            :z-index="800"
-            :items="[
-              {
-                key: 'dismiss',
-                label: t(
-                  ['uploading', 'review', 'paused'].includes(task.status)
-                    ? 'noteTransfer.abandon'
-                    : 'noteTransfer.deleteRecord',
-                ),
-                danger: true,
-              },
-            ]"
-            @select="dismissTask"
-          >
-            <BButton :disabled="busy">{{ t('noteTransfer.more') }}</BButton>
-          </BActionMenu>
+          <BButton v-if="canDismiss" class="note-transfer__dismiss" :disabled="busy" @click="dismissTask">
+            {{
+              t(
+                ['uploading', 'review', 'paused'].includes(task.status)
+                  ? 'noteTransfer.abandon'
+                  : 'noteTransfer.deleteRecord',
+              )
+            }}
+          </BButton>
           <BButton
             v-if="['expired', 'failed'].includes(task.status)"
             type="primary"
@@ -359,7 +363,7 @@
         </template>
       </div>
     </template>
-  </BModal>
+  </NoteTransferShell>
   <NoteDirectoryPicker v-model:visible="pickerVisible" :initial-parent-id="parentId" @selected="chooseParent" />
   <BModal
     v-model:visible="previewVisible"
@@ -387,9 +391,9 @@
   import { useUserStore, bookmarkStore } from '@/store';
   import { apiBasePost } from '@/http/request';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
+  import NoteTransferShell from './NoteTransferShell.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
-  import BActionMenu from '@/components/base/BasicComponents/BActionMenu.vue';
   import NoteImportProgress from './NoteImportProgress.vue';
   import NoteImportResult from './NoteImportResult.vue';
   import NoteImportWarnings from './NoteImportWarnings.vue';
@@ -427,6 +431,45 @@
     error = ref(''),
     mode = ref<'import' | 'records' | 'export'>('import');
   const contentRef = ref<HTMLElement>();
+  const retentionOpen = ref(false);
+  type ViewSnapshot = {
+    mode: 'import' | 'records' | 'export';
+    task: NoteImportTask | null;
+    parentId: string | null;
+    parentLabel: string;
+    scrollTop: number;
+    error: string;
+  };
+  const backStack = ref<ViewSnapshot[]>([]);
+  function rememberView() {
+    backStack.value.push({
+      mode: mode.value,
+      task: task.value ? JSON.parse(JSON.stringify(task.value)) : null,
+      parentId: parentId.value,
+      parentLabel: parentLabel.value,
+      scrollTop: contentRef.value?.scrollTop || 0,
+      error: error.value,
+    });
+  }
+  function goBack() {
+    if (busy.value) return;
+    const previous = backStack.value.pop();
+    if (!previous) return;
+    reset();
+    mode.value = previous.mode;
+    task.value = previous.task;
+    parentId.value = previous.parentId;
+    parentLabel.value = previous.parentLabel;
+    error.value = previous.error;
+    void nextTick(() => {
+      if (contentRef.value) contentRef.value.scrollTop = previous.scrollTop;
+    });
+    if (mode.value === 'records') void loadRecords(false);
+    else if (task.value && ['parsing', 'queued', 'running'].includes(task.value.status)) {
+      void refreshTask();
+      schedule();
+    }
+  }
   const detailFailed = ref(false);
   const detailLoading = ref(false),
     stale = ref(false),
@@ -538,6 +581,7 @@
   }
   function openImport(id: string | null = null) {
     if (user.adminContext?.mode === 'readonly') return;
+    backStack.value = [];
     reset();
     parentId.value = id;
     parentLabel.value = id ? t('noteTransfer.target') : t('noteTransfer.root');
@@ -547,6 +591,10 @@
     void loadRecords();
   }
   function openRecords() {
+    if (busy.value) return;
+    if (visible.value && mode.value === 'records') return;
+    if (visible.value && mode.value === 'import') rememberView();
+    else backStack.value = [];
     reset();
     mode.value = 'records';
     visible.value = true;
@@ -588,6 +636,8 @@
     if (visible.value && mode.value === 'records') timer = setTimeout(() => void loadRecords(false), 5000);
   }
   async function selectTask(id: string) {
+    if (busy.value) return;
+    rememberView();
     reset();
     mode.value = 'import';
     detailLoading.value = true;
@@ -644,6 +694,10 @@
       celebrate.value =
         task.value?.status === 'running' || task.value?.status === 'queued' ? next.status === 'completed' : false;
       task.value = next;
+      for (const snapshot of backStack.value) {
+        if (snapshot.task?.id === next.id && snapshot.task.status !== next.status)
+          snapshot.task = JSON.parse(JSON.stringify(next));
+      }
       stale.value = false;
       if (next.items.filter((i: NoteImportItem) => i.status === 'completed').length !== previous) emit('changed');
     } catch {
@@ -737,6 +791,43 @@
     () => records.value.filter((r) => !['completed', 'failed', 'expired'].includes(r.status)).length,
   );
   const canDismiss = computed(() => task.value && !['parsing', 'queued', 'running'].includes(task.value.status));
+  function clearHistory() {
+    if (busy.value || user.adminContext?.mode === 'readonly') return;
+    const g = generation;
+    Alert.alert({
+      title: t('noteTransfer.clearHistory'),
+      content: t('noteTransfer.clearHistoryHint'),
+      okText: t('noteTransfer.clearHistory'),
+      okType: 'danger',
+      onOk: () => {
+        if (g !== generation || mode.value !== 'records') return;
+        // Invalidate pending list polls while retaining the visible snapshot on failure.
+        generation++;
+        recordsFlight = null;
+        clearTimeout(timer);
+        const clearingGeneration = generation;
+        void guard(async () => {
+          const result = await call('clear-history');
+          if (generation !== clearingGeneration) return;
+          backStack.value = backStack.value.filter(
+            ({ task: saved }) =>
+              !saved ||
+              (!['completed', 'failed', 'expired'].includes(saved.status) &&
+                (!saved.expiresAt ||
+                  new Date(saved.expiresAt).getTime() > Date.now() ||
+                  ['parsing', 'queued', 'running'].includes(saved.status))),
+          );
+          message.success(t('noteTransfer.historyCleared', { count: result.clearedCount }));
+          await loadRecords(false);
+        }).finally(() => {
+          if (generation === clearingGeneration) {
+            clearTimeout(timer);
+            scheduleRecords();
+          }
+        });
+      },
+    });
+  }
   function dismissTask() {
     const id = task.value?.id;
     const g = generation;
@@ -754,6 +845,8 @@
             void guard(async () => {
               await call('dismiss', { id });
               if (g !== generation) return;
+              backStack.value = backStack.value.filter((snapshot) => snapshot.task?.id !== id);
+              if (backStack.value.at(-1)?.mode === 'records') backStack.value.pop();
               reset();
               mode.value = 'records';
               records.value = records.value.filter((record) => record.id !== id);
@@ -904,6 +997,7 @@
   watch(visible, (open) => {
     if (!open) {
       generation++;
+      backStack.value = [];
       clearTimeout(timer);
     }
   });
@@ -929,6 +1023,32 @@
   defineExpose({ openImport, openRecords, openExport });
 </script>
 <style scoped lang="less">
+  .note-transfer__navigation {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-width: 0;
+    font-size: 13px;
+  }
+  .note-transfer__navigation .b_btn {
+    font-size: 12px;
+  }
+  .note-transfer__retention {
+    order: 1;
+    padding-top: 12px;
+    border-top: 1px solid var(--surface-border-color);
+  }
+  .note-transfer__retention > .b_btn {
+    padding: 0;
+    background: transparent;
+    color: var(--desc-color);
+    font-size: 12px;
+  }
+  .note-transfer__retention p {
+    margin-top: 8px;
+  }
+
   .note-transfer__skeleton {
     min-height: 260px;
     display: flex;
@@ -946,6 +1066,10 @@
     justify-content: flex-end;
     margin-bottom: 0;
   }
+  .note-transfer__dismiss {
+    color: var(--danger-color);
+  }
+
   .note-transfer,
   .note-transfer *,
   .note-transfer__footer {
@@ -1286,7 +1410,7 @@
   }
   .note-transfer__record {
     height: auto;
-    min-height: 88px;
+    min-height: 82px;
     white-space: normal;
     line-height: 1.5;
     display: flex;
@@ -1322,11 +1446,11 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 42px;
-    height: 42px;
+    width: 34px;
+    height: 34px;
     flex-shrink: 0;
     border: 1px solid var(--surface-border-color);
-    border-radius: 12px;
+    border-radius: 8px;
     color: var(--workspace-note-text);
     background: var(--workspace-open-canvas);
   }

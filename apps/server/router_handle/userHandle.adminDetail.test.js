@@ -193,7 +193,7 @@ describe('后台用户管理增强', () => {
     const listCall = query.mock.calls.find(([sql]) => normalized(sql).includes('SELECT u.id, u.alias, u.email'));
     expect(normalized(listCall[0])).toContain('u.del_flag = 1');
     expect(normalized(listCall[0])).toContain('u.role = ?');
-    expect(normalized(listCall[0])).toContain('u.last_active_time IS NULL');
+    expect(normalized(listCall[0])).toContain('ua.last_active_at IS NULL');
     expect(normalized(listCall[0])).toContain('ug.equipped_frame');
     expect(normalized(listCall[0])).toContain('LEFT JOIN user_growth ug ON ug.user_id = u.id');
     expect(listCall[1]).toEqual(expect.arrayContaining(['root-1', 'tester-key', 'test']));
@@ -221,5 +221,84 @@ describe('后台用户管理增强', () => {
     );
     expect(normalized(countCall[0])).toContain('u.role = ?');
     expect(countCall[1]).toEqual(expect.arrayContaining(['root-1', 'tester-key', 'test']));
+  });
+});
+
+describe('用户管理真实交互口径', () => {
+  beforeEach(() => query.mockReset());
+  const request = (body = {}) => ({
+    user: { id: 'root-1', role: 'root' },
+    body: { cursor: null, limit: 1, sort: { field: 'lastActiveTime', order: 'desc' }, ...body },
+  });
+  function rowsForPage(rows) {
+    query.mockImplementation(async (sql) => {
+      const statement = normalized(sql);
+      if (statement.startsWith('SELECT u.id, u.alias, u.email')) return [rows];
+      if (statement.startsWith('SELECT COUNT(*)')) return [[{ total: 3 }]];
+      return [[]];
+    });
+  }
+  it.each(['asc', 'desc'])('真实活跃 %s 分页能从时间进入空值，再继续空值用户', async (order) => {
+    const body = { sort: { field: 'lastActiveTime', order } };
+    const known = { id: 'known', last_active_time: new Date('2026-09-09T04:30:06Z') };
+    const unknownA = { id: order === 'asc' ? 'a' : 'z', last_active_time: null };
+    const unknownB = { id: order === 'asc' ? 'b' : 'y', last_active_time: null };
+    rowsForPage([known, unknownA]);
+    const first = mockRes();
+    await getUserList(request(body), first);
+    const firstPage = first.send.mock.calls[0][0].data;
+    expect(firstPage.hasMore).toBe(true);
+    const sql = normalized(query.mock.calls[0][0]);
+    expect(sql).toContain('ua.last_active_at AS last_active_time');
+    expect(sql).not.toContain('u.last_active_time');
+    expect(sql).toContain('ORDER BY latest_activity.activity_date DESC LIMIT 1');
+    expect(sql).toContain(`ORDER BY ua.last_active_at IS NULL ASC, ua.last_active_at ${order.toUpperCase()}`);
+    rowsForPage([unknownA, unknownB]);
+    const second = mockRes();
+    await getUserList(request({ ...body, cursor: firstPage.nextCursor }), second);
+    const secondPage = second.send.mock.calls[0][0].data;
+    expect(secondPage.items[0].lastActiveTime).toBeNull();
+    expect(JSON.parse(Buffer.from(secondPage.nextCursor, 'base64url').toString()).value).toBe('');
+    const secondSql = normalized(
+      query.mock.calls.filter(([sql]) => normalized(sql).startsWith('SELECT u.id, u.alias, u.email')).at(-1)[0],
+    );
+    expect(secondSql).toContain('OR ua.last_active_at IS NULL');
+    query.mockClear();
+    rowsForPage([unknownB]);
+    const third = mockRes();
+    await getUserList(request({ ...body, cursor: secondPage.nextCursor }), third);
+    expect(third.send.mock.calls[0][0]).toMatchObject({ status: 200, data: { hasMore: false, nextCursor: null } });
+    expect(normalized(query.mock.calls[0][0])).toContain(
+      `ua.last_active_at IS NULL AND u.id ${order === 'asc' ? '>' : '<'} ?`,
+    );
+    expect(query.mock.calls[0][1].at(-2)).toBe(unknownA.id);
+  });
+  it.each([
+    ['day1', 1],
+    ['day7', 7],
+    ['day30', 30],
+  ])('%s 筛选与总数使用北京时间真实交互', async (activityWindow, days) => {
+    rowsForPage([]);
+    const res = mockRes();
+    await getUserList(request({ filters: { activityWindow } }), res);
+    expect(res.send.mock.calls[0][0].status).toBe(200);
+    for (const [sql] of query.mock.calls) {
+      expect(normalized(sql)).toContain('LEFT JOIN user_activity_daily ua');
+      expect(normalized(sql)).toContain(
+        `ua.last_active_at >= DATE_SUB(DATE_ADD(UTC_TIMESTAMP(3), INTERVAL 8 HOUR), INTERVAL ${days} DAY)`,
+      );
+      expect(normalized(sql)).not.toContain('u.last_active_time');
+    }
+  });
+  it('详情没有交互记录时保留空值，不从会话时间回填', async () => {
+    query.mockImplementation(async (sql) => {
+      if (normalized(sql).includes('WHERE u.id = ?')) return [[{ id: 'target-1', last_active_time: null }]];
+      return [[]];
+    });
+    const res = mockRes();
+    await getUserAdminDetail({ user: { id: 'root-1', role: 'root' }, body: { userId: 'target-1' } }, res);
+    expect(res.send.mock.calls[0][0]).toMatchObject({ status: 200, data: { profile: { lastActiveTime: null } } });
+    expect(normalized(query.mock.calls[0][0])).toContain('ua.last_active_at AS last_active_time');
+    expect(normalized(query.mock.calls[0][0])).not.toContain('u.last_active_time');
   });
 });

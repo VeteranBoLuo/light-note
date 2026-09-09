@@ -61,6 +61,7 @@ export async function getImportTask(owner, id) {
     uploadBytes: Number(task.upload_bytes),
     progress: task.progress_json ? JSON.parse(task.progress_json) : null,
     finishedAt: task.finished_at || null,
+    expiresAt: task.expires_at || null,
     parentId: task.parent_id,
     errorCode: task.error_code,
     createTime: task.create_time,
@@ -79,6 +80,14 @@ export async function getImportTask(owner, id) {
     })),
   };
 }
+// Clear only terminal history. The conditional update is atomic with retry/worker writes.
+export async function clearImportHistory(owner) {
+  const [result] = await pool.query(
+    "UPDATE note_import_tasks SET status=IF(status='expired','expired','failed'),error_code='NOTE_IMPORT_DISMISSED',progress_json=NULL,expires_at=NOW() WHERE owner_id=? AND (status IN ('completed','failed','expired') OR (expires_at<NOW() AND status NOT IN ('parsing','queued','running'))) AND (lease_until IS NULL OR lease_until<NOW()) AND (error_code IS NULL OR error_code<>'NOTE_IMPORT_DISMISSED')",
+    [owner],
+  );
+  return { clearedCount: Number(result.affectedRows) };
+}
 // Hide task history without removing notes or the idempotency evidence.
 export async function dismissImport(owner, id) {
   await transaction(async (db) => {
@@ -89,7 +98,7 @@ export async function dismissImport(owner, id) {
     )
       throw importError('NOTE_IMPORT_ACTIVE', 409);
     await db.query(
-      "UPDATE note_import_tasks SET status='failed',error_code='NOTE_IMPORT_DISMISSED',expires_at=DATE_ADD(NOW(),INTERVAL 7 DAY) WHERE id=?",
+      "UPDATE note_import_tasks SET status=IF(status='expired','expired','failed'),error_code='NOTE_IMPORT_DISMISSED',progress_json=NULL,expires_at=NOW() WHERE id=?",
       [id],
     );
   });

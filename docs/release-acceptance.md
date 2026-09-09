@@ -85,7 +85,7 @@ pnpm --filter server check:schema
 
 FCM 备用出口使用 `scripts/browser-push-relay/worker.mjs`，以独立托管实例配置主、备用地址与各自的服务端凭据（`BROWSER_PUSH_RELAYS`）。实例需设置 `RELAY_TOKEN`，关闭请求正文与凭据日志；示例 `wrangler.jsonc` 只提供部署结构，不含线上地址或密钥。每条出口上线前分别验证生产服务器到实际中转域名、中转到厂商以及真实设备展示；官网可访问或模拟测试不算出口验收。未配置中转保持直连，停用中转清空该配置即可；不得为验证而重开本地队列消费者。
 
-笔记导入需显式应用 `apps/server/migrations/20260909_note_import_tasks.sql`，再应用进度字段迁移 `apps/server/migrations/20260909_note_import_progress.sql`，随后执行 `pnpm --filter server check:note-imports`；API 与 `noteImportWorker.js` 必须共享持久私有暂存目录（`NOTE_IMPORT_STORAGE_DIR`）和笔记图片目录。导入 Worker 已接入本地启动与部署脚本，不能在未安装 Schema 时对外开放入口。帮助内容通过独立的 `20260909_note_transfer_knowledge.sql` 幂等更新；任务入口与删除说明通过 `20260909_note_import_task_help.sql` 更新，进度与结果页说明通过独立的 `20260909_note_import_progress_help.sql` 幂等更新，不混入应用启动。关闭导入 Worker 可停止领取新任务，已创建笔记保留；恢复后按租约续跑。
+笔记导入需显式应用 `apps/server/migrations/20260909_note_import_tasks.sql`，再应用进度字段迁移 `apps/server/migrations/20260909_note_import_progress.sql`，随后执行 `pnpm --filter server check:note-imports`；API 与 `noteImportWorker.js` 必须共享持久私有暂存目录（`NOTE_IMPORT_STORAGE_DIR`）和笔记图片目录。导入 Worker 已接入本地启动与部署脚本，不能在未安装 Schema 时对外开放入口。帮助内容通过独立的 `20260909_note_transfer_knowledge.sql` 幂等更新；任务入口与删除说明通过 `20260909_note_import_task_help.sql` 更新，进度与结果页说明通过独立的 `20260909_note_import_progress_help.sql` 幂等更新，清空与文件保留说明通过 `20260909_note_import_cleanup_help.sql` 更新，均不混入应用启动。关闭导入 Worker 可停止领取新任务，已创建笔记保留；恢复后按租约续跑。
 
 涉及相应异步流程时确认对应 Worker 随项目脚本或 PM2 正常运行。任务状态以领域任务表、租约和错误码为准，不用 API 日志代替 Worker 验收。
 

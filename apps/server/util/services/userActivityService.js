@@ -4,6 +4,16 @@ import redisClient from '../redisClient.js';
 import { INTERNAL_ROLES } from '../internalRoles.js';
 import { decodeAdminListCursor, encodeAdminListCursor } from '../adminListCursor.js';
 
+// Shared admin read model. The user/date index finds one latest daily row per account.
+// No session/API timestamp fallback: missing interaction history stays NULL.
+export const USER_LAST_INTERACTION_JOIN = `LEFT JOIN user_activity_daily ua
+  ON ua.user_id = u.id
+ AND ua.activity_date = (
+   SELECT latest_activity.activity_date FROM user_activity_daily latest_activity
+   WHERE latest_activity.user_id = u.id
+   ORDER BY latest_activity.activity_date DESC LIMIT 1
+ )`;
+
 const DAY_MS = 86_400_000;
 export const activityTime = (now = new Date()) =>
   new Date(now.getTime() + 8 * 3_600_000).toISOString().slice(0, 23).replace('T', ' ');
@@ -132,12 +142,13 @@ export async function queryActiveUsers({
   const date = current.slice(0, 10);
   const asOf = snapshotAt || current;
   if (!validActivityTime(asOf) || asOf.slice(0, 10) !== date || asOf > current) throw invalidCursor();
-  const scope = `active-users:${actorId}:${hideInternal}:${asOf}`;
+  // The snapshot fixes membership; latest activity remains live across pages.
+  const scope = `active-users:last-active:${actorId}:${hideInternal}:${asOf}`;
   const after = decodeAdminListCursor(cursor, scope);
   if (
     after &&
     (!validActivityTime(after.value) ||
-      after.value > asOf ||
+      after.value > current ||
       after.value.slice(0, 10) !== date ||
       after.id.length > 255)
   )
@@ -155,8 +166,8 @@ export async function queryActiveUsers({
       DATE_FORMAT(a.last_active_at, '%Y-%m-%d %H:%i:%s.%f') AS lastActiveAt
       FROM user_activity_daily a STRAIGHT_JOIN user u ON u.id = a.user_id
       LEFT JOIN admin_user_remarks r ON r.admin_user_id = ? AND r.target_user_id = u.id
-      WHERE ${where}${after ? ' AND (a.first_active_at < ? OR (a.first_active_at = ? AND a.user_id < ?))' : ''}
-      ORDER BY a.first_active_at DESC, a.user_id DESC LIMIT 21`,
+      WHERE ${where}${after ? ' AND (a.last_active_at < ? OR (a.last_active_at = ? AND a.user_id < ?))' : ''}
+      ORDER BY a.last_active_at DESC, a.user_id DESC LIMIT 21`,
       [actorId, ...params, ...(after ? [after.value, after.value, after.id] : [])],
     ),
   ]);
@@ -174,6 +185,6 @@ export async function queryActiveUsers({
     total: Number(totals[0]?.total || 0),
     items,
     hasMore: rows.length > 20,
-    nextCursor: rows.length > 20 ? encodeAdminListCursor(scope, { value: last.firstActiveAt, id: last.id }) : null,
+    nextCursor: rows.length > 20 ? encodeAdminListCursor(scope, { value: last.lastActiveAt, id: last.id }) : null,
   };
 }

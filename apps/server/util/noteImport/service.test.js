@@ -16,7 +16,7 @@ vi.mock('../services/noteTreeService.js', () => ({
 }));
 vi.mock('../imagePreview/references.js', () => ({ registerAsset: vi.fn() }));
 vi.mock('../noteImages.js', () => ({ NOTE_IMAGE_DIR: '/tmp/unused-import-images' }));
-const { startImport, ownedTask, dismissImport, getImportTask } = await import('./service.js');
+const { startImport, ownedTask, dismissImport, clearImportHistory, getImportTask } = await import('./service.js');
 beforeEach(() => {
   vi.clearAllMocks();
   state.task = {
@@ -111,7 +111,7 @@ describe('import task dismissal', () => {
   it('exposes upload bytes and expired staging accurately', async () => {
     state.task.upload_bytes = 23;
     state.task.expires_at = new Date(0);
-    expect(await getImportTask('owner', 'task')).toMatchObject({ status: 'expired', uploadBytes: 23 });
+    expect(await getImportTask('owner', 'task')).toMatchObject({ status: 'expired', uploadBytes: 23, expiresAt: state.task.expires_at });
   });
 });
 
@@ -135,4 +135,25 @@ it('clears execution progress on retry without reselecting successful items', as
   expect(updates).toHaveLength(1);
   expect(updates[0][0]).toContain("status='failed'");
   expect(state.queries.some(([sql]) => sql.includes("progress_json=NULL,finished_at=NULL,status='queued'"))).toBe(true);
+});
+
+describe('clear finished import history', () => {
+  it('scopes the atomic clear to the owner and eligible tasks without deleting notes', async () => {
+    db.query.mockResolvedValueOnce([{ affectedRows: 3 }]);
+    expect(await clearImportHistory('owner')).toEqual({ clearedCount: 3 });
+    expect(db.query).toHaveBeenCalledTimes(1);
+    const [sql, args] = db.query.mock.calls[0];
+    expect(args).toEqual(['owner']);
+    expect(sql).toContain('WHERE owner_id=?');
+    expect(sql).toContain("status IN ('completed','failed','expired')");
+    expect(sql).toContain("status NOT IN ('parsing','queued','running')");
+    expect(sql).toContain('lease_until<NOW()');
+    expect(sql).toContain("error_code<>'NOTE_IMPORT_DISMISSED'");
+    expect(sql).toContain('expires_at=NOW()');
+    expect(sql).toContain("status=IF(status='expired','expired','failed')");
+  });
+  it('returns zero when there is no eligible history', async () => {
+    db.query.mockResolvedValueOnce([{ affectedRows: 0 }]);
+    expect(await clearImportHistory('owner')).toEqual({ clearedCount: 0 });
+  });
 });

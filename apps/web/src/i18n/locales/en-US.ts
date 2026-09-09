@@ -12753,7 +12753,7 @@ export default {
     refresh: 'Refresh',
     rule: 'Clicks, touches, keyboard input and intentional scrolling count, followed by up to 5 minutes of foreground reading. Automatic refreshes and idle pages do not count.',
     timeHint:
-      'Beijing time; latest activity updates about once a minute. Sorted by first activity today; this is not online status.',
+      'Beijing time; latest activity updates about once a minute. Sorted by latest activity, newest first; this is not online status.',
     partial: 'Partial data on the first day of the new metric',
     loading: 'Loading active users…',
     failed: 'Unable to load active users. Retry or refresh.',

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { encodeAdminListCursor } from '../adminListCursor.js';
 import {
   activityTime,
   recordActivity,
@@ -92,7 +93,33 @@ describe('activity read model', () => {
     });
     expect(db.query.mock.calls[1][1]).toEqual(['2026-09-01', '2026-09-07', '10:30:00']);
   });
-  it('20-row cursor pages bind actor, filter and snapshot; last activity does not affect ordering', async () => {
+  it('accepts live latest-activity cursors after the membership snapshot and rejects future or old-sort cursors', async () => {
+    const snapshotAt = '2026-09-08 09:30:00.000';
+    const scope = `active-users:last-active:root:true:${snapshotAt}`;
+    const db = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce(metadata)
+        .mockResolvedValueOnce([[{ total: 1 }]])
+        .mockResolvedValueOnce([[]]),
+    };
+    const cursor = encodeAdminListCursor(scope, { value: '2026-09-08 10:00:00.000', id: 'u1' });
+    const result = await queryActiveUsers({ actorId: 'root', now, db, snapshotAt, cursor });
+    expect(result.items).toEqual([]);
+    expect(result.nextCursor).toBeNull();
+    expect(db.query.mock.calls[2][1].slice(-3)).toEqual(['2026-09-08 10:00:00.000', '2026-09-08 10:00:00.000', 'u1']);
+    db.query.mockResolvedValue(metadata);
+    for (const invalid of [
+      encodeAdminListCursor(scope, { value: '2026-09-08 10:31:00.000', id: 'u1' }),
+      encodeAdminListCursor(`active-users:root:true:${snapshotAt}`, { value: snapshotAt, id: 'u1' }),
+      encodeAdminListCursor(`active-users:last-active:root:false:${snapshotAt}`, { value: snapshotAt, id: 'u1' }),
+    ]) {
+      await expect(queryActiveUsers({ actorId: 'root', now, db, snapshotAt, cursor: invalid })).rejects.toMatchObject({
+        code: 'ADMIN_LIST_CURSOR_INVALID',
+      });
+    }
+  });
+  it('20-row pages order and continue by latest activity, binding actor, filter and snapshot', async () => {
     const rows = Array.from({ length: 21 }, (_, i) => ({
       id: `user-${i}`,
       name: 'name',
@@ -111,6 +138,7 @@ describe('activity read model', () => {
     expect(page.items).toHaveLength(20);
     expect(page.total).toBe(21);
     expect(page.hasMore).toBe(true);
+    expect(db.query.mock.calls[2][0]).toContain('ORDER BY a.last_active_at DESC, a.user_id DESC');
     db.query
       .mockReset()
       .mockResolvedValueOnce(metadata)
@@ -125,10 +153,11 @@ describe('activity read model', () => {
     });
     expect(second.items).toHaveLength(1);
     expect(second.hasMore).toBe(false);
-    expect(db.query.mock.calls[2][0]).toContain('ORDER BY a.first_active_at DESC, a.user_id DESC');
+    expect(db.query.mock.calls[2][0]).toContain('a.last_active_at < ? OR (a.last_active_at = ? AND a.user_id < ?)');
+    expect(db.query.mock.calls[2][0]).toContain('ORDER BY a.last_active_at DESC, a.user_id DESC');
     expect(db.query.mock.calls[2][1].slice(-3)).toEqual([
-      '2026-09-08 09:00:00.000',
-      '2026-09-08 09:00:00.000',
+      '2026-09-08 10:00:00.000',
+      '2026-09-08 10:00:00.000',
       'user-19',
     ]);
     db.query.mockResolvedValue(metadata);
