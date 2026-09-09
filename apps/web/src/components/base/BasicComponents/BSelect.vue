@@ -430,6 +430,15 @@
 
   function toggleOpen() {
     if (props.disabled) return;
+    if (usesInlineInput.value && props.selectOnFocus) {
+      const input = triggerRef.value?.querySelector<HTMLInputElement>('.select-search-inline');
+      if (input) {
+        keepOpen();
+        input.focus();
+        selectInlineValue(input);
+      }
+      return;
+    }
     isOpen.value = !isOpen.value;
     // 打开时的定位统一交给 watch(isOpen),覆盖 toggleOpen / 内联搜索框 @focus @input / keepOpen 所有打开路径
     if (isOpen.value) {
@@ -446,9 +455,8 @@
     if (!isOpen.value) isOpen.value = true;
   }
 
-  function selectInlineValue(event: FocusEvent | MouseEvent) {
+  function selectInlineValue(input: HTMLInputElement | null) {
     if (!props.selectOnFocus) return;
-    const input = event.currentTarget as HTMLInputElement | null;
     if (!input) return;
     if (!searchText.value && displayText.value) {
       searchText.value = displayText.value;
@@ -459,11 +467,12 @@
 
   function handleInlineFocus(event: FocusEvent) {
     keepOpen();
-    selectInlineValue(event);
+    selectInlineValue(event.currentTarget as HTMLInputElement);
   }
 
   function handleInlineClick(event: MouseEvent) {
-    selectInlineValue(event);
+    if (props.selectOnFocus) keepOpen();
+    selectInlineValue(event.currentTarget as HTMLInputElement);
   }
 
   function handleSearchInput() {
