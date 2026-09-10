@@ -3687,8 +3687,10 @@ WHERE NOT EXISTS (
 );
 
 SELECT 'support_campaign_visibility_columns' AS check_name, 'missing visibility columns' AS detail
+FROM DUAL
 WHERE (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'support_campaigns' AND COLUMN_NAME IN ('public_enabled','public_updated_by','public_updated_at')) <> 3;
 SELECT 'support_campaign_visibility_lock' AS check_name, 'missing serialization row' AS detail
+FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM support_campaign_visibility_lock WHERE id = 1);
 SELECT 'support_campaign_visibility_default' AS check_name, 'new versions must start hidden' AS detail
 FROM information_schema.COLUMNS
