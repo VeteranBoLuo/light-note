@@ -46,20 +46,38 @@
                 @keydown="onResultKeydown"
               >
                 <template #prefix><SvgIcon :src="icon.navigation.search" size="19" /></template>
-                <template #suffix><kbd>{{ searchShortcutLabel }}</kbd></template>
+                <template #suffix
+                  ><kbd>{{ searchShortcutLabel }}</kbd></template
+                >
               </BInput>
             </div>
           </header>
 
-          <div class="global-search-dialog__body">
+          <div class="global-search-dialog__body" :class="{ 'is-loading': loading }" :aria-busy="loading">
             <BButton v-if="workshopMatch" class="global-search__workshop" @click="openWorkshop">
               <SvgIcon :src="icon.toolbox.home" size="20" /><span
                 ><strong>{{ t('toolbox.title') }}</strong
                 ><small>{{ t('toolbox.project.introHint') }}</small></span
               >
             </BButton>
-            <div v-if="loading" class="global-search__loading" aria-live="polite">
-              <div v-for="n in 6" :key="n" class="global-search__skeleton"></div>
+            <div v-if="loading" class="global-search__loading" aria-hidden="true">
+              <section v-for="group in 3" :key="group" class="global-search-group">
+                <h3 class="global-search__skeleton global-search__skeleton-heading"></h3>
+                <div v-for="row in 3" :key="row" class="global-search__skeleton-row">
+                  <span class="global-search__skeleton global-search__skeleton-dot"></span>
+                  <div class="global-search__skeleton-copy">
+                    <span
+                      class="global-search__skeleton global-search__skeleton-title"
+                      :class="{ 'is-short': row === 2 }"
+                    ></span>
+                    <span
+                      class="global-search__skeleton global-search__skeleton-description"
+                      :class="{ 'is-short': row === 3 }"
+                    ></span>
+                  </div>
+                  <span class="global-search__skeleton global-search__skeleton-meta"></span>
+                </div>
+              </section>
             </div>
 
             <template v-else-if="suggestGroups.length">
@@ -147,14 +165,15 @@
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
-  import { fetchGlobalSearch, type SearchGroup, type SearchResultItem, type SearchType } from '@/api/search';
+  import { type SearchResultItem } from '@/api/search';
   import { recordOperation } from '@/api/commonApi';
   import { getSearchTypeLabel } from '@/components/searchCenter/searchMeta';
-  import { rankByRelevance } from '@/components/searchCenter/searchUtils';
+  import { useGlobalSearchSuggestions } from '@/composables/useGlobalSearchSuggestions';
+  import { GLOBAL_SEARCH_TYPES, type GlobalSearchType } from '@/utils/globalSearchTypes';
+  import { navigateToSearchResult } from '@/utils/globalSearchNavigation';
   import { GLOBAL_SEARCH_HIDDEN_ROUTE_NAMES } from '@/config/navigation';
   import { getGlobalShortcutKeys, isEditableShortcutTarget, matchesGlobalShortcut } from '@/config/keyboardShortcuts';
   import icon from '@/config/icon';
-  import { openBookmarkUrl } from '@/utils/openBookmark';
 
   const router = useRouter();
   const route = useRoute();
@@ -164,12 +183,21 @@
   const inputRef = ref<{ focus?: () => void } | null>(null);
   const keyword = ref('');
   const visible = ref(false);
-  const loading = ref(false);
-  const searchError = ref(false);
-  const suggestGroups = ref<SearchGroup[]>([]);
+  const {
+    items,
+    loading,
+    failed: searchError,
+    schedule,
+    run,
+    reset,
+  } = useGlobalSearchSuggestions(undefined, undefined, { includeRecent: true });
+  const suggestGroups = computed(() =>
+    GLOBAL_SEARCH_TYPES.map((type) => ({
+      type,
+      items: items.value.filter((item) => item.type === type),
+    })).filter((group) => group.items.length),
+  );
   const activeIndex = ref(-1);
-  let searchTimer = 0;
-  let requestSeq = 0;
   let previousBodyOverflow = '';
   const searchShortcutLabel = getGlobalShortcutKeys('globalSearch').join('+');
   const routeName = computed(() => String(route.name || ''));
@@ -210,8 +238,8 @@
         .includes(query)
     );
   }
-  function getGroupLabel(type: string) {
-    return getSearchTypeLabel(t, ['bookmark', 'note', 'file', 'tag'].includes(type) ? (type as SearchType) : 'all');
+  function getGroupLabel(type: GlobalSearchType) {
+    return getSearchTypeLabel(t, type);
   }
   function isActiveItem(item: SearchResultItem) {
     return activeIndex.value >= 0 && flatItems.value[activeIndex.value] === item;
@@ -221,33 +249,9 @@
     if (index >= 0) activeIndex.value = index;
   }
 
-  async function ensureData(force = false) {
-    const seq = ++requestSeq;
-    loading.value = true;
-    try {
-      const result = await fetchGlobalSearch(keyword.value, 10, force);
-      if (seq !== requestSeq) return;
-      searchError.value = false;
-      suggestGroups.value = result.groups.map((group) => ({
-        ...group,
-        items: rankByRelevance(group.items, keyword.value).slice(0, 3),
-      }));
-    } catch (error) {
-      if (seq === requestSeq) {
-        searchError.value = true;
-        suggestGroups.value = [];
-      }
-      console.warn('全局搜索失败:', error);
-    } finally {
-      if (seq === requestSeq) loading.value = false;
-    }
-  }
-  function scheduleSearch() {
-    window.clearTimeout(searchTimer);
-    searchTimer = window.setTimeout(() => void ensureData(), 220);
-  }
   function handleInput() {
-    scheduleSearch();
+    activeIndex.value = -1;
+    schedule(keyword.value);
   }
   function syncNavigationLayer(opened: boolean) {
     document.querySelector('.navigation')?.classList.toggle('navigation--search-open', opened);
@@ -259,7 +263,7 @@
     previousBodyOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     syncNavigationLayer(true);
-    void ensureData(true);
+    void run(keyword.value);
     await nextTick();
     inputRef.value?.focus?.();
   }
@@ -269,6 +273,7 @@
   function close({ restoreFocus = true } = {}) {
     if (!visible.value) return;
     visible.value = false;
+    reset();
     activeIndex.value = -1;
     document.body.style.overflow = previousBodyOverflow;
     syncNavigationLayer(false);
@@ -327,15 +332,7 @@
   }
   function openItem(item: SearchResultItem) {
     close({ restoreFocus: false });
-    if (item.type === 'bookmark' && item.url) {
-      openBookmarkUrl(item.url);
-      return;
-    }
-    if (item.type === 'file') {
-      void router.push({ path: '/cloudSpace', query: { fileName: item.title } });
-      return;
-    }
-    if (item.route) void router.push(item.route);
+    navigateToSearchResult(router, item);
   }
   function locateItem(item: SearchResultItem) {
     close({ restoreFocus: false });
@@ -380,7 +377,6 @@
   onBeforeUnmount(() => {
     document.removeEventListener('keydown', handleShortcut);
     window.removeEventListener('light-note:close-search', handleCloseSearch);
-    window.clearTimeout(searchTimer);
     if (visible.value) document.body.style.overflow = previousBodyOverflow;
     syncNavigationLayer(false);
   });
@@ -438,7 +434,9 @@
   }
   .global-search-dialog {
     width: min(720px, calc(100vw - 40px));
-    max-height: min(760px, calc(100vh - 100px));
+    // 各搜索状态共用固定外框；小窗口按可用高度收缩，结果区独立滚动。
+    height: min(600px, calc(100vh - 100px));
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -450,6 +448,7 @@
     animation: global-search-rise 0.18s ease-out;
   }
   .global-search-dialog__header {
+    flex-shrink: 0;
     padding: 18px 18px 14px;
     border-bottom: 1px solid var(--surface-divider-color);
   }
@@ -498,7 +497,8 @@
     font-size: 10px;
   }
   .global-search-dialog__body {
-    min-height: 240px;
+    flex: 1 1 0;
+    min-height: 0;
     padding: 6px 12px 12px;
     overflow-y: auto;
     overscroll-behavior: contain;
@@ -557,6 +557,9 @@
   }
   .global-search-result__dot.is-file {
     background: var(--resource-file-color);
+  }
+  .global-search-result__dot.is-todo {
+    background: var(--todo-accent-color);
   }
   .global-search-result__dot.is-tag {
     background: var(--resource-tag-color);
@@ -624,19 +627,70 @@
     color: inherit;
     background: color-mix(in srgb, var(--primary-color) 25%, transparent);
   }
+  .global-search-dialog__body.is-loading {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .global-search-dialog__body.is-loading > .global-search__workshop {
+    flex-shrink: 0;
+  }
   .global-search__loading {
-    padding: 14px 3px;
+    flex: 1 1 0;
+    min-height: 0;
+    overflow: hidden;
   }
   .global-search__skeleton {
-    height: 46px;
-    margin-bottom: 8px;
-    border-radius: 11px;
+    display: block;
+    border-radius: 4px;
     background: linear-gradient(90deg, var(--hover-background), var(--background-color), var(--hover-background));
     background-size: 200% 100%;
     animation: global-search-shimmer 1.4s infinite;
   }
+  .global-search-group h3.global-search__skeleton-heading {
+    width: 48px;
+    height: 12px;
+    margin: 0 8px 5px;
+  }
+  .global-search__skeleton-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 58px;
+    padding: 8px 9px;
+    box-sizing: border-box;
+  }
+  .global-search__skeleton-dot {
+    flex: 0 0 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+  .global-search__skeleton-copy {
+    flex: 1;
+    min-width: 0;
+    display: grid;
+    gap: 9px;
+  }
+  .global-search__skeleton-title {
+    width: 62%;
+    height: 13px;
+  }
+  .global-search__skeleton-title.is-short {
+    width: 43%;
+  }
+  .global-search__skeleton-description {
+    width: 94%;
+    height: 10px;
+  }
+  .global-search__skeleton-description.is-short {
+    width: 72%;
+  }
+  .global-search__skeleton-meta {
+    flex: 0 0 68px;
+    height: 10px;
+  }
   .global-search__empty {
-    min-height: 260px;
+    min-height: 100%;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -663,6 +717,7 @@
     font-size: 12px;
   }
   .global-search-dialog__footer {
+    flex-shrink: 0;
     min-height: 49px;
     padding: 8px 14px;
     display: flex;
@@ -700,7 +755,7 @@
     }
     .global-search-dialog {
       width: calc(100vw - 24px);
-      max-height: calc(100vh - 82px);
+      height: min(600px, calc(100vh - 82px));
       border-radius: 18px;
     }
     .global-search-result__extra > span:last-child {

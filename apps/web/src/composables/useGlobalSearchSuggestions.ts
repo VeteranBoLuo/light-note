@@ -16,6 +16,7 @@ export function useGlobalSearchSuggestions(
   types: readonly GlobalSearchType[] = GLOBAL_SEARCH_TYPES,
   /** 当前页面的主资源类型：只做同档位内的弱加权，不缩小搜索范围 */
   getSourceType: () => GlobalSearchType | '' = () => '',
+  options: { includeRecent?: boolean } = {},
 ) {
   const user = useUserStore();
   const items = ref<SearchResultItem[]>([]);
@@ -50,7 +51,7 @@ export function useGlobalSearchSuggestions(
 
   async function run(keyword: string) {
     const normalized = keyword.trim();
-    if (!normalized) {
+    if (!normalized && !options.includeRecent) {
       reset();
       return;
     }
@@ -67,6 +68,7 @@ export function useGlobalSearchSuggestions(
         types: [...types],
         sourceType: getSourceType(),
         signal,
+        ...(options.includeRecent ? { includeRecent: true } : {}),
       });
       if (seq !== requestSeq) return;
       items.value = diversifySearchItems(dedupeSearchItems(res.items));
@@ -87,11 +89,12 @@ export function useGlobalSearchSuggestions(
 
   function schedule(keyword: string) {
     const normalized = keyword.trim();
-    if (!normalized) {
+    if (!normalized && !options.includeRecent) {
       reset();
       return;
     }
     cancelPending();
+    requestSeq += 1;
     loading.value = true;
     debounceTimer = window.setTimeout(() => {
       debounceTimer = null;

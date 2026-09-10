@@ -36,23 +36,41 @@
                       ? 'neutral'
                       : 'success'
               "
-              >{{ runStatusLabel }}</BChip
+              ><span class="workspace-run-status"
+                ><SvgIcon
+                  :src="statusIcon"
+                  size="14"
+                  :class="{ 'status-spinning': statusWorking }"
+                  aria-hidden="true"
+                />{{ runStatusLabel }}</span
+              ></BChip
             >
           </div>
           <div class="workspace-tools" :inert="batch.busy.value || undefined">
             <BButton v-if="run.summary.types.file" :disabled="loading || draftBusy" @click="retryFiles">{{
               t('organizeFile.retry')
             }}</BButton>
-            <BButton :disabled="loading" @click="loadLatest">{{ t('organize.refresh') }}</BButton>
-            <BButton v-if="run.canPause" :disabled="loading || controlling" @click="controlRun('pause')">{{
-              t('organizeLifecycle.pause')
+            <BButton :disabled="loading || controlling" :loading="manualRefreshing" @click="manualRefresh">{{
+              t('organize.refresh')
             }}</BButton>
-            <BButton v-if="run.canResume" :disabled="loading || controlling" @click="controlRun('resume')">{{
-              t('organizeLifecycle.resume')
-            }}</BButton>
+            <BButton
+              v-if="run.canPause"
+              :loading="controlAction === 'pause'"
+              :disabled="loading || controlling"
+              @click="controlRun('pause')"
+              >{{ t('organizeLifecycle.pause') }}</BButton
+            >
+            <BButton
+              v-if="run.canResume"
+              :loading="controlAction === 'resume'"
+              :disabled="loading || controlling"
+              @click="controlRun('resume')"
+              >{{ t('organizeLifecycle.resume') }}</BButton
+            >
             <BButton
               v-if="run.canEnd || (run.runVersion !== 2 && queuedCount > 0)"
               :disabled="loading || controlling"
+              :loading="controlAction === 'end'"
               @click="cancelRemaining"
               >{{ t('organizeLifecycle.end') }}</BButton
             >
@@ -65,17 +83,28 @@
             <strong
               >{{ run.checked ?? run.summary.total }}<small> / {{ run.summary.total }}</small></strong
             >
+            <BProgress
+              v-if="scanPercent !== null"
+              :percent="scanPercent"
+              size="small"
+              :aria-label="t('organizeWorkspace.scanLabel')"
+            />
             <small>{{ t('organizeWorkspace.rulesFree') }}</small>
           </div>
           <div class="workspace-metric">
             <i class="metric-icon"><SvgIcon :src="icon.organize.spark" size="22" /></i
             ><span>{{ t('organizeWorkspace.aiLabel') }}</span>
             <strong v-if="run.summary.aiTotal === null" class="metric-text">{{
-              t('organizeLifecycle.undetermined')
+              t(statusWorking ? 'organizeLifecycle.waitingForChecks' : 'organizeLifecycle.undetermined')
             }}</strong>
             <strong v-else-if="run.summary.aiTotal" class="metric-text">{{ aiProgressText }}</strong>
             <strong v-else class="metric-text">{{ t('organizeWorkspace.aiNotNeeded') }}</strong>
-            <BProgress v-if="run.summary.aiTotal && run.progress" :percent="aiPercent" />
+            <BProgress
+              v-if="run.summary.aiTotal && run.progress"
+              :percent="aiPercent"
+              size="small"
+              :aria-label="t('organizeWorkspace.aiLabel')"
+            />
             <small>{{
               run.summary.aiTotal === null
                 ? t('organizeLifecycle.scanning')
@@ -537,6 +566,8 @@
   const switching = ref(false),
     displayedKind = ref('all');
   const controlling = ref(false);
+  const controlAction = ref<'pause' | 'resume' | 'end' | null>(null);
+  const manualRefreshing = ref(false);
   const initialStep = ref(0);
   const starting = ref(false);
   const user = useUserStore();
@@ -759,6 +790,23 @@
           Number(p.total) > 0,
       ),
   );
+  const statusWorking = computed(
+    () => activeAi.value && !['completed', 'ended', 'failed'].includes(run.value?.status || ''),
+  );
+  const statusIcon = computed(() =>
+    statusWorking.value
+      ? icon.message.loading
+      : run.value?.status === 'paused' || run.value?.status === 'ended'
+        ? icon.organize.clock
+        : run.value?.status === 'failed' || aiFailed.value || countStatuses(['failed', 'conflict'])
+          ? icon.message.warning
+          : icon.organize.check,
+  );
+  const scanPercent = computed(() => {
+    const current = run.value;
+    if (!current || current.checked == null || current.summary.total <= 0) return null;
+    return Math.min(100, Math.max(0, (current.checked / current.summary.total) * 100));
+  });
   const queuedCount = computed(() =>
     (run.value?.progress || [])
       .filter((p) => ['queued', 'waiting_content', 'preparing_content'].includes(p.aiStatus))
@@ -962,6 +1010,15 @@
       }
     }
   }
+  async function manualRefresh() {
+    if (loading.value || controlling.value || manualRefreshing.value) return;
+    manualRefreshing.value = true;
+    try {
+      await loadLatest();
+    } finally {
+      manualRefreshing.value = false;
+    }
+  }
   async function loadLatest() {
     loading.value = true;
     error.value = '';
@@ -985,7 +1042,7 @@
       if (!disposed) loading.value = false;
     }
   }
-  async function loadPage(append = false) {
+  async function loadPage(append = false, background = false) {
     if (!run.value) return;
     if (resourceType.value === 'tag' && append && nextCursor.value) {
       tagPageStarts.value[++tagPageIndex.value] = nextCursor.value;
@@ -994,7 +1051,7 @@
       id = run.value.id,
       requestedKind = kind.value,
       requestedType = resourceType.value;
-    loading.value = true;
+    if (!background) loading.value = true;
     pageError.value = '';
     try {
       const result = readResponse(
@@ -1053,7 +1110,7 @@
       if (!disposed && request === sequence) pageError.value = failure(e);
     } finally {
       if (!disposed && request === sequence) {
-        loading.value = false;
+        if (!background) loading.value = false;
         schedule();
       }
     }
@@ -1062,15 +1119,20 @@
     clearTimeout(timer);
     if (!disposed && activeAi.value && !document.hidden)
       timer = setTimeout(() => {
-        void refresh();
+        void refresh(true);
       }, 2400);
   }
   // 已展开多页时刷新每页，避免轮询把后续资料移出界面。
-  async function refresh() {
-    if (!run.value || batch.busy.value) return;
+  async function refresh(background = false) {
+    if (!run.value) return;
+    if (batch.busy.value || (background && (loading.value || controlling.value))) {
+      schedule();
+      return;
+    }
     const count = items.value.length;
-    await loadPage();
-    while (!disposed && !pageError.value && nextCursor.value && items.value.length < count) await loadPage(true);
+    await loadPage(false, background);
+    while (!disposed && !pageError.value && nextCursor.value && items.value.length < count)
+      await loadPage(true, background);
   }
   function cancelRemaining() {
     Alert.alert({
@@ -1084,6 +1146,7 @@
   async function controlRun(action: 'pause' | 'resume' | 'end') {
     if (!run.value || controlling.value) return;
     controlling.value = true;
+    controlAction.value = action;
     try {
       readResponse(await { pause: pauseRun, resume: resumeRun, end: cancelRun }[action](run.value.id));
       await refresh();
@@ -1091,6 +1154,7 @@
       pageError.value = failure(e);
     } finally {
       controlling.value = false;
+      controlAction.value = null;
     }
   }
   const batchRows = computed(() => items.value.map((item) => ({ ...item, suggestions: visibleSuggestions(item) })));
@@ -1316,6 +1380,30 @@
     align-items: center;
     flex-wrap: wrap;
     gap: 10px;
+  }
+  .workspace-run-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .status-spinning {
+    animation: organize-status-spin 1s linear infinite;
+  }
+  @keyframes organize-status-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .status-spinning {
+      animation: none;
+    }
+    .workspace-metric :deep(.b-progress__bar) {
+      transition: none;
+    }
+  }
+  :global(.disable-animations .status-spinning) {
+    animation: none !important;
   }
   .workspace-run-identity small {
     font-size: 11px;
@@ -1852,6 +1940,11 @@
     }
     .workspace-metric > strong {
       font-size: 24px;
+    }
+    .workspace-metric > .metric-text {
+      font-size: 14px;
+      line-height: 1.4;
+      text-wrap: balance;
     }
     .workspace-metric > small {
       font-size: 10px;

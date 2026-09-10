@@ -1,5 +1,26 @@
 <template>
-  <div v-if="user.adminContext" class="admin-context-banner" :class="`mode-${user.adminContext.mode}`">
+  <div v-if="user.adminContext && mobile" class="admin-preview-rail">
+    <BButton
+      class="admin-preview-rail__exit"
+      :aria-label="t('guest.adminContextExit')"
+      :disabled="ending"
+      :aria-busy="ending || undefined"
+      @click="endContext"
+    >
+      <SvgIcon :src="icon.navigation.exit" size="18" aria-hidden="true" />
+      <span>{{ t('guest.adminContextExit') }}</span>
+    </BButton>
+    <div class="admin-preview-rail__subject" :title="subjectLabel">{{ subjectName }}</div>
+    <div
+      class="admin-preview-rail__status"
+      :class="`mode-${user.adminContext.mode}`"
+      :aria-label="`${modeTitle}，${countdownLabel}`"
+    >
+      <strong>{{ modeShortTitle }}</strong>
+      <span>{{ countdownTime }}</span>
+    </div>
+  </div>
+  <div v-else-if="user.adminContext" class="admin-context-banner" :class="`mode-${user.adminContext.mode}`">
     <div class="admin-context-copy">
       <strong>{{ modeTitle }}</strong>
       <span>{{ subjectLabel }}</span>
@@ -19,6 +40,10 @@
   import userApi from '@/api/userApi.ts';
   import useUserStore from '@/store/useUser.ts';
   import { clearAdminLoginPreview, getAdminLoginPreviewReturnUrl } from '@/utils/authStorage.ts';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon.ts';
+
+  defineProps<{ mobile?: boolean }>();
 
   const { t } = useI18n();
   const user = useUserStore();
@@ -30,21 +55,24 @@
   const modeTitle = computed(() =>
     user.adminContext?.mode === 'maintain' ? t('guest.adminContextMaintain') : t('guest.adminContextReadonly'),
   );
+  const modeShortTitle = computed(() =>
+    user.adminContext?.mode === 'maintain' ? t('guest.adminContextMaintainShort') : t('guest.adminContextReadonlyShort'),
+  );
+  const subjectName = computed(() => user.adminContext?.subjectAlias || user.adminContext?.subjectUserId || '-');
   const subjectLabel = computed(() =>
     t('guest.adminContextSubject', {
-      name: user.adminContext?.subjectAlias || user.adminContext?.subjectUserId || '-',
+      name: subjectName.value,
     }),
   );
   const secondsLeft = computed(() =>
     Math.max(0, Math.ceil((new Date(user.adminContext?.expiresAt || 0).getTime() - now.value) / 1000)),
   );
-  const countdownLabel = computed(() => {
+  const countdownTime = computed(() => {
     const minutes = Math.floor(secondsLeft.value / 60);
     const seconds = secondsLeft.value % 60;
-    return t('guest.adminContextRemaining', {
-      time: `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`,
-    });
+    return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
   });
+  const countdownLabel = computed(() => t('guest.adminContextRemaining', { time: countdownTime.value }));
 
   async function endContext() {
     if (ending.value || leaving) return;
@@ -83,6 +111,65 @@
 </script>
 
 <style scoped lang="less">
+  .admin-preview-rail {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    flex: 0 0 auto;
+    gap: 6px;
+    width: 100%;
+    min-height: calc(52px + env(safe-area-inset-top));
+    padding: env(safe-area-inset-top) 8px 0;
+    box-sizing: border-box;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--card-background);
+    color: var(--text-color);
+  }
+  .admin-preview-rail__exit.b_btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    min-width: 44px;
+    height: 44px;
+    padding: 0 6px;
+    background: transparent;
+    color: var(--text-color);
+    font-size: 12px;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .admin-preview-rail__exit.b_btn:hover {
+      background: var(--hover-background);
+    }
+  }
+  .admin-preview-rail__subject {
+    min-width: 0;
+    overflow: hidden;
+    font-size: 13px;
+    font-weight: 700;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .admin-preview-rail__status {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 28px;
+    padding: 0 7px;
+    border: 1px solid var(--workspace-purple-text);
+    border-radius: 999px;
+    color: var(--workspace-purple-text);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .admin-preview-rail__status.mode-maintain {
+    border-color: var(--warning-color);
+    background: transparent;
+    color: var(--warning-color);
+  }
+
   .admin-context-banner {
     position: fixed;
     top: 8px;

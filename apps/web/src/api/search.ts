@@ -95,7 +95,7 @@ export interface GlobalSearchQuery {
   paginationMode?: 'perType' | 'ordered' | 'global';
   cursor?: SearchCursor | null;
   includeMetadata?: boolean;
-  /** 将标签从资源结果剥离，并在首屏元数据中返回 tagMatches。 */
+  /** 将标签从主结果剥离；ordered 模式可显式包含待办，首屏元数据返回 tagMatches。 */
   separateTagMatches?: boolean;
   /** 以下待办条件只有在 types 显式包含 todo 时才生效 */
   todoStatus?: 'all' | 'pending' | 'completed';
@@ -336,10 +336,15 @@ const suggestCache = new Map<string, SuggestCacheEntry>();
  */
 export async function fetchGlobalSearchSuggestions(
   keyword: string,
-  options: { types?: GlobalSearchType[]; sourceType?: GlobalSearchType | ''; signal?: AbortSignal } = {},
+  options: {
+    types?: GlobalSearchType[];
+    sourceType?: GlobalSearchType | '';
+    signal?: AbortSignal;
+    includeRecent?: boolean;
+  } = {},
 ): Promise<GlobalSearchSuggestResponse> {
   const normalizedKeyword = keyword.trim();
-  if (!normalizedKeyword) return { keyword: '', items: [], hasMore: false };
+  if (!normalizedKeyword && !options.includeRecent) return { keyword: '', items: [], hasMore: false };
 
   const locale = i18n.global.locale.value;
   const types = [...new Set(options.types || GLOBAL_SEARCH_TYPES)]
@@ -351,7 +356,7 @@ export async function fetchGlobalSearchSuggestions(
     : '';
   const cacheKey = `${locale}::${normalizedKeyword}::${types.join(',')}::${sourceType}`;
   const cached = suggestCache.get(cacheKey);
-  if (cached && Date.now() - cached.at < SUGGEST_CACHE_TTL) return cached.data;
+  if (normalizedKeyword && cached && Date.now() - cached.at < SUGGEST_CACHE_TTL) return cached.data;
 
   const res = await apiBasePost(
     '/api/search/global',
@@ -359,6 +364,7 @@ export async function fetchGlobalSearchSuggestions(
       keyword: normalizedKeyword,
       types,
       mode: 'suggest',
+      ...(!normalizedKeyword ? { sort: 'updated' } : {}),
       includeMetadata: false,
       ...(sourceType ? { sourceType } : {}),
     },
@@ -378,7 +384,7 @@ export async function fetchGlobalSearchSuggestions(
     items: Array.isArray(res.data?.items) ? res.data.items : [],
     hasMore: Boolean(res.data?.hasMore),
   };
-  suggestCache.set(cacheKey, { at: Date.now(), data });
+  if (normalizedKeyword) suggestCache.set(cacheKey, { at: Date.now(), data });
   return data;
 }
 

@@ -408,6 +408,30 @@ describe('getAdminOverviewSnapshot 首屏快照', () => {
 describe('getAdminOverviewTrend 历史分析', () => {
   beforeEach(() => query.mockReset());
 
+  it('昨日完整但不足七天时仍在接口中保留昨日活跃同期', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-10T08:58:00+08:00'));
+    try {
+      query.mockImplementation(async (sql) => {
+        const statement = String(sql);
+        if (statement.includes('user_activity_metadata')) return [[{ startedAt: '2026-09-08 15:20:00.000000' }]];
+        if (statement.includes('user_activity_daily') && statement.includes('GROUP BY a.activity_date'))
+          return [[{ d: '2026-09-09', c: 6 }]];
+        if (statement.includes('user_activity_daily')) return [[{ today: 9, period: 25 }]];
+        return [[]];
+      });
+      const res = mockRes();
+      await getAdminOverviewTrend({ user: { role: 'root' }, body: { days: 7, hideInternal: true } }, res);
+      expect(res.send.mock.calls[0][0].data.todayBaseline).toMatchObject({
+        available: true,
+        sampleDays: 7,
+        metrics: { activeUsers: { yesterday: 6, average7d: null } },
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('用北京时间截至当前时刻计算昨日同期与前 7 日同期均值', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-08-12T17:40:30+08:00'));

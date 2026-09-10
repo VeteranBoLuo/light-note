@@ -41,6 +41,7 @@ function getRawTime(raw: any): string {
   if (!raw || typeof raw !== 'object') return '';
   return (
     raw.updateTime ||
+    raw.update_time ||
     raw.uploadTime ||
     raw.updatedAt ||
     raw.createTime ||
@@ -73,9 +74,11 @@ function formatFileSizeLikeCloudSpace(sizeInput: unknown): string {
         .replace(/\B(?=(\d{3})+(?!\d))/g, ',') + ' MB'
     );
   }
-  return Number(size / 1024)
-    .toFixed()
-    .replace(/\B(?=(\d{3})+(?!\d))/g, ',') + ' KB';
+  return (
+    Number(size / 1024)
+      .toFixed()
+      .replace(/\B(?=(\d{3})+(?!\d))/g, ',') + ' KB'
+  );
 }
 
 function extractSelfTagName(item: SearchResultItem): string {
@@ -127,8 +130,10 @@ export function rankByRelevance(items: SearchResultItem[], keyword: string): Sea
 export function mapDisplayItems(items: SearchResultItem[], keyword: string): DisplaySearchItem[] {
   return items.map((item, index) => {
     const rawTime = getRawTime(item.raw);
-    const updatedAtMs = normalizeTimeValue(rawTime || item.extra);
-    const baseTags = extractTagNames(item.raw).map(normalizeTagName).filter(Boolean);
+    const updatedAtMs = normalizeTimeValue(rawTime || (item.type === 'todo' ? '' : item.extra));
+    const baseTags = [...extractTagNames(item.raw), ...(item.tags || []).map((tag) => tag.name)]
+      .map(normalizeTagName)
+      .filter(Boolean);
     const selfTag = item.type === 'tag' ? extractSelfTagName(item) : '';
     const tagNames = Array.from(new Set([...baseTags, ...(selfTag ? [selfTag] : [])]));
     return {

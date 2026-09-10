@@ -581,8 +581,10 @@ it('新版检查未结束时显示待确定，不用零值或完成进度条代�
   api.listRuns.mockResolvedValue(ok([row]));
   api.getRun.mockResolvedValue(ok(row));
   await mount();
-  expect(host.textContent).toContain('检查后确定');
-  expect(host.querySelectorAll('.b-progress')).toHaveLength(0);
+  expect(host.textContent).toContain('等待检查结果');
+  expect(host.querySelectorAll('.b-progress')).toHaveLength(1);
+  expect(host.querySelector('.b-progress')?.getAttribute('aria-valuenow')).toBe('17');
+  expect(host.querySelectorAll('.status-spinning')).toHaveLength(1);
   expect(button('暂停分析')).toBeTruthy();
 });
 it('暂停动作按服务端能力显示，重复点击不会重复请求；恢复保持当前页签', async () => {
@@ -1103,4 +1105,46 @@ it('点击资源行空白展开收起；详情和资源入口不触发展开', a
   expect(toggle.getAttribute('aria-expanded')).toBe('true');
   toggle.click(); await settle();
   expect(toggle.getAttribute('aria-expanded')).toBe('false');
+});
+
+it('后台轮询期间按钮保持可用，仍可暂停，旧响应不能覆盖暂停结果', async () => {
+  vi.useFakeTimers();
+  try {
+    const row = {
+      ...result(),
+      runVersion: 2,
+      status: 'running',
+      rulePhase: 'completed',
+      checked: 23,
+      canPause: true,
+      canEnd: true,
+      summary: { ...result().summary, aiTotal: 3 },
+      progress: [{ resourceType: 'bookmark', aiStatus: 'queued', total: 3 }],
+    };
+    api.listRuns.mockResolvedValue(ok([row]));
+    api.getRun.mockResolvedValue(ok(row));
+    await mount();
+    let resolvePoll!: (value: unknown) => void;
+    api.getRun.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolvePoll = resolve;
+        }),
+    );
+    await vi.advanceTimersByTimeAsync(2400);
+    for (const name of ['刷新', '暂停分析', '结束本次整理']) expect(button(name).disabled).toBe(false);
+    expect(host.querySelector('.workspace-results')?.getAttribute('aria-busy')).toBe('false');
+    const paused = { ...row, status: 'paused', canPause: false, canResume: true, pauseReason: 'user' };
+    api.pauseRun.mockResolvedValue(ok(paused));
+    api.getRun.mockResolvedValue(ok(paused));
+    button('暂停分析').click();
+    await settle();
+    resolvePoll(ok(row));
+    await settle();
+    expect(button('继续整理').disabled).toBe(false);
+    expect(host.querySelector('.status-spinning')).toBeNull();
+    expect(host.textContent).toContain('已暂停');
+  } finally {
+    vi.useRealTimers();
+  }
 });

@@ -10,6 +10,7 @@
       selection-variant="basic"
       :selected-count="selectedCount"
       :allow-sort="false"
+      :allow-batch="batchTypes.length > 0"
       :create-label="t('inbox.quickCapture')"
       @update:keyword="onMobileSearchKeyword"
       @submit="submitSearch"
@@ -249,6 +250,7 @@
                 </div>
                 <div v-else class="toolbar-actions">
                   <BBatchToggle
+                    v-if="batchTypes.length > 0"
                     size="small"
                     class="select-visible-btn"
                     :disabled="!batchMode && !selectableVisibleItems.length"
@@ -301,6 +303,9 @@
                 @touchend.passive="pullRefresh.onTouchEnd"
                 @touchcancel.passive="pullRefresh.onTouchCancel"
               >
+                <p v-if="batchMode && selectedTypes.includes('todo')" class="batch-scope-hint" role="status">
+                  {{ t('resourceCenter.todo.batchHint') }}
+                </p>
                 <TagMatchStrip v-if="!shouldShowLoadingSkeleton" :items="viewState.tagMatches" @open="openTagMatch" />
 
                 <div
@@ -346,7 +351,7 @@
                           :type-label="getSearchTypeLabel(t, item.type)"
                           :keyword="queryState.keyword"
                           :selected="isItemSelected(item)"
-                          :selectable="batchMode"
+                          :selectable="batchMode && isTaggableResourceType(item.type)"
                           :view="effectiveView"
                           :compact="bookmark.isMobile"
                           @open="handleResultOpen(item)"
@@ -613,7 +618,7 @@
       </template>
       <template #actions>
         <BButton
-          :disabled="selectionStore.busy || viewState.loading || !filteredResultTotal"
+          :disabled="selectionStore.busy || viewState.loading || !batchResultTotal"
           @click="toggleSelectAllMatching()"
           >{{ t('resourceSelection.allMatching') }}</BButton
         >
@@ -701,7 +706,13 @@
     type ResourceView,
   } from '@/components/searchCenter/searchUtils.ts';
   import { getSearchTypeLabel, SEARCH_CENTER_TYPE_LIST } from '@/components/searchCenter/searchMeta.ts';
-  import { isTaggableResourceType, type GlobalSearchType, type TaggableResourceType } from '@/utils/globalSearchTypes';
+  import {
+    isTaggableResourceType,
+    TAGGABLE_RESOURCE_TYPES,
+    type SearchCenterType,
+    type GlobalSearchType,
+    type TaggableResourceType,
+  } from '@/utils/globalSearchTypes';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { apiBasePost } from '@/http/request.ts';
   import { useInboxEnqueue } from '@/composables/useInboxEnqueue';
@@ -796,8 +807,8 @@
 
   const queryState = reactive<{
     keyword: string;
-    type: TaggableResourceType | 'all';
-    types: TaggableResourceType[];
+    type: SearchCenterType | 'all';
+    types: SearchCenterType[];
     sort: ResourceSort;
     view: ResourceView;
     tags: string[];
@@ -902,14 +913,15 @@
   const activeInspectedResourceKey = computed(() =>
     inspectedResource.value ? getItemSelectionKey(inspectedResource.value) : '',
   );
-  const RESOURCE_INSPECTOR_ICONS: Record<TaggableResourceType, string> = {
+  const RESOURCE_INSPECTOR_ICONS: Record<SearchCenterType, string> = {
+    todo: icon.todoWorkspace.checkSquare,
     bookmark: icon.resource.bookmark,
     note: icon.resource.note,
     file: icon.resource.file,
   };
   const inspectedResourceIcon = computed(() => {
     const type = inspectedResource.value?.type;
-    return isTaggableResourceType(type) ? RESOURCE_INSPECTOR_ICONS[type] : icon.resource.bookmark;
+    return type && type !== 'tag' ? RESOURCE_INSPECTOR_ICONS[type] : icon.resource.bookmark;
   });
   function compactInspectorText(value: unknown, format = '') {
     const source = String(value || '');
@@ -950,9 +962,16 @@
   const selectableVisibleItems = computed(() =>
     allVisibleItems.value.filter((item) => isTaggableResourceType(item.type)),
   );
-  const selectedTypes = computed<TaggableResourceType[]>(() =>
+  const selectedTypes = computed<SearchCenterType[]>(() =>
     queryState.types.length ? queryState.types : [...SEARCH_CENTER_TYPE_LIST],
   );
+  const batchTypes = computed(() => selectedTypes.value.filter(isTaggableResourceType));
+  const batchResultTotal = computed(() =>
+    batchTypes.value.reduce((sum, type) => sum + Number(summaryTotals.value[type] || 0), 0),
+  );
+  watch(batchTypes, (types) => {
+    if (!types.length) exitBatchMode();
+  });
   const filteredResultTotal = computed(() =>
     selectedTypes.value.reduce((sum, type) => sum + Number(summaryTotals.value[type] || 0), 0),
   );
@@ -993,7 +1012,7 @@
       },
       { bookmark: 0, note: 0, file: 0 },
     );
-    return SEARCH_CENTER_TYPE_LIST.filter((type) => counts[type])
+    return TAGGABLE_RESOURCE_TYPES.filter((type) => counts[type])
       .map((type) => t('resourceOutcome.typeCount', { type: getSearchTypeLabel(t, type), count: counts[type] }))
       .join(' · ');
   });
@@ -1007,7 +1026,7 @@
       key: 'allMatching',
       label: t('resourceSelection.allMatching'),
       icon: icon.filterPanel.check,
-      disabled: selectionStore.busy || viewState.loading || !filteredResultTotal.value,
+      disabled: selectionStore.busy || viewState.loading || !batchResultTotal.value,
     },
     {
       key: 'outcome',
@@ -1210,9 +1229,10 @@
   function menuForSearchItem(item: DisplaySearchItem) {
     const openItem = {
       key: 'open',
-      label: t('resourceCenter.openResource'),
+      label: t(item.type === 'todo' ? 'resourceCenter.todo.open' : 'resourceCenter.openResource'),
       icon: icon.noteTree.openPage,
     };
+    if (item.type === 'todo') return [openItem];
     const deleteItem = {
       key: 'delete',
       label: t('common.delete'),
@@ -1232,17 +1252,17 @@
     ];
   }
 
-  function isTypeFilterActive(type: TaggableResourceType | 'all') {
+  function isTypeFilterActive(type: SearchCenterType | 'all') {
     return type === 'all' ? queryState.types.length === 0 : queryState.types.includes(type);
   }
 
   // 抽屉里的类型是多选：空数组表示全选（与 URL 协议一致），
   // 取消最后一个会让结果永远为空，因此忽略这次点击而不是清空。
-  function isTypeSelected(type: TaggableResourceType) {
+  function isTypeSelected(type: SearchCenterType) {
     return queryState.types.length === 0 || queryState.types.includes(type);
   }
 
-  function toggleTypeFilter(type: TaggableResourceType) {
+  function toggleTypeFilter(type: SearchCenterType) {
     const selected = new Set(queryState.types.length ? queryState.types : SEARCH_CENTER_TYPE_LIST);
     if (selected.has(type)) selected.delete(type);
     else selected.add(type);
@@ -1252,11 +1272,11 @@
     applyQueryState('筛选资源类型');
   }
 
-  function parseTypes(value: unknown): TaggableResourceType[] {
+  function parseTypes(value: unknown): SearchCenterType[] {
     const raw = Array.isArray(value) ? String(value[0] || '') : String(value || '');
     const types = [...new Set(raw.split(',').map((item) => item.trim()))].filter((item) =>
-      SEARCH_CENTER_TYPE_LIST.includes(item as TaggableResourceType),
-    ) as TaggableResourceType[];
+      SEARCH_CENTER_TYPE_LIST.includes(item as SearchCenterType),
+    ) as SearchCenterType[];
     return types.length === SEARCH_CENTER_TYPE_LIST.length
       ? []
       : SEARCH_CENTER_TYPE_LIST.filter((type) => types.includes(type));
@@ -1306,9 +1326,9 @@
       .slice(0, 24);
   }
 
-  function normalizeItemType(input: unknown): TaggableResourceType | null {
+  function normalizeItemType(input: unknown): SearchCenterType | null {
     const raw = String(input || '').trim();
-    if (SEARCH_CENTER_TYPE_LIST.includes(raw as TaggableResourceType)) return raw as TaggableResourceType;
+    if (SEARCH_CENTER_TYPE_LIST.includes(raw as SearchCenterType)) return raw as SearchCenterType;
     return null;
   }
 
@@ -1330,6 +1350,11 @@
       tags: Array.isArray(rawItem.tags) ? rawItem.tags : [],
       matchReason: rawItem.matchReason ? String(rawItem.matchReason) : undefined,
       snippet: rawItem.snippet ? String(rawItem.snippet) : undefined,
+      status: rawItem.status,
+      priority: rawItem.priority,
+      dueAt: rawItem.dueAt,
+      completedAt: rawItem.completedAt,
+      referenceCount: rawItem.referenceCount,
       raw: rawItem.raw || rawItem,
     };
   }
@@ -1399,8 +1424,8 @@
     const directItems = Array.isArray(res.items) ? res.items : [];
     const groupItems = Array.isArray(res.groups) ? res.groups.flatMap((group: any) => group?.items || []) : [];
     const rawMergedItems = (directItems.length ? directItems : groupItems).map((item) => normalizeSearchItem(item));
-    return (rawMergedItems.filter(Boolean) as SearchResultItem[]).filter((item) =>
-      SEARCH_CENTER_TYPE_LIST.includes(item.type),
+    return (rawMergedItems.filter(Boolean) as SearchResultItem[]).filter(
+      (item) => item.type !== 'tag' && SEARCH_CENTER_TYPE_LIST.includes(item.type),
     );
   }
 
@@ -1498,7 +1523,7 @@
           note: Number(res.typeTotals.note || 0),
           file: Number(res.typeTotals.file || 0),
           tag: Number(res.typeTotals.tag || 0),
-          todo: 0,
+          todo: Number(res.typeTotals.todo || 0),
         };
       }
 
@@ -1602,7 +1627,7 @@
     syncQueryNow();
   }
 
-  function selectDesktopType(type: TaggableResourceType | 'all') {
+  function selectDesktopType(type: SearchCenterType | 'all') {
     if (isTypeFilterActive(type) && (type === 'all' || queryState.types.length === 1)) return;
     queryState.types = type === 'all' ? [] : [type];
     queryState.type = type;
@@ -1706,6 +1731,7 @@
   }
 
   function toggleSelect(item: DisplaySearchItem) {
+    if (!isTaggableResourceType(item.type)) return;
     if (!batchMode.value || selectionStore.busy || viewState.loading) return;
     const key = getItemSelectionKey(item);
     if (allMatchingActive.value) {
@@ -1724,6 +1750,7 @@
   }
 
   function toggleBatchMode() {
+    if (!batchTypes.value.length) return;
     batchMode.value = !batchMode.value;
     closeSearchAi();
     outcomeDrawerOpen.value = false;
@@ -1760,7 +1787,7 @@
       mode: 'allMatching',
       query: {
         keyword: queryState.keyword.trim(),
-        types: [...selectedTypes.value],
+        types: [...batchTypes.value],
         sort: queryState.sort,
         date: queryState.date,
         tags: [...queryState.tags],
@@ -1773,11 +1800,13 @@
   }
 
   function isItemSelected(item: DisplaySearchItem) {
+    if (!isTaggableResourceType(item.type)) return false;
     const key = getItemSelectionKey(item);
     return allMatchingActive.value ? !excludedSelectionIds.value.includes(key) : selectedIds.value.includes(key);
   }
 
   async function toggleSelectAllMatching() {
+    if (!batchTypes.value.length) return;
     if (selectionStore.busy || viewState.loading) return;
     if (allMatchingActive.value) {
       clearBatchSelection();
@@ -1949,7 +1978,8 @@
     }
     if (action !== 'delete') return;
     if (!isTaggableResourceType(item.type)) return;
-    const typeLabel = getSearchTypeLabel(t, item.type);
+    const resourceType = item.type;
+    const typeLabel = getSearchTypeLabel(t, resourceType);
     const name = item.title || '-';
     Alert.alert({
       title: t('resourceCenter.batch.deleteConfirmTitle'),
@@ -1958,7 +1988,7 @@
       cancelText: t('resourceCenter.batch.deleteConfirmCancel'),
       async onOk() {
         try {
-          const api = getSingleDeleteApi(item.type);
+          const api = getSingleDeleteApi(resourceType);
           const res = await apiBasePost(api, { id: item.id });
           if (Number(res?.status) !== 200) {
             message.error(res?.msg || t('resourceCenter.batch.deleteFailed'));
@@ -2161,7 +2191,7 @@
 </script>
 
 <style scoped lang="less">
-  @import (reference) "@/assets/css/workspace-surfaces.less";
+  @import (reference) '@/assets/css/workspace-surfaces.less';
   .search-center-route {
     width: 100%;
     height: 100%;
@@ -2513,8 +2543,14 @@
     background: var(--resource-tag-color);
   }
 
+  .batch-scope-hint {
+    margin: 0 0 12px;
+    color: var(--desc-color);
+    font-size: 12px;
+  }
+
   .filter-dot--todo {
-    background: var(--primary-color);
+    background: var(--todo-accent-color);
   }
 
   .result-panel {
@@ -3634,11 +3670,20 @@
   }
 
   // 共享工作区表面：仅改变颜色，布局与滚动由原组件负责。
-  .resource-scope-pane, .result-panel, .result-scroll-area, .resource-center-map {
+  .resource-scope-pane,
+  .result-panel,
+  .result-scroll-area,
+  .resource-center-map {
     .workspace-open-surface();
   }
 
-  .resource-scope-pane { .workspace-navigation-colors(); }
-  .resource-scope-item:hover { .workspace-navigation-hover(); }
-  .resource-scope-item.active { .workspace-navigation-selected(); }
+  .resource-scope-pane {
+    .workspace-navigation-colors();
+  }
+  .resource-scope-item:hover {
+    .workspace-navigation-hover();
+  }
+  .resource-scope-item.active {
+    .workspace-navigation-selected();
+  }
 </style>

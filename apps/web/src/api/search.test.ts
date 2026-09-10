@@ -268,6 +268,27 @@ describe('fetchGlobalSearchSuggestions', () => {
     );
   });
 
+  it('显式开启最近内容时空关键词按更新时间查询，每次打开读取最新结果', async () => {
+    mocks.apiBasePost.mockResolvedValue({
+      status: 200,
+      data: { items: [{ id: 'recent', type: 'todo' }], hasMore: false },
+    });
+    const result = await fetchGlobalSearchSuggestions(' ', { includeRecent: true });
+    expect(result.items.map((item) => item.id)).toEqual(['recent']);
+    expect(mocks.apiBasePost).toHaveBeenLastCalledWith(
+      '/api/search/global',
+      expect.objectContaining({
+        keyword: '',
+        sort: 'updated',
+        mode: 'suggest',
+        types: expect.arrayContaining(['todo']),
+      }),
+      expect.any(Object),
+    );
+    await fetchGlobalSearchSuggestions('', { includeRecent: true });
+    expect(mocks.apiBasePost).toHaveBeenCalledTimes(2);
+  });
+
   it('空关键词直接返回空结果，不发请求', async () => {
     const res = await fetchGlobalSearchSuggestions('   ');
     expect(mocks.apiBasePost).not.toHaveBeenCalled();

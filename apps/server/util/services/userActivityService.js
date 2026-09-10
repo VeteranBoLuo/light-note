@@ -107,18 +107,23 @@ export async function queryActivitySummary({ hideInternal = true, now = new Date
 
 export async function queryActivityBaseline({ hideInternal, dates, cutoffTime, now = new Date(), db = pool }) {
   const coverage = await activityCoverage({ db, now });
-  // All seven full comparable days must exist; an absent day after rollout is a real zero.
-  if (!dates.length || dates[0] < coverage.fullDaysFrom) return null;
+  // Yesterday becomes comparable independently of the seven-day average.
+  // Missing records on a fully covered date represent a real zero.
+  if (!dates.length || dates.at(-1) < coverage.fullDaysFrom) return null;
+  const comparableDates = dates.filter((date) => date >= coverage.fullDaysFrom);
   const [rows] = await db.query(
     `SELECT DATE_FORMAT(a.activity_date, '%Y-%m-%d') AS d, COUNT(*) AS c
     FROM user_activity_daily a STRAIGHT_JOIN user u ON u.id = a.user_id
     WHERE a.activity_date >= ? AND a.activity_date <= ? AND TIME(a.first_active_at) <= ? AND ${scopeSql(hideInternal)}
     GROUP BY a.activity_date`,
-    [dates[0], dates.at(-1), cutoffTime, ...scopeParams(hideInternal)],
+    [comparableDates[0], dates.at(-1), cutoffTime, ...scopeParams(hideInternal)],
   );
   const counts = new Map(rows.map((row) => [row.d, Number(row.c)]));
   const values = dates.map((date) => counts.get(date) || 0);
-  return { yesterday: values.at(-1), average7d: Number((values.reduce((a, b) => a + b, 0) / dates.length).toFixed(1)) };
+  return {
+    yesterday: values.at(-1),
+    average7d: comparableDates.length === 7 ? Number((values.reduce((a, b) => a + b, 0) / 7).toFixed(1)) : null,
+  };
 }
 
 function validActivityTime(value) {

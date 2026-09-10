@@ -20,12 +20,17 @@
       <p v-auto-scrollbar class="resource-inspector-description">{{ preview }}</p>
     </div>
 
+    <TodoSearchMeta v-if="resource.type === 'todo'" :item="resource" />
     <dl class="resource-inspector-meta">
+      <div v-if="resource.type === 'todo'">
+        <dt>{{ t('resourceCenter.todo.priority') }}</dt>
+        <dd>{{ t(`resourceCenter.todo.priority${resource.priority ?? 1}`) }}</dd>
+      </div>
       <div v-if="resource.type === 'note'">
         <dt>{{ t('resourceCenter.noteType') }}</dt>
         <dd>{{ noteTypeLabel }}</dd>
       </div>
-      <div>
+      <div v-if="resource.type !== 'todo'">
         <dt>{{ t(resource.type === 'note' ? 'resourceCenter.location' : 'resourceCenter.source') }}</dt>
         <dd>
           {{
@@ -52,24 +57,43 @@
       />
     </div>
 
-    <div class="resource-inspector-actions">
+    <div class="resource-inspector-actions" :class="{ 'resource-inspector-actions--todo': resource.type === 'todo' }">
       <BButton block size="large" type="primary" @click="emit('open', resource)">
         <SvgIcon :src="icon.noteTree.openPage" size="17" aria-hidden="true" />
-        {{ t('resourceCenter.openResource') }}
+        {{ t(resource.type === 'todo' ? 'resourceCenter.todo.open' : 'resourceCenter.openResource') }}
       </BButton>
-      <BButton block size="large" type="function" @click="emit('analyze', resource)">
+      <BButton
+        v-if="isTaggableResourceType(resource.type)"
+        block
+        size="large"
+        type="function"
+        @click="emit('analyze', resource)"
+      >
         <SvgIcon :src="icon.ai.organize" size="17" aria-hidden="true" />
         {{ t('resourceCenter.analyzeResource') }}
       </BButton>
-      <BButton block size="large" class="resource-inspector-action--inbox" @click="emit('inbox', resource)">
+      <BButton
+        v-if="isTaggableResourceType(resource.type)"
+        block
+        size="large"
+        class="resource-inspector-action--inbox"
+        @click="emit('inbox', resource)"
+      >
         <SvgIcon :src="icon.contextMenu.inbox" size="16" aria-hidden="true" />
         {{ t('inbox.addExisting') }}
       </BButton>
-      <BButton block size="large" class="resource-inspector-action--tags" @click="emit('manageTags', resource)">
+      <BButton
+        v-if="isTaggableResourceType(resource.type)"
+        block
+        size="large"
+        class="resource-inspector-action--tags"
+        @click="emit('manageTags', resource)"
+      >
         <SvgIcon :src="icon.resource.tag" size="16" aria-hidden="true" />
         {{ t('resourceCenter.manageResourceTags') }}
       </BButton>
       <BButton
+        v-if="isTaggableResourceType(resource.type)"
         block
         size="large"
         type="danger"
@@ -89,6 +113,8 @@
 </template>
 
 <script setup lang="ts">
+  import TodoSearchMeta from './TodoSearchMeta.vue';
+  import { isTaggableResourceType } from '@/utils/globalSearchTypes';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -119,7 +145,7 @@
 </script>
 
 <style scoped lang="less">
-  @import (reference) "@/assets/css/workspace-surfaces.less";
+  @import (reference) '@/assets/css/workspace-surfaces.less';
   .resource-inspector-panel {
     min-height: 0;
     display: flex;
@@ -144,6 +170,10 @@
 
   .resource-inspector-hero.is-note {
     --inspector-accent: var(--resource-note-color, #10a77a);
+  }
+
+  .resource-inspector-hero.is-todo {
+    --inspector-accent: var(--todo-accent-color);
   }
 
   .resource-inspector-hero.is-file {
@@ -278,6 +308,10 @@
     border-top: 1px solid var(--surface-border-color);
   }
 
+  .resource-inspector-actions--todo {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .resource-inspector-actions :deep(.b_btn) {
     width: 100%;
     min-width: 0;
@@ -332,7 +366,8 @@
   }
 
   // 共享工作区表面：仅改变颜色，布局与滚动由原组件负责。
-  .resource-inspector-panel, .resource-inspector-hero {
+  .resource-inspector-panel,
+  .resource-inspector-hero {
     .workspace-content-surface();
   }
 </style>

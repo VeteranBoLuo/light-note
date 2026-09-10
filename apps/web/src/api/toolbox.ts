@@ -1,7 +1,7 @@
 import { invalidateToolboxProjects } from '@/utils/toolboxProjectState';
 import { recordAiProductEvent, type AiProductEventDimensions } from '@/api/aiTelemetry';
 import type { ToolboxToolDefinition } from '@lightnote/shared/toolbox-protocol';
-import { apiBaseGet, apiBasePatch, apiBasePost } from '@/http/request';
+import { apiBaseDelete, apiBaseGet, apiBasePatch, apiBasePost } from '@/http/request';
 import type { ResourcePickerItem } from '@/composables/useResourcePickerSearch';
 
 export type ToolboxResourceRef = Pick<ResourcePickerItem, 'type' | 'id'> & { version?: string };
@@ -325,6 +325,19 @@ export async function markToolboxWorkspaceOpened(
   invalidateToolboxProjects();
   void recordAiProductEvent('workshop_project_opened', projectEvent(entrySource));
   return response.data as ToolboxHomeWorkspaceSummary;
+}
+
+export async function deleteToolboxWorkspace(workspaceId: string): Promise<void> {
+  try {
+    const response = await apiBaseDelete(`/api/toolbox/workspaces/${encodeURIComponent(workspaceId)}`, undefined, { silent: true });
+    if (response.status !== 200 && !(response.status === 404 && response.data?.code === 'TOOLBOX_WORKSPACE_NOT_FOUND'))
+      throw apiFailure(response, 'TOOLBOX_WORKSPACE_DELETE_FAILED');
+  } catch (error) {
+    // A lost success response or deletion in another tab is safe to retry.
+    const response = (error as { response?: { status?: number; data?: { data?: { code?: string } } } })?.response;
+    if (response?.status !== 404 || response.data?.data?.code !== 'TOOLBOX_WORKSPACE_NOT_FOUND') throw error;
+  }
+  invalidateToolboxProjects();
 }
 
 export async function updateToolboxWorkspace(

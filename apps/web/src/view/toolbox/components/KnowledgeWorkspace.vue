@@ -56,10 +56,10 @@
         </div>
 
         <div v-else class="workspace-card-grid">
+          <article v-for="item in filteredWorkspaces" :key="item.id" class="workspace-card-container">
           <BButton
-            v-for="item in filteredWorkspaces"
-            :key="item.id"
             class="workspace-card"
+            :disabled="!!deletingId"
             :aria-label="t('toolbox.workspace.openWorkspace', { title: item.title })"
             @click="openWorkspace(item.id)"
           >
@@ -82,6 +82,10 @@
               <SvgIcon :src="icon.toolbox.arrow" size="15" />
             </span>
           </BButton>
+          <BButton v-if="!visitorPreview" class="project-delete-trigger" :disabled="!!deletingId" :loading="deletingId === item.id"
+            :aria-label="t('toolbox.project.deleteNamed', { title: item.title })" :title="t('toolbox.project.delete')"
+            @click="confirmDeleteProject(item)"><SvgIcon :src="icon.toolbox.delete" size="16" /></BButton>
+          </article>
         </div>
       </section>
     </template>
@@ -406,8 +410,10 @@
           >{{ t('toolbox.back') }}</BButton
         >
         <div class="workspace-modal-actions">
-          <BButton @click="createModalVisible = false">{{ t('common.cancel') }}</BButton>
-          <BButton type="primary" :loading="creating" :disabled="!createForm.title.trim()" @click="saveWorkspaceForm">
+          <BButton v-if="workspaceFormMode === 'edit' && workspace" class="project-settings-delete" type="danger" :loading="!!deletingId"
+            :disabled="creating || mutating || savingProgress || !!deletingId" @click="confirmDeleteProject(workspace)">{{ t('toolbox.project.delete') }}</BButton>
+          <BButton :disabled="!!deletingId" @click="createModalVisible = false">{{ t('common.cancel') }}</BButton>
+          <BButton type="primary" :loading="creating" :disabled="!createForm.title.trim() || !!deletingId" @click="saveWorkspaceForm">
             {{ workspaceFormMode === 'edit' ? t('toolbox.workspace.updateAction') : templateText('createAction') }}
           </BButton>
         </div>
@@ -471,6 +477,7 @@
   import { useMobileLayout } from '@/composables/useMobileLayout';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import {
+    deleteToolboxWorkspace as requestDeleteToolboxWorkspace,
     addToolboxWorkspaceResources as requestaddToolboxWorkspaceResources,
     createToolboxWorkspace as requestcreateToolboxWorkspace,
     createToolboxWorkspaceSession as requestcreateToolboxWorkspaceSession,
@@ -770,6 +777,7 @@
     if (days < 30) return t('toolbox.workspace.updatedDaysAgo', { count: days });
     return formatDate(value);
   }
+  const deletingId = ref('');
   const staleRequest = Symbol('stale-workspace');
   function scopedRequest<T extends (...args: any[]) => Promise<any>>(request: T): T {
     return (async (...args: Parameters<T>) => {
@@ -785,6 +793,7 @@
       }
     }) as T;
   }
+  const deleteToolboxWorkspace = scopedRequest(requestDeleteToolboxWorkspace);
   const addToolboxWorkspaceResources = scopedRequest(requestaddToolboxWorkspaceResources);
   const createToolboxWorkspace = scopedRequest(requestcreateToolboxWorkspace);
   const createToolboxWorkspaceSession = scopedRequest(requestcreateToolboxWorkspaceSession);
@@ -949,6 +958,36 @@
       if (mutationVersion === initializationVersion) creating.value = false;
     }
   }
+  function confirmDeleteProject(project: ToolboxWorkspaceSummary) {
+    if (blockGuestWrite('toolbox-project') || deletingId.value) return;
+    const version = initializationVersion;
+    const owner = ownerKey.value;
+    Alert.alert({
+      title: t('toolbox.project.deleteNamed', { title: project.title }),
+      content: t('toolbox.project.deleteConfirm'),
+      okText: t('toolbox.project.delete'),
+      okType: 'danger',
+      cancelText: t('common.cancel'),
+      onOk: async () => {
+        if (version !== initializationVersion || owner !== ownerKey.value || deletingId.value) return;
+        deletingId.value = project.id;
+        try {
+          await deleteToolboxWorkspace(project.id);
+          workspaces.value = workspaces.value.filter((item) => item.id !== project.id);
+          if (workspaceQuery.value === project.id) {
+            createModalVisible.value = false;
+            workspace.value = null;
+            await leaveWorkspace();
+          }
+          message.success(t('toolbox.project.deleted'));
+        } catch (error) {
+          showMutationError(error);
+        } finally {
+          if (version === initializationVersion) deletingId.value = '';
+        }
+      },
+    });
+  }
   async function openWorkspace(id: string) {
     if (workspaceQuery.value === id) {
       await initialize();
@@ -1074,6 +1113,7 @@
     progressNextStep.value = '';
     progressDuration.value = 0;
     createModalVisible.value = resourceModalVisible.value = outcomeOpen.value = false;
+    deletingId.value = '';
     creating.value = mutating.value = savingProgress.value = false;
     workspace.value = null;
     selectedResourceKeys.value = [];
@@ -1235,6 +1275,36 @@
     grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
     gap: 12px;
     margin-top: 12px;
+  }
+  .workspace-card-container { position: relative; min-width: 0; display: flex; }
+  .workspace-card-container :deep(.project-delete-trigger) {
+    position: absolute;
+    right: 10px;
+    bottom: 14px;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    color: var(--desc-color);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    transition: color 0.15s ease, background-color 0.15s ease;
+  }
+  .workspace-card-container :deep(.project-delete-trigger:focus-visible) {
+    color: var(--danger-color);
+    outline: 2px solid var(--danger-color);
+    outline-offset: 2px;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .workspace-card-container :deep(.project-delete-trigger:hover:not(:disabled)) {
+      color: var(--danger-color);
+      background: var(--primary-btn-h-bg-color);
+    }
+  }
+  .workspace-card-container .workspace-card__meta { min-height: 32px; padding-right: 34px; }
+  @media (pointer: coarse), (max-width: 767px) {
+    .workspace-card-container :deep(.project-delete-trigger) { width: 44px; height: 44px; right: 6px; }
+    .workspace-card-container .workspace-card__meta { min-height: 44px; padding-right: 42px; }
   }
   .workspace-card-grid :deep(.workspace-card) {
     width: 100%;
@@ -1727,6 +1797,7 @@
   .workspace-timeline small {
     display: block;
   }
+  .workspace-modal-actions :deep(.project-settings-delete) { margin-right: auto; }
   .workspace-modal-form,
   .workspace-resource-modal {
     display: grid;
@@ -1923,6 +1994,10 @@
     .workspace-modal-actions :deep(.b_btn) {
       flex: 1;
       width: auto;
+      min-width: 0;
+      padding: 0 10px;
+      white-space: normal;
+      line-height: 1.3;
       min-height: 44px;
     }
   }

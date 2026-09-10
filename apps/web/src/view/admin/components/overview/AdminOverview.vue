@@ -304,6 +304,7 @@
   import AdminRecentAdditions from './AdminRecentAdditions.vue';
   import {
     buildAdminTodayInsights,
+    formatAdminTodayBaseline,
     type AdminTodayBaseline,
     type AdminTodayInsight,
     type AdminTodayMetricKey,
@@ -469,14 +470,7 @@
   };
 
   function baselineText(metric: AdminTodayMetricKey) {
-    const baseline = data.value?.todayBaseline as AdminTodayBaseline | undefined;
-    const values = baseline?.available ? baseline.metrics?.[metric] : null;
-    if (!values) return '';
-    return t('adminOverview.todayBaseline', {
-      yesterday: n(values.yesterday),
-      days: baseline?.sampleDays || 7,
-      average: n(values.average7d),
-    });
+    return formatAdminTodayBaseline(data.value?.todayBaseline, metric, t);
   }
 
   function insightText(insight: AdminTodayInsight) {

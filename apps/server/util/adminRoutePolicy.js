@@ -355,6 +355,7 @@ declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'toolbox', [
   ['POST', '/toolbox/project-entry/dismiss'],
   ['POST', '/toolbox/workspaces'],
   ['PATCH', '/toolbox/workspaces/:workspaceId'],
+  ['DELETE', '/toolbox/workspaces/:workspaceId'],
   ['POST', '/toolbox/workspaces/:workspaceId/open'],
   ['POST', '/toolbox/workspaces/:workspaceId/resources'],
   ['POST', '/toolbox/workspaces/:workspaceId/resources/remove'],

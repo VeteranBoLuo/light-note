@@ -28,14 +28,19 @@
         </div>
       </div>
       <template v-else>
-        <MobileAppShell
-          :enabled="mobileShellEnabled"
-          :show-top-bar="mobileTopBarActive"
-          :show-top-switcher="mobileTopSwitcherActive"
-          :show-bottom-nav="mobileBottomNavActive"
-        >
-          <router-view />
-        </MobileAppShell>
+        <div class="app-workspace" :class="{ 'has-mobile-preview': mobilePreviewActive }">
+          <AdminContextBanner v-if="mobilePreviewActive" mobile />
+          <div class="app-workspace__content">
+            <MobileAppShell
+              :enabled="mobileShellEnabled"
+              :show-top-bar="mobileTopBarActive"
+              :show-top-switcher="mobileTopSwitcherActive"
+              :show-bottom-nav="mobileBottomNavActive"
+            >
+              <router-view />
+            </MobileAppShell>
+          </div>
+        </div>
         <Login v-if="bookmark.isShowLogin && !publicStandaloneRoute" />
         <BViewer v-if="bookmark.viewerKey && !publicStandaloneRoute" />
         <GuestNudge v-if="nudgeVisible && !publicStandaloneRoute" />
@@ -45,7 +50,7 @@
         <EntitlementReturnHost v-if="!publicStandaloneRoute" />
         <ResourceProjectHost v-if="!publicStandaloneRoute" />
         <ResourceSelectionDrawer v-if="!publicStandaloneRoute" />
-        <AdminContextBanner v-if="user.adminContext && !publicStandaloneRoute" />
+        <AdminContextBanner v-if="user.adminContext && !publicStandaloneRoute && !mobilePreviewActive" />
         <QuickCaptureModal
           v-if="inbox.quickCaptureVisible && !publicStandaloneRoute"
           v-model:visible="inbox.quickCaptureVisible"
@@ -224,6 +229,7 @@
   const mobileBottomNavActive = computed(
     () => bookmark.isMobile && router.currentRoute.value.meta.mobileBottomNav === true,
   );
+  const mobilePreviewActive = computed(() => bookmark.isMobile && Boolean(user.adminContext) && !publicStandaloneRoute.value);
   // `mobileShell` 表示该路由需要统一移动端顶栏；资源切换器与底部导航是两个独立开关。
   // 二级页（例如模板管理）只需要「返回 + 标题 + 页面动作」，不能因为两项导航都关闭就把顶栏一并卸载。
   const mobileShellEnabled = computed(() => bookmark.isMobile && Boolean(router.currentRoute.value.meta.mobileShell));
@@ -1175,6 +1181,29 @@
     width: 100%;
     height: 100%;
   }
+  .app-workspace,
+  .app-workspace__content {
+    display: contents;
+  }
+
+  .app-workspace.has-mobile-preview {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .has-mobile-preview > .app-workspace__content {
+    display: block;
+    width: 100%;
+    min-height: 0;
+    position: relative;
+    flex: 1 1 0;
+    height: auto;
+    overflow: hidden;
+  }
+
   .app-loading {
     /* 固定边界随视口铺满，避免根节点 zoom 再次缩小 vw/vh 尺寸。 */
     position: fixed;

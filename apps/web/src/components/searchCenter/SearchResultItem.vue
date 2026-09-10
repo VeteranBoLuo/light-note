@@ -28,6 +28,7 @@
             <span v-else>{{ segment.text }}</span>
           </template>
         </span>
+        <TodoSearchMeta v-if="item.type === 'todo'" :item="item" />
         <span v-if="matchReasonText" class="match-reason">{{ matchReasonText }}</span>
         <span class="row-tags" :class="{ 'row-meta--empty': !tagMetaText }">{{ tagMetaText || '—' }}</span>
         <span class="row-time" :class="{ 'row-meta--empty': !updateMetaText }">{{ updateMetaText || '—' }}</span>
@@ -67,6 +68,7 @@
             <span v-else>{{ segment.text }}</span>
           </template>
         </p>
+        <TodoSearchMeta v-if="item.type === 'todo'" :item="item" />
         <p v-if="matchReasonText" class="match-reason">{{ matchReasonText }}</p>
 
         <div class="item-meta">
@@ -89,6 +91,7 @@
 </template>
 
 <script setup lang="ts">
+  import TodoSearchMeta from './TodoSearchMeta.vue';
   import { computed } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -153,6 +156,7 @@
   const tagMetaText = computed(() => props.item.tagNames.slice(0, 3).join(' / '));
   const updateMetaText = computed(() => props.item.updatedAtText || '');
   const headerExtra = computed(() => {
+    if (props.item.type === 'todo') return '';
     if (props.item.type === 'bookmark') return props.item.domain || props.item.extra || '';
     if (props.item.type === 'file') return props.item.fileMeta || props.item.extra || '';
     return props.item.extra || '';
@@ -160,7 +164,7 @@
 </script>
 
 <style scoped lang="less">
-  @import (reference) "@/assets/css/workspace-surfaces.less";
+  @import (reference) '@/assets/css/workspace-surfaces.less';
   .result-item {
     position: relative;
     border: 1px solid var(--surface-border-color, var(--card-border-color));

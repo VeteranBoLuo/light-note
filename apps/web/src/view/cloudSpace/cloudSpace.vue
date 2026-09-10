@@ -52,13 +52,24 @@
         :active="batchMode"
       />
       <FileTypeFilter class="cloud-type-filter" />
+      <BButton
+        v-if="bookmark.isMobile"
+        class="mobile-cloud-search-toggle"
+        :class="{ active: mobileSearchOpen || Boolean(cloud.searchFileName) }"
+        :aria-label="$t('cloudSpace.searchFile')"
+        :aria-expanded="mobileSearchOpen"
+        aria-controls="mobile-cloud-search"
+        @click="toggleMobileSearch"
+      >
+        <SvgIcon :src="icon.navigation.search" size="18" />
+      </BButton>
       <div v-if="!bookmark.isMobile" class="cloud-search-action">
         <BInput
           v-model:value="cloud.searchFileName"
           :placeholder="$t('cloudSpace.searchFile')"
           clearable
           @input="onCloudSearchInput"
-          @enter="cloud.queryFieldList()"
+          @enter="submitCloudSearch"
         >
           <template #prefix>
             <SvgIcon :src="icon.navigation.search" size="16" />
@@ -95,7 +106,21 @@
           {{ t('inbox.complete') }}
         </BButton>
       </div>
-      <!-- 移动端不放第二个文本搜索框：找文件统一走顶栏全局搜索，这里只保留文件夹与类型筛选 -->
+      <div v-if="bookmark.isMobile && mobileSearchOpen" id="mobile-cloud-search" class="mobile-cloud-search">
+        <BInput
+          ref="mobileSearchInput"
+          v-model:value="cloud.searchFileName"
+          :placeholder="$t('cloudSpace.searchFile')"
+          :aria-label="$t('cloudSpace.searchFile')"
+          clearable
+          @input="onCloudSearchInput"
+          @enter="submitCloudSearch"
+        >
+          <template #prefix>
+            <SvgIcon :src="icon.navigation.search" size="16" />
+          </template>
+        </BInput>
+      </div>
       <div v-if="bookmark.isMobile" class="mobile-folder-filter">
         <BButton
           class="mobile-folder-trigger"
@@ -281,7 +306,7 @@
     return queryValue(route.query.folderId);
   }
 
-  function routeQueryWith(key: 'fileId' | 'folderId', value = '') {
+  function routeQueryWith(key: 'fileId' | 'folderId' | 'fileName', value = '') {
     const query = { ...route.query };
     if (value) query[key] = value;
     else delete query[key];
@@ -416,6 +441,22 @@
     viewMode.value = mode;
     updatePreference({ cloudView: mode }).catch(() => {});
   }
+  const mobileSearchOpen = ref(Boolean(getRouteFileName() || cloud.searchFileName));
+  const mobileSearchInput = ref<{ focus: () => void } | null>(null);
+  async function toggleMobileSearch() {
+    mobileSearchOpen.value = !mobileSearchOpen.value;
+    if (mobileSearchOpen.value) {
+      await nextTick();
+      mobileSearchInput.value?.focus();
+    }
+  }
+  watch(
+    () => cloud.searchFileName,
+    (value) => {
+      if (value) mobileSearchOpen.value = true;
+    },
+  );
+
   let cloudSearchTimer = 0;
   let suppressRouteFileNameWatch = false;
   let suppressFolderRouteWatch = Boolean(getRouteFolderId());
@@ -423,7 +464,23 @@
   let unavailableFolderId = '';
   function onCloudSearchInput() {
     window.clearTimeout(cloudSearchTimer);
-    cloudSearchTimer = window.setTimeout(() => cloud.queryFieldList(), 220);
+    if (!cloud.searchFileName) {
+      void submitCloudSearch();
+      return;
+    }
+    cloudSearchTimer = window.setTimeout(() => void submitCloudSearch(), 220);
+  }
+
+  async function submitCloudSearch() {
+    window.clearTimeout(cloudSearchTimer);
+    if (route.path !== '/cloudSpace') return;
+    const fileName = cloud.searchFileName;
+    if (getRouteFileName() !== fileName) {
+      await router.replace({ path: '/cloudSpace', query: routeQueryWith('fileName', fileName) });
+    }
+    if (route.path === '/cloudSpace' && cloud.searchFileName === fileName) {
+      void cloud.queryFieldList();
+    }
   }
 
   const cloudIdentityKey = computed(() =>
@@ -950,6 +1007,7 @@
     () => {
       if (suppressRouteFileNameWatch) return;
       if (!route.path.includes('/cloudSpace')) return;
+      if (getRouteFileName() === cloud.searchFileName) return;
       initializeCloudSpace();
     },
   );
@@ -1011,7 +1069,7 @@
 </script>
 
 <style lang="less" scoped>
-  @import (reference) "@/assets/css/workspace-surfaces.less";
+  @import (reference) '@/assets/css/workspace-surfaces.less';
   .cloud-count-chip {
     height: 22px;
     padding: 0 8px;
@@ -1128,6 +1186,25 @@
     color: var(--resource-file-color, #ff8a00);
     background: var(--menu-body-bg-color);
     box-shadow: 0 2px 7px rgba(15, 23, 42, 0.08);
+  }
+
+  .mobile-cloud-search-toggle {
+    flex: 0 0 44px;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 1px solid transparent;
+
+    &.active {
+      color: var(--resource-file-color);
+      border-color: var(--resource-file-color);
+    }
+  }
+
+  .mobile-cloud-search {
+    flex-shrink: 0;
+    min-width: 0;
+    margin-bottom: 8px;
   }
 
   .cloud-search-action {

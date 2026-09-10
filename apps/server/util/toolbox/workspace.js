@@ -429,6 +429,25 @@ export async function getToolboxWorkspace({ userId, workspaceId, database = pool
   };
 }
 
+export async function deleteToolboxWorkspace({ userId, workspaceId, database = pool } = {}) {
+  const ownerId = requiredUserId(userId);
+  const id = requiredText(workspaceId, 'workspaceId', 36);
+  return withTransaction(database, async (connection) => {
+    await lockWorkspace(connection, ownerId, id);
+    // Child writers take the same project lock, so none can recreate rows after deletion.
+    for (const table of [
+      'toolbox_board_operations',
+      'toolbox_workspace_sessions',
+      'toolbox_workspace_items',
+      'toolbox_workspace_resources',
+    ]) {
+      await connection.query(`DELETE FROM ${table} WHERE workspace_id = ? AND user_id = ?`, [id, ownerId]);
+    }
+    await connection.query('DELETE FROM toolbox_workspaces WHERE id = ? AND user_id = ?', [id, ownerId]);
+    return { id };
+  });
+}
+
 export async function updateToolboxWorkspace({ userId, workspaceId, input = {}, database = pool } = {}) {
   const ownerId = requiredUserId(userId);
   const workspace = await requireWorkspace(database, ownerId, workspaceId);

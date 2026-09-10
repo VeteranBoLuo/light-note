@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { buildAdminTodayInsights, type AdminTodayBaseline, type AdminTodayMetricValues } from './adminTodayInsights.ts';
+import {
+  formatAdminTodayBaseline,
+  buildAdminTodayInsights,
+  type AdminTodayBaseline,
+  type AdminTodayMetricValues,
+} from './adminTodayInsights.ts';
 
 const current: AdminTodayMetricValues = {
   users: 10,
@@ -125,5 +130,36 @@ describe('今日运营同期波动解释', () => {
       changePercent: null,
     });
     expect(buildAdminTodayInsights(current, { ...baseline(), available: false })).toEqual([]);
+  });
+});
+
+describe('活跃同期展示', () => {
+  const t = (key: string, values: Record<string, string | number>) => JSON.stringify({ key, ...values });
+  it('昨日数据独立显示，缺失均值不当作零', () => {
+    const result = JSON.parse(
+      formatAdminTodayBaseline(baseline({ activeUsers: { yesterday: 6, average7d: null } }), 'activeUsers', t),
+    );
+    expect(result).toEqual({ key: 'adminOverview.todayBaselinePendingAverage', yesterday: '6' });
+  });
+  it('昨日和均值为零时正常显示', () => {
+    expect(
+      JSON.parse(formatAdminTodayBaseline(baseline({ activeUsers: { yesterday: 0, average7d: 0 } }), 'activeUsers', t)),
+    ).toEqual({ key: 'adminOverview.todayBaseline', yesterday: '0', days: 7, average: '0' });
+    expect(
+      JSON.parse(
+        formatAdminTodayBaseline(baseline({ activeUsers: { yesterday: 0, average7d: null } }), 'activeUsers', t),
+      ).yesterday,
+    ).toBe('0');
+  });
+  it('无基线或请求不可用时不生成比较值', () => {
+    expect(formatAdminTodayBaseline(baseline(), 'activeUsers', t)).toBe('');
+    expect(formatAdminTodayBaseline(undefined, 'activeUsers', t)).toBe('');
+    expect(
+      formatAdminTodayBaseline(
+        { ...baseline({ activeUsers: { yesterday: 6, average7d: null } }), available: false },
+        'activeUsers',
+        t,
+      ),
+    ).toBe('');
   });
 });

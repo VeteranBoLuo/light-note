@@ -13,6 +13,7 @@ router.get('/workspaces', localProcessingRateLimiter, toolboxHandle.listWorkspac
 router.post('/workspaces', localProcessingRateLimiter, toolboxHandle.createWorkspace);
 router.get('/workspaces/:workspaceId', localProcessingRateLimiter, toolboxHandle.getWorkspace);
 router.patch('/workspaces/:workspaceId', localProcessingRateLimiter, toolboxHandle.updateWorkspace);
+router.delete('/workspaces/:workspaceId', localProcessingRateLimiter, toolboxHandle.deleteWorkspace);
 router.post('/workspaces/:workspaceId/open', localProcessingRateLimiter, toolboxHandle.openWorkspace);
 router.post('/workspaces/:workspaceId/resources', localProcessingRateLimiter, toolboxHandle.addWorkspaceResources);
 router.post(

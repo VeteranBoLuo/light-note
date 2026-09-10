@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   markToolboxWorkspaceOpened: vi.fn(),
   saveToolboxArtifactToNote: vi.fn(),
   createToolboxWorkspace: vi.fn(),
+  deleteToolboxWorkspace: vi.fn(),
   updateToolboxWorkspace: vi.fn(),
   addToolboxWorkspaceResources: vi.fn(),
   removeToolboxWorkspaceResource: vi.fn(),
@@ -72,6 +73,7 @@ vi.mock('../util/toolbox/workspace.js', () => ({
   listToolboxWorkspaces: mocks.listToolboxWorkspaces,
   markToolboxWorkspaceOpened: mocks.markToolboxWorkspaceOpened,
   removeToolboxWorkspaceResource: mocks.removeToolboxWorkspaceResource,
+  deleteToolboxWorkspace: mocks.deleteToolboxWorkspace,
   updateToolboxWorkspace: mocks.updateToolboxWorkspace,
   updateToolboxWorkspaceItem: mocks.updateToolboxWorkspaceItem,
 }));
@@ -92,6 +94,7 @@ const {
   openWorkspace,
   removeWorkspaceResource,
   saveArtifact,
+  deleteWorkspace,
   updateWorkspace,
   updateWorkspaceItem,
 } = await import('./toolboxHandle.js');
@@ -111,6 +114,16 @@ describe('toolbox home handlers', () => {
     mocks.recordServerOperation.mockResolvedValue(true);
   });
 
+  it('项目删除使用认证身份，游客拒绝写入', async () => {
+    mocks.deleteToolboxWorkspace.mockResolvedValue({ id: 'project' });
+    const req = { user: { id: 'owner' }, params: { workspaceId: 'project' }, body: { userId: 'other' } };
+    await deleteWorkspace(req, createResponse());
+    expect(mocks.deleteToolboxWorkspace).toHaveBeenCalledWith({ userId: 'owner', workspaceId: 'project' });
+    mocks.deleteToolboxWorkspace.mockClear();
+    mocks.ensureNotVisitor.mockReturnValue(false);
+    await deleteWorkspace(req, createResponse());
+    expect(mocks.deleteToolboxWorkspace).not.toHaveBeenCalled();
+  });
   it('知识库整理接口不再返回目录导出所需的完整节点树', async () => {
     const overview = { summary: { total: 3 }, issues: [] };
     mocks.getToolboxKnowledgeOverview.mockResolvedValueOnce(overview);

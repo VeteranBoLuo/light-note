@@ -93,6 +93,43 @@ describe('activity read model', () => {
     });
     expect(db.query.mock.calls[1][1]).toEqual(['2026-09-01', '2026-09-07', '10:30:00']);
   });
+  it.each([0, 6])('shows yesterday (%i) before seven full days exist without including rollout day', async (count) => {
+    const db = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce([[{ startedAt: '2026-09-08 15:20:00.000000' }]])
+        .mockResolvedValueOnce([count ? [{ d: '2026-09-09', c: count }] : []]),
+    };
+    const dates = ['2026-09-03', '2026-09-04', '2026-09-05', '2026-09-06', '2026-09-07', '2026-09-08', '2026-09-09'];
+    expect(
+      await queryActivityBaseline({
+        hideInternal: true,
+        now: new Date('2026-09-10T08:58:00+08:00'),
+        dates,
+        cutoffTime: '08:58:00',
+        db,
+      }),
+    ).toEqual({ yesterday: count, average7d: null });
+    expect(db.query.mock.calls[1][1]).toEqual(['2026-09-09', '2026-09-09', '08:58:00', 'root', 'test']);
+  });
+  it('enables the average on the first date with seven full historical days', async () => {
+    const db = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce([[{ startedAt: '2026-09-08 15:20:00.000000' }]])
+        .mockResolvedValueOnce([[{ d: '2026-09-15', c: 7 }]]),
+    };
+    const dates = ['2026-09-09', '2026-09-10', '2026-09-11', '2026-09-12', '2026-09-13', '2026-09-14', '2026-09-15'];
+    expect(
+      await queryActivityBaseline({
+        hideInternal: false,
+        now: new Date('2026-09-16T00:00:00+08:00'),
+        dates,
+        cutoffTime: '00:00:00',
+        db,
+      }),
+    ).toEqual({ yesterday: 7, average7d: 1 });
+  });
   it('accepts live latest-activity cursors after the membership snapshot and rejects future or old-sort cursors', async () => {
     const snapshotAt = '2026-09-08 09:30:00.000';
     const scope = `active-users:last-active:root:true:${snapshotAt}`;

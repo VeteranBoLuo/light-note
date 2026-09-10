@@ -13,7 +13,26 @@ export interface AdminTodayBaseline {
   mode: 'same_elapsed_time';
   cutoffTime: string;
   sampleDays: number;
-  metrics: Partial<Record<AdminTodayMetricKey, AdminTodayBaselineMetric>>;
+  metrics: Partial<Record<Exclude<AdminTodayMetricKey, 'activeUsers'>, AdminTodayBaselineMetric>> & {
+    activeUsers?: { yesterday: number; average7d: number | null };
+  };
+}
+
+export function formatAdminTodayBaseline(
+  baseline: AdminTodayBaseline | null | undefined,
+  metric: AdminTodayMetricKey,
+  t: (key: string, values: Record<string, string | number>) => string,
+): string {
+  const values = baseline?.available ? baseline.metrics?.[metric] : null;
+  if (!values) return '';
+  if (values.average7d == null) {
+    return t('adminOverview.todayBaselinePendingAverage', { yesterday: values.yesterday.toLocaleString() });
+  }
+  return t('adminOverview.todayBaseline', {
+    yesterday: values.yesterday.toLocaleString(),
+    days: baseline?.sampleDays || 7,
+    average: values.average7d.toLocaleString(),
+  });
 }
 
 export interface AdminTodayMetricValues {

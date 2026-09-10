@@ -33,6 +33,7 @@ import {
   markToolboxWorkspaceOpened,
   removeToolboxWorkspaceResource,
   updateToolboxWorkspace,
+  deleteToolboxWorkspace,
   updateToolboxWorkspaceItem,
 } from '../util/toolbox/workspace.js';
 
@@ -153,6 +154,17 @@ export async function openWorkspace(req, res) {
       workspaceId: req.params.workspaceId,
     });
     return res.send(resultData(workspace));
+  } catch (error) {
+    return sendError(res, error);
+  }
+}
+
+export async function deleteWorkspace(req, res) {
+  if (!requireWrite(req, res)) return;
+  try {
+    const result = await deleteToolboxWorkspace({ userId: req.user.id, workspaceId: req.params.workspaceId });
+    await recordToolboxOperation(req, '删除项目');
+    return res.send(resultData(result));
   } catch (error) {
     return sendError(res, error);
   }

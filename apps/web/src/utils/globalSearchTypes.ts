@@ -13,6 +13,8 @@
 
 export type ResourceSearchType = 'bookmark' | 'note' | 'file' | 'tag';
 export type GlobalSearchType = ResourceSearchType | 'todo';
+/** 查找结果不包含标签导航；不代表对象具备资料整理能力。 */
+export type SearchCenterType = 'bookmark' | 'note' | 'file' | 'todo';
 export type TaggableResourceType = 'bookmark' | 'note' | 'file';
 export type InboxableResourceType = 'bookmark' | 'note' | 'file';
 export type ReferenceableResourceType = 'bookmark' | 'note' | 'file';

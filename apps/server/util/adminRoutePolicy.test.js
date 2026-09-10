@@ -25,6 +25,13 @@ function createRes() {
 }
 
 describe('adminRoutePolicyMiddleware', () => {
+  it.each(['readonly', 'maintain'])('项目删除拒绝 %s 代管上下文', (mode) => {
+    const next = vi.fn();
+    const res = createRes();
+    adminRoutePolicyMiddleware(createReq('/toolbox/workspaces/project', 'DELETE', mode), res, next);
+    expect(next).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(403);
+  });
   it('所有现有业务路由都显式声明策略', () => {
     const dirname = path.dirname(fileURLToPath(import.meta.url));
     const routerDir = path.resolve(dirname, '../router');

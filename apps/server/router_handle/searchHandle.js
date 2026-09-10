@@ -1278,11 +1278,13 @@ export const globalSearch = async (req, res) => {
       mode === 'full' && (req.body?.separateTagMatches === true || String(req.body?.separateTagMatches || '') === '1');
     const requestedTypes = normalizeSearchTypes(req.body?.types, req.body?.type);
     const selectedTypes =
-      separateTagMatches || paginationMode === 'global'
+      paginationMode === 'global' || (separateTagMatches && paginationMode !== 'ordered')
         ? requestedTypes.filter((type) => BATCH_EDITABLE_TYPES.includes(type))
-        : requestedTypes;
-    // 独立标签匹配模式用于资源中心。即使旧客户端漏传 types（或误传标签/待办），
-    // 也不能退回“导航对象也是资源结果”的旧语义。
+        : separateTagMatches
+          ? requestedTypes.filter((type) => type !== 'tag')
+          : requestedTypes;
+    // ordered 查找允许显式请求待办；旧调用与 global 资料分页保持资料范围。
+    // 标签始终是独立导航，空的有效范围保持旧调用的资料默认值。
     if (!selectedTypes.length) selectedTypes.push(...BATCH_EDITABLE_TYPES);
     const lang = normalizeLang(req.headers['x-lang']);
     const options = {

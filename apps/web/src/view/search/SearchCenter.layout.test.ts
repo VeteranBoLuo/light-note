@@ -15,9 +15,9 @@ const tagFilterSource = readFileSync(
 );
 
 describe('资源中心 2.0 工作区边界', () => {
-  it('只把书签、笔记和文件作为可检索资源，标签不再混进资源结果', () => {
+  it('展示资料和待办，标签不再混进查找结果', () => {
     expect(searchMetaSource).toContain(
-      'SEARCH_CENTER_TYPE_LIST: TaggableResourceType[] = [...TAGGABLE_RESOURCE_TYPES]',
+      "SEARCH_CENTER_TYPE_LIST: SearchCenterType[] = [...TAGGABLE_RESOURCE_TYPES, 'todo']",
     );
     expect(source).toMatch(/normalizeSearchResultItems[\s\S]*?SEARCH_CENTER_TYPE_LIST\.includes\(item\.type\)/);
     expect(source).toContain('separateTagMatches: true');

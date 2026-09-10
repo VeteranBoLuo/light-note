@@ -516,6 +516,78 @@ describe('globalSearch 待办', () => {
     });
   });
 
+  it.each(['updated', 'name', 'relevance'])('资源中心 ordered 待办分页保留计数、实例与游标：%s', async (sort) => {
+    const rows = todoRows(3);
+    mocks.pool.query.mockImplementation(async (sql, params) => {
+      if (String(sql).includes('COUNT(*) AS total FROM todo_items')) return [[{ total: 3 }]];
+      if (String(sql).includes('COUNT(*) AS total')) return [[{ total: 0 }]];
+      if (String(sql).includes('FROM todo_items t')) {
+        const offset = params.at(-1);
+        return [rows.slice(offset, offset + params.at(-2))];
+      }
+      return [[]];
+    });
+    const base = {
+      keyword: sort === 'relevance' ? '待办' : '',
+      types: ['todo'],
+      separateTagMatches: true,
+      paginationMode: 'ordered',
+      pageSize: 2,
+      sort,
+    };
+    const first = createResponse();
+    await globalSearch({ resourceUser: { id: 'owner' }, user: { id: 'admin' }, body: base, headers: {} }, first);
+    const page = first.send.mock.calls.at(-1)[0].data;
+    expect(page.items.map((item) => item.id)).toEqual(['todo-1', 'todo-2']);
+    expect(page.typeTotals.todo).toBe(3);
+    expect(page.groups.map((group) => group.type)).toEqual(['todo']);
+    expect(page.nextCursor).toEqual({ type: 'todo', offset: 2 });
+    const second = createResponse();
+    await globalSearch(
+      {
+        resourceUser: { id: 'owner' },
+        body: { ...base, cursor: page.nextCursor, includeMetadata: false },
+        headers: {},
+      },
+      second,
+    );
+    const next = second.send.mock.calls.at(-1)[0].data;
+    expect(next.items.map((item) => item.id)).toEqual(['todo-3']);
+    expect(next.hasMore).toBe(false);
+    const calls = mocks.pool.query.mock.calls.filter(([sql]) => String(sql).includes('FROM todo_items t'));
+    expect(calls.every(([, params]) => params.includes('owner') && !params.includes('admin'))).toBe(true);
+  });
+
+  it.each([{ paginationMode: 'ordered' }, { paginationMode: 'global', types: ['bookmark', 'todo'] }])(
+    '旧资料查询不访问待办表：%j',
+    async (query) => {
+      const res = createResponse();
+      await globalSearch({ user: { id: 'user-1' }, body: { ...query, separateTagMatches: true }, headers: {} }, res);
+      expect(res.send.mock.calls.at(-1)[0].status).toBe(200);
+      expect(mocks.pool.query.mock.calls.some(([sql]) => String(sql).includes('todo_items'))).toBe(false);
+    },
+  );
+
+  it('资源中心 mixed ordered 显式包含待办但不包含标签结果', async () => {
+    const res = createResponse();
+    await globalSearch(
+      {
+        user: { id: 'user-1' },
+        body: {
+          types: ['bookmark', 'note', 'file', 'todo', 'tag'],
+          separateTagMatches: true,
+          paginationMode: 'ordered',
+        },
+        headers: {},
+      },
+      res,
+    );
+    const data = res.send.mock.calls.at(-1)[0].data;
+    expect(data.items.map((item) => item.type)).toEqual(['todo', 'todo']);
+    expect(data.typeTotals.todo).toBe(9);
+    expect(data.typeTotals.tag).toBe(0);
+  });
+
   it('待办严格按 user_id 与 del_flag 过滤，并给出可定位的待办路由', async () => {
     const res = createResponse();
 

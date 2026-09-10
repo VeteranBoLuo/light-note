@@ -433,6 +433,15 @@ request.defaults.adapter = async (config) => {
       })),
     });
   }
+  const deleteMatch = url.match(/^\/api\/toolbox\/workspaces\/([^/]+)$/);
+  if (deleteMatch && String(config.method).toLowerCase() === 'delete') {
+    if (params.get('deleteError') === '1') return response(config, { code: 'TOOLBOX_WORKSPACE_DELETE_FAILED' }, 500);
+    await new Promise(resolve => setTimeout(resolve, 500));
+    const index = listFixture.findIndex(item => item.id === deleteMatch[1]);
+    if (index < 0) return response(config, { code: 'TOOLBOX_WORKSPACE_NOT_FOUND' }, 404);
+    listFixture.splice(index, 1);
+    return response(config, { id: deleteMatch[1] });
+  }
   if (url === '/api/toolbox/workspaces' && String(config.method).toLowerCase() === 'get') {
     return response(config, { items: state === 'empty' ? [] : listFixture });
   }

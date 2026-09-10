@@ -6,6 +6,7 @@ vi.mock('../personalKnowledgeSearch.js', () => ({ resolvePersonalKnowledgeResour
 vi.mock('../../db/index.js', () => ({ default: { query: vi.fn() } }));
 
 const {
+  deleteToolboxWorkspace,
   addToolboxWorkspaceResources,
   createToolboxWorkspaceItem,
   calculateWorkspaceStreak,
@@ -341,3 +342,58 @@ describe('project material atomic limits', () => {
     expect(insert[1].slice(1, 4)).toEqual(['workspace-1', 'owner', lane]);
   });
  });
+
+describe('项目删除事务', () => {
+  function databaseFixture({ missing = false, fail = false } = {}) {
+    const connection = {
+      query: vi.fn(async (sql) => {
+        if (sql.startsWith('SELECT')) return [missing ? [] : [{ id: 'project', status: 'active' }]];
+        if (fail && sql.includes('DELETE FROM toolbox_workspace_items')) throw new Error('delete failed');
+        return [{ affectedRows: 1 }];
+      }),
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+    };
+    return { connection, database: { getConnection: vi.fn(async () => connection) } };
+  }
+  it('锁定所属项目并仅清理项目内记录，保留独立资料和成果', async () => {
+    const { database, connection } = databaseFixture();
+    expect(await deleteToolboxWorkspace({ userId: 'owner', workspaceId: 'project', database })).toEqual({
+      id: 'project',
+    });
+    expect(connection.query.mock.calls.map(([sql]) => sql.match(/(?:FROM) (\w+)/)[1])).toEqual([
+      'toolbox_workspaces',
+      'toolbox_board_operations',
+      'toolbox_workspace_sessions',
+      'toolbox_workspace_items',
+      'toolbox_workspace_resources',
+      'toolbox_workspaces',
+    ]);
+    expect(connection.query.mock.calls[0][0]).toContain('FOR UPDATE');
+    for (const [, params] of connection.query.mock.calls) expect(params).toEqual(['project', 'owner']);
+    expect(connection.commit).toHaveBeenCalledOnce();
+    expect(connection.rollback).not.toHaveBeenCalled();
+    expect(connection.release).toHaveBeenCalledOnce();
+  });
+  it('项目不存在或不属于当前账号时不删除任何记录', async () => {
+    const { database, connection } = databaseFixture({ missing: true });
+    await expect(deleteToolboxWorkspace({ userId: 'owner', workspaceId: 'project', database })).rejects.toMatchObject({
+      code: 'TOOLBOX_WORKSPACE_NOT_FOUND',
+    });
+    expect(connection.query).toHaveBeenCalledTimes(1);
+    expect(connection.rollback).toHaveBeenCalledOnce();
+    expect(connection.commit).not.toHaveBeenCalled();
+  });
+  it('子表清理失败时回滚，保留项目且释放连接', async () => {
+    const { database, connection } = databaseFixture({ fail: true });
+    await expect(deleteToolboxWorkspace({ userId: 'owner', workspaceId: 'project', database })).rejects.toThrow(
+      'delete failed',
+    );
+    expect(connection.rollback).toHaveBeenCalledOnce();
+    expect(connection.commit).not.toHaveBeenCalled();
+    expect(connection.release).toHaveBeenCalledOnce();
+    expect(connection.query.mock.calls.some(([sql]) => sql.startsWith('DELETE FROM toolbox_workspaces '))).toBe(false);
+  });
+});
