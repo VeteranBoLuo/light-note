@@ -1,3 +1,4 @@
+import { DEFAULT_DEEPSEEK_MODEL } from './deepseekModelPolicy.js';
 import { getAiModelPrice } from '../aiCostPolicy.js';
 /**
  * Agent LLM 客户端（OpenAI 兼容接口，支持 DeepSeek / 千问双供应商）
@@ -45,7 +46,7 @@ const PROVIDERS = {
     baseUrl: 'https://api.deepseek.com/v1/chat/completions',
     apiKeyEnv: 'DEEPSEEK_API_KEY',
     modelEnv: 'DEEPSEEK_MODEL',
-    defaultModel: 'deepseek-v4-flash',
+    defaultModel: DEFAULT_DEEPSEEK_MODEL,
     // 笔记改写、翻译等场景的结果通常接近原文长度，默认给足 8K 输出空间；可用环境变量下调。
     noteAssistMaxTokens: 8192,
     // DeepSeek V4 默认开启思考模式，但 thinking 模式不接受 tool_choice。

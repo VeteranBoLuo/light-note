@@ -37,3 +37,15 @@ describe('Agent 分阶段模型策略', () => {
     });
   });
 });
+
+it('文本备用切换与文本模型覆盖不改变默认多模态模型，视觉阶段覆盖优先', () => {
+  expect(
+    resolveAgentStageModelOptions('vision', { AGENT_LLM_PROVIDER: 'qwen', DEEPSEEK_MODEL: 'deepseek-v4-pro' }),
+  ).toEqual({ stageGroup: 'vision', providerOverride: 'deepseek', modelOverride: 'deepseek-flash' });
+  expect(
+    resolveAgentStageModelOptions('vision', {
+      AGENT_VISION_MODEL: 'stage-vision',
+      DEEPSEEK_VISION_MODEL: 'legacy-vision',
+    }).modelOverride,
+  ).toBe('stage-vision');
+});

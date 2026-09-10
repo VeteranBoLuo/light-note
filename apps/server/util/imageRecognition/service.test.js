@@ -144,3 +144,21 @@ describe('统一图片识别服务', () => {
     expect(breaker.recordFailure).not.toHaveBeenCalled();
   });
 });
+
+it.each(['recognizeImage', 'understandImage'])('视觉覆盖同时用于 %s 请求和熔断身份', async (method) => {
+  const breaker = circuit();
+  const visionProvider = { model: 'deepseek-flash', [method]: vi.fn().mockResolvedValue({ content: '识别文字' }) };
+  const provider = createImageRecognitionProvider({
+    visionProvider,
+    circuitBreaker: breaker,
+    hasExecution: () => true,
+    env: { AGENT_VISION_MODEL: 'stage-vision', DEEPSEEK_VISION_MODEL: 'legacy-vision' },
+  });
+  await provider[method](Buffer.from('image'));
+  expect(visionProvider[method]).toHaveBeenCalledWith(
+    expect.any(Buffer),
+    expect.objectContaining({ model: 'stage-vision' }),
+  );
+  expect(breaker.isOpen).toHaveBeenCalledWith('deepseek:stage-vision');
+  expect(breaker.recordSuccess).toHaveBeenCalledWith('deepseek:stage-vision');
+});

@@ -91,8 +91,8 @@ describe('Agent AI Gateway', () => {
       ],
       { maxTokens: 1_200 },
     );
-    expect(estimate).toBeGreaterThanOrEqual(1_200 + 384);
-    expect(estimate).toBeLessThan(2_500);
+    expect(estimate).toBeGreaterThanOrEqual(1_200 + 1024);
+    expect(estimate).toBeLessThan(2_600);
   });
 
   it('完整调用受 Gateway 硬超时约束，并返回稳定错误码', async () => {
@@ -162,4 +162,21 @@ describe('Agent AI Gateway', () => {
     expect(client).not.toHaveBeenCalled();
     expect(governanceAdapter.finishAiGatewayGovernance).not.toHaveBeenCalled();
   });
+});
+
+it('多张图片分别预留 1024 tokens，额度预算不随 base64 大小变化', () => {
+  const estimate = (count) =>
+    estimateAiProviderTokens(
+      [
+        {
+          role: 'user',
+          content: Array.from({ length: count }, () => ({
+            type: 'image_url',
+            image_url: { url: 'data:image/png;base64,AA==' },
+          })),
+        },
+      ],
+      { maxTokens: 1200 },
+    );
+  expect(estimate(3) - estimate(0)).toBe(3072);
 });

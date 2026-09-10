@@ -21,8 +21,8 @@ describe('Agent LLM 供应商切换(AGENT_LLM_PROVIDER)', () => {
   it('未设置 AGENT_LLM_PROVIDER 时默认走 deepseek,价格按峰谷时段', () => {
     delete process.env.AGENT_LLM_PROVIDER;
     vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-09-09T02:00:00Z'));
-    expect(getActiveProviderPricing()).toEqual({ provider: 'deepseek', price: { input: 3, output: 9, cached: 0.1 } });
+    vi.setSystemTime(new Date('2026-09-11T02:00:00Z'));
+    expect(getActiveProviderPricing()).toEqual({ provider: 'deepseek', price: { input: 2, output: 8, cached: 0.04 } });
   });
 
   it('未登记价格的备用模型明确返回未知', () => {
@@ -170,7 +170,7 @@ describe('Agent LLM 供应商切换(AGENT_LLM_PROVIDER)', () => {
 
     const requestBody = JSON.parse(globalThis.fetch.mock.calls[0][1].body);
     expect(requestBody).toMatchObject({
-      model: 'deepseek-v4-flash',
+      model: 'deepseek-flash',
       thinking: { type: 'disabled' },
       tool_choice: { type: 'function', function: { name: 'plan_intent' } },
     });
@@ -243,7 +243,7 @@ describe('Agent LLM 供应商切换(AGENT_LLM_PROVIDER)', () => {
     });
     const requestBody = JSON.parse(globalThis.fetch.mock.calls[0][1].body);
     expect(requestBody).toMatchObject({
-      model: 'deepseek-v4-flash',
+      model: 'deepseek-flash',
       thinking: { type: 'disabled' },
       stream: true,
     });

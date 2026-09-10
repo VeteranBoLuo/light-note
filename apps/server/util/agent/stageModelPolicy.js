@@ -1,3 +1,5 @@
+import { resolveDeepSeekVisionModel } from './deepseekModelPolicy.js';
+
 const STAGE_GROUPS = Object.freeze([
   { prefix: 'VISION', pattern: /^(?:image_recognition|vision)/u },
   { prefix: 'INTENT', pattern: /^(?:intent_compiler|material_follow_up|note_draft_task)/u },
@@ -23,9 +25,7 @@ export function resolveAgentStageModelOptions(stage, env = process.env) {
   );
   const modelOverride = clean(
     env[`AGENT_${group}_MODEL`] ||
-      (group === 'VISION' && providerOverride === 'deepseek'
-        ? env.DEEPSEEK_VISION_MODEL || 'deepseek-v4-flash-vision-exp'
-        : ''),
+      (group === 'VISION' && providerOverride === 'deepseek' ? resolveDeepSeekVisionModel(env) : ''),
   );
   return {
     stageGroup: group.toLowerCase(),

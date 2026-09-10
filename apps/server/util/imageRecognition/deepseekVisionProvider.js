@@ -1,8 +1,9 @@
+import { DEFAULT_DEEPSEEK_MODEL, resolveDeepSeekVisionModel } from '../agent/deepseekModelPolicy.js';
 import { requestAi } from '../agent/aiGateway.js';
 import { prepareImagesForVision } from './preprocess.js';
 import { inspectRecognitionText } from './quality.js';
 
-export const DEFAULT_DEEPSEEK_VISION_MODEL = 'deepseek-v4-flash-vision-exp';
+export const DEFAULT_DEEPSEEK_VISION_MODEL = DEFAULT_DEEPSEEK_MODEL;
 
 function boundedInteger(value, fallback, min, max) {
   const parsed = Number(value);
@@ -57,7 +58,7 @@ export async function recognizeImageWithDeepSeekVision(
     signal,
     request = requestAi,
     prepare = prepareImagesForVision,
-    model = String(process.env.DEEPSEEK_VISION_MODEL || DEFAULT_DEEPSEEK_VISION_MODEL).trim(),
+    model = resolveDeepSeekVisionModel(),
     maxTokens = boundedInteger(process.env.AI_VISION_MAX_TOKENS, 1_200, 256, 4_096),
     timeoutMs = boundedInteger(process.env.AI_VISION_TIMEOUT_MS, 30_000, 5_000, 90_000),
   } = {},

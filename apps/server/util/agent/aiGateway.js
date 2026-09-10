@@ -1,3 +1,4 @@
+import { MAX_DEEPSEEK_IMAGE_TOKENS } from './deepseekModelPolicy.js';
 import crypto from 'node:crypto';
 import { requestDeepSeek, requestDeepSeekStream } from './deepseekClient.js';
 import { stableAgentErrorCode } from './logSafety.js';
@@ -62,8 +63,6 @@ function serializedByteLength(value) {
   }
 }
 
-const MAX_VISION_INPUT_TOKENS_PER_IMAGE = 384;
-
 function estimateTextTokens(value) {
   return Math.ceil(Buffer.byteLength(String(value || ''), 'utf8') / 3);
 }
@@ -80,8 +79,8 @@ function estimateMessageTokens(messages) {
     for (const block of content) {
       const type = String(block?.type || '');
       if (['image_url', 'input_image', 'image', 'file'].includes(type)) {
-        // 图片的 base64/URL 是传输载荷，不是文本 prompt。DeepSeek 当前每张图片最高折算 384 tokens。
-        estimate += MAX_VISION_INPUT_TOKENS_PER_IMAGE;
+        // 图片的 base64/URL 是传输载荷，不是文本 prompt。DeepSeek 当前每张图片最高折算 1024 tokens。
+        estimate += MAX_DEEPSEEK_IMAGE_TOKENS;
       } else if (['text', 'input_text'].includes(type)) {
         estimate += estimateTextTokens(block?.text);
       } else {

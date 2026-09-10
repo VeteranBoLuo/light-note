@@ -1,8 +1,9 @@
+import { resolveDeepSeekVisionModel } from '../agent/deepseekModelPolicy.js';
 import { stableAgentErrorCode } from '../agent/logSafety.js';
 import { localOcrProvider } from '../aiDocument/localOcr.js';
 import { getActiveAiExecution } from '../aiExecution/context.js';
 import { createVisionCircuitBreaker } from './circuitBreaker.js';
-import { deepseekVisionProvider, DEFAULT_DEEPSEEK_VISION_MODEL } from './deepseekVisionProvider.js';
+import { deepseekVisionProvider } from './deepseekVisionProvider.js';
 import { inspectRecognitionText } from './quality.js';
 
 export const IMAGE_RECOGNITION_POLICY_VERSION = 2;
@@ -104,11 +105,15 @@ export function createImageRecognitionProvider({
     async understandImage(buffer, options = {}) {
       if (recognitionMode(env) !== 'vision_primary' || !hasExecution())
         throw Object.assign(new Error('图片内容理解暂不可用'), { code: 'VISION_UNAVAILABLE' });
-      const identity = `deepseek:${String(options.model || env.DEEPSEEK_VISION_MODEL || visionProvider.model || DEFAULT_DEEPSEEK_VISION_MODEL)}`;
+      const model = options.model || resolveDeepSeekVisionModel(env, visionProvider.model);
+      const identity = `deepseek:${model}`;
       if ((await circuitBreaker.isOpen(identity)).open)
         throw Object.assign(new Error('图片内容理解暂不可用'), { code: 'VISION_UNAVAILABLE' });
       try {
-        const result = await visionProvider.understandImage(buffer, options);
+        const result = await visionProvider.understandImage(buffer, {
+          ...options,
+          model,
+        });
         await circuitBreaker.recordSuccess(identity);
         return result;
       } catch (error) {
@@ -129,14 +134,16 @@ export function createImageRecognitionProvider({
       // 后台 Worker 的无模型解析继续走本地 OCR；只有用户明确动作建立 AI Execution 后才外发图片。
       if (!hasExecution()) return runLocal('AI_EXECUTION_REQUIRED');
 
-      const circuitIdentity = `deepseek:${String(
-        options.model || env.DEEPSEEK_VISION_MODEL || visionProvider.model || DEFAULT_DEEPSEEK_VISION_MODEL,
-      )}`;
+      const model = options.model || resolveDeepSeekVisionModel(env, visionProvider.model);
+      const circuitIdentity = `deepseek:${model}`;
       const circuit = await circuitBreaker.isOpen(circuitIdentity);
       if (circuit.open) return runLocal(`VISION_CIRCUIT_OPEN_${circuit.reason || 'AI_PROVIDER_ERROR'}`);
 
       try {
-        const result = await visionProvider.recognizeImage(buffer, options);
+        const result = await visionProvider.recognizeImage(buffer, {
+          ...options,
+          model,
+        });
         await circuitBreaker.recordSuccess(circuitIdentity);
         return normalizedVisionResult(result, mode);
       } catch (error) {
@@ -169,7 +176,7 @@ export function getImageRecognitionPolicy(env = process.env) {
   return Object.freeze({
     version: IMAGE_RECOGNITION_POLICY_VERSION,
     mode: recognitionMode(env),
-    visionModel: String(env.DEEPSEEK_VISION_MODEL || DEFAULT_DEEPSEEK_VISION_MODEL).trim(),
+    visionModel: resolveDeepSeekVisionModel(env),
   });
 }
 
