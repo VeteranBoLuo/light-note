@@ -91,7 +91,7 @@
   }
 
   function resourceIcon(type: TodoResourceRefView['type']) {
-    return icon.resource[type];
+    return type === 'todo' ? icon.todoWorkspace.checkSquare : icon.resource[type];
   }
 </script>
 

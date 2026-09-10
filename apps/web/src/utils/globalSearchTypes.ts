@@ -1,7 +1,7 @@
 /**
  * 搜索类型边界。
  *
- * 待办是行动对象，不是资料对象：它可以被全局搜索找到，但不能自动继承资源能力。
+ * 待办是行动对象，不是资料对象：它可以被全局搜索和引用，但不能自动继承资料操作能力。
  * 因此类型必须分开声明，而不是把 'todo' 直接塞进一个万能的 SearchType 让所有调用方接受。
  *
  * - 全局搜索        → GlobalSearchType（含待办）
@@ -17,13 +17,19 @@ export type GlobalSearchType = ResourceSearchType | 'todo';
 export type SearchCenterType = 'bookmark' | 'note' | 'file' | 'todo';
 export type TaggableResourceType = 'bookmark' | 'note' | 'file';
 export type InboxableResourceType = 'bookmark' | 'note' | 'file';
-export type ReferenceableResourceType = 'bookmark' | 'note' | 'file';
+export type ReferenceableResourceType = GlobalSearchType;
 
 export const RESOURCE_SEARCH_TYPES: readonly ResourceSearchType[] = ['bookmark', 'note', 'file', 'tag'];
 export const GLOBAL_SEARCH_TYPES: readonly GlobalSearchType[] = [...RESOURCE_SEARCH_TYPES, 'todo'];
 export const TAGGABLE_RESOURCE_TYPES: readonly TaggableResourceType[] = ['bookmark', 'note', 'file'];
 export const INBOXABLE_RESOURCE_TYPES: readonly InboxableResourceType[] = ['bookmark', 'note', 'file'];
-export const REFERENCEABLE_RESOURCE_TYPES: readonly ReferenceableResourceType[] = ['bookmark', 'note', 'file'];
+export const REFERENCEABLE_RESOURCE_TYPES: readonly ReferenceableResourceType[] = [
+  'bookmark',
+  'note',
+  'file',
+  'todo',
+  'tag',
+];
 
 export function isResourceSearchType(value: unknown): value is ResourceSearchType {
   return RESOURCE_SEARCH_TYPES.includes(String(value || '') as ResourceSearchType);

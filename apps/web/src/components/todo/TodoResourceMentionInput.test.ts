@@ -102,7 +102,7 @@ describe('TodoResourceMentionInput', () => {
     expect(panel?.querySelector('input')).toBeNull();
     expect(searchMock).toHaveBeenLastCalledWith('codex', 12, true, {
       sort: 'relevance',
-      types: ['bookmark', 'note', 'file'],
+      types: ['bookmark', 'note', 'file', 'todo', 'tag'],
     });
   });
 

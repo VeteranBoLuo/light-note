@@ -1,3 +1,4 @@
+import { availableResourceSql, effectiveStatusSql, actionableStatuses, unavailableReason } from './organizeSuggestionAvailability.js';
 import { prepareOrganizeFile, understandOrganizeFile, applyVisualEvidence } from './organizeFileEvidence.js';
 import { prepareTagIconChoice } from '../tagIconService.js';
 import {
@@ -113,7 +114,7 @@ export async function getSuggestionRun(db = pool, { userId, id, after = '', reso
     [id, userId],
   );
   const [counts] = await db.query(
-    'SELECT status,COUNT(*) AS total FROM organize_suggestions WHERE run_id=? AND user_id=? GROUP BY status',
+    `SELECT ${effectiveStatusSql()} AS status,COUNT(*) AS total FROM organize_suggestions s JOIN organize_suggestion_items i ON i.id=s.item_id AND i.user_id=s.user_id WHERE s.run_id=? AND s.user_id=? GROUP BY 1`,
     [id, userId],
   );
   const where = ['i.run_id=?', 'i.user_id=?', 'i.id>?'];
@@ -127,7 +128,7 @@ export async function getSuggestionRun(db = pool, { userId, id, after = '', reso
     params.push(kind);
   }
   const [items] = await db.query(
-    `SELECT i.* FROM organize_suggestion_items i WHERE ${where.join(' AND ')} ORDER BY i.id LIMIT 31`,
+    `SELECT i.*, (${availableResourceSql()}) AS resource_available, (${availableResourceSql('i', true)}) AS resource_trashed FROM organize_suggestion_items i WHERE ${where.join(' AND ')} ORDER BY i.id LIMIT 31`,
     params,
   );
   const page = items.slice(0, 30);
@@ -147,10 +148,11 @@ export async function getSuggestionRun(db = pool, { userId, id, after = '', reso
   if (resourceType === 'tag') {
     const [groups] = await db.query(
       `SELECT CASE
+      WHEN s.status='expired' OR (s.status IN ('pending','insufficient','no_suggestion','info','failed','conflict') AND NOT (${availableResourceSql()})) THEN 'expired'
       WHEN s.status IN ('pending','info') THEN 'priority'
       WHEN s.status IN ('failed','conflict','cancelled') OR i.rule_status NOT IN ('completed','removed') THEN 'analysis'
       WHEN s.status IN ('insufficient','no_suggestion') THEN 'manual'
-      WHEN s.status IN ('applied','ignored','closed') OR i.rule_status='removed' THEN 'reviewed'
+      WHEN s.status IN ('applied','ignored','closed','expired') OR i.rule_status='removed' THEN 'reviewed'
       ELSE 'clear' END AS bucket, COUNT(*) AS total
       FROM organize_suggestion_items i LEFT JOIN organize_suggestions s ON s.item_id=i.id AND s.kind='tag_icon'
       WHERE i.user_id=? AND i.run_id=? AND i.resource_type='tag' GROUP BY bucket`,
@@ -174,7 +176,8 @@ export async function getSuggestionRun(db = pool, { userId, id, after = '', reso
         .filter((s) => s.item_id === i.id)
         .map((s) => {
           const { archiveDraft, ...payload } = json(s.payload_json);
-          return { ...payload, id: s.id, status: s.status };
+          const expired = Number(i.resource_available) === 0 && i.resource_available != null && actionableStatuses.includes(s.status);
+          return { ...payload, id: s.id, status: expired ? 'expired' : s.status, ...(expired ? { reason: unavailableReason(Number(i.resource_trashed) === 1) } : {}) };
         }),
     })),
     nextCursor: items.length > 30 ? page.at(-1).id : null,
@@ -251,6 +254,10 @@ export async function actOnSuggestion(db = pool, { userId, runId, suggestionId, 
     if (batchOnly && !['archive', 'tags', 'title'].includes(suggestion.kind))
       throw suggestionError('ORGANIZE_BATCH_UNSUPPORTED', '此建议需要单独处理', 409);
     if (['applied', 'ignored'].includes(suggestion.status)) return { status: suggestion.status };
+    if (suggestion.status === 'expired') {
+      const expired = json(suggestion.payload_json);
+      throw suggestionError(expired.reasonCode || 'ORGANIZE_RESOURCE_UNAVAILABLE', expired.reason || '建议已失效，请重新检查', 409);
+    }
     if (
       !['pending', 'insufficient', 'no_suggestion', 'info'].includes(suggestion.status) &&
       !(suggestion.kind === 'tag_icon' && suggestion.status === 'failed')
@@ -301,9 +308,18 @@ export async function actOnSuggestion(db = pool, { userId, runId, suggestionId, 
         [userId, item.resource_id],
       );
     }
+    const expire = async (code, message) => {
+      await c.query("UPDATE organize_suggestions SET status='expired',payload_json=? WHERE id=?", [JSON.stringify({ ...payload, reason: message, reasonCode: code }), suggestionId]);
+      return { conflict: { code, message } };
+    };
     const current = await readCurrentSuggestionSource(c, userId, item.resource_type, item.resource_id);
-    if (!current || current.version !== item.version_hash)
-      throw suggestionError('ORGANIZE_RESOURCE_CHANGED', '资料已变化，请重新检查', 409);
+    if (!current) {
+      const [deleted] = await c.query(`SELECT del_flag FROM ${table} WHERE id=? AND ${owner}=?`, [item.resource_id, userId]);
+      const trashed = Number(deleted[0]?.del_flag) === 1;
+      return expire(trashed ? 'ORGANIZE_RESOURCE_TRASHED' : 'ORGANIZE_RESOURCE_UNAVAILABLE', unavailableReason(trashed));
+    }
+    if (current.version !== item.version_hash)
+      return expire('ORGANIZE_RESOURCE_CHANGED', '资料已更新，需重新检查后再应用');
     if (['queued', 'running'].includes(item.ai_status))
       throw suggestionError('ORGANIZE_ANALYSIS_RUNNING', '请等待当前资料分析完成后再应用', 409);
     const mutation = await applySuggestionMutation(c, {
@@ -346,6 +362,7 @@ export async function actOnSuggestion(db = pool, { userId, runId, suggestionId, 
     ]);
     return { status: 'applied', applied: mutation.applied };
   });
+  if (result.conflict) throw suggestionError(result.conflict.code, result.conflict.message, 409);
   // 提交完成后的派生缓存清理失败不能伪装成业务写入失败。
   if (cleanup) void cleanup().catch(() => {});
   void invalidatePersonalKnowledgeCache(userId).catch(() => {});
@@ -767,7 +784,7 @@ export async function applySuggestionBatch(db = pool, { userId, runId, items }) 
       results.push({ suggestionId: item.suggestionId, ...result });
     } catch (error) {
       const known = [400, 403, 404, 409].includes(error.status);
-      results.push({ suggestionId: item.suggestionId, status: 'failed', message: known ? error.message : '应用失败，请稍后重试' });
+      results.push({ suggestionId: item.suggestionId, status: ['ORGANIZE_RESOURCE_TRASHED', 'ORGANIZE_RESOURCE_UNAVAILABLE', 'ORGANIZE_RESOURCE_CHANGED'].includes(error.code) ? 'expired' : 'failed', code: known ? error.code : 'ORGANIZE_FAILED', message: known ? error.message : '应用失败，请稍后重试' });
     }
   }
   return { results };

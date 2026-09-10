@@ -14,11 +14,11 @@ afterEach(() => {
   unmount?.();
   vi.useRealTimers();
 });
-function setup(includeRecent = false) {
+function setup(includeRecent = false, suggestLayout?: 'grouped') {
   let search!: ReturnType<typeof useGlobalSearchSuggestions>;
   const app = createApp({
     setup() {
-      search = useGlobalSearchSuggestions(undefined, undefined, { includeRecent });
+      search = useGlobalSearchSuggestions(undefined, undefined, { includeRecent, suggestLayout });
       return () => null;
     },
   });
@@ -81,4 +81,15 @@ describe('共享快捷搜索', () => {
     await vi.advanceTimersByTimeAsync(200);
     expect(mocks.fetch).toHaveBeenCalledTimes(1);
   });
+});
+
+it('PC 分组保留服务端五类 25 条结果，不再经过 8 条裁剪', async () => {
+  const items = ['bookmark', 'note', 'file', 'todo', 'tag'].flatMap((type) =>
+    Array.from({ length: 5 }, (_, i) => ({ type, id: `${type}-${i}` })),
+  );
+  mocks.fetch.mockResolvedValue({ items, hasMore: true });
+  const search = setup(true, 'grouped');
+  await search.run('项目');
+  expect(search.items.value).toHaveLength(25);
+  expect(mocks.fetch).toHaveBeenCalledWith('项目', expect.objectContaining({ suggestLayout: 'grouped' }));
 });

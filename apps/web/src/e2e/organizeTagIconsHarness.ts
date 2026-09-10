@@ -75,6 +75,39 @@ let run = {
   ],
   items,
 } as SuggestionRun;
+if (params.has('expired')) {
+  items.splice(
+    0,
+    items.length,
+    ...(['expired', 'pending'].map((status, index) => ({
+      id: `expired-item-${index}`,
+      resource: {
+        type: 'note',
+        id: `note-${index}`,
+        title: index ? '有效笔记' : '已移入回收站的笔记',
+        tags: [],
+        source: { folder: '' },
+        guards: {},
+        evidenceLevel: 'metadata',
+      },
+      aiStatus: 'completed',
+      ruleStatus: 'completed',
+      suggestions: [
+        {
+          id: `expired-suggestion-${index}`,
+          kind: 'tags',
+          status,
+          reason: index ? '建议标签' : '资料已移入回收站，此建议已失效',
+          before: [],
+          after: [{ id: 'tag', name: '开发' }],
+        },
+      ],
+    })) as WorkspaceItem[]),
+  );
+  run.options = { resourceTypes: ['note'], checks: ['tags'], scope: 'all', items: [] };
+  run.summary = { ...run.summary, total: 2, types: { note: 2 } };
+  run.checked = 2;
+}
 request.defaults.adapter = async (config) => {
   run.counts = [...new Set(items.flatMap((item) => item.suggestions.map((s) => s.status)))].map((status) => ({
     status,
@@ -86,7 +119,15 @@ request.defaults.adapter = async (config) => {
   if (url.endsWith('/runs')) data = params.has('empty') ? [] : [run];
   else if (url.endsWith('/previews')) {
     run = { ...run, options: body, status: 'preview' };
-    if (params.has('skipped')) run.summary = { ...run.summary, total: 12, types: { tag: 12 }, ruleTotal: 12, skipped: 34, skippedReasons: { customIcon: 34, unavailable: 0 } };
+    if (params.has('skipped'))
+      run.summary = {
+        ...run.summary,
+        total: 12,
+        types: { tag: 12 },
+        ruleTotal: 12,
+        skipped: 34,
+        skippedReasons: { customIcon: 34, unavailable: 0 },
+      };
     data = run;
   } else if (url.endsWith('/start')) {
     run.status = 'completed';

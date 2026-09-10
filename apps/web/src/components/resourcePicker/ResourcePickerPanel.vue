@@ -273,6 +273,7 @@
   const props = withDefaults(
     defineProps<{
       allowedTypes?: ResourcePickerType[];
+      excludeKeys?: string[];
       /** 受控关键词(showSearch=false 时生效) */
       keyword?: string;
       showSearch?: boolean;
@@ -378,6 +379,7 @@
     reset,
   } = useResourcePickerSearch({
     allowedTypes: () => props.allowedTypes,
+    excludeKeys: () => props.excludeKeys || [],
     limit: props.limit,
     perType: props.perType,
     exhaustiveSingleType: props.exhaustiveSingleType,
@@ -524,6 +526,7 @@
 
   const typeLabel = (type: string) => t(`ai.sourceTypes.${type}`);
   const typeColor = (type: string) => {
+    if (type === 'todo') return 'var(--todo-accent-color)';
     const cssVar = RESOURCE_COLOR_CSS_VAR[type as ResourceType];
     return cssVar ? `var(${cssVar})` : 'var(--desc-color)';
   };

@@ -1196,7 +1196,7 @@ function diversifySuggestItems(rankedItems, totalLimit, perTypeLimit) {
 const SOURCE_TYPE_BOOST = 3;
 
 // 快捷搜索：只取少量候选、不统计 typeTotals/tagOptions，保证每次输入的请求足够轻
-async function querySuggestItems({ userId, options, lang, selectedTypes, sourceType }) {
+async function querySuggestItems({ userId, options, lang, selectedTypes, sourceType, suggestLayout }) {
   const candidateLimit = 10;
   const results = await Promise.all(
     selectedTypes.map((type) =>
@@ -1216,7 +1216,18 @@ async function querySuggestItems({ userId, options, lang, selectedTypes, sourceT
       };
     })
     .sort((a, b) => b._score - a._score || a._stableIndex - b._stableIndex);
-  const picked = diversifySuggestItems(ranked, SUGGEST_TOTAL_LIMIT, SUGGEST_PER_TYPE_LIMIT);
+  // PC 分组各自保留名额；不把其他组的空缺补给单一类型。
+  const countByType = new Map();
+  const groupLimit = options.keyword ? 5 : 3;
+  const picked =
+    suggestLayout === 'grouped'
+      ? ranked.filter((item) => {
+          const count = countByType.get(item.type) || 0;
+          if (count >= groupLimit) return false;
+          countByType.set(item.type, count + 1);
+          return true;
+        })
+      : diversifySuggestItems(ranked, SUGGEST_TOTAL_LIMIT, SUGGEST_PER_TYPE_LIMIT);
   return {
     items: picked.map(({ _score, _stableIndex, ...item }) => item),
     hasMore: ranked.length > picked.length,
@@ -1305,7 +1316,14 @@ export const globalSearch = async (req, res) => {
       // 只接受合法资源/待办类型，未知值按无来源处理
       const rawSourceType = toText(req.body?.sourceType);
       const sourceType = GLOBAL_SEARCH_TYPES.includes(rawSourceType) ? rawSourceType : '';
-      const suggest = await querySuggestItems({ userId, options, lang, selectedTypes, sourceType });
+      const suggest = await querySuggestItems({
+        userId,
+        options,
+        lang,
+        selectedTypes,
+        sourceType,
+        suggestLayout: req.body?.suggestLayout === 'grouped' ? 'grouped' : 'compact',
+      });
       return res.send(
         resultData({
           keyword,

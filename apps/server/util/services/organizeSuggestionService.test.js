@@ -169,7 +169,7 @@ describe('整理范围与生命周期', () => {
       actOnSuggestion(db, { userId: 'u', runId: 'run', suggestionId: 's', action: 'apply', requestId }),
     ).rejects.toMatchObject({ code: 'ORGANIZE_RESOURCE_CHANGED' });
     expect(applySuggestionMutation).not.toHaveBeenCalled();
-    expect(db.rollback).toHaveBeenCalledOnce();
+    expect(db.commit).toHaveBeenCalledOnce();
   });
   it('应用成功后更新资源基线，重复应用不会再次写入', async () => {
     const item = { id: 'i', resource_type: 'note', resource_id: '1', version_hash: 'before', ai_status: 'completed' };
@@ -469,6 +469,7 @@ describe('标签图标应用一致性', () => {
       if (sql.includes('FROM organize_suggestion_runs')) return [[{ ...run, status: 'completed' }]];
       if (sql.includes('FROM organize_suggestion_items'))
         return [[{ id: 'item1', resource_type: 'tag', resource_id: 'tag1', version_hash: original.version }]];
+      if (sql.startsWith('SELECT del_flag FROM tag')) return [[]];
       if (sql.startsWith('SELECT id FROM tag')) {
         expect(params).toEqual(['tag1', 'u']);
         return [[{ id: 'tag1' }]];
@@ -480,9 +481,9 @@ describe('标签图标应用一致性', () => {
     async (current) => {
       readCurrentSuggestionSource.mockResolvedValue(current);
       const db = tagDb();
-      await expect(actOnSuggestion(db, args)).rejects.toMatchObject({ code: 'ORGANIZE_RESOURCE_CHANGED' });
+      await expect(actOnSuggestion(db, args)).rejects.toMatchObject({ code: current ? 'ORGANIZE_RESOURCE_CHANGED' : 'ORGANIZE_RESOURCE_UNAVAILABLE' });
       expect(applySuggestionMutation).not.toHaveBeenCalled();
-      expect(db.rollback).toHaveBeenCalledOnce();
+      expect(db.commit).toHaveBeenCalledOnce();
     },
   );
   it('使用已保存候选，不依赖外部网络，更新结果与建议同事务', async () => {
@@ -544,4 +545,37 @@ it('批量限制范围与大小，逐项错误隔离且身份不可由条目覆�
   expect(result.results.map(r => r.status)).toEqual(['failed', 'applied']);
   expect(applySuggestionMutation).not.toHaveBeenCalled();
   await expect(applySuggestionBatch(db, { userId: 'u', runId: 'run', items: Array(21).fill({ suggestionId: ids[0], requestId }) })).rejects.toMatchObject({ code: 'ORGANIZE_BATCH_INVALID' });
+});
+
+it.each([0, 1])('读取结果投影失效资源，保留已应用记录且不写库：回收站=%i', async (trashed) => {
+  const db = database((sql) => {
+    if (sql.includes('FROM organize_suggestion_runs')) return [[{ ...run, run_version: 1 }]];
+    if (sql.includes('GROUP BY')) return [[]];
+    if (sql.startsWith('SELECT i.*')) return [[{ id: 'i', snapshot_json: {}, resource_available: 0, resource_trashed: trashed }]];
+    if (sql.startsWith('SELECT * FROM organize_suggestions')) return [[
+      { id: 's', item_id: 'i', status: 'pending', payload_json: { kind: 'tags' } },
+      { id: 'done', item_id: 'i', status: 'applied', payload_json: { kind: 'title' } },
+    ]];
+  });
+  const result = await getSuggestionRun(db, { userId: 'u', id: 'run' });
+  expect(result.items[0].suggestions[0]).toMatchObject({ status: 'expired', reason: trashed ? '资料已移入回收站，此建议已失效' : '资料已删除或不可访问，此建议已失效' });
+  expect(result.items[0].suggestions[1].status).toBe('applied');
+  expect(db.query.mock.calls.some(([sql]) => /^(UPDATE|INSERT|DELETE)/.test(sql))).toBe(false);
+});
+
+it('打开后移入回收站：只提交建议失效状态，不执行资料写入', async () => {
+  const db = database((sql) => {
+    if (sql.includes('FROM organize_suggestion_runs')) return [[{ ...run, status: 'completed' }]];
+    if (sql.includes('FROM organize_suggestions')) return [[{ id: 's', item_id: 'i', kind: 'tags', status: 'pending', payload_json: { after: [{ id: 't', name: '标签' }] } }]];
+    if (sql.includes('FROM organize_suggestion_items')) return [[{ id: 'i', resource_type: 'note', resource_id: 'n', version_hash: 'old', ai_status: 'completed' }]];
+    if (sql.startsWith('SELECT id FROM note')) return [[]];
+    if (sql.startsWith('SELECT del_flag FROM note')) return [[{ del_flag: '1' }]];
+  });
+  readCurrentSuggestionSource.mockResolvedValue(null);
+  await expect(actOnSuggestion(db, { userId: 'u', runId: 'run', suggestionId: 's', requestId, action: 'apply' })).rejects.toMatchObject({ code: 'ORGANIZE_RESOURCE_TRASHED', status: 409 });
+  expect(applySuggestionMutation).not.toHaveBeenCalled();
+  expect(db.commit).toHaveBeenCalledOnce();
+  const updates = db.query.mock.calls.filter(([sql]) => sql.startsWith('UPDATE'));
+  expect(updates).toHaveLength(1);
+  expect(JSON.parse(updates[0][1][0]).reasonCode).toBe('ORGANIZE_RESOURCE_TRASHED');
 });

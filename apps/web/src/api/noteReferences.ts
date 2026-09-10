@@ -8,7 +8,7 @@ import {
 } from '@/utils/noteResourceRefs';
 
 export interface ResourceReferenceNavigation {
-  target: 'note-detail' | 'bookmark-url' | 'cloud-file';
+  target: 'note-detail' | 'bookmark-url' | 'cloud-file' | 'todo-detail' | 'tag-detail';
   fileId?: string;
 }
 
@@ -56,6 +56,8 @@ function dedupeRefs(refs: readonly ResourceRef[]) {
 function expectedNavigation(ref: ResourceRef): ResourceReferenceNavigation {
   if (ref.type === 'note') return { target: 'note-detail' };
   if (ref.type === 'bookmark') return { target: 'bookmark-url' };
+  if (ref.type === 'todo') return { target: 'todo-detail' };
+  if (ref.type === 'tag') return { target: 'tag-detail' };
   return { target: 'cloud-file', fileId: ref.id };
 }
 

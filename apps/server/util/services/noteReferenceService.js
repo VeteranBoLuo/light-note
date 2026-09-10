@@ -65,6 +65,8 @@ export function getResourceRefNavigation(ref) {
   // 书签引用的主语义是访问原站，而不是进入书签管理页。URL 仅由同一主体下的
   // validateOwnedResourceRefs 查询取得，再经前端统一的 http(s) 校验后打开。
   if (normalized.type === 'bookmark') return { target: 'bookmark-url' };
+  if (normalized.type === 'todo') return { target: 'todo-detail' };
+  if (normalized.type === 'tag') return { target: 'tag-detail' };
   return { target: 'cloud-file', fileId: normalized.id };
 }
 
@@ -148,7 +150,7 @@ export function extractOwnedResourceRefs({ content, type } = {}) {
  */
 export async function validateOwnedResourceRefs(connection, { userId, refs } = {}) {
   if (!userId || !Array.isArray(refs) || refs.length === 0) return [];
-  const byType = { bookmark: [], note: [], file: [] };
+  const byType = { bookmark: [], note: [], file: [], todo: [], tag: [] };
   for (const r of refs) {
     if (r && TARGET_TYPES.has(r.type) && r.id != null && r.id !== '') byType[r.type].push(String(r.id));
   }
@@ -172,6 +174,8 @@ export async function validateOwnedResourceRefs(connection, { userId, refs } = {
   await runBatch('bookmark', 'bookmark', 'user_id', 'name');
   await runBatch('note', 'note', 'create_by', 'title');
   await runBatch('file', 'files', 'create_by', 'file_name');
+  await runBatch('todo', 'todo_items', 'user_id', 'title');
+  await runBatch('tag', 'tag', 'user_id', 'name');
   return valid;
 }
 

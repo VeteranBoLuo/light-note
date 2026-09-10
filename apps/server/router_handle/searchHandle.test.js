@@ -710,6 +710,64 @@ describe('globalSearch 快捷模式', () => {
     mocks.formatDateTime.mockImplementation(() => '2026-07-31 10:00:00');
   });
 
+  it.each([
+    ['', 3, ['bookmark', 'note', 'file', 'todo', 'tag']],
+    ['备案', 5, ['bookmark', 'note', 'file', 'todo', 'tag']],
+    ['', 3, ['todo']],
+    ['备案', 5, ['tag']],
+  ])('PC 分组关键词 %s 各保留 %i 条，不挤占或跨组补足', async (keyword, limit, types) => {
+    mocks.pool.query.mockImplementation(async (sql) => {
+      const text = String(sql);
+      const type = text.includes('FROM bookmark b')
+        ? 'bookmark'
+        : text.includes('FROM note n')
+          ? 'note'
+          : text.includes('FROM files')
+            ? 'file'
+            : text.includes('FROM todo_items t')
+              ? 'todo'
+              : text.includes('FROM tag t')
+                ? 'tag'
+                : '';
+      return [
+        type
+          ? Array.from({ length: 10 }, (_, i) => ({
+              id: `${type}-${i}`,
+              name: `备案 ${i}`,
+              title: `备案 ${i}`,
+              file_name: `备案 ${i}`,
+              content: '',
+              description: '',
+              status: 'pending',
+              tags: [],
+              tag_list: [],
+            }))
+          : [],
+      ];
+    });
+    const res = createResponse();
+    await globalSearch(
+      {
+        user: { id: 'owner' },
+        headers: {},
+        body: {
+          mode: 'suggest',
+          suggestLayout: 'grouped',
+          keyword,
+          sort: keyword ? 'relevance' : 'updated',
+          types,
+        },
+      },
+      res,
+    );
+    const data = res.send.mock.calls.at(-1)[0].data;
+    for (const type of types) {
+      expect(data.items.filter((item) => item.type === type)).toHaveLength(limit);
+    }
+    expect(data.items).toHaveLength(limit * types.length);
+    expect(data.hasMore).toBe(true);
+  });
+
   it('最多返回 8 条、单类型最多 3 条，且不统计 typeTotals 与标签选项', async () => {
     mocks.pool.query.mockImplementation(async (sql) => {
       const normalizedSql = String(sql);

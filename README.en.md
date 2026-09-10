@@ -51,7 +51,7 @@ Open it in your browser and get started. The hosted service is currently **free 
 Paste a link and the title, description, and icon are fetched automatically. Tag tree on the left, card wall on the right, multi-tag filtering.
 
 <p align="center">
-  <img src="apps/web/public/screenshots/bookmark.png" alt="Bookmark management" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+  <img src="apps/web/public/screenshots/bookmark-1800.webp" alt="Bookmark management" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
 </p>
 
 ---
@@ -60,7 +60,7 @@ Paste a link and the title, description, and icon are fetched automatically. Tag
 Rich text | Markdown dual-mode editing with instant switching. Supports text, images, tables, and code blocks, plus multi-level folders, card/list dual views, PDF export, and mobile editing.
 
 <p align="center">
-  <img src="apps/web/public/screenshots/note1.png" alt="Note library" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+  <img src="apps/web/public/screenshots/note1-1800.webp" alt="Note library" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
 </p>
 
 ---
@@ -70,7 +70,7 @@ Rich text | Markdown dual-mode editing with instant switching. Supports text, im
 Keep files organized by folder and type, with upload, search, online preview, drag-and-drop organization, bulk actions, and unified tags. Storage usage stays visible, and frequently used files remain available across devices.
 
 <p align="center">
-  <img src="apps/web/public/screenshots/cloud-space.png" alt="Cloud space" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+  <img src="apps/web/public/screenshots/cloud-space-1800.webp" alt="Cloud space" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
 </p>
 
 ---
@@ -80,7 +80,7 @@ Keep files organized by folder and type, with upload, search, online preview, dr
 Turn saved material into next actions. Switch between list, agenda, and calendar views; set priorities, due times, one-time or recurring reminders, recurring tasks, and checklists; and link bookmarks, notes, and files.
 
 <p align="center">
-  <img src="apps/web/public/screenshots/todo.png" alt="Task management" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+  <img src="apps/web/public/screenshots/todo.webp" alt="Task management" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
 </p>
 
 ---
@@ -125,7 +125,7 @@ Move the day forward from the daily workspace, manage material in Resource Cente
 See user suggestions, developer replies, and real progress in public. Follow what is planned, in development, or already shipped — then sign in to submit ideas and vote.
 
 <p align="center">
-  <img src="apps/web/public/screenshots/require.png" alt="Co-build LightNote" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+  <img src="apps/web/public/screenshots/require-1800.webp" alt="Co-build LightNote" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
 </p>
 
 ---
@@ -159,7 +159,7 @@ See user suggestions, developer replies, and real progress in public. Follow wha
 Desktop + mobile, with cloud sync — it follows you wherever you go.
 
 <p align="center">
-  <img src="apps/web/public/screenshots/mobile.png" alt="Mobile light and dark themes" width="58%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+  <img src="apps/web/public/screenshots/mobile-900.webp" alt="Mobile light and dark themes" width="58%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
 </p>
 
 ---

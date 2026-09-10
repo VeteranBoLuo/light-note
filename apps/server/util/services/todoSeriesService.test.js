@@ -33,6 +33,26 @@ describe('todoSeriesService v2', () => {
   };
   const singlePlanOptions = { now: new Date('2026-08-06T00:00:00.000Z') };
 
+  it.each(['single', 'independent'])('%s 创建保留待办实例和标签引用', async taskMode => {
+    const input = {...singlePlanDraft, taskMode, resourceRefs:[{type:'todo',id:'completed-target'},{type:'tag',id:'topic'}],
+      ...(taskMode === 'independent' ? {plan:{type:'scheduled',frequency:'daily',interval:1,end:{mode:'count',count:2}}} : {})};
+    const preview = previewTodoPlan(input, singlePlanOptions);
+    const db = {query:vi.fn(async sql => {
+      if(sql.includes('FROM todo_plan_requests')) return [[]];
+      if(sql.includes('AS name FROM todo_items')) return [[{id:'completed-target',name:'完成任务'}]];
+      if(sql.includes('AS name FROM tag')) return [[{id:'topic',name:'主题'}]];
+      return [{affectedRows:1}];
+    })};
+    await createTodoPlan(db,'user-1',{...input,previewHash:preview.previewHash,idempotencyKey:'refs-'+taskMode},singlePlanOptions);
+    const itemRows = db.query.mock.calls.filter(([sql])=>sql.includes('INSERT IGNORE INTO todo_resource_refs')).flatMap(([,args])=>args[0]);
+    expect(itemRows.length).toBeGreaterThanOrEqual(2);
+    expect(itemRows.every(row => (row[2]==='todo' && row[3]==='completed-target') || (row[2]==='tag' && row[3]==='topic'))).toBe(true);
+    if(taskMode==='independent'){
+      const seriesRows=db.query.mock.calls.find(([sql])=>sql.includes('INSERT INTO todo_series_resource_refs'))[1][0];
+      expect(seriesRows.map(row=>row.slice(3,5))).toEqual([['todo','completed-target'],['tag','topic']]);
+    }
+  });
+
   it('v2 新建计划只为首条待办固化一次创建事实', async () => {
     const preview = previewTodoPlan(singlePlanDraft, singlePlanOptions);
     const db = {

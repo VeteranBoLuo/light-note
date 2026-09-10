@@ -331,7 +331,7 @@ const SUGGEST_CACHE_TTL = 30_000;
 const suggestCache = new Map<string, SuggestCacheEntry>();
 
 /**
- * 快捷全局搜索：结果已在服务端做过相关度排序与类型均衡（最多 8 条、单类型最多 3 条）。
+ * 快捷全局搜索：结果已在服务端做过相关度排序与类型均衡（默认精简模式；PC 分组模式独立保留各类型名额）。
  * 不返回 typeTotals / tagOptions / 分页，保证每次输入的请求足够轻。
  */
 export async function fetchGlobalSearchSuggestions(
@@ -341,6 +341,7 @@ export async function fetchGlobalSearchSuggestions(
     sourceType?: GlobalSearchType | '';
     signal?: AbortSignal;
     includeRecent?: boolean;
+    suggestLayout?: 'compact' | 'grouped';
   } = {},
 ): Promise<GlobalSearchSuggestResponse> {
   const normalizedKeyword = keyword.trim();
@@ -354,7 +355,8 @@ export async function fetchGlobalSearchSuggestions(
   const sourceType = GLOBAL_SEARCH_TYPES.includes(options.sourceType as GlobalSearchType)
     ? (options.sourceType as GlobalSearchType)
     : '';
-  const cacheKey = `${locale}::${normalizedKeyword}::${types.join(',')}::${sourceType}`;
+  const suggestLayout = options.suggestLayout === 'grouped' ? 'grouped' : 'compact';
+  const cacheKey = `${locale}::${normalizedKeyword}::${types.join(',')}::${sourceType}::${suggestLayout}`;
   const cached = suggestCache.get(cacheKey);
   if (normalizedKeyword && cached && Date.now() - cached.at < SUGGEST_CACHE_TTL) return cached.data;
 
@@ -364,6 +366,7 @@ export async function fetchGlobalSearchSuggestions(
       keyword: normalizedKeyword,
       types,
       mode: 'suggest',
+      ...(suggestLayout === 'grouped' ? { suggestLayout } : {}),
       ...(!normalizedKeyword ? { sort: 'updated' } : {}),
       includeMetadata: false,
       ...(sourceType ? { sourceType } : {}),

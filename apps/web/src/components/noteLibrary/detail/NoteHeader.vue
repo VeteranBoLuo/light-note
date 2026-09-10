@@ -45,6 +45,7 @@
         </BPopover>
       </div>
 
+      <NoteInlineTags v-if="visibleTags.length" :tags="visibleTags" compact />
       <div class="note-header-mobile-actions">
         <BButton
           v-if="hasNavigation || hasCatalog"
@@ -98,6 +99,7 @@
           <SvgIcon :src="icon.arrow_right" size="13" aria-hidden="true" />
         </BButton>
       </div>
+      <NoteInlineTags v-if="visibleTags.length" class="note-header-inline-tags" :tags="visibleTags" />
       <div class="note-header-actions flex-align-center">
         <span v-if="!readonly && noteType !== 'drawing'" class="mode-pill-group">
           <BTooltip :title="$t('note.switchModeTooltip')">
@@ -206,6 +208,8 @@
 </template>
 
 <script lang="ts" setup>
+  import NoteInlineTags from '@/components/noteLibrary/NoteInlineTags.vue';
+  import { useNoteTags } from '@/composables/useNoteTags';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import { bookmarkStore } from '@/store';
@@ -221,8 +225,6 @@
   import InboxPendingBadge from '@/components/inbox/InboxPendingBadge.vue';
   import { useI18n } from 'vue-i18n';
   import { computed } from 'vue';
-  import { apiBasePost } from '@/http/request.ts';
-  import { watch } from 'vue';
   import { recordOperation } from '@/api/commonApi.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { buildExportFileName, canSaveGeneratedFile, deliverGeneratedFile } from '@/utils/fileDelivery';
@@ -395,58 +397,15 @@
     exportModalVisible.value = true;
   };
 
-  const headerTags = ref<any[]>([]);
-
-  function normalizeTags(raw: any) {
-    if (!raw) return [];
-    let source = raw;
-    if (typeof source === 'string') {
-      try {
-        source = JSON.parse(source);
-      } catch {
-        return [];
-      }
-    }
-    if (!Array.isArray(source)) return [];
-    return source
-      .map((item) => {
-        if (item && typeof item === 'object' && item.name) {
-          return { id: item.id, name: item.name };
-        }
-        if (typeof item === 'string') {
-          return { id: item, name: item };
-        }
-        return null;
-      })
-      .filter((item) => item && item.name);
-  }
-
-  async function fetchNoteTags() {
-    if (!props.note?.id) {
-      headerTags.value = [];
-      return;
-    }
-    try {
-      const res = await apiBasePost('/api/note/getNoteTags', { id: props.note.id });
-      if (res.status === 200 && Array.isArray(res.data)) {
-        headerTags.value = normalizeTags(res.data);
-      }
-    } catch (error) {
-      console.warn('fetch note tags failed', error);
-    }
-  }
+  const { tags: visibleTags, refresh: fetchNoteTags } = useNoteTags(
+    () => props.note?.id,
+    () => props.note?.tags ?? props.note?.tagList,
+  );
 
   function handleTagSaved() {
     emit('save');
-    fetchNoteTags();
+    void fetchNoteTags();
   }
-
-  const visibleTags = computed(() => {
-    if (headerTags.value.length) {
-      return headerTags.value;
-    }
-    return normalizeTags(props.note?.tags || props.note?.tagList);
-  });
 
   function parseUpdateTime(value?: string) {
     if (!value) return null;
@@ -712,14 +671,6 @@
     return options;
   });
 
-  watch(
-    () => props.note?.id,
-    () => {
-      fetchNoteTags();
-    },
-    { immediate: true },
-  );
-
   const exportToPDF = async () => {
     Alert.alert({
       title: t('cloudSpace.alertTitle'),
@@ -906,6 +857,9 @@
   .note-header-leading {
     min-width: 0;
     gap: 20px;
+  }
+  .note-header-inline-tags {
+    margin-left: auto;
   }
   .note-header-actions {
     flex: 0 0 auto;
@@ -1105,6 +1059,10 @@
     margin-left: 6px;
   }
   .note-header-save-state {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     color: #c0c0c0;
     font-size: 12px;
   }

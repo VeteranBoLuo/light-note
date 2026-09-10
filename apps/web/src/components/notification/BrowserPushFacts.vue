@@ -29,9 +29,11 @@
   const connection = computed(() =>
     diagnostics.value.stale || diagnostics.value.subscription === null || diagnostics.value.bindingActive === null
       ? 'unknown'
-      : diagnostics.value.subscription === 'present' && diagnostics.value.bindingActive
-        ? 'present'
-        : 'absent',
+      : diagnostics.value.invalid
+        ? 'invalid'
+        : diagnostics.value.subscription === 'present' && diagnostics.value.bindingActive
+          ? 'present'
+          : 'absent',
   );
 </script>
 <style scoped>

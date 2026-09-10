@@ -632,13 +632,15 @@ export function resolveBookmarkUrlInput(
 //   note     -> /noteLibrary/{id}
 //   bookmark -> /manage/editBookmark/{id}
 //   file     -> /cloudSpace?fileId={id}
+//   todo     -> /inbox?tab=todo&todoId={id}
+//   tag      -> /tag/{id}
 // 纯字符串处理,无 DOM / DB / marked / cheerio 依赖。exact + safe:
 //   - 只接受站内相对路径,拒绝外链 / 协议 / 协议相对(//)。
-//   - note / bookmark 不接受任何 query 或 hash;file 只接受恰好一个 fileId 参数,且无 hash。
+//   - note / bookmark / tag 不接受 query;file 仅 fileId;todo 仅 tab=todo 和 todoId;均无 hash。
 //   - id 必须 URI 解码成功、非空、长度 <= 255、不含正/反斜杠或控制字符(防路由分段逃逸)。
 // ————————————————————————————————————————————————————————————————
 
-export const RESOURCE_REF_TYPES = Object.freeze(['note', 'bookmark', 'file']);
+export const RESOURCE_REF_TYPES = Object.freeze(['note', 'bookmark', 'file', 'todo', 'tag']);
 
 const MAX_RESOURCE_ID_LENGTH = 255; // 与 note.id / bookmark.id / files.id 的 VARCHAR(255) 对齐
 // 会改变路由分段或不可能出现在真实资源 id 中的危险字符:控制字符、DEL、正/反斜杠。
@@ -742,6 +744,19 @@ export function parseResourceHref(href) {
     const id = normalizeResourceId(m[1]);
     return id ? { type: 'bookmark', id } : null;
   }
+  m = path.match(/^\/tag\/([^/]+)$/);
+  if (m) {
+    if (query) return null;
+    const id = normalizeResourceId(m[1]);
+    return id ? { type: 'tag', id } : null;
+  }
+  if (path === '/inbox') {
+    const pairs = query.split('&');
+    if (pairs.length !== 2 || !pairs.includes('tab=todo')) return null;
+    const target = pairs.find(pair => pair.startsWith('todoId='));
+    const id = target ? normalizeResourceId(target.slice(7)) : null;
+    return id ? { type: 'todo', id } : null;
+  }
   if (path === '/cloudSpace') {
     if (!query) return null;
     // 只接受恰好一个 fileId 参数,拒绝额外 / 重复参数
@@ -772,6 +787,10 @@ export function buildResourceHref(ref) {
       return `/manage/editBookmark/${id}`;
     case 'file':
       return `/cloudSpace?fileId=${id}`;
+    case 'todo':
+      return `/inbox?tab=todo&todoId=${id}`;
+    case 'tag':
+      return `/tag/${id}`;
     default:
       return '';
   }
@@ -806,6 +825,14 @@ export const RESOURCE_REF_TEST_VECTORS = Object.freeze([
   { href: '/noteLibrary/abc-123', ref: { type: 'note', id: 'abc-123' } },
   { href: '/manage/editBookmark/bk-9', ref: { type: 'bookmark', id: 'bk-9' } },
   { href: '/cloudSpace?fileId=f-7', ref: { type: 'file', id: 'f-7' } },
+  { href: '/inbox?tab=todo&todoId=done-1', ref: { type: 'todo', id: 'done-1' } },
+  { href: '/inbox?todoId=done-1&tab=todo', ref: { type: 'todo', id: 'done-1' } },
+  { href: '/tag/topic%20one', ref: { type: 'tag', id: 'topic one' } },
+  { href: '/inbox?tab=todo&todoId=x&todoId=y', ref: null },
+  { href: '/inbox?tab=todo&todoId=', ref: null },
+  { href: '/inbox?tab=todo&todoId=%2Fetc', ref: null },
+  { href: '/tag/topic?extra=1', ref: null },
+
   {
     href: '/noteLibrary/550e8400-e29b-41d4-a716-446655440000',
     ref: { type: 'note', id: '550e8400-e29b-41d4-a716-446655440000' },

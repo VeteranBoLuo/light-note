@@ -295,7 +295,8 @@
         -->
         <ResourcePickerPanel
           ref="inlineMentionSuggestionsRef"
-          :allowed-types="['bookmark', 'note', 'file']"
+          :allowed-types="['bookmark', 'note', 'file', 'todo', 'tag']"
+          :placeholder="t('note.resourceMention.searchPlaceholder')"
           :show-search="false"
           inline
           :keyword="inlineMentionQuery"
@@ -314,7 +315,8 @@
       @close="closeMentionPicker"
     >
       <ResourcePickerPanel
-        :allowed-types="['bookmark', 'note', 'file']"
+        :allowed-types="['bookmark', 'note', 'file', 'todo', 'tag']"
+        :placeholder="t('note.resourceMention.searchPlaceholder')"
         @select="handleMentionPickerSelect"
         @close="closeMentionPicker"
       />
@@ -599,16 +601,13 @@
       @close="closeMobileResourcePreview"
     >
       <div v-if="mobileResourcePreview" class="resource-mention-mobile-preview">
-        <div class="resource-mention-mobile-preview__summary">
-          <strong>{{ mobileResourcePreviewTitle }}</strong>
-          <span>{{ mobileResourcePreviewType }}</span>
-        </div>
-        <p
-          class="resource-mention-mobile-preview__status"
-          :class="{ 'is-unavailable': mobileResourcePreviewState?.available === false }"
-        >
-          {{ mobileResourcePreviewStatus }}
-        </p>
+        <ResourceReferenceSummary
+          :type="mobileResourcePreview.ref.type"
+          :type-label="mobileResourcePreviewType"
+          :title="mobileResourcePreviewTitle"
+          :status="mobileResourcePreviewStatus"
+          :unavailable="mobileResourcePreviewState?.available === false"
+        />
         <div class="resource-mention-mobile-preview__actions">
           <template v-if="mobileResourcePreview.ref.type === 'file'">
             <BButton
@@ -694,6 +693,7 @@
 </template>
 
 <script setup lang="ts">
+  import ResourceReferenceSummary from '@/components/resourcePicker/ResourceReferenceSummary.vue';
   import {
     computed,
     defineAsyncComponent,
@@ -803,6 +803,7 @@
     normalizeReferencedFilePreviewInfo,
     type ReferencedFilePreviewInfo,
   } from '@/utils/noteResourceNavigation';
+  import { resolveResourceRoute } from '@/utils/resourceNavigation';
   import { resolveAiSourceNavigation, type AiSource, type AiSourceTarget } from '@/utils/aiSourceNavigation';
   import {
     analyzeNoteFormatConversion,
@@ -1381,6 +1382,8 @@
     const type = mobileResourcePreview.value?.ref.type;
     if (type === 'bookmark') return t('note.resourceMention.openWebsite');
     if (type === 'file') return t('note.resourceMention.openFile');
+    if (type === 'todo') return t('note.resourceMention.openTodo');
+    if (type === 'tag') return t('note.resourceMention.openTag');
     return t('note.resourceMention.openNote');
   });
   async function navigateResourceRef(ref: ResourceRef) {
@@ -1392,6 +1395,11 @@
     // 书签网址只能来自已完成归属校验的解析结果。解析尚未返回时不降级跳到编辑页，
     // 避免一次点击因竞态违背“打开原站”的引用语义。
     if (ref.type === 'bookmark' && !state?.url) return;
+    if (ref.type === 'todo' || ref.type === 'tag') {
+      const target = resolveResourceRoute(ref);
+      if (target) await router.push(target);
+      return;
+    }
     const source: AiSource = {
       // 刚插入时批量解析尚未返回，也应能立即按 canonical href 打开；真正的数据权限仍由目标页面接口校验。
       type: ref.type,
@@ -5196,15 +5204,19 @@
           if (!inlineMentionVisible.value || event.isComposing) return;
           if (event.key === 'ArrowDown') {
             event.preventDefault();
+            event.stopImmediatePropagation();
             inlineMentionSuggestionsRef.value?.moveActive(1);
           } else if (event.key === 'ArrowUp') {
             event.preventDefault();
+            event.stopImmediatePropagation();
             inlineMentionSuggestionsRef.value?.moveActive(-1);
           } else if (event.key === 'Enter') {
             event.preventDefault();
+            event.stopImmediatePropagation();
             inlineMentionSuggestionsRef.value?.chooseActive();
           } else if (event.key === 'Escape') {
             event.preventDefault();
+            event.stopImmediatePropagation();
             closeInlineMention({ dismissed: true });
           }
         },
@@ -5674,7 +5686,8 @@
       });
 
       editor.on('keydown', (event: KeyboardEvent) => {
-        if (event.key !== 'Enter' || event.isComposing) return;
+        // 引用选择等上游快捷操作已消费 Enter 时，不再创建待办行。
+        if (event.defaultPrevented || event.key !== 'Enter' || event.isComposing) return;
         const block = getCurrentBlock();
         if (!block) return;
         if (!getLeadingCheckbox(block)) return;
@@ -6274,36 +6287,6 @@
     display: grid;
     gap: 14px;
     min-width: min(300px, calc(90vw - 32px));
-
-    &__summary {
-      display: grid;
-      gap: 4px;
-
-      strong {
-        overflow: hidden;
-        color: var(--text-color);
-        font-size: 16px;
-        line-height: 1.4;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-
-      span {
-        color: var(--desc-color, #737782);
-        font-size: 13px;
-      }
-    }
-
-    &__status {
-      margin: 0;
-      color: var(--desc-color, #737782);
-      font-size: 13px;
-      line-height: 1.5;
-
-      &.is-unavailable {
-        color: var(--error-color, #e5484d);
-      }
-    }
 
     &__actions {
       display: flex;

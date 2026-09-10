@@ -178,7 +178,7 @@ export interface TodoChecklistItem {
 }
 
 export interface TodoResourceRefInput {
-  type: 'bookmark' | 'note' | 'file';
+  type: 'bookmark' | 'note' | 'file' | 'todo' | 'tag';
   id: string;
 }
 

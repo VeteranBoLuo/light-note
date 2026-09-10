@@ -350,3 +350,14 @@ describe('global material cursor transport', () => {
     expect(mocks.apiBasePost).toHaveBeenCalledOnce();
   });
 });
+
+it('分组与精简建议不共用缓存', async () => {
+  clearGlobalSearchCache();
+  mocks.apiBasePost.mockReset();
+  mocks.apiBasePost.mockResolvedValue({ status: 200, data: { items: [], hasMore: false } });
+  await fetchGlobalSearchSuggestions('布局隔离');
+  await fetchGlobalSearchSuggestions('布局隔离', { suggestLayout: 'grouped' });
+  await fetchGlobalSearchSuggestions('布局隔离', { suggestLayout: 'grouped' });
+  expect(mocks.apiBasePost).toHaveBeenCalledTimes(2);
+  expect(mocks.apiBasePost.mock.calls[1][1].suggestLayout).toBe('grouped');
+});

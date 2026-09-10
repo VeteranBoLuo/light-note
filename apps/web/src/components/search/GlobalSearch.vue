@@ -169,7 +169,7 @@
   import { recordOperation } from '@/api/commonApi';
   import { getSearchTypeLabel } from '@/components/searchCenter/searchMeta';
   import { useGlobalSearchSuggestions } from '@/composables/useGlobalSearchSuggestions';
-  import { GLOBAL_SEARCH_TYPES, type GlobalSearchType } from '@/utils/globalSearchTypes';
+  import { type GlobalSearchType } from '@/utils/globalSearchTypes';
   import { navigateToSearchResult } from '@/utils/globalSearchNavigation';
   import { GLOBAL_SEARCH_HIDDEN_ROUTE_NAMES } from '@/config/navigation';
   import { getGlobalShortcutKeys, isEditableShortcutTarget, matchesGlobalShortcut } from '@/config/keyboardShortcuts';
@@ -190,12 +190,14 @@
     schedule,
     run,
     reset,
-  } = useGlobalSearchSuggestions(undefined, undefined, { includeRecent: true });
+  } = useGlobalSearchSuggestions(undefined, undefined, { includeRecent: true, suggestLayout: 'grouped' });
   const suggestGroups = computed(() =>
-    GLOBAL_SEARCH_TYPES.map((type) => ({
-      type,
-      items: items.value.filter((item) => item.type === type),
-    })).filter((group) => group.items.length),
+    (['bookmark', 'note', 'file', 'todo', 'tag'] as const)
+      .map((type) => ({
+        type,
+        items: items.value.filter((item) => item.type === type),
+      }))
+      .filter((group) => group.items.length),
   );
   const activeIndex = ref(-1);
   let previousBodyOverflow = '';

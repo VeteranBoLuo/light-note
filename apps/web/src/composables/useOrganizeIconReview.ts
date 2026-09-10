@@ -86,7 +86,21 @@ export function useOrganizeIconReview(
       if (notify) changed();
       return true;
     } catch (error: any) {
-      if (current === generation) errors.set(s.id, error?.response?.data?.msg || error?.msg || error?.message || '');
+      if (current === generation) {
+        const message = error?.response?.data?.msg || error?.msg || error?.message || '';
+        errors.set(s.id, message);
+        if (
+          ['ORGANIZE_RESOURCE_TRASHED', 'ORGANIZE_RESOURCE_UNAVAILABLE', 'ORGANIZE_RESOURCE_CHANGED'].includes(
+            error?.response?.data?.data?.code,
+          )
+        ) {
+          s.status = 'expired';
+          s.reason = message;
+          selected.delete(s.id);
+          drafts.delete(s.id);
+          if (notify) changed();
+        }
+      }
       return false;
     } finally {
       if (current === generation) busy.delete(s.id);

@@ -33,8 +33,9 @@ export async function mainLoop() {
         console.log('[browser-push-worker] outcomes=%j', counts);
         for (const key of Object.keys(counts)) delete counts[key];
         lastReport = Date.now();
+        // Keep provider-invalid bindings as tombstones: dormant clients may still hold those endpoints.
         await pool.query(
-          'DELETE FROM browser_push_subscriptions WHERE active <> 1 AND enabled_at < DATE_SUB(NOW(), INTERVAL 7 DAY) LIMIT 1000',
+          'DELETE FROM browser_push_subscriptions WHERE active IN (0, 2) AND enabled_at < DATE_SUB(NOW(), INTERVAL 7 DAY) LIMIT 1000',
         );
         await pool.query(
           "DELETE FROM browser_push_jobs WHERE status NOT IN ('pending', 'sending') AND expires_at < DATE_SUB(NOW(), INTERVAL 7 DAY) LIMIT 1000",

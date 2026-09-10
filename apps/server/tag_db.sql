@@ -1724,7 +1724,7 @@ CREATE TABLE IF NOT EXISTS browser_push_subscriptions (
  endpoint_hash char(64) NOT NULL, endpoint varchar(2048) NOT NULL,
  p256dh varchar(128) NOT NULL, auth varchar(64) NOT NULL,
  generation char(36) NOT NULL, locale varchar(16) NOT NULL DEFAULT 'zh-CN',
- active tinyint NOT NULL DEFAULT 2 COMMENT '0 disabled, 1 enabled, 2 awaiting client binding', enabled_at datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+ active tinyint NOT NULL DEFAULT 2 COMMENT '0 disabled, 1 enabled, 2 awaiting client binding, 3 provider invalid', enabled_at datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
  UNIQUE KEY uk_push_endpoint(endpoint_hash), KEY idx_push_user(user_id, active, enabled_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CREATE TABLE IF NOT EXISTS browser_push_jobs (

@@ -22,6 +22,14 @@ describe('resourceNavigation', () => {
     });
   });
 
+  it('待办定位具体实例，标签进入详情', () => {
+    expect(resolveResourceRoute({ type: 'todo', id: 'completed' })).toEqual({
+      path: '/inbox',
+      query: { tab: 'todo', todoId: 'completed' },
+    });
+    expect(resolveResourceRoute({ type: 'tag', id: 'topic one' })).toEqual({ path: '/tag/topic%20one' });
+  });
+
   it('只为笔记附加来源地址，书签和文件保持原跳转契约', () => {
     const noteReturnPath = '/inbox?tab=todo';
     expect(resolveResourceRoute({ type: 'note', id: 'note-1' }, { noteReturnPath })).toEqual({

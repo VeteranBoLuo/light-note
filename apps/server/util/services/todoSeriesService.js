@@ -1310,6 +1310,9 @@ async function cancelRange(connection, userId, current, { includeAll = false } =
 export async function updateTodoPlan(connection, userId, input = {}, options = {}) {
   const todoId = String(input.todoId || '').trim();
   const scope = String(input.scope || 'current');
+  if (normalizeTodoResourceRefs(input.resourceRefs)?.some(ref => ref.type === 'todo' && ref.id === todoId)) {
+    throw serviceError('TODO_REFERENCE_INVALID', '待办不能引用自身');
+  }
   if (!todoId || !WRITE_SCOPES.has(scope)) throw serviceError('TODO_UPDATE_SCOPE_INVALID', '修改范围无效');
   const [rows] = await connection.query(
     `SELECT * FROM todo_items WHERE id = ? AND user_id = ? AND plan_version = 2 AND del_flag = 0 LIMIT 1 FOR UPDATE`,

@@ -38,7 +38,7 @@ describe('noteResourceRefs', () => {
   });
 
   describe('buildResourceHref', () => {
-    it('三类型正确构造', () => {
+    it('五类型正确构造', () => {
       expect(buildResourceHref({ type: 'note', id: 'abc-123' })).toBe('/noteLibrary/abc-123');
       expect(buildResourceHref({ type: 'bookmark', id: 'bk-9' })).toBe('/manage/editBookmark/bk-9');
       expect(buildResourceHref({ type: 'file', id: 'f-7' })).toBe('/cloudSpace?fileId=f-7');
@@ -49,12 +49,22 @@ describe('noteResourceRefs', () => {
   });
 
   describe('build ↔ parse 往返一致', () => {
-    it('三类型往返得到原 ref', () => {
-      for (const type of ['note', 'bookmark', 'file'] as const) {
+    it('五类型往返得到原 ref', () => {
+      for (const type of ['note', 'bookmark', 'file', 'todo', 'tag'] as const) {
         const ref = { type, id: 'round-trip-1' };
         expect(parseResourceHref(buildResourceHref(ref))).toEqual(ref);
       }
     });
+  });
+
+  it('新增引用 HTML 与 Markdown 往返保留实例和标签 ID', async () => {
+    const refs = [
+      { type: 'todo', id: 'done' },
+      { type: 'tag', id: 'topic' },
+    ] as const;
+    const html = refs.map((r) => `<p><a href="${buildResourceHref(r)}">引用</a></p>`).join('');
+    const markdown = (await createTurndown()).turndown(serializeResourceReferenceSnapshots(html));
+    expect(collectResourceRefsFromHtml(await renderMarkdownLikeEditor(markdown))).toEqual(refs);
   });
 
   describe('dedupeResourceRefs', () => {
@@ -119,6 +129,8 @@ describe('noteResourceRefs', () => {
         { type: 'note', id: 'n-1' },
         { type: 'bookmark', id: 'b-2' },
         { type: 'file', id: 'f-3' },
+        { type: 'todo', id: 'done-4' },
+        { type: 'tag', id: 'topic-5' },
       ] as const;
       const html = refs.map((r) => `<a href="${buildResourceHref(r)}">x</a>`).join('');
       expect(collectResourceRefsFromHtml(decorateInternalResourceLinks(html))).toEqual([...refs]);
@@ -221,10 +233,15 @@ describe('noteResourceRefs', () => {
     });
 
     it('活编辑器中手工改过 chip 文字时，保存保留手工文字而非旧快照', () => {
-      const doc = new DOMParser().parseFromString('<body><a href="/manage/editBookmark/b1">旧书签名</a></body>', 'text/html');
-      applyResourceReferenceChipPresentation(doc.body, [
-        { type: 'bookmark', id: 'b1', title: '当前书签名', available: true },
-      ], { liveEditor: true });
+      const doc = new DOMParser().parseFromString(
+        '<body><a href="/manage/editBookmark/b1">旧书签名</a></body>',
+        'text/html',
+      );
+      applyResourceReferenceChipPresentation(
+        doc.body,
+        [{ type: 'bookmark', id: 'b1', title: '当前书签名', available: true }],
+        { liveEditor: true },
+      );
       const anchor = doc.body.querySelector('a') as HTMLAnchorElement;
       expect(anchor.getAttribute('contenteditable')).toBe('false');
       anchor.textContent = '用户手工改名';

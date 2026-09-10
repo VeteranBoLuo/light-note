@@ -19,7 +19,8 @@
         )
       }}</BChip>
     </div>
-    <div class="icon-comparison">
+    <p v-if="suggestion.status === 'expired'">{{ suggestion.reason }}</p>
+    <div v-else class="icon-comparison">
       <span class="icon-before"
         ><SvgIcon :src="icon.resource.tag" size="28" /><small>{{ t('organizeIcons.current') }}</small></span
       >

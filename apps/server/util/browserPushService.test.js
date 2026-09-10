@@ -2,7 +2,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('../db/index.js', () => ({ default: { query: vi.fn() } }));
 import pool from '../db/index.js';
 import { browserPushEnabled, validatePushSubscription, pushFailure } from './browserPushPolicy.js';
-import { expandPushOutbox, processNextPush, unbindPushSubscription } from './browserPushService.js';
+import {
+  expandPushOutbox,
+  processNextPush,
+  bindPushSubscription,
+  unbindPushSubscription,
+} from './browserPushService.js';
 import { createNotification } from './notification.js';
 const env = {
   BROWSER_PUSH_ORIGIN: 'https://light.test',
@@ -202,7 +207,7 @@ describe('push worker', () => {
       const db = workerDb();
       const send = vi.fn().mockRejectedValue({ statusCode });
       expect((await processNextPush({ db, send, env })).status).toBe(status);
-      if (statusCode === 410) expect(db.query.mock.calls.some(([sql]) => sql.includes('SET active = 0'))).toBe(true);
+      if (statusCode === 410) expect(db.query.mock.calls.some(([sql]) => sql.includes('SET active = 3'))).toBe(true);
     }
   });
   it('losing worker does not fetch or send any task', async () => {
@@ -239,3 +244,22 @@ it('激活只接受等待客户端持久化的订阅，关闭后重放激活不�
   expect(db.query.mock.calls[0][0]).toContain('AND active = 2');
   expect(db.query.mock.calls[1][0]).toContain('AND active = 1');
 });
+
+it.each([{ active: 3 }, { active: 0, invalid: 1 }])(
+  'rejects reactivation of a provider-invalid endpoint',
+  async (previous) => {
+    const conn = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      query: vi.fn().mockResolvedValueOnce([[{ id: 's1', ...previous }]]),
+    };
+    await expect(
+      bindPushSubscription('u1', subscription, 'zh-CN', { getConnection: async () => conn }),
+    ).rejects.toMatchObject({ code: 'PUSH_SUBSCRIPTION_INVALID' });
+    expect(conn.query).toHaveBeenCalledOnce();
+    expect(conn.commit).not.toHaveBeenCalled();
+    expect(conn.rollback).toHaveBeenCalledOnce();
+  },
+);

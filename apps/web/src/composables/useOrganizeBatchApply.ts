@@ -99,6 +99,11 @@ export function useOrganizeBatchApply(
             selected.delete(s.id);
             success++;
           } else {
+            if (result?.status === 'expired') {
+              s.status = 'expired';
+              s.reason = result.message;
+              selected.delete(s.id);
+            }
             errors.set(s.id, result?.message || '');
             failed++;
           }

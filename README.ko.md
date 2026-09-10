@@ -49,7 +49,7 @@
 링크를 붙여넣으면 제목 · 설명 · 아이콘을 자동 수집. 왼쪽 태그 트리, 오른쪽 카드 월, 다중 태그 필터링.
 
 <p align="center">
-  <img src="apps/web/public/screenshots/bookmark.png" alt="북마크 관리" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+  <img src="apps/web/public/screenshots/bookmark-1800.webp" alt="북마크 관리" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
 </p>
 
 ---
@@ -58,7 +58,7 @@
 리치 텍스트｜Markdown 두 가지 편집 모드를 지원하며 실시간으로 전환할 수 있습니다. 텍스트 · 이미지 · 표 · 코드 블록, 다단계 폴더, 카드 / 리스트 두 가지 뷰, PDF 내보내기와 모바일 편집을 지원합니다.
 
 <p align="center">
-  <img src="apps/web/public/screenshots/note1.png" alt="노트 라이브러리" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+  <img src="apps/web/public/screenshots/note1-1800.webp" alt="노트 라이브러리" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
 </p>
 
 ---
@@ -68,7 +68,7 @@
 폴더와 파일 형식별로 자료를 한곳에서 관리할 수 있습니다. 업로드, 검색, 온라인 미리보기, 드래그 앤 드롭 정리, 일괄 작업과 통합 태그를 지원하며, 저장 공간 사용량을 한눈에 확인하고 자주 쓰는 파일에 여러 기기에서 접근할 수 있습니다.
 
 <p align="center">
-  <img src="apps/web/public/screenshots/cloud-space.png" alt="클라우드 공간" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+  <img src="apps/web/public/screenshots/cloud-space-1800.webp" alt="클라우드 공간" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
 </p>
 
 ---
@@ -78,7 +78,7 @@
 수집한 자료를 다음 행동으로 연결합니다. 목록·일정·달력 세 가지 보기와 우선순위, 마감 시간, 일회 또는 주기 알림, 반복 작업, 간단한 체크리스트를 지원하며 북마크·노트·파일을 연결할 수 있습니다.
 
 <p align="center">
-  <img src="apps/web/public/screenshots/todo.png" alt="할 일 관리" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+  <img src="apps/web/public/screenshots/todo.webp" alt="할 일 관리" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
 </p>
 
 ---
@@ -123,7 +123,7 @@
 사용자 제안, 개발자 답변, 실제 진행 상황을 공개합니다. 계획 중·개발 중·출시된 요구 사항을 확인하고, 로그인 후에는 제안을 등록하거나 투표할 수 있습니다.
 
 <p align="center">
-  <img src="apps/web/public/screenshots/require.png" alt="함께 만드는 LightNote" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+  <img src="apps/web/public/screenshots/require-1800.webp" alt="함께 만드는 LightNote" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
 </p>
 
 ---
@@ -157,7 +157,7 @@
 데스크톱 + 모바일 지원, 데이터는 클라우드 동기화. 어디서나 함께.
 
 <p align="center">
-  <img src="apps/web/public/screenshots/mobile.png" alt="모바일 라이트 및 다크 테마" width="58%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+  <img src="apps/web/public/screenshots/mobile-900.webp" alt="모바일 라이트 및 다크 테마" width="58%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
 </p>
 
 ---

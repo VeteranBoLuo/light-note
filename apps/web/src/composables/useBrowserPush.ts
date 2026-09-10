@@ -9,12 +9,13 @@ interface Binding {
   userId: string;
 }
 export type BrowserPushState =
-  'loading' | 'pending' | 'off' | 'on' | 'denied' | 'unsupported' | 'unavailable' | 'error';
+  'loading' | 'pending' | 'off' | 'on' | 'denied' | 'unsupported' | 'unavailable' | 'error' | 'invalid';
 const state = ref<BrowserPushState>('loading');
 export interface PushDiagnostics {
   permission: NotificationPermission | null;
   subscription: 'present' | 'absent' | null;
   bindingActive: boolean | null;
+  invalid: boolean;
   available: boolean | null;
   checkedAt: number | null;
   stale: boolean;
@@ -23,6 +24,7 @@ const emptyDiagnostics = (): PushDiagnostics => ({
   permission: null,
   subscription: null,
   bindingActive: null,
+  invalid: false,
   available: null,
   checkedAt: null,
   stale: false,
@@ -47,7 +49,8 @@ function savePreference(value: boolean) {
   localStorage.setItem(preferenceKey(currentOwner), value ? 'on' : 'off');
   preferred.value = value;
 }
-let config: { available: boolean; publicKey: string; userId: string; enabled: boolean } | null = null;
+let config: { available: boolean; publicKey: string; userId: string; enabled: boolean; invalid?: boolean } | null =
+  null;
 let currentOwner = '';
 let generation = 0;
 let ownerGeneration = 0;
@@ -102,7 +105,8 @@ async function bindingMessage(type: string, binding?: Binding | null): Promise<B
 }
 async function post(path: string, body: unknown = {}) {
   const response = await apiBasePost(`/api/notification/browser/${path}`, body, { silent: true });
-  if (response?.status !== 200) throw new Error('PUSH_REQUEST_FAILED');
+  if (response?.status !== 200)
+    throw new Error(response?.msg === 'PUSH_SUBSCRIPTION_INVALID' ? response.msg : 'PUSH_REQUEST_FAILED');
   return response.data;
 }
 export async function clearBrowserPush(): Promise<void> {
@@ -135,6 +139,7 @@ export async function clearBrowserPush(): Promise<void> {
     permission: typeof Notification !== 'undefined' ? Notification.permission : null,
     subscription: 'absent',
     bindingActive: false,
+    invalid: false,
     available: config?.available ?? null,
     checkedAt: Date.now(),
     stale: false,
@@ -177,8 +182,8 @@ export async function refreshBrowserPush() {
   }
   const requestGeneration = generation;
   refreshingGeneration = requestGeneration;
-  diagnostics.value = { ...diagnostics.value, stale: true };
-  state.value = 'loading';
+  // Keep the last snapshot during background checks; failures explicitly mark it stale.
+  if (diagnostics.value.checkedAt === null) state.value = 'loading';
   try {
     const binding = await bindingMessage('push.binding.get');
     const next = await post('config', binding || {});
@@ -193,6 +198,7 @@ export async function refreshBrowserPush() {
       permission: Notification.permission,
       subscription: subscription ? 'present' : 'absent',
       bindingActive: Boolean(next.enabled && binding?.userId === next.userId),
+      invalid: Boolean(next.invalid),
       available: next.available,
       checkedAt: Date.now(),
       stale: false,
@@ -205,12 +211,13 @@ export async function refreshBrowserPush() {
       state.value = 'off';
     } else if (Notification.permission === 'denied') state.value = 'denied';
     else if (!next.available) state.value = 'unavailable';
+    else if (next.invalid) state.value = 'invalid';
     else
       state.value =
         next.enabled && binding?.userId === next.userId && subscription && Notification.permission === 'granted'
           ? 'on'
           : 'pending';
-    if (preferred.value && !enabled.value && next.available && Notification.permission === 'granted') {
+    if (preferred.value && !enabled.value && !next.invalid && next.available && Notification.permission === 'granted') {
       await setEnabled(true, navigator.language, false);
     }
   } catch {
@@ -252,13 +259,21 @@ async function setEnabled(nextEnabled: boolean, locale: string, requestPermissio
       state.value = permission === 'denied' ? 'denied' : 'pending';
       return;
     }
+    enabled.value = false;
+    state.value = 'loading';
     const reg = await registration();
     let subscription = await reg.pushManager.getSubscription();
     const expectedKey = applicationKey(config.publicKey);
     const actualKey = subscription?.options.applicationServerKey;
-    if (subscription && actualKey && Array.from(new Uint8Array(actualKey)).join() !== Array.from(expectedKey).join()) {
+    if (
+      subscription &&
+      (config.invalid || (actualKey && Array.from(new Uint8Array(actualKey)).join() !== Array.from(expectedKey).join()))
+    ) {
+      const oldEndpoint = subscription.toJSON().endpoint;
       await subscription.unsubscribe();
-      subscription = null;
+      subscription = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: expectedKey });
+      if (config.invalid && subscription.toJSON().endpoint === oldEndpoint)
+        throw new Error('PUSH_SUBSCRIPTION_INVALID');
     }
     subscription ||= await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: expectedKey });
     const binding = (await post('subscribe', { subscription: subscription.toJSON(), locale })) as Binding;
@@ -273,20 +288,30 @@ async function setEnabled(nextEnabled: boolean, locale: string, requestPermissio
       await clearBrowserPush();
       return;
     }
+    if (config) config.invalid = false;
     enabled.value = true;
     diagnostics.value = {
       permission,
       subscription: 'present',
       bindingActive: true,
+      invalid: false,
       available: true,
       checkedAt: Date.now(),
       stale: false,
     };
     state.value = 'on';
-  } catch {
+  } catch (error) {
     if (owner === currentOwner && requestGeneration === generation) {
-      state.value = 'error';
-      diagnostics.value = { ...diagnostics.value, stale: true };
+      const invalid = error instanceof Error && error.message === 'PUSH_SUBSCRIPTION_INVALID';
+      if (invalid && config) config.invalid = true;
+      enabled.value = false;
+      state.value = invalid ? 'invalid' : 'error';
+      diagnostics.value = {
+        ...diagnostics.value,
+        invalid: invalid || diagnostics.value.invalid,
+        bindingActive: false,
+        stale: !invalid,
+      };
     }
   } finally {
     busy.value = false;

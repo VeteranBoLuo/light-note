@@ -16,7 +16,7 @@ export function useGlobalSearchSuggestions(
   types: readonly GlobalSearchType[] = GLOBAL_SEARCH_TYPES,
   /** 当前页面的主资源类型：只做同档位内的弱加权，不缩小搜索范围 */
   getSourceType: () => GlobalSearchType | '' = () => '',
-  options: { includeRecent?: boolean } = {},
+  options: { includeRecent?: boolean; suggestLayout?: 'compact' | 'grouped' } = {},
 ) {
   const user = useUserStore();
   const items = ref<SearchResultItem[]>([]);
@@ -68,10 +68,12 @@ export function useGlobalSearchSuggestions(
         types: [...types],
         sourceType: getSourceType(),
         signal,
+        ...(options.suggestLayout ? { suggestLayout: options.suggestLayout } : {}),
         ...(options.includeRecent ? { includeRecent: true } : {}),
       });
       if (seq !== requestSeq) return;
-      items.value = diversifySearchItems(dedupeSearchItems(res.items));
+      const uniqueItems = dedupeSearchItems(res.items);
+      items.value = options.suggestLayout === 'grouped' ? uniqueItems : diversifySearchItems(uniqueItems);
       hasMore.value = res.hasMore || res.items.length > items.value.length;
       lastKeyword.value = normalized;
     } catch (error) {

@@ -181,24 +181,109 @@ describe('read-only browser push diagnostics', () => {
   it('derives authorization and connection from actual checks', async () => {
     const module = await import('./useBrowserPush');
     await module.refreshBrowserPush();
-    expect(module.useBrowserPush().diagnostics.value).toMatchObject({permission:'default',subscription:'absent',bindingActive:false,stale:false});
-    permission='granted';
-    await module.useBrowserPush().setEnabled(true,'zh-CN');
-    expect(module.useBrowserPush().diagnostics.value).toMatchObject({permission:'granted',subscription:'present',bindingActive:true,stale:false});
+    expect(module.useBrowserPush().diagnostics.value).toMatchObject({
+      permission: 'default',
+      subscription: 'absent',
+      bindingActive: false,
+      stale: false,
+    });
+    permission = 'granted';
+    await module.useBrowserPush().setEnabled(true, 'zh-CN');
+    expect(module.useBrowserPush().diagnostics.value).toMatchObject({
+      permission: 'granted',
+      subscription: 'present',
+      bindingActive: true,
+      stale: false,
+    });
   });
   it('a failed check marks the snapshot stale instead of claiming permission or subscription is absent', async () => {
-    const module = await import('./useBrowserPush');await module.refreshBrowserPush();permission='granted';await module.useBrowserPush().setEnabled(true,'zh-CN');
-    post.mockRejectedValueOnce(new Error('offline'));await module.refreshBrowserPush();
-    expect(module.useBrowserPush().diagnostics.value).toMatchObject({permission:'granted',subscription:'present',bindingActive:true,stale:true});
+    const module = await import('./useBrowserPush');
+    await module.refreshBrowserPush();
+    permission = 'granted';
+    await module.useBrowserPush().setEnabled(true, 'zh-CN');
+    post.mockRejectedValueOnce(new Error('offline'));
+    await module.refreshBrowserPush();
+    expect(module.useBrowserPush().diagnostics.value).toMatchObject({
+      permission: 'granted',
+      subscription: 'present',
+      bindingActive: true,
+      stale: true,
+    });
     expect(module.useBrowserPush().state.value).toBe('error');
   });
   it('a new owner can be checked while an old owner check is unresolved', async () => {
     let resolveOld!: (value: any) => void;
-    post.mockImplementationOnce(() => new Promise(resolve => { resolveOld = resolve; })).mockResolvedValue({status:200,data:{available:true,enabled:false,userId:'u2',publicKey:key}});
-    const module=await import('./useBrowserPush');const old=module.refreshBrowserPush();await vi.waitFor(()=>expect(post).toHaveBeenCalledOnce());
+    post
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveOld = resolve;
+          }),
+      )
+      .mockResolvedValue({ status: 200, data: { available: true, enabled: false, userId: 'u2', publicKey: key } });
+    const module = await import('./useBrowserPush');
+    const old = module.refreshBrowserPush();
+    await vi.waitFor(() => expect(post).toHaveBeenCalledOnce());
     await module.syncBrowserPushOwner('u2');
     expect(module.useBrowserPush().state.value).toBe('pending');
-    resolveOld({status:200,data:{available:true,enabled:true,userId:'u1',publicKey:key}});await old;
-    expect(module.useBrowserPush().diagnostics.value).toMatchObject({bindingActive:false,stale:false});expect(module.useBrowserPush().state.value).toBe('pending');
+    resolveOld({ status: 200, data: { available: true, enabled: true, userId: 'u1', publicKey: key } });
+    await old;
+    expect(module.useBrowserPush().diagnostics.value).toMatchObject({ bindingActive: false, stale: false });
+    expect(module.useBrowserPush().state.value).toBe('pending');
   });
+});
+
+describe('provider-invalid subscription recovery', () => {
+  async function invalidBrowser() {
+    permission = 'granted';
+    await subscribe();
+    const old = subscription;
+    old.toJSON = () => ({ endpoint: 'old-endpoint' });
+    binding = { id: 's1', userId: 'u1', generation: 'g1' };
+    post.mockImplementationOnce(async () => ({
+      status: 200,
+      data: { available: true, enabled: false, invalid: true, userId: 'u1', publicKey: key },
+    }));
+    const module = await import('./useBrowserPush');
+    await module.refreshBrowserPush();
+    return { module, old };
+  }
+  it('reports invalid without silently reactivating the old endpoint, then replaces it on reconnect', async () => {
+    const { module, old } = await invalidBrowser();
+    expect(module.useBrowserPush().state.value).toBe('invalid');
+    expect(module.useBrowserPush().diagnostics.value).toMatchObject({ invalid: true, bindingActive: false });
+    expect(subscribe).toHaveBeenCalledTimes(1);
+    await module.useBrowserPush().setEnabled(true, 'zh-CN');
+    expect(old.unsubscribe).toHaveBeenCalledOnce();
+    expect(subscribe).toHaveBeenCalledTimes(2);
+    expect(module.useBrowserPush().state.value).toBe('on');
+    expect(module.useBrowserPush().diagnostics.value.invalid).toBe(false);
+  });
+  it('does not claim success if the browser returns the same invalid endpoint', async () => {
+    const { module, old } = await invalidBrowser();
+    subscribe.mockResolvedValueOnce(old);
+    await module.useBrowserPush().setEnabled(true, 'zh-CN');
+    expect(module.useBrowserPush().state.value).toBe('invalid');
+    expect(module.useBrowserPush().enabled.value).toBe(false);
+    expect(post.mock.calls.some(([url]) => url.endsWith('/subscribe'))).toBe(false);
+  });
+  it('a failed resubscription remains disconnected and can be retried', async () => {
+    const { module } = await invalidBrowser();
+    subscribe.mockRejectedValueOnce(new Error('network'));
+    await module.useBrowserPush().setEnabled(true, 'zh-CN');
+    expect(module.useBrowserPush().state.value).toBe('error');
+    expect(module.useBrowserPush().enabled.value).toBe(false);
+    await module.useBrowserPush().setEnabled(true, 'zh-CN');
+    expect(module.useBrowserPush().state.value).toBe('on');
+  });
+});
+
+it('surfaces provider rejection during binding as invalid instead of connected', async () => {
+  const module = await import('./useBrowserPush');
+  await module.refreshBrowserPush();
+  permission = 'granted';
+  post.mockResolvedValueOnce({ status: 409, msg: 'PUSH_SUBSCRIPTION_INVALID' });
+  await module.useBrowserPush().setEnabled(true, 'zh-CN');
+  expect(module.useBrowserPush().state.value).toBe('invalid');
+  expect(module.useBrowserPush().enabled.value).toBe(false);
 });

@@ -30,6 +30,7 @@
           <label>
             <span>{{ t('inbox.todoDescription') }}</span>
             <TodoResourceMentionInput
+              :exclude-keys="item?.id ? [`todo:${item.id}`] : []"
               v-model:value="draft.task.description"
               :rows="mobile ? 3 : 4"
               :maxlength="2000"
@@ -57,7 +58,9 @@
             :show-footer="false"
           >
             <ResourcePickerPanel
-              :allowed-types="['bookmark', 'note', 'file']"
+              :allowed-types="['bookmark', 'note', 'file', 'todo', 'tag']"
+              :exclude-keys="item?.id ? [`todo:${item.id}`] : []"
+              :placeholder="t('note.resourceMention.searchPlaceholder')"
               @select="applyResourceRef"
               @close="resourcePickerVisible = false"
             />
@@ -488,6 +491,7 @@
 
   function applyResourceRef(item: { type: string; id: string; title: string }) {
     resourcePickerVisible.value = false;
+    if (item.type === 'todo' && item.id === props.item?.id) return;
     const key = `${item.type}:${item.id}`;
     if (resourceRefs.value.some((ref) => `${ref.type}:${ref.id}` === key)) return;
     if (resourceRefs.value.length >= 10) {

@@ -33,7 +33,7 @@ describe('todoReferenceService', () => {
   });
 
   it('拒绝非法类型、空 ID 与超量引用', () => {
-    expect(() => normalizeTodoResourceRefs([{ type: 'tag', id: 't1' }])).toThrow('参考资料类型不支持');
+    expect(() => normalizeTodoResourceRefs([{ type: 'unknown', id: 't1' }])).toThrow('参考资料类型不支持');
     expect(() => normalizeTodoResourceRefs([{ type: 'note', id: '' }])).toThrow('参考资料标识不合法');
     const tooMany = Array.from({ length: MAX_TODO_RESOURCE_REFS + 1 }, (_, index) => ({
       type: 'note',
@@ -127,9 +127,65 @@ describe('todoReferenceService', () => {
   });
 
   it('源与目标相同时不复制', async () => {
-    await expect(
-      copyTodoResourceRefs(connection, { userId: 'u1', fromTodoId: 't1', toTodoId: 't1' }),
-    ).resolves.toEqual({ count: 0 });
+    await expect(copyTodoResourceRefs(connection, { userId: 'u1', fromTodoId: 't1', toTodoId: 't1' })).resolves.toEqual(
+      { count: 0 },
+    );
     expect(connection.query).not.toHaveBeenCalled();
   });
+});
+
+it('保存前拒绝待办引用自身且不改写旧关系', async () => {
+  const connection = { query: vi.fn() };
+  await expect(
+    replaceTodoResourceRefs(connection, { userId: 'owner', todoId: 'self', refs: [{ type: 'todo', id: 'self' }] }),
+  ).rejects.toThrow('自身');
+  expect(connection.query).not.toHaveBeenCalled();
+});
+it('待办和标签通过规范化且按类型和 ID 去重', () => {
+  expect(
+    normalizeTodoResourceRefs([
+      { type: 'todo', id: 'one' },
+      { type: 'tag', id: 'one' },
+      { type: 'todo', id: 'one' },
+    ]),
+  ).toEqual([
+    { type: 'todo', id: 'one' },
+    { type: 'tag', id: 'one' },
+  ]);
+});
+
+it('新增待办和标签写入快照，回读更新标题且保留失效标签', async () => {
+  const connection = {
+    query: vi
+      .fn()
+      .mockResolvedValueOnce([{ affectedRows: 0 }])
+      .mockResolvedValueOnce([[{ id: 'done', name: '完成任务' }]])
+      .mockResolvedValueOnce([[{ id: 'topic', name: '主题' }]])
+      .mockResolvedValueOnce([{ affectedRows: 2 }]),
+  };
+  await replaceTodoResourceRefs(connection, {
+    userId: 'owner',
+    todoId: 'source',
+    refs: [
+      { type: 'todo', id: 'done' },
+      { type: 'tag', id: 'topic' },
+    ],
+  });
+  const rows = connection.query.mock.calls[3][1][0];
+  expect(rows).toEqual([
+    ['source', 'owner', 'todo', 'done', '完成任务', 0],
+    ['source', 'owner', 'tag', 'topic', '主题', 1],
+  ]);
+  connection.query
+    .mockReset()
+    .mockResolvedValueOnce([
+      rows.map((r) => ({ todoId: r[0], type: r[2], id: r[3], snapshotTitle: r[4], sortOrder: r[5] })),
+    ])
+    .mockResolvedValueOnce([[{ id: 'done', name: '重命名后的完成任务' }]])
+    .mockResolvedValueOnce([[]]);
+  const result = await loadTodoResourceRefMap(connection, { userId: 'owner', todoIds: ['source'] });
+  expect(result.get('source')).toMatchObject([
+    { type: 'todo', id: 'done', title: '重命名后的完成任务', available: true },
+    { type: 'tag', id: 'topic', title: '主题', available: false },
+  ]);
 });

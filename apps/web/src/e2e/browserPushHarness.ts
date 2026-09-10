@@ -14,6 +14,46 @@ import zh from '@/i18n/locales/zh-CN';
 import en from '@/i18n/locales/en-US';
 import '@/assets/css/index.less';
 const params = new URLSearchParams(location.search);
+// Isolated UI fixture: never request real notification permission or bind a real device.
+const scenario = params.get('pushState');
+let fixtureInvalid = scenario === 'invalid' || scenario === 'error';
+let fixtureBinding: any = { id: 'fixture-subscription', generation: 'fixture-generation', userId: 'fixture-user' };
+let fixtureSubscription: any;
+if (scenario) {
+  const makeSubscription = (endpoint: string): any => ({
+    options: {},
+    toJSON: () => ({ endpoint }),
+    unsubscribe: async () => {
+      fixtureSubscription = null;
+      return true;
+    },
+  });
+  fixtureSubscription = makeSubscription('old-fixture');
+  Object.defineProperty(window, 'Notification', {
+    configurable: true,
+    value: { permission: 'granted', requestPermission: async () => 'granted' },
+  });
+  Object.defineProperty(window, 'PushManager', { configurable: true, value: class {} });
+  const registration = {
+    active: {
+      postMessage: (data: any, ports: any[]) => {
+        if (data.type === 'push.binding.set') fixtureBinding = data.binding;
+        ports[0].postMessage({ binding: fixtureBinding });
+      },
+    },
+    pushManager: {
+      getSubscription: async () => fixtureSubscription,
+      subscribe: async () => {
+        if (scenario === 'error') throw new Error('FIXTURE_SUBSCRIBE_FAILED');
+        return (fixtureSubscription = makeSubscription('new-fixture'));
+      },
+    },
+  };
+  Object.defineProperty(navigator, 'serviceWorker', {
+    configurable: true,
+    value: { register: async () => registration, getRegistration: async () => registration },
+  });
+}
 const theme = params.get('theme') === 'night' ? 'night' : 'day';
 const locale = params.get('locale') === 'en-US' ? 'en-US' : 'zh-CN';
 const targetId = '00000000-0000-4000-8000-000000000001';
@@ -55,9 +95,25 @@ request.defaults.adapter = async (config) => {
   const body = typeof config.data === 'string' ? JSON.parse(config.data) : config.data || {};
   const url = String(config.url);
   const ok = (data: any) => ({ data: { status: 200, data }, status: 200, statusText: 'OK', headers: {}, config });
-  if (url.endsWith('/user/saveUserInfo')) { metrics.writes.push(url); return ok(null); }
+  if (url.endsWith('/user/saveUserInfo')) {
+    metrics.writes.push(url);
+    return ok(null);
+  }
   if (url.endsWith('/notification/browser/config'))
-    return ok({ available: false, enabled: false, userId: 'fixture-user', publicKey: '' });
+    return ok({
+      available: Boolean(scenario),
+      enabled: Boolean(fixtureBinding) && !fixtureInvalid,
+      invalid: fixtureInvalid,
+      userId: 'fixture-user',
+      publicKey: 'B' + 'A'.repeat(86),
+    });
+  if (url.endsWith('/notification/browser/subscribe'))
+    return ok({ id: 'fixture-subscription', generation: 'new-generation', userId: 'fixture-user' });
+  if (url.endsWith('/notification/browser/activate')) {
+    fixtureInvalid = false;
+    return ok(null);
+  }
+  if (url.endsWith('/notification/browser/unsubscribe')) return ok(null);
   if (url.endsWith('/notification/unreadCount'))
     return ok({ unreadTotal: 2, byType: { todo_reminder: 1, community_chat: 1 } });
   if (url.endsWith('/notification/list')) {

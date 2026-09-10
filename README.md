@@ -36,7 +36,7 @@
 
 ❝ 刷到一篇好文章 → 存浏览器收藏夹 → **再也没打开过** ❞  
 ❝ 随手记的笔记散落在备忘录、Notion、本地 txt → **找不到** ❞  
-❝ 工作文件在微信发来、网盘传去 → **来回倒腾** ❞  
+❝ 工作文件在微信发来、网盘传去 → **来回倒腾** ❞
 
 **轻笺把它们放到一个地方。** 书签自动抓取、笔记随手记录、文件云端存储、待办按计划推进，统一标签串联资料。
 浏览器打开就能用，当前提供**免费在线使用**，不需要自行部署。
@@ -53,7 +53,7 @@
 粘贴链接自动抓取标题、描述、图标。左侧标签树导航，右侧卡片墙，多标签联合过滤。
 
 <p align="center">
-  <img src="apps/web/public/screenshots/bookmark.png" alt="书签管理" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+  <img src="apps/web/public/screenshots/bookmark-1800.webp" alt="书签管理" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
 </p>
 
 ---
@@ -62,7 +62,7 @@
 富文本｜Markdown 双模式编辑，可实时切换；文字、图片、表格、代码块一应俱全。多级文件夹归类，卡片/列表双视图，支持导出 PDF，移动端也能随时记录。
 
 <p align="center">
-  <img src="apps/web/public/screenshots/note1.png" alt="笔记库" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+  <img src="apps/web/public/screenshots/note1-1800.webp" alt="笔记库" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
 </p>
 
 ---
@@ -72,7 +72,7 @@
 按文件夹和文件类型集中管理资料，支持上传、搜索、在线预览、拖放整理、批量操作与关联标签；存储空间用量清晰可见，常用文件随时跨设备访问。
 
 <p align="center">
-  <img src="apps/web/public/screenshots/cloud-space.png" alt="云空间" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+  <img src="apps/web/public/screenshots/cloud-space-1800.webp" alt="云空间" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
 </p>
 
 ---
@@ -82,7 +82,7 @@
 把收藏的资料变成下一步行动。支持列表、议程和日历三种视图，可设置优先级、截止时间、单次或周期提醒、重复任务与简易清单，并能关联书签、笔记和文件。
 
 <p align="center">
-  <img src="apps/web/public/screenshots/todo.png" alt="待办管理" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+  <img src="apps/web/public/screenshots/todo.webp" alt="待办管理" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
 </p>
 
 ---
@@ -127,7 +127,7 @@
 公开查看用户建议、开发者回复与真实进度，了解哪些需求正在规划、开发或已经上线；登录后也可以提交建议和参与投票。
 
 <p align="center">
-  <img src="apps/web/public/screenshots/require.png" alt="共建轻笺" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+  <img src="apps/web/public/screenshots/require-1800.webp" alt="共建轻笺" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
 </p>
 
 ---
@@ -138,15 +138,15 @@
 
 ## 跟主流工具比
 
-| 维度 | 轻笺 | Notion | Cubox | Raindrop |
-|------|------|--------|-------|----------|
-| 书签管理 | ✅ 标签+搜索 | ❌ 太重 | ✅ | ✅ |
-| 笔记书写 | ✅ 富文本 + Markdown | ✅ | ❌ | ❌ |
-| 文件存储 | ✅ 云端+预览 | ❌ 付费 | ❌ | ❌ |
-| 待办规划 | ✅ 列表 + 议程 + 日历 | ✅ | ❌ | ❌ |
-| 统一标签 | ✅ **跨类型** | ⚠️ 分模块 | ✅ | ❌ |
-| 在线版 | 🆓 **免费使用** | 💰 $10/月 | 💰 ¥10/月 | 💰 $3+/月 |
-| 体验 | ⚡ **轻量快速** | ❌ 慢 | ✅ 快 | ✅ 快 |
+| 维度     | 轻笺                  | Notion    | Cubox     | Raindrop  |
+| -------- | --------------------- | --------- | --------- | --------- |
+| 书签管理 | ✅ 标签+搜索          | ❌ 太重   | ✅        | ✅        |
+| 笔记书写 | ✅ 富文本 + Markdown  | ✅        | ❌        | ❌        |
+| 文件存储 | ✅ 云端+预览          | ❌ 付费   | ❌        | ❌        |
+| 待办规划 | ✅ 列表 + 议程 + 日历 | ✅        | ❌        | ❌        |
+| 统一标签 | ✅ **跨类型**         | ⚠️ 分模块 | ✅        | ❌        |
+| 在线版   | 🆓 **免费使用**       | 💰 $10/月 | 💰 ¥10/月 | 💰 $3+/月 |
+| 体验     | ⚡ **轻量快速**       | ❌ 慢     | ✅ 快     | ✅ 快     |
 
 **没有大平台那么重，也没有单一工具那么局限。**
 
@@ -161,7 +161,7 @@
 支持桌面端 + 移动端，数据云端同步，走到哪跟到哪。
 
 <p align="center">
-  <img src="apps/web/public/screenshots/mobile.png" alt="移动端浅色与深色主题" width="58%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+  <img src="apps/web/public/screenshots/mobile-900.webp" alt="移动端浅色与深色主题" width="58%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
 </p>
 
 ---

@@ -442,3 +442,38 @@ describe('noteReferenceService', () => {
     });
   });
 });
+
+describe('待办与标签引用', () => {
+  it.each(['html', 'markdown'])('正文 %s 提取五类新增链接，跳过代码文本', (type) => {
+    const content =
+      type === 'html'
+        ? '<a href="/inbox?tab=todo&amp;todoId=done">待办</a><a href="/tag/topic">标签</a>'
+        : '[待办](/inbox?tab=todo&todoId=done) [标签](/tag/topic) `[/tag/fake]`';
+    expect(extractOwnedResourceRefs({ content, type })).toEqual([
+      { type: 'todo', id: 'done' },
+      { type: 'tag', id: 'topic' },
+    ]);
+  });
+  it('按账号与软删除校验，已完成待办不被排除；无权限统一不可用', async () => {
+    const db = {
+      query: vi.fn(async (sql, params) => {
+        expect(sql).toContain('user_id = ? AND del_flag = 0');
+        expect(sql).not.toContain('status =');
+        expect(params[0]).toBe('owner');
+        return [[{ id: sql.includes('todo_items') ? 'done' : 'topic', name: '当前标题' }]];
+      }),
+    };
+    const refs = [
+      { type: 'todo', id: 'done' },
+      { type: 'tag', id: 'topic' },
+      { type: 'todo', id: 'foreign' },
+    ];
+    expect((await resolveOwnedResourceRefSummaries(db, { userId: 'owner', refs })).map((r) => r.available)).toEqual([
+      true,
+      true,
+      false,
+    ]);
+    expect(getResourceRefNavigation(refs[0])).toEqual({ target: 'todo-detail' });
+    expect(getResourceRefNavigation(refs[1])).toEqual({ target: 'tag-detail' });
+  });
+});

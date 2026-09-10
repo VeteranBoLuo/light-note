@@ -56,3 +56,22 @@ describe('browser push API', () => {
     expect(response.send.mock.calls[0][0].data).not.toHaveProperty('privateKey');
   });
 });
+
+it.each([
+  { active: 3, invalid: 0 },
+  { active: 0, invalid: 1 },
+  { active: 1, invalid: 1 },
+])('exposes provider invalidity independently of activation', async (subscription) => {
+  mocks.query.mockResolvedValueOnce([[{ id: 's1', ...subscription }]]);
+  const response = res();
+  await config({ ...req(), body: { id: 's1', generation: 'g1' } }, response);
+  expect(response.send.mock.calls[0][0].data).toMatchObject({ enabled: false, invalid: true });
+  expect(mocks.query.mock.calls[0][1]).toEqual(['s1', 'g1', 'u1']);
+});
+
+it('keeps a healthy active binding enabled', async () => {
+  mocks.query.mockResolvedValueOnce([[{ id: 's1', active: 1, invalid: 0 }]]);
+  const response = res();
+  await config(req(), response);
+  expect(response.send.mock.calls[0][0].data).toMatchObject({ enabled: true, invalid: false });
+});

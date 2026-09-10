@@ -1148,3 +1148,18 @@ it('后台轮询期间按钮保持可用，仍可暂停，旧响应不能覆盖�
     vi.useRealTimers();
   }
 });
+
+it('应用时资源失效显示业务原因并立即隐藏编辑与应用', async () => {
+  const run = result();
+  run.items = [{ id: 'i', aiStatus: 'completed', ruleStatus: 'completed', resource: { id: 'n', type: 'note', title: '示例笔记', source: { folder: '' }, guards: {}, tags: [] }, suggestions: [{ id: 's', kind: 'title', status: 'pending', reason: '', before: '旧标题', after: '新标题' }] }] as any;
+  api.listRuns.mockResolvedValue(ok([run]));
+  api.getRun.mockResolvedValue(ok(run));
+  api.actOnRunSuggestion.mockRejectedValue(Object.assign(new Error('Request failed with status code 409'), { response: { data: { msg: '资料已移入回收站，此建议已失效', data: { code: 'ORGANIZE_RESOURCE_TRASHED' } } } }));
+  await mount();
+  button('应用建议').click();
+  await settle();
+  expect(document.body.textContent).toContain('资料已移入回收站，此建议已失效');
+  expect(document.body.textContent).not.toContain('Request failed');
+  expect(button('应用建议')).toBeUndefined();
+  expect(document.querySelector('.suggestion-edit-action')).toBeNull();
+});

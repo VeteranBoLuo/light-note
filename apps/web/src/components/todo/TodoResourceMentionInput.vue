@@ -29,7 +29,8 @@
       <template #content>
         <ResourcePickerPanel
           ref="mentionPanelRef"
-          :allowed-types="['bookmark', 'note', 'file']"
+          :allowed-types="['bookmark', 'note', 'file', 'todo', 'tag']"
+          :exclude-keys="excludeKeys"
           :show-search="false"
           inline
           :keyword="mentionQuery?.keyword || ''"
@@ -60,6 +61,7 @@
 
   withDefaults(
     defineProps<{
+      excludeKeys?: string[];
       rows?: number;
       maxlength?: number | string;
       placeholder?: string;

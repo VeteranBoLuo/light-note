@@ -21,18 +21,19 @@ describe('搜索类型边界', () => {
     expect(isResourceSearchType('todo')).toBe(false);
   });
 
-  it('待办不进入标签、待整理和 @ 引用', () => {
-    [TAGGABLE_RESOURCE_TYPES, INBOXABLE_RESOURCE_TYPES, REFERENCEABLE_RESOURCE_TYPES].forEach((list) => {
+  it('待办与标签可引用，但不进入资料整理操作', () => {
+    [TAGGABLE_RESOURCE_TYPES, INBOXABLE_RESOURCE_TYPES].forEach((list) => {
       expect(list).toEqual(['bookmark', 'note', 'file']);
       expect(list).not.toContain('todo');
     });
+    expect(REFERENCEABLE_RESOURCE_TYPES).toEqual(['bookmark', 'note', 'file', 'todo', 'tag']);
     expect(isTaggableResourceType('todo')).toBe(false);
     expect(isInboxableResourceType('todo')).toBe(false);
-    expect(isReferenceableResourceType('todo')).toBe(false);
-    // 标签本身也不是可打标签 / 可待整理 / 可引用的对象
+    expect(isReferenceableResourceType('todo')).toBe(true);
+    // 标签可引用，但不是可打标签 / 可待整理的对象
     expect(isTaggableResourceType('tag')).toBe(false);
     expect(isInboxableResourceType('tag')).toBe(false);
-    expect(isReferenceableResourceType('tag')).toBe(false);
+    expect(isReferenceableResourceType('tag')).toBe(true);
   });
 
   it('拒绝未知类型与空值', () => {

@@ -7,7 +7,8 @@
           <BChip tone="neutral">{{ t('settingsRefine.push.device') }}</BChip></h2
         ><p>{{ t('settings.notificationsBrowserDesc') }}</p></div
       >
-      <BSwitch controlled
+      <BSwitch
+        controlled
         :checked="preferred"
         :disabled="restricted || guest || busy || state === 'loading' || state === 'unsupported'"
         :aria-label="t('settings.notificationsBrowser')"
@@ -18,7 +19,7 @@
       class="browser-push-status"
       :class="{
         'is-ready': !restricted && !guest && state === 'on',
-        'is-error': !restricted && !guest && state === 'error',
+        'is-error': !restricted && !guest && ['error', 'invalid'].includes(state),
       }"
       role="status"
     >
@@ -41,8 +42,9 @@
     <BrowserPushFacts v-if="!restricted && !guest" />
     <div class="browser-push-actions">
       <BButton
-        v-if="!restricted && !guest && preferred && ['pending', 'error'].includes(state)"
+        v-if="!restricted && !guest && preferred && (busy || ['pending', 'error', 'invalid'].includes(state))"
         type="primary"
+        :loading="busy"
         :disabled="busy"
         @click="setEnabled(true, locale)"
         >{{
@@ -89,11 +91,18 @@
     )
       void refresh();
   };
+  let timer: number | undefined;
   onMounted(() => {
     refreshWhenVisible();
     window.addEventListener('focus', refreshWhenVisible);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    timer = window.setInterval(refreshWhenVisible, 30000);
   });
-  onUnmounted(() => window.removeEventListener('focus', refreshWhenVisible));
+  onUnmounted(() => {
+    window.removeEventListener('focus', refreshWhenVisible);
+    document.removeEventListener('visibilitychange', refreshWhenVisible);
+    window.clearInterval(timer);
+  });
 </script>
 <style scoped lang="less">
   .browser-push-settings {

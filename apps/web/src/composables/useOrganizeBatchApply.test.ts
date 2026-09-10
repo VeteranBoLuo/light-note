@@ -86,3 +86,12 @@ it('网络失败停止后续批次；不批量清理、合并、手动项或缺�
   ])
     expect(canBatchApply(suggestion as any)).toBe(false);
 });
+
+it('批量中失效项退出选择，其他项继续成功', async () => {
+  const { review } = mount();
+  api.applyRunSuggestionBatch.mockImplementation(async (_, items) => ({ status: 200, data: { results: items.map(i => ({ ...i, status: i.suggestionId === '1' ? 'expired' : 'applied', message: '资料已移入回收站' })) } }));
+  review.start();
+  await review.apply();
+  expect(review.outcome.value).toEqual({ success: 24, failed: 1 });
+  expect(review.selectedCount.value).toBe(0);
+});

@@ -643,6 +643,7 @@
   function groupFor(item: WorkspaceItem) {
     if (item.ruleStatus === 'removed') return 'reviewed';
     const suggestions = visibleSuggestions(item);
+    if (suggestions.some((s) => s.status === 'expired') && !suggestions.some((s) => ['pending', 'info'].includes(s.status))) return 'expired';
     if (suggestions.some((s) => ['pending', 'info'].includes(s.status) && !archiveWithoutResult(s))) return 'priority';
     if (
       suggestions.some(archiveWithoutResult) ||
@@ -660,7 +661,7 @@
       item.resource.unsupported
     )
       return 'manual';
-    if (suggestions.some((s) => ['applied', 'ignored', 'closed'].includes(s.status))) return 'reviewed';
+    if (suggestions.some((s) => ['applied', 'ignored', 'closed', 'expired'].includes(s.status))) return 'reviewed';
     return 'clear';
   }
   const resultGroups = computed(() =>
@@ -669,6 +670,7 @@
       { key: 'manual', icon: icon.organize.manual },
       { key: 'analysis', icon: icon.organize.clock },
       { key: 'clear', icon: icon.organize.check },
+      { key: 'expired', icon: icon.organize.clock },
       { key: 'reviewed', icon: icon.organize.check },
     ]
       .map((group) => ({ ...group, items: items.value.filter((item) => groupFor(item) === group.key) }))
@@ -866,7 +868,7 @@
     if (item.ruleStatus === 'cancelled') return t('organizeLifecycle.resourceEnded');
     if (item.ruleStatus && item.ruleStatus !== 'completed') return t('organizeLifecycle.resourceChecking');
     if (item.resource.unsupported) return t('organizeWorkspace.checkLimited');
-    if (visibleSuggestions(item).some((s) => ['applied', 'ignored', 'closed'].includes(s.status)))
+    if (visibleSuggestions(item).some((s) => ['applied', 'ignored', 'closed', 'expired'].includes(s.status)))
       return t('organizeWorkspace.reviewed');
     return t(displayedKind.value === 'all' ? 'organizeWorkspace.checkClear' : 'organizeWorkspace.filteredClear');
   }

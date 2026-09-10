@@ -9,7 +9,7 @@ const RESOURCE_NAVIGATION_ORIGIN = 'https://light-note.local';
  * 但不应该依赖 AI 侧的 resolveAiSourceNavigation(那份带有来源卡片的业务语义)。
  * 这里只沉淀路由事实,与项目既有的资源 canonical 路径保持一致。
  */
-export type NavigableResourceType = 'bookmark' | 'note' | 'file';
+export type NavigableResourceType = 'bookmark' | 'note' | 'file' | 'todo' | 'tag';
 
 export interface NavigableResource {
   type: NavigableResourceType | string;
@@ -71,6 +71,8 @@ export function resolveResourceRoute(
       ...(from ? { query: { from } } : {}),
     };
   }
+  if (resource.type === 'todo') return { path: '/inbox', query: { tab: 'todo', todoId: id } };
+  if (resource.type === 'tag') return { path: `/tag/${encodeURIComponent(id)}` };
   if (resource.type === 'bookmark') return { path: `/manage/editBookmark/${id}` };
   if (resource.type === 'file') {
     const query: Record<string, string> = { fileId: id };

@@ -191,7 +191,7 @@ export declare function resolveBookmarkUrlInput(
 ): BookmarkUrlResolution;
 
 /** 笔记内联提及(N0)· 站内资源引用类型。 */
-export type ResourceRefType = 'note' | 'bookmark' | 'file';
+export type ResourceRefType = 'note' | 'bookmark' | 'file' | 'todo' | 'tag';
 
 export interface ResourceRef {
   type: ResourceRefType;

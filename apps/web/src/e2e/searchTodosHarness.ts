@@ -19,32 +19,45 @@ const bookmark = bookmarkStore(pinia);
 bookmark.screenWidth = window.innerWidth;
 document.documentElement.dataset.theme = params.get('theme') === 'night' ? 'night' : 'day';
 document.documentElement.classList.toggle('light-note-mobile-rendering', params.get('renderProfile') === 'mobile');
-const rows = [
-  {
-    id: 'note-1',
-    type: 'note',
-    title: '项目计划资料',
-    description: '用于核对资料批量选择',
-    raw: { updateTime: '2026-09-10 09:00:00' },
-  },
-  ...['pending', 'completed', 'pending', 'pending'].map((status, index) => ({
-    id: `todo-${index}`,
-    type: 'todo',
-    title: [
-      '准备项目评审材料',
-      '已完成的项目核对',
-      '没有截止时间的项目任务',
-      '很长的项目待办标题：核对移动端和桌面端的浅色深色展示以及批量操作边界',
-    ][index],
-    description: '这是虚构的验收内容，检查状态、标签、截止时间和安全跳转。',
-    status,
-    priority: index % 3,
-    dueAt: index === 2 ? null : index === 3 ? '2099-09-15 10:00:00' : '2020-09-09 10:00:00',
-    tags: [{ id: 'tag-1', name: '项目' }],
-    route: `/inbox?tab=todo&todoId=todo-${index}`,
-    raw: { update_time: '2026-09-10 09:00:00' },
-  })),
-];
+const rows = params.has('groups')
+  ? ['bookmark', 'note', 'file', 'todo', 'tag'].flatMap((type) =>
+      Array.from({ length: 8 }, (_, i) => ({
+        id: `${type}-${i}`,
+        type,
+        title: `项目 ${type} ${i + 1}`,
+        description: '分组展示验收：长标题与说明保持行高，结果可以滚动查看。',
+        status: 'pending',
+        priority: 1,
+        dueAt: null,
+        raw: { update_time: '2026-09-10 09:00:00' },
+      })),
+    )
+  : [
+      {
+        id: 'note-1',
+        type: 'note',
+        title: '项目计划资料',
+        description: '用于核对资料批量选择',
+        raw: { updateTime: '2026-09-10 09:00:00' },
+      },
+      ...['pending', 'completed', 'pending', 'pending'].map((status, index) => ({
+        id: `todo-${index}`,
+        type: 'todo',
+        title: [
+          '准备项目评审材料',
+          '已完成的项目核对',
+          '没有截止时间的项目任务',
+          '很长的项目待办标题：核对移动端和桌面端的浅色深色展示以及批量操作边界',
+        ][index],
+        description: '这是虚构的验收内容，检查状态、标签、截止时间和安全跳转。',
+        status,
+        priority: index % 3,
+        dueAt: index === 2 ? null : index === 3 ? '2099-09-15 10:00:00' : '2020-09-09 10:00:00',
+        tags: [{ id: 'tag-1', name: '项目' }],
+        route: `/inbox?tab=todo&todoId=todo-${index}`,
+        raw: { update_time: '2026-09-10 09:00:00' },
+      })),
+    ];
 let failed = false;
 request.defaults.adapter = async (config) => {
   const body = typeof config.data === 'string' ? JSON.parse(config.data) : config.data || {};
@@ -63,7 +76,7 @@ request.defaults.adapter = async (config) => {
         status = 500;
         failed = true;
       }
-      const items =
+      let items =
         params.get('state') === 'empty'
           ? []
           : rows.filter(
@@ -71,6 +84,14 @@ request.defaults.adapter = async (config) => {
                 (!body.types?.length || body.types.includes(row.type)) &&
                 (!body.keyword || row.title.includes(body.keyword)),
             );
+      if (body.mode === 'suggest' && body.suggestLayout === 'grouped') {
+        const counts = new Map<string, number>();
+        items = items.filter((item) => {
+          const count = counts.get(item.type) || 0;
+          counts.set(item.type, count + 1);
+          return count < (body.keyword ? 5 : 3);
+        });
+      }
       const types = ['bookmark', 'note', 'file', 'todo'];
       data = {
         items,

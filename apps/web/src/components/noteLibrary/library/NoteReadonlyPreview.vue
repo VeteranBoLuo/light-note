@@ -30,12 +30,13 @@
             {{ t('note.childPagesCount', { count: childCount }) }}
             <SvgIcon :src="icon.arrow_right" size="13" aria-hidden="true" />
           </BButton>
-          <div class="note-readonly-preview__meta">
+          <div class="note-readonly-preview__meta" :class="{ 'is-compact': bookmark.isMobile }">
             <span class="note-readonly-preview__mode">
               <SvgIcon :src="icon.cloudSpace.preview.sidebar" size="14" aria-hidden="true" />
               {{ t('common.preview') }}
             </span>
-            <span v-if="displayTime">{{ displayTime }}</span>
+            <NoteInlineTags v-if="previewTags.length" :tags="previewTags" :compact="bookmark.isMobile" />
+            <span v-if="displayTime && !bookmark.isMobile" class="note-readonly-preview__time">{{ displayTime }}</span>
           </div>
         </div>
       </div>
@@ -93,16 +94,13 @@
       @close="closeResourcePreview"
     >
       <div v-if="resourcePreview" class="note-readonly-preview__resource-preview">
-        <div class="note-readonly-preview__resource-summary">
-          <strong>{{ resourcePreviewTitle }}</strong>
-          <span>{{ resourcePreviewType }}</span>
-        </div>
-        <p
-          class="note-readonly-preview__resource-status"
-          :class="{ 'is-unavailable': resourcePreviewState?.available === false }"
-        >
-          {{ resourcePreviewStatus }}
-        </p>
+        <ResourceReferenceSummary
+          :type="resourcePreview.ref.type"
+          :type-label="resourcePreviewType"
+          :title="resourcePreviewTitle"
+          :status="resourcePreviewStatus"
+          :unavailable="resourcePreviewState?.available === false"
+        />
         <div class="note-readonly-preview__resource-actions">
           <template v-if="resourcePreview.ref.type === 'file'">
             <BButton
@@ -134,6 +132,11 @@
 </template>
 
 <script lang="ts" setup>
+  import ResourceReferenceSummary from '@/components/resourcePicker/ResourceReferenceSummary.vue';
+  import { bookmarkStore } from '@/store';
+  import NoteInlineTags from '@/components/noteLibrary/NoteInlineTags.vue';
+  import { useNoteTags } from '@/composables/useNoteTags';
+  import { resolveResourceRoute } from '@/utils/resourceNavigation';
   import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
@@ -225,6 +228,7 @@
   }>();
   const { t } = useI18n();
   const router = useRouter();
+  const bookmark = bookmarkStore();
   const user = useUserStore();
   const detail = ref<Record<string, any>>({});
   const previewHtml = ref('');
@@ -247,6 +251,10 @@
   let outlineSpyFrame = 0;
   let drawingCenterFrame = 0;
 
+  const { tags: previewTags } = useNoteTags(
+    () => props.noteId,
+    () => props.seed?.tags ?? props.seed?.tagList,
+  );
   const displayNote = computed(() => ({ ...(props.seed || {}), ...detail.value }));
   // 操作成功后父级会立即更新 seed；优先使用它，避免刚加载的详情副本把新状态覆盖回去。
   const previewPending = computed(() => Boolean(props.seed?.isPending ?? detail.value.isPending));
@@ -288,6 +296,8 @@
     const type = resourcePreview.value?.ref.type;
     if (type === 'bookmark') return t('note.resourceMention.openWebsite');
     if (type === 'file') return t('note.resourceMention.openFile');
+    if (type === 'todo') return t('note.resourceMention.openTodo');
+    if (type === 'tag') return t('note.resourceMention.openTag');
     return t('note.resourceMention.openNote');
   });
 
@@ -321,6 +331,11 @@
     const state = resolvedResourceRef(ref);
     if (!state?.available || (ref.type === 'bookmark' && !state.url)) {
       message.warning(t('note.resourceMention.resourceUnavailable'));
+      return;
+    }
+    if (ref.type === 'todo' || ref.type === 'tag') {
+      const target = resolveResourceRoute(ref);
+      if (target) await router.push(target);
       return;
     }
     const source: AiSource = {
@@ -620,6 +635,7 @@
   }
 
   .note-readonly-preview__heading {
+    flex: 1 1 auto;
     min-width: 0;
   }
 
@@ -692,14 +708,27 @@
   }
 
   .note-readonly-preview__meta {
-    flex: 0 0 auto;
+    min-width: 0;
+    flex: 0 1 auto;
     gap: 10px;
     margin-left: 2px;
     color: var(--muted-text-color, var(--desc-color));
     font-size: 11px;
   }
 
+  .note-readonly-preview__meta.is-compact {
+    flex: 0 0 auto;
+  }
+
+  .note-readonly-preview__time {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .note-readonly-preview__mode {
+    flex: 0 0 auto;
     min-height: 22px;
     padding: 1px 8px;
     display: inline-flex;
@@ -834,36 +863,6 @@
     min-width: min(300px, calc(90vw - 32px));
     display: grid;
     gap: 14px;
-  }
-
-  .note-readonly-preview__resource-summary {
-    display: grid;
-    gap: 4px;
-
-    strong {
-      overflow: hidden;
-      color: var(--text-color);
-      font-size: 16px;
-      line-height: 1.4;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    span {
-      color: var(--desc-color, #737782);
-      font-size: 13px;
-    }
-  }
-
-  .note-readonly-preview__resource-status {
-    margin: 0;
-    color: var(--desc-color, #737782);
-    font-size: 13px;
-    line-height: 1.5;
-
-    &.is-unavailable {
-      color: var(--error-color, #e5484d);
-    }
   }
 
   .note-readonly-preview__resource-actions {

@@ -7,7 +7,7 @@ import { resolveOwnedResourceRefSummaries, validateOwnedResourceRefs } from './n
  * 这里只负责待办侧的规范化、事务内替换与批量 hydration。
  */
 
-const TARGET_TYPES = new Set(['bookmark', 'note', 'file']);
+const TARGET_TYPES = new Set(['bookmark', 'note', 'file', 'todo', 'tag']);
 export const MAX_TODO_RESOURCE_REFS = 10;
 const MAX_TARGET_ID_LENGTH = 255;
 
@@ -51,6 +51,9 @@ export async function replaceTodoResourceRefs(connection, { userId, todoId, refs
   if (!ownerId || !targetTodoId) return { count: 0 };
 
   const normalized = Array.isArray(refs) ? refs : [];
+  if (normalized.some(ref => ref.type === 'todo' && String(ref.id) === targetTodoId)) {
+    throw referenceError('待办不能引用自身');
+  }
   await connection.query('DELETE FROM todo_resource_refs WHERE todo_id = ? AND user_id = ?', [targetTodoId, ownerId]);
   if (!normalized.length) return { count: 0 };
 

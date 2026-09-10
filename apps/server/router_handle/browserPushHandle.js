@@ -27,15 +27,16 @@ export async function config(req, res) {
   try {
     const { id, generation } = req.body || {};
     const [[subscription]] = await pool.query(
-      `SELECT id FROM browser_push_subscriptions
-      WHERE id = ? AND generation = ? AND user_id = ? AND active = 1`,
+      `SELECT id, active, EXISTS(SELECT 1 FROM browser_push_jobs j WHERE j.subscription_id = browser_push_subscriptions.id AND j.status = 'invalid') AS invalid FROM browser_push_subscriptions
+      WHERE id = ? AND generation = ? AND user_id = ?`,
       [String(id || ''), String(generation || ''), userId],
     );
     res.send(
       resultData({
         available: browserPushEnabled() && Boolean(process.env.BROWSER_PUSH_ORIGIN),
         publicKey: process.env.BROWSER_PUSH_VAPID_PUBLIC_KEY || '',
-        enabled: Boolean(subscription),
+        enabled: Number(subscription?.active) === 1 && !Number(subscription?.invalid),
+        invalid: Number(subscription?.active) === 3 || Number(subscription?.invalid) === 1,
         userId,
       }),
     );
@@ -54,7 +55,11 @@ export async function subscribe(req, res) {
     res.send(resultData(binding));
   } catch (error) {
     res.send(
-      resultData(null, error?.code === 'INVALID_PUSH_SUBSCRIPTION' ? 400 : 500, 'BROWSER_PUSH_SUBSCRIBE_FAILED'),
+      resultData(
+        null,
+        error?.code === 'PUSH_SUBSCRIPTION_INVALID' ? 409 : error?.code === 'INVALID_PUSH_SUBSCRIPTION' ? 400 : 500,
+        error?.code === 'PUSH_SUBSCRIPTION_INVALID' ? 'PUSH_SUBSCRIPTION_INVALID' : 'BROWSER_PUSH_SUBSCRIBE_FAILED',
+      ),
     );
   }
 }

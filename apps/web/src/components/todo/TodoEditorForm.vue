@@ -29,6 +29,7 @@
       <label>
         <span>{{ t('inbox.todoDescription') }}</span>
         <TodoResourceMentionInput
+          :exclude-keys="item?.id ? [`todo:${item.id}`] : []"
           v-model:value="form.description"
           :rows="3"
           :maxlength="2000"
@@ -71,7 +72,9 @@
         :show-footer="false"
       >
         <ResourcePickerPanel
-          :allowed-types="['bookmark', 'note', 'file']"
+          :allowed-types="['bookmark', 'note', 'file', 'todo', 'tag']"
+          :exclude-keys="item?.id ? [`todo:${item.id}`] : []"
+          :placeholder="t('note.resourceMention.searchPlaceholder')"
           @select="applyMentionSelection"
           @close="resourcePickerVisible = false"
         />
@@ -344,6 +347,7 @@
   /** 选中后只保留结构化关系；@关键词由 TodoResourceMentionInput 统一消费。 */
   function applyMentionSelection(item: { type: string; id: string; title: string }) {
     resourcePickerVisible.value = false;
+    if (item.type === 'todo' && item.id === props.item?.id) return;
     const key = `${item.type}:${item.id}`;
     if (resourceRefs.value.some((ref) => `${ref.type}:${ref.id}` === key)) return;
     if (resourceRefs.value.length >= MAX_RESOURCE_REFS) {

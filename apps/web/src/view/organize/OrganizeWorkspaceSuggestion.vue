@@ -81,23 +81,29 @@
         </span></div
       >
       <p>{{
-        suggestion.kind === 'archive' && suggestion.status === 'pending'
-          ? t(suggestion.archivePreview ? 'organizeWorkspace.archiveReadyHint' : 'organizeWorkspace.archiveLegacyHint')
-          : suggestion.kind === 'archive' && suggestion.status === 'applied'
+        suggestion.status === 'expired'
+          ? suggestion.reason
+          : suggestion.kind === 'archive' && suggestion.status === 'pending'
             ? t(
-                ['already_saved', 'saved'].includes(String(suggestion.applied))
-                  ? 'organizeWorkspace.archiveSavedHint'
-                  : 'organizeWorkspace.archiveAppliedHint',
+                suggestion.archivePreview
+                  ? 'organizeWorkspace.archiveReadyHint'
+                  : 'organizeWorkspace.archiveLegacyHint',
               )
-            : suggestion.reading && !suggestion.reading.complete
-              ? t(fileReadingReasonKey(suggestion.reading.reasonCode))
-              : suggestion.reading &&
-                  suggestion.reasonCode &&
-                  ['suggested', 'filtered', 'no_suggestion', 'no_evidence', 'already_associated'].includes(
-                    suggestion.reasonCode,
-                  )
-                ? t(`organizeFile.outcomes.${suggestion.reasonCode}`)
-                : suggestion.reason
+            : suggestion.kind === 'archive' && suggestion.status === 'applied'
+              ? t(
+                  ['already_saved', 'saved'].includes(String(suggestion.applied))
+                    ? 'organizeWorkspace.archiveSavedHint'
+                    : 'organizeWorkspace.archiveAppliedHint',
+                )
+              : suggestion.reading && !suggestion.reading.complete
+                ? t(fileReadingReasonKey(suggestion.reading.reasonCode))
+                : suggestion.reading &&
+                    suggestion.reasonCode &&
+                    ['suggested', 'filtered', 'no_suggestion', 'no_evidence', 'already_associated'].includes(
+                      suggestion.reasonCode,
+                    )
+                  ? t(`organizeFile.outcomes.${suggestion.reasonCode}`)
+                  : suggestion.reason
       }}</p>
       <p
         v-if="suggestion.kind === 'archive' && suggestion.status === 'pending' && suggestion.archivePreview?.excerpt"
@@ -122,7 +128,7 @@
         >
       </div>
     </div>
-    <div v-if="editing" :inert="batchBusy || undefined" class="suggestion-edit">
+    <div v-if="editing && canReview" :inert="batchBusy || undefined" class="suggestion-edit">
       <OrganizeSuggestionTagEditor v-if="suggestion.kind === 'tags'" v-model:tags="tags" :disabled="busy" />
       <div v-else class="title-editor">
         <label :for="`organize-title-${suggestion.id}`">{{ t('organizeWorkspace.checks.title') }}</label>
@@ -245,6 +251,10 @@
     error = ref(''),
     title = ref(''),
     tags = ref<OrganizeAiSuggestionTag[]>([]);
+  const invalidReason = ref('');
+  const suggestion = computed(() =>
+    invalidReason.value ? { ...props.suggestion, status: 'expired', reason: invalidReason.value } : props.suggestion,
+  );
   const beforeTags = computed(() => (Array.isArray(props.suggestion.before) ? props.suggestion.before : []));
   const isMetadata = computed(() => ['tags', 'title'].includes(props.suggestion.kind));
   const manual = computed(
@@ -252,6 +262,7 @@
   );
   const canReview = computed(
     () =>
+      !invalidReason.value &&
       ['pending', 'insufficient', 'info', 'no_suggestion'].includes(props.suggestion.status) &&
       (isMetadata.value ||
         (props.suggestion.kind === 'archive'
@@ -262,6 +273,7 @@
     () => props.suggestion.id,
     () => {
       editing.value = false;
+      invalidReason.value = '';
       error.value = '';
     },
   );
@@ -298,7 +310,17 @@
       editing.value = false;
       emit('changed');
     } catch (e) {
-      error.value = e instanceof Error ? e.message : t('organize.actionFailed');
+      const failure = e as { response?: { data?: { msg?: string; data?: { code?: string } } }; message?: string };
+      error.value = failure.response?.data?.msg || failure.message || t('organize.actionFailed');
+      if (
+        ['ORGANIZE_RESOURCE_TRASHED', 'ORGANIZE_RESOURCE_UNAVAILABLE', 'ORGANIZE_RESOURCE_CHANGED'].includes(
+          failure.response?.data?.data?.code || '',
+        )
+      ) {
+        invalidReason.value = error.value;
+        editing.value = false;
+        emit('changed');
+      }
     } finally {
       busy.value = false;
     }

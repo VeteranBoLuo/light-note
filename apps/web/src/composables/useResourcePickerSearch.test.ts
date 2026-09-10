@@ -272,3 +272,17 @@ describe('complete mixed material browsing', () => {
     expect(picker.hasMore.value).toBe(false);
   });
 });
+
+it('显式五类选择器保留待办标签，排除自己；默认资料选择器不扩大', async () => {
+  const items = [item('todo', 'self'), item('todo', 'done'), item('tag', 'topic'), item('note', 'n')];
+  fetchGlobalSearchMock.mockResolvedValue({ items } as any);
+  const picker = useResourcePickerSearch({
+    allowedTypes: ['bookmark', 'note', 'file', 'todo', 'tag'],
+    excludeKeys: () => ['todo:self'],
+  });
+  await picker.searchNow('');
+  expect(picker.results.value.map((r) => r.id)).toEqual(['n', 'done', 'topic']);
+  const legacy = useResourcePickerSearch();
+  await legacy.searchNow('');
+  expect(legacy.results.value.map((r) => r.id)).toEqual(['n']);
+});

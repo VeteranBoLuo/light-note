@@ -17,10 +17,14 @@ export async function bindPushSubscription(userId, raw, locale, db = pool) {
   try {
     await conn.beginTransaction();
     const hash = endpointHash(subscription.endpoint);
-    const [existing] = await conn.query('SELECT * FROM browser_push_subscriptions WHERE endpoint_hash = ? FOR UPDATE', [
-      hash,
-    ]);
+    const [existing] = await conn.query(
+      `SELECT s.*, EXISTS(SELECT 1 FROM browser_push_jobs j WHERE j.subscription_id = s.id AND j.status = 'invalid') AS invalid FROM browser_push_subscriptions s WHERE endpoint_hash = ? FOR UPDATE`,
+      [hash],
+    );
     const previous = existing[0];
+    // Provider-invalid endpoints must never be reactivated, even by an older client.
+    if (Number(previous?.active) === 3 || Number(previous?.invalid) === 1)
+      throw Object.assign(new Error('PUSH_SUBSCRIPTION_INVALID'), { code: 'PUSH_SUBSCRIPTION_INVALID' });
     if (
       Number(previous?.active) === 1 &&
       previous.user_id === userId &&
@@ -89,7 +93,7 @@ export async function unbindPushSubscription(userId, id, generation, db = pool) 
   try {
     await conn.beginTransaction();
     const [result] = await conn.query(
-      'UPDATE browser_push_subscriptions SET active = 0 WHERE id = ? AND user_id = ? AND generation = ?',
+      'UPDATE browser_push_subscriptions SET active = IF(active = 3, 3, 0) WHERE id = ? AND user_id = ? AND generation = ?',
       [id, userId, generation],
     );
     if (result.affectedRows)
@@ -220,7 +224,7 @@ export async function processNextPush({ db = pool, send = sendWebPush, env = pro
     status = error?.code === 'PUSH_EXPIRED' ? 'expired' : pushFailure(httpCode, job.attempts);
     code = httpCode ? `HTTP_${httpCode}` : 'PUSH_TRANSPORT_ERROR';
     if (status === 'invalid')
-      await db.query('UPDATE browser_push_subscriptions SET active = 0 WHERE id = ? AND generation = ?', [
+      await db.query('UPDATE browser_push_subscriptions SET active = 3 WHERE id = ? AND generation = ?', [
         job.subscription_id,
         job.generation,
       ]);
