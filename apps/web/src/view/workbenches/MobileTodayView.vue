@@ -35,6 +35,8 @@
       />
     </div>
 
+    <CampaignEntry row />
+
     <section class="mobile-today__pending" :aria-label="t('workbench.panel.todaySummary')">
       <div class="mobile-today__pending-head">
         <strong>{{ t('workbench.panel.todaySummary') }}</strong>
@@ -66,7 +68,6 @@
           :loading="initialTodayLoading"
           :show-header="false"
           compact-empty
-          compact-actions
           @refresh="loadToday"
         />
       </div>
@@ -183,6 +184,7 @@
 </template>
 
 <script setup lang="ts">
+import CampaignEntry from '@/components/support/CampaignEntry.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import WorkshopProjectEntry from '@/components/workbenches/WorkshopProjectEntry.vue';
   import { computed, onActivated, onMounted, ref, watch } from 'vue';
@@ -466,6 +468,16 @@
     currentTodayRequest = request;
     return request;
   }
+
+  watch(
+    () => inbox.captureRevision,
+    () => {
+      // 让捕获前的在途快照失效，不能复用旧请求而漏掉刚添加的资源。
+      todayRequestId += 1;
+      currentTodayRequest = null;
+      void Promise.allSettled([loadToday(), organizer.loadSummary({ silent: true })]);
+    },
+  );
 
   function loadOrganizerAttention() {
     organizer.resetForOwner(organizeOwnerKey.value);

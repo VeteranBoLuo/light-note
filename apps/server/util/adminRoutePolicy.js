@@ -429,6 +429,9 @@ declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'support', [
   ['POST', '/support/public-preference'],
   ['GET', '/support/donation/checkout'],
   ['GET', '/support/checkout'],
+  ['POST', '/support/checkout-intents'],
+  ['GET', '/support/checkout-intents/:intentId'],
+  ['GET', '/support/campaigns/:campaignKey'],
   ['POST', '/support/events'],
   ['GET', '/support/afdian/oauth/start'],
   ['GET', '/support/afdian/oauth/callback'],
@@ -437,6 +440,7 @@ declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'support', [
 ]);
 declare(ADMIN_POLICIES.READ, 'support', [
   ['GET', '/support/catalog'],
+  ['GET', '/support/campaign-entry'],
   ['GET', '/support/leaderboard'],
   ['GET', '/support/leaderboard/avatar/:publicId'],
 ]);
@@ -450,6 +454,7 @@ declare(ADMIN_POLICIES.ADMIN_ONLY, 'support', [
   ['POST', '/support/admin/campaigns'],
   ['POST', '/support/admin/campaigns/:campaignId/publish'],
   ['POST', '/support/admin/campaigns/:campaignId/suspend'],
+  ['POST', '/support/admin/campaigns/:campaignId/visibility'],
   ['POST', '/support/admin/sync'],
   ['POST', '/support/admin/orders/:providerOrderNo/reconcile'],
   ['POST', '/support/admin/orders/:providerOrderNo/reward-approve'],

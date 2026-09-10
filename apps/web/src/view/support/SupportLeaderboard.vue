@@ -54,7 +54,7 @@
         <span>¥{{ leaderboard.mine.totalAmount }}</span>
       </div>
     </BCard>
-    <p class="support-leaderboard__footnote">{{ t('support.leaderboardFootnote') }}</p>
+    <p v-if="!compact" class="support-leaderboard__footnote">{{ t('support.leaderboardFootnote') }}</p>
   </section>
 </template>
 
@@ -66,7 +66,7 @@
   import icon from '@/config/icon';
   import { afdianLeaderboardAvatarUrl, type AfdianLeaderboard } from '@/api/supportApi';
 
-  defineProps<{ leaderboard: AfdianLeaderboard | null; loading: boolean }>();
+  defineProps<{ leaderboard: AfdianLeaderboard | null; loading: boolean; compact?: boolean }>();
   const { t } = useI18n();
 </script>
 

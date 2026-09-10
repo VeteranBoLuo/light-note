@@ -1,3 +1,8 @@
+import {
+  getCampaignPresentation,
+  setCampaignVisibility,
+  getCheckoutStatus,
+} from '../util/afdianCampaignPresentation.js';
 import { normalizeEntitlementEvent, recordEntitlementEvent } from '../util/entitlementEvents.js';
 import { L, resultData } from '../util/common.js';
 import { ensureNotVisitor } from '../util/auth.js';
@@ -539,5 +544,66 @@ export async function webhook(req, res) {
   } catch (error) {
     console.error('[afdian] Webhook 落库失败 code=%s', stableAgentErrorCode(error));
     return res.status(500).json({ ec: 500, em: 'temporary failure' });
+  }
+}
+
+export async function campaignEntry(req, res) {
+  try {
+    return res.send(resultData(await getCampaignPresentation({ entryOnly: true })));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+export async function campaignPresentation(req, res) {
+  if (!ensurePrivateSupportAccess(req, res)) return;
+  try {
+    const data = await getCampaignPresentation({ campaignKey: req.params.campaignKey, userId: req.user.id });
+    if (!data) return res.status(404).send(resultData({ code: 'SUPPORT_CAMPAIGN_NOT_FOUND' }, 404, '活动不可用'));
+    return res.send(resultData(data));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+export async function adminCampaignVisibility(req, res) {
+  if (!(await ensureRoot(req, res))) return;
+  try {
+    await auditAdminSupportAction(req, 'support_campaign_visibility', req.params.campaignId, 'intent');
+    const data = await setCampaignVisibility({
+      campaignId: req.params.campaignId,
+      enabled: req.body?.enabled,
+      actorUserId: req.user.id,
+    });
+    await auditAdminSupportAction(req, 'support_campaign_visibility', req.params.campaignId, 'succeeded').catch(
+      () => {},
+    );
+    return res.send(resultData(data));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+export async function checkoutCreate(req, res) {
+  if (!ensurePrivateSupportAccess(req, res)) return;
+  try {
+    const data = await createAfdianPackageCheckoutIntent({
+      userId: req.user.id,
+      skuId: req.body?.skuId,
+      catalogVersion: req.body?.catalogVersion,
+    });
+    await recordEntitlementEvent(
+      req,
+      { event: 'checkout_created', flowId: req.body?.flowId, skuId: req.body?.skuId },
+      { server: true, intentId: data.intentId },
+    ).catch(() => {});
+    return res.send(resultData(data));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+export async function checkoutStatus(req, res) {
+  if (!ensurePrivateSupportAccess(req, res)) return;
+  try {
+    return res.send(resultData(await getCheckoutStatus({ intentId: req.params.intentId, userId: req.user.id })));
+  } catch (error) {
+    return sendError(req, res, error);
   }
 }

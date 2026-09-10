@@ -32,6 +32,7 @@ vi.mock('@/utils/preferences.ts', () => ({ isMobileHomeRoute: () => false }));
 vi.mock('@/utils/common.ts', () => ({ getLogDeviceId: () => 'guest-device-1' }));
 vi.mock('@/composables/useGuestGuard', () => ({ blockGuestWrite: () => false }));
 vi.mock('@/components/search/GlobalSearch.vue', () => ({ default: { template: '<div />' } }));
+vi.mock('@/components/support/CampaignEntry.vue', () => ({ default: { template: '<div />' } }));
 vi.mock('@/view/personCenter/PersonCenter.vue', () => ({ default: { template: '<div />' } }));
 vi.mock('@/components/notification/NotificationBell.vue', () => ({ default: { template: '<div />' } }));
 vi.mock('@/components/growth/AvatarFramePreview.vue', () => ({ default: { template: '<div />' } }));

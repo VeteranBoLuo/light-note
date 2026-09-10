@@ -84,8 +84,8 @@ export const DAILY_QUEST_STAGES = resolveDailyQuestStages();
 export const STREAK_MILESTONES = [
   { days: 7, points: 50, cards: 1 },
   { days: 30, points: 300, storageMb: 512, cards: 1 },
-  { days: 100, points: 1000, storageMb: 2048 },
-  { days: 365, points: 5000, storageMb: 5120 },
+  { days: 100, points: 600, storageMb: 1024 },
+  { days: 365, points: 2000, storageMb: 2048 },
 ];
 
 const CHECKIN_BASE = 5; // 每日签到基础 +5

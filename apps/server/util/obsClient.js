@@ -180,6 +180,34 @@ export const getObjectBufferFromObs = async (objectKey, { maxBytes = Infinity } 
   return buffer;
 };
 
+/** Read only a bounded metadata range; reject servers that ignore Range. */
+export const getObjectRangeFromObs = async (objectKey, start, end) => {
+  if (
+    !Number.isSafeInteger(start) ||
+    !Number.isSafeInteger(end) ||
+    start < 0 ||
+    end < start ||
+    end - start + 1 > 16 * 1024 * 1024
+  ) {
+    throw Object.assign(new Error('OBS_RANGE_INVALID'), { code: 'OBS_RANGE_INVALID' });
+  }
+  const { url } = createDownloadSignedUrl({ objectKey, expires: 60 });
+  const response = await fetch(url, {
+    headers: { Range: `bytes=${start}-${end}` },
+    signal: AbortSignal.timeout(20000),
+    redirect: 'error',
+  });
+  if (response.status !== 206) {
+    await response.body?.cancel();
+    throw Object.assign(new Error('OBS_RANGE_UNSUPPORTED'), { code: 'OBS_RANGE_UNSUPPORTED' });
+  }
+  const body = await readObsBinaryContent(response.body, end - start + 1);
+  if (body.length !== end - start + 1) {
+    throw Object.assign(new Error('OBS_DOWNLOAD_SIZE_MISMATCH'), { code: 'OBS_DOWNLOAD_SIZE_MISMATCH' });
+  }
+  return body;
+};
+
 export const buildObjectUrl = (objectKey) => `${bucketBaseUrl}/${objectKey}`;
 
 export default obsClient;

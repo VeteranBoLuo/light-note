@@ -30,7 +30,6 @@
             </span>
             <span class="skeleton-row-actions">
               <span class="skeleton-block skeleton-row-button"></span>
-              <span class="skeleton-block skeleton-row-button skeleton-row-button--wide"></span>
             </span>
           </div>
         </div>
@@ -89,27 +88,40 @@
           </BButton>
         </header>
         <div class="today-actions__rows">
-          <article v-for="item in visibleInbox" :key="inboxKey(item)" class="today-action-row">
+          <article v-for="item in visibleInbox" :key="inboxKey(item)" class="today-action-row today-action-row--inbox">
             <span class="today-action-row__icon" :class="`is-${item.resourceType}`" aria-hidden="true">
               <SvgIcon :src="resourceIcon(item.resourceType)" size="16" />
             </span>
             <div class="today-action-row__main">
-              <span class="today-action-row__title">{{ item.title }}</span>
+              <BButton
+                class="today-action-row__open"
+                :disabled="mutatingInboxKey === inboxKey(item)"
+                :title="t('workbench.today.openToOrganize', { title: item.title })"
+                :aria-label="t('workbench.today.openToOrganize', { title: item.title })"
+                @click="openInboxItem(item)"
+              >
+                <span class="today-action-row__title">{{ item.title }}</span>
+              </BButton>
               <span class="today-action-row__meta">{{ formatCollectedAt(item.collectedAt) }}</span>
             </div>
             <div class="today-action-row__actions">
-              <BButton size="small" :disabled="mutatingInboxKey === inboxKey(item)" @click="openInboxItem(item)">
-                {{ t('inbox.organize') }}
-              </BButton>
-              <BButton
-                v-if="!compactActions"
-                class="today-action-row__secondary"
-                size="small"
-                :loading="mutatingInboxKey === inboxKey(item)"
-                @click="completeInboxItem(item)"
-              >
-                {{ t('inbox.complete') }}
-              </BButton>
+              <BTooltip :title="t('workbench.today.markOrganized')">
+                <BButton
+                  class="today-action-row__complete"
+                  size="small"
+                  :aria-label="t('workbench.today.completeInbox', { title: item.title })"
+                  :disabled="Boolean(mutatingInboxKey) && mutatingInboxKey !== inboxKey(item)"
+                  :loading="mutatingInboxKey === inboxKey(item)"
+                  @click="completeInboxItem(item)"
+                >
+                  <SvgIcon
+                    v-if="mutatingInboxKey !== inboxKey(item)"
+                    :src="icon.organize.check"
+                    size="16"
+                    aria-hidden="true"
+                  />
+                </BButton>
+              </BTooltip>
             </div>
           </article>
         </div>
@@ -145,6 +157,7 @@
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
@@ -194,14 +207,12 @@
       showHeader?: boolean;
       contained?: boolean;
       compactEmpty?: boolean;
-      compactActions?: boolean;
       showEmptyAction?: boolean;
     }>(),
     {
       showHeader: true,
       contained: false,
       compactEmpty: false,
-      compactActions: false,
       showEmptyAction: false,
     },
   );
@@ -432,6 +443,7 @@
 
   async function completeInboxItem(item: WorkbenchInboxItem) {
     if (blockGuestWrite('workbench-today-inbox', t('inbox.guestPrompt'))) return;
+    if (mutatingInboxKey.value) return;
     const key = inboxKey(item);
     mutatingInboxKey.value = key;
     try {
@@ -629,6 +641,25 @@
     }
   }
 
+  // 资源图标、标题和操作共享第一行中心；日期只作为标题的副信息。
+  .today-action-row--inbox {
+    display: grid;
+    grid-template-columns: 20px minmax(0, 1fr) 44px;
+    align-items: start;
+
+    .today-action-row__icon {
+      width: 20px;
+      height: 20px;
+      border-radius: 0;
+      background: transparent;
+    }
+
+    .today-action-row__actions {
+      height: 20px;
+      justify-content: center;
+    }
+  }
+
   .today-action-row__main {
     display: grid;
     gap: 4px;
@@ -644,6 +675,20 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .today-action-row__open.b_btn {
+    width: 100%;
+    min-width: 0;
+    height: auto;
+    padding: 0;
+    justify-content: flex-start;
+    text-align: left;
+    background: transparent;
+
+    &:not(:disabled):is(:hover, :focus-visible) .today-action-row__title {
+      color: var(--workspace-purple-text);
+    }
   }
 
   .today-action-row__meta {
@@ -687,6 +732,38 @@
     border-color: var(--surface-border-color);
     background: var(--hover-background);
     color: var(--text-color);
+  }
+
+  .today-action-row__actions .today-action-row__complete.b_btn {
+    position: relative;
+    width: 20px;
+    height: 20px;
+    min-height: 20px;
+    padding: 0;
+    border: 0;
+    border-radius: 4px;
+    color: var(--desc-color);
+    background: transparent;
+
+    // 20px 视觉尺寸对应 44px 点击区域，独立操作列避免与标题重叠。
+    &::after {
+      content: '';
+      position: absolute;
+      inset: -12px;
+      border-radius: 4px;
+    }
+
+    &:not(:disabled):is(:hover, :focus-visible) {
+      color: var(--workspace-note-text);
+      background: var(--hover-background);
+    }
+
+    :deep(.btn-spinner) {
+      width: 16px;
+      height: 16px;
+      box-sizing: border-box;
+      margin-right: 0;
+    }
   }
 
   .today-actions__empty {
@@ -855,13 +932,9 @@
   }
 
   .skeleton-row-button {
-    width: 48px;
-    height: 32px;
-    border-radius: 6px;
-  }
-
-  .skeleton-row-button--wide {
-    width: 66px;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
   }
 
   @keyframes today-skeleton-pulse {
@@ -894,7 +967,7 @@
       gap: 6px;
     }
 
-    .today-action-row__actions :deep(.b_btn) {
+    .today-action-row__actions :deep(.b_btn:not(.today-action-row__complete)) {
       height: 32px;
       min-height: 32px;
       padding: 0 9px;

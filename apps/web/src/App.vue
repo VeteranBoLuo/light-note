@@ -54,6 +54,7 @@
         <QuickCaptureModal
           v-if="inbox.quickCaptureVisible && !publicStandaloneRoute"
           v-model:visible="inbox.quickCaptureVisible"
+          @captured="inbox.notifyCaptured()"
         />
         <PwaInstallGuideModal v-if="!isAndroidApp && pwaGuideVisible && !publicStandaloneRoute" />
       </template>

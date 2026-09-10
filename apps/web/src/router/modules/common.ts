@@ -91,6 +91,11 @@ const commonRouter: RouteRecordRaw[] = [
     name: 'support',
     component: () => import('@/view/support/SupportUs.vue'),
   },
+  {
+    meta: { title: '秋日活动', requireAuth: true, roles: ALL_ROLES },
+    path: '/campaign/:campaignKey', name: 'campaign',
+    component: () => import('@/view/campaign/CampaignPage.vue'),
+  },
 ];
 
 export default commonRouter;

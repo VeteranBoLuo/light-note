@@ -54,10 +54,11 @@ function pointerEvent(type: string, x: number, y: number, pointerId = 1) {
 
 function mountTodoItem(
   item: TodoItemType = todo,
-  options: { selectable?: boolean; swipeEnabled?: boolean; seriesDetail?: boolean } = {},
+  options: { selectable?: boolean; swipeEnabled?: boolean; seriesDetail?: boolean; disabled?: boolean } = {},
 ) {
   const onPreview = vi.fn();
   const onSelect = vi.fn();
+  const onToggleComplete = vi.fn();
   const selected = ref(false);
   const onEdit = vi.fn();
   const onDelete = vi.fn();
@@ -72,9 +73,11 @@ function mountTodoItem(
           item,
           selectable: options.selectable,
           seriesDetail: options.seriesDetail,
+          disabled: options.disabled,
           swipeEnabled: options.swipeEnabled,
           swipeOpen: swipeOpen.value,
           onPreview,
+          onToggleComplete,
           selected: selected.value,
           onSelect: (value: boolean) => {
             selected.value = value;
@@ -148,7 +151,7 @@ function mountTodoItem(
     app.unmount();
     host.remove();
   };
-  return { host, onSelect, onPreview, onEdit, onDelete, onSeriesAction, swipeOpen };
+  return { host, onSelect, onPreview, onToggleComplete, onEdit, onDelete, onSeriesAction, swipeOpen };
 }
 
 afterEach(() => {
@@ -163,6 +166,30 @@ afterEach(() => {
 });
 
 describe('TodoItem card preview', () => {
+  it.each(['pending', 'completed'] as const)('标题独立打开 %s 待办详情，不切换完成状态', async (status) => {
+    const { host, onPreview, onToggleComplete } = mountTodoItem({ ...todo, status });
+    await nextTick();
+    const title = host.querySelector<HTMLButtonElement>('button.todo-item__title')!;
+    expect(title.type).toBe('button');
+    expect(title.tabIndex).toBe(0);
+    title.click();
+    expect(onPreview).toHaveBeenCalledOnce();
+    expect(onToggleComplete).not.toHaveBeenCalled();
+    host.querySelector<HTMLElement>('.todo-item__main-check')!.click();
+    expect(onToggleComplete).toHaveBeenCalledWith(status !== 'completed');
+    expect(onPreview).toHaveBeenCalledOnce();
+  });
+
+  it.each([{ disabled: true }, { seriesDetail: true }, { selectable: true }])(
+    '不可预览模式不提供标题详情按钮：%j',
+    async (options) => {
+      const { host, onPreview } = mountTodoItem(todo, options);
+      await nextTick();
+      expect(host.querySelector('button.todo-item__title')).toBeNull();
+      host.querySelector<HTMLElement>('.todo-item__main-line, .todo-item__selection-line')!.click();
+      expect(onPreview).not.toHaveBeenCalled();
+    },
+  );
   it('只读预览禁用修改但保留详情与子事项展开，退出预览恢复操作', async () => {
     const { host, onPreview } = mountTodoItem();
     const user = useUserStore();

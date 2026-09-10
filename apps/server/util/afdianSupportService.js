@@ -209,7 +209,7 @@ export async function createAfdianPackageCheckoutIntent({
   catalogVersion,
   db = pool,
   env = process.env,
-  now = new Date(),
+  now,
 }) {
   const feature = getSupportPackageFeatureState(env);
   if (!feature.checkoutEnabled) {

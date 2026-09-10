@@ -16,6 +16,7 @@ const previewTodoPlanUpdateV2 = vi.fn();
 const updateTodoPlanV2 = vi.fn();
 const snoozeTodo = vi.fn();
 const completeTodo = vi.fn();
+const completeInbox = vi.fn();
 const success = vi.fn();
 const error = vi.fn();
 const routerPush = vi.fn();
@@ -27,7 +28,7 @@ vi.mock('@/api/todoApi', () => ({
   snoozeTodo,
   completeTodo,
 }));
-vi.mock('@/api/inboxApi', () => ({ completeInbox: vi.fn() }));
+vi.mock('@/api/inboxApi', () => ({ completeInbox }));
 vi.mock('@/api/commonApi', () => ({ recordOperation: vi.fn() }));
 vi.mock('@/utils/common', () => ({ generateUUID: vi.fn(() => 'todo-idempotency-key') }));
 vi.mock('@/composables/useGuestGuard', () => ({ blockGuestWrite: vi.fn(() => false) }));
@@ -125,12 +126,57 @@ afterEach(() => {
   updateTodoPlanV2.mockReset();
   snoozeTodo.mockReset();
   completeTodo.mockReset();
+  completeInbox.mockReset();
   success.mockReset();
   error.mockReset();
   routerPush.mockReset();
 });
 
 describe('工作台待整理明细入口', () => {
+  it('标题直接进入笔记整理并保留返回来源', async () => {
+    const host = await mountSection([], { inboxItems: inboxItems(1) });
+    host.querySelector<HTMLButtonElement>('.today-action-row__open')?.click();
+    await nextTick();
+    expect(routerPush).toHaveBeenCalledWith({
+      path: '/noteLibrary/note-1',
+      query: { organize: 'inbox', from: '/workbenches' },
+    });
+  });
+
+  it('完成操作处理中不可重复触发，成功后移除条目', async () => {
+    let resolve!: (value: { status: number }) => void;
+    completeInbox.mockReturnValue(
+      new Promise((done) => {
+        resolve = done;
+      }),
+    );
+    const host = await mountSection([], { inboxItems: inboxItems(1) });
+    const button = host.querySelector<HTMLButtonElement>('.today-action-row__complete')!;
+    button.click();
+    await nextTick();
+    expect(button.disabled).toBe(true);
+    expect(host.querySelector<HTMLButtonElement>('.today-action-row__open')?.disabled).toBe(true);
+    button.click();
+    expect(completeInbox).toHaveBeenCalledTimes(1);
+    expect(completeInbox).toHaveBeenCalledWith([{ resourceType: 'note', resourceId: 'note-1' }]);
+    resolve({ status: 200 });
+    await Promise.resolve();
+    await nextTick();
+    expect(host.querySelector('.today-action-row')).toBeNull();
+    expect(routerPush).not.toHaveBeenCalled();
+  });
+
+  it('完成失败保留条目并允许重试', async () => {
+    completeInbox.mockRejectedValue(new Error('offline'));
+    const host = await mountSection([], { inboxItems: inboxItems(1) });
+    host.querySelector<HTMLButtonElement>('.today-action-row__complete')!.click();
+    await Promise.resolve();
+    await nextTick();
+    expect(host.querySelector('.today-action-row')).not.toBeNull();
+    expect(host.querySelector<HTMLButtonElement>('.today-action-row__complete')?.disabled).toBe(false);
+    expect(error).toHaveBeenCalled();
+  });
+
   it('查看全部直达整理中心的待整理子页', async () => {
     const host = await mountSection([], { inboxItems: inboxItems(1), inboxTotal: 1 });
     const button = [...host.querySelectorAll<HTMLButtonElement>('button')].find(

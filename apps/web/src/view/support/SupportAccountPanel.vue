@@ -245,7 +245,7 @@
     border-radius: 999px;
     color: var(--success-color);
     background: var(--card-background);
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
   }
 

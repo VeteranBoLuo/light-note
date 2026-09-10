@@ -460,14 +460,15 @@
       :sections="typePickerSections"
       :note="$t('note.pickEditorTip')"
     />
-    <ActionCardModal
+    <NoteBatchExportDialog
       v-if="batchExportModalVisible"
       v-model:visible="batchExportModalVisible"
-      mask-closable
-      :title="$t('note.batchExportTitle')"
-      width="min(680px, 88vw)"
-      :sections="batchExportSections"
-      :note="$t('note.batchExportArchiveHint', { count: selectedVisibleCount })"
+      v-model:settings="batchExportSettings"
+      :notes="batchExportNotes"
+      :busy="batchExporting"
+      :error="batchExportError"
+      :completed="batchExportCompleted"
+      @export="exportSelectedNotes"
     />
     <ActionCardModal
       v-if="singleNoteExportModalVisible"
@@ -509,6 +510,16 @@
             @change="setAllVisibleChecked"
           />
         </span>
+      </template>
+      <template #mobile-actions>
+        <BButton
+          class="batch-action-delete"
+          :disabled="!selectedVisibleCount || selection.busy.value"
+          @click="batchDeleteNote"
+        >
+          <SvgIcon :src="icon.noteDetail.delete" size="16" aria-hidden="true" />
+          {{ $t('common.delete') }}
+        </BButton>
       </template>
       <template #actions>
         <BButton :disabled="!selectedVisibleCount || selection.busy.value" @click="openBatchTags">
@@ -702,7 +713,13 @@
   import { isLightNoteAndroidApp } from '@/utils/androidBridge';
   import { prefetchResolvedRoute } from '@/utils/routePrefetch';
   import { deliverExportViaAndroidBridge } from '@/utils/androidFileExport';
-  import type { NoteBatchExportMode } from '@/utils/noteBatchExport';
+  import {
+    createNoteExportSettings,
+    noteExportFormat,
+    orderNotesForMergedExport,
+    type BatchExportNote,
+    type NoteBatchExportMode,
+  } from '@/utils/noteBatchExport';
   import {
     RESOURCE_LIST_PAGE_SIZE,
     isNearResourceScrollEnd,
@@ -738,6 +755,9 @@
   );
   const NoteShareModal = createDeferredLibraryFeature(
     () => import('@/components/noteLibrary/share/NoteShareModal.vue'),
+  );
+  const NoteBatchExportDialog = createDeferredLibraryFeature(
+    () => import('@/components/noteLibrary/NoteBatchExportDialog.vue'),
   );
   const ActionCardModal = createDeferredLibraryFeature(() => import('@/components/base/ActionCardModal.vue'));
   const NewNotePickerModal = createDeferredLibraryFeature(
@@ -968,6 +988,10 @@
   let exportOperation: SelectionOperation | null = null;
   const batchExportModalVisible = ref(false);
   const batchExporting = ref(false);
+  const batchExportNotes = ref<BatchExportNote[]>([]);
+  const batchExportSettings = ref(createNoteExportSettings());
+  const batchExportError = ref('');
+  const batchExportCompleted = ref(0);
   const singleNoteExportModalVisible = ref(false);
   const singleNoteExporting = ref(false);
   const activeExportNote = ref<any | null>(null);
@@ -2868,6 +2892,24 @@
     const operation = await selection.prepare(undefined, MAX_NOTE_BATCH_ACTION_ITEMS);
     if (!operation || !selection.current(operation)) return;
     exportOperation = operation;
+    const remaining = new Map(operation.items.map((item) => [String(item.id), item]));
+    const sorted = [] as typeof operation.items;
+    for (const note of viewNoteList.value) {
+      const item = remaining.get(String(note.id));
+      if (item) {
+        sorted.push(item);
+        remaining.delete(String(note.id));
+      }
+    }
+    sorted.push(...remaining.values());
+    batchExportNotes.value = sorted.map((item) => ({
+      id: String(item.id),
+      title: item.title,
+      type: item.noteType || 'html',
+    }));
+    batchExportSettings.value = createNoteExportSettings(batchExportNotes.value);
+    batchExportError.value = '';
+    batchExportCompleted.value = 0;
     batchExportModalVisible.value = true;
   }
 
@@ -3005,53 +3047,16 @@
     }
   }
 
-  const batchExportSections = computed(() => [
-    {
-      key: 'format',
-      title: '',
-      actions: [
-        {
-          key: 'original',
-          label: t('note.batchExportOriginal'),
-          description: t('note.batchExportOriginalDesc'),
-          tag: t('note.batchExportRecommended'),
-          onClick: () => void exportSelectedNotes('original'),
-        },
-        {
-          key: 'html',
-          label: t('note.batchExportHtml'),
-          description: t('note.batchExportHtmlDesc'),
-          onClick: () => void exportSelectedNotes('html'),
-        },
-        {
-          key: 'markdown',
-          label: t('note.batchExportMarkdown'),
-          description: t('note.batchExportMarkdownDesc'),
-          onClick: () => void exportSelectedNotes('markdown'),
-        },
-        {
-          key: 'pdf',
-          label: t('note.batchExportPdf'),
-          description: t('note.batchExportPdfDesc'),
-          onClick: () => void exportSelectedNotes('pdf'),
-        },
-      ],
-    },
-  ]);
-
-  async function deliverBatchExportArchive(
-    blob: Blob,
-    fileName: string,
+  async function deliverBatchExportFile(
+    file: { content: string | Blob; fileName: string; format: 'zip' | 'html' | 'md' | 'pdf'; mimeType: string },
     noteId: string,
     operation: SelectionOperation,
   ) {
     if (isLightNoteAndroidApp()) {
       const outcome = await deliverExportViaAndroidBridge({
         noteId,
-        content: blob,
-        fileName,
-        format: 'zip',
-        mimeType: 'application/zip',
+        ...file,
+        isCurrent: () => selection.current(operation) && batchExportModalVisible.value,
       });
       if (!selection.current(operation)) return false;
       if (outcome.ok) {
@@ -3066,9 +3071,8 @@
     }
 
     const result = await deliverGeneratedFile({
-      content: blob,
-      fileName,
-      mimeType: 'application/zip',
+      ...file,
+      isCurrent: () => selection.current(operation) && batchExportModalVisible.value,
       preferShare: bookmark.isMobile || bookmark.isTablet,
     });
     if (!selection.current(operation)) return false;
@@ -3080,66 +3084,78 @@
     return true;
   }
 
-  async function exportSelectedNotes(mode: NoteBatchExportMode) {
+  async function exportSelectedNotes() {
     const op = exportOperation;
-    if (!op || !selection.current(op) || batchExporting.value) return;
-    const selected = op.items;
-    batchExportModalVisible.value = false;
+    if (!op || !selection.current(op) || batchExporting.value || !batchExportModalVisible.value) return;
+    const settings = { ...batchExportSettings.value, orderedIds: [...batchExportSettings.value.orderedIds] };
+    const snapshots = batchExportNotes.value.map((note) => ({ ...note }));
+    if (settings.packaging === 'merged' && snapshots.some((note) => note.type === 'drawing')) return;
+    const mode = noteExportFormat(settings);
+    const selectedIds = snapshots.map((note) => note.id);
+    const current = () => selection.current(op) && batchExportModalVisible.value && exportOperation === op;
     batchExporting.value = true;
-    const selectedIds = selected.map((note) => String(note.id));
-    const closePreparing = message.loading(t('note.batchExportPreparing', { count: selectedIds.length }), 0);
-    let preparingClosed = false;
-    const stopPreparing = () => {
-      if (preparingClosed) return;
-      preparingClosed = true;
-      closePreparing();
-    };
-
+    batchExportError.value = '';
+    batchExportCompleted.value = 0;
     try {
       const response = await apiBasePost('/api/note/getNotesForExport', { ids: selectedIds }, { silent: true });
-      if (!selection.current(op)) return;
-      const notes = response.status === 200 && Array.isArray(response.data?.notes) ? response.data.notes : [];
-      if (!notes.length) {
-        message.error(response.msg || t('note.batchExportFailed'));
-        return;
-      }
-
-      const { buildBatchNoteExportArchive } = await import('@/utils/noteBatchExport');
-      const archive = await buildBatchNoteExportArchive(notes, mode, {
+      if (!current()) return;
+      if (response.status !== 200 || !Array.isArray(response.data?.notes)) throw new Error('NOTE_EXPORT_READ_FAILED');
+      const notes = response.data.notes as BatchExportNote[];
+      const { buildBatchNoteExportArchive, buildMergedNoteExport } = await import('@/utils/noteBatchExport');
+      const options = {
         fallbackTitle: t('noteDetail.unnamedDoc'),
         lang: locale.value,
-      });
-      if (!selection.current(op)) return;
-      if (!archive.blob || !archive.entries.length) {
-        message.error(t('note.batchExportFailed'));
-        return;
-      }
-
-      stopPreparing();
-      const fileName = `lightnote-notes-${new Date().toISOString().slice(0, 10)}.zip`;
-      const delivered = await deliverBatchExportArchive(archive.blob, fileName, String(notes[0].id), op);
-      if (!delivered || !selection.current(op)) return;
-      recordOperation({
-        module: '笔记库',
-        operation: `批量导出笔记成功【${archive.entries.length}篇/${mode}】`,
-      });
-      if (archive.entries.length < selectedIds.length) {
-        message.warning(t('note.batchExportPartial', { count: archive.entries.length, total: selectedIds.length }));
+        onProgress: (completed: number) => {
+          if (current()) batchExportCompleted.value = completed;
+        },
+      };
+      let file: Parameters<typeof deliverBatchExportFile>[0];
+      let count = notes.length;
+      if (settings.packaging === 'merged') {
+        const ordered = orderNotesForMergedExport(notes, snapshots, settings.orderedIds);
+        const result = await buildMergedNoteExport(ordered, settings.mergedFormat, {
+          ...options,
+          title: settings.exportName.trim() || settings.defaultName,
+          showDocumentTitle: settings.showDocumentTitle,
+          keepNoteTitles: settings.keepNoteTitles,
+          isCurrent: current,
+        });
+        if (!current()) return;
+        if (!result.file) throw new Error('NOTE_EXPORT_MERGE_FAILED');
+        file = result.file;
       } else {
-        message.success(t('note.batchExportSuccess', { count: archive.entries.length }));
+        const archive = await buildBatchNoteExportArchive(notes, mode, options);
+        if (!current()) return;
+        if (!archive.blob || !archive.entries.length) throw new Error('NOTE_EXPORT_ARCHIVE_FAILED');
+        count = archive.entries.length;
+        file = {
+          content: archive.blob,
+          fileName: `lightnote-notes-${new Date().toISOString().slice(0, 10)}.zip`,
+          format: 'zip',
+          mimeType: 'application/zip',
+        };
       }
-    } catch (error) {
-      if (selection.current(op)) {
-        console.error('批量导出笔记失败:', error);
-        message.error(t('note.batchExportFailed'));
-      }
-    } finally {
-      stopPreparing();
+      if (!current()) return;
+      const delivered = await deliverBatchExportFile(file, selectedIds[0], op);
+      if (!delivered || !current()) return;
+      recordOperation({ module: '笔记库', operation: `批量导出笔记成功【${count}篇/${settings.packaging}/${mode}】` });
+      if (count < selectedIds.length)
+        message.warning(t('note.batchExportPartial', { count, total: selectedIds.length }));
+      else message.success(t('noteExportSettings.started', { count }));
+      batchExportModalVisible.value = false;
       selection.finish(op);
-      if (exportOperation === op) {
-        exportOperation = null;
-        batchExporting.value = false;
-      }
+      exportOperation = null;
+    } catch (error) {
+      if (current())
+        batchExportError.value = t(
+          error instanceof Error && error.message === 'NOTE_EXPORT_SCOPE_CHANGED'
+            ? 'noteExportSettings.changed'
+            : settings.packaging === 'merged'
+              ? 'noteExportSettings.failed'
+              : 'note.batchExportFailed',
+        );
+    } finally {
+      if (exportOperation === op || !exportOperation) batchExporting.value = false;
     }
   }
 

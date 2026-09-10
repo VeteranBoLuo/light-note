@@ -71,7 +71,7 @@ vi.mock('@/api/supportApi', () => ({
   afdianLeaderboardAvatarUrl: (publicId: string) => '/api/support/leaderboard/avatar/' + publicId,
 }));
 vi.mock('@/api/commonApi', () => ({ recordOperation: mocks.recordOperation }));
-vi.mock('@/store', () => ({ bookmarkStore: () => ({ isMobile: false }) }));
+vi.mock('@/store', () => ({ useUserStore: () => ({ id: 'test-user' }), bookmarkStore: () => ({ isMobile: false }) }));
 vi.mock('vue-router', async (importOriginal) => {
   const original = await importOriginal<typeof import('vue-router')>();
   return {
@@ -128,10 +128,14 @@ describe('支持轻笺纯赞助页面', () => {
   it('用正向文案区分赞助与购买，并只用跟踪赞助意图打开爱发电', async () => {
     const host = await mountPage();
     expect(host.querySelector('h1')?.textContent).toContain('每一份支持');
-    expect(host.textContent).toContain('默认公开加入支持者榜');
-    expect(host.querySelector<HTMLElement>('[role="switch"]')?.getAttribute('aria-checked')).toBe('true');
+    expect(host.textContent).toContain('参与榜单 · 公开昵称与头像');
+    [...host.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent?.includes('修改公开设置'))
+      ?.click();
+    await nextTick();
+    expect(document.querySelector<HTMLElement>('[role="switch"]')?.getAttribute('aria-checked')).toBe('true');
     expect(host.textContent).not.toContain('不赠送');
-    expect(host.textContent).not.toContain('纯支持');
+    expect(host.textContent).toContain('不包含 AI 额度或云空间套餐');
     expect(host.querySelector('.support-tier-card__nature')).toBeNull();
     expect(host.textContent).toContain('需要 AI 额度或云空间');
     expect(host.textContent).toContain('赞助记录和购买记录会分别展示');
@@ -173,17 +177,22 @@ describe('支持轻笺纯赞助页面', () => {
       recentOrders: [],
     });
     const host = await mountPage();
-    expect(host.textContent).toContain('当前以匿名支持者展示');
+    expect(host.textContent).toContain('参与榜单 · 匿名展示');
+    [...host.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent?.includes('修改公开设置'))
+      ?.click();
+    await nextTick();
+    expect(document.body.textContent).toContain('当前以匿名支持者展示');
     expect(host.textContent).toContain('这里只展示爱发电已确认收款、并已加入轻笺账号支持记录的真实赞助');
 
-    host.querySelector<HTMLElement>('[role="switch"]')?.click();
+    document.querySelector<HTMLElement>('[role="switch"]')?.click();
     await vi.waitFor(() =>
       expect(mocks.updateAfdianPublicPreference).toHaveBeenCalledWith({
         participateInRanking: true,
         showIdentity: true,
       }),
     );
-    const leaveButton = host.querySelector<HTMLButtonElement>('.support-account-panel__participation');
+    const leaveButton = document.querySelector<HTMLButtonElement>('.support-account-panel__participation');
     expect(leaveButton?.textContent).toContain('退出榜单');
     await vi.waitFor(() => expect(leaveButton?.disabled).toBe(false));
     leaveButton?.click();
@@ -194,6 +203,39 @@ describe('支持轻笺纯赞助页面', () => {
         showIdentity: false,
       }),
     );
+  });
+
+  it('未关联账号可从摘要直接发起爱发电关联', async () => {
+    const host = await mountPage();
+    const button = host.querySelector<HTMLButtonElement>('.support-account-link');
+    expect(button?.textContent).toContain('关联爱发电');
+    expect(button?.disabled).toBe(false);
+    button?.click();
+    expect(mocks.openAfdianOAuthPage).toHaveBeenCalledOnce();
+    expect(mocks.openTrackedAfdianCheckout).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { authenticated: true, linked: true, oauthAvailable: true, visible: false },
+    { authenticated: false, linked: false, oauthAvailable: true, visible: false },
+    { authenticated: true, linked: false, oauthAvailable: false, visible: true },
+  ])('关联入口遵守账号和服务状态 $authenticated/$linked/$oauthAvailable', async (state) => {
+    mocks.getAfdianSupportState.mockResolvedValueOnce({
+      ...state,
+      orderSyncAvailable: true,
+      orderCount: 0,
+      totalAmount: '0.00',
+      publicPreference: { participateInRanking: true, showIdentity: true, adminHidden: false },
+      recentOrders: [],
+    });
+    const host = await mountPage();
+    const button = host.querySelector<HTMLButtonElement>('.support-account-link');
+    expect(Boolean(button)).toBe(state.visible);
+    if (button) {
+      expect(button.disabled).toBe(true);
+      button.click();
+    }
+    expect(mocks.openAfdianOAuthPage).not.toHaveBeenCalled();
   });
 
   it('游客走爱发电主页并提示关联只用于赞助归属和上榜', async () => {
@@ -208,7 +250,7 @@ describe('支持轻笺纯赞助页面', () => {
       recentOrders: [],
     });
     const host = await mountPage();
-    expect(host.textContent).toContain('未登录时仍可直接赞助');
+    expect(host.textContent).toContain('直接从爱发电主页赞助不会自动归入轻笺');
     expect(host.textContent).toContain('如需上榜');
     host.querySelector<HTMLButtonElement>('.support-primary-action')?.click();
     await nextTick();

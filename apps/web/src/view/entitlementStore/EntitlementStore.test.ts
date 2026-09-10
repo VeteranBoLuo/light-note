@@ -8,6 +8,16 @@ const routeState = vi.hoisted(() => ({ query: {} as Record<string, string> }));
 const mocks = vi.hoisted(() => ({
   getCatalog: vi.fn(),
   getState: vi.fn(),
+  createIntent: vi.fn(async () => ({
+    intentId: '11111111-1111-4111-8111-111111111111',
+    url: 'https://afdian.com/a/lightnote',
+  })),
+  queryIntent: vi.fn(async () => ({
+    intentId: '11111111-1111-4111-8111-111111111111',
+    status: 'pending',
+    amount: 10,
+    benefit: { aiTokens: 720000, storageMb: 128 },
+  })),
   openCheckout: vi.fn(() => true),
   recordOperation: vi.fn(() => Promise.resolve()),
   routerBack: vi.fn(),
@@ -16,10 +26,20 @@ const mocks = vi.hoisted(() => ({
   messageWarning: vi.fn(),
 }));
 
-vi.mock('@/config/support', () => ({ openTrackedEntitlementCheckout: mocks.openCheckout }));
+vi.mock('@/config/support', () => ({ openAfdianSupportPage: mocks.openCheckout }));
+vi.mock('@/utils/mobileOverlayHistory', () => ({
+  closeCurrentMobileOverlayThen: async (close: () => void, next: () => void) => {
+    close();
+    await nextTick();
+    return next();
+  },
+}));
 vi.mock('@/api/supportApi', () => ({
   getEntitlementStoreCatalog: mocks.getCatalog,
   getEntitlementStoreState: mocks.getState,
+  getCampaignEntry: vi.fn(async () => null),
+  createCheckoutIntent: mocks.createIntent,
+  queryCheckoutIntent: mocks.queryIntent,
 }));
 vi.mock('@/api/commonApi', () => ({ recordOperation: mocks.recordOperation }));
 vi.mock('@/store', () => ({
@@ -151,50 +171,22 @@ describe('独立资源商店', () => {
     cleanup = undefined;
   });
 
-  it('用正向文案突出永久资源、账号预计到账和活动套餐', async () => {
+  it('常驻套餐核对后创建可查询的原单，活动不再内嵌为第二个商城', async () => {
     const host = await mountStore();
-    await vi.waitFor(() => expect(host.textContent).toContain('周年组合包'));
-    expect(host.querySelector('h1')?.textContent).toBe('给灵感和资料，多一点余量');
-    expect(host.textContent).toContain('购买一次 · 永久叠加');
-    expect(host.textContent).toContain('灵感不断档，资料放心存');
-    expect(host.textContent).toContain('本账号权益实时核验');
-    expect(host.textContent).toContain('重点查看当前账号的预计到账');
-    expect(host.textContent).toContain('一次补齐 AI 与空间余量');
-    expect(host.textContent).not.toContain('日常使用通常不需要购买');
-    expect(host.textContent).not.toContain('超高强度使用');
-    expect(host.textContent).not.toContain('额外扩展');
-    expect(host.textContent).not.toContain('不赠送');
-    expect(host.textContent).toContain('预计可享首购加量');
-    expect(host.textContent).toContain('比同档分别购买节省 ¥2');
-    expect(host.textContent).toContain('250万 AI 额度 + 640 MB 云空间');
-    expect(host.textContent).toContain('还可购买 1 次');
-    expect(host.textContent).toContain('最近购买');
-    expect(host.textContent).toContain('650万 AI 额度 + 2 GB 云空间');
-    expect(host.querySelector('.package-card.is-campaign')?.textContent).not.toContain('首购');
-    expect(host.textContent).not.toMatch(/SKU|权益账本|结算快照|幂等/);
-
-    const actionWraps = host.querySelectorAll<HTMLElement>('.package-card__action-wrap');
-    const actions = host.querySelectorAll<HTMLButtonElement>('.package-card__action');
-    expect(actionWraps).toHaveLength(2);
-    expect(actions).toHaveLength(2);
-    expect([...actionWraps].every((wrapper) => wrapper.querySelector('.package-card__action'))).toBe(true);
-    actions[0]?.click();
+    expect(host.textContent).toContain('永久有效');
+    expect(host.textContent).not.toContain('周年组合包');
+    const action = host.querySelector<HTMLButtonElement>('.package-card__action');
+    action?.click();
     await nextTick();
-    expect(mocks.openCheckout).not.toHaveBeenCalled();
-    expect(document.body.textContent).toContain('确认购买');
-    expect(document.body.textContent).toContain('周年组合包');
     expect(document.body.textContent).toContain('到账账号菠萝');
-    document.body.querySelector<HTMLButtonElement>('.checkout-modal__confirm')?.click();
-    expect(mocks.openCheckout).toHaveBeenNthCalledWith(1, campaign.campaignSkuId, campaign.catalogVersion);
-
-    actions[1]?.click();
-    await nextTick();
-    expect(document.body.textContent).toContain('AI + 云空间 · 灵感加油包');
     expect(document.body.textContent).toContain('本次预计到账72万 AI 额度 + 128 MB 云空间');
-    expect(document.body.textContent).toContain('当前预计到账包含本账号可享的首购加量');
+    expect(mocks.createIntent).not.toHaveBeenCalled();
     document.body.querySelector<HTMLButtonElement>('.checkout-modal__confirm')?.click();
-    expect(mocks.openCheckout).toHaveBeenNthCalledWith(1, campaign.campaignSkuId, campaign.catalogVersion);
-    expect(mocks.openCheckout).toHaveBeenNthCalledWith(2, 'combo-10', 'support-packages-v3');
+    await vi.waitFor(() =>
+      expect(mocks.createIntent).toHaveBeenCalledWith('combo-10', 'support-packages-v3', undefined),
+    );
+    expect(mocks.openCheckout).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(document.body.textContent).toContain('前往爱发电付款'));
   });
 
   it('本地只读目录完整显示云空间套餐并保持结算关闭', async () => {
@@ -215,9 +207,11 @@ describe('独立资源商店', () => {
       campaigns: [],
     });
     const host = await mountStore();
-    await vi.waitFor(() => expect(host.textContent).toContain('套餐预览'));
+    await vi.waitFor(() => expect(host.textContent).toContain('当前环境关闭支付'));
+    expect(host.textContent).not.toContain('套餐预览');
     const cards = host.querySelectorAll<HTMLElement>('.package-card:not(.is-campaign)');
     expect(cards).toHaveLength(4);
+    expect(host.querySelector('.package-card__choice')).toBeNull();
     expect([...cards].map((card) => card.textContent)).toEqual([
       expect.stringContaining('128 MB'),
       expect.stringContaining('512 MB'),
@@ -265,7 +259,7 @@ describe('独立资源商店', () => {
     try {
       const host = await mountStore();
       await vi.waitFor(() => expect(host.textContent).toContain('购买 ¥10'));
-      host.querySelectorAll<HTMLButtonElement>('.package-card__action')[1]?.click();
+      host.querySelectorAll<HTMLButtonElement>('.package-card__action')[0]?.click();
       await nextTick();
       expect(document.body.querySelector<HTMLButtonElement>('.checkout-modal__confirm')?.disabled).toBe(false);
       mocks.getCatalog.mockResolvedValueOnce({
@@ -320,6 +314,11 @@ describe('独立资源商店', () => {
     });
     const host = await mountStore();
     await vi.waitFor(() => expect(host.textContent).toContain('首购加量已用'));
+    expect(host.querySelector('.package-card__benefit-row--primary')).toBeNull();
+    expect(host.querySelectorAll('.package-card__benefit-row')).toHaveLength(1);
+    expect(host.querySelector('.package-card__benefit-row--base')?.textContent).toContain(
+      '基础到账60万 AI 额度 + 128 MB 云空间',
+    );
     host.querySelector<HTMLButtonElement>('.package-card__action')?.click();
     await nextTick();
     expect(document.body.textContent).toContain('本次预计到账60万 AI 额度 + 128 MB 云空间');

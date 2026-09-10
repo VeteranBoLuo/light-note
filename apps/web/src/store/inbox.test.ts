@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
+import { nextTick, watch } from 'vue';
 
 const listInbox = vi.fn();
 const countInbox = vi.fn();
@@ -24,6 +25,20 @@ describe('inbox store', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     setActivePinia(createPinia());
+  });
+
+  it('每次捕获成功都通知订阅者，即使待整理数量没有变化', async () => {
+    const store = useInboxStore();
+    store.pendingTotal = 5;
+    const refresh = vi.fn();
+    const stop = watch(() => store.captureRevision, refresh);
+    store.notifyCaptured();
+    await nextTick();
+    store.notifyCaptured();
+    await nextTick();
+    expect(refresh).toHaveBeenCalledTimes(2);
+    expect(store.pendingTotal).toBe(5);
+    stop();
   });
 
   it('账号切换时清空列表、选择和旧请求标识', () => {

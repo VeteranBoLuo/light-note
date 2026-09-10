@@ -95,3 +95,24 @@ describe('image preview state and retries', () => {
     expect(artifactState({ preview_metadata_json: 'invalid' }).presentation).toBe('full');
   });
 });
+
+it('represents completed audio without artwork as a normal terminal state', async () => {
+  const row = {
+    id: 7,
+    asset_id: 4,
+    identity_hash: 'identity',
+    strategy_version: 2,
+    status: 'ready',
+    preview_metadata_json: '{"cover":"absent"}',
+  };
+  resolve.mockResolvedValue({ asset: { id: 4, source_version: 'current' } });
+  const db = database([row]);
+  const sign = vi.fn();
+  const [state] = await resolveImagePreviews('u', [source], { db, sign });
+  const items = [{ imagePreview: source }];
+  await hydrateImagePreviewStates(items, 'u', { db, sign });
+  for (const result of [state, items[0].imagePreview])
+    expect(result).toMatchObject({ status: 'unsupported', url: null, errorCode: null, retryable: false });
+  expect(sign).not.toHaveBeenCalled();
+  expect(db.c.query.mock.calls.some(([sql]) => sql.startsWith('INSERT'))).toBe(false);
+});

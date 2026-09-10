@@ -1,6 +1,6 @@
 import type { ResourceType } from '@/config/resourceColor.ts';
 
-export type RecentResourceType = Exclude<ResourceType, 'tag'>;
+export type RecentResourceType = Exclude<ResourceType, 'tag'> | 'todo';
 export type AdminRecentPeriod = 'recent' | 'today';
 export type AdminRecentFilterType = 'all' | 'resource' | 'user' | RecentResourceType;
 
@@ -13,6 +13,7 @@ export type AdminRecentResource = {
   id: string | number;
   type: RecentResourceType;
   title?: string | null;
+  status?: 'pending' | 'completed';
   userId: string;
   userName?: string | null;
   userRemark?: string | null;

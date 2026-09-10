@@ -1,217 +1,196 @@
 <template>
-  <div class="support-page">
+  <div
+    class="support-page commerce-surface"
+    :class="{ 'is-mobile': bookmark.isMobile, 'is-compact': !bookmark.isDesktop, 'is-dense': bookmark.isCompactLayout }"
+  >
     <MobileTopBar v-if="bookmark.isMobile" />
-    <div v-auto-scrollbar class="support-page__scroll">
-      <main class="support-shell">
-        <header class="support-hero">
-          <BButton v-if="!bookmark.isMobile" class="support-back" @click="goBack">
-            <SvgIcon :src="icon.arrow_left" size="16" aria-hidden="true" />
-            <span>{{ t('common.back') }}</span>
-          </BButton>
-
-          <div class="support-hero__layout">
-            <div class="support-hero__copy">
-              <div class="support-kicker">
-                <span class="support-kicker__icon" aria-hidden="true">
-                  <SvgIcon :src="icon.support.heart" size="22" />
-                </span>
-                <span>{{ t('support.kicker') }}</span>
-              </div>
-              <h1>{{ t('support.heroTitle') }}</h1>
-              <p>{{ t('support.heroDescription') }}</p>
-              <div class="support-hero__signals">
-                <BChip tone="success">{{ t('support.heroSignalFree') }}</BChip>
-                <BChip tone="neutral">{{ t('support.heroSignalLeaderboard') }}</BChip>
-              </div>
-              <div class="support-hero__actions">
-                <BButton
-                  class="support-primary-action"
-                  type="primary"
-                  size="large"
-                  :disabled="!supportConfigured || !supportStateReady"
-                  @click="handleSupport"
-                  v-click-log="{ module: '支持轻笺', operation: '前往爱发电赞助' }"
+    <div v-auto-scrollbar class="support-page__scroll"
+      ><div class="commerce-page-content"
+        ><div class="commerce-landscape commerce-landscape--support" aria-hidden="true"
+          ><img src="/brand-scenes/support-strip-footer.webp" alt="" loading="lazy" decoding="async"
+        /></div>
+        <BrandSceneHero
+          scene="support"
+          :title="t('autumn.reference.supportTitle')"
+          :description="t('autumn.reference.supportIntro')"
+          :eyebrow="t('support.pageTitle')" />
+        <main class="support-shell">
+          <div class="support-top">
+            <section class="support-section support-options" aria-labelledby="support-options-title">
+              <div class="support-section__heading"
+                ><h2 id="support-options-title">{{ t('support.optionsTitle') }}</h2
+                ><p>{{ t('support.optionsDescription') }}</p></div
+              >
+              <div class="support-tier-grid">
+                <BCard
+                  v-for="(option, index) in supportOptions"
+                  :key="option.key"
+                  as="article"
+                  class="support-tier-card"
+                  :class="{ 'is-recommended': option.key === 'server' }"
+                  padding="12px"
+                  radius="12px"
                 >
-                  <SvgIcon :src="icon.support.heart" size="18" aria-hidden="true" />
-                  <span>{{ supportPrimaryActionLabel }}</span>
-                </BButton>
-                <BButton size="large" @click="scrollToLeaderboard">
-                  <span>{{ t('support.viewLeaderboardAction') }}</span>
-                  <SvgIcon :src="icon.arrow_right" size="16" aria-hidden="true" />
-                </BButton>
+                  <span v-if="option.key === 'server'" class="support-tier-card__recommended">{{
+                    t('autumn.reference.encourage')
+                  }}</span>
+                  <div class="support-tier-card__header"
+                    ><span class="support-tier-card__icon"><SvgIcon :src="option.icon" size="23" /></span
+                    ><div
+                      ><div class="support-tier-card__amount"
+                        ><template v-if="option.amount !== null"
+                          ><span>¥</span><strong>{{ option.amount }}</strong></template
+                        ><strong v-else class="support-tier-card__custom">{{
+                          t('support.optionCustomAmount')
+                        }}</strong></div
+                      ><h3>{{ t(`autumn.reference.${['coffee', 'encourage', 'trust', 'custom'][index]}`) }}</h3></div
+                    ></div
+                  >
+                  <p>{{ t(`autumn.reference.supportTier${index + 1}`) }}</p>
+                  <BButton
+                    class="support-tier-card__action"
+                    type="primary"
+                    :disabled="!option.configured || !supportStateReady || supportStateError"
+                    @click="handleSupportOption(option)"
+                    >{{
+                      option.amount === null
+                        ? t('support.optionCustomAmount')
+                        : t('autumn.reference.donate', { amount: option.amount })
+                    }}</BButton
+                  >
+                </BCard>
               </div>
-              <span v-if="supportConfigured" class="support-hero__caption">{{ supportPrimaryActionHint }}</span>
-              <span v-else class="support-action-card__unavailable" role="status">{{ t('support.unavailable') }}</span>
-            </div>
-
-            <BCard class="support-hero-visual" variant="raised" padding="0" radius="22px">
-              <div class="support-hero-visual__halo" aria-hidden="true"></div>
-              <div class="support-hero-visual__community" aria-hidden="true">
-                <span class="is-left"><SvgIcon :src="icon.settings.account" size="20" /></span>
-                <span class="is-heart"><SvgIcon :src="icon.support.heart" size="34" /></span>
-                <span class="is-right"><SvgIcon :src="icon.settings.account" size="20" /></span>
-              </div>
-              <div class="support-hero-visual__copy">
-                <span>{{ t('support.heroVisualEyebrow') }}</span>
-                <strong>{{ t('support.heroVisualTitle') }}</strong>
-                <p>{{ t('support.heroVisualDescription') }}</p>
+              <p v-if="!supportConfigured" class="support-privacy-summary" role="status">{{ t('support.unavailable') }}</p>
+              <p v-if="supportStateError" role="alert"
+                >{{ t('autumn.stateError') }}
+                <BButton size="small" @click="loadSupportState">{{ t('common.retry') }}</BButton></p
+              >
+              <p
+                v-if="supportStateReady && !supportStateError && supportState.authenticated"
+                class="support-privacy-summary"
+                ><SvgIcon :src="icon.settings.privacy" size="14" /><span>{{
+                  t(
+                    supportState.publicPreference.adminHidden || !supportState.publicPreference.participateInRanking
+                      ? 'autumn.privacyOff'
+                      : supportState.publicPreference.showIdentity
+                        ? 'autumn.privacyPublic'
+                        : 'autumn.privacyAnonymous',
+                  )
+                }}</span
+                ><BButton class="scene-link" size="small" @click="accountVisible = true">{{
+                  t('autumn.privacyEdit')
+                }}</BButton></p
+              >
+              <p v-else class="support-privacy-summary">{{ supportPrimaryActionHint }}</p>
+            </section>
+            <BCard as="aside" class="support-store-gateway" padding="18px" radius="13px">
+              <h2><SvgIcon :src="icon.support.store" size="24" />{{ t('support.storeGatewayTitle') }}</h2
+              ><p>{{ t('autumn.reference.resourceInvitation') }}</p>
+              <div class="support-cross-art"
+                ><img src="/brand-scenes/cloud-object.webp" alt="" loading="lazy" /><div
+                  ><span><SvgIcon :src="icon.growth.ai" size="16" />{{ t('entitlementStore.tabs.ai') }}</span
+                  ><span><SvgIcon :src="icon.growth.storage" size="16" />{{ t('entitlementStore.tabs.storage') }}</span
+                  ><span
+                    ><SvgIcon :src="icon.growth.reward" size="16" />{{ t('entitlementStore.tabs.combo') }}</span
+                  ></div
+                ></div
+              >
+              <div class="support-cross-footer">
+                <BButton type="primary" @click="openStore"
+                  >{{ t('support.storeGatewayAction') }}<SvgIcon :src="icon.arrow_right" size="15"
+                /></BButton>
+                <p class="support-margin-note">{{ t('autumn.reference.morePossibilities') }}</p>
               </div>
             </BCard>
           </div>
-        </header>
-
-        <section class="support-section support-options" aria-labelledby="support-options-title">
-          <div class="support-section__heading">
-            <h2 id="support-options-title">{{ t('support.optionsTitle') }}</h2>
-            <p>{{ t('support.optionsDescription') }}</p>
-          </div>
-
-          <div class="support-tier-grid">
-            <BCard
-              v-for="option in supportOptions"
-              :key="option.key"
-              as="article"
-              class="support-tier-card"
-              :class="{ 'is-recommended': option.key === 'server' }"
-              padding="20px"
-              radius="18px"
+          <div class="support-lower">
+            <section class="support-section"
+              ><h2>{{ t('autumn.reference.usageTitle') }}</h2
+              ><p>{{ t('autumn.reference.usageIntro') }}</p
+              ><div class="support-card-grid--usage"
+                ><article v-for="item in usageCards" :key="item.key" class="support-usage-card"
+                  ><span class="support-usage-card__icon"><SvgIcon :src="item.icon" size="27" /></span
+                  ><h3>{{ item.title }}</h3
+                  ><p>{{ item.description }}</p></article
+                ></div
+              ></section
             >
-              <span v-if="option.key === 'server'" class="support-tier-card__recommended">
-                {{ t('support.optionRecommended') }}
-              </span>
-              <div class="support-tier-card__header">
-                <span class="support-tier-card__icon" aria-hidden="true">
-                  <SvgIcon :src="option.icon" size="21" />
-                </span>
-                <span class="support-tier-card__eyebrow">
-                  {{ option.amount === null ? t('support.optionCustomLabel') : t('support.optionMonthlyLabel') }}
-                </span>
-              </div>
-              <div v-if="option.amount !== null" class="support-tier-card__amount">
-                <span>¥</span><strong>{{ option.amount }}</strong
-                ><span>{{ t('support.optionPerMonth') }}</span>
-              </div>
-              <div v-else class="support-tier-card__amount support-tier-card__amount--custom">
-                <strong>{{ t('support.optionCustomAmount') }}</strong>
-              </div>
-              <h3>{{ option.title }}</h3>
-              <p>{{ option.description }}</p>
-              <BButton
-                class="support-tier-card__action"
-                type="primary"
-                :disabled="!option.configured || !supportStateReady"
-                @click="handleSupportOption(option)"
+            <div ref="leaderboardSection" class="support-section"
+              ><p v-if="leaderboardError" role="alert"
+                >{{ t('autumn.stateError') }}<BButton @click="loadLeaderboard">{{ t('common.retry') }}</BButton></p
+              ><SupportLeaderboard v-else compact :leaderboard="leaderboard" :loading="leaderboardLoading"
+            /></div>
+            <section ref="accountSection" class="support-section support-account-summary"
+              ><div class="support-account-title"
+                ><h2>{{ t('support.accountTitle') }}</h2
+                ><BChip v-if="supportState.linked" tone="success">{{ t('support.accountLinkedStatus') }}</BChip></div
               >
-                <span>{{ option.action }}</span>
-                <SvgIcon :src="icon.noteTree.openPage" size="15" aria-hidden="true" />
-              </BButton>
-            </BCard>
+              <p>{{ t('autumn.reference.supportAccountIntro') }}</p
+              ><div class="support-account-summary__row"
+                ><span class="support-tier-card__icon"><SvgIcon :src="icon.settings.account" size="21" /></span
+                ><div
+                  ><strong>{{ user.alias || user.userName || t('entitlementStore.confirm.currentAccount') }}</strong
+                  ><small>{{
+                    supportState.linked ? t('support.accountLinkedStatus') : t('autumn.reference.accountUnlinked')
+                  }}</small></div
+                >
+                <BButton
+                  v-if="supportStateReady && !supportStateError && supportState.authenticated && !supportState.linked"
+                  class="support-account-link"
+                  size="small"
+                  type="primary"
+                  :disabled="!supportState.oauthAvailable"
+                  :title="supportState.oauthAvailable ? undefined : t('support.accountLinkUnavailable')"
+                  @click="handleOAuthLink"
+                  >{{ t('support.accountLinkAction') }}</BButton
+                ></div
+              ><p v-if="supportStateReady && !supportStateError" class="support-account-summary__totals">{{
+                t('support.accountOrderSummary', { count: supportState.orderCount, amount: supportState.totalAmount })
+              }}</p>
+              <div class="support-account-actions"
+                ><BButton
+                  :disabled="!supportStateReady || supportStateError"
+                  type="primary"
+                  @click="accountVisible = true"
+                  >{{ t('autumn.reference.viewRecords') }}</BButton
+                ><BButton
+                  :disabled="!supportStateReady || supportStateError || unlinking"
+                  @click="supportState.linked ? confirmUnlink() : (accountVisible = true)"
+                  >{{ supportState.linked ? t('support.accountUnlinkAction') : t('autumn.privacyEdit') }}</BButton
+                ></div
+              ></section
+            >
           </div>
-          <p class="support-options__hint">
-            <SvgIcon :src="icon.settings.privacy" size="16" aria-hidden="true" />
-            <span>{{ t('support.optionsHint') }}</span>
-          </p>
-        </section>
-
-        <div ref="leaderboardSection">
-          <SupportLeaderboard :leaderboard="leaderboard" :loading="leaderboardLoading" />
-        </div>
-
-        <SupportAccountPanel
-          v-if="supportStateReady"
-          :state="supportState"
-          :unlinking="unlinking"
-          :preference-saving="preferenceSaving"
-          @link="handleOAuthLink"
-          @unlink="confirmUnlink"
-          @preference-change="handlePreferenceChange"
-        />
-
-        <BCard as="section" class="support-store-gateway" padding="20px" radius="18px">
-          <span class="support-store-gateway__icon" aria-hidden="true">
-            <SvgIcon :src="icon.support.store" size="23" />
-          </span>
-          <div class="support-store-gateway__copy">
-            <h2>{{ t('support.storeGatewayTitle') }}</h2>
-            <p>{{ t('support.storeGatewayDescription') }}</p>
-          </div>
-          <BButton type="default" size="large" @click="openStore">
-            <span>{{ t('support.storeGatewayAction') }}</span>
-            <SvgIcon :src="icon.arrow_right" size="16" aria-hidden="true" />
-          </BButton>
-        </BCard>
-
-        <section class="support-section" aria-labelledby="support-promises-title">
-          <div class="support-section__heading">
-            <h2 id="support-promises-title">{{ t('support.promisesTitle') }}</h2>
-            <p>{{ t('support.promisesDescription') }}</p>
-          </div>
-          <div class="support-card-grid support-card-grid--promises">
-            <BCard v-for="item in promiseCards" :key="item.key" as="article" class="support-info-card" padding="20px">
-              <span class="support-info-card__icon" aria-hidden="true"><SvgIcon :src="item.icon" size="22" /></span>
-              <h3>{{ item.title }}</h3>
-              <p>{{ item.description }}</p>
-            </BCard>
-          </div>
-        </section>
-
-        <section class="support-section" aria-labelledby="support-usage-title">
-          <div class="support-section__heading">
-            <h2 id="support-usage-title">{{ t('support.usageTitle') }}</h2>
-            <p>{{ t('support.usageDescription') }}</p>
-          </div>
-          <div class="support-card-grid support-card-grid--usage">
-            <BCard v-for="item in usageCards" :key="item.key" as="article" class="support-usage-card" padding="18px">
-              <span class="support-usage-card__icon" aria-hidden="true"><SvgIcon :src="item.icon" size="21" /></span>
-              <div
-                ><h3>{{ item.title }}</h3
-                ><p>{{ item.description }}</p></div
-              >
-            </BCard>
-          </div>
-        </section>
-
-        <BCard as="section" class="support-disclosure" padding="22px" radius="18px">
-          <div class="support-disclosure__heading">
-            <span class="support-disclosure__icon" aria-hidden="true">
-              <SvgIcon :src="icon.settings.privacy" size="24" />
-            </span>
-            <div>
-              <h2>{{ t('support.transparencyTitle') }}</h2>
-              <p>{{ t('support.transparencyDescription') }}</p>
-            </div>
-          </div>
-          <ul>
-            <li v-for="item in disclosureItems" :key="item">
-              <SvgIcon class="support-disclosure__check" :src="icon.message.success" size="17" aria-hidden="true" />
-              <span>{{ item }}</span>
-            </li>
-          </ul>
-        </BCard>
-
-        <BCard as="section" class="support-closing" variant="raised" padding="24px" radius="20px">
-          <div
-            ><h2>{{ t('support.closingTitle') }}</h2
-            ><p>{{ t('support.closingDescription') }}</p></div
-          >
-          <BButton
-            class="support-closing__action"
-            type="primary"
-            size="large"
-            :disabled="!supportConfigured || !supportStateReady"
-            @click="handleSupport"
-          >
-            <SvgIcon :src="icon.support.heart" size="18" aria-hidden="true" />
-            <span>{{ supportPrimaryActionLabel }}</span>
-          </BButton>
-        </BCard>
-      </main>
+          <p class="support-ranking-note">{{ t('support.leaderboardFootnote') }}</p>
+          <section class="support-closing"
+            ><div
+              ><h2>{{ t('autumn.reference.supportClosing') }}</h2
+              ><p>{{ t('autumn.reference.supportClosingIntro') }}</p></div
+            ><BButton
+              class="support-closing__action support-primary-action"
+              type="primary"
+              :disabled="!supportConfigured || !supportStateReady || supportStateError"
+              @click="handleSupport"
+              >{{ supportPrimaryActionLabel }}<SvgIcon :src="icon.arrow_right" size="16" /></BButton
+          ></section> </main
+      ></div>
     </div>
+    <BModal v-model:visible="accountVisible" :title="t('support.accountTitle')" width="700px" :show-footer="false"
+      ><SupportAccountPanel
+        v-if="supportStateReady && !supportStateError"
+        :state="supportState"
+        :unlinking="unlinking"
+        :preference-saving="preferenceSaving"
+        @link="handleOAuthLink"
+        @unlink="confirmUnlink"
+        @preference-change="handlePreferenceChange"
+    /></BModal>
   </div>
 </template>
-
 <script setup lang="ts">
-  import { computed, onMounted, ref } from 'vue';
+  import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
+  import BrandSceneHero from '@/components/support/BrandSceneHero.vue';
+  import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -231,7 +210,7 @@
     openAfdianSupportPage,
     openTrackedAfdianCheckout,
   } from '@/config/support';
-  import { bookmarkStore } from '@/store';
+  import { bookmarkStore, useUserStore } from '@/store';
   import { recordOperation } from '@/api/commonApi';
   import {
     getAfdianLeaderboard,
@@ -260,11 +239,19 @@
   };
   const supportState = ref<AfdianSupportState>({ ...emptySupportState });
   const supportStateReady = ref(false);
+  const supportStateError = ref(false);
   const unlinking = ref(false);
   const preferenceSaving = ref(false);
   const leaderboard = ref<AfdianLeaderboard | null>(null);
   const leaderboardLoading = ref(true);
+  const leaderboardError = ref(false);
+  const user = useUserStore();
+  let stateGeneration = 0,
+    boardGeneration = 0,
+    mutationGeneration = 0;
   const leaderboardSection = ref<HTMLElement | null>(null);
+  const accountSection = ref<HTMLElement | null>(null);
+  const accountVisible = ref(false);
 
   const canOpenTrackedSupport = computed(
     () => supportStateReady.value && supportState.value.authenticated && supportState.value.orderSyncAvailable,
@@ -275,64 +262,50 @@
   const supportPrimaryActionHint = computed(() =>
     t(canOpenTrackedSupport.value ? 'support.trackedActionHint' : 'support.creatorPageHint'),
   );
-  const promiseCards = computed(() => [
-    {
-      key: 'free',
-      icon: icon.message.success,
-      title: t('support.promiseFreeTitle'),
-      description: t('support.promiseFreeDescription'),
-    },
-    {
-      key: 'voluntary',
-      icon: icon.support.heart,
-      title: t('support.promiseVoluntaryTitle'),
-      description: t('support.promiseVoluntaryDescription'),
-    },
-    {
-      key: 'privacy',
-      icon: icon.settings.privacy,
-      title: t('support.promisePrivacyTitle'),
-      description: t('support.promisePrivacyDescription'),
-    },
-  ]);
   const usageCards = computed(() => [
     {
       key: 'infrastructure',
-      icon: icon.storage,
+      icon: icon.support.server,
       title: t('support.usageInfrastructureTitle'),
       description: t('support.usageInfrastructureDescription'),
     },
     {
       key: 'reliability',
-      icon: icon.settings.account,
-      title: t('support.usageReliabilityTitle'),
-      description: t('support.usageReliabilityDescription'),
+      icon: icon.support.security,
+      title: t('autumn.reference.securityTitle'),
+      description: t('autumn.reference.securityDescription'),
+    },
+    {
+      key: 'backup',
+      icon: icon.support.backup,
+      title: t('autumn.reference.backupTitle'),
+      description: t('autumn.reference.backupDescription'),
     },
     {
       key: 'development',
-      icon: icon.coBuild.board,
+      icon: icon.support.development,
       title: t('support.usageDevelopmentTitle'),
       description: t('support.usageDevelopmentDescription'),
     },
   ]);
   const supportOptionContent = {
     coffee: {
-      icon: icon.support.heart,
+      icon: icon.support.coffee,
       titleKey: 'support.tierCoffeeTitle',
       descriptionKey: 'support.tierCoffeeDescription',
     },
     server: {
-      icon: icon.storage,
+      icon: icon.support.heart,
       titleKey: 'support.tierServerTitle',
       descriptionKey: 'support.tierServerDescription',
     },
     companion: {
-      icon: icon.coBuild.board,
+      icon: icon.todoWorkspace.star,
       titleKey: 'support.tierCompanionTitle',
       descriptionKey: 'support.tierCompanionDescription',
     },
     custom: {
-      icon: icon.userCenter.growth,
+      icon: icon.common.more,
       titleKey: 'support.tierCustomTitle',
       descriptionKey: 'support.tierCustomDescription',
     },
@@ -350,12 +323,6 @@
       };
     }),
   );
-  const disclosureItems = computed(() => [
-    t('support.disclosureExternal'),
-    t('support.disclosurePayment'),
-    t('support.disclosurePrivacy'),
-    t('support.disclosureOrderSeparation'),
-  ]);
 
   function goBack() {
     if (window.history.length > 1) return router.back();
@@ -374,12 +341,14 @@
   }
 
   function handleSupport() {
+    if (!supportStateReady.value || supportStateError.value) return;
     const opened = canOpenTrackedSupport.value ? openTrackedAfdianCheckout('custom') : openAfdianSupportPage();
     if (!opened) return message.warning(t('support.unavailableMessage'));
     void recordOperation({ module: '支持轻笺', operation: '打开爱发电赞助入口' });
   }
 
   function handleSupportOption(option: (typeof supportOptions.value)[number]) {
+    if (!supportStateReady.value || supportStateError.value) return;
     const opened = canOpenTrackedSupport.value
       ? openTrackedAfdianCheckout(option.key)
       : openAfdianSupportPage(option.url);
@@ -388,25 +357,37 @@
   }
 
   async function loadSupportState() {
+    const gen = ++stateGeneration;
     try {
       const next = await getAfdianSupportState();
+      if (gen !== stateGeneration) return;
       supportState.value = {
         ...emptySupportState,
         ...next,
         publicPreference: { ...emptySupportState.publicPreference, ...next.publicPreference },
         recentOrders: Array.isArray(next.recentOrders) ? next.recentOrders : [],
       };
+      supportStateError.value = false;
+    } catch {
+      if (gen === stateGeneration) supportStateError.value = true;
     } finally {
-      supportStateReady.value = true;
+      if (gen === stateGeneration) supportStateReady.value = true;
     }
   }
 
   async function loadLeaderboard() {
+    const gen = ++boardGeneration;
     leaderboardLoading.value = true;
     try {
-      leaderboard.value = await getAfdianLeaderboard();
+      const result = await getAfdianLeaderboard();
+      if (gen === boardGeneration) {
+        leaderboard.value = result;
+        leaderboardError.value = false;
+      }
+    } catch {
+      if (gen === boardGeneration) leaderboardError.value = true;
     } finally {
-      leaderboardLoading.value = false;
+      if (gen === boardGeneration) leaderboardLoading.value = false;
     }
   }
 
@@ -415,19 +396,30 @@
   }
 
   async function handlePreferenceChange(value: { participateInRanking: boolean; showIdentity: boolean }) {
+    const gen = ++mutationGeneration;
     preferenceSaving.value = true;
     try {
-      supportState.value.publicPreference = await updateAfdianPublicPreference(value);
+      const preference = await updateAfdianPublicPreference(value);
+      if (gen !== mutationGeneration) return;
+      supportState.value.publicPreference = preference;
       await loadLeaderboard();
       message.success(t('support.rankingPreferenceSaved'));
     } catch {
-      message.error(t('support.rankingPreferenceFailed'));
+      if (gen === mutationGeneration) message.error(t('support.rankingPreferenceFailed'));
     } finally {
-      preferenceSaving.value = false;
+      if (gen === mutationGeneration) preferenceSaving.value = false;
     }
   }
 
   function handleOAuthLink() {
+    if (
+      !supportStateReady.value ||
+      supportStateError.value ||
+      !supportState.value.authenticated ||
+      supportState.value.linked
+    )
+      return;
+    if (!supportState.value.oauthAvailable) return message.warning(t('support.accountLinkUnavailable'));
     if (!openAfdianOAuthPage()) return message.warning(t('support.accountLinkUnavailable'));
     void recordOperation({ module: '支持轻笺', operation: '发起爱发电账号关联' });
   }
@@ -451,15 +443,17 @@
       content: t('support.accountUnlinkDescription'),
       okText: t('support.accountUnlinkAction'),
       async onOk() {
+        const gen = ++mutationGeneration;
         unlinking.value = true;
         try {
           await unlinkAfdianAccount();
+          if (gen !== mutationGeneration) return;
           await loadSupportState();
-          message.success(t('support.accountUnlinkSuccess'));
+          if (gen === mutationGeneration) message.success(t('support.accountUnlinkSuccess'));
         } catch {
-          message.error(t('support.accountUnlinkFailed'));
+          if (gen === mutationGeneration) message.error(t('support.accountUnlinkFailed'));
         } finally {
-          unlinking.value = false;
+          if (gen === mutationGeneration) unlinking.value = false;
         }
       },
     });
@@ -478,6 +472,28 @@
     });
     void recordOperation({ module: '支持轻笺', operation: '查看支持页面' });
   });
+  watch(
+    () => user.id,
+    () => {
+      ++stateGeneration;
+      ++boardGeneration;
+      ++mutationGeneration;
+      supportState.value = { ...emptySupportState, publicPreference: { ...emptySupportState.publicPreference } };
+      accountVisible.value = false;
+      supportStateReady.value = false;
+      supportStateError.value = false;
+      leaderboard.value = null;
+      leaderboardError.value = false;
+      preferenceSaving.value = false;
+      unlinking.value = false;
+      void refreshSupport();
+    },
+  );
+  onBeforeUnmount(() => {
+    ++stateGeneration;
+    ++boardGeneration;
+    ++mutationGeneration;
+  });
 </script>
 
 <style scoped lang="less">
@@ -487,515 +503,463 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
-    color: var(--text-color);
-    background: var(--surface-page-bg, var(--background-color));
   }
   .support-page__scroll {
+    flex: 1;
     min-height: 0;
-    flex: 1 1 auto;
     overflow-y: auto;
     overscroll-behavior-y: contain;
   }
   .support-shell {
-    width: min(1120px, calc(100% - 40px));
-    margin: 0 auto;
-    padding: 24px 0 40px;
-    box-sizing: border-box;
+    width: 94%;
+    max-width: 1600px;
+    margin: auto;
+    padding: 0 0 32px;
+    position: relative;
   }
-  .support-hero {
-    padding: clamp(24px, 4vw, 46px);
-    border: 1px solid var(--surface-border-color);
-    border-radius: 24px;
-    background: var(--surface-raised-background);
-    box-shadow: var(--surface-raised-shadow);
-  }
-  .support-back {
-    height: 36px;
-    margin-bottom: 22px;
-    padding: 0 12px;
-    gap: 7px;
-    border: 1px solid var(--surface-border-color);
-    color: var(--text-color);
-    background: var(--card-background) !important;
-  }
-  .support-hero__layout {
+  .support-top {
     display: grid;
-    grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
-    align-items: center;
-    gap: clamp(28px, 5vw, 62px);
-  }
-  .support-hero__copy {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-  }
-  .support-kicker {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 14px;
-    color: var(--primary-color);
-    font-size: 14px;
-    font-weight: 720;
-  }
-  .support-kicker__icon,
-  .support-tier-card__icon,
-  .support-info-card__icon,
-  .support-usage-card__icon,
-  .support-store-gateway__icon,
-  .support-disclosure__icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex: 0 0 auto;
-    color: var(--primary-color);
-    background: var(--primary-color-light);
-    border: 1px solid var(--primary-color);
-  }
-  .support-kicker__icon {
-    width: 42px;
-    height: 42px;
-    border-radius: 14px;
-  }
-  .support-hero h1 {
-    margin: 14px 0 10px;
-    font-size: clamp(34px, 5vw, 58px);
-    line-height: 1.08;
-    letter-spacing: -0.04em;
-  }
-  .support-hero__copy > p {
-    max-width: 650px;
-    margin: 0;
-    color: var(--text-color-secondary);
-    font-size: 16px;
-    line-height: 1.85;
-  }
-  .support-hero__signals {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 18px;
-  }
-  .support-hero__actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin-top: 22px;
-  }
-  .support-hero__actions :deep(.b_btn) {
-    gap: 8px;
-  }
-  .support-hero__caption,
-  .support-action-card__unavailable {
-    margin-top: 10px;
-    color: var(--text-color-secondary);
-    font-size: 12px;
-    line-height: 1.55;
-  }
-  .support-action-card__unavailable {
-    color: var(--error-color);
-  }
-  .support-hero-visual {
-    position: relative;
-    min-height: 300px;
-    overflow: hidden;
-    border: 1px solid var(--primary-color);
-    background: var(--card-background);
-  }
-  .support-hero-visual__halo {
-    position: absolute;
-    width: 260px;
-    height: 260px;
-    top: -130px;
-    right: -70px;
-    border-radius: 50%;
-    background: var(--primary-color-light);
-  }
-  .support-hero-visual__community {
-    position: relative;
-    height: 172px;
-  }
-  .support-hero-visual__community::before {
-    content: '';
-    position: absolute;
-    width: 180px;
-    height: 92px;
-    top: 44px;
-    left: 50%;
-    border: 1px solid var(--primary-color);
-    border-bottom-color: transparent;
-    border-radius: 50%;
-    opacity: 0.35;
-    transform: translateX(-50%);
-  }
-  .support-hero-visual__community > span {
-    position: absolute;
-    z-index: 1;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid var(--primary-color);
-    border-radius: 50%;
-    color: var(--primary-color);
-    background: var(--card-background);
-    box-shadow: var(--surface-raised-shadow);
-  }
-  .support-hero-visual__community .is-left,
-  .support-hero-visual__community .is-right {
-    width: 48px;
-    height: 48px;
-    top: 76px;
-  }
-  .support-hero-visual__community .is-left {
-    left: 26px;
-  }
-  .support-hero-visual__community .is-right {
-    right: 26px;
-  }
-  .support-hero-visual__community .is-heart {
-    width: 82px;
-    height: 82px;
-    top: 38px;
-    left: 50%;
-    color: var(--button-primary-text-color, #fff);
-    background: var(--primary-color);
-    transform: translateX(-50%);
-  }
-  .support-hero-visual__copy {
-    position: relative;
-    padding: 0 24px 24px;
-    text-align: center;
-  }
-  .support-hero-visual__copy > span {
-    color: var(--primary-color);
-    font-size: 12px;
-    font-weight: 750;
-  }
-  .support-hero-visual__copy strong {
-    display: block;
-    margin-top: 5px;
-    font-size: 21px;
-  }
-  .support-hero-visual__copy p {
-    margin: 7px 0 0;
-    color: var(--text-color-secondary);
-    font-size: 12px;
-    line-height: 1.6;
-  }
-  .support-store-gateway {
-    margin-top: 22px;
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 16px;
-    border: 1px solid var(--surface-border-color);
-  }
-  .support-store-gateway__icon {
-    width: 46px;
-    height: 46px;
-    border-radius: 15px;
-  }
-  .support-store-gateway h2,
-  .support-store-gateway p {
-    margin: 0;
-  }
-  .support-store-gateway h2 {
-    font-size: 18px;
-  }
-  .support-store-gateway p {
-    margin-top: 5px;
-    color: var(--text-color-secondary);
-    line-height: 1.6;
+    grid-template-columns: minmax(0, 2.15fr) minmax(0, 1fr);
+    gap: 12px;
+    align-items: stretch;
   }
   .support-section {
-    margin-top: 44px;
+    padding: 16px 18px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 13px;
+    background: var(--card-background);
+    min-width: 0;
+    box-shadow: var(--scene-shadow);
   }
-  .support-options {
-    margin-top: 34px;
+  h2 {
+    margin: 0 0 6px;
   }
-  .support-section__heading {
-    margin-bottom: 18px;
+  h3 {
+    font:
+      700 14px/1.5 'Songti SC',
+      serif;
+    margin: 4px 0;
   }
-  .support-section__heading h2 {
-    margin: 0;
-    font-size: 26px;
-  }
-  .support-section__heading p {
-    margin: 7px 0 0;
-    color: var(--text-color-secondary);
-    line-height: 1.7;
+  p {
+    font-size: 14px;
+    line-height: 1.65;
+    color: var(--desc-color);
+    margin: 4px 0;
   }
   .support-tier-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 16px;
+    gap: 10px;
+    margin-top: 16px;
   }
   .support-tier-card {
     position: relative;
     display: flex;
     flex-direction: column;
-    min-height: 320px;
+    gap: 12px;
+    min-width: 0;
     border: 1px solid var(--surface-border-color);
-    transition:
-      transform 0.18s ease,
-      border-color 0.18s ease;
-  }
-  .support-tier-card.is-recommended {
-    border: 2px solid var(--primary-color);
-    box-shadow: var(--surface-raised-shadow);
-  }
-  .support-tier-card__recommended {
-    position: absolute;
-    top: -12px;
-    right: 18px;
-    padding: 5px 12px;
-    border: 1px solid var(--primary-color);
-    border-radius: 999px;
-    color: var(--button-primary-text-color, #fff);
-    background: var(--primary-color);
-    font-size: 11px;
-    font-weight: 750;
-    line-height: 1;
-  }
-  .support-tier-card:hover {
-    transform: translateY(-2px);
-    border-color: var(--primary-color);
   }
   .support-tier-card__header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 10px;
+    gap: 8px;
   }
-  .support-tier-card__icon,
-  .support-info-card__icon,
-  .support-usage-card__icon {
-    width: 42px;
-    height: 42px;
-    border-radius: 13px;
-  }
-  .support-tier-card__eyebrow {
+  .support-tier-card__icon {
+    width: 48px;
+    height: 48px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: var(--hover-background);
     color: var(--primary-color);
-    font-size: 12px;
-    font-weight: 700;
   }
   .support-tier-card__amount {
     display: flex;
     align-items: baseline;
-    gap: 5px;
-    min-height: 62px;
-    margin: 20px 0 10px;
+    gap: 2px;
+    line-height: 1.2;
   }
   .support-tier-card__amount strong {
-    font-size: 42px;
-    line-height: 1;
+    font-size: 27px;
   }
   .support-tier-card__amount span {
-    color: var(--text-color-secondary);
+    font-size: 13px;
   }
-  .support-tier-card__amount--custom strong {
-    color: var(--primary-color);
-    font-size: 28px;
-  }
-  .support-tier-card h3 {
-    margin: 12px 0 7px;
+  .support-tier-card__amount strong.support-tier-card__custom {
     font-size: 18px;
-  }
-  .support-tier-card > p {
-    min-height: 70px;
-    margin: 0;
-    color: var(--text-color-secondary);
-    line-height: 1.65;
   }
   .support-tier-card__action {
     width: 100%;
-    gap: 6px;
     margin-top: auto;
   }
-  .support-options__hint {
+  .support-tier-card p {
+    flex: 1;
+    margin: 0;
+    font-size: 14px;
+  }
+  .support-tier-card__recommended {
+    position: absolute;
+    top: -10px;
+    right: 10px;
+    padding: 2px 10px;
+    font-size: 12px;
+    background: var(--primary-color);
+    color: white;
+    border-radius: 13px;
+  }
+
+  .support-privacy-summary {
     display: flex;
+    align-items: center;
+    gap: 7px;
+    flex-wrap: wrap;
+    font-size: 12px;
+    margin-top: 8px;
+  }
+  .support-store-gateway {
+    position: relative;
+    display: flex;
+    flex-direction: column;
     align-items: flex-start;
     gap: 8px;
-    margin: 14px 4px 0;
-    color: var(--text-color-secondary);
-    font-size: 13px;
-    line-height: 1.6;
+    box-shadow: var(--scene-shadow);
   }
-  .support-options__hint :deep(.svg-icon) {
-    flex: 0 0 auto;
-    margin-top: 2px;
+  .support-store-gateway h2 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .support-store-gateway h2 > .svg-icon {
     color: var(--primary-color);
+    flex-shrink: 0;
   }
-  .support-card-grid {
+  .support-cross-footer {
     display: grid;
-    gap: 16px;
+    grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+    align-items: center;
+    gap: 12px;
+    width: 100%;
   }
-  .support-card-grid--promises,
+  .support-cross-footer > .b_btn {
+    min-width: 0;
+    width: 100%;
+  }
+  .support-cross-art {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    margin: 8px 0;
+  }
+  .support-cross-art img {
+    width: 48%;
+    height: 110px;
+    object-fit: contain;
+    mix-blend-mode: multiply;
+  }
+  .support-cross-art > div {
+    display: grid;
+    gap: 6px;
+  }
+  .support-cross-art span {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 5px;
+    padding: 4px 8px;
+    font-size: 12px;
+  }
+  .support-lower {
+    display: grid;
+    grid-template-columns: 1.43fr 1fr 0.95fr;
+    gap: 12px;
+    margin-top: 12px;
+    align-items: stretch;
+  }
+  .support-lower > * {
+    min-width: 0;
+  }
   .support-card-grid--usage {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-  .support-info-card,
-  .support-usage-card {
-    border: 1px solid var(--surface-border-color);
-  }
-  .support-info-card h3,
-  .support-usage-card h3 {
-    margin: 14px 0 7px;
-    font-size: 17px;
-  }
-  .support-info-card p,
-  .support-usage-card p {
-    margin: 0;
-    color: var(--text-color-secondary);
-    line-height: 1.65;
-  }
-  .support-usage-card {
-    display: flex;
-    align-items: flex-start;
-    gap: 14px;
-  }
-  .support-usage-card h3 {
-    margin-top: 2px;
-  }
-  .support-disclosure {
-    margin-top: 44px;
-    border: 1px solid var(--surface-border-color);
-  }
-  .support-disclosure__heading {
-    display: flex;
-    gap: 14px;
-  }
-  .support-disclosure__icon {
-    width: 48px;
-    height: 48px;
-    border-radius: 15px;
-  }
-  .support-disclosure h2,
-  .support-disclosure p {
-    margin: 0;
-  }
-  .support-disclosure p {
-    margin-top: 6px;
-    color: var(--text-color-secondary);
-  }
-  .support-disclosure ul {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px 18px;
-    margin: 20px 0 0;
-    padding: 0;
-    list-style: none;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 7px;
+    margin-top: 12px;
   }
-  .support-disclosure li {
+  .support-usage-card {
+    padding: 12px 9px;
+    background: var(--hover-background);
+    border-radius: 9px;
+    min-width: 0;
+  }
+  .support-usage-card > .svg-icon {
+    color: var(--primary-color);
+    margin-bottom: 6px;
+  }
+  .support-usage-card__icon {
+    display: block;
+    color: var(--primary-color);
+    margin-bottom: 12px;
+  }
+  .support-usage-card p {
+    font-size: 12px;
+  }
+  .support-account-summary__row {
     display: flex;
-    align-items: flex-start;
     gap: 8px;
-    color: var(--text-color-secondary);
-    line-height: 1.55;
+    align-items: center;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 9px;
+    padding: 9px;
+    margin: 12px 0;
   }
-  .support-disclosure__check {
-    flex: 0 0 auto;
-    margin-top: 2px;
-    color: var(--success-color);
+  .support-account-summary__row > div {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .support-account-link {
+    flex-shrink: 0;
+    max-width: 42%;
+    margin-left: auto;
+  }
+  .support-account-summary__row small {
+    display: block;
+    font-size: 12px;
+    color: var(--desc-color);
+    line-height: 1.5;
+  }
+  .support-account-summary__row strong {
+    font-size: 14px;
+  }
+  .support-account-summary > .b_btn {
+    width: 100%;
   }
   .support-closing {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 24px;
-    margin-top: 24px;
-    border: 1px solid var(--primary-color);
+    padding: 20px 10% 12px;
+    border-top: 1px solid var(--surface-border-color);
   }
-  .support-closing h2,
   .support-closing p {
+    font-size: 12px;
+  }
+  .support-closing > .b_btn {
+    flex-shrink: 0;
+  }
+  .support-lower :deep(.support-leaderboard) {
     margin: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
   }
-  .support-closing p {
-    margin-top: 6px;
-    color: var(--text-color-secondary);
+  .support-lower :deep(.support-leaderboard__heading) {
+    margin: 0 0 10px;
+    display: block;
   }
-  .support-closing__action {
-    flex: 0 0 auto;
+  .support-lower :deep(.support-leaderboard__heading > div > span) {
+    display: none;
+  }
+  .support-lower :deep(.support-leaderboard__heading p),
+  .support-lower :deep(.support-leaderboard__footnote) {
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  .support-lower :deep(.support-leaderboard__state) {
+    min-height: 100px;
+    padding: 12px;
+    font-size: 12px;
+  }
+  .support-lower :deep(.support-leaderboard__state > span:last-child) {
+    display: none;
+  }
+  .support-lower :deep(.support-leaderboard__card) {
+    border: 0;
+    box-shadow: none;
+    background: transparent;
+  }
+  .support-lower > .support-section {
+    display: flex;
+    flex-direction: column;
+  }
+  .support-lower h2,
+  .support-lower :deep(.support-leaderboard h2) {
+    margin: 0 0 6px;
+    font:
+      700 20px/1.4 'Songti SC',
+      'STSong',
+      serif;
+  }
+  .support-lower > .support-section > p {
+    font-size: 12px;
+  }
+  .support-card-grid--usage {
+    flex: 1;
+  }
+  .support-usage-card {
+    border: 1px solid var(--surface-border-color);
+    background: var(--hover-background);
+  }
+  .support-account-summary > .b_btn {
+    margin-top: auto;
+  }
+  .support-account-summary__row {
+    margin: 14px 0;
+  }
+  .support-ranking-note {
+    margin: 10px 0 16px;
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  .support-lower :deep(.support-leaderboard__card) {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+  .support-lower :deep(.support-leaderboard__state) {
+    flex: 1;
+    min-height: 110px;
+    gap: 8px;
+    padding: 12px 0;
+  }
+  .support-lower :deep(.support-leaderboard__state strong) {
+    font-size: 13px;
+    text-align: center;
+  }
+  .support-lower :deep(.support-leaderboard ol) {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding: 0;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+  .support-lower :deep(.support-leaderboard li),
+  .support-lower :deep(.support-leaderboard li.is-featured) {
+    display: grid;
+    grid-template-columns: 20px 24px minmax(0, 1fr) auto;
+    gap: 6px;
+    min-height: 40px;
+    padding: 6px 0;
+    border: 0;
+    border-bottom: 1px solid var(--surface-border-color);
+    border-radius: 0;
+    background: transparent;
+    text-align: left;
+  }
+  .support-lower :deep(.support-leaderboard__rank),
+  .support-lower :deep(li.is-featured .support-leaderboard__rank) {
+    position: static;
+    width: 20px;
+    height: 20px;
+    border: 0;
+    font-size: 12px;
+  }
+  .support-lower :deep(.support-leaderboard__avatar),
+  .support-lower :deep(li.is-featured .support-leaderboard__avatar) {
+    width: 24px;
+    height: 24px;
+    border: 0;
+    box-shadow: none;
+  }
+  .support-lower :deep(.support-leaderboard__identity strong),
+  .support-lower :deep(li.is-featured .support-leaderboard__amount) {
+    font-size: 12px;
+  }
+  .support-lower :deep(.support-leaderboard__identity span) {
+    display: none;
+  }
+  .support-account-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     gap: 8px;
   }
-
-  @media (max-width: 900px) {
-    .support-hero__layout {
-      grid-template-columns: 1fr;
-    }
-    .support-tier-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
+  .support-account-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
   }
-  @media (max-width: 640px) {
-    .support-shell {
-      width: calc(100% - 24px);
-      max-width: 1120px;
-      padding: 14px 0 28px;
-    }
-    .support-hero {
-      padding: 22px 18px;
-      border-radius: 20px;
-    }
-    .support-hero h1 {
-      font-size: 34px;
-    }
-    .support-hero__actions,
-    .support-hero__actions :deep(.b_btn) {
-      width: 100%;
-    }
-    .support-hero-visual {
-      min-height: 280px;
-    }
-    .support-store-gateway {
-      grid-template-columns: auto minmax(0, 1fr);
-    }
-    .support-store-gateway :deep(.b_btn) {
-      grid-column: 1 / -1;
-      width: 100%;
-    }
-    .support-tier-grid,
-    .support-card-grid--promises,
-    .support-card-grid--usage,
-    .support-disclosure ul {
-      grid-template-columns: 1fr;
-    }
-    .support-tier-card {
-      min-height: 0;
-    }
-    .support-tier-card__recommended {
-      top: 12px;
-      right: 14px;
-    }
-    .support-tier-card.is-recommended .support-tier-card__header {
-      margin-top: 24px;
-    }
-    .support-tier-card > p {
-      min-height: 0;
-    }
-    .support-section {
-      margin-top: 34px;
-    }
-    .support-closing {
-      align-items: stretch;
-      flex-direction: column;
-    }
-    .support-closing__action {
-      width: 100%;
-    }
+  .support-account-avatar--fallback {
+    display: grid;
+    place-items: center;
+    background: linear-gradient(135deg, var(--primary-color), var(--desc-color));
+    color: white;
+    font-size: 17px;
   }
-
-  html.light-note-mobile-rendering & {
-    .support-hero,
-    .support-hero-visual,
-    .support-tier-card,
-    .support-store-gateway,
-    .support-disclosure,
-    .support-closing {
-      box-shadow: none;
-    }
-    .support-tier-card:hover {
-      transform: none;
-    }
+  .support-account-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: auto;
+  }
+  .support-account-actions .b_btn {
+    width: 100%;
+  }
+  .support-account-summary__totals {
+    margin: 0 0 12px;
+  }
+  .support-margin-note {
+    margin: 0;
+    min-width: 0;
+    justify-self: end;
+    font:
+      italic 14px/1.8 'Songti SC',
+      serif;
+    color: var(--primary-color);
+    white-space: pre-line;
+    transform: rotate(-8deg);
+    pointer-events: none;
+  }
+  .is-compact .support-cross-footer {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .is-dense .support-shell {
+    width: 94%;
+  }
+  .is-compact .support-top {
+    grid-template-columns: minmax(0, 2.6fr) minmax(200px, 1fr);
+  }
+  .is-compact .support-tier-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .is-compact .support-lower {
+    grid-template-columns: 1fr 1fr;
+  }
+  .is-compact .support-lower > .support-section:first-child {
+    grid-column: 1/-1;
+  }
+  .is-mobile .support-shell {
+    width: calc(100% - 24px);
+  }
+  .is-mobile .support-top,
+  .is-mobile .support-lower {
+    grid-template-columns: 1fr;
+  }
+  .is-mobile .support-tier-grid {
+    grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  }
+  .is-mobile .support-section {
+    padding: 14px 11px;
+  }
+  .is-mobile .support-closing {
+    padding: 20px 0 12px;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .is-mobile .support-tier-card__header {
+    flex-wrap: wrap;
+  }
+  .is-mobile .support-cross-art {
+    max-width: 310px;
+  }
+  .is-mobile .support-card-grid--usage {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 </style>

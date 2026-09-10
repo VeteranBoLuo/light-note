@@ -4,7 +4,10 @@
       <MobileStickyActionBar
         v-if="open && mobile"
         class="resource-batch-action-bar--mobile"
-        :class="{ 'has-selection-session': !!selectionModule, 'has-project-action': canAddProject }"
+        :class="{
+          'has-selection-session': !!selectionModule,
+          'has-project-action': canAddProject || !!$slots['mobile-actions'],
+        }"
         :above-navigation="aboveNavigation"
       >
         <div class="resource-batch-action-bar__selection">
@@ -17,7 +20,7 @@
             @click="selectionStore.reviewOpen = true"
           >
             <strong>{{ summary }}</strong>
-            <small>{{ selectionScopeDetail }}</small>
+            <small v-if="selectionScopeDetail" role="status">{{ selectionScopeDetail }}</small>
           </BButton>
           <div v-else class="resource-batch-action-bar__copy" role="status" aria-live="polite">
             <strong>{{ summary }}</strong>
@@ -27,6 +30,7 @@
         <BButton v-if="canAddProject" :disabled="!!selectionStore?.busy" @click="addToProject">{{
           translate('toolbox.project.join')
         }}</BButton>
+        <slot name="mobile-actions" />
         <BButton v-if="showMore" class="resource-batch-action-bar__mobile-more" @click="emit('more')">
           <SvgIcon :src="icon.common.more" size="17" aria-hidden="true" />
           <span>{{ moreLabel }}</span>
@@ -64,7 +68,7 @@
             @click="selectionStore.reviewOpen = true"
           >
             <strong>{{ summary }}</strong>
-            <small>{{ selectionScopeDetail }}</small>
+            <small v-if="selectionScopeDetail" role="status">{{ selectionScopeDetail }}</small>
           </BButton>
           <div v-else class="resource-batch-action-bar__copy" role="status" aria-live="polite">
             <strong>{{ summary }}</strong>
@@ -165,10 +169,7 @@
         ? translate('resourceSelection.processing')
         : selectionStore?.query
           ? translate('resourceSelection.allMatching')
-          : translate('resourceSelection.scope', {
-              visible: props.selectionVisibleCount,
-              other: Math.max(0, (selectionStore?.items.length || 0) - props.selectionVisibleCount),
-            }),
+          : '',
   );
 
   const { canJoinProject, joinProject } = useProjectResourceAction();
@@ -197,6 +198,11 @@
     align-items: flex-start;
     flex-direction: column;
     background: transparent;
+  }
+  .resource-batch-action-bar__review.b_btn {
+    min-height: 32px;
+    padding: 6px 16px;
+    border-radius: 8px;
   }
   .resource-batch-action-bar {
     position: fixed;
@@ -377,10 +383,23 @@
     width: 100%;
   }
 
+  .resource-batch-action-bar--mobile :deep(.batch-action-delete.b_btn) {
+    color: var(--danger-color);
+    gap: 5px;
+  }
+  .resource-batch-action-bar--mobile.has-project-action > :deep(.b_btn) {
+    padding: 8px 10px;
+    line-height: 1.35;
+  }
   .resource-batch-action-bar--mobile .resource-batch-action-bar__mobile-more {
     min-width: 96px;
     flex: 0 0 96px;
     gap: 5px;
+  }
+
+  .resource-batch-action-bar--mobile.has-project-action .resource-batch-action-bar__mobile-more {
+    min-width: 0;
+    flex: 1 1 0;
   }
 
   .resource-batch-action-bar--mobile .resource-batch-action-bar__primary {

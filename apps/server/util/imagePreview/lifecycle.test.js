@@ -2,7 +2,13 @@ import { beforeAll, afterAll, beforeEach, describe, it, expect, vi } from 'vites
 import mysql from 'mysql2/promise';
 import fs from 'node:fs/promises';
 import { imageSchemaStatements } from './schema.js';
-import { registerAsset, replaceReferences, syncContentReferences, removeImageReferences } from './references.js';
+import {
+  registerAsset,
+  registerCloudImage,
+  replaceReferences,
+  syncContentReferences,
+  removeImageReferences,
+} from './references.js';
 import { resolveImagePreviews, validateResolveItems, retryImagePreview } from './service.js';
 import { runSingleImagePreviewJob, cleanupImageAssets } from './worker.js';
 import { hash } from './sources.js';
@@ -28,6 +34,7 @@ const transaction = async (fn) => {
   }
 };
 async function asset() {
+  await db.query("INSERT IGNORE INTO files VALUES (1,'u1',0,'test-image.png','test-image.png',0)");
   return transaction((c) =>
     registerAsset(c, {
       owner: 'u1',
@@ -97,6 +104,50 @@ describe.skipIf(!socket)('image lifecycle on isolated local MySQL', () => {
       await admin.query(`DROP DATABASE ${database}`);
       await admin.end();
     }
+  });
+  it.each([false, true])('persists MP3 cover outcome and preserves audio size (absent=%s)', async (noCover) => {
+    await db.query("INSERT INTO files VALUES (1,'u1',0,'song.mp3','audio-key',9000000)");
+    const [[file]] = await db.query('SELECT * FROM files WHERE id=1');
+    const registered = await transaction((c) => registerCloudImage(c, file));
+    expect(registered).toBeTruthy();
+    const compress = vi.fn(async () => ({ body: Buffer.from('webp'), width: 320, height: 320 }));
+    const put = vi.fn();
+    await runSingleImagePreviewJob('audio-test', {
+      db,
+      compress,
+      put,
+      remove: vi.fn(),
+      metadata: async () => ({ version: 'metadata' }),
+      read: async (job) => {
+        expect(job.source_file_name).toBe('song.mp3');
+        return {
+          noCover,
+          body: noCover ? null : Buffer.from('picture'),
+          revision: hash('tag'),
+          version: 'metadata',
+          sourceSize: 9000000,
+        };
+      },
+    });
+    const [[job]] = await db.query('SELECT * FROM file_preview_jobs');
+    const [[assetRow]] = await db.query('SELECT * FROM image_assets');
+    const [[artifact]] = await db.query('SELECT * FROM file_preview_artifacts');
+    expect(job.status).toBe('completed');
+    expect(job.error_code).toBeNull();
+    expect(assetRow.source_size).toBe(9000000);
+    expect(artifact.source_size).toBe(9000000);
+    expect(artifact.status).toBe('ready');
+    expect(compress).toHaveBeenCalledTimes(noCover ? 0 : 1);
+    expect(put).toHaveBeenCalledTimes(noCover ? 0 : 1);
+    const [state] = await resolveImagePreviews('u1', [{ sourceType: 'cloud_file', sourceId: '1' }], {
+      db,
+      sign: () => ({ url: 'preview' }),
+    });
+    expect(state.status).toBe(noCover ? 'unsupported' : 'ready');
+    expect(state.url).toBe(noCover ? null : 'preview');
+    expect((await db.query('SELECT * FROM file_preview_jobs'))[0]).toHaveLength(1);
+    await transaction((c) => removeImageReferences(c, 'cloud_file', ['1']));
+    expect((await db.query('SELECT status FROM image_assets'))[0][0].status).toBe('pending_delete');
   });
   it('deduplicates tasks and keeps active images while any ref exists', async () => {
     const a = await asset();
@@ -266,9 +317,6 @@ describe.skipIf(!socket)('image lifecycle on isolated local MySQL', () => {
 
   it('serializes duplicate user retries and preserves server cooldown', async () => {
     await asset();
-    await db.query(
-      "INSERT INTO files (id,create_by,obs_key,file_name,file_size) VALUES (1,'u1','test-image.png','image.png',10)",
-    );
     await db.query(
       "UPDATE file_preview_jobs SET status='failed',attempts=3,error_code='IMAGE_STORAGE_UNAVAILABLE',available_at=DATE_SUB(NOW(),INTERVAL 1 SECOND)",
     );

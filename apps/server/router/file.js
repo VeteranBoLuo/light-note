@@ -109,7 +109,10 @@ const formatFileRecord = (file) => {
     ext: getFileExtension(file.file_name),
     category,
     fileSize: file.file_size,
-    imagePreview: category === 'image' ? previewDescriptor('cloud_file',file.id) : null,
+    imagePreview:
+      category === 'image' || getFileExtension(file.file_name) === 'mp3'
+        ? previewDescriptor('cloud_file', file.id)
+        : null,
     fileUrl: file.obs_key ? buildSignedDownloadUrl(file.obs_key) : file.directory + file.file_name,
     uploadTime: file.create_time,
     folderId: file.folder_id,

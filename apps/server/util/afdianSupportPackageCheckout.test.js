@@ -13,29 +13,36 @@ function connectionFor({ campaign = false, firstPurchaseUsed = false } = {}) {
     release: vi.fn(),
     query: vi.fn(async (sql) => {
       const statement = String(sql);
+      if (statement.includes('FROM support_campaign_visibility_lock')) return [[{ id: 1 }], []];
       if (statement.includes('FROM support_first_purchase_claims')) {
         return [firstPurchaseUsed ? [{ claimed: 1 }] : [], []];
       }
       if (statement.includes('FROM support_account_links')) return [[], []];
       if (campaign && statement.includes('FROM support_campaign_skus s')) {
-        return [[{
-          id: CAMPAIGN_SKU_ID,
-          sku_id: 'anniversary-combo',
-          title: '周年组合包',
-          category: 'combo',
-          amount: '30.00',
-          ai_tokens: 2_500_000,
-          storage_mb: 640,
-          per_user_limit: 1,
-          margin_bps: 4800,
-          campaign_id: CAMPAIGN_ID,
-          campaign_key: 'anniversary',
-          version: 2,
-          campaign_title: '周年支持季',
-          starts_at: '2026-08-01T00:00:00.000Z',
-          ends_at: '2026-09-01T00:00:00.000Z',
-          status: 'published',
-        }], []];
+        return [
+          [
+            {
+              id: CAMPAIGN_SKU_ID,
+              sku_id: 'anniversary-combo',
+              title: '周年组合包',
+              category: 'combo',
+              amount: '30.00',
+              ai_tokens: 2_500_000,
+              storage_mb: 640,
+              per_user_limit: 1,
+              margin_bps: 4800,
+              campaign_id: CAMPAIGN_ID,
+              campaign_key: 'anniversary',
+              version: 2,
+              campaign_title: '周年支持季',
+              starts_at: '2026-08-01T00:00:00.000Z',
+              ends_at: '2026-09-01T00:00:00.000Z',
+              status: 'published',
+              public_enabled: 1,
+            },
+          ],
+          [],
+        ];
       }
       if (campaign && statement.includes('SELECT completed_count')) {
         return [[{ completed_count: 0, active_intent_id: null, active_until: null }], []];
@@ -81,20 +88,24 @@ describe('爱发电 v3 套餐结算意图', () => {
     expect(url.searchParams.get('custom_price')).toBe('10.00');
     expect(token).toMatch(/^[A-Za-z0-9_-]{32,128}$/);
     expect(result).toMatchObject({ expiresIn: 30 * 24 * 60 * 60, firstPurchaseCandidate: true });
-    const insert = connection.query.mock.calls.find(([sql]) => String(sql).includes('INSERT INTO support_checkout_intents'));
+    const insert = connection.query.mock.calls.find(([sql]) =>
+      String(sql).includes('INSERT INTO support_checkout_intents'),
+    );
     expect(insert?.[1]).not.toContain(token);
-    expect(insert?.[1]).toEqual(expect.arrayContaining([
-      'user-1',
-      'permanent',
-      'combo-10',
-      SUPPORT_PACKAGE_CATALOG_VERSION,
-      '10.00',
-      600_000,
-      128,
-      720_000,
-      128,
-      1,
-    ]));
+    expect(insert?.[1]).toEqual(
+      expect.arrayContaining([
+        'user-1',
+        'permanent',
+        'combo-10',
+        SUPPORT_PACKAGE_CATALOG_VERSION,
+        '10.00',
+        600_000,
+        128,
+        720_000,
+        128,
+        1,
+      ]),
+    );
     expect(connection.commit).toHaveBeenCalledOnce();
     expect(connection.rollback).not.toHaveBeenCalled();
   });
@@ -117,20 +128,24 @@ describe('爱发电 v3 套餐结算意图', () => {
     });
     expect(new URL(result.url).searchParams.get('custom_price')).toBe('30.00');
     expect(result).toMatchObject({ expiresIn: 24 * 60 * 60, firstPurchaseCandidate: false });
-    const insert = connection.query.mock.calls.find(([sql]) => String(sql).includes('INSERT INTO support_checkout_intents'));
-    expect(insert?.[1]).toEqual(expect.arrayContaining([
-      'campaign',
-      'anniversary-combo',
-      catalogVersion,
-      '30.00',
-      2_500_000,
-      640,
-      CAMPAIGN_ID,
-      CAMPAIGN_SKU_ID,
-      2,
-      1,
-      24 * 60 * 60,
-    ]));
+    const insert = connection.query.mock.calls.find(([sql]) =>
+      String(sql).includes('INSERT INTO support_checkout_intents'),
+    );
+    expect(insert?.[1]).toEqual(
+      expect.arrayContaining([
+        'campaign',
+        'anniversary-combo',
+        catalogVersion,
+        '30.00',
+        2_500_000,
+        640,
+        CAMPAIGN_ID,
+        CAMPAIGN_SKU_ID,
+        2,
+        1,
+        24 * 60 * 60,
+      ]),
+    );
     expect(
       connection.query.mock.calls.some(
         ([sql, params]) => String(sql).includes('active_until = DATE_ADD') && params[1] === 24 * 60 * 60,
@@ -153,7 +168,9 @@ describe('爱发电 v3 套餐结算意图', () => {
     });
 
     expect(result.firstPurchaseCandidate).toBe(false);
-    const insert = connection.query.mock.calls.find(([sql]) => String(sql).includes('INSERT INTO support_checkout_intents'));
+    const insert = connection.query.mock.calls.find(([sql]) =>
+      String(sql).includes('INSERT INTO support_checkout_intents'),
+    );
     expect(insert?.[1]?.slice(7, 12)).toEqual([600_000, 0, 600_000, 0, 0]);
   });
 

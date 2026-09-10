@@ -30,7 +30,7 @@ const isGuest = visualState === 'guest';
 
 document.documentElement.dataset.theme = theme;
 document.documentElement.lang = locale;
-document.documentElement.classList.toggle('light-note-mobile-rendering', window.innerWidth <= 600);
+document.documentElement.classList.toggle('light-note-mobile-rendering', window.innerWidth < 768);
 document.body.dataset.visualState = visualState;
 
 function apiResponse<TConfig>(config: TConfig, data: unknown) {
@@ -187,7 +187,81 @@ function catalogFixture() {
   };
 }
 
+let queryCount = 0;
+let publicPreference = { participateInRanking: true, showIdentity: true, adminHidden: false };
+const campaignFixture = () => ({
+  campaignKey: 'autumn',
+  campaignVersion: 1,
+  title: '这个秋天，为灵感多留一点空间',
+  description: '让值得珍藏的资料与想法，在轻笺里慢慢生长。',
+  serverNow: new Date().toISOString(),
+  startsAt: new Date(Date.now() - 86400000).toISOString(),
+  endsAt: new Date(Date.now() + 86400000 * 7).toISOString(),
+  lifecycle: ['upcoming', 'paused', 'ended'].includes(visualState) ? visualState : 'active',
+  checkoutEnabled: !['upcoming', 'paused', 'ended'].includes(visualState),
+  themeKey: 'autumn-desk-v1',
+  packages: Array.from({ length: 4 }, (_, index) => ({
+    campaignId: '11111111-1111-4111-8111-111111111111',
+    campaignKey: 'autumn',
+    campaignVersion: 1,
+    campaignTitle: '秋日补给',
+    description: '测试目录 · 不是真实商品',
+    catalogVersion: 'campaign:11111111-1111-4111-8111-111111111111:v1',
+    campaignSkuId: `22222222-2222-4222-8222-22222222222${index}`,
+    skuId: `autumn-${index}`,
+    title: ['轻藏补给包', '长藏补给包', '进阶补给包', '创作补给包'][index],
+    category: 'combo',
+    amount: [9.9, 29.9, 59.9, 99.9][index],
+    benefit: { aiTokens: [100000, 250000, 500000, 750000][index], storageMb: [256, 1024, 2048, 3072][index] },
+    perUserLimit: 1,
+    completedCount: 0,
+    remainingPurchases: 1,
+    limitReached: visualState === 'limited',
+    hasActiveCheckout: false,
+    startsAt: new Date().toISOString(),
+    endsAt: new Date(Date.now() + 86400000 * 7).toISOString(),
+  })),
+});
 request.defaults.adapter = async (config) => {
+  if (config.url === '/api/support/campaign-entry')
+    return apiResponse(config, ['hidden', 'paused', 'ended'].includes(visualState) ? null : campaignFixture());
+  if (config.url === '/api/support/campaigns/autumn') {
+    if (visualState === 'loading') await new Promise(() => {});
+    if (visualState === 'error') throw new Error('fixture_error');
+    if (visualState === 'hidden')
+      return { ...apiResponse(config, null), data: { status: 404, msg: 'Hidden', data: null } };
+    return apiResponse(config, campaignFixture());
+  }
+  if (config.url === '/api/support/checkout-intents')
+    return apiResponse(config, {
+      intentId: '33333333-3333-4333-8333-333333333333',
+      url: 'https://afdian.com/a/lightnote',
+    });
+  if (String(config.url).startsWith('/api/support/checkout-intents/'))
+    return apiResponse(config, {
+      intentId: '33333333-3333-4333-8333-333333333333',
+      status: visualState === 'review' ? 'review' : ++queryCount > 1 ? 'credited' : 'pending',
+      amount: 9.9,
+      benefit: { aiTokens: 100000, storageMb: 256 },
+    });
+  if (config.url === '/api/support/state')
+    return apiResponse(config, {
+      authenticated: !isGuest,
+      oauthAvailable: true,
+      orderSyncAvailable: true,
+      linked: false,
+      orderCount: 0,
+      totalAmount: '0.00',
+      publicPreference,
+      recentOrders: [],
+    });
+  if (config.url === '/api/support/leaderboard')
+    return apiResponse(config, { scope: 'all_time', items: [], mine: null, totalParticipants: 0 });
+  if (config.url === '/api/support/public-preference') {
+    publicPreference = { ...publicPreference, ...JSON.parse(String(config.data)) };
+    return apiResponse(config, publicPreference);
+  }
+
   if (config.url === '/api/search/batchSelectionPreview') {
     return apiResponse(config, {
       unavailableItems: visualState === 'return-deleted' ? [{ type: 'bookmark', id: 'visual-bookmark' }] : [],
@@ -240,9 +314,22 @@ request.defaults.adapter = async (config) => {
 
 const router = createRouter({
   history: createMemoryHistory(),
-  routes: [{ path: '/:pathMatch(.*)*', component: { render: () => null } }],
+  routes: [
+    { path: '/campaign/:campaignKey', component: { render: () => null } },
+    { path: '/:pathMatch(.*)*', component: { render: () => null } },
+  ],
 });
-await router.push({ path: '/store', query: { category: requestedCategory } });
+await router.push({
+  path:
+    params.get('page') === 'support'
+      ? '/support'
+      : params.get('page') === 'campaign'
+        ? '/campaign/autumn'
+        : params.get('page') === 'draft'
+          ? '/draft'
+          : '/store',
+  query: { category: requestedCategory },
+});
 
 const pinia = createPinia();
 const app = createApp(SupportPackagesHarness, { visualState });

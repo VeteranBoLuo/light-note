@@ -971,14 +971,22 @@
    * 并把失败抛给调用方，让 useForegroundRefresh 保留陈旧计时、下次唤醒再试。
    * 用户点刷新按钮走的仍是非静默路径：主动操作要有 loading 和失败反馈。
    */
+  let workbenchRequestId = 0;
+
   async function fetchWorkbenchSummary(options: { silent?: boolean } = {}) {
+    const requestId = ++workbenchRequestId;
+    const owner = [user.id, user.role, user.adminContext?.subjectUserId, user.adminContext?.mode].join('|');
+    const isCurrent = () =>
+      requestId === workbenchRequestId &&
+      owner === [user.id, user.role, user.adminContext?.subjectUserId, user.adminContext?.mode].join('|');
     const silent = options.silent === true;
     if (!silent) {
       loadingWorkbench.value = true;
       workbenchError.value = null;
     }
     try {
-      const res = await apiBasePost('/api/workbench/summary');
+      const res = await apiBasePost('/api/workbench/summary', {}, { silent });
+      if (!isCurrent()) return;
       if (res.status !== 200) {
         const failure = {
           message: res.msg || t('common.requestFailedDescription'),
@@ -1029,13 +1037,14 @@
       recentNoteTable.value = Array.isArray(data.recentNotes) ? data.recentNotes : [];
       recentFileTable.value = Array.isArray(data.recentFiles) ? data.recentFiles : [];
     } catch (error: any) {
+      if (!isCurrent()) return;
       if (silent) throw error;
       workbenchError.value = {
         message: error?.message || t('common.requestFailedDescription'),
         requestId: error?.requestId,
       };
     } finally {
-      if (!silent) loadingWorkbench.value = false;
+      if (isCurrent()) loadingWorkbench.value = false;
     }
   }
 
@@ -1100,6 +1109,13 @@
     if (initRunning.value) return;
     await Promise.all([init(true), dailyBriefCardRef.value?.refresh()]);
   }
+
+  watch(
+    () => inbox.captureRevision,
+    () => {
+      void Promise.allSettled([fetchWorkbenchSummary({ silent: true }), organizer.loadSummary({ silent: true })]);
+    },
+  );
 
   async function refreshTodayActions() {
     await Promise.all([fetchWorkbenchSummary({ silent: true }), dailyBriefCardRef.value?.refresh()]);

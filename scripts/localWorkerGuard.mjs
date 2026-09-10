@@ -1,17 +1,63 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync } from "node:child_process";
 
-export function findLocalDocumentWorkers(serverDirectory, run = (file, args) => execFileSync(file, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })) {
-  const rows = run('ps', ['-axo', 'pid=,comm=,args=']).split('\n');
-  const found = [];
-  for (const row of rows) {
-    const match = row.trim().match(/^(\d+)\s+(\S+)\s+(.+)$/);
-    if (!match || !/(^|\/)node$/.test(match[2]) || !/(?:^|\s)(?:\S*\/)?documentWorker\.js(?:\s|$)/.test(match[3])) continue;
+const workerScripts =
+  /(?:^|\s)(?:\S*\/)?(?:documentWorker|noteImportWorker|browserPushWorker|resourceGovernanceWorker)\.js(?:\s|$)/;
+const managedWorkerCommand =
+  /(?:^|\s)\S*pnpm(?:\.c?js)?\s+--filter\s+server\s+run\s+worker:(?:documents|note-imports|browser-push|resource-governance)(?::dev)?\s*$/;
+const runProcessCommand = (file, args) =>
+  execFileSync(file, args, {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"],
+  });
+
+// 只回收本仓库启动器遗留的独立 pnpm 进程组；活跃启动器与手动 Worker 不自动停止。
+export function inspectLocalWorkers(serverDirectory, run = runProcessCommand) {
+  const processes = run("ps", ["-axo", "pid=,ppid=,pgid=,comm=,args="])
+    .split("\n")
+    .flatMap((row) => {
+      const match = row.trim().match(/^(\d+)\s+(\d+)\s+(\d+)\s+(\S+)\s+(.+)$/);
+      return match
+        ? [
+            {
+              pid: Number(match[1]),
+              ppid: Number(match[2]),
+              pgid: Number(match[3]),
+              command: match[4],
+              args: match[5],
+            },
+          ]
+        : [];
+    });
+  const cwd = (pid) => {
     try {
-      const cwd = run('lsof', ['-a', '-p', match[1], '-d', 'cwd', '-Fn']).split('\n').find(line => line.startsWith('n'))?.slice(1);
-      if (cwd === serverDirectory) found.push(Number(match[1]));
+      return run("lsof", ["-a", "-p", String(pid), "-d", "cwd", "-Fn"])
+        .split("\n")
+        .find((line) => line.startsWith("n"))
+        ?.slice(1);
     } catch {
-      // 进程可能已经退出。
+      return null;
     }
-  }
-  return found;
+  };
+  const nodeProcess = (row) => /(^|\/)node$/.test(row.command);
+  const workers = processes.filter(
+    (row) =>
+      nodeProcess(row) &&
+      workerScripts.test(row.args) &&
+      cwd(row.pid) === serverDirectory,
+  );
+  const rootDirectory = serverDirectory.replace(/\/apps\/server\/?$/, "");
+  const orphanGroups = [...new Set(workers.map((row) => row.pgid))].filter(
+    (pgid) => {
+      const leader = processes.find((row) => row.pid === pgid);
+      return (
+        leader &&
+        leader.ppid === 1 &&
+        leader.pgid === leader.pid &&
+        nodeProcess(leader) &&
+        managedWorkerCommand.test(leader.args) &&
+        cwd(leader.pid) === rootDirectory
+      );
+    },
+  );
+  return { workers: workers.map((row) => row.pid), orphanGroups };
 }

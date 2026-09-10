@@ -44,7 +44,7 @@
       <div class="checkout-modal__actions">
         <BButton @click="visible = false">{{ t('entitlementStore.confirm.cancel') }}</BButton>
         <BButton class="checkout-modal__confirm" type="primary" :disabled="!canConfirm" @click="emit('confirm')">
-          {{ t('entitlementStore.confirm.pay', { amount: item.amount }) }}
+          {{ t('autumn.createOrder', { amount: item.amount }) }}
         </BButton>
       </div>
     </div>
@@ -129,7 +129,7 @@
   }
   .checkout-modal__product span {
     color: var(--text-color-secondary);
-    font-size: 11px;
+    font-size: 12px;
   }
   .checkout-modal__product h3 {
     margin: 3px 0 0;

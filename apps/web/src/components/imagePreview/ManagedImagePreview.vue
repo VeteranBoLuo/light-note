@@ -16,41 +16,39 @@
       draggable="false"
       @error="onImageError"
     />
-    <SvgIcon
-      v-else
-      class="managed-image-preview__placeholder"
-      :src="icon.toolbox.image"
-      :size="24"
-      aria-hidden="true"
-    />
+    <template v-else>
+      <slot name="fallback">
+        <SvgIcon class="managed-image-preview__placeholder" :src="icon.toolbox.image" :size="24" aria-hidden="true" />
+        <div class="managed-image-preview__status" role="status">
+          <span>{{ statusLabel }}</span>
+          <BPopover v-if="reason" v-model:open="detailsOpen" trigger="manual">
+            <BButton
+              size="small"
+              :aria-expanded="detailsOpen"
+              @click.stop="detailsOpen = !detailsOpen"
+              @keydown.esc.stop="detailsOpen = false"
+              >{{ t('imagePreview.details') }}</BButton
+            >
+            <template #content>
+              <div class="managed-image-preview__details" @keydown.esc.stop="detailsOpen = false">
+                <p>{{ reason }}</p>
+                <BButton
+                  v-if="failed || state?.retryable || state?.errorCode === 'IMAGE_STATUS_UNAVAILABLE'"
+                  size="small"
+                  :disabled="retrying"
+                  @click.stop="retry"
+                >
+                  {{ t(retrying ? 'imagePreview.retrying' : 'imagePreview.retry') }}
+                </BButton>
+              </div>
+            </template>
+          </BPopover>
+        </div>
+      </slot>
+    </template>
     <span v-if="state?.presentation === 'long_top' && hasPreview" class="managed-image-preview__badge">{{
       t('imagePreview.long')
     }}</span>
-    <div v-if="!hasPreview" class="managed-image-preview__status" role="status">
-      <span>{{ statusLabel }}</span>
-      <BPopover v-if="reason" v-model:open="detailsOpen" trigger="manual">
-        <BButton
-          size="small"
-          :aria-expanded="detailsOpen"
-          @click.stop="detailsOpen = !detailsOpen"
-          @keydown.esc.stop="detailsOpen = false"
-          >{{ t('imagePreview.details') }}</BButton
-        >
-        <template #content>
-          <div class="managed-image-preview__details" @keydown.esc.stop="detailsOpen = false">
-            <p>{{ reason }}</p>
-            <BButton
-              v-if="failed || state?.retryable || state?.errorCode === 'IMAGE_STATUS_UNAVAILABLE'"
-              size="small"
-              :disabled="retrying"
-              @click.stop="retry"
-            >
-              {{ t(retrying ? 'imagePreview.retrying' : 'imagePreview.retry') }}
-            </BButton>
-          </div>
-        </template>
-      </BPopover>
-    </div>
   </div>
 </template>
 <script setup lang="ts">

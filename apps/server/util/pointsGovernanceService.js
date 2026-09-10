@@ -771,7 +771,7 @@ export function simulatePointsPolicy(input = {}) {
   }
   const draws = freeDrawsByTier.map((value) => boundedInteger(value, 0, { max: 20 }));
   const achievementPool = boundedInteger(input.achievementPool, 7850, { max: 100_000 });
-  const milestonePool = boundedInteger(input.milestonePool, 6350, { max: 100_000 });
+  const milestonePool = boundedInteger(input.milestonePool, 2950, { max: 100_000 });
   const activeRatio = boundedRatio(input.activeRatio, 0.35);
   const consumptionRatio = boundedRatio(input.consumptionRatio, 0.65);
   const activeUsers = boundedInteger(input.activeUsers, 1000, { max: 100_000_000 });

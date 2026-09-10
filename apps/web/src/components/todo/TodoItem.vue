@@ -31,7 +31,10 @@
             @click.stop
             @update:model-value="$emit('toggle-complete', $event)"
           />
-          <span class="todo-item__title todo-item__title--static">{{ item.title }}</span>
+          <BButton v-if="cardPreviewable" class="todo-item__title" @click.stop="emit('preview')">
+            {{ item.title }}
+          </BButton>
+          <span v-else class="todo-item__title todo-item__title--static">{{ item.title }}</span>
         </div>
         <div v-else class="todo-item__selection-line">
           <BCheckbox
@@ -626,12 +629,6 @@
   .todo-occurrence-priority {
     width: 100px;
   }
-  .todo-item__select {
-    flex: 0 0 auto;
-    align-items: flex-start;
-    margin-top: 4px;
-    padding: 2px 0;
-  }
   .todo-recurrence-label {
     color: var(--success-color, #2e8b57);
   }
@@ -757,48 +754,59 @@
     background: var(--chip-danger-bg) !important;
     color: var(--chip-danger-fg) !important;
   }
-  .todo-item__main-line {
-    display: flex;
-    align-items: flex-start;
-    gap: 6px;
-  }
-  .todo-item__main-check {
-    align-items: flex-start;
-    margin-top: 5px;
-    padding: 2px 0;
-  }
-  /* 已完成态标题独立于勾选框,补齐与 label 版一致的纵向节奏 */
-  .todo-item__title--static {
-    margin-top: 7px;
-    cursor: default;
-  }
-  .todo-item__main-check :deep(.b-checkbox__inner) {
-    width: 19px;
-    height: 19px;
-    border-radius: 6px;
-  }
-  .todo-item__title {
-    display: block;
-    color: var(--text-color);
-    font-size: 16px;
-    font-weight: 600;
-    line-height: 1.45;
-    overflow-wrap: anywhere;
-  }
+  .todo-item__main-line,
   .todo-item__selection-line {
     display: flex;
     align-items: flex-start;
     gap: 6px;
     margin-top: 5px;
   }
+  /* 方框与标题第一行共用 24px 行盒，换行后仍对齐首行。 */
+  .todo-item__main-check,
+  .todo-item__select {
+    flex: 0 0 24px;
+    height: 24px;
+    box-sizing: border-box;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+  }
+  .todo-item__title--static {
+    cursor: default;
+  }
+  .todo-item__main-check :deep(.b-checkbox__inner),
+  .todo-item__select :deep(.b-checkbox__inner) {
+    width: 19px;
+    height: 19px;
+    border-radius: 6px;
+  }
+  .todo-item__title,
   .todo-item__selection-title {
+    display: block;
     min-width: 0;
-    padding: 2px 0;
     color: var(--text-color);
     font-size: 16px;
     font-weight: 600;
-    line-height: 1.45;
+    line-height: 24px;
     overflow-wrap: anywhere;
+  }
+  .todo-item__title.b_btn {
+    width: auto;
+    height: auto;
+    min-height: 0;
+    padding: 0;
+    background: transparent;
+    text-align: left;
+    white-space: normal;
+    transition: color 0.2s;
+  }
+  .todo-item__title.b_btn:focus-visible {
+    color: var(--primary-color);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .todo-item__title.b_btn:hover {
+      color: var(--primary-color);
+    }
   }
   .is-completed .todo-item__title,
   .is-completed .todo-item__selection-title {

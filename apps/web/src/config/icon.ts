@@ -3,7 +3,9 @@ const achievementGlyph = (content: string) =>
 
 export default {
   todoWorkspace: {
-    calendar: achievementGlyph('<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M7 3v4M17 3v4M3 11h18M7 15h2M15 15h2M7 18h2"/>'),
+    calendar: achievementGlyph(
+      '<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M7 3v4M17 3v4M3 11h18M7 15h2M15 15h2M7 18h2"/>',
+    ),
     clock: achievementGlyph('<circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/>'),
     checkSquare: achievementGlyph('<rect x="3" y="3" width="18" height="18" rx="3"/><path d="m7 12 3.5 3.5L17 8"/>'),
     star: achievementGlyph('<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9Z"/>'),
@@ -455,6 +457,21 @@ export default {
   },
 
   support: {
+    server:
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M4 2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Zm0 11h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2Z"/><path d="M6 6.5h6M6 17.5h6" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg>',
+    backup:
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M6 20a5 5 0 0 1-1-9.9A7 7 0 0 1 18.6 8a6 6 0 0 1-.6 12H6Z"/><path d="M12 17v-6m-2 2 2-2 2 2" fill="none" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    security:
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="m12 1 10 4v6c0 5-4 9-10 12C6 20 2 16 2 11V5l10-4Z"/><path d="m7 11 3 3 7-7" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    development:
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><rect x="2" y="13" width="5" height="9" rx="2"/><rect x="9.5" y="7" width="5" height="15" rx="2"/><rect x="17" y="1" width="5" height="21" rx="2"/></svg>',
+
+    coffee: achievementGlyph(
+      '<path d="M4 4h12v8a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5V4Z"/><path d="M16 5h2a3 3 0 0 1 0 6h-2M3 20h16"/>',
+    ),
+    autumn: achievementGlyph(
+      '<path d="M20 3c-1 8-1 15-9 16C3 20 2 12 6 8c3-3 8-2 14-5Z"/><path d="M4 21 15 10M9 16v-5M9 16h5"/>',
+    ),
     heart:
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M12 20.25S4 15.7 4 9.5A4.25 4.25 0 0 1 12 7.55A4.25 4.25 0 0 1 20 9.5c0 6.2-8 10.75-8 10.75Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M17.5 3.75v3M16 5.25h3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
     store:

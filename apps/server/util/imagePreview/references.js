@@ -121,7 +121,7 @@ export async function syncNoteImageReferences(db, noteId) {
   });
 }
 export async function registerCloudImage(db, file) {
-  if (!/\.(png|jpe?g|gif|webp)$/i.test(file.file_name || file.fileName || '') || !file.obs_key) return null;
+  if (!/\.(png|jpe?g|gif|webp|mp3)$/i.test(file.file_name || file.fileName || '') || !file.obs_key) return null;
   const asset = await registerAsset(db, {
     owner: file.create_by,
     sourceType: 'cloud_file',

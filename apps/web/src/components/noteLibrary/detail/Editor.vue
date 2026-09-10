@@ -1397,7 +1397,11 @@
     if (ref.type === 'bookmark' && !state?.url) return;
     if (ref.type === 'todo' || ref.type === 'tag') {
       const target = resolveResourceRoute(ref);
-      if (target) await router.push(target);
+      if (target) {
+        const returnFocusLocation = buildNoteReturnFocusLocation(router.currentRoute.value, ref);
+        if (returnFocusLocation) await router.replace(returnFocusLocation);
+        await router.push(target);
+      }
       return;
     }
     const source: AiSource = {

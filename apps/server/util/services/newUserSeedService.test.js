@@ -71,6 +71,7 @@ describe('newUserSeedService', () => {
     expect(zh).toMatchObject({
       lang: 'zh-CN',
       cloud: { folderName: '轻笺示例' },
+      todoLists: [{ key: 'getting-started', name: '轻笺入门' }],
     });
     expect(zh.tags).toHaveLength(4);
     expect(zh.bookmarks).toHaveLength(3);
@@ -100,6 +101,7 @@ describe('newUserSeedService', () => {
     expect(en).toMatchObject({
       lang: 'en-US',
       cloud: { folderName: 'Light Note Examples' },
+      todoLists: [{ key: 'getting-started', name: 'Getting Started' }],
     });
     expect(en.cloud.files).toHaveLength(2);
     expect(en.todos).toEqual([
@@ -109,6 +111,11 @@ describe('newUserSeedService', () => {
     ]);
     expect(en.notes.some((note) => note.type === 'markdown')).toBe(true);
     for (const seed of [zh, en]) {
+      expect(seed.todos).toMatchObject([
+        { key: 'first-bookmark', priority: 1, listKey: 'getting-started', tagKeys: [] },
+        { key: 'first-note', priority: 2, listKey: 'getting-started', tagKeys: ['getting-started'] },
+        { key: 'first-file', priority: 1, listKey: null, tagKeys: [] },
+      ]);
       const drawing = seed.notes.find((note) => note.key === 'drawing-demo');
       expect(drawing).toMatchObject({ title: '手绘笔记示例', type: 'drawing', sort: 4 });
       const scene = parseDrawingScene(drawing.content);
@@ -141,12 +148,18 @@ describe('newUserSeedService', () => {
     }
   });
 
-  it('在同一个事务中创建标签、书签、笔记、文件夹及标签关系', async () => {
-    const connection = createConnection(async (sql) => {
+  it('在同一个事务中创建示例资源、清单与差异化待办归属', async () => {
+    const connection = createConnection(async (sql, params) => {
       const text = compactSql(sql);
       if (text === 'SELECT id FROM user WHERE id = ? LIMIT 1 FOR UPDATE') return [[{ id: 'user-1' }]];
       if (text === 'SELECT id FROM note WHERE id = ? AND create_by = ? LIMIT 1') return [[]];
       if (text === 'INSERT INTO folders SET ?') return [{ insertId: 42 }];
+      if (text === 'SELECT id FROM todo_lists WHERE id = ? AND user_id = ? FOR UPDATE') {
+        return [[{ id: params[0] }]];
+      }
+      if (text === 'SELECT id FROM tag WHERE id IN (?) AND user_id = ? AND del_flag = 0 FOR UPDATE') {
+        return [params[0].map((id) => ({ id }))];
+      }
       return [{ affectedRows: 1 }];
     });
     getConnection.mockResolvedValue(connection);
@@ -218,12 +231,26 @@ describe('newUserSeedService', () => {
       'markdown',
       'markdown',
     ]);
-    expect(todoInserts.map(([, [row]]) => row.title)).toEqual([
-      '收藏第一个网页',
-      '写下第一篇笔记',
-      '上传第一份文件',
+    expect(todoInserts.map(([, [row]]) => row.title)).toEqual(['收藏第一个网页', '写下第一篇笔记', '上传第一份文件']);
+    expect(todoInserts.map(([, [row]]) => row.priority)).toEqual([1, 2, 1]);
+    expect(todoInserts.every(([, [row]]) => row.status === 'pending' && row.due_at == null)).toBe(true);
+    const listInserts = connection.query.mock.calls.filter(([sql]) => sql.startsWith('INSERT INTO todo_lists'));
+    expect(listInserts).toHaveLength(1);
+    const [listId, owner, listName] = listInserts[0][1];
+    expect(owner).toBe('user-1');
+    expect(listName).toBe('轻笺入门');
+    const listUpdates = connection.query.mock.calls.filter(([sql]) => sql.startsWith('UPDATE todo_items SET list_id'));
+    expect(listUpdates.map(([, params]) => params)).toEqual([
+      [listId, [todoInserts[0][1][0].id], 'user-1'],
+      [listId, [todoInserts[1][1][0].id], 'user-1'],
+      [null, [todoInserts[2][1][0].id], 'user-1'],
     ]);
-    expect(todoInserts.every(([, [row]]) => row.priority === 1 && row.due_at == null)).toBe(true);
+    const todoTagInserts = connection.query.mock.calls.filter(([sql]) =>
+      sql.startsWith('INSERT INTO todo_tag_relations'),
+    );
+    const gettingStartedTag = tagInserts.find(([, [row]]) => row.name === '轻笺入门')[1][0];
+    expect(todoTagInserts).toHaveLength(1);
+    expect(todoTagInserts[0][1]).toEqual([[['user-1', 'todo', todoInserts[1][1][0].id, gettingStartedTag.id]]]);
     // 富文本示例里的引用占位符必须替换成指向本账号种子资源的真实引用链接，且不留占位符残留
     const richTextNote = noteInserts.map(([, [row]]) => row).find((row) => row.title === '富文本样式示例');
     expect(richTextNote).toBeDefined();

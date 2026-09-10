@@ -665,20 +665,6 @@ describe('笔记库页面树交互接线', () => {
     expect(mobileNavigationDrawerSource).toMatch(/\.note-mobile-navigation-drawer__pages,[\s\S]*?flex: 1 1 auto/);
   });
 
-  it('批量导出可选择原格式、HTML、Markdown 或 PDF，并统一打包为 ZIP', () => {
-    expect(source).toContain(':title="$t(\'note.batchExportTitle\')"');
-    expect(source).toContain("key: 'original'");
-    expect(source).toContain("key: 'html'");
-    expect(source).toContain("key: 'markdown'");
-    expect(source).toContain("key: 'pdf'");
-    expect(source).toContain("apiBasePost('/api/note/getNotesForExport'");
-    expect(source).toContain("import('@/utils/noteBatchExport')");
-    expect(source).toContain("format: 'zip'");
-    expect(source).not.toContain("backupKind: 'selected_notes_export'");
-    expect(zhLocaleSource).toContain("batchExportOriginal: '按每篇默认格式'");
-    expect(enLocaleSource).toContain("batchExportOriginal: 'Use Each Note’s Format'");
-  });
-
   it('单篇笔记的右键、详情更多和移动端更多共用同一导出入口，并直接交付所选格式', () => {
     expect(source).toMatch(/key: 'export',[\s\S]{0,140}label: t\('noteDetail\.export'\)/);
     expect(source).toContain("else if (action === 'export') openSingleNoteExport(note)");

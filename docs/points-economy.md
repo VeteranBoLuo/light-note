@@ -2,7 +2,7 @@
 
 > 本文是积分商品、兑换上限、免费惊喜、积分抽奖、消费协议与运营观测的单一产品规范。代码中的权威目录位于 `apps/server/util/pointsEconomyCatalog.js`；任何价格、次数、概率、等级或奖池变化都必须升级经济版本并同步测试、本文与帮助中心。
 
-积分获取、用户积分中心、Root 治理、余额对账与活动发放由独立的 [积分获取与治理 C5 规范](./points-earning-c5.md) 管理，现行每日任务规则见 [C6 每日任务规范](./points-earning-c6.md)。消费目录 C6 的 `economyVersion` 与获取策略的 `policyVersion` 不得混用：商品或抽奖请求提交 `points-economy-c6`，任务和成就流水记录实际获取策略版本。
+积分获取、用户积分中心、Root 治理、余额对账与活动发放由独立的 [积分获取与治理](./points-earning.md) 统一管理。消费目录 C6 的 `economyVersion` 与获取策略的 `policyVersion` 不得混用：商品或抽奖请求提交 `points-economy-c6`，任务和成就流水记录实际获取策略版本。
 
 ## 目标与边界
 

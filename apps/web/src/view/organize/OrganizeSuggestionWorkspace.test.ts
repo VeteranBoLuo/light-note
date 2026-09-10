@@ -412,6 +412,10 @@ it('后台运行时按实际 aiStatus 自动刷新，完成后停止轮询', asy
     await vi.advanceTimersByTimeAsync(5000);
     await settle();
     expect(api.getRun.mock.calls.length).toBe(calls + 1);
+    expect([...host.querySelectorAll('button')].some((el) => el.textContent?.trim() === '刷新')).toBe(false);
+    document.dispatchEvent(new Event('visibilitychange'));
+    await settle();
+    expect(api.getRun.mock.calls.length).toBe(calls + 2);
   } finally {
     vi.useRealTimers();
   }
@@ -513,7 +517,7 @@ it('读取所有分页后按资源唯一归组，后页的待审核建议优先�
   expect(document.querySelector('.group-clear .workspace-resource')).toBeNull();
 });
 
-it('所有待处理及手动补充资源默认展开，用户收起后刷新保留选择', async () => {
+it('所有待处理及手动补充资源默认展开，返回页面同步后保留收起选择', async () => {
   const run = {
     ...result(),
     items: ['pending', 'info', 'insufficient'].map((status, index) => ({
@@ -529,7 +533,7 @@ it('所有待处理及手动补充资源默认展开，用户收起后刷新保�
   expect(document.querySelectorAll('.resource-detail-toggle[aria-expanded="true"]')).toHaveLength(3);
   document.querySelector<HTMLButtonElement>('.resource-detail-toggle')!.click();
   await settle();
-  button('刷新').click();
+  document.dispatchEvent(new Event('visibilitychange'));
   await settle();
   expect(document.querySelectorAll('.resource-detail-toggle[aria-expanded="true"]')).toHaveLength(2);
 });
@@ -899,12 +903,12 @@ it('分析中的资源产生建议后自动展开，主动收起后轮询不重�
     ],
   };
   api.getRun.mockResolvedValue(ok(finished));
-  button('刷新').click();
+  document.dispatchEvent(new Event('visibilitychange'));
   await settle();
   expect(document.querySelector('.resource-detail-toggle')?.getAttribute('aria-expanded')).toBe('true');
   document.querySelector<HTMLButtonElement>('.resource-detail-toggle')!.click();
   await settle();
-  button('刷新').click();
+  document.dispatchEvent(new Event('visibilitychange'));
   await settle();
   expect(document.querySelector('.resource-detail-toggle')?.getAttribute('aria-expanded')).toBe('false');
 });
@@ -1132,7 +1136,7 @@ it('后台轮询期间按钮保持可用，仍可暂停，旧响应不能覆盖�
         }),
     );
     await vi.advanceTimersByTimeAsync(2400);
-    for (const name of ['刷新', '暂停分析', '结束本次整理']) expect(button(name).disabled).toBe(false);
+    for (const name of ['暂停分析', '结束本次整理']) expect(button(name).disabled).toBe(false);
     expect(host.querySelector('.workspace-results')?.getAttribute('aria-busy')).toBe('false');
     const paused = { ...row, status: 'paused', canPause: false, canResume: true, pauseReason: 'user' };
     api.pauseRun.mockResolvedValue(ok(paused));

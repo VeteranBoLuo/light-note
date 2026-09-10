@@ -3,6 +3,7 @@ import { runSingleImagePreviewJob, cleanupImageAssets } from './util/imagePrevie
 import { runOrganizeCompletionNotifications } from './util/services/organizeCompletionNotification.js';
 import os from 'node:os';
 import pool from './db/index.js';
+import redisClient from './util/redisClient.js';
 import { runSingleSuggestionItem } from './util/services/organizeSuggestionService.js';
 import { ensureAiDocumentSchema } from './util/aiDocumentSchema.js';
 import { cleanupExpiredDocumentSources, runSingleDocumentJob } from './util/aiDocument/service.js';
@@ -40,7 +41,7 @@ async function run() {
     console.warn(`[AI 文档] 本地 OCR 暂不可用: ${detail}`);
   }
   const imageRuntime = await inspectImagePreviewRuntime();
-  if(!imageRuntime.ready) console.warn('[image-preview] runtime unavailable');
+  if (!imageRuntime.ready) console.warn('[image-preview] runtime unavailable');
   const previewRuntime = await inspectAllFilePreviewRuntimes();
   for (const [name, state] of Object.entries({ archive: previewRuntime.archive, office: previewRuntime.office })) {
     if (state.errorCode === 'FILE_PREVIEW_DISABLED') console.log('[文件预览] %s 预览已通过配置关闭', name);
@@ -99,5 +100,8 @@ run()
     } catch (error) {
       console.error('[AI 文档] Worker 关闭连接失败 code=%s', stableAgentErrorCode(error));
       process.exitCode = 1;
+    } finally {
+      // 队列循环及在途任务均已结束，同时释放间接导入的 Redis 长连接。
+      if (redisClient.isOpen) redisClient.destroy();
     }
   });

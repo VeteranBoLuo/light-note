@@ -128,3 +128,14 @@ describe('deliverExportViaAndroidBridge', () => {
     expect(outcome).toEqual({ ok: false, reason: 'bridge_failed' });
   });
 });
+
+
+it('does not dispatch a late Android ticket after the export session ends', async () => {
+  let current = true;
+  apiBasePost.mockImplementationOnce(async () => {
+    current = false;
+    return { status: 200, data: { downloadUrl: '/api/note/exportFile?token=late' } };
+  });
+  expect(await deliverExportViaAndroidBridge(exportOptions({ isCurrent: () => current }))).toEqual({ ok: false, reason: 'cancelled' });
+  expect(postMessage).not.toHaveBeenCalled();
+});

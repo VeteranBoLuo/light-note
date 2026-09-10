@@ -3685,3 +3685,12 @@ WHERE NOT EXISTS (
   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_provider_spans'
     AND COLUMN_NAME = 'estimated_cost' AND IS_NULLABLE = 'YES'
 );
+
+SELECT 'support_campaign_visibility_columns' AS check_name, 'missing visibility columns' AS detail
+WHERE (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'support_campaigns' AND COLUMN_NAME IN ('public_enabled','public_updated_by','public_updated_at')) <> 3;
+SELECT 'support_campaign_visibility_lock' AS check_name, 'missing serialization row' AS detail
+WHERE NOT EXISTS (SELECT 1 FROM support_campaign_visibility_lock WHERE id = 1);
+SELECT 'support_campaign_visibility_default' AS check_name, 'new versions must start hidden' AS detail
+FROM information_schema.COLUMNS
+WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'support_campaigns' AND COLUMN_NAME = 'public_enabled'
+  AND (IS_NULLABLE <> 'NO' OR IFNULL(COLUMN_DEFAULT, '') <> '0');

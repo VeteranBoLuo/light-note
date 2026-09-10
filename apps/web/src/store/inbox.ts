@@ -56,8 +56,13 @@ export default defineStore('inbox', {
     countFailed: false,
     countRequestId: 0,
     requestId: 0,
+    captureRevision: 0,
   }),
   actions: {
+    // 捕获成功是独立事件；重复收集时数量可能不变，不能靠 pendingTotal 驱动明细刷新。
+    notifyCaptured() {
+      this.captureRevision += 1;
+    },
     resourceKey(item: InboxResourceRef) {
       return `${item.resourceType}:${item.resourceId}`;
     },

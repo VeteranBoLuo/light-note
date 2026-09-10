@@ -1,8 +1,14 @@
+import { readAudioCover } from './audioCover.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { NOTE_IMAGE_DIR } from '../noteImages.js';
-import { getObjectMetadataFromObs, getObjectBufferFromObs, deleteObjectFromObs } from '../obsClient.js';
+import {
+  getObjectMetadataFromObs,
+  getObjectBufferFromObs,
+  getObjectRangeFromObs,
+  deleteObjectFromObs,
+} from '../obsClient.js';
 import { MAX_SOURCE_BYTES, imageError } from './compress.js';
 export const hash = (value) => createHash('sha256').update(value).digest('hex');
 export function localImageLocator(url) {
@@ -70,6 +76,10 @@ export async function readSource(asset) {
   const adapter = storageAdapters[asset.storage_kind];
   if (!adapter) throw imageError('IMAGE_SOURCE_INVALID');
   const meta = await adapter.metadata(asset.source_locator);
+  if (asset.source_type === 'cloud_file' && /\.mp3$/i.test(asset.source_file_name || '')) {
+    const { body, tag } = await readAudioCover(asset.source_locator, Number(meta.size), getObjectRangeFromObs);
+    return { body, noCover: !body, version: meta.version, sourceSize: Number(meta.size), revision: hash(tag) };
+  }
   if (meta.size > MAX_SOURCE_BYTES) throw imageError('IMAGE_SOURCE_SIZE_LIMIT');
   const body = await adapter.read(asset.source_locator);
   if (body.length !== meta.size) throw imageError('IMAGE_SOURCE_CHANGED');

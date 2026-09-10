@@ -443,7 +443,11 @@
     if (!data.value || recentFilter.value.period !== 'today') return null;
     switch (recentFilter.value.type) {
       case 'all':
-        return Number(data.value.users.today || 0) + Number(todayResourceTotal.value || 0);
+        return (
+          Number(data.value.users.today || 0) +
+          Number(todayResourceTotal.value || 0) +
+          Number(data.value.todos.createdToday || 0)
+        );
       case 'resource':
         return Number(todayResourceTotal.value || 0);
       case 'user':
@@ -454,6 +458,8 @@
         return Number(data.value.resources.noteToday || 0);
       case 'file':
         return Number(data.value.resources.fileToday || 0);
+      case 'todo':
+        return Number(data.value.todos.createdToday || 0);
       default:
         return null;
     }

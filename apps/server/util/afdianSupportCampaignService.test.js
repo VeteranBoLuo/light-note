@@ -29,6 +29,7 @@ function activeSku(overrides = {}) {
     starts_at: '2026-08-01T00:00:00.000Z',
     ends_at: '2026-09-01T00:00:00.000Z',
     status: 'published',
+    public_enabled: 1,
     ...overrides,
   };
 }
@@ -37,6 +38,7 @@ function connectionFor({ sku = activeSku(), completedCount = 0, activeIntentId =
   return {
     query: vi.fn(async (sql) => {
       const statement = String(sql);
+      if (statement.includes('FROM support_campaign_visibility_lock')) return [[{ id: 1 }], []];
       if (statement.includes('FROM support_campaign_skus s')) return [sku ? [sku] : [], []];
       if (statement.includes('INSERT IGNORE INTO support_campaign_user_limits')) return [{ affectedRows: 1 }, []];
       if (statement.includes('SELECT completed_count')) {
@@ -79,25 +81,31 @@ function lifecycleConnection({ status = 'draft', endsAt = '2026-09-01T00:00:00.0
     release: vi.fn(),
     query: vi.fn(async (sql) => {
       const statement = String(sql);
+      if (statement.includes('FROM support_campaign_visibility_lock')) return [[{ id: 1 }], []];
       if (statement.includes('FROM support_campaigns')) {
-        return [[{
-          id: CAMPAIGN_ID,
-          campaign_key: 'anniversary',
-          version: 3,
-          title: '周年支持季',
-          description: '独立限时套餐',
-          status: currentStatus,
-          starts_at: '2026-08-01T00:00:00.000Z',
-          ends_at: endsAt,
-          cost_policy_version: 'support-cost-v1',
-          created_by: 'root-1',
-          published_by: currentStatus === 'published' ? 'root-1' : null,
-          published_at: currentStatus === 'published' ? '2026-08-25T00:00:00.000Z' : null,
-          suspended_by: null,
-          suspended_at: null,
-          create_time: '2026-08-20T00:00:00.000Z',
-          update_time: '2026-08-25T00:00:00.000Z',
-        }], []];
+        return [
+          [
+            {
+              id: CAMPAIGN_ID,
+              campaign_key: 'anniversary',
+              version: 3,
+              title: '周年支持季',
+              description: '独立限时套餐',
+              status: currentStatus,
+              starts_at: '2026-08-01T00:00:00.000Z',
+              ends_at: endsAt,
+              cost_policy_version: 'support-cost-v1',
+              created_by: 'root-1',
+              published_by: currentStatus === 'published' ? 'root-1' : null,
+              published_at: currentStatus === 'published' ? '2026-08-25T00:00:00.000Z' : null,
+              suspended_by: null,
+              suspended_at: null,
+              create_time: '2026-08-20T00:00:00.000Z',
+              update_time: '2026-08-25T00:00:00.000Z',
+            },
+          ],
+          [],
+        ];
       }
       if (statement.includes('FROM support_campaign_skus')) return [[sku], []];
       if (statement.includes("SET status = 'published'")) {
@@ -139,7 +147,9 @@ describe('爱发电独立限时套餐', () => {
       }),
     ).resolves.toMatchObject({ sku_id: 'anniversary-combo', per_user_limit: 1 });
     expect(
-      connection.query.mock.calls.some(([sql]) => String(sql).includes('INSERT IGNORE INTO support_campaign_user_limits')),
+      connection.query.mock.calls.some(([sql]) =>
+        String(sql).includes('INSERT IGNORE INTO support_campaign_user_limits'),
+      ),
     ).toBe(true);
   });
 
@@ -202,7 +212,8 @@ describe('爱发电独立限时套餐', () => {
     ).resolves.toMatchObject({ id: CAMPAIGN_SKU_ID });
     expect(
       connection.query.mock.calls.some(
-        ([sql, params]) => String(sql).includes("SET intent_status = 'expired'") && params[0] === 'checkout-intent-expired',
+        ([sql, params]) =>
+          String(sql).includes("SET intent_status = 'expired'") && params[0] === 'checkout-intent-expired',
       ),
     ).toBe(true);
   });
@@ -234,9 +245,9 @@ describe('爱发电独立限时套餐', () => {
     ).rejects.toMatchObject({ code: 'SUPPORT_CAMPAIGN_NOT_DRAFT' });
     expect(connection.rollback).toHaveBeenCalledOnce();
 
-    await expect(
-      suspendSupportCampaign({ campaignId: CAMPAIGN_ID, actorUserId: 'root-3', db }),
-    ).resolves.toMatchObject({ status: 'suspended' });
+    await expect(suspendSupportCampaign({ campaignId: CAMPAIGN_ID, actorUserId: 'root-3', db })).resolves.toMatchObject(
+      { status: 'suspended' },
+    );
   });
 
   it('发布时拒绝过期活动、成本快照漂移和缺失 Root 操作人', async () => {

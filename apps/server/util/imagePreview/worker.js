@@ -49,18 +49,31 @@ export async function runSingleImagePreviewJob(
     // Retain the previous key until its removal succeeds, including after a crash.
     if (job.output_object_key) await remove(job.output_object_key);
     stage = 'source';
+    if (job.source_type === 'cloud_file') {
+      const [[file]] = await connection.query(
+        'SELECT file_name FROM files WHERE id=? AND create_by=? AND obs_key=?',
+        [job.source_id, job.owner_user_id, job.source_locator],
+      );
+      if (!file) throw imageError('IMAGE_SOURCE_MISSING');
+      job.source_file_name = file.file_name;
+    }
     const source = await read(job);
     stage = 'decode';
-    const output = await compress(source.body);
-    const version = hash(source.body);
-    const key = `image-previews/${job.id}/card-v${CARD_IMAGE_PROFILE.version}/${version}/${lease.slice(-36)}.webp`;
-    const [registered] = await connection.query(
-      "UPDATE file_preview_jobs SET output_object_key=?,output_keys_json=JSON_ARRAY_APPEND(COALESCE(output_keys_json,JSON_ARRAY()), '$', ?) WHERE id=? AND locked_by=? AND status='processing'",
-      [key, key, job.job_id, lease],
-    );
-    if (!registered.affectedRows) return true;
-    stage = 'upload';
-    await put(key, output.body, 'image/webp');
+    const output = source.noCover ? null : await compress(source.body);
+    const version = source.revision || hash(source.body);
+    const sourceSize = source.sourceSize ?? source.body.length;
+    const key = source.noCover
+      ? null
+      : `image-previews/${job.id}/card-v${CARD_IMAGE_PROFILE.version}/${version}/${lease.slice(-36)}.webp`;
+    if (key) {
+      const [registered] = await connection.query(
+        "UPDATE file_preview_jobs SET output_object_key=?,output_keys_json=JSON_ARRAY_APPEND(COALESCE(output_keys_json,JSON_ARRAY()), '$', ?) WHERE id=? AND locked_by=? AND status='processing'",
+        [key, key, job.job_id, lease],
+      );
+      if (!registered.affectedRows) return true;
+      stage = 'upload';
+      await put(key, output.body, 'image/webp');
+    }
     stage = 'source';
     const currentMeta = await metadata(job);
     if (currentMeta.version !== source.version) throw imageError('IMAGE_SOURCE_CHANGED');
@@ -82,7 +95,7 @@ export async function runSingleImagePreviewJob(
     }
     await connection.query('UPDATE image_assets SET source_version=?,source_size=? WHERE id=?', [
       version,
-      source.body.length,
+      sourceSize,
       job.id,
     ]);
     await connection.query(
@@ -90,13 +103,13 @@ export async function runSingleImagePreviewJob(
       image_width=?,image_height=?,preview_metadata_json=?,source_revision=?,source_etag=?,source_size=?,error_code=NULL WHERE id=?`,
       [
         key,
-        output.body.length,
-        output.width,
-        output.height,
-        JSON.stringify({ presentation: output.presentation || 'full' }),
+        output?.body.length || 0,
+        output?.width || 0,
+        output?.height || 0,
+        JSON.stringify(source.noCover ? { cover: 'absent' } : { presentation: output.presentation || 'full' }),
         version,
         version,
-        source.body.length,
+        sourceSize,
         job.artifact_id,
       ],
     );
@@ -108,8 +121,8 @@ export async function runSingleImagePreviewJob(
     console.info(
       '[image-preview] ready source=%s inputBytes=%d outputBytes=%d',
       job.source_type,
-      source.body.length,
-      output.body.length,
+      sourceSize,
+      output?.body.length || 0,
     );
     return true;
   } catch (error) {

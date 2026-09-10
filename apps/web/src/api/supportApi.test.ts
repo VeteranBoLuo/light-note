@@ -10,11 +10,35 @@ vi.mock('@/http/request', () => ({
   apiBasePost: mocks.apiBasePost,
 }));
 
-import { createLocalSupportCatalogPreview, getEntitlementStoreState, getSupportCatalog } from './supportApi';
+import {
+  createLocalSupportCatalogPreview,
+  getEntitlementStoreState,
+  getSupportCatalog,
+  getCampaignPresentation,
+  createCheckoutIntent,
+  queryCheckoutIntent,
+} from './supportApi';
 
 describe('权益商店开发环境只读目录', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('隐藏详情不回退为示例目录，创建与查询原单使用独立端点', async () => {
+    mocks.apiBaseGet.mockResolvedValueOnce({ status: 404, data: null });
+    await expect(getCampaignPresentation('hidden')).rejects.toThrow('CAMPAIGN_HIDDEN');
+    mocks.apiBasePost.mockResolvedValueOnce({ status: 200, data: { intentId: 'safe-id', url: 'https://afdian.com/' } });
+    await expect(createCheckoutIntent('sku', 'version', 'flow')).resolves.toMatchObject({ intentId: 'safe-id' });
+    expect(mocks.apiBasePost).toHaveBeenCalledWith('/api/support/checkout-intents', {
+      skuId: 'sku',
+      catalogVersion: 'version',
+      flowId: 'flow',
+    });
+    mocks.apiBaseGet.mockResolvedValueOnce({ status: 200, data: { status: 'pending' } });
+    await queryCheckoutIntent('safe-id');
+    expect(mocks.apiBaseGet).toHaveBeenLastCalledWith('/api/support/checkout-intents/safe-id', undefined, {
+      silent: true,
+    });
   });
 
   it('严格复用共享正式目录展示全部 AI、空间和组合容量，并关闭结算', () => {

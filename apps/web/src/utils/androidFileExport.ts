@@ -24,9 +24,10 @@ export type AndroidExportOutcome =
   /**
    * too_large  —— 超出服务端单件上限，调用方应给「内容过大」的专门提示而不是笼统失败；
    * request_failed —— 换票据失败（离线、被限流、笔记归属校验不过）；
+   * cancelled —— 发起导出的账号或操作会话已失效，不再交给下载桥。
    * bridge_failed  —— 桥不可用或原生拒收，调用方应退回剪贴板等降级路径。
    */
-  | { ok: false; reason: 'too_large' | 'request_failed' | 'bridge_failed'; message?: string };
+  | { ok: false; reason: 'too_large' | 'request_failed' | 'bridge_failed' | 'cancelled'; message?: string };
 
 
 /**
@@ -40,9 +41,11 @@ export async function deliverExportViaAndroidBridge(options: {
   fileName: string;
   format: NoteExportFormat;
   mimeType: string;
+  isCurrent?: () => boolean;
 }): Promise<AndroidExportOutcome> {
   const { noteId, content, fileName, format, mimeType } = options;
 
+  if (options.isCurrent && !options.isCurrent()) return { ok: false, reason: 'cancelled' };
   let contentBase64: string;
   try {
     contentBase64 = await encodeFileContentToBase64(content, mimeType);
@@ -50,6 +53,7 @@ export async function deliverExportViaAndroidBridge(options: {
     console.error('导出内容编码失败:', error);
     return { ok: false, reason: 'request_failed' };
   }
+  if (options.isCurrent && !options.isCurrent()) return { ok: false, reason: 'cancelled' };
   if (!contentBase64) return { ok: false, reason: 'request_failed' };
 
   let res;
@@ -65,6 +69,7 @@ export async function deliverExportViaAndroidBridge(options: {
     return { ok: false, reason: 'request_failed' };
   }
 
+  if (options.isCurrent && !options.isCurrent()) return { ok: false, reason: 'cancelled' };
   if (res?.status === 413) return { ok: false, reason: 'too_large', message: res?.msg };
   if (res?.status !== 200 || !res?.data?.downloadUrl) {
     return { ok: false, reason: 'request_failed', message: res?.msg };

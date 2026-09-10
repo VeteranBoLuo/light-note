@@ -64,15 +64,23 @@
               <div class="admin-recent__row" role="listitem">
                 <span
                   class="admin-recent__resource-icon"
-                  :style="{ color: `var(${RESOURCE_COLOR_CSS_VAR[item.type]})` }"
+                  :style="{
+                    color: `var(${item.type === 'todo' ? '--todo-module-color' : RESOURCE_COLOR_CSS_VAR[item.type]})`,
+                  }"
                   aria-hidden="true"
                 >
-                  <SvgIcon :src="icon.resource[item.type]" size="19" />
+                  <SvgIcon
+                    :src="item.type === 'todo' ? icon.todoWorkspace.checkSquare : icon.resource[item.type]"
+                    size="19"
+                  />
                 </span>
                 <div class="admin-recent__body">
                   <strong :title="displayResourceTitle(item)">{{ displayResourceTitle(item) }}</strong>
                   <span>
                     <BChip :tone="item.type">{{ resourceLabel(item.type) }}</BChip>
+                    <span v-if="item.type === 'todo' && item.status" class="admin-recent__todo-status">
+                      {{ t(`adminOverviewRecent.todoStatus.${item.status}`) }}
+                    </span>
                     <span class="admin-recent__owner">{{ displayUserName(item.userName) }}</span>
                     <span v-if="displayUserRemark(item.userRemark)" class="admin-recent__remark">
                       {{ t('adminOverviewRecent.userRemark', { remark: displayUserRemark(item.userRemark) }) }}
@@ -209,7 +217,7 @@
   const { t, locale } = useI18n();
   const sectionTitleId = `admin-recent-${Math.random().toString(36).slice(2)}`;
   const allowedPeriods: AdminRecentPeriod[] = ['recent', 'today'];
-  const allowedTypes: AdminRecentFilterType[] = ['all', 'resource', 'user', 'bookmark', 'note', 'file'];
+  const allowedTypes: AdminRecentFilterType[] = ['all', 'resource', 'user', 'bookmark', 'note', 'file', 'todo'];
   const activeFilter = computed<AdminRecentFilter>(() => props.filter || { period: 'recent', type: 'all' });
   const recentResources = computed(() => props.data?.recentResources || []);
   const recentUsers = computed(() => props.data?.recentUsers || []);
@@ -247,6 +255,7 @@
     { value: 'bookmark', label: t('adminOverviewRecent.resourceType.bookmark') },
     { value: 'note', label: t('adminOverviewRecent.resourceType.note') },
     { value: 'file', label: t('adminOverviewRecent.resourceType.file') },
+    { value: 'todo', label: t('adminOverviewRecent.resourceType.todo') },
   ]);
   const sectionSubtitle = computed(() => {
     if (activeFilter.value.period !== 'today') return t('adminOverviewRecent.subtitle');
@@ -256,7 +265,7 @@
   });
   const resourceCardTitle = computed(() => {
     const { period, type } = activeFilter.value;
-    if (['bookmark', 'note', 'file'].includes(type)) {
+    if (['bookmark', 'note', 'file', 'todo'].includes(type)) {
       return t(
         period === 'today'
           ? 'adminOverviewRecent.filteredTitle.todayResourceType'
@@ -500,6 +509,12 @@
       color: var(--sub-text-color);
       font-size: 11px;
     }
+  }
+
+  .admin-recent__todo-status {
+    flex: 0 0 auto;
+    color: var(--text-color);
+    white-space: nowrap;
   }
 
   .admin-recent__owner {

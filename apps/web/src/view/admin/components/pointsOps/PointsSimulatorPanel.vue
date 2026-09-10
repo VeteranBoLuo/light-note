@@ -78,7 +78,7 @@
     weeklyChallenges: '250',
     freeDrawExpected: '15',
     achievementPool: '7850',
-    milestonePool: '6350',
+    milestonePool: '2950',
     activeRatio: '0.35',
     consumptionRatio: '0.65',
     activeUsers: '1000',

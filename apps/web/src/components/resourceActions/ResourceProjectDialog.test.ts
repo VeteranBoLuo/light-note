@@ -118,6 +118,26 @@ describe('project join workflow', () => {
     await nextTick();
     expect(choices.textContent).toBe('paused');
   });
+  it('disables joining when filters hide the selected project and enables it when restored', async () => {
+    mocks.list.mockResolvedValue([{ id: 'active', title: 'Project', status: 'active' }]);
+    await mount();
+    const choices = host.querySelectorAll('select')[1];
+    choices.value = 'active';
+    choices.dispatchEvent(new Event('change'));
+    await nextTick();
+    expect(button('toolbox.project.join').disabled).toBe(false);
+    const search = host.querySelector('input')!;
+    search.value = 'no match';
+    search.dispatchEvent(new Event('input'));
+    await nextTick();
+    expect(button('toolbox.project.join').disabled).toBe(true);
+    button('toolbox.project.join').click();
+    expect(mocks.add).not.toHaveBeenCalled();
+    search.value = '';
+    search.dispatchEvent(new Event('input'));
+    await nextTick();
+    expect(button('toolbox.project.join').disabled).toBe(false);
+  });
   it('ignores a create response after account switching and never joins old materials', async () => {
     let resolve!: (value: any) => void;
     mocks.create.mockImplementation(

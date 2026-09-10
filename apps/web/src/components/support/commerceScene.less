@@ -1,0 +1,211 @@
+.commerce-surface {
+  --scene-line: var(--surface-border-color);
+  --scene-soft: var(--primary-color-light);
+  --scene-paper: var(--card-background);
+  --scene-shadow: 0 8px 30px color-mix(in srgb, var(--primary-color) 6%, transparent);
+  color: var(--text-color);
+  background: var(--background-color);
+  font-size: 14px;
+  .b_btn {
+    border-radius: 7px;
+    border: 1px solid var(--scene-line);
+    min-height: 34px;
+    height: auto;
+    padding: 7px 14px;
+    line-height: 1.4;
+    font-size: 13px;
+    font-weight: 550;
+    gap: 7px;
+    background: var(--scene-paper);
+    white-space: normal;
+  }
+  .b_btn.primary_btn {
+    color: white;
+    border-color: var(--primary-color);
+    background: var(--primary-color);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--primary-color) 82%, white), var(--primary-color));
+    box-shadow:
+      inset 0 1px 0 #ffffff40,
+      0 4px 9px #6554ff13;
+  }
+  .b_btn.primary_btn:hover:not(:disabled) {
+    filter: brightness(1.07);
+  }
+  .b_btn.scene-link {
+    border: 0;
+    background: transparent;
+    color: var(--primary-color);
+    box-shadow: none;
+    padding: 4px 0;
+    min-height: 28px;
+  }
+  .b_btn.small_btn {
+    font-size: 12px;
+    min-height: 30px;
+    padding: 5px 9px;
+  }
+  .scene-panel {
+    border: 1px solid var(--scene-line);
+    border-radius: 13px;
+    background: var(--scene-paper);
+    box-shadow: var(--scene-shadow);
+    padding: 16px 18px;
+    min-width: 0;
+  }
+  h2 {
+    font:
+      700 21px/1.4 'Songti SC',
+      'STSong',
+      serif;
+    letter-spacing: -0.025em;
+  }
+  .scene-footnotes {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 24px;
+    padding: 14px 0 26px;
+  }
+  .scene-footer-art {
+    display: block;
+    width: 100%;
+    height: 100px;
+    object-fit: cover;
+    opacity: 0.65;
+  }
+}
+.commerce-surface.is-mobile .b_btn {
+  min-height: 40px;
+}
+.commerce-surface.is-mobile .b_btn.scene-link {
+  min-height: 36px;
+}
+.commerce-page-content {
+  position: relative;
+  isolation: isolate;
+  min-height: 100%;
+  padding-bottom: 24px;
+}
+.commerce-landscape {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-repeat: no-repeat;
+  background-position:
+    center top,
+    center bottom;
+  background-size:
+    100% auto,
+    100% auto;
+}
+.commerce-landscape--support {
+  background-image: url('/brand-scenes/support-strip-top.webp');
+}
+.commerce-landscape--store {
+  background-image: url('/brand-scenes/store-strip-top.webp');
+}
+.commerce-landscape--campaign {
+  background-image: url('/brand-scenes/campaign-hd-top.webp');
+}
+.commerce-surface .brand-scene:not(.brand-scene--mobile) .brand-scene__art {
+  display: none;
+}
+.commerce-surface .scene-panel,
+.commerce-surface .support-section,
+.commerce-surface .support-store-gateway,
+.commerce-surface .store-support,
+.commerce-surface .store-combo {
+  background: var(--card-background);
+  background: linear-gradient(
+    120deg,
+    color-mix(in srgb, var(--card-background) 97%, transparent),
+    color-mix(in srgb, var(--card-background) 91%, transparent)
+  );
+}
+.commerce-surface .brand-scene__orb,
+.commerce-surface .support-tier-card__icon {
+  background: color-mix(in srgb, var(--primary-color) 11%, var(--card-background));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--card-background) 90%, transparent);
+}
+html[data-theme='night'] .commerce-landscape {
+  opacity: 0.78;
+}
+html[data-theme='night'] .commerce-landscape::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--background-color) 82%, transparent),
+    color-mix(in srgb, var(--background-color) 68%, transparent) 44%,
+    transparent 78%
+  );
+}
+html[data-theme='night'] .commerce-surface .brand-scene__accent,
+html[data-theme='night'] .commerce-surface .support-margin-note {
+  color: color-mix(in srgb, var(--primary-color) 55%, var(--text-color));
+}
+html[data-theme='night'] .commerce-surface .support-cross-art img {
+  mix-blend-mode: normal;
+  border-radius: 10px;
+}
+html[data-theme='night'] .commerce-surface .store-combo__art {
+  mix-blend-mode: normal;
+  opacity: 0.85;
+  mask-image: linear-gradient(90deg, transparent, black 65%);
+}
+html[data-theme='night'] .commerce-surface .campaign-closing img {
+  opacity: 0.8;
+  mask-image: linear-gradient(90deg, transparent, black 80%);
+}
+.commerce-surface.is-mobile .commerce-landscape {
+  background-size:
+    auto 230px,
+    auto 150px;
+  background-position:
+    center -240px,
+    center bottom;
+}
+
+.commerce-landscape > img {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: auto;
+  mask-image: linear-gradient(transparent, black 30%);
+}
+.commerce-surface.is-mobile .commerce-landscape > img {
+  height: 150px;
+  object-fit: cover;
+}
+.commerce-surface .brand-scene--campaign .brand-scene__features {
+  max-width: 860px;
+}
+.commerce-surface .brand-scene--campaign .brand-scene__actions {
+  max-width: 940px;
+}
+.commerce-surface .brand-scene--campaign .brand-scene__actions > .b_btn {
+  order: -1;
+  min-width: 260px;
+  min-height: 46px;
+  border-radius: 25px;
+  font-size: 15px;
+}
+.commerce-surface .brand-scene--campaign .campaign-date {
+  margin-left: auto;
+  min-width: 235px;
+}
+.commerce-surface.is-mobile .brand-scene--campaign .brand-scene__features {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+.commerce-surface.is-mobile .brand-scene--campaign .campaign-date {
+  margin-left: 0;
+  width: 100%;
+}
+.commerce-surface.is-mobile .brand-scene--campaign .brand-scene__actions > .b_btn {
+  min-width: 0;
+  width: 100%;
+}

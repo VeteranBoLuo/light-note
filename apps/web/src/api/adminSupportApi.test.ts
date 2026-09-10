@@ -18,11 +18,20 @@ import {
   previewAdminSupportCampaignCosts,
   publishAdminSupportCampaign,
   suspendAdminSupportCampaign,
+  setAdminCampaignVisibility,
 } from './adminSupportApi';
 
 describe('赞助赠送后台 API', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('开放操作绑定具体版本并显式发送关闭值', async () => {
+    mocks.apiBasePost.mockResolvedValue({ status: 200, data: { publicEnabled: false } });
+    await expect(setAdminCampaignVisibility('version-id', false)).resolves.toEqual({ publicEnabled: false });
+    expect(mocks.apiBasePost).toHaveBeenCalledWith('/api/support/admin/campaigns/version-id/visibility', {
+      enabled: false,
+    });
   });
 
   it('大额审批携带管理员所见的额度与归属快照', async () => {

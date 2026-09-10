@@ -1,6 +1,9 @@
 import pool from '../db/index.js';
 
 export const AFDIAN_SUPPORT_PACKAGE_TABLE_SQL = Object.freeze([
+  `CREATE TABLE IF NOT EXISTS support_campaign_visibility_lock (
+    id tinyint unsigned NOT NULL PRIMARY KEY
+  ) ENGINE=InnoDB`,
   `CREATE TABLE IF NOT EXISTS support_campaigns (
     id char(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
     campaign_key varchar(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
@@ -8,6 +11,9 @@ export const AFDIAN_SUPPORT_PACKAGE_TABLE_SQL = Object.freeze([
     title varchar(120) NOT NULL,
     description varchar(500) NOT NULL DEFAULT '',
     status varchar(24) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'draft',
+    public_enabled tinyint unsigned NOT NULL DEFAULT 0,
+    public_updated_by varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci DEFAULT NULL,
+    public_updated_at datetime DEFAULT NULL,
     starts_at datetime NOT NULL,
     ends_at datetime NOT NULL,
     cost_policy_version varchar(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
@@ -161,7 +167,8 @@ async function ensureCampaignSkuVersionIndex(db) {
   for (const row of Array.isArray(rows) ? rows : []) {
     const name = String(row?.indexName || row?.INDEX_NAME || '');
     if (!name) continue;
-    if (!indexes.has(name)) indexes.set(name, { nonUnique: Number(row?.nonUnique ?? row?.NON_UNIQUE ?? 1), columns: [] });
+    if (!indexes.has(name))
+      indexes.set(name, { nonUnique: Number(row?.nonUnique ?? row?.NON_UNIQUE ?? 1), columns: [] });
     indexes.get(name).columns.push(String(row?.columnName || row?.COLUMN_NAME || ''));
   }
 
@@ -200,6 +207,13 @@ export function ensureAfdianSupportPackageSchema({ db = pool } = {}) {
         'KEY idx_support_checkout_consumed (consumed_order_id)',
       );
       for (const sql of AFDIAN_SUPPORT_PACKAGE_TABLE_SQL) await db.query(sql);
+      for (const [column, definition] of [
+        ['public_enabled', 'tinyint unsigned NOT NULL DEFAULT 0'],
+        ['public_updated_by', 'varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci DEFAULT NULL'],
+        ['public_updated_at', 'datetime DEFAULT NULL'],
+      ])
+        await ensureColumn(db, 'support_campaigns', column, definition);
+      await db.query('INSERT IGNORE INTO support_campaign_visibility_lock (id) VALUES (1)');
       await ensureCampaignSkuVersionIndex(db);
     })();
     if (db === pool) {

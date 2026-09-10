@@ -2605,7 +2605,7 @@ export const downloadNoteExportFile = async (req, res) => {
 export const previewNoteExportScope = async (req, res) => {
   try {
     const { nodes, ...scope } = await readNoteExportScope(req.user.id, req.body || {});
-    return res.send(resultData(scope));
+    return res.send(resultData({ ...scope, nodes: nodes.length <= scope.limit ? nodes.map(({ id, title, type }) => ({ id, title, type })) : [] }));
   } catch (e) {
     if (e instanceof NoteTreeError) return sendNoteTreeError(req, res, 'preview-export', e);
     return sendNoteServerError(res, 'preview-export', e);

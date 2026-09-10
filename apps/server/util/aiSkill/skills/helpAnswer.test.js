@@ -43,7 +43,7 @@ describe('help.answer', () => {
       'other-help',
     ]);
     expect(prepared.messages[1].content).toContain('Lv.15 文圣');
-    expect(prepared.messages[1].content).toContain('每日 AI 额度 80 万 tokens');
+    expect(prepared.messages[1].content).toContain('每日 AI 额度 50 万 tokens');
     expect(prepared.messages[1].content).toContain('云空间 20 GB');
     expect(prepared.messages[1].content).not.toContain('200 万 tokens');
     expect(prepared.messages[0].content).toContain('运行时规则生成');

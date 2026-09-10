@@ -3,35 +3,51 @@
     :visible="visible"
     :title="t('toolbox.project.join')"
     :show-footer="false"
-    fullscreen-mobile
+    width="440px"
+    :close-disabled="busy"
     @update:visible="close"
   >
-    <div class="project-join">
+    <div class="project-join" :class="{ 'is-pending': loading || failed }">
       <template v-if="joined">
         <p role="status">{{ t('toolbox.project.added') }}</p>
         <BButton type="primary" @click="openProject">{{ t('toolbox.project.open') }}</BButton>
       </template>
       <template v-else>
-        <p>{{ t('toolbox.project.selected', { count: handoff.resources.length }) }}</p>
+        <p class="project-join__summary">{{ t('toolbox.project.selected', { count: handoff.resources.length }) }}</p>
         <p v-if="failed" role="alert"
           >{{ t('toolbox.project.failed') }} <BButton @click="load">{{ t('common.retry') }}</BButton></p
         >
         <BLoading v-if="loading" inline loading />
         <template v-else-if="!failed">
-          <BInput v-if="!createdId" v-model:value="query" :placeholder="t('toolbox.project.search')" :disabled="busy" />
-          <BSelect v-if="!createdId" v-model:value="status" :disabled="busy" :options="statusOptions" />
-          <BSelect
-            v-model:value="selectedId"
-            :disabled="busy || !!createdId"
-            :placeholder="t('toolbox.project.choose')"
-            :options="projectOptions"
-          />
-          <p v-if="!projectOptions.length">{{ t('toolbox.project.noMatching') }}</p>
-          <BButton :loading="busy" :disabled="!selectedId" type="primary" @click="add">{{
-            t('toolbox.project.join')
-          }}</BButton>
+          <div v-if="!createdId" class="project-join__filters">
+            <BInput v-model:value="query" :placeholder="t('toolbox.project.search')" :disabled="busy" />
+            <BSelect
+              v-model:value="status"
+              :disabled="busy"
+              :options="statusOptions"
+              :aria-label="t('toolbox.project.projectStatus')"
+            />
+          </div>
+          <div class="project-join__field">
+            <span class="project-join__label">{{ t('toolbox.project.choose') }}</span>
+            <BSelect
+              v-model:value="selectedId"
+              :disabled="busy || !!createdId"
+              :placeholder="t('toolbox.project.choose')"
+              :options="projectOptions"
+              :aria-label="t('toolbox.project.choose')"
+            />
+          </div>
+          <p v-if="!projectOptions.length" class="project-join__empty">{{ t('toolbox.project.noMatching') }}</p>
+          <div class="project-join__actions">
+            <BButton v-if="!createdId" :disabled="busy" :aria-expanded="creating" @click="creating = !creating">{{
+              t('toolbox.project.newProject')
+            }}</BButton>
+            <BButton :loading="busy" :disabled="!hasSelectedProject" type="primary" @click="add">{{
+              t('toolbox.project.join')
+            }}</BButton>
+          </div>
           <template v-if="!createdId">
-            <BButton :disabled="busy" @click="creating = !creating">{{ t('toolbox.project.newProject') }}</BButton>
             <div v-if="creating" class="project-join__create">
               <BInput
                 v-model:value="title"
@@ -106,6 +122,7 @@
       )
       .map((p) => ({ value: p.id, label: p.title })),
   );
+  const hasSelectedProject = computed(() => projectOptions.value.some((p) => p.value === selectedId.value));
   function current() {
     return (
       canJoinProject.value &&
@@ -133,7 +150,7 @@
     }
   }
   async function add() {
-    if (busy.value || !current() || !projectOptions.value.some((p) => p.value === selectedId.value)) return;
+    if (busy.value || !current() || !hasSelectedProject.value) return;
     busy.value = true;
     joinFailed.value = false;
     try {
@@ -183,7 +200,49 @@
   .project-join,
   .project-join__create {
     display: grid;
-    gap: 12px;
+    gap: 16px;
+  }
+  .project-join.is-pending {
+    min-height: 205px;
+    align-content: start;
+  }
+  .project-join__filters {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 112px;
+    gap: 10px;
+  }
+  .project-join__field {
+    display: grid;
+    gap: 8px;
+    min-width: 0;
+  }
+  .project-join__label {
+    color: var(--text-color);
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .project-join__actions {
+    display: flex;
+    gap: 10px;
+    padding-top: 4px;
+  }
+  .project-join__actions > .b_btn,
+  .project-join__create > .b_btn {
+    flex: 1;
+    min-width: 0;
+    min-height: 44px;
+    height: auto;
+    white-space: normal;
+    line-height: 1.4;
+    padding: 8px 12px;
+  }
+  .project-join__empty {
+    padding: 12px 0;
+    font-size: 13px;
+    text-align: center;
+  }
+  .project-join__summary {
+    font-size: 13px;
   }
   .project-join p {
     margin: 0;

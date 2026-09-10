@@ -33,7 +33,8 @@
     | 'danger'
     | 'bookmark'
     | 'note'
-    | 'file';
+    | 'file'
+    | 'todo';
 
   const props = withDefaults(
     defineProps<{
@@ -166,6 +167,12 @@
     --b-chip-fg: var(--chip-file-fg);
     --b-chip-bg: var(--chip-file-bg);
     --b-chip-border: var(--chip-file-border);
+  }
+
+  .b-chip--todo {
+    --b-chip-fg: var(--chip-todo-fg);
+    --b-chip-bg: var(--chip-todo-bg);
+    --b-chip-border: var(--chip-todo-border);
   }
 
   .b-chip--interactive {

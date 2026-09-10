@@ -58,6 +58,14 @@ describe('deliverGeneratedFile', () => {
     vi.restoreAllMocks();
   });
 
+  it('does not fall back to a download when a pending share belongs to a closed export', async () => {
+    let current = true;
+    Object.defineProperty(navigator, 'canShare', { configurable: true, value: () => true });
+    Object.defineProperty(navigator, 'share', { configurable: true, value: async () => { current = false; throw new Error('share failed'); } });
+    expect(await deliverGeneratedFile({ content: 'body', fileName: 'notes.md', mimeType: 'text/markdown', preferShare: true, isCurrent: () => current })).toBe('cancelled');
+    expect(createObjectUrl).not.toHaveBeenCalled();
+  });
+
   it('手机端优先系统分享，分享成功后不再触发下载', async () => {
     const share = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'share', { configurable: true, value: share });

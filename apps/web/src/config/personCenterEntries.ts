@@ -19,6 +19,13 @@ export interface PersonCenterEntry {
  * 但名称、路径、图标和语义色不能在两个组件里分别维护。
  */
 export const PERSON_CENTER_ENTRIES = {
+  campaign: {
+    name: 'campaign',
+    labelKey: 'autumn.entry',
+    path: '/campaign/autumn',
+    icon: icon.support.autumn,
+    tone: 'store',
+  },
   growth: {
     name: 'growth',
     labelKey: 'growth.entry',

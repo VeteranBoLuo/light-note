@@ -1,5 +1,5 @@
 import { Readable } from 'node:stream';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const sdk = vi.hoisted(() => {
   process.env.OBS_AK = 'test-ak';
@@ -10,6 +10,9 @@ const sdk = vi.hoisted(() => {
   const getObject = vi.fn();
   const putObject = vi.fn();
   class MockObsClient {
+    createSignedUrlSync() {
+      return { SignedUrl: 'https://obs.test/signed' };
+    }
     getObject(...args) {
       return getObject(...args);
     }
@@ -23,7 +26,7 @@ const sdk = vi.hoisted(() => {
 
 vi.mock('esdk-obs-nodejs', () => ({ default: sdk.MockObsClient }));
 
-import { getObjectBufferFromObs, putObjectBodyToObs } from './obsClient.js';
+import { getObjectBufferFromObs, getObjectRangeFromObs, putObjectBodyToObs } from './obsClient.js';
 
 function mockObjectResult(content, contentLength) {
   sdk.getObject.mockImplementationOnce((params, callback) => {
@@ -103,5 +106,38 @@ describe('OBS 二进制下载', () => {
     });
     await putObjectBodyToObs('image-previews/test.webp', original, 'image/webp');
     expect(received).toEqual(original);
+  });
+});
+
+describe('OBS metadata ranges', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it('uses bounded Range and preserves binary data', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(Buffer.from([255, 0, 128]), { status: 206 }));
+    vi.stubGlobal('fetch', fetchMock);
+    expect(await getObjectRangeFromObs('audio.mp3', 10, 12)).toEqual(Buffer.from([255, 0, 128]));
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://obs.test/signed',
+      expect.objectContaining({
+        headers: { Range: 'bytes=10-12' },
+        signal: expect.any(AbortSignal),
+        redirect: 'error',
+      }),
+    );
+  });
+  it('rejects ignored ranges, truncated bytes and over-limit requests', async () => {
+    const cancel = vi.fn();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ status: 200, body: { cancel } })
+      .mockResolvedValueOnce(new Response(Buffer.alloc(2), { status: 206 }));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(getObjectRangeFromObs('audio.mp3', 0, 9)).rejects.toMatchObject({ code: 'OBS_RANGE_UNSUPPORTED' });
+    expect(cancel).toHaveBeenCalled();
+    await expect(getObjectRangeFromObs('audio.mp3', 0, 9)).rejects.toMatchObject({
+      code: 'OBS_DOWNLOAD_SIZE_MISMATCH',
+    });
+    await expect(getObjectRangeFromObs('audio.mp3', 0, 20 * 1024 * 1024)).rejects.toMatchObject({
+      code: 'OBS_RANGE_INVALID',
+    });
   });
 });

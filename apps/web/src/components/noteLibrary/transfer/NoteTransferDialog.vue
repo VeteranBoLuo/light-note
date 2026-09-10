@@ -58,18 +58,34 @@
             ><label>{{ t('noteTransfer.scope') }}</label
             ><BSelect v-model:value="includeDescendants" :disabled="busy" :options="scopeOptions" @change="loadScope"
           /></div>
-          <div class="note-transfer__field"
+          <div v-if="includeDescendants === 'self'" class="note-transfer__field"
             ><label>{{ t('noteTransfer.format') }}</label
             ><BSelect v-model:value="format" :disabled="busy" :options="formatOptions"
           /></div>
         </div>
-        <p v-if="scope?.drawingCount" class="note-transfer__notice">{{
-          t('noteTransfer.drawing', { count: scope.drawingCount })
+        <NoteExportOptions
+          v-if="includeDescendants === 'subtree' && scope && scope.count <= scope.limit"
+          v-model="exportSettings"
+          :notes="scope.nodes || []"
+          :busy="busy"
+        />
+        <p v-if="busy && mode === 'export'" role="status">{{
+          t('noteExportSettings.preparing', { completed: exportCompleted, total: scope?.count || 0 })
         }}</p>
+        <BButton v-if="!scope && !busy" @click="loadScope">{{ t('noteExportSettings.reloadScope') }}</BButton>
+        <p
+          v-if="scope?.drawingCount && (includeDescendants === 'self' || exportSettings.packaging === 'archive')"
+          class="note-transfer__notice"
+          >{{ t('noteTransfer.drawing', { count: scope.drawingCount }) }}</p
+        >
         <p v-if="scope && scope.count > scope.limit" class="note-transfer__error">{{
           t('noteTransfer.limit', { count: scope.limit })
         }}</p>
-        <p class="note-transfer__muted">{{ t('noteTransfer.exportTip') }}</p>
+        <p
+          v-if="includeDescendants === 'self' || exportSettings.packaging === 'archive'"
+          class="note-transfer__muted"
+          >{{ t('noteTransfer.exportTip') }}</p
+        >
       </template>
       <template v-else-if="mode === 'records'">
         <div class="note-transfer__retention">
@@ -310,7 +326,12 @@
         <BButton
           v-if="mode === 'export'"
           type="primary"
-          :disabled="busy || !scope || scope.count > scope.limit"
+          :disabled="
+            busy ||
+            !scope ||
+            scope.count > scope.limit ||
+            (includeDescendants === 'subtree' && exportSettings.packaging === 'merged' && !!scope.drawingCount)
+          "
           :loading="busy"
           @click="exportNotes"
           >{{ t('noteTransfer.exportStart') }}</BButton
@@ -392,6 +413,7 @@
   import { apiBasePost } from '@/http/request';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import NoteTransferShell from './NoteTransferShell.vue';
+  import NoteExportOptions from '../NoteExportOptions.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import NoteImportProgress from './NoteImportProgress.vue';
@@ -406,7 +428,14 @@
   import NoteDirectoryPicker from '../tree/NoteDirectoryPicker.vue';
   import { NOTE_IMPORT_EXTENSIONS, NOTE_IMPORT_LIMITS } from '@lightnote/shared/note-transfer';
   import type { NoteImportItem, NoteImportTask } from '@lightnote/shared/note-transfer';
-  import { buildBatchNoteExportArchive, buildBatchNoteExportEntries } from '@/utils/noteBatchExport';
+  import {
+    buildBatchNoteExportArchive,
+    buildBatchNoteExportEntries,
+    buildMergedNoteExport,
+    createNoteExportSettings,
+    noteExportFormat,
+    orderNotesForMergedExport,
+  } from '@/utils/noteBatchExport';
   import type { NoteBatchExportMode } from '@/utils/noteBatchExport';
   import { buildNoteExportPaths } from '@/utils/noteExportPaths';
   import { buildExportFileName, deliverGeneratedFile } from '@/utils/fileDelivery';
@@ -503,6 +532,8 @@
     includeDescendants = ref('self'),
     format = ref<NoteBatchExportMode>('original'),
     scope = ref<any>(null);
+  const exportSettings = ref(createNoteExportSettings());
+  const exportCompleted = ref(0);
   const dragging = ref(false);
   const dialogWidth = computed(() =>
     mode.value === 'import' && task.value && !['uploading', 'expired', 'failed'].includes(task.value.status)
@@ -909,13 +940,25 @@
         { silent: true },
       );
       if (r.status !== 200) throw new Error();
-      if (g === generation) scope.value = r.data;
+      if (g === generation) {
+        scope.value = r.data;
+        exportSettings.value = createNoteExportSettings(r.data.nodes || [], exportNode.value?.title || t('note.untitled'));
+        exportCompleted.value = 0;
+      }
     });
   }
   async function exportNotes() {
     const node = exportNode.value;
     const g = generation;
-    if (!node || !scope.value) return;
+    if (!node || !scope.value || scope.value.count > scope.value.limit) return;
+    const settings = { ...exportSettings.value, orderedIds: [...exportSettings.value.orderedIds] };
+    const subtree = includeDescendants.value === 'subtree';
+    const merged = subtree && settings.packaging === 'merged';
+    if (merged && scope.value.drawingCount) return;
+    const snapshots = (scope.value.nodes || []).map((n: any) => ({ ...n }));
+    const selectedFormat = subtree ? noteExportFormat(settings) : format.value;
+    const current = () => g === generation && visible.value;
+    exportCompleted.value = 0;
     await guard(async () => {
       const r = await apiBasePost(
         '/api/note/getNotesForExport',
@@ -934,12 +977,43 @@
       }
       if (r.status !== 200) throw new Error();
       const notes = r.data.notes;
-      const options = { fallbackTitle: t('note.untitled'), lang: locale.value };
+      const options = {
+        fallbackTitle: t('note.untitled'),
+        lang: locale.value,
+        onProgress: (completed: number) => {
+          if (current()) exportCompleted.value = completed;
+        },
+      };
+      let orderedNotes = notes;
+      if (merged) {
+        try {
+          orderedNotes = orderNotesForMergedExport(notes, snapshots, settings.orderedIds);
+        } catch {
+          error.value = t('noteExportSettings.changed');
+          return;
+        }
+      }
       let fileName: string, content: string | Blob, extension: string, failed: string[];
-      if (includeDescendants.value === 'subtree') {
-        const archive = await buildBatchNoteExportArchive(notes, format.value, {
+      if (merged) {
+        const result = await buildMergedNoteExport(orderedNotes, settings.mergedFormat, {
           ...options,
-          paths: buildNoteExportPaths(notes, node.id, format.value),
+          title: settings.exportName.trim() || settings.defaultName,
+          showDocumentTitle: settings.showDocumentTitle,
+          keepNoteTitles: settings.keepNoteTitles,
+          isCurrent: current,
+        });
+        if (!current()) return;
+        if (!result.file) {
+          error.value = t('noteExportSettings.failed');
+          return;
+        }
+        ({ content, fileName } = result.file);
+        extension = result.file.format;
+        failed = [];
+      } else if (subtree) {
+        const archive = await buildBatchNoteExportArchive(notes, selectedFormat, {
+          ...options,
+          paths: buildNoteExportPaths(notes, node.id, selectedFormat),
         });
         failed = archive.failedNoteIds;
         if (!archive.blob) throw new Error();
@@ -979,16 +1053,28 @@
           fileName,
           format: extension as any,
           mimeType,
+          isCurrent: current,
         });
-        if (!result.ok) throw new Error();
+        if (!current()) return;
+        if (!result.ok) {
+          error.value = result.message || t('noteExportSettings.failed');
+          return;
+        }
       } else {
-        const result = await deliverGeneratedFile({ content, fileName, mimeType });
+        const result = await deliverGeneratedFile({
+          content,
+          fileName,
+          mimeType,
+          isCurrent: current,
+          preferShare: device.isMobile || device.isTablet,
+        });
+        if (!current()) return;
         if (result === 'cancelled') return;
         if (result === 'unavailable') throw new Error();
       }
-      message.success(t('noteTransfer.exported'));
+      if (current()) message.success(t('noteExportSettings.started', { count: notes.length - failed.length }));
     });
-    if (!scope.value) {
+    if (current() && !scope.value) {
       const notice = error.value;
       await loadScope();
       if (notice) error.value = notice;

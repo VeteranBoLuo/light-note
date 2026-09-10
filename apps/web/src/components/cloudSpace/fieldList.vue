@@ -46,6 +46,22 @@
             loading="lazy"
             decoding="async"
           />
+          <ManagedImagePreview
+            v-else-if="/\.mp3$/i.test(item.fileName || '')"
+            :source="{ sourceType: 'cloud_file', sourceId: String(item.id) }"
+            :initial="item.imagePreview"
+            class="file-card-thumb file-card-audio-cover"
+            :alt="item.fileName"
+          >
+            <template #fallback>
+              <div class="file-card-placeholder file-card-placeholder--audio">
+                <div class="file-card-placeholder-inner">
+                  <SvgIcon :src="icon.cloudSpace.fileIcon.audio" size="34" />
+                  <span>{{ getFilePreviewLabel(item) }}</span>
+                </div>
+              </div>
+            </template>
+          </ManagedImagePreview>
           <div v-else-if="isPreviewableVideo(item)" class="file-card-video-preview">
             <video
               class="file-card-thumb file-card-video-thumb"
@@ -2675,6 +2691,14 @@
     font-variant-numeric: tabular-nums;
     line-height: 1;
     pointer-events: none;
+  }
+
+  .file-card-audio-cover :deep(img) {
+    object-fit: contain;
+  }
+  .file-card-audio-cover > .file-card-placeholder {
+    width: 100%;
+    height: 100%;
   }
 
   .file-card-placeholder {

@@ -3,8 +3,8 @@
     as="article"
     class="package-card"
     :class="{ 'is-campaign': isCampaign, 'is-recommended': isRecommended }"
-    padding="20px"
-    radius="18px"
+    padding="12px"
+    radius="12px"
   >
     <span v-if="isRecommended" class="package-card__recommendation">{{ t('entitlementStore.recommended') }}</span>
     <div class="package-card__top">
@@ -15,14 +15,13 @@
       <BChip v-else :tone="firstPurchaseTone">{{ firstPurchaseLabel }}</BChip>
     </div>
 
-    <p class="package-card__eyebrow">{{ categoryLabel }}</p>
     <div class="package-card__price"
       ><small>¥</small><strong>{{ item.amount }}</strong></div
     >
 
     <template v-if="isCampaign">
       <h3>{{ campaignItem.title }}</h3>
-      <p class="package-card__scenario">{{ campaignItem.description }}</p>
+
       <div class="package-card__benefits">
         <div class="package-card__benefit-row is-highlighted">
           <span>{{ t('entitlementStore.campaigns.arrival') }}</span>
@@ -46,6 +45,7 @@
       <p class="package-card__scenario">{{ scenarioLabel }}</p>
       <div class="package-card__benefits">
         <div
+          v-if="regularItem.firstPurchaseStatus !== 'used'"
           class="package-card__benefit-row package-card__benefit-row--primary"
           :class="{ 'is-highlighted': regularItem.firstPurchaseStatus === 'available' && !previewMode }"
         >
@@ -172,197 +172,131 @@
 <style scoped lang="less">
   .package-card {
     position: relative;
-    min-height: 446px;
     display: flex;
     flex-direction: column;
+    min-width: 0;
     border: 1px solid var(--surface-border-color);
-    transition:
-      transform 0.18s ease,
-      border-color 0.18s ease,
-      box-shadow 0.18s ease;
-  }
-  .package-card.is-recommended {
-    border: 2px solid var(--primary-color);
-    box-shadow: var(--surface-raised-shadow);
-  }
-  .package-card.is-campaign {
-    min-height: 410px;
+    background: var(--card-background);
+    box-shadow: 0 5px 15px #5b54aa05;
   }
   .package-card__recommendation {
     position: absolute;
-    top: -12px;
-    right: 18px;
-    padding: 5px 12px;
-    border: 1px solid var(--primary-color);
-    border-radius: 999px;
-    color: var(--button-primary-text-color, #fff);
+    top: -10px;
+    right: 12px;
+    padding: 2px 10px;
+    border-radius: 13px;
     background: var(--primary-color);
-    font-size: 11px;
-    font-weight: 750;
-    line-height: 1;
+    color: white;
+    font-size: 12px;
+    line-height: 1.5;
   }
   .package-card__top {
-    min-height: 38px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
+    gap: 6px;
+    margin-bottom: 8px;
+    min-height: 32px;
   }
   .package-card__icon {
-    width: 38px;
-    height: 38px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex: 0 0 auto;
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+    display: grid;
+    place-items: center;
     border: 1px solid var(--primary-color);
-    border-radius: 11px;
-    color: var(--primary-color);
+    border-radius: 8px;
     background: var(--primary-color-light);
+    color: var(--primary-color);
   }
-  .package-card__eyebrow {
-    margin: 17px 0 0;
-    color: var(--text-color-secondary);
-    font-size: 11px;
-    font-weight: 600;
+  .package-card__top :deep(.b-chip) {
+    font-size: 12px;
+    white-space: normal;
+    line-height: 1.4;
   }
   .package-card__price {
     display: flex;
-    align-items: flex-start;
+    align-items: baseline;
     gap: 3px;
-    margin-top: 7px;
+    line-height: 1.2;
   }
   .package-card__price small {
-    margin-top: 7px;
-    color: var(--text-color-secondary);
-    font-size: 14px;
+    font-size: 15px;
   }
   .package-card__price strong {
-    font-size: 42px;
-    line-height: 1;
+    font-size: 32px;
+    font-weight: 700;
     letter-spacing: -0.035em;
   }
-  .package-card h3 {
-    margin: 14px 0 0;
-    font-size: 18px;
-    line-height: 1.35;
+  h3 {
+    font:
+      700 16px/1.5 'Songti SC',
+      serif;
+    margin: 4px 0 0;
   }
   .package-card__scenario {
-    min-height: 42px;
-    margin: 6px 0 0;
-    color: var(--text-color-secondary);
-    font-size: 12px;
-    line-height: 1.55;
+    font-size: 14px;
+    line-height: 1.6;
+    margin: 3px 0 10px;
+    color: var(--desc-color);
   }
   .package-card__benefits {
     display: grid;
-    gap: 7px;
-    margin-top: 15px;
+    grid-template-columns: 1fr;
+    gap: 5px;
+    margin-top: auto;
+    margin-bottom: 8px;
+    padding-top: 10px;
   }
   .package-card__benefit-row {
-    padding: 10px 11px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 0;
+    padding: 6px 7px;
+    background: var(--primary-color-light);
     border: 1px solid var(--surface-border-color);
-    border-radius: 10px;
-  }
-  .package-card__benefit-row span,
-  .package-card__benefit-row strong {
-    display: block;
+    border-radius: 6px;
   }
   .package-card__benefit-row span {
-    color: var(--text-color-secondary);
-    font-size: 10px;
+    font-size: 12px;
+    color: var(--desc-color);
+    line-height: 1.5;
   }
   .package-card__benefit-row strong {
-    margin-top: 3px;
     font-size: 13px;
-    line-height: 1.4;
-  }
-  .package-card__benefit-row--primary {
-    min-height: 58px;
-    background: var(--surface-panel-bg);
+    line-height: 1.6;
+    overflow-wrap: break-word;
   }
   .package-card__benefit-row--primary strong {
-    font-size: 15px;
-  }
-  .package-card__benefit-row--base {
-    border-color: transparent;
-    background: transparent;
-  }
-  .package-card__benefit-row.is-highlighted {
-    border-color: var(--primary-color);
-  }
-  .package-card__benefit-row.is-highlighted strong {
     color: var(--primary-color);
   }
   .package-card__status-note,
-  .package-card__saving,
-  .package-card__meta-list {
-    font-size: 11px;
-    line-height: 1.5;
-  }
-  .package-card__status-note {
-    margin: 10px 0 0;
-    color: var(--text-color-secondary);
-  }
   .package-card__saving {
-    margin: 6px 0 0;
-    color: var(--success-color);
-    font-weight: 600;
-  }
-  .package-card__meta-list {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    margin-top: 10px;
-    color: var(--text-color-secondary);
+    font-size: 12px;
+    line-height: 1.5;
+    margin: 0 0 8px;
+    color: var(--desc-color);
   }
   .package-card__action-wrap {
     margin-top: auto;
-    padding-top: 14px;
   }
-  .package-card__action {
+  .package-card__action.b_btn {
     width: 100%;
+    min-height: 34px;
+    font-size: 13px;
   }
-  @media (hover: hover) and (pointer: fine) {
-    .package-card:hover {
-      transform: translateY(-3px);
-      border-color: var(--primary-color);
-      box-shadow: var(--surface-raised-shadow);
-    }
+  .is-campaign .package-card__benefits {
+    grid-template-columns: 1fr;
   }
-  @media (max-width: 640px) {
-    .package-card,
-    .package-card.is-campaign {
-      min-height: 0;
-    }
-    .package-card__scenario {
-      min-height: 0;
-    }
-    .package-card__recommendation {
-      top: 12px;
-      right: 14px;
-    }
-    .package-card.is-recommended .package-card__top {
-      margin-top: 24px;
-    }
-    .package-card__action-wrap {
-      margin-top: 18px;
-      padding-top: 0;
-    }
-    .package-card__action {
-      min-height: 44px;
-    }
+  .package-card__meta-list {
+    display: grid;
+    gap: 3px;
+    font-size: 12px;
+    color: var(--desc-color);
+    margin: 4px 0 10px;
   }
-  html.light-note-mobile-rendering & {
-    .package-card {
-      box-shadow: none;
-    }
-    .package-card:hover {
-      transform: none;
-      box-shadow: none;
-    }
-    .package-card:not(.is-recommended):hover {
-      border-color: var(--surface-border-color);
-    }
+  .is-mobile .package-card__action.b_btn {
+    min-height: 40px;
   }
 </style>

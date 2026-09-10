@@ -11,6 +11,7 @@ import { sanitizePersistedNoteContent } from '../noteHtmlSanitizer.js';
 import { NEW_USER_DRAWING_NOTE_EXAMPLE_SCENE } from './newUserDrawingNoteExample.js';
 import { createBookmarkExactUrlHash } from './bookmarkExactUrlService.js';
 import { createTodo } from './todoService.js';
+import { saveTodoList } from './todoOrganizationService.js';
 
 export const NEW_USER_SEED_VERSION = ONBOARDING_SEED_VERSION;
 
@@ -121,10 +122,32 @@ function buildChineseSeed(siteUrl) {
         tagKeys: ['read-later'],
       },
     ],
+    todoLists: [{ key: 'getting-started', name: '轻笺入门' }],
     todos: [
-      { key: 'first-bookmark', title: '收藏第一个网页', description: '保存一篇稍后想看的网页，并按需要添加标签。' },
-      { key: 'first-note', title: '写下第一篇笔记', description: '记录一个想法、计划或学习摘要。' },
-      { key: 'first-file', title: '上传第一份文件', description: '把常用资料上传到云空间，之后可以继续分类整理。' },
+      {
+        key: 'first-bookmark',
+        title: '收藏第一个网页',
+        description: '保存一篇稍后想看的网页，并按需要添加标签。',
+        priority: 1,
+        listKey: 'getting-started',
+        tagKeys: [],
+      },
+      {
+        key: 'first-note',
+        title: '写下第一篇笔记',
+        description: '记录一个想法、计划或学习摘要。',
+        priority: 2,
+        listKey: 'getting-started',
+        tagKeys: ['getting-started'],
+      },
+      {
+        key: 'first-file',
+        title: '上传第一份文件',
+        description: '把常用资料上传到云空间，之后可以继续分类整理。',
+        priority: 1,
+        listKey: null,
+        tagKeys: [],
+      },
     ],
     notes: [
       {
@@ -263,10 +286,32 @@ function buildEnglishSeed(siteUrl) {
         tagKeys: ['read-later'],
       },
     ],
+    todoLists: [{ key: 'getting-started', name: 'Getting Started' }],
     todos: [
-      { key: 'first-bookmark', title: 'Save your first webpage', description: 'Save a page to revisit and add a tag if useful.' },
-      { key: 'first-note', title: 'Write your first note', description: 'Capture an idea, plan, or learning summary.' },
-      { key: 'first-file', title: 'Upload your first file', description: 'Add a useful file to cloud storage and organize it later.' },
+      {
+        key: 'first-bookmark',
+        title: 'Save your first webpage',
+        description: 'Save a page to revisit and add a tag if useful.',
+        priority: 1,
+        listKey: 'getting-started',
+        tagKeys: [],
+      },
+      {
+        key: 'first-note',
+        title: 'Write your first note',
+        description: 'Capture an idea, plan, or learning summary.',
+        priority: 2,
+        listKey: 'getting-started',
+        tagKeys: ['getting-started'],
+      },
+      {
+        key: 'first-file',
+        title: 'Upload your first file',
+        description: 'Add a useful file to cloud storage and organize it later.',
+        priority: 1,
+        listKey: null,
+        tagKeys: [],
+      },
     ],
     notes: [
       {
@@ -574,6 +619,12 @@ export async function seedNewUserWorkspaceData({ userId, lang = 'zh-CN', siteUrl
       });
     }
 
+    const todoListIds = {};
+    for (const list of content.todoLists) {
+      const created = await saveTodoList(connection, userId, { name: list.name });
+      todoListIds[list.key] = created.id;
+    }
+
     for (const [index, todo] of content.todos.entries()) {
       const created = await createTodo(
         connection,
@@ -581,7 +632,9 @@ export async function seedNewUserWorkspaceData({ userId, lang = 'zh-CN', siteUrl
         {
           title: todo.title,
           description: todo.description,
-          priority: 1,
+          priority: todo.priority,
+          listId: todo.listKey ? todoListIds[todo.listKey] : null,
+          tagIds: todo.tagKeys.map((key) => ids.tags[key]),
           dueAt: null,
           reminder: null,
           sortOrder: (index + 1) * 1000,

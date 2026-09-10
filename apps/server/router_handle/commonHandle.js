@@ -1399,10 +1399,12 @@ export const getAgentLogsSummary = async (req, res) => {
 const ADMIN_TREND_PERIODS = new Set([7, 15, 30, 90]);
 const ADMIN_RECENT_LIMIT = 20;
 const ADMIN_RECENT_PERIODS = new Set(['recent', 'today']);
-const ADMIN_RECENT_TYPES = new Set(['all', 'resource', 'user', 'bookmark', 'note', 'file']);
+const ADMIN_RECENT_TYPES = new Set(['all', 'resource', 'user', 'bookmark', 'note', 'file', 'todo']);
 const ADMIN_RECENT_TARGETS = new Set(['resource', 'user']);
 const ADMIN_RECENT_RESOURCE_TYPES = ['bookmark', 'note', 'file'];
-const ADMIN_RECENT_RESOURCE_ORDER = new Map(ADMIN_RECENT_RESOURCE_TYPES.map((type, index) => [type, index]));
+const ADMIN_RECENT_RESOURCE_ORDER = new Map(
+  [...ADMIN_RECENT_RESOURCE_TYPES, 'todo'].map((type, index) => [type, index]),
+);
 const ADMIN_TODAY_BASELINE_DAYS = 7;
 
 function adminOverviewDateHelpers(now = new Date()) {
@@ -1998,7 +2000,7 @@ export const getAdminOverviewRecent = async (req, res) => {
       if (target === 'user' && candidate !== 'user') return false;
       return includeByType(candidate);
     };
-    const includedResourceTypes = ADMIN_RECENT_RESOURCE_TYPES.filter(include);
+    const includedResourceTypes = [...ADMIN_RECENT_RESOURCE_ORDER.keys()].filter(include);
     const cursorScope = adminCursorScope('admin-overview-recent', [hideInternal, period, type, target]);
     const resourceCursor =
       cursorMode && target === 'resource'
@@ -2011,6 +2013,7 @@ export const getAdminOverviewRecent = async (req, res) => {
     const bookmarkDate = dateFilter('bookmark.create_time');
     const noteDate = dateFilter('note.create_time');
     const fileDate = dateFilter('files.create_time');
+    const todoDate = dateFilter('todo_items.create_time');
     const userDate = dateFilter('recent_user.create_time');
     const bookmarkCursor = recentResourceCursorFilter(
       'bookmark.create_time',
@@ -2020,6 +2023,7 @@ export const getAdminOverviewRecent = async (req, res) => {
     );
     const noteCursor = recentResourceCursorFilter('note.create_time', 'note.id', 'note', resourceCursor);
     const fileCursor = recentResourceCursorFilter('files.create_time', 'files.id', 'file', resourceCursor);
+    const todoCursor = recentResourceCursorFilter('todo_items.create_time', 'todo_items.id', 'todo', resourceCursor);
     const userCursorFilter = userCursor
       ? {
           sql: ' AND (recent_user.create_time < ? OR (recent_user.create_time = ? AND recent_user.id < ?))',
@@ -2030,7 +2034,7 @@ export const getAdminOverviewRecent = async (req, res) => {
           ],
         }
       : { sql: '', params: [] };
-    const [bookmarkRows, noteRows, fileRows, userRows] = await Promise.all([
+    const [bookmarkRows, noteRows, fileRows, todoRows, userRows] = await Promise.all([
       include('bookmark')
         ? pool.query(
             `SELECT bookmark.id, bookmark.name AS title, bookmark.create_time AS createdAt,
@@ -2076,6 +2080,21 @@ export const getAdminOverviewRecent = async (req, res) => {
             [rootUserId, ...fileDate.params, ...fileCursor.params, take],
           )
         : Promise.resolve([[]]),
+      include('todo')
+        ? pool.query(
+            `SELECT todo_items.id, todo_items.title, todo_items.status, todo_items.create_time AS createdAt,
+                resource_owner.id AS userId, resource_owner.alias AS userName,
+                COALESCE(owner_remark.remark_name, '') AS userRemark
+         FROM todo_items
+         JOIN \`user\` resource_owner ON resource_owner.id = todo_items.user_id AND resource_owner.del_flag = 0
+         LEFT JOIN admin_user_remarks owner_remark
+           ON owner_remark.admin_user_id = ? AND owner_remark.target_user_id = resource_owner.id
+         WHERE todo_items.del_flag = 0${todoDate.sql}${todoCursor.sql}${resourceOwnerRole}${scope.notOnboardingTodo}
+         ORDER BY todo_items.create_time DESC, todo_items.id DESC
+         LIMIT ?`,
+            [rootUserId, ...todoDate.params, ...todoCursor.params, take],
+          )
+        : Promise.resolve([[]]),
       include('user')
         ? pool.query(
             `SELECT recent_user.id, recent_user.alias AS name, recent_user.role,
@@ -2097,6 +2116,7 @@ export const getAdminOverviewRecent = async (req, res) => {
       ...withType(bookmarkRows, 'bookmark'),
       ...withType(noteRows, 'note'),
       ...withType(fileRows, 'file'),
+      ...withType(todoRows, 'todo'),
     ].sort(compareRecentResources);
     const recentResources = mergedResources.slice(0, pageSize);
     const recentUsers = (userRows[0] || []).slice(0, pageSize);

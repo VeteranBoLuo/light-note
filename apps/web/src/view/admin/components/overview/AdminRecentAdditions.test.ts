@@ -68,6 +68,7 @@ function mountRecent(options: {
 afterEach(() => {
   cleanup?.();
   cleanup = undefined;
+  vi.restoreAllMocks();
 });
 
 describe('AdminRecentAdditions', () => {
@@ -234,6 +235,18 @@ describe('AdminRecentAdditions', () => {
   });
 
   it('接近已加载末尾时由虚拟列表自动请求下一页', async () => {
+    // jsdom 无布局，提供真实可见高度以触发祖先滚动列表的分页门槛。
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      top: 0,
+      bottom: 58,
+      left: 0,
+      right: 600,
+      width: 600,
+      height: 58,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
     const data: AdminRecentData = {
       recentResources: [
         {
@@ -255,5 +268,51 @@ describe('AdminRecentAdditions', () => {
     await nextTick();
     await nextTick();
     expect(onLoadMoreResource).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('最近新增待办', () => {
+  it('展示待办状态、未命名回退与归属，并可选择待办筛选', async () => {
+    const { host, onFilterChange } = mountRecent({
+      data: {
+        recentUsers: [],
+        recentResources: [
+          {
+            id: 'todo-1',
+            type: 'todo',
+            title: '本周回顾',
+            status: 'pending',
+            userId: 'u1',
+            userName: '测试用户',
+            createdAt: '2026-09-10T00:00:00Z',
+          },
+          {
+            id: 'todo-2',
+            type: 'todo',
+            title: ' ',
+            status: 'completed',
+            userId: 'u1',
+            createdAt: '2026-09-09T00:00:00Z',
+          },
+        ],
+      },
+    });
+    await nextTick();
+    expect(host.textContent).toContain('本周回顾');
+    expect(host.textContent).toContain('测试用户');
+    expect(host.textContent).toContain('adminOverviewRecent.unnamed.todo');
+    expect([...host.querySelectorAll('.admin-recent__todo-status')].map((el) => el.textContent?.trim())).toEqual([
+      'adminOverviewRecent.todoStatus.pending',
+      'adminOverviewRecent.todoStatus.completed',
+    ]);
+    (host.querySelector('.admin-recent__filter--type .select-trigger') as HTMLElement).click();
+    await nextTick();
+    const todo = [...document.body.querySelectorAll<HTMLElement>('.select-option')].find((el) =>
+      el.textContent?.includes('adminOverviewRecent.resourceType.todo'),
+    );
+    expect(todo).toBeDefined();
+    todo!.click();
+    await nextTick();
+    expect(onFilterChange).toHaveBeenCalledWith({ period: 'recent', type: 'todo' });
   });
 });

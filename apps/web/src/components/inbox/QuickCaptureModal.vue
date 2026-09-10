@@ -134,11 +134,20 @@
       </template>
 
       <div v-else class="capture-success">
-        <span>{{ successText }}</span>
+        <div class="capture-success__message" role="status">
+          <span class="capture-success__icon" aria-hidden="true">
+            <SvgIcon :src="icon.organize.check" size="16" />
+          </span>
+          <span>{{ successText }}</span>
+        </div>
         <div class="capture-success__actions">
-          <BButton size="small" @click="continueCapture">{{ t('inbox.continueCapture') }}</BButton>
-          <BButton size="small" @click="openCapturedResource">{{ t('inbox.openCaptured') }}</BButton>
-          <BButton size="small" @click="goInbox">{{ successTargetLabel }}</BButton>
+          <BButton class="capture-success__link" size="small" @click="openCapturedResource">
+            {{ t('inbox.openCaptured') }}
+          </BButton>
+          <BButton class="capture-success__link" size="small" @click="goInbox">{{ successTargetLabel }}</BButton>
+          <BButton class="capture-success__continue" type="primary" size="small" @click="continueCapture">
+            {{ t('inbox.continueCapture') }}
+          </BButton>
         </div>
       </div>
     </div>
@@ -903,18 +912,54 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 12px;
-    padding: 10px 12px;
-    border: 1px solid color-mix(in srgb, var(--message-success-color) 28%, transparent);
-    border-radius: 12px;
-    background: color-mix(in srgb, var(--message-success-color) 10%, var(--card-background));
+    flex-wrap: wrap;
+    gap: 16px;
+    padding: 8px 0 4px;
     color: var(--text-color);
+  }
+  .capture-success__message {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    font-size: 13px;
+    line-height: 20px;
+  }
+  .capture-success__icon {
+    display: grid;
+    place-items: center;
+    flex: 0 0 22px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    color: var(--workspace-note-text);
+    background: var(--hover-background);
   }
   .capture-success__actions {
     display: flex;
+    align-items: center;
     justify-content: flex-end;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 8px;
+    margin-left: auto;
+  }
+  .capture-success__actions .b_btn {
+    height: 32px;
+    min-height: 32px;
+    padding: 0 10px;
+    font-size: 12px;
+  }
+  .capture-success__link.b_btn {
+    background: transparent;
+    color: var(--desc-color);
+
+    &:not(:disabled):is(:hover, :focus-visible) {
+      background: var(--hover-background);
+      color: var(--text-color);
+    }
+  }
+  .capture-success__continue {
+    flex-shrink: 0;
   }
   .capture-actions {
     display: flex;
@@ -992,7 +1037,12 @@
     }
     .capture-success__actions {
       width: 100%;
+      margin-left: 0;
       justify-content: flex-start;
+      gap: 6px;
+    }
+    .capture-success__continue {
+      margin-left: auto;
     }
     .capture-actions :deep(.b_btn) {
       flex: 1;

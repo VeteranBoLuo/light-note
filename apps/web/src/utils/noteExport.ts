@@ -33,6 +33,16 @@ const EXPORT_STYLES = `
   .note-export h3 { font-size: 1.25em; }
   .note-export h1, .note-export h2, .note-export h3,
   .note-export h4, .note-export h5, .note-export h6 { margin: 1em 0 0.5em; line-height: 1.35; }
+  .note-export h1.note-export-document-title {
+    font-size: 2.6em;
+    font-weight: 700;
+    line-height: 1.25;
+    margin: 0 0 32px;
+    padding: 0 0 24px;
+    border-bottom: 1px solid #d8dce3;
+    break-after: avoid;
+    page-break-after: avoid;
+  }
   .note-export p { margin: 0 0 0.9em; }
   .note-export img { max-width: 100%; height: auto; }
   .note-export img[data-ln-size] { display: block; margin-inline: auto; }
@@ -292,11 +302,11 @@ export async function inlineMermaidForExport(html: string): Promise<string> {
  * 样式必须内联且用固定色值 —— 编辑器那份 content_style 依赖 `var(--text-color)`
  * 这类 CSS 变量，脱离站内主题后会全部失效。
  */
-export function buildNoteExportHtml(title: string, bodyHtml: string, lang = 'zh-CN') {
+export function buildNoteExportHtml(title: string, bodyHtml: string, lang = 'zh-CN', includeHeading = true) {
   const safeTitle = escapeHtml(title);
   // 正文若已以一级标题开头(md 笔记通常第一行就是 `# 标题`),不再补一个,否则页面上会出现两遍标题
   const hasLeadingH1 = /^\s*<h1[\s>]/i.test(bodyHtml);
-  const heading = hasLeadingH1 ? '' : `<h1>${safeTitle}</h1>\n`;
+  const heading = !includeHeading || hasLeadingH1 ? '' : `<h1>${safeTitle}</h1>\n`;
   return `<!DOCTYPE html>
 <html lang="${escapeHtml(lang)}">
 <head>

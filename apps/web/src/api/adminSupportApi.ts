@@ -95,6 +95,8 @@ export interface AdminSupportCampaign {
   title: string;
   description: string;
   status: 'draft' | 'published' | 'suspended';
+  publicEnabled?: boolean;
+  publicUpdatedAt?: string | null;
   startsAt: string;
   endsAt: string;
   costPolicyVersion: string;
@@ -242,5 +244,12 @@ export async function getAdminSupportCampaignGrants(campaignId: string): Promise
   return requireData(
     await apiBaseGet(`/api/support/admin/campaigns/${encodeURIComponent(campaignId)}/grants`),
     'ADMIN_SUPPORT_CAMPAIGN_GRANTS_FAILED',
+  );
+}
+
+export async function setAdminCampaignVisibility(id: string, enabled: boolean) {
+  return requireData<{ publicEnabled: boolean }>(
+    await apiBasePost(`/api/support/admin/campaigns/${encodeURIComponent(id)}/visibility`, { enabled }),
+    'CAMPAIGN_VISIBILITY_FAILED',
   );
 }

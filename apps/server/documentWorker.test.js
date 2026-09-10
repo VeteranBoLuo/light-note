@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
-const mocks = vi.hoisted(() => ({ end: vi.fn(), item: vi.fn(), ensure: vi.fn() }));
+const mocks = vi.hoisted(() => ({ end: vi.fn(), item: vi.fn(), ensure: vi.fn(), destroy: vi.fn() }));
+vi.mock('./util/redisClient.js', () => ({ default: { isOpen: true, destroy: mocks.destroy } }));
 vi.mock('./db/index.js', () => ({ default: { end: mocks.end } }));
 vi.mock('./util/aiDocumentSchema.js', () => ({ ensureAiDocumentSchema: mocks.ensure }));
 vi.mock('./util/communityChatSchema.js', () => ({ ensureCommunityChatSchema: async () => {} }));
@@ -56,17 +57,35 @@ it('停止领取新任务，等待在途任务完成后关闭数据库连接', a
   await import('./documentWorker.js');
   await vi.waitFor(() => expect(mocks.item).toHaveBeenCalledOnce());
   expect(mocks.end).not.toHaveBeenCalled();
+  expect(mocks.destroy).not.toHaveBeenCalled();
   complete();
-  await vi.waitFor(() => expect(mocks.end).toHaveBeenCalledOnce());
+  await vi.waitFor(() => {
+    expect(mocks.end).toHaveBeenCalledOnce();
+    expect(mocks.destroy).toHaveBeenCalledOnce();
+  });
   expect(mocks.item).toHaveBeenCalledOnce();
 });
 it('启动失败也释放连接池', async () => {
   mocks.ensure.mockRejectedValueOnce(new Error('fixture startup failure'));
   await import('./documentWorker.js');
-  await vi.waitFor(() => expect(mocks.end).toHaveBeenCalledOnce());
+  await vi.waitFor(() => {
+    expect(mocks.end).toHaveBeenCalledOnce();
+    expect(mocks.destroy).toHaveBeenCalledOnce();
+  });
   expect(process.exitCode).toBe(1);
   expect(mocks.item).not.toHaveBeenCalled();
 });
 
-vi.mock('./util/imagePreview/worker.js',()=>({runSingleImagePreviewJob:vi.fn(async()=>false),cleanupImageAssets:vi.fn()}));
-vi.mock('./util/imagePreview/runtime.js',()=>({inspectImagePreviewRuntime:vi.fn(async()=>({ready:true}))}));
+vi.mock('./util/imagePreview/worker.js', () => ({
+  runSingleImagePreviewJob: vi.fn(async () => false),
+  cleanupImageAssets: vi.fn(),
+}));
+vi.mock('./util/imagePreview/runtime.js', () => ({ inspectImagePreviewRuntime: vi.fn(async () => ({ ready: true })) }));
+
+it('数据库关闭失败仍释放 Redis 连接', async () => {
+  mocks.ensure.mockRejectedValueOnce(new Error('fixture startup failure'));
+  mocks.end.mockRejectedValueOnce(new Error('fixture close failure'));
+  await import('./documentWorker.js');
+  await vi.waitFor(() => expect(mocks.destroy).toHaveBeenCalledOnce());
+  expect(process.exitCode).toBe(1);
+});

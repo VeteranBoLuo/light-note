@@ -587,7 +587,7 @@ describe('getAdminOverview 兼容接口', () => {
 describe('getAdminOverviewRecent 最近新增', () => {
   beforeEach(() => query.mockReset());
 
-  it('按统一口径过滤示例资源和内部账号，并合并三类资源的最新 20 条', async () => {
+  it('按统一口径过滤示例资源和内部账号，并合并资料与待办的最新 20 条', async () => {
     query
       // ensureRootRole 复核当前 root 身份
       .mockResolvedValueOnce([[{ role: 'root', del_flag: 0 }]])
@@ -628,6 +628,17 @@ describe('getAdminOverviewRecent 最近新增', () => {
       .mockResolvedValueOnce([
         [
           {
+            id: 'todo-1',
+            title: '新待办',
+            status: 'completed',
+            userId: 'user-1',
+            createdAt: new Date('2026-08-07T10:30:00Z'),
+          },
+        ],
+      ])
+      .mockResolvedValueOnce([
+        [
+          {
             id: 'user-4',
             name: '新用户',
             userRemark: '内测用户',
@@ -640,24 +651,24 @@ describe('getAdminOverviewRecent 最近新增', () => {
 
     await getAdminOverviewRecent({ user: { id: 'root-id', role: 'root' }, body: { hideInternal: true } }, res);
 
-    const resourceSql = query.mock.calls.slice(1, 4).map(([sql]) => String(sql));
+    const resourceSql = query.mock.calls.slice(1, 5).map(([sql]) => String(sql));
     expect(resourceSql.every((sql) => sql.includes('onboarding_seed_resources'))).toBe(true);
     expect(resourceSql.every((sql) => sql.includes('resource_owner.del_flag = 0'))).toBe(true);
     expect(resourceSql.every((sql) => sql.includes('LEFT JOIN admin_user_remarks'))).toBe(true);
     expect(resourceSql.every((sql) => sql.includes("COALESCE(owner_remark.remark_name, '') AS userRemark"))).toBe(true);
     expect(resourceSql.every((sql) => sql.includes("resource_owner.role NOT IN ('root', 'test')"))).toBe(true);
     expect(resourceSql.every((sql) => sql.includes('LIMIT ?'))).toBe(true);
-    expect(query.mock.calls.slice(1, 5).every(([, params]) => params?.[0] === 'root-id')).toBe(true);
-    expect(query.mock.calls.slice(1, 5).every(([, params]) => params?.at(-1) === 20)).toBe(true);
-    expect(String(query.mock.calls[4][0])).toContain("role <> 'visitor'");
-    expect(String(query.mock.calls[4][0])).toContain('LEFT JOIN admin_user_remarks');
-    expect(String(query.mock.calls[4][0])).toContain('LIMIT ?');
+    expect(query.mock.calls.slice(1, 6).every(([, params]) => params?.[0] === 'root-id')).toBe(true);
+    expect(query.mock.calls.slice(1, 6).every(([, params]) => params?.at(-1) === 20)).toBe(true);
+    expect(String(query.mock.calls[5][0])).toContain("role <> 'visitor'");
+    expect(String(query.mock.calls[5][0])).toContain('LEFT JOIN admin_user_remarks');
+    expect(String(query.mock.calls[5][0])).toContain('LIMIT ?');
     const payload = res.send.mock.calls[0][0];
     expect(payload.status).toBe(200);
     expect(payload.data.filter).toEqual({ period: 'recent', type: 'all', timezone: 'Asia/Shanghai' });
     expect(payload.data.limit).toBe(20);
-    expect(payload.data.recentResources.map((item) => item.type)).toEqual(['note', 'file', 'bookmark']);
-    expect(payload.data.recentResources[2]).toEqual(expect.objectContaining({ userRemark: '客户甲' }));
+    expect(payload.data.recentResources.map((item) => item.type)).toEqual(['todo', 'note', 'file', 'bookmark']);
+    expect(payload.data.recentResources[3]).toEqual(expect.objectContaining({ userRemark: '客户甲' }));
     expect(payload.data.recentUsers).toEqual([
       expect.objectContaining({ id: 'user-4', name: '新用户', userRemark: '内测用户', role: 'user' }),
     ]);
@@ -758,6 +769,7 @@ describe('getAdminOverviewRecent 最近新增', () => {
           },
         ],
       ])
+      .mockResolvedValueOnce([[]])
       .mockResolvedValueOnce([[]]);
     const firstRes = mockRes();
 
@@ -769,7 +781,7 @@ describe('getAdminOverviewRecent 最近新增', () => {
       firstRes,
     );
 
-    expect(query).toHaveBeenCalledTimes(4);
+    expect(query).toHaveBeenCalledTimes(5);
     expect(query.mock.calls.slice(1).every(([, params]) => params?.at(-1) === 3)).toBe(true);
     const firstPage = firstRes.send.mock.calls[0][0].data;
     expect(firstPage.items.map((item) => `${item.type}:${item.id}`)).toEqual([
@@ -795,6 +807,7 @@ describe('getAdminOverviewRecent 最近新增', () => {
         ],
       ])
       .mockResolvedValueOnce([[{ id: 'note-1', title: '同刻笔记', userId: 'u2', userName: '乙', createdAt: sameTime }]])
+      .mockResolvedValueOnce([[]])
       .mockResolvedValueOnce([[]]);
     const secondRes = mockRes();
 
@@ -893,13 +906,101 @@ describe('getAdminOverviewRecent 最近新增', () => {
     await getAdminOverviewRecent(
       {
         user: { id: 'root-id', role: 'root' },
-        body: { period: 'today', type: 'todo' },
+        body: { period: 'today', type: 'unknown' },
       },
       res,
     );
 
     expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 400 }));
     expect(query).toHaveBeenCalledTimes(1);
+  });
+
+  it('今日待办只按创建时间取数，保留完成状态并过滤已删除及教学实例', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-10T08:00:00+08:00'));
+    try {
+      query
+        .mockResolvedValueOnce([[{ role: 'root', del_flag: 0 }]])
+        .mockResolvedValueOnce([
+          [{ id: 'todo-done', title: '已完成事项', status: 'completed', createdAt: new Date('2026-09-10T00:00:00Z') }],
+        ]);
+      const res = mockRes();
+      await getAdminOverviewRecent(
+        { user: { id: 'root-id', role: 'root' }, body: { period: 'today', type: 'todo', hideInternal: false } },
+        res,
+      );
+      expect(query).toHaveBeenCalledTimes(2);
+      const [sql, params] = query.mock.calls[1];
+      expect(sql).toContain('todo_items.del_flag = 0');
+      expect(sql).toContain('resource_owner.del_flag = 0');
+      expect(sql).toContain("osr.resource_type = 'todo'");
+      expect(sql).toContain('ORDER BY todo_items.create_time DESC, todo_items.id DESC');
+      expect(sql).not.toContain('completed_at');
+      expect(sql).not.toContain('update_time');
+      expect(sql).not.toContain('role NOT IN');
+      expect(params).toEqual(['root-id', '2026-09-10', '2026-09-10', 20]);
+      expect(res.send.mock.calls[0][0].data.recentResources).toEqual([
+        expect.objectContaining({ type: 'todo', status: 'completed' }),
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('跨类型同刻翻页覆盖待办，并用待办主键稳定续页', async () => {
+    const time = new Date('2026-09-10T02:00:00Z');
+    const body = { period: 'recent', type: 'all', target: 'resource', cursor: null, limit: 2 };
+    query
+      .mockResolvedValueOnce([[{ role: 'root', del_flag: 0 }]])
+      .mockResolvedValueOnce([[]])
+      .mockResolvedValueOnce([[]])
+      .mockResolvedValueOnce([[{ id: 9, createdAt: time }]])
+      .mockResolvedValueOnce([
+        [
+          { id: 'todo-b', createdAt: time },
+          { id: 'todo-a', createdAt: time },
+        ],
+      ]);
+    const first = mockRes();
+    await getAdminOverviewRecent({ user: { id: 'root-id', role: 'root' }, body }, first);
+    const page = first.send.mock.calls[0][0].data;
+    expect(page.items.map((item) => `${item.type}:${item.id}`)).toEqual(['file:9', 'todo:todo-b']);
+    expect(page.hasMore).toBe(true);
+    query.mockReset();
+    query
+      .mockResolvedValueOnce([[{ role: 'root', del_flag: 0 }]])
+      .mockResolvedValueOnce([[]])
+      .mockResolvedValueOnce([[]])
+      .mockResolvedValueOnce([[]])
+      .mockResolvedValueOnce([[{ id: 'todo-a', createdAt: time }]]);
+    const second = mockRes();
+    await getAdminOverviewRecent(
+      { user: { id: 'root-id', role: 'root' }, body: { ...body, cursor: page.nextCursor } },
+      second,
+    );
+    expect(query.mock.calls[3][0]).toContain('files.create_time < ?');
+    expect(query.mock.calls[4][0]).toContain('todo_items.id < ?');
+    expect(query.mock.calls[4][1]).toEqual(['root-id', time, time, 'todo-b', 3]);
+    expect(second.send.mock.calls[0][0].data).toEqual(
+      expect.objectContaining({
+        items: [expect.objectContaining({ id: 'todo-a', type: 'todo' })],
+        hasMore: false,
+        nextCursor: null,
+      }),
+    );
+  });
+
+  it('原资源筛选保持三类资料范围', async () => {
+    query
+      .mockResolvedValueOnce([[{ role: 'root', del_flag: 0 }]])
+      .mockResolvedValueOnce([[]])
+      .mockResolvedValueOnce([[]])
+      .mockResolvedValueOnce([[]]);
+    const res = mockRes();
+    await getAdminOverviewRecent({ user: { id: 'root-id', role: 'root' }, body: { type: 'resource' } }, res);
+    expect(res.send.mock.calls[0][0].status).toBe(200);
+    expect(query).toHaveBeenCalledTimes(4);
+    expect(query.mock.calls.some(([sql]) => sql.includes('FROM todo_items'))).toBe(false);
   });
 
   it('非 root 用户无权读取且不执行资源查询', async () => {

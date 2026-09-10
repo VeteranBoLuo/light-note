@@ -1,5 +1,5 @@
 import net from "node:net";
-import { findLocalDocumentWorkers } from "./localWorkerGuard.mjs";
+import { inspectLocalWorkers } from "./localWorkerGuard.mjs";
 import { spawn } from "node:child_process";
 import path from "node:path";
 import process from "node:process";
@@ -135,8 +135,30 @@ async function stopAll(exitCode) {
 
 async function main() {
   if (process.platform !== "win32") {
-    const workers = findLocalDocumentWorkers(path.join(rootDir, "apps/server"));
-    if (workers.length) throw new Error(`当前仓库仍有文档整理 Worker（PID ${workers.join(", ")}）。请先结束原来的本地后端或 Worker，再启动，避免新旧代码同时领取任务。`);
+    const serverDirectory = path.join(rootDir, "apps/server");
+    const { orphanGroups } = inspectLocalWorkers(serverDirectory);
+    for (const group of orphanGroups) {
+      console.log(`[本地后端] 回收旧启动器遗留的 Worker 进程组 ${group}…`);
+      try {
+        process.kill(-group, "SIGTERM");
+      } catch (error) {
+        if (error.code !== "ESRCH") throw error;
+      }
+    }
+    const deadline = Date.now() + 5_000;
+    let remaining = inspectLocalWorkers(serverDirectory);
+    while (
+      orphanGroups.length &&
+      remaining.workers.length &&
+      Date.now() < deadline
+    ) {
+      await sleep(200);
+      remaining = inspectLocalWorkers(serverDirectory);
+    }
+    if (remaining.workers.length)
+      throw new Error(
+        `当前仓库仍有 Worker（PID ${remaining.workers.join(", ")}）。请先结束原来的本地后端或 Worker，再启动，避免新旧代码同时领取任务。`,
+      );
   }
   console.log("\n[本地后端] 1/4 释放旧的 HTTP 服务端口…");
   const freePort = runChild(
@@ -160,7 +182,12 @@ async function main() {
   console.log(
     `[本地后端] 3/4 启动文档与文件预览 Worker${watchMode ? "（监听模式）" : ""}…`,
   );
-  runPnpm("笔记导入 Worker", ["--filter", "server", "run", "worker:note-imports"]);
+  runPnpm("笔记导入 Worker", [
+    "--filter",
+    "server",
+    "run",
+    "worker:note-imports",
+  ]);
   const worker = runPnpm("文档与文件预览 Worker", [
     "--filter",
     "server",
@@ -171,16 +198,19 @@ async function main() {
   console.log(
     `[本地后端] 4/4 启动资源治理 Worker${watchMode ? "（监听模式）" : ""}…`,
   );
-  const pushWorker = runPnpm("浏览器推送 Worker", ["--filter", "server", "run", "worker:browser-push"]);
+  const pushWorker = runPnpm("浏览器推送 Worker", [
+    "--filter",
+    "server",
+    "run",
+    "worker:browser-push",
+  ]);
   await ensureChildStable(pushWorker, "浏览器推送 Worker");
 
   const governanceWorker = runPnpm("资源治理 Worker", [
     "--filter",
     "server",
     "run",
-    watchMode
-      ? "worker:resource-governance:dev"
-      : "worker:resource-governance",
+    watchMode ? "worker:resource-governance:dev" : "worker:resource-governance",
   ]);
 
   await Promise.all([

@@ -9,6 +9,7 @@ import zh from '@/i18n/locales/zh-CN';
 import en from '@/i18n/locales/en-US';
 import '@/assets/css/index.less';
 const p = new URLSearchParams(location.search);
+const audioMode = p.get('audio') === 'true';
 const theme = p.get('theme') === 'night' ? 'night' : 'day';
 document.documentElement.dataset.theme = theme;
 document.documentElement.classList.toggle('light-note-mobile-rendering', p.get('renderProfile') === 'mobile');
@@ -261,9 +262,9 @@ useUserStore(pinia).setUserInfo({
 bookmarkStore(pinia).screenWidth = window.innerWidth;
 cloudSpaceStore(pinia).fileList = states.map((state, i) => ({
   id: `cloud-${i}`,
-  fileName: `图片-${state}.png`,
-  fileType: 'image/png',
-  category: 'image',
+  fileName: audioMode ? `音频-${state}.mp3` : `图片-${state}.png`,
+  fileType: audioMode ? 'audio/mpeg' : 'image/png',
+  category: audioMode ? 'audio' : 'image',
   fileSize: 2000000,
   fileUrl: '/original-must-not-be-requested.png',
   uploadTime: '2026-09-08 12:00',

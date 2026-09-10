@@ -206,7 +206,7 @@ async function loadActiveCampaignPackages({ userId, db, now }) {
        FROM support_campaigns c
        JOIN support_campaign_skus s ON s.campaign_id = c.id
        ${userJoin}
-      WHERE c.status = 'published'
+      WHERE c.status = 'published' AND c.public_enabled = 1
         AND c.starts_at <= ?
         AND c.ends_at > ?
       ORDER BY c.starts_at DESC, c.version DESC, s.sort_order ASC, s.id ASC`,

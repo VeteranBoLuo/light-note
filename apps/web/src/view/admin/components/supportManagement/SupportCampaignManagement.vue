@@ -5,10 +5,14 @@
         <h2>{{ t('adminSupport.campaigns.title') }}</h2>
         <p>{{ t('adminSupport.campaigns.description') }}</p>
       </div>
-      <BButton type="primary" @click="openCreate">{{ t('adminSupport.campaigns.create') }}</BButton>
+      <BButton v-if="canWrite" type="primary" @click="openCreate">{{ t('adminSupport.campaigns.create') }}</BButton>
     </header>
 
-    <EntitlementCampaignSection draft :title="t('entitlementJourney.title')" :description="t('entitlementJourney.description')" />
+    <EntitlementCampaignSection
+      draft
+      :title="t('entitlementJourney.title')"
+      :description="t('entitlementJourney.description')"
+    />
     <p>{{ t('entitlementJourney.costAssumptions') }}</p>
     <div v-if="loading" class="campaign-admin__state"><BLoading inline loading /></div>
     <div v-else-if="loadError" class="campaign-admin__state is-error">
@@ -30,9 +34,20 @@
             <p>{{ campaign.campaignKey }} · {{ formatTime(campaign.startsAt) }} — {{ formatTime(campaign.endsAt) }}</p>
           </div>
           <div class="campaign-admin__actions">
+            <BChip tone="neutral">{{ t(campaign.publicEnabled ? 'autumn.visible' : 'autumn.hidden') }}</BChip>
+            <BButton size="small" @click="previewCampaign(campaign)">{{ t('autumn.preview') }}</BButton>
+            <BButton
+              v-if="
+                canWrite && (campaign.publicEnabled || (campaign.status === 'published' && !campaignIsEnded(campaign)))
+              "
+              size="small"
+              :loading="actingId === campaign.id"
+              @click="confirmVisibility(campaign)"
+              >{{ t(campaign.publicEnabled ? 'autumn.close' : 'autumn.open') }}</BButton
+            >
             <BButton size="small" @click="openGrants(campaign)">{{ t('adminSupport.campaigns.grants') }}</BButton>
             <BButton
-              v-if="campaign.status === 'draft'"
+              v-if="canWrite && campaign.status === 'draft'"
               size="small"
               type="primary"
               :disabled="!campaignPassesCostGate(campaign)"
@@ -42,7 +57,7 @@
               {{ t('adminSupport.campaigns.publish') }}
             </BButton>
             <BButton
-              v-else-if="campaign.status === 'published' && !campaignIsEnded(campaign)"
+              v-else-if="canWrite && campaign.status === 'published' && !campaignIsEnded(campaign)"
               size="small"
               :loading="actingId === campaign.id"
               @click="confirmSuspend(campaign)"
@@ -73,6 +88,15 @@
     </div>
   </section>
 
+  <BModal
+    v-model:visible="showcaseVisible"
+    :title="t('autumn.preview')"
+    width="min(1520px, 98vw)"
+    height="90vh"
+    :show-footer="false"
+  >
+    <CampaignShowcase :presentation="showcasePresentation" draft />
+  </BModal>
   <BModal
     v-model:visible="createVisible"
     :title="t('adminSupport.campaigns.createTitle')"
@@ -123,10 +147,14 @@
       <div v-for="(sku, index) in draft.skus" :key="sku.localId" class="campaign-admin__sku-form">
         <div class="campaign-admin__sku-form-head">
           <strong>{{ t('adminSupport.campaigns.skuNumber', { count: index + 1 }) }}</strong>
-          <BButton v-if="draft.skus.length > 1" size="small" @click="removeSku(index)">{{ t('common.delete') }}</BButton>
+          <BButton v-if="draft.skus.length > 1" size="small" @click="removeSku(index)">{{
+            t('common.delete')
+          }}</BButton>
         </div>
         <div class="campaign-admin__form-grid is-sku">
-          <label><span>SKU ID</span><BInput v-model:value="sku.skuId" theme="al-day" placeholder="summer-ai-6" /></label>
+          <label
+            ><span>SKU ID</span><BInput v-model:value="sku.skuId" theme="al-day" placeholder="summer-ai-6"
+          /></label>
           <label
             ><span>{{ t('adminSupport.campaigns.skuName') }}</span
             ><BInput v-model:value="sku.title" theme="al-day"
@@ -145,7 +173,11 @@
             ><BInput v-model:value="sku.perUserLimit" theme="al-day" type="number"
           /></label>
         </div>
-        <div v-if="costBySku.get(sku.skuId)" class="campaign-admin__cost" :class="{ 'is-failed': !costBySku.get(sku.skuId)?.passes }">
+        <div
+          v-if="costBySku.get(sku.skuId)"
+          class="campaign-admin__cost"
+          :class="{ 'is-failed': !costBySku.get(sku.skuId)?.passes }"
+        >
           {{
             t('adminSupport.campaigns.costResult', {
               cost: costBySku.get(sku.skuId)?.directCost.toFixed(2),
@@ -164,7 +196,9 @@
     <template #footer>
       <div class="campaign-admin__modal-footer">
         <BButton :disabled="creating" @click="createVisible = false">{{ t('common.cancel') }}</BButton>
-        <BButton type="primary" :loading="creating" @click="createDraft">{{ t('adminSupport.campaigns.saveDraft') }}</BButton>
+        <BButton type="primary" :loading="creating" @click="createDraft">{{
+          t('adminSupport.campaigns.saveDraft')
+        }}</BButton>
       </div>
     </template>
   </BModal>
@@ -198,7 +232,9 @@
               {{ grantStatusLabel(record.status) }}
             </BChip>
           </template>
-          <template v-else-if="column.key === 'time'">{{ formatTime(record.creditedAt || record.createTime) }}</template>
+          <template v-else-if="column.key === 'time'">{{
+            formatTime(record.creditedAt || record.createTime)
+          }}</template>
         </template>
       </BTable>
       <div class="campaign-admin__grant-cards">
@@ -231,6 +267,11 @@
 </template>
 
 <script setup lang="ts">
+  import CampaignShowcase from '@/components/support/CampaignShowcase.vue';
+  import { useUserStore } from '@/store';
+  import { refreshCampaignEntry } from '@/composables/useCampaignEntry';
+  import { setAdminCampaignVisibility } from '@/api/adminSupportApi';
+  import type { CampaignPresentation } from '@/api/supportApi';
   import EntitlementCampaignSection from '@/components/support/EntitlementCampaignSection.vue';
   import { computed, onMounted, reactive, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
@@ -267,6 +308,106 @@
   };
 
   const { t, locale } = useI18n();
+  const user = useUserStore();
+  const canWrite = computed(() => user.role === 'root' && !user.adminContext);
+  const showcaseVisible = ref(false);
+  const showcasePresentation = ref<CampaignPresentation | null>(null);
+  function previewCampaign(c: AdminSupportCampaign) {
+    showcasePresentation.value = {
+      campaignKey: c.campaignKey,
+      campaignVersion: c.version,
+      title: c.title,
+      description: c.description,
+      serverNow: new Date().toISOString(),
+      startsAt: c.startsAt,
+      endsAt: c.endsAt,
+      lifecycle: campaignIsEnded(c)
+        ? 'ended'
+        : c.status === 'suspended'
+          ? 'paused'
+          : new Date(c.startsAt).getTime() > Date.now()
+            ? 'upcoming'
+            : 'active',
+      checkoutEnabled: false,
+      themeKey: 'autumn-desk-v1',
+      packages: c.skus.map((s) => ({
+        campaignId: c.id,
+        campaignKey: c.campaignKey,
+        campaignVersion: c.version,
+        catalogVersion: c.catalogVersion,
+        campaignTitle: c.title,
+        description: c.description,
+        startsAt: c.startsAt,
+        endsAt: c.endsAt,
+        campaignSkuId: s.campaignSkuId,
+        skuId: s.skuId,
+        title: s.title,
+        category: s.category,
+        amount: Number(s.amount),
+        benefit: { aiTokens: s.aiTokens, storageMb: s.storageMb },
+        perUserLimit: s.perUserLimit,
+        completedCount: 0,
+        remainingPurchases: null,
+        limitReached: false,
+        hasActiveCheckout: false,
+      })),
+    };
+    showcaseVisible.value = true;
+  }
+  async function confirmVisibility(c: AdminSupportCampaign) {
+    if (!canWrite.value || actingId.value) return;
+    const enabled = !c.publicEnabled;
+    let details = c.skus.map((s) => `${s.title} · ¥${s.amount} · ${benefitLabel(s)}`).join('\n');
+    if (enabled) {
+      actingId.value = c.id;
+      try {
+        const quote = await previewAdminSupportCampaignCosts(
+          c.skus.map((s) => ({
+            skuId: s.skuId,
+            title: s.title,
+            amount: Number(s.amount),
+            aiTokens: s.aiTokens,
+            storageMb: s.storageMb,
+            perUserLimit: s.perUserLimit,
+          })),
+        );
+        if (!quote.passes) {
+          message.error(t('adminSupport.campaigns.costFailed'));
+          return;
+        }
+        details +=
+          '\n' +
+          quote.items
+            .map(
+              (s) =>
+                `${s.title}: ${t('adminSupport.campaigns.costResult', { cost: s.directCost.toFixed(2), margin: (s.marginBps / 100).toFixed(1) })}`,
+            )
+            .join('\n');
+      } catch {
+        return;
+      } finally {
+        actingId.value = '';
+      }
+    }
+    if (!canWrite.value) return;
+    Alert.alert({
+      title: t(enabled ? 'autumn.confirmOpen' : 'autumn.close'),
+      content: `${c.title} · v${c.version} · ${formatTime(c.startsAt)} — ${formatTime(c.endsAt)}\n${details}\n${t('autumn.openHint')}`,
+      okText: t(enabled ? 'autumn.open' : 'autumn.close'),
+      async onOk() {
+        if (!canWrite.value) return;
+        actingId.value = c.id;
+        try {
+          await setAdminCampaignVisibility(c.id, enabled);
+          await Promise.all([loadCampaigns(), refreshCampaignEntry(true)]);
+        } catch {
+          /* request layer owns mutation errors */
+        } finally {
+          actingId.value = '';
+        }
+      },
+    });
+  }
   const campaigns = ref<AdminSupportCampaign[]>([]);
   const loading = ref(true);
   const loadError = ref(false);

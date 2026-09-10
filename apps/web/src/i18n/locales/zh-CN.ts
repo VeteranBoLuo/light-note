@@ -1,3 +1,5 @@
+import autumn from './autumn-zh-CN';
+import { noteExportSettingsZh } from './noteExportSettings';
 import { entitlementJourneyZh } from './entitlementJourney';
 import { noteTransferZh } from './noteTransfer';
 import { organizeFileZh } from './organizeFile';
@@ -6,6 +8,8 @@ import { accountSettingsZh } from './accountSettings';
 import { settingsRefineZh } from './settingsRefine';
 import { notificationMessages } from '@lightnote/shared/notification-presentation';
 export default {
+  autumn,
+  noteExportSettings: noteExportSettingsZh,
   entitlementJourney: entitlementJourneyZh,
   noteTransfer: noteTransferZh,
   organizeFile: organizeFileZh,
@@ -5409,6 +5413,9 @@ export default {
       inboxPending: '整理中心',
       inboxPendingHint: '待整理与资源治理问题的汇总入口',
       actionsTitle: '今日待处理',
+      markOrganized: '标记为整理完成',
+      completeInbox: '将「{title}」标记为整理完成',
+      openToOrganize: '整理：{title}',
       actionsHint: '今天先完成这些待办和待整理事项。',
       todoGroup: '今日待办',
       inboxGroup: '待整理',
@@ -12293,16 +12300,16 @@ export default {
     updating: '正在更新…',
     loadingMore: '正在加载更多',
     allLoaded: '已加载全部',
-    resources: '最近新增资源',
+    resources: '最近新增内容',
     users: '最近注册用户',
     userManagement: '用户管理',
     viewTodayDetails: '查看今日明细',
     viewMetricDetails: '查看{metric}的今日明细',
     loadFailed: '最近新增数据暂时无法加载',
-    loadFailedResources: '最近新增资源暂时无法加载',
+    loadFailedResources: '最近新增内容暂时无法加载',
     loadFailedUsers: '最近注册用户暂时无法加载',
     loadMoreFailed: '后续内容加载失败，已加载内容仍可查看',
-    emptyResources: '暂无新增资源',
+    emptyResources: '暂无新增内容',
     emptyUsers: '暂无新增用户',
     unnamedUser: '未设置昵称',
     userRemark: '备注：{remark}',
@@ -12310,23 +12317,29 @@ export default {
       bookmark: '未命名书签',
       note: '未命名笔记',
       file: '未命名文件',
+      todo: '未命名待办',
     },
     resourceType: {
       bookmark: '书签',
       note: '笔记',
       file: '文件',
+      todo: '待办',
+    },
+    todoStatus: {
+      pending: '待完成',
+      completed: '已完成',
     },
     filters: {
       periodAria: '筛选新增时间范围',
       typeAria: '筛选新增内容类型',
       periodRecent: '最近新增',
       periodToday: '今日',
-      typeAll: '用户与资源',
+      typeAll: '用户与内容',
       typeResources: '全部资源',
       typeUsers: '用户',
     },
     filteredTitle: {
-      todayResources: '今日新增资源',
+      todayResources: '今日新增内容',
       todayResourceType: '今日新增{type}',
       recentResourceType: '最近新增{type}',
       todayUsers: '今日新增用户',

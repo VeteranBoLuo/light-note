@@ -4,6 +4,7 @@
     :class="{ 'phone-top-menu': bookmark.isMobile }"
     :style="{ marginLeft: 'auto', gap: bookmark.isMobile ? '15px' : '5px' }"
   >
+    <CampaignEntry v-if="!bookmark.isMobile" />
     <GlobalSearch />
     <BTooltip v-if="showQuickCapture" :title="$t('inbox.quickCapture')">
       <BButton class="quick-capture-btn" :aria-label="$t('inbox.quickCapture')" @click="openQuickCapture">
@@ -62,6 +63,7 @@
   import { useRoute } from 'vue-router';
   import { recordOperation } from '@/api/commonApi.ts';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
+  import CampaignEntry from '@/components/support/CampaignEntry.vue';
   import GlobalSearch from '@/components/search/GlobalSearch.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import { inboxStore } from '@/store';

@@ -76,7 +76,7 @@ async function loadCampaign(connection, campaignId, { forUpdate = false } = {}) 
   const [campaignRows] = await connection.query(
     `SELECT id, campaign_key, version, title, description, status, starts_at, ends_at,
             cost_policy_version, created_by, published_by, published_at, suspended_by, suspended_at,
-            create_time, update_time
+            public_enabled, public_updated_by, public_updated_at, create_time, update_time
        FROM support_campaigns
       WHERE id = ?
       LIMIT 1${forUpdate ? ' FOR UPDATE' : ''}`,
@@ -103,6 +103,8 @@ function campaignDto(campaign, skus) {
     title: campaign.title,
     description: campaign.description || '',
     status: campaign.status,
+    publicEnabled: Number(campaign.public_enabled) === 1,
+    publicUpdatedAt: campaign.public_updated_at || null,
     startsAt: campaign.starts_at,
     endsAt: campaign.ends_at,
     costPolicyVersion: campaign.cost_policy_version,
@@ -184,11 +186,7 @@ export async function createSupportCampaignDraft({ actorUserId, input, db = pool
   } catch (error) {
     await connection.rollback();
     if (error?.code === 'ER_DUP_ENTRY') {
-      throw afdianError(
-        'SUPPORT_CAMPAIGN_VERSION_CONFLICT',
-        '活动版本已存在，或同一活动内的套餐标识重复',
-        409,
-      );
+      throw afdianError('SUPPORT_CAMPAIGN_VERSION_CONFLICT', '活动版本已存在，或同一活动内的套餐标识重复', 409);
     }
     throw error;
   } finally {
@@ -304,17 +302,15 @@ export async function listSupportCampaignGrants({ campaignId, db = pool }) {
 }
 
 /** 在结算事务内锁定活动和用户限购状态；调用方插入意图后必须回填 active_intent_id。 */
-export async function lockCampaignSkuForCheckout(
-  connection,
-  { campaignSkuId, catalogVersion, userId, now = new Date() },
-) {
+export async function lockCampaignSkuForCheckout(connection, { campaignSkuId, catalogVersion, userId, now }) {
   if (!CAMPAIGN_ID_PATTERN.test(String(campaignSkuId || ''))) {
     throw afdianError('SUPPORT_CAMPAIGN_SKU_INVALID', '活动套餐不存在', 404);
   }
+  await connection.query('SELECT id FROM support_campaign_visibility_lock WHERE id = 1 FOR UPDATE');
   const [rows] = await connection.query(
     `SELECT s.id, s.sku_id, s.title, s.category, s.amount, s.ai_tokens, s.storage_mb,
             s.per_user_limit, s.margin_bps, c.id AS campaign_id, c.campaign_key,
-            c.version, c.title AS campaign_title, c.starts_at, c.ends_at, c.status
+            c.version, c.title AS campaign_title, c.starts_at, c.ends_at, c.status, c.public_enabled
        FROM support_campaign_skus s
        JOIN support_campaigns c ON c.id = s.campaign_id
       WHERE s.id = ?
@@ -323,11 +319,13 @@ export async function lockCampaignSkuForCheckout(
     [campaignSkuId],
   );
   const sku = rows[0];
+  now ||= new Date(); // Check the window after waiting for the visibility and campaign locks.
   if (!sku) throw afdianError('SUPPORT_CAMPAIGN_SKU_INVALID', '活动套餐不存在', 404);
   if (supportCampaignCatalogVersion(sku.campaign_id, sku.version) !== String(catalogVersion || '')) {
     throw afdianError('SUPPORT_CATALOG_VERSION_STALE', '活动套餐版本已变化，请刷新页面', 409);
   }
   if (
+    Number(sku.public_enabled) !== 1 ||
     sku.status !== 'published' ||
     new Date(sku.starts_at).getTime() > now.getTime() ||
     new Date(sku.ends_at).getTime() <= now.getTime()

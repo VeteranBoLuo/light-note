@@ -1,3 +1,5 @@
+import autumn from './autumn-en-US';
+import { noteExportSettingsEn } from './noteExportSettings';
 import { entitlementJourneyEn } from './entitlementJourney';
 import { noteTransferEn } from './noteTransfer';
 import { organizeFileEn } from './organizeFile';
@@ -6,6 +8,8 @@ import { accountSettingsEn } from './accountSettings';
 import { settingsRefineEn } from './settingsRefine';
 import { notificationMessages } from '@lightnote/shared/notification-presentation';
 export default {
+  autumn,
+  noteExportSettings: noteExportSettingsEn,
   entitlementJourney: entitlementJourneyEn,
   noteTransfer: noteTransferEn,
   organizeFile: organizeFileEn,
@@ -5730,6 +5734,9 @@ export default {
       inboxPending: 'Organizer',
       inboxPendingHint: 'All collected items and resource-governance findings',
       actionsTitle: "Today's Pending",
+      markOrganized: 'Mark as organized',
+      completeInbox: 'Mark "{title}" as organized',
+      openToOrganize: 'Organize: {title}',
       actionsHint: 'Start with these todos and resources waiting to be organized.',
       todoGroup: "Today's todos",
       inboxGroup: 'To organize',
@@ -12856,16 +12863,16 @@ export default {
     updating: 'Updating…',
     loadingMore: 'Loading more',
     allLoaded: 'Everything is loaded',
-    resources: 'Recent resources',
+    resources: 'Recent content',
     users: 'Recent registrations',
     userManagement: 'Manage users',
     viewTodayDetails: 'View today’s details',
     viewMetricDetails: 'View today’s {metric} details',
     loadFailed: 'Recent additions are temporarily unavailable',
-    loadFailedResources: 'Recent resources are temporarily unavailable',
+    loadFailedResources: 'Recent content is temporarily unavailable',
     loadFailedUsers: 'Recent registrations are temporarily unavailable',
     loadMoreFailed: 'More items could not be loaded. Loaded items remain available.',
-    emptyResources: 'No recent resources',
+    emptyResources: 'No recent content',
     emptyUsers: 'No recent users',
     unnamedUser: 'Unnamed user',
     userRemark: 'Remark: {remark}',
@@ -12873,23 +12880,29 @@ export default {
       bookmark: 'Untitled bookmark',
       note: 'Untitled note',
       file: 'Untitled file',
+      todo: 'Untitled to-do',
     },
     resourceType: {
       bookmark: 'Bookmark',
       note: 'Note',
       file: 'File',
+      todo: 'To-do',
+    },
+    todoStatus: {
+      pending: 'Pending',
+      completed: 'Completed',
     },
     filters: {
       periodAria: 'Filter additions by time range',
       typeAria: 'Filter additions by content type',
       periodRecent: 'Recently added',
       periodToday: 'Today',
-      typeAll: 'Users and resources',
+      typeAll: 'Users and content',
       typeResources: 'All resources',
       typeUsers: 'Users',
     },
     filteredTitle: {
-      todayResources: 'Resources added today',
+      todayResources: 'Content added today',
       todayResourceType: '{type} added today',
       recentResourceType: 'Recent {type}',
       todayUsers: 'Users added today',

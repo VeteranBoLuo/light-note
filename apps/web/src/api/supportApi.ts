@@ -221,3 +221,51 @@ export async function updateAfdianPublicPreference(preference: {
 export function afdianLeaderboardAvatarUrl(publicId: string): string {
   return `/api/support/leaderboard/avatar/${encodeURIComponent(publicId)}`;
 }
+
+export interface CampaignPresentation {
+  campaignKey: string;
+  campaignVersion: number;
+  title: string;
+  description: string;
+  serverNow: string;
+  startsAt: string;
+  endsAt: string;
+  lifecycle: 'upcoming' | 'active' | 'paused' | 'ended';
+  checkoutEnabled: boolean;
+  themeKey: 'autumn-desk-v1';
+  packages?: SupportCampaignPackage[];
+}
+export interface CheckoutStatus {
+  intentId: string;
+  status: 'pending' | 'processing' | 'credited' | 'expired' | 'review';
+  expiresAt: string;
+  amount: number;
+  benefit: SupportBenefit;
+}
+export async function getCampaignEntry(): Promise<CampaignPresentation | null> {
+  const response = await apiBaseGet('/api/support/campaign-entry', undefined, { silent: true });
+  if (response.status !== 200) throw new Error('CAMPAIGN_ENTRY_FAILED');
+  return response.data as CampaignPresentation | null;
+}
+export async function getCampaignPresentation(key: string): Promise<CampaignPresentation> {
+  const response = await apiBaseGet(`/api/support/campaigns/${encodeURIComponent(key)}`, undefined, { silent: true });
+  if (response.status !== 200 || !response.data)
+    throw new Error(response.status === 404 ? 'CAMPAIGN_HIDDEN' : 'CAMPAIGN_FAILED');
+  return response.data as CampaignPresentation;
+}
+export async function createCheckoutIntent(
+  skuId: string,
+  catalogVersion: string,
+  flowId?: string,
+): Promise<{ intentId: string; url: string }> {
+  const response = await apiBasePost('/api/support/checkout-intents', { skuId, catalogVersion, flowId });
+  if (response.status !== 200 || !response.data) throw new Error('CHECKOUT_FAILED');
+  return response.data as { intentId: string; url: string };
+}
+export async function queryCheckoutIntent(id: string): Promise<CheckoutStatus> {
+  const response = await apiBaseGet(`/api/support/checkout-intents/${encodeURIComponent(id)}`, undefined, {
+    silent: true,
+  });
+  if (response.status !== 200 || !response.data) throw new Error('CHECKOUT_QUERY_FAILED');
+  return response.data as CheckoutStatus;
+}

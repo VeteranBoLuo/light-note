@@ -99,7 +99,9 @@ export async function deliverGeneratedFile(options: {
   fileName: string;
   mimeType: string;
   preferShare?: boolean;
+  isCurrent?: () => boolean;
 }): Promise<FileDeliveryResult> {
+  if (options.isCurrent && !options.isCurrent()) return 'cancelled';
   const { content, fileName, mimeType, preferShare = false } = options;
   const blob =
     content instanceof Blob ? content : new Blob([content], { type: `${mimeType};charset=utf-8` });
@@ -122,6 +124,7 @@ export async function deliverGeneratedFile(options: {
    * 然后无条件 return 'downloaded'，于是原生弹「无法开始下载」的同一秒，网页报「已下载」，
    * 还往操作日志里写了一条成功。落不了盘就说落不了盘，出路交给调用方。
    */
+  if (options.isCurrent && !options.isCurrent()) return 'cancelled';
   if (!canSaveGeneratedFile()) return 'unavailable';
 
   if (!canDownloadGeneratedFile()) {

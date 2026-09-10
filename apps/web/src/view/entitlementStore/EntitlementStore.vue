@@ -1,218 +1,199 @@
 <template>
-  <div class="store-page">
+  <div
+    class="store-page commerce-surface"
+    :class="{ 'is-mobile': bookmark.isMobile, 'is-compact': !bookmark.isDesktop, 'is-dense': bookmark.isCompactLayout }"
+  >
     <MobileTopBar v-if="bookmark.isMobile" />
-    <div v-auto-scrollbar class="store-page__scroll">
-      <main class="store-shell">
-        <BButton v-if="!bookmark.isMobile" class="store-back" @click="goBack">
-          <SvgIcon :src="icon.arrow_left" size="16" aria-hidden="true" />
-          <span>{{ t('common.back') }}</span>
-        </BButton>
-
-        <BCard v-if="journey" padding="16px">
-          <p>{{ t('entitlementJourney.pending') }}</p>
-          <BButton @click="returnToTask">{{ t('entitlementJourney.returnTask') }}</BButton>
-        </BCard>
-        <header class="store-hero">
-          <div class="store-hero__intro">
-            <div class="store-kicker">
-              <span class="store-icon" aria-hidden="true"><SvgIcon :src="icon.support.store" size="22" /></span>
-              <span>{{ t('entitlementStore.kicker') }}</span>
-            </div>
-            <h1>{{ t('entitlementStore.title') }}</h1>
-            <p>{{ t('entitlementStore.description') }}</p>
-            <div class="store-hero__signals">
-              <BChip tone="success">{{ t('entitlementStore.permanentBenefit') }}</BChip>
-              <BChip tone="neutral">{{ t('entitlementStore.firstPurchasePerPackage') }}</BChip>
-            </div>
-            <BButton class="store-hero__action" type="primary" size="large" @click="scrollToCatalog">
-              <span>{{ t('entitlementStore.heroAction') }}</span>
-              <SvgIcon :src="icon.arrow_right" size="16" aria-hidden="true" />
-            </BButton>
-          </div>
-
-          <BCard as="section" class="store-hero-visual" variant="raised" padding="0" radius="22px">
-            <div class="store-hero-visual__glow" aria-hidden="true"></div>
-            <div class="store-hero-visual__icons" aria-hidden="true">
-              <span class="store-hero-visual__icon is-ai"><SvgIcon :src="icon.growth.ai" size="28" /></span>
-              <span class="store-hero-visual__icon is-store"><SvgIcon :src="icon.support.store" size="30" /></span>
-              <span class="store-hero-visual__icon is-storage"><SvgIcon :src="icon.growth.storage" size="28" /></span>
-            </div>
-            <div class="store-hero-visual__copy">
-              <span>{{ t('entitlementStore.heroVisualEyebrow') }}</span>
-              <strong>{{ t('entitlementStore.heroVisualTitle') }}</strong>
-              <p>{{ t('entitlementStore.heroVisualDescription') }}</p>
-            </div>
-            <div class="store-hero-visual__account" :class="{ 'is-error': stateError }">
-              <BLoading
-                v-if="!stateReady || stateLoading"
-                inline
-                loading
-                :title="t('entitlementStore.accountLoading')"
-              />
-              <template v-else-if="stateError">
-                <SvgIcon :src="icon.message.error" size="17" aria-hidden="true" />
-                <span class="store-hero-visual__account-copy">
-                  <strong>{{ t('entitlementStore.stateUnavailable') }}</strong>
-                  <small>{{ t('entitlementStore.stateLoadFailed') }}</small>
-                </span>
-                <BButton size="small" :loading="stateLoading" @click="loadState">{{ t('common.retry') }}</BButton>
-              </template>
-              <template v-else>
-                <SvgIcon :src="icon.message.success" size="17" aria-hidden="true" />
-                <span>{{ heroAccountSummary }}</span>
-              </template>
-            </div>
+    <div v-auto-scrollbar class="store-page__scroll"
+      ><div class="commerce-page-content"
+        ><div class="commerce-landscape commerce-landscape--store" aria-hidden="true"
+          ><img src="/brand-scenes/store-strip-footer.webp" alt="" loading="lazy" decoding="async"
+        /></div>
+        <BrandSceneHero
+          scene="store"
+          :title="t('autumn.reference.storeTitle')"
+          :description="t('autumn.reference.storeIntro')"
+          :eyebrow="t('entitlementStore.pageTitle')"
+        ></BrandSceneHero
+        ><main class="store-shell">
+          <BCard v-if="journey" padding="16px">
+            <p>{{ t('entitlementJourney.pending') }}</p>
+            <BButton @click="returnToTask">{{ t('entitlementJourney.returnTask') }}</BButton>
           </BCard>
-        </header>
+          <AiQuotaValueSection />
 
-        <section class="store-assurance" :aria-label="t('entitlementStore.assuranceAria')">
-          <div v-for="item in assuranceItems" :key="item.key" class="store-assurance__item">
-            <span aria-hidden="true"><SvgIcon :src="item.icon" size="19" /></span>
-            <div>
-              <strong>{{ item.title }}</strong>
-              <p>{{ item.description }}</p>
-            </div>
-          </div>
-        </section>
-
-        <section ref="catalogSection" class="store-section store-catalog" aria-labelledby="store-catalog-title">
-          <div class="store-section__heading">
-            <div>
-              <h2 id="store-catalog-title">{{ t('entitlementStore.catalogTitle') }}</h2>
-              <p>{{ t('entitlementStore.catalogDescription') }}</p>
-            </div>
-            <BChip :tone="catalog?.previewMode ? 'pending' : 'neutral'">
-              {{ catalog?.previewMode ? t('entitlementStore.localPreview') : t('entitlementStore.eligibilityBadge') }}
-            </BChip>
-          </div>
-
-          <div v-if="catalog?.previewMode" class="store-notice" role="status">
-            <SvgIcon :src="icon.settings.privacy" size="16" aria-hidden="true" />
-            <span>{{ t('entitlementStore.localPreviewHint') }}</span>
-          </div>
-          <div v-if="catalogLoading" class="store-state">
-            <BLoading inline loading :title="t('entitlementStore.loading')" />
-          </div>
-          <div v-else-if="catalogError" class="store-state is-error" role="alert">
-            <SvgIcon :src="icon.message.error" size="18" aria-hidden="true" />
-            <span>{{ t('entitlementStore.loadFailed') }}</span>
-            <BButton size="small" @click="loadCatalog">{{ t('common.retry') }}</BButton>
-          </div>
-          <div v-else-if="!catalog?.catalogEnabled" class="store-state">
-            <SvgIcon :src="icon.support.store" size="21" aria-hidden="true" />
-            <span>{{ t('entitlementStore.catalogUnavailable') }}</span>
-          </div>
-          <template v-else>
-            <EntitlementCampaignSection
-              v-if="campaignPackages.length"
-              :title="t('entitlementStore.campaigns.title')"
-              :description="t('entitlementStore.campaigns.description')"
-            >
-              <EntitlementPackageCard
-                v-for="item in campaignPackages"
-                :key="item.campaignSkuId"
-                :item="item"
-                :action-label="actionLabel(item)"
-                :disabled="!canCheckout(item)"
-                @select="openCheckoutModal"
-              />
-            </EntitlementCampaignSection>
-
-            <BTabs v-model:active-tab="activeCategory" class="store-tabs" variant="solid" :options="categoryTabs" />
-            <div class="package-grid">
-              <EntitlementPackageCard
-                v-for="(item, index) in visiblePackages"
-                :key="item.skuId"
-                :item="item"
-                :index="index"
-                :preview-mode="Boolean(catalog.previewMode)"
-                :action-label="actionLabel(item)"
-                :disabled="!canCheckout(item)"
-                @select="openCheckoutModal"
-              />
-            </div>
-            <p class="store-notice store-notice--bottom">
-              <SvgIcon :src="icon.settings.privacy" size="16" aria-hidden="true" />
-              <span>{{ t('entitlementStore.identityHint') }}</span>
-            </p>
-          </template>
-        </section>
-
-        <section class="store-section store-flow" aria-labelledby="purchase-flow-title">
-          <div class="store-section__heading">
-            <div>
-              <h2 id="purchase-flow-title">{{ t('entitlementStore.flowTitle') }}</h2>
-              <p>{{ t('entitlementStore.flowDescription') }}</p>
-            </div>
-          </div>
-          <div class="store-flow__steps">
-            <BCard v-for="step in purchaseSteps" :key="step.key" class="store-flow__step" padding="18px" radius="16px">
-              <span>{{ step.number }}</span>
-              <div>
-                <strong>{{ step.title }}</strong>
-                <p>{{ step.description }}</p>
-              </div>
-            </BCard>
-          </div>
-          <p class="store-flow__rule">
-            <SvgIcon :src="icon.message.success" size="17" aria-hidden="true" />
-            <span>{{ t('entitlementStore.rulesDescription') }}</span>
-          </p>
-        </section>
-
-        <section class="store-lower" :class="{ 'has-history': showHistory }">
-          <div v-if="showHistory" class="store-history" aria-labelledby="purchase-history-title">
-            <div class="store-lower__heading">
-              <h2 id="purchase-history-title">{{ t('entitlementStore.historyTitle') }}</h2>
-              <p>{{ t('entitlementStore.historyDescription') }}</p>
-            </div>
-            <BCard v-if="!storeState.recentOrders.length" class="store-empty" padding="22px">
-              <SvgIcon :src="icon.support.store" size="24" aria-hidden="true" />
-              <span>{{ t('entitlementStore.historyEmpty') }}</span>
-            </BCard>
-            <div v-else class="purchase-history">
-              <BCard v-for="order in storeState.recentOrders" :key="order.id" class="purchase-order" padding="15px">
-                <span class="purchase-order__icon" aria-hidden="true"
-                  ><SvgIcon :src="orderIcon(order)" size="19"
-                /></span>
-                <div class="purchase-order__main">
-                  <strong>{{ formatOrderBenefit(order) }}</strong>
-                  <span>{{ formatDate(order.confirmedAt) }}</span>
+          <div class="store-purchase-layout">
+            <section ref="catalogSection" class="store-section store-catalog" aria-labelledby="store-catalog-title">
+              <div class="store-section__heading">
+                <div>
+                  <h2 id="store-catalog-title">{{ t('entitlementStore.catalogTitle') }}</h2>
+                  <p>{{ t('entitlementStore.catalogDescription') }}</p>
                 </div>
-                <div class="purchase-order__amount">¥{{ order.amount }}</div>
-                <BChip
-                  :tone="
-                    order.rewardStatus === 'credited'
-                      ? 'success'
-                      : order.rewardStatus === 'ineligible'
-                        ? 'danger'
-                        : 'pending'
-                  "
-                >
-                  {{
-                    order.rewardStatus === 'credited'
-                      ? t('entitlementStore.credited')
-                      : ['manual_review', 'reversal_review'].includes(order.rewardStatus || '')
-                        ? t('entitlementJourney.review')
-                        : order.rewardStatus === 'ineligible'
-                          ? t('entitlementJourney.failed')
-                          : t('entitlementStore.processing')
-                  }}
-                </BChip>
-              </BCard>
-            </div>
-          </div>
+                <div v-if="catalog?.catalogEnabled"
+                  ><BTabs
+                    v-model:active-tab="activeCategory"
+                    class="store-tabs"
+                    variant="solid"
+                    :options="categoryTabs"
+                /></div>
+              </div>
 
-          <BCard as="aside" class="store-support" padding="20px" radius="18px">
-            <span class="store-support__icon" aria-hidden="true"><SvgIcon :src="icon.support.heart" size="21" /></span>
-            <div>
-              <h2>{{ t('entitlementStore.supportTitle') }}</h2>
-              <p>{{ t('entitlementStore.supportDescription') }}</p>
-            </div>
-            <BButton @click="openSupport">{{ t('entitlementStore.supportAction') }}</BButton>
-          </BCard>
-        </section>
-      </main>
+              <div v-if="catalog?.previewMode" class="store-notice" role="status">
+                <SvgIcon :src="icon.settings.privacy" size="16" aria-hidden="true" />
+                <span>{{ t('entitlementStore.localPreviewHint') }}</span>
+              </div>
+              <div v-if="catalogLoading" class="store-state">
+                <BLoading inline loading :title="t('entitlementStore.loading')" />
+              </div>
+              <div v-else-if="catalogError" class="store-state is-error" role="alert">
+                <SvgIcon :src="icon.message.error" size="18" aria-hidden="true" />
+                <span>{{ t('entitlementStore.loadFailed') }}</span>
+                <BButton size="small" @click="loadCatalog">{{ t('common.retry') }}</BButton>
+              </div>
+              <div v-else-if="!catalog?.catalogEnabled" class="store-state">
+                <SvgIcon :src="icon.support.store" size="21" aria-hidden="true" />
+                <span>{{ t('entitlementStore.catalogUnavailable') }}</span>
+              </div>
+              <template v-else>
+                <div class="package-grid">
+                  <EntitlementPackageCard
+                    v-for="(item, index) in visiblePackages"
+                    :key="item.skuId"
+                    :item="item"
+                    :index="index"
+                    :preview-mode="Boolean(catalog.previewMode)"
+                    :action-label="actionLabel(item)"
+                    :disabled="!canCheckout(item)"
+                    @select="openCheckoutModal"
+                  />
+                </div>
+                <p class="store-notice store-notice--bottom">
+                  <SvgIcon :src="icon.settings.privacy" size="16" aria-hidden="true" />
+                  <span>{{ t('entitlementStore.identityHint') }}</span>
+                </p>
+              </template>
+            </section>
+
+            <BCard as="aside" class="store-support" padding="14px" radius="13px">
+              <span class="store-support__icon" aria-hidden="true"
+                ><SvgIcon :src="icon.support.heart" size="21"
+              /></span>
+              <div>
+                <h2>{{ t('entitlementStore.supportTitle') }}</h2>
+                <p>{{ t('autumn.reference.supportInvitation') }}</p>
+              </div>
+              <div class="store-support__art" aria-hidden="true"
+                ><img src="/brand-scenes/store-note.webp" alt="" loading="lazy" /><span>{{
+                  t('autumn.reference.storeNote')
+                }}</span></div
+              ><BButton @click="openSupport">{{ t('entitlementStore.supportAction') }}</BButton>
+            </BCard>
+          </div>
+          <div class="store-bottom-grid">
+            <BCard class="store-combo" padding="16px" radius="13px"
+              ><h2>{{ t('autumn.comboTitle') }}</h2
+              ><p>{{ t('autumn.comboDescription') }}</p>
+              <div class="store-combo__features"
+                ><div v-for="(glyph, i) in [icon.growth.reward, icon.growth.ai, icon.growth.storage]" :key="i"
+                  ><SvgIcon :src="glyph" size="21" /><div
+                    ><strong>{{ t(`autumn.reference.comboFeature${i + 1}`) }}</strong
+                    ><small>{{ t(`autumn.reference.comboFeatureHint${i + 1}`) }}</small></div
+                  ></div
+                ></div
+              >
+              <BButton
+                type="primary"
+                @click="
+                  activeCategory = 'combo';
+                  scrollToCatalog();
+                "
+                >{{ t('autumn.comboAction') }}</BButton
+              ><img class="store-combo__art" src="/brand-scenes/gift-object.webp" alt="" loading="lazy"
+            /></BCard>
+            <section class="store-section store-flow scene-panel" aria-labelledby="purchase-flow-title">
+              <div class="store-section__heading">
+                <div>
+                  <h2 id="purchase-flow-title">{{ t('entitlementStore.flowTitle') }}</h2>
+                </div>
+              </div>
+              <div class="store-flow__steps">
+                <BCard
+                  v-for="step in purchaseSteps"
+                  :key="step.key"
+                  class="store-flow__step"
+                  padding="18px"
+                  radius="16px"
+                >
+                  <span>{{ step.number }}</span>
+                  <div>
+                    <strong>{{ step.title }}</strong>
+                    <p>{{ step.description }}</p>
+                  </div>
+                </BCard>
+              </div>
+              <p class="store-flow__rule">
+                <SvgIcon :src="icon.message.success" size="17" aria-hidden="true" />
+                <span>{{ t('entitlementStore.rulesDescription') }}</span>
+              </p>
+            </section>
+
+            <p v-if="stateError" role="alert"
+              >{{ t('entitlementStore.stateLoadFailed') }}
+              <BButton size="small" @click="loadState">{{ t('common.retry') }}</BButton></p
+            >
+            <section class="store-lower scene-panel" :class="{ 'has-history': showHistory }">
+              <div v-if="showHistory" class="store-history" aria-labelledby="purchase-history-title">
+                <div class="store-lower__heading">
+                  <h2 id="purchase-history-title">{{ t('entitlementStore.historyTitle') }}</h2>
+                  <p>{{ t('entitlementStore.historyDescription') }}</p>
+                </div>
+                <BCard v-if="!storeState.recentOrders.length" class="store-empty" padding="22px">
+                  <SvgIcon :src="icon.support.store" size="24" aria-hidden="true" />
+                  <span>{{ t('entitlementStore.historyEmpty') }}</span>
+                </BCard>
+                <div v-else class="purchase-history">
+                  <BCard
+                    v-for="order in storeState.recentOrders"
+                    :key="order.id"
+                    class="purchase-order"
+                    padding="8px 0"
+                  >
+                    <span class="purchase-order__icon" aria-hidden="true"
+                      ><SvgIcon :src="orderIcon(order)" size="19"
+                    /></span>
+                    <div class="purchase-order__main">
+                      <strong>{{ formatOrderBenefit(order) }}</strong>
+                      <span>{{ formatDate(order.confirmedAt) }}</span>
+                    </div>
+                    <div class="purchase-order__amount">¥{{ order.amount }}</div>
+                    <BChip
+                      :tone="
+                        order.rewardStatus === 'credited'
+                          ? 'success'
+                          : order.rewardStatus === 'ineligible'
+                            ? 'danger'
+                            : 'pending'
+                      "
+                    >
+                      {{
+                        order.rewardStatus === 'credited'
+                          ? t('entitlementStore.credited')
+                          : ['manual_review', 'reversal_review'].includes(order.rewardStatus || '')
+                            ? t('entitlementJourney.review')
+                            : order.rewardStatus === 'ineligible'
+                              ? t('entitlementJourney.failed')
+                              : t('entitlementStore.processing')
+                      }}
+                    </BChip>
+                  </BCard>
+                </div>
+              </div>
+            </section> </div
+          ><div class="scene-footnotes"
+            ><CampaignEntry /><EntitlementPurchaseProgress
+              ref="purchaseProgress"
+              @credited="refreshStore" /></div></main
+      ></div>
     </div>
 
     <EntitlementCheckoutModal
@@ -228,11 +209,15 @@
 </template>
 
 <script setup lang="ts">
-  import EntitlementCampaignSection from '@/components/support/EntitlementCampaignSection.vue';
+  import BrandSceneHero from '@/components/support/BrandSceneHero.vue';
+  import AiQuotaValueSection from '@/components/support/AiQuotaValueSection.vue';
+  import CampaignEntry from '@/components/support/CampaignEntry.vue';
+  import EntitlementPurchaseProgress from '@/components/support/EntitlementPurchaseProgress.vue';
+  import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
   import { readEntitlementJourney, prepareEntitlementReturn } from '@/utils/entitlementJourney';
   import { recordEntitlementEvent } from '@/api/entitlementEvents';
   import { useAiQuotaStatus } from '@/composables/useAiQuotaStatus';
-  import { computed, onMounted, ref, watch } from 'vue';
+  import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -244,7 +229,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import icon from '@/config/icon';
-  import { openTrackedEntitlementCheckout } from '@/config/support';
+
   import { bookmarkStore, useUserStore } from '@/store';
   import { recordOperation } from '@/api/commonApi';
   import {
@@ -299,6 +284,7 @@
   const stateLoading = ref(false);
   const stateError = ref(false);
   const checkoutModalVisible = ref(false);
+  const purchaseProgress = ref<InstanceType<typeof EntitlementPurchaseProgress> | null>(null);
   const selectedItem = ref<StoreItem | null>(null);
   const catalogSection = ref<HTMLElement | null>(null);
   const requestedCategory = String(route.query.category || '');
@@ -468,13 +454,16 @@
     }
     const skuId = 'campaignSkuId' in item ? item.campaignSkuId : item.skuId;
     const catalogVersion = 'catalogVersion' in item ? item.catalogVersion : String(catalog.value?.catalogVersion || '');
-    // 保持在确认按钮的同步点击栈中打开外部页面，避免浏览器或 App WebView 拦截新窗口。
-    const opened = journey.value?.flowId
-      ? openTrackedEntitlementCheckout(skuId, catalogVersion, undefined, journey.value.flowId)
-      : openTrackedEntitlementCheckout(skuId, catalogVersion);
-    if (!opened) return message.warning(t('entitlementStore.unavailable'));
-    checkoutModalVisible.value = false;
-    void recordOperation({ module: '资源商店', operation: '打开资源购买:' + item.skuId });
+    const flowId = journey.value?.flowId;
+    const owner = user.id;
+    void closeCurrentMobileOverlayThen(
+      () => {
+        checkoutModalVisible.value = false;
+      },
+      () => {
+        if (owner === user.id && canCheckout(item)) return purchaseProgress.value?.start(skuId, catalogVersion, flowId);
+      },
+    );
   }
   function goBack() {
     if (window.history.length > 1) return router.back();
@@ -497,35 +486,43 @@
     }
     selectedItem.value = nextItem;
   }
+  let catalogGeneration = 0,
+    stateGeneration = 0;
+  onBeforeUnmount(() => {
+    ++catalogGeneration;
+    ++stateGeneration;
+  });
   async function loadCatalog() {
+    const gen = ++catalogGeneration;
     const owner = user.id;
     catalogLoading.value = true;
     catalogError.value = false;
     try {
       const nextCatalog = await getEntitlementStoreCatalog();
-      if (owner !== user.id) return;
+      if (owner !== user.id || gen !== catalogGeneration) return;
       catalog.value = nextCatalog;
       syncSelectedItem(nextCatalog);
     } catch {
-      if (owner !== user.id) return;
+      if (owner !== user.id || gen !== catalogGeneration) return;
       catalogError.value = true;
     } finally {
-      if (owner === user.id) catalogLoading.value = false;
+      if (owner === user.id && gen === catalogGeneration) catalogLoading.value = false;
     }
   }
   async function loadState() {
+    const gen = ++stateGeneration;
     const owner = user.id;
     stateLoading.value = true;
     stateError.value = false;
     try {
       const nextState = await getEntitlementStoreState();
-      if (owner !== user.id) return;
+      if (owner !== user.id || gen !== stateGeneration) return;
       storeState.value = { ...emptyStoreState, ...nextState };
     } catch {
-      if (owner !== user.id) return;
+      if (owner !== user.id || gen !== stateGeneration) return;
       stateError.value = true;
     } finally {
-      if (owner === user.id) {
+      if (owner === user.id && gen === stateGeneration) {
         stateReady.value = true;
         stateLoading.value = false;
       }
@@ -559,6 +556,8 @@
       journey.value = readEntitlementJourney(user.id);
       checkoutModalVisible.value = false;
       storeState.value = { ...emptyStoreState };
+      catalog.value = null;
+      selectedItem.value = null;
       stateReady.value = false;
       void refreshStore();
     },

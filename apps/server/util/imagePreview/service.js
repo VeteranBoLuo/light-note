@@ -15,6 +15,9 @@ export function artifactState(artifact) {
   }
   return {
     ...imageFailure(artifact?.error_code),
+    ...(artifact?.status === 'ready' && metadata?.cover === 'absent'
+      ? { status: 'unsupported', errorCode: null, failureKind: null, retryable: false }
+      : {}),
     presentation: metadata?.presentation === 'long_top' ? 'long_top' : 'full',
   };
 }

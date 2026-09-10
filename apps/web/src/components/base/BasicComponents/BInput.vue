@@ -191,54 +191,59 @@
     position: relative;
     color: var(--text-color);
   }
-  .b-input {
-    border-radius: 6px;
-    padding: 0 11px;
-    height: v-bind(height);
+  .b-input,
+  .b-textarea {
     width: 100%;
     box-sizing: border-box;
+    border: 1px solid var(--bl-input-border-color);
+    border-radius: 8px;
     color: var(--bl-input-color);
-
-    border-color: transparent !important;
-    box-shadow: none !important;
-    background: var(--bl-input-noBorder-bg-color);
-    transition: background-color 0.3s;
-    &:hover {
-      background: var(--bl-input-noBorder-hover-bg-color);
-    }
-    &:focus-visible {
-      background: var(--bl-input-noBorder-hover-bg-color);
-    }
+    background: var(--bl-input-bg-color);
+    font-family: inherit;
     outline: none;
+    transition:
+      background-color 0.18s ease,
+      border-color 0.18s ease,
+      box-shadow 0.18s ease;
+
+    &::placeholder {
+      color: var(--desc-color);
+      opacity: 1;
+    }
+    &:focus {
+      outline: 1px solid var(--bl-input-focus-border-color);
+      outline-offset: -1px;
+      box-shadow: var(--bl-input-focus-shadow);
+    }
+    &:focus:not(:disabled):not(:read-only) {
+      border-color: var(--bl-input-focus-border-color);
+      background: var(--bl-input-focus-bg-color);
+    }
     &:disabled {
       cursor: not-allowed;
       opacity: 0.72;
     }
   }
+  .b-input {
+    padding: 0 11px;
+    height: v-bind(height);
+  }
   .b-textarea {
-    border: 1px solid #d9d9d9;
-    border-radius: 6px;
     padding: 4px 11px;
-    width: 100%;
-    box-sizing: border-box;
-    background-color: unset !important;
-    color: var(--bl-input-color);
-    // 文本输入与应用根字体保持一致；Android 不存在“微软雅黑 Light”，回退到 serif 会显得异常偏粗。
-    font-family: inherit;
-    &:focus {
-      border: 1px solid var(--bl-input-border-h-color);
-      box-shadow: 0 0 0 1px rgba(92, 90, 86, 0.1);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .b-input,
+    .b-textarea {
+      &:hover:not(:focus):not(:disabled):not(:read-only) {
+        border-color: var(--bl-input-hover-border-color);
+        background: var(--bl-input-hover-bg-color);
+      }
     }
-    &:hover {
-      border: 1px solid var(--bl-input-border-h-color);
-    }
-    &:active {
-      border: 1px solid var(--bl-input-border-h-color);
-    }
-    outline: none;
-    &:disabled {
-      cursor: not-allowed;
-      opacity: 0.72;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .b-input,
+    .b-textarea {
+      transition: none;
     }
   }
 
@@ -266,12 +271,6 @@
     -webkit-text-fill-color: var(--text-color); //这个地方的颜色是字体颜色，可以根据实际情况修改
     transition: background-color 50000s ease-in-out 0s;
   }
-  .input-al-day {
-    border: 1px solid var(--card-border-color) !important;
-    background-color: var(--background-color) !important;
-    color: var(--text-color) !important;
-  }
-
   .input-clear-btn {
     position: absolute;
     right: 10px;

@@ -1,7 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
-const db = { query: vi.fn() };
+const db = { query: vi.fn(), getConnection: vi.fn(), beginTransaction: vi.fn(), commit: vi.fn(), rollback: vi.fn(), release: vi.fn() };
+db.getConnection.mockResolvedValue(db);
 vi.mock('../../db/index.js', () => ({ default: db }));
-const { readNoteExportScope } = await import('./noteExportService.js');
+const { readNoteExportScope, readScopedNotesForExport } = await import('./noteExportService.js');
 describe('directory export scope', () => {
   it('uses the whole owned tree including unexpanded grandchildren', async () => {
     db.query.mockResolvedValue([
@@ -35,4 +36,14 @@ describe('directory export scope', () => {
     const next = await readNoteExportScope('o', { rootNoteId: 'a', includeDescendants: true });
     expect(first.scopeToken).not.toBe(next.scopeToken);
   });
+});
+
+
+it('refuses changed scoped exports before reading bodies and rolls back the read transaction', async () => {
+  db.query.mockReset();
+  db.query.mockResolvedValue([[{ id: 'a', title: 'A', type: 'html', revision: 2 }]]);
+  await expect(readScopedNotesForExport('owner', { rootNoteId: 'a', includeDescendants: true, scopeToken: 'old' })).rejects.toMatchObject({ code: 'NOTE_EXPORT_SCOPE_CHANGED' });
+  expect(db.query).toHaveBeenCalledTimes(1);
+  expect(db.rollback).toHaveBeenCalled();
+  expect(db.release).toHaveBeenCalled();
 });

@@ -219,6 +219,8 @@
 </template>
 
 <script setup lang="ts">
+  import { useCampaignEntry } from '@/composables/useCampaignEntry';
+  import { PERSON_CENTER_ENTRIES } from '@/config/personCenterEntries';
   import router from '@/router';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -260,7 +262,12 @@
 
   const user = useUserStore();
   const mobileQuickEntries = MOBILE_PERSON_CENTER_QUICK_ENTRIES;
-  const mobileManagementEntries = MOBILE_PERSON_CENTER_MANAGEMENT_ENTRIES;
+  const { entry: campaignEntry, path: campaignPath } = useCampaignEntry();
+  const mobileManagementEntries = computed(() =>
+    campaignEntry.value
+      ? [{ ...PERSON_CENTER_ENTRIES.campaign, path: campaignPath.value }, ...MOBILE_PERSON_CENTER_MANAGEMENT_ENTRIES]
+      : MOBILE_PERSON_CENTER_MANAGEMENT_ENTRIES,
+  );
   const mobileCommunicationEntries = MOBILE_PERSON_CENTER_COMMUNICATION_ENTRIES;
   const { growth: growthInfo, loading: growthLoading, load: loadGrowth } = useGrowth();
   const equippedFrameId = computed(() => {

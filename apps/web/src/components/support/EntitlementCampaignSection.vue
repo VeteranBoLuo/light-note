@@ -1,32 +1,22 @@
 <template>
-  <section class="campaign-feature" :aria-label="title">
+  <CampaignShowcase v-if="draft" draft />
+  <section v-else class="campaign-feature" :aria-label="title">
     <header class="campaign-feature__header">
       <div>
-        <BChip :tone="draft ? 'neutral' : 'pending'">{{
-          draft ? t('entitlementJourney.draft') : t('entitlementStore.campaigns.limited')
-        }}</BChip>
-        <p v-if="draft" class="campaign-feature__eyebrow">{{ t('entitlementJourney.holiday') }}</p>
+        <BChip tone="pending">{{ t('entitlementStore.campaigns.limited') }}</BChip>
         <h3>{{ title }}</h3>
         <p>{{ description }}</p>
       </div>
-      <span v-if="draft" class="campaign-feature__date">{{ t('entitlementJourney.dates') }}</span>
     </header>
     <div class="campaign-feature__grid">
-      <template v-if="draft">
-        <BCard v-for="name in ['light', 'plus']" :key="name" padding="24px" radius="16px">
-          <h4>{{ t(`entitlementJourney.${name}`) }}</h4>
-          <p class="campaign-feature__price">{{ t('entitlementJourney.pendingPrice') }}</p>
-          <p>{{ t('entitlementJourney.pendingBenefit') }}</p>
-        </BCard>
-      </template>
-      <slot v-else />
+      <slot />
     </div>
     <p class="campaign-feature__rules">{{ t('entitlementJourney.rules') }}</p>
   </section>
 </template>
 <script setup lang="ts">
+  import CampaignShowcase from './CampaignShowcase.vue';
   import { useI18n } from 'vue-i18n';
-  import BCard from '@/components/base/BasicComponents/BCard.vue';
   import BChip from '@/components/base/BasicComponents/BChip.vue';
   defineProps<{ title: string; description: string; draft?: boolean }>();
   const { t } = useI18n();
@@ -57,29 +47,10 @@
     color: var(--desc-color);
     line-height: 1.7;
   }
-  .campaign-feature__eyebrow {
-    letter-spacing: 0.15em;
-    font-size: 12px;
-    margin-top: 20px;
-  }
-  .campaign-feature__date {
-    font-size: 12px;
-    color: var(--desc-color);
-    padding-top: 6px;
-  }
   .campaign-feature__grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
     gap: 16px;
-  }
-  .campaign-feature h4 {
-    font-size: 17px;
-    margin: 0 0 20px;
-  }
-  .campaign-feature .campaign-feature__price {
-    color: var(--text-color);
-    font-size: 21px;
-    font-weight: 600;
   }
   .campaign-feature__rules {
     margin: 20px 0 0;

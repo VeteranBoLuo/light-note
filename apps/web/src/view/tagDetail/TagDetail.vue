@@ -2785,6 +2785,13 @@
     pointer-events: none;
   }
 
+  .skeleton-block {
+    display: block;
+    border-radius: 999px;
+    background: var(--skeleton-bg-color, var(--surface-divider-color));
+    animation: tag-space-detail-pulse 1.15s ease-in-out infinite alternate;
+  }
+
   .skeleton-ai-panel {
     height: 100%;
     box-sizing: border-box;
@@ -2850,13 +2857,6 @@
     height: 64px;
     flex: 0 0 64px;
     border-radius: 15px;
-  }
-
-  .skeleton-block {
-    display: block;
-    border-radius: 999px;
-    background: var(--skeleton-bg-color, var(--surface-divider-color));
-    animation: tag-space-detail-pulse 1.15s ease-in-out infinite alternate;
   }
 
   .tag-directory-rail--skeleton {

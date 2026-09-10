@@ -137,9 +137,6 @@ describe('移动端待办页签布局', () => {
   });
 
   it('待办列表复用稳定批量入口与共享底栏，移动端动作收进更多抽屉', () => {
-    expect(inboxSource.match(/v-if="todoView === 'list' && \(todo\.items\.length \|\| pageLoading\)"/g)).toHaveLength(
-      1,
-    );
     expect(inboxSource.match(/:active="todoSelectionMode"/g)).toHaveLength(3);
     expect(inboxSource).toContain('<ResourceBatchActionBar');
     expect(inboxSource).toContain(':open="isTodoFocused && todoView === \'list\' && todoSelectionMode"');

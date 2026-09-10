@@ -193,6 +193,8 @@
 </template>
 
 <script setup lang="ts">
+  import { useCampaignEntry } from '@/composables/useCampaignEntry';
+  import { PERSON_CENTER_ENTRIES } from '@/config/personCenterEntries';
   import router from '@/router';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -301,7 +303,12 @@
     { label: 'English', function: () => changeLanguage('en-US') },
   ]);
 
-  const desktopPrimaryMenuOptions = DESKTOP_PERSON_CENTER_PRIMARY_ENTRIES;
+  const { entry: campaignEntry, path: campaignPath } = useCampaignEntry();
+  const desktopPrimaryMenuOptions = computed(() => {
+    const entries: PersonCenterEntry[] = [...DESKTOP_PERSON_CENTER_PRIMARY_ENTRIES];
+    if (campaignEntry.value) entries.splice(2, 0, { ...PERSON_CENTER_ENTRIES.campaign, path: campaignPath.value });
+    return entries;
+  });
   const desktopSecondaryMenuOptions = DESKTOP_PERSON_CENTER_SECONDARY_ENTRIES;
 
   const userStats = computed(() => [

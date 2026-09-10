@@ -15,13 +15,20 @@ afterEach(() => {
   vi.useRealTimers();
   vi.clearAllMocks();
 });
-function mount(state: ImagePreviewState) {
+function mount(state: ImagePreviewState, fallback = false) {
   const source = ref({ sourceType: 'note' as const, sourceId: 'one' });
   const current = ref(state);
   vi.mocked(useImagePreview).mockReturnValue(current);
   const element = document.createElement('div');
   document.body.append(element);
-  const app = createApp({ render: () => h(ManagedImagePreview, { source: source.value }) });
+  const app = createApp({
+    render: () =>
+      h(
+        ManagedImagePreview,
+        { source: source.value },
+        fallback ? { fallback: () => h('span', { class: 'audio-placeholder' }, 'MP3') } : undefined,
+      ),
+  });
   app
     .use(createPinia())
     .use(createI18n({ legacy: false, locale: 'zh', messages: { zh: { imagePreview: imagePreviewZh } } }));
@@ -76,4 +83,19 @@ describe('managed image feedback', () => {
     expect(retryImagePreview).not.toHaveBeenCalled();
     expect(element.textContent).toContain('缩略图暂不可用');
   });
+});
+
+it('shows the audio fallback until artwork is ready and after a failed image load', async () => {
+  const { element, current } = mount({ ...base, status: 'unsupported' }, true);
+  expect(element.textContent).toBe('MP3');
+  expect(element.querySelector('[role="status"]')).toBeNull();
+  current.value = { ...base, status: 'processing' };
+  await nextTick();
+  expect(element.textContent).toBe('MP3');
+  current.value = { ...base, status: 'ready', url: 'https://preview.test/cover.webp' };
+  await nextTick();
+  expect(element.querySelector('.audio-placeholder')).toBeNull();
+  vi.mocked(resolveImagePreviews).mockRejectedValue(new Error('network'));
+  element.querySelector('img')!.dispatchEvent(new Event('error'));
+  await vi.waitFor(() => expect(element.textContent).toBe('MP3'));
 });

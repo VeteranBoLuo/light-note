@@ -420,13 +420,6 @@
     }
   }
 
-  :deep(.b-input) {
-    background-color: var(--modal-input-bg);
-  }
-  :deep(.b-textarea) {
-    background-color: var(--modal-input-bg);
-  }
-
   @media (max-width: 767px) {
     .modal-view {
       min-width: 80%;

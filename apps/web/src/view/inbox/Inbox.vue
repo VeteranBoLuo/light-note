@@ -61,8 +61,9 @@
           {{ t('inbox.createTodo') }}
         </BButton>
         <BBatchToggle
-          v-if="todoView === 'list' && (todo.items.length || pageLoading)"
+          v-if="todoView === 'list'"
           :active="todoSelectionMode"
+          :disabled="pageLoading || !todo.items.length"
           @click="toggleTodoSelectionMode"
         />
       </div>
@@ -514,7 +515,7 @@
                 @range-change="ensureCalendarRange"
               />
               <div v-else-if="isTodoFocused" class="todo-group-list">
-                <small class="todo-count-hint">{{ t('todoWorkspace.instanceCountHint') }}</small>
+                <small v-if="hasTodoSeries" class="todo-count-hint">{{ t('todoWorkspace.instanceCountHint') }}</small>
                 <section v-for="group in todoGroupLists" :key="group.key" class="todo-group">
                   <header :class="{ 'is-collapsed': collapsedGroups[group.key] }" @click="collapsedGroups[group.key] = !collapsedGroups[group.key]">
                     <BButton
@@ -1169,6 +1170,11 @@
   ]);
   const todoUndo = ref<{ kind: 'complete' | 'delete'; ids: string[] } | null>(null);
   const todoUndoing = ref(false);
+  const hasTodoSeries = computed(() =>
+    todo.groups.some((group) =>
+      group.instanceCount > group.nodeCount || group.nodes.some((node) => node.kind === 'series'),
+    ),
+  );
   const todoGroupLists = computed(() =>
     todo.groups.map((group) => ({
       ...group,

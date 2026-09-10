@@ -51,6 +51,7 @@ vi.mock('@/api/commonApi', () => ({
 
 vi.mock('@/store', () => ({
   bookmarkStore: () => ({ isMobile: false }),
+  useUserStore: () => ({ id: '', role: 'visitor' }),
 }));
 
 vi.mock('vue-router', async (importOriginal) => {

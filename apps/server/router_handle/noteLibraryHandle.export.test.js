@@ -37,7 +37,7 @@ vi.mock('../util/noteExportTickets.js', () => ({
   consumeExportTicket,
 }));
 
-const { createNoteExportTicket, downloadNoteExportFile, getNotesForExport } = await import('./noteLibraryHandle.js');
+const { createNoteExportTicket, downloadNoteExportFile, getNotesForExport, previewNoteExportScope } = await import('./noteLibraryHandle.js');
 
 function mockRes() {
   const res = {
@@ -256,5 +256,23 @@ describe('downloadNoteExportFile', () => {
 
     expect(res.statusCode).toBe(500);
     expect(res.contentType).toBe('text/plain');
+  });
+});
+
+
+describe('previewNoteExportScope', () => {
+  it('keeps oversized previews bounded while reporting the full count', async () => {
+    poolQuery.mockResolvedValueOnce([[{ id: 'root', title: 'Root', type: 'html' }, ...Array.from({ length: 100 }, (_, index) => ({ id: `child-${index}`, title: 'Child', type: 'html', parent_id: 'root' }))]]);
+    const res = mockRes();
+    await previewNoteExportScope({ user: { id: 'owner' }, body: { rootNoteId: 'root', includeDescendants: true } }, res);
+    expect(res.body.data).toMatchObject({ count: 101, limit: 100, nodes: [] });
+  });
+  it('returns ordered minimal summaries for sorting, without body or revision metadata', async () => {
+    poolQuery.mockResolvedValueOnce([[{ id: 'root', title: 'Root', type: 'html', revision: 2, content: 'private body', parent_id: null },
+      { id: 'child', title: 'Child', type: 'drawing', revision: 3, parent_id: 'root' }]]);
+    const res = mockRes();
+    await previewNoteExportScope({ user: { id: 'owner' }, body: { rootNoteId: 'root', includeDescendants: true } }, res);
+    expect(res.body.data.nodes).toEqual([{ id: 'root', title: 'Root', type: 'html' }, { id: 'child', title: 'Child', type: 'drawing' }]);
+    expect(res.body.data).toMatchObject({ count: 2, drawingCount: 1, scopeToken: expect.any(String) });
   });
 });

@@ -146,7 +146,7 @@
           <footer class="global-search-dialog__footer">
             <span><kbd>↑</kbd><kbd>↓</kbd> {{ t('resourceCenter.keyboardSelect') }}</span>
             <span><kbd>Enter</kbd> {{ t('resourceCenter.keyboardOpen') }}</span>
-            <BButton size="small" @click="goSearch">
+            <BButton class="global-search-dialog__view-all" @click="goSearch">
               {{ t('resourceCenter.viewAll') }}<SvgIcon :src="icon.toolbox.arrow" size="14" />
             </BButton>
           </footer>
@@ -484,17 +484,18 @@
   }
   .global-search-dialog__input .b-input {
     padding-right: 72px !important;
-    border: 1px solid color-mix(in srgb, var(--primary-color) 22%, var(--surface-border-color)) !important;
-    border-radius: 14px !important;
-    background: var(--surface-subtle-bg, var(--hover-background));
+    border-radius: 14px;
     font-size: 15px;
   }
+  .global-search-dialog__input .prefix-icon {
+    color: var(--workspace-purple-text);
+  }
   .global-search-dialog__input kbd {
-    padding: 3px 6px;
+    padding: 2px 5px;
     border: 1px solid var(--surface-border-color);
     border-radius: 6px;
     color: var(--desc-color);
-    background: var(--card-background);
+    background: transparent;
     font-family: inherit;
     font-size: 10px;
   }
@@ -723,6 +724,7 @@
     min-height: 49px;
     padding: 8px 14px;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 13px;
     border-top: 1px solid var(--surface-divider-color);
@@ -733,6 +735,7 @@
     display: flex;
     align-items: center;
     gap: 4px;
+    white-space: nowrap;
   }
   .global-search-dialog__footer kbd {
     padding: 2px 5px;
@@ -741,11 +744,32 @@
     background: var(--card-background);
     font-family: inherit;
   }
-  .global-search-dialog__footer > .b_btn {
+  .global-search-dialog__footer > .global-search-dialog__view-all {
     margin-left: auto;
-    gap: 5px;
+    flex-shrink: 0;
+    gap: 8px;
+    padding: 0 12px;
+    border: 1px solid color-mix(in srgb, var(--primary-color) 18%, var(--surface-border-color));
+    border-radius: 9px;
+    color: var(--workspace-purple-text);
+    background: var(--workspace-purple-selected);
+    font-size: 12px;
+    font-weight: 600;
+    transition:
+      background-color 0.18s ease,
+      border-color 0.18s ease;
+  }
+  .global-search-dialog__footer > .global-search-dialog__view-all:focus-visible {
+    outline-color: var(--focus-ring-color);
+  }
+  .global-search-dialog__footer > .global-search-dialog__view-all:active {
+    border-color: var(--workspace-purple-text);
   }
   @media (hover: hover) and (pointer: fine) {
+    .global-search-dialog__footer > .global-search-dialog__view-all:hover {
+      border-color: var(--workspace-purple-text);
+      background: color-mix(in srgb, var(--primary-color) 8%, var(--workspace-purple-selected));
+    }
     .global-search-result:hover {
       transform: translateY(-1px);
       background: var(--hover-background);
@@ -765,6 +789,9 @@
     }
   }
   @media (prefers-reduced-motion: reduce) {
+    .global-search-dialog__footer > .global-search-dialog__view-all {
+      transition: none;
+    }
     .global-search-layer,
     .global-search-dialog,
     .global-search__skeleton {

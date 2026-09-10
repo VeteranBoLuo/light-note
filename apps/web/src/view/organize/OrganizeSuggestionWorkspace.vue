@@ -47,12 +47,13 @@
             >
           </div>
           <div class="workspace-tools" :inert="batch.busy.value || undefined">
-            <BButton v-if="run.summary.types.file" :disabled="loading || draftBusy" @click="retryFiles">{{
-              t('organizeFile.retry')
-            }}</BButton>
-            <BButton :disabled="loading || controlling" :loading="manualRefreshing" @click="manualRefresh">{{
-              t('organize.refresh')
-            }}</BButton>
+            <BButton
+              v-if="run.summary.types.file"
+              class="workspace-retry-files"
+              :disabled="loading || draftBusy"
+              @click="retryFiles"
+              >{{ t('organizeFile.retry') }}</BButton
+            >
             <BButton
               v-if="run.canPause"
               :loading="controlAction === 'pause'"
@@ -567,7 +568,6 @@
     displayedKind = ref('all');
   const controlling = ref(false);
   const controlAction = ref<'pause' | 'resume' | 'end' | null>(null);
-  const manualRefreshing = ref(false);
   const initialStep = ref(0);
   const starting = ref(false);
   const user = useUserStore();
@@ -1012,15 +1012,6 @@
       }
     }
   }
-  async function manualRefresh() {
-    if (loading.value || controlling.value || manualRefreshing.value) return;
-    manualRefreshing.value = true;
-    try {
-      await loadLatest();
-    } finally {
-      manualRefreshing.value = false;
-    }
-  }
   async function loadLatest() {
     loading.value = true;
     error.value = '';
@@ -1186,7 +1177,7 @@
   }
   function visibility() {
     if (document.hidden) clearTimeout(timer);
-    else if (activeAi.value) void refresh();
+    else if (active && run.value) void refresh(true);
   }
   watch(
     () => run.value?.id,
@@ -1358,6 +1349,20 @@
   }
   .workspace-tools .b_btn {
     font-size: 12px;
+  }
+  .workspace-tools .workspace-retry-files {
+    background: transparent;
+    color: var(--ow-purple);
+    padding-inline: 8px;
+    box-shadow: none;
+  }
+  .workspace-tools .workspace-retry-files:disabled {
+    color: var(--ow-muted);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .workspace-tools .workspace-retry-files:not(:disabled):hover {
+      background: var(--ow-purple-soft);
+    }
   }
   .workspace-results {
     min-width: 0;
