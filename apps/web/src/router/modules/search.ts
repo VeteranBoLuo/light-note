@@ -7,7 +7,7 @@ const searchRouter: RouteRecordRaw = {
     keepAlive: true,
     requireAuth: true,
     roles: ALL_ROLES,
-    // 资源中心包含「全部资源 / 整理中心 / 知识地图」，属于资料处理。
+    // 资源中心用于全局查找与资料整理。
     mobileShell: 'resources',
     mobileBottomNav: true,
   },

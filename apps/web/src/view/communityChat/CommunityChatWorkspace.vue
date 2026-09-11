@@ -163,12 +163,8 @@
                   :label="recalledMessageLabel(chatMessage)"
                   :can-reedit="canReeditRecalledMessage(chatMessage)"
                   :can-view-original="chatMessage.canViewRecalledContent"
-                  :action-items="recalledMessageMenuItems(chatMessage)"
-                  :busy="messageActionBusyId === chatMessage.publicId"
-                  @surface-click="handleMessageTap($event, chatMessage)"
                   @reedit="reeditRecalledMessage(chatMessage)"
                   @view-original="toggleRecalledMessageOriginal(chatMessage)"
-                  @action="(action) => handleMessageAction(action, chatMessage)"
                 />
                 <BButton
                   v-else
@@ -1471,7 +1467,7 @@
   }
 
   function canDeleteMessage(chatMessage: CommunityChatMessage) {
-    return props.access.authenticated && chatMessage.canDelete && ['active', 'recalled'].includes(chatMessage.status);
+    return props.access.authenticated && chatMessage.canDelete && chatMessage.status === 'active';
   }
 
   function messageHasText(chatMessage: CommunityChatMessage) {
@@ -1562,23 +1558,11 @@
   }
 
   function createReeditDraftSnapshot(chatMessage: CommunityChatMessage): CommunityChatReeditDraftSnapshot | null {
-    const messageKind = chatMessage.messageKind || 'text';
-    if (
-      !chatMessage.isOwn ||
-      chatMessage.status !== 'active' ||
-      messageKind !== 'text' ||
-      chatMessage.sticker ||
-      chatMessage.poll ||
-      Boolean(chatMessage.images?.length) ||
-      Boolean(chatMessage.attachments?.length) ||
-      !String(chatMessage.content || '').trim()
-    ) {
+    if (!chatMessage.isOwn || chatMessage.status !== 'active' || !String(chatMessage.content || '').trim()) {
       return null;
     }
 
     const mentionItems = Array.isArray(chatMessage.mentionItems) ? chatMessage.mentionItems : [];
-    const mentionNames = Array.isArray(chatMessage.mentions) ? chatMessage.mentions : [];
-    if (mentionNames.length !== mentionItems.length) return null;
 
     return {
       content: chatMessage.content,
@@ -1884,18 +1868,6 @@
       }
     }
     return items;
-  }
-
-  function recalledMessageMenuItems(chatMessage: CommunityChatMessage): BActionMenuItem[] {
-    if (!canDeleteMessage(chatMessage)) return [];
-    return [
-      {
-        key: 'delete',
-        label: t('communityChat.delete.action'),
-        icon: icon.noteDetail.deleteLine,
-        danger: true,
-      },
-    ];
   }
 
   function messageHasActions(chatMessage: CommunityChatMessage) {

@@ -163,7 +163,8 @@ describe('DailyReviewCard', () => {
   it('首次读取显示局部加载和错误重试，访客不渲染空卡', async () => {
     loading.value = true;
     const loadingHost = mountCard();
-    expect(loadingHost.textContent).toContain(zhCN.growth.dailyReviewLoading);
+    expect(loadingHost.querySelector('[role="status"]')?.textContent).toContain('正在准备今天的回顾');
+    expect(loadingHost.querySelector('.daily-review__item')).toBeNull();
     unmountCard();
 
     loading.value = false;

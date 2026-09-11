@@ -1,16 +1,14 @@
 <template>
   <div class="tag-graph-canvas" :class="{ 'tag-graph-canvas--compact': compact, 'tag-graph-canvas--full': fullHeight }">
     <div v-if="loading && !nodes.length" class="graph-state">
-      <div class="graph-spinner"></div>
-      <span>{{ t('tagGraph.loading') }}</span>
+      <BLoading inline loading :title="t('tagGraph.loading')" />
     </div>
     <div v-else-if="!nodes.length" class="graph-state graph-state--empty">
       {{ t('tagGraph.empty') }}
     </div>
     <div v-show="nodes.length" ref="containerRef" class="graph-stage"></div>
     <div v-if="loading && nodes.length" class="graph-refresh-indicator">
-      <div class="graph-spinner"></div>
-      <span>{{ t('tagGraph.loading') }}</span>
+      <BLoading inline loading :title="t('tagGraph.loading')" />
     </div>
     <div v-if="nodes.length" class="graph-zoom-hint">{{ t('tagGraph.zoomHint') }}</div>
     <div class="graph-actions" :class="{ 'graph-actions--loading': loading }">
@@ -20,6 +18,7 @@
 </template>
 
 <script setup lang="ts">
+  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import { Graph } from '@antv/g6';
   import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
@@ -507,21 +506,6 @@
 
   .graph-state--empty {
     background: transparent;
-  }
-
-  .graph-spinner {
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    border: 2px solid color-mix(in srgb, var(--resource-tag-color) 20%, transparent);
-    border-top-color: var(--resource-tag-color);
-    animation: graph-spin 0.8s linear infinite;
-  }
-
-  @keyframes graph-spin {
-    to {
-      transform: rotate(360deg);
-    }
   }
 
   @media (max-width: 767px) {

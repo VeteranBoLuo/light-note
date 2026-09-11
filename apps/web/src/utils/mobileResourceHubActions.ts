@@ -16,7 +16,7 @@ const PATHS: Record<MobileResourceHubActionKey, '/search' | '/organize'> = {
 export function createMobileResourceHubActions(t: (key: string) => string): MobileResourceHubActionItem[] {
   return [
     { key: 'resource-center', label: t('navigation.resourceCenter'), icon: icon.navigation.search },
-    { key: 'organize-center', label: t('resourceCenter.sections.organize'), icon: icon.ai.organize },
+    { key: 'organize-center', label: t('organize.title'), icon: icon.ai.organize },
   ];
 }
 

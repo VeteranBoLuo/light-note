@@ -1,5 +1,8 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { completionMessage, runOrganizeCompletionNotifications } from './organizeCompletionNotification.js';
+
+beforeEach(() => vi.stubEnv('LIGHTNOTE_RUNTIME_ENV', 'production'));
+afterEach(() => vi.unstubAllEnvs());
 const run = {
   id: 'run',
   user_id: 'owner',

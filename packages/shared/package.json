@@ -76,6 +76,10 @@
     "./note-transfer": {
       "types": "./noteTransfer.d.ts",
       "default": "./noteTransfer.js"
+    },
+    "./organize-progress": {
+      "types": "./organizeProgress.d.ts",
+      "default": "./organizeProgress.js"
     }
   },
   "devDependencies": {

@@ -6,11 +6,13 @@ import { noteTransferZh } from '@/i18n/locales/noteTransfer';
 const userState = reactive({ id: 'test' });
 const api = vi.hoisted(() => vi.fn());
 const delivery = vi.hoisted(() => vi.fn(async (_file: any) => 'downloaded'));
+const recordOperation = vi.hoisted(() => vi.fn());
 vi.mock('@/utils/fileDelivery', async (importOriginal) => ({
   ...(await importOriginal<any>()),
   deliverGeneratedFile: delivery,
 }));
 vi.mock('@/utils/androidBridge', () => ({ isLightNoteAndroidApp: () => false }));
+vi.mock('@/api/commonApi', () => ({ recordOperation }));
 const confirmAlert = vi.hoisted(() => vi.fn());
 vi.mock('@/http/request', () => ({ apiBasePost: api }));
 vi.mock('@/store', () => ({ useUserStore: () => userState, bookmarkStore: () => ({ isMobile: false }) }));
@@ -276,6 +278,7 @@ describe('directory merged export', () => {
   function exportApi() {
     vi.useRealTimers();
     delivery.mockClear();
+    recordOperation.mockClear();
     api.mockImplementation(async (url, data) => {
       if (url.endsWith('previewExportScope'))
         return {
@@ -308,6 +311,11 @@ describe('directory merged export', () => {
     expect([...host.querySelectorAll('.export-note strong')].map((n) => n.textContent)).toEqual(['Child', 'Root']);
     click(host, '开始导出');
     await vi.waitFor(() => expect(delivery).toHaveBeenCalledOnce());
+    expect(recordOperation).toHaveBeenCalledOnce();
+    expect(recordOperation).toHaveBeenCalledWith({
+      module: '笔记库',
+      operation: '导出笔记目录成功【2篇/merged/html】',
+    });
     const file = delivery.mock.calls[0][0] as any;
     expect(file.fileName).toBe('Folder.html');
     expect(file.content.indexOf('Second')).toBeLessThan(file.content.indexOf('First'));
@@ -393,6 +401,7 @@ describe('directory merged export', () => {
     resolve({ status: 200, data: { notes } });
     await settle();
     expect(delivery).not.toHaveBeenCalled();
+    expect(recordOperation).not.toHaveBeenCalled();
     expect(host.querySelector('.export-order')).toBeNull();
   });
   it('stops on an invalid scope token and requires a fresh confirmation', async () => {

@@ -1,5 +1,5 @@
 import { beforeEach, expect, it, vi } from 'vitest';
-import { createApp, h, ref } from 'vue';
+import { createApp, h, nextTick, ref } from 'vue';
 import { useOrganizeIconReview } from './useOrganizeIconReview';
 import type { SuggestionRun, WorkspaceItem } from '@/api/organizeSuggestionApi';
 const api = vi.hoisted(() => ({ actOnRunSuggestion: vi.fn() }));
@@ -45,6 +45,7 @@ it('默认不勾选；批量限并发、保留失败选择并只重试失败', a
     return id === '2' ? { status: 409, msg: '标签已变化' } : { status: 200, data: { status: 'applied' } };
   });
   expect(review.selectedCount.value).toBe(0);
+  review.startBatch();
   review.selectAvailable();
   await review.applySelected();
   expect(peak).toBeLessThanOrEqual(3);
@@ -64,6 +65,7 @@ it('离开页面停止继续发送剩余批次', async () => {
     resolve = done;
   });
   api.actOnRunSuggestion.mockReturnValue(pending);
+  review.startBatch();
   review.selectAvailable();
   const running = review.applySelected();
   expect(api.actOnRunSuggestion).toHaveBeenCalledTimes(3);
@@ -71,4 +73,58 @@ it('离开页面停止继续发送剩余批次', async () => {
   resolve({ status: 200, data: { status: 'applied' } });
   await running;
   expect(api.actOnRunSuggestion).toHaveBeenCalledTimes(3);
+});
+
+it('批量模式需显式进入，退出清空选择但保留图标草稿，换任务重置', async () => {
+  const { review, run, close } = mountReview();
+  expect(review.selecting.value).toBe(false);
+  review.selectAvailable();
+  expect(review.selectedCount.value).toBe(0);
+  review.startBatch();
+  expect(review.selecting.value).toBe(true);
+  expect(review.selectedCount.value).toBe(0);
+  review.drafts.set('0', { iconName: 'lucide:star', color: 'currentColor', iconUrl: 'safe' });
+  review.selectAvailable();
+  review.exitBatch();
+  expect(review.selecting.value).toBe(false);
+  expect(review.selectedCount.value).toBe(0);
+  expect(review.drafts.has('0')).toBe(true);
+  review.startBatch();
+  review.selectAvailable();
+  run.value = { id: 'next' } as SuggestionRun;
+  await nextTick();
+  expect(review.selecting.value).toBe(false);
+  expect(review.selected.size).toBe(0);
+  expect(review.drafts.size).toBe(0);
+  close();
+});
+it('只有手动补充时不能进入，选好图标后可以进入；提交中不能退出或改选', async () => {
+  const { review, items, close } = mountReview();
+  for (const item of items.value) {
+    item.suggestions[0].status = 'no_suggestion';
+    item.suggestions[0].after = null;
+  }
+  review.startBatch();
+  expect(review.selecting.value).toBe(false);
+  review.drafts.set('0', { iconName: 'lucide:star', color: 'currentColor', iconUrl: 'safe' });
+  review.startBatch();
+  review.selectAvailable();
+  let resolve!: (value: unknown) => void;
+  api.actOnRunSuggestion.mockReturnValue(
+    new Promise((done) => {
+      resolve = done;
+    }),
+  );
+  const pending = review.applySelected();
+  review.exitBatch();
+  review.selectAll(false);
+  expect(review.selecting.value).toBe(true);
+  expect(review.selectedCount.value).toBe(1);
+  resolve({ status: 200, data: { status: 'applied' } });
+  await pending;
+  expect(review.selectedCount.value).toBe(0);
+  expect(review.selecting.value).toBe(true);
+  review.exitBatch();
+  expect(review.selecting.value).toBe(false);
+  close();
 });

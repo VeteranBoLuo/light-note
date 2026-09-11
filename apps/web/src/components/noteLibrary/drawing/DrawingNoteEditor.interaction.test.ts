@@ -1,7 +1,10 @@
-import { createApp, nextTick, ref } from 'vue';
+import { createApp, h, nextTick, ref } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import DrawingNoteEditor from './DrawingNoteEditor.vue';
 import { MOBILE_LAYOUT_CONTEXT } from '@/composables/useMobileLayout';
+
+const delivery = vi.hoisted(() => vi.fn());
+const recordOperation = vi.hoisted(() => vi.fn());
 
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({ t: (key: string) => key }),
@@ -21,11 +24,12 @@ vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({
 
 vi.mock('@/utils/fileDelivery', () => ({
   buildExportFileName: vi.fn(() => 'drawing.png'),
-  deliverGeneratedFile: vi.fn(),
+  deliverGeneratedFile: delivery,
 }));
 
 vi.mock('@/utils/androidBridge', () => ({ isLightNoteAndroidApp: vi.fn(() => false) }));
 vi.mock('@/utils/androidFileExport', () => ({ deliverExportViaAndroidBridge: vi.fn() }));
+vi.mock('@/api/commonApi', () => ({ recordOperation }));
 
 class ResizeObserverStub {
   observe() {}
@@ -75,6 +79,40 @@ describe('DrawingNoteEditor 活动手势撤销', () => {
     );
     vi.stubGlobal('cancelAnimationFrame', vi.fn());
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(canvasContextStub());
+    delivery.mockReset();
+    recordOperation.mockReset();
+  });
+
+  it('只在手绘笔记导出交付成功后记录操作日志', async () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const editor = ref<InstanceType<typeof DrawingNoteEditor>>();
+    const app = createApp({
+      setup: () => () =>
+        h(DrawingNoteEditor, {
+          ref: editor,
+          noteId: 'drawing-1',
+          title: '草图',
+          content: JSON.stringify({ v: 2, page: { width: 1448, height: 1448 }, elements: [] }),
+        }),
+    });
+    app.mount(host);
+    await nextTick();
+
+    delivery.mockResolvedValueOnce('cancelled');
+    await editor.value!.exportJson();
+    expect(recordOperation).not.toHaveBeenCalled();
+
+    delivery.mockResolvedValueOnce('downloaded');
+    await editor.value!.exportJson();
+    expect(recordOperation).toHaveBeenCalledOnce();
+    expect(recordOperation).toHaveBeenCalledWith({
+      module: '笔记',
+      operation: '导出手绘笔记成功【草图/json】',
+    });
+
+    app.unmount();
+    host.remove();
   });
 
   afterEach(() => {

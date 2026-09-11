@@ -1,5 +1,10 @@
 <template>
-  <article v-if="compact && showCard" v-bind="$attrs" class="daily-brief-card daily-brief-card--summary">
+  <article
+    v-if="compact && showCard"
+    v-bind="$attrs"
+    class="daily-brief-card daily-brief-card--summary"
+    :aria-busy="busy || visitorLoading || undefined"
+  >
     <header class="daily-brief-card__header">
       <span class="daily-brief-card__ai-mark" aria-hidden="true">{{
         guestSample ? t('workbench.dailyBrief.exampleMark') : 'AI'
@@ -47,8 +52,21 @@
         >{{ t('workbench.dailyBrief.sampleMeta', { date: visitorState.dataDate || '—' })
         }}<span v-if="visitorState.stale"> · {{ t('workbench.dailyBrief.sampleStale') }}</span></p
       >
-      <BButton size="small" @click="detailsVisible = true">
-        {{ t('workbench.dailyBrief.viewBrief') }}<span v-if="briefInsights.length"> · {{ briefInsights.length }}</span>
+      <aside v-if="briefRecommendation" class="daily-brief-card__preview-recommendation">
+        <strong>{{
+          t(
+            guestSample
+              ? 'workbench.dailyBrief.sampleSuggestion'
+              : state?.stale
+                ? 'workbench.dailyBrief.previousRecommendation'
+                : 'workbench.dailyBrief.aiRecommendation',
+          )
+        }}</strong>
+        <p>{{ briefRecommendation }}</p>
+      </aside>
+      <p v-if="displayBrief && errorMessage" class="daily-brief-card__refresh-error" role="alert">{{ errorMessage }}</p>
+      <BButton size="small" class="daily-brief-card__view-brief" @click="detailsVisible = true">
+        {{ t('workbench.dailyBrief.viewBrief') }}
         <SvgIcon :src="icon.ai.sourceArrow" size="13" aria-hidden="true" />
       </BButton>
     </div>
@@ -116,7 +134,9 @@
         <div class="daily-brief-card__state-main">
           <BLoading v-if="visitorLoading" :loading="true" inline :title="t('common.loading')" />
           <template v-else>
-            <span>{{ t(visitorFailed ? 'workbench.dailyBrief.sampleFailed' : 'workbench.dailyBrief.sampleEmpty') }}</span>
+            <span>{{
+              t(visitorFailed ? 'workbench.dailyBrief.sampleFailed' : 'workbench.dailyBrief.sampleEmpty')
+            }}</span>
             <BButton size="small" @click="refreshVisitor">{{ t('common.retry') }}</BButton>
           </template>
         </div>
@@ -412,6 +432,44 @@
       background: transparent;
     }
   }
+  .daily-brief-card--summary .daily-brief-card__headline {
+    margin-bottom: 9px;
+    font-size: 14px;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+  }
+
+  .daily-brief-card__preview-recommendation {
+    margin: 0 0 8px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--primary-color) 8%, var(--card-background));
+
+    strong {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--workspace-purple-text);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    p {
+      margin: 0;
+      color: var(--text-color);
+      font-size: 13px;
+      line-height: 1.7;
+      overflow-wrap: anywhere;
+    }
+  }
+
+  .daily-brief-card__summary-copy .daily-brief-card__view-brief {
+    min-height: 32px;
+  }
+
+  .daily-brief-card--summary .daily-brief-card__heading p {
+    white-space: normal;
+  }
+
   /* 通栏简报完整展示；高度由内容决定，不与相邻业务卡片绑定。 */
   .daily-brief-card {
     min-width: 0;

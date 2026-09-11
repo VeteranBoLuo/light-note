@@ -14,6 +14,7 @@ import pool from '../db/index.js';
 import { earnPoints, earnStorage, getAchievementFrameByKey, titleName } from './points.js';
 import { grantItem } from './items.js';
 import { createNotification } from './notification.js';
+import { notificationSchedulerEnabled } from './notificationSchedulerPolicy.js';
 import { stableAgentErrorCode } from './agent/logSafety.js';
 import { finishAdminAction } from './adminActionExecution.js';
 import { dayKeyAtOffset, getGrowthCalendarContext } from './growthPreferences.js';
@@ -1409,6 +1410,7 @@ export async function getUserSpaceMb(userId, userRole = null) {
 // 只做「连签将断」——高价值(守住习惯)、非骚扰(仅昨天签过、今天未签、连签≥3 的用户)、单查询低成本;
 // 免费抽/成就待领等靠站内徽章提示,不在此每日推送以免刷屏。按 (user, type, 当天) 幂等。
 export async function generateGrowthNudges() {
+  if (!notificationSchedulerEnabled()) return;
   try {
     const yesterday = dayKey(new Date(Date.now() - 86_400_000));
     const today = dayKey();

@@ -60,6 +60,15 @@
     </section>
 
     <div :key="homeView" class="workshop-view-content">
+      <BButton
+        v-if="!isGuest && homeView === 'work' && attentionJob && !overviewLoading && !overviewFailed"
+        class="workshop-attention"
+        @click="taskSection?.scrollIntoView({ block: 'start' })"
+      >
+        <SvgIcon :src="icon.toolbox.audit" size="18" aria-hidden="true" />
+        <span>{{ taskAttentionSummary }}</span>
+        <SvgIcon :src="icon.ai.sourceArrow" size="16" aria-hidden="true" />
+      </BButton>
       <section
         v-if="canReadProjects && homeView === 'work'"
         class="toolbox-section toolbox-continue"
@@ -112,7 +121,7 @@
               <BChip tone="success">{{ t('toolbox.workspace.status.active') }}</BChip>
             </span>
             <span class="workshop-project__next" :class="{ 'is-empty': !workspace.nextStep }">
-              <small>{{ t('toolbox.workspace.nextStep') }}</small>
+              <small v-if="workspace.nextStep">{{ t('toolbox.workspace.nextStep') }}</small>
               <span>{{ workspace.nextStep || t('toolbox.workspace.noNextStep') }}</span>
             </span>
             <span class="workshop-project__foot">
@@ -133,7 +142,7 @@
         </div>
       </section>
 
-      <section v-if="!isGuest && homeView === 'work' && continueJobs.length" class="toolbox-section toolbox-tasks">
+      <section v-if="!isGuest && homeView === 'work' && continueJobs.length" class="toolbox-section toolbox-tasks" ref="taskSection">
         <header class="toolbox-section__head"
           ><h2>{{ t('toolbox.project.tasks') }}</h2></header
         >
@@ -243,7 +252,6 @@
         aria-labelledby="toolbox-catalog-title"
       >
         <header class="toolbox-section__head toolbox-catalog__head">
-          <span>{{ isGuest ? '03' : '04' }}</span>
           <h2 id="toolbox-catalog-title">{{ t('toolbox.home.allToolsTitle') }}</h2>
           <p>{{ t('toolbox.home.allToolsDescription') }}</p>
         </header>
@@ -492,18 +500,42 @@
     })),
   );
   const continueWorkspaces = computed(() =>
-    (overview.value?.workspaces?.continue || []).filter((item) => item.status === 'active').slice(0, 6),
+    (overview.value?.workspaces?.continue || [])
+      .filter((item) => item.status === 'active')
+      .sort((a, b) =>
+        Math.max(dateValue(b.lastOpenedAt) || 0, dateValue(b.updatedAt) || 0)
+        - Math.max(dateValue(a.lastOpenedAt) || 0, dateValue(a.updatedAt) || 0),
+      )
+      .slice(0, 4),
   );
   const continueJobs = computed(() => {
     const seen = new Set<string>();
-    return [...(overview.value?.tasks?.active || []), ...(overview.value?.tasks?.ready || [])]
+    return [
+      ...(overview.value?.tasks?.active || []),
+      ...(overview.value?.tasks?.ready || []),
+      ...(overview.value?.tasks?.recent || []).filter((job) => job.status === 'failed' || job.save.status === 'save_failed'),
+    ]
       .filter((job) => {
         if (seen.has(job.id)) return false;
         seen.add(job.id);
         return true;
       })
+      .sort((a, b) => Number(needsAttention(b)) - Number(needsAttention(a)))
       .slice(0, 3);
   });
+  const attentionJob = computed(() => continueJobs.value.find(needsAttention));
+  const taskSection = ref<HTMLElement | null>(null);
+  const taskAttentionSummary = computed(() => {
+    const ready = continueJobs.value.filter(isReadyTask).length;
+    const failed = continueJobs.value.filter((job) => needsAttention(job) && !isReadyTask(job)).length;
+    return [
+      ready ? t('toolbox.home.readyTaskCount', { count: ready }) : '',
+      failed ? t('toolbox.home.failedTaskCount', { count: failed }) : '',
+    ].filter(Boolean).join(' · ');
+  });
+  function needsAttention(job: ToolboxJob) {
+    return isReadyTask(job) || job.status === 'failed' || job.save.status === 'save_failed';
+  }
   const enabledToolIds = computed(() => new Set(tools.value.map((tool) => tool.id)));
   const recentEntries = computed<RecentEntry[]>(() => {
     const workspaceEntries = (overview.value?.workspaces?.recent || []).map((workspace) => ({
@@ -557,7 +589,7 @@
   const visibleTools = computed(() => {
     const query = keyword.value.trim().toLocaleLowerCase(locale.value);
     return tools.value.filter((tool) => {
-      if (activeCategory.value === 'free' && tool.billingMedium !== 'free') return false;
+      if (activeCategory.value === 'free' && !tool.billingMedia.includes('free')) return false;
       if (activeCategory.value === 'points' && tool.billingMedium === 'free') return false;
       if (!query) return true;
       return [toolName(tool.id), toolDescription(tool.id), t('toolbox.tool.' + tool.id + '.output')]
@@ -644,6 +676,7 @@
   const toolName = (toolId: string) => t('toolbox.tool.' + toolId + '.name');
   const toolDescription = (toolId: string) => t('toolbox.tool.' + toolId + '.description');
   function billingLabel(tool: ToolboxCatalogItem) {
+    if (tool.id === 'ocr_to_text') return t('toolbox.ocrBillingLabel');
     if (tool.price.kind !== 'free') {
       return tool.billingMedia.includes('ai_quota') ? t('toolbox.billingChoiceLabel') : t('toolbox.pointsLabel');
     }
@@ -852,6 +885,13 @@
     .toolbox-page-scroll();
     padding: 24px clamp(22px, 3.5vw, 54px) 56px;
     color: var(--text-color);
+    --workshop-border: #e2e5eb;
+    --workshop-card-shadow: 0 2px 6px rgba(24, 32, 56, 0.025);
+    background: var(--background-color);
+  }
+  :global([data-theme='night'] .toolbox-home) {
+    --workshop-border: #3b3e47;
+    --workshop-card-shadow: none;
   }
   .toolbox-home > section {
     width: 100%;
@@ -1826,6 +1866,29 @@
     background: transparent;
   }
 
+  .workshop-attention.b_btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    height: auto;
+    min-height: 44px;
+    margin-bottom: 20px;
+    padding: 10px 14px;
+    border: 1px solid var(--workshop-border);
+    border-radius: 10px;
+    background: var(--workspace-content);
+    color: var(--workspace-text);
+    text-align: left;
+    white-space: normal;
+  }
+  .workshop-attention > span:not(.b-chip) {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .workshop-view-content {
     animation: workshop-view-appear 180ms ease-out;
   }
@@ -1879,7 +1942,8 @@
   .toolbox-group-filter,
   .toolbox-home-group,
   .toolbox-catalog__content {
-    .workspace-open-surface();
+    background: transparent;
+    border-color: var(--workshop-border);
   }
   .toolbox-card.b_btn,
   .toolbox-activity-card,
@@ -1889,6 +1953,22 @@
 
   .toolbox-group-filter {
     .workspace-navigation-colors();
+    border: 0;
+  }
+  .toolbox-group-filter :deep(.b-chip:not(.b-chip--selected)) {
+    .workspace-navigation-default();
+  }
+  .toolbox-category-filter :deep(.b-chip) {
+    border-color: var(--workshop-border);
+    background: var(--workspace-content);
+    color: var(--workspace-muted);
+    font-weight: 500;
+  }
+  .toolbox-category-filter :deep(.b-chip.b-chip--selected) {
+    border-color: var(--workspace-purple-text);
+    background: var(--workspace-purple-selected);
+    color: var(--workspace-purple-text);
+    box-shadow: none;
   }
   .toolbox-group-filter :deep(.b-chip:not(.b-chip--selected):hover) {
     .workspace-navigation-hover();
@@ -1899,7 +1979,7 @@
   // 首页层级：资产、项目、工具各自使用稳定的内容表面。
   .toolbox-home__balances {
     display: grid;
-    grid-template-columns: repeat(2, minmax(160px, max-content));
+    grid-template-columns: repeat(2, max-content);
     gap: 10px;
   }
   .toolbox-home__balance.b_btn {
@@ -1907,14 +1987,15 @@
     --balance-accent: var(--workspace-purple-text);
     position: relative;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 16px;
-    gap: 7px 8px;
+    grid-template-columns: auto auto 14px;
+    align-items: center;
+    gap: 8px;
     width: 100%;
     min-width: 0;
     height: auto;
-    min-height: 74px;
-    padding: 12px 14px;
-    border: 1px solid var(--workspace-border);
+    min-height: 40px;
+    padding: 8px 10px;
+    border: 1px solid var(--workshop-border);
     border-radius: 14px;
     text-align: left;
     line-height: 1.25;
@@ -1936,16 +2017,16 @@
     color: var(--balance-accent);
   }
   .toolbox-home__balance strong {
-    grid-column: 1 / -1;
-    grid-row: 2;
+    grid-column: 2;
+    grid-row: 1;
     color: var(--workspace-text);
-    font-size: 21px;
+    font-size: 14px;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
   .balance-arrow {
-    grid-column: 2;
+    grid-column: 3;
     grid-row: 1;
     align-self: center;
     color: var(--workspace-muted);
@@ -1964,7 +2045,7 @@
     margin: 24px 0 28px;
     border: 0;
     border-radius: 12px;
-    background: var(--workspace-canvas);
+    background: var(--workspace-hover);
     isolation: isolate;
   }
   .workshop-view-switch__indicator {
@@ -1973,7 +2054,7 @@
     width: calc(50% - 4px);
     border-radius: 9px;
     background: var(--workspace-content);
-    border: 1px solid var(--workspace-border);
+    border: 1px solid var(--workshop-border);
     box-shadow: none;
     transition: transform 220ms ease;
     z-index: -1;
@@ -2020,9 +2101,9 @@
     width: 100%;
     min-width: 0;
     height: auto;
-    padding: 20px;
-    gap: 18px;
-    border: 1px solid var(--workspace-border);
+    padding: 16px;
+    gap: 12px;
+    border: 1px solid var(--workshop-border);
     border-radius: 16px;
     color: var(--workspace-text);
     text-align: left;
@@ -2059,7 +2140,7 @@
   }
   .workshop-project__identity strong {
     font-size: 17px;
-    font-weight: 650;
+    font-weight: 600;
     line-height: 1.45;
   }
   .workshop-project__identity strong,
@@ -2079,18 +2160,21 @@
     flex-shrink: 0;
   }
   .workshop-project__next {
-    display: grid;
-    gap: 5px;
-    padding: 12px 14px;
-    border-radius: 10px;
-    background: var(--workspace-canvas);
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .workshop-project__next small {
+    flex-shrink: 0;
   }
   .workshop-project__next small {
     color: var(--workspace-muted);
     font-size: 11px;
   }
   .workshop-project__next > span {
-    font-size: 13px;
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--workspace-text);
   }
   .workshop-project__next.is-empty > span {
     color: var(--workspace-muted);
@@ -2103,8 +2187,10 @@
     gap: 10px;
   }
   .workshop-project__meta {
-    display: grid;
-    gap: 3px;
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 4px 10px;
     color: var(--workspace-muted);
     font-size: 11px;
   }
@@ -2125,7 +2211,7 @@
     grid-template-columns: 40px minmax(0, 1fr) auto;
     gap: 14px;
     padding: 16px;
-    border: 1px solid var(--workspace-border);
+    border: 1px solid var(--workshop-border);
     border-radius: 14px;
     box-shadow: none;
   }
@@ -2219,7 +2305,7 @@
     min-width: 0;
     height: 100%;
     padding: 18px;
-    border: 1px solid var(--workspace-border);
+    border: 1px solid var(--workshop-border);
     border-radius: 14px;
     text-align: left;
     white-space: normal;
@@ -2251,7 +2337,8 @@
     -webkit-line-clamp: 2;
     overflow: hidden;
     color: var(--workspace-muted);
-    font-size: 12px;
+    font-size: 13px;
+    line-height: 1.6;
   }
   .toolbox-card__copy small {
     font-size: 11px;
@@ -2313,7 +2400,7 @@
       padding: 10px 12px;
     }
     .toolbox-home__balance strong {
-      font-size: 18px;
+      font-size: 14px;
     }
     .toolbox-overview h1 {
       font-size: 25px;
@@ -2324,8 +2411,8 @@
       gap: 12px;
     }
     .workshop-project.b_btn {
-      padding: 16px;
-      gap: 14px;
+      padding: 14px;
+      gap: 10px;
     }
     .workshop-project__head {
       flex-wrap: wrap;
@@ -2381,6 +2468,25 @@
     .toolbox-card__copy {
       padding-right: 26px;
     }
+  }
+  .workshop-project.b_btn,
+  .toolbox-card.b_btn,
+  .toolbox-quick-card.b_btn {
+    box-shadow: var(--workshop-card-shadow);
+  }
+  .toolbox-card__icon,
+  .toolbox-quick-card__icon {
+    background: var(--workspace-hover);
+    background: color-mix(in srgb, var(--tool-accent, var(--workspace-purple-text)) 9%, var(--workspace-content));
+  }
+  .toolbox-tasks {
+    scroll-margin-top: 20px;
+  }
+  .workshop-attention.b_btn {
+    background: var(--workspace-purple-selected);
+    border-color: var(--workshop-border);
+    color: var(--workspace-purple-text);
+    font-weight: 500;
   }
   @media (prefers-reduced-motion: reduce) {
     .workshop-view-switch__indicator {

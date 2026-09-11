@@ -87,6 +87,54 @@ describe('toolbox service boundaries', () => {
     expect(statements).not.toMatch(/toolbox_quotes|user_growth|points_economy|ai_quota|ai_execution/);
   });
 
+  it('requires explicit AI mode for a paid OCR quote and persists the mode', async () => {
+    mocks.resolvePersonalKnowledgeResourceVersions.mockResolvedValue([{ type: 'file', id: 'file-1', version: 'v1' }]);
+    const database = {
+      query: vi.fn(async (sql) =>
+        sql.includes('FROM files')
+          ? [[{ id: 'file-1', file_name: 'scan.png', file_type: 'image/png', file_size: 1024 }]]
+          : [[]],
+      ),
+    };
+    const args = {
+      userId: 'owner',
+      toolId: 'ocr_to_text',
+      billingMedium: 'ai_quota',
+      clientRequestId: 'ai-ocr-quote-1',
+      database,
+    };
+    for (const options of [{}, { recognitionMode: 'basic' }]) {
+      await expect(
+        createToolboxQuote({ ...args, rawInput: { resourceRefs: [{ type: 'file', id: 'file-1' }], options } }),
+      ).rejects.toMatchObject({ code: 'TOOLBOX_OPTIONS_INVALID' });
+    }
+    expect(database.query.mock.calls.some(([sql]) => sql.includes('INSERT'))).toBe(false);
+    const quote = await createToolboxQuote({
+      ...args,
+      rawInput: { resourceRefs: [{ type: 'file', id: 'file-1' }], options: { recognitionMode: 'ai' } },
+    });
+    expect(quote).toMatchObject({ billingMedium: 'ai_quota', quotedPoints: 0 });
+    const insert = database.query.mock.calls.find(([sql]) => sql.includes('INSERT INTO toolbox_quotes'));
+    expect(insert[1].some((value) => typeof value === 'string' && value.includes('"recognitionMode":"ai"'))).toBe(true);
+  });
+
+  it('rejects AI mode on the free endpoint before creating a task', async () => {
+    mocks.resolvePersonalKnowledgeResourceVersions.mockResolvedValue([{ type: 'file', id: 'file-1', version: 'v1' }]);
+    const database = {
+      query: vi.fn(async () => [[{ id: 'file-1', file_name: 'scan.png', file_type: 'image/png', file_size: 1024 }]]),
+      getConnection: vi.fn(),
+    };
+    await expect(
+      createFreeOcrJob({
+        userId: 'owner',
+        clientRequestId: 'ai-free-reject-1',
+        rawInput: { resourceRefs: [{ type: 'file', id: 'file-1' }], options: { recognitionMode: 'ai' } },
+        database,
+      }),
+    ).rejects.toMatchObject({ code: 'TOOLBOX_OPTIONS_INVALID' });
+    expect(database.getConnection).not.toHaveBeenCalled();
+  });
+
   it('does not create a new paid OCR job from an old active quote', async () => {
     const connection = {
       beginTransaction: vi.fn(),

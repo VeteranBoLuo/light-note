@@ -1,10 +1,10 @@
 <template>
   <section class="todo-matrix" :class="{ 'is-mobile': mobile }" :aria-label="t('inbox.todoMatrixLabel')">
-    <div v-if="!mobile" class="todo-matrix__guide-compact"
-      ><BTooltip :title="t('inbox.todoMatrixGuide')"
-        ><BButton size="small">{{ t('todoWorkspace.matrixGuide') }}</BButton></BTooltip
-      ></div
-    >
+    <div v-if="!mobile" class="todo-matrix__guide-compact">
+      <BTooltip :title="t('inbox.todoMatrixGuide')">
+        <BButton size="small">{{ t('todoWorkspace.matrixGuide') }}</BButton>
+      </BTooltip>
+    </div>
 
     <section v-if="mobile" class="todo-matrix__overview" :aria-label="t('inbox.todoMatrixLabel')">
       <BButton
@@ -21,8 +21,8 @@
             <span class="todo-matrix__dot" aria-hidden="true"></span>
             <strong>{{ t(`inbox.todoMatrixQuadrants.${quadrant.key}`) }}</strong>
           </span>
-          <span class="todo-matrix__count" :aria-label="t('inbox.todoMatrixCount', { count: quadrant.items.length })">
-            {{ quadrant.items.length }}
+          <span class="todo-matrix__count" :aria-label="loading ? t('todoWorkspace.loadingTasks') : t('inbox.todoMatrixCount', { count: quadrant.items.length })">
+            {{ loading ? '—' : quadrant.items.length }}
           </span>
         </span>
         <span class="todo-matrix__overview-description">
@@ -32,7 +32,7 @@
       </BButton>
     </section>
 
-    <div class="todo-matrix__grid">
+    <div class="todo-matrix__grid" :aria-busy="loading">
       <section
         v-for="quadrant in visibleQuadrants"
         :key="quadrant.key"
@@ -45,8 +45,8 @@
             <strong>{{ t(`inbox.todoMatrixQuadrants.${quadrant.key}`) }}</strong>
             <p>{{ t(`inbox.todoMatrixDescriptions.${quadrant.key}`) }}</p>
           </div>
-          <span class="todo-matrix__count" :aria-label="t('inbox.todoMatrixCount', { count: quadrant.items.length })">
-            {{ quadrant.items.length }}
+          <span class="todo-matrix__count" :aria-label="loading ? t('todoWorkspace.loadingTasks') : t('inbox.todoMatrixCount', { count: quadrant.items.length })">
+            {{ loading ? '—' : quadrant.items.length }}
           </span>
         </header>
 
@@ -132,11 +132,23 @@
                 :items="rowActions(item)"
                 :disabled="disabled"
                 placement="bottom-right"
-                :width="148"
+                :width="208"
                 :aria-label="t('common.more')"
                 @click.stop
                 @select="(key) => handleRowAction(key, item)"
               >
+                <template #item-priority="{ close }">
+                  <TodoPriorityMenu
+                    :value="item.priority"
+                    :disabled="priorityDisabled"
+                    @select="
+                      (priority) => {
+                        changePriority(item, priority);
+                        close();
+                      }
+                    "
+                  />
+                </template>
                 <BButton
                   class="todo-matrix-card__more"
                   :disabled="disabled"
@@ -149,7 +161,7 @@
             </template>
           </MobileListRow>
         </MobileListSurface>
-        <p v-else class="todo-matrix__empty">{{ t('inbox.todoMatrixEmpty') }}</p>
+        <p v-else class="todo-matrix__empty" :class="{ 'is-loading': loading }" :aria-hidden="loading || undefined">{{ t('inbox.todoMatrixEmpty') }}</p>
       </section>
     </div>
 
@@ -160,7 +172,16 @@
       :title="t('common.more')"
       :actions="mobileRowActions"
       @action="handleMobileAction"
-    />
+    >
+      <template #before-actions="{ runAction, pending }">
+        <TodoPriorityMenu
+          v-if="mobileActionItem?.status === 'pending'"
+          :value="mobileActionItem.priority"
+          :disabled="priorityDisabled || pending"
+          @select="(priority) => runAction({ key: `priority-${priority}`, label: t(`inbox.todoPriority${priority}`) })"
+        />
+      </template>
+    </MobilePageActionsDrawer>
     <TodoSeriesDrawer
       v-if="activeSeriesRepresentative"
       v-model:open="seriesDrawerOpen"
@@ -182,6 +203,7 @@
 </template>
 
 <script setup lang="ts">
+  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import type { TodoChecklistItem, TodoItem, TodoPriority, TodoSeriesAction } from '@/api/todoApi';
@@ -195,6 +217,8 @@
   import MobileListSurface from '@/components/mobile/MobileListSurface.vue';
   import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
   import TodoSeriesDrawer from '@/components/todo/TodoSeriesDrawer.vue';
+  import TodoPriorityMenu from './TodoPriorityMenu.vue';
+  import useUserStore from '@/store/useUser';
   import icon from '@/config/icon';
   import {
     formatTodoDateTime,
@@ -209,6 +233,7 @@
     defineProps<{
       items: TodoItem[];
       mobile?: boolean;
+      loading?: boolean;
       disabled?: boolean;
       deletingId?: string;
     }>(),
@@ -339,6 +364,12 @@
 
   function rowActions(item: TodoItem): BActionMenuItem[] {
     return [
+      ...(item.status === 'pending'
+        ? [
+            { key: 'priority', label: t('inbox.todoPriority') },
+            { key: 'priority-divider', divider: true },
+          ]
+        : []),
       { key: 'edit', label: t('inbox.editTodo'), icon: icon.table_edit, disabled: props.disabled },
       { key: `divider-${item.id}`, divider: true },
       {
@@ -355,6 +386,12 @@
     if (props.disabled) return;
     if (key === 'edit') emit('edit', item);
     if (key === 'delete') emit('delete', item);
+  }
+  const user = useUserStore();
+  const priorityDisabled = computed(() => props.disabled || user.adminContext?.mode === 'readonly');
+  function changePriority(item: TodoItem, priority: TodoPriority) {
+    if (priorityDisabled.value || item.status !== 'pending' || item.priority === priority) return;
+    emit('update-priority', item, priority);
   }
 
   function selectQuadrant(key: TodoMatrixQuadrantKey) {
@@ -373,6 +410,10 @@
   function handleMobileAction(action: MobilePageActionItem) {
     const item = mobileActionItem.value;
     if (!item || props.disabled) return;
+    if (action.key.startsWith('priority-')) {
+      const priority = Number(action.key.slice('priority-'.length));
+      if (priority === 0 || priority === 1 || priority === 2) changePriority(item, priority);
+    }
     if (action.key === 'edit') emit('edit', item);
     if (action.key === 'delete') emit('delete', item);
     mobileActionItem.value = null;
@@ -407,6 +448,9 @@
 </script>
 
 <style scoped lang="less">
+  .todo-matrix__empty.is-loading {
+    visibility: hidden;
+  }
   .todo-matrix {
     display: grid;
     gap: 12px;
@@ -870,6 +914,9 @@
   .todo-matrix__guide-compact {
     display: flex;
     justify-content: flex-end;
+    align-items: center;
+    min-height: 28px;
+    gap: 12px;
     margin-bottom: 6px;
   }
   @media (min-width: 768px) and (max-height: 819px) {

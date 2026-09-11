@@ -108,6 +108,186 @@ if (params.has('expired')) {
   run.summary = { ...run.summary, total: 2, types: { note: 2 } };
   run.checked = 2;
 }
+// V3 overview scenarios use synthetic counts and the existing isolated API adapter.
+const scenario = params.get('progress');
+if (scenario) {
+  const lane = {
+    total: 0,
+    completed: 0,
+    partial: 0,
+    failed: 0,
+    cancelled: 0,
+    skipped: 0,
+    running: 0,
+    waiting: 0,
+    queued: 0,
+    settled: false,
+  };
+  run.runVersion = 3;
+  run.status =
+    scenario === 'partial' || scenario === 'complete' ? 'completed' : scenario === 'paused' ? 'paused' : 'running';
+  run.summary = { ...run.summary, total: 72, types: { bookmark: 20, note: 20, file: 20, tag: 12 }, aiTotal: null };
+  run.options.resourceTypes = ['bookmark', 'file', 'note', 'tag'];
+  run.options.checks = ['tags', 'title', 'empty', 'duplicate', 'tag_icon'];
+  run.overview = {
+    inspection: { total: 72, checked: scenario === 'checking' ? 46 : 72, skipped: 0, settled: scenario !== 'checking' },
+    direct: {
+      ...lane,
+      total: 72,
+      completed: scenario === 'checking' ? 0 : 60,
+      running: scenario === 'checking' ? 0 : 1,
+      queued: scenario === 'checking' ? 72 : 11,
+    },
+    ai: {
+      ...lane,
+      total: scenario === 'checking' ? 0 : 19,
+      completed: scenario === 'checking' ? 0 : 8,
+      running: scenario === 'checking' || scenario === 'paused' ? 0 : 1,
+      queued: scenario === 'checking' ? 0 : scenario === 'paused' ? 11 : 10,
+    },
+    review: {
+      pending: scenario === 'checking' ? 0 : 15,
+      manualObjects: scenario === 'checking' ? 0 : 6,
+      retryFiles: scenario === 'partial' ? 2 : 0,
+    },
+  };
+  if (['complete', 'partial'].includes(scenario)) {
+    run.overview.direct = { ...lane, total: 72, completed: 72, settled: true };
+    run.overview.ai = {
+      ...lane,
+      total: 19,
+      completed: scenario === 'partial' ? 17 : 19,
+      failed: scenario === 'partial' ? 2 : 0,
+      settled: true,
+    };
+  }
+  if (scenario === 'free') run.overview.ai = { ...lane, settled: true };
+  if (scenario === 'ended') {
+    run.status = 'ended';
+    run.overview.inspection = { total: 72, checked: 46, skipped: 0, settled: false };
+    run.overview.direct = { ...lane, total: 46, cancelled: 46, settled: true };
+    run.overview.ai = { ...lane, settled: true };
+    run.overview.review = { pending: 0, manualObjects: 0, retryFiles: 0 };
+  }
+  if (scenario === 'allpaused') {
+    run.status = 'paused';
+    run.overview.direct = { ...lane, total: 72, completed: 72 };
+    run.overview.ai = { ...lane, total: 19, completed: 8, queued: 11 };
+  }
+  if (params.has('longNumbers')) {
+    run.summary.total = 1234567;
+    run.overview.inspection.total = 1234567;
+    run.overview.inspection.checked = 1234567;
+    run.overview.direct.total = 1234567;
+    run.overview.direct.completed = 1234567;
+    run.overview.review.pending = 1234567;
+  }
+
+  run.overview.review.outcomes =
+    scenario === 'checking'
+      ? { review: 0, manual: 0, processing: 72, unfinished: 0, reviewed: 0, unchanged: 0, skipped: 0, unavailable: 0 }
+      : { review: 13, manual: 6, processing: 0, unfinished: 2, reviewed: 7, unchanged: 44, skipped: 0, unavailable: 0 };
+  if (scenario === 'ended')
+    run.overview.review.outcomes = {
+      review: 0,
+      manual: 0,
+      processing: 0,
+      unfinished: 72,
+      reviewed: 0,
+      unchanged: 0,
+      skipped: 0,
+      unavailable: 0,
+    };
+  if (['running', 'free', 'paused', 'allpaused'].includes(scenario))
+    run.overview.review.outcomes = {
+      review: 13,
+      manual: 6,
+      processing: 11,
+      unfinished: 0,
+      reviewed: 0,
+      unchanged: 42,
+      skipped: 0,
+      unavailable: 0,
+    };
+  if (scenario === 'complete') {
+    run.overview.review.outcomes.unfinished = 0;
+    run.overview.review.outcomes.unchanged = 46;
+  }
+  if (params.has('longNumbers')) run.overview.review.outcomes.unchanged += run.summary.total - 72;
+  run.review = run.overview.review;
+  if (scenario === 'legacy') {
+    run.review.pending = 14;
+    run.review.manualObjects = 29;
+    run.review.outcomes = {
+      review: 14,
+      manual: 29,
+      processing: 0,
+      unfinished: 7,
+      reviewed: 1,
+      unchanged: 20,
+      skipped: 0,
+      unavailable: 1,
+    };
+    run.runVersion = 2;
+    run.status = 'completed';
+    run.summary.aiTotal = 19;
+    run.checked = 72;
+    run.progress = [
+      { resourceType: 'file', aiStatus: 'completed', total: 17 },
+      { resourceType: 'file', aiStatus: 'failed', total: 2 },
+    ];
+    run.overview = undefined;
+    run.review.retryFiles = 0;
+  }
+
+  run.canPause = run.status === 'running';
+  run.canResume = run.status === 'paused';
+  run.canEnd = ['running', 'paused'].includes(run.status);
+  run.pauseReason = run.status === 'paused' ? 'user' : undefined;
+  run.rulePhase = scenario === 'checking' ? 'pending' : 'completed';
+}
+if (params.has('unfinishedIcons')) {
+  const titles = ['银行卡', '密钥', '项目搭建', 'CS2', '面试', '弹幕', '椅子', '游戏账号', '轻笺历程', '轻笺知识库'];
+  const template = items[0];
+  items.splice(
+    0,
+    items.length,
+    ...(titles.map((title, i) => ({
+      ...template,
+      id: `outcome-${i}`,
+      resource: { ...template.resource, id: `tag-${i}`, title },
+      outcome: i < 3 ? 'review' : i < 5 ? 'manual' : 'unfinished',
+      aiStatus: 'completed',
+      suggestions: [
+        {
+          ...template.suggestions[0],
+          id: `suggestion-${i}`,
+          status: i < 3 ? 'pending' : i < 5 ? 'no_suggestion' : 'insufficient',
+          after: i < 3 ? candidate() : null,
+          candidates: i < 3 ? [candidate()] : [],
+        },
+      ],
+    })) as WorkspaceItem[]),
+  );
+  run.summary = { ...run.summary, total: 10, types: { tag: 10 } };
+  run.checked = 10;
+  run.review = {
+    pending: 3,
+    manualObjects: 2,
+    retryFiles: 0,
+    outcomes: {
+      review: 3,
+      manual: 2,
+      unfinished: 5,
+      processing: 0,
+      reviewed: 0,
+      unchanged: 0,
+      skipped: 0,
+      unavailable: 0,
+    },
+  };
+  run.groupTotals = { priority: 3, manual: 2, analysis: 5 };
+}
 request.defaults.adapter = async (config) => {
   run.counts = [...new Set(items.flatMap((item) => item.suggestions.map((s) => s.status)))].map((status) => ({
     status,
@@ -116,8 +296,16 @@ request.defaults.adapter = async (config) => {
   const url = String(config.url);
   const body = typeof config.data === 'string' ? JSON.parse(config.data) : config.data;
   let data: unknown = [];
-  if (url.endsWith('/runs')) data = params.has('empty') ? [] : [run];
-  else if (url.endsWith('/previews')) {
+  if (url.endsWith('/runs')) {
+    if (params.has('loadDelay')) await new Promise((resolve) => setTimeout(resolve, 300));
+    const { overview, progress, review, counts, items: _items, ...brief } = run;
+    data = params.has('empty') ? [] : [brief];
+  } else if (url.endsWith('/pause') || url.endsWith('/resume')) {
+    run.status = url.endsWith('/pause') ? 'paused' : 'running';
+    run.canPause = run.status === 'running';
+    run.canResume = run.status === 'paused';
+    data = run;
+  } else if (url.endsWith('/previews')) {
     run = { ...run, options: body, status: 'preview' };
     if (params.has('skipped'))
       run.summary = {
@@ -146,8 +334,11 @@ request.defaults.adapter = async (config) => {
     }
     s.status = body.action === 'ignore' ? 'ignored' : 'applied';
     data = { status: s.status, applied: body.action === 'apply' ? candidate(body.value.iconName) : undefined };
-  } else if (url.includes('/runs/')) data = run;
-  else if (url.endsWith('/tagIcon/search'))
+  } else if (url.includes('/runs/')) {
+    if (params.has('loadDelay')) await new Promise((resolve) => setTimeout(resolve, 1800));
+    if (params.has('loadError')) throw new Error('整理结果读取失败');
+    data = run;
+  } else if (url.endsWith('/tagIcon/search'))
     data = { icons: [], keywords: [], translatedQuery: '', page: 0, hasMore: false, aiExpanded: !!body.useAi };
   else if (url.endsWith('/tagIcon/resolve')) data = { iconUrl: icon.resource.note };
   return { data: { status: 200, msg: '', data }, status: 200, statusText: 'OK', headers: {}, config };
@@ -163,7 +354,7 @@ const app = createApp({
     sync();
     window.addEventListener('resize', sync);
     return () =>
-      h('div', { style: 'height:100%;max-width:1100px;margin:auto;padding:16px;box-sizing:border-box' }, [
+      h('div', { style: 'height:100%;width:100%;max-width:1100px;margin:auto;padding:16px;box-sizing:border-box' }, [
         h(Workspace),
       ]);
   },
@@ -173,4 +364,6 @@ app.use(createI18n({ legacy: false, locale, messages: { 'zh-CN': zh, 'en-US': en
 app.use(router);
 globalDirect(app);
 await router.isReady();
+// 固定验收容器宽度，避免全局 body flex 使首屏按内容收缩。
+document.getElementById('app')!.style.width = '100%';
 app.mount('#app');

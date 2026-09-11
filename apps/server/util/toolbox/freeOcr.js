@@ -1,3 +1,4 @@
+import { getToolboxTool } from '@lightnote/shared/toolbox-protocol';
 import crypto from 'node:crypto';
 import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 import { getObjectBufferFromObs } from '../obsClient.js';
@@ -64,6 +65,8 @@ export async function prepareFreeOcrInputs(database, userId, snapshot) {
       fileType: descriptor.file_type,
       fileSize: buffer.length,
     });
+    if (!getToolboxTool('ocr_to_text').input.accept.includes(meta.expectedType))
+      throw toolboxError('TOOLBOX_UPLOAD_TYPE_UNSUPPORTED', '仅支持 PDF、JPG、PNG、WebP');
     const pages = meta.extension === '.pdf' ? Number((await pdfParse(buffer, { max: 1 })).numpages) : 1;
     if (!Number.isInteger(pages) || pages < 1 || pages > 20)
       throw toolboxError('TOOLBOX_OCR_PAGE_LIMIT', '每次最多识别 20 页');

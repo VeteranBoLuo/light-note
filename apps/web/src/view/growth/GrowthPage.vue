@@ -100,7 +100,7 @@
 
             <section class="growth-panel growth-panel--level">
               <div v-if="!growth && (growthLoading || !growthError)" class="growth-state"
-                ><BLoading size="small"
+                ><BLoading inline loading
               /></div>
               <div v-else-if="growthError && !growth" class="growth-state growth-state--error">
                 <span>{{ t('growth.growthLoadFailed') }}</span>
@@ -117,7 +117,7 @@
 
             <section class="growth-panel growth-panel--stats">
               <div v-if="!dashboard && (dashboardLoading || !dashboardError)" class="growth-state"
-                ><BLoading size="small"
+                ><BLoading inline loading
               /></div>
               <div v-else-if="dashboardError && !dashboard" class="growth-state growth-state--error">
                 <span>{{ t('growth.dashboardLoadFailed') }}</span>
@@ -142,7 +142,7 @@
               />
               <section class="growth-panel growth-overview-daily">
                 <div v-if="!dashboard && (dashboardLoading || !dashboardError)" class="growth-state">
-                  <BLoading size="small" />
+                  <BLoading inline loading />
                 </div>
                 <div v-else-if="dashboardError && !dashboard" class="growth-state growth-state--error">
                   <span>{{ t('growth.dashboardLoadFailed') }}</span>
@@ -249,7 +249,7 @@
                 <div class="growth-task-workspace__main">
                   <template v-if="taskView === 'daily'">
                     <div v-if="!dashboard && (dashboardLoading || !dashboardError)" class="growth-state">
-                      <BLoading size="small" />
+                      <BLoading inline loading />
                     </div>
                     <div v-else-if="dashboardError && !dashboard" class="growth-state growth-state--error">
                       <span>{{ t('growth.dashboardLoadFailed') }}</span>
@@ -275,7 +275,7 @@
 
                   <section v-else id="growth-tasks">
                     <div v-if="!growthTasks && (growthTasksLoading || !growthTasksError)" class="growth-state"
-                      ><BLoading size="small"
+                      ><BLoading inline loading
                     /></div>
                     <div v-else-if="growthTasksError && !growthTasks" class="growth-state growth-state--error">
                       <span>{{ t('growth.tasksLoadFailed') }}</span>
@@ -334,7 +334,7 @@
 
           <template v-if="activeSection === 'achievements'">
             <section v-if="!dashboard && (dashboardLoading || !dashboardError)" class="growth-panel growth-state">
-              <BLoading size="small" />
+              <BLoading inline loading />
             </section>
             <section v-else-if="dashboardError && !dashboard" class="growth-panel growth-state growth-state--error">
               <span>{{ t('growth.dashboardLoadFailed') }}</span>

@@ -6,7 +6,12 @@
         <SvgIcon :src="previewSrc || icon.nullImg" :color="savedPreviewColor" size="20" />
       </span>
 
-      <BButton class="picker-smart" :disabled="disabled" type="primary" @click="openPicker">
+      <BButton
+        class="picker-smart"
+        :disabled="disabled"
+        :type="libraryOnly ? undefined : 'primary'"
+        @click="openPicker"
+      >
         {{ t(libraryOnly ? 'organizeIcons.change' : 'tagManage.smartChooseIcon') }}
       </BButton>
       <BButton v-if="!libraryOnly" class="picker-upload" @click="uploadIcon">{{ t('tagManage.uploadIcon') }}</BButton>

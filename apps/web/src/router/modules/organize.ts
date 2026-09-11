@@ -5,7 +5,7 @@ const organizeRouter: RouteRecordRaw = {
   path: '/organize',
   name: 'organizeCenter',
   meta: {
-    title: '整理中心',
+    title: '资源整理',
     keepAlive: true,
     requireAuth: true,
     roles: ALL_ROLES,

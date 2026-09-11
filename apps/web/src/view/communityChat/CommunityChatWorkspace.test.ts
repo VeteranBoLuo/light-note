@@ -3354,6 +3354,37 @@ describe('CommunityChatWorkspace', () => {
       },
     },
     {
+      label: '无文字附件消息',
+      overrides: {
+        content: '',
+        attachments: [
+          {
+            publicId: 'file-1',
+            kind: 'file',
+            fileName: 'example.txt',
+            fileType: 'text/plain',
+            fileSize: 12,
+            url: '/file-1',
+          },
+        ],
+      },
+    },
+    {
+      label: '文件消息',
+      overrides: {
+        attachments: [
+          {
+            publicId: 'file-1',
+            kind: 'file',
+            fileName: 'example.txt',
+            fileType: 'text/plain',
+            fileSize: 12,
+            url: '/file-1',
+          },
+        ],
+      },
+    },
+    {
       label: '贴图消息',
       overrides: { messageKind: 'sticker', sticker: { source: 'official', key: 'hello', url: '/hello.png' } },
     },
@@ -3365,7 +3396,7 @@ describe('CommunityChatWorkspace', () => {
       label: '提及身份不完整的旧消息',
       overrides: { mentions: ['旧成员'] },
     },
-  ])('不为$label提供重新编辑入口', async ({ overrides }) => {
+  ])('$label撤回后只恢复文字和可用提及', async ({ overrides }) => {
     const now = new Date();
     const activeMessage = chatMessage({
       content: '待撤回内容',
@@ -3407,7 +3438,18 @@ describe('CommunityChatWorkspace', () => {
     mocks.alert.mock.calls.at(-1)[0].footer[1].function();
     await flushAsync();
 
-    expect(host.querySelector('.community-message__recall-reedit')).toBeNull();
+    const button = host.querySelector<HTMLButtonElement>('.community-message__recall-reedit');
+    if (!activeMessage.content.trim()) {
+      expect(button).toBeNull();
+      return;
+    }
+    expect(button).not.toBeNull();
+    button?.click();
+    await flushAsync();
+    const draftSession = getCommunityChatDraftSession('user-1:user', 'general');
+    expect(draftSession.text).toBe('待撤回内容');
+    expect(draftSession.pendingAttachments).toEqual([]);
+    expect(draftSession.mentionTargets).toEqual([]);
   });
 
   it('超过两分钟仍显示撤回入口，点击后解释时间限制且不请求服务端', async () => {
@@ -3527,7 +3569,7 @@ describe('CommunityChatWorkspace', () => {
     expect(adminHost.textContent).toContain(zhCN.communityChat.recall.hideOriginal);
   });
 
-  it('移动端紧凑撤回行仍保留仅为自己删除的操作入口', async () => {
+  it('移动端紧凑撤回行不再打开删除操作面板', async () => {
     mocks.bookmark.isMobile = true;
     mocks.getMessages.mockResolvedValueOnce({
       data: {
@@ -3550,8 +3592,8 @@ describe('CommunityChatWorkspace', () => {
     host.querySelector<HTMLElement>('.community-message__recall-line')?.click();
     await flushAsync();
 
-    expect(document.body.textContent).toContain(zhCN.communityChat.delete.action);
-    expect(document.body.textContent).toContain(zhCN.communityChat.delete.personalDescription);
+    expect(document.body.querySelector('.mobile-page-actions')).toBeNull();
+    expect(host.querySelector('.community-message__recall-more')).toBeNull();
   });
 
   it('移动端点击消息正文打开紧凑操作面板，提供点赞、回复和治理入口', async () => {

@@ -32,22 +32,6 @@
         </BChip>
       </BButton>
     </div>
-    <BButton
-      class="knowledge-map-view"
-      :class="{ active: isKnowledgeMapView }"
-      :aria-label="t('resourceCenter.knowledgeGraph')"
-      role="tab"
-      :aria-selected="isKnowledgeMapView"
-      @click="toggleKnowledgeMap"
-    >
-      <SvgIcon class="knowledge-map-view__icon" :src="icon.noteTemplate.knowledge" size="16" aria-hidden="true" />
-      <span class="knowledge-map-view__label knowledge-map-view__label--full">
-        {{ t('resourceCenter.knowledgeGraph') }}
-      </span>
-      <span class="knowledge-map-view__label knowledge-map-view__label--short" aria-hidden="true">
-        {{ t('resourceCenter.knowledgeGraphShort') }}
-      </span>
-    </BButton>
   </div>
 </template>
 
@@ -67,7 +51,6 @@
   const router = useRouter();
   const organizer = organizeStore();
   const user = useUserStore();
-  const isKnowledgeMapView = computed(() => route.path === '/search' && route.query.section === 'map');
   const organizeOwnerKey = computed(() =>
     [user.id || 'visitor', user.role || '', user.adminContext?.subjectUserId || '', user.adminContext?.mode || ''].join(
       '|',
@@ -82,7 +65,6 @@
   );
 
   const activeSection = computed(() => {
-    if (isKnowledgeMapView.value) return 'map';
     if (route.path.startsWith('/organize')) return 'organize';
     return 'resources';
   });
@@ -98,24 +80,11 @@
     router.replace(target);
   }
 
-  function toggleKnowledgeMap() {
-    if (isKnowledgeMapView.value) return;
-    const query = route.path === '/search' ? { ...route.query, section: 'map' } : { section: 'map' };
-    recordOperation({
-      module: '资源中心',
-      operation: '切换全局图谱视图',
-    });
-    router.replace({ path: '/search', query });
-  }
-
   watch(
     organizeOwnerKey,
     (ownerKey) => {
       organizer.resetForOwner(ownerKey);
-      void Promise.all([
-        organizer.loadSummary({ silent: Boolean(organizer.summary) }),
-        organizer.loadKnowledgeStructureSummary({ silent: Boolean(organizer.knowledgeStructureSummary) }),
-      ]);
+      void organizer.loadSummary({ silent: Boolean(organizer.summary) });
     },
     { immediate: true },
   );
@@ -124,11 +93,13 @@
 <style scoped lang="less">
   .resource-center-section-bar {
     min-width: 0;
-    height: 40px;
+    flex: 0 0 auto;
+    margin-left: 12px;
+    height: 32px;
     display: inline-flex;
     align-items: stretch;
     gap: 4px;
-    padding: 4px;
+    padding: 2px;
     border-radius: 12px;
     background: var(--workspace-panel-bg-color, var(--hover-background));
     box-sizing: border-box;
@@ -140,8 +111,8 @@
 
   .section-nav-item {
     position: relative;
-    height: 32px;
-    padding: 0 13px;
+    height: 28px;
+    padding: 0 12px;
     gap: 6px;
     border: 1px solid transparent;
     border-radius: 9px;
@@ -174,8 +145,7 @@
     visibility: hidden;
   }
 
-  .section-nav-item:not(.active):hover,
-  .knowledge-map-view:not(.active):hover {
+  .section-nav-item:not(.active):hover {
     color: var(--text-color);
     background: var(--mobile-selected-bg, var(--hover-background));
   }
@@ -188,39 +158,9 @@
     font-weight: 650;
   }
 
-  .section-nav-item:focus-visible,
-  .knowledge-map-view:focus-visible {
+  .section-nav-item:focus-visible {
     outline: 2px solid var(--primary-color);
     outline-offset: 1px;
-  }
-
-  .knowledge-map-view {
-    position: relative;
-    height: 32px;
-    padding: 0 13px;
-    gap: 6px;
-    border: 1px solid transparent;
-    border-radius: 9px;
-    background: transparent;
-    color: var(--desc-color);
-    white-space: nowrap;
-    transition:
-      color 0.16s ease,
-      background-color 0.16s ease,
-      border-color 0.16s ease,
-      box-shadow 0.16s ease;
-  }
-
-  .knowledge-map-view.active {
-    border-color: var(--surface-border-color, var(--card-border-color));
-    background: var(--card-background, var(--background-color));
-    color: var(--primary-color);
-    box-shadow: 0 3px 10px rgba(15, 23, 42, 0.08);
-    font-weight: 650;
-  }
-
-  .knowledge-map-view__label--short {
-    display: none;
   }
 
   @media (max-width: 767px) {
@@ -228,7 +168,7 @@
       width: 100%;
       height: 52px;
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 4px;
       padding: 4px;
       border-radius: 12px;
@@ -253,36 +193,12 @@
       display: none;
     }
 
-    .section-nav-item.active,
-    .knowledge-map-view.active {
+    .section-nav-item.active {
       border-color: var(--surface-border-color, var(--card-border-color));
       color: var(--primary-color);
       background: var(--card-background) !important;
       font-weight: 650;
       box-shadow: 0 3px 10px rgba(15, 23, 42, 0.08);
-    }
-
-    .knowledge-map-view {
-      width: 100%;
-      min-width: 0;
-      height: var(--mobile-touch-size, 44px);
-      padding-inline: 8px;
-      border-color: transparent;
-      border-radius: 9px;
-      background: transparent !important;
-      box-shadow: none;
-    }
-
-    .knowledge-map-view__icon {
-      display: none;
-    }
-
-    .knowledge-map-view__label--full {
-      display: inline;
-    }
-
-    .knowledge-map-view__label--short {
-      display: none;
     }
   }
 </style>

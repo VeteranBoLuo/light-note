@@ -1,21 +1,23 @@
 <template>
   <section class="icon-suggestion" :aria-busy="busy">
-    <div class="icon-suggestion-heading">
+    <div v-if="suggestion.status !== 'pending' || review.selecting.value" class="icon-suggestion-heading">
       <BCheckbox
-        v-if="review.canReview(suggestion)"
+        v-if="review.selecting.value && review.canReview(suggestion)"
         :model-value="review.selected.has(suggestion.id)"
         :controlled="true"
         :disabled="busy || !choice"
         @update:model-value="toggle"
         >{{ t('organizeIcons.selectNamed', { name: title }) }}</BCheckbox
       >
-      <BChip tone="neutral">{{
+      <BChip v-if="suggestion.status !== 'pending'" :tone="unfinished ? 'danger' : 'neutral'">{{
         t(
-          suggestion.status === 'no_suggestion'
-            ? 'organizeIcons.noSuggestion'
-            : suggestion.status === 'failed'
-              ? 'organizeIcons.searchFailed'
-              : `organizeWorkspace.status.${suggestion.status}`,
+          unfinished
+            ? 'organizeProgress.outcomes.unfinished'
+            : ['no_suggestion', 'insufficient'].includes(suggestion.status)
+              ? 'organizeIcons.noSuggestion'
+              : suggestion.status === 'failed'
+                ? 'organizeIcons.searchFailed'
+                : `organizeWorkspace.status.${suggestion.status}`,
         )
       }}</BChip>
     </div>
@@ -30,7 +32,17 @@
           t(suggestion.status === 'applied' ? 'organizeIcons.applied' : 'organizeIcons.proposed')
         }}</small></span
       >
-      <span v-else>{{ t(suggestion.status === 'failed' ? 'organizeIcons.failed' : 'organizeIcons.noMatch') }}</span>
+      <span v-else>{{
+        t(
+          unfinished
+            ? 'organizeIcons.unfinished'
+            : ['queued', 'running'].includes(suggestion.status)
+              ? `organizeWorkspace.status.${suggestion.status}`
+              : suggestion.status === 'failed'
+                ? 'organizeIcons.failed'
+                : 'organizeIcons.noMatch',
+        )
+      }}</span>
     </div>
     <div v-if="review.canReview(suggestion)" class="icon-alternatives">
       <BButton
@@ -44,19 +56,18 @@
       >
         <SvgIcon :src="candidate.iconUrl" size="24" />
       </BButton>
-    </div>
-    <p>{{ t('organizeIcons.sharedImpact') }}</p>
-    <div v-if="review.canReview(suggestion)" class="icon-actions">
       <TagIconPicker
         :key="suggestion.id"
         v-model:value="pickerValue"
         :tag-name="title"
         :initial-icon-name="choice?.iconName"
         :disabled="busy"
-        free-search
         library-only
         @choice="review.drafts.set(suggestion.id, $event)"
       />
+    </div>
+    <p>{{ t('organizeIcons.sharedImpact') }}</p>
+    <div v-if="review.canReview(suggestion)" class="icon-actions">
       <BButton
         type="primary"
         :loading="review.busy.has(suggestion.id)"
@@ -81,7 +92,12 @@
   import icon from '@/config/icon';
   import type { WorkspaceSuggestion } from '@/api/organizeSuggestionApi';
   import type { OrganizeIconReview } from '@/composables/useOrganizeIconReview';
-  const props = defineProps<{ suggestion: WorkspaceSuggestion; title: string; review: OrganizeIconReview }>();
+  const props = defineProps<{
+    suggestion: WorkspaceSuggestion;
+    title: string;
+    review: OrganizeIconReview;
+    unfinished?: boolean;
+  }>();
   const { t } = useI18n();
   const choice = computed(() => props.review.choice(props.suggestion));
   const busy = computed(() => props.review.busy.has(props.suggestion.id) || props.review.batchBusy.value);
@@ -144,13 +160,17 @@
     font-size: 12px;
     color: var(--text-secondary-color);
   }
+  .icon-actions {
+    justify-content: flex-start;
+  }
   .icon-error {
     color: var(--danger-color, #d03050);
   }
-  .icon-actions :deep(.picker-controls) {
+  .icon-alternatives :deep(.picker-controls) {
+    display: flex;
     flex-wrap: wrap;
   }
-  .icon-actions :deep(.icon-preview) {
+  .icon-alternatives :deep(.icon-preview) {
     display: none;
   }
 </style>

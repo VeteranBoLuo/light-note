@@ -248,6 +248,11 @@ async function resolveOwnedToolboxInput({ userId, toolId, rawInput, database = p
     cloudFileBytes = rows.reduce((total, row) => total + Math.max(0, Number(row.file_size || 0)), 0);
   }
 
+  if (
+    definition.input.kind === 'documents' &&
+    cloudFileBytes + sourceRows.reduce((sum, row) => sum + Number(row.file_size || 0), 0) > definition.input.maxBytes
+  )
+    throw toolboxError('TOOLBOX_UPLOAD_TOO_LARGE', '文件总大小不能超过 20 MB', 413);
   const snapshot = Object.freeze({
     resourceRefs: Object.freeze(authoritativeRefs.map((ref) => Object.freeze({ ...ref }))),
     sourceIds: Object.freeze([...input.sourceIds]),
@@ -284,6 +289,8 @@ export async function createToolboxQuote({
   const normalizedBillingMedium = normalizeToolboxBillingMedium(toolId, billingMedium);
   const requestId = normalizeToolboxRequestId(clientRequestId, '报价请求标识');
   const resolved = await resolveOwnedToolboxInput({ userId, toolId, rawInput, database });
+  if (toolId === 'ocr_to_text' && resolved.snapshot.options.recognitionMode !== 'ai')
+    throw toolboxError('TOOLBOX_OPTIONS_INVALID', '请明确选择 AI 识别');
   const quotedPoints = normalizedBillingMedium === 'points' ? quoteToolboxPoints(toolId, resolved) : 0;
 
   const [existingRows] = await database.query(
@@ -371,6 +378,8 @@ export async function createFreeOcrJob({ userId, rawInput, clientRequestId, data
   assertToolAvailable('ocr_to_text');
   const requestId = normalizeToolboxRequestId(clientRequestId, '任务请求标识');
   const resolved = await resolveOwnedToolboxInput({ userId, toolId: 'ocr_to_text', rawInput, database });
+  if (resolved.snapshot.options.recognitionMode === 'ai')
+    throw toolboxError('TOOLBOX_OPTIONS_INVALID', 'AI 识别需要先确认计费方式');
   const [existing] = await database.query('SELECT * FROM toolbox_jobs WHERE user_id = ? AND client_request_id = ?', [
     userId,
     requestId,
@@ -478,8 +487,9 @@ export async function createToolboxJob({ userId, quoteId, clientRequestId, sourc
       await connection.commit();
       return formatJob(existing);
     }
-    if (quote.tool_id === 'ocr_to_text') {
-      throw toolboxError('TOOLBOX_PRICING_CHANGED', '文字识别已免费，请重新发起识别', 409, { refresh: true });
+
+    if (quote.tool_id === 'ocr_to_text' && parseJson(quote.input_snapshot_json)?.options?.recognitionMode !== 'ai') {
+      throw toolboxError('TOOLBOX_PRICING_CHANGED', '识别方式已更新，请重新确认', 409, { refresh: true });
     }
     if (quote.status !== 'active' || new Date(quote.expires_at).getTime() <= Date.now()) {
       if (quote.status === 'active') {

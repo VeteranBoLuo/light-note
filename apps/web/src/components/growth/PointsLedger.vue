@@ -11,7 +11,7 @@
       :options="filterOptions"
       @select="handleFilterSelect"
     />
-    <div v-if="(loading || !initialized) && !rows.length" class="ledger-loading"><BLoading size="small" /></div>
+    <div v-if="(loading || !initialized) && !rows.length" class="ledger-loading"><BLoading inline loading /></div>
     <div v-else-if="loadError && !rows.length" class="ledger-empty">
       <span>{{ t('growth.pointsLogFailed') }}</span
       ><BButton size="small" @click="reload">{{ t('common.retry') }}</BButton>

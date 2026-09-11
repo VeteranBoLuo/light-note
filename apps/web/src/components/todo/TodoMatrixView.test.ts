@@ -32,7 +32,7 @@ function todo(id: string, title: string, priority: TodoItem['priority'], dueAt: 
   };
 }
 
-function mountMatrix(options: { mobile?: boolean; items?: TodoItem[] } = {}) {
+function mountMatrix(options: { mobile?: boolean; items?: TodoItem[]; loading?: boolean } = {}) {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 30);
   const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 12);
@@ -46,6 +46,7 @@ function mountMatrix(options: { mobile?: boolean; items?: TodoItem[] } = {}) {
   const onEdit = vi.fn();
   const onDelete = vi.fn();
   const onToggleComplete = vi.fn();
+  const onUpdatePriority = vi.fn();
   const host = document.createElement('div');
   document.body.append(host);
   const app = createApp({
@@ -54,10 +55,12 @@ function mountMatrix(options: { mobile?: boolean; items?: TodoItem[] } = {}) {
         h(TodoMatrixView, {
           items,
           mobile: options.mobile,
+          loading: options.loading,
           onPreview,
           onEdit,
           onDelete,
           onToggleComplete,
+          'onUpdate-priority': onUpdatePriority,
         });
     },
   });
@@ -77,15 +80,29 @@ function mountMatrix(options: { mobile?: boolean; items?: TodoItem[] } = {}) {
     app.unmount();
     host.remove();
   };
-  return { host, items, onPreview, onEdit, onDelete, onToggleComplete };
+  return { host, items, onPreview, onEdit, onDelete, onToggleComplete, onUpdatePriority };
 }
 
 afterEach(() => {
   cleanup?.();
   cleanup = undefined;
+  document.querySelectorAll('.b-action-menu-panel').forEach((panel) => panel.remove());
 });
 
 describe('TodoMatrixView', () => {
+  it('优先级菜单回显当前值，切换只更新对应实例并关闭菜单', async () => {
+    const { host, items, onUpdatePriority, onPreview } = mountMatrix();
+    host.querySelector<HTMLButtonElement>('.todo-matrix-card__more')!.click();
+    await nextTick();
+    const options = document.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]');
+    expect(options).toHaveLength(3);
+    expect(options[2].getAttribute('aria-checked')).toBe('true');
+    options[0].click();
+    await nextTick();
+    expect(onUpdatePriority).toHaveBeenCalledExactlyOnceWith(items[0], 0);
+    expect(onPreview).not.toHaveBeenCalled();
+    expect(host.querySelector('.b-action-menu-anchor')?.getAttribute('aria-expanded')).toBe('false');
+  });
   it('桌面端在中性 2×2 矩阵中渲染计数，并复用既有预览、完成、删除动作', async () => {
     const { host, items, onPreview, onEdit, onDelete, onToggleComplete } = mountMatrix();
     await nextTick();
@@ -197,5 +214,17 @@ describe('TodoMatrixView', () => {
     expect(trigger.getAttribute('aria-expanded')).toBe('true');
     expect(document.querySelector('.b-drawer-wrapper')).not.toBeNull();
     expect(document.querySelectorAll('.todo-series-drawer__list .todo-item')).toHaveLength(2);
+  });
+});
+
+
+describe('四象限首次加载反馈', () => {
+  it.each([false, true])('mobile=%s 由外层统一显示加载，隐藏空提示及未确认计数', (mobile) => {
+    const { host } = mountMatrix({ mobile, items: [], loading: true });
+    expect(host.querySelector('[role="status"]')).toBeNull();
+    expect(host.querySelectorAll('.todo-matrix__empty').length).toBeGreaterThan(0);
+    expect([...host.querySelectorAll('.todo-matrix__empty')].every((node) => node.getAttribute('aria-hidden') === 'true')).toBe(true);
+    expect([...host.querySelectorAll('.todo-matrix__count')].every((node) => node.textContent?.trim() === '—')).toBe(true);
+    expect(host.querySelector('.todo-matrix__grid')?.getAttribute('aria-busy')).toBe('true');
   });
 });

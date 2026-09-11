@@ -13,6 +13,7 @@ const relays = [
   { url: 'https://second.example.com/push', token: 'b'.repeat(32) },
 ];
 const env = {
+  LIGHTNOTE_RUNTIME_ENV: 'production',
   BROWSER_PUSH_ENABLED: 'true',
   BROWSER_PUSH_ORIGIN: 'https://light.test',
   BROWSER_PUSH_VAPID_SUBJECT: 'mailto:test@example.com',

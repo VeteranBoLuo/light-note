@@ -9,6 +9,7 @@ import { adminRoutePolicyMiddleware } from './util/adminRoutePolicy.js';
 import { attackMonitor, ensureSecurityTables, cleanupExpiredSecurityEvents } from './util/security/index.js';
 import { cleanupAllExpiredTrash } from './router_handle/trashHandle.js';
 import { generateWeeklyReports } from './util/weeklyReport.js';
+import { notificationSchedulerEnabled } from './util/notificationSchedulerPolicy.js';
 import { ensureNotificationTable } from './util/notification.js';
 import { initLogExclude } from './util/logExclude.js';
 import { ensurePointsSchema } from './util/points.js';
@@ -258,6 +259,7 @@ scheduleSecurityEventsCleanup();
 
 // 成长周报（每周一凌晨 5:00 生成上周报告并推送「系统」通知,错开清理任务的 3:00/4:00）
 function scheduleWeeklyReport() {
+  if (!notificationSchedulerEnabled()) return;
   const now = new Date();
   const next = new Date(now);
   const daysUntilMonday = (8 - next.getDay()) % 7 || 7; // 下一个周一(getDay: 0=周日,1=周一)
@@ -276,6 +278,7 @@ scheduleWeeklyReport();
 
 // 每日 20:00 生成成长提醒(连签将断),晚间提醒当天未签到的用户守住连签
 function scheduleGrowthNudges() {
+  if (!notificationSchedulerEnabled()) return;
   const now = new Date();
   const next = new Date(now);
   next.setHours(20, 0, 0, 0);

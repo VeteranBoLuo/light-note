@@ -1,3 +1,9 @@
+import {
+  runOrganizeInspection,
+  runOrganizeDirect,
+  reclassifyCachedIcons,
+} from './util/services/organizeProcessingPipeline.js';
+import { runRuleBatch } from './util/services/organizeSuggestionLifecycle.js';
 import { inspectImagePreviewRuntime } from './util/imagePreview/runtime.js';
 import { runSingleImagePreviewJob, cleanupImageAssets } from './util/imagePreview/worker.js';
 import { runOrganizeCompletionNotifications } from './util/services/organizeCompletionNotification.js';
@@ -22,8 +28,31 @@ const workerId = `${os.hostname()}:${process.pid}`;
 let stopping = false;
 let lastCleanupAt = 0;
 let nextQueueIndex = 0;
+const pipelineLoops = [];
 
-const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const wakeups = new Set();
+const wait = (ms) =>
+  new Promise((resolve) => {
+    const wake = () => {
+      clearTimeout(timer);
+      wakeups.delete(wake);
+      resolve();
+    };
+    const timer = setTimeout(wake, ms);
+    wakeups.add(wake);
+  });
+
+async function pipelineLoop(work) {
+  while (!stopping) {
+    try {
+      const handled = await work();
+      if (!handled && !stopping) await wait(1200);
+    } catch (error) {
+      console.error('[organize-pipeline] code=%s', stableAgentErrorCode(error));
+      if (!stopping) await wait(3000);
+    }
+  }
+}
 
 async function run() {
   await ensureAiDocumentSchema();
@@ -48,6 +77,16 @@ async function run() {
     else if (!state.ready) console.warn('[文件预览] %s 运行时暂不可用 code=%s', name, state.errorCode);
   }
   console.log(`[AI 文档/文件预览/知识工具箱/整理建议] 解析 Worker 已启动: ${workerId}`);
+  pipelineLoops.push(
+    pipelineLoop(async () => (await runOrganizeInspection(workerId)) || runRuleBatch(pool)),
+    ...Array.from({ length: 2 }, () =>
+      pipelineLoop(async () => {
+        await reclassifyCachedIcons(workerId);
+        return runOrganizeDirect(workerId);
+      }),
+    ),
+    pipelineLoop(() => runSingleSuggestionItem(workerId, pool, { skipRules: true, pipeline: 'v3' })),
+  );
   while (!stopping) {
     try {
       const now = Date.now();
@@ -64,7 +103,7 @@ async function run() {
         runSingleImagePreviewJob,
         runSingleToolboxJob,
         runSingleOrganizeAiSuggestionBatch,
-        runSingleSuggestionItem,
+        (worker) => runSingleSuggestionItem(worker, pool, { skipRules: true, pipeline: 'legacy' }),
         runOrganizeCompletionNotifications,
       ];
       let handled = false;
@@ -84,6 +123,7 @@ async function run() {
 
 function stop() {
   stopping = true;
+  for (const wake of wakeups) wake();
 }
 
 process.on('SIGTERM', stop);
@@ -95,6 +135,8 @@ run()
     process.exitCode = 1;
   })
   .finally(async () => {
+    stopping = true;
+    await Promise.allSettled(pipelineLoops);
     try {
       await pool.end();
     } catch (error) {

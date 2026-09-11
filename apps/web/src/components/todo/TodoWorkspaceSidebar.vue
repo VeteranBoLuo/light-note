@@ -1,6 +1,10 @@
 <template>
-  <aside class="todo-workspace-sidebar" :aria-label="t('todoWorkspace.chooseScope')">
-    <div class="todo-workspace-sidebar__caption"
+  <aside
+    class="todo-workspace-sidebar"
+    :class="{ 'todo-workspace-sidebar--picker': picker }"
+    :aria-label="t('todoWorkspace.chooseScope')"
+  >
+    <div v-if="!picker" class="todo-workspace-sidebar__caption"
       ><SvgIcon :src="icon.todoWorkspace.quick" size="16" />{{ t('todoWorkspace.quick') }}</div
     >
     <BButton
@@ -111,6 +115,7 @@
   import useTodoStore from '@/store/todo';
   import useUserStore from '@/store/useUser';
   import { saveTodoList, removeTodoList, type TodoList } from '@/api/todoApi';
+  withDefaults(defineProps<{ picker?: boolean }>(), { picker: false });
   const emit = defineEmits<{ changed: [] }>();
   const user = useUserStore();
   const bookmark = bookmarkStore();
@@ -353,6 +358,26 @@
     margin-inline: 5px 6px;
     border-radius: 50%;
     flex-shrink: 0;
+  }
+  .todo-workspace-sidebar--picker {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    gap: 4px;
+  }
+  .todo-workspace-sidebar--picker > :deep(button),
+  .todo-workspace-sidebar--picker .todo-workspace-sidebar__list-title {
+    min-height: 44px;
+    padding: 8px 10px;
+  }
+  .todo-workspace-sidebar--picker header {
+    margin-top: 8px;
+    padding: 8px 10px 0;
+  }
+  .todo-workspace-sidebar--picker header :deep(button),
+  .todo-workspace-sidebar--picker .todo-workspace-sidebar__mobile-more {
+    min-width: 44px;
+    min-height: 44px;
   }
   .todo-list-form,
   .todo-list-form label {

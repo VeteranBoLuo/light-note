@@ -1,5 +1,17 @@
+vi.mock('./util/services/organizeProcessingPipeline.js', () => ({
+  runOrganizeInspection: async () => false,
+  runOrganizeDirect: async () => false,
+  reclassifyCachedIcons: async () => false,
+}));
+vi.mock('./util/services/organizeSuggestionLifecycle.js', () => ({ runRuleBatch: async () => false }));
 import { afterEach, expect, it, vi } from 'vitest';
-const mocks = vi.hoisted(() => ({ end: vi.fn(), item: vi.fn(), ensure: vi.fn(), destroy: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  end: vi.fn(),
+  item: vi.fn(),
+  ensure: vi.fn(),
+  destroy: vi.fn(),
+  document: vi.fn(async () => false),
+}));
 vi.mock('./util/redisClient.js', () => ({ default: { isOpen: true, destroy: mocks.destroy } }));
 vi.mock('./db/index.js', () => ({ default: { end: mocks.end } }));
 vi.mock('./util/aiDocumentSchema.js', () => ({ ensureAiDocumentSchema: mocks.ensure }));
@@ -15,7 +27,7 @@ vi.mock('./util/filePreview/runtime.js', () => ({
 }));
 vi.mock('./util/aiDocument/service.js', () => ({
   cleanupExpiredDocumentSources: async () => {},
-  runSingleDocumentJob: async () => false,
+  runSingleDocumentJob: mocks.document,
 }));
 vi.mock('./util/filePreview/service.js', () => ({
   cleanupStaleFilePreviewArtifacts: async () => {},
@@ -88,4 +100,27 @@ it('数据库关闭失败仍释放 Redis 连接', async () => {
   await import('./documentWorker.js');
   await vi.waitFor(() => expect(mocks.destroy).toHaveBeenCalledOnce());
   expect(process.exitCode).toBe(1);
+});
+
+it('V3 AI proceeds while the document parser is still occupied', async () => {
+  let releaseParser;
+  let parserStarted = false;
+  mocks.document.mockImplementationOnce(async () => {
+    parserStarted = true;
+    await new Promise((resolve) => {
+      releaseParser = resolve;
+    });
+    return true;
+  });
+  mocks.item.mockImplementation(async (_worker, _db, options) => {
+    if (options.pipeline !== 'v3') return false;
+    await vi.waitFor(() => expect(parserStarted).toBe(true));
+    process.emit('SIGTERM');
+    releaseParser();
+    return true;
+  });
+  await import('./documentWorker.js');
+  await vi.waitFor(() => expect(mocks.end).toHaveBeenCalledOnce());
+  expect(mocks.document).toHaveBeenCalledOnce();
+  expect(mocks.item.mock.calls.some(([, , options]) => options.pipeline === 'v3')).toBe(true);
 });

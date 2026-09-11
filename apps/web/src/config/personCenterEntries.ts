@@ -49,7 +49,7 @@ export const PERSON_CENTER_ENTRIES = {
   },
   organize: {
     name: 'organize',
-    labelKey: 'resourceCenter.sections.organize',
+    labelKey: 'organize.title',
     path: '/organize',
     icon: icon.ai.organize,
     tone: 'neutral',

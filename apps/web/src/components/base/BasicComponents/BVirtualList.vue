@@ -57,6 +57,8 @@
     gap: { type: Number, default: 0 },
     overscan: { type: Number, default: 6 },
     loading: { type: Boolean, default: false },
+    /** 调用方已提供加载行时，仅保留请求锁与 aria-busy，不重复绘制底部提示。 */
+    showLoadingIndicator: { type: Boolean, default: true },
     loadingText: { type: String, default: '' },
     hasMore: { type: Boolean, default: false },
     scrollMode: {
@@ -180,7 +182,9 @@
       });
     }
   }
-  const showLoadingFooter = computed(() => props.loading && logicalItemCount.value <= props.items.length);
+  const showLoadingFooter = computed(
+    () => props.showLoadingIndicator && props.loading && logicalItemCount.value <= props.items.length,
+  );
 
   let resizeObserver: ResizeObserver | null = null;
   let scrollAncestor: HTMLElement | null = null;

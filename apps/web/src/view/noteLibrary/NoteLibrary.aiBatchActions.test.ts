@@ -72,6 +72,14 @@ describe('笔记库批量 AI 操作语义', () => {
     expect(source).not.toContain("key: 'assistant'");
   });
 
+  it('批量导出记录打开意图，并且只在交付成功后记录汇总成功', () => {
+    expect(source).toContain('...OPERATION_LOG_MAP.noteLibrary.openBatchExport');
+    expect(source).toContain('`打开批量导出【${batchExportNotes.value.length}篇】`');
+    expect(source).toMatch(
+      /const delivered = await deliverBatchExportFile[\s\S]{0,180}if \(!delivered \|\| !current\(\)\) return;[\s\S]{0,180}\.\.\.OPERATION_LOG_MAP\.noteLibrary\.exportBatch/,
+    );
+  });
+
   it('单篇笔记的桌面右键与移动菜单共用 AI 总结入口', () => {
     expect(source).toMatch(/function menuForNote\(note: any\)[\s\S]*key: 'aiSummary'[\s\S]*icon: icon\.ai\.summary/);
     expect(source).toMatch(/action === 'aiSummary'[\s\S]*openNoteAi\(note\)/);
@@ -549,9 +557,7 @@ describe('笔记库页面树交互接线', () => {
     expect(openFunction.indexOf('isNavigationFailure(navigationFailure)')).toBeGreaterThan(
       openFunction.indexOf('await router.push'),
     );
-    expect(openFunction.indexOf('noteWorkspace.setLibraryPreviewPage(normalizedId)')).toBeGreaterThan(
-      openFunction.indexOf('isNavigationFailure(navigationFailure)'),
-    );
+    expect(openFunction).toContain('updateNotePreviewReturnPath(sourceReturnPath(), normalizedId)');
     expect(detailSource).not.toContain(':opening-page-id="openingPageId"');
     expect(noteLibrarySidebarSource).not.toContain(':opening-page-id="openingPageId"');
     expect(treeRowSource).not.toContain(':loading="opening"');

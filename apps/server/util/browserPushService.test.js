@@ -10,6 +10,7 @@ import {
 } from './browserPushService.js';
 import { createNotification } from './notification.js';
 const env = {
+  LIGHTNOTE_RUNTIME_ENV: 'production',
   BROWSER_PUSH_ORIGIN: 'https://light.test',
   BROWSER_PUSH_ENABLED: 'true',
   BROWSER_PUSH_VAPID_PUBLIC_KEY: 'public',
@@ -83,7 +84,7 @@ describe('transactional notification outbox', () => {
         .mockResolvedValueOnce([[{ id: 'n1' }]])
         .mockRejectedValueOnce(new Error('database')),
     };
-    await expect(expandPushOutbox({ getConnection: async () => conn })).rejects.toThrow();
+    await expect(expandPushOutbox({ getConnection: async () => conn }, env)).rejects.toThrow();
     expect(conn.rollback).toHaveBeenCalledOnce();
     expect(conn.commit).not.toHaveBeenCalled();
     expect(conn.release).toHaveBeenCalledOnce();
@@ -99,7 +100,7 @@ describe('transactional notification outbox', () => {
         .mockResolvedValueOnce([[{ id: 'n1' }]])
         .mockResolvedValue([{ affectedRows: 1 }]),
     };
-    expect(await expandPushOutbox({ getConnection: async () => conn })).toBe(1);
+    expect(await expandPushOutbox({ getConnection: async () => conn }, env)).toBe(1);
     expect(conn.query.mock.calls[1][0]).toContain('s.enabled_at <= n.browser_push_created_at');
     expect(conn.query.mock.calls[1][0]).toContain('INSERT IGNORE');
     expect(conn.commit).toHaveBeenCalledOnce();

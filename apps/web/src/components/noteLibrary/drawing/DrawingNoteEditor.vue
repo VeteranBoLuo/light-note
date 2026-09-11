@@ -465,6 +465,8 @@
   import { buildExportFileName, deliverGeneratedFile } from '@/utils/fileDelivery';
   import { isLightNoteAndroidApp } from '@/utils/androidBridge';
   import { deliverExportViaAndroidBridge } from '@/utils/androidFileExport';
+  import { recordOperation } from '@/api/commonApi';
+  import { OPERATION_LOG_MAP } from '@/config/logMap';
   import { eraseDrawingElementsAt, type DrawingPoint } from '@/utils/drawingEraser';
   import {
     buildDrawingFillSpans,
@@ -2371,6 +2373,11 @@
 
   async function deliverExport(content: string | Blob, extension: 'png' | 'json', mimeType: string) {
     const fileName = buildExportFileName(props.title, t('note.untitled'), extension);
+    const recordExportSuccess = () =>
+      recordOperation({
+        ...OPERATION_LOG_MAP.note.exportDrawing,
+        operation: `导出手绘笔记成功【${props.title || props.noteId || t('note.untitled')}/${extension}】`,
+      });
     try {
       if (isLightNoteAndroidApp()) {
         if (!props.noteId) {
@@ -2385,11 +2392,14 @@
           mimeType,
         });
         if (!result.ok) message.error(result.message || t('noteDetail.exportFailed'));
+        else recordExportSuccess();
         return;
       }
       const result = await deliverGeneratedFile({ content, fileName, mimeType, preferShare: true });
-      if (result === 'downloaded' || result === 'shared') message.success(t('noteDetail.exportDownloaded'));
-      else if (result === 'unavailable') message.error(t('noteDetail.exportFailed'));
+      if (result === 'downloaded' || result === 'shared') {
+        message.success(t('noteDetail.exportDownloaded'));
+        recordExportSuccess();
+      } else if (result === 'unavailable') message.error(t('noteDetail.exportFailed'));
     } catch {
       message.error(t('noteDetail.exportFailed'));
     }

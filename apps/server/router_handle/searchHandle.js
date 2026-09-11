@@ -455,6 +455,12 @@ function buildFileSearchFilter(userId, options) {
   const { keyword, tagNames, untagged, date } = options;
   const where = ['files.create_by = ?', 'files.del_flag = 0'];
   const params = [userId];
+  if (options.fileExtensions?.length) {
+    where.push(
+      `LOWER(SUBSTRING_INDEX(files.file_name, '.', -1)) IN (${options.fileExtensions.map(() => '?').join(',')})`,
+    );
+    params.push(...options.fileExtensions);
+  }
   if (options.materialIds?.length) {
     where.push(`files.id IN (${options.materialIds.map(() => '?').join(',')})`);
     params.push(...options.materialIds);
@@ -1307,6 +1313,15 @@ export const globalSearch = async (req, res) => {
       date: normalizeSearchDate(req.body?.date),
       tagNames: normalizeSearchTagNames(req.body?.tags),
       untagged: req.body?.untagged === true || String(req.body?.untagged || '') === '1',
+      fileExtensions: Array.isArray(req.body?.fileExtensions)
+        ? [
+            ...new Set(
+              req.body.fileExtensions
+                .map((value) => String(value).toLowerCase())
+                .filter((value) => /^[a-z0-9]{1,10}$/.test(value)),
+            ),
+          ].slice(0, 20)
+        : [],
       todoStatus: req.body?.todoStatus,
       todoPriorities: req.body?.todoPriority ?? req.body?.todoPriorities,
       todoDue: req.body?.todoDue,

@@ -1,3 +1,4 @@
+export declare const TOOLBOX_OCR_FILE_EXTENSIONS: readonly string[];
 export type ToolboxExecutionMode =
   "browser" | "service" | "worker" | "ai_skill";
 export type ToolboxBillingMedium = "free" | "points" | "ai_quota";

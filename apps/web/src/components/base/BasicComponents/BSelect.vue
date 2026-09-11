@@ -686,11 +686,20 @@
     }
 
     &.is-disabled {
-      opacity: 0.58;
+      opacity: 1;
 
       .select-trigger {
         cursor: not-allowed;
-        background: color-mix(in srgb, var(--background-color) 92%, var(--card-border-color));
+        background: var(--bl-input-disabled-bg-color);
+        border-color: var(--bl-input-border-color);
+        color: var(--desc-color);
+      }
+
+      .select-text,
+      .select-search-inline,
+      .select-search-inline::placeholder,
+      .select-tag {
+        color: var(--desc-color);
       }
     }
 
@@ -714,10 +723,10 @@
     align-items: center;
     height: 32px;
     padding: 0 30px 0 11px;
-    border: 1px solid var(--card-border-color, #d9d9d9);
+    border: 1px solid var(--bl-input-border-color);
     border-radius: 6px;
     cursor: pointer;
-    background: var(--background-color);
+    background: var(--bl-input-bg-color);
     transition:
       border-color 0.2s,
       box-shadow 0.2s;
@@ -726,7 +735,7 @@
     position: relative;
 
     &:hover {
-      border-color: var(--primary-color);
+      border-color: var(--bl-input-hover-border-color);
     }
 
     &:focus-visible {

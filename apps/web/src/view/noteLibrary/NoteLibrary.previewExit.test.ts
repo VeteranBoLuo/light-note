@@ -5,20 +5,6 @@ import { describe, expect, it } from 'vitest';
 const source = readFileSync(resolve(process.cwd(), 'src/view/noteLibrary/NoteLibrary.vue'), 'utf8');
 
 describe('笔记库桌面预览退出', () => {
-  it('桌面预览 ID 由账号工作区持久化，刷新恢复时只按 ID 重载权威详情', () => {
-    expect(source).toContain('libraryPreviewPageId: previewNoteId');
-    expect(source).not.toContain('const previewNoteId = ref<string | null>(null)');
-    expect(source).toMatch(
-      /function setDesktopPreviewPage[\s\S]*applyDesktopPreviewLocalState\(noteId, source\);[\s\S]*noteWorkspace\.setLibraryPreviewPage\(noteId\);/u,
-    );
-    expect(source).toMatch(
-      /watch\([\s\S]*previewNoteId,[\s\S]*bookmark\.isMobile,[\s\S]*noteCacheScope[\s\S]*prefetchNoteDetail\(user, normalizedId\);[\s\S]*applyDesktopPreviewLocalState\(normalizedId, source\);/u,
-    );
-    expect(source).toMatch(
-      /function closeDesktopPreview[\s\S]*clearDesktopPreviewLocalState\(\);[\s\S]*noteWorkspace\.setLibraryPreviewPage\(null\);/u,
-    );
-  });
-
   it('预览详情路径由笔记库写入共享工作区，并在失效时清理恢复状态', () => {
     expect(source).toContain(':breadcrumb="previewBreadcrumb"');
     expect(source).toContain('@breadcrumb-resolved="handlePreviewBreadcrumbResolved"');
@@ -27,7 +13,7 @@ describe('笔记库桌面预览退出', () => {
     expect(source).toMatch(
       /function handlePreviewBreadcrumbResolved[\s\S]*noteWorkspace\.revealNotePath\(noteId, payload\.items\)/u,
     );
-    expect(source).toMatch(/function handlePreviewUnavailable[\s\S]*closeDesktopPreview\(false\)/u);
+    expect(source).toMatch(/function handlePreviewUnavailable[\s\S]*closePreview\(true\)/u);
   });
 
   it('预览态点击笔记库只退出预览，普通态仍执行原有重置', () => {
@@ -52,21 +38,6 @@ describe('笔记库桌面预览退出', () => {
     expect(openBreadcrumbFunction).toContain('setDesktopPreviewPage(noteId, source)');
     expect(openBreadcrumbFunction).not.toContain('captureDesktopPreviewScroll');
     expect(openBreadcrumbFunction).not.toContain('closeDesktopPreview');
-  });
-
-  it('切换目录、标签和完整重置不会错误恢复旧列表位置', () => {
-    const discardCalls = source.match(/closeDesktopPreview\(false\);/g) || [];
-    expect(discardCalls.length).toBeGreaterThanOrEqual(3);
-    expect(source).toMatch(/async function selectDirectory[\s\S]*closeDesktopPreview\(false\);/);
-    expect(source).toMatch(/function handleTagFilterSelect[\s\S]*closeDesktopPreview\(false\);/);
-    expect(source).toMatch(
-      /function clearNoteLibraryRootViewState[\s\S]*closeDesktopPreview\(false\);[\s\S]*noteWorkspace\.resetLibraryRootState\(\);/,
-    );
-    expect(source).toMatch(
-      /function clearNoteLibraryRootViewState[\s\S]*searchValue\.value = '';[\s\S]*treeSearchValue\.value = '';[\s\S]*debouncedSearch\.value = '';/,
-    );
-    expect(source).toMatch(/function clearNoteLibraryRootViewState[\s\S]*exitBatch\(\);/);
-    expect(source).toMatch(/async function resetNoteLibrary[\s\S]*clearNoteLibraryRootViewState\(\);/);
   });
 
   it('顶部笔记入口在路由成功落到根页时清除 keepAlive 内的预览和筛选现场', () => {

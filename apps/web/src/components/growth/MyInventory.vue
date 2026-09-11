@@ -1,6 +1,6 @@
 <template>
   <div class="inv">
-    <div v-if="!inv && (inventoryLoading || !inventoryError)" class="inv-state"><BLoading size="small" /></div>
+    <div v-if="!inv && (inventoryLoading || !inventoryError)" class="inv-state"><BLoading inline loading /></div>
     <div v-else-if="inventoryError && !inv" class="inv-state inv-state--error">
       <span>{{ t('growth.inventoryLoadFailed') }}</span>
       <BButton size="small" @click="loadInventory">{{ t('common.retry') }}</BButton>

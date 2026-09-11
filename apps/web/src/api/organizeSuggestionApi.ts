@@ -1,3 +1,5 @@
+import type { OrganizeOutcomeCounts } from '@lightnote/shared/organize-progress';
+import type { OrganizeOverview } from '@lightnote/shared/organize-progress';
 import { apiBaseGet, apiBasePost } from '@/http/request';
 import type { OrganizeAiSuggestionTag } from './organizeApi';
 export type ResourceType = 'bookmark' | 'note' | 'file' | 'tag';
@@ -66,6 +68,7 @@ export interface WorkspaceSuggestion {
   members?: SuggestionMember[];
 }
 export interface WorkspaceItem {
+  outcome?: keyof OrganizeOutcomeCounts;
   id: string;
   resource: SuggestionMember & {
     iconUrl?: string;
@@ -82,6 +85,8 @@ export interface WorkspaceItem {
   suggestions: WorkspaceSuggestion[];
 }
 export interface SuggestionRun {
+  overview?: OrganizeOverview;
+  review?: OrganizeOverview['review'];
   groupTotals?: Record<string, number>;
   runVersion?: number;
   rulePhase?: string;

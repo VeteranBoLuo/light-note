@@ -1039,3 +1039,30 @@ describe('complete material pagination', () => {
     expect(res.send.mock.calls[0][0].status).toBe(400);
   });
 });
+
+describe('OCR file browsing', () => {
+  it('applies the same format restriction to SQL rows and totals before pagination', async () => {
+    mocks.pool.query.mockReset();
+    mocks.pool.query.mockImplementation(async (sql) => (String(sql).includes('COUNT(') ? [[{ total: 0 }]] : [[]]));
+    const res = createResponse();
+    await globalSearch(
+      {
+        user: { id: 'owner' },
+        headers: {},
+        body: {
+          types: ['file'],
+          paginationMode: 'global',
+          sort: 'updated',
+          fileExtensions: ['pdf', 'png', 'jpg', 'webp'],
+        },
+      },
+      res,
+    );
+    const calls = mocks.pool.query.mock.calls.filter(([sql]) => String(sql).includes('FROM files'));
+    expect(calls.length).toBeGreaterThan(1);
+    for (const [sql, params] of calls) {
+      expect(sql).toContain("LOWER(SUBSTRING_INDEX(files.file_name, '.', -1)) IN");
+      expect(params).toEqual(expect.arrayContaining(['owner', 'pdf', 'png', 'jpg', 'webp']));
+    }
+  });
+});

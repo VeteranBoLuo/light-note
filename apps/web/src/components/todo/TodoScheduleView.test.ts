@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createApp, h, nextTick } from 'vue';
+import { createApp, h, nextTick, ref } from 'vue';
 import { createI18n } from 'vue-i18n';
 import { createPinia } from 'pinia';
 import TodoScheduleView from './TodoScheduleView.vue';
@@ -195,5 +195,27 @@ describe('TodoScheduleView mobile swipe delete', () => {
     host.querySelectorAll<HTMLButtonElement>('.todo-calendar-head button')[1].click();
     await nextTick();
     expect(ranges).toHaveLength(2);
+  });
+});
+
+describe('日程加载与空状态互斥', () => {
+  it.each(['agenda', 'calendar'] as const)('%s 请求中隐藏空提示，完成后才显示', async (view) => {
+    const busy = ref(true);
+    const onRangeChange = vi.fn();
+    const host = document.createElement('div');
+    const app = createApp({ render: () => h(TodoScheduleView, { items: [], view, busy: busy.value, onRangeChange }) });
+    app.use(createPinia());
+    app.use(createI18n({ legacy: false, locale: 'zh', missingWarn: false, fallbackWarn: false, messages: { zh: {} } }));
+    app.mount(host);
+    cleanup = () => app.unmount();
+    const empty = '.todo-schedule-empty, .todo-calendar-empty-hint, .todo-calendar-daylist__empty';
+    expect(host.querySelector(empty)).toBeNull();
+    if (view === 'calendar') expect(onRangeChange).toHaveBeenCalled();
+    busy.value = false;
+    await nextTick();
+    expect(host.querySelector(empty)).not.toBeNull();
+    busy.value = true;
+    await nextTick();
+    expect(host.querySelector(empty)).toBeNull();
   });
 });

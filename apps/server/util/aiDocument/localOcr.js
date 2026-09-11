@@ -166,7 +166,7 @@ function pageNumberFromFileName(fileName) {
 
 export async function recognizePdfWithLocalOcr(
   buffer,
-  { pageCount, pageNumbers, signal, onPageStart, runner = runCommand, tempRoot = os.tmpdir() } = {},
+  { pageCount, pageNumbers, signal, onPageStart, recognizePage, runner = runCommand, tempRoot = os.tmpdir() } = {},
 ) {
   throwIfAborted(signal);
   const totalPages = Number(pageCount || 0);
@@ -214,7 +214,9 @@ export async function recognizePdfWithLocalOcr(
       try {
         inspectOcrImage(await readFile(pagePath), '.png');
         await onPageStart?.(pageNumberFromFileName(fileName));
-        const content = await recognizeImagePath(pagePath, { signal, runner });
+        const content = recognizePage
+          ? await recognizePage(await readFile(pagePath), { extension: '.png', signal })
+          : await recognizeImagePath(pagePath, { signal, runner });
         if (content) pages.push({ pageNumber: pageNumberFromFileName(fileName), content });
       } catch (error) {
         throwIfAborted(signal);

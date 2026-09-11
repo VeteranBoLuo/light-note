@@ -12,7 +12,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-function mountMenu(overrides: Record<string, unknown> = {}) {
+function mountMenu(overrides: Record<string, unknown> = {}, slots: Record<string, (...args: any[]) => any> = {}) {
   const host = document.createElement('div');
   document.body.append(host);
   const props = reactive({
@@ -35,7 +35,7 @@ function mountMenu(overrides: Record<string, unknown> = {}) {
         h(
           BActionMenu,
           { ...props, onSelect, onOpenChange },
-          { default: () => h('div', { class: 'test-row' }, '标签') },
+          { default: () => h('div', { class: 'test-row' }, '标签'), ...slots },
         );
     },
   });
@@ -60,6 +60,31 @@ async function advance(ms: number) {
 }
 
 describe('BActionMenu', () => {
+  it('自定义节点与默认节点共同支持键盘导航，自定义操作可关闭菜单', async () => {
+    const { anchor, onOpenChange, onSelect } = mountMenu(
+      { triggers: ['click'] },
+      {
+        'item-rename': ({ item, close }) =>
+          h('div', { role: 'group' }, [
+            h('button', { disabled: true }, '不可选'),
+            h('button', { class: 'custom-option', onClick: close }, item.label),
+          ]),
+      },
+    );
+    anchor.click();
+    await nextTick();
+    const panel = document.querySelector<HTMLElement>('.b-action-menu-panel')!;
+    const custom = panel.querySelector<HTMLButtonElement>('.custom-option')!;
+    custom.focus();
+    custom.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    expect(document.activeElement?.textContent).toContain('删除');
+    panel.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
+    expect(document.activeElement).toBe(custom);
+    custom.click();
+    await nextTick();
+    expect(onOpenChange).toHaveBeenLastCalledWith(false, 'click');
+    expect(onSelect).not.toHaveBeenCalled();
+  });
   it('整行悬浮达到延迟后打开，移入菜单时保持打开并返回触发来源', async () => {
     vi.useFakeTimers();
     const { anchor, onSelect, onOpenChange } = mountMenu();

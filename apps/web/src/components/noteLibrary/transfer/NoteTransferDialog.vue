@@ -442,6 +442,8 @@
   import { isLightNoteAndroidApp } from '@/utils/androidBridge';
   import { deliverExportViaAndroidBridge } from '@/utils/androidFileExport';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
+  import { recordOperation } from '@/api/commonApi';
+  import { OPERATION_LOG_MAP } from '@/config/logMap';
   const user = useUserStore();
   const device = bookmarkStore();
   watch(
@@ -1072,7 +1074,14 @@
         if (result === 'cancelled') return;
         if (result === 'unavailable') throw new Error();
       }
-      if (current()) message.success(t('noteExportSettings.started', { count: notes.length - failed.length }));
+      if (current()) {
+        const exportedCount = notes.length - failed.length;
+        message.success(t('noteExportSettings.started', { count: exportedCount }));
+        recordOperation({
+          ...OPERATION_LOG_MAP.noteLibrary.exportDirectory,
+          operation: `导出笔记目录成功【${exportedCount}篇/${subtree ? settings.packaging : 'self'}/${selectedFormat}】`,
+        });
+      }
     });
     if (current() && !scope.value) {
       const notice = error.value;

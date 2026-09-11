@@ -64,7 +64,7 @@ describe('NoteReadonlyPreview', () => {
     expect(source).toContain("emit('detailResolved', { noteId, detail: detailRecord })");
     expect(source).toContain("emit('breadcrumbResolved', {");
     expect(source).toContain('invalidateNoteDetailPrefetch(user, noteId)');
-    expect(source).toContain("if (Number(detailResult.status) === 404) emit('unavailable', noteId)");
+    expect(source).toContain("if ([403, 404].includes(Number(detailResult.status))) emit('unavailable', noteId)");
     expect(source).not.toContain("apiBasePost('/api/note/queryNoteBreadcrumb'");
   });
 

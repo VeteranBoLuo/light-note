@@ -164,10 +164,10 @@ it('仅正文存档也可创建书签整理，排除笔记与文件且不调用 
   expect(rows[1].suggestions[0]).toMatchObject({ status: 'no_suggestion' });
 });
 
-it('标签图标是独立免费检查，名称和图标变化进入版本，关系无关', () => {
+it('标签图标进入关键词转换队列，名称和图标变化进入版本，关系无关', () => {
   const tag = buildSnapshot('tag', { id: 't', name: '学习', icon_url: '' });
   const entries = buildRuleSuggestions([tag], ['tag_icon', 'tags', 'empty']);
-  expect(entries[0].aiKinds).toEqual([]);
+  expect(entries[0].aiKinds).toEqual(['tag_icon']);
   expect(entries[0].suggestions.map((s) => s.kind)).toEqual(['tag_icon']);
   expect(buildSnapshot('tag', { id: 't', name: '工作', icon_url: '' }).version).not.toBe(tag.version);
   expect(buildSnapshot('tag', { id: 't', name: '学习', icon_url: 'custom' }).version).not.toBe(tag.version);

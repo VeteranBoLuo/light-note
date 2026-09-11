@@ -1,3 +1,5 @@
+import type { LocationQuery, LocationQueryRaw } from 'vue-router';
+
 const NOTE_LIBRARY_ORIGIN = 'https://light-note.local';
 const MAX_RETURN_PATH_DEPTH = 8;
 const WORKBENCH_PATH = '/workbenches';
@@ -104,4 +106,28 @@ export function resolveDeletedNoteFallbackId({
     return normalizedSiblings[currentIndex + 1] || normalizedSiblings[currentIndex - 1] || normalizedParentId;
   }
   return normalizedSiblings.find((id) => id !== normalizedCurrentId) || normalizedParentId;
+}
+
+/** Preview and directory are independent: opening a body keeps the list context. */
+export function noteLibraryPreviewId(value: unknown): string | null {
+  return firstQueryValue(value) || null;
+}
+
+export function noteLibraryPreviewLocation(query: LocationQuery | LocationQueryRaw, noteId: string | null) {
+  const next = { ...query };
+  delete next.preview;
+  delete next.from;
+  delete next._rt;
+  if (noteId) next.preview = noteId;
+  return { path: '/noteLibrary', query: next };
+}
+
+export function updateNotePreviewReturnPath(value: unknown, noteId: string): string {
+  const source = resolveNoteDetailReturnPath(value);
+  if (!source) return '';
+  const parsed = new URL(source, NOTE_LIBRARY_ORIGIN);
+  if (parsed.pathname === '/noteLibrary' && noteLibraryPreviewId(parsed.searchParams.get('preview'))) {
+    parsed.searchParams.set('preview', noteId);
+  }
+  return `${parsed.pathname}${parsed.search}${parsed.hash}`;
 }

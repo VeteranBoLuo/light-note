@@ -519,6 +519,8 @@
 </script>
 
 <style scoped lang="less">
+  @import './inlineEmoji.less';
+
   .chat-composer-input__rich {
     width: 100%;
     box-sizing: border-box;
@@ -556,14 +558,7 @@
   }
 
   .chat-composer-input__rich :deep(.chat-composer-input__emoji) {
-    width: 1em;
-    height: 1em;
-    display: inline-block;
-    vertical-align: -0.12em;
-    object-fit: contain;
-    transform: scale(1.45);
-    transform-origin: center;
-    user-select: none;
+    .chat-inline-emoji-layout();
   }
 
   .chat-composer-input__rich :deep(.chat-composer-input__emoji.is-selected) {

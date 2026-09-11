@@ -218,6 +218,7 @@
 
   function viewNote(tag?: 'all' | 'null' | any) {
     const query = { ...router.currentRoute.value.query };
+    delete query.preview;
     delete query._rt;
     if (tag === 'all') {
       delete query.tag;
@@ -248,14 +249,19 @@
     gap: 6px;
 
     &:hover {
-      color: var(--resource-note-color, #00a884);
-      background: color-mix(in srgb, var(--resource-note-color, #00a884) 8%, var(--menu-body-bg-color));
+      color: var(--workspace-note-text);
+      background: color-mix(in srgb, var(--workspace-note-text) 8%, var(--menu-body-bg-color));
     }
 
     &.active {
-      color: var(--resource-note-color, #00a884);
-      background: color-mix(in srgb, var(--resource-note-color, #00a884) 10%, var(--menu-body-bg-color));
+      color: var(--workspace-note-text);
+      background: color-mix(in srgb, var(--workspace-note-text) 10%, var(--menu-body-bg-color));
     }
+  }
+
+  .tag-filter-input {
+    flex: 1;
+    min-width: 0;
   }
 
   .filter-label {
@@ -322,14 +328,14 @@
   .divider {
     width: 100%;
     height: 1px;
-    background: #f0f0f0;
+    background: var(--surface-divider-color);
     flex-shrink: 0;
   }
   .filter-header {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 4px 6px;
+    padding: 4px 0;
     .clear-action {
       width: auto;
       height: 36px;
@@ -337,7 +343,7 @@
       border: 0 !important;
       background: transparent !important;
       font-size: 12px;
-      color: var(--resource-note-color, #00a884);
+      color: var(--workspace-note-text);
       white-space: nowrap;
     }
   }
@@ -356,7 +362,8 @@
     text-align: left;
     color: var(--desc-color);
     justify-content: flex-start;
-    padding: 0 10px;
+    gap: 8px;
+    padding: 0 11px;
     box-sizing: border-box;
     border: 1px solid transparent !important;
     border-radius: 8px;
@@ -366,38 +373,31 @@
     display: flex;
     align-items: center;
     background: transparent !important;
-    @media (min-width: 600px) {
+    @media (hover: hover) and (pointer: fine) {
       &:hover {
-        background: color-mix(in srgb, var(--resource-note-color, #00a884) 9%, transparent);
-        color: var(--resource-note-color, #00a884);
+        background: var(--workspace-note-selected) !important;
+        color: var(--workspace-note-text);
       }
     }
   }
   .filter-item.is-selected {
-    border-color: var(--resource-note-color, #00a884) !important;
-    background: var(--mobile-selected-bg) !important;
-    color: var(--resource-note-color, #00a884);
-    font-weight: 650;
+    border-color: var(--workspace-note-text) !important;
+    background: var(--workspace-note-selected) !important;
+    color: var(--workspace-note-text);
+    font-weight: 600;
   }
   .filter-empty {
-    padding: 8px 10px;
+    padding: 8px 12px;
     color: var(--desc-color);
     font-size: 12px;
   }
   .check-mark {
     margin-left: auto;
-    color: var(--resource-note-color, #00a884);
+    color: var(--workspace-note-text);
     flex: 0 0 auto;
   }
 
   .filter-container--mobile {
-    .fixed-section {
-      position: sticky;
-      z-index: 1;
-      top: 0;
-      background: var(--card-background);
-    }
-
     .filter-header {
       padding: 2px 0 8px;
     }
@@ -419,15 +419,6 @@
 
     .scrollable-section {
       gap: 2px;
-    }
-  }
-</style>
-<style>
-  [data-theme='night'] {
-    .tag-filter-input {
-      .b-input {
-        background-color: #100a1685 !important;
-      }
     }
   }
 </style>

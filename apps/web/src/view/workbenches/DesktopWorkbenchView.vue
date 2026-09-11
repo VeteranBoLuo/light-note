@@ -48,7 +48,9 @@
           ref="dailyBriefCardRef"
           :eligible="Boolean(user.id && user.role !== 'visitor')"
           :owner-key="dailyBriefOwnerKey"
-          :visitor="Boolean(user.visitorWorkspace || user.role === 'visitor' || user.adminContext?.subjectRole === 'visitor')"
+          :visitor="
+            Boolean(user.visitorWorkspace || user.role === 'visitor' || user.adminContext?.subjectRole === 'visitor')
+          "
           :read-only="growthReadOnly"
         />
       </div>
@@ -1090,7 +1092,6 @@
         loadGrowthTasks(true),
         refreshDailyReview(),
         organizer.loadSummary({ silent: Boolean(organizer.summary) }),
-        organizer.loadKnowledgeStructureSummary({ silent: Boolean(organizer.knowledgeStructureSummary) }),
       ]);
       if (user.id && user.role !== 'visitor') {
         // 待处理数量以导航角标共用的计数接口为最终口径，避免工作台与快速添加显示不一致。
@@ -1142,9 +1143,8 @@
         loadGrowthTasks(true),
         refreshDailyReview(),
         organizer.loadSummary({ silent: true }),
-        organizer.loadKnowledgeStructureSummary({ silent: true }),
       ]);
-      // 待整理明细仍以 /inbox/count 为准；整理中心汇总由 organize store 的两份摘要独立维护。
+      // 待整理明细仍以 /inbox/count 为准；整理中心角标由 organize store 的统一摘要维护。
       if (user.id && user.role !== 'visitor') await inbox.refreshCount();
     },
     // 首屏还没成功过、或 init 正在跑时不插队：前者没有旧数据可保，后者会重复打同一批请求。

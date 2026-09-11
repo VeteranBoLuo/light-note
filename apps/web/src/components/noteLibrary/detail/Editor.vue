@@ -6524,6 +6524,7 @@
       overflow-wrap: anywhere;
       word-break: break-word;
       code {
+        padding: 0;
         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Courier New', monospace;
         font-size: 13px;
         white-space: inherit;

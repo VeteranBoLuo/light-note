@@ -123,7 +123,7 @@ describe("toolbox protocol", () => {
       "points",
       "ai_quota",
     ]);
-    expect(getToolboxTool("ocr_to_text")?.billingMedia).toEqual(["free"]);
+    expect(getToolboxTool("ocr_to_text")?.billingMedia).toEqual(["ai_quota", "points", "free"]);
     expect(getToolboxTool("idea_to_draft")?.input).toMatchObject({
       kind: "prompt",
       minItems: 0,

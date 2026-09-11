@@ -54,13 +54,21 @@ function pointerEvent(type: string, x: number, y: number, pointerId = 1) {
 
 function mountTodoItem(
   item: TodoItemType = todo,
-  options: { selectable?: boolean; swipeEnabled?: boolean; seriesDetail?: boolean; disabled?: boolean } = {},
+  options: {
+    selectable?: boolean;
+    swipeEnabled?: boolean;
+    seriesDetail?: boolean;
+    disabled?: boolean;
+    workspace?: boolean;
+  } = {},
 ) {
   const onPreview = vi.fn();
   const onSelect = vi.fn();
   const onToggleComplete = vi.fn();
   const selected = ref(false);
   const onEdit = vi.fn();
+  const onUpdatePriority = vi.fn();
+  const onSnooze = vi.fn();
   const onDelete = vi.fn();
   const onSeriesAction = vi.fn();
   const swipeOpen = ref(false);
@@ -71,12 +79,15 @@ function mountTodoItem(
       return () =>
         h(TodoItem, {
           item,
+          workspace: options.workspace,
+          onSnooze,
           selectable: options.selectable,
           seriesDetail: options.seriesDetail,
           disabled: options.disabled,
           swipeEnabled: options.swipeEnabled,
           swipeOpen: swipeOpen.value,
           onPreview,
+          'onUpdate-priority': onUpdatePriority,
           onToggleComplete,
           selected: selected.value,
           onSelect: (value: boolean) => {
@@ -151,7 +162,18 @@ function mountTodoItem(
     app.unmount();
     host.remove();
   };
-  return { host, onSelect, onPreview, onToggleComplete, onEdit, onDelete, onSeriesAction, swipeOpen };
+  return {
+    host,
+    onSelect,
+    onPreview,
+    onToggleComplete,
+    onEdit,
+    onDelete,
+    onSeriesAction,
+    swipeOpen,
+    onUpdatePriority,
+    onSnooze,
+  };
 }
 
 afterEach(() => {
@@ -166,6 +188,44 @@ afterEach(() => {
 });
 
 describe('TodoItem card preview', () => {
+  it.each(['tenMinutes', 'oneHour', 'threeHours', 'oneDay'])(
+    '时间分组点击 %s 只触发对应提醒并关闭菜单',
+    async (preset) => {
+      const { host, onSnooze } = mountTodoItem(todo, { workspace: true });
+      host.querySelector<HTMLButtonElement>('.todo-more-button')!.click();
+      await nextTick();
+      const options = document.querySelectorAll<HTMLButtonElement>('.todo-menu-snooze [role="menuitem"]');
+      expect(options).toHaveLength(4);
+      options[['tenMinutes', 'oneHour', 'threeHours', 'oneDay'].indexOf(preset)].click();
+      await nextTick();
+      expect(onSnooze).toHaveBeenCalledExactlyOnceWith(preset);
+      expect(host.querySelector('.b-action-menu-anchor')?.getAttribute('aria-expanded')).toBe('false');
+    },
+  );
+  it('更多菜单回显优先级，选择后只发出一次变更并关闭菜单', async () => {
+    const { host, onUpdatePriority } = mountTodoItem();
+    host.querySelector<HTMLButtonElement>('.todo-more-button')!.click();
+    await nextTick();
+    const options = document.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]');
+    expect(options).toHaveLength(3);
+    expect(options[1].getAttribute('aria-checked')).toBe('true');
+    options[2].click();
+    await nextTick();
+    expect(onUpdatePriority).toHaveBeenCalledExactlyOnceWith(2);
+    expect(host.querySelector('.b-action-menu-anchor')?.getAttribute('aria-expanded')).toBe('false');
+  });
+  it('重复选择当前优先级不写入，已完成任务不显示优先级节点', async () => {
+    const { host, onUpdatePriority } = mountTodoItem();
+    host.querySelector<HTMLButtonElement>('.todo-more-button')!.click();
+    await nextTick();
+    document.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')[1].click();
+    expect(onUpdatePriority).not.toHaveBeenCalled();
+    cleanup?.();
+    const completed = mountTodoItem({ ...todo, status: 'completed' });
+    completed.host.querySelector<HTMLButtonElement>('.todo-more-button')!.click();
+    await nextTick();
+    expect(document.querySelector('[role="menuitemradio"]')).toBeNull();
+  });
   it.each(['pending', 'completed'] as const)('标题独立打开 %s 待办详情，不切换完成状态', async (status) => {
     const { host, onPreview, onToggleComplete } = mountTodoItem({ ...todo, status });
     await nextTick();
@@ -455,7 +515,7 @@ describe('TodoItem card preview', () => {
     expect(panel).toBeTruthy();
     expect(panel?.querySelectorAll('[role="menuitem"]')).toHaveLength(3);
     expect(panel?.querySelectorAll('.b-action-menu__icon')).toHaveLength(3);
-    expect(panel?.querySelectorAll('[role="separator"]')).toHaveLength(1);
+    expect(panel?.querySelectorAll('[role="separator"]')).toHaveLength(2);
     expect(panel?.querySelector('.is-danger')?.textContent).toContain('删除');
 
     const editButton = Array.from(panel?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') || []).find(

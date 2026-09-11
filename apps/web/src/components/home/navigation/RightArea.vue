@@ -7,7 +7,14 @@
     <CampaignEntry v-if="!bookmark.isMobile" />
     <GlobalSearch />
     <BTooltip v-if="showQuickCapture" :title="$t('inbox.quickCapture')">
-      <BButton class="quick-capture-btn" :aria-label="$t('inbox.quickCapture')" @click="openQuickCapture">
+      <BButton
+        class="quick-capture-btn"
+        :class="{ 'is-open': inbox.quickCaptureVisible }"
+        :aria-label="$t('inbox.quickCapture')"
+        :aria-expanded="inbox.quickCaptureVisible"
+        aria-haspopup="dialog"
+        @click="openQuickCapture"
+      >
         <!--
           快速添加只负责创建，不承担待处理催办：它的角标曾用 actionTotal（全部未完成待办 +
           全部待整理），点开却只有创建表单，数字无从解释。待处理提醒改由「待办」导航角标
@@ -24,7 +31,7 @@
       </b-dropdown>
     </BTooltip>
     <BButton v-if="showGuestRegister" type="primary" class="guest-register-link" @click="registerClick">
-      {{ $t('home.freeRegister') }}
+      {{ $t('home.registerAccount') }}
     </BButton>
     <BButton v-if="showMobileHomeExtra" class="mobile-github-btn" @click="githubClick">
       <svg-icon size="24" hover :src="icon.github" />
@@ -124,7 +131,7 @@
     recordOperation({ module: '导航栏', operation: '打开共建轻笺' });
   }
 
-  // 游客点导航栏「免费注册」:打开注册弹窗(openAuthModal 内部记 signup_open,source=nav)
+  // 游客点导航栏「注册账号」:打开注册弹窗(openAuthModal 内部记 signup_open,source=nav)
   function registerClick() {
     bookmark.openAuthModal('注册', 'nav');
   }
@@ -228,16 +235,19 @@
     border-radius: 9px;
     line-height: 1;
     color: var(--primary-color, #615ced);
-    background: color-mix(in srgb, var(--primary-color, #615ced) 10%, var(--background-color));
+    background: transparent;
     transition:
       color 0.2s ease,
-      background-color 0.2s ease,
-      transform 0.2s ease;
+      background-color 0.2s ease;
 
-    &:hover {
-      color: var(--primary-color, #615ced);
-      background: color-mix(in srgb, var(--primary-color, #615ced) 18%, var(--background-color));
-      transform: translateY(-1px);
+    &.is-open {
+      background: color-mix(in srgb, var(--primary-color, #615ced) 10%, var(--background-color));
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        background: color-mix(in srgb, var(--primary-color, #615ced) 10%, var(--background-color));
+      }
     }
   }
   .guest-register-link {

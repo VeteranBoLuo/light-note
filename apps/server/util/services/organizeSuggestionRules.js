@@ -237,10 +237,11 @@ export function buildRuleSuggestions(snapshots, checks, { tagMode = 'untagged' }
       if (checks.includes('tag_icon'))
         add(
           'tag_icon',
-          s.iconUrl.trim() ? 'not_applicable' : 'no_suggestion',
-          s.iconUrl.trim() ? '已有自定义图标' : '暂无合适推荐，可手动选择',
+          s.iconUrl.trim() ? 'not_applicable' : 'queued',
+          s.iconUrl.trim() ? '已有自定义图标' : '等待图标匹配',
           { before: s.iconUrl },
         );
+      if (checks.includes('tag_icon') && !s.iconUrl.trim()) aiKinds.push('tag_icon');
       return { snapshot: s, suggestions: results, aiKinds };
     }
     if (checks.includes('tags') && supportsOrganizeCheck(s.type, 'tags')) {

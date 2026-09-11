@@ -31,6 +31,7 @@
       "@/*": ["src/*"],
       "@lightnote/shared/notification-presentation": ["../../packages/shared/notificationPresentation.d.ts"],
       "@lightnote/shared/ai-usage-modules": ["../../packages/shared/aiUsageModules.d.ts"],
+      "@lightnote/shared/organize-progress": ["../../packages/shared/organizeProgress.d.ts"],
       "@lightnote/shared/organize-capabilities": ["../../packages/shared/organizeCapabilities.d.ts"],
       "@lightnote/shared/resource-selection": ["../../packages/shared/resourceSelection.d.ts"],
       "@lightnote/shared/note-transfer": ["../../packages/shared/noteTransfer.d.ts"],

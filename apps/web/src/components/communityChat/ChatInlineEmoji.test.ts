@@ -10,11 +10,6 @@ import ChatEmojiPanel from './ChatEmojiPanel.vue';
 import ChatInlineEmojiText from './ChatInlineEmojiText.vue';
 
 const composerSource = readFileSync(join(process.cwd(), 'src/components/communityChat/ChatComposerInput.vue'), 'utf8');
-const messageTextSource = readFileSync(
-  join(process.cwd(), 'src/components/communityChat/ChatInlineEmojiText.vue'),
-  'utf8',
-);
-
 let cleanup: (() => void) | undefined;
 
 afterEach(() => {
@@ -102,23 +97,6 @@ describe('community chat inline emoji', () => {
     expect(image?.getAttribute('alt')).toBe('开心');
     expect(host.textContent).toContain('今天不错！[[ln-emoji:jian-tuan-v9:future]]');
     expect(host.textContent).not.toContain(emoji.token);
-  });
-
-  it('输入态笺团不撑高文本行，消息气泡仍保留更大的展示尺寸', () => {
-    expect(composerSource).toMatch(
-      /\.chat-composer-input__plain :deep\(\.b-textarea\)\s*\{[\s\S]*?display:\s*block;[\s\S]*?font-size:\s*inherit;/,
-    );
-    expect(composerSource).toMatch(
-      /\.chat-composer-input__emoji\)\s*\{[\s\S]*?width:\s*1em;[\s\S]*?height:\s*1em;[\s\S]*?vertical-align:\s*-0\.12em;[\s\S]*?transform:\s*scale\(1\.45\);/,
-    );
-    const composerEmojiStyle = composerSource.slice(
-      composerSource.indexOf('.chat-composer-input__emoji)'),
-      composerSource.indexOf('.chat-composer-input__emoji.is-selected'),
-    );
-    expect(composerEmojiStyle).not.toContain('margin-inline:');
-    expect(messageTextSource).toMatch(
-      /\.chat-inline-emoji-text__image\s*\{[\s\S]*?width:\s*2em;[\s\S]*?height:\s*2em;[\s\S]*?vertical-align:\s*-0\.65em;/,
-    );
   });
 
   it('placeholder 降低视觉层级，笺团选中态沿用原生矩形高亮且不绘制遮挡轮廓', () => {

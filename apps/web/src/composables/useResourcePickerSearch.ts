@@ -23,6 +23,7 @@ export interface ResourcePickerItem {
 }
 
 export interface UseResourcePickerSearchOptions {
+  fileExtensions?: () => string[] | undefined;
   /** 允许出现在结果里的资源类型 */
   allowedTypes?: ResourcePickerType[] | (() => ResourcePickerType[] | undefined);
   /** 单次返回上限 */
@@ -167,6 +168,7 @@ export function useResourcePickerSearch(options: UseResourcePickerSearchOptions 
       const data = await fetchGlobalSearch(normalizedKeyword, useOrderedBrowse ? singleTypePageSize : limit, true, {
         sort,
         types: allowedTypes,
+        fileExtensions: options.fileExtensions?.(),
         ...(useOrderedBrowse
           ? {
               paginationMode: options.exhaustive ? ('global' as const) : ('ordered' as const),
@@ -218,6 +220,7 @@ export function useResourcePickerSearch(options: UseResourcePickerSearchOptions 
       const data = await fetchGlobalSearch(browseKeyword, singleTypePageSize, false, {
         sort: browseSort,
         types: browseTypes,
+        fileExtensions: options.fileExtensions?.(),
         paginationMode: options.exhaustive ? 'global' : 'ordered',
         cursor,
         includeMetadata: false,
@@ -267,6 +270,7 @@ export function useResourcePickerSearch(options: UseResourcePickerSearchOptions 
       const data = await fetchGlobalSearch(keyword, singleTypePageSize, false, {
         sort,
         types,
+        fileExtensions: options.fileExtensions?.(),
         paginationMode: options.exhaustive ? 'global' : 'ordered',
         cursor,
         includeMetadata: false,

@@ -34,11 +34,11 @@ describe('待处理文案口径', () => {
     expect(enUS.workbench.panel.todaySummary.toLowerCase()).not.toContain('today');
   });
 
-  it('桌面与移动端都把汇总入口命名为整理中心', () => {
-    expect(zhCN.workbench.today.inboxPending).toBe('整理中心');
-    expect(zhCN.workbench.mobileToday.inbox).toBe('整理中心');
-    expect(enUS.workbench.today.inboxPending).toBe('Organizer');
-    expect(enUS.workbench.mobileToday.inbox).toBe('Organizer');
+  it('桌面与移动端都把汇总入口命名为资源整理', () => {
+    expect(zhCN.workbench.today.inboxPending).toBe('资源整理');
+    expect(zhCN.workbench.mobileToday.inbox).toBe('资源整理');
+    expect(enUS.workbench.today.inboxPending).toBe('Resource organization');
+    expect(enUS.workbench.mobileToday.inbox).toBe('Resource organization');
   });
 
   /** 总数只含待办与整理事项；未读通知在下方分项展示，但不计入行动项总数。 */

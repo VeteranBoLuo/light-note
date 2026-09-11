@@ -26,7 +26,7 @@ const fixture = () => ({
 async function mount() {
   host = document.createElement('div');
   document.body.append(host);
-  const props = reactive({ summary: fixture(), knowledgeStructure: null, onRefresh: vi.fn(), onSelect: vi.fn() });
+  const props = reactive({ summary: fixture(), onRefresh: vi.fn(), onSelect: vi.fn() });
   app = createApp({ render: () => h(Dashboard, props as any) });
   app.component('SvgIcon', SvgIcon);
   app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zh } }));
@@ -46,6 +46,14 @@ it('总览不渲染资源操作或筛选，详情入口进入对应分类', asyn
   expect(host.querySelector('[aria-pressed]')).toBeNull();
   host.querySelector<HTMLButtonElement>('.governance-summary__metric button')!.click();
   expect(props.onSelect).toHaveBeenCalledWith('untagged');
+});
+it('首张突出卡直接进入 AI 整理建议', async () => {
+  const props = await mount();
+  const card = host.querySelector<HTMLElement>('.governance-summary__ai-entry')!;
+  expect(card.textContent).toContain('AI 整理建议');
+  expect(card.textContent).toContain('核心整理能力');
+  card.querySelector<HTMLButtonElement>('button')!.click();
+  expect(props.onSelect).toHaveBeenCalledWith('ai_suggestions');
 });
 it('环形图使用全量类型统计，完全忽略预览样本', async () => {
   await mount();

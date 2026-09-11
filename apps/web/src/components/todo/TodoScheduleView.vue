@@ -8,10 +8,10 @@
       <BButton :aria-label="t('inbox.todoNextMonth')" @click="moveMonth(1)">
         <SvgIcon :src="icon.arrow_right" size="15" aria-hidden="true" />
       </BButton>
-      <small v-if="!scheduledItems.length" class="todo-calendar-empty-hint">{{ t('inbox.todoScheduleEmpty') }}</small>
+      <small v-if="!busy && !scheduledItems.length" class="todo-calendar-empty-hint">{{ t('inbox.todoScheduleEmpty') }}</small>
     </header>
 
-    <p v-if="view !== 'calendar' && !scheduledItems.length" class="todo-schedule-empty">{{
+    <p v-if="view !== 'calendar' && !busy && !scheduledItems.length" class="todo-schedule-empty">{{
       t('inbox.todoScheduleEmpty')
     }}</p>
 
@@ -66,7 +66,7 @@
         <strong>{{ selectedDayLabel }}</strong>
         <span>{{ t('inbox.todoDayCount', { count: selectedDay.items.length }) }}</span>
       </header>
-      <p v-if="!selectedDay.items.length" class="todo-calendar-daylist__empty">
+      <p v-if="!busy && !selectedDay.items.length" class="todo-calendar-daylist__empty">
         {{ t('inbox.todoDayEmpty') }}
       </p>
       <MobileSwipeDelete
@@ -163,6 +163,7 @@
   const props = defineProps<{
     items: TodoItem[];
     view: 'agenda' | 'calendar';
+    busy?: boolean;
     swipeEnabled?: boolean;
     disabled?: boolean;
     deletingId?: string;
@@ -373,8 +374,12 @@
 </script>
 
 <style scoped lang="less">
+  .todo-schedule-view {
+    box-sizing: border-box;
+    min-width: 0;
+    padding: 16px 20px 20px;
+  }
   @import (reference) '@/assets/css/workspace-surfaces.less';
-  /* 日历视图直接贴在滚动容器顶沿,补出与列表视图一致的上留白 */
   .todo-calendar-head {
     display: flex;
     align-items: center;
@@ -731,6 +736,7 @@
     }
     .todo-schedule-view {
       overflow-x: hidden;
+      padding: 10px 12px 12px;
     }
     .todo-calendar-weekday {
       padding: 3px 1px;

@@ -80,9 +80,11 @@
             :open="scopeDrawerOpen"
             :placement="bookmark.isDesktop ? 'right' : 'bottom'"
             :title="t('todoWorkspace.chooseScope')"
+            height="auto"
+            body-padding="10px 18px max(18px, env(safe-area-inset-bottom))"
             @close="scopeDrawerOpen = false"
           >
-            <TodoWorkspaceSidebar @changed="changeOrganizationScope" />
+            <TodoWorkspaceSidebar picker @changed="changeOrganizationScope" />
           </BDrawer>
         </template>
 
@@ -381,7 +383,7 @@
           v-model:open="todoPageActionsOpen"
           :title="t('common.more')"
           :actions="todoPageActions"
-          @action="toggleTodoSelectionMode"
+          @action="handleTodoPageAction"
         />
 
         <MobilePageActionsDrawer
@@ -461,7 +463,7 @@
             @touchend.passive="pullRefresh.onTouchEnd"
             @touchcancel.passive="pullRefresh.onTouchCancel"
           >
-            <BLoading :loading="pageLoading" class="inbox-loading">
+            <BLoading :loading="pageLoading" :title="t(isTodoFocused ? 'todoWorkspace.loadingTasks' : 'common.loading')" class="inbox-loading">
               <div v-if="!pageLoading && pageLoadFailed && actionItems.length === 0" class="inbox-empty inbox-error">
                 <div class="inbox-empty__icon">!</div>
                 <h2>{{ t(isTodoFocused ? 'todoWorkspace.loadFailedTitle' : 'inbox.loadFailedTitle') }}</h2>
@@ -488,6 +490,7 @@
                 v-else-if="isTodoFocused && todoView === 'matrix'"
                 :items="todo.items"
                 :mobile="bookmark.isMobile"
+                :loading="pageLoading"
                 :disabled="hasPendingOperation || todoBatchMutating"
                 :deleting-id="deletingTodoId"
                 @preview="openTodoPreview"
@@ -505,6 +508,7 @@
                 ref="scheduleViewRef"
                 :items="todo.items"
                 :view="todoView"
+                :busy="pageLoading || pageLoadFailed"
                 :swipe-enabled="bookmark.isMobile"
                 :disabled="hasPendingOperation || todoBatchMutating"
                 :deleting-id="deletingTodoId"
@@ -562,6 +566,7 @@
                       scroll-mode="ancestor"
                       :paused="!!collapsedGroups[group.key] || group.failed || todo.refreshing"
                       :loading="group.loading"
+                      :show-loading-indicator="false"
                       :has-more="!group.loaded || !!group.nextCursor"
                       @load-more="todo.loadGroup(group.key)"
                     >
@@ -570,7 +575,7 @@
                           <BButton v-if="group.failed" @click="todo.loadGroup(group.key, true)">{{
                             t('todoWorkspace.loadFailed')
                           }}</BButton>
-                          <BLoading v-else inline :loading="true" :title="t('todoWorkspace.loadingNext')" />
+                          <BLoading v-else inline :loading="true" :title="t(group.loaded ? 'todoWorkspace.loadingMore' : 'common.loading')" />
                         </div>
                         <TodoSeriesGroup
                           v-else-if="node.kind === 'series'"
@@ -987,6 +992,7 @@
   import { resolveFileAiSummaryPresentation } from '@/utils/fileAiSummary';
   import ResourceBatchActionBar from '@/components/resourceActions/ResourceBatchActionBar.vue';
   import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
+  import { createMobileResourceHubActions, mobileResourceHubPath } from '@/utils/mobileResourceHubActions';
 
   const props = withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false });
   const embedded = computed(() => props.embedded);
@@ -1161,6 +1167,7 @@
   const todoBatchActionsOpen = ref(false);
   const todoPageActionsOpen = ref(false);
   const todoPageActions = computed<MobilePageActionItem[]>(() => [
+    ...createMobileResourceHubActions(t),
     {
       key: 'batch',
       label: t('common.batchActions'),
@@ -1168,6 +1175,12 @@
       disabled: todoView.value !== 'list' || (!todo.items.length && !pageLoading.value),
     },
   ]);
+  function handleTodoPageAction(action: MobilePageActionItem) {
+    const hubPath = mobileResourceHubPath(action.key);
+    if (hubPath) void router.push(hubPath);
+    else if (action.key === 'batch') toggleTodoSelectionMode();
+  }
+
   const todoUndo = ref<{ kind: 'complete' | 'delete'; ids: string[] } | null>(null);
   const todoUndoing = ref(false);
   const hasTodoSeries = computed(() =>
@@ -1628,6 +1641,8 @@
       savedTodoRange = null;
     }
     openSwipeTodoId.value = '';
+    // 统一由 refreshList 应用状态口径；日历等 range-change 后再请求。
+    todo.seriesPresentation = view === 'list';
     if (view !== 'calendar') {
       delete todo.filters.rangeStart;
       delete todo.filters.rangeEnd;
@@ -1642,13 +1657,6 @@
       todoSelectionMode.value = false;
       selectedTodoIds.value = [];
       todoBatchActionsOpen.value = false;
-    }
-    // 列表和四象限共用未完成/已完成/全部；议程、日历始终展示全量。
-    // preserveStatus 保住页签选择，切回有状态筛选的视图时再按该口径恢复。
-    if (!todoViewUsesStatusFilter(view)) {
-      if (todo.effectiveStatus !== 'all') void todo.refreshList({ status: 'all', preserveStatus: true });
-    } else if (todo.effectiveStatus !== todo.status) {
-      void todo.refreshList({ status: todo.status });
     }
     if (user.preferences.todoView === view) return;
     updatePreference({ todoView: view }).catch(() => {

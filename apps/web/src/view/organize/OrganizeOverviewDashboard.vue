@@ -12,6 +12,19 @@
     </header>
 
     <div class="governance-summary__metrics">
+      <BCard class="governance-summary__ai-entry" padding="20px" radius="12px">
+        <div class="governance-summary__ai-icon" aria-hidden="true">
+          <SvgIcon :src="icon.common.magicWand" size="22" />
+        </div>
+        <div class="governance-summary__ai-copy">
+          <span>{{ t('organize.summaryView.aiEyebrow') }}</span>
+          <h3>{{ t('organize.views.aiSuggestions') }}</h3>
+          <p>{{ t('organize.summaryView.aiDescription') }}</p>
+        </div>
+        <BButton type="primary" class="governance-summary__ai-action" @click="emit('select', 'ai_suggestions')">
+          {{ t('organize.summaryView.aiAction') }} <span aria-hidden="true">→</span>
+        </BButton>
+      </BCard>
       <BCard
         v-for="metric in metrics"
         :key="metric.key"
@@ -98,42 +111,6 @@
       <BCard class="governance-summary__panel" padding="24px" radius="12px">
         <header
           ><div
-            ><h3>{{ t('organize.summaryView.structureComposition') }}</h3
-            ><p>{{ t('organize.summaryView.structureDescription') }}</p></div
-          ><SvgIcon :src="icon.toolbox.conceptMap" size="20"
-        /></header>
-        <template v-if="knowledgeStructure">
-          <div class="governance-summary__structure-facts"
-            ><span
-              ><strong>{{ knowledgeStructure.totalNotes }}</strong
-              >{{ t('organize.summaryView.notes') }}</span
-            ><span
-              ><strong>{{ knowledgeStructure.affectedNoteCount }}</strong
-              >{{ t('organize.summaryView.affectedNotes') }}</span
-            ></div
-          >
-          <ul v-if="structureIssues.length" class="governance-summary__bars"
-            ><li v-for="issue in structureIssues" :key="issue.kind"
-              ><div
-                ><span>{{ t(`organize.knowledge.issue.${issue.kind}`) }}</span
-                ><strong>{{ issue.count }}</strong></div
-              ><span class="governance-summary__track" aria-hidden="true"
-                ><span :style="{ width: `${issue.width}%` }"></span></span></li
-          ></ul>
-          <div v-else class="governance-summary__empty">{{ t('organize.knowledge.emptyTitle') }}</div>
-        </template>
-        <div v-else class="governance-summary__empty" role="status"
-          ><BLoading v-if="knowledgeLoading" :loading="true" inline />{{
-            t(knowledgeLoading ? 'organize.knowledge.loading' : 'organize.summaryView.unavailable')
-          }}</div
-        >
-        <footer>{{
-          t(knowledgeError && knowledgeStructure ? 'organize.knowledge.stale' : 'organize.summaryView.structureScope')
-        }}</footer>
-      </BCard>
-      <BCard class="governance-summary__panel" padding="24px" radius="12px">
-        <header
-          ><div
             ><h3>{{ t('organize.overview.pendingComposition') }}</h3
             ><p>{{ t('organize.summaryView.pendingDescription') }}</p></div
           ><SvgIcon :src="icon.contextMenu.inbox" size="20"
@@ -168,24 +145,15 @@
   import BCard from '@/components/base/BasicComponents/BCard.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BProgress from '@/components/base/BasicComponents/BProgress.vue';
-  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import OrganizeDonutChart from './OrganizeDonutChart.vue';
   import icon from '@/config/icon';
-  import type {
-    OrganizeIssueType,
-    OrganizeResourceType,
-    OrganizeSummary,
-    KnowledgeStructureSummary,
-  } from '@/api/organizeApi';
+  import type { OrganizeIssueType, OrganizeResourceType, OrganizeSummary } from '@/api/organizeApi';
   const props = defineProps<{
     summary: OrganizeSummary | null;
-    knowledgeStructure: KnowledgeStructureSummary | null;
-    knowledgeLoading?: boolean;
-    knowledgeError?: boolean;
     error?: boolean;
   }>();
-  const emit = defineEmits<{ select: [view: 'pending' | OrganizeIssueType]; refresh: [] }>();
+  const emit = defineEmits<{ select: [view: 'pending' | 'ai_suggestions' | OrganizeIssueType]; refresh: [] }>();
   const { t, locale } = useI18n();
   const count = (value: unknown) => Math.max(0, Number(value) || 0);
   const display = (value: number | null | undefined, more = false) =>
@@ -225,14 +193,6 @@
         more: props.summary?.issues.bookmarkHealth.hasMore,
         unit: 'organize.summaryView.bookmarks',
         description: t('organize.summaryView.healthMetric'),
-      },
-      {
-        key: 'knowledge_structure' as const,
-        label: t('organize.views.knowledgeStructure'),
-        icon: icon.toolbox.conceptMap,
-        value: props.knowledgeStructure?.findingCount,
-        unit: 'organize.summaryView.issues',
-        description: t('organize.summaryView.structureMetric'),
       },
     ].map((metric) => ({ ...metric, display: display(metric.value, metric.more) })),
   );
@@ -299,16 +259,9 @@
       },
     ];
   });
-  const structureIssues = computed(() => {
-    const items = (props.knowledgeStructure?.issueCounts || [])
-      .filter((item) => item.count > 0)
-      .sort((a, b) => b.count - a.count);
-    const max = Math.max(1, ...items.map((item) => item.count));
-    return items.map((item) => ({ ...item, width: (100 * item.count) / max }));
-  });
 </script>
 <style scoped lang="less">
-  @import (reference) "@/assets/css/workspace-surfaces.less";
+  @import (reference) '@/assets/css/workspace-surfaces.less';
   .governance-summary {
     --summary-surface: var(--workspace-content);
     display: grid;
@@ -358,10 +311,48 @@
     gap: 14px;
   }
   .governance-summary__metric,
+  .governance-summary__ai-entry,
   .governance-summary__panel {
     --b-card-background: var(--summary-surface);
     --b-card-shadow: none;
     min-width: 0;
+  }
+  .governance-summary__ai-entry {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr);
+    align-items: center;
+    gap: 12px;
+    border-color: var(--primary-color);
+    background: var(--mobile-selected-bg, var(--summary-surface));
+  }
+  .governance-summary__ai-icon {
+    width: 42px;
+    height: 42px;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--primary-color);
+    border-radius: 12px;
+    color: var(--primary-color);
+    background: var(--card-background);
+  }
+  .governance-summary__ai-copy {
+    min-width: 0;
+  }
+  .governance-summary__ai-copy > span {
+    display: block;
+    margin-bottom: 2px;
+    color: var(--primary-color);
+    font-size: 10px;
+    font-weight: 750;
+    letter-spacing: 0.06em;
+  }
+  .governance-summary__ai-copy p {
+    margin-top: 5px;
+  }
+  .governance-summary__ai-action.b_btn {
+    grid-column: 1 / -1;
+    width: 100%;
+    min-height: 36px;
   }
   .governance-summary__metric-title {
     display: flex;
@@ -460,8 +451,7 @@
   .governance-summary__coverage strong {
     color: var(--text-color);
   }
-  .governance-summary__health,
-  .governance-summary__bars {
+  .governance-summary__health {
     list-style: none;
     padding: 0;
     margin: 18px 0 20px;
@@ -484,38 +474,6 @@
   .governance-summary__health strong {
     color: var(--text-color);
     font-variant-numeric: tabular-nums;
-  }
-  .governance-summary__structure-facts {
-    display: flex;
-    gap: 24px;
-    color: var(--desc-color);
-    font-size: 12px;
-  }
-  .governance-summary__structure-facts strong {
-    font-size: 22px;
-    margin-right: 6px;
-    color: var(--text-color);
-    font-variant-numeric: tabular-nums;
-  }
-  .governance-summary__bars li > div {
-    display: flex;
-    justify-content: space-between;
-    gap: 12px;
-    font-size: 12px;
-    margin-bottom: 7px;
-  }
-  .governance-summary__track {
-    display: block;
-    height: 6px;
-    background: var(--surface-divider-color);
-    border-radius: 3px;
-    overflow: hidden;
-  }
-  .governance-summary__track > span {
-    display: block;
-    height: 100%;
-    background: var(--primary-color);
-    border-radius: inherit;
   }
   .governance-summary__empty {
     min-height: 160px;
@@ -566,6 +524,13 @@
     }
     .governance-summary__metric {
       --b-card-padding: 16px !important;
+    }
+    .governance-summary__ai-entry {
+      --b-card-padding: 16px !important;
+      grid-column: 1 / -1;
+    }
+    .governance-summary__metric:last-child {
+      grid-column: 1 / -1;
     }
     .governance-summary__panel {
       --b-card-padding: 20px !important;

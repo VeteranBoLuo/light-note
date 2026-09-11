@@ -1,5 +1,4 @@
 import { prepareOrganizeArchive } from './organizeArchiveDraft.js';
-import { recommendTagIcons } from '../tagIconService.js';
 import crypto from 'node:crypto';
 import { transaction, json } from './organizeSuggestionStorage.js';
 import { normalizeRunInput, buildRuleSuggestions, hash, suggestionError } from './organizeSuggestionRules.js';
@@ -27,7 +26,7 @@ export async function insertBatches(db, sql, rows) {
   }
   if (batch.length) await db.query(sql, [batch]);
 }
-export async function previewV2(db, { userId, input, requestId, retryFrom }) {
+export async function previewV2(db, { userId, input, requestId, retryFrom, runVersion = 2 }) {
   const began = Date.now();
   let queryCount = 0,
     batchWrites = 0;
@@ -127,13 +126,29 @@ export async function previewV2(db, { userId, input, requestId, retryFrom }) {
     );
     if (raced.length) return prior(raced[0]);
     const id = crypto.randomUUID();
+    const titleCounts = new Map();
+    if (runVersion === 3)
+      for (const item of candidates) {
+        const key = hash([
+          item.type,
+          String(item.title || '')
+            .normalize('NFKC')
+            .trim()
+            .toLowerCase(),
+        ]);
+        titleCounts.set(key, (titleCounts.get(key) || 0) + 1);
+      }
     const summary = {
+      ...(runVersion === 3
+        ? { duplicateTitleHashes: [...titleCounts].filter(([, count]) => count > 1).map(([key]) => key) }
+        : {}),
       total: candidates.length,
       types: Object.fromEntries(
         options.resourceTypes.map((type) => [type, candidates.filter((item) => item.type === type).length]),
       ),
-      aiTotal: options.resourceTypes.every((type) => type === 'tag') ? 0 : null,
-      ruleTotal: options.resourceTypes.every((type) => type === 'tag') ? candidates.length : null,
+      aiTotal:
+        runVersion === 3 ? null : options.resourceTypes.every((type) => type === 'tag') ? candidates.length : null,
+      ruleTotal: runVersion === 3 ? null : options.resourceTypes.every((type) => type === 'tag') ? 0 : null,
       files: { parsed: null, metadata: null },
       skipped: options.scope === 'selected' ? options.items.length - candidates.length : customIconCount,
       skippedReasons: {
@@ -145,8 +160,8 @@ export async function previewV2(db, { userId, input, requestId, retryFrom }) {
       aiEnabled: isOrganizeAiSuggestionsEnabled(),
     };
     await c.query(
-      "INSERT INTO organize_suggestion_runs(id,user_id,request_id,options_json,summary_json,run_version,rule_phase) VALUES(?,?,?,?,?,2,'pending')",
-      [id, userId, requestId, JSON.stringify(options), JSON.stringify(summary)],
+      "INSERT INTO organize_suggestion_runs(id,user_id,request_id,options_json,summary_json,run_version,rule_phase) VALUES(?,?,?,?,?,?,'pending')",
+      [id, userId, requestId, JSON.stringify(options), JSON.stringify(summary), runVersion],
     );
     await insertBatches(
       c,
@@ -157,14 +172,14 @@ export async function previewV2(db, { userId, input, requestId, retryFrom }) {
         userId,
         item.type,
         item.id,
-        JSON.stringify(item),
+        JSON.stringify(runVersion === 3 ? { ...item, frozenTitle: item.title } : item),
         '',
         '[]',
         'not_needed',
         'pending',
       ]),
     );
-    return { id, status: 'preview', runVersion: 2, options, summary };
+    return { id, status: 'preview', runVersion, options, summary };
   });
   console.info(
     '[organize-preview]',
@@ -187,14 +202,36 @@ async function lockedRun(c, userId, id) {
   return rows[0];
 }
 export async function endV2(c, run) {
+  if (Number(run.run_version) === 3) {
+    await c.query(
+      "UPDATE organize_processing_jobs SET status='cancelled',lease_token=NULL,lease_expires_at=NULL WHERE run_id=? AND (status IN ('queued','waiting') OR (lane='direct' AND status='running'))",
+      [run.id],
+    );
+    await c.query(
+      "UPDATE organize_processing_jobs j JOIN organize_suggestion_items i ON i.id=j.item_id SET j.status='cancelled',j.lease_token=NULL,j.lease_expires_at=NULL WHERE j.run_id=? AND j.status='running' AND i.ai_status='preparing_content'",
+      [run.id],
+    );
+    await c.query(
+      "UPDATE organize_suggestions s JOIN organize_suggestion_items i ON i.id=s.item_id SET s.status='cancelled' WHERE i.run_id=? AND i.ai_status<>'running' AND s.status IN ('queued','running')",
+      [run.id],
+    );
+  }
   await c.query(
     "UPDATE organize_suggestions s JOIN organize_suggestion_items i ON i.id=s.item_id SET s.status='cancelled' WHERE i.run_id=? AND i.ai_status IN ('queued','waiting_content','preparing_content') AND s.status IN ('queued','running')",
     [run.id],
   );
-  await c.query(
-    "UPDATE organize_suggestion_items SET ai_status=IF(ai_status IN ('queued','waiting_content','preparing_content'),'cancelled',ai_status),rule_status=IF(rule_status IN ('pending','loaded'),'cancelled',rule_status) WHERE run_id=?",
-    [run.id],
-  );
+  if (Number(run.run_version) === 3) {
+    // Keep inspection checkpoints: ending at 46/72 must not pretend the remaining 26 were checked.
+    await c.query(
+      "UPDATE organize_suggestion_items SET ai_status=IF(ai_status IN ('queued','waiting_content','preparing_content'),'cancelled',ai_status) WHERE run_id=?",
+      [run.id],
+    );
+  } else {
+    await c.query(
+      "UPDATE organize_suggestion_items SET ai_status=IF(ai_status IN ('queued','waiting_content','preparing_content'),'cancelled',ai_status),rule_status=IF(rule_status IN ('pending','checked','loaded'),'cancelled',rule_status) WHERE run_id=?",
+      [run.id],
+    );
+  }
   await c.query(
     "UPDATE organize_suggestion_runs SET status='ended',pause_reason=NULL,rule_lease_token=NULL,rule_lease_expires_at=NULL WHERE id=?",
     [run.id],
@@ -289,7 +326,7 @@ export function lifecycleState(run, progress = [], rules = []) {
     inFlight = sum('running');
   const scanning = run.rule_phase !== 'completed' && !['ended', 'completed'].includes(run.status);
   return {
-    runVersion: 2,
+    runVersion: Number(run.run_version),
     rulePhase: run.rule_phase,
     pauseReason: run.pause_reason,
     queued,
@@ -297,21 +334,20 @@ export function lifecycleState(run, progress = [], rules = []) {
     ruleRetrying: run.rule_phase === 'retrying',
     skipped: rules.filter((r) => r.rule_status === 'skipped').reduce((n, r) => n + Number(r.total), 0),
     checked: rules
-      .filter((r) => ['loaded', 'completed', 'skipped', 'removed'].includes(r.rule_status))
+      .filter((r) => ['checked', 'loaded', 'completed', 'skipped', 'removed'].includes(r.rule_status))
       .reduce((n, r) => n + Number(r.total), 0),
     canPause: ['preparing', 'running'].includes(run.status) && (scanning || queued > 0 || inFlight > 0),
     canResume: run.status === 'paused' && (scanning || queued > 0),
     canEnd: resumable.includes(run.status),
   };
 }
-async function writeSuggestions(c, run, entries, { independentOnly = false } = {}) {
+export async function writeSuggestions(c, run, entries, { independentOnly = false } = {}) {
   const rows = [];
   for (const entry of entries)
     for (const suggestion of entry.suggestions) {
       if (
         independentOnly &&
-        (!['empty', 'tag_icon', 'archive'].includes(suggestion.kind) ||
-          !json(run.options_json).checks.includes(suggestion.kind))
+        (!['empty', 'archive'].includes(suggestion.kind) || !json(run.options_json).checks.includes(suggestion.kind))
       )
         continue;
       rows.push([
@@ -379,20 +415,6 @@ export async function runRuleBatch(db) {
         )) {
           const draft = archiveDrafts.get(entry.snapshot.id);
           if (draft?.status === 'ready') entry.suggestions.find((s) => s.kind === 'archive').archiveDraft = draft;
-          if (type === 'tag' && !entry.snapshot.iconUrl.trim()) {
-            const suggestion = entry.suggestions[0];
-            try {
-              const candidates = await recommendTagIcons(entry.snapshot.title);
-              Object.assign(suggestion, {
-                candidates,
-                after: candidates[0] || null,
-                status: candidates.length ? 'pending' : 'no_suggestion',
-                reason: candidates.length ? '根据标签名称匹配图标' : '暂无合适推荐，可手动选择',
-              });
-            } catch {
-              Object.assign(suggestion, { status: 'failed', reason: '图标服务暂不可用，可重新搜索或手动选择' });
-            }
-          }
           entry.itemId = selected.find((i) => i.resource_id === entry.snapshot.id).id;
           entries.push(entry);
         }
@@ -426,7 +448,7 @@ export async function runRuleBatch(db) {
             "UPDATE organize_suggestion_items SET rule_status='skipped',error_code='ORGANIZE_RESOURCE_UNAVAILABLE' WHERE id IN (?)",
             [missing],
           );
-        if (json(claim.options_json).checks.some((kind) => ['empty', 'tag_icon', 'archive'].includes(kind)))
+        if (json(claim.options_json).checks.some((kind) => ['empty', 'archive'].includes(kind)))
           await writeSuggestions(c, claim, entries, { independentOnly: true });
       } else {
         // 独立规则已可审核；在最终分组落库前重读快照，防止已清理资源重新生成建议。
@@ -439,6 +461,15 @@ export async function runRuleBatch(db) {
           json(live.options_json).checks,
           json(live.options_json),
         ).map((entry, index) => ({ ...entry, itemId: all[index].id }));
+        // 升级前规则阶段已交付的图标结果保持原样，不因新队列重复生成或消费额度。
+        if (entries.some((entry) => entry.snapshot.type === 'tag')) {
+          const [delivered] = await c.query(
+            "SELECT item_id FROM organize_suggestions WHERE run_id=? AND kind='tag_icon' AND status NOT IN ('queued','running')",
+            [claim.id],
+          );
+          const deliveredIds = new Set(delivered.map((row) => row.item_id));
+          for (const entry of entries) if (deliveredIds.has(entry.itemId)) entry.aiKinds = [];
+        }
         await writeSuggestions(c, claim, entries);
         await insertBatches(
           c,
@@ -460,7 +491,7 @@ export async function runRuleBatch(db) {
           ...json(live.summary_json),
           aiTotal: entries.filter((e) => e.aiKinds.length).length,
           ruleTotal: entries.filter((e) =>
-            e.suggestions.some((s) => ['empty', 'duplicate', 'archive', 'tag_icon'].includes(s.kind)),
+            e.suggestions.some((s) => ['empty', 'duplicate', 'archive'].includes(s.kind)),
           ).length,
           files: {
             parsed: entries.filter((e) => e.snapshot.type === 'file' && e.snapshot.evidenceLevel === 'parsed').length,

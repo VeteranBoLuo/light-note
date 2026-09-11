@@ -1,16 +1,16 @@
 import { RouteRecordRaw } from 'vue-router';
 import { ALL_ROLES } from '@/config/bookmarkCfg.ts';
 
-// 全局知识地图：已登录用户可浏览自己的标签主题关系
+// 兼容历史图谱链接，统一进入资源查找。
 const graphRouter: RouteRecordRaw = {
   meta: {
-    title: '知识地图',
+    title: '资源中心',
     requireAuth: true,
     roles: ALL_ROLES,
   },
   path: '/graph',
   name: 'globalGraph',
-  redirect: { path: '/search', query: { section: 'map' } },
+  redirect: '/search',
 };
 
 export default graphRouter;

@@ -159,13 +159,14 @@ html[data-theme='night'] {
   --text-color: #161824;
   --icon-color: #bfbfbf;
   // BInput 的单行、多行与弹窗输入共用；旧 noBorder Token 仍供存量非输入表面使用。
-  --bl-input-bg-color: #f8f8fd;
-  --bl-input-hover-bg-color: #f3f2fc;
-  --bl-input-focus-bg-color: #fcfbff;
-  --bl-input-border-color: #e4e3ed;
-  --bl-input-hover-border-color: #b7b2da;
+  --bl-input-bg-color: var(--background-color);
+  --bl-input-hover-bg-color: var(--bl-input-bg-color);
+  --bl-input-focus-bg-color: var(--bl-input-bg-color);
+  --bl-input-disabled-bg-color: #f3f3f5;
+  --bl-input-border-color: #d9d9de;
+  --bl-input-hover-border-color: #a1a1aa;
   --bl-input-focus-border-color: #615ced;
-  --bl-input-focus-shadow: 0 0 0 3px rgba(97, 92, 237, 0.1);
+  --bl-input-focus-shadow: 0 0 0 2px rgba(97, 92, 237, 0.1);
   --bl-input-color: var(--text-color);
   --bl-input-border-h-color: #b2b5ba; // 存量 Ant 输入框边框
   --bl-input-noBorder-bg-color: #f4f4f5; // 无边框输入框背景颜色
@@ -487,13 +488,14 @@ html[data-theme='night'] {
   --note-editor-link-color: #8ab4ff;
   --category-item-ba-color: #2e333e;
   --desc-color: #a7adba;
-  --bl-input-bg-color: #303340;
-  --bl-input-hover-bg-color: #353848;
-  --bl-input-focus-bg-color: #323444;
-  --bl-input-border-color: #454958;
-  --bl-input-hover-border-color: #747098;
+  --bl-input-bg-color: var(--background-color);
+  --bl-input-hover-bg-color: var(--bl-input-bg-color);
+  --bl-input-focus-bg-color: var(--bl-input-bg-color);
+  --bl-input-disabled-bg-color: #2b2d33;
+  --bl-input-border-color: #45474e;
+  --bl-input-hover-border-color: #737680;
   --bl-input-focus-border-color: #aaa6ff;
-  --bl-input-focus-shadow: 0 0 0 3px rgba(170, 166, 255, 0.12);
+  --bl-input-focus-shadow: 0 0 0 2px rgba(170, 166, 255, 0.12);
   --bl-input-color: var(--text-color);
   --bl-input-noBorder-bg-color: #252933;
   --bl-input-noBorder-hover-bg-color: #303641;

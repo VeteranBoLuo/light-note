@@ -1,3 +1,4 @@
+import { recommendTagIcons, estimateTagIconTokens } from '../tagIconService.js';
 import { prepareBookmarkMeta, suggestPreparedBookmarkMeta, estimateBookmarkMetaTokens } from '../aiOrganize.js';
 import { callStructuredSkillModel, estimateStructuredSkillModelTokens } from '../aiSkill/structuredModel.js';
 import { hasMeaningfulFileName } from './organizeFileEvidence.js';
@@ -153,6 +154,7 @@ function metadataRequest(snapshot, kinds, tags) {
   };
 }
 export function estimateResourceMetadataTokens(snapshot, kinds, tags, prepared) {
+  if (snapshot.type === 'tag') return estimateTagIconTokens(snapshot.title);
   if (snapshot.type === 'bookmark') return estimateBookmarkMetaTokens(prepared, tags);
   if (snapshot.type === 'file') return compileFileMetadataPlan(snapshot, tags).reservationTokens;
   return estimateStructuredSkillModelTokens(metadataRequest(snapshot, kinds, tags));
@@ -176,6 +178,7 @@ export function filterAssociatedTags(result, snapshot) {
 }
 
 export async function suggestResourceMetadata(snapshot, kinds, tags, prepared, beforeCall = async () => {}) {
+  if (snapshot.type === 'tag') return { tag_icon: await recommendTagIcons(snapshot.title) };
   if (snapshot.type === 'file') return suggestFileMetadata(snapshot, tags, beforeCall);
   if (snapshot.type === 'bookmark') {
     const result = await suggestPreparedBookmarkMeta(prepared, { userTags: tags, includeSuggestionDetails: true });

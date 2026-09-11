@@ -76,6 +76,7 @@ const items = [
 beforeEach(() => {
   setActivePinia(createPinia());
   listTodos.mockReset();
+  groupPage.mockReset();
   groupPage.mockImplementation(async ({ status }) => ({
     status: 200,
     data: {
@@ -136,4 +137,58 @@ describe('待办页签请求与列表分组一致', () => {
     expect(todo.loading).toBe(false);
     expect(todo.loadFailed).toBe(false);
   });
+});
+
+
+// 执行真实视图 watcher，防止页签刷新与状态恢复各发起一次请求。
+const viewWatch = ast.statements.find(
+  (node) => ts.isExpressionStatement(node) && ts.isCallExpression(node.expression)
+    && node.expression.expression.getText(ast) === 'watch'
+    && node.expression.arguments[0]?.getText(ast) === 'todoView',
+) as ts.ExpressionStatement;
+const viewCallback = (viewWatch.expression as ts.CallExpression).arguments[1];
+const watcherCode = ts.transpile(`const onViewChange = ${viewCallback.getText(ast)};`, {
+  target: ts.ScriptTarget.ES2022,
+});
+
+it.each([
+  ['list', 'agenda', 'all', 'pending'],
+  ['agenda', 'list', 'pending', 'all'],
+  ['matrix', 'agenda', 'all', 'pending'],
+  ['calendar', 'list', 'pending', null],
+])('%s 从 %s 切换时只保留所属刷新入口', async (view, previous, effectiveStatus, requestedStatus) => {
+  const todo = useTodoStore();
+  todo.workspaceEnabled = true;
+  todo.status = 'pending';
+  todo.effectiveStatus = effectiveStatus as typeof todo.effectiveStatus;
+  todo.seriesPresentation = previous === 'list';
+  const refresh = vi.fn(pageRefresh(todo, view!));
+  const invoke = new Function('todo', 'refreshList', 'nextTick', `
+    const scopeDrawerOpen = {}, openSwipeTodoId = {}, scrollContainer = {};
+    const todoSelectionMode = {}, selectedTodoIds = {}, todoBatchActionsOpen = {};
+    const user = { preferences: { todoView: '${view}' } };
+    let savedTodoRange = null;
+    const updateScrollFade = () => {};
+    ${ts.transpile(viewNode.getText(ast), { target: ts.ScriptTarget.ES2022 })}
+    ${watcherCode}
+    return onViewChange;
+  `)(todo, refresh, async () => {});
+  invoke(view, previous);
+  await Promise.all(refresh.mock.results.map((result) => result.value));
+  if (requestedStatus) {
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(listTodos).toHaveBeenCalledTimes(1);
+    expect(listTodos).toHaveBeenCalledWith(expect.objectContaining({ status: requestedStatus }));
+    if (view === 'list') {
+      expect(groupPage).not.toHaveBeenCalled();
+      await todo.loadGroup('all');
+      expect(groupPage).toHaveBeenCalledTimes(1);
+      expect(todo.items.map((item) => item.id)).toEqual(['pending']);
+    }
+  } else {
+    expect(refresh).not.toHaveBeenCalled();
+    expect(listTodos).not.toHaveBeenCalled();
+    expect(todo.seriesPresentation).toBe(false);
+  }
+  expect(todo.status).toBe('pending');
 });

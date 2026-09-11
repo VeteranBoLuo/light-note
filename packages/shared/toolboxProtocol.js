@@ -1,3 +1,4 @@
+export const TOOLBOX_OCR_FILE_EXTENSIONS = Object.freeze(["pdf", "jpg", "jpeg", "png", "webp"]);
 /**
  * 轻笺知识工坊前后端共享协议。
  *
@@ -856,7 +857,8 @@ export const TOOLBOX_TOOL_CATALOG = Object.freeze([
     id: "ocr_to_text",
     phase: "next",
     executionMode: "worker",
-    billingMedium: "free",
+    billingMedium: "points",
+    billingMedia: ["ai_quota", "points", "free"],
     input: {
       kind: "documents",
       minItems: 1,

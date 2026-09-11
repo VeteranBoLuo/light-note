@@ -4,7 +4,7 @@
       <span class="growth-preferences__icon"><SvgIcon :src="icon.userCenter.settingsGear" size="20" /></span>
       <div><h2>{{ t('growth.preferencesTitle') }}</h2><p>{{ t('growth.preferencesSubtitle') }}</p></div>
     </header>
-    <div v-if="loading && !preferences" class="growth-preferences__loading"><BLoading size="small" /></div>
+    <div v-if="loading && !preferences" class="growth-preferences__loading"><BLoading inline loading /></div>
     <div v-else-if="error && !preferences" class="growth-preferences__error">
       <span>{{ t('growth.preferencesLoadFailed') }}</span>
       <BButton size="small" @click="$emit('retry')">{{ t('common.retry') }}</BButton>

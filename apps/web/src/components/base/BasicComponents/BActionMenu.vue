@@ -32,19 +32,20 @@
         >
           <template v-for="(item, index) in items" :key="item.key || `divider-${index}`">
             <div v-if="item.divider" class="b-action-menu__divider" role="separator" />
-            <BButton
-              v-else
-              class="b-action-menu__item"
-              :class="{ 'is-danger': item.danger }"
-              :disabled="item.disabled"
-              role="menuitem"
-              @click="selectItem(item)"
-            >
-              <span v-if="item.icon" class="b-action-menu__icon" aria-hidden="true">
-                <SvgIcon :src="item.icon" size="15" />
-              </span>
-              <span class="b-action-menu__label">{{ item.label }}</span>
-            </BButton>
+            <slot v-else :name="`item-${item.key}`" :item="item" :close="doClose">
+              <BButton
+                class="b-action-menu__item"
+                :class="{ 'is-danger': item.danger }"
+                :disabled="item.disabled"
+                role="menuitem"
+                @click="selectItem(item)"
+              >
+                <span v-if="item.icon" class="b-action-menu__icon" aria-hidden="true">
+                  <SvgIcon :src="item.icon" size="15" />
+                </span>
+                <span class="b-action-menu__label">{{ item.label }}</span>
+              </BButton>
+            </slot>
           </template>
         </div>
       </Transition>

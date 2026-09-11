@@ -1,4 +1,5 @@
 import { createNotification } from './notification.js';
+import { notificationSchedulerEnabled } from './notificationSchedulerPolicy.js';
 /**
  * 成长周报(每周一生成上周报告,推送一条「系统」分类通知,meta 带完整数据供前端点击看大图)。
  *
@@ -275,9 +276,10 @@ export async function buildWeeklyReport(userId, userRole = null, options = {}) {
 
 // 生成所有符合条件用户的上周周报并推送通知(定时任务调用)
 export async function generateWeeklyReports() {
+  if (!notificationSchedulerEnabled()) return;
   try {
     // 本周周一(本地时区)作为幂等键:同一用户同一周只发一份周报,避免定时任务重复执行、
-    // 或多实例(如本地 dev 与线上同时连同一库)并发时给同一用户重复推送两份。
+    // 或多个生产实例并发时给同一用户重复推送两份。
     const monday = new Date();
     monday.setHours(0, 0, 0, 0);
     monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));

@@ -7,7 +7,6 @@ import { NOTE_WORKSPACE_DEFAULT_SIDEBAR_WIDTH } from '@/utils/noteWorkspaceLayou
 export const NOTE_TREE_ROOT_KEY = '__light_note_root__';
 
 const EXPANDED_SESSION_KEY = 'light-note-note-tree-expanded-ids';
-const LIBRARY_PREVIEW_SESSION_KEY = 'light-note-note-library-preview';
 const LAYOUT_STORAGE_KEY = 'light-note-workspace-layout';
 
 export type NoteWorkspacePrimaryTab = 'pages' | 'outline';
@@ -16,11 +15,6 @@ interface NoteWorkspaceLayoutPreference {
   sidebarPreferredOpen: boolean;
   aiPreferredOpen: boolean;
   sidebarWidth: number;
-}
-
-interface LibraryPreviewSessionRecord {
-  ownerKey?: string;
-  noteId?: string;
 }
 
 function readJson<T>(storage: Storage | undefined, key: string, fallback: T): T {
@@ -73,17 +67,6 @@ function normalizeBreadcrumbItems(items: NoteBreadcrumbItem[]) {
   return (Array.isArray(items) ? items : [])
     .map((item) => ({ id: String(item?.id || '').trim(), title: String(item?.title || '') }))
     .filter((item) => item.id);
-}
-
-function readLibraryPreviewPageId(owner: string) {
-  const record = readJson<LibraryPreviewSessionRecord>(
-    typeof sessionStorage === 'undefined' ? undefined : sessionStorage,
-    LIBRARY_PREVIEW_SESSION_KEY,
-    {},
-  );
-  if (String(record.ownerKey || '') !== owner) return null;
-  const noteId = normalizedId(record.noteId);
-  return noteId && noteId.length <= 255 ? noteId : null;
 }
 
 function markSet(source: Set<string>, key: string, enabled: boolean) {
@@ -195,7 +178,6 @@ export default defineStore('noteWorkspace', () => {
   const ownerKey = ref('');
   const activePageId = ref<string | null>(null);
   const browseParentId = ref<string | null>(null);
-  const libraryPreviewPageId = ref<string | null>(null);
   // 普通路由恢复与用户显式点击“笔记库”拥有相同 URL；瞬时令牌负责跨越全局导航、详情守卫和 keepAlive 根页传递后者。
   const libraryRootEntryRequestToken = ref<number | null>(null);
   const detailTab = ref<NoteWorkspacePrimaryTab>('pages');
@@ -257,26 +239,7 @@ export default defineStore('noteWorkspace', () => {
     ownerKey.value = normalized;
     activePageId.value = null;
     browseParentId.value = null;
-    libraryPreviewPageId.value = readLibraryPreviewPageId(normalized);
     resetTreeState();
-  }
-
-  function setLibraryPreviewPage(noteId: string | null) {
-    const id = normalizedId(noteId);
-    libraryPreviewPageId.value = id;
-    if (typeof sessionStorage === 'undefined' || !ownerKey.value) return;
-    try {
-      if (id) {
-        sessionStorage.setItem(LIBRARY_PREVIEW_SESSION_KEY, JSON.stringify({ ownerKey: ownerKey.value, noteId: id }));
-        return;
-      }
-      const record = readJson<LibraryPreviewSessionRecord>(sessionStorage, LIBRARY_PREVIEW_SESSION_KEY, {});
-      if (!record.ownerKey || record.ownerKey === ownerKey.value) {
-        sessionStorage.removeItem(LIBRARY_PREVIEW_SESSION_KEY);
-      }
-    } catch {
-      // 受限 WebView 禁止存储时仍保留当前内存状态。
-    }
   }
 
   function beginLibraryRootEntryRequest() {
@@ -460,7 +423,6 @@ export default defineStore('noteWorkspace', () => {
 
   function resetLibraryRootState() {
     detailTab.value = 'pages';
-    setLibraryPreviewPage(null);
     setNavigation({ activePageId: null, browseParentId: null });
     clearTreeSearch();
   }
@@ -671,7 +633,6 @@ export default defineStore('noteWorkspace', () => {
     detailTab,
     detailTreeScrollTop,
     expandedIds,
-    libraryPreviewPageId,
     libraryRootEntryRequestToken,
     loadedKeys,
     loadingKeys,
@@ -701,7 +662,6 @@ export default defineStore('noteWorkspace', () => {
     seedBreadcrumb,
     setAiPreferredOpen,
     setDetailTreeScrollTop,
-    setLibraryPreviewPage,
     setNavigation,
     setSidebarPreferredOpen,
     setSidebarWidth,

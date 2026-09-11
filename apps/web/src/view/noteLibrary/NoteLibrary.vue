@@ -27,7 +27,7 @@
           <span>{{ mobileScopeLabel }}</span>
           <SvgIcon :src="icon.noteTree.chevron" size="12" aria-hidden="true" />
         </BButton>
-        <TagFilterSelector compact :all-tags="visibleNoteTags" @select="handleTagFilterSelect" />
+        <TagFilterSelector compact :all-tags="visibleNoteTags" />
         <ViewModeToggle compact />
       </div>
       <template v-else>
@@ -46,7 +46,7 @@
         </BActionMenu>
         <ViewModeToggle />
         <BBatchToggle class="note-batch-toggle" @click="toggleBatchMode" :active="batchMode" />
-        <TagFilterSelector :all-tags="visibleNoteTags" @select="handleTagFilterSelect" />
+        <TagFilterSelector :all-tags="visibleNoteTags" />
         <div class="note-search" v-click-log="OPERATION_LOG_MAP.noteLibrary.searchNote">
           <BInput v-model:value="searchValue" :placeholder="$t('note.searchNote')" clearable>
             <template #prefix>
@@ -142,6 +142,7 @@
       <div class="note-main-panel">
         <NoteReadonlyPreview
           v-if="desktopPreviewOpen && previewNoteId"
+          :key="noteCacheScope"
           :note-id="previewNoteId"
           :seed="previewNoteSeed"
           :breadcrumb="previewBreadcrumb"
@@ -643,6 +644,7 @@
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import router from '@/router';
+  import { useNoteLibraryNavigation } from '@/composables/useNoteLibraryNavigation';
   import { useResourceSelection } from '@/composables/useResourceSelection';
   import type { SelectionOperation } from '@/store/resourceSelection';
   import { runOrderedBatch } from '@/utils/orderedBatch';
@@ -786,11 +788,14 @@
   const noteCacheScope = computed(() => buildNoteDetailRequestScope(user));
   const {
     detailTab,
-    libraryPreviewPageId: previewNoteId,
     libraryRootEntryRequestToken,
     sidebarPreferredOpen: noteSidebarExpanded,
     sidebarWidth: noteWorkspaceSidebarWidth,
   } = storeToRefs(noteWorkspace);
+  const { previewNoteId, openPreview, closePreview } = useNoteLibraryNavigation(
+    router,
+    computed(() => bookmark.isMobile),
+  );
   const librarySidebarOverlayOpen = ref(false);
   const libraryWorkspaceMode = ref<NoteWorkspaceLayoutState['mode'] | null>(null);
 
@@ -1081,8 +1086,9 @@
     top: number;
     left: number;
     viewMode: string;
+    context: string;
   }
-  let desktopPreviewScrollSnapshot: DesktopPreviewScrollSnapshot | null = null;
+  const desktopPreviewScrollSnapshots = new Map<string, DesktopPreviewScrollSnapshot>();
   const MOBILE_RETURN_SCROLL_RETRY_DELAYS = [80, 240, 640] as const;
   const mobileReturnScrollRestoreTimers = new Set<number>();
   let mobileReturnScrollRestoreRequestId = 0;
@@ -1462,7 +1468,6 @@
 
   async function selectDirectory(noteId: string | null) {
     detailTab.value = 'pages';
-    closeDesktopPreview(false);
     void recordNoteTreeProductEvent('note_tree_branch_selected', {
       surface: noteTreeSurface(),
       ...noteTreeNodeMetrics(noteId),
@@ -1495,9 +1500,12 @@
     pendingPreviewPathId = '';
   }
 
-  function setDesktopPreviewPage(noteId: string, source: Record<string, any>) {
-    applyDesktopPreviewLocalState(noteId, source);
-    noteWorkspace.setLibraryPreviewPage(noteId);
+  async function setDesktopPreviewPage(noteId: string, source: Record<string, any>) {
+    const scope = noteCacheScope.value;
+    const failure = await openPreview(noteId);
+    if (!failure && scope === noteCacheScope.value && previewNoteId.value === noteId) {
+      applyDesktopPreviewLocalState(noteId, source);
+    }
   }
 
   function handlePreviewBreadcrumbResolved(payload: PreviewBreadcrumbResolution) {
@@ -1528,7 +1536,7 @@
 
   function handlePreviewUnavailable(noteId: string) {
     if (String(noteId || '').trim() !== previewNoteId.value) return;
-    closeDesktopPreview(false);
+    void closePreview(true);
   }
 
   function openCurrentDirectoryOutline(noteId: string) {
@@ -1663,13 +1671,14 @@
     });
   }
 
-  function closeDesktopPreview(restoreScroll = true) {
-    const snapshot = restoreScroll ? desktopPreviewScrollSnapshot : null;
-    desktopPreviewScrollSnapshot = null;
-    clearDesktopPreviewLocalState();
-    noteWorkspace.setLibraryPreviewPage(null);
-    if (snapshot) void restoreDesktopPreviewScroll(snapshot);
+  function closeDesktopPreview() {
+    void closePreview();
   }
+
+  watch(noteCacheScope, () => {
+    desktopPreviewScrollSnapshots.clear();
+    clearDesktopPreviewLocalState();
+  }, { flush: 'sync' });
 
   watch(
     [previewNoteId, () => bookmark.isMobile, noteCacheScope],
@@ -1686,7 +1695,6 @@
         return;
       }
       if (String(previewNoteSeed.value?.id || '') === normalizedId && previewSeedScope === scope) return;
-      desktopPreviewScrollSnapshot = null;
       const source = findNoteForWarmup(normalizedId) || { id: normalizedId };
       prefetchNoteDetail(user, normalizedId);
       applyDesktopPreviewLocalState(normalizedId, source);
@@ -1849,7 +1857,7 @@
                 return;
               }
               if (res.status !== 200) return;
-              if (previewNoteId.value === String(note.id)) closeDesktopPreview();
+              if (previewNoteId.value === String(note.id)) await closePreview(true);
               message.success(t('common.deleteSuccess'));
               recordOperation({ module: '笔记库', operation: `删除笔记成功【${note.title}】` });
               if (noteTreeReadEnabled.value) {
@@ -1900,7 +1908,7 @@
               return;
             }
             if (res.status !== 200) return;
-            if (previewNoteId.value === String(note.id)) closeDesktopPreview();
+            if (previewNoteId.value === String(note.id)) await closePreview(true);
             message.success(t('common.deleteSuccess'));
             const deletedCount = Number(res.data?.deletedCount || preview.totalCount);
             recordOperation({ module: '笔记库', operation: `删除笔记成功【${note.title}，共${deletedCount}篇】` });
@@ -2096,19 +2104,27 @@
   function captureDesktopPreviewScroll() {
     if (desktopPreviewOpen.value) return;
     const element = noteListScrollElement();
-    desktopPreviewScrollSnapshot = element
-      ? {
-          top: element.scrollTop,
-          left: element.scrollLeft,
-          viewMode: currentViewMode.value,
-        }
-      : null;
+    if (!element) return;
+    const context = currentListCacheKey.value;
+    desktopPreviewScrollSnapshots.delete(context);
+    desktopPreviewScrollSnapshots.set(context, {
+      top: element.scrollTop,
+      left: element.scrollLeft,
+      viewMode: currentViewMode.value,
+      context,
+    });
+    if (desktopPreviewScrollSnapshots.size > 20) {
+      desktopPreviewScrollSnapshots.delete(desktopPreviewScrollSnapshots.keys().next().value!);
+    }
   }
 
   async function restoreDesktopPreviewScroll(snapshot: DesktopPreviewScrollSnapshot) {
     await nextTick();
     window.requestAnimationFrame(() => {
-      if (desktopPreviewOpen.value || snapshot.viewMode !== currentViewMode.value) return;
+      if (
+        router.currentRoute.value.path !== '/noteLibrary' || desktopPreviewOpen.value ||
+        snapshot.context !== currentListCacheKey.value || snapshot.viewMode !== currentViewMode.value
+      ) return;
       const element = noteListScrollElement();
       if (!element) return;
       element.scrollTop = snapshot.top;
@@ -2161,6 +2177,12 @@
       keyword: debouncedSearch.value,
     }),
   );
+
+  watch([previewNoteId, currentListCacheKey, loading, () => router.currentRoute.value.path], () => {
+    if (bookmark.isMobile || loading.value || previewNoteId.value || router.currentRoute.value.path !== '/noteLibrary') return;
+    const snapshot = desktopPreviewScrollSnapshots.get(currentListCacheKey.value);
+    if (snapshot) void restoreDesktopPreviewScroll(snapshot);
+  }, { flush: 'post' });
 
   function restoreListSnapshot(snapshot: ReturnType<typeof noteLibraryCache.readList>) {
     if (!snapshot) return false;
@@ -2438,6 +2460,7 @@
   });
 
   function clearNoteLibraryRootViewState() {
+    desktopPreviewScrollSnapshots.clear();
     if (searchTimer.value) window.clearTimeout(searchTimer.value);
     if (treeSearchTimer.value) window.clearTimeout(treeSearchTimer.value);
     searchTimer.value = null;
@@ -2445,7 +2468,7 @@
     searchValue.value = '';
     treeSearchValue.value = '';
     debouncedSearch.value = '';
-    closeDesktopPreview(false);
+    clearDesktopPreviewLocalState();
     exitBatch();
     noteWorkspace.resetLibraryRootState();
   }
@@ -2494,7 +2517,7 @@
     if (treeSearchTimer.value) window.clearTimeout(treeSearchTimer.value);
     treeMotionCleanupTimers.forEach((timer) => window.clearTimeout(timer));
     treeMotionCleanupTimers.clear();
-    desktopPreviewScrollSnapshot = null;
+    desktopPreviewScrollSnapshots.clear();
     noteRequestSeq += 1;
     clearNoteDetailWarmup();
   });
@@ -2814,10 +2837,6 @@
     { immediate: true },
   );
 
-  function handleTagFilterSelect() {
-    closeDesktopPreview(false);
-  }
-
   function handleMobileBatchAction(action: MobilePageActionItem) {
     if (action.key === 'outcome') openSelectedOutcomeDrawer();
     else if (action.key === 'inbox') void addSelectedNotesToInbox();
@@ -2911,6 +2930,10 @@
     batchExportError.value = '';
     batchExportCompleted.value = 0;
     batchExportModalVisible.value = true;
+    recordOperation({
+      ...OPERATION_LOG_MAP.noteLibrary.openBatchExport,
+      operation: `打开批量导出【${batchExportNotes.value.length}篇】`,
+    });
   }
 
   function openSingleNoteExport(note: any) {
@@ -3138,7 +3161,10 @@
       if (!current()) return;
       const delivered = await deliverBatchExportFile(file, selectedIds[0], op);
       if (!delivered || !current()) return;
-      recordOperation({ module: '笔记库', operation: `批量导出笔记成功【${count}篇/${settings.packaging}/${mode}】` });
+      recordOperation({
+        ...OPERATION_LOG_MAP.noteLibrary.exportBatch,
+        operation: `批量导出笔记成功【${count}篇/${settings.packaging}/${mode}】`,
+      });
       if (count < selectedIds.length)
         message.warning(t('note.batchExportPartial', { count, total: selectedIds.length }));
       else message.success(t('noteExportSettings.started', { count }));
@@ -3220,8 +3246,8 @@
   }
 
   const handleNodeTypeChange = (tag) => {
-    closeDesktopPreview(false);
     const query = { ...router.currentRoute.value.query };
+    delete query.preview;
     delete query._rt;
     if (tag === null) delete query.tag;
     else query.tag = String(tag.id);

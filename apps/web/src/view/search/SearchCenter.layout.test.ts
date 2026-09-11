@@ -35,7 +35,7 @@ describe('资源中心 2.0 工作区边界', () => {
     expect(tagFilterSource).toContain('<BPopover');
     expect(tagFilterSource).toContain('<BInput');
     expect(tagFilterSource).toContain(':aria-selected="selected.includes(tag)"');
-    expect(tagFilterSource).toMatch(/resource-tag-picker\s*\{[\s\S]*?height:\s*min\(390px/);
+    expect(tagFilterSource).toMatch(/resource-tag-picker\s*\{[\s\S]*?height:\s*min\(360px/);
     expect(source).toContain('const options = [');
     expect(source).toContain('...new Set(viewState.tagOptions.length');
     expect(source).toMatch(/return \[\.\.\.options, \.\.\.queryState\.tags\.filter/);
@@ -82,12 +82,9 @@ describe('资源中心 2.0 工作区边界', () => {
     expect(source).toMatch(/\.result-scroll-area\s*\{[\s\S]*?overflow:\s*hidden auto/);
   });
 
-  it('移动端把资源中心作为独立页面，并禁用桌面全局图谱视图', () => {
-    expect(source).toContain('<template v-if="!bookmark.isMobile" #actions>');
+  it('移动端把资源中心作为独立页面', () => {
+    expect(source).toContain('<template v-if="!bookmark.isMobile" #meta>');
     expect(source).not.toContain('class="search-page-topbar"');
-    expect(source).toMatch(
-      /const isKnowledgeMapView = computed\([\s\S]*?!bookmark\.isMobile && route\.path === '\/search' && route\.query\.section === 'map'/,
-    );
   });
 
   it('桌面与移动端复用同一个资源检查器，移动端先打开底部抽屉再执行操作', () => {

@@ -331,7 +331,7 @@ it('书签追加任务续跑使用准备后的材料估算额度，保留已关�
   expect(db.query.mock.calls.some(([sql]) => sql.includes('SET options_json'))).toBe(false);
 });
 
-it('图标匹配在写入事务外完成，批次交付后汇总不会再次搜索', async () => {
+it.each([false, true])('规则阶段不搜索图标，已交付旧结果不重复收费：旧结果=%s', async (alreadyDelivered) => {
   const row = { ...run(), options_json: { resourceTypes: ['tag'], checks: ['tag_icon'], scope: 'all' } };
   const snapshot = buildSnapshot('tag', { id: 't', name: '阅读', icon_url: '' });
   const record = { id: 'i', resource_type: 'tag', resource_id: 't', snapshot_json: snapshot, rule_status: 'loaded' };
@@ -340,20 +340,16 @@ it('图标匹配在写入事务外完成，批次交付后汇总不会再次搜�
     if (sql.includes('FROM organize_suggestion_runs')) return [[row]];
     if (sql.includes("rule_status='pending'")) return [loaded ? [] : [record]];
     if (sql.includes("rule_status IN ('loaded','completed')")) return [[record]];
+    if (sql.startsWith('SELECT item_id FROM organize_suggestions')) return [alreadyDelivered ? [{ item_id: 'i' }] : []];
     if (sql.startsWith('UPDATE organize_suggestion_runs SET rule_lease_token=?')) row.rule_lease_token = args[0];
   });
   readSuggestionSources.mockResolvedValue([snapshot]);
-  recommendTagIcons.mockImplementation(async () => {
-    expect(db.commit).toHaveBeenCalledTimes(1);
-    return [{ iconName: 'lucide:book', iconUrl: 'safe', color: 'currentColor' }];
-  });
   await runRuleBatch(db);
-  const inserts = db.query.mock.calls.filter(([sql]) => sql.startsWith('INSERT IGNORE INTO organize_suggestions'));
-  expect(JSON.parse(inserts[0][1][0][0][6])).toMatchObject({ kind: 'tag_icon', status: 'pending' });
+  expect(recommendTagIcons).not.toHaveBeenCalled();
   loaded = true;
   await runRuleBatch(db);
-  expect(recommendTagIcons).toHaveBeenCalledTimes(1);
-  expect(db.query.mock.calls.find(([sql]) => sql.includes("rule_phase='completed'"))[1][1]).toBe('completed');
+  expect(recommendTagIcons).not.toHaveBeenCalled();
+  expect(db.query.mock.calls.find(([sql]) => sql.includes("rule_phase='completed'"))[1][1]).toBe(alreadyDelivered ? 'completed' : 'running');
 });
 
 it.each([0, 2])('选中标签将已有图标与不可访问分别统计：缺失 %i 项', async (missing) => {

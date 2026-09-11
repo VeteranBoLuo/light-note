@@ -234,6 +234,7 @@ export const AI_BILLING_ACTIONS = Object.freeze([
     ['action_plan', 'toolboxActionPlan'],
     ['source_comparison', 'toolboxSourceComparison'],
     ['knowledge_audit', 'toolboxKnowledgeAudit'],
+    ['ocr_to_text', 'toolboxOcrToText'],
   ].map(([profileId, labelKey]) =>
     tokenAction({
       id: `toolbox.${profileId}`,

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 vi.mock('../db/index.js', () => ({ default: { query: vi.fn(), getConnection: vi.fn() } }));
 vi.mock('./notification.js', () => ({ createNotification: vi.fn() }));
 vi.mock('./emailDelivery.js', () => ({ sendTrackedEmail: vi.fn() }));
@@ -6,6 +6,9 @@ import pool from '../db/index.js';
 import { createNotification } from './notification.js';
 import { sendTrackedEmail } from './emailDelivery.js';
 import { processDueTodoReminders } from './todoReminder.js';
+
+beforeEach(() => vi.stubEnv('LIGHTNOTE_RUNTIME_ENV', 'production'));
+afterEach(() => vi.unstubAllEnvs());
 it.each(['in_app', 'email'])('legacy %s reminders are delivered despite browser quiet hours', async (channel) => {
   vi.clearAllMocks();
   const preferences = { notificationsDnd: true, notificationsDndStart: '00:00', notificationsDndEnd: '23:59' };

@@ -14,6 +14,24 @@ describe('toolbox billing', () => {
     expect(resolveToolboxActualPoints({ quotedPoints: 20, outcome: 'cancelled' })).toBe(0);
   });
 
+  it('refunds the points reservation for deterministic OCR with no model call', async () => {
+    const connection = { query: vi.fn(async () => [{ affectedRows: 1 }]) };
+    const result = await settleReservedToolboxBilling(
+      connection,
+      {
+        id: 'ocr',
+        user_id: 'owner',
+        tool_id: 'ocr_to_text',
+        billing_medium: 'points',
+        billing_status: 'reserved',
+        quoted_points: 9,
+        points_operation_id: 1,
+      },
+      { outcome: 'succeeded', deterministicOcr: true },
+    );
+    expect(result).toMatchObject({ actualPoints: 0, refundedPoints: 9, billingStatus: 'released' });
+  });
+
   it('derives a bounded deterministic points receipt request id', () => {
     const first = toolboxBillingInternals.operationRequestId('request-id-123456789');
     expect(first).toBe(toolboxBillingInternals.operationRequestId('request-id-123456789'));

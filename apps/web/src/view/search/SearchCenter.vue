@@ -1,8 +1,8 @@
 <template>
   <div class="search-center-route">
-    <!-- 移动端资源中心是独立二级页；整理中心从资料模块入口进入，图谱仅保留桌面端。 -->
+    <!-- 移动端资源中心是独立二级页；整理中心从资料模块入口进入。 -->
     <ResourceCenterTopBar
-      v-if="bookmark.isMobile && !isKnowledgeMapView"
+      v-if="bookmark.isMobile"
       :keyword="queryState.keyword"
       input-id="mobile-search-page-input"
       show-menu
@@ -29,8 +29,8 @@
       layout="workspace"
       :class="{ 'search-center-shell--mobile': bookmark.isMobile }"
     >
-      <template v-if="!bookmark.isMobile" #actions>
-        <ResourceCenterSectionNav class="section-switcher" />
+      <template v-if="!bookmark.isMobile" #meta>
+        <ResourceCenterSectionNav />
       </template>
 
       <div
@@ -41,423 +41,410 @@
           'search-page--batch': batchMode,
         }"
       >
-        <template v-if="!isKnowledgeMapView">
-          <section class="search-layout">
-            <aside v-if="!bookmark.isMobile" class="resource-scope-pane" :aria-label="t('resourceCenter.scopeTitle')">
-              <section class="resource-scope-section">
+        <section class="search-layout">
+          <aside v-if="!bookmark.isMobile" class="resource-scope-pane" :aria-label="t('resourceCenter.scopeTitle')">
+            <section class="resource-scope-section">
+              <BButton
+                class="resource-scope-title"
+                :aria-expanded="scopeTypesExpanded"
+                :title="t(scopeTypesExpanded ? 'common.collapse' : 'common.expand')"
+                @click="scopeTypesExpanded = !scopeTypesExpanded"
+              >
+                <span>{{ t('resourceCenter.scopeTitle') }}</span>
+                <SvgIcon
+                  class="resource-scope-chevron"
+                  :class="{ 'is-expanded': scopeTypesExpanded }"
+                  :src="icon.noteTree.chevron"
+                  size="13"
+                  aria-hidden="true"
+                />
+              </BButton>
+              <div v-show="scopeTypesExpanded" class="resource-scope-list">
                 <BButton
-                  class="resource-scope-title"
-                  :aria-expanded="scopeTypesExpanded"
-                  :title="t(scopeTypesExpanded ? 'common.collapse' : 'common.expand')"
-                  @click="scopeTypesExpanded = !scopeTypesExpanded"
+                  v-for="item in typeFilters"
+                  :key="item.value"
+                  class="resource-scope-item"
+                  :class="{ active: isTypeFilterActive(item.value) }"
+                  :aria-pressed="isTypeFilterActive(item.value)"
+                  @click="selectDesktopType(item.value)"
                 >
-                  <span>{{ t('resourceCenter.scopeTitle') }}</span>
-                  <SvgIcon
-                    class="resource-scope-chevron"
-                    :class="{ 'is-expanded': scopeTypesExpanded }"
-                    :src="icon.noteTree.chevron"
-                    size="13"
-                    aria-hidden="true"
-                  />
+                  <span class="filter-dot" :class="`filter-dot--${item.value}`" aria-hidden="true"></span>
+                  <span class="resource-scope-item__label">{{ item.label }}</span>
+                  <span class="filter-count">{{ item.count }}</span>
                 </BButton>
-                <div v-show="scopeTypesExpanded" class="resource-scope-list">
-                  <BButton
-                    v-for="item in typeFilters"
-                    :key="item.value"
-                    class="resource-scope-item"
-                    :class="{ active: isTypeFilterActive(item.value) }"
-                    :aria-pressed="isTypeFilterActive(item.value)"
-                    @click="selectDesktopType(item.value)"
-                  >
-                    <span class="filter-dot" :class="`filter-dot--${item.value}`" aria-hidden="true"></span>
-                    <span class="resource-scope-item__label">{{ item.label }}</span>
-                    <span class="filter-count">{{ item.count }}</span>
-                  </BButton>
-                </div>
-              </section>
-              <div class="resource-scope-divider"></div>
-              <section class="resource-scope-section">
-                <BButton
-                  class="resource-scope-title"
-                  :aria-expanded="scopeStateExpanded"
-                  :title="t(scopeStateExpanded ? 'common.collapse' : 'common.expand')"
-                  @click="scopeStateExpanded = !scopeStateExpanded"
-                >
-                  <span>{{ t('resourceCenter.resourceState') }}</span>
-                  <SvgIcon
-                    class="resource-scope-chevron"
-                    :class="{ 'is-expanded': scopeStateExpanded }"
-                    :src="icon.noteTree.chevron"
-                    size="13"
-                    aria-hidden="true"
-                  />
-                </BButton>
-                <div v-show="scopeStateExpanded" class="resource-scope-list">
-                  <BButton
-                    class="resource-scope-item"
-                    :class="{ active: queryState.untagged }"
-                    :aria-pressed="queryState.untagged"
-                    @click="toggleUntagged"
-                  >
-                    <span class="filter-dot" aria-hidden="true"></span>
-                    <span class="resource-scope-item__label">{{ t('resourceCenter.untagged') }}</span>
-                  </BButton>
-                </div>
-              </section>
-              <div class="resource-scope-divider"></div>
-              <section class="resource-scope-section resource-scope-section--tags">
-                <BButton
-                  class="resource-scope-title"
-                  :aria-expanded="scopeTagsExpanded"
-                  :title="t(scopeTagsExpanded ? 'common.collapse' : 'common.expand')"
-                  @click="scopeTagsExpanded = !scopeTagsExpanded"
-                >
-                  <span>{{ t('resourceCenter.tagFilter') }}</span>
-                  <span v-if="queryState.tags.length" class="resource-scope-title__count">{{
-                    queryState.tags.length
-                  }}</span>
-                  <SvgIcon
-                    class="resource-scope-chevron"
-                    :class="{ 'is-expanded': scopeTagsExpanded }"
-                    :src="icon.noteTree.chevron"
-                    size="13"
-                    aria-hidden="true"
-                  />
-                </BButton>
-                <div v-show="scopeTagsExpanded" class="resource-scope-tag-filter">
-                  <ResourceTagFilterPopover
-                    v-if="tagOptions.length"
-                    :items="tagOptions"
-                    :selected="queryState.tags"
-                    @toggle="toggleTagFilter"
-                    @clear="clearTagFilters"
-                  />
-                  <span v-else class="resource-scope-empty-hint">{{ t('resourceCenter.noTagsAvailable') }}</span>
-                </div>
-              </section>
-            </aside>
-
-            <BCard v-if="!bookmark.isMobile" as="section" variant="raised" padding="16px 20px" class="search-header">
-              <div class="search-header-input">
-                <b-input
-                  id="search-center-input"
-                  v-model:value="queryState.keyword"
-                  :placeholder="t('resourceCenter.searchPlaceholder')"
-                  height="42px"
-                  @input="syncQueryDebounced"
-                  @enter="submitSearch"
-                >
-                  <template #prefix>
-                    <svg-icon :src="icon.navigation.search" size="18" />
-                  </template>
-                </b-input>
-
-                <div class="desktop-result-controls">
-                  <label class="select-wrap select-wrap--compact">
-                    <span>{{ t('resourceCenter.sort.label') }}</span>
-                    <BSelect
-                      class="filter-select"
-                      :options="sortOptions"
-                      v-model:value="queryState.sort"
-                      @change="applyQueryState('切换排序')"
-                    />
-                  </label>
-                  <label class="select-wrap select-wrap--compact">
-                    <span>{{ t('resourceCenter.date.label') }}</span>
-                    <BSelect
-                      class="filter-select"
-                      :options="dateOptions"
-                      v-model:value="queryState.date"
-                      @change="applyQueryState('筛选时间范围')"
-                    />
-                  </label>
-                  <div class="view-switch">
-                    <BButton class="view-btn" :class="{ active: queryState.view === 'card' }" @click="setView('card')">
-                      {{ t('resourceCenter.view.cardShort') }}
-                    </BButton>
-                    <BButton class="view-btn" :class="{ active: queryState.view === 'list' }" @click="setView('list')">
-                      {{ t('resourceCenter.view.listShort') }}
-                    </BButton>
-                  </div>
-                  <BButton class="tagless-btn" :class="{ active: queryState.untagged }" @click="toggleUntagged">
-                    {{ t('resourceCenter.untagged') }}
-                  </BButton>
-                </div>
-
-                <BTooltip :title="t('resourceCenter.refresh')">
-                  <BButton
-                    class="search-header-icon-btn refresh-btn"
-                    :disabled="viewState.loading"
-                    :aria-label="t('resourceCenter.refresh')"
-                    @click="refreshData()"
-                    v-click-log="{ module: '资源中心', operation: '刷新搜索结果' }"
-                  >
-                    <span
-                      class="refresh-icon"
-                      :class="{ 'refresh-icon--spinning': viewState.loading }"
-                      aria-hidden="true"
-                    >
-                      <SvgIcon :src="icon.cloudSpace.preview.retry" size="17" />
-                    </span>
-                  </BButton>
-                </BTooltip>
               </div>
-            </BCard>
+            </section>
+            <div class="resource-scope-divider"></div>
+            <section class="resource-scope-section">
+              <BButton
+                class="resource-scope-title"
+                :aria-expanded="scopeStateExpanded"
+                :title="t(scopeStateExpanded ? 'common.collapse' : 'common.expand')"
+                @click="scopeStateExpanded = !scopeStateExpanded"
+              >
+                <span>{{ t('resourceCenter.resourceState') }}</span>
+                <SvgIcon
+                  class="resource-scope-chevron"
+                  :class="{ 'is-expanded': scopeStateExpanded }"
+                  :src="icon.noteTree.chevron"
+                  size="13"
+                  aria-hidden="true"
+                />
+              </BButton>
+              <div v-show="scopeStateExpanded" class="resource-scope-list">
+                <BButton
+                  class="resource-scope-item"
+                  :class="{ active: queryState.untagged }"
+                  :aria-pressed="queryState.untagged"
+                  @click="toggleUntagged"
+                >
+                  <span class="filter-dot" aria-hidden="true"></span>
+                  <span class="resource-scope-item__label">{{ t('resourceCenter.untagged') }}</span>
+                </BButton>
+              </div>
+            </section>
+            <div class="resource-scope-divider"></div>
+            <section class="resource-scope-section resource-scope-section--tags">
+              <BButton
+                class="resource-scope-title"
+                :aria-expanded="scopeTagsExpanded"
+                :title="t(scopeTagsExpanded ? 'common.collapse' : 'common.expand')"
+                @click="scopeTagsExpanded = !scopeTagsExpanded"
+              >
+                <span>{{ t('resourceCenter.tagFilter') }}</span>
+                <span v-if="queryState.tags.length" class="resource-scope-title__count">{{
+                  queryState.tags.length
+                }}</span>
+                <SvgIcon
+                  class="resource-scope-chevron"
+                  :class="{ 'is-expanded': scopeTagsExpanded }"
+                  :src="icon.noteTree.chevron"
+                  size="13"
+                  aria-hidden="true"
+                />
+              </BButton>
+              <div v-show="scopeTagsExpanded" class="resource-scope-tag-filter">
+                <ResourceTagFilterPopover
+                  v-if="tagOptions.length"
+                  :items="tagOptions"
+                  :selected="queryState.tags"
+                  @toggle="toggleTagFilter"
+                  @clear="clearTagFilters"
+                />
+                <span v-else class="resource-scope-empty-hint">{{ t('resourceCenter.noTagsAvailable') }}</span>
+              </div>
+            </section>
+          </aside>
 
-            <!-- 移动端不放一排类型 Tab：用户搜索时先看最佳匹配，而不是先决定类型。
+          <BCard v-if="!bookmark.isMobile" as="section" variant="raised" padding="16px 20px" class="search-header">
+            <div class="search-header-input">
+              <b-input
+                id="search-center-input"
+                v-model:value="queryState.keyword"
+                :placeholder="t('resourceCenter.searchPlaceholder')"
+                height="42px"
+                @input="syncQueryDebounced"
+                @enter="submitSearch"
+              >
+                <template #prefix>
+                  <svg-icon :src="icon.navigation.search" size="18" />
+                </template>
+              </b-input>
+
+              <div class="desktop-result-controls">
+                <label class="select-wrap select-wrap--compact">
+                  <span>{{ t('resourceCenter.sort.label') }}</span>
+                  <BSelect
+                    class="filter-select"
+                    :options="sortOptions"
+                    v-model:value="queryState.sort"
+                    @change="applyQueryState('切换排序')"
+                  />
+                </label>
+                <label class="select-wrap select-wrap--compact">
+                  <span>{{ t('resourceCenter.date.label') }}</span>
+                  <BSelect
+                    class="filter-select"
+                    :options="dateOptions"
+                    v-model:value="queryState.date"
+                    @change="applyQueryState('筛选时间范围')"
+                  />
+                </label>
+                <div class="view-switch">
+                  <BButton class="view-btn" :class="{ active: queryState.view === 'card' }" @click="setView('card')">
+                    {{ t('resourceCenter.view.cardShort') }}
+                  </BButton>
+                  <BButton class="view-btn" :class="{ active: queryState.view === 'list' }" @click="setView('list')">
+                    {{ t('resourceCenter.view.listShort') }}
+                  </BButton>
+                </div>
+                <BButton class="tagless-btn" :class="{ active: queryState.untagged }" @click="toggleUntagged">
+                  {{ t('resourceCenter.untagged') }}
+                </BButton>
+              </div>
+
+              <BTooltip :title="t('resourceCenter.refresh')">
+                <BButton
+                  class="search-header-icon-btn refresh-btn"
+                  :disabled="viewState.loading"
+                  :aria-label="t('resourceCenter.refresh')"
+                  @click="refreshData()"
+                  v-click-log="{ module: '资源中心', operation: '刷新搜索结果' }"
+                >
+                  <span
+                    class="refresh-icon"
+                    :class="{ 'refresh-icon--spinning': viewState.loading }"
+                    aria-hidden="true"
+                  >
+                    <SvgIcon :src="icon.cloudSpace.preview.retry" size="17" />
+                  </span>
+                </BButton>
+              </BTooltip>
+            </div>
+          </BCard>
+
+          <!-- 移动端不放一排类型 Tab：用户搜索时先看最佳匹配，而不是先决定类型。
                类型收进底部筛选抽屉，这里只保留一行类型数量作为结果概览。 -->
-            <BCard as="main" variant="card" padding="16px" class="result-panel">
-              <div class="result-toolbar result-toolbar--summary">
-                <div class="result-heading">
-                  <template v-if="bookmark.isMobile">
-                    <div class="result-title">{{ t('resourceCenter.results') }}</div>
-                    <div class="result-subtitle">{{ mobileResultSubtitle }}</div>
-                  </template>
-                  <div v-else class="desktop-result-heading">
-                    <strong>{{ desktopTypeSummary.label }}</strong>
-                    <span>{{ t('resourceCenter.count', { count: desktopTypeSummary.count }) }}</span>
-                  </div>
-                </div>
-                <div v-if="bookmark.isMobile" class="toolbar-actions toolbar-actions--mobile">
-                  <BButton
-                    class="mobile-toolbar-btn mobile-toolbar-btn--icon"
-                    :disabled="viewState.loading"
-                    :aria-label="t('resourceCenter.refresh')"
-                    :title="t('resourceCenter.refresh')"
-                    @click="refreshData()"
-                    v-click-log="{ module: '资源中心', operation: '刷新搜索结果' }"
-                  >
-                    <span
-                      class="refresh-icon"
-                      :class="{ 'refresh-icon--spinning': viewState.loading }"
-                      aria-hidden="true"
-                    >
-                      <SvgIcon :src="icon.cloudSpace.preview.retry" size="16" />
-                    </span>
-                  </BButton>
-                  <BButton
-                    class="mobile-toolbar-btn mobile-filter-btn"
-                    :class="{ active: mobileActiveFilterCount > 0 }"
-                    @click="mobileFilterVisible = true"
-                    v-click-log="{ module: '资源中心', operation: '打开移动端筛选' }"
-                  >
-                    <SvgIcon :src="icon.cloudSpace.filter" size="15" aria-hidden="true" />
-                    <span>{{ t('common.filter') }}</span>
-                    <span v-if="mobileActiveFilterCount" class="mobile-filter-count">{{
-                      mobileActiveFilterCount
-                    }}</span>
-                  </BButton>
-                </div>
-                <div v-else class="toolbar-actions">
-                  <BBatchToggle
-                    v-if="batchTypes.length > 0"
-                    size="small"
-                    class="select-visible-btn"
-                    :disabled="!batchMode && !selectableVisibleItems.length"
-                    @click="toggleBatchMode"
-                    :active="batchMode"
-                  />
-                  <BButton
-                    size="small"
-                    class="clear-btn"
-                    :disabled="!queryState.keyword"
-                    @click="clearKeyword"
-                    v-click-log="{ module: '资源中心', operation: '清空搜索关键词' }"
-                  >
-                    {{ t('resourceCenter.clear') }}
-                  </BButton>
-                  <BButton
-                    size="small"
-                    class="clear-btn"
-                    :disabled="!hasActiveAdvancedFilters"
-                    @click="clearAdvancedFilters"
-                    v-click-log="{ module: '资源中心', operation: '清空筛选条件' }"
-                  >
-                    {{ t('resourceCenter.clearFilters') }}
-                  </BButton>
+          <BCard as="main" variant="card" padding="16px" class="result-panel">
+            <div class="result-toolbar result-toolbar--summary">
+              <div class="result-heading">
+                <template v-if="bookmark.isMobile">
+                  <div class="result-title">{{ t('resourceCenter.results') }}</div>
+                  <div class="result-subtitle">{{ mobileResultSubtitle }}</div>
+                </template>
+                <div v-else class="desktop-result-heading">
+                  <strong>{{ desktopTypeSummary.label }}</strong>
+                  <span>{{ t('resourceCenter.count', { count: desktopTypeSummary.count }) }}</span>
                 </div>
               </div>
+              <div v-if="bookmark.isMobile" class="toolbar-actions toolbar-actions--mobile">
+                <BButton
+                  class="mobile-toolbar-btn mobile-toolbar-btn--icon"
+                  :disabled="viewState.loading"
+                  :aria-label="t('resourceCenter.refresh')"
+                  :title="t('resourceCenter.refresh')"
+                  @click="refreshData()"
+                  v-click-log="{ module: '资源中心', operation: '刷新搜索结果' }"
+                >
+                  <span
+                    class="refresh-icon"
+                    :class="{ 'refresh-icon--spinning': viewState.loading }"
+                    aria-hidden="true"
+                  >
+                    <SvgIcon :src="icon.cloudSpace.preview.retry" size="16" />
+                  </span>
+                </BButton>
+                <BButton
+                  class="mobile-toolbar-btn mobile-filter-btn"
+                  :class="{ active: mobileActiveFilterCount > 0 }"
+                  @click="mobileFilterVisible = true"
+                  v-click-log="{ module: '资源中心', operation: '打开移动端筛选' }"
+                >
+                  <SvgIcon :src="icon.cloudSpace.filter" size="15" aria-hidden="true" />
+                  <span>{{ t('common.filter') }}</span>
+                  <span v-if="mobileActiveFilterCount" class="mobile-filter-count">{{ mobileActiveFilterCount }}</span>
+                </BButton>
+              </div>
+              <div v-else class="toolbar-actions">
+                <BBatchToggle
+                  v-if="batchTypes.length > 0"
+                  size="small"
+                  class="select-visible-btn"
+                  :disabled="!batchMode && !selectableVisibleItems.length"
+                  @click="toggleBatchMode"
+                  :active="batchMode"
+                />
+                <BButton
+                  size="small"
+                  class="clear-btn"
+                  :disabled="!queryState.keyword"
+                  @click="clearKeyword"
+                  v-click-log="{ module: '资源中心', operation: '清空搜索关键词' }"
+                >
+                  {{ t('resourceCenter.clear') }}
+                </BButton>
+                <BButton
+                  size="small"
+                  class="clear-btn"
+                  :disabled="!hasActiveAdvancedFilters"
+                  @click="clearAdvancedFilters"
+                  v-click-log="{ module: '资源中心', operation: '清空筛选条件' }"
+                >
+                  {{ t('resourceCenter.clearFilters') }}
+                </BButton>
+              </div>
+            </div>
 
-              <AiSkillPanel
-                v-if="bookmark.isMobile && searchAiVisible && explicitSearchAiResourceContext"
-                class="search-ai-panel search-ai-panel--mobile"
-                :title="t('ai.entry.searchSkillTitle')"
-                :description="t('ai.entry.searchSkillDescription')"
-                skill-id="search.summarize_selected"
-                surface="search"
-                :resource-refs="searchAiResourceRefs"
-                :scope-label="searchAiScopeLabel"
-                :initial-input="searchAiInitialInput"
-                :actions="searchAiActions"
-                :show-prompt="false"
-                :show-grounding="false"
-                :auto-run-action-id="searchAiAutoRunActionId"
-                :icon-src="icon.ai.organize"
-              />
+            <AiSkillPanel
+              v-if="bookmark.isMobile && searchAiVisible && explicitSearchAiResourceContext"
+              class="search-ai-panel search-ai-panel--mobile"
+              :title="t('ai.entry.searchSkillTitle')"
+              :description="t('ai.entry.searchSkillDescription')"
+              skill-id="search.summarize_selected"
+              surface="search"
+              :resource-refs="searchAiResourceRefs"
+              :scope-label="searchAiScopeLabel"
+              :initial-input="searchAiInitialInput"
+              :actions="searchAiActions"
+              :show-prompt="false"
+              :show-grounding="false"
+              :auto-run-action-id="searchAiAutoRunActionId"
+              :icon-src="icon.ai.organize"
+            />
+
+            <div
+              ref="resultScrollRef"
+              class="result-scroll-area"
+              @touchstart.passive="pullRefresh.onTouchStart"
+              @touchmove="pullRefresh.onTouchMove"
+              @touchend.passive="pullRefresh.onTouchEnd"
+              @touchcancel.passive="pullRefresh.onTouchCancel"
+            >
+              <p v-if="batchMode && selectedTypes.includes('todo')" class="batch-scope-hint" role="status">
+                {{ t('resourceCenter.todo.batchHint') }}
+              </p>
+              <TagMatchStrip v-if="!shouldShowLoadingSkeleton" :items="viewState.tagMatches" @open="openTagMatch" />
 
               <div
-                ref="resultScrollRef"
-                class="result-scroll-area"
-                @touchstart.passive="pullRefresh.onTouchStart"
-                @touchmove="pullRefresh.onTouchMove"
-                @touchend.passive="pullRefresh.onTouchEnd"
-                @touchcancel.passive="pullRefresh.onTouchCancel"
+                v-if="shouldShowLoadingSkeleton"
+                class="result-skeleton"
+                :class="{ 'result-skeleton--list': effectiveView === 'list' }"
               >
-                <p v-if="batchMode && selectedTypes.includes('todo')" class="batch-scope-hint" role="status">
-                  {{ t('resourceCenter.todo.batchHint') }}
-                </p>
-                <TagMatchStrip v-if="!shouldShowLoadingSkeleton" :items="viewState.tagMatches" @open="openTagMatch" />
-
-                <div
-                  v-if="shouldShowLoadingSkeleton"
-                  class="result-skeleton"
-                  :class="{ 'result-skeleton--list': effectiveView === 'list' }"
-                >
-                  <div v-for="n in 24" :key="n" class="result-sk-card">
-                    <div class="result-sk-top">
-                      <div class="result-sk-dot"></div>
-                      <div class="result-sk-line result-sk-line--short"></div>
-                    </div>
-                    <div class="result-sk-line result-sk-line--title"></div>
-                    <div class="result-sk-line result-sk-line--desc"></div>
-                    <div class="result-sk-line result-sk-line--desc result-sk-line--desc2"></div>
-                    <div class="result-sk-meta">
-                      <div class="result-sk-line result-sk-line--meta1"></div>
-                      <div class="result-sk-line result-sk-line--meta2"></div>
-                    </div>
+                <div v-for="n in 24" :key="n" class="result-sk-card">
+                  <div class="result-sk-top">
+                    <div class="result-sk-dot"></div>
+                    <div class="result-sk-line result-sk-line--short"></div>
                   </div>
-                </div>
-
-                <template v-else-if="visibleGroups.length">
-                  <section v-for="group in visibleGroups" :key="group.type" class="result-group">
-                    <div class="group-header">
-                      <span>{{ getSearchTypeLabel(t, group.type) }}</span>
-                      <span>{{ t('resourceCenter.count', { count: summaryTotals[group.type] }) }}</span>
-                    </div>
-                    <div class="result-grid" :class="{ 'result-grid--list': effectiveView === 'list' }">
-                      <RightMenu
-                        :menu="menuForSearchItem(item)"
-                        @select="handleItemMenu($event, item)"
-                        v-for="item in group.items"
-                        :key="`${item.type}-${item.id}`"
-                        class="resource-result-entry"
-                        :class="{
-                          'is-inspected':
-                            !bookmark.isMobile && activeInspectedResourceKey === getItemSelectionKey(item),
-                        }"
-                      >
-                        <SearchResultItem
-                          :item="item"
-                          :type-label="getSearchTypeLabel(t, item.type)"
-                          :keyword="queryState.keyword"
-                          :selected="isItemSelected(item)"
-                          :selectable="batchMode && isTaggableResourceType(item.type)"
-                          :view="effectiveView"
-                          :compact="bookmark.isMobile"
-                          @open="handleResultOpen(item)"
-                          @toggle-select="toggleSelect(item)"
-                        />
-                      </RightMenu>
-                    </div>
-                  </section>
-                </template>
-
-                <div v-else-if="viewState.error" class="result-error-state" role="alert">
-                  <h3>{{ t('resourceCenter.loadErrorTitle') }}</h3>
-                  <p>{{ viewState.error.message || t('common.requestFailedDescription') }}</p>
-                  <p v-if="viewState.error.requestId" class="result-error-request-id">
-                    {{ t('common.requestIdLabel') }}：{{ viewState.error.requestId }}
-                  </p>
-                  <BButton type="primary" @click="refreshData()">{{ t('common.retry') }}</BButton>
-                </div>
-
-                <div v-else class="empty-state">
-                  <div class="empty-orbit"></div>
-                  <h3>{{ t('resourceCenter.emptyTitle') }}</h3>
-                  <p>{{ t('resourceCenter.emptyDesc') }}</p>
-                  <div class="empty-actions">
-                    <BButton
-                      class="empty-action-btn"
-                      @click="router.push('/manage/editBookmark/add')"
-                      v-click-log="{ module: '资源中心', operation: '空状态创建书签' }"
-                    >
-                      {{ t('resourceCenter.emptyActionBookmark') }}
-                    </BButton>
-                    <BButton
-                      class="empty-action-btn"
-                      @click="router.push('/noteLibrary/add')"
-                      v-click-log="{ module: '资源中心', operation: '空状态创建笔记' }"
-                    >
-                      {{ t('resourceCenter.emptyActionNote') }}
-                    </BButton>
-                    <BButton
-                      class="empty-action-btn"
-                      @click="router.push('/cloudSpace')"
-                      v-click-log="{ module: '资源中心', operation: '空状态上传文件' }"
-                    >
-                      {{ t('resourceCenter.emptyActionFile') }}
-                    </BButton>
+                  <div class="result-sk-line result-sk-line--title"></div>
+                  <div class="result-sk-line result-sk-line--desc"></div>
+                  <div class="result-sk-line result-sk-line--desc result-sk-line--desc2"></div>
+                  <div class="result-sk-meta">
+                    <div class="result-sk-line result-sk-line--meta1"></div>
+                    <div class="result-sk-line result-sk-line--meta2"></div>
                   </div>
-                </div>
-                <div
-                  v-show="allVisibleItems.length && (viewState.hasMore || viewState.loadingMore)"
-                  ref="resultLoadSentinel"
-                  class="result-load-sentinel"
-                >
-                  <BLoading v-if="viewState.loadingMore" inline loading :title="t('common.loading')" />
-                  <BButton v-else size="small" @click="loadMoreResults">{{ t('common.loadMore') }}</BButton>
                 </div>
               </div>
-            </BCard>
 
-            <aside v-if="!bookmark.isMobile" class="resource-inspector-pane">
-              <AiSkillPanel
-                v-if="searchAiVisible && explicitSearchAiResourceContext"
-                class="search-ai-panel"
-                :title="t('ai.entry.searchSkillTitle')"
-                :description="t('ai.entry.searchSkillDescription')"
-                skill-id="search.summarize_selected"
-                surface="search"
-                :resource-refs="searchAiResourceRefs"
-                :scope-label="searchAiScopeLabel"
-                :initial-input="searchAiInitialInput"
-                :actions="searchAiActions"
-                :show-prompt="false"
-                :show-grounding="false"
-                :auto-run-action-id="searchAiAutoRunActionId"
-                :icon-src="icon.ai.organize"
-                presentation="sidebar"
-              />
-              <ResourceInspectorPanel
-                v-else
-                :resource="inspectedResource"
-                :icon-src="inspectedResourceIcon"
-                :type-label="inspectedResource ? getSearchTypeLabel(t, inspectedResource.type) : ''"
-                :preview="inspectedResourcePreview"
-                :note-type-label="inspectedNoteTypeLabel"
-                presentation="sidebar"
-                @open="openItem"
-                @analyze="openResourceAi"
-                @inbox="(item) => handleItemMenu('addInbox', item)"
-                @manage-tags="openSingleTagWorkspace"
-                @delete="(item) => handleItemMenu('delete', item)"
-              />
-            </aside>
-          </section>
-        </template>
-        <div v-else class="resource-center-map">
-          <Suspense>
-            <GlobalGraph />
-            <template #fallback>
-              <BLoading loading :title="t('common.loading')" />
-            </template>
-          </Suspense>
-        </div>
+              <template v-else-if="visibleGroups.length">
+                <section v-for="group in visibleGroups" :key="group.type" class="result-group">
+                  <div class="group-header">
+                    <span>{{ getSearchTypeLabel(t, group.type) }}</span>
+                    <span>{{ t('resourceCenter.count', { count: summaryTotals[group.type] }) }}</span>
+                  </div>
+                  <div class="result-grid" :class="{ 'result-grid--list': effectiveView === 'list' }">
+                    <RightMenu
+                      :menu="menuForSearchItem(item)"
+                      @select="handleItemMenu($event, item)"
+                      v-for="item in group.items"
+                      :key="`${item.type}-${item.id}`"
+                      class="resource-result-entry"
+                      :class="{
+                        'is-inspected': !bookmark.isMobile && activeInspectedResourceKey === getItemSelectionKey(item),
+                      }"
+                    >
+                      <SearchResultItem
+                        :item="item"
+                        :type-label="getSearchTypeLabel(t, item.type)"
+                        :keyword="queryState.keyword"
+                        :selected="isItemSelected(item)"
+                        :selectable="batchMode && isTaggableResourceType(item.type)"
+                        :view="effectiveView"
+                        :compact="bookmark.isMobile"
+                        @open="handleResultOpen(item)"
+                        @toggle-select="toggleSelect(item)"
+                      />
+                    </RightMenu>
+                  </div>
+                </section>
+              </template>
+
+              <div v-else-if="viewState.error" class="result-error-state" role="alert">
+                <h3>{{ t('resourceCenter.loadErrorTitle') }}</h3>
+                <p>{{ viewState.error.message || t('common.requestFailedDescription') }}</p>
+                <p v-if="viewState.error.requestId" class="result-error-request-id">
+                  {{ t('common.requestIdLabel') }}：{{ viewState.error.requestId }}
+                </p>
+                <BButton type="primary" @click="refreshData()">{{ t('common.retry') }}</BButton>
+              </div>
+
+              <div v-else class="empty-state">
+                <div class="empty-orbit"></div>
+                <h3>{{ t('resourceCenter.emptyTitle') }}</h3>
+                <p>{{ t('resourceCenter.emptyDesc') }}</p>
+                <div class="empty-actions">
+                  <BButton
+                    class="empty-action-btn"
+                    @click="router.push('/manage/editBookmark/add')"
+                    v-click-log="{ module: '资源中心', operation: '空状态创建书签' }"
+                  >
+                    {{ t('resourceCenter.emptyActionBookmark') }}
+                  </BButton>
+                  <BButton
+                    class="empty-action-btn"
+                    @click="router.push('/noteLibrary/add')"
+                    v-click-log="{ module: '资源中心', operation: '空状态创建笔记' }"
+                  >
+                    {{ t('resourceCenter.emptyActionNote') }}
+                  </BButton>
+                  <BButton
+                    class="empty-action-btn"
+                    @click="router.push('/cloudSpace')"
+                    v-click-log="{ module: '资源中心', operation: '空状态上传文件' }"
+                  >
+                    {{ t('resourceCenter.emptyActionFile') }}
+                  </BButton>
+                </div>
+              </div>
+              <div
+                v-show="allVisibleItems.length && (viewState.hasMore || viewState.loadingMore)"
+                ref="resultLoadSentinel"
+                class="result-load-sentinel"
+              >
+                <BLoading v-if="viewState.loadingMore" inline loading :title="t('common.loading')" />
+                <BButton v-else size="small" @click="loadMoreResults">{{ t('common.loadMore') }}</BButton>
+              </div>
+            </div>
+          </BCard>
+
+          <aside v-if="!bookmark.isMobile" class="resource-inspector-pane">
+            <AiSkillPanel
+              v-if="searchAiVisible && explicitSearchAiResourceContext"
+              class="search-ai-panel"
+              :title="t('ai.entry.searchSkillTitle')"
+              :description="t('ai.entry.searchSkillDescription')"
+              skill-id="search.summarize_selected"
+              surface="search"
+              :resource-refs="searchAiResourceRefs"
+              :scope-label="searchAiScopeLabel"
+              :initial-input="searchAiInitialInput"
+              :actions="searchAiActions"
+              :show-prompt="false"
+              :show-grounding="false"
+              :auto-run-action-id="searchAiAutoRunActionId"
+              :icon-src="icon.ai.organize"
+              presentation="sidebar"
+            />
+            <ResourceInspectorPanel
+              v-else
+              :resource="inspectedResource"
+              :icon-src="inspectedResourceIcon"
+              :type-label="inspectedResource ? getSearchTypeLabel(t, inspectedResource.type) : ''"
+              :preview="inspectedResourcePreview"
+              :note-type-label="inspectedNoteTypeLabel"
+              presentation="sidebar"
+              @open="openItem"
+              @analyze="openResourceAi"
+              @inbox="(item) => handleItemMenu('addInbox', item)"
+              @manage-tags="openSingleTagWorkspace"
+              @delete="(item) => handleItemMenu('delete', item)"
+            />
+          </aside>
+        </section>
       </div>
     </ResourcePageShell>
 
     <BDrawer
-      v-if="bookmark.isMobile && !isKnowledgeMapView"
+      v-if="bookmark.isMobile"
       :open="mobileFilterVisible"
       :title="t('resourceCenter.mobileFiltersTitle')"
       placement="bottom"
@@ -561,7 +548,7 @@
       </div>
     </BDrawer>
     <BDrawer
-      v-if="bookmark.isMobile && !isKnowledgeMapView"
+      v-if="bookmark.isMobile"
       :open="mobileInspectorVisible"
       :title="t('resourceCenter.resourceDetails')"
       placement="bottom"
@@ -587,7 +574,6 @@
     <ResourceBatchActionBar
       selection-module="search"
       :selection-visible-count="selectionSession.visibleSelected.value"
-      v-if="!isKnowledgeMapView"
       :open="batchMode"
       :mobile="bookmark.isMobile"
       :summary="batchActionSummary"
@@ -660,7 +646,7 @@
   import { useResourceSelection } from '@/composables/useResourceSelection';
   import { useResourceSelectionStore } from '@/store/resourceSelection';
   import { buildNoteDetailRequestScope } from '@/api/noteDetailPrefetch';
-  import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+  import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
   import { useRoute, useRouter } from 'vue-router';
   import { openBookmarkUrl } from '@/utils/openBookmark.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
@@ -739,7 +725,6 @@
   import { aiResourceCountBucket, recordAiProductEvent } from '@/api/aiTelemetry';
 
   const SearchResultItem = SearchResultItemComp;
-  const GlobalGraph = defineAsyncComponent(() => import('@/view/graph/GlobalGraph.vue'));
   const route = useRoute();
   const router = useRouter();
   const user = useUserStore();
@@ -747,9 +732,6 @@
   const inbox = inboxStore();
   const { addResourcesToInbox } = useInboxEnqueue();
   const { t } = useI18n();
-  const isKnowledgeMapView = computed(
-    () => !bookmark.isMobile && route.path === '/search' && route.query.section === 'map',
-  );
 
   const SEARCH_VIEW_STORAGE_KEY = 'resource-center-view-mode';
   const SEARCH_QUERY_KEYS = ['q', 'type', 'sort', 'view', 'tags', 'date', 'untagged'] as const;
@@ -2093,13 +2075,6 @@
           : document.querySelector<HTMLElement>('.search-center-route .search-page');
         scrollRoot?.scrollTo({ top: 0 });
       });
-      if (isKnowledgeMapView.value) {
-        requestSeq += 1;
-        viewState.loading = false;
-        viewState.loadingMore = false;
-        resultLoadObserver?.disconnect();
-        return;
-      }
       // 模块级搜索缓存用于同页筛选/视图切换，不能跨页面进入继续充当资源事实源。
       // 每次 SearchCenter 重新挂载时强制请求一次，确保新增、编辑或删除后的资源立即可见。
       const force = isInitialRouteLoad;
@@ -2148,22 +2123,11 @@
     syncQueryDebounced();
   }
 
-  // 资源列表自带搜索顶栏；知识地图切为标准二级页顶栏，避免全局宽搜索与本地搜索重复。
+  // 资源列表自带搜索顶栏。
   useMobileTopBar(['searchCenter'], {
-    ownTopBar: () => !isKnowledgeMapView.value,
-    title: () => (isKnowledgeMapView.value ? t('knowledgeMap.title') : ''),
-    onBack: () => {
-      if (isKnowledgeMapView.value) void router.replace('/search');
-      else leaveSearchPage();
-    },
+    ownTopBar: true,
+    onBack: leaveSearchPage,
     showNotification: false,
-    onAuxiliaryAction: () => {
-      const host = document.getElementById('knowledge-map-mobile-search');
-      const input = host?.tagName === 'INPUT' ? host : host?.querySelector('input');
-      (input as HTMLInputElement | null)?.focus();
-    },
-    auxiliaryActionLabel: () => (isKnowledgeMapView.value ? t('knowledgeMap.searchPlaceholder') : ''),
-    auxiliaryActionIcon: () => (isKnowledgeMapView.value ? icon.navigation.search : ''),
   });
 
   // 完整搜索页是二级页面：返回发起搜索的来源页，没有历史时回落资料首页
@@ -2221,15 +2185,6 @@
     color: var(--text-color);
   }
 
-  .section-switcher {
-    margin-bottom: 12px;
-  }
-
-  .resource-center-map {
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow: hidden;
-  }
 
   .search-page--night {
     --search-hero-bg: var(--workspace-content);
@@ -2576,6 +2531,7 @@
 
   .toolbar-actions {
     display: flex;
+    align-items: center;
     gap: 8px;
   }
 
@@ -2870,9 +2826,6 @@
       padding: 0;
     }
 
-    .section-switcher {
-      margin-bottom: 0;
-    }
 
     .search-header {
       grid-column: 2;
@@ -2990,11 +2943,18 @@
     }
 
     .clear-btn {
-      height: 28px;
-      min-height: 28px;
+      height: 32px;
+      min-height: 32px;
       padding: 0 10px;
-      border-radius: 9px;
+      border-radius: 8px;
       background: transparent;
+      font-size: 14px;
+      line-height: 1;
+      box-shadow: none;
+    }
+
+    .clear-btn:hover:not(:disabled) {
+      background: var(--search-muted-bg);
     }
 
     .desktop-result-controls {
@@ -3052,7 +3012,10 @@
     }
 
     .select-visible-btn {
-      --batch-toggle-height: 30px;
+      --batch-toggle-height: 32px;
+      --batch-toggle-font-size: 14px;
+      --batch-toggle-radius: 8px;
+      --batch-toggle-shadow: none;
     }
 
     .tag-chip {
@@ -3229,9 +3192,6 @@
       flex: 1 1 auto;
     }
 
-    .section-switcher {
-      margin-bottom: 0;
-    }
 
     .search-header {
       padding: 10px 12px;
@@ -3379,13 +3339,6 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-  }
-
-  .search-page--mobile .resource-center-map {
-    overflow-x: hidden;
-    overflow-y: auto;
-    overscroll-behavior-y: contain;
-    -webkit-overflow-scrolling: touch;
   }
 
   .search-page--mobile .search-layout {
@@ -3672,8 +3625,7 @@
   // 共享工作区表面：仅改变颜色，布局与滚动由原组件负责。
   .resource-scope-pane,
   .result-panel,
-  .result-scroll-area,
-  .resource-center-map {
+  .result-scroll-area {
     .workspace-open-surface();
   }
 

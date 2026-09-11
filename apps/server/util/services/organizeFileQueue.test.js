@@ -20,7 +20,7 @@ const snap = {
   source: { title: '面试准备.md', text: '面试准备与可视化', evidenceSegments: [] },
   reading: { state: 'text', complete: true },
 };
-function fixture(initial = 'queued', runStatus = 'running') {
+function fixture(initial = 'queued', runStatus = 'running', runVersion = 2) {
   const item = {
     id: 'item',
     user_id: 'u',
@@ -32,9 +32,10 @@ function fixture(initial = 'queued', runStatus = 'running') {
     snapshot_json: JSON.stringify(snap),
     ai_kinds_json: '["tags"]',
   };
-  const run = { id: 'run', user_id: 'u', status: runStatus, run_version: 2, rule_phase: 'completed' };
+  const run = { id: 'run', user_id: 'u', status: runStatus, run_version: runVersion, rule_phase: 'completed' };
   const query = vi.fn(async (sql, args = []) => {
     if (sql.startsWith('SELECT r.id,r.status')) return [[run]];
+    if (sql.startsWith('SELECT prepared_json')) return [[{ prepared_json: '{}' }]];
     if (sql.startsWith('SELECT i.*')) return [[{ ...item }]];
     if (sql.startsWith('SELECT * FROM organize_suggestion_runs')) return [[run]];
     if (sql.startsWith('SELECT lease_token')) return [[{ lease_token: item.lease_token }]];
@@ -125,4 +126,27 @@ it('内容准备期间结束任务，不再启动付费分析', async () => {
   await runSingleSuggestionItem('worker', db, { prepareFile, model });
   expect(model).not.toHaveBeenCalled();
   expect(db.query.mock.calls.some(([, args]) => args?.includes('ORGANIZE_RUN_ENDED'))).toBe(true);
+});
+
+it('V3 paused preparation recovery releases the persisted AI lease', async () => {
+  const { db } = fixture('preparing_content', 'paused', 3);
+  const model = vi.fn();
+  await runSingleSuggestionItem('worker', db, { model });
+  expect(model).not.toHaveBeenCalled();
+  expect(
+    db.query.mock.calls.some(
+      ([sql, args]) => sql.startsWith('UPDATE organize_processing_jobs SET status=') && args[0] === 'waiting',
+    ),
+  ).toBe(true);
+});
+it('V3 expired external call terminates its processing job without retrying the model', async () => {
+  const { db } = fixture('running', 'running', 3);
+  const model = vi.fn();
+  await runSingleSuggestionItem('worker', db, { model });
+  expect(model).not.toHaveBeenCalled();
+  expect(
+    db.query.mock.calls.some(
+      ([sql, args]) => sql.startsWith('UPDATE organize_processing_jobs SET status=') && args[0] === 'failed',
+    ),
+  ).toBe(true);
 });

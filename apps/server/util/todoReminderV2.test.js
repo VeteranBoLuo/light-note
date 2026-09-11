@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   pool: { getConnection: vi.fn(), query: vi.fn() },
@@ -9,6 +9,9 @@ vi.mock('./emailDelivery.js', () => ({ sendTrackedEmail: vi.fn() }));
 vi.mock('./notification.js', () => ({ createNotification: vi.fn() }));
 
 import { processDueTodoReminderJobs, todoReminderV2Internals } from './todoReminderV2.js';
+
+beforeEach(() => vi.stubEnv('LIGHTNOTE_RUNTIME_ENV', 'production'));
+afterEach(() => vi.unstubAllEnvs());
 
 function clock(minutes) {
   const value = ((minutes % 1440) + 1440) % 1440;

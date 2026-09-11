@@ -58,6 +58,9 @@ function database(extra) {
     query: vi.fn(async (sql, p = []) => {
       if (sql.includes('WHERE run_version=2') || sql.includes('id<>?')) return [[]];
       if (sql.startsWith('SELECT r.id,r.status')) return extra?.(sql, p) ?? [[{ id: 'run', status: 'running' }]];
+      if (sql === 'SELECT id FROM organize_processing_jobs LIMIT 0') return [[]];
+      if (sql.startsWith('SELECT i.id,i.rule_status')) return [[]];
+      if (sql.includes('manual_objects')) return [[{ pending: 0, manual_objects: 0, retry_files: 0 }]];
       if (sql.includes('FROM user')) return [[{ id: 'u', role: 'user', del_flag: 0 }]];
       const result = extra?.(sql, p);
       if (result !== undefined) return result;
@@ -285,11 +288,25 @@ it('过期运行租约不再次调用 Provider，避免崩溃重试重复收费'
 });
 
 describe('新版 AI 暂停与租约边界', () => {
-  function setup({ started = false, stale = false, ended = false, code = 'AI_QUOTA_EXCEEDED' } = {}) {
+  function setup({
+    started = false,
+    stale = false,
+    ended = false,
+    code = 'AI_QUOTA_EXCEEDED',
+    resourceType = 'note',
+    runVersion = 2,
+  } = {}) {
     let token;
-    const current = buildSnapshot('note', { id: '1', title: '测试', content: '需要分析的正文', type: 'html' });
+    const current = buildSnapshot(resourceType, {
+      id: '1',
+      name: '密钥',
+      icon_url: '',
+      title: '测试',
+      content: '需要分析的正文',
+      type: 'html',
+    });
     readCurrentSuggestionSource.mockResolvedValue(current);
-    const live = { ...run, run_version: 2, rule_phase: 'completed', status: ended ? 'ended' : 'running' };
+    const live = { ...run, run_version: runVersion, rule_phase: 'completed', status: ended ? 'ended' : 'running' };
     const db = database((sql, p) => {
       if (sql.startsWith('SELECT r.id,r.status')) return [[{ ...live, status: 'running' }]];
       if (sql.startsWith('SELECT i.*'))
@@ -300,19 +317,28 @@ describe('新版 AI 暂停与租约边界', () => {
               run_id: 'run',
               user_id: 'u',
               resource_id: '1',
-              resource_type: 'note',
+              resource_type: resourceType,
               version_hash: current.version,
-              ai_kinds_json: ['tags'],
+              ai_kinds_json: [resourceType === 'tag' ? 'tag_icon' : 'tags'],
               ai_status: 'queued',
             },
           ],
         ];
+      if (sql.startsWith('SELECT prepared_json FROM organize_processing_jobs')) return [[{ prepared_json: null }]];
       if (sql.includes("SET ai_status='running',lease_token=?")) token = p[0];
       if (sql.startsWith('SELECT lease_token')) return [[{ lease_token: token }]];
       if (sql.includes('FROM organize_suggestion_runs')) return [[live]];
       if (sql.includes('FROM tag')) return [[]];
       if (sql.startsWith('SELECT * FROM organize_suggestions'))
-        return [[{ id: 's', kind: 'tags', payload_json: { kind: 'tags' } }]];
+        return [
+          [
+            {
+              id: 's',
+              kind: resourceType === 'tag' ? 'tag_icon' : 'tags',
+              payload_json: { kind: resourceType === 'tag' ? 'tag_icon' : 'tags' },
+            },
+          ],
+        ];
       if (sql.includes('COUNT(*)')) return [[{ total: 1 }]];
       if (sql.includes('AND lease_token=?') && stale) return [{ affectedRows: 0 }];
     });
@@ -328,6 +354,72 @@ describe('新版 AI 暂停与租约边界', () => {
     };
     return { db, model, dependencies };
   }
+  it.each([false, true])(
+    'V3 quota failures preserve pending work only before dispatch: dispatched=%s',
+    async (started) => {
+      const { db, dependencies } = setup({ started, runVersion: 3 });
+      await runSingleSuggestionItem('worker', db, dependencies);
+      const changes = db.query.mock.calls.filter(([sql]) =>
+        sql.startsWith('UPDATE organize_processing_jobs SET status=?'),
+      );
+      expect(changes.at(-1)[1][0]).toBe(started ? 'failed' : 'queued');
+      if (started)
+        expect(
+          db.query.mock.calls.some(([sql]) => sql.includes('NOT EXISTS(SELECT 1 FROM organize_processing_jobs')),
+        ).toBe(true);
+    },
+  );
+  it('V3 cached completion is counted as direct processing', async () => {
+    const { db, model, dependencies } = setup({ resourceType: 'tag', runVersion: 3 });
+    model.mockResolvedValue({ tag_icon: [] });
+    await runSingleSuggestionItem('worker', db, dependencies);
+    expect(db.query.mock.calls.some(([sql]) => sql.includes("SET lane='direct'"))).toBe(true);
+    expect(
+      db.query.mock.calls
+        .filter(([sql]) => sql.startsWith('UPDATE organize_processing_jobs SET status=?'))
+        .at(-1)[1][0],
+    ).toBe('completed');
+  });
+  it.each([true, false])('图标候选在同一关键词 Execution 完成前持久化：有候选=%s', async (hasCandidate) => {
+    const { db, model, dependencies } = setup({ resourceType: 'tag' });
+    const candidates = hasCandidate ? [{ iconName: 'lucide:key', iconUrl: 'safe', color: 'currentColor' }] : [];
+    model.mockResolvedValue({ tag_icon: candidates });
+    const execution = vi.fn(async (_config, cb) => {
+      const result = await cb();
+      const saved = db.query.mock.calls.find(
+        ([sql]) => sql === 'UPDATE organize_suggestions SET status=?,payload_json=? WHERE id=?',
+      );
+      expect(saved[1][0]).toBe(hasCandidate ? 'pending' : 'no_suggestion');
+      expect(JSON.parse(saved[1][1])).toMatchObject({ after: candidates[0] || null, candidates });
+      return result;
+    });
+    await runSingleSuggestionItem('worker', db, { ...dependencies, runExecution: execution });
+    expect(model).toHaveBeenCalledOnce();
+    expect(execution.mock.calls[0][0]).toMatchObject({
+      skillId: 'tag.icon_keywords',
+      taskType: 'tag_icon_search',
+      billingPolicy: 'user',
+      organizeRunId: 'run',
+      organizeItemId: 'i',
+    });
+  });
+  it('图标关键词额度不足退回队列并暂停', async () => {
+    const { db, dependencies } = setup({ resourceType: 'tag' });
+    await runSingleSuggestionItem('worker', db, dependencies);
+    expect(
+      db.query.mock.calls.some(([sql, params]) => sql.includes("status='paused'") && params.includes('quota')),
+    ).toBe(true);
+    expect(db.query.mock.calls.some(([sql, params]) => sql.includes('SET ai_status=?') && params[0] === 'queued')).toBe(
+      true,
+    );
+  });
+  it('图标转换已外发后失败不自动重试', async () => {
+    const { db, dependencies } = setup({ resourceType: 'tag', started: true, code: 'AI_PROVIDER_ERROR' });
+    await runSingleSuggestionItem('worker', db, dependencies);
+    expect(db.query.mock.calls.some(([sql, params]) => sql.includes('SET ai_status=?') && params[0] === 'failed')).toBe(
+      true,
+    );
+  });
   it('尚未外发的额度失败退回队列并暂停，不取消其他项', async () => {
     const { db, dependencies } = setup();
     await runSingleSuggestionItem('worker', db, dependencies);
@@ -481,7 +573,9 @@ describe('标签图标应用一致性', () => {
     async (current) => {
       readCurrentSuggestionSource.mockResolvedValue(current);
       const db = tagDb();
-      await expect(actOnSuggestion(db, args)).rejects.toMatchObject({ code: current ? 'ORGANIZE_RESOURCE_CHANGED' : 'ORGANIZE_RESOURCE_UNAVAILABLE' });
+      await expect(actOnSuggestion(db, args)).rejects.toMatchObject({
+        code: current ? 'ORGANIZE_RESOURCE_CHANGED' : 'ORGANIZE_RESOURCE_UNAVAILABLE',
+      });
       expect(applySuggestionMutation).not.toHaveBeenCalled();
       expect(db.commit).toHaveBeenCalledOnce();
     },
@@ -514,17 +608,36 @@ it('草稿预览按用户、任务和建议读取，缺失或越权不返回正�
       return [[{ payload_json: { archiveDraft: draft } }]];
     }
   });
-  expect(await getArchiveDraft(db, { userId: 'u', runId: 'run', suggestionId: 's' })).toMatchObject({ content: '草稿正文', char_count: 4 });
-  const missing = database(sql => sql.includes('SELECT s.payload_json') ? [[]] : undefined);
-  await expect(getArchiveDraft(missing, { userId: 'other', runId: 'run', suggestionId: 's' })).rejects.toMatchObject({ status: 404 });
+  expect(await getArchiveDraft(db, { userId: 'u', runId: 'run', suggestionId: 's' })).toMatchObject({
+    content: '草稿正文',
+    char_count: 4,
+  });
+  const missing = database((sql) => (sql.includes('SELECT s.payload_json') ? [[]] : undefined));
+  await expect(getArchiveDraft(missing, { userId: 'other', runId: 'run', suggestionId: 's' })).rejects.toMatchObject({
+    status: 404,
+  });
 });
 
 it('整理列表只返回草稿摘要，完整正文留给独立预览', async () => {
-  const db = database(sql => {
+  const db = database((sql) => {
     if (sql.includes('FROM organize_suggestion_runs')) return [[{ ...run, run_version: 1 }]];
     if (sql.includes('GROUP BY')) return [[]];
     if (sql.includes('SELECT i.*')) return [[{ id: 'i', snapshot_json: { id: 'b' } }]];
-    if (sql.includes('SELECT * FROM organize_suggestions')) return [[{ id: 's', item_id: 'i', status: 'pending', payload_json: { kind: 'archive', archiveDraft: { content: '完整私有正文' }, archivePreview: { excerpt: '短摘录' } } }]];
+    if (sql.includes('SELECT * FROM organize_suggestions'))
+      return [
+        [
+          {
+            id: 's',
+            item_id: 'i',
+            status: 'pending',
+            payload_json: {
+              kind: 'archive',
+              archiveDraft: { content: '完整私有正文' },
+              archivePreview: { excerpt: '短摘录' },
+            },
+          },
+        ],
+      ];
   });
   const result = await getSuggestionRun(db, { userId: 'u', id: 'run' });
   expect(result.items[0].suggestions[0]).toMatchObject({ archivePreview: { excerpt: '短摘录' } });
@@ -532,7 +645,9 @@ it('整理列表只返回草稿摘要，完整正文留给独立预览', async (
 });
 
 it('批量限制范围与大小，逐项错误隔离且身份不可由条目覆盖', async () => {
-  await expect(applySuggestionBatch(database(), { userId: 'u', runId: 'run', items: [] })).rejects.toMatchObject({ code: 'ORGANIZE_BATCH_INVALID' });
+  await expect(applySuggestionBatch(database(), { userId: 'u', runId: 'run', items: [] })).rejects.toMatchObject({
+    code: 'ORGANIZE_BATCH_INVALID',
+  });
   const ids = [requestId, 'd56a4180-65aa-42ec-a945-5fd21dec0538'];
   const db = database((sql, args) => {
     if (sql.includes('FROM organize_suggestion_runs')) return [[{ ...run, status: 'completed' }]];
@@ -541,24 +656,37 @@ it('批量限制范围与大小，逐项错误隔离且身份不可由条目覆�
       return [[{ kind: args[0] === ids[0] ? 'empty' : 'archive', status: args[0] === ids[0] ? 'pending' : 'applied' }]];
     }
   });
-  const result = await applySuggestionBatch(db, { userId: 'u', runId: 'run', items: ids.map(suggestionId => ({ suggestionId, requestId, userId: 'foreign', runId: 'foreign' })) });
-  expect(result.results.map(r => r.status)).toEqual(['failed', 'applied']);
+  const result = await applySuggestionBatch(db, {
+    userId: 'u',
+    runId: 'run',
+    items: ids.map((suggestionId) => ({ suggestionId, requestId, userId: 'foreign', runId: 'foreign' })),
+  });
+  expect(result.results.map((r) => r.status)).toEqual(['failed', 'applied']);
   expect(applySuggestionMutation).not.toHaveBeenCalled();
-  await expect(applySuggestionBatch(db, { userId: 'u', runId: 'run', items: Array(21).fill({ suggestionId: ids[0], requestId }) })).rejects.toMatchObject({ code: 'ORGANIZE_BATCH_INVALID' });
+  await expect(
+    applySuggestionBatch(db, { userId: 'u', runId: 'run', items: Array(21).fill({ suggestionId: ids[0], requestId }) }),
+  ).rejects.toMatchObject({ code: 'ORGANIZE_BATCH_INVALID' });
 });
 
 it.each([0, 1])('读取结果投影失效资源，保留已应用记录且不写库：回收站=%i', async (trashed) => {
   const db = database((sql) => {
     if (sql.includes('FROM organize_suggestion_runs')) return [[{ ...run, run_version: 1 }]];
     if (sql.includes('GROUP BY')) return [[]];
-    if (sql.startsWith('SELECT i.*')) return [[{ id: 'i', snapshot_json: {}, resource_available: 0, resource_trashed: trashed }]];
-    if (sql.startsWith('SELECT * FROM organize_suggestions')) return [[
-      { id: 's', item_id: 'i', status: 'pending', payload_json: { kind: 'tags' } },
-      { id: 'done', item_id: 'i', status: 'applied', payload_json: { kind: 'title' } },
-    ]];
+    if (sql.startsWith('SELECT i.*'))
+      return [[{ id: 'i', snapshot_json: {}, resource_available: 0, resource_trashed: trashed }]];
+    if (sql.startsWith('SELECT * FROM organize_suggestions'))
+      return [
+        [
+          { id: 's', item_id: 'i', status: 'pending', payload_json: { kind: 'tags' } },
+          { id: 'done', item_id: 'i', status: 'applied', payload_json: { kind: 'title' } },
+        ],
+      ];
   });
   const result = await getSuggestionRun(db, { userId: 'u', id: 'run' });
-  expect(result.items[0].suggestions[0]).toMatchObject({ status: 'expired', reason: trashed ? '资料已移入回收站，此建议已失效' : '资料已删除或不可访问，此建议已失效' });
+  expect(result.items[0].suggestions[0]).toMatchObject({
+    status: 'expired',
+    reason: trashed ? '资料已移入回收站，此建议已失效' : '资料已删除或不可访问，此建议已失效',
+  });
   expect(result.items[0].suggestions[1].status).toBe('applied');
   expect(db.query.mock.calls.some(([sql]) => /^(UPDATE|INSERT|DELETE)/.test(sql))).toBe(false);
 });
@@ -566,13 +694,27 @@ it.each([0, 1])('读取结果投影失效资源，保留已应用记录且不写
 it('打开后移入回收站：只提交建议失效状态，不执行资料写入', async () => {
   const db = database((sql) => {
     if (sql.includes('FROM organize_suggestion_runs')) return [[{ ...run, status: 'completed' }]];
-    if (sql.includes('FROM organize_suggestions')) return [[{ id: 's', item_id: 'i', kind: 'tags', status: 'pending', payload_json: { after: [{ id: 't', name: '标签' }] } }]];
-    if (sql.includes('FROM organize_suggestion_items')) return [[{ id: 'i', resource_type: 'note', resource_id: 'n', version_hash: 'old', ai_status: 'completed' }]];
+    if (sql.includes('FROM organize_suggestions'))
+      return [
+        [
+          {
+            id: 's',
+            item_id: 'i',
+            kind: 'tags',
+            status: 'pending',
+            payload_json: { after: [{ id: 't', name: '标签' }] },
+          },
+        ],
+      ];
+    if (sql.includes('FROM organize_suggestion_items'))
+      return [[{ id: 'i', resource_type: 'note', resource_id: 'n', version_hash: 'old', ai_status: 'completed' }]];
     if (sql.startsWith('SELECT id FROM note')) return [[]];
     if (sql.startsWith('SELECT del_flag FROM note')) return [[{ del_flag: '1' }]];
   });
   readCurrentSuggestionSource.mockResolvedValue(null);
-  await expect(actOnSuggestion(db, { userId: 'u', runId: 'run', suggestionId: 's', requestId, action: 'apply' })).rejects.toMatchObject({ code: 'ORGANIZE_RESOURCE_TRASHED', status: 409 });
+  await expect(
+    actOnSuggestion(db, { userId: 'u', runId: 'run', suggestionId: 's', requestId, action: 'apply' }),
+  ).rejects.toMatchObject({ code: 'ORGANIZE_RESOURCE_TRASHED', status: 409 });
   expect(applySuggestionMutation).not.toHaveBeenCalled();
   expect(db.commit).toHaveBeenCalledOnce();
   const updates = db.query.mock.calls.filter(([sql]) => sql.startsWith('UPDATE'));

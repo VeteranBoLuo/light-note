@@ -273,6 +273,8 @@
   const props = withDefaults(
     defineProps<{
       allowedTypes?: ResourcePickerType[];
+      fileExtensions?: string[];
+      remainingSelection?: number;
       excludeKeys?: string[];
       /** 受控关键词(showSearch=false 时生效) */
       keyword?: string;
@@ -379,6 +381,7 @@
     reset,
   } = useResourcePickerSearch({
     allowedTypes: () => props.allowedTypes,
+    fileExtensions: () => props.fileExtensions,
     excludeKeys: () => props.excludeKeys || [],
     limit: props.limit,
     perType: props.perType,
@@ -592,7 +595,9 @@
     ...groups.value.flatMap((group) => group.items.map((entry) => entry.item)),
   ]);
   const selectableFlatItems = computed(() =>
-    flatItems.value.filter((item) => !resourceSelected(item) && !resourceDisabled(item)),
+    flatItems.value
+      .filter((item) => !resourceSelected(item) && !resourceDisabled(item))
+      .slice(0, props.remainingSelection),
   );
 
   async function selectCurrentResults() {
@@ -805,7 +810,7 @@
     },
   );
   watch(
-    () => (props.allowedTypes || []).join(','),
+    () => `${(props.allowedTypes || []).join(',')}:${(props.fileExtensions || []).join(',')}`,
     () => void handleAllowedTypesChange(),
   );
 

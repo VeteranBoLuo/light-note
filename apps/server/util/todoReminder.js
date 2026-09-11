@@ -1,4 +1,5 @@
 import pool from '../db/index.js';
+import { notificationSchedulerEnabled } from './notificationSchedulerPolicy.js';
 import { createNotification } from './notification.js';
 import { sendTrackedEmail } from './emailDelivery.js';
 import { formatTodoDueAt, normalizeTodoLocale } from './todoDateFormat.js';
@@ -233,6 +234,7 @@ async function processReminder(id) {
 }
 
 export async function processDueTodoReminders() {
+  if (!notificationSchedulerEnabled()) return;
   if (running) return;
   running = true;
   try {
@@ -256,6 +258,7 @@ export async function processDueTodoReminders() {
 }
 
 export function startTodoReminderScheduler() {
+  if (!notificationSchedulerEnabled()) return;
   const timer = setInterval(() => processDueTodoReminders(), POLL_INTERVAL_MS);
   timer.unref?.();
   setTimeout(() => processDueTodoReminders(), 15_000).unref?.();

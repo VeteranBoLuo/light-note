@@ -30,3 +30,13 @@ it('只选择标签不会输出标题，格式错误交给平台修复', async (
     code: 'AI_SKILL_STRUCTURED_OUTPUT_INVALID',
   });
 });
+
+it('标签图标复用图标服务，不走资料元信息模型', async () => {
+  const icons = await import('../tagIconService.js');
+  const candidate = { iconName: 'lucide:key', iconUrl: 'safe', color: 'currentColor' };
+  const recommend = vi.spyOn(icons, 'recommendTagIcons').mockResolvedValue([candidate]);
+  const result = await suggestResourceMetadata({ type: 'tag', title: '密钥' }, ['tag_icon'], []);
+  expect(result).toEqual({ tag_icon: [candidate] });
+  expect(recommend).toHaveBeenCalledWith('密钥');
+  recommend.mockRestore();
+});

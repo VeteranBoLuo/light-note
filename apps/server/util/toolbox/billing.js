@@ -111,7 +111,7 @@ export function resolveToolboxActualPoints({ quotedPoints, outcome, requestedAct
 export async function settleToolboxBilling(
   connection,
   job,
-  { outcome, requestedActualPoints = null, reasonCode = '' } = {},
+  { outcome, requestedActualPoints = null, reasonCode = '', deterministicOcr = false } = {},
 ) {
   const currentStatus = String(job.billing_status || '');
   const billingMedium = String(job.billing_medium || 'points');
@@ -120,9 +120,7 @@ export async function settleToolboxBilling(
       billingStatus: currentStatus,
       actualPoints: Math.max(0, Number(job.actual_points || 0)),
       refundedPoints:
-        billingMedium === 'points'
-          ? Math.max(0, Number(job.quoted_points || 0) - Number(job.actual_points || 0))
-          : 0,
+        billingMedium === 'points' ? Math.max(0, Number(job.quoted_points || 0) - Number(job.actual_points || 0)) : 0,
       replay: true,
     };
   }
@@ -147,7 +145,10 @@ export async function settleToolboxBilling(
     throw toolboxError('TOOLBOX_BILLING_STATE_INVALID', '任务计费状态异常，已停止自动结算', 500);
   }
   const quotedPoints = Math.max(0, Number(job.quoted_points || 0));
-  const actualPoints = resolveToolboxActualPoints({ quotedPoints, outcome, requestedActualPoints });
+  const actualPoints =
+    deterministicOcr && job.tool_id === 'ocr_to_text'
+      ? 0
+      : resolveToolboxActualPoints({ quotedPoints, outcome, requestedActualPoints });
   const refundedPoints = quotedPoints - actualPoints;
   const billingStatus = actualPoints === quotedPoints ? 'settled' : actualPoints > 0 ? 'partially_settled' : 'released';
 

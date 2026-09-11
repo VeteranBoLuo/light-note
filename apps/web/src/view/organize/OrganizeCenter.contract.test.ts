@@ -23,7 +23,7 @@ describe('整理中心 2.0 页面契约', () => {
     expect(source).toContain("t('organize.navigationLabel')");
   });
 
-  it('待整理与四类治理问题属于同一中心，但概览中保持两套统计语义', () => {
+  it('AI 整理、待整理与三类治理问题属于同一中心，但概览中保持统计语义', () => {
     expect(source).toContain("type OrganizeView = 'overview' | 'pending' | 'ai_suggestions' | OrganizeIssueType");
     expect(source).toContain("activeView === 'ai_suggestions'");
     expect(source).toContain("activeView === 'pending'");
@@ -32,14 +32,14 @@ describe('整理中心 2.0 页面契约', () => {
     expect(dashboardSource).toContain('props.summary?.pendingShortcut.count');
     expect(dashboardSource).toContain('props.summary?.issues.untagged.findingCount');
     expect(dashboardSource).toContain('props.summary?.issues.duplicateBookmark.groupCount');
-    expect(dashboardSource).toContain('props.knowledgeStructure?.findingCount');
+    expect(dashboardSource).toContain("emit('select', 'ai_suggestions')");
+    expect(dashboardSource).not.toContain('knowledgeStructure');
   });
 
   it('交互控件全部复用 B 组件，静态图标从 icon 配置读取', () => {
     expect(source).toContain("import BInput from '@/components/base/BasicComponents/BInput.vue'");
     expect(source).toContain("import BSelect from '@/components/base/BasicComponents/BSelect.vue'");
     expect(dashboardSource).toContain("import BCard from '@/components/base/BasicComponents/BCard.vue'");
-    expect(dashboardSource).toContain("import BLoading from '@/components/base/BasicComponents/BLoading.vue'");
     expect(source).toContain("import BModal from '@/components/base/BasicComponents/BModal/BModal.vue'");
     expect(dashboardSource).toContain("import BProgress from '@/components/base/BasicComponents/BProgress.vue'");
     expect(source).toContain("import icon from '@/config/icon'");
@@ -66,7 +66,7 @@ describe('整理中心 2.0 页面契约', () => {
     expect(source).not.toContain('class="organize-selection-bar"');
   });
 
-  it('移动端内部导航横向滚动，不把六个入口压成等宽网格', () => {
+  it('移动端内部导航横向滚动，不把五个入口压成等宽网格', () => {
     expect(source).toContain('class="organize-mobile-nav"');
     expect(source).toContain('role="tablist"');
     expect(source).toContain(':aria-selected="activeView === item.key"');
@@ -115,18 +115,14 @@ describe('整理中心 2.0 页面契约', () => {
     expect(source).toContain('@refresh="refreshSummary"');
   });
 
-  it('知识结构在整理中心承接轻量问题处理，并把完整体检交还知识工坊', () => {
-    expect(source).toContain("activeView === 'knowledge_structure'");
-    expect(source).toContain('openKnowledgeWorkbench');
-    expect(source).toContain("toolboxToolPath('knowledge_structure_audit')");
-    expect(source).not.toContain("toolboxToolPath('directory_index')");
-    expect(source).not.toContain('organize.knowledge.generateDirectory');
-    expect(source).toContain("organize.loadIssue('knowledge_structure'");
-    expect(source).toContain('item.noteId');
-    expect(source).toContain("query: { organize: 'knowledge_structure', from: route.fullPath }");
-    expect(source).toContain('count: displayCount(knowledgeStructureSummary.value?.findingCount)');
-    expect(source).toContain('notes: knowledgeStructureSummary.affectedNoteCount');
-    expect(source).not.toContain('item.reason }}</p>');
+  it('知识结构只保留在知识工坊，整理中心突出 AI 整理入口', () => {
+    expect(source).not.toContain("activeView === 'knowledge_structure'");
+    expect(source).not.toContain("organize.loadIssue('knowledge_structure'");
+    expect(source).not.toContain('knowledgeStructureSummary');
+    expect(dashboardSource).toContain('class="governance-summary__ai-entry"');
+    expect(dashboardSource).toContain(':src="icon.common.magicWand"');
+    expect(dashboardSource).toContain("emit('select', 'ai_suggestions')");
+    expect(dashboardSource).toContain("t('organize.summaryView.aiAction')");
   });
 
   it('移动导航用固定尺寸下划线表达选中，切换时不改变文字盒模型', () => {

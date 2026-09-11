@@ -32,17 +32,13 @@
 </script>
 
 <style scoped lang="less">
+  @import './inlineEmoji.less';
+
   .chat-inline-emoji-text {
     display: inline;
   }
 
   .chat-inline-emoji-text__image {
-    width: 2em;
-    height: 2em;
-    margin-inline: 0.04em;
-    display: inline-block;
-    vertical-align: -0.65em;
-    object-fit: contain;
-    user-select: none;
+    .chat-inline-emoji-layout();
   }
 </style>

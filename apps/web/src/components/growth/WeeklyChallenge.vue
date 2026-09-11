@@ -10,7 +10,7 @@
       <div class="wc-sub">{{ t('growth.weeklySubtitle') }}</div>
       <div class="wc-reset">{{ t('growth.weeklyResetTime') }}</div>
     </div>
-    <div v-if="loading && !weekly" class="wc-loading"><BLoading size="small" /></div>
+    <div v-if="loading && !weekly" class="wc-loading"><BLoading inline loading /></div>
     <div v-else-if="loadError && !weekly" class="wc-error">
       <span>{{ t('growth.weeklyLoadFailed') }}</span
       ><BButton size="small" @click="reload">{{ t('common.retry') }}</BButton>

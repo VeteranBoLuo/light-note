@@ -3696,3 +3696,23 @@ SELECT 'support_campaign_visibility_default' AS check_name, 'new versions must s
 FROM information_schema.COLUMNS
 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'support_campaigns' AND COLUMN_NAME = 'public_enabled'
   AND (IS_NULLABLE <> 'NO' OR IFNULL(COLUMN_DEFAULT, '') <> '0');
+
+-- V3 processing queue is installed by an explicit migration, never by application startup.
+SELECT 'organize_processing_columns' AS check_name, required.col AS detail
+FROM (
+ SELECT 'id' col UNION ALL SELECT 'run_id' UNION ALL SELECT 'item_id' UNION ALL SELECT 'user_id'
+ UNION ALL SELECT 'work_key' UNION ALL SELECT 'kind' UNION ALL SELECT 'lane' UNION ALL SELECT 'status'
+ UNION ALL SELECT 'prepared_json' UNION ALL SELECT 'lease_token' UNION ALL SELECT 'lease_expires_at'
+ UNION ALL SELECT 'next_check_at' UNION ALL SELECT 'attempts' UNION ALL SELECT 'error_code'
+) required LEFT JOIN information_schema.COLUMNS c ON c.TABLE_SCHEMA=DATABASE()
+ AND c.TABLE_NAME='organize_processing_jobs' AND c.COLUMN_NAME=required.col WHERE c.COLUMN_NAME IS NULL;
+SELECT 'organize_processing_indexes' AS check_name, required.idx AS detail
+FROM (
+ SELECT 'uk_organize_processing_work' idx,0 non_unique,'run_id,work_key' cols
+ UNION ALL SELECT 'idx_organize_processing_claim',1,'lane,status,next_check_at,lease_expires_at'
+ UNION ALL SELECT 'idx_organize_processing_item',1,'run_id,item_id,lane'
+) required LEFT JOIN (
+ SELECT INDEX_NAME,MIN(NON_UNIQUE) non_unique,GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX) cols
+ FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='organize_processing_jobs' GROUP BY INDEX_NAME
+) actual ON actual.INDEX_NAME=required.idx AND actual.non_unique=required.non_unique AND actual.cols=required.cols
+WHERE actual.INDEX_NAME IS NULL;

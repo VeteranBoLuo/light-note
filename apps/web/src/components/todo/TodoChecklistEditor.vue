@@ -18,13 +18,23 @@
           class="todo-checklist-editor__toggle"
           size="small"
           :aria-expanded="open"
+          :aria-controls="panelId"
           @click="emit('update:open', !open)"
-          >{{ open ? t('common.collapse') : t('inbox.todoShowChecklist') }}</BButton
         >
+          <span>{{ open ? t('common.collapse') : t('common.expand') }}</span>
+          <SvgIcon
+            class="todo-checklist-editor__chevron"
+            :class="{ 'is-open': open }"
+            :src="icon.noteTree.chevron"
+            size="14"
+            aria-hidden="true"
+          />
+        </BButton>
       </div>
     </header>
-    <div v-if="open" class="todo-checklist-editor__list">
+    <div v-if="open" :id="panelId" class="todo-checklist-editor__list">
       <div v-for="(item, index) in modelValue" :key="item.id" class="todo-checklist-editor__row">
+        <span class="todo-checklist-editor__number" aria-hidden="true">{{ index + 1 }}</span>
         <BInput
           :ref="(component) => setInput(item.id, component)"
           :value="item.text"
@@ -34,22 +44,39 @@
           @update:value="changeText(index, $event)"
           @enter="item.text.trim() && add(index)"
         />
-        <BButton size="small" :disabled="disabled" @click="remove(index)">{{ t('common.delete') }}</BButton>
+        <BButton
+          class="todo-checklist-editor__remove"
+          size="small"
+          :disabled="disabled"
+          :aria-label="`${t('common.delete')} ${index + 1}`"
+          :title="t('common.delete')"
+          @click="remove(index)"
+        >
+          <SvgIcon :src="icon.table_delete" size="16" aria-hidden="true" />
+        </BButton>
       </div>
-      <BButton size="small" :disabled="disabled || modelValue.length >= 50" @click="add()">{{
-        t('inbox.todoAddChecklistItem')
-      }}</BButton>
+      <BButton
+        class="todo-checklist-editor__add"
+        size="small"
+        :disabled="disabled || modelValue.length >= 50"
+        @click="add()"
+      >
+        <SvgIcon :src="icon.common.plus" size="16" aria-hidden="true" />
+        {{ t('inbox.todoAddChecklistItem') }}
+      </BButton>
     </div>
   </section>
 </template>
 <script setup lang="ts">
-  import { nextTick } from 'vue';
+  import { nextTick, useId } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import TodoBreakdownButton from './TodoBreakdownButton.vue';
   import type { TodoChecklistItem } from '@/api/todoApi';
   import { generateUUID } from '@/utils/common';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon';
   const props = defineProps<{
     modelValue: TodoChecklistItem[];
     open: boolean;
@@ -60,6 +87,7 @@
   }>();
   const emit = defineEmits<{ 'update:modelValue': [items: TodoChecklistItem[]]; 'update:open': [open: boolean] }>();
   const { t } = useI18n();
+  const panelId = `todo-checklist-editor-${useId()}`;
   const inputs = new Map<string, { focus: () => void }>();
   function setInput(id: string, component: any) {
     if (component) inputs.set(id, component);
@@ -102,7 +130,7 @@
 <style scoped lang="less">
   .todo-checklist-editor {
     display: grid;
-    gap: 18px;
+    gap: 12px;
     min-width: 0;
     scroll-margin-top: 16px;
   }
@@ -138,30 +166,68 @@
     gap: 8px;
   }
   .todo-checklist-editor .todo-checklist-editor__toggle {
-    color: var(--primary-color);
-    background: var(--card-background);
+    gap: 4px;
+    color: var(--workspace-purple-text);
+    background: transparent;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .todo-checklist-editor .todo-checklist-editor__toggle:hover {
+      background: var(--workspace-hover);
+    }
+  }
+  .todo-checklist-editor__chevron {
+    flex-shrink: 0;
+  }
+  .todo-checklist-editor__chevron.is-open {
+    transform: rotate(180deg);
   }
   .todo-checklist-editor__list {
     display: grid;
     gap: 9px;
+    padding: 0 12px 4px;
   }
   .todo-checklist-editor__row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: 20px minmax(0, 1fr) 32px;
     align-items: center;
     gap: 8px;
+  }
+  .todo-checklist-editor__number {
+    text-align: center;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    color: var(--desc-color);
+  }
+  .todo-checklist-editor .todo-checklist-editor__remove {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    color: var(--desc-color);
+    background: transparent;
+  }
+  .todo-checklist-editor .todo-checklist-editor__add {
+    gap: 5px;
+    height: 30px;
+    margin-left: 28px;
+    padding: 0 6px;
+    color: var(--workspace-purple-text);
+    background: transparent;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .todo-checklist-editor .todo-checklist-editor__remove:hover {
+      color: var(--danger-color);
+      background: var(--action-menu-danger-hover-bg);
+    }
+    .todo-checklist-editor .todo-checklist-editor__add:hover {
+      background: var(--workspace-hover);
+    }
   }
   .todo-checklist-editor .todo-checklist-editor__row :deep(.b-input) {
     width: 100%;
     min-width: 0;
     box-sizing: border-box;
-    border: 1px solid transparent !important;
+    border: 1px solid var(--surface-border-color);
     border-radius: 8px;
-    background: var(--bl-input-noBorder-bg-color) !important;
-    box-shadow: none !important;
-  }
-  .todo-checklist-editor .todo-checklist-editor__row :deep(.b-input:focus-visible) {
-    outline: 2px solid var(--primary-color);
-    outline-offset: 1px;
+    background: var(--bl-input-bg-color);
   }
 </style>

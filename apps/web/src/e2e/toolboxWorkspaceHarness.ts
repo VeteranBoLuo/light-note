@@ -381,7 +381,7 @@ request.defaults.adapter = async (config) => {
   if (url === '/api/search/global') {
     const count = Number(params.get('materials')) || (state === 'empty' ? 0 : 1);
     const body = typeof config.data === 'string' ? JSON.parse(config.data) : config.data || {};
-    const all = Array.from({ length: count }, (_, i) => ({
+    const all = toolId === 'ocr_to_text' ? ['sample.pdf', 'scan.png', 'photo.JPG', 'page.webp', 'second.pdf', 'sixth.png', 'program.exe', 'notes.docx'].map((title, i) => ({ type: 'file', id: `material-${i}`, title, description: 'Fixture', tags: [] })) : Array.from({ length: count }, (_, i) => ({
       type: ['note', 'bookmark', 'file'][i % 3],
       id: `material-${i}`,
       title: `材料 ${i + 1} · Complete material ${i + 1}`,
@@ -391,6 +391,7 @@ request.defaults.adapter = async (config) => {
     const matches = all.filter(
       (item) =>
         (!body.types?.length || body.types.includes(item.type)) &&
+        (!body.fileExtensions?.length || body.fileExtensions.includes(item.title.split('.').pop()?.toLowerCase())) &&
         (!body.keyword || item.title.toLowerCase().includes(body.keyword.toLowerCase())),
     );
     const start = body.cursor ? Math.max(0, matches.findIndex((item) => item.id === body.cursor.id) + 1) : 0;
@@ -413,6 +414,13 @@ request.defaults.adapter = async (config) => {
   }
   if (state === 'error' && url.startsWith('/api/toolbox/workspaces')) {
     return response(config, { code: 'VISUAL_WORKSPACE_ERROR' }, 500);
+  }
+  if (toolId === 'ocr_to_text' && ['/api/toolbox/quotes', '/api/toolbox/jobs'].includes(url)) {
+    const body = typeof config.data === 'string' ? JSON.parse(config.data) : config.data;
+    (window as any).__ocrRequest = { url, body };
+    if (params.get('submitError') === '1') return response(config, { code: 'TOOLBOX_UPLOAD_TYPE_UNSUPPORTED' }, 400);
+    if (url.endsWith('/quotes')) return response(config, { id: 'visual-quote', toolId, billingMedium: body.billingMedium, quotedPoints: 9, expiresAt: '2099-01-01T00:00:00Z', inputSummary: { itemCount: body.input.resourceRefs.length, totalBytes: 1000 } });
+    return response(config, { id: 'visual-ocr-job' }, 202);
   }
   if (url === '/api/toolbox/catalog') {
     if (params.get('catalogState') === 'error') return response(config, { code: 'VISUAL_CATALOG_ERROR' }, 500);

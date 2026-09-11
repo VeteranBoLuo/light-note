@@ -10,17 +10,6 @@ vi.mock('@/components/base/BasicComponents/BButton.vue', () => ({
     template: '<button type="button" :disabled="disabled"><slot /></button>',
   },
 }));
-vi.mock('@/components/base/BasicComponents/BActionMenu.vue', () => ({
-  default: {
-    props: ['items', 'disabled'],
-    emits: ['select'],
-    template: '<div class="action-menu-stub"><slot /></div>',
-  },
-}));
-vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({
-  default: { template: '<span class="svg-icon-stub" />' },
-}));
-
 const { default: ChatRecalledMessageLine } = await import('./ChatRecalledMessageLine.vue');
 
 let cleanup: (() => void) | undefined;
@@ -31,15 +20,12 @@ afterEach(() => {
 });
 
 function mountLine(props: Record<string, unknown> = {}) {
-  const emitted = { surfaceClick: 0, reedit: 0, viewOriginal: 0 };
+  const emitted = { reedit: 0, viewOriginal: 0 };
   const host = document.createElement('div');
   document.body.append(host);
   const app = createApp(ChatRecalledMessageLine, {
     label: '“薄荷”撤回了一条消息',
     ...props,
-    onSurfaceClick: () => {
-      emitted.surfaceClick += 1;
-    },
     onViewOriginal: () => {
       emitted.viewOriginal += 1;
     },
@@ -65,21 +51,16 @@ describe('ChatRecalledMessageLine', () => {
     expect(host.querySelector('time')).toBeNull();
   });
 
-  it('Root 审核入口和系统行点击保持独立事件', async () => {
+  it('Root 审核入口触发查看原文事件', async () => {
     const { host, emitted } = mountLine({ canViewOriginal: true });
     const buttons = host.querySelectorAll<HTMLButtonElement>('button');
     expect(buttons[0]?.textContent).toContain('communityChat.recall.viewOriginal');
     buttons[0]?.click();
     await nextTick();
     expect(emitted.viewOriginal).toBe(1);
-    expect(emitted.surfaceClick).toBe(0);
-
-    host.querySelector<HTMLElement>('.community-message__recall-line')?.click();
-    await nextTick();
-    expect(emitted.surfaceClick).toBe(1);
   });
 
-  it('重新编辑只在允许时显示，且不触发系统行点击', async () => {
+  it('重新编辑只在允许时显示并触发回填事件', async () => {
     const { host, emitted } = mountLine({ canReedit: true });
     const button = host.querySelector<HTMLButtonElement>('.community-message__recall-reedit');
 
@@ -88,6 +69,5 @@ describe('ChatRecalledMessageLine', () => {
     await nextTick();
 
     expect(emitted.reedit).toBe(1);
-    expect(emitted.surfaceClick).toBe(0);
   });
 });

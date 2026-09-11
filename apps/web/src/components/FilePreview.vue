@@ -61,10 +61,7 @@
       <div class="preview-content" @click.stop>
         <!-- 加载状态 -->
         <div v-if="loading" class="preview-loading">
-          <div class="b-spin">
-            <div class="b-spin-indicator"></div>
-            <div class="b-spin-tip">{{ t('cloudSpace.previewPanel.loading') }}</div>
-          </div>
+          <BLoading inline loading :title="t('cloudSpace.previewPanel.loading')" />
         </div>
 
         <!-- 错误状态 -->
@@ -324,6 +321,7 @@
 </template>
 
 <script setup lang="ts">
+  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
   import type { CSSProperties } from 'vue';
   import { useI18n } from 'vue-i18n';
@@ -1637,27 +1635,6 @@
         z-index: 10;
         text-align: center;
         padding: 40px;
-
-        .b-spin {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 16px;
-        }
-
-        .b-spin-indicator {
-          width: 32px;
-          height: 32px;
-          border: 3px solid var(--card-border-color);
-          border-top-color: var(--primary-color);
-          border-radius: 50%;
-          animation: b-spin-rotate 0.8s linear infinite;
-        }
-
-        .b-spin-tip {
-          color: var(--desc-color, #666);
-          font-size: 14px;
-        }
       }
 
       .preview-error {
@@ -2044,12 +2021,6 @@
     :deep(img) {
       max-width: 100%;
       height: auto;
-    }
-  }
-
-  @keyframes b-spin-rotate {
-    to {
-      transform: rotate(360deg);
     }
   }
 

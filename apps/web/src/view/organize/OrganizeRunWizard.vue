@@ -75,7 +75,7 @@
               )
             }}</small>
             <span class="option-bottom">
-              <span v-if="check === 'tag_icon'">{{ t('organizeIcons.free') }}</span>
+              <span v-if="check === 'tag_icon'">{{ t('organizeIcons.matching') }}</span>
               <span>{{
                 resourceNames(modelValue.resourceTypes.filter((type) => supportsOrganizeCheck(type, check)))
               }}</span></span
@@ -221,7 +221,7 @@
           t('organizeIcons.skippedUnknown', { count: preview.summary.skipped })
         }}</p>
         <p
-          v-if="!preview.summary.aiEnabled && preview.options.checks.some((check) => ['tags', 'title'].includes(check))"
+          v-if="!preview.summary.aiEnabled && preview.options.checks.some((check) => ['tags', 'title', 'tag_icon'].includes(check))"
           class="wizard-hint"
           >{{ t('organizeWorkspace.aiDisabled') }}</p
         >

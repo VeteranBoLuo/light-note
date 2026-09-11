@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
+import { notificationSchedulerEnabled } from './notificationSchedulerPolicy.js';
 export function browserPushEnabled(env = process.env) {
   return (
-    env.LIGHTNOTE_RUNTIME_ENV !== 'local' &&
+    notificationSchedulerEnabled(env) &&
     env.BROWSER_PUSH_ENABLED === 'true' &&
     Boolean(
       env.BROWSER_PUSH_ORIGIN &&

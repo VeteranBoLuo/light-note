@@ -144,12 +144,43 @@
         <BActionMenu
           v-else
           :items="desktopMoreMenuItems"
+          :width="208"
           :triggers="['click']"
           placement="bottom-right"
           :disabled="writeDisabled"
           :aria-label="t('common.more')"
           @select="handleDesktopMoreAction"
         >
+          <template #item-priority="{ close }">
+            <TodoPriorityMenu
+              :value="item.priority"
+              :disabled="writeDisabled"
+              @select="
+                (priority) => {
+                  changePriority(priority);
+                  close();
+                }
+              "
+            />
+          </template>
+          <template #item-snooze="{ close }">
+            <div class="todo-menu-snooze" role="group" :aria-label="t('inbox.todoSnooze')">
+              <span class="todo-menu-snooze__label">{{ t('inbox.todoSnooze') }}</span>
+              <div class="todo-menu-snooze__options">
+                <BButton
+                  v-for="option in snoozeOptions"
+                  :key="option.key"
+                  role="menuitem"
+                  :disabled="writeDisabled"
+                  @click="
+                    close();
+                    handleDesktopMoreAction(option.key);
+                  "
+                  >{{ option.label }}</BButton
+                >
+              </div>
+            </div>
+          </template>
           <BButton class="todo-more-button" size="small" :disabled="writeDisabled" :aria-label="t('common.more')">
             <SvgIcon :src="icon.common.more" size="18" aria-hidden="true" />
           </BButton>
@@ -210,6 +241,7 @@
 
 <script setup lang="ts">
   import TodoSubitems from './TodoSubitems.vue';
+  import TodoPriorityMenu from './TodoPriorityMenu.vue';
   import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
   import { computed, ref } from 'vue';
   import useUserStore from '@/store/useUser';
@@ -427,6 +459,12 @@
   const user = useUserStore();
   const writeDisabled = computed(() => props.disabled || user.adminContext?.mode === 'readonly');
   const cardPreviewable = computed(() => !props.seriesDetail && !props.selectable && !props.disabled);
+  const snoozeOptions = computed(() =>
+    (['tenMinutes', 'oneHour', 'threeHours', 'oneDay'] as const).map((preset) => ({
+      key: `snooze-${preset}`,
+      label: t(`inbox.todoSnooze${preset[0].toUpperCase()}${preset.slice(1)}`),
+    })),
+  );
   const desktopMoreMenuItems = computed<BActionMenuItem[]>(() => {
     const actions: BActionMenuItem[] =
       props.workspace && props.item.status !== 'completed'
@@ -434,20 +472,17 @@
             {
               key: 'organize',
               label: t('todoWorkspace.organization'),
-              icon: icon.organize.check,
+              icon: icon.resource.tag,
               disabled: props.selectable,
             },
           ]
         : [];
     if (props.item.status === 'pending') {
-      if (props.workspace)
-        actions.push(
-          ...(['tenMinutes', 'oneHour', 'threeHours', 'oneDay'] as const).map((preset) => ({
-            key: `snooze-${preset}`,
-            label: t(`inbox.todoSnooze${preset[0].toUpperCase()}${preset.slice(1)}`),
-            icon: icon.todoWorkspace.clock,
-          })),
-        );
+      actions.unshift(
+        { key: 'priority', label: t('inbox.todoPriority') },
+        ...(props.workspace ? [{ key: 'snooze', label: t('inbox.todoSnooze') }] : []),
+        { key: 'settings-divider', divider: true },
+      );
       actions.push(
         { key: 'edit', label: t('inbox.editTodo'), icon: icon.table_edit },
         { key: 'calendar', label: t('inbox.addToCalendar'), icon: icon.common.calendar },
@@ -519,7 +554,7 @@
             {
               key: 'organize',
               label: t('todoWorkspace.organization'),
-              icon: icon.organize.check,
+              icon: icon.resource.tag,
               disabled: props.selectable,
             },
           ]
@@ -597,11 +632,39 @@
   function changePriority(value: unknown) {
     if (writeDisabled.value) return;
     const priority = Number(value);
-    if (priority === 0 || priority === 1 || priority === 2) emit('update-priority', priority);
+    if (priority !== props.item.priority && (priority === 0 || priority === 1 || priority === 2))
+      emit('update-priority', priority);
   }
 </script>
 
 <style scoped lang="less">
+  .todo-menu-snooze {
+    padding: 7px 12px;
+  }
+  .todo-menu-snooze__label {
+    display: block;
+    margin-bottom: 7px;
+    color: var(--desc-color);
+    font-size: 12px;
+  }
+  .todo-menu-snooze__options {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+  .todo-menu-snooze__options .b_btn {
+    width: 100%;
+    height: 30px;
+    padding: 0 4px;
+    border: 1px solid var(--surface-border-color);
+    background: transparent;
+    font-size: 12px;
+  }
+  .todo-menu-snooze__options .b_btn:hover,
+  .todo-menu-snooze__options .b_btn:focus-visible {
+    color: var(--workspace-purple-text);
+    background: var(--workspace-hover);
+  }
   .todo-item__organization {
     display: flex;
     flex-wrap: wrap;

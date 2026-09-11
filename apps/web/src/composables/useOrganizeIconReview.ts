@@ -21,6 +21,7 @@ export function useOrganizeIconReview(
   const drafts = reactive(new Map<string, TagIconChoice>());
   const busy = reactive(new Set<string>());
   const errors = reactive(new Map<string, string>());
+  const selecting = ref(false);
   const batchBusy = ref(false);
   const outcome = ref<{ success: number; failed: number } | null>(null);
   const requests = new Map<string, { signature: string; id: string }>();
@@ -40,6 +41,7 @@ export function useOrganizeIconReview(
   const applicable = computed(() => suggestions.value.filter((s) => canReview(s) && choice(s)));
   function reset() {
     generation++;
+    selecting.value = false;
     selected.clear();
     drafts.clear();
     errors.clear();
@@ -106,8 +108,25 @@ export function useOrganizeIconReview(
       if (current === generation) busy.delete(s.id);
     }
   }
-  async function applySelected() {
+  function exitBatch() {
     if (batchBusy.value) return;
+    selecting.value = false;
+    selected.clear();
+    outcome.value = null;
+  }
+  function startBatch() {
+    if (batchBusy.value || !applicable.value.length) return;
+    selecting.value = true;
+  }
+  function selectAll(checked: boolean) {
+    if (!selecting.value || batchBusy.value) return;
+    for (const s of applicable.value) {
+      if (checked) selected.add(s.id);
+      else selected.delete(s.id);
+    }
+  }
+  async function applySelected() {
+    if (!selecting.value || batchBusy.value) return;
     const pending = applicable.value.filter((s) => selected.has(s.id));
     if (!pending.length) return;
     const current = generation;
@@ -133,6 +152,11 @@ export function useOrganizeIconReview(
   }
   return {
     reset,
+    selecting,
+    startBatch,
+    exitBatch,
+    selectAll,
+    applicable,
     selected,
     drafts,
     busy,
@@ -144,9 +168,7 @@ export function useOrganizeIconReview(
     act,
     applySelected,
     selectedCount: computed(() => applicable.value.filter((s) => selected.has(s.id)).length),
-    selectAvailable: () => {
-      for (const s of applicable.value) selected.add(s.id);
-    },
+    selectAvailable: () => selectAll(true),
   };
 }
 export type OrganizeIconReview = ReturnType<typeof useOrganizeIconReview>;

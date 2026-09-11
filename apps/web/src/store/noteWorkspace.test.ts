@@ -40,29 +40,6 @@ describe('noteWorkspace 目录元数据同步', () => {
     expect(workspace.detailTreeScrollTop).toBe(0);
   });
 
-  it('桌面预览只在同一账号的当前标签页恢复，显式关闭后清除', () => {
-    const workspace = useNoteWorkspaceStore();
-    workspace.ensureOwner('user-a');
-    workspace.setLibraryPreviewPage('leaf-note');
-
-    expect(workspace.libraryPreviewPageId).toBe('leaf-note');
-    expect(JSON.parse(sessionStorage.getItem('light-note-note-library-preview') || '{}')).toEqual({
-      ownerKey: 'user-a',
-      noteId: 'leaf-note',
-    });
-
-    setActivePinia(createPinia());
-    const restoredWorkspace = useNoteWorkspaceStore();
-    restoredWorkspace.ensureOwner('user-b');
-    expect(restoredWorkspace.libraryPreviewPageId).toBeNull();
-
-    restoredWorkspace.ensureOwner('user-a');
-    expect(restoredWorkspace.libraryPreviewPageId).toBe('leaf-note');
-    restoredWorkspace.setLibraryPreviewPage(null);
-    expect(restoredWorkspace.libraryPreviewPageId).toBeNull();
-    expect(sessionStorage.getItem('light-note-note-library-preview')).toBeNull();
-  });
-
   it('显式进入笔记库根页会生成独立请求令牌，旧请求结束不能覆盖较新的导航', () => {
     const workspace = useNoteWorkspaceStore();
 
@@ -79,10 +56,9 @@ describe('noteWorkspace 目录元数据同步', () => {
     expect(workspace.libraryRootEntryRequestToken).toBeNull();
   });
 
-  it('根页重置统一清除预览、浏览选择和目录搜索，但保留目录展开偏好', () => {
+  it('根页重置统一清除浏览选择和目录搜索，但保留目录展开偏好', () => {
     const workspace = useNoteWorkspaceStore();
     workspace.ensureOwner('user-a');
-    workspace.setLibraryPreviewPage('leaf-note');
     workspace.setNavigation({ activePageId: 'leaf-note', browseParentId: 'parent-note' });
     workspace.detailTab = 'outline';
     workspace.currentBreadcrumb = [{ id: 'parent-note', title: '父页面' }];
@@ -94,7 +70,6 @@ describe('noteWorkspace 目录元数据同步', () => {
     workspace.resetLibraryRootState();
 
     expect(workspace.detailTab).toBe('pages');
-    expect(workspace.libraryPreviewPageId).toBeNull();
     expect(workspace.activePageId).toBeNull();
     expect(workspace.browseParentId).toBeNull();
     expect(workspace.currentBreadcrumb).toEqual([]);

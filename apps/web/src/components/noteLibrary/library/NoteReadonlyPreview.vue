@@ -543,7 +543,7 @@
       if (detailResult.status !== 200 || !detailResult.data) {
         invalidateNoteDetailPrefetch(user, noteId);
         error.value = true;
-        if (Number(detailResult.status) === 404) emit('unavailable', noteId);
+        if ([403, 404].includes(Number(detailResult.status))) emit('unavailable', noteId);
         return;
       }
       const { breadcrumb: bundledBreadcrumb, ...detailRecord } = detailResult.data;
@@ -576,8 +576,12 @@
         unavailableLabel: (snapshotTitle) => t('note.resourceRefUnavailable', { title: snapshotTitle }),
       });
       void resolvePreviewResourceRefs(renderedHtml, seq);
-    } catch {
-      if (seq === requestSeq) error.value = true;
+    } catch (cause: any) {
+      if (seq === requestSeq) {
+        error.value = true;
+        const status = Number(cause?.response?.status ?? cause?.status);
+        if ([403, 404].includes(status)) emit('unavailable', noteId);
+      }
     } finally {
       if (seq === requestSeq) {
         loading.value = false;
@@ -600,6 +604,8 @@
   );
 
   onBeforeUnmount(() => {
+    requestSeq += 1;
+    resourceResolveSeq += 1;
     if (outlineSpyFrame) window.cancelAnimationFrame(outlineSpyFrame);
     if (drawingCenterFrame) window.cancelAnimationFrame(drawingCenterFrame);
     outlineSpyRoot?.removeEventListener('scroll', scheduleActivePreviewHeading);

@@ -85,6 +85,7 @@ export interface GlobalSearchResponse {
 }
 
 export interface GlobalSearchQuery {
+  fileExtensions?: string[];
   page?: number;
   type?: GlobalSearchType | 'all';
   types?: GlobalSearchType[];
@@ -206,6 +207,7 @@ export async function fetchGlobalSearch(
       .filter(Boolean)
       .sort(),
     untagged: query.untagged === true,
+    ...(query.fileExtensions?.length ? { fileExtensions: query.fileExtensions } : {}),
     // 标签匹配与资源结果是两类对象；显式开启时无论分页模式如何，都让服务端独立返回标签导航。
     ...(query.separateTagMatches === true ? { separateTagMatches: true } : {}),
     // 待办条件只在显式搜索待办时下发，避免污染既有资源调用方的缓存键

@@ -1,12 +1,7 @@
 <template>
-  <div class="community-message__recall-line" @click="emit('surfaceClick', $event)">
+  <div class="community-message__recall-line">
     <span role="status">{{ label }}</span>
-    <BButton
-      v-if="canReedit"
-      size="small"
-      class="community-message__recall-reedit"
-      @click.stop="emit('reedit')"
-    >
+    <BButton v-if="canReedit" size="small" class="community-message__recall-reedit" @click.stop="emit('reedit')">
       {{ t('communityChat.recall.reedit') }}
     </BButton>
     <BButton
@@ -17,50 +12,27 @@
     >
       {{ t('communityChat.recall.viewOriginal') }}
     </BButton>
-    <BActionMenu
-      v-if="actionItems.length"
-      class="community-message__recall-more"
-      :items="actionItems"
-      placement="bottom-left"
-      :disabled="busy"
-      :aria-label="t('communityChat.messageActions')"
-      @select="(action) => emit('action', action)"
-    >
-      <BButton size="small" :loading="busy" :aria-label="t('communityChat.moreActions')">
-        <SvgIcon :src="icon.common.more" size="15" aria-hidden="true" />
-      </BButton>
-    </BActionMenu>
   </div>
 </template>
 
 <script setup lang="ts">
   import { useI18n } from 'vue-i18n';
-  import BActionMenu from '@/components/base/BasicComponents/BActionMenu.vue';
-  import type { BActionMenuItem } from '@/components/base/BasicComponents/actionMenu';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
-  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
-  import icon from '@/config/icon';
 
   withDefaults(
     defineProps<{
       label: string;
       canReedit?: boolean;
       canViewOriginal?: boolean;
-      actionItems?: BActionMenuItem[];
-      busy?: boolean;
     }>(),
     {
       canViewOriginal: false,
       canReedit: false,
-      actionItems: () => [],
-      busy: false,
     },
   );
   const emit = defineEmits<{
-    surfaceClick: [event: MouseEvent];
     reedit: [];
     viewOriginal: [];
-    action: [action: string];
   }>();
   const { t } = useI18n();
 </script>
@@ -87,8 +59,7 @@
   }
 
   .community-message__recall-reedit,
-  .community-message__recall-audit-action,
-  .community-message__recall-more :deep(.b_btn) {
+  .community-message__recall-audit-action {
     min-width: 0;
     min-height: 24px;
     height: 24px;
@@ -97,21 +68,6 @@
     color: var(--primary-color) !important;
     background: transparent !important;
     font-size: 10px;
-  }
-
-  .community-message__recall-more {
-    position: absolute;
-    top: 1px;
-    left: calc(100% + 2px);
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.16s ease;
-  }
-
-  .community-message__recall-line:hover .community-message__recall-more,
-  .community-message__recall-line:focus-within .community-message__recall-more {
-    opacity: 1;
-    pointer-events: auto;
   }
 
   @media (max-width: 767px) {
@@ -124,10 +80,6 @@
       min-height: 44px;
       height: 44px;
       margin-block: -6px;
-    }
-
-    .community-message__recall-more {
-      display: none;
     }
   }
 </style>

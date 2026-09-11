@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ requestAi: vi.fn() }));
 
-vi.mock('./agent/aiGateway.js', () => ({ requestAi: mocks.requestAi }));
+vi.mock('./agent/aiGateway.js', () => ({ requestAi: mocks.requestAi, estimateAiProviderTokens: () => 500 }));
 
 import {
   containsCjk,
@@ -132,20 +132,18 @@ describe('默认图标补全', () => {
   it('主题优先线性匹配，排除品牌与通用占位', async () => {
     vi.stubGlobal(
       'fetch',
-      vi
-        .fn()
-        .mockResolvedValue({
-          ok: true,
-          json: async () => ({
-            icons: [
-              'simple-icons:database',
-              'material-symbols:database',
-              'lucide:database',
-              'lucide:tag',
-              'lucide:unrelated',
-            ],
-          }),
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          icons: [
+            'simple-icons:database',
+            'material-symbols:database',
+            'lucide:database',
+            'lucide:tag',
+            'lucide:unrelated',
+          ],
         }),
+      }),
     );
     const result = await searchTagIcons({ query: '数据库专题', mode: 'recommend' });
     expect(result.icons).toEqual(['lucide:database', 'material-symbols:database']);
@@ -171,6 +169,7 @@ describe('默认图标补全', () => {
             : { ok: true, text: async () => svg },
       ),
     );
+    mocks.requestAi.mockResolvedValue({ content: '{"keywords":["book","book-open"]}' });
     const candidates = await recommendTagIcons('阅读专题');
     expect(candidates.map((c) => c.iconName)).toEqual(['tabler:book-open']);
     const chosen = await prepareTagIconChoice({
@@ -184,4 +183,75 @@ describe('默认图标补全', () => {
       code: 'ORGANIZE_ICON_INVALID',
     });
   });
+});
+
+describe('新增标签与整理共用中文关键词', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it.each([
+    ['弹幕', ['danmaku', 'bullet', 'comment'], 'lucide:comment', true],
+    ['密钥', ['key', 'secret'], 'lucide:key', false],
+  ])('%s 在两个入口复用转换结果', async (query, keywords, iconName, pickerFirst) => {
+    vi.resetModules();
+    const { searchTagIcons, recommendTagIcons, estimateTagIconTokens } = await import('./tagIconService.js');
+    mocks.requestAi.mockClear().mockResolvedValue({ content: JSON.stringify({ keywords }) });
+    const fetch = vi.fn(async (url) =>
+      String(url).includes('/search')
+        ? { ok: true, json: async () => ({ icons: [iconName] }) }
+        : { ok: true, text: async () => '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M1 1h2v2Z"/></svg>' },
+    );
+    vi.stubGlobal('fetch', fetch);
+    expect(estimateTagIconTokens(query)).toBeGreaterThan(0);
+    let picker, candidates;
+    if (pickerFirst) {
+      picker = await searchTagIcons({ query, useAi: true });
+      candidates = await recommendTagIcons(query);
+    } else {
+      candidates = await recommendTagIcons(query);
+      picker = await searchTagIcons({ query, useAi: true });
+    }
+    expect(picker.icons).toContain(iconName);
+    expect(candidates[0].iconName).toBe(iconName);
+    expect(mocks.requestAi).toHaveBeenCalledOnce();
+    expect(estimateTagIconTokens(query)).toBe(0);
+    expect(estimateTagIconTokens('GitHub')).toBe(0);
+    const searches = fetch.mock.calls
+      .filter(([url]) => String(url).includes('/search'))
+      .map(([url]) => new URL(url).searchParams.get('query'));
+    for (const keyword of keywords) expect(searches.filter((term) => term === keyword)).toHaveLength(2);
+  });
+  it('转换失败明确抛错，不缓存为无推荐', async () => {
+    vi.resetModules();
+    const { recommendTagIcons } = await import('./tagIconService.js');
+    mocks.requestAi.mockRejectedValue(Object.assign(new Error('unavailable'), { code: 'AI_PROVIDER_ERROR' }));
+    vi.stubGlobal('fetch', vi.fn());
+    await expect(recommendTagIcons('失败关键词')).rejects.toMatchObject({ code: 'AI_PROVIDER_ERROR' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+it('saved translation keywords remain free after the process cache expires', async () => {
+  const { prepareTagIconRoute, searchTagIcons } = await import('./tagIconService.js');
+  const now = Date.now();
+  const date = vi.spyOn(Date, 'now').mockReturnValue(now);
+  const fetcher = vi.fn(async () => ({ ok: true, json: async () => ({ icons: ['lucide:book-open'] }) }));
+  vi.stubGlobal('fetch', fetcher);
+  mocks.requestAi.mockResolvedValue({ content: '{"keywords":["book"]}' });
+  try {
+    await searchTagIcons({ query: '独立缓存测试', useAi: true, mode: 'recommend' });
+    const prepared = prepareTagIconRoute('独立缓存测试');
+    expect(prepared.needsAi).toBe(false);
+    date.mockReturnValue(now + 25 * 60 * 60 * 1000);
+    expect(prepareTagIconRoute('独立缓存测试').needsAi).toBe(true);
+    mocks.requestAi.mockClear();
+    await searchTagIcons({
+      query: '独立缓存测试',
+      useAi: false,
+      mode: 'recommend',
+      preparedKeywords: prepared.keywords,
+    });
+    expect(mocks.requestAi).not.toHaveBeenCalled();
+  } finally {
+    date.mockRestore();
+    vi.unstubAllGlobals();
+  }
 });

@@ -12,7 +12,9 @@
   >
     <div class="toolbox-workbench__inner">
       <BButton class="toolbox-workbench__back" :aria-label="t('toolbox.back')" @click="returnToToolboxParent">
-        <SvgIcon :src="icon.toolbox.back" size="16" /><span class="toolbox-workbench__back-label">{{ t('toolbox.back') }}</span>
+        <SvgIcon :src="icon.toolbox.back" size="16" /><span class="toolbox-workbench__back-label">{{
+          t('toolbox.back')
+        }}</span>
       </BButton>
 
       <div v-if="loading" class="toolbox-workbench__state"
@@ -49,12 +51,6 @@
             </span>
           </div>
         </header>
-        <p v-if="tool.id === 'ocr_to_text' && ocrUsage" class="toolbox-ocr-usage" role="status">{{
-          t('toolbox.workbench.ocrRemaining', {
-            pages: ocrUsage.remainingPages,
-            time: new Date(ocrUsage.resetsAt).toLocaleString(),
-          })
-        }}</p>
 
         <section v-if="tool.executionMode === 'browser' && localToolComponent" class="toolbox-workbench__surface">
           <component :is="localToolComponent" :tool-id="routeToolId" />
@@ -92,7 +88,7 @@
           <div class="toolbox-paid-panel">
             <template v-if="!quote">
               <nav
-                v-if="!isPromptTool && tool.id !== 'ocr_to_text'"
+                v-if="!isPromptTool"
                 ref="workflowSwitchRef"
                 class="toolbox-workflow-switch"
                 :aria-label="t('toolbox.workbench.stepInput')"
@@ -139,6 +135,8 @@
                   <ToolboxResourceSelector
                     v-model="selectedResources"
                     :allowed-types="allowedTypes"
+                    :expand-note-branches="tool.id !== 'ocr_to_text'"
+                    :file-extensions="tool.id === 'ocr_to_text' ? [...TOOLBOX_OCR_FILE_EXTENSIONS] : undefined"
                     :max="tool.input.maxItems"
                     :external-count="uploadFiles.length"
                     :disabled="quoting || uploading"
@@ -283,6 +281,24 @@
                   </section>
 
                   <section v-else class="toolbox-workflow-card is-ocr-output">
+                    <div class="toolbox-ocr-mode">
+                      <BSelect
+                        v-model:value="ocrMode"
+                        :options="[
+                          { value: 'ai', label: t('toolbox.workbench.aiOcrMode') },
+                          { value: 'basic', label: t('toolbox.workbench.basicOcrMode') },
+                        ]"
+                        :disabled="quoting || uploading"
+                        :aria-label="t('toolbox.workbench.ocrMode')"
+                      />
+                      <p>{{ isBasicOcr ? freeOcrDescription : t('toolbox.workbench.aiOcrHint') }}</p>
+                      <p v-if="isBasicOcr && ocrUsage" class="toolbox-ocr-usage" role="status">{{
+                        t('toolbox.workbench.ocrRemaining', {
+                          pages: ocrUsage.remainingPages,
+                          time: new Date(ocrUsage.resetsAt).toLocaleString(),
+                        })
+                      }}</p>
+                    </div>
                     <div class="toolbox-workflow-card__head">
                       <span>{{ t('toolbox.workbench.designStep') }}</span>
                       <h2>{{ t('toolbox.workbench.ocrOutputTitle') }}</h2>
@@ -358,11 +374,7 @@
                       {{
                         quoting
                           ? t('common.loading')
-                          : t(
-                              tool.id === 'ocr_to_text'
-                                ? 'toolbox.workbench.startFreeOcr'
-                                : 'toolbox.workbench.getQuote',
-                            )
+                          : t(isBasicOcr ? 'toolbox.workbench.startFreeOcr' : 'toolbox.workbench.getQuote')
                       }}
                       <SvgIcon :src="icon.toolbox.arrow" size="15" />
                     </BButton>
@@ -439,18 +451,14 @@
         v-else
         type="primary"
         :loading="quoting || uploading"
-        :disabled="
-          compactWorkflowStep === 'sources' && !isPromptTool && tool.id !== 'ocr_to_text' ? !selectedCount : !canQuote
-        "
+        :disabled="compactWorkflowStep === 'sources' && !isPromptTool ? !selectedCount : !canQuote"
         @click="
-          compactWorkflowStep === 'sources' && !isPromptTool && tool.id !== 'ocr_to_text'
-            ? selectCompactWorkflowStep('design')
-            : requestQuote()
+          compactWorkflowStep === 'sources' && !isPromptTool ? selectCompactWorkflowStep('design') : requestQuote()
         "
         >{{
-          compactWorkflowStep === 'sources' && !isPromptTool && tool.id !== 'ocr_to_text'
+          compactWorkflowStep === 'sources' && !isPromptTool
             ? t('toolbox.workbench.designStep')
-            : t(tool.id === 'ocr_to_text' ? 'toolbox.workbench.startFreeOcr' : 'toolbox.workbench.getQuote')
+            : t(isBasicOcr ? 'toolbox.workbench.startFreeOcr' : 'toolbox.workbench.getQuote')
         }}</BButton
       >
     </section>
@@ -458,6 +466,7 @@
 </template>
 
 <script setup lang="ts">
+  import { TOOLBOX_OCR_FILE_EXTENSIONS } from '@lightnote/shared/toolbox-protocol';
   import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
@@ -540,6 +549,8 @@
   const uploadFiles = ref<UploadEntry[]>([]);
   const question = ref('');
   const detailLevel = ref<'concise' | 'balanced' | 'detailed'>('balanced');
+  const ocrMode = ref<'ai' | 'basic'>('ai');
+  const isBasicOcr = computed(() => tool.value?.id === 'ocr_to_text' && ocrMode.value === 'basic');
   const selectedBillingMedium = ref<PaidBillingMedium>('points');
   const quote = ref<ToolboxQuote | null>(null);
   const quoting = ref(false);
@@ -571,12 +582,21 @@
       tool.value?.executionMode !== 'browser' &&
       tool.value?.executionMode !== 'service',
   );
-  const supportsAiQuota = computed(() => Boolean(tool.value?.billingMedia.includes('ai_quota')));
+  const supportsAiQuota = computed(() => !isBasicOcr.value && Boolean(tool.value?.billingMedia.includes('ai_quota')));
+  watch(ocrMode, () => {
+    quote.value = null;
+  });
   const canQuote = computed(() =>
     Boolean(
       tool.value &&
       selectedCount.value >= tool.value.input.minItems &&
       selectedCount.value <= tool.value.input.maxItems &&
+      (tool.value.id !== 'ocr_to_text' ||
+        selectedResources.value.every(
+          (item) =>
+            item.type === 'file' &&
+            TOOLBOX_OCR_FILE_EXTENSIONS.includes(item.title.split('.').pop()?.toLowerCase() || ''),
+        )) &&
       (!isPromptTool.value || question.value.trim()) &&
       !uploading.value,
     ),
@@ -595,14 +615,14 @@
       : formatAiQuotaTokens(aiQuotaStatus.value?.availableRemaining ?? aiQuotaStatus.value?.remaining, locale.value),
   );
   const selectedBillingIcon = computed(() =>
-    tool.value?.id === 'ocr_to_text'
+    isBasicOcr.value
       ? icon.toolbox.ocr
       : selectedBillingMedium.value === 'ai_quota'
         ? icon.settings.ai
         : icon.toolbox.coin,
   );
   const selectedBillingSummary = computed(() =>
-    tool.value?.id === 'ocr_to_text'
+    isBasicOcr.value
       ? t('toolbox.free')
       : t(
           selectedBillingMedium.value === 'ai_quota'
@@ -611,7 +631,7 @@
         ),
   );
   const selectedBillingRule = computed(() =>
-    tool.value?.id === 'ocr_to_text'
+    isBasicOcr.value
       ? freeOcrDescription.value
       : t(
           selectedBillingMedium.value === 'ai_quota'
@@ -667,7 +687,8 @@
   const executionDescription = computed(() => {
     if (tool.value?.executionMode === 'browser') return t('toolbox.workbench.localExecutionDescription');
     if (tool.value?.executionMode === 'service') return t('toolbox.workbench.serviceExecutionDescription');
-    if (tool.value?.executionMode === 'worker') return freeOcrDescription.value;
+    if (tool.value?.executionMode === 'worker')
+      return isBasicOcr.value ? freeOcrDescription.value : t('toolbox.workbench.aiOcrHint');
     if (supportsAiQuota.value) return t('toolbox.workbench.flexibleBillingExecutionDescription');
     if (isPromptTool.value) return t('toolbox.workbench.promptPointsExecutionDescription');
     return t('toolbox.workbench.pointsExecutionDescription');
@@ -738,6 +759,7 @@
     uploading.value = false;
     starting.value = false;
     compactWorkflowStep.value = 'sources';
+    ocrMode.value = 'ai';
   }
   function workflowText(path: string) {
     return t(`toolbox.workbench.workflow.${toolId.value}.${path}`);
@@ -833,7 +855,7 @@
     try {
       const sourceIds = await ensureUploadedSources(activeTool, version);
       if (version !== stateVersion) return;
-      if (activeTool.id === 'ocr_to_text') {
+      if (activeTool.id === 'ocr_to_text' && ocrMode.value === 'basic') {
         const input = { resourceRefs: selectedResources.value.map(({ type, id }) => ({ type, id })), sourceIds };
         const key = JSON.stringify([toolboxRecentUseIdentityKey(user), input]);
         if (freeOcrRequest?.key !== key) freeOcrRequest = { key, id: createToolboxClientRequestId('job') };
@@ -856,6 +878,7 @@
           resourceRefs: selectedResources.value.map((item) => ({ type: item.type, id: item.id })),
           sourceIds,
           options: {
+            ...(activeTool.id === 'ocr_to_text' ? { recognitionMode: 'ai' as const } : {}),
             question: String(question.value || '').trim(),
             intent: selectedIntent.value || undefined,
             detailLevel: detailLevel.value,
@@ -963,7 +986,16 @@
 </script>
 
 <style scoped lang="less">
-  @import (reference) "@/assets/css/workspace-surfaces.less";
+  .toolbox-ocr-mode {
+    margin-bottom: 16px;
+  }
+  .toolbox-ocr-mode p {
+    color: var(--desc-color);
+    font-size: 13px;
+    line-height: 1.6;
+    margin-top: 10px;
+  }
+  @import (reference) '@/assets/css/workspace-surfaces.less';
   .toolbox-mobile-execute {
     display: none;
   }

@@ -1,5 +1,6 @@
 import { extractStudyCards } from './studyCards.js';
 import { executeFreeOcr } from './freeOcr.js';
+import { executeAiOcr } from './aiOcr.js';
 import crypto from 'node:crypto';
 import { AI_QUOTA_ERROR_CODES } from '@lightnote/shared/ai-quota-protocol';
 import pool from '../../db/index.js';
@@ -660,6 +661,10 @@ async function completeToolboxJob(job, workerId, artifact, database = pool) {
     );
     const settlement = await settleToolboxBilling(connection, current, {
       outcome: artifact.outcome,
+      deterministicOcr:
+        current.tool_id === 'ocr_to_text' &&
+        artifact.meta?.recognitionMode === 'ai' &&
+        artifact.meta?.modelCalled === false,
       reasonCode: artifact.outcome === 'partial_succeeded' ? 'PARTIAL_COVERAGE' : 'DELIVERED',
     });
     await connection.query(
@@ -764,6 +769,12 @@ export async function runSingleToolboxJob(workerId, database = pool) {
         if (job.tool_id === 'ocr_to_text' && job.billing_medium === 'free') return executeFreeOcr(job, database);
         const promptOnly = job.tool_id === 'idea_to_draft';
         await updateToolboxJobStage(job, leaseOwner, promptOnly ? 'preparing_prompt' : 'reading_sources', 28, database);
+        if (job.tool_id === 'ocr_to_text' && safeJson(job.options_json, {})?.recognitionMode === 'ai') {
+          return executeAiOcr(job, inputs, identity, database, {
+            requestId: toolboxAttemptRequestId(job),
+            beforeRequest: () => markExternalCostCommitted(job, leaseOwner, 'recognizing', database),
+          });
+        }
         let documentState = { sourceIds: [], statuses: [] };
         if (job.tool_id === 'ocr_to_text' || inputs.resourceRefs.some((item) => item.type === 'file')) {
           documentState = await ensureDocumentInputsReady(job, inputs, database);

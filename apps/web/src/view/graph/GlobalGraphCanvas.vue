@@ -1,7 +1,7 @@
 <template>
   <div class="global-graph-canvas">
     <div v-if="loading && !nodes.length" class="gg-state"
-      ><div class="gg-spinner"></div><span>{{ t('knowledgeMap.loading') }}</span></div
+      ><BLoading inline loading :title="t('knowledgeMap.loading')" /></div
     >
     <div v-else-if="!nodes.length" class="gg-state gg-state--empty">
       {{ t('knowledgeMap.empty') }}
@@ -11,6 +11,7 @@
 </template>
 
 <script setup lang="ts">
+  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import { Graph } from '@antv/g6';
   import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
@@ -406,20 +407,6 @@
     padding: 24px;
     font-size: 14px;
   }
-  .gg-spinner {
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    border: 2px solid rgba(97, 92, 237, 0.2);
-    border-top-color: #615ced;
-    animation: gg-spin 0.8s linear infinite;
-  }
-  @keyframes gg-spin {
-    to {
-      transform: rotate(360deg);
-    }
-  }
-
   // 共享工作区表面：仅改变颜色，布局与滚动由原组件负责。
   .global-graph-canvas {
     .workspace-canvas-surface();

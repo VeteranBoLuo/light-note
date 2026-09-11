@@ -18,6 +18,26 @@ const item = (type: string, id: string) => ({ type, id, title: `${type}-${id}` }
 describe('useResourcePickerSearch', () => {
   beforeEach(() => fetchGlobalSearchMock.mockReset());
 
+  it('keeps the file format filter on initial search and subsequent pages', async () => {
+    fetchGlobalSearchMock
+      .mockResolvedValueOnce({
+        items: [item('file', '1')],
+        hasMore: true,
+        nextCursor: { type: 'file', offset: 1 },
+        total: 2,
+      } as any)
+      .mockResolvedValueOnce({ items: [item('file', '2')], hasMore: false } as any);
+    const picker = useResourcePickerSearch({
+      allowedTypes: ['file'],
+      exhaustive: true,
+      fileExtensions: () => ['pdf', 'png'],
+    });
+    await picker.searchNow('scan');
+    await picker.loadMore();
+    expect(fetchGlobalSearchMock).toHaveBeenCalledTimes(2);
+    for (const call of fetchGlobalSearchMock.mock.calls) expect(call[3]?.fileExtensions).toEqual(['pdf', 'png']);
+  });
+
   it('全选自动收集后续页，去重且不要求先滚动加载', async () => {
     fetchGlobalSearchMock
       .mockResolvedValueOnce({

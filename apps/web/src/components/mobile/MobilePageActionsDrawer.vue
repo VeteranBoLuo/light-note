@@ -9,6 +9,7 @@
     @after-close="handleAfterClose"
   >
     <div class="mobile-page-actions" :class="{ 'is-compact': compact }" role="menu" :aria-label="sheetTitle">
+      <slot name="before-actions" :run-action="runAction" :pending="actionHandoffPending" />
       <BButton
         v-for="action in actions"
         :key="action.key"

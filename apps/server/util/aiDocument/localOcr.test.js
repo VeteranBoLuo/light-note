@@ -58,6 +58,27 @@ describe('本地 OCR', () => {
     expect(await readdir(tempRoot)).toEqual([]);
   });
 
+  it('reuses PDF rendering for a supplied vision recognizer without invoking Tesseract', async () => {
+    const tempRoot = await createTempRoot();
+    const runner = vi.fn(async (command, args) => {
+      expect(command).toBe('pdftoppm');
+      await writeFile(`${args.at(-1)}-2.png`, ONE_PIXEL_PNG);
+      return { stdout: '', stderr: '' };
+    });
+    const recognizePage = vi.fn(async () => '原图文字');
+    const pages = await recognizePdfWithLocalOcr(Buffer.from('%PDF-test'), {
+      pageCount: 2,
+      pageNumbers: [2],
+      runner,
+      tempRoot,
+      recognizePage,
+    });
+    expect(pages).toEqual([{ pageNumber: 2, content: '原图文字' }]);
+    expect(recognizePage.mock.calls[0][0]).toEqual(ONE_PIXEL_PNG);
+    expect(runner).toHaveBeenCalledOnce();
+    expect(await readdir(tempRoot)).toEqual([]);
+  });
+
   it('图片直接识别并使用中英文模型', async () => {
     const tempRoot = await createTempRoot();
     const runner = vi.fn(async () => ({ stdout: '图片里的文字', stderr: '' }));
@@ -125,8 +146,20 @@ it('逐页补读只渲染指定页，单页渲染失败仍保留成功页', asyn
     }
     return { stdout: '门窗图纸可靠文字', stderr: '' };
   });
-  const pages = await recognizePdfWithLocalOcr(Buffer.from('%PDF-fixture'), { pageCount: 4, pageNumbers: [2, 3], runner, tempRoot });
-  expect(runner.mock.calls.filter(([command]) => command === 'pdftoppm').map(([, args]) => args[args.indexOf('-f') + 1])).toEqual(['2', '3']);
-  expect(pages).toEqual(expect.arrayContaining([{ pageNumber: 2, content: '门窗图纸可靠文字' }, { pageNumber: 3, content: '', errorCode: 'OCR_PDF_RENDER_FAILED' }]));
+  const pages = await recognizePdfWithLocalOcr(Buffer.from('%PDF-fixture'), {
+    pageCount: 4,
+    pageNumbers: [2, 3],
+    runner,
+    tempRoot,
+  });
+  expect(
+    runner.mock.calls.filter(([command]) => command === 'pdftoppm').map(([, args]) => args[args.indexOf('-f') + 1]),
+  ).toEqual(['2', '3']);
+  expect(pages).toEqual(
+    expect.arrayContaining([
+      { pageNumber: 2, content: '门窗图纸可靠文字' },
+      { pageNumber: 3, content: '', errorCode: 'OCR_PDF_RENDER_FAILED' },
+    ]),
+  );
   expect(await readdir(tempRoot)).toEqual([]);
 });

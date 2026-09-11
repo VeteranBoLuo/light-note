@@ -58,7 +58,10 @@ function accountCalendar(dayKey, makeupDays = []) {
   };
 }
 
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllEnvs();
+});
 
 describe('growth 段位表', () => {
   it('书签判重键在 Node 运行时稳定生成 SHA-256', () => {
@@ -712,6 +715,7 @@ describe('后台成长调整的升级通知', () => {
 });
 
 describe('成长提醒', () => {
+  beforeEach(() => vi.stubEnv('LIGHTNOTE_RUNTIME_ENV', 'production'));
   it('按二进制用户标识关联新旧排序规则的成长表', async () => {
     vi.clearAllMocks();
     pool.query.mockResolvedValueOnce([[]]);

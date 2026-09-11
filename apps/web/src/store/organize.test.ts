@@ -3,13 +3,11 @@ import { createPinia, setActivePinia } from 'pinia';
 
 const mocks = vi.hoisted(() => ({
   getOrganizeIssueList: vi.fn(),
-  getOrganizeKnowledgeStructureSummary: vi.fn(),
   getOrganizeSummary: vi.fn(),
 }));
 
 vi.mock('@/api/organizeApi', () => ({
   getOrganizeIssueList: mocks.getOrganizeIssueList,
-  getOrganizeKnowledgeStructureSummary: mocks.getOrganizeKnowledgeStructureSummary,
   getOrganizeSummary: mocks.getOrganizeSummary,
 }));
 
@@ -68,34 +66,17 @@ describe('organize store', () => {
 
     expect(store.ownerKey).toBe('user-b');
     expect(store.summary).toBeNull();
-    expect(store.knowledgeStructureSummary).toBeNull();
     expect(store.lists.untagged).toMatchObject({ items: [], loading: false, loadingMore: false, error: false });
   });
 
-  it('知识结构摘要失败与主摘要相互隔离', async () => {
-    mocks.getOrganizeSummary.mockResolvedValue({ status: 200, data: { pendingShortcut: { count: 1 } } });
-    mocks.getOrganizeKnowledgeStructureSummary.mockRejectedValueOnce(new Error('knowledge unavailable'));
-    const store = useOrganizeStore();
-
-    await Promise.all([store.loadSummary(), store.loadKnowledgeStructureSummary()]);
-
-    expect(store.summary).toEqual(expect.objectContaining({ pendingShortcut: { count: 1 } }));
-    expect(store.summaryError).toBe(false);
-    expect(store.knowledgeStructureSummary).toBeNull();
-    expect(store.knowledgeStructureError).toBe(true);
-  });
-
-  it('汇总待整理、资源治理和知识结构的待处理事项数', () => {
+  it('汇总整理中心内的待整理和资源治理事项数', () => {
     const store = useOrganizeStore();
     store.summary = {
       pendingShortcut: { state: 'ready', count: 7, route: '/organize?issue=pending' },
       totals: { findingTotal: 12 },
     } as any;
 
-    expect(store.attentionCount).toBeNull();
-
-    store.knowledgeStructureSummary = { findingCount: 5 } as any;
-    expect(store.attentionCount).toBe(24);
+    expect(store.attentionCount).toBe(19);
   });
 
   it('摘要加载中复用当前请求，不重复发起相同统计', async () => {

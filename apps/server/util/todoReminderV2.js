@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { Temporal } from '@js-temporal/polyfill';
 import pool from '../db/index.js';
+import { notificationSchedulerEnabled } from './notificationSchedulerPolicy.js';
 import { sendTrackedEmail } from './emailDelivery.js';
 import { createNotification } from './notification.js';
 import { buildTodoReminderEmail } from './todoReminder.js';
@@ -230,6 +231,7 @@ async function processJob(id) {
 }
 
 export async function processDueTodoReminderJobs() {
+  if (!notificationSchedulerEnabled()) return;
   if (running) return;
   running = true;
   try {
@@ -255,6 +257,7 @@ export async function processDueTodoReminderJobs() {
 }
 
 export function startTodoReminderV2Scheduler() {
+  if (!notificationSchedulerEnabled()) return;
   const timer = setInterval(() => processDueTodoReminderJobs(), POLL_INTERVAL_MS);
   timer.unref?.();
   setTimeout(() => processDueTodoReminderJobs(), 20_000).unref?.();

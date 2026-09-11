@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { createApp, h, nextTick, ref } from 'vue';
+import { createI18n } from 'vue-i18n';
 import BLoading from './BLoading.vue';
 
 let cleanup: (() => void) | undefined;
@@ -44,4 +45,66 @@ describe('BLoading bar', () => {
 
     expect(host.querySelector<HTMLElement>('.b-loading-bar')?.style.display).toBe('none');
   });
+});
+
+describe('BLoading shared data feedback', () => {
+  it('shows a standalone status and preserves mounted content across loading changes', async () => {
+    const host = document.createElement('div');
+    const loading = ref(true);
+    const app = createApp({
+      render: () =>
+        h(
+          BLoading,
+          { loading: loading.value, title: '正在加载' },
+          {
+            default: () => h('input', { value: '保留内容' }),
+          },
+        ),
+    });
+    app.mount(host);
+    cleanup = () => app.unmount();
+    const input = host.querySelector('input');
+    expect(host.querySelector('[role="status"]')?.textContent).toContain('正在加载');
+    expect(host.querySelector('[aria-busy]')?.getAttribute('aria-busy')).toBe('true');
+    loading.value = false;
+    await nextTick();
+    expect(host.querySelector('[role="status"]')).toBeNull();
+    expect(host.querySelector('input')).toBe(input);
+    expect(input?.value).toBe('保留内容');
+  });
+
+  it('renders the same three-dot indicator in inline and standalone modes', () => {
+    const host = document.createElement('div');
+    const app = createApp({
+      render: () => h('div', [h(BLoading, { loading: true }), h(BLoading, { loading: true, inline: true })]),
+    });
+    app.mount(host);
+    cleanup = () => app.unmount();
+    expect(host.querySelectorAll('[role="status"]')).toHaveLength(2);
+    expect(host.querySelectorAll('.b-loading-inline__indicator')).toHaveLength(2);
+    expect(host.querySelectorAll('.b-loading-inline__indicator i')).toHaveLength(6);
+    expect(host.querySelector('.loader-container')?.classList.contains('is-standalone')).toBe(true);
+  });
+});
+
+it('居中加载提供本地化默认说明，行内提示移除重复省略号', async () => {
+  const host = document.createElement('div');
+  const i18n = createI18n({
+    legacy: false,
+    locale: 'zh',
+    messages: { zh: { common: { loading: '正在加载…' } }, en: { common: { loading: 'Loading...' } } },
+  });
+  const app = createApp({
+    render: () =>
+      h('div', [h(BLoading, { loading: true }), h(BLoading, { loading: true, inline: true, title: '加载更多...' })]),
+  });
+  app.use(i18n);
+  app.mount(host);
+  cleanup = () => app.unmount();
+  expect(host.querySelector('.b-loading-overlay')?.textContent?.trim()).toBe('正在加载');
+  expect(host.querySelector('.b-loading-inline__title')?.textContent?.trim()).toBe('正在加载');
+  expect(host.querySelector('.b-loading-inline .b-loading-inline__title')?.textContent).toBe('加载更多');
+  i18n.global.locale.value = 'en';
+  await nextTick();
+  expect(host.querySelector('.b-loading-overlay')?.textContent?.trim()).toBe('Loading');
 });

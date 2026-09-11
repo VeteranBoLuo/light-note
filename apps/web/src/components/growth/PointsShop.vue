@@ -1,7 +1,7 @@
 <template>
   <div ref="shopRoot" class="ps">
     <BButton v-if="journey && !readOnly" @click="returnToTask">{{ t('entitlementJourney.returnTask') }}</BButton>
-    <div v-if="!shop && (shopLoading || !shopError)" class="ps-state"><BLoading size="small" /></div>
+    <div v-if="!shop && (shopLoading || !shopError)" class="ps-state"><BLoading inline loading /></div>
     <div v-else-if="shopError && !shop" class="ps-state ps-state--error">
       <span>{{ t('growth.shopLoadFailed') }}</span>
       <BButton size="small" @click="loadShop">{{ t('common.retry') }}</BButton>

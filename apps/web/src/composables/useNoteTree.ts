@@ -84,6 +84,7 @@ export function useNoteTree(
 
   async function selectDirectory(parentId: string | null) {
     const query = { ...router.currentRoute.value.query };
+    delete query.preview;
     delete query._rt;
     delete query.from;
     // 目录决定浏览范围，标签只是范围内的筛选；切换目录时保留当前标签条件。

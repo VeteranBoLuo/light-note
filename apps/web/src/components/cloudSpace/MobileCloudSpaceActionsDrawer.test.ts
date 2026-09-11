@@ -74,7 +74,7 @@ function mountDrawer(props: Record<string, unknown> = {}) {
       'zh-CN': {
         common: { back: '返回', close: '关闭', cancel: '取消', delete: '删除' },
         navigation: { resourceCenter: '资源中心' },
-        resourceCenter: { sections: { organize: '整理中心' } },
+        organize: { title: '资源整理' },
         cloudSpace: {
           mobileActionsTitle: '云空间操作',
           newFolder: '新建文件夹',
@@ -158,7 +158,7 @@ describe('MobileCloudSpaceActionsDrawer', () => {
     const actions = host.querySelectorAll<HTMLButtonElement>('.mobile-page-actions__item');
     expect(actions).toHaveLength(5);
     expect(actions[0].textContent).toContain('资源中心');
-    expect(actions[1].textContent).toContain('整理中心');
+    expect(actions[1].textContent).toContain('资源整理');
     expect(host.textContent).not.toContain('新建子级、移动、重命名或删除文件夹');
 
     actions[2].click();

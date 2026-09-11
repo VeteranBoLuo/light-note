@@ -1,4 +1,4 @@
-import { requestAi } from './agent/aiGateway.js';
+import { requestAi, estimateAiProviderTokens } from './agent/aiGateway.js';
 import { safeAgentError } from './agent/logSafety.js';
 import { TAG_ICON_MAX_SVG_BYTES } from './contentLimits.js';
 
@@ -142,6 +142,37 @@ export function parseKeywordResponse(content) {
   }
 }
 
+function iconKeywordMessages(query) {
+  return [
+    {
+      role: 'system',
+      content:
+        '你负责把标签名称转换成适合 Iconify 搜索的英文关键词。保留品牌英文名，返回 2 到 4 个简短关键词，只输出 JSON：{"keywords":["keyword"]}。不要生成 SVG，不要解释。',
+    },
+    { role: 'user', content: query },
+  ];
+}
+
+// Saved keywords make the free lane deterministic even after process/cache expiry.
+export function prepareTagIconRoute(query) {
+  const normalized = normalizeIconQuery(query);
+  const keywords = getCached(keywordCache, normalized.toLowerCase());
+  const search = getCached(searchCache, `:recommend:ai:${normalized.toLowerCase()}`);
+  return {
+    needsAi: containsCjk(normalized) && !keywords && !search,
+    keywords:
+      keywords ||
+      search?.keywords ||
+      uniqueKeywords([...(normalized.match(/[a-z][a-z0-9.+#-]{1,}/gi) || []), ...getLocalKeywords(normalized)]),
+  };
+}
+
+export function estimateTagIconTokens(query) {
+  const normalized = normalizeIconQuery(query);
+  if (!containsCjk(normalized) || getCached(keywordCache, normalized.toLowerCase())) return 0;
+  return estimateAiProviderTokens(iconKeywordMessages(normalized), { maxTokens: 120, toolChoice: 'none' });
+}
+
 async function translateToIconKeywords(query, trace, signal) {
   const cacheKey = query.toLowerCase();
   const cached = getCached(keywordCache, cacheKey);
@@ -149,30 +180,20 @@ async function translateToIconKeywords(query, trace, signal) {
   const localKeywords = getLocalKeywords(query);
   let aiKeywords = [];
   try {
-    const result = await requestAi(
-      [
-        {
-          role: 'system',
-          content:
-            '你负责把标签名称转换成适合 Iconify 搜索的英文关键词。保留品牌英文名，返回 2 到 4 个简短关键词，只输出 JSON：{"keywords":["keyword"]}。不要生成 SVG，不要解释。',
-        },
-        { role: 'user', content: query },
-      ],
-      {
-        signal,
-        toolChoice: 'none',
-        maxTokens: 120,
-        temperature: 0.1,
-        trace: { ...trace, taskType: 'tag_icon_search', stage: 'tag_icon_keywords' },
-      },
-    );
+    const result = await requestAi(iconKeywordMessages(query), {
+      signal,
+      toolChoice: 'none',
+      maxTokens: 120,
+      temperature: 0.1,
+      trace: { ...trace, taskType: 'tag_icon_search', stage: 'tag_icon_keywords' },
+    });
     aiKeywords = parseKeywordResponse(result.content);
   } catch (error) {
     if (error?.name !== 'AbortError') {
       console.warn('[tag-icon] AI 关键词转换失败:', safeAgentError(error));
     }
-    // 这是用户显式点击并可能消耗额度的动作。普通免费搜索已经提供本地语义降级，
-    // 这里不能把 Provider 失败伪装成“AI 扩展成功”。保留页面现有免费结果并明确报错。
+    // 搜索与整理共用转换失败语义，不能把 Provider 失败伪装成成功或无匹配。
+    // 调用方保留已有结果，并交由统一错误提示或队列暂停处理。
     throw error;
   }
   if (!aiKeywords.length) {
@@ -235,24 +256,34 @@ function rankIcons(icons, keywords) {
     .map((item) => item.icon);
 }
 
-export async function searchTagIcons({ query, page = 0, useAi = false, signal, trace, mode = 'browse' } = {}) {
+export async function searchTagIcons({
+  query,
+  page = 0,
+  useAi = false,
+  signal,
+  trace,
+  mode = 'browse',
+  preparedKeywords,
+} = {}) {
   const normalizedQuery = normalizeIconQuery(query);
   if (!normalizedQuery) throw new Error('ICON_QUERY_REQUIRED');
   const normalizedPage = Math.max(0, Math.min(20, Number(page) || 0));
-  const aiExpanded = useAi === true && containsCjk(normalizedQuery);
+  const aiExpanded = !preparedKeywords && useAi === true && containsCjk(normalizedQuery);
   const recommend = mode === 'recommend';
   const brand = BRAND_ALIASES.get(normalizedQuery.toLowerCase());
-  const cacheKey = `${mode}:${aiExpanded ? 'ai' : 'direct'}:${normalizedQuery.toLowerCase()}`;
+  const cacheKey = `${preparedKeywords ? JSON.stringify(preparedKeywords) : ''}:${mode}:${aiExpanded ? 'ai' : 'direct'}:${normalizedQuery.toLowerCase()}`;
   let result = getCached(searchCache, cacheKey);
   const cacheHit = !!result;
 
   if (!result) {
-    const keywords = aiExpanded
-      ? await translateToIconKeywords(normalizedQuery, trace, signal)
-      : uniqueKeywords([
-          ...(normalizedQuery.match(/[a-z][a-z0-9.+#-]{1,}/gi) || []),
-          ...getLocalKeywords(normalizedQuery),
-        ]);
+    const keywords =
+      preparedKeywords ||
+      (aiExpanded
+        ? await translateToIconKeywords(normalizedQuery, trace, signal)
+        : uniqueKeywords([
+            ...(normalizedQuery.match(/[a-z][a-z0-9.+#-]{1,}/gi) || []),
+            ...getLocalKeywords(normalizedQuery),
+          ]));
     const asciiWords = normalizedQuery.match(/[a-z][a-z0-9.+#-]{1,}/gi) || [];
     const searchTerms = uniqueKeywords([
       ...(brand ? [brand] : []),
@@ -362,8 +393,8 @@ export function rankRecommendedIcons(icons, keywords, brand) {
     .map((item) => item.icon);
 }
 
-export async function recommendTagIcons(query) {
-  const result = await searchTagIcons({ query, mode: 'recommend', useAi: false });
+export async function recommendTagIcons(query, preparedKeywords) {
+  const result = await searchTagIcons({ query, mode: 'recommend', useAi: !preparedKeywords, preparedKeywords });
   const candidates = [];
   for (const iconName of result.icons.slice(0, 6)) {
     try {

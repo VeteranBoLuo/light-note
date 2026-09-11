@@ -3,7 +3,7 @@
     <div v-if="visible" class="guest-browse-nudge">
       <span class="guest-browse-nudge__text">{{ $t('home.guestNudgeText') }}</span>
       <BButton class="guest-browse-nudge__cta" type="primary" @click="register">
-        {{ $t('home.freeRegister') }}
+        {{ $t('home.createAccount') }}
       </BButton>
       <BButton class="guest-browse-nudge__close" :aria-label="$t('common.close')" @click="dismiss">
         <SvgIcon :src="icon.common.close" size="16" aria-hidden="true" />

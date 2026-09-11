@@ -388,7 +388,7 @@
   import { normalizeMarkdownBlockquoteEntities } from '@lightnote/shared';
   import { noteHtmlToMarkdown } from '@/utils/noteHtmlToMarkdown';
   import { buildNoteBreadcrumbDisplay } from '@/utils/noteBreadcrumb';
-  import { resolveDeletedNoteFallbackId, resolveNoteDetailReturnPath } from '@/utils/noteDetailNavigation';
+  import { resolveDeletedNoteFallbackId, resolveNoteDetailReturnPath, updateNotePreviewReturnPath } from '@/utils/noteDetailNavigation';
   import { hasMeaningfulNoteContent } from '@/utils/noteTree';
   import { resolveNoteWorkspaceLayout, type NoteWorkspaceLayoutState } from '@/utils/noteWorkspaceLayout';
   import { markNoteDraftPromoted } from '@/utils/routeViewKey';
@@ -491,7 +491,11 @@
     const from = sourceReturnPath();
     return from ? { from } : {};
   };
-  const returnToSource = () => router.push(sourceReturnPath() || noteLibraryFallback());
+  const returnToSource = () => {
+    const target = sourceReturnPath() || router.resolve(noteLibraryFallback()).fullPath;
+    if (router.options.history.state.back === target) router.back();
+    else void router.push(target);
+  };
   // 新建笔记时必须在 Editor 子组件挂载前就按 query(显式 type 或内置模板的 type)同步定好编辑器类型:
   // 子组件挂载早于父 onMounted,若此刻仍是默认富文本(html),随后灌入的 markdown 模板正文会经 TinyMCE,
   // 其中的 `>` 等被 HTML 转义成 &gt; 再回写存库。编辑已有笔记时该初值会被加载覆盖,不受影响。
@@ -1488,12 +1492,9 @@
     try {
       const navigationFailure = await router.push({
         path: `/noteLibrary/${encodeURIComponent(normalizedId)}`,
-        query: detailSourceQuery(),
+        query: sourceReturnPath() ? { from: updateNotePreviewReturnPath(sourceReturnPath(), normalizedId) } : {},
       });
       if (requestVersion !== noteOpenRequestVersion || isNavigationFailure(navigationFailure)) return;
-      // 编辑器内切换后的当前笔记才是返回笔记库时应恢复的预览页。
-      // 只在路由确认成功后落缓存，保存失败或导航被取消时仍保留原来的预览。
-      if (!bookmark.isMobile) noteWorkspace.setLibraryPreviewPage(normalizedId);
     } finally {
       if (requestVersion === noteOpenRequestVersion) {
         openingPageId.value = null;
@@ -2074,7 +2075,6 @@
     // 删除已在服务端成功完成，离开时不能再把排队中的旧编辑内容写回已删除笔记。
     skipSaveOnLeave = true;
     clearScheduledSave();
-    noteWorkspace.setLibraryPreviewPage(fallbackId || null);
     noteWorkspace.setNavigation({ activePageId: fallbackId || null, browseParentId: null });
     await refreshTree();
 

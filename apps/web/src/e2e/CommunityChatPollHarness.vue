@@ -74,7 +74,7 @@
         <span>本人、他人和管理员代撤回不再占用头像与空白气泡空间。</span>
       </div>
       <article>
-        <ChatRecalledMessageLine label="你撤回了一条消息" can-reedit :action-items="recallActions" />
+        <ChatRecalledMessageLine label="你撤回了一条消息" can-reedit />
       </article>
       <article><ChatRecalledMessageLine label="“薄荷”撤回了一条消息" /></article>
       <article>
@@ -120,14 +120,12 @@
     CommunityChatPollVoter,
     CommunityChatReadReceiptReader,
   } from '@/api/communityChatApi';
-  import type { BActionMenuItem } from '@/components/base/BasicComponents/actionMenu';
   import ChatPollCard from '@/components/communityChat/ChatPollCard.vue';
   import ChatPollComposerModal from '@/components/communityChat/ChatPollComposerModal.vue';
   import ChatPollVotersModal from '@/components/communityChat/ChatPollVotersModal.vue';
   import ChatReadReceiptBadge from '@/components/communityChat/ChatReadReceiptBadge.vue';
   import ChatReadReceiptReadersModal from '@/components/communityChat/ChatReadReceiptReadersModal.vue';
   import ChatRecalledMessageLine from '@/components/communityChat/ChatRecalledMessageLine.vue';
-  import icon from '@/config/icon';
 
   const props = withDefaults(
     defineProps<{
@@ -178,10 +176,6 @@
     if (props.readerState === 'error') return 6;
     return props.readerState === 'many' ? 46 : visibleVoters.value.length;
   });
-  const recallActions: BActionMenuItem[] = [
-    { key: 'delete', label: '从我的会话删除', icon: icon.noteDetail.deleteLine, danger: true },
-  ];
-
   const options = [
     {
       publicId: 'option-a',

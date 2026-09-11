@@ -82,11 +82,12 @@ describe('toolbox catalog', () => {
     expect(catalog).not.toHaveProperty('aiFollowupBilling');
     expect(catalog.tools.find((item) => item.id === 'ocr_to_text')?.availability.enabled).toBe(false);
     expect(catalog.tools.find((item) => item.id === 'image_optimizer')?.billingMedium).toBe('free');
-    expect(catalog.tools.find((item) => item.id === 'research_brief')?.billingMedia).toEqual([
-      'points',
+    expect(catalog.tools.find((item) => item.id === 'research_brief')?.billingMedia).toEqual(['points', 'ai_quota']);
+    expect(catalog.tools.find((item) => item.id === 'ocr_to_text')?.billingMedia).toEqual([
       'ai_quota',
+      'points',
+      'free',
     ]);
-    expect(catalog.tools.find((item) => item.id === 'ocr_to_text')?.billingMedia).toEqual(['free']);
     expect(catalog.tools).toHaveLength(41);
     expect(getPublicToolboxCatalog().tools.filter((item) => item.availability.enabled)).toHaveLength(17);
     expect(catalog.tools.filter((item) => item.availability.enabled)).toHaveLength(16);
@@ -105,9 +106,7 @@ describe('toolbox catalog', () => {
     }
     expect(normalizeToolboxBillingMedium('research_brief', 'ai_quota')).toBe('ai_quota');
     expect(normalizeToolboxBillingMedium('research_brief', 'points')).toBe('points');
-    expect(() => normalizeToolboxBillingMedium('ocr_to_text', 'ai_quota')).toThrowError(
-      expect.objectContaining({ code: 'TOOLBOX_BILLING_MEDIUM_INVALID' }),
-    );
+    expect(normalizeToolboxBillingMedium('ocr_to_text', 'ai_quota')).toBe('ai_quota');
   });
 
   it('fails closed on unknown fields, duplicate resources and out-of-range input counts', () => {

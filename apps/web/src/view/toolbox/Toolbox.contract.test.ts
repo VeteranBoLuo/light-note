@@ -246,7 +246,7 @@ describe('知识工具箱前端边界', () => {
     expect(homeTemplate.indexOf('toolbox-continue')).toBeLessThan(homeTemplate.indexOf('toolbox-tasks'));
     expect(homeTemplate.indexOf('toolbox-tasks')).toBeLessThan(homeTemplate.indexOf('toolbox-quick'));
     expect(homeTemplate.indexOf('toolbox-quick')).toBeLessThan(homeTemplate.indexOf('toolbox-catalog'));
-    expect(homeTemplate).toContain("isGuest ? '03' : '04'");
+    expect(homeTemplate).not.toContain("isGuest ? '03' : '04'");
     expect(homeTemplate).toContain('class="toolbox-group-filter"');
     expect(home).toContain('class="toolbox-catalog__search"');
     expect(home).not.toContain('class="toolbox-overview__search"');

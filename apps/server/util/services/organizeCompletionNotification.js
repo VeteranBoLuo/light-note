@@ -1,5 +1,6 @@
 import pool from '../../db/index.js';
 import { createNotification } from '../notification.js';
+import { notificationSchedulerEnabled } from '../notificationSchedulerPolicy.js';
 import { json, transaction } from './organizeSuggestionStorage.js';
 
 export const ORGANIZE_NOTIFICATION_MIN_MS = 30_000;
@@ -24,8 +25,9 @@ export function completionMessage(run, counts, preferences = {}) {
 
 /** 新任务在启动时登记待通知状态；投递和标记同事务，唯一来源键防止重复投递。 */
 export async function runOrganizeCompletionNotifications(_workerId, db = pool, notify = createNotification) {
+  if (!notificationSchedulerEnabled()) return;
   const [candidates] = await db.query(`SELECT id, user_id FROM organize_suggestion_runs
-    WHERE status='completed' AND run_version=2
+    WHERE status='completed' AND run_version IN (2,3)
       AND JSON_UNQUOTE(JSON_EXTRACT(summary_json,'$.completionNotification'))='pending'
     ORDER BY updated_at, id LIMIT 20`);
   for (const candidate of candidates) {
@@ -44,6 +46,13 @@ export async function runOrganizeCompletionNotifications(_workerId, db = pool, n
         FROM organize_suggestion_items i WHERE run_id=?`,
         [run.id],
       );
+      if (Number(run.run_version) === 3) {
+        const [processing] = await c.query(
+          "SELECT COUNT(DISTINCT item_id) failed FROM organize_processing_jobs WHERE run_id=? AND status IN ('failed','conflict','partial')",
+          [run.id],
+        );
+        counts[0] = processing[0];
+      }
       const payload = users.length ? completionMessage(run, counts[0] || {}, json(users[0].preferences) || {}) : null;
       if (payload) await notify(run.user_id, payload, c);
       await c.query(

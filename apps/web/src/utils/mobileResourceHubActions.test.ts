@@ -9,16 +9,17 @@ describe('移动资料共享入口', () => {
     const actions = createMobileResourceHubActions((key) => key);
     expect(actions).toEqual([
       { key: 'resource-center', label: 'navigation.resourceCenter', icon: icon.navigation.search },
-      { key: 'organize-center', label: 'resourceCenter.sections.organize', icon: icon.ai.organize },
+      { key: 'organize-center', label: 'organize.title', icon: icon.ai.organize },
     ]);
     expect(mobileResourceHubPath('resource-center')).toBe('/search');
     expect(mobileResourceHubPath('organize-center')).toBe('/organize');
     expect(mobileResourceHubPath('unknown')).toBeNull();
   });
 
-  it('书签、笔记、云空间和标签都接入共享入口，标签补齐更多抽屉', () => {
+  it('待办、书签、笔记、云空间和标签都接入共享入口，标签补齐更多抽屉', () => {
     const root = resolve(process.cwd(), 'src');
     const sources = [
+      'view/inbox/Inbox.vue',
       'view/home/Home.vue',
       'view/noteLibrary/NoteLibrary.vue',
       'components/cloudSpace/MobileCloudSpaceActionsDrawer.vue',
@@ -26,7 +27,7 @@ describe('移动资料共享入口', () => {
       'components/tagSpace/TagSpaceEntry.vue',
     ].map((file) => readFileSync(resolve(root, file), 'utf8'));
     for (const source of sources) expect(source).toContain('createMobileResourceHubActions');
-    for (const source of sources.slice(3)) {
+    for (const source of sources.slice(4)) {
       expect(source).toContain('v-model:open="mobilePageActionsOpen"');
       expect(source).toContain('onAuxiliaryAction');
     }

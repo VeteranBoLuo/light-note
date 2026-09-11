@@ -106,10 +106,19 @@ function normalizeOptions(toolId, value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw toolboxError('TOOLBOX_OPTIONS_INVALID', '工具选项必须是对象');
   }
-  const allowed = new Set(['title', 'question', 'intent', 'detailLevel', 'targetLength']);
+  const allowed = new Set([
+    'title',
+    'question',
+    'intent',
+    'detailLevel',
+    'targetLength',
+    ...(toolId === 'ocr_to_text' ? ['recognitionMode'] : []),
+  ]);
   const unknown = Object.keys(value).filter((key) => !allowed.has(key));
   if (unknown.length)
     throw toolboxError('TOOLBOX_OPTIONS_UNKNOWN_FIELD', `工具选项包含未知字段：${unknown.join(', ')}`);
+  if (value.recognitionMode != null && !['ai', 'basic'].includes(value.recognitionMode))
+    throw toolboxError('TOOLBOX_OPTIONS_INVALID', '不支持该识别方式');
   const title = String(value.title || '').trim();
   const question = String(value.question || '').trim();
   const intent = String(value.intent || '').trim();
@@ -133,6 +142,7 @@ function normalizeOptions(toolId, value) {
     }
   }
   return Object.freeze({
+    ...(value.recognitionMode ? { recognitionMode: value.recognitionMode } : {}),
     ...(title ? { title } : {}),
     ...(question ? { question } : {}),
     ...(intent ? { intent } : {}),

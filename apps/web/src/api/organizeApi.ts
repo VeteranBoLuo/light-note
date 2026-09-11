@@ -1,8 +1,7 @@
 import { apiBaseDelete, apiBaseGet, apiBasePost, apiBasePut, type ApiResponse } from '@/http/request';
 
-export type OrganizeIssueType = 'untagged' | 'duplicate_bookmark' | 'bookmark_health' | 'knowledge_structure';
+export type OrganizeIssueType = 'untagged' | 'duplicate_bookmark' | 'bookmark_health';
 export type OrganizeResourceType = 'bookmark' | 'note' | 'file';
-export type KnowledgeStructureIssueKind = 'invalid_parent' | 'empty' | 'duplicate_title' | 'untitled' | 'deep';
 
 export interface OrganizeIssueSummary {
   state: 'ready' | 'loading' | 'stale' | 'error';
@@ -48,28 +47,6 @@ export interface BookmarkHealthOverviewItem {
   name: string;
   observedCode?: string | null;
   checkedAt?: string | null;
-}
-
-export interface KnowledgeStructureIssue {
-  kind: KnowledgeStructureIssueKind;
-  severity: 'high' | 'medium' | 'low';
-  noteId: string;
-  title: string;
-  path: string;
-  reason: string;
-}
-
-export interface KnowledgeStructureSummary {
-  scannedAt: string;
-  healthScore: number;
-  totalNotes: number;
-  rootNotes: number;
-  maxDepth: number;
-  findingCount: number;
-  affectedNoteCount: number;
-  priorityIssueCount: number;
-  issueCounts: Array<{ kind: KnowledgeStructureIssueKind; count: number }>;
-  preview: OrganizeOverviewPreview<KnowledgeStructureIssue>;
 }
 
 export interface OrganizeSummary {
@@ -212,22 +189,9 @@ export interface OrganizeIssueListResponse<T> {
 export type OrganizeAiSuggestionResourceType = 'bookmark' | 'note';
 export type OrganizeAiSuggestionScopeMode = 'selected' | 'untagged';
 export type OrganizeAiSuggestionBatchStatus =
-  | 'queued'
-  | 'running'
-  | 'ready'
-  | 'partial'
-  | 'failed'
-  | 'completed'
-  | 'cancelled';
+  'queued' | 'running' | 'ready' | 'partial' | 'failed' | 'completed' | 'cancelled';
 export type OrganizeAiSuggestionStatus =
-  | 'queued'
-  | 'running'
-  | 'pending'
-  | 'no_suggestion'
-  | 'failed'
-  | 'accepted'
-  | 'ignored'
-  | 'conflict';
+  'queued' | 'running' | 'pending' | 'no_suggestion' | 'failed' | 'accepted' | 'ignored' | 'conflict';
 
 export interface OrganizeAiSuggestionEstimate {
   featureEnabled: boolean;
@@ -306,9 +270,6 @@ export interface OrganizeAiSuggestionBatchList {
 export const getOrganizeSummary = (): Promise<ApiResponse> =>
   apiBaseGet('/api/organize/summary', undefined, { silent: true });
 
-export const getOrganizeKnowledgeStructureSummary = (): Promise<ApiResponse> =>
-  apiBaseGet('/api/organize/knowledge-structure/summary', undefined, { silent: true });
-
 export const getOrganizeIssueList = (
   issueType: OrganizeIssueType,
   params: { cursor?: string | null; limit?: number; keyword?: string; resourceType?: string; kind?: string },
@@ -364,15 +325,19 @@ export const createOrganizeAiSuggestionBatch = (payload: {
   scope: OrganizeAiSuggestionScopeMode;
 }) => apiBasePost('/api/organize/ai-suggestions/batches', payload, { silent: true });
 
-export const getOrganizeAiSuggestionBatches = (params: {
-  cursor?: string | null;
-  limit?: number;
-  status?: OrganizeAiSuggestionBatchStatus;
-  groupId?: string;
-} = {}) => apiBaseGet('/api/organize/ai-suggestions/batches', params, { silent: true });
+export const getOrganizeAiSuggestionBatches = (
+  params: {
+    cursor?: string | null;
+    limit?: number;
+    status?: OrganizeAiSuggestionBatchStatus;
+    groupId?: string;
+  } = {},
+) => apiBaseGet('/api/organize/ai-suggestions/batches', params, { silent: true });
 
-export const getOrganizeAiSuggestionBatch = (batchId: string, params: { cursor?: string | null; limit?: number } = {}) =>
-  apiBaseGet(`/api/organize/ai-suggestions/batches/${encodeURIComponent(batchId)}`, params, { silent: true });
+export const getOrganizeAiSuggestionBatch = (
+  batchId: string,
+  params: { cursor?: string | null; limit?: number } = {},
+) => apiBaseGet(`/api/organize/ai-suggestions/batches/${encodeURIComponent(batchId)}`, params, { silent: true });
 
 export const updateOrganizeAiSuggestion = (batchId: string, suggestionId: string, tagNames: string[]) =>
   apiBasePut(

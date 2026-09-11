@@ -112,7 +112,8 @@ export async function unbindPushSubscription(userId, id, generation, db = pool) 
 
 // Transactional outbox expansion: the notification row and this pending marker were
 // inserted together. Subscription generation/time prevent re-enable and late binding replay.
-export async function expandPushOutbox(db = pool) {
+export async function expandPushOutbox(db = pool, env = process.env) {
+  if (!browserPushEnabled(env)) return 0;
   const conn = await db.getConnection();
   try {
     await conn.beginTransaction();

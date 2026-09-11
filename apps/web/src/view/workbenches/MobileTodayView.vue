@@ -30,7 +30,9 @@
         compact
         :eligible="Boolean(user.id && user.role !== 'visitor')"
         :owner-key="dailyBriefOwnerKey"
-        :visitor="Boolean(user.visitorWorkspace || user.role === 'visitor' || user.adminContext?.subjectRole === 'visitor')"
+        :visitor="
+          Boolean(user.visitorWorkspace || user.role === 'visitor' || user.adminContext?.subjectRole === 'visitor')
+        "
         :read-only="growthReadOnly"
       />
     </div>
@@ -184,7 +186,7 @@
 </template>
 
 <script setup lang="ts">
-import CampaignEntry from '@/components/support/CampaignEntry.vue';
+  import CampaignEntry from '@/components/support/CampaignEntry.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import WorkshopProjectEntry from '@/components/workbenches/WorkshopProjectEntry.vue';
   import { computed, onActivated, onMounted, ref, watch } from 'vue';
@@ -481,10 +483,7 @@ import CampaignEntry from '@/components/support/CampaignEntry.vue';
 
   function loadOrganizerAttention() {
     organizer.resetForOwner(organizeOwnerKey.value);
-    return Promise.all([
-      organizer.loadSummary({ silent: Boolean(organizer.summary) }),
-      organizer.loadKnowledgeStructureSummary({ silent: Boolean(organizer.knowledgeStructureSummary) }),
-    ]);
+    return organizer.loadSummary({ silent: Boolean(organizer.summary) });
   }
 
   // 手势细节(阈值、阻尼、方向锁、顶部判定、浮层拦截、竞态)全部收口在 composable 里,

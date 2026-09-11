@@ -1,4 +1,4 @@
-import { createApp, h, nextTick, reactive } from 'vue';
+import { createApp, h, nextTick, reactive, type SetupContext } from 'vue';
 import { createI18n } from 'vue-i18n';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import zhCN from '@/i18n/locales/zh-CN';
@@ -13,6 +13,16 @@ vi.mock('@/api/dailyBriefApi', () => ({
   refreshDailyBrief: mocks.refresh,
 }));
 vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({ default: { render: () => null } }));
+vi.mock('@/components/base/BasicComponents/BModal/BModal.vue', () => ({
+  default: {
+    inheritAttrs: false,
+    props: ['visible'],
+    setup:
+      (props: { visible: boolean }, { slots }: SetupContext) =>
+      () =>
+        props.visible ? slots.default?.() : null,
+  },
+}));
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: mocks.push }) }));
 let cleanup: (() => void) | undefined;
 afterEach(() => {
@@ -20,8 +30,8 @@ afterEach(() => {
   vi.resetAllMocks();
 });
 
-function mount(locale = 'zh-CN') {
-  const props = reactive({ eligible: false, ownerKey: 'visitor', readOnly: false });
+function mount(locale = 'zh-CN', compact = false) {
+  const props = reactive({ eligible: false, ownerKey: 'visitor', readOnly: false, compact });
   const host = document.createElement('div');
   document.body.append(host);
   const app = createApp({ render: () => h(DailyBriefCard, props) });
@@ -58,6 +68,33 @@ const sample = {
 };
 beforeEach(() => mocks.visitor.mockResolvedValue({ status: 200, data: sample }));
 describe('今日简报游客示例', () => {
+  it('compact preview shows the complete recommendation and opens the supporting details', async () => {
+    const { host } = mount('zh-CN', true);
+    await vi.waitFor(() =>
+      expect(host.querySelector('.daily-brief-card__preview-recommendation p')?.textContent).toBe(
+        sample.brief.recommendation,
+      ),
+    );
+    expect(host.querySelector('.daily-brief-card__preview-recommendation strong')?.textContent).toBe('浏览建议');
+    expect(host.textContent).not.toContain('实际资料关联');
+    host.querySelector<HTMLButtonElement>('.daily-brief-card__view-brief')!.click();
+    await nextTick();
+    expect(host.querySelectorAll('.daily-brief-insight')).toHaveLength(4);
+    expect(mocks.ensure).not.toHaveBeenCalled();
+  });
+  it('compact preview omits the recommendation panel when no suggestion exists', async () => {
+    mocks.visitor.mockResolvedValueOnce({
+      status: 200,
+      data: {
+        ...sample,
+        brief: { ...sample.brief, recommendation: '' },
+      },
+    });
+    const { host } = mount('zh-CN', true);
+    await vi.waitFor(() => expect(host.textContent).toContain(sample.brief.headline));
+    expect(host.querySelector('.daily-brief-card__preview-recommendation')).toBeNull();
+    expect(host.querySelector('.daily-brief-card__view-brief')).not.toBeNull();
+  });
   it('reads the visitor API and uses verified project and organize links without AI generation', async () => {
     const { host } = mount();
     await vi.waitFor(() => expect(host.querySelectorAll('.daily-brief-insight')).toHaveLength(4));

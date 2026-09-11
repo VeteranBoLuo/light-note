@@ -221,7 +221,9 @@
     }
     &:disabled {
       cursor: not-allowed;
-      opacity: 0.72;
+      opacity: 1;
+      background: var(--bl-input-disabled-bg-color);
+      color: var(--desc-color);
     }
   }
   .b-input {

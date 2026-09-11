@@ -9,6 +9,7 @@ export type ToolboxInput = {
   resourceRefs?: ToolboxResourceRef[];
   sourceIds?: string[];
   options?: {
+    recognitionMode?: 'ai' | 'basic';
     title?: string;
     question?: string;
     intent?: string;

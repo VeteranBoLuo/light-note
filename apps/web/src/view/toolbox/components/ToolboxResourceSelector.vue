@@ -29,7 +29,15 @@
     >
       <span v-if="!selectedGroups.length" class="toolbox-resource-selector__empty-selection">
         <SvgIcon :src="icon.toolbox.locate" size="16" aria-hidden="true" />
-        {{ t(expandNoteBranches ? 'toolbox.workbench.selectHint' : 'toolbox.project.selectResourcesHint') }}
+        {{
+          t(
+            fileExtensions?.length
+              ? 'toolbox.workbench.ocrSelectHint'
+              : expandNoteBranches
+                ? 'toolbox.workbench.selectHint'
+                : 'toolbox.project.selectResourcesHint',
+          )
+        }}
       </span>
       <template v-else>
         <article v-for="group in selectedGroups" :key="group.key" class="toolbox-resource-selector__selected-item">
@@ -83,6 +91,8 @@
       <ResourcePickerPanel
         ref="resourcePickerRef"
         :allowed-types="pickerAllowedTypes"
+        :file-extensions="fileExtensions"
+        :remaining-selection="Math.max(0, max - totalCount)"
         :selected-resource-keys="pickerSelectedKeys"
         :selected-scope-keys="selectedScopeKeys"
         :resources-disabled="totalCount >= max"
@@ -95,7 +105,13 @@
         :page-scroll="pageScroll"
         exhaustive
         fill
-        :placeholder="t('toolbox.workbench.resourceSearchPlaceholder')"
+        :placeholder="
+          t(
+            fileExtensions?.length
+              ? 'toolbox.workbench.ocrSearchPlaceholder'
+              : 'toolbox.workbench.resourceSearchPlaceholder',
+          )
+        "
         multi-select
         @select="add"
         @deselect="removeItem"
@@ -161,6 +177,7 @@
     defineProps<{
       modelValue: ToolboxSelectedResource[];
       allowedTypes?: ResourcePickerType[];
+      fileExtensions?: string[];
       max: number;
       externalCount?: number;
       existingResourceKeys?: string[];
@@ -271,8 +288,20 @@
     );
   }
 
+  function accepts(item: ResourcePickerItem) {
+    return (
+      !props.fileExtensions?.length ||
+      (item.type === 'file' && props.fileExtensions.includes(item.title.split('.').pop()?.toLowerCase() || ''))
+    );
+  }
   function add(item: ResourcePickerItem) {
-    if (props.disabled || totalCount.value >= props.max || selectedKeys.value.includes(resourceItemKey(item))) return;
+    if (
+      !accepts(item) ||
+      props.disabled ||
+      totalCount.value >= props.max ||
+      selectedKeys.value.includes(resourceItemKey(item))
+    )
+      return;
     emit('update:modelValue', [...props.modelValue, item]);
   }
 
@@ -281,7 +310,7 @@
     const existing = new Set(pickerSelectedKeys.value);
     const additions = items.filter((item) => {
       const key = resourceItemKey(item);
-      if (existing.has(key)) return false;
+      if (!accepts(item) || existing.has(key)) return false;
       existing.add(key);
       return true;
     });
