@@ -2,25 +2,34 @@
   <div
     ref="root"
     class="managed-image-preview"
-    :data-presentation="state?.presentation"
-    :data-preview-state="failed ? 'failed' : state?.status || 'queued'"
+    :data-presentation="usingOriginal ? undefined : state?.presentation"
+    :data-preview-state="usingOriginal ? 'original' : failed ? 'failed' : state?.status || 'queued'"
   >
     <img
-      v-if="hasPreview"
-      :key="imageGeneration"
-      :src="state?.url || undefined"
+      v-if="hasPreview || usingOriginal"
+      :key="`${imageGeneration}:${usingOriginal}`"
+      :src="usingOriginal ? originalUrl : state?.url || undefined"
       :alt="alt"
       loading="lazy"
       decoding="async"
       fetchpriority="low"
       draggable="false"
-      @error="onImageError"
+      @error="onDisplayedImageError"
     />
     <template v-else>
       <slot name="fallback">
         <SvgIcon class="managed-image-preview__placeholder" :src="icon.toolbox.image" :size="24" aria-hidden="true" />
         <div class="managed-image-preview__status" role="status">
-          <span>{{ statusLabel }}</span>
+          <span>{{ originalFailed ? t('imagePreview.originalFailed') : statusLabel }}</span>
+          <BButton
+            v-if="originalFailed || (canUseOriginal && (waitingTooLong || failed || state?.status === 'failed'))"
+            size="small"
+            @click.stop="
+              originalFailed = false;
+              originalRequested = true;
+            "
+            >{{ t('imagePreview.viewOriginal') }}</BButton
+          >
           <BPopover v-if="reason" v-model:open="detailsOpen" trigger="manual">
             <BButton
               size="small"
@@ -46,9 +55,11 @@
         </div>
       </slot>
     </template>
-    <span v-if="state?.presentation === 'long_top' && hasPreview" class="managed-image-preview__badge">{{
-      t('imagePreview.long')
-    }}</span>
+    <span
+      v-if="state?.presentation === 'long_top' && hasPreview && !usingOriginal"
+      class="managed-image-preview__badge"
+      >{{ t('imagePreview.long') }}</span
+    >
   </div>
 </template>
 <script setup lang="ts">
@@ -62,9 +73,18 @@
   import { computed, ref, onMounted, onBeforeUnmount, watch } from 'vue';
   import { useImagePreview, refreshImagePreview } from '@/composables/useImagePreview';
   import type { ImagePreviewSource, ImagePreviewState } from '@/api/imagePreview';
-  const props = withDefaults(defineProps<{ source: ImagePreviewSource; alt?: string; initial?: ImagePreviewState }>(), {
-    alt: '',
-  });
+  const props = withDefaults(
+    defineProps<{
+      source: ImagePreviewSource;
+      alt?: string;
+      initial?: ImagePreviewState;
+      originalUrl?: string;
+      originalBytes?: number;
+    }>(),
+    {
+      alt: '',
+    },
+  );
   const { t } = useI18n();
   const retrying = ref(false);
   const detailsOpen = ref(false);
@@ -75,6 +95,8 @@
   const visible = ref(false);
   const failed = ref(false);
   const waitingTooLong = ref(false);
+  const originalRequested = ref(false);
+  const originalFailed = ref(false);
   const state = useImagePreview(
     computed(() => props.source),
     visible,
@@ -86,6 +108,29 @@
       ['ready', 'queued', 'processing'].includes(state.value?.status || '') &&
       !failed.value,
   );
+  const canUseOriginal = computed(
+    () =>
+      Boolean(props.originalUrl) &&
+      !originalFailed.value &&
+      !['unavailable'].includes(state.value?.status || '') &&
+      state.value?.errorCode !== 'IMAGE_SOURCE_MISSING',
+  );
+  const usingOriginal = computed(
+    () =>
+      visible.value &&
+      !hasPreview.value &&
+      canUseOriginal.value &&
+      (originalRequested.value ||
+        (Number(props.originalBytes) > 0 &&
+          Number(props.originalBytes) <= 2 * 1024 * 1024 &&
+          (waitingTooLong.value ||
+            failed.value ||
+            ['failed', 'disabled', 'unsupported'].includes(state.value?.status || '')))),
+  );
+  function onDisplayedImageError() {
+    if (usingOriginal.value) originalFailed.value = true;
+    else void onImageError();
+  }
   const statusLabel = computed(() =>
     t(
       failed.value || state.value?.status === 'failed'
@@ -111,16 +156,13 @@
           : '',
   );
   watch(
-    [
-      () => `${props.source.sourceType}:${props.source.sourceId}`,
-      () => visible.value && ['queued', 'processing'].includes(state.value?.status || ''),
-    ],
+    [() => `${props.source.sourceType}:${props.source.sourceId}`, () => visible.value && !hasPreview.value],
     ([, pending], _previous, onCleanup) => {
       waitingTooLong.value = false;
       if (!pending) return;
       const timeout = setTimeout(() => {
         waitingTooLong.value = true;
-      }, 60000);
+      }, 3000);
       onCleanup(() => clearTimeout(timeout));
     },
     { immediate: true },
@@ -187,11 +229,20 @@
     () => `${props.source.sourceType}:${props.source.sourceId}`,
     () => {
       epoch++;
+      originalRequested.value = false;
+      originalFailed.value = false;
       detailsOpen.value = false;
       failed.value = false;
       reloads = 0;
       retrying.value = false;
       imageGeneration.value++;
+    },
+  );
+  watch(
+    () => props.originalUrl,
+    () => {
+      originalFailed.value = false;
+      originalRequested.value = false;
     },
   );
   let observer: IntersectionObserver | undefined;

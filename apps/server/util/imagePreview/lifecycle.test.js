@@ -12,6 +12,7 @@ import {
 import { resolveImagePreviews, validateResolveItems, retryImagePreview } from './service.js';
 import { runSingleImagePreviewJob, cleanupImageAssets } from './worker.js';
 import { hash } from './sources.js';
+import { relocateCloudImage } from './relocate.js';
 const socket = process.env.IMAGE_PREVIEW_TEST_SOCKET;
 const database = `ln_image_preview_test_${process.pid}`;
 let db, admin;
@@ -313,6 +314,105 @@ describe.skipIf(!socket)('image lifecycle on isolated local MySQL', () => {
     const [[out]] = await db.query('SELECT status,error_code FROM file_preview_artifacts');
     expect(out.status).not.toBe('ready');
     expect(out.error_code).toBe('IMAGE_SOURCE_CHANGED');
+  });
+
+  async function renameImage(targetKey, { abort = false } = {}) {
+    return transaction(async (c) => {
+      const [[file]] = await c.query('SELECT * FROM files WHERE id=1 FOR UPDATE');
+      await relocateCloudImage(c, file, targetKey, targetKey);
+      await c.query('UPDATE files SET obs_key=?,file_name=? WHERE id=1', [targetKey, targetKey]);
+      if (abort) throw new Error('COPY_FAILED');
+    });
+  }
+  const imageJobDeps = {
+    db: null,
+    read: async () => ({ body: Buffer.from('input'), version: 'meta' }),
+    compress: async () => ({ body: Buffer.from('webp'), width: 480, height: 720, presentation: 'long_top' }),
+    put: vi.fn(),
+    remove: vi.fn(),
+    metadata: async () => ({ version: 'meta' }),
+  };
+  it('renames the asset in place and keeps the completed preview, revision and references usable', async () => {
+    const a = await asset();
+    await transaction((c) => replaceReferences(c, 'cloud_file', '1', [a.id]));
+    await runSingleImagePreviewJob('before-rename', { ...imageJobDeps, db });
+    const [[before]] = await db.query('SELECT * FROM file_preview_artifacts');
+    const previousRefs = await refs();
+    await renameImage('renamed.jpg');
+    const [[after]] = await db.query('SELECT * FROM file_preview_artifacts');
+    expect(after).toEqual(before);
+    expect(await refs()).toEqual(previousRefs);
+    const [[moved]] = await db.query('SELECT * FROM image_assets');
+    expect(moved).toMatchObject({
+      id: a.id,
+      source_locator: 'renamed.jpg',
+      source_version: before.source_revision,
+      identity_hash: hash('u1:obs:renamed.jpg'),
+    });
+    const result = await resolveImagePreviews('u1', [{ sourceType: 'cloud_file', sourceId: '1' }], {
+      db,
+      sign: () => ({ url: 'kept.webp' }),
+    });
+    expect(result[0]).toMatchObject({ status: 'ready', url: 'kept.webp' });
+    await renameImage('test-image.png');
+    expect((await db.query('SELECT * FROM file_preview_artifacts'))[0]).toHaveLength(1);
+    expect((await db.query('SELECT * FROM image_assets'))[0]).toHaveLength(1);
+  });
+  it('rolls back asset relocation and its task fence with the file transaction', async () => {
+    await asset();
+    await db.query("UPDATE file_preview_jobs SET status='processing',locked_by='worker',locked_at=NOW(),attempts=1");
+    const [[before]] = await db.query('SELECT * FROM image_assets');
+    await expect(renameImage('renamed.jpg', { abort: true })).rejects.toThrow('COPY_FAILED');
+    expect((await db.query('SELECT * FROM image_assets'))[0][0]).toEqual(before);
+    expect((await db.query('SELECT status,locked_by,attempts FROM file_preview_jobs'))[0][0]).toMatchObject({
+      status: 'processing',
+      locked_by: 'worker',
+      attempts: 1,
+    });
+  });
+  it('fences an in-flight worker and finishes from the new address without consuming a retry', async () => {
+    await asset();
+    let release;
+    const barrier = new Promise((resolve) => {
+      release = resolve;
+    });
+    const compress = vi.fn(async () => {
+      await barrier;
+      return { body: Buffer.from('webp'), width: 1, height: 1 };
+    });
+    const first = runSingleImagePreviewJob('old-locator', { ...imageJobDeps, db, compress });
+    await vi.waitFor(() => expect(compress).toHaveBeenCalledTimes(1));
+    await renameImage('renamed.jpg');
+    release();
+    await first;
+    const [[pending]] = await db.query('SELECT status,attempts,locked_by FROM file_preview_jobs');
+    expect(pending).toMatchObject({ status: 'queued', attempts: 0, locked_by: null });
+    const read = vi.fn(async (job) => {
+      expect(job.source_locator).toBe('renamed.jpg');
+      return { body: Buffer.from('input'), version: 'meta' };
+    });
+    await runSingleImagePreviewJob('new-locator', { ...imageJobDeps, db, read });
+    expect((await db.query('SELECT status,attempts FROM file_preview_jobs'))[0][0]).toMatchObject({
+      status: 'completed',
+      attempts: 1,
+    });
+  });
+  it('registers untracked originals on rename and refuses retained target assets', async () => {
+    await db.query("INSERT INTO files VALUES (1,'u1',0,'legacy.png','legacy.png',0)");
+    await renameImage('registered.png');
+    expect((await db.query('SELECT source_locator FROM image_assets'))[0][0].source_locator).toBe('registered.png');
+    expect((await db.query('SELECT status FROM file_preview_jobs'))[0][0].status).toBe('queued');
+    await transaction((c) =>
+      registerAsset(c, {
+        owner: 'u1',
+        sourceType: 'cloud_file',
+        sourceId: '2',
+        storage: 'obs',
+        locator: 'occupied.png',
+      }),
+    );
+    await expect(renameImage('occupied.png')).rejects.toMatchObject({ code: 'FILE_IMAGE_TARGET_CONFLICT' });
+    expect((await db.query('SELECT obs_key FROM files WHERE id=1'))[0][0].obs_key).toBe('registered.png');
   });
 
   it('serializes duplicate user retries and preserves server cooldown', async () => {

@@ -384,15 +384,15 @@
               v-click-log="{ module: '成长', operation: '切换资产与奖励子页' }"
               @select="handleRewardTabSelect"
             />
-            <section class="growth-panel">
-              <PointsCenter v-if="activeRewardSection === 'center'" :read-only="isAdminContext" />
+            <section class="growth-panel" :class="{ 'growth-points-panel': activeRewardSection === 'ledger' }">
+              <PointsUsagePage v-if="activeRewardSection === 'ledger'" embedded :show-summary="pointsCenterEnabled" />
               <MyInventory v-else-if="activeRewardSection === 'inventory'" :read-only="isAdminContext" />
               <PointsShop
                 v-else-if="activeRewardSection === 'shop'"
                 :read-only="isAdminContext"
                 :focus="String(route.query.focus || '')"
+                :show-goal="pointsCenterEnabled"
               />
-              <PointsLedger v-else-if="activeRewardSection === 'ledger'" />
               <LotteryDraw v-else :read-only="isAdminContext" @focus-header="scrollLotteryToPreferredPosition" />
             </section>
           </template>
@@ -420,8 +420,7 @@
   import PointsShop from '@/components/growth/PointsShop.vue';
   import LotteryDraw from '@/components/growth/LotteryDraw.vue';
   import MyInventory from '@/components/growth/MyInventory.vue';
-  import PointsLedger from '@/components/growth/PointsLedger.vue';
-  import PointsCenter from '@/components/growth/PointsCenter.vue';
+  import PointsUsagePage from '@/view/pointsUsage/PointsUsagePage.vue';
   import WeeklyChallenge from '@/components/growth/WeeklyChallenge.vue';
   import TodayGrowthCard from '@/components/growth/TodayGrowthCard.vue';
   import GrowthPreferencesCard from '@/components/growth/GrowthPreferencesCard.vue';
@@ -447,7 +446,7 @@
   import { scrollIntoContainer } from '@/utils/zoom';
 
   type GrowthSection = 'overview' | 'tasks' | 'achievements' | 'rewards';
-  type RewardSection = 'center' | 'shop' | 'lottery' | 'inventory' | 'ledger';
+  type RewardSection = 'shop' | 'lottery' | 'inventory' | 'ledger';
   type TaskView = 'daily' | 'weekly' | 'onboarding';
   type GrowthNavOption<T extends string> = { key: T; label: string; icon: string; badge?: number };
   type DesktopGrowthNavOption = {
@@ -465,17 +464,15 @@
   const user = useUserStore();
   const bookmark = bookmarkStore();
   const routeSection = String(route.query.section || '');
-  const routeRewardSection = String(route.query.reward || '');
-  const validRewardSections: RewardSection[] = ['center', 'shop', 'lottery', 'inventory', 'ledger'];
+  const routeRewardSection = String(route.query.reward || '').replace(/^center$/, 'ledger');
+  const validRewardSections: RewardSection[] = ['shop', 'lottery', 'inventory', 'ledger'];
   const hasRewardDeepLink = validRewardSections.includes(routeRewardSection as RewardSection);
   const activeSection = ref<GrowthSection>(
     ['overview', 'tasks', 'achievements', 'rewards'].includes(routeSection)
       ? (routeSection as GrowthSection)
       : 'overview',
   );
-  const activeRewardSection = ref<RewardSection>(
-    hasRewardDeepLink ? (routeRewardSection as RewardSection) : 'inventory',
-  );
+  const activeRewardSection = ref<RewardSection>(hasRewardDeepLink ? (routeRewardSection as RewardSection) : 'ledger');
   const taskView = ref<TaskView>(
     route.hash === '#growth-weekly' ? 'weekly' : route.hash === '#growth-tasks' ? 'onboarding' : 'daily',
   );
@@ -503,14 +500,13 @@
   });
   const rewardSectionOptions = computed<GrowthNavOption<RewardSection>[]>(() => {
     const options: GrowthNavOption<RewardSection>[] = [
-      { key: 'center', label: t('growth.rewardTabPointsCenter'), icon: icon.growth.coin },
+      { key: 'ledger', label: t('growth.pointsLogTitle'), icon: icon.noteDetail.history },
       { key: 'inventory', label: t('growth.rewardTabInventory'), icon: icon.growth.storage },
       { key: 'shop', label: t('growth.rewardTabShop'), icon: icon.growth.coin },
-      { key: 'ledger', label: t('growth.rewardTabLedger'), icon: icon.noteDetail.history },
       { key: 'lottery', label: t('growth.rewardTabLottery'), icon: icon.growth.reward },
     ];
-    if (growthV2Enabled.value) return pointsCenterEnabled.value ? options : options.slice(1);
-    return [options[2], options[4], options[1], options[3]];
+    if (growthV2Enabled.value) return options;
+    return [options[2], options[3], options[1], options[0]];
   });
   const desktopNavigationOptions = computed<DesktopGrowthNavOption[]>(() => [
     ...sectionOptions.value
@@ -922,11 +918,11 @@
   watch(
     () => route.query.reward,
     (reward) => {
-      const requested = String(reward || '');
+      const requested = String(reward || '').replace(/^center$/, 'ledger');
       const nextReward = validRewardSections.includes(requested as RewardSection)
         ? (requested as RewardSection)
         : growthV2Enabled.value
-          ? 'inventory'
+          ? 'ledger'
           : 'shop';
       if (activeRewardSection.value !== nextReward) activeRewardSection.value = nextReward;
     },
@@ -952,8 +948,7 @@
   watch(
     growthV2Enabled,
     (enabled) => {
-      if (!hasRewardDeepLink)
-        activeRewardSection.value = enabled && pointsCenterEnabled.value ? 'center' : enabled ? 'inventory' : 'shop';
+      if (!hasRewardDeepLink) activeRewardSection.value = enabled ? 'ledger' : 'shop';
     },
     { immediate: true },
   );
@@ -995,6 +990,13 @@
 </script>
 
 <style scoped lang="less">
+  .growth-panel.growth-points-panel {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
   /* 与设置页同理:index.vue 子路由根元素被内联 position:fixed + height:calc(100%-60px),
      必须自身 overflow-y:auto 在固定框内滚动,勿用 min-height:100vh(见记忆 subroute-fixed-scroll)。 */
   .growth-page {

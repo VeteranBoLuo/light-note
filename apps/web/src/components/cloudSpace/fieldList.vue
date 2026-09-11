@@ -41,6 +41,8 @@
             v-if="isPreviewableImage(item)"
             :source="{ sourceType: 'cloud_file', sourceId: String(item.id) }"
             :initial="item.imagePreview"
+            :original-url="item.fileUrl"
+            :original-bytes="item.fileSize"
             class="file-card-thumb"
             :alt="item.fileName"
             loading="lazy"
@@ -726,6 +728,7 @@
 
     <b-modal
       v-model:visible="renameModalVisible"
+      initial-focus=".rename-modal-input .b-input"
       :title="$t('common.reName')"
       width="400px"
       :show-footer="false"
@@ -734,6 +737,7 @@
     >
       <div class="rename-modal-field">
         <b-input
+          ref="renameModalInput"
           v-model:value="renameModalValue"
           class="rename-modal-input"
           :disabled="renameModalSubmitting"
@@ -1281,6 +1285,7 @@
   const renameModalVisible = ref(false);
   const renameModalFile = ref<any>(null);
   const renameModalValue = ref('');
+  const renameModalInput = ref<{ inputEl?: HTMLInputElement } | null>(null);
   const renamingFileIds = ref<Set<string>>(new Set());
   const renameModalSubmitting = computed(() => isFileRenaming(renameModalFile.value));
   const downloadProgress = ref({
@@ -2102,8 +2107,8 @@
     renameModalValue.value = getFileBaseName(originalName.value);
     renameModalVisible.value = true;
     nextTick(() => {
-      const input = document.querySelector('.rename-modal-field .b-input') as HTMLInputElement;
-      input?.focus();
+      const input = renameModalInput.value?.inputEl;
+      if (input) input.setSelectionRange(input.value.length, input.value.length);
     });
   }
   async function confirmRename() {
@@ -2784,6 +2789,8 @@
   .file-card:hover .file-card-overlay,
   .file-card:hover .file-card-more {
     opacity: 1 !important;
+  }
+  .file-card:hover .file-card-more {
     pointer-events: auto;
   }
 

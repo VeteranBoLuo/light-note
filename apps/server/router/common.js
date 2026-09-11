@@ -1,4 +1,5 @@
 import express from 'express';
+import { getAdminCoreUsageReport } from '../router_handle/adminCoreUsageHandle.js';
 const router = express.Router();
 
 import * as commonHandle from '../router_handle/commonHandle.js';
@@ -75,6 +76,7 @@ router.post('/retryAdminAsyncJob', retryAdminAsyncJob);
 router.post('/dismissAdminAsyncJob', dismissAdminAsyncJob);
 router.post('/getAdminOperationAudits', getAdminOperationAudits);
 router.post('/getAdminProductInsights', getAdminProductInsights);
+router.post('/getAdminCoreUsageReport', getAdminCoreUsageReport);
 router.post('/getAdminGovernance', getAdminGovernance);
 
 export default router;

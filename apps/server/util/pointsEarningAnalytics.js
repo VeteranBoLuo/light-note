@@ -136,7 +136,8 @@ export async function getUserPointsSummary(userId, { db = pool, userRole = null 
          COALESCE(SUM(CASE WHEN create_time >= DATE_SUB(NOW(), INTERVAL 28 DAY)
             AND delta > 0 AND reason IN (${placeholders(operationsList)}) THEN delta ELSE 0 END), 0) AS operations28,
          COALESCE(SUM(CASE WHEN create_time >= DATE_SUB(NOW(), INTERVAL 28 DAY)
-            AND delta < 0 THEN -delta ELSE 0 END), 0) AS spent28
+            AND delta < 0 THEN -delta ELSE 0 END), 0) AS spent28,
+         COALESCE(SUM(CASE WHEN delta > 0 THEN delta ELSE 0 END), 0) AS earned28
        FROM points_log
       WHERE user_id = ? AND create_time >= DATE_SUB(NOW(), INTERVAL 28 DAY)`,
       aggregateParams,
@@ -145,7 +146,7 @@ export async function getUserPointsSummary(userId, { db = pool, userRole = null 
       `SELECT reason, SUM(delta) AS delta, COUNT(*) AS count
          FROM points_log
         WHERE user_id = ? AND create_time >= DATE_SUB(NOW(), INTERVAL 28 DAY)
-        GROUP BY reason ORDER BY ABS(SUM(delta)) DESC`,
+        GROUP BY reason, SIGN(delta) ORDER BY ABS(SUM(delta)) DESC`,
       [String(userId)],
     ),
   ]);
@@ -193,6 +194,7 @@ export async function getUserPointsSummary(userId, { db = pool, userRole = null 
       spent: Number(aggregate.weekSpent || 0),
     },
     last28Days: {
+      earned: Number(aggregate.earned28 || 0),
       stableEarned: stable28,
       oneTimeEarned: Number(aggregate.oneTime28 || 0),
       randomEarned: Number(aggregate.random28 || 0),

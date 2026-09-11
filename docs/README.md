@@ -21,6 +21,8 @@
 | [support-packages.md](./support-packages.md)                               | 爱发电资源商店套餐、订单与权益                               | 套餐或结算协议变化                    |
 | [android/p4-compliance-audit.md](./android/p4-compliance-audit.md)         | Android 合规证据与复核结论                                   | 权限、SDK、隐私流程或合规证据变化     |
 
+后台产品运营分析与核心使用报告的页面入口、统计口径和查询边界见 [后台增长统计](./architecture.md#后台增长统计)。
+
 `assets/` 只保存正式文档引用的素材。
 
 ## 临时材料

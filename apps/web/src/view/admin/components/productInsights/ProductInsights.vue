@@ -15,14 +15,6 @@
           :disabled="loading"
           @change="load()"
         />
-        <BSelect
-          v-model:value="cohortWeeks"
-          class="product-insights__select"
-          :aria-label="t('adminProductInsights.cohortPeriodLabel')"
-          :options="cohortOptions"
-          :disabled="loading"
-          @change="load()"
-        />
         <BButton size="small" :loading="loading" @click="load">{{ t('common.refresh') }}</BButton>
       </div>
     </template>
@@ -31,17 +23,24 @@
       <li class="admin-stat-card">
         <span class="admin-stat-label">{{ t('adminProductInsights.metrics.activeUsers') }}</span>
         <strong class="admin-stat-value">{{ n(data?.summary.activeUsers) }}</strong>
-        <span class="admin-stat-hint">{{ t('adminProductInsights.metrics.periodHint', { days: periodDays }) }}</span>
+        <span class="admin-stat-hint">{{
+          t('adminProductInsights.metrics.periodHint', { days: data?.periodDays ?? periodDays })
+        }}</span>
       </li>
       <li class="admin-stat-card">
         <span class="admin-stat-label">{{ t('adminProductInsights.metrics.newUsers') }}</span>
         <strong class="admin-stat-value">{{ n(data?.summary.newUsers) }}</strong>
         <span class="admin-stat-hint">{{ t('adminProductInsights.metrics.excludesInternal') }}</span>
       </li>
-      <li class="admin-stat-card" :class="{ 'has-warning': (data?.summary.activationRate || 0) < 20 }">
+      <li
+        class="admin-stat-card"
+        :class="{ 'has-warning': data?.summary.activationRate != null && data.summary.activationRate < 20 }"
+      >
         <span class="admin-stat-label">{{ t('adminProductInsights.metrics.activation') }}</span>
         <strong class="admin-stat-value">{{ rate(data?.summary.activationRate) }}</strong>
-        <span class="admin-stat-hint">{{ t('adminProductInsights.metrics.activationHint') }}</span>
+        <span class="admin-stat-hint"
+          >{{ t('adminProductInsights.metrics.activationHint') }} · {{ n(data?.summary.activationEligible) }}</span
+        >
       </li>
       <li class="admin-stat-card">
         <span class="admin-stat-label">{{ t('adminProductInsights.metrics.aiAdoption') }}</span>
@@ -59,6 +58,9 @@
       }}</span>
     </div>
 
+    <CoreUsageReport :days="periodDays" />
+
+    <p v-if="loadFailed" class="product-insights__warning" role="alert">{{ t('adminProductInsights.loadFailed') }}</p>
     <BLoading v-if="loading && !data" loading :title="t('adminProductInsights.loading')" />
 
     <template v-else-if="data">
@@ -66,7 +68,7 @@
         <header class="product-insights__section-header">
           <div>
             <h3 id="product-feature-adoption">{{ t('adminProductInsights.adoption.title') }}</h3>
-            <p>{{ t('adminProductInsights.adoption.subtitle', { days: periodDays }) }}</p>
+            <p>{{ t('adminProductInsights.adoption.subtitle', { days: data?.periodDays ?? periodDays }) }}</p>
           </div>
           <BChip tone="neutral">{{ t('adminProductInsights.aggregateOnly') }}</BChip>
         </header>
@@ -119,6 +121,7 @@
           <div>
             <h3 id="product-cohort-retention">{{ t('adminProductInsights.retention.title') }}</h3>
             <p>{{ t('adminProductInsights.retention.subtitle') }}</p>
+            <p>{{ t('adminProductInsights.retention.valueHint') }}</p>
           </div>
         </header>
 
@@ -130,7 +133,7 @@
           class="product-insights__table"
         >
           <template #bodyCell="{ record, column }">
-            <template v-if="column.key === 'cohortStart'">{{ formatDate(asCohort(record).cohortStart) }}</template>
+            <template v-if="column.key === 'cohortStart'">{{ formatWeekRange(asCohort(record).cohortStart) }}</template>
             <template v-else-if="column.key === 'registered'">{{ n(asCohort(record).registered) }}</template>
             <template v-else-if="column.key === 'd1'">{{ retentionLabel(asCohort(record).d1) }}</template>
             <template v-else-if="column.key === 'd7'">{{ retentionLabel(asCohort(record).d7) }}</template>
@@ -148,18 +151,21 @@
             class="product-insights__cohort"
           >
             <header>
-              <strong>{{ formatDate(cohort.cohortStart) }}</strong>
+              <strong>{{ formatWeekRange(cohort.cohortStart) }}</strong>
               <span>{{ t('adminProductInsights.retention.registered', { count: n(cohort.registered) }) }}</span>
             </header>
             <dl>
               <div
-                ><dt>D1</dt><dd>{{ retentionLabel(cohort.d1) }}</dd></div
+                ><dt>{{ t('adminProductInsights.retention.day1') }}</dt
+                ><dd>{{ retentionLabel(cohort.d1) }}</dd></div
               >
               <div
-                ><dt>D7</dt><dd>{{ retentionLabel(cohort.d7) }}</dd></div
+                ><dt>{{ t('adminProductInsights.retention.day7') }}</dt
+                ><dd>{{ retentionLabel(cohort.d7) }}</dd></div
               >
               <div
-                ><dt>D30</dt><dd>{{ retentionLabel(cohort.d30) }}</dd></div
+                ><dt>{{ t('adminProductInsights.retention.day30') }}</dt
+                ><dd>{{ retentionLabel(cohort.d30) }}</dd></div
               >
             </dl>
           </BCard>
@@ -186,6 +192,7 @@
 <script setup lang="ts">
   import { computed, onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import CoreUsageReport from './CoreUsageReport.vue';
   import AdminDataPage from '@/components/admin/AdminDataPage.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BCard from '@/components/base/BasicComponents/BCard.vue';
@@ -200,7 +207,6 @@
   import { bookmarkStore } from '@/store';
 
   type PeriodDays = 7 | 30 | 90;
-  type CohortWeeks = 8 | 12 | 16;
   interface RetentionValue {
     eligible: number;
     retained: number;
@@ -216,12 +222,12 @@
   interface ProductInsightsData {
     generatedAt: string;
     periodDays: PeriodDays;
-    cohortWeeks: CohortWeeks;
     summary: {
       activeUsers: number;
       newUsers: number;
       activatedUsers: number;
-      activationRate: number;
+      activationEligible?: number;
+      activationRate: number | null;
       aiAdoptionRate: number;
     };
     features: Array<{ source: string; available: boolean; users: number; events: number; rate: number }>;
@@ -232,8 +238,8 @@
   const { t, locale } = useI18n();
   const bookmark = bookmarkStore();
   const loading = ref(false);
-  const periodDays = ref<PeriodDays>(30);
-  const cohortWeeks = ref<CohortWeeks>(8);
+  const loadFailed = ref(false);
+  const periodDays = ref<PeriodDays>(7);
   const data = ref<ProductInsightsData | null>(null);
 
   const periodOptions = computed(() => [
@@ -241,23 +247,19 @@
     { value: 30, label: t('adminProductInsights.periods.30') },
     { value: 90, label: t('adminProductInsights.periods.90') },
   ]);
-  const cohortOptions = computed(() => [
-    { value: 8, label: t('adminProductInsights.cohortPeriods.8') },
-    { value: 12, label: t('adminProductInsights.cohortPeriods.12') },
-    { value: 16, label: t('adminProductInsights.cohortPeriods.16') },
-  ]);
   const cohortColumns = computed<Column[]>(() => [
-    { key: 'cohortStart', title: t('adminProductInsights.retention.cohort'), width: 'minmax(150px, 1fr)' },
+    { key: 'cohortStart', title: t('adminProductInsights.retention.cohort'), width: 'minmax(240px, 1.4fr)' },
     { key: 'registered', title: t('adminProductInsights.retention.newUsers'), width: '110px' },
-    { key: 'd1', title: 'D1', width: 'minmax(150px, 1fr)' },
-    { key: 'd7', title: 'D7', width: 'minmax(150px, 1fr)' },
-    { key: 'd30', title: 'D30', width: 'minmax(150px, 1fr)' },
+    { key: 'd1', title: t('adminProductInsights.retention.day1'), width: 'minmax(150px, 1fr)' },
+    { key: 'd7', title: t('adminProductInsights.retention.day7'), width: 'minmax(150px, 1fr)' },
+    { key: 'd30', title: t('adminProductInsights.retention.day30'), width: 'minmax(150px, 1fr)' },
   ]);
 
   function n(value: unknown) {
     return Number(value || 0).toLocaleString(locale.value);
   }
   function rate(value: unknown) {
+    if (value == null) return '—';
     return `${Number(value || 0).toLocaleString(locale.value, { maximumFractionDigits: 1 })}%`;
   }
   function sourceLabel(source: string) {
@@ -274,24 +276,33 @@
       eligible: n(value.eligible),
     });
   }
-  function formatDate(value: string) {
-    const date = new Date(`${value}T00:00:00`);
-    return Number.isFinite(date.getTime())
-      ? date.toLocaleDateString(locale.value, { month: 'short', day: 'numeric', year: 'numeric' })
-      : value;
+  function formatWeekRange(value: string) {
+    // The API returns a calendar Monday, not a timestamp in the viewer's timezone.
+    const start = new Date(`${value}T00:00:00Z`);
+    if (!Number.isFinite(start.getTime())) return value;
+    const end = new Date(start.getTime() + 6 * 86400000);
+    const format = (date: Date, year: boolean) =>
+      date.toLocaleDateString(locale.value, {
+        timeZone: 'UTC',
+        month: 'short',
+        day: 'numeric',
+        ...(year ? { year: 'numeric' as const } : {}),
+      });
+    return `${format(start, true)} — ${format(end, start.getUTCFullYear() !== end.getUTCFullYear())}`;
   }
 
   async function load() {
     if (loading.value) return;
     loading.value = true;
+    loadFailed.value = false;
     try {
       const response: any = await getAdminProductInsights({
         periodDays: periodDays.value,
-        cohortWeeks: cohortWeeks.value,
       });
       if (response?.status !== 200) throw new Error(response?.msg || 'ADMIN_PRODUCT_INSIGHTS_FAILED');
       data.value = response.data;
     } catch {
+      loadFailed.value = true;
       message.error(t('adminProductInsights.loadFailed'));
     } finally {
       loading.value = false;

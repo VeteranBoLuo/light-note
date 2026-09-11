@@ -607,6 +607,7 @@ declare(ADMIN_POLICIES.ADMIN_ONLY, 'admin', [
   ['POST', '/common/dismissAdminAsyncJob'],
   ['POST', '/common/getAdminOperationAudits'],
   ['POST', '/common/getAdminProductInsights'],
+  ['POST', '/common/getAdminCoreUsageReport'],
   ['POST', '/common/getAdminGovernance'],
   ['POST', '/notification/send'],
   ['POST', '/notification/admin/stats'],

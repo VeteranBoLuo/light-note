@@ -14,6 +14,7 @@
     "worker:resource-governance:dev": "node --watch --watch-preserve-output resourceGovernanceWorker.js",
     "check:bookmark-icons": "node scripts/checkBookmarkIconRuntime.js",
     "check:resource-governance": "node scripts/checkResourceGovernanceRuntime.js",
+    "report:core-usage": "node scripts/reportCoreUsage.js",
     "check:image-previews:large": "node scripts/checkLargeImagePreviews.js",
     "repair:image-previews": "node scripts/repairImagePreviews.js",
     "check:image-previews": "node scripts/checkImagePreviewRuntime.js",

@@ -15,7 +15,7 @@ afterEach(() => {
   vi.useRealTimers();
   vi.clearAllMocks();
 });
-function mount(state: ImagePreviewState, fallback = false) {
+function mount(state: ImagePreviewState, fallback = false, original = {}) {
   const source = ref({ sourceType: 'note' as const, sourceId: 'one' });
   const current = ref(state);
   vi.mocked(useImagePreview).mockReturnValue(current);
@@ -25,7 +25,7 @@ function mount(state: ImagePreviewState, fallback = false) {
     render: () =>
       h(
         ManagedImagePreview,
-        { source: source.value },
+        { source: source.value, ...original },
         fallback ? { fallback: () => h('span', { class: 'audio-placeholder' }, 'MP3') } : undefined,
       ),
   });
@@ -45,7 +45,7 @@ describe('managed image feedback', () => {
     vi.useFakeTimers();
     const { element, current } = mount({ ...base, status: 'queued' });
     await nextTick();
-    await vi.advanceTimersByTimeAsync(60000);
+    await vi.advanceTimersByTimeAsync(3000);
     expect(element.textContent).toContain('仍在处理');
     expect(element.textContent).not.toContain('暂不可用');
     current.value = { ...base, status: 'ready', url: 'https://preview.test/completed.webp' };
@@ -98,4 +98,59 @@ it('shows the audio fallback until artwork is ready and after a failed image loa
   vi.mocked(resolveImagePreviews).mockRejectedValue(new Error('network'));
   element.querySelector('img')!.dispatchEvent(new Event('error'));
   await vi.waitFor(() => expect(element.textContent).toBe('MP3'));
+});
+
+describe('cloud original fallback', () => {
+  const original = { originalUrl: 'https://preview.test/original.jpg', originalBytes: 580295 };
+  it('waits only three seconds, then uses the original and switches back when the thumbnail is ready', async () => {
+    vi.useFakeTimers();
+    const { element, current } = mount({ ...base, status: 'queued' }, false, original);
+    await nextTick();
+    await vi.advanceTimersByTimeAsync(2999);
+    expect(element.querySelector('img')).toBeNull();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(element.querySelector('img')?.getAttribute('src')).toBe(original.originalUrl);
+    current.value = { ...base, status: 'ready', url: 'https://preview.test/small.webp' };
+    await nextTick();
+    expect(element.querySelector('img')?.getAttribute('src')).toBe('https://preview.test/small.webp');
+  });
+  it('falls back immediately on failure and stops automatically retrying a broken original', async () => {
+    const { element, source } = mount({ ...base, status: 'failed' }, false, original);
+    await nextTick();
+    expect(element.querySelector('img')?.getAttribute('src')).toBe(original.originalUrl);
+    element.querySelector('img')!.dispatchEvent(new Event('error'));
+    await nextTick();
+    expect(element.querySelector('img')).toBeNull();
+    expect(element.textContent).toContain('原图也未能加载');
+    expect(resolveImagePreviews).not.toHaveBeenCalled();
+    source.value = { sourceType: 'note', sourceId: 'two' };
+    await nextTick();
+    expect(element.querySelector('img')).not.toBeNull();
+  });
+  it('uses the original when an existing thumbnail fails to load', async () => {
+    vi.mocked(resolveImagePreviews).mockRejectedValue(new Error('unavailable'));
+    const { element } = mount({ ...base, status: 'ready', url: 'https://preview.test/broken.webp' }, false, original);
+    await nextTick();
+    element.querySelector('img')!.dispatchEvent(new Event('error'));
+    await nextTick();
+    expect(element.querySelector('img')?.getAttribute('src')).toBe(original.originalUrl);
+    await vi.waitFor(() => expect(resolveImagePreviews).toHaveBeenCalledTimes(1));
+    expect(retryImagePreview).not.toHaveBeenCalled();
+  });
+  it('requires a click for large images and does not bypass access denial', async () => {
+    const { element, current } = mount({ ...base, status: 'failed' }, false, {
+      ...original,
+      originalBytes: 10 * 1024 * 1024,
+    });
+    await nextTick();
+    expect(element.querySelector('img')).toBeNull();
+    Array.from(element.querySelectorAll('button'))
+      .find((b) => b.textContent?.includes('查看原图'))!
+      .click();
+    await nextTick();
+    expect(element.querySelector('img')?.getAttribute('src')).toBe(original.originalUrl);
+    current.value = { ...base, status: 'unavailable' };
+    await nextTick();
+    expect(element.querySelector('img')).toBeNull();
+  });
 });

@@ -32,6 +32,14 @@
       <div v-if="shop?.isVisitor" class="ps-visitor">{{ t('growth.shopVisitorTip') }}</div>
       <div v-else-if="shop && !shop.purchaseEnabled" class="ps-visitor">{{ t('growth.shopMaintenance') }}</div>
 
+      <PointsGoal
+        :key="`${user.id}:${user.adminContext?.id || ''}`"
+        v-if="showGoal && !shop?.isVisitor"
+        :read-only="readOnly"
+        :refresh-key="goalRefreshKey"
+        :catalog="[...(shop?.items || []), ...(shop?.frames || [])]"
+      />
+
       <!-- 实用道具 -->
       <div v-if="consumables.length" class="ps-section-title">{{ t('growth.shopSectionConsumable') }}</div>
       <div class="ps-grid">
@@ -187,6 +195,7 @@
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
+  import PointsGoal from '@/components/growth/PointsGoal.vue';
   import AvatarFramePreview from '@/components/growth/AvatarFramePreview.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
@@ -196,10 +205,12 @@
 
   const { t, te } = useI18n();
   const router = useRouter();
-  const props = withDefaults(defineProps<{ readOnly?: boolean; focus?: string }>(), {
+  const props = withDefaults(defineProps<{ readOnly?: boolean; focus?: string; showGoal?: boolean }>(), {
     readOnly: false,
     focus: '',
+    showGoal: false,
   });
+  const goalRefreshKey = ref(0);
   const readOnly = computed(() => props.readOnly);
   const { dashboard, shop, shopLoading, shopError, loadShop, buyItem, equipFrame, claimAchievement } = useGrowth();
   const user = useUserStore();
@@ -429,6 +440,7 @@
     try {
       const res = await buyItem(it.id);
       if (res?.status === 200 && res.data?.ok) {
+        goalRefreshKey.value++;
         message.success(t('growth.shopBuyOk'));
         recordOperation({ module: '成长', operation: '兑换成长权益' });
       } else if (res?.status === 200 && res.data?.reason === 'purchase_limit') {

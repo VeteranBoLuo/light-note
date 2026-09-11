@@ -43,15 +43,14 @@ describe('GrowthPage 宽屏桌面导航布局', () => {
     );
   });
 
-  it('奖励页保留五个入口与旧深链兼容', () => {
-    expect(source).toContain(
-      "const validRewardSections: RewardSection[] = ['center', 'shop', 'lottery', 'inventory', 'ledger']",
-    );
+  it('奖励页合并为四个入口并兼容旧深链', () => {
+    expect(source).toContain("const validRewardSections: RewardSection[] = ['shop', 'lottery', 'inventory', 'ledger']");
     expect(source).toContain('const activeRewardSection = ref<RewardSection>(');
-    expect(source).toContain("hasRewardDeepLink ? (routeRewardSection as RewardSection) : 'inventory'");
+    expect(source).toContain("hasRewardDeepLink ? (routeRewardSection as RewardSection) : 'ledger'");
     expect(source).toMatch(
-      /const options:[\s\S]*?key: 'center'[\s\S]*?key: 'inventory'[\s\S]*?key: 'shop'[\s\S]*?key: 'ledger'[\s\S]*?key: 'lottery'/,
+      /const options:[\s\S]*?key: 'ledger'[\s\S]*?key: 'inventory'[\s\S]*?key: 'shop'[\s\S]*?key: 'lottery'/,
     );
+    expect(source).toContain("replace(/^center$/, 'ledger')");
     for (const legacyKey of ['shop', 'lottery', 'inventory', 'ledger']) {
       expect(source).toContain(`'${legacyKey}'`);
     }

@@ -1,3 +1,8 @@
+import {
+  ACTIVE_USERS_QUERY,
+  ACTIVATION_QUERY,
+  COHORT_RETENTION_QUERY,
+} from '../util/services/productInsightsQueries.js';
 import pool from '../db/index.js';
 import { resultData } from '../util/common.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
@@ -9,17 +14,11 @@ import { bookmarkIconBackgroundJobsEnabled } from '../util/bookmarkIconBatchServ
 import { SECURITY_CONFIG } from '../util/security/rules.js';
 
 const PERIOD_DAYS = new Set([7, 30, 90]);
-const COHORT_WEEKS = new Set([8, 12, 16]);
 const DEFAULT_AI_PRODUCT_EVENT_RETENTION_DAYS = 180;
 
 function normalizePeriodDays(value) {
   const normalized = Number(value);
-  return PERIOD_DAYS.has(normalized) ? normalized : 30;
-}
-
-function normalizeCohortWeeks(value) {
-  const normalized = Number(value);
-  return COHORT_WEEKS.has(normalized) ? normalized : 8;
+  return PERIOD_DAYS.has(normalized) ? normalized : 7;
 }
 
 function number(value) {
@@ -34,7 +33,7 @@ function percent(numerator, denominator) {
 
 async function optionalQuery(source, sql, params = []) {
   try {
-    const [rows] = await pool.query(sql, params);
+    const [rows] = await pool.query(sql.replace(/^SELECT\b/i, 'SELECT /*+ MAX_EXECUTION_TIME(5000) */'), params);
     return { source, available: true, rows };
   } catch (error) {
     console.warn('[admin-product-insights] source=%s unavailable code=%s', source, stableAgentErrorCode(error));
@@ -79,19 +78,10 @@ function ensureAdminActor(req, res) {
 export async function getAdminProductInsights(req, res) {
   if (!ensureAdminActor(req, res)) return;
   const periodDays = normalizePeriodDays(req.body?.periodDays);
-  const cohortWeeks = normalizeCohortWeeks(req.body?.cohortWeeks);
 
   try {
     const [activeResult, newUserResult, activationResult, cohortResult, ...featureResults] = await Promise.all([
-      optionalQuery(
-        'active_users',
-        `SELECT COUNT(DISTINCT l.user_id) AS users
-           FROM api_logs l
-           JOIN user u ON u.id = l.user_id AND u.role = 'user' AND u.del_flag = '0'
-          WHERE l.del_flag = '0'
-            AND l.request_time >= DATE_SUB(NOW(), INTERVAL ? DAY)`,
-        [periodDays],
-      ),
+      optionalQuery('active_users', ACTIVE_USERS_QUERY, [periodDays]),
       optionalQuery(
         'new_users',
         `SELECT COUNT(*) AS users
@@ -100,60 +90,8 @@ export async function getAdminProductInsights(req, res) {
             AND create_time >= DATE_SUB(NOW(), INTERVAL ? DAY)`,
         [periodDays],
       ),
-      optionalQuery(
-        'activation',
-        `SELECT COUNT(DISTINCT u.id) AS new_users,
-                COUNT(DISTINCT f.user_id) AS activated_users
-           FROM user u
-           LEFT JOIN conversion_events f
-             ON f.user_id = u.id
-            AND f.event = 'first_own_resource'
-            AND f.create_time >= u.create_time
-            AND f.create_time < DATE_ADD(u.create_time, INTERVAL 7 DAY)
-          WHERE u.role = 'user' AND u.del_flag = '0'
-            AND u.create_time >= DATE_SUB(NOW(), INTERVAL ? DAY)`,
-        [periodDays],
-      ),
-      optionalQuery(
-        'cohort_retention',
-        `SELECT DATE_FORMAT(
-                  DATE_SUB(DATE(u.create_time), INTERVAL WEEKDAY(u.create_time) DAY),
-                  '%Y-%m-%d'
-                ) AS cohort_start,
-                COUNT(DISTINCT u.id) AS registered,
-                COUNT(DISTINCT CASE
-                  WHEN u.create_time <= DATE_SUB(NOW(), INTERVAL 1 DAY) THEN u.id
-                END) AS d1_eligible,
-                COUNT(DISTINCT CASE
-                  WHEN l.request_time >= DATE_ADD(u.create_time, INTERVAL 1 DAY)
-                   AND l.request_time < DATE_ADD(u.create_time, INTERVAL 2 DAY) THEN u.id
-                END) AS d1_retained,
-                COUNT(DISTINCT CASE
-                  WHEN u.create_time <= DATE_SUB(NOW(), INTERVAL 7 DAY) THEN u.id
-                END) AS d7_eligible,
-                COUNT(DISTINCT CASE
-                  WHEN l.request_time >= DATE_ADD(u.create_time, INTERVAL 7 DAY)
-                   AND l.request_time < DATE_ADD(u.create_time, INTERVAL 8 DAY) THEN u.id
-                END) AS d7_retained,
-                COUNT(DISTINCT CASE
-                  WHEN u.create_time <= DATE_SUB(NOW(), INTERVAL 30 DAY) THEN u.id
-                END) AS d30_eligible,
-                COUNT(DISTINCT CASE
-                  WHEN l.request_time >= DATE_ADD(u.create_time, INTERVAL 30 DAY)
-                   AND l.request_time < DATE_ADD(u.create_time, INTERVAL 31 DAY) THEN u.id
-                END) AS d30_retained
-           FROM user u
-           LEFT JOIN api_logs l
-             ON l.user_id = u.id
-            AND l.del_flag = '0'
-            AND l.request_time >= u.create_time
-            AND l.request_time < DATE_ADD(u.create_time, INTERVAL 31 DAY)
-          WHERE u.role = 'user' AND u.del_flag = '0'
-            AND u.create_time >= DATE_SUB(CURDATE(), INTERVAL ? WEEK)
-          GROUP BY cohort_start
-          ORDER BY cohort_start DESC`,
-        [cohortWeeks],
-      ),
+      optionalQuery('activation', ACTIVATION_QUERY, [periodDays]),
+      optionalQuery('cohort_retention', COHORT_RETENTION_QUERY, [periodDays]),
       optionalQuery(
         'bookmark',
         `SELECT COUNT(DISTINCT b.user_id) AS users, COUNT(*) AS events
@@ -241,7 +179,7 @@ export async function getAdminProductInsights(req, res) {
     const newUsers = number(newUserResult.rows[0]?.users);
     const activationRow = activationResult.rows[0] || {};
     const activatedUsers = number(activationRow.activated_users);
-    const activationBase = number(activationRow.new_users) || newUsers;
+    const activationBase = number(activationRow.new_users);
     const features = ['bookmark', 'note', 'file', 'todo', 'ai', 'community'].map((source, index) =>
       adoptionResult(source, featureResults[index], activeUsers),
     );
@@ -270,12 +208,13 @@ export async function getAdminProductInsights(req, res) {
       resultData({
         generatedAt: new Date(),
         periodDays,
-        cohortWeeks,
         summary: {
           activeUsers,
           newUsers,
           activatedUsers,
-          activationRate: percent(activatedUsers, activationBase),
+          activationEligible: activationBase,
+          activationRate:
+            activationResult.available && activationBase > 0 ? percent(activatedUsers, activationBase) : null,
           aiAdoptionRate: features.find((item) => item.source === 'ai')?.rate || 0,
         },
         features,
@@ -426,7 +365,6 @@ export async function getAdminGovernance(req, res) {
 
 export const adminInsightsHandleInternals = {
   normalizePeriodDays,
-  normalizeCohortWeeks,
   percent,
   parseAiProductEventRetention,
   policySummary,

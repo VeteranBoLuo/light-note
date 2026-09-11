@@ -125,6 +125,7 @@
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
   import { NOTE_WORKSPACE_DEFAULT_SIDEBAR_WIDTH, resolveNoteWorkspaceLayout } from '@/utils/noteWorkspaceLayout';
@@ -173,6 +174,25 @@
   let resizeObserver: ResizeObserver | null = null;
   let resizeStartX = 0;
   let resizeStartWidth = 0;
+  let resizePointerId: number | null = null;
+  let resizeHintShown = false;
+  const resizeHintStorageKey = 'light-note:note-sidebar-resize-hint-shown';
+
+  function showSidebarResizeHint() {
+    if (resizeHintShown) return;
+    try {
+      if (localStorage.getItem(resizeHintStorageKey) === '1') return;
+    } catch {
+      // 存储不可用时，仍允许本次页面内提示一次。
+    }
+    message.info(t('note.pageSidebarResizedHint'), 2);
+    resizeHintShown = true;
+    try {
+      localStorage.setItem(resizeHintStorageKey, '1');
+    } catch {
+      // 引导标记写入失败不能中断拖动。
+    }
+  }
 
   const layout = computed(() => {
     const resolved = resolveNoteWorkspaceLayout(containerWidth.value, props.mobile);
@@ -259,21 +279,40 @@
   }
 
   function onSidebarResize(event: PointerEvent) {
+    if (event.pointerId !== resizePointerId) return;
     emit('update:sidebarWidth', Math.min(360, Math.max(220, resizeStartWidth + event.clientX - resizeStartX)));
   }
 
   function stopSidebarResize() {
     document.removeEventListener('pointermove', onSidebarResize);
-    document.removeEventListener('pointerup', stopSidebarResize);
+    document.removeEventListener('pointerup', finishSidebarResize);
+    document.removeEventListener('pointercancel', cancelSidebarResize);
+    window.removeEventListener('blur', stopSidebarResize);
+    resizePointerId = null;
     document.body.style.removeProperty('user-select');
   }
 
+  function finishSidebarResize(event: PointerEvent) {
+    if (event.pointerId !== resizePointerId) return;
+    const changed = props.sidebarWidth !== resizeStartWidth;
+    stopSidebarResize();
+    if (changed) showSidebarResizeHint();
+  }
+
+  function cancelSidebarResize(event: PointerEvent) {
+    if (event.pointerId === resizePointerId) stopSidebarResize();
+  }
+
   function startSidebarResize(event: PointerEvent) {
+    if (event.button !== 0 || resizePointerId !== null) return;
+    resizePointerId = event.pointerId;
     resizeStartX = event.clientX;
     resizeStartWidth = props.sidebarWidth;
     document.body.style.userSelect = 'none';
     document.addEventListener('pointermove', onSidebarResize);
-    document.addEventListener('pointerup', stopSidebarResize, { once: true });
+    document.addEventListener('pointerup', finishSidebarResize);
+    document.addEventListener('pointercancel', cancelSidebarResize);
+    window.addEventListener('blur', stopSidebarResize);
   }
 
   onMounted(() => {

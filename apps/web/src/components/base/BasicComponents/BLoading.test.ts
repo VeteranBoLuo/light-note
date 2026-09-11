@@ -48,6 +48,26 @@ describe('BLoading bar', () => {
 });
 
 describe('BLoading shared data feedback', () => {
+  it('hides an idle standalone layer and restores it only while loading', async () => {
+    const host = document.createElement('div');
+    const loading = ref(false);
+    const app = createApp({
+      render: () => h(BLoading, { loading: loading.value, class: 'both-center' }),
+    });
+    app.mount(host);
+    cleanup = () => app.unmount();
+    const layer = host.querySelector<HTMLElement>('.loader-container')!;
+    expect(layer.style.display).toBe('none');
+    loading.value = true;
+    await nextTick();
+    expect(layer.style.display).not.toBe('none');
+    expect(layer.querySelector('[role="status"]')).not.toBeNull();
+    loading.value = false;
+    await nextTick();
+    expect(layer.style.display).toBe('none');
+    expect(layer.querySelector('[role="status"]')).toBeNull();
+  });
+
   it('shows a standalone status and preserves mounted content across loading changes', async () => {
     const host = document.createElement('div');
     const loading = ref(true);
@@ -70,6 +90,7 @@ describe('BLoading shared data feedback', () => {
     await nextTick();
     expect(host.querySelector('[role="status"]')).toBeNull();
     expect(host.querySelector('input')).toBe(input);
+    expect(host.querySelector<HTMLElement>('.loader-container')?.style.display).not.toBe('none');
     expect(input?.value).toBe('保留内容');
   });
 

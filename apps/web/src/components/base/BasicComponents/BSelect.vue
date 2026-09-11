@@ -36,7 +36,7 @@
           v-model="searchText"
           class="select-search-inline"
           :class="{
-            'has-editable-value': editable && Boolean(displayText),
+            'has-selected-value': Boolean(displayText),
             'is-select-on-focus': selectOnFocus,
           }"
           :placeholder="displayText || placeholderText"
@@ -92,7 +92,7 @@
         :data-b-select-id="selectId"
         :class="[dropdownClassName, { 'has-footer': $slots['dropdown-footer'], 'is-tag-tone': chipTone === 'tag' }]"
         v-show="isOpen"
-        :style="dropdownStyle"
+        :style="[dropdownStyle, { zIndex: dropdownZIndex }]"
         @click.stop
       >
         <div v-if="showSearch && isMultiple" class="select-search-bar">
@@ -205,6 +205,22 @@
   const isHovering = ref(false);
   const searchText = ref('');
   const containerRef = ref<HTMLElement>();
+  const dropdownZIndex = ref(500);
+
+  function updateDropdownLayer() {
+    // Teleport 脱离所属浮层：页面菜单使用 500，浮层内菜单使用其上方一档。
+    let layer = 500;
+    let parent = containerRef.value?.parentElement;
+    while (parent) {
+      const style = window.getComputedStyle(parent);
+      const zIndex = Number.parseInt(style.zIndex, 10);
+      if (Number.isFinite(zIndex) && zIndex >= 500) {
+        layer = Math.max(layer, (Math.floor(zIndex / 100) + 1) * 100);
+      }
+      parent = parent.parentElement;
+    }
+    dropdownZIndex.value = layer;
+  }
   const triggerRef = ref<HTMLElement>();
   const dropdownStyle = ref({ top: '0px', left: '0px', width: '0px' });
   const dropdownRef = ref<HTMLElement>();
@@ -639,6 +655,7 @@
     if (val) {
       // 无论从哪条路径打开(点击 / 单选可搜索时内联 input 的 focus·input / keepOpen),都在此统一算定位。
       // 修复:「单选+可搜索」的内联 input 带 @click.stop 绕过了 toggleOpen,导致面板从未计算位置、停在左上角(0,0)。
+      updateDropdownLayer();
       placementAbove = false;
       nextTick(() => updateDropdownPosition());
       window.addEventListener('scroll', updateDropdownPosition, true);
@@ -760,7 +777,7 @@
       color: var(--desc-color, #999);
     }
 
-    &.has-editable-value::placeholder {
+    &.has-selected-value::placeholder {
       color: var(--text-color);
       opacity: 1;
     }
@@ -907,7 +924,7 @@
 
   .select-dropdown {
     position: fixed;
-    z-index: 900;
+    z-index: 500;
     box-sizing: border-box;
     padding: 4px;
     border-radius: 6px;

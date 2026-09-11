@@ -4,6 +4,28 @@ import { beforeEach, afterEach, describe, it, expect, vi } from 'vitest';
 import zh from '@/i18n/locales/zh-CN';
 const get = vi.hoisted(() => vi.fn());
 vi.mock('@/api/growthApi.ts', () => ({ default: { getPointsLog: get } }));
+vi.mock('@/components/base/BasicComponents/BVirtualList.vue', async () => {
+  const { defineComponent, h } = await import('vue');
+  return {
+    default: defineComponent({
+      props: ['items', 'hasMore', 'loading'],
+      emits: ['loadMore'],
+      setup(props, { slots, emit }) {
+        return () =>
+          h(
+            'div',
+            {
+              class: 'virtual-test',
+              onScroll: () => {
+                if (props.hasMore && !props.loading) emit('loadMore');
+              },
+            },
+            props.items.map((item: any) => slots.default?.({ item })),
+          );
+      },
+    }),
+  };
+});
 import PointsLedger from './PointsLedger.vue';
 let app: ReturnType<typeof createApp>;
 let host: HTMLDivElement;
@@ -52,8 +74,9 @@ describe('积分流水并发与分页', () => {
     get.mockResolvedValueOnce(response([row(1, 0)], true, 'cursor1')).mockResolvedValueOnce(response([row(2, 2)]));
     await mount();
     expect(host.querySelector('.ledger-row strong')?.textContent?.trim()).toBe('0');
-    (host.querySelector('.ledger-more') as HTMLButtonElement).click();
+    host.querySelector('.virtual-test')!.dispatchEvent(new Event('scroll'));
     await flush();
+    expect(host.querySelector('.ledger-more')).toBeNull();
     expect(get.mock.calls[1][1].cursor).toBe('cursor1');
     expect(host.querySelectorAll('.ledger-row')).toHaveLength(2);
   });
@@ -63,7 +86,7 @@ describe('积分流水并发与分页', () => {
       .mockRejectedValueOnce(new Error('offline'))
       .mockResolvedValueOnce(response([row(2)]));
     await mount();
-    (host.querySelector('.ledger-more') as HTMLButtonElement).click();
+    host.querySelector('.virtual-test')!.dispatchEvent(new Event('scroll'));
     await flush();
     expect(host.querySelectorAll('.ledger-row')).toHaveLength(1);
     expect(host.querySelector('.ledger-all')).toBeNull();

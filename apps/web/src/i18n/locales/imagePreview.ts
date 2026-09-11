@@ -1,5 +1,7 @@
 export const imagePreviewZh = {
   details: '查看原因',
+  viewOriginal: '查看原图',
+  originalFailed: '原图也未能加载，请稍后重试',
   generating: '正在生成缩略图',
   stillProcessing: '仍在处理，完成后自动显示',
   long: '长图',
@@ -23,6 +25,8 @@ export const imagePreviewZh = {
 };
 export const imagePreviewEn: typeof imagePreviewZh = {
   details: 'View reason',
+  viewOriginal: 'View original',
+  originalFailed: 'The original image could not load. Please try again later.',
   generating: 'Generating thumbnail',
   stillProcessing: 'Still processing. Preview will appear automatically.',
   long: 'Tall image',

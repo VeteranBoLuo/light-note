@@ -44,6 +44,18 @@ describe('用户积分目标估算', () => {
     ).toBeNull();
   });
 
+  it('同一来源的正负变化保持独立的收支分类', () => {
+    expect(
+      pointsEarningAnalyticsInternals.sourceRows([
+        { reason: 'admin', delta: 100, count: 1 },
+        { reason: 'admin', delta: -40, count: 1 },
+      ]),
+    ).toEqual([
+      { key: 'operations', reason: 'admin', category: 'operations', amount: 100, count: 1 },
+      { key: 'operations', reason: 'admin', category: 'spent', amount: -40, count: 1 },
+    ]);
+  });
+
   it('用户摘要的所有聚合都在 SQL WHERE 层限制为近 28 天', async () => {
     const source = await readFile(fileURLToPath(new URL('./pointsEarningAnalytics.js', import.meta.url)), 'utf8');
     expect(source).toContain('WHERE user_id = ? AND create_time >= DATE_SUB(NOW(), INTERVAL 28 DAY)');

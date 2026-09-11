@@ -12,7 +12,13 @@
       <slot name="title">{{ displayTitle }}</slot>
     </span>
   </div>
-  <div v-else class="loader-container" :class="{ 'is-standalone': !$slots.default && loading }" :aria-busy="loading">
+  <div
+    v-else
+    v-show="!!$slots.default || loading"
+    class="loader-container"
+    :class="{ 'is-standalone': !$slots.default && loading }"
+    :aria-busy="loading"
+  >
     <div v-if="$slots.default" class="b-loading-content">
       <slot></slot>
     </div>

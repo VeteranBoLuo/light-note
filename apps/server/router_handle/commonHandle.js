@@ -1,3 +1,4 @@
+import { buildApproximateFunnelQuery } from '../util/services/conversionFunnelQuery.js';
 import { queryActivitySummary, queryActivityBaseline, activityFailure } from '../util/services/userActivityService.js';
 import { resultData, snakeCaseKeys, insertData, generateUUID, INTERNAL_ROLES } from '../util/common.js';
 import { isLocalIp } from '../util/ipFilter.js';
@@ -154,34 +155,9 @@ export const getConversionFunnel = async (req, res) => {
        ) p`,
       timeParams,
     );
-    // 完整路径是诊断指标，不能代替各事件的真实总人数。例如已有 4 人注册，
-    // 其中只有 2 人在本时间窗内被完整记录了四步，主卡仍应显示 4，另外标注完整路径 2。
-    const timeFor = (alias) =>
-      timeCond.length
-        ? ' AND ' +
-          timeCond.map((condition) => condition.replaceAll('create_time', `${alias}.create_time`)).join(' AND ')
-        : '';
-    // 通过有序自连接寻找「后于上一阶段」的任意有效事件；这样即使访客在本期
-    // 早先打开过注册、后来重新访问并完成注册，也不会因「各事件最早时间」而被误删。
-    const [orderedRows] = await pool.query(
-      `SELECT
-         COUNT(DISTINCT p.fingerprint) AS pageView,
-         COUNT(DISTINCT s.fingerprint) AS signupOpen,
-         COUNT(DISTINCT submit_event.fingerprint) AS signupSubmit,
-         COUNT(DISTINCT register_event.fingerprint) AS registerSuccess
-       FROM conversion_events p
-       LEFT JOIN conversion_events s
-         ON s.fingerprint = p.fingerprint AND s.event = 'signup_open' AND s.visitor_type = 'visitor'
-        AND s.create_time > p.create_time${timeFor('s')}
-       LEFT JOIN conversion_events submit_event
-         ON submit_event.fingerprint = s.fingerprint AND submit_event.event = 'signup_submit'
-        AND submit_event.visitor_type = 'visitor' AND submit_event.create_time > s.create_time${timeFor('submit_event')}
-       LEFT JOIN conversion_events register_event
-         ON register_event.fingerprint = submit_event.fingerprint AND register_event.event = 'register'
-        AND register_event.create_time > submit_event.create_time${timeFor('register_event')}
-       WHERE p.fingerprint <> '' AND p.event = 'page_view' AND p.visitor_type = 'visitor'${timeFor('p')}`,
-      timeCond.length ? [...timeParams, ...timeParams, ...timeParams, ...timeParams] : [],
-    );
+    // 指纹近似路径只用于诊断；同秒允许关联但不代表因果顺序，不替代独立事件计数。
+    const pathQuery = buildApproximateFunnelQuery({ startDate, endDate });
+    const [orderedRows] = await pool.query(pathQuery.sql, pathQuery.params);
     const pathOf = (key) => Number(pathRows[0]?.[key] || 0);
     const ordered = orderedRows[0] || {};
     const independentStageValues = [
@@ -213,6 +189,8 @@ export const getConversionFunnel = async (req, res) => {
       resultData({
         mainFunnel,
         orderedFunnel,
+        pathMethod: 'fingerprint-nondecreasing-seconds-v1',
+        pathApproximate: true,
         pageViewVisitors: visitorsOf('page_view'),
         demoEnterVisitors: visitorsOf('demo_enter'),
         wallHitVisitors: visitorsOf('wall_hit'),

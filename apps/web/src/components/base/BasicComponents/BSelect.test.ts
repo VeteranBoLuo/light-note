@@ -69,6 +69,28 @@ afterEach(() => {
 });
 
 describe('BSelect keyboard interaction', () => {
+  it.each([
+    ['', 500],
+    ['600', 700],
+    ['700', 800],
+    ['800', 900],
+  ])('根据所属浮层 %s 设置菜单层级，并在重新打开时重新计算', async (parentLayer, expectedLayer) => {
+    const { host } = mountSelect();
+    host.style.position = 'relative';
+    host.style.zIndex = parentLayer;
+    const trigger = host.querySelector<HTMLElement>('.select-trigger')!;
+    trigger.click();
+    await nextTick();
+    const dropdown = document.body.querySelector<HTMLElement>('.select-dropdown')!;
+    expect(dropdown.style.zIndex).toBe(String(expectedLayer));
+    pressKey(trigger, 'Escape');
+    await nextTick();
+    host.style.zIndex = '';
+    trigger.click();
+    await nextTick();
+    expect(dropdown.style.zIndex).toBe('500');
+  });
+
   it('搜索多选保留可聚焦 combobox 触发器并支持键盘打开', async () => {
     const { host } = mountSelect(true, { ariaLabel: '选择标签' }, 'multiple');
     const trigger = host.querySelector<HTMLElement>('.select-trigger')!;
@@ -228,25 +250,32 @@ describe('BSelect keyboard interaction', () => {
     expect(input!.classList.contains('is-select-on-focus')).toBe(true);
   });
 
-  it.each(['.select-trigger', '.select-suffix'])('点击全选控件的 %s 同样聚焦并选中数字，重复点击不关闭', async (target) => {
-    const { host, value } = mountSelect(false, {}, 'single', {
-      options: [{ label: '09', value: '09' }, { label: '10', value: '10' }],
-      editable: true, selectOnFocus: true,
-    });
-    value.value = '09';
-    await nextTick();
-    const input = host.querySelector<HTMLInputElement>('.select-search-inline')!;
-    for (let attempt = 0; attempt < 2; attempt++) {
-      host.querySelector<HTMLElement>(target)!.click();
+  it.each(['.select-trigger', '.select-suffix'])(
+    '点击全选控件的 %s 同样聚焦并选中数字，重复点击不关闭',
+    async (target) => {
+      const { host, value } = mountSelect(false, {}, 'single', {
+        options: [
+          { label: '09', value: '09' },
+          { label: '10', value: '10' },
+        ],
+        editable: true,
+        selectOnFocus: true,
+      });
+      value.value = '09';
       await nextTick();
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-      expect(document.activeElement).toBe(input);
-      expect([input.selectionStart, input.selectionEnd]).toEqual([0, 2]);
-      expect(input.value).toBe('09');
-      expect(input.getAttribute('aria-expanded')).toBe('true');
-      expect(document.body.querySelectorAll('.select-option')).toHaveLength(2);
-    }
-  });
+      const input = host.querySelector<HTMLInputElement>('.select-search-inline')!;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        host.querySelector<HTMLElement>(target)!.click();
+        await nextTick();
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        expect(document.activeElement).toBe(input);
+        expect([input.selectionStart, input.selectionEnd]).toEqual([0, 2]);
+        expect(input.value).toBe('09');
+        expect(input.getAttribute('aria-expanded')).toBe('true');
+        expect(document.body.querySelectorAll('.select-option')).toHaveLength(2);
+      }
+    },
+  );
 
   it('可输入单选按 Escape 放弃非法草稿并恢复当前选中值', async () => {
     const { host, value } = mountSelect(false, {}, 'single', {

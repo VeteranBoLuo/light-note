@@ -2,7 +2,7 @@
   <AdminDataPage
     eyebrow="Admin / 增长"
     title="游客转化漏斗"
-    subtitle="主指标展示各阶段真实去重人数；完整时序路径作为诊断指标单独标注。"
+    subtitle="主指标展示各阶段按浏览器标识去重的数量；近似时序路径作为诊断指标单独标注。"
     layout="scroll"
   >
     <template #toolbar>
@@ -36,9 +36,9 @@
               v-if="step.key === 'registerSuccess' && orderedRegisterCount !== null"
               class="funnel-chain__path-label"
             >
-              其中完整路径 {{ formatNumber(orderedRegisterCount) }} 人
+              其中近似路径 {{ formatNumber(orderedRegisterCount) }} 人
             </span>
-            <span v-if="index === weakestStageIndex && index > 0" class="funnel-chain__weak-label">主要流失环节</span>
+            <span v-if="index === weakestStageIndex && index > 0" class="funnel-chain__weak-label">阶段人数差异</span>
           </div>
           <div v-if="index < mainFunnel.length - 1" class="funnel-chain__connector">
             <span aria-hidden="true">↓</span>
@@ -49,7 +49,7 @@
       </ol>
 
       <p class="funnel-chain__summary">
-        各阶段为所选时间内的独立去重总人数；“完整路径”只用于检查四步埋点是否连续，不会替代真实注册数。
+        各阶段为所选时间内的按浏览器标识独立去重的数量；“近似路径”允许同秒事件，仅作四步埋点诊断；无法确认同一次尝试，跨设备也可能缺链，不会替代独立注册事件数。
       </p>
     </section>
 
@@ -187,7 +187,12 @@
     let selected = -1;
     let lowest = Number.POSITIVE_INFINITY;
     mainFunnel.value.forEach((step, index) => {
-      if (index > 0 && step.fromPreviousRate !== null && step.fromPreviousRate < lowest) {
+      if (
+        index > 0 &&
+        step.count < mainFunnel.value[index - 1].count &&
+        step.fromPreviousRate !== null &&
+        step.fromPreviousRate < lowest
+      ) {
         lowest = step.fromPreviousRate;
         selected = index;
       }
@@ -231,9 +236,9 @@
       ? []
       : [
           {
-            label: '完整路径注册',
+            label: '近似路径注册',
             value: formatNumber(orderedRegisterCount.value),
-            hint: `真实注册 ${formatNumber(reg.value)} 人 · 路径覆盖 ${orderedPathCoverage.value}%`,
+            hint: `独立注册 ${formatNumber(reg.value)} 人 · 路径覆盖 ${orderedPathCoverage.value}%`,
           },
         ]),
     {

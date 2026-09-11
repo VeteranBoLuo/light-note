@@ -103,8 +103,12 @@ export const getAdminOperationAudits = async function (params: {
   return apiBasePost('/api/common/getAdminOperationAudits', params, { silent: true });
 };
 
-export const getAdminProductInsights = async function (params: { periodDays: 7 | 30 | 90; cohortWeeks: 8 | 12 | 16 }) {
+export const getAdminProductInsights = async function (params: { periodDays: 7 | 30 | 90 }) {
   return apiBasePost('/api/common/getAdminProductInsights', params, { silent: true });
+};
+
+export const getAdminCoreUsageReport = async function (params: { days: 7 | 30 | 90 }) {
+  return apiBasePost('/api/common/getAdminCoreUsageReport', params, { silent: true });
 };
 
 export const getAdminGovernance = async function () {

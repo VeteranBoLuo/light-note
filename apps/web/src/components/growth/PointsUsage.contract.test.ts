@@ -49,21 +49,13 @@ describe('积分资产入口与明细页契约', () => {
     expect(balanceSource).not.toContain('<button');
   });
 
-  it('独立页面同时提供余额概览、知识工坊入口、可筛选账本和预扣结算说明', () => {
-    expect(usagePageSource).toContain('growthApi.getPointsSummary()');
-    expect(usagePageSource).toContain('<PointsLedger');
-    expect(usagePageSource).toContain('summary.value?.week?.spent');
-    expect(usagePageSource).toContain("return amount > 0 ? `-${amount.toLocaleString(locale.value)}` : '0';");
+  it('成长、设置和独立明细复用摘要与单列账本', () => {
+    expect(usagePageSource).toContain('<PointsSummary');
+    expect(usagePageSource).toContain('<PointsLedger :key="accountKey" settings-layout');
     expect(usagePageSource).toContain("t('growth.pointsUsageSettlementHint')");
     expect(usagePageSource).toContain(
       "router.push({ path: '/growth', query: { section: 'rewards', reward: 'shop' } })",
     );
-    expect(usagePageSource).toContain("router.push('/toolbox')");
-    expect(usagePageSource).toContain('icon.toolbox.home');
-    expect(usagePageSource).toContain("t('growth.pointsUsageWorkshopAction')");
-    expect(usagePageSource).toContain('<BCard');
-    expect(usagePageSource).toContain('<BLoading');
-    expect(usagePageSource).toContain('withDefaults(defineProps<{ embedded?: boolean }>()');
   });
 
   it('知识工坊入口明确纯 AI 工具每次只选择一种结算介质', () => {

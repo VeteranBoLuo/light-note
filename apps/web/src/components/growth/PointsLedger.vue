@@ -17,36 +17,45 @@
       ><BButton size="small" @click="reload">{{ t('common.retry') }}</BButton>
     </div>
     <div v-else-if="!rows.length" class="ledger-empty">{{ t('growth.pointsLogEmpty') }}</div>
-    <div v-else class="ledger-list">
-      <component
-        :is="settingsLayout ? BButton : 'div'"
-        v-for="row in rows"
-        :key="row.id"
-        class="ledger-row"
-        @click="settingsLayout && (selected = row)"
-      >
-        <div class="ledger-main">
-          <b>{{ labelOf(row.reason) }}</b>
-          <span
-            >{{ sourceOf(row)
-            }}<span :class="{ 'ledger-time-inline': settingsLayout }">
-              · {{ fmtTime(row.createTime || row.create_time || '') }}</span
-            ></span
-          >
-        </div>
-        <time v-if="settingsLayout" class="ledger-time">{{ fmtTime(row.createTime || row.create_time || '') }}</time>
-        <strong :class="row.delta > 0 || row.assetChange ? 'up' : row.delta < 0 ? 'down' : 'flat'">
-          {{ amountOf(row) }}
-        </strong>
-      </component>
-    </div>
+    <BVirtualList
+      v-else
+      :key="filter"
+      class="ledger-list"
+      :items="rows"
+      :item-height="settingsLayout ? 88 : 64"
+      dynamic-height
+      scroll-mode="ancestor"
+      :loading="loading"
+      :has-more="hasMore && !loadError"
+      :loading-text="t('common.loading')"
+      @load-more="loadMore"
+    >
+      <template #default="{ item: row }">
+        <component
+          :is="settingsLayout ? BButton : 'div'"
+          class="ledger-row"
+          @click="settingsLayout && (selected = row)"
+        >
+          <div class="ledger-main">
+            <b>{{ labelOf(row.reason) }}</b>
+            <span
+              >{{ sourceOf(row)
+              }}<span :class="{ 'ledger-time-inline': settingsLayout }">
+                · {{ fmtTime(row.createTime || row.create_time || '') }}</span
+              ></span
+            >
+          </div>
+          <time v-if="settingsLayout" class="ledger-time">{{ fmtTime(row.createTime || row.create_time || '') }}</time>
+          <strong :class="row.delta > 0 || row.assetChange ? 'up' : row.delta < 0 ? 'down' : 'flat'">
+            {{ amountOf(row) }}
+          </strong>
+        </component>
+      </template>
+    </BVirtualList>
     <p v-if="loadError && rows.length" role="alert" class="ledger-page-error"
       >{{ t('growth.pointsLogFailed') }} <BButton size="small" @click="loadMore">{{ t('common.retry') }}</BButton></p
     >
-    <BButton v-if="hasMore && !loadError" class="ledger-more" :loading="loading" @click="loadMore">
-      {{ t('growth.pointsLogMore') }}
-    </BButton>
-    <span v-else-if="rows.length && !loadError" class="ledger-all">{{ t('growth.pointsLogAll') }}</span>
+    <span v-if="rows.length && !hasMore && !loadError" class="ledger-all">{{ t('growth.pointsLogAll') }}</span>
     <BModal
       v-if="settingsLayout"
       :visible="Boolean(selected)"
@@ -74,6 +83,7 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import BVirtualList from '@/components/base/BasicComponents/BVirtualList.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import { formatGrowthAssetChange, type GrowthAssetChange } from '@/utils/growthAssetChange.ts';
 
@@ -156,7 +166,7 @@
       if (response?.status !== 200 || !response.data) throw new Error('POINTS_LOG_FAILED');
       if (response?.status === 200 && response.data) {
         const list = (response.data.rows || []) as LogRow[];
-        rows.value = reset ? list : [...rows.value, ...list];
+        rows.value = [...new Map((reset ? list : [...rows.value, ...list]).map((row) => [row.id, row])).values()];
         cursor.value = response.data.nextCursor || null;
         hasMore.value = Boolean(response.data.hasMore);
       }
@@ -171,6 +181,7 @@
     }
   }
   function loadMore() {
+    if (!hasMore.value || loading.value) return;
     void fetchPage(false);
   }
   function reload() {
@@ -195,6 +206,17 @@
     flex-direction: column;
     gap: 12px;
   }
+  .ledger :deep(.tab-container) {
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+  .ledger :deep(.tab) {
+    flex-shrink: 0;
+  }
+  .ledger :deep(.tab.is-active) {
+    color: var(--workspace-purple-text);
+  }
   .ledger-head h3 {
     margin: 0;
     font-size: 16px;
@@ -205,9 +227,7 @@
     font-size: 12px;
   }
   .ledger-list {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px 18px;
+    width: 100%;
   }
   .ledger-row {
     display: flex;
@@ -255,21 +275,11 @@
     justify-content: center;
     gap: 8px;
   }
-  .ledger-more {
-    align-self: center;
-    min-height: 34px !important;
-    padding: 0 18px !important;
-  }
   .ledger-all,
   .ledger-empty {
     align-self: center;
     padding: 16px;
     font-size: 12px;
-  }
-  @media (max-width: 640px) {
-    .ledger-list {
-      grid-template-columns: 1fr;
-    }
   }
   .ledger-detail {
     display: grid;
@@ -294,10 +304,6 @@
     }
     .ledger-head p {
       font-size: 13px;
-    }
-    .ledger-list {
-      grid-template-columns: 1fr;
-      gap: 0;
     }
     .ledger-row {
       width: 100%;

@@ -52,6 +52,22 @@ describe('explicit remote read-only mode', () => {
     await expect(readonly.query('SELECT 1')).rejects.toThrow('read-only setup failed');
     expect(raw.destroy).toHaveBeenCalledTimes(1);
   });
+  it('reuses an existing read-only pool instead of nesting transaction guards', async () => {
+    const raw = { query: vi.fn().mockResolvedValue([[]]), release: vi.fn(), destroy: vi.fn(), commit: vi.fn() };
+    const pool = createReadOnlyPool({ getConnection: async () => raw });
+    const shared = createReadOnlyPool(pool, { transactionOnly: true });
+    expect(shared).toBe(pool);
+    const connection = await shared.getConnection();
+    await connection.beginTransaction();
+    await connection.query('SELECT 1');
+    await connection.commit();
+    connection.release();
+    expect(raw.query.mock.calls.map(([sql]) => sql)).toEqual([
+      'SET SESSION TRANSACTION READ ONLY',
+      'START TRANSACTION READ ONLY',
+      'SELECT 1',
+    ]);
+  });
   it('does not expose raw connections and destroys unreleased read transactions', async () => {
     const raw = {
       query: vi.fn().mockResolvedValue([[]]),

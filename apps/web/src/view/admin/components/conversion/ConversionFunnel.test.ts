@@ -97,7 +97,7 @@ describe('转化漏斗新可视化', () => {
     expect(steps[1].textContent).toContain('72.9%');
     expect(steps[1].textContent).toContain('较上步少 52 人');
     expect(steps[3].textContent).toContain('注册成功115');
-    expect(steps[3].textContent).toContain('其中完整路径 96 人');
+    expect(steps[3].textContent).toContain('其中近似路径 96 人');
   });
 
   it('用实色描边和文字标记最弱转化环节', async () => {
@@ -105,8 +105,27 @@ describe('转化漏斗新可视化', () => {
     const weak = host.querySelector('.funnel-chain__step.is-weak');
 
     expect(weak?.textContent).toContain('打开注册');
-    expect(weak?.textContent).toContain('主要流失环节');
+    expect(weak?.textContent).toContain('阶段人数差异');
   });
+
+  it.each([
+    [0, 0, 0, 0],
+    [10, 10, 10, 10],
+    [10, 12, 14, 16],
+  ])(
+    '人数为 %i/%i/%i/%i 时不把持平或增加标成下降',
+    async (pageViewVisitors, signupOpenVisitors, signupSubmitVisitors, registerVisitors) => {
+      const host = await mountFunnel({
+        ...REAL_DATA,
+        pageViewVisitors,
+        signupOpenVisitors,
+        signupSubmitVisitors,
+        registerVisitors,
+      });
+      expect(host.querySelector('.funnel-chain__step.is-weak')).toBeNull();
+      expect(host.querySelector('.funnel-chain__weak-label')).toBeNull();
+    },
+  );
 
   it('并列展示打开注册与注册成功的入口构成', async () => {
     const host = await mountFunnel();
@@ -132,15 +151,15 @@ describe('转化漏斗新可视化', () => {
     expect(wall?.textContent).not.toContain('290.9');
   });
 
-  it('明确区分独立总人数与完整时序路径', async () => {
+  it('明确区分独立总人数与近似时序路径', async () => {
     const host = await mountFunnel();
     const summary = host.querySelector('.funnel-chain__summary');
 
-    expect(summary?.textContent).toContain('独立去重总人数');
-    expect(summary?.textContent).toContain('不会替代真实注册数');
+    expect(summary?.textContent).toContain('按浏览器标识独立去重的数量');
+    expect(summary?.textContent).toContain('不会替代独立注册事件数');
   });
 
-  it('注册总数为 4 时主卡显示 4，完整路径 2 只作为辅助诊断', async () => {
+  it('注册总数为 4 时主卡显示 4，近似路径 2 只作为辅助诊断', async () => {
     const host = await mountFunnel({
       ...REAL_DATA,
       pageViewVisitors: 28,
@@ -152,10 +171,10 @@ describe('转化漏斗新可视化', () => {
 
     const registerStep = [...host.querySelectorAll('.funnel-chain__step')].at(-1);
     expect(registerStep?.textContent).toContain('注册成功4');
-    expect(registerStep?.textContent).toContain('其中完整路径 2 人');
+    expect(registerStep?.textContent).toContain('其中近似路径 2 人');
   });
 
-  it('兼容旧后端：旧 mainFunnel 作为完整路径，主数字仍用独立事件总量', async () => {
+  it('兼容旧后端：旧 mainFunnel 作为近似路径，主数字仍用独立事件总量', async () => {
     const host = await mountFunnel({
       ...REAL_DATA,
       pageViewVisitors: 35,
@@ -173,7 +192,7 @@ describe('转化漏斗新可视化', () => {
 
     const registerStep = [...host.querySelectorAll('.funnel-chain__step')].at(-1);
     expect(registerStep?.textContent).toContain('注册成功4');
-    expect(registerStep?.textContent).toContain('其中完整路径 2 人');
+    expect(registerStep?.textContent).toContain('其中近似路径 2 人');
   });
 
   it('旧后端未返回新字段时安全降级，不出现 NaN', async () => {

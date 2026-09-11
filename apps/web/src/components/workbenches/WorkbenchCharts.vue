@@ -49,18 +49,20 @@
               <span>{{ item.type }}</span>
             </span>
           </div>
-          <div
-            v-if="trendTooltip.visible"
-            class="trend-tooltip"
-            :style="{ left: `${trendTooltip.x}px`, top: `${trendTooltip.y}px` }"
-          >
-            <div class="trend-tooltip-date">{{ trendTooltip.date }}</div>
-            <div v-for="item in trendTooltip.items" :key="item.type" class="trend-tooltip-row">
-              <span class="trend-tooltip-dot" :style="{ backgroundColor: item.color }"></span>
-              <span>{{ item.type }}</span>
-              <strong>{{ item.value }}</strong>
+          <Transition name="chart-tooltip-fade">
+            <div
+              v-if="trendTooltip.visible"
+              class="trend-tooltip chart-tooltip--tracking"
+              :style="{ transform: `translate3d(${trendTooltip.x}px, ${trendTooltip.y}px, 0)` }"
+            >
+              <div class="trend-tooltip-date">{{ trendTooltip.date }}</div>
+              <div v-for="item in trendTooltip.items" :key="item.type" class="trend-tooltip-row">
+                <span class="trend-tooltip-dot" :style="{ backgroundColor: item.color }"></span>
+                <span>{{ item.type }}</span>
+                <strong>{{ item.value }}</strong>
+              </div>
             </div>
-          </div>
+          </Transition>
         </div>
 
         <div v-if="trendInsight" class="trend-insight" role="status">
@@ -103,23 +105,26 @@
             <span>{{ item.percent }}%</span>
           </div>
         </div>
-        <div
-          v-if="typeTooltip.visible"
-          class="trend-tooltip type-tooltip"
-          :style="{ left: `${typeTooltip.x}px`, top: `${typeTooltip.y}px` }"
-        >
-          <div class="trend-tooltip-date">{{ typeTooltip.type }}</div>
-          <div class="trend-tooltip-row">
-            <span class="trend-tooltip-dot" :style="{ backgroundColor: typeTooltip.color }"></span>
-            <span>{{ t('workbench.chart.count', '数量') }}</span>
-            <strong>{{ typeTooltip.value }}</strong>
+        <Transition name="chart-tooltip-fade">
+          <div
+            v-if="typeTooltip.visible"
+            ref="typeTooltipRef"
+            class="trend-tooltip chart-tooltip--tracking type-tooltip"
+            :style="{ transform: `translate3d(${typeTooltip.x}px, ${typeTooltip.y}px, 0)` }"
+          >
+            <div class="trend-tooltip-date">{{ typeTooltip.type }}</div>
+            <div class="trend-tooltip-row">
+              <span class="trend-tooltip-dot" :style="{ backgroundColor: typeTooltip.color }"></span>
+              <span>{{ t('workbench.chart.count', '数量') }}</span>
+              <strong>{{ typeTooltip.value }}</strong>
+            </div>
+            <div class="trend-tooltip-row">
+              <span class="trend-tooltip-dot" :style="{ backgroundColor: typeTooltip.color }"></span>
+              <span>{{ t('workbench.chart.percent', '占比') }}</span>
+              <strong>{{ typeTooltip.percent }}%</strong>
+            </div>
           </div>
-          <div class="trend-tooltip-row">
-            <span class="trend-tooltip-dot" :style="{ backgroundColor: typeTooltip.color }"></span>
-            <span>{{ t('workbench.chart.percent', '占比') }}</span>
-            <strong>{{ typeTooltip.percent }}%</strong>
-          </div>
-        </div>
+        </Transition>
       </div>
       <div v-else class="chart-empty chart-empty--file">
         <span class="chart-empty__icon" aria-hidden="true">
@@ -143,6 +148,7 @@
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
+  import { getRootZoom } from '@/utils/zoom';
   import { FILE_TYPE_COLOR_HEX, RESOURCE_COLOR_CSS_VAR, RESOURCE_COLOR_HEX } from '@/config/resourceColor';
   import {
     getTrendCurveSegments,
@@ -196,6 +202,7 @@
   const trendMotionCanvasRef = ref<HTMLCanvasElement | null>(null);
   const typeRef = ref<HTMLElement | null>(null);
   const typeCanvasRef = ref<HTMLCanvasElement | null>(null);
+  const typeTooltipRef = ref<HTMLElement | null>(null);
 
   let trendCanvasAnimation: Animation | null = null;
   let trendSummaryAnimations: Animation[] = [];
@@ -229,11 +236,12 @@
   const TREND_PLOT_RIGHT = 16;
   const TREND_PLOT_BOTTOM = 48;
   const TREND_PLOT_LEFT = 42;
-  const TREND_TOOLTIP_WIDTH = 146;
+  const CHART_TOOLTIP_WIDTH = 146;
 
   const trendTooltip = reactive({
     visible: false,
     index: -1,
+    side: 'right' as 'left' | 'right',
     x: 0,
     y: 0,
     date: '',
@@ -385,6 +393,8 @@
   }
 
   function handleResize() {
+    hideTrendTooltip();
+    hideTypeTooltip();
     drawTrend();
     prepareTrendMotionTracks();
     drawType(performance.now());
@@ -925,8 +935,9 @@
     const container = trendRef.value;
     if (!container || !visibleTrendData.value.length) return;
     const rect = container.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
+    const zoom = getRootZoom();
+    const x = (event.clientX - rect.left) / zoom;
+    const y = (event.clientY - rect.top) / zoom;
     const width = container.clientWidth;
     const height = container.clientHeight;
     const left = TREND_PLOT_LEFT;
@@ -949,12 +960,24 @@
     }));
 
     const shouldRedraw = !trendTooltip.visible || trendTooltip.index !== index;
+    // Keep the current side while it fits; a safe margin on the opposite side
+    // prevents repeated flips when the plot is too narrow to fit both sides.
+    const tooltipWidth = Math.min(CHART_TOOLTIP_WIDTH, Math.max(0, width - 16));
+    const rightX = activeX + 12;
+    const leftX = activeX - tooltipWidth - 12;
+    if (!trendTooltip.visible) {
+      trendTooltip.side = rightX + tooltipWidth <= width - 8 ? 'right' : 'left';
+    } else if (trendTooltip.side === 'right' && rightX + tooltipWidth > width - 8 && leftX >= 24) {
+      trendTooltip.side = 'left';
+    } else if (trendTooltip.side === 'left' && leftX < 8 && rightX + tooltipWidth <= width - 24) {
+      trendTooltip.side = 'right';
+    }
     trendTooltip.visible = true;
     trendTooltip.index = index;
     trendTooltip.date = dates[index] || '';
     trendTooltip.items = tooltipItems;
-    const preferredTooltipX = activeX > width / 2 ? activeX - TREND_TOOLTIP_WIDTH - 12 : activeX + 12;
-    trendTooltip.x = Math.min(Math.max(preferredTooltipX, 8), Math.max(8, width - TREND_TOOLTIP_WIDTH - 8));
+    const preferredTooltipX = trendTooltip.side === 'left' ? leftX : rightX;
+    trendTooltip.x = Math.min(Math.max(preferredTooltipX, 8), Math.max(8, width - tooltipWidth - 8));
     trendTooltip.y = top + 8;
     if (shouldRedraw) drawTrend();
   }
@@ -975,8 +998,9 @@
     const container = typeRef.value;
     if (!container || !props.fileTypeData.length) return;
     const rect = container.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
+    const zoom = getRootZoom();
+    const x = (event.clientX - rect.left) / zoom;
+    const y = (event.clientY - rect.top) / zoom;
     const width = container.clientWidth;
     const height = container.clientHeight;
     const cx = getTypeCenterX(width);
@@ -1002,8 +1026,10 @@
     typeTooltip.value = segment.value;
     typeTooltip.percent = segment.percent;
     typeTooltip.color = segment.color;
-    typeTooltip.x = Math.min(Math.max(x + 12, 8), width - 138);
-    typeTooltip.y = Math.min(Math.max(y - 12, 8), height - 86);
+    const tooltipWidth = Math.min(CHART_TOOLTIP_WIDTH, Math.max(0, width - 16));
+    const tooltipHeight = typeTooltipRef.value?.offsetHeight || 78;
+    typeTooltip.x = Math.min(Math.max(x + 12, 8), Math.max(8, width - tooltipWidth - 8));
+    typeTooltip.y = Math.min(Math.max(y - 12, 8), Math.max(8, height - tooltipHeight - 8));
   }
 
   function hideTypeTooltip() {
@@ -1400,6 +1426,33 @@
     pointer-events: none;
   }
 
+  .chart-tooltip--tracking {
+    top: 0;
+    left: 0;
+    width: 146px;
+    max-width: calc(100% - 16px);
+    min-width: 0;
+    box-sizing: border-box;
+    transition:
+      transform 180ms cubic-bezier(0.22, 0.61, 0.36, 1),
+      opacity 100ms ease-out;
+  }
+
+  .chart-tooltip-fade-leave-active {
+    transition: opacity 100ms ease-out;
+  }
+
+  .chart-tooltip-fade-enter-from,
+  .chart-tooltip-fade-leave-to {
+    opacity: 0;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .chart-tooltip--tracking {
+      transition: none;
+    }
+  }
+
   .trend-tooltip-date {
     margin-bottom: 5px;
     color: var(--text-color);
@@ -1543,10 +1596,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  .type-tooltip {
-    min-width: 120px;
   }
 
   .chart-empty {

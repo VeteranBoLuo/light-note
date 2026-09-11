@@ -1,0 +1,83 @@
+export const coreUsageReportZh = {
+  title: '新用户有没有真正用起来',
+  intro: '看看所选时间里注册的人，有没有保存资料、建待办，后来有没有继续用。点击才统计。',
+  generate: '生成报告',
+  regenerate: '重新生成',
+  idle: '跟随顶部近 {days} 天的选择，只计算已注册满 7 天的人；还没等满时会说明，不把等待当作没人使用。',
+  failed: '报告生成失败，请重试；已有结果仍为上次生成的快照。',
+  busy: '已有其他范围的报告正在生成，请稍后重试。',
+  snapshot: '生成于 {time}（北京时间）· 近 {days} 天注册 · 已注册满 7 天 {eligible} 人 · 还需等待 {immature} 人',
+  metric: '指标',
+  observed: '做过的人',
+  eligible: '已满 7 天的人',
+  rate: '比例',
+  status: '能否算准',
+  coverage: '还没等满 7 天，或记录不全、无法确认从何时记录完整时，比例显示“—”，这不代表没人使用。',
+  limitation:
+    '同一资料的重复操作可能只留一条记录，所以不能反映所有使用。用户从哪里来、是否反复用扩展、是否重新使用旧资料，目前还不能准确判断。',
+  metrics: {
+    a7Resources: '一周内保存过资料',
+    a7Overall: '一周内保存过资料或建过待办',
+    r7Core: '一周内在不同日子继续做事',
+    a7ResourcesLegacy: '保存过资料（旧记录）',
+    r7InteractionProxy: '在不同日子有点击等操作',
+  },
+  statuses: {
+    available: '可以计算',
+    no_mature_cohort: '还没注册满 7 天',
+    coverage_unknown: '记录完整性待确认',
+    partial_coverage: '记录不完整',
+    unavailable: '暂不可用',
+  },
+  reasons: {
+    coverage_start_unverified: '还不确定从何时开始记录完整',
+    cohort_precedes_coverage: '部分用户注册较早，当时记录还不完整',
+    required_index_missing: '查询条件尚未就绪',
+    schema_unavailable: '数据源尚未就绪',
+    query_timeout: '查询超时，可稍后重试',
+    source_unavailable: '数据源暂不可用',
+  },
+};
+export const coreUsageReportEn = {
+  title: 'Are new users getting started?',
+  intro:
+    'See whether new users save content, create tasks and return on another day. Generated on demand, without automatic refresh.',
+  generate: 'Generate report',
+  regenerate: 'Regenerate',
+  idle: 'Uses the {days}-day window above. Only accounts at least 7 days old qualify; waiting is not counted as no usage.',
+  failed: 'Report generation failed. Retry when ready; any existing results remain the previous snapshot.',
+  busy: 'A report for another window is being generated. Please retry shortly.',
+  snapshot:
+    'Generated {time} (UTC+08) · {days}-day registration window · {eligible} mature · {immature} awaiting observation',
+  metric: 'Metric',
+  observed: 'Observed users',
+  eligible: 'Mature sample',
+  rate: 'Rate',
+  status: 'Data status',
+  coverage:
+    'Unknown or incomplete collection coverage keeps observed counts but displays rates as “—”. This does not mean there was no usage.',
+  limitation:
+    'Core return uses existing success records, which may merge repeat actions. Content reuse, repeat extension saves, acquisition channels and the organization funnel lack reliable linkage.',
+  metrics: {
+    a7Resources: 'First content save within 7 days',
+    a7Overall: 'First save or task within 7 days',
+    r7Core: 'Core actions on multiple days within 7 days',
+    a7ResourcesLegacy: 'First content save (legacy)',
+    r7InteractionProxy: 'Interaction on multiple days (proxy)',
+  },
+  statuses: {
+    available: 'Available',
+    no_mature_cohort: 'Awaiting maturity',
+    coverage_unknown: 'Coverage unverified',
+    partial_coverage: 'Partial coverage',
+    unavailable: 'Unavailable',
+  },
+  reasons: {
+    coverage_start_unverified: 'Collection start is unverified',
+    cohort_precedes_coverage: 'Some registrations precede complete coverage',
+    required_index_missing: 'Query prerequisites are not ready',
+    schema_unavailable: 'Data source is not ready',
+    query_timeout: 'Query timed out; retry later',
+    source_unavailable: 'Data source is unavailable',
+  },
+};

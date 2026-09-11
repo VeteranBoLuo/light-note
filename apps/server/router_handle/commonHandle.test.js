@@ -1294,12 +1294,12 @@ describe('getConversionFunnel', () => {
     expect(arg.data.hotspots).toEqual([{ context: 'add-bookmark', cnt: 5 }]);
   });
 
-  it('主漏斗展示独立事件总人数，同时返回严格时序路径用于诊断', async () => {
+  it('主漏斗展示独立事件总人数，同时返回近似时序路径用于诊断', async () => {
     query.mockImplementation((sql) => {
       const activity = mockActivityStatement(sql);
       if (activity) return activity;
       const statement = String(sql);
-      if (statement.includes('COUNT(DISTINCT p.fingerprint) AS pageView')) {
+      if (statement.includes('COUNT(*) AS pageView')) {
         return [[{ pageView: 100, signupOpen: 40, signupSubmit: 25, registerSuccess: 20 }]];
       }
       if (statement.includes('GROUP BY event')) {
@@ -1330,10 +1330,10 @@ describe('getConversionFunnel', () => {
       { key: 'signupSubmit', label: '提交注册', count: 25, fromPreviousRate: 62.5, lost: 15 },
       { key: 'registerSuccess', label: '注册成功', count: 20, fromPreviousRate: 80, lost: 5 },
     ]);
-    const orderedSql = query.mock.calls.find(([sql]) => String(sql).includes('COUNT(DISTINCT p.fingerprint)'))[0];
-    expect(orderedSql).toContain('s.create_time > p.create_time');
-    expect(orderedSql).toContain('submit_event.create_time > s.create_time');
-    expect(orderedSql).toContain('register_event.create_time > submit_event.create_time');
+    expect(res.send.mock.calls[0][0].data).toMatchObject({
+      pathApproximate: true,
+      pathMethod: 'fingerprint-nondecreasing-seconds-v1',
+    });
   });
 
   it('返回分享/激活字段,且时间窗参数下推到查询', async () => {

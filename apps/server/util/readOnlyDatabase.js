@@ -1,3 +1,5 @@
+const readOnlyPools = new WeakSet();
+
 /** Explicit inspection profile: SQL allowlist plus MySQL session-level read-only transactions. */
 function readOnlyError() {
   return Object.assign(new Error('当前数据库连接仅允许只读检查'), { code: 'DATABASE_READ_ONLY' });
@@ -16,12 +18,15 @@ export function assertReadOnlyQuery(input) {
   return input;
 }
 
-export function createReadOnlyPool(pool) {
+export function createReadOnlyPool(pool, { transactionOnly = false } = {}) {
+  if (readOnlyPools.has(pool)) return pool;
   async function getConnection() {
     const raw = await pool.getConnection();
     try {
       // Every checkout is initialized before exposing it, including reused pool connections.
-      await raw.query('SET SESSION TRANSACTION READ ONLY');
+      // Shared HTTP pools must not retain a read-only session after release.
+      // Their protected work uses START TRANSACTION READ ONLY instead.
+      if (!transactionOnly) await raw.query('SET SESSION TRANSACTION READ ONLY');
     } catch (error) {
       raw.destroy();
       throw error;
@@ -64,10 +69,12 @@ export function createReadOnlyPool(pool) {
       connection.release();
     }
   };
-  return {
+  const readonly = {
     getConnection,
     query: (...args) => run('query', args),
     execute: (...args) => run('execute', args),
     end: () => pool.end(),
   };
+  readOnlyPools.add(readonly);
+  return readonly;
 }

@@ -18,7 +18,7 @@ function response() {
 
 function resultFor(sql) {
   const statement = String(sql);
-  if (statement.includes('COUNT(DISTINCT l.user_id) AS users')) return [[{ users: 20 }]];
+  if (statement.includes('FROM api_logs l') && !statement.includes('AS cohort_start')) return [[{ users: 20 }]];
   if (statement.includes('COUNT(*) AS users') && statement.includes('FROM user')) return [[{ users: 8 }]];
   if (statement.includes('activated_users')) return [[{ new_users: 8, activated_users: 4 }]];
   if (statement.includes('AS cohort_start')) {
@@ -71,7 +71,7 @@ describe('后台产品洞察与治理快照', () => {
 
   it('返回匿名聚合的采用率与留存，单个新模块缺失时降级但不拖垮页面', async () => {
     const res = response();
-    await getAdminProductInsights({ user: { role: 'root' }, body: { periodDays: 30, cohortWeeks: 8 } }, res);
+    await getAdminProductInsights({ user: { role: 'root' }, body: { periodDays: 30 } }, res);
 
     expect(res.body).toMatchObject({
       status: 200,
@@ -93,9 +93,29 @@ describe('后台产品洞察与治理快照', () => {
     expect(JSON.stringify(res.body)).not.toContain('user_id');
   });
 
+  it('没有成熟激活样本时返回未知，不回退到全部新用户作为分母', async () => {
+    query.mockImplementation(async (sql) =>
+      String(sql).includes('activated_users') ? [[{ new_users: 0, activated_users: 0 }]] : resultFor(sql),
+    );
+    const res = response();
+    await getAdminProductInsights({ user: { role: 'root' }, body: {} }, res);
+    expect(res.body.data.summary).toMatchObject({ newUsers: 8, activationEligible: 0, activationRate: null });
+  });
+
+  it('激活数据源不可用时不把缺失伪装成零转化率', async () => {
+    query.mockImplementation(async (sql) => {
+      if (String(sql).includes('activated_users')) throw new Error('unavailable');
+      return resultFor(sql);
+    });
+    const res = response();
+    await getAdminProductInsights({ user: { role: 'root' }, body: {} }, res);
+    expect(res.body.data.summary.activationRate).toBeNull();
+    expect(res.body.data.unavailableSources).toContain('activation');
+  });
+
   it('资源与待办采用统计排除注册种子，但保留种子待办的真实完成行为', async () => {
     const res = response();
-    await getAdminProductInsights({ user: { role: 'root' }, body: { periodDays: 30, cohortWeeks: 8 } }, res);
+    await getAdminProductInsights({ user: { role: 'root' }, body: { periodDays: 30 } }, res);
 
     const sqlStatements = query.mock.calls.map(([sql]) => String(sql));
     const resourceQueries = [
@@ -120,11 +140,18 @@ describe('后台产品洞察与治理快照', () => {
   });
 
   it('周期只接受明确档位，百分比在空分母时稳定为 0', () => {
-    expect(adminInsightsHandleInternals.normalizePeriodDays(31)).toBe(30);
+    expect(adminInsightsHandleInternals.normalizePeriodDays(31)).toBe(7);
     expect(adminInsightsHandleInternals.normalizePeriodDays(90)).toBe(90);
-    expect(adminInsightsHandleInternals.normalizeCohortWeeks(99)).toBe(8);
     expect(adminInsightsHandleInternals.percent(3, 0)).toBe(0);
     expect(adminInsightsHandleInternals.percent(1, 3)).toBe(33.3);
+  });
+
+  it('默认七天并对各聚合设置执行上限', async () => {
+    await getAdminProductInsights({ user: { role: 'root' }, body: {} }, response());
+    const calls = query.mock.calls;
+    expect(calls).toHaveLength(10);
+    expect(calls[0][1]).toEqual([7]);
+    expect(calls.every(([sql]) => sql.startsWith('SELECT /*+ MAX_EXECUTION_TIME(5000) */'))).toBe(true);
   });
 
   it('治理接口只返回显式白名单策略，不枚举密钥或开启任意配置写入', async () => {
