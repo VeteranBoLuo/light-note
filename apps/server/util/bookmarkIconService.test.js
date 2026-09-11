@@ -15,6 +15,9 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../db/index.js', () => ({ default: mocks.pool }));
+vi.mock('./obsClient.js', () => {
+  throw new Error('Bookmark icon operations must not load the OBS client');
+});
 vi.mock('./bookmarkIconLimiter.js', () => ({
   bookmarkIconLimiter: { acquire: mocks.acquire },
 }));
@@ -114,6 +117,15 @@ describe('bookmarkIconService 内容寻址与清理', () => {
     const saved = await saveIconToDisk({ id: 'bookmark-1' }, { buffer: Buffer.from('retained'), contentType: 'image/png' });
     mocks.pool.query.mockResolvedValueOnce([[]]).mockResolvedValueOnce([[{ id: 1 }]]);
     expect(await cleanupBookmarkIconFiles([{ id: 'bookmark-1', iconUrl: saved.iconUrl }])).toMatchObject({ kept: 1, deleted: 0 });
+    await expect(readFile(saved.newFilePath)).resolves.toBeInstanceOf(Buffer);
+  });
+
+  it('图片保护查询失败时保留文件，并沿用调用方数据库连接', async () => {
+    const saved = await saveIconToDisk({ id: 'bookmark-1' }, { buffer: Buffer.from('protected'), contentType: 'image/png' });
+    const error = new Error('IMAGE_LOOKUP_FAILED');
+    const db = { query: vi.fn().mockResolvedValueOnce([[]]).mockRejectedValueOnce(error) };
+    await expect(cleanupBookmarkIconFiles([{ id: 'bookmark-1', iconUrl: saved.iconUrl }], { db })).rejects.toBe(error);
+    expect(mocks.pool.query).not.toHaveBeenCalled();
     await expect(readFile(saved.newFilePath)).resolves.toBeInstanceOf(Buffer);
   });
 

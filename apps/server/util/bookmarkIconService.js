@@ -9,7 +9,7 @@
  */
 
 import pool from '../db/index.js';
-import { isManagedImage } from './imagePreview/cleanup.js';
+import { isManagedImage } from './imagePreview/managedImage.js';
 import { bookmarkIconLimiter } from './bookmarkIconLimiter.js';
 import { fetchFaviconFromApi, normalizeOrigin, isRetryableError, isPermanentError } from './bookmarkIconClient.js';
 import path from 'path';

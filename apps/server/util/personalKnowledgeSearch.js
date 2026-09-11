@@ -7,10 +7,28 @@ const CACHE_TTL_MS = 3 * 60 * 1000;
 const MAX_CACHED_USERS = 20;
 const MAX_DOCUMENTS_PER_USER = 12_000;
 const cache = new Map();
+let cacheExpiryTimer = null;
 const loading = new Map();
 const generations = new Map();
 const pendingPersistentInvalidations = new Map();
 let chunkPersistenceWarningShown = false;
+
+function scheduleCacheExpiry() {
+  clearTimeout(cacheExpiryTimer);
+  cacheExpiryTimer = null;
+  if (!cache.size) return;
+  const expiresAt = Math.min(...Array.from(cache.values(), (bundle) => bundle.builtAt + CACHE_TTL_MS));
+  cacheExpiryTimer = setTimeout(() => {
+    cacheExpiryTimer = null;
+    const now = Date.now();
+    // Only drop cache references; in-flight searches keep their own bundles.
+    for (const [key, bundle] of cache) {
+      if (now - bundle.builtAt >= CACHE_TTL_MS) cache.delete(key);
+    }
+    scheduleCacheExpiry();
+  }, Math.max(1, expiresAt - Date.now()));
+  cacheExpiryTimer.unref();
+}
 
 function isOptionalSchemaMissing(error) {
   return ['ER_NO_SUCH_TABLE', 'ER_BAD_FIELD_ERROR'].includes(error?.code);
@@ -492,6 +510,7 @@ async function loadBundle(userId) {
     if (stable && generation === currentGeneration(key)) {
       cache.set(key, bundle);
       while (cache.size > MAX_CACHED_USERS) cache.delete(cache.keys().next().value);
+      scheduleCacheExpiry();
       void persistChunks(key, documents, generation, databaseGeneration).catch((error) =>
         console.error(
           '[personal-search] chunk persistence failed code=%s',
@@ -513,6 +532,7 @@ export function invalidatePersonalKnowledgeCache(userId, { database = pool, pers
   if (userId) {
     const key = String(userId);
     cache.delete(key);
+    scheduleCacheExpiry();
     generations.set(key, currentGeneration(key) + 1);
     const shouldPersist = persist ?? process.env.NODE_ENV !== 'test';
     if (!shouldPersist) return Promise.resolve({ generationAdvanced: false, deleted: 0, skipped: true });
@@ -534,6 +554,7 @@ export function invalidatePersonalKnowledgeCache(userId, { database = pool, pers
     return invalidation;
   } else {
     cache.clear();
+    scheduleCacheExpiry();
     for (const key of loading.keys()) generations.set(key, currentGeneration(key) + 1);
     return Promise.resolve({ generationAdvanced: false, deleted: 0, skipped: true });
   }
@@ -739,6 +760,7 @@ export async function searchPersonalKnowledge({ userId, query, limit = 8, scope 
       (bundle.persistentGeneration != null && bundle.persistentGeneration !== afterPersistentGeneration);
     if (stale && attempt === 0) {
       cache.delete(key);
+      scheduleCacheExpiry();
       continue;
     }
     const hits = verified.slice(0, take).map((hit, index) => ({ ...hit, citationKey: String(index + 1) }));
@@ -788,6 +810,8 @@ export async function searchPersonalKnowledge({ userId, query, limit = 8, scope 
 }
 
 export const __testing = {
+  cache,
+  loadBundle,
   buildBundle,
   chunkResource,
   excerptAround,
