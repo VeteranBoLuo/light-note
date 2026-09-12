@@ -41,6 +41,7 @@
           <img :src="sticker.url" :alt="sticker.name || t('communityChat.sticker.customAlt')" loading="lazy" />
         </BButton>
         <BButton
+          icon-only
           class="chat-sticker-panel__remove"
           :loading="removingId === sticker.publicId"
           :aria-label="t('communityChat.sticker.removeAction')"

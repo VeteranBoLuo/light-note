@@ -117,6 +117,7 @@
 
             <template #trailing>
               <BButton
+                icon-only
                 v-if="mobile"
                 class="todo-matrix-card__more"
                 :disabled="disabled"
@@ -124,7 +125,7 @@
                 :aria-label="t('common.more')"
                 @click.stop="openMobileActions(item)"
               >
-                <SvgIcon v-if="deletingId !== item.id" :src="icon.common.more" size="18" aria-hidden="true" />
+                <SvgIcon :src="icon.common.more" size="18" aria-hidden="true" />
               </BButton>
               <BActionMenu
                 v-else
@@ -150,12 +151,13 @@
                   />
                 </template>
                 <BButton
+                  icon-only
                   class="todo-matrix-card__more"
                   :disabled="disabled"
                   :loading="deletingId === item.id"
                   :aria-label="t('common.more')"
                 >
-                  <SvgIcon v-if="deletingId !== item.id" :src="icon.common.more" size="18" aria-hidden="true" />
+                  <SvgIcon :src="icon.common.more" size="18" aria-hidden="true" />
                 </BButton>
               </BActionMenu>
             </template>

@@ -555,3 +555,27 @@ it.each(['pause', 'resume'])('整理 %s 不能在管理员代管中消耗目标�
   expect(next).not.toHaveBeenCalled();
   expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ data: { code: 'ADMIN_MAINTENANCE_FORBIDDEN' } }));
 });
+
+it.each(['managedUploadBatch', 'prepareManagedUpload', 'confirmManagedUpload', 'abortManagedUpload'])(
+  '上传接口 %s 保持统一的代管权限及奖励边界',
+  (operation) => {
+    for (const subjectRole of ['user', 'visitor']) {
+      const readonly = createReq(`/file/${operation}`, 'POST', 'readonly', subjectRole);
+      const denied = createRes();
+      const blockedNext = vi.fn();
+      adminRoutePolicyMiddleware(readonly, denied, blockedNext);
+      expect(blockedNext).not.toHaveBeenCalled();
+      expect(denied.status).toHaveBeenCalledWith(403);
+      expect(denied.json).toHaveBeenCalledWith(expect.objectContaining({ data: { code: 'ADMIN_PREVIEW_READONLY' } }));
+
+      const maintain = createReq(`/file/${operation}`, 'POST', 'maintain', subjectRole);
+      const allowedNext = vi.fn();
+      adminRoutePolicyMiddleware(maintain, createRes(), allowedNext);
+      expect(allowedNext).toHaveBeenCalledOnce();
+      expect(maintain.adminCapability.policy).toBe('content_write');
+      expect(maintain.suppressUserRewards).toBe(true);
+      expect(maintain.suppressConversionTracking).toBe(true);
+      expect(maintain.isVisitorWorkspaceContentWrite).toBe(subjectRole === 'visitor');
+    }
+  },
+);

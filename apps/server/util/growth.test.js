@@ -740,3 +740,59 @@ describe('claimDailyQuestBonus 角色边界', () => {
     expect(pool.getConnection).not.toHaveBeenCalled();
   });
 });
+
+describe('成长看板独立统计完成边界', () => {
+  const setup = () => ({
+    query: vi.fn(async (sql) => {
+      if (sql.includes('AS bookmarkCount')) return [[{ bookmarkCount: 2, noteCount: 1, createTime: '2026-09-01' }]];
+      if (sql.includes('SELECT DISTINCT day')) return [[{ day: '20260909' }, { day: '20260910' }]];
+      if (sql.includes('AS s FROM growth_events')) return [[{ s: 12 }]];
+      return [[]];
+    }),
+  });
+  it('等待签到集合后才派生成就，原资源统计和周经验仍完整返回', async () => {
+    const db = setup();
+    const normal = db.query.getMockImplementation();
+    let resolveDays;
+    const days = new Promise((resolve) => {
+      resolveDays = resolve;
+    });
+    db.query.mockImplementation((sql, params) => (sql.includes('SELECT DISTINCT day') ? days : normal(sql, params)));
+    let completed = false;
+    const done = getGrowthDashboard('owner', { userRole: 'user', db, calendar: accountCalendar('20260911') }).then(
+      (data) => {
+        completed = true;
+        return data;
+      },
+    );
+    await vi.waitFor(() =>
+      expect(db.query.mock.calls.some(([sql]) => sql.includes('AS s FROM growth_events'))).toBe(true),
+    );
+    expect(completed).toBe(false);
+    resolveDays([[{ day: '20260909' }, { day: '20260910' }]]);
+    const result = await done;
+    expect(result.stats).toMatchObject({
+      bookmarkCount: 2,
+      noteCount: 1,
+      weekExp: 12,
+      totalCheckins: 2,
+      maxStreak: 2,
+      checkinDays: ['20260909', '20260910'],
+    });
+    expect(db.query.mock.calls.every(([sql]) => /^\s*SELECT/i.test(sql))).toBe(true);
+  });
+  it('多个统计失败时返回原顺序首个错误，不继续读取时间线', async () => {
+    const db = setup();
+    const normal = db.query.getMockImplementation();
+    const first = Object.assign(new Error('fixture resource failure'), { code: 'FIRST' });
+    db.query.mockImplementation((sql, params) => {
+      if (sql.includes('AS bookmarkCount')) return Promise.reject(first);
+      if (sql.includes('SELECT DISTINCT day')) return Promise.reject(new Error('fixture checkin failure'));
+      return normal(sql, params);
+    });
+    await expect(
+      getGrowthDashboard('owner', { userRole: 'user', db, calendar: accountCalendar('20260911') }),
+    ).rejects.toBe(first);
+    expect(db.query.mock.calls.some(([sql]) => sql.includes('SELECT b.name'))).toBe(false);
+  });
+});

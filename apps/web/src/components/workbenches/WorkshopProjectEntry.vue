@@ -22,7 +22,7 @@
     >
     <template v-else-if="data">
       <header v-if="!tabPanel || !data.projects.length" class="workshop-entry__row">
-        <div
+        <div v-if="data.projects.length"
           ><strong>{{ t(data.hasProjects ? 'toolbox.project.continueTitle' : 'toolbox.project.intro') }}</strong
           ><p v-if="!data.hasProjects">{{ t('toolbox.project.introHint') }}</p></div
         >
@@ -30,7 +30,7 @@
           <BButton v-if="!data.projects.length && user.role !== 'visitor'" type="primary" @click="openProjects(true)">{{
             t('toolbox.project.newProject')
           }}</BButton>
-          <BButton @click="openProjects(false)">{{
+          <BButton v-if="data.projects.length || user.role === 'visitor'" @click="openProjects(false)">{{
             t(data.hasProjects ? 'toolbox.project.allProjects' : 'toolbox.project.learn')
           }}</BButton>
         </div>

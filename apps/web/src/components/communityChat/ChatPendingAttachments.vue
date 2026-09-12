@@ -41,6 +41,7 @@
         <span :style="{ width: `${attachment.progress}%` }"></span>
       </span>
       <BButton
+        icon-only
         class="chat-pending-attachment__remove"
         :disabled="removingIds.has(attachment.publicId)"
         :loading="removingIds.has(attachment.publicId)"

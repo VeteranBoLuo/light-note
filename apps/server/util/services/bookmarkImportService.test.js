@@ -91,6 +91,41 @@ describe('importBookmarksWithTags', () => {
     expect(Array.isArray(stats.affectedBookmarkIds)).toBe(true);
   });
 
+  it('重复导入同一书签只写首次关联，仍保留逐条 affected IDs 和新增标签关联', async () => {
+    const connection = createConnection();
+    connection.query
+      .mockResolvedValueOnce([[{ id: 'tag-a', name: 'A' }, { id: 'tag-b', name: 'B' }]])
+      .mockResolvedValueOnce([[{ id: 'bookmark-existing', name: 'Existing', url: 'https://same.example' }]]);
+    mocks.insertResourceTagRelations.mockImplementation(async (_connection, { tagIds }) => tagIds.length);
+    const stats = await importBookmarksWithTags(connection, {
+      userId: 'user-1',
+      items: [
+        { url: 'https://same.example', tagNames: ['A'] },
+        { url: 'https://same.example', tagNames: ['A', 'B'] },
+        { url: 'https://same.example', tagNames: ['B', 'A'] },
+      ],
+    });
+    expect(stats.boundRelations).toBe(2);
+    expect(stats.affectedBookmarkIds).toEqual(Array(3).fill('bookmark-existing'));
+    expect(mocks.insertResourceTagRelations.mock.calls.map(([, options]) => options.tagIds)).toEqual([
+      ['tag-a'], ['tag-b'], [],
+    ]);
+    expect(connection.query).toHaveBeenCalledTimes(2);
+  });
+
+  it('首次关联失败立即抛出，由导入事务回滚，后续重复项不能吞掉错误', async () => {
+    const connection = createConnection();
+    connection.query
+      .mockResolvedValueOnce([[{ id: 'tag-a', name: 'A' }]])
+      .mockResolvedValueOnce([[{ id: 'bookmark-existing', name: 'Existing', url: 'https://same.example' }]]);
+    mocks.insertResourceTagRelations.mockRejectedValueOnce(new Error('relation failed'));
+    await expect(importBookmarksWithTags(connection, {
+      userId: 'user-1',
+      items: Array(2).fill({ url: 'https://same.example', tagNames: ['A'] }),
+    })).rejects.toThrow('relation failed');
+    expect(mocks.insertResourceTagRelations).toHaveBeenCalledTimes(1);
+  });
+
   it('事务提交后把 stats 返回给 Excel/HTML 导入后续批次创建逻辑', async () => {
     const stats = {
       parsedTotal: 1,

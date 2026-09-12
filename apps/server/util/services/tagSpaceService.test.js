@@ -117,7 +117,7 @@ describe('tagSpaceService', () => {
     const detail = await getTagSpaceOverview(detailDb, { userId: 'user-1', tagId: 'empty-tag' });
     expect(detail.tag.counts.total).toBe(0);
     expect(detailDb.query.mock.calls[0][0]).toContain('t.user_id = ? AND t.id = ?');
-    expect(detailDb.query.mock.calls[0][1]).toEqual(['user-1', 'user-1', 'empty-tag']);
+    expect(detailDb.query.mock.calls[0][1]).toEqual(['user-1', 'empty-tag', 'user-1', 'empty-tag']);
   });
 
   it('按契约显式包含空标签时不改变其它筛选语义', async () => {

@@ -667,6 +667,8 @@
     resize: none;
     border: 0 !important;
     border-radius: 15px;
+    // 聊天容器统一呈现焦点边框，避免与 BInput 的 focus outline 叠加。
+    outline: none;
     background: transparent !important;
     box-shadow: none !important;
     line-height: 1.6;

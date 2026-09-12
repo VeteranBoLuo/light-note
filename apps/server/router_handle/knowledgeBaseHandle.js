@@ -82,11 +82,18 @@ export const listKnowledgeBase = async (req, res) => {
     const where = 'WHERE ' + conditions.join(' AND ');
     const offset = pageSize * (currentPage - 1);
 
-    const [rows] = await pool.query(
-      `SELECT id, title, category, help_section, status, type, sort, created_at, updated_at FROM knowledge_base ${where} ORDER BY ${order || 'sort ASC, created_at DESC'} LIMIT ? OFFSET ?`,
-      [...params, pageSize, offset],
-    );
-    const [countRes] = await pool.query(`SELECT COUNT(*) as total FROM knowledge_base ${where}`, params);
+    const results = await Promise.allSettled([
+      pool.query(
+        `SELECT id, title, category, help_section, status, type, sort, created_at, updated_at FROM knowledge_base ${where} ORDER BY ${order || 'sort ASC, created_at DESC'} LIMIT ? OFFSET ?`,
+        [...params, pageSize, offset],
+      ),
+      pool.query(`SELECT COUNT(*) as total FROM knowledge_base ${where}`, params),
+    ]);
+    // 保持原错误优先级，不因计数先失败而改变错误响应。
+    for (const result of results) {
+      if (result.status === 'rejected') throw result.reason;
+    }
+    const [[rows], [countRes]] = results.map((result) => result.value);
     res.send(resultData({ items: rows, total: countRes[0].total }));
   } catch (e) {
     res.send(resultData(null, 500, '服务器内部错误: ' + e.message));

@@ -24,6 +24,15 @@ const ensureRootRole = async (req, res) => {
   return true;
 };
 
+// 独立列表和计数同时完成，失败仍按原查询顺序选择错误。
+const readSecurityListParts = async (queries) => {
+  const results = await Promise.allSettled(queries);
+  for (const result of results) {
+    if (result.status === 'rejected') throw result.reason;
+  }
+  return results.map((result) => result.value);
+};
+
 const parseJsonField = (row, field, fallback) => {
   if (!row || row[field] === undefined || row[field] === null) return;
   if (typeof row[field] === 'object') return;
@@ -247,6 +256,9 @@ export const getSecurityEvents = async (req, res) => {
     if (!(await ensureRootRole(req, res))) return;
     const { filters, pageSize, currentPage } = validateQueryParams(req.body);
     const { where, params } = buildEventWhere(filters);
+    // The user primary key contributes at most one match. Only keyword
+    // filtering uses user fields; otherwise COUNT can scan events alone.
+    const countUserJoin = filters.key ? 'LEFT JOIN user u ON e.user_id = u.id' : '';
     const queryParams = [...params];
     let limitClause = '';
     if (pageSize !== -1) {
@@ -254,26 +266,37 @@ export const getSecurityEvents = async (req, res) => {
       limitClause = 'LIMIT ? OFFSET ?';
       queryParams.push(Number(pageSize), Number(skip));
     }
-    const [rows] = await pool.query(
-      `SELECT e.*, u.alias, u.email
-       FROM security_events e
-       LEFT JOIN user u ON e.user_id = u.id
-       WHERE ${where}
-       ORDER BY e.created_at DESC, e.id DESC
-       ${limitClause}`,
-      queryParams,
-    );
+    // Without user-field filtering, the unique user join only decorates each
+    // event. Select the same stable page before the cross-charset join.
+    const pageBeforeUserJoin = !filters.key && Boolean(limitClause);
+    const eventSource = pageBeforeUserJoin
+      ? `(SELECT e.* FROM security_events e
+          WHERE ${where}
+          ORDER BY e.created_at DESC, e.id DESC ${limitClause}) e`
+      : 'security_events e';
+    const [[rows], [totalRows]] = await readSecurityListParts([
+      pool.query(
+        `SELECT e.*, u.alias, u.email
+         FROM ${eventSource}
+         LEFT JOIN user u ON e.user_id = u.id
+         ${pageBeforeUserJoin ? '' : `WHERE ${where}`}
+         ORDER BY e.created_at DESC, e.id DESC
+         ${pageBeforeUserJoin ? '' : limitClause}`,
+        queryParams,
+      ),
+      pool.query(
+        `SELECT COUNT(*) AS total
+         FROM security_events e
+         ${countUserJoin}
+         WHERE ${where}`,
+        params,
+      ),
+    ]);
     rows.forEach((row) => {
       parseJsonField(row, 'payload_summary', {});
       parseJsonField(row, 'headers_summary', {});
     });
-    const [totalRows] = await pool.query(
-      `SELECT COUNT(*) AS total
-       FROM security_events e
-       LEFT JOIN user u ON e.user_id = u.id
-       WHERE ${where}`,
-      params,
-    );
+
     res.send(resultData({ items: rows, total: totalRows[0].total }));
   } catch (e) {
     res.send(resultData(null, 500, '获取安全事件失败：' + e.message));
@@ -436,20 +459,23 @@ export const getIpReputationList = async (req, res) => {
       limitClause = 'LIMIT ? OFFSET ?';
       queryParams.push(Number(pageSize), Number(skip));
     }
-    const [rows] = await pool.query(
-      `SELECT *
-       FROM security_ip_reputation
-       ${where}
-       ORDER BY is_banned DESC, risk_score DESC, total_attacks DESC
-       ${limitClause}`,
-      queryParams,
-    );
+    const [[rows], [totalRows]] = await readSecurityListParts([
+      pool.query(
+        `SELECT *
+         FROM security_ip_reputation
+         ${where}
+         ORDER BY is_banned DESC, risk_score DESC, total_attacks DESC
+         ${limitClause}`,
+        queryParams,
+      ),
+      pool.query(`SELECT COUNT(*) AS total FROM security_ip_reputation ${where}`, params),
+    ]);
     rows.forEach((row) => {
       parseJsonField(row, 'attack_type_breakdown', {});
       parseJsonField(row, 'location', {});
       row.city = row.location?.city || '';
     });
-    const [totalRows] = await pool.query(`SELECT COUNT(*) AS total FROM security_ip_reputation ${where}`, params);
+
     res.send(resultData({ items: rows, total: totalRows[0].total }));
   } catch (e) {
     res.send(resultData(null, 500, '获取IP画像失败：' + e.message));
@@ -551,41 +577,44 @@ export const getAccountBanList = async (req, res) => {
       params.push(filters.key, filters.key, filters.key, filters.key);
     }
     const where = conditions.join(' AND ');
-    const [rows] = await pool.query(
-      `SELECT
-         u.id AS user_id,
-         u.alias,
-         u.email,
-         u.role,
-         u.head_picture,
-         COALESCE(NULLIF(sr.reason, ''), b.ban_reason) AS ban_reason,
-         b.banned_by,
-         b.banned_at,
-         b.unbanned_at,
-         b.updated_at,
-         ar.risk_score,
-         ar.total_events,
-         ar.high_risk_count,
-         ar.critical_count,
-         ar.last_event_at
-       FROM security_account_restrictions sr
-       JOIN user u ON u.id = sr.user_id
-       LEFT JOIN security_account_bans b ON b.user_id = u.id
-       LEFT JOIN security_account_reputation ar ON ar.user_id = u.id
-       WHERE ${where}
-       ORDER BY sr.created_at DESC
-       LIMIT ? OFFSET ?`,
-      [...params, Number(pageSize), Number(skip)],
-    );
+    const [[rows], [totalRows]] = await readSecurityListParts([
+      pool.query(
+        `SELECT
+           u.id AS user_id,
+           u.alias,
+           u.email,
+           u.role,
+           u.head_picture,
+           COALESCE(NULLIF(sr.reason, ''), b.ban_reason) AS ban_reason,
+           b.banned_by,
+           b.banned_at,
+           b.unbanned_at,
+           b.updated_at,
+           ar.risk_score,
+           ar.total_events,
+           ar.high_risk_count,
+           ar.critical_count,
+           ar.last_event_at
+         FROM security_account_restrictions sr
+         JOIN user u ON u.id = sr.user_id
+         LEFT JOIN security_account_bans b ON b.user_id = u.id
+         LEFT JOIN security_account_reputation ar ON ar.user_id = u.id
+         WHERE ${where}
+         ORDER BY sr.created_at DESC
+         LIMIT ? OFFSET ?`,
+        [...params, Number(pageSize), Number(skip)],
+      ),
+      pool.query(
+        `SELECT COUNT(*) AS total
+         FROM security_account_restrictions sr
+         JOIN user u ON u.id = sr.user_id
+         LEFT JOIN security_account_bans b ON b.user_id = u.id
+         WHERE ${where}`,
+        params,
+      ),
+    ]);
     rows.forEach((row) => parseJsonField(row, 'attack_type_breakdown', {}));
-    const [totalRows] = await pool.query(
-      `SELECT COUNT(*) AS total
-       FROM security_account_restrictions sr
-       JOIN user u ON u.id = sr.user_id
-       LEFT JOIN security_account_bans b ON b.user_id = u.id
-       WHERE ${where}`,
-      params,
-    );
+
     res.send(resultData({ items: rows, total: totalRows[0].total }));
   } catch (e) {
     res.send(resultData(null, 500, '获取账号封禁列表失败：' + e.message));

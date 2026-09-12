@@ -63,8 +63,8 @@
           <dd>{{ preview.occurrenceCount ?? `${preview.generatedNowCount}+` }}</dd>
         </div>
         <div>
-          <dt>{{ t('inbox.todoPlanPreviewReminderJobs') }}</dt>
-          <dd>{{ preview.reminderJobCount }}</dd>
+          <dt>{{ t(preview.reminderIsOngoing ? 'inbox.todoPlanPreviewReminderDuration' : 'inbox.todoPlanPreviewReminderJobs') }}</dt>
+          <dd>{{ preview.reminderIsOngoing ? t('inbox.todoPlanReminderOngoing') : preview.reminderJobCount }}</dd>
         </div>
         <div>
           <dt>{{ t('inbox.todoPlanPreviewNextReminder') }}</dt>

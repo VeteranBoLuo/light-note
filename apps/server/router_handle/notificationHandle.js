@@ -162,22 +162,35 @@ export const list = async (req, res) => {
       }
     }
 
-    const [items] = await db.query(
-      `SELECT id, type, title, content, link, meta, is_read, create_time
-       FROM notification WHERE ${whereSql}
-       ORDER BY create_time DESC, id DESC LIMIT ? OFFSET ?`,
-      [...params, pageSize, offset],
-    );
-    await attachTodoStates(items, userId, db);
-    const [[{ total }]] = await db.query(`SELECT COUNT(*) AS total FROM notification WHERE ${whereSql}`, params);
-    const [[{ unreadTotal }]] = await db.query(
-      `SELECT COUNT(*) AS unreadTotal
-        FROM notification
-        WHERE user_id = ? AND is_read = 0 AND del_flag = 0
-          AND ${COMMUNITY_CHAT_TARGETED_NOTIFICATION_SQL}
-          ${excludeCommunityChat ? `AND ${COMMUNITY_CHAT_EXCLUDED_SQL}` : ''}`,
-      [userId],
-    );
+    const readItems = async () => {
+      const [items] = await db.query(
+        `SELECT id, type, title, content, link, meta, is_read, create_time
+         FROM notification WHERE ${whereSql}
+         ORDER BY create_time DESC, id DESC LIMIT ? OFFSET ?`,
+        [...params, pageSize, offset],
+      );
+      await attachTodoStates(items, userId, db);
+      return items;
+    };
+    const readTotal = async () => {
+      const [[{ total }]] = await db.query(`SELECT COUNT(*) AS total FROM notification WHERE ${whereSql}`, params);
+      return total;
+    };
+    const readUnreadTotal = async () => {
+      const [[{ unreadTotal }]] = await db.query(
+        `SELECT COUNT(*) AS unreadTotal
+          FROM notification
+          WHERE user_id = ? AND is_read = 0 AND del_flag = 0
+            AND ${COMMUNITY_CHAT_TARGETED_NOTIFICATION_SQL}
+            ${excludeCommunityChat ? `AND ${COMMUNITY_CHAT_EXCLUDED_SQL}` : ''}`,
+        [userId],
+      );
+      return unreadTotal;
+    };
+    // 定位通知必须保持同一事务快照与原读取顺序；普通分页的三个独立读可使用连接池并发。
+    const [items, total, unreadTotal] = readConnection
+      ? [await readItems(), await readTotal(), await readUnreadTotal()]
+      : await Promise.all([readItems(), readTotal(), readUnreadTotal()]);
     if (readConnection) await readConnection.commit();
     res.send(resultData({ items, total, unreadTotal, currentPage, pageSize, targetFound }));
   } catch (error) {
@@ -366,18 +379,23 @@ export const send = async (req, res) => {
   }
 };
 
+// 独立读取并发，仍按原查询顺序选择错误响应。
+async function readAdminNotificationParts(queries) {
+  const results = await Promise.allSettled(queries);
+  for (const result of results) {
+    if (result.status === 'rejected') throw result.reason;
+  }
+  return results.map((result) => result.value);
+}
+
 // POST /notification/admin/stats —— 后台通知中心概览(仅 root)
 export const adminStats = async (req, res) => {
   if (req.user?.role !== 'root') return res.send(resultData(null, 403, '没有操作权限'));
   try {
     const typeIn = `type IN (${ADMIN_TYPES.map(() => '?').join(',')})`;
     const [[s]] = await pool.query(
-      `SELECT COUNT(*) AS totalSent, COALESCE(SUM(is_read), 0) AS totalRead, COALESCE(SUM(recalled), 0) AS totalRecalled
+      `SELECT COUNT(*) AS totalSent, COALESCE(SUM(is_read), 0) AS totalRead, COALESCE(SUM(recalled), 0) AS totalRecalled, COUNT(DISTINCT ${GROUP_KEY}) AS batches
        FROM notification WHERE ${typeIn}`,
-      ADMIN_TYPES,
-    );
-    const [[b]] = await pool.query(
-      `SELECT COUNT(*) AS batches FROM (SELECT ${GROUP_KEY} g FROM notification WHERE ${typeIn} GROUP BY ${GROUP_KEY}) t`,
       ADMIN_TYPES,
     );
     res.send(
@@ -385,7 +403,7 @@ export const adminStats = async (req, res) => {
         totalSent: Number(s.totalSent || 0),
         totalRead: Number(s.totalRead || 0),
         totalRecalled: Number(s.totalRecalled || 0),
-        batches: Number(b.batches || 0),
+        batches: Number(s.batches || 0),
       }),
     );
   } catch (e) {
@@ -401,23 +419,25 @@ export const adminList = async (req, res) => {
     const currentPage = Math.max(Number(req.body?.currentPage) || 1, 1);
     const offset = (currentPage - 1) * pageSize;
     const typeIn = `type IN (${ADMIN_TYPES.map(() => '?').join(',')})`;
-    const [items] = await pool.query(
-      `SELECT ${GROUP_KEY} AS batchId, MIN(type) AS type, MIN(title) AS title, MIN(content) AS content, MIN(link) AS link,
-              COUNT(*) AS recipients, COALESCE(SUM(is_read), 0) AS readCount, MAX(recalled) AS recalled, MIN(create_time) AS createTime
-       FROM notification WHERE ${typeIn} AND COALESCE(admin_archived, 0) = 0
-       GROUP BY ${GROUP_KEY}
-       ORDER BY createTime DESC
-       LIMIT ? OFFSET ?`,
-      [...ADMIN_TYPES, pageSize, offset],
-    );
-    const [[{ total }]] = await pool.query(
-      `SELECT COUNT(*) AS total FROM (
-         SELECT ${GROUP_KEY} FROM notification
-         WHERE ${typeIn} AND COALESCE(admin_archived, 0) = 0
+    const [[items], [[{ total }]]] = await readAdminNotificationParts([
+      pool.query(
+        `SELECT ${GROUP_KEY} AS batchId, MIN(type) AS type, MIN(title) AS title, MIN(content) AS content, MIN(link) AS link,
+                COUNT(*) AS recipients, COALESCE(SUM(is_read), 0) AS readCount, MAX(recalled) AS recalled, MIN(create_time) AS createTime
+         FROM notification WHERE ${typeIn} AND COALESCE(admin_archived, 0) = 0
          GROUP BY ${GROUP_KEY}
-       ) t`,
-      ADMIN_TYPES,
-    );
+         ORDER BY createTime DESC
+         LIMIT ? OFFSET ?`,
+        [...ADMIN_TYPES, pageSize, offset],
+      ),
+      pool.query(
+        `SELECT COUNT(*) AS total FROM (
+           SELECT ${GROUP_KEY} FROM notification
+           WHERE ${typeIn} AND COALESCE(admin_archived, 0) = 0
+           GROUP BY ${GROUP_KEY}
+         ) t`,
+        ADMIN_TYPES,
+      ),
+    ]);
     res.send(resultData({ items, total, currentPage, pageSize }));
   } catch (e) {
     res.send(resultData(null, 500, '获取发送记录失败: ' + e.message));
@@ -610,27 +630,29 @@ export const adminEmailList = async (req, res) => {
       params.push(`${endDate} 00:00:00`);
     }
     const whereSql = where.join(' AND ');
-    const [items] = await pool.query(
-      `SELECT e.id, e.email_type AS emailType, e.user_id AS userId,
-              e.recipient_email AS recipientEmail, e.subject,
-              e.business_type AS businessType, e.business_id AS businessId,
-              (${EMAIL_EFFECTIVE_STATUS_SQL}) AS status, e.attempt_no AS attemptNo,
-              e.accepted_at AS acceptedAt, e.create_time AS createTime, e.update_time AS updateTime,
-              u.alias
-       FROM email_delivery_logs e
-       LEFT JOIN user u ON u.id = e.user_id
-       WHERE ${whereSql}
-       ORDER BY e.create_time DESC
-       LIMIT ? OFFSET ?`,
-      [...params, pageSize, offset],
-    );
-    const [[{ total }]] = await pool.query(
-      `SELECT COUNT(*) AS total
-       FROM email_delivery_logs e
-       LEFT JOIN user u ON u.id = e.user_id
-       WHERE ${whereSql}`,
-      params,
-    );
+    const [[items], [[{ total }]]] = await readAdminNotificationParts([
+      pool.query(
+        `SELECT e.id, e.email_type AS emailType, e.user_id AS userId,
+                e.recipient_email AS recipientEmail, e.subject,
+                e.business_type AS businessType, e.business_id AS businessId,
+                (${EMAIL_EFFECTIVE_STATUS_SQL}) AS status, e.attempt_no AS attemptNo,
+                e.accepted_at AS acceptedAt, e.create_time AS createTime, e.update_time AS updateTime,
+                u.alias
+         FROM email_delivery_logs e
+         LEFT JOIN user u ON u.id = e.user_id
+         WHERE ${whereSql}
+         ORDER BY e.create_time DESC
+         LIMIT ? OFFSET ?`,
+        [...params, pageSize, offset],
+      ),
+      pool.query(
+        `SELECT COUNT(*) AS total
+         FROM email_delivery_logs e
+         LEFT JOIN user u ON u.id = e.user_id
+         WHERE ${whereSql}`,
+        params,
+      ),
+    ]);
     const safeItems = items.map((item) => ({
       ...item,
       recipientEmail: maskEmail(item.recipientEmail),

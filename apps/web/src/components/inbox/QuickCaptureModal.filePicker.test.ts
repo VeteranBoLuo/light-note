@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h, nextTick } from 'vue';
 import { createI18n } from 'vue-i18n';
 import zhCN from '@/i18n/locales/zh-CN';
+import { uploadManagedCloudFile } from '@/api/cloudFileUploadApi';
+vi.mock('@/api/cloudFileUploadApi', () => ({ uploadManagedCloudFile: vi.fn(), createManagedUploadBatchRequest: vi.fn() }));
 
 /**
  * 快速添加 —— 点「选择文件」这条路径。
@@ -29,13 +31,14 @@ const todo = { refreshCount: vi.fn(), refreshList: vi.fn() };
 let stubFiles: File[] = [];
 
 vi.mock('@/store', () => ({
+  useUserStore: () => ({ id: 'capture-test-user', adminContext: null }),
   bookmarkStore: () => layout,
   inboxStore: () => inbox,
   todoStore: () => todo,
 }));
 vi.mock('vue-router', async (importOriginal) => ({
   ...(await importOriginal<typeof import('vue-router')>()),
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: vi.fn(), currentRoute: { value: { path: '/workbenches', query: {} } } }),
 }));
 vi.mock('@/http/request', () => ({ apiBasePost: vi.fn().mockResolvedValue({ status: 200, data: {} }) }));
 vi.mock('@/api/commonApi', () => ({ recordOperation: vi.fn() }));
@@ -125,6 +128,7 @@ function collectButton(host: HTMLElement) {
 beforeEach(() => {
   stubFiles = [];
   vi.clearAllMocks();
+  vi.mocked(uploadManagedCloudFile).mockReset();
 });
 
 afterEach(() => {
@@ -171,5 +175,56 @@ describe('快速添加 · 选择文件', () => {
     await nextTick();
 
     expect(host.querySelectorAll('.file-list__item')).toHaveLength(1);
+  });
+});
+
+
+const settleUploads = async () => {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await nextTick();
+};
+
+describe('快速添加 · 批量失败与重试', () => {
+  it('只留下失败文件，重试不再上传已成功项', async () => {
+    stubFiles = [new File(['a'], 'a.txt'), new File(['b'], 'b.txt')];
+    vi.mocked(uploadManagedCloudFile).mockImplementation(async (file) => {
+      if (file.name === 'b.txt') throw new Error('offline');
+      return { fileId: '1', filename: 'a (1).txt', status: '已上传' };
+    });
+    const host = mount();
+    host.querySelector<HTMLButtonElement>('.upload-stub')!.click(); await nextTick();
+    collectButton(host)!.click(); await settleUploads();
+    expect(host.querySelector('.capture-success')).toBeNull();
+    expect(host.querySelector('.file-upload-status')?.textContent).toContain('已保存 1 个，1 个未成功');
+    expect(host.querySelectorAll('.file-list__item')).toHaveLength(1);
+    expect(host.querySelector('.file-list__name')?.textContent).toBe('b.txt');
+    vi.mocked(uploadManagedCloudFile).mockResolvedValue({ fileId: '2', filename: 'b.txt', status: '已上传' });
+    collectButton(host)!.click(); await settleUploads();
+    expect(vi.mocked(uploadManagedCloudFile).mock.calls.map(([file]) => file.name)).toEqual(['a.txt', 'b.txt', 'b.txt']);
+    expect(host.querySelector('.capture-success')).not.toBeNull();
+  });
+
+  it('最多三项在途，所有项结束前不解锁重试或更改文件列表', async () => {
+    stubFiles = Array.from({ length: 5 }, (_, i) => new File(['x'], `${i}.txt`));
+    const finish: Array<() => void> = [];
+    vi.mocked(uploadManagedCloudFile).mockImplementation((file) => new Promise((resolve) => {
+      finish.push(() => resolve({ fileId: file.name, filename: file.name, status: '已上传' }));
+    }));
+    const host = mount();
+    host.querySelector<HTMLButtonElement>('.upload-stub')!.click(); await nextTick();
+    collectButton(host)!.click(); await nextTick();
+    expect(uploadManagedCloudFile).toHaveBeenCalledTimes(3);
+    expect(host.querySelector<HTMLButtonElement>('.file-list__remove')?.disabled).toBe(true);
+    stubFiles = [new File(['new'], 'new.txt')];
+    host.querySelector<HTMLButtonElement>('.upload-stub')!.click(); await nextTick();
+    expect(host.querySelectorAll('.file-list__item')).toHaveLength(5);
+    collectButton(host)!.click(); await nextTick();
+    expect(uploadManagedCloudFile).toHaveBeenCalledTimes(3);
+    finish[0](); await settleUploads();
+    expect(uploadManagedCloudFile).toHaveBeenCalledTimes(4);
+    finish[1](); await settleUploads();
+    expect(uploadManagedCloudFile).toHaveBeenCalledTimes(5);
+    finish.slice(2).forEach((done) => done()); await settleUploads();
+    expect(host.querySelector('.capture-success')).not.toBeNull();
   });
 });

@@ -22,7 +22,7 @@
       >{{ t('noteTransfer.createdAt') }} · {{ time(task.createTime)
       }}<template v-if="task.finishedAt"> · {{ t('noteTransfer.finishedAt') }} {{ time(task.finishedAt) }}</template></p
     >
-    <p v-if="task.errorCode" class="import-result__issue">{{ failureReason }} ({{ task.errorCode }})</p>
+    <p v-if="task.errorCode" class="import-result__issue">{{ t(noteImportErrorKey(task.errorCode)) }}</p>
     <p v-if="task.status === 'expired'" class="import-result__meta">{{ t('noteTransfer.expiredHint') }}</p>
     <div class="import-result__list">
       <article v-for="item in task.items" :key="item.id" class="import-result__item">
@@ -31,7 +31,7 @@
           ><strong>{{ item.title }}</strong
           ><p>{{ item.sourceName }} · {{ t('noteTransfer.imageCount', { count: item.imageCount }) }}</p
           ><NoteImportWarnings :item="item" /><p v-if="item.errorCode" class="import-result__issue">{{
-            item.errorCode
+            t(noteImportErrorKey(item.errorCode))
           }}</p></div
         >
         <div class="import-result__action"
@@ -56,6 +56,7 @@
 </template>
 <script setup lang="ts">
   import { computed } from 'vue';
+  import { noteImportErrorKey } from '@/utils/noteImportError';
   import { useI18n } from 'vue-i18n';
   import type { NoteImportTask } from '@lightnote/shared/note-transfer';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -71,15 +72,6 @@
   const pending = computed(() => props.task.items.filter((item) => item.selected && item.status === 'ready').length);
   const partial = computed(() => props.task.status === 'completed' && failed.value > 0);
   const success = computed(() => props.task.status === 'completed' && !failed.value);
-  const failureReason = computed(() =>
-    t(
-      props.task.errorCode === 'NOTE_IMPORT_PARSE_TIMEOUT'
-        ? 'noteTransfer.parseTimeout'
-        : props.task.errorCode === 'NOTE_IMPORT_SOURCE_UNAVAILABLE'
-          ? 'noteTransfer.sourceUnavailable'
-          : 'noteTransfer.failedHint',
-    ),
-  );
   const time = (value: string) => new Date(value).toLocaleString(locale.value);
 </script>
 <style scoped lang="less">

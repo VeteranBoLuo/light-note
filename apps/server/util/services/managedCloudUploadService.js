@@ -94,14 +94,32 @@ async function assertOwnedFolder(connection, userId, folderId) {
 async function uniqueCloudFileName(connection, userId, requestedName) {
   const extension = path.extname(requestedName);
   const base = requestedName.slice(0, requestedName.length - extension.length) || '文件';
-  for (let index = 0; index < 1000; index += 1) {
-    const suffix = index === 0 ? '' : ` (${index})`;
-    const candidate = `${base.slice(0, Math.max(1, 255 - extension.length - suffix.length))}${suffix}${extension}`;
-    const [rows] = await connection.query(
-      'SELECT id FROM files WHERE create_by = ? AND file_name = ? AND del_flag IN (0, 1) LIMIT 1',
-      [userId, candidate],
-    );
-    if (!rows.length) return candidate;
+  for (let start = 0; start < 1000;) {
+    // 常见的无冲突名称仍只检查一次；冲突后分批检查，避免每个后缀一次数据库往返。
+    const size = start === 0 ? 1 : Math.min(32, 1000 - start);
+    const candidates = Array.from({ length: size }, (_, offset) => {
+      const index = start + offset;
+      const suffix = index === 0 ? '' : ` (${index})`;
+      return `${base.slice(0, Math.max(1, 255 - extension.length - suffix.length))}${suffix}${extension}`;
+    });
+    if (start === 0) {
+      const [rows] = await connection.query(
+        'SELECT id FROM files WHERE create_by = ? AND file_name = ? AND del_flag IN (0, 1) LIMIT 1',
+        [userId, candidates[0]],
+      );
+      if (!rows.length) return candidates[0];
+    } else {
+      // 由数据库判等，保留现有大小写、重音与回收站占名语义；不能用 JS Set 比较文件名。
+      const [rows] = await connection.query(
+        `SELECT ${candidates.map((_, index) => `MAX(file_name = ?) AS occupied${index}`).join(', ')}
+         FROM files WHERE create_by = ? AND del_flag IN (0, 1)
+         AND file_name IN (${candidates.map(() => '?').join(', ')})`,
+        [...candidates, userId, ...candidates],
+      );
+      const free = candidates.findIndex((_, index) => !Number(rows[0]?.[`occupied${index}`]));
+      if (free !== -1) return candidates[free];
+    }
+    start += size;
   }
   throw serviceError('FILE_NAME_CONFLICT', '同名文件过多，请修改名称后重试');
 }
@@ -182,25 +200,48 @@ export async function prepareManagedCloudUpload({ userId, userRole, fileName, fi
   };
 }
 
+// Fail fast instead of waiting while holding an owner row lock. This also covers
+// maintenance callers which insert verified files inside an existing transaction.
+async function withUploadObjectLock(connection, objectKey, operation) {
+  const name = `ln-upload:${crypto.createHash('sha256').update(objectKey).digest('hex').slice(0, 48)}`;
+  const [rows] = await connection.query('SELECT GET_LOCK(?, 0) AS acquired', [name]);
+  if (Number(rows[0]?.acquired) !== 1) throw serviceError('UPLOAD_BUSY', '文件正在处理，请稍后重试');
+  try {
+    return await operation();
+  } finally {
+    try {
+      const [released] = await connection.query('SELECT RELEASE_LOCK(?) AS released', [name]);
+      if (Number(released[0]?.released) !== 1) connection.destroy();
+    } catch {
+      // A session lock must never return to the pool on an uncertain release.
+      connection.destroy();
+    }
+  }
+}
+
 export async function abortManagedCloudUpload({ userId, objectKey } = {}) {
   const ownedKey = assertOwnedManagedObjectKey(userId, objectKey);
   const connection = await pool.getConnection();
   let existing = null;
   let transactionStarted = false;
   try {
-    await connection.beginTransaction();
-    transactionStarted = true;
-    // 与确认共用账号行锁：确认超时但服务端仍在执行时，中止不能抢先删掉即将落库的对象。
-    await connection.query('SELECT id FROM user WHERE id = ? LIMIT 1 FOR UPDATE', [userId]);
-    existing = await findFileByObjectKey(connection, userId, ownedKey);
-    await connection.commit();
-    transactionStarted = false;
+    await withUploadObjectLock(connection, ownedKey, async () => {
+      await connection.beginTransaction();
+      transactionStarted = true;
+      await connection.query('SELECT id FROM user WHERE id = ? LIMIT 1 FOR UPDATE', [userId]);
+      existing = await findFileByObjectKey(connection, userId, ownedKey);
+      await connection.commit();
+      transactionStarted = false;
+      // Object lock protects against insertion, while slow storage no longer
+      // blocks unrelated uploads or account writes behind the owner row lock.
+      if (!existing) await deleteObjectFromObs(ownedKey);
+    });
   } catch (error) {
     if (transactionStarted) {
       try {
         await connection.rollback();
       } catch {
-        // 只读核验失败时保持对象，不做风险清理。
+        // 保留核验或对象存储异常；回滚不能撤销已经完成的对象删除。
       }
     }
     throw error;
@@ -214,7 +255,6 @@ export async function abortManagedCloudUpload({ userId, objectKey } = {}) {
       ...formatResult(existing, true),
     };
   }
-  await deleteObjectFromObs(ownedKey).catch(() => {});
   return { deleted: true, alreadyConfirmed: false };
 }
 
@@ -224,35 +264,37 @@ export async function insertVerifiedCloudFile(
   { userId, objectKey, fileName, fileType, folderId, quotaMB },
 ) {
   const ownedKey = assertOwnedManagedObjectKey(userId, objectKey);
-  const metadata = await getObjectMetadataFromObs(ownedKey);
-  const verifiedSize = normalizeFileSize(metadata?.contentLength);
-  const targetFolderId = await assertOwnedFolder(connection, userId, folderId);
-  const usedBytes = await getAccountedStorageBytes(connection, userId);
-  if (usedBytes + verifiedSize > Number(quotaMB) * BYTES_PER_MB) {
-    throw quotaError(quotaMB, usedBytes, verifiedSize);
-  }
-  const finalName = await uniqueCloudFileName(connection, userId, normalizeFileName(fileName));
-  const [insertResult] = await connection.query('INSERT INTO files SET ?', [
-    {
-      create_by: userId,
+  return withUploadObjectLock(connection, ownedKey, async () => {
+    const metadata = await getObjectMetadataFromObs(ownedKey);
+    const verifiedSize = normalizeFileSize(metadata?.contentLength);
+    const targetFolderId = await assertOwnedFolder(connection, userId, folderId);
+    const usedBytes = await getAccountedStorageBytes(connection, userId);
+    if (usedBytes + verifiedSize > Number(quotaMB) * BYTES_PER_MB) {
+      throw quotaError(quotaMB, usedBytes, verifiedSize);
+    }
+    const finalName = await uniqueCloudFileName(connection, userId, normalizeFileName(fileName));
+    const [insertResult] = await connection.query('INSERT INTO files SET ?', [
+      {
+        create_by: userId,
+        file_name: finalName,
+        file_type: normalizeFileType(fileType),
+        file_size: verifiedSize,
+        directory: `${bucketBaseUrl}/files/${userId}/`,
+        folder_id: targetFolderId,
+        del_flag: 0,
+        obs_key: ownedKey,
+      },
+    ]);
+    const createdFile = {
+      id: insertResult.insertId,
       file_name: finalName,
       file_type: normalizeFileType(fileType),
       file_size: verifiedSize,
-      directory: `${bucketBaseUrl}/files/${userId}/`,
       folder_id: targetFolderId,
-      del_flag: 0,
       obs_key: ownedKey,
-    },
-  ]);
-  const createdFile = {
-    id: insertResult.insertId,
-    file_name: finalName,
-    file_type: normalizeFileType(fileType),
-    file_size: verifiedSize,
-    folder_id: targetFolderId,
-    obs_key: ownedKey,
-  };
-  return createdFile;
+    };
+    return createdFile;
+  });
 }
 
 export async function confirmManagedCloudUpload({
@@ -341,7 +383,8 @@ export async function confirmManagedCloudUpload({
         throw transactionError;
       }
     }
-    if (!alreadyConfirmed) await deleteObjectFromObs(ownedKey).catch(() => {});
+    // 回滚后另一请求可能已经确认同一对象；清理也必须重新加锁核验。
+    if (!alreadyConfirmed) await abortManagedCloudUpload({ userId, objectKey: ownedKey }).catch(() => {});
     throw transactionError;
   }
 

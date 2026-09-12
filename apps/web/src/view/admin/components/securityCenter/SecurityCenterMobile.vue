@@ -8,6 +8,7 @@
         <strong>{{ t('securityV2.title') }}</strong>
         <span></span>
         <BButton
+          icon-only
           class="security-mobile-icon"
           :aria-label="t('securityV2.common.refresh')"
           :loading="loading"

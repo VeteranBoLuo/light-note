@@ -13,7 +13,8 @@ function normalizeUnionText(expression) {
   return `CONVERT(${expression} USING utf8mb4) COLLATE ${TAG_SPACE_UNION_COLLATION}`;
 }
 
-const LIVE_RESOURCE_STATS_JOIN = `
+function liveResourceStatsJoin(singleTag = false) {
+  return `
   LEFT JOIN (
     SELECT
       r.tag_id,
@@ -44,10 +45,13 @@ const LIVE_RESOURCE_STATS_JOIN = `
      AND f.id = r.resource_id
      AND f.create_by = r.user_id
      AND f.del_flag = 0
-    WHERE r.user_id = ?
+    WHERE r.user_id = ?${singleTag ? ' AND r.tag_id = ?' : ''}
     GROUP BY r.tag_id
   ) stats ON stats.tag_id = t.id
 `;
+}
+
+const LIVE_RESOURCE_STATS_JOIN = liveResourceStatsJoin();
 
 const TODO_TAG_COUNT = `(SELECT COUNT(*) FROM todo_tag_relations tr INNER JOIN todo_items ti ON ti.id = tr.target_id AND ti.user_id = tr.user_id AND ti.del_flag = 0 AND COALESCE(ti.instance_state, 'normal') = 'normal' WHERE tr.target_type = 'todo' AND tr.tag_id = t.id AND tr.user_id = t.user_id)`;
 const TODO_TAG_PENDING = TODO_TAG_COUNT.slice(0, -1) + " AND ti.status = 'pending')";
@@ -698,10 +702,10 @@ export async function getTagSpaceOverview(db, { userId, tagId, relatedLimit = 8 
   const [rows] = await db.query(
     `SELECT ${TAG_BASE_COLUMNS}
      FROM tag t
-     ${LIVE_RESOURCE_STATS_JOIN}
+     ${liveResourceStatsJoin(true)}
      WHERE t.user_id = ? AND t.id = ? AND t.del_flag = 0
      LIMIT 1`,
-    [ownerId, ownerId, normalizedTagId],
+    [ownerId, normalizedTagId, ownerId, normalizedTagId],
   );
   if (!rows?.length) return null;
   const relatedTags = await getDerivedRelatedTags(db, {

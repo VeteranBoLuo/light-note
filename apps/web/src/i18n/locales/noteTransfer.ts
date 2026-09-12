@@ -31,9 +31,10 @@ export const noteTransferZh = {
   expiredTitle: '文件已过期',
   failedTitle: '这次导入未能完成',
   failureReason: '失败原因',
-  parseFailed: '解析未完成。请重新导入；若再次失败，请保留错误码以便排查。',
+  parseFailed: '文件未能解析，请检查文件是否能正常打开，再重新导入该文件。',
   parseTimeout: '文件解析超时，请减少单次导入文件数量后重试。',
-  sourceUnavailable: '当前处理节点无法读取上传文件，请重新上传。',
+  sourceUnavailable: '暂存文件无法读取，请只重新上传失败的文件，已导入的笔记会保留。',
+  itemFailedHint: '这份文件未能导入，可以重试；已成功的笔记不会重复创建。',
   notesRetained: '已导入的笔记会保留，不受此操作影响。',
 
   uploadPending: '文件未上传完成，请重新选择文件，或放弃此任务。',
@@ -133,6 +134,7 @@ export const noteTransferZh = {
   status: {
     partial: '部分失败',
     uploading: '等待上传',
+    uploaded: '已上传，等待检查',
     parsing: '正在解析',
     review: '待确认',
     queued: '排队中',
@@ -178,9 +180,10 @@ export const noteTransferEn = {
   expiredTitle: 'Files have expired',
   failedTitle: 'This import could not finish',
   failureReason: 'Reason',
-  parseFailed: 'Parsing did not finish. Import again and retain this error code if the problem persists.',
+  parseFailed: 'The file could not be parsed. Check that it opens normally, then import that file again.',
   parseTimeout: 'Parsing timed out. Try fewer files in one import.',
-  sourceUnavailable: 'The processing host cannot read these files. Please upload them again.',
+  sourceUnavailable: 'The temporary file cannot be read. Upload only the failed files again; imported notes are retained.',
+  itemFailedHint: 'This file could not be imported. Retry without duplicating successful notes.',
   notesRetained: 'Previously imported notes are kept.',
 
   uploadPending: 'Upload is incomplete. Select files again or abandon this task.',
@@ -283,6 +286,7 @@ export const noteTransferEn = {
   status: {
     partial: 'Partially failed',
     uploading: 'Awaiting upload',
+    uploaded: 'Uploaded, ready to check',
     parsing: 'Parsing',
     review: 'Review',
     queued: 'Queued',

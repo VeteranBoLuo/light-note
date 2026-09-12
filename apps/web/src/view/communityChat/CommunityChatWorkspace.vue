@@ -94,6 +94,7 @@
           </BButton>
           <BTooltip v-if="canManagePinnedMessage" :title="t('communityChat.pin.unpinAction')" :delay="80">
             <BButton
+              icon-only
               class="community-pinned-message__unpin"
               :loading="pinActionBusy"
               :aria-label="t('communityChat.pin.unpinAction')"
@@ -387,6 +388,7 @@
                           >
                             <BTooltip :title="t('communityChat.moreActions')" :delay="80">
                               <BButton
+                                icon-only
                                 size="small"
                                 class="community-message__more"
                                 :loading="messageActionBusyId === chatMessage.publicId"
@@ -670,6 +672,7 @@
             <div class="community-composer__actions">
               <span :class="{ 'is-near-limit': draftLength > 1800 }">{{ draftLength }}/2000</span>
               <BButton
+                icon-only
                 type="primary"
                 class="community-composer__send"
                 :loading="sending"
@@ -678,7 +681,7 @@
                 :title="t('communityChat.sendAction')"
                 @click="sendMessage"
               >
-                <SvgIcon v-if="!sending" :src="icon.arrow_right" size="16" aria-hidden="true" />
+                <SvgIcon :src="icon.arrow_right" size="16" aria-hidden="true" />
               </BButton>
             </div>
           </div>

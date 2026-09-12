@@ -960,7 +960,8 @@ describe('页面树写入 handler', () => {
 
     expect(connection.query.mock.calls[0][0]).toContain('FOR UPDATE');
     expect(connection.query.mock.calls.slice(1).every(([sql]) => String(sql).includes('parent_id <=> ?'))).toBe(true);
-    expect(connection.query.mock.calls.slice(1).map(([, params]) => params.at(-1))).toEqual(['parent', 'parent']);
+    expect(connection.query).toHaveBeenCalledTimes(2);
+    expect(connection.query.mock.calls[1][1]).toEqual(['a', 1, 'b', 0, 'a', 'b', 'u1', 'parent']);
     expect(connection.commit).toHaveBeenCalledTimes(1);
     expect(lastSent(res).status).toBe(200);
   });

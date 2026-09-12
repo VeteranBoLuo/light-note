@@ -102,12 +102,12 @@
       <div class="mobile-today__continue-head">
         <strong>{{ t('workbench.mobileToday.continueTitle') }}</strong>
         <BButton
-          v-if="continueTab === 'projects'"
+          v-if="continueTab === 'projects' && projectEntryCount > 0"
           size="small"
           @click="router.push('/toolbox/research_workspace?entry=workbench')"
           >{{ t('toolbox.project.allProjects') }}</BButton
         >
-        <span v-else>{{ t('workbench.mobileToday.continueHint') }}</span>
+        <span v-else-if="continueTab !== 'projects'">{{ t('workbench.mobileToday.continueHint') }}</span>
       </div>
       <BTabs
         v-model:active-tab="continueTab"
@@ -133,7 +133,10 @@
         v-show="continueTab === 'projects'"
         inline
         tab-panel
-        @state="projectEntryVisible = $event.visible"
+        @state="
+          projectEntryVisible = $event.visible;
+          projectEntryCount = $event.count;
+        "
       />
       <div v-if="continueTab === 'resources'" class="mobile-today__continue-list">
         <BButton
@@ -264,6 +267,7 @@
   const inboxItems = ref<TodayInboxItem[]>([]);
   const continueTab = ref('resources');
   const projectEntryVisible = ref(false);
+  const projectEntryCount = ref(0);
   const continueItems = ref<TodayContinueItem[]>([]);
   watch([projectEntryVisible, () => continueItems.value.length], ([visible, count]) => {
     if (visible && !count) continueTab.value = 'projects';

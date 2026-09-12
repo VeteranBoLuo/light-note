@@ -54,6 +54,7 @@ const {
   getIpLogStats,
   getDeepSeekBalance,
   getAgentLogsSummary,
+  getNoticeSummary,
   getAiFeedback,
   clearImages,
   getHelpConfig,
@@ -1967,5 +1968,97 @@ describe('clearImages 服务端校验与失败上报', () => {
     expect(unlinkSpy).not.toHaveBeenCalled();
     const sent = res.send.mock.calls.at(-1)[0];
     expect(sent.status).toBe(403);
+  });
+});
+
+describe('入口提醒汇总并发读取', () => {
+  beforeEach(() => query.mockReset());
+  const response = () => ({ send: vi.fn() });
+  function deferred() {
+    let resolve, reject;
+    const promise = new Promise((yes, no) => {
+      resolve = yes;
+      reject = no;
+    });
+    return { promise, resolve, reject };
+  }
+  it('管理员两项统计并发，完整统计就绪后才返回', async () => {
+    const opinion = deferred(),
+      security = deferred();
+    query.mockReturnValueOnce(opinion.promise).mockReturnValueOnce(security.promise);
+    const res = response();
+    const done = getNoticeSummary({ user: { id: 'root', role: 'root' } }, res);
+    expect(query).toHaveBeenCalledTimes(2);
+    security.resolve([[{ unhandled_high_risk_count: 2, unhandled_critical_count: 1 }]]);
+    await Promise.resolve();
+    expect(res.send).not.toHaveBeenCalled();
+    opinion.resolve([[{ pending_total: 3 }]]);
+    await done;
+    expect(res.send.mock.calls[0][0]).toMatchObject({
+      status: 200,
+      data: {
+        opinion: { pendingTotal: 3 },
+        security: { enabled: true, unhandledHighRiskCount: 2, unhandledCriticalCount: 1 },
+        hasNotice: true,
+      },
+    });
+  });
+  it('普通账号保留归属参数、未读数和最新回复', async () => {
+    query
+      .mockResolvedValueOnce([[{ unread_reply_total: 1, latest_at: 'fixture-time' }]])
+      .mockResolvedValueOnce([[{ id: 'reply', content: '测试回复' }]]);
+    const res = response();
+    await getNoticeSummary({ user: { id: 'owner', role: 'user' } }, res);
+    expect(query.mock.calls[0][1][0]).toBe('owner');
+    expect(query.mock.calls[1][1][0]).toBe('owner');
+    expect(res.send.mock.calls[0][0]).toMatchObject({
+      status: 200,
+      data: {
+        opinion: { unreadReplyTotal: 1, latestAt: 'fixture-time', latestReply: { id: 'reply', content: '测试回复' } },
+        security: { enabled: false },
+        hasNotice: true,
+      },
+    });
+  });
+  it('后一个查询先失败时，仍保留原先第一个查询的错误优先级', async () => {
+    const first = deferred(),
+      second = deferred();
+    query.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    const res = response(),
+      done = getNoticeSummary({ user: { id: 'root', role: 'root' } }, res);
+    second.reject(new Error('second failure'));
+    await Promise.resolve();
+    expect(res.send).not.toHaveBeenCalled();
+    first.reject(new Error('first failure'));
+    await done;
+    expect(res.send.mock.calls[0][0]).toMatchObject({ status: 500, msg: '获取提醒汇总失败：first failure' });
+  });
+  it('游客不访问数据库', async () => {
+    const res = response();
+    await getNoticeSummary({ user: { id: 'visitor', role: 'visitor' } }, res);
+    expect(query).not.toHaveBeenCalled();
+    expect(res.send.mock.calls[0][0]).toMatchObject({ status: 200, data: { hasNotice: false } });
+  });
+});
+
+
+describe('操作日志首屏并发统计', () => {
+  beforeEach(() => { query.mockReset(); });
+  it('首屏并发且等待完整结果；下一游标页不重复COUNT', async () => {
+    let finishRows;
+    query.mockReturnValueOnce(new Promise(resolve=>{finishRows=resolve;})).mockResolvedValueOnce([[{total:2}]]);
+    const res=mockRes();const body={cursor:null,limit:1,filters:{endDate:'2026-09-10'}};
+    const done=getOperationLogs({user:{role:'root'},body},res);
+    expect(query).toHaveBeenCalledTimes(2);await Promise.resolve();expect(res.send).not.toHaveBeenCalled();
+    finishRows([[{id:'b',create_time:'2026-09-01 12:00:00',system:'{}'},{id:'a',create_time:'2026-09-01 11:00:00',system:'{}'}]]);await done;
+    const data=res.send.mock.calls[0][0].data;expect(data.total).toBe(2);expect(data.items).toHaveLength(1);expect(data.nextCursor).toBeTruthy();
+    query.mockReset();query.mockResolvedValueOnce([[]]);const next=mockRes();
+    await getOperationLogs({user:{role:'root'},body:{...body,cursor:data.nextCursor}},next);
+    expect(query).toHaveBeenCalledTimes(1);expect(next.send.mock.calls[0][0].data.total).toBeUndefined();
+  });
+  it('任一读取失败返回原统一错误', async () => {
+    query.mockResolvedValueOnce([[]]).mockRejectedValueOnce(new Error('fixture'));
+    const res=mockRes();await getOperationLogs({user:{role:'root'},body:{pageSize:5,currentPage:1,filters:{}}},res);
+    expect(res.send.mock.calls[0][0]).toMatchObject({status:500,data:null,msg:'查询日志失败'});
   });
 });

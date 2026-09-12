@@ -112,7 +112,12 @@
                   <h2>{{ t('workbench.panel.continueWorking') }}</h2>
                   <p>{{ t('workbench.panel.continueHint') }}</p>
                 </div>
-                <BButton size="small" class="quiet-button" @click="openActiveCollection">
+                <BButton
+                  v-if="activeContinueTab !== 'projects' || projectEntryCount > 0"
+                  size="small"
+                  class="quiet-button"
+                  @click="openActiveCollection"
+                >
                   {{ t('workbench.panel.viewAll') }}
                 </BButton>
               </div>
@@ -135,7 +140,10 @@
                   v-show="activeContinueTab === 'projects'"
                   inline
                   tab-panel
-                  @state="projectEntryVisible = $event.visible"
+                  @state="
+                    projectEntryVisible = $event.visible;
+                    projectEntryCount = $event.count;
+                  "
                 />
                 <template v-if="activeContinueTab !== 'projects'">
                   <div v-if="summaryLoading" class="content-list content-list--loading content-list--distributed">
@@ -597,6 +605,7 @@
   const updateLogList = ref<UpdateLogItem[]>([]);
   const activeContinueTab = ref<ContinueTab>('notes');
   const projectEntryVisible = ref(false);
+  const projectEntryCount = ref(0);
   watch(projectEntryVisible, (visible) => {
     if (!visible && activeContinueTab.value === 'projects') activeContinueTab.value = 'notes';
   });

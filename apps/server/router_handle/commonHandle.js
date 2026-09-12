@@ -307,23 +307,33 @@ export const getNoticeSummary = async (req, res) => {
       return res.send(resultData(emptyNoticeSummary(role)));
     }
 
+    // 同时读取独立统计；多处失败时仍按原查询顺序选择错误，保持错误响应一致。
+    const readSummaryParts = async (queries) => {
+      const results = await Promise.allSettled(queries);
+      for (const result of results) {
+        if (result.status === 'rejected') throw result.reason;
+      }
+      return results.map((result) => result.value);
+    };
     const summary = emptyNoticeSummary(role);
     if (role === 'root') {
-      const [opinionRows] = await pool.query(
-        `SELECT COUNT(*) AS pending_total, MAX(create_time) AS latest_at
-         FROM opinion
-         WHERE del_flag = 0 AND status = ?`,
-        [OPINION_STATUS.PENDING],
-      );
-      const [securityRows] = await pool.query(
-        `SELECT
-           COUNT(*) AS unhandled_high_risk_count,
-           SUM(severity = 'critical') AS unhandled_critical_count,
-           MAX(created_at) AS latest_at
-         FROM security_events
-         WHERE handled_status = 'unhandled'
-           AND severity IN ('high','critical')`,
-      );
+      const [[opinionRows], [securityRows]] = await readSummaryParts([
+        pool.query(
+          `SELECT COUNT(*) AS pending_total, MAX(create_time) AS latest_at
+           FROM opinion
+           WHERE del_flag = 0 AND status = ?`,
+          [OPINION_STATUS.PENDING],
+        ),
+        pool.query(
+          `SELECT
+             COUNT(*) AS unhandled_high_risk_count,
+             SUM(severity = 'critical') AS unhandled_critical_count,
+             MAX(created_at) AS latest_at
+           FROM security_events
+           WHERE handled_status = 'unhandled'
+             AND severity IN ('high','critical')`,
+        ),
+      ]);
       summary.opinion.pendingTotal = Number(opinionRows[0]?.pending_total || 0);
       summary.opinion.latestAt = opinionRows[0]?.latest_at || null;
       summary.security.enabled = true;
@@ -335,26 +345,28 @@ export const getNoticeSummary = async (req, res) => {
       return res.send(resultData(summary));
     }
 
-    const [countRows] = await pool.query(
-      `SELECT COUNT(*) AS unread_reply_total, MAX(reply_time) AS latest_at
-       FROM opinion
-       WHERE user_id = ?
-         AND del_flag = 0
-         AND status = ?
-         AND reply_viewed = 0`,
-      [userId, OPINION_STATUS.REPLIED],
-    );
-    const [latestRows] = await pool.query(
-      `SELECT id, type, content, reply_content, reply_time
-       FROM opinion
-       WHERE user_id = ?
-         AND del_flag = 0
-         AND status = ?
-         AND reply_viewed = 0
-       ORDER BY reply_time DESC, create_time DESC
-       LIMIT 1`,
-      [userId, OPINION_STATUS.REPLIED],
-    );
+    const [[countRows], [latestRows]] = await readSummaryParts([
+      pool.query(
+        `SELECT COUNT(*) AS unread_reply_total, MAX(reply_time) AS latest_at
+         FROM opinion
+         WHERE user_id = ?
+           AND del_flag = 0
+           AND status = ?
+           AND reply_viewed = 0`,
+        [userId, OPINION_STATUS.REPLIED],
+      ),
+      pool.query(
+        `SELECT id, type, content, reply_content, reply_time
+         FROM opinion
+         WHERE user_id = ?
+           AND del_flag = 0
+           AND status = ?
+           AND reply_viewed = 0
+         ORDER BY reply_time DESC, create_time DESC
+         LIMIT 1`,
+        [userId, OPINION_STATUS.REPLIED],
+      ),
+    ]);
     summary.opinion.unreadReplyTotal = Number(countRows[0]?.unread_reply_total || 0);
     summary.opinion.latestAt = countRows[0]?.latest_at || null;
     summary.opinion.latestReply = latestRows[0] || null;
@@ -794,16 +806,25 @@ export const getOperationLogs = async (req, res) => {
       : [];
     const listConditions = cursorFilter ? [...conditions, cursorFilter] : conditions;
     const take = cursorMode ? pageSize + 1 : pageSize;
-    const [rows] = await pool.query(
-      `SELECT o.*, u.alias,u.email
+    // 仅需要总数时并发统计；后续游标页继续省略 COUNT。
+    const [[rows], total] = await Promise.all([
+      pool.query(
+        `SELECT o.*, u.alias,u.email
 FROM operation_logs o
 LEFT JOIN user u ON o.create_by = u.id
 WHERE ${listConditions.join(' AND ')}
 ORDER BY o.create_time DESC, o.id DESC
 LIMIT ?${cursorMode ? '' : ' OFFSET ?'};
 `,
-      [...baseParams, ...cursorParams, take, ...(cursorMode ? [] : [skip])],
-    );
+        [...baseParams, ...cursorParams, take, ...(cursorMode ? [] : [skip])],
+      ),
+      !cursorMode || !cursor
+        ? pool.query(
+            `SELECT COUNT(*) AS total FROM operation_logs o LEFT JOIN user u ON o.create_by = u.id WHERE ${conditions.join(' AND ')}`,
+            baseParams,
+          ).then(([totalRes]) => Number(totalRes[0].total || 0))
+        : Promise.resolve(undefined),
+    ]);
     const hasMore = cursorMode && rows.length > pageSize;
     const page = cursorMode ? rows.slice(0, pageSize) : rows;
     // 与 api 日志同样的处理:存的是 JSON 字符串,前端按对象读 system.os / system.runtime。
@@ -816,14 +837,6 @@ LIMIT ?${cursorMode ? '' : ' OFFSET ?'};
       }
       row.system = normalizeApiLogSystem(row.system);
     });
-    let total;
-    if (!cursorMode || !cursor) {
-      const [totalRes] = await pool.query(
-        `SELECT COUNT(*) AS total FROM operation_logs o LEFT JOIN user u ON o.create_by = u.id WHERE ${conditions.join(' AND ')}`,
-        baseParams,
-      );
-      total = Number(totalRes[0].total || 0);
-    }
     const last = page[page.length - 1];
     return res.send(
       resultData({

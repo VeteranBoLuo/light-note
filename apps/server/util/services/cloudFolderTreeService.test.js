@@ -270,7 +270,9 @@ describe('cloudFolderTreeService', () => {
     await expect(
       reorderOwnedCloudFolders({ userId: 'user-1', parentId: null, items: [{ id: 2 }, { id: 1 }], database: db }),
     ).resolves.toEqual({ parentId: null, items: ['2', '1'] });
-    expect(db.connection.query.mock.calls.slice(2).map((call) => call[1]?.[1])).toEqual(['2', '1']);
+    expect(db.connection.query.mock.calls.slice(2).map((call) => call[1])).toEqual([
+      ['2', 0, '1', 1, '2', '1', 'user-1', null],
+    ]);
 
     const invalidDb = mutationDatabase(rows);
     await expect(

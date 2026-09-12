@@ -4,6 +4,7 @@
     class="inbox-page"
     :class="{
       'inbox-page--embedded': embedded,
+      'has-resource-inspector': embedded && !isTodoFocused && bookmark.isDesktop,
       'inbox-page--todo-focused': isTodoFocused,
       'inbox-page--mobile-todo': isMobileTodoPrimary,
       'inbox-page--mobile-resources': isMobileResourceInbox,
@@ -665,20 +666,23 @@
                     v-if="action.actionType === 'resource'"
                     class="resource-inbox-entry"
                     :class="{
-                      'is-inspected': !bookmark.isMobile && activeInspectedInboxKey === inbox.resourceKey(action.item),
+                      'is-inspected':
+                        (bookmark.isDesktop || resourceInspectorOpen) &&
+                        !resourceSelectionMode &&
+                        activeInspectedInboxKey === inbox.resourceKey(action.item),
                     }"
                   >
                     <InboxItem
                       :item="action.item"
                       :selectable="!usesExplicitResourceSelection || resourceSelectionMode"
                       :selected="inbox.selectedKeys.includes(inbox.resourceKey(action.item))"
+                      :inspected="(bookmark.isDesktop || resourceInspectorOpen) && activeInspectedInboxKey === inbox.resourceKey(action.item)"
                       :completing="completingKey === inbox.resourceKey(action.item)"
                       :deleting="deletingKey === inbox.resourceKey(action.item)"
                       :disabled="hasPendingOperation"
                       :selection-mode="resourceSelectionMode"
                       :swipe-enabled="bookmark.isMobile"
                       :swipe-open="openSwipeResourceKey === inbox.resourceKey(action.item)"
-                      :show-inline-actions="embedded && !bookmark.isMobile"
                       @swipe-start="beginResourceSwipe(action.item)"
                       @update:swipe-open="updateResourceSwipe(action.item, $event)"
                       @select="toggleSelected(action.item, $event)"
@@ -718,83 +722,110 @@
           </div>
         </section>
 
-        <aside v-if="!embedded && !isTodoFocused && !bookmark.isMobile" class="resource-inbox-inspector">
-          <AiSkillPanel
-            v-if="inboxAiResource"
-            class="resource-inbox-ai-panel"
-            :title="t('ai.entry.searchSkillTitle')"
-            :description="t('ai.entry.searchSkillDescription')"
-            :skill-id="inboxAiSkillId"
-            surface="inbox"
-            :resource-refs="inboxAiResourceRefs"
-            :scope-label="inboxAiScopeLabel"
-            :initial-input="{}"
-            :actions="inboxAiActions"
-            :show-prompt="false"
-            auto-run-action-id="analyze"
-            :icon-src="icon.ai.summary"
-            presentation="sidebar"
-          />
-          <template v-else-if="inspectedInboxItem">
-            <div class="resource-inbox-inspector__eyebrow">{{ t('inbox.currentPendingResource') }}</div>
-            <span class="resource-inbox-inspector__type">{{ t(`inbox.${inspectedInboxItem.resourceType}`) }}</span>
-            <h2>{{ inspectedInboxItem.title || t('inbox.untitled') }}</h2>
-            <p
-              v-auto-scrollbar
-              class="resource-inbox-inspector__summary"
-              :class="{ 'is-scrollable': inspectedInboxItem.resourceType === 'note' }"
-            >
-              {{ inspectedInboxSummary }}
-            </p>
-            <dl class="resource-inbox-inspector__meta">
-              <div>
-                <dt>{{ t('inbox.collectedAt') }}</dt>
-                <dd>{{ inspectedInboxItem.collectedAt || '-' }}</dd>
+        <component
+          :is="bookmark.isDesktop ? 'aside' : BDrawer"
+          v-if="!isTodoFocused"
+          v-bind="
+            bookmark.isDesktop
+              ? { class: 'resource-inbox-inspector-host' }
+              : {
+                  open: resourceInspectorOpen,
+                  title: t('inbox.currentPendingResource'),
+                  width: '420px',
+                  mobileFullScreen: true,
+                  closeDisabled: hasPendingOperation,
+                }
+          "
+          @close="resourceInspectorOpen = false"
+        >
+          <div class="resource-inbox-inspector" :class="{ 'resource-inbox-inspector--drawer': !bookmark.isDesktop }">
+            <BButton v-if="inboxAiResource" @click="inboxAiResource = null">{{ t('common.back') }}</BButton>
+            <AiSkillPanel
+              v-if="inboxAiResource"
+              class="resource-inbox-ai-panel"
+              :title="t('ai.entry.searchSkillTitle')"
+              :description="t('ai.entry.searchSkillDescription')"
+              :skill-id="inboxAiSkillId"
+              surface="inbox"
+              :resource-refs="inboxAiResourceRefs"
+              :scope-label="inboxAiScopeLabel"
+              :initial-input="{}"
+              :actions="inboxAiActions"
+              :show-prompt="false"
+              auto-run-action-id="analyze"
+              :icon-src="icon.ai.summary"
+              presentation="sidebar"
+            />
+            <template v-else-if="inspectedInboxItem">
+              <div v-if="bookmark.isDesktop" class="resource-inbox-inspector__eyebrow">{{ t('inbox.currentPendingResource') }}</div>
+              <span class="resource-inbox-inspector__type">{{ t(`inbox.${inspectedInboxItem.resourceType}`) }}</span>
+              <h2>{{ inspectedInboxItem.title || t('inbox.untitled') }}</h2>
+              <p
+                v-auto-scrollbar
+                class="resource-inbox-inspector__summary"
+                :class="{ 'is-scrollable': inspectedInboxItem.resourceType === 'note' }"
+              >
+                {{ inspectedInboxSummary }}
+              </p>
+              <dl class="resource-inbox-inspector__meta">
+                <div>
+                  <dt>{{ t('inbox.collectedAt') }}</dt>
+                  <dd>{{ inspectedInboxItem.collectedAt || '-' }}</dd>
+                </div>
+                <div>
+                  <dt>{{ t('inbox.resourceLocation') }}</dt>
+                  <dd>{{ inspectedInboxItem.detail || '-' }}</dd>
+                </div>
+              </dl>
+              <div class="resource-inbox-inspector__actions">
+                <BButton
+                  block
+                  size="large"
+                  type="function"
+                  class="resource-inbox-inspector__action--ai"
+                  :disabled="hasPendingOperation || resourceSelectionMode"
+                  @click="openInboxResourceAi(inspectedInboxItem)"
+                >
+                  <SvgIcon :src="icon.ai.summary" size="17" aria-hidden="true" />
+                  {{ t('resourceCenter.analyzeResource') }}
+                </BButton>
+                <BButton
+                  block
+                  size="large"
+                  type="primary"
+                  :disabled="hasPendingOperation || resourceSelectionMode"
+                  @click="openResource(inspectedInboxItem)"
+                >
+                  {{ t('inbox.organize') }}
+                </BButton>
+                <BButton
+                  block
+                  size="large"
+                  class="resource-inbox-inspector__action--complete"
+                  :disabled="hasPendingOperation || resourceSelectionMode"
+                  :loading="completingKey === inbox.resourceKey(inspectedInboxItem)"
+                  @click="completeOne(inspectedInboxItem)"
+                >
+                  {{ t('inbox.complete') }}
+                </BButton>
+                <BButton
+                  block
+                  size="large"
+                  class="resource-inbox-inspector__action--delete"
+                  :disabled="hasPendingOperation || resourceSelectionMode"
+                  :loading="deletingKey === inbox.resourceKey(inspectedInboxItem)"
+                  @click="confirmDelete([inspectedInboxItem])"
+                >
+                  {{ t('inbox.deleteResource') }}
+                </BButton>
               </div>
-              <div>
-                <dt>{{ t('inbox.resourceLocation') }}</dt>
-                <dd>{{ inspectedInboxItem.detail || inspectedInboxItem.source || '-' }}</dd>
-              </div>
-            </dl>
-            <div class="resource-inbox-inspector__actions">
-              <BButton
-                block
-                size="large"
-                type="function"
-                class="resource-inbox-inspector__action--ai"
-                @click="openInboxResourceAi(inspectedInboxItem)"
-              >
-                <SvgIcon :src="icon.ai.summary" size="17" aria-hidden="true" />
-                {{ t('resourceCenter.analyzeResource') }}
-              </BButton>
-              <BButton block size="large" type="primary" @click="openResource(inspectedInboxItem)">
-                {{ t('inbox.organize') }}
-              </BButton>
-              <BButton
-                block
-                size="large"
-                class="resource-inbox-inspector__action--complete"
-                :loading="completingKey === inbox.resourceKey(inspectedInboxItem)"
-                @click="completeOne(inspectedInboxItem)"
-              >
-                {{ t('inbox.complete') }}
-              </BButton>
-              <BButton
-                block
-                size="large"
-                class="resource-inbox-inspector__action--delete"
-                :loading="deletingKey === inbox.resourceKey(inspectedInboxItem)"
-                @click="confirmDelete([inspectedInboxItem])"
-              >
-                {{ t('inbox.deleteResource') }}
-              </BButton>
+            </template>
+            <div v-else class="resource-inbox-inspector__empty">
+              <strong>{{ t('inbox.inspectorEmptyTitle') }}</strong>
+              <p>{{ t('inbox.inspectorEmptyDesc') }}</p>
             </div>
-          </template>
-          <div v-else class="resource-inbox-inspector__empty">
-            <strong>{{ t('inbox.inspectorEmptyTitle') }}</strong>
-            <p>{{ t('inbox.inspectorEmptyDesc') }}</p>
           </div>
-        </aside>
+        </component>
       </div>
     </div>
     <TodoSeriesDrawer
@@ -924,6 +955,7 @@
   import ResourceTagFilterPopover from '@/components/searchCenter/ResourceTagFilterPopover.vue';
   import { fetchSelectableTags } from '@/api/tagSpace';
   import { getTodoWorkspace, organizeTodos } from '@/api/todoApi';
+  import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
   import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
@@ -1184,8 +1216,8 @@
   const todoUndo = ref<{ kind: 'complete' | 'delete'; ids: string[] } | null>(null);
   const todoUndoing = ref(false);
   const hasTodoSeries = computed(() =>
-    todo.groups.some((group) =>
-      group.instanceCount > group.nodeCount || group.nodes.some((node) => node.kind === 'series'),
+    todo.groups.some(
+      (group) => group.instanceCount > group.nodeCount || group.nodes.some((node) => node.kind === 'series'),
     ),
   );
   const todoGroupLists = computed(() =>
@@ -1240,6 +1272,7 @@
   const showTopFade = ref(false);
   const showBottomFade = ref(false);
   const inspectedInboxKey = ref('');
+  const resourceInspectorOpen = ref(false);
   const inboxAiResource = ref<InboxItemType | null>(null);
   let resizeObserver: ResizeObserver | null = null;
 
@@ -1547,6 +1580,9 @@
       previewTodoId.value = '';
       previewTodoSeed.value = null;
       todoView.value = normalizeTodoView(user.preferences.todoView);
+      resourceInspectorOpen.value = false;
+      inspectedInboxKey.value = '';
+      inboxAiResource.value = null;
       inbox.resetForOwner(id || 'visitor');
       todo.resetForOwner(id || 'visitor');
       savedTodoRange = null;
@@ -1612,7 +1648,10 @@
       const keys = new Set(resourceKeyList ? resourceKeyList.split('|') : []);
       const aiKey = inboxAiResource.value ? inbox.resourceKey(inboxAiResource.value) : '';
       if (aiKey && !keys.has(aiKey)) inboxAiResource.value = null;
-      if (inspectedInboxKey.value && !keys.has(inspectedInboxKey.value)) inspectedInboxKey.value = '';
+      if (inspectedInboxKey.value && !keys.has(inspectedInboxKey.value)) {
+        inspectedInboxKey.value = '';
+        resourceInspectorOpen.value = false;
+      }
     },
   );
   watch(
@@ -1768,16 +1807,21 @@
   }
 
   function handleInboxItemOpen(item: InboxItemType) {
-    if (embedded.value || bookmark.isMobile) {
-      openResource(item);
-      return;
-    }
+    if (hasPendingOperation.value || resourceSelectionMode.value) return;
     inspectInboxResource(item);
+    if (!bookmark.isDesktop) resourceInspectorOpen.value = true;
   }
 
   function setMobileInboxKeyword(value: string) {
     inbox.keyword = value;
   }
+
+  watch(
+    () => bookmark.isDesktop,
+    () => {
+      resourceInspectorOpen.value = false;
+    },
+  );
 
   function enterResourceSelection() {
     if (!usesExplicitResourceSelection.value) return;
@@ -2159,6 +2203,17 @@
     inbox.selectedKeys = selected ? inbox.items.map((item) => inbox.resourceKey(item)) : [];
   }
   function openResource(item: InboxItemType) {
+    if (hasPendingOperation.value || resourceSelectionMode.value) return;
+    if (resourceInspectorOpen.value) {
+      const snapshot = { ...item };
+      void closeCurrentMobileOverlayThen(
+        () => {
+          resourceInspectorOpen.value = false;
+        },
+        () => openResource(snapshot),
+      );
+      return;
+    }
     recordOperation(OPERATION_LOG_MAP.inbox.openResource);
     const sourceQuery = embedded.value ? { from: route.fullPath } : {};
     if (item.resourceType === 'bookmark') {
@@ -3173,7 +3228,9 @@
   }
 
   .resource-inbox-ai-panel {
-    margin: -18px;
+    margin: 0;
+    min-height: 0;
+    flex: 1;
     border: 0;
     border-radius: 0;
   }
@@ -3419,7 +3476,7 @@
       grid-row: 5;
     }
 
-    .inbox-page--resource-workspace > .inbox-workspace-body > .inbox-workspace-main > .resource-inbox-inspector {
+    .inbox-page--resource-workspace > .inbox-workspace-body > .inbox-workspace-main > .resource-inbox-inspector-host {
       grid-column: 3;
       grid-row: 2 / 6;
     }
@@ -3482,6 +3539,52 @@
     .inbox-page--resource-workspace > .inbox-workspace-body > .inbox-workspace-main > .inbox-content {
       grid-row: 5;
     }
+  }
+
+  .resource-inbox-inspector-host {
+    min-width: 0;
+    min-height: 0;
+  }
+  .resource-inbox-inspector-host > .resource-inbox-inspector,
+  .resource-inbox-inspector.resource-inbox-inspector--drawer {
+    display: flex;
+    height: 100%;
+  }
+  .resource-inbox-inspector.resource-inbox-inspector--drawer {
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    min-height: 320px;
+  }
+  .resource-inbox-inspector h2 {
+    overflow-wrap: anywhere;
+  }
+  .inbox-page--embedded.has-resource-inspector {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 300px;
+    grid-template-rows: auto auto auto minmax(0, 1fr);
+    column-gap: 14px;
+  }
+  .inbox-page--embedded.has-resource-inspector .todo-controls-row,
+  .inbox-page--embedded.has-resource-inspector .todo-controls-row > .inbox-toolbar {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+  .inbox-page--embedded.has-resource-inspector .inbox-batch {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .inbox-page--embedded.has-resource-inspector .inbox-error-banner {
+    grid-column: 1 / -1;
+    grid-row: 3;
+  }
+  .inbox-page--embedded.has-resource-inspector .inbox-content {
+    grid-column: 1;
+    grid-row: 4;
+  }
+  .inbox-page--embedded.has-resource-inspector .resource-inbox-inspector-host {
+    grid-column: 2;
+    grid-row: 4;
   }
 
   .inbox-empty {

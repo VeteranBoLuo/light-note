@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createApp, h } from 'vue';
+import { createApp, h, nextTick, ref } from 'vue';
 
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({ t: (key: string) => key }),
@@ -18,6 +18,34 @@ afterEach(() => {
 });
 
 describe('NoteDetailLoadingState', () => {
+  it('不存在时返回列表，切换为网络失败后恢复重试动作', async () => {
+    const host = document.createElement('div');
+    const unavailable = ref(true);
+    const back = vi.fn();
+    const retry = vi.fn();
+    const app = createApp({
+      render: () => h(NoteDetailLoadingState, {
+        error: true,
+        unavailable: unavailable.value,
+        onBack: back,
+        onRetry: retry,
+      }),
+    });
+    app.mount(host);
+    cleanup = () => app.unmount();
+    expect(host.textContent).toContain('noteDetail.unavailableDescription');
+    expect(host.textContent).not.toContain('noteDetail.loadFailedDescription');
+    host.querySelector('button')!.click();
+    expect(back).toHaveBeenCalledOnce();
+    expect(retry).not.toHaveBeenCalled();
+    unavailable.value = false;
+    await nextTick();
+    expect(host.textContent).toContain('noteDetail.loadFailedDescription');
+    expect(host.textContent).not.toContain('noteDetail.unavailableDescription');
+    host.querySelector('button')!.click();
+    expect(retry).toHaveBeenCalledOnce();
+  });
+
   it('把调用方的覆盖层 class 与属性透传到唯一根节点', () => {
     const host = document.createElement('div');
     document.body.append(host);

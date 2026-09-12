@@ -95,9 +95,9 @@ describe('移动端待办页签布局', () => {
     expect(inboxSource).toContain(':selectable="!usesExplicitResourceSelection || resourceSelectionMode"');
     expect(inboxSource).toContain('(!usesExplicitResourceSelection || resourceSelectionMode)');
     expect(inboxSource).toMatch(/function toggleResourceSelectionMode[\s\S]*?enterResourceSelection\(\)/);
-    expect(inboxSource).toContain(':show-inline-actions="embedded && !bookmark.isMobile"');
-    expect(inboxItemSource).toContain('class="inbox-item__actions inbox-item__actions--inline"');
-    expect(inboxItemSource).toContain("t('inbox.organize')");
+    expect(inboxSource).not.toContain(':show-inline-actions');
+    expect(inboxItemSource).not.toContain('inbox-item__actions--inline');
+    expect(inboxItemSource).toContain("t('common.detail')");
     expect(inboxItemSource).toContain("t('inbox.complete')");
   });
 
@@ -167,13 +167,13 @@ describe('移动端待办页签布局', () => {
     expect(mobileActionsSource).not.toContain('magicWand');
   });
 
-  it('独立桌面页点击待整理卡片更新检查器，移动端与整理中心嵌入态直接打开资源', () => {
+  it('点击待整理卡片更新详情，窄屏打开抽屉，整理操作才导航', () => {
     expect(inboxSource).not.toContain('@mouseenter="inspectInboxResource(action.item)"');
     expect(inboxSource).not.toContain('@focusin="inspectInboxResource(action.item)"');
     expect(inboxSource).toContain('@open="handleInboxItemOpen(action.item)"');
     expect(inboxSource).toMatch(/const inspectedInboxItem = computed\([\s\S]*?inbox\.items\[0\]/);
     expect(inboxSource).toMatch(
-      /function handleInboxItemOpen[\s\S]*?embedded\.value \|\| bookmark\.isMobile[\s\S]*?openResource\(item\)/,
+      /function handleInboxItemOpen[\s\S]*?inspectInboxResource\(item\)[\s\S]*?!bookmark\.isDesktop\) resourceInspectorOpen\.value = true/,
     );
     expect(inboxSource).toContain('const sourceQuery = embedded.value ? { from: route.fullPath } : {};');
     expect(inboxSource).toMatch(/function inspectInboxResource[\s\S]*?inboxAiResource\.value = null/);
@@ -236,8 +236,12 @@ describe('移动端待办页签布局', () => {
   });
 
   it('待办分组使用紧凑列表边界，系列正文不重复分隔', () => {
-    expect(inboxSource).toMatch(/\.todo-group__items :deep\(\.todo-item\)\s*\{[\s\S]*?border-bottom:\s*1px solid var\(--surface-divider-color\);/);
-    expect(inboxSource).toMatch(/\.todo-group__items :deep\(\.todo-series-group \.todo-item\)\s*\{\s*border-bottom:\s*0;/);
+    expect(inboxSource).toMatch(
+      /\.todo-group__items :deep\(\.todo-item\)\s*\{[\s\S]*?border-bottom:\s*1px solid var\(--surface-divider-color\);/,
+    );
+    expect(inboxSource).toMatch(
+      /\.todo-group__items :deep\(\.todo-series-group \.todo-item\)\s*\{\s*border-bottom:\s*0;/,
+    );
     expect(inboxSource).toMatch(/\.inbox-toolbar\s*\{[\s\S]*?border:\s*0;[\s\S]*?box-shadow:\s*none;/);
   });
 

@@ -27,7 +27,7 @@
           <template v-if="column.key === 'label'">{{ t(`coreUsageReport.metrics.${row(record).key}`) }}</template>
           <template v-else-if="column.key === 'observed'">{{ count(row(record).observed) }}</template>
           <template v-else-if="column.key === 'eligible'">{{ count(row(record).eligible) }}</template>
-          <template v-else-if="column.key === 'value'">{{ rate(row(record).value) }}</template>
+          <template v-else-if="column.key === 'value'">{{ recordedRate(row(record)) }}</template>
           <template v-else-if="column.key === 'status'">
             <BChip :tone="row(record).status === 'available' ? 'success' : 'pending'">{{
               t(`coreUsageReport.statuses.${row(record).status}`)
@@ -53,7 +53,7 @@
               ><dd>{{ count(metric.eligible) }}</dd></div
             ><div
               ><dt>{{ t('coreUsageReport.rate') }}</dt
-              ><dd>{{ rate(metric.value) }}</dd></div
+              ><dd>{{ recordedRate(metric) }}</dd></div
             ></dl
           >
           <p v-if="metric.reasons.length" class="core-usage__hint">{{ reason(metric) }}</p>
@@ -111,8 +111,21 @@
   );
   const row = (value: unknown) => value as Row;
   const count = (value: number | null) => (value == null ? '—' : value.toLocaleString(locale.value));
-  const rate = (value: number | null) =>
-    value == null ? '—' : `${value.toLocaleString(locale.value, { maximumFractionDigits: 2 })}%`;
+  function recordedRate(metric: Metric) {
+    // Coverage uncertainty affects completeness, not the ratio of records we do have.
+    if (
+      !['available', 'coverage_unknown', 'partial_coverage'].includes(metric.status) ||
+      metric.observed == null ||
+      metric.eligible == null ||
+      !Number.isFinite(metric.observed) ||
+      !Number.isFinite(metric.eligible) ||
+      metric.eligible <= 0 ||
+      metric.observed < 0 ||
+      metric.observed > metric.eligible
+    )
+      return '—';
+    return `${((metric.observed / metric.eligible) * 100).toLocaleString(locale.value, { maximumFractionDigits: 2 })}%`;
+  }
   const reason = (metric: Metric) => metric.reasons.map((key) => t(`coreUsageReport.reasons.${key}`)).join(' · ');
   watch(
     () => props.days,

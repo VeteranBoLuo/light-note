@@ -38,7 +38,12 @@ function connectionWith(query) {
     commit: vi.fn(),
     rollback: vi.fn(),
     release: vi.fn(),
-    query: vi.fn(query),
+    query: vi.fn((sql, ...args) => {
+      if (sql.includes('GET_LOCK(')) return [[{ acquired: 1 }]];
+      if (sql.includes('RELEASE_LOCK(')) return [[{ released: 1 }]];
+      return query(sql, ...args);
+    }),
+    destroy: vi.fn(),
   };
 }
 
@@ -100,6 +105,40 @@ describe('managedCloudUploadService', () => {
     ]);
     expect(connection.query.mock.calls.some(([sql]) => String(sql).startsWith('DELETE FROM files'))).toBe(false);
     expect(result).toEqual(expect.objectContaining({ fileId: '19', filename: '季度报告 (1).pdf' }));
+  });
+
+  it.each([
+    { occupied: 100, expected: '资料 (100).pdf' },
+    { occupied: 999, expected: '资料 (999).pdf' },
+    { occupied: 1000, expected: null },
+  ])('大量同名文件分批选取首个空位，保留千个候选的上限：$occupied', async ({ occupied, expected }) => {
+    const names = new Set(Array.from({ length: occupied }, (_, i) => i ? `资料 (${i}).pdf` : '资料.pdf'));
+    let nameQueries = 0;
+    const connection = connectionWith(async (sql, params) => {
+      const text = String(sql);
+      if (text.includes('MAX(file_name')) {
+        nameQueries += 1;
+        const size = (params.length - 1) / 2;
+        expect(size).toBeLessThanOrEqual(32);
+        expect(params[size]).toBe('user-1');
+        return [[Object.fromEntries(params.slice(0, size).map((name, i) => [`occupied${i}`, Number(names.has(name))]))]];
+      }
+      if (text.includes('file_name = ?')) {
+        nameQueries += 1;
+        return [names.has(params[1]) ? [{ id: 8 }] : []];
+      }
+      if (text === 'INSERT INTO files SET ?') return [{ insertId: 29 }];
+      return [[]];
+    });
+    mocks.pool.getConnection.mockResolvedValue(connection);
+    const result = confirmManagedCloudUpload({ userId: 'user-1', objectKey, fileName: '资料.pdf' });
+    if (expected) {
+      await expect(result).resolves.toMatchObject({ filename: expected });
+    } else {
+      await expect(result).rejects.toMatchObject({ code: 'FILE_NAME_CONFLICT' });
+      expect(connection.query.mock.calls.some(([sql]) => String(sql).startsWith('INSERT INTO files'))).toBe(false);
+    }
+    expect(nameQueries).toBeLessThanOrEqual(33);
   });
 
   it('浏览器插件确认文件时在文件事务内同步加入待整理', async () => {
@@ -218,6 +257,18 @@ describe('managedCloudUploadService', () => {
     expect(mocks.deleteObjectFromObs).not.toHaveBeenCalled();
   });
 
+  it('确认失败回滚后，清理前发现另一请求已保存同一对象时不删除', async () => {
+    const failed = connectionWith(async () => [[]]);
+    const cleanup = connectionWith(async (sql) => String(sql).includes('obs_key = ?')
+      ? [[{ id: 31, file_name: '资料.pdf', file_type: 'application/pdf', file_size: 2048 }]] : [[]]);
+    mocks.pool.getConnection.mockResolvedValueOnce(failed).mockResolvedValueOnce(cleanup);
+    await expect(confirmManagedCloudUpload({ userId: 'user-1', objectKey, fileName: '资料.pdf', folderId: '99' }))
+      .rejects.toMatchObject({ code: 'FOLDER_NOT_FOUND' });
+    expect(failed.rollback).toHaveBeenCalledOnce();
+    expect(cleanup.commit).toHaveBeenCalledOnce();
+    expect(mocks.deleteObjectFromObs).not.toHaveBeenCalled();
+  });
+
   it('中止上传先取得与确认相同的账号锁，已落库对象绝不删除', async () => {
     const connection = connectionWith(async (sql) => {
       if (String(sql).includes('obs_key = ?')) {
@@ -233,10 +284,62 @@ describe('managedCloudUploadService', () => {
       fileId: '30',
       filename: '资料.pdf',
     });
-    expect(connection.query.mock.calls[0]).toEqual([
+    expect(connection.query.mock.calls[1]).toEqual([
       'SELECT id FROM user WHERE id = ? LIMIT 1 FOR UPDATE',
       ['user-1'],
     ]);
     expect(mocks.deleteObjectFromObs).not.toHaveBeenCalled();
   });
+
+  it('中止删除尚未完成时释放账号锁但保留对象锁', async () => {
+    const connection = connectionWith(async () => [[]]);
+    mocks.pool.getConnection.mockResolvedValue(connection);
+    let finishDelete;
+    let started;
+    const deleting = new Promise((resolve) => { started = resolve; });
+    mocks.deleteObjectFromObs.mockImplementation(() => {
+      started();
+      return new Promise((resolve) => { finishDelete = resolve; });
+    });
+    const pending = abortManagedCloudUpload({ userId: 'user-1', objectKey });
+    await deleting;
+    try {
+      expect(connection.commit).toHaveBeenCalledOnce();
+      expect(connection.query.mock.calls.some(([sql]) => sql.includes('RELEASE_LOCK('))).toBe(false);
+      expect(connection.release).not.toHaveBeenCalled();
+    } finally {
+      finishDelete({});
+      await pending;
+    }
+    expect(connection.commit).toHaveBeenCalledOnce();
+    expect(connection.release).toHaveBeenCalledOnce();
+  });
+
+  it('对象删除失败时不谎报已删除，允许客户端保留原对象凭据', async () => {
+    const connection = connectionWith(async () => [[]]);
+    mocks.pool.getConnection.mockResolvedValue(connection);
+    mocks.deleteObjectFromObs.mockRejectedValue(new Error('OBS unavailable'));
+    await expect(abortManagedCloudUpload({ userId: 'user-1', objectKey })).rejects.toThrow('OBS unavailable');
+    expect(connection.rollback).not.toHaveBeenCalled();
+    expect(connection.release).toHaveBeenCalledOnce();
+  });
+  it('对象锁忙时不读取或删除对象、不等待账号锁', async () => {
+    const connection = connectionWith(async () => [[]]);
+    connection.query.mockResolvedValue([[{ acquired: 0 }]]);
+    mocks.pool.getConnection.mockResolvedValue(connection);
+    await expect(abortManagedCloudUpload({ userId: 'user-1', objectKey })).rejects.toMatchObject({ code: 'UPLOAD_BUSY' });
+    expect(connection.beginTransaction).not.toHaveBeenCalled();
+    expect(mocks.deleteObjectFromObs).not.toHaveBeenCalled();
+    expect(connection.release).toHaveBeenCalledOnce();
+  });
+  it('对象锁释放失败时销毁连接，不将锁泄漏到连接池', async () => {
+    const connection = connectionWith(async () => [[]]);
+    const query = connection.query.getMockImplementation();
+    connection.query.mockImplementation((sql, ...args) => sql.includes('RELEASE_LOCK(')
+      ? Promise.reject(new Error('connection lost')) : query(sql, ...args));
+    mocks.pool.getConnection.mockResolvedValue(connection);
+    await expect(abortManagedCloudUpload({ userId: 'user-1', objectKey })).resolves.toMatchObject({ deleted: true });
+    expect(connection.destroy).toHaveBeenCalledOnce();
+  });
+
 });

@@ -7,10 +7,8 @@
           <strong
             >{{ review?.pending ?? '—' }}<small>{{ t('organizeProgress.suggestionUnit') }}</small></strong
           >
-          <p>{{
-            review?.outcomes
-              ? t('organizeProgress.reviewObjects', { count: review.outcomes.review })
-              : t('organizeProgress.reviewAction')
+          <p v-if="review?.outcomes">{{
+            t('organizeProgress.reviewObjects', { count: review.outcomes.review })
           }}</p>
         </section>
         <section v-if="manualObjects" class="result-kpi">

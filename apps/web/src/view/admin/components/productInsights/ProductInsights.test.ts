@@ -77,7 +77,7 @@ describe('ProductInsights', () => {
     document.body.innerHTML = '';
   });
 
-  it('报告默认不查询，点击后生成；覆盖未知保留人数与缺失比例', async () => {
+  it('报告默认不查询，点击后生成；覆盖未知仍显示已记录比例与说明', async () => {
     const metric = {
       eligible: 3,
       observed: 1,
@@ -107,12 +107,49 @@ describe('ProductInsights', () => {
     button.click();
     await vi.waitFor(() => expect(mounted.host.textContent).toContain('记录完整性待确认'));
     expect(apiMocks.report).toHaveBeenCalledExactlyOnceWith({ days: 7 });
-    expect(mounted.host.querySelector('.core-usage')?.textContent).not.toContain('0%');
+    expect(mounted.host.querySelector('.core-usage')?.textContent).toContain('33.33%');
+    expect(mounted.host.querySelector('.core-usage')?.textContent).toContain('已记录比例');
     expect(mounted.host.textContent).toContain('已注册满 7 天 3 人');
     apiMocks.report.mockRejectedValueOnce(new Error('network'));
     button.click();
     await vi.waitFor(() => expect(mounted.host.textContent).toContain('报告生成失败'));
     expect(mounted.host.textContent).toContain('已注册满 7 天 3 人');
+  });
+
+  it('部分记录显示已记录比例，零记录与不可计算状态明确区分', async () => {
+    const metric = (observed: number | null, eligible: number, status: string) => ({
+      observed,
+      eligible,
+      status,
+      value: null,
+      reasons: [],
+    });
+    apiMocks.report.mockResolvedValue({
+      status: 200,
+      data: {
+        asOf: '2026-09-11T08:00:00Z',
+        days: 7,
+        cohort: { eligible: 236, immature: 25 },
+        metrics: {
+          a7Resources: metric(84, 236, 'partial_coverage'),
+          a7Overall: metric(0, 236, 'coverage_unknown'),
+          r7Core: metric(null, 236, 'unavailable'),
+          a7ResourcesLegacy: metric(0, 0, 'no_mature_cohort'),
+          r7InteractionProxy: metric(1, 0, 'coverage_unknown'),
+        },
+      },
+    });
+    const mounted = mountPage();
+    cleanup = mounted.unmount;
+    Array.from(mounted.host.querySelectorAll('button'))
+      .find((el) => el.textContent?.includes('生成报告'))!
+      .click();
+    await vi.waitFor(() => expect(mounted.host.querySelector('.core-usage')?.textContent).toContain('35.59%'));
+    const content = mounted.host.querySelector('.core-usage')!.textContent!;
+    expect(content).toContain('0%');
+    expect(content).toContain('—');
+    expect(content).not.toMatch(/NaN|Infinity/);
+    expect(content).toContain('实际比例可能更高');
   });
 
   it('只有一个时间选择；切换范围后忽略在途旧报告且不自动生成', async () => {

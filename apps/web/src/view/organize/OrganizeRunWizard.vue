@@ -170,7 +170,7 @@
       </template>
 
       <template v-else-if="preview">
-        <p v-if="preview.options.resourceTypes.includes('file')">{{ t('organizeFile.automatic') }}</p>
+        <p v-if="preview.options.resourceTypes.includes('file') && preview.options.checks.includes('tags')">{{ t('organizeFile.automatic') }}</p>
         <div class="wizard-context"
           ><strong>{{ resourceNames(preview.options.resourceTypes) }}</strong
           ><span>{{ checkNames }} · {{ scopeLabel(preview.options.scope) }}</span></div
@@ -194,8 +194,8 @@
             >
             <div
               ><span>{{ t('organizeWorkspace.aiCount') }}</span
-              ><strong>{{ preview.summary.aiTotal ?? t('organizeLifecycle.undetermined') }}</strong
-              ><small>{{ t('organizeWizard.aiWhenNeeded') }}</small></div
+              ><strong>{{ previewUsesAi ? (preview.summary.aiTotal ?? t('organizeLifecycle.undetermined')) : 0 }}</strong
+              ><small>{{ t(previewUsesAi ? 'organizeWizard.aiWhenNeeded' : 'organizeWizard.noAi') }}</small></div
             ></div
           >
         </section>
@@ -221,13 +221,13 @@
           t('organizeIcons.skippedUnknown', { count: preview.summary.skipped })
         }}</p>
         <p
-          v-if="!preview.summary.aiEnabled && preview.options.checks.some((check) => ['tags', 'title', 'tag_icon'].includes(check))"
+          v-if="!preview.summary.aiEnabled && previewUsesAi"
           class="wizard-hint"
           >{{ t('organizeWorkspace.aiDisabled') }}</p
         >
         <p v-if="!preview.summary.total" class="wizard-hint">{{ t('organizeWizard.noResources') }}</p>
         <p class="wizard-hint">{{ t('organizeWorkspace.confirmHint') }}</p>
-        <p class="wizard-hint">{{ t('organizeLifecycle.billing') }}</p>
+        <p class="wizard-hint">{{ t(previewUsesAi ? 'organizeLifecycle.billing' : 'organizeWizard.ruleOnlyBilling') }}</p>
       </template>
       <p v-if="excludedTypes.length && step > 0 && step < 3" class="wizard-hint" role="status">{{
         t('organizeWizard.excluded', { names: resourceNames(excludedTypes) })
@@ -305,6 +305,13 @@
   const availableChecks = computed(() =>
     checks.filter((check) => props.modelValue.resourceTypes.some((type) => supportsOrganizeCheck(type, check))),
   );
+  const previewUsesAi = computed(() => {
+    const options = props.preview?.options;
+    return options?.checks.some((check) =>
+      ['tags', 'title', 'tag_icon'].includes(check) &&
+      options.resourceTypes.some((type) => supportsOrganizeCheck(type, check)),
+    ) ?? false;
+  });
   const effectiveTypes = computed(() =>
     applicableOrganizeResources(props.modelValue.resourceTypes, props.modelValue.checks),
   );

@@ -1040,6 +1040,7 @@ export const queryNoteList = async (req, res) => {
     }
 
     const whereSql = where.join(' AND ');
+    // 先按资源定位标签关系，再按标签主键读取，避免每篇笔记先扫描标签表。
     let listSql = `
       SELECT
         n.id,
@@ -1071,7 +1072,7 @@ export const queryNoteList = async (req, res) => {
         (
           SELECT JSON_ARRAYAGG(JSON_OBJECT('id', t.id, 'name', t.name))
           FROM resource_tag_relations r
-          INNER JOIN tag t ON r.tag_id = t.id
+          STRAIGHT_JOIN tag t ON r.tag_id = t.id
           WHERE r.resource_type = 'note'
             AND r.resource_id = n.id
             AND t.del_flag = 0
@@ -1683,13 +1684,14 @@ export const updateNoteSort = async (req, res) => {
     ) {
       throw new NoteTreeError('INVALID_SORT_ANCHOR', '目录状态已变化，请刷新后重试', 409);
     }
-    for (const note of normalizedNotes) {
-      const { id, sort } = note;
-      const sql = `UPDATE note
-                      SET sort = ?, update_time = update_time
-                    WHERE id = ? AND create_by = ? AND del_flag = 0 AND parent_id <=> ?`;
-      await connection.query(sql, [sort, id, userId, authoritativeParentId]);
-    }
+    // 校验与锁定完成后一次写入同目录排序，保留内容更新时间。
+    const sortCases = normalizedNotes.map(() => 'WHEN ? THEN ?').join(' ');
+    await connection.query(
+      `UPDATE note
+          SET sort = CASE id ${sortCases} ELSE sort END, update_time = update_time
+        WHERE id IN (${placeholders}) AND create_by = ? AND del_flag = 0 AND parent_id <=> ?`,
+      [...normalizedNotes.flatMap(({ id, sort }) => [id, sort]), ...uniqueIds, userId, authoritativeParentId],
+    );
     await connection.commit(); // 提交事务
     res.send(resultData(null, 200, 'Sort updated successfully'));
   } catch (e) {

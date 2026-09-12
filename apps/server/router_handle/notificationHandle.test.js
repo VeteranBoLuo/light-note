@@ -15,7 +15,7 @@ vi.mock('../util/emailDelivery.js', () => ({
   maskEmail: (value) => String(value).replace(/^(.{2}).*(@.*)$/u, '$1***$2'),
 }));
 
-const { adminDelete, adminEmailStats, adminEmailList, adminEmailDetail, list, unreadCount, markAllRead } =
+const { adminStats, adminList, adminDelete, adminEmailStats, adminEmailList, adminEmailDetail, list, unreadCount, markAllRead } =
   await import('./notificationHandle.js');
 
 const mockRes = () => ({ send: vi.fn() });
@@ -34,14 +34,14 @@ describe('待办提醒通知状态', () => {
           { id: 'n3', type: 'todo_reminder', meta: { todoId: 'todo-deleted' } },
         ],
       ])
+      .mockResolvedValueOnce([[{ total: 3 }]])
+      .mockResolvedValueOnce([[{ unreadTotal: 1 }]])
       .mockResolvedValueOnce([
         [
           { id: 'todo-pending', status: 'pending' },
           { id: 'todo-completed', status: 'completed' },
         ],
-      ])
-      .mockResolvedValueOnce([[{ total: 3 }]])
-      .mockResolvedValueOnce([[{ unreadTotal: 1 }]]);
+      ]);
     const res = mockRes();
 
     await list({ user: { id: 'user-1', role: 'user' }, body: { currentPage: 1, pageSize: 20 } }, res);
@@ -49,9 +49,9 @@ describe('待办提醒通知状态', () => {
     const payload = res.send.mock.calls[0][0];
     expect(payload.status).toBe(200);
     expect(payload.data.items.map((item) => item.todoState)).toEqual(['pending', 'completed', 'unavailable']);
-    expect(query.mock.calls[1][0]).toContain('WHERE user_id = ? AND del_flag = 0 AND id IN (?,?,?)');
-    expect(query.mock.calls[1][1]).toEqual(['user-1', 'todo-pending', 'todo-completed', 'todo-deleted']);
-    for (const callIndex of [0, 2, 3]) {
+    expect(query.mock.calls[3][0]).toContain('WHERE user_id = ? AND del_flag = 0 AND id IN (?,?,?)');
+    expect(query.mock.calls[3][1]).toEqual(['user-1', 'todo-pending', 'todo-completed', 'todo-deleted']);
+    for (const callIndex of [0, 1, 2]) {
       expect(query.mock.calls[callIndex][0]).toContain("JSON_EXTRACT(meta, '$.kind')");
       expect(query.mock.calls[callIndex][0]).toContain("IN ('reply', 'mention')");
     }
@@ -328,5 +328,29 @@ describe('浏览器通知定位', () => {
     await list({ user: { id: 'u1', role: 'user' }, body: { notificationId: 'someone-elses' } }, res);
     expect(res.send.mock.calls[0][0].data).toMatchObject({ targetFound: false, items: [] });
     expect(query).toHaveBeenCalledTimes(4);
+  });
+});
+
+
+describe('通知管理只读优化', () => {
+  beforeEach(() => { query.mockReset(); });
+  it('一次聚合返回完整统计且保留数字转换', async () => {
+    query.mockResolvedValueOnce([[{totalSent:'5',totalRead:'2',totalRecalled:'1',batches:'3'}]]);
+    const res=mockRes();await adminStats({user:{role:'root'}},res);
+    expect(query).toHaveBeenCalledTimes(1);
+    expect(res.send).toHaveBeenCalledWith({status:200,msg:'',data:{totalSent:5,totalRead:2,totalRecalled:1,batches:3}});
+    expect(query.mock.calls[0][1]).toEqual(['system','other']);
+  });
+  it('发送列表与总数并发，完整完成后才返回',async()=>{
+    let finish;query.mockReturnValueOnce(new Promise(resolve=>{finish=resolve;})).mockResolvedValueOnce([[{total:2}]]);
+    const res=mockRes();const done=adminList({user:{role:'root'},body:{currentPage:2,pageSize:5}},res);
+    expect(query).toHaveBeenCalledTimes(2);expect(query.mock.calls[0][1]).toEqual(['system','other',5,5]);
+    await Promise.resolve();expect(res.send).not.toHaveBeenCalled();finish([[{batchId:'legacy',recipients:1}]]);await done;
+    expect(res.send.mock.calls[0][0].data).toEqual({items:[{batchId:'legacy',recipients:1}],total:2,currentPage:2,pageSize:5});
+  });
+  it('发送列表双失败保留第一查询错误',async()=>{
+    query.mockRejectedValueOnce(new Error('list failure')).mockRejectedValueOnce(new Error('count failure'));
+    const res=mockRes();await adminList({user:{role:'root'},body:{}},res);
+    expect(res.send).toHaveBeenCalledWith({status:500,data:null,msg:'获取发送记录失败: list failure'});
   });
 });

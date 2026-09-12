@@ -173,6 +173,7 @@ declare(ADMIN_POLICIES.CONTENT_WRITE, 'file', [
   ['POST', '/file/uploadFiles'],
   ['POST', '/file/confirmUpload'],
   ['POST', '/file/prepareManagedUpload'],
+  ['POST', '/file/managedUploadBatch'],
   ['POST', '/file/confirmManagedUpload'],
   ['POST', '/file/abortManagedUpload'],
   ['POST', '/file/deleteFileById'],

@@ -1002,64 +1002,81 @@ export async function getGrowthDashboard(userId, { userRole = null, db = pool, c
     // 资源计数 + 注册时间(合并成一条查询)。
     // 注册时间兜底:部分早期/root 账号 user.create_time 为 NULL,退而用最早的书签/笔记时间作为"入驻"起点,
     // 避免"陪伴 0 天"。
-    const [[row]] = await db.query(
-      `SELECT
-        (SELECT COUNT(*) FROM bookmark b
-          WHERE b.user_id = ? AND b.del_flag = 0
-            AND NOT EXISTS (
-              SELECT 1 FROM onboarding_seed_resources osr
-              WHERE osr.user_id = b.user_id AND osr.resource_type = 'bookmark' AND osr.resource_id = b.id
-            )) AS bookmarkCount,
-        (SELECT COUNT(*) FROM note n
-          WHERE n.create_by = ? AND n.del_flag = 0
-            AND NOT EXISTS (
-              SELECT 1 FROM onboarding_seed_resources osr
-              WHERE osr.user_id = n.create_by AND osr.resource_type = 'note' AND osr.resource_id = n.id
-            )) AS noteCount,
-        (SELECT COUNT(*) FROM files f
-          WHERE f.create_by = ? AND f.del_flag = 0
-            AND NOT EXISTS (
-              SELECT 1 FROM onboarding_seed_resources osr
-              WHERE osr.user_id = f.create_by AND osr.resource_type = 'file'
-                AND osr.resource_id = CAST(f.id AS CHAR)
-            )) AS fileCount,
-        (SELECT COUNT(*) FROM tag t
-          WHERE t.user_id = ? AND t.del_flag = 0
-            AND NOT EXISTS (
-              SELECT 1 FROM onboarding_seed_resources osr
-              WHERE osr.user_id = t.user_id AND osr.resource_type = 'tag' AND osr.resource_id = t.id
-            )) AS tagCount,
-        (SELECT COUNT(*) FROM todo_items td
-          WHERE td.user_id = ? AND td.del_flag = 0 AND td.status = 'completed') AS completedTodoCount,
-        (SELECT COUNT(*) FROM resource_inbox ri
-          WHERE ri.user_id = ? AND ri.status = 'completed'
-            AND NOT EXISTS (
-              SELECT 1 FROM onboarding_seed_resources osr
-              WHERE osr.user_id = ri.user_id AND osr.resource_type = ri.resource_type
-                AND osr.resource_id = ri.resource_id
-            )) AS organizedResourceCount,
-        (SELECT COUNT(*) FROM resource_inbox ri
-          WHERE ri.user_id = ? AND ri.status = 'pending'
-            AND NOT EXISTS (
-              SELECT 1 FROM onboarding_seed_resources osr
-              WHERE osr.user_id = ri.user_id AND osr.resource_type = ri.resource_type
-                AND osr.resource_id = ri.resource_id
-            )) AS pendingResourceCount,
-        (SELECT create_time FROM user WHERE id = ?) AS createTime,
-        (SELECT MIN(b.create_time) FROM bookmark b
-          WHERE b.user_id = ? AND b.del_flag = 0
-            AND NOT EXISTS (
-              SELECT 1 FROM onboarding_seed_resources osr
-              WHERE osr.user_id = b.user_id AND osr.resource_type = 'bookmark' AND osr.resource_id = b.id
-            )) AS firstBookmark,
-        (SELECT MIN(n.create_time) FROM note n
-          WHERE n.create_by = ? AND n.del_flag = 0
-            AND NOT EXISTS (
-              SELECT 1 FROM onboarding_seed_resources osr
-              WHERE osr.user_id = n.create_by AND osr.resource_type = 'note' AND osr.resource_id = n.id
-            )) AS firstNote`,
-      [userId, userId, userId, userId, userId, userId, userId, userId, userId, userId],
-    );
+    const reads = await Promise.allSettled([
+      db.query(
+        `SELECT
+          (SELECT COUNT(*) FROM bookmark b
+            WHERE b.user_id = ? AND b.del_flag = 0
+              AND NOT EXISTS (
+                SELECT 1 FROM onboarding_seed_resources osr
+                WHERE osr.user_id = b.user_id AND osr.resource_type = 'bookmark' AND osr.resource_id = b.id
+              )) AS bookmarkCount,
+          (SELECT COUNT(*) FROM note n
+            WHERE n.create_by = ? AND n.del_flag = 0
+              AND NOT EXISTS (
+                SELECT 1 FROM onboarding_seed_resources osr
+                WHERE osr.user_id = n.create_by AND osr.resource_type = 'note' AND osr.resource_id = n.id
+              )) AS noteCount,
+          (SELECT COUNT(*) FROM files f
+            WHERE f.create_by = ? AND f.del_flag = 0
+              AND NOT EXISTS (
+                SELECT 1 FROM onboarding_seed_resources osr
+                WHERE osr.user_id = f.create_by AND osr.resource_type = 'file'
+                  AND osr.resource_id = CAST(f.id AS CHAR)
+              )) AS fileCount,
+          (SELECT COUNT(*) FROM tag t
+            WHERE t.user_id = ? AND t.del_flag = 0
+              AND NOT EXISTS (
+                SELECT 1 FROM onboarding_seed_resources osr
+                WHERE osr.user_id = t.user_id AND osr.resource_type = 'tag' AND osr.resource_id = t.id
+              )) AS tagCount,
+          (SELECT COUNT(*) FROM todo_items td
+            WHERE td.user_id = ? AND td.del_flag = 0 AND td.status = 'completed') AS completedTodoCount,
+          (SELECT COUNT(*) FROM resource_inbox ri
+            WHERE ri.user_id = ? AND ri.status = 'completed'
+              AND NOT EXISTS (
+                SELECT 1 FROM onboarding_seed_resources osr
+                WHERE osr.user_id = ri.user_id AND osr.resource_type = ri.resource_type
+                  AND osr.resource_id = ri.resource_id
+              )) AS organizedResourceCount,
+          (SELECT COUNT(*) FROM resource_inbox ri
+            WHERE ri.user_id = ? AND ri.status = 'pending'
+              AND NOT EXISTS (
+                SELECT 1 FROM onboarding_seed_resources osr
+                WHERE osr.user_id = ri.user_id AND osr.resource_type = ri.resource_type
+                  AND osr.resource_id = ri.resource_id
+              )) AS pendingResourceCount,
+          (SELECT create_time FROM user WHERE id = ?) AS createTime,
+          (SELECT MIN(b.create_time) FROM bookmark b
+            WHERE b.user_id = ? AND b.del_flag = 0
+              AND NOT EXISTS (
+                SELECT 1 FROM onboarding_seed_resources osr
+                WHERE osr.user_id = b.user_id AND osr.resource_type = 'bookmark' AND osr.resource_id = b.id
+              )) AS firstBookmark,
+          (SELECT MIN(n.create_time) FROM note n
+            WHERE n.create_by = ? AND n.del_flag = 0
+              AND NOT EXISTS (
+                SELECT 1 FROM onboarding_seed_resources osr
+                WHERE osr.user_id = n.create_by AND osr.resource_type = 'note' AND osr.resource_id = n.id
+              )) AS firstNote`,
+        [userId, userId, userId, userId, userId, userId, userId, userId, userId, userId],
+      ),
+      db.query(
+        `SELECT DISTINCT day FROM growth_events
+         WHERE user_id = ? AND source = 'checkin' AND day IS NOT NULL
+         ORDER BY day ASC`,
+        [userId],
+      ),
+      db.query(
+        `SELECT COALESCE(SUM(amount), 0) AS s FROM growth_events
+         WHERE user_id = ? AND status = 'granted' AND create_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)`,
+        [userId],
+      ),
+    ]);
+    const failed = reads.find((read) => read.status === 'rejected');
+    if (failed) throw failed.reason;
+    const [[[row]], [ckRows], [[wk]]] = reads.map((read) => read.value);
+
     stats.bookmarkCount = Number(row.bookmarkCount || 0);
     stats.noteCount = Number(row.noteCount || 0);
     stats.fileCount = Number(row.fileCount || 0);
@@ -1079,12 +1096,6 @@ export async function getGrowthDashboard(userId, { userRole = null, db = pool, c
     }
 
     // 签到天集合 → 累计签到 + 最长连签(从账本派生,无需新列)
-    const [ckRows] = await db.query(
-      `SELECT DISTINCT day FROM growth_events
-       WHERE user_id = ? AND source = 'checkin' AND day IS NOT NULL
-       ORDER BY day ASC`,
-      [userId],
-    );
     const days = ckRows.map((r) => String(r.day)).filter((d) => d && d !== 'null');
     // 累计签到与最长连签至少不小于当前连签，兼容早期缺少事件的历史账号。
     stats.totalCheckins = Math.max(days.length, stats.currentStreak);
@@ -1092,11 +1103,6 @@ export async function getGrowthDashboard(userId, { userRole = null, db = pool, c
     stats.checkinDays = days; // 签到日期(YYYYMMDD)数组,供前端签到日历高亮
 
     // 近 7 天获得经验
-    const [[wk]] = await db.query(
-      `SELECT COALESCE(SUM(amount), 0) AS s FROM growth_events
-       WHERE user_id = ? AND status = 'granted' AND create_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)`,
-      [userId],
-    );
     stats.weekExp = Number(wk.s || 0);
 
     // 成长足迹:从真实活动派生(书签/笔记/文件 + 升级里程碑),合并按时间倒序取 15。

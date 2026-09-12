@@ -10,9 +10,9 @@ export const coreUsageReportZh = {
   metric: '指标',
   observed: '做过的人',
   eligible: '已满 7 天的人',
-  rate: '比例',
-  status: '能否算准',
-  coverage: '还没等满 7 天，或记录不全、无法确认从何时记录完整时，比例显示“—”，这不代表没人使用。',
+  rate: '已记录比例',
+  status: '记录说明',
+  coverage: '已记录比例 = 做过的人 ÷ 已满 7 天的人。记录可能不全，实际比例可能更高；0% 仅表示未查到记录。没有可统计人数或查询失败时显示“—”。',
   limitation:
     '同一资料的重复操作可能只留一条记录，所以不能反映所有使用。用户从哪里来、是否反复用扩展、是否重新使用旧资料，目前还不能准确判断。',
   metrics: {
@@ -52,10 +52,10 @@ export const coreUsageReportEn = {
   metric: 'Metric',
   observed: 'Observed users',
   eligible: 'Mature sample',
-  rate: 'Rate',
-  status: 'Data status',
+  rate: 'Recorded rate',
+  status: 'Record coverage',
   coverage:
-    'Unknown or incomplete collection coverage keeps observed counts but displays rates as “—”. This does not mean there was no usage.',
+    'Recorded rate = observed users / eligible users. Incomplete records may understate actual usage; 0% means no records were found. No eligible users or a failed query displays “—”.',
   limitation:
     'Core return uses existing success records, which may merge repeat actions. Content reuse, repeat extension saves, acquisition channels and the organization funnel lack reliable linkage.',
   metrics: {

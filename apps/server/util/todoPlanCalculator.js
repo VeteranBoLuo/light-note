@@ -966,6 +966,10 @@ export function calculateTodoPlan(input = {}, options = {}) {
     reminderMoments,
     reminderMomentCount: momentCount,
     reminderJobCount: momentCount * reminder.channels.length,
+    reminderIsOngoing:
+      inferredTaskMode === 'single' && reminder.mode === 'repeat' &&
+      (['completion', 'manual'].includes(reminder.repeat.stop.type) ||
+        (reminder.repeat.stop.type === 'completion_or_due' && !occurrences[0]?.dueAtUtc)),
     theoreticalReminderJobCount,
     nextReminderAt: deliverableMoments[0]?.scheduledAtLocal || null,
     warnings: warnings.filter(

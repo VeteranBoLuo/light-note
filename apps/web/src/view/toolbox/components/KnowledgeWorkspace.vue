@@ -82,7 +82,7 @@
               <SvgIcon :src="icon.toolbox.arrow" size="15" />
             </span>
           </BButton>
-          <BButton v-if="!visitorPreview" class="project-delete-trigger" :disabled="!!deletingId" :loading="deletingId === item.id"
+          <BButton icon-only v-if="!visitorPreview" class="project-delete-trigger" :disabled="!!deletingId" :loading="deletingId === item.id"
             :aria-label="t('toolbox.project.deleteNamed', { title: item.title })" :title="t('toolbox.project.delete')"
             @click="confirmDeleteProject(item)"><SvgIcon :src="icon.toolbox.delete" size="16" /></BButton>
           </article>

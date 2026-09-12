@@ -762,8 +762,9 @@ export const getUserList = async (req, res) => {
     const take = cursorMode ? pageSize + 1 : pageSize;
     // 用户列表头像只用于 30px 左右的缩略展示，不能把历史 Base64 原图带进排序接口。
     // 外部头像地址保留；较大的内嵌头像交给列表使用默认头像，详情接口仍保留完整头像。
-    const [rows] = await pool.query(
-      `SELECT u.id, u.alias, u.email,
+    const [[rows], total] = await Promise.all([
+      pool.query(
+        `SELECT u.id, u.alias, u.email,
               CASE
                 WHEN u.head_picture LIKE 'http://%' OR u.head_picture LIKE 'https://%' THEN u.head_picture
                 WHEN OCTET_LENGTH(u.head_picture) <= ${MAX_INLINE_AVATAR_BYTES} THEN u.head_picture
@@ -781,8 +782,20 @@ export const getUserList = async (req, res) => {
        WHERE ${whereSql}${cursorFilter}
        ORDER BY ${activitySort ? `${sortColumn} IS NULL ASC, ` : ''}${sortColumn} ${direction}, u.id ${direction}
        LIMIT ?${cursorMode ? '' : ' OFFSET ?'}`,
-      [req.user.id, ...filterParams, ...cursorParams, take, ...(cursorMode ? [] : [skip])],
-    );
+        [req.user.id, ...filterParams, ...cursorParams, take, ...(cursorMode ? [] : [skip])],
+      ),
+      !cursorMode || !cursor
+        ? pool.query(
+            `SELECT COUNT(*) AS total
+             FROM user u
+             ${activityWindow === 'all' ? '' : USER_LAST_INTERACTION_JOIN}
+             LEFT JOIN admin_user_remarks aur
+               ON aur.admin_user_id = ? AND aur.target_user_id = u.id
+             WHERE ${whereSql}`,
+            [req.user.id, ...filterParams],
+          ).then(([totalRes]) => Number(totalRes[0].total || 0))
+        : Promise.resolve(undefined),
+    ]);
     const hasMore = cursorMode && rows.length > pageSize;
     const page = cursorMode ? rows.slice(0, pageSize) : rows;
     const ids = page.map((row) => row.id).filter(Boolean);
@@ -840,19 +853,6 @@ export const getUserList = async (req, res) => {
       });
     }
 
-    let total;
-    if (!cursorMode || !cursor) {
-      const [totalRes] = await pool.query(
-        `SELECT COUNT(*) AS total
-         FROM user u
-         ${USER_LAST_INTERACTION_JOIN}
-         LEFT JOIN admin_user_remarks aur
-           ON aur.admin_user_id = ? AND aur.target_user_id = u.id
-         WHERE ${whereSql}`,
-        [req.user.id, ...filterParams],
-      );
-      total = Number(totalRes[0].total || 0);
-    }
     const last = page[page.length - 1];
     const cursorValue = last?.[sortField === 'lastActiveTime' ? 'last_active_time' : 'create_time'];
     return res.send(

@@ -20,3 +20,17 @@ it('预览显示归属、标签、资料与次日截止，更新中仍保留计�
     expect(host.querySelector('.todo-plan-preview__schedule')).not.toBeNull();
   } finally { app.unmount(); }
 });
+
+it.each([true, false])('区分长期提醒与有限次数：ongoing=%s', (ongoing) => {
+  const host = document.createElement('div');
+  const app = createApp({ render: () => h(Preview, {
+    preview: { displaySummary: { title: '打卡', range: '无日期', timing: '', reminder: '每周一到周五提醒' }, occurrenceCount: 1, reminderJobCount: 43, reminderIsOngoing: ongoing } as any,
+  }) });
+  app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
+  app.mount(host);
+  try {
+    expect(host.textContent).toContain(ongoing ? '长期有效' : '43');
+    expect(host.textContent).toContain(ongoing ? '重复期限' : '提醒次数');
+    expect(host.textContent).not.toContain(ongoing ? '43' : '长期有效');
+  } finally { app.unmount(); }
+});

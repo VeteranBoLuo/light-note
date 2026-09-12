@@ -79,10 +79,11 @@
                 block
                 :multiple="true"
                 :raw-file="true"
+                :disabled="submitting"
                 :max-total-size="MAX_FILE_TOTAL_SIZE"
                 @change="(selected) => addFiles(selected, 'picker')"
               >
-                <BButton block class="file-capture__dropzone" @dragover.prevent @drop.prevent.stop="handleDrop">
+                <BButton block class="file-capture__dropzone" :disabled="submitting" @dragover.prevent @drop.prevent.stop="handleDrop">
                   <strong>{{ t('inbox.chooseFiles') }}</strong>
                   <template v-if="!bookmark.isMobile">
                     <span>{{ t('inbox.dropOrPasteFiles') }}</span>
@@ -90,13 +91,14 @@
                   </template>
                 </BButton>
               </BUpload>
+              <p v-if="fileUploadNotice" class="file-upload-status" role="status">{{ fileUploadNotice }}</p>
               <div v-if="files.length" class="file-selection">
                 <div class="file-selection__header">
                   <div>
                     <strong>{{ t('inbox.selectedFiles', { count: files.length }) }}</strong>
                     <span>{{ formatFileSize(totalFileSize) }}</span>
                   </div>
-                  <BButton size="small" @click="clearFiles">{{ t('inbox.clearSelectedFiles') }}</BButton>
+                  <BButton size="small" :disabled="submitting" @click="clearFiles">{{ t('inbox.clearSelectedFiles') }}</BButton>
                 </div>
                 <div class="file-list">
                   <div v-for="(file, index) in files" :key="selectedFileKey(file)" class="file-list__item">
@@ -113,6 +115,7 @@
                     <BButton
                       size="small"
                       class="file-list__remove"
+                      :disabled="submitting"
                       :aria-label="t('inbox.removeSelectedFile', { name: file.name })"
                       @click="removeFile(index)"
                     >
@@ -163,7 +166,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, ref, watch } from 'vue';
+  import { computed, onBeforeUnmount, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
@@ -177,10 +180,10 @@
   import TodoEditorModal from '@/components/todo/TodoEditorModal.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import { apiBasePost } from '@/http/request';
+  import { createManagedUploadBatchRequest, uploadManagedCloudFile, type CloudUploadResult, type ManagedCloudUploadReceipt } from '@/api/cloudFileUploadApi';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
-  import { bookmarkStore, inboxStore, todoStore } from '@/store';
+  import { bookmarkStore, inboxStore, todoStore, useUserStore } from '@/store';
   import {
-    buildCaptureFileMeta,
     buildMarkdownNotePayload,
     detectInboxCaptureType,
     getAvailableQuickCaptureTypes,
@@ -213,6 +216,8 @@
   const { t } = useI18n();
   const router = useRouter();
   const bookmark = bookmarkStore();
+  const user = useUserStore();
+  const captureOwner = computed(() => JSON.stringify([user.id, user.adminContext?.id, user.adminContext?.subjectUserId]));
   const inbox = inboxStore();
   const todo = todoStore();
   const captureType = ref<ActionCaptureType>(inbox.quickCaptureType);
@@ -255,7 +260,23 @@
   }
 
   const content = ref('');
+  let noteOperation: { payload: string; key: string } | null = null;
+  let todoOperation: { payload: string; key: string } | null = null;
+  let captureGeneration = 0;
+  let bookmarkPreflightController: AbortController | null = null;
+  onBeforeUnmount(reset);
+  watch(
+    captureOwner,
+    () => {
+      reset();
+      visible.value = false;
+    },
+    { flush: 'sync' },
+  );
   const files = ref<File[]>([]);
+  const fileUploadNotice = ref('');
+  let fileUploadController: AbortController | null = null;
+  const fileUploadReceipts = new Map<File, ManagedCloudUploadReceipt>();
   const pastedFileKeys = new Set<string>();
   const submitting = ref(false);
   const successText = ref('');
@@ -360,6 +381,7 @@
   }
 
   function addFiles(value: File[], source: 'picker' | 'drop' | 'clipboard' = 'picker') {
+    if (submitting.value) return;
     if (!value.length) return;
     const seenKeys = new Set(files.value.map(selectedFileKey));
     const additions = value.filter((file) => {
@@ -398,12 +420,19 @@
   }
 
   function removeFile(index: number) {
+    if (submitting.value) return;
     const target = files.value[index];
-    if (target) pastedFileKeys.delete(selectedFileKey(target));
+    if (target) {
+      pastedFileKeys.delete(selectedFileKey(target));
+      fileUploadReceipts.delete(target);
+    }
     files.value = files.value.filter((_, fileIndex) => fileIndex !== index);
   }
 
   function clearFiles() {
+    if (submitting.value) return;
+    fileUploadReceipts.clear();
+    fileUploadNotice.value = '';
     files.value = [];
     pastedFileKeys.clear();
   }
@@ -415,7 +444,14 @@
   }
 
   async function collectBookmark() {
-    const urlResult = await preflightBookmarkUrl(content.value, { checkLiveness: true });
+    const generation = captureGeneration;
+    const controller = new AbortController();
+    bookmarkPreflightController = controller;
+    const urlResult = await preflightBookmarkUrl(content.value, { checkLiveness: true, signal: controller.signal });
+    if (bookmarkPreflightController === controller) bookmarkPreflightController = null;
+    if (generation !== captureGeneration) {
+      throw Object.assign(new Error('Capture closed'), { code: 'CAPTURE_CANCELLED' });
+    }
     if (!urlResult.ok || !urlResult.url) {
       const error = new Error(urlResult.message || t('bookmarkUrl.invalid')) as Error & { code?: string };
       if (urlResult.cancelled) error.code = 'BOOKMARK_URL_CANCELLED';
@@ -431,61 +467,101 @@
       addToInbox: true,
       inboxSource: 'quick_capture',
     });
+    if (generation !== captureGeneration) {
+      throw Object.assign(new Error('Capture closed'), { code: 'CAPTURE_CANCELLED' });
+    }
     if (res.status !== 200) throw new Error(res.msg || t('inbox.captureFailed'));
     capturedResource.value = { type: 'bookmark', id: String(res.data?.id || ''), title: url.hostname };
     return res.data?.duplicate ? t('inbox.duplicateRequeued') : t('inbox.captureSuccess');
   }
 
   async function collectNote() {
-    const payload = buildMarkdownNotePayload(content.value, t('inbox.untitledNote'));
-    const res = await apiBasePost('/api/note/addNote', {
-      ...payload,
+    const generation = captureGeneration;
+    const payload = {
+      ...buildMarkdownNotePayload(content.value, t('inbox.untitledNote')),
       addToInbox: true,
       inboxSource: 'quick_capture',
-    });
+    };
+    // 同一输入重试时找回已提交结果，避免响应丢失后重复创建。
+    // 收据只保留在当前草稿内存中；关闭、继续添加或切号后结束本次操作。
+    const identity = JSON.stringify([captureOwner.value, payload]);
+    if (noteOperation?.payload !== identity) {
+      noteOperation = { payload: identity, key: `quick-capture:note:${generateUUID()}` };
+    }
+    const res = await apiBasePost('/api/note/addNote', { ...payload, idempotencyKey: noteOperation.key });
+    if (generation !== captureGeneration) {
+      throw Object.assign(new Error('Capture closed'), { code: 'CAPTURE_CANCELLED' });
+    }
     if (res.status !== 200) throw new Error(res.msg || t('inbox.captureFailed'));
     capturedResource.value = { type: 'note', id: String(res.data?.id || ''), title: payload.title };
     return t('inbox.captureSuccess');
   }
 
   async function collectFiles() {
-    const fileMeta = buildCaptureFileMeta(files.value);
-    const uploadRes = await apiBasePost('/api/file/uploadFiles', { files: fileMeta });
-    if (uploadRes.status !== 200) throw new Error(uploadRes.msg || t('inbox.captureFailed'));
-    const signed = Array.isArray(uploadRes.data) ? uploadRes.data : [];
-    if (signed.length !== files.value.length) throw new Error(t('inbox.captureFailed'));
-    await Promise.all(
-      signed.map(async (info, index) => {
-        const response = await fetch(info.uploadUrl, {
-          method: 'PUT',
-          headers: info.headers || { 'Content-Type': files.value[index].type || 'application/octet-stream' },
-          body: files.value[index],
-        });
-        if (!response.ok) throw new Error(`${files.value[index].name}: ${t('inbox.uploadFailed')}`);
-      }),
-    );
-    const confirmRes = await apiBasePost('/api/file/confirmUpload', {
-      files: fileMeta,
-      folderId: null,
-      addToInbox: true,
-      inboxSource: 'quick_capture',
-    });
-    if (confirmRes.status !== 200) throw new Error(confirmRes.msg || t('inbox.captureFailed'));
-    capturedResource.value = { type: 'file', title: files.value[0]?.name || '' };
-    return t('inbox.captureSuccessCount', { count: files.value.length });
+    const generation = captureGeneration;
+    const batch = [...files.value];
+    const controller = new AbortController();
+    const batchRequest = createManagedUploadBatchRequest();
+    fileUploadController = controller;
+    fileUploadNotice.value = '';
+    const results: Array<CloudUploadResult | null> = batch.map(() => null);
+    let next = 0;
+    // 复用随机对象键、逐文件确认与确认回包恢复，且限制并发。
+    await Promise.all(Array.from({ length: Math.min(3, batch.length) }, async () => {
+      while (!controller.signal.aborted && generation === captureGeneration) {
+        const index = next++;
+        if (index >= batch.length) return;
+        try {
+          const receipt = fileUploadReceipts.get(batch[index]) || {};
+          fileUploadReceipts.set(batch[index], receipt);
+          results[index] = await uploadManagedCloudFile(batch[index], {
+            batchRequest,
+            receipt,
+            addToInbox: true,
+            inboxSource: 'quick_capture',
+            signal: controller.signal,
+          });
+        } catch {
+          // 只保留失败项供用户重试；已确认的文件不重传，也不回滚。
+        }
+      }
+    }));
+    if (generation !== captureGeneration) {
+      throw Object.assign(new Error('Capture closed'), { code: 'CAPTURE_CANCELLED' });
+    }
+    fileUploadController = null;
+    batch.forEach((file, index) => { if (results[index]) fileUploadReceipts.delete(file); });
+    const failed = batch.filter((_, index) => !results[index]);
+    const saved = results.filter((item): item is CloudUploadResult => Boolean(item));
+    if (failed.length) {
+      files.value = failed;
+      const remaining = new Set(failed.map(selectedFileKey));
+      for (const key of pastedFileKeys) if (!remaining.has(key)) pastedFileKeys.delete(key);
+      const hasUnknown = failed.some((file) => fileUploadReceipts.get(file)?.pending);
+      fileUploadNotice.value = t(hasUnknown ? 'inbox.captureFilesUnknown' : 'inbox.captureFilesPartial', { saved: saved.length, failed: failed.length });
+      if (saved.length) {
+        await refreshQuickCaptureStores('file', captureWorkspaceActive('file'), inbox, todo);
+      }
+      throw new Error(fileUploadNotice.value);
+    }
+    capturedResource.value = { type: 'file', title: saved.length === 1 ? saved[0].filename : undefined };
+    return t('inbox.captureSuccessCount', { count: saved.length });
   }
 
   async function submit() {
+    const generation = captureGeneration;
     if (!canSubmit.value || submitting.value) return;
     if (blockGuestWrite('inbox-capture', t('inbox.guestPrompt'))) return;
     submitting.value = true;
     try {
-      successText.value =
+      const result =
         captureType.value === 'bookmark'
           ? await collectBookmark()
           : captureType.value === 'note'
             ? await collectNote()
             : await collectFiles();
+      if (generation !== captureGeneration) return;
+      successText.value = result;
       const operation =
         captureType.value === 'bookmark'
           ? OPERATION_LOG_MAP.inbox.captureBookmark
@@ -503,29 +579,38 @@
         inbox,
         todo,
       );
+      if (generation !== captureGeneration) return;
       emit('captured');
       message.success(successText.value);
     } catch (error: any) {
+      if (generation !== captureGeneration || error?.code === 'CAPTURE_CANCELLED') return;
       if (error?.code !== 'BOOKMARK_URL_CANCELLED') message.error(error?.message || t('inbox.captureFailed'));
     } finally {
-      submitting.value = false;
+      if (generation === captureGeneration) submitting.value = false;
     }
   }
 
   async function submitTodo(payload: TodoCreateInitialValues & { title: string }) {
     if (submitting.value || blockGuestWrite('todo-create', t('inbox.guestPrompt'))) return;
+    const generation = captureGeneration;
     submitting.value = true;
     try {
       const draft = normalizeQuickTodoInitial(payload);
+      const identity = JSON.stringify([captureOwner.value, draft]);
+      if (todoOperation?.payload !== identity) {
+        todoOperation = { payload: identity, key: generateUUID() };
+      }
+      const idempotencyKey = todoOperation.key;
       const preview = await previewTodoPlanV2(draft);
+      if (generation !== captureGeneration) return;
       if (preview.status !== 200 || !preview.data?.previewHash) {
         throw new Error(preview.msg || t('inbox.todoPlanPreviewFailed'));
       }
-      const res = await createTodoPlanV2({
-        ...draft,
-        previewHash: preview.data.previewHash,
-        idempotencyKey: generateUUID(),
-      });
+      const res = await createTodoPlanV2(
+        { ...draft, previewHash: preview.data.previewHash, idempotencyKey },
+        { silent: true },
+      );
+      if (generation !== captureGeneration) return;
       if (res.status !== 200) throw new Error(res.msg || t('inbox.todoSaveFailed'));
       capturedResource.value = {
         type: 'todo',
@@ -535,12 +620,14 @@
       successText.value = t('inbox.todoSaved');
       recordOperation(OPERATION_LOG_MAP.inbox.captureTodo);
       await refreshQuickCaptureStores('todo', captureWorkspaceActive('todo'), inbox, todo);
+      if (generation !== captureGeneration) return;
       emit('captured');
       message.success(successText.value);
     } catch (error: any) {
+      if (generation !== captureGeneration) return;
       message.error(error?.message || t('inbox.todoSaveFailed'));
     } finally {
-      submitting.value = false;
+      if (generation === captureGeneration) submitting.value = false;
     }
   }
 
@@ -599,11 +686,12 @@
   }
 
   async function goInbox() {
+    const target = getQuickCaptureInboxTarget(captureType.value, bookmark.isMobile);
     await closeCurrentMobileOverlayThen(
       () => {
         visible.value = false;
       },
-      () => router.push(getQuickCaptureInboxTarget(captureType.value, bookmark.isMobile)),
+      () => router.push(target),
     );
   }
 
@@ -614,6 +702,8 @@
   }
 
   function continueCapture() {
+    noteOperation = null;
+    todoOperation = null;
     successText.value = '';
     capturedResource.value = null;
     if (captureType.value === 'todo') todoFormKey.value += 1;
@@ -638,6 +728,15 @@
   }
 
   function reset() {
+    bookmarkPreflightController?.abort();
+    bookmarkPreflightController = null;
+    fileUploadController?.abort();
+    fileUploadController = null;
+    fileUploadNotice.value = '';
+    fileUploadReceipts.clear();
+    captureGeneration += 1;
+    noteOperation = null;
+    todoOperation = null;
     content.value = '';
     files.value = [];
     pastedFileKeys.clear();
@@ -664,6 +763,12 @@
     flex-direction: column;
     gap: 16px;
     min-width: 0;
+  }
+
+  .file-upload-status {
+    margin: 12px 0;
+    color: var(--text-color);
+    line-height: 1.6;
   }
 
   .capture-intro {

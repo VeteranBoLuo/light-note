@@ -4,12 +4,13 @@
     :class="`note-detail-loading-state--${variant}`"
     :role="error ? 'alert' : 'status'"
     :aria-live="error ? 'assertive' : 'polite'"
-    :aria-label="error ? t('noteDetail.loadFailedTitle') : t('noteDetail.loadingTitle')"
+    :aria-label="error ? t(unavailable ? 'noteDetail.unavailableTitle' : 'noteDetail.loadFailedTitle') : t('noteDetail.loadingTitle')"
   >
     <div v-if="error" class="note-detail-loading-state__error">
-      <h2>{{ t('noteDetail.loadFailedTitle') }}</h2>
-      <p>{{ t('noteDetail.loadFailedDescription') }}</p>
-      <BButton type="primary" @click="emit('retry')">{{ t('noteDetail.retryLoad') }}</BButton>
+      <h2>{{ t(unavailable ? 'noteDetail.unavailableTitle' : 'noteDetail.loadFailedTitle') }}</h2>
+      <p>{{ t(unavailable ? 'noteDetail.unavailableDescription' : 'noteDetail.loadFailedDescription') }}</p>
+      <BButton v-if="unavailable" type="primary" @click="emit('back')">{{ t('noteDetail.returnToLibrary') }}</BButton>
+      <BButton v-else type="primary" @click="emit('retry')">{{ t('noteDetail.retryLoad') }}</BButton>
     </div>
     <template v-else>
       <span class="sr-only">{{ t('noteDetail.loadingDescription') }}</span>
@@ -50,15 +51,18 @@
     defineProps<{
       variant?: 'page' | 'editor';
       error?: boolean;
+      unavailable?: boolean;
     }>(),
     {
       variant: 'editor',
       error: false,
+      unavailable: false,
     },
   );
 
   const emit = defineEmits<{
     retry: [];
+    back: [];
   }>();
   const { t } = useI18n();
 </script>

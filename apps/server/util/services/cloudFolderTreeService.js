@@ -258,19 +258,22 @@ export async function listOwnedCloudFolders({ userId, filters = {}, database = p
   const [[rows], [fileCountRows]] = await Promise.all([
     database.query(
       `SELECT folders.id, folders.name, folders.parent_id, folders.sort, folders.create_time,
-              COUNT(DISTINCT child.id) AS child_count,
-              COUNT(DISTINCT files.id) AS direct_file_count
+              COALESCE(children.child_count, 0) AS child_count,
+              COALESCE(file_counts.direct_file_count, 0) AS direct_file_count
          FROM folders
-         LEFT JOIN folders child ON child.parent_id = folders.id
-                                AND child.create_by = folders.create_by
-                                AND child.del_flag = 0
-         LEFT JOIN files ON files.folder_id = folders.id
-                        AND files.create_by = folders.create_by
-                        AND files.del_flag = 0
+         LEFT JOIN (
+           SELECT parent_id, COUNT(*) AS child_count
+             FROM folders WHERE create_by = ? AND del_flag = 0
+            GROUP BY parent_id
+         ) children ON children.parent_id = folders.id
+         LEFT JOIN (
+           SELECT folder_id, COUNT(*) AS direct_file_count
+             FROM files WHERE create_by = ? AND del_flag = 0
+            GROUP BY folder_id
+         ) file_counts ON file_counts.folder_id = folders.id
         WHERE folders.create_by = ? AND folders.del_flag = 0
-        GROUP BY folders.id, folders.name, folders.parent_id, folders.sort, folders.create_time
         ORDER BY folders.sort ASC, folders.create_time DESC, folders.id ASC`,
-      [normalizedUserId],
+      [normalizedUserId, normalizedUserId, normalizedUserId],
     ),
     database.query(
       `SELECT COUNT(*) AS all_file_count
@@ -455,11 +458,20 @@ export async function reorderOwnedCloudFolders({ userId, parentId = null, items,
       if (siblingIds.size !== ids.length || ids.some((id) => !siblingIds.has(id))) {
         throw serviceError('FOLDER_SORT_INVALID', '只能对同一层级的全部文件夹进行排序');
       }
-      for (let index = 0; index < ids.length; index += 1) {
-        await connection.query(
-          'UPDATE folders SET sort = ? WHERE id = ? AND create_by = ? AND parent_id <=> ? AND del_flag = 0',
-          [index, ids[index], ownerId, normalizedParentId],
-        );
+      for (const batch of chunkItems(ids.map((id, sort) => ({ id, sort })))) {
+        if (batch.length === 1) {
+          await connection.query(
+            'UPDATE folders SET sort = ? WHERE id = ? AND create_by = ? AND parent_id <=> ? AND del_flag = 0',
+            [batch[0].sort, batch[0].id, ownerId, normalizedParentId],
+          );
+        } else {
+          await connection.query(
+            `UPDATE folders SET sort = CASE id ${batch.map(() => 'WHEN ? THEN ?').join(' ')} ELSE sort END
+              WHERE id IN (${batch.map(() => '?').join(',')})
+                AND create_by = ? AND parent_id <=> ? AND del_flag = 0`,
+            [...batch.flatMap(({ id, sort }) => [id, sort]), ...batch.map(({ id }) => id), ownerId, normalizedParentId],
+          );
+        }
       }
       return { parentId: normalizedParentId == null ? null : String(normalizedParentId), items: ids };
     },

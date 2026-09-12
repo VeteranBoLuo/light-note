@@ -278,6 +278,55 @@ describe('securityV2Handle 安全态势', () => {
     vi.useRealTimers();
   });
 
+  it('主统计失败时不启动可选读取，仍返回原500', async () => {
+    mocks.pool.query.mockRejectedValueOnce(new Error('fixture failure'));
+    const res = createResponse();
+    await getSecurityOverviewV2({ user: { id: 'root', role: 'root' }, body: {} }, res);
+    expect(mocks.pool.query).toHaveBeenCalledTimes(1);
+    expect(res.body).toMatchObject({ status: 500, data: null });
+  });
+
+  it('可选统计同时读取，策略未完成时不提前发布规则模式', async () => {
+    let resolvePolicy;
+    const policy = new Promise((resolve) => {
+      resolvePolicy = resolve;
+    });
+    mocks.pool.query
+      .mockResolvedValueOnce([[{ rawDetections: 1 }]])
+      .mockResolvedValueOnce([[{ total: 2 }]])
+      .mockResolvedValueOnce([[]])
+      .mockResolvedValueOnce([[{ ruleCode: 'TEST', rawHits: 1 }]])
+      .mockResolvedValueOnce([[]])
+      .mockReturnValueOnce(policy);
+    const res = createResponse();
+    const done = getSecurityOverviewV2({ user: { id: 'root', role: 'root' }, body: { days: 1 } }, res);
+    await Promise.resolve();
+    expect(mocks.pool.query).toHaveBeenCalledTimes(6);
+    expect(res.send).not.toHaveBeenCalled();
+    resolvePolicy([[{ ruleCode: 'TEST', mode: 'off', version: 5 }]]);
+    await done;
+    expect(res.body.data.summary).toMatchObject({ policyVersion: 5, rateLimitTriggers: 2 });
+    expect(res.body.data.noisyRules[0].mode).toBe('off');
+  });
+
+  it('可选统计失败只降级该项，其他统计仍返回', async () => {
+    mocks.pool.query
+      .mockResolvedValueOnce([[{ rawDetections: 3 }]])
+      .mockRejectedValueOnce(Object.assign(new Error('fixture failure'), { code: 'ER_NO_SUCH_TABLE' }))
+      .mockResolvedValue([[]]);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const res = createResponse();
+      await getSecurityOverviewV2({ user: { id: 'root', role: 'root' }, body: {} }, res);
+      expect(res.body).toMatchObject({
+        status: 200,
+        data: { summary: { rawDetections: 3, rateLimitTriggers: 0 }, noisyRules: [], reviewQueue: [] },
+      });
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it('最吵规则直接按安全事件聚合，并回传命中量与当前运行模式', async () => {
     mocks.pool.query
       .mockResolvedValueOnce([

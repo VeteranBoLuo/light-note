@@ -134,27 +134,21 @@ See user suggestions, developer replies, and real progress in public. Follow wha
 
 ---
 
-## How it compares
+## What LightNote is for
 
-| Aspect | LightNote | Notion | Cubox | Raindrop |
-|------|------|--------|-------|----------|
-| Bookmarks | ✅ tags + search | ❌ too heavy | ✅ | ✅ |
-| Note writing | ✅ rich text + Markdown | ✅ | ❌ | ❌ |
-| File storage | ✅ cloud + preview | ❌ paid | ❌ | ❌ |
-| Task planning | ✅ list + agenda + calendar | ✅ | ❌ | ❌ |
-| Unified tags | ✅ **cross-type** | ⚠️ per module | ✅ | ❌ |
-| Hosted plan | 🆓 **free to use** | 💰 $10/mo | 💰 ¥10/mo | 💰 $3+/mo |
-| Feel | ⚡ **light & fast** | ❌ slow | ✅ fast | ✅ fast |
+Keep bookmarks, notes, cloud files and tasks in one account. Use tags and search to find your material again, continue editing, or take the next action.
 
-**Not as heavy as the big platforms, not as limited as the single-purpose tools.**
+Core resource management is free to use. AI and cloud storage have usage limits; additional resources follow the in-app store terms. Voluntary support is not required to use existing free features.
 
 ---
 
 ## ⚡ Get started
 
 1. Open **[boluo66.top](https://boluo66.top)**
-2. Sign up (30 seconds)
-3. Start organizing your digital odds and ends
+2. Register or sign in to your own account
+3. Save one item of your own, open it to check the result, and find it by name next time.
+
+[Saving, finding and browser extension guide (Chinese)](docs/getting-started.md)
 
 Desktop + mobile, with cloud sync — it follows you wherever you go.
 

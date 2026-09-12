@@ -302,3 +302,25 @@ describe('用户管理真实交互口径', () => {
     expect(normalized(query.mock.calls[0][0])).not.toContain('u.last_active_time');
   });
 });
+
+
+describe('用户列表总数的活跃表依赖',()=>{
+ beforeEach(()=>{query.mockReset();});
+ it('未筛选活跃时间时COUNT省略关联，列表仍保留真实活跃时间',async()=>{
+  query.mockResolvedValueOnce([[]]).mockResolvedValueOnce([[{total:0}]]);
+  const res=mockRes();await getUserList({user:{id:'root',role:'root'},body:{cursor:null,limit:10,filters:{}}},res);
+  expect(res.send.mock.calls[0][0].status).toBe(200);
+  expect(normalized(query.mock.calls[0][0])).toContain('LEFT JOIN user_activity_daily ua');
+  expect(normalized(query.mock.calls[1][0])).not.toContain('user_activity_daily');
+  expect(query.mock.calls[1][1]).toEqual(['root','','','']);
+ });
+});
+
+
+it('用户首屏在列表返回前启动COUNT，等待两项完成',async()=>{
+ query.mockReset();let finish;
+ query.mockReturnValueOnce(new Promise(resolve=>{finish=resolve;})).mockResolvedValueOnce([[{total:0}]]);
+ const res=mockRes();const done=getUserList({user:{id:'root',role:'root'},body:{cursor:null,limit:10,filters:{}}},res);
+ expect(query).toHaveBeenCalledTimes(2);await Promise.resolve();expect(res.send).not.toHaveBeenCalled();
+ finish([[]]);await done;expect(res.send.mock.calls[0][0].data.total).toBe(0);
+});

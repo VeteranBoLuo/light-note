@@ -17,13 +17,14 @@
     <template #header-actions>
       <BTooltip :title="t('inbox.deleteTodo')" :disabled="bookmark.isMobile || disabled || deleting" :delay="80">
         <BButton
+          icon-only
           class="todo-preview__action todo-preview__delete"
           :aria-label="t('inbox.deleteTodo')"
           :disabled="disabled || deleting"
           :loading="deleting"
           @click="requestDelete"
         >
-          <SvgIcon v-if="!deleting" :src="icon.table_delete" size="17" aria-hidden="true" />
+          <SvgIcon :src="icon.table_delete" size="17" aria-hidden="true" />
         </BButton>
       </BTooltip>
       <BTooltip v-if="item.status !== 'completed'" :title="t('inbox.editTodo')" :disabled="bookmark.isMobile || disabled || deleting" :delay="80">

@@ -194,6 +194,7 @@
                       <div class="timeline-meta">
                         <time>{{ formatDate(update.createTime) }}</time>
                         <BButton
+                          icon-only
                           v-if="isRoot && canDeleteTimelineUpdate(update)"
                           class="timeline-delete"
                           size="small"

@@ -123,7 +123,7 @@
                   ? t('noteTransfer.awaitingReview', { count: record.itemCount })
                   : record.itemCount
                     ? t('noteTransfer.done', { done: record.completedCount || 0, total: record.itemCount })
-                    : t(`noteTransfer.status.${record.status}`)
+                    : t(`noteTransfer.status.${importDisplayStatus(record)}`)
               }}</span>
             </span>
             <span class="note-transfer__record-aside">
@@ -132,7 +132,7 @@
                 :data-status="record.status === 'completed' && record.failedCount > 0 ? 'partial' : record.status"
                 >{{
                   t(
-                    `noteTransfer.status.${record.status === 'completed' && record.failedCount > 0 ? 'partial' : record.status}`,
+                    `noteTransfer.status.${importDisplayStatus(record)}`,
                   )
                 }}</span
               >
@@ -224,7 +224,7 @@
                 task.status === 'review'
                   ? t('noteTransfer.reviewHeading')
                   : ['uploading', 'parsing', 'queued'].includes(task.status)
-                    ? t(`noteTransfer.status.${task.status}`)
+                    ? t(`noteTransfer.status.${taskDisplayStatus}`)
                     : t('noteTransfer.done', {
                         done: task.items.filter((i) => i.status === 'completed').length,
                         total: task.items.filter((i) => i.selected).length,
@@ -251,13 +251,13 @@
               "
               >{{
                 t(
-                  `noteTransfer.status.${task.status === 'completed' && task.items.some((i) => i.status === 'failed') ? 'partial' : task.status}`,
+                  `noteTransfer.status.${taskDisplayStatus}`,
                 )
               }}</span
             >
           </div>
           <p v-if="task.errorCode" class="note-transfer__error"
-            >{{ t('noteTransfer.failed') }} ({{ task.errorCode }})</p
+            >{{ t(noteImportErrorKey(task.errorCode)) }}</p
           >
           <div class="note-transfer__destination"
             ><SvgIcon :src="icon.common.folderOutline" size="19" /><div class="note-transfer__destination-copy"
@@ -292,7 +292,7 @@
                 >
                 <NoteImportWarnings :item="item" />
                 <p v-if="item.errorCode" class="note-transfer__error"
-                  >{{ t('noteTransfer.failed') }} ({{ item.errorCode }})</p
+                  >{{ t(noteImportErrorKey(item.errorCode)) }}</p
                 >
               </div>
               <div class="note-transfer__item-actions"
@@ -404,6 +404,7 @@
   </BModal>
 </template>
 <script setup lang="ts">
+  import { noteImportErrorKey } from '@/utils/noteImportError';
   import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
@@ -542,12 +543,25 @@
       ? 'min(800px, 94vw)'
       : 'min(600px, 94vw)',
   );
+  function importDisplayStatus(current: {
+    status: string;
+    uploadBytes?: number;
+    failedCount?: number;
+    items?: NoteImportItem[];
+  }) {
+    if (current.status === 'uploading' && current.uploadBytes) return 'uploaded';
+    if (current.status === 'completed' && (current.failedCount || current.items?.some((item) => item.status === 'failed')))
+      return 'partial';
+    return current.status;
+  }
+  const taskDisplayStatus = computed(() => task.value ? importDisplayStatus(task.value) : 'uploading');
   const stepIndex = computed(() =>
     !task.value || ['uploading', 'parsing'].includes(task.value.status) ? 0 : task.value.status === 'review' ? 1 : 2,
   );
   let taskRevision = 0;
   let taskFlight: symbol | null = null,
     recordsFlight: symbol | null = null;
+  let pendingUploadTaskId: string | null = null;
   let generation = 0,
     timer: ReturnType<typeof setTimeout> | undefined;
   const scopeOptions = computed(() => [
@@ -594,6 +608,7 @@
   }
   function reset() {
     generation++;
+    pendingUploadTaskId = null;
     taskFlight = null;
     recordsFlight = null;
     busy.value = false;
@@ -749,8 +764,19 @@
       )
         throw new Error();
       const g = generation;
+      if (pendingUploadTaskId) {
+        const recovered = await call('detail', { id: pendingUploadTaskId });
+        if (g !== generation) return;
+        task.value = recovered;
+        if (recovered.status !== 'uploading' || recovered.uploadBytes) {
+          pendingUploadTaskId = null;
+          schedule();
+          return;
+        }
+      }
       const created = task.value?.status === 'uploading' && !task.value.uploadBytes ? task.value : await call('create');
       if (g !== generation) return;
+      pendingUploadTaskId = created.id;
       uploadState.value = { name: files.map((file) => file.name).join('、'), percent: null, received: false };
       const form = new FormData();
       files.forEach((file) => form.append('files', file));
@@ -768,7 +794,21 @@
         });
         if (r.status !== 200) throw Object.assign(new Error(), { code: r.data?.errorCode });
       } catch (cause: any) {
-        if (g === generation) uploadState.value = null;
+        if (g === generation) {
+          uploadState.value = null;
+          try {
+            const recovered = await call('detail', { id: created.id });
+            if (g === generation) {
+              task.value = recovered;
+              if (recovered.status !== 'uploading' || recovered.uploadBytes) {
+                pendingUploadTaskId = null;
+                return;
+              }
+            }
+          } catch {
+            // Retain the task id while offline; the next explicit retry checks it first.
+          }
+        }
         throw Object.assign(new Error(), { uploadFailure: true, code: cause?.code });
       }
       if (g !== generation) return;
@@ -777,6 +817,7 @@
       const detail = await call('detail', { id: created.id });
       if (g !== generation) return;
       task.value = detail;
+      pendingUploadTaskId = null;
       uploadState.value = null;
       schedule();
     });

@@ -350,19 +350,28 @@ async function queryHotTags(userId) {
 }
 
 async function queryRecentNotes(userId) {
+  // UUID IDs: convert the bounded lookup side for the legacy relation index,
+  // then retain the common-collation equality check used across resource domains.
   const [rows] = await pool.query(
     `
       SELECT
         n.id,
         n.title,
-        COALESCE(n.update_time, n.create_time) AS updateTime,
+        n.updateTime,
         COUNT(ntr.tag_id) AS tagCount
-      FROM note n
-      LEFT JOIN resource_tag_relations ntr ON n.id = ntr.resource_id AND ntr.resource_type = 'note'
-      WHERE n.create_by = ? AND n.del_flag = 0
-      GROUP BY n.id
-      ORDER BY n.sort, COALESCE(n.update_time, n.create_time) DESC
-      LIMIT 10
+      FROM (
+        SELECT id, title, COALESCE(update_time, create_time) AS updateTime
+        FROM note
+        WHERE create_by = ? AND del_flag = 0
+        ORDER BY COALESCE(update_time, create_time) DESC, id DESC
+        LIMIT 10
+      ) n
+      LEFT JOIN resource_tag_relations ntr
+        ON ntr.resource_type = 'note'
+        AND ntr.resource_id = CONVERT(n.id USING utf8)
+        AND n.id = CONVERT(ntr.resource_id USING utf8mb4) COLLATE utf8mb4_unicode_ci
+      GROUP BY n.id, n.title, n.updateTime
+      ORDER BY n.updateTime DESC, n.id DESC
     `,
     [userId],
   );

@@ -74,3 +74,35 @@ describe('bookmarkHandle 资源主体与错误边界', () => {
     expect(updateSource).not.toContain('resultData(null, 500, error.message)');
   });
 });
+
+describe('书签详情响应边界', () => {
+  it('按认证归属返回可序列化的详情', async () => {
+    const { default: pool } = await import('../db/index.js');
+    const { getBookmarkDetail } = await import('./bookmarkHandle.js');
+    const query = vi.spyOn(pool, 'query').mockResolvedValueOnce([[{
+      id: 'bookmark-1', name: '手填名称', description: '手填说明', url: 'https://example.com',
+    }]]);
+    try {
+      const send = vi.fn();
+      await getBookmarkDetail({ body: { filters: { id: 'bookmark-1' }, userId: 'untrusted' }, user: { id: 'login' }, resourceUser: { id: 'owner' } }, { send });
+      expect(query.mock.calls[0][1]).toEqual(['bookmark-1', 'owner']);
+      expect(send.mock.calls[0][0]).toMatchObject({ status: 200, data: { name: '手填名称', description: '手填说明' } });
+      expect(() => JSON.stringify(send.mock.calls[0][0])).not.toThrow();
+    } finally { query.mockRestore(); }
+  });
+
+  it('不存在或不属于当前账号时返回 404，数据库故障不泄露内部错误', async () => {
+    const { default: pool } = await import('../db/index.js');
+    const { getBookmarkDetail } = await import('./bookmarkHandle.js');
+    const query = vi.spyOn(pool, 'query').mockResolvedValueOnce([[]]).mockRejectedValueOnce(new Error('private SQL failure'));
+    try {
+      const send = vi.fn();
+      const req = { body: { filters: { id: 'missing' } }, user: { id: 'owner' } };
+      await getBookmarkDetail(req, { send });
+      expect(send.mock.calls[0][0]).toMatchObject({ status: 404, data: null });
+      await getBookmarkDetail(req, { send });
+      expect(send.mock.calls[1][0]).toMatchObject({ status: 500, msg: '获取书签失败，请稍后重试' });
+      expect(JSON.stringify(send.mock.calls[1][0])).not.toContain('private SQL');
+    } finally { query.mockRestore(); }
+  });
+});

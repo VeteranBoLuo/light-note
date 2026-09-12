@@ -66,6 +66,7 @@ export async function importBookmarksWithTags(connection, { userId, items = [] }
     affectedBookmarkIds: [],
   };
 
+  const processedRelations = new Map();
   for (const rawItem of sourceItems) {
     const item = normalizeImportItem(rawItem);
     const resolution = inspectBookmarkUrl(item.url, { allowTextExtraction: false });
@@ -111,13 +112,19 @@ export async function importBookmarksWithTags(connection, { userId, items = [] }
     }
     stats.affectedBookmarkIds.push(bookmarkId);
 
+    // A successful INSERT IGNORE already holds the existing/new relation locks
+    // until commit. Repeated input pairs cannot add another relation in this transaction.
+    const processedTagIds = processedRelations.get(bookmarkId) || new Set();
+    const pendingTagIds = tagIds.filter((tagId) => !processedTagIds.has(tagId));
     const inserted = await insertResourceTagRelations(connection, {
-      tagIds,
+      tagIds: pendingTagIds,
       resourceType: RESOURCE_TYPE.BOOKMARK,
       resourceId: bookmarkId,
       userId,
       source: 'import',
     });
+    pendingTagIds.forEach((tagId) => processedTagIds.add(tagId));
+    processedRelations.set(bookmarkId, processedTagIds);
     stats.boundRelations += Number(inserted || 0);
   }
 

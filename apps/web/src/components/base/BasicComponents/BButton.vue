@@ -7,8 +7,14 @@
     :disabled="disabled || loading"
     :aria-busy="loading || undefined"
   >
-    <span v-if="loading" class="btn-spinner" aria-hidden="true"></span>
-    <slot></slot>
+    <span v-if="iconOnly" class="btn-icon">
+      <span class="btn-icon-content" :class="{ 'is-loading': loading }" :aria-hidden="loading || undefined"><slot></slot></span>
+      <span v-if="loading" class="btn-spinner" aria-hidden="true"></span>
+    </span>
+    <template v-else>
+      <span v-if="loading" class="btn-spinner" aria-hidden="true"></span>
+      <slot></slot>
+    </template>
   </button>
 </template>
 
@@ -29,6 +35,10 @@
       default: '',
     },
     loading: {
+      type: Boolean,
+      default: false,
+    },
+    iconOnly: {
       type: Boolean,
       default: false,
     },
@@ -187,6 +197,34 @@
     border-radius: 50%;
     animation: btn-spin 0.6s linear infinite;
     flex-shrink: 0;
+  }
+
+  // 保留原图标的占位，转圈覆盖同一盒子，不参与横向挤压。
+  .btn-icon {
+    position: relative;
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .btn-icon-content {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .btn-icon-content.is-loading {
+    visibility: hidden;
+  }
+
+  .btn-icon > .btn-spinner {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    box-sizing: border-box;
   }
 
   @keyframes btn-spin {

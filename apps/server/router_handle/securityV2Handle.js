@@ -222,83 +222,85 @@ export const getSecurityOverviewV2 = async (req, res) => {
        WHERE created_at >= ?`,
       [cutoff],
     );
-    const rateRows = await queryOptionalRows(
-      'overview rate-limit',
-      `SELECT COUNT(*) AS total
-       FROM api_logs
-       WHERE request_time >= ? AND status_code = '429'`,
-      [cutoff],
-    );
-    const trendRows = await queryOptionalRows(
-      'overview trend',
-      `SELECT DATE_FORMAT(created_at, '%Y-%m-%d') AS statDate,
-              COUNT(*) AS raw,
-              COALESCE(SUM(disposition = 'confirmed_attack'), 0) AS confirmed,
-              COALESCE(SUM(disposition = 'false_positive'), 0) AS falsePositive,
-              COALESCE(SUM(disposition = 'benign_anomaly'), 0) AS benignAnomaly,
-              COALESCE(SUM(disposition = 'authorized_test'), 0) AS authorizedTest
-       FROM security_events
-       WHERE created_at >= ?
-       GROUP BY DATE_FORMAT(created_at, '%Y-%m-%d')
-       ORDER BY MIN(created_at)`,
-      [cutoff],
-    );
-    const noisyRuleRows = await queryOptionalRows(
-      'overview noisy rules',
-      `SELECT COALESCE(NULLIF(e.primary_rule_code, ''), NULLIF(e.matched_rule, ''), e.attack_type) AS ruleCode,
-              MAX(COALESCE(r.rule_name, NULLIF(e.matched_rule, ''), e.attack_type)) AS ruleName,
-              COUNT(*) AS rawHits,
-              COALESCE(SUM(e.disposition = 'confirmed_attack'), 0) AS confirmedHits,
-              COALESCE(SUM(e.disposition = 'false_positive'), 0) AS falsePositiveHits,
-              ROUND(100 * COALESCE(SUM(e.disposition = 'false_positive'), 0) /
-                NULLIF(COALESCE(SUM(e.disposition IN ('confirmed_attack','false_positive','benign_anomaly')), 0), 0)) AS falsePositiveRate,
-              SUBSTRING_INDEX(GROUP_CONCAT(e.request_path ORDER BY e.created_at DESC SEPARATOR ','), ',', 1) AS primaryRoute
-       FROM security_events e
-       LEFT JOIN security_rules r
-         ON r.rule_code = COALESCE(NULLIF(e.primary_rule_code, ''), NULLIF(e.matched_rule, ''), e.attack_type)
-       WHERE e.created_at >= ?
-         AND COALESCE(NULLIF(e.primary_rule_code, ''), NULLIF(e.matched_rule, ''), e.attack_type) IS NOT NULL
-       GROUP BY COALESCE(NULLIF(e.primary_rule_code, ''), NULLIF(e.matched_rule, ''), e.attack_type)
-       ORDER BY falsePositiveRate DESC, rawHits DESC
-       LIMIT 5`,
-      [cutoff],
-    );
-    const reviewRows = await queryOptionalRows(
-      'overview review queue',
-      `SELECT
-         SUBSTRING_INDEX(GROUP_CONCAT(e.event_id ORDER BY e.created_at DESC SEPARATOR ','), ',', 1) AS representativeEventId,
-         MAX(COALESCE(NULLIF(e.primary_rule_code, ''), e.matched_rule, e.attack_type)) AS ruleCode,
-         MAX(e.matched_rule) AS ruleName,
-         MAX(e.request_path) AS requestPath,
-         MAX(e.request_method) AS requestMethod,
-         MAX(COALESCE(NULLIF(e.user_id, ''), e.source_ip, 'anonymous')) AS actorKey,
-         MAX(COALESCE(u.alias, u.email, e.user_id, '匿名来源')) AS actorLabel,
-         MAX(e.source_ip) AS sourceIp,
-         COUNT(*) AS hitCount,
-         MAX(e.threat_score) AS maxScore,
-         MAX(e.confidence) AS confidence,
-         MAX(e.blocked) AS blocked,
-         MAX(e.created_at) AS lastSeenAt,
-         MIN(e.created_at) AS firstSeenAt
-       FROM security_events e
-       LEFT JOIN user u ON u.id = e.user_id
-       WHERE e.created_at >= ? AND e.disposition = 'unknown' AND e.workflow_status IN ('new','reviewing')
-       GROUP BY COALESCE(NULLIF(e.cluster_key, ''), CONCAT(COALESCE(e.primary_rule_code, e.matched_rule, e.attack_type), '|', e.request_path, '|', COALESCE(NULLIF(e.user_id, ''), e.source_ip), '|', FLOOR(UNIX_TIMESTAMP(e.created_at) / 300)))
-       ORDER BY maxScore DESC, lastSeenAt DESC
-       LIMIT 5`,
-      [cutoff],
-    );
-    const policyRows = await queryOptionalRows(
-      'overview active policies',
-      `SELECT o.rule_code AS ruleCode, o.mode, o.version
-       FROM security_rule_overrides o
-       JOIN (
-         SELECT rule_code, MAX(id) AS id
-         FROM security_rule_overrides
-         WHERE enabled = 1 AND (expires_at IS NULL OR expires_at > NOW())
-         GROUP BY rule_code
-       ) latest ON latest.id = o.id`,
-    );
+    const [rateRows, trendRows, noisyRuleRows, reviewRows, policyRows] = await Promise.all([
+      queryOptionalRows(
+        'overview rate-limit',
+        `SELECT COUNT(*) AS total
+         FROM api_logs
+         WHERE request_time >= ? AND status_code = '429'`,
+        [cutoff],
+      ),
+      queryOptionalRows(
+        'overview trend',
+        `SELECT DATE_FORMAT(created_at, '%Y-%m-%d') AS statDate,
+                COUNT(*) AS raw,
+                COALESCE(SUM(disposition = 'confirmed_attack'), 0) AS confirmed,
+                COALESCE(SUM(disposition = 'false_positive'), 0) AS falsePositive,
+                COALESCE(SUM(disposition = 'benign_anomaly'), 0) AS benignAnomaly,
+                COALESCE(SUM(disposition = 'authorized_test'), 0) AS authorizedTest
+         FROM security_events
+         WHERE created_at >= ?
+         GROUP BY DATE_FORMAT(created_at, '%Y-%m-%d')
+         ORDER BY MIN(created_at)`,
+        [cutoff],
+      ),
+      queryOptionalRows(
+        'overview noisy rules',
+        `SELECT COALESCE(NULLIF(e.primary_rule_code, ''), NULLIF(e.matched_rule, ''), e.attack_type) AS ruleCode,
+                MAX(COALESCE(r.rule_name, NULLIF(e.matched_rule, ''), e.attack_type)) AS ruleName,
+                COUNT(*) AS rawHits,
+                COALESCE(SUM(e.disposition = 'confirmed_attack'), 0) AS confirmedHits,
+                COALESCE(SUM(e.disposition = 'false_positive'), 0) AS falsePositiveHits,
+                ROUND(100 * COALESCE(SUM(e.disposition = 'false_positive'), 0) /
+                  NULLIF(COALESCE(SUM(e.disposition IN ('confirmed_attack','false_positive','benign_anomaly')), 0), 0)) AS falsePositiveRate,
+                SUBSTRING_INDEX(GROUP_CONCAT(e.request_path ORDER BY e.created_at DESC SEPARATOR ','), ',', 1) AS primaryRoute
+         FROM security_events e
+         LEFT JOIN security_rules r
+           ON r.rule_code = COALESCE(NULLIF(e.primary_rule_code, ''), NULLIF(e.matched_rule, ''), e.attack_type)
+         WHERE e.created_at >= ?
+           AND COALESCE(NULLIF(e.primary_rule_code, ''), NULLIF(e.matched_rule, ''), e.attack_type) IS NOT NULL
+         GROUP BY COALESCE(NULLIF(e.primary_rule_code, ''), NULLIF(e.matched_rule, ''), e.attack_type)
+         ORDER BY falsePositiveRate DESC, rawHits DESC
+         LIMIT 5`,
+        [cutoff],
+      ),
+      queryOptionalRows(
+        'overview review queue',
+        `SELECT
+           SUBSTRING_INDEX(GROUP_CONCAT(e.event_id ORDER BY e.created_at DESC SEPARATOR ','), ',', 1) AS representativeEventId,
+           MAX(COALESCE(NULLIF(e.primary_rule_code, ''), e.matched_rule, e.attack_type)) AS ruleCode,
+           MAX(e.matched_rule) AS ruleName,
+           MAX(e.request_path) AS requestPath,
+           MAX(e.request_method) AS requestMethod,
+           MAX(COALESCE(NULLIF(e.user_id, ''), e.source_ip, 'anonymous')) AS actorKey,
+           MAX(COALESCE(u.alias, u.email, e.user_id, '匿名来源')) AS actorLabel,
+           MAX(e.source_ip) AS sourceIp,
+           COUNT(*) AS hitCount,
+           MAX(e.threat_score) AS maxScore,
+           MAX(e.confidence) AS confidence,
+           MAX(e.blocked) AS blocked,
+           MAX(e.created_at) AS lastSeenAt,
+           MIN(e.created_at) AS firstSeenAt
+         FROM security_events e
+         LEFT JOIN user u ON u.id = e.user_id
+         WHERE e.created_at >= ? AND e.disposition = 'unknown' AND e.workflow_status IN ('new','reviewing')
+         GROUP BY COALESCE(NULLIF(e.cluster_key, ''), CONCAT(COALESCE(e.primary_rule_code, e.matched_rule, e.attack_type), '|', e.request_path, '|', COALESCE(NULLIF(e.user_id, ''), e.source_ip), '|', FLOOR(UNIX_TIMESTAMP(e.created_at) / 300)))
+         ORDER BY maxScore DESC, lastSeenAt DESC
+         LIMIT 5`,
+        [cutoff],
+      ),
+      queryOptionalRows(
+        'overview active policies',
+        `SELECT o.rule_code AS ruleCode, o.mode, o.version
+         FROM security_rule_overrides o
+         JOIN (
+           SELECT rule_code, MAX(id) AS id
+           FROM security_rule_overrides
+           WHERE enabled = 1 AND (expires_at IS NULL OR expires_at > NOW())
+           GROUP BY rule_code
+         ) latest ON latest.id = o.id`,
+      ),
+    ]);
     const summary = summaryRows[0] || {};
     const reviewedDenominator =
       Number(summary.confirmedAttacks || 0) +

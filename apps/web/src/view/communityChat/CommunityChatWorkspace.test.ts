@@ -2846,7 +2846,7 @@ describe('CommunityChatWorkspace', () => {
     const optimistic = host.querySelector('.community-message.is-sending');
     expect(optimistic?.textContent).toContain('网络慢时也立即出现');
     expect(host.querySelector('.community-composer__send .btn-spinner')).not.toBeNull();
-    expect(host.querySelector('.community-composer__send .svg-icon-stub')).toBeNull();
+    expect(host.querySelector('.community-composer__send .btn-icon-content')?.getAttribute('aria-hidden')).toBe('true');
 
     request.resolve({
       data: {

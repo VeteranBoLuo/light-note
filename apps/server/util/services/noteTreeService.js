@@ -567,15 +567,31 @@ function assertValidMoveAnchors(nodes, { movedId, previousId, nextId }) {
 }
 
 async function updateSiblingSort(connection, { userId, parentId, rows, skipId = null }) {
+  const changes = rows.flatMap((row, sort) =>
+    row.id === skipId || numberOrZero(row.sort) === sort ? [] : [{ id: row.id, sort }],
+  );
   let updatedCount = 0;
-  for (const [index, row] of rows.entries()) {
-    if (row.id === skipId || numberOrZero(row.sort) === index) continue;
-    const [result] = await connection.query(
-      `UPDATE note
-          SET sort = ?, update_time = update_time
-        WHERE id = ? AND create_by = ? AND del_flag = 0 AND parent_id <=> ?`,
-      [index, row.id, userId, parentId],
-    );
+  // 大目录按块写入；调用方持有整棵树的锁，且所有块仍属于同一事务。
+  for (let offset = 0; offset < changes.length; offset += 500) {
+    const batch = changes.slice(offset, offset + 500);
+    let result;
+    if (batch.length === 1) {
+      [result] = await connection.query(
+        `UPDATE note
+            SET sort = ?, update_time = update_time
+          WHERE id = ? AND create_by = ? AND del_flag = 0 AND parent_id <=> ?`,
+        [batch[0].sort, batch[0].id, userId, parentId],
+      );
+    } else {
+      [result] = await connection.query(
+        `UPDATE note
+            SET sort = CASE id ${batch.map(() => 'WHEN ? THEN ?').join(' ')} ELSE sort END,
+                update_time = update_time
+          WHERE id IN (${batch.map(() => '?').join(',')})
+            AND create_by = ? AND del_flag = 0 AND parent_id <=> ?`,
+        [...batch.flatMap(({ id, sort }) => [id, sort]), ...batch.map(({ id }) => id), userId, parentId],
+      );
+    }
     updatedCount += Number(result?.affectedRows || 0);
   }
   return updatedCount;
@@ -769,6 +785,12 @@ export async function moveOwnedNoteNodes(
       rows.push(...roots.filter((root) => Boolean(targetTopById.get(root.id)) === Boolean(group.isTop)));
     }
 
+    // 非选中兄弟始终位于追加的移动根节点之前，先按原位置批量收口排序。
+    updatedCount += await updateSiblingSort(db, {
+      userId: normalizedUserId,
+      parentId: group.parentId,
+      rows: rows.filter((row) => !movingRootIds.has(row.id)),
+    });
     for (const [sort, row] of rows.entries()) {
       if (movingRootIds.has(row.id)) {
         desiredRootSort.set(row.id, sort);
@@ -794,15 +816,6 @@ export async function moveOwnedNoteNodes(
         updatedCount += 1;
         continue;
       }
-
-      if (numberOrZero(row.sort) === sort) continue;
-      const [result] = await db.query(
-        `UPDATE note
-            SET sort = ?, update_time = update_time
-          WHERE id = ? AND create_by = ? AND del_flag = 0 AND parent_id <=> ?`,
-        [sort, row.id, normalizedUserId, group.parentId],
-      );
-      updatedCount += Number(result?.affectedRows || 0);
     }
   }
 

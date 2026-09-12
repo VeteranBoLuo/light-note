@@ -76,10 +76,15 @@
         </div>
 
         <!-- 文件预览内容 -->
-        <div :style="{ opacity: loading ? '0' : '1' }" class="preview-main flex-center">
+        <!-- 失败时保留容器尺寸，Office 重试初始化需要测量实际宽高。 -->
+        <div
+          :style="{ opacity: loading ? '0' : '1', visibility: error ? 'hidden' : 'visible' }"
+          class="preview-main flex-center"
+        >
           <!-- 1. PDF预览 -->
           <PdfPreview
             v-if="(previewType === 'pdf' || previewType === 'converted-pdf') && effectiveFileUrl"
+            :key="previewAttempt"
             :src="effectiveFileUrl"
             :file-name="fileInfo.fileName"
             class="preview-pdf-viewer"
@@ -189,6 +194,7 @@
             @click.capture="handleOfficeLink"
           >
             <VueOfficeDocx
+              :key="previewAttempt"
               :src="effectiveFileUrl"
               @rendered="onRendered"
               @error="onOfficeError"
@@ -199,6 +205,7 @@
           <!-- 5. Excel预览 -->
           <div v-else-if="previewType === 'excel'" class="office-preview-container">
             <VueOfficeExcel
+              :key="previewAttempt"
               :src="effectiveFileUrl"
               @rendered="onRendered"
               @error="onOfficeError"
@@ -209,6 +216,7 @@
           <!-- 6. PPT预览 -->
           <div v-else-if="previewType === 'ppt'" class="office-preview-container">
             <VueOfficePptx
+              :key="previewAttempt"
               :src="effectiveFileUrl"
               @rendered="onRendered"
               @error="onOfficeError"
@@ -406,6 +414,7 @@
 
   // 内部状态
   const loading = ref(false);
+  const previewAttempt = ref(0);
   const error = ref(false);
   const errorMessage = ref('');
   const previewFailureCode = ref('');
@@ -450,6 +459,7 @@
   const markdownContent = ref('');
   let activePreviewFileId = '';
   let textAbortController: AbortController | null = null;
+  let htmlAbortController: AbortController | null = null;
   const derivedPreviewUrl = ref('');
   const derivedReady = ref(false);
   const sharePreviewTicket = ref('');
@@ -606,6 +616,8 @@
     async (newVisible) => {
       syncEscapeLock(newVisible);
       if (newVisible && props.fileInfo) {
+        // 文件监听可能已在同一批更新中启动；外壳仍需初始化，内容不重复请求。
+        const shouldStart = !props.fileInfo.id || activePreviewFileId !== String(props.fileInfo.id);
         activePreviewFileId = String(props.fileInfo.id || '');
         previousBodyOverflow = document.body.style.overflow;
         document.body.style.overflow = 'hidden';
@@ -616,11 +628,13 @@
             emit('close');
           });
         }
-        await startPreview(props.fileInfo);
+        if (shouldStart) await startPreview(props.fileInfo);
         return;
       }
       if (!newVisible) {
         cancelPreviewPolling();
+        htmlAbortController?.abort();
+        htmlAbortController = null;
         textAbortController?.abort();
         textAbortController = null;
         void exitHtmlFullscreen();
@@ -667,7 +681,10 @@
 
   // 开始预览
   async function startPreview(file: typeof props.fileInfo, retryDerived = false) {
+    previewAttempt.value += 1;
     cancelPreviewPolling();
+    htmlAbortController?.abort();
+    htmlAbortController = null;
     textAbortController?.abort();
     textAbortController = null;
     loading.value = true;
@@ -862,26 +879,30 @@
     }
 
     const expectedFileId = activePreviewFileId;
+    const controller = new AbortController();
+    htmlAbortController = controller;
     try {
-      const response = await fetch(url, { mode: 'cors' });
+      const response = await fetch(url, { mode: 'cors', signal: controller.signal });
       if (!response.ok) {
         throw new Error(`HTTP错误! 状态码: ${response.status}`);
       }
       const sourceBlob = await response.blob();
-      if (expectedFileId !== activePreviewFileId) return;
+      if (controller.signal.aborted || expectedFileId !== activePreviewFileId) return;
 
       // 强制使用 text/html，兼容对象存储把 .html 误标为 application/octet-stream 的情况。
       const source = await sourceBlob.text();
-      if (expectedFileId !== activePreviewFileId) return;
+      if (controller.signal.aborted || expectedFileId !== activePreviewFileId) return;
       const htmlBlob = new Blob([injectHtmlPreviewAnchorBridge(source)], { type: 'text/html;charset=utf-8' });
       htmlBlobUrl.value = URL.createObjectURL(htmlBlob);
       // 保持加载态，直到 iframe 真正完成导航并触发 onLoad。
     } catch (err) {
-      if (expectedFileId !== activePreviewFileId) return;
+      if (controller.signal.aborted || expectedFileId !== activePreviewFileId) return;
       console.error('加载HTML文件失败:', err);
       error.value = true;
       errorMessage.value = t('cloudSpace.previewPanel.textLoadFailed');
       loading.value = false;
+    } finally {
+      if (htmlAbortController === controller) htmlAbortController = null;
     }
   }
 
@@ -932,16 +953,25 @@
         truncated = true;
       }
 
-      if (expectedFileId !== activePreviewFileId) return;
+      if (controller.signal.aborted || textAbortController !== controller || expectedFileId !== activePreviewFileId)
+        return;
       textContent.value = truncated ? content + `\n\n${t('cloudSpace.previewPanel.contentTruncated')}` : content;
     } catch (err) {
-      if ((err as DOMException)?.name === 'AbortError' || expectedFileId !== activePreviewFileId) return;
+      if (
+        controller.signal.aborted ||
+        textAbortController !== controller ||
+        (err as DOMException)?.name === 'AbortError' ||
+        expectedFileId !== activePreviewFileId
+      )
+        return;
       console.error('加载文本文件失败:', err);
       textContent.value = t('cloudSpace.previewPanel.textLoadFailed');
       throw err;
     } finally {
-      if (textAbortController === controller) textAbortController = null;
-      if (expectedFileId === activePreviewFileId) loading.value = false;
+      if (textAbortController === controller) {
+        textAbortController = null;
+        if (expectedFileId === activePreviewFileId) loading.value = false;
+      }
     }
   }
 
@@ -994,7 +1024,7 @@
     loading.value = false;
     error.value = true;
     errorMessage.value = t('cloudSpace.previewPanel.officeLoadFailed', {
-      message: err.message || t('cloudSpace.previewPanel.checkFile'),
+      message: t('cloudSpace.previewPanel.checkFile'),
     });
   }
 
@@ -1472,6 +1502,8 @@
 
   onUnmounted(() => {
     cancelPreviewPolling();
+    htmlAbortController?.abort();
+    htmlAbortController = null;
     textAbortController?.abort();
     textAbortController = null;
     syncEscapeLock(false);

@@ -12,6 +12,7 @@ const filePreviewApiMocks = vi.hoisted(() => ({
   resolveCommunityChatFilePreview: vi.fn(),
   prepareCommunityChatFilePreview: vi.fn(),
 }));
+const pdfLifecycle = vi.hoisted(() => ({ mounted: vi.fn(), unmounted: vi.fn() }));
 const commonHttpMocks = vi.hoisted(() => ({ getFileShareDownload: vi.fn(), requestAndroidDownload: vi.fn() }));
 const communityChatApiMocks = vi.hoisted(() => ({ getCommunityChatFileDownload: vi.fn() }));
 
@@ -53,7 +54,14 @@ vi.mock('@/components/noteLibrary/detail/ResourceBacklinks.vue', () => ({
 vi.mock('@/components/cloudSpace/PdfPreview.vue', () => ({
   default: {
     props: ['src', 'fileName'],
-    template: '<div class="pdf-preview-stub" :data-src="src" :data-file-name="fileName" />',
+    emits: ['error'],
+    mounted() {
+      pdfLifecycle.mounted();
+    },
+    unmounted() {
+      pdfLifecycle.unmounted();
+    },
+    template: `<div class="pdf-preview-stub" :data-src="src" :data-file-name="fileName"><button class="pdf-fail" @click="$emit('error', new Error('invalid PDF'))" /></div>`,
   },
 }));
 
@@ -82,6 +90,7 @@ vi.mock('@vue-office/docx/lib/v3/vue-office-docx.mjs', () => ({
   default: {
     template: `
       <div class="vue-office-docx">
+        <button class="docx-fail" @click="$emit('error', new Error('invalid DOCX'))" />
         <a class="docx-toc-link" href="#_TocTarget"><span>估价结果</span></a>
         <span id="_TocTarget">估价结果正文</span>
       </div>
@@ -89,6 +98,20 @@ vi.mock('@vue-office/docx/lib/v3/vue-office-docx.mjs', () => ({
   },
 }));
 
+vi.mock('@vue-office/excel/lib/v3/vue-office-excel.mjs', () => ({
+  __esModule: true,
+  default: {
+    emits: ['error'],
+    template: `<div class="office-retry-fixture"><button class="office-fail" @click="$emit('error', new Error('invalid office file'))" /></div>`,
+  },
+}));
+vi.mock('@vue-office/pptx/lib/v3/vue-office-pptx.mjs', () => ({
+  __esModule: true,
+  default: {
+    emits: ['error'],
+    template: `<div class="office-retry-fixture"><button class="office-fail" @click="$emit('error', new Error('invalid office file'))" /></div>`,
+  },
+}));
 vi.mock('@/api/commonApi.ts', () => ({
   recordOperation: vi.fn(),
 }));
@@ -109,6 +132,8 @@ beforeEach(() => {
   Object.values(filePreviewApiMocks).forEach((mock) => mock.mockReset());
   Object.values(commonHttpMocks).forEach((mock) => mock.mockReset());
   communityChatApiMocks.getCommunityChatFileDownload.mockReset();
+  pdfLifecycle.mounted.mockClear();
+  pdfLifecycle.unmounted.mockClear();
   resetMobileOverlayHistoryForTests();
   window.history.replaceState({}, '', '/');
   vi.spyOn(window.history, 'back').mockImplementation(() => {});
@@ -349,7 +374,7 @@ describe('FilePreview HTML sandbox', () => {
     const iframe = document.body.querySelector<HTMLIFrameElement>('iframe.html-preview-iframe');
 
     expect(iframe).not.toBeNull();
-    expect(fetch).toHaveBeenCalledWith(fileUrl, { mode: 'cors' });
+    expect(fetch).toHaveBeenCalledWith(fileUrl, { mode: 'cors', signal: expect.any(AbortSignal) });
     expect(createObjectUrl).toHaveBeenCalledOnce();
     const htmlBlob = createObjectUrl.mock.calls[0][0] as Blob;
     const htmlSource = await htmlBlob.text();
@@ -966,5 +991,176 @@ describe('FilePreview mobile image gestures', () => {
     await prepareImageLayout(secondImage);
     expect(document.body.querySelector('.zoom-value-btn')?.textContent).toContain('100%');
     expect(secondImage.getAttribute('style')).toContain('rotate(0deg)');
+  });
+});
+
+describe('FilePreview HTML request lifecycle', () => {
+  it('aborts a closed preview and ignores its response after reopening the same file', async () => {
+    let finishOld: ((response: unknown) => void) | undefined;
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishOld = resolve;
+          }),
+      )
+      .mockResolvedValueOnce({ ok: true, blob: async () => new Blob(['new preview']) });
+    vi.stubGlobal('fetch', fetchMock);
+    const visible = ref(true);
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp({
+      setup: () => () =>
+        h(FilePreview, {
+          visible: visible.value,
+          fileInfo: {
+            id: 'same-html',
+            fileName: 'page.html',
+            category: 'text',
+            fileType: 'text/html',
+            fileUrl: 'https://files.example/page.html',
+          },
+        }),
+    });
+    app.mount(host);
+    cleanup = () => {
+      app.unmount();
+      host.remove();
+    };
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const oldSignal = fetchMock.mock.calls[0]?.[1]?.signal as AbortSignal | undefined;
+    visible.value = false;
+    await nextTick();
+
+    expect(oldSignal?.aborted).toBe(true);
+    visible.value = true;
+    await vi.waitFor(() => expect(createObjectUrl).toHaveBeenCalledTimes(1));
+    finishOld?.({ ok: true, blob: async () => new Blob(['old preview']) });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await nextTick();
+    expect(createObjectUrl).toHaveBeenCalledTimes(1);
+    cleanup();
+    cleanup = undefined;
+    expect(revokeObjectUrl).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('FilePreview PDF recovery', () => {
+  it('retries the same URL with a fresh PDF renderer and disposes the failed renderer', async () => {
+    await mountPdfPreview();
+    expect(pdfLifecycle.mounted).toHaveBeenCalledTimes(1);
+    document.querySelector<HTMLButtonElement>('.pdf-fail')!.click();
+    await nextTick();
+    expect(document.querySelector('.preview-error')).not.toBeNull();
+    document.querySelector<HTMLButtonElement>('.retry-btn')!.click();
+    await nextTick();
+    expect(pdfLifecycle.unmounted).toHaveBeenCalledTimes(1);
+    expect(pdfLifecycle.mounted).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('FilePreview Word recovery', () => {
+  it('replaces the failed Word renderer when retrying the same file', async () => {
+    await mountWordPreview();
+    const failedRenderer = document.querySelector('.vue-office-docx');
+    document.querySelector<HTMLButtonElement>('.docx-fail')!.click();
+    await nextTick();
+    expect(document.querySelector('.preview-error')).not.toBeNull();
+    document.querySelector<HTMLButtonElement>('.retry-btn')!.click();
+    await vi.waitFor(() => {
+      expect(document.querySelector('.vue-office-docx')).not.toBeNull();
+      expect(document.querySelector('.vue-office-docx')).not.toBe(failedRenderer);
+    });
+    expect(failedRenderer?.isConnected).toBe(false);
+  });
+});
+
+describe('FilePreview spreadsheet and presentation recovery', () => {
+  it.each([
+    ['xlsx', 'excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
+    ['pptx', 'ppt', 'application/vnd.openxmlformats-officedocument.presentationml.presentation'],
+  ])('restarts a failed %s renderer at the same URL', async (extension, category, fileType) => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp({
+      setup: () => () =>
+        h(FilePreview, {
+          visible: true,
+          fileInfo: {
+            id: 'office-file',
+            fileName: 'sample.' + extension,
+            fileType,
+            category,
+            fileUrl: 'https://files.example/sample.' + extension,
+          },
+        }),
+    });
+    app.mount(host);
+    cleanup = () => {
+      app.unmount();
+      host.remove();
+    };
+    await vi.waitFor(() => expect(document.querySelector('.office-retry-fixture')).not.toBeNull());
+    const failed = document.querySelector('.office-retry-fixture');
+    document.querySelector<HTMLButtonElement>('.office-fail')!.click();
+    await nextTick();
+    document.querySelector<HTMLButtonElement>('.retry-btn')!.click();
+    await vi.waitFor(() => {
+      expect(document.querySelector('.office-retry-fixture')).not.toBeNull();
+      expect(document.querySelector('.office-retry-fixture')).not.toBe(failed);
+    });
+    expect(failed?.isConnected).toBe(false);
+  });
+});
+
+describe('FilePreview 同时打开与切换文件', () => {
+  it('一次打开只请求一次，关闭重开和切换文件仍重新加载', async () => {
+    const visible = ref(false);
+    const fileInfo = ref({ id: '', fileName: 'sample.html', fileType: 'text/html', fileUrl: 'https://files.example/sample.html', category: 'text' });
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp({ render: () => h(FilePreview, { visible: visible.value, fileInfo: fileInfo.value }) });
+    app.mount(host);
+    cleanup = () => { app.unmount(); host.remove(); };
+    fileInfo.value = { ...fileInfo.value, id: 'first' };
+    visible.value = true;
+    await nextTick(); await Promise.resolve(); await nextTick();
+    expect(fetch).toHaveBeenCalledTimes(1);
+    visible.value = false; await nextTick();
+    visible.value = true; await nextTick(); await Promise.resolve(); await nextTick();
+    expect(fetch).toHaveBeenCalledTimes(2);
+    fileInfo.value = { ...fileInfo.value, id: 'second' };
+    await nextTick(); await Promise.resolve(); await nextTick();
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe('FilePreview 文本请求归属', () => {
+  it.each(['abort', 'resolve'])('同一文件重开后忽略旧请求的 %s，不结束新加载', async (completion) => {
+    let oldResolve!: (value: any) => void;
+    let oldReject!: (error: any) => void;
+    let newResolve!: (value: any) => void;
+    const fetchMock = vi.fn()
+      .mockImplementationOnce(() => new Promise((resolve, reject) => { oldResolve = resolve; oldReject = reject; }))
+      .mockImplementationOnce(() => new Promise((resolve) => { newResolve = resolve; }));
+    vi.stubGlobal('fetch', fetchMock);
+    const visible = ref(true);
+    const host = document.createElement('div');document.body.append(host);
+    const fileInfo = { id: 'same-text', fileName: 'sample.txt', fileType: 'text/plain', category: 'text', fileUrl: 'https://files.example/sample.txt' };
+    const app = createApp({ render: () => h(FilePreview, { visible: visible.value, fileInfo }) });
+    app.mount(host);cleanup = () => { app.unmount(); host.remove(); };
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    visible.value = false;await nextTick();visible.value = true;await nextTick();
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(fetchMock.mock.calls[0][1].signal.aborted).toBe(true);
+    if(completion === 'abort') oldReject(new DOMException('Cancelled','AbortError'));
+    else oldResolve({ ok:true, text:async ()=>'OLD_CONTENT' });
+    await new Promise(resolve=>setTimeout(resolve,0));await nextTick();
+    expect(document.querySelector('.preview-loading')).not.toBeNull();
+    expect(document.querySelector('.fullscreen-preview')?.textContent).not.toContain('OLD_CONTENT');
+    newResolve({ ok:true, text:async ()=>'NEW_CONTENT' });
+    await vi.waitFor(() => expect(document.querySelector('.fullscreen-preview')?.textContent).toContain('NEW_CONTENT'));
+    expect(document.querySelector('.preview-loading')).toBeNull();
   });
 });

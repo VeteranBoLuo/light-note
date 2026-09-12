@@ -50,6 +50,7 @@ import {
   prepareManagedCloudUpload,
 } from '../util/services/managedCloudUploadService.js';
 import { softDeleteOwnedCloudFiles } from '../util/services/cloudFileDeletionService.js';
+import { processManagedUploadBatch } from '../util/services/managedCloudUploadBatchService.js';
 const router = express.Router();
 const fileShareAccessLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -222,6 +223,15 @@ router.post('/uploadFiles', async (req, res) => {
 
 // 笔记等需要“创建新文件”的入口使用托管单文件上传：随机对象键与展示名解耦，
 // 同名只自动改名，不覆盖旧文件记录，避免破坏已经保存的资源引用。
+router.post('/managedUploadBatch', async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    return res.send(await processManagedUploadBatch(req));
+  } catch (error) {
+    return sendFileServerError(res, 'managed-upload-batch', error);
+  }
+});
+
 router.post('/prepareManagedUpload', async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   try {
@@ -613,19 +623,23 @@ router.post('/checkFileNames', async (req, res) => {
     if (!Array.isArray(fileNames) || fileNames.length === 0) {
       return res.send(resultData([], 200));
     }
-    const placeholders = fileNames.map(() => '?').join(',');
-    const [rows] = await pool.query(
-      `SELECT file_name FROM files WHERE create_by = ? AND file_name IN (${placeholders}) AND del_flag = 0`,
-      [userId, ...fileNames],
-    );
-    const existingNames = new Set(rows.map((r) => r.file_name));
+    // 原判断最终使用 JS 精确匹配；字符串输入可直接复用必须返回的全名称集合。
+    // 非字符串仍走原 SQL，保留旧接口对这些输入的转换或失败行为。
+    let matchedRows;
+    if (!fileNames.every((name) => typeof name === 'string')) {
+      const placeholders = fileNames.map(() => '?').join(',');
+      [matchedRows] = await pool.query(
+        `SELECT file_name FROM files WHERE create_by = ? AND file_name IN (${placeholders}) AND del_flag = 0`,
+        [userId, ...fileNames],
+      );
+    }
+    const [allRows] = await pool.query(`SELECT file_name FROM files WHERE create_by = ? AND del_flag = 0`, [userId]);
+    const allNames = allRows.map((r) => r.file_name);
+    const existingNames = new Set(matchedRows ? matchedRows.map((r) => r.file_name) : allNames);
     const result = fileNames.map((name) => ({
       fileName: name,
       exists: existingNames.has(name),
     }));
-    // 同时返回该用户所有已有文件名，供前端自动改名构建完整 existingSet
-    const [allRows] = await pool.query(`SELECT file_name FROM files WHERE create_by = ? AND del_flag = 0`, [userId]);
-    const allNames = allRows.map((r) => r.file_name);
     res.send(resultData({ check: result, allNames }, 200));
   } catch (e) {
     return sendFileServerError(res, 'check-file-names', e, '检查文件名失败，请稍后重试');
@@ -638,9 +652,11 @@ router.post('/queryTotalFileSize', async (req, res) => {
     // 获取用户ID
     const userId = req.user.id;
 
-    const usage = await getStorageUsageBreakdown(pool, userId);
-    // 一并下发容量配额(前端 store 据此设 maxSpace,按等级正确显示)
-    const quotaMB = await storageQuotaMB(req.user);
+    // 用量与等级配额独立读取，复用现有服务保持共享容量与扩容口径。
+    const [usage, quotaMB] = await Promise.all([
+      getStorageUsageBreakdown(pool, userId),
+      storageQuotaMB(req.user),
+    ]);
     res.send(
       resultData({
         totalSizeMB: storageBytesToMb(usage.totalBytes),

@@ -107,6 +107,7 @@
             <div class="today-action-row__actions">
               <BTooltip :title="t('workbench.today.markOrganized')">
                 <BButton
+                  icon-only
                   class="today-action-row__complete"
                   size="small"
                   :aria-label="t('workbench.today.completeInbox', { title: item.title })"
@@ -115,7 +116,6 @@
                   @click="completeInboxItem(item)"
                 >
                   <SvgIcon
-                    v-if="mutatingInboxKey !== inboxKey(item)"
                     :src="icon.organize.check"
                     size="16"
                     aria-hidden="true"

@@ -1,5 +1,5 @@
 import type { TodoListSummary, TodoOrganizationPatch } from '@lightnote/shared';
-import { apiBasePost } from '@/http/request';
+import { apiBasePost, type RequestOptions } from '@/http/request';
 
 export type TodoPriority = 0 | 1 | 2;
 export type TodoStatus = 'pending' | 'completed';
@@ -150,6 +150,7 @@ export interface TodoPlanPreview {
   actionableCount: number;
   skippedCount: number;
   reminderJobCount: number;
+  reminderIsOngoing?: boolean;
   theoreticalReminderJobCount: number;
   nextReminderAt?: string | null;
   requiredChoices: string[];
@@ -263,7 +264,8 @@ export const createTodo = (payload: TodoPayload) => apiBasePost('/api/todo/creat
 export const getTodoPlanV2Config = () => apiBasePost('/api/todo/v2/config', {}, { silent: true });
 export const previewTodoPlanV2 = (payload: TodoPlanDraft) =>
   apiBasePost('/api/todo/v2/preview', payload, { silent: true });
-export const createTodoPlanV2 = (payload: TodoPlanWritePayload) => apiBasePost('/api/todo/v2/create', payload);
+export const createTodoPlanV2 = (payload: TodoPlanWritePayload, options?: Pick<RequestOptions, 'silent'>) =>
+  apiBasePost('/api/todo/v2/create', payload, options);
 export const ensureTodoCalendarRangeV2 = (endDate: string) =>
   apiBasePost('/api/todo/v2/calendar-range', { endDate }, { silent: true });
 export const previewLegacyTodoConversionV2 = (legacyTodoId: string, payload: TodoPlanDraft) =>

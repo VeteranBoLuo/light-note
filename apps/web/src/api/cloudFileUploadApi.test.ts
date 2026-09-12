@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import axios from 'axios';
 import { apiBasePost } from '@/http/request';
-import { ensureCloudFolder, fetchCloudFolders, uploadCloudFile, uploadManagedCloudFile } from './cloudFileUploadApi';
+import { createManagedUploadBatchRequest, ensureCloudFolder, fetchCloudFolders, uploadCloudFile, uploadManagedCloudFile } from './cloudFileUploadApi';
 
 vi.mock('axios', () => ({ default: { put: vi.fn() } }));
 vi.mock('@/http/request', () => ({ apiBasePost: vi.fn() }));
@@ -178,5 +178,121 @@ describe('cloudFileUploadApi', () => {
       status: '已上传',
       fileId: '32',
     });
+  });
+
+  it('确认与核验双重断网后，只核验原对象，不重复准备或 PUT', async () => {
+    const file = new File(['x'], 'x.txt');
+    const receipt = {};
+    postMock.mockResolvedValueOnce({ status: 200, data: { objectKey: 'original', uploadUrl: 'https://upload.test/x' } })
+      .mockRejectedValueOnce(new Error('confirm response lost'))
+      .mockRejectedValueOnce(new Error('recovery offline'));
+    putMock.mockResolvedValue({} as never);
+    await expect(uploadManagedCloudFile(file, { receipt })).rejects.toThrow('confirm response lost');
+    postMock.mockRejectedValueOnce(new Error('still offline'));
+    await expect(uploadManagedCloudFile(file, { receipt })).rejects.toThrow('UPLOAD_RESULT_UNKNOWN');
+    expect(putMock).toHaveBeenCalledTimes(1);
+    expect(postMock.mock.calls.filter(([url]) => url.includes('prepareManaged'))).toHaveLength(1);
+    postMock.mockResolvedValueOnce({ status: 200, data: { alreadyConfirmed: true, fileId: 42, filename: 'x.txt' } });
+    await expect(uploadManagedCloudFile(file, { receipt })).resolves.toMatchObject({ fileId: '42' });
+    expect(putMock).toHaveBeenCalledTimes(1);
+    expect(receipt).toEqual({ pending: undefined });
+  });
+
+  it('只有明确未落库时才重新上传；收据不能换文件使用', async () => {
+    const file = new File(['x'], 'x.txt');
+    const receipt = {};
+    postMock.mockResolvedValueOnce({ status: 200, data: { objectKey: 'old', uploadUrl: 'https://upload.test/x' } })
+      .mockRejectedValueOnce(new Error('confirm lost')).mockRejectedValueOnce(new Error('offline'));
+    putMock.mockResolvedValue({} as never);
+    await expect(uploadManagedCloudFile(file, { receipt })).rejects.toThrow();
+    await expect(uploadManagedCloudFile(new File(['y'], 'x.txt'), { receipt })).rejects.toThrow('UPLOAD_RECEIPT_MISMATCH');
+    postMock.mockResolvedValueOnce({ status: 200, data: { deleted: true, alreadyConfirmed: false } })
+      .mockResolvedValueOnce({ status: 200, data: { objectKey: 'new', uploadUrl: 'https://upload.test/new' } })
+      .mockResolvedValueOnce({ status: 200, data: { fileId: 43, filename: 'x.txt', status: '已上传' } });
+    await expect(uploadManagedCloudFile(file, { receipt })).resolves.toMatchObject({ fileId: '43' });
+    expect(putMock).toHaveBeenCalledTimes(2);
+  });
+
+});
+
+
+describe('managed batch transport', () => {
+  beforeEach(() => { postMock.mockReset(); putMock.mockReset(); });
+  it('100 个同步小文件保持三并发，合并签名与确认至 68 次请求', async () => {
+    postMock.mockImplementation(async (_url, body: any) => ({ status: 200, data: body.items.map(({ operation, payload }: any) => ({ status: 200, data: operation === 'prepareManagedUpload'
+      ? { uploadUrl: 'https://obs.example/' + payload.fileName, objectKey: payload.fileName }
+      : { fileId: payload.objectKey, filename: payload.fileName, status: '已上传' } })) } as any));
+    putMock.mockResolvedValue({} as never);
+    const batchRequest = createManagedUploadBatchRequest();
+    let next = 0;const results: any[] = [];
+    await Promise.all(Array.from({ length: 3 }, async () => {
+      while (next < 100) { const i = next++; results.push(await uploadManagedCloudFile(new File(['x'], i + '.txt'), { batchRequest })); }
+    }));
+    expect(results).toHaveLength(100);
+    expect(new Set(results.map((item) => item.fileId)).size).toBe(100);
+    expect(putMock).toHaveBeenCalledTimes(100);
+    expect(postMock).toHaveBeenCalledTimes(68);
+    expect(postMock.mock.calls.every(([url, body]: any) => url === '/api/file/managedUploadBatch' && body.items.length <= 3)).toBe(true);
+  });
+  it('确认整批响应丢失后按原对象恢复，不重新 PUT', async () => {
+    postMock.mockImplementation(async (_url, body: any) => {
+      if (body.items[0].operation === 'confirmManagedUpload') throw new Error('connection lost');
+      return { status: 200, data: body.items.map(({ operation, payload }: any) => ({ status: 200, data: operation === 'prepareManagedUpload'
+        ? { uploadUrl: 'https://obs.example/' + payload.fileName, objectKey: payload.fileName }
+        : { alreadyConfirmed: true, fileId: payload.objectKey, filename: payload.objectKey } })) } as any;
+    });
+    putMock.mockResolvedValue({} as never);
+    const batchRequest = createManagedUploadBatchRequest();
+    const results = await Promise.all(['a','b','c'].map((name) => uploadManagedCloudFile(new File(['x'], name), { batchRequest, receipt: {} })));
+    expect(results.map((item) => item.fileId)).toEqual(['a','b','c']);
+    expect(putMock).toHaveBeenCalledTimes(3);
+    expect(postMock).toHaveBeenCalledTimes(3);
+  });
+});
+
+
+it('批次确认与核验都断网后，显式重试只核验原对象', async () => {
+  postMock.mockReset();putMock.mockReset();let offline = true;
+  postMock.mockImplementation(async (_url, body: any) => {
+    if (body.items[0].operation === 'confirmManagedUpload' || (body.items[0].operation === 'abortManagedUpload' && offline)) throw new Error('offline');
+    return { status: 200, data: body.items.map(({ operation, payload }: any) => ({ status: 200, data: operation === 'prepareManagedUpload'
+      ? { uploadUrl: 'https://obs.example/' + payload.fileName, objectKey: payload.fileName }
+      : { alreadyConfirmed: true, fileId: payload.objectKey, filename: payload.objectKey } })) } as any;
+  });
+  putMock.mockResolvedValue({} as never);
+  const batchRequest = createManagedUploadBatchRequest();
+  const entries = ['a','b','c'].map(name=>({file:new File(['x'],name),receipt:{}}));
+  const first = await Promise.allSettled(entries.map(({file,receipt})=>uploadManagedCloudFile(file,{receipt,batchRequest})));
+  expect(first.every(item=>item.status==='rejected')).toBe(true);
+  offline = false;
+  const recovered = await Promise.all(entries.map(({file,receipt})=>uploadManagedCloudFile(file,{receipt,batchRequest})));
+  expect(recovered.map(item=>item.fileId)).toEqual(['a','b','c']);
+  expect(putMock).toHaveBeenCalledTimes(3);
+  expect(postMock).toHaveBeenCalledTimes(4);
+});
+
+it('批次回包数量不完整时拒绝整批，不把文件映射到别人的结果', async () => {
+  postMock.mockReset();postMock.mockResolvedValue({status:200,data:[{status:200,data:{fileId:'wrong'}}]} as any);
+  const batchRequest = createManagedUploadBatchRequest();
+  const results = await Promise.allSettled(['a','b','c'].map(objectKey=>batchRequest('abortManagedUpload',{objectKey})));
+  expect(results.every(item=>item.status==='rejected')).toBe(true);
+});
+
+
+describe('托管上传完成传输时取消', () => {
+  it('取消后不再确认保存，清理对象并结束本次收据', async () => {
+    postMock.mockReset();
+    putMock.mockReset();
+    const controller = new AbortController();
+    const receipt = {};
+    postMock.mockImplementation(async (url) => {
+      if (url === '/api/file/prepareManagedUpload') return { status: 200, data: { objectKey: 'cancelled-object', uploadUrl: 'https://obs.example/upload' } } as any;
+      if (url === '/api/file/abortManagedUpload') return { status: 200, data: { deleted: true } } as any;
+      return { status: 200, data: { status: '已上传', fileId: 'unexpected' } } as any;
+    });
+    putMock.mockImplementation(async () => { controller.abort(); return {} as never; });
+    await expect(uploadManagedCloudFile(new File(['test'], 'test.txt'), { signal: controller.signal, receipt })).rejects.toMatchObject({ name: 'AbortError' });
+    expect(postMock.mock.calls.map(([url]) => url)).toEqual(['/api/file/prepareManagedUpload', '/api/file/abortManagedUpload']);
+    expect(receipt).toEqual({ pending: undefined });
   });
 });

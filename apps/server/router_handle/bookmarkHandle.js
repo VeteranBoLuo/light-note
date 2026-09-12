@@ -258,6 +258,47 @@ export const getRelatedTag = async (req, res) => {
   }
 };
 
+const SORT_BATCH_SIZE = 200;
+const SORT_UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Only the unambiguous legacy input shape is batched. Other values retain
+// the original per-row SQL coercion, duplicate handling and error messages.
+async function tryBatchResourceSort(connection, table, userId, items) {
+  if (table !== "tag" && table !== "bookmark")
+    throw new Error("INVALID_SORT_TABLE");
+  if (!Array.isArray(items) || items.length < 2) return false;
+  const ids = new Set();
+  for (const item of items) {
+    if (
+      !item ||
+      typeof item.id !== "string" ||
+      !SORT_UUID.test(item.id) ||
+      !Number.isInteger(item.sort) ||
+      item.sort < -2147483648 ||
+      item.sort > 2147483647
+    )
+      return false;
+    const key = item.id.toLowerCase();
+    if (ids.has(key)) return false;
+    ids.add(key);
+  }
+  // table is supplied only by the two internal callers below.
+  for (let offset = 0; offset < items.length; offset += SORT_BATCH_SIZE) {
+    const batch = items.slice(offset, offset + SORT_BATCH_SIZE);
+    await connection.query(
+      `UPDATE ${table} SET sort = CASE id ${batch.map(() => "WHEN ? THEN ?").join(" ")} ELSE sort END
+        WHERE id IN (${batch.map(() => "?").join(",")}) AND user_id = ?`,
+      [
+        ...batch.flatMap(({ id, sort }) => [id, sort]),
+        ...batch.map(({ id }) => id),
+        userId,
+      ],
+    );
+  }
+  return true;
+}
+
 export const updateTagSort = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   const connection = await pool.getConnection();
@@ -265,10 +306,12 @@ export const updateTagSort = async (req, res) => {
     await connection.beginTransaction(); // 开始事务
     const userId = (req.resourceUser || req.user).id;
     const { tags } = req.body;
-    for (const tag of tags) {
-      const { id, sort } = tag;
-      const sql = 'UPDATE tag SET sort = ? WHERE id = ? AND user_id = ?';
-      await connection.query(sql, [sort, id, userId]);
+    if (!(await tryBatchResourceSort(connection, 'tag', userId, tags))) {
+      for (const tag of tags) {
+        const { id, sort } = tag;
+        const sql = 'UPDATE tag SET sort = ? WHERE id = ? AND user_id = ?';
+        await connection.query(sql, [sort, id, userId]);
+      }
     }
     await connection.commit(); // 提交事务
     res.send(resultData(null, 200, 'Sort updated successfully'));
@@ -931,24 +974,21 @@ export const updateBookmark = async (req, res) => {
   }
 };
 
-export const getBookmarkDetail = (req, res) => {
+export const getBookmarkDetail = async (req, res) => {
   try {
     const userId = (req.resourceUser || req.user).id;
-    // 归属校验:只能读自己的书签,防止传他人 bookmark id 越权读取;越权/不存在统一 404
-    let sql = `SELECT * FROM bookmark WHERE id=? AND user_id=? AND del_flag=0`;
-    pool
-      .query(sql, [req.body.filters.id, userId])
-      .then(([result]) => {
-        if (result.length === 0) {
-          return res.send(resultData(null, 404, '书签不存在'));
-        }
-        res.send(resultData(result[0]));
-      })
-      .catch((e) => {
-        return res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
-      });
-  } catch (e) {
-    res.send(resultData(null, 400, '客户端请求异常' + e)); // 设置状态码为400
+    // 内部二进制网址索引不属于详情协议，不能传入 JSON 字段转换。
+    const [rows] = await pool.query(
+      `SELECT id, name, user_id, url, description, create_time, del_flag,
+              icon_url, icon_checked_at, sort, deleted_at, is_top
+       FROM bookmark WHERE id=? AND user_id=? AND del_flag=0`,
+      [req.body?.filters?.id, userId],
+    );
+    if (!rows.length) return res.send(resultData(null, 404, '书签不存在'));
+    return res.send(resultData(rows[0]));
+  } catch (error) {
+    console.error('[bookmark] detail failed code=%s', stableAgentErrorCode(error));
+    return res.send(resultData(null, 500, '获取书签失败，请稍后重试'));
   }
 };
 
@@ -1030,10 +1070,12 @@ export const updateBookmarkSort = async (req, res) => {
       await connection.rollback();
       return res.send(resultData(null, 400, '排序参数无效'));
     }
-    for (const bookmark of bookmarks) {
-      const { id, sort } = bookmark;
-      const sql = 'UPDATE bookmark SET sort = ? WHERE id = ? AND user_id = ?';
-      await connection.query(sql, [sort, id, userId]);
+    if (!(await tryBatchResourceSort(connection, 'bookmark', userId, bookmarks))) {
+      for (const bookmark of bookmarks) {
+        const { id, sort } = bookmark;
+        const sql = 'UPDATE bookmark SET sort = ? WHERE id = ? AND user_id = ?';
+        await connection.query(sql, [sort, id, userId]);
+      }
     }
     await connection.commit(); // 提交事务
     res.send(resultData(null, 200, 'Sort updated successfully'));

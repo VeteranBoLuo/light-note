@@ -185,12 +185,13 @@
           <span class="b-image-viewer__divider" aria-hidden="true"></span>
           <BTooltip :title="t('common.saveImage')" :delay="80">
             <BButton
+              icon-only
               :loading="saving"
               :disabled="!canDownloadCurrent"
               :aria-label="t('common.saveImage')"
               @click="saveCurrentImage"
             >
-              <SvgIcon v-if="!saving" :src="icon.cloudSpace.download" size="19" aria-hidden="true" />
+              <SvgIcon :src="icon.cloudSpace.download" size="19" aria-hidden="true" />
             </BButton>
           </BTooltip>
         </template>

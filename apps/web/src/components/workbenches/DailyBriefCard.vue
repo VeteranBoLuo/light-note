@@ -23,6 +23,7 @@
         }}</p>
       </div>
       <BButton
+        icon-only
         v-if="!readOnly && !guestSample"
         size="small"
         :loading="briefUpdating"
@@ -30,7 +31,7 @@
         :aria-label="t('workbench.dailyBrief.updateAction')"
         @click="update"
       >
-        <SvgIcon v-if="!briefUpdating" :src="icon.infrastructure.refresh" size="18" aria-hidden="true" />
+        <SvgIcon :src="icon.infrastructure.refresh" size="18" aria-hidden="true" />
       </BButton>
     </header>
     <div class="daily-brief-card__summary-copy">
@@ -112,6 +113,7 @@
         </div>
         <div v-if="!readOnly && !guestSample" class="daily-brief-card__actions">
           <BButton
+            icon-only
             v-if="readyBrief"
             size="small"
             class="daily-brief-card__update"
@@ -121,7 +123,7 @@
             :aria-label="t('workbench.dailyBrief.updateAction')"
             @click="update"
           >
-            <SvgIcon v-if="!briefUpdating" :src="icon.infrastructure.refresh" size="18" aria-hidden="true" />
+            <SvgIcon :src="icon.infrastructure.refresh" size="18" aria-hidden="true" />
           </BButton>
         </div>
       </header>

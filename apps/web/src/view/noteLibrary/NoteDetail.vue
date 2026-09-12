@@ -271,7 +271,14 @@
         @close="catalogDrawerOpen = false"
       />
     </div>
-    <NoteDetailLoadingState v-if="!isReady" variant="page" :error="noteLoadFailed" @retry="retryLoadRouteNote" />
+    <NoteDetailLoadingState
+      v-if="!isReady"
+      variant="page"
+      :error="noteLoadFailed"
+      :unavailable="noteLoadUnavailable"
+      @retry="retryLoadRouteNote"
+      @back="router.push('/noteLibrary')"
+    />
     <NoteVersionHistory
       v-if="versionHistoryVisible"
       v-model:visible="versionHistoryVisible"
@@ -2185,6 +2192,7 @@
   });
   const isReady = ref(false);
   const noteLoadFailed = ref(false);
+  const noteLoadUnavailable = ref(false);
   const editorRuntimeReady = ref(false);
 
   function resetPerNoteRuntime() {
@@ -2262,6 +2270,7 @@
     const requestVersion = ++noteLoadVersion;
     const isInitialLoad = !isReady.value;
     noteLoadFailed.value = false;
+    noteLoadUnavailable.value = false;
     if (!isInitialLoad) isNoteSwitching.value = true;
     resetPerNoteRuntime();
 
@@ -2364,6 +2373,7 @@
         completeMarkdownContentSwitch();
         syncReadonlyEditorChrome();
       } else {
+        noteLoadUnavailable.value = [403, 404].includes(Number(response.status));
         noteLoadFailed.value = true;
         isReady.value = false;
       }

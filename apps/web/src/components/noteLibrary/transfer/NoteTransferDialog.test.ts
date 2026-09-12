@@ -435,3 +435,46 @@ describe('directory merged export', () => {
     expect(delivery).not.toHaveBeenCalled();
   });
 });
+
+it('recovers a received upload after its response is lost without creating another task', async () => {
+  const original = api.getMockImplementation()!;
+  api.mockImplementation(async (url, data, options) => {
+    if (url.includes('/upload?')) {
+      task = { ...fixture('uploading'), items: [], uploadBytes: 4 };
+      throw new Error('response lost');
+    }
+    return original(url, data, options);
+  });
+  const { host, dialog } = mount();
+  dialog.value.openImport();
+  await settle();
+  click(host, '上传测试文件');
+  await settle();
+  expect(host.textContent).toContain('文件已上传');
+  expect(host.textContent).toContain('继续检查');
+  expect(api.mock.calls.filter(([url]) => url.endsWith('/create'))).toHaveLength(1);
+  expect(api.mock.calls.filter(([url]) => url.endsWith('/parse'))).toHaveLength(0);
+});
+
+it('checks the original task on explicit retry when upload and recovery responses both fail', async () => {
+  const original = api.getMockImplementation()!;
+  let detailFailed = false;
+  api.mockImplementation(async (url, data, options) => {
+    if (url.includes('/upload?')) throw new Error('offline');
+    if (url.endsWith('/detail')) {
+      if (!detailFailed) { detailFailed = true; throw new Error('offline'); }
+      return { status: 200, data: { ...fixture('uploading'), items: [], uploadBytes: 4 } };
+    }
+    return original(url, data, options);
+  });
+  const { host, dialog } = mount();
+  dialog.value.openImport();
+  await settle();
+  click(host, '上传测试文件');
+  await settle();
+  click(host, '上传测试文件');
+  await settle();
+  expect(host.textContent).toContain('文件已上传');
+  expect(api.mock.calls.filter(([url]) => url.endsWith('/create'))).toHaveLength(1);
+  expect(api.mock.calls.filter(([url]) => url.includes('/upload?'))).toHaveLength(1);
+});

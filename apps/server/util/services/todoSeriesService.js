@@ -1203,7 +1203,19 @@ export async function ensureSingleReminderBuffer(connection, ruleId, { now = new
     momentEntry: preview.reminderMoments[0],
     reminder,
   });
-  return { reminderJobsCreated: await insertReminderJobs(connection, jobs) };
+  if (!jobs.length) return { reminderJobsCreated: 0 };
+  // 滚动窗口会重新编号；按规则版本、渠道和原定时刻识别已有提醒，兼容旧 dedupe key。
+  // 调用方事务持有上面的规则行锁，防止多个续排进程同时插入。
+  const [existing] = await connection.query(
+    `SELECT channel, DATE_FORMAT(original_scheduled_at_utc, '%Y-%m-%d %H:%i:%s') AS scheduled_at
+       FROM todo_reminder_jobs
+      WHERE rule_id = ? AND rule_version = ?
+        AND original_scheduled_at_utc BETWEEN ? AND ?`,
+    [rule.id, rule.version, jobs[0].original_scheduled_at_utc, jobs.at(-1).original_scheduled_at_utc],
+  );
+  const scheduled = new Set(existing.map((job) => `${job.channel}|${job.scheduled_at}`));
+  const missing = jobs.filter((job) => !scheduled.has(`${job.channel}|${job.original_scheduled_at_utc}`));
+  return { reminderJobsCreated: await insertReminderJobs(connection, missing) };
 }
 
 export async function runSeriesAction(connection, userId, input = {}) {

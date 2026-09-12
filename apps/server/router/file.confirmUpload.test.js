@@ -369,3 +369,80 @@ describe('云空间普通上传覆盖随机 OBS 对象', () => {
 vi.mock('../util/imagePreview/references.js',()=>({registerCloudImage:vi.fn(),removeImageReferences:vi.fn()}));
 
 vi.mock('../util/imagePreview/cleanup.js',()=>({deleteUnmanagedObject:(...args)=>mocks.deleteObjectFromObs(...args)}));
+
+
+describe('容量接口并发读取', () => {
+  beforeEach(() => {
+    mocks.pool.query.mockReset();
+    mocks.getUserSpaceMb.mockReset();
+  });
+  it('同时读取用量与配额，等待两项结果后返回', async () => {
+    let finishUsage;
+    mocks.pool.query.mockReturnValueOnce(new Promise((resolve) => { finishUsage = resolve; }));
+    mocks.getUserSpaceMb.mockResolvedValueOnce(2048);
+    const res = response();
+    const done = mocks.routes.get('/queryTotalFileSize').at(-1)(request(), res);
+    expect(mocks.getUserSpaceMb).toHaveBeenCalledOnce();
+    expect(mocks.getUserSpaceMb).toHaveBeenCalledWith('user-1', 'user');
+    await Promise.resolve();
+    expect(res.send).not.toHaveBeenCalled();
+    finishUsage([[{ activeBytes: 1048576, trashBytes: 524288, totalBytes: 1572864 }]]);
+    await done;
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({
+      status: 200,
+      data: {
+        totalSizeMB: 1.5, activeSizeMB: 1, trashSizeMB: 0.5, quotaMB: 2048, sharedWithTrash: true,
+      },
+    }));
+    expect(mocks.pool.query.mock.calls[0][1]).toEqual(['user-1']);
+  });
+  it.each(['usage', 'quota'])('任一读取失败返回原有错误响应：%s', async (failing) => {
+    mocks.pool.query.mockImplementation(() =>
+      failing === 'usage' ? Promise.reject(new Error('fixture')) : Promise.resolve([[]]),
+    );
+    mocks.getUserSpaceMb.mockImplementation(() =>
+      failing === 'quota' ? Promise.reject(new Error('fixture')) : Promise.resolve(1024),
+    );
+    const res = response();
+    await mocks.routes.get('/queryTotalFileSize').at(-1)(request(), res);
+    expect(res.send).toHaveBeenCalledWith({status: 500, data: null, msg: '服务器暂时无法处理，请稍后重试'});
+  });
+});
+
+
+describe('文件名检查复用完整名称查询', () => {
+  beforeEach(() => mocks.pool.query.mockReset());
+  it('保留精确大小写、重复输入和完整名称顺序', async () => {
+    mocks.pool.query.mockResolvedValueOnce([[{file_name: 'File.txt'}, {file_name: '文件.png'}, {file_name: 'File.txt'}]]);
+    const req = request();
+    req.body = {fileNames: ['File.txt', 'file.txt', '文件.png', 'File.txt', 'missing']};
+    const res = response();
+    await mocks.routes.get('/checkFileNames').at(-1)(req, res);
+    expect(mocks.pool.query).toHaveBeenCalledTimes(1);
+    expect(mocks.pool.query.mock.calls[0][1]).toEqual(['user-1']);
+    expect(res.send).toHaveBeenCalledWith({status: 200, msg: '', data: {
+      check: req.body.fileNames.map((fileName, index) => ({fileName, exists: [0, 2, 3].includes(index)})),
+      allNames: ['File.txt', '文件.png', 'File.txt'],
+    }});
+  });
+  it.each([[], null, 'name'])('空或非数组输入保持空数组响应：%j', async (fileNames) => {
+    const req = request();req.body = {fileNames};const res = response();
+    await mocks.routes.get('/checkFileNames').at(-1)(req, res);
+    expect(mocks.pool.query).not.toHaveBeenCalled();
+    expect(res.send).toHaveBeenCalledWith({status: 200, msg: '', data: []});
+  });
+  it('混合类型仍保留原有两次查询和严格匹配', async () => {
+    mocks.pool.query.mockResolvedValueOnce([[{file_name: '1'}]]).mockResolvedValueOnce([[{file_name: '1'}]]);
+    const req = request();req.body = {fileNames: [1]};const res = response();
+    await mocks.routes.get('/checkFileNames').at(-1)(req, res);
+    expect(mocks.pool.query).toHaveBeenCalledTimes(2);
+    expect(mocks.pool.query.mock.calls[0][1]).toEqual(['user-1', 1]);
+    expect(res.send.mock.calls[0][0].data.check).toEqual([{fileName: 1, exists: false}]);
+  });
+  it('查询失败保留原错误响应', async () => {
+    mocks.pool.query.mockRejectedValueOnce(new Error('fixture'));
+    const req = request();req.body = {fileNames: ['name']};const res = response();
+    await mocks.routes.get('/checkFileNames').at(-1)(req, res);
+    expect(res.send).toHaveBeenCalledWith({status: 500, data: null, msg: '检查文件名失败，请稍后重试'});
+  });
+});

@@ -13,7 +13,6 @@
         'inbox-item',
         `inbox-item--${item.resourceType}`,
         { 'inbox-item--selection': selectionMode, 'inbox-item--selected': selected },
-        { 'inbox-item--inline-actions': showInlineActions && !selectionMode },
       ]"
     >
       <BCheckbox
@@ -27,7 +26,9 @@
       <div
         class="inbox-item__body"
         role="button"
-        tabindex="0"
+        :tabindex="disabled ? -1 : 0"
+        :aria-disabled="disabled"
+        :aria-pressed="selectionMode ? selected : inspected"
         :aria-label="item.title || t('inbox.untitled')"
         @click="handleBodyClick"
         @keydown.enter.prevent="handleBodyClick"
@@ -40,16 +41,6 @@
         <h3 :title="item.title">{{ item.title || t('inbox.untitled') }}</h3>
         <p v-if="plainSummary">{{ plainSummary }}</p>
         <span v-if="item.resourceType === 'bookmark'" class="inbox-item__detail">{{ item.detail }}</span>
-      </div>
-      <div
-        v-if="showInlineActions && !selectionMode"
-        class="inbox-item__actions inbox-item__actions--inline"
-        @click.stop
-      >
-        <BButton size="small" :disabled="disabled" @click="emit('open')">{{ t('inbox.organize') }}</BButton>
-        <BButton size="small" :loading="completing" :disabled="disabled" @click="emit('complete')">
-          {{ t('inbox.complete') }}
-        </BButton>
       </div>
       <div v-if="!selectionMode" class="inbox-item__actions inbox-item__actions--mobile" @click.stop>
         <BButton
@@ -86,6 +77,7 @@
     defineProps<{
       item: InboxItem;
       selected: boolean;
+      inspected?: boolean;
       completing?: boolean;
       deleting?: boolean;
       disabled?: boolean;
@@ -93,9 +85,8 @@
       selectionMode?: boolean;
       swipeEnabled?: boolean;
       swipeOpen?: boolean;
-      showInlineActions?: boolean;
     }>(),
-    { selectable: true, selectionMode: false, swipeEnabled: false, swipeOpen: false, showInlineActions: false },
+    { selectable: true, selectionMode: false, swipeEnabled: false, swipeOpen: false },
   );
   const emit = defineEmits<{
     select: [selected: boolean];
@@ -110,7 +101,7 @@
   const mobileMenuActions = computed<MobilePageActionItem[]>(() => [
     {
       key: 'open',
-      label: t('inbox.organize'),
+      label: t('common.detail'),
       icon: icon.common.more,
       disabled: props.disabled,
     },
@@ -160,6 +151,7 @@
       : '';
 
   function handleBodyClick() {
+    if (props.disabled) return;
     if (props.selectionMode) emit('select', !props.selected);
     else emit('open');
   }
@@ -226,6 +218,16 @@
     cursor: pointer;
   }
 
+  .inbox-item__body:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 4px;
+    border-radius: 4px;
+  }
+
+  .inbox-item__body[aria-disabled='true'] {
+    cursor: default;
+  }
+
   .inbox-item__select-placeholder {
     width: 18px;
     height: 18px;
@@ -279,12 +281,8 @@
   .inbox-item__actions--mobile {
     display: none;
   }
-  .inbox-item__actions--inline :deep(.b_btn) {
-    min-height: 32px;
-    white-space: nowrap;
-  }
-  .inbox-item--selected {
-    border-color: color-mix(in srgb, var(--primary-color) 55%, var(--card-border-color));
+  .inbox-item.inbox-item--selected {
+    border-color: var(--primary-color);
   }
   @media (max-width: 767px) {
     .inbox-item {

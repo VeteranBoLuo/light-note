@@ -62,13 +62,13 @@ function validateDraft(input = {}) {
   return { title, content, category, showIdentity: input.showIdentity !== false };
 }
 
-const requestSelect = (viewerUserId = '', includePrivateIdentity = false) => ({
+const requestSelect = (viewerUserId = '', includePrivateIdentity = false, reuseOwnerAvatar = false) => ({
   sql: `
     SELECT fr.id,fr.title,fr.content,fr.category,fr.source_type,fr.show_identity,
            fr.moderation_status,fr.progress_status,fr.merged_to_id,fr.developer_reply,
            fr.release_url,fr.vote_count,fr.published_at,fr.released_at,fr.create_time,fr.update_time,
            CASE WHEN fr.source_type = 'user' AND fr.show_identity = 1 THEN COALESCE(u.alias, '轻笺用户') ELSE NULL END AS submitter_alias,
-           CASE WHEN fr.source_type = 'user' AND fr.show_identity = 1 THEN u.head_picture ELSE NULL END AS submitter_avatar,
+           CASE WHEN fr.source_type = 'user' AND fr.show_identity = 1 THEN ${reuseOwnerAvatar ? '1' : 'u.head_picture'} ELSE NULL END AS submitter_avatar,
            ${includePrivateIdentity ? 'u.alias AS owner_alias, u.head_picture AS owner_avatar,' : ''}
            (fr.submitter_user_id = ?) AS viewer_is_owner,
            EXISTS(
@@ -155,20 +155,22 @@ export async function listPublicFeatureRequests({ viewerUserId = '', filters = {
     params.push(`%${keyword}%`, `%${keyword}%`);
   }
   const selected = requestSelect(viewerUserId);
-  const [rows] = await db.query(
-    `${selected.sql} WHERE ${where.join(' AND ')} ORDER BY ${publicSortSql[sort]} LIMIT ? OFFSET ?`,
-    [...selected.params, ...params, pageSize, offset],
-  );
-  const [[countRow]] = await db.query(
-    `SELECT COUNT(*) AS total FROM feature_requests fr WHERE ${where.join(' AND ')}`,
-    params,
-  );
-  const [summaryRows] = await db.query(
-    `SELECT progress_status, COUNT(*) AS total
-       FROM feature_requests
-      WHERE del_flag = 0 AND moderation_status = 'published'
-      GROUP BY progress_status`,
-  );
+  // 保留原查询口径；独立列表与计数同时读取，全部完成后再返回。
+  const [[rows], [[countRow]], [summaryRows]] = await Promise.all([
+    db.query(`${selected.sql} WHERE ${where.join(' AND ')} ORDER BY ${publicSortSql[sort]} LIMIT ? OFFSET ?`, [
+      ...selected.params,
+      ...params,
+      pageSize,
+      offset,
+    ]),
+    db.query(`SELECT COUNT(*) AS total FROM feature_requests fr WHERE ${where.join(' AND ')}`, params),
+    db.query(
+      `SELECT progress_status, COUNT(*) AS total
+         FROM feature_requests
+        WHERE del_flag = 0 AND moderation_status = 'published'
+        GROUP BY progress_status`,
+    ),
+  ]);
   const summary = Object.fromEntries(FEATURE_PROGRESS_STATUSES.map((status) => [status, 0]));
   for (const row of summaryRows) summary[row.progress_status] = Number(row.total || 0);
   return {
@@ -215,7 +217,8 @@ export async function listAdminFeatureRequests({ filters = {}, pagination = {}, 
     where.push('(fr.title LIKE ? OR fr.content LIKE ? OR u.alias LIKE ?)');
     params.push(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`);
   }
-  const selected = requestSelect('', true);
+  // 同一行两个头像字段来自同一用户；数据库只传输一次，随后还原原有公开字段。
+  const selected = requestSelect('', true, true);
   const [rows] = await db.query(
     `${selected.sql} WHERE ${where.join(' AND ')} ORDER BY fr.update_time DESC LIMIT ? OFFSET ?`,
     [...selected.params, ...params, pageSize, offset],
@@ -226,7 +229,11 @@ export async function listAdminFeatureRequests({ filters = {}, pagination = {}, 
       WHERE ${where.join(' AND ')}`,
     params,
   );
-  return { items: rows, total: Number(countRow?.total || 0), currentPage, pageSize };
+  const items = rows.map((row) => ({
+    ...row,
+    submitter_avatar: Number(row.submitter_avatar) === 1 ? row.owner_avatar : null,
+  }));
+  return { items, total: Number(countRow?.total || 0), currentPage, pageSize };
 }
 
 export async function getFeatureRequestDetail({ id, viewerUserId = '', viewerRole = 'visitor', db = pool }) {
