@@ -13443,7 +13443,7 @@ export default {
       '与普通应用一样，长按桌面图标卸载，或在系统设置的应用列表中卸载。卸载只移除本机应用，云端账号与数据不受影响。',
 
     changelogTitle: '更新说明',
-    changelogVersion: '{version}（首个正式版本）',
+    changelogVersion: '{version}',
     changelogItems: [
       '改进系统返回：优先收起焦点控件的下拉菜单，并复用页面的返回与取消操作。',
       '改善系统浅色与深色切换、登录会话保存和桌面启动器图标。',

@@ -14044,7 +14044,7 @@ export default {
       'Uninstall it like any app: long-press the home screen icon, or use the app list in system settings. Uninstalling removes only the local app; your account and cloud data are untouched.',
 
     changelogTitle: 'Release notes',
-    changelogVersion: '{version} (first official release)',
+    changelogVersion: '{version}',
     changelogItems: [
       'Improved system back: closes the focused control’s dropdown first and uses the page’s back or cancel action.',
       'Improved system theme switching, login session persistence, and launcher icons.',
