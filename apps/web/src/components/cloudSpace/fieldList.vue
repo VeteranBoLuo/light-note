@@ -620,6 +620,7 @@
     </b-modal>
 
     <ResourceBatchActionBar
+      :show-mobile-project="false"
       selection-module="files"
       :selection-visible-count="selection.visibleSelected.value"
       :open="batchMode"
@@ -675,8 +676,9 @@
       </template>
     </ResourceBatchActionBar>
 
-    <MobilePageActionsDrawer
+    <ResourceBatchActionsDrawer
       v-if="bookmark.isMobile"
+      selection-module="files"
       v-model:open="mobileBatchActionsOpen"
       :title="batchActionSummary"
       :actions="mobileBatchActions"
@@ -816,6 +818,7 @@
   import { resolveFileAiSummaryPresentation } from '@/utils/fileAiSummary';
   import CloudTextCardPreview from '@/components/cloudSpace/CloudTextCardPreview.vue';
   import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
+  import ResourceBatchActionsDrawer from '@/components/resourceActions/ResourceBatchActionsDrawer.vue';
   import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
   import ResourceBatchActionBar from '@/components/resourceActions/ResourceBatchActionBar.vue';
   import ResourceOutcomeDrawer, {

@@ -96,6 +96,7 @@
     </ResourcePageShell>
 
     <ResourceBatchActionBar
+      :show-mobile-project="false"
       :open="batchMode && !desktopManagementMode"
       :mobile="bookmark.isMobile"
       selection-module="bookmarks"
@@ -149,7 +150,8 @@
       :actions="mobilePageActions"
       @action="handleMobilePageAction"
     />
-    <MobilePageActionsDrawer
+    <ResourceBatchActionsDrawer
+      selection-module="bookmarks"
       v-model:open="mobileBatchActionsOpen"
       :title="$t('bookmarkMg.batchSelected', { count: selectedIds.length })"
       :actions="mobileBatchActions"
@@ -185,6 +187,7 @@
   import icon from '@/config/icon.ts';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import { RESOURCE_LIST_PAGE_SIZE, mergeResourcePage } from '@/utils/resourcePagination';
+  import ResourceBatchActionsDrawer from '@/components/resourceActions/ResourceBatchActionsDrawer.vue';
   import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
   import { createMobileResourceHubActions, mobileResourceHubPath } from '@/utils/mobileResourceHubActions';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';

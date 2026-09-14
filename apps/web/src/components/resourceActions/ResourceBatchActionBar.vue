@@ -7,7 +7,7 @@
         class="resource-batch-action-bar--mobile"
         :class="{
           'has-selection-session': !!selectionModule,
-          'has-project-action': canAddProject || !!$slots['mobile-actions'],
+          'has-project-action': (showMobileProject && canAddProject) || !!$slots['mobile-actions'],
         }"
         :above-navigation="aboveNavigation"
       >
@@ -28,7 +28,7 @@
             <small v-if="detail">{{ detail }}</small>
           </div>
         </div>
-        <BButton v-if="canAddProject" :disabled="!!selectionStore?.busy" @click="addToProject">{{
+        <BButton v-if="showMobileProject && canAddProject" :disabled="!!selectionStore?.busy" @click="addToProject">{{
           translate('toolbox.project.join')
         }}</BButton>
         <slot name="mobile-actions" />
@@ -138,6 +138,7 @@
       showMore?: boolean;
       showPrimary?: boolean;
       showMobilePrimary?: boolean;
+      showMobileProject?: boolean;
       primaryIcon?: string;
       primaryDisabled?: boolean;
       primaryDisabledReason?: string;
@@ -153,6 +154,7 @@
       showMore: true,
       showPrimary: true,
       showMobilePrimary: true,
+      showMobileProject: true,
       primaryIcon: '',
       primaryDisabled: false,
       primaryDisabledReason: '',

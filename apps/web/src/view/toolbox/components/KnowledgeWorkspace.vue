@@ -350,7 +350,10 @@
       fullscreen-mobile
       initial-focus=".workspace-create-title"
     >
-      <div class="workspace-modal-form" :class="{ 'workspace-settings-form': workspaceFormMode === 'edit' }">
+      <div
+        class="workspace-modal-form"
+        :class="{ 'workspace-settings-form': workspaceFormMode === 'edit', 'workspace-modal-form--mobile': isMobileLayout }"
+      >
         <label v-if="workspaceFormMode !== 'edit'">
           <span>{{ t('toolbox.workspace.projectTemplate') }}</span>
           <BSelect v-model:value="createKind" :options="projectTemplateOptions" />
@@ -1802,6 +1805,13 @@
   .workspace-resource-modal {
     display: grid;
     gap: 18px;
+  }
+  .workspace-modal-form--mobile {
+    height: 100%;
+    box-sizing: border-box;
+    overflow-y: auto;
+    align-content: start;
+    padding: 16px var(--mobile-page-gutter, 16px) calc(20px + env(safe-area-inset-bottom));
   }
   .workspace-modal-callout {
     display: flex;

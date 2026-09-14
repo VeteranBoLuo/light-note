@@ -483,6 +483,7 @@
 
     <NoteAiDialog v-model:visible="noteAiVisible" :notes="noteAiItems" />
     <ResourceBatchActionBar
+      :show-mobile-project="false"
       selection-module="notes"
       :selection-visible-count="selection.visibleSelected.value"
       :open="batchMode"
@@ -613,8 +614,9 @@
       :actions="mobilePageActions"
       @action="handleMobilePageAction"
     />
-    <MobilePageActionsDrawer
+    <ResourceBatchActionsDrawer
       v-if="bookmark.isMobile"
+      selection-module="notes"
       v-model:open="mobileBatchActionsOpen"
       :title="t('note.selectedCount', { count: selectedVisibleCount })"
       :actions="mobileBatchActions"
@@ -700,6 +702,7 @@
   import NoteAiDialog from '@/components/noteLibrary/library/NoteAiDialog.vue';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import { useMobileNavigationState } from '@/composables/useMobileNavigationState';
+  import ResourceBatchActionsDrawer from '@/components/resourceActions/ResourceBatchActionsDrawer.vue';
   import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
   import { createMobileResourceHubActions, mobileResourceHubPath } from '@/utils/mobileResourceHubActions';
   import ResourceBatchActionBar from '@/components/resourceActions/ResourceBatchActionBar.vue';

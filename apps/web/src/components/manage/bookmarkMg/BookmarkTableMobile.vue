@@ -46,6 +46,7 @@
     </template>
   </PhoneListMg>
   <ResourceBatchActionBar
+    :show-mobile-project="false"
     selection-module="bookmarks"
     :selection-visible-count="selection.visibleSelected.value"
     :open="batchMode"
@@ -94,7 +95,8 @@
     :actions="mobilePageActions"
     @action="handleMobilePageAction"
   />
-  <MobilePageActionsDrawer
+  <ResourceBatchActionsDrawer
+    selection-module="bookmarks"
     v-model:open="mobileBatchActionsOpen"
     :title="batchActionSummary"
     :actions="mobileBatchActions"
@@ -119,6 +121,7 @@
   import { useI18n } from 'vue-i18n';
   import router from '@/router';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import ResourceBatchActionsDrawer from '@/components/resourceActions/ResourceBatchActionsDrawer.vue';
   import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
