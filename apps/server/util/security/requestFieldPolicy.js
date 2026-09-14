@@ -5,6 +5,8 @@ import {
   DRAWING_THUMBNAIL_MAX_BYTES,
   NOTE_CONTENT_MAX_LENGTH,
   NOTE_EXPORT_MAX_BYTES,
+  ORGANIZE_SELECTED_ITEMS_MAX_COUNT,
+  ORGANIZE_RESOURCE_ID_MAX_LENGTH,
   TAG_ICON_MAX_SVG_BYTES,
 } from '../contentLimits.js';
 import { AI_SKILL_NOTE_TRANSFORM_MAX_TEXT_CHARS } from '../aiSkill/limits.js';
@@ -15,6 +17,7 @@ const BASE64_PAYLOAD_PATTERN = /^[A-Za-z0-9+/]+={0,2}$/u;
 const NO_SIGNATURE_RULE_EXEMPTIONS = Object.freeze([]);
 const DAILY_REVIEW_ITEM_ACTIONS = new Set(['open', 'open_tag_space', 'snooze_7d', 'dismiss']);
 const DAILY_REVIEW_SESSION_ACTIONS = new Set(['skip_today', 'resume_today']);
+const ORGANIZE_RESOURCE_TYPES = new Set(['bookmark', 'note', 'file', 'tag']);
 
 const utf8Length = (value) => Buffer.byteLength(String(value ?? ''), 'utf8');
 
@@ -44,7 +47,45 @@ const policy = ({
 // 这里只声明“通用安全检测如何理解字段”，不取代业务 handler 的权威内容校验。
 // 路由、字段、语义和容量预算必须一起命中；形态不符或超限时仍回到通用签名/异常检测。
 const REQUEST_FIELD_POLICIES = new Map([
-  ['POST /note/imports/start', new Map(Array.from({ length: 200 }, (_, i) => [`body.items.${i}.title`, policy({ semantic: 'note-import-title', maxSize: 255, skipSignatureRules: '*' })]))],
+  [
+    'POST /organize/suggestions/previews',
+    new Map([
+      [
+        'body.items',
+        policy({
+          semantic: 'organize-selected-items',
+          maxSize: ORGANIZE_SELECTED_ITEMS_MAX_COUNT,
+          sizeUnit: 'items',
+          measure: (value) => (Array.isArray(value) ? value.length : 0),
+          accepts: (value, context) =>
+            context.body?.scope === 'selected' &&
+            Array.isArray(context.body?.resourceTypes) &&
+            value.length > 0 &&
+            value.every(
+              (item) =>
+                item &&
+                typeof item === 'object' &&
+                !Array.isArray(item) &&
+                Object.keys(item).every((key) => ['id', 'type'].includes(key)) &&
+                ORGANIZE_RESOURCE_TYPES.has(item.type) &&
+                context.body.resourceTypes.includes(item.type) &&
+                typeof item.id === 'string' &&
+                item.id.length > 0 &&
+                item.id.length <= ORGANIZE_RESOURCE_ID_MAX_LENGTH,
+            ),
+        }),
+      ],
+    ]),
+  ],
+  [
+    'POST /note/imports/start',
+    new Map(
+      Array.from({ length: 200 }, (_, i) => [
+        `body.items.${i}.title`,
+        policy({ semantic: 'note-import-title', maxSize: 255, skipSignatureRules: '*' }),
+      ]),
+    ),
+  ],
   [
     'POST /notification/browser/subscribe',
     new Map([
@@ -253,14 +294,15 @@ export const resolveRequestFieldPolicy = (context = {}, field = '') => {
   if (!definition) return null;
   const value = requestFieldValue(context, field);
   const size = definition.sizeUnit === 'utf8-bytes' ? utf8Length(value) : definition.measure(value);
-  const withinBudget = typeof value === 'string' && size <= definition.maxSize;
+  const measurable = definition.sizeUnit === 'items' ? Array.isArray(value) : typeof value === 'string';
+  const withinBudget = measurable && size <= definition.maxSize;
   return {
     semantic: definition.semantic,
     maxSize: definition.maxSize,
     sizeUnit: definition.sizeUnit,
     size,
     withinBudget,
-    overBudget: typeof value === 'string' && size > definition.maxSize,
+    overBudget: measurable && size > definition.maxSize,
     trustedEnvelope: withinBudget && definition.accepts(value, context),
     skipSignatureRules: definition.skipSignatureRules,
     fallbackContext: definition.fallbackContext,

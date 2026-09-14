@@ -32,6 +32,23 @@ export function getRootZoom(): number {
   return parseCssZoom(document.documentElement.style.zoom);
 }
 
+/**
+ * 为按布局像素命中的第三方画布适配鼠标 offset 坐标（在容器捕获阶段调用）。
+ * CSS zoom 下浏览器的 offsetX/Y 可能仍为视觉像素，不能直接交给表格引擎。
+ * 从 client 坐标和实际事件目标重算，避免依赖浏览器是否已缩放 offset 的差异；
+ * 只修正当前事件，不修改原型或 client 坐标，也不派发合成事件。
+ */
+export function normalizeMouseEventOffsetsForRootZoom(event: MouseEvent): void {
+  const zoom = getRootZoom();
+  if (zoom === 1 || !(event.target instanceof HTMLElement)) return;
+  const target = event.target;
+  const rect = target.getBoundingClientRect();
+  Object.defineProperties(event, {
+    offsetX: { configurable: true, value: (event.clientX - rect.left) / zoom - target.clientLeft },
+    offsetY: { configurable: true, value: (event.clientY - rect.top) / zoom - target.clientTop },
+  });
+}
+
 export interface RootZoomRect {
   top: number;
   right: number;

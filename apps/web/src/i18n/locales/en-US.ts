@@ -4758,11 +4758,11 @@ export default {
     },
     providers: {
       title: 'Models and providers',
-      hint: 'Cost is estimated from the price active when each call ran',
+      hint: 'Historical models in the selected period; cost uses prices at call time. Failed tasks are deduplicated per model and cannot be added across models',
       empty: 'No Provider calls',
       unknown: 'Provider not recorded',
       row: '{calls} calls · {tokens} tokens · est. ¥{cost}',
-      issue: 'Failed {failed} · missing usage {missing} · platform-covered {platform}',
+      issue: 'Failed tasks {failed} · failed calls {calls} · missing usage {missing} · platform-covered {platform}',
     },
     executions: {
       title: 'Execution details',
@@ -7448,6 +7448,17 @@ export default {
     },
   },
   cloudSpace: {
+    shareNoActiveLinks: 'No active share links',
+    shareBrandHint: 'File sharing by LightNote',
+    shareCreateOwn: 'Get started with LightNote',
+    shareShowHistory: 'Show inactive links ({count})',
+    shareHideHistory: 'Hide inactive links',
+
+    shareCopyLink: 'Copy link',
+    shareNewLinkReady: 'Your share link is ready. Copy it or select the address to save it.',
+    shareCopyFailed: 'Automatic copying was blocked. Select and copy the link manually.',
+    shareCopyUnavailable: 'The original link is not saved in this tab and cannot be recovered from the server. Replace and copy it? The old link will stop working immediately.',
+
     title: 'Cloud Space',
     subtitle: 'Organize files in nested folders and by type, with search, preview, drag-and-drop, and batch actions.',
     // 下拉刷新时文件、文件夹、用量分别请求,只有一部分失败时用它区别于整体失败
@@ -13794,6 +13805,8 @@ export default {
     breadcrumb: 'Shared directory path',
     sharedBy: 'Shared by {name}',
     updatedAt: 'Updated {time}',
+    emptyOutline: 'No outline for this page',
+    emptyOutlineHint: 'Headings in the page content will appear here for navigation.',
     emptyPage: 'This note has no content',
     poweredBy: 'Read-only sharing by LightNote',
     createOwnNotes: 'Create your own notes',

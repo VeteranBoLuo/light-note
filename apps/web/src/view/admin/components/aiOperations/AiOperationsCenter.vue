@@ -250,12 +250,18 @@
                 })
               }}</small>
               <small
-                v-if="provider.failedCalls || provider.missingUsageCalls || provider.platformCalls"
+                v-if="
+                  provider.failedExecutions ||
+                  provider.failedCalls ||
+                  provider.missingUsageCalls ||
+                  provider.platformCalls
+                "
                 class="is-attention"
               >
                 {{
                   t('aiOperations.providers.issue', {
-                    failed: formatNumber(provider.failedCalls),
+                    failed: formatNumber(provider.failedExecutions),
+                    calls: formatNumber(provider.failedCalls),
                     missing: formatNumber(provider.missingUsageCalls),
                     platform: formatNumber(provider.platformCalls),
                   })

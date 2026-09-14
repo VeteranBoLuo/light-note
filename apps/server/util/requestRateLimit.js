@@ -130,3 +130,4 @@ export const earlyAnonymousRateLimiter = rateLimit({
 });
 
 export const userActivityRateLimiter = featureRateLimiter({ limit: 12, code: 'ACTIVITY_RATE_LIMITED', message: '请稍后重试' });
+export const resourceReuseRateLimiter = featureRateLimiter({ limit: 30, code: 'REUSE_RATE_LIMITED', message: '请稍后重试' });

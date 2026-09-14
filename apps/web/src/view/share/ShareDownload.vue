@@ -1,5 +1,5 @@
 <template>
-  <div class="share-download">
+  <div class="share-download" :class="{ 'is-mobile': bookmark.isMobile }">
     <div class="download-container">
       <div v-if="loading && !file.fileName" class="loading-section" aria-live="polite">
         <div class="loading-card">
@@ -9,8 +9,10 @@
       <div v-else-if="errorCode && !requiresCode" class="file-info-section" role="alert">
         <div class="file-card">
           <div class="file-header">
-            <h2 class="file-title">{{ t('cloudSpace.shareUnavailableTitle') }}</h2>
-            <p class="file-subtitle">{{ errorMessage }}</p>
+            <div class="file-heading">
+              <h2 class="file-title">{{ t('cloudSpace.shareUnavailableTitle') }}</h2>
+              <p class="file-subtitle">{{ errorMessage }}</p>
+            </div>
           </div>
           <BButton :loading="loading" type="primary" @click="resolveShare">{{ t('common.retry') }}</BButton>
         </div>
@@ -19,12 +21,14 @@
         <div class="file-card">
           <div class="file-header">
             <div v-if="file.fileName" class="file-icon">
-              <svg-icon :src="fileIcon" />
+              <SvgIcon :src="fileIcon" :size="bookmark.isMobile ? 48 : 56" aria-hidden="true" />
             </div>
-            <h2 class="file-title">{{ file.fileName || t('cloudSpace.share') }}</h2>
-            <p class="file-subtitle">
-              {{ requiresCode ? t('cloudSpace.shareCodeRequired') : t('cloudSpace.shareDescription') }}
-            </p>
+            <div class="file-heading">
+              <h2 class="file-title">{{ file.fileName || t('cloudSpace.share') }}</h2>
+              <p v-if="requiresCode || file.description" class="file-subtitle">
+                {{ requiresCode ? t('cloudSpace.shareCodeRequired') : file.description }}
+              </p>
+            </div>
           </div>
           <div v-if="requiresCode" class="share-code-form">
             <label for="file-share-code">{{ t('cloudSpace.shareAccessCode') }}</label>
@@ -42,39 +46,41 @@
             </BButton>
           </div>
           <template v-else-if="file.fileName">
-            <div class="file-details">
-              <div v-if="file.description" class="detail-item">
-                <span><strong>{{ t('cloudSpace.shareDescriptionLabel') }}:</strong> {{ file.description }}</span>
-              </div>
-              <div class="detail-item">
-                <span><strong>{{ t('cloudSpace.fileSize') }}:</strong> {{ formatFileSize(file.fileSize) }}</span>
-              </div>
-              <div class="detail-item">
-                <span><strong>{{ t('cloudSpace.createTime') }}:</strong> {{ formatDate(file.createTime) }}</span>
-              </div>
-              <div class="detail-item">
-                <span><strong>{{ t('cloudSpace.createBy') }}:</strong> {{ file.creatorName || '-' }}</span>
-              </div>
-              <div class="detail-item">
-                <span><strong>{{ t('cloudSpace.shareExpiresAt') }}:</strong> {{ formatDate(file.expiresAt) }}</span>
-              </div>
-            </div>
+            <dl class="file-details">
+              <div
+                ><dt>{{ t('cloudSpace.fileSize') }}</dt
+                ><dd>{{ formatFileSize(file.fileSize) }}</dd></div
+              >
+              <div
+                ><dt>{{ t('cloudSpace.createBy') }}</dt
+                ><dd>{{ file.creatorName || '-' }}</dd></div
+              >
+              <div
+                ><dt>{{ t('cloudSpace.createTime') }}</dt
+                ><dd>{{ formatDate(file.createTime) }}</dd></div
+              >
+              <div
+                ><dt>{{ t('cloudSpace.shareExpiresAt') }}</dt
+                ><dd>{{ formatDate(file.expiresAt) }}</dd></div
+              >
+            </dl>
             <div class="action-buttons">
-              <BSpace :size="12">
-                <BButton size="large" :loading="loading" @click="previewFile" class="preview-btn">
-                  {{ t('common.preview') }}
-                </BButton>
-                <BButton type="primary" size="large" :loading="loading" @click="downloadFile" class="download-btn">
-                  {{ downloadSuccess ? t('cloudSpace.downloadAgain') : t('cloudSpace.download') }}
-                </BButton>
-              </BSpace>
+              <BButton type="success" size="large" :loading="loading" @click="previewFile" class="preview-btn">
+                {{ t('common.preview') }}
+              </BButton>
+              <BButton type="primary" size="large" :loading="loading" @click="downloadFile" class="download-btn">
+                {{ downloadSuccess ? t('cloudSpace.downloadAgain') : t('cloudSpace.download') }}
+              </BButton>
+              <BButton size="large" class="copy-btn" @click="copyShareLink">{{
+                t('cloudSpace.shareCopyLink')
+              }}</BButton>
             </div>
           </template>
         </div>
       </div>
       <div class="brand-cta">
-        <span class="brand-cta__text">用<b>轻笺</b>管理你的书签 · 笔记 · 文件,免费</span>
-        <BButton type="primary" @click="goRegister">免费创建你自己的</BButton>
+        <span class="brand-cta__text">{{ t('cloudSpace.shareBrandHint') }}</span>
+        <BButton type="primary" class="brand-cta__button" @click="goRegister">{{ t('cloudSpace.shareCreateOwn') }}</BButton>
       </div>
     </div>
     <FilePreview
@@ -87,6 +93,8 @@
 </template>
 
 <script lang="ts" setup>
+  import { copyFileShareUrl } from '@/utils/fileShareLinks';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import { ref, computed, reactive, onMounted } from 'vue';
   import { useRoute } from 'vue-router';
   import { useI18n } from 'vue-i18n';
@@ -98,7 +106,6 @@
   import { getCloudFileCategory } from '@/constants/cloudFileCategory.ts';
   import { recordOperation } from '@/api/commonApi.ts';
   import { bookmarkStore } from '@/store';
-  import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
@@ -200,6 +207,11 @@
     }
   };
 
+  async function copyShareLink() {
+    if (await copyFileShareUrl(token.value)) message.success(t('common.shareLinkCopied'));
+    else message.warning(t('cloudSpace.shareCopyFailed'));
+  }
+
   const previewFile = () => {
     errorMessage.value = '';
     recordOperation({ module: '分享文件', operation: `预览分享文件【${file.fileName}】` });
@@ -222,409 +234,147 @@
 <style lang="less" scoped>
   .share-download {
     display: flex;
-    justify-content: center;
-    align-items: center;
-    min-height: 100vh;
-    background:
-      radial-gradient(circle at 20% 80%, rgba(120, 119, 198, 0.3) 0%, transparent 50%),
-      radial-gradient(circle at 80% 20%, rgba(255, 119, 198, 0.3) 0%, transparent 50%),
-      radial-gradient(circle at 40% 40%, rgba(120, 219, 226, 0.3) 0%, transparent 50%),
-      var(--bg-image, linear-gradient(135deg, #667eea 0%, #764ba2 100%));
-    padding: 20px;
-    font-family: var(--app-font-family);
-    position: relative;
-    overflow: hidden;
-
-    &::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grain" width="100" height="100" patternUnits="userSpaceOnUse"><circle cx="25" cy="25" r="1" fill="rgba(255,255,255,0.1)"/><circle cx="75" cy="75" r="1" fill="rgba(255,255,255,0.1)"/><circle cx="50" cy="10" r="0.5" fill="rgba(255,255,255,0.1)"/><circle cx="10" cy="50" r="0.5" fill="rgba(255,255,255,0.1)"/><circle cx="90" cy="50" r="0.5" fill="rgba(255,255,255,0.1)"/><circle cx="50" cy="90" r="0.5" fill="rgba(255,255,255,0.1)"/></pattern></defs><rect width="100" height="100" fill="url(%23grain)"/></svg>');
-      pointer-events: none;
-      opacity: 0.5;
-    }
-
-    .download-container {
-      max-width: 600px;
-      width: 100%;
-
-      .loading-section,
-      .success-section,
-      .file-info-section {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        min-height: 500px;
-      }
-
-      .loading-card,
-      .success-card,
-      .file-card {
-        background: rgba(255, 255, 255, 0.1);
-        backdrop-filter: blur(20px);
-        -webkit-backdrop-filter: blur(20px);
-        border-radius: 24px;
-        box-shadow:
-          0 20px 60px rgba(0, 0, 0, 0.15),
-          inset 0 1px 0 rgba(255, 255, 255, 0.2);
-        padding: 40px;
-        text-align: center;
-        width: 100%;
-        max-width: 500px;
-        transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        position: relative;
-        overflow: hidden;
-
-        &::before {
-          content: '';
-          position: absolute;
-          top: 0;
-          left: -100%;
-          width: 100%;
-          height: 100%;
-          background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
-          transition: left 0.5s;
-        }
-
-        &:hover {
-          box-shadow:
-            0 30px 80px rgba(0, 0, 0, 0.2),
-            inset 0 1px 0 rgba(255, 255, 255, 0.3);
-
-          &::before {
-            left: 100%;
-          }
-        }
-      }
-
-      .loading-card {
-        .loading-icon {
-          margin-bottom: 20px;
-
-          .pulse {
-            animation: pulse 2s infinite;
-            font-size: 80px;
-            color: var(--primary-btn-bg-color, #667eea);
-          }
-        }
-
-        .loading-title {
-          font-size: 24px;
-          font-weight: 600;
-          color: var(--text-color, #333);
-          margin-bottom: 8px;
-        }
-
-        .loading-subtitle {
-          font-size: 16px;
-          color: var(--desc-color, #666);
-          margin-bottom: 20px;
-        }
-
-        .progress-bar {
-          width: 100%;
-          height: 6px;
-          background: var(--bl-input-noBorder-bg-color, #f0f0f0);
-          border-radius: 3px;
-          overflow: hidden;
-          margin-bottom: 20px;
-
-          .progress-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #667eea, #764ba2);
-            animation: progress 2s ease-in-out infinite;
-          }
-        }
-
-        .loading-text {
-          color: var(--desc-color, #666);
-          font-size: 14px;
-        }
-      }
-
-      .success-card,
-      .file-card {
-        .success-header,
-        .file-header {
-          margin-bottom: 30px;
-
-          .success-icon,
-          .file-icon {
-            margin-bottom: 20px;
-            font-size: 50px;
-            color: var(--primary-btn-bg-color, #667eea);
-            filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.2));
-          }
-
-          .bounce {
-            animation: bounce 1s ease-in-out;
-          }
-
-          .success-title,
-          .file-title {
-            font-size: 32px;
-            font-weight: 800;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            margin-bottom: 12px;
-            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            animation: titleGlow 2s ease-in-out infinite alternate;
-          }
-
-          .success-subtitle,
-          .file-subtitle {
-            font-size: 16px;
-            color: #ccc;
-          }
-        }
-
-        .file-details {
-          background: var(--bl-input-noBorder-bg-color, #f8f9fa);
-          border-radius: 12px;
-          padding: 20px;
-          margin-bottom: 30px;
-
-          .detail-item {
-            display: flex;
-            align-items: center;
-            margin-bottom: 16px;
-            gap: 10px;
-            padding: 8px 12px;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 8px;
-            transition: all 0.3s ease;
-
-            &:last-child {
-              margin-bottom: 0;
-            }
-
-            &:hover {
-              background: rgba(255, 255, 255, 0.2);
-              transform: translateX(5px);
-            }
-
-            svg {
-              margin-right: 16px;
-              color: var(--icon-color, #bfbfbf);
-              font-size: 20px;
-              flex-shrink: 0;
-            }
-
-            span {
-              color: var(--text-color, #555);
-              font-size: 14px;
-              line-height: 1.4;
-
-              strong {
-                color: var(--text-color, #333);
-                font-weight: 600;
-              }
-            }
-          }
-        }
-
-        .action-buttons {
-          .download-btn,
-          .preview-btn {
-            width: 100%;
-            height: 56px;
-            font-size: 18px;
-            font-weight: 700;
-            border-radius: 16px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border: none;
-            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            position: relative;
-            overflow: hidden;
-            color: white;
-            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-
-            &::before {
-              content: '';
-              position: absolute;
-              top: 0;
-              left: -100%;
-              width: 100%;
-              height: 100%;
-              background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-              transition: left 0.5s;
-            }
-
-            &:hover {
-              transform: translateY(-3px) scale(1.05);
-              box-shadow: 0 12px 30px rgba(102, 126, 234, 0.5);
-              background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
-
-              &::before {
-                left: 100%;
-              }
-            }
-
-            svg {
-              margin-right: 12px;
-              font-size: 20px;
-            }
-          }
-
-          .preview-btn {
-            background: linear-gradient(135deg, #52c41a 0%, #73d13d 100%);
-
-            &:hover {
-              background: linear-gradient(135deg, #73d13d 0%, #52c41a 100%);
-              box-shadow: 0 12px 30px rgba(82, 196, 26, 0.5);
-            }
-          }
-        }
-      }
-    }
+    flex-direction: column;
+    min-height: 100%;
+    height: 100%;
+    overflow-y: auto;
+    box-sizing: border-box;
+    padding: 32px 24px;
+    color: var(--text-color);
+    background: var(--workspace-canvas);
   }
-
-  .brand-cta {
-    margin: 20px auto 0;
-    max-width: 500px;
+  .download-container {
+    width: min(100%, 680px);
+    flex: 0 0 auto;
+    margin: auto;
+  }
+  .file-card,
+  .loading-card {
+    padding: 32px;
+    border: 1px solid var(--workspace-border);
+    border-radius: 20px;
+    background: var(--workspace-content);
+    box-shadow: var(--surface-card-shadow);
+  }
+  .loading-card {
+    min-height: 180px;
+    display: grid;
+    place-items: center;
+  }
+  .file-header {
     display: flex;
     align-items: center;
-    justify-content: center;
-    gap: 14px;
-    flex-wrap: wrap;
-    padding: 14px 18px;
-    border-radius: 16px;
-    background: rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    gap: 18px;
+    margin-bottom: 24px;
+  }
+  .file-icon {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+  }
+  .file-heading {
+    min-width: 0;
+  }
+  .file-title {
+    margin: 0;
+    font-size: 26px;
+    line-height: 1.35;
+    font-weight: 650;
+    overflow-wrap: anywhere;
+  }
+  .file-subtitle {
+    margin: 10px 0 0;
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--workspace-muted);
+    overflow-wrap: anywhere;
+  }
+  .file-details {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px 24px;
+    margin: 0 0 24px;
+    padding: 20px 0;
+    border-top: 1px solid var(--workspace-divider);
+    border-bottom: 1px solid var(--workspace-divider);
+    dt {
+      color: var(--workspace-muted);
+      font-size: 13px;
+      margin-bottom: 5px;
+    }
+    dd {
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.5;
+      overflow-wrap: anywhere;
+    }
+  }
+  .action-buttons {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    .download-btn,
+    .preview-btn,
+    .copy-btn {
+      width: 100%;
+      min-width: 0;
+      height: 40px;
+      min-height: 40px;
+      padding: 0 6px;
+      box-sizing: border-box;
+      font-size: 14px;
+      border-radius: 8px;
+    }
+    .preview-btn {
+      background: var(--success-color);
+      color: var(--workspace-content);
+    }
+    .preview-btn:hover {
+      background: var(--success-color);
+      filter: brightness(0.94);
+    }
   }
   .share-code-form {
-    display: flex;
-    flex-direction: column;
+    display: grid;
     gap: 12px;
-    text-align: left;
-    label {
-      color: var(--text-color);
-      font-size: 14px;
-      font-weight: 600;
-    }
   }
   .share-code-error {
     margin: 0;
-    color: var(--danger-color, #d14343);
+    color: var(--error-color);
+  }
+  .brand-cta {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 24px;
+    color: var(--text-color);
     font-size: 13px;
   }
-  .brand-cta__text {
-    color: #fff;
-    font-size: 14px;
-  }
-  .brand-cta__btn {
-    border: 0;
-    cursor: pointer;
+  .brand-cta__button {
+    height: 36px;
+    min-height: 36px;
+    padding: 0 18px;
+    border-radius: 10px;
     font-size: 14px;
     font-weight: 600;
-    color: #fff;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    padding: 8px 18px;
-    border-radius: 999px;
   }
-  .brand-cta__btn:hover {
-    opacity: 0.92;
-  }
-
-  @keyframes pulse {
-    0%,
-    100% {
-      opacity: 1;
-      transform: scale(1);
+  .share-download.is-mobile {
+    padding: 20px 12px;
+    .file-card,
+    .loading-card {
+      padding: 20px 16px;
     }
-    50% {
-      opacity: 0.7;
-      transform: scale(1.05);
+    .file-header {
+      gap: 12px;
+      margin-bottom: 20px;
     }
-  }
-
-  @keyframes progress {
-    0% {
-      width: 0%;
+    .file-title {
+      font-size: 20px;
     }
-    50% {
-      width: 70%;
-    }
-    100% {
-      width: 100%;
-    }
-  }
-
-  @keyframes bounce {
-    0%,
-    20%,
-    50%,
-    80%,
-    100% {
-      transform: translateY(0);
-    }
-    40% {
-      transform: translateY(-10px);
-    }
-    60% {
-      transform: translateY(-5px);
-    }
-  }
-
-  @keyframes titleGlow {
-    from {
-      filter: brightness(1) drop-shadow(0 0 5px rgba(102, 126, 234, 0.3));
-    }
-    to {
-      filter: brightness(1.1) drop-shadow(0 0 15px rgba(102, 126, 234, 0.6));
-    }
-  }
-
-  @media (max-width: 768px) {
-    .share-download {
-      padding: 10px;
-
-      .download-container {
-        .loading-card,
-        .success-card,
-        .file-card {
-          padding: 30px 20px;
-
-          .loading-icon,
-          .success-icon,
-          .file-icon {
-            svg {
-              font-size: 60px;
-            }
-          }
-
-          .success-title,
-          .file-title {
-            font-size: 24px;
-          }
-
-          .file-details {
-            padding: 16px;
-
-            .detail-item {
-              span {
-                font-size: 13px;
-              }
-            }
-          }
-
-          .download-btn,
-          .preview-btn {
-            height: 45px;
-            font-size: 15px;
-          }
-        }
-      }
+    .file-details {
+      gap: 16px 12px;
     }
   }
 </style>

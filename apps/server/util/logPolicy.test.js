@@ -22,6 +22,7 @@ describe('API 日志跳过策略', () => {
     '/api/infra/storage',
     '/api/infra/security',
     '/api/common/recordAiEvent',
+    '/api/common/recordResourceOpen',
     '/api/me',
   ])('跳过无审计价值的被动读取接口：%s', (url) => {
     expect(shouldSkipApiLog(url)).toBe(true);

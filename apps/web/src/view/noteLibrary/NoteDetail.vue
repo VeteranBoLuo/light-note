@@ -1,6 +1,10 @@
 <template>
   <div class="note-container" :class="{ 'note-container--mobile': bookmark.isMobile }">
-    <div v-if="isReady">
+    <div
+      v-if="isReady"
+      data-reuse-resource-type="note"
+      :data-reuse-resource-id="!isNoteSwitching && !readonly ? note.id : undefined"
+    >
       <NoteHeader
         :updateTime="updateTime"
         :readonly="readonly"
@@ -338,6 +342,7 @@
 </template>
 
 <script lang="ts" setup>
+  import { captureResourceOpen } from '@/utils/resourceReuseRuntime';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import NoteTransferDialog from '@/components/noteLibrary/transfer/NoteTransferDialog.vue';
   import {
@@ -2261,6 +2266,7 @@
   }
 
   async function loadRouteNote(routeId: string, query: Record<string, any>) {
+    const recordOpened = captureResourceOpen();
     if (!routeId) return;
     if (promotedDraftRouteId && routeId === promotedDraftRouteId && note.id === routeId) {
       promotedDraftRouteId = '';
@@ -2355,6 +2361,7 @@
         });
         updateTime.value = detailRecord.updateTime ?? detailRecord.createTime;
         nodeType.value = user.id === note.createBy ? 'edit' : 'share';
+        if (nodeType.value === 'edit') recordOpened('note', note.id);
         if (note.type === 'drawing' && nodeType.value === 'edit') {
           // 历史笔记不要求用户制造一次正文 revision；完整 scene 到达后静默补齐当前版派生图。
           void ensureDrawingThumbnail(note.id, note.revision, String(note.content || '')).catch(() => false);

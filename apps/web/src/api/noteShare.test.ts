@@ -70,29 +70,23 @@ describe('note share URL', () => {
     expect(readerSource).toContain("import NoteOutlineList from '@/components/noteLibrary/detail/NoteOutlineList.vue'");
     expect(readerSource).toContain(':active-index="activeHeadingIndex"');
     expect(readerSource).toContain("readerRef.value?.addEventListener('scroll', scheduleActiveHeading");
-    expect(readerSource).toContain(":class=\"{ 'is-outline': !isSubtreeShare || effectiveSidebarTab === 'outline' }\"");
+    expect(readerSource).toContain(":class=\"{ 'is-outline': !isSubtreeShare || sidebarTab === 'outline' }\"");
     expect(readerSource).toMatch(/\.note-share-reader__sidebar-scroll[\s\S]*?box-sizing:\s*border-box/);
     expect(readerSource).toMatch(/&\.is-outline\s*\{\s*overflow:\s*hidden/);
     expect(outlineSource).toContain('v-auto-scrollbar');
     expect(readerSource).not.toContain('note-share-reader__outline-item');
   });
 
-  it('切换无大纲页面时临时回退到页面树，并阻止旧页异步渲染覆盖新页', () => {
+  it('阻止旧页异步渲染覆盖新页，并在正文挂载后收集大纲', () => {
     const readerSource = readFileSync(resolve(process.cwd(), 'src/view/share/NoteShareReader.vue'), 'utf8');
-    expect(readerSource).toContain("const effectiveSidebarTab = computed<'pages' | 'outline'>(() =>");
-    expect(readerSource).toContain("sidebarTab.value === 'outline' && !headings.value.length ? 'pages'");
     expect(readerSource).toContain('const renderVersion = ++pageRenderVersion');
     expect(readerSource.match(/if \(renderVersion !== pageRenderVersion\) return;/g)).toHaveLength(2);
-    expect(readerSource).toContain('if (!busy && renderedHtml.value) void collectRenderedHeadings(pageRenderVersion)');
-    expect(readerSource).toContain('if (!content) return');
+    expect(readerSource).toContain('if (!busy) void collectRenderedHeadings(pageRenderVersion)');
     expect(readerSource).toContain('variant="share"');
   });
 
   it('编辑页大纲只有内部列表承接滚动，单个标题不再出现双层滚动条', () => {
-    const catalogSource = readFileSync(
-      resolve(process.cwd(), 'src/components/noteLibrary/detail/Catalog.vue'),
-      'utf8',
-    );
+    const catalogSource = readFileSync(resolve(process.cwd(), 'src/components/noteLibrary/detail/Catalog.vue'), 'utf8');
     const outlineSource = readFileSync(
       resolve(process.cwd(), 'src/components/noteLibrary/detail/NoteOutlineList.vue'),
       'utf8',

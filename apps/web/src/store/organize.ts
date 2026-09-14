@@ -18,6 +18,7 @@ interface IssueListState {
   loading: boolean;
   loadingMore: boolean;
   error: boolean;
+  retryReset: boolean;
   requestGeneration: number;
 }
 
@@ -29,6 +30,7 @@ function emptyListState(): IssueListState {
     loading: false,
     loadingMore: false,
     error: false,
+    retryReset: true,
     requestGeneration: 0,
   };
 }
@@ -98,7 +100,7 @@ export default defineStore('organize', {
     ) {
       const list = this.lists[issueType];
       const reset = options.reset !== false;
-      // 重复点击“加载更多”不能先推进请求世代；否则会把仍在途的合法请求标成过期，
+      // 重复触发续页不能先推进请求世代；否则会把仍在途的合法请求标成过期，
       // 且它的 finally 也无法复位 loadingMore，列表会永久卡在加载态。
       if (!reset && (!list.hasMore || list.loadingMore || list.loading)) return false;
       const generation = ++list.requestGeneration;
@@ -119,6 +121,7 @@ export default defineStore('organize', {
         });
         if (generation !== list.requestGeneration) return false;
         if (response.status !== 200) {
+          list.retryReset = reset;
           list.error = true;
           return false;
         }
@@ -129,7 +132,10 @@ export default defineStore('organize', {
         list.error = false;
         return true;
       } catch {
-        if (generation === list.requestGeneration) list.error = true;
+        if (generation === list.requestGeneration) {
+          list.retryReset = reset;
+          list.error = true;
+        }
         return false;
       } finally {
         if (generation === list.requestGeneration) {

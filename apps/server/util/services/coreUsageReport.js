@@ -84,6 +84,13 @@ export function buildCoreUsageQueries(o) {
       AND a.first_active_at < DATE_ADD(CONVERT_TZ(u.create_time, ?, '+08:00'),INTERVAL 7 DAY)) >= 2`,
       params: [...mature, ...Array(4).fill(o.storageOffset)],
     },
+    reuse: {
+      sql: `${HINT} COUNT(*) AS returning_count FROM user u WHERE ${USERS}
+        AND EXISTS (SELECT 1 FROM resource_reuse_milestones r WHERE r.user_id = u.id
+          AND r.first_opened_at >= CONVERT_TZ(u.create_time, ?, '+08:00')
+          AND r.first_opened_at < DATE_ADD(CONVERT_TZ(u.create_time, ?, '+08:00'), INTERVAL 7 DAY))`,
+      params: [...mature, o.storageOffset, o.storageOffset],
+    },
   };
 }
 function reason(error) {
@@ -140,7 +147,7 @@ export async function generateCoreUsageReport(db, input = {}) {
       throw Object.assign(new Error('CORE_USAGE_TIMEZONE_MISMATCH'), { code: 'CORE_USAGE_TIMEZONE_MISMATCH' });
     const indices = await run(
       'indices',
-      `${HINT} TABLE_NAME AS tableName, INDEX_NAME AS indexName, GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX) AS cols FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME IN ('user','growth_events','conversion_events','user_activity_daily') GROUP BY TABLE_NAME,INDEX_NAME`,
+      `${HINT} TABLE_NAME AS tableName, INDEX_NAME AS indexName, GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX) AS cols FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME IN ('user','growth_events','conversion_events','user_activity_daily','resource_reuse_milestones') GROUP BY TABLE_NAME,INDEX_NAME`,
     );
     const indexed = (table, prefix) =>
       indices.some((r) => r.tableName === table && (r.cols === prefix || r.cols.startsWith(prefix + ',')));
@@ -165,18 +172,20 @@ export async function generateCoreUsageReport(db, input = {}) {
       growth: ['growth_events', 'user_id,source,status,create_time'],
       conversion: ['conversion_events', 'user_id,event,create_time'],
       interaction: ['user_activity_daily', 'user_id,activity_date'],
+      reuse: ['resource_reuse_milestones', 'user_id,first_opened_at'],
     };
-    for (const source of ['growth', 'conversion', 'interaction']) {
+    for (const source of ['growth', 'conversion', 'interaction', 'reuse']) {
       let values = null,
         failure = null,
         coverage = o.coverage[source] ?? null;
       try {
         if (!indexed(...requirements[source])) failure = 'required_index_missing';
         else {
-          if (source === 'interaction') {
+          if (source === 'interaction' || source === 'reuse') {
+            const metadata = source === 'reuse' ? 'resource_reuse_metadata' : 'user_activity_metadata';
             const rows = await run(
-              'interaction_coverage',
-              `${HINT} DATE_FORMAT(started_at,'%Y-%m-%d %H:%i:%s') AS startedAt FROM user_activity_metadata WHERE id=1`,
+              `${source}_coverage`,
+              `${HINT} DATE_FORMAT(started_at,'%Y-%m-%d %H:%i:%s') AS startedAt FROM ${metadata} WHERE id=1`,
             );
             coverage = rows[0]?.startedAt ? instant(rows[0].startedAt.replace(' ', 'T') + '+08:00') : null;
           }
@@ -192,12 +201,13 @@ export async function generateCoreUsageReport(db, input = {}) {
           ? { a7Resources: 'own_count', a7Overall: 'first_count', r7Core: 'returning_count' }
           : source === 'conversion'
             ? { a7ResourcesLegacy: 'own_count' }
-            : { r7InteractionProxy: 'returning_count' };
+            : source === 'reuse'
+              ? { u7Reuse: 'returning_count' }
+              : { r7InteractionProxy: 'returning_count' };
       for (const [name, column] of Object.entries(fields))
         report.metrics[name] = metric(eligible, values?.[column], coverage, o, failure);
     }
     for (const [name, missing] of Object.entries({
-      u7Reuse: 'missing_linkage',
       extensionRepeat: 'incomplete_history',
       acquisitionChannel: 'missing_attribution',
       organizeTaskFunnel: 'missing_linkage',

@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import ts from 'typescript';
+import { computed, ref } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { todoCalendarOwnerKey } from '@/utils/todoCalendarAccess';
@@ -31,7 +32,13 @@ const executable = ts.transpile(`${viewNode.getText(ast)}\n${refreshNode.getText
   target: ts.ScriptTarget.ES2022,
 });
 
-function pageRefresh(todo: ReturnType<typeof useTodoStore>, view: string) {
+function pageRefresh(
+  todo: ReturnType<typeof useTodoStore>,
+  view: string,
+  loading = { value: false },
+  fetchTags = async (): Promise<any[]> => [],
+  refreshCount = async () => false,
+) {
   return new Function(
     'todoCalendarOwnerKey',
     'todo',
@@ -46,7 +53,8 @@ function pageRefresh(todo: ReturnType<typeof useTodoStore>, view: string) {
     'workspaceTags',
     'getTodoWorkspace',
     'recentCompleted',
-    `let savedTodoRange = null; ${executable}; return refreshList;`,
+    'todoPageLoading',
+    `let savedTodoRange = null; let pageRefreshGeneration = 0; ${executable}; return refreshList;`,
   )(
     todoCalendarOwnerKey,
     todo,
@@ -54,18 +62,19 @@ function pageRefresh(todo: ReturnType<typeof useTodoStore>, view: string) {
     {
       filterType: 'todo',
       keyword: '',
-      refreshCount: async () => false,
+      refreshCount,
     },
     async () => {},
     { value: null },
     () => {},
     { value: view === 'calendar' || view === 'matrix' },
     { id: 'test-owner' },
-    async () => [],
+    fetchTags,
     { value: [] },
     async () => ({ status: 200, data: { items: [] } }),
     { value: [] },
-  ) as () => Promise<boolean>;
+    loading,
+  ) as (resetScroll?: boolean, silent?: boolean) => Promise<boolean>;
 }
 
 const items = [
@@ -191,4 +200,92 @@ it.each([
     expect(todo.seriesPresentation).toBe(false);
   }
   expect(todo.status).toBe('pending');
+});
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+it.each(['success', 'empty', 'failure'])('慢标签与待办请求持续加载，结束后进入 %s 状态', async (result) => {
+  const todo = useTodoStore();
+  const loading = { value: false };
+  const tags = deferred<any[]>();
+  const response = deferred<any>();
+  listTodos.mockReturnValueOnce(response.promise);
+  const refresh = pageRefresh(todo, 'matrix', loading, () => tags.promise);
+  const pending = refresh();
+  expect(loading.value).toBe(true);
+  expect(listTodos).not.toHaveBeenCalled();
+  tags.resolve([]);
+  await vi.waitFor(() => expect(listTodos).toHaveBeenCalledTimes(1));
+  expect(loading.value).toBe(true);
+  response.resolve({ status: result === 'failure' ? 500 : 200, data: { items: result === 'success' ? items : [] } });
+  await pending;
+  expect(loading.value).toBe(false);
+  expect(todo.loading).toBe(false);
+  expect(todo.loadFailed).toBe(result === 'failure');
+  expect(todo.items).toHaveLength(result === 'success' ? 2 : 0);
+});
+
+it('已有内容的静默刷新保留列表，不显示首屏加载', async () => {
+  const todo = useTodoStore();
+  todo.items = items as any;
+  const tags = deferred<any[]>();
+  const loading = { value: false };
+  const pending = pageRefresh(todo, 'matrix', loading, () => tags.promise)(false, true);
+  expect(loading.value).toBe(false);
+  expect(todo.items).toHaveLength(2);
+  tags.resolve([]);
+  await pending;
+});
+
+it('旧标签响应不能关闭最新加载态或发起过时的列表请求', async () => {
+  const todo = useTodoStore();
+  const loading = { value: false };
+  const oldTags = deferred<any[]>();
+  const newTags = deferred<any[]>();
+  const fetchTags = vi.fn().mockReturnValueOnce(oldTags.promise).mockReturnValueOnce(newTags.promise);
+  const refresh = pageRefresh(todo, 'matrix', loading, fetchTags);
+  const oldRequest = refresh();
+  const newRequest = refresh();
+  oldTags.resolve([]);
+  expect(await oldRequest).toBe(false);
+  expect(loading.value).toBe(true);
+  expect(listTodos).not.toHaveBeenCalled();
+  newTags.resolve([]);
+  expect(await newRequest).toBe(true);
+  expect(loading.value).toBe(false);
+  expect(listTodos).toHaveBeenCalledTimes(1);
+});
+
+
+it('分组出现后结束总加载，统计仍在等待时只保留分组加载', async () => {
+  const todo = useTodoStore();
+  const loading = ref(false);
+  const count = deferred<boolean>();
+  const pageLoadingNode = ast.statements.find((node) =>
+    ts.isVariableStatement(node) && node.declarationList.declarations.some(
+      (declaration) => declaration.name.getText(ast) === 'pageLoading',
+    ),
+  )!;
+  const getLoading = new Function('computed', 'todo', 'todoPageLoading', `
+    const isTodoFocused = { value: true }, isMobileTodoPrimary = { value: false };
+    const isMobileResourceInbox = { value: false }, inbox = { filterType: 'todo' };
+    const recentCompleted = { value: [] };
+    ${ts.transpile(pageLoadingNode.getText(ast), { target: ts.ScriptTarget.ES2022 })}
+    return pageLoading;
+  `)(computed, todo, loading);
+  const pending = pageRefresh(todo, 'list', loading, async () => [], () => count.promise)();
+  expect(getLoading.value).toBe(true);
+  await vi.waitFor(() => expect(todo.groups).toHaveLength(1));
+  expect(loading.value).toBe(true); // 后续统计尚未完成。
+  expect(getLoading.value).toBe(false);
+  expect(todo.groups[0].loaded).toBe(false);
+  count.resolve(false);
+  await pending;
+  expect(getLoading.value).toBe(false);
 });

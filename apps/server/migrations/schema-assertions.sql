@@ -3604,6 +3604,33 @@ WHERE s.INDEX_NAME IS NULL OR s.cols <> e.cols OR s.NON_UNIQUE <> e.non_unique;
 SELECT '[activity] missing_start' AS check_name, 'user_activity_metadata.id=1' AS detail
 FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM user_activity_metadata WHERE id = 1);
 
+-- Cross-day resource reuse is a content-free milestone, independent of activity telemetry.
+SELECT '[resource-reuse] missing_column' AS check_name, CONCAT(e.tn, '.', e.cn) AS detail
+FROM (SELECT 'resource_reuse_milestones' tn, 'user_id' cn
+UNION ALL SELECT 'resource_reuse_milestones', 'resource_type'
+UNION ALL SELECT 'resource_reuse_milestones', 'first_opened_at'
+UNION ALL SELECT 'resource_reuse_metadata', 'id'
+UNION ALL SELECT 'resource_reuse_metadata', 'started_at') e
+LEFT JOIN information_schema.COLUMNS c ON c.TABLE_SCHEMA=DATABASE() AND c.TABLE_NAME=e.tn AND c.COLUMN_NAME=e.cn
+WHERE c.COLUMN_NAME IS NULL;
+SELECT '[resource-reuse] invalid_key' AS check_name, CONCAT(e.tn, '.', e.ix) AS detail
+FROM (SELECT 'resource_reuse_milestones' tn, 'PRIMARY' ix, 'user_id,resource_type' cols, 0 non_unique
+UNION ALL SELECT 'resource_reuse_milestones', 'idx_reuse_user_time', 'user_id,first_opened_at', 1
+UNION ALL SELECT 'resource_reuse_metadata', 'PRIMARY', 'id', 0) e
+LEFT JOIN (SELECT TABLE_NAME, INDEX_NAME, NON_UNIQUE, GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX) cols
+FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE()
+AND TABLE_NAME IN ('resource_reuse_milestones','resource_reuse_metadata') GROUP BY TABLE_NAME, INDEX_NAME, NON_UNIQUE) s
+ON s.TABLE_NAME=e.tn AND s.INDEX_NAME=e.ix
+WHERE s.INDEX_NAME IS NULL OR s.cols<>e.cols OR s.NON_UNIQUE<>e.non_unique;
+SELECT '[resource-reuse] invalid_time' AS check_name, CONCAT(TABLE_NAME, '.', COLUMN_NAME) AS detail
+FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE()
+AND ((TABLE_NAME='resource_reuse_milestones' AND COLUMN_NAME='first_opened_at' AND
+  (DATA_TYPE<>'datetime' OR DATETIME_PRECISION<>3 OR IS_NULLABLE<>'NO'))
+OR (TABLE_NAME='resource_reuse_metadata' AND COLUMN_NAME='started_at' AND
+  (DATA_TYPE<>'datetime' OR DATETIME_PRECISION<>3 OR IS_NULLABLE<>'YES')));
+SELECT '[resource-reuse] missing_metadata' AS check_name, 'resource_reuse_metadata.id=1' AS detail
+FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM resource_reuse_metadata WHERE id=1);
+
 -- Browser push: notification row is the transactional outbox; historical rows stay disabled.
 SELECT 'browser_push_missing_column' AS check_name, CONCAT(e.tn, '.', e.cn) AS detail FROM (
  SELECT 'notification' tn, 'browser_push_pending' cn UNION ALL

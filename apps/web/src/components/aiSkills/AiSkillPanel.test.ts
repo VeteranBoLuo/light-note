@@ -7,11 +7,13 @@ import type { AiSkillPanelAction } from './types';
 
 vi.mock('@/api/entitlementEvents', () => ({ recordEntitlementEvent: vi.fn() }));
 
+const executeAiSkillStream = vi.hoisted(() => vi.fn());
 const executeAiSkill = vi.hoisted(() => vi.fn());
 
 vi.mock('@/api/aiSkillApi', () => ({
   createAiSkillRequest: (value: Record<string, unknown>) => value,
   executeAiSkill,
+  executeAiSkillStream,
 }));
 
 vi.mock('@/api/aiTelemetry', () => ({
@@ -614,4 +616,50 @@ describe('AiSkillPanel 手动提问草稿', () => {
       expect(executeAiSkill.mock.calls[2][0]).toMatchObject({ threadId: null });
     },
   );
+});
+
+describe('AiSkillPanel streaming', () => {
+  it('完成前逐段展示，修复重置，成功后展示权威结果', async () => {
+    let handlers: any;
+    let complete!: (value: AiSkillResponse) => void;
+    executeAiSkillStream.mockImplementation((_request, callbacks) => {
+      handlers = callbacks;
+      return new Promise(resolve => { complete = resolve; });
+    });
+    const host = mountPromptPanel({ streaming: true });
+    const input = await enterPrompt(host, '如何部署');
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await flushExecution();
+    handlers.onDelta('第一段');
+    await nextTick();
+    expect(host.textContent).toContain('第一段');
+    expect(host.textContent).toContain('处理中');
+    handlers.onReset();
+    await nextTick();
+    expect(host.textContent).not.toContain('第一段');
+    handlers.onDelta('修复段');
+    await nextTick();
+    const resultContainer = host.querySelector('.ai-skill-panel__result');
+    complete(completedResponse('help.answer'));
+    await flushExecution();
+    expect(host.textContent).toContain('分析完成');
+    expect(host.textContent).not.toContain('修复段');
+    expect(host.querySelector('.ai-skill-panel__result')).toBe(resultContainer);
+  });
+  it('取消时清理中间结果并忽略迟到事件', async () => {
+    let handlers: any;
+    executeAiSkillStream.mockImplementation((_request, callbacks) => { handlers = callbacks; return new Promise(() => {}); });
+    const host = mountPromptPanel({ streaming: true });
+    const input = await enterPrompt(host, '如何部署');
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await flushExecution();
+    handlers.onDelta('中间段');
+    await nextTick();
+    Array.from(host.querySelectorAll('button')).find(button => button.textContent?.includes('停止'))!.click();
+    handlers.onDelta('迟到段');
+    await nextTick();
+    expect(handlers.signal.aborted).toBe(true);
+    expect(host.textContent).not.toContain('中间段');
+    expect(host.textContent).not.toContain('迟到段');
+  });
 });

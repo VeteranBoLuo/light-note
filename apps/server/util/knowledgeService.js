@@ -98,6 +98,7 @@ function prepareStructuredText(content, type = '') {
     raw
       .replace(/<script\b[^>]*>[\s\S]*?<\/script>/giu, ' ')
       .replace(/<style\b[^>]*>[\s\S]*?<\/style>/giu, ' ')
+      .replace(/<a\b[^>]*href=["'](https?:\/\/[^"']+)["'][^>]*>([\s\S]*?)<\/a>/giu, '$2 ($1)')
       .replace(/<h[1-6]\b[^>]*>/giu, '\n@@KNOWLEDGE_HEADING@@')
       .replace(/<\/h[1-6]>/giu, '\n')
       .replace(/<br\s*\/?>/giu, '\n')
@@ -316,21 +317,30 @@ export function invalidateKnowledgeCache(key) {
     clearCacheKey(key);
     return;
   }
-  for (const cacheKey of new Set(['public', 'all', ...cache.keys(), ...cachePromises.keys(), ...cacheTimers.keys()])) {
+  for (const cacheKey of new Set([
+    'public',
+    'help',
+    'all',
+    ...cache.keys(),
+    ...cachePromises.keys(),
+    ...cacheTimers.keys(),
+  ])) {
     clearCacheKey(cacheKey);
   }
 }
 
-async function loadSearchBundle(onlyPublic) {
-  const key = onlyPublic ? 'public' : 'all';
+async function loadSearchBundle(onlyPublic, helpOnly = false) {
+  const key = helpOnly ? 'help' : onlyPublic ? 'public' : 'all';
   if (cache.has(key)) return cache.get(key);
   if (cachePromises.has(key)) return cachePromises.get(key);
   const generation = cacheGenerations.get(key) || 0;
 
   const loading = (async () => {
-    const whereClause = onlyPublic
-      ? " WHERE status = 'public' AND COALESCE(admin_archived, 0) = 0"
-      : ' WHERE COALESCE(admin_archived, 0) = 0';
+    const whereClause = helpOnly
+      ? " WHERE category = '帮助中心' AND status = 'public' AND COALESCE(admin_archived, 0) = 0"
+      : onlyPublic
+        ? " WHERE status = 'public' AND COALESCE(admin_archived, 0) = 0"
+        : ' WHERE COALESCE(admin_archived, 0) = 0';
     const [rows] = await pool.query(
       `SELECT id, title, content, type, category, status
          FROM knowledge_base${whereClause} ORDER BY sort ASC, created_at ASC`,
@@ -524,10 +534,10 @@ function retrieveLegacy(rows, query, topK) {
  * 检索知识库。默认使用本地 MiniSearch BM25+ 分块索引；设置
  * KNOWLEDGE_SEARCH_ENGINE=legacy 可在异常时快速回退旧匹配算法。
  */
-export async function retrieve(_userId, query, topK = 3, onlyPublic = true) {
+export async function retrieve(_userId, query, topK = 3, onlyPublic = true, { helpOnly = false } = {}) {
   const normalizedQuery = String(query || '').trim();
   if (!normalizedQuery || topK <= 0) return [];
-  const bundle = await loadSearchBundle(onlyPublic);
+  const bundle = await loadSearchBundle(onlyPublic, helpOnly);
   if (!bundle.rows.length) return [];
   if (process.env.KNOWLEDGE_SEARCH_ENGINE === 'legacy') {
     return retrieveLegacy(bundle.rows, normalizedQuery, topK);
@@ -553,4 +563,47 @@ export async function retrieve(_userId, query, topK = 3, onlyPublic = true) {
     console.error('[knowledge-search] MiniSearch 检索失败，回退旧算法:', error?.message || error);
     return retrieveLegacy(bundle.rows, normalizedQuery, topK);
   }
+}
+
+/** 命中定位与阅读材料分开：普通帮助读全文，超长文章保留命中片段与按原顺序选取的章节。 */
+export async function retrieveHelpEvidence(_userId, query, topK = 5) {
+  const hits = await retrieve(null, query, Math.min(5, topK), true, { helpOnly: true });
+  if (!hits.length) return [];
+  const [rows] = await pool.query(
+    `SELECT id, title, content, type FROM knowledge_base
+     WHERE id IN (${hits.map(() => '?').join(',')}) AND category = '帮助中心'
+       AND status = 'public' AND COALESCE(admin_archived, 0) = 0`,
+    hits.map((hit) => hit.id),
+  );
+  const current = new Map(rows.map((row) => [String(row.id), row]));
+  let remaining = 18_000;
+  return hits
+    .filter((hit) => current.has(hit.id))
+    .map((hit, index, available) => {
+      const row = current.get(hit.id);
+      const chapters = splitKnowledgeContent(row.content, row.type).map((chunk) =>
+        [chunk.heading, chunk.content].filter(Boolean).join('\n'),
+      );
+      const fullText = chapters.join('\n\n');
+      const budget = Math.min(6_000, Math.floor(remaining / (available.length - index)));
+      let content = fullText;
+      const truncated = fullText.length > budget;
+      if (truncated) {
+        // 不丢失检索命中；其余预算补充上下文，不能把截断误称为文章没有说明。
+        const terms = extractTokens(query);
+        const bestChapter =
+          [...chapters].sort(
+            (a, b) =>
+              terms.filter((term) => b.toLowerCase().includes(term)).length -
+              terms.filter((term) => a.toLowerCase().includes(term)).length,
+          )[0] || '';
+        content = (fullText.includes(hit.content) ? hit.content : bestChapter).slice(0, budget);
+        for (const chapter of chapters) {
+          if (chapter.includes(hit.content) || content.includes(chapter)) continue;
+          if (content.length + chapter.length + 2 <= budget) content += `\n\n${chapter}`;
+        }
+      }
+      remaining -= content.length;
+      return { ...hit, title: row.title, content, truncated };
+    });
 }

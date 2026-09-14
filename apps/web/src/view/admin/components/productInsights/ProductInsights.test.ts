@@ -92,7 +92,7 @@ describe('ProductInsights', () => {
         days: 7,
         cohort: { eligible: 3, immature: 1 },
         metrics: Object.fromEntries(
-          ['a7Resources', 'a7Overall', 'r7Core', 'a7ResourcesLegacy', 'r7InteractionProxy'].map((key) => [key, metric]),
+          ['a7Resources', 'a7Overall', 'r7Core', 'u7Reuse', 'a7ResourcesLegacy', 'r7InteractionProxy'].map((key) => [key, metric]),
         ),
       },
     });

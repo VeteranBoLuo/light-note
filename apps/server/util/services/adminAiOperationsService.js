@@ -204,6 +204,7 @@ function mapProviders(rows) {
     tokens: safeNumber(row.tokens),
     estimatedCost: Number(row.unknown_cost_calls || 0) > 0 ? null : safeDecimal(row.estimated_cost),
     failedCalls: safeNumber(row.failed_calls),
+    failedExecutions: safeNumber(row.failed_executions),
     missingUsageCalls: safeNumber(row.missing_usage_calls),
     platformCalls: safeNumber(row.platform_calls),
   }));
@@ -394,6 +395,7 @@ export async function getAdminAiOperationsOverview(rawQuery = {}, database = poo
                 COALESCE(SUM(span.estimated_cost), 0) AS estimated_cost,
                 SUM(span.estimated_cost IS NULL) AS unknown_cost_calls,
                 COALESCE(SUM(span.status = 'failed'), 0) AS failed_calls,
+                COUNT(DISTINCT CASE WHEN e.status = 'failed' THEN e.id END) AS failed_executions,
                 COALESCE(SUM(span.usage_status <> 'reported'), 0) AS missing_usage_calls,
                 COALESCE(SUM(span.billing_scope = 'platform' OR RIGHT(span.stage, 7) = '_repair'), 0)
                   AS platform_calls

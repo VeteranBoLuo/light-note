@@ -153,14 +153,65 @@ describe('grounded skill model', () => {
     expect(requestAiStream.mock.calls[1][1].repairReasonCode).toBe('AI_SKILL_OUTPUT_TOO_SHORT');
   });
 
-  it('拒绝把带来源结果走未校验的流式通道', async () => {
+  it('带来源的真实参数流只发布完整合法段落，最终结果一致', async () => {
+    const blocks = [
+      { markdown: '正文含有 \"引号\"、{括号} 和换行\n第二行', sourceIndexes: [1] },
+      { markdown: '第二段', sourceIndexes: [1] },
+    ];
+    const response = groundedToolResponse(blocks);
+    const args = response.toolCalls[0].function.arguments;
+    const deltas = [];
+    requestAiStream.mockImplementation(async (_messages, options) => {
+      for (let i = 1; i <= args.length; i++)
+        options.onToolCallDelta({ index: 0, name: 'submit_grounded_answer', arguments: args.slice(0, i) });
+      expect(deltas).toHaveLength(2); // 在 Provider Promise 完成前已输出
+      return response;
+    });
+    const result = await callGroundedSkillModelStream({
+      messages: [],
+      sources: [{ id: 's-1' }],
+      modelPolicy: { maxTokens: 1400 },
+      onDelta: (value) => deltas.push(value),
+    });
+    expect(deltas.join('')).toBe(result.content);
+    expect(requestAi).not.toHaveBeenCalled();
+  });
+
+  it('坏来源不透传，修复重置草稿且只使用一次平台预算', async () => {
+    const deltas = [];
+    const invalid = groundedToolResponse([{ markdown: '不可信', sourceIndexes: [2] }]);
+    const valid = groundedToolResponse([{ markdown: '已修复', sourceIndexes: [1] }]);
+    requestAiStream
+      .mockImplementationOnce(async (_m, options) => {
+        options.onToolCallDelta({
+          index: 0,
+          name: 'submit_grounded_answer',
+          arguments: invalid.toolCalls[0].function.arguments,
+        });
+        expect(deltas).toEqual([]);
+        return invalid;
+      })
+      .mockImplementationOnce(async (_m, options) => {
+        options.onToolCallDelta({
+          index: 0,
+          name: 'submit_grounded_answer',
+          arguments: valid.toolCalls[0].function.arguments,
+        });
+        return valid;
+      });
+    await callGroundedSkillModelStream({
+      messages: [],
+      sources: [{ id: 's-1' }],
+      modelPolicy: { maxTokens: 1400 },
+      onDelta: (value) => deltas.push(value),
+      onReset: () => deltas.push('RESET'),
+    });
+    expect(deltas).toEqual(['RESET', '已修复\n\n[1]']);
+    expect(requestAiStream.mock.calls[1][1].billingScope).toBe('platform');
+    requestAiStream.mockReset().mockResolvedValue(invalid);
     await expect(
-      callGroundedSkillModelStream({
-        messages: [],
-        sources: [{ id: 's-1' }],
-        modelPolicy: { maxTokens: 100, temperature: 0 },
-      }),
-    ).rejects.toMatchObject({ code: 'AI_SKILL_STREAM_STRUCTURED_REQUIRED' });
-    expect(requestAiStream).not.toHaveBeenCalled();
+      callGroundedSkillModelStream({ messages: [], sources: [{ id: 's-1' }], modelPolicy: { maxTokens: 1400 } }),
+    ).rejects.toMatchObject({ code: 'AI_SKILL_OUTPUT_SOURCE_INVALID' });
+    expect(requestAiStream).toHaveBeenCalledTimes(2);
   });
 });

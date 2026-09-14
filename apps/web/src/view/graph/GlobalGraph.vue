@@ -557,7 +557,7 @@
         () => {
           mobileTopicDrawerOpen.value = false;
         },
-        () => openBookmarkUrl(node.meta.url),
+        () => openBookmarkUrl(node.meta.url, { resourceId: node.rawId }),
       );
       return;
     }

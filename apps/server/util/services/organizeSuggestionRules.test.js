@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildSnapshot, buildRuleSuggestions, inspectNote, normalizeRunInput } from './organizeSuggestionRules.js';
+import { ORGANIZE_SELECTED_ITEMS_MAX_COUNT, ORGANIZE_RESOURCE_ID_MAX_LENGTH } from '../contentLimits.js';
 const now = Date.parse('2026-09-05T00:00:00Z');
 const note = (extra = {}) =>
   buildSnapshot(
@@ -11,6 +12,28 @@ const note = (extra = {}) =>
 const findings = (snapshots, checks = ['tags', 'title', 'empty', 'duplicate']) =>
   buildRuleSuggestions(snapshots, checks);
 describe('多类型整理规则', () => {
+  it('选择数量和资源 ID 长度使用与安全检测相同的权威上限', () => {
+    const input = {
+      resourceTypes: ['note'],
+      checks: ['title'],
+      scope: 'selected',
+      items: Array.from({ length: ORGANIZE_SELECTED_ITEMS_MAX_COUNT }, (_, index) => ({
+        type: 'note',
+        id: String(index),
+      })),
+    };
+    expect(normalizeRunInput(input).items).toHaveLength(ORGANIZE_SELECTED_ITEMS_MAX_COUNT);
+    expect(() => normalizeRunInput({ ...input, items: [...input.items, { type: 'note', id: 'extra' }] })).toThrow(
+      '1000',
+    );
+    expect(
+      normalizeRunInput({ ...input, items: [{ type: 'note', id: 'x'.repeat(ORGANIZE_RESOURCE_ID_MAX_LENGTH) }] }).items,
+    ).toHaveLength(1);
+    expect(() =>
+      normalizeRunInput({ ...input, items: [{ type: 'note', id: 'x'.repeat(ORGANIZE_RESOURCE_ID_MAX_LENGTH + 1) }] }),
+    ).toThrow('有效资料');
+  });
+
   it.each([
     '<img src="a.png">',
     '<a href="/attachment/1"></a>',

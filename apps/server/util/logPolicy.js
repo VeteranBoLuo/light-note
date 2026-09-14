@@ -20,6 +20,7 @@ const PASSIVE_API_PATHS = new Set([
   '/notification/browser/activate',
   '/notification/browser/unsubscribe',
   '/common/recordUserActivity', // Activity is aggregated separately; never feed it into API statistics.
+  '/common/recordResourceOpen', // Reuse milestones are separate; never retain resource IDs in API logs.
   '/json/getConfigByName', // 公开配置读取（更新日志滚动发布兼容期间仍会回退调用）。
   '/updateLog/list', // 公开更新日志读取，页面与构建预渲染都会调用。
   '/inbox/count', // 待处理角标读取，页面加载及构建预渲染会高频调用。

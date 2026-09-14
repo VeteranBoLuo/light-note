@@ -1,4 +1,3 @@
-import imagePreviewRouter from './router/imagePreview.js';
 import { ensureBookmarkArchiveSchema } from './util/bookmarkArchiveJobs.js';
 import express from 'express';
 import bodyParser from 'body-parser';
@@ -91,7 +90,6 @@ app.use(logFunction);
 app.use(globalRateLimiter);
 // 路由感知的安全检测放在限流之后，避免过量请求先消耗正则、画像和事件计算。
 app.use(attackMonitor);
-app.use('/api/image-previews', imagePreviewRouter);
 
 const allRouter = [
   ...baseRouter,

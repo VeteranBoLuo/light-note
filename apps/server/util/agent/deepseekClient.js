@@ -337,6 +337,12 @@ export async function requestDeepSeekStream(messages, options = {}) {
         // 回答风格:调用方(agentHandle)按用户偏好传入并已 clamp;仅作用于最终回答,Planner 不设(保证工具选择稳定)
         ...(Number.isFinite(options.temperature) ? { temperature: options.temperature } : {}),
         ...cfg.extraBody,
+        ...(options.tools?.length
+          ? {
+              tools: providerCompatibleTools(cfg, options.tools),
+              tool_choice: options.toolChoice ?? 'auto',
+            }
+          : {}),
       }),
     });
 
@@ -350,6 +356,7 @@ export async function requestDeepSeekStream(messages, options = {}) {
     const decoder = new TextDecoder();
     let buffer = '';
     let fullContent = '';
+    const toolCalls = [];
     let pendingContent = '';
     let leakedToolCall = false;
     let consumerStopReason = null;
@@ -372,7 +379,7 @@ export async function requestDeepSeekStream(messages, options = {}) {
         return false;
       }
       fullContent = candidateContent;
-      options.onDelta(safeContent);
+      options.onDelta?.(safeContent);
       return true;
     };
 
@@ -414,6 +421,18 @@ export async function requestDeepSeekStream(messages, options = {}) {
 
         if (chunk.choices?.[0]?.finish_reason) finishReason = chunk.choices[0].finish_reason;
 
+        for (const part of chunk.choices?.[0]?.delta?.tool_calls || []) {
+          const index = part.index;
+          if (!Number.isSafeInteger(index) || index < 0 || index > 15) {
+            throw new Error('Invalid streamed tool call index');
+          }
+          const call = (toolCalls[index] ||= { id: '', type: 'function', function: { name: '', arguments: '' } });
+          if (part.id) call.id += part.id;
+          if (part.function?.name) call.function.name += part.function.name;
+          if (part.function?.arguments) call.function.arguments += part.function.arguments;
+          if (call.function.arguments.length > 200_000) throw new Error('Streamed tool arguments too large');
+          options.onToolCallDelta?.({ index, name: call.function.name, arguments: call.function.arguments });
+        }
         const delta = chunk.choices?.[0]?.delta?.content || '';
         if (!delta) continue;
         if (leakedToolCall) continue;
@@ -447,6 +466,7 @@ export async function requestDeepSeekStream(messages, options = {}) {
 
     return {
       content: fullContent,
+      toolCalls: toolCalls.filter(Boolean),
       leakedToolCall,
       consumerStopped: Boolean(consumerStopReason),
       consumerStopReason,

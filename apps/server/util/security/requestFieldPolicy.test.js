@@ -1,10 +1,77 @@
 import { describe, expect, it } from 'vitest';
 import { DRAWING_SCENE_MAX_BYTES } from '@lightnote/shared/drawing-note';
-import { DRAWING_THUMBNAIL_MAX_BYTES } from '../contentLimits.js';
+import {
+  DRAWING_THUMBNAIL_MAX_BYTES,
+  ORGANIZE_SELECTED_ITEMS_MAX_COUNT,
+  ORGANIZE_RESOURCE_ID_MAX_LENGTH,
+} from '../contentLimits.js';
 import { AI_SKILL_NOTE_TRANSFORM_MAX_TEXT_CHARS } from '../aiSkill/limits.js';
 import { resolveRequestFieldPolicy } from './requestFieldPolicy.js';
 
 describe('请求字段安全策略', () => {
+  it('整理选择数组使用业务条目数预算且保留签名规则', () => {
+    const context = {
+      method: 'POST',
+      path: '/api/organize/suggestions/previews/',
+      body: { scope: 'selected', resourceTypes: ['note'], items: [{ type: 'note', id: 'note-1' }] },
+    };
+    expect(resolveRequestFieldPolicy(context, 'body.items')).toMatchObject({
+      semantic: 'organize-selected-items',
+      sizeUnit: 'items',
+      size: 1,
+      maxSize: ORGANIZE_SELECTED_ITEMS_MAX_COUNT,
+      trustedEnvelope: true,
+      skipSignatureRules: [],
+    });
+    expect(resolveRequestFieldPolicy({ ...context, method: 'GET' }, 'body.items')).toBeNull();
+    expect(resolveRequestFieldPolicy(context, 'body.items[0].id')).toBeNull();
+  });
+
+  it.each(
+    [
+      [],
+      [null],
+      [['note', 'note-1']],
+      [{ type: 'unknown', id: 'note-1' }],
+      [{ type: 'file', id: 'note-1' }],
+      [{ type: 'note', id: '' }],
+      [{ type: 'note', id: 1 }],
+      [{ type: 'note', id: 'x'.repeat(ORGANIZE_RESOURCE_ID_MAX_LENGTH + 1) }],
+      [{ type: 'note', id: 'note-1', content: 'extra' }],
+    ].map((items) => [items]),
+  )('畸形整理选择不获得条目预算豁免：%j', (items) => {
+    expect(
+      resolveRequestFieldPolicy(
+        {
+          method: 'POST',
+          path: '/organize/suggestions/previews',
+          body: { scope: 'selected', resourceTypes: ['note'], items },
+        },
+        'body.items',
+      ),
+    ).toMatchObject({ trustedEnvelope: false });
+  });
+
+  it('超限整理选择在原始数组上计数', () => {
+    expect(
+      resolveRequestFieldPolicy(
+        {
+          method: 'POST',
+          path: '/organize/suggestions/previews',
+          body: {
+            scope: 'selected',
+            resourceTypes: ['note'],
+            items: Array.from({ length: ORGANIZE_SELECTED_ITEMS_MAX_COUNT + 1 }, (_, index) => ({
+              type: 'note',
+              id: String(index),
+            })),
+          },
+        },
+        'body.items',
+      ),
+    ).toMatchObject({ size: ORGANIZE_SELECTED_ITEMS_MAX_COUNT + 1, overBudget: true, trustedEnvelope: false });
+  });
+
   it('按方法、规范化路由和完整字段路径匹配业务语义', () => {
     const context = {
       method: 'post',

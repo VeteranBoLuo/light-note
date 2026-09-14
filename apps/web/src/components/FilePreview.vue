@@ -4,6 +4,10 @@
       v-if="visible"
       ref="previewRootRef"
       class="fullscreen-preview"
+      data-reuse-resource-type="file"
+      :data-reuse-resource-id="
+        !loading && !error && (!previewAccess || previewAccess.kind === 'owner') ? fileInfo?.id : undefined
+      "
       :class="{ 'html-fullscreen-mode': isHtmlFullscreen }"
     >
       <div class="preview-header">
@@ -118,7 +122,7 @@
 
           <!-- 2. 视频预览 -->
           <VideoPreview
-            v-else-if="previewType === 'video'"
+            v-else-if="previewType === 'video' && effectiveFileUrl"
             :key="String(fileInfo.id)"
             :video-url="effectiveFileUrl"
             :mime-type="mediaMimeType"
@@ -129,7 +133,7 @@
           />
 
           <!-- 2.5 音频预览 -->
-          <div v-else-if="previewType === 'audio'" class="preview-audio-container">
+          <div v-else-if="previewType === 'audio' && effectiveFileUrl" class="preview-audio-container">
             <div class="preview-audio-card">
               <div class="preview-audio-summary">
                 <div class="preview-audio-artwork">
@@ -155,7 +159,7 @@
 
           <!-- 3. 图片预览 -->
           <div
-            v-else-if="previewType === 'image'"
+            v-else-if="previewType === 'image' && effectiveFileUrl"
             ref="imageViewportRef"
             v-auto-scrollbar
             class="preview-image-container"
@@ -188,7 +192,7 @@
 
           <!-- 4. Word文档预览 -->
           <div
-            v-else-if="previewType === 'word'"
+            v-else-if="previewType === 'word' && effectiveFileUrl"
             ref="officeContainerRef"
             class="office-preview-container"
             @click.capture="handleOfficeLink"
@@ -203,7 +207,13 @@
           </div>
 
           <!-- 5. Excel预览 -->
-          <div v-else-if="previewType === 'excel'" class="office-preview-container">
+          <div
+            v-else-if="previewType === 'excel' && effectiveFileUrl"
+            class="office-preview-container"
+            @mousedown.capture="normalizeMouseEventOffsetsForRootZoom"
+            @mousemove.capture="normalizeMouseEventOffsetsForRootZoom"
+            @mouseout.capture="normalizeMouseEventOffsetsForRootZoom"
+          >
             <VueOfficeExcel
               :key="previewAttempt"
               :src="effectiveFileUrl"
@@ -214,7 +224,7 @@
           </div>
 
           <!-- 6. PPT预览 -->
-          <div v-else-if="previewType === 'ppt'" class="office-preview-container">
+          <div v-else-if="previewType === 'ppt' && effectiveFileUrl" class="office-preview-container">
             <VueOfficePptx
               :key="previewAttempt"
               :src="effectiveFileUrl"
@@ -329,6 +339,7 @@
 </template>
 
 <script setup lang="ts">
+  import { captureResourceOpen } from '@/utils/resourceReuseRuntime';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
   import type { CSSProperties } from 'vue';
@@ -379,7 +390,7 @@
   import { configureMarkdownRenderer } from '@/utils/markdownRenderer';
   import { getFilePreviewPollDelay, hasFilePreviewPollingTimedOut } from '@/utils/filePreviewPolling';
   import { resolveImageViewportLayout } from '@/utils/imageViewport';
-  import { getRootZoom } from '@/utils/zoom';
+  import { getRootZoom, normalizeMouseEventOffsetsForRootZoom } from '@/utils/zoom';
 
   const VueOfficeDocx = defineAsyncComponent(() => import('@vue-office/docx/lib/v3/vue-office-docx.mjs'));
   const VueOfficeExcel = defineAsyncComponent(() => import('@vue-office/excel/lib/v3/vue-office-excel.mjs'));
@@ -681,6 +692,9 @@
 
   // 开始预览
   async function startPreview(file: typeof props.fileInfo, retryDerived = false) {
+    if (props.visible && file?.id && (!props.previewAccess || props.previewAccess.kind === 'owner')) {
+      captureResourceOpen()('file', file.id);
+    }
     previewAttempt.value += 1;
     cancelPreviewPolling();
     htmlAbortController?.abort();

@@ -664,6 +664,7 @@
     let syncRequest: ReturnType<typeof startItemAction> = null;
     if (item.resourceType === 'bookmark' && item.url) {
       const opened = openBookmarkUrl(item.url, {
+        resourceId: item.resourceId,
         beforeNavigate: () => {
           syncRequest = startItemAction(item, 'open', true);
         },

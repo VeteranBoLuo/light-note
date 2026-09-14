@@ -29,6 +29,86 @@ const facts = [
 }));
 
 describe('routine.daily_brief', () => {
+  it('从有效精确占位符补齐漏报的引用，并仍拒绝无标题来源与未知声明', () => {
+    const args = {
+      headline: '近期重点',
+      recommendation: '回看资料',
+      insights: [{ factIds: ['todo_due_today'], text: '今日新增 {{note_created_today.count}} 篇笔记。' }],
+    };
+    expect(validateDailyBriefArguments(args, facts).insights[0].factIds).toEqual([
+      'todo_due_today',
+      'note_created_today',
+    ]);
+    expect(args.insights[0].factIds).toEqual(['todo_due_today']);
+    expect(() =>
+      validateDailyBriefArguments(
+        { ...args, insights: [{ factIds: ['todo_due_today'], text: '{{note_created_today.sample}}' }] },
+        facts,
+      ),
+    ).toThrowError(
+      expect.objectContaining({ details: expect.objectContaining({ reason: 'TOKEN_SAMPLE_UNAVAILABLE' }) }),
+    );
+    expect(() =>
+      validateDailyBriefArguments(
+        { ...args, insights: [{ factIds: ['unknown'], text: '{{note_created_today.count}}' }] },
+        facts,
+      ),
+    ).toThrow();
+  });
+
+  it('一次修复同时收到跨洞察结构错误和关联证据错误，不只检查正文格式', async () => {
+    const input = validateDailyBriefInput({
+      date: '2026-09-14',
+      timezone: 'Asia/Shanghai',
+      locale: 'zh-CN',
+      facts: [
+        ...facts,
+        {
+          id: 'resource_connection',
+          label: '关联资料',
+          count: 1,
+          route: '/workbench',
+          samples: ['近期与较早资料具有共同标签'],
+        },
+      ],
+    });
+    const prepared = await routineDailyBriefSkill.prepare({ input });
+    const invalid = {
+      headline: '长'.repeat(81),
+      recommendation: '回看资料',
+      insights: [
+        { factIds: ['unknown'], text: '回看资料' },
+        { factIds: ['resource_connection'], text: '可以对照原资料' },
+      ],
+    };
+    let failure;
+    try {
+      prepared.validateArguments(invalid);
+    } catch (error) {
+      failure = error;
+    }
+    const message = prepared.buildRepairInstruction({ error: failure, invalidArguments: invalid });
+    const diagnostic = JSON.parse(message.slice(message.lastIndexOf('\n') + 1));
+    expect(diagnostic.fieldIssues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ field: 'headline', reason: 'TEXT_TOO_LONG', maxLength: 80 }),
+        expect.objectContaining({ field: 'insights[0].factIds', reason: 'FACT_IDS_INVALID' }),
+        expect.objectContaining({ field: 'insights[1].text', reason: 'CONNECTION_EVIDENCE_REQUIRED' }),
+      ]),
+    );
+  });
+
+  it('全零日仍接受一条真实静态洞察，空数组继续走受控修复', () => {
+    const zeroFacts = facts.map((fact) => ({ ...fact, count: 0, samples: [] }));
+    const args = {
+      headline: '平静的一天',
+      recommendation: '按自己的节奏推进',
+      insights: [{ factIds: ['todo_due_today'], text: '今天待办为 {{todo_due_today.count}} 项。' }],
+    };
+    expect(validateDailyBriefArguments(args, zeroFacts).insights).toHaveLength(1);
+    expect(() => validateDailyBriefArguments({ ...args, insights: [] }, zeroFacts)).toThrow();
+  });
+
   it('多给的有效候选按优先级收敛到五条，不把展示取舍变成整份简报失败', () => {
     const args = {
       headline: '近期重点',
@@ -285,9 +365,9 @@ describe('routine.daily_brief', () => {
     ['TOKEN_UNKNOWN_FACT', 'headline', { headline: '{{unknown.count}}' }],
     ['TOKEN_SAMPLE_UNAVAILABLE', 'headline', { headline: '{{note_created_today.sample}}' }],
     [
-      'TOKEN_UNDECLARED_FACT',
+      'TOKEN_UNKNOWN_FACT',
       'insights[0].text',
-      { insights: [{ factIds: ['todo_due_today'], text: '{{note_created_today.count}}' }] },
+      { insights: [{ factIds: ['todo_due_today'], text: '{{unknown.count}}' }] },
     ],
     ['FACT_IDS_INVALID', 'insights[0].factIds', { insights: [{ factIds: ['unknown'], text: '回看资料' }] }],
     ['INSIGHTS_SHAPE', 'insights', { insights: [] }],

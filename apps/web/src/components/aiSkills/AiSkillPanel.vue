@@ -67,7 +67,12 @@
       <strong>{{ t('aiSkills.unavailableTitle') }}</strong>
       <span>{{ t('aiSkills.unavailableDescription') }}</span>
     </div>
-    <div v-else-if="loading" class="ai-skill-panel__state is-loading" role="status" aria-live="polite">
+    <div
+      v-else-if="loading && !streamContent"
+      class="ai-skill-panel__state is-loading"
+      role="status"
+      aria-live="polite"
+    >
       <BLoading inline loading :title="t('aiSkills.processing')" />
     </div>
     <div v-else-if="error" class="ai-skill-panel__state is-error" role="alert">
@@ -83,22 +88,42 @@
         {{ t('aiSkills.retry') }}
       </BButton>
     </div>
-    <div v-else-if="response?.result" class="ai-skill-panel__result" aria-live="polite">
-      <slot name="result" :response="response" :result="response.result">
-        <AiSkillResultContent :result="response.result" :show-grounding="showGrounding" />
+    <div
+      v-else-if="(loading && streamContent) || response?.result"
+      class="ai-skill-panel__result"
+      :class="{ 'is-loading': loading }"
+      aria-live="polite"
+    >
+      <template v-if="loading">
+        <AiSkillResultContent :result="{ kind: 'grounded_markdown', content: streamContent }" :show-grounding="false" />
+        <BLoading inline loading :title="t('aiSkills.processing')" />
+      </template>
+      <slot v-else-if="response" name="result" :response="response" :result="response.result">
+        <AiSkillResultContent
+          :result="response.result"
+          :show-grounding="showGrounding"
+          :sources="response.sources"
+          @source-select="emit('source-select', $event)"
+        />
       </slot>
-      <div v-if="showGrounding && response.sources.length" class="ai-skill-panel__sources">
-        <span>{{ t('aiSkills.sources', { count: response.sources.length }) }}</span>
-        <span
-          v-for="(source, index) in response.sources"
-          :key="sourceKey(source, index)"
-          class="ai-skill-panel__source"
-        >
-          {{ sourceTitle(source, index) }}
-        </span>
-      </div>
+      <slot
+        v-if="!loading && response && showGrounding && response.sources.length"
+        name="sources"
+        :sources="response.sources"
+      >
+        <div class="ai-skill-panel__sources">
+          <span>{{ t('aiSkills.sources', { count: response.sources.length }) }}</span>
+          <span
+            v-for="(source, index) in response.sources"
+            :key="sourceKey(source, index)"
+            class="ai-skill-panel__source"
+          >
+            {{ sourceTitle(source, index) }}
+          </span>
+        </div>
+      </slot>
       <div
-        v-if="coverageSummary || coverageWarnings.length"
+        v-if="!loading && response && (coverageSummary || coverageWarnings.length)"
         class="ai-skill-panel__coverage"
         :class="{ 'is-complete': response.coverage?.complete === true }"
         role="status"
@@ -108,7 +133,9 @@
         <span v-for="warning in coverageWarnings" :key="warning">{{ warning }}</span>
       </div>
       <div
-        v-if="showResultActions && (response.availableActions.length || $slots['result-actions'])"
+        v-if="
+          !loading && response && showResultActions && (response.availableActions.length || $slots['result-actions'])
+        "
         class="ai-skill-panel__result-actions"
       >
         <slot
@@ -150,7 +177,7 @@
   import { recordEntitlementEvent } from '@/api/entitlementEvents';
   import { useI18n } from 'vue-i18n';
   import type { AiSkillRequest, AiSkillResourceRef, AiSkillResponse } from '@lightnote/shared/ai-skill-protocol';
-  import { createAiSkillRequest, executeAiSkill } from '@/api/aiSkillApi';
+  import { createAiSkillRequest, executeAiSkill, executeAiSkillStream } from '@/api/aiSkillApi';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
@@ -191,6 +218,7 @@
       autoRunActionId?: string;
       iconSrc?: string;
       showGrounding?: boolean;
+      streaming?: boolean;
       showResultActions?: boolean;
       clearPromptOnSuccess?: boolean;
       reserveResultSpace?: boolean;
@@ -218,6 +246,7 @@
       autoRunActionId: '',
       iconSrc: '',
       showGrounding: true,
+      streaming: false,
       showResultActions: true,
       clearPromptOnSuccess: false,
       reserveResultSpace: false,
@@ -228,6 +257,7 @@
 
   const emit = defineEmits<{
     result: [response: AiSkillResponse];
+    'source-select': [source: Record<string, unknown>];
     error: [error: { code: string; message: string }];
     'result-action': [action: Record<string, unknown>, response: AiSkillResponse];
   }>();
@@ -241,6 +271,7 @@
     savedJourney?.recoveryKey === recoveryKey.value ? savedJourney.prompt || props.initialPrompt : props.initialPrompt,
   );
   const loading = ref(false);
+  const streamContent = ref('');
   const response = ref<AiSkillResponse | null>(null);
   const error = ref<{ code: string; message: string; title?: string; retryable: boolean } | null>(null);
   const feature = useAiSkillAvailability(() => props.skillId);
@@ -341,6 +372,7 @@
     controller?.abort();
     controller = null;
     loading.value = false;
+    streamContent.value = '';
     if (wasLoading)
       void recordAiProductEvent('ai_skill_cancelled', { ...telemetryDimensions.value, outcome: 'cancelled' });
   }
@@ -351,27 +383,38 @@
     controller = new AbortController();
     const requestController = controller;
     loading.value = true;
+    streamContent.value = '';
     error.value = null;
     const threadKey = `${skillId}@${scopeKey.value}`;
     try {
-      const result = await executeAiSkill(
-        createAiSkillRequest({
-          skillId,
-          threadId: threads.get(threadKey) || null,
-          input,
-          resourceRefs: props.resourceRefs,
-          scopeSelector: props.scopeSelector,
-          surface: props.surface,
-        }),
-        { signal: requestController.signal },
-      );
+      const payload = createAiSkillRequest({
+        skillId,
+        threadId: threads.get(threadKey) || null,
+        input,
+        resourceRefs: props.resourceRefs,
+        scopeSelector: props.scopeSelector,
+        surface: props.surface,
+      });
+      const result = props.streaming
+        ? await executeAiSkillStream(payload, {
+            signal: requestController.signal,
+            onDelta: (content) => {
+              if (current === sequence && !requestController.signal.aborted) streamContent.value += content;
+            },
+            onReset: () => {
+              if (current === sequence && !requestController.signal.aborted) streamContent.value = '';
+            },
+          })
+        : await executeAiSkill(payload, { signal: requestController.signal });
       if (current !== sequence || requestController.signal.aborted) return null;
+      streamContent.value = '';
       response.value = result;
       if (result.threadId) threads.set(threadKey, result.threadId);
       emit('result', result);
       return result;
     } catch (cause: any) {
       if (current !== sequence || requestController.signal.aborted) return null;
+      streamContent.value = '';
       if (recoverableThreadErrorCodes.has(String(cause?.code || ''))) threads.delete(threadKey);
       const quotaFailure = getAiQuotaErrorPresentation(cause, (key, params) => t(key, params));
       quotaBlocked.value = Boolean(quotaFailure);

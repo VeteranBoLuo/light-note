@@ -686,7 +686,7 @@
     text-align: left;
     background: transparent;
 
-    &:not(:disabled):is(:hover, :focus-visible) .today-action-row__title {
+    &:not(:disabled):focus-visible .today-action-row__title {
       color: var(--workspace-purple-text);
     }
   }
@@ -728,12 +728,6 @@
     background: transparent;
   }
 
-  .today-action-row__actions .b_btn:not(:disabled):hover {
-    border-color: var(--surface-border-color);
-    background: var(--hover-background);
-    color: var(--text-color);
-  }
-
   .today-action-row__actions .today-action-row__complete.b_btn {
     position: relative;
     width: 20px;
@@ -753,7 +747,7 @@
       border-radius: 4px;
     }
 
-    &:not(:disabled):is(:hover, :focus-visible) {
+    &:not(:disabled):focus-visible {
       color: var(--workspace-note-text);
       background: var(--hover-background);
     }
@@ -763,6 +757,23 @@
       height: 16px;
       box-sizing: border-box;
       margin-right: 0;
+    }
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .today-action-row__open.b_btn:not(:disabled):hover .today-action-row__title {
+      color: var(--workspace-purple-text);
+    }
+
+    .today-action-row__actions .b_btn:not(:disabled):hover {
+      border-color: var(--surface-border-color);
+      background: var(--hover-background);
+      color: var(--text-color);
+    }
+
+    .today-action-row__actions .today-action-row__complete.b_btn:not(:disabled):hover {
+      color: var(--workspace-note-text);
+      background: var(--hover-background);
     }
   }
 

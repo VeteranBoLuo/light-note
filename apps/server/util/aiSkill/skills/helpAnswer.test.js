@@ -10,17 +10,22 @@ describe('help.answer', () => {
     });
     expect(retrieveHelp).toHaveBeenCalledWith(null, '怎么导出？', 5, true);
     expect(prepared.sources[0].resourceType).toBe('help');
+    expect(prepared.sources[0].target.path).toBe('/help?article=h-1');
     expect(prepared.messages[0].content).toContain('不能读取或推测用户的笔记');
   });
 
-  it('无公开命中时返回固定安全结果和帮助动作', async () => {
+  it.each(['你好', '不存在的功能', '帮我写一篇小说'])('无公开命中 %s 交给模型友好引导，不附加假来源与无效动作', async (question) => {
     const prepared = await helpAnswer.prepare({
-      input: { question: '不存在的功能' },
+      input: { question },
       dependencies: { retrieveHelp: vi.fn().mockResolvedValue([]) },
     });
-    expect(prepared.modelCalled).toBe(false);
-    expect(prepared.result.content).toBe('帮助中心暂未找到可靠说明。');
-    expect(prepared.availableActions.map((item) => item.id)).toEqual(['browse_help', 'submit_feedback']);
+    expect(prepared.modelCalled).not.toBe(false);
+    expect(prepared.result).toBeUndefined();
+    expect(prepared.sources).toEqual([]);
+    expect(prepared.coverage).toEqual({ complete: false, warnings: [] });
+    expect(prepared.availableActions).toBeUndefined();
+    expect(prepared.messages[1]).toEqual({ role: 'user', content: question });
+    expect(prepared.messages[0].content).toContain('不得编造产品功能');
   });
 
   it('等级权益问题优先使用运行时规则，并剔除仍声称满级 200 万的旧知识', async () => {
@@ -42,6 +47,7 @@ describe('help.answer', () => {
       '52d9bd49-6bb0-4ac8-a4fb-65c2d80401c7',
       'other-help',
     ]);
+    expect(prepared.sources[0].target).toBeUndefined();
     expect(prepared.messages[1].content).toContain('Lv.15 文圣');
     expect(prepared.messages[1].content).toContain('每日 AI 额度 50 万 tokens');
     expect(prepared.messages[1].content).toContain('云空间 20 GB');

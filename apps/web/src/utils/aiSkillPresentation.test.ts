@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatAiSkillCoverageWarnings } from './aiSkillPresentation';
+import { formatAiSkillCoverageWarnings, helpSourceArticleId } from './aiSkillPresentation';
 
 describe('formatAiSkillCoverageWarnings', () => {
   const t = (key: string) =>
@@ -38,4 +38,18 @@ describe('formatAiSkillCoverageWarnings', () => {
       '部分内容本次未能读取。',
     ]);
   });
+});
+
+it('帮助来源只使用匹配的服务端身份，运行时资料和任意路径不产生链接', () => {
+  expect(
+    helpSourceArticleId({
+      resourceType: 'help',
+      resourceId: 'h-1',
+      target: { type: 'help', id: 'h-1', path: 'javascript:alert(1)' },
+    }),
+  ).toBe('h-1');
+  expect(helpSourceArticleId({ resourceType: 'help', resourceId: 'h-1' })).toBe('');
+  expect(helpSourceArticleId({ resourceType: 'help', resourceId: 'h-1', target: { type: 'help', id: 'h-2' } })).toBe(
+    '',
+  );
 });

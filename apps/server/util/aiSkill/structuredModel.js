@@ -1,4 +1,4 @@
-import { estimateAiProviderTokens, requestAi } from '../agent/aiGateway.js';
+import { estimateAiProviderTokens, requestAi, requestAiStream } from '../agent/aiGateway.js';
 import { aiSkillError } from './errors.js';
 
 export function estimateStructuredSkillModelTokens({ messages, structuredTool, modelPolicy }) {
@@ -33,6 +33,9 @@ export async function callStructuredSkillModel({
   repairableErrorCodes = ['AI_SKILL_STRUCTURED_OUTPUT_MISSING', 'AI_SKILL_STRUCTURED_OUTPUT_INVALID'],
   buildRepairInstruction,
   beforeRequest,
+  stream = false,
+  onToolCallDelta,
+  onReset,
 }) {
   const options = {
     tools: [{ type: 'function', function: structuredTool }],
@@ -42,9 +45,11 @@ export async function callStructuredSkillModel({
     timeoutMs: modelPolicy.timeoutMs,
     trace,
     signal,
+    ...(stream ? { onToolCallDelta } : {}),
   };
   await beforeRequest?.();
-  let response = await requestAi(messages, options);
+  const requestModel = stream ? requestAiStream : requestAi;
+  let response = await requestModel(messages, options);
   let parsedArguments = null;
   try {
     parsedArguments = parseToolArguments(response, structuredTool.name);
@@ -57,7 +62,8 @@ export async function callStructuredSkillModel({
         ? buildRepairInstruction({ error, toolName: structuredTool.name, invalidArguments: parsedArguments })
         : `上一版没有按协议返回。必须且只能调用 ${structuredTool.name} 一次，不要输出解释文本。`;
     await beforeRequest?.();
-    response = await requestAi(
+    onReset?.();
+    response = await requestModel(
       [
         ...messages,
         { role: 'assistant', content: String(response?.content || '') },

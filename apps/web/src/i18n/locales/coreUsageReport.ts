@@ -12,13 +12,15 @@ export const coreUsageReportZh = {
   eligible: '已满 7 天的人',
   rate: '已记录比例',
   status: '记录说明',
-  coverage: '已记录比例 = 做过的人 ÷ 已满 7 天的人。记录可能不全，实际比例可能更高；0% 仅表示未查到记录。没有可统计人数或查询失败时显示“—”。',
+  coverage:
+    '已记录比例 = 做过的人 ÷ 已满 7 天的人。记录可能不全，实际比例可能更高；0% 仅表示未查到记录。没有可统计人数或查询失败时显示“—”。',
   limitation:
-    '同一资料的重复操作可能只留一条记录，所以不能反映所有使用。用户从哪里来、是否反复用扩展、是否重新使用旧资料，目前还不能准确判断。',
+    '跨日打开只统计主动打开自己在更早自然日保存的书签、笔记或文件，排除系统示例；不代表读完或完成任务。每类资料只保留首次符合条件的时间，不统计打开次数。旧版本或未上报行为可能遗漏，渠道和扩展重复使用尚无完整记录。',
   metrics: {
     a7Resources: '一周内保存过资料',
     a7Overall: '一周内保存过资料或建过待办',
     r7Core: '一周内在不同日子继续做事',
+    u7Reuse: '一周内跨日打开自己的资料',
     a7ResourcesLegacy: '保存过资料（旧记录）',
     r7InteractionProxy: '在不同日子有点击等操作',
   },
@@ -30,6 +32,7 @@ export const coreUsageReportZh = {
     unavailable: '暂不可用',
   },
   reasons: {
+    missing_linkage: '当前版本尚未记录资料再次使用',
     coverage_start_unverified: '还不确定从何时开始记录完整',
     cohort_precedes_coverage: '部分用户注册较早，当时记录还不完整',
     required_index_missing: '查询条件尚未就绪',
@@ -57,11 +60,12 @@ export const coreUsageReportEn = {
   coverage:
     'Recorded rate = observed users / eligible users. Incomplete records may understate actual usage; 0% means no records were found. No eligible users or a failed query displays “—”.',
   limitation:
-    'Core return uses existing success records, which may merge repeat actions. Content reuse, repeat extension saves, acquisition channels and the organization funnel lack reliable linkage.',
+    'Cross-day opens count deliberate opens of owned bookmarks, notes or files saved on an earlier Beijing calendar day, excluding seeded examples. They do not prove reading or task completion. Only the first qualifying time per resource type is retained, not open counts. Older clients and unreported actions may be missed; channel and repeat-extension history remain incomplete.',
   metrics: {
     a7Resources: 'First content save within 7 days',
     a7Overall: 'First save or task within 7 days',
     r7Core: 'Core actions on multiple days within 7 days',
+    u7Reuse: 'Cross-day content open within 7 days',
     a7ResourcesLegacy: 'First content save (legacy)',
     r7InteractionProxy: 'Interaction on multiple days (proxy)',
   },
@@ -73,6 +77,7 @@ export const coreUsageReportEn = {
     unavailable: 'Unavailable',
   },
   reasons: {
+    missing_linkage: 'This version has no resource reuse records',
     coverage_start_unverified: 'Collection start is unverified',
     cohort_precedes_coverage: 'Some registrations precede complete coverage',
     required_index_missing: 'Query prerequisites are not ready',

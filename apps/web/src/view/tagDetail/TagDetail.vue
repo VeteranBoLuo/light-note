@@ -1267,7 +1267,7 @@
 
   async function openResource(item: TagSpaceResourceItem) {
     if (item.type === 'bookmark' && item.url) {
-      openBookmarkUrl(item.url);
+      openBookmarkUrl(item.url, { resourceId: item.id });
       return;
     }
     if (item.type === 'note') {
@@ -1298,7 +1298,7 @@
       return;
     }
     if (node.type === 'bookmark' && node.meta?.url) {
-      openBookmarkUrl(node.meta.url);
+      openBookmarkUrl(node.meta.url, { resourceId: node.rawId });
       return;
     }
     if (node.type === 'note') {

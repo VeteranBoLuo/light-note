@@ -17,7 +17,10 @@ const routePolicies = new Map();
 declare(ADMIN_POLICIES.BACKGROUND_WRITE, 'note', [['POST', '/image-previews/retry']]);
 
 // Telemetry must never attribute administrator preview/maintenance to the subject.
-declare(ADMIN_POLICIES.BACKGROUND_WRITE, 'activity', [['POST', '/common/recordUserActivity']]);
+declare(ADMIN_POLICIES.BACKGROUND_WRITE, 'activity', [
+  ['POST', '/common/recordUserActivity'],
+  ['POST', '/common/recordResourceOpen'],
+]);
 
 function declare(policy, resourceType, routes) {
   for (const [method, path] of routes) {

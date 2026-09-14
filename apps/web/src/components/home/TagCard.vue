@@ -103,7 +103,7 @@
       emit('select');
       return;
     }
-    openBookmarkUrl(props.cardInfo.url);
+    openBookmarkUrl(props.cardInfo.url, { resourceId: props.cardInfo.id });
     recordOperation({ module: '首页', operation: `点击书签卡片【${props.cardInfo.name}】` });
   }
 

@@ -2,6 +2,7 @@ import { useUserStore } from '@/store';
 import { resolveBookmarkUrlInput } from '@lightnote/shared';
 import message from '@/components/base/BasicComponents/BMessage/BMessage';
 import i18n from '@/i18n';
+import { captureResourceOpen } from '@/utils/resourceReuseRuntime';
 
 function normalizeUrl(url: string): string {
   return resolveBookmarkUrlInput(url, { allowTextExtraction: false }).canonicalUrl;
@@ -14,6 +15,7 @@ function normalizeUrl(url: string): string {
  * window.open(url, '_blank'),让「设置 - 书签打开方式」一处生效、行为一致。
  */
 export interface OpenBookmarkUrlOptions {
+  resourceId?: string | number;
   /**
    * 地址完成校验、真正切页之前同步执行。用于发起不能因页面卸载而丢失的轻量旁路写入；
    * 回调抛错也不能阻断用户打开内容。
@@ -28,6 +30,7 @@ export function openBookmarkUrl(url: string, options: OpenBookmarkUrlOptions = {
     return false;
   }
   const openInCurrent = (useUserStore().preferences as any)?.openBookmarkIn === 'current';
+  if (options.resourceId != null) captureResourceOpen()('bookmark', options.resourceId);
   try {
     options.beforeNavigate?.({ url: finalUrl, openInCurrent });
   } catch (error) {

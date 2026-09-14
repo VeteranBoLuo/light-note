@@ -33,3 +33,12 @@ export function formatAiSkillCoverageWarnings(warnings: unknown, translate: (key
 }
 
 export const aiSkillPresentationInternals = Object.freeze({ COVERAGE_WARNING_KEYS });
+
+/** 只接受服务端绑定的帮助来源身份；不执行模型正文或 target.path 中的任意地址。 */
+export function helpSourceArticleId(source: Record<string, unknown>): string {
+  const target = source.target;
+  if (source.resourceType !== 'help' || !target || typeof target !== 'object' || Array.isArray(target)) return '';
+  const value = target as Record<string, unknown>;
+  const id = String(value.id || '');
+  return value.type === 'help' && id && id === String(source.resourceId || '') ? id : '';
+}

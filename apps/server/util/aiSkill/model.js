@@ -5,6 +5,7 @@ import {
   validateGroundedAnswerArguments,
 } from './groundedOutput.js';
 import { validateGroundedMarkdownOutput } from './outputValidator.js';
+import { createGroundedStream } from './groundedStream.js';
 import { callStructuredSkillModel } from './structuredModel.js';
 
 const FREE_TEXT_REPAIRABLE_OUTPUT_ERRORS = new Set([
@@ -60,12 +61,22 @@ export async function callGroundedSkillModel({
   resultRepairInstruction = '',
   trace,
   signal,
+  stream = false,
+  onDelta,
+  onReset,
 }) {
   if (sources.length) {
     const structuredTool = createGroundedAnswerTool(sources.length);
+    let publish = createGroundedStream({ sources, coverage, onDelta });
     return callStructuredSkillModel({
       messages: withGroundedProtocol(messages),
       structuredTool,
+      stream,
+      onToolCallDelta: (event) => publish(event),
+      onReset: () => {
+        onReset?.();
+        publish = createGroundedStream({ sources, coverage, onDelta });
+      },
       validateArguments: (args) =>
         validateSkillResult(validateGroundedAnswerArguments(args, sources, coverage), resultValidator),
       modelPolicy,
@@ -132,10 +143,7 @@ export async function callGroundedSkillModel({
   }
 }
 
-/**
- * 流式接口只服务无来源的纯文本变换。需要来源的 Skill 必须先完成结构化协议校验，
- * 再一次性返回由服务端渲染的引用，不能把未经校验的中间正文透传给客户端。
- */
+/** 带来源的结果逐段校验后发布，最终仍走相同结构化协议和一次平台修复。 */
 export async function callGroundedSkillModelStream({
   messages,
   sources = [],
@@ -150,10 +158,20 @@ export async function callGroundedSkillModelStream({
   onReset,
 }) {
   if (sources.length) {
-    const error = new Error('带来源的 AI Skill 必须使用结构化非流式输出');
-    error.code = 'AI_SKILL_STREAM_STRUCTURED_REQUIRED';
-    error.status = 500;
-    throw error;
+    return callGroundedSkillModel({
+      messages,
+      sources,
+      coverage,
+      modelPolicy,
+      outputPolicy,
+      resultValidator,
+      resultRepairInstruction,
+      trace,
+      signal,
+      stream: true,
+      onDelta,
+      onReset,
+    });
   }
   const requestOptions = {
     toolChoice: 'none',

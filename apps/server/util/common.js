@@ -29,6 +29,7 @@ import organizeRouter from '../router/organize.js';
 import toolboxRouter from '../router/toolbox.js';
 import dailyReviewRouter from '../router/dailyReview.js';
 import adminAiOperationsRouter from '../router/adminAiOperations.js';
+import imagePreviewRouter from '../router/imagePreview.js';
 
 export { INTERNAL_ROLES } from './internalRoles.js';
 
@@ -186,6 +187,10 @@ export const insertData = function (params) {
 };
 
 export const baseRouter = [
+  {
+    path: '/image-previews',
+    router: imagePreviewRouter,
+  },
   {
     path: '/admin/ai-operations',
     router: adminAiOperationsRouter,

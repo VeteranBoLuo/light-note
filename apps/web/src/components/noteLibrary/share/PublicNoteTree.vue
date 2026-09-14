@@ -40,6 +40,7 @@
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import icon from '@/config/icon';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import type { PublicNoteShareTreeItem } from '@/api/noteShare';
   import { getNoteTreePageColor, getNoteTreePageIcon } from '@/utils/noteTreePresentation';

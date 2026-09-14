@@ -27,6 +27,8 @@ describe.skipIf(!socketPath)('核心使用报告真实 SQL（独立 Socket 测�
       'conversion_events(user_id VARCHAR(64),event VARCHAR(64),create_time DATETIME,KEY idx_event(user_id,event,create_time))',
       'user_activity_daily(user_id VARCHAR(64),activity_date DATE,first_active_at DATETIME,KEY idx_date(user_id,activity_date))',
       'user_activity_metadata(id INT,started_at DATETIME)',
+      'resource_reuse_milestones(user_id VARCHAR(64), resource_type VARCHAR(16), first_opened_at DATETIME(3), PRIMARY KEY(user_id,resource_type), KEY idx_reuse_user_time(user_id,first_opened_at))',
+      'resource_reuse_metadata(id INT,started_at DATETIME(3))',
     ])
       await admin.query('CREATE TABLE ' + ddl);
     pool = mysql.createPool({ socketPath, user: 'root', database: schema, connectionLimit: 1 });
@@ -39,7 +41,7 @@ describe.skipIf(!socketPath)('核心使用报告真实 SQL（独立 Socket 测�
     await admin?.end();
   });
   beforeEach(async () => {
-    for (const table of ['user', 'growth_events', 'conversion_events', 'user_activity_daily', 'user_activity_metadata'])
+    for (const table of ['user', 'growth_events', 'conversion_events', 'user_activity_daily', 'user_activity_metadata', 'resource_reuse_milestones', 'resource_reuse_metadata'])
       await admin.query('DELETE FROM ' + table);
     await admin.query(
       "INSERT INTO user VALUES ('A','user',0,'2026-10-01 12:00:00'),('B','user',0,'2026-10-01 12:00:00'),('C','user',0,'2026-10-01 12:00:00'),('D','user',0,'2026-10-08 12:00:00'),('internal','root',0,'2026-10-01 12:00:00'),('disabled','user',1,'2026-10-01 12:00:00')",
@@ -51,6 +53,7 @@ describe.skipIf(!socketPath)('核心使用报告真实 SQL（独立 Socket 测�
       "INSERT INTO conversion_events VALUES ('A','first_own_resource','2026-10-01 12:00:00'),('A','first_own_resource','2026-10-01 12:00:00'),('C','first_own_resource','2026-10-08 12:00:00')",
     );
     await admin.query("INSERT INTO user_activity_metadata VALUES (1,'2026-01-01 00:00:00')");
+    await admin.query("INSERT INTO resource_reuse_metadata VALUES (1,NULL)");
     await admin.query(
       "INSERT INTO user_activity_daily VALUES ('A','2026-10-01','2026-10-01 12:00:00'),('A','2026-10-02','2026-10-02 12:00:00'),('C','2026-10-08','2026-10-08 12:00:00')",
     );
@@ -63,6 +66,20 @@ describe.skipIf(!socketPath)('核心使用报告真实 SQL（独立 Socket 测�
     expect(r.metrics.r7Core.value).toBe(33.33);
     expect(r.metrics.a7ResourcesLegacy.value).toBe(33.33);
     expect(r.metrics.r7InteractionProxy.value).toBe(33.33);
+  });
+  it('资料再次使用按人去重，排除窗口外、内部和未成熟账号，覆盖未知不伪造比例', async () => {
+    await admin.query(`INSERT INTO resource_reuse_milestones VALUES
+      ('A','note','2026-10-02 12:00:00'),('A','bookmark','2026-10-03 12:00:00'),
+      ('B','note','2026-10-08 12:00:00'),('D','note','2026-10-09 12:00:00'),
+      ('internal','note','2026-10-02 12:00:00')`);
+    let report = await generateCoreUsageReport(db, options);
+    expect(report.metrics.u7Reuse).toMatchObject({ eligible: 3, observed: 1, value: null, status: 'coverage_unknown' });
+    await admin.query("UPDATE resource_reuse_metadata SET started_at='2026-01-01'");
+    report = await generateCoreUsageReport(db, options);
+    expect(report.metrics.u7Reuse).toMatchObject({ eligible: 3, observed: 1, value: 33.33, status: 'available' });
+    await admin.query("UPDATE resource_reuse_metadata SET started_at='2026-10-05'");
+    report = await generateCoreUsageReport(db, options);
+    expect(report.metrics.u7Reuse).toMatchObject({ observed: 1, value: null, status: 'partial_coverage' });
   });
   it('未成熟和空队列比例为 null', async () => {
     await admin.query('DELETE FROM user');

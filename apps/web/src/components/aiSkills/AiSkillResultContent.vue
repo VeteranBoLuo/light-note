@@ -1,9 +1,14 @@
 <template>
-  <div v-if="result.kind === 'grounded_markdown'" class="ai-skill-result__markdown" v-html="renderedContent"></div>
+  <div
+    v-if="result.kind === 'grounded_markdown'"
+    class="ai-skill-result__markdown"
+    @click="openSource"
+    v-html="renderedContent"
+  ></div>
 
   <article v-else-if="result.kind === 'artifact_preview'" class="ai-skill-result__artifact">
     <strong>{{ textValue(result.title) || t('aiSkills.draftTitle') }}</strong>
-    <div class="ai-skill-result__markdown" v-html="renderedContent"></div>
+    <div class="ai-skill-result__markdown" @click="openSource" v-html="renderedContent"></div>
   </article>
 
   <article v-else-if="result.kind === 'text'" class="ai-skill-result__text">
@@ -74,21 +79,77 @@
   import { computed } from 'vue';
   import { useI18n } from 'vue-i18n';
   import type { AiSkillResponse } from '@lightnote/shared/ai-skill-protocol';
-  import { renderStreamingMarkdown } from '@/utils/aiMessageRender';
+  import { helpSourceArticleId } from '@/utils/aiSkillPresentation';
+  import { resolveAiSourceNavigation } from '@/utils/aiSourceNavigation';
+  import { renderAssistantMarkdown, renderStreamingMarkdown } from '@/utils/aiMessageRender';
   import { stripAiAnalysisCitations } from '@/utils/aiAnalysisContent';
 
   type SkillResult = NonNullable<AiSkillResponse['result']>;
   type UnknownRecord = Record<string, unknown>;
 
-  const props = withDefaults(defineProps<{ result: SkillResult; showGrounding?: boolean }>(), {
-    showGrounding: true,
-  });
+  const props = withDefaults(
+    defineProps<{ result: SkillResult; showGrounding?: boolean; sources?: readonly Record<string, unknown>[] }>(),
+    {
+      showGrounding: true,
+      sources: () => [],
+    },
+  );
+  const emit = defineEmits<{ 'source-select': [source: Record<string, unknown>] }>();
   const { t } = useI18n();
 
   const renderedContent = computed(() => {
     const content = textValue(props.result.content);
-    return renderStreamingMarkdown(props.showGrounding ? content : stripAiAnalysisCitations(content));
+    if (!props.showGrounding || !props.sources.some((source) => source.resourceType === 'help'))
+      return renderStreamingMarkdown(props.showGrounding ? content : stripAiAnalysisCitations(content));
+    const root = document.createElement('div');
+    const keys = props.sources.map((source, index) => String(source.citationKey || index + 1));
+    root.innerHTML = renderAssistantMarkdown(content, keys);
+    for (const marker of root.querySelectorAll<HTMLElement>('[data-citation-key]')) {
+      const index = keys.indexOf(marker.dataset.citationKey || '');
+      const source = props.sources[index];
+      const id = source && helpSourceArticleId(source);
+      if (!id) continue;
+      const navigation = resolveAiSourceNavigation({
+        type: 'knowledge',
+        id,
+        title: String(source.title || ''),
+        target: 'help-article',
+      });
+      if (navigation.kind !== 'internal' || typeof navigation.target === 'string') continue;
+      const link = document.createElement('a');
+      link.href = `${navigation.target.path}?${new URLSearchParams(navigation.target.query).toString()}`;
+      link.className = 'ai-inline-citation';
+      link.dataset.sourceIndex = String(index);
+      link.textContent = marker.textContent;
+      link.title = String(source.title || '');
+      link.setAttribute('aria-label', `${marker.textContent} ${source.title || ''}`);
+      marker.replaceWith(link);
+    }
+    for (const paragraph of root.querySelectorAll('p')) {
+      if (paragraph.previousElementSibling?.tagName !== 'P' || !paragraph.querySelector('.ai-inline-citation'))
+        continue;
+      if (
+        ![...paragraph.childNodes].every((node) =>
+          node.nodeType === Node.TEXT_NODE
+            ? !node.textContent?.trim()
+            : node instanceof HTMLElement && node.classList.contains('ai-inline-citation'),
+        )
+      )
+        continue;
+      paragraph.previousElementSibling.append(' ', ...paragraph.childNodes);
+      paragraph.remove();
+    }
+    return root.innerHTML;
   });
+  function openSource(event: MouseEvent) {
+    const link = (event.target as HTMLElement)?.closest<HTMLAnchorElement>('a[data-source-index]');
+    if (!link || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+    const source = props.sources[Number(link.dataset.sourceIndex)];
+    if (!source || !helpSourceArticleId(source)) return;
+    event.preventDefault();
+    emit('source-select', source);
+  }
+
   const isTodoDraft = computed(
     () =>
       props.result.kind === 'structured_draft' &&
@@ -153,6 +214,13 @@
     word-break: break-word;
     font-size: 14px;
     line-height: 1.75;
+  }
+
+  .ai-skill-result__markdown :deep(.ai-inline-citation) {
+    color: var(--workspace-purple-text);
+    font-size: 12px;
+    text-decoration: underline;
+    text-underline-offset: 2px;
   }
 
   .ai-skill-result__markdown :deep(h1),

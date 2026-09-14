@@ -45,34 +45,21 @@
 
     <main v-else class="note-share-reader__workspace" :class="{ 'has-sidebar': desktopSidebarVisible }">
       <aside v-if="desktopSidebarVisible" class="note-share-reader__sidebar">
-        <div v-if="isSubtreeShare && headings.length" class="note-share-reader__tabs" role="tablist">
-          <BButton
-            class="note-share-reader__tab"
-            :class="{ 'is-active': effectiveSidebarTab === 'pages' }"
-            role="tab"
-            :aria-selected="effectiveSidebarTab === 'pages'"
-            @click="sidebarTab = 'pages'"
-          >
-            {{ t('noteShare.pages') }}
-          </BButton>
-          <BButton
-            class="note-share-reader__tab"
-            :class="{ 'is-active': effectiveSidebarTab === 'outline' }"
-            role="tab"
-            :aria-selected="effectiveSidebarTab === 'outline'"
-            @click="sidebarTab = 'outline'"
-          >
-            {{ t('noteShare.outline') }}
-          </BButton>
-        </div>
+        <BTabs
+          v-if="isSubtreeShare"
+          v-model:active-tab="sidebarTab"
+          class="note-share-reader__tabs"
+          variant="segment"
+          :options="navigationTabs"
+        />
         <h2 v-else class="note-share-reader__sidebar-title">
           {{ t(isSubtreeShare ? 'noteShare.pages' : 'noteShare.outline') }}
         </h2>
         <div
           class="note-share-reader__sidebar-scroll"
-          :class="{ 'is-outline': !isSubtreeShare || effectiveSidebarTab === 'outline' }"
+          :class="{ 'is-outline': !isSubtreeShare || sidebarTab === 'outline' }"
         >
-          <template v-if="isSubtreeShare && effectiveSidebarTab === 'pages'">
+          <template v-if="isSubtreeShare && sidebarTab === 'pages'">
             <PublicNoteTree
               v-if="rootTreeNode"
               :node="rootTreeNode"
@@ -82,6 +69,13 @@
               @open="openPage"
             />
           </template>
+          <div v-else-if="outlineLoading" class="note-share-reader__outline-status" role="status">
+            <BLoading inline loading :title="t('common.loading')" />
+          </div>
+          <div v-else-if="!headings.length" class="note-share-reader__outline-status" role="status">
+            <p>{{ t('noteShare.emptyOutline') }}</p>
+            <span>{{ t('noteShare.emptyOutlineHint') }}</span>
+          </div>
           <NoteOutlineList
             v-else
             class="note-share-reader__outline-list"
@@ -161,28 +155,28 @@
       body-padding="12px"
       @close="mobileNavigationOpen = false"
     >
-      <div v-if="isSubtreeShare && headings.length" class="note-share-reader__tabs" role="tablist">
-        <BButton
-          class="note-share-reader__tab"
-          :class="{ 'is-active': effectiveSidebarTab === 'pages' }"
-          @click="sidebarTab = 'pages'"
-          >{{ t('noteShare.pages') }}</BButton
-        >
-        <BButton
-          class="note-share-reader__tab"
-          :class="{ 'is-active': effectiveSidebarTab === 'outline' }"
-          @click="sidebarTab = 'outline'"
-          >{{ t('noteShare.outline') }}</BButton
-        >
-      </div>
+      <BTabs
+        v-if="isSubtreeShare"
+        v-model:active-tab="sidebarTab"
+        class="note-share-reader__tabs"
+        variant="segment"
+        :options="navigationTabs"
+      />
       <PublicNoteTree
-        v-if="isSubtreeShare && effectiveSidebarTab === 'pages' && rootTreeNode"
+        v-if="isSubtreeShare && sidebarTab === 'pages' && rootTreeNode"
         :node="rootTreeNode"
         :active-id="page.id"
         :get-children="getTreeChildren"
         default-expanded
         @open="openPageFromDrawer"
       />
+      <div v-else-if="outlineLoading" class="note-share-reader__outline-status" role="status">
+        <BLoading inline loading :title="t('common.loading')" />
+      </div>
+      <div v-else-if="!headings.length" class="note-share-reader__outline-status" role="status">
+        <p>{{ t('noteShare.emptyOutline') }}</p>
+        <span>{{ t('noteShare.emptyOutlineHint') }}</span>
+      </div>
       <NoteOutlineList
         v-else
         class="note-share-reader__drawer-outline"
@@ -203,6 +197,7 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
@@ -235,7 +230,8 @@
   const errorMessage = ref('');
   const accessTicket = ref('');
   const mobileNavigationOpen = ref(false);
-  const sidebarTab = ref<'pages' | 'outline'>('pages');
+  const sidebarTab = ref('pages');
+  const pageRendering = ref(false);
   const readerRef = ref<HTMLElement | null>(null);
   const contentRef = ref<HTMLElement | null>(null);
   const renderedHtml = ref('');
@@ -271,9 +267,11 @@
     return new URLSearchParams(hash).get('token') || '';
   });
   const isSubtreeShare = computed(() => share.scopeType === 'subtree');
-  const effectiveSidebarTab = computed<'pages' | 'outline'>(() =>
-    isSubtreeShare.value && sidebarTab.value === 'outline' && !headings.value.length ? 'pages' : sidebarTab.value,
-  );
+  const navigationTabs = computed(() => [
+    { key: 'pages', label: t('noteShare.pages') },
+    { key: 'outline', label: t('noteShare.outline') },
+  ]);
+  const outlineLoading = computed(() => pageLoading.value || pageRendering.value);
   const desktopSidebarVisible = computed(() => isSubtreeShare.value || headings.value.length > 0);
   const rootTreeNode = computed<PublicNoteShareTreeItem | null>(() =>
     share.rootNoteId
@@ -303,11 +301,16 @@
     headings.value = [];
     activeHeadingIndex.value = null;
     renderedHtml.value = '';
+    pageRendering.value = sourceType !== 'drawing';
     if (sourceType === 'drawing') return;
-    const nextHtml = await noteContentToHtml(normalizeNoteContentResourceUrls(sourceContent), sourceType);
-    if (renderVersion !== pageRenderVersion) return;
-    renderedHtml.value = nextHtml;
-    await collectRenderedHeadings(renderVersion);
+    try {
+      const nextHtml = await noteContentToHtml(normalizeNoteContentResourceUrls(sourceContent), sourceType);
+      if (renderVersion !== pageRenderVersion) return;
+      renderedHtml.value = nextHtml;
+      await collectRenderedHeadings(renderVersion);
+    } finally {
+      if (renderVersion === pageRenderVersion) pageRendering.value = false;
+    }
   }
 
   async function collectRenderedHeadings(renderVersion = pageRenderVersion) {
@@ -486,7 +489,7 @@
   });
 
   watch(pageLoading, (busy) => {
-    if (!busy && renderedHtml.value) void collectRenderedHeadings(pageRenderVersion);
+    if (!busy) void collectRenderedHeadings(pageRenderVersion);
   });
 
   onMounted(() => {
@@ -629,6 +632,8 @@
   }
 
   .note-share-reader__sidebar {
+    display: flex;
+    flex-direction: column;
     position: sticky;
     top: 62px;
     height: calc(100vh - 62px);
@@ -638,7 +643,8 @@
   }
 
   .note-share-reader__sidebar-scroll {
-    height: calc(100% - 54px);
+    flex: 1;
+    min-height: 0;
     padding: 10px;
     box-sizing: border-box;
     overflow: auto;
@@ -648,24 +654,50 @@
     }
   }
 
-  .note-share-reader__tabs {
+  .note-share-reader__tabs.is-segment {
+    flex: 0 0 auto;
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 4px;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     margin: 10px;
-    padding: 4px;
-    border: 1px solid var(--card-border-color, #e5e1d8);
-    border-radius: 10px;
-    background: var(--body-bg-color, #f5f3ee);
+    border-radius: 8px;
+
+    :deep(.tab) {
+      min-width: 0;
+      min-height: 36px;
+      justify-content: center;
+      box-sizing: border-box;
+      font-size: 14px;
+      line-height: 20px;
+      border-bottom: 2px solid transparent;
+      padding: 7px 14px 5px;
+    }
+
+    :deep(.tab.is-active) {
+      border-bottom-color: var(--primary-color);
+      box-shadow: none;
+    }
   }
 
-  .note-share-reader__tab {
-    min-height: 32px;
+  .note-share-reader__outline-status {
+    min-height: 180px;
+    padding: 24px 16px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    text-align: center;
 
-    &.is-active {
-      color: var(--primary-color);
-      border: 1px solid var(--primary-color);
-      background: var(--menu-body-bg-color, #fff);
+    p {
+      margin: 0;
+      font-size: 14px;
+    }
+
+    span {
+      color: var(--desc-color);
+      font-size: 13px;
+      line-height: 1.6;
     }
   }
 
@@ -914,7 +946,6 @@
       box-shadow: none;
     }
 
-    .note-share-reader__tab.is-active,
     .note-share-reader__readonly-badge,
     .note-share-reader__gate-icon {
       border-width: 1px;

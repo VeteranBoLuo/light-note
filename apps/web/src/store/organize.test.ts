@@ -118,4 +118,27 @@ describe('organize store', () => {
     expect(store.lists.untagged.loadingMore).toBe(false);
     expect(mocks.getOrganizeIssueList).toHaveBeenCalledTimes(1);
   });
+  it('失败重试区分筛选刷新与游标续页，保留已有内容', async () => {
+    const store = useOrganizeStore();
+    store.lists.untagged.items = [{ resourceType: 'note', resourceId: 'first' } as any];
+    store.lists.untagged.cursor = 'cursor-1';
+    store.lists.untagged.hasMore = true;
+    mocks.getOrganizeIssueList.mockRejectedValueOnce(new Error('offline'));
+    await store.loadIssue('untagged', { reset: false });
+    expect(store.lists.untagged).toMatchObject({ error: true, retryReset: false, cursor: 'cursor-1' });
+    mocks.getOrganizeIssueList.mockResolvedValueOnce({ status: 500 });
+    await store.loadIssue('untagged', { reset: true, keyword: '新筛选' });
+    expect(store.lists.untagged).toMatchObject({ error: true, retryReset: true });
+    expect(store.lists.untagged.items).toHaveLength(1);
+    mocks.getOrganizeIssueList.mockResolvedValueOnce({
+      status: 200,
+      data: { items: [], hasMore: false, nextCursor: null },
+    });
+    await store.loadIssue('untagged', { reset: store.lists.untagged.retryReset, keyword: '新筛选' });
+    expect(mocks.getOrganizeIssueList).toHaveBeenLastCalledWith(
+      'untagged',
+      expect.objectContaining({ cursor: null, keyword: '新筛选' }),
+    );
+    expect(store.lists.untagged).toMatchObject({ error: false, items: [], hasMore: false });
+  });
 });

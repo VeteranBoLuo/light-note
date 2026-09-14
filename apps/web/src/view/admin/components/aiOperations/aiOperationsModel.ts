@@ -96,6 +96,7 @@ export interface AiOperationsProvider {
   tokens: number;
   estimatedCost: number | null;
   failedCalls: number;
+  failedExecutions: number;
   missingUsageCalls: number;
   platformCalls: number;
 }

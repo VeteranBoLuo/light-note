@@ -3,9 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const dbMocks = vi.hoisted(() => ({ query: vi.fn(), getConnection: vi.fn() }));
 vi.mock('../db/index.js', () => ({ default: dbMocks }));
 
-const { extractTokens, invalidateKnowledgeCache, retrieve, splitKnowledgeContent } = await import(
-  './knowledgeService.js'
-);
+const { extractTokens, invalidateKnowledgeCache, retrieve, retrieveHelpEvidence, splitKnowledgeContent } =
+  await import('./knowledgeService.js');
 
 const row = (overrides = {}) => ({
   id: 'knowledge-id',
@@ -63,9 +62,7 @@ describe('splitKnowledgeContent（知识正文分块）', () => {
 
   it('识别 Markdown 标题并去掉常用标记', () => {
     const chunks = splitKnowledgeContent('# 账号安全\n\n## 修改密码\n\n**设置页**可以修改密码。', 'markdown');
-    expect(chunks).toEqual([
-      expect.objectContaining({ heading: '修改密码', content: '设置页可以修改密码。' }),
-    ]);
+    expect(chunks).toEqual([expect.objectContaining({ heading: '修改密码', content: '设置页可以修改密码。' })]);
   });
 });
 
@@ -240,5 +237,43 @@ describe('retrieve（MiniSearch 本地分块检索）', () => {
     const result = await retrieve('user-id', '回收站', 1, true);
 
     expect(result[0]?.id).toBe('legacy');
+  });
+});
+
+describe('retrieveHelpEvidence', () => {
+  afterEach(() => {
+    invalidateKnowledgeCache();
+    vi.unstubAllEnvs();
+  });
+  it('命中后补齐章节和链接，二次查询约束公开帮助与未归档', async () => {
+    vi.clearAllMocks();
+    const article = row({
+      title: '开源与自部署',
+      content:
+        '<h1>开源与自部署</h1><p>可以自部署。</p><h2>GitHub 仓库</h2><p><a href="https://example.com/repo">项目仓库</a></p><h2>部署步骤</h2><p>先安装依赖，再构建。</p>',
+    });
+    dbMocks.query.mockResolvedValueOnce([[article]]).mockResolvedValueOnce([[article]]);
+    const hits = await retrieveHelpEvidence(null, '自部署');
+    expect(hits[0].content).toContain('https://example.com/repo');
+    expect(hits[0].content).toContain('先安装依赖，再构建');
+    expect(hits[0].truncated).toBe(false);
+    expect(dbMocks.query.mock.calls[0][0]).toContain("category = '帮助中心'");
+    expect(dbMocks.query.mock.calls[1][0]).toContain("status = 'public'");
+    expect(dbMocks.query.mock.calls[1][0]).toContain('COALESCE(admin_archived, 0) = 0');
+    expect(dbMocks.query.mock.calls[1][1]).toEqual(['knowledge-id']);
+    dbMocks.query.mockResolvedValueOnce([[]]);
+    expect(await retrieveHelpEvidence(null, '自部署')).toEqual([]);
+  });
+  it('超长材料守住预算且命中段落不丢失', async () => {
+    vi.clearAllMocks();
+    const article = row({
+      title: '使用说明',
+      content: '<h1>背景</h1><p>' + '其他内容。'.repeat(2000) + '</p><h2>部署</h2><p>部署需要构建网页。</p>',
+    });
+    dbMocks.query.mockResolvedValueOnce([[article]]).mockResolvedValueOnce([[article]]);
+    const hits = await retrieveHelpEvidence(null, '部署');
+    expect(hits[0].content).toContain('部署需要构建网页');
+    expect(hits[0].content.length).toBeLessThanOrEqual(6000);
+    expect(hits[0].truncated).toBe(true);
   });
 });

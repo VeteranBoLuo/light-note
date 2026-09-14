@@ -8,6 +8,8 @@ const CACHE_TTL = 60 * 1000;
 const isPrivateOrLocalIp = (ip = '') =>
   /^(127\.|10\.|192\.168\.|::1$|::ffff:127\.|172\.(1[6-9]|2\d|3[0-1])\.)/.test(String(ip));
 const isAutoBanReason = (reason = '') => /^IP风险分 \d+ 达到自动封禁阈值 \d+$/.test(String(reason || ''));
+const ipRiskDelta = (attackType, threatScore) =>
+  attackType === 'FLOOD' ? 0 : Math.max(3, Math.ceil(Number(threatScore || 0) / 10));
 
 const defaultReputation = (ip) => ({
   ip,
@@ -75,7 +77,7 @@ export const updateIpReputation = async ({
   const currentRiskScore = Number(current.risk_score || 0);
   // 纯高频(FLOOD)不累积到自动封禁:正常用户刷新页面也会高频,只在 app 层限流(429)+ 记录即可,
   // 不应因此封 IP。自动封禁留给有明确攻击特征的类型(注入/XSS/扫描/爆破/IP信誉)。
-  const theoreticalRiskDelta = attackType === 'FLOOD' ? 0 : Math.max(3, Math.ceil(Number(threatScore || 0) / 10));
+  const theoreticalRiskDelta = ipRiskDelta(attackType, threatScore);
   const predictedScore = Math.min(100, currentRiskScore + theoreticalRiskDelta);
 
   const currentBanActive =
@@ -234,8 +236,13 @@ export const rebuildIpReputationFromEvents = async ({ ip, connection = null }) =
     const attackType = event.attack_type || 'SUSPICIOUS_REQUEST';
     const severity = event.severity || 'low';
     const storedDelta = Number(event.ip_risk_delta || 0);
-    const theoreticalDelta = Math.max(3, Math.ceil(Number(event.threat_score || 0) / 10));
-    const actualDelta = storedDelta > 0 ? storedDelta : Math.min(100, riskScore + theoreticalDelta) - riskScore;
+    const theoreticalDelta = ipRiskDelta(attackType, event.threat_score);
+    const actualDelta =
+      attackType === 'FLOOD'
+        ? 0
+        : storedDelta > 0
+          ? storedDelta
+          : Math.min(100, riskScore + theoreticalDelta) - riskScore;
     riskScore = Math.min(100, riskScore + Math.max(0, actualDelta));
     breakdown[attackType] = Number(breakdown[attackType] || 0) + 1;
     if (['high', 'critical'].includes(severity)) highRiskCount += 1;

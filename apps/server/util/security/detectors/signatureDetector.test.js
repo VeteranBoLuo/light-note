@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { detectSignatures } from './signatureDetector.js';
+import { ORGANIZE_SELECTED_ITEMS_MAX_COUNT } from '../../contentLimits.js';
+
+const selectedResources = (count) => ({
+  scope: 'selected',
+  resourceTypes: ['note'],
+  checks: ['title'],
+  items: Array.from({ length: count }, (_, index) => ({ type: 'note', id: `resource-${index}` })),
+});
 
 const detectNumericAnomalies = (path, body, method = 'POST') =>
   detectSignatures({
@@ -24,6 +32,31 @@ const detectRequestSignatures = (path, body, method = 'POST') =>
   });
 
 describe('请求参数异常检测', () => {
+  it.each(['/todo/workspace', '/todo/workspace/group', '/todo/workspace/series'])(
+    '待办工作区的合法排序枚举不会产生数值异常：%s',
+    (path) => {
+      for (const sort of ['smart', 'action', 'priority', 'due', 'newest', 'oldest']) {
+        for (const route of [path, `/api${path}/`]) {
+          expect(detectNumericAnomalies(route, { sort })).toEqual([]);
+        }
+      }
+      expect(detectNumericAnomalies(path, { sort: 'unexpected' })).toContainEqual(
+        expect.objectContaining({ ruleCode: 'NUMERIC_PARAM_ANOMALY', matchedField: 'body.sort' }),
+      );
+      expect(detectNumericAnomalies(path, { sort: 'smart' }, 'GET')).toHaveLength(1);
+      expect(detectNumericAnomalies(path, { filters: { sort: 'smart' } })).toHaveLength(1);
+    },
+  );
+
+  it('排序语义只匹配实际路由，真实 SQL 注入仍被检测', () => {
+    for (const path of ['/other/todo/workspace', '/todo/workspace/other', '/todo/workspace/groups']) {
+      expect(detectNumericAnomalies(path, { sort: 'smart' })).toHaveLength(1);
+    }
+    expect(detectRequestSignatures('/todo/workspace', { sort: 'UNION SELECT password FROM user' })).toContainEqual(
+      expect.objectContaining({ ruleCode: 'SQL_UNION_SELECT', matchedField: 'body.sort' }),
+    );
+  });
+
   it.each([
     ['/todo/list', 'newest'],
     ['/api/todo/list', 'smart'],
@@ -51,9 +84,7 @@ describe('请求参数异常检测', () => {
   });
 
   it('共建广场只豁免真实字段路径中的合法排序枚举', () => {
-    expect(
-      detectNumericAnomalies('/featureRequest/listPublic', { filters: { sort: 'DROP TABLE' } }),
-    ).toEqual([
+    expect(detectNumericAnomalies('/featureRequest/listPublic', { filters: { sort: 'DROP TABLE' } })).toEqual([
       expect.objectContaining({
         ruleCode: 'NUMERIC_PARAM_ANOMALY',
         matchedField: 'body.filters.sort',
@@ -65,9 +96,7 @@ describe('请求参数异常检测', () => {
         matchedField: 'body.sort',
       }),
     ]);
-    expect(
-      detectNumericAnomalies('/featureRequest/listPublic', { filters: { sort: 'updated' } }, 'GET'),
-    ).toEqual([
+    expect(detectNumericAnomalies('/featureRequest/listPublic', { filters: { sort: 'updated' } }, 'GET')).toEqual([
       expect.objectContaining({
         ruleCode: 'NUMERIC_PARAM_ANOMALY',
         matchedField: 'body.filters.sort',
@@ -164,6 +193,52 @@ describe('请求参数异常检测', () => {
 });
 
 describe('业务载荷语义检测', () => {
+  it.each([500, ORGANIZE_SELECTED_ITEMS_MAX_COUNT])('整理预检的合法对象数组按条目预算检测：%s', (count) => {
+    const body = selectedResources(count);
+    expect(String(body.items).length).toBeGreaterThan(5000);
+    expect(detectRequestSignatures('/api/organize/suggestions/previews/', body)).toEqual([]);
+  });
+
+  it('整理选择超出业务条目上限时仍记录溢出', () => {
+    expect(
+      detectRequestSignatures(
+        '/organize/suggestions/previews',
+        selectedResources(ORGANIZE_SELECTED_ITEMS_MAX_COUNT + 1),
+      ),
+    ).toContainEqual(expect.objectContaining({ ruleCode: 'PARAMETER_OVERFLOW', matchedField: 'body.items' }));
+  });
+
+  it('整理选择预算不扩散到错误方法、路由、字段或畸形载荷', () => {
+    const body = selectedResources(500);
+    for (const [path, payload, method] of [
+      ['/organize/suggestions/previews', body, 'PUT'],
+      ['/other', body, 'POST'],
+      ['/organize/suggestions/previews', { ...body, items: undefined, selection: body.items }, 'POST'],
+      ['/organize/suggestions/previews', { ...body, scope: 'all' }, 'POST'],
+      ['/organize/suggestions/previews', { ...body, items: 'x'.repeat(6000) }, 'POST'],
+      [
+        '/organize/suggestions/previews',
+        { ...body, items: body.items.map((item) => ({ ...item, extra: 'x' })) },
+        'POST',
+      ],
+    ]) {
+      expect(detectRequestSignatures(path, payload, method)).toContainEqual(
+        expect.objectContaining({ ruleCode: 'PARAMETER_OVERFLOW' }),
+      );
+    }
+  });
+
+  it('整理选择的条目预算保留子字段注入与其他字段的异常检测', () => {
+    const body = selectedResources(500);
+    body.items[0].id = 'UNION SELECT password FROM user';
+    expect(detectRequestSignatures('/organize/suggestions/previews', body)).toContainEqual(
+      expect.objectContaining({ ruleCode: 'SQL_UNION_SELECT', matchedField: 'body.items[0].id' }),
+    );
+    expect(
+      detectRequestSignatures('/organize/suggestions/previews', { ...body, cursor: 'x'.repeat(6000) }),
+    ).toContainEqual(expect.objectContaining({ ruleCode: 'PARAMETER_OVERFLOW', matchedField: 'body.cursor' }));
+  });
+
   it.each([
     ['/api/daily-review/items/6f1fbf56-31e4-4e87-8a58-c420ed3819ce/action', 'open'],
     ['/daily-review/items/6f1fbf56-31e4-4e87-8a58-c420ed3819ce/action', 'open_tag_space'],

@@ -1714,7 +1714,7 @@
 
   function openItem(item: DisplaySearchItem) {
     if (item.type === 'bookmark' && item.url) {
-      openBookmarkUrl(item.url);
+      openBookmarkUrl(item.url, { resourceId: item.id });
       return;
     }
     // 文件先于 route 判断：云空间需要带上 fileName 搜索过滤

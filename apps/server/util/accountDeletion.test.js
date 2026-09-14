@@ -414,6 +414,7 @@ describe('账号注销后台清理', () => {
         return [
           [
             { tableName: 'ai_token_reservations' },
+            { tableName: 'resource_reuse_milestones' },
             { tableName: 'admin_user_remarks' },
             { tableName: 'note' },
             { tableName: 'folders' },
@@ -421,6 +422,7 @@ describe('账号注销后台清理', () => {
           ],
         ];
       }
+      if (sql.includes('DELETE FROM resource_reuse_milestones')) return [{ affectedRows: 1 }];
       if (sql.includes('DELETE FROM ai_token_reservations')) return [{ affectedRows: 1 }];
       if (sql.includes('DELETE FROM admin_user_remarks')) return [{ affectedRows: 1 }];
       if (sql.includes('DELETE FROM note WHERE create_by')) return [{ affectedRows: 3 }];
@@ -433,6 +435,7 @@ describe('账号注销后台清理', () => {
     const result = await processAccountDeletionRequest(requestId);
 
     expect(result).toEqual({ claimed: true, completed: true });
+    expect(connection.query).toHaveBeenCalledWith('DELETE FROM resource_reuse_milestones WHERE user_id = ?', ['user-1']);
     expect(deleteObjectFromObs).toHaveBeenCalledWith('files/user-1/a.png');
     expect(cleanupOrphanNoteImages).toHaveBeenCalledWith(['https://boluo66.top/uploads/note-a.png'], { strict: true });
     expect(cleanupBookmarkIconFiles).toHaveBeenCalledWith([

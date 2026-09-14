@@ -530,18 +530,30 @@
       </div>
     </BModal>
 
-    <b-modal v-model:visible="shareDescVisible" :title="$t('cloudSpace.share')" width="450px" :show-footer="false">
-      <div class="share-desc-body">
-        <div class="share-desc-tip">{{ $t('cloudSpace.shareDescTip') }}</div>
-        <label class="share-field-label">{{ $t('cloudSpace.shareExpiry') }}</label>
-        <BSelect v-model:value="shareExpiresInDays" :options="shareExpiryOptions" />
-        <label class="share-field-label">{{ $t('cloudSpace.shareAccessCode') }}</label>
-        <b-input
-          v-model:value="shareAccessCode"
-          :maxlength="12"
-          :placeholder="$t('cloudSpace.shareCodePlaceholder')"
-          autocomplete="off"
-        />
+    <b-modal
+      v-model:visible="shareDescVisible"
+      :title="$t('cloudSpace.share')"
+      width="600px"
+      :show-footer="false"
+      fullscreen-mobile
+    >
+      <div class="share-desc-body" :class="{ 'is-mobile': bookmark.isMobile }">
+        <strong class="share-target-name">{{ shareTarget?.fileName }}</strong>
+        <div class="share-limit-grid">
+          <div>
+            <label class="share-field-label">{{ $t('cloudSpace.shareExpiry') }}</label>
+            <BSelect v-model:value="shareExpiresInDays" :options="shareExpiryOptions" />
+          </div>
+          <div>
+            <label class="share-field-label">{{ $t('cloudSpace.shareAccessCode') }}</label>
+            <BInput
+              v-model:value="shareAccessCode"
+              :maxlength="12"
+              :placeholder="$t('cloudSpace.shareCodePlaceholder')"
+              autocomplete="off"
+            />
+          </div>
+        </div>
         <div class="share-limit-grid">
           <div>
             <label class="share-field-label">{{ $t('cloudSpace.shareAccessLimit') }}</label>
@@ -560,25 +572,27 @@
             />
           </div>
         </div>
-        <b-input
-          type="textarea"
-          v-model:value="shareDescValue"
-          :maxlength="200"
-          :placeholder="$t('cloudSpace.shareDescPlaceholder')"
-        />
+        <b-input v-model:value="shareDescValue" :maxlength="200" :placeholder="$t('cloudSpace.shareDescPlaceholder')" />
         <div class="share-desc-actions">
           <b-button :loading="shareSubmitting" type="primary" @click="submitShare">{{
             $t('cloudSpace.share')
           }}</b-button>
           <b-button :disabled="shareSubmitting" @click="closeShareDialog">{{ $t('common.cancel') }}</b-button>
         </div>
+        <div v-if="lastShareUrl" class="share-new-link" role="status">
+          <p>{{ $t('cloudSpace.shareNewLinkReady') }}</p>
+          <div class="share-new-link-row">
+            <BInput v-model:value="lastShareUrl" readonly />
+            <BButton @click="copyLastShareLink">{{ $t('cloudSpace.shareCopyLink') }}</BButton>
+          </div>
+        </div>
         <section class="share-records" :aria-label="$t('cloudSpace.shareCurrentLinks')">
           <h4>{{ $t('cloudSpace.shareCurrentLinks') }}</h4>
           <BLoading v-if="shareRecordsLoading" inline loading :title="$t('common.loading')" />
-          <p v-else-if="shareRecords.length === 0" class="share-records-empty">
-            {{ $t('cloudSpace.shareNoCurrentLinks') }}
+          <p v-else-if="visibleShareRecords.length === 0" class="share-records-empty">
+            {{ $t(inactiveShareCount ? 'cloudSpace.shareNoActiveLinks' : 'cloudSpace.shareNoCurrentLinks') }}
           </p>
-          <article v-for="record in shareRecords" v-else :key="record.id" class="share-record">
+          <article v-for="record in visibleShareRecords" v-else :key="record.id" class="share-record">
             <div class="share-record-head">
               <strong>{{ formatShareState(record.state) }}</strong>
               <span>{{ formatShareDate(record.expiresAt) }}</span>
@@ -597,7 +611,14 @@
                 })
               }}</span>
             </div>
-            <div class="share-record-actions">
+            <div v-if="record.state === 'active'" class="share-record-actions">
+              <BButton
+                size="small"
+                :disabled="record.state !== 'active' || shareSubmitting"
+                @click="copyShareRecord(record)"
+              >
+                {{ $t('cloudSpace.shareCopyLink') }}
+              </BButton>
               <BButton
                 size="small"
                 :disabled="record.state !== 'active' || shareSubmitting"
@@ -615,6 +636,18 @@
               </BButton>
             </div>
           </article>
+          <BButton
+            v-if="inactiveShareCount"
+            class="share-history-toggle"
+            :aria-expanded="showShareHistory"
+            @click="showShareHistory = !showShareHistory"
+          >
+            {{
+              $t(showShareHistory ? 'cloudSpace.shareHideHistory' : 'cloudSpace.shareShowHistory', {
+                count: inactiveShareCount,
+              })
+            }}
+          </BButton>
         </section>
       </div>
     </b-modal>
@@ -651,7 +684,11 @@
         </span>
       </template>
       <template #mobile-actions>
-        <BButton class="batch-action-delete" :disabled="!hasSelection || selection.busy.value" @click="handleBatchDelete">
+        <BButton
+          class="batch-action-delete"
+          :disabled="!hasSelection || selection.busy.value"
+          @click="handleBatchDelete"
+        >
           <SvgIcon :src="icon.table_delete" size="16" aria-hidden="true" />
           {{ $t('common.delete') }}
         </BButton>
@@ -767,6 +804,8 @@
 </template>
 <script setup lang="ts">
   import ManagedImagePreview from '@/components/imagePreview/ManagedImagePreview.vue';
+  import { readFileShareToken, copyFileShareUrl, buildFileShareUrl } from '@/utils/fileShareLinks';
+  import { copyTextToClipboard } from '@/utils/clipboard';
   import { useProjectResourceAction } from '@/composables/useProjectResourceAction';
   const { canJoinProject, joinProject } = useProjectResourceAction();
   import { useResourceSelection } from '@/composables/useResourceSelection';
@@ -1266,6 +1305,12 @@
   const shareTarget = ref<{ id: string; fileName?: string; fileType?: string } | null>(null);
   const shareRecordsLoading = ref(false);
   const shareRecords = ref<FileShareRecord[]>([]);
+  const lastShareUrl = ref('');
+  const showShareHistory = ref(false);
+  const inactiveShareCount = computed(() => shareRecords.value.filter((record) => record.state !== 'active').length);
+  const visibleShareRecords = computed(() =>
+    shareRecords.value.filter((record) => showShareHistory.value || record.state === 'active'),
+  );
   const shareExpiryOptions = computed(() => [
     { value: 1, label: t('cloudSpace.shareExpiryOneDay') },
     { value: 7, label: t('cloudSpace.shareExpirySevenDays') },
@@ -1956,6 +2001,8 @@
 
   async function handleShareFile(id, fileName, fileType) {
     recordOperation({ module: '云空间', operation: `打开文件分享弹窗【${fileName}】` });
+    lastShareUrl.value = '';
+    showShareHistory.value = false;
     shareTarget.value = { id, fileName, fileType };
     resetShareForm();
     shareRecords.value = [];
@@ -1967,6 +2014,7 @@
     if (shareSubmitting.value) return;
     shareDescVisible.value = false;
     shareTarget.value = null;
+    lastShareUrl.value = '';
     shareRecords.value = [];
     resetShareForm();
   };
@@ -1976,7 +2024,8 @@
     if (!shareTarget.value) return;
     try {
       shareSubmitting.value = true;
-      await shareField(shareTarget.value.id, currentShareInput());
+      const result = await shareField(shareTarget.value.id, currentShareInput());
+      lastShareUrl.value = result.shareUrl;
       recordOperation({ module: '云空间', operation: `分享文件成功【${shareTarget.value.fileName}】` });
       resetShareForm();
       await loadShareRecords();
@@ -2011,6 +2060,7 @@
         shareSubmitting.value = true;
         try {
           await revokeFileShare(shareId);
+          lastShareUrl.value = '';
           message.success(t('cloudSpace.shareRevoked'));
           await loadShareRecords();
         } catch {
@@ -2022,14 +2072,32 @@
     });
   }
 
-  function confirmRotateShare(shareId: string) {
+  async function copyLastShareLink() {
+    const copied = await copyTextToClipboard(lastShareUrl.value);
+    if (copied) message.success(t('common.shareLinkCopied'));
+    else message.warning(t('cloudSpace.shareCopyFailed'));
+  }
+
+  async function copyShareRecord(record: FileShareRecord) {
+    const token = readFileShareToken(record.id, record.tokenHint);
+    if (!token) {
+      confirmRotateShare(record.id, true);
+      return;
+    }
+    lastShareUrl.value = buildFileShareUrl(token);
+    if (await copyFileShareUrl(token)) message.success(t('common.shareLinkCopied'));
+    else message.warning(t('cloudSpace.shareCopyFailed'));
+  }
+
+  function confirmRotateShare(shareId: string, missingOriginal = false) {
     Alert.alert({
       title: t('cloudSpace.alertTitle'),
-      content: t('cloudSpace.shareRotateConfirm'),
+      content: t(missingOriginal ? 'cloudSpace.shareCopyUnavailable' : 'cloudSpace.shareRotateConfirm'),
       onOk: async () => {
         shareSubmitting.value = true;
         try {
-          await rotateFileShare(shareId, currentShareInput());
+          const result = await rotateFileShare(shareId, currentShareInput());
+          lastShareUrl.value = result.shareUrl;
           message.success(t('cloudSpace.shareRotated'));
           resetShareForm();
           await loadShareRecords();
@@ -2158,7 +2226,7 @@
 </script>
 
 <style scoped lang="less">
-  @import (reference) "@/assets/css/workspace-surfaces.less";
+  @import (reference) '@/assets/css/workspace-surfaces.less';
   .field-list {
     --file-card-min-width: 260px;
 
@@ -2456,13 +2524,32 @@
     }
   }
   .share-desc-body {
+    &.is-mobile {
+      padding: 16px;
+      box-sizing: border-box;
+    }
     display: flex;
     flex-direction: column;
     gap: 12px;
   }
-  .share-desc-tip {
-    color: var(--desc-color);
-    font-size: 12px;
+  .share-target-name {
+    overflow-wrap: anywhere;
+    color: var(--text-color);
+  }
+  .share-new-link-row {
+    display: flex;
+    gap: 8px;
+    min-width: 0;
+    > :first-child {
+      flex: 1;
+      min-width: 0;
+    }
+    > :last-child {
+      flex: 0 0 auto;
+    }
+  }
+  .share-history-toggle {
+    margin-top: 10px;
   }
   .share-field-label {
     color: var(--text-color);
@@ -2484,6 +2571,16 @@
     display: flex;
     justify-content: flex-end;
     gap: 10px;
+  }
+  .share-new-link {
+    display: grid;
+    gap: 10px;
+    min-width: 0;
+    p {
+      margin: 0;
+      color: var(--desc-color);
+      font-size: 13px;
+    }
   }
   .share-records {
     margin-top: 4px;
@@ -2518,6 +2615,7 @@
     }
   }
   .share-record-actions {
+    flex-wrap: wrap;
     justify-content: flex-end !important;
   }
   @media (max-width: 1400px) {
@@ -3060,11 +3158,15 @@
   .file-container {
     .workspace-open-surface();
   }
-  .field-header, .field-item, .file-card {
+  .field-header,
+  .field-item,
+  .file-card {
     .workspace-content-surface();
   }
 
-  .field-item:hover { background: var(--workspace-hover); }
+  .field-item:hover {
+    background: var(--workspace-hover);
+  }
   .field-item.field-item--selected {
     background: var(--workspace-file-selected);
     box-shadow: inset 3px 0 0 var(--workspace-file-text);

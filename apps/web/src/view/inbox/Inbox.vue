@@ -1465,7 +1465,14 @@
       (todo.seriesPresentation && todo.refreshing),
     ),
   );
+  const todoPageLoading = ref(false);
+  let pageRefreshGeneration = 0;
   const pageLoading = computed(() => {
+    // 列表或分组已出现后，由分组自身反馈加载，不再叠加首屏遮罩。
+    if (
+      isTodoFocused.value && todoPageLoading.value &&
+      !todo.items.length && !todo.groups.length && !recentCompleted.value.length
+    ) return true;
     if (isMobileTodoPrimary.value) return todo.loading;
     if (isMobileResourceInbox.value) return inbox.loading;
     return inbox.filterType === 'todo' ? todo.loading : inbox.loading;
@@ -1659,6 +1666,7 @@
     scheduleTodoMidnightRefresh();
   });
   onBeforeUnmount(() => {
+    pageRefreshGeneration++;
     window.removeEventListener('resize', updateViewportHeight);
     resizeObserver?.disconnect();
     window.clearTimeout(todoUndoTimer);
@@ -1951,81 +1959,92 @@
   async function search() {
     await refreshList(true);
   }
-  // silent: 下拉刷新专用 —— 不进 loading(旧列表留在屏幕上),也不重置滚动位置。
+  // silent: 已有列表的下拉刷新保留内容，也不重置滚动位置。
   async function refreshList(resetScroll = false, silent = false) {
-    todo.keyword = inbox.keyword;
-    let refreshed = false;
-    let inboxCountsReady = false;
-    if (inbox.filterType === 'todo') {
-      if (isUnscopedTodoView.value) {
-        if (
-          !savedTodoRange &&
-          (todo.filters.listId !== undefined || (todo.filters.scope && todo.filters.scope !== 'all'))
-        ) {
-          savedTodoRange = { scope: todo.filters.scope, listId: todo.filters.listId };
+    const generation = ++pageRefreshGeneration;
+    // 页面还需准备标签与最近完成记录，Store 的 loading 只覆盖主列表请求。
+    todoPageLoading.value =
+      inbox.filterType === 'todo' && !todo.items.length && !todo.groups.length && !recentCompleted.value.length;
+    try {
+      todo.keyword = inbox.keyword;
+      let refreshed = false;
+      let inboxCountsReady = false;
+      if (inbox.filterType === 'todo') {
+        if (isUnscopedTodoView.value) {
+          if (
+            !savedTodoRange &&
+            (todo.filters.listId !== undefined || (todo.filters.scope && todo.filters.scope !== 'all'))
+          ) {
+            savedTodoRange = { scope: todo.filters.scope, listId: todo.filters.listId };
+          }
+          todo.filters.scope = 'all';
+          delete todo.filters.listId;
         }
-        todo.filters.scope = 'all';
-        delete todo.filters.listId;
-      }
-      if (resetScroll) {
-        selectedTodoIds.value = [];
-        seriesDrawerOpen.value = false;
-      }
-      todo.workspaceEnabled = true;
-      todo.seriesPresentation = todoView.value === 'list';
-      const owner = todoCalendarOwnerKey(user);
-      const freshTags = await fetchSelectableTags().catch(() => workspaceTags.value);
-      if (owner !== todoCalendarOwnerKey(user)) return false;
-      workspaceTags.value = freshTags;
-      todo.filters.tagIds = (todo.filters.tagIds || []).filter((id) => freshTags.some((tag) => tag.id === id));
-      // 列表与四象限按当前页签查询；议程和日历读取全量并保留页签选择。
-      refreshed = await todo.refreshList({
-        silent,
-        status: todoViewUsesStatusFilter(todoView.value) ? todo.status : 'all',
-        preserveStatus: !todoViewUsesStatusFilter(todoView.value),
-      });
-      if (owner !== todoCalendarOwnerKey(user)) return false;
-      if (refreshed && todoView.value === 'calendar') {
-        const generation = todo.requestId;
-        while (todo.nextCursor && generation === todo.requestId && !todo.loadFailed) {
-          const cursor = todo.nextCursor;
-          await todo.loadMore();
-          if (cursor === todo.nextCursor) break;
+        if (resetScroll) {
+          selectedTodoIds.value = [];
+          seriesDrawerOpen.value = false;
         }
+        todo.workspaceEnabled = true;
+        todo.seriesPresentation = todoView.value === 'list';
+        const owner = todoCalendarOwnerKey(user);
+        const freshTags = await fetchSelectableTags().catch(() => workspaceTags.value);
+        if (generation !== pageRefreshGeneration || owner !== todoCalendarOwnerKey(user)) return false;
+        workspaceTags.value = freshTags;
+        todo.filters.tagIds = (todo.filters.tagIds || []).filter((id) => freshTags.some((tag) => tag.id === id));
+        // 列表与四象限按当前页签查询；议程和日历读取全量并保留页签选择。
+        refreshed = await todo.refreshList({
+          silent,
+          status: todoViewUsesStatusFilter(todoView.value) ? todo.status : 'all',
+          preserveStatus: !todoViewUsesStatusFilter(todoView.value),
+        });
+        if (generation !== pageRefreshGeneration || owner !== todoCalendarOwnerKey(user)) return false;
+        if (refreshed && todoView.value === 'calendar') {
+          const requestGeneration = todo.requestId;
+          while (todo.nextCursor && requestGeneration === todo.requestId && !todo.loadFailed) {
+            const cursor = todo.nextCursor;
+            await todo.loadMore();
+            if (cursor === todo.nextCursor) break;
+          }
+        }
+        inboxCountsReady = await inbox.refreshCount();
+      } else if (inbox.filterType === 'all') {
+        const inboxRefreshed = await inbox.refreshList({ silent });
+        refreshed = inboxRefreshed;
+        inboxCountsReady = inboxRefreshed || (await inbox.refreshCount());
+      } else {
+        const inboxRefreshed = await inbox.refreshList({ silent });
+        refreshed = inboxRefreshed;
+        inboxCountsReady = inboxRefreshed || (await inbox.refreshCount());
       }
-      inboxCountsReady = await inbox.refreshCount();
-    } else if (inbox.filterType === 'all') {
-      const inboxRefreshed = await inbox.refreshList({ silent });
-      refreshed = inboxRefreshed;
-      inboxCountsReady = inboxRefreshed || (await inbox.refreshCount());
-    } else {
-      const inboxRefreshed = await inbox.refreshList({ silent });
-      refreshed = inboxRefreshed;
-      inboxCountsReady = inboxRefreshed || (await inbox.refreshCount());
+      if (generation !== pageRefreshGeneration) return false;
+      if (inboxCountsReady) todo.pendingTotal = inbox.todoPendingTotal;
+      if (
+        refreshed &&
+        inbox.filterType === 'todo' &&
+        todoView.value === 'list' &&
+        todo.workspaceEnabled &&
+        todo.status === 'pending' &&
+        todo.sort === 'smart' &&
+        (todo.filters.scope || 'all') === 'all' &&
+        todo.filters.listId === undefined &&
+        !todo.filters.tagIds?.length &&
+        !todo.keyword &&
+        (todo.filters.priority === undefined || todo.filters.priority === '')
+      ) {
+        const requestGeneration = todo.requestId;
+        const recent = await getTodoWorkspace({ status: 'completed', limit: 5 }).catch(() => null);
+        if (generation !== pageRefreshGeneration) return false;
+        if (requestGeneration === todo.requestId) recentCompleted.value = recent?.status === 200 ? recent.data.items : [];
+      } else recentCompleted.value = [];
+      await nextTick();
+      if (resetScroll && scrollContainer.value) scrollContainer.value.scrollTop = 0;
+      updateScrollFade();
+      return refreshed;
+    } finally {
+      if (generation === pageRefreshGeneration) todoPageLoading.value = false;
     }
-    if (inboxCountsReady) todo.pendingTotal = inbox.todoPendingTotal;
-    if (
-      refreshed &&
-      inbox.filterType === 'todo' &&
-      todoView.value === 'list' &&
-      todo.workspaceEnabled &&
-      todo.status === 'pending' &&
-      todo.sort === 'smart' &&
-      (todo.filters.scope || 'all') === 'all' &&
-      todo.filters.listId === undefined &&
-      !todo.filters.tagIds?.length &&
-      !todo.keyword &&
-      (todo.filters.priority === undefined || todo.filters.priority === '')
-    ) {
-      const generation = todo.requestId;
-      const recent = await getTodoWorkspace({ status: 'completed', limit: 5 }).catch(() => null);
-      if (generation === todo.requestId) recentCompleted.value = recent?.status === 200 ? recent.data.items : [];
-    } else recentCompleted.value = [];
-    await nextTick();
-    if (resetScroll && scrollContainer.value) scrollContainer.value.scrollTop = 0;
-    updateScrollFade();
-    return refreshed;
   }
+
   async function ensureCalendarRange(range: { startDate: string; endDate: string }) {
     if (todoView.value !== 'calendar') return;
     const requestGeneration = ++calendarRangeGeneration;

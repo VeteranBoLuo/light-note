@@ -961,7 +961,7 @@
     }
     recordOperation({ module: '工作台', operation: `打开高频书签【${item.title}】` });
     if (item.raw?.url) {
-      openBookmarkUrl(item.raw.url);
+      openBookmarkUrl(item.raw.url, { resourceId: item.raw.id });
       return;
     }
     router.push('/home');

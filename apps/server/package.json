@@ -33,6 +33,7 @@
     "backfill:note-thumbnails": "node scripts/backfillNoteImageThumbnails.js",
     "backfill:community-chat-identities": "node scripts/backfillCommunityChatIdentities.js",
     "test": "vitest run",
+    "test:mysql": "node scripts/runMysqlTests.js",
     "test:watch": "vitest",
     "worker:browser-push": "node browserPushWorker.js",
     "worker:browser-push:dev": "node --watch --watch-preserve-output browserPushWorker.js",

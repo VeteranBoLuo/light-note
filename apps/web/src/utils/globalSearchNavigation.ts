@@ -13,7 +13,7 @@ import { openBookmarkUrl } from '@/utils/openBookmark';
  */
 export function navigateToSearchResult(router: Router, item: SearchResultItem): void {
   if (item.type === 'bookmark' && item.url) {
-    openBookmarkUrl(item.url);
+    openBookmarkUrl(item.url, { resourceId: item.id });
     return;
   }
   if (item.type === 'file') {

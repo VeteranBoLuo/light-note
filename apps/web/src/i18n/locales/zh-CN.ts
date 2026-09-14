@@ -4475,11 +4475,11 @@ export default {
     },
     providers: {
       title: '模型与供应商',
-      hint: '成本按调用时生效的单价估算',
+      hint: '展示所选时段的历史模型，成本按调用时单价估算；任务失败按模型内去重，跨模型不相加',
       empty: '暂无 Provider 调用',
       unknown: '未记录供应商',
       row: '{calls} 次 · {tokens} tokens · 估算 ¥{cost}',
-      issue: '失败 {failed} · 用量缺失 {missing} · 平台承担 {platform}',
+      issue: '任务失败 {failed} · 调用失败 {calls} · 用量缺失 {missing} · 平台承担 {platform}',
     },
     executions: {
       title: '执行明细',
@@ -7089,6 +7089,17 @@ export default {
     },
   },
   cloudSpace: {
+    shareNoActiveLinks: '暂无有效分享链接',
+    shareBrandHint: '由轻笺提供文件分享',
+    shareCreateOwn: '开始使用轻笺',
+    shareShowHistory: '查看失效分享（{count}）',
+    shareHideHistory: '收起失效分享',
+
+    shareCopyLink: '复制链接',
+    shareNewLinkReady: '分享链接已生成，可复制或手动选择保存。',
+    shareCopyFailed: '浏览器未允许自动复制，请手动选择链接复制。',
+    shareCopyUnavailable: '当前标签页未保留原链接，服务端无法还原。是否换新并复制？原链接将立即失效。',
+
     title: '云空间',
     subtitle: '按多级文件夹与类型管理资料，支持搜索、预览、拖放和批量操作。',
     // 下拉刷新时文件、文件夹、用量分别请求,只有一部分失败时用它区别于整体失败
@@ -13209,6 +13220,8 @@ export default {
     breadcrumb: '分享目录路径',
     sharedBy: '由 {name} 分享',
     updatedAt: '更新于 {time}',
+    emptyOutline: '当前页面暂无大纲',
+    emptyOutlineHint: '包含标题的正文会在这里显示导航。',
     emptyPage: '这篇笔记暂无正文',
     poweredBy: '由轻笺提供只读分享',
     createOwnNotes: '创建自己的笔记',

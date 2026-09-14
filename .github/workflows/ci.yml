@@ -14,6 +14,51 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  mysql:
+    name: MySQL 5.7 核心行为
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      LIGHTNOTE_TEST_MYSQL_SOCKET: /tmp/light-note-ci-mysql/mysql.sock
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.25.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: 启动独立 MySQL 5.7（无网络监听与生产凭据）
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -m 777 /tmp/light-note-ci-mysql
+          docker run -d --name light-note-ci-mysql --network none \
+            -e MYSQL_ALLOW_EMPTY_PASSWORD=yes \
+            -v /tmp/light-note-ci-mysql:/tmp/light-note-ci-mysql \
+            mysql:5.7.44 \
+            --skip-networking --socket=/tmp/light-note-ci-mysql/mysql.sock \
+            --default-time-zone=+08:00 \
+            --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+          for attempt in $(seq 1 90); do
+            if docker logs light-note-ci-mysql 2>&1 | grep 'MySQL init process done' >/dev/null && \
+              docker exec light-note-ci-mysql mysqladmin \
+                --socket=/tmp/light-note-ci-mysql/mysql.sock -uroot ping --silent; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs light-note-ci-mysql
+          exit 1
+      - name: 笔记持久化、上传并发、排序与运营 SQL
+        run: pnpm --filter server test:mysql
+      - name: 清理临时数据库
+        if: always()
+        run: docker rm -fv light-note-ci-mysql || true
+
   quality:
     name: 类型检查、测试与构建
     runs-on: ubuntu-latest

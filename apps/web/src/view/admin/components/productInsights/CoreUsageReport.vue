@@ -97,8 +97,21 @@
   onBeforeUnmount(() => {
     generation++;
   });
-  const keys = ['a7Resources', 'a7Overall', 'r7Core', 'a7ResourcesLegacy', 'r7InteractionProxy'];
-  const rows = computed<Row[]>(() => (report.value ? keys.map((key) => ({ key, ...report.value!.metrics[key] })) : []));
+  const keys = ['a7Resources', 'a7Overall', 'r7Core', 'u7Reuse', 'a7ResourcesLegacy', 'r7InteractionProxy'];
+  const rows = computed<Row[]>(() =>
+    report.value
+      ? keys.map((key) => ({
+          key,
+          ...(report.value!.metrics[key] || {
+            eligible: null,
+            observed: null,
+            value: null,
+            status: 'unavailable',
+            reasons: ['schema_unavailable'],
+          }),
+        }))
+      : [],
+  );
   const columns = computed<Column[]>(() => [
     { key: 'label', title: t('coreUsageReport.metric'), width: 'minmax(190px, 1.3fr)', ellipsis: false },
     { key: 'observed', title: t('coreUsageReport.observed'), width: '110px' },

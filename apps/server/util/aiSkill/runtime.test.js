@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { createAiGateway } from '../agent/aiGateway.js';
 import { executeAiSkill } from './runtime.js';
+import helpAnswer from './skills/helpAnswer.js';
 
 function createExecutionPersistence() {
   return {
@@ -42,6 +43,33 @@ function resolvedContext(scopeDigest) {
 }
 
 describe('executeAiSkill', () => {
+  it('帮助无命中仍调用模型，保留空来源且不返回误导告警或无效按钮', async () => {
+    const callModel = vi.fn().mockResolvedValue({ kind: 'grounded_markdown', content: '你好！想了解轻笺的什么功能？' });
+    const result = await executeAiSkill(
+      { ...request(), input: { question: '你好' } },
+      { user: { id: 'u-1', role: 'user' } },
+      {
+        resolveSkill: () => helpAnswer,
+        assertDomainEnabled: vi.fn(),
+        resolveContext: async () => resolvedContext('a'.repeat(64)),
+        runExecution: async (_config, operation) => operation(),
+        callModel,
+        skillDependencies: { retrieveHelp: async () => [] },
+        resolveThread: async () => null,
+        appendTurn: vi.fn(),
+      },
+    );
+    expect(callModel).toHaveBeenCalledOnce();
+    expect(callModel).toHaveBeenCalledWith(expect.objectContaining({ sources: [] }));
+    expect(result).toMatchObject({
+      status: 'completed',
+      result: { content: '你好！想了解轻笺的什么功能？' },
+      sources: [],
+      coverage: { complete: false, warnings: [] },
+      availableActions: [],
+    });
+  });
+
   it('页面已选定 Skill 后只执行该定义，并由一个根 Execution 包住准备与模型调用', async () => {
     const events = [];
     let insideExecution = false;

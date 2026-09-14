@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h } from 'vue';
 import { createI18n } from 'vue-i18n';
 import { readFileSync } from 'node:fs';
@@ -14,10 +14,10 @@ const componentSource = readFileSync(
 
 let cleanup: (() => void) | undefined;
 
-function mountResult(result: SkillResult, showGrounding = true) {
+function mountResult(result: SkillResult, showGrounding = true, extra: Record<string, unknown> = {}) {
   const host = document.createElement('div');
   document.body.append(host);
-  const app = createApp({ render: () => h(AiSkillResultContent, { result, showGrounding }) });
+  const app = createApp({ render: () => h(AiSkillResultContent, { result, showGrounding, ...extra }) });
   app.use(
     createI18n({
       legacy: false,
@@ -150,4 +150,26 @@ describe('AiSkillResultContent', () => {
     expect(host.textContent).toContain('不支持展示');
     expect(host.textContent).not.toContain('should-not-render');
   });
+});
+
+it('帮助角标使用真实来源深链，点击通知页面，代码和未知编号不导航', () => {
+  const source = {
+    resourceType: 'help',
+    resourceId: 'h-1',
+    title: '开源与自部署',
+    citationKey: '1',
+    target: { type: 'help', id: 'h-1', path: '/wrong' },
+  };
+  const select = vi.fn();
+  const host = mountResult({ kind: 'grounded_markdown', content: '支持自部署。\n\n[1]\n\n`arr[1]` [9]' }, true, {
+    sources: [source],
+    'onSource-select': select,
+  });
+  const link = host.querySelector<HTMLAnchorElement>('a[data-source-index]')!;
+  expect(link.getAttribute('href')).toBe('/help?article=h-1');
+  expect(link.parentElement?.textContent).toBe('支持自部署。 [1]');
+  link.click();
+  expect(select).toHaveBeenCalledWith(source);
+  expect(host.querySelectorAll('a[data-source-index]')).toHaveLength(1);
+  expect(host.querySelector('code')?.textContent).toBe('arr[1]');
 });

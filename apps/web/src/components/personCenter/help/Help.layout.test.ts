@@ -61,9 +61,9 @@ describe('帮助中心布局契约', () => {
     expect(helpSource).not.toMatch(/\.help-compact-outline\s*\{[^}]*position:\s*fixed/s);
   });
 
-  it('问答抽屉复用通用侧栏形态与一体化输入，并保留输入重置与隐去来源能力', () => {
+  it('问答抽屉复用通用侧栏形态与一体化输入，并保留输入重置与来源入口能力', () => {
     expect(helpSource).toContain(':prompt-rows="3"');
-    expect(helpSource).toContain(':show-grounding="false"');
+    expect(helpSource).toContain(':streaming="true"');
     expect(helpSource).toContain(':clear-prompt-on-success="true"');
     expect(helpSource).not.toContain(':empty-text="t(\'help.aiEmpty\')"');
     expect(panelSource).toContain("presentation?: 'default' | 'sidebar'");

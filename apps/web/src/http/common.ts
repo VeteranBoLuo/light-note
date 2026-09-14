@@ -1,3 +1,9 @@
+import {
+  buildFileShareUrl,
+  copyFileShareUrl,
+  rememberFileShareToken,
+  forgetFileShareToken,
+} from '@/utils/fileShareLinks';
 import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
 import i18n from '@/i18n';
 import cloudSpaceStore from '@/store/cloudSpace';
@@ -107,11 +113,13 @@ export interface FileShareRecord {
   state: string;
 }
 
-async function copyFileShareToken(token: string) {
-  const shareUrl = `${window.location.origin}/share/${encodeURIComponent(token)}`;
-  await navigator.clipboard.writeText(shareUrl);
-  message.success(i18n.global.t('common.shareLinkCopied'));
-  return shareUrl;
+async function presentFileShareLink(data: { id: string; token: string; replacedShareId?: string }) {
+  if (data.replacedShareId) forgetFileShareToken(data.replacedShareId);
+  rememberFileShareToken(data.id, data.token, data.token.slice(-8));
+  const shareUrl = buildFileShareUrl(data.token);
+  if (await copyFileShareUrl(data.token)) message.success(i18n.global.t('common.shareLinkCopied'));
+  else message.warning(i18n.global.t('cloudSpace.shareCopyFailed'));
+  return { ...data, shareUrl };
 }
 
 // 创建独立分享记录；令牌只在创建/轮换成功时返回一次。
@@ -121,8 +129,7 @@ export async function shareField(id: number | string, options: FileShareInput = 
     if (res.status !== 200 || !res.data?.token) {
       throw new Error(res.data?.errorCode || 'FILE_SHARE_CREATE_FAILED');
     }
-    const shareUrl = await copyFileShareToken(res.data.token);
-    return { ...res.data, shareUrl };
+    return await presentFileShareLink(res.data);
   } catch (error) {
     console.error('分享失败:', error);
     message.error(i18n.global.t('common.shareLinkFailed'));
@@ -141,6 +148,7 @@ export async function listFileShares(fileId?: number | string): Promise<FileShar
 export async function revokeFileShare(shareId: string) {
   const res = await apiBasePost('/api/file/share/revoke', { shareId });
   if (res.status !== 200) throw new Error(res.data?.errorCode || 'FILE_SHARE_REVOKE_FAILED');
+  forgetFileShareToken(shareId);
   return true;
 }
 
@@ -149,8 +157,7 @@ export async function rotateFileShare(shareId: string, options: FileShareInput =
   if (res.status !== 200 || !res.data?.token) {
     throw new Error(res.data?.errorCode || 'FILE_SHARE_ROTATE_FAILED');
   }
-  const shareUrl = await copyFileShareToken(res.data.token);
-  return { ...res.data, shareUrl };
+  return presentFileShareLink(res.data);
 }
 
 export async function resolveFileShare(token: string, accessCode = '') {

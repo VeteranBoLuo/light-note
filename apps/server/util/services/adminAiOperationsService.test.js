@@ -180,7 +180,8 @@ describe('adminAiOperationsService', () => {
                 calls: 5,
                 tokens: 5000,
                 estimated_cost: '0.008600',
-                failed_calls: 1,
+                failed_calls: 0,
+                failed_executions: 1,
                 missing_usage_calls: 1,
                 platform_calls: 1,
               },
@@ -211,7 +212,13 @@ describe('adminAiOperationsService', () => {
     expect(result.daily).toHaveLength(7);
     expect(result.daily.at(-1)).toMatchObject({ date: '2026-08-28', providerTokens: 5000, failures: 1 });
     expect(result.modules.map((item) => item.module)).toEqual(['note', 'bookmark']);
-    expect(result.providers[0]).toMatchObject({ provider: 'deepseek', calls: 5, platformCalls: 1 });
+    expect(result.providers[0]).toMatchObject({
+      provider: 'deepseek',
+      calls: 5,
+      platformCalls: 1,
+      failedCalls: 0,
+      failedExecutions: 1,
+    });
 
     const statements = database.query.mock.calls.map(([sql]) => String(sql));
     expect(statements).toHaveLength(5);

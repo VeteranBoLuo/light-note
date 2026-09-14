@@ -20,7 +20,7 @@ const createEvidence = ({ rule, field, value, message, scoreDelta, confidence })
 const ENUM_SORT_VALUES_BY_REQUEST_FIELD = [
   {
     method: 'POST',
-    pattern: /\/todo\/list\/?$/i,
+    pattern: /^(?:\/api)?\/todo\/(?:list|workspace(?:\/(?:group|series))?)\/?$/i,
     field: 'body.sort',
     values: new Set(['smart', 'action', 'priority', 'due', 'newest', 'oldest']),
   },

@@ -153,55 +153,69 @@
                 :empty-description="t('organize.untagged.emptyDescription')"
                 @retry="loadUntagged(true)"
               >
-                <div class="organize-resource-list" role="list">
-                  <article
-                    v-for="item in untaggedItems"
-                    :key="untaggedKey(item)"
-                    class="organize-resource-row"
-                    :class="{
-                      'is-batch-mode': untaggedBatchMode,
-                      'is-selected': selectedUntaggedKeys.includes(untaggedKey(item)),
-                    }"
-                    role="listitem"
-                    :tabindex="untaggedBatchMode ? 0 : undefined"
-                    @click="handleUntaggedRowSelection(item, $event)"
-                    @keydown.enter.self="handleUntaggedRowSelection(item, $event)"
-                    @keydown.space.self.prevent="handleUntaggedRowSelection(item, $event)"
-                  >
-                    <BCheckbox
-                      v-if="untaggedBatchMode"
-                      :model-value="selectedUntaggedKeys.includes(untaggedKey(item))"
-                      :aria-label="t('organize.selectResource', { title: item.title || t('inbox.untitled') })"
-                      @update:model-value="toggleUntagged(item, $event)"
-                    />
-                    <span class="organize-resource-row__icon" :class="`is-${item.resourceType}`">
-                      <SvgIcon :src="resourceIcon(item.resourceType)" size="18" aria-hidden="true" />
-                    </span>
-                    <div class="organize-resource-row__body">
-                      <div class="organize-resource-row__title-line">
-                        <strong>{{ item.title || t('inbox.untitled') }}</strong>
-                        <span class="organize-type-chip" :class="`is-${item.resourceType}`">
-                          {{ resourceTypeLabel(item.resourceType) }}
-                        </span>
-                      </div>
-                      <p>{{ item.summary || item.url || t('organize.untagged.noSummary') }}</p>
-                      <small>{{ formatDate(item.updatedAt || item.createdAt) }}</small>
-                    </div>
-                    <div class="organize-resource-row__actions">
-                      <BButton size="small" @click="openResource(item)">{{ t('organize.open') }}</BButton>
-                      <BButton size="small" type="primary" @click="openBatchTags([item])">
-                        {{ t('organize.untagged.addTag') }}
-                      </BButton>
-                    </div>
-                  </article>
-                </div>
-                <BButton
-                  v-if="untaggedList.hasMore"
-                  class="organize-load-more"
-                  :loading="untaggedList.loadingMore"
-                  @click="loadUntagged(false)"
+                <BVirtualList
+                  class="organize-resource-list"
+                  :items="untaggedVirtualItems"
+                  item-key="virtualKey"
+                  role="list"
+                  scroll-mode="ancestor"
+                  dynamic-height
+                  :item-height="bookmark.isMobile ? 150 : 100"
+                  :gap="10"
+                  :loading="untaggedList.loading || untaggedList.loadingMore"
+                  :show-loading-indicator="!untaggedList.loading"
+                  :has-more="untaggedList.hasMore && !untaggedList.error"
+                  :loading-text="t('organize.loading')"
+                  @load-more="loadUntagged(false)"
                 >
-                  {{ t('organize.loadMore') }}
+                  <template #default="{ item }">
+                    <article
+                      class="organize-resource-row"
+                      :class="{
+                        'is-batch-mode': untaggedBatchMode,
+                        'is-selected': selectedUntaggedKeys.includes(untaggedKey(item)),
+                      }"
+                      role="listitem"
+                      :tabindex="untaggedBatchMode ? 0 : undefined"
+                      @click="handleUntaggedRowSelection(item, $event)"
+                      @keydown.enter.self="handleUntaggedRowSelection(item, $event)"
+                      @keydown.space.self.prevent="handleUntaggedRowSelection(item, $event)"
+                    >
+                      <BCheckbox
+                        v-if="untaggedBatchMode"
+                        :model-value="selectedUntaggedKeys.includes(untaggedKey(item))"
+                        :aria-label="t('organize.selectResource', { title: item.title || t('inbox.untitled') })"
+                        @update:model-value="toggleUntagged(item, $event)"
+                      />
+                      <span class="organize-resource-row__icon" :class="`is-${item.resourceType}`">
+                        <SvgIcon :src="resourceIcon(item.resourceType)" size="18" aria-hidden="true" />
+                      </span>
+                      <div class="organize-resource-row__body">
+                        <div class="organize-resource-row__title-line">
+                          <strong>{{ item.title || t('inbox.untitled') }}</strong>
+                          <span class="organize-type-chip" :class="`is-${item.resourceType}`">
+                            {{ resourceTypeLabel(item.resourceType) }}
+                          </span>
+                        </div>
+                        <p>{{ item.summary || item.url || t('organize.untagged.noSummary') }}</p>
+                        <small>{{ formatDate(item.updatedAt || item.createdAt) }}</small>
+                      </div>
+                      <div class="organize-resource-row__actions">
+                        <BButton size="small" @click="openResource(item)">{{ t('organize.open') }}</BButton>
+                        <BButton size="small" type="primary" @click="openBatchTags([item])">
+                          {{ t('organize.untagged.addTag') }}
+                        </BButton>
+                      </div>
+                    </article>
+                  </template>
+                </BVirtualList>
+                <BButton
+                  v-if="untaggedList.error"
+                  class="organize-list-retry"
+                  :loading="untaggedList.loadingMore"
+                  @click="loadUntagged(untaggedList.retryReset)"
+                >
+                  {{ t('organize.retry') }}
                 </BButton>
               </OrganizeIssueListState>
             </section>
@@ -226,45 +240,56 @@
                 :empty-description="t('organize.duplicate.emptyDescription')"
                 @retry="loadDuplicates(true)"
               >
-                <div class="organize-duplicate-list" role="list">
-                  <article
-                    v-for="group in duplicateGroups"
-                    :key="group.groupKey"
-                    class="organize-duplicate-card"
-                    role="listitem"
-                  >
-                    <span class="organize-duplicate-card__icon">
-                      <SvgIcon :src="icon.resource.bookmark" size="20" aria-hidden="true" />
-                    </span>
-                    <div class="organize-duplicate-card__body">
-                      <div class="organize-duplicate-card__heading">
-                        <strong>{{ t('organize.duplicate.groupTitle', { count: group.memberCount }) }}</strong>
-                        <span v-if="!group.canResolve" class="organize-status-chip is-blocked">
-                          {{ t('organize.duplicate.blocked') }}
-                        </span>
-                      </div>
-                      <p>{{ group.url }}</p>
-                      <div class="organize-duplicate-card__members">
-                        <span v-for="member in group.members.slice(0, 3)" :key="member.id">
-                          {{ member.name || t('inbox.untitled') }}
-                        </span>
-                      </div>
-                    </div>
-                    <div class="organize-duplicate-card__actions">
-                      <BButton size="small" @click="ignoreDuplicate(group)">{{ t('organize.ignore') }}</BButton>
-                      <BButton size="small" type="primary" @click="openDuplicatePreview(group)">
-                        {{ t('organize.duplicate.review') }}
-                      </BButton>
-                    </div>
-                  </article>
-                </div>
-                <BButton
-                  v-if="duplicateList.hasMore"
-                  class="organize-load-more"
-                  :loading="duplicateList.loadingMore"
-                  @click="loadDuplicates(false)"
+                <BVirtualList
+                  class="organize-duplicate-list"
+                  :items="duplicateGroups"
+                  item-key="groupKey"
+                  role="list"
+                  scroll-mode="ancestor"
+                  dynamic-height
+                  :item-height="bookmark.isMobile ? 150 : 100"
+                  :gap="10"
+                  :loading="duplicateList.loading || duplicateList.loadingMore"
+                  :show-loading-indicator="!duplicateList.loading"
+                  :has-more="duplicateList.hasMore && !duplicateList.error"
+                  :loading-text="t('organize.loading')"
+                  @load-more="loadDuplicates(false)"
                 >
-                  {{ t('organize.loadMore') }}
+                  <template #default="{ item: group }">
+                    <article class="organize-duplicate-card" role="listitem">
+                      <span class="organize-duplicate-card__icon">
+                        <SvgIcon :src="icon.resource.bookmark" size="20" aria-hidden="true" />
+                      </span>
+                      <div class="organize-duplicate-card__body">
+                        <div class="organize-duplicate-card__heading">
+                          <strong>{{ t('organize.duplicate.groupTitle', { count: group.memberCount }) }}</strong>
+                          <span v-if="!group.canResolve" class="organize-status-chip is-blocked">
+                            {{ t('organize.duplicate.blocked') }}
+                          </span>
+                        </div>
+                        <p>{{ group.url }}</p>
+                        <div class="organize-duplicate-card__members">
+                          <span v-for="member in group.members.slice(0, 3)" :key="member.id">
+                            {{ member.name || t('inbox.untitled') }}
+                          </span>
+                        </div>
+                      </div>
+                      <div class="organize-duplicate-card__actions">
+                        <BButton size="small" @click="ignoreDuplicate(group)">{{ t('organize.ignore') }}</BButton>
+                        <BButton size="small" type="primary" @click="openDuplicatePreview(group)">
+                          {{ t('organize.duplicate.review') }}
+                        </BButton>
+                      </div>
+                    </article>
+                  </template>
+                </BVirtualList>
+                <BButton
+                  v-if="duplicateList.error"
+                  class="organize-list-retry"
+                  :loading="duplicateList.loadingMore"
+                  @click="loadDuplicates(duplicateList.retryReset)"
+                >
+                  {{ t('organize.retry') }}
                 </BButton>
               </OrganizeIssueListState>
             </section>
@@ -372,42 +397,58 @@
                 :empty-description="t('organize.health.emptyDescription')"
                 @retry="loadHealth(true)"
               >
-                <div class="organize-health-list" role="list">
-                  <article v-for="item in healthItems" :key="item.id" class="organize-health-row" role="listitem">
-                    <span class="organize-health-row__status" aria-hidden="true">
-                      <SvgIcon :src="icon.message.warning" size="19" />
-                    </span>
-                    <div class="organize-health-row__body">
-                      <div class="organize-health-row__heading">
-                        <strong>{{ item.name || t('inbox.untitled') }}</strong>
-                        <span class="organize-status-chip is-suspect">
-                          {{ t('organize.health.httpCode', { code: item.observedCode || '-' }) }}
-                        </span>
-                        <span v-if="item.hasSnapshot" class="organize-status-chip">
-                          {{ t('organize.health.hasSnapshot') }}
-                        </span>
-                      </div>
-                      <p>{{ item.url }}</p>
-                      <small>{{ t('organize.health.checkedAt', { time: formatDate(item.checkedAt) }) }}</small>
-                    </div>
-                    <div class="organize-health-row__actions">
-                      <BButton size="small" @click="openExternal(item.url)">{{ t('organize.open') }}</BButton>
-                      <BButton size="small" :loading="checkingHealthIds.has(item.id)" @click="recheckHealth(item)">
-                        {{ t('organize.health.recheck') }}
-                      </BButton>
-                      <BButton size="small" type="primary" @click="markHealthNormal(item)">
-                        {{ t('organize.health.markNormal') }}
-                      </BButton>
-                    </div>
-                  </article>
-                </div>
-                <BButton
-                  v-if="healthList.hasMore"
-                  class="organize-load-more"
-                  :loading="healthList.loadingMore"
-                  @click="loadHealth(false)"
+                <BVirtualList
+                  class="organize-health-list"
+                  :items="healthItems"
+                  item-key="id"
+                  role="list"
+                  scroll-mode="ancestor"
+                  dynamic-height
+                  :item-height="bookmark.isMobile ? 150 : 100"
+                  :gap="10"
+                  :loading="healthList.loading || healthList.loadingMore"
+                  :show-loading-indicator="!healthList.loading"
+                  :has-more="healthList.hasMore && !healthList.error"
+                  :loading-text="t('organize.loading')"
+                  @load-more="loadHealth(false)"
                 >
-                  {{ t('organize.loadMore') }}
+                  <template #default="{ item }">
+                    <article class="organize-health-row" role="listitem">
+                      <span class="organize-health-row__status" aria-hidden="true">
+                        <SvgIcon :src="icon.message.warning" size="19" />
+                      </span>
+                      <div class="organize-health-row__body">
+                        <div class="organize-health-row__heading">
+                          <strong>{{ item.name || t('inbox.untitled') }}</strong>
+                          <span class="organize-status-chip is-suspect">
+                            {{ t('organize.health.httpCode', { code: item.observedCode || '-' }) }}
+                          </span>
+                          <span v-if="item.hasSnapshot" class="organize-status-chip">
+                            {{ t('organize.health.hasSnapshot') }}
+                          </span>
+                        </div>
+                        <p>{{ item.url }}</p>
+                        <small>{{ t('organize.health.checkedAt', { time: formatDate(item.checkedAt) }) }}</small>
+                      </div>
+                      <div class="organize-health-row__actions">
+                        <BButton size="small" @click="openExternal(item.url)">{{ t('organize.open') }}</BButton>
+                        <BButton size="small" :loading="checkingHealthIds.has(item.id)" @click="recheckHealth(item)">
+                          {{ t('organize.health.recheck') }}
+                        </BButton>
+                        <BButton size="small" type="primary" @click="markHealthNormal(item)">
+                          {{ t('organize.health.markNormal') }}
+                        </BButton>
+                      </div>
+                    </article>
+                  </template>
+                </BVirtualList>
+                <BButton
+                  v-if="healthList.error"
+                  class="organize-list-retry"
+                  :loading="healthList.loadingMore"
+                  @click="loadHealth(healthList.retryReset)"
+                >
+                  {{ t('organize.retry') }}
                 </BButton>
               </OrganizeIssueListState>
             </section>
@@ -585,6 +626,7 @@
   import BChip from '@/components/base/BasicComponents/BChip.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import BVirtualList from '@/components/base/BasicComponents/BVirtualList.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
@@ -634,6 +676,7 @@
   const organize = organizeStore();
   const untaggedKeyword = ref('');
   const untaggedType = ref<'all' | OrganizeResourceType>('all');
+  const appliedUntaggedFilters = ref({ keyword: '', resourceType: 'all' });
   const untaggedBatchMode = ref(false);
   const selectedUntaggedKeys = ref<string[]>([]);
   const ignoringUntagged = ref(false);
@@ -671,6 +714,9 @@
   const duplicateList = computed(() => organize.lists.duplicate_bookmark);
   const healthList = computed(() => organize.lists.bookmark_health);
   const untaggedItems = computed(() => untaggedList.value.items as UntaggedResourceItem[]);
+  const untaggedVirtualItems = computed(() =>
+    untaggedItems.value.map((item) => ({ ...item, virtualKey: untaggedKey(item) })),
+  );
   const duplicateGroups = computed(() => duplicateList.value.items as DuplicateBookmarkGroup[]);
   const healthItems = computed(() => healthList.value.items as BookmarkHealthItem[]);
   const healthScan = computed(() => healthSummary.value?.scan || null);
@@ -933,15 +979,18 @@
   }
 
   async function loadUntagged(reset: boolean) {
-    await organize.loadIssue('untagged', {
-      reset,
-      keyword: untaggedKeyword.value.trim(),
-      resourceType: untaggedType.value,
-    });
+    if (reset) {
+      appliedUntaggedFilters.value = {
+        keyword: untaggedKeyword.value.trim(),
+        resourceType: untaggedType.value,
+      };
+    }
+    await organize.loadIssue('untagged', { reset, ...appliedUntaggedFilters.value });
     if (reset) selectedUntaggedKeys.value = [];
   }
 
   function applyUntaggedFilters() {
+    organizeMainRef.value?.querySelector<HTMLElement>('.organize-issue-view')?.scrollTo({ top: 0 });
     void loadUntagged(true);
   }
 
@@ -1677,13 +1726,6 @@
     padding-bottom: 96px;
   }
 
-  .organize-resource-list,
-  .organize-duplicate-list,
-  .organize-health-list {
-    display: grid;
-    gap: 10px;
-  }
-
   .organize-resource-row,
   .organize-duplicate-card,
   .organize-health-row {
@@ -1979,7 +2021,7 @@
     background: var(--card-background);
   }
 
-  .organize-load-more {
+  .organize-list-retry {
     margin: 16px auto 0;
   }
 

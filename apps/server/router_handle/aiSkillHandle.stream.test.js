@@ -58,8 +58,8 @@ describe('executeAiSkillStreamRequest', () => {
     vi.clearAllMocks();
   });
 
-  it('只为纯文本变换建立 SSE，并按 start/delta/reset/complete 顺序透传', async () => {
-    const request = createRequest();
+  it.each(['note.transform_text', 'help.answer'])('%s 建立 SSE，并按 start/delta/reset/complete 顺序透传', async (skillId) => {
+    const request = createRequest(skillId);
     const response = createResponse();
     const completed = {
       protocolVersion: 1,

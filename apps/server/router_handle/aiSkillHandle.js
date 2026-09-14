@@ -47,11 +47,10 @@ function writeSse(res, event, data) {
 }
 
 /**
- * 首期只开放纯文本变换 Skill。结构化草稿与需要来源修复的能力仍走普通 JSON，
- * 防止一个“通用流式接口”绕开各 Skill 的最终结果契约。
+ * 仅开放已接入增量展示与最终校验的能力；结构化写入草稿仍走普通 JSON。
  */
 export async function executeAiSkillStreamRequest(req, res) {
-  if (String(req.body?.skillId || '') !== 'note.transform_text') {
+  if (!['note.transform_text', 'help.answer'].includes(String(req.body?.skillId || ''))) {
     return res.status(400).send(resultData({ code: 'AI_SKILL_STREAM_UNSUPPORTED' }, 400, '该 AI 能力暂不支持流式输出'));
   }
   const abortContext = createRequestAbortContext(req, res);

@@ -694,6 +694,31 @@ describe('FilePreview derived previews', () => {
     expect(document.body.querySelector('.unsupported-preview')).toBeNull();
   });
 
+  it('waits for a shared image URL before mounting the image, then completes loading', async () => {
+    let resolveDownload!: (value: { downloadUrl: string }) => void;
+    commonHttpMocks.getFileShareDownload.mockReturnValue(new Promise((resolve) => { resolveDownload = resolve; }));
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp({
+      setup: () => () => h(FilePreview, {
+        visible: true,
+        previewAccess: { kind: 'share', token: 'share-fixture', accessCode: 'A123' },
+        fileInfo: { id: 'shared-image', fileName: 'shared.png', fileType: 'image/png', fileUrl: '', category: 'image' },
+      }),
+    });
+    app.mount(host);
+    cleanup = () => { app.unmount(); host.remove(); };
+    await vi.waitFor(() => expect(commonHttpMocks.getFileShareDownload).toHaveBeenCalledWith('share-fixture', 'A123'));
+    expect(document.body.querySelector('.preview-image')).toBeNull();
+    expect(document.body.querySelector('.preview-loading')).not.toBeNull();
+    resolveDownload({ downloadUrl: 'https://files.example/shared.png' });
+    await vi.waitFor(() => expect(document.body.querySelector('.preview-image')?.getAttribute('src')).toBe('https://files.example/shared.png'));
+    document.body.querySelector('.preview-image')!.dispatchEvent(new Event('load'));
+    await nextTick();
+    expect(document.body.querySelector('.preview-error')).toBeNull();
+    expect(document.body.querySelector('.preview-loading')).toBeNull();
+  });
+
   it('authorizes a shared archive once and passes its short-lived ticket to the directory viewer', async () => {
     filePreviewApiMocks.prepareSharedFilePreview.mockResolvedValue({
       fileId: 'archive-shared',
@@ -1162,5 +1187,28 @@ describe('FilePreview 文本请求归属', () => {
     newResolve({ ok:true, text:async ()=>'NEW_CONTENT' });
     await vi.waitFor(() => expect(document.querySelector('.fullscreen-preview')?.textContent).toContain('NEW_CONTENT'));
     expect(document.querySelector('.preview-loading')).toBeNull();
+  });
+});
+
+describe('FilePreview 表格缩放坐标接入', () => {
+  it('捕获阶段为点击、拖选与移出事件还原布局坐标', async () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp({ render: () => h(FilePreview, {
+      visible: true,
+      fileInfo: { id: 'zoom-fixture', fileName: 'zoom.xlsx', fileType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', category: 'excel', fileUrl: 'https://files.example/zoom.xlsx' },
+    }) });
+    app.mount(host);
+    cleanup = () => { app.unmount(); host.remove(); document.documentElement.style.zoom = ''; };
+    await vi.waitFor(() => expect(document.querySelector('.office-retry-fixture')).not.toBeNull());
+    document.documentElement.style.zoom = '0.9';
+    const target = document.querySelector<HTMLElement>('.office-retry-fixture')!;
+    vi.spyOn(target, 'getBoundingClientRect').mockReturnValue({ left: 18, top: 36 } as DOMRect);
+    for (const type of ['mousedown', 'mousemove', 'mouseout']) {
+      const receive = vi.fn((event: MouseEvent) => [event.offsetX, event.offsetY]);
+      target.addEventListener(type, receive);
+      target.dispatchEvent(new MouseEvent(type, { bubbles: true, clientX: 648, clientY: 261 }));
+      expect(receive.mock.results[0].value).toEqual([700, 250]);
+    }
   });
 });

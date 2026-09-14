@@ -150,6 +150,21 @@ describe('Agent LLM 供应商切换(AGENT_LLM_PROVIDER)', () => {
     });
   });
 
+  it('流式工具参数跨片累积，保留工具选择、usage 和最终参数', async () => {
+    delete process.env.AGENT_LLM_PROVIDER;
+    process.env.DEEPSEEK_API_KEY = 'test-key';
+    const parts = ['{"blocks":[', '{"markdown":"正文","sourceIndexes":[1]}', ']}'];
+    const frames = parts.map((argumentsPart, index) => ({ choices: [{ delta: { tool_calls: [{ index: 0, ...(index ? {} : { id: 'call-1', function: { name: 'submit_grounded_answer', arguments: argumentsPart } }), ...(index ? { function: { arguments: argumentsPart } } : {}) }] } }] }));
+    frames.push({ choices: [{ delta: {}, finish_reason: 'tool_calls' }], usage: { prompt_tokens: 5, completion_tokens: 8, total_tokens: 13 } });
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response(frames.map(frame => `data: ${JSON.stringify(frame)}\n\n`).join('') + 'data: [DONE]\n\n'));
+    const onToolCallDelta = vi.fn();
+    const result = await requestDeepSeekStream([], { tools: [{ type: 'function', function: { name: 'submit_grounded_answer', parameters: { type: 'object' } } }], toolChoice: 'required', onToolCallDelta });
+    expect(JSON.parse(globalThis.fetch.mock.calls[0][1].body)).toMatchObject({ stream: true, tool_choice: 'required', tools: [expect.objectContaining({ type: 'function' })] });
+    expect(result.toolCalls[0].function.arguments).toBe(parts.join(''));
+    expect(result.usage.totalTokens).toBe(13);
+    expect(onToolCallDelta).toHaveBeenCalledTimes(3);
+  });
+
   it('DeepSeek 同步 Planner 显式关闭思考模式，允许强制指定计划工具', async () => {
     delete process.env.AGENT_LLM_PROVIDER;
     process.env.DEEPSEEK_API_KEY = 'test-key';

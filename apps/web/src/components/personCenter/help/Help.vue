@@ -109,7 +109,7 @@
                 :title="item.title"
                 @click="logItem(item)"
               >
-                <SvgIcon :src="icon.help_document" size="15" />
+                <SvgIcon class="help-catalog-item__icon" :src="icon.help_document" size="15" />
                 <span class="text-hidden">{{ item.title }}</span>
               </BButton>
             </section>
@@ -323,6 +323,7 @@
       :modal="isCompactHelpLayout"
       :close-on-click-outside="!isCompactHelpLayout"
       :destroy-on-close="false"
+      :history-closable="!isAnswerSourceNavigation"
       :mobile-centered-header="isCompactHelpLayout"
       :show-handle="isCompactHelpLayout"
       body-padding="0"
@@ -348,9 +349,22 @@
           presentation="sidebar"
           composer-variant="chat"
           :show-header="false"
-          :show-grounding="false"
+          :streaming="true"
+          @source-select="openAnswerSource"
           :clear-prompt-on-success="true"
-        />
+        >
+          <template #sources="{ sources }">
+            <div class="help-answer-sources">
+              <span>{{ t('aiSkills.sources', { count: sources.length }) }}</span>
+              <template v-for="(source, index) in sources" :key="String(source.id || index)">
+                <BButton v-if="helpSourceArticleId(source)" class="help-answer-source" @click="openAnswerSource(source)"
+                  >[{{ index + 1 }}] {{ source.title }}</BButton
+                >
+                <span v-else>[{{ index + 1 }}] {{ source.title }}</span>
+              </template>
+            </div>
+          </template>
+        </AiSkillPanel>
       </div>
     </BDrawer>
   </div>
@@ -372,6 +386,9 @@
   import { useRoute, useRouter } from 'vue-router';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import AiSkillPanel from '@/components/aiSkills/AiSkillPanel.vue';
+  import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
+  import { resolveAiSourceNavigation } from '@/utils/aiSourceNavigation';
+  import { helpSourceArticleId } from '@/utils/aiSkillPresentation';
   import HelpOutlineList from './HelpOutlineList.vue';
   import { groupHelpArticles, normalizeHelpSection, type HelpArticle, type HelpSectionGroup } from './helpCatalog';
 
@@ -401,6 +418,7 @@
   const isCompactCatalogOpen = ref(false);
   const isCompactOutlineOpen = ref(false);
   const isAssistantOpen = ref(false);
+  const isAnswerSourceNavigation = ref(false);
   const searchValue = ref('');
   const selectedFromSearch = ref(false);
   const helpConfigLoaded = ref(false);
@@ -450,10 +468,10 @@
   });
   const renderedContent = computed(() => renderedHelp.value.html);
   const helpOutline = computed(() => renderedHelp.value.outline);
-  function applyArticle(item: HelpArticle) {
+  function applyArticle(item: HelpArticle, keepAssistantOpen = false) {
     isCompactCatalogOpen.value = false;
     isCompactOutlineOpen.value = false;
-    isAssistantOpen.value = false;
+    if (!keepAssistantOpen) isAssistantOpen.value = false;
     checkId.value = String(item.id);
     activeOutlineId.value = '';
     nextTick(() => {
@@ -512,10 +530,10 @@
     void router.replace({ name: 'personCenter' });
   }
 
-  function resetToIntro() {
+  function resetToIntro(keepAssistantOpen = false) {
     isCompactCatalogOpen.value = false;
     isCompactOutlineOpen.value = false;
-    isAssistantOpen.value = false;
+    if (!keepAssistantOpen) isAssistantOpen.value = false;
     checkId.value = '';
     activeOutlineId.value = '';
     node.value = helpInfo;
@@ -523,6 +541,35 @@
       const dom = document.getElementById('view-body');
       if (dom) dom.scrollTop = 0;
     });
+  }
+
+  async function openAnswerSource(source: Record<string, unknown>) {
+    const id = helpSourceArticleId(source);
+    if (!id) return;
+    const navigation = resolveAiSourceNavigation({
+      type: 'knowledge',
+      id,
+      title: String(source.title || ''),
+      target: 'help-article',
+    });
+    if (navigation.kind !== 'internal') return;
+    if (isAnswerSourceNavigation.value) return;
+    try {
+      // 只释放移动端的旧 history 占位，抽屉和回答保持挂载；跳转后在新文章上恢复返回键占位。
+      await closeCurrentMobileOverlayThen(
+        () => {
+          isAnswerSourceNavigation.value = true;
+        },
+        async () => {
+          searchValue.value = '';
+          selectedFromSearch.value = false;
+          await router.push(navigation.target);
+          await nextTick();
+        },
+      );
+    } finally {
+      isAnswerSourceNavigation.value = false;
+    }
   }
 
   function logItem(item: HelpArticle) {
@@ -746,7 +793,7 @@
     const articleId = routeArticleId();
     if (!articleId) {
       unavailableArticleId = '';
-      resetToIntro();
+      resetToIntro(isAnswerSourceNavigation.value);
       const sectionName = routeSectionName();
       if (sectionName && !catalogGroups.value.some((group) => group.name === sectionName)) {
         navigateToSection('', true);
@@ -756,7 +803,7 @@
     }
     const target = serverOptions.value.find((item) => String(item.id) === articleId);
     if (!target) {
-      resetToIntro();
+      resetToIntro(isAnswerSourceNavigation.value);
       navigateToArticle('', true);
       if (unavailableArticleId !== articleId) {
         unavailableArticleId = articleId;
@@ -768,7 +815,7 @@
     if (String(checkId.value) === articleId && (selectedFromSearch.value || !isSearching.value)) return;
     searchValue.value = '';
     selectedFromSearch.value = false;
-    applyArticle(target);
+    applyArticle(target, isAnswerSourceNavigation.value);
   }
 
   watch(
@@ -892,6 +939,29 @@
     overflow: hidden;
   }
 
+  .help-answer-sources {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    padding-top: 12px;
+    margin-top: 12px;
+    border-top: 1px solid var(--surface-divider-color);
+    color: var(--desc-color);
+    font-size: 12px;
+  }
+
+  .help-answer-source.b_btn {
+    max-width: 100%;
+    height: auto;
+    padding: 6px 8px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-align: left;
+    justify-content: flex-start;
+    color: var(--workspace-purple-text);
+  }
+
   .help-home-link.b_btn {
     width: 100%;
     height: auto;
@@ -924,12 +994,6 @@
     border-radius: 9px;
     color: var(--resource-bookmark-color);
     background: var(--workspace-panel-bg-color);
-  }
-
-  .help-home-link.active .help-home-link__icon {
-    border-color: var(--resource-bookmark-color);
-    color: #ffffff;
-    background: var(--resource-bookmark-color);
   }
 
   .help-home-link__copy {
@@ -985,17 +1049,17 @@
     justify-content: space-between;
     border: 1px solid transparent !important;
     border-radius: 7px;
-    color: var(--desc-color);
+    color: var(--catalog-color);
     background: transparent;
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 600;
     line-height: 18px;
     text-align: left;
   }
 
   .help-catalog-group__title.b_btn small {
-    color: inherit;
-    font-size: 10px;
+    color: var(--desc-color);
+    font-size: 11px;
     font-weight: 500;
   }
 
@@ -1020,6 +1084,10 @@
     background: transparent;
     font-size: 13px;
     text-align: left;
+  }
+
+  .help-catalog-item__icon {
+    flex-shrink: 0;
   }
 
   .help-catalog-item.b_btn .text-hidden {

@@ -5,6 +5,7 @@ import { load } from 'cheerio';
 import { marked } from 'marked';
 import { parseNoteContent, renderNoteForAi } from '../noteSemantic.js';
 import { createBookmarkExactUrlHash } from './bookmarkExactUrlService.js';
+import { ORGANIZE_SELECTED_ITEMS_MAX_COUNT, ORGANIZE_RESOURCE_ID_MAX_LENGTH } from '../contentLimits.js';
 
 export const SUGGESTION_TYPES = ['tags', 'title', 'empty', 'duplicate', 'archive', 'tag_icon'];
 export const RESOURCE_TYPES = ['bookmark', 'note', 'file', 'tag'];
@@ -51,8 +52,8 @@ export function normalizeRunInput(input = {}) {
   if (
     scope === 'selected' &&
     (!items.length ||
-      items.length > 1000 ||
-      items.some((v) => !resourceTypes.includes(v.type) || !v.id || v.id.length > 128))
+      items.length > ORGANIZE_SELECTED_ITEMS_MAX_COUNT ||
+      items.some((v) => !resourceTypes.includes(v.type) || !v.id || v.id.length > ORGANIZE_RESOURCE_ID_MAX_LENGTH))
   )
     throw suggestionError('ORGANIZE_SELECTION_INVALID', '请选择 1 至 1000 项有效资料');
   if (scope !== 'selected' && items.length)

@@ -1,5 +1,6 @@
 import express from 'express';
 import { getAdminCoreUsageReport } from '../router_handle/adminCoreUsageHandle.js';
+import { recordResourceOpen } from '../router_handle/resourceReuseHandle.js';
 const router = express.Router();
 
 import * as commonHandle from '../router_handle/commonHandle.js';
@@ -14,7 +15,7 @@ import { getAdminOperationAudits } from '../router_handle/adminAuditHandle.js';
 import { updateAdminAiFeedbackTriage } from '../router_handle/adminAiFeedbackHandle.js';
 import { getAdminGovernance, getAdminProductInsights } from '../router_handle/adminInsightsHandle.js';
 import { recordUserActivity, getAdminOverviewActiveUsers } from '../router_handle/userActivityHandle.js';
-import { userActivityRateLimiter } from '../util/requestRateLimit.js';
+import { userActivityRateLimiter, resourceReuseRateLimiter } from '../util/requestRateLimit.js';
 import { recordAiEvent } from '../router_handle/aiTelemetryHandle.js';
 
 router.post('/getApiLogs', commonHandle.getApiLogs);
@@ -27,6 +28,7 @@ router.post('/recordOperationLogs', commonHandle.recordOperationLogs);
 
 router.post('/recordAiEvent', recordAiEvent);
 router.post('/recordUserActivity', userActivityRateLimiter, recordUserActivity);
+router.post('/recordResourceOpen', resourceReuseRateLimiter, recordResourceOpen);
 router.post('/getAdminOverviewActiveUsers', getAdminOverviewActiveUsers);
 
 router.post('/recordConversion', commonHandle.recordConversion);

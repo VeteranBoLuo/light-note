@@ -36,6 +36,7 @@ const DIRECT_DELETE_TABLES = Object.freeze([
   ['workbench_daily_briefs', 'user_id'],
   ['onboarding_seed_resources', 'user_id'],
   ['growth_events', 'user_id'],
+  ['resource_reuse_milestones', 'user_id'],
   ['user_growth_tasks', 'user_id'],
   ['user_achievements', 'user_id'],
   ['user_growth_preferences', 'user_id'],
