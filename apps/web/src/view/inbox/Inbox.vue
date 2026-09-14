@@ -2653,6 +2653,9 @@
   .workspace-title-reset.b_btn:hover {
     color: var(--primary-color);
   }
+  .inbox-page--todo-focused .workspace-title-reset.b_btn:hover {
+    color: var(--todo-module-color);
+  }
 
   .todo-organization-dialog {
     display: grid;

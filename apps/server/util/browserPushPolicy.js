@@ -13,8 +13,10 @@ export function browserPushEnabled(env = process.env) {
   );
 }
 // Provider-owned exact hosts only. No arbitrary callback URLs, ports or redirects.
+const GOOGLE_PUSH_HOSTS = new Set(['fcm.googleapis.com', 'jmt17.google.com']);
+export const isGooglePushHost = (hostname) => GOOGLE_PUSH_HOSTS.has(hostname);
 const ENDPOINT_HOSTS = new Set([
-  'fcm.googleapis.com',
+  ...GOOGLE_PUSH_HOSTS,
   'updates.push.services.mozilla.com',
   'web.push.apple.com',
   'wns2-par02p.notify.windows.com',

@@ -286,8 +286,9 @@
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import { useBrowserPush } from '@/composables/useBrowserPush';
   import { computed, ref, nextTick, watch, onBeforeUnmount } from 'vue';
+  import { useSettingsFieldFocus } from './useSettingsFieldFocus';
   import { useI18n } from 'vue-i18n';
-  import { useRoute, useRouter } from 'vue-router';
+  import { useRoute, useRouter, type LocationQueryRaw } from 'vue-router';
   import { bookmarkStore, useUserStore } from '@/store';
   import { isGuestUser } from '@/utils/savePreference';
   import { recordOperation } from '@/api/commonApi.ts';
@@ -330,6 +331,10 @@
   const isAndroidApp = isLightNoteAndroidApp();
 
   const pageRef = ref<HTMLElement | null>(null);
+  useSettingsFieldFocus(pageRef, () =>
+    route.query.section === 'general' && route.query.focus === 'todo-subitems'
+      ? '#todo-subitems-preference' : null,
+  );
   /*
    * 桌面左侧目录和移动端「目录 + 子页」共用 route.query.section。
    *
@@ -390,8 +395,9 @@
   function openDesktopSection(id: SettingsIndexSectionId) {
     const targetPanel = id === 'ai' ? 'usage' : undefined;
     if (desktopSection.value === id && route.query.section === id && route.query.panel === targetPanel) return;
-    const query = { ...route.query, section: id, panel: targetPanel };
+    const query: LocationQueryRaw = { ...route.query, section: id, panel: targetPanel };
     if (!targetPanel) delete query.panel;
+    delete query.focus;
     void router.replace({ path: '/settings', query });
   }
 
@@ -1291,5 +1297,27 @@
   .settings-page.is-mobile {
     padding: 14px 14px 32px;
     background: var(--workspace-panel-bg-color);
+  }
+  .settings-page .is-settings-focus {
+    position: relative;
+    isolation: isolate;
+  }
+  .settings-page .is-settings-focus::before {
+    content: '';
+    position: absolute;
+    inset: 4px -10px;
+    z-index: -1;
+    pointer-events: none;
+    border: 1px solid var(--workspace-purple-text);
+    border-radius: 8px;
+    background: var(--workspace-purple-selected);
+    animation: settings-field-focus 2.4s ease-out;
+  }
+  @keyframes settings-field-focus {
+    0%, 83% { opacity: 1; }
+    100% { opacity: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .settings-page .is-settings-focus::before { animation: none; }
   }
 </style>

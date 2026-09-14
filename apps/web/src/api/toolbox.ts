@@ -467,6 +467,11 @@ export async function fetchToolboxJob(jobId: string): Promise<ToolboxJob> {
   return response.data as ToolboxJob;
 }
 
+export async function dismissToolboxJob(jobId: string): Promise<void> {
+  const response = await apiBasePost(`/api/toolbox/jobs/${encodeURIComponent(jobId)}/dismiss`, {}, { silent: true });
+  if (response.status !== 200) throw apiFailure(response, 'TOOLBOX_DISMISS_FAILED');
+}
+
 export async function cancelToolboxJob(jobId: string): Promise<ToolboxJob> {
   const response = await apiBasePost(`/api/toolbox/jobs/${encodeURIComponent(jobId)}/cancel`, {}, { silent: true });
   if (response.status !== 200) throw apiFailure(response, 'TOOLBOX_CANCEL_FAILED');

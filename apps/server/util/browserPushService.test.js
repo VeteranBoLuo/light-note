@@ -36,7 +36,16 @@ describe('browser push policy', () => {
   });
   it('accepts valid provider subscriptions and rejects SSRF targets and malformed keys', () => {
     expect(validatePushSubscription(subscription)).toEqual(subscription);
+    const quark = { ...subscription, endpoint: 'https://jmt17.google.com/fcm/send/test' };
+    expect(validatePushSubscription(quark)).toEqual(quark);
     for (const endpoint of [
+      'http://jmt17.google.com/send',
+      'https://jmt17.google.com.evil.test/send',
+      'https://evil.jmt17.google.com/send',
+      'https://u:p@jmt17.google.com/send',
+      'https://jmt17.google.com:444/send',
+      'https://jmt17.google.com/send#fragment',
+      'https://google.com/send',
       'http://fcm.googleapis.com/send',
       'https://127.0.0.1/send',
       'https://fcm.googleapis.com.evil.test/send',

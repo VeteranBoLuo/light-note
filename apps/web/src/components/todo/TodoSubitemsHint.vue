@@ -6,7 +6,7 @@
     <p>{{ t('todoWorkspace.subitemsHint') }}</p>
     <BButton
       class="todo-subitems-hint__settings"
-      @click="router.push({ path: '/settings', query: { section: 'general' } })"
+      @click="router.push({ path: '/settings', query: { section: 'general', focus: 'todo-subitems' } })"
     >
       {{ t('todoWorkspace.subitemsSettings') }}
     </BButton>

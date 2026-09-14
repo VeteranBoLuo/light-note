@@ -96,7 +96,7 @@ describe('Subitem settings tip', () => {
   it('requires subitems and a disabled default; navigation does not enable or dismiss it', async () => {
     const { host, user, hasSubitems } = mount(true);
     host.querySelector<HTMLButtonElement>('.todo-subitems-hint__settings')!.click();
-    expect(push).toHaveBeenCalledWith({ path: '/settings', query: { section: 'general' } });
+    expect(push).toHaveBeenCalledWith({ path: '/settings', query: { section: 'general', focus: 'todo-subitems' } });
     expect(user.preferences.todoSubitemsExpanded).toBe(false);
     expect(localStorage.length).toBe(0);
     user.preferences.todoSubitemsExpanded = true;

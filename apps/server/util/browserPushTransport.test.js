@@ -4,6 +4,7 @@ import { browserPushRelays, deliverBrowserPush } from './browserPushTransport.js
 import { browserPushEnabled } from './browserPushPolicy.js';
 import worker, { handleRelay } from '../../../scripts/browser-push-relay/worker.mjs';
 const keyPair = webpush.generateVAPIDKeys();
+const googleEndpoints = ['https://fcm.googleapis.com/wp/test', 'https://jmt17.google.com/fcm/send/test'];
 const subscription = {
   endpoint: 'https://fcm.googleapis.com/wp/test',
   keys: { p256dh: keyPair.publicKey, auth: Buffer.alloc(16, 7).toString('base64url') },
@@ -39,7 +40,28 @@ const request = (patch = {}, token = relays[0].token) => {
     body: JSON.stringify({ endpoint: d.endpoint, headers: d.headers, body: d.body.toString('base64'), ...patch }),
   });
 };
-describe('push failover', () => {
+describe.each(googleEndpoints)('push failover for %s', (endpoint) => {
+  const subscription = {
+    endpoint,
+    keys: { p256dh: keyPair.publicKey, auth: Buffer.alloc(16, 7).toString('base64url') },
+  };
+  it('passes generated requests through the standalone relay without changing the subscription', async () => {
+    const send = vi.fn().mockResolvedValue(new Response(null, { status: 201 }));
+    const direct = vi.fn();
+    const relay = async (target, details) => {
+      const response = await handleRelay(
+        request({ endpoint: details.endpoint, headers: details.headers, body: details.body.toString('base64') }, target.token),
+        { RELAY_TOKEN: target.token },
+        send,
+      );
+      expect(response.status).toBe(200);
+      return { statusCode: (await response.json()).upstreamStatus };
+    };
+    await expect(deliverBrowserPush(subscription, { title: 'test' }, 60, env, { relay, direct }))
+      .resolves.toEqual({ statusCode: 201 });
+    expect(send.mock.calls[0][0]).toBe(endpoint);
+    expect(direct).not.toHaveBeenCalled();
+  });
   it('prevents local runtimes consuming production jobs even when accidentally enabled', () => {
     expect(browserPushEnabled({ ...env, LIGHTNOTE_RUNTIME_ENV: 'local' })).toBe(false);
     expect(browserPushEnabled({ ...env, LIGHTNOTE_RUNTIME_ENV: 'production' })).toBe(true);
@@ -52,6 +74,7 @@ describe('push failover', () => {
     ).resolves.toEqual({ statusCode: 201 });
     expect(relay).toHaveBeenCalledTimes(2);
     expect(direct).not.toHaveBeenCalled();
+    expect(relay.mock.calls[0][1].endpoint).toBe(endpoint);
     const forwarded = JSON.stringify(relay.mock.calls[0][1]);
     expect(forwarded).not.toContain(keyPair.privateKey);
     expect(forwarded).not.toContain('private notification');
@@ -62,6 +85,7 @@ describe('push failover', () => {
     await deliverBrowserPush(subscription, {}, 60, env, { relay, direct });
     expect(relay).toHaveBeenCalledTimes(2);
     expect(direct).toHaveBeenCalledOnce();
+    expect(direct.mock.calls[0][0].endpoint).toBe(endpoint);
   });
   it.each([403, 404, 410])('does not bypass permanent provider rejection %s', async (statusCode) => {
     const relay = vi.fn().mockRejectedValue({ statusCode });
@@ -111,12 +135,20 @@ describe('push failover', () => {
   });
 });
 describe('encrypted relay', () => {
-  it('forwards only encrypted payload and safe provider headers, never follows redirects', async () => {
+  it.each(googleEndpoints)('forwards encrypted payload to unchanged endpoint %s', async (endpoint) => {
     const send = vi.fn().mockResolvedValue(new Response(null, { status: 201 }));
-    const response = await handleRelay(request(), { RELAY_TOKEN: relays[0].token }, send);
+    const d = webpush.generateRequestDetails({ ...subscription, endpoint }, '{}', options);
+    const response = await handleRelay(
+      request({ endpoint, headers: d.headers, body: d.body.toString('base64') }),
+      { RELAY_TOKEN: relays[0].token },
+      send,
+    );
     expect(await response.json()).toEqual({ upstreamStatus: 201 });
     const [url, init] = send.mock.calls[0];
-    expect(url).toBe(subscription.endpoint);
+    expect(url).toBe(endpoint);
+    const token = init.headers.get('authorization').match(/^vapid t=([^,]+)/)[1];
+    const claims = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString());
+    expect(claims.aud).toBe(new URL(endpoint).origin);
     expect(init.redirect).toBe('manual');
     expect(init.headers.get('authorization')).toMatch(/^vapid t=/);
     expect(init.headers.get('authorization')).not.toContain(relays[0].token);
@@ -128,6 +160,13 @@ describe('encrypted relay', () => {
     expect(send).not.toHaveBeenCalled();
   });
   it.each([
+    'https://jmt17.google.com.evil.test/a',
+    'https://evil.jmt17.google.com/a',
+    'http://jmt17.google.com/a',
+    'https://user:pass@jmt17.google.com/a',
+    'https://jmt17.google.com:444/a',
+    'https://jmt17.google.com/a#fragment',
+    'https://google.com/a',
     'https://127.0.0.1/a',
     'https://fcm.googleapis.com.evil.test/a',
     'http://fcm.googleapis.com/a',

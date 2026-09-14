@@ -524,6 +524,13 @@ request.defaults.adapter = async (config) => {
       isMax: false,
     });
   }
+  if (/^\/api\/toolbox\/jobs\/[^/]+\/dismiss$/.test(url)) {
+    if (params.has('dismissFailure')) return response(config, {}, 500);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const id = url.split('/').at(-2);
+    sessionStorage.setItem(`toolbox-dismissed-${id}`, '1');
+    return response(config, { id, dismissed: true });
+  }
   if (url === '/api/toolbox/home') {
     if (state === 'error') return response(config, { code: 'VISUAL_HOME_ERROR' }, 500);
     return response(config, {
@@ -533,8 +540,8 @@ request.defaults.adapter = async (config) => {
         recent: state === 'empty' ? [] : homeWorkspaceFixtures,
       },
       tasks: {
-        active: state === 'empty' ? [] : homeTaskFixtures.filter((job) => job.status !== 'succeeded'),
-        ready: state === 'empty' ? [] : homeTaskFixtures.filter((job) => job.status === 'succeeded'),
+        active: state === 'empty' ? [] : homeTaskFixtures.filter((job) => !sessionStorage.getItem(`toolbox-dismissed-${job.id}`)).filter((job) => job.status !== 'succeeded'),
+        ready: state === 'empty' ? [] : homeTaskFixtures.filter((job) => !sessionStorage.getItem(`toolbox-dismissed-${job.id}`)).filter((job) => job.status === 'succeeded'),
         recent: [],
       },
     });

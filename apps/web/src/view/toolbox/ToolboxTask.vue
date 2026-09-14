@@ -302,38 +302,62 @@
     <BModal
       v-model:visible="saveDialogVisible"
       :title="t('toolbox.task.saveToNote')"
-      :show-footer="false"
+      width="640px"
+      :mask-closable="!saving"
       fullscreen-mobile
     >
       <div class="toolbox-save-form">
-        <BInput v-model:value="saveTitle" :maxlength="120" :aria-label="t('toolbox.task.noteTitle')" />
-        <label>{{ t('toolbox.task.saveLocation') }}</label>
-        <BSelect
-          v-model:value="saveParentId"
-          :options="saveParentOptions"
-          :placeholder="t('toolbox.task.rootLocation')"
-        />
-        <div>
-          <BButton @click="loadSaveParents(null)">{{ t('toolbox.task.rootLocation') }}</BButton>
-          <BButton :disabled="!saveParentId" @click="loadSaveParents(saveParentId)">{{
-            t('toolbox.task.browseChildren')
-          }}</BButton>
+        <div class="toolbox-save-field">
+          <label for="toolbox-save-title">{{ t('toolbox.task.noteTitle') }}</label>
+          <BInput
+            id="toolbox-save-title"
+            v-model:value="saveTitle"
+            :maxlength="120"
+            :disabled="saving"
+            :aria-label="t('toolbox.task.noteTitle')"
+          />
         </div>
-        <label v-if="saveProjectOptions.length"
-          >{{ t('toolbox.task.linkProject')
-          }}<BSelect
+        <div class="toolbox-save-field">
+          <span id="toolbox-save-location-label">{{ t('toolbox.task.saveLocation') }}</span>
+          <BSelect
+            v-model:value="saveParentId"
+            :options="saveParentOptions"
+            :disabled="saving"
+            :aria-label="t('toolbox.task.saveLocation')"
+            :placeholder="t('toolbox.task.rootLocation')"
+          />
+          <div class="toolbox-save-location-actions">
+            <BButton size="small" :disabled="saving" @click="loadSaveParents(null)">{{
+              t('toolbox.task.rootLocation')
+            }}</BButton>
+            <BButton size="small" :disabled="!saveParentId || saving" @click="loadSaveParents(saveParentId)">{{
+              t('toolbox.task.browseChildren')
+            }}</BButton>
+          </div>
+        </div>
+        <div v-if="saveProjectOptions.length" class="toolbox-save-field">
+          <span>{{ t('toolbox.task.linkProject') }}</span>
+          <BSelect
             v-model:value="saveProjectId"
             :options="saveProjectOptions"
+            :disabled="saving || saveProjectsLoading"
+            :aria-label="t('toolbox.task.linkProject')"
             :placeholder="t('toolbox.task.noProject')"
-        /></label>
-        <BButton
-          type="primary"
-          :loading="saving"
-          :disabled="!saveTitle.trim() || saveProjectsLoading"
-          @click="confirmSaveDialog"
-          >{{ t('toolbox.task.saveToNote') }}</BButton
-        >
+          />
+        </div>
       </div>
+      <template #footer>
+        <div class="toolbox-save-actions">
+          <BButton :disabled="saving" @click="saveDialogVisible = false">{{ t('common.cancel') }}</BButton>
+          <BButton
+            type="primary"
+            :loading="saving"
+            :disabled="!saveTitle.trim() || saveProjectsLoading"
+            @click="confirmSaveDialog"
+            >{{ t('toolbox.task.saveToNote') }}</BButton
+          >
+        </div>
+      </template>
     </BModal>
   </main>
 </template>
@@ -1034,7 +1058,45 @@
   }
   .toolbox-save-form {
     display: grid;
-    gap: 16px;
+    gap: 24px;
+    min-width: 0;
+  }
+  .toolbox-save-field {
+    display: grid;
+    gap: 10px;
+    min-width: 0;
+    font-size: 14px;
+    color: var(--text-color);
+  }
+  .toolbox-save-field :deep(.b-select) {
+    width: 100%;
+    min-width: 0;
+  }
+  .toolbox-save-location-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .toolbox-save-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 16px 20px;
+    border-top: 1px solid var(--surface-border-color);
+  }
+  @media (max-width: 767px) {
+    .toolbox-save-form {
+      padding: 20px 16px;
+    }
+    .toolbox-save-actions {
+      padding-bottom: calc(16px + env(safe-area-inset-bottom));
+    }
+    .toolbox-save-actions .b_btn {
+      min-height: 44px;
+    }
+    .toolbox-save-actions .b_btn:last-child {
+      flex: 1;
+    }
   }
   @import './toolboxPageScroll.less';
 

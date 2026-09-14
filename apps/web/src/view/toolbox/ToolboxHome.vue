@@ -142,36 +142,49 @@
         </div>
       </section>
 
-      <section v-if="!isGuest && homeView === 'work' && continueJobs.length" class="toolbox-section toolbox-tasks" ref="taskSection">
+      <section
+        v-if="!isGuest && homeView === 'work' && continueJobs.length"
+        class="toolbox-section toolbox-tasks"
+        ref="taskSection"
+      >
         <header class="toolbox-section__head"
           ><h2>{{ t('toolbox.project.tasks') }}</h2></header
         >
         <div class="toolbox-task-list">
-          <BButton
-            v-for="job in continueJobs"
-            :key="`task-${job.id}`"
-            class="toolbox-activity-card is-task"
-            :class="{ 'is-ready': isReadyTask(job) }"
-            @click="openTask(job)"
-          >
-            <span class="toolbox-activity-card__icon">
-              <SvgIcon :src="presentation(job.toolId).icon" size="21" />
-            </span>
-            <span class="toolbox-activity-card__copy">
-              <span class="toolbox-activity-card__topline">
-                <BChip :tone="jobTone(job.status)">{{ taskStateLabel(job) }}</BChip>
+          <div v-for="job in continueJobs" :key="`task-${job.id}`" class="toolbox-task-row">
+            <BButton
+              class="toolbox-activity-card is-task"
+              :class="{ 'is-ready': isReadyTask(job) }"
+              @click="openTask(job)"
+            >
+              <span class="toolbox-activity-card__icon">
+                <SvgIcon :src="presentation(job.toolId).icon" size="21" />
               </span>
-              <strong>{{ job.artifact?.title || toolName(job.toolId) }}</strong>
-              <span>{{ taskContinueDescription(job) }}</span>
-              <small>{{ toolName(job.toolId) }}</small>
-            </span>
-            <span class="toolbox-task-meta">
-              <small class="toolbox-task-time">{{ formatRelativeDate(job.updatedAt) }}</small>
-              <span class="toolbox-activity-card__action">
-                {{ isReadyTask(job) ? t('toolbox.home.viewResultAction') : t('toolbox.home.viewProgressAction') }}
+              <span class="toolbox-activity-card__copy">
+                <span class="toolbox-activity-card__topline">
+                  <BChip :tone="jobTone(job.status)">{{ taskStateLabel(job) }}</BChip>
+                </span>
+                <strong>{{ job.artifact?.title || toolName(job.toolId) }}</strong>
+                <span>{{ taskContinueDescription(job) }}</span>
+                <small>{{ toolName(job.toolId) }}</small>
               </span>
-            </span>
-          </BButton>
+              <span class="toolbox-task-meta">
+                <small class="toolbox-task-time">{{ formatRelativeDate(job.updatedAt) }}</small>
+                <span class="toolbox-activity-card__action">
+                  {{ isReadyTask(job) ? t('toolbox.home.viewResultAction') : t('toolbox.home.viewProgressAction') }}
+                </span>
+              </span>
+            </BButton>
+            <BTooltip v-if="canDismissTask(job)" :title="t('toolbox.home.dismissTask')" class="toolbox-task-dismiss">
+              <BButton
+                icon-only
+                :loading="dismissingJobs.has(job.id)"
+                :aria-label="t('toolbox.home.dismissTaskLabel', { title: job.artifact?.title || toolName(job.toolId) })"
+                @click="confirmDismissTask(job)"
+                ><SvgIcon :src="icon.common.close" size="17"
+              /></BButton>
+            </BTooltip>
+          </div>
         </div>
       </section>
 
@@ -391,11 +404,13 @@
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
+  import Alert from '@/components/base/BasicComponents/BModal/Alert';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import {
     fetchToolboxCatalog,
     fetchToolboxHome,
+    dismissToolboxJob,
     type ToolboxCatalogItem,
     type ToolboxHomeOverview,
     type ToolboxHomeWorkspaceSummary,
@@ -502,9 +517,10 @@
   const continueWorkspaces = computed(() =>
     (overview.value?.workspaces?.continue || [])
       .filter((item) => item.status === 'active')
-      .sort((a, b) =>
-        Math.max(dateValue(b.lastOpenedAt) || 0, dateValue(b.updatedAt) || 0)
-        - Math.max(dateValue(a.lastOpenedAt) || 0, dateValue(a.updatedAt) || 0),
+      .sort(
+        (a, b) =>
+          Math.max(dateValue(b.lastOpenedAt) || 0, dateValue(b.updatedAt) || 0) -
+          Math.max(dateValue(a.lastOpenedAt) || 0, dateValue(a.updatedAt) || 0),
       )
       .slice(0, 4),
   );
@@ -513,7 +529,9 @@
     return [
       ...(overview.value?.tasks?.active || []),
       ...(overview.value?.tasks?.ready || []),
-      ...(overview.value?.tasks?.recent || []).filter((job) => job.status === 'failed' || job.save.status === 'save_failed'),
+      ...(overview.value?.tasks?.recent || []).filter(
+        (job) => job.status === 'failed' || job.save.status === 'save_failed',
+      ),
     ]
       .filter((job) => {
         if (seen.has(job.id)) return false;
@@ -523,6 +541,44 @@
       .sort((a, b) => Number(needsAttention(b)) - Number(needsAttention(a)))
       .slice(0, 3);
   });
+  const dismissingJobs = ref(new Set<string>());
+  function canDismissTask(job: ToolboxJob) {
+    return (
+      ['succeeded', 'partial_succeeded', 'failed', 'cancelled', 'expired'].includes(job.status) &&
+      job.save.status !== 'saving'
+    );
+  }
+  function confirmDismissTask(job: ToolboxJob) {
+    if (!canDismissTask(job) || dismissingJobs.value.has(job.id)) return;
+    const identity = identityKey.value;
+    Alert.alert({
+      title: t('toolbox.home.dismissTask'),
+      content: t('toolbox.home.dismissTaskHint'),
+      okText: t('toolbox.home.dismissTask'),
+      cancelText: t('common.cancel'),
+      onOk: () => void runDismissTask(job.id, identity),
+    });
+  }
+  async function runDismissTask(jobId: string, identity: string) {
+    if (identity !== identityKey.value || dismissingJobs.value.has(jobId)) return;
+    dismissingJobs.value.add(jobId);
+    try {
+      await dismissToolboxJob(jobId);
+      if (identity !== identityKey.value) return;
+      ++overviewRequestVersion;
+      overviewLoading.value = false;
+      const tasks = overview.value?.tasks;
+      if (tasks) {
+        tasks.active = tasks.active.filter((job) => job.id !== jobId);
+        tasks.ready = tasks.ready.filter((job) => job.id !== jobId);
+        tasks.recent = tasks.recent.filter((job) => job.id !== jobId);
+      }
+    } catch {
+      if (identity === identityKey.value) message.error(t('toolbox.home.dismissTaskFailed'));
+    } finally {
+      dismissingJobs.value.delete(jobId);
+    }
+  }
   const attentionJob = computed(() => continueJobs.value.find(needsAttention));
   const taskSection = ref<HTMLElement | null>(null);
   const taskAttentionSummary = computed(() => {
@@ -531,7 +587,9 @@
     return [
       ready ? t('toolbox.home.readyTaskCount', { count: ready }) : '',
       failed ? t('toolbox.home.failedTaskCount', { count: failed }) : '',
-    ].filter(Boolean).join(' · ');
+    ]
+      .filter(Boolean)
+      .join(' · ');
   });
   function needsAttention(job: ToolboxJob) {
     return isReadyTask(job) || job.status === 'failed' || job.save.status === 'save_failed';
@@ -1816,6 +1874,26 @@
   }
   .toolbox-overview__eyebrow {
     display: none;
+  }
+  .toolbox-task-row {
+    position: relative;
+    min-width: 0;
+  }
+  .toolbox-task-list .toolbox-task-row .toolbox-activity-card.b_btn {
+    padding-right: 60px;
+  }
+  .toolbox-task-dismiss {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+  }
+  .toolbox-task-dismiss .b_btn {
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    color: var(--workspace-muted);
+    background: transparent;
   }
   .toolbox-task-list {
     display: grid;

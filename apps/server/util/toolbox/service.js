@@ -623,6 +623,7 @@ export async function listToolboxHomeTasks({ userId, database = pool } = {}) {
        FROM toolbox_jobs job
        LEFT JOIN toolbox_artifacts artifact ON artifact.id = job.artifact_id
       WHERE job.user_id = ?
+        AND COALESCE(JSON_UNQUOTE(JSON_EXTRACT(job.options_json, '$.homeDismissed')), 'false') NOT IN ('true', '1')
       ORDER BY CASE
                  WHEN job.status IN ('queued', 'processing') THEN 0
                  WHEN artifact.status = 'ready'
@@ -661,6 +662,33 @@ export async function getToolboxJob({ userId, jobId, database = pool }) {
   const job = await selectJobWithArtifact(database, userId, String(jobId || '').trim());
   if (!job) throw toolboxError('TOOLBOX_JOB_NOT_FOUND', '任务不存在', 404);
   return formatJob(job);
+}
+
+// Dismissal only removes a finished task from the home queue; receipts and artifacts remain intact.
+export async function dismissToolboxJob({ userId, jobId, database = pool }) {
+  const ownerId = requiredUserId(userId);
+  const connection = await database.getConnection();
+  try {
+    await connection.beginTransaction();
+    const job = await selectJobWithArtifact(connection, ownerId, String(jobId || '').trim(), true);
+    if (!job) throw toolboxError('TOOLBOX_JOB_NOT_FOUND', '任务不存在', 404);
+    if (!TERMINAL_JOB_STATUSES.has(job.status) || job.save_status === 'saving') {
+      throw toolboxError('TOOLBOX_JOB_CANNOT_DISMISS', '任务仍在处理或保存，请稍后再移除', 409);
+    }
+    await connection.query(
+      `UPDATE toolbox_jobs SET options_json = JSON_SET(
+         COALESCE(options_json, JSON_OBJECT()), '$.homeDismissed', true)
+       WHERE id = ? AND user_id = ?`,
+      [job.id, ownerId],
+    );
+    await connection.commit();
+    return { id: job.id, dismissed: true };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
 }
 
 export async function cancelToolboxJob({ userId, jobId, database = pool }) {

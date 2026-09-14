@@ -1,7 +1,7 @@
 import https from 'node:https';
 import webpush from 'web-push';
 import { guardedHttpsAgent, validatePublicWebUrl } from './webUrlSafety.js';
-import { validatePushSubscription } from './browserPushPolicy.js';
+import { isGooglePushHost, validatePushSubscription } from './browserPushPolicy.js';
 
 const transportError = (code = 'PUSH_TRANSPORT_ERROR') => Object.assign(new Error(code), { code });
 const providerError = (statusCode) => Object.assign(new Error('PUSH_PROVIDER_REJECTED'), { statusCode });
@@ -115,7 +115,7 @@ export async function deliverBrowserPush(subscription, payload, ttl, env = proce
   const sendRelay = dependencies.relay || postRelay;
   const generate = dependencies.generate || webpush.generateRequestDetails.bind(webpush);
   // Only FCM needs the alternate egress. Apple/Mozilla/WNS remain direct.
-  const selected = new URL(subscription.endpoint).hostname === 'fcm.googleapis.com' ? relays : [];
+  const selected = isGooglePushHost(new URL(subscription.endpoint).hostname) ? relays : [];
   const serialized = JSON.stringify(payload);
   const started = Date.now();
   const remainingTtl = () => {

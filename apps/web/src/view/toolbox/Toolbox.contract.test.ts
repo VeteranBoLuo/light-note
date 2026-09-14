@@ -442,7 +442,10 @@ describe('知识工具箱前端边界', () => {
     expect(workspace).toContain("t('toolbox.workspace.backToList')");
     expect(workspace).toContain('html.light-note-mobile-rendering');
     expect(workspaceTemplate).not.toMatch(/<input\b|<select\b|<textarea\b|<a-/u);
-    expect(workspace).not.toMatch(/overflow-y:\s*(?:auto|scroll)/u);
+    // 移动端全屏表单需要独立滚动；页面工作区仍保持单一主滚动。
+    const mobileModalRule = /\.workspace-modal-form--mobile\s*\{[^}]*\}/u;
+    expect(workspace.match(mobileModalRule)?.[0]).toMatch(/overflow-y:\s*auto/u);
+    expect(workspace.replace(mobileModalRule, '')).not.toMatch(/overflow-y:\s*(?:auto|scroll)/u);
     expect(workspace).toContain('@media (max-width: 767px)');
   });
 

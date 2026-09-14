@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   createToolboxQuote: vi.fn(),
   createToolboxJob: vi.fn(),
   cancelToolboxJob: vi.fn(),
+  dismissToolboxJob: vi.fn(),
   listToolboxHomeTasks: vi.fn(),
   listToolboxHomeWorkspaces: vi.fn(),
   markToolboxWorkspaceOpened: vi.fn(),
@@ -53,6 +54,7 @@ vi.mock('../util/toolbox/knowledgeStructure.js', () => ({
 }));
 vi.mock('../util/toolbox/service.js', () => ({
   cancelToolboxJob: mocks.cancelToolboxJob,
+  dismissToolboxJob: mocks.dismissToolboxJob,
   createToolboxJob: mocks.createToolboxJob,
   createToolboxQuote: mocks.createToolboxQuote,
   getToolboxArtifact: vi.fn(),
@@ -80,6 +82,7 @@ vi.mock('../util/toolbox/workspace.js', () => ({
 const {
   addWorkspaceResources,
   cancelJob,
+  dismissJob,
   createJob,
   createQuote,
   createWorkspace,
@@ -112,6 +115,19 @@ describe('toolbox home handlers', () => {
     mocks.ensureNotVisitor.mockReturnValue(true);
     mocks.ensureUserOrAdminPolicy.mockReturnValue(true);
     mocks.recordServerOperation.mockResolvedValue(true);
+  });
+
+  it('移除提醒仅使用认证身份，并拒绝无写权限请求', async () => {
+    mocks.dismissToolboxJob.mockResolvedValue({ id: 'job', dismissed: true });
+    const req = { user: { id: 'owner' }, params: { jobId: 'job' }, body: { userId: 'other' } };
+    const res = createResponse();
+    await dismissJob(req, res);
+    expect(mocks.dismissToolboxJob).toHaveBeenCalledWith({ userId: 'owner', jobId: 'job' });
+    expect(res.send).toHaveBeenCalledWith({ data: { id: 'job', dismissed: true }, status: 200, msg: 'success' });
+    mocks.dismissToolboxJob.mockClear();
+    mocks.ensureNotVisitor.mockReturnValue(false);
+    await dismissJob(req, createResponse());
+    expect(mocks.dismissToolboxJob).not.toHaveBeenCalled();
   });
 
   it('项目删除使用认证身份，游客拒绝写入', async () => {

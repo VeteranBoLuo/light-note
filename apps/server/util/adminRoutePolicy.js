@@ -367,6 +367,7 @@ declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'toolbox', [
   ['POST', '/toolbox/uploads'],
   ['POST', '/toolbox/jobs'],
   ['POST', '/toolbox/jobs/:jobId/cancel'],
+  ['POST', '/toolbox/jobs/:jobId/dismiss'],
   ['POST', '/toolbox/artifacts/:artifactId/save'],
   ['POST', '/toolbox/artifacts/:artifactId/study'],
 ]);
@@ -833,6 +834,9 @@ function resolvePolicy(method, path) {
   }
   if (/^\/toolbox\/workspaces\/[^/]+\/open$/.test(path)) {
     return routePolicies.get(`${method} /toolbox/workspaces/:workspaceId/open`);
+  }
+  if (/^\/toolbox\/jobs\/[^/]+\/dismiss$/.test(path)) {
+    return routePolicies.get(`${method} /toolbox/jobs/:jobId/dismiss`);
   }
   if (/^\/toolbox\/jobs\/[^/]+\/cancel$/.test(path)) {
     return routePolicies.get(`${method} /toolbox/jobs/:jobId/cancel`);

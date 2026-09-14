@@ -7,6 +7,7 @@ describe('SEO sitemap', () => {
 
     expect(xml).toContain('<loc>https://boluo66.top/</loc>');
     expect(xml).toContain('<loc>https://boluo66.top/browser-extension</loc>');
+    expect(xml).toContain('<loc>https://boluo66.top/download/android</loc>');
     expect(xml).toContain('<loc>https://boluo66.top/about.html</loc>');
     expect(xml).toContain('<loc>https://boluo66.top/updateLogs</loc>');
     expect(xml).toContain('<loc>https://boluo66.top/helpCenter</loc>');

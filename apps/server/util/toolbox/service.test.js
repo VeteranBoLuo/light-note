@@ -31,6 +31,7 @@ const {
   getStudyProgress,
   saveStudyProgress,
   listToolboxHomeTasks,
+  dismissToolboxJob,
   saveToolboxArtifactToNote,
   toolboxServiceInternals,
 } = await import('./service.js');
@@ -39,6 +40,37 @@ const { toolboxInputDigest } = await import('./catalog.js');
 describe('toolbox service boundaries', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it.each(['succeeded', 'partial_succeeded', 'failed', 'cancelled', 'expired'])('dismisses a finished %s task without deleting results or receipts', async (status) => {
+    const connection = {
+      beginTransaction: vi.fn(), commit: vi.fn(), rollback: vi.fn(), release: vi.fn(),
+      query: vi.fn().mockResolvedValueOnce([[{ id: 'job-1', status, save_status: 'unsaved' }]]).mockResolvedValue([{}]),
+    };
+    const result = await dismissToolboxJob({ userId: 'owner', jobId: 'job-1', database: { getConnection: async () => connection } });
+    expect(result).toEqual({ id: 'job-1', dismissed: true });
+    expect(connection.query.mock.calls[0][1]).toEqual(['owner', 'job-1']);
+    expect(connection.query.mock.calls[1][1]).toEqual(['job-1', 'owner']);
+    expect(connection.query.mock.calls[1][0]).toContain('JSON_SET');
+    expect(connection.query.mock.calls[1][0]).not.toMatch(/DELETE|save_status|billing_status/);
+    expect(connection.commit).toHaveBeenCalledOnce();
+    expect(connection.release).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    [null, 'TOOLBOX_JOB_NOT_FOUND'],
+    [{ id: 'job-1', status: 'processing' }, 'TOOLBOX_JOB_CANNOT_DISMISS'],
+    [{ id: 'job-1', status: 'queued' }, 'TOOLBOX_JOB_CANNOT_DISMISS'],
+    [{ id: 'job-1', status: 'succeeded', save_status: 'saving' }, 'TOOLBOX_JOB_CANNOT_DISMISS'],
+  ])('rejects missing, running or saving tasks', async (job, code) => {
+    const connection = {
+      beginTransaction: vi.fn(), commit: vi.fn(), rollback: vi.fn(), release: vi.fn(),
+      query: vi.fn().mockResolvedValue([job ? [job] : []]),
+    };
+    await expect(dismissToolboxJob({ userId: 'owner', jobId: 'job-1', database: { getConnection: async () => connection } })).rejects.toMatchObject({ code });
+    expect(connection.query).toHaveBeenCalledOnce();
+    expect(connection.rollback).toHaveBeenCalledOnce();
+    expect(connection.release).toHaveBeenCalledOnce();
   });
 
   it('creates OCR without a quote, financial balance check or financial ledger write', async () => {
@@ -701,7 +733,8 @@ describe('toolbox service boundaries', () => {
     expect(result.ready[0].artifact).not.toHaveProperty('content');
     expect(database.query.mock.calls[0][0]).not.toContain('job.*');
     expect(database.query.mock.calls[0][0]).not.toContain('artifact.content,');
-    expect(database.query.mock.calls[0][0]).not.toContain('options_json');
+    expect(database.query.mock.calls[0][0].split('FROM toolbox_jobs')[0]).not.toContain('options_json');
+    expect(database.query.mock.calls[0][0]).toContain("JSON_EXTRACT(job.options_json, '$.homeDismissed')");
     expect(database.query.mock.calls[0][1]).toEqual(['user-1']);
   });
 

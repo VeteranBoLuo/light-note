@@ -33,7 +33,7 @@ export async function handleRelay(request, env, send = fetch) {
     const url = new URL(input.endpoint);
     if (
       url.protocol !== "https:" ||
-      url.hostname !== "fcm.googleapis.com" ||
+      !["fcm.googleapis.com", "jmt17.google.com"].includes(url.hostname) ||
       url.port ||
       url.username ||
       url.password ||

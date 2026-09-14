@@ -32,6 +32,7 @@ router.get('/tasks', toolboxHandle.listJobs);
 router.get('/jobs', toolboxHandle.listJobs);
 router.post('/jobs', aiActionRateLimiter, toolboxHandle.createJob);
 router.get('/jobs/:jobId', toolboxHandle.getJob);
+router.post('/jobs/:jobId/dismiss', localProcessingRateLimiter, toolboxHandle.dismissJob);
 router.post('/jobs/:jobId/cancel', toolboxHandle.cancelJob);
 router.get('/artifacts/:artifactId', toolboxHandle.getArtifact);
 router.post('/artifacts/:artifactId/save', toolboxHandle.saveArtifact);

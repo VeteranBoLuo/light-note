@@ -8,6 +8,7 @@ import { parseToolboxError } from '../util/toolbox/errors.js';
 import { getToolboxKnowledgeOverview } from '../util/toolbox/knowledgeStructure.js';
 import {
   cancelToolboxJob,
+  dismissToolboxJob,
   createToolboxJob,
   createFreeOcrJob,
   getToolboxOcrUsage,
@@ -332,6 +333,15 @@ export async function getJob(req, res) {
   try {
     const job = await getToolboxJob({ userId: readUserId(req), jobId: req.params.jobId });
     return res.send(resultData(job));
+  } catch (error) {
+    return sendError(res, error);
+  }
+}
+
+export async function dismissJob(req, res) {
+  if (!requireWrite(req, res)) return;
+  try {
+    return res.send(resultData(await dismissToolboxJob({ userId: req.user.id, jobId: req.params.jobId })));
   } catch (error) {
     return sendError(res, error);
   }
