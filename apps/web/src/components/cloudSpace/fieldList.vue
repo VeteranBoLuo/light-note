@@ -649,6 +649,12 @@
           />
         </span>
       </template>
+      <template #mobile-actions>
+        <BButton class="batch-action-delete" :disabled="!hasSelection || selection.busy.value" @click="handleBatchDelete">
+          <SvgIcon :src="icon.table_delete" size="16" aria-hidden="true" />
+          {{ $t('common.delete') }}
+        </BButton>
+      </template>
       <template #actions>
         <BButton :disabled="!hasSelection || selection.busy.value" @click="selection.openTags('add')">
           <SvgIcon :src="icon.resource.tag" size="16" aria-hidden="true" />

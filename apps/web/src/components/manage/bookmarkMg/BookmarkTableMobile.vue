@@ -71,6 +71,16 @@
         @change="toggleSelectAll"
       />
     </template>
+    <template #mobile-actions>
+      <BButton
+        class="batch-action-delete"
+        :disabled="!selectedIds.length || selection.busy.value"
+        @click="handleBatchDelete"
+      >
+        <SvgIcon :src="icon.table_delete" size="16" aria-hidden="true" />
+        {{ $t('common.delete') }}
+      </BButton>
+    </template>
   </ResourceBatchActionBar>
   <MobilePageActionsDrawer
     v-model:open="pageActionsOpen"
@@ -110,6 +120,7 @@
   import router from '@/router';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import BookmarkFavicon from '@/components/base/BookmarkFavicon.vue';
   import BookmarkCapabilityBadge from '@/components/manage/bookmarkMg/BookmarkCapabilityBadge.vue';

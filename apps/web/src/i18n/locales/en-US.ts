@@ -14009,9 +14009,6 @@ export default {
     reqAndroid: 'Requires Android {version} or later',
     reqHarmony:
       'HarmonyOS devices that support Android packages can install it via Zhuoyitong. This is not a native HarmonyOS app.',
-    // The unknown-source warning is explained once, in the install steps below.
-    safetyOnlyOfficial:
-      'Download the official build only from {host}; packages with the same name elsewhere are from untrusted sources.',
 
     verifyTitle: 'Package verification',
     verifyDesc:

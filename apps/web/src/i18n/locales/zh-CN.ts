@@ -13412,8 +13412,6 @@ export default {
     copyFailed: '当前浏览器不允许自动复制，请手动选中后复制',
     reqAndroid: '支持 Android {version} 及以上',
     reqHarmony: '部分支持 Android 安装包的鸿蒙设备可通过卓易通安装，这不是鸿蒙原生应用',
-    // 「未知来源」提示只在下面的安装步骤里讲一次,首屏这句只负责"别去别处下"
-    safetyOnlyOfficial: '请只从 {host} 下载轻笺正式版，第三方站点的同名安装包来源不可信。',
 
     verifyTitle: '安装包校验信息',
     verifyDesc: '以下信息全部取自当前线上这一个安装包，可用来确认你下载到的文件没有被替换。',

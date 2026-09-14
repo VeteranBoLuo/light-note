@@ -1,6 +1,7 @@
 <template>
   <Teleport to="body">
-    <Transition name="resource-batch-action-bar">
+    <!-- 移动端与复选框、列表留白同帧退出，避免工具栏离场期间底层布局先恢复。 -->
+    <Transition name="resource-batch-action-bar" :css="!mobile">
       <MobileStickyActionBar
         v-if="open && mobile"
         class="resource-batch-action-bar--mobile"

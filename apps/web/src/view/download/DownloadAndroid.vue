@@ -97,11 +97,6 @@
             <span>{{ t('download.reqHarmony') }}</span>
           </li>
         </ul>
-
-        <p class="dl-safety">
-          <SvgIcon :src="icon.message.warning" size="15" aria-hidden="true" />
-          <span>{{ t('download.safetyOnlyOfficial', { host: OFFICIAL_HOST }) }}</span>
-        </p>
       </header>
 
       <!-- ==================== 安装步骤:侧载的刚需信息,保持展开 ==================== -->
@@ -582,22 +577,6 @@
     gap: 7px;
     color: var(--desc-color);
     font-size: 13px;
-    text-align: left;
-  }
-
-  .dl-safety {
-    display: inline-flex;
-    align-items: flex-start;
-    gap: 7px;
-    max-width: 500px;
-    margin: 18px auto 0;
-    padding: 10px 14px;
-    border: 1px solid color-mix(in srgb, var(--warning-color, #d97706) 34%, transparent);
-    border-radius: 10px;
-    background: color-mix(in srgb, var(--warning-color, #d97706) 8%, var(--background-color));
-    color: var(--text-color);
-    font-size: 12.8px;
-    line-height: 1.65;
     text-align: left;
   }
 

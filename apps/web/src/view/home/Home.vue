@@ -117,6 +117,12 @@
           :disabled="selection.busy.value || bookmark.bookmarkLoading"
           @change="selection.selectVisible"
       /></template>
+      <template #mobile-actions>
+        <BButton class="batch-action-delete" :disabled="selection.busy.value || !selectedIds.length" @click="handleBatchDelete">
+          <SvgIcon :src="icon.table_delete" size="16" aria-hidden="true" />
+          {{ $t('common.delete') }}
+        </BButton>
+      </template>
       <template #actions>
         <BButton :disabled="selection.busy.value || !selectedIds.length" @click="selection.openTags('add')">
           <SvgIcon :src="icon.resource.tag" size="16" aria-hidden="true" />
@@ -357,6 +363,8 @@
   }
 
   useMobileTopBar(['home', 'home:id', 'home:search'], {
+    onBack: exitBatch,
+    canGoBack: () => batchMode.value,
     onTitleClick: resetBookmarkView,
     searchSourceType: 'bookmark',
     onAuxiliaryAction: () => {
