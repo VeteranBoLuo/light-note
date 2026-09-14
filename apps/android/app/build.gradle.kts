@@ -152,41 +152,27 @@ val syncLegalDocuments by tasks.registering(Sync::class) {
     }
 }
 
-val validateAdaptiveLauncherIcons by tasks.registering {
+val validateLauncherIconConsistency by tasks.registering {
     group = "verification"
-    description = "Verifies that supported Android versions use adaptive launcher icons."
-
-    val launcherResources = linkedMapOf(
-        "src/main/res/mipmap-anydpi-v26/ic_launcher.xml" to listOf(
-            "<adaptive-icon",
-            "<background",
-            "<foreground",
-        ),
-        "src/main/res/mipmap-anydpi-v33/ic_launcher.xml" to listOf(
-            "<adaptive-icon",
-            "<background",
-            "<foreground",
-            "<monochrome",
-        ),
+    description = "Verifies that installers and launchers use the same published brand artwork."
+    val launcherResources = listOf(
+        "src/main/res/mipmap-anydpi/ic_launcher.xml",
+        "src/main/res/mipmap-anydpi-v26/ic_launcher.xml",
+        "src/main/res/mipmap-anydpi-v33/ic_launcher.xml",
     )
-
-    inputs.files(launcherResources.keys.map(::file))
-
+    inputs.files(launcherResources.map(::file))
     doLast {
-        launcherResources.forEach { (resourcePath, requiredElements) ->
-            val resourceFile = file(resourcePath)
-            check(resourceFile.isFile) {
-                "Android launcher icon resource is missing: $resourcePath"
+        launcherResources.forEach { resourcePath ->
+            val document = javax.xml.parsers.DocumentBuilderFactory.newInstance()
+                .newDocumentBuilder().parse(file(resourcePath))
+            val root = document.documentElement
+            val items = root.getElementsByTagName("item")
+            check(root.tagName == "layer-list" && items.length == 1) {
+                "$resourcePath must preserve the published single-layer brand icon."
             }
-
-            val resourceText = resourceFile.readText()
-            requiredElements.forEach { requiredElement ->
-                check(requiredElement in resourceText) {
-                    "$resourcePath must contain $requiredElement"
-                }
-            }
-            check("<layer-list" !in resourceText) {
-                "$resourcePath must remain an adaptive icon; a layer-list breaks launcher transitions."
+            val item = items.item(0) as org.w3c.dom.Element
+            check(item.getAttribute("android:drawable") == "@drawable/ic_brand_tile") {
+                "$resourcePath must use the same brand artwork as the installer."
             }
         }
     }
@@ -194,5 +180,5 @@ val validateAdaptiveLauncherIcons by tasks.registering {
 
 tasks.named("preBuild") {
     dependsOn(syncLegalDocuments)
-    dependsOn(validateAdaptiveLauncherIcons)
+    dependsOn(validateLauncherIconConsistency)
 }

@@ -14047,7 +14047,7 @@ export default {
     changelogVersion: '{version}',
     changelogItems: [
       'Improved system back: closes the focused control’s dropdown first and uses the page’s back or cancel action.',
-      'Improved system theme switching, login session persistence, and launcher icons.',
+      'Restored the original launcher icon and improved system theme switching and login session persistence.',
       'Improved download feedback, handoff to the system calendar, and opening of some external sharing links.',
     ],
     troubleTitle: 'Download or install problems',
