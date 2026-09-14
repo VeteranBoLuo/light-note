@@ -877,15 +877,15 @@ export const RESOURCE_REF_TEST_VECTORS = Object.freeze([
  * 两者必须来自同一次 Release 构建。前端仍从 @/config/androidRelease 引用，那边只做转出。
  */
 export const ANDROID_RELEASE = Object.freeze({
-  versionName: '1.0.1',
-  versionCode: 10001,
+  versionName: '1.0.2',
+  versionCode: 10002,
   packageName: 'top.boluo66.lightnote',
-  releaseDate: '2026-08-11',
-  fileSizeBytes: 1777869,
-  sha256: '0a309f1ca1504491f89ba9fbe5a655ed3dc9fe476cfe9ca0df1d70de94c89ce3',
+  releaseDate: '2026-09-14',
+  fileSizeBytes: 1783278,
+  sha256: 'c83e482957e6fdb6ec3cb01f1e4e80c1ac82055b140bbb046748400f48163ff1',
   certificateSha256:
     '23:D3:65:AA:C9:33:A3:8D:71:07:0E:0C:2B:DD:C0:CD:B7:E1:7B:41:67:7F:FC:5E:45:2C:96:D8:9A:1C:77:B4',
-  downloadPath: '/downloads/android/light-note-1.0.1.apk',
+  downloadPath: '/downloads/android/light-note-1.0.2.apk',
   minAndroidVersion: '8.0',
   permissions: Object.freeze([
     'android.permission.INTERNET',

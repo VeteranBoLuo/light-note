@@ -151,7 +151,7 @@ try {
 - 移动端 `BModal`、`BDrawer` 和全屏预览统一接入 `utils/mobileOverlayHistory.ts`。
 - 从一个占 history 的浮层导航或打开下一层时，使用 `closeCurrentMobileOverlayThen()` 等待旧占位出栈；后续需要的数据在关闭前复制为普通对象快照。
 - `BPopover` / `BDropdown` 不占 history；Escape 和系统返回只关闭最上层可关闭对象。
-- Android 系统返回先处理移动浮层，再通过 `light-note-system-back` 复用当前页面的返回动作；自画页头也须注册动作，动态返回状态使用 `canGoBack`。底栏可见不代表一级首页，带有效返回动作的页面不能触发退回桌面。
+- Android 系统返回先向焦点控件派发 Escape，让最上层菜单或浮层消费；未消费时回退移动浮层 history，再通过 `light-note-system-back` 复用当前页面的返回动作。自画页头也须注册动作，动态返回状态使用 `canGoBack`。底栏可见不代表一级首页，带有效返回动作的页面不能触发退回桌面。
 - 桌面界面缩放通过根节点 CSS `zoom` 实现。视觉坐标与布局坐标混用前使用 `getRootZoom()` 换算；滚动定位复用 `utils/zoom.ts`。
 - Teleport 浮层必须响应页面/容器滚动、缩放、视口和软键盘变化，不能假设触发器打开后保持静止。
 

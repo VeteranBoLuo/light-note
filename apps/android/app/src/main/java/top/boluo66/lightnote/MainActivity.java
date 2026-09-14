@@ -1394,7 +1394,7 @@ public final class MainActivity extends Activity {
         } else {
             backNavigationPending = true;
             webView.evaluateJavascript(
-                "(function(){try{if(Boolean(window.history.state&&window.history.state.__lnMobileOverlayId))return 'overlay';if(!document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true})))return 'handled';if(!window.dispatchEvent(new Event('light-note-system-back',{cancelable:true})))return 'handled';return document.documentElement.dataset.lightNotePrimaryRoot==='true'?'root':'page';}catch(error){return 'page';}})();",
+                "(function(){try{if(!(document.activeElement||document).dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true})))return 'handled';if(Boolean(window.history.state&&window.history.state.__lnMobileOverlayId))return 'overlay';if(!window.dispatchEvent(new Event('light-note-system-back',{cancelable:true})))return 'handled';return document.documentElement.dataset.lightNotePrimaryRoot==='true'?'root':'page';}catch(error){return 'page';}})();",
                 state -> {
                     backNavigationPending = false;
                     if ("\"handled\"".equals(state)) {

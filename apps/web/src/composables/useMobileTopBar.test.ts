@@ -72,3 +72,32 @@ it('原生返回先关闭 history 浮层和菜单，未消费时才回退到页�
     delete document.documentElement.dataset.lightNotePrimaryRoot;
   }
 });
+
+it('原生返回让焦点控件先消费 Escape，不越过下拉框退出所在浮层', () => {
+  const trigger = document.createElement('button');
+  document.body.append(trigger);
+  trigger.focus();
+  const closeSelect = vi.fn((event: KeyboardEvent) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+  });
+  const pageBack = vi.fn();
+  trigger.addEventListener('keydown', closeSelect);
+  window.addEventListener('light-note-system-back', pageBack);
+  window.history.replaceState({ __lnMobileOverlayId: 'drawer' }, '');
+  try {
+    expect(nativeBack()).toBe('handled');
+    expect(closeSelect).toHaveBeenCalledOnce();
+    expect(pageBack).not.toHaveBeenCalled();
+    expect(window.history.state.__lnMobileOverlayId).toBe('drawer');
+    trigger.removeEventListener('keydown', closeSelect);
+    expect(nativeBack()).toBe('overlay');
+    expect(pageBack).not.toHaveBeenCalled();
+  } finally {
+    trigger.remove();
+    window.removeEventListener('light-note-system-back', pageBack);
+    window.history.replaceState({}, '');
+  }
+});
