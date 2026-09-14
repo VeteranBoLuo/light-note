@@ -281,6 +281,9 @@ export function inlineCachedMermaid(html: string, previous?: HTMLElement | null)
       figure.appendChild(placeholder);
     }
 
+    // Preserve the editor preview's source anchor when replacing code with a diagram.
+    const sourceAnchor = pre.getAttribute('data-ln-md-source');
+    if (sourceAnchor !== null) figure.setAttribute('data-ln-md-source', sourceAnchor);
     pre.replaceWith(figure);
     replaced = true;
   });
@@ -781,6 +784,9 @@ export async function renderMermaidBlocks(
   const figures = blocks.map(({ pre, code }) => {
     const figure = buildFigure(code);
     figure.dataset.mermaidState = 'pending';
+    // Preserve the editor preview's source anchor when replacing code with a diagram.
+    const sourceAnchor = pre.getAttribute('data-ln-md-source');
+    if (sourceAnchor !== null) figure.setAttribute('data-ln-md-source', sourceAnchor);
     pre.replaceWith(figure);
     return { figure, code };
   });

@@ -27,6 +27,7 @@
     MOBILE_RESOURCE_NAVIGATION,
     type MobileResourcePath,
   } from '@/config/mobileNavigation';
+  import { getMobileTopBarBinding } from '@/composables/useMobileTopBar';
   import { useMobileNavigationState } from '@/composables/useMobileNavigationState';
 
   const route = useRoute();
@@ -45,7 +46,9 @@
 
   function selectResource(path: MobileResourcePath) {
     if (activePath.value === path) {
-      scrollCurrentResourceToTop();
+      const reset = getMobileTopBarBinding(route.name)?.onTitleClick;
+      if (reset) reset();
+      else scrollCurrentResourceToTop();
       return;
     }
     saveResourceScroll(activePath.value);

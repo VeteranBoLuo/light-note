@@ -338,6 +338,7 @@
 </template>
 
 <script lang="ts" setup>
+  import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import NoteTransferDialog from '@/components/noteLibrary/transfer/NoteTransferDialog.vue';
   import {
     computed,
@@ -2468,6 +2469,7 @@
     clearScheduledSave();
     nStore.headings = [];
   });
+  useMobileTopBar(['noteDetail'], { ownTopBar: true, onBack: back });
 </script>
 
 <style lang="less">
@@ -2517,6 +2519,10 @@
       &:focus,
       &:focus-visible {
         background: transparent !important;
+      }
+
+      &:focus {
+        outline: none;
       }
     }
   }

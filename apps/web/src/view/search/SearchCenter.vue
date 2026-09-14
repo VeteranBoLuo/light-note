@@ -25,6 +25,8 @@
       class="search-center-shell"
       :title="t('resourceCenter.title')"
       :subtitle="t('resourceCenter.subtitle')"
+      title-actionable
+      @title-click="resetSearchView"
       accent="neutral"
       layout="workspace"
       :class="{ 'search-center-shell--mobile': bookmark.isMobile }"
@@ -209,7 +211,7 @@
             <div class="result-toolbar result-toolbar--summary">
               <div class="result-heading">
                 <template v-if="bookmark.isMobile">
-                  <div class="result-title">{{ t('resourceCenter.results') }}</div>
+                  <div class="result-title"><BButton class="mobile-result-title-reset" @click="resetSearchView">{{ t('resourceCenter.results') }}</BButton></div>
                   <div class="result-subtitle">{{ mobileResultSubtitle }}</div>
                 </template>
                 <div v-else class="desktop-result-heading">
@@ -1670,6 +1672,20 @@
     applyQueryState('清空标签筛选');
   }
 
+  function resetSearchView() {
+    exitBatchMode();
+    closeSearchAi();
+    inspectedResourceKey.value = '';
+    mobileInspectorVisible.value = false;
+    mobileFilterVisible.value = false;
+    queryState.keyword = '';
+    queryState.type = 'all';
+    clearAdvancedFilters();
+    void nextTick(() => {
+      resultScrollRef.value?.scrollTo({ top: 0 });
+      document.querySelector<HTMLElement>('.search-center-route .search-page')?.scrollTo({ top: 0 });
+    });
+  }
   function clearAdvancedFilters() {
     queryState.tags = [];
     queryState.date = 'all';
@@ -2126,7 +2142,10 @@
   // 资源列表自带搜索顶栏。
   useMobileTopBar(['searchCenter'], {
     ownTopBar: true,
-    onBack: leaveSearchPage,
+    onBack: () => {
+      if (batchMode.value) exitBatchMode();
+      else leaveSearchPage();
+    },
     showNotification: false,
   });
 
@@ -2155,6 +2174,8 @@
 </script>
 
 <style scoped lang="less">
+  .mobile-result-title-reset.b_btn { height: auto; padding: 0; background: transparent; color: inherit; font: inherit; }
+  .mobile-result-title-reset.b_btn:hover { color: var(--primary-color); }
   @import (reference) '@/assets/css/workspace-surfaces.less';
   .search-center-route {
     width: 100%;
@@ -2184,7 +2205,6 @@
     box-sizing: border-box;
     color: var(--text-color);
   }
-
 
   .search-page--night {
     --search-hero-bg: var(--workspace-content);
@@ -2826,7 +2846,6 @@
       padding: 0;
     }
 
-
     .search-header {
       grid-column: 2;
       grid-row: 1;
@@ -3191,7 +3210,6 @@
       min-height: 0;
       flex: 1 1 auto;
     }
-
 
     .search-header {
       padding: 10px 12px;

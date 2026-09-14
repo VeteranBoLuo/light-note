@@ -1,59 +1,21 @@
-import { marked } from 'marked';
+import { Marked } from 'marked';
 import DOMPurify from 'dompurify';
-import hljs from 'highlight.js/lib/core';
-import bash from 'highlight.js/lib/languages/bash';
-import css from 'highlight.js/lib/languages/css';
-import javascript from 'highlight.js/lib/languages/javascript';
-import json from 'highlight.js/lib/languages/json';
-import markdown from 'highlight.js/lib/languages/markdown';
-import python from 'highlight.js/lib/languages/python';
-import sql from 'highlight.js/lib/languages/sql';
-import typescript from 'highlight.js/lib/languages/typescript';
-import xml from 'highlight.js/lib/languages/xml';
-import plaintext from 'highlight.js/lib/languages/plaintext';
 import i18n from '@/i18n';
 import { configureMarkdownRenderer } from '@/utils/markdownRenderer';
+import { highlightCode, escapeCodeText } from '@/utils/codeHighlight';
+import { normalizeCodeLanguage, supportsCodeHighlight } from '@/config/codeLanguages';
 
-hljs.registerLanguage('bash', bash);
-hljs.registerLanguage('shell', bash);
-hljs.registerLanguage('css', css);
-hljs.registerLanguage('javascript', javascript);
-hljs.registerLanguage('js', javascript);
-hljs.registerLanguage('json', json);
-hljs.registerLanguage('markdown', markdown);
-hljs.registerLanguage('md', markdown);
-hljs.registerLanguage('python', python);
-hljs.registerLanguage('py', python);
-hljs.registerLanguage('sql', sql);
-hljs.registerLanguage('typescript', typescript);
-hljs.registerLanguage('ts', typescript);
-hljs.registerLanguage('html', xml);
-hljs.registerLanguage('xml', xml);
-// core 构建默认不含 plaintext;显式注册,避免将来接回高亮时对无/未知语言的代码块抛 "Unknown language: plaintext"。
-hljs.registerLanguage('plaintext', plaintext);
-configureMarkdownRenderer(marked);
-
-// marked v5+ 移除了 highlight / smartLists / smartypants 选项(v4 时代的 setOptions 写法在 v17 下被静默
-// 忽略,导致代码块一直没有语法高亮)。语法高亮改为自定义 code renderer 接 highlight.js;注意必须同时放开
-// 下方 DOMPurify 的 span 白名单,否则 hljs 生成的 <span class="hljs-*"> token 会被净化掉,高亮依旧不显。
-// 注意:marked 的 use/setOptions 是全局单例配置,笔记预览、导出等处 import('marked') 拿到的是同一个实例,
-// 所以这份 renderer 同时也是站内 Markdown 的口径 —— 改动要按"所有 Markdown 渲染路径"来评估。
+// AI 配置只作用于私有实例，不能让摘要、导出或笔记正文因模块加载顺序而执行高亮。
+const marked = configureMarkdownRenderer(new Marked());
 marked.use({
   renderer: {
     code({ text, lang }) {
-      // mermaid 图表交给 utils/mermaidRender 渲染成图:这里只原样保留源码和语言标记。
-      // 若走下面的高亮分支,hljs 不认识 mermaid 会退成 plaintext,class 里的语言信息丢失,
-      // 后续就再也认不出这是图表块了。
-      if (String(lang || '').trim().toLowerCase() === 'mermaid') {
-        const escaped = String(text ?? '').replace(
-          /[&<>"']/g,
-          (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char] as string,
-        );
-        return `<pre><code class="language-mermaid">${escaped}</code></pre>\n`;
-      }
-      const language = lang && hljs.getLanguage(lang) ? lang : 'plaintext';
-      const value = hljs.highlight(text, { language }).value;
-      return `<pre><code class="hljs language-${language}">${value}</code></pre>\n`;
+      const requested = normalizeCodeLanguage(lang);
+      if (requested === 'mermaid') return `<pre><code class="language-mermaid">${escapeCodeText(text)}</code></pre>\n`;
+      const language = supportsCodeHighlight(requested)
+        ? String(lang).trim().split(/\s+/u)[0].toLowerCase()
+        : 'plaintext';
+      return `<pre><code class="hljs language-${language}">${highlightCode(text, language)}</code></pre>\n`;
     },
   },
 });

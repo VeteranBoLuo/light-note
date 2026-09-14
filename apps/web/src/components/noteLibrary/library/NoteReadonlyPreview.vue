@@ -153,6 +153,7 @@
   import { consumeNoteDetail, invalidateNoteDetailPrefetch } from '@/api/noteDetailPrefetch';
   import { resolveNoteResourceRefs, type ResolvedResourceReference } from '@/api/noteReferences';
   import { useUserStore } from '@/store';
+  import { useNoteCodeHighlight } from '@/composables/useNoteCodeHighlight';
   import { normalizeNoteContentResourceUrls, noteContentToHtml } from '@/utils/common';
   import {
     collectResourceRefsFromHtml,
@@ -234,6 +235,7 @@
   const previewHtml = ref('');
   const previewSourceHtml = ref('');
   const previewContentRef = ref<HTMLElement | null>(null);
+  useNoteCodeHighlight(previewContentRef, previewHtml);
   const previewScrollRef = ref<HTMLElement | null>(null);
   const resolvedResourceRefs = ref<ResolvedResourceReference[]>([]);
   const resourcePreviewVisible = ref(false);

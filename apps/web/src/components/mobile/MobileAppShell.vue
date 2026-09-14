@@ -61,6 +61,7 @@
   import { activePullIndicator } from '@/composables/useAndroidPullRefresh';
   import MobileGlobalSearchOverlay from '@/components/globalSearch/MobileGlobalSearchOverlay.vue';
   import { getMobileResourcePath, type MobileFormalCreateActionKey } from '@/config/mobileNavigation';
+  import { getMobileTopBarBinding, getMobilePageBack } from '@/composables/useMobileTopBar';
   import { useMobileNavigationState } from '@/composables/useMobileNavigationState';
 
   const MobileFormalCreateLayer = defineAsyncComponent(() => import('@/components/mobile/MobileFormalCreateLayer.vue'));
@@ -199,7 +200,9 @@
 
   function syncPrimaryRootState() {
     if (typeof document === 'undefined') return;
-    document.documentElement.dataset.lightNotePrimaryRoot = String(props.enabled && props.showBottomNav);
+    document.documentElement.dataset.lightNotePrimaryRoot = String(
+      props.enabled && props.showBottomNav && !getMobilePageBack(route.name),
+    );
     document.documentElement.classList.toggle('light-note-keyboard-open', props.enabled && keyboardOpen.value);
   }
 
@@ -265,7 +268,17 @@
     { immediate: true },
   );
 
-  watch(() => [props.enabled, props.showBottomNav, route.fullPath], syncPrimaryRootState, { immediate: true });
+  watch(
+    () => [
+      props.enabled,
+      props.showBottomNav,
+      route.fullPath,
+      getMobileTopBarBinding(route.name)?.onBack,
+      getMobileTopBarBinding(route.name)?.canGoBack?.(),
+    ],
+    syncPrimaryRootState,
+    { immediate: true },
+  );
   watch(keyboardOpen, syncPrimaryRootState);
   watch(
     () => [props.enabled, props.showBottomNav],

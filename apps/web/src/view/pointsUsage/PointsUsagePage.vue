@@ -30,6 +30,7 @@
 </template>
 
 <script setup lang="ts">
+  import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import { computed } from 'vue';
   import { useUserStore } from '@/store';
   import { useI18n } from 'vue-i18n';
@@ -52,6 +53,7 @@
     if (window.history.length > 1) router.back();
     else void router.push({ path: '/growth', query: { section: 'rewards', reward: 'ledger' } });
   }
+  useMobileTopBar(['pointsUsage'], { ownTopBar: true, onBack: goBack });
 </script>
 <style scoped lang="less">
   .points-usage-page {

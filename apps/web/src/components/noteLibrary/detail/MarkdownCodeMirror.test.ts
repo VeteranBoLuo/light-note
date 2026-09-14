@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import i18n from '@/i18n';
 import { createApp, h, nextTick, ref } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import MarkdownCodeMirror, { type MarkdownCodeMirrorExpose } from './MarkdownCodeMirror.vue';
@@ -23,6 +24,7 @@ async function mountEditor(
   host.style.height = '400px';
   document.body.appendChild(host);
   const model = ref(initial);
+  const readonlyModel = ref(readonly);
   const editor = ref<MarkdownCodeMirrorExpose | null>(null);
   const commands = ref<string[]>([]);
   const app = createApp({
@@ -31,7 +33,7 @@ async function mountEditor(
         h(MarkdownCodeMirror, {
           ref: editor,
           modelValue: model.value,
-          readonly,
+          readonly: readonlyModel.value,
           mobile,
           onKeydown,
           'onUpdate:modelValue': (value: string) => (model.value = value),
@@ -48,6 +50,7 @@ async function mountEditor(
         });
     },
   });
+  app.use(i18n);
   app.mount(host);
   await nextTick();
   await nextTick();
@@ -55,7 +58,7 @@ async function mountEditor(
     app.unmount();
     host.remove();
   });
-  return { host, model, editor, commands };
+  return { host, model, editor, commands, readonlyModel };
 }
 
 function dispatchModShortcut(host: HTMLElement, key: string, options: { shiftKey?: boolean; altKey?: boolean } = {}) {
@@ -76,6 +79,7 @@ function dispatchModShortcut(host: HTMLElement, key: string, options: { shiftKey
 
 describe('MarkdownCodeMirror', () => {
   beforeEach(() => {
+    i18n.global.locale.value = 'zh-CN';
     vi.stubGlobal('ResizeObserver', ResizeObserverStub);
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => window.setTimeout(callback, 0));
     vi.stubGlobal('cancelAnimationFrame', (id: number) => window.clearTimeout(id));
@@ -115,6 +119,74 @@ describe('MarkdownCodeMirror', () => {
     expect(editor.value?.redo()).toBe(true);
     await nextTick();
     expect(model.value).toBe('**正文**');
+  });
+
+  it('语言选择只修改当前围栏，保留代码和光标并支持独立撤销/重做', async () => {
+    const source = '```js\nconst value = 42;\n```';
+    const { editor, model, host } = await mountEditor(source);
+    editor.value?.setSelection(source.indexOf('value'));
+    await nextTick();
+    const trigger = host.querySelector<HTMLElement>('[role="combobox"]');
+    expect(trigger?.getAttribute('aria-label')).toBe('代码语言');
+    trigger?.click();
+    await nextTick();
+    const option = Array.from(document.querySelectorAll<HTMLElement>('[role="option"]')).find((item) =>
+      item.textContent?.includes('Python'),
+    );
+    expect(option).toBeTruthy();
+    option?.click();
+    await nextTick();
+    expect(model.value).toBe(source.replace('```js', '```python'));
+    expect(editor.value?.getSelection().from).toBe(model.value.indexOf('value'));
+    editor.value?.undo();
+    await nextTick();
+    expect(model.value).toBe(source);
+    editor.value?.redo();
+    await nextTick();
+    expect(model.value).toContain('```python');
+    editor.value?.replaceAll('ordinary prose', false);
+    await nextTick();
+    expect(host.querySelector('[role="combobox"]')).toBeNull();
+  });
+
+  it('所有代码块入口常显，修改第二块不依赖光标且前文编辑后仍定位正确', async () => {
+    const source = '正文\n\n```js\nconst value = 42;\n```\n\n```python\ndef second(): pass\n```';
+    const { host, editor, model } = await mountEditor(source);
+    editor.value?.setSelection(0);
+    await nextTick();
+    expect(host.querySelectorAll('[role="combobox"]')).toHaveLength(2);
+    editor.value?.replaceRange(0, 0, '新增正文\n', 0);
+    await nextTick();
+    const select = host.querySelectorAll<HTMLElement>('[role="combobox"]')[1];
+    select.click();
+    await nextTick();
+    const sql = Array.from(
+      document.getElementById(select.getAttribute('aria-controls')!)!.querySelectorAll<HTMLElement>('[role="option"]'),
+    ).find((item) => item.textContent?.trim() === 'SQL');
+    sql?.click();
+    await nextTick();
+    expect(model.value).toBe('新增正文\n' + source.replace('```python', '```sql'));
+    expect(editor.value?.getSelection()).toEqual({ from: 0, to: 0 });
+    editor.value?.undo();
+    await nextTick();
+    expect(model.value).toBe('新增正文\n' + source);
+    editor.value?.setSelection(model.value.indexOf('second'));
+    await nextTick();
+    expect(host.querySelectorAll('[role="combobox"]')).toHaveLength(2);
+  });
+
+  it('切换只读状态后语言控件同步恢复，重新打开时读取保存的围栏语言', async () => {
+    const source = '```python\ndef example(): pass\n```';
+    const { host, editor, readonlyModel } = await mountEditor(source, true);
+    editor.value?.setSelection(18);
+    await nextTick();
+    expect(host.querySelector('[role="combobox"]')).toBeNull();
+    readonlyModel.value = false;
+    await nextTick();
+    expect(host.querySelector('[role="combobox"]')?.textContent).toContain('Python');
+    readonlyModel.value = true;
+    await nextTick();
+    expect(host.querySelector('[role="combobox"]')).toBeNull();
   });
 
   it('只读模式拒绝工具栏写入', async () => {

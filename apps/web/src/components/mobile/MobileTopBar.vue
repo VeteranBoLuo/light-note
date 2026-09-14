@@ -11,7 +11,12 @@
         <span v-if="leadingActionLabel">{{ leadingActionLabel }}</span>
         <SvgIcon v-else :src="icon.arrow_left" size="20" aria-hidden="true" />
       </BButton>
-      <h1 class="mobile-top-bar__title">{{ secondaryTitle }}</h1>
+      <h1 class="mobile-top-bar__title"
+        ><BButton v-if="activeBinding?.onTitleClick" class="mobile-title-reset" @click="activeBinding.onTitleClick()">{{
+          secondaryTitle
+        }}</BButton
+        ><template v-else>{{ secondaryTitle }}</template></h1
+      >
     </template>
     <BButton
       v-else
@@ -132,7 +137,9 @@
     const value = activeBinding.value?.ownTopBar;
     return typeof value === 'function' ? value() : Boolean(value);
   });
-  const isSecondary = computed(() => Boolean(activeBinding.value?.title && activeBinding.value?.onBack));
+  const isSecondary = computed(() =>
+    Boolean(activeBinding.value?.title && activeBinding.value?.onBack && activeBinding.value?.canGoBack?.() !== false),
+  );
   const secondaryTitle = computed(() => activeBinding.value?.title?.() || '');
   const leadingActionLabel = computed(() => activeBinding.value?.leadingActionLabel?.() || '');
   const showSearch = computed(() => !isSecondary.value && activeBinding.value?.searchMode !== 'icon');
@@ -246,6 +253,16 @@
     font-weight: 650;
   }
 
+  .mobile-title-reset.b_btn {
+    height: auto;
+    padding: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+  }
+  .mobile-title-reset.b_btn:hover {
+    color: var(--primary-color);
+  }
   .mobile-top-bar__title {
     min-width: 0;
     margin: 0;

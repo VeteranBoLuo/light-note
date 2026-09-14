@@ -55,6 +55,7 @@ interface UserInfo {
     homePage?: 'landing' | 'workbench' | 'resourceCenter' | 'bookmark' | 'noteLibrary' | 'cloudSpace'; // 默认首页
     uiScale?: 'small' | 'medium' | 'large'; // 界面缩放(整体风格:小/标准/大,用 zoom 实现)
     resourceView?: 'card' | 'list'; // 资源中心视图
+    todoSubitemsExpanded?: boolean; // 默认展开子事项
     todoView?: 'list' | 'agenda' | 'calendar' | 'matrix'; // 待办默认视图
     cloudView?: 'card' | 'table'; // 云空间视图:卡片/表格
     tagView?: 'card' | 'graph'; // 标签详情视图
@@ -120,6 +121,7 @@ const createDefaultUserState = (): UserState => ({
     noteSidebarMode: 'directory', // 笔记库默认展示目录
     noteDirectEdit: false, // PC 默认先预览已有笔记；移动端始终直接编辑
     noteParentOpenMode: 'children', // 父页面默认进入子页面目录；PC 可改为预览当前页面
+    todoSubitemsExpanded: false,
     todoView: 'list', // 待办默认视图
     lang: 'zh-CN', // 语言
     hideEmptyTags: false, // 首页标签列表是否隐藏空标签(默认不隐藏)

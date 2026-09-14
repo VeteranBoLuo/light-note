@@ -532,7 +532,7 @@
     await Promise.all([loadCatalog(), loadState(), refreshQuota({ force: true })]);
   }
 
-  useMobileTopBar(['store'], { title: () => t('entitlementStore.pageTitle'), onBack: goBack, showNotification: false });
+  useMobileTopBar(['entitlementStore'], { title: () => t('entitlementStore.pageTitle'), onBack: goBack, showNotification: false });
   const { markLoaded } = useForegroundRefresh({
     refresh: refreshStore,
     staleMs: 0,

@@ -2444,6 +2444,7 @@
   }
 
   useMobileTopBar(['noteLibrary'], {
+    onTitleClick: handleNoteLibraryTitleClick,
     searchSourceType: 'note',
     onAuxiliaryAction: () => {
       if (batchMode.value) {

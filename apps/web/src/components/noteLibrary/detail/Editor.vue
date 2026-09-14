@@ -144,6 +144,7 @@
               :locale="currentLang"
               @update:model-value="onMdInput"
               @scroll="syncMdScroll('edit')"
+              @geometry-change="mdScrollSync.refresh()"
               @keydown="onMarkdownEditorKeydown"
               @command="runMarkdownToolbarAction"
               @selection-change="syncMarkdownInlineMenus"
@@ -758,6 +759,10 @@
     type EditResult,
     type EditorSelection,
   } from '@/utils/markdownEditing.ts';
+  import { CODE_LANGUAGES } from '@/config/codeLanguages';
+  import { useMarkdownScrollSync } from '@/composables/useMarkdownScrollSync';
+  import { renderMarkdownScrollMap } from '@/utils/markdownScrollMap';
+  import { useNoteCodeHighlight } from '@/composables/useNoteCodeHighlight';
   import { configureMarkdownRenderer } from '@/utils/markdownRenderer.ts';
   import ResourcePickerPanel from '@/components/resourcePicker/ResourcePickerPanel.vue';
   import EditorSlashCommandMenu, { type EditorSlashCommand } from './EditorSlashCommandMenu.vue';
@@ -847,21 +852,6 @@
   });
   const FilePreview = defineAsyncComponent(() => import('@/components/FilePreview.vue'));
 
-  const CODE_LANGUAGES = [
-    { value: 'plaintext', text: 'Plain Text' },
-    { value: 'javascript', text: 'JavaScript' },
-    { value: 'typescript', text: 'TypeScript' },
-    { value: 'html', text: 'HTML' },
-    { value: 'css', text: 'CSS' },
-    { value: 'json', text: 'JSON' },
-    { value: 'bash', text: 'Bash' },
-    { value: 'python', text: 'Python' },
-    { value: 'java', text: 'Java' },
-    { value: 'go', text: 'Go' },
-    { value: 'rust', text: 'Rust' },
-    { value: 'cpp', text: 'C++' },
-    { value: 'sql', text: 'SQL' },
-  ];
   const SLASH_CODE_LANGUAGES = CODE_LANGUAGES.map((language) => ({
     value: language.value,
     label: language.text,
@@ -1624,7 +1614,7 @@
   // Markdown 编辑器与预览的滚动同步
   const mdCodeMirrorRef = ref<MarkdownCodeMirrorExpose | null>(null);
   const mdPreviewRef = ref<HTMLElement | null>(null);
-  let isSyncingMdScroll = false;
+  let mdRenderedSource = '';
   let isProgrammaticMdScroll = false;
   let mdScrollUnlockTimer: number | null = null;
 
@@ -2628,40 +2618,20 @@
     inlineMentionVisible.value = false;
   }
 
+  const mdScrollSync = useMarkdownScrollSync(
+    mdCodeMirrorRef,
+    mdPreviewRef,
+    () => currentType.value === 'markdown' && mdView.value === 'split',
+    () => isProgrammaticMdScroll,
+    () => mdRenderedSource,
+  );
+
   function syncMdScroll(source: 'edit' | 'preview') {
     if (isProgrammaticMdScroll) {
-      // 平滑定位期间两个面板都会连续触发 scroll。等最后一次滚动真正结束后再解锁，
-      // 避免百分比同步把刚刚精确定位到顶部的标题重新推回页面中部。
       scheduleProgrammaticMarkdownScrollUnlock();
       return;
     }
-    if (isSyncingMdScroll) return;
-    isSyncingMdScroll = true;
-
-    const editorScroll = mdCodeMirrorRef.value?.getScrollElement();
-    const preview = mdPreviewRef.value;
-    if (!editorScroll || !preview) {
-      isSyncingMdScroll = false;
-      return;
-    }
-
-    if (source === 'edit') {
-      // CodeMirror → preview：按百分比同步
-      const ratio = editorScroll.scrollHeight - editorScroll.clientHeight;
-      if (ratio > 0) {
-        preview.scrollTop = (editorScroll.scrollTop / ratio) * (preview.scrollHeight - preview.clientHeight);
-      }
-    } else {
-      // preview → CodeMirror：按百分比同步
-      const ratio = preview.scrollHeight - preview.clientHeight;
-      if (ratio > 0) {
-        editorScroll.scrollTop = (preview.scrollTop / ratio) * (editorScroll.scrollHeight - editorScroll.clientHeight);
-      }
-    }
-
-    requestAnimationFrame(() => {
-      isSyncingMdScroll = false;
-    });
+    mdScrollSync.onScroll(source);
   }
 
   // Markdown 模式下同步外部内容
@@ -2688,15 +2658,19 @@
   // MD → HTML 统一收口：marked 渲染 + DOMPurify 消毒 + 站内链接增强属性(N0)。
   // 集中一处避免多条渲染路径口径漂移；decorate 只给站内链接补 data-ln-*,无站内链接则原样返回(零改写)。
   // 调用方须先 await ensureMdLib()（本函数同步使用已加载的 markedLib/dompurifyLib）。
-  function mdToSafeHtml(mdText: string, editableTaskLists = false): string {
+  function mdToSafeHtml(mdText: string, editableTaskLists = false, scrollMap = false): string {
     if (!markedLib || !dompurifyLib) throw new Error('MARKDOWN_RENDERER_NOT_READY');
-    const raw = markedLib.parse(mdText || '', { walkTokens: promoteEmptyMarkdownTaskToken });
+    const raw = scrollMap
+      ? renderMarkdownScrollMap(mdText || '', markedLib, promoteEmptyMarkdownTaskToken)
+      : markedLib.parse(mdText || '', { walkTokens: promoteEmptyMarkdownTaskToken });
     const safe = dompurifyLib.sanitize(raw);
     return decorateInternalResourceLinks(normalizeMarkdownTaskListHtml(safe, editableTaskLists));
   }
 
   const renderedMd = ref('');
+  useNoteCodeHighlight(mdPreviewRef, renderedMd);
   let mdRenderTimer: ReturnType<typeof setTimeout> | null = null;
+  let mdRenderGeneration = 0;
   // 富文本里图表装饰块的重渲染节流(编辑器的 NodeChange 触发很密)
   const MERMAID_COMPANION_DEBOUNCE_MS = 260;
   let mermaidCompanionTimer: number | null = null;
@@ -4175,8 +4149,10 @@
 
   async function renderMd() {
     if (!markedLib) await ensureMdLib();
+    const generation = ++mdRenderGeneration;
+    const source = (mdContent.value || '').replace(/\r\n?/g, '\n');
     try {
-      const safeHtml = mdToSafeHtml(mdContent.value || '');
+      const safeHtml = mdToSafeHtml(source, false, true);
       publishResourceRefs(safeHtml);
       const indexedSafeHtml = decorateRenderedMarkdownImageIndexes(safeHtml);
       // 已经画过的图直接用缓存顶上;改了图表内容、缓存还没有时沿用上一版预览里的旧图,
@@ -4190,6 +4166,10 @@
       publishResourceRefs('');
     }
     await nextTick();
+    if (generation !== mdRenderGeneration) return;
+    const contentChanged = mdRenderedSource !== source;
+    mdRenderedSource = source;
+    mdScrollSync.invalidate(contentChanged ? 'edit' : undefined);
     prepareNoteContentPreviewImages(mdPreviewRef.value, t('noteDetail.editor.imagePreview'));
     emits('markdown-rendered');
   }

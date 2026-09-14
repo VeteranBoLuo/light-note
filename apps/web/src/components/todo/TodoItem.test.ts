@@ -113,6 +113,7 @@ function mountTodoItem(
           common: { more: '更多', noMatch: '无匹配项', pleaseSelect: '请选择', searchPlaceholder: '搜索' },
           inbox: {
             todo: '待办',
+            todoReopenCompletion: '撤回完成',
             todoSelect: '选择 {title}',
             todoPriority: '优先级',
             todoPriority0: '低',
@@ -528,17 +529,33 @@ describe('TodoItem card preview', () => {
     });
   });
 
-  it('已完成待办的桌面更多菜单只显示删除且没有多余分隔线', async () => {
-    const { host } = mountTodoItem({ ...todo, status: 'completed' });
+  it('已完成待办的移动更多菜单支持撤回完成', async () => {
+    const { host, onToggleComplete } = mountTodoItem({ ...todo, status: 'completed' });
+    host.querySelector<HTMLButtonElement>('.todo-item__actions--mobile .todo-mobile-action')!.click();
+    await nextTick();
+    const reopen = Array.from(document.body.querySelectorAll<HTMLButtonElement>('button')).find((button) =>
+      button.textContent?.includes('撤回完成'),
+    );
+    expect(reopen).toBeTruthy();
+    reopen!.click();
+    await vi.waitFor(() => expect(onToggleComplete).toHaveBeenCalledExactlyOnceWith(false));
+  });
+
+  it('已完成待办的桌面更多菜单支持撤回完成并保留删除分组', async () => {
+    const { host, onToggleComplete } = mountTodoItem({ ...todo, status: 'completed' });
     await nextTick();
 
     host.querySelector<HTMLButtonElement>('.todo-more-button')?.click();
     await nextTick();
 
     const panel = document.body.querySelector<HTMLElement>('.b-action-menu-panel');
-    expect(panel?.querySelectorAll('[role="menuitem"]')).toHaveLength(1);
-    expect(panel?.querySelectorAll('[role="separator"]')).toHaveLength(0);
+    expect(panel?.querySelectorAll('[role="menuitem"]')).toHaveLength(2);
+    expect(panel?.querySelectorAll('[role="separator"]')).toHaveLength(1);
     expect(panel?.textContent).toContain('删除');
+    Array.from(panel!.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'))
+      .find((button) => button.textContent?.includes('撤回完成'))!
+      .click();
+    expect(onToggleComplete).toHaveBeenCalledExactlyOnceWith(false);
   });
 });
 

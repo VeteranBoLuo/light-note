@@ -98,6 +98,7 @@
   import { showPreviewGuide } from '@/composables/useGuestGuard';
   import DisplayScaleSuggestion from '@/components/base/DisplayScaleSuggestion.vue';
   import { resetBookmarkIconRuntime } from '@/composables/bookmarkIconRuntime.ts';
+  import { handleMobilePageBack } from '@/composables/useMobileTopBar';
   import MobileAppShell from '@/components/mobile/MobileAppShell.vue';
   import {
     getLandingAuthRetryDelay,
@@ -142,6 +143,13 @@
   });
 
   const router = useRouter();
+  // 原生返回复用页面动作，保留保存、取消批量选择及深链接回退语义。
+  function onSystemBack(event: Event) {
+    if (!bookmark.isMobile || event.defaultPrevented) return;
+    handleMobilePageBack(router.currentRoute.value.name, event);
+  }
+  onMounted(() => window.addEventListener('light-note-system-back', onSystemBack));
+  onBeforeUnmount(() => window.removeEventListener('light-note-system-back', onSystemBack));
   const user = useUserStore();
   useUserActivity();
   useResourceSelectionRuntime();

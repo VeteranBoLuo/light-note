@@ -108,6 +108,7 @@
 </template>
 
 <script setup lang="ts">
+  import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import { computed, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
@@ -200,6 +201,7 @@
     if (window.history.length > 1) router.back();
     else router.push('/settings');
   }
+  useMobileTopBar(['aiUsage'], { ownTopBar: true, onBack: goBack });
 </script>
 
 <style scoped lang="less">

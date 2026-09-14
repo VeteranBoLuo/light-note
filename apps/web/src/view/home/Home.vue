@@ -357,6 +357,7 @@
   }
 
   useMobileTopBar(['home', 'home:id', 'home:search'], {
+    onTitleClick: resetBookmarkView,
     searchSourceType: 'bookmark',
     onAuxiliaryAction: () => {
       if (batchMode.value) {

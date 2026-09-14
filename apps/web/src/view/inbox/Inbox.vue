@@ -41,7 +41,11 @@
       <div class="inbox-hero__heading">
         <div class="inbox-hero__title-row">
           <span class="inbox-hero__accent" aria-hidden="true"></span>
-          <h1>{{ isTodoFocused ? t('inbox.todoPageTitle') : t('inbox.title') }}</h1>
+          <h1
+            ><BButton class="workspace-title-reset" @click="resetTodoView">{{
+              isTodoFocused ? t('inbox.todoPageTitle') : t('inbox.title')
+            }}</BButton></h1
+          >
         </div>
         <p>{{ isTodoFocused ? t('todoWorkspace.subtitle') : t('inbox.subtitle') }}</p>
       </div>
@@ -91,7 +95,11 @@
 
         <header v-if="isMobileTodoPrimary" class="mobile-todo-heading">
           <div class="mobile-todo-heading__row">
-            <h1>{{ t('inbox.todoPageTitle') }}</h1>
+            <h1
+              ><BButton class="workspace-title-reset" @click="resetTodoView">{{
+                t('inbox.todoPageTitle')
+              }}</BButton></h1
+            >
             <BButton
               v-if="!embedded && !showTodoSidebar && !isUnscopedTodoView"
               class="mobile-todo-heading__scope"
@@ -312,6 +320,10 @@
             </div>
           </div>
         </div>
+        <TodoSubitemsHint
+          v-if="isTodoFocused && (todoView === 'list' || todoView === 'agenda')"
+          :has-subitems="todo.items.some((item) => item.checklist?.length > 0)"
+        />
         <ResourceBatchActionBar
           :open="isTodoFocused && todoView === 'list' && todoSelectionMode"
           :mobile="bookmark.isMobile"
@@ -973,6 +985,7 @@
   import Alert from '@/components/base/BasicComponents/BModal/Alert';
   import InboxItem from '@/components/inbox/InboxItem.vue';
   import TodoItem from '@/components/todo/TodoItem.vue';
+  import TodoSubitemsHint from '@/components/todo/TodoSubitemsHint.vue';
   import TodoSeriesGroup from '@/components/todo/TodoSeriesGroup.vue';
   import TodoEditorModal from '@/components/todo/TodoEditorModal.vue';
   import TodoPreviewDrawer from '@/components/todo/TodoPreviewDrawer.vue';
@@ -1088,6 +1101,23 @@
     { value: '', label: t('todoWorkspace.anyPriority') },
     ...[0, 1, 2].map((value) => ({ value, label: t(`inbox.todoPriority${value}`) })),
   ]);
+  async function resetTodoView() {
+    if (hasPendingOperation.value) return;
+    inbox.keyword = '';
+    todo.keyword = '';
+    todo.status = 'pending';
+    const { rangeStart, rangeEnd } = todo.filters;
+    todo.filters = { scope: 'all', tagIds: [], ...(todoView.value === 'calendar' ? { rangeStart, rangeEnd } : {}) };
+    savedTodoRange = null;
+    collapsedGroups.value = {};
+    todoSelectionMode.value = false;
+    selectedTodoIds.value = [];
+    todo.selectedSeriesItems = {};
+    todoBatchActionsOpen.value = false;
+    openSwipeTodoId.value = '';
+    scopeDrawerOpen.value = false;
+    await refreshList(true, true);
+  }
   async function changeOrganizationScope() {
     scopeDrawerOpen.value = false;
     await refreshList(true, true);
@@ -1859,6 +1889,13 @@
   useMobileTopBar(['inbox'], {
     // 待整理分区自画顶栏（返回 + 搜索 + 创建），待办分区仍用共享顶栏
     ownTopBar: () => isMobileResourceInbox.value,
+    onBack: () => {
+      if (resourceSelectionMode.value) leaveResourceSelection();
+      else if (todoSelectionMode.value) toggleTodoSelectionMode();
+      else leaveResourceInbox();
+    },
+    canGoBack: () => isMobileResourceInbox.value || todoSelectionMode.value,
+    onTitleClick: resetTodoView,
     searchSourceType: 'todo',
     onAuxiliaryAction: () => {
       if (todoSelectionMode.value) toggleTodoSelectionMode();
@@ -2606,6 +2643,17 @@
 </script>
 
 <style scoped lang="less">
+  .workspace-title-reset.b_btn {
+    height: auto;
+    padding: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+  }
+  .workspace-title-reset.b_btn:hover {
+    color: var(--primary-color);
+  }
+
   .todo-organization-dialog {
     display: grid;
     gap: 20px;
@@ -4499,5 +4547,41 @@
   }
   .todo-overview-toggle__arrow.is-open {
     transform: rotate(180deg);
+  }
+  // Multi-line mobile tasks need a visible gap around the complete parent task.
+  html.light-note-mobile-rendering .inbox-page--mobile-todo {
+    .todo-group {
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+    }
+    .todo-group__items {
+      .workspace-canvas-surface();
+      padding: 10px;
+      border-radius: 0 0 12px 12px;
+    }
+    .todo-group__items :deep(.todo-item),
+    .todo-group__items :deep(.todo-series-group) {
+      .workspace-content-surface();
+      border: 1px solid var(--workspace-border);
+      border-radius: 10px;
+      box-shadow: none;
+    }
+    .todo-group__items :deep(.mobile-swipe-actions),
+    .todo-group__items :deep(.todo-series-group) {
+      margin-bottom: 10px;
+      --swipe-border-radius: 10px;
+    }
+    .todo-group__items :deep(.todo-series-group .mobile-swipe-actions) {
+      margin-bottom: 0;
+    }
+    .todo-group__items :deep(.todo-series-group .todo-item) {
+      border: 0;
+      border-radius: 0;
+    }
+    .todo-group__items :deep(.todo-item) {
+      padding: 12px;
+      gap: 6px;
+    }
   }
 </style>

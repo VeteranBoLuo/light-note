@@ -95,7 +95,7 @@
           </span>
         </section>
       </div>
-      <!-- 已完成待办的右侧操作只保留删除；恢复仍通过标题前的勾选框完成。 -->
+      <!-- 已完成待办同时提供勾选框与更多菜单恢复入口。 -->
       <div class="todo-item__actions todo-item__actions--desktop">
         <template v-if="item.status === 'pending'">
           <BSelect
@@ -498,6 +498,10 @@
       }
       actions.push({ key: 'delete-divider', divider: true });
     }
+    if (props.item.status === 'completed') {
+      actions.push({ key: 'reopen', label: t('inbox.todoReopenCompletion'), icon: icon.noteDetail.back });
+      actions.push({ key: 'delete-divider', divider: true });
+    }
     actions.push({
       key: 'delete',
       label: t('inbox.deleteTodo'),
@@ -548,7 +552,7 @@
             { key: 'edit', label: t('inbox.editTodo'), icon: icon.table_edit },
             { key: 'calendar', label: t('inbox.addToCalendar'), icon: icon.common.calendar },
           ]
-        : []),
+        : [{ key: 'reopen', label: t('inbox.todoReopenCompletion'), icon: icon.noteDetail.back }]),
       ...(props.workspace && props.item.status !== 'completed'
         ? [
             {
@@ -565,7 +569,7 @@
         label: t('inbox.deleteTodo'),
         icon: icon.table_delete,
         danger: true,
-        dividerBefore: props.item.status === 'pending',
+        dividerBefore: true,
         loading: props.deleting,
       },
     ];
@@ -591,6 +595,7 @@
   function handleMoreAction(key: string) {
     if (writeDisabled.value) return;
     if (key.startsWith('snooze-')) emit('snooze', key.slice(7) as TodoSnoozePreset);
+    else if (key === 'reopen') emit('toggle-complete', false);
     else if (key === 'edit') emit('edit');
     else if (key === 'organize') emit('organize');
     else if (key === 'calendar') {

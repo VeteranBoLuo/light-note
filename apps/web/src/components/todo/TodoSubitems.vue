@@ -74,6 +74,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
   import useTodoStore from '@/store/todo';
+  import useUserStore from '@/store/useUser';
   import type { TodoItem, TodoChecklistItem } from '@/api/todoApi';
   const props = defineProps<{ item: TodoItem; disabled?: boolean; detail?: boolean; editable?: boolean }>();
   const emit = defineEmits<{ 'update-checklist': [items: TodoChecklistItem[]]; edit: [] }>();
@@ -81,7 +82,9 @@
   const store = useTodoStore();
   const showAll = ref(false);
   const panelId = `todo-subitems-${useId()}`;
-  const open = computed(() => Boolean(store.expandedSubitems[props.item.id]));
+  const user = useUserStore();
+  // An explicit session override (including false) takes precedence over the account default.
+  const open = computed(() => store.expandedSubitems[props.item.id] ?? user.preferences.todoSubitemsExpanded === true);
   const done = computed(() => props.item.checklist.filter((item) => item.done).length);
   const pending = computed(() => Boolean(store.checklistPending[props.item.id]));
   const visibleItems = computed(() =>
@@ -172,5 +175,12 @@
   }
   .todo-subitems p {
     color: var(--error-color, #d14355);
+  }
+  html.light-note-mobile-rendering .todo-subitems__panel {
+    margin-left: 12px;
+    padding: 0 0 0 12px;
+    border: 0;
+    border-left: 1px solid var(--workspace-divider);
+    border-radius: 0;
   }
 </style>

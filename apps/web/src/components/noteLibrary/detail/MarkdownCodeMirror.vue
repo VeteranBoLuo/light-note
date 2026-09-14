@@ -1,5 +1,7 @@
 <template>
-  <div ref="hostRef" class="markdown-codemirror" :class="{ 'is-mobile': mobile }"></div>
+  <div class="markdown-codemirror" :class="{ 'is-mobile': mobile }">
+    <div ref="hostRef" class="markdown-codemirror__host"></div>
+  </div>
 </template>
 
 <script lang="ts">
@@ -24,6 +26,7 @@
     replaceAllSearchMatches: (request: MarkdownSearchRequest) => number;
     coordsAtPos: (position: number) => DOMRect | null;
     getScrollElement: () => HTMLElement | null;
+    getSourceTop: (offset: number) => number;
     scrollToPosition: (position: number, selectionEnd?: number, behavior?: ScrollBehavior) => void;
   }
 
@@ -36,7 +39,8 @@
 </script>
 
 <script setup lang="ts">
-  import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+  import { nextTick, onBeforeUnmount, onMounted, ref, watch, getCurrentInstance } from 'vue';
+  import { markdownCodeLanguageControls } from '@/utils/markdownCodeLanguageControls';
   import { closeBrackets, closeBracketsKeymap, autocompletion, completionKeymap } from '@codemirror/autocomplete';
   import { defaultKeymap, history, historyKeymap, redo, redoDepth, undo, undoDepth } from '@codemirror/commands';
   import { markdown } from '@codemirror/lang-markdown';
@@ -92,10 +96,13 @@
     command: [command: string];
     'selection-change': [];
     scroll: [];
+    geometryChange: [];
     blur: [];
     ready: [];
     'history-change': [state: { canUndo: boolean; canRedo: boolean }];
   }>();
+
+  const appContext = getCurrentInstance()!.appContext;
 
   const hostRef = ref<HTMLElement | null>(null);
   let view: EditorView | null = null;
@@ -251,6 +258,7 @@
       doc: props.modelValue || '',
       extensions: [
         editorSetup,
+        markdownCodeLanguageControls(appContext),
         // 放在默认 keymap 之上，确保 ⌘/Ctrl+B 等编辑命令不落到浏览器默认行为。
         Prec.highest(keymap.of(markdownShortcutBindings)),
         markdown({ extensions: [GFM] }),
@@ -291,6 +299,7 @@
             emitHistoryState();
           }
           if (update.selectionSet) emit('selection-change');
+          if (update.geometryChanged) emit('geometryChange');
         }),
       ],
     });
@@ -500,6 +509,12 @@
         : null;
     },
     getScrollElement: () => view?.scrollDOM || null,
+    getSourceTop: (offset: number) => {
+      if (!view) return 0;
+      // Use the line box, not glyph coordinates: a few pixels of font leading would
+      // otherwise be magnified into a large error across a tall preview image.
+      return view.lineBlockAt(safePosition(offset)).top + view.documentPadding.top;
+    },
     scrollToPosition,
   });
 </script>
@@ -511,8 +526,17 @@
     min-width: 0;
     min-height: 0;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
   }
-
+  .markdown-codemirror__host {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+    min-width: 0;
+    width: 100%;
+    overflow: hidden;
+  }
   /*
    * 组件根节点在 Editor 中同时作为 flex 容器使用；CodeMirror 自己的根节点
    * 默认按正文的最大行宽计算尺寸，会表现成「输入底色随最长一行变宽」。

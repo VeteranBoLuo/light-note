@@ -1,0 +1,41 @@
+pre[data-ln-code-language]::before {
+  content: attr(data-ln-code-language);
+  display: block;
+  margin-bottom: 8px;
+  color: var(--pre-muted-color, var(--desc-color));
+  font:
+    12px/1.5 ui-monospace,
+    monospace;
+}
+pre.ln-code-highlight .hljs {
+  color: var(--pre-text-color);
+}
+pre.ln-code-highlight {
+  .hljs-keyword,
+  .hljs-selector-tag,
+  .hljs-literal,
+  .hljs-tag {
+    color: var(--code-keyword);
+  }
+  .hljs-string,
+  .hljs-regexp,
+  .hljs-addition {
+    color: var(--code-string);
+  }
+  .hljs-number,
+  .hljs-symbol,
+  .hljs-attr,
+  .hljs-built_in {
+    color: var(--code-number);
+  }
+  .hljs-title,
+  .hljs-section,
+  .hljs-type {
+    color: var(--code-title);
+  }
+  .hljs-comment,
+  .hljs-quote,
+  .hljs-meta {
+    color: var(--code-comment);
+  }
+}

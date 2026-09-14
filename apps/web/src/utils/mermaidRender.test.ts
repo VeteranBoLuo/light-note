@@ -36,6 +36,17 @@ describe('mermaidRender', () => {
     renderMock.mockImplementation(async (id: string) => ({ svg: `<svg data-id="${id}"><text>图</text></svg>` }));
   });
 
+  it('preserves preview source anchors when code becomes a diagram', async () => {
+    const { inlineCachedMermaid, renderMermaidBlocks } = await loadModule();
+    const html = '<pre data-ln-md-source="123"><code class="language-mermaid">graph TD; A--&gt;B</code></pre>';
+    const host = document.createElement('div');
+    host.innerHTML = inlineCachedMermaid(html);
+    expect(host.firstElementChild?.getAttribute('data-ln-md-source')).toBe('123');
+    host.innerHTML = html;
+    await renderMermaidBlocks(host);
+    expect(host.firstElementChild?.getAttribute('data-ln-md-source')).toBe('123');
+  });
+
   it('识别 mermaid 代码块:源码围栏与渲染后的 class 都算', async () => {
     const { hasMermaidBlock } = await loadModule();
     expect(hasMermaidBlock('```mermaid\nmindmap\n```')).toBe(true);

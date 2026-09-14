@@ -7,14 +7,15 @@
     >
       <div v-if="showNavigation" class="phone-navigation">
         <slot name="navigation">
-          <span
+          <BButton
             v-if="showBack"
             style="position: absolute; left: 0; top: 30px; transform: translateY(-50%)"
-            class="flex-align-center dom-hover"
+            class="flex-align-center common-container-back"
+            :aria-label="$t('common.back')"
             @click="backClick"
           >
             <svg-icon :src="icon.arrow_left" size="25" />
-          </span>
+          </BButton>
           <span>{{ title }}</span>
         </slot>
       </div>
@@ -27,13 +28,15 @@
 </template>
 
 <script lang="ts" setup>
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import { bookmarkStore } from '@/store';
-  import { getCurrentInstance } from 'vue';
+  import { getCurrentInstance, onMounted, onBeforeUnmount, onActivated, onDeactivated } from 'vue';
+  import { useRoute } from 'vue-router';
   import { backRouterPage } from '@/utils/common';
   const bookmark = bookmarkStore();
-  defineProps({
+  const props = defineProps({
     title: {
       type: String,
       default: '',
@@ -50,6 +53,30 @@
       type: Boolean,
       default: false,
     },
+  });
+  const route = useRoute();
+  const routeName = route.name;
+  let active = true;
+  function onSystemBack(event: Event) {
+    if (
+      event.defaultPrevented ||
+      !active ||
+      route.name !== routeName ||
+      !bookmark.isMobile ||
+      !props.showBack ||
+      !props.showNavigation
+    )
+      return;
+    event.preventDefault();
+    backClick();
+  }
+  onMounted(() => window.addEventListener('light-note-system-back', onSystemBack));
+  onBeforeUnmount(() => window.removeEventListener('light-note-system-back', onSystemBack));
+  onActivated(() => {
+    active = true;
+  });
+  onDeactivated(() => {
+    active = false;
   });
   const emit = defineEmits(['backClick']);
   const instance = getCurrentInstance();
@@ -69,6 +96,12 @@
 </script>
 
 <style lang="less" scoped>
+  .common-container-back.b_btn {
+    padding: 0;
+    width: 44px;
+    height: 44px;
+    background: transparent;
+  }
   .phone-container {
     position: fixed !important;
     top: 0 !important;

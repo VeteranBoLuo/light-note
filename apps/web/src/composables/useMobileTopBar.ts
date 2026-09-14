@@ -12,6 +12,9 @@ export interface MobileTopBarBinding {
   /** 二级页面标题；与 onBack 同时提供时，顶栏切换为「返回 + 标题」形态。 */
   title?: () => string;
   onBack?: () => void;
+  /** 同一路由仅在部分状态显示返回时使用。 */
+  canGoBack?: () => boolean;
+  onTitleClick?: () => void;
   /** 批量态等场景可用文字替换返回图标，例如“取消”。 */
   leadingActionLabel?: () => string;
   /**
@@ -74,4 +77,19 @@ export function useMobileTopBar(routeNames: readonly string[], binding: MobileTo
   const unregister = registerMobileTopBarBinding(routeNames, binding);
   onBeforeUnmount(unregister);
   return unregister;
+}
+
+/** 系统返回与标题点击都从当前路由的唯一动作绑定读取。 */
+export function getMobilePageBack(routeName: unknown): (() => void) | null {
+  const binding = getMobileTopBarBinding(routeName);
+  return binding?.canGoBack?.() === false ? null : binding?.onBack || null;
+}
+
+export function handleMobilePageBack(routeName: unknown, event: Event): boolean {
+  if (event.defaultPrevented) return false;
+  const back = getMobilePageBack(routeName);
+  if (!back) return false;
+  event.preventDefault();
+  back();
+  return true;
 }

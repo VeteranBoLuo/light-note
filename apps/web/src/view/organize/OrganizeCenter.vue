@@ -4,6 +4,8 @@
       class="organize-shell"
       :title="t('resourceCenter.title')"
       :subtitle="t('resourceCenter.subtitle')"
+      title-actionable
+      @title-click="resetOrganizer"
       accent="neutral"
       layout="workspace"
       :show-header="!bookmark.isMobile"
@@ -1335,6 +1337,14 @@
     window.open(url, '_blank', 'noopener,noreferrer');
   }
 
+  function resetOrganizer() {
+    untaggedKeyword.value = '';
+    untaggedType.value = 'all';
+    untaggedBatchMode.value = false;
+    selectedUntaggedKeys.value = [];
+    void router.replace('/organize');
+    organizeMainRef.value?.scrollTo({ top: 0 });
+  }
   function leaveOrganizer() {
     if (window.history.length > 1) router.back();
     else void router.replace('/search');
@@ -1343,6 +1353,7 @@
   useMobileTopBar(['organizeCenter'], {
     title: () => t('organize.title'),
     onBack: leaveOrganizer,
+    onTitleClick: resetOrganizer,
     showNotification: false,
   });
 

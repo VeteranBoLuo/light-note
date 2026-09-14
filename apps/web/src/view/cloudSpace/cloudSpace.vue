@@ -494,6 +494,7 @@
   );
 
   useMobileTopBar(['cloudSpace'], {
+    onTitleClick: resetCloudSpace,
     searchSourceType: 'file',
     onAuxiliaryAction: () => {
       if (batchMode.value) {

@@ -279,6 +279,7 @@
 </template>
 
 <script setup lang="ts">
+  import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import SettingsAppearanceSection from './components/SettingsAppearanceSection.vue';
   import SettingsGeneralSection from './components/SettingsGeneralSection.vue';
   import SettingsNotificationSection from './components/SettingsNotificationSection.vue';
@@ -711,6 +712,7 @@
     if (window.history.length > 1) router.back();
     else router.push('/home');
   }
+  useMobileTopBar(['settings'], { ownTopBar: true, onBack: goBack });
 </script>
 
 <style lang="less">

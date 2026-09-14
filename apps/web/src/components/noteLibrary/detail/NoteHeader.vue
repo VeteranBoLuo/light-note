@@ -45,7 +45,6 @@
         </BPopover>
       </div>
 
-      <NoteInlineTags v-if="visibleTags.length" :tags="visibleTags" compact />
       <div class="note-header-mobile-actions">
         <BButton
           v-if="hasNavigation || hasCatalog"

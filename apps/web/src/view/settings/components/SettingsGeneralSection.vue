@@ -50,6 +50,14 @@
         default-value="list"
         :options="todoViewOpts" />
       <SettingsPreferenceField
+        id="todo-subitems-preference"
+        pref-key="todoSubitemsExpanded"
+        :label="t('settings.todoSubitemsExpanded')"
+        :description="t('settings.todoSubitemsExpandedDesc')"
+        kind="switch"
+        :default-value="false"
+        :disabled="Boolean(user.adminContext)" />
+      <SettingsPreferenceField
         pref-key="noteViewMode"
         :label="t('settings.noteView')"
         :description="t('settings.noteViewDesc')"

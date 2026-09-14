@@ -8,7 +8,9 @@
       <BButton :aria-label="t('inbox.todoNextMonth')" @click="moveMonth(1)">
         <SvgIcon :src="icon.arrow_right" size="15" aria-hidden="true" />
       </BButton>
-      <small v-if="!busy && !scheduledItems.length" class="todo-calendar-empty-hint">{{ t('inbox.todoScheduleEmpty') }}</small>
+      <small v-if="!busy && !scheduledItems.length" class="todo-calendar-empty-hint">{{
+        t('inbox.todoScheduleEmpty')
+      }}</small>
     </header>
 
     <p v-if="view !== 'calendar' && !busy && !scheduledItems.length" class="todo-schedule-empty">{{
@@ -374,6 +376,7 @@
 </script>
 
 <style scoped lang="less">
+  @import (reference) '@/assets/css/workspace-surfaces.less';
   .todo-schedule-view {
     box-sizing: border-box;
     min-width: 0;
@@ -806,5 +809,18 @@
       min-height: 64px;
       min-height: clamp(64px, calc((100vh - 320px) / 6), 104px);
     }
+  }
+  html.light-note-mobile-rendering .todo-agenda-card-swipe {
+    .workspace-content-surface();
+    border: 1px solid var(--workspace-border);
+    border-radius: 10px;
+    box-sizing: border-box;
+  }
+  html.light-note-mobile-rendering .todo-agenda-card {
+    border: 0;
+    background: transparent;
+  }
+  html.light-note-mobile-rendering .todo-agenda-card-swipe :deep(.todo-subitems) {
+    margin: 0 12px 10px;
   }
 </style>

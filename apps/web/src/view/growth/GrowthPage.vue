@@ -405,6 +405,7 @@
 </template>
 
 <script setup lang="ts">
+  import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import { computed, nextTick, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
@@ -987,6 +988,7 @@
     if (window.history.length > 1) router.back();
     else router.push('/home');
   }
+  useMobileTopBar(['growth'], { ownTopBar: true, onBack: goBack });
 </script>
 
 <style scoped lang="less">

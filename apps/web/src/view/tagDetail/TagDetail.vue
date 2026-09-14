@@ -3,6 +3,8 @@
     class="tag-space-shell"
     :title="t('tagSpace.title')"
     :subtitle="t('tagSpace.subtitle')"
+    title-actionable
+    @title-click="resetTagView"
     accent="tag"
     layout="workspace"
     compact-mobile-heading
@@ -162,7 +164,7 @@
         <main class="tag-space-main" :aria-busy="detailRefreshing">
           <BCard as="section" variant="card" padding="18px" class="tag-profile-card">
             <div class="tag-profile-main">
-              <BButton class="workspace-back" :aria-label="t('common.back')" @click="router.back()">
+              <BButton class="workspace-back" :aria-label="t('common.back')" @click="leaveTagView()">
                 <SvgIcon :src="icon.noteDetail.back" size="19" />
               </BButton>
               <span class="tag-profile-icon" :class="{ 'has-custom-icon': tag.iconUrl && !tagIconLoadError }">
@@ -176,7 +178,9 @@
               </span>
               <div class="tag-profile-identity">
                 <div class="tag-profile-title-row">
-                  <h2>{{ tag.name }}</h2>
+                  <h2
+                    ><BButton class="tag-title-reset" @click="resetTagView">{{ tag.name }}</BButton></h2
+                  >
                   <div v-if="bookmark.isMobile" class="mobile-tag-profile-actions">
                     <BButton
                       v-if="!isReadOnly"
@@ -794,6 +798,8 @@
   const isReadOnly = computed(() => user.adminContext?.mode === 'readonly');
   const mobilePageActions = computed<MobilePageActionItem[]>(() => createMobileResourceHubActions(t));
   useMobileTopBar(['tagDetail'], {
+    onBack: leaveTagView,
+    onTitleClick: resetTagView,
     onAuxiliaryAction: () => (mobilePageActionsOpen.value = true),
     auxiliaryActionLabel: () => t('common.more'),
     auxiliaryActionIcon: () => icon.common.more,
@@ -801,6 +807,20 @@
     addLabel: () => t('tagSpace.createTag'),
     showAdd: () => !isReadOnly.value,
   });
+  function leaveTagView() {
+    if (window.history.state?.back) router.back();
+    else void router.replace('/home');
+  }
+  async function resetTagView() {
+    activeType.value = 'all';
+    resourceSort.value = 'updated';
+    resourceKeyword.value = '';
+    viewMode.value = 'resources';
+    activeGraphNode.value = null;
+    await nextTick();
+    resourceScrollRef.value?.scrollTo({ top: 0 });
+    document.querySelector<HTMLElement>('.tag-space-main')?.scrollTo({ top: 0 });
+  }
   function handleMobilePageAction(action: MobilePageActionItem) {
     const path = mobileResourceHubPath(action.key);
     if (path) void router.push(path);
@@ -1419,6 +1439,17 @@
 </script>
 
 <style scoped lang="less">
+  .tag-title-reset.b_btn {
+    height: auto;
+    padding: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+  }
+  .tag-title-reset.b_btn:hover {
+    color: var(--workspace-tag-text);
+  }
+
   @import (reference) "@/assets/css/workspace-surfaces.less";
   .tag-space-detail {
     height: 100%;

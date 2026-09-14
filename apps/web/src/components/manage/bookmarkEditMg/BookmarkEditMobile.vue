@@ -41,6 +41,7 @@
   import BookmarkEditorForm from '@/components/manage/bookmarkEditMg/BookmarkEditorForm.vue';
   import BookmarkSnapshotModal from '@/components/manage/bookmarkEditMg/BookmarkSnapshotModal.vue';
   import ResourceBacklinks from '@/components/noteLibrary/detail/ResourceBacklinks.vue';
+  import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import { useBookmarkEditor } from '@/composables/useBookmarkEditor';
 
   const {
@@ -67,6 +68,7 @@
     requestCancel,
     goAddTag,
   } = useBookmarkEditor();
+  useMobileTopBar(['bookmarkEditMg', 'bookmarkEditMgAddByTag'], { ownTopBar: true, onBack: requestCancel });
 </script>
 
 <style scoped lang="less">

@@ -77,7 +77,9 @@
       <span class="select-suffix">
         <span v-if="loading" class="select-loading" aria-hidden="true"></span>
         <span v-else-if="showClear" class="select-clear" @click.stop="handleClear">&times;</span>
-        <span v-else class="select-arrow">&#9662;</span>
+        <span v-else class="select-arrow" aria-hidden="true">
+          <SvgIcon :src="icon.noteTree.chevron" :size="16" />
+        </span>
       </span>
     </div>
 
@@ -145,6 +147,8 @@
 <script setup lang="ts">
   import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
   import type { BaseOptions } from '@/config/bookmarkCfg.ts';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon';
   import { getRootZoom } from '@/utils/zoom';
   import { useI18n } from 'vue-i18n';
 
@@ -916,7 +920,12 @@
   }
 
   .select-arrow {
-    font-size: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
     color: var(--desc-color, #999);
     transition: transform 0.2s;
     line-height: 1;

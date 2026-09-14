@@ -1394,10 +1394,13 @@ public final class MainActivity extends Activity {
         } else {
             backNavigationPending = true;
             webView.evaluateJavascript(
-                "(function(){try{return Boolean(window.history.state&&window.history.state.__lnMobileOverlayId)?'overlay':document.documentElement.dataset.lightNotePrimaryRoot==='true'?'root':'page';}catch(error){return 'page';}})();",
+                "(function(){try{if(Boolean(window.history.state&&window.history.state.__lnMobileOverlayId))return 'overlay';if(!document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true})))return 'handled';if(!window.dispatchEvent(new Event('light-note-system-back',{cancelable:true})))return 'handled';return document.documentElement.dataset.lightNotePrimaryRoot==='true'?'root':'page';}catch(error){return 'page';}})();",
                 state -> {
                     backNavigationPending = false;
-                    if ("\"root\"".equals(state)) {
+                    if ("\"handled\"".equals(state)) {
+                        lastRootBackPressedAt = 0L;
+                        hideBackToDesktopHintImmediately();
+                    } else if ("\"root\"".equals(state)) {
                         confirmMoveTaskToBackground();
                     } else if (webView.canGoBack()) {
                         lastRootBackPressedAt = 0L;
