@@ -65,6 +65,7 @@ jobs:
     timeout-minutes: 20
     # CI 只使用无权限占位配置，避免测试导入模块时连接生产数据库或真实 OBS。
     env:
+      TZ: Asia/Shanghai
       DB_HOST: 127.0.0.1
       DB_PORT: "3306"
       DB_USER: ci
@@ -92,6 +93,12 @@ jobs:
 
       - name: 安装依赖
         run: pnpm install --frozen-lockfile
+
+      - name: 安装真实图片转换测试运行时
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y imagemagick
+          convert -version
 
       - name: 类型检查
         run: pnpm typecheck
