@@ -14046,10 +14046,9 @@ export default {
     changelogTitle: 'Release notes',
     changelogVersion: '{version} (first official release)',
     changelogItems: [
-      'First official LightNote Android release: a native shell hosting the full bookmarks, notes, cloud files, todos, and AI features.',
-      'First launch shows a privacy policy and user agreement bundled offline in the package; the app goes online only after you accept.',
-      'Supports the system back gesture, file-picker uploads, downloads to the system download folder, and external links.',
-      'Follows the system light and dark themes, with the status bar recoloring to match.',
+      'Improved system back: closes the focused control’s dropdown first and uses the page’s back or cancel action.',
+      'Improved system theme switching, login session persistence, and launcher icons.',
+      'Improved download feedback, handoff to the system calendar, and opening of some external sharing links.',
     ],
     troubleTitle: 'Download or install problems',
     troubleItems: [
