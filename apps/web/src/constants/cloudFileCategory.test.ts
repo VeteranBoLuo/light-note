@@ -86,6 +86,14 @@ describe('cloudFileCategory preview compatibility', () => {
     expect(getCloudMediaMimeType({ fileName, fileType })).toBe(expectedMime);
   });
 
+  it('MOV 的 MIME 检测失败时保留实际解码机会，不承诺编码可播放', () => {
+    const file = { fileName: 'clip.MOV', fileType: 'application/octet-stream' };
+    expect(getCloudMediaMimeType(file)).toBe('video/quicktime');
+    expect(getCloudMediaPlaybackSupport(file, () => '')).toBe('unknown');
+    expect(getCloudMediaPlaybackSupport(file, () => 'maybe')).toBe('supported');
+    expect(getCloudMediaPlaybackSupport({ fileType: 'video/quicktime' }, () => '')).toBe('unknown');
+  });
+
   it('使用 canPlayType 区分浏览器可播放与仅可下载的格式', () => {
     const supported = vi.fn((mimeType: string) => (mimeType === 'video/mp4' ? 'probably' : ''));
     expect(getCloudMediaPlaybackSupport({ fileName: 'clip.mp4' }, supported)).toBe('supported');

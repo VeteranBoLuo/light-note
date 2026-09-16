@@ -48,6 +48,18 @@ function mountVideoPreview(overrides: Record<string, unknown> = {}) {
 }
 
 describe('VideoPreview', () => {
+  it('attempts MOV decoding without a source type hint and reports actual decoding failure', async () => {
+    const onError = vi.fn();
+    const host = mountVideoPreview({ videoUrl: '/clip.MOV', mimeType: 'video/quicktime', onError });
+    const video = host.querySelector('video');
+    expect(video?.getAttribute('src')).toBe('/clip.MOV');
+    expect(video?.querySelector('source')).toBeNull();
+    expect(onError).not.toHaveBeenCalled();
+    video?.dispatchEvent(new Event('error'));
+    await nextTick();
+    expect(onError).toHaveBeenCalledOnce();
+  });
+
   it('loads metadata without autoplay and only plays after an explicit click', async () => {
     const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
     const onLoaded = vi.fn();
@@ -55,7 +67,7 @@ describe('VideoPreview', () => {
     const video = host.querySelector('video');
 
     expect(video?.autoplay).toBe(false);
-    expect(video?.querySelector('source')?.getAttribute('type')).toBe('video/mp4');
+    expect(video?.getAttribute('src')).toBe('https://files.example/clip.mp4?signature=test');
     expect(play).not.toHaveBeenCalled();
 
     video?.dispatchEvent(new Event('loadedmetadata'));

@@ -111,6 +111,18 @@ describe('OBS 二进制下载', () => {
 
 describe('OBS metadata ranges', () => {
   afterEach(() => vi.unstubAllGlobals());
+  it('propagates a caller deadline to range downloads', async () => {
+    const controller = new AbortController();
+    const fetchMock = vi.fn(async (_url, options) => {
+      controller.abort();
+      expect(options.signal.aborted).toBe(true);
+      options.signal.throwIfAborted();
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(getObjectRangeFromObs('video.mov', 0, 9, { signal: controller.signal })).rejects.toMatchObject({
+      name: 'AbortError',
+    });
+  });
   it('uses bounded Range and preserves binary data', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(Buffer.from([255, 0, 128]), { status: 206 }));
     vi.stubGlobal('fetch', fetchMock);

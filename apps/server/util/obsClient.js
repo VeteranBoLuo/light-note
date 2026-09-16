@@ -181,7 +181,7 @@ export const getObjectBufferFromObs = async (objectKey, { maxBytes = Infinity } 
 };
 
 /** Read only a bounded metadata range; reject servers that ignore Range. */
-export const getObjectRangeFromObs = async (objectKey, start, end) => {
+export const getObjectRangeFromObs = async (objectKey, start, end, { signal } = {}) => {
   if (
     !Number.isSafeInteger(start) ||
     !Number.isSafeInteger(end) ||
@@ -194,7 +194,7 @@ export const getObjectRangeFromObs = async (objectKey, start, end) => {
   const { url } = createDownloadSignedUrl({ objectKey, expires: 60 });
   const response = await fetch(url, {
     headers: { Range: `bytes=${start}-${end}` },
-    signal: AbortSignal.timeout(20000),
+    signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(20000)]) : AbortSignal.timeout(20000),
     redirect: 'error',
   });
   if (response.status !== 206) {

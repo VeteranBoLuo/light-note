@@ -31,13 +31,16 @@ export function validatePreview(buffer) {
   }
   return size;
 }
-export async function compressCardImage(buffer, { runner = promisify(execFile), now = Date.now } = {}) {
+export async function compressCardImage(
+  buffer,
+  { runner = promisify(execFile), now = Date.now, budgetMs = 60_000, cropLongImage = true } = {},
+) {
   const source = validateSource(buffer);
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'ln-image-preview-'));
   const input = path.join(dir, `source.${source.type}`);
   const intermediate = path.join(dir, 'small.miff');
   const output = path.join(dir, 'card.webp');
-  const deadline = now() + 60_000;
+  const deadline = now() + Math.min(60_000, Math.max(0, budgetMs));
   const env = {
     ...buildFilePreviewChildEnv(dir),
     MAGICK_MEMORY_LIMIT: '128MiB',
@@ -70,7 +73,7 @@ export async function compressCardImage(buffer, { runner = promisify(execFile), 
     const width = Number(rotated ? rawHeight : rawWidth);
     const height = Number(rotated ? rawWidth : rawHeight);
     if (!(width > 0 && height > 0)) throw imageError('IMAGE_DECODE_FAILED');
-    const long = height / width > 3;
+    const long = cropLongImage && height / width > 3;
     const presentation = long ? 'long_top' : 'full';
     await run(
       [

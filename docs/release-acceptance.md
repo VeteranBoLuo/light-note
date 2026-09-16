@@ -81,6 +81,8 @@ pnpm --filter server check:schema
 | 资源治理 | `check:resource-governance` |
 | 模块化 AI | `check:ai-model-access` |
 
+视频封面与图片预览共用 `check:image-previews` 门禁，运行环境需同时具备 ImageMagick、FFmpeg 和 FFprobe（后两者可分别通过 `VIDEO_PREVIEW_FFMPEG_BIN`、`VIDEO_PREVIEW_FFPROBE_BIN` 指定）。抽帧子进程只读取受控临时文件，不继承业务凭据；源大小、像素数、线程、单次内存分配、输出大小与耗时边界由 `util/imagePreview/videoCover.js` 维护。视频通道每个文档 Worker 同时处理一个任务，与图片消费独立。首次启用前停止不识别 `video-card` 的旧 Worker，再更新 API/Worker；禁止混跑。回滚到旧 Worker 前须暂停预览生成，避免其误消费视频任务；保留资产、产物和清理账本。此能力复用现有表及预览元数据列，不需要新增迁移。
+
 浏览器推送需先经授权应用 `apps/server/migrations/20260908_browser_push.sql`，再运行 `pnpm --filter server check:browser-push` 验证 Schema 与 VAPID 配置。API 与 `browserPushWorker.js` 使用同一持久 VAPID 密钥和站点 Origin；默认服务开关关闭，启动本地预览及部署脚本均纳入该 Worker。密钥不由部署过程临时生成，服务开关关闭不影响站内通知。推送凭据不进入日志，测试应区分厂商受理、设备展示及点击定位，不能用模拟推送替代真实网络与设备验收。
 
 FCM 备用出口使用 `scripts/browser-push-relay/worker.mjs`，以独立托管实例配置主、备用地址与各自的服务端凭据（`BROWSER_PUSH_RELAYS`）。实例需设置 `RELAY_TOKEN`，关闭请求正文与凭据日志；示例 `wrangler.jsonc` 只提供部署结构，不含线上地址或密钥。每条出口上线前分别验证生产服务器到实际中转域名、中转到厂商以及真实设备展示；官网可访问或模拟测试不算出口验收。未配置中转保持直连，停用中转清空该配置即可；不得为验证而重开本地队列消费者。

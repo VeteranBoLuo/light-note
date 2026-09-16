@@ -10,7 +10,7 @@ import {
   removeImageReferences,
 } from './references.js';
 import { resolveImagePreviews, validateResolveItems, retryImagePreview } from './service.js';
-import { runSingleImagePreviewJob, cleanupImageAssets } from './worker.js';
+import { runSingleImagePreviewJob, runSingleVideoPreviewJob, cleanupImageAssets } from './worker.js';
 import { hash } from './sources.js';
 import { relocateCloudImage } from './relocate.js';
 const socket = process.env.IMAGE_PREVIEW_TEST_SOCKET;
@@ -106,6 +106,62 @@ describe.skipIf(!socket)('image lifecycle on isolated local MySQL', () => {
       await admin.end();
     }
   });
+  it('generates legacy video covers once in their own lane, retains duration on rename and protects ownership', async () => {
+    await db.query("INSERT INTO files VALUES (1,'u1',0,'clip.MOV','video-key',9000000)");
+    const source = { sourceType: 'cloud_file', sourceId: '1' };
+    const sign = () => ({ url: 'cover.webp' });
+    const [denied] = await resolveImagePreviews('other', [source], { db, sign });
+    expect(denied.status).toBe('unavailable');
+    expect((await db.query('SELECT * FROM image_assets'))[0]).toHaveLength(0);
+    const [pending] = await resolveImagePreviews('u1', [source], { db, sign });
+    expect(pending.status).toBe('queued');
+    await resolveImagePreviews('u1', [source], { db, sign });
+    expect((await db.query('SELECT * FROM file_preview_jobs'))[0]).toHaveLength(1);
+    const compress = vi.fn();
+    const read = vi.fn(async (job) => {
+      expect(job.preview_format).toBe('video-card');
+      return {
+        body: Buffer.from('webp'),
+        preview: { body: Buffer.from('webp'), width: 720, height: 405 },
+        durationSeconds: 12.5,
+        version: 'metadata',
+        revision: hash('video-bytes'),
+        sourceSize: 9000000,
+      };
+    });
+    const deps = { db, read, compress, put: vi.fn(), remove: vi.fn(), metadata: async () => ({ version: 'metadata' }) };
+    expect(await runSingleImagePreviewJob('image-lane', deps)).toBe(false);
+    expect(read).not.toHaveBeenCalled();
+    expect(await runSingleVideoPreviewJob('video-lane', deps)).toBe(true);
+    expect(compress).not.toHaveBeenCalled();
+    expect(await runSingleVideoPreviewJob('video-lane', deps)).toBe(false);
+    const [[artifact]] = await db.query('SELECT * FROM file_preview_artifacts');
+    expect(artifact.source_size).toBe(9000000);
+    const [ready] = await resolveImagePreviews('u1', [source], { db, sign });
+    expect(ready).toMatchObject({ status: 'ready', durationSeconds: 12.5, url: 'cover.webp' });
+    await transaction(async (c) => {
+      const [[file]] = await c.query('SELECT * FROM files WHERE id=1 FOR UPDATE');
+      await relocateCloudImage(c, file, 'renamed-key', 'renamed.MOV');
+      await c.query("UPDATE files SET obs_key='renamed-key',file_name='renamed.MOV' WHERE id=1");
+    });
+    expect((await resolveImagePreviews('u1', [source], { db, sign }))[0]).toMatchObject({
+      status: 'ready',
+      durationSeconds: 12.5,
+    });
+    expect((await db.query('SELECT * FROM file_preview_artifacts'))[0]).toHaveLength(1);
+    expect(await runSingleVideoPreviewJob('video-lane', deps)).toBe(false);
+    await transaction((c) => removeImageReferences(c, 'cloud_file', ['1']));
+    await db.query(
+      'UPDATE image_assets SET cleanup_after=DATE_SUB(NOW(),INTERVAL 1 DAY),delete_started_at=DATE_SUB(NOW(),INTERVAL 2 DAY)',
+    );
+    const remove = vi.fn(),
+      removeSource = vi.fn();
+    await cleanupImageAssets({ db, remove, removeSource });
+    expect(remove).toHaveBeenCalledWith(artifact.artifact_object_key);
+    expect(removeSource).toHaveBeenCalledWith(expect.objectContaining({ source_locator: 'renamed-key' }));
+    expect((await db.query('SELECT * FROM image_assets'))[0]).toHaveLength(0);
+  });
+
   it.each([false, true])('persists MP3 cover outcome and preserves audio size (absent=%s)', async (noCover) => {
     await db.query("INSERT INTO files VALUES (1,'u1',0,'song.mp3','audio-key',9000000)");
     const [[file]] = await db.query('SELECT * FROM files WHERE id=1');

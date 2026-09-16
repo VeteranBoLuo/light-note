@@ -3,6 +3,7 @@
     <div class="video-stage">
       <video
         ref="videoPlayer"
+        :src="videoUrl"
         controls
         preload="metadata"
         playsinline
@@ -11,9 +12,7 @@
         @pause="hasStarted = false"
         @ended="hasStarted = false"
         @error="handleError"
-      >
-        <source :src="videoUrl" :type="mimeType || undefined" />
-      </video>
+      />
       <span v-if="formatLabel" class="video-format">{{ formatLabel }}</span>
       <BButton
         v-if="loaded && !hasStarted"

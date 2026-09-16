@@ -10,6 +10,7 @@ import en from '@/i18n/locales/en-US';
 import '@/assets/css/index.less';
 const p = new URLSearchParams(location.search);
 const audioMode = p.get('audio') === 'true';
+const videoMode = p.get('video') === 'true';
 const theme = p.get('theme') === 'night' ? 'night' : 'day';
 document.documentElement.dataset.theme = theme;
 document.documentElement.classList.toggle('light-note-mobile-rendering', p.get('renderProfile') === 'mobile');
@@ -164,7 +165,8 @@ request.defaults.adapter = async (config) => {
             status: state,
             errorCode: state === 'failed' ? (index === 4 ? 'IMAGE_STORAGE_UNAVAILABLE' : 'IMAGE_SOURCE_MISSING') : null,
             retryable: state === 'failed' && index === 4,
-            presentation: index === 5 ? 'long_top' : 'full',
+            presentation: !videoMode && index === 5 ? 'long_top' : 'full',
+            durationSeconds: videoMode && state === 'ready' ? 12.5 : null,
             assetId: item.sourceId,
             url: state === 'ready' ? (index === 5 ? tallThumbnail : small) : null,
             expiresAt: Date.now() + 600000,
@@ -236,7 +238,10 @@ const app = createApp({
         batchMode: false,
         viewMode: 'card',
         onPreviewFile: (file: any) => {
-          openedFile.value = { ...file, fileUrl: String(file.id).endsWith('-5') ? tallOriginal : small };
+          openedFile.value = {
+            ...file,
+            fileUrl: videoMode ? file.fileUrl : String(file.id).endsWith('-5') ? tallOriginal : small,
+          };
           opened.value = true;
         },
       }),
@@ -262,9 +267,13 @@ useUserStore(pinia).setUserInfo({
 bookmarkStore(pinia).screenWidth = window.innerWidth;
 cloudSpaceStore(pinia).fileList = states.map((state, i) => ({
   id: `cloud-${i}`,
-  fileName: audioMode ? `音频-${state}.mp3` : `图片-${state}.png`,
-  fileType: audioMode ? 'audio/mpeg' : 'image/png',
-  category: audioMode ? 'audio' : 'image',
+  fileName: videoMode
+    ? `视频-${state}.${i % 2 ? 'MOV' : 'mp4'}`
+    : audioMode
+      ? `音频-${state}.mp3`
+      : `图片-${state}.png`,
+  fileType: videoMode ? 'video/quicktime' : audioMode ? 'audio/mpeg' : 'image/png',
+  category: videoMode ? 'video' : audioMode ? 'audio' : 'image',
   fileSize: p.has('originalFallback') && i === 3 ? 10 * 1024 * 1024 : 2000000,
   fileUrl: p.has('originalFallback') && i !== 4 ? small : '/original-must-not-be-requested.png',
   uploadTime: '2026-09-08 12:00',
@@ -272,6 +281,11 @@ cloudSpaceStore(pinia).fileList = states.map((state, i) => ({
   tags: [],
 }));
 cloudSpaceStore(pinia).loading = false;
+(window as any).__toggleVideoDirectory = () => {
+  const cloud = cloudSpaceStore(pinia);
+  cloud.fileList = cloud.fileList.length ? [] : videoDirectoryFiles;
+};
+const videoDirectoryFiles = [...cloudSpaceStore(pinia).fileList];
 globalDirect(app);
 app.mount('#app');
 const style = document.createElement('style');

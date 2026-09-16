@@ -26,6 +26,26 @@ function database(artifacts, job) {
   return { c, getConnection: async () => c, query: vi.fn(async () => [artifacts]) };
 }
 describe('image preview state and retries', () => {
+  it('returns persisted duration from both list hydration and resolving, without reading the original', async () => {
+    const row = {
+      id: 80,
+      asset_id: 4,
+      identity_hash: 'identity',
+      strategy_version: 2,
+      status: 'ready',
+      artifact_object_key: 'video-cover.webp',
+      preview_metadata_json: '{"durationSeconds":12.5}',
+    };
+    resolve.mockResolvedValue({ asset: { id: 4, source_version: 'current' } });
+    const db = database([row]);
+    const sign = () => ({ url: 'small-cover.webp' });
+    const [state] = await resolveImagePreviews('u', [source], { db, sign });
+    const items = [{ imagePreview: source }];
+    await hydrateImagePreviewStates(items, 'u', { db, sign });
+    expect(state).toMatchObject({ durationSeconds: 12.5, url: 'small-cover.webp' });
+    expect(items[0].imagePreview).toMatchObject({ durationSeconds: 12.5, url: 'small-cover.webp' });
+    expect(artifactState({ preview_metadata_json: '{"durationSeconds":-1}' }).durationSeconds).toBeNull();
+  });
   it('returns identical safe failure reasons in list hydration and resolve', async () => {
     const row = {
       id: 1,

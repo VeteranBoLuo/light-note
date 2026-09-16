@@ -282,7 +282,10 @@ export function getCloudMediaPlaybackSupport(
   if (!check) return 'unknown';
 
   try {
-    return check(mimeType) ? 'supported' : 'unsupported';
+    if (check(mimeType)) return 'supported';
+    // QuickTime 的 MIME 探测可能拒绝实际可解码的 MOV，交给媒体元素读取内容后判断。
+    if (previewType === 'video' && mimeType.split(';')[0] === 'video/quicktime') return 'unknown';
+    return 'unsupported';
   } catch {
     return 'unknown';
   }

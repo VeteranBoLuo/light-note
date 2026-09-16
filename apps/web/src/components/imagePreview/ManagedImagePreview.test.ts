@@ -41,6 +41,25 @@ function mount(state: ImagePreviewState, fallback = false, original = {}) {
 }
 const base = { sourceType: 'note' as const, sourceId: 'one' };
 describe('managed image feedback', () => {
+  it('never falls back to the original video while queued, failed or unsupported', async () => {
+    vi.useFakeTimers();
+    const { element, current } = mount({ ...base, status: 'queued' }, false, {
+      mediaKind: 'video',
+      originalUrl: '/original.MOV',
+      originalBytes: 500,
+    });
+    await vi.advanceTimersByTimeAsync(4000);
+    for (const status of ['queued', 'failed', 'unsupported'] as const) {
+      current.value = { ...base, status };
+      await nextTick();
+      expect(element.querySelector('video')).toBeNull();
+      expect(element.querySelector('img')).toBeNull();
+      expect(element.textContent).not.toContain('查看原图');
+    }
+    current.value = { ...base, status: 'ready', url: '/cover.webp', durationSeconds: 12 };
+    await nextTick();
+    expect(element.querySelector('img')?.getAttribute('src')).toBe('/cover.webp');
+  });
   it('explains a long wait and automatically replaces it with the completed thumbnail', async () => {
     vi.useFakeTimers();
     const { element, current } = mount({ ...base, status: 'queued' });

@@ -2,6 +2,7 @@ import { buildNoteCardPreview } from '../noteCardPreview.js';
 import { localImageLocator, hash } from './sources.js';
 import { syncNoteImageReferences, syncCloudImageById } from './references.js';
 import { imageError } from './compress.js';
+import { isVideoCoverFile } from '@lightnote/shared';
 
 // Business access/retention belongs to the source adapter, never the image encoder.
 // Future chat adapters must check the parent message and cap maxUrlAgeSeconds at attachment expiry.
@@ -42,7 +43,7 @@ export const imageSourceAdapters = Object.freeze({
     },
     async resolve(c, owner, id, { readOnly }) {
       const [[file]] = await c.query(
-        'SELECT id,obs_key FROM files WHERE id=? AND create_by=? AND del_flag=0 FOR UPDATE',
+        'SELECT id,obs_key,file_name FROM files WHERE id=? AND create_by=? AND del_flag=0 FOR UPDATE',
         [id, owner],
       );
       if (!file) throw imageError('IMAGE_PREVIEW_NOT_FOUND');
@@ -51,6 +52,7 @@ export const imageSourceAdapters = Object.freeze({
         [String(file.id), owner, file.obs_key],
       );
       if (!asset && !readOnly) asset = await syncCloudImageById(c, file.id);
+      if (asset) asset.preview_format = isVideoCoverFile(file.file_name) ? 'video-card' : 'card';
       return { asset, maxUrlAgeSeconds: 600 };
     },
   },

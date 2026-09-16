@@ -64,22 +64,23 @@
               </div>
             </template>
           </ManagedImagePreview>
-          <div v-else-if="isPreviewableVideo(item)" class="file-card-video-preview">
-            <video
+          <div v-else-if="getFileCategory(item) === 'video'" class="file-card-video-preview">
+            <ManagedImagePreview
               class="file-card-thumb file-card-video-thumb"
-              :src="item.fileUrl"
-              preload="metadata"
-              muted
-              playsinline
-              @loadedmetadata="captureVideoDuration(item.id, $event)"
-              @error="markVideoPreviewFailed(item.id)"
-            />
-            <span class="file-card-video-play" aria-hidden="true">
-              <SvgIcon :src="icon.ai.play" size="22" />
-            </span>
-            <span v-if="videoDurationLabels[String(item.id)]" class="file-card-video-duration">
-              {{ videoDurationLabels[String(item.id)] }}
-            </span>
+              :source="{ sourceType: 'cloud_file', sourceId: String(item.id) }"
+              :initial="item.imagePreview"
+              :alt="item.fileName"
+              media-kind="video"
+            >
+              <template #overlay="{ state, hasPreview }">
+                <span v-if="hasPreview" class="file-card-video-play" aria-hidden="true">
+                  <SvgIcon :src="icon.ai.play" size="22" />
+                </span>
+                <span v-if="formatMediaDuration(state?.durationSeconds)" class="file-card-video-duration">
+                  {{ formatMediaDuration(state?.durationSeconds) }}
+                </span>
+              </template>
+            </ManagedImagePreview>
           </div>
           <div v-else-if="isTextFile(item)" class="file-card-text-preview">
             <CloudTextCardPreview :file-info="item" />
@@ -1018,8 +1019,6 @@
   );
   const selectedRows = selection.ids;
   const selectAll = selection.allVisible;
-  const videoDurationLabels = ref<Record<string, string>>({});
-  const failedVideoPreviewIds = ref<Set<string>>(new Set());
   const hasSelection = computed(() => selectedRows.value.length > 0);
   const batchDownloadLoading = ref(false);
   const indeterminate = selection.someVisible;
@@ -1363,11 +1362,8 @@
     return getFileCategory(file) === 'image' && !!file.fileUrl;
   }
 
-  function isPreviewableVideo(file: any): boolean {
-    return getFileCategory(file) === 'video' && !!file.fileUrl && !failedVideoPreviewIds.value.has(String(file.id));
-  }
-
-  function formatMediaDuration(duration: number): string {
+  function formatMediaDuration(value?: number | null): string {
+    const duration = Number(value);
     if (!Number.isFinite(duration) || duration <= 0) return '';
     const totalSeconds = Math.round(duration);
     const hours = Math.floor(totalSeconds / 3600);
@@ -1379,22 +1375,6 @@
     return `${minutes}:${String(seconds).padStart(2, '0')}`;
   }
 
-  function captureVideoDuration(fileId: string | number, event: Event) {
-    const duration = (event.currentTarget as HTMLVideoElement | null)?.duration;
-    const label = formatMediaDuration(Number(duration));
-    if (!label) return;
-    videoDurationLabels.value = {
-      ...videoDurationLabels.value,
-      [String(fileId)]: label,
-    };
-  }
-
-  function markVideoPreviewFailed(fileId: string | number) {
-    const next = new Set(failedVideoPreviewIds.value);
-    next.add(String(fileId));
-    failedVideoPreviewIds.value = next;
-  }
-
   function isTextFile(file: any): boolean {
     return getFileCategory(file) === 'text' && !!file?.fileUrl;
   }
@@ -1403,21 +1383,6 @@
     const ext = getFileExt(String(file?.fileName || '')).toUpperCase();
     return ext || getFileTypeLabel(file);
   }
-
-  watch(
-    () => cloud.fileList,
-    (list) => {
-      // 列表刷新仅清理当前视图的媒体展示缓存，不裁剪会话选择。
-      const ids = list.map((item) => item.id);
-      const stringIds = new Set(ids.map(String));
-
-      videoDurationLabels.value = Object.fromEntries(
-        Object.entries(videoDurationLabels.value).filter(([id]) => stringIds.has(id)),
-      );
-      failedVideoPreviewIds.value = new Set(Array.from(failedVideoPreviewIds.value).filter((id) => stringIds.has(id)));
-    },
-    { deep: true },
-  );
 
   watch(
     () => props.clearKey,
@@ -2764,10 +2729,14 @@
     align-items: center;
     justify-content: center;
     overflow: hidden;
-    background: #080a0f;
+    background: var(--card-background);
   }
 
   .file-card-video-thumb {
+    background: var(--card-background);
+  }
+
+  .file-card-video-thumb :deep(img) {
     object-fit: contain;
     background: #080a0f;
   }

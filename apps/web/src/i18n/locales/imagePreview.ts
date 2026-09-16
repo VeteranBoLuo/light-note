@@ -1,5 +1,9 @@
 export const imagePreviewZh = {
   details: '查看原因',
+  videoUnsupported: '暂不支持此视频的封面预览，仍可尝试播放或下载原视频。',
+  videoDecode: '无法提取视频封面，请检查视频是否完整，仍可尝试播放或下载。',
+  videoSize: '视频超过封面生成的大小限制，仍可播放或下载原视频。',
+  videoResource: '视频处理所需资源超出封面服务限制，仍可播放或下载原视频。',
   viewOriginal: '查看原图',
   originalFailed: '原图也未能加载，请稍后重试',
   generating: '正在生成缩略图',
@@ -25,6 +29,10 @@ export const imagePreviewZh = {
 };
 export const imagePreviewEn: typeof imagePreviewZh = {
   details: 'View reason',
+  videoUnsupported: 'Cover previews are not supported for this video. You can still try playing or downloading it.',
+  videoDecode: 'The video cover could not be extracted. Check the file, or try playing or downloading it.',
+  videoSize: 'The video exceeds the cover generation size limit. You can still play or download it.',
+  videoResource: 'The video exceeds cover processing resource limits. You can still play or download it.',
   viewOriginal: 'View original',
   originalFailed: 'The original image could not load. Please try again later.',
   generating: 'Generating thumbnail',

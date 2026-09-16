@@ -1,5 +1,8 @@
 export function imagePreviewMessageKey(code?: string | null): string {
   const keys: Record<string, string> = {
+    IMAGE_VIDEO_DECODE_FAILED: 'videoDecode',
+    IMAGE_VIDEO_SIZE_LIMIT: 'videoSize',
+    IMAGE_VIDEO_RESOURCE_LIMIT: 'videoResource',
     IMAGE_SOURCE_MISSING: 'sourceMissing',
     IMAGE_SOURCE_UNSUPPORTED: 'unsupported',
     IMAGE_DECODE_FAILED: 'decode',

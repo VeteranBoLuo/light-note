@@ -1,4 +1,4 @@
-import { CARD_IMAGE_PROFILE } from '@lightnote/shared';
+import { CARD_IMAGE_PROFILE, isVideoCoverFile } from '@lightnote/shared';
 import { extractManagedImages } from './extract.js';
 import { localImageLocator, hash } from './sources.js';
 import { imageError } from './compress.js';
@@ -9,9 +9,16 @@ export async function queuePreview(db, asset) {
   await db.query(
     `INSERT INTO file_preview_artifacts
     (source_type,file_id,owner_user_id,strategy,strategy_version,format_id,source_etag,source_size,source_revision)
-    VALUES ('image_asset',?,?,'image_thumbnail',${CARD_IMAGE_PROFILE.version},'card',?,?,?)
+    VALUES ('image_asset',?,?,'image_thumbnail',${CARD_IMAGE_PROFILE.version},?,?,?,?)
     ON DUPLICATE KEY UPDATE id=LAST_INSERT_ID(id)`,
-    [asset.id, asset.owner_user_id, asset.source_version, asset.source_size || 0, asset.source_version],
+    [
+      asset.id,
+      asset.owner_user_id,
+      asset.preview_format || 'card',
+      asset.source_version,
+      asset.source_size || 0,
+      asset.source_version,
+    ],
   );
   await db.query(
     `INSERT IGNORE INTO file_preview_jobs (artifact_id)
@@ -22,7 +29,7 @@ export async function queuePreview(db, asset) {
 }
 export async function registerAsset(
   db,
-  { owner, sourceType, sourceId, locator, storage, version, size = 0, reconciled = false },
+  { owner, sourceType, sourceId, locator, storage, version, size = 0, reconciled = false, previewFormat = 'card' },
 ) {
   const identity = hash(`${owner}:${storage}:${locator}`);
   await db.query(
@@ -44,6 +51,7 @@ export async function registerAsset(
   );
   const [[asset]] = await db.query('SELECT * FROM image_assets WHERE identity_hash=? FOR UPDATE', [identity]);
   if (asset.status === 'deleting') throw imageError('IMAGE_SOURCE_DELETING');
+  asset.preview_format = previewFormat;
   await queuePreview(db, asset);
   return asset;
 }
@@ -121,7 +129,9 @@ export async function syncNoteImageReferences(db, noteId) {
   });
 }
 export async function registerCloudImage(db, file) {
-  if (!/\.(png|jpe?g|gif|webp|mp3)$/i.test(file.file_name || file.fileName || '') || !file.obs_key) return null;
+  const name = file.file_name || file.fileName || '';
+  const video = isVideoCoverFile(name);
+  if ((!/\.(png|jpe?g|gif|webp|mp3)$/i.test(name) && !video) || !file.obs_key) return null;
   const asset = await registerAsset(db, {
     owner: file.create_by,
     sourceType: 'cloud_file',
@@ -130,6 +140,7 @@ export async function registerCloudImage(db, file) {
     storage: 'obs',
     size: Number(file.file_size || 0),
     reconciled: true,
+    previewFormat: video ? 'video-card' : 'card',
   });
   await replaceReferences(db, 'cloud_file', file.id, [asset.id]);
   return asset;

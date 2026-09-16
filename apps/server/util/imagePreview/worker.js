@@ -16,6 +16,7 @@ export async function runSingleImagePreviewJob(
     put = putObjectBodyToObs,
     remove = deleteObjectFromObs,
     metadata = (asset) => storageAdapters[asset.storage_kind].metadata(asset.source_locator),
+    video = false,
   } = {},
 ) {
   if (!generationEnabled()) return false;
@@ -26,10 +27,10 @@ export async function runSingleImagePreviewJob(
   try {
     await connection.beginTransaction();
     const [rows] =
-      await connection.query(`SELECT j.id AS job_id,j.attempts,j.output_object_key,a.id AS artifact_id,a.file_id,
+      await connection.query(`SELECT j.id AS job_id,j.attempts,j.output_object_key,a.id AS artifact_id,a.file_id,a.format_id AS preview_format,
       i.* FROM file_preview_jobs j JOIN file_preview_artifacts a ON a.id=j.artifact_id
       JOIN image_assets i ON i.id=a.file_id AND a.source_type='image_asset'
-      WHERE a.strategy='image_thumbnail' AND a.strategy_version=${CARD_IMAGE_PROFILE.version} AND a.source_revision=i.source_version AND i.status<>'deleting' AND j.attempts<3 AND
+      WHERE a.strategy='image_thumbnail' AND a.format_id${video ? '=' : '<>'}'video-card' AND a.strategy_version=${CARD_IMAGE_PROFILE.version} AND a.source_revision=i.source_version AND i.status<>'deleting' AND j.attempts<3 AND
       ((j.status='queued' AND j.available_at<=NOW()) OR
        (j.status='processing' AND j.locked_at<DATE_SUB(NOW(),INTERVAL 2 MINUTE)))
       ORDER BY j.available_at,j.id LIMIT 1 FOR UPDATE`);
@@ -50,16 +51,17 @@ export async function runSingleImagePreviewJob(
     if (job.output_object_key) await remove(job.output_object_key);
     stage = 'source';
     if (job.source_type === 'cloud_file') {
-      const [[file]] = await connection.query(
-        'SELECT file_name FROM files WHERE id=? AND create_by=? AND obs_key=?',
-        [job.source_id, job.owner_user_id, job.source_locator],
-      );
+      const [[file]] = await connection.query('SELECT file_name FROM files WHERE id=? AND create_by=? AND obs_key=?', [
+        job.source_id,
+        job.owner_user_id,
+        job.source_locator,
+      ]);
       if (!file) throw imageError('IMAGE_SOURCE_MISSING');
       job.source_file_name = file.file_name;
     }
     const source = await read(job);
     stage = 'decode';
-    const output = source.noCover ? null : await compress(source.body);
+    const output = source.noCover ? null : source.preview || (await compress(source.body));
     const version = source.revision || hash(source.body);
     const sourceSize = source.sourceSize ?? source.body.length;
     const key = source.noCover
@@ -106,7 +108,14 @@ export async function runSingleImagePreviewJob(
         output?.body.length || 0,
         output?.width || 0,
         output?.height || 0,
-        JSON.stringify(source.noCover ? { cover: 'absent' } : { presentation: output.presentation || 'full' }),
+        JSON.stringify(
+          source.noCover
+            ? { cover: 'absent' }
+            : {
+                presentation: output.presentation || 'full',
+                ...(video ? { durationSeconds: source.durationSeconds ?? null } : {}),
+              },
+        ),
         version,
         version,
         sourceSize,
@@ -145,6 +154,10 @@ export async function runSingleImagePreviewJob(
   } finally {
     connection.release();
   }
+}
+
+export function runSingleVideoPreviewJob(workerId, options = {}) {
+  return runSingleImagePreviewJob(workerId, { ...options, video: true });
 }
 
 export async function cleanupImageAssets({

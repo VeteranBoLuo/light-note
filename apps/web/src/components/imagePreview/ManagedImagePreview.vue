@@ -18,7 +18,12 @@
     />
     <template v-else>
       <slot name="fallback">
-        <SvgIcon class="managed-image-preview__placeholder" :src="icon.toolbox.image" :size="24" aria-hidden="true" />
+        <SvgIcon
+          class="managed-image-preview__placeholder"
+          :src="mediaKind === 'video' ? icon.cloudSpace.fileIcon.video : icon.toolbox.image"
+          :size="24"
+          aria-hidden="true"
+        />
         <div class="managed-image-preview__status" role="status">
           <span>{{ originalFailed ? t('imagePreview.originalFailed') : statusLabel }}</span>
           <BButton
@@ -55,6 +60,7 @@
         </div>
       </slot>
     </template>
+    <slot name="overlay" :state="state" :has-preview="hasPreview" />
     <span
       v-if="state?.presentation === 'long_top' && hasPreview && !usingOriginal"
       class="managed-image-preview__badge"
@@ -80,9 +86,11 @@
       initial?: ImagePreviewState;
       originalUrl?: string;
       originalBytes?: number;
+      mediaKind?: 'image' | 'video';
     }>(),
     {
       alt: '',
+      mediaKind: 'image',
     },
   );
   const { t } = useI18n();
@@ -110,6 +118,7 @@
   );
   const canUseOriginal = computed(
     () =>
+      props.mediaKind !== 'video' &&
       Boolean(props.originalUrl) &&
       !originalFailed.value &&
       !['unavailable'].includes(state.value?.status || '') &&
@@ -148,7 +157,7 @@
   );
   const reason = computed(() =>
     state.value?.status === 'unsupported'
-      ? t('imagePreview.unsupported')
+      ? t(props.mediaKind === 'video' ? 'imagePreview.videoUnsupported' : 'imagePreview.unsupported')
       : failed.value
         ? t('imagePreview.network')
         : state.value?.status === 'failed'

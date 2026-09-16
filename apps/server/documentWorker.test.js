@@ -90,9 +90,11 @@ it('启动失败也释放连接池', async () => {
 
 vi.mock('./util/imagePreview/worker.js', () => ({
   runSingleImagePreviewJob: vi.fn(async () => false),
+  runSingleVideoPreviewJob: vi.fn(async () => false),
   cleanupImageAssets: vi.fn(),
 }));
 vi.mock('./util/imagePreview/runtime.js', () => ({ inspectImagePreviewRuntime: vi.fn(async () => ({ ready: true })) }));
+vi.mock('./util/imagePreview/videoCover.js', () => ({ inspectVideoPreviewRuntime: vi.fn(async () => ({ ready: true })) }));
 
 it('数据库关闭失败仍释放 Redis 连接', async () => {
   mocks.ensure.mockRejectedValueOnce(new Error('fixture startup failure'));
@@ -123,4 +125,17 @@ it('V3 AI proceeds while the document parser is still occupied', async () => {
   await vi.waitFor(() => expect(mocks.end).toHaveBeenCalledOnce());
   expect(mocks.document).toHaveBeenCalledOnce();
   expect(mocks.item.mock.calls.some(([, , options]) => options.pipeline === 'v3')).toBe(true);
+});
+
+it('does not claim video jobs when the decoder runtime is unavailable', async () => {
+  const { inspectVideoPreviewRuntime } = await import('./util/imagePreview/videoCover.js');
+  const { runSingleVideoPreviewJob } = await import('./util/imagePreview/worker.js');
+  inspectVideoPreviewRuntime.mockResolvedValueOnce({ ready: false });
+  mocks.item.mockImplementation(async () => {
+    process.emit('SIGTERM');
+    return false;
+  });
+  await import('./documentWorker.js');
+  await vi.waitFor(() => expect(mocks.end).toHaveBeenCalledOnce());
+  expect(runSingleVideoPreviewJob).not.toHaveBeenCalled();
 });

@@ -19,6 +19,12 @@ export function artifactState(artifact) {
       ? { status: 'unsupported', errorCode: null, failureKind: null, retryable: false }
       : {}),
     presentation: metadata?.presentation === 'long_top' ? 'long_top' : 'full',
+    durationSeconds:
+      typeof metadata?.durationSeconds === 'number' &&
+      Number.isFinite(metadata.durationSeconds) &&
+      metadata.durationSeconds > 0
+        ? metadata.durationSeconds
+        : null,
   };
 }
 

@@ -5,6 +5,8 @@ export declare const CARD_IMAGE_PROFILE: Readonly<{
   maxBytes: number;
 }>;
 export declare const IMAGE_PREVIEW_SOURCES: readonly ["note", "cloud_file"];
+export declare const VIDEO_COVER_EXTENSIONS: readonly string[];
+export declare function isVideoCoverFile(name: unknown): boolean;
 export type ImagePreviewSource = {
   sourceType: "note" | "cloud_file";
   sourceId: string;
@@ -29,4 +31,5 @@ export type ImagePreviewState = ImagePreviewSource & {
   failureKind?: "source" | "resource_limit" | "service" | null;
   retryable?: boolean;
   presentation?: "full" | "long_top";
+  durationSeconds?: number | null;
 };
