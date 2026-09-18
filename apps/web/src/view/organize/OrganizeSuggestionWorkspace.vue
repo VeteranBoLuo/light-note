@@ -1423,6 +1423,7 @@
     --ow-inset: #f7f8fd;
     --ow-muted: #787e95;
     --ow-purple: #6254f4;
+    --ow-blue: #1677c8;
     --ow-purple-soft: #efedff;
     --ow-red: #f54870;
     --ow-red-soft: #fff0f4;
@@ -1447,6 +1448,7 @@
     --ow-inset: #272e39;
     --ow-muted: #a1aabd;
     --ow-purple: #a49bff;
+    --ow-blue: #70bbff;
     --ow-purple-soft: #363252;
     --ow-red: #ff6c8b;
     --ow-red-soft: #482d3c;

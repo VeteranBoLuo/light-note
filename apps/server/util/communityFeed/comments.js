@@ -94,7 +94,7 @@ export async function withdrawComment({ user, input, env = process.env, db = poo
 export async function moderateComment({ user, input, env = process.env, db = pool }) {
   strictFields(input, ['requestId', 'postId', 'commentId', 'expectedRevision', 'action', 'reason']);
   if (!['approve', 'reject', 'remove', 'restore'].includes(input.action)) fail('COMMUNITY_INVALID_INPUT');
-  const reason = text(input.reason, 500);
+  const reason = text(input.reason ?? '', 500, input.action !== 'approve') || '审批通过';
   return transaction(
     { user, requestId: input.requestId, action: 'moderateComment', input, env, db, ownSafety: true },
     async (c, account) => {
@@ -340,8 +340,8 @@ export async function ownComments({ user, input = {}, env = process.env, db = po
   await access(db, user, { env, ownSafety: true });
   const { limit, before } = pageOptions(input);
   const [rows] = await db.query(
-    `SELECT c.id,c.public_id AS publicId,p.public_id AS postId,c.body,c.status,c.row_revision AS revision,parent.public_id AS replyTo FROM community_comments c JOIN community_posts p ON p.id=c.post_id LEFT JOIN community_comments parent ON parent.id=c.reply_to_comment_id WHERE c.author_id=? ${before ? 'AND c.id<?' : ''} ORDER BY c.id DESC LIMIT ?`,
-    [user.id, ...(before ? [before] : []), limit + 1],
+    `SELECT c.id,c.public_id AS publicId,p.public_id AS postId,c.body,c.status,c.row_revision AS revision,parent.public_id AS replyTo,(c.status='published' AND p.status='published' AND ${authorVisibleSql('p')} AND ${unblockedSql('p')}) AS canOpen FROM community_comments c JOIN community_posts p ON p.id=c.post_id LEFT JOIN community_comments parent ON parent.id=c.reply_to_comment_id WHERE c.author_id=? ${before ? 'AND c.id<?' : ''} ORDER BY c.id DESC LIMIT ?`,
+    [user.id, user.id, user.id, ...(before ? [before] : []), limit + 1],
   );
   return {
     items: rows.slice(0, limit).map(({ id, ...row }) => row),

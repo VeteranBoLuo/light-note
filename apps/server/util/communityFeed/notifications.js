@@ -126,8 +126,8 @@ async function deliver(db, event, userId) {
         {
           id: notificationId,
           type: 'community_feed',
-          title: review ? '有帖子待审核' : action ? '社区处理结果' : '社区有新的回复或提及',
-          content: action ? action.reason : null,
+          title: review ? '有新帖子待审核' : action ? '社区处理结果' : '社区有新的回复或提及',
+          content: action ? action.reason : review ? revision?.title || null : null,
           link: review
             ? '/community/moderation'
             : action

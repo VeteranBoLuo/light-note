@@ -7,9 +7,7 @@
           <strong
             >{{ review?.pending ?? '—' }}<small>{{ t('organizeProgress.suggestionUnit') }}</small></strong
           >
-          <p v-if="review?.outcomes">{{
-            t('organizeProgress.reviewObjects', { count: review.outcomes.review })
-          }}</p>
+          <p v-if="review?.outcomes">{{ t('organizeProgress.reviewObjects', { count: review.outcomes.review }) }}</p>
         </section>
         <section v-if="manualObjects" class="result-kpi">
           <h4>{{ outcomeLabel('manual') }}</h4>
@@ -123,7 +121,8 @@
             )
           }}</strong>
           <strong v-else
-            >{{ run.overview[name].completed }}<small> {{ t('organizeProgress.completedUnit') }}</small></strong
+            >{{ run.overview[name].completed
+            }}<small> / {{ run.overview[name].total }} {{ t('organizeProgress.completedUnit') }}</small></strong
           >
           <BProgress
             v-if="
@@ -479,7 +478,7 @@
     --outcome-color: var(--ow-red);
   }
   .segment-processing {
-    --outcome-color: var(--ow-purple);
+    --outcome-color: var(--ow-blue);
   }
   .segment-unchanged {
     --outcome-color: var(--ow-green);

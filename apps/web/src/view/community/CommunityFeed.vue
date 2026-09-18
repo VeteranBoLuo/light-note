@@ -253,9 +253,9 @@
               ><template #default="{ item }"
                 ><article
                   class="feed-post managed-post"
-                  :class="{ 'is-clickable': item.hasPublishedVersion || item.postId }"
+                  :class="{ 'is-clickable': canOpenManagedItem(item) }"
                   @click="
-                    (item.hasPublishedVersion || item.postId) &&
+                    canOpenManagedItem(item) &&
                     shouldOpenCommunityPost($event) &&
                     router.push({
                       path: '/community/posts/' + (item.postId || item.publicId),
@@ -282,7 +282,7 @@
                     >
                     <h2
                       ><RouterLink
-                        v-if="item.hasPublishedVersion || item.postId"
+                        v-if="canOpenManagedItem(item)"
                         :to="{
                           path: '/community/posts/' + (item.postId || item.publicId),
                           query: managedItemQuery(item),
@@ -535,7 +535,13 @@
         :title="
           t(
             'community.feed.' +
-              (dialog.kind === 'report' ? 'report' : dialog.kind === 'appeal' ? 'appeal' : 'reviewReason'),
+              (dialog.kind === 'report'
+                ? 'report'
+                : dialog.kind === 'appeal'
+                  ? 'appeal'
+                  : dialog.action === 'approve'
+                    ? 'approvalReason'
+                    : 'reviewReason'),
           )
         "
         width="min(480px, 92vw)"
@@ -565,7 +571,10 @@
             ><BButton
               type="primary"
               :loading="busy"
-              :disabled="Array.from(dialogBody.trim()).length > 500 || (dialog.kind !== 'report' && !dialogBody.trim())"
+              :disabled="
+                Array.from(dialogBody.trim()).length > 500 ||
+                (dialog.kind !== 'report' && dialog.action !== 'approve' && !dialogBody.trim())
+              "
               @click="submitDialog"
               >{{ t('community.feed.confirm') }}</BButton
             ><BButton :disabled="busy" @click="dialog = null">{{ t('community.feed.cancel') }}</BButton></div
@@ -832,6 +841,10 @@
     const featured = new Set((profile.value?.featuredPostItems || []).map((post: FeedPost) => post.publicId));
     return posts.value.filter((post) => !featured.has(post.publicId));
   });
+  function canOpenManagedItem(item: any) {
+    if (managementTab.value === 'posts') return Boolean(item.hasPublishedVersion) && item.status === 'published';
+    return Boolean(Number(item.canOpen));
+  }
   function managedItemQuery(item: any) {
     return {
       from: route.fullPath,
@@ -918,10 +931,11 @@
         posts.value = result.posts.items;
         cursor.value = result.posts.nextCursor;
       } else if (mode.value !== 'feed' || caps.value.feedEnabled) await readPage();
-    } catch {
+    } catch (failure: any) {
       if (current === generation) {
-        error.value = true;
-        loadFailed.value = true;
+        const unavailable = mode.value === 'detail' && failure?.code === 'COMMUNITY_CONTENT_UNAVAILABLE';
+        error.value = !unavailable;
+        loadFailed.value = !unavailable;
         detail.value = null;
         if (['feed', 'profile'].includes(mode.value)) posts.value = [];
       }

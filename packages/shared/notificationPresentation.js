@@ -21,6 +21,13 @@ export const notificationMessages = {
     opinionReplyTitle: "你的反馈收到新回复",
     communityReplyTitle: "社区有新的回复或提及",
     communityResultTitle: "社区处理结果",
+    communityTitles: {
+      review: "有新帖子待审核",
+      reply: "有人回复了你",
+      mention: "有人在帖子中提及你",
+      comment: "你的帖子收到新评论",
+      subscription: "你订阅的帖子有新评论",
+    },
   },
   "en-US": {
     ranks: {
@@ -44,6 +51,13 @@ export const notificationMessages = {
     opinionReplyTitle: "Your feedback got a reply",
     communityReplyTitle: "New community reply or mention",
     communityResultTitle: "Community review result",
+    communityTitles: {
+      review: "New post awaiting review",
+      reply: "Someone replied to you",
+      mention: "Someone mentioned you in a post",
+      comment: "New comment on your post",
+      subscription: "New comment on a subscribed post",
+    },
   },
 };
 export function notificationPresentation(item, locale = "zh-CN") {
@@ -63,7 +77,13 @@ export function notificationPresentation(item, locale = "zh-CN") {
       .replace("{level}", String(meta.level || ""))
       .replace("{name}", messages.ranks[meta.level] || meta.name || "");
   if (item.type === "opinion_reply") title = messages.opinionReplyTitle;
-  if(item.type === "community_feed") title = meta.kind === "result" ? messages.communityResultTitle : messages.communityReplyTitle;
+  if (item.type === "community_feed")
+    title =
+      meta.kind === "result"
+        ? messages.communityResultTitle
+        : Object.hasOwn(messages.communityTitles, meta.kind)
+          ? messages.communityTitles[meta.kind]
+          : title;
   return {
     title,
     content: item.type === "level_up" ? "" : String(item.content || ""),

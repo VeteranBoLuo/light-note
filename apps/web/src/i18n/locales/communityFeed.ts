@@ -293,6 +293,7 @@ export const feedZh = {
   reports: '举报',
   appeals: '申诉',
   reviewComments: '待审评论',
+  approvalReason: '批准说明（选填，不填将显示“审批通过”）',
   reviewReason: '请输入处理原因（会展示给作者）',
   reviewHint: '处理仅针对当前版本。申诉受理后，请核对内容并另行恢复。',
   profile: '公开主页',
@@ -628,6 +629,7 @@ export const feedEn: Record<keyof typeof feedZh, string> = {
   reports: 'Reports',
   appeals: 'Appeals',
   reviewComments: 'Comments in review',
+  approvalReason: 'Approval note (optional; defaults to “Approved”)',
   reviewReason: 'Enter a reason (visible to the author)',
   reviewHint:
     'Actions apply to this exact version. After accepting an appeal, review and restore the content separately.',

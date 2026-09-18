@@ -230,7 +230,7 @@ export async function moderatePost({ user, input, env = process.env, db = pool }
   strictFields(input, ['requestId', 'postId', 'expectedRevision', 'action', 'reason']);
   if (!['approve', 'reject', 'lock', 'unlock', 'remove', 'restore'].includes(input.action))
     fail('COMMUNITY_INVALID_INPUT');
-  const reason = text(input.reason, 500);
+  const reason = text(input.reason ?? '', 500, input.action !== 'approve') || '审批通过';
   return transaction(
     { user, requestId: input.requestId, action: 'moderatePost', input, env, db, ownSafety: true },
     async (c, account) => {

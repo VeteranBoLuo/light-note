@@ -111,6 +111,34 @@ let run = {
   ],
   items,
 } as SuggestionRun;
+if (params.has('pipeline')) {
+  const lane = (total: number, completed: number, queued: number) => ({
+    total,
+    completed,
+    queued,
+    partial: 0,
+    failed: 0,
+    cancelled: 0,
+    skipped: 0,
+    running: 0,
+    waiting: 0,
+    settled: true,
+  });
+  Object.assign(run, {
+    runVersion: 3,
+    overview: {
+      inspection: { total: 5, checked: 5, skipped: 0, settled: true },
+      direct: lane(5, 5, 0),
+      ai: lane(3, 1, 2),
+      review: {
+        pending: 2,
+        manualObjects: 0,
+        retryFiles: 0,
+        outcomes: { review: 2, manual: 0, unfinished: 0, processing: 2, unchanged: 1, reviewed: 0 },
+      },
+    },
+  });
+}
 request.defaults.adapter = async (config) => {
   const url = String(config.url);
   let data: unknown = [];

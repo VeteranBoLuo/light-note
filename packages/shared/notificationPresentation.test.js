@@ -35,3 +35,35 @@ describe("shared notification presentation", () => {
     ).toEqual({ title: "Your feedback got a reply", body: "reply" });
   });
 });
+
+it("distinguishes existing review, result and conversation notifications", () => {
+  for (const [kind, title] of Object.entries({
+    review: "有新帖子待审核",
+    reply: "有人回复了你",
+    mention: "有人在帖子中提及你",
+    comment: "你的帖子收到新评论",
+    subscription: "你订阅的帖子有新评论",
+    result: "社区处理结果",
+  })) {
+    expect(
+      notificationPresentation({
+        type: "community_feed",
+        title: "旧标题",
+        meta: JSON.stringify({ kind }),
+      }).title,
+    ).toBe(title);
+  }
+  expect(
+    notificationPresentation({
+      type: "community_feed",
+      title: "保留未知类型",
+      meta: { kind: "future" },
+    }).title,
+  ).toBe("保留未知类型");
+  expect(
+    notificationPresentation(
+      { type: "community_feed", meta: { kind: "review" } },
+      "en-US",
+    ).title,
+  ).toBe("New post awaiting review");
+});

@@ -118,8 +118,8 @@ export async function results({ user, input = {}, env = process.env, db = pool }
   await access(db, user, { env, ownSafety: true });
   const { limit, before } = pageOptions(input);
   const [rows] = await db.query(
-    `SELECT a.id,a.public_id AS publicId,a.action,a.reason,a.created_at AS createdAt,p.public_id AS postId,r.title,ap.public_id AS appealId,ap.status AS appealStatus,ap.result AS appealResult FROM community_moderation_actions a JOIN community_posts p ON p.id=a.post_id LEFT JOIN community_post_revisions r ON r.post_id=p.id AND r.revision_no=(SELECT MAX(r2.revision_no) FROM community_post_revisions r2 WHERE r2.post_id=p.id) LEFT JOIN community_appeals ap ON ap.action_id=a.id AND ap.author_id=? WHERE a.subject_id=? AND NOT (a.action='approve' AND a.actor_id=a.subject_id AND a.reason='Root self-publication') ${before ? 'AND a.id<?' : ''} ORDER BY a.id DESC LIMIT ?`,
-    [user.id, user.id, ...(before ? [before] : []), limit + 1],
+    `SELECT a.id,a.public_id AS publicId,a.action,a.reason,a.created_at AS createdAt,p.public_id AS postId,(p.status='published' AND ${authorVisibleSql('p')} AND ${unblockedSql('p')}) AS canOpen,r.title,ap.public_id AS appealId,ap.status AS appealStatus,ap.result AS appealResult FROM community_moderation_actions a JOIN community_posts p ON p.id=a.post_id LEFT JOIN community_post_revisions r ON r.post_id=p.id AND r.revision_no=(SELECT MAX(r2.revision_no) FROM community_post_revisions r2 WHERE r2.post_id=p.id) LEFT JOIN community_appeals ap ON ap.action_id=a.id AND ap.author_id=? WHERE a.subject_id=? AND p.status<>'deleted' AND NOT (a.action='approve' AND a.actor_id=a.subject_id AND a.reason='Root self-publication') ${before ? 'AND a.id<?' : ''} ORDER BY a.id DESC LIMIT ?`,
+    [user.id, user.id, user.id, user.id, ...(before ? [before] : []), limit + 1],
   );
   return {
     items: rows.slice(0, limit).map(({ id, ...r }) => r),

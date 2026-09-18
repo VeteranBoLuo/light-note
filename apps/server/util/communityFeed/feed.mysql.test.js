@@ -361,6 +361,8 @@ describe.skipIf(!socketPath)('P2 real database boundaries', () => {
       [ROOT.id],
     );
     expect(alerts).toHaveLength(1);
+    expect(alerts[0].title).toBe('有新帖子待审核');
+    expect(alerts[0].content).toBe('怎样整理资料？');
     expect(alerts[0].link).toBe('/community/moderation');
     expect(
       (
@@ -504,6 +506,42 @@ describe.skipIf(!socketPath)('P2 real database boundaries', () => {
       input({ postId: p.publicId, expectedRevision: edit.revision, action: 'approve', reason: '新版通过' }),
     );
     expect((await postDetail({ user: B, id: p.publicId, env, db })).body).toBe('待审核的新内容');
+  });
+  it('approval accepts an omitted note and records a default while rejection requires a reason', async () => {
+    const p = await run(submitPost, A, postInput());
+    await expect(
+      run(
+        moderatePost,
+        ROOT,
+        input({ postId: p.publicId, expectedRevision: p.revision, action: 'reject', reason: '  ' }),
+      ),
+    ).rejects.toMatchObject({ code: 'COMMUNITY_INVALID_INPUT' });
+    await run(moderatePost, ROOT, input({ postId: p.publicId, expectedRevision: p.revision, action: 'approve' }));
+    expect((await postDetail({ user: B, id: p.publicId, env, db })).status).toBe('published');
+    const [actions] = await db.query(
+      "SELECT reason FROM community_moderation_actions WHERE action='approve' AND subject_id=?",
+      [A.id],
+    );
+    expect(actions.map((x) => x.reason)).toContain('审批通过');
+  });
+  it('hides deleted post results and disables unavailable comment destinations', async () => {
+    const p = await published();
+    const comment = await run(createComment, B, input({ postId: p.publicId, body: 'reply' }));
+    expect((await ownComments({ user: B, env, db })).items[0].canOpen).toBe(1);
+    await run(
+      withdrawComment,
+      B,
+      input({
+        postId: p.publicId,
+        commentId: comment.publicId,
+        expectedRevision: (await ownComments({ user: B, env, db })).items[0].revision,
+      }),
+    );
+    expect((await ownComments({ user: B, env, db })).items[0].canOpen).toBe(0);
+    expect((await results({ user: A, env, db })).items[0].canOpen).toBe(1);
+    await run(deletePost, A, input({ postId: p.publicId, expectedRevision: p.revision }));
+    expect((await results({ user: A, env, db })).items).toEqual([]);
+    expect((await ownComments({ user: B, env, db })).items[0].canOpen).toBe(0);
   });
   it('same request has one result under concurrency and cannot be reused with another body', async () => {
     const body = postInput();

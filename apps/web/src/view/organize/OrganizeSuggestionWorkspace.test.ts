@@ -1498,6 +1498,8 @@ it('V3 review counts survive a tab change and failures are not duplicated or col
   api.listRuns.mockResolvedValue(ok([row]));
   api.getRun.mockResolvedValue(ok(row));
   await mount();
+  expect(host.querySelector('[data-lane="direct"] strong').textContent).toContain('23 / 23');
+  expect(host.querySelector('[data-lane="ai"] strong').textContent).toContain('17 / 19');
   const summary = host.querySelector('.run-review').textContent;
   const tab = [...host.querySelectorAll('[role="tab"]')].find((el) =>
     el.textContent.includes('笔记'),
