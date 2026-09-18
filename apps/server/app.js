@@ -1,3 +1,4 @@
+import { startCommunityFeedScheduler } from './util/communityFeed/scheduler.js';
 import { ensureBookmarkArchiveSchema } from './util/bookmarkArchiveJobs.js';
 import express from 'express';
 import bodyParser from 'body-parser';
@@ -288,6 +289,7 @@ function scheduleGrowthNudges() {
   console.log(`[成长提醒] 定时已注册,首次执行: ${next.toLocaleString('zh-CN')}`);
 }
 scheduleGrowthNudges();
+startCommunityFeedScheduler();
 startTodoReminderScheduler();
 if (getTodoPlanFeatureState().schedulerEnabled) {
   startTodoReminderV2Scheduler();

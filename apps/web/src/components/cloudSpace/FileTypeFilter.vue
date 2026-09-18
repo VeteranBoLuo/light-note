@@ -3,11 +3,13 @@
     <BPopover v-model:open="showFilterMenu" trigger="click" placement="bottom-right">
       <b-button
         class="filter-button"
-        :class="{ 'filter-button--active': showFilterMenu }"
+        :class="{ 'filter-button--active': showFilterMenu || cloud.pendingOnly }"
         v-click-log="{ module: '云空间', operation: '切换文件类型筛选' }"
       >
         <svg-icon :src="icon.cloudSpace.filter" class="filter-icon" />
-        <span class="filter-button-label filter-button-label--desktop">{{ $t('cloudSpace.fileType') }}</span>
+        <span class="filter-button-label filter-button-label--desktop">{{
+          cloud.pendingOnly ? $t('inbox.pendingBadge') : $t('cloudSpace.fileType')
+        }}</span>
         <span class="filter-button-label filter-button-label--mobile">{{ filterSummary }}</span>
         <span v-if="selectedCount > 0 && selectedCount < fileTypes.length" class="filter-badge">
           {{ selectedCount }}
@@ -17,6 +19,14 @@
 
       <template #content>
         <div class="filter-menu">
+          <PendingFilterSection v-model="cloud.pendingOnly">
+            <template #actions>
+              <BButton class="clear-action" @click="clearFilters">{{ $t('note.clearFilter') }}</BButton>
+            </template>
+          </PendingFilterSection>
+          <div class="filter-section-heading">
+            <span>{{ $t('cloudSpace.fileType') }}</span>
+          </div>
           <div class="filter-header">
             <BCheckbox
               :indeterminate="indeterminate"
@@ -56,6 +66,7 @@
 <script lang="ts" setup>
   import { computed, ref, watch } from 'vue';
   import icon from '@/config/icon.ts';
+  import PendingFilterSection from '@/components/inbox/PendingFilterSection.vue';
   import { cloudSpaceStore } from '@/store';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import { useI18n } from 'vue-i18n';
@@ -84,10 +95,16 @@
   const indeterminate = ref(false);
   const selectedCount = computed(() => cloud.typeCheckValue.length);
   const filterSummary = computed(() => {
+    if (cloud.pendingOnly) return t('inbox.pendingBadge');
     if (selectedCount.value === fileTypes.value.length) return t('cloudSpace.allFileTypes');
     if (selectedCount.value === 0) return t('cloudSpace.noFileTypes');
     return t('cloudSpace.selectedFileTypes', { count: selectedCount.value });
   });
+
+  function clearFilters() {
+    cloud.pendingOnly = false;
+    cloud.typeCheckValue = [...CLOUD_FILE_CATEGORY_ORDER];
+  }
 
   const toggleSelectAll = (e) => {
     if (e.target.checked) {
@@ -97,17 +114,30 @@
       indeterminate.value = false;
     }
   };
-  watch(
-    () => cloud.typeCheckValue,
-    (val) => {
-      indeterminate.value = !!val.length && val.length < fileTypes.value.length;
-      allTypesSelected.value = val.length === fileTypes.value.length;
-      cloud.queryFieldList();
-    },
-  );
+  watch([() => cloud.typeCheckValue, () => cloud.pendingOnly], ([val]) => {
+    indeterminate.value = !!val.length && val.length < fileTypes.value.length;
+    allTypesSelected.value = val.length === fileTypes.value.length;
+    cloud.queryFieldList();
+  });
 </script>
 
 <style scoped>
+  .filter-section-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 8px 4px;
+    color: var(--desc-color);
+    font-size: 12px;
+  }
+  .clear-action {
+    height: 28px;
+    padding: 0 4px;
+    border: 0;
+    background: transparent;
+    color: var(--resource-file-color);
+    font-size: 12px;
+  }
   .filter-container {
     display: inline-block;
     position: relative;
@@ -134,7 +164,7 @@
   }
 
   .filter-button--active {
-    border-color: color-mix(in srgb, var(--resource-file-color, #ff8a00) 42%, transparent);
+    border-color: var(--resource-file-color);
     color: var(--resource-file-color, #ff8a00);
     background: color-mix(in srgb, var(--resource-file-color, #ff8a00) 8%, var(--menu-body-bg-color));
     box-shadow: 0 0 0 2px color-mix(in srgb, var(--resource-file-color, #ff8a00) 11%, transparent);
@@ -177,8 +207,9 @@
   }
 
   .filter-menu {
-    width: 214px;
-    max-height: min(340px, calc(100dvh - 24px));
+    width: 248px;
+    max-height: min(440px, calc(100vh - 24px));
+    max-height: min(440px, calc(100dvh - 24px));
     padding: 6px;
     box-sizing: border-box;
     display: flex;
@@ -193,8 +224,13 @@
     justify-content: space-between;
     align-items: center;
     margin-bottom: 8px;
-    padding: 2px 8px 10px 4px;
+    padding: 2px 8px 10px;
     border-bottom: 1px solid var(--noteType-border-color);
+  }
+
+  .filter-header > .b-checkbox,
+  .filter-menu :deep(.pending-filter-section > .b-checkbox) {
+    padding-inline: 0;
   }
 
   .select-all-label {
@@ -230,9 +266,8 @@
   }
 
   .filter-options {
-    display: flex;
-    flex-direction: column;
-    flex-wrap: nowrap;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 4px;
     min-height: 0;
     max-height: none;
@@ -244,7 +279,7 @@
   .filter-option {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 6px;
     height: 34px;
     padding: 0 8px;
     border-radius: 7px;
@@ -318,6 +353,7 @@
 
     .filter-menu {
       width: min(320px, calc(100vw - 32px));
+      max-height: min(420px, calc(100vh - 24px));
       max-height: min(420px, calc(100dvh - 24px));
       box-sizing: border-box;
       overflow: hidden;
@@ -335,7 +371,7 @@
 
     .filter-option {
       min-width: 0;
-      padding: 0 6px;
+      padding: 0 8px;
     }
 
     .filter-option :deep(span:last-child) {

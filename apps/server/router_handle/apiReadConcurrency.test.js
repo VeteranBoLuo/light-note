@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ query: vi.fn(), getConnection: vi.fn() }));
+const mocks = vi.hoisted(() => ({ query: vi.fn(), getConnection: vi.fn(), schemaReady: vi.fn() }));
 vi.mock('../db/index.js', () => ({ default: { query: mocks.query, getConnection: mocks.getConnection } }));
+vi.mock('../util/communityFeed/schema.js', () => ({ communityFeedSchemaReady: mocks.schemaReady }));
 vi.mock('../util/obsClient.js', () => ({
   default: {},
   bucketBaseUrl: 'https://fixture.invalid',
@@ -29,6 +30,7 @@ const response = () => ({ send: vi.fn() });
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.schemaReady.mockResolvedValue(false);
 });
 
 describe('读接口独立回填与完成边界', () => {
@@ -48,7 +50,7 @@ describe('读接口独立回填与完成边界', () => {
     );
     const res = response(),
       done = list(request(), res);
-    expect(mocks.query).toHaveBeenCalledTimes(3);
+    await vi.waitFor(() => expect(mocks.query).toHaveBeenCalledTimes(3));
     total.resolve([[{ total: 1 }]]);
     unread.resolve([[{ unreadTotal: 1 }]]);
     items.resolve([[{ id: 'notice', type: 'todo_reminder', meta: { todoId: 'todo' } }]]);
@@ -81,6 +83,7 @@ describe('读接口独立回填与完成边界', () => {
     const res = response(),
       done = list(req, res);
     await vi.waitFor(() => expect(c.query).toHaveBeenCalledTimes(3));
+    expect(mocks.schemaReady).toHaveBeenCalledWith(c);
     expect(c.query.mock.calls.some(([sql]) => sql.includes('COUNT(*)'))).toBe(false);
     page.reject(Object.assign(new Error('fixture'), { code: 'FIXTURE_FAILURE' }));
     await done;

@@ -212,3 +212,96 @@ describe('activity read model', () => {
     ).rejects.toMatchObject({ code: 'ADMIN_LIST_CURSOR_INVALID' });
   });
 });
+
+describe('daily activity history', () => {
+  it('queries a historical full day, including activity later than the current time of day', async () => {
+    const db = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce(metadata)
+        .mockResolvedValueOnce([[{ total: 2 }]])
+        .mockResolvedValueOnce([
+          [{ id: 'late', firstActiveAt: '2026-09-07 23:00:00.000000', lastActiveAt: '2026-09-07 23:59:00.000000' }],
+        ]),
+    };
+    const result = await queryActiveUsers({ actorId: 'root', date: '2026-09-07', hideInternal: false, now, db });
+    expect(result).toMatchObject({
+      date: '2026-09-07',
+      total: 2,
+      snapshotAt: '2026-09-07 23:59:59.999',
+      partialDate: false,
+    });
+    expect(db.query.mock.calls[1][1]).toEqual(['2026-09-07', '2026-09-07 23:59:59.999']);
+    expect(result.items[0].id).toBe('late');
+  });
+  it.each(['2026-09-09', '2026-02-30', '', '2026-9-7', null, ['2026-09-07']])(
+    'rejects invalid/future date %j',
+    async (date) => {
+      const db = { query: vi.fn().mockResolvedValue(metadata) };
+      await expect(queryActiveUsers({ actorId: 'root', date, now, db })).rejects.toMatchObject({
+        code: 'ACTIVITY_DATE_INVALID',
+      });
+      expect(db.query).toHaveBeenCalledTimes(1);
+    },
+  );
+  it('pre-collection history is unknown, while rollout day is partial', async () => {
+    const db = { query: vi.fn().mockResolvedValue(metadata) };
+    expect(await queryActiveUsers({ actorId: 'root', date: '2026-07-31', now, db })).toMatchObject({
+      total: null,
+      historyUnavailable: true,
+      items: [],
+    });
+    expect(db.query).toHaveBeenCalledTimes(1);
+    db.query
+      .mockReset()
+      .mockResolvedValueOnce(metadata)
+      .mockResolvedValueOnce([[{ total: 0 }]])
+      .mockResolvedValueOnce([[]]);
+    expect(await queryActiveUsers({ actorId: 'root', date: '2026-08-01', now, db })).toMatchObject({
+      total: 0,
+      partialDate: true,
+      historyUnavailable: false,
+    });
+  });
+  it('returns bounded daily points, distinguishes missing from zero and marks incomplete days', async () => {
+    const db = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce([[{ startedAt: '2026-09-05 08:00:00.000000' }]])
+        .mockResolvedValueOnce([
+          [
+            { date: '2026-09-05', total: 4 },
+            { date: '2026-09-08', total: 2 },
+          ],
+        ])
+        .mockResolvedValueOnce([[{ total: 2 }]])
+        .mockResolvedValueOnce([[]]),
+    };
+    const result = await queryActiveUsers({ actorId: 'root', trendDays: 7, now, db });
+    expect(result.trend).toEqual([
+      { date: '2026-09-02', total: null, partial: false },
+      { date: '2026-09-03', total: null, partial: false },
+      { date: '2026-09-04', total: null, partial: false },
+      { date: '2026-09-05', total: 4, partial: true },
+      { date: '2026-09-06', total: 0, partial: false },
+      { date: '2026-09-07', total: 0, partial: false },
+      { date: '2026-09-08', total: 2, partial: true },
+    ]);
+    expect(db.query.mock.calls[1][1]).toEqual(['2026-09-02', '2026-09-08', '2026-09-08 10:30:00.000', 'root', 'test']);
+    expect(db.query.mock.calls[1][0].timeout).toBe(5000);
+  });
+  it('rejects unbounded ranges and cursors belonging to another day', async () => {
+    const db = { query: vi.fn().mockResolvedValue(metadata) };
+    await expect(queryActiveUsers({ actorId: 'root', trendDays: 365, now, db })).rejects.toMatchObject({
+      code: 'ACTIVITY_DATE_INVALID',
+    });
+    const snapshotAt = '2026-09-07 23:59:59.999';
+    const cursor = encodeAdminListCursor(`active-users:last-active:root:true:${snapshotAt}`, {
+      value: '2026-09-07 20:00:00.000',
+      id: 'u1',
+    });
+    await expect(
+      queryActiveUsers({ actorId: 'root', date: '2026-09-06', snapshotAt, cursor, now, db }),
+    ).rejects.toMatchObject({ code: 'ADMIN_LIST_CURSOR_INVALID' });
+  });
+});

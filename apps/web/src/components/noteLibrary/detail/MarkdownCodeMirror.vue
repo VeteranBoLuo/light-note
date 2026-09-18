@@ -260,7 +260,19 @@
         editorSetup,
         markdownCodeLanguageControls(appContext),
         // 放在默认 keymap 之上，确保 ⌘/Ctrl+B 等编辑命令不落到浏览器默认行为。
-        Prec.highest(keymap.of(markdownShortcutBindings)),
+        Prec.highest(
+          keymap.of([
+            {
+              key: 'Mod-y',
+              preventDefault: true,
+              run: (view) => {
+                if (!props.readonly) redo(view);
+                return true;
+              },
+            },
+            ...markdownShortcutBindings,
+          ]),
+        ),
         markdown({ extensions: [GFM] }),
         phrasesCompartment.of(EditorState.phrases.of(searchPhrases(props.locale))),
         // 所有端都按编辑区宽度软换行；只改变视觉排版，不改写 Markdown 源码中的真实换行。

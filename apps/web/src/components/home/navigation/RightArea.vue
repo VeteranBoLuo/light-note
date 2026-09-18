@@ -4,7 +4,6 @@
     :class="{ 'phone-top-menu': bookmark.isMobile }"
     :style="{ marginLeft: 'auto', gap: bookmark.isMobile ? '15px' : '5px' }"
   >
-    <CampaignEntry v-if="!bookmark.isMobile" />
     <GlobalSearch />
     <BTooltip v-if="showQuickCapture" :title="$t('inbox.quickCapture')">
       <BButton
@@ -20,7 +19,7 @@
           全部待整理），点开却只有创建表单，数字无从解释。待处理提醒改由「待办」导航角标
           （逾期 + 今天）和弹框内的上下文入口承担。
         -->
-        <svg-icon size="21" :src="icon.common.add" />
+        <svg-icon size="26" :src="icon.common.add" />
       </BButton>
     </BTooltip>
     <BTooltip v-if="!bookmark.isMobile" :title="$t('navigation.moreEntries')">
@@ -70,7 +69,6 @@
   import { useRoute } from 'vue-router';
   import { recordOperation } from '@/api/commonApi.ts';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
-  import CampaignEntry from '@/components/support/CampaignEntry.vue';
   import GlobalSearch from '@/components/search/GlobalSearch.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import { inboxStore } from '@/store';

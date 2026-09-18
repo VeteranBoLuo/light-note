@@ -9,7 +9,7 @@
         @click="open"
         v-click-log="{ module: '全局搜索', operation: '打开全局搜索' }"
       >
-        <SvgIcon :src="icon.navigation.search" size="20" />
+        <SvgIcon :src="icon.navigation.search" size="26" />
       </BButton>
     </BTooltip>
 

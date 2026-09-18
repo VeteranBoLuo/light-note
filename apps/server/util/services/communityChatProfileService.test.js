@@ -160,6 +160,7 @@ describe('communityChatProfileService', () => {
                 authorAccountRole: 'root',
                 authorExp: 50_000,
                 featuredAchievements: '[]',
+                showCommunityTenure: 0,
               }),
             ],
             [],
@@ -176,10 +177,12 @@ describe('communityChatProfileService', () => {
       db,
     });
     expect(result).toMatchObject({
+      communityTenurePreviewLabel: expect.stringContaining('加入轻笺'),
+      showCommunityTenure: true,
       featuredAchievementKeys: [],
       usesDefaultFeaturedAchievements: false,
       revision: 0,
-      publicPreview: { achievements: [], achievementCount: 4, hasMoreAchievements: true },
+      publicPreview: { communityTenureLabel: expect.stringContaining('加入轻笺'), achievements: [], achievementCount: 4, hasMoreAchievements: true },
     });
   });
 

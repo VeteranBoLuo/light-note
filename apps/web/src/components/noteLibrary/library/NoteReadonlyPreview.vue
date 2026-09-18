@@ -42,6 +42,16 @@
       </div>
 
       <div class="note-readonly-preview__actions">
+        <BCheckbox
+          v-if="batchMode"
+          class="note-readonly-preview__select"
+          controlled
+          :checked="selected"
+          :disabled="selectionDisabled"
+          @change="emit('selectNote', $event)"
+        >
+          {{ t(selected ? 'note.pageSelected' : 'note.selectThisPage') }}
+        </BCheckbox>
         <BButton type="primary" class="note-readonly-preview__edit" @click="emit('edit')">
           <SvgIcon :src="icon.card_edit" size="16" aria-hidden="true" />
           {{ t('common.edit') }}
@@ -54,7 +64,15 @@
       </div>
     </header>
 
-    <div ref="previewScrollRef" v-auto-scrollbar class="note-readonly-preview__scroll">
+    <div
+      ref="previewScrollRef"
+      v-auto-scrollbar
+      class="note-readonly-preview__scroll"
+      @wheel.passive="releaseOutlineNavigation"
+      @touchstart.passive="releaseOutlineNavigation"
+      @pointerdown="releaseOutlineNavigation"
+      @keydown="handleOutlineNavigationKey"
+    >
       <div v-if="loading" class="note-readonly-preview__loading">
         <BLoading inline loading :title="t('common.loading')" />
       </div>
@@ -140,6 +158,7 @@
   import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
+  import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
@@ -201,6 +220,9 @@
   const props = withDefaults(
     defineProps<{
       noteId: string;
+      batchMode?: boolean;
+      selected?: boolean;
+      selectionDisabled?: boolean;
       seed?: Record<string, any> | null;
       breadcrumb?: PreviewBreadcrumbItem[];
       childCount?: number;
@@ -216,6 +238,7 @@
     },
   );
   const emit = defineEmits<{
+    selectNote: [checked: boolean];
     close: [];
     openPage: [page: PreviewBreadcrumbItem];
     edit: [];
@@ -251,6 +274,25 @@
   const previewHeadingElements = new Map<string, HTMLElement>();
   let outlineSpyRoot: HTMLElement | null = null;
   let outlineSpyFrame = 0;
+  let outlineNavigationActive = false;
+  let outlineNavigationTimer = 0;
+
+  function releaseOutlineNavigation() {
+    outlineNavigationActive = false;
+    window.clearTimeout(outlineNavigationTimer);
+  }
+
+  function handleOutlineNavigationKey(event: KeyboardEvent) {
+    if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(event.key)) {
+      releaseOutlineNavigation();
+    }
+  }
+
+  function deferOutlineNavigationRelease() {
+    window.clearTimeout(outlineNavigationTimer);
+    // 滚动停止后解除锁定；兼容没有 scrollend 的 WebView。
+    outlineNavigationTimer = window.setTimeout(releaseOutlineNavigation, 200);
+  }
   let drawingCenterFrame = 0;
 
   const { tags: previewTags } = useNoteTags(
@@ -412,12 +454,14 @@
   }
 
   function clearPreviewOutline() {
+    releaseOutlineNavigation();
     previewHeadingElements.clear();
     emit('outlineChange', []);
     emit('outlineActiveChange', null);
   }
 
   function updateActivePreviewHeading() {
+    if (outlineNavigationActive) return;
     const root = previewScrollRef.value;
     if (!root || !previewHeadingElements.size) {
       emit('outlineActiveChange', null);
@@ -434,6 +478,10 @@
   }
 
   function scheduleActivePreviewHeading() {
+    if (outlineNavigationActive) {
+      deferOutlineNavigationRelease();
+      return;
+    }
     if (outlineSpyFrame) return;
     outlineSpyFrame = window.requestAnimationFrame(() => {
       outlineSpyFrame = 0;
@@ -600,12 +648,15 @@
       const heading = previewHeadingElements.get(target.id);
       const root = previewScrollRef.value;
       if (!heading || !root) return;
+      outlineNavigationActive = true;
+      deferOutlineNavigationRelease();
       emit('outlineActiveChange', target.id);
       scrollIntoContainer(root, heading, 8);
     },
   );
 
   onBeforeUnmount(() => {
+    releaseOutlineNavigation();
     requestSeq += 1;
     resourceResolveSeq += 1;
     if (outlineSpyFrame) window.cancelAnimationFrame(outlineSpyFrame);
@@ -752,6 +803,19 @@
   .note-readonly-preview__actions {
     flex: 0 0 auto;
     gap: 8px;
+  }
+
+  .note-readonly-preview__select {
+    min-height: 36px;
+    padding: 0 10px;
+    border: 1px solid var(--card-border-color);
+    border-radius: 8px;
+    white-space: nowrap;
+    box-sizing: border-box;
+
+    &.is-checked {
+      border-color: var(--primary-color);
+    }
   }
 
   .note-readonly-preview__edit {

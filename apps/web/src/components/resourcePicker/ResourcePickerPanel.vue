@@ -309,6 +309,8 @@
       batchLabel?: string;
       selectAllMatching?: boolean;
       maxSelection?: number;
+      /** 在展示候选前校验业务支持范围；失败沿用搜索重试。 */
+      filterItems?: (items: ResourcePickerItem[]) => Promise<ResourcePickerItem[]>;
       /** 锁定搜索与选择操作，但保留当前结果供用户查看。 */
       disabled?: boolean;
     }>(),
@@ -380,6 +382,7 @@
     collectMatching,
     reset,
   } = useResourcePickerSearch({
+    filterItems: props.filterItems,
     allowedTypes: () => props.allowedTypes,
     fileExtensions: () => props.fileExtensions,
     excludeKeys: () => props.excludeKeys || [],

@@ -112,6 +112,7 @@
   import { isDefinitiveAuthResultStatus, type ApplicationAuthStatus } from '@/utils/authBootstrap.ts';
   import { onSystemThemeChange } from '@/utils/systemTheme';
   import { MOBILE_LAYOUT_CONTEXT } from '@/composables/useMobileLayout';
+  import { communityChatWorkspaceActive } from '@/composables/useCommunityChatActivation';
   import { useCommunityChatUnreadRuntime } from '@/composables/useCommunityChatUnreadRuntime';
   import { nudgeVisible } from '@/composables/guestNudge';
   import { usePwaInstall } from '@/composables/usePwaInstall';
@@ -247,7 +248,7 @@
   useCommunityChatUnreadRuntime({
     userId: computed(() => user.id),
     userRole: computed(() => user.role),
-    realtimeActive: computed(() => router.currentRoute.value.name !== 'communityChat'),
+    realtimeActive: computed(() => !communityChatWorkspaceActive.value),
   });
   watch(
     mobileBottomNavActive,

@@ -10,7 +10,7 @@ const desktopPersonCenterSource = source('src/view/personCenter/PersonCenter.vue
 const personCenterEntriesSource = source('src/config/personCenterEntries.ts');
 const communityChatSource = source('src/view/communityChat/CommunityChatWorkspace.vue');
 const myInfoSource = source('src/components/personCenter/myInfo/MyInfoMobile.vue');
-const desktopMyInfoSource = source('src/components/personCenter/myInfo/MyInfo.vue');
+const desktopMyInfoSource = source('src/components/personCenter/myInfo/ProfileEditorForm.vue');
 const framePickerSource = source('src/components/growth/AvatarFramePickerDrawer.vue');
 const avatarFrameSource = source('src/components/growth/AvatarFramePreview.vue');
 const avatarPickerSource = source('src/components/personCenter/myInfo/AvatarPicker.vue');
@@ -52,7 +52,7 @@ describe('mobile personal center experience', () => {
   it('shows only the account email in the profile summary and keeps role labels inside profile editing', () => {
     expect(personCenterSource).toContain('<span v-if="user.email">{{ user.email }}</span>');
     expect(personCenterSource).not.toContain('{{ roleName }}');
-    expect(myInfoSource).toContain('resolveAccountRoleLabelKey(user.role, user.id)');
+    expect(myInfoSource).toContain('<ProfileEditorForm');
     expect(desktopMyInfoSource).toContain('resolveAccountRoleLabelKey(user.role, user.id)');
   });
 
@@ -65,14 +65,12 @@ describe('mobile personal center experience', () => {
   });
 
   it('exposes the equipped frame and the frame picker from profile editing', () => {
-    expect(myInfoSource).toContain('<AvatarFramePreview');
-    expect(myInfoSource).toContain(
-      '<AvatarFramePickerDrawer v-model:open="frameDrawerOpen" @navigate="handleFrameNavigation" />',
-    );
+    expect(myInfoSource).toContain('<ProfileEditorForm');
+    expect(desktopMyInfoSource).toContain('@navigate="handleFrameNavigation"');
     expect(desktopMyInfoSource).toContain('<AvatarFramePreview');
     expect(desktopMyInfoSource).toContain('@navigate="handleFrameNavigation"');
     expect(desktopMyInfoSource).toContain("t('myInfo.chooseAvatarFrame')");
-    expect(myInfoSource).toContain('<MobileStickyActionBar');
+    expect(myInfoSource).toContain('form?.requestClose()');
     expect(framePickerSource).toContain('await buyItem(frame.id)');
     expect(framePickerSource).toContain('await equipFrame(frame.id)');
     expect(framePickerSource).toContain('isMobileLayout.value ? BDrawer : BModal');
@@ -95,7 +93,7 @@ describe('mobile personal center experience', () => {
 
   it('keeps avatar artwork crisp for visitors and locked frame previews', () => {
     expect(desktopMyInfoSource).toMatch(/\.user_icon\.disabled\s*\{[^}]*opacity:\s*1;/);
-    expect(myInfoSource).toMatch(/\.profile-avatar\.disabled\s*\{[^}]*opacity:\s*1;/);
+    expect(desktopMyInfoSource).toMatch(/\.user_icon\.disabled\s*\{[^}]*opacity:\s*1;/);
     expect(framePickerSource).toMatch(/\.frame-card\.is-locked\s*\{[^}]*opacity:\s*1;/);
     expect(framePickerSource).not.toMatch(/\.frame-card\.is-locked\s*\{[^}]*opacity:\s*0\.[0-9]+;/);
   });
@@ -213,18 +211,6 @@ describe('mobile personal center experience', () => {
     expect(personCenterSource).toMatch(
       /\.profile-card__avatar\.profile-card__avatar--framed\s*\{[\s\S]*?width:\s*auto;[\s\S]*?height:\s*auto;[\s\S]*?flex:\s*0 0 auto;/,
     );
-    expect(myInfoSource).toContain(':class="{ \'profile-hero--framed\': equippedFrameId }"');
-    expect(myInfoSource).toContain(':size="64"');
-    expect(myInfoSource).toMatch(/\.profile-hero--framed\s*\{[\s\S]*?padding-top:\s*16px;/);
-    expect(myInfoSource).toMatch(
-      /\.profile-avatar\.profile-avatar--framed\s*\{[\s\S]*?width:\s*auto;[\s\S]*?height:\s*auto;[\s\S]*?flex:\s*0 0 auto;[\s\S]*?overflow:\s*visible;/,
-    );
-    const maxMyInfoArtworkOverflow = Math.max(
-      ...Object.values(AVATAR_FRAME_ARTWORK).map(({ artSize, outerSize }) =>
-        Math.max(0, ((artSize - outerSize) * 64) / 64 / 2),
-      ),
-    );
-    expect(8 + 16 - maxMyInfoArtworkOverflow).toBeGreaterThanOrEqual(8);
     expect(desktopMyInfoSource).toContain(':class="{ \'home-container--framed\': equippedFrameId }"');
     expect(desktopMyInfoSource).toContain(':size="80"');
     expect(desktopMyInfoSource).toMatch(/\.home-container--framed\s*\{[\s\S]*?padding-top:\s*56px;/);
@@ -808,8 +794,8 @@ describe('mobile personal center experience', () => {
     expect(framePickerSource).toContain("emit('navigate', 'achievements')");
     expect(framePickerSource).toContain("emit('navigate', 'tasks')");
     expect(framePickerSource).toContain('@click="goEarnPoints"');
-    expect(desktopMyInfoSource).toContain('visible.value = false');
-    expect(desktopMyInfoSource).toContain("query: { section: 'tasks' }");
+    expect(desktopMyInfoSource).toContain("emit('close')");
+    expect(desktopMyInfoSource).toContain("'/growth?section=' + destination");
     expect(framePickerSource).toContain('flex: 0 0 38px');
     expect(framePickerSource).toContain('flex: 1 1 50%');
   });

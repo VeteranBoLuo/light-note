@@ -14,7 +14,7 @@
       :class="{ active: activeIndex === index }"
       :style="{ '--toc-indent': `${headingIndent(heading.level)}px` }"
       :aria-current="activeIndex === index ? 'location' : undefined"
-      @click="emit('select', index)"
+      @click="selectHeading(index)"
       v-click-log="{ module: '笔记', operation: `点击目录【${heading.text}】` }"
     >
       <span class="toc-marker" aria-hidden="true" />
@@ -55,6 +55,12 @@
   const { t } = useI18n();
   const rootRef = ref<HTMLElement | null>(null);
   const itemRefs = new Map<number, HTMLElement>();
+  let selectedIndex: number | null = null;
+
+  function selectHeading(index: number) {
+    selectedIndex = index;
+    emit('select', index);
+  }
   const minimumHeadingLevel = computed(() =>
     props.headings.length ? Math.min(...props.headings.map((heading) => Number(heading.level) || 1)) : 1,
   );
@@ -82,7 +88,28 @@
 
   watch(
     () => props.activeIndex,
-    () => void scrollActiveIntoView('auto'),
+    async (index, previousIndex) => {
+      // 点击定位只更新高亮，保留用户手动滚动的大纲位置。
+      if (index === selectedIndex) return;
+      selectedIndex = null;
+      await nextTick();
+      if (index == null || props.activeIndex !== index) return;
+      const root = rootRef.value;
+      const item = itemRefs.get(index);
+      if (!root || !item) return;
+      const direction = previousIndex == null || index >= previousIndex ? 1 : -1;
+      const neighbor = itemRefs.get(index + direction);
+      // 按实际行高预留阅读方向的相邻标题，移动端换行时也适用。
+      const itemRect = item.getBoundingClientRect();
+      const neighborRect = neighbor?.getBoundingClientRect();
+      const span = neighborRect
+        ? Math.max(itemRect.bottom, neighborRect.bottom) - Math.min(itemRect.top, neighborRect.top)
+        : Infinity;
+      const rootRect = root.getBoundingClientRect();
+      const activeBeyondOppositeEdge = direction > 0 ? itemRect.top < rootRect.top : itemRect.bottom > rootRect.bottom;
+      const target = neighbor && span <= rootRect.height && !activeBeyondOppositeEdge ? neighbor : item;
+      scrollNearestIntoContainer(root, target, 'auto');
+    },
   );
 
   defineExpose({ scrollActiveIntoView });

@@ -144,13 +144,13 @@ describe('Navigation', () => {
     const host = await mountNavigation();
     const entry = host.querySelector<HTMLButtonElement>('#nav-community-entry');
 
-    expect(entry?.textContent).toContain('聊天室');
+    expect(entry?.textContent).toContain('社区');
     expect(entry?.querySelector('.navigation-community-entry__badge')?.textContent?.trim()).toBe('8');
     expect(entry?.getAttribute('aria-label')).toContain('8');
 
     entry?.click();
     await nextTick();
-    expect(mocks.routerPush).toHaveBeenCalledWith('/community-chat');
+    expect(mocks.routerPush).toHaveBeenCalledWith('/community');
   });
 
   it('PC 顶栏按待办、标签、资源中心、聊天室的顺序保留一级入口', async () => {

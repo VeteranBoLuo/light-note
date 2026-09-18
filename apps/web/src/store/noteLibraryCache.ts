@@ -41,6 +41,7 @@ export interface NoteLibraryCacheQuery {
   parentId?: string | null;
   tagId?: string | null;
   keyword?: string;
+  pendingOnly?: boolean;
 }
 
 function cloneItems(items: any[]) {
@@ -82,6 +83,7 @@ export function buildNoteLibraryListCacheKey(scope: string, query: NoteLibraryCa
     scope: String(scope || 'anonymous'),
     parentId: String(query.parentId || ''),
     tagId: String(query.tagId || ''),
+    pendingOnly: query.pendingOnly === true,
     keyword: String(query.keyword || '')
       .trim()
       .toLowerCase(),
@@ -216,8 +218,8 @@ export default defineStore('noteLibraryCache', () => {
   }
 
   /**
-   * 待整理是资源关系状态，不应为了切换一个布尔值整页重拉列表。
-   * 只更新同一账号已经缓存的笔记副本，并保留原 updatedAt：原本过期的快照仍然过期，
+   * 普通范围只更新同一账号的笔记副本；待整理筛选的成员和总数会变化，须失效。
+   * 普通范围保留原 updatedAt：原本过期的快照仍然过期，
    * 原本新鲜的快照则可以在返回笔记库时立即显示正确角标。
    */
   function updateNotePendingState(scope: string, noteId: string, isPending: boolean) {
@@ -227,7 +229,12 @@ export default defineStore('noteLibraryCache', () => {
     const next = { ...listSnapshots.value };
     for (const [key, snapshot] of Object.entries(next)) {
       try {
-        if (JSON.parse(key)?.scope !== normalizedScope) continue;
+        const query = JSON.parse(key);
+        if (query?.scope !== normalizedScope) continue;
+        if (query.pendingOnly) {
+          delete next[key];
+          continue;
+        }
       } catch {
         continue;
       }

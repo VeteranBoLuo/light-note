@@ -11,6 +11,7 @@ const topBarSource = readFileSync(resolve(process.cwd(), 'src/components/mobile/
 const release = { versionName: '1.0.1', downloadPath: '/downloads/android/light-note-1.0.1.apk', released: true };
 let userAgent = '';
 const replace = vi.fn();
+const push = vi.fn();
 const loadGrowth = vi.fn(() => Promise.resolve());
 const route = { name: 'workbenches', path: '/workbenches', meta: { mobileShell: 'today' } };
 const growth = ref<{ equippedFrame?: string | null; hasUnreadLevelUp?: boolean } | null>(null);
@@ -35,7 +36,7 @@ vi.mock('@/components/base/BasicComponents/BMessage/BMessage.ts', () => ({
 vi.mock('@/i18n', () => ({ default: { global: { t: (key: string) => key } } }));
 vi.mock('vue-router', () => ({
   useRoute: () => route,
-  useRouter: () => ({ replace }),
+  useRouter: () => ({ replace, push }),
 }));
 vi.mock('@/store', () => ({
   useUserStore: () => ({
@@ -91,6 +92,7 @@ beforeEach(() => {
   growth.value = null;
   loadGrowth.mockClear();
   replace.mockReset();
+  push.mockReset();
   window.localStorage.clear();
   resetAndroidAppUpdateForTest();
 });
@@ -122,7 +124,8 @@ describe('移动顶栏 · 头像入口', () => {
     expect(entry).toBeTruthy();
     expect(host.querySelector('.mobile-top-bar__brand')).toBeNull();
     entry.click();
-    expect(replace).toHaveBeenCalledWith('/personCenter');
+    expect(push).toHaveBeenCalledWith('/personCenter');
+    expect(replace).not.toHaveBeenCalled();
   });
 
   it('位于个人中心时保留 aria-current 语义但不额外套头像圆环', () => {
@@ -133,6 +136,8 @@ describe('移动顶栏 · 头像入口', () => {
     const entry = host.querySelector('.mobile-top-bar__profile') as HTMLButtonElement;
     expect(entry.classList.contains('mobile-top-bar__profile--active')).toBe(false);
     expect(entry.getAttribute('aria-current')).toBe('page');
+    entry.click();
+    expect(push).not.toHaveBeenCalled();
   });
 
   it('App 内有新版本时把原“我的”底栏红点迁到头像', () => {

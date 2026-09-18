@@ -41,20 +41,12 @@
           >
             <svg-icon size="18" :src="icon.resource.bookmark" />
             <span class="filter-all-label">{{ $t('home.allBookmarks') }}</span>
-            <SvgIcon
-              v-if="bookmark.type === 'all'"
-              class="tag-item-check"
-              :src="icon.filterPanel.check"
-              size="16"
-              aria-hidden="true"
-            />
             <span class="filter-all-count">{{ user.bookmarkTotal || bookmark.bookmarkList.length }}</span>
           </BButton>
         </div>
       </template>
       <template #item="{ item }: { item: TagInterface }">
         <BActionMenu
-          v-if="!item.isRename"
           class="bookmark-tag-action-menu"
           :items="tagContextMenu"
           :triggers="tagMenuTriggers"
@@ -91,23 +83,6 @@
             <span class="tag-item-count">{{ item.bookmarkList?.length || 0 }}</span>
           </div>
         </BActionMenu>
-        <b-input v-else class="edit-input" v-model:value="newName" @keydown.esc="cancelRename(<TagInterface>item)">
-          <template #suffix>
-            <svg-icon
-              :src="icon.filterPanel.check"
-              size="18"
-              @click="handleRename(<TagInterface>item)"
-              class="dom-hover"
-            />
-            <svg-icon
-              :src="icon.common.close"
-              size="16"
-              style="margin-left: 6px"
-              @click="cancelRename(<TagInterface>item)"
-              class="dom-hover"
-            />
-          </template>
-        </b-input>
       </template>
       <template #empty>
         <div class="empty-tag-prompt">
@@ -126,6 +101,28 @@
         </div>
       </template>
     </b-list>
+    <BModal
+      v-model:visible="renameVisible"
+      :title="t('common.reName')"
+      :mask-closable="false"
+      :close-disabled="renameSaving"
+      width="min(440px, 88vw)"
+      initial-focus=".tag-rename-input .b-input"
+      @ok="handleRename"
+    >
+      <BInput
+        v-model:value="newName"
+        class="tag-rename-input"
+        :disabled="renameSaving"
+        @enter="handleRename"
+      />
+      <template #footer>
+        <div class="tag-rename-footer">
+          <BButton type="primary" :loading="renameSaving" @click="handleRename">{{ t('common.confirm') }}</BButton>
+          <BButton :disabled="renameSaving" @click="renameVisible = false">{{ t('common.cancel') }}</BButton>
+        </div>
+      </template>
+    </BModal>
     <footer v-if="!bookmark.tagLoading && !bookmark.isMobile" class="filter-panel-footer">
       <span>{{
         $t('home.bookmarkDirectorySummary', {
@@ -159,6 +156,8 @@
   import icon from '@/config/icon.ts';
   import BList from '@/components/base/BasicComponents/BList.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import { recordOperation } from '@/api/commonApi.ts';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
   import { summarizeBookmarkCoverage } from '@/utils/bookmarkCoverage';
@@ -207,6 +206,9 @@
   });
 
   const newName = ref('');
+  const renameVisible = ref(false);
+  const renameSaving = ref(false);
+  const renamingTag = ref<TagInterface | null>(null);
   const rightTagData = ref<TagInterface>();
 
   function handleTagMenu(action: string, tag: TagInterface, source: BActionMenuSource = 'contextmenu') {
@@ -224,8 +226,9 @@
     rightTagData.value = tag;
     const actions = {
       rename: () => {
-        tag.isRename = true;
+        renamingTag.value = tag;
         newName.value = tag.name;
+        renameVisible.value = true;
       },
       edit: () =>
         navigateFromMobileFilter(() =>
@@ -255,26 +258,31 @@
     });
   };
 
-  function handleRename(tag: TagInterface) {
-    // 空名此前静默 return,输入框永远停在编辑态;现在给出提示
-    if (!newName.value || !newName.value.trim()) {
+  async function handleRename() {
+    const tag = renamingTag.value;
+    if (!tag || renameSaving.value) return;
+    const name = newName.value.trim();
+    if (!name) {
       message.warning(t('home.tagNameRequired'));
       return;
     }
-    apiBasePost('/api/bookmark/updateTag', {
-      name: newName.value.trim(),
-      id: tag.id,
-    }).then((res) => {
-      if (res.status == 200) {
-        tag.isRename = !tag.isRename;
+    if (name === tag.name) {
+      renameVisible.value = false;
+      return;
+    }
+    renameSaving.value = true;
+    try {
+      const res = await apiBasePost('/api/bookmark/updateTag', { name, id: tag.id });
+      if (res.status === 200) {
+        renameVisible.value = false;
         message.success(t('home.renameSuccess'));
         bookmark.refreshTag();
       }
-    });
-  }
-
-  function cancelRename(tag: TagInterface) {
-    tag.isRename = false;
+    } catch {
+      // 请求层统一提示失败，保留弹框和草稿供用户重试。
+    } finally {
+      renameSaving.value = false;
+    }
   }
 
   function navigateFromMobileFilter<T>(navigate: () => T | Promise<T>) {
@@ -698,10 +706,11 @@
     }
   }
 
-  .edit-input {
-    :deep(.b-input) {
-      height: 30px !important;
-    }
+  .tag-rename-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 0 20px 16px;
   }
 
   .filter-panel-menu {

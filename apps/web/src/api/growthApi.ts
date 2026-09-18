@@ -85,8 +85,8 @@ export const updateRecapState = (payload: { type: 'bookmark' | 'note'; id: strin
 
 export const getClaimable = () => apiBaseGet('/api/growth/claimable');
 export const claimAll = (payload?: {
-  scopes?: Array<'daily' | 'growthTasks' | 'achievements' | 'weekly'>;
-  keys?: Partial<Record<'daily' | 'growthTasks' | 'achievements' | 'weekly', string[]>>;
+  scopes?: Array<'daily' | 'growthTasks' | 'achievements' | 'weekly' | 'community'>;
+  keys?: Partial<Record<'daily' | 'growthTasks' | 'achievements' | 'weekly' | 'community', string[]>>;
 }) => apiBasePost('/api/growth/claimAll', payload || {});
 
 export const getGrowthPreferences = () => apiBaseGet('/api/growth/preferences');

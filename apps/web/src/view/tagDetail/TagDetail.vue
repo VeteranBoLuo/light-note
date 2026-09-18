@@ -11,13 +11,19 @@
     :show-header="!bookmark.isMobile"
   >
     <template #actions>
-      <BButton v-if="!isReadOnly" :disabled="detailLoading || detailRefreshing" @click="createTag">
-        <SvgIcon :src="icon.common.add" size="15" aria-hidden="true" />
+      <BButton
+        v-if="!isReadOnly"
+        type="primary"
+        class="tag-header-action"
+        :disabled="detailLoading || detailRefreshing"
+        @click="createTag"
+      >
+        <SvgIcon :src="icon.common.add" size="16" aria-hidden="true" />
         {{ t('tagSpace.createTag') }}
       </BButton>
-      <BButton v-if="!isReadOnly" :disabled="!tag || detailRefreshing" @click="editTag()">
-        <SvgIcon :src="icon.table_edit" size="14" aria-hidden="true" />
-        {{ t('common.edit') }}
+      <BButton v-if="!isReadOnly" class="tag-header-action" :disabled="!tag || detailRefreshing" @click="editTag()">
+        <SvgIcon :src="icon.table_edit" size="16" aria-hidden="true" />
+        {{ t('tagSpace.editDescription') }}
       </BButton>
       <BButton v-if="!bookmark.isDesktop" type="primary" :disabled="!tag || detailRefreshing" @click="openTagInAi">
         <SvgIcon :src="icon.ai.ask" size="15" aria-hidden="true" />
@@ -178,34 +184,40 @@
               </span>
               <div class="tag-profile-identity">
                 <div class="tag-profile-title-row">
-                  <h2
-                    ><BButton class="tag-title-reset" @click="resetTagView">{{ tag.name }}</BButton></h2
+                  <h2>
+                    <BButton
+                      v-if="bookmark.isMobile"
+                      class="tag-title-reset mobile-tag-switcher"
+                      :aria-label="`${tag.name} · ${t('tagSpace.switchTag')}`"
+                      :disabled="detailRefreshing"
+                      @click="openMobileTagDirectory"
+                    >
+                      <span class="mobile-tag-name">{{ tag.name }}</span>
+                      <SvgIcon class="mobile-tag-chevron" :src="icon.noteTree.chevron" size="13" aria-hidden="true" />
+                    </BButton>
+                    <BButton v-else class="tag-title-reset" @click="resetTagView">{{ tag.name }}</BButton>
+                  </h2>
+                </div>
+                <div v-if="bookmark.isMobile" class="mobile-tag-profile-actions">
+                  <BButton
+                    v-if="!isReadOnly"
+                    class="mobile-tag-edit"
+                    :aria-label="t('tagSpace.editDescription')"
+                    :title="t('tagSpace.editDescription')"
+                    :disabled="detailRefreshing"
+                    @click="editTag()"
                   >
-                  <div v-if="bookmark.isMobile" class="mobile-tag-profile-actions">
-                    <BButton
-                      v-if="!isReadOnly"
-                      class="mobile-tag-edit"
-                      :aria-label="t('tagSpace.editDescription')"
-                      :title="t('tagSpace.editDescription')"
-                      :disabled="detailRefreshing"
-                      @click="editTag()"
-                    >
-                      <SvgIcon :src="icon.table_edit" size="16" aria-hidden="true" />
-                    </BButton>
-                    <BButton
-                      class="mobile-tag-ai"
-                      :aria-label="t('tagSpace.askAi')"
-                      :title="t('tagSpace.askAi')"
-                      :disabled="detailRefreshing"
-                      @click="openTagInAi"
-                    >
-                      <SvgIcon :src="icon.ai.ask" size="16" aria-hidden="true" />
-                    </BButton>
-                    <BButton class="mobile-tag-switcher" :disabled="detailRefreshing" @click="openMobileTagDirectory">
-                      <span>{{ t('tagSpace.switchTag') }}</span>
-                      <SvgIcon :src="icon.noteTree.chevron" size="15" aria-hidden="true" />
-                    </BButton>
-                  </div>
+                    <SvgIcon :src="icon.table_edit" size="16" aria-hidden="true" />
+                  </BButton>
+                  <BButton
+                    class="mobile-tag-ai"
+                    :aria-label="t('tagSpace.askAi')"
+                    :title="t('tagSpace.askAi')"
+                    :disabled="detailRefreshing"
+                    @click="openTagInAi"
+                  >
+                    <SvgIcon :src="icon.ai.ask" size="16" aria-hidden="true" />
+                  </BButton>
                 </div>
                 <p>{{ spaceDescription }}</p>
                 <footer class="tag-profile-meta">
@@ -1483,6 +1495,13 @@
   }
   :deep(.resource-page-actions .b_btn) {
     gap: 6px;
+  }
+  :deep(.resource-page-actions .tag-header-action) {
+    height: 36px;
+    min-width: 112px;
+    padding: 0 14px;
+    gap: 7px;
+    border-radius: 10px;
   }
   .detail-state,
   .resource-state {
@@ -3358,11 +3377,52 @@
     }
 
     .tag-profile-main {
+      display: flex;
+      flex-wrap: wrap;
       align-items: flex-start;
-      gap: 12px;
+      gap: 4px;
+    }
+
+    .workspace-back {
+      width: 44px;
+      min-width: 44px;
+      height: 44px;
+    }
+
+    .tag-profile-identity {
+      display: contents;
+    }
+
+    .tag-profile-title-row {
+      display: block;
+      flex: 1 1 auto;
+      width: max-content;
+      max-width: calc(100% - 80px);
+    }
+
+    .tag-profile-title-row h2 {
+      overflow: visible;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+
+    .tag-title-reset.b_btn {
+      width: 100%;
+      min-width: 0;
+      justify-content: flex-start;
+      text-align: left;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+
+    .tag-profile-identity p,
+    .tag-profile-meta {
+      flex-basis: 100%;
     }
 
     .mobile-tag-profile-actions {
+      margin-left: auto;
+      justify-content: flex-end;
       min-width: 0;
       display: inline-flex;
       align-items: center;
@@ -3372,8 +3432,8 @@
 
     .mobile-tag-edit,
     .mobile-tag-ai {
-      width: 40px;
-      min-width: 40px;
+      width: 44px;
+      min-width: 44px;
       height: 44px;
       padding: 0;
       display: inline-flex;
@@ -3388,18 +3448,20 @@
       background: var(--primary-light-1);
     }
 
-    .mobile-tag-switcher {
-      min-width: 0;
+    .tag-title-reset.mobile-tag-switcher {
       min-height: 44px;
-      height: 44px;
-      padding: 0 6px 0 8px;
-      display: inline-flex;
-      flex: 0 0 auto;
-      gap: 3px;
-      border-color: transparent;
-      color: var(--primary-color);
-      background: transparent;
-      font-size: 12px;
+      height: auto;
+      display: flex;
+      gap: 4px;
+    }
+
+    .mobile-tag-name {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .mobile-tag-chevron {
+      flex-shrink: 0;
     }
 
     .mobile-tag-edit:focus-visible,
@@ -3409,14 +3471,20 @@
     }
 
     .tag-profile-icon {
-      width: 54px;
-      height: 54px;
-      border-radius: 13px;
+      margin-top: 8px;
+      width: 28px;
+      height: 28px;
+      padding: 3px;
+      border-radius: 6px;
       box-shadow: none;
     }
 
+    .tag-profile-icon.has-custom-icon {
+      padding: 3px;
+    }
+
     .tag-profile-identity h2 {
-      font-size: 20px;
+      font-size: 18px;
     }
 
     .tag-profile-identity p {
@@ -3425,23 +3493,25 @@
     }
 
     .tag-profile-stats {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      border: 1px solid var(--surface-border-color);
-      border-radius: 10px;
-      overflow: hidden;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 10px 0;
+      padding-top: 10px;
+      border-top: 1px solid var(--surface-divider-color);
     }
 
     .profile-stat {
-      min-height: 56px;
-      padding: 9px 11px;
+      grid-column: span 2;
+      min-height: 0;
+      padding: 0 10px;
+      gap: 3px;
     }
 
-    .profile-stat:nth-child(odd) {
+    .profile-stat:nth-child(-n + 2) {
+      grid-column: span 3;
+    }
+
+    .profile-stat:nth-child(3) {
       border-left: 0;
-    }
-
-    .profile-stat:nth-child(n + 3) {
-      border-top: 1px solid var(--surface-divider-color);
     }
 
     .profile-stat--total strong,
@@ -3450,7 +3520,7 @@
     }
 
     .tag-profile-meta {
-      margin-top: 6px;
+      margin-top: 2px;
       padding-top: 0;
       flex-wrap: wrap;
     }

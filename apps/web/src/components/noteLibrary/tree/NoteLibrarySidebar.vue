@@ -62,6 +62,10 @@
           :drop-target-active="dropTargetActive"
           :drop-target-position="dropTargetPosition"
           :menu-disabled="menuDisabled"
+          :batch-mode="batchMode"
+          :selected-ids="selectedIds"
+          :selection-disabled="selectionDisabled"
+          @select-note="(node, checked) => emit('selectNote', node, checked)"
           @toggle="emit('toggle', $event)"
           @open="emit('open', $event)"
           @browse-children="emit('browseChildren', $event)"
@@ -71,8 +75,8 @@
           @move="emit('move', $event)"
           @rename="emit('rename', $event)"
           @share="emit('share', $event)"
-            @import="emit('import', $event)"
-            @export="emit('export', $event)"
+          @import="emit('import', $event)"
+          @export="emit('export', $event)"
           @delete="emit('delete', $event)"
           @drag-start="(node, event) => emit('dragStart', node, event)"
           @drag-end="emit('dragEnd')"
@@ -128,6 +132,9 @@
       dropTargetActive?: boolean;
       dropTargetPosition?: NoteTreeDropPosition | '';
       menuDisabled?: boolean;
+      batchMode?: boolean;
+      selectedIds?: Set<string>;
+      selectionDisabled?: boolean;
     }>(),
     {
       treeError: '',
@@ -146,6 +153,9 @@
       dropTargetActive: false,
       dropTargetPosition: '',
       menuDisabled: false,
+      batchMode: false,
+      selectedIds: () => new Set<string>(),
+      selectionDisabled: false,
       currentParentId: null,
       activePageId: null,
       treeScrollTop: 0,
@@ -155,6 +165,7 @@
   );
 
   const emit = defineEmits<{
+    selectNote: [node: NoteTreeItem, checked: boolean];
     toggle: [node: NoteTreeItem];
     select: [id: string | null];
     open: [id: string];

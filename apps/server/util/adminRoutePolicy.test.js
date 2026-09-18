@@ -25,6 +25,16 @@ function createRes() {
 }
 
 describe('adminRoutePolicyMiddleware', () => {
+  it.each(['readonly', 'maintain'])('社区本人偏好拒绝 %s 代管，能力元数据允许读取', (mode) => {
+    for (const method of ['GET', 'PUT']) {
+      const next = vi.fn();
+      adminRoutePolicyMiddleware(createReq('/community/preferences/me', method, mode), createRes(), next);
+      expect(next).not.toHaveBeenCalled();
+    }
+    const next = vi.fn();
+    adminRoutePolicyMiddleware(createReq('/community/capabilities', 'GET', mode), createRes(), next);
+    expect(next).toHaveBeenCalledOnce();
+  });
   it.each(['readonly', 'maintain'])('项目删除拒绝 %s 代管上下文', (mode) => {
     const next = vi.fn();
     const res = createRes();

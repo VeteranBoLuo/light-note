@@ -11,7 +11,15 @@ export interface CommunityChatDraftMentionTarget {
   messagePublicId?: string;
 }
 
+export interface CommunityChatReadingAnchor {
+  publicId: string;
+  offsetTop: number;
+  scrollHeight: number;
+  scrollTop: number;
+}
+
 export interface CommunityChatComposerDraftSession {
+  readingAnchor: CommunityChatReadingAnchor | null;
   identityKey: string;
   roomSlug: string;
   text: string;
@@ -35,6 +43,7 @@ function createDraftSession(identityKey = '', roomSlug = ''): CommunityChatCompo
   return reactive({
     identityKey,
     roomSlug,
+    readingAnchor: null,
     text: '',
     replyTarget: null,
     mentionTargets: [],

@@ -26,13 +26,6 @@
         :aria-selected="activeTab === tab.value"
         @click="emit('switch-tab', tab.value)"
       >
-        <SvgIcon
-          v-if="activeTab === tab.value"
-          class="nt-tab-check"
-          :src="icon.filterPanel.check"
-          size="14"
-          aria-hidden="true"
-        />
         {{ tab.label }}
         <span
           v-if="tabUnread(tab.value) > 0"
@@ -269,18 +262,17 @@
     color: var(--desc-color);
     background: transparent !important;
     font-size: 12px;
+    font-weight: 400;
+    transition:
+      color 0.15s,
+      background-color 0.15s,
+      border-color 0.15s;
   }
 
   .nt-tab.active {
-    border: 2px solid var(--primary-color);
+    border-color: var(--primary-color);
     color: var(--primary-color);
     background: var(--mobile-selected-bg) !important;
-    font-weight: 700;
-  }
-
-  .nt-tab-check {
-    flex: 0 0 auto;
-    color: currentColor;
   }
 
   .nt-tab-badge {
@@ -502,7 +494,7 @@
   }
 
   .is-desktop-page .nt-tab.active {
-    border: 2px solid var(--primary-color);
+    border-color: var(--primary-color);
     color: var(--primary-color);
     background: var(--mobile-selected-bg) !important;
   }
@@ -686,11 +678,10 @@
   }
 
   .is-mobile .nt-tab.active {
-    border: 2px solid var(--primary-color);
+    border-color: var(--primary-color);
     color: var(--primary-color);
     background: var(--mobile-selected-bg) !important;
     box-shadow: none;
-    font-weight: 700;
   }
 
   .is-mobile .nt-group-label {

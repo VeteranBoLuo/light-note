@@ -1,3 +1,4 @@
+import { clearBlockedRelations } from '../communityFeed/profiles.js';
 import pool from '../../db/index.js';
 import { generateUUID } from '../agent/data.js';
 import { getCommunityChatFeatureState } from '../communityChatFeature.js';
@@ -318,6 +319,7 @@ export async function blockCommunityChatMessageAuthor({ user, messagePublicId, e
         target.userId,
       ]);
     }
+    await clearBlockedRelations(connection,user.id,target.userId);
     await connection.commit();
     return {
       id: blockId,

@@ -7,7 +7,7 @@ import {
 } from './growthClaimFeedback';
 
 describe('growthClaimFeedback', () => {
-  it('按 claimable 的四类分组生成领取前构成，并忽略非法计数', () => {
+  it('按 claimable 的分组生成领取前构成，并忽略非法计数', () => {
     const breakdown = resolveClaimableBreakdown({
       daily: { count: 1 },
       growthTasks: { count: -1 },
@@ -15,7 +15,7 @@ describe('growthClaimFeedback', () => {
       weekly: { count: Number.NaN },
     });
 
-    expect(breakdown).toEqual({ daily: 1, growthTasks: 0, achievements: 4, weekly: 0 });
+    expect(breakdown).toEqual({ daily: 1, growthTasks: 0, achievements: 4, weekly: 0, community: 0 });
     expect(growthClaimBreakdownTotal(breakdown)).toBe(5);
     expect(growthClaimBreakdownEntries(breakdown)).toEqual([
       { source: 'daily', count: 1 },
@@ -34,6 +34,11 @@ describe('growthClaimFeedback', () => {
         { type: 'weekly', status: 'incomplete' },
         { type: 'unknown', status: 'claimed' },
       ]),
-    ).toEqual({ daily: 1, growthTasks: 1, achievements: 2, weekly: 0 });
+    ).toEqual({ daily: 1, growthTasks: 1, achievements: 2, weekly: 0, community: 0 });
   });
+});
+
+it('counts community rewards across shared claim entry points', () => {
+  expect(resolveClaimedBreakdown([{ type: 'community', status: 'claimed' }]).community).toBe(1);
+  expect(resolveClaimableBreakdown({ community: { count: 2 } }).community).toBe(2);
 });

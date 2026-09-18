@@ -39,7 +39,7 @@ describe('移动端导航配置', () => {
     expect(MOBILE_BOTTOM_NAVIGATION.find((item) => item.key === 'today')?.path).toBe('/workbenches');
     expect(MOBILE_BOTTOM_NAVIGATION.find((item) => item.key === 'create')?.path).toBeUndefined();
     expect(MOBILE_BOTTOM_NAVIGATION.map((item) => item.key)).not.toContain('toolbox');
-    expect(MOBILE_BOTTOM_NAVIGATION.find((item) => item.key === 'community')?.path).toBe('/community-chat');
+    expect(MOBILE_BOTTOM_NAVIGATION.find((item) => item.key === 'community')?.path).toBe('/community');
   });
 
   it('拒绝把详情页或任意字符串当成资料根路径', () => {

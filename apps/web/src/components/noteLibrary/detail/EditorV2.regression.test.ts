@@ -211,8 +211,8 @@ describe('编辑器 V2 交互回归', () => {
 
   it('快捷键帮助、重做与重复上一步是三个独立入口，两种编辑模式都支持重复格式功能', () => {
     const mobilePrimaryActions = sourceBetween(toolbarSource, 'const mobilePrimaryActions', 'function emitAction');
-    expect(toolbarSource).toContain('<ToolbarButton :action="shortcutsAction" @run="emitAction" />');
-    expect(toolbarSource).toContain('<ToolbarButton :action="repeatAction" @run="emitAction" />');
+    expect(toolbarSource).toContain('<ToolbarButton v-if="!minimal" :action="shortcutsAction" @run="emitAction" />');
+    expect(toolbarSource).toContain('<ToolbarButton v-if="!minimal" :action="repeatAction" @run="emitAction" />');
     expect(toolbarSource).toContain('shortcutsAction: EditorToolbarAction');
     expect(toolbarSource).toContain('repeatAction: EditorToolbarAction');
     expect(mobilePrimaryActions).not.toContain('props.shortcutsAction');
@@ -585,7 +585,7 @@ describe('编辑器 V2 交互回归', () => {
   });
 
   it('PC 固定工具栏以图片替代待办快捷位，待办归入列表结构菜单', () => {
-    expect(toolbarSource).toContain('<ToolbarButton :action="imageAction"');
+    expect(toolbarSource).toContain('<ToolbarButton v-if="!minimal" :action="imageAction"');
     expect(toolbarSource).not.toContain('<ToolbarButton :action="todoAction"');
     expect(toolbarSource).toContain('imageAction: EditorToolbarAction;');
     expect(editorSource).toMatch(
@@ -596,7 +596,7 @@ describe('编辑器 V2 交互回归', () => {
 
   it('移动端固定工具栏把列表作为独立入口，并让待办与两种列表共用抽屉', () => {
     expect(toolbarSource).toMatch(
-      /const mobilePrimaryActions = computed\(\(\) => \[[\s\S]*props\.boldAction,[\s\S]*props\.listAction,[\s\S]*props\.insertAction/u,
+      /const mobilePrimaryActions = computed\(\(\) =>[\s\S]*?\[[\s\S]*props\.boldAction,[\s\S]*props\.listAction,[\s\S]*props\.insertAction/u,
     );
     expect(toolbarSource).toContain('v-model:open="listDrawerOpen"');
     expect(toolbarSource).toContain(':title="listAction.label"');

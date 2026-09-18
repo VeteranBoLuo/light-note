@@ -3,6 +3,7 @@
     class="community-workspace"
     :class="{ 'has-room-list': showRoomList }"
     :aria-label="t('communityChat.workspaceLabel')"
+    @copy="copyInlineEmojiSelection"
   >
     <aside v-if="showRoomList" v-auto-scrollbar class="community-workspace__rooms">
       <div class="community-workspace__rooms-heading">
@@ -40,19 +41,18 @@
     <div class="community-workspace__conversation">
       <header v-if="currentRoom" class="community-conversation-header">
         <div class="community-conversation-header__title">
-          <span aria-hidden="true">
-            <SvgIcon :src="icon.ai.conversations" size="17" />
-          </span>
+          <slot name="header-navigation">
+            <span aria-hidden="true"><SvgIcon :src="icon.ai.conversations" size="17" /></span>
+          </slot>
           <div>
             <div class="community-conversation-header__title-line">
               <strong>{{ currentRoom.name }}</strong>
-              <span
-                v-if="canViewOnlinePresence && realtimeEnabled && onlineCount !== null"
+              <BButton
+                v-if="canViewOnlinePresence && realtimeEnabled && onlineCount != null"
                 class="community-conversation-header__online"
                 @click="openOnlineMembers"
+                >{{ t('communityChat.onlineCount', { count: onlineCount }) }}</BButton
               >
-                {{ t('communityChat.onlineCount', { count: onlineCount }) }}
-              </span>
             </div>
             <small>{{ currentRoom.description }}</small>
           </div>
@@ -61,27 +61,26 @@
           <BButton
             v-if="access.authenticated"
             class="community-conversation-header__settings"
-            :aria-label="t('communityChat.settings.open')"
-            @click="settingsVisible = true"
+            :aria-label="t('community.feed.settings')"
+            @click="router.push('/community/preferences')"
           >
             <SvgIcon :src="icon.userCenter.settingsGear" size="16" aria-hidden="true" />
-            <span>{{ t('communityChat.settings.open') }}</span>
+            <span>{{ t('community.feed.settings') }}</span>
           </BButton>
-          <span class="community-conversation-header__delivery" :class="`is-${realtimeStatus}`" role="status">
-            <i aria-hidden="true"></i>{{ realtimeStatusLabel }}
+          <span
+            class="community-conversation-header__delivery"
+            :class="`is-${realtimeStatus}`"
+            role="status"
+            :title="realtimeStatusLabel"
+            :aria-label="realtimeStatusLabel"
+          >
+            <i aria-hidden="true"></i>
           </span>
         </div>
       </header>
 
       <div class="community-message-stream" :aria-busy="initialLoading">
-        <div
-          v-if="initialLoading"
-          class="community-message-skeleton"
-          role="status"
-          :aria-label="t('communityChat.messagesLoading')"
-        >
-          <span v-for="index in 4" :key="index" :class="{ 'is-own': index % 3 === 0 }"></span>
-        </div>
+        <ChatMessageSkeleton v-if="initialLoading" :label="t('communityChat.messagesLoading')" />
         <div v-if="pinnedMessage" class="community-pinned-message" role="status">
           <BButton
             class="community-pinned-message__jump"
@@ -123,9 +122,10 @@
                 <span>{{ t('communityChat.emergencyReadOnlyDescription') }}</span>
               </div>
             </div>
-            <div v-if="hasMore && !initialLoading" class="community-message-list__older">
-              <BButton size="small" :loading="olderLoading" @click="loadOlder">
-                {{ t('communityChat.loadOlder') }}
+            <div v-if="hasMore" class="community-message-list__older">
+              <BLoading v-if="olderLoading" inline loading :title="t('common.loading')" />
+              <BButton v-else-if="olderLoadError" size="small" @click="loadOlder">
+                {{ t('communityChat.retryMessages') }}
               </BButton>
             </div>
 
@@ -150,9 +150,7 @@
                 class="community-message"
                 :class="{
                   'is-own': chatMessage.isOwn,
-                  'is-focused':
-                    chatMessage.publicId === focusedMessagePublicId ||
-                    chatMessage.publicId === transientFocusedMessagePublicId,
+                  'is-focused': chatMessage.publicId === transientFocusedMessagePublicId,
                   'is-recalled': chatMessage.status === 'recalled',
                   'is-recall-compact': chatMessage.status === 'recalled' && !isRecalledMessageExpanded(chatMessage),
                   'is-sending': chatMessage.deliveryState === 'sending',
@@ -327,7 +325,8 @@
                               size="small"
                               class="community-message__action community-message__like"
                               :class="{ 'is-selected': chatMessage.likedByMe }"
-                              :loading="messageActionBusyId === chatMessage.publicId"
+                              :loading="messageActionLoading(chatMessage, 'like')"
+                              :disabled="Boolean(messageActionBusyId)"
                               :aria-label="likeActionLabel(chatMessage)"
                               @click.stop="toggleLike(chatMessage)"
                             >
@@ -343,6 +342,7 @@
                             <BButton
                               size="small"
                               class="community-message__action"
+                              :disabled="Boolean(messageActionBusyId)"
                               :aria-label="t('communityChat.replyAction')"
                               @click.stop="startReply(chatMessage)"
                             >
@@ -357,6 +357,8 @@
                             <BButton
                               size="small"
                               class="community-message__action is-danger"
+                              :disabled="Boolean(messageActionBusyId)"
+                              :loading="messageActionLoading(chatMessage, 'recall')"
                               :aria-label="t('communityChat.recall.action')"
                               @click.stop="confirmRecall(chatMessage)"
                             >
@@ -371,6 +373,8 @@
                             <BButton
                               size="small"
                               class="community-message__action is-danger"
+                              :disabled="Boolean(messageActionBusyId)"
+                              :loading="messageActionLoading(chatMessage, 'delete')"
                               :aria-label="t('communityChat.delete.action')"
                               @click.stop="confirmDelete(chatMessage)"
                             >
@@ -382,7 +386,7 @@
                             class="community-message__desktop-more"
                             :items="messageMenuItems(chatMessage)"
                             placement="bottom-left"
-                            :disabled="messageActionBusyId === chatMessage.publicId"
+                            :disabled="Boolean(messageActionBusyId)"
                             :aria-label="t('communityChat.messageActions')"
                             @select="(action) => handleMessageAction(action, chatMessage)"
                           >
@@ -391,7 +395,8 @@
                                 icon-only
                                 size="small"
                                 class="community-message__more"
-                                :loading="messageActionBusyId === chatMessage.publicId"
+                                :loading="messageActionLoading(chatMessage, 'more')"
+                                :disabled="Boolean(messageActionBusyId)"
                                 :aria-label="t('communityChat.moreActions')"
                               >
                                 <SvgIcon :src="icon.common.more" size="16" aria-hidden="true" />
@@ -750,20 +755,7 @@
     :submitting="reporting"
     @submit="submitReport"
   />
-  <ChatBlockListModal
-    v-model:visible="blocksVisible"
-    :items="blockedUsers"
-    :loading="blocksLoading"
-    :unblocking-id="unblockingId"
-    @refresh="loadBlocks"
-    @unblock="unblockUser"
-  />
-  <ChatSettingsModal
-    v-model:visible="settingsVisible"
-    @manage-blocks="openBlocksFromSettings"
-    @manage-profile="openProfileFromSettings"
-    @notification-saved="handleNotificationSettingsSaved"
-  />
+
   <ChatOnlineMembersModal
     v-if="canViewOnlinePresence"
     v-model:visible="onlineMembersVisible"
@@ -819,6 +811,7 @@
     @block="blockProfileMember"
     @report="reportProfileMember"
     @login="loginFromProfile"
+    @navigate="(path) => closeProfileThen(() => router.push(path))"
   />
 </template>
 
@@ -841,9 +834,10 @@
     resolveCommunityChatInlineEmoji,
   } from '@lightnote/shared/community-chat-inline-emojis';
   import { resolveCommunityChatOfficialSticker } from '@lightnote/shared/community-chat-stickers';
+  import { useCommunityChatActivation } from '@/composables/useCommunityChatActivation';
   import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { useRoute, useRouter } from 'vue-router';
+  import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
   import { isEqual } from 'lodash-es';
   import {
     blockCommunityChatMessageAuthor,
@@ -853,7 +847,6 @@
     discardCommunityChatFile,
     discardCommunityChatImage,
     ensureCommunityChatIdentity,
-    getCommunityChatBlocks,
     getCommunityChatMessage,
     getCommunityChatMessages,
     getCommunityChatPinnedMessage,
@@ -871,13 +864,11 @@
     sendCommunityChatMessage,
     toggleCommunityChatMessageLike,
     voteCommunityChatPoll,
-    unblockCommunityChatUser,
     unpinCommunityChatMessage,
     uploadCommunityChatFile,
     uploadCommunityChatImage,
     type CommunityChatAccess,
     type CommunityChatAttachment,
-    type CommunityChatBlockItem,
     type CommunityChatImage,
     type CommunityChatMessage,
     type CommunityChatMemberSearchItem,
@@ -900,6 +891,7 @@
   import BActionMenu from '@/components/base/BasicComponents/BActionMenu.vue';
   import type { BActionMenuItem } from '@/components/base/BasicComponents/actionMenu';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
@@ -908,8 +900,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import AvatarFramePreview from '@/components/growth/AvatarFramePreview.vue';
   import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
-  import ChatBlockListModal from '@/components/communityChat/ChatBlockListModal.vue';
-  import ChatSettingsModal from '@/components/communityChat/ChatSettingsModal.vue';
+  import ChatMessageSkeleton from '@/components/communityChat/ChatMessageSkeleton.vue';
   import ChatReportModal from '@/components/communityChat/ChatReportModal.vue';
   import ChatImageViewerModal from '@/components/communityChat/ChatImageViewerModal.vue';
   import ChatMessageAttachments from '@/components/communityChat/ChatMessageAttachments.vue';
@@ -918,6 +909,7 @@
   import ChatOnlineMembersModal from '@/components/communityChat/ChatOnlineMembersModal.vue';
   import ChatExpressionPanel from '@/components/communityChat/ChatExpressionPanel.vue';
   import ChatComposerInput from '@/components/communityChat/ChatComposerInput.vue';
+  import { copyInlineEmojiSelection } from '@/components/communityChat/inlineEmojiClipboard';
   import ChatInlineEmojiText from '@/components/communityChat/ChatInlineEmojiText.vue';
   import ChatMentionSuggestions from '@/components/communityChat/ChatMentionSuggestions.vue';
   import ChatPollCard from '@/components/communityChat/ChatPollCard.vue';
@@ -991,7 +983,6 @@
     allAchievementsError: profileAllAchievementsError,
     isOwn: profileIsOwn,
     openForMessage: openCommunityProfileForMessage,
-    openOwnProfile: openOwnCommunityProfile,
     closeProfile: closeCommunityProfile,
     loadPublicProfile,
     loadOwnProfile,
@@ -1002,6 +993,7 @@
   const chatMessages = ref<CommunityChatMessage[]>([]);
   const initialLoading = ref(false);
   const olderLoading = ref(false);
+  const olderLoadError = ref(false);
   const newerLoading = ref(false);
   const loadError = ref(false);
   const hasMore = ref(false);
@@ -1117,16 +1109,20 @@
   const attachmentUploadControllers = new Map<string, AbortController>();
   const filePreviewVisible = ref(false);
   const filePreviewAttachment = ref<CommunityChatAttachment | null>(null);
-  const blocksVisible = ref(false);
-  const settingsVisible = ref(false);
   const onlineMembersVisible = ref(false);
   const onlineMembersLoading = ref(false);
   const onlineMembersError = ref(false);
   const onlineMembersSnapshot = ref<CommunityChatOnlineMembersSnapshot | null>(null);
-  const blocksLoading = ref(false);
-  const blockedUsers = ref<CommunityChatBlockItem[]>([]);
-  const unblockingId = ref('');
-  const messageActionBusyId = ref('');
+  const messageActionBusy = ref<{ publicId: string; action: string } | null>(null);
+  const messageActionBusyId = computed(() => messageActionBusy.value?.publicId || '');
+
+  function messageActionLoading(chatMessage: CommunityChatMessage, action: string) {
+    const busy = messageActionBusy.value;
+    if (busy?.publicId !== chatMessage.publicId) return false;
+    return action === 'more'
+      ? !['like', 'recall', 'delete'].includes(busy.action)
+      : busy.action === action;
+  }
   const recalledExpandedMessageIds = ref(new Set<string>());
   const recalledDraftSnapshots = ref(new Map<string, CommunityChatReeditDraftSnapshot>());
   const mobileMessageActionsVisible = ref(false);
@@ -1143,6 +1139,7 @@
   const pinActionBusy = ref(false);
   let loadGeneration = 0;
   let pinnedLoadGeneration = 0;
+  let pinnedLoadTask: Promise<void> | null = null;
   let pollTimer: number | undefined;
   let markReadTimer: number | undefined;
   let readReceiptVisibilityTimer: number | undefined;
@@ -1173,6 +1170,8 @@
   const queuedMessageDetailIds = new Set<string>();
   const deadlinePollRefreshRequestedIds = new Set<string>();
   let isUnmounted = false;
+  let messageOwnerKey = '';
+  let readingPositionCapturedForLeave = false;
   let composerDragDepth = 0;
   let avatarLongPressState: {
     pointerId: number;
@@ -1338,7 +1337,10 @@
         (imageAttachmentLimit.value !== null ||
           pendingAttachments.value.some((attachment) => attachment.kind === 'file'))),
   );
-  const realtimeEnabled = computed(() => Boolean(props.access.realtimeEnabled && props.access.canRead));
+  const workspaceActive = useCommunityChatActivation();
+  const realtimeEnabled = computed(() =>
+    Boolean(workspaceActive.value && props.access.realtimeEnabled && props.access.canRead),
+  );
   const realtimeIdentityKey = computed(() => `${currentUser.id || 'guest'}:${currentUser.role || 'visitor'}`);
   const emojiRecentOwnerId = computed(() => currentUser.id || 'visitor');
   const { recent: recentEmojis, remember: rememberEmoji } = useCommunityChatEmojiRecent(emojiRecentOwnerId);
@@ -1398,7 +1400,6 @@
         description: t('communityChat.like.count', { count: target.likeCount || 0 }),
         icon: icon.coBuild.vote,
         selected: target.likedByMe,
-        loading: messageActionBusyId.value === target.publicId,
       });
     }
     if (canReplyToMessage(target)) {
@@ -1437,7 +1438,11 @@
         dividerBefore: item.key === 'report',
       });
     }
-    return actions;
+    return actions.map((action) => ({
+      ...action,
+      loading: messageActionLoading(target, action.key),
+      disabled: action.disabled || Boolean(messageActionBusyId.value),
+    }));
   });
 
   function canLikeMessage(chatMessage: CommunityChatMessage) {
@@ -2203,6 +2208,7 @@
 
   function canTrackReadReceiptsInForeground() {
     return (
+      workspaceActive.value &&
       readReceiptForegroundActive &&
       document.visibilityState === 'visible' &&
       (typeof document.hasFocus !== 'function' || document.hasFocus())
@@ -2298,7 +2304,8 @@
       scrollingUp &&
       scrollTop <= 160 &&
       hasMore.value &&
-      !olderLoading.value
+      !olderLoading.value &&
+      !olderLoadError.value
     ) {
       void loadOlder();
     }
@@ -2383,6 +2390,7 @@
   }
 
   function handleDocumentPointerDown(event: PointerEvent) {
+    transientFocusedMessagePublicId.value = '';
     if (!mentionSuggestionsOpen.value || !(event.target instanceof Element)) return;
     if (
       event.target.closest('.community-composer__mention-anchor') ||
@@ -2548,7 +2556,10 @@
   }
 
   async function markLatestRead() {
-    if (!props.access.authenticated) return;
+    if (!props.access.authenticated || !workspaceActive.value || isUnmounted || document.visibilityState !== 'visible')
+      return;
+    const identityAtStart = realtimeIdentityKey.value;
+    const unreadGeneration = unread.captureDirectorySyncToken().generation;
     const roomSlug = selectedRoomSlug.value;
     if (!roomSlug || !chatMessages.value.length) return;
     // 撤回消息仍保留在消息流里，但服务端明确不允许它作为已读游标。若直接提交最后一条
@@ -2561,6 +2572,14 @@
     try {
       // 当前窗口全是撤回消息时交由服务端选择该房间最后一条有效消息，避免无效游标。
       await markCommunityChatRoomRead(roomSlug, latestActiveMessage?.publicId || null);
+      if (
+        isUnmounted ||
+        !workspaceActive.value ||
+        identityAtStart !== realtimeIdentityKey.value ||
+        unreadGeneration !== unread.captureDirectorySyncToken().generation ||
+        roomSlug !== selectedRoomSlug.value
+      )
+        return;
       lastMarkedReadMessageId = readMarkerKey;
       unread.markRoomRead(roomSlug);
       emit('roomRead', roomSlug);
@@ -2590,19 +2609,30 @@
     const roomSlug = selectedRoomSlug.value;
     if (!roomSlug) return;
     const generation = ++pinnedLoadGeneration;
-    const nextPinnedMessage = await requestPinnedMessage(roomSlug);
-    if (generation !== pinnedLoadGeneration || roomSlug !== selectedRoomSlug.value) return;
-    await commitPinnedMessage(nextPinnedMessage);
+    const task = (async () => {
+      const nextPinnedMessage = await requestPinnedMessage(roomSlug);
+      if (generation !== pinnedLoadGeneration || roomSlug !== selectedRoomSlug.value) return;
+      await commitPinnedMessage(nextPinnedMessage);
+    })();
+    pinnedLoadTask = task;
+    try {
+      await task;
+    } finally {
+      if (pinnedLoadTask === task) pinnedLoadTask = null;
+    }
   }
 
   async function loadInitial({ ignoreFocus = false } = {}) {
     const roomSlug = selectedRoomSlug.value;
     if (!roomSlug) return;
+    const identityAtStart = realtimeIdentityKey.value;
     const generation = ++loadGeneration;
     const pinnedGeneration = ++pinnedLoadGeneration;
-    const requestedFocus = ignoreFocus ? '' : focusMessageFromRoute.value;
+    const savedAnchor = !ignoreFocus && !focusMessageFromRoute.value ? composerDraftSession.value.readingAnchor : null;
+    const requestedFocus = ignoreFocus ? '' : focusMessageFromRoute.value || savedAnchor?.publicId || '';
     if (!requestedFocus) messageViewport.followLatest();
     initialLoading.value = true;
+    olderLoadError.value = false;
     cancelInitialBottomAnchor();
     loadError.value = false;
     pendingNewMessageCount.value = 0;
@@ -2623,15 +2653,24 @@
           nextAfter.value = null;
           messageViewport.followLatest();
           await clearFocusMessageRoute();
-          message.warning(t('communityChat.sourceMessageUnavailable'));
+          if (!savedAnchor) message.warning(t('communityChat.sourceMessageUnavailable'));
           return getCommunityChatMessages(roomSlug, { limit: INITIAL_MESSAGE_PAGE_SIZE });
         }
       })();
       // 首屏消息与置顶栏都会改变消息区结构，两条请求并行，但在同一轮提交后再撤掉覆盖整个消息流的骨架。
-      // 这样等待时间取较慢请求而不是相加，也不会出现“先贴底 → 插入置顶栏 → 图片回调再次贴底”的三段跳动。
+      // 真实消息的历史占位也在定位前挂载，移除骨架不能再改变滚动内容的高度。
       const [response, nextPinnedMessage] = await Promise.all([messagePagePromise, requestPinnedMessage(roomSlug)]);
-      if (generation !== loadGeneration || roomSlug !== selectedRoomSlug.value) return;
+      if (
+        generation !== loadGeneration ||
+        roomSlug !== selectedRoomSlug.value ||
+        identityAtStart !== realtimeIdentityKey.value
+      )
+        return;
+      // 实时握手可能已启动更新的布局请求。它尚未落定时不能展示旧尺寸下的“底部”。
+      while (pinnedLoadTask && generation === loadGeneration && !isUnmounted) await pinnedLoadTask;
+      if (generation !== loadGeneration || identityAtStart !== realtimeIdentityKey.value || isUnmounted) return;
       const page = response.data as CommunityChatMessagePage;
+      messageOwnerKey = identityAtStart;
       syncCommunityClock(page.serverTime);
       prewarmInitialViewportImages(page.items || [], page.focusPublicId || '');
       chatMessages.value = page.items || [];
@@ -2640,6 +2679,9 @@
       hasMore.value = Boolean(page.hasMore);
       nextBefore.value = page.nextBefore || null;
       focusedMessagePublicId.value = page.focusPublicId || '';
+      transientFocusedMessagePublicId.value = '';
+      if (!savedAnchor && focusMessageFromRoute.value && page.focusPublicId)
+        showTransientMessageFocus(page.focusPublicId);
       hasNewerThanFocus.value = Boolean(page.focusPublicId && page.hasNewer);
       nextAfter.value = hasNewerThanFocus.value
         ? page.nextAfter ||
@@ -2647,14 +2689,17 @@
           null
         : null;
       // 真实消息始终在覆盖层后完成挂载和定位；覆盖层只在最终 scrollTop 已写入后移除，首帧即最终布局。
-      if (focusedMessagePublicId.value) await scrollToFocusedMessage(focusedMessagePublicId.value);
-      else {
+      if (savedAnchor && page.focusPublicId === savedAnchor.publicId) {
+        await restoreMessageViewportAnchor(savedAnchor);
+      } else if (focusedMessagePublicId.value) {
+        await scrollToFocusedMessage(focusedMessagePublicId.value);
+      } else {
         beginInitialBottomAnchor();
         await restoreInitialBottomAnchor();
       }
       initialLoading.value = false;
       // 定位旧消息只代表用户读到了该时间窗，不能把窗口内最后一条误当成聊天室最新消息。
-      if (!hasNewerThanFocus.value) void markLatestRead();
+      if (!hasNewerThanFocus.value && !savedAnchor) void markLatestRead();
     } catch {
       if (generation === loadGeneration) loadError.value = true;
     } finally {
@@ -2675,6 +2720,8 @@
     if (!roomSlug || !before || olderLoading.value) return;
     messageViewport.preservePosition();
     olderLoading.value = true;
+    olderLoadError.value = false;
+    const generation = loadGeneration;
     const viewportAnchor = captureMessageViewportAnchor();
     const previousScrollHeight = element?.scrollHeight || 0;
     try {
@@ -2701,7 +2748,10 @@
         });
       }
     } catch (error: any) {
-      message.error(error?.message || t('communityChat.messagesLoadFailed'));
+      if (generation === loadGeneration && roomSlug === selectedRoomSlug.value) {
+        olderLoadError.value = true;
+        message.error(error?.message || t('communityChat.messagesLoadFailed'));
+      }
     } finally {
       olderLoading.value = false;
     }
@@ -2747,7 +2797,7 @@
     // Redis 跨实例广播不可用时，WebSocket 仍可能保持“已连接”。保留 30 秒级权威安全刷新，
     // 避免客户端在连接不断开的情况下永久漏掉其他实例写入。
     if (!force && realtimeStatus.value === 'connected' && Date.now() - lastAuthorityRefreshAt < 30_000) return;
-    if (!roomSlug || document.visibilityState !== 'visible') return;
+    if (!workspaceActive.value || !roomSlug || document.visibilityState !== 'visible') return;
     if (initialLoading.value) {
       if (force) realtimeAuthorityRefreshPending = true;
       return;
@@ -2947,6 +2997,7 @@
   async function refreshReadReceiptCounts() {
     const roomSlug = selectedRoomSlug.value;
     if (
+      !workspaceActive.value ||
       readReceiptCountRefreshInFlight ||
       !props.access.authenticated ||
       !props.access.canManage ||
@@ -3394,7 +3445,7 @@
 
   async function toggleLike(chatMessage: CommunityChatMessage) {
     if (!canLikeMessage(chatMessage) || messageActionBusyId.value) return;
-    messageActionBusyId.value = chatMessage.publicId;
+    messageActionBusy.value = { publicId: chatMessage.publicId, action: 'like' };
     try {
       const response = await toggleCommunityChatMessageLike(chatMessage.publicId);
       if (response?.status !== 200) throw new Error('COMMUNITY_CHAT_LIKE_FAILED');
@@ -3406,7 +3457,7 @@
     } catch (error: any) {
       message.error(error?.message || t('communityChat.like.failed'));
     } finally {
-      messageActionBusyId.value = '';
+      messageActionBusy.value = null;
     }
   }
 
@@ -3440,7 +3491,7 @@
   async function recallMessage(chatMessage: CommunityChatMessage) {
     if (messageActionBusyId.value) return;
     const reeditSnapshot = createReeditDraftSnapshot(chatMessage);
-    messageActionBusyId.value = chatMessage.publicId;
+    messageActionBusy.value = { publicId: chatMessage.publicId, action: 'recall' };
     try {
       const response = await recallCommunityChatMessage(chatMessage.publicId);
       if (response?.status !== 200) throw new Error('COMMUNITY_CHAT_RECALL_FAILED');
@@ -3465,7 +3516,7 @@
     } catch (error: any) {
       message.error(error?.message || t('communityChat.recall.failed'));
     } finally {
-      messageActionBusyId.value = '';
+      messageActionBusy.value = null;
     }
   }
 
@@ -3490,7 +3541,7 @@
 
   async function deleteMessage(chatMessage: CommunityChatMessage) {
     if (!canDeleteMessage(chatMessage) || messageActionBusyId.value) return;
-    messageActionBusyId.value = chatMessage.publicId;
+    messageActionBusy.value = { publicId: chatMessage.publicId, action: 'delete' };
     try {
       const response = await deleteCommunityChatMessage(chatMessage.publicId);
       if (response?.status !== 200) throw new Error('COMMUNITY_CHAT_DELETE_FAILED');
@@ -3515,7 +3566,7 @@
     } catch (error: any) {
       message.error(error?.message || t('communityChat.delete.failed'));
     } finally {
-      messageActionBusyId.value = '';
+      messageActionBusy.value = null;
     }
   }
 
@@ -4237,14 +4288,6 @@
     }
   }
 
-  function openBlocksFromSettings() {
-    blocksVisible.value = true;
-  }
-
-  function openProfileFromSettings() {
-    openOwnCommunityProfile();
-  }
-
   function requestOwnProfile() {
     void loadOwnProfile().catch(() => undefined);
   }
@@ -4299,10 +4342,6 @@
     void closeProfileThen(openAuthentication);
   }
 
-  function handleNotificationSettingsSaved() {
-    emit('accessInvalidated');
-  }
-
   function confirmPinMessage(chatMessage: CommunityChatMessage) {
     if (!canManagePinnedMessage.value || pinActionBusy.value || chatMessage.status !== 'active') return;
     if (!pinnedMessage.value || pinnedMessage.value.publicId === chatMessage.publicId) {
@@ -4327,9 +4366,9 @@
   }
 
   async function pinMessage(chatMessage: CommunityChatMessage) {
-    if (!canManagePinnedMessage.value || pinActionBusy.value) return;
+    if (!canManagePinnedMessage.value || pinActionBusy.value || messageActionBusyId.value) return;
     pinActionBusy.value = true;
-    messageActionBusyId.value = chatMessage.publicId;
+    messageActionBusy.value = { publicId: chatMessage.publicId, action: 'pin' };
     try {
       const response = await pinCommunityChatMessage(chatMessage.publicId);
       if (response?.status !== 200 || !response.data?.message) throw new Error('COMMUNITY_CHAT_PIN_FAILED');
@@ -4342,12 +4381,12 @@
       await loadPinnedMessage();
     } finally {
       pinActionBusy.value = false;
-      messageActionBusyId.value = '';
+      messageActionBusy.value = null;
     }
   }
 
   function confirmUnpinMessage(chatMessage: CommunityChatMessage) {
-    if (!canManagePinnedMessage.value || pinActionBusy.value) return;
+    if (!canManagePinnedMessage.value || pinActionBusy.value || messageActionBusyId.value) return;
     Alert.alert({
       title: t('communityChat.pin.unpinTitle'),
       content: t('communityChat.pin.unpinDescription'),
@@ -4366,9 +4405,9 @@
   }
 
   async function unpinMessage(chatMessage: CommunityChatMessage) {
-    if (!canManagePinnedMessage.value || pinActionBusy.value) return;
+    if (!canManagePinnedMessage.value || pinActionBusy.value || messageActionBusyId.value) return;
     pinActionBusy.value = true;
-    messageActionBusyId.value = chatMessage.publicId;
+    messageActionBusy.value = { publicId: chatMessage.publicId, action: 'unpin' };
     try {
       const response = await unpinCommunityChatMessage(chatMessage.publicId);
       if (response?.status !== 200) throw new Error('COMMUNITY_CHAT_UNPIN_FAILED');
@@ -4381,7 +4420,7 @@
       await loadPinnedMessage();
     } finally {
       pinActionBusy.value = false;
-      messageActionBusyId.value = '';
+      messageActionBusy.value = null;
     }
   }
 
@@ -4429,7 +4468,7 @@
     ) {
       return;
     }
-    messageActionBusyId.value = chatMessage.publicId;
+    messageActionBusy.value = { publicId: chatMessage.publicId, action: 'save-sticker' };
     try {
       const response = await saveCommunityChatMessageSticker(chatMessage.publicId);
       const duplicate = Boolean(response.data?.duplicate);
@@ -4446,7 +4485,7 @@
         message.error(t('communityChat.sticker.saveFailed'));
       }
     } finally {
-      messageActionBusyId.value = '';
+      messageActionBusy.value = null;
     }
   }
 
@@ -4489,53 +4528,17 @@
 
   async function blockAuthor(chatMessage: CommunityChatMessage) {
     if (messageActionBusyId.value) return;
-    messageActionBusyId.value = chatMessage.publicId;
+    messageActionBusy.value = { publicId: chatMessage.publicId, action: 'block' };
     try {
       const response = await blockCommunityChatMessageAuthor(chatMessage.publicId);
       if (response?.status !== 200) throw new Error('COMMUNITY_BLOCK_FAILED');
       void recordOperation({ module: '公共聊天室', operation: '屏蔽消息作者' });
       message.success(t('communityChat.blocks.success', { name: authorName(chatMessage) }));
       await loadInitial();
-      if (blocksVisible.value) await loadBlocks();
     } catch (error: any) {
       message.error(error?.message || t('communityChat.blocks.failed'));
     } finally {
-      messageActionBusyId.value = '';
-    }
-  }
-
-  async function loadBlocks() {
-    if (blocksLoading.value) return;
-    blocksLoading.value = true;
-    try {
-      const response = await getCommunityChatBlocks();
-      if (response?.status !== 200 || !Array.isArray(response.data?.items)) {
-        throw new Error('COMMUNITY_BLOCK_LIST_FAILED');
-      }
-      blockedUsers.value = response.data.items as CommunityChatBlockItem[];
-    } catch (error: any) {
-      message.error(error?.message || t('communityChat.blocks.loadFailed'));
-    } finally {
-      blocksLoading.value = false;
-    }
-  }
-
-  async function unblockUser(item: CommunityChatBlockItem) {
-    if (unblockingId.value) return;
-    unblockingId.value = item.id;
-    try {
-      const response = await unblockCommunityChatUser(item.id);
-      if (response?.status !== 200) throw new Error('COMMUNITY_UNBLOCK_FAILED');
-      blockedUsers.value = blockedUsers.value.filter((blocked) => blocked.id !== item.id);
-      void recordOperation({ module: '公共聊天室', operation: '取消屏蔽成员' });
-      message.success(
-        t('communityChat.blocks.unblocked', { name: item.displayName || t('communityChat.memberFallback') }),
-      );
-      await loadInitial();
-    } catch (error: any) {
-      message.error(error?.message || t('communityChat.blocks.unblockFailed'));
-    } finally {
-      unblockingId.value = '';
+      messageActionBusy.value = null;
     }
   }
 
@@ -4778,6 +4781,19 @@
     bookmark.isShowLogin = true;
   }
 
+  function rememberReadingPosition() {
+    if (
+      initialLoading.value ||
+      loadError.value ||
+      !chatMessages.value.length ||
+      composerDraftSession.value.identityKey !== messageOwnerKey
+    )
+      return;
+    composerDraftSession.value.readingAnchor = messageViewport.shouldFollowLatest()
+      ? null
+      : captureMessageViewportAnchor();
+  }
+
   function bindComposerDraftSession(identityKey: string, roomSlug: string) {
     composerDraftSession.value = getCommunityChatDraftSession(identityKey, roomSlug);
     removingAttachmentIds.value = new Set();
@@ -4796,6 +4812,7 @@
 
   watch(realtimeIdentityKey, (nextIdentity, previousIdentity) => {
     if (!previousIdentity || nextIdentity === previousIdentity) return;
+    rememberReadingPosition();
     bindComposerDraftSession(nextIdentity, selectedRoomSlug.value);
     expressionPanelOpen.value = false;
     closeMentionSuggestions();
@@ -4811,6 +4828,7 @@
   watch(
     selectedRoomSlug,
     (nextRoomSlug) => {
+      rememberReadingPosition();
       resetComposerDragState();
       bindComposerDraftSession(realtimeIdentityKey.value, nextRoomSlug);
       chatMessages.value = [];
@@ -4823,7 +4841,7 @@
       closeMentionSuggestions();
       reportVisible.value = false;
       reportTarget.value = null;
-      messageActionBusyId.value = '';
+      messageActionBusy.value = null;
       mobileMessageActionsVisible.value = false;
       mobileMessageActionTarget.value = null;
       mobileMessageActionImageTarget.value = null;
@@ -4839,6 +4857,7 @@
       transientFocusedMessagePublicId.value = '';
       hasNewerThanFocus.value = false;
       pinnedLoadGeneration += 1;
+      pinnedLoadTask = null;
       pinnedMessage.value = null;
       pinActionBusy.value = false;
       pollComposerVisible.value = false;
@@ -5050,6 +5069,7 @@
       void ensureCommunityChatIdentity().catch(() => undefined);
     }
     pollTimer = window.setInterval(() => {
+      if (!workspaceActive.value) return;
       void refreshLatest();
       void refreshReadReceiptCounts();
     }, 8000);
@@ -5068,7 +5088,14 @@
     void nextTick(scheduleVisibleReadReceipts);
   });
 
+  // Capture before the destination route changes shared shell geometry (especially mobile).
+  onBeforeRouteLeave(() => {
+    rememberReadingPosition();
+    readingPositionCapturedForLeave = true;
+  });
+
   onBeforeUnmount(() => {
+    if (!readingPositionCapturedForLeave) rememberReadingPosition();
     isUnmounted = true;
     cancelAvatarLongPress();
     clearAvatarClickSuppression();
@@ -5111,6 +5138,7 @@
 
 <style scoped lang="less">
   .community-workspace {
+    box-sizing: border-box;
     width: 100%;
     height: 100%;
     min-height: 0;
@@ -5338,7 +5366,8 @@
 
   .community-conversation-header {
     min-width: 0;
-    min-height: 58px;
+    height: var(--chat-header-height, 58px);
+    min-height: var(--chat-header-height, 58px);
     padding: 7px 14px;
     box-sizing: border-box;
     display: flex;
@@ -5376,6 +5405,7 @@
   }
 
   .community-conversation-header__title-line {
+    height: 26px;
     min-width: 0;
     display: flex;
     align-items: center;
@@ -5396,19 +5426,23 @@
     font-size: 15px;
   }
 
-  .community-conversation-header__online {
-    flex: 0 0 auto;
-    color: var(--desc-color);
-    font-size: 10px;
-    font-weight: 600;
-    white-space: nowrap;
-  }
-
   .community-conversation-header__title small {
     color: var(--desc-color);
     font-size: 10px;
   }
 
+  .community-conversation-header__online {
+    padding: 2px 6px;
+    min-height: 26px;
+    height: 26px;
+    line-height: 20px;
+    box-sizing: border-box;
+    background: transparent;
+    color: var(--desc-color);
+    font-size: 12px;
+    white-space: nowrap;
+    border-radius: 6px;
+  }
   .community-conversation-header__actions,
   .community-conversation-header__delivery {
     display: inline-flex;
@@ -5527,6 +5561,7 @@
   .community-message-list__older {
     display: flex;
     justify-content: center;
+    min-height: 32px;
     margin-bottom: 16px;
   }
 
@@ -5570,41 +5605,6 @@
     color: var(--desc-color);
     font-size: 11px;
     line-height: 1.6;
-  }
-
-  .community-message-skeleton {
-    position: absolute;
-    inset: 0;
-    z-index: 3;
-    align-content: start;
-    padding: 18px clamp(14px, 3vw, 32px) 22px;
-    box-sizing: border-box;
-    display: grid;
-    gap: 18px;
-    overflow: hidden;
-    background: var(--card-background);
-  }
-
-  .community-message-skeleton span {
-    width: min(420px, 72%);
-    height: 72px;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 16px;
-    background: var(--workspace-panel-bg-color);
-    animation: community-skeleton 1.4s ease-in-out infinite alternate;
-  }
-
-  .community-message-skeleton span.is-own {
-    justify-self: end;
-  }
-
-  @keyframes community-skeleton {
-    from {
-      opacity: 0.55;
-    }
-    to {
-      opacity: 0.9;
-    }
   }
 
   .community-message-state {
@@ -6174,6 +6174,7 @@
     width: 100%;
     min-width: 0;
     display: block;
+    font-size: 13px;
   }
 
   .community-composer__mention-anchor {
@@ -6211,6 +6212,7 @@
     outline: 0;
     box-shadow: none !important;
     background: transparent !important;
+    font-size: 13px;
     line-height: 1.45;
   }
 
@@ -6409,7 +6411,8 @@
     }
 
     .community-conversation-header {
-      min-height: 52px;
+      height: var(--chat-header-height, 52px);
+      min-height: var(--chat-header-height, 52px);
       padding: 6px 10px;
     }
 
@@ -6426,10 +6429,6 @@
 
     .community-conversation-header__title-line {
       gap: 6px;
-    }
-
-    .community-conversation-header__online {
-      font-size: 10px;
     }
 
     .community-conversation-header__settings {

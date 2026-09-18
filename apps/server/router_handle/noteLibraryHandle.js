@@ -973,6 +973,7 @@ export const queryNoteList = async (req, res) => {
   try {
     const userId = req.user.id;
     const tagId = req.body?.tagId;
+    const pendingOnly = req.body?.pendingOnly === true;
     const keyword = String(req.body?.keyword || '')
       .trim()
       .slice(0, 200);
@@ -985,7 +986,7 @@ export const queryNoteList = async (req, res) => {
     const treeMode = Object.prototype.hasOwnProperty.call(req.body || {}, 'parentId');
     if (treeMode) assertNoteTreeFeature(req, NOTE_TREE_FEATURE.READ);
     const parentId = String(req.body?.parentId ?? '').trim() || null;
-    const hasTreeFilter = Boolean(keyword) || tagId === 'null' || Boolean(tagId);
+    const hasTreeFilter = pendingOnly || Boolean(keyword) || tagId === 'null' || Boolean(tagId);
     const rootTreeScope = treeMode && parentId === null;
     let treeSnapshot = null;
 
@@ -1037,6 +1038,12 @@ export const queryNoteList = async (req, res) => {
         )
       `);
       params.push(tagId);
+    }
+
+    if (pendingOnly) {
+      where.push(`EXISTS (SELECT 1 FROM resource_inbox pending
+        WHERE pending.user_id = n.create_by AND pending.resource_type = 'note'
+          AND pending.resource_id = n.id AND pending.status = 'pending')`);
     }
 
     const whereSql = where.join(' AND ');

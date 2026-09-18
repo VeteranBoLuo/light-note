@@ -17,8 +17,12 @@
       :ariaLabel="t('cloudSpace.moveFileTarget')"
     />
     <template #footer>
-      <BButton :disabled="moving" @click="visible = false">{{ t('common.cancel') }}</BButton>
-      <BButton type="primary" :loading="moving" @click="moveFile">{{ t('common.confirm') }}</BButton>
+      <div class="move-file-footer">
+        <BSpace>
+          <BButton :disabled="moving" @click="visible = false">{{ t('common.cancel') }}</BButton>
+          <BButton type="primary" :loading="moving" @click="moveFile">{{ t('common.confirm') }}</BButton>
+        </BSpace>
+      </div>
     </template>
   </BModal>
 </template>
@@ -29,6 +33,7 @@
   import { ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import CloudFolderPicker from '@/components/cloudSpace/CloudFolderPicker.vue';
@@ -96,3 +101,12 @@
     },
   );
 </script>
+
+<style scoped>
+  .move-file-footer {
+    display: flex;
+    justify-content: flex-end;
+    flex-shrink: 0;
+    padding: 0 20px 16px;
+  }
+</style>

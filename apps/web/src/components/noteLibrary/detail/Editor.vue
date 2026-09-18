@@ -3475,14 +3475,19 @@
       toolbarAction(key, label, actionIcon, { disabled, ...options });
 
     const headingActions = [
-      action('paragraph', t('noteDetail.editor.paragraph'), icon.noteDetail.toolbar.heading, {
+      action('paragraph', t('noteDetail.editor.paragraph'), icon.noteDetail.toolbar.paragraph, {
         selected: !isMarkdown && state.block === 'p',
       }),
       ...Array.from({ length: 6 }, (_, index) => {
         const level = index + 1;
-        return action(`heading${level}`, t(`noteDetail.editor.heading${level}`), icon.noteDetail.toolbar.heading, {
-          selected: !isMarkdown && state.block === `h${level}`,
-        });
+        return action(
+          `heading${level}`,
+          t(`noteDetail.editor.heading${level}`),
+          icon.noteDetail.toolbar[`heading${level}` as 'heading1'],
+          {
+            selected: !isMarkdown && state.block === `h${level}`,
+          },
+        );
       }),
     ];
 

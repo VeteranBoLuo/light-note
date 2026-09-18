@@ -161,6 +161,15 @@ export default {
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M12 20v-7m0 0c0-3.5 2.1-5.6 6.25-6.25C18.1 10.8 16 12.9 12 13Zm0 2c0-2.9-1.75-4.65-5.25-5.25c.1 3.45 1.85 5.2 5.25 5.25Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M7.5 20h9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
     // 成就徽记：每个成就拥有独立图形，统一由 AchievementEmblem 组合成同一套徽章视觉。
     achievement: {
+      community_post_1: achievementGlyph('<path d="M5 4h14v13H9l-4 4V4Z"/><path d="M8 8h8M8 11h5"/>'),
+      community_post_10: achievementGlyph(
+        '<path d="M7 4h13v12h-4l-4 4v-4H7V4Z"/><path d="M4 7H2v13h5M10 8h7M10 11h4"/>',
+      ),
+      community_post_50: achievementGlyph(
+        '<path d="M3 7c3-1.5 6-1.5 9 0c3-1.5 6-1.5 9 0v13c-3-1.5-6-1.5-9 0c-3-1.5-6-1.5-9 0V7ZM12 7v13"/><path d="m12 2l1 2l2.2.3l-1.6 1.5M6 11h3M15 11h3"/>',
+      ),
+      community_answer_1: achievementGlyph('<path d="M4 4h16v13h-6l-4 4v-4H4V4Z"/><path d="m8 10l2.5 2.5L16 7"/>'),
+
       streak_1: achievementGlyph(
         '<rect x="3.5" y="5.5" width="13.5" height="14" rx="3"/><path d="M7 3.5v4M13.5 3.5v4M3.5 9.5H17m-9 4l2 2l3.5-4"/><path d="m19.25 4l.55 1.45L21.25 6l-1.45.55L19.25 8l-.55-1.45L17.25 6l1.45-.55L19.25 4Z" fill="currentColor" stroke="none"/>',
       ),
@@ -339,6 +348,8 @@ export default {
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><path d="M12 3.25 19 6v5.1c0 4.45-2.85 7.45-7 9.65-4.15-2.2-7-5.2-7-9.65V6z"/><path d="M9 11.5l2 2 4-4"/></g></svg>',
     notification:
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><path d="M18 9a6 6 0 0 0-12 0c0 6-2.5 8-2.5 8h17S18 15 18 9Z"/><path d="M14.25 20a2.5 2.5 0 0 1-4.5 0"/></g></svg>',
+    notificationFilled:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2a7 7 0 0 0-7 7c0 4.8-1.7 7-2.2 7.5A1 1 0 0 0 3.5 18h17a1 1 0 0 0 .7-1.5C20.7 16 19 13.8 19 9a7 7 0 0 0-7-7Zm-2.8 18a3 3 0 0 0 5.6 0Z"/></svg>',
     notificationReadAll:
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path d="m5 12.5l4.2 4.2L19 7" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg>',
   },
@@ -515,6 +526,9 @@ export default {
   coBuild: {
     board:
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="currentColor" d="M9 21h6v-1.5H9zm3-19a7 7 0 0 0-4.3 12.52c.8.62 1.3 1.38 1.3 2.23V18h6v-1.25c0-.85.5-1.61 1.3-2.23A7 7 0 0 0 12 2m3.08 11.34C13.98 14.2 13.5 15.3 13.5 16.5h-3c0-1.2-.48-2.3-1.58-3.16A5.5 5.5 0 1 1 15.08 13.34"/></svg>',
+    voteOutline: achievementGlyph(
+      '<path d="M8 10H4v10h4M8 10l5-7c2 0 3 2 2 5l-.4 2H20a1 1 0 0 1 1 1.3l-2 8A1 1 0 0 1 18 20H8V10Z"/>',
+    ),
     vote: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="currentColor" d="M9 21H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h4zm2 0V9.74l3.12-6.24c.23-.46.8-.65 1.27-.42a3.5 3.5 0 0 1 1.84 4.08L16.7 9H20a2 2 0 0 1 1.94 2.49l-2 8A2 2 0 0 1 18 21z"/></svg>',
     official:
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="currentColor" d="m12 2l2.09 4.26L18.8 7l-3.4 3.31l.8 4.69L12 12.77L7.8 15l.8-4.69L5.2 7l4.71-.74zm-7 9.5l2 1.06V20l5-2l5 2v-7.44l2-1.06V23l-7-2.8L5 23z"/></svg>',
@@ -643,8 +657,15 @@ export default {
       bold: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.9" d="M7 5h6.2a3.4 3.4 0 0 1 0 6.8H7Zm0 6.8h7a3.6 3.6 0 0 1 0 7.2H7Z"/></svg>',
       italic:
         '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.9" d="M15.5 5h-5m3 14h-5M14 5l-4 14"/></svg>',
+      paragraph: achievementGlyph('<path d="M14 4H9a4 4 0 0 0 0 8h5M14 4v16M18 4v16M11 4h9"/>'),
+      heading1: achievementGlyph('<path d="M3 5v14M12 5v14M3 12h9M18 14l2-1v7"/>'),
+      heading2: achievementGlyph('<path d="M3 5v14M12 5v14M3 12h9M17 14c0-2 4-2 4 0 0 2-4 3-4 6h4"/>'),
+      heading3: achievementGlyph('<path d="M3 5v14M12 5v14M3 12h9M17 13h4l-2 3c4 0 2 6-2 4"/>'),
+      heading4: achievementGlyph('<path d="M3 5v14M12 5v14M3 12h9M20 20v-7l-4 5h6"/>'),
+      heading5: achievementGlyph('<path d="M3 5v14M12 5v14M3 12h9M21 13h-4v3c5-2 5 6 0 4"/>'),
+      heading6: achievementGlyph('<path d="M3 5v14M12 5v14M3 12h9M21 13c-5-2-5 8-2 7 4 0 3-6-2-3"/>'),
       heading:
-        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.9" d="M5 5v14M14 5v14M5 12h9M17.5 19v-6.2l-2 1.4"/></svg>',
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.9" d="M6 5v14M18 5v14M6 12h12"/></svg>',
       quote:
         '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"><path d="M4 5.5v13"/><path d="M9 8h11M9 12h11M9 16h7"/></g></svg>',
       bulletList:

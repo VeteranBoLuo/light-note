@@ -10,6 +10,7 @@
       :external-loading-more="bookmark.bookmarkLoadingMore"
       :external-has-more="bookmark.bookmarkHasMore"
       :external-load-error="bookmarkLoadError"
+      :external-load-more-error="bookmarkLoadMoreError"
       :management-mode="desktopManagementMode"
       :reload-bookmarks="reloadEmbeddedManagement"
       @management-mode-change="setDesktopManagementMode"
@@ -253,6 +254,7 @@
   }
   const batchMutating = ref(false);
   const bookmarkLoadError = ref(false);
+  const bookmarkLoadMoreError = ref(false);
   const mobilePageActionsOpen = ref(false);
   const workspaceRef = ref<HTMLElement | null>(null);
   const desktopManagementMode = computed(() => bookmark.isDesktop && String(route.query.mode || '') === 'manage');
@@ -569,10 +571,15 @@
     const params = getBookmarkRequestParams(requestType);
     if (!params) return false;
 
+    bookmarkLoadMoreError.value = false;
     bookmark.bookmarkLoadingMore = true;
     try {
       const result = await fetchBookmarkList(requestType, params, bookmark.bookmarkPage + 1);
-      if (requestSequence !== bookmarkRequestSequence || requestType !== bookmark.type || !result) return false;
+      if (requestSequence !== bookmarkRequestSequence || requestType !== bookmark.type) return false;
+      if (!result) {
+        bookmarkLoadMoreError.value = true;
+        return false;
+      }
       const previousLength = bookmark.bookmarkList.length;
       bookmark.bookmarkList = mergeResourcePage(bookmark.bookmarkList, result.items);
       bookmark.bookmarkPage = result.page;
@@ -585,6 +592,7 @@
       void cacheImages(result.items);
       return bookmark.bookmarkList.length > previousLength;
     } catch (error) {
+      if (requestSequence === bookmarkRequestSequence) bookmarkLoadMoreError.value = true;
       console.warn('加载更多书签失败:', error);
       return false;
     } finally {
@@ -622,6 +630,7 @@
     const loadedPages = options.preserveLoaded ? bookmark.bookmarkPage : 1;
     const filterParams = getBookmarkRequestParams();
     const requestSequence = ++bookmarkRequestSequence;
+    bookmarkLoadMoreError.value = false;
     const requestType = bookmark.type;
     if (!silent) {
       bookmarkLoadError.value = false;

@@ -18,6 +18,30 @@ const item = (type: string, id: string) => ({ type, id, title: `${type}-${id}` }
 describe('useResourcePickerSearch', () => {
   beforeEach(() => fetchGlobalSearchMock.mockReset());
 
+  it('waits for eligibility and ignores stale filter responses', async () => {
+    fetchGlobalSearchMock.mockResolvedValue({ items: [item('note', '1'), item('note', '2')] } as any);
+    let release!: (items: any[]) => void;
+    const picker = useResourcePickerSearch({
+      filterItems: () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    });
+    const pending = picker.searchNow('');
+    await Promise.resolve();
+    expect(picker.loading.value).toBe(true);
+    expect(picker.results.value).toEqual([]);
+    release([item('note', '1')] as any);
+    await pending;
+    expect(picker.results.value.map(resourceItemKey)).toEqual(['note:1']);
+    const stale = picker.searchNow('old');
+    await Promise.resolve();
+    picker.reset();
+    release([item('note', '2')] as any);
+    await stale;
+    expect(picker.results.value).toEqual([]);
+  });
+
   it('keeps the file format filter on initial search and subsequent pages', async () => {
     fetchGlobalSearchMock
       .mockResolvedValueOnce({

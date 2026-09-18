@@ -99,8 +99,7 @@ describe('NotificationCenterPanel', () => {
 
     expect(host.querySelectorAll('.nt-tab')).toHaveLength(4);
     expect(host.querySelector('.nt-tab.active')?.textContent).toContain('全部');
-    expect(host.querySelector('.nt-tab.active .nt-tab-check')).not.toBeNull();
-    expect(host.querySelectorAll('.nt-tab:not(.active) .nt-tab-check')).toHaveLength(0);
+    expect(host.querySelectorAll('.nt-tab-check')).toHaveLength(0);
     expect(host.querySelectorAll('.nt-group-surface .nt-item')).toHaveLength(2);
     expect(host.querySelector('.nt-item')?.classList.contains('unread')).toBe(true);
     expect(host.querySelector('.nt-item .nt-dot')).not.toBeNull();
@@ -204,13 +203,13 @@ describe('NotificationCenterPanel', () => {
     expect(source).toMatch(/\.nt-todo-state\s*\{[\s\S]*?min-height: 24px;[\s\S]*?border-radius: 7px;/);
   });
 
-  it('通知分类选中态同时使用实色描边、明确文字色和勾选图标', () => {
-    expect(source).toContain('class="nt-tab-check"');
+  it('通知分类选中态使用实色描边和明确文字色，不增加勾选占位', () => {
+    expect(source).not.toContain('nt-tab-check');
     expect(source).toMatch(
-      /\.nt-tab\.active\s*\{[\s\S]*?border:\s*2px solid var\(--primary-color\);[\s\S]*?color:\s*var\(--primary-color\);/,
+      /\.nt-tab\.active\s*\{[\s\S]*?border-color:\s*var\(--primary-color\);[\s\S]*?color:\s*var\(--primary-color\);/,
     );
     expect(source).toMatch(
-      /\.is-mobile \.nt-tab\.active\s*\{[\s\S]*?border:\s*2px solid var\(--primary-color\);[\s\S]*?background:\s*var\(--mobile-selected-bg\) !important;/,
+      /\.is-mobile \.nt-tab\.active\s*\{[\s\S]*?border-color:\s*var\(--primary-color\);[\s\S]*?background:\s*var\(--mobile-selected-bg\) !important;/,
     );
     expect(bellSource).toMatch(
       /\.notification-popover \.nt-tab\.active\s*\{[\s\S]*?border-color:\s*var\(--primary-color\);[\s\S]*?color:\s*var\(--primary-color\);/,

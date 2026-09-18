@@ -111,6 +111,10 @@
             :drop-target-active="dragDropTargetActive"
             :drop-target-position="dragDropTarget?.position || ''"
             :menu-disabled="noteDragging"
+            :batch-mode="batchMode"
+            :selected-ids="selectedNoteIds"
+            :selection-disabled="selection.busy.value || loading || refreshing"
+            @select-note="(node, checked) => selection.toggle(node, checked)"
             @toggle="toggleTreeNode"
             @select="selectDirectory"
             @open="openLibraryNote"
@@ -144,6 +148,10 @@
           v-if="desktopPreviewOpen && previewNoteId"
           :key="noteCacheScope"
           :note-id="previewNoteId"
+          :batch-mode="batchMode"
+          :selected="selectedNoteIds.has(previewNoteId)"
+          :selection-disabled="selection.busy.value || loading || refreshing"
+          @select-note="selectPreviewNote"
           :seed="previewNoteSeed"
           :breadcrumb="previewBreadcrumb"
           :child-count="previewChildCount"
@@ -400,7 +408,7 @@
           <span class="note-empty-icon"><SvgIcon :src="icon.resource.note" size="28" /></span>
           <!-- 区分「搜索/标签筛选无命中」与「新用户没笔记」 -->
           <template v-if="hasActiveFilter">
-            <strong>{{ $t('note.noFilterMatch') }}</strong>
+            <strong>{{ $t(pendingOnly ? 'inbox.pendingFilterEmpty' : 'note.noFilterMatch') }}</strong>
             <BButton type="primary" class="note-create-button" @click="clearFilters">
               {{ $t('note.clearFilter') }}
             </BButton>
@@ -507,7 +515,7 @@
             controlled
             :checked="allVisibleChecked"
             :indeterminate="someVisibleChecked"
-            :disabled="!viewNoteList.length || selection.busy.value || loading || refreshing"
+            :disabled="!batchSelectionCandidates.length || selection.busy.value || loading || refreshing"
             :aria-label="$t(allVisibleChecked ? 'note.unselectAllCurrent' : 'note.selectAllCurrent')"
             @change="setAllVisibleChecked"
           />
@@ -646,6 +654,7 @@
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import router from '@/router';
+  import { collectNoteBatchCandidates } from '@/utils/noteBatchSelection';
   import { useNoteLibraryNavigation } from '@/composables/useNoteLibraryNavigation';
   import { useResourceSelection } from '@/composables/useResourceSelection';
   import type { SelectionOperation } from '@/store/resourceSelection';
@@ -982,9 +991,15 @@
   const attachPagesVisible = ref(false);
   const activeRenameNote = ref<{ id: string; title?: string; revision?: number } | null>(null);
   const renameNoteVisible = ref(false);
+  const batchSelectionCandidates = computed(() => collectNoteBatchCandidates(
+    noteList.value,
+    !bookmark.isMobile && noteTreeReadEnabled.value ? sidebarTreeChildrenByParent.value : {},
+    sidebarTreeExpandedIds.value,
+    NOTE_TREE_ROOT_KEY,
+  ));
   const selection = useResourceSelection(
     'notes',
-    noteList,
+    batchSelectionCandidates,
     'note',
     computed(() => loading.value || refreshing.value),
     () => {
@@ -993,6 +1008,7 @@
     },
   );
   const batchMode = selection.mode;
+  const selectedNoteIds = computed(() => new Set(selection.ids.value));
   let exportOperation: SelectionOperation | null = null;
   const batchExportModalVisible = ref(false);
   const batchExporting = ref(false);
@@ -1339,6 +1355,12 @@
       syncNotePendingState(noteId, !wasPending);
       // 预览可能已经把旧状态写进详情预取；切换后失效，进入编辑页时读取服务端权威状态。
       invalidateNoteDetailPrefetch(user, noteId);
+      if (pendingOnly.value && wasPending) {
+        const before = noteList.value.length;
+        noteList.value = noteList.value.filter((item) => String(item.id) !== noteId);
+        noteTotal.value = Math.max(0, noteTotal.value - (before - noteList.value.length));
+        await reloadNotes(true);
+      }
     } finally {
       togglingInboxIds.delete(noteId);
     }
@@ -1477,6 +1499,15 @@
       result: 'success',
     });
     return selectTreeDirectory(noteId);
+  }
+
+  function selectPreviewNote(checked: boolean) {
+    const id = previewNoteId.value;
+    if (!id) return;
+    const note = String(previewNoteSeed.value?.id || '') === id
+      ? previewNoteSeed.value
+      : findNoteForWarmup(id);
+    selection.toggle(note || { id }, checked);
   }
 
   function findNoteForWarmup(noteId: string) {
@@ -2173,11 +2204,14 @@
     return String(rawTag);
   }
 
+  const pendingOnly = computed(() => router.currentRoute.value.query.pending === '1');
+
   const currentListCacheKey = computed(() =>
     buildNoteLibraryListCacheKey(noteCacheScope.value, {
       parentId: noteTreeReadEnabled.value ? currentParentId.value : null,
       tagId: getActiveNoteTagId(),
       keyword: debouncedSearch.value,
+      pendingOnly: pendingOnly.value,
     }),
   );
 
@@ -2236,6 +2270,7 @@
             previewVersion: 2,
             ...(noteTreeReadEnabled.value ? { parentId: currentParentId.value } : {}),
             keyword: debouncedSearch.value,
+            pendingOnly: pendingOnly.value,
             tagId: getActiveNoteTagId(),
           },
           // 列表有本地骨架/软刷新状态，不再同时点亮全局顶部请求条。
@@ -2348,16 +2383,17 @@
     return Number.isFinite(parsed) ? parsed : null;
   }
 
-  // 空态区分用：搜索词或标签筛选任一激活；目录范围本身不是筛选条件。
+  // 目录范围本身不是筛选条件；搜索、标签与待整理用于区分筛选空态。
   const hasActiveFilter = computed(
-    () => Boolean(debouncedSearch.value.trim()) || router.currentRoute.value.query.tag != null,
+    () => pendingOnly.value || Boolean(debouncedSearch.value.trim()) || router.currentRoute.value.query.tag != null,
   );
   function clearFilters() {
     searchValue.value = '';
     debouncedSearch.value = '';
-    if (router.currentRoute.value.query.tag != null) {
+    if (router.currentRoute.value.query.tag != null || pendingOnly.value) {
       const query = { ...router.currentRoute.value.query };
       delete query.tag;
+      delete query.pending;
       delete query._rt;
       router.replace({ path: '/noteLibrary', query });
     }
@@ -2370,6 +2406,7 @@
       !loadingMore.value &&
       !treeMovePending.value &&
       !debouncedSearch.value &&
+      !pendingOnly.value &&
       router.currentRoute.value.query.tag == null &&
       visibleDragNoteList.value.length > (noteTreeReadEnabled.value ? 0 : 1) &&
       !selection.items.value.length,
@@ -2405,6 +2442,7 @@
       () => router.currentRoute.value.query.tag,
       () => router.currentRoute.value.query._rt,
       currentParentId,
+      pendingOnly,
     ],
     ([featuresReady, search, tag, refreshToken, parentId], previous) => {
       if (!featuresReady) return;
@@ -2481,7 +2519,10 @@
 
   async function resetNoteLibrary() {
     const alreadyReset =
-      !debouncedSearch.value && router.currentRoute.value.query.tag == null && currentParentId.value === null;
+      !debouncedSearch.value &&
+      !pendingOnly.value &&
+      router.currentRoute.value.query.tag == null &&
+      currentParentId.value === null;
     clearNoteLibraryRootViewState();
     await router.replace('/noteLibrary');
     if (alreadyReset) await reloadNotes();
@@ -3693,6 +3734,12 @@
     min-width: 0;
     justify-content: center;
     padding-inline: 0;
+  }
+
+  .note-mobile-actions :deep(.noteType-select.has-pending) {
+    width: auto;
+    padding-inline: 6px;
+    flex-shrink: 0;
   }
 
   .note-mobile-directory {

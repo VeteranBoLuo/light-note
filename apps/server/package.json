@@ -40,7 +40,8 @@
     "check:browser-push": "node scripts/checkBrowserPushRuntime.js",
     "worker:note-imports": "node noteImportWorker.js",
     "worker:note-imports:dev": "node --watch --watch-preserve-output noteImportWorker.js",
-    "check:note-imports": "node scripts/checkNoteImportRuntime.js"
+    "check:note-imports": "node scripts/checkNoteImportRuntime.js",
+    "migrate:community-feed-schema": "node scripts/ensureCommunityFeedSchema.js"
   },
   "keywords": [],
   "author": "",

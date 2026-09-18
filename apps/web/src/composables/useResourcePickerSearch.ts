@@ -23,6 +23,7 @@ export interface ResourcePickerItem {
 }
 
 export interface UseResourcePickerSearchOptions {
+  filterItems?: (items: ResourcePickerItem[]) => Promise<ResourcePickerItem[]>;
   fileExtensions?: () => string[] | undefined;
   /** 允许出现在结果里的资源类型 */
   allowedTypes?: ResourcePickerType[] | (() => ResourcePickerType[] | undefined);
@@ -178,7 +179,9 @@ export function useResourcePickerSearch(options: UseResourcePickerSearchOptions 
           : {}),
       });
       if (currentRequest !== requestId) return;
-      const normalizedItems = normalizeItems(data?.items || [], allowedTypes);
+      const candidates = normalizeItems(data?.items || [], allowedTypes);
+      const normalizedItems = options.filterItems ? await options.filterItems(candidates) : candidates;
+      if (currentRequest !== requestId) return;
       results.value = useOrderedBrowse
         ? normalizedItems
         : takePerType(normalizedItems, { perType, order: allowedTypes });
@@ -227,7 +230,9 @@ export function useResourcePickerSearch(options: UseResourcePickerSearchOptions 
       });
       if (currentRequest !== requestId) return;
       const existingKeys = results.value.map(resourceItemKey);
-      const additions = normalizeItems(data?.items || [], browseTypes, existingKeys);
+      const candidates = normalizeItems(data?.items || [], browseTypes, existingKeys);
+      const additions = options.filterItems ? await options.filterItems(candidates) : candidates;
+      if (currentRequest !== requestId) return;
       if (additions.length) results.value = [...results.value, ...additions];
       const followingCursor = data.nextCursor || null;
       const cursorAdvanced = JSON.stringify(followingCursor) !== JSON.stringify(cursor);
@@ -276,7 +281,10 @@ export function useResourcePickerSearch(options: UseResourcePickerSearchOptions 
         includeMetadata: false,
       });
       if (version !== requestId) return null;
-      for (const item of normalizeItems(data.items || [], types)) collected.set(resourceItemKey(item), item);
+      const candidates = normalizeItems(data.items || [], types);
+      const filtered = options.filterItems ? await options.filterItems(candidates) : candidates;
+      if (version !== requestId) return null;
+      for (const item of filtered) collected.set(resourceItemKey(item), item);
       checkLimit();
       cursor = data.nextCursor || null;
       more = Boolean(data.hasMore);

@@ -85,7 +85,8 @@ describe('growth 段位表', () => {
       1024, 1280, 1536, 1792, 2048, 2560, 3072, 4096, 5120, 6144, 8192, 10752, 13824, 16896, 20480,
     ]);
     expect(RANKS.map((rank) => rank.aiTokenDaily)).toEqual([
-      100_000, 120_000, 140_000, 160_000, 180_000, 200_000, 220_000, 240_000, 270_000, 300_000, 340_000, 380_000, 420_000, 460_000, 500_000,
+      100_000, 120_000, 140_000, 160_000, 180_000, 200_000, 220_000, 240_000, 270_000, 300_000, 340_000, 380_000,
+      420_000, 460_000, 500_000,
     ]);
     for (let i = 1; i < RANKS.length; i++) {
       expect(RANKS[i].spaceMb).toBeGreaterThanOrEqual(RANKS[i - 1].spaceMb);
@@ -179,9 +180,10 @@ describe('每日经验上限与一次性奖励隔离', () => {
 
     expect(result.granted).toBe(5);
     const capQuery = connection.query.mock.calls.find(([sql]) => sql.includes('SUM(amount)'));
-    expect(capQuery?.[0]).toContain('source NOT IN (?, ?, ?, ?, ?)');
+    expect(capQuery?.[0]).toContain('source NOT IN (?, ?, ?, ?, ?, ?)');
     expect(capQuery?.[1]).toEqual([
       'user-1',
+      'community_task',
       'growth_task',
       'first_own_resource',
       'milestone',
@@ -262,6 +264,7 @@ describe('每日经验上限与一次性奖励隔离', () => {
       'user-1',
       0,
       '20260806',
+      'community_task',
       'growth_task',
       'first_own_resource',
       'milestone',
@@ -272,26 +275,31 @@ describe('每日经验上限与一次性奖励隔离', () => {
 });
 
 describe('成就体系职责', () => {
-  it('仅用首签成就承接新用户赠框，其余仍保持长期积累目标', () => {
+  it('首签与社区首次贡献保留入门目标，其余成就保持长期积累目标', () => {
     const retiredKeys = ['first_checkin', 'first_bookmark', 'first_note', 'first_file'];
     const keys = ACHIEVEMENTS.map((achievement) => achievement.key);
 
-    expect(keys).toHaveLength(39);
+    expect(keys).toHaveLength(43);
     expect(keys).not.toEqual(expect.arrayContaining(retiredKeys));
-    expect(ACHIEVEMENTS.filter((achievement) => achievement.target === 1)).toEqual([
-      expect.objectContaining({ key: 'streak_1', metric: 'maxStreak', reward: 10 }),
-    ]);
+    expect(ACHIEVEMENTS.filter((achievement) => achievement.target === 1)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: 'community_post_1', reward: 20 }),
+        expect.objectContaining({ key: 'community_answer_1', reward: 30 }),
+        expect.objectContaining({ key: 'streak_1', metric: 'maxStreak', reward: 10 }),
+      ]),
+    );
+    expect(ACHIEVEMENTS.filter((achievement) => achievement.target === 1)).toHaveLength(3);
     expect(
-      ACHIEVEMENTS.filter((achievement) => achievement.key !== 'streak_1').every(
-        (achievement) => achievement.target > 1,
-      ),
+      ACHIEVEMENTS.filter(
+        (achievement) => !['streak_1', 'community_post_1', 'community_answer_1'].includes(achievement.key),
+      ).every((achievement) => achievement.target > 1),
     ).toBe(true);
     expect(
       ACHIEVEMENTS.reduce((counts, achievement) => {
         counts[achievement.group] = (counts[achievement.group] || 0) + 1;
         return counts;
       }, {}),
-    ).toEqual({ checkin: 7, create: 17, action: 4, organize: 4, level: 3, tenure: 4 });
+    ).toEqual({ checkin: 7, create: 17, action: 4, organize: 4, level: 3, tenure: 4, community: 4 });
   });
 
   it('为书签、笔记和文件提供基础与进阶两级静态头像框门槛', () => {

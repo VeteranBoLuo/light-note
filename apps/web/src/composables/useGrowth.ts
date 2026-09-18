@@ -323,6 +323,7 @@ export interface GrowthClaimable {
   growthTasks: ClaimableItemGroup<GrowthTask>;
   achievements: ClaimableItemGroup<Achievement>;
   weekly: ClaimableItemGroup<WeeklyChallenge>;
+  community?: ClaimableItemGroup;
   today?: { completed: number; total: number; claimableCount: number };
   nextAction?: GrowthNextAction | null;
   nextActions?: GrowthNextAction[];
@@ -1103,7 +1104,10 @@ export function useGrowth() {
     return generation === ownerGeneration ? claimable.value : null;
   }
 
-  async function claimAllRewards(scopes?: Array<'daily' | 'growthTasks' | 'achievements' | 'weekly'>) {
+  async function claimAllRewards(
+    scopes?: Array<'daily' | 'growthTasks' | 'achievements' | 'weekly' | 'community'>,
+    communityKeys?: string[],
+  ) {
     const uid = useUserStore().id || 'visitor';
     ensureGrowthOwner(uid);
     if (claimingRewards.value) return null;
@@ -1111,7 +1115,9 @@ export function useGrowth() {
     const generation = ownerGeneration;
     const claimVersion = ++claimRequestVersion;
     try {
-      const res = await growthApi.claimAll(scopes?.length ? { scopes } : undefined);
+      const res = await growthApi.claimAll(
+        scopes?.length ? { scopes, ...(communityKeys ? { keys: { community: communityKeys } } : {}) } : undefined,
+      );
       if (isCurrentGrowthOwner(uid, generation) && res?.status === 200 && res.data?.ok) {
         if (res.data.growth) {
           applyGrowthMutationSnapshot(res.data.growth as Growth);

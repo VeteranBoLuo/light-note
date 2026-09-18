@@ -7,6 +7,7 @@ describe('growthNavigation', () => {
       ['create_note', '/noteLibrary'],
       ['upload_file', '/cloudSpace'],
       ['create_bookmark', '/home'],
+      ['open_community', '/community/feed'],
     ]) {
       expect(resolveGrowthActionRoute(action, mobile)).toBe(path);
     }

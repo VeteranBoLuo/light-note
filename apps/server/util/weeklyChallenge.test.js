@@ -92,4 +92,19 @@ describe('weeklyChallenge 示例资源隔离', () => {
       expect.objectContaining({ dayKey: '20260820' }),
     );
   });
+  it('C7 reads approved community posts and respects a previous weekly claim', async () => {
+    vi.stubEnv('COMMUNITY_FEED_ENABLED','true');
+    mocks.resolveWeeklyEarningPolicyVersion.mockResolvedValue('points-earning-c7');
+    mocks.getMeaningfulActivityFacts.mockResolvedValue({byType:{},activeDays:0,variety:0,total:0});
+    const calendar={timezone:'Asia/Shanghai',utcOffsetMinutes:480,shiftMinutes:480,dayKey:'20260921',weekKey:'202639'};
+    try {
+      mocks.query.mockResolvedValueOnce([[{count:3}]]).mockResolvedValueOnce([[]]);
+      let weekly = await getWeeklyChallenges('a',{calendar});
+      expect(weekly.challenges.find(c=>c.key==='wk_community')).toMatchObject({cur:1,target:1,reward:20,claimable:true});
+      mocks.query.mockResolvedValueOnce([[{count:3}]]).mockResolvedValueOnce([[{ref:'week:c7:202639:wk_community'}]]);
+      weekly = await getWeeklyChallenges('a',{calendar});
+      expect(weekly.challenges.find(c=>c.key==='wk_community')).toMatchObject({claimed:true,claimable:false});
+    } finally {vi.unstubAllEnvs();}
+  });
+
 });

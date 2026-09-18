@@ -7,6 +7,7 @@ describe('community chat draft memory', () => {
   it('按账号与频道隔离完整的输入会话', () => {
     const general = getCommunityChatDraftSession('user-1:user', 'general');
     general.text = '未发送内容';
+    general.readingAnchor = { publicId: 'message-older', offsetTop: -12, scrollTop: 250, scrollHeight: 900 };
     general.replyTarget = {
       publicId: 'message-1',
       content: '被回复的消息',
@@ -39,6 +40,7 @@ describe('community chat draft memory', () => {
     expect(getCommunityChatDraftSession('user-1:user', 'general')).toBe(general);
     expect(getCommunityChatDraftSession('user-1:user', 'general')).toMatchObject({
       text: '未发送内容',
+      readingAnchor: { publicId: 'message-older', offsetTop: -12 },
       replyTarget: { publicId: 'message-1' },
       mentionTargets: [{ userPublicId: 'user-2' }],
       pendingAttachments: [{ publicId: 'image-1', kind: 'image', state: 'ready' }],
@@ -47,6 +49,7 @@ describe('community chat draft memory', () => {
     });
     expect(getCommunityChatDraftSession('user-1:user', 'help')).not.toBe(general);
     expect(getCommunityChatDraftSession('user-2:user', 'general').text).toBe('');
+    expect(getCommunityChatDraftSession('user-2:user', 'general').readingAnchor).toBeNull();
   });
 
   it('切回同一频道复用原响应式会话，发送成功后可原位清空', () => {

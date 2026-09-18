@@ -19,6 +19,13 @@ export interface PersonCenterEntry {
  * 但名称、路径、图标和语义色不能在两个组件里分别维护。
  */
 export const PERSON_CENTER_ENTRIES = {
+  communityProfile: {
+    name: 'communityProfile',
+    labelKey: 'community.publicProfile',
+    path: '/community/profile',
+    icon: icon.communityChat.profileEdit,
+    tone: 'community',
+  },
   campaign: {
     name: 'campaign',
     labelKey: 'autumn.entry',
@@ -132,6 +139,7 @@ export const MOBILE_PERSON_CENTER_QUICK_ENTRIES = [
 export const MOBILE_PERSON_CENTER_MANAGEMENT_ENTRIES = [PERSON_CENTER_ENTRIES.trash] as const;
 
 export const MOBILE_PERSON_CENTER_COMMUNICATION_ENTRIES = [
+  PERSON_CENTER_ENTRIES.communityProfile,
   PERSON_CENTER_ENTRIES.coBuild,
   PERSON_CENTER_ENTRIES.feedback,
   PERSON_CENTER_ENTRIES.help,

@@ -15,6 +15,8 @@ pnpm dev:web
 pnpm dev:server
 ```
 
+macOS / Linux 再次运行 `pnpm dev:server` 或监听模式时，会先通知同仓库的旧本地启动器退出，等待其 HTTP 服务与 Worker 停止后再启动。手动 Worker、其他仓库的启动器与 Worker，以及无法确认归属的 Worker 不自动接管；旧 Worker 未退出时停止启动，避免新旧代码同时领取任务。
+
 真机 HMR 使用：
 
 ```bash

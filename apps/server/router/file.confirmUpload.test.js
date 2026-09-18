@@ -43,7 +43,8 @@ vi.mock('../util/obsClient.js', () => ({
   putObjectToObs: vi.fn(),
 }));
 vi.mock('../util/fileCategory.js', () => ({
-  FILE_CATEGORY_ORDER: [],
+  FILE_CATEGORY_ORDER: ['pdf', 'image'],
+  buildFileCategorySql: () => 'files.category',
   getFileExtension: () => '',
   resolveFileCategory: () => 'other',
 }));
@@ -444,5 +445,25 @@ describe('文件名检查复用完整名称查询', () => {
     const req = request();req.body = {fileNames: ['name']};const res = response();
     await mocks.routes.get('/checkFileNames').at(-1)(req, res);
     expect(res.send).toHaveBeenCalledWith({status: 500, data: null, msg: '检查文件名失败，请稍后重试'});
+  });
+});
+
+
+describe('云空间待整理列表', () => {
+  it('分页数据和总数使用同一待整理、目录、类型及搜索范围', async () => {
+    mocks.pool.query.mockReset();
+    mocks.pool.query.mockResolvedValueOnce([[]]).mockResolvedValueOnce([[{ total: 0 }]]);
+    const res = response();
+    await mocks.routes.get('/queryFiles').at(-1)({ user: { id: 'user-1' }, body: {
+      currentPage: 1, pageSize: 48,
+      filters: { pendingOnly: true, folderId: 'folder-1', fileName: 'report', category: ['pdf'] },
+    } }, res);
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200 }));
+    for (const [sql, params] of mocks.pool.query.mock.calls) {
+      expect(sql).toContain('pending.user_id = files.create_by');
+      expect(sql).toContain("pending.resource_type = 'file'");
+      expect(sql).toContain("pending.status = 'pending'");
+      expect(params.slice(0, 4)).toEqual(['user-1', 'folder-1', '%report%', 'pdf']);
+    }
   });
 });

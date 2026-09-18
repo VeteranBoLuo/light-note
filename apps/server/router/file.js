@@ -485,6 +485,12 @@ router.post('/queryFiles', async (req, res) => {
       }
     }
 
+    if (filters.pendingOnly === true) {
+      where.push(`EXISTS (SELECT 1 FROM resource_inbox pending
+        WHERE pending.user_id = files.create_by AND pending.resource_type = 'file'
+          AND pending.resource_id = files.id AND pending.status = 'pending')`);
+    }
+
     const whereSql = where.join(' AND ');
     const orderBy = buildFileListOrderBy(req.body?.sort);
     let sql = `SELECT files.*, folders.name AS folderName,

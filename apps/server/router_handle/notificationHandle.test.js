@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('../util/communityFeed/schema.js',()=>({communityFeedSchemaReady:vi.fn(async()=>false)}));
+const markSnapshot=vi.fn(async()=>2);
+vi.mock('../util/notificationReadSnapshot.js',()=>({markNotificationSnapshotRead:(...args)=>markSnapshot(...args)}));
 const query = vi.fn();
 const getConnection = vi.fn();
 
@@ -69,8 +72,8 @@ describe('聊天室通知中心可见性与旧客户端兼容', () => {
       ['ai_routine', 'type IN (?,?)', ['user-1', 'daily_brief', 'ai_routine']],
       [
         'system_group',
-        'type NOT IN (?,?,?,?,?,?)',
-        ['user-1', 'todo_reminder', 'level_up', 'streak_risk', 'daily_brief', 'ai_routine', 'community_chat'],
+        'type NOT IN (?,?,?,?,?,?,?)',
+        ['user-1', 'todo_reminder', 'level_up', 'streak_risk', 'daily_brief', 'ai_routine', 'community_chat', 'community_feed'],
       ],
     ]) {
       query
@@ -110,7 +113,7 @@ describe('聊天室通知中心可见性与旧客户端兼容', () => {
   });
 
   it('旧客户端的铃铛计数和全部已读仍可完全排除聊天室通知', async () => {
-    query.mockResolvedValueOnce([[{ type: 'system', c: 2 }]]).mockResolvedValueOnce([{ affectedRows: 2 }]);
+    query.mockResolvedValueOnce([[{ type: 'system', c: 2 }]]);
     const unreadRes = mockRes();
     const markAllRes = mockRes();
 
@@ -118,7 +121,7 @@ describe('聊天室通知中心可见性与旧客户端兼容', () => {
     await markAllRead({ user: { id: 'user-1', role: 'user' }, body: { excludeCommunityChat: true } }, markAllRes);
 
     expect(query.mock.calls[0][0]).toContain("type <> 'community_chat'");
-    expect(query.mock.calls[1][0]).toContain("type <> 'community_chat'");
+    expect(markSnapshot.mock.calls.at(-1)[1].join(' ')).toContain("type <> 'community_chat'");
     expect(unreadRes.send.mock.calls[0][0].data).toEqual({ unreadTotal: 2, byType: { system: 2 } });
     expect(markAllRes.send.mock.calls[0][0].data).toEqual({ updated: 2 });
   });

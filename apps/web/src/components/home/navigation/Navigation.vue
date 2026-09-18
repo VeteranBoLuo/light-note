@@ -99,14 +99,15 @@
           <BButton
             id="nav-community-entry"
             class="navigation-pill-entry navigation-community-entry"
-            :class="{ 'is-active': route.path.includes('/community-chat') }"
-            :aria-current="route.path.includes('/community-chat') ? 'page' : undefined"
+            :class="{ 'is-active': isCommunityRoute(route) }"
+            :aria-current="isCommunityRoute(route) ? 'page' : undefined"
             :aria-label="communityEntryLabel"
-            v-click-log="{ module: '导航栏', operation: '打开公共聊天室' }"
-            @click="router.push('/community-chat')"
+            :title="communityEntryLabel"
+            v-click-log="{ module: '导航栏', operation: '打开社区' }"
+            @click="openCommunity"
           >
             <SvgIcon class="navigation-pill-entry__icon" :src="icon.ai.conversations" size="16" aria-hidden="true" />
-            <span>{{ $t('navigation.communityChat') }}</span>
+            <span>{{ $t('community.title') }}</span>
             <span
               v-if="communityUnreadTotal > 0"
               class="navigation-community-entry__badge"
@@ -136,6 +137,7 @@
 </template>
 
 <script lang="ts" setup>
+  import { isCommunityRoute } from '@/utils/communityNavigation';
   import { computed, onMounted, watch } from 'vue';
   import router from '@/router';
   import { bookmarkStore, inboxStore, useNoteWorkspaceStore, useUserStore } from '@/store';
@@ -152,6 +154,9 @@
   const user = useUserStore();
   const inbox = inboxStore();
   const noteWorkspace = useNoteWorkspaceStore();
+  function openCommunity() {
+    if (!isCommunityRoute(route)) void router.push('/community');
+  }
   const communityUnread = useCommunityChatUnread();
   const { totalUnread: communityUnreadTotal } = communityUnread;
 
@@ -181,8 +186,8 @@
   );
   const communityEntryLabel = computed(() =>
     communityUnreadTotal.value > 0
-      ? `${t('navigation.communityChat')}，${t('communityChat.unreadBadge', { count: communityUnreadTotal.value })}`
-      : t('navigation.communityChat'),
+      ? `${t('community.title')}，${t('communityChat.unreadBadge', { count: communityUnreadTotal.value })}`
+      : t('community.title'),
   );
 
   const bookmark = bookmarkStore();

@@ -600,13 +600,15 @@
       id: 'all',
     };
     cloud.searchFileName = '';
+    const hadPendingFilter = cloud.pendingOnly;
+    cloud.pendingOnly = false;
 
     const allTypes = [...CLOUD_FILE_CATEGORY_ORDER];
     const alreadyShowingAllTypes =
       cloud.typeCheckValue.length === allTypes.length && allTypes.every((type) => cloud.typeCheckValue.includes(type));
-    if (alreadyShowingAllTypes) {
+    if (alreadyShowingAllTypes && !hadPendingFilter) {
       cloud.queryFieldList();
-    } else {
+    } else if (!alreadyShowingAllTypes) {
       cloud.typeCheckValue = allTypes;
     }
     await nextTick();

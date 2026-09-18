@@ -71,3 +71,23 @@ describe('user activity authorization', () => {
     expect(response.send).toHaveBeenCalledWith(expect.objectContaining({ data: { code: 'ACTIVITY_UNAVAILABLE' } }));
   });
 });
+
+it('forwards the selected day and range through the root-only endpoint', async () => {
+  query.mockResolvedValueOnce([[{ role: 'root', del_flag: 0 }]]);
+  queryActiveUsers.mockResolvedValue({ date: '2026-09-07', total: 5, items: [] });
+  await getAdminOverviewActiveUsers(
+    { user: { id: 'root', role: 'root' }, body: { date: '2026-09-07', trendDays: 30 } },
+    res(),
+  );
+  expect(queryActiveUsers).toHaveBeenCalledWith(
+    expect.objectContaining({ date: '2026-09-07', trendDays: 30, hideInternal: true }),
+  );
+});
+it('invalid date is a client error without leaking internals', async () => {
+  query.mockResolvedValueOnce([[{ role: 'root', del_flag: 0 }]]);
+  queryActiveUsers.mockRejectedValue(Object.assign(new Error('private'), { code: 'ACTIVITY_DATE_INVALID' }));
+  const response = res();
+  await getAdminOverviewActiveUsers({ user: { id: 'root', role: 'root' }, body: { date: 'bad' } }, response);
+  expect(response.status).toHaveBeenCalledWith(400);
+  expect(response.send).toHaveBeenCalledWith(expect.objectContaining({ data: { code: 'ACTIVITY_DATE_INVALID' } }));
+});

@@ -4,6 +4,7 @@ import {
   COMMUNITY_CHAT_ATTACHMENT_PENDING_HOURS,
   COMMUNITY_CHAT_ATTACHMENT_RETENTION_DAYS,
 } from '@lightnote/shared/community-chat-attachments';
+import { validateCommunityChatGif } from '../communityChatGif.js';
 import { safeImageSize } from '../safeImageSize.js';
 import pool from '../../db/index.js';
 import { COMMUNITY_CHAT_PRIMARY_ROOM_SLUG } from '../communityChatFeature.js';
@@ -100,7 +101,7 @@ function validateDimensions(dimensions) {
   return { width, height };
 }
 
-export async function validateCommunityChatImage(file) {
+export async function validateCommunityChatImage(file, { allowGif = false } = {}) {
   if (!file?.path || !Number(file.size)) {
     throw chatError('COMMUNITY_CHAT_IMAGE_REQUIRED', 400, '请选择要发送的图片', 'Select an image to send');
   }
@@ -130,19 +131,29 @@ export async function validateCommunityChatImage(file) {
     throw chatError(
       'COMMUNITY_CHAT_IMAGE_CONTENT_INVALID',
       400,
-      '仅支持真实的 JPG、PNG 或 WebP 图片',
-      'Only valid JPG, PNG, or WebP images are supported',
+      allowGif ? '仅支持真实的 JPG、PNG、WebP 或 GIF 图片' : '仅支持真实的 JPG、PNG 或 WebP 图片',
+      allowGif
+        ? 'Only valid JPG, PNG, WebP, or GIF images are supported'
+        : 'Only valid JPG, PNG, or WebP images are supported',
     );
   }
-  const imageType = IMAGE_TYPES[String(dimensions?.type || '').toLowerCase()];
+  const imageType =
+    allowGif && dimensions?.type === 'gif'
+      ? { contentType: 'image/gif', extension: 'gif' }
+      : IMAGE_TYPES[String(dimensions?.type || '').toLowerCase()];
   if (!imageType || String(file.mimetype || '').toLowerCase() !== imageType.contentType) {
     throw chatError(
       'COMMUNITY_CHAT_IMAGE_CONTENT_INVALID',
       400,
-      '图片格式与实际内容不一致，仅支持 JPG、PNG 或 WebP',
-      'Image format does not match its content. Only JPG, PNG, and WebP are supported.',
+      allowGif
+        ? '图片格式与实际内容不一致，仅支持 JPG、PNG、WebP 或 GIF'
+        : '图片格式与实际内容不一致，仅支持 JPG、PNG 或 WebP',
+      allowGif
+        ? 'Image format does not match its content. Only JPG, PNG, WebP, and GIF are supported.'
+        : 'Image format does not match its content. Only JPG, PNG, and WebP are supported.',
     );
   }
+  if (imageType.contentType === 'image/gif') validateCommunityChatGif(buffer);
   return {
     ...validateDimensions(dimensions),
     contentSha256: createHash('sha256').update(buffer).digest('hex'),

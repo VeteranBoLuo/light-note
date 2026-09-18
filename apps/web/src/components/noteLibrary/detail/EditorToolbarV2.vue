@@ -26,7 +26,7 @@
       <div class="editor-toolbar-v2__group">
         <ToolbarButton :action="undoAction" @run="emitAction" />
         <ToolbarButton :action="redoAction" @run="emitAction" />
-        <ToolbarButton :action="repeatAction" @run="emitAction" />
+        <ToolbarButton v-if="!minimal" :action="repeatAction" @run="emitAction" />
       </div>
 
       <span class="editor-toolbar-v2__divider" aria-hidden="true"></span>
@@ -48,7 +48,7 @@
 
       <div class="editor-toolbar-v2__group">
         <ToolbarMenu :action="listAction" :items="listActions" @run="emitAction" />
-        <ToolbarButton :action="imageAction" @run="emitAction" />
+        <ToolbarButton v-if="!minimal" :action="imageAction" @run="emitAction" />
       </div>
 
       <span class="editor-toolbar-v2__divider" aria-hidden="true"></span>
@@ -58,9 +58,9 @@
       <span class="editor-toolbar-v2__divider" aria-hidden="true"></span>
 
       <div class="editor-toolbar-v2__group">
-        <ToolbarMenu :action="insertAction" :items="insertActions" @run="emitAction" />
+        <ToolbarMenu v-if="!minimal" :action="insertAction" :items="insertActions" @run="emitAction" />
         <ToolbarMenu :action="moreAction" :items="moreActions" align="right" @run="emitAction" />
-        <ToolbarButton :action="shortcutsAction" @run="emitAction" />
+        <ToolbarButton v-if="!minimal" :action="shortcutsAction" @run="emitAction" />
       </div>
 
       <div v-if="$slots.trailing" class="editor-toolbar-v2__trailing">
@@ -129,6 +129,7 @@
   const props = defineProps<{
     mobile: boolean;
     compact?: boolean;
+    minimal?: boolean;
     ariaLabel: string;
     undoAction: EditorToolbarAction;
     redoAction: EditorToolbarAction;
@@ -162,14 +163,18 @@
     { className: 'is-narrow-680', maxWidth: 680 },
   ]);
 
-  const mobilePrimaryActions = computed(() => [
-    props.undoAction,
-    props.headingAction,
-    props.boldAction,
-    props.listAction,
-    props.insertAction,
-    props.moreAction,
-  ]);
+  const mobilePrimaryActions = computed(() =>
+    props.minimal
+      ? [props.undoAction, props.redoAction, props.headingAction, props.boldAction, props.listAction, props.moreAction]
+      : [
+          props.undoAction,
+          props.headingAction,
+          props.boldAction,
+          props.listAction,
+          props.insertAction,
+          props.moreAction,
+        ],
+  );
 
   function emitAction(action: EditorToolbarAction | MobilePageActionItem) {
     emit('action', action as EditorToolbarAction);
@@ -247,6 +252,7 @@
             label: item.label,
             icon: item.icon,
             disabled: item.disabled,
+            active: item.selected,
             function: () => {
               if (!item.disabled) componentEmit('run', item);
             },

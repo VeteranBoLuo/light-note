@@ -173,6 +173,7 @@
 
   async function activate(item: MobileBottomNavigationItem) {
     if (pendingKey.value === item.key) return;
+    if (item.key === 'community' && route.meta.mobileShell === 'community') return;
     if (item.key === 'create') {
       emit('prepareFormalCreate');
       createHubOpen.value = true;

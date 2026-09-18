@@ -136,6 +136,23 @@ async function stopAll(exitCode) {
 async function main() {
   if (process.platform !== "win32") {
     const serverDirectory = path.join(rootDir, "apps/server");
+    const { launchers } = inspectLocalWorkers(serverDirectory);
+    for (const pid of launchers) {
+      // 再检查一次归属，避免把已退出进程的 PID 当作旧启动器。
+      if (!inspectLocalWorkers(serverDirectory).launchers.includes(pid)) continue;
+      console.log(`[本地后端] 正在停止旧启动器 ${pid} 及其服务…`);
+      try {
+        process.kill(pid, "SIGTERM");
+      } catch (error) {
+        if (error.code !== "ESRCH") throw error;
+      }
+    }
+    const launcherDeadline = Date.now() + 10_000;
+    while (inspectLocalWorkers(serverDirectory).launchers.length) {
+      if (Date.now() >= launcherDeadline)
+        throw new Error("旧启动器尚未退出，请检查原终端日志后重试；未启动新服务。");
+      await sleep(200);
+    }
     const { orphanGroups } = inspectLocalWorkers(serverDirectory);
     for (const group of orphanGroups) {
       console.log(`[本地后端] 回收旧启动器遗留的 Worker 进程组 ${group}…`);

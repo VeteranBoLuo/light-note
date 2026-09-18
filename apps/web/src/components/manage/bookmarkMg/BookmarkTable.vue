@@ -322,112 +322,125 @@
             </div>
 
             <!-- 卡片视图 -->
-            <div v-else-if="viewMode === 'card' && filteredBookmarks.length" class="bookmark-grid">
-              <BCard
-                v-for="bookmarkItem in filteredBookmarks"
-                :key="bookmarkItem.id"
-                as="article"
-                variant="card"
-                padding="14px"
-                class="bookmark-card"
-                :class="{
-                  'is-selected': selectedRows.includes(bookmarkItem.id),
-                  'is-selection-mode': selectionMode,
-                }"
-                @click="handleBookmarkCardClick(bookmarkItem.id)"
-              >
-                <BCheckbox
-                  controlled
-                  v-if="selectionMode"
-                  class="bookmark-selection-checkbox"
-                  :checked="selectedRows.includes(bookmarkItem.id)"
-                  :disabled="selection.busy.value || loading"
-                  :aria-label="bookmarkItem.name"
-                  @click.stop
-                  @keydown.stop
-                  @change="toggleBookmarkSelection(bookmarkItem.id)"
-                />
-                <div class="bookmark-card__head">
-                  <div class="bookmark-identity">
-                    <BookmarkFavicon
-                      :bookmark-id="bookmarkItem.id"
-                      :src="bookmarkItem.iconUrl"
-                      :size="22"
-                      :tile-size="34"
-                    />
-                    <div class="bookmark-meta">
-                      <div class="bookmark-name">{{ bookmarkItem.name }}</div>
-                      <div class="bookmark-url" :title="bookmarkItem.url">
-                        <a
-                          :href="withProtocol(bookmarkItem.url)"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          @click.stop="handleBookmarkUrlClick($event, bookmarkItem)"
-                          >{{ bookmarkItem.url }}</a
-                        >
+            <BookmarkVirtualGrid
+              v-else-if="viewMode === 'card' && filteredBookmarks.length"
+              :items="filteredBookmarks"
+              :loading="loading || externalLoadingMore"
+              :has-more="embedded && externalHasMore && !externalLoadMoreError"
+              :paused="embedded && !managementMode"
+              :loading-text="$t('common.loading')"
+              @load-more="emit('load-more')"
+            >
+              <template #default="{ item: bookmarkItem }">
+                <BCard
+                  :key="bookmarkItem.id"
+                  as="article"
+                  variant="card"
+                  padding="14px"
+                  class="bookmark-card"
+                  :class="{
+                    'is-selected': selectedRows.includes(bookmarkItem.id),
+                    'is-selection-mode': selectionMode,
+                  }"
+                  @click="handleBookmarkCardClick(bookmarkItem.id)"
+                >
+                  <BCheckbox
+                    controlled
+                    v-if="selectionMode"
+                    class="bookmark-selection-checkbox"
+                    :checked="selectedRows.includes(bookmarkItem.id)"
+                    :disabled="selection.busy.value || loading"
+                    :aria-label="bookmarkItem.name"
+                    @click.stop
+                    @keydown.stop
+                    @change="toggleBookmarkSelection(bookmarkItem.id)"
+                  />
+                  <div class="bookmark-card__head">
+                    <div class="bookmark-identity">
+                      <BookmarkFavicon
+                        :bookmark-id="bookmarkItem.id"
+                        :src="bookmarkItem.iconUrl"
+                        :size="22"
+                        :tile-size="34"
+                      />
+                      <div class="bookmark-meta">
+                        <div class="bookmark-name">{{ bookmarkItem.name }}</div>
+                        <div class="bookmark-url" :title="bookmarkItem.url">
+                          <a
+                            :href="withProtocol(bookmarkItem.url)"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            @click.stop="handleBookmarkUrlClick($event, bookmarkItem)"
+                            >{{ bookmarkItem.url }}</a
+                          >
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
 
-                <div v-if="bookmarkItem.hasSnapshot || bookmarkItem.hasSummary" class="bm-badges">
-                  <BookmarkCapabilityBadge
-                    type="snapshot"
-                    :label="$t('bookmarkMg.badgeArchived')"
-                    :tooltip="$t('bookmarkMg.badgeArchivedHint')"
-                    @click="handleBookmarkSnapshotClick(bookmarkItem)"
-                    v-click-log="OPERATION_LOG_MAP.bookmarkMg.viewSnapshot"
-                  />
-                </div>
-
-                <div v-if="bookmarkItem.description" class="bookmark-desc">
-                  {{ bookmarkItem.description }}
-                </div>
-
-                <div class="section-block" :aria-label="$t('bookmarkMg.relatedTag')">
-                  <div v-if="bookmarkItem.tagList?.length" class="chip-list">
-                    <ResourceTagChip
-                      v-for="t in bookmarkItem.tagList"
-                      :key="t.id"
-                      :tag="t"
-                      interactive
-                      max-width="120px"
-                      @click.stop="handleBookmarkTagClick(bookmarkItem.id, t.id)"
+                  <div v-if="bookmarkItem.hasSnapshot || bookmarkItem.hasSummary" class="bm-badges">
+                    <BookmarkCapabilityBadge
+                      type="snapshot"
+                      :label="$t('bookmarkMg.badgeArchived')"
+                      :tooltip="$t('bookmarkMg.badgeArchivedHint')"
+                      @click="handleBookmarkSnapshotClick(bookmarkItem)"
+                      v-click-log="OPERATION_LOG_MAP.bookmarkMg.viewSnapshot"
                     />
                   </div>
-                  <div v-else class="empty-inline">{{ $t('bookmarkMg.noTags') }}</div>
-                </div>
 
-                <div v-if="!selectionMode" class="bookmark-card__footer bookmark-actions" @click.stop>
-                  <BButton
-                    class="bookmark-ai-action"
-                    :aria-label="$t('bookmarkMg.aiUseBookmark')"
-                    :title="$t('bookmarkMg.aiUseBookmark')"
-                    @click="openBookmarksInAi([bookmarkItem])"
-                  >
-                    <SvgIcon :src="icon.ai.ask" color="currentColor" size="16" aria-hidden="true" />
-                    <span>{{ $t('bookmarkMg.aiUseBookmark') }}</span>
-                  </BButton>
-                  <BActionButton
-                    action="edit"
-                    :label="$t('common.edit')"
-                    :tooltip="$t('common.edit')"
-                    @click="edit(bookmarkItem.id)"
-                  />
-                  <BActionButton
-                    action="delete"
-                    :label="$t('common.delete')"
-                    :tooltip="$t('common.delete')"
-                    @click="handleDeleteTag(bookmarkItem)"
-                  />
-                </div>
-              </BCard>
-            </div>
+                  <div v-if="bookmarkItem.description" class="bookmark-desc">
+                    {{ bookmarkItem.description }}
+                  </div>
+
+                  <div class="section-block" :aria-label="$t('bookmarkMg.relatedTag')">
+                    <div v-if="bookmarkItem.tagList?.length" class="chip-list">
+                      <ResourceTagChip
+                        v-for="t in bookmarkItem.tagList"
+                        :key="t.id"
+                        :tag="t"
+                        interactive
+                        max-width="120px"
+                        @click.stop="handleBookmarkTagClick(bookmarkItem.id, t.id)"
+                      />
+                    </div>
+                    <div v-else class="empty-inline">{{ $t('bookmarkMg.noTags') }}</div>
+                  </div>
+
+                  <div v-if="!selectionMode" class="bookmark-card__footer bookmark-actions" @click.stop>
+                    <BButton
+                      class="bookmark-ai-action"
+                      :aria-label="$t('bookmarkMg.aiUseBookmark')"
+                      :title="$t('bookmarkMg.aiUseBookmark')"
+                      @click="openBookmarksInAi([bookmarkItem])"
+                    >
+                      <SvgIcon :src="icon.ai.ask" color="currentColor" size="16" aria-hidden="true" />
+                      <span>{{ $t('bookmarkMg.aiUseBookmark') }}</span>
+                    </BButton>
+                    <BActionButton
+                      action="edit"
+                      :label="$t('common.edit')"
+                      :tooltip="$t('common.edit')"
+                      @click="edit(bookmarkItem.id)"
+                    />
+                    <BActionButton
+                      action="delete"
+                      :label="$t('common.delete')"
+                      :tooltip="$t('common.delete')"
+                      @click="handleDeleteTag(bookmarkItem)"
+                    />
+                  </div>
+                </BCard>
+              </template>
+            </BookmarkVirtualGrid>
 
             <!-- 表格视图 -->
             <BTable
               v-else-if="viewMode === 'table' && filteredBookmarks.length"
               :data="filteredBookmarks"
+              virtual
+              :loading="loading || externalLoadingMore"
+              :has-more="embedded && managementMode && externalHasMore && !externalLoadMoreError"
+              @load-more="emit('load-more')"
               :columns="tagColumns"
               style="margin-top: 10px; width: 100%; height: calc(100% - 50px)"
               :selectable="selectionMode"
@@ -538,12 +551,11 @@
               </div>
             </div>
             <div
-              v-if="embedded && filteredBookmarks.length && (externalHasMore || externalLoadingMore)"
+              v-if="embedded && filteredBookmarks.length && externalLoadMoreError"
               class="bookmark-manage-load-more"
               aria-live="polite"
             >
-              <BLoading v-if="externalLoadingMore" inline loading :title="$t('common.loading')" />
-              <BButton v-else size="small" @click="emit('load-more')">{{ $t('common.loadMore') }}</BButton>
+              <BButton size="small" @click="emit('load-more')">{{ $t('bookmarkMg.retryLoad') }}</BButton>
             </div>
           </BCard>
         </div>
@@ -629,7 +641,6 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BBatchToggle from '@/components/base/BasicComponents/BBatchToggle.vue';
   import BCard from '@/components/base/BasicComponents/BCard.vue';
-  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
   import router from '@/router';
   import { useRoute } from 'vue-router';
@@ -640,6 +651,7 @@
   import LinkHealthModal from '@/components/manage/bookmarkMg/LinkHealthModal.vue';
   import BookmarkSnapshotModal from '@/components/manage/bookmarkEditMg/BookmarkSnapshotModal.vue';
   import BookmarkCapabilityBadge from '@/components/manage/bookmarkMg/BookmarkCapabilityBadge.vue';
+  import BookmarkVirtualGrid from './BookmarkVirtualGrid.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BUpload from '@/components/base/BasicComponents/BUpload.vue';
   import BActionButton from '@/components/base/BasicComponents/BActionButton.vue';
@@ -682,6 +694,7 @@
       externalLoadingMore?: boolean;
       externalHasMore?: boolean;
       externalLoadError?: boolean;
+      externalLoadMoreError?: boolean;
       managementMode?: boolean;
       reloadBookmarks?: (options?: { refreshIcons?: boolean }) => Promise<unknown>;
     }>(),
@@ -693,6 +706,7 @@
       externalLoadingMore: false,
       externalHasMore: false,
       externalLoadError: false,
+      externalLoadMoreError: false,
       managementMode: false,
       reloadBookmarks: undefined,
     },
@@ -1878,6 +1892,7 @@
   }
 
   .bookmark-results-column {
+    --bookmark-card-min-width: 270px;
     min-width: 0;
     min-height: 0;
     display: flex;
@@ -2630,6 +2645,9 @@
     gap: 10px;
   }
   @media (max-width: 1280px) {
+    .bookmark-results-column {
+      --bookmark-card-min-width: 300px;
+    }
     .content-layout {
       grid-template-columns: 228px minmax(0, 1fr);
       gap: 10px;

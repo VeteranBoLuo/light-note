@@ -283,6 +283,51 @@ const requestFieldValue = (context, field) => {
   return value;
 };
 
+// Plain text rendered as text nodes. Exact routes and field budgets remain independently enforced.
+for (const [route, fields] of [
+  ['POST /community/posts', { title: 80, body: 4000 }],
+  ['POST /community/comments', { body: 1200 }],
+  ['POST /community/reports', { detail: 500 }],
+  ['POST /community/appeals', { body: 500 }],
+  ['POST /community/moderation/posts', { reason: 500 }],
+  ['POST /community/moderation/reports', { reason: 500 }],
+  ['POST /community/moderation/comments', { reason: 500 }],
+  ['POST /community/moderation/appeals', { reason: 500 }],
+])
+  REQUEST_FIELD_POLICIES.set(
+    route,
+    new Map(
+      Object.entries(fields).map(([field, maxSize]) => [
+        `body.${field}`,
+        policy({
+          semantic: 'community-plain-text',
+          maxSize,
+          measure: (value) => Array.from(String(value)).length,
+          skipSignatureRules: '*',
+        }),
+      ]),
+    ),
+  );
+
+for (const [route, maxSize] of [
+  ['GET /community/posts', 100],
+  ['GET /community/members', 40],
+])
+  REQUEST_FIELD_POLICIES.set(
+    route,
+    new Map([
+      [
+        'query.q',
+        policy({
+          semantic: 'community-search-text',
+          maxSize,
+          measure: (value) => Array.from(String(value)).length,
+          skipSignatureRules: '*',
+        }),
+      ],
+    ]),
+  );
+
 export const resolveRequestFieldPolicy = (context = {}, field = '') => {
   const method = String(context.method || 'GET').toUpperCase();
   const normalizedPath = normalizeSecurityRoutePath(context.path);

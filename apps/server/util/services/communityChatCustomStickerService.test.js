@@ -124,7 +124,15 @@ describe('communityChatCustomStickerService', () => {
     expect(mocks.getConnection).not.toHaveBeenCalled();
   });
 
-  it('上传图片时先写权威记录再上传对象，成功后激活账号私有表情', async () => {
+  it.each(['png', 'gif'])('上传 %s 时保留格式并激活账号私有表情', async (format) => {
+    mocks.validateImage.mockResolvedValueOnce({
+      contentType: `image/${format}`,
+      extension: format,
+      fileSize: 1024,
+      width: 320,
+      height: 240,
+      contentSha256: 'a'.repeat(64),
+    });
     const query = vi
       .fn()
       .mockResolvedValueOnce([[], []])
@@ -143,7 +151,7 @@ describe('communityChatCustomStickerService', () => {
       duplicate: false,
       sticker: {
         name: '开心',
-        contentType: 'image/png',
+        contentType: `image/${format}`,
         fileSize: 1024,
         width: 320,
         height: 240,
@@ -152,9 +160,9 @@ describe('communityChatCustomStickerService', () => {
     expect(result.sticker.publicId).toMatch(/^[0-9a-f-]{36}$/i);
     expect(connection.commit).toHaveBeenCalledTimes(1);
     expect(mocks.putObject).toHaveBeenCalledWith(
-      expect.stringMatching(/^community-chat-stickers\/[a-f0-9]{24}\/[0-9a-f-]{36}\.png$/i),
+      expect.stringMatching(new RegExp(`^community-chat-stickers/[a-f0-9]{24}/[0-9a-f-]{36}\\.${format}$`, 'i')),
       '/tmp/light-note-sticker-test-missing.png',
-      'image/png',
+      `image/${format}`,
     );
     expect(mocks.poolQuery.mock.calls[0][0]).toContain("SET status = 'active'");
   });
@@ -206,12 +214,12 @@ describe('communityChatCustomStickerService', () => {
     expect(connection.commit).toHaveBeenCalledTimes(1);
   });
 
-  it('收藏他人的自定义表情时由服务端复制对象并写入当前账号表情库', async () => {
+  it.each(['png', 'gif'])('收藏他人的 %s 表情时复制原始对象并保留格式', async (format) => {
     const messagePublicId = '2deff89a-0ee2-4bc2-9751-3ef25ff66ab1';
     const source = {
-      objectKey: 'community-chat-stickers/source-user/original.png',
+      objectKey: `community-chat-stickers/source-user/original.${format}`,
       contentSha256: 'c'.repeat(64),
-      contentType: 'image/png',
+      contentType: `image/${format}`,
       fileSize: 2048,
       width: 360,
       height: 300,
@@ -231,12 +239,12 @@ describe('communityChatCustomStickerService', () => {
     expect(result).toMatchObject({
       duplicate: false,
       restored: false,
-      sticker: { name: '收到啦', contentType: 'image/png', fileSize: 2048, width: 360, height: 300 },
+      sticker: { name: '收到啦', contentType: `image/${format}`, fileSize: 2048, width: 360, height: 300 },
     });
     expect(result.sticker.publicId).toMatch(/^[0-9a-f-]{36}$/i);
     expect(mocks.copyObject).toHaveBeenCalledWith(
       source.objectKey,
-      expect.stringMatching(/^community-chat-stickers\/[a-f0-9]{24}\/[0-9a-f-]{36}\.png$/i),
+      expect.stringMatching(new RegExp(`^community-chat-stickers/[a-f0-9]{24}/[0-9a-f-]{36}\\.${format}$`, 'i')),
     );
     expect(mocks.copyObject.mock.calls[0][1]).not.toBe(source.objectKey);
     expect(mocks.poolQuery.mock.calls[0][0]).toContain('message.user_id <> ?');

@@ -231,6 +231,9 @@
     height: v-bind(height);
   }
   .b-textarea {
+    // Continuous Latin input should use the remaining line width instead of moving as one word.
+    word-break: break-all;
+    overflow-wrap: anywhere;
     padding: 4px 11px;
   }
   @media (hover: hover) and (pointer: fine) {

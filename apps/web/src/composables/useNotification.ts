@@ -106,19 +106,27 @@ export function useNotification(options: { excludeCommunityChat?: MaybeRef<boole
 
   // 标记指定已读(本地未读数即时递减,乐观更新;随后同步分类型角标)
   async function markRead(ids: string[]) {
-    if (!ids.length) return;
-    unreadTotal.value = Math.max(0, unreadTotal.value - ids.length);
-    await notificationApi.markNotificationsRead(ids).catch(() => {});
-    refreshUnread();
+    if (!ids.length || isGuest()) return false;
+    const uid = useUserStore().id;
+    try {
+      const response = await notificationApi.markNotificationsRead(ids);
+      if (useUserStore().id !== uid) return false;
+      await refreshUnread();
+      return response?.status === 200;
+    } catch {
+      await refreshUnread();
+      return false;
+    }
   }
 
   // 全部已读
-  async function markAllRead() {
-    unreadTotal.value = 0;
-    unreadByType.value = {};
+  async function markAllRead(type = 'all') {
+    if (isGuest()) return false;
+    const uid = useUserStore().id;
     try {
-      const res = await notificationApi.markAllNotificationsRead(notificationScope());
-      if (res?.status !== 200) refreshUnread();
+      const res = await notificationApi.markAllNotificationsRead({ ...notificationScope(), type });
+      if (useUserStore().id !== uid) return false;
+      await refreshUnread();
       return res?.status === 200;
     } catch {
       refreshUnread();

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createApp, nextTick } from 'vue';
+import { createApp, nextTick, reactive } from 'vue';
 import { createI18n } from 'vue-i18n';
 import zhCN from '@/i18n/locales/zh-CN';
 
@@ -11,7 +11,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/api/communityChatApi', () => ({
   getCommunityChatRooms: mocks.getRooms,
 }));
-vi.mock('@/store', () => ({ useUserStore: () => mocks.user }));
+const reactiveUser = reactive(mocks.user);
+vi.mock('@/store', () => ({ useUserStore: () => reactiveUser }));
 vi.mock('@/composables/useMobileTopBar', () => ({ useMobileTopBar: vi.fn() }));
 vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({
   default: { name: 'SvgIconStub', template: '<span class="svg-icon-stub" />' },
@@ -115,6 +116,25 @@ afterEach(() => {
 });
 
 describe('CommunityChat workspace bootstrap', () => {
+  it('切号后的旧目录响应不能恢复上一个账号的发言权', async () => {
+    let finish!: (value: unknown) => void;
+    mocks.getRooms.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const host = await mountPage({ flush: false });
+    mocks.getRooms.mockResolvedValue({
+      data: { access: access({ authenticated: false, canPost: false }), messagingEnabled: true, items: [room] },
+    });
+    reactiveUser.id = 'visitor-2';
+    reactiveUser.role = 'visitor';
+    await flushAsync();
+    finish({ data: { access: access(), messagingEnabled: true, items: [room] } });
+    await flushAsync();
+    expect(host.querySelector<HTMLElement>('.community-workspace-stub')?.dataset.canPost).toBe('false');
+  });
+
   it('首个请求完成前只展示聊天室结构骨架，不闪现访问状态或项目介绍页', async () => {
     let resolveRooms: (value: unknown) => void = () => {};
     mocks.getRooms.mockReturnValue(

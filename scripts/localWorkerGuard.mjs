@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import path from "node:path";
 
 const workerScripts =
   /(?:^|\s)(?:\S*\/)?(?:documentWorker|noteImportWorker|browserPushWorker|resourceGovernanceWorker)\.js(?:\s|$)/;
@@ -10,7 +11,7 @@ const runProcessCommand = (file, args) =>
     stdio: ["ignore", "pipe", "ignore"],
   });
 
-// 只回收本仓库启动器遗留的独立 pnpm 进程组；活跃启动器与手动 Worker 不自动停止。
+// 启动器按脚本路径和工作目录确认；手动 Worker 不自动停止。
 export function inspectLocalWorkers(serverDirectory, run = runProcessCommand) {
   const processes = run("ps", ["-axo", "pid=,ppid=,pgid=,comm=,args="])
     .split("\n")
@@ -46,6 +47,15 @@ export function inspectLocalWorkers(serverDirectory, run = runProcessCommand) {
       cwd(row.pid) === serverDirectory,
   );
   const rootDirectory = serverDirectory.replace(/\/apps\/server\/?$/, "");
+  const launchers = processes.filter((row) => {
+    if (row.pid === process.pid || !nodeProcess(row)) return false;
+    const script = row.args.match(/^\S+\s+(\S+)(?:\s+--watch)?\s*$/)?.[1];
+    return (
+      script &&
+      path.resolve(rootDirectory, script) === path.join(rootDirectory, "scripts/localServer.mjs") &&
+      cwd(row.pid) === rootDirectory
+    );
+  }).map((row) => row.pid);
   const orphanGroups = [...new Set(workers.map((row) => row.pgid))].filter(
     (pgid) => {
       const leader = processes.find((row) => row.pid === pgid);
@@ -59,5 +69,5 @@ export function inspectLocalWorkers(serverDirectory, run = runProcessCommand) {
       );
     },
   );
-  return { workers: workers.map((row) => row.pid), orphanGroups };
+  return { workers: workers.map((row) => row.pid), orphanGroups, launchers };
 }

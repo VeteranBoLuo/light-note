@@ -2,6 +2,7 @@ import { apiBasePost } from '@/http/request.ts';
 
 export interface NotificationScopeOptions {
   excludeCommunityChat?: boolean;
+  type?: string;
 }
 
 // 通知列表(分页 + 未读数;可按 type 筛选:all/level_up/opinion_reply/system)

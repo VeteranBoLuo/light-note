@@ -25,7 +25,7 @@
 10. 注销验证码只发送到服务端读取的当前账号绑定邮箱，Redis 仅保存 5 分钟有效的加盐摘要；前端不能指定收件人。
 11. 验证码和精确确认文字通过后，账号在事务内立即去标识化并停止登录，所有会话随即清除。
 12. 数据库内容、OBS 对象、笔记图片和书签图标进入可重试物理清理任务；全部完成前不会伪装为成功清理。
-13. GitHub 登录在跳转前单独展示境外接收方、目的、信息类型、处理地点和权利渠道；拒绝后仍可使用邮箱登录。
+13. GitHub 登录、注册入口点击后直接进入 GitHub 授权页，本站不再增加确认弹框；邮箱登录入口仍可使用。服务端保留版本字段以兼容已有 OAuth 协议，该字段不应视为独立弹框确认的证据。
 14. GitHub OAuth 授权地址由服务端生成；一次性 `state` 在 Redis 保存 10 分钟，并与浏览器 HttpOnly
     随机 Cookie 绑定。回调按 `pending → processing → completed/failed` 原子认领，完成结果短暂保留用于恢复本站会话；
     授权码同时使用 PKCE 约束，换取令牌时再次提交同一回调地址，且仅向预先探测选定的线路提交一次，
@@ -92,7 +92,7 @@ Tracing、VersionedParcelable，以及 Kotlin 标准库和协程运行时。当�
 | 华为云对象存储        | 用户上传、预览或下载云文件       | 文件、图片、文件名、类型、大小及存储元数据       | 提供者为华为云计算技术有限公司；当前访问端点为华南-广州（`cn-south-1`），跨区域复制、版本控制和备份设置仍须在控制台复核。华为云对客户内容按[数据处理附则](https://www.huaweicloud.com/declaration/sa-dpa.html)处理，并提供[隐私政策声明](https://www.huaweicloud.com/declaration/sa_prp.html)。                                             |
 | DeepSeek              | 用户主动使用 AI 功能             | 问题、用户选择的上下文、必要检索结果及对应输出   | 当前主通道，提供者为杭州深度求索人工智能基础技术研究有限公司。其[隐私政策](https://cdn.deepseek.com/policies/zh-CN/deepseek-privacy-policy.html)载明境内存储，并可能在加密、去标识化后将输入与输出用于训练和服务优化；正式政策保留该较宽披露，不依赖运营账号退出设置。                                                                      |
 | 阿里云百炼 / 通义千问 | 服务端显式切换备用通道时         | 同上                                             | 备用通道不是自动并行发送。当前[百炼服务协议](https://terms.alicdn.com/legal-agreement/terms/common_platform_service/20230728213935489/20230728213935489.html)签约主体为通义云启（杭州）信息技术有限公司，底层云资源由阿里云计算有限公司提供；[隐私说明](https://help.aliyun.com/zh/model-studio/privacy-notice)载明百炼数据不用于模型训练。 |
-| GitHub OAuth          | 用户主动选择 GitHub 登录         | 授权返回的账号标识、登录名、授权范围内邮箱和头像 | 提供者为 GitHub, Inc. / GitHub B.V.；其[隐私声明](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement)载明可能在美国及其他国家或地区处理数据。跳转前已实现分场景告知和单独确认，并按版本记录同意事件；正式发布前仍须复核适用的跨境合规路径。                                                           |
+| GitHub OAuth          | 用户主动选择 GitHub 登录         | 授权返回的账号标识、登录名、授权范围内邮箱和头像 | 提供者为 GitHub, Inc. / GitHub B.V.；其[隐私声明](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement)载明可能在美国及其他国家或地区处理数据。入口直接跳转 GitHub 授权页，本站不再单独弹框确认；正式发布前仍须复核适用的跨境合规路径。                                                           |
 | 高德 IP 定位接口      | 账号粗略区域展示或安全风控需要时 | 访问 IP、返回的省市级粗略区域                    | 使用服务端 Web 服务 IP 定位 API，不嵌入高德 SDK、不调用设备定位权限。服务提供方包括高德软件有限公司、北京高德图强科技有限公司，见[开放平台隐私权政策](https://lbs.amap.com/pages/privacy/)和[IP 定位说明](https://lbs.amap.com/api/webservice/guide/api/ipconfig)。                                                                         |
 | QQ 邮箱 SMTP          | 验证码和账号/安全通知            | 收件邮箱及邮件内容                               | 邮件通道由深圳市腾讯计算机系统有限公司相关服务提供，见[腾讯隐私政策](https://privacy.tencent.com/mb/policy/tencent-privacypolicy)；轻笺侧投递日志默认 180 天，账号注销会删除与账号或原邮箱关联的记录。                                                                                                                                      |
 | Iconify 在线图标服务  | 用户主动搜索或选择在线图标       | 搜索词、服务端网络请求信息、所选图标             | 由轻笺服务端请求 Iconify 公共 API，不嵌入移动 SDK，也不直接发送终端设备标识。提供者为 Iconify OÜ；公共 API 使用全球节点并可能涉及 Cloudflare，见[API 说明](https://iconify.design/docs/api/)与[隐私政策](https://iconify.design/privacy/)。                                                                                                 |
@@ -126,7 +126,7 @@ Tracing、VersionedParcelable，以及 Kotlin 标准库和协程运行时。当�
 - 用户确认长期公开使用 `1902013368@qq.com` 受理用户权利、注销与投诉；
 - 接口、操作和转化日志统一采用最长 180 天规则，并接入自动分批清理；
 - DeepSeek 采用不依赖退出设置的保守披露；第三方未公开固定期限时采用“功能所需最短期间 + 公开规则”口径；
-- GitHub 登录已实现境外接收方分场景告知、单独确认、拒绝后邮箱登录替代路径和同意证据；
+- GitHub 登录采用直接授权入口，保留邮箱登录替代路径及服务端 OAuth 状态校验；
 - 用户申请删除时，文案明确轻笺侧删除以及适用情况下向第三方传达或协助行权；
 - 未成年人、争议解决、政策更新与重新同意规则均已形成不排除用户法定权利的保守表述；
 - 两份页面、Android 同意常量均切换为正式版本 `2026-07-28`，并移除审阅稿、TODO 和 `noindex` 标记。

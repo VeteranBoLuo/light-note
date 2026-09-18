@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   getConnection: vi.fn(),
+  taskRewardStates: vi.fn(),
+  claimTaskRewards: vi.fn(),
   getGrowth: vi.fn(),
   getGrowthDashboard: vi.fn(),
   grantExp: vi.fn(),
@@ -12,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   getGrowthCalendarContext: vi.fn(),
 }));
 
+vi.mock('./communityFeed/taskRewards.js', () => ({ taskRewardStates: mocks.taskRewardStates, claimTaskRewards: mocks.claimTaskRewards }));
 vi.mock('../db/index.js', () => ({ default: { getConnection: mocks.getConnection } }));
 vi.mock('./growth.js', () => ({
   DAILY_QUEST_STAGES: [
@@ -71,6 +74,8 @@ function connection() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.taskRewardStates.mockResolvedValue([]);
+  mocks.claimTaskRewards.mockResolvedValue([]);
   mocks.getGrowthCalendarContext.mockResolvedValue(calendar);
   mocks.getGrowthDashboard.mockResolvedValue(dashboard());
   mocks.getGrowthTasks.mockResolvedValue(tasks());
@@ -223,4 +228,18 @@ describe('growthClaimService', () => {
     expect(firstConnection.commit).toHaveBeenCalledOnce();
     expect(secondConnection.commit).toHaveBeenCalledOnce();
   });
+});
+
+it('community awards join the shared count and default claim-all, with explicit topic filtering', async () => {
+  mocks.taskRewardStates.mockResolvedValue([{key:'autumn',state:'claimable',exp:20,points:50}]);
+  const snapshot=await getGrowthClaimableSnapshot('user-1',{userRole:'user'});
+  expect(snapshot.count).toBe(1);
+  expect(snapshot.community.count).toBe(1);
+  const conn=connection(); mocks.getConnection.mockResolvedValue(conn);
+  mocks.claimTaskRewards.mockResolvedValue([{type:'community',key:'autumn',status:'claimed',reward:{exp:20,points:50}}]);
+  const result=await claimGrowthRewards('user-1',{}, {userRole:'user'});
+  expect(result).toMatchObject({claimed:1,exp:20,points:50});
+  expect(mocks.claimTaskRewards.mock.calls[0][2]).toBeNull();
+  await claimGrowthRewards('user-1',{scopes:['community'],keys:{community:['autumn']}},{userRole:'user'});
+  expect([...mocks.claimTaskRewards.mock.calls[1][2]]).toEqual(['autumn']);
 });

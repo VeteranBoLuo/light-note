@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  POINTS_EARNING_C7_POLICY_VERSION,
   POINTS_EARNING_C6_POLICY_VERSION,
   POINTS_EARNING_POLICY_VERSION,
   applyAchievementEarningPolicy,
@@ -222,4 +223,17 @@ describe('pointsEarningPolicy', () => {
       'points-earning-c6',
     );
   });
+  it('adds posting only in the new weekly version and never rolls back on pause', async () => {
+    const runtime = getPointsEarningRuntime({POINTS_EARNING_C5_ENABLED:'true',POINTS_EARNING_C5_EFFECTIVE_DAY:'20260901',POINTS_EARNING_C5_EFFECTIVE_WEEK:'202636',POINTS_EARNING_C7_EFFECTIVE_WEEK:'202639',POINTS_EARNING_C7_ENABLED:'true'});
+    expect(earningPolicyVersionForWeek('202638',runtime)).toBe(POINTS_EARNING_POLICY_VERSION);
+    expect(earningPolicyVersionForWeek('202639',runtime)).toBe(POINTS_EARNING_C7_POLICY_VERSION);
+    expect(resolveWeeklyChallenges(POINTS_EARNING_POLICY_VERSION).some(x=>x.key==='wk_community')).toBe(false);
+    expect(resolveWeeklyChallenges(POINTS_EARNING_C7_POLICY_VERSION).find(x=>x.key==='wk_community')).toMatchObject({target:1,reward:20});
+    expect(getEarningPolicySnapshot(POINTS_EARNING_C7_POLICY_VERSION).stableWeekMaximum).toBe(690);
+    expect(earningPolicyVersionForWeek('202639',{...runtime,c7Enabled:false})).toBe(POINTS_EARNING_C7_POLICY_VERSION);
+    expect(earningWritesEnabled(POINTS_EARNING_C7_POLICY_VERSION,{...runtime,c7Enabled:false})).toBe(false);
+    const db = {query:vi.fn().mockResolvedValue([[{policyVersion:POINTS_EARNING_POLICY_VERSION}]])};
+    expect(await resolvePointsEarningPeriodVersion('week','202639',{db,runtime})).toBe(POINTS_EARNING_POLICY_VERSION);
+  });
+
 });

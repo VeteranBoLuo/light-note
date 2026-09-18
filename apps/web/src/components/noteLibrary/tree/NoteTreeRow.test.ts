@@ -70,6 +70,74 @@ describe('NoteTreeRow 显式页面操作', () => {
     document.body.innerHTML = '';
   });
 
+  it('批量勾选独立于预览和展开，递归子项同步受控选择及忙碌状态', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const selectedIds = ref(new Set<string>());
+    const disabled = ref(false);
+    const batch = ref(true);
+    const parent = {
+      id: 'parent',
+      parentId: null,
+      title: '父页面',
+      childCount: 1,
+      hasChildren: true,
+      isTop: false,
+      sort: 0,
+    };
+    const child = { ...parent, id: 'child', parentId: 'parent', title: '子页面', childCount: 0, hasChildren: false };
+    const open = vi.fn();
+    const toggle = vi.fn();
+    const select = vi.fn((node, checked) => {
+      const next = new Set(selectedIds.value);
+      if (checked) next.add(node.id);
+      else next.delete(node.id);
+      selectedIds.value = next;
+    });
+    const app = createApp({
+      render: () =>
+        h(NoteTreeRow, {
+          node: parent,
+          depth: 0,
+          childrenByParent: { parent: [child] },
+          expandedIds: new Set(['parent']),
+          loadingKeys: new Set<string>(),
+          batchMode: batch.value,
+          selectedIds: selectedIds.value,
+          selectionDisabled: disabled.value,
+          onSelectNote: select,
+          onOpen: open,
+          onToggle: toggle,
+        }),
+    });
+    app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
+    app.mount(host);
+    cleanup = () => app.unmount();
+    const boxes = () => [...host.querySelectorAll<HTMLElement>('[role="checkbox"]')];
+    boxes()[0].click();
+    await nextTick();
+    expect([...selectedIds.value]).toEqual(['parent']);
+    expect(boxes()[1].getAttribute('aria-checked')).toBe('false');
+    expect(open).not.toHaveBeenCalled();
+    expect(toggle).not.toHaveBeenCalled();
+    host.querySelector<HTMLButtonElement>('.note-tree-title')!.click();
+    expect(open).toHaveBeenCalledWith('parent');
+    expect(select).toHaveBeenCalledTimes(1);
+    boxes()[1].click();
+    await nextTick();
+    expect([...selectedIds.value]).toEqual(['parent', 'child']);
+    disabled.value = true;
+    await nextTick();
+    boxes()[0].click();
+    expect(select).toHaveBeenCalledTimes(2);
+    selectedIds.value = new Set();
+    await nextTick();
+    expect(boxes().every((box) => box.getAttribute('aria-checked') === 'false')).toBe(true);
+    batch.value = false;
+    await nextTick();
+    expect(boxes()).toHaveLength(0);
+  });
+
   it('预览其他笔记时隐藏旧浏览目录边框，关闭预览后恢复', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

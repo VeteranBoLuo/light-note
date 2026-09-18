@@ -8,7 +8,9 @@
     :aria-busy="loading || undefined"
   >
     <span v-if="iconOnly" class="btn-icon">
-      <span class="btn-icon-content" :class="{ 'is-loading': loading }" :aria-hidden="loading || undefined"><slot></slot></span>
+      <span class="btn-icon-content" :class="{ 'is-loading': loading }" :aria-hidden="loading || undefined"
+        ><slot></slot
+      ></span>
       <span v-if="loading" class="btn-spinner" aria-hidden="true"></span>
     </span>
     <template v-else>
@@ -27,7 +29,7 @@
       default: 'default',
     },
     type: {
-      type: String as PropType<'primary' | 'danger' | 'success' | 'function'>,
+      type: String as PropType<'primary' | 'danger' | 'success' | 'function' | 'text'>,
       default: '',
     },
     border: {
@@ -57,7 +59,9 @@
   });
 
   const btnClass = computed(() => {
-    if (props.type === 'primary') {
+    if (props.type === 'text') {
+      return 'text_btn';
+    } else if (props.type === 'primary') {
       return 'primary_btn';
     } else if (props.type === 'success') {
       return 'success_btn';
@@ -112,6 +116,12 @@
   .b_btn.is-block {
     width: 100%;
   }
+  .text_btn {
+    background: transparent;
+    color: var(--workspace-purple-text, var(--primary-color));
+    padding-inline: 4px;
+  }
+
   .primary_btn {
     background-color: #615ced;
     color: white;
@@ -142,6 +152,9 @@
   // 触屏 WebView 会把 :hover 保留到下一次点击，按钮因此像一直处于悬浮态。
   // 只有设备确实支持精细指针悬浮时才绘制 hover；触屏反馈继续由下方 :active 承担。
   @media (hover: hover) and (pointer: fine) {
+    .text_btn:not(:disabled):hover {
+      text-decoration: underline;
+    }
     .primary_btn:hover {
       background-color: #6b66ef;
     }

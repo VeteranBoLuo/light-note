@@ -375,13 +375,12 @@ describe('FilePreview HTML sandbox', () => {
 
     expect(iframe).not.toBeNull();
     expect(fetch).toHaveBeenCalledWith(fileUrl, { mode: 'cors', signal: expect.any(AbortSignal) });
-    expect(createObjectUrl).toHaveBeenCalledOnce();
-    const htmlBlob = createObjectUrl.mock.calls[0][0] as Blob;
-    const htmlSource = await htmlBlob.text();
-    expect(htmlBlob.type).toBe('text/html;charset=utf-8');
+    expect(createObjectUrl).not.toHaveBeenCalled();
+    const htmlSource = iframe?.getAttribute('srcdoc') || '';
     expect(htmlSource).toContain('data-light-note-anchor-bridge');
     expect(htmlSource).toContain('<script>window.started = true</script>');
-    expect(iframe?.getAttribute('src')).toBe('blob:https://boluo66.top/html-preview');
+    expect(iframe?.hasAttribute('src')).toBe(false);
+    expect(htmlSource).toContain('<base href="about:blank">');
     expect(iframe?.getAttribute('sandbox')).toBe(HTML_PREVIEW_SANDBOX);
     expect(iframe?.getAttribute('referrerpolicy')).toBe(HTML_PREVIEW_REFERRER_POLICY);
     expect(iframe?.getAttribute('allow')).toBe('fullscreen');
@@ -389,7 +388,31 @@ describe('FilePreview HTML sandbox', () => {
 
     cleanup?.();
     cleanup = undefined;
-    expect(revokeObjectUrl).toHaveBeenCalledWith('blob:https://boluo66.top/html-preview');
+    expect(document.querySelector('.html-preview-iframe')).toBeNull();
+  });
+
+  it('shows a recoverable error when HTML loading times out', async () => {
+    let expire: (() => void) | undefined;
+    const originalSetTimeout = globalThis.setTimeout;
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((
+      callback: () => void,
+      delay?: number,
+      ...args: unknown[]
+    ) => {
+      if (delay === 30_000) expire = callback;
+      return originalSetTimeout(callback, delay, ...args);
+    }) as typeof setTimeout);
+    await mountHtmlPreview();
+    expect(expire).toBeTypeOf('function');
+    expire?.();
+    await nextTick();
+    expect(document.querySelector('.html-preview-iframe')).toBeNull();
+    expect(document.querySelector('.retry-btn')).not.toBeNull();
+    document.querySelector<HTMLButtonElement>('.retry-btn')!.click();
+    await vi.waitFor(() => expect(document.querySelector('.html-preview-iframe')).not.toBeNull());
+    document.querySelector('.html-preview-iframe')!.dispatchEvent(new Event('load'));
+    await nextTick();
+    expect(document.querySelector('.retry-btn')).toBeNull();
   });
 
   it('keeps the normal controls until fullscreen, then exits with the top-right action', async () => {
@@ -1060,14 +1083,15 @@ describe('FilePreview HTML request lifecycle', () => {
 
     expect(oldSignal?.aborted).toBe(true);
     visible.value = true;
-    await vi.waitFor(() => expect(createObjectUrl).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(document.querySelector('iframe')?.getAttribute('srcdoc')).toContain('new preview'));
     finishOld?.({ ok: true, blob: async () => new Blob(['old preview']) });
     await new Promise((resolve) => setTimeout(resolve, 0));
     await nextTick();
-    expect(createObjectUrl).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('iframe')?.getAttribute('srcdoc')).toContain('new preview');
+    expect(document.querySelector('iframe')?.getAttribute('srcdoc')).not.toContain('old preview');
     cleanup();
     cleanup = undefined;
-    expect(revokeObjectUrl).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('.html-preview-iframe')).toBeNull();
   });
 });
 

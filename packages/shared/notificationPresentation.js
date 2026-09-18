@@ -19,6 +19,8 @@ export const notificationMessages = {
     },
     levelUpTitle: "升级到 Lv.{level} · {name}",
     opinionReplyTitle: "你的反馈收到新回复",
+    communityReplyTitle: "社区有新的回复或提及",
+    communityResultTitle: "社区处理结果",
   },
   "en-US": {
     ranks: {
@@ -40,6 +42,8 @@ export const notificationMessages = {
     },
     levelUpTitle: "Leveled up to Lv.{level} · {name}",
     opinionReplyTitle: "Your feedback got a reply",
+    communityReplyTitle: "New community reply or mention",
+    communityResultTitle: "Community review result",
   },
 };
 export function notificationPresentation(item, locale = "zh-CN") {
@@ -59,6 +63,7 @@ export function notificationPresentation(item, locale = "zh-CN") {
       .replace("{level}", String(meta.level || ""))
       .replace("{name}", messages.ranks[meta.level] || meta.name || "");
   if (item.type === "opinion_reply") title = messages.opinionReplyTitle;
+  if(item.type === "community_feed") title = meta.kind === "result" ? messages.communityResultTitle : messages.communityReplyTitle;
   return {
     title,
     content: item.type === "level_up" ? "" : String(item.content || ""),

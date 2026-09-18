@@ -1,3 +1,4 @@
+import { purgeCommunityFeedData } from './communityFeed/lifecycle.js';
 import { deferCloudImageDeletion, deleteUnmanagedObject } from './imagePreview/cleanup.js';
 import crypto from 'node:crypto';
 import pool from '../db/index.js';
@@ -698,6 +699,7 @@ async function purgeFeatureRequests(connection, tables, userId) {
 }
 
 export async function purgeOwnedResources(connection, tables, userId) {
+  await purgeCommunityFeedData(connection,tables,userId);
   if (tables.has('image_assets') && tables.has('image_asset_refs')) {
     if (tables.has('files')) {
       const [images] = await connection.query('SELECT * FROM files WHERE create_by=?', [userId]);

@@ -1,3 +1,4 @@
+import { communityZh } from './community';
 import { coreUsageReportZh } from './coreUsageReport';
 import autumn from './autumn-zh-CN';
 import { noteExportSettingsZh } from './noteExportSettings';
@@ -9,6 +10,7 @@ import { accountSettingsZh } from './accountSettings';
 import { settingsRefineZh } from './settingsRefine';
 import { notificationMessages } from '@lightnote/shared/notification-presentation';
 export default {
+  community: communityZh,
   coreUsageReport: coreUsageReportZh,
   autumn,
   noteExportSettings: noteExportSettingsZh,
@@ -1409,7 +1411,7 @@ export default {
     noteLibrary: '笔记库',
     create: '新建',
     ai: 'AI',
-    community: '聊天室',
+    community: '社区',
     profile: '我的',
     createHub: {
       title: '新建',
@@ -3741,7 +3743,7 @@ export default {
       loading: '正在读取个人表情库',
       loadFailed: '个人表情库暂时无法读取',
       uploadAction: '添加图片',
-      uploadHint: '支持 JPG、PNG、WebP；文件较大或画面尺寸过高时会自动优化，表情库跟随账号在多端同步。',
+      uploadHint: '支持 JPG、PNG、WebP、GIF；静态图片自动优化，GIF 原图上传（不超过 2MB），表情库多端同步。',
       emptyTitle: '还没有自定义表情',
       emptyDescription: '上传自己的图片，之后可以直接作为表情消息发送。',
       customAlt: '自定义表情',
@@ -3755,6 +3757,7 @@ export default {
       limitReached: '个人表情最多保存 40 个，请先移除一些表情',
       saveUnavailable: '这个表情不存在或当前不可收藏',
       saveFailed: '收藏表情失败，请稍后重试',
+      gifRejected: 'GIF 无法上传：文件需不超过 2MB；请确认动图完整，并缩小尺寸或减少帧数后重试。GIF 不会自动压缩。',
       compressedTooLarge: '这张图片自动优化后仍然过大，请换一张图片，或先裁剪、缩小后重试',
       dimensionsTooLarge: '这张图片的画面尺寸太大，自动缩小未成功。请换一张图片，或先裁剪、缩小后重试',
       compressFailed: '这张图片无法自动处理，请换一张 JPG、PNG 或 WebP 图片，或先裁剪、缩小后重试',
@@ -4584,6 +4587,9 @@ export default {
     questionUnavailable: '原问题不可用',
   },
   inbox: {
+    pendingFilter: '仅看待整理',
+    pendingFilterEmpty: '当前筛选下没有待整理内容',
+    filterStatus: '整理状态',
     title: '待整理',
     subtitle: '需要整理的书签、笔记和文件，都在这里集中处理。',
     pendingScopeTitle: '待整理范围',
@@ -6196,6 +6202,9 @@ export default {
     },
   },
   note: {
+    selectPageNamed: '选择「{title}」',
+    selectThisPage: '选择此篇',
+    pageSelected: '已选择',
     mobileActionsTitle: '笔记操作',
     title: '笔记库',
     subtitle: '用页面树组织知识，同时保留标签、卡片、列表与 AI 能力。',
@@ -8869,6 +8878,7 @@ export default {
     claimAllSuccessBySource: '领取成功：{sources}，经验 +{exp}，积分 +{points}',
     claimAllSuccessBySourceWithFrames: '领取成功：{sources}，经验 +{exp}，积分 +{points}，头像框 +{frames}',
     claimSources: {
+      community: '社区活动 {n} 项',
       daily: '日常任务 ×{n}',
       growthTasks: '成长任务 ×{n}',
       achievements: '成就 ×{n}',
@@ -8905,6 +8915,7 @@ export default {
       daily_todo: '完成一个待办',
       daily_organize: '整理一项资源',
       wk_bookmark: '推进本周书签挑战',
+      wk_community: '本周分享一篇帖子',
       wk_note: '推进本周笔记挑战',
       wk_checkin: '推进本周签到挑战',
       wk_todo: '推进本周待办挑战',
@@ -9171,14 +9182,16 @@ export default {
     recapEmptyTitle: '暂时没有可回顾的内容',
     recapEmptyDesc: '先记录一条笔记或收藏，之后再回来看看。',
     weeklyTitle: '每周挑战',
-    weeklySubtitle: '每周一刷新，完成领积分',
-    weeklyPointsProgress: '本周 {current} / {total} 积分',
+    weeklySubtitle: '每项完成后单独领取积分，每周一刷新',
+    weeklyReward: '+{n} 积分',
+    weeklyPointsProgress: '已领取 {current} / 本周共 {total} 积分',
     weeklyClaim: '领取 +{n}',
     weeklyClaimed: '已领取',
     weeklyDoneClaim: '可领取',
     weeklyClaimOk: '领取成功，积分 +{n}',
     weeklyActiveTodayDone: '今日已计入 · 明日继续',
     weeklyName: {
+      wk_community: '本周分享',
       wk_bookmark: '本周收藏书签',
       wk_note: '本周记笔记',
       wk_checkin: '本周签到',
@@ -9190,6 +9203,7 @@ export default {
       wk_variety: '完成 3 类知识管理操作',
     },
     weeklyDescription: {
+      wk_community: '本周首次审核通过 1 篇帖子；修改和重复审核不重复计数',
       wk_active_days: '当天新建书签、笔记或文件，或完成待办、整理资源，任一项计 1 天；新建标签、修改已有内容不计入',
       wk_variety: '新增书签、笔记或文件，或完成待办、整理资源，任选 3 类',
     },
@@ -9268,6 +9282,7 @@ export default {
     },
     pointsSource: {
       wk_bookmark: '本周书签挑战',
+      wk_community: '本周分享一篇帖子',
       wk_note: '本周笔记挑战',
       wk_checkin: '本周签到挑战',
       wk_todo: '本周待办挑战',
@@ -9612,6 +9627,7 @@ export default {
     achClaimedAlready: '该成就奖励已领取',
     achClaimLocked: '成就尚未解锁',
     achGroup: {
+      community: '社区交流',
       checkin: '签到成就',
       create: '创作成就',
       action: '行动成就',
@@ -9620,6 +9636,11 @@ export default {
       tenure: '资历成就',
     },
     achName: {
+      community_post_1: '初次分享',
+      community_post_10: '持续分享',
+      community_post_50: '经验沉淀',
+      community_answer_1: '热心解答',
+
       streak_1: '初见轻笺',
       streak_7: '七日不辍',
       streak_30: '卅日勤学',
@@ -9661,6 +9682,11 @@ export default {
       join_365: '周年知己',
     },
     achDesc: {
+      community_post_1: '首次发布并审核通过 1 篇帖子',
+      community_post_10: '累计发布并审核通过 10 篇不同帖子',
+      community_post_50: '累计发布并审核通过 50 篇不同帖子',
+      community_answer_1: '首次有回答被其他求助者采用',
+
       streak_1: '完成首次签到',
       streak_7: '连续签到 7 天',
       streak_30: '连续签到 30 天',
@@ -9704,6 +9730,7 @@ export default {
     timelineEmpty: '还没有成长记录，开始你的第一步吧',
     timelineLevelUp: '升级到 Lv.{level} · {name}',
     timelineSrc: {
+      community_task: '社区活动奖励',
       checkin: '每日签到',
       bookmark: '收藏书签',
       note: '记录笔记',
@@ -11682,6 +11709,7 @@ export default {
     newPasswordTooShort: '新密码长度不能小于6位',
     changePasswordSuccess: '修改密码成功',
     setPasswordSuccess: '设置密码成功',
+    bindEmailBeforeReset: '请先在个人资料中绑定邮箱，再通过邮箱找回密码。',
     forgotOldPassword: '忘记原密码？',
     resetByEmail: '邮箱验证码重置',
     backToChange: '返回修改密码',
@@ -12371,7 +12399,14 @@ export default {
   },
 
   adminActivity: {
-    title: '今日活跃用户',
+    metricHelp: '统计口径',
+    trendTitle: '每日活跃趋势',
+    range: '近 {days} 天',
+    point: '{date} · {count} 人',
+    missing: '未采集',
+    partialPoint: '非完整日',
+    chartHint: '点击或用方向键选择日期；空缺表示尚未采集，今天及启用首日为非完整日。',
+    title: '每日活跃用户',
     view: '查看活跃用户',
     total: '{date} · {count} 人',
     internalHidden: '已排除管理员和测试账号',
@@ -12383,14 +12418,19 @@ export default {
     loading: '正在加载活跃用户…',
     failed: '活跃用户加载失败，请重试或刷新',
     retry: '重试',
-    empty: '今天还没有记录到真实使用的用户',
+    empty: '当天没有记录到真实使用的用户',
     unnamed: '未命名用户',
     remark: '备注',
-    first: '今日首次',
+    first: '当天首次',
     last: '最近活跃',
     complete: '已加载全部用户',
     noBaseline: '暂无可比数据',
     unavailable: '统计暂不可用',
+    date: '统计日期',
+    today: '今天',
+    invalidDate: '请选择今天或之前的日期',
+    dayHint: '按北京时间自然日统计；历史日期显示全天人数，今天统计到当前时间。',
+    historyUnavailable: '真实活跃记录始于 {date}，所选日期尚未开始采集，无法查询。',
   },
 
   adminOverview: {

@@ -58,7 +58,13 @@
 
     <div class="auth-divider">{{ t('auth.or') }}</div>
 
-    <BButton class="auth-secondary" v-click-log="OPERATION_LOG_MAP.register.githubRegister" @click="registerWithGitHub">
+    <BButton
+      :loading="githubStarting"
+      :disabled="githubStarting || submitting"
+      class="auth-secondary"
+      v-click-log="OPERATION_LOG_MAP.register.githubRegister"
+      @click="registerWithGitHub"
+    >
       <SvgIcon :src="icon.github" size="17" />
       {{ t('auth.githubRegister') }}
     </BButton>
@@ -67,12 +73,6 @@
       <span>{{ t('auth.hasAccount') }}</span>
       <BButton class="auth-link" @click="title = '登录'">{{ t('auth.goLogin') }}</BButton>
     </div>
-
-    <GithubOAuthConsentModal
-      v-model:visible="githubConsentVisible"
-      :loading="githubStarting"
-      @confirm="confirmGitHubRegistration"
-    />
   </form>
 </template>
 
@@ -98,7 +98,6 @@
   import { clearQuickSaveAuthReturnPath, resolveQuickSaveAuthReturnPath } from '@/utils/quickSaveAuthReturn.ts';
   import { clearExtensionAuthReturnPath, resolveExtensionAuthReturnPath } from '@/utils/extensionAuthReturn.ts';
   import { persistAndroidAuthSession } from '@/utils/androidBridge.ts';
-  import GithubOAuthConsentModal from './GithubOAuthConsentModal.vue';
   import { clearAuthNavigationIntent, resolveAuthNavigationIntent } from '@/utils/authNavigationIntent.ts';
 
   type AuthMode = '登录' | '注册' | '重置';
@@ -109,13 +108,12 @@
   const bookmark = bookmarkStore();
   const user = useUserStore();
   const submitting = ref(false);
-  const githubConsentVisible = ref(false);
   const githubStarting = ref(false);
   const disable = computed(() => submitting.value || !formData.password || !formData.email);
   const emit = defineEmits<{ 'update:success': [formData: { email: string; password: string }] }>();
 
   function registerWithGitHub() {
-    githubConsentVisible.value = true;
+    void confirmGitHubRegistration();
   }
 
   async function confirmGitHubRegistration() {

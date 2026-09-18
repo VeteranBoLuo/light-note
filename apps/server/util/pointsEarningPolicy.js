@@ -1,6 +1,7 @@
 export const LEGACY_POINTS_EARNING_POLICY_VERSION = 'points-earning-legacy';
 export const POINTS_EARNING_C5_POLICY_VERSION = 'points-earning-c5';
 export const POINTS_EARNING_C6_POLICY_VERSION = 'points-earning-c6';
+export const POINTS_EARNING_C7_POLICY_VERSION = 'points-earning-c7';
 // 兼容既有治理、活动和周策略调用；C6 只升级每日任务条件，其他 C5 数值保持不变。
 export const POINTS_EARNING_POLICY_VERSION = POINTS_EARNING_C5_POLICY_VERSION;
 export const POINTS_SYSTEM_VERSION = 'points-system-c5';
@@ -9,10 +10,12 @@ export const SUPPORTED_POINTS_EARNING_POLICY_VERSIONS = Object.freeze([
   LEGACY_POINTS_EARNING_POLICY_VERSION,
   POINTS_EARNING_C5_POLICY_VERSION,
   POINTS_EARNING_C6_POLICY_VERSION,
+  POINTS_EARNING_C7_POLICY_VERSION,
 ]);
 export const C5_EARNING_RULE_POLICY_VERSIONS = Object.freeze([
   POINTS_EARNING_C5_POLICY_VERSION,
   POINTS_EARNING_C6_POLICY_VERSION,
+  POINTS_EARNING_C7_POLICY_VERSION,
 ]);
 export const POINTS_EARNING_C5_MIGRATION_MARKERS = Object.freeze([
   'points-earning-c5-achievement-snapshots-v1',
@@ -100,6 +103,7 @@ export function usesC5EarningRules(version) {
 }
 
 function earningPolicyShortVersion(version) {
+  if (version === POINTS_EARNING_C7_POLICY_VERSION) return 'c7';
   if (version === POINTS_EARNING_C6_POLICY_VERSION) return 'c6';
   if (version === POINTS_EARNING_C5_POLICY_VERSION) return POINTS_EARNING_POLICY_SHORT_VERSION;
   return null;
@@ -109,6 +113,8 @@ export function getPointsEarningRuntime(env = process.env) {
   return Object.freeze({
     enabled: strictBoolean(env.POINTS_EARNING_C5_ENABLED, false),
     c6Enabled: strictBoolean(env.POINTS_EARNING_C6_ENABLED, false),
+    c7Enabled: strictBoolean(env.POINTS_EARNING_C7_ENABLED, false),
+    c7EffectiveWeek: normalizeWeek(env.POINTS_EARNING_C7_EFFECTIVE_WEEK),
     pointsCenterEnabled: strictBoolean(env.POINTS_POINTS_CENTER_ENABLED, false),
     adminGovernanceEnabled: strictBoolean(env.POINTS_ADMIN_GOVERNANCE_V2_ENABLED, false),
     campaignEnabled: strictBoolean(env.POINTS_CAMPAIGN_ENABLED, false),
@@ -128,10 +134,25 @@ export async function assertPointsEarningActivationReady({
   campaignRuntime = null,
 } = {}) {
   const requiresMigration =
-    runtime.enabled || runtime.c6Enabled || runtime.adminGovernanceEnabled || runtime.campaignEnabled;
+    runtime.enabled ||
+    runtime.c6Enabled ||
+    runtime.c7Enabled ||
+    runtime.adminGovernanceEnabled ||
+    runtime.campaignEnabled;
   if (runtime.enabled && (!runtime.effectiveDay || !runtime.effectiveWeek)) {
     const error = new Error('POINTS_EARNING_C5_EFFECTIVE_BOUNDARY_REQUIRED');
     error.code = 'POINTS_EARNING_C5_EFFECTIVE_BOUNDARY_REQUIRED';
+    throw error;
+  }
+  if (
+    runtime.c7Enabled &&
+    (!runtime.enabled ||
+      !runtime.c7EffectiveWeek ||
+      !runtime.effectiveWeek ||
+      runtime.c7EffectiveWeek < runtime.effectiveWeek)
+  ) {
+    const error = new Error('POINTS_EARNING_C7_BOUNDARY_REQUIRED');
+    error.code = 'POINTS_EARNING_C7_BOUNDARY_REQUIRED';
     throw error;
   }
   if (runtime.c6Enabled && (!runtime.enabled || !runtime.c6EffectiveDay)) {
@@ -192,6 +213,7 @@ export function earningPolicyVersionForDay(dayKey, runtime = getPointsEarningRun
 
 export function earningPolicyVersionForWeek(weekKey, runtime = getPointsEarningRuntime()) {
   const week = normalizeWeek(weekKey);
+  if (runtime.c7EffectiveWeek && week && week >= runtime.c7EffectiveWeek) return POINTS_EARNING_C7_POLICY_VERSION;
   return runtime.effectiveWeek && week && week >= runtime.effectiveWeek
     ? POINTS_EARNING_POLICY_VERSION
     : LEGACY_POINTS_EARNING_POLICY_VERSION;
@@ -202,6 +224,7 @@ export function earningWritesEnabled(version, runtime = getPointsEarningRuntime(
   // 仍失败关闭，避免未来新增策略在未接入写闸时意外发奖。
   if (version == null || version === LEGACY_POINTS_EARNING_POLICY_VERSION) return true;
   if (version === POINTS_EARNING_C5_POLICY_VERSION) return runtime.enabled;
+  if (version === POINTS_EARNING_C7_POLICY_VERSION) return runtime.enabled && runtime.c7Enabled;
   if (version === POINTS_EARNING_C6_POLICY_VERSION) return runtime.enabled && runtime.c6Enabled;
   return false;
 }
@@ -262,7 +285,10 @@ export function resolveWeeklyChallenges(version = POINTS_EARNING_POLICY_VERSION)
       { key: 'wk_organize', metric: 'organize', target: 5, reward: 50 },
     ];
   }
-  return WEEKLY_POINTS_POLICY.map((challenge) => ({ ...challenge }));
+  const challenges = WEEKLY_POINTS_POLICY.map((challenge) => ({ ...challenge }));
+  if (version === POINTS_EARNING_C7_POLICY_VERSION)
+    challenges.push({ key: 'wk_community', metric: 'communityPosts', target: 1, reward: 20 });
+  return challenges;
 }
 
 export function applyAchievementEarningPolicy(achievement, version = POINTS_EARNING_POLICY_VERSION) {

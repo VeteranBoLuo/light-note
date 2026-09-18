@@ -23,6 +23,7 @@
         class="note-tree-row"
         :class="{
           'is-active': active,
+          'is-batch': batchMode,
           'is-browse-scope': browsing,
           'is-search-match': node.matched,
           'has-invalid-parent': node.invalidParent,
@@ -32,8 +33,8 @@
           'is-drop-after': dropTargetKey === node.id && dropTargetPosition === 'after',
         }"
         :style="rowStyle"
-        :draggable="writeEnabled && dragEnabled && !searchMode"
-        :title="writeEnabled && dragEnabled && !searchMode ? t('note.dragPageHint') : undefined"
+        :draggable="writeEnabled && dragEnabled && !searchMode && !batchMode"
+        :title="writeEnabled && dragEnabled && !searchMode && !batchMode ? t('note.dragPageHint') : undefined"
         :data-note-drop-parent="node.id"
         :data-note-drop-title="node.title || t('note.untitled')"
         :data-note-tree-node-id="node.id"
@@ -53,6 +54,17 @@
           <SvgIcon v-if="node.hasChildren" :src="icon.noteTree.chevron" size="12" aria-hidden="true" />
           <span v-else class="note-tree-toggle-placeholder" aria-hidden="true"></span>
         </BButton>
+
+        <BCheckbox
+          v-if="batchMode"
+          class="note-tree-checkbox"
+          controlled
+          :checked="selectedIds.has(node.id)"
+          :disabled="selectionDisabled"
+          :aria-label="t('note.selectPageNamed', { title: node.title || t('note.untitled') })"
+          @click.stop
+          @change="emit('selectNote', node, $event)"
+        />
 
         <BButton class="note-tree-title" @click="emit('open', node.id)">
           <SvgIcon :src="pageIcon" size="16" class="note-tree-page-icon" aria-hidden="true" />
@@ -94,6 +106,10 @@
             :drop-target-active="dropTargetActive"
             :drop-target-position="dropTargetPosition"
             :menu-disabled="menuDisabled"
+            :batch-mode="batchMode"
+            :selected-ids="selectedIds"
+            :selection-disabled="selectionDisabled"
+            @select-note="(node, checked) => emit('selectNote', node, checked)"
             @toggle="emit('toggle', $event)"
             @open="emit('open', $event)"
             @browse-children="emit('browseChildren', $event)"
@@ -119,6 +135,7 @@
   import { computed } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BActionMenu from '@/components/base/BasicComponents/BActionMenu.vue';
+  import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import type { BActionMenuItem, BActionMenuTrigger } from '@/components/base/BasicComponents/actionMenu';
@@ -146,6 +163,9 @@
       dropTargetActive?: boolean;
       dropTargetPosition?: NoteTreeDropPosition | '';
       menuDisabled?: boolean;
+      batchMode?: boolean;
+      selectedIds?: Set<string>;
+      selectionDisabled?: boolean;
     }>(),
     {
       writeEnabled: true,
@@ -155,12 +175,16 @@
       dropTargetActive: false,
       dropTargetPosition: '',
       menuDisabled: false,
+      batchMode: false,
+      selectedIds: () => new Set<string>(),
+      selectionDisabled: false,
       activePageId: null,
       browseParentId: null,
     },
   );
 
   const emit = defineEmits<{
+    selectNote: [node: NoteTreeItem, checked: boolean];
     toggle: [node: NoteTreeItem];
     open: [id: string];
     browseChildren: [id: string];
@@ -442,6 +466,16 @@
       color: var(--resource-note-color, #00a884);
       border-color: var(--resource-note-color, #00a884);
     }
+  }
+
+  .note-tree-row.is-batch {
+    grid-template-columns: 22px 28px minmax(0, 1fr);
+  }
+
+  .note-tree-checkbox {
+    height: 30px;
+    padding: 0 6px;
+    box-sizing: border-box;
   }
 
   .note-tree-toggle,

@@ -102,6 +102,7 @@ export interface CommunityChatAchievementCollection {
 }
 
 export interface CommunityChatOwnProfile {
+  communityTenurePreviewLabel?: string | null;
   bio: string;
   showCommunityTenure: boolean;
   featuredAchievementKeys: string[];
@@ -198,7 +199,7 @@ export interface CommunityChatCustomSticker {
   publicId: string;
   name: string;
   url: string;
-  contentType: 'image/jpeg' | 'image/png' | 'image/webp';
+  contentType: 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif';
   fileSize: number;
   width: number;
   height: number;

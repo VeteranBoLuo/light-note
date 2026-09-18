@@ -6,11 +6,19 @@ export interface ActiveUserRow {
   firstActiveAt: string;
   lastActiveAt: string;
 }
+export interface ActivityTrendPoint {
+  date: string;
+  total: number | null;
+  partial: boolean;
+}
 export interface ActiveUsersPage {
+  trend?: ActivityTrendPoint[];
   date: string;
   snapshotAt: string;
   hideInternal: boolean;
-  total: number;
+  total: number | null;
+  partialDate: boolean;
+  historyUnavailable: boolean;
   items: ActiveUserRow[];
   hasMore: boolean;
   nextCursor: string | null;
@@ -22,9 +30,11 @@ export const getActiveUsers = (
   cursor: string | null,
   snapshotAt: string | null,
   signal?: AbortSignal,
+  date?: string,
+  trendDays?: number,
 ) =>
   apiBasePost(
     '/api/common/getAdminOverviewActiveUsers',
-    { hideInternal, cursor, snapshotAt },
+    { hideInternal, cursor, snapshotAt, date, trendDays },
     { silent: true, signal },
   );

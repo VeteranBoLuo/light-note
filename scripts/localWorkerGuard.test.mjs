@@ -24,6 +24,7 @@ test("仅回收同仓库已失去启动器的 pnpm Worker 组，保留活跃、�
   assert.deepEqual(inspectLocalWorkers("/repo/apps/server", run), {
     workers: [21, 31, 40, 51],
     orphanGroups: [20, 50],
+    launchers: [],
   });
 });
 
@@ -37,5 +38,24 @@ test("进程退出或无法确认工作目录时不回收进程组", () => {
   assert.deepEqual(inspectLocalWorkers("/repo/apps/server", run), {
     workers: [21],
     orphanGroups: [],
+    launchers: [],
+  });
+});
+
+test("识别同仓库普通和监听启动器，不接管其他脚本、其他仓库或自身", () => {
+  const run = (file, args) => {
+    if (file === "ps") return [
+      "90 1 90 node node scripts/localServer.mjs",
+      "91 1 91 node node /repo/scripts/localServer.mjs --watch",
+      "92 1 92 node node scripts/localServer.mjs",
+      "93 1 93 node node /other/scripts/localServer.mjs",
+      "94 1 94 node node scripts/localServer.mjs.bak",
+      "95 1 95 node node scripts/localServer.mjs --unknown",
+      `${process.pid} 1 ${process.pid} node node scripts/localServer.mjs`,
+    ].join("\n");
+    return `n${args[2] === "92" ? "/other" : "/repo"}`;
+  };
+  assert.deepEqual(inspectLocalWorkers("/repo/apps/server", run), {
+    workers: [], orphanGroups: [], launchers: [90, 91],
   });
 });

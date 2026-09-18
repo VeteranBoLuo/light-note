@@ -70,6 +70,7 @@ export default defineStore('dom', {
           isPending?: boolean;
         }[];
         typeCheckValue: CloudFileCategory[];
+        pendingOnly: boolean;
         folder?: { id: string; name: string };
         searchFileName: string;
         loading: boolean;
@@ -97,6 +98,7 @@ export default defineStore('dom', {
       expandedFolderIds: [],
       fileList: [],
       typeCheckValue: [...CLOUD_FILE_CATEGORY_ORDER],
+      pendingOnly: false,
       folder: {
         // store 在组件外,按项目约定用 i18n.global.t(复用 cloudSpace.allFile 现成键),不再硬编码中文
         name: i18n.global.t('cloudSpace.allFile'),
@@ -151,6 +153,7 @@ export default defineStore('dom', {
             fileName: this.searchFileName,
             category: this.typeCheckValue,
             folderId: this.folder?.id ?? 'all',
+            pendingOnly: this.pendingOnly,
           },
           sort: this.fileSort,
         });
@@ -186,6 +189,7 @@ export default defineStore('dom', {
         fileName: this.searchFileName,
         category: this.typeCheckValue,
         folderId: this.folder?.id ?? 'all',
+        pendingOnly: this.pendingOnly,
       };
       const sort = this.fileSort;
       const items: any[] = [];
@@ -342,6 +346,7 @@ export default defineStore('dom', {
         id: 'all',
       };
       this.searchFileName = '';
+      this.pendingOnly = false;
       this.loading = options.showLoading === true;
       this.folderLoading = options.showLoading === true;
       this.loadingMore = false;

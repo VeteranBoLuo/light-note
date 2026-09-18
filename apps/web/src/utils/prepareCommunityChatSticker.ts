@@ -1,4 +1,4 @@
-const SUPPORTED_STICKER_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const SUPPORTED_STICKER_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 const WEBP_TYPE = 'image/webp';
 const OUTPUT_PROFILES = [
   { maxEdge: 1600, quality: 0.9 },
@@ -128,6 +128,9 @@ export async function prepareCommunityChatSticker(
     throw new Error('CUSTOM_STICKER_IMAGE_TYPE_INVALID');
   }
   const limits = validateLimits(inputLimits);
+  if (source.type === 'image/gif' && source.size > limits.maxBytes) {
+    throw new Error('CUSTOM_STICKER_GIF_TOO_LARGE');
+  }
   const image = await loadImage(source);
   const dimensions = imageDimensions(image);
   const dimensionsWithinLimits =
@@ -138,6 +141,11 @@ export async function prepareCommunityChatSticker(
     return { file: source, compressed: false };
   }
 
+  // GIF 必须保留原始帧；Canvas 重编码会丢失动画。
+  if (source.type === 'image/gif') {
+    throw new Error('CUSTOM_STICKER_GIF_DIMENSIONS_INVALID');
+  }
+
   let smallestBlob: Blob | null = null;
   let previousEdge = -1;
   let canvas: HTMLCanvasElement | null = null;
@@ -145,12 +153,7 @@ export async function prepareCommunityChatSticker(
   let lastPngFallbackEdge = -1;
 
   for (const profile of OUTPUT_PROFILES) {
-    const safeOutputEdge = resolveSafeOutputEdge(
-      dimensions.width,
-      dimensions.height,
-      profile.maxEdge,
-      limits,
-    );
+    const safeOutputEdge = resolveSafeOutputEdge(dimensions.width, dimensions.height, profile.maxEdge, limits);
     if (!webpSupported && source.type === 'image/png' && safeOutputEdge === lastPngFallbackEdge) continue;
     if (safeOutputEdge !== previousEdge) {
       canvas = renderImage(image, safeOutputEdge);

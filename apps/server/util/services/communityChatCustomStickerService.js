@@ -61,6 +61,7 @@ function extensionForContentType(contentType) {
   if (contentType === 'image/jpeg') return 'jpg';
   if (contentType === 'image/png') return 'png';
   if (contentType === 'image/webp') return 'webp';
+  if (contentType === 'image/gif') return 'gif';
   throw chatError(
     'CUSTOM_STICKER_CONTENT_TYPE_INVALID',
     400,
@@ -122,7 +123,15 @@ export async function uploadCommunityChatCustomSticker({
     await assertCommunityChatMessagingAccess({ user, env, db });
     await assertCommunityChatPostingAllowed({ user, db });
     const normalizedName = normalizeName(name);
-    const validated = await validateCommunityChatImage(file);
+    if (Number(file?.size) > COMMUNITY_CHAT_CUSTOM_STICKER_MAX_BYTES) {
+      throw chatError(
+        'CUSTOM_STICKER_TOO_LARGE',
+        413,
+        '自定义表情不能超过 2MB',
+        'Custom stickers must be 2MB or smaller',
+      );
+    }
+    const validated = await validateCommunityChatImage(file, { allowGif: true });
     if (validated.fileSize > COMMUNITY_CHAT_CUSTOM_STICKER_MAX_BYTES) {
       throw chatError(
         'CUSTOM_STICKER_TOO_LARGE',

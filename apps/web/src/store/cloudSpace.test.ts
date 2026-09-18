@@ -32,6 +32,23 @@ describe('cloud space pagination', () => {
     });
   });
 
+  it('待整理与文件类型、目录和搜索组合，并用于分页和刷新', async () => {
+    const store = useCloudSpaceStore();
+    store.pendingOnly = true;
+    store.folder = { id: 'folder-1', name: 'Folder' };
+    store.searchFileName = 'report';
+    store.typeCheckValue = ['pdf'];
+    mocks.apiQueryPost.mockResolvedValue({ status: 200, data: { items: [], total: 60, page: 1, hasMore: true } });
+    await store.queryFieldList();
+    await store.loadMoreFiles();
+    await store.refreshLoadedFiles();
+    for (const [, body] of mocks.apiQueryPost.mock.calls) expect(body.filters).toEqual({
+      pendingOnly: true, folderId: 'folder-1', fileName: 'report', category: ['pdf'],
+    });
+    store.reset();
+    expect(store.pendingOnly).toBe(false);
+  });
+
   it('loads the first page and appends the next page without replacing existing files', async () => {
     mocks.apiQueryPost
       .mockResolvedValueOnce({

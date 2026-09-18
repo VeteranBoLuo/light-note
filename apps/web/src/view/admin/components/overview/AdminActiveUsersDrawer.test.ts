@@ -91,10 +91,10 @@ describe('active users drawer', () => {
     mount();
     await flush();
     expect(host.textContent).toContain('加载失败');
-    expect(host.textContent).not.toContain('今天还没有');
+    expect(host.textContent).not.toContain('当天没有');
     [...host.querySelectorAll('button')].find((b) => b.textContent?.includes('重试'))!.click();
     await flush();
-    expect(host.textContent).toContain('今天还没有');
+    expect(host.textContent).toContain('当天没有');
   });
   it('unmount aborts an in-flight request and ignores its late completion', async () => {
     let resolve!: (value: any) => void;
@@ -152,4 +152,77 @@ describe('active drawer refresh and scope changes', () => {
     expect(host.textContent).not.toContain('用户 old');
     expect(getActiveUsers.mock.calls[2].slice(1, 3)).toEqual([null, null]);
   });
+});
+
+describe('historical activity chart', () => {
+  const yesterday = new Date(Date.now() + 8 * 3_600_000 - 86400000).toISOString().slice(0, 10);
+  const trend = [
+    { date: yesterday, total: 5, partial: false },
+    { date, total: 2, partial: true },
+  ];
+  it('chart selection sends the chosen date and never synchronizes historical totals into today', async () => {
+    getActiveUsers
+      .mockResolvedValueOnce({ ...page(), data: { ...page().data, trend } })
+      .mockResolvedValueOnce({ ...page(), data: { ...page().data, date: yesterday, total: 5, trend } });
+    const { snapshot } = mount();
+    await flush();
+    host.querySelector('.activity-trend__hit')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flush();
+    expect(getActiveUsers.mock.calls[1][4]).toBe(yesterday);
+    expect(getActiveUsers.mock.calls[1].slice(1, 3)).toEqual([null, null]);
+    expect(snapshot).toHaveBeenCalledTimes(1);
+    expect(host.textContent).toContain(`${yesterday} · 5 人`);
+  });
+  it('rapid date changes abort and ignore a late historical response', async () => {
+    let finish!: (value: any) => void;
+    getActiveUsers
+      .mockResolvedValueOnce({ ...page(), data: { ...page().data, trend } })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      )
+      .mockResolvedValueOnce({ ...page(), data: { ...page().data, trend } });
+    mount();
+    await flush();
+    host.querySelector('.activity-trend__hit')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flush();
+    const signal = getActiveUsers.mock.calls[1][3] as AbortSignal;
+    [...host.querySelectorAll('button')].find((b) => b.textContent?.trim() === '今天')!.click();
+    await flush();
+    finish({ ...page(), data: { ...page().data, date: yesterday, total: 99, trend } });
+    await flush();
+    expect(signal.aborted).toBe(true);
+    expect(host.textContent).not.toContain(`${yesterday} · 99 人`);
+  });
+  it('unrecorded history has no fabricated zero or empty-list message', async () => {
+    getActiveUsers.mockResolvedValueOnce({
+      ...page(),
+      data: {
+        ...page().data,
+        total: null,
+        items: [],
+        historyUnavailable: true,
+        startedAt: `${date} 08:00:00.000`,
+        trend,
+      },
+    });
+    const { snapshot } = mount();
+    await flush();
+    expect(host.textContent).toContain('尚未开始采集');
+    expect(host.textContent).not.toContain('当天没有记录');
+    expect(snapshot).not.toHaveBeenCalled();
+  });
+});
+
+it('range tabs request numeric supported ranges', async () => {
+  getActiveUsers.mockResolvedValue(page());
+  mount();
+  await flush();
+  [...host.querySelectorAll('[role="tab"]')]
+    .find((el) => el.textContent?.includes('30'))!
+    .dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  await flush();
+  expect(getActiveUsers.mock.calls.at(-1)?.[5]).toBe(30);
 });

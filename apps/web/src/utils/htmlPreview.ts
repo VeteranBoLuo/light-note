@@ -57,30 +57,47 @@ const HTML_PREVIEW_ANCHOR_BRIDGE = `<script ${HTML_PREVIEW_ANCHOR_BRIDGE_MARKER}
 </script>`;
 
 /**
- * HTML 预览运行在无同源权限的 Blob sandbox 中，浏览器无法稳定处理旧式
+ * HTML 预览运行在无同源权限的 iframe sandbox 中，浏览器无法稳定处理旧式
  * `href="#..."` → `<a name="...">` 片段导航。将桥接脚本放在 head 最前面，
  * 直接在隔离文档内部完成滚动，不需要开放 allow-same-origin 或访问主应用 DOM。
  */
 export function injectHtmlPreviewAnchorBridge(source: string) {
   if (!source || source.includes(HTML_PREVIEW_ANCHOR_BRIDGE_MARKER)) return source;
 
+  return prependHtmlMarkup(source, HTML_PREVIEW_ANCHOR_BRIDGE);
+}
+
+/** srcdoc 默认继承应用地址；无显式 base 的文件不能把相对资源请求发往应用路由。 */
+export function buildHtmlPreviewDocument(source: string) {
+  const document = new DOMParser().parseFromString(source, 'text/html');
+  const baseHref = document.querySelector('base[href]')?.getAttribute('href') || '';
+  let hasAbsoluteBase = false;
+  try {
+    new URL(baseHref);
+    hasAbsoluteBase = true;
+  } catch {}
+  const isolatedSource = hasAbsoluteBase ? source : prependHtmlMarkup(source, '<base href="about:blank">');
+  return injectHtmlPreviewAnchorBridge(isolatedSource);
+}
+
+function prependHtmlMarkup(source: string, markup: string) {
   const headMatch = /<head(?:\s[^>]*)?>/i.exec(source);
   if (headMatch?.index !== undefined) {
     const insertAt = headMatch.index + headMatch[0].length;
-    return `${source.slice(0, insertAt)}${HTML_PREVIEW_ANCHOR_BRIDGE}${source.slice(insertAt)}`;
+    return `${source.slice(0, insertAt)}${markup}${source.slice(insertAt)}`;
   }
 
   const htmlMatch = /<html(?:\s[^>]*)?>/i.exec(source);
   if (htmlMatch?.index !== undefined) {
     const insertAt = htmlMatch.index + htmlMatch[0].length;
-    return `${source.slice(0, insertAt)}${HTML_PREVIEW_ANCHOR_BRIDGE}${source.slice(insertAt)}`;
+    return `${source.slice(0, insertAt)}${markup}${source.slice(insertAt)}`;
   }
 
   const doctypeMatch = /^\s*<!doctype[^>]*>/i.exec(source);
   if (doctypeMatch) {
     const insertAt = doctypeMatch[0].length;
-    return `${source.slice(0, insertAt)}${HTML_PREVIEW_ANCHOR_BRIDGE}${source.slice(insertAt)}`;
+    return `${source.slice(0, insertAt)}${markup}${source.slice(insertAt)}`;
   }
 
-  return `${HTML_PREVIEW_ANCHOR_BRIDGE}${source}`;
+  return `${markup}${source}`;
 }

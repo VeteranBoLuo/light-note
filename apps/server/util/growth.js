@@ -11,6 +11,7 @@
  */
 import { createHash } from 'node:crypto';
 import pool from '../db/index.js';
+import { communityGrowthMetrics } from './communityFeed/growthMetrics.js';
 import { earnPoints, earnStorage, getAchievementFrameByKey, titleName } from './points.js';
 import { grantItem } from './items.js';
 import { createNotification } from './notification.js';
@@ -71,6 +72,7 @@ const DAILY_EXP_CAP = 200; // 日 EXP 硬顶 —— 唯一不可绕底线(批量
 // 一次性/运营类经验不属于可刷的「每日经验」，既不受 200 日顶限制，也不占用当日额度。
 // first_own_resource / profile_done 为历史一次性来源，保留在同一口径中兼容旧账本。
 const DAILY_EXP_CAP_EXEMPT_SOURCES = Object.freeze([
+  'community_task',
   'growth_task',
   'first_own_resource',
   'milestone',
@@ -504,6 +506,10 @@ export async function getGrowth(userId, { userRole = null, db = pool, calendar =
 // reward 按长期积累难度递增：首签 10；中阶 40~120；高阶 150~500；里程碑级 600~800。
 // points_log(reason='achievement', ref=key)负责到账幂等，user_achievements 负责永久解锁与领取展示状态。
 export const LEGACY_ACHIEVEMENTS = [
+  { key: 'community_post_1', group: 'community', metric: 'communityPostCount', target: 1, reward: 20 },
+  { key: 'community_post_10', group: 'community', metric: 'communityPostCount', target: 10, reward: 60 },
+  { key: 'community_post_50', group: 'community', metric: 'communityPostCount', target: 50, reward: 120 },
+  { key: 'community_answer_1', group: 'community', metric: 'communityAnswerCount', target: 1, reward: 30 },
   { key: 'streak_1', group: 'checkin', metric: 'maxStreak', target: 1, reward: 10 },
   { key: 'streak_7', group: 'checkin', metric: 'maxStreak', target: 7, reward: 50 },
   { key: 'streak_30', group: 'checkin', metric: 'maxStreak', target: 30, reward: 120 },
@@ -1172,7 +1178,8 @@ export async function getGrowthDashboard(userId, { userRole = null, db = pool, c
     for (const row of cRows) achievementState.set(row.achievementKey, row);
   }
   const activeDays = isGuest ? 0 : await getMeaningfulActiveDays(userId, { db, calendar: accountCalendar });
-  const metrics = { ...stats, level: growth.level, activeDays };
+  const communityMetrics = isGuest ? {} : await communityGrowthMetrics(userId, { db });
+  const metrics = { ...stats, ...communityMetrics, level: growth.level, activeDays };
   const achievements = achievementCatalog.map((a) => {
     const cur = Number(metrics[a.metric] || 0);
     const minLevel = Math.max(0, Number(a.minLevel || 0));

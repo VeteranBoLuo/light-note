@@ -62,6 +62,33 @@ beforeEach(() => {
 });
 
 describe('communityChatImageService', () => {
+  it('allows real GIF bytes only for the sticker validation path and checks MIME and structure', async () => {
+    const file = await tempImage('image/gif');
+    const bytes = Buffer.from(
+      '47494638396101000100800000000000ffffff21f904000a0000002c00000000010001000002024401003b',
+      'hex',
+    );
+    await fs.writeFile(file.path, bytes);
+    file.size = bytes.length;
+    await expect(validateCommunityChatImage(file)).rejects.toMatchObject({
+      code: 'COMMUNITY_CHAT_IMAGE_CONTENT_INVALID',
+    });
+    await expect(validateCommunityChatImage(file, { allowGif: true })).resolves.toMatchObject({
+      contentType: 'image/gif',
+      extension: 'gif',
+      width: 1,
+      height: 1,
+      fileSize: bytes.length,
+    });
+    await expect(
+      validateCommunityChatImage({ ...file, mimetype: 'image/png' }, { allowGif: true }),
+    ).rejects.toMatchObject({ code: 'COMMUNITY_CHAT_IMAGE_CONTENT_INVALID' });
+    await fs.writeFile(file.path, bytes.subarray(0, -1));
+    await expect(
+      validateCommunityChatImage({ ...file, size: bytes.length - 1 }, { allowGif: true }),
+    ).rejects.toMatchObject({ code: 'CUSTOM_STICKER_GIF_INVALID' });
+  });
+
   it('只信任图片真实内容，并拒绝 MIME 与内容不一致的伪装文件', async () => {
     const file = await tempImage('image/jpeg');
 

@@ -125,4 +125,31 @@ describe('BModal 初始焦点', () => {
     await nextTick();
     expect(visible.value).toBe(false);
   });
+  it('notifies a controlled owner on close so the owner can reopen it', async () => {
+    vi.useFakeTimers();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const visible = ref(true);
+    const onClose = vi.fn(() => {
+      visible.value = false;
+    });
+    const app = createApp(
+      defineComponent({
+        setup: () => () =>
+          visible.value ? h(BModal, { visible: true, title: '资源', historyClosable: false, onClose }) : null,
+      }),
+    );
+    app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
+    app.mount(host);
+    cleanup = () => app.unmount();
+    for (let count = 1; count <= 3; count++) {
+      await nextTick();
+      document.body.querySelector<HTMLButtonElement>('.modal-close')!.click();
+      vi.advanceTimersByTime(200);
+      await nextTick();
+      expect(onClose).toHaveBeenCalledTimes(count);
+      expect(document.body.querySelector('.mask-container')).toBeNull();
+      visible.value = true;
+    }
+  });
 });

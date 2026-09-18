@@ -126,6 +126,30 @@ export async function queryActivityBaseline({ hideInternal, dates, cutoffTime, n
   };
 }
 
+export async function queryActivityTrend({ hideInternal, days, now, db, coverage }) {
+  if (![7, 30, 90].includes(days))
+    throw Object.assign(new Error('Invalid activity range'), { code: 'ACTIVITY_DATE_INVALID' });
+  const dates = Array.from({ length: days }, (_, index) =>
+    activityTime(new Date(now.getTime() - (days - 1 - index) * DAY_MS)).slice(0, 10),
+  );
+  const [rows] = await db.query(
+    {
+      sql: `SELECT DATE_FORMAT(a.activity_date, '%Y-%m-%d') AS date, COUNT(*) AS total
+      FROM user_activity_daily a STRAIGHT_JOIN user u ON u.id = a.user_id
+      WHERE a.activity_date >= ? AND a.activity_date <= ? AND a.first_active_at <= ? AND ${scopeSql(hideInternal)}
+      GROUP BY a.activity_date`,
+      timeout: 5000,
+    },
+    [dates[0], dates.at(-1), activityTime(now), ...scopeParams(hideInternal)],
+  );
+  const counts = new Map(rows.map((row) => [row.date, Number(row.total)]));
+  return dates.map((date) => ({
+    date,
+    total: date < coverage.startedAt.slice(0, 10) ? null : counts.get(date) || 0,
+    partial: date === coverage.startedAt.slice(0, 10) || date === dates.at(-1),
+  }));
+}
+
 function validActivityTime(value) {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}$/.test(value)) return false;
   const timestamp = Date.parse(value.replace(' ', 'T') + '+08:00');
@@ -136,6 +160,8 @@ function invalidCursor() {
 }
 export async function queryActiveUsers({
   actorId,
+  date: requestedDate,
+  trendDays,
   hideInternal = true,
   cursor = null,
   snapshotAt = null,
@@ -144,8 +170,11 @@ export async function queryActiveUsers({
 }) {
   const coverage = await activityCoverage({ db, now });
   const current = activityTime(now);
-  const date = current.slice(0, 10);
-  const asOf = snapshotAt || current;
+  const today = current.slice(0, 10);
+  const date = requestedDate === undefined ? today : requestedDate;
+  if (typeof date !== 'string' || !validActivityTime(`${date} 00:00:00.000`) || date > today)
+    throw Object.assign(new Error('Invalid activity date'), { code: 'ACTIVITY_DATE_INVALID' });
+  const asOf = snapshotAt || (date === today ? current : `${date} 23:59:59.999`);
   if (!validActivityTime(asOf) || asOf.slice(0, 10) !== date || asOf > current) throw invalidCursor();
   // The snapshot fixes membership; latest activity remains live across pages.
   const scope = `active-users:last-active:${actorId}:${hideInternal}:${asOf}`;
@@ -158,6 +187,25 @@ export async function queryActiveUsers({
       after.id.length > 255)
   )
     throw invalidCursor();
+  const trend =
+    trendDays !== undefined && !cursor
+      ? await queryActivityTrend({ hideInternal, days: trendDays, now, db, coverage })
+      : undefined;
+  const partialDate = date < coverage.fullDaysFrom;
+  if (date < coverage.startedAt.slice(0, 10))
+    return {
+      ...coverage,
+      trend,
+      date,
+      snapshotAt: asOf,
+      hideInternal,
+      total: null,
+      items: [],
+      hasMore: false,
+      nextCursor: null,
+      partialDate: false,
+      historyUnavailable: true,
+    };
   const where = `a.activity_date = ? AND a.first_active_at <= ? AND ${scopeSql(hideInternal)}`;
   const params = [date, asOf, ...scopeParams(hideInternal)];
   const [[totals], [rows]] = await Promise.all([
@@ -185,6 +233,9 @@ export async function queryActiveUsers({
   return {
     ...coverage,
     date,
+    partialDate,
+    trend,
+    historyUnavailable: false,
     snapshotAt: asOf,
     hideInternal,
     total: Number(totals[0]?.total || 0),

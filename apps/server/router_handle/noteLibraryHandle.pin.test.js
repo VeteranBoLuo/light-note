@@ -299,6 +299,21 @@ describe('笔记置顶 handler', () => {
     expect(lastSent(res).status).toBe(200);
   });
 
+  it('待整理筛选同时约束分页结果与总数，并可叠加标签和关键词', async () => {
+    poolQuery.mockResolvedValueOnce([[]]).mockResolvedValueOnce([[{ total: 0 }]]);
+    const res = mockRes();
+    await queryNoteList({ user: { id: 'u1' }, body: {
+      page: 1, pageSize: 48, pendingOnly: true, tagId: 'tag-1', keyword: 'report',
+    } }, res);
+    expect(lastSent(res).status).toBe(200);
+    for (const [sql, params] of poolQuery.mock.calls) {
+      expect(sql).toContain("pending.user_id = n.create_by");
+      expect(sql).toContain("pending.resource_type = 'note'");
+      expect(sql).toContain("pending.status = 'pending'");
+      expect(params.slice(0, 4)).toEqual(['u1', '%report%', '%report%', 'tag-1']);
+    }
+  });
+
   it('分页列表只为正文开头的本站图片返回独立缩略图地址', async () => {
     poolQuery
       .mockResolvedValueOnce([

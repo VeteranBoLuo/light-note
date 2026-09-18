@@ -18,6 +18,7 @@ describe('visibleSettingsSections', () => {
     expect(visibleSettingsSections(LOGGED_IN).map((s) => s.id)).toEqual([
       'appearance',
       'general',
+      'community',
       'notification',
       'ai',
       'points',
@@ -43,8 +44,8 @@ describe('visibleSettingsSections', () => {
     expect(SETTINGS_SECTION_META).toEqual(visibleSettingsSections(LOGGED_IN));
     for (const section of SETTINGS_SECTION_META) {
       expect(section.iconKey).toMatch(/^(appearance|general|notification|ai|points|account|privacy)$/);
-      expect(section.titleKey).toMatch(/^(settings|growth)\./);
-      expect(section.mobileTitleKey).toMatch(/^(settings|growth)\./);
+      expect(section.titleKey).toMatch(/^(settings|growth|community)\./);
+      expect(section.mobileTitleKey).toMatch(/^(settings|growth|community)\./);
     }
   });
 });
@@ -75,7 +76,7 @@ describe('groupSettingsSections', () => {
   it('按固定分组顺序切分', () => {
     const grouped = groupSettingsSections(visibleSettingsSections(LOGGED_IN));
     expect(grouped.map((g) => g.group)).toEqual(SETTINGS_GROUP_ORDER);
-    expect(grouped[0].items.map((i) => i.id)).toEqual(['appearance', 'general', 'notification', 'ai']);
+    expect(grouped[0].items.map((i) => i.id)).toEqual(['appearance', 'general', 'community', 'notification', 'ai']);
     expect(grouped[1].items.map((i) => i.id)).toEqual(['points', 'account']);
   });
 

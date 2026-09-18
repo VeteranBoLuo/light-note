@@ -23,6 +23,7 @@
             {{ nameOf(c.key) }}
             <span class="wc-target">{{ c.cur }}/{{ c.target }}</span>
           </div>
+          <div class="wc-reward">{{ t('growth.weeklyReward', { n: c.reward }) }}</div>
           <div v-if="descriptionOf(c.key)" class="wc-description">{{ descriptionOf(c.key) }}</div>
           <div class="wc-bar"><div class="wc-fill" :style="{ width: pct(c) + '%' }"></div></div>
         </div>
@@ -51,7 +52,6 @@
           <span v-else-if="!c.done && c.metric === 'activeDays' && todayActive" class="wc-today-done">
             <SvgIcon :src="icon.message.success" size="13" />{{ t('growth.weeklyActiveTodayDone') }}
           </span>
-          <span v-else class="wc-reward"><SvgIcon :src="icon.growth.coin" size="13" />{{ c.reward }}</span>
         </div>
       </div>
     </div>
@@ -83,6 +83,7 @@
   const loadError = ref(false);
 
   const ICONS: Record<string, string> = {
+    wk_community: icon.growth.achievement.community_post_1,
     wk_bookmark: icon.resource.bookmark,
     wk_note: icon.resource.note,
     wk_checkin: icon.growth.checkin,
@@ -128,7 +129,8 @@
   }
 
   function goToChallenge(challenge: WeeklyChallenge) {
-    if (challenge.metric === 'bookmark' || challenge.metric === 'collect') void router.push('/home');
+    if (challenge.metric === 'communityPosts') void router.push('/community/feed');
+    else if (challenge.metric === 'bookmark' || challenge.metric === 'collect') void router.push('/home');
     else if (challenge.metric === 'note') void router.push('/noteLibrary');
     else if (challenge.metric === 'todo' || challenge.metric === 'progress')
       void router.push({ path: '/inbox', query: { tab: 'todo' } });
@@ -168,6 +170,7 @@
     font-weight: 700;
   }
   .wc-title-row {
+    flex-wrap: wrap;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -218,6 +221,7 @@
     gap: 5px;
   }
   .wc-name {
+    flex-wrap: wrap;
     font-size: 13px;
     font-weight: 600;
     display: flex;

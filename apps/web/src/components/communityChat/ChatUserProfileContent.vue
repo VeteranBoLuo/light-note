@@ -1,5 +1,5 @@
 <template>
-  <div class="chat-profile-content" :class="{ 'chat-profile-content--editing': view === 'edit' }">
+  <div class="chat-profile-content">
     <div v-if="loading" class="chat-profile-content__state">
       <BLoading inline loading :title="t('communityChat.profile.loading')" />
     </div>
@@ -23,9 +23,21 @@
       </div>
 
       <template v-if="view === 'summary'">
-        <ProfileIdentity :profile="profile" />
+        <div :class="{ 'chat-profile-content__hero': $slots.identityActions }">
+          <ProfileIdentity :profile="profile"><slot name="identityDescription" /></ProfileIdentity>
+          <slot name="identityActions" />
+        </div>
+        <CommunityProfileActions
+          v-if="communityActions && profile.userPublicId"
+          :user-public-id="profile.userPublicId"
+          @navigate="emit('navigate', $event)"
+        />
 
-        <section class="chat-profile-content__bio" :aria-label="t('communityChat.profile.bio')">
+        <section
+          v-if="!$slots.identityDescription"
+          class="chat-profile-content__bio"
+          :aria-label="t('communityChat.profile.bio')"
+        >
           <div class="chat-profile-content__section-heading">
             <span>
               <SvgIcon :src="icon.userCenter.info" size="16" aria-hidden="true" />
@@ -48,11 +60,17 @@
               <strong>{{ t('communityChat.profile.featuredAchievements') }}</strong>
             </span>
             <small>{{ t('communityChat.profile.achievementCount', { count: profile.achievementCount }) }}</small>
+            <slot name="achievementActions" />
           </div>
 
           <AchievementGrid :achievements="featuredAchievements" />
 
-          <BButton v-if="hasMoreAchievements" class="chat-profile-content__view-all" @click="openAllAchievements">
+          <BButton
+            v-if="hasMoreAchievements && !compact"
+            type="text"
+            class="chat-profile-content__view-all"
+            @click="openAllAchievements"
+          >
             {{ t('communityChat.profile.viewAllAchievements', { count: profile.achievementCount }) }}
             <SvgIcon :src="icon.arrow_right" size="15" aria-hidden="true" />
           </BButton>
@@ -61,16 +79,12 @@
         <div v-if="isOwn" class="chat-profile-content__actions chat-profile-content__actions--own">
           <BButton type="primary" @click="beginEdit">
             <SvgIcon :src="icon.communityChat.profileEdit" size="16" aria-hidden="true" />
-            {{ t('communityChat.profile.editAction') }}
-          </BButton>
-          <BButton @click="openPreview">
-            <SvgIcon :src="icon.communityChat.profilePreview" size="16" aria-hidden="true" />
-            {{ t('communityChat.profile.previewAction') }}
+            {{ t('community.feed.editProfile') }}
           </BButton>
         </div>
 
         <div
-          v-else-if="authenticated"
+          v-else-if="authenticated && chatActions"
           class="chat-profile-content__actions chat-profile-content__actions--moderation"
           :class="{ 'is-single': profile.role === 'official' }"
         >
@@ -84,12 +98,12 @@
           </BButton>
         </div>
 
-        <div v-else class="chat-profile-content__visitor-action">
+        <div v-else-if="!authenticated && chatActions" class="chat-profile-content__visitor-action">
           <span>{{ t('communityChat.profile.visitorHint') }}</span>
           <BButton type="primary" @click="emit('login')">{{ t('communityChat.guestLoginAction') }}</BButton>
         </div>
 
-        <p class="chat-profile-content__privacy">
+        <p v-if="!compact" class="chat-profile-content__privacy">
           <SvgIcon :src="icon.growth.lock" size="14" aria-hidden="true" />
           <span>{{ t('communityChat.profile.privacy') }}</span>
         </p>
@@ -111,180 +125,6 @@
             {{ t('communityChat.profile.allAchievementsDescription', { count: profile.achievementCount }) }}
           </p>
           <AchievementGrid :achievements="allAchievements || profile.achievements" expanded />
-        </template>
-      </section>
-
-      <section v-else-if="view === 'preview'" class="chat-profile-content__subview">
-        <div v-if="!previewProfile" class="chat-profile-content__subview-state" role="status">
-          <SvgIcon :src="icon.message.warning" size="22" aria-hidden="true" />
-          <span>{{ t('communityChat.profile.ownLoadFailed') }}</span>
-          <BButton size="small" @click="emit('retry')">{{ t('communityChat.profile.retry') }}</BButton>
-        </div>
-        <template v-else>
-          <p class="chat-profile-content__subview-description">{{ t('communityChat.profile.previewDescription') }}</p>
-          <ProfileIdentity :profile="previewProfile" />
-          <div class="chat-profile-content__preview-card">
-            <p :class="{ 'is-empty': !previewProfile.bio }">
-              {{ previewProfile.bio || t('communityChat.profile.bioEmpty') }}
-            </p>
-            <p v-if="previewProfile.communityTenureLabel" class="chat-profile-content__tenure">
-              <SvgIcon :src="icon.growth.tenure" size="15" aria-hidden="true" />
-              <span>{{ previewProfile.communityTenureLabel }}</span>
-            </p>
-            <AchievementGrid :achievements="previewProfile.achievements.slice(0, 3)" />
-          </div>
-        </template>
-      </section>
-
-      <section v-else class="chat-profile-content__subview chat-profile-content__editor">
-        <div v-if="ownLoading && !ownProfile" class="chat-profile-content__subview-state">
-          <BLoading inline loading :title="t('communityChat.profile.loadingOwn')" />
-        </div>
-        <div v-else-if="ownError || !ownProfile" class="chat-profile-content__subview-state" role="status">
-          <SvgIcon :src="icon.message.warning" size="22" aria-hidden="true" />
-          <span>{{ t('communityChat.profile.ownLoadFailed') }}</span>
-          <BButton size="small" @click="emit('requestOwn')">{{ t('communityChat.profile.retry') }}</BButton>
-        </div>
-        <template v-else>
-          <div class="chat-profile-content__editor-scroll">
-            <label class="chat-profile-content__field">
-              <span>
-                <strong>{{ t('communityChat.profile.bioLabel') }}</strong>
-                <small :class="{ 'is-invalid': draftBioLength > 60 }">{{ draftBioLength }}/60</small>
-              </span>
-              <BInput
-                v-model:value="draftBio"
-                type="textarea"
-                :rows="3"
-                :placeholder="t('communityChat.profile.bioPlaceholder')"
-              />
-            </label>
-
-            <div class="chat-profile-content__toggle-row">
-              <span>
-                <strong>{{ t('communityChat.profile.tenureVisibility') }}</strong>
-                <small>{{ t('communityChat.profile.tenureVisibilityDescription') }}</small>
-              </span>
-              <BSwitch v-model:checked="draftShowTenure" />
-            </div>
-
-            <div class="chat-profile-content__featured-editor">
-              <div class="chat-profile-content__section-heading">
-                <span>
-                  <SvgIcon :src="icon.userCenter.growth" size="17" aria-hidden="true" />
-                  <strong>{{ t('communityChat.profile.featuredLabel') }}</strong>
-                </span>
-                <small>{{ t('communityChat.profile.featuredLimit', { count: draftFeaturedKeys.length }) }}</small>
-              </div>
-
-              <div v-if="selectedAchievements.length" class="chat-profile-content__selected-list">
-                <article
-                  v-for="(achievement, index) in selectedAchievements"
-                  :key="achievement.key"
-                  class="chat-profile-content__selected-item"
-                  role="button"
-                  tabindex="0"
-                  :aria-label="
-                    t('communityChat.profile.viewAchievementDetail', { name: achievementName(achievement.key) })
-                  "
-                  @click="openAchievementDetail(achievement)"
-                  @keydown.enter.self="openAchievementDetail(achievement)"
-                  @keydown.space.self.prevent="openAchievementDetail(achievement)"
-                >
-                  <AchievementEmblem
-                    class="chat-profile-content__achievement-icon"
-                    :achievement-key="achievement.key"
-                    :group="achievement.group"
-                    :size="30"
-                  />
-                  <span>
-                    <strong>{{ achievementName(achievement.key) }}</strong>
-                    <small>{{ achievementGroupName(achievement.group) }}</small>
-                  </span>
-                  <span class="chat-profile-content__order-actions">
-                    <BButton
-                      size="small"
-                      :disabled="index === 0"
-                      :aria-label="t('communityChat.profile.moveUp', { name: achievementName(achievement.key) })"
-                      @click.stop="moveAchievement(index, -1)"
-                    >
-                      {{ t('communityChat.profile.moveUpShort') }}
-                    </BButton>
-                    <BButton
-                      size="small"
-                      :disabled="index === selectedAchievements.length - 1"
-                      :aria-label="t('communityChat.profile.moveDown', { name: achievementName(achievement.key) })"
-                      @click.stop="moveAchievement(index, 1)"
-                    >
-                      {{ t('communityChat.profile.moveDownShort') }}
-                    </BButton>
-                    <BButton
-                      size="small"
-                      :aria-label="
-                        t('communityChat.profile.removeAchievement', { name: achievementName(achievement.key) })
-                      "
-                      @click.stop="removeAchievement(achievement.key)"
-                    >
-                      {{ t('communityChat.profile.removeShort') }}
-                    </BButton>
-                  </span>
-                </article>
-              </div>
-              <p v-else class="chat-profile-content__selection-empty">
-                {{ t('communityChat.profile.noFeaturedSelected') }}
-              </p>
-
-              <div class="chat-profile-content__available-heading">
-                <strong>{{ t('communityChat.profile.availableAchievements') }}</strong>
-                <small>{{ t('communityChat.profile.availableAchievementsHint') }}</small>
-              </div>
-              <div v-if="availableUnselectedAchievements.length" class="chat-profile-content__available-grid">
-                <article
-                  v-for="achievement in availableUnselectedAchievements"
-                  :key="achievement.key"
-                  class="chat-profile-content__available-item"
-                  role="button"
-                  tabindex="0"
-                  :aria-label="
-                    t('communityChat.profile.viewAchievementDetail', { name: achievementName(achievement.key) })
-                  "
-                  @click="openAchievementDetail(achievement)"
-                  @keydown.enter.self="openAchievementDetail(achievement)"
-                  @keydown.space.self.prevent="openAchievementDetail(achievement)"
-                >
-                  <AchievementEmblem
-                    class="chat-profile-content__achievement-icon"
-                    :achievement-key="achievement.key"
-                    :group="achievement.group"
-                    :size="30"
-                  />
-                  <span>
-                    <strong>{{ achievementName(achievement.key) }}</strong>
-                    <small>{{ achievementGroupName(achievement.group) }}</small>
-                  </span>
-                  <BButton
-                    class="chat-profile-content__add-achievement"
-                    size="small"
-                    :disabled="draftFeaturedKeys.length >= 3"
-                    :aria-label="t('communityChat.profile.addAchievement', { name: achievementName(achievement.key) })"
-                    @click.stop="addAchievement(achievement.key)"
-                  >
-                    <SvgIcon :src="icon.common.plus" size="16" aria-hidden="true" />
-                  </BButton>
-                </article>
-              </div>
-              <p v-else class="chat-profile-content__selection-empty">
-                {{ t('communityChat.profile.noAvailableAchievements') }}
-              </p>
-            </div>
-          </div>
-
-          <div class="chat-profile-content__editor-actions">
-            <BButton @click="view = 'summary'">{{ t('common.cancel') }}</BButton>
-            <BButton type="primary" :loading="saving" :disabled="draftBioLength > 60" @click="saveDraft">
-              {{ t('communityChat.profile.saveAction') }}
-            </BButton>
-          </div>
         </template>
       </section>
     </template>
@@ -318,6 +158,7 @@
 </template>
 
 <script setup lang="ts">
+  import CommunityProfileActions from '@/components/community/CommunityProfileActions.vue';
   import { computed, defineComponent, h, ref, watch, type PropType } from 'vue';
   import { useI18n } from 'vue-i18n';
   import type {
@@ -326,10 +167,8 @@
     CommunityChatPublicAchievement,
   } from '@/api/communityChatApi';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
-  import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
-  import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import AchievementEmblem from '@/components/growth/AchievementEmblem.vue';
   import AvatarFramePreview from '@/components/growth/AvatarFramePreview.vue';
@@ -338,10 +177,13 @@
   import { frameVariant } from '@/config/growthFrames';
   import type { CommunityChatProfileUpdateInput } from '@/composables/useCommunityChatProfile';
 
-  type ProfileView = 'summary' | 'achievements' | 'preview' | 'edit';
+  type ProfileView = 'summary' | 'achievements';
 
   const props = withDefaults(
     defineProps<{
+      compact?: boolean;
+      communityActions?: boolean;
+      chatActions?: boolean;
       profile?: CommunityChatAuthorProfile | null;
       loading?: boolean;
       error?: boolean;
@@ -357,6 +199,9 @@
       sessionKey?: number;
     }>(),
     {
+      compact: false,
+      communityActions: true,
+      chatActions: true,
       profile: null,
       loading: false,
       error: false,
@@ -374,6 +219,7 @@
   );
 
   const emit = defineEmits<{
+    navigate: [path: string];
     retry: [];
     requestOwn: [];
     loadAllAchievements: [];
@@ -387,10 +233,6 @@
   const view = ref<ProfileView>('summary');
   const detailAchievement = ref<CommunityChatPublicAchievement | null>(null);
   const detailVisible = ref(false);
-  const draftBio = ref('');
-  const draftShowTenure = ref(true);
-  const draftFeaturedKeys = ref<string[]>([]);
-  const draftBaseRevision = ref(0);
   const featuredAchievements = computed(() => (props.profile?.achievements || []).slice(0, 3));
   const hasMoreAchievements = computed(() => {
     if (!props.profile) return false;
@@ -400,7 +242,6 @@
       props.profile.achievements.length > featuredAchievements.value.length
     );
   });
-  const previewProfile = computed(() => props.ownProfile?.publicPreview || props.profile || null);
 
   function achievementName(key: string) {
     const i18nKey = `growth.achName.${key}`;
@@ -427,7 +268,7 @@
     props: {
       profile: { type: Object as PropType<CommunityChatAuthorProfile>, required: true },
     },
-    setup(identityProps) {
+    setup(identityProps, { slots }) {
       return () => {
         const profile = identityProps.profile;
         const validFrameId = profile.frameId && frameVariant(profile.frameId) ? profile.frameId : null;
@@ -435,12 +276,12 @@
           ? h(AvatarFramePreview, {
               frameId: validFrameId,
               src: profile.avatar || icon.communityChat.defaultAvatar,
-              size: 68,
+              size: props.compact ? 52 : 68,
             })
           : h(SvgIcon, {
               class: 'chat-profile-content__avatar-image',
               src: profile.avatar || icon.communityChat.defaultAvatar,
-              size: 68,
+              size: props.compact ? 52 : 68,
             });
         const tags = [
           h(GrowthLevelChip, {
@@ -471,13 +312,14 @@
             },
             [avatar],
           ),
-          h('span', { class: 'chat-profile-content__identity-copy' }, [
+          h('div', { class: 'chat-profile-content__identity-copy' }, [
             h('strong', profile.name || t('communityChat.memberFallback')),
             profile.communityId
               ? h('small', { class: 'chat-profile-content__community-id' }, `@${profile.communityId}`)
               : null,
             h('span', { class: 'chat-profile-content__identity-tags' }, tags),
             profile.title ? h('small', profile.title) : null,
+            slots.default?.(),
           ]),
         ]);
       };
@@ -531,7 +373,7 @@
                 h(AchievementEmblem, {
                   achievementKey: achievement.key,
                   group: achievement.group,
-                  size: 30,
+                  size: props.compact ? 38 : 30,
                 }),
                 h('span', [
                   h('strong', achievementName(achievement.key)),
@@ -545,108 +387,19 @@
     },
   });
 
-  const subviewTitle = computed(() => {
-    if (view.value === 'achievements') return t('communityChat.profile.allAchievements');
-    if (view.value === 'preview') return t('communityChat.profile.previewTitle');
-    return t('communityChat.profile.editTitle');
-  });
-
-  const draftBioLength = computed(() => {
-    const value = String(draftBio.value || '');
-    if (typeof Intl?.Segmenter === 'function') {
-      return Array.from(new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(value)).length;
-    }
-    return Array.from(value).length;
-  });
-
-  const selectedAchievements = computed(() => {
-    const byKey = new Map((props.ownProfile?.availableAchievements || []).map((item) => [item.key, item]));
-    return draftFeaturedKeys.value
-      .map((key) => byKey.get(key))
-      .filter((item): item is CommunityChatPublicAchievement => Boolean(item));
-  });
-
-  const availableUnselectedAchievements = computed(() => {
-    const selected = new Set(draftFeaturedKeys.value);
-    return (props.ownProfile?.availableAchievements || []).filter((item) => !selected.has(item.key));
-  });
-
-  function syncDraft() {
-    if (!props.ownProfile) return;
-    draftBio.value = props.ownProfile.bio || '';
-    draftShowTenure.value = props.ownProfile.showCommunityTenure;
-    draftFeaturedKeys.value = [...props.ownProfile.featuredAchievementKeys];
-    draftBaseRevision.value = props.ownProfile.revision;
-  }
-
+  const subviewTitle = computed(() => t('communityChat.profile.allAchievements'));
   function beginEdit() {
-    view.value = 'edit';
-    syncDraft();
-    emit('requestOwn');
+    emit('navigate', '/community/profile');
   }
-
-  function openPreview() {
-    view.value = 'preview';
-  }
-
   function openAllAchievements() {
     view.value = 'achievements';
     emit('loadAllAchievements');
   }
-
-  function addAchievement(key: string) {
-    if (draftFeaturedKeys.value.length >= 3 || draftFeaturedKeys.value.includes(key)) return;
-    draftFeaturedKeys.value = [...draftFeaturedKeys.value, key];
-  }
-
-  function removeAchievement(key: string) {
-    draftFeaturedKeys.value = draftFeaturedKeys.value.filter((item) => item !== key);
-  }
-
-  function moveAchievement(index: number, offset: -1 | 1) {
-    const targetIndex = index + offset;
-    if (index < 0 || targetIndex < 0 || targetIndex >= draftFeaturedKeys.value.length) return;
-    const next = [...draftFeaturedKeys.value];
-    [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
-    draftFeaturedKeys.value = next;
-  }
-
-  function saveDraft() {
-    if (!props.ownProfile || props.saving || draftBioLength.value > 60) return;
-    emit('save', {
-      bio: draftBio.value,
-      showCommunityTenure: draftShowTenure.value,
-      featuredAchievementKeys: [...draftFeaturedKeys.value],
-      baseRevision: draftBaseRevision.value,
-    });
-  }
-
   watch(view, (nextView) => emit('viewChange', nextView), { immediate: true });
-
   watch(
     () => props.sessionKey,
     () => {
       view.value = 'summary';
-      syncDraft();
-    },
-  );
-
-  watch(
-    () => props.ownProfile?.revision,
-    (revision) => {
-      if (revision === undefined || props.saving) return;
-      if (view.value !== 'edit' || revision !== draftBaseRevision.value) syncDraft();
-    },
-  );
-
-  watch(
-    () => props.saving,
-    (saving, wasSaving) => {
-      if (!wasSaving || saving || !props.ownProfile) return;
-      if (props.ownProfile.revision !== draftBaseRevision.value) {
-        syncDraft();
-        view.value = 'summary';
-      }
     },
   );
 </script>
@@ -822,7 +575,6 @@
   }
 
   .chat-profile-content__bio > p,
-  .chat-profile-content__preview-card > p,
   .chat-profile-content__subview-description {
     margin: 0;
     color: var(--text-color);
@@ -830,8 +582,7 @@
     line-height: 1.7;
   }
 
-  .chat-profile-content__bio > p.is-empty,
-  .chat-profile-content__preview-card > p.is-empty {
+  .chat-profile-content__bio > p.is-empty {
     color: var(--desc-color);
   }
 
@@ -953,12 +704,15 @@
     text-align: center;
   }
 
-  .chat-profile-content__view-all {
-    width: 100%;
+  .chat-profile-content__view-all.b_btn {
+    width: auto;
+    padding: 6px 0;
+    border: 0;
+    font-size: 13px;
     min-height: 36px;
     gap: 5px;
     color: var(--primary-color);
-    background: var(--workspace-panel-bg-color);
+    background: transparent;
   }
 
   .chat-profile-content__actions {
@@ -1046,184 +800,6 @@
     color: var(--desc-color);
   }
 
-  .chat-profile-content__preview-card {
-    padding: 12px;
-    display: grid;
-    gap: 12px;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 14px;
-    background: var(--workspace-panel-bg-color);
-  }
-
-  .chat-profile-content__field {
-    min-width: 0;
-    display: grid;
-    gap: 7px;
-  }
-
-  .chat-profile-content__field > span,
-  .chat-profile-content__available-heading {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-  }
-
-  .chat-profile-content__field strong,
-  .chat-profile-content__available-heading strong,
-  .chat-profile-content__toggle-row strong {
-    color: var(--text-color);
-    font-size: 12px;
-  }
-
-  .chat-profile-content__field small,
-  .chat-profile-content__available-heading small,
-  .chat-profile-content__toggle-row small {
-    color: var(--desc-color);
-    font-size: 9px;
-  }
-
-  .chat-profile-content__field small.is-invalid {
-    color: var(--danger-color, #d9363e);
-  }
-
-  .chat-profile-content__field .b-textarea {
-    width: 100%;
-    min-height: 84px;
-    box-sizing: border-box;
-    resize: vertical;
-  }
-
-  .chat-profile-content__toggle-row {
-    padding: 11px 12px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 12px;
-    background: var(--workspace-panel-bg-color);
-  }
-
-  .chat-profile-content__toggle-row > span {
-    min-width: 0;
-    display: grid;
-    gap: 3px;
-  }
-
-  .chat-profile-content__selected-list {
-    display: grid;
-    gap: 7px;
-  }
-
-  .chat-profile-content__selected-item {
-    min-width: 0;
-    padding: 8px;
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 8px;
-    border: 1px solid var(--primary-color);
-    border-radius: 12px;
-    background: var(--workspace-panel-bg-color);
-    cursor: pointer;
-  }
-
-  .chat-profile-content__order-actions {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-  }
-
-  .chat-profile-content__order-actions .b_btn {
-    min-width: 30px;
-    padding-inline: 7px;
-    font-size: 9px;
-  }
-
-  .chat-profile-content__available-heading {
-    margin-top: 4px;
-  }
-
-  .chat-profile-content__available-grid {
-    min-width: 0;
-    width: 100%;
-    box-sizing: border-box;
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    column-gap: 12px;
-    row-gap: 8px;
-  }
-
-  .chat-profile-content__available-item {
-    min-width: 0;
-    max-width: 100%;
-    height: auto;
-    min-height: 48px;
-    padding: 7px;
-    box-sizing: border-box;
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 7px;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 12px;
-    color: var(--text-color);
-    background: var(--card-background);
-    line-height: normal;
-    text-align: left;
-    cursor: pointer;
-  }
-
-  .chat-profile-content__available-item:hover,
-  .chat-profile-content__selected-item:hover,
-  .chat-profile-content__achievement:hover {
-    border-color: var(--primary-color);
-  }
-
-  .chat-profile-content__add-achievement.b_btn {
-    width: 30px;
-    min-width: 30px;
-    padding: 0;
-    color: var(--primary-color);
-    font-size: 17px;
-  }
-
-  .chat-profile-content__editor {
-    min-height: 0;
-    height: 100%;
-    overflow: hidden;
-    grid-template-rows: minmax(0, 1fr) auto;
-    gap: 0;
-  }
-
-  .chat-profile-content__editor-scroll {
-    min-height: 0;
-    min-width: 0;
-    padding: 2px 6px 18px 2px;
-    box-sizing: border-box;
-    display: grid;
-    align-content: start;
-    gap: 10px;
-    overflow-x: hidden;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    scrollbar-gutter: stable;
-  }
-
-  .chat-profile-content__editor-actions {
-    position: relative;
-    z-index: 3;
-    margin: 0 -20px -20px;
-    padding: 12px 20px 20px;
-    display: flex;
-    justify-content: flex-end;
-    gap: 8px;
-    border-top: 1px solid var(--surface-border-color);
-    background-color: var(--background-color);
-    box-shadow: 0 -10px 24px rgba(15, 23, 42, 0.06);
-  }
-
   .chat-profile-content__achievement-detail {
     min-width: 0;
     padding: 8px 6px 6px;
@@ -1284,57 +860,19 @@
       grid-template-columns: minmax(0, 1fr);
     }
 
-    .chat-profile-content__available-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
     .chat-profile-content__visitor-action {
       align-items: stretch;
       flex-direction: column;
     }
 
-    .chat-profile-content__visitor-action .b_btn,
-    .chat-profile-content__editor-actions .b_btn {
+    .chat-profile-content__visitor-action .b_btn {
       min-height: 44px;
-    }
-
-    .chat-profile-content__selected-item {
-      grid-template-columns: auto minmax(0, 1fr);
-    }
-
-    .chat-profile-content__order-actions {
-      grid-column: 1 / -1;
-      justify-content: flex-end;
-    }
-
-    .chat-profile-content__available-item {
-      min-height: 58px;
-      padding: 7px;
-      grid-template-columns: auto minmax(0, 1fr) auto;
-    }
-
-    .chat-profile-content__add-achievement.b_btn {
-      grid-column: auto;
-      width: 30px;
-    }
-
-    .chat-profile-content__editor-actions {
-      margin-right: -16px;
-      margin-bottom: calc(-16px - env(safe-area-inset-bottom));
-      margin-left: -16px;
-      padding: 12px 16px calc(16px + env(safe-area-inset-bottom));
     }
   }
 
   html.light-note-mobile-rendering .chat-profile-content__identity,
   html.light-note-mobile-rendering .chat-profile-content__achievement,
-  html.light-note-mobile-rendering .chat-profile-content__level,
-  html.light-note-mobile-rendering .chat-profile-content__selected-item,
-  html.light-note-mobile-rendering .chat-profile-content__toggle-row {
-    box-shadow: none;
-  }
-
-  html.light-note-mobile-rendering .chat-profile-content__editor-actions {
+  html.light-note-mobile-rendering .chat-profile-content__level {
     box-shadow: none;
   }
 </style>

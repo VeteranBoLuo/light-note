@@ -51,7 +51,7 @@ export function pushFailure(code, attempts) {
   if (attempts >= 8 || (code >= 400 && code < 500 && code !== 408 && code !== 429)) return 'failed';
   return 'pending';
 }
-export const notificationVisibleSql = `(del_flag = 0 AND recalled = 0 AND (
+export const notificationVisibleSql = `(del_flag = 0 AND recalled = 0 AND type <> 'community_feed' AND (
  (type <> 'community_chat' AND COALESCE(source_type, '') <> 'community_chat_message')
  OR COALESCE(JSON_UNQUOTE(JSON_EXTRACT(meta, '$.kind')), '') IN ('reply', 'mention'))) `;
 

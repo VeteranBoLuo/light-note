@@ -10,10 +10,11 @@ import icon from '@/config/icon.ts';
  * - metal：表达成就稀有度，避免高阶成就仍被家族色误读成普通彩色图标。
  */
 
-export const ACHIEVEMENT_GROUPS = ['checkin', 'create', 'action', 'organize', 'level', 'tenure'] as const;
+export const ACHIEVEMENT_GROUPS = ['checkin', 'create', 'community', 'action', 'organize', 'level', 'tenure'] as const;
 export type AchievementGroup = (typeof ACHIEVEMENT_GROUPS)[number];
 
-export type AchievementFamily = 'checkin' | 'bookmark' | 'note' | 'file' | 'todo' | 'organize' | 'level' | 'tenure';
+export type AchievementFamily =
+  'community' | 'checkin' | 'bookmark' | 'note' | 'file' | 'todo' | 'organize' | 'level' | 'tenure';
 export type AchievementTier = 1 | 2 | 3 | 4 | 5;
 export type AchievementRarity = 'starter' | 'platinum' | 'gilded' | 'legendary' | 'mythic';
 
@@ -49,6 +50,7 @@ export interface AchievementVisual extends AchievementJewelPalette, AchievementM
 }
 
 const JEWEL_PALETTES: Record<AchievementFamily, AchievementJewelPalette> = {
+  community: { accent: '#5d6ce8', secondary: '#abb7ff', deep: '#283380', highlight: '#f1f2ff' },
   checkin: {
     accent: '#ef5b35',
     secondary: '#ff9a5a',
@@ -192,6 +194,11 @@ function visual(
 
 /** 与后端成就 key 一一对应；图形、宝石家族、稀有度和顶级身份由此统一供成长页与社区名片消费。 */
 export const ACHIEVEMENT_VISUALS = {
+  community_post_1: visual('community', 'community', 1, icon.growth.achievement.community_post_1),
+  community_post_10: visual('community', 'community', 2, icon.growth.achievement.community_post_10),
+  community_post_50: visual('community', 'community', 3, icon.growth.achievement.community_post_50),
+  community_answer_1: visual('community', 'community', 2, icon.growth.achievement.community_answer_1),
+
   streak_1: visual('checkin', 'checkin', 1, icon.growth.achievement.streak_1),
   streak_7: visual('checkin', 'checkin', 2, icon.growth.achievement.streak_7),
   streak_30: visual('checkin', 'checkin', 3, icon.growth.achievement.streak_30),
@@ -237,6 +244,7 @@ export type AchievementKey = keyof typeof ACHIEVEMENT_VISUALS;
 export const ACHIEVEMENT_KEYS = Object.keys(ACHIEVEMENT_VISUALS) as AchievementKey[];
 
 const GROUP_FALLBACK_FAMILY: Record<AchievementGroup, AchievementFamily> = {
+  community: 'community',
   checkin: 'checkin',
   create: 'note',
   action: 'todo',
@@ -246,6 +254,7 @@ const GROUP_FALLBACK_FAMILY: Record<AchievementGroup, AchievementFamily> = {
 };
 
 const GROUP_FALLBACK_ICON: Record<AchievementGroup, string> = {
+  community: icon.growth.achievement.community_post_1,
   checkin: icon.growth.checkin,
   create: icon.growth.create,
   action: icon.growth.action,

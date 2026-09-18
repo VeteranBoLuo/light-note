@@ -1,4 +1,4 @@
-import { createApp, h, ref } from 'vue';
+import { createApp, h, ref, watch } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { createRouter, createMemoryHistory, RouterView } from 'vue-router';
 import { createI18n } from 'vue-i18n';
@@ -63,8 +63,32 @@ request.defaults.adapter = async (config) => {
     };
   } else if (url.endsWith('/archive')) data = { ok: true, status: 'pending' };
   else if (url.endsWith('/getBookmarkList') || url.endsWith('/queryNoteList'))
-    data = { items, total: items.length, page: 1, hasMore: false };
-  else if (url.endsWith('/getNoteTreeFeatures')) data = { readEnabled: false, writeEnabled: false };
+    data = { items: params.has('tree') && url.endsWith('/queryNoteList') ? items.slice(0, 3) : items, total: items.length, page: 1, hasMore: false };
+  else if (url.endsWith('/getNoteTreeFeatures'))
+    data = {
+      features: {
+        noteTreeRead: params.has('tree'),
+        noteTreeWrite: params.has('tree'),
+        noteTreeMobile: params.has('tree'),
+      },
+    };
+  else if (url.endsWith('/queryNoteTree'))
+    data = {
+      parentId: body.parentId || null,
+      maxDepth: 8,
+      items: body.parentId
+        ? []
+        : items.map((item) => ({
+            ...item,
+            parentId: null,
+            hasChildren: false,
+            childCount: 0,
+            isTop: false,
+            sort: Number(item.id),
+          })),
+    };
+  else if (url.endsWith('/getNoteDetail')) data = items.find((item) => item.id === body.id);
+  else if (url.endsWith('/queryNoteBreadcrumb')) data = { items: items.filter((item) => item.id === body.id) };
   else if (url.endsWith('/batchSelectionPreview'))
     data = {
       resolvedItems: body.selection.items.map((item: any) => ({ ...item, title: `设计资料 ${item.id}` })),
@@ -138,6 +162,19 @@ const router = createRouter({
     },
   ],
 });
+// 笔记树和库内预览沿用模块路由，验收时同步到内存路由，避免跳出夹具。
+if (params.has('tree')) {
+  const { default: moduleRouter } = await import('@/router');
+  moduleRouter.push = router.push.bind(router);
+  moduleRouter.replace = router.replace.bind(router);
+  watch(
+    router.currentRoute,
+    (route) => {
+      moduleRouter.currentRoute.value = route;
+    },
+    { immediate: true, flush: 'sync' },
+  );
+}
 const bookmark = bookmarkStore();
 bookmark.screenWidth = innerWidth;
 bookmark.screenHeight = innerHeight;

@@ -174,9 +174,9 @@
     void loadGrowth();
   });
 
-  /** 顶栏头像是「我的」的新一级入口；与底栏切换一致，不在 Android 返回栈堆叠一级页面。 */
+  /** 头像进入个人中心时保留来源页，供页头和系统返回使用。 */
   function goToProfile() {
-    if (route.path !== '/personCenter') void router.replace('/personCenter');
+    if (route.path !== '/personCenter') void router.push('/personCenter');
   }
 
   function openGlobalSearch() {

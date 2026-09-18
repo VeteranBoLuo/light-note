@@ -54,7 +54,7 @@
               : undefined
           "
         >
-          <slot name="header-leading">
+          <slot name="header-leading" :close="handleClose">
             <BButton
               v-if="mobileCenteredHeader"
               class="b-drawer-close b-drawer-close--leading"

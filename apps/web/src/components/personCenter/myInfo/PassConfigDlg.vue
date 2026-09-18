@@ -21,7 +21,7 @@
         <!-- 常规:修改 / 设置密码 -->
         <template v-if="!forgotMode">
           <BForm ref="passCfgRef" form-id="userEditForm" :form-data="formData" :fields="formFields" layout="vertical" />
-          <div v-if="type === t('myInfo.changePassword') && user.email" class="forgot-entry">
+          <div v-if="user.password" class="forgot-entry">
             <BButton class="forgot-link" @click="enterForgot">{{ t('myInfo.forgotOldPassword') }}</BButton>
           </div>
         </template>
@@ -152,7 +152,7 @@
     }
     return [
       {
-        label: t('myInfo.password'),
+        label: t('myInfo.newPassword'),
         name: 'password',
         required: true,
         type: 'password',
@@ -187,6 +187,7 @@
           open: visible.value === true,
           title: passwordTitle.value,
           placement: 'bottom' as const,
+          zIndex: 710,
           height: 'min(86vh, 720px)',
           bodyPadding: '0',
           mobileCenteredHeader: true,
@@ -195,13 +196,17 @@
       : {
           visible: visible.value === true,
           title: passwordTitle.value,
-          width: '640px',
+          width: '460px',
           maskClosable: false,
           showFooter: false,
         },
   );
 
   function enterForgot() {
+    if (!user.email) {
+      message.warning(t('myInfo.bindEmailBeforeReset'));
+      return;
+    }
     forgotMode.value = true;
   }
   function exitForgot() {
@@ -220,7 +225,7 @@
   async function sendResetEmail() {
     if (codeTime.value !== 0) return;
     if (!user.email) {
-      message.warning(t('myInfo.enterEmail'));
+      message.warning(t('myInfo.bindEmailBeforeReset'));
       return;
     }
     // email 锁定为当前登录账号,验证码只会发到本人邮箱
@@ -332,7 +337,7 @@
 
 <style lang="less" scoped>
   .password-shell {
-    width: 600px;
+    width: 100%;
     max-width: 100%;
   }
 
@@ -405,18 +410,6 @@
     flex: none !important;
   }
 
-  .password-cfg-container :deep(.b-input) {
-    height: 42px !important;
-    border: 1px solid var(--surface-border-color) !important;
-    border-radius: 10px;
-    background: var(--surface-panel-bg);
-  }
-
-  .password-cfg-container :deep(.b-input:focus-visible) {
-    border-color: var(--primary-color) !important;
-    background: var(--card-background);
-  }
-
   .password-cfg-container :deep(.require-tip) {
     position: static;
     min-height: 0;
@@ -485,12 +478,6 @@
     color: var(--text-color);
     font-size: 13px;
     font-weight: 600;
-  }
-
-  .forgot-field :deep(.b-input) {
-    border: 1px solid var(--surface-border-color) !important;
-    border-radius: 10px;
-    background: var(--surface-panel-bg);
   }
 
   .code-btn {

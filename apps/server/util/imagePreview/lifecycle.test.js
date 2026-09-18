@@ -414,6 +414,46 @@ describe.skipIf(!socket)('image lifecycle on isolated local MySQL', () => {
     expect((await db.query('SELECT * FROM file_preview_artifacts'))[0]).toHaveLength(1);
     expect((await db.query('SELECT * FROM image_assets'))[0]).toHaveLength(1);
   });
+  it('renames an overwritten upload whose asset still points at the deleted file ID', async () => {
+    const a = await asset();
+    await transaction((c) => replaceReferences(c, 'cloud_file', '1', [a.id]));
+    await transaction(async (c) => {
+      await removeImageReferences(c, 'cloud_file', ['1']);
+      await c.query('DELETE FROM files WHERE id=1');
+      await c.query("INSERT INTO files VALUES (2,'u1',0,'test-image.png','test-image.png',0)");
+      const [[file]] = await c.query('SELECT * FROM files WHERE id=2');
+      await registerCloudImage(c, file);
+    });
+    const [[before]] = await db.query('SELECT * FROM image_assets');
+    expect(before.source_id).toBe('1');
+    await transaction(async (c) => {
+      const [[file]] = await c.query('SELECT * FROM files WHERE id=2 FOR UPDATE');
+      await relocateCloudImage(c, file, 'renamed.png', 'renamed.png');
+      await c.query("UPDATE files SET obs_key='renamed.png',file_name='renamed.png' WHERE id=2");
+    });
+    const [[after]] = await db.query('SELECT * FROM image_assets');
+    expect(after).toMatchObject({
+      id: a.id,
+      source_id: '2',
+      source_locator: 'renamed.png',
+      source_version: before.source_version,
+    });
+    expect(await refs()).toEqual([expect.objectContaining({ asset_id: a.id, ref_type: 'cloud_file', ref_id: '2' })]);
+  });
+  it.each(['existing-source', 'missing-reference', 'other-owner', 'deleting'])(
+    'rejects unsafe source rebinding: %s',
+    async (conflict) => {
+      const a = await asset();
+      await db.query("UPDATE image_assets SET source_id='2'");
+      await transaction((c) => replaceReferences(c, 'cloud_file', '1', conflict === 'missing-reference' ? [] : [a.id]));
+      if (conflict === 'existing-source') await db.query("INSERT INTO files VALUES (2,'u1',1,'old.png','old.png',0)");
+      if (conflict === 'other-owner') await db.query("UPDATE image_assets SET owner_user_id='u2'");
+      if (conflict === 'deleting') await db.query("UPDATE image_assets SET status='deleting'");
+      const [[before]] = await db.query('SELECT * FROM image_assets');
+      await expect(renameImage('renamed.png')).rejects.toMatchObject({ code: 'FILE_IMAGE_SOURCE_CONFLICT' });
+      expect((await db.query('SELECT * FROM image_assets'))[0][0]).toEqual(before);
+    },
+  );
   it('rolls back asset relocation and its task fence with the file transaction', async () => {
     await asset();
     await db.query("UPDATE file_preview_jobs SET status='processing',locked_by='worker',locked_at=NOW(),attempts=1");

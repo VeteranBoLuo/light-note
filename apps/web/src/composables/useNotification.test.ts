@@ -99,7 +99,7 @@ describe('useNotification.fetchList', () => {
       pageSize: 20,
       excludeCommunityChat: true,
     });
-    expect(markAllNotificationsRead).toHaveBeenCalledWith({ excludeCommunityChat: true });
+    expect(markAllNotificationsRead).toHaveBeenCalledWith({ excludeCommunityChat: true, type: 'all' });
   });
 
   it('页面未读刷新不再创建系统通知，避免与 Service Worker 重复投递', async () => {

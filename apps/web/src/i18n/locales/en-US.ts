@@ -1,3 +1,4 @@
+import { communityEn } from './community';
 import { coreUsageReportEn } from './coreUsageReport';
 import autumn from './autumn-en-US';
 import { noteExportSettingsEn } from './noteExportSettings';
@@ -9,6 +10,7 @@ import { accountSettingsEn } from './accountSettings';
 import { settingsRefineEn } from './settingsRefine';
 import { notificationMessages } from '@lightnote/shared/notification-presentation';
 export default {
+  community: communityEn,
   coreUsageReport: coreUsageReportEn,
   autumn,
   noteExportSettings: noteExportSettingsEn,
@@ -1484,7 +1486,7 @@ export default {
     noteLibrary: 'Notes',
     create: 'Create',
     ai: 'AI',
-    community: 'Chat',
+    community: 'Community',
     profile: 'Me',
     createHub: {
       title: 'Create',
@@ -3992,7 +3994,7 @@ export default {
       loadFailed: 'Your sticker library is temporarily unavailable',
       uploadAction: 'Add image',
       uploadHint:
-        'JPG, PNG, and WebP. Large files or dimensions are optimized automatically, and your library syncs across devices.',
+        'JPG, PNG, WebP, and GIF. Still images are optimized; GIFs upload unchanged (up to 2MB). Your library syncs across devices.',
       emptyTitle: 'No custom stickers yet',
       emptyDescription: 'Upload your own image, then send it directly as a sticker message.',
       customAlt: 'Custom sticker',
@@ -4006,6 +4008,7 @@ export default {
       limitReached: 'You can save up to 40 stickers. Remove some stickers first.',
       saveUnavailable: 'This sticker is unavailable or cannot be saved',
       saveFailed: 'The sticker could not be saved. Try again later.',
+      gifRejected: 'GIF upload failed. Use a complete GIF up to 2MB; reduce its dimensions or frame count and try again. GIFs are not compressed automatically.',
       compressedTooLarge:
         'The image is still too large after optimization. Try another image, or crop or resize it first.',
       dimensionsTooLarge:
@@ -4868,6 +4871,9 @@ export default {
     questionUnavailable: 'Original question unavailable',
   },
   inbox: {
+    pendingFilter: 'Only pending',
+    pendingFilterEmpty: 'No pending items match these filters',
+    filterStatus: 'Organization status',
     title: 'To organize',
     subtitle: 'Organize captured bookmarks, notes, and files in one focused place.',
     pendingScopeTitle: 'To-organize Scope',
@@ -6533,6 +6539,9 @@ export default {
     },
   },
   note: {
+    selectPageNamed: 'Select “{title}”',
+    selectThisPage: 'Select this note',
+    pageSelected: 'Selected',
     mobileActionsTitle: 'Note actions',
     title: 'Note Library',
     subtitle: 'Organize knowledge as a page tree while keeping tags, views, and AI tools.',
@@ -9307,6 +9316,7 @@ export default {
     claimAllSuccessBySource: 'Claimed: {sources}, +{exp} EXP, +{points} points',
     claimAllSuccessBySourceWithFrames: 'Claimed: {sources}, +{exp} EXP, +{points} points, and {frames} avatar frame(s)',
     claimSources: {
+      community: '{n} community rewards',
       daily: 'Daily tasks ×{n}',
       growthTasks: 'Growth tasks ×{n}',
       achievements: 'Achievements ×{n}',
@@ -9343,6 +9353,7 @@ export default {
       daily_todo: 'Complete one todo',
       daily_organize: 'Organize one resource',
       wk_bookmark: 'Advance the weekly bookmark challenge',
+      wk_community: 'Share a post this week',
       wk_note: 'Advance the weekly note challenge',
       wk_checkin: 'Advance the weekly check-in challenge',
       wk_todo: 'Advance the weekly todo challenge',
@@ -9614,14 +9625,16 @@ export default {
     recapEmptyTitle: 'Nothing to review yet',
     recapEmptyDesc: 'Save a bookmark or write a note, then come back to revisit it.',
     weeklyTitle: 'Weekly Challenges',
-    weeklySubtitle: 'Resets every Monday — complete to earn points',
-    weeklyPointsProgress: '{current} / {total} points this week',
+    weeklySubtitle: 'Claim each challenge separately. Resets every Monday.',
+    weeklyReward: '+{n} points',
+    weeklyPointsProgress: '{current} claimed / {total} points available this week',
     weeklyClaim: 'Claim +{n}',
     weeklyClaimed: 'Claimed',
     weeklyDoneClaim: 'Claimable',
     weeklyClaimOk: 'Claimed! +{n} points',
     weeklyActiveTodayDone: 'Counted today · Continue tomorrow',
     weeklyName: {
+      wk_community: 'Share this week',
       wk_bookmark: 'Save bookmarks this week',
       wk_note: 'Write notes this week',
       wk_checkin: 'Check in this week',
@@ -9633,6 +9646,7 @@ export default {
       wk_variety: 'Complete 3 types of knowledge actions',
     },
     weeklyDescription: {
+      wk_community: 'Have one post approved for the first time this week. Edits do not count again.',
       wk_active_days:
         'A day counts after you create a bookmark, note, or file, complete a to-do, or organize a resource; creating tags or editing existing content does not count',
       wk_variety: 'Choose any 3: bookmarks, notes, files, completed todos, or organized resources',
@@ -9714,6 +9728,7 @@ export default {
     },
     pointsSource: {
       wk_bookmark: 'Weekly bookmark challenge',
+      wk_community: 'Share a post this week',
       wk_note: 'Weekly note challenge',
       wk_checkin: 'Weekly check-in challenge',
       wk_todo: 'Weekly todo challenge',
@@ -10076,6 +10091,7 @@ export default {
     achClaimedAlready: 'Reward already claimed',
     achClaimLocked: 'Achievement not unlocked yet',
     achGroup: {
+      community: 'Community',
       checkin: 'Check-in',
       create: 'Creation',
       action: 'Action',
@@ -10084,6 +10100,11 @@ export default {
       tenure: 'Tenure',
     },
     achName: {
+      community_post_1: 'First Share',
+      community_post_10: 'Keep Sharing',
+      community_post_50: 'Knowledge Keeper',
+      community_answer_1: 'Helpful Answer',
+
       streak_1: 'First Hello',
       streak_7: 'Seven Days Strong',
       streak_30: 'Month of Diligence',
@@ -10125,6 +10146,11 @@ export default {
       join_365: 'A Year Together',
     },
     achDesc: {
+      community_post_1: 'Publish your first approved post',
+      community_post_10: 'Publish 10 different approved posts',
+      community_post_50: 'Publish 50 different approved posts',
+      community_answer_1: 'Have an answer accepted by another author',
+
       streak_1: 'Complete your first check-in',
       streak_7: 'Check in 7 days in a row',
       streak_30: 'Check in 30 days in a row',
@@ -10168,6 +10194,7 @@ export default {
     timelineEmpty: 'No growth records yet — take your first step',
     timelineLevelUp: 'Level up to Lv.{level} · {name}',
     timelineSrc: {
+      community_task: 'Community activity reward',
       checkin: 'Daily check-in',
       bookmark: 'Saved a bookmark',
       note: 'Wrote a note',
@@ -12207,6 +12234,7 @@ export default {
     newPasswordTooShort: 'New password length cannot be less than 6 characters',
     changePasswordSuccess: 'Password changed successfully',
     setPasswordSuccess: 'Password set successfully',
+    bindEmailBeforeReset: 'Add an email address in your profile before resetting your password by email.',
     forgotOldPassword: 'Forgot your password?',
     resetByEmail: 'Reset via Email Code',
     backToChange: 'Back to Change Password',
@@ -12936,7 +12964,14 @@ export default {
   },
 
   adminActivity: {
-    title: 'Today’s active users',
+    metricHelp: 'Metric details',
+    trendTitle: 'Daily active users',
+    range: '{days} days',
+    point: '{date} · {count} users',
+    missing: 'Not recorded',
+    partialPoint: 'Partial day',
+    chartHint: 'Click or use arrow keys to select a date. Gaps mean no recording; today and the first recording day are partial.',
+    title: 'Daily active users',
     view: 'View active users',
     total: '{date} · {count} users',
     internalHidden: 'Administrators and test accounts excluded',
@@ -12949,14 +12984,19 @@ export default {
     loading: 'Loading active users…',
     failed: 'Unable to load active users. Retry or refresh.',
     retry: 'Retry',
-    empty: 'No real user activity recorded today',
+    empty: 'No real user activity recorded on this date',
     unnamed: 'Unnamed user',
     remark: 'Remark',
-    first: 'First today',
+    first: 'First on this date',
     last: 'Latest activity',
     complete: 'All users loaded',
     noBaseline: 'No comparable data yet',
     unavailable: 'Statistics unavailable',
+    date: 'Date',
+    today: 'Today',
+    invalidDate: 'Choose today or an earlier date',
+    dayHint: 'Beijing calendar days: historical dates cover the full day; today covers activity so far.',
+    historyUnavailable: 'Activity recording began on {date}. No data is available for the selected date.',
   },
 
   adminOverview: {

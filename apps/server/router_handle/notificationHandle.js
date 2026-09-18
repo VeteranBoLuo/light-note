@@ -1,3 +1,6 @@
+import { markNotificationSnapshotRead } from '../util/notificationReadSnapshot.js';
+import { communityFeedSchemaReady } from '../util/communityFeed/schema.js';
+import { feedNotificationVisibleSql } from '../util/communityFeed/notifications.js';
 import crypto from 'crypto';
 import pool from '../db/index.js';
 import { resultData } from '../util/common.js';
@@ -35,6 +38,7 @@ const PRIMARY_NOTIFICATION_TYPES = Object.freeze([
   ...NOTIFICATION_TYPE_GROUPS.growth,
   ...NOTIFICATION_TYPE_GROUPS.ai_routine,
   'community_chat',
+  'community_feed',
 ]);
 
 function appendNotificationTypeFilter(type, where, params) {
@@ -139,7 +143,8 @@ export const list = async (req, res) => {
     const type = req.body?.type;
     const excludeCommunityChat = req.body?.excludeCommunityChat === true;
 
-    const where = ['user_id = ?', 'del_flag = 0', COMMUNITY_CHAT_TARGETED_NOTIFICATION_SQL];
+    const feedVisibility = feedNotificationVisibleSql(await communityFeedSchemaReady(db).catch(() => false));
+    const where = ['user_id = ?', 'del_flag = 0', COMMUNITY_CHAT_TARGETED_NOTIFICATION_SQL, feedVisibility];
     const params = [userId];
     if (excludeCommunityChat) where.push(COMMUNITY_CHAT_EXCLUDED_SQL);
     appendNotificationTypeFilter(type, where, params);
@@ -181,7 +186,7 @@ export const list = async (req, res) => {
         `SELECT COUNT(*) AS unreadTotal
           FROM notification
           WHERE user_id = ? AND is_read = 0 AND del_flag = 0
-            AND ${COMMUNITY_CHAT_TARGETED_NOTIFICATION_SQL}
+            AND ${COMMUNITY_CHAT_TARGETED_NOTIFICATION_SQL} AND ${feedVisibility}
             ${excludeCommunityChat ? `AND ${COMMUNITY_CHAT_EXCLUDED_SQL}` : ''}`,
         [userId],
       );
@@ -209,11 +214,12 @@ export const unreadCount = async (req, res) => {
     return res.send(resultData({ unreadTotal: 0, byType: {} }));
   }
   try {
+    const feedVisibility = feedNotificationVisibleSql(await communityFeedSchemaReady(pool).catch(() => false));
     const excludeCommunityChat = req.body?.excludeCommunityChat === true;
     const [rows] = await pool.query(
       `SELECT type, COUNT(*) AS c FROM notification
        WHERE user_id = ? AND is_read = 0 AND del_flag = 0
-         AND ${COMMUNITY_CHAT_TARGETED_NOTIFICATION_SQL}
+         AND ${COMMUNITY_CHAT_TARGETED_NOTIFICATION_SQL} AND ${feedVisibility}
          ${excludeCommunityChat ? `AND ${COMMUNITY_CHAT_EXCLUDED_SQL}` : ''}
        GROUP BY type`,
       [userId],
@@ -224,7 +230,10 @@ export const unreadCount = async (req, res) => {
       byType[r.type] = Number(r.c || 0);
       unreadTotal += Number(r.c || 0);
     }
-    res.send(resultData({ unreadTotal, byType }));
+    const response = resultData({ unreadTotal });
+    // Type identifiers are dictionary keys, not database column names.
+    response.data.byType = byType;
+    res.send(response);
   } catch {
     res.send(resultData(null, 500, '获取未读数失败'));
   }
@@ -279,14 +288,13 @@ export const markAllRead = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   try {
     const excludeCommunityChat = req.body?.excludeCommunityChat === true;
-    const [result] = await pool.query(
-      `UPDATE notification SET is_read = 1, read_time = NOW()
-       WHERE user_id = ? AND is_read = 0 AND del_flag = 0
-         AND ${COMMUNITY_CHAT_TARGETED_NOTIFICATION_SQL}
-         ${excludeCommunityChat ? `AND ${COMMUNITY_CHAT_EXCLUDED_SQL}` : ''}`,
-      [req.user.id],
-    );
-    res.send(resultData({ updated: result.affectedRows || 0 }));
+    const feedVisibility = feedNotificationVisibleSql(await communityFeedSchemaReady(pool).catch(() => false));
+    const where = ['user_id = ?', 'is_read=0', 'del_flag=0', COMMUNITY_CHAT_TARGETED_NOTIFICATION_SQL, feedVisibility];
+    const params = [req.user.id];
+    appendNotificationTypeFilter(req.body?.type, where, params);
+    if (excludeCommunityChat) where.push(COMMUNITY_CHAT_EXCLUDED_SQL);
+    const updated = await markNotificationSnapshotRead(pool, where, params);
+    res.send(resultData({ updated }));
   } catch {
     res.send(resultData(null, 500, '标记全部已读失败'));
   }

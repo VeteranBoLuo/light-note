@@ -481,9 +481,12 @@
       <span class="file-empty-icon">
         <SvgIcon :src="icon.file_upload" size="28" />
       </span>
-      <strong>{{ $t('cloudSpace.emptyTitle') }}</strong>
-      <p>{{ $t('cloudSpace.emptyHint') }}</p>
-      <BButton v-if="!bookmark.isMobile" type="primary" class="file-empty-action" @click="triggerUpload">
+      <strong>{{ $t(cloud.pendingOnly ? 'inbox.pendingFilterEmpty' : 'cloudSpace.emptyTitle') }}</strong>
+      <p v-if="!cloud.pendingOnly">{{ $t('cloudSpace.emptyHint') }}</p>
+      <BButton v-if="cloud.pendingOnly" class="file-empty-action" @click="clearFileFilters">
+        {{ $t('note.clearFilter') }}
+      </BButton>
+      <BButton v-if="!cloud.pendingOnly && !bookmark.isMobile" type="primary" class="file-empty-action" @click="triggerUpload">
         {{ $t('cloudSpace.uploadFile') }}
       </BButton>
     </div>
@@ -848,6 +851,7 @@
   import { useRouter } from 'vue-router';
   import { recordOperation } from '@/api/commonApi.ts';
   import { useInboxEnqueue } from '@/composables/useInboxEnqueue';
+  import { CLOUD_FILE_CATEGORY_ORDER } from '@/constants/cloudFileCategory';
   import InboxPendingBadge from '@/components/inbox/InboxPendingBadge.vue';
   import AiSkillDialog from '@/components/aiSkills/AiSkillDialog.vue';
   import { isAiDocumentFileNameSupported } from '@lightnote/shared';
@@ -1003,13 +1007,27 @@
     }
   }
 
+  function clearFileFilters() {
+    cloud.searchFileName = '';
+    cloud.typeCheckValue = [...CLOUD_FILE_CATEGORY_ORDER];
+    cloud.pendingOnly = false;
+  }
+
   async function toggleFileInbox(file: any) {
     const resource = [{ resourceType: 'file' as const, resourceId: String(file.id) }];
     const ok = file.isPending
       ? await removeResourcesFromInbox(resource, '云空间')
       : await addResourcesToInbox(resource, '云空间');
-    // 接口已确认状态变更,直接本地更新徽标和菜单,不必重新拉取整页文件
-    if (ok) file.isPending = !file.isPending;
+    // 写入成功后先更新本地；待整理范围移除已完成条目，再核对分页和总数。
+    if (ok) {
+      file.isPending = !file.isPending;
+      if (cloud.pendingOnly && !file.isPending) {
+        const before = cloud.fileList.length;
+        cloud.fileList = cloud.fileList.filter((item) => String(item.id) !== String(file.id));
+        cloud.fileTotal = Math.max(0, cloud.fileTotal - (before - cloud.fileList.length));
+        await cloud.refreshLoadedFiles();
+      }
+    }
   }
   const selection = useResourceSelection(
     'files',

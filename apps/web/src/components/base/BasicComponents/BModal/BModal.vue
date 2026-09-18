@@ -70,7 +70,7 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
-  import { computed, getCurrentInstance, nextTick, onBeforeUnmount, ref, useAttrs, watch } from 'vue';
+  import { computed, getCurrentInstance, nextTick, onBeforeUnmount, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { acquireModalLayer, isTopModalLayer, releaseModalLayer } from '@/utils/modalLayer';
   import { resolveViewportUnitValue } from '@/utils/cssViewport';
@@ -128,7 +128,7 @@
   let layerAcquired = false;
   let closeTimer: number | null = null;
   let historyHandle: MobileOverlayHistoryHandle | null = null;
-  const attrs = useAttrs();
+  const instance = getCurrentInstance();
   const resolvedHeight = computed(() => resolveViewportUnitValue(props.height));
   const isMobileFullscreen = computed(() => props.fullscreenMobile && isMobileLayout.value);
 
@@ -138,8 +138,8 @@
     closeTimer = window.setTimeout(() => {
       closeTimer = null;
       isOut.value = false;
-      // 检查父组件是否监听了 'close' 事件
-      if (attrs.onClose) {
+      // 已声明的 emits 监听器不在 attrs 中；受控弹窗由父组件关闭。
+      if (instance?.vnode.props?.onClose) {
         emit('close');
       } else {
         visible.value = false;

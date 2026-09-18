@@ -22,6 +22,7 @@ import featureRequestRouter from '../router/featureRequest.js';
 import updateLogRouter from '../router/updateLog.js';
 import resourceGovernanceRouter from '../router/resourceGovernance.js';
 import communityChatRouter from '../router/communityChat.js';
+import communityRouter from '../router/community.js';
 import supportRouter from '../router/support.js';
 import infraRouter from '../router/infra.js';
 import aiSkillsRouter from '../router/aiSkills.js';
@@ -260,6 +261,10 @@ export const baseRouter = [
     // 公共社区与私人 AI chat 在路由、权限和数据模型上完全隔离。
     path: '/community-chat',
     router: communityChatRouter,
+  },
+  {
+    path: '/community',
+    router: communityRouter,
   },
   {
     path: '/search',

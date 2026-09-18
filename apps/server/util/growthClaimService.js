@@ -1,3 +1,4 @@
+import { taskRewardStates, claimTaskRewards } from './communityFeed/taskRewards.js';
 import pool from '../db/index.js';
 import { getGrowth, getGrowthDashboard, grantExp } from './growth.js';
 import { earnPoints, getAchievementFrameByKey } from './points.js';
@@ -13,7 +14,7 @@ import {
 } from './pointsEarningPolicy.js';
 import { resolveDailyEarningPolicyVersion, resolveWeeklyEarningPolicyVersion } from './pointsEarningPolicyState.js';
 
-export const GROWTH_CLAIM_SCOPES = Object.freeze(['daily', 'growthTasks', 'achievements', 'weekly']);
+export const GROWTH_CLAIM_SCOPES = Object.freeze(['daily', 'growthTasks', 'achievements', 'weekly', 'community']);
 
 const ACTION_BY_TASK = Object.freeze({
   profile_avatar: 'profile',
@@ -35,6 +36,7 @@ const ACTION_BY_QUEST = Object.freeze({
 });
 
 const ACTION_BY_WEEKLY = Object.freeze({
+  communityPosts: 'open_community',
   bookmark: 'create_bookmark',
   note: 'create_note',
   checkin: 'checkin',
@@ -158,6 +160,7 @@ export async function getGrowthClaimableSnapshot(userId, { userRole = null, db =
       growthTasks: { count: 0, items: [] },
       achievements: { count: 0, items: [] },
       weekly: { count: 0, items: [] },
+      community: { count: 0, items: [] },
       nextAction: null,
       nextActions: [],
     };
@@ -168,23 +171,26 @@ export async function getGrowthClaimableSnapshot(userId, { userRole = null, db =
     getWeeklyChallenges(userId, { db, calendar }),
     getGrowthTasks(userId, { db, ensureSchema: false }),
   ]);
+  const communityItems = (await taskRewardStates(db, userId)).filter((item) => item.state === 'claimable');
   const dailyItems = dashboard.questBonus.stages.filter((item) => item.claimable);
   const taskItems = tasks.allTasks.filter((item) => item.claimable);
   const achievementItems = dashboard.achievements.filter((item) => item.claimable);
   const weeklyItems = weekly.challenges.filter((item) => item.claimable);
   const nextActions = nextActionsFrom({ dashboard, weekly, tasks });
   return {
-    count: dailyItems.length + taskItems.length + achievementItems.length + weeklyItems.length,
+    count: dailyItems.length + taskItems.length + achievementItems.length + weeklyItems.length + communityItems.length,
     daily: { count: dailyItems.length, items: dailyItems },
     growthTasks: { count: taskItems.length, items: taskItems },
     achievements: { count: achievementItems.length, items: achievementItems },
     weekly: { count: weeklyItems.length, items: weeklyItems },
+    community: { count: communityItems.length, items: communityItems },
     nextAction: nextActions[0] || null,
     nextActions,
     today: {
       completed: dashboard.questBonus.completedCount,
       total: dashboard.questBonus.total,
-      claimableCount: dailyItems.length + taskItems.length + achievementItems.length + weeklyItems.length,
+      claimableCount:
+        dailyItems.length + taskItems.length + achievementItems.length + weeklyItems.length + communityItems.length,
     },
   };
 }
@@ -367,6 +373,15 @@ export async function claimGrowthRewards(userId, input = {}, { userRole = null }
       }
     }
 
+    if (scopes.has('community')) {
+      for (const receipt of await claimTaskRewards(conn, userId, selectedKeys(input, 'community'), {
+        grantExp,
+        earnPoints,
+        userRole,
+        calendar,
+      }))
+        addReceipt(receipts, summary, receipt);
+    }
     // 快照读取也属于本次原子操作：若读取失败则整笔回滚，不能出现“到账成功但接口报错”。
     growth = await getGrowth(userId, { userRole, db: conn, calendar });
     await conn.commit();

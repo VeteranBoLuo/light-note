@@ -2,15 +2,21 @@
   <template v-if="bookmark.isMobile">
     <BButton
       class="noteType-select"
-      :class="{ active: filterVisible || tag !== undefined, 'is-compact': compact }"
+      :class="{
+        active: filterVisible || tag !== undefined || pendingOnly,
+        'is-compact': compact,
+        'has-pending': pendingOnly,
+      }"
       :aria-expanded="filterVisible"
-      :aria-label="`${t('note.tagsTab')}：${viewNoteFilter}`"
+      :aria-label="`${t('note.tagsTab')}：${viewNoteFilter}${pendingOnly ? ' · ' + t('inbox.pendingBadge') : ''}`"
       :title="viewNoteFilter"
       @click="filterVisible = true"
       v-click-log="OPERATION_LOG_MAP.noteLibrary.filterNote"
     >
       <SvgIcon :src="icon.resource.tag" :size="compact ? 18 : 16" aria-hidden="true" />
-      <span v-if="!compact" class="filter-label text-hidden">{{ viewNoteFilter }}</span>
+      <span v-if="!compact || pendingOnly" class="filter-label text-hidden">{{
+        pendingOnly ? t('inbox.pendingBadge') : viewNoteFilter
+      }}</span>
       <SvgIcon
         class="filter-chevron"
         :class="{ 'is-open': filterVisible }"
@@ -29,6 +35,13 @@
     >
       <div class="filter-container filter-container--mobile" role="listbox" :aria-label="t('note.tagDirectory')">
         <div class="fixed-section">
+          <PendingFilterSection :model-value="pendingOnly" @update:model-value="setPendingOnly">
+            <template #actions>
+              <BButton class="clear-action" @click.stop="clearFilters">{{ $t('note.clearFilter') }}</BButton>
+            </template>
+          </PendingFilterSection>
+          <span class="filter-section-heading">{{ t('note.tagsTab') }}</span>
+
           <div class="filter-header">
             <BInput
               class="tag-filter-input"
@@ -37,9 +50,6 @@
               v-model:value="keyword"
               allow-clear
             />
-            <BButton class="clear-action" @click.stop="(viewNote('all'), (keyword = ''))">
-              {{ $t('note.clearFilter') }}
-            </BButton>
           </div>
 
           <BButton
@@ -49,7 +59,7 @@
             :class="{ 'is-selected': tag === undefined }"
             @click.stop="viewNote('all')"
           >
-            <span>{{ $t('note.allNote') }}</span>
+            <span>{{ $t('tagSpace.allTags') }}</span>
             <SvgIcon v-if="tag === undefined" class="check-mark" :src="icon.filterPanel.check" size="16" />
           </BButton>
           <BButton
@@ -88,14 +98,24 @@
   <BPopover v-else v-model:open="filterVisible" trigger="click" placement="bottom-right">
     <BButton
       class="noteType-select"
-      :class="{ active: filterVisible || tag !== undefined, 'is-compact': compact }"
+      :class="{
+        active: filterVisible || tag !== undefined || pendingOnly,
+        'is-compact': compact,
+        'has-pending': pendingOnly,
+      }"
       :aria-expanded="filterVisible"
-      :aria-label="`${t('note.tagsTab')}：${viewNoteFilter}`"
+      :aria-label="`${t('note.tagsTab')}：${viewNoteFilter}${pendingOnly ? ' · ' + t('inbox.pendingBadge') : ''}`"
       :title="viewNoteFilter"
       v-click-log="OPERATION_LOG_MAP.noteLibrary.filterNote"
     >
       <SvgIcon :src="icon.resource.tag" :size="compact ? 18 : 16" aria-hidden="true" />
-      <span class="filter-label text-hidden">{{ viewNoteFilter }}</span>
+      <span class="filter-label text-hidden">{{
+        pendingOnly
+          ? tag === undefined
+            ? t('inbox.pendingBadge')
+            : t('inbox.pendingBadge') + ' · ' + viewNoteFilter
+          : viewNoteFilter
+      }}</span>
       <SvgIcon
         class="filter-chevron"
         :class="{ 'is-open': filterVisible }"
@@ -107,6 +127,12 @@
     <template #content>
       <div class="filter-container" role="listbox" :aria-label="t('note.tagDirectory')">
         <div class="fixed-section">
+          <PendingFilterSection :model-value="pendingOnly" @update:model-value="setPendingOnly">
+            <template #actions>
+              <BButton class="clear-action" @click.stop="clearFilters">{{ $t('note.clearFilter') }}</BButton>
+            </template>
+          </PendingFilterSection>
+          <span class="filter-section-heading">{{ t('note.tagsTab') }}</span>
           <div class="filter-header">
             <BInput
               class="tag-filter-input"
@@ -115,9 +141,6 @@
               v-model:value="keyword"
               allow-clear
             />
-            <BButton class="clear-action" @click.stop="(viewNote('all'), (keyword = ''))">
-              {{ $t('note.clearFilter') }}
-            </BButton>
           </div>
 
           <BButton
@@ -127,7 +150,7 @@
             :class="{ 'is-selected': tag === undefined }"
             @click.stop="viewNote('all')"
           >
-            <span>{{ $t('note.allNote') }}</span>
+            <span>{{ $t('tagSpace.allTags') }}</span>
             <SvgIcon v-if="tag === undefined" class="check-mark" :src="icon.filterPanel.check" size="16" />
           </BButton>
           <BButton
@@ -165,6 +188,7 @@
 </template>
 
 <script lang="ts" setup>
+  import PendingFilterSection from '@/components/inbox/PendingFilterSection.vue';
   import { useI18n } from 'vue-i18n';
   const { t } = useI18n();
   import icon from '@/config/icon.ts';
@@ -212,6 +236,36 @@
     return found ? found.name : tag.value;
   });
 
+  const pendingOnly = computed(() => router.currentRoute.value.query.pending === '1');
+  function setPendingOnly(value: boolean) {
+    const query = { ...router.currentRoute.value.query };
+    delete query.preview;
+    if (value) query.pending = '1';
+    else delete query.pending;
+    navigateFilter(query);
+  }
+
+  function clearFilters() {
+    const query = { ...router.currentRoute.value.query };
+    delete query.pending;
+    delete query.tag;
+    delete query.preview;
+    delete query._rt;
+    keyword.value = '';
+    navigateFilter(query);
+  }
+
+  function navigateFilter(query: typeof router.currentRoute.value.query) {
+    const navigate = () => router.replace({ query });
+    if (bookmark.isMobile) {
+      void closeCurrentMobileOverlayThen(() => {
+        filterVisible.value = false;
+      }, navigate);
+    } else {
+      void navigate();
+    }
+  }
+
   const tag = computed(() => {
     return router.currentRoute.value.query.tag;
   });
@@ -239,23 +293,31 @@
 </script>
 
 <style lang="less" scoped>
-  .noteType-select {
+  .filter-section-heading {
+    padding: 8px 8px 0;
+    color: var(--desc-color);
+    font-size: 12px;
+  }
+  .noteType-select.b_btn {
     height: 36px;
     padding: 0 11px;
     border-radius: 10px;
+    border: 1px solid transparent;
     color: var(--text-color);
     background: var(--primary-btn-bg-color);
     display: flex;
     gap: 6px;
 
     &:hover {
+      border-color: var(--workspace-note-text);
       color: var(--workspace-note-text);
-      background: color-mix(in srgb, var(--workspace-note-text) 8%, var(--menu-body-bg-color));
+      background: var(--workspace-note-selected);
     }
 
     &.active {
+      border-color: var(--workspace-note-text);
       color: var(--workspace-note-text);
-      background: color-mix(in srgb, var(--workspace-note-text) 10%, var(--menu-body-bg-color));
+      background: var(--workspace-note-selected);
     }
   }
 
@@ -297,8 +359,9 @@
   }
   .filter-container {
     /* 背景/圆角/阴影由 BPopover 面板统一提供,这里只管尺寸与布局,避免双重卡片 */
-    width: 200px;
-    max-height: 300px;
+    width: 248px;
+    max-height: min(440px, calc(100vh - 24px));
+    max-height: min(440px, calc(100dvh - 24px));
     padding: 5px;
     display: flex;
     flex-direction: column;
@@ -336,16 +399,16 @@
     align-items: center;
     gap: 8px;
     padding: 4px 0;
-    .clear-action {
-      width: auto;
-      height: 36px;
-      padding: 0 4px;
-      border: 0 !important;
-      background: transparent !important;
-      font-size: 12px;
-      color: var(--workspace-note-text);
-      white-space: nowrap;
-    }
+  }
+  .clear-action {
+    width: auto;
+    height: 28px;
+    padding: 0 4px;
+    border: 0 !important;
+    background: transparent !important;
+    font-size: 12px;
+    color: var(--workspace-note-text);
+    white-space: nowrap;
   }
   .filter-toggle {
     min-height: 28px;
@@ -402,7 +465,7 @@
       padding: 2px 0 8px;
     }
 
-    .filter-header .clear-action {
+    .clear-action {
       height: var(--mobile-touch-size, 44px);
       min-height: var(--mobile-touch-size, 44px);
     }

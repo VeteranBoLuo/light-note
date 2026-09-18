@@ -10,6 +10,15 @@
     :close-label="t('common.close')"
     @close="emit('update:open', false)"
   >
+    <template #header-leading="{ close }">
+      <BButton
+        class="mobile-tag-directory__close"
+        :aria-label="t('common.close')"
+        @click="close"
+      >
+        <SvgIcon :src="icon.common.close" size="22" aria-hidden="true" />
+      </BButton>
+    </template>
     <div class="mobile-tag-directory">
       <div class="mobile-tag-directory__toolbar">
         <div class="mobile-tag-directory__summary">
@@ -189,6 +198,25 @@
 </script>
 
 <style scoped lang="less">
+  .mobile-tag-directory__close.b_btn {
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    padding: 0;
+    background: transparent;
+    color: var(--text-color);
+
+    &:hover {
+      background: transparent;
+      color: var(--primary-color);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--primary-color);
+      outline-offset: -4px;
+    }
+  }
+
   .mobile-tag-directory {
     height: 100%;
     min-height: 0;

@@ -171,6 +171,7 @@ export function useCommunityChatProfile() {
     if (message.isOwn && ownProfile.value) {
       profile.value = ownProfile.value.publicPreview;
       profileLoading.value = false;
+      void loadOwnProfile({ force: true }).catch(() => undefined);
       return;
     }
 
@@ -194,6 +195,7 @@ export function useCommunityChatProfile() {
     if (ownProfile.value) {
       profile.value = ownProfile.value.publicPreview;
       profileLoading.value = false;
+      void loadOwnProfile({ force: true }).catch(() => undefined);
       return;
     }
     profile.value = null;

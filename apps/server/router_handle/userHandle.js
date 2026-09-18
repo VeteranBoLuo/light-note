@@ -90,6 +90,7 @@ import {
   markFeatureAnnouncementSeen as persistFeatureAnnouncementSeen,
   preserveFeatureAnnouncementReads,
 } from '../util/services/featureAnnouncementService.js';
+import { preserveCommunityPreference } from '../util/communityPreferences.js';
 import { preserveDailyBriefPreference } from '../util/dailyBriefFeature.js';
 let redisClient;
 if (process.platform === 'linux') {
@@ -1172,6 +1173,7 @@ export const saveUserInfo = async (req, res) => {
         finalBody.preferences = preserveFeatureAnnouncementReads(finalBody.preferences, persistedUser.preferences);
         finalBody.preferences = preserveWorkshopPreference(finalBody.preferences, persistedUser.preferences);
         finalBody.preferences = preserveDailyBriefPreference(finalBody.preferences, persistedUser.preferences);
+        finalBody.preferences = preserveCommunityPreference(finalBody.preferences, persistedUser.preferences);
         [result] = await connection.query('update user set ? where id=?', [finalBody, id]);
         await connection.commit();
       } catch (error) {

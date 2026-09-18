@@ -1,4 +1,4 @@
-export const GROWTH_CLAIM_SOURCES = ['daily', 'growthTasks', 'achievements', 'weekly'] as const;
+export const GROWTH_CLAIM_SOURCES = ['daily', 'growthTasks', 'achievements', 'weekly', 'community'] as const;
 
 export type GrowthClaimSource = (typeof GROWTH_CLAIM_SOURCES)[number];
 export type GrowthClaimBreakdown = Record<GrowthClaimSource, number>;
@@ -11,10 +11,11 @@ const RECEIPT_SOURCE_MAP: Record<string, GrowthClaimSource> = {
   growthTask: 'growthTasks',
   achievement: 'achievements',
   weekly: 'weekly',
+  community: 'community',
 };
 
 function emptyBreakdown(): GrowthClaimBreakdown {
-  return { daily: 0, growthTasks: 0, achievements: 0, weekly: 0 };
+  return { daily: 0, growthTasks: 0, achievements: 0, weekly: 0, community: 0 };
 }
 
 function normalizeCount(value: unknown): number {
@@ -22,9 +23,10 @@ function normalizeCount(value: unknown): number {
   return Number.isFinite(count) && count > 0 ? Math.trunc(count) : 0;
 }
 
-/** 领取前以 claimable 接口的四类分组为唯一事实源。 */
+/** 领取前以 claimable 接口的奖励分组为唯一事实源。 */
 export function resolveClaimableBreakdown(value: ClaimableBreakdownLike): GrowthClaimBreakdown {
   return {
+    community: normalizeCount(value?.community?.count),
     daily: normalizeCount(value?.daily?.count),
     growthTasks: normalizeCount(value?.growthTasks?.count),
     achievements: normalizeCount(value?.achievements?.count),

@@ -45,6 +45,7 @@ describe('personal center menu contract', () => {
     expect(MOBILE_PERSON_CENTER_MANAGEMENT_ENTRIES.map((entry) => entry.name)).toEqual(['trash']);
     expect(PERSON_CENTER_ENTRIES.trash.mobilePath).toBe('/ptrash');
     expect(MOBILE_PERSON_CENTER_COMMUNICATION_ENTRIES.map((entry) => entry.name)).toEqual([
+      'communityProfile',
       'coBuild',
       'feedback',
       'help',

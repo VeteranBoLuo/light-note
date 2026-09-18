@@ -1,4 +1,16 @@
 // Keep the text line box stable while sharing the same visual size and spacing.
+.chat-emoji-selection() {
+  &.is-selected::before {
+    content: '';
+    position: absolute;
+    inset-inline: 0;
+    top: var(--emoji-selection-top, -0.12em);
+    height: var(--emoji-selection-height, 1.2em);
+    background: rgba(144, 198, 255, 0.55);
+    pointer-events: none;
+  }
+}
+
 .chat-inline-emoji-layout() {
   width: 1em;
   height: 1em;

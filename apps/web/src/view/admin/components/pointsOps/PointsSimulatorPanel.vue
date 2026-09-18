@@ -77,7 +77,7 @@
     dailyQuestDaily: '40',
     weeklyChallenges: '250',
     freeDrawExpected: '15',
-    achievementPool: '7850',
+    achievementPool: '8080',
     milestonePool: '2950',
     activeRatio: '0.35',
     consumptionRatio: '0.65',

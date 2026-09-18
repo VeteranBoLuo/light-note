@@ -68,8 +68,8 @@ describe('C5 积分治理时间窗与只读模拟器', () => {
     expect(result).toMatchObject({
       readOnly: true,
       stableWeek: 670,
-      input: { milestonePool: 2950 },
-      firstYearOneTime: 3_780_000,
+      input: { milestonePool: 2950, achievementPool: 8080 },
+      firstYearOneTime: 3_860_500,
       disclaimer: 'simulation_only_no_production_write',
     });
     expect(result.tiers.map((row) => row.expectedWeek)).toEqual([670, 775, 880, 985]);

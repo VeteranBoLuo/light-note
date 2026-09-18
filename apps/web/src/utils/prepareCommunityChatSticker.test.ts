@@ -118,3 +118,26 @@ describe('prepareCommunityChatSticker', () => {
     expect(result.file.size).toBeGreaterThan(maxBytes);
   });
 });
+
+describe('GIF stickers', () => {
+  it('preserves the original GIF without canvas conversion', async () => {
+    const source = new File(['GIF89a'], 'animated.gif', { type: 'image/gif' });
+    const mocks = installImageAndCanvasMocks(new Blob(['unused']), { width: 320, height: 240 });
+    const result = await prepareCommunityChatSticker(source, STICKER_LIMITS);
+    expect(result.file).toBe(source);
+    expect(result.compressed).toBe(false);
+    expect(mocks.drawImage).not.toHaveBeenCalled();
+  });
+  it('rejects oversized GIF before decoding', async () => {
+    const source = new File([new Uint8Array(STICKER_LIMITS.maxBytes + 1)], 'large.gif', { type: 'image/gif' });
+    await expect(prepareCommunityChatSticker(source, STICKER_LIMITS)).rejects.toThrow('CUSTOM_STICKER_GIF_TOO_LARGE');
+  });
+  it('rejects excessive GIF dimensions instead of flattening the animation', async () => {
+    const source = new File(['GIF89a'], 'large.gif', { type: 'image/gif' });
+    const mocks = installImageAndCanvasMocks(new Blob(['unused']), { width: 4096, height: 4096 });
+    await expect(prepareCommunityChatSticker(source, STICKER_LIMITS)).rejects.toThrow(
+      'CUSTOM_STICKER_GIF_DIMENSIONS_INVALID',
+    );
+    expect(mocks.drawImage).not.toHaveBeenCalled();
+  });
+});

@@ -118,6 +118,7 @@
   const props = withDefaults(
     defineProps<{
       title: string;
+      keyboard?: boolean;
       okText: string;
       okType: 'primary' | 'danger' | 'success' | 'function';
       cancelText: string;
@@ -197,11 +198,19 @@
     });
   }
 
+  function handleEscape(event: KeyboardEvent) {
+    if (!props.keyboard || event.key !== 'Escape' || isExit.value) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    cancelAlert();
+  }
   onMounted(() => {
+    document.addEventListener('keydown', handleEscape, true);
     if (isMobileLayout.value) historyHandle = registerMobileOverlayHistory(closeFromMobileHistory);
   });
 
   onBeforeUnmount(() => {
+    document.removeEventListener('keydown', handleEscape, true);
     pendingHistoryAction = null;
     if (historyHandle) releaseMobileOverlayHistory(historyHandle);
     historyHandle = null;

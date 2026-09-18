@@ -1,6 +1,11 @@
 import { JSDOM } from 'jsdom';
 import { describe, expect, it, vi } from 'vitest';
-import { HTML_PREVIEW_REFERRER_POLICY, HTML_PREVIEW_SANDBOX, injectHtmlPreviewAnchorBridge } from './htmlPreview';
+import {
+  HTML_PREVIEW_REFERRER_POLICY,
+  HTML_PREVIEW_SANDBOX,
+  buildHtmlPreviewDocument,
+  injectHtmlPreviewAnchorBridge,
+} from './htmlPreview';
 
 describe('HTML preview sandbox policy', () => {
   it('allows interactive scripts without exposing the Light Note origin', () => {
@@ -77,5 +82,36 @@ describe('HTML preview sandbox policy', () => {
     expect(event.defaultPrevented).toBe(true);
     expect(scrollTo).toHaveBeenCalledWith({ top: 340, behavior: 'smooth' });
     dom.window.close();
+  });
+});
+
+describe('HTML srcdoc document', () => {
+  it('isolates relative URLs while preserving interactive source', () => {
+    const result = buildHtmlPreviewDocument(
+      '<!doctype html><html><head></head><body><img src="photo.png"><script>window.started=true</script></body></html>',
+    );
+    const dom = new JSDOM(result, { url: 'https://boluo66.top/app' });
+    expect(dom.window.document.baseURI).toBe('about:blank');
+    expect(dom.window.document.querySelector('img')?.src).not.toContain('boluo66.top');
+    expect(result).toContain('<script>window.started=true</script>');
+    dom.window.close();
+  });
+  it('preserves an explicit saved-page base URL', () => {
+    const result = buildHtmlPreviewDocument(
+      '<html><head><base href="https://example.com/saved/"></head><body><img src="photo.png"></body></html>',
+    );
+    const dom = new JSDOM(result);
+    expect(dom.window.document.querySelector('img')?.src).toBe('https://example.com/saved/photo.png');
+    expect(dom.window.document.querySelectorAll('base')).toHaveLength(1);
+    dom.window.close();
+  });
+  it.each(['', '/assets/', '../'])('does not inherit the app origin through a relative base: %s', (href) => {
+    const result = buildHtmlPreviewDocument(`<html><head><base href="${href}"></head><body></body></html>`);
+    const dom = new JSDOM(result, { url: 'https://boluo66.top/app' });
+    expect(dom.window.document.baseURI).toBe('about:blank');
+    dom.window.close();
+  });
+  it('renders an empty file as an isolated document', () => {
+    expect(buildHtmlPreviewDocument('')).toContain('<base href="about:blank">');
   });
 });

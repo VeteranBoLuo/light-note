@@ -28,7 +28,7 @@ export interface MobileBottomNavigationItem {
     | 'mobileNavigation.todo'
     | 'mobileNavigation.community'
     | 'mobileNavigation.profile';
-  path?: '/workbenches' | '/toolbox' | '/inbox' | '/community-chat' | '/personCenter';
+  path?: '/workbenches' | '/toolbox' | '/inbox' | '/community' | '/personCenter';
 }
 
 export const MOBILE_RESOURCE_NAVIGATION: readonly MobileResourceNavigationItem[] = [
@@ -65,7 +65,7 @@ export const MOBILE_BOTTOM_NAVIGATION: readonly MobileBottomNavigationItem[] = [
   { key: 'resources', labelKey: 'mobileNavigation.resources' },
   { key: 'create', labelKey: 'mobileNavigation.create' },
   { key: 'todo', labelKey: 'mobileNavigation.todo', path: '/inbox' },
-  { key: 'community', labelKey: 'mobileNavigation.community', path: '/community-chat' },
+  { key: 'community', labelKey: 'mobileNavigation.community', path: '/community' },
 ] as const;
 
 /** 今日路径：移动端所有默认落点与底部第一个入口共用 */

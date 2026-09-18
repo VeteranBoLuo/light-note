@@ -226,6 +226,7 @@
     ...WIDE_NOTIFICATION_GROUPS.growth,
     ...WIDE_NOTIFICATION_GROUPS.ai_routine,
     'community_chat',
+    'community_feed',
   ]);
   const useWidePageCategories = computed(() => props.page && bookmark.isDesktop);
 
@@ -237,6 +238,7 @@
           { value: 'growth', label: t('notification.tabGrowth') },
           { value: 'ai_routine', label: t('notification.tabAiRoutine') },
           { value: 'community_chat', label: t('notification.tabCommunityChat') },
+          { value: 'community_feed', label: t('community.feed.title') },
           { value: 'system_group', label: t('notification.tabSystem') },
         ]
       : [
@@ -244,6 +246,7 @@
           { value: 'todo_reminder', label: t('notification.tabTodo') },
           { value: 'system', label: t('notification.tabSystem') },
           { value: 'opinion_reply', label: t('notification.tabFeedback') },
+          { value: 'community_feed', label: t('community.feed.title') },
         ],
   );
   // 各 tab 未读角标:全部=总数,其余=该类型未读数
@@ -296,8 +299,7 @@
   }
   async function markNotificationRead(n: NotificationItem) {
     if (n.isRead) return;
-    n.isRead = 1;
-    await markRead([n.id]);
+    if (await markRead([n.id])) n.isRead = 1;
   }
   // 升级通知按 type+meta 渲染 i18n(国际化);其余(反馈回复/系统/其他)用后端原文
   function renderTitle(n: NotificationItem): string {
@@ -439,16 +441,18 @@
   }
 
   async function onMarkAll() {
-    const succeeded = await markAllRead();
+    const visibleIds = new Set(items.value.map((item) => item.id));
+    const succeeded = await markAllRead(activeTab.value);
     if (succeeded) {
-      items.value.forEach((n) => (n.isRead = 1));
+      items.value.forEach((n) => {
+        if (visibleIds.has(n.id)) n.isRead = 1;
+      });
       recordOperation({ module: '通知中心', operation: '全部通知标记已读成功' });
     }
   }
   async function onItemClick(n: NotificationItem) {
     if (!n.isRead) {
-      n.isRead = 1;
-      markRead([n.id]);
+      if (await markRead([n.id])) n.isRead = 1;
     }
     if (n.type === 'todo_reminder' && todoActionState(n) === 'unavailable') {
       message.warning(t('notification.todoUnavailable'));
@@ -875,13 +879,15 @@
     color: var(--desc-color);
     font-size: 12px;
     cursor: pointer;
-    transition: all 0.15s;
+    transition:
+      color 0.15s,
+      background-color 0.15s,
+      border-color 0.15s;
   }
   .notification-popover .nt-tab.active {
     border-color: var(--primary-color);
     background: var(--mobile-selected-bg) !important;
     color: var(--primary-color);
-    font-weight: 700;
   }
   .notification-popover .nt-tab-badge {
     display: inline-flex;

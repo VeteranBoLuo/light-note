@@ -118,41 +118,15 @@ describe('ChatUserProfileContent', () => {
     );
   });
 
-  it('自己的名片按字素校验 60 字简介，并携带 revision 保存', async () => {
-    const onSave = vi.fn();
-    const host = mountProfile({
-      profile: profile(),
-      ownProfile: ownProfile(),
-      isOwn: true,
-      authenticated: true,
-      onSave,
-    });
-
-    findButton(host, zhCN.communityChat.profile.editAction)?.click();
+  it('自己的名片只导航到统一资料页，不在卡片中启动第二套编辑器', async () => {
+    const onNavigate = vi.fn(),
+      onRequestOwn = vi.fn();
+    const host = mountProfile({ profile: profile(), isOwn: true, authenticated: true, onNavigate, onRequestOwn });
+    findButton(host, zhCN.community.feed.editProfile)?.click();
     await nextTick();
-    const textarea = host.querySelector<HTMLTextAreaElement>('textarea');
-    expect(textarea).not.toBeNull();
-
-    if (!textarea) return;
-    textarea.value = '😀'.repeat(61);
-    textarea.dispatchEvent(new Event('input', { bubbles: true }));
-    await nextTick();
-    expect(findButton(host, zhCN.communityChat.profile.saveAction)?.disabled).toBe(true);
-
-    const validBio = '👨‍👩‍👧‍👦'.repeat(60);
-    textarea.value = validBio;
-    textarea.dispatchEvent(new Event('input', { bubbles: true }));
-    await nextTick();
-    const saveButton = findButton(host, zhCN.communityChat.profile.saveAction);
-    expect(saveButton?.disabled).toBe(false);
-    saveButton?.click();
-
-    expect(onSave).toHaveBeenCalledWith({
-      bio: validBio,
-      showCommunityTenure: true,
-      featuredAchievementKeys: ['level_1'],
-      baseRevision: 3,
-    });
+    expect(onNavigate).toHaveBeenCalledWith('/community/profile');
+    expect(onRequestOwn).not.toHaveBeenCalled();
+    expect(host.querySelector('textarea')).toBeNull();
   });
 
   it('访客仅显示登录参与动作，公开资料不会暴露账号标识', () => {
@@ -231,46 +205,10 @@ describe('ChatUserProfileContent', () => {
     expect(host.textContent).toContain(zhCN.communityChat.profile.viewAllAchievements.replace('{count}', '4'));
   });
 
-  it('公开预览直接复用当前公开名片，不依赖个人配置接口成功', async () => {
-    const onRequestOwn = vi.fn();
-    const host = mountProfile({
-      profile: profile(),
-      isOwn: true,
-      authenticated: true,
-      ownError: true,
-      onRequestOwn,
-    });
-
-    findButton(host, zhCN.communityChat.profile.previewAction)?.click();
-    await nextTick();
-
-    expect(host.textContent).toContain(zhCN.communityChat.profile.previewDescription);
+  it('自己的公开名片直接展示，不增加重复预览入口', () => {
+    const host = mountProfile({ profile: profile(), isOwn: true, authenticated: true, ownError: true });
     expect(host.textContent).toContain('薄荷');
+    expect(findButton(host, zhCN.communityChat.profile.previewAction)).toBeUndefined();
     expect(host.textContent).not.toContain(zhCN.communityChat.profile.ownLoadFailed);
-    expect(onRequestOwn).not.toHaveBeenCalled();
-  });
-
-  it('编辑名片时成就卡片可打开大图详情，且不误触发保存', async () => {
-    const onSave = vi.fn();
-    const host = mountProfile({
-      profile: profile(),
-      ownProfile: ownProfile(),
-      isOwn: true,
-      authenticated: true,
-      onSave,
-    });
-
-    findButton(host, zhCN.communityChat.profile.editAction)?.click();
-    await nextTick();
-
-    const availableAchievement = host.querySelector<HTMLElement>('.chat-profile-content__available-item');
-    expect(availableAchievement).not.toBeNull();
-    availableAchievement?.click();
-    await nextTick();
-
-    expect(document.body.textContent).toContain(zhCN.communityChat.profile.achievementDetailTitle);
-    expect(document.body.textContent).toContain(zhCN.growth.achName.streak_7);
-    expect(document.body.textContent).toContain(zhCN.communityChat.profile.achievementUnlocked);
-    expect(onSave).not.toHaveBeenCalled();
   });
 });

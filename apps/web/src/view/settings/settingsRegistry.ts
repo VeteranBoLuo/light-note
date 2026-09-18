@@ -6,7 +6,7 @@
  */
 
 export type SettingsSectionId =
-  'appearance' | 'general' | 'notification' | 'ai' | 'points' | 'account' | 'install' | 'privacy';
+  'appearance' | 'general' | 'community' | 'notification' | 'ai' | 'points' | 'account' | 'install' | 'privacy';
 
 /** 两端共用的一级分类；桌面独有的安装/快捷键等能力归入「通用」，不再自成目录项。 */
 export type SettingsIndexSectionId = Exclude<SettingsSectionId, 'install'>;
@@ -44,6 +44,14 @@ export const SETTINGS_SECTION_META: SettingsSectionMeta[] = [
     iconKey: 'general',
     titleKey: 'settings.general',
     mobileTitleKey: 'settings.mobileIndex.general',
+    tone: 'green',
+  },
+  {
+    id: 'community',
+    group: 'preferences',
+    iconKey: 'general',
+    titleKey: 'community.title',
+    mobileTitleKey: 'community.title',
     tone: 'green',
   },
   {

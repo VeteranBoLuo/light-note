@@ -51,12 +51,12 @@ describe('桌面书签浏览与管理合并契约', () => {
     expect(managementSource).toContain('if (props.embedded) {\n      if (pending)');
   });
 
-  it('桌面管理模式保留全局统计与管理操作，并使用显式翻页', () => {
+  it('桌面管理模式保留全局统计与管理操作，并使用滚动续页', () => {
     expect(managementSource).toContain('<section class="hero-stats-section"');
     expect(managementSource).toContain('summarizeBookmarkCoverage(bookmark.tagList, externalLibraryTotal.value)');
     expect(managementSource).toContain('class="bookmark-ai-action"');
-    expect(managementSource).toContain('<BActionButton\n                    action="edit"');
-    expect(managementSource).toContain('<BActionButton\n                    action="delete"');
+    expect(managementSource).toMatch(/<BActionButton\s+action="edit"/);
+    expect(managementSource).toMatch(/<BActionButton\s+action="delete"/);
     expect(managementSource).toContain('class="bookmark-manage-load-more"');
   });
 

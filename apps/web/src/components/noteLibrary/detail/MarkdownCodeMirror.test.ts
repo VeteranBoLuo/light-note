@@ -121,6 +121,27 @@ describe('MarkdownCodeMirror', () => {
     expect(model.value).toBe('**正文**');
   });
 
+  it('Mod+Y 重做已撤销的编辑，并阻止浏览器默认快捷键', async () => {
+    const { host, editor, model } = await mountEditor('正文');
+    editor.value?.applyEdit(wrapSelection({ value: '正文', selectionStart: 0, selectionEnd: 2 }, '**'));
+    editor.value?.undo();
+    await nextTick();
+    expect(model.value).toBe('正文');
+    const content = host.querySelector<HTMLElement>('.cm-content')!;
+    content.focus();
+    const event = new KeyboardEvent('keydown', {
+      key: 'y',
+      code: 'KeyY',
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    content.dispatchEvent(event);
+    await nextTick();
+    expect(model.value).toBe('**正文**');
+    expect(event.defaultPrevented).toBe(true);
+  });
+
   it('语言选择只修改当前围栏，保留代码和光标并支持独立撤销/重做', async () => {
     const source = '```js\nconst value = 42;\n```';
     const { editor, model, host } = await mountEditor(source);

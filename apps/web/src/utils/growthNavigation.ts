@@ -9,6 +9,7 @@ export function growthNextActionCommand(item: GrowthNextAction): string {
 
 /** 工作台和成长中心共用的建议目的地；个人资料由调用方打开对应端的入口。 */
 export function resolveGrowthActionRoute(action: string, isMobile: boolean): RouteLocationRaw | null {
+  if (action === 'open_community') return '/community/feed';
   if (action === 'create_note') return '/noteLibrary';
   if (action === 'create_bookmark') return '/home';
   if (action === 'upload_file') return '/cloudSpace';

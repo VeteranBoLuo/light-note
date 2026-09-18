@@ -34,6 +34,8 @@ export async function getAdminOverviewActiveUsers(req, res) {
       resultData(
         await queryActiveUsers({
           actorId,
+          date: req.body?.date,
+          trendDays: req.body?.trendDays,
           hideInternal: req.body?.hideInternal !== false,
           cursor: req.body?.cursor,
           snapshotAt: req.body?.snapshotAt,
@@ -41,7 +43,7 @@ export async function getAdminOverviewActiveUsers(req, res) {
       ),
     );
   } catch (error) {
-    const status = error.code === 'ADMIN_LIST_CURSOR_INVALID' ? 400 : 503;
+    const status = ['ADMIN_LIST_CURSOR_INVALID', 'ACTIVITY_DATE_INVALID'].includes(error.code) ? 400 : 503;
     if (status === 503) activityFailure(error);
     return res
       .status(status)

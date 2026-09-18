@@ -3,7 +3,7 @@
     v-if="!isMobileLayout"
     v-model:visible="visible"
     :title="t('communityChat.profile.title')"
-    width="min(560px, 92vw)"
+    :width="contentView === 'edit' ? 'min(1000px, 94vw)' : 'min(560px, 92vw)'"
     :height="contentView === 'edit' ? 'min(82dvh, 840px)' : 'auto'"
     :show-footer="false"
     :content-class="
@@ -79,6 +79,7 @@
   );
 
   const emit = defineEmits<{
+    navigate: [path: string];
     retry: [];
     requestOwn: [];
     loadAllAchievements: [];
@@ -109,6 +110,7 @@
   }));
 
   const contentListeners = {
+    navigate: (path: string) => emit('navigate', path),
     retry: () => emit('retry'),
     requestOwn: () => emit('requestOwn'),
     loadAllAchievements: () => emit('loadAllAchievements'),

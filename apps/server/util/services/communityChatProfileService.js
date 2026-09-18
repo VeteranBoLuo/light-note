@@ -97,7 +97,7 @@ async function queryFirst(db, sql, params = []) {
   return rows[0] || null;
 }
 
-function publicGrowthProfile(row) {
+export function publicGrowthProfile(row) {
   const level = levelForExp(Number(row.authorExp || 0));
   return {
     level,
@@ -219,7 +219,7 @@ function publicAchievement(achievement) {
 }
 
 function tenureLabel(row, locale) {
-  if (!Boolean(Number(row.showCommunityTenure ?? 1))) return null;
+
   const registeredAt = row.authorRegisteredAt;
   const joinedTime = registeredAt ? new Date(registeredAt).getTime() : Number.NaN;
   if (!Number.isFinite(joinedTime)) return null;
@@ -243,7 +243,7 @@ function publicFrame(frameId) {
   return frame ? { frameId: frame.id, frameRarity: frame.rarity || null } : { frameId: null, frameRarity: null };
 }
 
-async function buildProfilePayload({ db, author, avatarPath, locale }) {
+export async function buildProfilePayload({ db, author, avatarPath, locale }) {
   const growth = publicGrowthProfile(author);
   const unlocked = await loadUnlockedAchievements(db, author.authorUserId, growth.level);
   const featured = resolveFeaturedAchievements(unlocked, author.featuredAchievements);
@@ -342,6 +342,11 @@ async function loadVisibleMessageAuthor({ user, messagePublicId, env, db }) {
 
 async function loadOwnAuthor({ user, env, db }) {
   await assertCommunityChatMessagingAccess({ user, env, db });
+  return loadCommunityProfileAuthor({ userId: user.id, db });
+}
+
+// Callers must authorize their own entry point before assembling the shared public projection.
+export async function loadCommunityProfileAuthor({ userId, db = pool }) {
   const author = await queryFirst(
     db,
     `SELECT account.id AS authorUserId,
@@ -378,7 +383,7 @@ async function loadOwnAuthor({ user, env, db }) {
        LEFT JOIN community_chat_member_profiles profile ON profile.user_id = account.id
       WHERE account.id = ? AND account.del_flag = 0
       LIMIT 1`,
-    [user.id],
+    [userId],
   );
   if (!author) {
     throw chatError('COMMUNITY_PROFILE_NOT_FOUND', 404, '社区资料当前不可用', 'Community profile is unavailable');
@@ -433,7 +438,8 @@ export async function getCommunityChatOwnProfile({ user, locale = 'zh-CN', env =
   });
   return {
     bio: profile.bio,
-    showCommunityTenure: Boolean(Number(author.showCommunityTenure ?? 1)),
+    communityTenurePreviewLabel: tenureLabel({ ...author, showCommunityTenure: 1 }, locale),
+    showCommunityTenure: true,
     featuredAchievementKeys: featured.map((achievement) => achievement.key),
     revision: Number(author.profileRevision || 0),
     usesDefaultFeaturedAchievements: author.featuredAchievements === null || author.featuredAchievements === undefined,

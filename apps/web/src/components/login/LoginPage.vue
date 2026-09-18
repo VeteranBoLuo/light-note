@@ -47,7 +47,13 @@
 
     <div class="auth-divider">{{ t('auth.or') }}</div>
 
-    <BButton class="auth-secondary" v-click-log="OPERATION_LOG_MAP.login.githubLogin" @click="loginWithGitHub">
+    <BButton
+      :loading="githubStarting"
+      :disabled="githubStarting || submitting"
+      class="auth-secondary"
+      v-click-log="OPERATION_LOG_MAP.login.githubLogin"
+      @click="loginWithGitHub"
+    >
       <SvgIcon :src="icon.github" size="17" />
       {{ t('auth.githubLogin') }}
     </BButton>
@@ -56,12 +62,6 @@
       <span>{{ t('auth.noAccount') }}</span>
       <BButton class="auth-link" @click="title = '注册'">{{ t('auth.goRegister') }}</BButton>
     </div>
-
-    <GithubOAuthConsentModal
-      v-model:visible="githubConsentVisible"
-      :loading="githubStarting"
-      @confirm="confirmGitHubLogin"
-    />
   </form>
 </template>
 
@@ -85,7 +85,6 @@
   import { persistAndroidAuthSession } from '@/utils/androidBridge.ts';
   import { isValidEmail } from '@/utils/validator.ts';
   import { clearAuthNavigationIntent, resolveAuthNavigationIntent } from '@/utils/authNavigationIntent.ts';
-  import GithubOAuthConsentModal from './GithubOAuthConsentModal.vue';
 
   type AuthMode = '登录' | '注册' | '重置';
   interface LoginFormData {
@@ -98,7 +97,6 @@
   const REMEMBERED_EMAIL_KEY = 'rememberedLoginEmail';
   const isCheck = ref(true);
   const submitting = ref(false);
-  const githubConsentVisible = ref(false);
   const githubStarting = ref(false);
   const disable = computed(() => submitting.value || !formData.value.email || !formData.value.password);
   const { t } = useI18n();
@@ -171,7 +169,7 @@
   }
 
   function loginWithGitHub() {
-    githubConsentVisible.value = true;
+    void confirmGitHubLogin();
   }
 
   async function confirmGitHubLogin() {

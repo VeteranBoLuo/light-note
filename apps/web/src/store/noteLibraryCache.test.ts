@@ -11,6 +11,19 @@ describe('noteLibraryCache', () => {
     vi.useRealTimers();
   });
 
+  it('隔离待整理缓存，并在状态变化后使待整理范围失效', () => {
+    const store = useNoteLibraryCacheStore();
+    const all = buildNoteLibraryListCacheKey('user-a', {});
+    const pending = buildNoteLibraryListCacheKey('user-a', { pendingOnly: true });
+    expect(pending).not.toBe(all);
+    for (const key of [all, pending]) store.writeList(key, {
+      items: [{ id: 'n1', isPending: true }], total: 1, page: 1, hasMore: false,
+    });
+    store.updateNotePendingState('user-a', 'n1', false);
+    expect(store.readList(pending)).toBeNull();
+    expect(store.readList(all)?.items[0].isPending).toBe(false);
+  });
+
   it('按账号、范围、标签和搜索词隔离列表快照', () => {
     const store = useNoteLibraryCacheStore();
     const firstKey = buildNoteLibraryListCacheKey('user-a', {

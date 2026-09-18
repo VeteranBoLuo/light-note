@@ -80,6 +80,10 @@
     "./organize-progress": {
       "types": "./organizeProgress.d.ts",
       "default": "./organizeProgress.js"
+    },
+    "./community-feed": {
+      "types": "./communityFeed.d.ts",
+      "default": "./communityFeed.js"
     }
   },
   "devDependencies": {

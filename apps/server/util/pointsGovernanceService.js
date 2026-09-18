@@ -770,7 +770,7 @@ export function simulatePointsPolicy(input = {}) {
     throw new PointsGovernanceError('INVALID_SIMULATOR_INPUT', '免费次数档位无效');
   }
   const draws = freeDrawsByTier.map((value) => boundedInteger(value, 0, { max: 20 }));
-  const achievementPool = boundedInteger(input.achievementPool, 7850, { max: 100_000 });
+  const achievementPool = boundedInteger(input.achievementPool, 8080, { max: 100_000 });
   const milestonePool = boundedInteger(input.milestonePool, 2950, { max: 100_000 });
   const activeRatio = boundedRatio(input.activeRatio, 0.35);
   const consumptionRatio = boundedRatio(input.consumptionRatio, 0.65);

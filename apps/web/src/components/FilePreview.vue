@@ -109,15 +109,17 @@
 
           <!-- 1.5 HTML 交互预览：必须与轻笺页面隔离，禁止直接 v-html 注入 -->
           <iframe
-            v-else-if="previewType === 'html' && htmlBlobUrl"
-            :src="htmlBlobUrl"
+            v-else-if="previewType === 'html' && htmlDocument"
+            ref="htmlPreviewFrame"
+            :key="previewAttempt"
+            :srcdoc="htmlDocument"
             :title="fileInfo.fileName"
             :sandbox="HTML_PREVIEW_SANDBOX"
             :referrerpolicy="HTML_PREVIEW_REFERRER_POLICY"
             class="html-preview-iframe"
             allow="fullscreen"
-            @load="onLoad"
-            @error="onError"
+            @load="onHtmlLoad"
+            @error="onHtmlError"
           />
 
           <!-- 2. 视频预览 -->
@@ -376,11 +378,7 @@
     getCloudPreviewType,
     isLegacyOfficeFile,
   } from '@/constants/cloudFileCategory.ts';
-  import {
-    HTML_PREVIEW_REFERRER_POLICY,
-    HTML_PREVIEW_SANDBOX,
-    injectHtmlPreviewAnchorBridge,
-  } from '@/utils/htmlPreview.ts';
+  import { HTML_PREVIEW_REFERRER_POLICY, HTML_PREVIEW_SANDBOX, buildHtmlPreviewDocument } from '@/utils/htmlPreview.ts';
   import {
     registerMobileOverlayHistory,
     releaseMobileOverlayHistory,
@@ -457,7 +455,25 @@
   let pinchAnchor: ImageViewportAnchor | null = null;
   const textContent = ref('');
   const wrapText = ref(true);
-  const htmlBlobUrl = ref<string>('');
+  const htmlDocument = ref<string>('');
+  const htmlPreviewFrame = ref<HTMLIFrameElement | null>(null);
+  let htmlLoadTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function clearHtmlLoadTimer() {
+    if (htmlLoadTimer !== null) clearTimeout(htmlLoadTimer);
+    htmlLoadTimer = null;
+  }
+
+  function onHtmlLoad(event: Event) {
+    if (event.target !== htmlPreviewFrame.value) return;
+    clearHtmlLoadTimer();
+    onLoad();
+  }
+
+  function onHtmlError() {
+    clearHtmlLoadTimer();
+    onError();
+  }
   const previewRootRef = ref<HTMLElement | null>(null);
   const imageViewportRef = ref<HTMLElement | null>(null);
   const imageNaturalSize = ref({ width: 0, height: 0 });
@@ -651,7 +667,7 @@
         void exitHtmlFullscreen();
         activePreviewFileId = '';
         resetDerivedPreviewState();
-        releaseHtmlBlobUrl();
+        resetHtmlPreview();
         document.body.style.overflow = previousBodyOverflow;
         if (previewHistoryHandle) {
           releaseMobileOverlayHistory(previewHistoryHandle);
@@ -708,7 +724,7 @@
     textContent.value = '';
     markdownContent.value = '';
     resetImageView();
-    releaseHtmlBlobUrl();
+    resetHtmlPreview();
     resetDerivedPreviewState();
     try {
       if (previewType.value === 'archive' || previewType.value === 'converted-pdf') {
@@ -745,7 +761,7 @@
         await ensureOfficeStylesLoaded();
       }
       if (previewType.value === 'html') {
-        await loadHtmlBlob(effectiveFileUrl.value);
+        await loadHtmlDocument(effectiveFileUrl.value);
       } else if (previewType.value === 'text') {
         await loadTextContent(effectiveFileUrl.value);
       } else if (
@@ -878,13 +894,12 @@
     }
   }
 
-  function releaseHtmlBlobUrl() {
-    if (!htmlBlobUrl.value) return;
-    URL.revokeObjectURL(htmlBlobUrl.value);
-    htmlBlobUrl.value = '';
+  function resetHtmlPreview() {
+    clearHtmlLoadTimer();
+    htmlDocument.value = '';
   }
 
-  async function loadHtmlBlob(url?: string) {
+  async function loadHtmlDocument(url?: string) {
     if (!url) {
       error.value = true;
       errorMessage.value = t('cloudSpace.previewPanel.invalidUrl');
@@ -895,6 +910,11 @@
     const expectedFileId = activePreviewFileId;
     const controller = new AbortController();
     htmlAbortController = controller;
+    htmlLoadTimer = setTimeout(() => {
+      controller.abort();
+      htmlDocument.value = '';
+      onHtmlError();
+    }, 30_000);
     try {
       const response = await fetch(url, { mode: 'cors', signal: controller.signal });
       if (!response.ok) {
@@ -903,14 +923,15 @@
       const sourceBlob = await response.blob();
       if (controller.signal.aborted || expectedFileId !== activePreviewFileId) return;
 
-      // 强制使用 text/html，兼容对象存储把 .html 误标为 application/octet-stream 的情况。
+      // 按 HTML 文本承载，兼容对象存储把 .html 误标为 application/octet-stream 的情况。
       const source = await sourceBlob.text();
       if (controller.signal.aborted || expectedFileId !== activePreviewFileId) return;
-      const htmlBlob = new Blob([injectHtmlPreviewAnchorBridge(source)], { type: 'text/html;charset=utf-8' });
-      htmlBlobUrl.value = URL.createObjectURL(htmlBlob);
+      // srcdoc 避免旧 Android 壳将 blob: 预览导航当成外部协议拦截。
+      htmlDocument.value = buildHtmlPreviewDocument(source);
       // 保持加载态，直到 iframe 真正完成导航并触发 onLoad。
     } catch (err) {
       if (controller.signal.aborted || expectedFileId !== activePreviewFileId) return;
+      clearHtmlLoadTimer();
       console.error('加载HTML文件失败:', err);
       error.value = true;
       errorMessage.value = t('cloudSpace.previewPanel.textLoadFailed');
@@ -1249,7 +1270,7 @@
   }
 
   function handleClose() {
-    releaseHtmlBlobUrl();
+    resetHtmlPreview();
     resetImageView();
     if (previewHistoryHandle && requestMobileOverlayHistoryClose(previewHistoryHandle)) return;
     previewHistoryHandle = null;
@@ -1531,7 +1552,7 @@
     if (previewHistoryHandle) releaseMobileOverlayHistory(previewHistoryHandle);
     previewHistoryHandle = null;
     document.body.style.overflow = previousBodyOverflow;
-    releaseHtmlBlobUrl();
+    resetHtmlPreview();
     void exitHtmlFullscreen();
   });
 </script>

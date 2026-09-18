@@ -239,6 +239,7 @@
   import { useI18n } from 'vue-i18n';
   import { recordOperation } from '@/api/commonApi';
   import { useGrowth } from '@/composables/useGrowth.ts';
+  import { MOBILE_TODAY_PATH } from '@/config/mobileNavigation';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import { frameVariant } from '@/config/growthFrames';
   import { usePwaInstall } from '@/composables/usePwaInstall';
@@ -293,8 +294,16 @@
         : t('pwa.addToHomeScreen'),
   );
   useMobileTopBar(['personCenter'], {
+    title: () => t('personCenter.title'),
+    onBack: goBack,
     searchMode: 'icon',
   });
+
+  function goBack() {
+    // Vue Router 的站内历史比浏览器 history.length 更准确，直接打开时回到今日。
+    if (typeof router.options.history.state.back === 'string') router.back();
+    else void router.replace(MOBILE_TODAY_PATH);
+  }
   onMounted(() => {
     loadGrowth();
   });

@@ -183,6 +183,7 @@ describe('communityChatModerationService', () => {
       if (text.includes('FROM community_chat_members')) return [[MEMBER], []];
       if (text.includes('FROM community_chat_messages message')) return [[moderationMessage()], []];
       if (text.includes('FROM community_chat_blocks')) return [[], []];
+      if (text.includes('DELETE FROM community_follows')) return [{affectedRows:2},[]];
       if (text.includes('INSERT INTO community_chat_blocks')) return [{ affectedRows: 1 }, []];
       throw new Error(`unexpected query: ${sql}`);
     });

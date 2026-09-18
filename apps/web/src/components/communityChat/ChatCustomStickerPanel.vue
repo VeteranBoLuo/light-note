@@ -12,7 +12,7 @@
       <BUpload
         raw-file
         :multiple="false"
-        accept="image/jpeg,image/png,image/webp"
+        accept="image/jpeg,image/png,image/webp,image/gif"
         :max-total-size="null"
         :disabled="uploading || items.length >= maxCount"
         @change="handleUpload"
@@ -149,7 +149,16 @@
     } catch (error: any) {
       // Axios 的 ERR_BAD_REQUEST 只是传输层分类；服务端业务码才决定用户应该看到的操作提示。
       const errorCode = String(error?.response?.data?.data?.code || error?.code || error?.message || '');
-      if (errorCode === 'CUSTOM_STICKER_DIMENSIONS_INVALID') {
+      if (
+        file.type === 'image/gif' &&
+        (errorCode.startsWith('CUSTOM_STICKER_GIF_') ||
+          errorCode.startsWith('CUSTOM_STICKER_IMAGE_') ||
+          errorCode.startsWith('COMMUNITY_CHAT_IMAGE_') ||
+          errorCode === 'CUSTOM_STICKER_TOO_LARGE' ||
+          errorCode === 'CUSTOM_STICKER_DIMENSIONS_INVALID')
+      ) {
+        message.error(t('communityChat.sticker.gifRejected'));
+      } else if (errorCode === 'CUSTOM_STICKER_DIMENSIONS_INVALID') {
         message.error(t('communityChat.sticker.dimensionsTooLarge'));
       } else if (errorCode === 'CUSTOM_STICKER_TOO_LARGE') {
         message.error(t('communityChat.sticker.compressedTooLarge'));

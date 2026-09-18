@@ -68,24 +68,45 @@ request.defaults.adapter = async (config) => {
       (metrics.state === 'append-error' && body.cursor)
     )
       return response(config, null, 503);
-    const total = metrics.state === 'empty' ? 0 : 23;
+    const selectedDate = body.date || day();
+    const dailyCount = (date: string) =>
+      state === 'empty'
+        ? 0
+        : date < '2026-09-08'
+          ? null
+          : 9 + ((Math.floor(Date.parse(`${date}T00:00:00Z`) / 86400000) * 7) % 19);
+    const total = dailyCount(selectedDate);
     const offset = body.cursor ? 20 : 0;
     return response(config, {
       total,
-      date: day(),
-      snapshotAt: `${day()} 09:25:00.000`,
+      date: selectedDate,
+      trend: body.trendDays
+        ? Array.from({ length: body.trendDays }, (_, i) => {
+            const date = new Date(Date.now() + 8 * 3600000 - (body.trendDays - 1 - i) * 86400000)
+              .toISOString()
+              .slice(0, 10);
+            return {
+              date,
+              total: dailyCount(date),
+              partial: date === day() || date === '2026-09-08',
+            };
+          })
+        : undefined,
+      partialDate: state === 'partial' || selectedDate === '2026-09-08',
+      historyUnavailable: total === null,
+      snapshotAt: `${selectedDate} ${selectedDate === day() ? '09:25:00.000' : '23:59:59.999'}`,
       hideInternal: body.hideInternal,
-      items: Array.from({ length: Math.min(20, Math.max(0, total - offset)) }, (_, i) => ({
+      items: Array.from({ length: Math.min(20, Math.max(0, (total ?? 0) - offset)) }, (_, i) => ({
         id: `fixture-user-${offset + i + 1}`,
         name: i === 0 ? '正在阅读的用户 · 一个较长昵称' : `用户 ${offset + i + 1}`,
         userRemark: '仅当前管理员可见的备注',
-        firstActiveAt: `${day()} 09:00:00.000`,
-        lastActiveAt: `${day()} 09:24:00.000`,
+        firstActiveAt: `${selectedDate} 09:00:00.000`,
+        lastActiveAt: `${selectedDate} 09:24:00.000`,
       })),
-      hasMore: total > 20 && !body.cursor,
-      nextCursor: total > 20 && !body.cursor ? 'next' : null,
+      hasMore: (total ?? 0) > 20 && !body.cursor,
+      nextCursor: (total ?? 0) > 20 && !body.cursor ? 'next' : null,
       partialToday: state === 'partial',
-      startedAt: `${day()} 08:00:00.000`,
+      startedAt: `2026-09-08 08:00:00.000`,
     });
   }
   // Fixtures are isolated: unexpected requests never reach a real backend.

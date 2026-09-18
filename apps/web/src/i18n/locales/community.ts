@@ -1,0 +1,73 @@
+import { feedZh, feedEn } from './communityFeed';
+export const communityZh = {
+  cardPreview: '名片预览',
+  cardPreviewHint: '修改实时预览，保存后生效。',
+  settingsScope: '聊天室提醒、广场通知和屏蔽成员，在这里统一管理。',
+  profileScope: '聊天室名片与广场主页共用这份社区资料。',
+  accountIdentity: '全站账号',
+  accountIdentityHint: '头像、昵称和头像装扮在全站共用；邮箱与密码仅在个人中心管理。',
+  accountEntry: '前往个人中心',
+  profileFields: '社区展示',
+  profileFieldsHint: '简介、资历与精选成就会显示在社区名片中。',
+  profileSave: '保存社区资料',
+  profilePartial: '部分内容可能已保存，未保存的输入已保留，请重试。',
+
+  feed: feedZh,
+  profileRevisionChanged: '资料已有新版本，当前输入已保留。可复制需要保留的内容，再载入最新资料重新编辑。',
+  reloadProfileDraft: '载入最新资料重新编辑',
+  reloadPreferences: '重新读取',
+  settingsDescription: '管理社区入口与公开资料。',
+  title: '社区',
+  chat: '聊天室',
+  entryLoading: '正在打开社区',
+  preferencesTitle: '进入社区时',
+  preferencesDescription: '默认打开聊天室。顶部社区角标只表示聊天室的未读提醒，不改变轻笺首页。',
+  feedUnavailable: '广场（暂未开放）',
+  feedFallback: '广场暂不可用，本次进入聊天室；已保存的默认页保持不变。',
+  preferenceLoadFailed: '暂时无法读取社区设置，请重试。',
+  preferenceSaveFailed: '设置未保存，可能已在其他设备修改。请重新读取后选择。',
+  preferenceUnavailable: '请使用自己的登录账号管理社区资料与设置。',
+  publicProfile: '社区公开资料',
+  publicProfileDescription: '这里的简介、成就和资历会展示在聊天室资料卡中。邮箱及其他私人资料不会公开。',
+  editIdentity: '修改昵称与头像（同步社区展示）',
+  profileSaveFailed: '资料未保存，输入已保留。若版本冲突，请核对最新资料后重试。',
+};
+export const communityEn = {
+  cardPreview: 'Profile card preview',
+  cardPreviewHint: 'Live preview. Save to update your public card.',
+  settingsScope: 'Manage chat reminders, feed notifications and blocked members here.',
+  profileScope: 'Your chat card and feed profile share these community details.',
+  accountIdentity: 'Account identity',
+  accountIdentityHint:
+    'Your avatar, name and frame are shared across the app. Email and password are managed in Personal Center.',
+  accountEntry: 'Go to Personal Center',
+  profileFields: 'Community details',
+  profileFieldsHint: 'Your bio, tenure and featured achievements appear on your community card.',
+  profileSave: 'Save community profile',
+  profilePartial: 'Some changes may have been saved. Unsaved input is preserved. Please retry.',
+
+  feed: feedEn,
+  profileRevisionChanged:
+    'A newer profile is available. Your input is preserved. Copy any changes you want to keep, then load the latest profile to edit again.',
+  reloadProfileDraft: 'Load latest profile to edit',
+  reloadPreferences: 'Reload settings',
+  settingsDescription: 'Manage your community entry and public profile.',
+  title: 'Community',
+  chat: 'Chat',
+  entryLoading: 'Opening community',
+  preferencesTitle: 'When opening community',
+  preferencesDescription:
+    'Chat opens by default. The community badge counts chat reminders only and does not change your app home page.',
+  feedUnavailable: 'Feed (not available yet)',
+  feedFallback: 'The feed is unavailable. Chat opens instead; your saved preference is unchanged.',
+  preferenceLoadFailed: 'Unable to load community settings. Please retry.',
+  preferenceSaveFailed:
+    'Settings were not saved. They may have changed on another device. Reload before choosing again.',
+  preferenceUnavailable: 'Use your own signed-in account to manage community information and settings.',
+  publicProfile: 'Public community profile',
+  publicProfileDescription:
+    'Your bio, achievements and tenure appear on your chat profile card. Your email and other private information remain private.',
+  editIdentity: 'Edit name and avatar (shared with community)',
+  profileSaveFailed:
+    'Profile was not saved. Your input is preserved. If the version changed, review the latest profile before retrying.',
+};

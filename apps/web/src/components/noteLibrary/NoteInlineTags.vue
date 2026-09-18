@@ -51,6 +51,7 @@
   import { computed, onBeforeUnmount, ref, watch } from 'vue';
   import { useRouter } from 'vue-router';
   import { resolveResourceRoute } from '@/utils/resourceNavigation';
+  import { normalizeRectForRootZoom } from '@/utils/zoom';
   import { useI18n } from 'vue-i18n';
   import BChip from '@/components/base/BasicComponents/BChip.vue';
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
@@ -88,8 +89,10 @@
   function measureChips() {
     if (!measure.value) return;
     const children = Array.from(measure.value.children) as HTMLElement[];
-    chipWidths.value = children.slice(0, -1).map((item) => item.offsetWidth);
-    moreWidth.value = children.at(-1)?.offsetWidth || 36;
+    // offsetWidth 会四舍五入；缩放后少分配不足 1px 也会触发整字省略。
+    const widths = children.map((item) => Math.ceil(normalizeRectForRootZoom(item.getBoundingClientRect()).width));
+    chipWidths.value = widths.slice(0, -1);
+    moreWidth.value = widths.at(-1) || 36;
   }
   let measureObserver: ResizeObserver | undefined;
   watch(
@@ -160,7 +163,7 @@
     min-width: 0;
   }
   .note-inline-tags__chip {
-    flex: 0 1 auto;
+    flex: 0 0 auto;
     max-width: 120px;
   }
   .note-inline-tags__more {

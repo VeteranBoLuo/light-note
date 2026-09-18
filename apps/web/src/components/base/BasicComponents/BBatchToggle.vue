@@ -153,7 +153,7 @@
   }
 
   :global(html.light-note-mobile-rendering .b-batch-toggle.b_btn) {
-    min-height: 44px;
+    // 渲染兼容档可能在桌面预览启用；尺寸仍由视口与组件 size 决定。
     box-shadow: none;
   }
 

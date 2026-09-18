@@ -163,6 +163,35 @@
     outline-offset: 1px;
   }
 
+  @media (min-width: 768px) {
+    .resource-center-section-bar {
+      margin-left: 20px;
+      background: var(--workspace-canvas);
+    }
+
+    .section-nav-item {
+      color: var(--workspace-text);
+      font-weight: 600;
+    }
+
+    .section-nav-item:not(.active):hover {
+      color: var(--workspace-purple-text);
+      background: var(--workspace-hover);
+    }
+
+    .section-nav-item.active {
+      border-color: var(--workspace-purple-text);
+      background: var(--workspace-purple-selected);
+      color: var(--workspace-purple-text);
+      box-shadow: none;
+    }
+
+    :deep(.organize-attention-badge.b-chip--neutral.b-chip--small) {
+      --b-chip-fg: var(--workspace-purple-text);
+      --b-chip-bg: var(--workspace-purple-selected);
+    }
+  }
+
   @media (max-width: 767px) {
     .resource-center-section-bar {
       width: 100%;

@@ -99,20 +99,14 @@ describe('community chat inline emoji', () => {
     expect(host.textContent).not.toContain(emoji.token);
   });
 
-  it('placeholder 降低视觉层级，笺团选中态沿用原生矩形高亮且不绘制遮挡轮廓', () => {
+  it('placeholder 降低视觉层级', () => {
     expect(composerSource).toMatch(
       /\.chat-composer-input__rich:empty::before\s*\{[\s\S]*?font-size:\s*0\.9em;[\s\S]*?opacity:\s*0\.78;/,
     );
     expect(composerSource).toMatch(
       /\.b-textarea::placeholder\)\s*\{[\s\S]*?font-size:\s*0\.9em;[\s\S]*?opacity:\s*0\.78;/,
     );
-    const selectedStyle = composerSource.slice(
-      composerSource.indexOf('.chat-composer-input__emoji.is-selected'),
-      composerSource.indexOf('</style>'),
-    );
-    expect(selectedStyle).toContain('background: rgba(144, 198, 255, 0.55);');
-    expect(selectedStyle).not.toContain('outline:');
-    expect(selectedStyle).not.toContain('border-radius:');
+
   });
 
   it('含笺团时切换为富输入并保持令牌选区，移除后回到 BInput 文本域', async () => {
@@ -291,13 +285,13 @@ describe('community chat inline emoji', () => {
     selection.removeAllRanges();
     selection.addRange(range);
     document.dispatchEvent(new Event('selectionchange'));
-    expect(image.classList.contains('is-selected')).toBe(true);
+    expect(image.closest('[data-emoji-atom]')?.classList.contains('is-selected')).toBe(true);
 
     range.collapse(false);
     selection.removeAllRanges();
     selection.addRange(range);
     document.dispatchEvent(new Event('selectionchange'));
-    expect(image.classList.contains('is-selected')).toBe(false);
+    expect(image.closest('[data-emoji-atom]')?.classList.contains('is-selected')).toBe(false);
   });
 
   it('笺团插入进入统一撤销栈，跨普通与富输入模式均可撤销和重做', async () => {

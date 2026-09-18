@@ -77,6 +77,9 @@
         <!-- 通用 -->
         <SettingsGeneralSection v-if="sectionVisible('general')" />
 
+        <SettingsSectionCard v-if="sectionVisible('community')">
+          <BButton class="settings-community-profile" @click="router.push('/community/profile')">{{ t('community.publicProfile') }}</BButton>
+        </SettingsSectionCard>
         <!-- 通知 -->
         <SettingsNotificationSection v-if="sectionVisible('notification')" />
 
@@ -279,6 +282,7 @@
 </template>
 
 <script setup lang="ts">
+  import SettingsSectionCard from './components/SettingsSectionCard.vue';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import SettingsAppearanceSection from './components/SettingsAppearanceSection.vue';
   import SettingsGeneralSection from './components/SettingsGeneralSection.vue';
@@ -377,6 +381,7 @@
   const activeCategory = computed(() => desktopNavigationRows.value.find((row) => row.id === desktopSection.value));
   const categoryDescription = computed(() => {
     const keys = {
+      community: 'community.settingsDescription',
       appearance: 'settings.appearanceDesc',
       general: 'settings.generalDesc',
       notification: 'settings.notificationDesc',
@@ -722,6 +727,7 @@
 </script>
 
 <style lang="less">
+  .settings-community-profile { margin: 16px 0 14px; }
   .settings-page {
     height: 100%;
     overflow-y: auto;

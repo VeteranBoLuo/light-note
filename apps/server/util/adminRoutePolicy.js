@@ -14,6 +14,59 @@ export const ADMIN_POLICIES = Object.freeze({
 
 const routePolicies = new Map();
 
+// Community social operations never impersonate another account.
+declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'community', [
+  ['GET', '/community/feed/capabilities'],
+  ['POST', '/community/resources/prepare'],
+  ['GET', '/community/resources/:id'],
+  ['POST', '/community/resources/:id/discard'],
+  ['POST', '/community/images'],
+  ['GET', '/community/images/:id'],
+  ['POST', '/community/images/:id/discard'],
+  ['GET', '/community/topics'],
+  ['GET', '/community/topics/:slug'],
+  ['GET', '/community/moderation/topics'],
+  ['POST', '/community/moderation/topics'],
+  ['GET', '/community/members'],
+  ['POST', '/community/moderation/reports'],
+  ['GET', '/community/posts'],
+  ['GET', '/community/posts/:id'],
+  ['GET', '/community/posts/:postId/avatar'],
+  ['POST', '/community/posts'],
+  ['POST', '/community/posts/withdraw'],
+  ['POST', '/community/posts/state'],
+  ['POST', '/community/posts/resolve'],
+  ['GET', '/community/own/posts'],
+  ['GET', '/community/own/comments'],
+  ['GET', '/community/own/results'],
+  ['GET', '/community/comments'],
+  ['GET', '/community/comments/context'],
+  ['POST', '/community/comments'],
+  ['POST', '/community/comments/withdraw'],
+  ['POST', '/community/comments/state'],
+  ['GET', '/community/profiles/options/me'],
+  ['PUT', '/community/profiles/options/me'],
+  ['GET', '/community/profiles/:id'],
+  ['GET', '/community/profiles/:id/avatar'],
+  ['GET', '/community/relations'],
+  ['PUT', '/community/relations'],
+  ['POST', '/community/reports'],
+  ['POST', '/community/appeals'],
+  ['GET', '/community/operations/:id'],
+  ['GET', '/community/moderation/posts'],
+  ['GET', '/community/moderation/queue'],
+  ['POST', '/community/moderation/posts'],
+  ['POST', '/community/moderation/comments'],
+  ['POST', '/community/moderation/appeals'],
+]);
+
+// Public capability metadata is read-only; personal navigation is never editable in impersonation.
+declare(ADMIN_POLICIES.READ, 'community', [['GET', '/community/capabilities']]);
+declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'community', [
+  ['GET', '/community/preferences/me'],
+  ['PUT', '/community/preferences/me'],
+]);
+
 declare(ADMIN_POLICIES.BACKGROUND_WRITE, 'note', [['POST', '/image-previews/retry']]);
 
 // Telemetry must never attribute administrator preview/maintenance to the subject.
@@ -118,7 +171,10 @@ declare(ADMIN_POLICIES.READ, 'note', [
 ]);
 
 declare(ADMIN_POLICIES.CONTENT_WRITE, 'note', [
-  ...['create','upload','parse','start','stop','dismiss','clear-history'].map(action => ['POST', `/note/imports/${action}`]),
+  ...['create', 'upload', 'parse', 'start', 'stop', 'dismiss', 'clear-history'].map((action) => [
+    'POST',
+    `/note/imports/${action}`,
+  ]),
   ['POST', '/note/uploadImage'],
   ['POST', '/note/updateNote'],
   ['POST', '/note/updateDrawingNote'],

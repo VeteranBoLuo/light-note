@@ -133,6 +133,7 @@ vi.mock('@/composables/useNotification', () => ({
 vi.mock('vue-router', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   useRoute: () => mocks.route,
+  onBeforeRouteLeave: vi.fn(),
   useRouter: () => ({ replace: mocks.routerReplace }),
 }));
 vi.mock('@/utils/zoom', async (importOriginal) => ({
@@ -555,7 +556,9 @@ describe('CommunityChatWorkspace', () => {
 
     expect(mocks.getMessages).toHaveBeenCalledWith('general', { limit: 30 });
     expect(host.textContent).toContain('实时补齐的新消息');
-    expect(host.textContent).toContain(zhCN.communityChat.realtimeConnected);
+    expect(host.querySelector('.community-conversation-header__delivery')?.getAttribute('aria-label')).toBe(
+      zhCN.communityChat.realtimeConnected,
+    );
     expect(host.textContent).not.toContain('在线人数 6');
 
     mocks.getMessages.mockResolvedValueOnce({
@@ -1448,7 +1451,7 @@ describe('CommunityChatWorkspace', () => {
     expect(mocks.getMessage).toHaveBeenCalledTimes(2);
   });
 
-  it('只有 Root 点击原在线人数文字后才按需读取成员名单', async () => {
+  it('只有 Root 从标题在线人数打开诊断后才按需读取成员名单', async () => {
     WorkspaceRealtimeSocket.instances = [];
     vi.stubGlobal('WebSocket', WorkspaceRealtimeSocket);
     mocks.user.id = 'root-user';
@@ -1459,8 +1462,9 @@ describe('CommunityChatWorkspace', () => {
     socket.message('room.subscribed', { roomSlug: 'general', onlineCount: 2 });
     await flushAsync();
 
-    expect(host.textContent).toContain('在线人数 2');
-    (host.querySelector('.community-conversation-header__online') as HTMLElement).click();
+    expect(host.querySelector('.community-conversation-header__online')?.textContent).toContain('在线人数 2');
+    expect(socket.sent.some((raw) => JSON.parse(raw).type === 'presence.members.request')).toBe(false);
+    host.querySelector<HTMLButtonElement>('.community-conversation-header__online')!.click();
     await flushAsync();
     const request = JSON.parse(socket.sent.at(-1) || '{}');
     expect(request).toMatchObject({ type: 'presence.members.request', payload: {} });
@@ -1511,6 +1515,31 @@ describe('CommunityChatWorkspace', () => {
     expect(document.body.textContent).not.toContain('当前在线');
   });
 
+  it('实际握手启动的后续布局请求完成前，不能撤下首屏骨架', async () => {
+    WorkspaceRealtimeSocket.instances = [];
+    vi.stubGlobal('WebSocket', WorkspaceRealtimeSocket);
+    const firstPage = deferred<any>();
+    const laterLayout = deferred<any>();
+    mocks.getMessages.mockReturnValueOnce(firstPage.promise);
+    mocks.getPinnedMessage.mockResolvedValueOnce({ data: { message: null } }).mockReturnValueOnce(laterLayout.promise);
+    const host = await mountWorkspace({ access: { ...access, realtimeEnabled: true } });
+    const socket = WorkspaceRealtimeSocket.instances[0];
+    socket.open();
+    socket.message('room.subscribed', { roomSlug: 'general' });
+    await flushAsync();
+    firstPage.resolve({ data: { items: [chatMessage()], hasMore: true } });
+    await flushAsync();
+    await flushAsync();
+    expect(mocks.getPinnedMessage).toHaveBeenCalledTimes(2);
+    expect(host.querySelector('.community-message-skeleton')).not.toBeNull();
+    laterLayout.resolve({ data: { message: chatMessage({ content: '完成后的公告' }) } });
+    await flushAsync();
+    await flushAsync();
+    await flushAsync();
+    expect(host.querySelector('.community-message-skeleton')).toBeNull();
+    expect(host.querySelector('.community-pinned-message')?.textContent).toContain('完成后的公告');
+  });
+
   it('首屏历史仍在加载时完成实时订阅，会在首屏落定后再补一次权威窗口', async () => {
     WorkspaceRealtimeSocket.instances = [];
     vi.stubGlobal('WebSocket', WorkspaceRealtimeSocket);
@@ -1544,6 +1573,7 @@ describe('CommunityChatWorkspace', () => {
     const host = await mounting;
     await flushAsync();
 
+    await flushAsync();
     expect(mocks.getMessages).toHaveBeenCalledTimes(2);
     expect(host.textContent).toContain('订阅缝隙内的新消息');
   });
@@ -1891,6 +1921,9 @@ describe('CommunityChatWorkspace', () => {
 
     expect(mocks.getMessages).toHaveBeenNthCalledWith(1, 'general', { focus: 'message-1', limit: 30 });
     expect(host.querySelector('[data-message-public-id="message-1"]')?.classList.contains('is-focused')).toBe(true);
+    document.body.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+    await flushAsync();
+    expect(host.querySelector('.community-message.is-focused')).toBeNull();
     expect(mocks.scrollIntoContainer).toHaveBeenCalledTimes(1);
     const latestButton = host.querySelector<HTMLButtonElement>('.community-message-list__new');
     expect(latestButton?.textContent).toContain('回到最新消息');
@@ -2326,6 +2359,7 @@ describe('CommunityChatWorkspace', () => {
   });
 
   it('首屏只取最新 30 条，上滑接近顶部时用游标自动加载更早消息', async () => {
+    const pendingOlder = deferred<any>();
     mocks.getMessages
       .mockResolvedValueOnce({
         data: {
@@ -2337,17 +2371,9 @@ describe('CommunityChatWorkspace', () => {
           hasNewer: false,
         },
       })
-      .mockResolvedValueOnce({
-        data: {
-          roomSlug: 'general',
-          items: [chatMessage({ publicId: 'message-1', content: '更早消息' })],
-          hasMore: false,
-          nextBefore: null,
-          focusPublicId: null,
-          hasNewer: false,
-        },
-      });
+      .mockReturnValueOnce(pendingOlder.promise);
     const host = await mountWorkspace();
+    expect(host.querySelector('.community-message-list__older button')).toBeNull();
     const messageList = host.querySelector<HTMLElement>('.community-message-list');
     expect(messageList).not.toBeNull();
     if (!messageList) return;
@@ -2360,6 +2386,20 @@ describe('CommunityChatWorkspace', () => {
     messageList.dispatchEvent(new Event('scroll'));
     await vi.waitFor(() => expect(mocks.getMessages).toHaveBeenCalledTimes(2));
     await flushAsync();
+    expect(host.querySelector('.community-message-list__older [role="status"]')?.textContent).toContain('加载中');
+    expect(host.querySelector('.community-message-list__older button')).toBeNull();
+    pendingOlder.resolve({
+      data: {
+        roomSlug: 'general',
+        items: [chatMessage({ publicId: 'message-1', content: '更早消息' })],
+        hasMore: false,
+        nextBefore: null,
+        focusPublicId: null,
+        hasNewer: false,
+      },
+    });
+    await flushAsync();
+    expect(host.querySelector('.community-message-list__older')).toBeNull();
 
     expect(mocks.getMessages).toHaveBeenNthCalledWith(1, 'general', { limit: 30 });
     expect(mocks.getMessages).toHaveBeenNthCalledWith(2, 'general', { before: 'message-2', limit: 30 });
@@ -2776,6 +2816,18 @@ describe('CommunityChatWorkspace', () => {
     host.querySelector<HTMLImageElement>('.community-message__image img')?.dispatchEvent(new Event('load'));
     await flushAnimationFrame();
     expect(messageList.scrollTop).toBe(80);
+  });
+
+  it('恢复阅读位置不高亮消息', async () => {
+    const session = getCommunityChatDraftSession('user-1:user', 'general');
+    session.readingAnchor = { publicId: 'message-1', offsetTop: 0, scrollTop: 100, scrollHeight: 1000 };
+    mocks.getMessages.mockResolvedValue({
+      status: 200,
+      data: { items: [chatMessage()], hasMore: false, hasNewer: true, focusPublicId: 'message-1' },
+    });
+    const host = await mountWorkspace();
+    expect(mocks.getMessages).toHaveBeenCalledWith('general', expect.objectContaining({ focus: 'message-1' }));
+    expect(host.querySelector('.community-message.is-focused')).toBeNull();
   });
 
   it('提及在输入框上方用 tag 编辑，发送后在气泡内展示昵称且提交稳定消息公有 ID', async () => {
@@ -3854,6 +3906,63 @@ describe('CommunityChatWorkspace', () => {
     );
   });
 
+  it.each(['success', 'failure'])('收藏表情只显示一个加载图标，%s 后恢复操作', async (outcome) => {
+    const pending = deferred<void>();
+    mocks.saveMessageSticker.mockImplementationOnce(async () => {
+      await pending.promise;
+      if (outcome === 'failure') throw new Error('fixture save failure');
+      return { status: 200, data: { duplicate: false } };
+    });
+    mocks.getMessages.mockResolvedValue({
+      data: {
+        items: [
+          chatMessage({
+            messageKind: 'sticker',
+            stickerSource: 'custom',
+            canDelete: true,
+            sticker: { source: 'custom', key: 'sticker-1', url: '/sticker.gif' },
+          }),
+        ],
+        hasMore: false,
+      },
+    });
+    const host = await mountWorkspace();
+    const toolbar = host.querySelector<HTMLElement>('.community-message__actions')!;
+    toolbar.querySelector<HTMLButtonElement>('.community-message__more')!.click();
+    await flushAsync();
+    const save = Array.from(document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')).find((button) =>
+      button.textContent?.includes(zhCN.communityChat.sticker.saveAction),
+    )!;
+    expect(save).toBeTruthy();
+    save.click();
+    await flushAsync();
+    expect(mocks.saveMessageSticker).toHaveBeenCalledTimes(1);
+    expect(toolbar.querySelectorAll('.btn-spinner')).toHaveLength(1);
+    expect(toolbar.querySelector('.community-message__more .btn-spinner')).not.toBeNull();
+    expect(toolbar.querySelector('.community-message__like .btn-spinner')).toBeNull();
+    expect(Array.from(toolbar.querySelectorAll('button')).every((button) => button.disabled)).toBe(true);
+    pending.resolve();
+    await flushAsync();
+    expect(toolbar.querySelectorAll('.btn-spinner')).toHaveLength(0);
+    expect(Array.from(toolbar.querySelectorAll('button')).every((button) => !button.disabled)).toBe(true);
+  });
+
+  it('点赞时只在点赞按钮显示加载图标', async () => {
+    const pending = deferred<any>();
+    mocks.toggleLike.mockReturnValueOnce(pending.promise);
+    mocks.getMessages.mockResolvedValue({ data: { items: [chatMessage()], hasMore: false } });
+    const host = await mountWorkspace();
+    const toolbar = host.querySelector<HTMLElement>('.community-message__actions')!;
+    toolbar.querySelector<HTMLButtonElement>('.community-message__like')!.click();
+    await flushAsync();
+    expect(toolbar.querySelectorAll('.btn-spinner')).toHaveLength(1);
+    expect(toolbar.querySelector('.community-message__like .btn-spinner')).not.toBeNull();
+    expect(toolbar.querySelector('.community-message__more .btn-spinner')).toBeNull();
+    pending.resolve({ status: 200, data: { likedByMe: true, likeCount: 1 } });
+    await flushAsync();
+    expect(toolbar.querySelectorAll('.btn-spinner')).toHaveLength(0);
+  });
+
   it('他人的自定义表情可从统一操作菜单收藏，纯表情操作栏锚定表情中部', () => {
     expect(workspaceSource).toContain("key: 'save-sticker'");
     expect(workspaceSource).toContain("chatMessage.messageKind === 'sticker'");
@@ -4678,6 +4787,7 @@ describe('CommunityChatWorkspace', () => {
     Object.defineProperty(imagePaste, 'clipboardData', {
       configurable: true,
       value: {
+        getData: () => '',
         items: [{ kind: 'file', type: 'image/png', getAsFile: () => file }],
         files: [file],
       },
@@ -4696,7 +4806,7 @@ describe('CommunityChatWorkspace', () => {
     const textPaste = new Event('paste', { bubbles: true, cancelable: true });
     Object.defineProperty(textPaste, 'clipboardData', {
       configurable: true,
-      value: { items: [], files: [] },
+      value: { items: [], files: [], getData: () => '' },
     });
     textarea?.dispatchEvent(textPaste);
     expect(textPaste.defaultPrevented).toBe(false);

@@ -19,6 +19,7 @@
     @focus="handleFocus"
     @focusout="handleBlur"
     @enter="emit('enter', $event)"
+    @paste="handlePlainPaste"
   />
   <div
     v-else
@@ -37,11 +38,14 @@
     @keydown="handleRichKeydown"
     @keyup="handleRichSelectionChange"
     @mouseup="handleRichSelectionChange"
+    @mousedown="placeCaretBesideEmoji"
+    @dblclick="selectInlineEmoji"
     @compositionstart="emit('compositionstart', $event)"
     @compositionend="handleRichCompositionEnd"
     @focus="handleFocus"
     @blur="handleBlur"
     @paste="handleRichPaste"
+    @copy="copyInlineEmojiSelection"
   ></div>
 </template>
 
@@ -56,6 +60,9 @@
   import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import { inlineEmojiBounds } from './inlineEmojiBounds';
+  import { selectInlineEmoji, syncInlineEmojiSelection } from './inlineEmojiSelection';
+  import { copyInlineEmojiSelection, readInlineEmojiClipboard } from './inlineEmojiClipboard';
 
   const props = withDefaults(
     defineProps<{
@@ -161,7 +168,16 @@
       image.draggable = false;
       image.contentEditable = 'false';
       image.dataset.inlineEmojiToken = segment.emoji.token;
-      fragment.append(image);
+      const atom = document.createElement('span');
+      atom.className = 'chat-composer-input__emoji-atom';
+      atom.dataset.emojiAtom = '';
+      atom.contentEditable = 'false';
+      const [left, width] = inlineEmojiBounds[segment.emoji.id] || [0, 1];
+      atom.style.width = `${width * 2}em`;
+      image.style.left = `${-left * 2}em`;
+      image.style.clipPath = `inset(0 ${(1 - left - width) * 100}% 0 ${left * 100}%)`;
+      atom.append(image);
+      fragment.append(atom);
     }
     if (value.endsWith('\n')) {
       // Chromium 需要第二个、不计入正文的 BR 才会为末尾换行建立可见空行盒。
@@ -182,23 +198,7 @@
   function syncRichEmojiSelection() {
     const root = richInput.value;
     if (!root) return;
-    const selection = richSelectionRange();
-    const content = serializeRichContent();
-    let searchOffset = 0;
-    root.querySelectorAll<HTMLImageElement>('.chat-composer-input__emoji').forEach((image) => {
-      const token = image.dataset.inlineEmojiToken || '';
-      const tokenStart = token ? content.indexOf(token, searchOffset) : -1;
-      const tokenEnd = tokenStart + token.length;
-      const selected = Boolean(
-        selection &&
-        selection.start !== selection.end &&
-        tokenStart >= 0 &&
-        selection.start < tokenEnd &&
-        selection.end > tokenStart,
-      );
-      image.classList.toggle('is-selected', selected);
-      if (tokenStart >= 0) searchOffset = tokenEnd;
-    });
+    syncInlineEmojiSelection(root);
   }
 
   function richSelectionRange() {
@@ -444,7 +444,7 @@
       if (props.submitOnEnter && !event.shiftKey) {
         event.preventDefault();
         emit('enter', event);
-      } else if (event.shiftKey) {
+      } else if (event.shiftKey || !props.submitOnEnter) {
         event.preventDefault();
         insertRichText('\n');
       }
@@ -456,12 +456,39 @@
     handleRichInput();
   }
 
+  function handlePlainPaste(event: ClipboardEvent) {
+    const text = readInlineEmojiClipboard(event);
+    if (text === null) return;
+    event.preventDefault();
+    replaceSelection(text);
+  }
+
   function handleRichPaste(event: ClipboardEvent) {
     if (!event.clipboardData) return;
     const hasFiles = Array.from(event.clipboardData.types || []).includes('Files');
     if (hasFiles) return;
     event.preventDefault();
-    insertRichText(event.clipboardData.getData('text/plain'));
+    insertRichText(readInlineEmojiClipboard(event) ?? event.clipboardData.getData('text/plain'));
+  }
+
+  function placeCaretBesideEmoji(event: MouseEvent) {
+    if (props.disabled || event.button !== 0 || event.detail > 1 || event.shiftKey) return;
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const atom = target.closest('.chat-composer-input__emoji-atom');
+    const image = atom?.querySelector('img');
+    if (!atom || !image?.dataset.inlineEmojiToken || !richInput.value) return;
+    // Set the caret before the browser's default mouse selection, not after click.
+    event.preventDefault();
+    // Split the visible image at its midpoint to place the caret on either side.
+    const prefix = document.createRange();
+    prefix.selectNodeContents(richInput.value);
+    prefix.setEndBefore(atom);
+    const start = serializeNode(prefix.cloneContents()).length;
+    const rect = atom.getBoundingClientRect();
+    const offset = event.clientX < rect.left + rect.width / 2 ? start : start + image.dataset.inlineEmojiToken.length;
+    focus();
+    setSelectionRange(offset);
   }
 
   function handleRichSelectionChange(event: Event) {
@@ -557,11 +584,29 @@
     opacity: 0.78;
   }
 
-  .chat-composer-input__rich :deep(.chat-composer-input__emoji) {
-    .chat-inline-emoji-layout();
-  }
-
-  .chat-composer-input__rich :deep(.chat-composer-input__emoji.is-selected) {
+  .chat-composer-input__rich::selection,
+  .chat-composer-input__rich :deep(::selection) {
     background: rgba(144, 198, 255, 0.55);
   }
+
+  .chat-composer-input__rich :deep(.chat-composer-input__emoji-atom) {
+    .chat-emoji-selection();
+    position: relative;
+    display: inline-block;
+    height: 1em;
+    vertical-align: -0.12em;
+  }
+
+  .chat-composer-input__rich :deep(.chat-composer-input__emoji) {
+    position: absolute;
+    top: -0.5em;
+    width: 2em;
+    height: 2em;
+    max-width: none;
+    margin: 0;
+    object-fit: contain;
+    pointer-events: auto;
+    user-select: none;
+  }
+
 </style>

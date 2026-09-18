@@ -22,19 +22,36 @@ export async function relocateCloudImage(db, file, targetKey, targetName) {
     await registerCloudImage(db, { ...file, obs_key: targetKey, file_name: targetName });
     return;
   }
+  let sourceMatches = String(asset.source_id) === String(file.id);
+  if (
+    !sourceMatches &&
+    asset.status !== 'deleting' &&
+    asset.source_type === 'cloud_file' &&
+    String(asset.owner_user_id) === String(file.create_by)
+  ) {
+    // Older overwrite uploads recreated files while retaining the asset at the same OBS key.
+    // Rebind only an orphaned source that already has an explicit reference from this file.
+    const [previousFiles] = await db.query('SELECT id FROM files WHERE id=? FOR UPDATE', [asset.source_id]);
+    const [references] = await db.query(
+      "SELECT asset_id FROM image_asset_refs WHERE asset_id=? AND ref_type='cloud_file' AND ref_id=? FOR UPDATE",
+      [asset.id, String(file.id)],
+    );
+    sourceMatches = previousFiles.length === 0 && references.length > 0;
+  }
   if (
     asset.status === 'deleting' ||
     asset.source_type !== 'cloud_file' ||
-    String(asset.source_id) !== String(file.id) ||
+    !sourceMatches ||
     String(asset.owner_user_id) !== String(file.create_by)
   )
     throw Object.assign(new Error('图片资源状态已变化，请刷新后重试'), {
       status: 409,
       code: 'FILE_IMAGE_SOURCE_CONFLICT',
     });
-  await db.query('UPDATE image_assets SET source_locator=?,identity_hash=? WHERE id=?', [
+  await db.query('UPDATE image_assets SET source_locator=?,identity_hash=?,source_id=? WHERE id=?', [
     targetKey,
     newIdentity,
+    String(file.id),
     asset.id,
   ]);
   // Fence workers holding the old locator. Keep completed previews, failed facts and output cleanup ledgers.

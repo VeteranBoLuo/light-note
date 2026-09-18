@@ -31,6 +31,7 @@ function sendInfo(params) {
     defaultChoice,
     choiceLabel,
     choiceHint,
+    keyboard: params.keyboard,
   });
   // 把虚拟节点渲染DOM容器中
   render(vNode, div);
@@ -49,6 +50,7 @@ function onCancel() {
 export default {
   alert(params: {
     title: string;
+    keyboard?: boolean;
     okText?: string;
     okType?: 'primary' | 'danger' | 'success' | 'function';
     cancelText?: string;

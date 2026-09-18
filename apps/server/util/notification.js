@@ -119,7 +119,7 @@ export async function createNotification(
     isRead: 0,
   });
   if (id) row.id = id;
-  row.browser_push_pending = browserPushEnabled() ? 1 : 0;
+  row.browser_push_pending = type !== 'community_feed' && browserPushEnabled() ? 1 : 0;
   // Use a database microsecond timestamp, shared with subscription eligibility.
   // 只有携带来源键的系统事实才允许幂等忽略；普通通知仍保留原先的严格 INSERT 语义。
   const [result] = await db.query(

@@ -57,3 +57,21 @@ describe('选择范围后统一确认', () => {
     expect(onOk).toHaveBeenCalledWith(undefined);
   });
 });
+
+it('Escape cancels an opted-in confirmation without confirming or reaching background handlers', () => {
+  const onCancel = vi.fn(), onOk = vi.fn(), background = vi.fn();
+  Alert.alert({ title: '退出发布', content: '保留草稿', keyboard: true, onCancel, onOk });
+  document.addEventListener('keydown', background);
+  const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+  document.dispatchEvent(event);
+  expect(onCancel).toHaveBeenCalledOnce();
+  expect(onOk).not.toHaveBeenCalled();
+  expect(background).not.toHaveBeenCalled();
+  expect(event.defaultPrevented).toBe(true);
+  expect(document.querySelector('.bAlert')).toBeNull();
+  document.removeEventListener('keydown', background);
+  Alert.alert({ title: '默认确认', content: '正文', onCancel });
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  expect(document.querySelector('.bAlert')).not.toBeNull();
+  expect(onCancel).toHaveBeenCalledOnce();
+});

@@ -8,7 +8,7 @@
           type="primary"
           class="upload-action"
           :loading="uploadProgress.visible"
-          @click.stop="openFileDialog(null)"
+          @click.stop="openFileDialog(cloud.folder.id === 'all' ? null : cloud.folder.id)"
         >
           <SvgIcon :src="icon.file_upload" size="17" />
           {{ bookmark.isDesktop ? $t('cloudSpace.uploadFile') : '' }}
