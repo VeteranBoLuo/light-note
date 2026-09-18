@@ -28,9 +28,10 @@
       ><span v-if="detail || preview">{{ post.title }}</span
       ><RouterLink v-else :to="postTarget()">{{ post.title }}</RouterLink></h2
     >
+    <CommunityPostImages v-if="detail || preview" :images="post.images" />
     <CommunityMarkdown :body="post.body" :class="{ 'feed-excerpt': !detail && !preview }" />
     <CommunityPostResources :resources="post.resources" :class="{ 'feed-resource-grid': !detail }" />
-    <CommunityPostImages :images="post.images" />
+    <CommunityPostImages v-if="!detail && !preview" :images="post.images" />
     <div class="feed-actions feed-meta"
       ><RouterLink
         class="post-topic"
