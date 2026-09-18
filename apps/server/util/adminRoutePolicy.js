@@ -304,7 +304,7 @@ declare(ADMIN_POLICIES.CONTENT_WRITE, 'organize', [
   ['POST', '/organize/bookmark-health/:bookmarkId/mark-normal'],
   ['DELETE', '/organize/bookmark-health/:bookmarkId/mark-normal'],
 ]);
-declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'organize_ai_suggestions', [
+declare(ADMIN_POLICIES.CONTENT_WRITE, 'visitor_organize_suggestions', [
   ['POST', '/organize/suggestions/runs/:id/apply-batch'],
   ['POST', '/organize/suggestions/previews'],
   ['POST', '/organize/suggestions/runs/:id/retry-preview'],
@@ -313,6 +313,8 @@ declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'organize_ai_suggestions', [
   ['POST', '/organize/suggestions/runs/:id/pause'],
   ['POST', '/organize/suggestions/runs/:id/resume'],
   ['POST', '/organize/suggestions/runs/:id/items/:suggestionId/actions'],
+]);
+declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'organize_ai_suggestions', [
   ['POST', '/organize/ai-suggestions/batches'],
   ['PUT', '/organize/ai-suggestions/batches/:batchId/suggestions/:suggestionId'],
   ['POST', '/organize/ai-suggestions/batches/:batchId/suggestions/:suggestionId/accept'],
@@ -947,6 +949,10 @@ export function adminRoutePolicyMiddleware(req, res, next) {
       status: 200,
       msg: '',
     });
+  }
+
+  if (capability.resourceType === 'visitor_organize_suggestions' && req.adminContext.subjectRole !== 'visitor') {
+    return sendPolicyError(res, 403, 'ADMIN_MAINTENANCE_FORBIDDEN', '仅支持维护游客账号的整理示例。');
   }
 
   if (capability.policy === ADMIN_POLICIES.CONTENT_WRITE) {

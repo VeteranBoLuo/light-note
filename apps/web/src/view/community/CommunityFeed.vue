@@ -573,6 +573,7 @@
         </div>
       </BModal>
     </CommunityLayout>
+    <BBackToTop v-if="['feed', 'detail'].includes(mode)" :target="surface" :label="t('community.feed.backToTop')" />
   </main>
 </template>
 <script setup lang="ts">
@@ -588,6 +589,7 @@
   import CommunityOfficialCampaign from '@/components/community/CommunityOfficialCampaign.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import BBackToTop from '@/components/base/BasicComponents/BBackToTop.vue';
   import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router';

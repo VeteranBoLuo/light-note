@@ -3,9 +3,9 @@
     class="feed-post community-post-card"
     :class="{ 'is-detail': detail, 'is-preview': preview }"
     :data-post-id="post.publicId"
-    @click="!detail && shouldOpenCommunityPost($event) && router.push(postTarget())"
+    @click="!detail && !preview && shouldOpenCommunityPost($event) && router.push(postTarget())"
   >
-    <div v-if="post.author" class="post-author-row">
+    <div v-if="post.author" class="post-author-row" :inert="preview">
       <BButton class="post-author" @click="router.push('/community/people/' + post.author.userPublicId)">
         <img v-if="post.author.avatar" :src="post.author.avatar" alt="" width="34" height="34" />
         <span v-else class="post-avatar-fallback" aria-hidden="true">{{ Array.from(post.author.name || '?')[0] }}</span>
@@ -28,11 +28,13 @@
       ><span v-if="detail || preview">{{ post.title }}</span
       ><RouterLink v-else :to="postTarget()">{{ post.title }}</RouterLink></h2
     >
-    <CommunityPostImages v-if="detail || preview" :images="post.images" />
-    <CommunityMarkdown :body="post.body" :class="{ 'feed-excerpt': !detail && !preview }" />
-    <CommunityPostResources :resources="post.resources" :class="{ 'feed-resource-grid': !detail }" />
+    <CommunityPostImages v-if="detail || preview" :images="post.images" article />
+    <CommunityMarkdown :body="post.body" :class="{ 'feed-excerpt': !detail && !preview }" :inert="preview" />
+    <div :inert="preview">
+      <CommunityPostResources :resources="post.resources" :class="{ 'feed-resource-grid': !detail }" />
+    </div>
     <CommunityPostImages v-if="!detail && !preview" :images="post.images" />
-    <div class="feed-actions feed-meta"
+    <div class="feed-actions feed-meta" :inert="preview"
       ><RouterLink
         class="post-topic"
         v-for="topic in post.topics"

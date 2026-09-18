@@ -349,7 +349,9 @@ it.each([false, true])('规则阶段不搜索图标，已交付旧结果不重�
   loaded = true;
   await runRuleBatch(db);
   expect(recommendTagIcons).not.toHaveBeenCalled();
-  expect(db.query.mock.calls.find(([sql]) => sql.includes("rule_phase='completed'"))[1][1]).toBe(alreadyDelivered ? 'completed' : 'running');
+  expect(db.query.mock.calls.find(([sql]) => sql.includes("rule_phase='completed'"))[1][1]).toBe(
+    alreadyDelivered ? 'completed' : 'running',
+  );
 });
 
 it.each([0, 2])('选中标签将已有图标与不可访问分别统计：缺失 %i 项', async (missing) => {
@@ -401,12 +403,18 @@ it.each([34, 134])('全部标签范围统计 %i 个已有图标标签，分页�
 });
 
 it('重试预检从原任务服务端完整范围冻结超过首屏的未推荐文件', async () => {
-  const db = dbFor(sql => {
+  const db = dbFor((sql) => {
     if (sql.includes('request_id=?')) return [[]];
     if (sql.startsWith('SELECT id FROM organize_suggestion_runs')) return [[{ id: 'original' }]];
-    if (sql.startsWith('SELECT DISTINCT f.id')) return [Array.from({ length: 1201 }, (_, i) => ({ id: i + 1, title: '文件.md' }))];
+    if (sql.startsWith('SELECT DISTINCT f.id'))
+      return [Array.from({ length: 1201 }, (_, i) => ({ id: i + 1, title: '文件.md' }))];
   });
-  const result = await previewV2(db, { userId: 'u', requestId: id, retryFrom: 'original', input: { resourceTypes: ['file'], checks: ['tags'], scope: 'untagged' } });
+  const result = await previewV2(db, {
+    userId: 'u',
+    requestId: id,
+    retryFrom: 'original',
+    input: { resourceTypes: ['file'], checks: ['tags'], scope: 'untagged' },
+  });
   expect(result.summary.total).toBe(1201);
   expect(readSuggestionCandidates).not.toHaveBeenCalled();
   expect(readSuggestionSources).not.toHaveBeenCalled();
@@ -417,15 +425,28 @@ it('重试预检从原任务服务端完整范围冻结超过首屏的未推荐�
   expect(args).toEqual(['u', 'original', 'u', 'u', 'u']);
 });
 it('重试不能访问其他账号的任务', async () => {
-  const db = dbFor(sql => sql.startsWith('SELECT') ? [[]] : undefined);
-  await expect(previewV2(db, { userId: 'u', requestId: id, retryFrom: 'foreign', input: { resourceTypes: ['file'], checks: ['tags'], scope: 'untagged' } })).rejects.toMatchObject({ code: 'ORGANIZE_RUN_NOT_FOUND' });
+  const db = dbFor((sql) => (sql.startsWith('SELECT') ? [[]] : undefined));
+  await expect(
+    previewV2(db, {
+      userId: 'u',
+      requestId: id,
+      retryFrom: 'foreign',
+      input: { resourceTypes: ['file'], checks: ['tags'], scope: 'untagged' },
+    }),
+  ).rejects.toMatchObject({ code: 'ORGANIZE_RUN_NOT_FOUND' });
   expect(db.query.mock.calls.some(([sql]) => sql.startsWith('INSERT'))).toBe(false);
 });
 
 it.each([true, false])('网页存档在规则阶段生成并持久化结果，成功=%s，汇总不重复抓取', async (success) => {
   const row = { ...run(), options_json: { resourceTypes: ['bookmark'], checks: ['archive'], scope: 'all' } };
   const snapshot = buildSnapshot('bookmark', { id: 'b', url: 'https://example.com' });
-  const record = { id: 'i', resource_type: 'bookmark', resource_id: 'b', snapshot_json: snapshot, rule_status: 'loaded' };
+  const record = {
+    id: 'i',
+    resource_type: 'bookmark',
+    resource_id: 'b',
+    snapshot_json: snapshot,
+    rule_status: 'loaded',
+  };
   let loaded = false;
   const db = dbFor((sql, args) => {
     if (sql.includes('FROM organize_suggestion_runs')) return [[row]];
@@ -436,7 +457,9 @@ it.each([true, false])('网页存档在规则阶段生成并持久化结果，�
   readSuggestionSources.mockResolvedValue([snapshot]);
   archiveBookmark.mockImplementation(async () => {
     expect(db.commit).toHaveBeenCalledTimes(1);
-    return success ? { ok: true, url: snapshot.source.url, title: '网页', content: '正文'.repeat(100) } : { ok: false, reason: 'AUTH_REQUIRED' };
+    return success
+      ? { ok: true, url: snapshot.source.url, title: '网页', content: '正文'.repeat(100) }
+      : { ok: false, reason: 'AUTH_REQUIRED' };
   });
   await runRuleBatch(db);
   const writes = db.query.mock.calls.filter(([sql]) => sql.startsWith('INSERT IGNORE INTO organize_suggestions'));
@@ -450,4 +473,56 @@ it.each([true, false])('网页存档在规则阶段生成并持久化结果，�
   await runRuleBatch(db);
   expect(archiveBookmark).toHaveBeenCalledTimes(1);
   expect(db.query.mock.calls.find(([sql]) => sql.includes("rule_phase='completed'"))[1][1]).toBe('completed');
+});
+
+describe('游客示例整理生命周期', () => {
+  it('服务端维护身份随预检持久化，客户端伪造身份不生效，响应不泄露管理员', async () => {
+    const { lockActiveUserForUpdate } = await import('../aiOutboundDispatchGuard.js');
+    lockActiveUserForUpdate.mockResolvedValue({ id: 'admin', role: 'root' });
+    readSuggestionCandidates.mockResolvedValue([{ id: 'note', type: 'note', title: '示例' }]);
+    const db = dbFor((sql) =>
+      sql.includes('request_id=?')
+        ? [[]]
+        : sql.includes('FROM user')
+          ? [[{ id: 'guest', role: 'visitor' }]]
+          : undefined,
+    );
+    const input = { ...options, maintenanceActorId: 'forged' };
+    const result = await previewV2(db, { userId: 'guest', input, requestId: id, maintenanceActorId: 'admin' });
+    expect(result.options.maintenanceActorId).toBeUndefined();
+    const saved = JSON.parse(
+      db.query.mock.calls.find(([sql]) => sql.startsWith('INSERT INTO organize_suggestion_runs'))[1][3],
+    );
+    expect(saved.maintenanceActorId).toBe('admin');
+    db.query.mockClear();
+    await previewV2(db, { userId: 'user', input, requestId: id });
+    const own = JSON.parse(
+      db.query.mock.calls.find(([sql]) => sql.startsWith('INSERT INTO organize_suggestion_runs'))[1][3],
+    );
+    expect(own.maintenanceActorId).toBeUndefined();
+  });
+  it('游客预检可启动，暂停续跑检查发起管理员额度', async () => {
+    const { lockActiveUserForUpdate } = await import('../aiOutboundDispatchGuard.js');
+    lockActiveUserForUpdate.mockResolvedValue({ id: 'admin', role: 'root' });
+    const row = {
+      ...run(),
+      user_id: 'guest',
+      status: 'preview',
+      options_json: { ...options, maintenanceActorId: 'admin' },
+    };
+    const db = dbFor((sql, args) => {
+      if (sql.includes('FROM user')) return [[{ id: args[0], role: args[0] === 'admin' ? 'root' : 'visitor' }]];
+      if (sql.includes('id<>?') || sql.includes('FROM organize_suggestion_items')) return [[]];
+      if (sql.includes('FROM organize_suggestion_runs')) return [[row]];
+    });
+    expect(await startV2(db, { userId: 'guest', id: 'r', requestId: id })).toMatchObject({ status: 'preparing' });
+    row.status = 'paused';
+    const quota = vi.fn(async () => ({ remaining: 10000, enforcing: true }));
+    const restrictions = vi.fn(async () => []);
+    expect(await resumeV2(db, { userId: 'guest', id: 'r' }, { quota, restrictions })).toMatchObject({
+      status: 'preparing',
+    });
+    expect(quota).toHaveBeenCalledWith('admin', 'root');
+    expect(restrictions).toHaveBeenCalledWith('admin');
+  });
 });

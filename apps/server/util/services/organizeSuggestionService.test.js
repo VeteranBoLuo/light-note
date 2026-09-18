@@ -721,3 +721,82 @@ it('打开后移入回收站：只提交建议失效状态，不执行资料写�
   expect(updates).toHaveLength(1);
   expect(JSON.parse(updates[0][1][0]).reasonCode).toBe('ORGANIZE_RESOURCE_TRASHED');
 });
+
+it('游客整理 Worker 使用管理员额度、游客资源身份', async () => {
+  let lease;
+  const source = { ...snap(), version: 'v', source: { title: '未命名文档', text: 'Vue 组件通信' } };
+  readCurrentSuggestionSource.mockResolvedValue(source);
+  const db = database((sql, p) => {
+    if (sql.startsWith('SELECT i.*'))
+      return [
+        [
+          {
+            id: 'i',
+            run_id: 'run',
+            user_id: 'u',
+            resource_type: 'note',
+            resource_id: '1',
+            version_hash: 'v',
+            ai_kinds_json: ['tags', 'title'],
+            ai_status: 'queued',
+          },
+        ],
+      ];
+    if (sql.includes("SET ai_status='running'")) {
+      lease = p[0];
+      return [{ affectedRows: 1 }];
+    }
+    if (sql.includes('FROM organize_suggestion_runs'))
+      return [[{ ...run, options_json: { ...options, maintenanceActorId: 'admin' } }]];
+    if (sql.startsWith('SELECT lease_token')) return [[{ lease_token: lease }]];
+    if (sql.startsWith('SELECT * FROM organize_suggestions'))
+      return [
+        [
+          { id: 't', kind: 'tags', payload_json: { kind: 'tags' } },
+          { id: 'n', kind: 'title', payload_json: { kind: 'title' } },
+        ],
+      ];
+    if (sql.includes('COUNT(*)')) return [[{ total: 0 }]];
+    if (sql.includes('FROM tag')) return [[]];
+  });
+  const originalQuery = db.query;
+  db.query = vi.fn((sql, args) =>
+    sql === 'SELECT id,role,del_flag FROM user WHERE id=? FOR UPDATE'
+      ? Promise.resolve([[{ id: 'u', role: 'visitor', del_flag: 0 }]])
+      : originalQuery(sql, args),
+  );
+  const model = vi
+    .fn()
+    .mockResolvedValue({ title: { name: 'Vue 通信', evidence: 'Vue' }, tags: [{ id: null, name: 'Vue' }] });
+  const execution = vi.fn(async (_config, callback) => {
+    const value = await callback();
+    expect(db.query.mock.calls.some(([sql, p]) => sql.includes('SET ai_status=?') && p[0] === 'completed')).toBe(true);
+    return value;
+  });
+  await runSingleSuggestionItem('worker', db, {
+    dispatch: async (_db, actorId, cb) => {
+      expect(actorId).toBe('admin');
+      return cb({ connection: db, user: { id: 'admin', role: 'root' } });
+    },
+    restrictions: async () => [],
+    model,
+    runExecution: execution,
+  });
+  expect(model).toHaveBeenCalledOnce();
+  expect(model.mock.calls[0][1]).toEqual(['tags', 'title']);
+  expect(execution).toHaveBeenCalledOnce();
+  expect(execution.mock.calls[0][0]).toMatchObject({
+    identity: { id: 'admin', role: 'root' },
+    subjectIdentity: { id: 'u', role: 'visitor' },
+    request: expect.objectContaining({
+      billingUser: { id: 'admin', role: 'root' },
+      resourceUser: { id: 'u', role: 'visitor' },
+    }),
+    organizeRunId: expect.any(String),
+    organizeItemId: expect.any(String),
+  });
+  const claims = db.query.mock.calls.map(([sql]) => sql).filter((sql) => sql.includes('FOR UPDATE'));
+  expect(claims.length).toBeGreaterThanOrEqual(2);
+  expect(claims.every((sql) => !/SKIP LOCKED|NOWAIT/.test(sql))).toBe(true);
+  expect(db.commit).toHaveBeenCalled();
+});

@@ -127,9 +127,9 @@
                 /></div>
               </div>
             </template>
-            <div v-else class="writing-preview"
-              ><div inert><CommunityPostCard :post="previewPost" preview can-like /></div
-            ></div>
+            <div v-else class="writing-preview">
+              <div><CommunityPostCard :post="previewPost" preview can-like /></div>
+            </div>
             <div v-if="!preview" class="writing-status"
               ><span>{{ Array.from(draft.body).length }} / 4000</span></div
             >

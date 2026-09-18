@@ -3,7 +3,12 @@ import crypto from 'node:crypto';
 import { transaction, json } from './organizeSuggestionStorage.js';
 import { normalizeRunInput, buildRuleSuggestions, hash, suggestionError } from './organizeSuggestionRules.js';
 import { readSuggestionCandidates, readSuggestionSources } from './organizeSuggestionSources.js';
-import { lockActiveUserForUpdate } from '../aiOutboundDispatchGuard.js';
+import {
+  lockOrganizeIdentity,
+  lockOrganizeRunOwner,
+  publicOrganizeOptions,
+  maintenanceActor,
+} from './organizeSuggestionIdentity.js';
 import { isOrganizeAiSuggestionsEnabled } from '../organizeAiSuggestionFeature.js';
 import { getActiveSecurityRestrictions } from '../security/services/securityRestrictionService.js';
 import { getStatusForUser } from '../aiQuota.js';
@@ -26,11 +31,15 @@ export async function insertBatches(db, sql, rows) {
   }
   if (batch.length) await db.query(sql, [batch]);
 }
-export async function previewV2(db, { userId, input, requestId, retryFrom, runVersion = 2 }) {
+export async function previewV2(db, { userId, input, requestId, retryFrom, runVersion = 2, maintenanceActorId }) {
   const began = Date.now();
   let queryCount = 0,
     batchWrites = 0;
-  const options = { ...normalizeRunInput(input), ...(retryFrom ? { retryFrom } : {}) };
+  const options = {
+    ...normalizeRunInput(input),
+    ...(retryFrom ? { retryFrom } : {}),
+    ...(maintenanceActorId ? { maintenanceActorId } : {}),
+  };
   const result = await transaction(db, async (connection) => {
     const c = {
       query: (...args) => {
@@ -47,6 +56,7 @@ export async function previewV2(db, { userId, input, requestId, retryFrom, runVe
       if (
         hash({
           ...normalizeRunInput(json(row.options_json)),
+          ...(maintenanceActor(row.options_json) ? { maintenanceActorId: maintenanceActor(row.options_json) } : {}),
           ...(json(row.options_json).retryFrom ? { retryFrom: json(row.options_json).retryFrom } : {}),
         }) !== hash(options)
       )
@@ -54,7 +64,7 @@ export async function previewV2(db, { userId, input, requestId, retryFrom, runVe
       return {
         id: row.id,
         status: row.status,
-        options,
+        options: publicOrganizeOptions(options),
         summary: json(row.summary_json),
         runVersion: Number(row.run_version || 1),
       };
@@ -119,7 +129,7 @@ export async function previewV2(db, { userId, input, requestId, retryFrom, runVe
       }
     }
     // 候选读取完成后才获取用户锁；并发相同请求在写入前再次检查。
-    await lockActiveUserForUpdate(c, userId);
+    await lockOrganizeIdentity(c, userId, options);
     const [raced] = await c.query(
       'SELECT * FROM organize_suggestion_runs WHERE user_id=? AND request_id=? FOR UPDATE',
       [userId, requestId],
@@ -179,7 +189,7 @@ export async function previewV2(db, { userId, input, requestId, retryFrom, runVe
         'pending',
       ]),
     );
-    return { id, status: 'preview', runVersion, options, summary };
+    return { id, status: 'preview', runVersion, options: publicOrganizeOptions(options), summary };
   });
   console.info(
     '[organize-preview]',
@@ -239,14 +249,14 @@ export async function endV2(c, run) {
 }
 export async function startV2(db, { userId, id, requestId, replaceRunId }) {
   return transaction(db, async (c) => {
-    await lockActiveUserForUpdate(c, userId);
+    await lockOrganizeRunOwner(c, userId, id);
     const run = await lockedRun(c, userId, id);
     if (run.status !== 'preview')
       return {
         id,
         status: run.status,
         ...lifecycleState(run),
-        options: json(run.options_json),
+        options: publicOrganizeOptions(run.options_json),
         summary: json(run.summary_json),
       };
     if (!json(run.summary_json).total) throw suggestionError('ORGANIZE_SCOPE_EMPTY', '没有可处理的资料');
@@ -265,7 +275,7 @@ export async function startV2(db, { userId, id, requestId, replaceRunId }) {
       id,
       status: 'preparing',
       ...lifecycleState({ ...run, status: 'preparing' }),
-      options: json(run.options_json),
+      options: publicOrganizeOptions(run.options_json),
       summary: json(run.summary_json),
     };
   });
@@ -280,13 +290,21 @@ export async function pauseV2(db, { userId, id, reason = 'user' }) {
   });
 }
 export async function resumeV2(db, { userId, id }, dependencies = {}) {
-  const [users] = await db.query('SELECT id,role FROM user WHERE id=? AND del_flag=0', [userId]);
+  const [runs] = await db.query('SELECT options_json FROM organize_suggestion_runs WHERE user_id=? AND id=?', [
+    userId,
+    id,
+  ]);
+  if (!runs.length) throw suggestionError('ORGANIZE_RUN_NOT_FOUND', '整理任务不存在', 404);
+  const actorId = maintenanceActor(runs[0].options_json) || userId;
+  const [users] = await db.query('SELECT id,role FROM user WHERE id=? AND del_flag=0', [actorId]);
+  if (actorId !== userId && users[0]?.role !== 'root')
+    throw suggestionError('AI_ACCOUNT_UNAVAILABLE', '维护管理员当前不可用', 403);
   if (!users.length) throw suggestionError('AI_ACCOUNT_UNAVAILABLE', '账号暂不可用', 403);
   if (!isOrganizeAiSuggestionsEnabled()) throw suggestionError('ORGANIZE_AI_DISABLED', 'AI 建议暂不可用', 503);
-  const restrictions = await (dependencies.restrictions || getActiveSecurityRestrictions)(userId);
+  const restrictions = await (dependencies.restrictions || getActiveSecurityRestrictions)(actorId);
   if (restrictions.some((r) => ['full_lock', 'login_lock', 'ai_lock'].includes(r.restriction_type)))
     throw suggestionError('AI_ACCESS_RESTRICTED', 'AI 权限暂不可用', 403);
-  const quota = await (dependencies.quota || getStatusForUser)(userId, users[0].role);
+  const quota = await (dependencies.quota || getStatusForUser)(actorId, users[0].role);
   if (quota.unavailable) throw suggestionError('AI_QUOTA_UNAVAILABLE', '暂时无法读取额度，请稍后再试', 503);
   if (!quota.exempt && quota.enforcing !== false && Number(quota.availableRemaining ?? quota.remaining ?? 0) <= 0)
     throw suggestionError('ORGANIZE_QUOTA_PAUSED', '额度仍不足，已有结果保留', 409);
@@ -308,7 +326,7 @@ export async function resumeV2(db, { userId, id }, dependencies = {}) {
       throw suggestionError('ORGANIZE_QUOTA_PAUSED', '额度不足以继续下一项，已有结果保留', 409);
   }
   return transaction(db, async (c) => {
-    await lockActiveUserForUpdate(c, userId);
+    await lockOrganizeRunOwner(c, userId, id);
     const run = await lockedRun(c, userId, id);
     if (!isRunV2(run) || !resumable.includes(run.status))
       throw suggestionError('ORGANIZE_RUN_STATE', '此任务不能继续', 409);

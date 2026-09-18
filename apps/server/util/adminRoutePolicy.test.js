@@ -589,3 +589,30 @@ it.each(['managedUploadBatch', 'prepareManagedUpload', 'confirmManagedUpload', '
     }
   },
 );
+
+const visitorOrganizePaths = [
+  '/organize/suggestions/previews',
+  ...['start', 'pause', 'resume', 'cancel', 'retry-preview', 'apply-batch'].map(
+    (action) => `/organize/suggestions/runs/run-1/${action}`,
+  ),
+  '/organize/suggestions/runs/run-1/items/item-1/actions',
+];
+it.each(visitorOrganizePaths)('游客整理维护权限矩阵 %s', (path) => {
+  for (const role of ['visitor', 'user', 'test', 'root']) {
+    for (const mode of ['readonly', 'maintain']) {
+      const req = createReq(path, 'POST', mode, role);
+      const next = vi.fn();
+      const res = createRes();
+      adminRoutePolicyMiddleware(req, res, next);
+      if (role === 'visitor' && mode === 'maintain') {
+        expect(next).toHaveBeenCalledOnce();
+        expect(req.suppressUserRewards).toBe(true);
+        expect(req.suppressConversionTracking).toBe(true);
+        expect(req.isVisitorWorkspaceContentWrite).toBe(true);
+      } else {
+        expect(next).not.toHaveBeenCalled();
+        expect(res.status).toHaveBeenCalledWith(403);
+      }
+    }
+  }
+});

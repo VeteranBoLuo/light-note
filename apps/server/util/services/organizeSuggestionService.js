@@ -1,3 +1,9 @@
+import {
+  lockOrganizeRunOwner,
+  publicOrganizeOptions,
+  maintenanceActor,
+  lockVisitorSubject,
+} from './organizeSuggestionIdentity.js';
 import { organizeOutcomeGroup } from '@lightnote/shared/organize-progress';
 import {
   assertOrganizeProcessingSchema,
@@ -33,7 +39,7 @@ import { readCurrentSuggestionSource } from './organizeSuggestionSources.js';
 import { createUserAiExecutionConfig } from '../aiBillingCatalog.js';
 import { runAiExecution } from '../aiExecution/service.js';
 import { getActiveAiExecution } from '../aiExecution/context.js';
-import { withActiveUserAiDispatch, lockActiveUserForUpdate } from '../aiOutboundDispatchGuard.js';
+import { withActiveUserAiDispatch } from '../aiOutboundDispatchGuard.js';
 import { getActiveSecurityRestrictions } from '../security/services/securityRestrictionService.js';
 import { isOrganizeAiSuggestionsEnabled } from '../organizeAiSuggestionFeature.js';
 import {
@@ -56,10 +62,10 @@ async function ownedRun(db, userId, id, lock = false) {
   if (!rows.length) throw suggestionError('ORGANIZE_RUN_NOT_FOUND', '整理任务不存在', 404);
   return rows[0];
 }
-export async function previewSuggestionRun(db = pool, { userId, input, requestId }) {
+export async function previewSuggestionRun(db = pool, { userId, input, requestId, maintenanceActorId }) {
   if (!uuid(requestId)) throw suggestionError('ORGANIZE_REQUEST_INVALID', '请求标识无效');
   await assertOrganizeProcessingSchema(db);
-  return previewV2(db, { userId, input, requestId, runVersion: 3 });
+  return previewV2(db, { userId, input, requestId, runVersion: 3, maintenanceActorId });
 }
 
 function mapRun(row) {
@@ -68,7 +74,7 @@ function mapRun(row) {
     status: row.status,
     createdAt: row.created_at,
     ...lifecycleState(row),
-    options: json(row.options_json),
+    options: publicOrganizeOptions(row.options_json),
     summary: json(row.summary_json),
   };
 }
@@ -77,7 +83,7 @@ export async function createSuggestionRun(db = pool, { userId, id, requestId = i
   const version = await ownedRun(db, userId, id);
   if (isRunV2(version)) return startV2(db, { userId, id, requestId, replaceRunId });
   return transaction(db, async (c) => {
-    await lockActiveUserForUpdate(c, userId);
+    await lockOrganizeRunOwner(c, userId, id);
     const run = await ownedRun(c, userId, id, true);
     if (run.status !== 'preview') return mapRun(run);
     const [active] = await c.query(
@@ -265,7 +271,7 @@ export async function actOnSuggestion(
   }
   let cleanup;
   const result = await transaction(db, async (c) => {
-    await lockActiveUserForUpdate(c, userId);
+    await lockOrganizeRunOwner(c, userId, runId);
     const run = await ownedRun(c, userId, runId, true);
     if (run.status === 'preview') throw suggestionError('ORGANIZE_RUN_NOT_STARTED', '请先确认并开始整理', 409);
     const [rows] = await c.query(
@@ -523,7 +529,7 @@ export async function runSingleSuggestionItem(workerId, db = pool, dependencies 
     if (!dependencies.skipRules && (await runRuleBatch(db))) return true;
     job = await transaction(db, async (c) => {
       // MySQL 5.7: serialize the short claim transaction; release locks before any AI call.
-      const [runs] = await c.query(`SELECT r.id,r.status,r.run_version FROM organize_suggestion_runs r
+      const [runs] = await c.query(`SELECT r.id,r.status,r.run_version,r.options_json FROM organize_suggestion_runs r
         WHERE ${dependencies.pipeline === 'v3' ? 'r.run_version=3 AND' : dependencies.pipeline === 'legacy' ? 'r.run_version<>3 AND' : ''} r.status IN ('running','paused','ended','cancelled') AND (r.run_version<>3 OR r.rule_phase='completed') AND EXISTS (
           SELECT 1 FROM organize_suggestion_items i WHERE i.run_id=r.id AND
           ((r.status='running' AND (i.ai_status='queued' OR (i.ai_status='waiting_content' AND (i.next_check_at IS NULL OR i.next_check_at<=NOW())))) OR (i.ai_status IN ('running','preparing_content') AND i.lease_expires_at<NOW()))
@@ -538,6 +544,7 @@ export async function runSingleSuggestionItem(workerId, db = pool, dependencies 
       if (!rows.length) return null;
       const item = rows[0];
       item.run_version = runs[0].run_version;
+      item.maintenanceActorId = maintenanceActor(runs[0].options_json);
       if (item.ai_status === 'running') {
         // 外发后崩溃无法证明 Provider 未执行，过期租约只交付失败，不自动重复收费。
         await finishItem(c, item, 'failed', null, 'ORGANIZE_WORKER_INTERRUPTED');
@@ -666,8 +673,13 @@ export async function runSingleSuggestionItem(workerId, db = pool, dependencies 
         ? job.processingPrepared?.bookmark || (await (dependencies.prepare || prepareResourceMetadata)(current))
         : null;
     const dispatch = dependencies.dispatch || withActiveUserAiDispatch;
-    await dispatch(db, job.user_id, async ({ connection, user }) => {
-      const restrictions = await (dependencies.restrictions || getActiveSecurityRestrictions)(job.user_id);
+    await dispatch(db, job.maintenanceActorId || job.user_id, async ({ connection, user }) => {
+      if (job.maintenanceActorId && user.role !== 'root')
+        throw suggestionError('AI_ACCOUNT_UNAVAILABLE', '维护管理员当前不可用', 403);
+      const subject = job.maintenanceActorId ? await lockVisitorSubject(connection, job.user_id) : user;
+      const restrictions = await (dependencies.restrictions || getActiveSecurityRestrictions)(
+        job.maintenanceActorId || job.user_id,
+      );
       if (restrictions.some((r) => ['full_lock', 'login_lock', 'ai_lock'].includes(r.restriction_type)))
         throw suggestionError('AI_ACCESS_RESTRICTED', 'AI 权限暂不可用', 403);
       if (['bookmark', 'tag'].includes(current.type) || (Number(job.run_version) === 3 && current.type === 'note')) {
@@ -691,7 +703,7 @@ export async function runSingleSuggestionItem(workerId, db = pool, dependencies 
       const request = {
         user,
         billingUser: user,
-        resourceUser: user,
+        resourceUser: subject,
         securityRestrictions: restrictions,
         headers: {},
         body: {},
@@ -714,7 +726,9 @@ export async function runSingleSuggestionItem(workerId, db = pool, dependencies 
         const latest = await readCurrentSuggestionSource(db, job.user_id, job.resource_type, job.resource_id);
         if (!latest || latest.version !== current.version)
           throw suggestionError('ORGANIZE_RESOURCE_CHANGED', '资料已变化', 409);
-        const restrictions = await (dependencies.restrictions || getActiveSecurityRestrictions)(job.user_id);
+        const restrictions = await (dependencies.restrictions || getActiveSecurityRestrictions)(
+          job.maintenanceActorId || job.user_id,
+        );
         if (restrictions.some((r) => ['full_lock', 'login_lock', 'ai_lock'].includes(r.restriction_type)))
           throw suggestionError('AI_ACCESS_RESTRICTED', 'AI 权限暂不可用', 403);
         const [renewed] = await db.query(
@@ -732,7 +746,7 @@ export async function runSingleSuggestionItem(workerId, db = pool, dependencies 
           organizeItemId: job.id,
           request,
           identity: user,
-          subjectIdentity: user,
+          subjectIdentity: subject,
           surface: 'organize_center',
           reservationTokens: estimateResourceMetadataTokens(current, json(job.ai_kinds_json), tags, prepared),
           maxUserProviderCalls: 1,
@@ -890,13 +904,14 @@ export async function runSingleSuggestionItem(workerId, db = pool, dependencies 
 export const pauseSuggestionRun = (db = pool, args) => pauseV2(db, args);
 export const resumeSuggestionRun = (db = pool, args) => resumeV2(db, args);
 
-export async function previewFileRetry(db = pool, { userId, id, requestId }) {
+export async function previewFileRetry(db = pool, { userId, id, requestId, maintenanceActorId }) {
   if (!uuid(requestId) || !uuid(id)) throw suggestionError('ORGANIZE_REQUEST_INVALID', '请求标识无效');
   await assertOrganizeProcessingSchema(db);
   return previewV2(db, {
     userId,
     requestId,
     retryFrom: id,
+    maintenanceActorId,
     runVersion: 3,
     input: { resourceTypes: ['file'], checks: ['tags'], scope: 'untagged', items: [] },
   });

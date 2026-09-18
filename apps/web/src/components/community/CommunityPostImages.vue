@@ -1,5 +1,9 @@
 <template>
-  <div v-if="images?.length" class="community-post-images" :class="{ 'is-single': images.length === 1 }">
+  <div
+    v-if="images?.length"
+    class="community-post-images"
+    :class="{ 'is-single': images.length === 1, 'is-article': article }"
+  >
     <BButton
       v-for="(item, index) in images"
       :key="item.publicId"
@@ -30,7 +34,7 @@
   import type { FeedImage } from '@/api/communityFeedApi';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   const BImageViewer = defineAsyncComponent(() => import('@/components/base/Viewer/BImageViewer.vue'));
-  const props = defineProps<{ images?: FeedImage[] }>();
+  const props = defineProps<{ images?: FeedImage[]; article?: boolean }>();
   const { t } = useI18n();
   const failed = ref(new Set<string>());
   function openImage(id: string) {
@@ -86,6 +90,18 @@
   .community-post-images.is-single {
     grid-template-columns: minmax(0, 1fr);
     max-width: 380px;
+  }
+  .community-post-images.is-article:not(.is-single) {
+    max-width: none;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  }
+  .community-post-images.is-article:not(.is-single) .b_btn {
+    max-height: 240px;
+  }
+  @media (max-width: 767px) {
+    .community-post-images.is-article:not(.is-single) {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
   }
   .community-post-images.is-single .b_btn {
     aspect-ratio: auto;

@@ -3,6 +3,13 @@ import { resultData } from '../util/common.js';
 import { ensureNotVisitor } from '../util/auth.js';
 import * as service from '../util/services/organizeSuggestionService.js';
 
+// Identity is derived from authenticated context, never from request input.
+function maintenanceActorId(req) {
+  return req.adminContext?.mode === 'maintain' && req.resourceUser?.role === 'visitor'
+    ? req.billingUser?.id
+    : undefined;
+}
+
 function handler(write, work) {
   return async (req, res) => {
     if (write && !ensureNotVisitor(req, res)) return;
@@ -26,7 +33,12 @@ function handler(write, work) {
   };
 }
 export const preview = handler(true, (req, userId) =>
-  service.previewSuggestionRun(pool, { userId, input: req.body, requestId: req.body?.requestId }),
+  service.previewSuggestionRun(pool, {
+    userId,
+    input: req.body,
+    requestId: req.body?.requestId,
+    maintenanceActorId: maintenanceActorId(req),
+  }),
 );
 export const start = handler(true, (req, userId) =>
   service.createSuggestionRun(pool, {
@@ -61,7 +73,12 @@ export const act = handler(true, (req, userId) =>
 );
 
 export const retryFiles = handler(true, (req, userId) =>
-  service.previewFileRetry(pool, { userId, id: req.params.id, requestId: req.body?.requestId }),
+  service.previewFileRetry(pool, {
+    userId,
+    id: req.params.id,
+    requestId: req.body?.requestId,
+    maintenanceActorId: maintenanceActorId(req),
+  }),
 );
 
 export const archiveDraft = handler(false, (req, userId) =>
