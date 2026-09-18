@@ -1,6 +1,7 @@
 import { ensureBookmarkArchiveSchema } from '../util/bookmarkArchiveJobs.js';
 import { constants as fsConstants, promises as fsP } from 'node:fs';
 import pool from '../db/index.js';
+import redisClient from '../util/redisClient.js';
 import { ensureOrganizeSchema, ORGANIZE_BACKGROUND_TABLES } from '../util/organizeSchema.js';
 import { ensureResourceGovernanceSchema, RESOURCE_GOVERNANCE_TABLES } from '../util/resourceGovernanceSchema.js';
 import { resolveGovernedImageRoots } from '../util/resourceGovernance/safety.js';
@@ -42,7 +43,12 @@ try {
   failed = true;
   console.error('[resource-governance-check] failed code=%s', String(error?.code || error?.message || 'UNKNOWN'));
 } finally {
-  await pool.end();
+  try {
+    await pool.end();
+  } finally {
+    // Schema imports also open the cache client; this one-shot check owns no Redis commands.
+    if (redisClient.isOpen) redisClient.destroy();
+  }
 }
 
 if (failed) process.exitCode = 1;
