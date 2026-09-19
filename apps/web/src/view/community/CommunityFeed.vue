@@ -1,5 +1,5 @@
 <template>
-  <main ref="surface" v-auto-scrollbar class="community-feed" @scroll.passive="rememberScroll">
+  <main ref="surface" v-auto-scrollbar class="community-feed community-surface" @scroll.passive="rememberScroll">
     <CommunityLayout class="feed-container" :class="{ 'is-post-detail': mode === 'detail' }">
       <template #navigation><CommunityNavigation active="feed" /></template>
       <div class="feed-main-column" :class="{ 'is-management': mode === 'manage' }">
@@ -1259,7 +1259,6 @@
       overflow-anchor: none;
       box-sizing: border-box;
       color: var(--text-color);
-      background: var(--background-color);
       padding: 0;
     }
     .feed-main-column {

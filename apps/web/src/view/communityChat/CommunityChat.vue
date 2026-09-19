@@ -1,47 +1,49 @@
 <template>
-  <CommunityLayout chat :disabled="!feedAvailable" class="community-chat-page">
-    <template #navigation><CommunityFeedLink @available="feedAvailable = $event" /></template>
-    <template #aside><CommunityContext chat /></template>
-    <section
-      v-if="bootstrapLoading"
-      class="community-chat-bootstrap"
-      :aria-label="t('communityChat.bootstrapLoading')"
-      aria-busy="true"
-    >
-      <div class="community-chat-bootstrap__conversation" aria-hidden="true">
-        <div class="community-chat-bootstrap__header"
-          ><span class="bootstrap-icon"></span><span class="bootstrap-title"></span
-        ></div>
-        <div class="community-chat-bootstrap__messages">
-          <ChatMessageSkeleton :label="t('communityChat.messagesLoading')" />
+  <div v-auto-scrollbar class="community-surface">
+    <CommunityLayout chat :disabled="!feedAvailable" class="community-chat-page">
+      <template #navigation><CommunityFeedLink @available="feedAvailable = $event" /></template>
+      <template #aside><CommunityContext chat /></template>
+      <section
+        v-if="bootstrapLoading"
+        class="community-chat-bootstrap"
+        :aria-label="t('communityChat.bootstrapLoading')"
+        aria-busy="true"
+      >
+        <div class="community-chat-bootstrap__conversation" aria-hidden="true">
+          <div class="community-chat-bootstrap__header"
+            ><span class="bootstrap-icon"></span><span class="bootstrap-title"></span
+          ></div>
+          <div class="community-chat-bootstrap__messages">
+            <ChatMessageSkeleton :label="t('communityChat.messagesLoading')" />
+          </div>
+          <div class="community-chat-bootstrap__composer"><span></span></div>
         </div>
-        <div class="community-chat-bootstrap__composer"><span></span></div>
-      </div>
-    </section>
+      </section>
 
-    <CommunityChatWorkspace
-      v-else-if="messagingReady && access"
-      :access="access"
-      :rooms="serverRooms"
-      @room-read="handleRoomRead"
-      @access-invalidated="loadDirectory({ background: true })"
-    >
-      <template v-if="feedAvailable && isMobile" #header-navigation>
-        <CommunityNavigation active="chat" compact />
-      </template>
-    </CommunityChatWorkspace>
+      <CommunityChatWorkspace
+        v-else-if="messagingReady && access"
+        :access="access"
+        :rooms="serverRooms"
+        @room-read="handleRoomRead"
+        @access-invalidated="loadDirectory({ background: true })"
+      >
+        <template v-if="feedAvailable && isMobile" #header-navigation>
+          <CommunityNavigation active="chat" compact />
+        </template>
+      </CommunityChatWorkspace>
 
-    <section v-else class="community-chat-unavailable" role="status">
-      <span class="community-chat-unavailable__icon" aria-hidden="true">
-        <SvgIcon :src="icon.ai.conversations" size="26" />
-      </span>
-      <h1>{{ unavailableTitle }}</h1>
-      <p>{{ unavailableDescription }}</p>
-      <BButton type="primary" :loading="bootstrapLoading" @click="loadDirectory">
-        {{ t('communityChat.retryWorkspace') }}
-      </BButton>
-    </section>
-  </CommunityLayout>
+      <section v-else class="community-chat-unavailable" role="status">
+        <span class="community-chat-unavailable__icon" aria-hidden="true">
+          <SvgIcon :src="icon.ai.conversations" size="26" />
+        </span>
+        <h1>{{ unavailableTitle }}</h1>
+        <p>{{ unavailableDescription }}</p>
+        <BButton type="primary" :loading="bootstrapLoading" @click="loadDirectory">
+          {{ t('communityChat.retryWorkspace') }}
+        </BButton>
+      </section>
+    </CommunityLayout>
+  </div>
 </template>
 
 <script setup lang="ts">

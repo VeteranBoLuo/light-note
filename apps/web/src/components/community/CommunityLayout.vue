@@ -30,12 +30,25 @@
   });
   onBeforeUnmount(() => observer?.disconnect());
 </script>
+<style lang="less">
+  // Every community route reserves the same scrollbar lane, including the fixed-height chat.
+  .community-surface {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    overflow: auto;
+    box-sizing: border-box;
+    background: var(--workspace-canvas);
+  }
+</style>
 <style scoped lang="less">
   .community-layout {
     display: grid;
     grid-template-columns: 200px minmax(0, 1fr);
     width: 100%;
     max-width: 1600px;
+    box-sizing: border-box;
+    border-inline: 1px solid var(--workspace-divider);
     min-height: 100%;
     margin: 0 auto;
     background: var(--workspace-open-canvas);
@@ -121,6 +134,9 @@
     }
   }
   @media (max-width: 767px) {
+    .community-layout {
+      border-inline: 0;
+    }
     // The mobile navigation already names the page; retain a heading for assistive technology.
     :deep(.community-page-title) {
       position: absolute;

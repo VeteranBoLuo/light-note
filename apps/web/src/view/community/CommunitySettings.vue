@@ -1,5 +1,5 @@
 <template>
-  <div class="community-settings-page" v-auto-scrollbar>
+  <div class="community-settings-page community-surface" v-auto-scrollbar>
     <CommunityLayout>
       <template #navigation><CommunityNavigation active="feed" /></template>
       <section class="settings-content">
