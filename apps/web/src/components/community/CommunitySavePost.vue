@@ -22,36 +22,42 @@
             >{{ t('community.feed.saveTitle')
             }}<BInput v-model:value="title" :maxlength="255" :disabled="busy || Boolean(createdId)"
           /></label>
-          <template v-if="kind === 'note'">
-            <label
-              >{{ t('community.feed.saveLocation')
-              }}<BSelect
-                v-model:value="parentId"
-                :options="parents"
-                :placeholder="t('community.feed.saveRoot')"
-                :disabled="busy || Boolean(createdId) || parentsLoading"
-            /></label>
-            <div class="save-location-actions"
-              ><BButton :disabled="busy || Boolean(createdId) || parentsLoading" @click="loadParents(null)">{{
-                t('community.feed.saveRoot')
-              }}</BButton
-              ><BButton
-                :disabled="busy || Boolean(createdId) || parentsLoading || !parentId"
-                @click="loadParents(parentId)"
-                >{{ t('community.feed.browseChildren') }}</BButton
-              ></div
+          <div v-if="kind === 'note'" class="save-location-field">
+            <span>{{ t('community.feed.saveLocation') }}</span>
+            <CommunityNoteLocation v-model:value="parentId" :disabled="busy || Boolean(createdId)" />
+          </div>
+          <div class="save-location-field">
+            <span>{{ t('community.feed.saveTags') }}</span>
+            <BSelect
+              v-model:value="tags"
+              :options="selectableTags"
+              mode="multiple"
+              chip-tone="tag"
+              :max-tag-count="3"
+              :show-search="true"
+              :placeholder="t('bookmarkEditor.tagPlaceholder')"
+              :disabled="busy"
             >
-          </template>
+              <template #dropdown-footer>
+                <InlineTagCreate
+                  v-if="!busy && tags.length < 4"
+                  :existing-tags="existingTags"
+                  @created="selectCreatedTag"
+                  @reused="selectCreatedTag"
+                  @stale="reloadTags"
+                />
+              </template>
+            </BSelect>
+          </div>
           <label
-            >{{ t('community.feed.saveTags')
-            }}<BSelect v-model:value="tags" :options="tagOptions" mode="multiple" :disabled="busy"
-          /></label>
-          <label
-            >{{ t('community.feed.myThoughts')
+            >{{ t(kind === 'note' ? 'community.feed.myThoughts' : 'community.feed.bookmarkDescription')
             }}<BInput
               v-model:value="thoughts"
               type="textarea"
               :rows="3"
+              :placeholder="
+                t(kind === 'note' ? 'community.feed.noteThoughtsHint' : 'community.feed.bookmarkThoughtsHint')
+              "
               :maxlength="2000"
               :disabled="busy || Boolean(createdId)"
           /></label>
@@ -82,7 +88,7 @@
   </BModal>
 </template>
 <script setup lang="ts">
-  import { ref, onMounted, onBeforeUnmount } from 'vue';
+  import { computed, ref, onMounted, onBeforeUnmount } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
   import { useUserStore, useNoteWorkspaceStore } from '@/store';
@@ -95,8 +101,11 @@
   import { communityNoteContent, communityPostUrl } from '@/utils/communityPostSave';
   import { confirmNoteShareExposure } from '@/utils/noteShareExposure';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
+  import CommunityNoteLocation from './CommunityNoteLocation.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import InlineTagCreate from '@/components/tag/InlineTagCreate.vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
@@ -116,36 +125,39 @@
     thoughts = ref(''),
     tags = ref<string[]>([]),
     parentId = ref('');
-  const parents = ref<Array<{ value: string; label: string }>>([]),
-    tagOptions = ref<Array<{ value: string; label: string }>>([]);
+  const tagOptions = ref<Array<{ value: string; label: string }>>([]);
+  const existingTags = computed(() => tagOptions.value.map((tag) => ({ id: tag.value, name: tag.label })));
+  const selectableTags = computed(() =>
+    tagOptions.value.map((tag) => ({ ...tag, disabled: tags.value.length >= 4 && !tags.value.includes(tag.value) })),
+  );
+  function selectCreatedTag(tag: { id: string; name: string }) {
+    if (!current() || busy.value) return;
+    if (!tagOptions.value.some((option) => option.value === tag.id))
+      tagOptions.value.push({ value: tag.id, label: tag.name });
+    if (tags.value.length < 4 && !tags.value.includes(tag.id)) tags.value.push(tag.id);
+  }
+  async function refreshTags() {
+    const response = await apiQueryPost('/api/bookmark/queryTagList', { filters: { userId: owner } });
+    if (!current()) return;
+    if (response.status !== 200) throw new Error();
+    tagOptions.value = (response.data || []).map((item: any) => ({ value: String(item.id), label: item.name }));
+  }
+  async function reloadTags() {
+    try {
+      await refreshTags();
+    } catch {
+      if (current()) message.error(t('community.feed.saveFailed'));
+    }
+  }
   const busy = ref(false),
     initializing = ref(true),
     ready = ref(false),
-    parentsLoading = ref(false),
     error = ref(''),
     createdId = ref('');
   const existing = ref<{ id: string; deleted: boolean } | null>(null);
   let key = '';
   let folderId: string | undefined;
   const copies = new Map<string, { file?: File; id?: string; receipt: ManagedCloudUploadReceipt }>();
-  async function loadParents(id: string | null) {
-    parentsLoading.value = true;
-    try {
-      workspace.ensureOwner(buildNoteDetailRequestScope(user));
-      const rows = await workspace.loadChildren(id);
-      if (!current()) return;
-      parents.value = [
-        { value: '', label: t('community.feed.saveRoot') },
-        ...(id ? parents.value.filter((p) => p.value === id) : []),
-        ...rows.map((row) => ({ value: row.id, label: row.title })),
-      ];
-      parentId.value = id || '';
-    } catch {
-      if (current()) error.value = t('community.feed.saveFailed');
-    } finally {
-      if (current()) parentsLoading.value = false;
-    }
-  }
   onMounted(initialize);
   async function initialize() {
     initializing.value = true;
@@ -156,11 +168,7 @@
       key = saved.key;
       existing.value = saved[props.kind];
       if (existing.value) return;
-      const response = await apiQueryPost('/api/bookmark/queryTagList', { filters: { userId: owner } });
-      if (!current()) return;
-      if (response.status !== 200) throw new Error();
-      tagOptions.value = (response.data || []).map((item: any) => ({ value: String(item.id), label: item.name }));
-      if (props.kind === 'note') await loadParents(null);
+      await refreshTags();
       if (current()) ready.value = true;
     } catch {
       if (current()) error.value = t('community.feed.saveFailed');
@@ -232,7 +240,7 @@
               imageIds,
               thoughts.value,
               t('community.feed.sourcePost'),
-              t('community.feed.myThoughts'),
+              t('community.feed.thoughtsHeading'),
             ),
             parentId: parentId.value || null,
             idempotencyKey: key,
@@ -281,7 +289,10 @@
           parentId: parentId.value || null,
         });
       }
-      if (current()) openSaved(createdId.value);
+      if (current()) {
+        emit('close');
+        message.success(t('common.saveSuccess'));
+      }
     } catch {
       if (current()) error.value = t(createdId.value ? 'community.feed.savedTagsFailed' : 'community.feed.saveFailed');
     } finally {
@@ -294,21 +305,17 @@
     display: grid;
     gap: 16px;
   }
-  .save-post-form label {
+  .save-post-form label,
+  .save-location-field {
     display: grid;
     gap: 8px;
     margin-bottom: 16px;
     color: var(--text-color);
   }
-  .save-post-actions,
-  .save-location-actions {
+  .save-post-actions {
     display: flex;
     gap: 8px;
     justify-content: flex-end;
-  }
-  .save-location-actions {
-    margin: -8px 0 16px;
-    justify-content: flex-start;
   }
   .save-post-hint {
     color: var(--desc-color);

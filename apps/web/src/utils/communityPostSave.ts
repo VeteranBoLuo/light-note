@@ -22,7 +22,7 @@ export function communityNoteContent(
     .join('');
   const source = `<hr><p>${escapePostText(sourceLabel)}：${escapePostText(post.author?.name || '')} · <a href="${escapePostText(communityPostUrl(post.publicId))}">${escapePostText(post.title)}</a></p>`;
   const personal = thoughts.trim()
-    ? `<h2>${escapePostText(thoughtsLabel)}</h2><p>${escapePostText(thoughts).replace(/\n/g, '<br>')}</p>`
+    ? `<blockquote><p><strong>${escapePostText(thoughtsLabel)}</strong></p><p>${escapePostText(thoughts).replace(/\n/g, '<br>')}</p></blockquote>`
     : '';
   return imageHtml + renderCommunityMarkdown(post.body) + source + personal;
 }

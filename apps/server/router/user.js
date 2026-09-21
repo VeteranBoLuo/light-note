@@ -2,6 +2,9 @@ import express from 'express';
 import rateLimit from 'express-rate-limit';
 const router = express.Router();
 
+import dataExports from './dataExports.js';
+router.use('/dataExports', dataExports);
+
 import * as userHandle from '../router_handle/userHandle.js';
 import { saveAdminUserRemark } from '../router_handle/adminUserRemarkHandle.js';
 import {

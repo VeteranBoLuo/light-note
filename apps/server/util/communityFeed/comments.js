@@ -343,7 +343,7 @@ export async function ownComments({ user, input = {}, env = process.env, db = po
   await access(db, user, { env, ownSafety: true });
   const { limit, before } = pageOptions(input);
   const [rows] = await db.query(
-    `SELECT c.id,c.public_id AS publicId,p.public_id AS postId,c.body,c.status,c.row_revision AS revision,parent.public_id AS replyTo,(c.status='published' AND p.status='published' AND ${authorVisibleSql('p')} AND ${unblockedSql('p')}) AS canOpen FROM community_comments c JOIN community_posts p ON p.id=c.post_id LEFT JOIN community_comments parent ON parent.id=c.reply_to_comment_id WHERE c.author_id=? ${before ? 'AND c.id<?' : ''} ORDER BY c.id DESC LIMIT ?`,
+    `SELECT c.id,c.public_id AS publicId,p.public_id AS postId,c.body,c.status,c.row_revision AS revision,parent.public_id AS replyTo,(c.status='published' AND p.status='published' AND ${authorVisibleSql('p')} AND ${unblockedSql('p')}) AS canOpen FROM community_comments c JOIN community_posts p ON p.id=c.post_id LEFT JOIN community_comments parent ON parent.id=c.reply_to_comment_id WHERE c.author_id=? AND c.status<>'withdrawn' ${before ? 'AND c.id<?' : ''} ORDER BY c.id DESC LIMIT ?`,
     [user.id, user.id, user.id, ...(before ? [before] : []), limit + 1],
   );
   return {

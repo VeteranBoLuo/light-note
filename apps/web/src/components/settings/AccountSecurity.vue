@@ -156,13 +156,13 @@
             <span class="deletion-backup__title">{{ t('accountSettings.backupTitle') }}</span>
             <span class="field-desc">{{ t('accountSettings.backupDesc') }}</span>
           </div>
-          <BButton :loading="exporting" :disabled="codeSending" @click="exportAll">{{
+          <BButton :disabled="codeSending" @click="exportAll">{{
             t('accountSettings.export')
           }}</BButton>
         </div>
         <div class="deletion-actions">
           <BButton :disabled="codeSending" @click="closeDeletion">{{ t('accountSettings.cancel') }}</BButton>
-          <BButton type="danger" :loading="codeSending" :disabled="exporting" @click="sendDeletionCode">
+          <BButton type="danger" :loading="codeSending" @click="sendDeletionCode">
             {{ t('accountSettings.getCode') }}
           </BButton>
         </div>
@@ -223,6 +223,7 @@
 </template>
 
 <script setup lang="ts">
+  import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
   import { computed, onBeforeUnmount, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useUserStore } from '@/store';
@@ -431,7 +432,6 @@
   const deletionCountdown = ref(0);
   const codeSending = ref(false);
   const deleting = ref(false);
-  const exporting = ref(false);
   let deletionCountdownTimer: number | null = null;
 
   const canSubmitDeletion = computed(
@@ -494,35 +494,9 @@
     resetDeletionFlow();
   }
 
+  const emit = defineEmits<{ 'export-data': [] }>();
   async function exportAll() {
-    if (exporting.value) return;
-    exporting.value = true;
-    const owner = generation;
-    try {
-      const res = await apiBasePost('/api/user/exportData', {}, { silent: true });
-      if (owner !== generation) return;
-      if (res?.status !== 200 || !res.data) {
-        message.error(res?.msg || t('accountSettings.exportFailed'));
-        return;
-      }
-      const blob = new Blob([JSON.stringify(res.data, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const date = new Date();
-      const pad = (value: number) => String(value).padStart(2, '0');
-      const download = document.createElement('a');
-      download.href = url;
-      download.download = `轻笺备份_${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}.json`;
-      document.body.appendChild(download);
-      download.click();
-      document.body.removeChild(download);
-      URL.revokeObjectURL(url);
-      message.success(t('accountSettings.downloaded'));
-    } catch {
-      if (owner !== generation) return;
-      message.error(t('accountSettings.exportFailed'));
-    } finally {
-      if (owner === generation) exporting.value = false;
-    }
+    await closeCurrentMobileOverlayThen(closeDeletion, () => emit('export-data'));
   }
 
   async function sendDeletionCode() {
@@ -596,7 +570,6 @@
       acc.value = { email: '', githubBound: false, loginType: 'local', hasPassword: true };
       revoking.value = false;
       passwordSaving.value = false;
-      exporting.value = false;
       deleting.value = false;
       revokingId.value = null;
       pwVisible.value = false;

@@ -21,10 +21,24 @@ it('keeps copied images before the body and records the source without executabl
   expect(html.indexOf('/api/file/image/')).toBeLessThan(html.indexOf('<strong>正文'));
   expect(node.querySelector('a')?.getAttribute('href')).toBe(communityPostUrl('post'));
   expect(node.textContent).toContain('<作者>');
-  expect(node.textContent).toContain('<img src=x onerror=alert(1)>');
+  expect(node.querySelector('blockquote')?.textContent).toContain('<img src=x onerror=alert(1)>');
+  expect(node.querySelector('blockquote strong')?.textContent).toBe('我的想法');
+  expect(node.querySelector('blockquote h2')).toBeNull();
+  expect(node.lastElementChild?.tagName).toBe('BLOCKQUOTE');
 });
 it('creates a direct link without navigation or notification parameters', () => {
   expect(communityPostUrl('post', 'https://example.com/community?comment=x')).toBe(
     'https://example.com/community/posts/post',
   );
+});
+
+it('omits the thoughts block when no personal thoughts were entered', () => {
+  const html = communityNoteContent(
+    { publicId: 'post', title: '标题', body: '正文' } as any,
+    [],
+    '  ',
+    '来源',
+    '我的想法',
+  );
+  expect(html).not.toContain('<blockquote>');
 });

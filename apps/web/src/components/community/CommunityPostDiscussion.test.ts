@@ -100,3 +100,18 @@ it('retains the list if the target is no longer accessible', async () => {
   expect(host.querySelectorAll('.feed-comment')).toHaveLength(1);
   expect(host.textContent).toContain('community.feed.commentUnavailable');
 });
+
+it('keeps only withdrawn roots with replies and hides their original body', async () => {
+  mocks.get.mockResolvedValue({
+    items: [
+      { ...comment('target'), status: 'withdrawn', body: 'private original', replyCount: 1 },
+      { ...comment('leaf'), status: 'withdrawn' },
+    ],
+    nextCursor: null,
+  });
+  const host = await mount();
+  expect(host.querySelectorAll('.feed-comment')).toHaveLength(1);
+  expect(host.textContent).toContain('community.feed.commentDeleted');
+  expect(host.textContent).not.toContain('private original');
+  expect(host.querySelector('.feed-replies-toggle')).not.toBeNull();
+});

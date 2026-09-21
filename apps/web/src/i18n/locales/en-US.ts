@@ -1,3 +1,4 @@
+import { dataExportEn } from './dataExport';
 import { communityEn } from './community';
 import { coreUsageReportEn } from './coreUsageReport';
 import autumn from './autumn-en-US';
@@ -10,6 +11,7 @@ import { accountSettingsEn } from './accountSettings';
 import { settingsRefineEn } from './settingsRefine';
 import { notificationMessages } from '@lightnote/shared/notification-presentation';
 export default {
+  dataExport: dataExportEn,
   community: communityEn,
   coreUsageReport: coreUsageReportEn,
   autumn,

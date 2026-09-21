@@ -2,9 +2,9 @@ import { execFileSync } from "node:child_process";
 import path from "node:path";
 
 const workerScripts =
-  /(?:^|\s)(?:\S*\/)?(?:documentWorker|noteImportWorker|browserPushWorker|resourceGovernanceWorker)\.js(?:\s|$)/;
+  /(?:^|\s)(?:\S*\/)?(?:dataExportWorker|documentWorker|noteImportWorker|browserPushWorker|resourceGovernanceWorker)\.js(?:\s|$)/;
 const managedWorkerCommand =
-  /(?:^|\s)\S*pnpm(?:\.c?js)?\s+--filter\s+server\s+run\s+worker:(?:documents|note-imports|browser-push|resource-governance)(?::dev)?\s*$/;
+  /(?:^|\s)\S*pnpm(?:\.c?js)?\s+--filter\s+server\s+run\s+worker:(?:data-exports|documents|note-imports|browser-push|resource-governance)(?::dev)?\s*$/;
 const runProcessCommand = (file, args) =>
   execFileSync(file, args, {
     encoding: "utf8",

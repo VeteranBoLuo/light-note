@@ -541,11 +541,11 @@ describe.skipIf(!socketPath)('P2 real database boundaries', () => {
         expectedRevision: (await ownComments({ user: B, env, db })).items[0].revision,
       }),
     );
-    expect((await ownComments({ user: B, env, db })).items[0].canOpen).toBe(0);
+    expect((await ownComments({ user: B, env, db })).items).toEqual([]);
     expect((await results({ user: A, env, db })).items[0].canOpen).toBe(1);
     await run(deletePost, A, input({ postId: p.publicId, expectedRevision: p.revision }));
     expect((await results({ user: A, env, db })).items).toEqual([]);
-    expect((await ownComments({ user: B, env, db })).items[0].canOpen).toBe(0);
+    expect((await ownComments({ user: B, env, db })).items).toEqual([]);
   });
   it('same request has one result under concurrency and cannot be reused with another body', async () => {
     const body = postInput();
@@ -684,17 +684,12 @@ describe.skipIf(!socketPath)('P2 real database boundaries', () => {
       expect(rows[0].pending_revision_id).toBeNull();
     }
   });
-  it('shows withdrawal over the published revision and enforces owner deletion and revision checks', async () => {
+  it('hides withdrawn posts from own lists and enforces owner deletion and revision checks', async () => {
     const p = await published();
     const args = { postId: p.publicId, expectedRevision: p.revision };
     const withdrawn = await run(withdrawPost, A, input(args));
     const own = await ownPosts({ user: A, env, db });
-    expect(own.items.find((item) => item.publicId === p.publicId)).toMatchObject({
-      status: 'withdrawn',
-      displayStatus: 'withdrawn',
-      revisionStatus: 'published',
-      hasPublishedVersion: false,
-    });
+    expect(own.items.some((item) => item.publicId === p.publicId)).toBe(false);
     await expect(run(deletePost, B, input({ ...args, expectedRevision: withdrawn.revision }))).rejects.toMatchObject({
       code: 'COMMUNITY_CONTENT_UNAVAILABLE',
     });

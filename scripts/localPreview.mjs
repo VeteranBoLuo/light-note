@@ -213,6 +213,7 @@ async function main() {
   await waitForPort(backendPort, backend, "本机后端");
 
   console.log("\n[本地预览] 2/4 启动文档与文件预览 Worker…");
+  runPnpm("数据导出 Worker", ["--filter", "server", "run", "worker:data-exports"]);
   runPnpm("笔记导入 Worker", ["--filter", "server", "run", "worker:note-imports"]);
   const worker = runPnpm("文档与文件预览 Worker", [
     "--filter",

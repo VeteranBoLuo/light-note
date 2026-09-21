@@ -220,6 +220,7 @@ describe('communityChatMessageService', () => {
                 publicId: 'message-2',
                 userId: 'user-1',
                 content: '第二条',
+                authorAvatarVersion: 'new-avatar',
                 databaseNow: '2026-08-26T10:00:00.125Z',
                 mentionNamesHex: Buffer.from('薄荷').toString('hex'),
               }),
@@ -255,7 +256,7 @@ describe('communityChatMessageService', () => {
       author: {
         name: '薄荷',
         role: 'member',
-        avatar: '/api/community-chat/messages/message-2/author-avatar',
+        avatar: '/api/community-chat/messages/message-2/author-avatar?v=new-avatar',
         frameId: 'frame_mint',
         level: 2,
         levelName: '书生',

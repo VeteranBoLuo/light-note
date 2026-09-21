@@ -419,7 +419,10 @@ export async function ownPosts({ user, input = {}, env = process.env, db = pool,
     params = [];
   let where = moderation ? (input.scope === 'all' ? '1=1' : 'p.pending_revision_id IS NOT NULL') : 'p.author_id=?';
   where += " AND p.status<>'deleted'";
-  if (!moderation) params.push(user.id);
+  if (!moderation) {
+    where += " AND p.status<>'withdrawn'";
+    params.push(user.id);
+  }
   if (input.postId) {
     where += ' AND p.public_id=?';
     params.push(publicId(input.postId));

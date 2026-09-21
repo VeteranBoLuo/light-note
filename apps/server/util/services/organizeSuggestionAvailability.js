@@ -29,3 +29,7 @@ export function unavailableReason(trashed) {
 export function pendingReviewSql() {
   return `((${effectiveStatusSql()})='pending' OR ((${effectiveStatusSql()})='info' AND JSON_UNQUOTE(JSON_EXTRACT(s.payload_json,'$.action')) IN ('trash','duplicate_bookmarks')))`;
 }
+
+// 整理页与简报共用：优先尚未结束的任务，否则取最近启动的一轮。
+export const visibleOrganizeRunOrderSql =
+  "(status IN ('preparing','running','paused')) DESC,COALESCE(started_at,created_at) DESC,id DESC";

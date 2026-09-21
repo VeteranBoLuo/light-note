@@ -2,6 +2,8 @@
   <BModal
     v-if="!isMobileLayout"
     v-model:visible="visible"
+    modal-class="chat-user-profile-modal"
+    mask-class="chat-user-profile-mask"
     :title="t('communityChat.profile.title')"
     :width="contentView === 'edit' ? 'min(1000px, 94vw)' : 'min(560px, 92vw)'"
     :height="contentView === 'edit' ? 'min(82dvh, 840px)' : 'auto'"
@@ -43,10 +45,14 @@
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import ChatUserProfileContent from '@/components/communityChat/ChatUserProfileContent.vue';
   import { useMobileLayout } from '@/composables/useMobileLayout';
-  import type { CommunityChatProfileUpdateInput } from '@/composables/useCommunityChatProfile';
+  import type {
+    CommunityChatProfileUpdateInput,
+    CommunityProfileActionsState,
+  } from '@/composables/useCommunityChatProfile';
 
   const props = withDefaults(
     defineProps<{
+      actionsProfile?: CommunityProfileActionsState | null;
       profile?: CommunityChatAuthorProfile | null;
       loading?: boolean;
       error?: boolean;
@@ -94,6 +100,7 @@
   const contentView = ref<'summary' | 'achievements' | 'preview' | 'edit'>('summary');
 
   const contentProps = computed(() => ({
+    actionsProfile: props.actionsProfile,
     profile: props.profile,
     loading: props.loading,
     error: props.error,
@@ -125,9 +132,26 @@
 </script>
 
 <style lang="less">
+  .modal-view.chat-user-profile-modal,
+  .mask-container.chat-user-profile-mask {
+    animation-duration: 120ms;
+  }
+
+  .modal-view.chat-user-profile-modal.out {
+    // Keep the exit frame until BModal's close timer removes the dialog.
+    animation-fill-mode: forwards;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .modal-view.chat-user-profile-modal,
+    .mask-container.chat-user-profile-mask {
+      animation-duration: 0ms;
+    }
+  }
+
   .chat-user-profile-modal__content {
-    max-height: min(72vh, 720px);
-    overflow-y: auto;
+    // BModal already limits the dialog to the viewport and owns scrolling.
+    max-height: none;
   }
 
   .chat-user-profile-modal__content--editing {

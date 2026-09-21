@@ -345,6 +345,7 @@ const MESSAGE_SELECT = `
              THEN 1
            ELSE 0
          END AS authorHasAvatar,
+         LEFT(SHA2(account.head_picture, 256), 16) AS authorAvatarVersion,
          COALESCE(growth.exp, 0) AS authorExp,
          growth.equipped_title AS authorTitleId,
          growth.equipped_frame AS authorFrameId,
@@ -818,7 +819,7 @@ async function loadMessageByPublicId(
   ]);
   const internalId = Number(rows[0].internalId);
   const authorAvatar = rows[0].authorHasAvatar
-    ? `/api/community-chat/messages/${encodeURIComponent(rows[0].publicId)}/author-avatar`
+    ? `/api/community-chat/messages/${encodeURIComponent(rows[0].publicId)}/author-avatar${rows[0].authorAvatarVersion ? `?v=${encodeURIComponent(rows[0].authorAvatarVersion)}` : ''}`
     : '';
   return toPublicMessage(
     rows[0],
@@ -1461,7 +1462,7 @@ export async function listCommunityChatMessages({
     if (!row.authorHasAvatar || authorAvatarByUserId.has(row.userId)) continue;
     authorAvatarByUserId.set(
       row.userId,
-      `/api/community-chat/messages/${encodeURIComponent(row.publicId)}/author-avatar`,
+      `/api/community-chat/messages/${encodeURIComponent(row.publicId)}/author-avatar${row.authorAvatarVersion ? `?v=${encodeURIComponent(row.authorAvatarVersion)}` : ''}`,
     );
   }
   const viewerIsRoot = memberRole === 'admin';

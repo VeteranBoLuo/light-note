@@ -95,6 +95,14 @@ FCM 备用出口使用 `scripts/browser-push-relay/worker.mjs`，以独立托管
 
 真实 Provider 调用不是日常 AI 发布门禁。只有 Provider 协议、模型或生产兼容发生变化且用户明确授权时，才运行最小真实用例；输出必须脱敏。
 
+### 账号数据导出
+
+- 启用前显式应用加法迁移 `apps/server/migrations/20260921_data_export.sql`，不在启动时建表；迁移属于线上写入，需要对应授权。
+- API 与 `dataExportWorker.js` 必须使用同一运行环境和私有 `DATA_EXPORT_STORAGE_DIR`（默认后端 `.runtime/data-exports`），不能置于静态公开目录。暂存磁盘预留至少 512 MiB；产物、快照和临时文件均由所属主机回收。
+- 发布前运行 `pnpm --filter server check:schema` 和 `pnpm --filter server check:data-exports`。本地启动器托管 `worker:data-exports`，生产部署托管 `light-note-exports`；本地缺 Schema 时 Worker 等待，生产失败关闭。
+- 外链图片只接受标准 HTTP(S) 端口，逐次重定向校验；每张最多 25 MiB，每任务最多 2,000 次图片读取、累计 512 MiB 图片。超过预算必须显示部分完成和缺失说明。原件读取单项最长 30 分钟；不可把超时文件混入成功产物。
+- 回滚旧服务前停止导出 Worker；保留加法表，由支持清理的新版本回收残留私有文件。验收覆盖断网阅读、长正文、原件一致性、跨账号下载拒绝、任务取消和过期清理。
+
 ### 资料再次使用统计
 
 - 经授权应用 `apps/server/migrations/20260914_resource_reuse.sql` 并运行 Schema 门禁；迁移只建立里程碑与覆盖元数据，不回填历史，重复执行不改变已有覆盖时间。未安装时统计入口降级，不影响打开资料。

@@ -84,6 +84,14 @@
     "./community-feed": {
       "types": "./communityFeed.d.ts",
       "default": "./communityFeed.js"
+    },
+    "./data-export": {
+      "types": "./dataExport.d.ts",
+      "default": "./dataExport.js"
+    },
+    "./note-export-document": {
+      "types": "./noteExportDocument.d.ts",
+      "default": "./noteExportDocument.js"
     }
   },
   "devDependencies": {

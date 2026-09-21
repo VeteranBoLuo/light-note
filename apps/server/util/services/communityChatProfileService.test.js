@@ -23,6 +23,7 @@ function authorRow(overrides = {}) {
     authorName: '薄荷',
     authorRole: 'member',
     authorHasAvatar: 1,
+    authorAvatarVersion: 'new-avatar',
     authorExp: 15000,
     authorTitleId: null,
     authorFrameId: 'frame_streak_seed',
@@ -104,7 +105,7 @@ describe('communityChatProfileService', () => {
 
     expect(profile).toMatchObject({
       name: '薄荷',
-      avatar: `/api/community-chat/messages/${messagePublicId}/author-avatar`,
+      avatar: `/api/community-chat/messages/${messagePublicId}/author-avatar?v=new-avatar`,
       frameId: 'frame_streak_seed',
       frameRarity: 'rare',
       bio: '喜欢整理知识',

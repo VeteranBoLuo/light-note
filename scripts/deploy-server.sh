@@ -95,6 +95,9 @@ ssh -i "$KEY" "$HOST" "cd '$REMOTE' && '$REMOTE_NODE' scripts/checkWebPageRender
 echo "🔎  检查笔记导入 Schema 与暂存目录…"
 ssh -i "$KEY" "$HOST" "cd '$REMOTE' && '$REMOTE_NODE' scripts/checkNoteImportRuntime.js"
 
+echo "🔎  检查数据导出 Schema 与暂存空间…"
+ssh -i "$KEY" "$HOST" "cd '$REMOTE' && '$REMOTE_NODE' scripts/checkDataExportRuntime.js"
+
 echo "♻️  先重启 Worker，再重启 ${PM2}…"
 ssh -i "$KEY" "$HOST" "if pm2 describe '$DOCUMENT_WORKER_PM2' >/dev/null 2>&1; then \
     pm2 restart '$DOCUMENT_WORKER_PM2' --update-env --interpreter '$REMOTE_NODE'; \
@@ -115,6 +118,11 @@ ssh -i "$KEY" "$HOST" "if pm2 describe '$DOCUMENT_WORKER_PM2' >/dev/null 2>&1; t
     pm2 restart 'light-note-imports' --update-env --interpreter '$REMOTE_NODE'; \
   else \
     cd '$REMOTE' && pm2 start noteImportWorker.js --interpreter '$REMOTE_NODE' --name 'light-note-imports'; \
+  fi && \
+  if pm2 describe 'light-note-exports' >/dev/null 2>&1; then \
+    pm2 restart 'light-note-exports' --update-env --interpreter '$REMOTE_NODE'; \
+  else \
+    cd '$REMOTE' && pm2 start dataExportWorker.js --interpreter '$REMOTE_NODE' --name 'light-note-exports'; \
   fi && \
   if pm2 describe 'light-note-browser-push' >/dev/null 2>&1; then \
     pm2 restart 'light-note-browser-push' --update-env --interpreter '$REMOTE_NODE'; \

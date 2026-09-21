@@ -2,11 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CommunityChatAuthorProfile, CommunityChatMessage, CommunityChatOwnProfile } from '@/api/communityChatApi';
 
 const mocks = vi.hoisted(() => ({
+  feedGet: vi.fn(),
   getPublic: vi.fn(),
   getAchievements: vi.fn(),
   getOwn: vi.fn(),
   updateOwn: vi.fn(),
 }));
+
+vi.mock('@/api/communityFeedApi', () => ({ feedGet: mocks.feedGet }));
 
 vi.mock('@/api/communityChatApi', () => ({
   getCommunityChatMessageAuthorProfile: mocks.getPublic,
@@ -80,6 +83,62 @@ beforeEach(() => {
 });
 
 describe('useCommunityChatProfile', () => {
+  it('新接口一次返回完整名片，不再请求广场能力和资料接口', async () => {
+    mocks.getPublic.mockResolvedValue({
+      data: {
+        ...publicProfile('薄荷'),
+        userPublicId: 'member-id',
+        communityActions: { isOwn: false, following: true },
+      },
+    });
+    const state = useCommunityChatProfile();
+    state.openForMessage(chatMessage('ready-card'));
+    await vi.waitFor(() => expect(state.visible.value).toBe(true));
+    expect(state.actionsProfile.value).toEqual({ isOwn: false, following: true });
+    expect(mocks.feedGet).not.toHaveBeenCalled();
+  });
+
+  it('资料和关注状态全部就绪后才展开，缓存打开不再补请求', async () => {
+    let resolveActions: (value: unknown) => void = () => {};
+    mocks.getPublic.mockResolvedValue({ data: { ...publicProfile('薄荷'), userPublicId: 'member-id' } });
+    mocks.feedGet.mockResolvedValueOnce({ feedEnabled: true }).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveActions = resolve;
+        }),
+    );
+    const state = useCommunityChatProfile();
+    state.openForMessage(chatMessage('complete-card'));
+    await vi.waitFor(() => expect(mocks.feedGet).toHaveBeenCalledWith('profiles/member-id', { summary: 'true' }));
+    expect(state.visible.value).toBe(false);
+    resolveActions({ isOwn: false, following: true });
+    await vi.waitFor(() => expect(state.visible.value).toBe(true));
+    expect(state.actionsProfile.value?.following).toBe(true);
+    state.closeProfile();
+    state.openForMessage(chatMessage('complete-card'));
+    expect(state.visible.value).toBe(true);
+    expect(mocks.feedGet).toHaveBeenCalledTimes(2);
+  });
+
+  it('等待资料期间关闭后，迟到响应不能重新打开名片', async () => {
+    let resolveProfile: (value: unknown) => void = () => {};
+    mocks.getPublic.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveProfile = resolve;
+        }),
+    );
+    const state = useCommunityChatProfile();
+    state.openForMessage(chatMessage('pending-card'));
+    state.closeProfile({ reset: true });
+    resolveProfile({ data: publicProfile('薄荷') });
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(state.visible.value).toBe(false);
+    expect(state.profile.value).toBeNull();
+  });
+
   it('同一消息的公开名片在短缓存期内复用，不重复请求接口', async () => {
     mocks.getPublic.mockResolvedValue({ data: publicProfile('薄荷') });
     const state = useCommunityChatProfile();
@@ -92,6 +151,20 @@ describe('useCommunityChatProfile', () => {
 
     expect(state.profile.value?.name).toBe('薄荷');
     expect(mocks.getPublic).toHaveBeenCalledTimes(1);
+  });
+
+  it('头像版本变化时失效同一消息的名片缓存', async () => {
+    mocks.getPublic.mockResolvedValueOnce({ data: { ...publicProfile('薄荷'), avatar: '/avatar?v=old' } });
+    const state = useCommunityChatProfile();
+    const message = chatMessage('message-1');
+    message.author.avatar = '/avatar?v=old';
+    state.openForMessage(message);
+    await vi.waitFor(() => expect(state.profile.value?.avatar).toBe('/avatar?v=old'));
+    state.closeProfile();
+    mocks.getPublic.mockResolvedValueOnce({ data: { ...publicProfile('薄荷'), avatar: '/avatar?v=new' } });
+    state.openForMessage({ ...message, author: { ...message.author, avatar: '/avatar?v=new' } });
+    await vi.waitFor(() => expect(state.profile.value?.avatar).toBe('/avatar?v=new'));
+    expect(mocks.getPublic).toHaveBeenCalledTimes(2);
   });
 
   it('快速切换成员时丢弃先发后到的旧请求', async () => {

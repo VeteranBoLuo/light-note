@@ -791,7 +791,8 @@
   />
   <ChatUserProfileModal
     v-model:visible="profileVisible"
-    :profile="authorProfile"
+    :profile="displayAuthorProfile"
+    :actions-profile="profileActions"
     :loading="profileLoading"
     :error="profileError"
     :authenticated="props.access.authenticated"
@@ -968,6 +969,7 @@
   const currentUser = useUserStore();
   const { growth: currentGrowth } = useGrowth();
   const {
+    actionsProfile: profileActions,
     visible: profileVisible,
     targetMessage: profileTargetMessage,
     sessionKey: profileSessionKey,
@@ -1704,7 +1706,19 @@
     );
   }
 
+  const ownAvatarSource = computed(() =>
+    currentUser.headPicture && currentUser.headPicture !== icon.navigation.user
+      ? currentUser.headPicture
+      : icon.communityChat.defaultAvatar,
+  );
+  const displayAuthorProfile = computed(() =>
+    authorProfile.value && profileIsOwn.value
+      ? { ...authorProfile.value, avatar: ownAvatarSource.value }
+      : authorProfile.value,
+  );
+
   function authorAvatarSource(chatMessage: CommunityChatMessage) {
+    if (chatMessage.isOwn) return ownAvatarSource.value;
     return chatMessage.author.avatar || icon.communityChat.defaultAvatar;
   }
 

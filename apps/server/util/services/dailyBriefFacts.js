@@ -16,8 +16,8 @@ export const DAILY_BRIEF_FACT_DEFINITIONS = Object.freeze([
   ['organize_untagged', '待整理的无标签内容', 'Untagged content to organize', '/organize?issue=untagged'],
   [
     'organize_ai_pending',
-    '各次整理中待审核的建议',
-    'Suggestions awaiting review across organizing runs',
+    '当前一轮整理中待审核的建议',
+    'Current run: suggestions to review',
     '/organize?issue=ai_suggestions',
   ],
 ]);

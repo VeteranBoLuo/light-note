@@ -1,3 +1,4 @@
+import { dataExportZh } from './dataExport';
 import { communityZh } from './community';
 import { coreUsageReportZh } from './coreUsageReport';
 import autumn from './autumn-zh-CN';
@@ -10,6 +11,7 @@ import { accountSettingsZh } from './accountSettings';
 import { settingsRefineZh } from './settingsRefine';
 import { notificationMessages } from '@lightnote/shared/notification-presentation';
 export default {
+  dataExport: dataExportZh,
   community: communityZh,
   coreUsageReport: coreUsageReportZh,
   autumn,

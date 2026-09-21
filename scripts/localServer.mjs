@@ -199,6 +199,7 @@ async function main() {
   console.log(
     `[本地后端] 3/4 启动文档与文件预览 Worker${watchMode ? "（监听模式）" : ""}…`,
   );
+  runPnpm("数据导出 Worker", ["--filter", "server", "run", "worker:data-exports"]);
   runPnpm("笔记导入 Worker", [
     "--filter",
     "server",

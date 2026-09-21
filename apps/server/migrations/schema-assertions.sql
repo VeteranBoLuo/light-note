@@ -3942,3 +3942,12 @@ SELECT 'community_growth_column' AS check_name,'community_accepted_answers.user_
 SELECT 'community_growth_column' AS check_name,'community_accepted_answers.accepted_at' AS detail FROM DUAL WHERE NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='community_accepted_answers' AND column_name='accepted_at');
 SELECT 'community_growth_index' AS check_name,'community_accepted_answers.PRIMARY' AS detail FROM DUAL WHERE NOT EXISTS(SELECT 1 FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='community_accepted_answers' AND index_name='PRIMARY' GROUP BY index_name HAVING GROUP_CONCAT(column_name ORDER BY seq_in_index)='comment_id' AND MAX(non_unique)=0);
 SELECT 'community_growth_index' AS check_name,'community_accepted_answers.idx_user' AS detail FROM DUAL WHERE NOT EXISTS(SELECT 1 FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='community_accepted_answers' AND index_name='idx_user' GROUP BY index_name HAVING GROUP_CONCAT(column_name ORDER BY seq_in_index)='user_id,accepted_at' AND MAX(non_unique)=1);
+
+-- Unified data export requires explicit additive migration 20260921_data_export.sql.
+SELECT 'data_export_tables' AS check_name, 'missing export columns' AS detail FROM DUAL
+WHERE (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='data_export_tasks' AND COLUMN_NAME IN ('id','owner_id','runtime','host_key','request_id','options_json','status','stage','total','completed','failed','error_code','lease_token','lease_until','create_time','update_time','expires_at')) <> 17
+OR (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='data_export_items' AND COLUMN_NAME IN ('id','task_id','kind','resource_id','title','version','path','status','error_code')) <> 9;
+
+SELECT 'data_export_indexes' AS check_name, 'missing export task or item indexes' AS detail FROM DUAL
+WHERE (SELECT COUNT(DISTINCT INDEX_NAME) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='data_export_tasks' AND INDEX_NAME IN ('PRIMARY','export_request','export_owner','export_queue')) <> 4
+OR (SELECT COUNT(DISTINCT INDEX_NAME) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='data_export_items' AND INDEX_NAME IN ('PRIMARY','export_resource','export_items')) <> 3;

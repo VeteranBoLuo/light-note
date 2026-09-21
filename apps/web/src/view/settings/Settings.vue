@@ -77,16 +77,13 @@
         <!-- 通用 -->
         <SettingsGeneralSection v-if="sectionVisible('general')" />
 
-        <SettingsSectionCard v-if="sectionVisible('community')">
-          <BButton class="settings-community-profile" @click="router.push('/community/profile')">{{ t('community.publicProfile') }}</BButton>
-        </SettingsSectionCard>
         <!-- 通知 -->
         <SettingsNotificationSection v-if="sectionVisible('notification')" />
 
         <!-- 账号与安全(登录用户可见) -->
         <BCard as="section" v-if="!isGuestUser() && sectionVisible('account')" class="settings-card" id="set-account">
           <div class="fields">
-            <AccountSecurity />
+            <AccountSecurity @export-data="openDataExport" />
           </div>
         </BCard>
 
@@ -181,44 +178,19 @@
         <!-- 数据导出 / 备份 -->
         <BCard
           as="section"
-          v-if="!bookmark.isMobile && sectionVisible('privacy')"
+          v-if="sectionVisible('export')"
           class="settings-card"
           id="set-export"
         >
           <div class="card-head">
-            <span class="card-icon"><SvgIcon :src="icon.resource.file" size="20" /></span>
+            <span class="card-icon"><SvgIcon :src="icon.toolbox.download" size="20" /></span>
             <div class="card-head-text">
-              <h2 class="card-title">{{ t('settings.exportTitle') }}</h2>
-              <p class="card-sub">{{ t('settings.exportDesc') }}</p>
+              <h2 class="card-title">{{ t('dataExport.title') }}</h2>
+              <p class="card-sub">{{ t('dataExport.description') }}</p>
             </div>
           </div>
-          <div class="fields">
-            <div class="field">
-              <div class="field-head">
-                <span class="field-label">{{ t('settings.exportAll') }}</span>
-                <span class="field-desc">{{ t('settings.exportAllDesc') }}</span>
-              </div>
-              <BButton class="export-btn" type="primary" :loading="exporting" @click="exportAll">
-                {{ exporting ? t('settings.exporting') : t('settings.exportBtn') }}
-              </BButton>
-            </div>
-            <div class="field">
-              <div class="field-head">
-                <span class="field-label">{{ t('settings.importAll') }}</span>
-                <span class="field-desc">{{ t('settings.importAllDesc') }}</span>
-              </div>
-              <BUpload
-                accept="application/json,.json"
-                :multiple="false"
-                raw-file
-                :disabled="importing"
-                @change="onImportFiles"
-              >
-                <BButton class="export-btn" type="primary" :loading="importing">
-                  {{ importing ? t('settings.importing') : t('settings.importBtn') }}
-                </BButton>
-              </BUpload>
-            </div>
+          <div class="data-export-entry">
+            <DataExportControl ref="dataExportControl" :owner="user.adminContext || user.role === 'visitor' ? '' : String(user.id || '')" />
           </div>
         </BCard>
 
@@ -282,14 +254,13 @@
 </template>
 
 <script setup lang="ts">
-  import SettingsSectionCard from './components/SettingsSectionCard.vue';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import SettingsAppearanceSection from './components/SettingsAppearanceSection.vue';
   import SettingsGeneralSection from './components/SettingsGeneralSection.vue';
   import SettingsNotificationSection from './components/SettingsNotificationSection.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import { useBrowserPush } from '@/composables/useBrowserPush';
-  import { computed, ref, nextTick, watch, onBeforeUnmount } from 'vue';
+  import { computed, ref, nextTick, watch } from 'vue';
   import { useSettingsFieldFocus } from './useSettingsFieldFocus';
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter, type LocationQueryRaw } from 'vue-router';
@@ -299,8 +270,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
-  import message from '@/components/base/BasicComponents/BMessage/BMessage';
-  import { apiBasePost } from '@/http/request';
+  import DataExportControl from '@/components/settings/DataExportControl.vue';
   import AccountSecurity from '@/components/settings/AccountSecurity.vue';
   import AiUsagePage from '@/view/aiUsage/AiUsagePage.vue';
   import PointsUsagePage from '@/view/pointsUsage/PointsUsagePage.vue';
@@ -308,8 +278,6 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BCard from '@/components/base/BasicComponents/BCard.vue';
   import BChip from '@/components/base/BasicComponents/BChip.vue';
-  import BUpload from '@/components/base/BasicComponents/BUpload.vue';
-  import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import {
     isLightNoteAndroidApp,
     postAndroidOpenLegalDocument,
@@ -332,6 +300,12 @@
   const route = useRoute();
   const bookmark = bookmarkStore();
   const user = useUserStore();
+  const dataExportControl = ref<InstanceType<typeof DataExportControl> | null>(null);
+  async function openDataExport() {
+    await router.push({ query: { ...route.query, section: 'export' } });
+    await nextTick();
+    await dataExportControl.value?.open();
+  }
   const isAndroidApp = isLightNoteAndroidApp();
 
   const pageRef = ref<HTMLElement | null>(null);
@@ -366,6 +340,7 @@
   const showMobileIndex = computed(() => bookmark.isMobile && mobileSection.value === null);
 
   function sectionIcon(iconKey: string) {
+    if (iconKey === 'export') return icon.toolbox.download;
     if (iconKey === 'points') return icon.growth.coin;
     return (icon.settings as Record<string, string>)[iconKey] || icon.nullImg;
   }
@@ -381,13 +356,13 @@
   const activeCategory = computed(() => desktopNavigationRows.value.find((row) => row.id === desktopSection.value));
   const categoryDescription = computed(() => {
     const keys = {
-      community: 'community.settingsDescription',
       appearance: 'settings.appearanceDesc',
       general: 'settings.generalDesc',
       notification: 'settings.notificationDesc',
       ai: 'settings.ai.description',
       points: 'growth.pointsUsagePageDescription',
       account: 'settings.accountSecurityDesc',
+      export: 'dataExport.description',
       privacy: 'settings.privacyDesc',
     };
     return t(keys[desktopSection.value]);
@@ -542,6 +517,7 @@
       ai: aiSummary.value,
       points: t('growth.pointsUsagePageDescription'),
       account: t('settings.accountSecurityDesc'),
+      export: t('dataExport.description'),
       privacy: t('settings.mobileIndex.privacySummary'),
     };
     return visibleSettingsSections(settingsEnv.value).map((meta) => ({
@@ -569,133 +545,6 @@
   function openDeveloperToolbox() {
     window.open('https://boluo66.top/toolkit/', '_blank', 'noopener,noreferrer');
     recordOperation(OPERATION_LOG_MAP.navigation.toolkit);
-  }
-
-  // 一键导出/备份:拉全部数据 → 下成 JSON(文件名用本地日期,不用 toISOString 避免跨日偏差)
-  const exporting = ref(false);
-  async function exportAll() {
-    if (exporting.value) return;
-    exporting.value = true;
-    const owner = dataOperationGeneration;
-    try {
-      if (owner !== dataOperationGeneration) return;
-      const res = await apiBasePost('/api/user/exportData', {});
-      if (owner !== dataOperationGeneration) return;
-      if (res?.status === 200 && res.data) {
-        const blob = new Blob([JSON.stringify(res.data, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const d = new Date();
-        const p = (n: number) => String(n).padStart(2, '0');
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `轻笺备份_${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}.json`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        const c = res.data.counts || {};
-        message.success(t('settings.exportOk', { b: c.bookmarks || 0, n: c.notes || 0, f: c.files || 0 }));
-        recordOperation({
-          ...OPERATION_LOG_MAP.settings.exportData,
-          operation: `导出个人数据成功【书签${c.bookmarks || 0}/笔记${c.notes || 0}/文件${c.files || 0}】`,
-        });
-      } else {
-        message.info(res?.msg || t('settings.exportFail'));
-      }
-    } catch {
-      if (owner !== dataOperationGeneration) return;
-      message.info(t('settings.exportFail'));
-    } finally {
-      if (owner === dataOperationGeneration) exporting.value = false;
-    }
-  }
-
-  // 元数据恢复先做只读预检，再由用户确认写入；文件本体和 AI 数据只导出、不承诺恢复。
-  const importing = ref(false);
-  let dataOperationGeneration = 0;
-  watch(
-    dailyBriefPreferenceOwnerKey,
-    () => {
-      dataOperationGeneration++;
-      importing.value = false;
-      exporting.value = false;
-    },
-    { flush: 'sync' },
-  );
-  onBeforeUnmount(() => {
-    dataOperationGeneration++;
-  });
-  async function runMetadataImport(data: any, owner = dataOperationGeneration) {
-    if (owner !== dataOperationGeneration) return;
-    importing.value = true;
-    try {
-      if (owner !== dataOperationGeneration) return;
-      const res = await apiBasePost('/api/user/importData', { data });
-      if (owner !== dataOperationGeneration) return;
-      if (res?.status === 200 && res.data) {
-        const s = res.data;
-        message.success(
-          t('settings.importOk', {
-            b: s.bookmarks?.added || 0,
-            n: s.notes?.added || 0,
-            sk: (s.bookmarks?.skipped || 0) + (s.notes?.skipped || 0),
-          }),
-        );
-        recordOperation({
-          module: '设置',
-          operation: `恢复元数据(书签+${s.bookmarks?.added || 0}、笔记+${s.notes?.added || 0})`,
-        });
-      } else {
-        message.info(res?.msg || t('settings.importFail'));
-      }
-    } catch {
-      if (owner !== dataOperationGeneration) return;
-      message.info(t('settings.importFail'));
-    } finally {
-      if (owner === dataOperationGeneration) importing.value = false;
-    }
-  }
-
-  async function onImportFiles(files: File[]) {
-    const file = files?.[0];
-    if (!file) return;
-    importing.value = true;
-    const owner = dataOperationGeneration;
-    try {
-      const text = await file.text();
-      let data: any;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        message.info(t('settings.importInvalid'));
-        return;
-      }
-      if (owner !== dataOperationGeneration) return;
-      const res = await apiBasePost('/api/user/importData', { data, mode: 'preflight' });
-      if (owner !== dataOperationGeneration) return;
-      if (res?.status !== 200 || !res.data?.canImport) {
-        message.info(res?.msg || t('settings.importFail'));
-        return;
-      }
-      const preview = res.data;
-      if (owner === dataOperationGeneration) importing.value = false;
-      Alert.alert({
-        title: t('settings.importConfirmTitle'),
-        content: t('settings.importConfirmContent', {
-          b: preview.willRestore?.bookmarks || 0,
-          n: preview.willRestore?.notes || 0,
-          t: preview.willRestore?.tags || 0,
-          f: preview.exportOnly?.files || 0,
-          ai: preview.exportOnly?.aiConversations || 0,
-        }),
-        onOk: () => runMetadataImport(data, owner),
-      });
-    } catch {
-      if (owner !== dataOperationGeneration) return;
-      message.info(t('settings.importFail'));
-    } finally {
-      if (owner === dataOperationGeneration) importing.value = false;
-    }
   }
 
   // 选项 label 必须用 computed:语言即时切换(不再整页刷新)后,顶层一次性求值的 t() 不会更新
@@ -727,7 +576,7 @@
 </script>
 
 <style lang="less">
-  .settings-community-profile { margin: 16px 0 14px; }
+  .settings-page .data-export-entry { padding: 18px 0; }
   .settings-page {
     height: 100%;
     overflow-y: auto;

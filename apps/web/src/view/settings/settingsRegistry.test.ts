@@ -14,15 +14,15 @@ const LOGGED_IN: SettingsEnv = { isGuest: false };
 const GUEST: SettingsEnv = { isGuest: true };
 
 describe('visibleSettingsSections', () => {
-  it('登录用户能看到七个分类，积分明细纳入设置目录', () => {
+  it('登录用户能看到八个分类，积分明细纳入设置目录', () => {
     expect(visibleSettingsSections(LOGGED_IN).map((s) => s.id)).toEqual([
       'appearance',
       'general',
-      'community',
       'notification',
       'ai',
       'points',
       'account',
+      'export',
       'privacy',
     ]);
   });
@@ -35,6 +35,7 @@ describe('visibleSettingsSections', () => {
   it('游客不出现账号和 AI 用量，其他偏好照常可见', () => {
     const ids = visibleSettingsSections(GUEST).map((s) => s.id);
     expect(ids).not.toContain('account');
+    expect(ids).not.toContain('export');
     expect(ids).not.toContain('ai');
     expect(ids).toContain('appearance');
     expect(ids).toContain('privacy');
@@ -43,9 +44,9 @@ describe('visibleSettingsSections', () => {
   it('桌面与移动目录共用每个分类的顺序、图标和文案键', () => {
     expect(SETTINGS_SECTION_META).toEqual(visibleSettingsSections(LOGGED_IN));
     for (const section of SETTINGS_SECTION_META) {
-      expect(section.iconKey).toMatch(/^(appearance|general|notification|ai|points|account|privacy)$/);
-      expect(section.titleKey).toMatch(/^(settings|growth|community)\./);
-      expect(section.mobileTitleKey).toMatch(/^(settings|growth|community)\./);
+      expect(section.iconKey).toMatch(/^(appearance|general|notification|ai|points|account|export|privacy)$/);
+      expect(section.titleKey).toMatch(/^(settings|growth|dataExport)\./);
+      expect(section.mobileTitleKey).toMatch(/^(settings|growth|dataExport)\./);
     }
   });
 });
@@ -69,6 +70,8 @@ describe('parseSettingsSection', () => {
 
   it('当前环境不可见的分类不能靠深链接进入', () => {
     expect(parseSettingsSection('account', GUEST)).toBeNull();
+    expect(parseSettingsSection('export', GUEST)).toBeNull();
+    expect(parseSettingsSection('export', LOGGED_IN)).toBe('export');
   });
 });
 
@@ -76,7 +79,7 @@ describe('groupSettingsSections', () => {
   it('按固定分组顺序切分', () => {
     const grouped = groupSettingsSections(visibleSettingsSections(LOGGED_IN));
     expect(grouped.map((g) => g.group)).toEqual(SETTINGS_GROUP_ORDER);
-    expect(grouped[0].items.map((i) => i.id)).toEqual(['appearance', 'general', 'community', 'notification', 'ai']);
+    expect(grouped[0].items.map((i) => i.id)).toEqual(['appearance', 'general', 'notification', 'ai']);
     expect(grouped[1].items.map((i) => i.id)).toEqual(['points', 'account']);
   });
 

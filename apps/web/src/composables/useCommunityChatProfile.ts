@@ -1,9 +1,11 @@
 import { computed, ref } from 'vue';
+import { feedGet } from '@/api/communityFeedApi';
 import {
   getCommunityChatMessageAuthorAchievements,
   getCommunityChatMessageAuthorProfile,
   getCommunityChatOwnProfile,
   updateCommunityChatOwnProfile,
+  type CommunityProfileActionsState,
   type CommunityChatAchievementCollection,
   type CommunityChatAuthorProfile,
   type CommunityChatMessage,
@@ -15,7 +17,11 @@ const PROFILE_CACHE_TTL_MS = 60_000;
 const PROFILE_CACHE_MAX_ENTRIES = 100;
 const MAX_FEATURED_ACHIEVEMENTS = 3;
 
+export type { CommunityProfileActionsState } from '@/api/communityChatApi';
+
 interface CachedProfile {
+  avatarSource: string;
+  actionsProfile: CommunityProfileActionsState | null | undefined;
   profile: CommunityChatAuthorProfile;
   allAchievements: CommunityChatPublicAchievement[] | null;
   cachedAt: number;
@@ -86,6 +92,8 @@ function normalizePublicProfile(value: CommunityChatAuthorProfile) {
  */
 export function useCommunityChatProfile() {
   const visible = ref(false);
+  const actionsProfile = ref<CommunityProfileActionsState | null>();
+  let openingGeneration = 0;
   const openKind = ref<'message' | 'own'>('message');
   const targetMessage = ref<CommunityChatMessage | null>(null);
   const sessionKey = ref(0);
@@ -122,7 +130,10 @@ export function useCommunityChatProfile() {
   function readCachedProfile(messagePublicId: string) {
     const entry = profileCache.get(messagePublicId);
     if (!entry) return null;
-    if (Date.now() - entry.cachedAt > PROFILE_CACHE_TTL_MS) {
+    if (
+      Date.now() - entry.cachedAt > PROFILE_CACHE_TTL_MS ||
+      entry.avatarSource !== (targetMessage.value?.author.avatar || '')
+    ) {
       profileCache.delete(messagePublicId);
       return null;
     }
@@ -139,6 +150,8 @@ export function useCommunityChatProfile() {
   ) {
     profileCache.delete(messagePublicId);
     profileCache.set(messagePublicId, {
+      avatarSource: targetMessage.value?.author.avatar || '',
+      actionsProfile: actionsProfile.value,
       profile: value,
       allAchievements: allAchievementsValue,
       cachedAt: Date.now(),
@@ -148,6 +161,7 @@ export function useCommunityChatProfile() {
 
   function applyCachedProfile(entry: CachedProfile) {
     profile.value = entry.profile;
+    actionsProfile.value = entry.actionsProfile;
     allAchievements.value = entry.allAchievements;
     profileLoading.value = false;
     profileError.value = false;
@@ -161,31 +175,32 @@ export function useCommunityChatProfile() {
   }
 
   function openForMessage(message: CommunityChatMessage) {
+    const opening = ++openingGeneration;
+    profileGeneration += 1;
     openKind.value = 'message';
     targetMessage.value = message;
     sessionKey.value += 1;
-    visible.value = true;
+    visible.value = false;
     resetSecondaryViews();
     profileError.value = false;
-
-    if (message.isOwn && ownProfile.value) {
-      profile.value = ownProfile.value.publicPreview;
-      profileLoading.value = false;
-      void loadOwnProfile({ force: true }).catch(() => undefined);
-      return;
-    }
-
+    actionsProfile.value = undefined;
     const cached = readCachedProfile(message.publicId);
     if (cached) {
       applyCachedProfile(cached);
+      visible.value = true;
       return;
     }
-
     profile.value = null;
-    void loadPublicProfile().catch(() => undefined);
+    void loadPublicProfile()
+      .catch(() => undefined)
+      .finally(() => {
+        if (opening === openingGeneration) visible.value = true;
+      });
   }
 
   function openOwnProfile() {
+    openingGeneration += 1;
+    actionsProfile.value = undefined;
     openKind.value = 'own';
     targetMessage.value = null;
     sessionKey.value += 1;
@@ -204,6 +219,7 @@ export function useCommunityChatProfile() {
   }
 
   function closeProfile(options: { reset?: boolean; clearIdentityCache?: boolean } = {}) {
+    openingGeneration += 1;
     visible.value = false;
     if (!options.reset) return;
     profileGeneration += 1;
@@ -242,6 +258,15 @@ export function useCommunityChatProfile() {
       const value = response.data as unknown;
       if (!validAuthorProfile(value)) throw new Error('COMMUNITY_PROFILE_INVALID');
       if (generation !== profileGeneration || messagePublicId !== targetPublicId.value) return null;
+      let preparedActions: CommunityProfileActionsState | null = value.communityActions ?? null;
+      // Older servers do not yet include actions in the card response.
+      if (value.communityActions === undefined && value.userPublicId) {
+        const caps = await feedGet('feed/capabilities');
+        if (generation !== profileGeneration || messagePublicId !== targetPublicId.value) return null;
+        if (caps.feedEnabled) preparedActions = await feedGet('profiles/' + value.userPublicId, { summary: 'true' });
+      }
+      if (generation !== profileGeneration || messagePublicId !== targetPublicId.value) return null;
+      actionsProfile.value = preparedActions;
       const normalized = normalizePublicProfile(value);
       writeCachedProfile(messagePublicId, normalized.profile, normalized.allAchievements);
       profile.value = normalized.profile;
@@ -352,6 +377,7 @@ export function useCommunityChatProfile() {
   }
 
   return {
+    actionsProfile,
     visible,
     targetMessage,
     sessionKey,

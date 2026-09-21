@@ -458,7 +458,16 @@
                   :like-failed="likeErrors.has(post.publicId)"
                   @like="togglePostLike"
               /></section>
+              <section
+                v-if="!loading && !error && !posts.length && !profile.featuredPostItems?.length"
+                class="feed-empty profile-posts-empty"
+                role="status"
+              >
+                <h2>{{ t('community.feed.profilePostsEmpty') }}</h2>
+                <p>{{ t('community.feed.profilePostsEmptyHint') }}</p>
+              </section>
               <BVirtualList
+                v-else
                 class="profile-post-list"
                 :items="profileRegularPosts"
                 item-key="publicId"

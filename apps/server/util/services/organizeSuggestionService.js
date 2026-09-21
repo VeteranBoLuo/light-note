@@ -13,6 +13,7 @@ import {
   settleProcessingRun,
 } from './organizeProcessingPipeline.js';
 import {
+  visibleOrganizeRunOrderSql,
   availableResourceSql,
   effectiveStatusSql,
   pendingReviewSql,
@@ -123,7 +124,7 @@ export async function createSuggestionRun(db = pool, { userId, id, requestId = i
 }
 export async function listSuggestionRuns(db = pool, { userId }) {
   const [rows] = await db.query(
-    "SELECT * FROM organize_suggestion_runs WHERE user_id=? AND status<>'preview' ORDER BY (status IN ('preparing','running','paused')) DESC,COALESCE(started_at,created_at) DESC,id DESC LIMIT 50",
+    `SELECT * FROM organize_suggestion_runs WHERE user_id=? AND status<>'preview' ORDER BY ${visibleOrganizeRunOrderSql} LIMIT 50`,
     [userId],
   );
   return rows.map(mapRun);

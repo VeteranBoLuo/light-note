@@ -6,7 +6,7 @@
  */
 
 export type SettingsSectionId =
-  'appearance' | 'general' | 'community' | 'notification' | 'ai' | 'points' | 'account' | 'install' | 'privacy';
+  'appearance' | 'general' | 'notification' | 'ai' | 'points' | 'account' | 'export' | 'install' | 'privacy';
 
 /** 两端共用的一级分类；桌面独有的安装/快捷键等能力归入「通用」，不再自成目录项。 */
 export type SettingsIndexSectionId = Exclude<SettingsSectionId, 'install'>;
@@ -16,8 +16,8 @@ export type SettingsSectionGroup = 'preferences' | 'account' | 'rules';
 export type SettingsSectionMeta = {
   id: SettingsIndexSectionId;
   group: SettingsSectionGroup;
-  /** icon.settings 下的键，由调用方按 SvgIcon 取值，避免本文件依赖图标模块 */
-  iconKey: 'appearance' | 'general' | 'notification' | 'ai' | 'points' | 'account' | 'privacy';
+  /** 图标语义键，由调用方解析现有图标资源，避免本文件依赖图标模块 */
+  iconKey: 'appearance' | 'general' | 'notification' | 'ai' | 'points' | 'account' | 'export' | 'privacy';
   /** 桌面目录用的简短标题 */
   titleKey: string;
   /** 移动目录用的标题，可比桌面标题更完整 */
@@ -44,14 +44,6 @@ export const SETTINGS_SECTION_META: SettingsSectionMeta[] = [
     iconKey: 'general',
     titleKey: 'settings.general',
     mobileTitleKey: 'settings.mobileIndex.general',
-    tone: 'green',
-  },
-  {
-    id: 'community',
-    group: 'preferences',
-    iconKey: 'general',
-    titleKey: 'community.title',
-    mobileTitleKey: 'community.title',
     tone: 'green',
   },
   {
@@ -87,6 +79,14 @@ export const SETTINGS_SECTION_META: SettingsSectionMeta[] = [
     tone: 'green',
   },
   {
+    id: 'export',
+    group: 'rules',
+    iconKey: 'export',
+    titleKey: 'dataExport.navigation',
+    mobileTitleKey: 'dataExport.navigation',
+    tone: 'purple',
+  },
+  {
     id: 'privacy',
     group: 'rules',
     iconKey: 'privacy',
@@ -108,7 +108,7 @@ export type SettingsEnv = {
 };
 
 export function isSettingsSectionVisible(id: SettingsIndexSectionId, env: SettingsEnv): boolean {
-  if (id === 'account' || id === 'ai' || id === 'points') return !env.isGuest;
+  if (id === 'account' || id === 'ai' || id === 'points' || id === 'export') return !env.isGuest;
   return true;
 }
 

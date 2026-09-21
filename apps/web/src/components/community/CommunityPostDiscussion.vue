@@ -138,10 +138,24 @@
                   @report="$emit('report', root.publicId)"
                   @solve="solve(true, root.publicId)"
                 />
-                <div v-if="root.replyCount || replies[root.publicId]?.items.length" class="feed-replies">
-                  <BButton v-if="!replies[root.publicId]" :disabled="busy" @click="loadReplies(root.publicId)"
-                    >{{ t('community.feed.replies') }} ({{ root.replyCount }})</BButton
-                  >
+                <p v-else class="feed-comment-placeholder">{{
+                  t(root.status === 'withdrawn' ? 'community.feed.commentDeleted' : 'community.feed.removed')
+                }}</p>
+                <div
+                  v-if="root.replyCount || replies[root.publicId]?.items.length"
+                  class="feed-replies"
+                  :class="{ 'is-expanded': replies[root.publicId]?.items.length }"
+                >
+                  <BButton
+                    v-if="!replies[root.publicId]"
+                    type="text"
+                    class="feed-replies-toggle"
+                    :disabled="busy"
+                    :aria-expanded="false"
+                    @click="loadReplies(root.publicId)"
+                    ><span>{{ t('community.feed.replies') }} ({{ root.replyCount }})</span
+                    ><SvgIcon :src="icon.noteTree.chevron" size="14" aria-hidden="true"
+                  /></BButton>
                   <article
                     v-for="child in replies[root.publicId]?.items || []"
                     :id="'comment-' + child.publicId"
@@ -160,6 +174,8 @@
                   </article>
                   <BButton
                     v-if="replies[root.publicId]?.nextCursor"
+                    type="text"
+                    class="feed-replies-toggle"
                     :disabled="busy"
                     @click="loadReplies(root.publicId, true)"
                     >{{ t('community.feed.more') }}</BButton
@@ -746,9 +762,21 @@
     font-weight: 600;
   }
   .community-comments-panel .feed-replies {
-    margin: 12px 0 0 14px;
-    padding-left: 14px;
+    margin: 8px 0 0;
+  }
+  .community-comments-panel .feed-replies.is-expanded {
+    margin-left: 4px;
+    padding-left: 16px;
     border-left: 2px solid var(--workspace-divider);
+  }
+  .community-comments-panel .feed-replies-toggle {
+    gap: 6px;
+    padding: 0 4px;
+    font-size: 13px;
+  }
+  .community-comments-panel .feed-comment-placeholder {
+    color: var(--desc-color);
+    font-size: 13px;
   }
   .community-comments-panel .community-reply-composer {
     padding: 18px 0;

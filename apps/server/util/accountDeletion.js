@@ -384,6 +384,12 @@ export async function requestAccountDeletion({ userId, code, confirmation }) {
       ]);
     }
 
+    // Export artifacts remain private and are reclaimed by the owning host's worker.
+    if (tables.has('data_export_tasks')) {
+      await connection.query("UPDATE data_export_tasks SET status='cancelled',expires_at=NOW() WHERE owner_id=?", [userId]);
+      if (tables.has('data_export_items')) await connection.query('DELETE i FROM data_export_items i JOIN data_export_tasks t ON t.id=i.task_id WHERE t.owner_id=?', [userId]);
+    }
+
     // 用户角色去标识化前同步关闭其历史 Root 发言采集，避免异步物理清理前破坏聊天室 Schema 不变量。
     await disableCommunityChatReadReceiptsForAuthor(connection, tables, userId);
     // 本人作为参与者留下的投票和回执也必须在同一事务立即退出聚合；后台清理只作幂等兜底。

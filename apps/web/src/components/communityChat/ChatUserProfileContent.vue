@@ -30,6 +30,7 @@
         <CommunityProfileActions
           v-if="communityActions && profile.userPublicId"
           :user-public-id="profile.userPublicId"
+          :prepared-profile="actionsProfile"
           @navigate="emit('navigate', $event)"
         />
 
@@ -175,7 +176,10 @@
   import GrowthLevelChip from '@/components/growth/GrowthLevelChip.vue';
   import icon from '@/config/icon';
   import { frameVariant } from '@/config/growthFrames';
-  import type { CommunityChatProfileUpdateInput } from '@/composables/useCommunityChatProfile';
+  import type {
+    CommunityChatProfileUpdateInput,
+    CommunityProfileActionsState,
+  } from '@/composables/useCommunityChatProfile';
 
   type ProfileView = 'summary' | 'achievements';
 
@@ -184,6 +188,7 @@
       compact?: boolean;
       communityActions?: boolean;
       chatActions?: boolean;
+      actionsProfile?: CommunityProfileActionsState | null;
       profile?: CommunityChatAuthorProfile | null;
       loading?: boolean;
       error?: boolean;

@@ -88,7 +88,13 @@ export interface CommunityChatPublicAchievement {
   group: 'checkin' | 'create' | 'action' | 'organize' | 'level' | 'tenure' | string;
 }
 
+export interface CommunityProfileActionsState {
+  isOwn: boolean;
+  following: boolean;
+}
+
 export interface CommunityChatAuthorProfile extends CommunityChatMessageAuthor {
+  communityActions?: CommunityProfileActionsState | null;
   bio: string;
   communityTenureLabel: string | null;
   achievements: CommunityChatPublicAchievement[];

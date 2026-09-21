@@ -41,7 +41,9 @@
     "worker:note-imports": "node noteImportWorker.js",
     "worker:note-imports:dev": "node --watch --watch-preserve-output noteImportWorker.js",
     "check:note-imports": "node scripts/checkNoteImportRuntime.js",
-    "migrate:community-feed-schema": "node scripts/ensureCommunityFeedSchema.js"
+    "migrate:community-feed-schema": "node scripts/ensureCommunityFeedSchema.js",
+    "worker:data-exports": "node dataExportWorker.js",
+    "check:data-exports": "node scripts/checkDataExportRuntime.js"
   },
   "keywords": [],
   "author": "",
@@ -49,6 +51,7 @@
   "dependencies": {
     "@js-temporal/polyfill": "^0.5.1",
     "@lightnote/shared": "workspace:*",
+    "archiver": "^7.0.1",
     "axios": "^1.13.2",
     "body-parser": "^1.20.6",
     "cheerio": "^1.0.0",
@@ -56,6 +59,7 @@
     "csv-parse": "^7.0.2",
     "dotenv": "^17.2.0",
     "esdk-obs-nodejs": "^3.25.6",
+    "exceljs": "^4.4.0",
     "express": "5.0.0",
     "express-rate-limit": "^8.5.1",
     "htmlparser2": "10.1.0",
@@ -69,6 +73,8 @@
     "playwright-core": "1.57.0",
     "redis": "^5.6.0",
     "sanitize-html": "2.17.7",
+    "turndown": "^7.2.4",
+    "turndown-plugin-gfm": "^1.0.2",
     "web-push": "^3.6.7",
     "ws": "^8.18.0",
     "yauzl": "3.2.1"

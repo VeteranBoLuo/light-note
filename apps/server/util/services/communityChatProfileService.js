@@ -1,4 +1,5 @@
 import pool from '../../db/index.js';
+import { communityProfileActions } from '../communityFeed/profileActions.js';
 import { COMMUNITY_CHAT_PRIMARY_ROOM_SLUG } from '../communityChatFeature.js';
 import { ACHIEVEMENTS, levelForExp, rankOf } from '../growth.js';
 import { getFrameItem, titleName } from '../points.js';
@@ -253,7 +254,9 @@ export async function buildProfilePayload({ db, author, avatarPath, locale }) {
       userPublicId: author.authorUserPublicId || '',
       communityId: author.authorCommunityId || '',
       role: author.authorRole || 'member',
-      avatar: Boolean(Number(author.authorHasAvatar || 0)) ? avatarPath : '',
+      avatar: Boolean(Number(author.authorHasAvatar || 0))
+        ? `${avatarPath}${author.authorAvatarVersion ? `?v=${encodeURIComponent(author.authorAvatarVersion)}` : ''}`
+        : '',
       ...publicFrame(author.authorFrameId),
       ...growth,
       bio: normalizeBio(author.bio || ''),
@@ -302,6 +305,7 @@ async function loadVisibleMessageAuthor({ user, messagePublicId, env, db }) {
                 )
               THEN 1 ELSE 0
             END AS authorHasAvatar,
+            LEFT(SHA2(account.head_picture, 256), 16) AS authorAvatarVersion,
             COALESCE(growth.exp, 0) AS authorExp,
             growth.equipped_title AS authorTitleId,
             growth.equipped_frame AS authorFrameId,
@@ -368,6 +372,7 @@ export async function loadCommunityProfileAuthor({ userId, db = pool }) {
                 )
               THEN 1 ELSE 0
             END AS authorHasAvatar,
+            LEFT(SHA2(account.head_picture, 256), 16) AS authorAvatarVersion,
             COALESCE(growth.exp, 0) AS authorExp,
             growth.equipped_title AS authorTitleId,
             growth.equipped_frame AS authorFrameId,
@@ -404,13 +409,18 @@ export async function getCommunityChatMessageAuthorProfile({
     env,
     db,
   });
-  const { profile } = await buildProfilePayload({
-    db,
-    author,
-    avatarPath: `/api/community-chat/messages/${encodeURIComponent(normalizedMessagePublicId)}/author-avatar`,
-    locale,
-  });
-  return profile;
+  const [{ profile }, actions] = await Promise.all([
+    buildProfilePayload({
+      db,
+      author,
+      avatarPath: `/api/community-chat/messages/${encodeURIComponent(normalizedMessagePublicId)}/author-avatar`,
+      locale,
+    }),
+    author.authorUserPublicId
+      ? communityProfileActions({ user, authorUserId: author.authorUserId, env, db })
+      : Promise.resolve(null),
+  ]);
+  return { ...profile, communityActions: actions };
 }
 
 export async function getCommunityChatMessageAuthorAchievements({
