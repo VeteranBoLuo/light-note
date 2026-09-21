@@ -1,3 +1,4 @@
+import { imagePreviewWorkerEnabled } from './workerPolicy.js';
 import { CARD_IMAGE_PROFILE } from '@lightnote/shared';
 import { classifyImageError, imageFailure } from './errors.js';
 import { randomUUID } from 'node:crypto';
@@ -19,7 +20,7 @@ export async function runSingleImagePreviewJob(
     video = false,
   } = {},
 ) {
-  if (!generationEnabled()) return false;
+  if (!imagePreviewWorkerEnabled() || !generationEnabled()) return false;
   const connection = await db.getConnection();
   let job;
   let stage = 'processing';
@@ -165,6 +166,7 @@ export async function cleanupImageAssets({
   remove = deleteObjectFromObs,
   removeSource = (asset) => storageAdapters[asset.storage_kind].remove(asset.source_locator),
 } = {}) {
+  if (!imagePreviewWorkerEnabled()) return;
   // Failed final attempts must not remain processing forever after a process crash.
   await db.query(`UPDATE file_preview_jobs j JOIN file_preview_artifacts a ON a.id=j.artifact_id
     SET j.status='failed',a.status='failed',j.error_code='IMAGE_WORKER_INTERRUPTED',a.error_code='IMAGE_WORKER_INTERRUPTED'
