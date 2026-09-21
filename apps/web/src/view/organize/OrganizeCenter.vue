@@ -950,6 +950,8 @@
     const query = { ...route.query };
     delete query._rt;
     delete query.organizeSelection;
+    delete query.review;
+    delete query.runId;
     delete query.resourceType;
     if (view === 'overview') delete query.issue;
     else query.issue = view;

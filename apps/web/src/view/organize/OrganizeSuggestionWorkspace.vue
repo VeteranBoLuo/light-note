@@ -10,9 +10,15 @@
         ><h2>{{ t('organizeWorkspace.title') }}</h2
         ><p>{{ t('organizeWorkspace.description') }}</p></div
       ><div class="workspace-tools"
-        ><BButton type="primary" @click="resetDraft">{{ t('organize.aiSuggestions.regenerate') }}</BButton></div
+        ><BButton v-if="!reviewEntry" type="primary" @click="resetDraft">{{
+          t('organize.aiSuggestions.regenerate')
+        }}</BButton></div
       ></header
     >
+    <div v-if="reviewEntry" class="workspace-notice review-entry">
+      <span>{{ t('organizeWorkspace.reviewEntryHint') }}</span>
+      <BButton @click="exitReviewEntry">{{ t('organizeWorkspace.exitReviewEntry') }}</BButton>
+    </div>
     <div v-if="error" class="workspace-notice" role="alert"
       ><span>{{ error }}</span
       ><BButton @click="loadLatest">{{ t('common.retry') }}</BButton></div
@@ -338,17 +344,14 @@
                       }}
                     </BChip>
                     <span
-                      v-if="primarySuggestions(item).length"
+                      v-if="['priority', 'manual'].includes(group.key) && primarySuggestions(item).length"
                       class="resource-issue-label"
                       :class="`issue-${group.key}`"
                       >{{ issueLabel(item) }}</span
                     >
-                    <span
-                      v-if="!primarySuggestions(item).length"
-                      class="resource-conclusion"
-                      :class="{ 'is-clear': groupFor(item) === 'clear' }"
-                      >{{ resourceConclusion(item) }}</span
-                    >
+                    <span v-else class="resource-conclusion" :class="`conclusion-${group.key}`">{{
+                      resourceConclusion(item)
+                    }}</span>
                     <BButton
                       v-if="item.suggestions.length"
                       class="resource-detail-toggle"
@@ -388,7 +391,12 @@
                     :unfinished="item.outcome === 'unfinished'"
                   />
                   <p v-if="fileReadingDetails(item).length" class="file-reading-details">
-                    <span v-for="detail in fileReadingDetails(item)" :key="detail">{{ detail }}</span>
+                    <span
+                      v-for="detail in fileReadingDetails(item)"
+                      :key="detail.text"
+                      :class="{ 'reading-warning': detail.warning }"
+                      >{{ detail.text }}</span
+                    >
                   </p>
                   <OrganizeWorkspaceSuggestion
                     v-for="suggestion in primarySuggestions(item).filter((s) => s.kind !== 'tag_icon')"
@@ -412,7 +420,14 @@
                     <div class="resource-check-details">
                       <div v-for="suggestion in secondarySuggestions(item)" :key="suggestion.id">
                         <span>{{ t(`organizeWorkspace.checks.${suggestion.kind}`) }}</span>
-                        <p>{{ suggestion.reason }}</p>
+                        <p
+                          ><template v-if="['applied', 'ignored', 'closed', 'expired'].includes(suggestion.status)"
+                            ><span :class="{ 'suggestion-applied': suggestion.status === 'applied' }">{{
+                              t(`organizeWorkspace.status.${suggestion.status}`)
+                            }}</span>
+                            · </template
+                          >{{ suggestion.reason }}</p
+                        >
                       </div>
                     </div>
                   </div>
@@ -692,11 +707,11 @@
   function fileReadingDetails(item: WorkspaceItem) {
     const reading = item.resource.reading;
     if (!reading) return [];
-    const details: string[] = [];
+    const details = new Map<string, { text: string; warning: boolean }>();
+    const addDetail = (text: string, warning = false) => details.set(text, { text, warning });
     if (reading.totalPages)
-      details.push(t('organizeFile.pages', { read: reading.readPages || 0, total: reading.totalPages }));
-    if (reading.missingPages?.length)
-      details.push(t('organizeFile.missing', { pages: reading.missingPages.join(', ') }));
+      addDetail(t('organizeFile.pages', { read: reading.readPages || 0, total: reading.totalPages }));
+    if (reading.missingPages?.length) addDetail(t('organizeFile.missing', { pages: reading.missingPages.join(', ') }));
     if (reading.reasonCode) {
       const reason = t(fileReadingReasonKey(reading.reasonCode));
       const shownInSuggestion = primarySuggestions(item).some(
@@ -704,17 +719,17 @@
           (s.reading && !s.reading.complete && t(fileReadingReasonKey(s.reading.reasonCode)) === reason) ||
           s.reason === reason,
       );
-      if (!shownInSuggestion) details.push(reason);
+      if (!shownInSuggestion) addDetail(reason, !reading.complete);
     }
     for (const range of (reading.failedRanges || []).filter((r) => r.unit !== 'pages'))
-      details.push(
+      addDetail(
         t('organizeFile.range', {
           type: t(`organizeFile.rangeTypes.${range.unit}`),
           start: range.start,
           end: range.end,
         }),
       );
-    return [...new Set(details)];
+    return [...details.values()];
   }
   function groupFor(item: WorkspaceItem) {
     if (item.outcome) return organizeOutcomeGroup(item.outcome);
@@ -939,23 +954,41 @@
   const primarySuggestions = (item: WorkspaceItem) => visibleSuggestions(item).filter((s) => !isSecondary(s));
   const secondarySuggestions = (item: WorkspaceItem) => visibleSuggestions(item).filter(isSecondary);
   function resourceConclusion(item: WorkspaceItem) {
-    if (item.ruleStatus === 'removed') return t('organizeWorkspace.reviewed');
-    if (item.ruleStatus === 'skipped') return t('organizeLifecycle.resourceSkipped');
-    if (
-      ['ended', 'cancelled'].includes(run.value?.status || '') &&
-      ['pending', 'checked'].includes(item.ruleStatus || '')
-    )
-      return t('organizeLifecycle.resourceEnded');
-    if (item.ruleStatus === 'cancelled') return t('organizeLifecycle.resourceEnded');
-    if (item.ruleStatus && item.ruleStatus !== 'completed')
-      return t(
-        item.ruleStatus === 'checked' ? 'organizeProgress.queuedResource' : 'organizeLifecycle.resourceChecking',
-      );
-    if (item.resource.unsupported) return t('organizeWorkspace.checkLimited');
-    if (visibleSuggestions(item).some((s) => ['applied', 'ignored', 'closed', 'expired'].includes(s.status)))
-      return t('organizeWorkspace.reviewed');
-    return t(displayedKind.value === 'all' ? 'organizeWorkspace.checkClear' : 'organizeWorkspace.filteredClear');
+    const group = groupFor(item);
+    // The resource conclusion follows the same outcome as its group. Suggestion
+    // review decisions belong to individual suggestions, not unfinished work.
+    if (group === 'analysis') {
+      if (item.ruleStatus === 'skipped') return t('organizeLifecycle.resourceSkipped');
+      if (item.ruleStatus === 'cancelled' || item.aiStatus === 'cancelled')
+        return t('organizeWorkspace.status.cancelled');
+      const reading = item.resource.reading;
+      if (reading && !reading.complete && reading.state !== 'waiting') {
+        if (reading.state === 'partial') return t('organizeFile.partial');
+        if (reading.reasonCode === 'UNSUPPORTED_FILE_TYPE') return t('organizeWorkspace.checkLimited');
+        if (reading.reasonCode) return t('organizeFile.failed');
+      }
+      const states = [item.aiStatus, ...item.suggestions.map((s) => s.status)];
+      if (states.includes('conflict')) return t('organizeWorkspace.status.conflict');
+      if (states.includes('failed')) return t('organizeWorkspace.resourceUnfinished');
+      if (states.includes('cancelled')) return t('organizeWorkspace.status.cancelled');
+      if (
+        item.outcome === 'unfinished' ||
+        ['ended', 'cancelled', 'completed', 'failed'].includes(run.value?.status || '')
+      )
+        return t('organizeWorkspace.resourceUnfinished');
+      if (reading?.state === 'waiting') return t('organizeFile.waiting');
+      if (item.ruleStatus && item.ruleStatus !== 'completed')
+        return t(
+          item.ruleStatus === 'checked' ? 'organizeProgress.queuedResource' : 'organizeLifecycle.resourceChecking',
+        );
+      return t('organizeWorkspace.resourceProcessing');
+    }
+    if (group === 'manual' && item.resource.unsupported) return t('organizeWorkspace.checkLimited');
+    if (group === 'reviewed') return t('organizeWorkspace.reviewed');
+    if (group === 'clear') return t('organizeWorkspace.checkClear');
+    return t(`organizeWorkspace.groups.${group}`);
   }
+
   function date(value?: string) {
     return value
       ? new Date(value).toLocaleString(locale.value, {
@@ -1099,11 +1132,32 @@
       }
     }
   }
+  const reviewEntry = computed(() => router.currentRoute.value.query.review === 'pending');
+  async function exitReviewEntry() {
+    const query = { ...router.currentRoute.value.query };
+    delete query.review;
+    delete query.runId;
+    delete query.resourceType;
+    await router.replace({ query });
+  }
   async function loadLatest() {
     const request = ++sequence;
     loading.value = true;
     error.value = '';
     try {
+      const requestedRun = router.currentRoute.value.query.runId;
+      const requestedType = router.currentRoute.value.query.resourceType;
+      if (reviewEntry.value && typeof requestedRun === 'string' && requestedRun) {
+        await loadPage(false, false, {
+          id: requestedRun,
+          type: (['bookmark', 'note', 'file', 'tag'].includes(String(requestedType))
+            ? requestedType
+            : 'bookmark') as ResourceType,
+          kind: 'all',
+          request,
+        });
+        return;
+      }
       const result = readResponse(await listRuns()) as SuggestionRun[];
       if (disposed || request !== sequence) return;
       const latest = result[0];
@@ -1146,6 +1200,7 @@
     try {
       const result = readResponse(
         await getRun(id, {
+          ...(reviewEntry.value ? { reviewOnly: true } : {}),
           resourceType: requestedType,
           kind: requestedKind === 'all' ? '' : requestedKind,
           after:
@@ -1168,6 +1223,7 @@
         seenCursors.add(cursor);
         const page = readResponse(
           await getRun(id, {
+            ...(reviewEntry.value ? { reviewOnly: true } : {}),
             resourceType: requestedType,
             kind: requestedKind === 'all' ? '' : requestedKind,
             after: cursor,
@@ -1340,6 +1396,12 @@
       void preflight(options);
     }
   }
+  watch(
+    () => [router.currentRoute.value.query.runId, router.currentRoute.value.query.review],
+    () => {
+      void loadLatest();
+    },
+  );
   watch(() => router.currentRoute.value.query.organizeSelection, receiveHandoff);
   watch(
     () => buildNoteDetailRequestScope(user),
@@ -1880,6 +1942,13 @@
     overflow-wrap: anywhere;
     font-size: 12px;
   }
+  .reading-warning {
+    color: var(--workspace-file-text);
+  }
+  .suggestion-applied {
+    color: var(--workspace-note-text);
+    font-weight: 500;
+  }
   .resource-symbol.b_btn :deep(.btn-spinner) {
     margin: 0;
   }
@@ -1944,7 +2013,13 @@
   }
   .resource-conclusion {
     font-size: 11px;
-    color: var(--ow-green);
+    color: var(--ow-muted);
+  }
+  .conclusion-clear {
+    color: var(--workspace-note-text);
+  }
+  .conclusion-analysis {
+    color: var(--workspace-file-text);
   }
   .expand-chevron {
     flex-shrink: 0;
@@ -1997,6 +2072,10 @@
     padding: 16px 0;
     color: var(--danger-color);
     font-size: 13px;
+  }
+  .review-entry {
+    color: var(--workspace-muted);
+    flex-wrap: wrap;
   }
   .workspace-more {
     margin: 12px 0;

@@ -588,8 +588,30 @@ export async function getPointsLog(userId, { limit = 30, offset = 0, cursor = nu
   );
   const hasMore = rawRows.length > lim;
   const rows = rawRows.slice(0, lim);
+  // 只对当前页社区奖励批量补读公开话题名；已有快照优先。
+  const topicIds = [
+    ...new Set(
+      rows
+        .filter((row) => row.reason === 'campaign' && /^community-task:[^:]+$/.test(String(row.ref || '')))
+        .map((row) => String(row.ref).slice('community-task:'.length)),
+    ),
+  ];
+  const topics = new Map();
+  if (topicIds.length) {
+    const [names] = await pool.query(
+      `SELECT id,name_zh,name_en FROM community_topics WHERE id IN (${topicIds.map(() => '?').join(',')})`,
+      topicIds,
+    );
+    for (const topic of names) topics.set(String(topic.id), topic);
+  }
   return {
-    rows: rows.map(enrichPointsLogRow),
+    rows: rows.map((row) => {
+      const result = enrichPointsLogRow(row);
+      const topic = topics.get(String(row.ref || '').slice('community-task:'.length));
+      if (!result.sourceName?.zh && !result.sourceName?.en && row.reason === 'campaign' && topic)
+        result.sourceName = { zh: topic.name_zh, en: topic.name_en };
+      return result;
+    }),
     total: Number(c.c || 0),
     limit: lim,
     offset: off,
@@ -644,6 +666,16 @@ export function enrichPointsLogRow(row) {
     ...row,
     ref: privateOperation ? null : row.ref,
     meta: publicMeta && Object.values(publicMeta).some((value) => value !== null) ? publicMeta : null,
+    sourceName:
+      reason === 'campaign' &&
+      /^community-task:[^:]+$/.test(ref) &&
+      parsedMeta?.topicName &&
+      typeof parsedMeta.topicName === 'object'
+        ? {
+            zh: typeof parsedMeta.topicName.zh === 'string' ? parsedMeta.topicName.zh.slice(0, 200) : '',
+            en: typeof parsedMeta.topicName.en === 'string' ? parsedMeta.topicName.en.slice(0, 200) : '',
+          }
+        : null,
     sourceType: baseReason,
     sourceKey: sourceKey || null,
     sourceMeta,

@@ -135,6 +135,7 @@ export const COMMUNITY_FEED_SCHEMA = {
       'featured_posts',
       'comment_notifications_enabled',
       'mention_notifications_enabled',
+      'like_notifications_enabled',
     ],
     indexes: [['PRIMARY', 'user_id', 0]],
   },

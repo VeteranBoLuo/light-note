@@ -7,18 +7,43 @@ const organizeActions = [
   { id: 'organize_untagged', label: 'organizeUntagged', route: '/organize?issue=untagged' },
 ] as const;
 
-/** 只使用结构化事实；旧简报入口打开最新列表，不携带过期数量或模型生成的地址。 */
+/** 只使用结构化事实；审核入口仅接受服务端绑定的整理任务定位；旧简报保留默认入口。 */
 export function resolveBriefOrganizeActions(insight: DailyBriefInsight, brief: DailyBrief | null) {
   // 站内导航沿用全局管理员上下文；只读权限由目标接口继续约束。
   const items = brief?.sections?.find((section) => section.id === 'organize')?.items || [];
-  return organizeActions.filter(
-    (action) =>
-      insight.factIds.includes(action.id) &&
-      items.some(
-        (item) =>
-          item.id === action.id && typeof item.count === 'number' && Number.isFinite(item.count) && item.count > 0,
-      ),
-  );
+  return organizeActions
+    .filter(
+      (action) =>
+        insight.factIds.includes(action.id) &&
+        items.some(
+          (item) =>
+            item.id === action.id && typeof item.count === 'number' && Number.isFinite(item.count) && item.count > 0,
+        ),
+    )
+    .map((action) => {
+      const item = items.find((item) => item.id === action.id);
+      if (action.id !== 'organize_ai_pending' || !item?.route) return action;
+      try {
+        const url = new URL(item.route, 'https://lightnote.invalid');
+        const runId = url.searchParams.get('runId');
+        const resourceType = url.searchParams.get('resourceType');
+        if (
+          url.origin !== 'https://lightnote.invalid' ||
+          url.pathname !== '/organize' ||
+          url.searchParams.get('review') !== 'pending' ||
+          !runId ||
+          !/^[a-zA-Z0-9-]{1,64}$/.test(runId) ||
+          !['bookmark', 'note', 'file', 'tag'].includes(resourceType || '')
+        )
+          return action;
+        return {
+          ...action,
+          route: `/organize?issue=ai_suggestions&review=pending&runId=${encodeURIComponent(runId)}&resourceType=${resourceType}`,
+        };
+      } catch {
+        return action;
+      }
+    });
 }
 
 export function resolveBriefSourceTarget(source: NonNullable<DailyBriefInsight['sources']>[number]) {

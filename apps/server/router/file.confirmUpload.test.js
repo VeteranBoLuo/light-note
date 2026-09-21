@@ -15,6 +15,9 @@ const mocks = vi.hoisted(() => ({
 vi.mock('express', () => ({
   default: {
     Router: () => ({
+      get(path, ...handlers) {
+        mocks.routes.set(path, handlers);
+      },
       post(path, ...handlers) {
         mocks.routes.set(path, handlers);
       },

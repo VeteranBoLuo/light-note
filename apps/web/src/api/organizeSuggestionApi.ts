@@ -116,8 +116,10 @@ export const previewRun = (options: RunOptions, requestId: string) =>
 export const startRun = (id: string, replaceRunId?: string) =>
   apiBasePost(`${root}/runs/${encodeURIComponent(id)}/start`, { requestId: id, replaceRunId }, opts);
 export const listRuns = () => apiBaseGet(`${root}/runs`, undefined, opts);
-export const getRun = (id: string, params: { after?: string; resourceType?: string; kind?: string } = {}) =>
-  apiBaseGet(`${root}/runs/${encodeURIComponent(id)}`, params, opts);
+export const getRun = (
+  id: string,
+  params: { after?: string; resourceType?: string; kind?: string; reviewOnly?: boolean } = {},
+) => apiBaseGet(`${root}/runs/${encodeURIComponent(id)}`, params, opts);
 export const cancelRun = (id: string) => apiBasePost(`${root}/runs/${encodeURIComponent(id)}/cancel`, {}, opts);
 export const actOnRunSuggestion = (
   runId: string,

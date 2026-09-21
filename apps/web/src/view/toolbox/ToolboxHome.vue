@@ -192,6 +192,10 @@
         <header class="toolbox-section__head">
           <h2 id="toolbox-quick-title">{{ t('toolbox.project.quick') }}</h2>
           <p>{{ t('toolbox.project.quickHint') }}</p>
+          <BButton class="toolbox-external-link" type="text" @click="openDeveloperToolbox">
+            {{ t('toolbox.home.developerToolbox') }}
+            <SvgIcon :src="icon.ai.sourceExternal" size="16" aria-hidden="true" />
+          </BButton>
         </header>
         <div v-if="catalogLoading" class="toolbox-home__state">
           <BLoading inline loading :title="t('common.loading')" />
@@ -385,6 +389,16 @@
                 </div>
               </section>
             </div>
+            <BCard class="toolbox-external-card" :aria-label="t('toolbox.home.developerToolbox')">
+              <div class="toolbox-external-card__copy">
+                <h3>{{ t('toolbox.home.developerToolbox') }}</h3>
+                <p>{{ t('toolbox.home.developerToolboxDescription') }}</p>
+              </div>
+              <BButton class="toolbox-external-link" type="text" @click="openDeveloperToolbox">
+                {{ t('toolbox.home.openDeveloperToolbox') }}
+                <SvgIcon :src="icon.ai.sourceExternal" size="16" aria-hidden="true" />
+              </BButton>
+            </BCard>
           </div>
         </div>
       </section>
@@ -399,6 +413,7 @@
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
   import { TOOLBOX_TOOL_CATALOG, type ToolboxToolId } from '@lightnote/shared/toolbox-protocol';
+  import BCard from '@/components/base/BasicComponents/BCard.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BChip from '@/components/base/BasicComponents/BChip.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
@@ -454,6 +469,10 @@
     detail: string;
     usedAt: string | number;
   };
+
+  function openDeveloperToolbox() {
+    window.open('https://boluo66.top/toolkit/', '_blank', 'noopener,noreferrer');
+  }
 
   const { t, locale } = useI18n();
   const router = useRouter();
@@ -2569,6 +2588,46 @@
   @media (prefers-reduced-motion: reduce) {
     .workshop-view-switch__indicator {
       transition: none;
+    }
+  }
+  .toolbox-external-card {
+    .workspace-content-surface();
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px 24px;
+    margin-top: 24px;
+    box-shadow: none;
+  }
+  .toolbox-external-card__copy {
+    flex: 1 1 240px;
+    min-width: 0;
+  }
+  .toolbox-external-card h3 {
+    margin: 0;
+    color: var(--workspace-text);
+    font-size: 15px;
+    line-height: 1.5;
+  }
+  .toolbox-external-card p {
+    margin: 4px 0 0;
+    color: var(--workspace-muted);
+    font-size: 13px;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+  }
+  .toolbox-external-link.b_btn {
+    gap: 6px;
+    flex-shrink: 0;
+    color: var(--workspace-purple-text);
+  }
+  @media (max-width: 767px) {
+    .toolbox-quick .toolbox-section__head p {
+      flex-basis: 100%;
+      order: 1;
+    }
+    .toolbox-external-card {
+      gap: 8px;
     }
   }
 </style>

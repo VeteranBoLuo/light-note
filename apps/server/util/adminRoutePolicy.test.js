@@ -25,6 +25,41 @@ function createRes() {
 }
 
 describe('adminRoutePolicyMiddleware', () => {
+  it.each(['readonly', 'maintain'])('allows only explicit community preview reads in %s', (mode) => {
+    for (const path of [
+      '/community/feed/capabilities',
+      '/community/topics',
+      '/community/topics/autumn',
+      '/community/posts',
+      '/community/posts/post',
+      '/community/comments',
+      '/community/comments/context',
+      '/community/profiles/person',
+      '/community/relations',
+      '/community/resources/resource',
+      '/community/images/image',
+      '/community/posts/post/avatar',
+      '/community/profiles/person/avatar',
+    ]) {
+      const next = vi.fn();
+      adminRoutePolicyMiddleware(createReq(path, 'GET', mode), createRes(), next);
+      expect(next, path).toHaveBeenCalledOnce();
+    }
+    for (const [method, path] of [
+      ['GET', '/community/profiles/options/me'],
+      ['GET', '/community/posts/post/saved'],
+      ['GET', '/community/unknown'],
+      ['POST', '/community/posts'],
+      ['PUT', '/community-chat/rooms/general/read'],
+      ['POST', '/community-chat/presence'],
+      ['POST', '/growth/claimAll'],
+    ]) {
+      const next = vi.fn();
+      adminRoutePolicyMiddleware(createReq(path, method, mode), createRes(), next);
+      expect(next, path).not.toHaveBeenCalled();
+    }
+  });
+
   it.each(['readonly', 'maintain'])('社区本人偏好拒绝 %s 代管，能力元数据允许读取', (mode) => {
     for (const method of ['GET', 'PUT']) {
       const next = vi.fn();

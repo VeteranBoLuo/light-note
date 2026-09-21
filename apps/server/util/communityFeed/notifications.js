@@ -8,11 +8,19 @@ import { first, feature, parseJson, pairAllowed, authorVisibleSql } from './core
 // No body snippets: unavailable sources must not leak through historical notifications.
 export function feedNotificationVisibleSql(ready) {
   if (!ready) return "type <> 'community_feed'";
-  return `(type<>'community_feed' OR (source_type='community_feed_review' AND EXISTS(SELECT 1 FROM user reviewer WHERE reviewer.id=notification.user_id AND reviewer.role='root' AND reviewer.del_flag='0') AND EXISTS(SELECT 1 FROM community_posts pending WHERE CONVERT(pending.public_id USING utf8mb4) COLLATE utf8mb4_bin=notification.source_id AND pending.pending_revision_id=CAST(JSON_UNQUOTE(JSON_EXTRACT(notification.meta,'$.revisionId')) AS UNSIGNED))) OR (source_type='community_feed_result' AND EXISTS (SELECT 1 FROM community_moderation_actions result_action WHERE result_action.public_id=notification.source_id AND result_action.subject_id=notification.user_id)) OR (source_type IN ('community_feed_comment','community_feed_post') AND EXISTS (
+  return `(type<>'community_feed' OR (source_type='community_feed_review' AND EXISTS(SELECT 1 FROM user reviewer WHERE reviewer.id=notification.user_id AND reviewer.role='root' AND reviewer.del_flag='0') AND EXISTS(SELECT 1 FROM community_posts pending WHERE CONVERT(pending.public_id USING utf8mb4) COLLATE utf8mb4_bin=notification.source_id AND pending.pending_revision_id=CAST(JSON_UNQUOTE(JSON_EXTRACT(notification.meta,'$.revisionId')) AS UNSIGNED))) OR (source_type='community_feed_result' AND EXISTS (SELECT 1 FROM community_moderation_actions result_action WHERE result_action.public_id=notification.source_id AND result_action.subject_id=notification.user_id)) OR (source_type IN ('community_feed_comment','community_feed_post','community_feed_post_like','community_feed_comment_like') AND EXISTS (
     SELECT 1 FROM community_posts fp WHERE CONVERT(fp.public_id USING utf8mb4) COLLATE utf8mb4_bin=JSON_UNQUOTE(JSON_EXTRACT(notification.meta,'$.postId')) AND fp.status='published' AND ${authorVisibleSql('fp')}
     AND NOT EXISTS (SELECT 1 FROM community_chat_blocks fb WHERE (fb.user_id=notification.user_id AND fb.blocked_user_id=fp.author_id) OR (fb.blocked_user_id=notification.user_id AND fb.user_id=fp.author_id))
     AND EXISTS (SELECT 1 FROM community_chat_user_identities actor JOIN user au ON au.id=actor.user_id AND au.del_flag='0' AND au.role<>'visitor' WHERE NOT EXISTS(SELECT 1 FROM community_chat_members am WHERE am.user_id=actor.user_id AND am.status='banned') AND CONVERT(actor.public_id USING utf8mb4) COLLATE utf8mb4_bin=JSON_UNQUOTE(JSON_EXTRACT(notification.meta,'$.actorId')) AND NOT EXISTS (SELECT 1 FROM community_chat_blocks ab WHERE (ab.user_id=notification.user_id AND ab.blocked_user_id=actor.user_id) OR (ab.blocked_user_id=notification.user_id AND ab.user_id=actor.user_id)))
-    AND (source_type='community_feed_post' OR EXISTS (SELECT 1 FROM community_comments fc WHERE CONVERT(fc.public_id USING utf8mb4) COLLATE utf8mb4_bin=JSON_UNQUOTE(JSON_EXTRACT(notification.meta,'$.commentId')) AND fc.post_id=fp.id AND fc.status='published' AND ${authorVisibleSql('fc')})))))`;
+    AND (source_type IN ('community_feed_post','community_feed_post_like') OR EXISTS (SELECT 1 FROM community_comments fc WHERE CONVERT(fc.public_id USING utf8mb4) COLLATE utf8mb4_bin=JSON_UNQUOTE(JSON_EXTRACT(notification.meta,'$.commentId')) AND fc.post_id=fp.id AND fc.status='published' AND ${authorVisibleSql('fc')})))))`;
+}
+// Read current content only after applying feedNotificationVisibleSql; never store private body snapshots.
+export function feedNotificationContentSql(ready) {
+  if (!ready) return 'content';
+  return `CASE
+    WHEN source_type='community_feed_post_like' THEN (SELECT r.title FROM community_posts p JOIN community_post_revisions r ON r.id=p.published_revision_id WHERE CONVERT(p.public_id USING utf8mb4) COLLATE utf8mb4_bin=JSON_UNQUOTE(JSON_EXTRACT(notification.meta,'$.postId')) LIMIT 1)
+    WHEN source_type='community_feed_comment_like' THEN (SELECT LEFT(c.body,160) FROM community_comments c WHERE CONVERT(c.public_id USING utf8mb4) COLLATE utf8mb4_bin=JSON_UNQUOTE(JSON_EXTRACT(notification.meta,'$.commentId')) LIMIT 1)
+    ELSE content END`;
 }
 async function deliver(db, event, userId) {
   const c = await db.getConnection();
@@ -45,19 +53,22 @@ async function deliver(db, event, userId) {
       [userId, event.post_id],
     );
     const review = event.kind === 'review';
-    let kind = review
-      ? 'review'
-      : action
-        ? 'result'
-        : direct?.author_id === userId
-          ? 'reply'
-          : ids.includes(identity?.public_id)
-            ? 'mention'
-            : comment && !comment.reply_to_comment_id && post?.author_id === userId
-              ? 'comment'
-              : comment && subscription
-                ? 'subscription'
-                : '';
+    const like = event.kind === 'like';
+    let kind = like
+      ? 'like'
+      : review
+        ? 'review'
+        : action
+          ? 'result'
+          : direct?.author_id === userId
+            ? 'reply'
+            : ids.includes(identity?.public_id)
+              ? 'mention'
+              : comment && !comment.reply_to_comment_id && post?.author_id === userId
+                ? 'comment'
+                : comment && subscription
+                  ? 'subscription'
+                  : '';
     if (!kind || (!action && event.actor_id === userId)) {
       await c.commit();
       return;
@@ -72,7 +83,7 @@ async function deliver(db, event, userId) {
     let allowed = Boolean(recipient && post);
     const pref = await first(
       c,
-      'SELECT comment_notifications_enabled,mention_notifications_enabled FROM community_profile_options WHERE user_id=?',
+      'SELECT comment_notifications_enabled,mention_notifications_enabled,like_notifications_enabled FROM community_profile_options WHERE user_id=?',
       [userId],
     );
     if (parseJson(recipient?.preferences)?.notificationsInApp === false) allowed = false;
@@ -105,6 +116,23 @@ async function deliver(db, event, userId) {
         !(await first(c, "SELECT user_id FROM community_chat_members WHERE user_id=? AND status='banned'", [userId]));
       allowed =
         allowed && (await pairAllowed(c, userId, event.actor_id)) && (await pairAllowed(c, userId, post.author_id));
+      if (like && allowed) {
+        allowed =
+          allowed &&
+          (!event.comment_id || Boolean(comment)) &&
+          (comment ? comment.author_id : post.author_id) === userId &&
+          (!pref || Boolean(Number(pref.like_notifications_enabled)));
+        const reaction = comment
+          ? await first(c, 'SELECT user_id FROM community_comment_likes WHERE user_id=? AND comment_id=?', [
+              event.actor_id,
+              comment.id,
+            ])
+          : await first(c, 'SELECT user_id FROM community_post_user_states WHERE user_id=? AND post_id=? AND liked=1', [
+              event.actor_id,
+              post.id,
+            ]);
+        allowed = allowed && Boolean(reaction);
+      }
       if (kind === 'mention' && pref && !Number(pref.mention_notifications_enabled)) allowed = false;
       if (['reply', 'comment'].includes(kind) && pref && !Number(pref.comment_notifications_enabled)) allowed = false;
       if (
@@ -116,42 +144,77 @@ async function deliver(db, event, userId) {
       )
         allowed = false;
     }
-    const notificationId = allowed ? randomUUID() : null;
+    let notificationId = allowed ? randomUUID() : null;
     if (allowed) {
       const actor = await first(c, 'SELECT public_id FROM community_chat_user_identities WHERE user_id=?', [
         event.actor_id,
       ]);
-      await createNotification(
-        userId,
-        {
-          id: notificationId,
-          type: 'community_feed',
-          title: review ? '有新帖子待审核' : action ? '社区处理结果' : '社区有新的回复或提及',
-          content: action ? action.reason : review ? revision?.title || null : null,
-          link: review
-            ? '/community/moderation'
-            : action
-              ? '/community/manage?tab=results'
-              : `/community/posts/${post.public_id}${comment ? '?comment=' + comment.public_id : ''}`,
-          sourceType: review
-            ? 'community_feed_review'
-            : action
-              ? 'community_feed_result'
-              : comment
-                ? 'community_feed_comment'
-                : 'community_feed_post',
-          sourceId: action ? action.public_id : comment ? comment.public_id : post.public_id,
-          meta: {
-            kind,
-            ...(review ? { revisionId: Number(event.revision_id) } : {}),
-            postId: post.public_id,
-            ...(comment ? { commentId: comment.public_id } : {}),
-            ...(action ? { actionId: action.public_id } : {}),
-            actorId: actor?.public_id || '',
+      if (like) {
+        const sourceType = comment ? 'community_feed_comment_like' : 'community_feed_post_like';
+        const sourceId = comment ? comment.public_id : post.public_id;
+        const existing = await first(
+          c,
+          'SELECT id,meta FROM notification WHERE user_id=? AND source_type=? AND source_id=? FOR UPDATE',
+          [userId, sourceType, sourceId],
+        );
+        const name = await first(c, "SELECT COALESCE(NULLIF(alias,''),'成员') AS name FROM user WHERE id=?", [
+          event.actor_id,
+        ]);
+        const count = Number(parseJson(existing?.meta)?.likeCount || 0) + 1;
+        const title = `${String(name?.name || '成员').slice(0, 80)}${count > 1 ? `等 ${count} 人` : ''}赞了你的${comment ? '回复' : '帖子'}`;
+        const meta = {
+          kind: 'like',
+          likeCount: count,
+          postId: post.public_id,
+          actorId: actor?.public_id || '',
+          ...(comment ? { commentId: comment.public_id } : {}),
+        };
+        const link = `/community/posts/${post.public_id}${comment ? '?comment=' + comment.public_id : ''}`;
+        if (existing) {
+          notificationId = existing.id;
+          await c.query(
+            'UPDATE notification SET title=?,meta=?,link=?,is_read=0,read_time=NULL,del_flag=0,create_time=NOW(6) WHERE id=? AND user_id=?',
+            [title, JSON.stringify(meta), link, existing.id, userId],
+          );
+        } else {
+          await createNotification(
+            userId,
+            { id: notificationId, type: 'community_feed', title, link, sourceType, sourceId, meta },
+            c,
+          );
+        }
+      } else
+        await createNotification(
+          userId,
+          {
+            id: notificationId,
+            type: 'community_feed',
+            title: review ? '有新帖子待审核' : action ? '社区处理结果' : '社区有新的回复或提及',
+            content: action ? action.reason : review ? revision?.title || null : null,
+            link: review
+              ? '/community/moderation'
+              : action
+                ? '/community/manage?tab=results'
+                : `/community/posts/${post.public_id}${comment ? '?comment=' + comment.public_id : ''}`,
+            sourceType: review
+              ? 'community_feed_review'
+              : action
+                ? 'community_feed_result'
+                : comment
+                  ? 'community_feed_comment'
+                  : 'community_feed_post',
+            sourceId: action ? action.public_id : comment ? comment.public_id : post.public_id,
+            meta: {
+              kind,
+              ...(review ? { revisionId: Number(event.revision_id) } : {}),
+              postId: post.public_id,
+              ...(comment ? { commentId: comment.public_id } : {}),
+              ...(action ? { actionId: action.public_id } : {}),
+              actorId: actor?.public_id || '',
+            },
           },
-        },
-        c,
-      );
+          c,
+        );
     }
     await c.query(
       'INSERT INTO community_event_recipients (dedupe_key,user_id,outcome,notification_id) VALUES (?,?,?,?)',
@@ -198,6 +261,11 @@ export async function consumeCommunityEvent({ db = pool, env = process.env } = {
     if (row.action_id) {
       const action = await first(db, 'SELECT subject_id FROM community_moderation_actions WHERE id=?', [row.action_id]);
       if (action) candidates.push(action.subject_id);
+    } else if (row.kind === 'like') {
+      const target = row.comment_id
+        ? await first(db, 'SELECT author_id FROM community_comments WHERE id=?', [row.comment_id])
+        : await first(db, 'SELECT author_id FROM community_posts WHERE id=?', [row.post_id]);
+      if (target) candidates.push(target.author_id);
     } else if (row.kind !== 'review') {
       const source = row.comment_id
         ? await first(db, 'SELECT author_id,mentions,reply_to_comment_id FROM community_comments WHERE id=?', [
@@ -225,12 +293,12 @@ export async function consumeCommunityEvent({ db = pool, env = process.env } = {
     }
     const branches = candidates.map(() => 'SELECT CAST(? AS CHAR CHARACTER SET utf8) COLLATE utf8_general_ci AS id');
     if (row.kind === 'review') branches.push("SELECT id FROM user WHERE role='root' AND del_flag='0'");
-    if (row.comment_id)
+    if (row.comment_id && row.kind !== 'like')
       branches.push("SELECT user_id AS id FROM community_post_user_states WHERE post_id=? AND subscription='enabled'");
     const [users] = branches.length
       ? await db.query(
           `SELECT u.id FROM user u JOIN (${branches.join(' UNION ')}) recipients ON recipients.id=u.id WHERE u.id>? AND u.del_flag='0' AND u.role<>'visitor' ORDER BY u.id LIMIT 50`,
-          [...candidates, ...(row.comment_id ? [row.post_id] : []), row.recipient_cursor],
+          [...candidates, ...(row.comment_id && row.kind !== 'like' ? [row.post_id] : []), row.recipient_cursor],
         )
       : [[]];
     for (const user of users) {

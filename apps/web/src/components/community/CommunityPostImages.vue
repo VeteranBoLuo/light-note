@@ -8,16 +8,18 @@
       v-for="(item, index) in images"
       :key="item.publicId"
       :aria-label="
-        failed.has(item.publicId)
+        failed.has(item.publicId) || imageUnavailable(item.url)
           ? t('community.feed.imageUnavailable')
           : t('community.feed.imagePreview', { index: index + 1 })
       "
       @click="openImage(item.publicId)"
     >
-      <span v-if="failed.has(item.publicId)" class="image-unavailable">{{ t('community.feed.imageUnavailable') }}</span>
+      <span v-if="failed.has(item.publicId) || imageUnavailable(item.url)" class="image-unavailable">{{
+        t('community.feed.imageUnavailable')
+      }}</span>
       <img
-        v-else
-        :src="item.url"
+        v-else-if="imageSource(item.url)"
+        :src="imageSource(item.url)"
         :alt="t('community.feed.imagePreview', { index: index + 1 })"
         loading="lazy"
         :width="item.width"
@@ -29,32 +31,49 @@
   <BImageViewer v-if="visible" v-model:visible="visible" :images="viewerImages" :initial-id="selected" />
 </template>
 <script setup lang="ts">
-  import { computed, ref, defineAsyncComponent } from 'vue';
+  import { useCommunityPreviewImages } from '@/composables/useCommunityPreviewImages';
+  import { useCommunityPreview } from '@/composables/useCommunityPreview';
+  import { computed, ref, defineAsyncComponent, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import type { FeedImage } from '@/api/communityFeedApi';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   const BImageViewer = defineAsyncComponent(() => import('@/components/base/Viewer/BImageViewer.vue'));
   const props = defineProps<{ images?: FeedImage[]; article?: boolean }>();
   const { t } = useI18n();
+  const { imageSource, imageUnavailable } = useCommunityPreviewImages(() =>
+    (props.images || []).map((image) => image.url),
+  );
+  const { identity } = useCommunityPreview();
   const failed = ref(new Set<string>());
   function openImage(id: string) {
     if (failed.value.has(id)) {
       failed.value.delete(id);
       return;
     }
+    if (!imageSource(props.images?.find((image) => image.publicId === id)?.url)) return;
     selected.value = id;
     visible.value = true;
   }
   const selected = ref(''),
     visible = ref(false);
+  watch(
+    identity,
+    () => {
+      visible.value = false;
+      failed.value.clear();
+    },
+    { flush: 'sync' },
+  );
   const viewerImages = computed(() =>
-    (props.images || []).map((i) => ({
-      id: i.publicId,
-      src: i.url,
-      width: i.width,
-      height: i.height,
-      alt: t('community.feed.imagePreview', { index: (props.images || []).indexOf(i) + 1 }),
-    })),
+    (props.images || [])
+      .filter((i) => imageSource(i.url))
+      .map((i) => ({
+        id: i.publicId,
+        src: imageSource(i.url)!,
+        width: i.width,
+        height: i.height,
+        alt: t('community.feed.imagePreview', { index: (props.images || []).indexOf(i) + 1 }),
+      })),
   );
 </script>
 <style scoped>

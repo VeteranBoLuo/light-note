@@ -9,6 +9,7 @@ export interface UseCommunityChatUnreadRuntimeOptions {
   userId: ReadonlyStringRef;
   userRole: ReadonlyStringRef;
   realtimeActive: ReadonlyBooleanRef;
+  previewContextId?: ReadonlyStringRef;
 }
 
 const FALLBACK_REFRESH_INTERVAL_MS = 60_000;
@@ -24,11 +25,11 @@ const REALTIME_REFRESH_DEBOUNCE_MS = 25;
  */
 export function useCommunityChatUnreadRuntime(options: UseCommunityChatUnreadRuntimeOptions) {
   const unread = useCommunityChatUnread();
+  const previewContext = computed(() => options.previewContextId?.value || '');
+  const active = computed(() => options.realtimeActive.value && !previewContext.value);
   const authenticated = computed(() => Boolean(options.userId.value) && options.userRole.value !== 'visitor');
   const roomSlug = computed(() => unread.rooms.value[0]?.slug || 'general');
-  const socketEnabled = computed(
-    () => options.realtimeActive.value && unread.realtimeAvailable.value && Boolean(roomSlug.value),
-  );
+  const socketEnabled = computed(() => active.value && unread.realtimeAvailable.value && Boolean(roomSlug.value));
   const identityKey = computed(() => `${options.userId.value || 'guest'}:${options.userRole.value || 'visitor'}`);
   let mounted = false;
   let realtimeRefreshTimer: number | undefined;
@@ -42,12 +43,12 @@ export function useCommunityChatUnreadRuntime(options: UseCommunityChatUnreadRun
   function refreshNow({ afterCurrent = false } = {}) {
     // 聊天室页面由 Workspace 的实时连接和目录刷新维护状态，
     // 根层角标运行时不应再发起一组重复 REST 请求。
-    if (!options.realtimeActive.value) return;
+    if (!active.value) return;
     void unread.refresh({ afterCurrent });
   }
 
   function scheduleAuthoritativeRefresh() {
-    if (!options.realtimeActive.value || !authenticated.value || realtimeRefreshTimer !== undefined) return;
+    if (!active.value || !authenticated.value || realtimeRefreshTimer !== undefined) return;
     realtimeRefreshTimer = window.setTimeout(() => {
       realtimeRefreshTimer = undefined;
       refreshNow({ afterCurrent: true });
@@ -73,7 +74,7 @@ export function useCommunityChatUnreadRuntime(options: UseCommunityChatUnreadRun
   });
 
   watch(
-    [options.userId, options.userRole],
+    [options.userId, options.userRole, previewContext],
     () => {
       clearRealtimeRefreshTimer();
       unread.reset();
@@ -83,7 +84,7 @@ export function useCommunityChatUnreadRuntime(options: UseCommunityChatUnreadRun
   );
 
   watch(
-    options.realtimeActive,
+    active,
     (active) => {
       clearRealtimeRefreshTimer();
       if (mounted && active) refreshNow();
@@ -97,12 +98,12 @@ export function useCommunityChatUnreadRuntime(options: UseCommunityChatUnreadRun
 
   onMounted(() => {
     mounted = true;
-    if (options.realtimeActive.value) refreshNow();
+    if (active.value) refreshNow();
     document.addEventListener('visibilitychange', handleVisibilityChange);
     fallbackRefreshTimer = window.setInterval(() => {
       // 游客没有未读状态，首次读取开放策略后由 WebSocket 自身负责在线状态；
       // 只有登录账号需要用低频 REST 覆盖断线期间可能遗漏的角标变化。
-      if (options.realtimeActive.value && authenticated.value && document.visibilityState === 'visible') refreshNow();
+      if (active.value && authenticated.value && document.visibilityState === 'visible') refreshNow();
     }, FALLBACK_REFRESH_INTERVAL_MS);
   });
 

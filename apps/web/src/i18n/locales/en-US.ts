@@ -448,6 +448,10 @@ export default {
       reviewed: 'Review applied or dismissed suggestions',
     },
 
+    reviewEntryHint: 'The brief counts suggestions across organizing runs. This view shows resources awaiting review in one run.',
+    exitReviewEntry: 'Back to latest run',
+    resourceUnfinished: 'Unfinished',
+    resourceProcessing: 'Processing',
     filteredClear: 'No issues found for this check',
     checkClear: 'No issues found in these checks',
     checkLimited: 'Some checks are unavailable',
@@ -1774,6 +1778,9 @@ export default {
       pinTool: 'Pin to everyday tools',
       unpinTool: 'Unpin tool',
       pinLimit: 'You can pin up to {count} tools',
+      developerToolbox: 'Developer toolkit',
+      developerToolboxDescription: 'Standalone tools for web extraction, encoding conversion, and network queries.',
+      openDeveloperToolbox: 'Open toolkit',
       allToolsTitle: 'All tools',
       groupToolCount: '{count} tools',
       allToolsDescription:

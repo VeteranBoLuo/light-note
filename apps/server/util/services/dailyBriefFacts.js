@@ -1,3 +1,4 @@
+import { summarizePendingOrganizeReview } from './organizeReviewSummary.js';
 import { compileWorkshopBriefFacts } from './dailyBriefWorkshop.js';
 import { summarizeUntaggedResources } from './resourceInventoryService.js';
 import { compileBriefConnection } from './dailyBriefConnections.js';
@@ -13,7 +14,12 @@ export const DAILY_BRIEF_FACT_DEFINITIONS = Object.freeze([
   ['note_created_today', '今天新增笔记', 'Notes added today', '/noteLibrary'],
   ['file_created_today', '今天新增文件', 'Files added today', '/cloudSpace'],
   ['organize_untagged', '待整理的无标签内容', 'Untagged content to organize', '/organize?issue=untagged'],
-  ['organize_ai_pending', '待确认的 AI 整理建议', 'AI suggestions to review', '/organize?issue=ai_suggestions'],
+  [
+    'organize_ai_pending',
+    '各次整理中待审核的建议',
+    'Suggestions awaiting review across organizing runs',
+    '/organize?issue=ai_suggestions',
+  ],
 ]);
 
 export async function compileDailyBriefFacts(database, userId, calendar) {
@@ -37,13 +43,6 @@ export async function compileDailyBriefFacts(database, userId, calendar) {
         "del_flag = 0 AND status = 'pending' AND ((due_at IS NOT NULL AND due_at >= ? AND due_at < ?) OR (due_at IS NULL AND occurrence_date = ?))",
       params: [calendar.now, calendar.todayEnd, calendar.date],
       revision: 'id, title, due_at, occurrence_date',
-    },
-    organize_ai_pending: {
-      table: 'organize_ai_tag_suggestions',
-      owner: 'user_id',
-      filter: "status = 'pending'",
-      params: [],
-      revision: 'id',
     },
   };
   for (const [kind, table, owner, title] of [
@@ -69,7 +68,9 @@ export async function compileDailyBriefFacts(database, userId, calendar) {
   const entries = await Promise.all(
     DAILY_BRIEF_FACT_DEFINITIONS.map(async ([id, zh, en, route]) => {
       let row;
-      if (id === 'organize_untagged') {
+      if (id === 'organize_ai_pending') {
+        row = await summarizePendingOrganizeReview(database, userId);
+      } else if (id === 'organize_untagged') {
         row = await summarizeUntaggedResources(database, { userId });
       } else {
         const config = definitions[id];
@@ -94,7 +95,7 @@ export async function compileDailyBriefFacts(database, userId, calendar) {
       return {
         id,
         label: calendar.locale === 'en-US' ? en : zh,
-        route,
+        route: row.route || route,
         count: Math.max(0, Number(row.total || 0)),
         samples: sample ? [sample] : [],
         revision: String(row.revision || ''),

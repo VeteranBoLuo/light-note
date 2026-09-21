@@ -42,15 +42,22 @@ export async function ensureCommunityFeedSchema(db = pool) {
     '\n' +
     (await readFile(new URL('../../migrations/20260916_community_task_rewards.sql', import.meta.url), 'utf8')) +
     '\n' +
-    (await readFile(new URL('../../migrations/20260917_community_growth.sql', import.meta.url), 'utf8'));
-  for (const statement of sql
-    .split('\n')
-    .filter((line) => !line.trim().startsWith('--'))
-    .join('\n')
-    .split(';')
-    .map((s) => s.trim())
-    .filter(Boolean))
-    await db.query(statement);
+    (await readFile(new URL('../../migrations/20260917_community_growth.sql', import.meta.url), 'utf8')) +
+    '\n' +
+    (await readFile(new URL('../../migrations/20260921_community_like_notifications.sql', import.meta.url), 'utf8'));
+  const connection = db.getConnection ? await db.getConnection() : db;
+  try {
+    for (const statement of sql
+      .split('\n')
+      .filter((line) => !line.trim().startsWith('--'))
+      .join('\n')
+      .split(';')
+      .map((s) => s.trim())
+      .filter(Boolean))
+      await connection.query(statement);
+  } finally {
+    if (connection !== db) connection.release();
+  }
 }
 export async function communityFeedSchemaReady(db = pool, contract = COMMUNITY_FEED_SCHEMA) {
   const names = Object.keys(contract),

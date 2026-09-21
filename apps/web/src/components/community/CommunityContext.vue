@@ -28,7 +28,7 @@
     <section>
       <h2>{{ t('community.feed.communityWelcome') }}</h2>
       <p>{{ t('community.feed.communityWelcomeHint') }}</p>
-      <BButton class="context-link" @click="router.push(chat ? '/community/feed' : '/community/chat')"
+      <BButton type="text" class="context-link" @click="router.push(chat ? '/community/feed' : '/community/chat')"
         >{{ t(chat ? 'community.feed.title' : 'community.feed.visitChat') }} →</BButton
       >
     </section>

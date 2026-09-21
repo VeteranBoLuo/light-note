@@ -40,10 +40,10 @@
         compact
         :topic="topic"
         @claimed="$emit('claimed')"
-        @participate="router.push('/community/topics/' + topic.slug)"
+        @participate="$emit('participate', topic.slug)"
       />
-      <BButton v-else class="official-campaign-action" @click="router.push('/community/topics/' + topic.slug)"
-        >{{ t('community.feed.joinTopic') }} →</BButton
+      <BButton v-else class="official-campaign-action" @click="$emit('participate', topic.slug)"
+        >{{ t(user.adminContext ? 'community.feed.topicBrowse' : 'community.feed.joinTopic') }} →</BButton
       >
     </article></section
   >
@@ -52,7 +52,7 @@
 <script setup lang="ts">
   import { communityTopicCover } from '@/config/communityTopicCovers';
   import CommunityTaskReward from './CommunityTaskReward.vue';
-  defineEmits<{ claimed: [] }>();
+  defineEmits<{ claimed: []; participate: [topic: string] }>();
   import { computed, ref } from 'vue';
   import { useUserStore } from '@/store';
   import CommunityCampaignManager from './CommunityCampaignManager.vue';

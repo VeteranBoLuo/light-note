@@ -16,14 +16,15 @@
       <small v-if="!compact" class="task-reward-date">{{ period }} · {{ t('community.feed.rewardOnce') }}</small>
     </div>
     <div class="task-reward-action">
-      <BButton v-if="state === 'claimable'" type="primary" :loading="busy" @click="claim">{{
+      <BButton v-if="state === 'claimable' && !preview" type="primary" :loading="busy" @click="claim">{{
         t('community.feed.claimReward')
       }}</BButton>
       <span v-else-if="state === 'claimed'" class="task-reward-done">✓ {{ t('community.feed.rewardClaimed') }}</span>
-      <BButton v-else-if="state === 'active'" @click="$emit('participate')"
+      <BButton v-else-if="state === 'active' && !preview" @click="$emit('participate')"
         >{{ t('community.feed.joinTopic') }} →</BButton
       >
-      <small v-if="state === 'claimable' && !compact">{{ t('community.feed.rewardSharedClaim') }}</small>
+      <small v-if="preview">{{ t('community.feed.previewReward') }}</small>
+      <small v-if="!preview && state === 'claimable' && !compact">{{ t('community.feed.rewardSharedClaim') }}</small>
       <p v-if="error" role="alert">{{ t('community.feed.rewardClaimFailed') }}</p>
     </div>
   </section>
@@ -32,17 +33,17 @@
   import { computed, ref, watch, onBeforeUnmount } from 'vue';
   import { useI18n } from 'vue-i18n';
   import type { FeedTopic } from '@/api/communityFeedApi';
-  import { useUserStore } from '@/store';
+  import { useCommunityPreview } from '@/composables/useCommunityPreview';
   import { useGrowth } from '@/composables/useGrowth';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   const props = defineProps<{ topic: FeedTopic; compact?: boolean }>();
   const emit = defineEmits<{ claimed: []; participate: [] }>();
   const { t, locale } = useI18n();
   const growth = useGrowth();
-  const user = useUserStore();
+  const { preview, identity } = useCommunityPreview();
   let generation = 0;
   watch(
-    () => [user.id, props.topic.slug],
+    () => [identity.value, props.topic.slug],
     () => {
       generation++;
       claimed.value = false;
@@ -70,7 +71,7 @@
       .join(' — '),
   );
   async function claim() {
-    if (busy.value) return;
+    if (busy.value || preview.value) return;
     const current = generation;
     busy.value = true;
     error.value = false;

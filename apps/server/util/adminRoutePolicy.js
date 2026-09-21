@@ -16,22 +16,15 @@ const routePolicies = new Map();
 
 // Community social operations never impersonate another account.
 declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'community', [
-  ['GET', '/community/feed/capabilities'],
+  ['GET', '/community/posts/:id/saved'],
   ['POST', '/community/resources/prepare'],
-  ['GET', '/community/resources/:id'],
   ['POST', '/community/resources/:id/discard'],
   ['POST', '/community/images'],
-  ['GET', '/community/images/:id'],
   ['POST', '/community/images/:id/discard'],
-  ['GET', '/community/topics'],
-  ['GET', '/community/topics/:slug'],
   ['GET', '/community/moderation/topics'],
   ['POST', '/community/moderation/topics'],
   ['GET', '/community/members'],
   ['POST', '/community/moderation/reports'],
-  ['GET', '/community/posts'],
-  ['GET', '/community/posts/:id'],
-  ['GET', '/community/posts/:postId/avatar'],
   ['POST', '/community/posts'],
   ['POST', '/community/posts/withdraw'],
   ['POST', '/community/posts/state'],
@@ -39,16 +32,11 @@ declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'community', [
   ['GET', '/community/own/posts'],
   ['GET', '/community/own/comments'],
   ['GET', '/community/own/results'],
-  ['GET', '/community/comments'],
-  ['GET', '/community/comments/context'],
   ['POST', '/community/comments'],
   ['POST', '/community/comments/withdraw'],
   ['POST', '/community/comments/state'],
   ['GET', '/community/profiles/options/me'],
   ['PUT', '/community/profiles/options/me'],
-  ['GET', '/community/profiles/:id'],
-  ['GET', '/community/profiles/:id/avatar'],
-  ['GET', '/community/relations'],
   ['PUT', '/community/relations'],
   ['POST', '/community/reports'],
   ['POST', '/community/appeals'],
@@ -60,12 +48,31 @@ declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'community', [
   ['POST', '/community/moderation/appeals'],
 ]);
 
+// Read-only preview keeps the subject's visibility; personal/social writes remain forbidden.
+declare(ADMIN_POLICIES.READ, 'community', [
+  ['GET', '/community/feed/capabilities'],
+  ['GET', '/community/resources/:id'],
+  ['GET', '/community/images/:id'],
+  ['GET', '/community/topics'],
+  ['GET', '/community/topics/:slug'],
+  ['GET', '/community/posts'],
+  ['GET', '/community/posts/:id'],
+  ['GET', '/community/posts/:postId/avatar'],
+  ['GET', '/community/comments'],
+  ['GET', '/community/comments/context'],
+  ['GET', '/community/profiles/:id'],
+  ['GET', '/community/profiles/:id/avatar'],
+  ['GET', '/community/relations'],
+]);
+
 // Public capability metadata is read-only; personal navigation is never editable in impersonation.
 declare(ADMIN_POLICIES.READ, 'community', [['GET', '/community/capabilities']]);
 declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'community', [
   ['GET', '/community/preferences/me'],
   ['PUT', '/community/preferences/me'],
 ]);
+
+declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'file', [['GET', '/file/image/:id']]);
 
 declare(ADMIN_POLICIES.BACKGROUND_WRITE, 'note', [['POST', '/image-previews/retry']]);
 
@@ -782,6 +789,19 @@ const normalizePath = (req) => {
 function resolvePolicy(method, path) {
   const exact = routePolicies.get(`${method} ${path}`);
   if (exact) return exact;
+  // Explicit community read routes only; never infer safety from the HTTP verb.
+  for (const [pattern, route] of [
+    [/^\/community\/topics\/[^/]+$/, '/community/topics/:slug'],
+    [/^\/community\/posts\/[^/]+$/, '/community/posts/:id'],
+    [/^\/community\/profiles\/[^/]+$/, '/community/profiles/:id'],
+    [/^\/community\/images\/[^/]+$/, '/community/images/:id'],
+    [/^\/community\/resources\/[^/]+$/, '/community/resources/:id'],
+    [/^\/community\/posts\/[^/]+\/avatar$/, '/community/posts/:postId/avatar'],
+    [/^\/community\/profiles\/[^/]+\/avatar$/, '/community/profiles/:id/avatar'],
+  ]) {
+    if (method === 'GET' && pattern.test(path)) return routePolicies.get(`${method} ${route}`);
+  }
+
   if (/^\/security\/events\/[^/]+$/.test(path)) {
     return routePolicies.get(`${method} /security/events/:eventId`);
   }

@@ -68,7 +68,7 @@ describe('cloudFileCategory preview compatibility', () => {
     expect(getCloudPreviewType(file)).toBe('text');
   });
 
-  it.each(['py', 'java', 'go', 'rs', 'cpp', 'sql', 'sh', 'vue', 'toml', 'ini', 'tsv', 'jsonl', 'srt', 'vtt', 'ics', 'diff'])(
+  it.each(['py', 'java', 'go', 'rs', 'cpp', 'sql', 'sh', 'vue', 'toml', 'ini', 'tsv', 'jsonl', 'srt', 'vtt', 'lrc', 'LRC', 'ics', 'diff'])(
     '源码或配置文件 .%s 可以进入文本预览',
     (ext) => {
       const file = { fileName: `source.${ext}`, fileType: 'application/octet-stream' };

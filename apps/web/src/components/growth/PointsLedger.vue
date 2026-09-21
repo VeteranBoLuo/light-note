@@ -41,7 +41,7 @@
             <span
               >{{ sourceOf(row)
               }}<span :class="{ 'ledger-time-inline': settingsLayout }">
-                · {{ fmtTime(row.createTime || row.create_time || '') }}</span
+                {{ sourceOf(row) ? ' · ' : '' }}{{ fmtTime(row.createTime || row.create_time || '') }}</span
               ></span
             >
           </div>
@@ -66,7 +66,7 @@
     >
       <dl v-if="selected" class="ledger-detail">
         <dt>{{ t('settingsRefine.ledger.source') }}</dt
-        ><dd>{{ labelOf(selected.reason) }} · {{ sourceOf(selected) }}</dd>
+        ><dd>{{ [labelOf(selected.reason), sourceOf(selected)].filter(Boolean).join(' · ') }}</dd>
         <dt>{{ t('settingsRefine.ledger.time') }}</dt
         ><dd>{{ fmtTime(selected.createTime || selected.create_time || '') }}</dd>
         <dt>{{ t('settingsRefine.ledger.change') }}</dt
@@ -80,6 +80,7 @@
   import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import growthApi from '@/api/growthApi.ts';
+  import { describeLedgerSource } from '@/utils/pointsLedgerSource';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
@@ -95,6 +96,8 @@
     create_time?: string;
     sourceType?: string;
     sourceKey?: string | null;
+    sourceName?: { zh?: string; en?: string } | null;
+    meta?: { required?: number; challengeKey?: string; achievementKey?: string } | null;
     assetChange?: GrowthAssetChange | null;
   }
   withDefaults(defineProps<{ settingsLayout?: boolean }>(), { settingsLayout: false });
@@ -125,13 +128,9 @@
     return te(key) ? t(key) : reason;
   }
   function sourceOf(row: LogRow) {
-    const sourceType = row.sourceType || baseReason(row.reason);
-    const sourceKey = row.sourceKey || '';
-    const specificKey = sourceKey ? `growth.pointsSource.${sourceKey}` : '';
-    if (specificKey && te(specificKey)) return t(specificKey);
-    const typeKey = `growth.pointsSourceType.${sourceType}`;
-    return te(typeKey) ? t(typeKey) : labelOf(row.reason);
+    return describeLedgerSource(row, t, te, String(locale.value));
   }
+
   function amountOf(row: LogRow) {
     if (row.delta > 0) return `+${row.delta}`;
     if (row.delta < 0) return String(row.delta);

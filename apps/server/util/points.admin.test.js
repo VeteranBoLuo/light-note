@@ -173,6 +173,35 @@ describe('积分运营选人与资产事务', () => {
 describe('积分流水来源语义', () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it('社区奖励优先使用名称快照，旧记录批量补读且不泄漏活动引用', async () => {
+    mocks.query
+      .mockResolvedValueOnce([
+        [
+          {
+            id: 3,
+            reason: 'campaign',
+            ref: 'community-task:1',
+            meta: JSON.stringify({ topicName: { zh: '旧名称', en: 'Original' }, secret: 'private' }),
+          },
+          { id: 2, reason: 'campaign', ref: 'community-task:2' },
+          { id: 1, reason: 'campaign', ref: 'private-operation' },
+        ],
+      ])
+      .mockResolvedValueOnce([[{ c: 3 }]])
+      .mockResolvedValueOnce([
+        [
+          { id: 1, name_zh: '新名称', name_en: 'New' },
+          { id: 2, name_zh: '中秋', name_en: 'Mid-Autumn' },
+        ],
+      ]);
+    const result = await getPointsLog('user-1');
+    expect(result.rows[0]).toMatchObject({ sourceName: { zh: '旧名称', en: 'Original' }, ref: null, meta: null });
+    expect(result.rows[1]).toMatchObject({ sourceName: { zh: '中秋', en: 'Mid-Autumn' }, ref: null });
+    expect(result.rows[2]).toMatchObject({ sourceName: null, sourceKey: null, ref: null });
+    expect(mocks.query).toHaveBeenCalledTimes(3);
+    expect(mocks.query.mock.calls[2][1]).toEqual(['1', '2']);
+  });
+
   it('把成就键和每周挑战周期拆成结构化字段', async () => {
     mocks.query
       .mockResolvedValueOnce([

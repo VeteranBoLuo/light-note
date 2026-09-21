@@ -53,7 +53,7 @@ describe('featureRequestService', () => {
   it('普通用户建议进入待审核状态且不会伪装成公开内容', async () => {
     const connection = createConnection();
     connection.query.mockResolvedValue([{ affectedRows: 1 }]);
-    const db = { getConnection: vi.fn(async () => connection) };
+    const db = { getConnection: vi.fn(async () => connection), query: vi.fn().mockResolvedValue([[]]) };
 
     const result = await createFeatureRequest({
       userId: 'user-1',

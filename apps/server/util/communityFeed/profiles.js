@@ -26,6 +26,7 @@ export async function profileOptions({ user, env = process.env, db = pool }) {
     interests: parseJson(row?.interests) || [],
     featuredPosts: parseJson(row?.featured_posts) || [],
     commentNotificationsEnabled: row ? Boolean(row.comment_notifications_enabled) : true,
+    likeNotificationsEnabled: row ? Boolean(row.like_notifications_enabled) : true,
     mentionNotificationsEnabled: row ? Boolean(row.mention_notifications_enabled) : true,
   };
 }
@@ -39,8 +40,14 @@ export async function updateProfileOptions({ user, input, env = process.env, db 
     'featuredPosts',
     'commentNotificationsEnabled',
     'mentionNotificationsEnabled',
+    'likeNotificationsEnabled',
   ]);
-  for (const field of ['enabled', 'commentNotificationsEnabled', 'mentionNotificationsEnabled'])
+  for (const field of [
+    'enabled',
+    'commentNotificationsEnabled',
+    'mentionNotificationsEnabled',
+    'likeNotificationsEnabled',
+  ])
     if (input[field] !== undefined && typeof input[field] !== 'boolean') fail('COMMUNITY_INVALID_INPUT');
   return transaction(
     { user, requestId: input.requestId, action: 'updateProfileOptions', input, env, db, ownSafety: true },
@@ -83,7 +90,7 @@ export async function updateProfileOptions({ user, input, env = process.env, db 
       await identity(c, user.id);
       const revision = Number(previous?.row_revision || 0) + 1;
       await c.query(
-        'UPDATE community_profile_options SET enabled=?,consent_version=?,interests=?,featured_posts=?,comment_notifications_enabled=?,mention_notifications_enabled=?,row_revision=? WHERE user_id=?',
+        'UPDATE community_profile_options SET enabled=?,consent_version=?,interests=?,featured_posts=?,comment_notifications_enabled=?,mention_notifications_enabled=?,like_notifications_enabled=?,row_revision=? WHERE user_id=?',
         [
           1,
           row.consent_version,
@@ -91,6 +98,7 @@ export async function updateProfileOptions({ user, input, env = process.env, db 
           JSON.stringify([...new Set(featured)]),
           input.commentNotificationsEnabled ?? row.comment_notifications_enabled,
           input.mentionNotificationsEnabled ?? row.mention_notifications_enabled,
+          input.likeNotificationsEnabled ?? row.like_notifications_enabled,
           revision,
           user.id,
         ],

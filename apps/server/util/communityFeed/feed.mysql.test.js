@@ -27,7 +27,7 @@ import { markNotificationSnapshotRead } from '../notificationReadSnapshot.js';
 import { purgeCommunityFeedData } from './lifecycle.js';
 import { COMMUNITY_FEED_TABLES } from './schema.js';
 import { identity } from './core.js';
-import { consumeCommunityEvent, feedNotificationVisibleSql } from './notifications.js';
+import { consumeCommunityEvent, feedNotificationVisibleSql, feedNotificationContentSql } from './notifications.js';
 const socketPath = process.env.LIGHTNOTE_TEST_MYSQL_SOCKET;
 const env = {
   COMMUNITY_FEED_ENABLED: 'true',
@@ -214,6 +214,10 @@ describe.skipIf(!socketPath)('P2 real database boundaries', () => {
     expect(results.flat().filter((x) => x.status === 'claimed')).toHaveLength(1);
     expect(grantExp).toHaveBeenCalledTimes(1);
     expect(earnPoints).toHaveBeenCalledTimes(1);
+    expect(earnPoints.mock.calls[0][5]).toMatchObject({
+      policyVersion: 'community-task-v1',
+      meta: { topicName: { zh: config.nameZh, en: config.nameEn } },
+    });
     expect((await taskRewardStates(db, A.id))[0].state).toBe('claimed');
   });
   it('does not award submissions outside the activity window', async () => {
@@ -753,11 +757,10 @@ describe.skipIf(!socketPath)('P2 real database boundaries', () => {
       run(relation, B, input({ userPublicId: author, action: 'follow', enabled: true })),
     ).rejects.toMatchObject({ code: 'COMMUNITY_CONTENT_UNAVAILABLE' });
   });
-  it('comment event retries do not duplicate notifications; likes do not add events and removed sources leave unread', async () => {
+  it('comment event retries do not duplicate notifications and removed sources leave unread', async () => {
     const p = await published();
     await db.query("UPDATE community_outbox SET status='done'");
-    await run(postState, B, input({ postId: p.publicId, liked: true }));
-    expect((await db.query("SELECT * FROM community_outbox WHERE status='pending'"))[0]).toHaveLength(0);
+
     await run(createComment, B, input({ postId: p.publicId, body: '评论' }));
     await consumeCommunityEvent({ db, env });
     await db.query("UPDATE community_outbox SET status='pending',recipient_cursor='' WHERE kind='comment'");
@@ -768,6 +771,105 @@ describe.skipIf(!socketPath)('P2 real database boundaries', () => {
     expect(notifications[0].browser_push_pending).toBe(0);
     await run(withdrawPost, A, input({ postId: p.publicId, expectedRevision: p.revision }));
     expect((await db.query(`SELECT * FROM notification WHERE ${feedNotificationVisibleSql(true)}`))[0]).toHaveLength(0);
+  });
+  it('like preference migration is idempotent and schema checks detect its absence', async () => {
+    await profileOptions({ user: A, db, env });
+    await db.query(
+      'INSERT INTO community_profile_options(user_id,interests,featured_posts,like_notifications_enabled) VALUES (?,JSON_ARRAY(),JSON_ARRAY(),0)',
+      [A.id],
+    );
+    await ensureCommunityFeedSchema(db);
+    expect((await profileOptions({ user: A, db, env })).likeNotificationsEnabled).toBe(false);
+    expect(await communityFeedSchemaReady(db)).toBe(true);
+    const assertions = await fs.readFile(new URL('../../migrations/schema-assertions.sql', import.meta.url), 'utf8');
+    const assertion = assertions
+      .split('\n')
+      .find((line) => line.includes("'community_profile_options.like_notifications_enabled'"));
+    expect(assertion).toBeTruthy();
+    expect((await db.query(assertion))[0]).toEqual([]);
+    await db.query('ALTER TABLE community_profile_options DROP COLUMN like_notifications_enabled');
+    expect((await db.query(assertion))[0]).toHaveLength(1);
+    expect(await communityFeedSchemaReady(db)).toBe(false);
+    await ensureCommunityFeedSchema(db);
+    expect(await communityFeedSchemaReady(db)).toBe(true);
+  });
+  it('likes notify authors only, merge distinct actors and never re-notify on unlike/re-like or retries', async () => {
+    const p = await published();
+    await db.query("UPDATE community_outbox SET status='done'");
+    await run(postState, A, input({ postId: p.publicId, liked: true }));
+    expect((await db.query("SELECT id FROM community_outbox WHERE status='pending'"))[0]).toHaveLength(0);
+    await run(postState, B, input({ postId: p.publicId, liked: true }));
+    await consumeCommunityEvent({ db, env });
+    await run(postState, B, input({ postId: p.publicId, liked: false }));
+    await run(postState, B, input({ postId: p.publicId, liked: true }));
+    await db.query("UPDATE community_outbox SET status='pending',recipient_cursor='' WHERE kind='like'");
+    await consumeCommunityEvent({ db, env });
+    await run(postState, ROOT, input({ postId: p.publicId, liked: true }));
+    await consumeCommunityEvent({ db, env });
+    const [rows] = await db.query("SELECT * FROM notification WHERE source_type='community_feed_post_like'");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].user_id).toBe(A.id);
+    expect(rows[0].title).toContain('等 2 人');
+    expect(rows[0].browser_push_pending).toBe(0);
+    expect(rows[0].link).toBe(`/community/posts/${p.publicId}`);
+    expect((await db.query(`SELECT * FROM notification WHERE ${feedNotificationVisibleSql(true)}`))[0]).toHaveLength(1);
+    await run(withdrawPost, A, input({ postId: p.publicId, expectedRevision: p.revision }));
+    expect((await db.query(`SELECT * FROM notification WHERE ${feedNotificationVisibleSql(true)}`))[0]).toHaveLength(0);
+  });
+  it('reply likes target the reply author, respect preferences and suppress cancelled likes', async () => {
+    const p = await published();
+    const comment = await run(createComment, B, input({ postId: p.publicId, body: 'reply' }));
+    await db.query("UPDATE community_outbox SET status='done'");
+    await run(commentState, A, input({ postId: p.publicId, commentId: comment.publicId, liked: true }));
+    await consumeCommunityEvent({ db, env });
+    const [rows] = await db.query("SELECT * FROM notification WHERE source_type='community_feed_comment_like'");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].user_id).toBe(B.id);
+    expect(rows[0].link).toContain(`?comment=${comment.publicId}`);
+    expect(
+      (
+        await db.query(
+          `SELECT ${feedNotificationContentSql(true)} AS content FROM notification WHERE ${feedNotificationVisibleSql(true)} AND source_type='community_feed_comment_like'`,
+        )
+      )[0][0].content,
+    ).toBe('reply');
+    const pref = await profileOptions({ user: A, db, env });
+    expect(pref.likeNotificationsEnabled).toBe(true);
+    await run(updateProfileOptions, A, input({ expectedRevision: pref.revision, likeNotificationsEnabled: false }));
+    await run(postState, B, input({ postId: p.publicId, liked: true }));
+    await consumeCommunityEvent({ db, env });
+    expect((await db.query("SELECT * FROM notification WHERE source_type='community_feed_post_like'"))[0]).toHaveLength(
+      0,
+    );
+    await run(commentState, ROOT, input({ postId: p.publicId, commentId: comment.publicId, liked: true }));
+    await run(commentState, ROOT, input({ postId: p.publicId, commentId: comment.publicId, liked: false }));
+    await consumeCommunityEvent({ db, env });
+    expect(
+      (await db.query("SELECT title FROM notification WHERE source_type='community_feed_comment_like'"))[0][0].title,
+    ).not.toContain('等');
+    await run(withdrawComment, B, input({ postId: p.publicId, commentId: comment.publicId, expectedRevision: 1 }));
+    expect((await db.query(`SELECT * FROM notification WHERE ${feedNotificationVisibleSql(true)}`))[0]).toHaveLength(0);
+  });
+  it('like delivery respects global in-app preference and blocks at dispatch', async () => {
+    const p = await published();
+    await db.query("UPDATE community_outbox SET status='done'");
+    await db.query('UPDATE user SET preferences=? WHERE id=?', [JSON.stringify({ notificationsInApp: false }), A.id]);
+    await run(postState, B, input({ postId: p.publicId, liked: true }));
+    await consumeCommunityEvent({ db, env });
+    expect((await db.query("SELECT * FROM notification WHERE source_type='community_feed_post_like'"))[0]).toHaveLength(
+      0,
+    );
+    await db.query("UPDATE user SET preferences='{}' WHERE id=?", [A.id]);
+    await run(postState, ROOT, input({ postId: p.publicId, liked: true }));
+    await db.query('INSERT INTO community_chat_blocks(id,user_id,blocked_user_id) VALUES (?,?,?)', [
+      randomUUID(),
+      A.id,
+      ROOT.id,
+    ]);
+    await consumeCommunityEvent({ db, env });
+    expect((await db.query("SELECT * FROM notification WHERE source_type='community_feed_post_like'"))[0]).toHaveLength(
+      0,
+    );
   });
   it('report, disposition and appeal remain available when feed is disabled', async () => {
     const p = await published();

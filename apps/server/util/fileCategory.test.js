@@ -24,6 +24,8 @@ describe('file category filtering', () => {
     ['config.toml', 'text'],
     ['events.jsonl', 'text'],
     ['captions.vtt', 'text'],
+    ['歌词.lrc', 'text'],
+    ['歌词.LRC', 'text'],
     ['calendar.ics', 'text'],
     ['document.odt', 'word'],
     ['sheet.ods', 'excel'],

@@ -28,7 +28,13 @@ beforeEach(() => {
   mocks.get.mockImplementation(async (path: string) =>
     path.includes('capabilities')
       ? { feedEnabled: true }
-      : { revision: 4, enabled: true, commentNotificationsEnabled: true, mentionNotificationsEnabled: true },
+      : {
+          revision: 4,
+          enabled: true,
+          commentNotificationsEnabled: true,
+          mentionNotificationsEnabled: true,
+          likeNotificationsEnabled: true,
+        },
   );
   mocks.operation.mockReturnValue(mocks.write);
   mocks.write.mockResolvedValue({ revision: 5 });
@@ -53,6 +59,14 @@ it('saves only the changed private preference and advances revision', async () =
     { expectedRevision: 5, mentionNotificationsEnabled: false },
     'put',
   );
+  host.querySelectorAll('button')[2].click();
+  await flush();
+  expect(mocks.operation).toHaveBeenLastCalledWith(
+    'profiles/options/me',
+    { expectedRevision: 5, likeNotificationsEnabled: false },
+    'put',
+  );
+  expect(host.querySelectorAll('button')[2].getAttribute('aria-pressed')).toBe('false');
   app.unmount();
 });
 it('keeps the saved value and disables further writes after failure', async () => {

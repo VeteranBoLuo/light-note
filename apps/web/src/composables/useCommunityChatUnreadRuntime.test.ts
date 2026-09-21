@@ -31,13 +31,14 @@ async function flushRequests() {
   await nextTick();
 }
 
-async function mountRuntime() {
+async function mountRuntime(context = '') {
+  const previewContextId = ref(context);
   const userId = ref('user-b');
   const userRole = ref('user');
   const realtimeActive = ref(true);
   const app = createApp({
     setup() {
-      useCommunityChatUnreadRuntime({ userId, userRole, realtimeActive });
+      useCommunityChatUnreadRuntime({ userId, userRole, realtimeActive, previewContextId });
       return () => h('div');
     },
   });
@@ -46,7 +47,7 @@ async function mountRuntime() {
   app.mount(host);
   apps.push(app);
   await flushRequests();
-  return { realtimeActive, userId, userRole };
+  return { realtimeActive, userId, userRole, previewContextId };
 }
 
 beforeEach(() => {
@@ -70,6 +71,23 @@ afterEach(() => {
 });
 
 describe('useCommunityChatUnreadRuntime', () => {
+  it('does not connect, poll or retain chat state during administrator preview', async () => {
+    const { previewContextId } = await mountRuntime('context-a');
+    expect(mocks.getRooms).not.toHaveBeenCalled();
+    expect(mocks.socketOptions?.enabled.value).toBe(false);
+    await vi.advanceTimersByTimeAsync(120000);
+    document.dispatchEvent(new Event('visibilitychange'));
+    expect(mocks.getRooms).not.toHaveBeenCalled();
+    previewContextId.value = '';
+    await flushRequests();
+    expect(mocks.getRooms).toHaveBeenCalled();
+    expect(mocks.socketOptions?.enabled.value).toBe(true);
+    previewContextId.value = 'context-b';
+    await flushRequests();
+    expect(mocks.socketOptions?.enabled.value).toBe(false);
+    expect(useCommunityChatUnread().rooms.value).toEqual([]);
+  });
+
   it('在聊天室外订阅公共房间，并在新消息事件后立即刷新服务端权威角标', async () => {
     await mountRuntime();
     expect(mocks.socketOptions?.enabled.value).toBe(true);

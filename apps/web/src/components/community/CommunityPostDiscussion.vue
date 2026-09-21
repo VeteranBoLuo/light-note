@@ -66,8 +66,11 @@
             t(post.resolved ? 'community.feed.reopen' : 'community.feed.solve')
           }}</BButton>
           <CommunityContentMenu
+            :readonly="Boolean(user.adminContext)"
             :placement="showSidebar ? 'bottom-left' : 'top-right'"
             :own="post.isOwn"
+            save-actions
+            :can-save="Boolean(user.id && user.role !== 'visitor' && !user.adminContext)"
             :disabled="busy || actionPending"
             @select="selectPostAction"
           />
@@ -122,7 +125,7 @@
             :paused="!commentsOpen"
             :has-more="Boolean(cursor) && !error"
             :loading-text="t('community.feed.loading')"
-            @load-more="load(true)"
+            @load-more="!locatingTarget && load(true)"
             ><template #default="{ item: root }">
               <article :id="'comment-' + root.publicId" :key="root.publicId" class="feed-comment">
                 <CommentContent
@@ -181,6 +184,13 @@
         }}</p>
       </div></BDrawer
     >
+    <CommunitySavePost
+      v-if="saveKind"
+      :key="post.publicId + saveKind"
+      :post="post"
+      :kind="saveKind"
+      @close="saveKind = null"
+    />
   </section>
 </template>
 <script setup lang="ts">
@@ -202,6 +212,11 @@
   import ChatInlineEmojiText from '@/components/communityChat/ChatInlineEmojiText.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert';
   import CommunityContentMenu from './CommunityContentMenu.vue';
+  import CommunitySavePost from './CommunitySavePost.vue';
+  import { communityPostUrl } from '@/utils/communityPostSave';
+  import { copyTextToClipboard } from '@/utils/clipboard';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage';
+  const saveKind = ref<'note' | 'bookmark' | null>(null);
   import CommunityPostCard from './CommunityPostCard.vue';
   const props = defineProps<{
     post: FeedPost;
@@ -240,6 +255,7 @@
     error = ref(false),
     loading = ref(false),
     loadingMore = ref(false),
+    locatingTarget = ref(false),
     submitted = ref(''),
     target = ref('');
   const isHelpPost = computed(() =>
@@ -326,6 +342,7 @@
                     reply.value?.publicId === c.publicId ? t('community.feed.cancelReply') : t('community.feed.reply'),
                   ]),
                   h(CommunityContentMenu, {
+                    readonly: Boolean(user.adminContext),
                     own: c.isOwn,
                     comment: true,
                     disabled: busy.value,
@@ -489,7 +506,18 @@
       }
     }, true);
   }
-  function selectPostAction(key: string) {
+  async function selectPostAction(key: string) {
+    if (key === 'copy-link') {
+      const copied = await copyTextToClipboard(communityPostUrl(props.post.publicId));
+      if (copied) message.success(t('community.feed.linkCopied'));
+      else message.error(t('community.feed.copyFailed'));
+      return;
+    }
+    if (key === 'save-note' || key === 'save-bookmark') {
+      if (user.id && user.role !== 'visitor' && !user.adminContext)
+        saveKind.value = key === 'save-note' ? 'note' : 'bookmark';
+      return;
+    }
     if (key === 'withdraw' && props.post.isOwn) withdrawPost();
     else if (key === 'delete' && props.post.isOwn) emit('delete');
     else if (key === 'report') emit('report', null);
@@ -504,8 +532,10 @@
     [() => props.post.publicId, () => user.id, () => route.query.comment, () => route.query.comments],
     async () => {
       const current = ++generation;
+      saveKind.value = null;
       loading.value = loadingMore.value = false;
       comments.value = [];
+      cursor.value = null;
       replies.value = {};
       body.value = '';
       reply.value = null;
@@ -518,25 +548,57 @@
       target.value = typeof route.query.comment === 'string' ? route.query.comment : '';
       commentsOpen.value = Boolean(target.value) || route.query.comments === '1';
       initialized = commentsOpen.value;
+      locatingTarget.value = Boolean(target.value);
       if (!commentsOpen.value) return;
       await load();
       if (current !== generation) return;
+      if (error.value) {
+        locatingTarget.value = false;
+        return;
+      }
       if (target.value) {
         try {
-          const context = await feedGet('comments/context', { postId: props.post.publicId, commentId: target.value });
-          const page = await feedGet<FeedPage<FeedComment>>('comments', {
-            postId: props.post.publicId,
-            before: context.before,
-          });
+          const context = comments.value.some((item) => item.publicId === target.value)
+            ? { root: null }
+            : await feedGet('comments/context', { postId: props.post.publicId, commentId: target.value });
           if (current !== generation) return;
-          comments.value = visibleComments(page.items, true);
-          cursor.value = page.nextCursor;
-          if (context.root) await loadReplies(context.root, false, context.replyBefore);
+          const root = context.root || target.value;
+          // Keep the contiguous list: notification navigation only locates a comment.
+          while (!comments.value.some((item) => item.publicId === root) && cursor.value) {
+            const previousCursor = cursor.value;
+            await load(true);
+            if (current !== generation) return;
+            if (error.value || cursor.value === previousCursor) return;
+          }
+          if (!comments.value.some((item) => item.publicId === root)) {
+            targetUnavailable.value = true;
+            return;
+          }
+          if (context.root) {
+            await loadReplies(context.root);
+            if (current !== generation) return;
+            if (error.value) return;
+            while (
+              !replies.value[root]?.items.some((item) => item.publicId === target.value) &&
+              replies.value[root]?.nextCursor
+            ) {
+              const previousCursor = replies.value[root].nextCursor;
+              await loadReplies(root, true);
+              if (current !== generation) return;
+              if (error.value || replies.value[root]?.nextCursor === previousCursor) return;
+            }
+          }
+          if (context.root && !replies.value[root]?.items.some((item) => item.publicId === target.value)) {
+            targetUnavailable.value = true;
+            return;
+          }
           await nextTick();
           if (current !== generation) return;
           pendingTargetRoot.value = context.root || target.value;
         } catch {
           if (current === generation) targetUnavailable.value = true;
+        } finally {
+          if (current === generation) locatingTarget.value = false;
         }
       }
     },

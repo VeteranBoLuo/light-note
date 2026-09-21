@@ -24,3 +24,8 @@ export function effectiveStatusSql() {
 export function unavailableReason(trashed) {
   return trashed ? '资料已移入回收站，此建议已失效' : '资料已删除或不可访问，此建议已失效';
 }
+
+// Shared review predicate for the task summary, brief and review entry.
+export function pendingReviewSql() {
+  return `((${effectiveStatusSql()})='pending' OR ((${effectiveStatusSql()})='info' AND JSON_UNQUOTE(JSON_EXTRACT(s.payload_json,'$.action')) IN ('trash','duplicate_bookmarks')))`;
+}

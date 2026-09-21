@@ -20,7 +20,7 @@ function mockTextResponse(source: string) {
       ok: true,
       status: 200,
       body: null,
-      text: async () => source,
+      arrayBuffer: async () => new TextEncoder().encode(source).buffer,
     })),
   );
 }
@@ -75,6 +75,17 @@ afterEach(() => {
 });
 
 describe('CloudTextCardPreview', () => {
+  it('卡片直接读取 GBK 歌词字节，保留中文与时间戳', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(new Uint8Array([
+      ...new TextEncoder().encode('[00:01]'), 0xd6, 0xd0, 0xce, 0xc4,
+    ]))));
+    const { host } = await mountPreview({
+      id: 'gbk-lyrics', fileName: '歌词.lrc', fileType: 'application/octet-stream',
+      fileUrl: 'https://files.example/lyrics.lrc', category: 'text',
+    });
+    expect(host.querySelector('.cloud-text-card-preview__plain')?.textContent).toBe('[00:01]中文');
+  });
+
   it('在隔离且不可交互的 iframe 中展示 HTML，不把脚本、链接和表单能力带入卡片', async () => {
     mockTextResponse(`
       <!doctype html>

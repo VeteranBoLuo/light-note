@@ -124,7 +124,7 @@ export async function taskRewardStates(db, userId) {
 export async function claimTaskRewards(db, userId, keys, { grantExp, earnPoints, userRole, calendar }) {
   const receipts = [];
   const [awards] = await db.query(
-    `SELECT a.*,t.slug FROM community_task_awards a JOIN community_topics t ON t.id=a.topic_id WHERE a.user_id=? ORDER BY a.topic_id`,
+    `SELECT a.*,t.slug,t.name_zh,t.name_en FROM community_task_awards a JOIN community_topics t ON t.id=a.topic_id WHERE a.user_id=? ORDER BY a.topic_id`,
     [userId],
   );
   for (const award of awards) {
@@ -153,7 +153,7 @@ export async function claimTaskRewards(db, userId, keys, { grantExp, earnPoints,
       const points = award.reward_points
         ? await earnPoints(userId, award.reward_points, 'campaign', ref, db, {
             policyVersion: 'community-task-v1',
-            meta: { topicId: award.topic_id },
+            meta: { topicId: award.topic_id, topicName: { zh: award.name_zh, en: award.name_en } },
           })
         : false;
       await db.query('UPDATE community_task_awards SET claimed_at=NOW(6) WHERE topic_id=? AND user_id=?', [

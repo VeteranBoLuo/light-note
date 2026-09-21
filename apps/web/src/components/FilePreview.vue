@@ -385,6 +385,7 @@
     requestMobileOverlayHistoryClose,
     type MobileOverlayHistoryHandle,
   } from '@/utils/mobileOverlayHistory';
+  import { readTextPreviewSource } from '@/utils/textPreviewSource';
   import { configureMarkdownRenderer } from '@/utils/markdownRenderer';
   import { getFilePreviewPollDelay, hasFilePreviewPollingTimedOut } from '@/utils/filePreviewPolling';
   import { resolveImageViewportLayout } from '@/utils/imageViewport';
@@ -958,35 +959,7 @@
         throw new Error(`HTTP错误! 状态码: ${response.status}`);
       }
 
-      let content = '';
-      let truncated = false;
-      if (response.body) {
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          content += decoder.decode(value, { stream: true });
-          if (content.length > MAX_TEXT_PREVIEW_CHARS) {
-            content = content.slice(0, MAX_TEXT_PREVIEW_CHARS);
-            truncated = true;
-            await reader.cancel().catch(() => undefined);
-            break;
-          }
-        }
-        if (!truncated) content += decoder.decode();
-      } else {
-        content = await response.text();
-        if (content.length > MAX_TEXT_PREVIEW_CHARS) {
-          content = content.slice(0, MAX_TEXT_PREVIEW_CHARS);
-          truncated = true;
-        }
-      }
-
-      if (content.length > MAX_TEXT_PREVIEW_CHARS) {
-        content = content.slice(0, MAX_TEXT_PREVIEW_CHARS);
-        truncated = true;
-      }
+      const { content, truncated } = await readTextPreviewSource(response, MAX_TEXT_PREVIEW_CHARS);
 
       if (controller.signal.aborted || textAbortController !== controller || expectedFileId !== activePreviewFileId)
         return;

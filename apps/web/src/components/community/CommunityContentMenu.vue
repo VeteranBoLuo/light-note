@@ -1,7 +1,8 @@
 <template>
   <BActionMenu
+    v-if="items.length"
     :z-index="810"
-    :width="104"
+    :width="saveActions ? 176 : 104"
     :items="items"
     :placement="placement || 'bottom-right'"
     :disabled="disabled"
@@ -21,7 +22,10 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
   const props = defineProps<{
+    readonly?: boolean;
     own?: boolean;
+    saveActions?: boolean;
+    canSave?: boolean;
     disabled?: boolean;
     comment?: boolean;
     placement?: BActionMenuPlacement;
@@ -29,7 +33,19 @@
   defineEmits<{ select: [key: string] }>();
   const { t } = useI18n();
   const items = computed(() => [
-    ...(props.own
+    ...(props.saveActions
+      ? [
+          ...(props.canSave && !props.readonly
+            ? [
+                { key: 'save-note', label: t('community.feed.saveNote') },
+                { key: 'save-bookmark', label: t('community.feed.saveBookmark') },
+              ]
+            : []),
+          { key: 'copy-link', label: t('community.feed.copyLink') },
+          ...(!props.readonly ? [{ key: 'save-divider', divider: true }] : []),
+        ]
+      : []),
+    ...(props.own && !props.readonly
       ? [
           {
             key: 'withdraw',
@@ -38,10 +54,10 @@
           },
         ]
       : []),
-    ...(props.own && !props.comment
+    ...(props.own && !props.comment && !props.readonly
       ? [{ key: 'delete', label: t('community.feed.deletePost'), danger: true }]
       : []),
-    ...(!props.own ? [{ key: 'report', label: t('community.feed.report') }] : []),
+    ...(!props.own && !props.readonly ? [{ key: 'report', label: t('community.feed.report') }] : []),
   ]);
 </script>
 <style scoped>

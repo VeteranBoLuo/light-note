@@ -1,5 +1,11 @@
 export const settingsRefineZh = {
-  ledger: { detail: '积分流水详情', source: '来源', time: '时间', change: '资产变化' },
+  ledger: {
+    detail: '积分流水详情',
+    source: '来源',
+    time: '时间',
+    change: '资产变化',
+    questStage: '完成 {n} 项每日任务',
+  },
   display: '显示设置',
   displayDesc: '语言与界面缩放',
   opening: '默认首页与打开方式',
@@ -62,7 +68,13 @@ export const settingsRefineZh = {
   },
 };
 export const settingsRefineEn = {
-  ledger: { detail: 'Points transaction', source: 'Source', time: 'Time', change: 'Asset change' },
+  ledger: {
+    detail: 'Points transaction',
+    source: 'Source',
+    time: 'Time',
+    change: 'Asset change',
+    questStage: 'Complete {n} daily tasks',
+  },
   display: 'Display settings',
   displayDesc: 'Language and interface scale',
   opening: 'Home and opening behavior',

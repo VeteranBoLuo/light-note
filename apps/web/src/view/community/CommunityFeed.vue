@@ -4,8 +4,8 @@
       <template #navigation><CommunityNavigation active="feed" /></template>
       <div class="feed-main-column" :class="{ 'is-management': mode === 'manage' }">
         <p v-if="!caps.feedEnabled && !loading && !error">{{ t('community.feed.closed') }}</p>
-        <p v-if="caps.feedEnabled && !caps.writesEnabled" class="feed-readonly" role="status">{{
-          t('community.feed.readonly')
+        <p v-if="preview || (caps.feedEnabled && !caps.writesEnabled)" class="feed-readonly" role="status">{{
+          t(preview ? 'community.feed.previewReadonly' : 'community.feed.readonly')
         }}</p>
         <div v-if="error && !dialog" class="feed-error" role="alert"
           >{{ t(loadFailed ? 'community.feed.loadError' : 'community.feed.error') }}
@@ -100,6 +100,7 @@
             </div>
           </section>
           <CommunityOfficialCampaign
+            @participate="participateInTopic"
             @claimed="load"
             v-if="!hasFilters && filters.stream === 'latest'"
             :topics="topicRows"
@@ -371,7 +372,7 @@
             ><template v-if="profile"
               ><div class="public-profile-card"
                 ><ChatUserProfileContent
-                  :profile="profile"
+                  :profile="displayProfile"
                   :community-actions="false"
                   :chat-actions="false"
                   :all-achievements="profile.allAchievements"
@@ -402,7 +403,7 @@
                   </template>
                   <template #identityActions
                     ><div class="profile-summary-actions">
-                      <BButton type="text" v-if="profile.isOwn" @click="accountEditorOpen = true">{{
+                      <BButton type="text" v-if="profile.isOwn && !preview" @click="accountEditorOpen = true">{{
                         t('community.feed.editProfile')
                       }}</BButton>
                       <div class="feed-actions profile-relationship-actions" v-if="authenticated && !profile.isOwn"
@@ -426,7 +427,7 @@
                       >
                     </div></template
                   >
-                  <template v-if="profile.isOwn" #achievementActions>
+                  <template v-if="profile.isOwn && !preview" #achievementActions>
                     <BButton type="text" class="profile-section-edit" @click="profileEditSection = 'achievements'">{{
                       t('community.feed.editAchievements')
                     }}</BButton>
@@ -437,7 +438,7 @@
                 <header class="profile-section-heading"
                   ><h2>{{ t('community.feed.featuredTitle') }}</h2>
                   <BButton
-                    v-if="profile.isOwn"
+                    v-if="profile.isOwn && !preview"
                     type="text"
                     class="profile-section-edit"
                     @click="profileEditSection = 'posts'"
@@ -517,7 +518,7 @@
         v-if="editor"
         :key="editing?.publicId || 'new'"
         :post="editing"
-        :initial-topic="filters.topic"
+        :initial-topic="editorTopic || filters.topic"
         :images-enabled="caps.imagesEnabled"
         :resources-enabled="caps.resourcesEnabled"
         :topics="topicOptions"
@@ -586,6 +587,9 @@
   </main>
 </template>
 <script setup lang="ts">
+  import { useCommunityPreviewImages } from '@/composables/useCommunityPreviewImages';
+  import { useCommunityPreview } from '@/composables/useCommunityPreview';
+  const { preview } = useCommunityPreview();
   import { communityTopicCover } from '@/config/communityTopicCovers';
   import CommunityRelations from '@/components/community/CommunityRelations.vue';
   import CommunityTopicManager from '@/components/community/CommunityTopicManager.vue';
@@ -704,6 +708,7 @@
     error = ref(false),
     loadFailed = ref(false),
     editor = ref(false),
+    editorTopic = ref(''),
     editing = ref<FeedPost | null>(null),
     managementTab = ref('posts'),
     newAvailable = ref(false),
@@ -714,6 +719,18 @@
     reportReason = ref('other'),
     relationsOpen = ref(false),
     relationKind = ref('followers');
+  function participateInTopic(topic: string) {
+    if (!canWrite.value) {
+      chooseTopic(topic);
+      return;
+    }
+    editorTopic.value = topic;
+    editing.value = null;
+    editor.value = true;
+  }
+  watch(editor, (open) => {
+    if (!open) editorTopic.value = '';
+  });
   const managementOptions = computed(() =>
     (mode.value === 'manage'
       ? ['posts', 'comments', 'results']
@@ -837,6 +854,10 @@
     } else if (mode.value === 'manage') await load();
     else await router.push('/community/manage');
   }
+  const { imageSource } = useCommunityPreviewImages(() => [profile.value?.avatar]);
+  const displayProfile = computed(() =>
+    profile.value ? { ...profile.value, avatar: imageSource(profile.value.avatar) || '' } : null,
+  );
   const profileRegularPosts = computed(() => {
     const featured = new Set((profile.value?.featuredPostItems || []).map((post: FeedPost) => post.publicId));
     return posts.value.filter((post) => !featured.has(post.publicId));
@@ -890,6 +911,13 @@
     }
   }
   async function load() {
+    if (
+      preview.value &&
+      (['manage', 'settings', 'moderation'].includes(mode.value) || (mode.value === 'profile' && !route.params.id))
+    ) {
+      await router.replace('/community/feed');
+      return;
+    }
     const current = ++generation;
     newAvailable.value = false;
     filters.topic = typeof route.params.slug === 'string' ? route.params.slug : '';
@@ -1209,7 +1237,8 @@
       managed.value = [];
       profile.value = null;
       profileEditSection.value = null;
-      if (loadedTopic.value?.slug !== route.params.slug) loadedTopic.value = null;
+      loadedTopic.value = null;
+      topicRows.value = [];
       topicManager.value = false;
       options.value = { enabled: true, interests: [], featuredPosts: [], revision: 0 };
       detail.value = null;

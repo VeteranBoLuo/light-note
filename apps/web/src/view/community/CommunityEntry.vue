@@ -5,9 +5,11 @@
   import { onMounted, onBeforeUnmount } from 'vue';
   import { useRouter } from 'vue-router';
   import { useI18n } from 'vue-i18n';
+  import { useCommunityPreview } from '@/composables/useCommunityPreview';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   const { t } = useI18n();
   const router = useRouter();
+  const { preview } = useCommunityPreview();
   let left = false;
   onBeforeUnmount(() => {
     left = true;
@@ -15,7 +17,7 @@
   onMounted(async () => {
     if (!left && router.currentRoute.value.path === '/community') {
       await router.replace({
-        path: '/community/chat',
+        path: preview.value ? '/community/feed' : '/community/chat',
         query: router.currentRoute.value.query,
         hash: router.currentRoute.value.hash,
       });

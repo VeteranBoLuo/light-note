@@ -249,6 +249,7 @@
     userId: computed(() => user.id),
     userRole: computed(() => user.role),
     realtimeActive: computed(() => !communityChatWorkspaceActive.value),
+    previewContextId: computed(() => user.adminContext?.id || ''),
   });
   watch(
     mobileBottomNavActive,

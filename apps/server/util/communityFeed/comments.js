@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import pool from '../../db/index.js';
 import {
   access,
@@ -164,7 +164,7 @@ export async function commentState({ user, input, env = process.env, db = pool }
     const post = await loadPost(c, input.postId, user, { lock: true });
     const comment = await first(
       c,
-      `SELECT c.id FROM community_comments c WHERE c.public_id=? AND c.post_id=? AND c.status='published' AND ${authorVisibleSql('c')} AND ${unblockedSql('c')} FOR UPDATE`,
+      `SELECT c.id,c.author_id FROM community_comments c WHERE c.public_id=? AND c.post_id=? AND c.status='published' AND ${authorVisibleSql('c')} AND ${unblockedSql('c')} FOR UPDATE`,
       [publicId(input.commentId), post.id, user.id, user.id],
     );
     if (!comment) fail('COMMUNITY_CONTENT_UNAVAILABLE', 404);
@@ -174,6 +174,7 @@ export async function commentState({ user, input, env = process.env, db = pool }
         comment.id,
       ]);
     else await c.query('DELETE FROM community_comment_likes WHERE user_id=? AND comment_id=?', [user.id, comment.id]);
+    if (input.liked && comment.author_id !== user.id) await queueLike(c, user.id, post.id, comment.id);
     const count = await first(c, 'SELECT COUNT(*) AS total FROM community_comment_likes WHERE comment_id=?', [
       comment.id,
     ]);
@@ -221,6 +222,8 @@ export async function postState({ user, input, env = process.env, db = pool }) {
         'UPDATE community_post_user_states SET liked=?,subscription=?,hidden=? WHERE user_id=? AND post_id=?',
         [liked ? 1 : 0, subscription, hidden ? 1 : 0, user.id, post.id],
       );
+      if (input.liked === true && !Number(row.liked) && post.author_id !== user.id)
+        await queueLike(c, user.id, post.id);
       return { publicId: post.public_id, liked, subscription, hidden };
     },
   );
@@ -347,4 +350,17 @@ export async function ownComments({ user, input = {}, env = process.env, db = po
     items: rows.slice(0, limit).map(({ id, ...row }) => row),
     nextCursor: rows.length > limit ? String(rows[limit - 1].id) : null,
   };
+}
+
+// Stable event identity survives unlike/re-like and worker retries.
+async function queueLike(db, actorId, postId, commentId = null) {
+  await identity(db, actorId);
+  const actorKey = createHash('sha256').update(actorId).digest('hex');
+  await outbox(db, {
+    key: `like:${commentId ? 'comment' : 'post'}:${commentId || postId}:${actorKey}`,
+    kind: 'like',
+    actorId,
+    postId,
+    commentId,
+  });
 }

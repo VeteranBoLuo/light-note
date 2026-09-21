@@ -1,3 +1,6 @@
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import { readOwnedCloudImage } from '../util/services/cloudImageReadService.js';
 import { deleteUnmanagedObject } from '../util/imagePreview/cleanup.js';
 import { previewDescriptor, hydrateImagePreviewStates } from '../util/imagePreview/service.js';
 import { registerCloudImage, removeImageReferences } from '../util/imagePreview/references.js';
@@ -541,6 +544,24 @@ router.post('/queryFiles', async (req, res) => {
 });
 
 // 后端：/downloadFileById 接口
+// Stable private URL for images copied into a user's knowledge library.
+router.get('/image/:id', async (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  res.set('X-Content-Type-Options', 'nosniff');
+  if (req.adminContext) return res.sendStatus(403);
+  try {
+    const image = await readOwnedCloudImage({ user: req.user, id: req.params.id });
+    if (!image) return res.sendStatus(404);
+    const upstream = await fetch(image.url, { redirect: 'error', signal: AbortSignal.timeout(15000) });
+    if (!upstream.ok || !upstream.body) return res.sendStatus(404);
+    res.type(image.contentType);
+    await pipeline(Readable.fromWeb(upstream.body), res);
+  } catch {
+    if (!res.headersSent) res.sendStatus(404);
+    else res.destroy();
+  }
+});
+
 router.post('/downloadFileById', async (req, res) => {
   try {
     const { id } = req.body;

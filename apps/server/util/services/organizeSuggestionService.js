@@ -15,6 +15,7 @@ import {
 import {
   availableResourceSql,
   effectiveStatusSql,
+  pendingReviewSql,
   actionableStatuses,
   unavailableReason,
 } from './organizeSuggestionAvailability.js';
@@ -127,7 +128,10 @@ export async function listSuggestionRuns(db = pool, { userId }) {
   );
   return rows.map(mapRun);
 }
-export async function getSuggestionRun(db = pool, { userId, id, after = '', resourceType = '', kind = '' }) {
+export async function getSuggestionRun(
+  db = pool,
+  { userId, id, after = '', resourceType = '', kind = '', reviewOnly = false },
+) {
   const run = await ownedRun(db, userId, id);
   const [progress] = await db.query(
     'SELECT resource_type,ai_status,COUNT(*) AS total FROM organize_suggestion_items WHERE run_id=? AND user_id=? GROUP BY resource_type,ai_status',
@@ -139,6 +143,10 @@ export async function getSuggestionRun(db = pool, { userId, id, after = '', reso
   );
   const where = ['i.run_id=?', 'i.user_id=?', 'i.id>?'];
   const params = [id, userId, after];
+  if (reviewOnly)
+    where.push(
+      `EXISTS(SELECT 1 FROM organize_suggestions s WHERE s.item_id=i.id AND s.user_id=i.user_id AND ${pendingReviewSql()})`,
+    );
   if (resourceType) {
     where.push('i.resource_type=?');
     params.push(resourceType);

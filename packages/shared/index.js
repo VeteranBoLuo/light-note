@@ -337,6 +337,7 @@ export const FILE_PREVIEW_EXTRA_TEXT_EXTENSIONS = Object.freeze([
   'ndjson',
   'srt',
   'vtt',
+  'lrc',
   'ics',
   'vcf',
   'diff',

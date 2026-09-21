@@ -32,6 +32,19 @@ describe('简报整理入口', () => {
       '/organize?issue=untagged',
     ]);
   });
+  it('仅采纳站内审核任务定位，拒绝外链和无效资源类型', () => {
+    const data = brief(0, 3);
+    const item = data.sections[0].items[1];
+    item.route = '/organize?issue=ai_suggestions&review=pending&runId=old-run&resourceType=note';
+    expect(resolveBriefOrganizeActions(insight, data)[0].route).toBe(item.route);
+    for (const route of [
+      'https://evil.example/organize?review=pending&runId=old-run&resourceType=note',
+      '/organize?review=pending&runId=old-run&resourceType=user',
+    ]) {
+      item.route = route;
+      expect(resolveBriefOrganizeActions(insight, data)[0].route).toBe('/organize?issue=ai_suggestions');
+    }
+  });
   it('只展示有数量且被当前洞察引用的入口', () => {
     expect(resolveBriefOrganizeActions(insight, brief(58, 0)).map((a) => a.id)).toEqual(['organize_untagged']);
     expect(resolveBriefOrganizeActions({ ...insight, factIds: ['note_created_today'] }, brief(58, 12))).toEqual([]);

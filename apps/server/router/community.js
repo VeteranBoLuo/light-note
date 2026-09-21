@@ -43,6 +43,7 @@ router.get('/topics/:slug', feed.topicDetail);
 router.get('/moderation/topics', feed.managedTopics);
 router.post('/moderation/topics', writeLimit, feed.saveTopic);
 router.get('/members', feed.members);
+router.get('/posts/:id/saved', feed.savedResources);
 router.get('/posts', feed.listPosts);
 router.get('/posts/:id', feed.postDetail);
 router.get('/posts/:postId/avatar', feed.profileAvatar);

@@ -7,7 +7,13 @@
   >
     <div v-if="post.author" class="post-author-row" :inert="preview">
       <BButton class="post-author" @click="router.push('/community/people/' + post.author.userPublicId)">
-        <img v-if="post.author.avatar" :src="post.author.avatar" alt="" width="34" height="34" />
+        <img
+          v-if="imageSource(post.author.avatar)"
+          :src="imageSource(post.author.avatar)"
+          alt=""
+          width="34"
+          height="34"
+        />
         <span v-else class="post-avatar-fallback" aria-hidden="true">{{ Array.from(post.author.name || '?')[0] }}</span>
         <span class="post-author-copy"
           ><strong>{{ post.author.name }}</strong
@@ -62,6 +68,7 @@
   </article>
 </template>
 <script setup lang="ts">
+  import { useCommunityPreviewImages } from '@/composables/useCommunityPreviewImages';
   import { useRouter, useRoute } from 'vue-router';
   import { useI18n } from 'vue-i18n';
   import type { FeedPost } from '@/api/communityFeedApi';
@@ -82,6 +89,7 @@
     likeFailed?: boolean;
   }>();
   defineEmits<{ like: [post: FeedPost] }>();
+  const { imageSource } = useCommunityPreviewImages(() => [props.post.author?.avatar]);
   const { t, locale } = useI18n();
   const router = useRouter();
   const route = useRoute();

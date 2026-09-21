@@ -793,7 +793,7 @@ describe('FilePreview community chat downloads', () => {
   it('从预览内下载时重新获取短期签名，避免复用已过期 URL', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () => ({ ok: true, body: null, text: async () => 'chat attachment' })),
+      vi.fn(async () => ({ ok: true, body: null, arrayBuffer: async () => new TextEncoder().encode('chat attachment').buffer })),
     );
     communityChatApiMocks.getCommunityChatFileDownload
       .mockResolvedValueOnce({ status: 200, data: { downloadUrl: 'https://files.example/source-old.txt' } })
@@ -888,7 +888,7 @@ describe('FilePreview text request lifecycle', () => {
     const fetchMock = vi
       .fn()
       .mockReturnValueOnce(firstResponse)
-      .mockResolvedValueOnce({ ok: true, body: null, text: async () => 'new file content' });
+      .mockResolvedValueOnce({ ok: true, body: null, arrayBuffer: async () => new TextEncoder().encode('new file content').buffer });
     vi.stubGlobal('fetch', fetchMock);
 
     const host = document.createElement('div');
@@ -922,7 +922,7 @@ describe('FilePreview text request lifecycle', () => {
       expect(document.body.querySelector('.preview-text')?.textContent).toContain('new file content'),
     );
 
-    resolveFirstResponse?.({ ok: true, body: null, text: async () => 'old file content' });
+    resolveFirstResponse?.({ ok: true, body: null, arrayBuffer: async () => new TextEncoder().encode('old file content').buffer });
     await Promise.resolve();
     await nextTick();
 
@@ -1186,6 +1186,21 @@ describe('FilePreview 同时打开与切换文件', () => {
 });
 
 describe('FilePreview 文本请求归属', () => {
+  it('全屏预览将 GBK 歌词解码为中文', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(new Uint8Array([
+      ...new TextEncoder().encode('[00:01]'), 0xd6, 0xd0, 0xce, 0xc4,
+    ]))));
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp({ render: () => h(FilePreview, {
+      visible: true,
+      fileInfo: { id: 'gbk-lyrics', fileName: '歌词.lrc', fileType: 'application/octet-stream', fileUrl: 'https://files.example/lyrics.lrc' },
+    }) });
+    app.mount(host);
+    cleanup = () => { app.unmount(); host.remove(); };
+    await vi.waitFor(() => expect(document.querySelector('.preview-text')?.textContent).toContain('[00:01]中文'));
+  });
+
   it.each(['abort', 'resolve'])('同一文件重开后忽略旧请求的 %s，不结束新加载', async (completion) => {
     let oldResolve!: (value: any) => void;
     let oldReject!: (error: any) => void;
@@ -1204,11 +1219,11 @@ describe('FilePreview 文本请求归属', () => {
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     expect(fetchMock.mock.calls[0][1].signal.aborted).toBe(true);
     if(completion === 'abort') oldReject(new DOMException('Cancelled','AbortError'));
-    else oldResolve({ ok:true, text:async ()=>'OLD_CONTENT' });
+    else oldResolve({ ok:true, arrayBuffer: async () => new TextEncoder().encode('OLD_CONTENT').buffer });
     await new Promise(resolve=>setTimeout(resolve,0));await nextTick();
     expect(document.querySelector('.preview-loading')).not.toBeNull();
     expect(document.querySelector('.fullscreen-preview')?.textContent).not.toContain('OLD_CONTENT');
-    newResolve({ ok:true, text:async ()=>'NEW_CONTENT' });
+    newResolve({ ok:true, arrayBuffer: async () => new TextEncoder().encode('NEW_CONTENT').buffer });
     await vi.waitFor(() => expect(document.querySelector('.fullscreen-preview')?.textContent).toContain('NEW_CONTENT'));
     expect(document.querySelector('.preview-loading')).toBeNull();
   });

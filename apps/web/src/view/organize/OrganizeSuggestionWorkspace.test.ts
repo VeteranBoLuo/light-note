@@ -1722,3 +1722,62 @@ it('标签分页返回时刷新当前页，不把第一页内容写进第二页'
   expect(button('上一页')).toBeTruthy();
   expect(api.getRun).toHaveBeenCalledTimes(3);
 });
+
+it.each([
+  {
+    outcome: 'unfinished',
+    aiStatus: 'completed',
+    reading: { state: 'metadata', complete: false, reasonCode: 'DOCUMENT_PARSE_FAILED' },
+    label: '读取失败',
+  },
+  { outcome: 'unfinished', aiStatus: 'completed', reading: { state: 'partial', complete: false }, label: '部分读取' },
+  {
+    outcome: 'processing',
+    aiStatus: 'waiting_content',
+    reading: { state: 'waiting', complete: false },
+    label: '读取中',
+  },
+  { outcome: 'unfinished', aiStatus: 'cancelled', label: '已取消' },
+  { outcome: 'unfinished', aiStatus: 'completed', label: '未完成' },
+  { outcome: 'processing', aiStatus: 'running', label: '处理中' },
+  { outcome: undefined, aiStatus: 'failed', label: '未完成' },
+])('已审核建议不覆盖对象主状态 $label ($outcome)', async ({ outcome, aiStatus, reading, label }) => {
+  const run = {
+    ...result(),
+    status: outcome === 'processing' ? 'running' : 'completed',
+    items: [
+      {
+        id: 'mixed',
+        outcome,
+        aiStatus,
+        ruleStatus: 'completed',
+        resource: { id: 'f', type: 'file', title: '资料.pdf', source: { folder: '' }, guards: {}, tags: [], reading },
+        suggestions: [
+          { id: 'reviewed-tag', kind: 'tags', status: 'applied', reason: '主题建议', before: [], after: [] },
+        ],
+      },
+    ],
+  };
+  api.listRuns.mockResolvedValue(ok([run]));
+  api.getRun.mockResolvedValue(ok(run));
+  await mount();
+  await openGroup('analysis');
+  const card = document.querySelector('.group-analysis .workspace-resource')!;
+  expect(card.querySelector('.resource-conclusion')?.textContent).toBe(label);
+  expect(card.querySelector('header')?.textContent).not.toContain('本次建议已处理');
+  (card.querySelector('[aria-controls="checks-mixed"]') as HTMLButtonElement).click();
+  await settle();
+  expect(card.querySelector('.resource-check-details')?.textContent).toContain('已应用 · 主题建议');
+});
+
+it('简报审核入口打开指定历史任务且后续分页保持待审核筛选', async () => {
+  navigation.currentRoute.value.query = { review: 'pending', runId: 'older-run', resourceType: 'note' };
+  api.getRun.mockResolvedValue(ok({ ...result(), id: 'older-run' }));
+  await mount();
+  expect(api.listRuns).not.toHaveBeenCalled();
+  expect(api.getRun).toHaveBeenCalledWith(
+    'older-run',
+    expect.objectContaining({ resourceType: 'note', reviewOnly: true }),
+  );
+  expect(document.body.textContent).toContain('简报统计各次整理的待审核建议');
+});

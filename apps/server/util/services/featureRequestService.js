@@ -86,10 +86,10 @@ export async function createFeatureRequest({ userId, input, sourceType = 'user',
   const normalizedSourceType = sourceType === 'official' ? 'official' : 'user';
   const id = generateUUID();
   const updateId = generateUUID();
+  const isOfficial = normalizedSourceType === 'official';
   const connection = await db.getConnection();
   try {
     await connection.beginTransaction();
-    const isOfficial = normalizedSourceType === 'official';
     await connection.query(
       `INSERT INTO feature_requests
         (id,title,content,category,source_type,submitter_user_id,show_identity,moderation_status,progress_status,published_at)
@@ -119,19 +119,22 @@ export async function createFeatureRequest({ userId, input, sourceType = 'user',
       ],
     );
     await connection.commit();
-    return {
-      id,
-      ...draft,
-      sourceType: normalizedSourceType,
-      moderationStatus: isOfficial ? 'published' : 'pending_review',
-      progressStatus: 'evaluating',
-    };
   } catch (error) {
     await connection.rollback();
     throw error;
   } finally {
     connection.release();
   }
+  if (!isOfficial) {
+    await notifyFeatureRequestAdmins({ requestId: id, updateId, event: 'submitted', actorUserId: userId, db });
+  }
+  return {
+    id,
+    ...draft,
+    sourceType: normalizedSourceType,
+    moderationStatus: isOfficial ? 'published' : 'pending_review',
+    progressStatus: 'evaluating',
+  };
 }
 
 export async function listPublicFeatureRequests({ viewerUserId = '', filters = {}, pagination = {}, db = pool }) {
@@ -324,14 +327,59 @@ export async function addSubmitterFeatureUpdate({ requestId, userId, content, db
     [requestId, userId],
   );
   if (!request) throw new FeatureRequestError('FORBIDDEN', '当前建议不可补充', 403);
+  const updateId = generateUUID();
   await db.query(
     `INSERT INTO feature_request_updates
       (id,request_id,type,content,actor_user_id,create_time)
      VALUES (?,?,'submitter_addition',?,?,NOW())`,
-    [generateUUID(), requestId, text, userId],
+    [updateId, requestId, text, userId],
   );
   await db.query('UPDATE feature_requests SET update_time = NOW() WHERE id = ?', [requestId]);
+  await notifyFeatureRequestAdmins({ requestId, updateId, event: 'submitter_addition', actorUserId: userId, db });
   return { requestId, content: text };
+}
+
+// 管理审核提醒独立于用户的共建进度订阅；只携带事件摘要，正文由详情接口重新鉴权。
+async function notifyFeatureRequestAdmins({ requestId, updateId, event, actorUserId, db }) {
+  try {
+    const [admins] = await db.query(
+      `SELECT id, COALESCE(JSON_UNQUOTE(JSON_EXTRACT(preferences, '$.lang')), 'zh-CN') AS lang
+         FROM user WHERE role = 'root' AND del_flag = 0 AND id <> ?`,
+      [actorUserId],
+    );
+    const results = await Promise.allSettled(
+      admins.map((admin) => {
+        const en = admin.lang === 'en-US';
+        const submitted = event === 'submitted';
+        return createNotification(
+          admin.id,
+          {
+            type: 'feature_request',
+            title: submitted
+              ? en
+                ? 'New co-build suggestion'
+                : '收到新的共建建议'
+              : en
+                ? 'Co-build suggestion updated'
+                : '用户补充了共建建议',
+            content: en
+              ? 'Open the suggestion to view its details and current status.'
+              : '点击查看建议详情和当前处理状态。',
+            link: `/co-build/${requestId}`,
+            meta: { requestId, event },
+            sourceType: 'feature_request_admin',
+            sourceId: updateId,
+          },
+          db,
+        );
+      }),
+    );
+    if (results.some((result) => result.status === 'rejected')) {
+      console.error('[共建轻笺] FEATURE_REQUEST_ADMIN_NOTIFICATION_FAILED');
+    }
+  } catch {
+    console.error('[共建轻笺] FEATURE_REQUEST_ADMIN_NOTIFICATION_FAILED');
+  }
 }
 
 async function addTimeline(connection, { requestId, type, content, fromStatus = null, toStatus = null, actorUserId }) {

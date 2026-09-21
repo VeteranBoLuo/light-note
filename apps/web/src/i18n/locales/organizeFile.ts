@@ -15,6 +15,7 @@ export const organizeFileZh = {
   retryHint: '仅重新分析这轮整理中仍未处理、没有标签建议的文件；已应用、已忽略或已有标签的文件不会重复处理。',
   confirmCount: '将重新分析 {count} 个文件',
   automatic: '启动后自动读取正文，必要时理解图片或 PDF 页面；完整分批分析消耗正常 AI 额度，已有内容缓存会复用。',
+  failed: '读取失败',
   waiting: '读取中',
   text: '已读取正文',
   visual: '已理解图片',
@@ -51,6 +52,7 @@ export const organizeFileEn = {
   confirmCount: 'Reanalyze {count} files',
   automatic:
     'Starting reads document content and understands images or PDF pages when needed. Complete batched analysis uses your AI allowance and reuses cached content.',
+  failed: 'Reading failed',
   waiting: 'Reading content',
   text: 'Document read',
   visual: 'Image understood',

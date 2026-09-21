@@ -1,10 +1,16 @@
 <template>
   <div v-auto-scrollbar class="community-surface">
-    <CommunityLayout chat :disabled="!feedAvailable" class="community-chat-page">
+    <CommunityLayout chat :disabled="!feedAvailable && !preview" class="community-chat-page">
       <template #navigation><CommunityFeedLink @available="feedAvailable = $event" /></template>
       <template #aside><CommunityContext chat /></template>
+      <CommunityNavigation v-if="preview && isMobile" active="chat" compact />
+      <section v-if="preview" class="community-chat-unavailable" role="status">
+        <h1>{{ t('community.feed.previewChatTitle') }}</h1>
+        <p>{{ t('community.feed.previewChatDescription') }}</p>
+        <BButton type="primary" @click="router.push('/community/feed')">{{ t('community.feed.backFeed') }}</BButton>
+      </section>
       <section
-        v-if="bootstrapLoading"
+        v-else-if="bootstrapLoading"
         class="community-chat-bootstrap"
         :aria-label="t('communityChat.bootstrapLoading')"
         aria-busy="true"
@@ -48,6 +54,8 @@
 
 <script setup lang="ts">
   import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+  import { useCommunityPreview } from '@/composables/useCommunityPreview';
+  import { useRouter } from 'vue-router';
   import { useI18n } from 'vue-i18n';
   import {
     getCommunityChatRooms,
@@ -72,6 +80,8 @@
 
   const { t } = useI18n();
   const user = useUserStore();
+  const router = useRouter();
+  const { preview, identity } = useCommunityPreview();
   const feedAvailable = ref(knownCommunityLayout(`${user.id}|${user.role}|${user.adminContext?.id || ''}`));
   const isMobile = useMobileLayout();
   const access = ref<CommunityChatAccess | null>(null);
@@ -109,6 +119,14 @@
   );
 
   async function loadDirectory({ background = false } = {}) {
+    if (preview.value) {
+      directoryGeneration++;
+      access.value = null;
+      serverRooms.value = [];
+      directoryMessagingEnabled.value = false;
+      bootstrapLoading.value = false;
+      return;
+    }
     if (background && bootstrapLoading.value) return;
     const generation = ++directoryGeneration;
     if (!background) bootstrapLoading.value = true;
@@ -156,7 +174,7 @@
   });
 
   watch(
-    () => [user.id, user.role],
+    () => identity.value,
     (_next, previous) => {
       if (previous) void loadDirectory();
     },

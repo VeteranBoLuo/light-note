@@ -33,6 +33,7 @@
 </template>
 
 <script setup lang="ts">
+  import { readTextPreviewSource } from '@/utils/textPreviewSource';
   import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { isHtmlFile } from '@/constants/cloudFileCategory';
@@ -182,24 +183,8 @@
   async function readPreviewSource(url: string): Promise<string> {
     const response = await fetch(url);
     if (!response.ok) throw new Error(`HTTP_${response.status}`);
-    if (!response.body) {
-      return (await response.text()).slice(0, SOURCE_READ_LIMIT);
-    }
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder('utf-8');
-    let source = '';
-    while (source.length < SOURCE_READ_LIMIT) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      source += decoder.decode(value, { stream: true });
-      if (source.length >= SOURCE_READ_LIMIT) {
-        await reader.cancel();
-        break;
-      }
-    }
-    source += decoder.decode();
-    return source.slice(0, SOURCE_READ_LIMIT);
+    const { content } = await readTextPreviewSource(response, SOURCE_READ_LIMIT);
+    return content;
   }
 
   async function sanitizeDocumentFragment(source: string, kind: PreviewKind): Promise<string> {

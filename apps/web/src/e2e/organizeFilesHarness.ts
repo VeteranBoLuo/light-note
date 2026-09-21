@@ -139,6 +139,54 @@ if (params.has('pipeline')) {
     },
   });
 }
+// Covers completed review decisions coexisting with unfinished processing.
+if (params.has('outcomes')) {
+  const cases = [
+    [
+      '读取失败.pdf',
+      'unfinished',
+      'completed',
+      { state: 'metadata', complete: false, reasonCode: 'DOCUMENT_PARSE_FAILED' },
+    ],
+    [
+      '部分读取.pdf',
+      'unfinished',
+      'completed',
+      { state: 'partial', complete: false, totalPages: 4, readPages: 3, missingPages: [4] },
+    ],
+    ['等待读取.pdf', 'processing', 'waiting_content', { state: 'waiting', complete: false }],
+    ['已取消.pdf', 'unfinished', 'cancelled', undefined],
+    ['正常完成.pdf', 'reviewed', 'completed', { state: 'text', complete: true }],
+    ['无需修改.pdf', 'unchanged', 'completed', { state: 'text', complete: true }],
+  ] as const;
+  run.items = cases.map(([title, outcome, aiStatus, reading], index) => ({
+    ...items[0],
+    id: `outcome-${index}`,
+    outcome,
+    aiStatus,
+    resource: { ...items[0].resource, id: String(index), title, reading },
+    suggestions: [
+      {
+        ...items[0].suggestions[0],
+        id: `review-${index}`,
+        status: index === 5 ? 'no_suggestion' : 'applied',
+        kind: index === 5 ? 'empty' : 'tags',
+        reading: undefined,
+      },
+    ],
+  })) as WorkspaceItem[];
+  run.summary = { ...run.summary, total: 6, types: { file: 6 }, aiTotal: 5 };
+  run.checked = 6;
+  run.counts = [
+    { status: 'applied', total: 5 },
+    { status: 'no_suggestion', total: 1 },
+  ];
+  run.progress = [
+    { resourceType: 'file', aiStatus: 'completed', total: 4 },
+    { resourceType: 'file', aiStatus: 'waiting_content', total: 1 },
+    { resourceType: 'file', aiStatus: 'cancelled', total: 1 },
+  ];
+}
 request.defaults.adapter = async (config) => {
   const url = String(config.url);
   let data: unknown = [];
@@ -157,7 +205,10 @@ request.defaults.adapter = async (config) => {
       canResume: url.endsWith('/pause'),
     };
     data = run;
-  } else if (url.includes('/runs/')) data = run;
+  } else if (url.includes('/runs/'))
+    data = config.params?.reviewOnly
+      ? { ...run, items: run.items?.filter((item) => item.suggestions.some((s) => s.status === 'pending')) }
+      : run;
   return { data: { status: 200, msg: '', data }, status: 200, statusText: 'OK', headers: {}, config };
 };
 const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: Workspace }] });
@@ -180,5 +231,7 @@ app.use(createPinia());
 app.use(createI18n({ legacy: false, locale, messages: { 'zh-CN': zh, 'en-US': en } }));
 app.use(router);
 globalDirect(app);
+if (params.get('review') === 'pending')
+  await router.replace({ path: '/', query: { review: 'pending', runId: 'file-fixture', resourceType: 'file' } });
 await router.isReady();
 app.mount('#app');

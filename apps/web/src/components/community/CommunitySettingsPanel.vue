@@ -41,6 +41,7 @@
   const fields = [
     { key: 'commentNotificationsEnabled', label: 'community.feed.commentNotifications' },
     { key: 'mentionNotificationsEnabled', label: 'community.feed.mentionNotifications' },
+    { key: 'likeNotificationsEnabled', label: 'community.feed.likeNotifications' },
   ];
   const enabled = ref(false),
     options = ref<any>(null),

@@ -14,7 +14,7 @@ import { prepareTagIconRoute, recommendTagIcons } from '../tagIconService.js';
 import { prepareResourceMetadata } from './organizeSuggestionModel.js';
 import { prepareOrganizeFile } from './organizeFileEvidence.js';
 import { prepareOrganizeArchive } from './organizeArchiveDraft.js';
-import { availableResourceSql, effectiveStatusSql } from './organizeSuggestionAvailability.js';
+import { availableResourceSql, pendingReviewSql } from './organizeSuggestionAvailability.js';
 
 const open = "'queued','waiting','running'";
 const active = "'preparing','running','paused'";
@@ -132,7 +132,7 @@ export async function readOrganizeOutcomes(c, run, itemOutcomes) {
 export async function readOrganizeReview(c, run, itemOutcomes) {
   const [rows] = await c.query(
     `SELECT
-    SUM((${effectiveStatusSql()})='pending' OR ((${effectiveStatusSql()})='info' AND JSON_UNQUOTE(JSON_EXTRACT(s.payload_json,'$.action')) IN ('trash','duplicate_bookmarks'))) pending,
+    SUM(${pendingReviewSql()}) pending,
     COUNT(DISTINCT IF((${manualSuggestionSql()}) AND (${availableResourceSql()}) AND i.rule_status<>'removed',i.id,NULL)) manual_objects,
     COUNT(DISTINCT IF(i.resource_type='file' AND s.kind='tags' AND s.status IN ('failed','insufficient','no_suggestion')
       AND (${availableResourceSql()}) AND NOT EXISTS(SELECT 1 FROM resource_tag_relations tr JOIN tag t ON t.id=tr.tag_id AND t.del_flag=0
