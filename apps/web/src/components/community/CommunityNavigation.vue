@@ -16,14 +16,24 @@
         }}</span>
       </BButton>
     </template>
-    <BActionMenu v-else :items="items" @select="select">
-      <BButton class="community-mobile-switch" :aria-label="t('community.title')">
-        <SvgIcon :src="icon.navigation.menu" size="18" />
-        <template v-if="!compact">{{
-          items.find((item) => item.key === currentPath)?.label || t('community.title')
-        }}</template>
+    <template v-else>
+      <BButton
+        class="community-mobile-switch"
+        :aria-label="t('community.feed.switchModule', { name: currentLabel })"
+        :aria-expanded="mobileOpen"
+        aria-haspopup="dialog"
+        @click="mobileOpen = true"
+      >
+        <span class="community-mobile-label">{{ currentLabel }}</span>
+        <SvgIcon :src="icon.noteTree.chevron" size="16" />
       </BButton>
-    </BActionMenu>
+      <MobilePageActionsDrawer
+        v-model:open="mobileOpen"
+        :title="t('community.title')"
+        :actions="mobileActions"
+        @action="select($event.key)"
+      />
+    </template>
     <div v-if="authenticated && !isMobile" class="community-navigation-footer">
       <BButton class="community-navigation-profile" @click="select('/community/profile')">
         <img
@@ -44,17 +54,17 @@
   </nav>
 </template>
 <script setup lang="ts">
-  import { computed } from 'vue';
+  import { computed, ref, watch } from 'vue';
   import { useRouter, useRoute } from 'vue-router';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
-  import BActionMenu from '@/components/base/BasicComponents/BActionMenu.vue';
+  import MobilePageActionsDrawer from '@/components/mobile/MobilePageActionsDrawer.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
   import { useUserStore } from '@/store';
   import { useMobileLayout } from '@/composables/useMobileLayout';
   import { useCommunityChatUnread } from '@/composables/useCommunityChatUnread';
-  const props = defineProps<{ active: 'chat' | 'feed'; compact?: boolean }>();
+  const props = defineProps<{ active: 'chat' | 'feed'; label?: string }>();
   const user = useUserStore();
   const route = useRoute();
   const authenticated = computed(() => Boolean(user.id && user.role !== 'visitor' && !user.adminContext));
@@ -91,6 +101,24 @@
         ]
       : []),
   ]);
+  const mobileOpen = ref(false);
+  const currentLabel = computed(
+    () => props.label || items.value.find((item) => item.key === currentPath.value)?.label || t('community.title'),
+  );
+  const mobileActions = computed(() =>
+    items.value.map((item, index) => ({
+      ...item,
+      selected: item.key === currentPath.value,
+      dividerBefore: index === 2,
+      description:
+        item.key === '/community/chat' && unread.totalUnread.value
+          ? t('community.feed.unreadMessages', { count: unread.totalUnread.value })
+          : undefined,
+    })),
+  );
+  watch([isMobile, authenticated], () => {
+    mobileOpen.value = false;
+  });
   function select(value: string) {
     void router.push(value);
   }
@@ -209,9 +237,26 @@
       height: auto;
       min-height: 0;
     }
+    .community-navigation {
+      min-width: 0;
+    }
     .community-mobile-switch {
+      max-width: 100%;
+      height: 32px;
+      min-height: 32px;
+      padding: 0 4px;
+      justify-content: flex-start;
+      gap: 6px;
+      border: 0;
       background: transparent;
-      gap: 8px;
+      color: var(--text-color);
+      font-size: 15px;
+      font-weight: 600;
+    }
+    .community-mobile-label {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
   }
 </style>

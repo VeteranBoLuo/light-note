@@ -234,7 +234,6 @@ describe('统一标签模块交互契约', () => {
     expect(detail).not.toContain("t('tagSpace.currentTopic')");
     expect(detail).not.toContain("t('tagSpace.workspaceTitle')");
     expect(detail).not.toContain('class="rail-heading"');
-    expect(detail).toContain('class="rail-overview"');
     expect(detail).toContain('if (tag.value && !tags.has(displayedTagId.value))');
   });
 

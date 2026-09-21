@@ -169,6 +169,7 @@ describe('todoSeriesService v2', () => {
     );
 
     expect(dailyPreview.displaySummary.reminder).toBe('每 1 天提醒 · 站内');
+    expect(dailyPreview.displaySummary.reminderSchedule).toBe('每 1 天提醒');
     expect(hourlyPreview.displaySummary.reminder).toBe('每 2 小时提醒 · 站内');
   });
 

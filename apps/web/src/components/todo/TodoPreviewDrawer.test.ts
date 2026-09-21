@@ -41,9 +41,11 @@ const todo: TodoItem = {
   ],
 };
 
-function mountPreview(focusRef = '') {
+function mountPreview(focusRef = '', item: TodoItem = todo) {
   const visible = ref(true);
   const deleting = ref(false);
+  const reopening = ref(false);
+  const onReopen = vi.fn();
   const onEdit = vi.fn();
   const onDelete = vi.fn();
   const onClosed = vi.fn();
@@ -54,9 +56,11 @@ function mountPreview(focusRef = '') {
     setup() {
       return () =>
         h(TodoPreviewDrawer, {
-          item: todo,
+          item,
           visible: visible.value,
           deleting: deleting.value,
+          reopening: reopening.value,
+          onReopen,
           focusRef,
           'onUpdate:visible': (value: boolean) => (visible.value = value),
           onEdit,
@@ -76,7 +80,7 @@ function mountPreview(focusRef = '') {
     host.remove();
     document.querySelectorAll('.b-drawer-wrapper').forEach((element) => element.remove());
   };
-  return { visible, deleting, onEdit, onDelete, onClosed, onUpdateChecklist };
+  return { visible, deleting, reopening, onReopen, onEdit, onDelete, onClosed, onUpdateChecklist };
 }
 
 afterEach(() => {
@@ -94,7 +98,7 @@ describe('TodoPreviewDrawer', () => {
     expect(drawer.querySelector('h2')?.textContent).toBe(todo.title);
     expect(drawer.querySelector('.todo-preview__description')?.textContent).toContain(todo.description);
     expect(drawer.querySelector('.todo-subitems')?.textContent).toContain('检查关联资料');
-    expect(drawer.querySelector('.todo-preview__schedule')?.textContent).toContain('下一次提醒');
+    expect(drawer.querySelector('.todo-preview__schedule')?.textContent).toContain('提醒时间');
     expect(drawer.querySelector('.todo-resource-link__title')?.textContent).toBe('开发文档');
   });
 
@@ -180,4 +184,26 @@ describe('TodoPreviewDrawer', () => {
     expect(editorModalSource).toContain('resolveTodoResourceReturnPath(');
     expect(editorModalSource).toContain('const target = resolveResourceRoute(resource, { noteReturnPath })');
   });
+});
+
+it.each(['once', 'once_per_instance', 'repeat', 'nudge'] as const)('详情按提醒模式 %s 区分时间标签', async (mode) => {
+  mountPreview('', { ...todo, reminder: { ...todo.reminder, mode, channels: ['in_app', 'email'], nextAt: '2026-09-27 09:00:00' } as TodoItem['reminder'] });
+  await nextTick();
+  const labels = Array.from(document.querySelectorAll('.todo-preview__schedule dt')).map(node => node.textContent);
+  const single = mode === 'once' || mode === 'once_per_instance';
+  expect(labels).toContain(single ? '提醒时间' : '下一次提醒');
+  expect(labels).not.toContain(single ? '下一次提醒' : '提醒时间');
+});
+
+it('已完成详情显示撤回图标，点击不关闭抽屉，处理中不能重复提交', async () => {
+  const item = { ...todo, status: 'completed' as const };
+  const { visible, reopening, onReopen } = mountPreview('', item);
+  await nextTick();
+  const button = document.querySelector<HTMLButtonElement>('.todo-preview__reopen')!;
+  expect(button.getAttribute('aria-label')).toBe('撤回完成');
+  expect(button.textContent?.trim()).toBe('');
+  expect(document.querySelector('.todo-preview__edit')).toBeNull();
+  button.click(); expect(onReopen).toHaveBeenCalledWith(item); expect(visible.value).toBe(true);
+  reopening.value = true; await nextTick();
+  expect(button.disabled).toBe(true); button.click();expect(onReopen).toHaveBeenCalledTimes(1);
 });

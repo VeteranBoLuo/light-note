@@ -149,6 +149,8 @@ export interface TodoPlanPreview {
   generatedNowCount: number;
   actionableCount: number;
   skippedCount: number;
+  reminderMomentCount?: number;
+  normalizedPlan?: { plan: TodoPlanConfig; reminder: TodoReminderV2Config | TodoSingleTaskReminderSchedule };
   reminderJobCount: number;
   reminderIsOngoing?: boolean;
   theoreticalReminderJobCount: number;
@@ -157,7 +159,7 @@ export interface TodoPlanPreview {
   warnings: Array<{ code: string; [key: string]: unknown }>;
   firstOccurrence?: { occurrenceDate: string | null; startAt?: string | null; dueAt?: string | null } | null;
   lastOccurrence?: { occurrenceDate: string | null; startAt?: string | null; dueAt?: string | null } | null;
-  displaySummary: { title: string; range: string; timing: string; reminder: string };
+  displaySummary: { title: string; range: string; timing: string; reminder: string; reminderSchedule?: string };
 }
 
 export interface TodoSeriesView {

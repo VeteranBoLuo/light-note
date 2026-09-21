@@ -41,12 +41,14 @@
     <div class="community-workspace__conversation">
       <header v-if="currentRoom" class="community-conversation-header">
         <div class="community-conversation-header__title">
-          <slot name="header-navigation">
+          <slot v-if="!$slots['header-title']" name="header-navigation">
             <span aria-hidden="true"><SvgIcon :src="icon.ai.conversations" size="17" /></span>
           </slot>
           <div>
             <div class="community-conversation-header__title-line">
-              <strong>{{ currentRoom.name }}</strong>
+              <slot name="header-title" :room="currentRoom"
+                ><strong>{{ currentRoom.name }}</strong></slot
+              >
               <BButton
                 v-if="canViewOnlinePresence && realtimeEnabled && onlineCount != null"
                 class="community-conversation-header__online"

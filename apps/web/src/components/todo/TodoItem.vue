@@ -89,7 +89,7 @@
         </section>
         <section v-if="reminderLabel" class="todo-reminder-summary" :class="{ 'is-past': pastReminderLabel }">
           <strong>{{ reminderLabel }}</strong>
-          <span v-if="nextReminderLabel">{{ t('inbox.todoNextReminder', { time: nextReminderLabel }) }}</span>
+          <span v-if="nextReminderLabel">{{ t(isTodoSingleReminder(item) ? 'inbox.todoSingleReminderTime' : 'inbox.todoNextReminder', { time: nextReminderLabel }) }}</span>
           <span v-else-if="pastReminderLabel" class="todo-reminder-summary__past">
             {{ t('inbox.todoPastReminder', { time: pastReminderLabel }) }}
           </span>
@@ -264,6 +264,7 @@
   import {
     formatTodoDateTime,
     isTodoOverdue,
+    isTodoSingleReminder,
     normalizeTodoDateOnly,
     todoPastReminderAt,
     type TodoSnoozePreset,

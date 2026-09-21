@@ -27,6 +27,18 @@
           <SvgIcon :src="icon.table_delete" size="17" aria-hidden="true" />
         </BButton>
       </BTooltip>
+      <BTooltip v-if="item.status === 'completed'" :title="t('inbox.todoReopenCompletion')" :disabled="bookmark.isMobile || disabled || reopening" :delay="80">
+        <BButton
+          icon-only
+          class="todo-preview__action todo-preview__reopen"
+          :aria-label="t('inbox.todoReopenCompletion')"
+          :disabled="disabled || deleting"
+          :loading="reopening"
+          @click="emit('reopen', item)"
+        >
+          <SvgIcon :src="icon.noteDetail.toolbar.undo" size="17" aria-hidden="true" />
+        </BButton>
+      </BTooltip>
       <BTooltip v-if="item.status !== 'completed'" :title="t('inbox.editTodo')" :disabled="bookmark.isMobile || disabled || deleting" :delay="80">
         <BButton
           class="todo-preview__action todo-preview__edit"
@@ -121,21 +133,23 @@
   import { bookmarkStore } from '@/store';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
   import { resolveResourceRoute, resolveTodoResourceReturnPath } from '@/utils/resourceNavigation';
-  import { formatTodoDateTime, normalizeTodoDateOnly, todoNextReminderAt } from '@/utils/todoPlanning';
+  import { formatTodoDateTime, isTodoSingleReminder, normalizeTodoDateOnly, todoNextReminderAt } from '@/utils/todoPlanning';
 
   const props = withDefaults(
     defineProps<{
       item: TodoItem;
       disabled?: boolean;
       deleting?: boolean;
+      reopening?: boolean;
       focusRef?: string;
     }>(),
-    { disabled: false, deleting: false, focusRef: '' },
+    { disabled: false, deleting: false, reopening: false, focusRef: '' },
   );
   const visible = defineModel<boolean>('visible');
   const emit = defineEmits<{
     edit: [item: TodoItem, section?: 'checklist'];
     delete: [item: TodoItem];
+    reopen: [item: TodoItem];
     'update-checklist': [item: TodoItem, checklist: TodoChecklistItem[]];
     closed: [];
   }>();
@@ -198,7 +212,7 @@
     if (nextReminderAt) {
       rows.push({
         key: 'next-reminder',
-        label: t('inbox.todoPlanPreviewNextReminder'),
+        label: t(isTodoSingleReminder(props.item) ? 'inbox.todoPlanPreviewReminderTime' : 'inbox.todoPlanPreviewNextReminder'),
         value: formatAbsolute(nextReminderAt),
       });
     }
@@ -303,6 +317,10 @@
 
   :deep(.b_btn.todo-preview__edit) {
     color: var(--primary-color);
+  }
+
+  :deep(.b_btn.todo-preview__reopen) {
+    color: var(--workspace-purple-text);
   }
 
   :deep(.b_btn.todo-preview__delete) {

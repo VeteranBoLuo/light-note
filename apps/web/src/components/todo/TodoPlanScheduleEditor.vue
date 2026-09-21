@@ -263,9 +263,15 @@
             <span>{{
               t('inbox.todoPlanInstances', { count: preview.occurrenceCount ?? preview.generatedNowCount })
             }}</span>
-            <span>{{ t('inbox.todoPlanReminderJobs', { count: preview.reminderJobCount }) }}</span>
+            <span>{{
+              preview.normalizedPlan?.reminder.mode === 'none'
+                ? t('inbox.todoReminderNone')
+                : preview.reminderIsOngoing || preview.occurrenceCount === null
+                  ? t('inbox.todoPlanReminderOngoing')
+                  : t('inbox.todoPlanReminderJobs', { count: preview.reminderMomentCount ?? '—' })
+            }}</span>
             <span v-if="preview.nextReminderAt">{{
-              t('inbox.todoPlanNextReminder', { time: preview.nextReminderAt })
+              t(preview.normalizedPlan?.plan.type === 'once' && isTodoSingleReminder({ reminder: preview.normalizedPlan.reminder }) ? 'inbox.todoSingleReminderTime' : 'inbox.todoPlanNextReminder', { time: preview.nextReminderAt })
             }}</span>
           </div>
         </template>
@@ -319,7 +325,7 @@
     type TodoResourceRefInput,
   } from '@/api/todoApi';
   import { generateUUID } from '@/utils/common';
-  import { toTodoLocalInput } from '@/utils/todoPlanning';
+  import { isTodoSingleReminder, toTodoLocalInput } from '@/utils/todoPlanning';
   import { todoTodayInTimezone } from './todoDraftNormalizer';
 
   const props = withDefaults(

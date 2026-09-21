@@ -55,21 +55,39 @@
             · {{ t('todoWorkspace.dueNextDay') }}</strong
           ></p
         >
-        <p>{{ preview.displaySummary.reminder }}</p>
+        <p v-if="hasReminder && !isOnce">{{
+          preview.displaySummary.reminderSchedule || preview.displaySummary.reminder
+        }}</p>
       </section>
       <dl v-if="preview">
         <div>
           <dt>{{ t('inbox.todoPlanPreviewTasks') }}</dt>
           <dd>{{ preview.occurrenceCount ?? `${preview.generatedNowCount}+` }}</dd>
         </div>
-        <div>
-          <dt>{{ t(preview.reminderIsOngoing ? 'inbox.todoPlanPreviewReminderDuration' : 'inbox.todoPlanPreviewReminderJobs') }}</dt>
-          <dd>{{ preview.reminderIsOngoing ? t('inbox.todoPlanReminderOngoing') : preview.reminderJobCount }}</dd>
+        <div v-if="!hasReminder">
+          <dt>{{ t('inbox.todoPlanPreviewReminder') }}</dt>
+          <dd>{{ t('inbox.todoReminderNone') }}</dd>
         </div>
-        <div>
-          <dt>{{ t('inbox.todoPlanPreviewNextReminder') }}</dt>
-          <dd>{{ preview.nextReminderAt || t('inbox.todoReminderNone') }}</dd>
-        </div>
+        <template v-else>
+          <div>
+            <dt>{{ t(ongoing ? 'inbox.todoPlanPreviewReminderDuration' : 'inbox.todoPlanPreviewReminderJobs') }}</dt>
+            <dd>{{
+              ongoing
+                ? stopLabel
+                : reminderCount == null
+                  ? '—'
+                  : t('inbox.todoPlanPreviewReminderCount', { count: reminderCount }, reminderCount)
+            }}</dd>
+          </div>
+          <div v-if="channels.length">
+            <dt>{{ t('inbox.todoPlanPreviewChannels') }}</dt>
+            <dd>{{ channels.join(locale.startsWith('zh') ? '、' : ', ') }}</dd>
+          </div>
+          <div v-if="preview.nextReminderAt">
+            <dt>{{ t(isOnce ? 'inbox.todoPlanPreviewReminderTime' : 'inbox.todoPlanPreviewNextReminder') }}</dt>
+            <dd>{{ preview.nextReminderAt }}</dd>
+          </div>
+        </template>
       </dl>
       <div v-if="!preview" class="todo-plan-preview__empty">
         <strong>{{ fallbackTitle }}</strong>
@@ -104,7 +122,34 @@
     }>(),
     { preview: null, loading: false, error: '', independent: false, task: undefined, resources: () => [] },
   );
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const reminder = computed(() => props.preview?.normalizedPlan?.reminder);
+  const hasReminder = computed(() =>
+    reminder.value ? reminder.value.mode !== 'none' : Boolean(props.preview?.reminderJobCount),
+  );
+  const isOnce = computed(
+    () =>
+      reminder.value?.mode === 'once' ||
+      (reminder.value?.mode === 'once_per_instance' && props.preview?.normalizedPlan?.plan.type === 'once'),
+  );
+  const ongoing = computed(
+    () =>
+      Boolean(props.preview?.reminderIsOngoing) ||
+      (props.preview?.normalizedPlan?.plan.type !== 'once' &&
+        props.preview?.normalizedPlan?.plan.end?.mode === 'never'),
+  );
+  const reminderCount = computed(() => props.preview?.reminderMomentCount);
+  const channels = computed(() =>
+    (reminder.value?.channels || []).map((channel) =>
+      t(channel === 'in_app' ? 'inbox.todoReminderInApp' : 'inbox.todoReminderEmail'),
+    ),
+  );
+  const stopLabel = computed(() => {
+    const stop = reminder.value?.mode === 'repeat' ? reminder.value.repeat?.stop.type : null;
+    if (stop === 'manual') return t('inbox.todoReminderStopManual');
+    if (stop === 'completion' || stop === 'completion_or_due') return t('inbox.todoReminderStopCompletion');
+    return t('inbox.todoPlanReminderOngoing');
+  });
   const previewChecklist = computed(() => (props.task?.checklist || []).filter((item) => item.text.trim()));
   const visibleChecklist = computed(() => previewChecklist.value.slice(0, 4));
   const hiddenChecklistCount = computed(() =>
@@ -322,11 +367,14 @@
   }
 
   dt {
+    flex-shrink: 0;
     color: var(--desc-color);
     font-size: 12px;
   }
 
   dd {
+    min-width: 0;
+    overflow-wrap: anywhere;
     margin: 0;
     color: var(--text-color);
     font-size: 13px;

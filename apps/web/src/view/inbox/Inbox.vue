@@ -407,15 +407,14 @@
           @action="handleTodoMobileBatchAction"
         />
 
-        <section v-if="todoUndo" class="todo-undo-banner" role="status">
-          <span>{{
-            todoUndo.kind === 'delete'
-              ? t('inbox.todoDeletedCount', { count: todoUndo.ids.length })
-              : t('inbox.todoCompletedCount', { count: todoUndo.ids.length })
-          }}</span>
-          <BButton size="small" :loading="todoUndoing" @click="undoTodoAction">{{ t('common.undo') }}</BButton>
-          <BButton size="small" :aria-label="t('common.close')" @click="clearTodoUndo">{{ t('common.close') }}</BButton>
-        </section>
+        <TodoUndoToast
+          v-if="todoUndo"
+          :action="todoUndo"
+          :loading="todoUndoing"
+          :mobile="bookmark.isMobile"
+          @undo="undoTodoAction"
+          @dismiss="clearTodoUndo"
+        />
 
         <section
           v-if="
@@ -869,6 +868,8 @@
       :focus-ref="previewTodoFocusRef"
       :disabled="hasPendingOperation || todoBatchMutating || user.adminContext?.mode === 'readonly'"
       :deleting="deletingTodoId === previewTodo.id"
+      :reopening="updatingTodoId === previewTodo.id"
+      @reopen="toggleTodo($event, false)"
       @edit="openTodoEditor"
       @delete="confirmDeleteTodo"
       @update-checklist="updateTodoChecklist"
@@ -988,6 +989,7 @@
   import TodoSubitemsHint from '@/components/todo/TodoSubitemsHint.vue';
   import TodoSeriesGroup from '@/components/todo/TodoSeriesGroup.vue';
   import TodoEditorModal from '@/components/todo/TodoEditorModal.vue';
+  import TodoUndoToast from '@/components/todo/TodoUndoToast.vue';
   import TodoPreviewDrawer from '@/components/todo/TodoPreviewDrawer.vue';
   import TodoCalendarModal from '@/components/todo/TodoCalendarModal.vue';
   import TodoMatrixView from '@/components/todo/TodoMatrixView.vue';
@@ -1294,7 +1296,6 @@
     else delete todo.selectedSeriesItems[item.id];
     toggleTodoSelected(item.id, selected);
   }
-  let todoUndoTimer = 0;
   let todoMidnightTimer = 0;
   const ensuredCalendarRanges = new Set<string>();
   let calendarRangeGeneration = 0;
@@ -1669,7 +1670,6 @@
     pageRefreshGeneration++;
     window.removeEventListener('resize', updateViewportHeight);
     resizeObserver?.disconnect();
-    window.clearTimeout(todoUndoTimer);
     window.clearTimeout(todoMidnightTimer);
   });
 
@@ -2185,12 +2185,10 @@
     }
   }
   function showTodoUndo(kind: 'complete' | 'delete', ids: string[]) {
-    window.clearTimeout(todoUndoTimer);
-    todoUndo.value = { kind, ids };
-    todoUndoTimer = window.setTimeout(clearTodoUndo, 10_000);
+    const previous = !todoUndoing.value && todoUndo.value?.kind === kind ? todoUndo.value.ids : [];
+    todoUndo.value = { kind, ids: [...new Set([...previous, ...ids])] };
   }
   function clearTodoUndo() {
-    window.clearTimeout(todoUndoTimer);
     todoUndo.value = null;
   }
   async function undoTodoAction() {
@@ -2202,7 +2200,7 @@
         action.kind === 'delete' ? await todo.restoreMany(action.ids) : await todo.reopenMany(action.ids);
       if (succeeded === true) {
         message.success(t('inbox.todoUndoSuccess'));
-        clearTodoUndo();
+        if (todoUndo.value === action) clearTodoUndo();
       } else if (succeeded !== 'preview') message.warning(t('inbox.todoUndoFailed'));
     } finally {
       todoUndoing.value = false;
@@ -2404,12 +2402,30 @@
     try {
       const result = await todo.setCompleted(item, completed);
       if (result === true) {
+        if (!completed) recentCompleted.value = recentCompleted.value.filter((recent) => recent.id !== item.id);
+        if (previewTodoId.value === item.id) {
+          previewTodoSeed.value = todo.items.find((current) => current.id === item.id) || {
+            ...item, status: completed ? 'completed' : 'pending', completedAt: completed ? item.completedAt : null,
+          };
+          if (!todo.items.some((current) => current.id === item.id)) {
+            const detail = await getTodoWorkspace({ ids: [item.id], status: 'all' }).catch(() => null);
+            if (previewTodoId.value === item.id && detail?.status === 200 && detail.data.items[0]) {
+              previewTodoSeed.value = detail.data.items[0];
+            }
+          }
+        }
         await inbox.refreshCount();
         if (completed) {
           toggleTodoSelected(item.id, false);
           delete todo.selectedSeriesItems[item.id];
           showTodoUndo('complete', [item.id]);
-        } else message.success(t('inbox.todoReopenedSuccess'));
+        } else {
+          if (todoUndo.value?.kind === 'complete' && todoUndo.value.ids.includes(item.id)) {
+            const ids = todoUndo.value.ids.filter((id) => id !== item.id);
+            todoUndo.value = ids.length ? { kind: 'complete', ids } : null;
+          }
+          message.success(t('inbox.todoReopenedSuccess'));
+        }
       } else if (result !== 'preview') message.error(t('inbox.todoSaveFailed'));
     } finally {
       updatingTodoId.value = '';
@@ -2929,19 +2945,11 @@
     margin-left: auto;
     white-space: nowrap;
   }
-  .todo-undo-banner {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 10px;
-    padding: 8px 10px;
-    border: 1px solid color-mix(in srgb, var(--success-color, #2e8b57) 35%, var(--card-border-color));
-    border-radius: 10px;
-    background: color-mix(in srgb, var(--success-color, #2e8b57) 7%, var(--background-color));
-    color: var(--text-color);
+  .todo-sidebar-layout .inbox-workspace-main {
+    position: relative;
   }
-  .todo-undo-banner > span {
-    flex: 1;
+  .todo-sidebar-layout :deep(.todo-undo-toast:not(.is-mobile)) {
+    position: absolute;
   }
   .todo-page-tail {
     min-height: 40px;
@@ -3762,9 +3770,6 @@
     .todo-workspace-toolbar__views {
       min-width: 0;
       flex: 1 1 auto;
-    }
-    .todo-undo-banner {
-      flex-wrap: wrap;
     }
     .inbox-page--mobile-todo {
       padding: 14px 14px 0;

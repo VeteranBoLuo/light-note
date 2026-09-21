@@ -1,6 +1,25 @@
 <template>
+  <template v-if="items.length && isMobile">
+    <BButton
+      class="community-content-more is-mobile"
+      :aria-label="t('community.feed.contentMore')"
+      :aria-expanded="mobileOpen"
+      aria-haspopup="dialog"
+      :disabled="disabled"
+      icon-only
+      @click="mobileOpen = true"
+    >
+      <SvgIcon :src="icon.common.more" size="18" />
+    </BButton>
+    <MobilePageActionsDrawer
+      v-model:open="mobileOpen"
+      :title="t('community.feed.contentMore')"
+      :actions="mobileActions"
+      @action="selectMobileAction"
+    />
+  </template>
   <BActionMenu
-    v-if="items.length"
+    v-else-if="items.length"
     :z-index="810"
     :width="saveActions ? 176 : 104"
     :items="items"
@@ -14,8 +33,10 @@
   </BActionMenu>
 </template>
 <script setup lang="ts">
-  import { computed } from 'vue';
-  import type { BActionMenuPlacement } from '@/components/base/BasicComponents/actionMenu';
+  import { computed, ref, watch } from 'vue';
+  import { useMobileLayout } from '@/composables/useMobileLayout';
+  import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
+  import type { BActionMenuItem, BActionMenuPlacement } from '@/components/base/BasicComponents/actionMenu';
   import { useI18n } from 'vue-i18n';
   import BActionMenu from '@/components/base/BasicComponents/BActionMenu.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -30,9 +51,11 @@
     comment?: boolean;
     placement?: BActionMenuPlacement;
   }>();
-  defineEmits<{ select: [key: string] }>();
+  const emit = defineEmits<{ select: [key: string] }>();
+  const isMobile = useMobileLayout();
+  const mobileOpen = ref(false);
   const { t } = useI18n();
-  const items = computed(() => [
+  const items = computed<BActionMenuItem[]>(() => [
     ...(props.saveActions
       ? [
           ...(props.canSave && !props.readonly
@@ -59,6 +82,40 @@
       : []),
     ...(!props.own && !props.readonly ? [{ key: 'report', label: t('community.feed.report') }] : []),
   ]);
+  const actionIcons: Record<string, string> = {
+    'save-note': icon.resource.note,
+    'save-bookmark': icon.resource.bookmark,
+    'copy-link': icon.toolbox.copy,
+    withdraw: icon.toolbox.back,
+    delete: icon.toolbox.delete,
+    report: icon.message.warning,
+  };
+  const mobileActions = computed<MobilePageActionItem[]>(() => {
+    let dividerBefore = false;
+    return items.value.flatMap((item) => {
+      if (item.divider) {
+        dividerBefore = true;
+        return [];
+      }
+      const action = {
+        ...item,
+        label: item.label || '',
+        icon: props.comment && item.key === 'withdraw' ? icon.toolbox.delete : actionIcons[item.key],
+        dividerBefore,
+        disabled: props.disabled || item.disabled,
+      };
+      dividerBefore = false;
+      return [action];
+    });
+  });
+  function selectMobileAction(action: MobilePageActionItem) {
+    if (!props.disabled && items.value.some((item) => item.key === action.key && !item.divider && !item.disabled)) {
+      emit('select', action.key);
+    }
+  }
+  watch([isMobile, () => props.disabled, () => items.value.length], () => {
+    if (!isMobile.value || props.disabled || !items.value.length) mobileOpen.value = false;
+  });
 </script>
 <style scoped>
   .community-content-more {
@@ -67,5 +124,9 @@
     width: 32px;
     height: 32px;
     padding: 6px;
+  }
+  .community-content-more.is-mobile {
+    width: 44px;
+    height: 44px;
   }
 </style>

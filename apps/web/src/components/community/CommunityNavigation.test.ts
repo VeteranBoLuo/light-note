@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createApp, nextTick } from 'vue';
+import { createApp, nextTick, ref } from 'vue';
+import { MOBILE_LAYOUT_CONTEXT } from '@/composables/useMobileLayout';
 import CommunityNavigation from './CommunityNavigation.vue';
 const push = vi.hoisted(() => vi.fn());
 const user = vi.hoisted(() => ({ id: '', role: 'visitor', alias: '', headPicture: '' }));
@@ -54,3 +55,34 @@ describe('Community navigation', () => {
     expect(push).toHaveBeenLastCalledWith('/community/chat');
   });
 });
+
+vi.mock('@/components/mobile/MobilePageActionsDrawer.vue', () => ({
+  default: {
+    props: ['open', 'actions'],
+    template: `<div v-if="open" role="menu"><button v-for="action in actions" :key="action.key" @click="$emit('action', action)">{{ action.label }}</button></div>`,
+  },
+}));
+it.each(['visitor', 'user', 'root'])(
+  'opens mobile destinations from the current title and gates management (%s)',
+  async (role) => {
+    Object.assign(user, { id: role === 'visitor' ? '' : 'member', role });
+    const host = document.createElement('div');
+    const app = createApp(CommunityNavigation, { active: 'feed' });
+    app.provide(MOBILE_LAYOUT_CONTEXT, ref(true));
+    app.mount(host);
+    cleanup = () => app.unmount();
+    const trigger = host.querySelector<HTMLButtonElement>('.community-mobile-switch')!;
+    expect(trigger.textContent).toContain('community.feed.title');
+    expect(host.querySelector('[role=menu]')).toBeNull();
+    trigger.click();
+    await nextTick();
+    const menu = host.querySelector('[role=menu]')!;
+    expect(menu.textContent?.includes('community.feed.myProfile')).toBe(role !== 'visitor');
+    expect(menu.textContent?.includes('community.feed.moderation')).toBe(role === 'root');
+    const destinations = menu.querySelectorAll<HTMLButtonElement>('button');
+    destinations[0].click();
+    expect(push).toHaveBeenLastCalledWith('/community/chat');
+    destinations[1].click();
+    expect(push).toHaveBeenLastCalledWith('/community/feed');
+  },
+);

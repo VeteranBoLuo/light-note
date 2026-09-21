@@ -181,7 +181,15 @@ function previewSummary(preview) {
   } else if (reminder.mode === 'once_per_instance') {
     reminderLabel = `${formatReminderTrigger(reminder.trigger, '提醒一次')} · ${channelLabel}`;
   }
-  return { title: planTitle, range, timing: timeParts.join(' · '), reminder: reminderLabel };
+  return {
+    title: planTitle,
+    range,
+    timing: timeParts.join(' · '),
+    reminder: reminderLabel,
+    reminderSchedule: channelLabel && reminderLabel.endsWith(` · ${channelLabel}`)
+      ? reminderLabel.slice(0, -` · ${channelLabel}`.length)
+      : reminderLabel,
+  };
 }
 
 export function previewTodoPlan(input = {}, options = {}) {

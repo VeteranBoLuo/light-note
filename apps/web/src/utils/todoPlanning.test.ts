@@ -1,3 +1,4 @@
+import { isTodoSingleReminder } from './todoPlanning';
 import { describe, expect, it } from 'vitest';
 import {
   dueForTodoGroup,
@@ -238,4 +239,11 @@ describe('todoPlanning', () => {
       }),
     ).toBe('明天');
   });
+});
+
+it('提醒时间标签依据模式，兼容旧单次提醒，不按剩余次数或渠道判断', () => {
+  expect(isTodoSingleReminder({ reminderAt: '2026-09-27 09:00:00' })).toBe(true);
+  expect(isTodoSingleReminder({})).toBe(false);
+  expect(isTodoSingleReminder({ reminder: { mode: 'repeat', channels: ['in_app'], remainingCount: 1 } as any })).toBe(false);
+  expect(isTodoSingleReminder({ reminder: { mode: 'once', channels: ['in_app', 'email'] } as any })).toBe(true);
 });

@@ -1,9 +1,16 @@
 <template>
   <div v-auto-scrollbar class="community-surface">
-    <CommunityLayout chat :disabled="!feedAvailable && !preview" class="community-chat-page">
-      <template #navigation><CommunityFeedLink @available="feedAvailable = $event" /></template>
+    <CommunityLayout
+      chat
+      :disabled="!feedAvailable && !preview"
+      class="community-chat-page"
+      :class="{ 'has-header-navigation': !preview && (bootstrapLoading || (messagingReady && access)) }"
+    >
+      <template #navigation>
+        <CommunityNavigation v-if="preview" active="chat" />
+        <CommunityFeedLink v-else @available="feedAvailable = $event" />
+      </template>
       <template #aside><CommunityContext chat /></template>
-      <CommunityNavigation v-if="preview && isMobile" active="chat" compact />
       <section v-if="preview" class="community-chat-unavailable" role="status">
         <h1>{{ t('community.feed.previewChatTitle') }}</h1>
         <p>{{ t('community.feed.previewChatDescription') }}</p>
@@ -33,8 +40,8 @@
         @room-read="handleRoomRead"
         @access-invalidated="loadDirectory({ background: true })"
       >
-        <template v-if="feedAvailable && isMobile" #header-navigation>
-          <CommunityNavigation active="chat" compact />
+        <template v-if="feedAvailable && isMobile" #header-title="{ room }">
+          <CommunityNavigation active="chat" :label="room.name" />
         </template>
       </CommunityChatWorkspace>
 
@@ -65,6 +72,7 @@
   } from '@/api/communityChatApi';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import { useMobileLayout } from '@/composables/useMobileLayout';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import { useCommunityChatUnread } from '@/composables/useCommunityChatUnread';
   import icon from '@/config/icon';
@@ -72,18 +80,17 @@
   import ChatMessageSkeleton from '@/components/communityChat/ChatMessageSkeleton.vue';
   import CommunityChatWorkspace from './CommunityChatWorkspace.vue';
   import CommunityNavigation from '@/components/community/CommunityNavigation.vue';
-  import { useMobileLayout } from '@/composables/useMobileLayout';
   import { knownCommunityLayout } from '@/utils/communityLayoutAvailability';
   import CommunityLayout from '@/components/community/CommunityLayout.vue';
   import CommunityContext from '@/components/community/CommunityContext.vue';
   import CommunityFeedLink from '@/components/community/CommunityFeedLink.vue';
 
   const { t } = useI18n();
+  const isMobile = useMobileLayout();
   const user = useUserStore();
   const router = useRouter();
   const { preview, identity } = useCommunityPreview();
   const feedAvailable = ref(knownCommunityLayout(`${user.id}|${user.role}|${user.adminContext?.id || ''}`));
-  const isMobile = useMobileLayout();
   const access = ref<CommunityChatAccess | null>(null);
   const serverRooms = ref<CommunityChatRoom[]>([]);
   const directoryMessagingEnabled = ref(false);
@@ -188,7 +195,7 @@
 
 <style scoped lang="less">
   @media (max-width: 767px) {
-    .community-chat-page:not(.is-disabled) :deep(.community-layout-nav) {
+    .community-chat-page.has-header-navigation :deep(.community-layout-nav) {
       display: none;
     }
   }

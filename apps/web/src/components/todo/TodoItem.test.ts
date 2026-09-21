@@ -138,6 +138,7 @@ function mountTodoItem(
             todoReminderOnceSummary: '{channels} · 单次提醒',
             todoReminderRepeatSummary: '{channels} · 周期提醒',
             todoNextReminder: '下一次提醒：{time}',
+            todoSingleReminderTime: '提醒时间：{time}',
             todoPastReminder: '提醒时间已过：{time}',
             todoToday: '今天',
             todoTomorrow: '明天',
@@ -361,7 +362,7 @@ describe('TodoItem card preview', () => {
     const chips = host.querySelector('.todo-item__chips')!;
     expect(title.compareDocumentPosition(chips) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(chips.textContent).toContain('站内 · 单次提醒');
-    expect(host.querySelector('.todo-reminder-summary')?.textContent).toContain('下一次提醒：');
+    expect(host.querySelector('.todo-reminder-summary')?.textContent).toContain('提醒时间：');
   });
 
   it('固定提醒已投递但待办未完成时明确显示提醒时间已过，而不是伪装成任务逾期', async () => {

@@ -35,6 +35,12 @@ export function normalizeTodoDateOnly(value: string | Date | null | undefined) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
+/** 单条实例的一次提醒不因渠道数量或所属系列变成周期提醒。 */
+export function isTodoSingleReminder(item: Pick<TodoItem, 'reminder' | 'reminderAt'>) {
+  const mode = item.reminder?.mode;
+  return mode === 'once' || mode === 'once_per_instance' || (!item.reminder && Boolean(item.reminderAt));
+}
+
 export function todoNextReminderAt(item: Pick<TodoItem, 'reminder' | 'reminderAt'>) {
   return resolveTodoNextReminderAt(item);
 }

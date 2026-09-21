@@ -10,6 +10,10 @@
     compact-mobile-heading
     :show-header="!bookmark.isMobile"
   >
+    <template #meta>
+      <BChip v-if="sidebarTotal > 0" tone="tag">{{ t('tagSpace.resultCount', { count: sidebarTotal }) }}</BChip>
+    </template>
+
     <template #actions>
       <BButton
         v-if="!isReadOnly"
@@ -40,11 +44,7 @@
         :aria-label="t('common.loading')"
       >
         <aside class="tag-directory-rail tag-directory-rail--skeleton" aria-hidden="true">
-          <div class="skeleton-directory-overview">
-            <span class="skeleton-block skeleton-block--directory-icon"></span>
-            <span class="skeleton-block skeleton-block--directory-title"></span>
-            <span class="skeleton-block skeleton-block--directory-count"></span>
-          </div>
+          <span class="skeleton-block skeleton-block--directory-search"></span>
           <span class="skeleton-block skeleton-block--directory-label"></span>
           <div class="skeleton-directory-list">
             <div v-for="index in 9" :key="index" class="skeleton-directory-row">
@@ -133,16 +133,26 @@
         }"
       >
         <aside class="tag-directory-rail" :aria-label="t('tagSpace.sidebarTitle')">
-          <div class="rail-overview" :aria-label="t('tagSpace.allTags')">
-            <span class="rail-icon rail-icon--tag"><SvgIcon :src="icon.resource.tag" size="16" /></span>
-            <span>{{ t('tagSpace.allTags') }}</span>
-            <strong>{{ sidebarTagTotal }}</strong>
-          </div>
-
+          <BInput
+            v-model:value="directoryKeyword"
+            class="rail-search"
+            clearable
+            :placeholder="t('tagSpace.searchPlaceholder')"
+          >
+            <template #prefix><SvgIcon :src="icon.navigation.search" size="16" aria-hidden="true" /></template>
+          </BInput>
           <div v-if="directorySidebarTags.length" v-auto-scrollbar class="rail-section rail-section--directory">
             <span class="rail-section__label">{{ t('tagSpace.directoryTopics') }}</span>
+            <div v-if="sidebarError" class="rail-directory-state" role="alert">
+              <span>{{ t('tagSpace.staleError') }}</span>
+              <BButton size="small" @click="loadSidebarTags()">{{ t('common.retry') }}</BButton>
+            </div>
+            <p v-else-if="sidebarLoading" class="rail-directory-state" role="status">{{ t('common.loading') }}</p>
+            <p v-else-if="!filteredDirectoryTags.length" class="rail-directory-state" role="status">
+              {{ t('tagSpace.noMatchTitle') }}
+            </p>
             <BActionMenu
-              v-for="sidebarTag in directorySidebarTags"
+              v-for="sidebarTag in filteredDirectoryTags"
               :key="sidebarTag.id"
               :items="tagDirectoryActionItems(sidebarTag)"
               :triggers="tagMenuTriggers"
@@ -651,6 +661,7 @@
   } from '@/components/base/BasicComponents/actionMenu';
   import Alert from '@/components/base/BasicComponents/BModal/Alert';
   import TagGraphPanel from '@/components/tagGraph/TagGraphPanel.vue';
+  import BChip from '@/components/base/BasicComponents/BChip.vue';
   import TagDirectoryRow from '@/components/tagSpace/TagDirectoryRow.vue';
   import MobileTagDirectoryDrawer from '@/components/tagSpace/MobileTagDirectoryDrawer.vue';
   import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
@@ -692,6 +703,7 @@
   type TagSpaceViewMode = 'resources' | 'related' | 'graph' | 'todos';
   const viewMode = ref<TagSpaceViewMode>('resources');
   const sidebarTags = ref<TagSpaceSummary[]>([]);
+  const directoryKeyword = ref('');
   const sidebarTotal = ref(0);
   const sidebarLoading = ref(false);
   const sidebarError = ref(false);
@@ -754,6 +766,12 @@
     const tags = new Map(sidebarTags.value.map((item) => [String(item.id), item]));
     if (tag.value && !tags.has(displayedTagId.value)) tags.set(displayedTagId.value, tag.value);
     return [...tags.values()];
+  });
+  const filteredDirectoryTags = computed(() => {
+    const keyword = directoryKeyword.value.trim().toLocaleLowerCase();
+    return keyword
+      ? directorySidebarTags.value.filter((item) => String(item.name || '').toLocaleLowerCase().includes(keyword))
+      : directorySidebarTags.value;
   });
   const resourceGroups = computed(() => {
     const definitions = [
@@ -2188,50 +2206,21 @@
     background: transparent;
   }
 
-  .rail-overview {
-    min-width: 0;
-    width: 100%;
+  .rail-search {
     flex: 0 0 auto;
-    min-height: 38px;
-    padding: 7px 4px;
+    margin-bottom: 8px;
+  }
+
+  .rail-directory-state {
+    margin: 0;
+    padding: 8px 7px;
     display: flex;
-    align-items: center;
-    gap: 6px;
-    box-sizing: border-box;
-    border-radius: 10px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
     color: var(--desc-color);
-  }
-
-  .rail-overview > span:nth-child(2) {
-    flex: 0 0 auto;
     font-size: 12px;
-    text-align: left;
-    white-space: nowrap;
-  }
-
-  .rail-overview strong {
-    margin-left: auto;
-    margin-right: 2px;
-    flex: 0 0 auto;
-    color: inherit;
-    font-size: 11px;
-  }
-
-  .rail-icon {
-    width: 24px;
-    height: 24px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex: 0 0 auto;
-    border-radius: 7px;
-    color: var(--resource-tag-color, #ec4899);
-    background: var(--workspace-panel-bg-color);
-    overflow: hidden;
-  }
-
-  .rail-icon--tag {
-    color: var(--primary-color);
+    overflow-wrap: anywhere;
   }
 
   .rail-section {
@@ -2913,7 +2902,6 @@
     gap: 10px;
   }
 
-  .skeleton-directory-overview,
   .skeleton-directory-row {
     min-width: 0;
     min-height: 38px;
@@ -2935,9 +2923,12 @@
     border-radius: 7px;
   }
 
-  .skeleton-block--directory-title {
-    width: 66px;
-    height: 10px;
+  .skeleton-block--directory-search {
+    width: 100%;
+    height: 32px;
+    flex: 0 0 auto;
+    margin-bottom: 8px;
+    border-radius: 8px;
   }
 
   .skeleton-block--directory-name {
