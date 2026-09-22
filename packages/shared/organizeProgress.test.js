@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   organizeObjectOutcome,
+  organizeWorkResolved,
   organizeOutcomeGroup,
   summarizeOrganizeLane,
   organizeOverviewStatus,
@@ -129,7 +130,7 @@ it("keeps unfinished matching out of manual totals and groups", () => {
     organizeOutcomeGroup(organizeObjectOutcome(row, "completed")),
   );
   expect(groups.filter((group) => group === "manual")).toHaveLength(2);
-  expect(groups.filter((group) => group === "analysis")).toHaveLength(5);
+  expect(groups.filter((group) => group === "unfinished")).toHaveLength(5);
   const lane = summarizeOrganizeLane([], true);
   expect(
     organizeOverviewStatus(
@@ -142,4 +143,56 @@ it("keeps unfinished matching out of manual totals and groups", () => {
       "completed",
     ),
   ).toBe("partialFailure");
+});
+
+it.each([
+  [{}, "unchanged"],
+  [{ work_open: 1 }, "processing"],
+  [{ pending: 1, work_failed: 1 }, "review"],
+  [{ reviewed: 1, work_failed: 1 }, "unfinished"],
+  [{ reviewed: 1, work_open: 1 }, "processing"],
+  [{ reviewed: 1 }, "reviewed"],
+  [{ expired: 1, work_open: 1 }, "processing"],
+  [{ expired: 1, manual: 1 }, "manual"],
+  [{ expired: 1, reviewed: 1 }, "unavailable"],
+  [{ resource_available: 0 }, "unavailable"],
+  [{ resource_available: 0, rule_status: "removed" }, "reviewed"],
+  [{ rule_status: "skipped" }, "skipped"],
+  [{ rule_status: undefined }, "unfinished"],
+])("keeps resource lifecycle exclusive: %j → %s", (patch, expected) => {
+  const row = {
+    resource_available: 1,
+    rule_status: "completed",
+    ai_status: "not_needed",
+    ...patch,
+  };
+  expect(organizeObjectOutcome(row, "running", 3)).toBe(expected);
+});
+
+it("review resolves only the checks covered by the failed attempt", () => {
+  const checks = [
+    { kind: "tags", status: "applied" },
+    { kind: "title", status: "failed" },
+  ];
+  expect(organizeWorkResolved("analysis", checks, ["tags", "title"])).toBe(
+    false,
+  );
+  expect(organizeWorkResolved("analysis", checks, ["tags"])).toBe(true);
+  expect(organizeWorkResolved("prepare", checks)).toBe(false);
+  expect(organizeWorkResolved("analysis", checks, [])).toBe(false);
+  expect(
+    organizeWorkResolved("tag_icon", [{ kind: "tag_icon", status: "ignored" }]),
+  ).toBe(true);
+  expect(
+    organizeObjectOutcome(
+      {
+        resource_available: 1,
+        rule_status: "completed",
+        ai_status: "failed",
+        ai_resolved: 1,
+        reviewed: 1,
+      },
+      "completed",
+    ),
+  ).toBe("reviewed");
 });

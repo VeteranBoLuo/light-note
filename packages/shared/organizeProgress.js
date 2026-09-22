@@ -106,16 +106,17 @@ export function organizeObjectOutcome(row, runStatus, runVersion = 3) {
   if (row.rule_status === "removed") bucket = "reviewed";
   else if (!yes("resource_available")) bucket = "unavailable";
   else if (yes("pending")) bucket = "review";
-  else if (yes("expired")) bucket = "unavailable";
   else if (active || yes("pending_work"))
     bucket = ended ? "unfinished" : "processing";
   else if (
     yes("work_failed") ||
     yes("failed") ||
-    ["failed", "conflict", "cancelled"].includes(row.ai_status)
+    (["failed", "conflict", "cancelled"].includes(row.ai_status) &&
+      !yes("ai_resolved"))
   )
     bucket = "unfinished";
   else if (yes("manual") || yes("unsupported")) bucket = "manual";
+  else if (yes("expired")) bucket = "unavailable";
   else if (yes("reviewed")) bucket = "reviewed";
   else if (row.rule_status === "skipped") bucket = "skipped";
   else if (
@@ -123,7 +124,11 @@ export function organizeObjectOutcome(row, runStatus, runVersion = 3) {
     (runVersion === 1 && runStatus === "completed")
   )
     bucket = "unchanged";
-  else bucket = ended ? "unfinished" : "processing";
+  else
+    bucket =
+      ["pending", "checked", "loaded"].includes(row.rule_status) && !ended
+        ? "processing"
+        : "unfinished";
   return bucket;
 }
 
@@ -132,10 +137,35 @@ export function organizeOutcomeGroup(outcome) {
     review: "priority",
     manual: "manual",
     processing: "analysis",
-    unfinished: "analysis",
+    unfinished: "unfinished",
     reviewed: "reviewed",
     unchanged: "clear",
-    skipped: "analysis",
+    skipped: "skipped",
     unavailable: "expired",
   }[outcome];
+}
+
+// A failed attempt remains in the execution history. Only explicit review
+// decisions for every affected check resolve its outstanding resource work.
+export function organizeWorkResolved(kind, checks, aiKinds = []) {
+  const kinds = kind === "analysis" ? aiKinds : [kind];
+  if (kind === "prepare" || !kinds.length) return false;
+  return kinds.every((key) =>
+    checks.some(
+      (check) =>
+        check.kind === key && ["applied", "ignored"].includes(check.status),
+    ),
+  );
+}
+
+export function organizeReviewDisposition(checks, removed = false) {
+  const applied = removed || checks.some((s) => s.status === "applied");
+  const ignored = checks.some((s) => s.status === "ignored");
+  return applied && ignored
+    ? "mixed"
+    : applied
+      ? "applied"
+      : ignored
+        ? "ignored"
+        : "closed";
 }

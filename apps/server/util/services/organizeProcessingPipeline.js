@@ -4,6 +4,8 @@ import {
   summarizeOrganizeLane,
   summarizeOrganizeOutcomes,
   organizeObjectOutcome,
+  organizeWorkResolved,
+  organizeReviewDisposition,
 } from '@lightnote/shared/organize-progress';
 import { supportsOrganizeCheck } from '@lightnote/shared/organize-capabilities';
 import { json, transaction } from './organizeSuggestionStorage.js';
@@ -103,10 +105,13 @@ export async function markProcessingAi(c, itemId, status, token = null, errorCod
 
 export const manualSuggestionSql = () =>
   `s.status IN ('insufficient','no_suggestion') AND s.kind IN ('tags','title','tag_icon')`;
-export async function readOrganizeOutcomes(c, run, itemOutcomes) {
+export async function readOrganizeOutcomes(c, run, itemOutcomes, jobs) {
   const v3 = Number(run.run_version) === 3;
   const [rows] = await c.query(
     `SELECT i.id,i.resource_type,i.rule_status,i.ai_status,
+    GROUP_CONCAT(DISTINCT s.kind) check_kinds,
+    GROUP_CONCAT(DISTINCT CONCAT(s.kind,':',s.status)) check_states,
+    MAX(CAST(i.ai_kinds_json AS CHAR)) ai_kinds_json,
     MAX(JSON_UNQUOTE(JSON_EXTRACT(i.snapshot_json,'$.unsupported'))='true') unsupported,
     (${availableResourceSql()}) resource_available,
     MAX(s.status='pending' OR (s.status='info' AND JSON_UNQUOTE(JSON_EXTRACT(s.payload_json,'$.action')) IN ('trash','duplicate_bookmarks'))) pending,
@@ -121,15 +126,54 @@ export async function readOrganizeOutcomes(c, run, itemOutcomes) {
     WHERE i.run_id=? AND i.user_id=? GROUP BY i.id,i.rule_status,i.ai_status,i.resource_type,i.resource_id,i.user_id`,
     [run.id, run.user_id],
   );
+  const byItem = new Map();
+  for (const job of jobs || []) {
+    if (!byItem.has(job.item_id)) byItem.set(job.item_id, []);
+    byItem.get(job.item_id).push(job);
+  }
+  for (const row of rows) {
+    const checks = String(row.check_states || '')
+      .split(',')
+      .filter(Boolean)
+      .map((value) => {
+        const [kind, status] = value.split(':');
+        return { kind, status };
+      });
+    row.disposition = organizeReviewDisposition(checks, row.rule_status === 'removed');
+    const aiKinds = json(row.ai_kinds_json);
+    row.ai_resolved = organizeWorkResolved('analysis', checks, Array.isArray(aiKinds) ? aiKinds : []);
+    if (jobs) {
+      row.work = (byItem.get(row.id) || []).map(({ kind, lane, status }) => ({
+        kind,
+        lane,
+        status,
+        resolved:
+          ['failed', 'conflict', 'partial', 'cancelled'].includes(status) &&
+          organizeWorkResolved(kind, checks, Array.isArray(aiKinds) ? aiKinds : []),
+      }));
+      // Keep the query's pending facts; a later worker transition can be newer
+      // than the lane snapshot. Resolve failures only when review proves it.
+      if (
+        row.work.some((w) => w.resolved) &&
+        row.work.every((w) => w.resolved || ['completed', 'skipped'].includes(w.status))
+      )
+        row.work_failed = 0;
+    }
+  }
   if (itemOutcomes)
     for (const row of rows)
       itemOutcomes.set(row.id, {
         type: row.resource_type,
+        disposition: row.disposition,
+        ...(jobs ? { work: row.work } : {}),
+        checks: String(row.check_kinds || '')
+          .split(',')
+          .filter(Boolean),
         outcome: organizeObjectOutcome(row, run.status, Number(run.run_version || 1)),
       });
   return summarizeOrganizeOutcomes(rows, run.status, Number(run.run_version || 1));
 }
-export async function readOrganizeReview(c, run, itemOutcomes) {
+export async function readOrganizeReview(c, run, itemOutcomes, jobs) {
   const [rows] = await c.query(
     `SELECT
     SUM(${pendingReviewSql()}) pending,
@@ -141,7 +185,7 @@ export async function readOrganizeReview(c, run, itemOutcomes) {
     WHERE i.run_id=? AND i.user_id=?`,
     [run.id, run.user_id],
   );
-  const outcomes = await readOrganizeOutcomes(c, run, itemOutcomes);
+  const outcomes = await readOrganizeOutcomes(c, run, itemOutcomes, jobs);
   return {
     pending: Number(rows[0]?.pending || 0),
     manualObjects: outcomes.manual,
@@ -165,6 +209,7 @@ export async function readOrganizeOverview(c, run, ruleProgress, itemOutcomes) {
       jobs.filter((j) => j.lane === name).map((j) => ({ itemId: j.item_id, status: j.status })),
       settled,
     );
+  const review = await readOrganizeReview(c, run, itemOutcomes, jobs);
   return {
     inspection: {
       total: Number(json(run.summary_json).total),
@@ -176,7 +221,7 @@ export async function readOrganizeOverview(c, run, ruleProgress, itemOutcomes) {
     },
     direct: lane('direct', directSettled),
     ai: lane('ai', directSettled),
-    review: await readOrganizeReview(c, run, itemOutcomes),
+    review,
   };
 }
 

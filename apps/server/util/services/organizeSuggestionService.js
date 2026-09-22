@@ -131,7 +131,7 @@ export async function listSuggestionRuns(db = pool, { userId }) {
 }
 export async function getSuggestionRun(
   db = pool,
-  { userId, id, after = '', resourceType = '', kind = '', reviewOnly = false },
+  { userId, id, after = '', resourceType = '', kind = '', reviewOnly = false, reviewState = '' },
 ) {
   const run = await ownedRun(db, userId, id);
   const [progress] = await db.query(
@@ -142,6 +142,16 @@ export async function getSuggestionRun(
     `SELECT ${effectiveStatusSql()} AS status,COUNT(*) AS total FROM organize_suggestions s JOIN organize_suggestion_items i ON i.id=s.item_id AND i.user_id=s.user_id WHERE s.run_id=? AND s.user_id=? GROUP BY 1`,
     [id, userId],
   );
+  const [ruleProgress] = isRunV2(run)
+    ? await db.query(
+        'SELECT rule_status,COUNT(*) AS total FROM organize_suggestion_items WHERE run_id=? GROUP BY rule_status',
+        [id],
+      )
+    : [[]];
+  const itemOutcomes = new Map();
+  const overview =
+    Number(run.run_version) === 3 ? await readOrganizeOverview(db, run, ruleProgress, itemOutcomes) : undefined;
+  const review = overview?.review || (await readOrganizeReview(db, run, itemOutcomes));
   const where = ['i.run_id=?', 'i.user_id=?', 'i.id>?'];
   const params = [id, userId, after];
   if (reviewOnly)
@@ -156,6 +166,16 @@ export async function getSuggestionRun(
     where.push('EXISTS(SELECT 1 FROM organize_suggestions s WHERE s.item_id=i.id AND s.kind=?)');
     params.push(kind);
   }
+  const filteredReview = ['applied', 'ignored', 'mixed', 'closed'].includes(reviewState);
+  const excluded = filteredReview
+    ? [...itemOutcomes]
+        .filter(([, result]) => result.outcome === 'reviewed' && result.disposition !== reviewState)
+        .map(([itemId]) => itemId)
+    : [];
+  if (excluded.length) {
+    where.push('i.id NOT IN (?)');
+    params.push(excluded);
+  }
   const [items] = await db.query(
     `SELECT i.*, (${availableResourceSql()}) AS resource_available, (${availableResourceSql('i', true)}) AS resource_trashed FROM organize_suggestion_items i WHERE ${where.join(' AND ')} ORDER BY i.id LIMIT 31`,
     params,
@@ -167,24 +187,17 @@ export async function getSuggestionRun(
         [userId, id, page.map((i) => i.id)],
       )
     : [[]];
-  const [ruleProgress] = isRunV2(run)
-    ? await db.query(
-        'SELECT rule_status,COUNT(*) AS total FROM organize_suggestion_items WHERE run_id=? GROUP BY rule_status',
-        [id],
-      )
-    : [[]];
-  const itemOutcomes = new Map();
-  const overview =
-    Number(run.run_version) === 3 ? await readOrganizeOverview(db, run, ruleProgress, itemOutcomes) : undefined;
-  const review = overview?.review || (await readOrganizeReview(db, run, itemOutcomes));
-  let groupTotals;
-  if (resourceType === 'tag') {
-    groupTotals = {};
-    for (const { type, outcome } of itemOutcomes.values())
-      if (type === 'tag') {
-        const group = organizeOutcomeGroup(outcome);
-        groupTotals[group] = (groupTotals[group] || 0) + 1;
-      }
+  const groupTotals = {};
+  for (const { type, outcome, checks, disposition } of itemOutcomes.values()) {
+    if (
+      (resourceType && type !== resourceType) ||
+      (kind && !checks.includes(kind)) ||
+      (reviewOnly && outcome !== 'review') ||
+      (filteredReview && outcome === 'reviewed' && disposition !== reviewState)
+    )
+      continue;
+    const group = organizeOutcomeGroup(outcome);
+    groupTotals[group] = (groupTotals[group] || 0) + 1;
   }
   return {
     ...mapRun(run),
@@ -200,6 +213,7 @@ export async function getSuggestionRun(
       aiStatus: i.ai_status,
       ruleStatus: i.rule_status,
       outcome: itemOutcomes.get(i.id)?.outcome,
+      work: itemOutcomes.get(i.id)?.work,
       errorCode: i.error_code,
       suggestions: suggestions
         .filter((s) => s.item_id === i.id)

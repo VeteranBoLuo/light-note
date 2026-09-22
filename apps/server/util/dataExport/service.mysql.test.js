@@ -145,12 +145,12 @@ describe.skipIf(!socket)('export jobs on isolated MySQL', () => {
   });
   it('passes the additive schema assertions', async () => {
     const source = await fs.readFile(new URL('../../migrations/schema-assertions.sql', import.meta.url), 'utf8');
-    const tail = source.slice(source.indexOf('-- Unified data export'));
-    for (const sql of tail
+    const assertions = source
       .replace(/^--.*$/gm, '')
       .split(';')
-      .filter((s) => s.trim()))
-      expect((await state.pool.query(sql))[0]).toEqual([]);
+      .filter((s) => /^\s*SELECT\s+'data_export_[^']+'\s+AS\s+check_name/i.test(s));
+    expect(assertions.length).toBeGreaterThan(0);
+    for (const sql of assertions) expect((await state.pool.query(sql))[0]).toEqual([]);
   });
   it('rejects creation when account deletion won the row lock', async () => {
     await state.pool.query("UPDATE user SET role='deleted',del_flag=1 WHERE id='u'");

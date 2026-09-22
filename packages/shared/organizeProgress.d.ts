@@ -61,3 +61,14 @@ export function organizeObjectOutcome(
 export function organizeOutcomeGroup(
   outcome: keyof OrganizeOutcomeCounts,
 ): string;
+
+export function organizeWorkResolved(
+  kind: string,
+  checks: Array<{ kind: string; status: string }>,
+  aiKinds?: string[],
+): boolean;
+
+export function organizeReviewDisposition(
+  checks: Array<{ status: string }>,
+  removed?: boolean,
+): "mixed" | "applied" | "ignored" | "closed";

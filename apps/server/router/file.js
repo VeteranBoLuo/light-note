@@ -108,6 +108,7 @@ const formatFileRecord = (file) => {
 
   return {
     id: file.id,
+    isTop: Number(file.is_top) === 1,
     fileName: file.file_name,
     fileType: file.file_type,
     ext: getFileExtension(file.file_name),
@@ -434,6 +435,31 @@ router.post('/confirmUpload', async (req, res) => {
     return sendFileServerError(res, 'confirm-upload', error);
   } finally {
     connection.release();
+  }
+});
+
+// Explicit desired state makes retries idempotent; never mutate file contents or timestamps.
+router.post('/setFilePin', async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  const { id, isTop } = req.body || {};
+  if (!['string', 'number'].includes(typeof id) || !/^[1-9]\d*$/.test(String(id || '')) || typeof isTop !== 'boolean') {
+    return res.send(resultData(null, 400, L(req, '置顶参数无效', 'Invalid pin parameters')));
+  }
+  try {
+    const [result] = await pool.query(
+      'UPDATE files SET is_top = ? WHERE id = ? AND create_by = ? AND del_flag = 0',
+      [isTop ? 1 : 0, String(id), req.user.id],
+    );
+    if (!result.affectedRows) {
+      const [rows] = await pool.query(
+        'SELECT id FROM files WHERE id = ? AND create_by = ? AND del_flag = 0',
+        [String(id), req.user.id],
+      );
+      if (!rows.length) return res.send(resultData(null, 404, L(req, '文件不存在或无权访问', 'File not found')));
+    }
+    return res.send(resultData({ id: String(id), isTop }, 200));
+  } catch {
+    return res.send(resultData(null, 500, L(req, '置顶状态更新失败，请稍后重试', 'Could not update pin. Try again later.')));
   }
 });
 

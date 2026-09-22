@@ -23,26 +23,27 @@ describe('cloud file empty state layout', () => {
 
   it('移动端文件操作抽屉只提供当前文件的模块 AI，不进入全局助手', () => {
     const mobileActionsSource = source.match(
-      /const mobileFileActions = computed<MobilePageActionItem\[\]>\(\(\) => \{([\s\S]*?)\n  \}\);/,
+      /function fileActions\(file: any\): MobilePageActionItem\[\] \{([\s\S]*?)\n  \}/,
     )?.[1];
     const mobileHandlerSource = source.match(
-      /function handleMobileFileAction\(action: MobilePageActionItem\) \{([\s\S]*?)\n  \}/,
+      /function handleFileAction\(file: any, key: string\) \{([\s\S]*?)\n  \}/,
     )?.[1];
 
     expect(mobileActionsSource).toBeDefined();
     expect(mobileActionsSource).toContain("key: 'ai'");
     expect(mobileActionsSource).toContain("label: t('cloudSpace.aiUseFile')");
     expect(mobileHandlerSource).toBeDefined();
-    expect(mobileHandlerSource).toContain("action.key === 'ai'");
+    expect(mobileHandlerSource).toContain("key === 'ai'");
     expect(mobileHandlerSource).toContain('openFilesInAi([file])');
     expect(source).toContain('<AiSkillDialog');
     expect(source).not.toContain("router.push('/ai')");
   });
 
   it('桌面卡片与列表的更多菜单都复用单文件分析能力，并按文件支持范围显示', () => {
-    expect(source.match(/label: \$t\('cloudSpace\.aiUseFile'\)/g)).toHaveLength(2);
-    expect(source.match(/function: \(\) => openFilesInAi\(\[item\]\)/g)).toHaveLength(2);
-    expect(source.match(/\.\.\.\(isAiDocumentFileNameSupported\(item\.fileName\)/g)).toHaveLength(2);
+    expect(source.match(/:items="desktopFileActions\(item\)"/g)).toHaveLength(4);
+    expect(source).toContain("isAiDocumentFileNameSupported(file.fileName)");
+    expect(source).toContain("label: t('cloudSpace.aiUseFile')");
+    expect(source).toContain("handleFileAction(mobileActionFile.value, action.key)");
   });
 
   it('桌面批量栏脱离文档流，数量变化不会重排文件列表和后续操作', () => {

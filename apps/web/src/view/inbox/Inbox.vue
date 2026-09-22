@@ -4516,6 +4516,8 @@
     gap: 10px;
     width: 100%;
     min-height: 44px;
+    height: auto;
+    line-height: 1.5;
     padding: 10px 16px;
     margin: 0;
     border: 0;

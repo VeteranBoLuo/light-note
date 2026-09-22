@@ -86,6 +86,8 @@
     },
   );
 
+  defineExpose({ close: doClose });
+
   const emit = defineEmits<{
     select: [key: string, source: BActionMenuSource];
     openChange: [open: boolean, source: BActionMenuSource];

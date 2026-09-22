@@ -14,7 +14,14 @@
       data-mobile-resource-scroll
       @scroll.passive="onFileListScroll"
     >
-      <article
+      <BActionMenu
+        :ref="(menu) => setFileContextMenu(item.id, menu)"
+        :items="desktopFileActions(item)"
+        :triggers="['contextmenu']"
+        :disabled="bookmark.isMobile || batchMode || Boolean(item.isRename)"
+        :aria-label="item.fileName"
+        :tabindex="bookmark.isMobile || batchMode ? undefined : 0"
+        @select="handleFileAction(item, $event)"
         v-for="item in cloud.fileList"
         :key="item.id"
         class="file-card"
@@ -24,7 +31,10 @@
           'file-card--selected': batchMode && selectedRows.includes(item.id),
         }"
         :draggable="canDragFile(item)"
-        @click="onCardClick(item)"
+        @click="
+          closeFileContext(item);
+          onCardClick(item);
+        "
         @dragstart="onFileDragStart($event, item)"
         @dragend="onFileDragEnd"
       >
@@ -101,67 +111,19 @@
               />
             </BTooltip>
           </div>
-          <div v-if="!batchMode" class="file-card-more" @click.stop>
-            <b-dropdown
+          <div v-if="!batchMode" class="file-card-more" @click.stop="closeFileContext(item)">
+            <BActionMenu
               v-if="!bookmark.isMobile"
-              class="card-more-menu"
-              :trigger="'click'"
-              :menu-options="[
-                {
-                  label: $t('common.reName'),
-                  icon: icon.cloudSpace.rename,
-                  function: () => openRenameModal(item),
-                },
-                {
-                  label: $t('cloudSpace.share'),
-                  icon: icon.cloudSpace.share,
-                  function: () => handleShareFile(item.id, item.fileName, item.fileType),
-                },
-                {
-                  label: $t('cloudSpace.moveFile'),
-                  icon: icon.cloudSpace.moveFile,
-                  function: () => emit('moveField', [item]),
-                },
-                {
-                  label: $t('cloudSpace.relateTags'),
-                  icon: icon.manage_categoryBtn_tag,
-                  function: () => openTagDialog(item),
-                },
-                ...(canJoinProject
-                  ? [
-                      {
-                        label: $t('toolbox.project.join'),
-                        icon: icon.toolbox.research,
-                        function: () => joinProject([{ type: 'file', id: String(item.id), title: item.fileName }]),
-                      },
-                    ]
-                  : []),
-                ...(isAiDocumentFileNameSupported(item.fileName)
-                  ? [
-                      {
-                        label: $t('cloudSpace.aiUseFile'),
-                        icon: icon.ai.organize,
-                        function: () => openFilesInAi([item]),
-                      },
-                    ]
-                  : []),
-                {
-                  label: item.isPending ? $t('inbox.removeExisting') : $t('inbox.addExisting'),
-                  icon: icon.contextMenu.inbox,
-                  function: () => toggleFileInbox(item),
-                },
-                {
-                  label: $t('common.delete'),
-                  icon: icon.noteDetail.delete,
-                  danger: true,
-                  function: () => handleDelFile(item),
-                },
-              ]"
+              :items="desktopFileActions(item)"
+              :triggers="['click']"
+              placement="bottom-right"
+              :aria-label="$t('common.more')"
+              @select="handleFileAction(item, $event)"
             >
-              <BTooltip :title="$t('common.more')">
-                <svg-icon class="more-icon" :src="icon.common.more" size="20" />
-              </BTooltip>
-            </b-dropdown>
+              <BButton class="file-more-button" :aria-label="$t('common.more')" icon-only>
+                <SvgIcon :src="icon.common.more" size="20" />
+              </BButton>
+            </BActionMenu>
             <BButton
               v-else
               class="mobile-file-more"
@@ -177,6 +139,9 @@
             <span class="file-card-type" :class="`file-card-type--${getFileCategory(item)}`">{{
               getFileTypeLabel(item)
             }}</span>
+            <BTooltip v-if="item.isTop" :title="$t('common.pinned')"
+              ><SvgIcon class="file-pin-mark" :src="icon.contextMenu.pin" size="16" :aria-label="$t('common.pinned')"
+            /></BTooltip>
             <InboxPendingBadge v-if="item.isPending" />
             <span class="file-card-size">{{ formatFileSize(item.fileSize) }}</span>
           </div>
@@ -192,7 +157,7 @@
             }}</span>
           </div>
         </div>
-      </article>
+      </BActionMenu>
     </div>
     <div v-if="downloadProgress.visible" class="download-progress-floating">
       <div class="download-progress-header">
@@ -275,7 +240,14 @@
       data-mobile-resource-scroll
       @scroll.passive="onFileListScroll"
     >
-      <div
+      <BActionMenu
+        :ref="(menu) => setFileContextMenu(item.id, menu)"
+        :items="desktopFileActions(item)"
+        :triggers="['contextmenu']"
+        :disabled="bookmark.isMobile || batchMode || Boolean(item.isRename)"
+        :aria-label="item.fileName"
+        :tabindex="bookmark.isMobile || batchMode ? undefined : 0"
+        @select="handleFileAction(item, $event)"
         class="field-item"
         :class="{
           'field-item-draggable': canDragFile(item),
@@ -283,7 +255,10 @@
           'field-item--selected': batchMode && selectedRows.includes(item.id),
         }"
         :draggable="canDragFile(item)"
-        @click="onListRowClick(item)"
+        @click="
+          closeFileContext(item);
+          onListRowClick(item);
+        "
         @dragstart="onFileDragStart($event, item)"
         @dragend="onFileDragEnd"
         v-for="item in cloud.fileList"
@@ -301,6 +276,9 @@
           <div v-if="!item.isRename" class="file-label flex-align-center" @click.stop="onFileLabelClick(item)">
             <svg-icon :src="icon.cloudSpace.fileIcon[getFileCategory(item)]" size="20" style="min-width: 20px" />
             <span class="file-name text-hidden">{{ item.fileName }}</span>
+            <BTooltip v-if="item.isTop" :title="$t('common.pinned')"
+              ><SvgIcon class="file-pin-mark" :src="icon.contextMenu.pin" size="16" :aria-label="$t('common.pinned')"
+            /></BTooltip>
             <InboxPendingBadge v-if="item.isPending" />
           </div>
           <b-input
@@ -343,7 +321,11 @@
               </div>
             </template>
           </b-input>
-          <div v-if="!item.isRename && !batchMode" class="flex-align-center handle-btn" @click.stop>
+          <div
+            v-if="!item.isRename && !batchMode"
+            class="flex-align-center handle-btn"
+            @click.stop="closeFileContext(item)"
+          >
             <BTooltip v-if="!bookmark.isMobile" :title="$t('cloudSpace.download')">
               <svg-icon
                 class="download-icon"
@@ -370,73 +352,18 @@
                 v-click-log="{ module: '云空间', operation: `打开文件标签配置【${item.fileName}】` }"
               />
             </BTooltip>
-            <b-dropdown
+            <BActionMenu
               v-if="!bookmark.isMobile"
-              :trigger="'click'"
-              align="right"
-              :menu-options="[
-                ...(bookmark.isMobile
-                  ? [
-                      {
-                        label: $t('common.reName'),
-                        icon: icon.cloudSpace.rename,
-                        function: () => openRenameModal(item),
-                      },
-                      {
-                        label: $t('cloudSpace.download'),
-                        icon: icon.cloudSpace.download,
-                        function: () => handleDownloadFile(item),
-                      },
-                      {
-                        label: $t('cloudSpace.relateTags'),
-                        icon: icon.manage_categoryBtn_tag,
-                        function: () => openTagDialog(item),
-                      },
-                    ]
-                  : []),
-                ...(canJoinProject
-                  ? [
-                      {
-                        label: $t('toolbox.project.join'),
-                        icon: icon.toolbox.research,
-                        function: () => joinProject([{ type: 'file', id: String(item.id), title: item.fileName }]),
-                      },
-                    ]
-                  : []),
-                ...(isAiDocumentFileNameSupported(item.fileName)
-                  ? [
-                      {
-                        label: $t('cloudSpace.aiUseFile'),
-                        icon: icon.ai.organize,
-                        function: () => openFilesInAi([item]),
-                      },
-                    ]
-                  : []),
-                {
-                  label: $t('cloudSpace.share'),
-                  icon: icon.cloudSpace.share,
-                  function: () => handleShareFile(item.id, item.fileName, item.fileType),
-                },
-                {
-                  label: $t('cloudSpace.moveFile'),
-                  icon: icon.cloudSpace.moveFile,
-                  function: () => emit('moveField', [item]),
-                },
-                {
-                  label: item.isPending ? $t('inbox.removeExisting') : $t('inbox.addExisting'),
-                  icon: icon.contextMenu.inbox,
-                  function: () => toggleFileInbox(item),
-                },
-                {
-                  label: $t('common.delete'),
-                  icon: icon.noteDetail.delete,
-                  danger: true,
-                  function: () => handleDelFile(item),
-                },
-              ]"
+              :items="desktopFileActions(item)"
+              :triggers="['click']"
+              placement="bottom-right"
+              :aria-label="$t('common.more')"
+              @select="handleFileAction(item, $event)"
             >
-              <svg-icon class="download-icon" :src="icon.common.more" size="20" />
-            </b-dropdown>
+              <BButton class="file-more-button" :aria-label="$t('common.more')" icon-only>
+                <SvgIcon :src="icon.common.more" size="20" />
+              </BButton>
+            </BActionMenu>
             <BButton
               v-else
               class="mobile-file-more"
@@ -475,7 +402,7 @@
           }}</div>
           <div v-if="!bookmark.isMobile" class="text-hidden" :title="item.uploadTime">{{ item.uploadTime }} </div>
         </div>
-      </div>
+      </BActionMenu>
     </div>
     <div v-if="!cloud.loading && !cloud.fileList.length" class="file-empty-state">
       <span class="file-empty-icon">
@@ -486,7 +413,12 @@
       <BButton v-if="cloud.pendingOnly" class="file-empty-action" @click="clearFileFilters">
         {{ $t('note.clearFilter') }}
       </BButton>
-      <BButton v-if="!cloud.pendingOnly && !bookmark.isMobile" type="primary" class="file-empty-action" @click="triggerUpload">
+      <BButton
+        v-if="!cloud.pendingOnly && !bookmark.isMobile"
+        type="primary"
+        class="file-empty-action"
+        @click="triggerUpload"
+      >
         {{ $t('cloudSpace.uploadFile') }}
       </BButton>
     </div>
@@ -822,8 +754,10 @@
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
+  import BActionMenu from '@/components/base/BasicComponents/BActionMenu.vue';
+  import type { BActionMenuItem } from '@/components/base/BasicComponents/actionMenu';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
-  import { bookmarkStore, cloudSpaceStore } from '@/store';
+  import { bookmarkStore, cloudSpaceStore, useUserStore } from '@/store';
   import { apiBasePost } from '@/http/request.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { useAndroidPullRefresh } from '@/composables/useAndroidPullRefresh';
@@ -883,6 +817,7 @@
   }
   const cloud = cloudSpaceStore();
   const bookmark = bookmarkStore();
+  const user = useUserStore();
   const router = useRouter();
 
   function fileSortLabel(field: 'fileName' | 'fileSize') {
@@ -915,13 +850,19 @@
   const fieldListRef = ref<HTMLElement | null>(null);
   const mobileFileActionsOpen = ref(false);
   const mobileActionFile = ref<any | null>(null);
-  const mobileFileActions = computed<MobilePageActionItem[]>(() => {
-    const file = mobileActionFile.value;
-    if (!file) return [];
-    return [
+  const mobileFileActions = computed(() => (mobileActionFile.value ? fileActions(mobileActionFile.value) : []));
+  const pinningFileIds = ref(new Set<string>());
+  function fileActions(file: any): MobilePageActionItem[] {
+    const actions: MobilePageActionItem[] = [
       ...(canJoinProject.value
         ? [{ key: 'joinProject', label: t('toolbox.project.join'), icon: icon.toolbox.research }]
         : []),
+      {
+        key: 'pin',
+        label: t(file.isTop ? 'common.unpin' : 'common.pin'),
+        icon: file.isTop ? icon.contextMenu.unpin : icon.contextMenu.pin,
+        disabled: user.adminContext?.mode === 'readonly' || pinningFileIds.value.has(String(file.id)),
+      },
       { key: 'rename', label: t('common.reName'), icon: icon.cloudSpace.rename },
       { key: 'download', label: t('cloudSpace.download'), icon: icon.cloudSpace.download },
       { key: 'tags', label: t('cloudSpace.relateTags'), icon: icon.manage_categoryBtn_tag },
@@ -937,7 +878,45 @@
       },
       { key: 'delete', label: t('common.delete'), icon: icon.noteDetail.delete, danger: true, dividerBefore: true },
     ];
-  });
+    return actions.map((action) => ({
+      ...action,
+      disabled: action.disabled || (user.adminContext?.mode === 'readonly' && !['download', 'ai'].includes(action.key)),
+    }));
+  }
+  const fileContextMenus = new Map<string, { close: () => void }>();
+  function setFileContextMenu(id: string | number, menu: unknown) {
+    if (menu) fileContextMenus.set(String(id), menu as { close: () => void });
+    else fileContextMenus.delete(String(id));
+  }
+  function closeFileContext(file: any) {
+    fileContextMenus.get(String(file.id))?.close();
+  }
+  function desktopFileActions(file: any): BActionMenuItem[] {
+    return fileActions(file).flatMap((action) => [
+      ...(action.dividerBefore ? [{ key: `${action.key}-divider`, divider: true }] : []),
+      action,
+    ]);
+  }
+  async function toggleFilePin(file: any) {
+    const id = String(file.id);
+    if (user.adminContext?.mode === 'readonly' || blockGuestWrite('pin-file') || pinningFileIds.value.has(id)) return;
+    const isTop = !file.isTop;
+    pinningFileIds.value.add(id);
+    try {
+      const res = await apiBasePost('/api/file/setFilePin', { id, isTop }, { silent: true });
+      if (res?.status !== 200) {
+        message.error(res?.msg || t('cloudSpace.pinFailed'));
+        return;
+      }
+      file.isTop = isTop;
+      message.success(t(isTop ? 'common.pinned' : 'common.unpinned'));
+      if (!(await cloud.queryFieldList({ silent: true }))) message.warning(t('common.refreshFailed'));
+    } catch {
+      message.error(t('cloudSpace.pinFailed'));
+    } finally {
+      pinningFileIds.value.delete(id);
+    }
+  }
 
   function openMobileFileActions(file: any) {
     mobileActionFile.value = file;
@@ -945,17 +924,20 @@
   }
 
   function handleMobileFileAction(action: MobilePageActionItem) {
-    const file = mobileActionFile.value;
-    if (!file) return;
-    if (action.key === 'joinProject') joinProject([{ type: 'file', id: String(file.id), title: file.fileName }]);
-    else if (action.key === 'rename') openRenameModal(file);
-    else if (action.key === 'download') void handleDownloadFile(file);
-    else if (action.key === 'tags') void openTagDialog(file);
-    else if (action.key === 'ai') openFilesInAi([file]);
-    else if (action.key === 'share') void handleShareFile(file.id, file.fileName, file.fileType);
-    else if (action.key === 'move') emit('moveField', [file]);
-    else if (action.key === 'inbox') void toggleFileInbox(file);
-    else if (action.key === 'delete') handleDelFile(file);
+    handleFileAction(mobileActionFile.value, action.key);
+  }
+  function handleFileAction(file: any, key: string) {
+    if (!file || !fileActions(file).some((action) => action.key === key && !action.disabled)) return;
+    if (key === 'joinProject') joinProject([{ type: 'file', id: String(file.id), title: file.fileName }]);
+    else if (key === 'pin') void toggleFilePin(file);
+    else if (key === 'rename') openRenameModal(file);
+    else if (key === 'download') void handleDownloadFile(file);
+    else if (key === 'tags') void openTagDialog(file);
+    else if (key === 'ai') openFilesInAi([file]);
+    else if (key === 'share') void handleShareFile(file.id, file.fileName, file.fileType);
+    else if (key === 'move') emit('moveField', [file]);
+    else if (key === 'inbox') void toggleFileInbox(file);
+    else if (key === 'delete') handleDelFile(file);
   }
 
   /*
@@ -2209,6 +2191,20 @@
 </script>
 
 <style scoped lang="less">
+  .file-more-button.b_btn {
+    padding: 0;
+    width: 28px;
+    height: 28px;
+    background: transparent;
+  }
+  .file-card.b-action-menu-anchor {
+    display: block;
+  }
+
+  .file-pin-mark {
+    flex-shrink: 0;
+    color: var(--workspace-purple-text);
+  }
   @import (reference) '@/assets/css/workspace-surfaces.less';
   .field-list {
     --file-card-min-width: 260px;
@@ -3002,6 +2998,7 @@
   }
 
   .file-card-size {
+    margin-left: auto;
     font-size: 12px;
     color: var(--desc-color);
     font-weight: 600;

@@ -601,8 +601,8 @@ it.each(['pause', 'resume'])('整理 %s 不能在管理员代管中消耗目标�
   expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ data: { code: 'ADMIN_MAINTENANCE_FORBIDDEN' } }));
 });
 
-it.each(['managedUploadBatch', 'prepareManagedUpload', 'confirmManagedUpload', 'abortManagedUpload'])(
-  '上传接口 %s 保持统一的代管权限及奖励边界',
+it.each(['managedUploadBatch', 'prepareManagedUpload', 'confirmManagedUpload', 'abortManagedUpload', 'setFilePin'])(
+  '文件写接口 %s 保持统一的代管权限及奖励边界',
   (operation) => {
     for (const subjectRole of ['user', 'visitor']) {
       const readonly = createReq(`/file/${operation}`, 'POST', 'readonly', subjectRole);

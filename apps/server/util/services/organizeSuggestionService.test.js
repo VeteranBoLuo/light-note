@@ -800,3 +800,61 @@ it('游客整理 Worker 使用管理员额度、游客资源身份', async () =>
   expect(claims.every((sql) => !/SKIP LOCKED|NOWAIT/.test(sql))).toBe(true);
   expect(db.commit).toHaveBeenCalled();
 });
+
+it('已处理筛选在分页前覆盖整轮资源，分组计数不使用当前页长度', async () => {
+  const rows = [
+    {
+      id: 'a',
+      resource_type: 'tag',
+      resource_available: 1,
+      rule_status: 'completed',
+      ai_status: 'completed',
+      reviewed: 1,
+      check_kinds: 'tag_icon',
+      check_states: 'tag_icon:applied',
+    },
+    {
+      id: 'z',
+      resource_type: 'tag',
+      resource_available: 1,
+      rule_status: 'completed',
+      ai_status: 'completed',
+      reviewed: 1,
+      check_kinds: 'tag_icon',
+      check_states: 'tag_icon:ignored',
+    },
+    {
+      id: 'n',
+      resource_type: 'note',
+      resource_available: 1,
+      rule_status: 'completed',
+      ai_status: 'completed',
+      reviewed: 1,
+      check_kinds: 'tags',
+      check_states: 'tags:ignored',
+    },
+  ];
+  const db = database((sql, args) => {
+    if (sql.includes('FROM organize_suggestion_runs')) return [[{ ...run, run_version: 2, status: 'completed' }]];
+    if (sql.startsWith('SELECT i.id,i.resource_type')) return [rows];
+    if (sql.includes('GROUP BY')) return [[]];
+    if (sql.startsWith('SELECT i.*')) {
+      expect(sql).toContain('i.id NOT IN (?)');
+      expect(args).toEqual(['run', 'u', 'm', 'tag', 'tag_icon', ['a']]);
+      return [[{ id: 'z', snapshot_json: {}, resource_available: 1 }]];
+    }
+    if (sql.startsWith('SELECT * FROM organize_suggestions')) return [[]];
+  });
+  const result = await getSuggestionRun(db, {
+    userId: 'u',
+    id: 'run',
+    after: 'm',
+    resourceType: 'tag',
+    kind: 'tag_icon',
+    reviewState: 'ignored',
+  });
+  expect(result.items.map((i) => i.id)).toEqual(['z']);
+  expect(result.groupTotals).toEqual({ reviewed: 1 });
+  expect(result.review.outcomes.reviewed).toBe(3);
+  expect(db.query.mock.calls.some(([sql]) => /^(UPDATE|INSERT|DELETE)/.test(sql))).toBe(false);
+});

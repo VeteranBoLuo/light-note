@@ -1,3 +1,5 @@
+import { buildObjectKey } from '../obsClient.js';
+import { uniqueCloudFileName } from './cloudFileNameService.js';
 import pool from '../../db/index.js';
 import { resolveAgentTimeRange } from '../agent/timeRange.js';
 import { invalidatePersonalKnowledgeCache } from '../personalKnowledgeSearch.js';
@@ -74,6 +76,9 @@ export async function restoreTrashResources({ userId, filters: rawFilters, conte
   let noteRestored = false;
   try {
     await connection.beginTransaction();
+    if (filters.types.includes('file')) {
+      await connection.query('SELECT id FROM user WHERE id = ? LIMIT 1 FOR UPDATE', [userId]);
+    }
     for (const type of filters.types) {
       if (type === 'note') {
         const restored = await restoreOwnedNoteTrash(connection, {
@@ -90,6 +95,24 @@ export async function restoreTrashResources({ userId, filters: rawFilters, conte
       }
       const config = TRASH_TABLE_CONFIG[type];
       const { where, params } = buildWhere(config, filters, userId);
+      if (type === 'file') {
+        const [files] = await connection.query(
+          `SELECT id, file_name FROM files WHERE ${where} ORDER BY id FOR UPDATE`,
+          params,
+        );
+        let count = 0;
+        for (const file of files) {
+          const name = await uniqueCloudFileName(connection, userId, file.file_name, { includeDeleted: false });
+          // 恢复只分配展示名，保留对象地址、稳定 ID 和所有图片引用。
+          const [result] = await connection.query(
+            "UPDATE files SET file_name = ?, obs_key = COALESCE(NULLIF(obs_key, ''), ?), del_flag = 0, deleted_at = NULL WHERE id = ? AND create_by = ? AND del_flag = 1",
+            [name, buildObjectKey(userId, file.file_name), file.id, userId],
+          );
+          count += result.affectedRows;
+        }
+        if (count) results.push({ type, count });
+        continue;
+      }
       const [result] = await connection.query(
         `UPDATE \`${config.table}\` SET del_flag = 0, deleted_at = NULL WHERE ${where}`,
         params,

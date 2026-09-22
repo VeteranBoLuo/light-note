@@ -84,6 +84,7 @@ describe('blockGuestWrite', () => {
     userState.role = 'visitor';
     userState.visitorWorkspace = true;
     expect(blockGuestWrite('upload-file')).toBe(false);
+    expect(blockGuestWrite('pin-file')).toBe(false);
     expect(blockGuestWrite('manage-folder')).toBe(false);
     expect(blockGuestWrite('update-file-tags')).toBe(false);
     expect(blockGuestWrite('inbox-enqueue')).toBe(false);

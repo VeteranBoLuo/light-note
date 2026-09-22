@@ -1,0 +1,168 @@
+/* Shared by the rich editor iframe and every community Markdown surface. */
+:root .community-markdown {
+  color: var(--text-color);
+  font-family: var(--app-font-family);
+  font-size: 16px;
+  font-weight: 400;
+  font-synthesis: none;
+  line-height: 1.85;
+  overflow-wrap: anywhere;
+  min-width: 0;
+  text-align: start;
+}
+:root .community-markdown p {
+  margin: 0 0 1em;
+  line-height: inherit;
+}
+:root .community-markdown h1,
+:root .community-markdown h2,
+:root .community-markdown h3,
+:root .community-markdown h4,
+:root .community-markdown h5,
+:root .community-markdown h6 {
+  margin: 1.25em 0 0.5em;
+  font-weight: 700;
+  line-height: 1.5;
+  color: inherit;
+}
+:root .community-markdown h1 {
+  font-size: 2em;
+}
+:root .community-markdown h2 {
+  font-size: 1.5em;
+}
+:root .community-markdown h3 {
+  font-size: 1.25em;
+}
+:root .community-markdown h4 {
+  font-size: 1.125em;
+}
+:root .community-markdown h5 {
+  font-size: 1em;
+}
+:root .community-markdown h6 {
+  font-size: 0.875em;
+}
+:root .community-markdown strong,
+:root .community-markdown b {
+  font-weight: 700;
+}
+:root .community-markdown em,
+:root .community-markdown i {
+  font-style: italic;
+}
+:root .community-markdown del,
+:root .community-markdown s {
+  text-decoration: line-through;
+}
+:root .community-markdown u {
+  text-decoration: underline;
+}
+:root .community-markdown a {
+  color: var(--workspace-purple-text);
+  font-weight: inherit;
+  text-decoration: underline;
+}
+:root .community-markdown a:focus-visible {
+  outline: 2px solid var(--workspace-purple-text);
+  outline-offset: 2px;
+}
+:root .community-markdown ul,
+:root .community-markdown ol {
+  margin: 0 0 1em;
+  padding: 0 0 0 1.75em;
+}
+:root .community-markdown ul {
+  list-style-type: disc;
+}
+:root .community-markdown ol {
+  list-style-type: decimal;
+}
+:root .community-markdown li {
+  margin: 0.25em 0;
+}
+:root .community-markdown li > ul,
+:root .community-markdown li > ol {
+  margin-bottom: 0;
+}
+:root .community-markdown li > p {
+  margin-bottom: 0.5em;
+}
+:root .community-markdown blockquote {
+  margin: 1em 0;
+  padding: 4px 16px;
+  border-left: 3px solid var(--workspace-purple-text);
+  color: var(--desc-color);
+}
+:root .community-markdown pre,
+:root .community-markdown code {
+  font-family: 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Courier New', monospace;
+  text-shadow: none;
+}
+:root .community-markdown code {
+  font-size: 0.875em;
+  background: var(--workspace-hover);
+  border-radius: 4px;
+  padding: 0.15em 0.35em;
+}
+:root .community-markdown pre {
+  margin: 1em 0;
+  padding: 16px;
+  background: var(--pre-bg-color);
+  color: var(--pre-text-color);
+  border: 1px solid var(--pre-border-color);
+  box-shadow: inset 0 1px 0 var(--pre-highlight-color, transparent);
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 1.6;
+  white-space: pre;
+  overflow-wrap: normal;
+  overflow: auto;
+}
+:root .community-markdown pre code {
+  font-size: inherit;
+  color: inherit;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+}
+:root .community-markdown hr {
+  margin: 1.5em 0;
+  border: 0;
+  border-top: 1px solid var(--workspace-border);
+}
+:root .community-markdown table {
+  display: block;
+  max-width: 100%;
+  margin: 1em 0;
+  overflow: auto;
+  border-collapse: collapse;
+}
+:root .community-markdown td,
+:root .community-markdown th {
+  border: 1px solid var(--workspace-border);
+  padding: 8px;
+}
+:root .community-markdown th {
+  font-weight: 700;
+}
+:root .community-markdown [align='left'] {
+  text-align: left;
+}
+:root .community-markdown [align='center'] {
+  text-align: center;
+}
+:root .community-markdown [align='right'] {
+  text-align: right;
+}
+:root .community-markdown input[type='checkbox'] {
+  accent-color: var(--workspace-purple-text);
+  vertical-align: middle;
+}
+:root .community-markdown > :first-child {
+  margin-top: 0;
+}
+:root .community-markdown > :last-child,
+:root .community-markdown blockquote > :last-child {
+  margin-bottom: 0;
+}

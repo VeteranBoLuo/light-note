@@ -25,6 +25,7 @@ const VISITOR_WORKSPACE_WRITE_SOURCES = new Set([
   'upload-file',
   'move-file',
   'rename-file',
+  'pin-file',
   'delete-file',
   'share-file',
   'update-file-tags',

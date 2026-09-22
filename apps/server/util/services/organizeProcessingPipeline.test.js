@@ -220,6 +220,66 @@ it('returns the same exclusive outcomes for review counts and per-item grouping'
   const result = await readOrganizeOverview(db, { ...run, status: 'completed' }, [], itemOutcomes);
   expect(result.review.manualObjects).toBe(2);
   expect(result.review.outcomes).toMatchObject({ review: 3, manual: 2, unfinished: 5 });
-  expect(itemOutcomes.get('5')).toEqual({ type: 'tag', outcome: 'unfinished' });
-  expect(itemOutcomes.get('3')).toEqual({ type: 'tag', outcome: 'manual' });
+  expect(itemOutcomes.get('5')).toMatchObject({ type: 'tag', outcome: 'unfinished', work: [] });
+  expect(itemOutcomes.get('3')).toMatchObject({ type: 'tag', outcome: 'manual', work: [] });
+});
+
+it('已有标签的资料立即完成准备，不为无需修改项创建分析任务', async () => {
+  const existing = {
+    ...buildSnapshot('bookmark', { id: 'b', title: 'CSS Loaders', url: 'https://example.com' }),
+    tags: [{ id: 't', name: 'CSS' }],
+  };
+  const db = directDb('prepare', (sql) => {
+    if (sql.startsWith('SELECT * FROM organize_suggestion_runs'))
+      return [[{ ...run, options_json: { checks: ['tags'] } }]];
+    if (sql.startsWith('SELECT * FROM organize_suggestion_items'))
+      return [[{ ...item, resource_type: 'bookmark', version_hash: existing.version, snapshot_json: existing }]];
+  });
+  await runOrganizeDirect('w', db, { source: async () => existing });
+  expect(inserts(db)).toEqual([]);
+  expect(db.query.mock.calls.some(([sql]) => sql.includes("rule_status='completed'"))).toBe(true);
+  expect(
+    db.query.mock.calls.some(
+      ([sql, args]) => sql.startsWith('INSERT IGNORE INTO organize_suggestions') && args[0][0][5] === 'not_applicable',
+    ),
+  ).toBe(true);
+});
+
+it('手动应用解决图标失败，但不消除其他尚未完成的检查', async () => {
+  const rows = [
+    {
+      id: 'icon',
+      resource_type: 'tag',
+      resource_available: 1,
+      rule_status: 'completed',
+      ai_status: 'failed',
+      ai_kinds_json: '["tag_icon"]',
+      check_states: 'tag_icon:applied',
+      reviewed: 1,
+      work_failed: 1,
+    },
+    {
+      id: 'mixed',
+      resource_type: 'note',
+      resource_available: 1,
+      rule_status: 'completed',
+      ai_status: 'failed',
+      ai_kinds_json: '["tags","title"]',
+      check_states: 'tags:applied,title:failed',
+      reviewed: 1,
+      failed: 1,
+      work_failed: 1,
+    },
+  ];
+  const jobs = rows.map((r) => ({ item_id: r.id, kind: 'analysis', lane: 'ai', status: 'failed' }));
+  const db = database((sql) => {
+    if (sql.startsWith('SELECT item_id')) return [jobs];
+    if (sql.startsWith('SELECT i.id,')) return [rows];
+    if (sql.includes('manual_objects')) return [[{ pending: 0, manual_objects: 0, retry_files: 0 }]];
+  });
+  const outcomes = new Map();
+  const result = await readOrganizeOverview(db, { ...run, status: 'completed' }, [], outcomes);
+  expect(result.review.outcomes).toMatchObject({ reviewed: 1, unfinished: 1 });
+  expect(outcomes.get('icon').work).toEqual([{ kind: 'analysis', lane: 'ai', status: 'failed', resolved: true }]);
+  expect(outcomes.get('mixed').work[0].resolved).toBe(false);
 });

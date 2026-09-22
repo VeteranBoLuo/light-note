@@ -634,6 +634,7 @@
   import CommunityPostDiscussion from '@/components/community/CommunityPostDiscussion.vue';
   import { shouldOpenCommunityPost, hasNewCommunityPost } from '@/utils/communityNavigation';
   import { rememberCommunityLayout } from '@/utils/communityLayoutAvailability';
+  import { restoreCommunityFeed } from '@/utils/communityFeedRestore';
   import ChatUserProfileContent from '@/components/communityChat/ChatUserProfileContent.vue';
 
   const { t, locale } = useI18n(),
@@ -786,6 +787,7 @@
           scrollKey(),
           JSON.stringify({
             anchor: card?.dataset.postId,
+            anchorPublishedAt: posts.value.find((post) => post.publicId === card?.dataset.postId)?.publishedAt,
             offset: card ? card.getBoundingClientRect().top - top : 0,
             head: latestHead.value,
             headPublishedAt: latestHeadPublishedAt.value,
@@ -818,7 +820,7 @@
   }
   function handleDetailRemoved(postId: string) {
     if (mode.value !== 'detail' || route.params.id !== postId) return;
-    // 撤回或删除改变了列表，不能沿用只加载旧锚点及更早帖子的阅读恢复范围。
+    // 撤回或删除后不再恢复已失效的阅读位置。
     clearScrollMemory();
     void router.replace('/community/feed');
   }
@@ -907,16 +909,24 @@
             ? { type: managementTab.value, ...(managementTab.value === 'publishedPosts' ? { scope: 'all' } : {}) }
             : {};
     if (more && cursor.value) params.before = cursor.value;
-    else if (mode.value === 'feed' && scrollMemory()?.anchor) params.anchor = scrollMemory().anchor;
-    const data = await feedGet<FeedPage<any>>(pagePath(), params);
-    if (current !== generation) return;
+    const path = pagePath();
+    const data =
+      mode.value === 'feed' && !more
+        ? await restoreCommunityFeed<FeedPost>(
+            (before) => feedGet<FeedPage<FeedPost>>(path, { ...params, ...(before ? { before } : {}) }),
+            scrollMemory(),
+            () => current === generation,
+          )
+        : await feedGet<FeedPage<any>>(path, params);
+    if (current !== generation || !data) return;
+    if ('restoreFailed' in data && data.restoreFailed) moreFailed.value = true;
     if (['manage', 'moderation'].includes(mode.value))
       managed.value = more ? [...managed.value, ...data.items] : data.items;
     else posts.value = more ? [...posts.value, ...data.items] : data.items;
     cursor.value = data.nextCursor;
     if (mode.value === 'feed' && !more) {
-      latestHead.value = scrollMemory()?.head || data.items[0]?.publicId || '';
-      latestHeadPublishedAt.value = scrollMemory()?.headPublishedAt || data.items[0]?.publishedAt || '';
+      latestHead.value = data.items[0]?.publicId || '';
+      latestHeadPublishedAt.value = data.items[0]?.publishedAt || '';
     }
   }
   async function load() {
@@ -1316,20 +1326,25 @@
       flex-wrap: wrap;
       margin-bottom: 24px;
     }
-    .feed-main-column h1 {
+    .feed-main-column > h1,
+    .feed-heading h1 {
       font-size: 24px;
       margin: 0 0 6px;
     }
-    .feed-main-column h2 {
+    .feed-empty > h2,
+    .managed-post-heading > h2,
+    .profile-section-heading > h2 {
       font-size: 18px;
       margin: 12px 0;
       line-height: 1.6;
       overflow-wrap: anywhere;
     }
-    .feed-main-column p {
+    .feed-main-column > p,
+    .feed-heading p,
+    .feed-empty > p {
       line-height: 1.75;
     }
-    .feed-main-column small,
+    .feed-main-column > small,
     .feed-meta,
     .feed-heading p {
       color: var(--desc-color);
@@ -1358,22 +1373,12 @@
       padding: 22px 0;
       border-bottom: 1px solid var(--surface-border-color);
     }
-    .feed-post a {
+    .feed-post > h2 > a {
       color: inherit;
       text-decoration: none;
     }
-    .feed-post h2 a:hover {
+    .feed-post > h2 > a:hover {
       color: var(--primary-color);
-    }
-    .feed-excerpt {
-      font-weight: 400;
-      display: -webkit-box;
-      -webkit-line-clamp: 4;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
-      white-space: normal;
-      overflow-wrap: anywhere;
-      line-height: 1.8;
     }
     .feed-body {
       font-weight: 400;
@@ -1450,7 +1455,8 @@
       & {
         padding: 0;
       }
-      .feed-main-column h1 {
+      .feed-main-column > h1,
+      .feed-heading h1 {
         font-size: 21px;
       }
       .feed-editor {

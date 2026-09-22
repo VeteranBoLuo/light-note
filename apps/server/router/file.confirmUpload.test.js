@@ -470,3 +470,48 @@ describe('云空间待整理列表', () => {
     }
   });
 });
+
+describe('云文件置顶', () => {
+  beforeEach(() => mocks.pool.query.mockReset());
+  it.each([true, false])('保存明确状态 %s 并限制 owner 和未删除文件', async (isTop) => {
+    mocks.pool.query.mockResolvedValueOnce([{ affectedRows: 1 }]);
+    const res = response();
+    await mocks.routes.get('/setFilePin').at(-1)({ user: { id: 'owner' }, body: { id: '17', isTop } }, res);
+    expect(mocks.pool.query).toHaveBeenCalledWith(
+      'UPDATE files SET is_top = ? WHERE id = ? AND create_by = ? AND del_flag = 0',
+      [isTop ? 1 : 0, '17', 'owner'],
+    );
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200, data: { id: '17', isTop } }));
+  });
+  it.each([{ id: '1', isTop: 'false' }, { id: '1', isTop: 1 }, { id: '../2', isTop: true }, { id: 0, isTop: true }])('拒绝非法参数 %j', async body => {
+    const res = response();
+    await mocks.routes.get('/setFilePin').at(-1)({ user: { id: 'owner' }, body }, res);
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 400 }));
+    expect(mocks.pool.query).not.toHaveBeenCalled();
+  });
+  it('重复请求保持成功，越权和已删除文件统一返回不存在', async () => {
+    for (const exists of [true, false]) {
+      mocks.pool.query.mockResolvedValueOnce([{ affectedRows: 0 }]).mockResolvedValueOnce([exists ? [{ id: 17 }] : []]);
+      const res = response();
+      await mocks.routes.get('/setFilePin').at(-1)({ user: { id: 'owner' }, body: { id: 17, isTop: true } }, res);
+      expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: exists ? 200 : 404 }));
+    }
+  });
+  it('数据库失败不报告成功', async () => {
+    mocks.pool.query.mockRejectedValueOnce(new Error('unavailable'));
+    const res = response();
+    await mocks.routes.get('/setFilePin').at(-1)({ user: { id: 'owner' }, body: { id: 17, isTop: true } }, res);
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 500 }));
+  });
+});
+
+it('文件分页响应返回持久置顶状态，置顶排序发生在 LIMIT 之前', async () => {
+  mocks.pool.query.mockReset();
+  mocks.pool.query.mockResolvedValueOnce([[{ id: 17, file_name: 'pinned.zip', is_top: 1 }, { id: 18, file_name: 'normal.zip', is_top: 0 }]]).mockResolvedValueOnce([[{ total: 2 }]]);
+  const res = response();
+  await mocks.routes.get('/queryFiles').at(-1)({ user: { id: 'owner' }, body: { currentPage: 1, pageSize: 48 } }, res);
+  expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200, data: expect.objectContaining({ items: expect.arrayContaining([
+    expect.objectContaining({ id: 17, isTop: true }), expect.objectContaining({ id: 18, isTop: false }),
+  ]) }) }));
+  expect(mocks.pool.query.mock.calls[0][0]).toMatch(/ORDER BY files.is_top DESC, files.create_time DESC, files.id DESC LIMIT \? OFFSET \?/);
+});

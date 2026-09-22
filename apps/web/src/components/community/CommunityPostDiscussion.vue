@@ -660,7 +660,6 @@
   }
 
   .community-discussion {
-    background: var(--workspace-content);
     border: 0;
     padding: 0;
     margin-top: 16px;

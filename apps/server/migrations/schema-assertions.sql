@@ -3951,3 +3951,9 @@ OR (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE(
 SELECT 'data_export_indexes' AS check_name, 'missing export task or item indexes' AS detail FROM DUAL
 WHERE (SELECT COUNT(DISTINCT INDEX_NAME) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='data_export_tasks' AND INDEX_NAME IN ('PRIMARY','export_request','export_owner','export_queue')) <> 4
 OR (SELECT COUNT(DISTINCT INDEX_NAME) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='data_export_items' AND INDEX_NAME IN ('PRIMARY','export_resource','export_items')) <> 3;
+
+-- Cloud file pinning must be installed before API rollout.
+SELECT '[file_pin] missing_column' AS check_name, 'files.is_top' AS detail FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='files' AND column_name='is_top' AND data_type='tinyint' AND is_nullable='NO' AND column_default='0');
+SELECT '[file_pin] missing_index' AS check_name, 'idx_files_owner_pin_time' AS detail FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='files' AND index_name='idx_files_owner_pin_time');

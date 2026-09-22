@@ -76,8 +76,8 @@ it('名称未变化时不复制也不删除原对象', async () => {
   expect(deleteObjectFromObs).not.toHaveBeenCalled();
   expect(relocateCloudImage).not.toHaveBeenCalled();
 });
-it.each(['name', 'object'])('名称或对象地址冲突均不复制、不覆盖 (%s)', async (kind) => {
-  const c = db({ file_name: 'old.pdf' }, kind === 'name' ? [{ id: 2 }] : [], kind === 'object' ? [{ id: 2 }] : []);
+it('正常文件同名仍拒绝，不覆盖', async () => {
+  const c = db({ file_name: 'old.pdf' }, [{ id: 2 }]);
   await expect(renameOwnedCloudFile(c, { userId: 'u', id: 1, name: 'new.pdf' })).rejects.toMatchObject({
     code: 'FILE_NAME_CONFLICT',
   });
@@ -91,11 +91,31 @@ it('复制失败不写文件名也不清理旧原图', async () => {
   expect(c.query.mock.calls.some(([s]) => s.startsWith('UPDATE'))).toBe(false);
   expect(deleteObjectFromObs).not.toHaveBeenCalled();
 });
-it('图片资产冲突在复制前失败', async () => {
-  relocateCloudImage.mockRejectedValueOnce(Object.assign(Error('conflict'), { code: 'FILE_IMAGE_TARGET_CONFLICT' }));
+it.each(['file', 'asset'])('回收站或保留图片占用目标时使用独立地址 (%s)', async (kind) => {
+  const c = db({ file_name: 'old.jpg', obs_key: 'files/u/old.jpg' }, [], kind === 'file' ? [{ id: 2 }] : []);
+  if (kind === 'asset')
+    relocateCloudImage.mockRejectedValueOnce(Object.assign(Error('conflict'), { code: 'FILE_IMAGE_TARGET_CONFLICT' }));
+  const result = await renameOwnedCloudFile(c, { userId: 'u', id: 1, name: 'new.jpg' });
+  expect(result.name).toBe('new.jpg');
+  const target = copyObjectInObs.mock.calls[0][1];
+  expect(target).toMatch(/^files\/u\/renamed\/[0-9a-f-]+\.jpg$/);
+  expect(copyObjectInObs).toHaveBeenCalledExactlyOnceWith('files/u/old.jpg', target);
+  expect(relocateCloudImage).toHaveBeenLastCalledWith(expect.anything(), expect.anything(), target, 'new.jpg');
+  expect(c.query).toHaveBeenCalledWith(expect.stringContaining('UPDATE files'), [
+    'new.jpg',
+    target,
+    'https://obs.invalid/files/u/',
+    1,
+    'u',
+  ]);
+  await result.cleanup();
+  expect(deleteObjectFromObs).not.toHaveBeenCalledWith('files/u/new.jpg');
+});
+it('图片源状态冲突仍拒绝，不复制原件', async () => {
+  relocateCloudImage.mockRejectedValueOnce(Object.assign(Error('conflict'), { code: 'FILE_IMAGE_SOURCE_CONFLICT' }));
   await expect(
     renameOwnedCloudFile(db({ file_name: 'old.jpg' }), { userId: 'u', id: 1, name: 'new.jpg' }),
-  ).rejects.toMatchObject({ code: 'FILE_IMAGE_TARGET_CONFLICT' });
+  ).rejects.toMatchObject({ code: 'FILE_IMAGE_SOURCE_CONFLICT' });
   expect(copyObjectInObs).not.toHaveBeenCalled();
 });
 it.each(['file', 'asset'])('延迟清理时旧地址重新被使用则保留原图 (%s)', async (kind) => {

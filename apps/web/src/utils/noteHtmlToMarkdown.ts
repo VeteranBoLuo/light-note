@@ -98,11 +98,14 @@ function moveTaskItemContentToParagraph(
   while (source.firstChild) paragraph.appendChild(source.firstChild);
 }
 
-export function createNoteTurndownService() {
+export function createNoteTurndownService(
+  options: { blankReplacement?: (content: string, node: HTMLElement & { isBlock?: boolean }) => string } = {},
+) {
   const service = new TurndownService({
     headingStyle: 'atx',
     codeBlockStyle: 'fenced',
     bulletListMarker: '-',
+    ...options,
   });
   // 普通表格和删除线都有标准 GFM 表达，不能因为格式切换就退化成连续纯文本。
   // 合并单元格仍无法一一表达，由转换预检明确告警并依靠转换前还原点兜底。

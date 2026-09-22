@@ -162,6 +162,9 @@
       <BButton @click="emit('preview-archive', resourceId)">{{ t('organizeWorkspace.archivePreview') }}</BButton>
     </div>
     <div v-else-if="canReview" class="suggestion-actions" :inert="batchBusy || undefined">
+      <BButton type="text" :disabled="busy || analyzing" @click="submit('ignore')">{{
+        t('organizeWorkspace.ignoreSuggestion')
+      }}</BButton>
       <BButton
         v-if="suggestion.kind === 'archive' && suggestion.archivePreview && resourceId"
         @click="emit('preview-archive', resourceId, suggestion.id)"
@@ -295,7 +298,7 @@
   // 请求重试沿用同一标识；服务端还以建议独立状态保证只写一次。
   let requestId = '',
     requestPayload = '';
-  async function submit(action: 'apply', value?: unknown) {
+  async function submit(action: 'apply' | 'ignore', value?: unknown) {
     if (busy.value) return;
     const signature = JSON.stringify([props.suggestion.id, action, value]);
     if (signature !== requestPayload) {

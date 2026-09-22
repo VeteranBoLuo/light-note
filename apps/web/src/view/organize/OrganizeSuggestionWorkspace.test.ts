@@ -480,7 +480,7 @@ it('正常结论与未覆盖检查区分，不用不适用胶囊代替具体解�
   api.listRuns.mockResolvedValue(ok([run]));
   api.getRun.mockResolvedValue(ok(run));
   await mount();
-  expect(document.body.textContent).toContain('本次检查未发现问题');
+  expect(document.body.textContent).toContain('无需调整');
   await openGroup('manual');
   await openGroup('clear');
   expect(document.body.textContent).toContain('部分项目暂无法检查');
@@ -1142,7 +1142,7 @@ it('存档生成失败直接显示原因，没有应用按钮', async () => {
   api.listRuns.mockResolvedValue(ok([run]));
   api.getRun.mockResolvedValue(ok(run));
   await mount();
-  await openGroup('analysis');
+  await openGroup('unfinished');
   document.querySelector<HTMLButtonElement>('[aria-controls="checks-failed-item"]')?.click();
   await settle();
   expect(document.body.textContent).toContain('生成失败');
@@ -1201,7 +1201,7 @@ it.each([false, true])('无正文存档按真实可审核成果分组，另有�
   api.listRuns.mockResolvedValue(ok([run]));
   api.getRun.mockResolvedValue(ok(run));
   await mount();
-  const target = hasTags ? 'priority' : 'analysis';
+  const target = hasTags ? 'priority' : 'unfinished';
   await openGroup(target);
   expect(document.querySelector(`.group-${target}`)?.textContent).toContain('无正文网页');
   if (!hasTags) expect(document.querySelector('.group-priority')).toBeNull();
@@ -1229,7 +1229,7 @@ it.each([false, true])('文件读取原因只显示一次，独立页数信息�
   api.listRuns.mockResolvedValue(ok([run]));
   api.getRun.mockResolvedValue(ok(run));
   await mount();
-  await openGroup('analysis');
+  await openGroup('unfinished');
   document.querySelector<HTMLButtonElement>('[aria-controls="checks-unreadable-item"]')?.click();
   await settle();
   const reason = zh.organizeFile.reasons.unsupported;
@@ -1254,7 +1254,7 @@ it('点击资源行空白展开收起；详情和资源入口不触发展开', a
   api.listRuns.mockResolvedValue(ok([run]));
   api.getRun.mockResolvedValue(ok(run));
   await mount();
-  await openGroup('analysis');
+  await openGroup('unfinished');
   const header = document.querySelector('.workspace-resource > header') as HTMLElement;
   const toggle = header.querySelector('.resource-detail-toggle') as HTMLButtonElement;
   expect(toggle.textContent?.trim()).toBe('');
@@ -1595,7 +1595,7 @@ it('统一对象状态使手动选择与未完成不重复，旧建议状态不�
         unavailable: 0,
       },
     },
-    groupTotals: { priority: 3, manual: 2, analysis: 5 },
+    groupTotals: { priority: 3, manual: 2, unfinished: 5 },
     items: Array.from({ length: 10 }, (_, i) => ({
       id: `item-${i}`,
       outcome: i < 3 ? 'review' : i < 5 ? 'manual' : 'unfinished',
@@ -1611,15 +1611,14 @@ it('统一对象状态使手动选择与未完成不重复，旧建议状态不�
   const manual = [...document.querySelectorAll('.result-kpi')].find((el) => el.textContent?.includes('需手动选择'))!;
   expect(manual.querySelector('strong')?.textContent).toBe('2项');
   expect(document.querySelector('.group-manual .group-toggle')?.textContent).toContain('2');
-  expect(document.querySelector('.group-analysis .group-toggle')?.textContent).toContain('5');
-  document.querySelector<HTMLButtonElement>('.group-analysis .group-toggle')!.click();
+  expect(document.querySelector('.group-unfinished .group-toggle')?.textContent).toContain('5');
+  await openGroup('unfinished');
+  document.querySelector<HTMLElement>('.group-unfinished .workspace-resource > header')!.click();
   await settle();
-  document.querySelector<HTMLElement>('.group-analysis .workspace-resource > header')!.click();
-  await settle();
-  expect(document.querySelector('.group-analysis')?.textContent).toContain('图标匹配未完成');
-  expect(document.querySelector('.group-analysis .resource-outcome')?.textContent).toContain('未完成');
-  expect(document.querySelector('.group-analysis .group-toggle')?.textContent).not.toContain('处理中或未完成');
-  expect(document.querySelector('.group-analysis')?.textContent).not.toContain('依据不足');
+  expect(document.querySelector('.group-unfinished')?.textContent).toContain('图标匹配未完成');
+  expect(document.querySelector('.group-unfinished .resource-outcome')?.textContent).toContain('未完成');
+  expect(document.querySelector('.group-unfinished .group-toggle')?.textContent).not.toContain('处理中或未完成');
+  expect(document.querySelector('.group-unfinished')?.textContent).not.toContain('依据不足');
 });
 
 it('标签首屏只读一次详情，完整结果到达前不暴露简略任务和成功状态', async () => {
@@ -1737,10 +1736,10 @@ it.each([
     reading: { state: 'waiting', complete: false },
     label: '读取中',
   },
-  { outcome: 'unfinished', aiStatus: 'cancelled', label: '已取消' },
-  { outcome: 'unfinished', aiStatus: 'completed', label: '未完成' },
-  { outcome: 'processing', aiStatus: 'running', label: '处理中' },
-  { outcome: undefined, aiStatus: 'failed', label: '未完成' },
+  { outcome: 'unfinished', aiStatus: 'cancelled', label: '内容分析 · 已取消' },
+  { outcome: 'unfinished', aiStatus: 'completed', label: '状态待确认' },
+  { outcome: 'processing', aiStatus: 'running', label: '内容分析 · 处理中' },
+  { outcome: undefined, aiStatus: 'failed', label: '内容分析 · 失败' },
 ])('已审核建议不覆盖对象主状态 $label ($outcome)', async ({ outcome, aiStatus, reading, label }) => {
   const run = {
     ...result(),
@@ -1761,8 +1760,9 @@ it.each([
   api.listRuns.mockResolvedValue(ok([run]));
   api.getRun.mockResolvedValue(ok(run));
   await mount();
-  await openGroup('analysis');
-  const card = document.querySelector('.group-analysis .workspace-resource')!;
+  const group = outcome === 'processing' ? 'analysis' : 'unfinished';
+  await openGroup(group);
+  const card = document.querySelector(`.group-${group} .workspace-resource`)!;
   expect(card.querySelector('.resource-conclusion')?.textContent).toBe(label);
   expect(card.querySelector('header')?.textContent).not.toContain('本次建议已处理');
   (card.querySelector('[aria-controls="checks-mixed"]') as HTMLButtonElement).click();
@@ -1780,4 +1780,106 @@ it('简报审核入口打开指定历史任务且后续分页保持待审核筛�
     expect.objectContaining({ resourceType: 'note', reviewOnly: true }),
   );
   expect(document.body.textContent).toContain('简报统计各次整理的待审核建议');
+});
+
+it('忽略建议成功后进入已处理，显示已忽略并同步跨组提示', async () => {
+  let ignored = false;
+  const snapshot = () => ({
+    ...result(),
+    items: [
+      {
+        id: 'ignore-item',
+        aiStatus: 'completed',
+        ruleStatus: 'completed',
+        resource: { id: 'n', type: 'note', title: '可忽略资料', source: { folder: '' }, guards: {}, tags: [] },
+        suggestions: [
+          {
+            id: 'ignore-tags',
+            kind: 'tags',
+            status: ignored ? 'ignored' : 'pending',
+            reason: '主题',
+            before: [],
+            after: [{ id: 't', name: '开发' }],
+          },
+        ],
+      },
+    ],
+  });
+  api.listRuns.mockResolvedValue(ok([snapshot()]));
+  api.getRun.mockImplementation(async () => ok(snapshot()));
+  api.actOnRunSuggestion.mockImplementation(async () => {
+    ignored = true;
+    return ok({ status: 'ignored' });
+  });
+  await mount();
+  button('忽略建议').click();
+  await settle();
+  expect(api.actOnRunSuggestion).toHaveBeenCalledWith('r', 'ignore-tags', 'ignore', undefined, expect.any(String));
+  expect(document.querySelector('.group-priority')).toBeNull();
+  await openGroup('reviewed');
+  expect(document.querySelector('.group-reviewed .resource-conclusion')?.textContent).toBe('已忽略');
+  expect(document.body.textContent).toContain('结果已更新，相关资料已移至：已处理');
+});
+
+it('保留完整资源结论及尚未生成建议的检查说明', async () => {
+  const row = {
+    ...result(),
+    status: 'running',
+    runVersion: 3,
+    items: [
+      {
+        id: 'waiting-duplicate',
+        ruleStatus: 'completed',
+        aiStatus: 'not_needed',
+        outcome: 'processing',
+        work: [{ kind: 'duplicate', lane: 'direct', status: 'waiting' }],
+        resource: { id: 'n', type: 'note', title: '已有标签资料', source: { folder: '' }, guards: {}, tags: [] },
+        suggestions: [
+          { id: 'existing-tags', kind: 'tags', status: 'not_applicable', reason: '已有标签，本次仅补齐无标签资料' },
+        ],
+      },
+    ],
+  };
+  api.listRuns.mockResolvedValue(ok([row]));
+  api.getRun.mockResolvedValue(ok(row));
+  await mount();
+  await openGroup('analysis');
+  expect(document.querySelector('.resource-conclusion')?.textContent).toBe('重复检查 · 等待资料准备');
+  button('检查详情：已有标签资料').click();
+  await settle();
+  expect(document.querySelector('.resource-expanded')?.textContent).toContain('重复检查 · 等待资料准备');
+  expect(document.querySelector('.group-clear')).toBeNull();
+});
+
+it('已处理筛选向服务端传递，空结果仍保留筛选入口', async () => {
+  const data = {
+    ...result(),
+    items: [
+      {
+        id: 'handled',
+        ruleStatus: 'completed',
+        aiStatus: 'completed',
+        outcome: 'reviewed',
+        resource: { id: 'n', type: 'note', title: '已应用资料', source: { folder: '' }, guards: {}, tags: [] },
+        suggestions: [{ id: 'tags', kind: 'tags', status: 'applied', reason: '主题' }],
+      },
+    ],
+  };
+  api.listRuns.mockResolvedValue(ok([data]));
+  api.getRun.mockImplementation(async (_id, params) =>
+    ok(params.reviewState === 'ignored' ? { ...data, items: [], groupTotals: { reviewed: 0 } } : data),
+  );
+  await mount();
+  await openGroup('reviewed');
+  const filter = document.querySelector<HTMLElement>('[role="combobox"][aria-label="筛选已处理结果"]')!;
+  filter.click();
+  await settle();
+  const ignored = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(
+    (el) => el.textContent?.trim() === '已忽略',
+  )!;
+  ignored.click();
+  await settle();
+  expect(api.getRun.mock.lastCall?.[1]).toMatchObject({ reviewState: 'ignored', after: '' });
+  expect(document.querySelector('.group-reviewed')).not.toBeNull();
+  expect(document.querySelector('.group-reviewed')?.textContent).toContain('当前显示 0 项');
 });

@@ -3,12 +3,12 @@ import { buildFileListOrderBy, normalizeFileListSort } from './fileListSort.js';
 
 describe('云空间服务端排序白名单', () => {
   it('名称与大小排序都生成稳定的全量 ORDER BY', () => {
-    expect(buildFileListOrderBy({ field: 'createTime', order: 'asc' })).toBe('files.create_time ASC, files.id ASC');
+    expect(buildFileListOrderBy({ field: 'createTime', order: 'asc' })).toBe('files.is_top DESC, files.create_time ASC, files.id ASC');
     expect(buildFileListOrderBy({ field: 'fileName', order: 'asc' })).toBe(
-      'files.file_name ASC, files.create_time DESC, files.id DESC',
+      'files.is_top DESC, files.file_name ASC, files.create_time DESC, files.id DESC',
     );
     expect(buildFileListOrderBy({ field: 'fileSize', order: 'desc' })).toBe(
-      'files.file_size DESC, files.create_time DESC, files.id DESC',
+      'files.is_top DESC, files.file_size DESC, files.create_time DESC, files.id DESC',
     );
   });
 
@@ -22,7 +22,7 @@ describe('云空间服务端排序白名单', () => {
       order: 'desc',
     });
     expect(buildFileListOrderBy({ field: 'file_name; DROP TABLE files', order: 'asc; --' })).toBe(
-      'files.create_time DESC, files.id DESC',
+      'files.is_top DESC, files.create_time DESC, files.id DESC',
     );
   });
 });

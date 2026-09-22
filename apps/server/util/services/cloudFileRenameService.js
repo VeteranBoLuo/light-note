@@ -1,9 +1,11 @@
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { bucketBaseUrl, buildObjectKey, copyObjectInObs, deleteObjectFromObs } from '../obsClient.js';
 import { relocateCloudImage } from '../imagePreview/relocate.js';
 import { purgeDocumentSourcesForCloudFiles } from '../aiDocument/service.js';
 import pool from '../../db/index.js';
 export async function renameOwnedCloudFile(connection, { userId, id, name, preserveExtension = false }) {
+  await connection.query('SELECT id FROM user WHERE id = ? LIMIT 1 FOR UPDATE', [userId]);
   const [rows] = await connection.query('SELECT * FROM files WHERE id=? AND create_by=? AND del_flag=0 FOR UPDATE', [
     id,
     userId,
@@ -26,18 +28,24 @@ export async function renameOwnedCloudFile(connection, { userId, id, name, prese
   );
   if (duplicates.length) throw Object.assign(new Error('已存在同名文件'), { status: 409, code: 'FILE_NAME_CONFLICT' });
   const sourceKey = file.obs_key || buildObjectKey(userId, file.file_name);
-  const targetKey = buildObjectKey(userId, finalName);
+  let targetKey = buildObjectKey(userId, finalName);
   if (sourceKey !== targetKey) {
     const [occupied] = await connection.query(
-      'SELECT id FROM files WHERE create_by=? AND obs_key=? AND id<>? FOR UPDATE',
-      [userId, targetKey, id],
+      "SELECT id FROM files WHERE create_by=? AND (obs_key=? OR ((obs_key IS NULL OR obs_key='') AND file_name=?)) AND id<>? FOR UPDATE",
+      [userId, targetKey, finalName, id],
     );
-    if (occupied.length)
-      throw Object.assign(new Error('目标文件名仍被其他文件占用，请换一个名称'), {
-        status: 409,
-        code: 'FILE_NAME_CONFLICT',
-      });
-    await relocateCloudImage(connection, { ...file, obs_key: sourceKey }, targetKey, finalName);
+    // 已删除文件或历史引用仍拥有旧对象；换用独立地址，不能覆盖或跳过保护。
+    const independentKey = () =>
+      buildObjectKey(userId, `renamed/${randomUUID()}${path.extname(finalName).slice(0, 17)}`);
+    if (occupied.length) targetKey = independentKey();
+    try {
+      await relocateCloudImage(connection, { ...file, obs_key: sourceKey }, targetKey, finalName);
+    } catch (error) {
+      // 物理删除后图片资产仍可能因正文引用而保留。该冲突在 relocate 的任何写入之前抛出。
+      if (error.code !== 'FILE_IMAGE_TARGET_CONFLICT') throw error;
+      targetKey = independentKey();
+      await relocateCloudImage(connection, { ...file, obs_key: sourceKey }, targetKey, finalName);
+    }
     await copyObjectInObs(sourceKey, targetKey);
   }
   await connection.query(

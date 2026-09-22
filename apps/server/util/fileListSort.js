@@ -15,6 +15,6 @@ export function buildFileListOrderBy(value = {}) {
   const sort = normalizeFileListSort(value);
   const direction = sort.order.toUpperCase();
   const column = FILE_LIST_SORT_COLUMNS[sort.field];
-  if (sort.field === 'createTime') return `${column} ${direction}, files.id ${direction}`;
-  return `${column} ${direction}, files.create_time DESC, files.id DESC`;
+  if (sort.field === 'createTime') return `files.is_top DESC, ${column} ${direction}, files.id ${direction}`;
+  return `files.is_top DESC, ${column} ${direction}, files.create_time DESC, files.id DESC`;
 }

@@ -55,6 +55,7 @@ export const get = handler(false, (req, userId) =>
     id: req.params.id,
     after: String(req.query.after || ''),
     reviewOnly: req.query.reviewOnly === 'true',
+    reviewState: String(req.query.reviewState || ''),
     resourceType: String(req.query.resourceType || ''),
     kind: String(req.query.kind || ''),
   }),

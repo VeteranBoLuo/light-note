@@ -27,6 +27,7 @@ function mountMenu(overrides: Record<string, unknown> = {}, slots: Record<string
     disabled: false,
     ...overrides,
   });
+  let menuApi: { close: () => void } | null = null;
   const onSelect = vi.fn();
   const onOpenChange = vi.fn();
   const app = createApp({
@@ -34,7 +35,14 @@ function mountMenu(overrides: Record<string, unknown> = {}, slots: Record<string
       return () =>
         h(
           BActionMenu,
-          { ...props, onSelect, onOpenChange },
+          {
+            ...props,
+            onSelect,
+            onOpenChange,
+            ref: (value: any) => {
+              menuApi = value;
+            },
+          },
           { default: () => h('div', { class: 'test-row' }, '标签'), ...slots },
         );
     },
@@ -45,6 +53,7 @@ function mountMenu(overrides: Record<string, unknown> = {}, slots: Record<string
     host.remove();
   };
   return {
+    close: () => menuApi?.close(),
     host,
     props,
     onSelect,
@@ -60,6 +69,16 @@ async function advance(ms: number) {
 }
 
 describe('BActionMenu', () => {
+  it('调用方切换同一资源的菜单入口时可关闭已打开的右键菜单', async () => {
+    const { anchor, close, onOpenChange } = mountMenu({ triggers: ['contextmenu'] });
+    anchor.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    await nextTick();
+    expect(document.querySelector('.b-action-menu-panel')).not.toBeNull();
+    close();
+    await nextTick();
+    expect(anchor.getAttribute('aria-expanded')).toBe('false');
+    expect(onOpenChange).toHaveBeenLastCalledWith(false, 'contextmenu');
+  });
   it('自定义节点与默认节点共同支持键盘导航，自定义操作可关闭菜单', async () => {
     const { anchor, onOpenChange, onSelect } = mountMenu(
       { triggers: ['click'] },

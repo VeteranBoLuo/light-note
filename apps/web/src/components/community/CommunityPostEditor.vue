@@ -267,7 +267,11 @@
   import type { Editor as RichEditor } from 'tinymce';
   import type { MarkdownCodeMirrorExpose } from '@/components/noteLibrary/detail/MarkdownCodeMirror.vue';
   import { renderCommunityMarkdown } from '@/utils/communityMarkdown';
-  import { noteHtmlToMarkdown } from '@/utils/noteHtmlToMarkdown';
+  import {
+    communityHtmlToMarkdown,
+    communityRichContentStyle,
+    communityRichValidElements,
+  } from '@/utils/communityContent';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import CommunityResourcePicker from './CommunityResourcePicker.vue';
   import { discardFeedResource, type FeedResource } from '@/api/communityFeedApi';
@@ -334,7 +338,7 @@
   function updateRichBody(html: string) {
     if (busy.value || editorMode.value !== 'rich' || html === richHtml.value) return;
     richHtml.value = html;
-    draft.body = noteHtmlToMarkdown(html);
+    draft.body = communityHtmlToMarkdown(html);
   }
   const richEditor = shallowRef<RichEditor | null>(null);
   const richState = ref({
@@ -541,11 +545,12 @@
       });
     },
     toolbar: false,
-    valid_elements:
-      'p,br,strong/b,em/i,del/s,h1,h2,h3,h4,h5,h6,blockquote,ul,ol,li,pre,code,a[href|title],hr,table,thead,tbody,tr,th,td',
+    body_class: 'community-markdown',
+    visual: false,
+    valid_elements: communityRichValidElements,
     paste_data_images: false,
     automatic_uploads: false,
-    content_style: `html { cursor: text; min-height: 100%; } body { cursor: text; min-height: calc(100% - 32px); font: 16px/1.85 system-ui; margin: 16px 0; overflow-wrap: anywhere; color: ${getComputedStyle(document.documentElement).getPropertyValue('--text-color')}; background: ${getComputedStyle(document.documentElement).getPropertyValue('--workspace-open-canvas')}; } blockquote { margin: 20px 0; padding: 12px 16px; border-left: 3px solid ${getComputedStyle(document.documentElement).getPropertyValue('--primary-color')}; background: ${getComputedStyle(document.documentElement).getPropertyValue('--workspace-hover')}; }`,
+    content_style: communityRichContentStyle(),
   }));
   const isMobile = useMobileLayout();
   const user = useUserStore();

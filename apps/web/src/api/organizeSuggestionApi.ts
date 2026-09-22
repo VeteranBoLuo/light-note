@@ -68,6 +68,7 @@ export interface WorkspaceSuggestion {
   members?: SuggestionMember[];
 }
 export interface WorkspaceItem {
+  work?: Array<{ kind: string; lane: string; status: string; resolved?: boolean }>;
   outcome?: keyof OrganizeOutcomeCounts;
   id: string;
   resource: SuggestionMember & {
@@ -118,7 +119,7 @@ export const startRun = (id: string, replaceRunId?: string) =>
 export const listRuns = () => apiBaseGet(`${root}/runs`, undefined, opts);
 export const getRun = (
   id: string,
-  params: { after?: string; resourceType?: string; kind?: string; reviewOnly?: boolean } = {},
+  params: { after?: string; resourceType?: string; kind?: string; reviewOnly?: boolean; reviewState?: string } = {},
 ) => apiBaseGet(`${root}/runs/${encodeURIComponent(id)}`, params, opts);
 export const cancelRun = (id: string) => apiBasePost(`${root}/runs/${encodeURIComponent(id)}/cancel`, {}, opts);
 export const actOnRunSuggestion = (

@@ -244,6 +244,7 @@ declare(ADMIN_POLICIES.CONTENT_WRITE, 'file', [
   ['POST', '/file/abortManagedUpload'],
   ['POST', '/file/deleteFileById'],
   ['POST', '/file/updateFile'],
+  ['POST', '/file/setFilePin'],
   ['POST', '/file/preview/prepare'],
   ['POST', '/file/addFolder'],
   ['POST', '/file/ensureFolder'],

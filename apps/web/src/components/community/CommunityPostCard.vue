@@ -130,7 +130,7 @@
   }
   .community-post-card {
     border-bottom: 1px solid var(--surface-border-color);
-    a {
+    > h2 > a {
       color: inherit;
       text-decoration: none;
     }
@@ -140,13 +140,45 @@
       flex-wrap: wrap;
     }
     .feed-excerpt {
+      margin: 0;
+      color: var(--desc-color);
+      font-size: 14px;
       font-weight: 400;
+      line-height: 1.8;
       display: -webkit-box;
       -webkit-line-clamp: 4;
       -webkit-box-orient: vertical;
       overflow: hidden;
+      max-height: 9em;
       white-space: normal;
       overflow-wrap: anywhere;
+    }
+    .feed-excerpt :deep(h1),
+    .feed-excerpt :deep(h2),
+    .feed-excerpt :deep(h3),
+    .feed-excerpt :deep(h4),
+    .feed-excerpt :deep(h5),
+    .feed-excerpt :deep(h6) {
+      font-size: 15px;
+      line-height: 1.6;
+      margin: 0.4em 0 0.2em;
+    }
+    .feed-excerpt :deep(p),
+    .feed-excerpt :deep(ul),
+    .feed-excerpt :deep(ol),
+    .feed-excerpt :deep(blockquote),
+    .feed-excerpt :deep(pre),
+    .feed-excerpt :deep(table) {
+      margin-top: 0;
+      margin-bottom: 0.35em;
+    }
+    .feed-excerpt :deep(pre) {
+      padding: 6px 10px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .feed-excerpt :deep(> :first-child) {
+      margin-top: 0;
     }
     padding: 24px 0;
     .post-author-row {
@@ -214,20 +246,10 @@
       border-radius: 4px;
       padding: 2px 5px;
     }
-    h2 {
+    > h2 {
       margin: 0 0 8px;
       font-size: 18px;
       line-height: 1.5;
-    }
-    .feed-excerpt,
-    .feed-body {
-      font-size: 15px;
-      line-height: 1.85;
-      margin: 0;
-    }
-    .feed-excerpt {
-      color: var(--desc-color);
-      font-size: 14px;
     }
     .feed-meta {
       margin: 14px 0 0;
@@ -236,20 +258,16 @@
     &.is-detail {
       padding-top: 24px;
     }
-    &.is-detail h2 {
+    &.is-detail > h2 {
       font-size: 25px;
       margin: 18px 0;
-    }
-    &.is-detail .feed-body {
-      font-size: 16px;
-      line-height: 1.95;
     }
     @media (max-width: 767px) {
       padding: 20px 0;
       .post-labels {
         gap: 5px;
       }
-      &.is-detail h2 {
+      &.is-detail > h2 {
         font-size: 22px;
       }
     }
@@ -265,6 +283,7 @@
     line-height: 1.5;
   }
   .community-post-card .feed-meta > .post-topic {
+    text-decoration: none;
     color: var(--workspace-purple-text);
   }
   .community-post-card .post-avatar-fallback {

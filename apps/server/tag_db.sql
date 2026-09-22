@@ -116,11 +116,13 @@ CREATE TABLE `files` (
   `file_size` bigint(20) NOT NULL COMMENT '文件大小（字节）',
   `directory` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '文件访问目录',
   `folder_id` int(11) DEFAULT NULL,
+  `is_top` tinyint(1) NOT NULL DEFAULT 0,
   `del_flag` int(1) NOT NULL DEFAULT '0',
   `obs_key` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `deleted_at` datetime DEFAULT NULL,
   `share_token` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '旧版分享令牌（仅迁移兼容，禁止新写入）',
   PRIMARY KEY (`id`),
+  KEY `idx_files_owner_pin_time` (`create_by`(64),`del_flag`,`is_top`,`create_time`,`id`),
   KEY `fk_folder_id` (`folder_id`),
   KEY `idx_files_owner_create` (`create_time`,`del_flag`,`create_by`),
   CONSTRAINT `fk_folder_id` FOREIGN KEY (`folder_id`) REFERENCES `folders` (`id`) ON DELETE SET NULL
