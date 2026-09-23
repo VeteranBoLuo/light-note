@@ -31,7 +31,7 @@ describe('BAlert 多操作布局', () => {
   it('桌面端三个以上操作自动使用宽版弹窗，并允许按钮组换行', () => {
     expect(alertSource).toContain("'bAlert--multi-action': footer.length > 2");
     expect(alertSource).toContain(':wrap="footer.length > 2"');
-    expect(alertSource).toMatch(/\.bAlert--multi-action\s*\{[\s\S]*?width:\s*min\(680px, calc\(100vw - 40px\)\)/);
+    expect(alertSource).toMatch(/\.bAlert--multi-action\s*\{[\s\S]*?width:\s*min\(var\(--ui-layout-680, 680px\), calc\(100vw - 40px\)\)/);
     expect(alertSource).toMatch(/\.bAlert-footer :deep\(\.space-body\)\s*\{[\s\S]*?max-width:\s*100%/);
   });
 

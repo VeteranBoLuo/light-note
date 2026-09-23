@@ -94,12 +94,12 @@
 </script>
 <style scoped lang="less">
   .board-card {
-    padding: 14px;
+    padding: var(--ui-space-14, 14px);
     border: 1px solid var(--surface-border-color);
     border-radius: 14px;
     background: var(--card-background);
     display: grid;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     cursor: pointer;
     min-width: 0;
   }
@@ -109,7 +109,7 @@
   }
   .board-card__heading {
     display: flex;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     align-items: flex-start;
     min-width: 0;
   }
@@ -117,20 +117,20 @@
     flex: 1;
     min-width: 0;
     display: grid;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
   .board-card__type {
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
     color: var(--workspace-purple-text);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 600;
     line-height: 1.4;
   }
   .board-card__heading strong {
     min-width: 0;
-    font-size: 16px;
+    font-size: var(--ui-font-16, 16px);
     line-height: 1.5;
     overflow-wrap: anywhere;
     display: -webkit-box;
@@ -140,8 +140,8 @@
   }
   .board-drag.b_btn,
   .board-card__menu.b_btn {
-    width: 24px;
-    height: 26px;
+    width: var(--ui-layout-24, 24px);
+    height: var(--ui-layout-26, 26px);
     padding: 0;
     background: transparent;
     color: var(--desc-color);
@@ -154,42 +154,42 @@
   .board-card__meta {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     flex-wrap: wrap;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     color: var(--desc-color);
   }
   .board-card__description {
-    padding: 10px 12px;
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     border-radius: 8px;
     background: var(--workspace-panel-bg-color);
     display: grid;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
   .board-card__label {
     display: block;
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     line-height: 1.4;
     color: var(--desc-color);
   }
   .board-card__date {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     color: var(--desc-color);
     margin-right: auto;
   }
   .board-card__date time {
     display: block;
     color: var(--text-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 500;
     font-variant-numeric: tabular-nums;
     line-height: 1.5;
   }
   .board-card p {
     margin: 0;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.6;
     display: -webkit-box;
     -webkit-line-clamp: 2;
@@ -199,12 +199,12 @@
     color: var(--desc-color);
   }
   .board-card small {
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     color: var(--desc-color);
   }
   .board-card__source.b_btn {
     height: auto;
-    min-height: 24px;
+    min-height: var(--ui-layout-24, 24px);
     width: 100%;
     padding: 0;
     background: transparent;
@@ -213,7 +213,7 @@
     line-height: 1.4;
     white-space: normal;
     color: var(--workspace-purple-text, var(--primary-color));
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     overflow-wrap: anywhere;
   }
   .board-card__footer {
@@ -221,7 +221,7 @@
     justify-content: flex-end;
     align-items: center;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .board-card__footer .b_btn {
     background: transparent;
@@ -240,11 +240,11 @@
     .board-card__footer .b_btn,
     .board-card__menu.b_btn,
     .board-drag.b_btn {
-      min-height: 36px;
+      min-height: var(--ui-layout-36, 36px);
     }
     .board-card__menu.b_btn,
     .board-drag.b_btn {
-      width: 28px;
+      width: var(--ui-layout-28, 28px);
     }
   }
 </style>

@@ -248,11 +248,11 @@
     { value: 90, label: t('adminProductInsights.periods.90') },
   ]);
   const cohortColumns = computed<Column[]>(() => [
-    { key: 'cohortStart', title: t('adminProductInsights.retention.cohort'), width: 'minmax(240px, 1.4fr)' },
-    { key: 'registered', title: t('adminProductInsights.retention.newUsers'), width: '110px' },
-    { key: 'd1', title: t('adminProductInsights.retention.day1'), width: 'minmax(150px, 1fr)' },
-    { key: 'd7', title: t('adminProductInsights.retention.day7'), width: 'minmax(150px, 1fr)' },
-    { key: 'd30', title: t('adminProductInsights.retention.day30'), width: 'minmax(150px, 1fr)' },
+    { key: 'cohortStart', title: t('adminProductInsights.retention.cohort'), width: 'minmax(var(--ui-layout-240, 240px), 1.4fr)' },
+    { key: 'registered', title: t('adminProductInsights.retention.newUsers'), width: 'var(--ui-layout-110, 110px)' },
+    { key: 'd1', title: t('adminProductInsights.retention.day1'), width: 'minmax(var(--ui-layout-150, 150px), 1fr)' },
+    { key: 'd7', title: t('adminProductInsights.retention.day7'), width: 'minmax(var(--ui-layout-150, 150px), 1fr)' },
+    { key: 'd30', title: t('adminProductInsights.retention.day30'), width: 'minmax(var(--ui-layout-150, 150px), 1fr)' },
   ]);
 
   function n(value: unknown) {
@@ -316,37 +316,37 @@
   .product-insights__actions {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .product-insights__select {
-    width: 132px;
+    width: var(--ui-layout-132, 132px);
   }
 
   .product-insights__warning {
     display: flex;
     align-items: flex-start;
-    gap: 8px;
-    padding: 10px 12px;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     border: 1px solid var(--warning-border-color, #e6a23c);
     border-radius: 10px;
     color: var(--text-color);
     background: var(--warning-background-color, rgba(230, 162, 60, 0.08));
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.5;
   }
 
   .product-insights__section {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .product-insights__section-header {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .product-insights__section-header h3,
@@ -356,19 +356,19 @@
 
   .product-insights__section-header h3 {
     color: var(--text-color);
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
   }
 
   .product-insights__section-header p {
-    margin-top: 2px;
+    margin-top: var(--ui-space-2, 2px);
     color: var(--sub-text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .product-insights__feature-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .product-insights__feature {
@@ -384,87 +384,87 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .product-insights__feature-rate {
     display: flex;
     align-items: baseline;
-    gap: 6px;
-    margin: 12px 0 8px;
+    gap: var(--ui-space-6, 6px);
+    margin: var(--ui-space-12, 12px) 0 var(--ui-space-8, 8px);
   }
 
   .product-insights__feature-rate strong {
     color: var(--text-color);
-    font-size: 22px;
+    font-size: var(--ui-font-22, 22px);
   }
 
   .product-insights__feature-rate span,
   .product-insights__feature p,
   .product-insights__cohort header span {
     color: var(--sub-text-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .product-insights__feature p {
-    margin: 8px 0 0;
+    margin: var(--ui-space-8, 8px) 0 0;
     line-height: 1.5;
   }
 
   .product-insights__table {
-    min-height: 220px;
+    min-height: var(--ui-layout-220, 220px);
   }
 
   .product-insights__cohort-list {
     display: grid;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .product-insights__cohort dl {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
-    margin: 12px 0 0;
+    gap: var(--ui-space-8, 8px);
+    margin: var(--ui-space-12, 12px) 0 0;
   }
 
   .product-insights__cohort dl div {
-    padding: 8px;
+    padding: var(--ui-space-8, 8px);
     border: 1px solid var(--surface-divider-color);
     border-radius: 8px;
   }
 
   .product-insights__cohort dt {
     color: var(--sub-text-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
 
   .product-insights__cohort dd {
-    margin: 3px 0 0;
+    margin: var(--ui-space-3, 3px) 0 0;
     color: var(--text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .product-insights__empty {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 4px;
-    padding: 28px 12px;
+    gap: var(--ui-space-4, 4px);
+    padding: var(--ui-space-28, 28px) var(--ui-space-12, 12px);
     border: 1px dashed var(--surface-border-color);
     border-radius: 12px;
     color: var(--sub-text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .product-insights__methodology > strong {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .product-insights__methodology ul {
-    margin: 8px 0 0;
-    padding-left: 18px;
+    margin: var(--ui-space-8, 8px) 0 0;
+    padding-left: var(--ui-space-18, 18px);
     color: var(--sub-text-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.7;
   }
 

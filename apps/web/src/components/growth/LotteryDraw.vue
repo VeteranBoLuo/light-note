@@ -180,7 +180,7 @@
           <BButton
             v-if="freeDaily > 0"
             class="lt-draw-button lt-draw-button--free"
-            :aria-busy="rolling && activePoolMode === 'free' || undefined"
+            :aria-busy="(rolling && activePoolMode === 'free') || undefined"
             type="success"
             :disabled="readOnly || !canFree"
             :title="readOnly ? t('growth.adminContextActionUnavailable') : ''"
@@ -191,7 +191,9 @@
               <SvgIcon v-else :src="icon.growth.reward" :size="21" />
             </span>
             <span class="lt-draw-button__copy">
-              <strong>{{ rolling && activePoolMode === 'free' ? t('growth.lotteryRolling') : t('growth.lotteryFreeDrawAction') }}</strong>
+              <strong>{{
+                rolling && activePoolMode === 'free' ? t('growth.lotteryRolling') : t('growth.lotteryFreeDrawAction')
+              }}</strong>
               <small>{{
                 freeRemaining > 0 ? t('growth.lotteryFreeLeft', { n: freeRemaining }) : t('growth.lotteryFreeUsedUp')
               }}</small>
@@ -532,6 +534,7 @@
 </script>
 
 <style scoped lang="less">
+  @import (reference) '@/assets/css/ui-density.less';
   .lt {
     --lt-accent-fg: var(--chip-pin-fg, #5146d9);
     --lt-accent-bg: var(--chip-pin-bg, #eeecff);
@@ -541,7 +544,7 @@
     --lt-gold-border: var(--chip-pending-border, #f3d4a1);
     display: flex;
     flex-direction: column;
-    gap: 22px;
+    gap: .ui-space(22px) [];
     color: var(--text-color);
   }
 
@@ -549,19 +552,19 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 24px;
+    gap: var(--ui-space-24, 24px);
   }
 
   .lt-heading {
     display: flex;
     align-items: center;
     min-width: 0;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
   }
 
   .lt-heading__icon {
-    width: 48px;
-    height: 48px;
+    width: var(--ui-layout-48, 48px);
+    height: var(--ui-layout-48, 48px);
     display: grid;
     flex: 0 0 auto;
     place-items: center;
@@ -574,26 +577,26 @@
 
   .lt-title {
     margin: 0;
-    font-size: 20px;
+    font-size: .ui-font(20px) [];
     font-weight: 800;
     letter-spacing: -0.02em;
   }
 
   .lt-subtitle {
-    max-width: 620px;
-    margin: 5px 0 0;
+    max-width: var(--ui-layout-620, 620px);
+    margin: var(--ui-space-5, 5px) 0 0;
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.55;
   }
 
   .lt-wallet {
-    min-width: 194px;
+    min-width: var(--ui-layout-194, 194px);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
-    padding: 11px 13px 11px 15px;
+    gap: var(--ui-space-16, 16px);
+    padding: var(--ui-space-11, 11px) var(--ui-space-13, 13px) var(--ui-space-11, 11px) var(--ui-space-15, 15px);
     border: 1px solid var(--lt-gold-border);
     border-radius: 15px;
     background: var(--lt-gold-bg);
@@ -602,37 +605,37 @@
   .lt-wallet__copy {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
 
   .lt-wallet__copy > span {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .lt-wallet__copy strong {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     color: var(--lt-gold-fg);
-    font-size: 20px;
+    font-size: var(--ui-font-20, 20px);
     font-variant-numeric: tabular-nums;
     line-height: 1.2;
   }
 
   .lt-wallet__level {
-    padding: 4px 8px;
+    padding: var(--ui-space-4, 4px) var(--ui-space-8, 8px);
     border: 1px solid var(--lt-gold-border);
     border-radius: 999px;
     color: var(--lt-gold-fg);
     background: var(--background-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     font-weight: 700;
     white-space: nowrap;
   }
 
   .lt-loading {
-    min-height: 420px;
+    min-height: .ui-layout(420px) [];
     display: grid;
     place-items: center;
     border: 1px solid var(--surface-border-color);
@@ -643,23 +646,23 @@
   .lt-loading--error {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     color: var(--warning-color, #a05f00);
   }
 
   .lt-layout {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(270px, 318px);
+    grid-template-columns: minmax(0, 1fr) minmax(var(--ui-layout-270, 270px), var(--ui-layout-318, 318px));
     align-items: start;
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
   }
 
   .lt-status-strip {
-    margin: 0 0 14px;
-    padding: 9px 12px;
+    margin: 0 0 var(--ui-space-14, 14px);
+    padding: var(--ui-space-9, 9px) var(--ui-space-12, 12px);
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     border: 1px solid var(--surface-border-color);
     border-radius: 13px;
     background: var(--workbench-subcard-bg);
@@ -669,18 +672,18 @@
     min-width: 0;
     display: flex;
     align-items: baseline;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
 
   .lt-status-strip dt {
     color: var(--desc-color);
-    font-size: 10.5px;
+    font-size: var(--ui-font-10_5, 10.5px);
   }
 
   .lt-status-strip dd {
     margin: 0;
     color: var(--text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 750;
     font-variant-numeric: tabular-nums;
   }
@@ -694,7 +697,7 @@
 
   .lt-machine {
     min-width: 0;
-    padding: 20px;
+    padding: var(--ui-space-20, 20px);
     border-radius: 22px;
   }
 
@@ -702,40 +705,40 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 14px;
-    margin-bottom: 14px;
+    gap: var(--ui-space-14, 14px);
+    margin-bottom: var(--ui-space-14, 14px);
   }
 
   .lt-machine__head > div {
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
 
   .lt-machine__head strong {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 500;
     color: var(--desc-color);
   }
 
   .lt-kicker {
     color: var(--lt-accent-fg);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 800;
     letter-spacing: 0.08em;
   }
 
   .lt-pity-badge {
-    min-height: 28px;
+    min-height: var(--ui-layout-28, 28px);
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 0 10px;
+    gap: var(--ui-space-6, 6px);
+    padding: 0 var(--ui-space-10, 10px);
     border: 1px solid var(--lt-accent-border);
     border-radius: 999px;
     color: var(--lt-accent-fg);
     background: var(--lt-accent-bg);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 700;
     white-space: nowrap;
   }
@@ -750,11 +753,11 @@
   .lt-stage {
     isolation: isolate;
     position: relative;
-    min-height: 320px;
+    min-height: var(--ui-layout-320, 320px);
     display: grid;
     overflow: hidden;
     place-items: center;
-    padding: 26px;
+    padding: var(--ui-space-26, 26px);
     border: 1px solid var(--lt-accent-border);
     border-radius: 20px;
     background:
@@ -802,27 +805,27 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     text-align: center;
   }
 
   .lt-idle > strong,
   .lt-rolling > strong {
-    margin-top: 5px;
-    font-size: 16px;
+    margin-top: var(--ui-space-5, 5px);
+    font-size: var(--ui-font-16, 16px);
     font-weight: 800;
   }
 
   .lt-idle > span,
   .lt-rolling > span {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .lt-prize-core {
     position: relative;
-    width: 94px;
-    height: 94px;
+    width: var(--ui-layout-94, 94px);
+    height: var(--ui-layout-94, 94px);
     display: grid;
     place-items: center;
     border: 1px solid var(--lt-accent-border);
@@ -849,7 +852,7 @@
     display: flex;
     flex-direction: column;
     justify-content: center;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
   }
 
   .lt-results__heading {
@@ -857,9 +860,9 @@
     flex-wrap: wrap;
     align-items: center;
     justify-content: center;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     color: var(--lt-accent-fg);
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
   }
 
   .lt-results__heading.is-best {
@@ -869,13 +872,13 @@
   .lt-results__pity-status {
     display: inline-flex;
     align-items: center;
-    min-height: 24px;
-    padding: 2px 8px;
+    min-height: var(--ui-layout-24, 24px);
+    padding: var(--ui-space-2, 2px) var(--ui-space-8, 8px);
     border: 1px solid var(--lt-gold-border);
     border-radius: 999px;
     color: var(--lt-gold-fg);
     background: var(--lt-gold-bg);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     font-weight: 800;
   }
 
@@ -883,11 +886,11 @@
     width: 100%;
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .lt-prizes.is-single {
-    max-width: 220px;
+    max-width: var(--ui-layout-220, 220px);
     grid-template-columns: 1fr;
     align-self: center;
   }
@@ -895,13 +898,13 @@
   .lt-prize {
     position: relative;
     min-width: 0;
-    min-height: 96px;
+    min-height: var(--ui-layout-96, 96px);
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 7px;
-    padding: 10px 7px;
+    gap: var(--ui-space-7, 7px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-7, 7px);
     border: 1px solid var(--surface-border-color);
     border-radius: 13px;
     background: var(--workbench-subcard-bg);
@@ -950,7 +953,7 @@
   .lt-prize__name {
     min-width: 0;
     color: var(--text-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 700;
     line-height: 1.3;
     overflow-wrap: anywhere;
@@ -958,18 +961,18 @@
 
   .lt-prize__compensation {
     color: var(--success-color, #1a7d4a);
-    font-size: 9px;
+    font-size: var(--ui-font-9, 9px);
     font-weight: 700;
     line-height: 1.35;
   }
 
   .lt-prize__rare {
-    padding: 2px 6px;
+    padding: var(--ui-space-2, 2px) var(--ui-space-6, 6px);
     border: 1px solid var(--lt-gold-border);
     border-radius: 999px;
     color: var(--lt-gold-fg);
     background: var(--background-color);
-    font-size: 9px;
+    font-size: var(--ui-font-9, 9px);
     font-weight: 800;
   }
 
@@ -983,9 +986,9 @@
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
-    gap: 12px;
-    margin-top: 12px;
-    padding: 12px 14px;
+    gap: var(--ui-space-12, 12px);
+    margin-top: var(--ui-space-12, 12px);
+    padding: var(--ui-space-12, 12px) var(--ui-space-14, 14px);
     border: 1px solid var(--surface-border-color);
     border-radius: 15px;
     background: var(--workbench-subcard-bg);
@@ -1015,8 +1018,8 @@
 
   .lt-pity-panel__icon,
   .lt-side-card__icon {
-    width: 36px;
-    height: 36px;
+    width: var(--ui-layout-36, 36px);
+    height: var(--ui-layout-36, 36px);
     display: grid;
     flex: 0 0 auto;
     place-items: center;
@@ -1037,28 +1040,28 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .lt-pity-panel__copy {
     display: flex;
     align-items: baseline;
     justify-content: space-between;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .lt-pity-panel__copy strong {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .lt-pity-panel__copy span {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .lt-pity-panel__count {
     color: var(--lt-accent-fg);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-variant-numeric: tabular-nums;
   }
 
@@ -1091,23 +1094,23 @@
   .lt-draw-options {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 10px;
-    margin-top: 14px;
+    gap: var(--ui-space-10, 10px);
+    margin-top: var(--ui-space-14, 14px);
   }
 
   .lt-draw-options.has-no-free {
-    grid-template-columns: repeat(2, minmax(0, 220px));
+    grid-template-columns: repeat(2, minmax(0, var(--ui-layout-220, 220px)));
     justify-content: center;
   }
 
   .lt-draw-options :deep(.lt-draw-button.b_btn) {
     position: relative;
     width: 100%;
-    height: 64px;
+    height: var(--ui-control-64, 64px);
     min-width: 0;
     justify-content: flex-start;
-    gap: 10px;
-    padding: 0 14px;
+    gap: var(--ui-space-10, 10px);
+    padding: 0 var(--ui-space-14, 14px);
     overflow: hidden;
     border: 1px solid var(--surface-border-color) !important;
     border-radius: 14px;
@@ -1137,8 +1140,8 @@
   }
 
   .lt-draw-button__icon {
-    width: 34px;
-    height: 34px;
+    width: var(--ui-layout-34, 34px);
+    height: var(--ui-layout-34, 34px);
     display: grid;
     flex: 0 0 auto;
     place-items: center;
@@ -1165,18 +1168,18 @@
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
 
   .lt-draw-button__copy strong {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 800;
   }
 
   .lt-draw-button__copy small {
     max-width: 100%;
     overflow: hidden;
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     opacity: 0.82;
     text-overflow: ellipsis;
   }
@@ -1185,19 +1188,19 @@
     position: absolute;
     top: 6px;
     right: 6px;
-    padding: 2px 5px;
+    padding: var(--ui-space-2, 2px) var(--ui-space-5, 5px);
     border: 1px solid rgba(255, 255, 255, 0.35);
     border-radius: 999px;
     color: #fff;
     background: rgba(255, 255, 255, 0.16);
-    font-size: 8px;
+    font-size: var(--ui-font-8, 8px);
     font-weight: 800;
   }
 
   .lt-tip {
-    margin: 10px 0 0;
+    margin: var(--ui-space-10, 10px) 0 0;
     color: var(--lt-accent-fg);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     text-align: center;
   }
 
@@ -1205,35 +1208,35 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
   }
 
   .lt-side-card {
-    padding: 16px;
+    padding: var(--ui-space-16, 16px);
     border-radius: 18px;
   }
 
   .lt-side-card__head {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .lt-side-card__head > div {
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
 
   .lt-side-card__head strong {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 800;
   }
 
   .lt-side-card__head span:not(.lt-side-card__icon) {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     line-height: 1.35;
   }
 
@@ -1247,26 +1250,26 @@
     display: flex;
     align-items: flex-end;
     justify-content: space-between;
-    gap: 10px;
-    margin: 18px 0 10px;
+    gap: var(--ui-space-10, 10px);
+    margin: var(--ui-space-18, 18px) 0 var(--ui-space-10, 10px);
   }
 
   .lt-benefit-card__value strong {
     color: var(--lt-accent-fg);
-    font-size: 28px;
+    font-size: var(--ui-font-28, 28px);
     font-variant-numeric: tabular-nums;
     line-height: 1;
   }
 
   .lt-benefit-card__value strong small {
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .lt-benefit-card__value > span,
   .lt-benefit-card p {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
 
   .lt-progress--free > span {
@@ -1274,35 +1277,35 @@
   }
 
   .lt-benefit-card p {
-    margin: 9px 0 0;
+    margin: var(--ui-space-9, 9px) 0 0;
     line-height: 1.45;
   }
 
   .lt-benefit-card__locked {
-    padding: 13px 0 0;
+    padding: var(--ui-space-13, 13px) 0 0;
   }
 
   .lt-pool-card__head {
-    margin-bottom: 14px;
+    margin-bottom: var(--ui-space-14, 14px);
   }
 
   .lt-pool-tabs.tab-container {
-    margin-bottom: 12px;
+    margin-bottom: var(--ui-space-12, 12px);
     border-radius: 10px;
   }
 
   .lt-pool-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
 
   .lt-pool-item {
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 9px;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-9, 9px);
     border: 1px solid var(--surface-border-color);
     border-radius: 11px;
     background: var(--workbench-subcard-bg);
@@ -1314,8 +1317,8 @@
   }
 
   .lt-pool-item__icon {
-    width: 28px;
-    height: 28px;
+    width: var(--ui-layout-28, 28px);
+    height: var(--ui-layout-28, 28px);
     flex: 0 0 auto;
     border-radius: 9px;
     background: var(--background-color);
@@ -1325,12 +1328,12 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
 
   .lt-pool-item__copy strong {
     overflow: hidden;
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     font-weight: 700;
     line-height: 1.25;
     text-overflow: ellipsis;
@@ -1339,19 +1342,19 @@
 
   .lt-pool-item__copy small {
     color: var(--lt-gold-fg);
-    font-size: 9px;
+    font-size: var(--ui-font-9, 9px);
     font-weight: 800;
   }
 
   .lt-pool-item__pity-badge,
   .lt-odds__pity-badge {
     width: fit-content;
-    padding: 1px 5px;
+    padding: var(--ui-space-1, 1px) var(--ui-space-5, 5px);
     border: 1px solid var(--lt-gold-border);
     border-radius: 999px;
     color: var(--lt-gold-fg);
     background: var(--background-color);
-    font-size: 8px;
+    font-size: var(--ui-font-8, 8px);
     font-weight: 800;
     line-height: 1.35;
     white-space: nowrap;
@@ -1359,16 +1362,16 @@
 
   .lt-odds-toggle {
     width: 100%;
-    height: 36px;
+    height: var(--ui-control-36, 36px);
     display: flex;
     justify-content: space-between;
-    margin-top: 12px;
-    padding: 0 10px;
+    margin-top: var(--ui-space-12, 12px);
+    padding: 0 var(--ui-space-10, 10px);
     border: 1px solid var(--surface-border-color) !important;
     border-radius: 10px;
     color: var(--text-color);
     background: var(--workbench-subcard-bg);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 700;
   }
 
@@ -1384,9 +1387,9 @@
   .lt-odds {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    margin-top: 10px;
-    padding: 10px;
+    gap: var(--ui-space-6, 6px);
+    margin-top: var(--ui-space-10, 10px);
+    padding: var(--ui-space-10, 10px);
     border: 1px solid var(--surface-border-color);
     border-radius: 11px;
     background: var(--background-color);
@@ -1394,26 +1397,26 @@
 
   .lt-odds__row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 54px 54px;
+    grid-template-columns: minmax(0, 1fr) var(--ui-layout-54, 54px) var(--ui-layout-54, 54px);
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
 
   .lt-odds__header {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 54px 54px;
-    gap: 10px;
-    padding-bottom: 5px;
+    grid-template-columns: minmax(0, 1fr) var(--ui-layout-54, 54px) var(--ui-layout-54, 54px);
+    gap: var(--ui-space-10, 10px);
+    padding-bottom: var(--ui-space-5, 5px);
     border-bottom: 1px solid var(--surface-border-color);
     color: var(--desc-color);
-    font-size: 9px;
+    font-size: var(--ui-font-9, 9px);
   }
 
   .lt-odds__row.is-two-column,
   .lt-odds__header.is-two-column {
-    grid-template-columns: minmax(0, 1fr) 70px;
+    grid-template-columns: minmax(0, 1fr) var(--ui-layout-70, 70px);
   }
 
   .lt-odds__header strong,
@@ -1425,7 +1428,7 @@
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
 
   .lt-odds__pity-badge {
@@ -1444,9 +1447,9 @@
   }
 
   .lt-odds__note {
-    margin: 2px 0 0;
+    margin: var(--ui-space-2, 2px) 0 0;
     color: var(--desc-color);
-    font-size: 9px;
+    font-size: var(--ui-font-9, 9px);
     line-height: 1.45;
   }
 

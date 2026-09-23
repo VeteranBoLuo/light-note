@@ -2,14 +2,15 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const growthCardSource = readFileSync(resolve(process.cwd(), 'src/components/growth/GrowthCard.vue'), 'utf8');
+const growthCardSource = readFileSync(resolve(process.cwd(), 'src/components/growth/GrowthCard.vue'), 'utf8').replace(
+  /var\(--ui-[\w-]+,\s*([\d.]+px)\)/g,
+  '$1',
+);
 const rankLadderSource = readFileSync(resolve(process.cwd(), 'src/components/growth/RankLadder.vue'), 'utf8');
 
 describe('成长概览等级路线布局', () => {
   it('完整桌面直接在右侧展示路线，手机和平板保留弹框入口', () => {
-    expect(growthCardSource).toContain(
-      '<RankLadder v-if="bookmark.isDesktop" class="gc-ladder" :compact="compact" />',
-    );
+    expect(growthCardSource).toContain('<RankLadder v-if="bookmark.isDesktop" class="gc-ladder" :compact="compact" />');
     expect(growthCardSource).toContain('v-if="!bookmark.isDesktop" class="gc-ranks-btn"');
     expect(growthCardSource).toContain('v-if="!bookmark.isDesktop"');
     expect(growthCardSource).toContain('@media (min-width: 1200px)');

@@ -243,7 +243,7 @@
   .dq {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .dq-head {
     display: flex;
@@ -251,7 +251,7 @@
     justify-content: space-between;
   }
   .dq-title {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     font-weight: 700;
   }
   .dq-title-wrap {
@@ -259,9 +259,9 @@
     flex-direction: column;
   }
   .dq-title-wrap small {
-    margin-top: 2px;
+    margin-top: var(--ui-space-2, 2px);
     color: var(--primary-color);
-    font-size: 10.5px;
+    font-size: var(--ui-font-10_5, 10.5px);
     font-weight: 500;
   }
   .dq-go {
@@ -269,7 +269,7 @@
     color: var(--primary-color);
   }
   .dq-count {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 600;
     color: var(--desc-color);
     font-variant-numeric: tabular-nums;
@@ -280,13 +280,13 @@
   .dq-list {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .dq-completed {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 12px;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-12, 12px);
     border: 1px solid var(--surface-border-color);
     border-radius: 10px;
     background: var(--card-background);
@@ -298,23 +298,23 @@
   }
   .dq-completed > div {
     display: grid;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
     min-width: 0;
   }
   .dq-completed strong {
     color: var(--text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.5;
   }
   .dq-completed small {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .dq-item {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 9px 12px;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-9, 9px) var(--ui-space-12, 12px);
     border-radius: 10px;
     border: 1px solid color-mix(in srgb, var(--primary-color) 14%, var(--surface-border-color));
     background: color-mix(in srgb, var(--primary-color) 4%, var(--card-background));
@@ -324,8 +324,8 @@
   }
   .dq-check {
     flex: 0 0 auto;
-    width: 18px;
-    height: 18px;
+    width: var(--ui-layout-18, 18px);
+    height: var(--ui-layout-18, 18px);
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -340,37 +340,37 @@
   }
   .dq-label {
     flex: 1 1 auto;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     color: var(--text-color);
   }
   .dq-counted {
     display: block;
-    margin-top: 2px;
+    margin-top: var(--ui-space-2, 2px);
     color: var(--desc-color);
-    font-size: 10.5px;
+    font-size: var(--ui-font-10_5, 10.5px);
   }
   .dq-prog {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 600;
     color: var(--primary-color);
     font-variant-numeric: tabular-nums;
   }
   .dq-tag {
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 600;
     color: var(--success-color);
   }
   .dq-stages {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .dq-stage {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     min-width: 0;
-    padding: 9px 10px;
+    padding: var(--ui-space-9, 9px) var(--ui-space-10, 10px);
     border: 1px solid var(--surface-border-color);
     border-radius: 10px;
     background: var(--card-background);
@@ -378,9 +378,9 @@
   .dq-stage-dot {
     display: grid;
     place-items: center;
-    width: 24px;
-    height: 24px;
-    flex: 0 0 24px;
+    width: var(--ui-layout-24, 24px);
+    height: var(--ui-layout-24, 24px);
+    flex: 0 0 var(--ui-layout-24, 24px);
     border: 1px solid currentColor;
     border-radius: 50%;
     color: var(--desc-color);
@@ -399,26 +399,26 @@
     flex: 1 1 auto;
     min-width: 0;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
   .dq-stage-main b {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .dq-stage-main small {
     color: var(--desc-color);
-    font-size: 10.5px;
+    font-size: var(--ui-font-10_5, 10.5px);
   }
   .dq-stage-state {
     flex: 0 0 auto;
     color: var(--desc-color);
-    font-size: 10.5px;
+    font-size: var(--ui-font-10_5, 10.5px);
     font-weight: 700;
   }
   .dq-exp-guide {
     display: flex;
     flex-direction: column;
-    gap: 9px;
-    padding: 11px 12px;
+    gap: var(--ui-space-9, 9px);
+    padding: var(--ui-space-11, 11px) var(--ui-space-12, 12px);
     border: 1px solid var(--card-border-color);
     border-radius: 10px;
     background: var(--background-color);
@@ -426,14 +426,14 @@
   .dq-exp-guide-head {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .dq-exp-guide-icon {
     display: grid;
     place-items: center;
-    width: 24px;
-    height: 24px;
-    flex: 0 0 24px;
+    width: var(--ui-layout-24, 24px);
+    height: var(--ui-layout-24, 24px);
+    flex: 0 0 var(--ui-layout-24, 24px);
     border: 1px solid var(--primary-color);
     border-radius: 50%;
     color: var(--primary-color);
@@ -442,37 +442,37 @@
     display: flex;
     min-width: 0;
     flex-direction: column;
-    gap: 1px;
+    gap: var(--ui-space-1, 1px);
   }
   .dq-exp-guide-copy b {
     color: var(--text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .dq-exp-guide-copy small,
   .dq-exp-guide-disabled {
     color: var(--desc-color);
-    font-size: 10.5px;
+    font-size: var(--ui-font-10_5, 10.5px);
     line-height: 1.45;
   }
   .dq-exp-guide-list {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
   .dq-exp-guide-item {
     display: flex;
     min-width: 0;
     flex-direction: column;
-    gap: 2px;
-    padding: 7px 8px;
+    gap: var(--ui-space-2, 2px);
+    padding: var(--ui-space-7, 7px) var(--ui-space-8, 8px);
     border: 1px solid var(--card-border-color);
     border-radius: 8px;
     color: var(--desc-color);
-    font-size: 10.5px;
+    font-size: var(--ui-font-10_5, 10.5px);
   }
   .dq-exp-guide-item b {
     color: var(--primary-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.45;
   }
   .dq-exp-guide-footnote,
@@ -481,14 +481,14 @@
   }
   .dq-exp-guide-footnote {
     color: var(--desc-color);
-    font-size: 10.5px;
+    font-size: var(--ui-font-10_5, 10.5px);
     line-height: 1.45;
   }
   .dq-exp-cap {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    padding: 9px 10px;
+    gap: var(--ui-space-6, 6px);
+    padding: var(--ui-space-9, 9px) var(--ui-space-10, 10px);
     border: 1px solid var(--primary-color);
     border-radius: 8px;
     background: var(--card-background);
@@ -500,9 +500,9 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     color: var(--text-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 600;
   }
   .dq-exp-cap-head b {
@@ -514,30 +514,30 @@
   }
   .dq-exp-cap small {
     color: var(--desc-color);
-    font-size: 10.5px;
+    font-size: var(--ui-font-10_5, 10.5px);
     line-height: 1.45;
   }
   .dq-bonus {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
-    padding: 10px 12px;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     border: 1px solid var(--surface-border-color);
     border-radius: 10px;
     background: var(--card-background);
   }
   .dq-bonus-text {
-    font-size: 12.5px;
+    font-size: var(--ui-font-12_5, 12.5px);
     color: var(--text-color);
   }
   .dq-claim {
     flex: 0 0 auto;
-    padding: 6px 16px;
+    padding: var(--ui-space-6, 6px) var(--ui-space-16, 16px);
     border-radius: 8px;
     border: none;
     color: #fff;
-    font-size: 12.5px;
+    font-size: var(--ui-font-12_5, 12.5px);
     font-weight: 600;
     cursor: pointer;
     background: linear-gradient(135deg, #f59e0b, #fb923c);
@@ -552,77 +552,77 @@
     cursor: default;
   }
   .dq--compact {
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
   .dq--compact .dq-title-wrap {
     min-width: 0;
     flex-direction: row;
     align-items: baseline;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
   .dq--compact .dq-title-wrap small {
     margin-top: 0;
     overflow: hidden;
     color: var(--desc-color);
-    font-size: 9.5px;
+    font-size: var(--ui-font-9_5, 9.5px);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
   .dq--compact .dq-list {
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
   .dq--compact .dq-item {
-    min-height: 34px;
+    min-height: var(--ui-layout-34, 34px);
     box-sizing: border-box;
-    gap: 8px;
-    padding: 5px 8px;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-5, 5px) var(--ui-space-8, 8px);
     border-radius: 8px;
   }
   .dq--compact .dq-check {
-    width: 16px;
-    height: 16px;
+    width: var(--ui-layout-16, 16px);
+    height: var(--ui-layout-16, 16px);
   }
   .dq--compact .dq-label {
-    font-size: 11.5px;
+    font-size: var(--ui-font-11_5, 11.5px);
   }
   .dq--compact .dq-counted {
     display: none;
   }
   .dq--compact .dq-go {
-    min-height: 26px;
-    padding-inline: 8px;
-    font-size: 10px;
+    min-height: var(--ui-layout-26, 26px);
+    padding-inline: var(--ui-space-8, 8px);
+    font-size: var(--ui-font-10, 10px);
   }
   .dq--compact .dq-prog,
   .dq--compact .dq-tag,
   .dq--compact .dq-count {
-    font-size: 10.5px;
+    font-size: var(--ui-font-10_5, 10.5px);
   }
   .dq--compact .dq-stages {
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   .dq--compact .dq-stage {
-    gap: 6px;
-    padding: 5px 7px;
+    gap: var(--ui-space-6, 6px);
+    padding: var(--ui-space-5, 5px) var(--ui-space-7, 7px);
     border-radius: 8px;
   }
   .dq--compact .dq-stage-dot {
-    width: 20px;
-    height: 20px;
-    flex-basis: 20px;
+    width: var(--ui-layout-20, 20px);
+    height: var(--ui-layout-20, 20px);
+    flex-basis: var(--ui-layout-20, 20px);
   }
   .dq--compact .dq-stage-main {
     gap: 0;
   }
   .dq--compact .dq-stage-main b {
-    font-size: 10.5px;
+    font-size: var(--ui-font-10_5, 10.5px);
   }
   .dq--compact .dq-stage-main small,
   .dq--compact .dq-stage-state {
-    font-size: 9.5px;
+    font-size: var(--ui-font-9_5, 9.5px);
   }
   .dq--compact .dq-bonus {
-    padding: 6px 8px;
+    padding: var(--ui-space-6, 6px) var(--ui-space-8, 8px);
   }
   @media (max-width: 520px) {
     .dq-stages {
@@ -635,7 +635,7 @@
       flex-direction: row;
       align-items: center;
       justify-content: space-between;
-      gap: 12px;
+      gap: var(--ui-space-12, 12px);
     }
     .dq-exp-guide-item b {
       max-width: 68%;

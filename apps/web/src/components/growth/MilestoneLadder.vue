@@ -37,24 +37,24 @@
   .ml {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .ml-title {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    font-size: 15px;
+    gap: var(--ui-space-5, 5px);
+    font-size: var(--ui-font-15, 15px);
     font-weight: 700;
   }
   .ml-hint {
-    margin-top: 3px;
-    font-size: 12px;
+    margin-top: var(--ui-space-3, 3px);
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
   }
   .ml-track {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   @media (max-width: 560px) {
     .ml-track {
@@ -65,8 +65,8 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 6px;
-    padding: 12px 8px;
+    gap: var(--ui-space-6, 6px);
+    padding: var(--ui-space-12, 12px) var(--ui-space-8, 8px);
     border-radius: 12px;
     background: var(--background-color);
     border: 1px solid color-mix(in srgb, var(--card-border-color) 45%, transparent);
@@ -77,32 +77,32 @@
     background: color-mix(in srgb, #f59e0b 8%, var(--background-color));
   }
   .ml-day {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     font-weight: 800;
     font-variant-numeric: tabular-nums;
   }
   .ml-rewards {
     display: flex;
     flex-direction: column;
-    gap: 2px;
-    font-size: 11.5px;
+    gap: var(--ui-space-2, 2px);
+    font-size: var(--ui-font-11_5, 11.5px);
     color: var(--desc-color);
   }
   .ml-rw {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
     white-space: nowrap;
   }
   .ml-state {
-    margin-top: 2px;
-    font-size: 11px;
+    margin-top: var(--ui-space-2, 2px);
+    font-size: var(--ui-font-11, 11px);
   }
   .ml-reached {
     display: inline-flex;
     align-items: center;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
     color: #d97706;
     font-weight: 700;
   }

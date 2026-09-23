@@ -94,12 +94,12 @@
   .resource-center-section-bar {
     min-width: 0;
     flex: 0 0 auto;
-    margin-left: 12px;
-    height: 32px;
+    margin-left: var(--ui-space-12, 12px);
+    height: var(--ui-layout-32, 32px);
     display: inline-flex;
     align-items: stretch;
-    gap: 4px;
-    padding: 2px;
+    gap: var(--ui-space-4, 4px);
+    padding: var(--ui-space-2, 2px);
     border-radius: 12px;
     background: var(--workspace-panel-bg-color, var(--hover-background));
     box-sizing: border-box;
@@ -111,9 +111,9 @@
 
   .section-nav-item {
     position: relative;
-    height: 28px;
-    padding: 0 12px;
-    gap: 6px;
+    height: var(--ui-layout-28, 28px);
+    padding: 0 var(--ui-space-12, 12px);
+    gap: var(--ui-space-6, 6px);
     border: 1px solid transparent;
     border-radius: 9px;
     background: transparent;
@@ -130,12 +130,12 @@
     --b-chip-bg: var(--mobile-selected-bg, var(--workspace-panel-bg-color));
     --b-chip-border: transparent;
 
-    min-width: 20px;
-    height: 18px;
-    min-height: 18px;
-    padding: 0 5px;
+    min-width: var(--ui-layout-20, 20px);
+    height: var(--ui-layout-18, 18px);
+    min-height: var(--ui-layout-18, 18px);
+    padding: 0 var(--ui-space-5, 5px);
     border: 0;
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     line-height: 16px;
     font-variant-numeric: tabular-nums;
     pointer-events: none;
@@ -165,7 +165,7 @@
 
   @media (min-width: 768px) {
     .resource-center-section-bar {
-      margin-left: 20px;
+      margin-left: var(--ui-space-20, 20px);
       background: var(--workspace-canvas);
     }
 
@@ -195,11 +195,11 @@
   @media (max-width: 767px) {
     .resource-center-section-bar {
       width: 100%;
-      height: 52px;
+      height: var(--ui-layout-52, 52px);
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 4px;
-      padding: 4px;
+      gap: var(--ui-space-4, 4px);
+      padding: var(--ui-space-4, 4px);
       border-radius: 12px;
       background: var(--workspace-panel-bg-color);
     }
@@ -211,8 +211,8 @@
     .section-nav-item {
       width: 100%;
       min-width: 0;
-      height: var(--mobile-touch-size, 44px);
-      padding-inline: 8px;
+      height: var(--mobile-touch-size, var(--ui-layout-44, 44px));
+      padding-inline: var(--ui-space-8, 8px);
       border: 1px solid transparent;
       background: transparent !important;
       box-shadow: none;

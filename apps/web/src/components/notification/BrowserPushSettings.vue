@@ -107,39 +107,39 @@
 <style scoped lang="less">
   .browser-push-settings {
     min-width: 0;
-    padding: 0 0 12px;
+    padding: 0 0 var(--ui-space-12, 12px);
   }
   .browser-push-settings__head {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 20px;
+    gap: var(--ui-space-20, 20px);
   }
   h2 {
     margin: 0;
-    font-size: 16px;
+    font-size: var(--ui-font-16, 16px);
     display: flex;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     align-items: center;
     flex-wrap: wrap;
   }
   p {
-    margin: 6px 0 0;
-    font-size: 12px;
+    margin: var(--ui-space-6, 6px) 0 0;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
     line-height: 1.7;
   }
   .browser-push-status {
     display: flex;
-    gap: 10px;
-    padding: 14px;
-    margin-top: 18px;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-14, 14px);
+    margin-top: var(--ui-space-18, 18px);
     border: 1px solid var(--surface-border-color);
     border-radius: 9px;
     background: var(--workspace-panel-bg-color);
   }
   .browser-push-status strong {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 600;
   }
   .browser-push-status.is-ready {
@@ -155,7 +155,7 @@
   }
   .browser-push-actions {
     display: flex;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     align-items: center;
     flex-wrap: wrap;
   }
@@ -163,6 +163,6 @@
     margin-left: auto;
   }
   .browser-push-note {
-    padding: 12px 0;
+    padding: var(--ui-space-12, 12px) 0;
   }
 </style>

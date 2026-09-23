@@ -16,7 +16,7 @@
     :aria-hidden="decorative ? 'true' : undefined"
   >
     <span class="avatar-frame__portrait">
-      <SvgIcon :src="src" :size="displayAvatarSize" />
+      <SvgIcon :src="src" :size="displayAvatarSize" :density-aware="false" />
     </span>
     <span class="avatar-frame__canvas">
       <span

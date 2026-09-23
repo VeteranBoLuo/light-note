@@ -189,39 +189,39 @@
   }
 
   .result-item--card {
-    min-height: 186px;
+    min-height: var(--ui-layout-186, 186px);
   }
 
   .result-item--compact.result-item--card {
-    min-height: 112px;
+    min-height: var(--ui-layout-112, 112px);
   }
 
   .result-item--compact .result-checkbox-wrap {
-    top: 11px;
-    right: 11px;
+    top: var(--ui-space-11, 11px);
+    right: var(--ui-space-11, 11px);
   }
 
   .result-item--compact .result-click-area {
-    gap: 5px;
-    padding: 10px 12px;
+    gap: var(--ui-space-5, 5px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
   }
 
   .result-item--compact .result-click-area--selectable {
-    padding-right: 36px;
+    padding-right: var(--ui-space-36, 36px);
   }
 
   .result-item--compact .item-head {
-    min-height: 21px;
+    min-height: var(--ui-layout-21, 21px);
   }
 
   .result-item--compact .type-pill {
-    padding: 2px 7px;
-    font-size: 11px;
+    padding: var(--ui-space-2, 2px) var(--ui-space-7, 7px);
+    font-size: var(--ui-font-11, 11px);
   }
 
   .result-item--compact .item-title {
-    min-height: 20px;
-    font-size: 15px;
+    min-height: var(--ui-layout-20, 20px);
+    font-size: var(--ui-font-15, 15px);
   }
 
   .result-item--compact .item-desc {
@@ -232,17 +232,17 @@
   }
 
   .result-item--compact .item-meta {
-    min-height: 18px;
-    margin-top: 1px;
+    min-height: var(--ui-layout-18, 18px);
+    margin-top: var(--ui-space-1, 1px);
     flex-direction: row;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .result-item--compact .meta-line {
     min-width: 0;
     max-width: 60%;
-    line-height: 18px;
+    line-height: var(--ui-layout-18, 18px);
   }
 
   .result-item--compact .meta-line:last-child {
@@ -282,7 +282,7 @@
     flex: 0 0 auto;
     display: flex;
     align-items: center;
-    padding-left: 12px;
+    padding-left: var(--ui-space-12, 12px);
   }
   .result-row {
     flex: 1 1 auto;
@@ -294,8 +294,8 @@
     cursor: pointer;
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 9px 14px;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-9, 9px) var(--ui-space-14, 14px);
     box-sizing: border-box;
     width: 100%;
     height: auto;
@@ -308,9 +308,9 @@
   }
   .row-title {
     flex: 0 1 auto;
-    min-width: 96px;
+    min-width: var(--ui-layout-96, 96px);
     max-width: 42%;
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     font-weight: 600;
     color: var(--text-color);
     overflow: hidden;
@@ -321,7 +321,7 @@
     flex: 1 1 auto;
     min-width: 0;
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -330,17 +330,17 @@
     flex: 0 0 auto;
     max-width: 22%;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
   .row-time {
     flex: 0 0 auto;
-    width: 112px;
+    width: var(--ui-layout-112, 112px);
     text-align: right;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     white-space: nowrap;
   }
   .row-meta--empty {
@@ -355,8 +355,8 @@
 
   .result-checkbox-wrap {
     position: absolute;
-    top: 14px;
-    right: 14px;
+    top: var(--ui-space-14, 14px);
+    right: var(--ui-space-14, 14px);
     z-index: 3;
   }
 
@@ -368,12 +368,12 @@
     color: inherit;
     text-align: left;
     cursor: pointer;
-    padding: 14px;
+    padding: var(--ui-space-14, 14px);
     display: flex;
     flex-direction: column;
     align-items: stretch;
     justify-content: flex-start;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     box-sizing: border-box;
     height: 100%;
     line-height: normal;
@@ -389,24 +389,24 @@
   }
 
   .result-click-area--selectable {
-    padding-right: 40px;
+    padding-right: var(--ui-space-40, 40px);
   }
 
   .item-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     width: 100%;
     min-width: 0;
-    min-height: 24px;
+    min-height: var(--ui-layout-24, 24px);
   }
 
   .type-pill {
     min-width: max-content;
-    padding: 3px 8px;
+    padding: var(--ui-space-3, 3px) var(--ui-space-8, 8px);
     border-radius: 999px;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 700;
     background: color-mix(in srgb, var(--resource-bookmark-color) 14%, transparent);
     color: var(--resource-bookmark-color);
@@ -438,7 +438,7 @@
     min-width: 0;
     text-align: right;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -449,13 +449,13 @@
     width: 100%;
     min-width: 0;
     margin: 0;
-    font-size: 16px;
+    font-size: var(--ui-font-16, 16px);
     line-height: 1.35;
     font-weight: 700;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    min-height: 22px;
+    min-height: var(--ui-layout-22, 22px);
     overflow-wrap: anywhere;
   }
 
@@ -478,12 +478,12 @@
   .match-reason {
     flex: 0 0 auto;
     margin: 0;
-    padding: 2px 7px;
+    padding: var(--ui-space-2, 2px) var(--ui-space-7, 7px);
     border-radius: 999px;
     color: var(--primary-color);
     background: color-mix(in srgb, var(--primary-color) 10%, transparent);
-    font-size: 11px;
-    line-height: 18px;
+    font-size: var(--ui-font-11, 11px);
+    line-height: var(--ui-layout-18, 18px);
     white-space: nowrap;
   }
 
@@ -496,22 +496,22 @@
     flex-direction: column;
     width: 100%;
     min-width: 0;
-    gap: 2px;
-    min-height: 40px;
+    gap: var(--ui-space-2, 2px);
+    min-height: var(--ui-layout-40, 40px);
     margin-top: auto;
   }
 
   .meta-line {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    line-height: 18px;
+    line-height: var(--ui-layout-18, 18px);
   }
 
   .meta-line-value {
-    margin-left: 4px;
+    margin-left: var(--ui-space-4, 4px);
     min-width: 0;
     overflow-wrap: anywhere;
   }
@@ -529,7 +529,7 @@
     background: color-mix(in srgb, #facc15 72%, transparent);
     color: #171717;
     border-radius: 3px;
-    padding: 0 2px;
+    padding: 0 var(--ui-space-2, 2px);
     font-weight: 700;
   }
 

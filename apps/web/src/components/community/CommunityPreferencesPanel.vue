@@ -54,10 +54,10 @@
   }
   h2 {
     margin: 0;
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
   }
   p {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.7;
     color: var(--desc-color);
   }
@@ -66,7 +66,7 @@
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .community-preferences__choices [aria-pressed='true'] {
     outline: 1px solid var(--primary-color);
@@ -74,8 +74,8 @@
     color: var(--primary-color);
   }
   .community-preferences__error {
-    margin-top: 10px;
+    margin-top: var(--ui-space-10, 10px);
     color: var(--danger-color, var(--text-color));
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 </style>

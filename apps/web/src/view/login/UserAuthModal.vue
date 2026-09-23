@@ -204,7 +204,7 @@
     z-index: 700;
     display: grid;
     place-items: center;
-    padding: 20px;
+    padding: var(--ui-space-20, 20px);
     box-sizing: border-box;
     overflow-y: auto;
     background: rgba(12, 15, 28, 0.58);
@@ -229,9 +229,9 @@
 
   .auth-card {
     position: relative;
-    width: min(460px, calc(100vw - 40px));
-    max-height: calc(100vh - 40px);
-    padding: 28px 32px 22px;
+    width: min(var(--ui-layout-460, 460px), calc(100vw - var(--ui-layout-40, 40px)));
+    max-height: calc(100vh - var(--ui-layout-40, 40px));
+    padding: var(--ui-space-28, 28px) var(--ui-space-32, 32px) var(--ui-space-22, 22px);
     box-sizing: border-box;
     overflow-x: hidden;
     overflow-y: auto;
@@ -274,11 +274,11 @@
 
   .auth-close {
     position: absolute;
-    top: 18px;
-    right: 18px;
+    top: var(--ui-space-18, 18px);
+    right: var(--ui-space-18, 18px);
     z-index: 2;
-    width: 34px !important;
-    height: 34px !important;
+    width: var(--ui-control-34, 34px) !important;
+    height: var(--ui-control-34, 34px) !important;
     padding: 0 !important;
     color: var(--auth-muted) !important;
     border: 1px solid transparent;
@@ -295,8 +295,8 @@
   .auth-brand {
     display: flex;
     align-items: center;
-    min-height: 28px;
-    padding-right: 42px;
+    min-height: var(--ui-layout-28, 28px);
+    padding-right: var(--ui-space-42, 42px);
   }
 
   .auth-brand__mark {
@@ -336,7 +336,7 @@
   }
 
   .auth-brand__name {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 750;
     letter-spacing: 0.18em;
   }
@@ -344,29 +344,29 @@
   .auth-brand__line {
     width: 1px;
     height: 13px;
-    margin: 0 10px;
+    margin: 0 var(--ui-space-10, 10px);
     background: var(--auth-divider);
   }
 
   .auth-brand__tagline {
     overflow: hidden;
     color: var(--auth-muted);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     white-space: nowrap;
     text-overflow: ellipsis;
   }
 
   .auth-heading {
-    margin: 30px 0 24px;
+    margin: var(--ui-space-30, 30px) 0 var(--ui-space-24, 24px);
   }
 
   .auth-heading__eyebrow {
     display: inline-flex;
     align-items: center;
-    min-height: 24px;
-    padding: 0 9px;
+    min-height: var(--ui-layout-24, 24px);
+    padding: 0 var(--ui-space-9, 9px);
     color: #817cff;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 700;
     letter-spacing: 0.08em;
     border: 1px solid rgba(118, 111, 255, 0.2);
@@ -375,9 +375,9 @@
   }
 
   .auth-heading h2 {
-    margin: 12px 0 7px;
+    margin: var(--ui-space-12, 12px) 0 var(--ui-space-7, 7px);
     color: var(--auth-title);
-    font-size: 30px;
+    font-size: var(--ui-font-30, 30px);
     line-height: 1.2;
     letter-spacing: -0.03em;
   }
@@ -385,74 +385,74 @@
   .auth-heading p {
     margin: 0;
     color: var(--auth-muted);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.7;
   }
 
   .auth-card--reset .auth-heading {
-    margin: 24px 0 18px;
+    margin: var(--ui-space-24, 24px) 0 var(--ui-space-18, 18px);
   }
 
   .auth-card--reset :deep(.auth-fields) {
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .auth-card--reset :deep(.auth-field) {
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
 
   .auth-card--reset :deep(.auth-input .b-input) {
-    height: 44px;
+    height: var(--ui-control-44, 44px);
   }
 
   .auth-card--reset :deep(.auth-primary) {
-    height: 44px !important;
-    margin-top: 14px;
+    height: var(--ui-control-44, 44px) !important;
+    margin-top: var(--ui-space-14, 14px);
   }
 
   .auth-card--reset :deep(.auth-switch) {
-    margin-top: 12px;
+    margin-top: var(--ui-space-12, 12px);
   }
 
   .auth-card--reset .auth-assurance {
-    margin-top: 14px;
+    margin-top: var(--ui-space-14, 14px);
   }
 
   /* 注册页字段最多(昵称+邮箱+密码 + GitHub + 切换),用紧凑间距把多出的昵称行"吃回来",正常屏不出滚动条 */
   .auth-card--compact .auth-heading {
-    margin: 22px 0 16px;
+    margin: var(--ui-space-22, 22px) 0 var(--ui-space-16, 16px);
   }
   .auth-card--compact :deep(.auth-fields) {
-    gap: 11px;
+    gap: var(--ui-space-11, 11px);
   }
   .auth-card--compact :deep(.auth-field) {
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   .auth-card--compact :deep(.auth-input .b-input) {
-    height: 44px;
+    height: var(--ui-control-44, 44px);
   }
   .auth-card--compact :deep(.auth-primary) {
-    height: 44px !important;
-    margin-top: 14px;
+    height: var(--ui-control-44, 44px) !important;
+    margin-top: var(--ui-space-14, 14px);
   }
   .auth-card--compact :deep(.auth-divider) {
-    margin: 14px 0;
+    margin: var(--ui-space-14, 14px) 0;
   }
   .auth-card--compact :deep(.auth-switch) {
-    margin-top: 13px;
+    margin-top: var(--ui-space-13, 13px);
   }
   .auth-card--compact .auth-assurance {
-    margin-top: 14px;
+    margin-top: var(--ui-space-14, 14px);
   }
 
   .auth-assurance {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 7px;
-    margin-top: 18px;
+    gap: var(--ui-space-7, 7px);
+    margin-top: var(--ui-space-18, 18px);
     color: var(--auth-muted);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .auth-legal {
     position: relative;
@@ -461,10 +461,10 @@
     align-items: center;
     justify-content: center;
     flex-wrap: wrap;
-    gap: 4px;
-    margin-top: 8px;
+    gap: var(--ui-space-4, 4px);
+    margin-top: var(--ui-space-8, 8px);
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.5;
     text-align: center;
   }
@@ -490,23 +490,23 @@
 
   :deep(.auth-fields) {
     display: grid;
-    gap: 15px;
+    gap: var(--ui-space-15, 15px);
   }
 
   :deep(.auth-field) {
     display: grid;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   :deep(.auth-field__label) {
     color: var(--auth-title);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 600;
   }
 
   :deep(.auth-input .b-input) {
-    height: 48px;
-    padding-left: 42px !important;
+    height: var(--ui-control-48, 48px);
+    padding-left: var(--ui-space-42, 42px) !important;
     color: var(--auth-title) !important;
     border: 1px solid var(--auth-divider) !important;
     border-radius: 12px;
@@ -533,24 +533,24 @@
   }
 
   :deep(.auth-input .prefix-icon) {
-    left: 14px;
+    left: var(--ui-space-14, 14px);
     color: #7772ff;
   }
 
   :deep(.auth-input--action .b-input) {
-    padding-right: 112px !important;
+    padding-right: var(--ui-space-112, 112px) !important;
   }
 
   :deep(.auth-input--action .suffix-icon) {
-    right: 8px;
+    right: var(--ui-space-8, 8px);
   }
 
   :deep(.auth-primary) {
     width: 100% !important;
-    height: 46px !important;
-    margin-top: 18px;
+    height: var(--ui-control-46, 46px) !important;
+    margin-top: var(--ui-space-18, 18px);
     border-radius: 12px !important;
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     font-weight: 700;
     background: linear-gradient(100deg, #5d55e8, #756cff 65%, #8178ff) !important;
     box-shadow: 0 10px 24px rgba(97, 92, 237, 0.23);
@@ -563,8 +563,8 @@
 
   :deep(.auth-secondary) {
     width: 100% !important;
-    height: 44px !important;
-    gap: 8px;
+    height: var(--ui-control-44, 44px) !important;
+    gap: var(--ui-space-8, 8px);
     color: var(--auth-title) !important;
     border: 1px solid var(--auth-divider);
     border-radius: 12px !important;
@@ -578,9 +578,9 @@
 
   :deep(.auth-link) {
     height: auto !important;
-    padding: 2px 0 !important;
+    padding: var(--ui-space-2, 2px) 0 !important;
     color: #7772ff !important;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.4 !important;
     background: transparent !important;
   }
@@ -593,8 +593,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
-    margin-top: 12px;
+    gap: var(--ui-space-16, 16px);
+    margin-top: var(--ui-space-12, 12px);
   }
 
   :deep(.auth-options .b-checkbox) {
@@ -603,16 +603,16 @@
 
   :deep(.auth-options .b-checkbox__label) {
     color: var(--auth-muted);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   :deep(.auth-divider) {
     display: flex;
     align-items: center;
-    gap: 12px;
-    margin: 18px 0;
+    gap: var(--ui-space-12, 12px);
+    margin: var(--ui-space-18, 18px) 0;
     color: var(--auth-muted);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   :deep(.auth-divider::before),
@@ -627,18 +627,18 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
-    margin-top: 17px;
+    gap: var(--ui-space-6, 6px);
+    margin-top: var(--ui-space-17, 17px);
     color: var(--auth-muted);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   :deep(.auth-inline-action) {
-    min-width: 88px;
-    height: 32px !important;
-    padding: 0 10px !important;
+    min-width: var(--ui-layout-88, 88px);
+    height: var(--ui-control-32, 32px) !important;
+    padding: 0 var(--ui-space-10, 10px) !important;
     color: #817cff !important;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     background: transparent !important;
   }
 

@@ -66,14 +66,14 @@
   .todo-reminder-once {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
   }
 
   label {
     display: grid;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 600;
   }
 

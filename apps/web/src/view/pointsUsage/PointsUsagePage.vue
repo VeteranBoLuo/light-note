@@ -18,10 +18,16 @@
         </div>
       </header>
 
-      <BCard v-if="showSummary" as="section" class="points-overview-panel" padding="20px" radius="14px">
+      <BCard
+        v-if="showSummary"
+        as="section"
+        class="points-overview-panel"
+        padding="var(--ui-space-20, 20px)"
+        radius="14px"
+      >
         <PointsSummary :key="accountKey" @exchange="openRewards" />
       </BCard>
-      <BCard as="section" class="points-ledger-panel" padding="20px" radius="14px">
+      <BCard as="section" class="points-ledger-panel" padding="var(--ui-space-20, 20px)" radius="14px">
         <PointsLedger :key="accountKey" settings-layout />
         <p class="points-ledger-note">{{ t('growth.pointsUsageSettlementHint') }}</p>
       </BCard>
@@ -59,17 +65,17 @@
   .points-usage-page {
     height: 100%;
     overflow-y: auto;
-    padding: 28px 24px 64px;
+    padding: var(--ui-space-28, 28px) var(--ui-space-24, 24px) var(--ui-space-64, 64px);
     box-sizing: border-box;
     background: var(--background-color);
     color: var(--text-color);
   }
   .points-usage-shell {
-    width: min(100%, 1000px);
+    width: min(100%, var(--ui-layout-1000, 1000px));
     margin: 0 auto;
     display: flex;
     flex-direction: column;
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
   }
   .points-usage-page.is-embedded {
     height: auto;
@@ -84,7 +90,7 @@
   .points-usage-hero {
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
   }
   .points-usage-back {
     align-self: flex-start;
@@ -92,18 +98,18 @@
   .points-usage-heading {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .points-usage-heading__icon {
     color: var(--primary-color);
   }
   .points-usage-heading h1 {
     margin: 0;
-    font-size: 24px;
+    font-size: var(--ui-font-24, 24px);
   }
   .points-usage-heading p {
-    margin: 4px 0 0;
-    font-size: 13px;
+    margin: var(--ui-space-4, 4px) 0 0;
+    font-size: var(--ui-font-13, 13px);
     color: var(--desc-color);
   }
   .points-overview-panel,
@@ -112,11 +118,11 @@
     box-shadow: none;
   }
   .points-ledger-note {
-    margin: 16px 0 0;
-    padding-top: 12px;
+    margin: var(--ui-space-16, 16px) 0 0;
+    padding-top: var(--ui-space-12, 12px);
     border-top: 1px solid var(--card-border-color);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.6;
   }
   @media (max-width: 767px) {

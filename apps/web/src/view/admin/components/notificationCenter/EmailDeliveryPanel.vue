@@ -88,7 +88,7 @@
     <BModal
       v-model:visible="detailVisible"
       :title="t('notificationAdmin.email.detail.title')"
-      width="min(680px, 94vw)"
+      width="min(var(--ui-layout-680, 680px), 94vw)"
       :show-footer="false"
     >
       <div v-if="detailLoading" class="email-detail-state">
@@ -221,11 +221,11 @@
   ]);
   const columns = computed(() => [
     { title: t('notificationAdmin.email.columns.subject'), key: 'subject', width: '1fr' },
-    { title: t('notificationAdmin.email.columns.type'), key: 'emailType', width: '110px' },
-    { title: t('notificationAdmin.email.columns.recipient'), key: 'recipientEmail', width: '180px' },
-    { title: t('notificationAdmin.email.columns.status'), key: 'status', width: '110px' },
-    { title: t('notificationAdmin.email.columns.attempt'), key: 'attemptNo', width: '72px' },
-    { title: t('notificationAdmin.email.columns.time'), key: 'createTime', width: '170px' },
+    { title: t('notificationAdmin.email.columns.type'), key: 'emailType', width: 'var(--ui-layout-110, 110px)' },
+    { title: t('notificationAdmin.email.columns.recipient'), key: 'recipientEmail', width: 'var(--ui-layout-180, 180px)' },
+    { title: t('notificationAdmin.email.columns.status'), key: 'status', width: 'var(--ui-layout-110, 110px)' },
+    { title: t('notificationAdmin.email.columns.attempt'), key: 'attemptNo', width: 'var(--ui-layout-72, 72px)' },
+    { title: t('notificationAdmin.email.columns.time'), key: 'createTime', width: 'var(--ui-layout-170, 170px)' },
   ]);
 
   const detailVisible = ref(false);
@@ -345,27 +345,27 @@
   }
   .email-stats {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 12px;
-    margin-bottom: 16px;
+    grid-template-columns: repeat(auto-fit, minmax(var(--ui-layout-150, 150px), 1fr));
+    gap: var(--ui-space-12, 12px);
+    margin-bottom: var(--ui-space-16, 16px);
   }
   .email-stat {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    padding: 16px;
+    gap: var(--ui-space-4, 4px);
+    padding: var(--ui-space-16, 16px);
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     background: var(--card-background);
     box-shadow: var(--surface-card-shadow);
   }
   .email-stat b {
-    font-size: 24px;
+    font-size: var(--ui-font-24, 24px);
     font-variant-numeric: tabular-nums;
   }
   .email-stat span {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .email-stat.is-accepted b {
     color: var(--success-color);
@@ -380,33 +380,33 @@
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 10px;
-    padding: 14px;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-14, 14px);
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     background: var(--workspace-panel-bg-color);
   }
   .email-select {
-    width: 150px;
+    width: var(--ui-layout-150, 150px);
   }
   .email-keyword {
-    width: min(280px, 100%);
+    width: min(var(--ui-layout-280, 280px), 100%);
   }
   .email-range {
-    width: 210px;
+    width: var(--ui-layout-210, 210px);
   }
   .email-range :deep(.drp-trigger.b_btn) {
     width: 100%;
     justify-content: space-between;
   }
   .email-scope-hint {
-    margin: 10px 2px 14px;
+    margin: var(--ui-space-10, 10px) var(--ui-space-2, 2px) var(--ui-space-14, 14px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .email-table-card {
     min-width: 0;
-    padding: 14px;
+    padding: var(--ui-space-14, 14px);
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     background: var(--card-background);
@@ -418,21 +418,21 @@
   .email-secondary,
   .email-time {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .email-recipient {
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .email-type,
   .email-status {
     display: inline-flex;
     align-items: center;
     width: max-content;
-    padding: 3px 8px;
+    padding: var(--ui-space-3, 3px) var(--ui-space-8, 8px);
     border-radius: 999px;
     background: var(--hover-background);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .email-status.is-accepted {
     color: var(--success-color, #16845b);
@@ -451,13 +451,13 @@
     background: color-mix(in srgb, var(--warning-color) 13%, transparent);
   }
   .email-detail-state {
-    padding: 32px 0;
+    padding: var(--ui-space-32, 32px) 0;
     color: var(--desc-color);
     text-align: center;
   }
   .email-detail {
     display: grid;
-    gap: 1px;
+    gap: var(--ui-space-1, 1px);
     overflow: hidden;
     border: 1px solid var(--surface-border-color);
     border-radius: 10px;
@@ -465,32 +465,32 @@
   }
   .email-detail-row {
     display: grid;
-    grid-template-columns: 150px minmax(0, 1fr);
-    gap: 16px;
+    grid-template-columns: var(--ui-layout-150, 150px) minmax(0, 1fr);
+    gap: var(--ui-space-16, 16px);
     align-items: center;
-    padding: 11px 14px;
+    padding: var(--ui-space-11, 11px) var(--ui-space-14, 14px);
     background: var(--card-background);
   }
   .email-detail-row > span:first-child {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .email-detail-row b,
   .email-detail-row code {
     min-width: 0;
     overflow-wrap: anywhere;
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .email-detail-row.is-multiline {
     align-items: flex-start;
   }
   .email-detail-note {
     margin: 0;
-    padding: 12px 14px;
+    padding: var(--ui-space-12, 12px) var(--ui-space-14, 14px);
     background: var(--card-background);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.6;
   }
   @media (max-width: @admin-bp-mobile) {

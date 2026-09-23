@@ -24,19 +24,19 @@
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 16px;
-    padding-bottom: 14px;
+    gap: var(--ui-space-16, 16px);
+    padding-bottom: var(--ui-space-14, 14px);
     border-bottom: 1px solid var(--surface-divider-color, var(--border-color));
   }
   h2 {
     margin: 0;
-    font-size: 16px;
+    font-size: var(--ui-font-16, 16px);
     font-weight: 600;
     color: var(--text-color);
   }
   p {
-    margin: 5px 0 0;
-    font-size: 12px;
+    margin: var(--ui-space-5, 5px) 0 0;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.7;
     color: var(--desc-color);
   }

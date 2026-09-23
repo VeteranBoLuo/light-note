@@ -3,7 +3,7 @@
     v-model:visible="visible"
     :title="t('entitlementStore.confirm.title')"
     :show-footer="false"
-    width="520px"
+    width="var(--ui-layout-520, 520px)"
     initial-focus=".checkout-modal__confirm"
   >
     <div v-if="item" class="checkout-modal">
@@ -110,11 +110,11 @@
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .checkout-modal__icon {
-    width: 38px;
-    height: 38px;
+    width: var(--ui-layout-38, 38px);
+    height: var(--ui-layout-38, 38px);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -129,28 +129,28 @@
   }
   .checkout-modal__product span {
     color: var(--text-color-secondary);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .checkout-modal__product h3 {
-    margin: 3px 0 0;
-    font-size: 17px;
+    margin: var(--ui-space-3, 3px) 0 0;
+    font-size: var(--ui-font-17, 17px);
   }
   .checkout-modal__product > strong {
-    font-size: 25px;
+    font-size: var(--ui-font-25, 25px);
   }
   .checkout-modal__facts {
     display: grid;
     gap: 0;
-    margin: 18px 0 0;
-    padding: 0 13px;
+    margin: var(--ui-space-18, 18px) 0 0;
+    padding: 0 var(--ui-space-13, 13px);
     border: 1px solid var(--surface-border-color);
     border-radius: 13px;
   }
   .checkout-modal__facts > div {
     display: grid;
-    grid-template-columns: minmax(100px, auto) minmax(0, 1fr);
-    gap: 16px;
-    padding: 11px 0;
+    grid-template-columns: minmax(var(--ui-layout-100, 100px), auto) minmax(0, 1fr);
+    gap: var(--ui-space-16, 16px);
+    padding: var(--ui-space-11, 11px) 0;
     border-bottom: 1px solid var(--surface-border-color);
   }
   .checkout-modal__facts > div:last-child {
@@ -162,11 +162,11 @@
   }
   .checkout-modal__facts dt {
     color: var(--text-color-secondary);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .checkout-modal__facts dd {
     text-align: right;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 600;
     line-height: 1.45;
   }
@@ -176,25 +176,25 @@
   .checkout-modal__notice {
     display: flex;
     align-items: flex-start;
-    gap: 8px;
-    margin: 13px 0 0;
-    padding: 11px 12px;
+    gap: var(--ui-space-8, 8px);
+    margin: var(--ui-space-13, 13px) 0 0;
+    padding: var(--ui-space-11, 11px) var(--ui-space-12, 12px);
     border: 1px solid var(--surface-border-color);
     border-radius: 11px;
     color: var(--text-color-secondary);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.55;
   }
   .checkout-modal__notice :deep(.svg-icon) {
     flex: 0 0 auto;
-    margin-top: 1px;
+    margin-top: var(--ui-space-1, 1px);
     color: var(--primary-color);
   }
   .checkout-modal__actions {
     display: flex;
     justify-content: flex-end;
-    gap: 10px;
-    margin-top: 18px;
+    gap: var(--ui-space-10, 10px);
+    margin-top: var(--ui-space-18, 18px);
   }
   @media (max-width: 640px) {
     .checkout-modal__facts > div {

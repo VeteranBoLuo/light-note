@@ -109,28 +109,29 @@
 
 <style scoped lang="less">
   .admin-opinion-detail {
+    font-size: var(--ui-font-16, 16px);
     min-width: 0;
     display: grid;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
 
   .admin-opinion-detail__identity {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .admin-opinion-detail__identity > div {
     min-width: 0;
     display: grid;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
 
   .admin-opinion-detail__identity strong {
     overflow: hidden;
     color: var(--text-color);
-    font-size: 16px;
+    font-size: var(--ui-font-16, 16px);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -138,14 +139,14 @@
   .admin-opinion-detail__identity span,
   .admin-opinion-detail__footer span {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .admin-opinion-detail__grid {
     margin: 0;
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px 20px;
+    gap: var(--ui-space-12, 12px) var(--ui-space-20, 20px);
   }
 
   .admin-opinion-detail__wide {
@@ -155,9 +156,9 @@
   .admin-opinion-detail dt,
   .admin-opinion-detail__images h4,
   .admin-opinion-detail__reply label {
-    margin: 0 0 6px;
+    margin: 0 0 var(--ui-space-6, 6px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 500;
   }
 
@@ -173,12 +174,12 @@
   .admin-opinion-detail__image-list {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .admin-opinion-detail__image-button.b_btn {
-    width: 88px;
-    height: 88px;
+    width: var(--ui-layout-88, 88px);
+    height: var(--ui-layout-88, 88px);
     padding: 0;
     overflow: hidden;
     border: 1px solid var(--surface-border-color);
@@ -194,14 +195,14 @@
 
   .admin-opinion-detail__reply {
     display: grid;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .admin-opinion-detail__footer {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   @media (max-width: 767px) {

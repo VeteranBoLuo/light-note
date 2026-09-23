@@ -28,12 +28,12 @@
 
 <style scoped lang="less">
   .markdown-code-language-picker {
-    width: 124px;
+    width: var(--ui-layout-124, 124px);
     font-family: var(--app-font-family);
     :deep(.select-trigger) {
-      height: 32px;
-      min-height: 32px;
-      padding: 0 7px;
+      height: var(--ui-control-32, 32px);
+      min-height: var(--ui-control-32, 32px);
+      padding: 0 var(--ui-space-7, 7px);
       border-color: transparent;
       background: var(--surface-page-bg, var(--background-color));
       box-shadow: none;
@@ -47,7 +47,7 @@
       border-color: var(--primary-color);
     }
     :deep(.select-text) {
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
       color: var(--workspace-muted);
     }
   }

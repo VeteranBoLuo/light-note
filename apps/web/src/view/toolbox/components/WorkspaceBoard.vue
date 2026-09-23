@@ -513,31 +513,31 @@
     visibility: hidden;
     pointer-events: none;
     white-space: nowrap;
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     font-weight: 500;
-    padding: 0 32px 0 13px;
+    padding: 0 var(--ui-space-32, 32px) 0 var(--ui-space-13, 13px);
   }
   .project-board__toolbar {
     display: flex;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     align-items: center;
     flex-wrap: wrap;
-    margin: 16px 0;
+    margin: var(--ui-space-16, 16px) 0;
   }
   .project-board__hint {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
     flex: 1;
   }
   .project-board__lanes {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
     align-items: start;
   }
   .project-board__lane {
     min-width: 0;
-    padding: 12px;
+    padding: var(--ui-space-12, 12px);
     border: 1px solid var(--surface-border-color);
     border-radius: 16px;
     background: var(--workspace-panel-bg-color);
@@ -546,51 +546,51 @@
     display: flex;
     align-items: start;
     justify-content: space-between;
-    gap: 10px;
-    margin: 0 0 12px;
+    gap: var(--ui-space-10, 10px);
+    margin: 0 0 var(--ui-space-12, 12px);
   }
   .project-board__lane h4 {
     margin: 0;
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
   }
   .project-board__lane header p {
-    height: 32px;
-    line-height: 16px;
+    height: var(--ui-layout-32, 32px);
+    line-height: var(--ui-layout-16, 16px);
     overflow: hidden;
-    margin: 5px 0 0;
+    margin: var(--ui-space-5, 5px) 0 0;
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .is-drop-description {
     color: var(--workspace-purple-text, var(--primary-color)) !important;
   }
   .project-board__drop {
     display: grid;
-    gap: 10px;
-    min-height: 32px;
+    gap: var(--ui-space-10, 10px);
+    min-height: var(--ui-layout-32, 32px);
   }
   .project-board__empty {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.6;
     text-align: center;
     color: var(--desc-color);
-    padding: 16px 6px;
+    padding: var(--ui-space-16, 16px) var(--ui-space-6, 6px);
     margin: 0;
   }
   .project-board__add.b_btn {
-    margin-top: 12px;
+    margin-top: var(--ui-space-12, 12px);
     background: transparent;
     border: 1px dashed var(--surface-border-color);
     white-space: normal;
     height: auto;
-    min-height: 34px;
-    font-size: 12px;
-    gap: 6px;
+    min-height: var(--ui-layout-34, 34px);
+    font-size: var(--ui-font-12, 12px);
+    gap: var(--ui-space-6, 6px);
     line-height: 1.4;
-    padding: 6px;
+    padding: var(--ui-space-6, 6px);
   }
   .project-board__drop:empty {
-    min-height: 64px;
+    min-height: var(--ui-layout-64, 64px);
   }
   .project-board__ghost {
     opacity: 0.35;
@@ -604,7 +604,7 @@
       flex-basis: 100%;
     }
     .project-board__add.b_btn {
-      min-height: 44px;
+      min-height: var(--ui-layout-44, 44px);
     }
   }
 </style>

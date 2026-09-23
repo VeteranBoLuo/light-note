@@ -7,8 +7,7 @@ describe('textareaCaret', () => {
     vi.restoreAllMocks();
   });
 
-  it('根节点缩放下统一换算镜像、滚动量与定位父级坐标', () => {
-    document.documentElement.style.zoom = '1.25';
+  it('镜像、滚动量与定位父级共用 CSS 像素', () => {
     const textarea = document.createElement('textarea');
     textarea.value = '说明 @codex';
     textarea.setSelectionRange(textarea.value.length, textarea.value.length);
@@ -34,9 +33,9 @@ describe('textareaCaret', () => {
     const caret = getTextareaCaretRect(textarea);
     const offset = toAnchorOffset(caret, container);
 
-    expect(mirrorPosition).toEqual({ left: '40px', top: '80px' });
-    expect(caret).toEqual({ left: 110, top: 145, height: 25 });
-    expect(offset).toEqual({ left: 48, top: 36, lineHeight: 20 });
+    expect(mirrorPosition).toEqual({ left: '50px', top: '100px' });
+    expect(caret).toEqual({ left: 112, top: 146, height: 25 });
+    expect(offset).toEqual({ left: 62, top: 46, lineHeight: 25 });
 
     container.remove();
     textarea.remove();

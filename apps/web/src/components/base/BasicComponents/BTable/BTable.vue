@@ -2,7 +2,7 @@
   <div class="table-container" :class="{ 'is-fill': props.fill, 'has-pagination': props.pagination }">
     <!-- 表头 -->
     <div class="table-header" :style="gridStyle">
-      <div v-if="props.selectable" class="header-cell" style="width: 50px">
+      <div v-if="props.selectable" class="header-cell" style="width: var(--ui-layout-50, 50px)">
         <BCheckbox
           :controlled="props.preserveSelection"
           :disabled="props.selectionDisabled || (props.preserveSelection && props.loading)"
@@ -51,7 +51,7 @@
               :style="[gridStyle, virtualRowStyle]"
               @click="handleRowClick(entry.item, entry.index)"
             >
-              <div v-if="props.selectable" class="table-cell" style="width: 50px" @click.stop>
+              <div v-if="props.selectable" class="table-cell" style="width: var(--ui-layout-50, 50px)" @click.stop>
                 <BCheckbox
                   :controlled="props.preserveSelection"
                   :disabled="props.selectionDisabled || (props.preserveSelection && props.loading)"
@@ -113,6 +113,7 @@
 </template>
 
 <script lang="ts" setup>
+  import { useUiDensity } from '@/composables/useUiDensity';
   import { computed, nextTick, onBeforeUnmount, onMounted, PropType, ref, watch } from 'vue';
   import { Column } from '@/components/base/BasicComponents/BTable/config.ts';
   import BPagination from '@/components/base/BasicComponents/BPagination.vue';
@@ -214,11 +215,11 @@
   // 生成网格列宽样式
   const gridStyle = computed(() => {
     const columns = props.selectable
-      ? ['50px', ...props.columns.map((col) => col.width || '1fr')]
+      ? ['var(--ui-layout-50, 50px)', ...props.columns.map((col) => col.width || '1fr')]
       : props.columns.map((col) => col.width || '1fr');
     return {
       'grid-template-columns': columns.join(' '),
-      gap: '10px',
+      gap: 'var(--ui-space-10, 10px)',
     };
   });
 
@@ -263,8 +264,10 @@
   const tableBodyRef = ref<HTMLElement | null>(null);
   const scrollTop = ref(0);
   const viewportHeight = ref(0);
-  const rowGap = 8;
-  const rowPitch = computed(() => Math.max(1, props.rowHeight) + rowGap);
+  const { dimension } = useUiDensity();
+  const rowGap = computed(() => dimension(8));
+  const rowHeight = computed(() => dimension(props.rowHeight, 'control'));
+  const rowPitch = computed(() => Math.max(1, rowHeight.value) + rowGap.value);
   const startIndex = computed(() => {
     if (!props.virtual) return 0;
     return Math.max(0, Math.floor(scrollTop.value / rowPitch.value) - Math.max(0, props.overscan));
@@ -283,7 +286,9 @@
   const virtualSizerStyle = computed(() => {
     if (!props.virtual) return undefined;
     const rowCount = sortedData.value.length;
-    const totalHeight = rowCount ? rowCount * Math.max(1, props.rowHeight) + Math.max(0, rowCount - 1) * rowGap : 0;
+    const totalHeight = rowCount
+      ? rowCount * Math.max(1, rowHeight.value) + Math.max(0, rowCount - 1) * rowGap.value
+      : 0;
     return {
       height: `${totalHeight}px`,
     };
@@ -293,9 +298,20 @@
   );
   const virtualRowStyle = computed(() =>
     props.virtual
-      ? { height: `${Math.max(1, props.rowHeight)}px`, minHeight: `${Math.max(1, props.rowHeight)}px` }
+      ? { height: `${Math.max(1, rowHeight.value)}px`, minHeight: `${Math.max(1, rowHeight.value)}px` }
       : undefined,
   );
+
+  watch(rowPitch, async (pitch, previousPitch) => {
+    if (!props.virtual || !tableBodyRef.value) return;
+    const previousTop = tableBodyRef.value.scrollTop;
+    const index = Math.floor(previousTop / previousPitch);
+    const offset = previousTop - index * previousPitch;
+    await nextTick();
+    if (!tableBodyRef.value) return;
+    tableBodyRef.value.scrollTop = index * pitch + Math.min(offset, pitch - 1);
+    scrollTop.value = tableBodyRef.value.scrollTop;
+  });
 
   let resizeObserver: ResizeObserver | null = null;
   let loadMoreQueued = false;
@@ -388,7 +404,7 @@
     flex-direction: column;
     max-height: 100%;
     width: 100%;
-    padding: 12px;
+    padding: var(--ui-space-12, 12px);
     box-sizing: border-box;
     background-color: var(--table-bg-color);
     box-shadow:
@@ -396,7 +412,7 @@
       0 2px 10px 0 rgba(0, 0, 0, 0.06),
       0 0 1px 0 rgba(0, 0, 0, 0.3);
     border-radius: 14px;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .table-container.is-fill {
@@ -408,16 +424,16 @@
   .table-header {
     display: grid;
     background-color: var(--table-header-bg-color);
-    height: 40px;
+    height: var(--ui-control-40, 40px);
     border-radius: 8px;
     align-items: center;
-    padding: 0 12px;
+    padding: 0 var(--ui-space-12, 12px);
     flex-shrink: 0;
     overflow: hidden;
   }
 
   .header-cell {
-    padding: 0 4px;
+    padding: 0 var(--ui-space-4, 4px);
     display: flex;
     align-items: center;
     white-space: nowrap;
@@ -425,7 +441,7 @@
     text-overflow: ellipsis;
     font-weight: 500;
     color: var(--desc-color);
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
   }
 
   .is-sortable {
@@ -442,8 +458,8 @@
     display: inline-flex;
     flex-direction: column;
     align-items: center;
-    gap: 1px;
-    margin-left: 4px;
+    gap: var(--ui-space-1, 1px);
+    margin-left: var(--ui-space-4, 4px);
     vertical-align: middle;
     flex-shrink: 0;
   }
@@ -465,7 +481,7 @@
     display: flex;
     flex-direction: column;
     overflow-y: auto;
-    min-height: 100px;
+    min-height: var(--ui-layout-100, 100px);
     max-height: 100%;
     box-sizing: border-box;
   }
@@ -475,7 +491,7 @@
   }
 
   .table-container.has-pagination:not(.is-fill) .table-body {
-    max-height: calc(100% - 100px);
+    max-height: calc(100% - var(--ui-layout-100, 100px));
   }
 
   .table-container.is-fill .table-body {
@@ -499,7 +515,7 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .table-row-window.is-virtual {
@@ -512,10 +528,10 @@
 
   .table-row {
     display: grid;
-    min-height: 40px;
+    min-height: var(--ui-control-40, 40px);
     border-radius: 8px;
     align-items: center;
-    padding: 0 12px;
+    padding: 0 var(--ui-space-12, 12px);
     transition: background-color 0.2s;
     flex-shrink: 0;
     &:hover {
@@ -524,8 +540,8 @@
   }
 
   .table-loading {
-    min-height: 32px;
-    margin-top: 8px;
+    min-height: var(--ui-control-32, 32px);
+    margin-top: var(--ui-space-8, 8px);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -537,12 +553,12 @@
   }
 
   .table-expand-row {
-    padding: 0 20px 16px;
-    margin-bottom: 4px;
+    padding: 0 var(--ui-space-20, 20px) var(--ui-space-16, 16px);
+    margin-bottom: var(--ui-space-4, 4px);
   }
 
   .table-cell {
-    padding: 0 8px;
+    padding: 0 var(--ui-space-8, 8px);
     box-sizing: border-box;
     white-space: nowrap;
     overflow: hidden;
@@ -550,7 +566,7 @@
     color: var(--text-color);
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
 
   .table-cell.table-cell--overflow-visible {
@@ -573,7 +589,7 @@
 
   .table-pagination {
     margin-top: auto;
-    padding-top: 12px;
+    padding-top: var(--ui-space-12, 12px);
     border-top: 1px solid var(--menu-item-h-bg-color);
   }
 </style>

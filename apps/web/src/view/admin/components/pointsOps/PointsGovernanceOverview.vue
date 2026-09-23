@@ -308,7 +308,7 @@
   });
   const trendChart = computed(() => buildPointsGovernanceTrend(data.value?.trends || []));
   const trend = computed(() => trendChart.value.points);
-  const trendMinWidth = computed(() => `${Math.max(280, trend.value.length * 34)}px`);
+  const trendMinWidth = computed(() => `max(var(--ui-layout-280, 280px), calc(var(--ui-layout-34, 34px) * ${trend.value.length}))`);
   const activeTrend = computed(() => trend.value.find((item) => item.day === activeTrendDay.value) || null);
   const leaderboardRows = computed(() =>
     (data.value?.balanceLeaderboard || []).map((row: BalanceLeaderboardUser) => ({
@@ -326,11 +326,11 @@
           { title: '积分', key: 'pointsLabel', width: '92px', ellipsis: false },
         ]
       : [
-          { title: '排名', key: 'rank', width: '64px', ellipsis: false },
-          { title: '用户', key: 'identity', width: 'minmax(220px, 1fr)', ellipsis: false },
-          { title: '当前积分', key: 'pointsLabel', width: '130px', ellipsis: false },
-          { title: '等级', key: 'levelLabel', width: '90px', ellipsis: false },
-          { title: '最近活跃', key: 'lastActiveLabel', width: '130px', ellipsis: false },
+          { title: '排名', key: 'rank', width: 'var(--ui-layout-64, 64px)', ellipsis: false },
+          { title: '用户', key: 'identity', width: 'minmax(var(--ui-layout-220, 220px), 1fr)', ellipsis: false },
+          { title: '当前积分', key: 'pointsLabel', width: 'var(--ui-layout-130, 130px)', ellipsis: false },
+          { title: '等级', key: 'levelLabel', width: 'var(--ui-layout-90, 90px)', ellipsis: false },
+          { title: '最近活跃', key: 'lastActiveLabel', width: 'var(--ui-layout-130, 130px)', ellipsis: false },
         ],
   );
 
@@ -409,15 +409,15 @@
   .points-health {
     position: relative;
     display: grid;
-    gap: 16px;
-    min-height: 240px;
+    gap: var(--ui-space-16, 16px);
+    min-height: var(--ui-layout-240, 240px);
   }
   .points-health__toolbar,
   .points-health__panel header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
   h2,
   h3,
@@ -426,31 +426,31 @@
   }
   h2 {
     color: var(--text-color);
-    font-size: 18px;
+    font-size: var(--ui-font-18, 18px);
   }
   h3 {
     color: var(--text-color);
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
   }
   .points-health__toolbar p,
   header span,
   small {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .points-health__filters {
     display: flex;
     align-items: center;
     justify-content: flex-end;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .points-health__range {
-    width: 132px;
+    width: var(--ui-layout-132, 132px);
     flex: 0 0 auto;
   }
   .points-health__filters :deep(.input-container) {
-    width: 142px;
+    width: var(--ui-layout-142, 142px);
   }
   .points-health__error,
   .points-health__refresh-error {
@@ -458,22 +458,22 @@
     border-radius: 10px;
     color: var(--danger-color);
     background: var(--card-background);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .points-health__error {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    padding: 12px 14px;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-12, 12px) var(--ui-space-14, 14px);
   }
   .points-health__refresh-error {
-    padding: 10px 12px;
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
   }
   .points-health__metrics {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .points-health__metric,
   .points-health__panel {
@@ -483,16 +483,16 @@
   }
   .points-health__metric {
     display: grid;
-    gap: 5px;
-    padding: 14px;
+    gap: var(--ui-space-5, 5px);
+    padding: var(--ui-space-14, 14px);
   }
   .points-health__metric > span {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .points-health__metric strong {
     color: var(--text-color);
-    font-size: 22px;
+    font-size: var(--ui-font-22, 22px);
     font-variant-numeric: tabular-nums;
   }
   .points-health__metric strong.is-up {
@@ -504,44 +504,44 @@
   .points-health__grid {
     display: grid;
     grid-template-columns: 1.35fr 1fr;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .points-health__panel {
     display: grid;
-    gap: 14px;
-    padding: 15px;
+    gap: var(--ui-space-14, 14px);
+    padding: var(--ui-space-15, 15px);
   }
   .points-health__distribution {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .points-health__distribution div {
     display: grid;
-    gap: 3px;
-    padding: 9px;
+    gap: var(--ui-space-3, 3px);
+    padding: var(--ui-space-9, 9px);
     border-radius: 8px;
     background: var(--card-background);
   }
   .points-health__distribution span {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .points-health__distribution b {
     color: var(--text-color);
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     font-variant-numeric: tabular-nums;
   }
   .points-health__warnings {
     display: grid;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .points-health__warnings p,
   .points-health__healthy {
-    padding: 10px 12px;
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     border-radius: 8px;
     color: var(--text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.5;
   }
   .points-health__warnings p {
@@ -553,7 +553,7 @@
     background: var(--card-background);
   }
   .points-health__trend {
-    --trend-plot-height: 174px;
+    --trend-plot-height: var(--ui-layout-174, 174px);
     overflow: hidden;
   }
   .points-health__trend-header {
@@ -561,20 +561,20 @@
   }
   .points-health__trend-header > div {
     display: grid;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
   .points-health__trend-legend {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .points-health__trend-legend span {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   .points-health__trend-legend i {
     display: inline-block;
@@ -598,7 +598,7 @@
     width: 100%;
     overflow-x: auto;
     overflow-y: hidden;
-    padding-bottom: 4px;
+    padding-bottom: var(--ui-space-4, 4px);
   }
   .points-health__chart {
     position: relative;
@@ -608,7 +608,7 @@
     position: relative;
     z-index: 4;
     display: grid;
-    grid-template-columns: repeat(var(--trend-count), minmax(30px, 1fr));
+    grid-template-columns: repeat(var(--trend-count), minmax(var(--ui-layout-30, 30px), 1fr));
     width: 100%;
   }
   .points-health__chart-plot-layer {
@@ -634,10 +634,10 @@
     position: absolute;
     top: 0;
     left: 0;
-    padding-right: 4px;
+    padding-right: var(--ui-space-4, 4px);
     color: var(--desc-color);
     background: var(--workbench-subcard-bg);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     font-weight: 400;
     line-height: 16px;
     transform: translateY(-50%);
@@ -658,14 +658,14 @@
   }
   .points-health__bar-tooltip {
     width: 100%;
-    min-width: 30px;
+    min-width: var(--ui-layout-30, 30px);
   }
   .points-health__bar-item {
     display: grid;
-    grid-template-rows: var(--trend-plot-height) 20px;
-    gap: 5px;
+    grid-template-rows: var(--trend-plot-height) var(--ui-layout-20, 20px);
+    gap: var(--ui-space-5, 5px);
     width: 100%;
-    min-width: 30px;
+    min-width: var(--ui-layout-30, 30px);
     border: 1px solid transparent;
     border-radius: 7px;
     box-sizing: border-box;
@@ -723,13 +723,13 @@
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 8px 16px;
-    padding: 10px 12px;
+    gap: var(--ui-space-8, 8px) var(--ui-space-16, 16px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     border: 1px solid var(--surface-border-color);
     border-radius: 8px;
     color: var(--desc-color);
     background: var(--card-background);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-variant-numeric: tabular-nums;
   }
   .points-health__trend-summary > strong {
@@ -737,7 +737,7 @@
   }
   .points-health__trend-summary span {
     display: inline-flex;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
   .points-health__trend-summary .is-issued b {
     color: var(--success-color);
@@ -750,13 +750,13 @@
   }
   .points-health__leaderboard header > div {
     display: grid;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
   .points-health__rank {
     display: inline-grid;
     place-items: center;
-    width: 28px;
-    height: 28px;
+    width: var(--ui-layout-28, 28px);
+    height: var(--ui-layout-28, 28px);
     border-radius: 50%;
     color: var(--desc-color);
     background: var(--card-background);
@@ -769,7 +769,7 @@
   .points-health__identity {
     display: grid;
     min-width: 0;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
   .points-health__identity strong,
   .points-health__identity small {
@@ -779,23 +779,23 @@
   }
   .points-health__identity strong {
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .points-health__points {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
     color: var(--warning-color);
     font-variant-numeric: tabular-nums;
   }
   .points-health__empty {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .points-health__loading {
     justify-content: center;
     width: 100%;
-    padding: 16px 0;
+    padding: var(--ui-space-16, 16px) 0;
   }
   @media (max-width: @admin-bp-mobile) {
     .points-health__toolbar {

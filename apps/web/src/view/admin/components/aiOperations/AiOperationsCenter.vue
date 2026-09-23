@@ -1,5 +1,6 @@
 <template>
   <AdminDataPage
+    class="ai-operations-page"
     layout="scroll"
     :eyebrow="t('aiOperations.eyebrow')"
     :title="t('aiOperations.title')"
@@ -433,6 +434,7 @@
 
 <script setup lang="ts">
   import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+  import { useUiDensity } from '@/composables/useUiDensity';
   import { useI18n } from 'vue-i18n';
   import { useRoute } from 'vue-router';
   import { apiBasePost } from '@/http/request';
@@ -493,6 +495,7 @@
   });
 
   const { t, locale } = useI18n();
+  const { dimension } = useUiDensity();
   const route = useRoute();
   const bookmark = bookmarkStore();
   const tableRef = ref<InstanceType<typeof BTable> | null>(null);
@@ -549,7 +552,7 @@
     Math.max(0, ...(overview.value?.modules || []).map((item) => Number(item.providerTokens || 0))),
   );
   const trendWidthStyle = computed(() => ({
-    minWidth: `${Math.max(560, (overview.value?.daily?.length || 0) * (filters.periodDays === 90 ? 13 : 24))}px`,
+    minWidth: `${dimension(Math.max(560, (overview.value?.daily?.length || 0) * (filters.periodDays === 90 ? 13 : 24)), 'layout')}px`,
   }));
 
   const periodOptions = computed(() =>
@@ -574,14 +577,29 @@
     ...seenProviders.value.map((value) => ({ value, label: value })),
   ]);
   const columns = computed(() => [
-    { title: t('aiOperations.columns.action'), key: 'action', width: 'minmax(210px, 1.5fr)', ellipsis: false },
-    { title: t('aiOperations.columns.actor'), key: 'actor', width: 'minmax(130px, 1fr)', ellipsis: false },
-    { title: t('aiOperations.columns.status'), key: 'status', width: '144px', ellipsis: false },
-    { title: t('aiOperations.columns.model'), key: 'model', width: 'minmax(150px, 1.15fr)', ellipsis: false },
-    { title: t('aiOperations.columns.tokens'), key: 'tokens', width: '130px', ellipsis: false },
-    { title: t('aiOperations.columns.calls'), key: 'calls', width: '112px', ellipsis: false },
-    { title: t('aiOperations.columns.time'), key: 'time', width: '148px', ellipsis: false },
-    { title: '', key: 'detail', width: '44px', ellipsis: false },
+    {
+      title: t('aiOperations.columns.action'),
+      key: 'action',
+      width: 'minmax(var(--ui-layout-210, 210px), 1.5fr)',
+      ellipsis: false,
+    },
+    {
+      title: t('aiOperations.columns.actor'),
+      key: 'actor',
+      width: 'minmax(var(--ui-layout-130, 130px), 1fr)',
+      ellipsis: false,
+    },
+    { title: t('aiOperations.columns.status'), key: 'status', width: 'var(--ui-layout-144, 144px)', ellipsis: false },
+    {
+      title: t('aiOperations.columns.model'),
+      key: 'model',
+      width: 'minmax(var(--ui-layout-150, 150px), 1.15fr)',
+      ellipsis: false,
+    },
+    { title: t('aiOperations.columns.tokens'), key: 'tokens', width: 'var(--ui-layout-130, 130px)', ellipsis: false },
+    { title: t('aiOperations.columns.calls'), key: 'calls', width: 'var(--ui-layout-112, 112px)', ellipsis: false },
+    { title: t('aiOperations.columns.time'), key: 'time', width: 'var(--ui-layout-148, 148px)', ellipsis: false },
+    { title: '', key: 'detail', width: 'var(--ui-layout-44, 44px)', ellipsis: false },
   ]);
   const balanceDisplay = computed(() => {
     if (balanceLoading.value && !balance.value) return '…';
@@ -905,23 +923,26 @@
 </script>
 
 <style scoped lang="less">
+  .ai-operations-page {
+    font-size: var(--ui-font-16, 16px);
+  }
   .operations-filter {
     min-width: 0;
     display: inline-flex;
     flex-direction: column;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
     color: var(--sub-text-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     line-height: 1.2;
   }
 
   .operations-filter--select {
-    width: 138px;
+    width: var(--ui-layout-138, 138px);
   }
 
   .operations-filter--search {
-    min-width: 220px;
-    flex: 1 1 260px;
+    min-width: var(--ui-layout-220, 220px);
+    flex: 1 1 var(--ui-layout-260, 260px);
   }
 
   .operations-filter :deep(.b-select),
@@ -930,24 +951,24 @@
   }
 
   .operations-filter__label {
-    min-height: 12px;
+    min-height: var(--ui-layout-12, 12px);
   }
 
   .operations-internal-filter {
     align-self: flex-end;
     display: inline-flex;
-    min-height: 32px;
+    min-height: var(--ui-control-32, 32px);
     align-items: center;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     color: var(--text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     white-space: nowrap;
   }
 
   .operations-anomaly-hint {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
 
   .operations-signal-dot {
@@ -967,22 +988,22 @@
   .operations-inline-warning {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 9px 11px;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-9, 9px) var(--ui-space-11, 11px);
     border: 1px solid var(--warning-color, #a86700);
     border-radius: 10px;
     color: var(--warning-color, #a86700);
     background: var(--card-background);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .operations-state-card,
   .operations-list-state {
     display: flex;
-    min-height: 180px;
+    min-height: var(--ui-layout-180, 180px);
     align-items: center;
     justify-content: center;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
   }
 
   .operations-state-card--error,
@@ -999,8 +1020,8 @@
 
   .operations-overview-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1.7fr) minmax(280px, 0.8fr);
-    gap: 14px;
+    grid-template-columns: minmax(0, 1.7fr) minmax(var(--ui-layout-280, 280px), 0.8fr);
+    gap: var(--ui-space-14, 14px);
   }
 
   .operations-trend-card,
@@ -1014,38 +1035,38 @@
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .operations-section-title > span {
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
 
   .operations-section-title strong {
     color: var(--text-color);
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
   }
 
   .operations-section-title small {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     font-weight: 400;
   }
 
   .operations-trend-scroll {
     overflow-x: auto;
-    padding: 4px 0 2px;
+    padding: var(--ui-space-4, 4px) 0 var(--ui-space-2, 2px);
   }
 
   .operations-trend {
-    height: 176px;
+    height: var(--ui-layout-176, 176px);
     display: flex;
     align-items: stretch;
-    gap: 4px;
-    padding: 8px 6px 0;
+    gap: var(--ui-space-4, 4px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-6, 6px) 0;
     border-bottom: 1px solid var(--surface-divider-color);
     background-image: linear-gradient(to bottom, transparent 49%, var(--surface-divider-color) 50%, transparent 51%);
   }
@@ -1063,7 +1084,7 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
 
   .operations-trend__plot {
@@ -1095,27 +1116,27 @@
   }
 
   .operations-trend__item time {
-    min-height: 14px;
+    min-height: var(--ui-layout-14, 14px);
     color: var(--desc-color);
-    font-size: 9px;
+    font-size: var(--ui-font-9, 9px);
     white-space: nowrap;
   }
 
   .operations-empty-block {
-    min-height: 132px;
+    min-height: var(--ui-layout-132, 132px);
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .operations-module-list {
     margin: 0;
     padding: 0;
     display: grid;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     list-style: none;
   }
 
@@ -1124,24 +1145,24 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
 
   .operations-module-list li > div {
     flex-direction: row;
     align-items: baseline;
     justify-content: space-between;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .operations-module-list strong {
     color: var(--text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .operations-module-list span {
     color: var(--desc-color);
-    font-size: 9.5px;
+    font-size: var(--ui-font-9_5, 9.5px);
   }
 
   .operations-module-track {
@@ -1161,16 +1182,16 @@
 
   .operations-provider-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-    gap: 10px;
+    grid-template-columns: repeat(auto-fit, minmax(var(--ui-layout-230, 230px), 1fr));
+    gap: var(--ui-space-10, 10px);
   }
 
   .operations-provider-grid article {
     min-width: 0;
     display: flex;
     align-items: flex-start;
-    gap: 10px;
-    padding: 10px;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-10, 10px);
     border: 1px solid var(--surface-border-color);
     border-radius: 10px;
     background: var(--card-background);
@@ -1179,8 +1200,8 @@
   .operations-provider-icon,
   .operations-mobile-icon {
     display: inline-flex;
-    width: 34px;
-    height: 34px;
+    width: var(--ui-layout-34, 34px);
+    height: var(--ui-layout-34, 34px);
     flex: 0 0 auto;
     align-items: center;
     justify-content: center;
@@ -1194,7 +1215,7 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
 
   .operations-provider-grid strong,
@@ -1207,13 +1228,13 @@
 
   .operations-provider-grid strong {
     color: var(--text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .operations-provider-grid span,
   .operations-provider-grid small {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
 
   .operations-provider-grid .is-attention {
@@ -1224,14 +1245,14 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .operations-executions__header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .operations-executions__header h3,
@@ -1241,25 +1262,25 @@
 
   .operations-executions__header h3 {
     color: var(--text-color);
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
   }
 
   .operations-executions__header p {
-    margin-top: 2px;
+    margin-top: var(--ui-space-2, 2px);
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
 
   .operations-table-wrap {
-    height: 520px;
-    min-height: 420px;
+    height: var(--ui-layout-520, 520px);
+    min-height: var(--ui-layout-420, 420px);
   }
 
   .operations-cell-main {
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
 
   .operations-cell-main strong,
@@ -1273,12 +1294,12 @@
 
   .operations-cell-main strong {
     color: var(--text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .operations-cell-main span {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
 
   .operations-cell-main--numeric strong,
@@ -1288,12 +1309,12 @@
 
   .operations-executions time {
     color: var(--text-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .operations-row-action.b_btn {
-    width: 30px;
-    height: 30px;
+    width: var(--ui-control-30, 30px);
+    height: var(--ui-control-30, 30px);
     padding: 0;
     border: 1px solid var(--surface-border-color);
     border-radius: 8px;
@@ -1312,15 +1333,15 @@
     display: inline-flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
 
   .operations-status-stack > span {
     display: inline-flex;
     align-items: center;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
     color: var(--warning-color, #a86700);
-    font-size: 9px;
+    font-size: var(--ui-font-9, 9px);
     line-height: 1.2;
     white-space: nowrap;
   }
@@ -1329,7 +1350,7 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
 
   .operations-mobile-row__head {
@@ -1337,14 +1358,14 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .operations-mobile-row__head strong {
     min-width: 0;
     overflow: hidden;
     color: var(--text-color);
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -1353,7 +1374,7 @@
   .operations-mobile-row > small {
     overflow: hidden;
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -1361,38 +1382,38 @@
   .operations-mobile-row > .operations-mobile-row__attention {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
     color: var(--warning-color, #a86700);
   }
 
   .operations-mobile-more {
     display: flex;
-    min-height: 44px;
+    min-height: var(--ui-layout-44, 44px);
     align-items: center;
     justify-content: center;
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .operations-list-retry {
     display: flex;
-    min-height: 42px;
+    min-height: var(--ui-layout-42, 42px);
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
-    padding: 7px 10px;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-7, 7px) var(--ui-space-10, 10px);
     border: 1px solid var(--warning-color, #a86700);
     border-radius: 10px;
     color: var(--warning-color, #a86700);
     background: var(--card-background);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .operations-list-retry > span {
     min-width: 0;
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
 
   @media (max-width: 960px) {

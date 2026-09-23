@@ -2,7 +2,7 @@
   <BModal
     v-model:visible="visible"
     :title="t('noteDetail.editor.fileUpload.title')"
-    width="min(480px, calc(100vw - 24px))"
+    width="min(var(--ui-layout-480, 480px), calc(100vw - 24px))"
     :show-footer="false"
     :mask-closable="!uploading"
     :esc-closable="!uploading"
@@ -225,29 +225,30 @@
 <style scoped lang="less">
   .note-file-upload {
     display: grid;
-    gap: 12px;
-    width: min(420px, 100%);
+    gap: var(--ui-space-12, 12px);
+    font-size: var(--ui-font-16, 16px);
+    width: min(var(--ui-layout-420, 420px), 100%);
   }
 
   .note-file-upload > label {
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 600;
   }
 
   .note-file-upload__summary {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     min-width: 0;
-    padding: 10px;
+    padding: var(--ui-space-10, 10px);
     border: 1px solid var(--border-color);
     border-radius: 10px;
     background: var(--primary-btn-bg-color);
 
     > div:last-child {
       display: grid;
-      gap: 2px;
+      gap: var(--ui-space-2, 2px);
       min-width: 0;
     }
 
@@ -259,15 +260,15 @@
 
     span:not(.note-file-upload__icon) {
       color: var(--desc-color);
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
     }
   }
 
   .note-file-upload__icon {
     display: grid;
     flex: none;
-    width: 40px;
-    height: 40px;
+    width: var(--ui-layout-40, 40px);
+    height: var(--ui-layout-40, 40px);
     place-items: center;
     border: 1px solid var(--resource-file-color, #ff8a00);
     border-radius: 10px;
@@ -289,7 +290,7 @@
     display: flex;
     align-items: center;
     flex: none;
-    padding: 0 10px;
+    padding: 0 var(--ui-space-10, 10px);
     border: 1px solid var(--border-color);
     border-left: 0;
     border-radius: 0 6px 6px 0;
@@ -306,7 +307,7 @@
   .note-file-upload__saved p {
     margin: 0;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.5;
   }
 
@@ -317,8 +318,8 @@
   .note-file-upload__progress,
   .note-file-upload__saved {
     display: grid;
-    gap: 8px;
-    padding: 12px;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-12, 12px);
     border: 1px solid var(--primary-color);
     border-radius: 10px;
     background: var(--primary-btn-bg-color);
@@ -326,14 +327,14 @@
 
   .note-file-upload__progress > span {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .note-file-upload__actions {
     display: flex;
     justify-content: flex-end;
-    gap: 8px;
-    padding-top: 4px;
+    gap: var(--ui-space-8, 8px);
+    padding-top: var(--ui-space-4, 4px);
   }
 
   @media (max-width: 600px) {

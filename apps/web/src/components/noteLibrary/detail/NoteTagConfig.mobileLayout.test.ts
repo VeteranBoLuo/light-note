@@ -2,7 +2,10 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const source = readFileSync(resolve(process.cwd(), 'src/components/noteLibrary/detail/NoteTagConfig.vue'), 'utf8');
+const source = readFileSync(
+  resolve(process.cwd(), 'src/components/noteLibrary/detail/NoteTagConfig.vue'),
+  'utf8',
+).replace(/var\(--ui-[\w-]+, ([\d.]+px)\)/g, '$1');
 
 describe('NoteTagConfig 移动端高度分配', () => {
   it('桌面端固定内容高度，搜索结果变化只在标签列表内部滚动', () => {

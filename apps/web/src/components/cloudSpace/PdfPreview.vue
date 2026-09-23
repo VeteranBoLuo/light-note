@@ -270,6 +270,7 @@
   let resizeTimer: number | null = null;
   let scrollFrame: number | null = null;
   let lastViewerWidth = 0;
+  let lastViewerHeight = 0;
   let pinchStartDistance = 0;
   let pinchStartZoom = 1;
   let pinchTargetZoom = 1;
@@ -482,12 +483,17 @@
     if (typeof ResizeObserver === 'undefined' || !viewerRef.value) return;
     resizeObserver = new ResizeObserver(() => {
       const currentWidth = viewerRef.value?.clientWidth || 0;
+      const currentHeight = viewerRef.value?.clientHeight || 0;
       if (!lastViewerWidth) {
         lastViewerWidth = currentWidth;
+        lastViewerHeight = currentHeight;
         return;
       }
-      if (Math.abs(currentWidth - lastViewerWidth) < 2) return;
+      const widthChanged = Math.abs(currentWidth - lastViewerWidth) >= 2;
+      const heightChanged = Math.abs(currentHeight - lastViewerHeight) >= 2;
       lastViewerWidth = currentWidth;
+      lastViewerHeight = currentHeight;
+      if (!widthChanged && !(fitMode.value === 'page' && heightChanged)) return;
       scheduleRerender();
     });
     resizeObserver.observe(viewerRef.value);
@@ -735,6 +741,7 @@
     outlineItems.value = [];
     firstPageRendered = false;
     lastViewerWidth = 0;
+    lastViewerHeight = 0;
     const activeLoadingTask = loadingTask;
     const activeDocument = pdfDocument;
     loadingTask = null;
@@ -820,8 +827,8 @@
   }
 
   .pdf-preview__sidebar {
-    width: 220px;
-    min-width: 220px;
+    width: var(--ui-layout-220, 220px);
+    min-width: var(--ui-layout-220, 220px);
     height: 100%;
     border-right: 1px solid var(--card-border-color);
     background: var(--background-color);
@@ -839,9 +846,9 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    min-height: 46px;
-    padding: 6px 10px;
-    gap: 6px;
+    min-height: var(--ui-layout-46, 46px);
+    padding: var(--ui-space-6, 6px) var(--ui-space-10, 10px);
+    gap: var(--ui-space-6, 6px);
     overflow-x: auto;
     box-sizing: border-box;
     border-bottom: 1px solid var(--card-border-color);
@@ -857,8 +864,8 @@
     display: inline-flex;
     flex: 0 0 auto;
     align-items: center;
-    gap: 2px;
-    padding-right: 6px;
+    gap: var(--ui-space-2, 2px);
+    padding-right: var(--ui-space-6, 6px);
     border-right: 1px solid var(--card-border-color);
   }
 
@@ -869,8 +876,8 @@
 
   :deep(.pdf-preview__icon-button.b_btn),
   :deep(.pdf-preview__zoom-value.b_btn) {
-    width: 32px;
-    height: 32px;
+    width: var(--ui-layout-32, 32px);
+    height: var(--ui-layout-32, 32px);
     padding: 0;
     line-height: 1;
     color: var(--desc-color);
@@ -885,24 +892,24 @@
   }
 
   :deep(.pdf-preview__zoom-value.b_btn) {
-    width: 48px;
-    font-size: 12px;
+    width: var(--ui-layout-48, 48px);
+    font-size: var(--ui-font-12, 12px);
   }
 
   .pdf-preview__page-input {
-    width: 44px;
+    width: var(--ui-layout-44, 44px);
   }
 
   :deep(.pdf-preview__page-input .b-input) {
-    height: 28px;
-    padding: 0 6px !important;
+    height: var(--ui-layout-28, 28px);
+    padding: 0 var(--ui-space-6, 6px) !important;
     text-align: center;
   }
 
   .pdf-preview__page-total {
-    min-width: 30px;
+    min-width: var(--ui-layout-30, 30px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     white-space: nowrap;
   }
 
@@ -964,11 +971,11 @@
     position: absolute;
     right: 8px;
     bottom: 8px;
-    padding: 3px 7px;
+    padding: var(--ui-space-3, 3px) var(--ui-space-7, 7px);
     border-radius: 999px;
     background: rgb(20 22 30 / 58%);
     color: #fff;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.2;
     pointer-events: none;
   }
@@ -976,12 +983,12 @@
   @media (max-width: 600px) {
     .pdf-preview__toolbar {
       justify-content: flex-start;
-      min-height: 44px;
-      padding: 5px 6px;
+      min-height: var(--ui-layout-44, 44px);
+      padding: var(--ui-space-5, 5px) var(--ui-space-6, 6px);
     }
 
     .pdf-preview__tool-group {
-      padding-right: 3px;
+      padding-right: var(--ui-space-3, 3px);
     }
 
     .pdf-preview__viewport {

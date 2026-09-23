@@ -21,8 +21,8 @@ describe('目录树拖拽边缘自动滚动', () => {
     expect(resolveNoteTreeDragScrollStep({ clientX: 90, clientY: 102, rect })).toBe(0);
   });
 
-  it('界面缩放时按视觉尺寸同步换算热区', () => {
-    expect(resolveNoteTreeDragScrollStep({ clientX: 200, clientY: 135, rect, rootZoom: 1 })).toBeLessThan(0);
-    expect(resolveNoteTreeDragScrollStep({ clientX: 200, clientY: 135, rect, rootZoom: 0.8 })).toBe(0);
+  it('允许定制拖拽热区，边界外不触发', () => {
+    expect(resolveNoteTreeDragScrollStep({ clientX: 200, clientY: 135, rect, edgeSize: 40 })).toBeLessThan(0);
+    expect(resolveNoteTreeDragScrollStep({ clientX: 200, clientY: 135, rect, edgeSize: 32 })).toBe(0);
   });
 });

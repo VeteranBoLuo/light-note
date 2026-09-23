@@ -42,7 +42,18 @@
           {{ $t('note.newNote') }}
         </BButton>
         <BActionMenu :items="transferMenuItems" :triggers="['click']" @select="handleTransferMenu">
-          <BButton class="note-action-button">{{ $t('noteTransfer.more') }}</BButton>
+          <template #default="{ open }">
+            <BButton class="note-action-button note-more-button" :aria-expanded="open" aria-haspopup="menu">
+              {{ $t('noteTransfer.more') }}
+              <SvgIcon
+                :src="icon.noteTree.chevron"
+                size="12"
+                class="note-more-chevron"
+                :class="{ 'is-open': open }"
+                aria-hidden="true"
+              />
+            </BButton>
+          </template>
         </BActionMenu>
         <ViewModeToggle />
         <BBatchToggle class="note-batch-toggle" @click="toggleBatchMode" :active="batchMode" />
@@ -465,7 +476,7 @@
       v-model:visible="showTypePicker"
       :mask-closable="false"
       :title="$t('note.pickEditor')"
-      width="min(760px, 80vw)"
+      width="min(var(--ui-layout-760, 760px), 80vw)"
       :sections="typePickerSections"
       :note="$t('note.pickEditorTip')"
     />
@@ -484,7 +495,7 @@
       v-model:visible="singleNoteExportModalVisible"
       mask-closable
       :title="$t('noteDetail.exportNote')"
-      width="min(680px, 88vw)"
+      width="min(var(--ui-layout-680, 680px), 88vw)"
       :sections="singleNoteExportSections"
       :note="$t('noteDetail.exportNoteDesc')"
     />
@@ -3365,7 +3376,7 @@
     flex-direction: column;
   }
   .note-library-container {
-    padding: 20px;
+    padding: var(--ui-space-20, 20px);
     width: 100%;
     height: 100%;
     border-top: 1px solid var(--notePage-topBody-border-color);
@@ -3379,8 +3390,8 @@
     left: 0;
     top: 0;
     width: 100%;
-    height: 60px;
-    padding: 0 20px;
+    height: var(--ui-layout-60, 60px);
+    padding: 0 var(--ui-space-20, 20px);
     box-sizing: border-box;
     display: flex;
     justify-content: space-between;
@@ -3389,17 +3400,17 @@
     .header-content {
       display: flex;
       align-items: center;
-      gap: 20px;
+      gap: var(--ui-space-20, 20px);
     }
   }
   .note-library-body {
-    height: calc(100% - 20px);
+    height: calc(100% - var(--ui-layout-20, 20px));
     width: 100%;
-    padding: 20px;
+    padding: var(--ui-space-20, 20px);
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(var(--note-card-min-width, 320px), 1fr));
-    column-gap: 24px;
-    row-gap: 22px;
+    column-gap: var(--ui-space-24, 24px);
+    row-gap: var(--ui-space-22, 22px);
     overflow: auto;
     box-sizing: border-box;
     align-content: start;
@@ -3473,21 +3484,21 @@
   .note-card-skeleton,
   .note-list-skeleton-item {
     border-radius: 12px;
-    padding: 14px;
+    padding: var(--ui-space-14, 14px);
     box-sizing: border-box;
   }
 
   .note-card-skeleton {
-    height: 282px;
+    height: var(--ui-card-282, 282px);
     border: 1px solid var(--surface-border-color, var(--card-border-color));
     box-shadow: none;
   }
 
   .skeleton-line {
-    height: 12px;
+    height: var(--ui-layout-12, 12px);
     border-radius: 6px;
     background: rgba(120, 120, 120, 0.18);
-    margin-bottom: 10px;
+    margin-bottom: var(--ui-space-10, 10px);
   }
 
   .skeleton-line.long {
@@ -3504,23 +3515,23 @@
 
   .skeleton-tags {
     position: absolute;
-    left: 14px;
-    bottom: 14px;
+    left: var(--ui-space-14, 14px);
+    bottom: var(--ui-space-14, 14px);
     display: flex;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   /* 列表项的 chip 行是随内容流排的(卡片那版 .skeleton-tags 绝对定位贴底,列表不能照搬:
      列表项高度由内容撑开,绝对定位不占高,骨架照样矮) */
   .skeleton-list-chips {
     display: flex;
-    gap: 8px;
-    margin-top: 4px;
+    gap: var(--ui-space-8, 8px);
+    margin-top: var(--ui-space-4, 4px);
   }
 
   .skeleton-chip {
-    width: 52px;
-    height: 16px;
+    width: var(--ui-layout-52, 52px);
+    height: var(--ui-layout-16, 16px);
     border-radius: 8px;
     background: rgba(120, 120, 120, 0.18);
   }
@@ -3548,31 +3559,31 @@
 
   .note-library-body-list {
     display: flex;
-    height: calc(100% - 20px);
+    height: calc(100% - var(--ui-layout-20, 20px));
     width: 100%;
-    padding: 20px;
+    padding: var(--ui-space-20, 20px);
     box-sizing: border-box;
-    gap: 20px;
+    gap: var(--ui-space-20, 20px);
     transition: opacity 180ms ease;
     .note-list {
       flex: 1;
       overflow-y: auto;
-      padding: 0 10px;
+      padding: 0 var(--ui-space-10, 10px);
     }
 
     .note-list-skeleton-wrap {
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: var(--ui-space-8, 8px);
       overflow-y: auto;
-      padding: 0 10px;
+      padding: 0 var(--ui-space-10, 10px);
       flex: 1;
     }
 
     .note-list-skeleton-item {
       /* 桌面列表是稳定的「标题 + 摘要/标签」两行，骨架与真实项保持相同的紧凑高度。 */
-      min-height: 70px;
-      padding: 11px 14px;
+      min-height: var(--ui-layout-70, 70px);
+      padding: var(--ui-space-11, 11px) var(--ui-space-14, 14px);
       border: 1px solid var(--card-border-color);
 
       .skeleton-list-chips {
@@ -3586,24 +3597,24 @@
     align-items: center;
     justify-content: center;
     border-radius: 50%;
-    height: 30px;
-    width: 30px;
+    height: var(--ui-control-30, 30px);
+    width: var(--ui-control-30, 30px);
     cursor: pointer;
     border: 1px solid #e8eaf2;
   }
   .handle-btn-group {
-    height: 32px;
+    height: var(--ui-control-32, 32px);
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .deleteText {
     display: flex;
     align-items: center;
     cursor: pointer;
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     color: #f54e4e;
-    padding: 6px 12px;
+    padding: var(--ui-space-6, 6px) var(--ui-space-12, 12px);
     border-radius: 6px;
     background: rgba(245, 78, 78, 0.1);
     transition: all 0.2s;
@@ -3613,8 +3624,8 @@
   }
   .search-icon {
     overflow: hidden; // 防止因为padding变化导致动画开始时的错位问题
-    height: 32px;
-    width: 32px;
+    height: var(--ui-control-32, 32px);
+    width: var(--ui-control-32, 32px);
     border-radius: 16px;
     border-color: var(--card-border-color) !important;
     transition: all 0.3s;
@@ -3649,12 +3660,12 @@
     }
 
     .note-library-header {
-      gap: 10px;
-      padding: 0 12px;
+      gap: var(--ui-space-10, 10px);
+      padding: 0 var(--ui-space-12, 12px);
 
       .header-content {
         min-width: 0;
-        gap: 10px;
+        gap: var(--ui-space-10, 10px);
 
         > div:last-child {
           min-width: 0;
@@ -3666,26 +3677,26 @@
 
       .handle-btn-group {
         flex: 0 0 auto;
-        gap: 6px;
+        gap: var(--ui-space-6, 6px);
 
         :deep(.noteType-select) {
           max-width: 112px;
-          padding-inline: 8px;
+          padding-inline: var(--ui-space-8, 8px);
         }
       }
     }
 
     .mobile-add-note-btn {
-      padding-inline: 10px;
+      padding-inline: var(--ui-space-10, 10px);
     }
 
     .note-library-body {
-      margin-top: 40px;
+      margin-top: var(--ui-space-40, 40px);
       min-width: 0;
       max-width: 100%;
       grid-template-columns: minmax(0, 1fr);
-      gap: 14px;
-      padding: 12px;
+      gap: var(--ui-space-14, 14px);
+      padding: var(--ui-space-12, 12px);
     }
 
     .note-library-body > * {
@@ -3695,30 +3706,37 @@
   }
 
   .note-count-chip {
-    height: 22px;
-    padding: 0 8px;
+    height: var(--ui-layout-22, 22px);
+    padding: 0 var(--ui-space-8, 8px);
     border-radius: 999px;
     display: inline-flex;
     align-items: center;
     color: var(--resource-note-color, #00a884);
     background: color-mix(in srgb, var(--resource-note-color, #00a884) 10%, transparent);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 650;
     font-variant-numeric: tabular-nums;
   }
 
   .note-search {
-    width: min(220px, 18vw);
+    width: min(var(--ui-layout-220, 220px), 18vw);
   }
 
   .note-search :deep(.b-input) {
-    height: 36px;
+    height: var(--ui-control-36, 36px);
     border-radius: 10px;
   }
 
+  .note-more-chevron {
+    flex: 0 0 auto;
+  }
+  .note-more-chevron.is-open {
+    transform: rotate(180deg);
+  }
+
   .note-action-button {
-    height: 36px;
-    gap: 6px;
+    height: var(--ui-control-36, 36px);
+    gap: var(--ui-space-6, 6px);
     border-radius: 10px;
   }
 
@@ -3726,7 +3744,7 @@
     width: 100%;
     display: flex;
     justify-content: flex-end;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .note-mobile-actions :deep(.noteType-select) {
@@ -3738,7 +3756,7 @@
 
   .note-mobile-actions :deep(.noteType-select.has-pending) {
     width: auto;
-    padding-inline: 6px;
+    padding-inline: var(--ui-space-6, 6px);
     flex-shrink: 0;
   }
 
@@ -3748,8 +3766,8 @@
     min-width: 0;
     flex: 1 1 auto;
     height: 36px;
-    padding: 0 9px;
-    gap: 6px;
+    padding: 0 var(--ui-space-9, 9px);
+    gap: var(--ui-space-6, 6px);
     border: 1px solid var(--surface-border-color);
     border-radius: 10px;
     color: var(--desc-color);
@@ -3780,9 +3798,9 @@
     min-width: 0;
     min-height: 62px;
     flex: 0 0 auto;
-    padding: 9px 12px;
+    padding: var(--ui-space-9, 9px) var(--ui-space-12, 12px);
     justify-content: flex-start;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     border: 1px solid var(--resource-note-color, #00a884);
     border-radius: 11px;
     color: var(--text-color);
@@ -3807,7 +3825,7 @@
     flex: 1 1 auto;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
 
     strong {
       overflow: hidden;
@@ -3839,7 +3857,7 @@
   }
 
   .note-workspace {
-    --note-card-min-width: 320px;
+    --note-card-min-width: var(--ui-layout-320, 320px);
     --note-workspace-frame-color: color-mix(in srgb, var(--card-border-color) 72%, transparent);
     --note-workspace-divider-color: var(--note-workspace-frame-color);
 
@@ -3855,7 +3873,7 @@
 
     @supports (width: 1cqi) {
       // 以工作区宽度自适应:1470 左右保持可读卡宽,2560 左右自然落到 6 列。
-      --note-card-min-width: clamp(320px, 15cqi, 460px);
+      --note-card-min-width: clamp(var(--ui-layout-320, 320px), 15cqi, var(--ui-layout-460, 460px));
     }
   }
 
@@ -3866,7 +3884,7 @@
     min-height: 0;
     overflow: hidden;
     box-sizing: border-box;
-    padding: 12px;
+    padding: var(--ui-space-12, 12px);
     border-right: 0;
   }
 
@@ -3883,7 +3901,7 @@
 
   .note-directory-header {
     flex: 0 0 auto;
-    padding: 12px 16px 11px;
+    padding: var(--ui-space-12, 12px) var(--ui-space-16, 16px) var(--ui-space-11, 11px);
     border-bottom: 1px solid color-mix(in srgb, var(--card-border-color) 72%, transparent);
   }
 
@@ -3891,20 +3909,20 @@
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
     overflow: hidden;
   }
 
   .note-directory-crumb {
     position: relative;
     min-width: 0;
-    max-width: 180px;
-    height: 24px;
-    padding: 0 4px;
+    max-width: var(--ui-layout-180, 180px);
+    height: var(--ui-layout-24, 24px);
+    padding: 0 var(--ui-space-4, 4px);
     overflow: hidden;
     color: var(--desc-color);
     background: transparent !important;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     text-overflow: ellipsis;
 
     &.is-current {
@@ -3957,30 +3975,30 @@
   .note-directory-separator {
     flex: 0 0 auto;
     color: var(--muted-text-color, var(--desc-color));
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .note-directory-title-row {
     min-width: 0;
-    margin-top: 5px;
+    margin-top: var(--ui-space-5, 5px);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .note-directory-title-copy {
     min-width: 0;
     display: flex;
     align-items: baseline;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
 
     h2 {
       min-width: 0;
       margin: 0;
       overflow: hidden;
       color: var(--text-color);
-      font-size: 18px;
+      font-size: var(--ui-font-18, 18px);
       font-weight: 720;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -3989,14 +4007,14 @@
     span {
       flex: 0 0 auto;
       color: var(--desc-color);
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
     }
   }
 
   .note-open-directory-page {
-    height: 32px;
+    height: var(--ui-control-32, 32px);
     flex: 0 0 auto;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     border: 1px solid var(--surface-border-color, var(--card-border-color));
     border-radius: 9px;
     color: var(--resource-note-color, #00a884);
@@ -4007,12 +4025,12 @@
     flex: 0 0 auto;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .note-new-child-page {
-    height: 32px;
-    gap: 6px;
+    height: var(--ui-control-32, 32px);
+    gap: var(--ui-space-6, 6px);
     border-radius: 9px;
   }
 
@@ -4029,9 +4047,9 @@
     height: auto;
     flex: 1;
     min-height: 0;
-    padding: 14px;
+    padding: var(--ui-space-14, 14px);
     grid-template-columns: repeat(auto-fill, minmax(var(--note-card-min-width), 1fr));
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
     scrollbar-gutter: stable;
   }
 
@@ -4046,7 +4064,7 @@
     height: auto;
     flex: 1;
     min-height: 0;
-    padding: 12px;
+    padding: var(--ui-space-12, 12px);
     gap: 0;
   }
 
@@ -4054,7 +4072,7 @@
   .note-library-body-list .note-list-skeleton-wrap {
     width: 100%;
     // 右侧留出与滚动条的呼吸位,列表项不贴着滑块
-    padding: 0 8px 0 4px;
+    padding: 0 var(--ui-space-8, 8px) 0 var(--ui-space-4, 4px);
     box-sizing: border-box;
     scrollbar-gutter: stable;
   }
@@ -4062,7 +4080,7 @@
   .note-workspace--batch .note-library-body,
   .note-workspace--batch .note-library-body-list .note-list,
   .note-workspace--batch .note-library-body-list .note-list-skeleton-wrap {
-    padding-bottom: 112px;
+    padding-bottom: var(--ui-space-112, 112px);
     scroll-padding-bottom: 112px;
   }
 
@@ -4101,13 +4119,13 @@
   .note-empty-state {
     min-height: 0;
     flex: 1;
-    padding: 56px 20px;
+    padding: var(--ui-space-56, 56px) var(--ui-space-20, 20px);
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
     text-align: center;
     color: var(--desc-color);
   }
@@ -4115,11 +4133,11 @@
   .note-load-more {
     position: absolute;
     left: 50%;
-    bottom: 12px;
+    bottom: var(--ui-space-12, 12px);
     z-index: 3;
     transform: translateX(-50%);
-    min-height: 30px;
-    padding: 4px 10px;
+    min-height: var(--ui-layout-30, 30px);
+    padding: var(--ui-space-4, 4px) var(--ui-space-10, 10px);
     box-sizing: border-box;
     border-radius: 999px;
     color: var(--desc-color);
@@ -4130,12 +4148,12 @@
 
   .note-empty-state strong {
     color: var(--text-color);
-    font-size: 16px;
+    font-size: var(--ui-font-16, 16px);
   }
 
   .note-empty-state p {
-    margin: 0 0 6px;
-    font-size: 13px;
+    margin: 0 0 var(--ui-space-6, 6px);
+    font-size: var(--ui-font-13, 13px);
   }
 
   .note-empty-actions {
@@ -4143,20 +4161,20 @@
     flex-wrap: wrap;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .note-attach-button {
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     color: var(--resource-note-color, #00a884);
     border-color: var(--resource-note-color, #00a884);
     background: var(--menu-body-bg-color);
   }
 
   .note-empty-icon {
-    width: 52px;
-    height: 52px;
-    margin-bottom: 2px;
+    width: var(--ui-layout-52, 52px);
+    height: var(--ui-layout-52, 52px);
+    margin-bottom: var(--ui-space-2, 2px);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -4167,7 +4185,7 @@
 
   @media (max-width: 1200px) {
     .note-search {
-      width: 180px;
+      width: var(--ui-layout-180, 180px);
     }
   }
 
@@ -4187,7 +4205,7 @@
       margin-top: 0;
       padding: 0;
       grid-template-columns: minmax(0, 1fr);
-      gap: 12px;
+      gap: var(--ui-space-12, 12px);
       overflow-anchor: none;
     }
 
@@ -4207,7 +4225,7 @@
     }
 
     .note-mobile-current-page-card {
-      margin: 6px 0;
+      margin: var(--ui-space-6, 6px) 0;
     }
 
     .note-action-button {

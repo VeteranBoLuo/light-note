@@ -1,4 +1,7 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync as rawReadFileSync } from 'node:fs';
+import { standardDensitySource } from '@/test/standardDensitySource';
+
+const readFileSync = (path: string, encoding: 'utf8') => standardDensitySource(rawReadFileSync(path, encoding));
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import icon from '@/config/icon';
@@ -20,7 +23,7 @@ const codeMirrorSource = readFileSync(
 const toolbarSource = readFileSync(
   resolve(process.cwd(), 'src/components/noteLibrary/detail/EditorToolbarV2.vue'),
   'utf8',
-);
+).replace(/var\(--ui-(?:space|control|layout|font|card)-\d+, (\d+px)\)/g, '$1');
 const findBarSource = readFileSync(
   resolve(process.cwd(), 'src/components/noteLibrary/detail/EditorFindBar.vue'),
   'utf8',
@@ -367,8 +370,8 @@ describe('编辑器 V2 交互回归', () => {
 
   it('模板编辑在宽屏把三个字段压成一排，并把格式状态收进标题区', () => {
     expect(templateEditSource.match(/height="34px"/gu)).toHaveLength(3);
-    expect(templateEditSource).toContain(
-      'grid-template-columns: minmax(150px, 0.8fr) minmax(220px, 1.1fr) minmax(220px, 1.3fr)',
+    expect(templateEditSource.replace(/\s+/g, '')).toContain(
+      'grid-template-columns:minmax(150px,0.8fr)minmax(220px,1.1fr)minmax(220px,1.3fr)',
     );
     const heading = sourceBetween(templateEditSource, '<div class="note-template-edit__heading-row">', '</div>');
     expect(heading).toContain('<BChip');

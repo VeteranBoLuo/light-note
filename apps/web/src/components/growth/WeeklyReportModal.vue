@@ -2,8 +2,8 @@
   <BModal
     v-model:visible="modalVisible"
     :title="t('growth.weeklyReportTitle')"
-    width="1040px"
-    height="min(90vh, 860px)"
+    width="var(--ui-layout-1040, 1040px)"
+    height="min(90vh, var(--ui-layout-860, 860px))"
     modal-class="weekly-report-v2-modal"
     content-class="weekly-report-v2-content"
     :fullscreen-mobile="true"
@@ -18,6 +18,7 @@
           :class="{ 'is-scaled': posterPreviewScale < 1 }"
           :style="posterStageStyle"
         >
+          <!-- Exportable artwork keeps its own geometry; density only changes the surrounding interface. -->
           <article
             ref="posterRef"
             class="wr-poster"
@@ -28,7 +29,7 @@
             <div class="wr-poster-glow wr-poster-glow-two"></div>
             <header class="wr-poster-header">
               <div class="wr-brand-mark">
-                <SvgIcon :src="icon.growth.rank" size="18" />
+                <SvgIcon :density-aware="false" :src="icon.growth.rank" size="18" />
                 <span>LIGHT NOTE · WEEKLY MOMENT</span>
               </div>
               <span class="wr-edition">NO.{{ weekNumber }}</span>
@@ -36,7 +37,7 @@
 
             <section class="wr-profile">
               <div class="wr-avatar">
-                <SvgIcon :src="avatarSrc" size="46" />
+                <SvgIcon :density-aware="false" :src="avatarSrc" size="46" />
               </div>
               <div class="wr-profile-copy">
                 <strong>{{ displayName }}</strong>
@@ -49,7 +50,9 @@
             </section>
 
             <section class="wr-hero">
-              <div class="wr-hero-emblem" aria-hidden="true"><SvgIcon :src="milestone.icon" size="36" /></div>
+              <div class="wr-hero-emblem" aria-hidden="true"
+                ><SvgIcon :density-aware="false" :src="milestone.icon" size="36"
+              /></div>
               <div>
                 <span class="wr-hero-kicker">{{ t('growth.wrWeeklyHighlight') }}</span>
                 <h2>{{ milestone.title }}</h2>
@@ -59,17 +62,17 @@
 
             <section class="wr-core-stats">
               <div class="wr-core-stat">
-                <SvgIcon :src="icon.growth.create" size="17" />
+                <SvgIcon :density-aware="false" :src="icon.growth.create" size="17" />
                 <b>{{ totalOutput }}</b>
                 <span>{{ t('growth.wrTotal') }}</span>
               </div>
               <div class="wr-core-stat">
-                <SvgIcon :src="icon.growth.checkin" size="17" />
+                <SvgIcon :density-aware="false" :src="icon.growth.checkin" size="17" />
                 <b>{{ activeDays }}/7</b>
                 <span>{{ t('growth.wrActiveDays') }}</span>
               </div>
               <div class="wr-core-stat">
-                <SvgIcon :src="icon.growth.level" size="17" />
+                <SvgIcon :density-aware="false" :src="icon.growth.level" size="17" />
                 <b>{{ expDisplay }}</b>
                 <span>{{ expCaption }}</span>
               </div>
@@ -205,6 +208,7 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
+  import { useUiDensity } from '@/composables/useUiDensity';
   import { useUserStore } from '@/store';
   import { recordOperation } from '@/api/commonApi';
   import { ensureCloudFolder, uploadCloudFile } from '@/api/cloudFileUploadApi';
@@ -248,6 +252,7 @@
   const emit = defineEmits<{ 'update:visible': [value: boolean] }>();
   const { t, locale } = useI18n();
   const user = useUserStore();
+  const { density } = useUiDensity();
   const posterRef = ref<HTMLElement | null>(null);
   const posterStageRef = ref<HTMLElement | null>(null);
   const posterPreviewScale = ref(1);
@@ -402,8 +407,16 @@
         description: t('growth.wrMilestoneMomentumDesc', { n: totalOutput.value }),
       };
     if (!totalOutput.value && !checkins)
-      return { icon: icon.noteDetail.history, title: t('growth.wrMilestonePause'), description: t('growth.wrMilestonePauseDesc') };
-    return { icon: icon.growth.create, title: t('growth.wrMilestoneSeed'), description: t('growth.wrMilestoneSeedDesc') };
+      return {
+        icon: icon.noteDetail.history,
+        title: t('growth.wrMilestonePause'),
+        description: t('growth.wrMilestonePauseDesc'),
+      };
+    return {
+      icon: icon.growth.create,
+      title: t('growth.wrMilestoneSeed'),
+      description: t('growth.wrMilestoneSeedDesc'),
+    };
   });
   const headline = computed(() => {
     if (!totalOutput.value && !activeDays.value) return t('growth.wrHeadlineEmpty');
@@ -495,8 +508,7 @@
     if (composition.value.notes < 3) return t('growth.wrGoalNotes', { n: 3 - composition.value.notes });
     if (composition.value.bookmarks < 5) return t('growth.wrGoalBookmarks', { n: 5 - composition.value.bookmarks });
     if (composition.value.todos < 3) return t('growth.wrGoalTodos', { n: 3 - composition.value.todos });
-    if (composition.value.organized < 3)
-      return t('growth.wrGoalOrganized', { n: 3 - composition.value.organized });
+    if (composition.value.organized < 3) return t('growth.wrGoalOrganized', { n: 3 - composition.value.organized });
     return t('growth.wrGoalKeepMomentum');
   });
 
@@ -526,7 +538,10 @@
         safeNumber(contentStyle?.paddingBottom?.replace('px', ''));
       const availableHeight = Math.max(
         320,
-        (content?.clientHeight || height) - verticalPadding - (label?.offsetHeight || 0) - 8,
+        (content?.clientHeight || height) -
+          verticalPadding -
+          (label?.offsetHeight || 0) -
+          (label ? parseFloat(getComputedStyle(label).marginBottom) || 0 : 8),
       );
       posterPreviewScale.value = Math.min(1, availableHeight / height);
     });
@@ -538,6 +553,9 @@
     },
     { immediate: true },
   );
+  watch(density, () => {
+    if (props.visible) nextTick(updatePosterPreviewScale);
+  });
   onMounted(() => window.addEventListener('resize', updatePosterPreviewScale));
   onBeforeUnmount(() => {
     window.removeEventListener('resize', updatePosterPreviewScale);
@@ -691,16 +709,17 @@
 
   .weekly-report-v2-content {
     min-height: 0;
-    padding: 18px 22px !important;
+    padding: var(--ui-space-18, 18px) var(--ui-space-22, 22px) !important;
     overflow: auto;
     background: var(--background-color);
   }
 
   .wr-workspace {
     display: grid;
-    grid-template-columns: minmax(420px, 500px) minmax(280px, 1fr);
-    gap: 24px;
-    max-width: 930px;
+    /* ui-density-fixed: 左列承载独立的 500px 海报画布预览；海报内容几何不随界面密度变化。 */
+    grid-template-columns: minmax(420px, 500px) minmax(var(--ui-layout-280, 280px), 1fr);
+    gap: var(--ui-space-24, 24px);
+    max-width: var(--ui-layout-930, 930px);
     margin: 0 auto;
   }
 
@@ -710,9 +729,9 @@
 
   .wr-preview-label {
     display: block;
-    margin: 0 0 8px 4px;
+    margin: 0 0 var(--ui-space-8, 8px) var(--ui-space-4, 4px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 600;
   }
 
@@ -1137,23 +1156,23 @@
   .wr-insights {
     display: flex;
     flex-direction: column;
-    gap: 13px;
-    padding-top: 26px;
+    gap: var(--ui-space-13, 13px);
+    padding-top: var(--ui-space-26, 26px);
   }
   .wr-insight-heading {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
   .wr-insight-heading span {
     color: var(--primary-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 700;
     letter-spacing: 0.08em;
   }
   .wr-insight-heading strong {
     color: var(--text-color);
-    font-size: 20px;
+    font-size: var(--ui-font-20, 20px);
   }
   .wr-insight-card,
   .wr-next-goal,
@@ -1166,18 +1185,18 @@
     display: flex;
     min-width: 0;
     flex-direction: column;
-    gap: 6px;
-    padding: 16px;
+    gap: var(--ui-space-6, 6px);
+    padding: var(--ui-space-16, 16px);
   }
   .wr-insight-card > span,
   .wr-next-goal span {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 600;
   }
   .wr-insight-card strong {
     color: var(--text-color);
-    font-size: 18px;
+    font-size: var(--ui-font-18, 18px);
   }
   .wr-insight-card strong.up {
     color: #16a34a;
@@ -1188,7 +1207,7 @@
   .wr-insight-card p {
     margin: 0;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.6;
   }
   .wr-insight-card.is-summary {
@@ -1198,13 +1217,13 @@
   .wr-insight-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .wr-next-goal {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 16px;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-16, 16px);
     border-color: color-mix(in srgb, var(--primary-color) 42%, var(--surface-border-color));
   }
   .wr-next-goal-icon {
@@ -1212,8 +1231,8 @@
     flex: 0 0 auto;
     align-items: center;
     justify-content: center;
-    width: 38px;
-    height: 38px;
+    width: var(--ui-layout-38, 38px);
+    height: var(--ui-layout-38, 38px);
     border-radius: 12px;
     background: color-mix(in srgb, var(--primary-color) 12%, var(--surface-card-bg));
     color: var(--primary-color);
@@ -1221,21 +1240,21 @@
   .wr-next-goal > div:last-child {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
   .wr-next-goal strong {
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.45;
   }
   .wr-save-tip {
     display: flex;
     align-items: flex-start;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     margin: 0;
-    padding: 12px;
+    padding: var(--ui-space-12, 12px);
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.5;
   }
   .wr-save-tip .svg-icon {
@@ -1248,15 +1267,15 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
     align-items: center;
     align-self: stretch;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     width: 100%;
     margin-top: auto;
-    padding-top: 2px;
+    padding-top: var(--ui-space-2, 2px);
   }
   .wr-insight-actions .b_btn {
     min-width: 0;
     width: 100%;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   .wr-save-cloud-action {
     grid-column: 1 / -1;
@@ -1305,18 +1324,18 @@
 
   @media (min-width: 821px) and (max-height: 780px) {
     .wr-insights {
-      gap: 8px;
+      gap: var(--ui-space-8, 8px);
       padding-top: 0;
     }
     .wr-insight-card {
-      gap: 4px;
-      padding: 12px;
+      gap: var(--ui-space-4, 4px);
+      padding: var(--ui-space-12, 12px);
     }
     .wr-next-goal {
-      padding: 11px 12px;
+      padding: var(--ui-space-11, 11px) var(--ui-space-12, 12px);
     }
     .wr-save-tip {
-      padding: 9px 11px;
+      padding: var(--ui-space-9, 9px) var(--ui-space-11, 11px);
     }
   }
 

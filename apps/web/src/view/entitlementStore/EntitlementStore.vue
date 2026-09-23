@@ -16,7 +16,7 @@
           :eyebrow="t('entitlementStore.pageTitle')"
         ></BrandSceneHero
         ><main class="store-shell">
-          <BCard v-if="journey" padding="16px">
+          <BCard v-if="journey" padding="var(--ui-space-16, 16px)">
             <p>{{ t('entitlementJourney.pending') }}</p>
             <BButton @click="returnToTask">{{ t('entitlementJourney.returnTask') }}</BButton>
           </BCard>
@@ -74,7 +74,7 @@
               </template>
             </section>
 
-            <BCard as="aside" class="store-support" padding="14px" radius="13px">
+            <BCard as="aside" class="store-support" padding="var(--ui-space-14, 14px)" radius="13px">
               <span class="store-support__icon" aria-hidden="true"
                 ><SvgIcon :src="icon.support.heart" size="21"
               /></span>
@@ -90,7 +90,7 @@
             </BCard>
           </div>
           <div class="store-bottom-grid">
-            <BCard class="store-combo" padding="16px" radius="13px"
+            <BCard class="store-combo" padding="var(--ui-space-16, 16px)" radius="13px"
               ><h2>{{ t('autumn.comboTitle') }}</h2
               ><p>{{ t('autumn.comboDescription') }}</p>
               <div class="store-combo__features"
@@ -121,7 +121,7 @@
                   v-for="step in purchaseSteps"
                   :key="step.key"
                   class="store-flow__step"
-                  padding="18px"
+                  padding="var(--ui-space-18, 18px)"
                   radius="16px"
                 >
                   <span>{{ step.number }}</span>
@@ -147,7 +147,7 @@
                   <h2 id="purchase-history-title">{{ t('entitlementStore.historyTitle') }}</h2>
                   <p>{{ t('entitlementStore.historyDescription') }}</p>
                 </div>
-                <BCard v-if="!storeState.recentOrders.length" class="store-empty" padding="22px">
+                <BCard v-if="!storeState.recentOrders.length" class="store-empty" padding="var(--ui-space-22, 22px)">
                   <SvgIcon :src="icon.support.store" size="24" aria-hidden="true" />
                   <span>{{ t('entitlementStore.historyEmpty') }}</span>
                 </BCard>
@@ -156,7 +156,7 @@
                     v-for="order in storeState.recentOrders"
                     :key="order.id"
                     class="purchase-order"
-                    padding="8px 0"
+                    padding="var(--ui-space-8, 8px) 0"
                   >
                     <span class="purchase-order__icon" aria-hidden="true"
                       ><SvgIcon :src="orderIcon(order)" size="19"

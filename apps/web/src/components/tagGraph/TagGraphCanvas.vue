@@ -456,34 +456,34 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     color: var(--desc-color);
     background: color-mix(in srgb, var(--background-color) 58%, transparent);
   }
 
   .graph-refresh-indicator {
     position: absolute;
-    top: 14px;
-    right: 16px;
+    top: var(--ui-space-14, 14px);
+    right: var(--ui-space-16, 16px);
     z-index: 3;
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     border-radius: 999px;
     border: 1px solid var(--card-border-color);
     background: color-mix(in srgb, var(--background-color) 90%, transparent);
-    padding: 5px 10px;
+    padding: var(--ui-space-5, 5px) var(--ui-space-10, 10px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     backdrop-filter: blur(4px);
   }
 
   .graph-zoom-hint {
     position: absolute;
-    left: 14px;
-    bottom: 12px;
+    left: var(--ui-space-14, 14px);
+    bottom: var(--ui-space-12, 12px);
     z-index: 3;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     color: var(--desc-color);
     opacity: 0.7;
     pointer-events: none;
@@ -491,11 +491,11 @@
 
   .graph-actions {
     position: absolute;
-    top: 5px;
-    right: 5px;
+    top: var(--ui-space-5, 5px);
+    right: var(--ui-space-5, 5px);
     z-index: 3;
     display: flex;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     pointer-events: auto;
 
     &.graph-actions--loading {

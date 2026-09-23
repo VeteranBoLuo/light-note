@@ -512,7 +512,7 @@
       <BModal
         v-if="profileEditSection"
         :visible="true"
-        width="min(680px, 94vw)"
+        width="min(var(--ui-layout-680, 680px), 94vw)"
         :title="
           t(profileEditSection === 'posts' ? 'community.feed.featuredTitle' : 'communityChat.profile.featuredLabel')
         "
@@ -554,7 +554,7 @@
                     : 'reviewReason'),
           )
         "
-        width="min(480px, 92vw)"
+        width="min(var(--ui-layout-480, 480px), 92vw)"
         :show-footer="false"
         :mask-closable="false"
         :close-disabled="busy"
@@ -1315,27 +1315,27 @@
     .feed-heading-actions {
       display: flex;
       flex-wrap: wrap;
-      gap: 8px;
+      gap: var(--ui-space-8, 8px);
       flex-shrink: 0;
     }
     .feed-heading {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 16px;
+      gap: var(--ui-space-16, 16px);
       flex-wrap: wrap;
-      margin-bottom: 24px;
+      margin-bottom: var(--ui-space-24, 24px);
     }
     .feed-main-column > h1,
     .feed-heading h1 {
-      font-size: 24px;
-      margin: 0 0 6px;
+      font-size: var(--ui-font-24, 24px);
+      margin: 0 0 var(--ui-space-6, 6px);
     }
     .feed-empty > h2,
     .managed-post-heading > h2,
     .profile-section-heading > h2 {
-      font-size: 18px;
-      margin: 12px 0;
+      font-size: var(--ui-font-18, 18px);
+      margin: var(--ui-space-12, 12px) 0;
       line-height: 1.6;
       overflow-wrap: anywhere;
     }
@@ -1348,14 +1348,14 @@
     .feed-meta,
     .feed-heading p {
       color: var(--desc-color);
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
     }
     .feed-actions {
       display: flex;
       align-items: center;
       flex-wrap: wrap;
-      gap: 10px;
-      margin: 10px 0;
+      gap: var(--ui-space-10, 10px);
+      margin: var(--ui-space-10, 10px) 0;
     }
     .feed-actions:not(.discussion-actions) [aria-pressed='true']:not(.post-like) {
       outline: 1px solid var(--primary-color);
@@ -1363,14 +1363,14 @@
     }
     .feed-actions .input-container {
       flex: 1;
-      min-width: 160px;
+      min-width: var(--ui-layout-160, 160px);
     }
     .feed-filters {
-      padding: 0 0 8px;
+      padding: 0 0 var(--ui-space-8, 8px);
       border-bottom: 1px solid var(--surface-border-color);
     }
     .feed-post {
-      padding: 22px 0;
+      padding: var(--ui-space-22, 22px) 0;
       border-bottom: 1px solid var(--surface-border-color);
     }
     .feed-post > h2 > a {
@@ -1388,15 +1388,15 @@
     .feed-editor {
       display: flex;
       flex-direction: column;
-      gap: 12px;
-      margin: 20px 0;
-      padding: 20px;
+      gap: var(--ui-space-12, 12px);
+      margin: var(--ui-space-20, 20px) 0;
+      padding: var(--ui-space-20, 20px);
       border: 1px solid var(--surface-border-color);
       border-radius: 12px;
       background: var(--card-background);
     }
     .feed-editor label {
-      font-size: 13px;
+      font-size: var(--ui-font-13, 13px);
     }
     .feed-editor .b-checkbox {
       align-self: flex-start;
@@ -1404,15 +1404,15 @@
     .feed-error {
       color: var(--danger-color, #bb3030);
       border: 1px solid currentColor;
-      padding: 12px;
+      padding: var(--ui-space-12, 12px);
     }
     .feed-comment {
-      padding: 16px 0;
+      padding: var(--ui-space-16, 16px) 0;
       border-bottom: 1px solid var(--surface-border-color);
     }
     .feed-replies {
-      margin-left: 18px;
-      padding-left: 14px;
+      margin-left: var(--ui-space-18, 18px);
+      padding-left: var(--ui-space-14, 14px);
       border-left: 2px solid var(--surface-border-color);
     }
     .feed-comment.is-located {
@@ -1421,10 +1421,10 @@
     }
     .feed-status {
       display: inline-block;
-      padding: 3px 8px;
+      padding: var(--ui-space-3, 3px) var(--ui-space-8, 8px);
       border: 1px solid var(--surface-border-color);
       border-radius: 6px;
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
     }
     .managed-post.is-clickable {
       cursor: pointer;
@@ -1432,15 +1432,15 @@
     .feed-new-notice {
       display: flex;
       justify-content: center;
-      padding: 16px 0 4px;
+      padding: var(--ui-space-16, 16px) 0 var(--ui-space-4, 4px);
     }
     .feed-new.b_btn {
-      padding: 5px 10px;
-      min-height: 28px;
+      padding: var(--ui-space-5, 5px) var(--ui-space-10, 10px);
+      min-height: var(--ui-layout-28, 28px);
       border: 0;
       background: transparent;
       color: var(--primary-color);
-      font-size: 13px;
+      font-size: var(--ui-font-13, 13px);
     }
     .feed-new-dot {
       width: 6px;
@@ -1473,50 +1473,50 @@
     .feed-personal-actions {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: var(--ui-space-8, 8px);
     }
     .feed-heading {
-      margin: 0 0 24px;
+      margin: 0 0 var(--ui-space-24, 24px);
     }
     .feed-heading h1 {
-      margin: 0 0 6px;
+      margin: 0 0 var(--ui-space-6, 6px);
     }
     .feed-heading p {
-      font-size: 14px;
+      font-size: var(--ui-font-14, 14px);
       margin: 0;
     }
     .feed-readonly {
-      font-size: 13px;
-      padding: 10px 14px;
+      font-size: var(--ui-font-13, 13px);
+      padding: var(--ui-space-10, 10px) var(--ui-space-14, 14px);
       border: 1px solid var(--surface-border-color);
       border-radius: 8px;
       color: var(--desc-color);
-      margin: 0 0 20px;
+      margin: 0 0 var(--ui-space-20, 20px);
     }
     .feed-toolbar {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 20px;
+      gap: var(--ui-space-20, 20px);
     }
     .feed-stream-tabs.tab-container {
       flex: 0 0 auto;
       margin: 0;
-      gap: 28px;
+      gap: var(--ui-space-28, 28px);
       border: 0;
       padding: 0;
     }
     .feed-stream-tabs.tab-container :deep(.tab) {
       min-width: 0;
       margin: 0;
-      padding: 12px 2px;
-      font-size: 14px;
+      padding: var(--ui-space-12, 12px) var(--ui-space-2, 2px);
+      font-size: var(--ui-font-14, 14px);
     }
     .feed-search {
       display: flex;
       align-items: center;
-      gap: 8px;
-      max-width: 470px;
+      gap: var(--ui-space-8, 8px);
+      max-width: var(--ui-layout-470, 470px);
       flex: 1;
     }
     .feed-search .input-container {
@@ -1526,8 +1526,8 @@
     .feed-clear {
       background: transparent;
       color: var(--desc-color);
-      font-size: 12px;
-      padding: 5px 10px;
+      font-size: var(--ui-font-12, 12px);
+      padding: var(--ui-space-5, 5px) var(--ui-space-10, 10px);
     }
     .feed-mobile-topics {
       display: none;
@@ -1536,34 +1536,34 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 16px;
-      margin-bottom: 24px;
+      gap: var(--ui-space-16, 16px);
+      margin-bottom: var(--ui-space-24, 24px);
     }
     .management-heading p {
-      margin: 4px 0 0;
+      margin: var(--ui-space-4, 4px) 0 0;
       color: var(--desc-color);
-      font-size: 13px;
+      font-size: var(--ui-font-13, 13px);
     }
     .management-tabs.tab-container {
       width: 100%;
       margin: 0;
       border-bottom: 1px solid var(--workspace-border);
-      gap: 24px;
+      gap: var(--ui-space-24, 24px);
     }
     .management-tabs :deep(.tab) {
       min-width: 0;
-      padding: 12px 2px;
+      padding: var(--ui-space-12, 12px) var(--ui-space-2, 2px);
       margin: 0;
-      font-size: 14px;
+      font-size: var(--ui-font-14, 14px);
     }
     .managed-post-heading {
       display: flex;
       align-items: baseline;
-      gap: 12px;
+      gap: var(--ui-space-12, 12px);
     }
     .managed-post-heading .feed-status {
       flex-shrink: 0;
-      font-size: 11px;
+      font-size: var(--ui-font-11, 11px);
       color: var(--desc-color);
       border-color: currentColor;
     }
@@ -1580,14 +1580,14 @@
       color: var(--danger-color);
     }
     .is-management {
-      max-width: 1080px;
+      max-width: var(--ui-layout-1080, 1080px);
       margin: 0;
     }
     .is-management .managed-post {
-      padding: 22px 0;
+      padding: var(--ui-space-22, 22px) 0;
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
-      gap: 0 20px;
+      gap: 0 var(--ui-space-20, 20px);
     }
     .is-management .managed-post > :not(.feed-actions) {
       grid-column: 1;
@@ -1604,7 +1604,7 @@
       align-items: center;
     }
     .management-empty {
-      min-height: 200px;
+      min-height: var(--ui-layout-200, 200px);
       justify-content: center;
     }
     @media (max-width: 767px) {
@@ -1618,11 +1618,11 @@
 
     .is-management .managed-post h2 {
       margin: 0;
-      font-size: 16px;
+      font-size: var(--ui-font-16, 16px);
     }
     .is-management .managed-post .feed-body {
-      margin: 10px 0 12px;
-      font-size: 14px;
+      margin: var(--ui-space-10, 10px) 0 var(--ui-space-12, 12px);
+      font-size: var(--ui-font-14, 14px);
       color: var(--desc-color);
       display: -webkit-box;
       -webkit-line-clamp: 2;
@@ -1630,13 +1630,13 @@
       overflow: hidden;
     }
     .is-management .managed-post .feed-actions {
-      margin: 14px 0 0;
-      gap: 8px;
+      margin: var(--ui-space-14, 14px) 0 0;
+      gap: var(--ui-space-8, 8px);
     }
     .is-management .managed-post .feed-actions .b_btn {
       background: transparent;
-      padding: 0 10px;
-      font-size: 12px;
+      padding: 0 var(--ui-space-10, 10px);
+      font-size: var(--ui-font-12, 12px);
       color: var(--desc-color);
     }
     .is-management .managed-post .feed-actions .b_btn:active {
@@ -1683,41 +1683,41 @@
       flex-direction: column;
       align-items: center;
       text-align: center;
-      padding: 64px 16px;
+      padding: var(--ui-space-64, 64px) var(--ui-space-16, 16px);
     }
     .feed-empty h2 {
-      font-size: 18px;
-      margin: 0 0 8px;
+      font-size: var(--ui-font-18, 18px);
+      margin: 0 0 var(--ui-space-8, 8px);
     }
     .feed-empty p {
       color: var(--desc-color);
-      font-size: 14px;
-      margin: 0 auto 20px;
-      max-width: 400px;
+      font-size: var(--ui-font-14, 14px);
+      margin: 0 auto var(--ui-space-20, 20px);
+      max-width: var(--ui-layout-400, 400px);
     }
     .feed-profile-source {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 20px;
+      gap: var(--ui-space-20, 20px);
       border-bottom: 1px solid var(--surface-border-color);
-      padding-bottom: 20px;
+      padding-bottom: var(--ui-space-20, 20px);
     }
     .feed-profile-source p {
       color: var(--desc-color);
-      font-size: 13px;
-      max-width: 580px;
+      font-size: var(--ui-font-13, 13px);
+      max-width: var(--ui-layout-580, 580px);
     }
     .feed-comment .feed-meta {
-      font-size: 13px;
+      font-size: var(--ui-font-13, 13px);
       color: var(--text-color);
       font-weight: 600;
     }
     .feed-replies {
       background: var(--card-background);
       border-radius: 8px;
-      padding: 0 14px;
-      margin: 12px 0 0 24px;
+      padding: 0 var(--ui-space-14, 14px);
+      margin: var(--ui-space-12, 12px) 0 0 var(--ui-space-24, 24px);
     }
     @media (max-width: 767px) {
       .feed-personal-actions {
@@ -1774,23 +1774,23 @@
   .community-action-dialog {
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
     color: var(--text-color);
   }
   .community-action-dialog p {
     margin: 0;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     color: var(--desc-color);
     line-height: 1.65;
   }
   .community-action-dialog small {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
     text-align: right;
   }
   .community-action-dialog .feed-actions {
     display: flex;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     justify-content: flex-end;
     margin: 0;
   }
@@ -1801,9 +1801,9 @@
     background: transparent;
     border: 0;
     color: var(--desc-color);
-    padding: 4px 0;
-    gap: 6px;
-    margin-bottom: 16px;
+    padding: var(--ui-space-4, 4px) 0;
+    gap: var(--ui-space-6, 6px);
+    margin-bottom: var(--ui-space-16, 16px);
   }
   .managed-post-heading a {
     color: inherit;
@@ -1823,10 +1823,10 @@
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 16px;
-    margin: 0 0 24px;
+    gap: var(--ui-space-16, 16px);
+    margin: 0 0 var(--ui-space-24, 24px);
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .topic-introduction :deep(.task-reward) {
     width: 100%;
@@ -1842,8 +1842,8 @@
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 12px;
-    padding: 16px 0;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-16, 16px) 0;
     border-top: 1px solid var(--workspace-divider);
     border-bottom: 1px solid var(--workspace-divider);
   }
@@ -1855,45 +1855,45 @@
     color: var(--primary-color);
   }
   .topic-management-entry {
-    margin-bottom: 20px;
+    margin-bottom: var(--ui-space-20, 20px);
   }
   .profile-section-heading {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .profile-section-heading h2 {
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
     margin: 0;
   }
   .profile-section-edit.b_btn {
     background: transparent;
     color: var(--primary-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     padding: 0;
   }
   .public-featured-posts {
-    padding: 8px 0 24px;
-    margin-bottom: 8px;
+    padding: var(--ui-space-8, 8px) 0 var(--ui-space-24, 24px);
+    margin-bottom: var(--ui-space-8, 8px);
   }
   .profile-featured-hint {
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .public-profile-card :deep(.chat-profile-content__section-heading > small) {
     margin-left: auto;
   }
   .public-profile-card {
-    padding-bottom: 28px;
-    margin-bottom: 12px;
+    padding-bottom: var(--ui-space-28, 28px);
+    margin-bottom: var(--ui-space-12, 12px);
   }
   .public-profile-card :deep(.chat-profile-content__hero) {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 24px;
-    padding: 24px 0 12px;
+    gap: var(--ui-space-24, 24px);
+    padding: var(--ui-space-24, 24px) 0 var(--ui-space-12, 12px);
   }
   .public-profile-card :deep(.chat-profile-content__identity) {
     flex: 1;
@@ -1906,12 +1906,12 @@
   .public-profile-card :deep(.chat-profile-content__empty) {
     border: 0;
     background: transparent;
-    padding: 12px 0;
+    padding: var(--ui-space-12, 12px) 0;
   }
   .profile-inline-bio {
-    margin: 8px 0 0;
-    max-width: 600px;
-    font-size: 14px;
+    margin: var(--ui-space-8, 8px) 0 0;
+    max-width: var(--ui-layout-600, 600px);
+    font-size: var(--ui-font-14, 14px);
     line-height: 1.7;
     color: var(--desc-color);
   }
@@ -1922,15 +1922,15 @@
     display: flex;
     flex-direction: column;
     align-items: flex-end;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
   .profile-relationship-actions {
     margin: 0;
   }
   .profile-more.b_btn {
-    font-size: 20px;
+    font-size: var(--ui-font-20, 20px);
     letter-spacing: 2px;
-    min-width: 40px;
+    min-width: var(--ui-layout-40, 40px);
   }
   .public-profile-card :deep(.chat-profile-content__privacy) {
     display: none;
@@ -1954,7 +1954,7 @@
   }
   .profile-statistics {
     display: flex;
-    gap: 24px;
+    gap: var(--ui-space-24, 24px);
     margin: 0;
     color: var(--desc-color);
   }
@@ -1962,13 +1962,13 @@
   .profile-statistics .b_btn {
     display: flex;
     align-items: center;
-    min-height: 32px;
-    height: 32px;
+    min-height: var(--ui-layout-32, 32px);
+    height: var(--ui-layout-32, 32px);
     box-sizing: border-box;
-    line-height: 20px;
+    line-height: var(--ui-layout-20, 20px);
     font-weight: 400;
-    gap: 6px;
-    font-size: 13px;
+    gap: var(--ui-space-6, 6px);
+    font-size: var(--ui-font-13, 13px);
   }
   .profile-statistics .b_btn {
     background: transparent;
@@ -1977,7 +1977,7 @@
   }
   .profile-statistics strong {
     color: var(--text-color);
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
   }
   .profile-relationship-actions .b_btn:not(.primary_btn) {
     background: transparent;
@@ -1986,11 +1986,11 @@
 
   .feed-loading-region.loader-container {
     height: auto;
-    min-height: 280px;
-    min-height: max(280px, calc(100vh - 360px));
+    min-height: var(--ui-layout-280, 280px);
+    min-height: max(var(--ui-layout-280, 280px), calc(100vh - var(--ui-layout-360, 360px)));
   }
   .feed-loading-region :deep(.b-loading-overlay) {
-    max-height: max(280px, calc(100vh - 360px));
+    max-height: max(var(--ui-layout-280, 280px), calc(100vh - var(--ui-layout-360, 360px)));
   }
 </style>
 

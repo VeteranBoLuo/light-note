@@ -50,13 +50,13 @@
   .gs {
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
   }
   .gs-hero {
     display: flex;
     align-items: center;
-    gap: 14px;
-    padding: 14px 16px;
+    gap: var(--ui-space-14, 14px);
+    padding: var(--ui-space-14, 14px) var(--ui-space-16, 16px);
     border-radius: 12px;
     background: linear-gradient(
       135deg,
@@ -67,8 +67,8 @@
   }
   .gs-hero-icon {
     display: grid;
-    width: 36px;
-    height: 36px;
+    width: var(--ui-layout-36, 36px);
+    height: var(--ui-layout-36, 36px);
     flex: 0 0 auto;
     place-items: center;
     border: 1px solid var(--primary-color);
@@ -79,48 +79,48 @@
     min-width: 0;
   }
   .gs-hero-main {
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
     color: var(--text-color);
   }
   .gs-hero-main :deep(b) {
-    font-size: 22px;
+    font-size: var(--ui-font-22, 22px);
     font-weight: 800;
     color: var(--primary-color);
-    margin: 0 3px;
+    margin: 0 var(--ui-space-3, 3px);
     font-variant-numeric: tabular-nums;
   }
   .gs-hero-sub {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
-    margin-top: 2px;
+    margin-top: var(--ui-space-2, 2px);
   }
   .gs-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
-    gap: 10px;
+    grid-template-columns: repeat(auto-fit, minmax(var(--ui-layout-84, 84px), 1fr));
+    gap: var(--ui-space-10, 10px);
   }
   .gs-tile {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 3px;
-    padding: 12px 8px;
+    gap: var(--ui-space-3, 3px);
+    padding: var(--ui-space-12, 12px) var(--ui-space-8, 8px);
     border-radius: 10px;
     background: color-mix(in srgb, var(--primary-color) 4%, var(--background-color));
     border: 1px solid color-mix(in srgb, var(--card-border-color) 38%, transparent);
   }
   .gs-tile-icon {
-    font-size: 18px;
+    font-size: var(--ui-font-18, 18px);
     line-height: 1;
   }
   .gs-tile-val {
-    font-size: 18px;
+    font-size: var(--ui-font-18, 18px);
     font-weight: 800;
     font-variant-numeric: tabular-nums;
     color: var(--text-color);
   }
   .gs-tile-label {
-    font-size: 11.5px;
+    font-size: var(--ui-font-11_5, 11.5px);
     color: var(--desc-color);
   }
 </style>

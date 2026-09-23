@@ -89,13 +89,14 @@ describe('applyDisplaySettings', () => {
   });
 
   it.each([
-    ['small', '0.9'],
-    ['medium', ''],
-    ['large', '1.1'],
-  ] as const)('桌面端按已保存偏好应用 %s 缩放', (uiScale, expectedZoom) => {
+    ['small', 'compact'],
+    ['medium', 'standard'],
+    ['large', 'comfortable'],
+  ] as const)('桌面端按已保存偏好应用 %s 密度', (uiScale, expectedDensity) => {
     userState.preferences.uiScale = uiScale;
     applyDisplaySettings();
-    expect(document.documentElement.style.zoom).toBe(expectedZoom);
+    expect(document.documentElement.dataset.density).toBe(expectedDensity);
+    expect(document.documentElement.style.zoom).toBe('');
   });
 
   it('手机布局强制标准显示，但保留电脑端缩放偏好', () => {

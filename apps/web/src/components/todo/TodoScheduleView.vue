@@ -380,52 +380,52 @@
   .todo-schedule-view {
     box-sizing: border-box;
     min-width: 0;
-    padding: 16px 20px 20px;
+    padding: var(--ui-space-16, 16px) var(--ui-space-20, 20px) var(--ui-space-20, 20px);
   }
   @import (reference) '@/assets/css/workspace-surfaces.less';
   .todo-calendar-head {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 12px;
-    margin-bottom: 12px;
-    padding-top: 10px;
+    gap: var(--ui-space-12, 12px);
+    margin-bottom: var(--ui-space-12, 12px);
+    padding-top: var(--ui-space-10, 10px);
   }
   .todo-calendar-head :deep(.b_btn) {
-    min-width: 36px;
-    height: 36px;
+    min-width: var(--ui-layout-36, 36px);
+    height: var(--ui-layout-36, 36px);
     padding: 0;
   }
   .todo-calendar-grid {
     display: grid;
     grid-template-columns: repeat(7, minmax(0, 1fr));
     align-content: start;
-    gap: 1px;
+    gap: var(--ui-space-1, 1px);
     overflow: hidden;
     border: 1px solid var(--surface-border-color, var(--card-border-color));
     border-radius: 14px;
     background: var(--surface-border-color, var(--card-border-color));
   }
   .todo-calendar-weekday {
-    padding: 7px 5px;
+    padding: var(--ui-space-7, 7px) var(--ui-space-5, 5px);
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     text-align: center;
   }
   .todo-calendar-day {
-    min-height: 104px;
+    min-height: var(--ui-layout-104, 104px);
     box-sizing: border-box;
-    padding: 6px;
+    padding: var(--ui-space-6, 6px);
     border: 0;
     border-radius: 0;
   }
   .todo-calendar-day > span {
     display: flex;
     align-items: center;
-    gap: 4px;
-    margin-bottom: 4px;
+    gap: var(--ui-space-4, 4px);
+    margin-bottom: var(--ui-space-4, 4px);
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .todo-calendar-day.is-outside {
     opacity: 0.42;
@@ -433,11 +433,11 @@
   /* 日期数字单独成块,「今天」才能用实心圆底标记(日历通用语义,窄格子里也一眼可见) */
   .todo-calendar-daynum {
     display: inline-flex;
-    min-width: 18px;
-    height: 18px;
+    min-width: var(--ui-layout-18, 18px);
+    height: var(--ui-layout-18, 18px);
     align-items: center;
     justify-content: center;
-    padding: 0 3px;
+    padding: 0 var(--ui-space-3, 3px);
     box-sizing: border-box;
     border-radius: 999px;
     font-weight: 400;
@@ -462,9 +462,9 @@
     display: block;
     width: 100%;
     height: auto;
-    min-height: 42px;
-    margin: 3px 0;
-    padding: 4px 5px;
+    min-height: var(--ui-layout-42, 42px);
+    margin: var(--ui-space-3, 3px) 0;
+    padding: var(--ui-space-4, 4px) var(--ui-space-5, 5px);
     overflow: hidden;
     border-left: 3px solid var(--primary-color);
     line-height: 1.2;
@@ -474,19 +474,19 @@
     display: flex;
     min-width: 0;
     align-items: center;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
   .todo-calendar-item__main time {
     flex: 0 0 auto;
     color: var(--desc-color);
-    font-size: 9px;
+    font-size: var(--ui-font-9, 9px);
     font-variant-numeric: tabular-nums;
   }
   .todo-calendar-item__main strong {
     min-width: 0;
     overflow: hidden;
     color: var(--text-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -494,12 +494,12 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 4px;
-    margin-top: 2px;
+    gap: var(--ui-space-4, 4px);
+    margin-top: var(--ui-space-2, 2px);
   }
   .todo-calendar-item__meta small {
     overflow: hidden;
-    font-size: 8px;
+    font-size: var(--ui-font-8, 8px);
     line-height: 1.2;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -508,7 +508,7 @@
   .todo-agenda-card__meta small.is-series {
     display: inline-flex;
     align-items: center;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
     color: var(--primary-color);
     font-weight: 650;
   }
@@ -537,9 +537,9 @@
 
   .todo-calendar-daylist {
     display: grid;
-    gap: 6px;
-    margin-top: 12px;
-    padding: 12px;
+    gap: var(--ui-space-6, 6px);
+    margin-top: var(--ui-space-12, 12px);
+    padding: var(--ui-space-12, 12px);
     border: 0;
     border-radius: 12px;
     background: var(--workspace-panel-bg-color, var(--background-color));
@@ -548,32 +548,32 @@
     display: flex;
     align-items: baseline;
     justify-content: space-between;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
 
     strong {
       color: var(--text-color);
-      font-size: 13px;
+      font-size: var(--ui-font-13, 13px);
     }
 
     span {
       color: var(--desc-color);
-      font-size: 11px;
+      font-size: var(--ui-font-11, 11px);
     }
   }
   .todo-calendar-daylist__empty {
     margin: 0;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .todo-calendar-dayitem {
     display: flex;
     width: 100%;
     height: auto;
-    min-height: 40px;
+    min-height: var(--ui-layout-40, 40px);
     align-items: center;
     justify-content: flex-start;
-    gap: 8px;
-    padding: 7px 9px;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-7, 7px) var(--ui-space-9, 9px);
     border: 0;
     border-radius: 10px;
     background: color-mix(in srgb, var(--primary-color) 4%, transparent) !important;
@@ -591,7 +591,7 @@
   }
   .todo-calendar-dayitem__priority {
     width: 3px;
-    height: 22px;
+    height: var(--ui-layout-22, 22px);
     flex: 0 0 auto;
     border-radius: 999px;
     background: var(--primary-color);
@@ -607,12 +607,12 @@
   .todo-calendar-dayitem__content {
     display: grid;
     min-width: 0;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
 
     > strong {
       overflow: hidden;
       color: var(--text-color);
-      font-size: 13px;
+      font-size: var(--ui-font-13, 13px);
       font-weight: 600;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -624,9 +624,9 @@
   }
   .todo-calendar-dayitem__meta {
     display: flex;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .todo-calendar-item.is-priority-2 {
@@ -656,37 +656,37 @@
   }
   .todo-calendar-day small {
     color: var(--desc-color);
-    font-size: 9px;
+    font-size: var(--ui-font-9, 9px);
   }
   .todo-agenda {
     display: grid;
-    gap: 9px;
-    padding: 8px 2px 24px;
+    gap: var(--ui-space-9, 9px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-2, 2px) var(--ui-space-24, 24px);
     box-sizing: border-box;
   }
   .todo-agenda-item {
     display: grid;
-    grid-template-columns: 110px minmax(0, 1fr);
-    gap: 10px;
+    grid-template-columns: var(--ui-layout-110, 110px) minmax(0, 1fr);
+    gap: var(--ui-space-10, 10px);
     align-items: stretch;
   }
   .todo-agenda-item time {
     display: grid;
     align-content: center;
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .todo-schedule-view .todo-agenda-card {
     width: 100%;
     height: auto;
-    min-height: 60px;
-    padding: 9px 14px;
+    min-height: var(--ui-layout-60, 60px);
+    padding: var(--ui-space-9, 9px) var(--ui-space-14, 14px);
     box-sizing: border-box;
     border: 1px solid var(--surface-border-color, var(--card-border-color));
     border-radius: 13px;
     box-shadow: 0 12px 30px -28px rgba(30, 40, 80, 0.5);
     justify-content: flex-start;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     line-height: 1.3;
     text-align: left;
   }
@@ -701,7 +701,7 @@
     display: grid;
     min-width: 0;
     flex: 1;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
   .todo-agenda-card__content > strong {
     overflow: hidden;
@@ -711,59 +711,59 @@
   .todo-agenda-card__meta {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .todo-agenda-card__meta small {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
   .todo-agenda__more {
     justify-self: center;
-    min-width: 180px;
-    margin-top: 5px;
+    min-width: var(--ui-layout-180, 180px);
+    margin-top: var(--ui-space-5, 5px);
   }
   .todo-schedule-empty {
-    margin: 0 18px 10px;
-    padding: 10px 12px;
+    margin: 0 var(--ui-space-18, 18px) var(--ui-space-10, 10px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     border-radius: 10px;
     background: color-mix(in srgb, var(--primary-color) 4%, var(--background-color));
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     text-align: center;
   }
   @media (max-width: 767px) {
     .todo-calendar-grid {
       min-width: 0;
-      grid-auto-rows: 82px;
-      gap: 1px;
+      grid-auto-rows: var(--ui-layout-82, 82px);
+      gap: var(--ui-space-1, 1px);
     }
     .todo-schedule-view {
       overflow-x: hidden;
-      padding: 10px 12px 12px;
+      padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px) var(--ui-space-12, 12px);
     }
     .todo-calendar-weekday {
-      padding: 3px 1px;
-      font-size: 9px;
+      padding: var(--ui-space-3, 3px) var(--ui-space-1, 1px);
+      font-size: var(--ui-font-9, 9px);
     }
     .todo-calendar-day {
-      height: 82px;
-      min-height: 82px;
-      padding: 3px;
+      height: var(--ui-layout-82, 82px);
+      min-height: var(--ui-layout-82, 82px);
+      padding: var(--ui-space-3, 3px);
       box-sizing: border-box;
       overflow: hidden;
       border-radius: 0;
     }
     .todo-calendar-day > span {
-      font-size: 10px;
+      font-size: var(--ui-font-10, 10px);
     }
     .todo-calendar-daynum {
-      min-width: 16px;
-      height: 16px;
-      padding: 0 2px;
+      min-width: var(--ui-layout-16, 16px);
+      height: var(--ui-layout-16, 16px);
+      padding: 0 var(--ui-space-2, 2px);
     }
     .todo-calendar-item {
-      min-height: 20px;
-      padding: 2px;
+      min-height: var(--ui-layout-20, 20px);
+      padding: var(--ui-space-2, 2px);
       border-left-width: 2px;
     }
     /* 窄格里「是什么」比「几点」重要:保留标题,时间与状态交给下方选中日详情 */
@@ -772,18 +772,18 @@
       display: none;
     }
     .todo-calendar-item__main strong {
-      font-size: 9px;
+      font-size: var(--ui-font-9, 9px);
       line-height: 1.15;
     }
     .todo-agenda-item {
-      grid-template-columns: 86px minmax(0, 1fr);
+      grid-template-columns: var(--ui-layout-86, 86px) minmax(0, 1fr);
     }
     .todo-agenda {
-      padding: 6px 0 20px;
+      padding: var(--ui-space-6, 6px) 0 var(--ui-space-20, 20px);
     }
     .todo-schedule-empty {
-      margin: 0 14px 8px;
-      padding: 8px 10px;
+      margin: 0 var(--ui-space-14, 14px) var(--ui-space-8, 8px);
+      padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px);
     }
   }
 
@@ -797,17 +797,23 @@
   }
   .todo-calendar-empty-hint {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .todo-calendar-head {
     flex-wrap: wrap;
     padding-top: 0;
-    margin-bottom: 8px;
+    margin-bottom: var(--ui-space-8, 8px);
   }
   @media (min-width: 768px) and (max-height: 819px) {
     .todo-calendar-day {
-      min-height: 64px;
-      min-height: clamp(64px, calc((100vh - 320px) / 6), 104px);
+      min-height: var(--ui-layout-64, 64px);
+      // Keep the viewport reserve stable; shrinking it would make compact calendar rows taller.
+      /* ui-density-fixed: 320px 保留视口非日历区域；减去标准行高 104px 后叠加密度行高差值，避免紧凑档反而增高。 */
+      min-height: clamp(
+        var(--ui-layout-64, 64px),
+        calc((100vh - 320px) / 6 + var(--ui-layout-104, 104px) - 104px),
+        var(--ui-layout-104, 104px)
+      );
     }
   }
   html.light-note-mobile-rendering .todo-agenda-card-swipe {
@@ -821,6 +827,6 @@
     background: transparent;
   }
   html.light-note-mobile-rendering .todo-agenda-card-swipe :deep(.todo-subitems) {
-    margin: 0 12px 10px;
+    margin: 0 var(--ui-space-12, 12px) var(--ui-space-10, 10px);
   }
 </style>

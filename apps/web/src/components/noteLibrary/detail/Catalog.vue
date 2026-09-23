@@ -53,7 +53,7 @@
   import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { bookmarkStore, noteStore } from '@/store';
-  import { scrollIntoContainer } from '@/utils/zoom.ts';
+  import { scrollIntoContainer } from '@/utils/scrolling';
   import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
   import NoteOutlineList from '@/components/noteLibrary/detail/NoteOutlineList.vue';
 

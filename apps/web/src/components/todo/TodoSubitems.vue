@@ -100,15 +100,15 @@
 <style scoped lang="less">
   .todo-subitems {
     min-width: 0;
-    margin-top: 8px;
+    margin-top: var(--ui-space-8, 8px);
   }
   .todo-subitems__toggle {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
   .todo-subitems__chevron {
-    flex: 0 0 14px;
+    flex: 0 0 var(--ui-layout-14, 14px);
     transform-origin: center;
   }
   .todo-subitems__chevron.is-open {
@@ -117,18 +117,18 @@
   .todo-subitems__panel {
     display: grid;
     gap: 0;
-    padding: 4px 12px;
-    margin-top: 8px;
+    padding: var(--ui-space-4, 4px) var(--ui-space-12, 12px);
+    margin-top: var(--ui-space-8, 8px);
     background: transparent;
     border: 1px solid var(--surface-border-color);
     border-radius: 8px;
   }
   .todo-subitems__panel .todo-subitems__row {
     box-sizing: border-box;
-    min-height: 44px;
+    min-height: var(--ui-layout-44, 44px);
     height: auto;
-    padding: 10px 4px;
-    gap: 8px;
+    padding: var(--ui-space-10, 10px) var(--ui-space-4, 4px);
+    gap: var(--ui-space-8, 8px);
     white-space: normal;
     overflow-wrap: anywhere;
   }
@@ -142,24 +142,24 @@
   .todo-subitems footer {
     display: flex;
     justify-content: flex-start;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     flex-wrap: wrap;
     border-top: 1px solid var(--workspace-divider);
-    padding-top: 4px;
-    margin-top: 2px;
+    padding-top: var(--ui-space-4, 4px);
+    margin-top: var(--ui-space-2, 2px);
   }
   .todo-subitems footer .todo-subitems__edit {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    min-height: 32px;
-    padding: 4px 6px;
+    gap: var(--ui-space-6, 6px);
+    min-height: var(--ui-layout-32, 32px);
+    padding: var(--ui-space-4, 4px) var(--ui-space-6, 6px);
     border: 1px solid transparent;
     border-radius: 6px;
     background: transparent;
     box-shadow: none;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.4;
   }
   .todo-subitems footer .todo-subitems__edit:not(:disabled):hover {
@@ -171,14 +171,14 @@
     outline-offset: 2px;
   }
   html.light-note-mobile-rendering .todo-subitems footer .todo-subitems__edit {
-    min-height: 44px;
+    min-height: var(--ui-layout-44, 44px);
   }
   .todo-subitems p {
     color: var(--error-color, #d14355);
   }
   html.light-note-mobile-rendering .todo-subitems__panel {
-    margin-left: 12px;
-    padding: 0 0 0 12px;
+    margin-left: var(--ui-space-12, 12px);
+    padding: 0 0 0 var(--ui-space-12, 12px);
     border: 0;
     border-left: 1px solid var(--workspace-divider);
     border-radius: 0;

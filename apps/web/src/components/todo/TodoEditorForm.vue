@@ -68,7 +68,7 @@
       <BModal
         v-model:visible="resourcePickerVisible"
         :title="t('inbox.todoAddResource')"
-        width="460px"
+        width="var(--ui-layout-460, 460px)"
         :show-footer="false"
       >
         <ResourcePickerPanel
@@ -687,25 +687,26 @@
   .todo-editor-form {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
     color: var(--text-color);
   }
   .todo-editor-form.is-desktop-plan {
     position: relative;
-    min-height: calc(100dvh - 65px);
-    padding: 22px 410px 24px 22px;
+    min-height: calc(100dvh - var(--ui-layout-65, 65px));
+    padding: var(--ui-space-22, 22px) calc(var(--ui-layout-388, 388px) + var(--ui-space-22, 22px))
+      var(--ui-space-24, 24px) var(--ui-space-22, 22px);
     background: var(--card-background);
   }
   .todo-editor-form:not(.is-desktop-plan) {
     min-height: 100%;
-    padding: 20px;
+    padding: var(--ui-space-20, 20px);
     box-sizing: border-box;
   }
   .todo-editor-form__step {
     display: flex;
     flex-direction: column;
-    gap: 13px;
-    padding: 16px;
+    gap: var(--ui-space-13, 13px);
+    padding: var(--ui-space-16, 16px);
     border: 1px solid var(--surface-border-color);
     border-radius: 15px;
     background: var(--card-background);
@@ -714,21 +715,21 @@
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 1px;
+    gap: var(--ui-space-12, 12px);
+    margin-bottom: var(--ui-space-1, 1px);
   }
   .todo-editor-form__section-title > div {
     display: flex;
     min-width: 0;
     flex-direction: column;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
   .todo-editor-form__section-title strong {
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
   }
   .todo-editor-form__section-title small {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 400;
   }
   .todo-editor-form__mobile-progress {
@@ -750,8 +751,8 @@
   .todo-editor-form label {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    font-size: 13px;
+    gap: var(--ui-space-6, 6px);
+    font-size: var(--ui-font-13, 13px);
     font-weight: 500;
   }
 
@@ -780,7 +781,7 @@
 
   .todo-editor-form :deep(.select-trigger),
   .todo-editor-form :deep(.b-datetime-trigger) {
-    min-height: 40px;
+    min-height: var(--ui-layout-40, 40px);
     border: 1px solid color-mix(in srgb, var(--text-color) 16%, var(--surface-border-color)) !important;
     border-radius: 9px;
     background: color-mix(in srgb, var(--bl-input-noBorder-bg-color) 78%, var(--card-background)) !important;
@@ -792,30 +793,30 @@
   }
 
   .todo-editor-form__step > label:nth-of-type(1) :deep(.b-input) {
-    height: 44px;
+    height: var(--ui-layout-44, 44px);
     border-color: color-mix(in srgb, var(--primary-color) 26%, var(--surface-border-color)) !important;
     border-radius: 10px;
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
   }
   .todo-editor-form__step > label:nth-of-type(2) :deep(.b-textarea) {
-    min-height: 104px;
+    min-height: var(--ui-layout-104, 104px);
     border-radius: 10px;
   }
   .todo-editor-form__priority-field {
-    max-width: 360px;
+    max-width: var(--ui-layout-360, 360px);
   }
   .todo-editor-form__segment {
     display: flex;
-    gap: 5px;
-    padding: 4px;
+    gap: var(--ui-space-5, 5px);
+    padding: var(--ui-space-4, 4px);
     border-radius: 12px;
     background: var(--workspace-panel-bg-color);
   }
   .todo-editor-form__segment :deep(.b_btn) {
     min-width: 0;
-    min-height: 36px;
+    min-height: var(--ui-layout-36, 36px);
     flex: 1 1 0;
-    padding: 0 10px;
+    padding: 0 var(--ui-space-10, 10px);
     border: 0;
     border-radius: 9px;
     background: transparent;
@@ -830,10 +831,10 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    padding-top: 2px;
+    gap: var(--ui-space-12, 12px);
+    padding-top: var(--ui-space-2, 2px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .todo-editor-form__advanced-head :deep(.b_btn) {
     color: var(--primary-color);
@@ -841,13 +842,13 @@
   .todo-reminder-editor__interval-field {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    font-size: 13px;
+    gap: var(--ui-space-6, 6px);
+    font-size: var(--ui-font-13, 13px);
   }
   .todo-recurrence-editor {
     display: grid;
-    gap: 9px;
-    padding: 12px;
+    gap: var(--ui-space-9, 9px);
+    padding: var(--ui-space-12, 12px);
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     background: var(--workspace-panel-bg-color);
@@ -856,8 +857,8 @@
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 14px;
-    padding: 14px;
+    gap: var(--ui-space-14, 14px);
+    padding: var(--ui-space-14, 14px);
     border: 1px solid #b45309;
     border-radius: 12px;
     background: #fffbeb;
@@ -870,7 +871,7 @@
   }
   .todo-legacy-plan-banner > div {
     display: grid;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
     min-width: 0;
   }
   .todo-legacy-plan-banner p,
@@ -883,7 +884,7 @@
   }
   .todo-recurrence-editor > div:first-child {
     display: grid;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
   .todo-recurrence-editor small {
     color: var(--desc-color);
@@ -892,18 +893,18 @@
   .todo-recurrence-editor__fields {
     display: grid;
     grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr);
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .todo-editor-form__grid {
     display: grid;
     grid-template-columns: 0.8fr 1.4fr;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .todo-reminder-editor {
     display: flex;
     flex-direction: column;
-    gap: 11px;
-    padding: 13px;
+    gap: var(--ui-space-11, 11px);
+    padding: var(--ui-space-13, 13px);
     border: 1px solid var(--surface-border-color);
     border-radius: 14px;
     background: var(--workspace-panel-bg-color);
@@ -913,59 +914,59 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .todo-reminder-editor__title > div {
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
   .todo-reminder-editor__title small {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 400;
   }
   .todo-reminder-editor__channels {
     display: flex;
     flex-wrap: wrap;
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
   }
   .todo-reminder-editor label {
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   .todo-reminder-editor__field-label {
     display: flex;
     align-items: baseline;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     min-width: 0;
   }
   .todo-reminder-editor__field-error {
     color: var(--danger-color, #e5484d);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 400;
     text-align: right;
   }
   .todo-reminder-editor__interval {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 120px;
-    gap: 8px;
+    grid-template-columns: minmax(0, 1fr) var(--ui-layout-120, 120px);
+    gap: var(--ui-space-8, 8px);
   }
   .todo-reminder-editor__error {
     margin: 0;
     color: var(--danger-color, #e5484d);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .todo-editor-form__actions {
     display: flex;
     justify-content: flex-end;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .todo-editor-form__actions--preview {
-    margin-top: 16px;
+    margin-top: var(--ui-space-16, 16px);
   }
   .todo-editor-form__actions--preview :deep(.b_btn) {
-    min-height: 42px;
+    min-height: var(--ui-layout-42, 42px);
     flex: 1 1 0;
   }
 
@@ -974,27 +975,29 @@
     position: sticky;
     bottom: calc(-1 * var(--todo-editor-sticky-gutter, 14px));
     z-index: 1;
-    margin: 4px calc(-1 * var(--todo-editor-sticky-gutter, 14px)) calc(-1 * var(--todo-editor-sticky-gutter, 14px));
-    padding: 12px var(--todo-editor-sticky-gutter, 14px) calc(12px + env(safe-area-inset-bottom));
+    margin: var(--ui-space-4, 4px) calc(-1 * var(--todo-editor-sticky-gutter, var(--ui-space-14, 14px)))
+      calc(-1 * var(--todo-editor-sticky-gutter, var(--ui-space-14, 14px)));
+    padding: var(--ui-space-12, 12px) var(--todo-editor-sticky-gutter, var(--ui-space-14, 14px))
+      calc(var(--ui-space-12, 12px) + env(safe-area-inset-bottom));
     border-top: 1px solid var(--surface-divider-color, var(--card-border-color));
     background: var(--card-background);
     box-shadow: 0 -8px 20px color-mix(in srgb, var(--text-color) 6%, transparent);
   }
 
   .todo-editor-form__actions.is-sticky .b_btn {
-    min-height: 40px;
+    min-height: var(--ui-layout-40, 40px);
     flex: 1 1 0;
   }
   @media (min-width: 768px) and (max-width: 980px) {
     .todo-editor-form.is-desktop-plan {
       min-height: 0;
-      padding: 18px;
+      padding: var(--ui-space-18, 18px);
     }
   }
   @media (max-width: 767px) {
     .todo-editor-form:not(.is-desktop-plan) {
-      gap: 15px;
-      padding: 14px 16px 0;
+      gap: var(--ui-space-15, 15px);
+      padding: var(--ui-space-14, 14px) var(--ui-space-16, 16px) 0;
     }
     /* 移动端编辑页与新建页共用同一套输入视觉：短文本和日期为浅灰无边框，说明保留描边。 */
     .todo-editor-form:not(.is-desktop-plan) :deep(.b-input) {
@@ -1046,7 +1049,7 @@
       max-width: none;
     }
     .todo-editor-form.is-mobile-wizard .todo-editor-form__section-title small {
-      font-size: 11px;
+      font-size: var(--ui-font-11, 11px);
     }
     .todo-legacy-plan-banner {
       flex-direction: column;
@@ -1076,7 +1079,7 @@
     }
     .todo-reminder-editor__field-label {
       flex-wrap: wrap;
-      row-gap: 3px;
+      row-gap: var(--ui-space-3, 3px);
     }
     .todo-reminder-editor__field-error {
       margin-left: auto;
@@ -1085,15 +1088,15 @@
 
   .todo-description-hint {
     display: block;
-    margin-top: 4px;
+    margin-top: var(--ui-space-4, 4px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .todo-resource-refs {
     display: grid;
-    gap: 6px;
-    padding: 11px 12px;
+    gap: var(--ui-space-6, 6px);
+    padding: var(--ui-space-11, 11px) var(--ui-space-12, 12px);
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     background: var(--workspace-panel-bg-color);
@@ -1103,12 +1106,12 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .todo-resource-refs__label {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .todo-resource-refs__list {

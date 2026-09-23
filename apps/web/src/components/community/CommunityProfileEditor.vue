@@ -167,63 +167,63 @@
     margin-top: 0;
   }
   .profile-editor :deep(.featured-choices) {
-    height: 400px;
+    height: var(--ui-layout-400, 400px);
     max-height: 50vh;
   }
 
   .profile-editor {
-    max-width: 1120px;
+    max-width: var(--ui-layout-1120, 1120px);
     margin: 0;
   }
   h1 {
-    font-size: 24px;
+    font-size: var(--ui-font-24, 24px);
     margin: 0;
   }
   h2 {
-    font-size: 17px;
-    margin: 0 0 12px;
+    font-size: var(--ui-font-17, 17px);
+    margin: 0 0 var(--ui-space-12, 12px);
   }
   h3 {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     display: flex;
     justify-content: space-between;
   }
   p,
   small {
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.7;
     font-weight: 400;
   }
   header {
-    margin-bottom: 28px;
+    margin-bottom: var(--ui-space-28, 28px);
   }
   .profile-loading {
-    min-height: 260px;
+    min-height: var(--ui-layout-260, 260px);
     height: auto;
   }
   .profile-fields {
-    padding-top: 28px;
+    padding-top: var(--ui-space-28, 28px);
   }
   .achievement-choices {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .achievement-choices .b_btn {
     width: 100%;
     box-sizing: border-box;
     display: inline-flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     height: auto;
     min-width: 0;
     white-space: normal;
     text-align: left;
     justify-content: flex-start;
     background: var(--workspace-content);
-    font-size: 12px;
-    padding: 12px 8px;
+    font-size: var(--ui-font-12, 12px);
+    padding: var(--ui-space-12, 12px) var(--ui-space-8, 8px);
     border: 1px solid var(--workspace-border);
   }
   .achievement-choices [aria-pressed='true'] {
@@ -238,13 +238,13 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
-    margin-top: 12px;
-    padding: 12px 0 0;
+    gap: var(--ui-space-16, 16px);
+    margin-top: var(--ui-space-12, 12px);
+    padding: var(--ui-space-12, 12px) 0 0;
     border-top: 1px solid var(--workspace-divider);
   }
   footer span {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     color: var(--desc-color);
   }
   footer .b_btn {

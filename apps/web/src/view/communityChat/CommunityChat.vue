@@ -200,8 +200,8 @@
     }
   }
   .community-chat-page {
-    --chat-header-height: 58px;
-    --chat-composer-height: 108px;
+    --chat-header-height: var(--ui-layout-58, 58px);
+    --chat-composer-height: var(--ui-layout-108, 108px);
     height: 100%;
     min-height: 0;
   }
@@ -244,8 +244,8 @@
   .community-chat-bootstrap__header {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 7px 14px;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-7, 7px) var(--ui-space-14, 14px);
     box-sizing: border-box;
     border-bottom: 1px solid var(--surface-divider-color);
   }
@@ -258,13 +258,13 @@
     box-sizing: border-box;
   }
   .bootstrap-icon {
-    width: 32px;
-    height: 32px;
+    width: var(--ui-layout-32, 32px);
+    height: var(--ui-layout-32, 32px);
     border-radius: 10px;
   }
   .bootstrap-title {
-    width: 180px;
-    height: 30px;
+    width: var(--ui-layout-180, 180px);
+    height: var(--ui-layout-30, 30px);
     border-radius: 6px;
   }
   .community-chat-bootstrap__messages {
@@ -272,7 +272,7 @@
     min-height: 0;
   }
   .community-chat-bootstrap__composer {
-    padding: 7px 14px 12px;
+    padding: var(--ui-space-7, 7px) var(--ui-space-14, 14px) var(--ui-space-12, 12px);
     border-top: 1px solid var(--surface-divider-color);
     box-sizing: border-box;
   }
@@ -283,12 +283,12 @@
 
   .community-chat-unavailable {
     height: 100%;
-    min-height: 320px;
+    min-height: var(--ui-layout-320, 320px);
     display: flex;
     align-items: center;
     justify-content: center;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     border: 1px solid var(--surface-border-color);
     border-radius: 20px;
     background: var(--card-background);
@@ -296,8 +296,8 @@
   }
 
   .community-chat-unavailable__icon {
-    width: 52px;
-    height: 52px;
+    width: var(--ui-layout-52, 52px);
+    height: var(--ui-layout-52, 52px);
     display: grid;
     place-items: center;
     border: 1px solid var(--primary-color);
@@ -306,16 +306,16 @@
   }
 
   .community-chat-unavailable h1 {
-    margin: 4px 0 0;
+    margin: var(--ui-space-4, 4px) 0 0;
     color: var(--text-color);
-    font-size: 20px;
+    font-size: var(--ui-font-20, 20px);
   }
 
   .community-chat-unavailable p {
-    max-width: 480px;
-    margin: 0 18px 6px;
+    max-width: var(--ui-layout-480, 480px);
+    margin: 0 var(--ui-space-18, 18px) var(--ui-space-6, 6px);
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.7;
   }
 

@@ -2,8 +2,9 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const source = readFileSync(resolve(process.cwd(), 'src/components/tag/ResourceTagChip.vue'), 'utf8');
-const commonSource = readFileSync(resolve(process.cwd(), 'src/assets/css/common.less'), 'utf8');
+const standardSizes = (value: string) => value.replace(/var\(--ui-[\w-]+, ([\d.]+px)\)/g, '$1');
+const source = standardSizes(readFileSync(resolve(process.cwd(), 'src/components/tag/ResourceTagChip.vue'), 'utf8'));
+const commonSource = standardSizes(readFileSync(resolve(process.cwd(), 'src/assets/css/common.less'), 'utf8'));
 
 describe('资源标签胶囊视觉状态', () => {
   it('选中态使用实心标签色、双重实色描边信号和对勾间距', () => {

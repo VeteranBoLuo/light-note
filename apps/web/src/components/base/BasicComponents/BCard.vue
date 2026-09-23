@@ -21,6 +21,7 @@
 
 <script lang="ts" setup>
   import { computed, useSlots } from 'vue';
+  import { useUiDensity } from '@/composables/useUiDensity';
 
   type CardVariant = 'card' | 'panel' | 'raised';
 
@@ -45,12 +46,24 @@
     },
   );
 
+  const { density, dimension } = useUiDensity();
+  function densityPadding(value: string): string {
+    // Only standard px shorthands belong to this API. Variables, relative units
+    // and expressions already own their sizing and must not be scaled twice.
+    if (density.value === 'standard' || !/^(?:0|\d+(?:\.\d+)?px)(?:\s+(?:0|\d+(?:\.\d+)?px)){0,3}$/.test(value.trim())) return value;
+    return value.replace(/(\d+(?:\.\d+)?)px/g, (_, number) => `${dimension(Number(number), 'space')}px`);
+  }
+  function densityTitleSize(value: string | number): string {
+    if (typeof value === 'number') return `${dimension(value, 'font')}px`;
+    if (density.value === 'standard' || !/^\d+(?:\.\d+)?px$/.test(value)) return value;
+    return `${dimension(Number.parseFloat(value), 'font')}px`;
+  }
   const slots = useSlots();
   const hasHeader = computed(() => Boolean(props.title || slots.title || slots.extra));
   const cardStyle = computed<Record<string, string>>(() => ({
-    '--b-card-padding': props.padding,
+    '--b-card-padding': densityPadding(props.padding),
     '--b-card-radius': props.radius,
-    '--b-card-title-size': typeof props.size === 'number' ? `${props.size}px` : props.size,
+    '--b-card-title-size': densityTitleSize(props.size),
   }));
 </script>
 
@@ -100,8 +113,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 12px;
+    gap: var(--ui-space-12, 12px);
+    margin-bottom: var(--ui-space-12, 12px);
   }
 
   .card-title {

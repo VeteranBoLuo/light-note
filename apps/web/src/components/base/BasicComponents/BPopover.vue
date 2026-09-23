@@ -28,15 +28,15 @@
 </template>
 
 <script lang="ts" setup>
+  import { createAnchorPositionTracker } from '@/utils/anchorPositionTracking';
+  import { useUiDensity } from '@/composables/useUiDensity';
   import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
-  import { getRootZoom } from '@/utils/zoom';
 
   // 组件同时渲染触发器与 Teleport，Vue 无法自动决定非 prop 属性应落到哪个根节点。
   // 显式把 class、style、data-* 等业务属性透传给可见触发器，避免样式静默失效与运行时警告。
   defineOptions({ inheritAttrs: false });
 
   // 项目自研通用浮层(替代 ant a-popover):任意内容(content 插槽),按实时 getBoundingClientRect 定位。
-  // 关键:定位与 fixed 都基于同一视口坐标系,与 <html> zoom(界面缩放)自洽,不会像 a-popover 那样在缩放下错位。
   const props = withDefaults(
     defineProps<{
       // hover/click 由组件自身管理开关;manual 为纯受控(只跟随 v-model:open,适合调用方自己管 hover 逻辑)
@@ -62,12 +62,8 @@
   const teleportTarget = ref<HTMLElement | string>('body');
   const panelStyle = reactive<Record<string, string>>({ position: 'fixed', top: '0px', left: '0px' });
   let closeTimer: number | null = null;
-  let positionFrame: number | null = null;
   let resizeObserver: ResizeObserver | null = null;
   let triggerMutationObserver: MutationObserver | null = null;
-  let lastTriggerPosition = '';
-  let stablePositionFrames = 0;
-  const POSITION_STABLE_FRAMES = 8;
 
   const isHover = computed(() => props.trigger === 'hover');
   const isClick = computed(() => props.trigger === 'click');
@@ -78,23 +74,21 @@
   function computePosition() {
     const el = triggerRef.value;
     if (!el) return;
-    const zoom = getRootZoom();
+
     const r = el.getBoundingClientRect();
-    const rTop = r.top / zoom;
-    const rBottom = r.bottom / zoom;
-    const rLeft = r.left / zoom;
-    const rRight = r.right / zoom;
+    const rTop = r.top;
+    const rBottom = r.bottom;
+    const rLeft = r.left;
+    const rRight = r.right;
     const panelW = panelRef.value?.offsetWidth ?? 0;
     const panelH = panelRef.value?.offsetHeight ?? 0;
     const alignRight = props.placement.endsWith('right');
     const vLeft = alignRight ? rRight - panelW : rLeft;
     // 统一用 fixed(视口坐标):无论 teleport 到 body 还是某容器,fixed 都相对视口定位,
     // 不依赖容器是否为定位元素 —— 原 absolute 分支在静态容器(如 #tag-container)下会把面板顶到页首(缩放时 c.top≠0 尤甚)。
-    // 坐标口径:getBoundingClientRect=视觉像素(÷zoom 得布局);offsetWidth=布局像素;
-    // documentElement.clientWidth=视觉像素(÷zoom 得布局);style.top/left=布局像素(渲染再 ×zoom)。
     let left = vLeft;
-    const vw = document.documentElement.clientWidth / zoom; // 视口宽(布局像素),与 left/panelW 同口径
-    const vh = document.documentElement.clientHeight / zoom;
+    const vw = document.documentElement.clientWidth; // 视口宽(布局像素),与 left/panelW 同口径
+    const vh = document.documentElement.clientHeight;
     if (panelW && left + panelW > vw - 8) left = vw - panelW - 8;
     if (left < 8) left = 8;
 
@@ -134,44 +128,11 @@
     panelStyle.left = `${left}px`;
   }
 
-  function readTriggerPosition() {
-    const rect = triggerRef.value?.getBoundingClientRect();
-    if (!rect) return '';
-    return [rect.left, rect.top, rect.right, rect.bottom].map((value) => value.toFixed(2)).join(':');
-  }
-
-  function stopPositionTracking() {
-    if (positionFrame !== null) cancelAnimationFrame(positionFrame);
-    positionFrame = null;
-    lastTriggerPosition = '';
-    stablePositionFrames = 0;
-  }
-
-  function trackTriggerPosition() {
-    positionFrame = null;
-    if (!open.value) return;
-    const nextPosition = readTriggerPosition();
-    if (nextPosition !== lastTriggerPosition) {
-      lastTriggerPosition = nextPosition;
-      stablePositionFrames = 0;
-      computePosition();
-    } else {
-      stablePositionFrames += 1;
-    }
-    // 打开初期跟踪到锚点连续稳定，覆盖抽屉滑入等「祖先 transform 改变位置但不触发 ResizeObserver」的场景。
-    if (stablePositionFrames < POSITION_STABLE_FRAMES) {
-      positionFrame = requestAnimationFrame(trackTriggerPosition);
-    }
-  }
-
-  function startPositionTracking() {
-    if (!open.value) return;
-    if (positionFrame !== null) cancelAnimationFrame(positionFrame);
-    positionFrame = null;
-    lastTriggerPosition = '';
-    stablePositionFrames = 0;
-    positionFrame = requestAnimationFrame(trackTriggerPosition);
-  }
+  const { start: startPositionTracking, stop: stopPositionTracking } = createAnchorPositionTracker({
+    getAnchor: () => triggerRef.value,
+    isActive: () => open.value,
+    update: computePosition,
+  });
 
   function onPageMotionStart() {
     startPositionTracking();
@@ -281,6 +242,17 @@
     if (event.key !== 'Escape' || event.isComposing || event.keyCode === 229 || !open.value) return;
     const openPanels = document.querySelectorAll<HTMLElement>('.b-popover-panel');
     if (panelRef.value !== openPanels.item(openPanels.length - 1)) return;
+    // Capture runs before BSelect's target handler. Let an owned open select
+    // consume Escape first, including its search input teleported to body.
+    if (event.target instanceof Element) {
+      const select = event.target.closest<HTMLElement>('.b-select.is-open');
+      const dropdown = event.target.closest<HTMLElement>('.select-dropdown[data-b-select-id]');
+      const ownsOpenSelect = select && panelRef.value?.contains(select);
+      const ownsDropdown = dropdown && Array.from(
+        panelRef.value?.querySelectorAll<HTMLElement>('.b-select.is-open[data-b-select-id]') || [],
+      ).some((item) => item.dataset.bSelectId === dropdown.dataset.bSelectId);
+      if (ownsOpenSelect || ownsDropdown) return;
+    }
     event.preventDefault();
     event.stopPropagation();
     doClose();
@@ -306,6 +278,13 @@
     document.removeEventListener('transitionstart', onPageMotionStart, true);
     document.removeEventListener('animationstart', onPageMotionStart, true);
     document.removeEventListener('mousedown', onDocMouseDown, true);
+  });
+  const { density } = useUiDensity();
+  watch(density, () => {
+    if (open.value) nextTick(() => {
+      computePosition();
+      startPositionTracking();
+    });
   });
 </script>
 

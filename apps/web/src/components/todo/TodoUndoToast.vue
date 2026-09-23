@@ -88,11 +88,11 @@
     transform: translateX(-50%);
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     width: max-content;
-    max-width: calc(100% - 24px);
+    max-width: calc(100% - var(--ui-space-24, 24px));
     box-sizing: border-box;
-    padding: 6px 8px 6px 12px;
+    padding: var(--ui-space-6, 6px) var(--ui-space-8, 8px) var(--ui-space-6, 6px) var(--ui-space-12, 12px);
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     background: var(--card-background);
@@ -105,7 +105,7 @@
   }
   .todo-undo-toast__message {
     min-width: 0;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.5;
     overflow-wrap: anywhere;
   }
@@ -120,11 +120,11 @@
   .todo-undo-toast.is-mobile {
     position: fixed;
     bottom: calc(68px + env(safe-area-inset-bottom));
-    padding: 4px 6px 4px 12px;
+    padding: var(--ui-space-4, 4px) var(--ui-space-6, 6px) var(--ui-space-4, 4px) var(--ui-space-12, 12px);
     .todo-undo-toast__undo,
     .todo-undo-toast__close {
-      min-width: 44px;
-      min-height: 44px;
+      min-width: var(--ui-layout-44, 44px);
+      min-height: var(--ui-layout-44, 44px);
     }
   }
 </style>

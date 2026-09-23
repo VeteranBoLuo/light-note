@@ -35,7 +35,13 @@
             ><p>{{ t('autumn.reference.offersHint') }}</p></div
           ><div class="campaign-grid">
             <template v-if="!presentation?.packages?.length && draft">
-              <BCard v-for="i in 4" :key="i" padding="14px" radius="14px" class="campaign-draft-card">
+              <BCard
+                v-for="i in 4"
+                :key="i"
+                padding="var(--ui-space-14, 14px)"
+                radius="14px"
+                class="campaign-draft-card"
+              >
                 <span class="campaign-draft-card__ornament"
                   ><SvgIcon
                     :src="[icon.support.autumn, icon.growth.reward, icon.growth.ai, icon.todoWorkspace.star][i - 1]"
@@ -67,7 +73,7 @@
               @select="emit('select', item)"
             />
           </div> </section
-        ><BCard as="aside" class="campaign-rules" padding="18px" radius="14px"
+        ><BCard as="aside" class="campaign-rules" padding="var(--ui-space-18, 18px)" radius="14px"
           ><SvgIcon :src="icon.growth.reward" size="28" aria-hidden="true" /><h2>{{ t('autumn.rulesTitle') }}</h2
           ><img class="campaign-rules__gift" src="/brand-scenes/gift-object.webp" alt="" loading="lazy" /><p>{{
             t('autumn.rules')
@@ -183,82 +189,82 @@
   }
   .campaign-body {
     width: 88%;
-    max-width: 1480px;
+    max-width: var(--ui-layout-1480, 1480px);
     margin: auto;
-    padding-bottom: 25px;
+    padding-bottom: var(--ui-space-25, 25px);
   }
   .campaign-offers {
     display: grid;
-    grid-template-columns: minmax(0, 4fr) minmax(210px, 1fr);
-    gap: 12px;
+    grid-template-columns: minmax(0, 4fr) minmax(var(--ui-layout-210, 210px), 1fr);
+    gap: var(--ui-space-12, 12px);
   }
   .campaign-section-heading {
-    margin-bottom: 16px;
+    margin-bottom: var(--ui-space-16, 16px);
   }
   .campaign-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .campaign-draft-card {
     position: relative;
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    min-height: 200px;
+    gap: var(--ui-space-10, 10px);
+    min-height: var(--ui-layout-200, 200px);
   }
   .campaign-draft-card > .svg-icon {
     color: var(--primary-color);
   }
   h2 {
     font:
-      700 21px/1.4 'Songti SC',
+      700 var(--ui-font-21, 21px)/1.4 'Songti SC',
       serif;
-    margin: 0 0 6px;
+    margin: 0 0 var(--ui-space-6, 6px);
     white-space: pre-line;
   }
   p {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     line-height: 1.65;
     color: var(--desc-color);
-    margin: 5px 0;
+    margin: var(--ui-space-5, 5px) 0;
   }
   .campaign-draft-card h2 {
-    font-size: 16px;
+    font-size: var(--ui-font-16, 16px);
   }
   .campaign-draft-card strong {
-    font-size: 20px;
+    font-size: var(--ui-font-20, 20px);
   }
   .campaign-draft-card p {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .campaign-lower {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
-    margin-top: 12px;
+    gap: var(--ui-space-12, 12px);
+    margin-top: var(--ui-space-12, 12px);
   }
   .campaign-lower :deep(.quota-value) {
     grid-template-columns: 1fr;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
   }
   .campaign-lower :deep(.quota-value__note) {
     display: none;
   }
   .campaign-lower :deep(.quota-value h2) {
-    font-size: 21px;
+    font-size: var(--ui-font-21, 21px);
   }
   .campaign-date {
-    padding: 10px 16px;
+    padding: var(--ui-space-10, 10px) var(--ui-space-16, 16px);
     display: grid;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     background: var(--card-background);
   }
   .campaign-date strong {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .campaign-draft-card > .b_btn {
     width: 100%;
@@ -266,49 +272,49 @@
   }
   .campaign-date,
   .campaign-preview-note {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .campaign-preview-note {
     margin: 0;
-    padding: 8px 0;
+    padding: var(--ui-space-8, 8px) 0;
   }
   .campaign-scenarios__grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 9px;
-    margin-top: 18px;
+    gap: var(--ui-space-9, 9px);
+    margin-top: var(--ui-space-18, 18px);
   }
   .campaign-scenarios__grid > div {
-    padding: 15px 8px;
+    padding: var(--ui-space-15, 15px) var(--ui-space-8, 8px);
     display: grid;
     justify-items: center;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     border: 1px solid var(--surface-border-color);
     border-radius: 10px;
     background: var(--primary-color-light);
     text-align: center;
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
   }
   .campaign-scenarios__grid .svg-icon {
     color: var(--primary-color);
   }
   .campaign-faq h3 {
-    font-size: 14px;
-    margin: 14px 0 4px;
+    font-size: var(--ui-font-14, 14px);
+    margin: var(--ui-space-14, 14px) 0 var(--ui-space-4, 4px);
   }
   .campaign-faq h3 span {
     color: var(--primary-color);
-    margin-right: 8px;
+    margin-right: var(--ui-space-8, 8px);
   }
   .campaign-faq p {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .campaign-closing {
     position: relative;
     overflow: hidden;
     display: flex;
     align-items: center;
-    min-height: 210px;
+    min-height: var(--ui-layout-210, 210px);
   }
   .campaign-closing > div {
     position: relative;
@@ -316,7 +322,7 @@
     max-width: 80%;
   }
   .campaign-closing h2 {
-    font-size: 29px;
+    font-size: var(--ui-font-29, 29px);
   }
   .campaign-closing img {
     position: absolute;
@@ -346,20 +352,20 @@
   }
   .campaign-rules ul {
     clear: both;
-    padding-left: 18px;
+    padding-left: var(--ui-space-18, 18px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.8;
   }
   .campaign-scenarios__grid small {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.6;
     color: var(--desc-color);
   }
   .campaign-faq {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 6px 18px;
+    gap: var(--ui-space-6, 6px) var(--ui-space-18, 18px);
   }
   .campaign-faq > h2 {
     grid-column: 1 / -1;

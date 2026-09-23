@@ -4,7 +4,7 @@
     :title="title || t('note.newNote')"
     :mask-closable="false"
     :show-footer="false"
-    width="min(420px, calc(100% - 24px))"
+    width="min(var(--ui-layout-420, 420px), calc(100% - 24px))"
   >
     <div class="new-note-picker">
       <BTabs
@@ -190,17 +190,17 @@
     flex: 1;
     min-width: 0;
     justify-content: center;
-    padding-inline: 6px;
+    padding-inline: var(--ui-space-6, 6px);
   }
 
   .new-note-picker__section {
-    padding-top: 16px;
+    padding-top: var(--ui-space-16, 16px);
   }
 
   .new-note-picker__heading {
-    margin: 0 0 10px;
+    margin: 0 0 var(--ui-space-10, 10px);
     color: var(--sub-text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 600;
     line-height: 1.4;
   }
@@ -209,7 +209,7 @@
   .new-note-picker__template-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .new-note-picker__mode,
@@ -236,9 +236,9 @@
   }
 
   .new-note-picker__mode {
-    min-height: 72px;
-    gap: 9px;
-    padding: 10px;
+    min-height: var(--ui-layout-72, 72px);
+    gap: var(--ui-space-9, 9px);
+    padding: var(--ui-space-10, 10px);
   }
 
   .new-note-picker__mode-mark {
@@ -246,21 +246,21 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 34px;
-    height: 34px;
+    width: var(--ui-layout-34, 34px);
+    height: var(--ui-layout-34, 34px);
     border-radius: 9px;
     color: var(--resource-note-color);
     background: color-mix(in srgb, var(--resource-note-color) 11%, var(--card-background));
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 700;
     letter-spacing: -0.2px;
   }
 
   .new-note-picker__template {
-    min-height: 104px;
+    min-height: var(--ui-layout-104, 104px);
     align-items: flex-start;
-    gap: 9px;
-    padding: 10px;
+    gap: var(--ui-space-9, 9px);
+    padding: var(--ui-space-10, 10px);
   }
 
   .new-note-picker__template-icon {
@@ -268,8 +268,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 32px;
-    height: 32px;
+    width: var(--ui-layout-32, 32px);
+    height: var(--ui-layout-32, 32px);
     border-radius: 9px;
     color: var(--resource-note-color);
     background: color-mix(in srgb, var(--resource-note-color) 10%, var(--card-background));
@@ -279,7 +279,7 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
     overflow: hidden;
   }
 
@@ -292,20 +292,20 @@
 
   .new-note-picker__choice-copy strong {
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 650;
   }
 
   .new-note-picker__choice-copy small {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 400;
   }
 
   .new-note-picker__template .new-note-picker__choice-copy small {
     display: -webkit-box;
-    min-height: 30px;
-    line-height: 15px;
+    min-height: var(--ui-layout-30, 30px);
+    line-height: var(--ui-layout-15, 15px);
     overflow: hidden;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
@@ -314,7 +314,7 @@
 
   .new-note-picker__template-type {
     align-self: flex-start;
-    margin-top: 1px;
+    margin-top: var(--ui-space-1, 1px);
   }
 
   .new-note-picker__mode:hover,
@@ -327,55 +327,55 @@
   }
 
   .new-note-picker__status {
-    min-height: 56px;
+    min-height: var(--ui-layout-56, 56px);
     box-sizing: border-box;
     display: flex;
     align-items: center;
     margin: 0;
-    padding: 12px;
+    padding: var(--ui-space-12, 12px);
     border-radius: 10px;
     color: var(--desc-color);
     background: var(--workspace-panel-bg-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.5;
   }
 
   .new-note-picker__retry {
-    min-height: 58px;
-    gap: 10px;
-    padding: 10px 12px;
+    min-height: var(--ui-layout-58, 58px);
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     color: var(--resource-note-color);
   }
 
   .new-note-picker__mine-list {
     display: grid;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .new-note-picker__mine-heading {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
-    margin-bottom: 10px;
+    gap: var(--ui-space-10, 10px);
+    margin-bottom: var(--ui-space-10, 10px);
 
     > strong {
       color: var(--text-color);
-      font-size: 13px;
+      font-size: var(--ui-font-13, 13px);
       font-weight: 650;
     }
   }
 
   .new-note-picker__mine-main {
     width: 100%;
-    min-height: 56px;
-    padding: 9px 12px;
+    min-height: var(--ui-layout-56, 56px);
+    padding: var(--ui-space-9, 9px) var(--ui-space-12, 12px);
   }
 
   .new-note-picker__manage {
     flex: 0 0 auto;
     width: auto;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
     border: 1px solid var(--card-border-color) !important;
     background: transparent;
     color: var(--resource-note-color);

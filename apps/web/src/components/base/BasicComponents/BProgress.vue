@@ -63,7 +63,7 @@
   .b-progress {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     min-width: 0;
     width: 100%;
   }
@@ -88,7 +88,7 @@
 
   .b-progress__info {
     flex: none;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
     font-variant-numeric: tabular-nums;
   }

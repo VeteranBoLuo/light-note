@@ -13,8 +13,7 @@
     </div>
 
     <div v-else ref="scrollRef" v-auto-scrollbar class="note-tag-scroll">
-      <!-- 选中态用一条滑动指示条,定位取 offsetTop/offsetHeight(布局像素):
-           界面缩放是 <html> 的 CSS zoom,getBoundingClientRect 返回的视觉坐标在缩放≠100% 时会错位 -->
+      <!-- 指示条使用相对于滚动容器的布局位置。 -->
       <div class="note-tag-indicator" :class="{ ready: indicatorReady }" :style="indicatorStyle" aria-hidden="true" />
 
       <div
@@ -70,7 +69,8 @@
 <script lang="ts" setup>
   import { computed, nextTick, ref, watch } from 'vue';
   import router from '@/router';
-  import { scrollIntoContainer } from '@/utils/zoom';
+  import { useUiDensity } from '@/composables/useUiDensity';
+  import { scrollIntoContainer } from '@/utils/scrolling';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
@@ -102,6 +102,7 @@
   );
 
   const { t } = useI18n();
+  const { density } = useUiDensity();
   const emit = defineEmits<{ select: [key: string] }>();
   const keyword = ref('');
   const scrollRef = ref<HTMLElement | null>(null);
@@ -177,8 +178,6 @@
     const targetTop = target.offsetTop;
     const targetBottom = targetTop + target.offsetHeight;
     if (targetTop >= viewTop && targetBottom <= viewBottom) return;
-    // 用 scrollIntoContainer 而不是裸写 scrollTo:界面缩放是 <html> 的 CSS zoom,
-    // 视觉坐标与布局坐标是两套,该工具已经按 getRootZoom() 换算过
     scrollIntoContainer(container, target, Math.max(0, container.clientHeight / 2 - target.offsetHeight));
   }
 
@@ -197,7 +196,7 @@
   }
 
   watch(
-    [activeKey, filteredTags, () => props.loading],
+    [activeKey, filteredTags, () => props.loading, density],
     () => {
       void nextTick(syncIndicator);
     },
@@ -211,13 +210,13 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .note-tag-search {
     flex-shrink: 0;
     // 与下方列表项右边缘对齐:4px 呼吸位 + 3px 滚动条槽
-    padding-right: 7px;
+    padding-right: var(--ui-space-7, 7px);
   }
 
   // 暗色下 --bl-input-noBorder-bg-color 与 --workspace-panel-bg-color 同为 #252933,
@@ -226,7 +225,7 @@
   // 放进同色的侧栏面板里会整个隐形。这里沿用顶部搜索框那套无边框语言,
   // 只把填充改成相对侧栏底色偏移:浅色下压暗、暗色下提亮,保持与页面级搜索框一致的对比方向。
   .note-tag-search :deep(.b-input) {
-    height: 34px;
+    height: var(--ui-control-34, 34px);
     border-radius: 10px;
     background: color-mix(in srgb, var(--text-color) 6%, var(--workspace-panel-bg-color));
 
@@ -242,14 +241,14 @@
     flex: 1;
     min-height: 0;
     overflow-y: auto;
-    padding-right: 4px;
+    padding-right: var(--ui-space-4, 4px);
   }
 
   .note-tag-indicator {
     position: absolute;
     // 右侧让开滚动条槽位,与列表项右边缘对齐(absolute 的包含块是 padding box,不能用 inset-inline: 0)
     left: 0;
-    right: 4px;
+    right: var(--ui-space-4, 4px);
     top: 0;
     border-radius: 9px;
     background: color-mix(in srgb, var(--resource-note-color, #00a884) 12%, transparent);
@@ -268,15 +267,15 @@
   .note-tag-item {
     position: relative;
     z-index: 1;
-    height: 34px;
-    padding: 0 10px;
+    height: var(--ui-control-34, 34px);
+    padding: 0 var(--ui-space-10, 10px);
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     border-radius: 9px;
     box-sizing: border-box;
     cursor: pointer;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     color: var(--desc-color);
     transition: color 160ms ease;
 
@@ -307,7 +306,7 @@
 
   .note-tag-count {
     flex-shrink: 0;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     color: var(--sub-text-color, var(--desc-color));
     font-variant-numeric: tabular-nums;
   }
@@ -318,13 +317,13 @@
 
   .note-tag-divider {
     height: 1px;
-    margin: 6px 4px;
+    margin: var(--ui-space-6, 6px) var(--ui-space-4, 4px);
     background: var(--card-border-color);
   }
 
   .note-tag-empty {
-    padding: 10px;
-    font-size: 12px;
+    padding: var(--ui-space-10, 10px);
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
     text-align: center;
   }
@@ -334,7 +333,7 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     overflow: hidden;
   }
 
@@ -342,7 +341,7 @@
     position: relative;
     overflow: hidden;
     flex-shrink: 0;
-    height: 34px;
+    height: var(--ui-control-34, 34px);
     border-radius: 9px;
     background: var(--card-background);
 

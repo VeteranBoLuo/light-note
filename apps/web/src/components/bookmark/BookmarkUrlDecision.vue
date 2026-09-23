@@ -4,7 +4,7 @@
     :title="title"
     :show-footer="false"
     :mask-closable="false"
-    width="min(560px, 92vw)"
+    width="min(var(--ui-layout-560, 560px), 92vw)"
     @close="finish(null)"
   >
     <div class="bookmark-url-decision">
@@ -70,7 +70,7 @@
   .bookmark-url-decision {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
     min-width: 0;
   }
 
@@ -83,14 +83,14 @@
   .bookmark-url-decision__options {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   :deep(.bookmark-url-decision__option) {
     width: 100%;
     height: auto;
-    min-height: 62px;
-    padding: 12px 14px;
+    min-height: var(--ui-control-62, 62px);
+    padding: var(--ui-space-12, 12px) var(--ui-space-14, 14px);
     line-height: 1.35;
     white-space: normal;
     justify-content: flex-start;
@@ -102,14 +102,14 @@
     flex: 1;
     min-width: 0;
     flex-direction: column;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
 
   .bookmark-url-decision__option-heading {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     min-width: 0;
   }
 
@@ -125,7 +125,7 @@
   }
 
   .bookmark-url-decision__option-description {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     opacity: 0.78;
     overflow-wrap: anywhere;
   }

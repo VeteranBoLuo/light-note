@@ -24,7 +24,7 @@
     >
     <p v-if="enabled && start === end" class="quiet-hours-warning">{{ t('settingsRefine.dnd.equal') }}</p>
     <SettingsSaveStatus :keys="keys" />
-    <BModal v-model:visible="editing" :title="t('settingsRefine.dnd.title')" width="440px" :close-disabled="saving">
+    <BModal v-model:visible="editing" :title="t('settingsRefine.dnd.title')" width="var(--ui-layout-440, 440px)" :close-disabled="saving">
       <div class="quiet-hours-editor">
         <label
           >{{ t('settings.notificationsDndStart')
@@ -131,27 +131,27 @@
 <style scoped>
   .browser-push-quiet-hours {
     border-top: 1px solid var(--surface-divider-color, var(--border-color));
-    margin-top: 18px;
-    padding-top: 16px;
+    margin-top: var(--ui-space-18, 18px);
+    padding-top: var(--ui-space-16, 16px);
   }
   .quiet-hours-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
   }
   .quiet-hours-copy {
     min-width: 0;
   }
   .quiet-hours-copy strong {
     display: flex;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     flex-wrap: wrap;
     align-items: center;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   p {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
     line-height: 1.7;
   }
@@ -159,21 +159,21 @@
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 12px;
-    font-size: 12px;
+    gap: var(--ui-space-12, 12px);
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
-    padding: 10px 0;
+    padding: var(--ui-space-10, 10px) 0;
   }
   .quiet-hours-editor {
     display: flex;
-    gap: 20px;
+    gap: var(--ui-space-20, 20px);
     flex-wrap: wrap;
   }
   .quiet-hours-editor label {
     display: grid;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     flex: 1;
-    min-width: 120px;
+    min-width: var(--ui-layout-120, 120px);
   }
   .quiet-hours-warning {
     color: var(--error-color);
@@ -181,7 +181,7 @@
   .quiet-hours-footer {
     display: flex;
     justify-content: flex-end;
-    padding: 12px 20px 18px;
-    gap: 8px;
+    padding: var(--ui-space-12, 12px) var(--ui-space-20, 20px) var(--ui-space-18, 18px);
+    gap: var(--ui-space-8, 8px);
   }
 </style>

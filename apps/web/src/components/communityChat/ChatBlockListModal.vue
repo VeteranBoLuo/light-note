@@ -2,7 +2,7 @@
   <BModal
     v-model:visible="visible"
     :title="t('communityChat.blocks.title')"
-    width="min(520px, 92vw)"
+    width="min(var(--ui-layout-520, 520px), 92vw)"
     :show-footer="false"
   >
     <div class="chat-block-list-modal">
@@ -88,20 +88,20 @@
 <style scoped lang="less">
   .chat-block-list-modal {
     display: grid;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     color: var(--text-color);
   }
 
   .chat-block-list-modal__description {
     margin: 0;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.6;
   }
 
   .chat-block-list-modal__loading,
   .chat-block-list-modal__empty {
-    min-height: 120px;
+    min-height: var(--ui-layout-120, 120px);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -109,7 +109,7 @@
 
   .chat-block-list-modal__empty {
     flex-direction: column;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     color: var(--desc-color);
@@ -119,53 +119,53 @@
 
   .chat-block-list-modal__empty strong {
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .chat-block-list-modal__empty span {
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .chat-block-list-modal__list {
-    max-height: min(420px, 52vh);
+    max-height: min(var(--ui-layout-420, 420px), 52vh);
     margin: 0;
     padding: 0;
     display: grid;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     overflow-y: auto;
     list-style: none;
   }
 
   .chat-block-list-modal__item {
     min-width: 0;
-    min-height: 58px;
-    padding: 8px 9px;
+    min-height: var(--ui-layout-58, 58px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-9, 9px);
     box-sizing: border-box;
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     background: var(--card-background);
   }
 
   .chat-block-list-modal__avatar {
-    width: 34px;
-    height: 34px;
+    width: var(--ui-layout-34, 34px);
+    height: var(--ui-layout-34, 34px);
     display: grid;
     place-items: center;
     border: 1px solid var(--primary-color);
     border-radius: 11px;
     color: var(--primary-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 700;
   }
 
   .chat-block-list-modal__copy {
     min-width: 0;
     display: grid;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
 
   .chat-block-list-modal__copy strong,
@@ -176,12 +176,12 @@
   }
 
   .chat-block-list-modal__copy strong {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .chat-block-list-modal__copy small {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
 
   .chat-block-list-modal__actions {

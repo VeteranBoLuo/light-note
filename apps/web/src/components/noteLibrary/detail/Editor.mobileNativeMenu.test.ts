@@ -71,7 +71,7 @@ describe('移动端富文本交给系统菜单', () => {
     );
     expect(source).toContain('event.stopImmediatePropagation()');
     expect(source).toContain(
-      "editor.dispatch?.('contexttoolbar-show', { toolbarKey: 'imageselection', target: image })",
+      "editor.dispatch?.('contexttoolbar-show', { toolbarKey: 'imageselection', target: { dom: image } })",
     );
     expect(source).toContain("image.closest('.mermaid-figure--companion, .ln-media-text')");
     expect(source).toContain("addEventListener('contextmenu', blockNativeRichImageContextMenu, true)");

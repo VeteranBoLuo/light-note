@@ -2,16 +2,12 @@ import { createApp, defineComponent, nextTick, ref } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import BTooltip from './BTooltip.vue';
 
-const zoomState = vi.hoisted(() => ({ value: 1 }));
-vi.mock('@/utils/zoom', () => ({ getRootZoom: () => zoomState.value }));
-
 describe('BTooltip 交互状态', () => {
   let app: ReturnType<typeof createApp> | null = null;
   let host: HTMLElement | null = null;
 
   beforeEach(() => {
     vi.useFakeTimers();
-    zoomState.value = 1;
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1280 });
   });
 
@@ -23,6 +19,30 @@ describe('BTooltip 交互状态', () => {
     host = null;
     vi.useRealTimers();
     vi.unstubAllGlobals();
+  });
+
+  it('普通提示随嵌套滚动重定位，关闭后停止监听', async () => {
+    host = document.createElement('div');
+    document.body.append(host);
+    app = createApp(defineComponent({components: { BTooltip }, template: '<BTooltip title="定位提示"><button>入口</button></BTooltip>'}));
+    app.mount(host);
+    const trigger = host.querySelector('.b-tooltip-wrap') as HTMLElement;
+    const popup = document.querySelector('.b-tooltip-popup') as HTMLElement;
+    let top = 200;
+    const measure = vi.spyOn(trigger, 'getBoundingClientRect').mockImplementation(() => ({left: 100, top, bottom: top + 30, width: 60, height: 30, right: 160, x:100, y:top, toJSON() {}}));
+    Object.defineProperty(popup, 'offsetHeight', {configurable:true, value:40});
+    trigger.dispatchEvent(new MouseEvent('mouseenter'));
+    await vi.advanceTimersByTimeAsync(1);
+    expect(popup.style.top).toBe('154px');
+    top = 150;
+    host.dispatchEvent(new Event('scroll'));
+    await nextTick();
+    expect(popup.style.top).toBe('104px');
+    trigger.dispatchEvent(new MouseEvent('mouseleave'));
+    await vi.advanceTimersByTimeAsync(151);
+    measure.mockClear();
+    host.dispatchEvent(new Event('scroll'));
+    expect(measure).not.toHaveBeenCalled();
   });
 
   it('关闭时保留触发内容但不显示浮层，重新启用后可正常显示', async () => {
@@ -122,13 +142,12 @@ describe('BTooltip 交互状态', () => {
     expect(popup.style.top).toBe('362px');
   });
 
-  it.each([1, 1.25])('zoom=%s 时在右下边缘翻转并保持在视口内', async (zoom) => {
-    zoomState.value = zoom;
+  it('在右下边缘翻转并保持在视口内', async () => {
     const { trigger, popup } = mountCursorTooltip();
     trigger.dispatchEvent(new MouseEvent('mouseenter', { clientX: 1278, clientY: 798 }));
     await vi.advanceTimersByTimeAsync(1000);
-    expect(parseFloat(popup.style.left)).toBeCloseTo((1278 - 12) / zoom - 200);
-    expect(parseFloat(popup.style.top)).toBeCloseTo((798 - 12) / zoom - 40);
+    expect(parseFloat(popup.style.left)).toBeCloseTo(1278 - 12 - 200);
+    expect(parseFloat(popup.style.top)).toBeCloseTo(798 - 12 - 40);
   });
 
   it('离开取消等待；按下立即关闭，拖动经过时不重新显示', async () => {

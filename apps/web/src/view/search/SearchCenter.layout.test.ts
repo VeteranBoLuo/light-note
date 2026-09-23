@@ -1,8 +1,11 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync as rawReadFileSync } from 'node:fs';
+import { standardDensitySource } from '@/test/standardDensitySource';
+
+const readFileSync = (path: string, encoding: 'utf8') => standardDensitySource(rawReadFileSync(path, encoding));
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const source = readFileSync(resolve(process.cwd(), 'src/view/search/SearchCenter.vue'), 'utf8');
+const source = readFileSync(resolve(process.cwd(), 'src/view/search/SearchCenter.vue'), 'utf8').replace(/var\(--ui-(?:space|control|layout|font|card)-[\d_]+, ([\d.]+px)\)/g, '$1');
 const searchMetaSource = readFileSync(resolve(process.cwd(), 'src/components/searchCenter/searchMeta.ts'), 'utf8');
 const inspectorSource = readFileSync(
   resolve(process.cwd(), 'src/components/searchCenter/ResourceInspectorPanel.vue'),

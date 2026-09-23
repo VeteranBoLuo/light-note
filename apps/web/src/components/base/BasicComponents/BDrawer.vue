@@ -93,7 +93,7 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
-  import { getRootZoom } from '@/utils/zoom';
+
   import { resolveViewportUnitValue } from '@/utils/cssViewport';
   import { acquireModalLayer, isTopModalLayer, releaseModalLayer } from '@/utils/modalLayer';
   import { shouldIgnoreBackgroundEscape } from '@/utils/topLayerEscape';
@@ -349,7 +349,7 @@
 
   function readLayoutViewportWidth() {
     if (typeof window === 'undefined' || typeof document === 'undefined') return props.maxWidth;
-    return document.documentElement.clientWidth || Math.max(1, Math.round(window.innerWidth / getRootZoom()));
+    return document.documentElement.clientWidth || Math.max(1, Math.round(window.innerWidth));
   }
 
   function syncLayoutViewportWidth() {
@@ -425,7 +425,7 @@
   function handleResizeMove(event: PointerEvent) {
     if (!resizing) return;
     // 右侧抽屉:鼠标相对起点左移(clientX 变小)→ 宽度增大;按位移增量算,保证 1:1 跟手
-    const delta = (resizeStartX - event.clientX) / getRootZoom();
+    const delta = (resizeStartX - event.clientX);
     currentWidth.value = clampWidth(resizeStartWidth + delta);
   }
 
@@ -568,7 +568,7 @@
     flex-direction: column;
     transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
     transform: translateX(100%);
-    min-width: 300px;
+    min-width: var(--ui-layout-300, 300px);
     max-width: 90vw;
 
     &:focus {
@@ -633,16 +633,16 @@
     box-shadow: none;
 
     .b-drawer-header {
-      padding-top: calc(12px + env(safe-area-inset-top));
-      padding-right: max(14px, env(safe-area-inset-right));
-      padding-bottom: 12px;
-      padding-left: max(14px, env(safe-area-inset-left));
+      padding-top: calc(var(--ui-space-12, 12px) + env(safe-area-inset-top));
+      padding-right: max(var(--ui-space-14, 14px), env(safe-area-inset-right));
+      padding-bottom: var(--ui-space-12, 12px);
+      padding-left: max(var(--ui-space-14, 14px), env(safe-area-inset-left));
     }
 
     .b-drawer-body {
       overflow: hidden;
-      padding: 12px max(12px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom))
-        max(12px, env(safe-area-inset-left));
+      padding: var(--ui-space-12, 12px) max(var(--ui-space-12, 12px), env(safe-area-inset-right)) max(var(--ui-space-10, 10px), env(safe-area-inset-bottom))
+        max(var(--ui-space-12, 12px), env(safe-area-inset-left));
     }
   }
 
@@ -653,24 +653,24 @@
   .b-drawer-panel--bottom {
     top: auto;
     left: 0;
-    min-height: 240px;
+    min-height: var(--ui-layout-240, 240px);
     max-height: calc(100% - env(safe-area-inset-top));
     border-radius: 20px 20px 0 0;
     box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.16);
     transform: translateY(100%);
 
     .b-drawer-header {
-      padding: 14px 18px 12px;
+      padding: var(--ui-space-14, 14px) var(--ui-space-18, 18px) var(--ui-space-12, 12px);
     }
 
     .b-drawer-body {
-      padding-bottom: max(18px, env(safe-area-inset-bottom));
+      padding-bottom: max(var(--ui-space-18, 18px), env(safe-area-inset-bottom));
     }
   }
 
   .b-drawer-panel--with-handle {
     .b-drawer-header {
-      padding-top: 24px;
+      padding-top: var(--ui-space-24, 24px);
       border-bottom-color: var(--surface-divider-color);
     }
   }
@@ -694,7 +694,7 @@
       var(--b-drawer-mobile-header-side-width, 44px) minmax(0, 1fr)
       var(--b-drawer-mobile-header-side-width, minmax(44px, auto));
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
 
     .b-drawer-title {
       overflow: hidden;
@@ -757,7 +757,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 16px 24px;
+    padding: var(--ui-space-16, 16px) var(--ui-space-24, 24px);
     border-bottom: 1px solid var(--card-border-color, #e8e8e8);
     flex-shrink: 0;
   }
@@ -768,7 +768,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 16px;
+    font-size: var(--ui-font-16, 16px);
     font-weight: 600;
     color: var(--text-color);
   }
@@ -776,14 +776,14 @@
   .b-drawer-header-actions {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     flex: 0 0 auto;
     min-width: 0;
   }
 
   .b-drawer-close {
-    width: 32px;
-    height: 32px;
+    width: var(--ui-control-32, 32px);
+    height: var(--ui-control-32, 32px);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -806,7 +806,7 @@
     min-height: 0;
     flex: 1;
     overflow-y: auto;
-    padding: 24px;
+    padding: var(--ui-space-24, 24px);
   }
 
   @media (prefers-reduced-motion: reduce) {

@@ -22,8 +22,8 @@
   .pending-filter-section {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    padding: 8px 8px 12px;
+    gap: var(--ui-space-4, 4px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-8, 8px) var(--ui-space-12, 12px);
     border-bottom: 1px solid var(--surface-divider-color);
     flex-shrink: 0;
   }
@@ -31,15 +31,15 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    min-height: 28px;
-    gap: 8px;
+    min-height: var(--ui-layout-28, 28px);
+    gap: var(--ui-space-8, 8px);
   }
   .filter-section-title {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
     line-height: 1.5;
   }
   .pending-filter-section :deep(.b-checkbox) {
-    min-height: 32px;
+    min-height: var(--ui-layout-32, 32px);
   }
 </style>

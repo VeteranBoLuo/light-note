@@ -136,8 +136,8 @@
 <style lang="less" scoped>
   .note-subpage-section {
     flex: 0 0 auto;
-    max-height: min(18dvh, 108px);
-    padding: 6px 10px 7px;
+    max-height: min(18dvh, var(--ui-layout-108, 108px));
+    padding: var(--ui-space-6, 6px) var(--ui-space-10, 10px) var(--ui-space-7, 7px);
     box-sizing: border-box;
     border-top: 1px solid var(--surface-border-color);
     background: var(--surface-page-bg, var(--background-color));
@@ -147,25 +147,25 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .note-subpage-heading {
     min-width: 0;
-    height: 30px;
-    padding: 0 4px;
+    height: var(--ui-control-30, 30px);
+    padding: 0 var(--ui-space-4, 4px);
     display: flex;
     justify-content: flex-start;
     align-items: center;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     border: 0;
     background: transparent;
 
     span {
       color: var(--desc-color);
-      font-size: 11px;
+      font-size: var(--ui-font-11, 11px);
       font-variant-numeric: tabular-nums;
     }
   }
@@ -173,25 +173,25 @@
   .note-subpage-actions {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
 
   .note-subpage-empty-copy {
     min-width: 0;
     overflow: hidden;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .note-subpage-create,
   .note-subpage-position-button {
-    height: 28px;
-    padding-inline: 9px;
-    gap: 5px;
+    height: var(--ui-control-28, 28px);
+    padding-inline: var(--ui-space-9, 9px);
+    gap: var(--ui-space-5, 5px);
     border-radius: 7px;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .note-subpage-position-button {
@@ -206,20 +206,20 @@
 
   .note-subpage-list {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 5px;
-    max-height: 70px;
-    margin-top: 5px;
+    grid-template-columns: repeat(auto-fit, minmax(var(--ui-layout-200, 200px), 1fr));
+    gap: var(--ui-space-5, 5px);
+    max-height: var(--ui-layout-70, 70px);
+    margin-top: var(--ui-space-5, 5px);
     overflow-y: auto;
   }
 
   .note-subpage-row {
     width: 100%;
     min-width: 0;
-    height: 32px;
-    padding: 4px 7px;
+    height: var(--ui-control-32, 32px);
+    padding: var(--ui-space-4, 4px) var(--ui-space-7, 7px);
     justify-content: flex-start;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     border: 1px solid var(--surface-border-color) !important;
     border-radius: 7px;
     color: var(--desc-color);
@@ -244,19 +244,19 @@
   .note-subpage-count {
     margin-left: auto;
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .note-subpage-error {
-    margin: 6px 0 0;
+    margin: var(--ui-space-6, 6px) 0 0;
     color: var(--danger-color, #dc2626);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .note-subpage-section.is-compact {
-    min-height: 48px;
-    max-height: 48px;
-    padding: 8px 10px;
+    min-height: var(--ui-layout-48, 48px);
+    max-height: var(--ui-layout-48, 48px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px);
     display: flex;
     align-items: center;
 

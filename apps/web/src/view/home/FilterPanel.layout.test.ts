@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const source = readFileSync(resolve(process.cwd(), 'src/view/home/FilterPanel.vue'), 'utf8');
+const source = readFileSync(resolve(process.cwd(), 'src/view/home/FilterPanel.vue'), 'utf8').replace(/var\(--ui-(?:space|control|layout|font|card)-\d+, (\d+px)\)/g, '$1');
 
 describe('书签标签树排版', () => {
   it('可拖拽时用操作提示替代重复的标签名 title', () => {

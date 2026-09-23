@@ -28,7 +28,7 @@ describe('后台用户管理头像框展示', () => {
     for (const file of ['UserMg.vue', 'UserMgMobile.vue']) {
       const content = source(file);
       expect(content).toContain("'is-framed': frameVariant(record.equippedFrame)");
-      expect(content).toContain(':size="30"');
+      expect(content).toContain(file === 'UserMg.vue' ? `:size="dimension(30, 'icon')"` : ':size="30"');
       expect(content).toMatch(/(?:<svg-icon|<SvgIcon) v-else[^>]+(?:size|:size)="36"/u);
       expect(content).toMatch(/:not\(\.is-framed\)[\s\S]*overflow:\s*hidden/u);
       expect(content).toMatch(/:not\(\.is-framed\)[\s\S]*object-fit:\s*cover/u);
@@ -47,7 +47,8 @@ describe('后台用户管理头像框展示', () => {
   });
 
   it('普通头像缩到与 30px 头像框的约 36px 总外径一致，同时保留 44px 装饰安全槽', () => {
-    const desktop = source('UserMg.vue');
+    // The standard density keeps the original avatar slot geometry.
+    const desktop = source('UserMg.vue').replace(/var\(--ui-layout-36, 36px\)/gu, '36px');
     const mobile = source('UserMgMobile.vue');
 
     expect(desktop).toMatch(

@@ -7,7 +7,7 @@
           id="auth-login-email"
           v-model:value="formData.email"
           class="auth-input"
-          height="48px"
+          height="var(--ui-control-48, 48px)"
           autocomplete="email"
           :placeholder="t('auth.emailPlaceholder')"
         >
@@ -23,7 +23,7 @@
           id="auth-login-password"
           v-model:value="formData.password"
           class="auth-input"
-          height="48px"
+          height="var(--ui-control-48, 48px)"
           maxlength="64"
           type="password"
           autocomplete="current-password"

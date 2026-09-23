@@ -101,14 +101,14 @@
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
 
   .todo-resource-link {
     --todo-resource-tone: var(--primary-color);
     min-width: 0;
-    max-width: min(220px, 100%);
-    height: 24px;
+    max-width: min(var(--ui-layout-220, 220px), 100%);
+    height: var(--ui-layout-24, 24px);
     display: inline-flex;
     align-items: center;
     overflow: hidden;
@@ -142,8 +142,8 @@
 
   :deep(.b_btn.todo-resource-link__open),
   :deep(.b_btn.todo-resource-link__remove) {
-    height: 22px;
-    min-height: 22px;
+    height: var(--ui-layout-22, 22px);
+    min-height: var(--ui-layout-22, 22px);
     line-height: 1;
     border: 0;
     border-radius: 999px;
@@ -153,15 +153,15 @@
   :deep(.b_btn.todo-resource-link__open) {
     min-width: 0;
     max-width: 100%;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
     justify-content: flex-start;
-    padding: 0 7px;
+    padding: 0 var(--ui-space-7, 7px);
     color: var(--todo-resource-tone);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .todo-resource-link.is-removable :deep(.b_btn.todo-resource-link__open) {
-    padding-right: 4px;
+    padding-right: var(--ui-space-4, 4px);
   }
 
   .todo-resource-link__type {
@@ -173,16 +173,16 @@
     min-width: 0;
     overflow: hidden;
     color: var(--text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 500;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   :deep(.b_btn.todo-resource-link__remove) {
-    width: 22px;
-    min-width: 22px;
-    flex: 0 0 22px;
+    width: var(--ui-layout-22, 22px);
+    min-width: var(--ui-layout-22, 22px);
+    flex: 0 0 var(--ui-layout-22, 22px);
     padding: 0;
     border-left: 1px solid var(--surface-divider-color, var(--surface-border-color));
     border-radius: 0;
@@ -192,8 +192,8 @@
   .todo-resource-links__more {
     flex: 0 0 auto;
     color: var(--desc-color);
-    font-size: 11px;
-    line-height: 24px;
+    font-size: var(--ui-font-11, 11px);
+    line-height: var(--ui-layout-24, 24px);
   }
 
   @media (hover: hover) and (pointer: fine) {

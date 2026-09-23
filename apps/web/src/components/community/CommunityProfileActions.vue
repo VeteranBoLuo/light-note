@@ -112,18 +112,18 @@
 </script>
 <style scoped>
   .community-profile-actions {
-    min-height: 32px;
+    min-height: var(--ui-layout-32, 32px);
     align-items: center;
     display: flex;
     flex-wrap: wrap;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     margin: 0;
   }
   .community-profile-actions__home {
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
 
   .community-profile-actions__follow {
-    min-width: 108px;
+    min-width: var(--ui-layout-108, 108px);
   }
 </style>

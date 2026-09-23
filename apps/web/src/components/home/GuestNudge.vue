@@ -52,27 +52,27 @@
 <style scoped lang="less">
   .guest-nudge {
     position: fixed;
-    right: 20px;
-    bottom: 20px;
+    right: var(--ui-space-20, 20px);
+    bottom: var(--ui-space-20, 20px);
     z-index: 400;
-    width: 300px;
+    width: var(--ui-layout-300, 300px);
     max-width: calc(100vw - 32px);
-    padding: 15px 16px;
+    padding: var(--ui-space-15, 15px) var(--ui-space-16, 16px);
     border-radius: 14px;
     background: var(--card-background, #fff);
     border: 1px solid var(--card-border-color);
     box-shadow: 0 12px 40px -12px rgba(20, 24, 50, 0.35);
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .gn-close {
     position: absolute;
-    top: 8px;
-    right: 8px;
-    width: 30px;
-    min-width: 30px;
-    height: 30px;
+    top: var(--ui-space-8, 8px);
+    right: var(--ui-space-8, 8px);
+    width: var(--ui-control-30, 30px);
+    min-width: var(--ui-control-30, 30px);
+    height: var(--ui-control-30, 30px);
     padding: 0;
     background: transparent;
     border: none;
@@ -84,14 +84,14 @@
   }
   .gn-main {
     display: flex;
-    gap: 11px;
+    gap: var(--ui-space-11, 11px);
     align-items: flex-start;
-    padding-right: 22px;
+    padding-right: var(--ui-space-22, 22px);
   }
   .gn-icon {
     display: inline-flex;
-    width: 34px;
-    height: 34px;
+    width: var(--ui-layout-34, 34px);
+    height: var(--ui-layout-34, 34px);
     align-items: center;
     justify-content: center;
     border-radius: 10px;
@@ -103,22 +103,22 @@
     min-width: 0;
   }
   .gn-title {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     font-weight: 700;
     color: var(--text-color);
-    margin-bottom: 4px;
+    margin-bottom: var(--ui-space-4, 4px);
   }
   .gn-desc {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.6;
     color: var(--desc-color);
   }
   .gn-cta {
     align-self: stretch;
-    height: 34px;
+    height: var(--ui-control-34, 34px);
     width: 100%;
     border-radius: 9px;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 600;
   }
   /* 右下角滑入滑出 */

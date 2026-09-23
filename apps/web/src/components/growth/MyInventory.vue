@@ -195,14 +195,14 @@
   .inv {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .inv-state {
-    min-height: 180px;
+    min-height: var(--ui-layout-180, 180px);
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     color: var(--desc-color);
   }
   .inv-state--error {
@@ -211,33 +211,33 @@
   .inv-head {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
   .inv-title {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     margin: 0;
-    font-size: 16px;
+    font-size: var(--ui-font-16, 16px);
     font-weight: 700;
     color: var(--text-color);
   }
   .inv-sub {
     margin: 0;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
     line-height: 1.5;
   }
   .inv-label {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 600;
     color: var(--desc-color);
-    margin-top: 4px;
+    margin-top: var(--ui-space-4, 4px);
   }
   .inv-assets {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   @media (max-width: 520px) {
     .inv-assets {
@@ -247,8 +247,8 @@
   .asset {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 12px 14px;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-12, 12px) var(--ui-space-14, 14px);
     border-radius: 12px;
     border: 1px solid color-mix(in srgb, var(--card-border-color) 55%, transparent);
     background: color-mix(in srgb, var(--card-border-color) 8%, transparent);
@@ -262,29 +262,29 @@
     flex: 1 1 auto;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
     min-width: 0;
   }
   .asset-val {
-    font-size: 17px;
+    font-size: var(--ui-font-17, 17px);
     font-weight: 800;
     font-variant-numeric: tabular-nums;
     color: var(--text-color);
   }
   .asset-label {
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     color: var(--desc-color);
   }
   .inv-items {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .inv-item {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 12px 14px;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-12, 12px) var(--ui-space-14, 14px);
     border-radius: 12px;
     border: 1px solid color-mix(in srgb, var(--card-border-color) 55%, transparent);
     background: color-mix(in srgb, var(--card-border-color) 6%, transparent);
@@ -304,20 +304,20 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
   .item-name-row {
     display: flex;
     align-items: baseline;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .item-name {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     font-weight: 600;
     color: var(--text-color);
   }
   .item-qty {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 700;
     color: var(--primary-color);
     font-variant-numeric: tabular-nums;
@@ -328,7 +328,7 @@
   }
   .item-desc {
     margin: 0;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
     line-height: 1.5;
   }
@@ -336,14 +336,14 @@
     flex-shrink: 0;
   }
   .inv-btn {
-    min-width: 60px;
-    height: 30px !important;
-    padding: 0 14px !important;
+    min-width: var(--ui-layout-60, 60px);
+    height: var(--ui-control-30, 30px) !important;
+    padding: 0 var(--ui-space-14, 14px) !important;
     border-radius: 8px;
     border: 1px solid color-mix(in srgb, var(--primary-color) 45%, transparent);
     background: color-mix(in srgb, var(--primary-color) 10%, transparent);
     color: var(--primary-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 600;
     cursor: pointer;
     transition:

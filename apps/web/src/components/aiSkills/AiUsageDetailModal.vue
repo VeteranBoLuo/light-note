@@ -3,8 +3,8 @@
     v-model:visible="visible"
     :title="t('settings.ai.usage.detail.title')"
     :show-footer="false"
-    width="min(720px, 94vw)"
-    height="min(720px, 86vh)"
+    width="min(var(--ui-layout-720, 720px), 94vw)"
+    height="min(var(--ui-layout-720, 720px), 86vh)"
     content-class="ai-usage-detail-modal__content"
     fullscreen-mobile
   >
@@ -343,25 +343,25 @@
 <style scoped lang="less">
   .detail-state {
     display: flex;
-    min-height: 280px;
+    min-height: var(--ui-layout-280, 280px);
     align-items: center;
     justify-content: center;
   }
 
   .detail-state--error {
     flex-direction: column;
-    gap: 8px;
-    padding: 24px;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-24, 24px);
     border: 1px solid var(--error-color, #c33f47);
     border-radius: 10px;
     color: var(--desc-color);
     text-align: center;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .detail-state--error strong {
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .usage-call-detail {
@@ -374,20 +374,20 @@
   .call-error {
     display: flex;
     align-items: flex-start;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
 
   .detail-inline-warning {
-    margin-bottom: 10px;
-    padding: 8px 10px;
+    margin-bottom: var(--ui-space-10, 10px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px);
     border: 1px solid var(--warning-color, #a86700);
     border-radius: 8px;
     color: var(--warning-color, #a86700);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .detail-overview {
-    padding: 12px;
+    padding: var(--ui-space-12, 12px);
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     background: var(--workspace-panel-bg-color);
@@ -403,13 +403,13 @@
   }
 
   .detail-heading {
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .detail-heading-icon {
     display: inline-flex;
-    width: 38px;
-    height: 38px;
+    width: var(--ui-layout-38, 38px);
+    height: var(--ui-layout-38, 38px);
     flex: 0 0 auto;
     align-items: center;
     justify-content: center;
@@ -420,7 +420,7 @@
 
   .detail-title-row {
     flex-wrap: wrap;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
 
   .detail-title-row h3,
@@ -430,16 +430,16 @@
   }
 
   .detail-title-row h3 {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
   }
 
   .detail-heading p,
   .detail-section-head p,
   .call-head p,
   .repair-reason p {
-    margin: 3px 0 0;
+    margin: var(--ui-space-3, 3px) 0 0;
     color: var(--desc-color);
-    font-size: 10.5px;
+    font-size: var(--ui-font-10_5, 10.5px);
     line-height: 1.45;
   }
 
@@ -448,13 +448,13 @@
   .billing-badge {
     display: inline-flex;
     align-items: center;
-    gap: 3px;
-    min-height: 19px;
+    gap: var(--ui-space-3, 3px);
+    min-height: var(--ui-layout-19, 19px);
     box-sizing: border-box;
-    padding: 2px 6px;
+    padding: var(--ui-space-2, 2px) var(--ui-space-6, 6px);
     border: 1px solid currentColor;
     border-radius: 999px;
-    font-size: 9.5px;
+    font-size: var(--ui-font-9_5, 9.5px);
     line-height: 1;
   }
 
@@ -477,15 +477,15 @@
   .detail-metrics {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
-    margin-top: 12px;
+    gap: var(--ui-space-8, 8px);
+    margin-top: var(--ui-space-12, 12px);
   }
 
   .detail-metrics > div {
     display: grid;
     grid-template-columns: 1fr auto;
-    gap: 2px 6px;
-    padding: 8px 9px;
+    gap: var(--ui-space-2, 2px) var(--ui-space-6, 6px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-9, 9px);
     border: 1px solid var(--surface-divider-color);
     border-radius: 8px;
   }
@@ -493,43 +493,43 @@
   .detail-metrics span {
     grid-column: 1 / -1;
     color: var(--desc-color);
-    font-size: 9.5px;
+    font-size: var(--ui-font-9_5, 9.5px);
   }
 
   .detail-metrics strong {
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-variant-numeric: tabular-nums;
   }
 
   .detail-metrics small {
     align-self: end;
     color: var(--desc-color);
-    font-size: 8.5px;
+    font-size: var(--ui-font-8_5, 8.5px);
   }
 
   .detail-calls {
-    margin-top: 16px;
+    margin-top: var(--ui-space-16, 16px);
   }
 
   .detail-section-head {
     justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 12px;
+    gap: var(--ui-space-12, 12px);
+    margin-bottom: var(--ui-space-12, 12px);
   }
 
   .detail-section-head h4 {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .detail-refresh {
     flex: 0 0 auto;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
 
   .call-timeline {
     display: grid;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     margin: 0;
     padding: 0;
     list-style: none;
@@ -538,15 +538,15 @@
   .call-item {
     position: relative;
     display: grid;
-    grid-template-columns: 26px minmax(0, 1fr);
-    gap: 9px;
+    grid-template-columns: var(--ui-layout-26, 26px) minmax(0, 1fr);
+    gap: var(--ui-space-9, 9px);
   }
 
   .call-item:not(:last-child)::before {
     position: absolute;
-    top: 28px;
-    bottom: -12px;
-    left: 12px;
+    top: var(--ui-layout-28, 28px);
+    bottom: calc(-1 * var(--ui-space-12, 12px));
+    left: var(--ui-layout-12, 12px);
     width: 2px;
     background: var(--surface-divider-color);
     content: '';
@@ -555,21 +555,21 @@
   .call-sequence {
     z-index: 1;
     display: inline-flex;
-    width: 26px;
-    height: 26px;
+    width: var(--ui-layout-26, 26px);
+    height: var(--ui-layout-26, 26px);
     align-items: center;
     justify-content: center;
     border: 2px solid var(--primary-color);
     border-radius: 50%;
     color: var(--primary-color);
     background: var(--background-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     font-weight: 700;
   }
 
   .call-card {
     min-width: 0;
-    padding: 11px;
+    padding: var(--ui-space-11, 11px);
     border: 1px solid var(--surface-border-color);
     border-radius: 10px;
     background: var(--workspace-panel-bg-color);
@@ -577,17 +577,17 @@
 
   .call-head {
     justify-content: space-between;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .call-title-row {
     flex-wrap: wrap;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
 
   .call-title-row > strong {
     color: var(--text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .call-head p {
@@ -605,29 +605,29 @@
   .call-token-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 6px;
-    margin-top: 10px;
+    gap: var(--ui-space-6, 6px);
+    margin-top: var(--ui-space-10, 10px);
   }
 
   .call-token-grid > div {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
     min-width: 0;
-    padding: 7px;
+    padding: var(--ui-space-7, 7px);
     border: 1px solid var(--surface-divider-color);
     border-radius: 7px;
   }
 
   .call-token-grid span {
     color: var(--desc-color);
-    font-size: 9px;
+    font-size: var(--ui-font-9, 9px);
   }
 
   .call-token-grid strong {
     overflow: hidden;
     color: var(--text-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-variant-numeric: tabular-nums;
     text-overflow: ellipsis;
   }
@@ -635,9 +635,9 @@
   .repair-reason {
     display: flex;
     align-items: flex-start;
-    gap: 7px;
-    margin-top: 9px;
-    padding: 8px;
+    gap: var(--ui-space-7, 7px);
+    margin-top: var(--ui-space-9, 9px);
+    padding: var(--ui-space-8, 8px);
     border: 1px solid var(--primary-color);
     border-radius: 8px;
     color: var(--primary-color);
@@ -645,20 +645,20 @@
 
   .repair-reason > :first-child {
     flex: 0 0 auto;
-    margin-top: 1px;
+    margin-top: var(--ui-space-1, 1px);
   }
 
   .repair-reason strong {
     color: var(--text-color);
-    font-size: 10.5px;
+    font-size: var(--ui-font-10_5, 10.5px);
   }
 
   .usage-missing,
   .call-error {
-    margin-top: 8px;
-    padding: 7px 8px;
+    margin-top: var(--ui-space-8, 8px);
+    padding: var(--ui-space-7, 7px) var(--ui-space-8, 8px);
     border-radius: 7px;
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
 
   .usage-missing {
@@ -673,26 +673,26 @@
 
   .detail-empty {
     display: flex;
-    min-height: 120px;
+    min-height: var(--ui-layout-120, 120px);
     align-items: center;
     justify-content: center;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     border: 1px dashed var(--surface-border-color);
     border-radius: 10px;
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .detail-privacy {
-    margin: 14px 0 0;
+    margin: var(--ui-space-14, 14px) 0 0;
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     line-height: 1.45;
   }
 
   .detail-privacy > :first-child {
     flex: 0 0 auto;
-    margin-top: 1px;
+    margin-top: var(--ui-space-1, 1px);
     color: var(--primary-color);
   }
 

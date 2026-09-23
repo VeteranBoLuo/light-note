@@ -2222,10 +2222,10 @@
     position: relative;
     overflow: hidden;
     border-radius: 18px;
-    padding: 16px 20px;
+    padding: var(--ui-space-16, 16px) var(--ui-space-20, 20px);
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
     background:
       radial-gradient(
         circle at 97% -10%,
@@ -2259,7 +2259,7 @@
   }
 
   .refresh-btn {
-    height: 46px;
+    height: var(--ui-layout-46, 46px);
     border-radius: 16px;
     color: #fff;
     background: linear-gradient(
@@ -2290,8 +2290,8 @@
 
   .search-header-input {
     display: grid;
-    grid-template-columns: minmax(220px, 1fr) 110px;
-    gap: 10px;
+    grid-template-columns: minmax(var(--ui-layout-220, 220px), 1fr) var(--ui-layout-110, 110px);
+    gap: var(--ui-space-10, 10px);
     align-items: center;
   }
 
@@ -2303,13 +2303,13 @@
   .desktop-result-heading {
     display: flex;
     align-items: baseline;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     white-space: nowrap;
   }
 
   .desktop-result-heading span {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .resource-scope-pane,
@@ -2325,7 +2325,7 @@
     display: flex;
     flex-direction: column;
     gap: 0;
-    padding: 12px 10px;
+    padding: var(--ui-space-12, 12px) var(--ui-space-10, 10px);
     overflow: hidden auto;
     overscroll-behavior: contain;
     scrollbar-gutter: stable;
@@ -2335,21 +2335,21 @@
   .resource-scope-list {
     min-width: 0;
     display: grid;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
 
   .resource-scope-title {
     width: 100%;
     height: auto;
-    min-height: 30px;
-    padding: 3px 8px;
+    min-height: var(--ui-layout-30, 30px);
+    padding: var(--ui-space-3, 3px) var(--ui-space-8, 8px);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     color: var(--desc-color);
     background: transparent;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 700;
     line-height: 1.2;
     text-align: left;
@@ -2372,12 +2372,12 @@
 
   .resource-scope-item {
     width: 100%;
-    min-height: 40px;
+    min-height: var(--ui-layout-40, 40px);
     display: grid;
     grid-template-columns: 8px minmax(0, 1fr) auto;
     align-items: center;
-    gap: 9px;
-    padding: 0 10px;
+    gap: var(--ui-space-9, 9px);
+    padding: 0 var(--ui-space-10, 10px);
     border: 1px solid transparent;
     border-radius: 11px;
     background: transparent;
@@ -2401,7 +2401,7 @@
 
   .resource-scope-divider {
     height: 1px;
-    margin: 8px 6px;
+    margin: var(--ui-space-8, 8px) var(--ui-space-6, 6px);
     background: var(--search-border-color);
   }
 
@@ -2410,10 +2410,10 @@
   }
 
   .resource-scope-title__count {
-    min-width: 18px;
-    height: 18px;
+    min-width: var(--ui-layout-18, 18px);
+    height: var(--ui-layout-18, 18px);
     margin-left: auto;
-    padding-inline: 5px;
+    padding-inline: var(--ui-space-5, 5px);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -2421,31 +2421,31 @@
     border-radius: 999px;
     color: var(--primary-color);
     background: var(--search-card-bg);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     line-height: 1;
   }
 
   .resource-scope-tag-filter {
     min-width: 0;
     display: grid;
-    gap: 8px;
-    padding: 3px 6px 2px;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-3, 3px) var(--ui-space-6, 6px) var(--ui-space-2, 2px);
   }
 
   .resource-scope-empty-hint {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .resource-scope-empty-hint {
-    padding: 4px 2px;
+    padding: var(--ui-space-4, 4px) var(--ui-space-2, 2px);
   }
 
   .resource-inspector-pane {
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    padding: 14px;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-14, 14px);
     overflow: hidden;
   }
 
@@ -2460,7 +2460,7 @@
 
   .search-ai-panel--mobile {
     flex: 0 0 auto;
-    margin: 0 0 12px;
+    margin: 0 0 var(--ui-space-12, 12px);
   }
 
   .resource-result-entry {
@@ -2482,10 +2482,10 @@
   }
 
   .search-layout {
-    margin-top: 20px;
+    margin-top: var(--ui-space-20, 20px);
     display: grid;
-    grid-template-columns: 210px minmax(0, 1fr);
-    gap: 20px;
+    grid-template-columns: var(--ui-layout-210, 210px) minmax(0, 1fr);
+    gap: var(--ui-space-20, 20px);
     align-items: start;
   }
 
@@ -2519,9 +2519,9 @@
   }
 
   .batch-scope-hint {
-    margin: 0 0 12px;
+    margin: 0 0 var(--ui-space-12, 12px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .filter-dot--todo {
@@ -2532,31 +2532,31 @@
     --b-card-background: var(--search-card-bg);
     --b-card-shadow: var(--surface-card-shadow);
 
-    min-height: 420px;
+    min-height: var(--ui-layout-420, 420px);
   }
 
   .result-toolbar {
     display: flex;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     align-items: center;
-    padding-bottom: 14px;
+    padding-bottom: var(--ui-space-14, 14px);
     border-bottom: 1px solid var(--search-border-color);
   }
 
   .result-title {
-    font-size: 20px;
+    font-size: var(--ui-font-20, 20px);
     font-weight: 800;
   }
 
   .toolbar-actions {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .clear-btn {
-    padding: 8px 12px;
+    padding: var(--ui-space-8, 8px) var(--ui-space-12, 12px);
     border-radius: 12px;
     background: var(--search-muted-bg);
   }
@@ -2568,14 +2568,14 @@
 
   .select-wrap {
     display: flex;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     align-items: center;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     color: var(--desc-color);
   }
 
   .filter-select {
-    min-width: 140px;
+    min-width: var(--ui-layout-140, 140px);
   }
 
   .view-switch {
@@ -2586,7 +2586,7 @@
   }
 
   .view-btn {
-    padding: 6px 12px;
+    padding: var(--ui-space-6, 6px) var(--ui-space-12, 12px);
     background: transparent;
   }
 
@@ -2596,7 +2596,7 @@
   }
 
   .tagless-btn {
-    padding: 6px 12px;
+    padding: var(--ui-space-6, 6px) var(--ui-space-12, 12px);
     border-radius: 10px;
     background: var(--search-muted-bg);
   }
@@ -2607,19 +2607,19 @@
   }
 
   .tag-chip {
-    min-height: 28px;
+    min-height: var(--ui-layout-28, 28px);
   }
 
   .result-scroll-area {
     position: relative;
-    margin-top: 12px;
+    margin-top: var(--ui-space-12, 12px);
     box-sizing: border-box;
     border-radius: 14px;
   }
 
   .result-load-sentinel {
-    min-height: 32px;
-    padding: 10px 0 2px;
+    min-height: var(--ui-layout-32, 32px);
+    padding: var(--ui-space-10, 10px) 0 var(--ui-space-2, 2px);
     box-sizing: border-box;
     display: flex;
     align-items: center;
@@ -2628,7 +2628,7 @@
   }
 
   .result-group {
-    margin-top: 16px;
+    margin-top: var(--ui-space-16, 16px);
   }
 
   .group-header {
@@ -2636,14 +2636,14 @@
     justify-content: space-between;
     color: var(--desc-color);
     font-weight: 700;
-    font-size: 13px;
-    margin-bottom: 10px;
+    font-size: var(--ui-font-13, 13px);
+    margin-bottom: var(--ui-space-10, 10px);
   }
 
   .result-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-    gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(var(--ui-layout-250, 250px), 1fr));
+    gap: var(--ui-space-12, 12px);
   }
 
   .result-grid--list {
@@ -2654,9 +2654,9 @@
 
   .result-skeleton {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-    gap: 14px;
-    margin-top: 18px;
+    grid-template-columns: repeat(auto-fill, minmax(var(--ui-layout-240, 240px), 1fr));
+    gap: var(--ui-space-14, 14px);
+    margin-top: var(--ui-space-18, 18px);
   }
 
   .result-skeleton--list {
@@ -2664,16 +2664,16 @@
   }
 
   .result-sk-card {
-    min-height: 168px;
+    min-height: var(--ui-layout-168, 168px);
     border-radius: 16px;
     border: 1px solid var(--search-border-color);
     background: var(--search-card-bg);
     box-shadow: var(--surface-card-shadow);
-    padding: 14px;
+    padding: var(--ui-space-14, 14px);
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   /* 列表骨架:紧凑横向行,与重构后的列表行一致(避免加载完从大卡跳变) */
@@ -2681,14 +2681,14 @@
     min-height: 0;
     flex-direction: row;
     align-items: center;
-    padding: 10px 14px;
-    gap: 12px;
+    padding: var(--ui-space-10, 10px) var(--ui-space-14, 14px);
+    gap: var(--ui-space-12, 12px);
   }
   .result-skeleton--list .result-sk-top {
     margin-bottom: 0;
   }
   .result-skeleton--list .result-sk-line--title {
-    width: 160px;
+    width: var(--ui-layout-160, 160px);
   }
   .result-skeleton--list .result-sk-line--desc {
     flex: 1;
@@ -2703,31 +2703,31 @@
     display: flex;
     align-items: center;
     justify-content: flex-start;
-    gap: 10px;
-    margin-bottom: 4px;
+    gap: var(--ui-space-10, 10px);
+    margin-bottom: var(--ui-space-4, 4px);
   }
 
   .result-sk-dot {
-    width: 22px;
-    height: 22px;
+    width: var(--ui-layout-22, 22px);
+    height: var(--ui-layout-22, 22px);
     border-radius: 7px;
     background: color-mix(in srgb, var(--bl-input-noBorder-bg-color) 76%, var(--background-color));
     animation: sk-breathe 1.55s ease-in-out infinite alternate;
   }
 
   .result-sk-line {
-    height: 12px;
+    height: var(--ui-layout-12, 12px);
     border-radius: 999px;
     background: color-mix(in srgb, var(--bl-input-noBorder-bg-color) 76%, var(--background-color));
     animation: sk-breathe 1.55s ease-in-out infinite alternate;
   }
 
   .result-sk-line--short {
-    width: 120px;
+    width: var(--ui-layout-120, 120px);
   }
 
   .result-sk-line--title {
-    height: 10px;
+    height: var(--ui-layout-10, 10px);
     width: 100%;
   }
 
@@ -2742,19 +2742,19 @@
   .result-sk-meta {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     margin-top: auto;
   }
 
   .result-sk-line--meta1 {
     width: 46%;
-    height: 11px;
+    height: var(--ui-layout-11, 11px);
     border-radius: 999px;
   }
 
   .result-sk-line--meta2 {
     width: 58%;
-    height: 11px;
+    height: var(--ui-layout-11, 11px);
     border-radius: 999px;
   }
 
@@ -2768,7 +2768,7 @@
   }
 
   .empty-state {
-    min-height: 300px;
+    min-height: var(--ui-layout-300, 300px);
     display: grid;
     place-items: center;
     align-content: center;
@@ -2777,14 +2777,14 @@
   }
 
   .result-error-state {
-    min-height: 260px;
-    padding: 28px;
+    min-height: var(--ui-layout-260, 260px);
+    padding: var(--ui-space-28, 28px);
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     border: 1px dashed color-mix(in srgb, var(--danger-color, #dc2626) 30%, var(--card-border-color));
     border-radius: 14px;
     text-align: center;
@@ -2799,34 +2799,34 @@
   .result-error-state p,
   .result-error-request-id {
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .empty-state h3 {
-    margin: 16px 0 8px;
+    margin: var(--ui-space-16, 16px) 0 var(--ui-space-8, 8px);
     color: var(--text-color);
   }
 
   .empty-orbit {
-    width: 76px;
-    height: 76px;
+    width: var(--ui-layout-76, 76px);
+    height: var(--ui-layout-76, 76px);
     border-radius: 50%;
     border: 12px solid color-mix(in srgb, var(--resource-bookmark-color) 14%, transparent);
     border-top-color: var(--resource-bookmark-color);
   }
 
   .empty-actions {
-    margin-top: 12px;
+    margin-top: var(--ui-space-12, 12px);
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     justify-content: center;
   }
 
   .empty-action-btn {
-    min-height: 32px;
+    min-height: var(--ui-layout-32, 32px);
     border-radius: 12px;
-    padding: 0 12px;
+    padding: 0 var(--ui-space-12, 12px);
     background: var(--search-muted-bg);
   }
 
@@ -2840,7 +2840,7 @@
     .search-page {
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: var(--ui-space-8, 8px);
       height: 100%;
       overflow: hidden;
       padding: 0;
@@ -2849,12 +2849,12 @@
     .search-header {
       grid-column: 2;
       grid-row: 1;
-      min-height: 58px;
+      min-height: var(--ui-layout-58, 58px);
       box-sizing: border-box;
-      padding: 8px 12px;
+      padding: var(--ui-space-8, 8px) var(--ui-space-12, 12px);
       flex-direction: row;
       align-items: center;
-      gap: 10px;
+      gap: var(--ui-space-10, 10px);
       border-radius: 14px;
       box-shadow: var(--surface-raised-shadow);
     }
@@ -2865,24 +2865,24 @@
       min-width: 0;
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: var(--ui-space-8, 8px);
     }
 
     :deep(.search-header-input .b-input) {
-      min-width: 220px;
-      flex: 1 1 320px;
+      min-width: var(--ui-layout-220, 220px);
+      flex: 1 1 var(--ui-layout-320, 320px);
       border-radius: 12px;
     }
 
     .search-header-icon-btn {
-      height: 42px;
+      height: var(--ui-layout-42, 42px);
       border-radius: 11px;
       font-weight: 600;
     }
 
     .search-header-icon-btn {
-      width: 42px;
-      min-width: 42px;
+      width: var(--ui-layout-42, 42px);
+      min-width: var(--ui-layout-42, 42px);
       padding: 0;
       display: inline-flex;
       align-items: center;
@@ -2895,9 +2895,9 @@
       flex: 1 1 auto;
       min-height: 0;
       margin-top: 0;
-      grid-template-columns: clamp(220px, 14vw, 280px) minmax(0, 1fr) clamp(350px, 20vw, 410px);
+      grid-template-columns: clamp(var(--ui-layout-220, 220px), 14vw, var(--ui-layout-280, 280px)) minmax(0, 1fr) clamp(var(--ui-layout-350, 350px), 20vw, var(--ui-layout-410, 410px));
       grid-template-rows: auto minmax(0, 1fr);
-      gap: 12px 14px;
+      gap: var(--ui-space-12, 12px) var(--ui-space-14, 14px);
       align-items: stretch;
       overflow: hidden;
     }
@@ -2918,7 +2918,7 @@
     }
 
     .search-page--batch .resource-inspector-pane {
-      padding-bottom: 112px;
+      padding-bottom: var(--ui-space-112, 112px);
     }
 
     .result-panel {
@@ -2928,7 +2928,7 @@
 
     .result-panel {
       min-height: 0;
-      padding: 14px;
+      padding: var(--ui-space-14, 14px);
       border-radius: 16px;
       display: flex;
       flex-direction: column;
@@ -2937,37 +2937,37 @@
 
     .result-toolbar--summary {
       flex: 0 0 auto;
-      min-height: 38px;
-      padding: 0 2px 7px;
-      gap: 8px;
+      min-height: var(--ui-layout-38, 38px);
+      padding: 0 var(--ui-space-2, 2px) var(--ui-space-7, 7px);
+      gap: var(--ui-space-8, 8px);
     }
 
     .result-heading {
       min-width: 0;
       display: flex;
       align-items: baseline;
-      gap: 10px;
+      gap: var(--ui-space-10, 10px);
     }
 
     .result-title {
       flex: 0 0 auto;
-      font-size: 17px;
+      font-size: var(--ui-font-17, 17px);
     }
 
     .result-subtitle {
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
     }
 
     .clear-btn {
-      height: 32px;
-      min-height: 32px;
-      padding: 0 10px;
+      height: var(--ui-layout-32, 32px);
+      min-height: var(--ui-layout-32, 32px);
+      padding: 0 var(--ui-space-10, 10px);
       border-radius: 8px;
       background: transparent;
-      font-size: 14px;
+      font-size: var(--ui-font-14, 14px);
       line-height: 1;
       box-shadow: none;
     }
@@ -2981,7 +2981,7 @@
       flex: 0 0 auto;
       display: flex;
       align-items: center;
-      gap: 7px;
+      gap: var(--ui-space-7, 7px);
       overflow: visible;
     }
 
@@ -3001,25 +3001,25 @@
     }
 
     .filter-select {
-      width: 112px;
-      min-width: 112px;
+      width: var(--ui-layout-112, 112px);
+      min-width: var(--ui-layout-112, 112px);
     }
 
     .view-switch {
       flex: 0 0 auto;
-      height: 32px;
+      height: var(--ui-layout-32, 32px);
       border-radius: 9px;
     }
 
     .view-btn,
     .tagless-btn {
-      height: 30px;
-      min-height: 30px;
+      height: var(--ui-layout-30, 30px);
+      min-height: var(--ui-layout-30, 30px);
       line-height: 1;
-      padding: 0 10px;
+      padding: 0 var(--ui-space-10, 10px);
       border-radius: 8px;
       background: transparent;
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
     }
 
     .view-btn.active {
@@ -3031,15 +3031,15 @@
     }
 
     .select-visible-btn {
-      --batch-toggle-height: 32px;
+      --batch-toggle-height: var(--ui-layout-32, 32px);
       --batch-toggle-font-size: 14px;
       --batch-toggle-radius: 8px;
       --batch-toggle-shadow: none;
     }
 
     .tag-chip {
-      min-height: 26px;
-      height: 26px;
+      min-height: var(--ui-layout-26, 26px);
+      height: var(--ui-layout-26, 26px);
       line-height: 1;
     }
 
@@ -3047,7 +3047,7 @@
       flex: 1 1 auto;
       min-height: 0;
       overflow: hidden auto;
-      margin-top: 6px;
+      margin-top: var(--ui-space-6, 6px);
       overscroll-behavior: contain;
       scrollbar-gutter: stable;
       mask-image: linear-gradient(to bottom, transparent 0, #000 8px, #000 calc(100% - 8px), transparent 100%);
@@ -3055,7 +3055,7 @@
 
     .result-group:first-child,
     .result-skeleton {
-      margin-top: 4px;
+      margin-top: var(--ui-space-4, 4px);
     }
 
     .result-group:last-child {
@@ -3063,7 +3063,7 @@
     }
 
     .result-grid {
-      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(var(--ui-layout-280, 280px), 1fr));
     }
 
     .result-grid--list {
@@ -3097,8 +3097,8 @@
     }
 
     :deep(.search-header-input > .input-container) {
-      flex: 1 1 calc(100% - 100px);
-      min-width: 220px;
+      flex: 1 1 calc(100% - var(--ui-layout-100, 100px));
+      min-width: var(--ui-layout-220, 220px);
     }
 
     :deep(.search-header-input > .b-tooltip-wrap) {
@@ -3108,8 +3108,8 @@
 
   @media (min-width: 768px) and (max-width: 1380px) {
     .search-layout {
-      grid-template-columns: minmax(176px, 200px) minmax(0, 1fr) minmax(270px, 300px);
-      gap: 10px;
+      grid-template-columns: minmax(var(--ui-layout-176, 176px), var(--ui-layout-200, 200px)) minmax(0, 1fr) minmax(var(--ui-layout-270, 270px), var(--ui-layout-300, 300px));
+      gap: var(--ui-space-10, 10px);
     }
 
     .result-grid {
@@ -3119,18 +3119,18 @@
 
   @media (min-width: 768px) and (max-width: 980px) {
     .search-layout {
-      grid-template-columns: minmax(96px, 120px) minmax(240px, 1fr) minmax(210px, 28vw);
-      gap: 8px;
+      grid-template-columns: minmax(var(--ui-layout-96, 96px), var(--ui-layout-120, 120px)) minmax(var(--ui-layout-240, 240px), 1fr) minmax(var(--ui-layout-210, 210px), 28vw);
+      gap: var(--ui-space-8, 8px);
     }
 
     .resource-scope-pane {
-      padding: 9px 6px;
+      padding: var(--ui-space-9, 9px) var(--ui-space-6, 6px);
     }
 
     .resource-scope-item {
       grid-template-columns: 8px minmax(0, 1fr);
-      gap: 7px;
-      padding-inline: 7px;
+      gap: var(--ui-space-7, 7px);
+      padding-inline: var(--ui-space-7, 7px);
     }
 
     .resource-scope-item .filter-count {
@@ -3138,17 +3138,17 @@
     }
 
     .resource-scope-title {
-      padding-inline: 6px;
+      padding-inline: var(--ui-space-6, 6px);
     }
 
     .resource-inspector-pane {
-      padding: 10px;
+      padding: var(--ui-space-10, 10px);
     }
   }
 
   @media (min-width: 768px) and (max-width: 900px) {
     .desktop-result-controls {
-      gap: 5px;
+      gap: var(--ui-space-5, 5px);
     }
 
     .desktop-result-controls .select-wrap > span {
@@ -3156,13 +3156,13 @@
     }
 
     .desktop-result-controls .filter-select {
-      width: 104px;
-      min-width: 104px;
+      width: var(--ui-layout-104, 104px);
+      min-width: var(--ui-layout-104, 104px);
     }
 
     .desktop-result-controls .view-btn,
     .desktop-result-controls .tagless-btn {
-      padding-inline: 8px;
+      padding-inline: var(--ui-space-8, 8px);
     }
   }
 
@@ -3174,7 +3174,7 @@
     }
 
     .search-header {
-      padding: 14px 16px;
+      padding: var(--ui-space-14, 14px) var(--ui-space-16, 16px);
       border-radius: 16px;
     }
 
@@ -3212,39 +3212,39 @@
     }
 
     .search-header {
-      padding: 10px 12px;
+      padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     }
 
     .search-header-input {
       grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr);
-      gap: 8px;
+      gap: var(--ui-space-8, 8px);
     }
 
     .refresh-btn {
       width: 100%;
       min-width: 0;
-      height: 38px;
-      padding-inline: 10px;
+      height: var(--ui-layout-38, 38px);
+      padding-inline: var(--ui-space-10, 10px);
       border-radius: 11px;
     }
 
     .search-layout {
-      margin-top: 12px;
-      gap: 12px;
+      margin-top: var(--ui-space-12, 12px);
+      gap: var(--ui-space-12, 12px);
     }
 
     .result-panel {
       min-height: 0;
-      padding: 10px;
+      padding: var(--ui-space-10, 10px);
       border-radius: 14px;
     }
 
     .result-toolbar--summary {
       min-height: 0;
-      padding-bottom: 8px;
+      padding-bottom: var(--ui-space-8, 8px);
       align-items: center;
       flex-direction: row;
-      gap: 8px;
+      gap: var(--ui-space-8, 8px);
     }
 
     .result-heading {
@@ -3252,12 +3252,12 @@
       min-width: 0;
       display: flex;
       flex-direction: column;
-      gap: 2px;
+      gap: var(--ui-space-2, 2px);
     }
 
     .result-title {
       white-space: nowrap;
-      font-size: 16px;
+      font-size: var(--ui-font-16, 16px);
       line-height: 1.2;
     }
 
@@ -3265,24 +3265,24 @@
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
       line-height: 1.35;
     }
 
     .toolbar-actions {
       flex: 0 0 auto;
       width: auto;
-      gap: 4px;
+      gap: var(--ui-space-4, 4px);
     }
 
     .toolbar-actions :deep(.b_btn) {
       flex: 0 0 auto;
       min-width: 0;
-      height: 28px;
-      min-height: 28px;
-      padding: 0 8px;
+      height: var(--ui-layout-28, 28px);
+      min-height: var(--ui-layout-28, 28px);
+      padding: 0 var(--ui-space-8, 8px);
       border-radius: 8px;
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
     }
 
     .result-panel,
@@ -3297,8 +3297,8 @@
       min-width: 0;
       display: grid;
       grid-template-columns: auto minmax(0, 1fr);
-      gap: 4px;
-      font-size: 11px;
+      gap: var(--ui-space-4, 4px);
+      font-size: var(--ui-font-11, 11px);
     }
 
     .filter-select {
@@ -3307,33 +3307,33 @@
     }
 
     :deep(.filter-select .select-trigger) {
-      height: 32px;
-      min-height: 32px;
-      padding: 0 8px;
+      height: var(--ui-layout-32, 32px);
+      min-height: var(--ui-layout-32, 32px);
+      padding: 0 var(--ui-space-8, 8px);
       border-radius: 8px;
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
     }
 
     .tagless-btn {
       width: 100%;
-      height: 32px;
-      min-height: 32px;
-      padding: 0 8px;
+      height: var(--ui-layout-32, 32px);
+      min-height: var(--ui-layout-32, 32px);
+      padding: 0 var(--ui-space-8, 8px);
       border-radius: 8px;
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
       white-space: nowrap;
     }
 
     .tag-chip {
       flex: 0 0 auto;
-      height: 40px;
-      min-height: 40px;
-      padding: 0 12px;
+      height: var(--ui-layout-40, 40px);
+      min-height: var(--ui-layout-40, 40px);
+      padding: 0 var(--ui-space-12, 12px);
       line-height: 1;
     }
 
     .result-scroll-area {
-      margin-top: 8px;
+      margin-top: var(--ui-space-8, 8px);
     }
 
     .result-grid,
@@ -3365,7 +3365,7 @@
     margin-top: 0;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     overflow: hidden;
   }
 
@@ -3375,7 +3375,7 @@
   }
 
   .search-page--mobile .filter-count {
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .search-page--mobile .result-panel {
@@ -3397,10 +3397,10 @@
      与工具按钮挤在同一行会把统计截断，因此让统计独占一行。 */
   .search-page--mobile .result-toolbar--summary {
     flex: 0 0 auto;
-    padding: 4px 0 7px;
+    padding: var(--ui-space-4, 4px) 0 var(--ui-space-7, 7px);
     flex-direction: row;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .search-page--mobile .result-heading {
@@ -3410,43 +3410,43 @@
     display: flex;
     align-items: baseline;
     flex-direction: row;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
 
   .search-page--mobile .result-title {
     flex: 0 0 auto;
-    font-size: 16px;
+    font-size: var(--ui-font-16, 16px);
   }
 
   .search-page--mobile .result-subtitle {
     min-width: 0;
     overflow: hidden;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .search-page--mobile .toolbar-actions--mobile {
     flex: 0 0 auto;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
 
   .search-page--mobile .mobile-toolbar-btn {
-    min-width: 40px;
-    height: 40px;
-    min-height: 40px;
-    padding: 0 9px;
-    gap: 4px;
+    min-width: var(--ui-layout-40, 40px);
+    height: var(--ui-layout-40, 40px);
+    min-height: var(--ui-layout-40, 40px);
+    padding: 0 var(--ui-space-9, 9px);
+    gap: var(--ui-space-4, 4px);
     border: 1px solid var(--search-border-color);
     border-radius: 10px;
     color: var(--desc-color);
     background: var(--search-card-bg);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1;
   }
 
   .search-page--mobile .mobile-toolbar-btn--icon {
-    width: 40px;
+    width: var(--ui-layout-40, 40px);
     padding: 0;
   }
 
@@ -3463,7 +3463,7 @@
   .mobile-filter-count {
     min-width: 16px;
     height: 16px;
-    padding: 0 4px;
+    padding: 0 var(--ui-space-4, 4px);
     box-sizing: border-box;
     display: inline-flex;
     align-items: center;
@@ -3471,7 +3471,7 @@
     border-radius: 999px;
     background: var(--primary-color);
     color: #fff;
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     font-weight: 700;
   }
 
@@ -3479,7 +3479,7 @@
     flex: 1 1 auto;
     min-height: 0;
     margin-top: 0;
-    padding: 0 2px 12px;
+    padding: 0 var(--ui-space-2, 2px) var(--ui-space-12, 12px);
     overflow: hidden auto;
     border: 0;
     border-radius: 0;
@@ -3489,45 +3489,45 @@
   }
 
   .search-page.search-page--batch .result-scroll-area {
-    padding-bottom: 112px;
+    padding-bottom: var(--ui-space-112, 112px);
     scroll-padding-bottom: 112px;
   }
 
   .search-page--mobile.search-page--batch .result-scroll-area {
-    padding-bottom: 164px;
+    padding-bottom: var(--ui-space-164, 164px);
     scroll-padding-bottom: 164px;
   }
 
   .search-page--mobile .result-group {
-    margin-top: 9px;
+    margin-top: var(--ui-space-9, 9px);
   }
 
   .search-page--mobile .result-group:first-child,
   .search-page--mobile .result-skeleton {
-    margin-top: 7px;
+    margin-top: var(--ui-space-7, 7px);
   }
 
   .search-page--mobile .group-header {
-    margin-bottom: 6px;
-    padding: 0 2px;
-    font-size: 12px;
+    margin-bottom: var(--ui-space-6, 6px);
+    padding: 0 var(--ui-space-2, 2px);
+    font-size: var(--ui-font-12, 12px);
   }
 
   .search-page--mobile .result-grid,
   .search-page--mobile .result-grid--list {
     grid-template-columns: minmax(0, 1fr);
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .search-page--mobile .result-skeleton {
     grid-template-columns: minmax(0, 1fr);
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .search-page--mobile .result-sk-card {
-    min-height: 106px;
-    padding: 10px 12px;
-    gap: 7px;
+    min-height: var(--ui-layout-106, 106px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
+    gap: var(--ui-space-7, 7px);
     border-radius: 14px;
   }
 
@@ -3549,7 +3549,7 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
 
   .mobile-filter-field,
@@ -3557,12 +3557,12 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .mobile-filter-label {
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 650;
   }
 
@@ -3571,24 +3571,24 @@
   }
 
   .mobile-filter-search {
-    padding-bottom: 2px;
+    padding-bottom: var(--ui-space-2, 2px);
   }
 
   .mobile-filter-search :deep(.b-input) {
     border-radius: 10px;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .mobile-filter-toggle {
     width: max-content;
-    min-height: 34px;
+    min-height: var(--ui-layout-34, 34px);
   }
 
   .mobile-filter-tags {
     max-height: 30dvh;
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     overflow-y: auto;
   }
 
@@ -3596,21 +3596,21 @@
   .mobile-filter-types {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .mobile-filter-type {
     width: 100%;
     min-width: 0;
-    height: 38px;
-    padding: 0 10px;
-    gap: 7px;
+    height: var(--ui-layout-38, 38px);
+    padding: 0 var(--ui-space-10, 10px);
+    gap: var(--ui-space-7, 7px);
     justify-content: flex-start;
     border: 1px solid var(--search-border-color);
     border-radius: 10px;
     color: var(--text-color);
     background: var(--workspace-content) !important;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .mobile-filter-type.active {
@@ -3621,23 +3621,23 @@
   .mobile-filter-type .filter-count {
     margin-left: auto;
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .mobile-filter-footer {
     position: sticky;
     bottom: 0;
     margin-top: auto;
-    padding-top: 10px;
+    padding-top: var(--ui-space-10, 10px);
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     background: var(--background-color);
   }
 
   .mobile-filter-footer :deep(.b_btn) {
     width: 100%;
-    min-height: 40px;
+    min-height: var(--ui-layout-40, 40px);
   }
 
   // 共享工作区表面：仅改变颜色，布局与滚动由原组件负责。

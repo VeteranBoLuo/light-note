@@ -4,8 +4,8 @@
     :title="$t('noteDetail.history.title')"
     :show-footer="false"
     :mask-closable="true"
-    width="min(94vw, 1440px)"
-    height="min(86dvh, 720px)"
+    width="min(94vw, var(--ui-layout-1440, 1440px))"
+    height="min(86dvh, var(--ui-layout-720, 720px))"
     content-class="note-version-history__content"
   >
     <template #title>
@@ -405,7 +405,7 @@
     display: flex;
     min-width: 0;
     align-items: baseline;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
 
     &__text {
       flex: 0 0 auto;
@@ -414,7 +414,7 @@
     &__hint {
       min-width: 0;
       color: var(--desc-color);
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
       font-weight: 400;
       line-height: 1.5;
       overflow-wrap: anywhere;
@@ -437,8 +437,8 @@
     height: 100%;
     min-height: 0;
     display: grid;
-    grid-template-columns: minmax(240px, 280px) minmax(0, 1fr);
-    gap: 16px;
+    grid-template-columns: minmax(var(--ui-layout-240, 240px), var(--ui-layout-280, 280px)) minmax(0, 1fr);
+    gap: var(--ui-space-16, 16px);
     color: var(--text-color);
 
     &.mobile {
@@ -472,14 +472,14 @@
   .list-scroll {
     height: 100%;
     overflow: auto;
-    padding: 8px;
+    padding: var(--ui-space-8, 8px);
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .version-item {
-    padding: 10px 12px;
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     border: 1px solid var(--card-border-color);
     border-radius: 10px;
     background: var(--background-color);
@@ -499,7 +499,7 @@
   }
 
   .version-time {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 600;
     color: var(--text-color);
   }
@@ -508,15 +508,15 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
-    margin-top: 4px;
+    gap: var(--ui-space-8, 8px);
+    margin-top: var(--ui-space-4, 4px);
   }
 
   .version-title-line {
     display: flex;
     align-items: center;
-    gap: 6px;
-    font-size: 12px;
+    gap: var(--ui-space-6, 6px);
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -531,16 +531,16 @@
 
   .version-reason {
     flex: 0 0 auto;
-    padding: 1px 5px;
+    padding: var(--ui-space-1, 1px) var(--ui-space-5, 5px);
     border: 1px solid var(--surface-border-color);
     border-radius: 999px;
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     line-height: 1.4;
   }
 
   .version-chars {
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     color: var(--desc-color);
     flex-shrink: 0;
   }
@@ -559,21 +559,21 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    padding: 10px 14px;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-14, 14px);
     border-bottom: 1px solid var(--card-border-color);
     flex-shrink: 0;
   }
 
   .preview-title {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 600;
     color: var(--text-color);
   }
 
   .preview-body {
     position: relative;
-    padding: 14px;
+    padding: var(--ui-space-14, 14px);
     min-height: 0;
     flex: 1;
     overflow: auto;
@@ -585,22 +585,22 @@
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .version-drawing-diff__summary > span:first-child {
-    margin-right: 2px;
+    margin-right: var(--ui-space-2, 2px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .version-drawing-diff__hint {
-    margin: 8px 0 12px;
+    margin: var(--ui-space-8, 8px) 0 var(--ui-space-12, 12px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .version-drawing-diff__grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     align-items: start;
   }
   .version-drawing-diff__panel {
@@ -612,14 +612,14 @@
   }
   .version-drawing-diff__panel h3 {
     position: sticky;
-    top: -14px;
+    top: calc(-1 * var(--ui-space-14, 14px));
     z-index: 1;
     margin: 0;
-    padding: 9px 12px;
+    padding: var(--ui-space-9, 9px) var(--ui-space-12, 12px);
     color: var(--text-color);
     background: var(--background-color);
     border-bottom: 1px solid var(--card-border-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 650;
   }
   .version-drawing-diff__canvas {
@@ -677,7 +677,7 @@
   }
   .version-diff-column-title {
     position: sticky;
-    top: -14px;
+    top: calc(-1 * var(--ui-space-14, 14px));
     z-index: 1;
     color: var(--text-color);
     background: var(--workspace-panel-bg-color);
@@ -736,9 +736,9 @@
 
   .preview-empty {
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     text-align: center;
-    padding-top: 40px;
+    padding-top: var(--ui-space-40, 40px);
   }
 
   .preview-html {
@@ -785,19 +785,19 @@
   }
 
   .empty {
-    padding: 40px 16px;
+    padding: var(--ui-space-40, 40px) var(--ui-space-16, 16px);
     text-align: center;
   }
 
   .empty-title {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     color: var(--text-color);
     font-weight: 600;
   }
 
   .empty-hint {
-    margin-top: 6px;
-    font-size: 12px;
+    margin-top: var(--ui-space-6, 6px);
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
     line-height: 1.6;
   }

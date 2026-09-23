@@ -2,7 +2,7 @@
   <BModal
     v-model:visible="visible"
     :title="t('changelog.editorTitle')"
-    width="1180px"
+    width="var(--ui-layout-1180, 1180px)"
     height="calc(100% - 32px)"
     modal-class="update-log-editor-modal"
     :show-footer="false"
@@ -542,7 +542,7 @@
 
 <style scoped lang="less">
   .editor-loading {
-    min-height: 360px;
+    min-height: var(--ui-layout-360, 360px);
     display: grid;
     place-items: center;
   }
@@ -552,22 +552,23 @@
     height: 100%;
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
   }
 
   .editor-meta-grid {
     display: grid;
-    grid-template-columns: minmax(0, 2fr) minmax(170px, 0.55fr) minmax(170px, 0.55fr);
-    gap: 10px 12px;
+    grid-template-columns:
+      minmax(0, 2fr) minmax(var(--ui-layout-170, 170px), 0.55fr) minmax(var(--ui-layout-170, 170px), 0.55fr);
+    gap: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
   }
 
   .editor-field {
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 600;
   }
 
@@ -577,7 +578,7 @@
 
   .editor-field small {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 400;
   }
 
@@ -585,13 +586,13 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .editor-count,
   .save-hint {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .markdown-editor-pane,
@@ -612,8 +613,8 @@
   .markdown-toolbar {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 8px;
+    gap: var(--ui-space-6, 6px);
+    padding: var(--ui-space-8, 8px);
     border-bottom: 1px solid var(--surface-border-color, var(--card-border-color));
     background: var(--workspace-panel-bg-color);
     overflow-x: auto;
@@ -621,12 +622,12 @@
   }
 
   .image-size-select {
-    width: 116px;
-    flex: 0 0 116px;
+    width: var(--ui-layout-116, 116px);
+    flex: 0 0 var(--ui-layout-116, 116px);
   }
 
   .image-size-select :deep(.select-trigger) {
-    min-height: 32px;
+    min-height: var(--ui-control-32, 32px);
   }
 
   .markdown-input {
@@ -651,7 +652,7 @@
   }
 
   .markdown-preview-pane {
-    padding: 18px 22px;
+    padding: var(--ui-space-18, 18px) var(--ui-space-22, 22px);
   }
 
   .markdown-body {
@@ -717,18 +718,18 @@
   }
 
   .preview-empty {
-    min-height: 260px;
+    min-height: var(--ui-layout-260, 260px);
     display: grid;
     place-items: center;
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .editor-footer {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     flex-shrink: 0;
   }
 
@@ -736,7 +737,7 @@
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   @media (max-width: 767px) {

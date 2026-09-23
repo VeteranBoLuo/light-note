@@ -128,11 +128,11 @@
 
 <style scoped lang="less">
   .note-template-list {
-    width: 320px;
+    width: var(--ui-layout-320, 320px);
     min-width: 0;
     min-height: 0;
     display: flex;
-    flex: 0 0 320px;
+    flex: 0 0 var(--ui-layout-320, 320px);
     flex-direction: column;
     border-right: 1px solid var(--surface-border-color);
     background: var(--workspace-panel-bg-color);
@@ -145,8 +145,8 @@
   }
   .note-template-list__tools {
     display: grid;
-    gap: 8px;
-    padding: 10px;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-10, 10px);
     border-bottom: 1px solid var(--surface-divider-color);
   }
   .note-template-list__tools :deep(.b-input) {
@@ -181,17 +181,17 @@
     min-height: 0;
     flex: 1 1 auto;
     overflow: auto;
-    padding: 10px;
+    padding: var(--ui-space-10, 10px);
     scrollbar-gutter: stable;
   }
   .note-template-list__status {
-    min-height: 150px;
+    min-height: var(--ui-layout-150, 150px);
     margin: 0;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     color: var(--desc-color);
     text-align: center;
   }
@@ -200,15 +200,15 @@
   }
   .note-template-list__desktop-items {
     display: grid;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   .note-template-list__item {
     width: 100%;
     height: auto;
-    min-height: 82px;
+    min-height: var(--ui-layout-82, 82px);
     justify-content: flex-start;
-    gap: 10px;
-    padding: 11px;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-11, 11px);
     border: 1px solid transparent !important;
     border-radius: 11px;
     color: var(--text-color);
@@ -226,9 +226,9 @@
     font-weight: 650;
   }
   .note-template-list__format-icon {
-    width: 36px;
-    height: 36px;
-    flex: 0 0 36px;
+    width: var(--ui-layout-36, 36px);
+    height: var(--ui-layout-36, 36px);
+    flex: 0 0 var(--ui-layout-36, 36px);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -243,7 +243,7 @@
     flex: 1 1 auto;
     flex-direction: column;
     align-items: flex-start;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
     overflow: hidden;
     line-height: 1.35;
   }
@@ -256,21 +256,21 @@
   }
   .note-template-list__copy strong {
     color: inherit;
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
   }
   .note-template-list__copy small {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 400;
   }
   .note-template-list__copy > span {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .note-template-list__copy time {
     color: var(--muted-text-color, var(--desc-color));
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     font-weight: 400;
   }
   .is-mobile .note-template-list__scroll {

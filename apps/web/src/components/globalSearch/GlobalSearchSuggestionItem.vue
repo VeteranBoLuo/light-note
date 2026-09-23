@@ -48,9 +48,9 @@
 <style scoped lang="less">
   .gs-suggestion {
     width: 100%;
-    min-height: 56px;
-    padding: 10px 10px;
-    gap: 10px;
+    min-height: var(--ui-control-56, 56px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-10, 10px);
+    gap: var(--ui-space-10, 10px);
     justify-content: flex-start;
     border-radius: 12px;
     color: var(--text-color);
@@ -69,8 +69,8 @@
   }
 
   .gs-suggestion__badge {
-    width: 32px;
-    height: 32px;
+    width: var(--ui-layout-32, 32px);
+    height: var(--ui-layout-32, 32px);
     flex: 0 0 auto;
     display: grid;
     place-items: center;
@@ -104,7 +104,7 @@
     flex: 1 1 auto;
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
 
   .gs-suggestion__title {
@@ -113,7 +113,7 @@
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     font-weight: 600;
     line-height: 1.35;
   }
@@ -125,12 +125,12 @@
     white-space: nowrap;
     text-overflow: ellipsis;
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.4;
   }
 
   .gs-suggestion__title :deep(.gs-highlight) {
-    padding: 0 1px;
+    padding: 0 var(--ui-space-1, 1px);
     border-radius: 3px;
     color: var(--primary-color);
     background: color-mix(in srgb, var(--primary-color) 16%, transparent);

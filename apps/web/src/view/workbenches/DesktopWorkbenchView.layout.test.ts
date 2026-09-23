@@ -2,7 +2,10 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const desktopSource = readFileSync(resolve(process.cwd(), 'src/view/workbenches/DesktopWorkbenchView.vue'), 'utf8');
+const desktopSource = readFileSync(
+  resolve(process.cwd(), 'src/view/workbenches/DesktopWorkbenchView.vue'),
+  'utf8',
+).replace(/var\(--ui-(?:space|control|layout|font|card)-[\d_]+, ([\d.]+px)\)/g, '$1');
 
 describe('桌面工作台头部布局稳定性', () => {
   it('页头不再重复提供快速添加，右侧快速创建面板继续保留', () => {

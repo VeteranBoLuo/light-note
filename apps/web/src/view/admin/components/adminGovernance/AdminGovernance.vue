@@ -416,13 +416,13 @@
     policyOrder.map((key) => ({ key, count: Number(data.value?.routePolicies.counts[key] || 0) })),
   );
   const roleColumns = computed<Column[]>(() => [
-    { key: 'role', title: t('adminGovernance.roles.columns.role'), width: '130px' },
-    { key: 'ownContent', title: t('adminGovernance.roles.columns.ownContent'), width: 'minmax(130px, 1fr)' },
-    { key: 'adminConsole', title: t('adminGovernance.roles.columns.adminConsole'), width: '110px' },
-    { key: 'userPreview', title: t('adminGovernance.roles.columns.userPreview'), width: '110px' },
-    { key: 'contentMaintenance', title: t('adminGovernance.roles.columns.maintenance'), width: '110px' },
-    { key: 'highRiskOperations', title: t('adminGovernance.roles.columns.highRisk'), width: '110px' },
-    { key: 'analyticsIncluded', title: t('adminGovernance.roles.columns.analytics'), width: '110px' },
+    { key: 'role', title: t('adminGovernance.roles.columns.role'), width: 'var(--ui-layout-130, 130px)' },
+    { key: 'ownContent', title: t('adminGovernance.roles.columns.ownContent'), width: 'minmax(var(--ui-layout-130, 130px), 1fr)' },
+    { key: 'adminConsole', title: t('adminGovernance.roles.columns.adminConsole'), width: 'var(--ui-layout-110, 110px)' },
+    { key: 'userPreview', title: t('adminGovernance.roles.columns.userPreview'), width: 'var(--ui-layout-110, 110px)' },
+    { key: 'contentMaintenance', title: t('adminGovernance.roles.columns.maintenance'), width: 'var(--ui-layout-110, 110px)' },
+    { key: 'highRiskOperations', title: t('adminGovernance.roles.columns.highRisk'), width: 'var(--ui-layout-110, 110px)' },
+    { key: 'analyticsIncluded', title: t('adminGovernance.roles.columns.analytics'), width: 'var(--ui-layout-110, 110px)' },
   ]);
   const artifactRetentionLabel = computed(() => {
     const config = data.value?.runtime.retention.aiArtifacts.domains.changeSet;
@@ -489,13 +489,13 @@
   .admin-governance__role-list {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .admin-governance__warning {
     display: flex;
     align-items: flex-start;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     border-width: 1px;
     border-style: solid;
   }
@@ -514,9 +514,9 @@
   }
 
   .admin-governance__warning p {
-    margin-top: 2px;
+    margin-top: var(--ui-space-2, 2px);
     color: var(--sub-text-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.5;
   }
 
@@ -524,7 +524,7 @@
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .admin-governance__section-header h3,
@@ -534,24 +534,24 @@
 
   .admin-governance__section-header h3 {
     color: var(--text-color);
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
   }
 
   .admin-governance__section-header p {
-    margin-top: 2px;
+    margin-top: var(--ui-space-2, 2px);
     color: var(--sub-text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .admin-governance__runtime-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .admin-governance__facts {
     display: grid;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     margin: 0;
   }
 
@@ -559,9 +559,9 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    min-height: 26px;
-    padding-bottom: 7px;
+    gap: var(--ui-space-12, 12px);
+    min-height: var(--ui-layout-26, 26px);
+    padding-bottom: var(--ui-space-7, 7px);
     border-bottom: 1px solid var(--surface-divider-color);
   }
 
@@ -572,67 +572,67 @@
 
   .admin-governance__facts dt {
     color: var(--sub-text-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .admin-governance__facts dd {
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
     margin: 0;
     color: var(--text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     text-align: right;
   }
 
   .admin-governance__role-table {
-    min-height: 250px;
+    min-height: var(--ui-layout-250, 250px);
   }
 
   .admin-governance__role-list article > header {
-    margin-bottom: 10px;
+    margin-bottom: var(--ui-space-10, 10px);
   }
 
   .admin-governance__policy-grid {
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .admin-governance__policy-grid article {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .admin-governance__policy-grid span {
     color: var(--sub-text-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .admin-governance__policy-grid strong {
-    font-size: 18px;
+    font-size: var(--ui-font-18, 18px);
   }
 
   .admin-governance__handoff {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
 
   .admin-governance__handoff p {
-    margin: 3px 0 0;
+    margin: var(--ui-space-3, 3px) 0 0;
     color: var(--sub-text-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.5;
   }
 
   .admin-governance__handoff-actions {
     display: flex;
     flex: none;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   @media (max-width: 900px) {

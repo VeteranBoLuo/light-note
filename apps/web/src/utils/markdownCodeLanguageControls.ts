@@ -100,16 +100,16 @@ export function markdownCodeLanguageControls(appContext: AppContext) {
     EditorView.theme({
       '.cm-line.cm-code-language-line': {
         position: 'relative',
-        paddingRight: '134px',
-        minHeight: '32px',
-        lineHeight: '32px',
+        paddingRight: 'calc(var(--ui-layout-124, 124px) + var(--ui-space-10, 10px))',
+        minHeight: 'var(--ui-control-32, 32px)',
+        lineHeight: 'var(--ui-control-32, 32px)',
       },
       '.cm-code-language-widget': {
         position: 'absolute',
         right: '0',
         top: '0',
-        width: '124px',
-        height: '32px',
+        width: 'var(--ui-layout-124, 124px)',
+        height: 'var(--ui-control-32, 32px)',
         userSelect: 'none',
         lineHeight: 'normal',
       },

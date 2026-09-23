@@ -183,7 +183,7 @@
                     v-if="authorFrameId(chatMessage)"
                     :frame-id="authorFrameId(chatMessage)"
                     :src="authorAvatarSource(chatMessage)"
-                    :size="32"
+                    :size="dimension(32, 'layout')"
                     layout-mode="slot"
                     motion-profile="chat"
                     pause-when-offscreen
@@ -839,6 +839,7 @@
   import { resolveCommunityChatOfficialSticker } from '@lightnote/shared/community-chat-stickers';
   import { useCommunityChatActivation } from '@/composables/useCommunityChatActivation';
   import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
+  import { useUiDensity } from '@/composables/useUiDensity';
   import { useI18n } from 'vue-i18n';
   import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
   import { isEqual } from 'lodash-es';
@@ -952,7 +953,7 @@
     requestMobileOverlayHistoryClose,
     type MobileOverlayHistoryHandle,
   } from '@/utils/mobileOverlayHistory';
-  import { getRootZoom, scrollIntoContainer } from '@/utils/zoom';
+  import { scrollIntoContainer } from '@/utils/scrolling';
 
   const props = defineProps<{
     access: CommunityChatAccess;
@@ -1192,6 +1193,7 @@
   const INITIAL_MESSAGE_PAGE_SIZE = 30;
   const FOCUSED_MESSAGE_WINDOW_LIMIT = 120;
   const MESSAGE_PAGINATION_EDGE_PX = 180;
+  const { density: uiDensity, dimension } = useUiDensity();
   const COMPOSER_INPUT_MIN_HEIGHT = 42;
   const COMPOSER_INPUT_MAX_HEIGHT = 112;
   const AVATAR_LONG_PRESS_MS = 480;
@@ -2460,13 +2462,16 @@
     scrollTop: number;
   }
 
-  function captureMessageViewportAnchor(): MessageViewportAnchor | null {
+  function captureMessageViewportAnchor(fullyVisible = false): MessageViewportAnchor | null {
     const element = messageListEl.value;
     if (!element) return null;
     const containerTop = element.getBoundingClientRect().top;
     const messageElements = Array.from(element.querySelectorAll<HTMLElement>('[data-message-public-id]'));
     const anchorElement =
-      messageElements.find((item) => item.getBoundingClientRect().bottom >= containerTop - 1) || messageElements[0];
+      messageElements.find((item) => {
+        const rect = item.getBoundingClientRect();
+        return fullyVisible ? rect.top >= containerTop : rect.bottom >= containerTop - 1;
+      }) || messageElements[0];
     const publicId = String(anchorElement?.dataset.messagePublicId || '');
     if (!anchorElement || !publicId) return null;
     return {
@@ -2488,7 +2493,7 @@
     if (anchorElement) {
       const containerTop = element.getBoundingClientRect().top;
       const nextOffsetTop = anchorElement.getBoundingClientRect().top - containerTop;
-      messageViewport.adjustScrollTop((nextOffsetTop - anchor.offsetTop) / getRootZoom(), {
+      messageViewport.adjustScrollTop((nextOffsetTop - anchor.offsetTop), {
         intent: 'preserve-position',
       });
     } else {
@@ -3945,8 +3950,35 @@
   }
 
   function syncComposerInputHeight() {
-    composerInput.value?.syncHeight(COMPOSER_INPUT_MIN_HEIGHT, COMPOSER_INPUT_MAX_HEIGHT);
+    composerInput.value?.syncHeight(
+      dimension(COMPOSER_INPUT_MIN_HEIGHT, 'layout'),
+      dimension(COMPOSER_INPUT_MAX_HEIGHT, 'layout'),
+    );
   }
+
+  watch(
+    uiDensity,
+    (_next, _previous, onCleanup) => {
+      const roomSlug = selectedRoomSlug.value;
+      const anchor = messageViewport.shouldFollowLatest() ? null : captureMessageViewportAnchor(true);
+      const viewportTop = messageListEl.value?.getBoundingClientRect().top || 0;
+      let cancelled = false;
+      onCleanup(() => {
+        cancelled = true;
+      });
+      void nextTick(async () => {
+        if (cancelled || roomSlug !== selectedRoomSlug.value) return;
+        syncComposerInputHeight();
+        // Commit the new container bounds before restoring a message's relative position.
+        messageViewport.reconcileGeometry({ immediateFollow: true });
+        if (anchor) {
+          anchor.offsetTop += viewportTop - (messageListEl.value?.getBoundingClientRect().top || 0);
+          await restoreMessageViewportAnchor(anchor);
+        }
+      });
+    },
+    { flush: 'sync' },
+  );
 
   function transferHasFiles(dataTransfer: DataTransfer | null | undefined) {
     if (!dataTransfer) return false;
@@ -5167,29 +5199,29 @@
   }
 
   .community-workspace.has-room-list {
-    grid-template-columns: 270px minmax(0, 1fr);
+    grid-template-columns: var(--ui-layout-270, 270px) minmax(0, 1fr);
   }
 
   .community-workspace__rooms {
     min-width: 0;
     overflow: auto;
-    padding: 14px 10px;
+    padding: var(--ui-space-14, 14px) var(--ui-space-10, 10px);
     border-right: 1px solid var(--surface-divider-color);
     background: var(--workspace-panel-bg-color);
   }
 
   .community-workspace__rooms-heading {
     min-width: 0;
-    padding: 4px 6px 14px;
+    padding: var(--ui-space-4, 4px) var(--ui-space-6, 6px) var(--ui-space-14, 14px);
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .community-workspace__rooms-mark {
-    width: 36px;
-    height: 36px;
-    flex: 0 0 36px;
+    width: var(--ui-layout-36, 36px);
+    height: var(--ui-layout-36, 36px);
+    flex: 0 0 var(--ui-layout-36, 36px);
     display: grid;
     place-items: center;
     border: 1px solid var(--primary-color);
@@ -5201,33 +5233,33 @@
   .community-workspace__rooms-heading > div {
     min-width: 0;
     display: grid;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
 
   .community-workspace__rooms-heading strong {
     color: var(--text-color);
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
   }
 
   .community-workspace__rooms-heading span {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .community-workspace__room-list {
     display: grid;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
 
   .community-room-button {
     width: 100%;
     height: auto;
-    min-height: 62px;
-    padding: 8px 9px;
+    min-height: var(--ui-layout-62, 62px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-9, 9px);
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
     border: 1px solid transparent !important;
     border-radius: 13px;
     color: var(--text-color);
@@ -5243,8 +5275,8 @@
   }
 
   .community-room-button__symbol {
-    width: 31px;
-    height: 31px;
+    width: var(--ui-layout-31, 31px);
+    height: var(--ui-layout-31, 31px);
     display: grid;
     place-items: center;
     border: 1px solid var(--surface-border-color);
@@ -5263,7 +5295,7 @@
   .community-room-button__copy {
     min-width: 0;
     display: grid;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
 
   .community-room-button__copy strong,
@@ -5274,18 +5306,18 @@
   }
 
   .community-room-button__copy strong {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .community-room-button__copy small {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
 
   .community-room-button__badge {
-    min-width: 18px;
-    height: 18px;
-    padding: 0 5px;
+    min-width: var(--ui-layout-18, 18px);
+    height: var(--ui-layout-18, 18px);
+    padding: 0 var(--ui-space-5, 5px);
     box-sizing: border-box;
     display: inline-flex;
     align-items: center;
@@ -5294,7 +5326,7 @@
     border-radius: 999px;
     color: var(--danger-fill-fg, #fff);
     background: var(--danger-fill-bg, #d93b3b);
-    font-size: 9px;
+    font-size: var(--ui-font-9, 9px);
   }
 
   .community-workspace__conversation {
@@ -5317,26 +5349,26 @@
 
   .community-pinned-message {
     min-width: 0;
-    min-height: 38px;
-    padding: 4px 12px;
+    min-height: var(--ui-layout-38, 38px);
+    padding: var(--ui-space-4, 4px) var(--ui-space-12, 12px);
     box-sizing: border-box;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     border-bottom: 1px solid var(--surface-divider-color);
     background: var(--workspace-panel-bg-color);
   }
 
   .community-pinned-message__jump {
     min-width: 0;
-    min-height: 30px;
+    min-height: var(--ui-layout-30, 30px);
     height: auto;
-    padding: 3px 5px !important;
+    padding: var(--ui-space-3, 3px) var(--ui-space-5, 5px) !important;
     flex: 1 1 auto;
     display: flex;
     align-items: center;
     justify-content: flex-start;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     border: 0 !important;
     color: var(--desc-color);
     background: transparent !important;
@@ -5346,14 +5378,14 @@
   .community-pinned-message__jump > strong {
     flex: 0 0 auto;
     color: var(--chip-pin-fg, var(--primary-color));
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .community-pinned-message__jump > span {
     min-width: 0;
     overflow: hidden;
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -5368,10 +5400,10 @@
   }
 
   .community-pinned-message__unpin {
-    width: 30px;
-    min-width: 30px;
-    height: 30px;
-    min-height: 30px;
+    width: var(--ui-layout-30, 30px);
+    min-width: var(--ui-layout-30, 30px);
+    height: var(--ui-layout-30, 30px);
+    min-height: var(--ui-layout-30, 30px);
     padding: 0 !important;
     display: grid;
     place-items: center;
@@ -5382,14 +5414,14 @@
 
   .community-conversation-header {
     min-width: 0;
-    height: var(--chat-header-height, 58px);
-    min-height: var(--chat-header-height, 58px);
-    padding: 7px 14px;
+    height: var(--chat-header-height, var(--ui-layout-58, 58px));
+    min-height: var(--chat-header-height, var(--ui-layout-58, 58px));
+    padding: var(--ui-space-7, 7px) var(--ui-space-14, 14px);
     box-sizing: border-box;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
     border-bottom: 1px solid var(--surface-divider-color);
     background: var(--card-background);
   }
@@ -5399,13 +5431,13 @@
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .community-conversation-header__title > span {
-    width: 30px;
-    height: 30px;
-    flex: 0 0 30px;
+    width: var(--ui-layout-30, 30px);
+    height: var(--ui-layout-30, 30px);
+    flex: 0 0 var(--ui-layout-30, 30px);
     display: grid;
     place-items: center;
     border: 1px solid var(--primary-color);
@@ -5417,15 +5449,15 @@
   .community-conversation-header__title > div {
     min-width: 0;
     display: grid;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
 
   .community-conversation-header__title-line {
-    height: 26px;
+    height: var(--ui-layout-26, 26px);
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .community-conversation-header__title strong,
@@ -5439,23 +5471,23 @@
     min-width: 0;
     flex: 0 1 auto;
     color: var(--text-color);
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
   }
 
   .community-conversation-header__title small {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
 
   .community-conversation-header__online {
-    padding: 2px 6px;
-    min-height: 26px;
-    height: 26px;
-    line-height: 20px;
+    padding: var(--ui-space-2, 2px) var(--ui-space-6, 6px);
+    min-height: var(--ui-layout-26, 26px);
+    height: var(--ui-layout-26, 26px);
+    line-height: var(--ui-layout-20, 20px);
     box-sizing: border-box;
     background: transparent;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     white-space: nowrap;
     border-radius: 6px;
   }
@@ -5467,20 +5499,20 @@
 
   .community-conversation-header__actions {
     flex: 0 0 auto;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .community-conversation-header__settings {
-    min-height: 34px;
-    gap: 5px;
+    min-height: var(--ui-layout-34, 34px);
+    gap: var(--ui-space-5, 5px);
     color: var(--desc-color);
     background: transparent;
   }
 
   .community-conversation-header__delivery {
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     white-space: nowrap;
   }
 
@@ -5511,7 +5543,7 @@
     overscroll-behavior-y: contain;
     touch-action: pan-y;
     -webkit-overflow-scrolling: touch;
-    padding: 18px clamp(14px, 3vw, 32px) 22px;
+    padding: var(--ui-space-18, 18px) clamp(var(--ui-space-14, 14px), 3vw, var(--ui-space-32, 32px)) var(--ui-space-22, 22px);
     box-sizing: border-box;
     scrollbar-width: thin;
     scrollbar-color: transparent transparent;
@@ -5554,15 +5586,15 @@
     left: 50%;
     bottom: 12px;
     z-index: 1;
-    min-height: 36px;
-    gap: 6px;
-    padding: 6px 12px;
+    min-height: var(--ui-layout-36, 36px);
+    gap: var(--ui-space-6, 6px);
+    padding: var(--ui-space-6, 6px) var(--ui-space-12, 12px);
     transform: translateX(-50%);
     border: 1px solid var(--primary-color) !important;
     border-radius: 999px;
     color: var(--primary-color);
     background: var(--card-background) !important;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 700;
     white-space: nowrap;
   }
@@ -5577,18 +5609,18 @@
   .community-message-list__older {
     display: flex;
     justify-content: center;
-    min-height: 32px;
-    margin-bottom: 16px;
+    min-height: var(--ui-layout-32, 32px);
+    margin-bottom: var(--ui-space-16, 16px);
   }
 
   .community-runtime-readonly {
-    width: min(700px, 100%);
-    margin: 0 auto 16px;
-    padding: 10px 12px;
+    width: min(var(--ui-layout-700, 700px), 100%);
+    margin: 0 auto var(--ui-space-16, 16px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     box-sizing: border-box;
     display: flex;
     align-items: flex-start;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
     border: 1px solid var(--warning-color);
     border-radius: 12px;
     color: var(--text-color);
@@ -5596,9 +5628,9 @@
   }
 
   .community-runtime-readonly__icon {
-    width: 28px;
-    height: 28px;
-    flex: 0 0 28px;
+    width: var(--ui-layout-28, 28px);
+    height: var(--ui-layout-28, 28px);
+    flex: 0 0 var(--ui-layout-28, 28px);
     display: grid;
     place-items: center;
     border: 1px solid var(--warning-color);
@@ -5610,16 +5642,16 @@
   .community-runtime-readonly > div {
     min-width: 0;
     display: grid;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
 
   .community-runtime-readonly strong {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .community-runtime-readonly span:not(.community-runtime-readonly__icon) {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.6;
   }
 
@@ -5629,13 +5661,13 @@
     align-items: center;
     justify-content: center;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     text-align: center;
   }
 
   .community-message-state__icon {
-    width: 46px;
-    height: 46px;
+    width: var(--ui-layout-46, 46px);
+    height: var(--ui-layout-46, 46px);
     display: grid;
     place-items: center;
     border: 1px solid var(--primary-color);
@@ -5646,29 +5678,29 @@
 
   .community-message-state strong {
     color: var(--text-color);
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
   }
 
   .community-message-state p {
-    max-width: 390px;
-    margin: 0 0 4px;
+    max-width: var(--ui-layout-390, 390px);
+    margin: 0 0 var(--ui-space-4, 4px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.6;
   }
 
   .community-message {
-    --community-message-content-width: min(720px, 86%);
+    --community-message-content-width: min(var(--ui-layout-720, 720px), 86%);
 
     box-sizing: border-box;
     width: 100%;
-    margin-bottom: 2px;
-    padding: 8px 10px;
+    margin-bottom: var(--ui-space-2, 2px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px);
     border-radius: 12px;
     background-color: transparent;
     display: flex;
     align-items: flex-start;
-    gap: 15px;
+    gap: var(--ui-space-15, 15px);
     transition: background-color 0.16s ease;
   }
 
@@ -5681,15 +5713,15 @@
   }
 
   .community-message.is-recall-compact {
-    margin: 1px auto 5px;
-    padding: 4px 10px;
+    margin: var(--ui-space-1, 1px) auto var(--ui-space-5, 5px);
+    padding: var(--ui-space-4, 4px) var(--ui-space-10, 10px);
     justify-content: center;
   }
 
   .community-message__avatar {
-    width: 40px;
-    height: 40px;
-    flex: 0 0 40px;
+    width: var(--ui-layout-40, 40px);
+    height: var(--ui-layout-40, 40px);
+    flex: 0 0 var(--ui-layout-40, 40px);
     padding: 0 !important;
     display: grid;
     grid-template: minmax(0, 1fr) / minmax(0, 1fr);
@@ -5727,9 +5759,9 @@
 
   .community-message__body {
     min-width: 0;
-    max-width: calc(var(--community-message-content-width) - 50px);
+    max-width: calc(var(--community-message-content-width) - var(--ui-layout-50, 50px));
     display: grid;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
 
   .community-message.is-own .community-message__body {
@@ -5759,7 +5791,7 @@
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
 
   .community-message.is-own .community-message__surface {
@@ -5772,7 +5804,7 @@
     max-width: 100%;
     display: flex;
     align-items: flex-start;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
 
   .community-message__primary.is-sticker-only {
@@ -5791,23 +5823,23 @@
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
 
   .community-message__meta strong,
   .community-message__author-name {
     color: var(--text-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .community-message__author-name {
     width: auto;
     height: auto;
-    min-height: 20px;
+    min-height: var(--ui-layout-20, 20px);
     padding: 0;
-    line-height: 20px;
+    line-height: var(--ui-layout-20, 20px);
     font-weight: 700;
     background: transparent;
   }
@@ -5818,31 +5850,31 @@
   }
 
   .community-message__role {
-    padding: 1px 6px;
+    padding: var(--ui-space-1, 1px) var(--ui-space-6, 6px);
     border: 1px solid var(--primary-color);
     border-radius: 999px;
     color: var(--primary-color);
-    font-size: 9px;
+    font-size: var(--ui-font-9, 9px);
   }
 
   .community-message__reply {
     width: auto;
     max-width: 100%;
-    min-height: 24px;
+    min-height: var(--ui-layout-24, 24px);
     height: auto;
-    padding: 3px 2px 3px 9px !important;
+    padding: var(--ui-space-3, 3px) var(--ui-space-2, 2px) var(--ui-space-3, 3px) var(--ui-space-9, 9px) !important;
     box-sizing: border-box;
     display: flex;
     align-items: center;
     justify-content: flex-start;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
     overflow: hidden;
     border: 0 !important;
     border-left: 2px solid var(--surface-border-color) !important;
     border-radius: 0;
     color: var(--desc-color);
     background: transparent !important;
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     line-height: 1.45;
     text-align: left;
   }
@@ -5875,17 +5907,17 @@
   }
 
   .community-message__recalled {
-    min-height: 34px;
-    padding: 7px 10px;
+    min-height: var(--ui-layout-34, 34px);
+    padding: var(--ui-space-7, 7px) var(--ui-space-10, 10px);
     box-sizing: border-box;
     display: inline-flex;
     align-items: center;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     border: 1px solid var(--surface-border-color);
     border-radius: 10px;
     color: var(--desc-color);
     background: var(--workspace-panel-bg-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .community-message.is-recalled .community-message__content,
@@ -5896,9 +5928,9 @@
   }
 
   .community-message__sticker {
-    width: min(176px, 48vw);
-    min-height: 72px;
-    padding: 6px;
+    width: min(var(--ui-layout-176, 176px), 48vw);
+    min-height: var(--ui-layout-72, 72px);
+    padding: var(--ui-space-6, 6px);
     box-sizing: border-box;
     display: grid;
     place-items: center;
@@ -5907,7 +5939,7 @@
     border-radius: 14px;
     color: var(--desc-color);
     background: var(--card-background);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .community-message__sticker img {
@@ -5935,7 +5967,7 @@
   .community-message__content {
     max-width: 100%;
     margin: 0;
-    padding: 10px 12px;
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     border: 1px solid var(--surface-border-color);
     border-radius: 5px 15px 15px;
     color: var(--text-color);
@@ -5948,11 +5980,11 @@
 
   .community-message__mentions {
     display: inline;
-    margin-inline-end: 5px;
+    margin-inline-end: var(--ui-space-5, 5px);
   }
 
   .community-message__mention {
-    margin-inline-end: 5px;
+    margin-inline-end: var(--ui-space-5, 5px);
     color: var(--primary-color);
     font-weight: 600;
     white-space: nowrap;
@@ -5977,12 +6009,12 @@
     top: 4px;
     z-index: 1;
     flex: 0 0 auto;
-    min-height: 24px;
+    min-height: var(--ui-layout-24, 24px);
     width: fit-content;
-    padding: 2px;
+    padding: var(--ui-space-2, 2px);
     display: inline-flex;
     align-items: center;
-    gap: 1px;
+    gap: var(--ui-space-1, 1px);
     border: 1px solid var(--surface-border-color);
     border-radius: 8px;
     background: var(--card-background);
@@ -5998,10 +6030,10 @@
   }
 
   .community-message__actions :deep(.b_btn) {
-    min-width: 29px;
-    min-height: 27px;
-    padding: 3px 6px;
-    gap: 4px;
+    min-width: var(--ui-layout-29, 29px);
+    min-height: var(--ui-layout-27, 27px);
+    padding: var(--ui-space-3, 3px) var(--ui-space-6, 6px);
+    gap: var(--ui-space-4, 4px);
     border: 0 !important;
     border-radius: 6px;
     color: var(--desc-color);
@@ -6021,17 +6053,17 @@
     width: fit-content;
     max-width: 100%;
     min-width: 0;
-    min-height: 25px;
-    padding: 3px 8px;
+    min-height: var(--ui-layout-25, 25px);
+    padding: var(--ui-space-3, 3px) var(--ui-space-8, 8px);
     box-sizing: border-box;
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
     border: 1px solid var(--primary-color);
     border-radius: 999px;
     color: var(--primary-color);
     background: var(--workspace-panel-bg-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     line-height: 1.4;
     overflow: hidden;
   }
@@ -6044,12 +6076,12 @@
   }
 
   .community-message__more {
-    min-width: 30px;
-    padding-inline: 6px;
+    min-width: var(--ui-layout-30, 30px);
+    padding-inline: var(--ui-space-6, 6px);
   }
 
   .community-composer {
-    padding: 7px 14px 12px;
+    padding: var(--ui-space-7, 7px) var(--ui-space-14, 14px) var(--ui-space-12, 12px);
     border-top: 1px solid var(--surface-divider-color);
     background: var(--card-background);
   }
@@ -6084,7 +6116,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
     border: 1px solid var(--primary-color);
     border-radius: 11px;
     color: var(--primary-color);
@@ -6093,8 +6125,8 @@
   }
 
   .community-composer__drop-overlay > span {
-    width: 34px;
-    height: 34px;
+    width: var(--ui-layout-34, 34px);
+    height: var(--ui-layout-34, 34px);
     display: grid;
     place-items: center;
     border: 1px solid var(--primary-color);
@@ -6102,20 +6134,20 @@
   }
 
   .community-composer__drop-overlay strong {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .community-composer__mentions {
-    padding: 8px 12px 0;
+    padding: var(--ui-space-8, 8px) var(--ui-space-12, 12px) 0;
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
 
   .community-composer__mentions > strong {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
 
   .community-composer__mentions > div {
@@ -6123,22 +6155,22 @@
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
 
   .community-composer__mentions .b_btn {
-    min-height: 28px;
-    gap: 4px;
+    min-height: var(--ui-layout-28, 28px);
+    gap: var(--ui-space-4, 4px);
     border: 1px solid var(--primary-color);
     border-radius: 999px;
     color: var(--primary-color);
     background: var(--card-background);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
 
   .community-composer__auxiliary {
     min-width: 0;
-    padding: 8px 8px 0;
+    padding: var(--ui-space-8, 8px) var(--ui-space-8, 8px) 0;
     display: flex;
   }
 
@@ -6147,17 +6179,17 @@
   }
 
   .community-composer__auxiliary {
-    padding-bottom: 8px;
+    padding-bottom: var(--ui-space-8, 8px);
     border-bottom: 1px solid var(--surface-border-color);
   }
 
   .community-composer__reply {
-    margin: 8px 10px 0;
-    padding: 7px 8px 7px 10px;
+    margin: var(--ui-space-8, 8px) var(--ui-space-10, 10px) 0;
+    padding: var(--ui-space-7, 7px) var(--ui-space-8, 8px) var(--ui-space-7, 7px) var(--ui-space-10, 10px);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     border: 1px solid var(--primary-color);
     border-radius: 10px;
     background: var(--workspace-panel-bg-color);
@@ -6166,7 +6198,7 @@
   .community-composer__reply > div {
     min-width: 0;
     display: grid;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
 
   .community-composer__reply strong,
@@ -6178,12 +6210,12 @@
 
   .community-composer__reply strong {
     color: var(--primary-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .community-composer__reply span {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
 
   .community-composer__input {
@@ -6200,13 +6232,13 @@
   }
 
   :global(.community-composer__mention-popover) {
-    width: 360px;
+    width: var(--ui-layout-360, 360px);
     max-width: calc(100% - 16px);
     overflow: hidden;
   }
 
   :global(.community-composer__expression-popover) {
-    width: 360px;
+    width: var(--ui-layout-360, 360px);
     max-width: calc(100% - 16px);
     box-sizing: border-box;
     overflow: hidden;
@@ -6219,9 +6251,9 @@
 
   .community-composer__input.chat-composer-input__rich,
   .community-composer__input :deep(.b-textarea) {
-    min-height: 42px;
-    max-height: 112px;
-    padding: 8px 12px 2px !important;
+    min-height: var(--ui-layout-42, 42px);
+    max-height: var(--ui-layout-112, 112px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-12, 12px) var(--ui-space-2, 2px) !important;
     resize: none;
     border: 0 !important;
     border-radius: 0;
@@ -6245,22 +6277,22 @@
   }
 
   .community-composer__toolbar {
-    min-height: 38px;
-    padding: 1px 6px 5px 7px;
+    min-height: var(--ui-layout-38, 38px);
+    padding: var(--ui-space-1, 1px) var(--ui-space-6, 6px) var(--ui-space-5, 5px) var(--ui-space-7, 7px);
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .community-composer__tools {
     flex: 1 1 auto;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .community-composer__attach {
-    width: 32px;
-    min-width: 32px;
-    height: 32px;
-    min-height: 32px;
+    width: var(--ui-layout-32, 32px);
+    min-width: var(--ui-layout-32, 32px);
+    height: var(--ui-layout-32, 32px);
+    min-height: var(--ui-layout-32, 32px);
     padding: 0;
     display: grid;
     place-items: center;
@@ -6285,17 +6317,17 @@
   .community-composer__upload-hint,
   .community-composer__actions > span {
     color: var(--desc-color);
-    font-size: 9px;
+    font-size: var(--ui-font-9, 9px);
     line-height: 1.5;
   }
 
   .community-composer__actions {
     flex: 0 0 auto;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
   }
 
   .community-composer__actions > span {
-    min-width: 42px;
+    min-width: var(--ui-layout-42, 42px);
     text-align: right;
   }
 
@@ -6305,10 +6337,10 @@
   }
 
   .community-composer__send {
-    width: 34px;
-    min-width: 34px;
-    height: 34px;
-    min-height: 34px;
+    width: var(--ui-layout-34, 34px);
+    min-width: var(--ui-layout-34, 34px);
+    height: var(--ui-layout-34, 34px);
+    min-height: var(--ui-layout-34, 34px);
     padding: 0;
     display: grid;
     place-items: center;
@@ -6321,28 +6353,28 @@
 
   .community-composer__locked {
     width: 100%;
-    min-height: 44px;
+    min-height: var(--ui-layout-44, 44px);
     box-sizing: border-box;
-    padding: 0 12px;
+    padding: 0 var(--ui-space-12, 12px);
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     color: var(--desc-color);
     background: var(--workspace-panel-bg-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .community-composer__guest {
     width: 100%;
-    min-height: 54px;
+    min-height: var(--ui-layout-54, 54px);
     box-sizing: border-box;
-    padding: 8px 10px 8px 12px;
+    padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px) var(--ui-space-8, 8px) var(--ui-space-12, 12px);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
     border: 1px solid var(--primary-color);
     border-radius: 13px;
     background: var(--workspace-panel-bg-color);
@@ -6351,21 +6383,21 @@
   .community-composer__guest > div {
     min-width: 0;
     display: grid;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
 
   .community-composer__guest strong {
     color: var(--text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .community-composer__guest span {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
 
   .community-composer__guest .b_btn {
-    min-height: 40px;
+    min-height: var(--ui-layout-40, 40px);
     flex: 0 0 auto;
   }
 
@@ -6383,7 +6415,7 @@
     }
 
     .community-workspace__rooms {
-      padding: 7px 8px 8px;
+      padding: var(--ui-space-7, 7px) var(--ui-space-8, 8px) var(--ui-space-8, 8px);
       overflow-x: auto;
       overflow-y: hidden;
       border-right: 0;
@@ -6398,14 +6430,14 @@
     .community-workspace__room-list {
       width: max-content;
       display: flex;
-      gap: 7px;
+      gap: var(--ui-space-7, 7px);
     }
 
     .community-room-button {
       width: auto;
       min-width: 128px;
       min-height: 43px;
-      padding: 5px 8px;
+      padding: var(--ui-space-5, 5px) var(--ui-space-8, 8px);
       grid-template-columns: auto minmax(0, 1fr) auto;
       border-color: var(--surface-border-color) !important;
       border-radius: 12px;
@@ -6429,7 +6461,7 @@
     .community-conversation-header {
       height: var(--chat-header-height, 52px);
       min-height: var(--chat-header-height, 52px);
-      padding: 6px 10px;
+      padding: var(--ui-space-6, 6px) var(--ui-space-10, 10px);
     }
 
     .community-conversation-header__title > span {
@@ -6444,7 +6476,7 @@
     }
 
     .community-conversation-header__title-line {
-      gap: 6px;
+      gap: var(--ui-space-6, 6px);
     }
 
     .community-conversation-header__settings {
@@ -6460,11 +6492,11 @@
 
     .community-pinned-message {
       min-height: 36px;
-      padding: 3px 8px;
+      padding: var(--ui-space-3, 3px) var(--ui-space-8, 8px);
     }
 
     .community-pinned-message__jump {
-      gap: 5px;
+      gap: var(--ui-space-5, 5px);
     }
 
     .community-pinned-message__jump > strong,
@@ -6473,20 +6505,20 @@
     }
 
     .community-message-list {
-      padding: 14px 10px 18px;
+      padding: var(--ui-space-14, 14px) var(--ui-space-10, 10px) var(--ui-space-18, 18px);
     }
 
     .community-message {
       --community-message-content-width: 94%;
 
-      margin-bottom: 2px;
-      padding: 6px;
-      gap: 7px;
+      margin-bottom: var(--ui-space-2, 2px);
+      padding: var(--ui-space-6, 6px);
+      gap: var(--ui-space-7, 7px);
     }
 
     .community-message.is-recall-compact {
-      margin-bottom: 2px;
-      padding: 4px 6px;
+      margin-bottom: var(--ui-space-2, 2px);
+      padding: var(--ui-space-4, 4px) var(--ui-space-6, 6px);
     }
 
     .community-message__body {
@@ -6500,7 +6532,7 @@
     }
 
     .community-message__content {
-      padding: 9px 10px;
+      padding: var(--ui-space-9, 9px) var(--ui-space-10, 10px);
       font-size: 13px;
     }
 
@@ -6536,24 +6568,24 @@
     }
 
     .community-composer__auxiliary {
-      padding-inline: 6px;
+      padding-inline: var(--ui-space-6, 6px);
     }
 
     .community-composer__input.chat-composer-input__rich,
     .community-composer__input :deep(.b-textarea) {
       min-height: 42px;
       max-height: 96px;
-      padding: 7px 9px 1px !important;
+      padding: var(--ui-space-7, 7px) var(--ui-space-9, 9px) var(--ui-space-1, 1px) !important;
     }
 
     .community-composer__toolbar {
       min-height: 36px;
-      padding: 1px 5px 4px 6px;
-      gap: 7px;
+      padding: var(--ui-space-1, 1px) var(--ui-space-5, 5px) var(--ui-space-4, 4px) var(--ui-space-6, 6px);
+      gap: var(--ui-space-7, 7px);
     }
 
     .community-composer__tools {
-      gap: 5px;
+      gap: var(--ui-space-5, 5px);
     }
 
     .community-composer__attach,
@@ -6569,7 +6601,7 @@
     }
 
     .community-composer__actions {
-      gap: 5px;
+      gap: var(--ui-space-5, 5px);
     }
 
     .community-composer__actions > span {
@@ -6579,8 +6611,8 @@
 
     .community-composer__guest {
       min-height: 64px;
-      padding: 7px 8px 7px 10px;
-      gap: 8px;
+      padding: var(--ui-space-7, 7px) var(--ui-space-8, 8px) var(--ui-space-7, 7px) var(--ui-space-10, 10px);
+      gap: var(--ui-space-8, 8px);
     }
 
     .community-composer__guest span {

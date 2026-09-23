@@ -68,16 +68,16 @@
   .bl-radio-group {
     display: flex;
     flex-wrap: wrap;
-    gap: 15px;
+    gap: var(--ui-space-15, 15px);
   }
   .bl-radio {
     cursor: pointer;
-    height: 30px;
-    line-height: 30px;
+    height: var(--ui-layout-30, 30px);
+    line-height: var(--ui-layout-30, 30px);
     display: flex;
     align-items: center;
     box-sizing: border-box;
-    padding: 0 10px;
+    padding: 0 var(--ui-space-10, 10px);
     width: max-content;
     border-radius: 4px;
     border: 1px solid #333333;
@@ -86,16 +86,16 @@
 <style scoped lang="less">
   .b-radio-options {
     display: grid;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .b-radio-option.b_btn {
     display: flex;
     align-items: flex-start;
     justify-content: flex-start;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     width: 100%;
     height: auto;
-    padding: 12px;
+    padding: var(--ui-space-12, 12px);
     text-align: left;
     white-space: normal;
     border: 1px solid var(--surface-border-color);
@@ -114,30 +114,30 @@
     outline-offset: 2px;
   }
   .b-radio-option__indicator {
-    flex: 0 0 16px;
-    width: 16px;
-    height: 16px;
+    flex: 0 0 var(--ui-layout-16, 16px);
+    width: var(--ui-layout-16, 16px);
+    height: var(--ui-layout-16, 16px);
     box-sizing: border-box;
     border: 1px solid var(--desc-color);
     border-radius: 50%;
-    margin-top: 2px;
+    margin-top: var(--ui-space-2, 2px);
   }
   .is-selected .b-radio-option__indicator {
     border: 5px solid var(--primary-color);
   }
   .b-radio-option__body {
     display: grid;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
     min-width: 0;
     line-height: 1.5;
     overflow-wrap: anywhere;
   }
   .b-radio-option__body strong {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     font-weight: 600;
   }
   .b-radio-option__body small {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
   }
 </style>

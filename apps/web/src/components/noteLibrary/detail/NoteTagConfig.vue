@@ -374,16 +374,16 @@
 
 <style lang="less" scoped>
   .tag-config {
-    width: min(74vw, 980px);
+    width: min(74vw, var(--ui-layout-980, 980px));
     /*
      * 桌面端由内容区统一决定弹框高度，标签数量和搜索结果只改变列表内部滚动。
      * 与 FileTagConfig 使用同一高度模型：常规视口固定 460px，较矮视口按可用空间收缩。
      */
-    height: min(460px, calc(100vh - 190px));
-    min-height: 360px;
+    height: min(var(--ui-layout-460, 460px), calc(100vh - var(--ui-layout-190, 190px)));
+    min-height: var(--ui-layout-360, 360px);
     display: grid;
-    grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
-    gap: 18px;
+    grid-template-columns: minmax(var(--ui-layout-280, 280px), var(--ui-layout-340, 340px)) minmax(0, 1fr);
+    gap: var(--ui-space-18, 18px);
     color: var(--text-color);
 
     &.mobile {
@@ -444,7 +444,7 @@
     background: var(--background-color);
     border: 1px solid var(--card-border-color);
     border-radius: 14px;
-    padding: 16px;
+    padding: var(--ui-space-16, 16px);
     box-shadow: var(--ant-table-boxShadow);
   }
 
@@ -452,8 +452,8 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 12px;
-    margin-bottom: 10px;
+    gap: var(--ui-space-12, 12px);
+    margin-bottom: var(--ui-space-10, 10px);
   }
 
   .panel-header--library {
@@ -467,7 +467,7 @@
 
   .title {
     font-weight: 600;
-    font-size: 16px;
+    font-size: var(--ui-font-16, 16px);
     color: var(--text-color);
   }
 
@@ -476,42 +476,42 @@
   }
 
   .panel-subtitle {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
-    margin: 0 0 10px;
+    margin: 0 0 var(--ui-space-10, 10px);
     line-height: 1.5;
   }
 
   .panel-subtitle--tight {
-    margin: 6px 0 0;
+    margin: var(--ui-space-6, 6px) 0 0;
   }
 
   .selected-overview {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 12px 14px;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-12, 12px) var(--ui-space-14, 14px);
     border-radius: 12px;
-    margin-bottom: 14px;
+    margin-bottom: var(--ui-space-14, 14px);
     background: color-mix(in srgb, var(--noteType-hover-color) 10%, var(--background-color));
     border: 1px solid color-mix(in srgb, var(--noteType-hover-color) 24%, var(--card-border-color));
   }
 
   .overview-count {
-    min-width: 44px;
-    height: 44px;
+    min-width: var(--ui-layout-44, 44px);
+    height: var(--ui-layout-44, 44px);
     border-radius: 12px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 22px;
+    font-size: var(--ui-font-22, 22px);
     font-weight: 700;
     color: var(--noteType-hover-color);
     background: color-mix(in srgb, var(--noteType-hover-color) 14%, white);
   }
 
   .overview-text {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.5;
     color: var(--desc-color);
   }
@@ -524,8 +524,8 @@
   .chip-list {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
-    min-height: 48px;
+    gap: var(--ui-space-8, 8px);
+    min-height: var(--ui-layout-48, 48px);
     align-items: flex-start;
   }
 
@@ -535,7 +535,7 @@
 
     :deep(.b-chip__content) {
       width: 100%;
-      gap: 6px;
+      gap: var(--ui-space-6, 6px);
     }
   }
 
@@ -558,9 +558,9 @@
 
   :deep(.chip-close.b_btn) {
     flex: 0 0 auto;
-    width: 18px;
-    height: 18px;
-    min-height: 18px;
+    width: var(--ui-layout-18, 18px);
+    height: var(--ui-layout-18, 18px);
+    min-height: var(--ui-layout-18, 18px);
     padding: 0;
     border: 0;
     border-radius: 50%;
@@ -576,30 +576,30 @@
   .tag-actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     justify-content: flex-end;
   }
 
   .tag-toolbar {
-    margin-bottom: 12px;
+    margin-bottom: var(--ui-space-12, 12px);
   }
 
   .tag-list {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     min-height: 0;
-    max-height: 360px;
+    max-height: var(--ui-layout-360, 360px);
     overflow: auto;
-    padding: 2px 2px 0;
+    padding: var(--ui-space-2, 2px) var(--ui-space-2, 2px) 0;
   }
 
   .tag-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 10px;
-    padding: 12px;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-12, 12px);
     border: 1px solid var(--card-border-color);
     border-radius: 12px;
     background: var(--background-color);
@@ -625,7 +625,7 @@
   .tag-left {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     min-width: 0;
   }
 
@@ -642,11 +642,11 @@
   }
 
   .tag-state {
-    margin-top: 4px;
+    margin-top: var(--ui-space-4, 4px);
     display: flex;
     align-items: center;
-    gap: 4px;
-    font-size: 12px;
+    gap: var(--ui-space-4, 4px);
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
   }
 
@@ -656,8 +656,8 @@
 
   .empty {
     color: var(--desc-color);
-    font-size: 13px;
-    padding: 16px 0;
+    font-size: var(--ui-font-13, 13px);
+    padding: var(--ui-space-16, 16px) 0;
     text-align: center;
   }
 

@@ -212,9 +212,6 @@
           <div
             v-else-if="previewType === 'excel' && effectiveFileUrl"
             class="office-preview-container"
-            @mousedown.capture="normalizeMouseEventOffsetsForRootZoom"
-            @mousemove.capture="normalizeMouseEventOffsetsForRootZoom"
-            @mouseout.capture="normalizeMouseEventOffsetsForRootZoom"
           >
             <VueOfficeExcel
               :key="previewAttempt"
@@ -389,7 +386,6 @@
   import { configureMarkdownRenderer } from '@/utils/markdownRenderer';
   import { getFilePreviewPollDelay, hasFilePreviewPollingTimedOut } from '@/utils/filePreviewPolling';
   import { resolveImageViewportLayout } from '@/utils/imageViewport';
-  import { getRootZoom, normalizeMouseEventOffsetsForRootZoom } from '@/utils/zoom';
 
   const VueOfficeDocx = defineAsyncComponent(() => import('@vue-office/docx/lib/v3/vue-office-docx.mjs'));
   const VueOfficeExcel = defineAsyncComponent(() => import('@vue-office/excel/lib/v3/vue-office-excel.mjs'));
@@ -1297,9 +1293,9 @@
     const viewport = imageViewportRef.value;
     if (!viewport) return null;
     const rect = viewport.getBoundingClientRect();
-    const rootZoom = getRootZoom();
-    const offsetX = clientX == null ? viewport.clientWidth / 2 : (clientX - rect.left) / rootZoom;
-    const offsetY = clientY == null ? viewport.clientHeight / 2 : (clientY - rect.top) / rootZoom;
+
+    const offsetX = clientX == null ? viewport.clientWidth / 2 : (clientX - rect.left);
+    const offsetY = clientY == null ? viewport.clientHeight / 2 : (clientY - rect.top);
     return {
       ratioX: (viewport.scrollLeft + offsetX) / Math.max(1, viewport.scrollWidth),
       ratioY: (viewport.scrollTop + offsetY) / Math.max(1, viewport.scrollHeight),
@@ -1381,9 +1377,9 @@
   function drag(e: MouseEvent) {
     const viewport = imageViewportRef.value;
     if (!viewport || !isDragging.value) return;
-    const rootZoom = getRootZoom();
-    viewport.scrollLeft = dragStart.value.scrollLeft - (e.clientX - dragStart.value.x) / rootZoom;
-    viewport.scrollTop = dragStart.value.scrollTop - (e.clientY - dragStart.value.y) / rootZoom;
+
+    viewport.scrollLeft = dragStart.value.scrollLeft - (e.clientX - dragStart.value.x);
+    viewport.scrollTop = dragStart.value.scrollTop - (e.clientY - dragStart.value.y);
     e.preventDefault();
   }
 
@@ -1535,7 +1531,7 @@
     position: fixed;
     inset: 0;
     display: grid;
-    grid-template-rows: 48px minmax(0, 1fr);
+    grid-template-rows: var(--ui-layout-48, 48px) minmax(0, 1fr);
     background: var(--background-color);
     color: var(--text-color);
     z-index: 900;
@@ -1548,7 +1544,7 @@
     }
 
     &.html-fullscreen-mode {
-      grid-template-rows: 40px minmax(0, 1fr);
+      grid-template-rows: var(--ui-layout-40, 40px) minmax(0, 1fr);
 
       .preview-header {
         display: none;
@@ -1566,7 +1562,7 @@
       align-items: center;
       justify-content: flex-end;
       min-width: 0;
-      padding: 0 max(10px, env(safe-area-inset-right)) 0 max(10px, env(safe-area-inset-left));
+      padding: 0 max(var(--ui-space-10, 10px), env(safe-area-inset-right)) 0 max(var(--ui-space-10, 10px), env(safe-area-inset-left));
       border-bottom: 1px solid var(--card-border-color);
       background: color-mix(in srgb, var(--background-color) 94%, var(--primary-color) 6%);
       box-sizing: border-box;
@@ -1575,9 +1571,9 @@
     .exit-fullscreen-btn {
       display: flex;
       align-items: center;
-      gap: 7px;
-      height: 34px;
-      padding: 0 12px;
+      gap: var(--ui-space-7, 7px);
+      height: var(--ui-layout-34, 34px);
+      padding: 0 var(--ui-space-12, 12px);
       border: 1px solid color-mix(in srgb, var(--card-border-color) 78%, transparent);
       border-radius: 10px;
       color: var(--text-color);
@@ -1593,7 +1589,7 @@
       min-width: 0;
       background: color-mix(in srgb, var(--background-color) 94%, var(--primary-color) 6%);
       color: var(--text-color);
-      padding: 0 14px;
+      padding: 0 var(--ui-space-14, 14px);
       box-sizing: border-box;
       justify-content: center;
       border-bottom: 1px solid var(--card-border-color);
@@ -1602,9 +1598,9 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        gap: 8px;
+        gap: var(--ui-space-8, 8px);
         min-width: 0;
-        max-width: min(720px, calc(100% - 96px));
+        max-width: min(var(--ui-layout-720, 720px), calc(100% - var(--ui-layout-96, 96px)));
       }
 
       .file-preview-backlinks {
@@ -1615,26 +1611,26 @@
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-        font-size: 14px;
+        font-size: var(--ui-font-14, 14px);
         font-weight: 600;
       }
 
       .file-type-badge {
         flex: 0 0 auto;
-        padding: 3px 8px;
+        padding: var(--ui-space-3, 3px) var(--ui-space-8, 8px);
         border: 1px solid var(--resource-file-color);
         border-radius: 999px;
         background: color-mix(in srgb, var(--resource-file-color) 12%, transparent);
         color: var(--resource-file-color);
-        font-size: 11px;
+        font-size: var(--ui-font-11, 11px);
         font-weight: 600;
       }
 
       .preview-actions {
         position: absolute;
-        right: 12px;
+        right: var(--ui-space-12, 12px);
         display: flex;
-        gap: 8px;
+        gap: var(--ui-space-8, 8px);
 
         .action-btn {
           display: flex;
@@ -1644,9 +1640,9 @@
 
         .header-close-btn,
         .header-fullscreen-btn {
-          width: 30px;
-          min-width: 30px;
-          height: 30px;
+          width: var(--ui-layout-30, 30px);
+          min-width: var(--ui-layout-30, 30px);
+          height: var(--ui-layout-30, 30px);
           padding: 0;
           border-radius: 9px;
           color: var(--desc-color);
@@ -1674,33 +1670,33 @@
         position: absolute;
         z-index: 10;
         text-align: center;
-        padding: 40px;
+        padding: var(--ui-space-40, 40px);
       }
 
       .preview-error {
         z-index: 10;
         text-align: center;
-        padding: 40px;
+        padding: var(--ui-space-40, 40px);
         position: absolute;
         .error-icon {
           color: var(--error-color, #ff4d4f);
-          margin-bottom: 16px;
+          margin-bottom: var(--ui-space-16, 16px);
         }
 
         h3 {
-          margin-bottom: 8px;
+          margin-bottom: var(--ui-space-8, 8px);
           color: var(--text-color);
         }
 
         p {
           color: var(--desc-color);
-          margin-bottom: 20px;
+          margin-bottom: var(--ui-space-20, 20px);
         }
 
         .retry-btn {
           display: inline-flex;
-          gap: 6px;
-          margin-top: 16px;
+          gap: var(--ui-space-6, 6px);
+          margin-top: var(--ui-space-16, 16px);
         }
       }
 
@@ -1739,11 +1735,11 @@
           justify-content: center;
           align-items: center;
           box-sizing: border-box;
-          padding: 24px 20px 88px;
+          padding: var(--ui-space-24, 24px) var(--ui-space-20, 20px) var(--ui-space-88, 88px);
 
           .preview-audio-card {
-            width: min(560px, 100%);
-            padding: 22px;
+            width: min(var(--ui-layout-560, 560px), 100%);
+            padding: var(--ui-space-22, 22px);
             box-sizing: border-box;
             border: 1px solid var(--card-border-color);
             border-radius: 16px;
@@ -1754,9 +1750,9 @@
           .preview-audio-summary {
             display: flex;
             align-items: center;
-            gap: 14px;
+            gap: var(--ui-space-14, 14px);
             min-width: 0;
-            margin-bottom: 18px;
+            margin-bottom: var(--ui-space-18, 18px);
           }
 
           .preview-audio-artwork {
@@ -1764,8 +1760,8 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            width: 64px;
-            height: 64px;
+            width: var(--ui-layout-64, 64px);
+            height: var(--ui-layout-64, 64px);
             border: 1px solid var(--resource-file-color);
             border-radius: 18px;
             background: color-mix(in srgb, var(--resource-file-color) 10%, var(--card-background));
@@ -1774,14 +1770,14 @@
           .preview-audio-meta {
             display: flex;
             flex-direction: column;
-            gap: 6px;
+            gap: var(--ui-space-6, 6px);
             min-width: 0;
           }
 
           .preview-audio-name {
             overflow: hidden;
             color: var(--text-color);
-            font-size: 15px;
+            font-size: var(--ui-font-15, 15px);
             font-weight: 650;
             text-overflow: ellipsis;
             white-space: nowrap;
@@ -1789,7 +1785,7 @@
 
           .preview-audio-format {
             color: var(--desc-color);
-            font-size: 12px;
+            font-size: var(--ui-font-12, 12px);
             font-weight: 600;
           }
 
@@ -1801,9 +1797,9 @@
         }
 
         .preview-image-container {
-          --file-preview-image-padding-x: 24px;
-          --file-preview-image-padding-top: 24px;
-          --file-preview-image-padding-bottom: 86px;
+          --file-preview-image-padding-x: var(--ui-space-24, 24px);
+          --file-preview-image-padding-top: var(--ui-space-24, 24px);
+          --file-preview-image-padding-bottom: var(--ui-space-86, 86px);
 
           width: 100%;
           height: 100%;
@@ -1869,27 +1865,27 @@
           background: var(--background-color);
 
           .text-toolbar {
-            padding: 12px 16px;
+            padding: var(--ui-space-12, 12px) var(--ui-space-16, 16px);
             border-bottom: 1px solid var(--card-border-color);
             background: var(--menu-body-bg-color, var(--background-color));
 
             .text-toolbar-actions {
               display: flex;
               align-items: center;
-              gap: 10px;
+              gap: var(--ui-space-10, 10px);
             }
 
             .toolbar-btn {
               display: flex;
               align-items: center;
               justify-content: center;
-              width: 28px;
+              width: var(--ui-layout-28, 28px);
               padding: 0;
             }
 
             .text-info {
               color: var(--desc-color);
-              font-size: 12px;
+              font-size: var(--ui-font-12, 12px);
             }
           }
 
@@ -1918,22 +1914,22 @@
 
         .unsupported-preview {
           text-align: center;
-          padding: 60px 40px 104px;
+          padding: var(--ui-space-60, 60px) var(--ui-space-40, 40px) var(--ui-space-104, 104px);
 
           .unsupported-icon {
             color: var(--desc-color);
-            margin-bottom: 24px;
+            margin-bottom: var(--ui-space-24, 24px);
           }
 
           h3 {
-            margin-bottom: 12px;
+            margin-bottom: var(--ui-space-12, 12px);
             color: var(--text-color);
           }
 
           p {
             color: var(--desc-color);
-            margin-bottom: 24px;
-            max-width: 300px;
+            margin-bottom: var(--ui-space-24, 24px);
+            max-width: var(--ui-layout-300, 300px);
             margin-left: auto;
             margin-right: auto;
           }
@@ -1944,13 +1940,13 @@
     .preview-controls {
       position: absolute;
       left: 50%;
-      bottom: max(18px, env(safe-area-inset-bottom));
+      bottom: max(var(--ui-space-18, 18px), env(safe-area-inset-bottom));
       z-index: 25;
       display: flex;
       align-items: center;
-      gap: 6px;
-      max-width: calc(100% - 28px);
-      padding: 7px;
+      gap: var(--ui-space-6, 6px);
+      max-width: calc(100% - var(--ui-layout-28, 28px));
+      padding: var(--ui-space-7, 7px);
       box-sizing: border-box;
       overflow-x: auto;
       border: 1px solid color-mix(in srgb, var(--card-border-color) 86%, transparent);
@@ -1969,29 +1965,29 @@
         display: flex;
         flex: 0 0 auto;
         align-items: center;
-        gap: 4px;
+        gap: var(--ui-space-4, 4px);
       }
 
       .control-divider {
         flex: 0 0 auto;
         width: 1px;
-        height: 20px;
-        margin: 0 2px;
+        height: var(--ui-layout-20, 20px);
+        margin: 0 var(--ui-space-2, 2px);
         background: var(--card-border-color);
       }
 
       .action-btn {
-        width: 30px;
-        min-width: 30px;
-        height: 30px;
+        width: var(--ui-layout-30, 30px);
+        min-width: var(--ui-layout-30, 30px);
+        height: var(--ui-layout-30, 30px);
         padding: 0;
         border-radius: 9px;
         color: var(--text-color);
       }
 
       .zoom-value-btn {
-        width: 54px;
-        min-width: 54px;
+        width: var(--ui-layout-54, 54px);
+        min-width: var(--ui-layout-54, 54px);
         color: var(--desc-color);
         font-variant-numeric: tabular-nums;
       }

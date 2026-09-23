@@ -39,7 +39,7 @@
   }>();
 
   const localChecked = ref(props.checked);
-  const displayedChecked = computed(() => props.controlled ? props.checked : localChecked.value);
+  const displayedChecked = computed(() => (props.controlled ? props.checked : localChecked.value));
 
   watch(
     () => props.checked,
@@ -73,8 +73,8 @@
 
   .b-switch__track {
     position: relative;
-    width: 40px;
-    height: 22px;
+    width: var(--ui-layout-40, 40px);
+    height: var(--ui-layout-22, 22px);
     border-radius: 11px;
     background: var(--card-border-color, #6e6e77);
     transition: background 0.25s ease;
@@ -85,8 +85,10 @@
     position: absolute;
     top: 3px;
     left: 3px;
-    width: 16px;
-    height: 16px;
+    /* ui-density-fixed: 滑块左右各保留固定 3px 留白，与 left: 3px 及轨道端点一致。 */
+    width: calc(var(--ui-layout-22, 22px) - 6px);
+    /* ui-density-fixed: 滑块上下各保留固定 3px 留白，与 top: 3px 一致。 */
+    height: calc(var(--ui-layout-22, 22px) - 6px);
     border-radius: 50%;
     background: #fff;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
@@ -98,7 +100,7 @@
   }
 
   .b-switch.is-checked .b-switch__thumb {
-    transform: translateX(18px);
+    transform: translateX(calc(var(--ui-layout-40, 40px) - var(--ui-layout-22, 22px)));
   }
 
   .b-switch:hover .b-switch__track {

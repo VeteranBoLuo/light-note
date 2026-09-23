@@ -746,7 +746,7 @@
   const previewColumns = computed<Column[]>(() =>
     (previewDataset.value?.headers || [])
       .slice(0, 8)
-      .map((header) => ({ key: header, title: header, width: 'minmax(120px, 1fr)' })),
+      .map((header) => ({ key: header, title: header, width: 'minmax(var(--ui-layout-120, 120px), 1fr)' })),
   );
   const previewNote = computed(() =>
     previewDataset.value
@@ -1141,24 +1141,24 @@
   }
   .dataset-workbench {
     display: grid;
-    grid-template-columns: minmax(224px, 248px) minmax(0, 1fr);
+    grid-template-columns: minmax(var(--ui-layout-224, 224px), var(--ui-layout-248, 248px)) minmax(0, 1fr);
     align-items: start;
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
   }
 
   .dataset-workbench__surface {
     min-width: 0;
     display: grid;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
 
   .dataset-operation-rail {
     position: sticky;
-    top: 16px;
+    top: var(--ui-space-16, 16px);
     min-width: 0;
-    padding: 14px;
+    padding: var(--ui-space-14, 14px);
     display: grid;
-    gap: 13px;
+    gap: var(--ui-space-13, 13px);
     border: 1px solid var(--surface-border-color);
     border-radius: 18px;
     background: var(--card-background);
@@ -1166,42 +1166,42 @@
 
   .dataset-operation-rail > header {
     display: grid;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
 
   .dataset-operation-rail > header > span {
     color: var(--primary-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     font-weight: 750;
     letter-spacing: 0.08em;
   }
 
   .dataset-operation-rail > header > strong {
     color: var(--text-color);
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
   }
 
   .dataset-operation-rail > header > small {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     line-height: 1.5;
   }
 
   .dataset-operation-rail__items {
     display: grid;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
 
   .dataset-operation {
     width: 100%;
     max-width: 100%;
     min-width: 0;
-    min-height: 70px;
-    padding: 10px 11px;
+    min-height: var(--ui-layout-70, 70px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-11, 11px);
     overflow: hidden;
     box-sizing: border-box;
     justify-content: flex-start;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     border: 1px solid transparent;
     border-radius: 12px;
     color: var(--desc-color);
@@ -1210,8 +1210,8 @@
   }
 
   .dataset-operation > span:first-child {
-    width: 36px;
-    height: 36px;
+    width: var(--ui-layout-36, 36px);
+    height: var(--ui-layout-36, 36px);
     display: grid;
     flex: 0 0 auto;
     place-items: center;
@@ -1222,10 +1222,10 @@
 
   .dataset-operation > span:last-child {
     min-width: 0;
-    padding-right: 2px;
+    padding-right: var(--ui-space-2, 2px);
     flex: 1;
     display: grid;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
 
   .dataset-operation strong,
@@ -1237,7 +1237,7 @@
 
   .dataset-operation strong {
     color: var(--text-color);
-    font-size: 12.5px;
+    font-size: var(--ui-font-12_5, 12.5px);
   }
 
   .dataset-operation small {
@@ -1245,7 +1245,7 @@
     overflow: hidden;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     line-height: 1.45;
     white-space: normal;
   }
@@ -1277,7 +1277,7 @@
   .dataset-stagebar {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .dataset-stagebar.is-quality {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1285,11 +1285,11 @@
 
   .dataset-stage {
     min-width: 0;
-    min-height: 66px;
-    padding: 12px 14px;
+    min-height: var(--ui-layout-66, 66px);
+    padding: var(--ui-space-12, 12px) var(--ui-space-14, 14px);
     display: flex;
     align-items: center;
-    gap: 11px;
+    gap: var(--ui-space-11, 11px);
     box-sizing: border-box;
     border: 1px solid var(--surface-border-color);
     border-radius: 14px;
@@ -1302,22 +1302,22 @@
   }
 
   .dataset-stage > span {
-    width: 30px;
-    height: 30px;
+    width: var(--ui-layout-30, 30px);
+    height: var(--ui-layout-30, 30px);
     display: grid;
     flex: 0 0 auto;
     place-items: center;
     border: 1px solid var(--surface-border-color);
     border-radius: 9px;
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 750;
   }
 
   .dataset-stage > div {
     min-width: 0;
     display: grid;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
 
   .dataset-stage strong,
@@ -1329,11 +1329,11 @@
 
   .dataset-stage strong {
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .dataset-stage small {
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .dataset-stage.is-active,
@@ -1354,13 +1354,13 @@
   }
 
   .dataset-empty {
-    min-height: 350px;
-    padding: 44px 24px;
+    min-height: var(--ui-layout-350, 350px);
+    padding: var(--ui-space-44, 44px) var(--ui-space-24, 24px);
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
     box-sizing: border-box;
     border: 1px dashed rgba(97, 92, 237, 0.48);
     border-radius: 20px;
@@ -1369,8 +1369,8 @@
   }
 
   .dataset-empty__icon {
-    width: 72px;
-    height: 72px;
+    width: var(--ui-layout-72, 72px);
+    height: var(--ui-layout-72, 72px);
     display: grid;
     place-items: center;
     border: 1px solid rgba(97, 92, 237, 0.4);
@@ -1381,10 +1381,10 @@
   }
 
   .dataset-empty > div {
-    max-width: 560px;
+    max-width: var(--ui-layout-560, 560px);
     display: grid;
     justify-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .dataset-empty > .dataset-empty__actions {
@@ -1393,7 +1393,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     flex-wrap: wrap;
   }
 
@@ -1408,7 +1408,7 @@
   }
 
   .dataset-empty h2 {
-    font-size: clamp(22px, 2.2vw, 30px);
+    font-size: clamp(var(--ui-font-22, 22px), 2.2vw, var(--ui-font-30, 30px));
   }
 
   .dataset-empty p,
@@ -1418,11 +1418,11 @@
   }
 
   .dataset-sourcebar {
-    padding: 12px;
+    padding: var(--ui-space-12, 12px);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     border: 1px solid var(--surface-border-color);
     border-radius: 16px;
     background: var(--card-background);
@@ -1432,7 +1432,7 @@
   .dataset-sourcebar__actions {
     display: flex;
     align-items: center;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
   }
 
   .dataset-sourcebar__files {
@@ -1442,19 +1442,19 @@
 
   .dataset-sourcebar__files article {
     min-width: 0;
-    max-width: 360px;
-    padding: 8px 10px;
+    max-width: var(--ui-layout-360, 360px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px);
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
     border-radius: 11px;
     background: var(--workspace-panel-bg-color);
   }
 
   .dataset-sourcebar__files article > span:first-child {
-    width: 34px;
-    height: 34px;
+    width: var(--ui-layout-34, 34px);
+    height: var(--ui-layout-34, 34px);
     display: grid;
     place-items: center;
     border-radius: 10px;
@@ -1465,7 +1465,7 @@
   .dataset-sourcebar__files article > div {
     min-width: 0;
     display: grid;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
 
   .dataset-sourcebar__files strong,
@@ -1477,13 +1477,13 @@
 
   .dataset-sourcebar__files small {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .dataset-studio {
     display: grid;
-    grid-template-columns: minmax(260px, 0.34fr) minmax(0, 1fr);
-    gap: 14px;
+    grid-template-columns: minmax(var(--ui-layout-260, 260px), 0.34fr) minmax(0, 1fr);
+    gap: var(--ui-space-14, 14px);
     align-items: start;
   }
   .dataset-studio.is-quality {
@@ -1493,9 +1493,9 @@
   .dataset-control-card,
   .dataset-canvas {
     min-width: 0;
-    padding: 18px;
+    padding: var(--ui-space-18, 18px);
     display: grid;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
     border: 1px solid var(--surface-border-color);
     border-radius: 18px;
     background: var(--card-background);
@@ -1503,19 +1503,19 @@
 
   .dataset-control-card {
     position: sticky;
-    top: 16px;
+    top: var(--ui-space-16, 16px);
   }
 
   .dataset-control-card__head,
   .dataset-canvas__head > div:first-child {
     display: grid;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
 
   .dataset-control-card__head > span,
   .dataset-canvas__head > div:first-child > span {
     color: var(--primary-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 750;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -1530,30 +1530,30 @@
 
   .dataset-control-card h2,
   .dataset-canvas h2 {
-    font-size: 19px;
+    font-size: var(--ui-font-19, 19px);
   }
 
   .dataset-control-card p,
   .dataset-canvas p {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.6;
   }
 
   .dataset-field {
     display: grid;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
 
   .dataset-field label {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 650;
   }
 
   .dataset-checkboxes {
     display: grid;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
 
   .dataset-checkboxes.is-inline {
@@ -1561,8 +1561,8 @@
   }
 
   .dataset-checkboxes :deep(.b-checkbox) {
-    min-height: 38px;
-    padding: 7px 9px;
+    min-height: var(--ui-layout-38, 38px);
+    padding: var(--ui-space-7, 7px) var(--ui-space-9, 9px);
     border: 1px solid var(--surface-border-color);
     border-radius: 10px;
   }
@@ -1571,15 +1571,15 @@
   .dataset-result-banner,
   .dataset-split-summary,
   .dataset-validation-summary {
-    padding: 11px 12px;
+    padding: var(--ui-space-11, 11px) var(--ui-space-12, 12px);
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     color: var(--desc-color);
     background: var(--workspace-panel-bg-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.55;
   }
 
@@ -1598,15 +1598,15 @@
 
   .dataset-rule-list {
     display: grid;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
 
   .dataset-rule-list article {
-    padding: 8px 9px;
+    padding: var(--ui-space-8, 8px) var(--ui-space-9, 9px);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     border: 1px solid var(--surface-border-color);
     border-radius: 10px;
   }
@@ -1614,27 +1614,27 @@
   .dataset-rule-list article > div {
     min-width: 0;
     display: grid;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
 
   .dataset-rule-list small {
     overflow: hidden;
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .dataset-control-card__action {
-    padding-top: 14px;
+    padding-top: var(--ui-space-14, 14px);
     display: grid;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     border-top: 1px solid var(--surface-border-color);
   }
 
   .dataset-control-card__action small {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     text-align: center;
   }
 
@@ -1642,24 +1642,24 @@
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .dataset-canvas__actions {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .dataset-canvas__actions :deep(.b-select) {
-    min-width: 90px;
+    min-width: var(--ui-layout-90, 90px);
   }
 
   .dataset-error {
-    padding: 11px 13px;
+    padding: var(--ui-space-11, 11px) var(--ui-space-13, 13px);
     display: flex;
     align-items: flex-start;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     border: 1px solid var(--danger-color, #dc3e4d);
     border-radius: 12px;
     color: var(--danger-color, #dc3e4d);
@@ -1669,17 +1669,17 @@
   }
 
   .dataset-quality-loading {
-    min-height: 220px;
+    min-height: var(--ui-layout-220, 220px);
     display: grid;
     place-items: center;
     align-content: center;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
     color: var(--desc-color);
     text-align: center;
   }
   .dataset-quality-loading p {
-    max-width: 440px;
-    font-size: 11px;
+    max-width: var(--ui-layout-440, 440px);
+    font-size: var(--ui-font-11, 11px);
   }
 
   .dataset-error > div,
@@ -1687,7 +1687,7 @@
   .dataset-split-summary > div,
   .dataset-validation-summary > div {
     display: grid;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
 
   .dataset-error span,
@@ -1695,12 +1695,12 @@
   .dataset-split-summary small,
   .dataset-validation-summary small {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .dataset-preview-note {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     text-align: right;
   }
 
@@ -1708,16 +1708,16 @@
   .dataset-diff-summary {
     display: grid;
     grid-template-columns: 1.2fr repeat(3, minmax(0, 1fr));
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
   }
 
   .dataset-quality-summary > div,
   .dataset-diff-summary > div {
-    min-height: 86px;
-    padding: 12px;
+    min-height: var(--ui-layout-86, 86px);
+    padding: var(--ui-space-12, 12px);
     display: grid;
     align-content: center;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
     border: 1px solid var(--surface-border-color);
     border-radius: 13px;
     background: var(--workspace-panel-bg-color);
@@ -1726,12 +1726,12 @@
   .dataset-quality-summary span,
   .dataset-diff-summary span {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .dataset-quality-summary strong,
   .dataset-diff-summary strong {
-    font-size: 24px;
+    font-size: var(--ui-font-24, 24px);
   }
 
   .dataset-quality-score {
@@ -1760,15 +1760,18 @@
   .dataset-issue-list,
   .dataset-split-list {
     display: grid;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
 
   .dataset-profile-list article {
-    padding: 9px 11px;
+    padding: var(--ui-space-9, 9px) var(--ui-space-11, 11px);
     display: grid;
-    grid-template-columns: minmax(150px, 1.3fr) minmax(90px, 0.5fr) minmax(90px, 0.5fr) minmax(100px, 1fr);
+    grid-template-columns: minmax(var(--ui-layout-150, 150px), 1.3fr) minmax(var(--ui-layout-90, 90px), 0.5fr) minmax(
+        var(--ui-layout-90, 90px),
+        0.5fr
+      ) minmax(var(--ui-layout-100, 100px), 1fr);
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     border: 1px solid var(--surface-border-color);
     border-radius: 10px;
   }
@@ -1777,7 +1780,7 @@
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
 
   .dataset-profile-list__name strong {
@@ -1788,7 +1791,7 @@
 
   .dataset-profile-list article > span {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .dataset-profile-list__bar {
@@ -1823,11 +1826,11 @@
 
   .dataset-change-list article,
   .dataset-split-list article {
-    padding: 9px 11px;
+    padding: var(--ui-space-9, 9px) var(--ui-space-11, 11px);
     display: grid;
-    grid-template-columns: minmax(120px, 0.7fr) minmax(0, 1fr) auto;
+    grid-template-columns: minmax(var(--ui-layout-120, 120px), 0.7fr) minmax(0, 1fr) auto;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     border-bottom: 1px solid var(--surface-border-color);
   }
 
@@ -1835,7 +1838,7 @@
   .dataset-split-list article > span {
     overflow: hidden;
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -1845,24 +1848,27 @@
   }
 
   .dataset-issue-list article {
-    padding: 8px 10px;
+    padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px);
     display: grid;
-    grid-template-columns: 36px minmax(100px, 0.55fr) minmax(110px, 0.5fr) minmax(0, 1fr);
+    grid-template-columns: var(--ui-layout-36, 36px) minmax(var(--ui-layout-100, 100px), 0.55fr) minmax(
+        var(--ui-layout-110, 110px),
+        0.5fr
+      ) minmax(0, 1fr);
     align-items: center;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
     border: 1px solid var(--surface-border-color);
     border-radius: 9px;
   }
 
   .dataset-issue-list article > span {
-    width: 28px;
-    height: 28px;
+    width: var(--ui-layout-28, 28px);
+    height: var(--ui-layout-28, 28px);
     display: grid;
     place-items: center;
     border-radius: 8px;
     color: var(--danger-color, #dc3e4d);
     background: var(--workspace-panel-bg-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 700;
   }
 
@@ -1877,11 +1883,11 @@
   }
 
   .dataset-chart {
-    min-height: 430px;
-    padding: 18px;
+    min-height: var(--ui-layout-430, 430px);
+    padding: var(--ui-space-18, 18px);
     display: grid;
     grid-template-rows: auto 1fr;
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
     border: 1px solid var(--surface-border-color);
     border-radius: 15px;
     background: linear-gradient(rgba(97, 92, 237, 0.035) 1px, transparent 1px), var(--card-background);
@@ -1896,7 +1902,7 @@
 
   .dataset-chart > header span {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .dataset-chart__plot {
@@ -1982,7 +1988,7 @@
 
   @media (max-width: 1100px) {
     .dataset-workbench {
-      grid-template-columns: 210px minmax(0, 1fr);
+      grid-template-columns: var(--ui-layout-210, 210px) minmax(0, 1fr);
     }
 
     .dataset-studio {
@@ -1997,7 +2003,7 @@
   @media (max-width: 767px) {
     .dataset-workbench {
       grid-template-columns: minmax(0, 1fr);
-      gap: 12px;
+      gap: var(--ui-space-12, 12px);
     }
 
     .dataset-operation-rail {
@@ -2005,9 +2011,9 @@
     }
 
     .dataset-mode-select {
-      padding: 12px;
+      padding: var(--ui-space-12, 12px);
       display: grid;
-      gap: 7px;
+      gap: var(--ui-space-7, 7px);
       border: 1px solid var(--surface-border-color);
       border-radius: 14px;
       background: var(--card-background);
@@ -2015,7 +2021,7 @@
 
     .dataset-mode-select label {
       color: var(--desc-color);
-      font-size: 11px;
+      font-size: var(--ui-font-11, 11px);
       font-weight: 650;
     }
 
@@ -2027,16 +2033,16 @@
     }
 
     .dataset-stage {
-      min-height: 56px;
+      min-height: var(--ui-layout-56, 56px);
     }
 
     .dataset-empty {
-      min-height: 300px;
-      padding: 32px 16px;
+      min-height: var(--ui-layout-300, 300px);
+      padding: var(--ui-space-32, 32px) var(--ui-space-16, 16px);
     }
 
     .dataset-empty > .dataset-empty__actions {
-      max-width: 320px;
+      max-width: var(--ui-layout-320, 320px);
       align-items: stretch;
       flex-direction: column;
     }
@@ -2045,7 +2051,7 @@
     .dataset-empty__actions > :deep(.b_btn),
     .dataset-empty__actions :deep(.b-upload-trigger .b_btn) {
       width: 100%;
-      min-height: 44px;
+      min-height: var(--ui-layout-44, 44px);
     }
 
     .dataset-sourcebar,
@@ -2066,7 +2072,7 @@
 
     .dataset-control-card,
     .dataset-canvas {
-      padding: 14px;
+      padding: var(--ui-space-14, 14px);
       border-radius: 15px;
     }
 
@@ -2085,7 +2091,7 @@
 
     .dataset-change-list article,
     .dataset-issue-list article {
-      grid-template-columns: 36px minmax(0, 1fr);
+      grid-template-columns: var(--ui-layout-36, 36px) minmax(0, 1fr);
     }
 
     .dataset-change-list article > span,
@@ -2095,7 +2101,7 @@
     }
 
     .dataset-chart.is-vertical .dataset-chart__plot {
-      gap: 4px;
+      gap: var(--ui-space-4, 4px);
     }
   }
 

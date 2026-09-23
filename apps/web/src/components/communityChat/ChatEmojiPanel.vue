@@ -95,9 +95,9 @@
 
 <style scoped lang="less">
   .chat-emoji-panel {
-    width: min(360px, 100%);
-    height: min(380px, 42vh);
-    min-height: 260px;
+    width: min(var(--ui-layout-360, 360px), 100%);
+    height: min(var(--ui-layout-380, 380px), 42vh);
+    min-height: var(--ui-layout-260, 260px);
     display: grid;
     grid-template-rows: auto auto minmax(0, 1fr);
     overflow: hidden;
@@ -109,20 +109,20 @@
 
   .chat-emoji-panel__categories {
     display: flex;
-    gap: 2px;
-    padding: 7px;
+    gap: var(--ui-space-2, 2px);
+    padding: var(--ui-space-7, 7px);
     overflow-x: auto;
     border-bottom: 1px solid var(--surface-border-color);
   }
 
   .chat-emoji-panel__categories .b_btn {
-    width: 32px;
-    height: 32px;
-    flex: 0 0 32px;
+    width: var(--ui-layout-32, 32px);
+    height: var(--ui-layout-32, 32px);
+    flex: 0 0 var(--ui-layout-32, 32px);
     padding: 0;
     border: 1px solid transparent;
     background: transparent;
-    font-size: 17px;
+    font-size: var(--ui-font-17, 17px);
     border-radius: 8px;
     transition: background-color 120ms ease;
   }
@@ -139,8 +139,8 @@
   }
 
   .chat-emoji-panel__category-image {
-    width: 30px;
-    height: 30px;
+    width: var(--ui-layout-30, 30px);
+    height: var(--ui-layout-30, 30px);
     display: block;
     flex: none;
     object-fit: contain;
@@ -150,22 +150,22 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
-    padding: 8px 11px 3px;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-11, 11px) var(--ui-space-3, 3px);
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .chat-emoji-panel__heading small {
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
 
   .chat-emoji-panel__grid {
     display: grid;
     grid-template-columns: repeat(8, minmax(0, 1fr));
     align-content: start;
-    gap: 4px 2px;
-    padding: 6px 10px 10px;
+    gap: var(--ui-space-4, 4px) var(--ui-space-2, 2px);
+    padding: var(--ui-space-6, 6px) var(--ui-space-10, 10px) var(--ui-space-10, 10px);
     overflow-y: auto;
     overscroll-behavior: contain;
   }
@@ -173,12 +173,12 @@
   .chat-emoji-panel__grid .b_btn {
     width: 100%;
     min-width: 0;
-    height: 42px;
+    height: var(--ui-layout-42, 42px);
     padding: 0;
     border: 1px solid transparent;
     border-radius: 8px;
     background: transparent;
-    font-size: 22px;
+    font-size: var(--ui-font-22, 22px);
     line-height: 1;
     transition: background-color 120ms ease;
   }
@@ -195,8 +195,8 @@
   }
 
   .chat-emoji-panel__inline-image {
-    width: 36px;
-    height: 36px;
+    width: var(--ui-layout-36, 36px);
+    height: var(--ui-layout-36, 36px);
     max-width: 100%;
     display: block;
     flex: none;
@@ -208,7 +208,7 @@
     display: grid;
     place-items: center;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   html.light-note-mobile-rendering .chat-emoji-panel {

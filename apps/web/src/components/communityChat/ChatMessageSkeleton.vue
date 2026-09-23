@@ -12,16 +12,16 @@
     inset: 0;
     z-index: 3;
     align-content: start;
-    padding: 18px clamp(14px, 3vw, 32px) 22px;
+    padding: var(--ui-space-18, 18px) clamp(var(--ui-space-14, 14px), 3vw, var(--ui-space-32, 32px)) var(--ui-space-22, 22px);
     box-sizing: border-box;
     display: grid;
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
     overflow: hidden;
     background: var(--card-background);
   }
   .community-message-skeleton span {
-    width: min(420px, 72%);
-    height: 72px;
+    width: min(var(--ui-layout-420, 420px), 72%);
+    height: var(--ui-layout-72, 72px);
     border: 1px solid var(--surface-border-color);
     border-radius: 16px;
     background: var(--workspace-panel-bg-color);

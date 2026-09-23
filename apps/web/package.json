@@ -23,6 +23,8 @@
     "prettier": "prettier --write",
     "typecheck": "tsc --noEmit --skipLibCheck",
     "test": "vitest run",
+    "check:ui-density": "vitest run src/config/uiDensity.test.ts src/config/uiDensityLess.test.ts src/config/uiDensityRaw.test.ts && node --test scripts/check-density-cli.test.mjs",
+    "check:ui-density-new": "node scripts/check-density-raw.mjs",
     "check:workspace-surfaces": "node scripts/check-workspace-surfaces.mjs",
     "test:watch": "vitest"
   },

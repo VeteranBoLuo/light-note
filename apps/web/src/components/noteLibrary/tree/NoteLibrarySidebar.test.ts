@@ -6,7 +6,7 @@ import type { NoteTreeItem } from '@/types/noteTree';
 
 const mocks = vi.hoisted(() => ({ scrollNearestIntoContainer: vi.fn() }));
 
-vi.mock('@/utils/zoom', () => ({ scrollNearestIntoContainer: mocks.scrollNearestIntoContainer }));
+vi.mock('@/utils/scrolling', () => ({ scrollNearestIntoContainer: mocks.scrollNearestIntoContainer }));
 vi.mock('@/composables/useNoteTree', () => ({ NOTE_TREE_ROOT_KEY: '__light_note_root__' }));
 vi.mock('@/components/noteLibrary/tree/NoteTreeRow.vue', () => ({
   default: defineComponent({

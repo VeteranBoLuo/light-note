@@ -24,7 +24,7 @@ vi.mock('@/store', () => ({
   bookmarkStore: () => bookmarkState,
   noteStore: () => noteState,
 }));
-vi.mock('@/utils/zoom.ts', () => ({ scrollIntoContainer, scrollNearestIntoContainer }));
+vi.mock('@/utils/scrolling', () => ({ scrollIntoContainer, scrollNearestIntoContainer }));
 vi.mock('@/components/base/BasicComponents/BDrawer.vue', () => ({
   default: {
     name: 'BDrawer',

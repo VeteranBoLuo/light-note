@@ -135,7 +135,9 @@ describe('ResourceCenterSectionNav', () => {
   it('一级导航的相邻状态保留间距，选中面不叠加短下划线或角标描边', () => {
     expect(source).toContain('class="section-nav-item__icon"');
     expect(source).toMatch(/--b-chip-border:\s*transparent/);
-    expect(source).toMatch(/\.resource-center-section-bar\s*\{[\s\S]*?gap:\s*4px;/);
+    expect(source.replace(/var\(--ui-[\w-]+,\s*([\d.]+px)\)/g, '$1')).toMatch(
+      /\.resource-center-section-bar\s*\{[\s\S]*?gap:\s*4px;/,
+    );
     expect(source).toMatch(/\.section-nav-item:not\(\.active\):hover/);
     expect(source).toMatch(/\.section-nav-item\.active\s*\{[\s\S]*?border-color:\s*var\(--surface-border-color/);
     expect(source).not.toContain('.section-nav-item.active::after');

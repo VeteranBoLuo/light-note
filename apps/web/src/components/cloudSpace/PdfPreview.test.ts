@@ -40,9 +40,18 @@ class ImmediateIntersectionObserver implements IntersectionObserver {
   }
 }
 
+const resizeObservers: PassiveResizeObserver[] = [];
 class PassiveResizeObserver implements ResizeObserver {
-  constructor(_callback: ResizeObserverCallback) {}
-  observe() {}
+  constructor(private readonly callback: ResizeObserverCallback) {
+    resizeObservers.push(this);
+  }
+  target?: Element;
+  observe(target: Element) {
+    this.target = target;
+  }
+  notify() {
+    this.callback([], this);
+  }
   disconnect() {}
   unobserve() {}
 }
@@ -52,6 +61,7 @@ let cleanup: (() => void) | undefined;
 beforeEach(() => {
   Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1024 });
   Object.defineProperty(window, 'innerHeight', { configurable: true, value: 768 });
+  resizeObservers.length = 0;
   pdfMocks.workerOptions.workerSrc = '';
   pdfMocks.getDocument.mockReset();
   vi.stubGlobal('IntersectionObserver', ImmediateIntersectionObserver);
@@ -145,6 +155,18 @@ describe('PdfPreview', () => {
     expect(host.querySelector('[aria-label="连续滚动"]')).toBeNull();
     expect(host.querySelector('[aria-label="适合页面"]')?.classList.contains('is-active')).toBe(true);
     expect(host.querySelector('[aria-label="适合宽度"]')?.classList.contains('is-active')).toBe(false);
+
+    // A density change can alter toolbar height without changing viewer width.
+    const viewer = host.querySelector<HTMLElement>('.pdf-preview__viewport')!;
+    Object.defineProperty(viewer, 'clientWidth', { configurable: true, value: 1000 });
+    Object.defineProperty(viewer, 'clientHeight', { configurable: true, value: 600 });
+    const observer = resizeObservers.find((observer) => observer.target === viewer)!;
+    observer.notify();
+    Object.defineProperty(viewer, 'clientHeight', { configurable: true, value: 500 });
+    observer.notify();
+    await vi.waitFor(() =>
+      expect(host.querySelector<HTMLCanvasElement>('.pdf-preview__canvas')?.style.height).toBe('468px'),
+    );
 
     const zoomInButton = host.querySelector<HTMLButtonElement>('[aria-label="放大（Ctrl + 滚轮）"]');
     zoomInButton?.click();

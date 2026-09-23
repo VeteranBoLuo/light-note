@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+cd "$(git rev-parse --show-toplevel)"
+node apps/web/scripts/check-density-raw.mjs --staged

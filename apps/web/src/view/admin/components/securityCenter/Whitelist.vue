@@ -61,8 +61,8 @@
     <BModal
       v-model:visible="whitelistModalVisible"
       title="添加白名单"
-      width="820px"
-      height="640px"
+      width="var(--ui-layout-820, 820px)"
+      height="var(--ui-layout-640, 640px)"
       top="50%"
       :mask-closable="false"
       @close="resetWhitelistModal"
@@ -164,7 +164,7 @@
   const userColumns = [
     { title: '昵称', key: 'alias' },
     { title: '邮箱', key: 'email' },
-    { title: '角色', key: 'role', width: '90px' },
+    { title: '角色', key: 'role', width: 'var(--ui-layout-90, 90px)' },
     { title: '最近IP', key: 'ip' },
   ];
 
@@ -359,27 +359,27 @@
     flex-direction: column;
     min-height: 0;
     height: 100%;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .whitelist-tabs {
     display: flex;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     flex-shrink: 0;
   }
 
   .whitelist-user-toolbar {
     display: grid;
-    grid-template-columns: minmax(180px, 240px) minmax(220px, 1fr);
-    gap: 10px;
+    grid-template-columns: minmax(var(--ui-layout-180, 180px), var(--ui-layout-240, 240px)) minmax(var(--ui-layout-220, 220px), 1fr);
+    gap: var(--ui-space-10, 10px);
     align-items: center;
   }
 
   .whitelist-ip-modal {
     display: grid;
-    grid-template-columns: minmax(200px, 260px) minmax(220px, 1fr);
-    gap: 10px;
-    padding: 10px;
+    grid-template-columns: minmax(var(--ui-layout-200, 200px), var(--ui-layout-260, 260px)) minmax(var(--ui-layout-220, 220px), 1fr);
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-10, 10px);
     border: 1px solid var(--security-border);
     border-radius: 8px;
     background: var(--security-sub-surface);
@@ -391,13 +391,13 @@
   .whitelist-user-modal {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     min-height: 0;
     flex: 1;
   }
 
   .whitelist-user-table {
-    height: 390px;
+    height: var(--ui-layout-390, 390px);
   }
 
   .whitelist-modal-footer {
@@ -405,10 +405,10 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 12px;
-    padding: 0 20px 16px;
+    gap: var(--ui-space-12, 12px);
+    padding: 0 var(--ui-space-20, 20px) var(--ui-space-16, 16px);
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   @media (max-width: @admin-bp-desktop) {

@@ -387,11 +387,11 @@
 <style scoped lang="less">
   .file-tag-config {
     width: 100%;
-    height: min(460px, calc(100vh - 190px));
-    min-height: 360px;
+    height: min(var(--ui-layout-460, 460px), calc(100vh - var(--ui-layout-190, 190px)));
+    min-height: var(--ui-layout-360, 360px);
     display: grid;
-    grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
-    gap: 16px;
+    grid-template-columns: minmax(var(--ui-layout-280, 280px), var(--ui-layout-340, 340px)) minmax(0, 1fr);
+    gap: var(--ui-space-16, 16px);
     color: var(--text-color);
 
     &.mobile {
@@ -412,7 +412,7 @@
     position: relative;
     min-width: 0;
     min-height: 0;
-    padding: 14px;
+    padding: var(--ui-space-14, 14px);
     border-radius: 8px;
     border: 1px solid var(--card-border-color);
     background: var(--background-color);
@@ -427,9 +427,9 @@
   .file-card {
     display: flex;
     align-items: center;
-    gap: 12px;
-    margin-bottom: 16px;
-    padding: 12px;
+    gap: var(--ui-space-12, 12px);
+    margin-bottom: var(--ui-space-16, 16px);
+    padding: var(--ui-space-12, 12px);
     border-radius: 8px;
     border: 1px solid color-mix(in srgb, var(--resource-file-color) 24%, var(--card-border-color));
     background: color-mix(in srgb, var(--resource-file-color) 8%, var(--background-color));
@@ -446,7 +446,7 @@
 
   .file-name {
     color: var(--text-color);
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
     font-weight: 600;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -458,19 +458,19 @@
   .tag-state,
   .empty {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .file-desc {
-    margin-top: 4px;
+    margin-top: var(--ui-space-4, 4px);
   }
 
   .panel-header {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 10px;
+    gap: var(--ui-space-12, 12px);
+    margin-bottom: var(--ui-space-10, 10px);
   }
 
   .library-header {
@@ -478,7 +478,7 @@
   }
 
   .title {
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
     font-weight: 600;
     color: var(--text-color);
   }
@@ -488,16 +488,16 @@
   }
 
   .panel-subtitle {
-    margin-top: 5px;
+    margin-top: var(--ui-space-5, 5px);
     line-height: 1.5;
   }
 
   .selected-overview {
     display: flex;
     align-items: center;
-    gap: 12px;
-    margin-bottom: 12px;
-    padding: 12px;
+    gap: var(--ui-space-12, 12px);
+    margin-bottom: var(--ui-space-12, 12px);
+    padding: var(--ui-space-12, 12px);
     border-radius: 8px;
     border: 1px solid color-mix(in srgb, var(--resource-tag-color) 22%, var(--card-border-color));
     background: color-mix(in srgb, var(--resource-tag-color) 7%, var(--background-color));
@@ -505,14 +505,14 @@
 
   .overview-count {
     flex: 0 0 auto;
-    width: 42px;
-    height: 42px;
+    width: var(--ui-layout-42, 42px);
+    height: var(--ui-layout-42, 42px);
     display: flex;
     align-items: center;
     justify-content: center;
     border-radius: 8px;
     color: var(--resource-tag-color);
-    font-size: 22px;
+    font-size: var(--ui-font-22, 22px);
     font-weight: 700;
     background: color-mix(in srgb, var(--resource-tag-color) 12%, var(--background-color));
   }
@@ -520,7 +520,7 @@
   .overview-text {
     min-width: 0;
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.5;
   }
 
@@ -550,24 +550,24 @@
     position: sticky;
     bottom: 0;
     display: flex;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     /* 抽屉 body 底部 padding 已归零，这里补齐呼吸位与安全区 */
-    padding: 10px 0 calc(12px + env(safe-area-inset-bottom, 0px));
-    margin-top: 8px;
+    padding: var(--ui-space-10, 10px) 0 calc(var(--ui-space-12, 12px) + env(safe-area-inset-bottom, 0px));
+    margin-top: var(--ui-space-8, 8px);
     background: var(--background-color);
     border-top: 1px solid var(--card-border-color);
   }
   .tag-config-footer :deep(.b_btn) {
     flex: 1 1 0;
-    min-height: 44px;
+    min-height: var(--ui-layout-44, 44px);
   }
 
   .chip-list {
     display: flex;
     flex-wrap: wrap;
     align-items: flex-start;
-    gap: 8px;
-    max-height: 210px;
+    gap: var(--ui-space-8, 8px);
+    max-height: var(--ui-layout-210, 210px);
     overflow: auto;
   }
 
@@ -585,7 +585,7 @@
 
     :deep(.b-chip__content) {
       width: 100%;
-      gap: 6px;
+      gap: var(--ui-space-6, 6px);
     }
   }
 
@@ -600,9 +600,9 @@
 
   :deep(.chip-close.b_btn) {
     flex: 0 0 auto;
-    width: 18px;
-    height: 18px;
-    min-height: 18px;
+    width: var(--ui-layout-18, 18px);
+    height: var(--ui-layout-18, 18px);
+    min-height: var(--ui-layout-18, 18px);
     padding: 0;
     border: 0;
     border-radius: 50%;
@@ -619,29 +619,29 @@
     display: flex;
     flex-wrap: wrap;
     justify-content: flex-end;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .tag-toolbar {
-    margin-bottom: 12px;
+    margin-bottom: var(--ui-space-12, 12px);
   }
 
   .tag-list {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     min-height: 0;
     overflow: auto;
-    padding-right: 2px;
+    padding-right: var(--ui-space-2, 2px);
   }
 
   .tag-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     min-width: 0;
-    padding: 10px;
+    padding: var(--ui-space-10, 10px);
     border-radius: 8px;
     border: 1px solid var(--card-border-color);
     background: var(--background-color);
@@ -666,7 +666,7 @@
   .tag-left {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     min-width: 0;
   }
 
@@ -675,7 +675,7 @@
   }
 
   .tag-name {
-    max-width: 220px;
+    max-width: var(--ui-layout-220, 220px);
     overflow: hidden;
     color: var(--text-color);
     font-weight: 600;
@@ -684,14 +684,14 @@
   }
 
   .tag-state {
-    margin-top: 3px;
+    margin-top: var(--ui-space-3, 3px);
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
 
   .empty {
-    padding: 16px 0;
+    padding: var(--ui-space-16, 16px) 0;
     text-align: center;
   }
 
@@ -703,14 +703,14 @@
   }
 
   .modal-footer {
-    padding: 0 20px 16px;
+    padding: 0 var(--ui-space-20, 20px) var(--ui-space-16, 16px);
     place-self: end;
     flex-shrink: 0;
   }
 
   @media (max-width: 900px) {
     .file-tag-config {
-      gap: 12px;
+      gap: var(--ui-space-12, 12px);
     }
 
     .file-panel {
@@ -722,7 +722,7 @@
     }
 
     .chip-list {
-      max-height: 96px;
+      max-height: var(--ui-layout-96, 96px);
     }
 
     .library-header {
@@ -734,14 +734,14 @@
     }
 
     .tag-name {
-      max-width: 150px;
+      max-width: var(--ui-layout-150, 150px);
     }
 
     .file-tag-config.mobile {
-      gap: 8px;
+      gap: var(--ui-space-8, 8px);
 
       .panel {
-        padding: 10px;
+        padding: var(--ui-space-10, 10px);
         border-radius: var(--mobile-control-radius, 10px);
         box-shadow: none;
       }
@@ -749,13 +749,13 @@
       .file-panel {
         display: grid;
         flex: 0 0 auto;
-        gap: 8px;
+        gap: var(--ui-space-8, 8px);
       }
 
       .file-card {
-        min-height: 44px;
+        min-height: var(--ui-layout-44, 44px);
         margin: 0;
-        padding: 7px 9px;
+        padding: var(--ui-space-7, 7px) var(--ui-space-9, 9px);
         border-color: var(--resource-file-color);
       }
 
@@ -777,22 +777,22 @@
       .title {
         display: flex;
         align-items: center;
-        gap: 7px;
-        font-size: 14px;
+        gap: var(--ui-space-7, 7px);
+        font-size: var(--ui-font-14, 14px);
       }
 
       .selected-count-badge {
-        min-width: 23px;
-        height: 23px;
+        min-width: var(--ui-layout-23, 23px);
+        height: var(--ui-layout-23, 23px);
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        padding: 0 6px;
+        padding: 0 var(--ui-space-6, 6px);
         box-sizing: border-box;
         border: 1px solid var(--resource-tag-color);
         border-radius: 999px;
         color: var(--resource-tag-color);
-        font-size: 12px;
+        font-size: var(--ui-font-12, 12px);
         font-variant-numeric: tabular-nums;
       }
 
@@ -801,17 +801,17 @@
         max-height: none;
         overflow-x: auto;
         overflow-y: hidden;
-        padding-bottom: 2px;
+        padding-bottom: var(--ui-space-2, 2px);
         scrollbar-width: thin;
       }
 
       .chip {
         flex: 0 0 auto;
-        max-width: min(72vw, 250px);
+        max-width: min(72vw, var(--ui-layout-250, 250px));
       }
 
       .empty {
-        padding: 4px 0;
+        padding: var(--ui-space-4, 4px) 0;
         text-align: left;
       }
 
@@ -822,7 +822,7 @@
       }
 
       .library-header {
-        min-height: 34px;
+        min-height: var(--ui-layout-34, 34px);
         flex-direction: row;
       }
 
@@ -832,7 +832,7 @@
       }
 
       .tag-toolbar {
-        margin: 8px 0;
+        margin: var(--ui-space-8, 8px) 0;
       }
 
       .tag-list {
@@ -841,12 +841,12 @@
       }
 
       .tag-row {
-        min-height: 58px;
-        padding: 8px 10px;
+        min-height: var(--ui-layout-58, 58px);
+        padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px);
       }
 
       .tag-name {
-        max-width: min(42vw, 170px);
+        max-width: min(42vw, var(--ui-layout-170, 170px));
       }
     }
   }

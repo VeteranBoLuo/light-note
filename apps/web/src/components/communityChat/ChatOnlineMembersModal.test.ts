@@ -207,7 +207,9 @@ describe('ChatOnlineMembersModal', () => {
     expect(source).toContain('class="chat-online-members-modal__avatar-slot"');
     expect(source).not.toMatch(/chat-online-members-modal__avatar\s+:deep\(/);
 
-    const columnWidth = Number(source.match(/--chat-online-members-avatar-column:\s*(\d+)px/)?.[1]);
+    const columnWidth = Number(
+      source.match(/--chat-online-members-avatar-column:\s*var\(--ui-layout-88,\s*(\d+)px\)/)?.[1],
+    );
     const maxArtSize = Math.max(...Object.values(AVATAR_FRAME_ARTWORK).map((artwork) => artwork.artSize));
     const requiredWidth = Math.ceil((maxArtSize * 38) / 64) + 6;
     expect(columnWidth).toBeGreaterThanOrEqual(requiredWidth);

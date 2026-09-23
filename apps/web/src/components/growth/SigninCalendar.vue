@@ -149,7 +149,7 @@
   .cal {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   /* 宽版(满级卡内):撑满左栏宽度、格子加高,填满留白并与右侧段位路线视觉对齐 */
   .cal-wide {
@@ -157,28 +157,28 @@
   }
   .cal-wide .cal-cell {
     aspect-ratio: auto;
-    min-height: 48px;
+    min-height: var(--ui-layout-48, 48px);
   }
   .cal-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     flex-wrap: wrap;
   }
   .cal-title {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     font-weight: 700;
   }
   .cal-nav {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .cal-arrow {
-    width: 24px;
-    min-width: 24px;
-    height: 24px !important;
+    width: var(--ui-control-24, 24px);
+    min-width: var(--ui-control-24, 24px);
+    height: var(--ui-control-24, 24px) !important;
     padding: 0 !important;
     border-radius: 7px;
     border: 1px solid color-mix(in srgb, var(--card-border-color) 55%, transparent);
@@ -186,7 +186,7 @@
     color: var(--text-color);
     cursor: pointer;
     line-height: 1;
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
   }
   .cal-arrow:hover:not(.disabled) {
     color: var(--primary-color);
@@ -197,21 +197,21 @@
     cursor: default;
   }
   .cal-month {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 600;
     color: var(--desc-color);
-    min-width: 96px;
+    min-width: var(--ui-layout-96, 96px);
     text-align: center;
   }
   .cal-weekrow,
   .cal-grid {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   .cal-wd {
     text-align: center;
-    font-size: 11.5px;
+    font-size: var(--ui-font-11_5, 11.5px);
     color: var(--desc-color);
   }
   .cal-cell {
@@ -219,7 +219,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 12.5px;
+    font-size: var(--ui-font-12_5, 12.5px);
     border-radius: 8px;
     color: var(--text-color);
     background: color-mix(in srgb, var(--primary-color) 4%, var(--background-color));
@@ -244,7 +244,7 @@
     box-shadow: inset 0 0 0 1.5px var(--resource-bookmark-color);
     position: relative;
     flex-direction: column;
-    gap: 1px;
+    gap: var(--ui-space-1, 1px);
   }
   .cal-cell.makeup-able:hover {
     background: color-mix(in srgb, var(--resource-bookmark-color) 12%, transparent);
@@ -253,12 +253,12 @@
     line-height: 1.2;
   }
   .cal-makeup-tag {
-    font-size: 9px;
+    font-size: var(--ui-font-9, 9px);
     line-height: 1;
     font-weight: 700;
     color: var(--resource-bookmark-color);
     background: color-mix(in srgb, var(--resource-bookmark-color) 15%, transparent);
-    padding: 0 4px;
+    padding: 0 var(--ui-space-4, 4px);
     border-radius: 3px;
     white-space: nowrap;
   }
@@ -266,14 +266,14 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
-    font-size: 12px;
+    gap: var(--ui-space-8, 8px);
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
   }
   .cal-dot-legend {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   .cal-legend-dot {
     width: 10px;

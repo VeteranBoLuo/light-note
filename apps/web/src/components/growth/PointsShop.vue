@@ -92,7 +92,7 @@
             class="ps-frame-preview"
             :frame-id="it.id"
             :src="avatarSrc"
-            :size="64"
+            :size="dimension(64, 'layout')"
             pause-when-offscreen
           />
           <div class="ps-item-body">
@@ -175,7 +175,12 @@
       <div v-if="!consumables.length && !frames.length" class="ps-empty">{{ t('growth.shopEmpty') }}</div>
 
       <!-- 兑换确认 -->
-      <BModal v-model:visible="confirmVisible" :title="t('growth.shopBuy')" width="360px" @ok="confirmBuy">
+      <BModal
+        v-model:visible="confirmVisible"
+        :title="t('growth.shopBuy')"
+        width="var(--ui-layout-360, 360px)"
+        @ok="confirmBuy"
+      >
         <div class="ps-confirm">{{ pending ? purchaseConfirmation(pending) : '' }}</div>
       </BModal>
     </template>
@@ -201,9 +206,11 @@
   import icon from '@/config/icon.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import { recordOperation } from '@/api/commonApi.ts';
+  import { useUiDensity } from '@/composables/useUiDensity';
   import { frameVariant, sortFramesByRarity } from '@/config/growthFrames';
 
   const { t, te } = useI18n();
+  const { dimension } = useUiDensity();
   const router = useRouter();
   const props = withDefaults(defineProps<{ readOnly?: boolean; focus?: string; showGoal?: boolean }>(), {
     readOnly: false,
@@ -516,7 +523,7 @@
   .ps {
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
   }
   .ps-item.is-focused {
     border-color: var(--primary-color);
@@ -529,11 +536,11 @@
     box-shadow: none;
   }
   .ps-state {
-    min-height: 180px;
+    min-height: var(--ui-layout-180, 180px);
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     color: var(--desc-color);
   }
   .ps-state--error {
@@ -543,42 +550,42 @@
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
     flex-wrap: wrap;
   }
   .ps-title {
     display: flex;
     align-items: center;
-    gap: 6px;
-    font-size: 16px;
+    gap: var(--ui-space-6, 6px);
+    font-size: var(--ui-font-16, 16px);
     font-weight: 700;
   }
   .ps-sub {
-    margin-top: 4px;
-    font-size: 12.5px;
+    margin-top: var(--ui-space-4, 4px);
+    font-size: var(--ui-font-12_5, 12.5px);
     color: var(--desc-color);
-    max-width: 420px;
+    max-width: var(--ui-layout-420, 420px);
   }
   .ps-balance {
     display: flex;
     flex-direction: column;
     align-items: flex-end;
-    gap: 2px;
-    padding: 8px 14px;
+    gap: var(--ui-space-2, 2px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-14, 14px);
     border-radius: 12px;
     background: color-mix(in srgb, #f59e0b 10%, var(--background-color));
     border: 1px solid color-mix(in srgb, #f59e0b 30%, transparent);
     white-space: nowrap;
   }
   .ps-balance-label {
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     color: var(--desc-color);
   }
   .ps-balance-num {
     display: flex;
     align-items: center;
-    gap: 4px;
-    font-size: 18px;
+    gap: var(--ui-space-4, 4px);
+    font-size: var(--ui-font-18, 18px);
     font-weight: 800;
     color: #d97706;
     font-variant-numeric: tabular-nums;
@@ -587,15 +594,15 @@
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
-    gap: 10px;
-    padding: 11px 12px;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-11, 11px) var(--ui-space-12, 12px);
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     background: var(--workspace-panel-bg-color);
   }
   .ps-store-bridge__icon {
-    width: 36px;
-    height: 36px;
+    width: var(--ui-layout-36, 36px);
+    height: var(--ui-layout-36, 36px);
     display: grid;
     place-items: center;
     border: 1px solid var(--primary-color);
@@ -607,44 +614,44 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
   .ps-store-bridge strong {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .ps-store-bridge span {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.45;
   }
   .ps-earn {
     display: flex;
     align-items: center;
-    gap: 6px;
-    font-size: 12px;
+    gap: var(--ui-space-6, 6px);
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
-    padding: 8px 12px;
+    padding: var(--ui-space-8, 8px) var(--ui-space-12, 12px);
     border-radius: 10px;
     background: color-mix(in srgb, var(--primary-color) 5%, var(--background-color));
     border: 1px dashed color-mix(in srgb, var(--primary-color) 30%, transparent);
   }
   .ps-visitor {
-    font-size: 12.5px;
+    font-size: var(--ui-font-12_5, 12.5px);
     color: var(--primary-color);
   }
   .ps-section-title {
-    font-size: 12.5px;
+    font-size: var(--ui-font-12_5, 12.5px);
     font-weight: 700;
     color: var(--desc-color);
     letter-spacing: 0.03em;
-    margin-top: 4px;
+    margin-top: var(--ui-space-4, 4px);
   }
   .ps-frame-toolbar {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px 16px;
-    margin-top: 4px;
+    gap: var(--ui-space-10, 10px) var(--ui-space-16, 16px);
+    margin-top: var(--ui-space-4, 4px);
     flex-wrap: wrap;
   }
   .ps-frame-toolbar .ps-section-title {
@@ -656,7 +663,7 @@
   .ps-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   @media (max-width: 560px) {
     .ps-store-bridge {
@@ -673,8 +680,8 @@
   .ps-item {
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    padding: 14px;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-14, 14px);
     border-radius: 14px;
     background: var(--background-color);
     border: 1px solid color-mix(in srgb, var(--card-border-color) 50%, transparent);
@@ -697,7 +704,7 @@
     color: var(--primary-color);
   }
   .ps-frame-grid {
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(var(--ui-layout-300, 300px), 1fr));
   }
   .ps-frame-item {
     display: grid;
@@ -706,10 +713,10 @@
       'preview foot';
     grid-template-columns: auto minmax(0, 1fr);
     align-items: center;
-    column-gap: 15px;
-    row-gap: 10px;
-    min-height: 112px;
-    padding: 16px;
+    column-gap: var(--ui-space-15, 15px);
+    row-gap: var(--ui-space-10, 10px);
+    min-height: var(--ui-layout-112, 112px);
+    padding: var(--ui-space-16, 16px);
     overflow: hidden;
   }
   .ps-frame-item--mint {
@@ -886,29 +893,29 @@
     min-width: 0;
   }
   .ps-item-name {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     font-weight: 700;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     flex-wrap: wrap;
   }
   .ps-frame-style {
-    padding: 2px 7px;
+    padding: var(--ui-space-2, 2px) var(--ui-space-7, 7px);
     border-radius: 999px;
     color: var(--primary-color);
     background: color-mix(in srgb, var(--primary-color) 9%, transparent);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     font-weight: 700;
     letter-spacing: 0.02em;
   }
   .ps-frame-rarity {
-    padding: 2px 7px;
+    padding: var(--ui-space-2, 2px) var(--ui-space-7, 7px);
     border: 1px solid #cbd5e1;
     border-radius: 999px;
     color: #475569;
     background: #f8fafc;
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     font-weight: 800;
     letter-spacing: 0.06em;
   }
@@ -929,38 +936,38 @@
     box-shadow: 0 2px 8px -4px rgba(76, 29, 149, 0.92);
   }
   .ps-frame-source {
-    padding: 2px 7px;
+    padding: var(--ui-space-2, 2px) var(--ui-space-7, 7px);
     border: 1px solid var(--primary-color);
     border-radius: 999px;
     color: var(--primary-color);
     background: var(--background-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     font-weight: 700;
   }
   .ps-tag-equipped {
-    font-size: 10.5px;
+    font-size: var(--ui-font-10_5, 10.5px);
     font-weight: 600;
-    padding: 1px 7px;
+    padding: var(--ui-space-1, 1px) var(--ui-space-7, 7px);
     border-radius: 999px;
     color: #fff;
     background: linear-gradient(135deg, var(--primary-color), #22d3ee);
   }
   .ps-item-desc {
-    margin-top: 4px;
-    font-size: 12px;
+    margin-top: var(--ui-space-4, 4px);
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
     line-height: 1.5;
   }
   .ps-item-limit {
-    margin-top: 8px;
+    margin-top: var(--ui-space-8, 8px);
   }
   .ps-achievement-requirement {
     display: flex;
     align-items: center;
-    gap: 5px;
-    margin-top: 5px;
+    gap: var(--ui-space-5, 5px);
+    margin-top: var(--ui-space-5, 5px);
     color: var(--primary-color);
-    font-size: 11.5px;
+    font-size: var(--ui-font-11_5, 11.5px);
     font-weight: 600;
     line-height: 1.4;
   }
@@ -968,13 +975,13 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .ps-item-cost {
     display: inline-flex;
     align-items: center;
-    gap: 3px;
-    font-size: 13px;
+    gap: var(--ui-space-3, 3px);
+    font-size: var(--ui-font-13, 13px);
     font-weight: 700;
     color: #d97706;
     font-variant-numeric: tabular-nums;
@@ -987,38 +994,38 @@
     min-width: 0;
     display: inline-flex;
     align-items: center;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     flex-wrap: wrap;
   }
   .ps-item-owned {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 700;
   }
   .ps-item-unavailable {
     color: var(--desc-color);
-    font-size: 10.5px;
+    font-size: var(--ui-font-10_5, 10.5px);
     font-weight: 500;
     white-space: nowrap;
   }
   .ps-achievement-progress {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
     color: var(--primary-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 700;
   }
   .ps-empty {
     text-align: center;
     color: var(--desc-color);
-    font-size: 13px;
-    padding: 20px 0;
+    font-size: var(--ui-font-13, 13px);
+    padding: var(--ui-space-20, 20px) 0;
   }
   .ps-confirm {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     line-height: 1.6;
-    padding: 4px 2px;
+    padding: var(--ui-space-4, 4px) var(--ui-space-2, 2px);
   }
   @media (max-width: 560px) {
     .ps-frame-toolbar {

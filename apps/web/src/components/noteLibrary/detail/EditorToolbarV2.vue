@@ -308,10 +308,10 @@
   .editor-toolbar-v2 {
     display: flex;
     min-width: 0;
-    min-height: 40px;
+    min-height: var(--ui-control-40, 40px);
     align-items: center;
-    gap: 6px;
-    padding: 5px 10px;
+    gap: var(--ui-space-6, 6px);
+    padding: var(--ui-space-5, 5px) var(--ui-space-10, 10px);
     border-bottom: 1px solid var(--surface-border-color);
     background: var(--note-editor-header-bg, var(--surface-panel-bg, var(--background-color)));
     box-sizing: border-box;
@@ -321,21 +321,21 @@
   .editor-toolbar-v2__group {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
     flex: 0 0 auto;
   }
 
   .editor-toolbar-v2__divider {
     width: 1px;
-    height: 18px;
-    margin: 0 2px;
+    height: var(--ui-layout-18, 18px);
+    margin: 0 var(--ui-space-2, 2px);
     background: var(--surface-divider-color, var(--surface-border-color));
     flex: 0 0 auto;
   }
 
   :deep(.editor-toolbar-v2__button) {
-    min-width: 30px;
-    padding: 0 7px;
+    min-width: var(--ui-control-30, 30px);
+    padding: 0 var(--ui-space-7, 7px);
     border: 1px solid var(--surface-border-color) !important;
     background: var(--surface-page-bg, var(--background-color));
     color: var(--text-color);
@@ -363,18 +363,18 @@
   }
 
   :deep(.editor-toolbar-v2__button.is-menu) {
-    gap: 5px;
-    min-width: 74px;
+    gap: var(--ui-space-5, 5px);
+    min-width: var(--ui-layout-74, 74px);
   }
 
   .editor-toolbar-v2__button-label {
-    max-width: 90px;
+    max-width: var(--ui-layout-90, 90px);
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
   .editor-toolbar-v2__chevron {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1;
   }
 
@@ -387,22 +387,22 @@
   /* 富文本没有右侧视图切换，桌面端压成 36px 即可；Markdown 保留 40px，
      避免分栏切换和格式按钮挤在一起。移动端仍使用独立的大触控尺寸。 */
   .editor-toolbar-v2.is-compact {
-    min-height: 36px;
-    gap: 5px;
-    padding: 3px 8px;
+    min-height: var(--ui-control-36, 36px);
+    gap: var(--ui-space-5, 5px);
+    padding: var(--ui-space-3, 3px) var(--ui-space-8, 8px);
 
     .editor-toolbar-v2__divider {
-      height: 16px;
-      margin-inline: 1px;
+      height: var(--ui-layout-16, 16px);
+      margin-inline: var(--ui-space-1, 1px);
     }
   }
 
   .editor-toolbar-v2.is-mobile {
     display: grid;
     grid-template-columns: repeat(6, minmax(0, 1fr));
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     min-height: 56px;
-    padding: 5px 8px;
+    padding: var(--ui-space-5, 5px) var(--ui-space-8, 8px);
     overflow: hidden;
   }
 
@@ -412,12 +412,12 @@
     min-height: 46px;
     height: 46px;
     flex-direction: column;
-    gap: 1px;
-    padding: 3px 2px;
+    gap: var(--ui-space-1, 1px);
+    padding: var(--ui-space-3, 3px) var(--ui-space-2, 2px);
     border: 1px solid var(--surface-border-color) !important;
     background: transparent;
     color: var(--text-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     line-height: 1.15;
   }
 
@@ -450,7 +450,7 @@
   }
 
   .editor-toolbar-v2.is-narrow-840 :deep(.editor-toolbar-v2__button.is-menu) {
-    min-width: 30px;
+    min-width: var(--ui-control-30, 30px);
   }
 
   .editor-toolbar-v2.is-narrow-840 .editor-toolbar-v2__divider {
@@ -458,7 +458,7 @@
   }
 
   .editor-toolbar-v2.is-narrow-680 .editor-toolbar-v2__group {
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
 
   .editor-toolbar-v2.is-narrow-680 .editor-toolbar-v2__divider {

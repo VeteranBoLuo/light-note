@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 const source = readFileSync(
   resolve(process.cwd(), 'src/components/noteLibrary/library/NoteReadonlyPreview.vue'),
   'utf8',
-);
+).replace(/var\(--ui-[\w-]+, ([\d.]+px)\)/g, '$1');
 const commonStyles = readFileSync(resolve(process.cwd(), 'src/assets/css/common.less'), 'utf8');
 
 describe('NoteReadonlyPreview', () => {

@@ -1,4 +1,7 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync as rawReadFileSync } from 'node:fs';
+import { standardDensitySource } from '@/test/standardDensitySource';
+
+const readFileSync = (path: string, encoding: 'utf8') => standardDensitySource(rawReadFileSync(path, encoding));
 import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -108,7 +111,7 @@ describe('note share URL', () => {
     expect(treeSource).toContain('.public-note-tree__toggle.is-expanded .public-note-tree__chevron');
     expect(treeSource).toContain('box-shadow: inset 3px 0 0 var(--primary-color)');
     expect(modalSource).toContain('class="note-share-modal__new-link-row"');
-    expect(modalSource).toContain('gap: 10px');
+    expect(modalSource.replace(/var\(--ui-[\w-]+, ([\d.]+px)\)/g, '$1')).toContain('gap: 10px');
     expect(modalSource).toContain('@click="copyRecordLink(record)"');
     expect(modalSource).toContain('readOwnedNoteShareToken(record.id, record.tokenHint)');
     expect(modalSource).toContain("okText: t('noteShare.rotateAndCopy')");

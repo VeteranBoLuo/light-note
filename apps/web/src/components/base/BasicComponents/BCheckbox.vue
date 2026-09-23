@@ -118,11 +118,11 @@
   .b-checkbox {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     cursor: pointer;
     user-select: none;
     -webkit-user-select: none;
-    padding: 4px;
+    padding: var(--ui-space-4, 4px);
 
     &.is-disabled {
       cursor: not-allowed;
@@ -138,8 +138,8 @@
   }
 
   .b-checkbox__inner {
-    width: 16px;
-    height: 16px;
+    width: var(--ui-layout-16, 16px);
+    height: var(--ui-layout-16, 16px);
     border: 2px solid var(--card-border-color);
     border-radius: 4px;
     display: flex;
@@ -165,12 +165,16 @@
   }
 
   .b-checkbox__icon {
+    width: var(--ui-layout-12, 12px);
+    height: var(--ui-layout-12, 12px);
+    max-width: 100%;
+    max-height: 100%;
     color: #fff;
     display: block;
   }
 
   .b-checkbox__label {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     color: var(--text-color);
     line-height: 1.4;
   }

@@ -213,14 +213,14 @@
     { value: 'ended', label: t('todoPlanDiagnosticsAdmin.statusEnded') },
   ]);
   const columns = computed<Column[]>(() => [
-    { key: 'series', title: t('todoPlanDiagnosticsAdmin.series'), width: 'minmax(220px, 1.5fr)' },
-    { key: 'status', title: t('todoPlanDiagnosticsAdmin.status'), width: '90px' },
-    { key: 'rule', title: t('todoPlanDiagnosticsAdmin.rule'), width: '150px' },
-    { key: 'instances', title: t('todoPlanDiagnosticsAdmin.instances'), width: '130px' },
-    { key: 'generatedThroughDate', title: t('todoPlanDiagnosticsAdmin.generatedThrough'), width: '120px' },
-    { key: 'nextReminderAtUtc', title: t('todoPlanDiagnosticsAdmin.nextReminder'), width: '160px' },
-    { key: 'jobs', title: t('todoPlanDiagnosticsAdmin.jobs'), width: '150px' },
-    { key: 'detail', title: t('common.detail'), width: '76px', ellipsis: false },
+    { key: 'series', title: t('todoPlanDiagnosticsAdmin.series'), width: 'minmax(var(--ui-layout-220, 220px), 1.5fr)' },
+    { key: 'status', title: t('todoPlanDiagnosticsAdmin.status'), width: 'var(--ui-layout-90, 90px)' },
+    { key: 'rule', title: t('todoPlanDiagnosticsAdmin.rule'), width: 'var(--ui-layout-150, 150px)' },
+    { key: 'instances', title: t('todoPlanDiagnosticsAdmin.instances'), width: 'var(--ui-layout-130, 130px)' },
+    { key: 'generatedThroughDate', title: t('todoPlanDiagnosticsAdmin.generatedThrough'), width: 'var(--ui-layout-120, 120px)' },
+    { key: 'nextReminderAtUtc', title: t('todoPlanDiagnosticsAdmin.nextReminder'), width: 'var(--ui-layout-160, 160px)' },
+    { key: 'jobs', title: t('todoPlanDiagnosticsAdmin.jobs'), width: 'var(--ui-layout-150, 150px)' },
+    { key: 'detail', title: t('common.detail'), width: 'var(--ui-layout-76, 76px)', ellipsis: false },
   ]);
 
   function n(value: unknown) {
@@ -306,14 +306,14 @@
 
 <style scoped lang="less">
   .todo-plan-diagnostics__search {
-    width: min(320px, 42vw);
+    width: min(var(--ui-layout-320, 320px), 42vw);
   }
   .todo-plan-diagnostics__status {
-    width: 140px;
+    width: var(--ui-layout-140, 140px);
   }
   .todo-plan-diagnostics__series-cell {
     display: grid;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
     min-width: 0;
   }
   .todo-plan-diagnostics__series-cell small {
@@ -329,10 +329,10 @@
   .todo-plan-diagnostics__expanded {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px 18px;
-    padding: 10px 16px;
+    gap: var(--ui-space-8, 8px) var(--ui-space-18, 18px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-16, 16px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .admin-stat-card.has-warning {
     border-color: #d97706 !important;

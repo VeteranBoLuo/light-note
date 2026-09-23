@@ -2,7 +2,7 @@
   <div class="workbenches-card">
     <div class="card-header">
       <b :class="['card-title', titleType && `card-title--${titleType}`]">{{ title }}</b>
-      <div style="position: absolute; right: 10px; top: 10px">
+      <div style="position: absolute; right: var(--ui-space-10, 10px); top: var(--ui-space-10, 10px)">
         <slot name="rightHeader" />
       </div>
     </div>
@@ -22,7 +22,7 @@
 <style lang="less" scoped>
   .workbenches-card {
     position: relative;
-    padding: 10px;
+    padding: var(--ui-space-10, 10px);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
     background: linear-gradient(160deg, var(--workbench-table-inner-bg-start), var(--workbench-table-inner-bg-end));
     border: 1px solid var(--workbench-table-inner-border);
@@ -33,13 +33,13 @@
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     overflow: hidden;
   }
 
   .card-header {
     flex-shrink: 0;
-    padding: 0 2px 8px;
+    padding: 0 var(--ui-space-2, 2px) var(--ui-space-8, 8px);
     border-bottom: 1px solid color-mix(in srgb, var(--workbench-table-inner-border) 72%, transparent);
   }
 
@@ -47,8 +47,8 @@
     --title-accent: var(--noteType-hover-color);
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    font-size: 14px;
+    gap: var(--ui-space-8, 8px);
+    font-size: var(--ui-font-14, 14px);
     line-height: 1.2;
 
     &::before {
@@ -82,6 +82,6 @@
     flex: 1;
     min-height: 0;
     overflow: hidden;
-    padding-top: 2px;
+    padding-top: var(--ui-space-2, 2px);
   }
 </style>

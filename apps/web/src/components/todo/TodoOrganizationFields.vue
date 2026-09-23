@@ -26,7 +26,11 @@
         @change="changeTags"
       >
         <template #dropdown-footer>
-          <BButton class="todo-organization-fields__add-tag" :disabled="disabled || tagIds.length >= 4" @click="tagDialogOpen = true">
+          <BButton
+            class="todo-organization-fields__add-tag"
+            :disabled="disabled || tagIds.length >= 4"
+            @click="tagDialogOpen = true"
+          >
             <SvgIcon :src="icon.common.add" size="16" />
             <span>{{ t('navigation.newTag') }}</span>
           </BButton>
@@ -86,9 +90,13 @@
     { value: '', label: t('todoWorkspace.unassigned') },
     ...lists.value.map((list) => ({ value: list.id, label: list.name })),
   ]);
-  const tagOptions = computed(() => tags.value.map((tag) => ({
-    value: tag.id, label: tag.name, disabled: props.tagIds.length >= 4 && !props.tagIds.includes(tag.id),
-  })));
+  const tagOptions = computed(() =>
+    tags.value.map((tag) => ({
+      value: tag.id,
+      label: tag.name,
+      disabled: props.tagIds.length >= 4 && !props.tagIds.includes(tag.id),
+    })),
+  );
   function changeTags(value: string[]) {
     if (!props.disabled && (value.length <= 4 || value.length < props.tagIds.length)) emit('update:tagIds', value);
   }
@@ -111,7 +119,8 @@
   async function tagCreated(id: string) {
     const owner = user.id;
     await load();
-    if (owner === user.id && !props.disabled && props.tagIds.length < 4) emit('update:tagIds', [...new Set([...props.tagIds, id])]);
+    if (owner === user.id && !props.disabled && props.tagIds.length < 4)
+      emit('update:tagIds', [...new Set([...props.tagIds, id])]);
   }
   watch(
     () => user.id,
@@ -129,31 +138,31 @@
     display: flex;
     flex-wrap: wrap;
     align-items: flex-start;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
     min-width: 0;
   }
   .todo-organization-fields > label,
   .todo-organization-fields__tags {
-    flex: 1 1 260px;
+    flex: 1 1 var(--ui-layout-260, 260px);
     min-width: 0;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 500;
   }
   .todo-organization-fields__tags {
     display: grid;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .todo-organization-fields :deep(.b-select .select-trigger),
   .todo-organization-fields :deep(.b-select.is-multiple .select-trigger) {
     box-sizing: border-box;
-    min-height: 42px;
-    padding: 6px 32px 6px 11px;
-    font-size: 13px;
+    min-height: var(--ui-layout-42, 42px);
+    padding: var(--ui-space-6, 6px) var(--ui-space-32, 32px) var(--ui-space-6, 6px) var(--ui-space-11, 11px);
+    font-size: var(--ui-font-13, 13px);
     font-weight: 400;
     border-radius: 8px;
   }
   .todo-organization-fields label {
     display: grid;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 </style>

@@ -22,7 +22,7 @@
                 v-if="equippedFrameId"
                 :frame-id="equippedFrameId"
                 :src="user.headPicture || icon.navigation.user"
-                :size="48"
+                :size="dimension(48, 'icon')"
                 :decorative="false"
               />
               <svg-icon v-else img-id="viewUserImg" size="58" :src="user.headPicture || icon.navigation.user" />
@@ -243,6 +243,7 @@
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import { frameVariant } from '@/config/growthFrames';
   import { usePwaInstall } from '@/composables/usePwaInstall';
+  import { useUiDensity } from '@/composables/useUiDensity';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import { isLightNoteAndroidApp } from '@/utils/androidBridge';
   import { useAndroidAppUpdate } from '@/composables/useAndroidAppUpdate';
@@ -257,6 +258,7 @@
   const ActionCardModal = defineAsyncComponent(() => import('@/components/base/ActionCardModal.vue'));
 
   const { t } = useI18n();
+  const { dimension } = useUiDensity();
   const bookmark = bookmarkStore();
   const menuVisible = ref(false);
   const userVisible = ref(false);
@@ -420,14 +422,14 @@
 
   .person-menu-scroll {
     min-height: 0;
-    padding: 2px 0 calc(24px + env(safe-area-inset-bottom));
+    padding: var(--ui-space-2, 2px) 0 calc(var(--ui-space-24, 24px) + env(safe-area-inset-bottom));
     overflow-y: auto;
     overscroll-behavior-y: contain;
     flex: 1 1 auto;
   }
 
   .profile-card {
-    padding: 20px 16px 16px;
+    padding: var(--ui-space-20, 20px) var(--ui-space-16, 16px) var(--ui-space-16, 16px);
     box-sizing: border-box;
     border: 1px solid var(--surface-border-color);
     border-radius: 18px;
@@ -438,14 +440,14 @@
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .profile-card__avatar {
-    width: 72px;
-    min-width: 72px;
-    height: 72px;
-    flex: 0 0 72px;
+    width: var(--ui-layout-72, 72px);
+    min-width: var(--ui-layout-72, 72px);
+    height: var(--ui-layout-72, 72px);
+    flex: 0 0 var(--ui-layout-72, 72px);
     padding: 0;
     overflow: visible;
     border: 0;
@@ -475,7 +477,7 @@
     display: flex;
     flex: 1 1 auto;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
 
   .profile-card__copy strong,
@@ -488,30 +490,30 @@
 
   .profile-card__copy strong {
     color: var(--text-color);
-    font-size: 20px;
+    font-size: var(--ui-font-20, 20px);
     line-height: 1.25;
   }
 
   .profile-card__copy span {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.4;
   }
 
   .profile-card__edit {
-    min-height: 32px;
+    min-height: var(--ui-layout-32, 32px);
     flex: 0 0 auto;
-    gap: 5px;
-    padding: 0 10px;
+    gap: var(--ui-space-5, 5px);
+    padding: 0 var(--ui-space-10, 10px);
     border: 1px solid var(--surface-border-color);
     border-radius: 10px;
     color: var(--primary-color);
     background: var(--card-background);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .profile-card__stats {
-    margin-top: 14px;
+    margin-top: var(--ui-space-14, 14px);
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     border-top: 1px solid var(--surface-divider-color);
@@ -519,21 +521,21 @@
   }
 
   .profile-card__assets {
-    margin-top: 12px;
+    margin-top: var(--ui-space-12, 12px);
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .profile-card__stat {
     min-width: 0;
-    min-height: 58px;
+    min-height: var(--ui-layout-58, 58px);
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 3px;
-    padding: 7px 4px;
+    gap: var(--ui-space-3, 3px);
+    padding: var(--ui-space-7, 7px) var(--ui-space-4, 4px);
     box-sizing: border-box;
   }
 
@@ -551,26 +553,26 @@
 
   .profile-card__stat strong {
     color: var(--text-color);
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
     line-height: 1.25;
   }
 
   .profile-card__stat span {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     line-height: 1.25;
   }
 
   .profile-card__growth {
     width: 100%;
     height: auto;
-    min-height: 54px;
+    min-height: var(--ui-layout-54, 54px);
     margin-top: 0;
     display: flex;
     align-items: center;
     justify-content: flex-start;
-    gap: 10px;
-    padding: 11px 2px 0;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-11, 11px) var(--ui-space-2, 2px) 0;
     border: 0;
     border-radius: 0;
     color: var(--text-color);
@@ -581,12 +583,12 @@
   }
 
   .profile-card__growth-icon {
-    width: 34px;
-    height: 34px;
+    width: var(--ui-layout-34, 34px);
+    height: var(--ui-layout-34, 34px);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    flex: 0 0 34px;
+    flex: 0 0 var(--ui-layout-34, 34px);
     border: 1px solid var(--surface-border-color);
     border-radius: 11px;
     color: var(--primary-color);
@@ -598,7 +600,7 @@
     display: flex;
     flex: 1 1 auto;
     flex-direction: column;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
 
   .profile-card__growth-main {
@@ -609,36 +611,36 @@
   .profile-card__growth-main {
     min-width: 0;
     justify-content: space-between;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .profile-card__growth-main strong {
     min-width: 0;
     overflow: hidden;
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .profile-card__growth-main > span {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     white-space: nowrap;
   }
 
   .profile-section {
-    --mobile-row-min-height: 60px;
-    --mobile-row-padding-y: 9px;
-    --mobile-row-padding-x: 12px;
+    --mobile-row-min-height: var(--ui-layout-60, 60px);
+    --mobile-row-padding-y: var(--ui-space-9, 9px);
+    --mobile-row-padding-x: var(--ui-space-12, 12px);
 
-    margin-top: 18px;
+    margin-top: var(--ui-space-18, 18px);
   }
 
   .profile-section h2 {
-    margin: 0 0 8px 4px;
+    margin: 0 0 var(--ui-space-8, 8px) var(--ui-space-4, 4px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 600;
     letter-spacing: 0.02em;
   }
@@ -647,23 +649,23 @@
     width: 100%;
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .profile-quick-item {
     width: 100%;
     min-width: 0;
-    height: 76px;
+    height: var(--ui-layout-76, 76px);
     display: flex;
     flex-direction: column;
     justify-content: center;
-    gap: 7px;
-    padding: 8px 3px;
+    gap: var(--ui-space-7, 7px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-3, 3px);
     border: 1px solid var(--surface-border-color);
     border-radius: 14px;
     color: var(--text-color);
     background: var(--card-background);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 600;
     line-height: 1.25;
     text-align: center;
@@ -679,12 +681,12 @@
   }
 
   .profile-entry-icon {
-    width: 32px;
-    height: 32px;
+    width: var(--ui-layout-32, 32px);
+    height: var(--ui-layout-32, 32px);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    flex: 0 0 32px;
+    flex: 0 0 var(--ui-layout-32, 32px);
     border: 1px solid var(--surface-border-color);
     border-radius: 10px;
     color: var(--primary-color);
@@ -699,7 +701,7 @@
     display: inline-block;
     width: 7px;
     height: 7px;
-    margin-left: 6px;
+    margin-left: var(--ui-space-6, 6px);
     border-radius: 50%;
     background: #dc2626;
     vertical-align: middle;
@@ -707,9 +709,9 @@
 
   .profile-session-action {
     width: 100%;
-    min-height: 46px;
-    margin-top: 18px;
-    gap: 8px;
+    min-height: var(--ui-layout-46, 46px);
+    margin-top: var(--ui-space-18, 18px);
+    gap: var(--ui-space-8, 8px);
     border: 1px solid #fecaca;
     border-radius: 14px;
     color: #b91c1c;
@@ -722,7 +724,7 @@
   }
 
   :deep(.phone-container--embedded .phone-body) {
-    padding-top: 10px;
+    padding-top: var(--ui-space-10, 10px);
     overflow: hidden;
   }
 
@@ -739,28 +741,28 @@
 
   @media (max-width: 360px) {
     .profile-card {
-      padding: 18px 14px 14px;
+      padding: var(--ui-space-18, 18px) var(--ui-space-14, 14px) var(--ui-space-14, 14px);
     }
 
     .profile-card__avatar {
-      width: 66px;
-      min-width: 66px;
-      height: 66px;
+      width: var(--ui-layout-66, 66px);
+      min-width: var(--ui-layout-66, 66px);
+      height: var(--ui-layout-66, 66px);
     }
 
     .profile-card__edit {
-      width: 32px;
+      width: var(--ui-layout-32, 32px);
       padding: 0;
       font-size: 0;
     }
 
     .profile-quick-grid {
-      gap: 6px;
+      gap: var(--ui-space-6, 6px);
     }
 
     .profile-quick-item {
-      height: 72px;
-      font-size: 10px;
+      height: var(--ui-layout-72, 72px);
+      font-size: var(--ui-font-10, 10px);
     }
   }
 </style>

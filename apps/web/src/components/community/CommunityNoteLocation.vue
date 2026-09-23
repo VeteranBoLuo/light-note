@@ -26,7 +26,7 @@
             v-for="item in visibleItems"
             :key="item.id"
             class="note-location-row"
-            :style="{ paddingLeft: `${(item.depth - 1) * 16}px` }"
+            :style="{ paddingLeft: `${(item.depth - 1) * dimension(16)}px` }"
           >
             <BButton
               v-if="item.children?.length"
@@ -68,6 +68,8 @@
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
+  import { useUiDensity } from '@/composables/useUiDensity';
+  const { dimension } = useUiDensity();
   const triggerButton = ref<{ $el: HTMLButtonElement } | null>(null);
   const props = defineProps<{ disabled?: boolean }>();
   const value = defineModel<string>('value', { default: '' });
@@ -188,10 +190,10 @@
     min-width: 0;
   }
   .note-location-panel {
-    width: min(520px, calc(100vw - 48px));
-    max-height: min(320px, 50vh);
+    width: min(var(--ui-layout-520, 520px), calc(100vw - var(--ui-layout-48, 48px)));
+    max-height: min(var(--ui-layout-320, 320px), 50vh);
     overflow-y: auto;
-    padding: 8px;
+    padding: var(--ui-space-8, 8px);
     box-sizing: border-box;
   }
   .note-location-row {
@@ -217,8 +219,8 @@
   }
   .note-location-expand,
   .note-location-spacer {
-    flex: 0 0 32px;
-    width: 32px;
+    flex: 0 0 var(--ui-layout-32, 32px);
+    width: var(--ui-layout-32, 32px);
     padding: 0;
   }
   .collapsed {
@@ -226,8 +228,8 @@
   }
   .note-location-error {
     display: grid;
-    gap: 8px;
-    padding: 8px;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-8, 8px);
     color: var(--desc-color);
   }
   @media (max-width: 768px) {

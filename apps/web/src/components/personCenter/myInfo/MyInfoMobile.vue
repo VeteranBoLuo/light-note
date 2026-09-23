@@ -44,7 +44,7 @@
 </script>
 <style scoped>
   .mobile-profile-editor {
-    padding: 24px 20px;
-    padding-bottom: calc(24px + env(safe-area-inset-bottom));
+    padding: var(--ui-space-24, 24px) var(--ui-space-20, 20px);
+    padding-bottom: calc(var(--ui-space-24, 24px) + env(safe-area-inset-bottom));
   }
 </style>

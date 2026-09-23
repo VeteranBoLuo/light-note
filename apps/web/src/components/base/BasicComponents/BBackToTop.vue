@@ -46,8 +46,8 @@
     right: 24px;
     bottom: 24px;
     z-index: 20;
-    width: 42px;
-    height: 42px;
+    width: var(--ui-layout-42, 42px);
+    height: var(--ui-layout-42, 42px);
     padding: 0;
     border-radius: 50%;
     background: var(--workspace-open-canvas);

@@ -3,7 +3,7 @@
     v-model:visible="guideVisible"
     :title="t('pwa.guideTitle')"
     :show-footer="false"
-    width="760px"
+    width="var(--ui-layout-760, 760px)"
     modal-class="pwa-install-modal"
     mask-class="pwa-install-mask"
   >
@@ -312,8 +312,8 @@
   }
 
   :global(.pwa-install-modal .modal-header) {
-    min-height: 72px;
-    padding: 15px 20px;
+    min-height: var(--ui-layout-72, 72px);
+    padding: var(--ui-space-15, 15px) var(--ui-space-20, 20px);
     border-color: rgba(255, 255, 255, 0.07);
     background: rgba(10, 11, 20, 0.88);
   }
@@ -323,7 +323,7 @@
      2) 各平台步骤长短不一,高度自适应会让弹框在切 tab 时上下跳。
      移动端窄屏分区滚动反而难用,下面的 767px 断点会整体还原成一起滚。 */
   :global(.pwa-install-modal.modal-view) {
-    height: min(680px, calc(100% - 32px));
+    height: min(var(--ui-layout-680, 680px), calc(100% - var(--ui-layout-32, 32px)));
   }
 
   :global(.pwa-install-modal .modal-content) {
@@ -333,8 +333,8 @@
   }
 
   :global(.pwa-install-modal .modal-close) {
-    width: 34px;
-    height: 34px;
+    width: var(--ui-control-34, 34px);
+    height: var(--ui-control-34, 34px);
     border: 1px solid rgba(255, 255, 255, 0.07);
     border-radius: 11px;
     color: #8e90a3;
@@ -359,14 +359,14 @@
   .pwa-guide__brand-head {
     display: flex;
     align-items: center;
-    gap: 11px;
+    gap: var(--ui-space-11, 11px);
     min-width: 0;
   }
 
   .pwa-guide__brand-mark {
-    width: 40px;
-    height: 40px;
-    flex: 0 0 40px;
+    width: var(--ui-layout-40, 40px);
+    height: var(--ui-layout-40, 40px);
+    flex: 0 0 var(--ui-layout-40, 40px);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -381,12 +381,12 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
 
   .pwa-guide__brand-head span {
     color: #777a92;
-    font-size: 9px;
+    font-size: var(--ui-font-9, 9px);
     font-weight: 700;
     line-height: 1.2;
     letter-spacing: 0.16em;
@@ -395,7 +395,7 @@
   .pwa-guide__brand-head strong {
     overflow: hidden;
     color: #f7f7ff;
-    font-size: 16px;
+    font-size: var(--ui-font-16, 16px);
     line-height: 1.3;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -405,12 +405,12 @@
     position: relative;
     isolation: isolate;
     flex: 0 0 auto;
-    min-height: 184px;
-    padding: 24px;
+    min-height: var(--ui-layout-184, 184px);
+    padding: var(--ui-space-24, 24px);
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 292px;
+    grid-template-columns: minmax(0, 1fr) var(--ui-layout-292, 292px);
     align-items: center;
-    gap: 24px;
+    gap: var(--ui-space-24, 24px);
     overflow: hidden;
     border-bottom: 1px solid rgba(255, 255, 255, 0.07);
     background:
@@ -455,45 +455,45 @@
     width: max-content;
     display: inline-flex;
     align-items: center;
-    min-height: 25px;
-    padding: 0 10px;
+    min-height: var(--ui-layout-25, 25px);
+    padding: 0 var(--ui-space-10, 10px);
     border: 1px solid rgba(151, 147, 255, 0.2);
     border-radius: 999px;
     color: #b9b6ff;
     background: rgba(97, 92, 237, 0.1);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     font-weight: 650;
     letter-spacing: 0.04em;
   }
 
   .pwa-guide__hero h2 {
-    margin: 12px 0 6px;
-    font-size: 23px;
+    margin: var(--ui-space-12, 12px) 0 var(--ui-space-6, 6px);
+    font-size: var(--ui-font-23, 23px);
     line-height: 1.3;
     letter-spacing: -0.02em;
   }
 
   .pwa-guide__hero p {
-    max-width: 410px;
+    max-width: var(--ui-layout-410, 410px);
     margin: 0;
     color: #999bae;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.65;
   }
 
   .pwa-guide__benefits {
-    margin-top: 14px;
+    margin-top: var(--ui-space-14, 14px);
     display: flex;
     flex-wrap: wrap;
-    gap: 8px 14px;
+    gap: var(--ui-space-8, 8px) var(--ui-space-14, 14px);
   }
 
   .pwa-guide__benefits span {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
     color: #c7c8d5;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .pwa-guide__benefits :deep(.svg-icon) {
@@ -503,11 +503,11 @@
   .pwa-guide__action {
     position: relative;
     min-width: 0;
-    padding: 16px;
+    padding: var(--ui-space-16, 16px);
     display: grid;
-    grid-template-columns: 42px minmax(0, 1fr);
+    grid-template-columns: var(--ui-layout-42, 42px) minmax(0, 1fr);
     align-items: center;
-    gap: 11px;
+    gap: var(--ui-space-11, 11px);
     overflow: hidden;
     border: 1px solid rgba(151, 147, 255, 0.16);
     border-radius: 18px;
@@ -528,8 +528,8 @@
   }
 
   .pwa-guide__action-icon {
-    width: 42px;
-    height: 42px;
+    width: var(--ui-layout-42, 42px);
+    height: var(--ui-layout-42, 42px);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -554,14 +554,14 @@
 
   .pwa-guide__action-copy strong {
     color: #f4f3ff;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.4;
   }
 
   .pwa-guide__action-copy span {
-    margin-top: 3px;
+    margin-top: var(--ui-space-3, 3px);
     color: #85889c;
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     line-height: 1.5;
   }
 
@@ -572,7 +572,7 @@
 
   .pwa-guide__install-button {
     width: 100%;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     border-radius: 10px;
     background: linear-gradient(135deg, #6c66f2, #7d6cff);
     box-shadow: 0 10px 24px rgba(97, 92, 237, 0.25);
@@ -581,12 +581,12 @@
   .pwa-guide__action-badge {
     width: max-content;
     max-width: 100%;
-    padding: 5px 9px;
+    padding: var(--ui-space-5, 5px) var(--ui-space-9, 9px);
     overflow: hidden;
     border-radius: 7px;
     color: #aaa7ff;
     background: rgba(97, 92, 237, 0.1);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     line-height: 1.3;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -596,37 +596,37 @@
   .pwa-guide__method-label {
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin: 0 0 9px;
+    gap: var(--ui-space-8, 8px);
+    margin: 0 0 var(--ui-space-9, 9px);
     color: #c9cad6;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 700;
   }
 
   .pwa-guide__method-label--secondary {
-    margin-top: 18px;
+    margin-top: var(--ui-space-18, 18px);
     color: #85889c;
     font-weight: 650;
   }
 
   .pwa-guide__method-badge {
-    padding: 3px 7px;
+    padding: var(--ui-space-3, 3px) var(--ui-space-7, 7px);
     border: 1px solid rgba(151, 147, 255, 0.28);
     border-radius: 999px;
     color: #b9b6ff;
     background: rgba(97, 92, 237, 0.14);
-    font-size: 9px;
+    font-size: var(--ui-font-9, 9px);
     font-weight: 700;
     line-height: 1.2;
   }
 
   .pwa-guide__apk-card {
     min-width: 0;
-    padding: 12px 13px;
+    padding: var(--ui-space-12, 12px) var(--ui-space-13, 13px);
     display: grid;
-    grid-template-columns: 38px minmax(0, 1fr) auto;
+    grid-template-columns: var(--ui-layout-38, 38px) minmax(0, 1fr) auto;
     align-items: center;
-    gap: 11px;
+    gap: var(--ui-space-11, 11px);
     border: 1px solid rgba(151, 147, 255, 0.24);
     border-radius: 13px;
     background: linear-gradient(120deg, rgba(97, 92, 237, 0.16), rgba(97, 92, 237, 0.04));
@@ -644,8 +644,8 @@
   }
 
   .pwa-guide__apk-icon {
-    width: 38px;
-    height: 38px;
+    width: var(--ui-layout-38, 38px);
+    height: var(--ui-layout-38, 38px);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -666,14 +666,14 @@
 
   .pwa-guide__apk-copy strong {
     color: #f4f3ff;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.4;
   }
 
   .pwa-guide__apk-copy small {
-    margin-top: 3px;
+    margin-top: var(--ui-space-3, 3px);
     color: #9093a6;
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     line-height: 1.5;
   }
 
@@ -681,12 +681,12 @@
     flex: 0 0 auto;
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    padding: 7px 12px;
+    gap: var(--ui-space-4, 4px);
+    padding: var(--ui-space-7, 7px) var(--ui-space-12, 12px);
     border-radius: 999px;
     color: #c6c3ff;
     background: rgba(97, 92, 237, 0.22);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     font-weight: 700;
     line-height: 1.2;
     white-space: nowrap;
@@ -702,14 +702,14 @@
     /* min-height:0 是关键:否则 grid 子项的内容高度会撑破 flex 容器,详情区永远不滚 */
     min-height: 0;
     display: grid;
-    grid-template-columns: 214px minmax(0, 1fr);
+    grid-template-columns: var(--ui-layout-214, 214px) minmax(0, 1fr);
     background: #0d0e18;
   }
 
   .pwa-guide__platforms {
     min-width: 0;
     min-height: 0;
-    padding: 20px 14px 20px 20px;
+    padding: var(--ui-space-20, 20px) var(--ui-space-14, 14px) var(--ui-space-20, 20px) var(--ui-space-20, 20px);
     overflow-y: auto;
     border-right: 1px solid rgba(255, 255, 255, 0.07);
     background: rgba(255, 255, 255, 0.012);
@@ -717,9 +717,9 @@
 
   .pwa-guide__section-label {
     display: block;
-    margin: 0 8px 11px;
+    margin: 0 var(--ui-space-8, 8px) var(--ui-space-11, 11px);
     color: #686b80;
-    font-size: 9px;
+    font-size: var(--ui-font-9, 9px);
     font-weight: 700;
     letter-spacing: 0.12em;
     text-transform: uppercase;
@@ -728,16 +728,16 @@
   .pwa-guide__platform-list {
     display: flex;
     flex-direction: column;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
 
   .pwa-guide__platform {
     position: relative;
     width: 100%;
-    height: 58px;
-    padding: 0 10px;
+    height: var(--ui-control-58, 58px);
+    padding: 0 var(--ui-space-10, 10px);
     justify-content: flex-start;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     overflow: hidden;
     border: 1px solid transparent;
     border-radius: 13px;
@@ -766,9 +766,9 @@
   }
 
   .pwa-guide__platform-icon {
-    width: 34px;
-    height: 34px;
-    flex: 0 0 34px;
+    width: var(--ui-layout-34, 34px);
+    height: var(--ui-layout-34, 34px);
+    flex: 0 0 var(--ui-layout-34, 34px);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -786,7 +786,7 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
 
   .pwa-guide__platform-copy strong,
@@ -797,13 +797,13 @@
   }
 
   .pwa-guide__platform-copy strong {
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.3;
   }
 
   .pwa-guide__platform-copy small {
     color: #65687b;
-    font-size: 9px;
+    font-size: var(--ui-font-9, 9px);
     line-height: 1.3;
   }
 
@@ -826,18 +826,18 @@
   .pwa-guide__detail {
     min-width: 0;
     min-height: 0;
-    padding: 22px 24px 24px;
+    padding: var(--ui-space-22, 22px) var(--ui-space-24, 24px) var(--ui-space-24, 24px);
     overflow-y: auto;
     animation: pwa-detail-in 0.24s ease;
   }
 
   .pwa-guide__browser-context {
     min-width: 0;
-    margin-bottom: 14px;
-    padding: 8px 10px;
+    margin-bottom: var(--ui-space-14, 14px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px);
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     border: 1px solid rgba(151, 147, 255, 0.12);
     border-radius: 11px;
     color: #999bae;
@@ -845,9 +845,9 @@
   }
 
   .pwa-guide__browser-icon {
-    width: 26px;
-    height: 26px;
-    flex: 0 0 26px;
+    width: var(--ui-layout-26, 26px);
+    height: var(--ui-layout-26, 26px);
+    flex: 0 0 var(--ui-layout-26, 26px);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -861,7 +861,7 @@
     flex: 1;
     overflow: hidden;
     color: #c9cad6;
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     font-weight: 650;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -869,11 +869,11 @@
 
   .pwa-guide__browser-state {
     flex: 0 0 auto;
-    padding: 4px 7px;
+    padding: var(--ui-space-4, 4px) var(--ui-space-7, 7px);
     border-radius: 999px;
     color: #9294a6;
     background: rgba(255, 255, 255, 0.04);
-    font-size: 8px;
+    font-size: var(--ui-font-8, 8px);
     line-height: 1.2;
   }
 
@@ -886,14 +886,14 @@
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
 
   .pwa-guide__detail-kicker {
     display: block;
-    margin-bottom: 4px;
+    margin-bottom: var(--ui-space-4, 4px);
     color: #7772ee;
-    font-size: 9px;
+    font-size: var(--ui-font-9, 9px);
     font-weight: 750;
     letter-spacing: 0.12em;
     text-transform: uppercase;
@@ -902,41 +902,41 @@
   .pwa-guide__detail h3 {
     margin: 0;
     color: #f7f7ff;
-    font-size: 18px;
+    font-size: var(--ui-font-18, 18px);
     line-height: 1.35;
   }
 
   .pwa-guide__step-count {
     flex: 0 0 auto;
-    padding: 5px 9px;
+    padding: var(--ui-space-5, 5px) var(--ui-space-9, 9px);
     border: 1px solid rgba(151, 147, 255, 0.14);
     border-radius: 999px;
     color: #aaa7ff;
     background: rgba(97, 92, 237, 0.08);
-    font-size: 9px;
+    font-size: var(--ui-font-9, 9px);
   }
 
   .pwa-guide__description {
-    margin: 8px 0 16px;
+    margin: var(--ui-space-8, 8px) 0 var(--ui-space-16, 16px);
     color: #85889c;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.6;
   }
 
   .pwa-guide__steps {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .pwa-guide__step {
     min-width: 0;
-    min-height: 54px;
-    padding: 10px 12px;
+    min-height: var(--ui-layout-54, 54px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     display: grid;
-    grid-template-columns: 30px minmax(0, 1fr);
+    grid-template-columns: var(--ui-layout-30, 30px) minmax(0, 1fr);
     align-items: center;
-    gap: 11px;
+    gap: var(--ui-space-11, 11px);
     border: 1px solid rgba(255, 255, 255, 0.055);
     border-radius: 12px;
     background: rgba(255, 255, 255, 0.022);
@@ -953,8 +953,8 @@
   }
 
   .pwa-guide__step-number {
-    width: 30px;
-    height: 30px;
+    width: var(--ui-layout-30, 30px);
+    height: var(--ui-layout-30, 30px);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -962,7 +962,7 @@
     border-radius: 9px;
     color: #9691ff;
     background: rgba(97, 92, 237, 0.08);
-    font-size: 9px;
+    font-size: var(--ui-font-9, 9px);
     font-weight: 750;
     letter-spacing: 0.05em;
   }
@@ -970,26 +970,26 @@
   .pwa-guide__step p {
     margin: 0;
     color: #c6c7d2;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.55;
   }
 
   .pwa-guide__note {
-    margin-top: 12px;
-    padding: 10px 12px;
+    margin-top: var(--ui-space-12, 12px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     display: flex;
     align-items: flex-start;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     border-radius: 11px;
     color: #85889b;
     background: rgba(97, 92, 237, 0.055);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     line-height: 1.55;
   }
 
   .pwa-guide__note :deep(.svg-icon) {
     flex: 0 0 auto;
-    margin-top: 1px;
+    margin-top: var(--ui-space-1, 1px);
     color: #8f8aff;
   }
 

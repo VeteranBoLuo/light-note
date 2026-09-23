@@ -2,12 +2,18 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const inboxSource = readFileSync(resolve(process.cwd(), 'src/view/inbox/Inbox.vue'), 'utf8');
-const inboxItemSource = readFileSync(resolve(process.cwd(), 'src/components/inbox/InboxItem.vue'), 'utf8');
+const inboxSource = readFileSync(resolve(process.cwd(), 'src/view/inbox/Inbox.vue'), 'utf8').replace(
+  /var\(--ui-(?:space|control|layout|font|card)-[\d_]+, ([\d.]+px)\)/g,
+  '$1',
+);
+const inboxItemSource = readFileSync(resolve(process.cwd(), 'src/components/inbox/InboxItem.vue'), 'utf8').replace(
+  /var\(--ui-(?:space|control|layout|font|card)-[\d_]+, ([\d.]+px)\)/g,
+  '$1',
+);
 const resourcePageShellSource = readFileSync(
   resolve(process.cwd(), 'src/components/base/ResourcePageShell.vue'),
   'utf8',
-);
+).replace(/var\(--ui-(?:space|control|layout|font|card)-\d+, (\d+px)\)/g, '$1');
 const themeSource = readFileSync(resolve(process.cwd(), 'src/assets/css/theme.less'), 'utf8');
 const dayThemeStart = themeSource.indexOf("\n[data-theme='day'] {") + 1;
 const nightThemeStart = themeSource.indexOf("\n[data-theme='night'] {") + 1;
@@ -198,10 +204,10 @@ describe('移动端待办页签布局', () => {
   it('PC 端视图与状态分组使用胶囊，并支持窄屏换行', () => {
     expect(inboxSource).toContain("t('inbox.todoStatusGroupLabel')");
     expect(inboxSource).toContain("t('inbox.todoViewGroupLabel')");
-    expect(inboxSource).toContain('class="inbox-toolbar__todo-status"');
+    expect(inboxSource).toMatch(/class="(?:[^"\s]+\s+)*inbox-toolbar__todo-status(?:\s+[^"\s]+)*"/);
     expect(inboxSource).not.toContain('class="inbox-toolbar__todo-group-label"');
     expect(inboxSource).not.toContain('class="inbox-toolbar__todo-divider"');
-    expect(inboxSource).toMatch(/class="inbox-toolbar__todo-status"[\s\S]*?variant="pill"/);
+    expect(inboxSource).toMatch(/class="(?:[^"\s]+\s+)*inbox-toolbar__todo-status(?:\s+[^"\s]+)*"[\s\S]*?variant="pill"/);
     expect(inboxSource).toMatch(/class="inbox-toolbar__todo-views"[\s\S]*?variant="pill"/);
     expect(inboxSource).toContain("'inbox-toolbar--todo-desktop': isTodoFocused && !isMobileTodoPrimary");
     expect(inboxSource).toMatch(

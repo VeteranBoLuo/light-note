@@ -1,5 +1,5 @@
 <template>
-  <BCard class="todo-plan-preview" padding="18px" radius="16px">
+  <BCard class="todo-plan-preview" padding="var(--ui-space-18, 18px)" radius="16px">
     <template #title>
       <span>{{ t('inbox.todoPlanPreview') }}</span>
     </template>
@@ -169,14 +169,14 @@
 
   .todo-plan-preview__organization {
     display: grid;
-    gap: 8px;
-    font-size: 12px;
+    gap: var(--ui-space-8, 8px);
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
   }
   .todo-plan-preview__organization > div {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   .todo-plan-preview__error {
     color: var(--error-color);
@@ -187,24 +187,24 @@
   }
   .todo-plan-preview__loading {
     color: var(--primary-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .todo-plan-preview__content,
   .todo-plan-preview__empty {
     display: grid;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .todo-plan-preview__empty > strong {
-    font-size: 18px;
+    font-size: var(--ui-font-18, 18px);
     line-height: 1.4;
   }
 
   .todo-plan-preview__task {
     display: grid;
-    gap: 10px;
-    padding: 13px;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-13, 13px);
     border: 1px solid var(--surface-border-color);
     border-radius: 13px;
     background: var(--workspace-panel-bg-color);
@@ -215,25 +215,25 @@
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .todo-plan-preview__task-head > strong {
     min-width: 0;
     color: var(--text-color);
-    font-size: 16px;
+    font-size: var(--ui-font-16, 16px);
     line-height: 1.45;
     overflow-wrap: anywhere;
   }
 
   .todo-plan-preview__priority {
     flex: 0 0 auto;
-    padding: 2px 8px;
+    padding: var(--ui-space-2, 2px) var(--ui-space-8, 8px);
     border: 1px solid var(--surface-border-color);
     border-radius: 999px;
     color: var(--desc-color);
     background: var(--card-background);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 700;
   }
 
@@ -256,25 +256,25 @@
   .todo-plan-preview__resources,
   .todo-plan-preview__schedule {
     display: grid;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
 
   .todo-plan-preview__subhead > span,
   .todo-plan-preview__resources > span {
     color: var(--text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 700;
   }
 
   .todo-plan-preview__subhead small,
   .todo-plan-preview__more {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .todo-plan-preview__checklist ul {
     display: grid;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     margin: 0;
     padding: 0;
     list-style: none;
@@ -282,23 +282,23 @@
 
   .todo-plan-preview__checklist li {
     display: grid;
-    grid-template-columns: 16px minmax(0, 1fr);
+    grid-template-columns: var(--ui-layout-16, 16px) minmax(0, 1fr);
     align-items: start;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     color: var(--text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .todo-plan-preview__checklist li > span {
     display: grid;
-    width: 14px;
-    height: 14px;
+    width: var(--ui-layout-14, 14px);
+    height: var(--ui-layout-14, 14px);
     place-items: center;
-    margin-top: 1px;
+    margin-top: var(--ui-space-1, 1px);
     border: 1px solid var(--surface-border-color);
     border-radius: 4px;
     color: #fff;
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     line-height: 1;
   }
 
@@ -320,56 +320,56 @@
   .todo-plan-preview__resources > div {
     display: flex;
     flex-wrap: wrap;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
 
   .todo-plan-preview__resources > div > span {
     max-width: 100%;
     overflow: hidden;
-    padding: 3px 7px;
+    padding: var(--ui-space-3, 3px) var(--ui-space-7, 7px);
     border-radius: 999px;
     background: var(--card-background);
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .todo-plan-preview__schedule {
-    padding: 2px 1px;
+    padding: var(--ui-space-2, 2px) var(--ui-space-1, 1px);
   }
 
   .todo-plan-preview__schedule > strong {
     color: var(--text-color);
-    font-size: 16px;
+    font-size: var(--ui-font-16, 16px);
     line-height: 1.4;
   }
 
   p {
     margin: 0;
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.65;
   }
 
   dl {
     display: grid;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     margin: 0;
-    padding-top: 14px;
+    padding-top: var(--ui-space-14, 14px);
     border-top: 1px solid var(--surface-divider-color);
   }
 
   dl > div {
     display: flex;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   dt {
     flex-shrink: 0;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   dd {
@@ -377,7 +377,7 @@
     overflow-wrap: anywhere;
     margin: 0;
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 650;
     text-align: right;
   }

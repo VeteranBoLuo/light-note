@@ -58,7 +58,7 @@
             v-for="tag in visibleTags"
             :tag="tag"
             show-detail-corner
-            max-width="96px"
+            max-width="var(--ui-layout-96, 96px)"
             @click.stop="handleTagClick(tag)"
             @detail="handleTagDetail(tag)"
             v-click-log="{ module: '笔记库', operation: `筛选标签【${tag.name}】` }"
@@ -248,11 +248,11 @@
     --note-card-bg: var(--workspace-content);
     display: flex;
     flex-direction: column;
-    height: 282px;
+    height: var(--ui-card-282, 282px);
     position: relative;
     border-radius: 12px;
     border: 1px solid var(--workspace-border);
-    padding: 16px 20px 16px;
+    padding: var(--ui-space-16, 16px) var(--ui-space-20, 20px);
     box-sizing: border-box;
     cursor: pointer;
     background: var(--note-card-bg);
@@ -298,15 +298,15 @@
   .note-title-row {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding-right: 28px;
+    gap: var(--ui-space-8, 8px);
+    padding-right: var(--ui-space-28, 28px);
     min-width: 0;
   }
 
   .note-title {
-    font-size: 16px;
+    font-size: var(--ui-font-16, 16px);
     font-weight: 600;
-    line-height: 24px;
+    line-height: var(--ui-layout-24, 24px);
     color: var(--text-color);
     white-space: nowrap;
     overflow: hidden;
@@ -320,7 +320,7 @@
     display: block;
     flex: 1 1 auto;
     min-height: 0;
-    margin-top: 10px;
+    margin-top: var(--ui-space-10, 10px);
     overflow: hidden;
   }
 
@@ -345,7 +345,7 @@
       bottom: 0;
       left: 0;
       right: 0;
-      height: 42px;
+      height: var(--ui-layout-42, 42px);
       background: linear-gradient(to bottom, transparent, var(--note-card-bg));
       pointer-events: none;
     }
@@ -366,7 +366,7 @@
 
   .note-preview-media {
     width: 100%;
-    height: 112px;
+    height: var(--ui-layout-112, 112px);
     overflow: hidden;
     border: 1px solid var(--workspace-border);
     border-radius: 9px;
@@ -376,7 +376,7 @@
 
   .note-content + .note-preview-media,
   .note-preview-media + .note-content {
-    margin-top: 8px;
+    margin-top: var(--ui-space-8, 8px);
   }
 
   .note-preview-image {
@@ -394,7 +394,7 @@
 
   .note-parent-path {
     flex: 0 0 auto;
-    margin-top: 8px;
+    margin-top: var(--ui-space-8, 8px);
     width: fit-content;
     max-width: 100%;
   }
@@ -402,8 +402,8 @@
   .note-footer {
     flex: 0 0 auto;
     margin-top: auto;
-    padding-top: 12px;
-    min-height: 54px;
+    padding-top: var(--ui-space-12, 12px);
+    min-height: var(--ui-layout-54, 54px);
     display: flex;
     flex-direction: column;
     justify-content: flex-end;
@@ -413,15 +413,15 @@
     flex: 1 1 auto;
     min-width: 0;
     display: flex;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     flex-wrap: nowrap;
     width: auto;
     // padding-top 是给 hover 时上溢的角标留的(本行 overflow: hidden),
     // 原来用等量负 margin 抵消掉了,标签因此贴着正文;去掉负值让标签落到正文与日期中间。
     // 卡片是固定 282px,这里多占的高度由正文区吸收,不会撑大卡片或改变网格
-    padding: 7px 7px 0 0;
+    padding: var(--ui-space-7, 7px) var(--ui-space-7, 7px) 0 0;
     box-sizing: border-box;
-    min-height: 24px;
+    min-height: var(--ui-layout-24, 24px);
     overflow: hidden;
     align-items: center;
     margin: 0;
@@ -434,10 +434,10 @@
   }
 
   .note-time {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
     white-space: nowrap;
-    line-height: 18px;
+    line-height: var(--ui-layout-18, 18px);
     text-align: right;
     align-self: flex-end;
   }
@@ -446,21 +446,21 @@
     min-width: 0;
     display: flex;
     align-items: flex-end;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .note-child-count {
     flex: 0 0 auto;
     margin-bottom: 0;
     min-width: 0;
-    height: 24px;
-    padding: 0 6px;
-    gap: 3px;
+    height: var(--ui-control-24, 24px);
+    padding: 0 var(--ui-space-6, 6px);
+    gap: var(--ui-space-3, 3px);
     border: 1px solid var(--workspace-border);
     border-radius: 7px;
     color: var(--resource-note-color, #00a884);
     background: transparent;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .note-select-control {
@@ -469,7 +469,7 @@
     visibility: hidden;
     pointer-events: none;
     position: absolute;
-    right: 14px;
+    right: var(--ui-space-14, 14px);
     z-index: 2;
     transition:
       opacity 0.16s ease,

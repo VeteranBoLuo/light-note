@@ -22,7 +22,7 @@
         as="section"
         class="ai-quota-panel"
         variant="raised"
-        padding="18px 20px"
+        padding="var(--ui-space-18, 18px) var(--ui-space-20, 20px)"
         radius="16px"
         aria-labelledby="ai-quota-panel-title"
       >
@@ -48,7 +48,7 @@
             as="article"
             class="ai-quota-metric"
             variant="panel"
-            padding="12px 13px"
+            padding="var(--ui-space-12, 12px) var(--ui-space-13, 13px)"
             radius="11px"
           >
             <span>{{ metric.label }}</span>
@@ -99,7 +99,12 @@
         </div>
       </BCard>
 
-      <BCard as="section" class="ai-usage-panel" padding="18px 20px" radius="16px">
+      <BCard
+        as="section"
+        class="ai-usage-panel"
+        padding="var(--ui-space-18, 18px) var(--ui-space-20, 20px)"
+        radius="16px"
+      >
         <AiUsageCenter :settings-layout="embedded" />
       </BCard>
     </main>
@@ -208,7 +213,7 @@
   .ai-usage-page {
     height: 100%;
     overflow-y: auto;
-    padding: 28px 24px 64px;
+    padding: var(--ui-space-28, 28px) var(--ui-space-24, 24px) var(--ui-space-64, 64px);
     box-sizing: border-box;
     background: var(--background-color);
     color: var(--text-color);
@@ -224,33 +229,33 @@
   .ai-usage-page.is-embedded .ai-usage-shell {
     width: 100%;
     max-width: none;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
   }
 
   .ai-usage-shell {
-    width: min(100%, 820px);
+    width: min(100%, var(--ui-layout-820, 820px));
     margin: 0 auto;
     display: flex;
     flex-direction: column;
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
   }
 
   .ai-usage-hero {
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
   }
 
   .ai-usage-back.b_btn {
     align-self: flex-start;
-    height: 34px;
-    gap: 5px;
-    padding: 0 12px 0 8px;
+    height: var(--ui-layout-34, 34px);
+    gap: var(--ui-space-5, 5px);
+    padding: 0 var(--ui-space-12, 12px) 0 var(--ui-space-8, 8px);
     border: 1px solid var(--surface-border-color);
     border-radius: 999px;
     background: transparent;
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .ai-usage-back.b_btn:hover {
@@ -261,13 +266,13 @@
   .ai-usage-heading {
     display: flex;
     align-items: center;
-    gap: 13px;
+    gap: var(--ui-space-13, 13px);
   }
 
   .ai-usage-heading__icon {
-    width: 44px;
-    height: 44px;
-    flex: 0 0 44px;
+    width: var(--ui-layout-44, 44px);
+    height: var(--ui-layout-44, 44px);
+    flex: 0 0 var(--ui-layout-44, 44px);
     display: grid;
     place-items: center;
     border-radius: 13px;
@@ -282,20 +287,20 @@
   }
 
   .ai-usage-heading h1 {
-    font-size: 24px;
+    font-size: var(--ui-font-24, 24px);
     font-weight: 700;
     letter-spacing: -0.01em;
   }
 
   .ai-usage-heading p,
   .ai-quota-panel__head p {
-    margin: 3px 0 0;
+    margin: var(--ui-space-3, 3px) 0 0;
     color: var(--desc-color);
     line-height: 1.5;
   }
 
   .ai-usage-heading p {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .ai-quota-panel,
@@ -307,31 +312,31 @@
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 13px;
+    gap: var(--ui-space-12, 12px);
+    margin-bottom: var(--ui-space-13, 13px);
   }
 
   .ai-quota-panel__head h2 {
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
     font-weight: 650;
   }
 
   .ai-quota-panel__head p {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .ai-quota-metrics {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
   }
 
   .ai-quota-pending {
     display: flex;
     align-items: flex-start;
-    gap: 8px;
-    margin-top: 10px;
-    padding: 9px 11px;
+    gap: var(--ui-space-8, 8px);
+    margin-top: var(--ui-space-10, 10px);
+    padding: var(--ui-space-9, 9px) var(--ui-space-11, 11px);
     border: 1px solid var(--warning-color, #b56a00);
     border-radius: 10px;
     color: var(--text-color);
@@ -342,7 +347,7 @@
     width: 7px;
     height: 7px;
     flex: 0 0 7px;
-    margin-top: 5px;
+    margin-top: var(--ui-space-5, 5px);
     border: 1px solid var(--warning-color, #b56a00);
     border-radius: 50%;
     background: var(--warning-color, #b56a00);
@@ -350,53 +355,53 @@
 
   .ai-quota-pending p {
     margin: 0;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.55;
   }
 
   .ai-quota-metric {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
 
   .ai-quota-metric > span,
   .ai-quota-metric > small {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.4;
   }
 
   .ai-quota-metric > strong {
     overflow-wrap: anywhere;
     color: var(--text-color);
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
     line-height: 1.35;
   }
 
   .ai-quota-metric__acquire.b_btn {
     align-self: flex-start;
-    min-height: 28px;
-    margin-top: 3px;
-    padding-inline: 10px;
+    min-height: var(--ui-layout-28, 28px);
+    margin-top: var(--ui-space-3, 3px);
+    padding-inline: var(--ui-space-10, 10px);
     border: 1px solid var(--primary-color);
     color: var(--primary-color);
     background: transparent;
   }
 
   .ai-quota-state {
-    min-height: 72px;
+    min-height: var(--ui-layout-72, 72px);
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     box-sizing: border-box;
-    padding: 12px;
+    padding: var(--ui-space-12, 12px);
     border: 1px solid var(--surface-border-color);
     border-radius: 11px;
     background: var(--workspace-panel-bg-color);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     text-align: center;
   }
 
@@ -457,40 +462,40 @@
 
   .ai-usage-page.is-embedded {
     .ai-usage-shell {
-      gap: 18px;
+      gap: var(--ui-space-18, 18px);
     }
     .ai-quota-panel,
     .ai-usage-panel {
-      padding: 22px;
+      padding: var(--ui-space-22, 22px);
       border-radius: 14px;
       background: var(--card-background);
       box-shadow: none;
     }
     .ai-quota-panel__head {
-      padding-bottom: 18px;
-      margin-bottom: 18px;
+      padding-bottom: var(--ui-space-18, 18px);
+      margin-bottom: var(--ui-space-18, 18px);
       border-bottom: 1px solid var(--card-border-color);
     }
     .ai-quota-panel__head h2 {
-      font-size: 16px;
+      font-size: var(--ui-font-16, 16px);
     }
     .ai-quota-panel__head p {
-      font-size: 13px;
+      font-size: var(--ui-font-13, 13px);
     }
     .ai-quota-metrics {
-      gap: 12px;
+      gap: var(--ui-space-12, 12px);
     }
     .ai-quota-metric {
-      padding: 16px;
-      min-height: 130px;
+      padding: var(--ui-space-16, 16px);
+      min-height: var(--ui-layout-130, 130px);
       background: transparent;
     }
     .ai-quota-metric > strong {
-      font-size: 23px;
+      font-size: var(--ui-font-23, 23px);
     }
     .ai-quota-metric > span,
     .ai-quota-metric > small {
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
     }
   }
   @media (max-width: 767px) {

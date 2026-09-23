@@ -2,7 +2,7 @@
   <BModal
     :visible="visible"
     :title="`成长运营 · ${userName || '用户'}`"
-    width="420px"
+    width="var(--ui-layout-420, 420px)"
     :show-footer="false"
     :mask-closable="true"
     @update:visible="emit('update:visible', $event)"
@@ -150,22 +150,22 @@
   .ga {
     display: flex;
     flex-direction: column;
-    gap: 16px;
-    padding: 4px 2px;
+    gap: var(--ui-space-16, 16px);
+    padding: var(--ui-space-4, 4px) var(--ui-space-2, 2px);
   }
   .ga-cur {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 10px 12px;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     border-radius: 10px;
     background: color-mix(in srgb, var(--primary-color) 8%, var(--background-color));
     border: 1px solid color-mix(in srgb, var(--card-border-color) 45%, transparent);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     color: var(--text-color);
   }
   .ga-cur-label {
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 700;
     color: var(--primary-color);
   }
@@ -175,16 +175,16 @@
   .ga-field {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   .ga-field label {
-    font-size: 12.5px;
+    font-size: var(--ui-font-12_5, 12.5px);
     color: var(--desc-color);
   }
   .ga-field label em {
     font-style: normal;
     opacity: 0.7;
-    margin-left: 4px;
+    margin-left: var(--ui-space-4, 4px);
   }
   .ga-control {
     width: 100%;
@@ -198,6 +198,6 @@
   .ga-actions {
     display: flex;
     justify-content: flex-end;
-    margin-top: 4px;
+    margin-top: var(--ui-space-4, 4px);
   }
 </style>

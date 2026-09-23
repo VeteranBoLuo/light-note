@@ -5,7 +5,7 @@
     :mask-closable="false"
     :show-footer="false"
     initial-focus="#note-page-rename-input"
-    width="min(440px, calc(100% - 24px))"
+    width="min(var(--ui-layout-440, 440px), calc(100% - 24px))"
   >
     <div class="note-rename-modal">
       <label class="note-rename-modal__label" for="note-page-rename-input">{{ t('note.pageTitle') }}</label>
@@ -91,22 +91,22 @@
 <style scoped lang="less">
   .note-rename-modal {
     display: grid;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .note-rename-modal__label {
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .note-rename-modal__footer {
     display: flex;
     justify-content: flex-end;
-    gap: 8px;
-    margin-top: 8px;
+    gap: var(--ui-space-8, 8px);
+    margin-top: var(--ui-space-8, 8px);
 
     :deep(.b_btn) {
-      min-height: 38px;
+      min-height: var(--ui-control-38, 38px);
     }
   }
 

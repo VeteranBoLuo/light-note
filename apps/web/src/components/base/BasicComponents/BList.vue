@@ -7,7 +7,7 @@
       class="category-body"
       v-auto-scrollbar
       :style="{
-        height: bookmark.isDesktop ? 'calc(100% - 40px)' : 'calc(100% - 50px)',
+        height: bookmark.isDesktop ? 'calc(100% - var(--ui-control-32, 32px) - var(--ui-space-8, 8px))' : 'calc(100% - 50px)',
       }"
     >
       <VueDraggable
@@ -132,16 +132,16 @@
     overflow-y: auto;
   }
   .category-item {
-    margin: 5px 0;
-    padding: 5px 10px;
+    margin: var(--ui-space-5, 5px) 0;
+    padding: var(--ui-space-5, 5px) var(--ui-space-10, 10px);
     border-radius: 8px;
     cursor: pointer;
     display: flex;
     align-items: center;
     width: 100%;
     box-sizing: border-box;
-    gap: 10px;
-    font-size: 14px;
+    gap: var(--ui-space-10, 10px);
+    font-size: var(--ui-font-14, 14px);
     &:hover {
       background-color: var(--category-item-ba-color);
     }
@@ -153,7 +153,7 @@
     align-items: center;
     height: 100%;
     color: #999;
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
   }
 
   .empty-content {

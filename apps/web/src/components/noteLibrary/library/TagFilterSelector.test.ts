@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const source = readFileSync(resolve(process.cwd(), 'src/components/noteLibrary/library/TagFilterSelector.vue'), 'utf8');
+const standardSource = source.replace(/var\(--ui-[\w-]+, ([\d.]+px)\)/g, '$1');
 
 describe('TagFilterSelector', () => {
   it('桌面与移动紧凑态使用同一个标准下拉箭头，并在展开时转为向上', () => {
@@ -25,7 +26,7 @@ describe('TagFilterSelector', () => {
     expect(source.match(/:src="icon\.resource\.tag"/gu)).toHaveLength(2);
     expect(source.match(/:size="compact \? 18 : 16"/gu)).toHaveLength(2);
     expect(source.match(/'is-compact': compact/gu)).toHaveLength(2);
-    expect(source).toMatch(
+    expect(standardSource).toMatch(
       /\.noteType-select\.is-compact\s*\{[\s\S]*?height:\s*36px;[\s\S]*?gap:\s*3px;[\s\S]*?padding-inline:\s*0;/u,
     );
   });

@@ -5,7 +5,7 @@
     :title="t('entitlementJourney.returnTask')"
     :show-footer="false"
     fullscreen-mobile
-    width="min(720px, 94vw)"
+    width="min(var(--ui-layout-720, 720px), 94vw)"
   >
     <p>{{ t('entitlementJourney.returnHint') }}</p>
     <BLoading v-if="checking" inline loading />

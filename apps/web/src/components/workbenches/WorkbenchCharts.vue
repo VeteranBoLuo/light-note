@@ -148,7 +148,7 @@
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
-  import { getRootZoom } from '@/utils/zoom';
+
   import { FILE_TYPE_COLOR_HEX, RESOURCE_COLOR_CSS_VAR, RESOURCE_COLOR_HEX } from '@/config/resourceColor';
   import {
     getTrendCurveSegments,
@@ -935,9 +935,9 @@
     const container = trendRef.value;
     if (!container || !visibleTrendData.value.length) return;
     const rect = container.getBoundingClientRect();
-    const zoom = getRootZoom();
-    const x = (event.clientX - rect.left) / zoom;
-    const y = (event.clientY - rect.top) / zoom;
+
+    const x = (event.clientX - rect.left);
+    const y = (event.clientY - rect.top);
     const width = container.clientWidth;
     const height = container.clientHeight;
     const left = TREND_PLOT_LEFT;
@@ -998,9 +998,9 @@
     const container = typeRef.value;
     if (!container || !props.fileTypeData.length) return;
     const rect = container.getBoundingClientRect();
-    const zoom = getRootZoom();
-    const x = (event.clientX - rect.left) / zoom;
-    const y = (event.clientY - rect.top) / zoom;
+
+    const x = (event.clientX - rect.left);
+    const y = (event.clientY - rect.top);
     const width = container.clientWidth;
     const height = container.clientHeight;
     const cx = getTypeCenterX(width);
@@ -1139,7 +1139,7 @@
   .chart-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .chart-card--trend {
@@ -1153,8 +1153,8 @@
   .chart-card {
     position: relative;
     min-width: 0;
-    height: 420px;
-    padding: 20px;
+    height: var(--ui-layout-420, 420px);
+    padding: var(--ui-space-20, 20px);
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
@@ -1188,13 +1188,13 @@
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
 
   .chart-heading-copy {
     position: relative;
     min-width: 0;
-    padding-left: 14px;
+    padding-left: var(--ui-space-14, 14px);
 
     &::before {
       content: '';
@@ -1202,7 +1202,7 @@
       left: 0;
       top: 1px;
       width: 4px;
-      height: 34px;
+      height: var(--ui-layout-34, 34px);
       border-radius: 999px;
       background: var(--primary-color);
     }
@@ -1211,16 +1211,16 @@
   .chart-heading-copy h2 {
     margin: 0;
     color: var(--text-color);
-    font-size: 18px;
+    font-size: var(--ui-font-18, 18px);
     line-height: 1.25;
     font-weight: 750;
     letter-spacing: -0.01em;
   }
 
   .chart-heading-copy p {
-    margin: 5px 0 0;
+    margin: var(--ui-space-5, 5px) 0 0;
     color: var(--desc-color);
-    font-size: 11.5px;
+    font-size: var(--ui-font-11_5, 11.5px);
     line-height: 1.45;
   }
 
@@ -1231,11 +1231,11 @@
   }
 
   .trend-range-tabs :deep(.tab) {
-    min-width: 72px;
-    min-height: 34px;
+    min-width: var(--ui-layout-72, 72px);
+    min-height: var(--ui-layout-34, 34px);
     justify-content: center;
-    padding: 0 14px;
-    line-height: 34px;
+    padding: 0 var(--ui-space-14, 14px);
+    line-height: var(--ui-layout-34, 34px);
   }
 
   .trend-range-tabs :deep(.tab.is-active) {
@@ -1253,20 +1253,20 @@
   }
 
   .trend-summary-grid {
-    margin-top: 16px;
+    margin-top: var(--ui-space-16, 16px);
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .trend-summary-card {
     min-width: 0;
-    min-height: 68px;
-    padding: 10px 12px;
+    min-height: var(--ui-layout-68, 68px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     box-sizing: border-box;
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     border: 1px solid var(--card-border-color);
     border-left-width: 3px;
     border-radius: 12px;
@@ -1286,8 +1286,8 @@
   }
 
   .trend-summary-icon {
-    width: 38px;
-    height: 38px;
+    width: var(--ui-layout-38, 38px);
+    height: var(--ui-layout-38, 38px);
     flex: 0 0 auto;
     display: grid;
     place-items: center;
@@ -1325,16 +1325,16 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
 
   .trend-summary-copy > span {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .trend-summary-copy strong {
-    font-size: 20px;
+    font-size: var(--ui-font-20, 20px);
     line-height: 1.15;
     font-weight: 760;
     font-variant-numeric: tabular-nums;
@@ -1348,8 +1348,8 @@
   }
 
   .trend-plot {
-    min-height: 190px;
-    margin-top: 8px;
+    min-height: var(--ui-layout-190, 190px);
+    margin-top: var(--ui-space-8, 8px);
     overflow: hidden;
     border-radius: 10px;
     cursor: crosshair;
@@ -1361,7 +1361,7 @@
     left: 42px;
     z-index: 2;
     color: var(--workbench-chart-axis-text);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 600;
     pointer-events: none;
   }
@@ -1391,7 +1391,7 @@
     display: flex;
     justify-content: center;
     flex-wrap: wrap;
-    gap: 8px 18px;
+    gap: var(--ui-space-8, 8px) var(--ui-space-18, 18px);
     align-items: center;
     pointer-events: none;
   }
@@ -1399,15 +1399,15 @@
   .trend-legend-item {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     min-width: 0;
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 16px;
   }
 
   .trend-legend-line {
-    width: 18px;
+    width: var(--ui-layout-18, 18px);
     height: 2px;
     border-radius: 999px;
     flex-shrink: 0;
@@ -1416,8 +1416,8 @@
   .trend-tooltip {
     position: absolute;
     z-index: 3;
-    min-width: 126px;
-    padding: 8px 9px;
+    min-width: var(--ui-layout-126, 126px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-9, 9px);
     border: 1px solid var(--card-border-color);
     border-radius: 9px;
     background: var(--menu-body-bg-color);
@@ -1429,7 +1429,7 @@
   .chart-tooltip--tracking {
     top: 0;
     left: 0;
-    width: 146px;
+    width: var(--ui-layout-146, 146px);
     max-width: calc(100% - 16px);
     min-width: 0;
     box-sizing: border-box;
@@ -1454,9 +1454,9 @@
   }
 
   .trend-tooltip-date {
-    margin-bottom: 5px;
+    margin-bottom: var(--ui-space-5, 5px);
     color: var(--text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 700;
   }
 
@@ -1464,14 +1464,14 @@
     display: grid;
     grid-template-columns: 8px minmax(0, 1fr) auto;
     align-items: center;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
     color: var(--desc-color);
-    font-size: 11px;
-    line-height: 18px;
+    font-size: var(--ui-font-11, 11px);
+    line-height: var(--ui-layout-18, 18px);
 
     strong {
       color: var(--text-color);
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
       font-variant-numeric: tabular-nums;
     }
   }
@@ -1483,18 +1483,18 @@
   }
 
   .trend-insight {
-    min-height: 38px;
-    padding: 8px 11px;
+    min-height: var(--ui-layout-38, 38px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-11, 11px);
     box-sizing: border-box;
     display: flex;
     align-items: center;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
     border: 1px solid var(--card-border-color);
     border-left: 3px solid var(--primary-color);
     border-radius: 10px;
     color: var(--desc-color);
     background: color-mix(in srgb, var(--primary-color) 5%, var(--menu-body-bg-color));
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.45;
   }
 
@@ -1504,8 +1504,8 @@
   }
 
   .trend-insight-icon {
-    width: 28px;
-    height: 28px;
+    width: var(--ui-layout-28, 28px);
+    height: var(--ui-layout-28, 28px);
     flex: 0 0 auto;
     display: grid;
     place-items: center;
@@ -1515,7 +1515,7 @@
   }
 
   .type-plot {
-    margin-top: 12px;
+    margin-top: var(--ui-space-12, 12px);
     overflow: hidden;
     border: 1px solid var(--card-border-color);
     border-radius: 12px;
@@ -1539,7 +1539,7 @@
   }
 
   .type-center-value {
-    font-size: 25px;
+    font-size: var(--ui-font-25, 25px);
     line-height: 1;
     font-weight: 800;
     color: var(--text-color);
@@ -1547,8 +1547,8 @@
   }
 
   .type-center-label {
-    margin-top: 4px;
-    font-size: 11px;
+    margin-top: var(--ui-space-4, 4px);
+    font-size: var(--ui-font-11, 11px);
     color: var(--desc-color);
     white-space: nowrap;
   }
@@ -1558,10 +1558,10 @@
     top: 28px;
     right: 10px;
     bottom: 12px;
-    width: 136px;
+    width: var(--ui-layout-136, 136px);
     display: flex;
     flex-direction: column;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     overflow: hidden;
   }
 
@@ -1569,18 +1569,18 @@
     display: grid;
     grid-template-columns: 8px minmax(0, 1fr) auto auto;
     align-items: center;
-    gap: 5px;
-    min-height: 22px;
-    padding: 3px 6px;
+    gap: var(--ui-space-5, 5px);
+    min-height: var(--ui-layout-22, 22px);
+    padding: var(--ui-space-3, 3px) var(--ui-space-6, 6px);
     border-radius: 7px;
     background: var(--menu-body-bg-color);
     border: 1px solid var(--card-border-color);
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
 
     strong {
       color: var(--text-color);
-      font-size: 11px;
+      font-size: var(--ui-font-11, 11px);
       font-variant-numeric: tabular-nums;
     }
   }
@@ -1599,7 +1599,7 @@
   }
 
   .chart-empty {
-    margin-top: 12px;
+    margin-top: var(--ui-space-12, 12px);
     flex: 1;
     border-radius: 10px;
     border: 1px dashed var(--card-border-color);
@@ -1608,10 +1608,10 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 7px;
-    padding: 18px;
+    gap: var(--ui-space-7, 7px);
+    padding: var(--ui-space-18, 18px);
     box-sizing: border-box;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
     position: relative;
     z-index: 1;
@@ -1629,8 +1629,8 @@
   }
 
   .chart-empty__icon {
-    width: 46px;
-    height: 46px;
+    width: var(--ui-layout-46, 46px);
+    height: var(--ui-layout-46, 46px);
     display: grid;
     place-items: center;
     border-radius: 14px;
@@ -1641,25 +1641,25 @@
 
   .chart-empty--file strong {
     color: var(--text-color);
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     font-weight: 700;
   }
 
   .chart-empty--file > span:not(.chart-empty__icon) {
-    max-width: 280px;
+    max-width: var(--ui-layout-280, 280px);
     line-height: 1.5;
     text-align: center;
   }
 
   .chart-empty__action {
-    margin-top: 3px;
+    margin-top: var(--ui-space-3, 3px);
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
 
   .chart-skeleton {
-    margin-top: 14px;
+    margin-top: var(--ui-space-14, 14px);
     flex: 1;
     border-radius: 10px;
     background: linear-gradient(
@@ -1673,7 +1673,7 @@
   }
 
   .chart-skeleton--trend {
-    min-height: 310px;
+    min-height: var(--ui-layout-310, 310px);
   }
 
   @keyframes workbench-chart-shine {
@@ -1696,15 +1696,15 @@
     }
 
     .chart-card--type {
-      height: 340px;
+      height: var(--ui-layout-340, 340px);
     }
   }
 
   @media (max-width: 760px) {
     .chart-card {
       height: auto;
-      min-height: 380px;
-      padding: 16px;
+      min-height: var(--ui-layout-380, 380px);
+      padding: var(--ui-space-16, 16px);
     }
 
     .chart-header {
@@ -1716,7 +1716,7 @@
     }
 
     .trend-content {
-      min-height: 520px;
+      min-height: var(--ui-layout-520, 520px);
     }
   }
 

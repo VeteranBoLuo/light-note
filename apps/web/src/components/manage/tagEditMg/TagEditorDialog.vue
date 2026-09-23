@@ -2,8 +2,8 @@
   <BModal
     :visible="visible"
     :title="pageTitle"
-    width="min(1180px, calc(100vw - 48px))"
-    height="min(820px, calc(100vh - 48px))"
+    width="min(var(--ui-layout-1180, 1180px), calc(100vw - var(--ui-space-48, 48px)))"
+    height="min(var(--ui-layout-820, 820px), calc(100vh - var(--ui-space-48, 48px)))"
     modal-class="tag-editor-dialog"
     content-class="tag-editor-dialog__content"
     :show-footer="false"
@@ -90,13 +90,13 @@
 
 <style lang="less">
   .tag-editor-dialog {
-    max-width: calc(100vw - 24px);
-    max-height: calc(100vh - 24px);
+    max-width: calc(100vw - var(--ui-space-24, 24px));
+    max-height: calc(100vh - var(--ui-space-24, 24px));
   }
 
   .tag-editor-dialog__content {
     min-height: 0;
-    padding: 14px 18px 18px;
+    padding: var(--ui-space-14, 14px) var(--ui-space-18, 18px) var(--ui-space-18, 18px);
     overflow: hidden;
   }
 

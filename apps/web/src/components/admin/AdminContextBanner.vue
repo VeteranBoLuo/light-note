@@ -177,9 +177,9 @@
     z-index: 200;
     display: flex;
     align-items: center;
-    gap: 16px;
-    max-width: calc(100vw - 32px);
-    padding: 8px 10px 8px 14px;
+    gap: var(--ui-space-16, 16px);
+    max-width: calc(100vw - var(--ui-layout-32, 32px));
+    padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px) var(--ui-space-8, 8px) var(--ui-space-14, 14px);
     border: 1px solid rgba(97, 92, 237, 0.35);
     border-radius: 10px;
     background: color-mix(in srgb, var(--background-color) 94%, #615ced 6%);
@@ -193,9 +193,9 @@
   .admin-context-copy {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     min-width: 0;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     white-space: nowrap;
   }
   .admin-context-countdown {

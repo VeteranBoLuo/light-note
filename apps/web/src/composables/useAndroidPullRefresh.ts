@@ -24,10 +24,6 @@ import { hasOpenMobileOverlay } from '@/utils/mobileOverlayHistory';
  * preventDefault 会和原生 overscroll 打架，且 iOS/Standalone 行为各不相同。
  * 想扩到 PWA 需要单独一轮验证（见落地方案第 10 节）。
  *
- * 坐标口径提醒：下拉距离取自 touch.clientY（视觉坐标），顶部判定取 scrollTop
- * （布局坐标）。移动布局运行时强制标准缩放，两者比例一致，所以当前无需换算；
- * 若将来在可能存在 <html> CSS zoom 的形态下启用，必须先按 utils/zoom.ts 的
- * getRootZoom() 归一，否则手指位移与下拉距离不成比例。
  */
 
 /** 与「今日」原实现一致的手感参数，各页面不要各自改，保证全 App 一致。 */

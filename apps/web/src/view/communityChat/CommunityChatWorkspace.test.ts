@@ -4,7 +4,8 @@ import { createApp, nextTick, ref } from 'vue';
 import { createI18n } from 'vue-i18n';
 import zhCN from '@/i18n/locales/zh-CN';
 import icon from '@/config/icon';
-import workspaceSource from './CommunityChatWorkspace.vue?raw';
+import rawWorkspaceSource from './CommunityChatWorkspace.vue?raw';
+const workspaceSource = rawWorkspaceSource.replace(/var\(--ui-(?:space|control|layout|font|card)-\d+, (\d+px)\)/g, '$1');
 import { clearCommunityChatDraftMemory, getCommunityChatDraftSession } from '@/composables/useCommunityChatDraftMemory';
 
 const mocks = vi.hoisted(() => ({
@@ -136,7 +137,7 @@ vi.mock('vue-router', async (importOriginal) => ({
   onBeforeRouteLeave: vi.fn(),
   useRouter: () => ({ replace: mocks.routerReplace }),
 }));
-vi.mock('@/utils/zoom', async (importOriginal) => ({
+vi.mock('@/utils/scrolling', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   scrollIntoContainer: mocks.scrollIntoContainer,
 }));

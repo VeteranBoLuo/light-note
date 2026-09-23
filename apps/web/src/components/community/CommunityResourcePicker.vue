@@ -2,7 +2,7 @@
   <BModal
     :visible="true"
     :title="t('community.feed.addResources')"
-    width="min(760px, 94vw)"
+    width="min(var(--ui-layout-760, 760px), 94vw)"
     :show-footer="false"
     :close-disabled="busy"
     :mask-closable="false"
@@ -142,26 +142,26 @@
 <style scoped>
   .snapshot-picker {
     display: grid;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
   .snapshot-picker > p {
     margin: 0;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     color: var(--desc-color);
     line-height: 1.8;
   }
   .snapshot-preview {
-    padding: 20px;
+    padding: var(--ui-space-20, 20px);
     border: 1px solid var(--workspace-border);
     border-radius: 12px;
     background: var(--workspace-hover);
   }
   .snapshot-label {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--primary-color);
   }
   .snapshot-preview h3 {
-    margin: 10px 0 16px;
+    margin: var(--ui-space-10, 10px) 0 var(--ui-space-16, 16px);
     overflow-wrap: anywhere;
   }
   .snapshot-text {
@@ -175,7 +175,7 @@
   .snapshot-actions {
     display: flex;
     justify-content: flex-end;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .snapshot-picker .snapshot-error {
     color: var(--danger-color);

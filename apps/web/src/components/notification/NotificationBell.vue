@@ -151,7 +151,7 @@
     v-model:visible="detailVisible"
     :title="detailItem ? renderTitle(detailItem) : ''"
     :show-footer="false"
-    width="440px"
+    width="var(--ui-layout-440, 440px)"
   >
     <div class="nt-detail">
       <div v-if="detailItem" class="nt-detail-time">{{ fmtTime(detailItem.createTime) }}</div>
@@ -593,7 +593,7 @@
     justify-content: center;
     color: var(--text-color);
     cursor: pointer;
-    padding: 6px;
+    padding: var(--ui-space-6, 6px);
     border-radius: 8px;
     background: transparent !important;
     box-sizing: border-box;
@@ -614,29 +614,29 @@
     position: absolute;
     top: -1px;
     right: -1px;
-    min-width: 16px;
-    height: 16px;
-    padding: 0 4px;
+    min-width: var(--ui-layout-16, 16px);
+    height: var(--ui-layout-16, 16px);
+    padding: 0 var(--ui-space-4, 4px);
     border-radius: 999px;
     background: #ff4d4f;
     color: #fff;
-    font-size: 10px;
-    line-height: 16px;
+    font-size: var(--ui-font-10, 10px);
+    line-height: var(--ui-layout-16, 16px);
     text-align: center;
     box-sizing: border-box;
     box-shadow: 0 0 0 1.5px var(--background-color);
   }
 
   .nt-popover-content {
-    width: 370px;
-    max-width: calc(100vw - 24px);
+    width: var(--ui-layout-370, 370px);
+    max-width: calc(100vw - var(--ui-layout-24, 24px));
   }
 
   .nt-open-page {
     width: 100%;
-    min-height: 40px;
+    min-height: var(--ui-control-40, 40px);
     justify-content: center;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
     border-width: 1px 0 0;
     border-radius: 0;
     color: var(--primary-color);
@@ -655,30 +655,32 @@
   }
 
   .nt-page.is-desktop-page {
-    gap: 14px;
-    padding: 22px clamp(20px, 2.4vw, 44px) 30px;
+    gap: var(--ui-space-14, 14px);
+    padding: var(--ui-space-22, 22px) clamp(var(--ui-space-20, 20px), 2.4vw, var(--ui-space-44, 44px))
+      var(--ui-space-30, 30px);
     box-sizing: border-box;
   }
 
   .nt-page.is-wide-desktop-page {
-    gap: 16px;
-    padding: 24px clamp(32px, 3vw, 52px) 32px;
+    gap: var(--ui-space-16, 16px);
+    padding: var(--ui-space-24, 24px) clamp(var(--ui-space-32, 32px), 3vw, var(--ui-space-52, 52px))
+      var(--ui-space-32, 32px);
   }
 
   .nt-desktop-header {
-    width: min(100%, 1380px);
-    min-height: 58px;
+    width: min(100%, var(--ui-layout-1380, 1380px));
+    min-height: var(--ui-layout-58, 58px);
     margin: 0 auto;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 24px;
+    gap: var(--ui-space-24, 24px);
     flex: 0 0 auto;
   }
 
   .is-wide-desktop-page .nt-desktop-header {
-    width: min(100%, 1380px);
-    min-height: 62px;
+    width: min(100%, var(--ui-layout-1380, 1380px));
+    min-height: var(--ui-layout-62, 62px);
   }
 
   .nt-desktop-heading,
@@ -690,13 +692,13 @@
 
   .nt-desktop-heading {
     min-width: 0;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .nt-desktop-heading__icon {
-    width: 42px;
-    height: 42px;
-    flex: 0 0 42px;
+    width: var(--ui-layout-42, 42px);
+    height: var(--ui-layout-42, 42px);
+    flex: 0 0 var(--ui-layout-42, 42px);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -709,16 +711,16 @@
   .nt-desktop-heading__copy {
     min-width: 0;
     display: grid;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
 
   .nt-desktop-heading__title-row {
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
   }
 
   .nt-desktop-heading h1 {
     margin: 0;
-    font-size: clamp(22px, 2vw, 28px);
+    font-size: clamp(var(--ui-font-22, 22px), 2vw, var(--ui-font-28, 28px));
     font-weight: 750;
     line-height: 1.2;
     letter-spacing: -0.02em;
@@ -727,31 +729,31 @@
   .nt-desktop-heading p {
     margin: 0;
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .nt-desktop-unread {
     display: inline-flex;
     align-items: center;
-    min-height: 22px;
-    padding: 1px 8px;
+    min-height: var(--ui-layout-22, 22px);
+    padding: var(--ui-space-1, 1px) var(--ui-space-8, 8px);
     border: 1px solid var(--primary-color);
     border-radius: 999px;
     color: var(--primary-color);
     background: color-mix(in srgb, var(--primary-color) 8%, var(--card-background));
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 700;
     font-variant-numeric: tabular-nums;
   }
 
   .nt-desktop-actions {
     flex: 0 0 auto;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .nt-desktop-actions :deep(.b_btn) {
-    min-height: 36px;
-    gap: 6px;
+    min-height: var(--ui-control-36, 36px);
+    gap: var(--ui-space-6, 6px);
   }
 
   .nt-page__header {
@@ -810,7 +812,7 @@
   }
 
   .nt-page.is-desktop-page > :deep(.nt-panel) {
-    width: min(100%, 1380px);
+    width: min(100%, var(--ui-layout-1380, 1380px));
     max-width: none;
     margin: 0 auto;
     overflow: hidden;
@@ -829,8 +831,8 @@
 <!-- 面板样式不 scoped:BPopover 内容 teleport 到 body,scoped 命不中 -->
 <style lang="less">
   .notification-popover {
-    width: 370px;
-    max-width: calc(100vw - 24px);
+    width: var(--ui-layout-370, 370px);
+    max-width: calc(100vw - var(--ui-layout-24, 24px));
     padding: 0;
     overflow: hidden;
   }
@@ -843,18 +845,18 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 12px 14px;
+    padding: var(--ui-space-12, 12px) var(--ui-space-14, 14px);
     border-bottom: 1px solid color-mix(in srgb, var(--card-border-color) 45%, transparent);
   }
   .notification-popover .nt-title {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     font-weight: 700;
   }
   .notification-popover .nt-markall {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    font-size: 12px;
+    gap: var(--ui-space-5, 5px);
+    font-size: var(--ui-font-12, 12px);
     color: var(--primary-color);
     cursor: pointer;
   }
@@ -864,20 +866,20 @@
   }
   .notification-popover .nt-tabs {
     display: flex;
-    gap: 6px;
-    padding: 10px 14px 4px;
+    gap: var(--ui-space-6, 6px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-14, 14px) var(--ui-space-4, 4px);
     flex-wrap: wrap;
   }
   .notification-popover .nt-tab {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    padding: 4px 10px;
+    gap: var(--ui-space-5, 5px);
+    padding: var(--ui-space-4, 4px) var(--ui-space-10, 10px);
     border-radius: 8px;
     border: 1px solid color-mix(in srgb, var(--card-border-color) 50%, transparent);
     background: transparent;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     cursor: pointer;
     transition:
       color 0.15s,
@@ -894,13 +896,13 @@
     align-items: center;
     justify-content: center;
     flex: 0 0 auto;
-    min-width: 15px;
-    height: 15px;
+    min-width: var(--ui-layout-15, 15px);
+    height: var(--ui-layout-15, 15px);
     padding: 0;
     border-radius: 999px;
     background: #ff4d4f;
     color: #fff;
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     line-height: 1;
     text-align: center;
     white-space: nowrap;
@@ -908,20 +910,20 @@
     font-variant-numeric: tabular-nums;
   }
   .notification-popover .nt-tab-badge.is-wide {
-    min-width: 22px;
-    padding: 0 5px;
+    min-width: var(--ui-layout-22, 22px);
+    padding: 0 var(--ui-space-5, 5px);
   }
   .notification-popover .nt-tab-badge.is-capped {
-    min-width: 28px;
+    min-width: var(--ui-layout-28, 28px);
   }
   .notification-popover .nt-tab.active .nt-tab-badge {
     background: var(--danger-fill-bg, #d93b3b);
     color: var(--danger-fill-fg, #fff);
   }
   .notification-popover .nt-list {
-    max-height: 380px;
+    max-height: var(--ui-layout-380, 380px);
     overflow-y: auto;
-    padding: 6px;
+    padding: var(--ui-space-6, 6px);
   }
   /* 移动端顶栏铃铛打开时:面板近全宽,列表限高避免盖过底部导航 */
   @media (max-width: 767px) {
@@ -930,27 +932,27 @@
     }
   }
   .notification-popover .nt-state {
-    padding: 40px 0;
+    padding: var(--ui-space-40, 40px) 0;
     text-align: center;
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .notification-popover .nt-empty-icon {
-    font-size: 30px;
-    margin-bottom: 8px;
+    font-size: var(--ui-font-30, 30px);
+    margin-bottom: var(--ui-space-8, 8px);
     opacity: 0.7;
   }
   .notification-popover .nt-group-label {
-    padding: 10px 4px 4px;
-    font-size: 11px;
+    padding: var(--ui-space-10, 10px) var(--ui-space-4, 4px) var(--ui-space-4, 4px);
+    font-size: var(--ui-font-11, 11px);
     font-weight: 600;
     color: var(--desc-color, #888);
   }
   .notification-popover .nt-item {
     position: relative;
     display: flex;
-    gap: 10px;
-    padding: 10px;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-10, 10px);
     border: 1px solid color-mix(in srgb, var(--card-border-color) 68%, transparent);
     border-radius: 10px;
     background: var(--card-background);
@@ -960,15 +962,15 @@
       border-color 0.15s;
   }
   .notification-popover .nt-item + .nt-item {
-    margin-top: 6px;
+    margin-top: var(--ui-space-6, 6px);
   }
   .notification-popover .nt-del {
     position: absolute;
-    top: 8px;
-    right: 8px;
-    width: 22px;
-    min-width: 22px;
-    height: 22px;
+    top: var(--ui-space-8, 8px);
+    right: var(--ui-space-8, 8px);
+    width: var(--ui-layout-22, 22px);
+    min-width: var(--ui-layout-22, 22px);
+    height: var(--ui-layout-22, 22px);
     padding: 0;
     display: flex;
     align-items: center;
@@ -992,7 +994,7 @@
     flex: 0 0 auto;
     width: 8px;
     height: 8px;
-    margin-top: 6px;
+    margin-top: var(--ui-space-6, 6px);
     border-radius: 50%;
     background: var(--card-border-color);
   }
@@ -1017,17 +1019,17 @@
     min-width: 0;
   }
   .notification-popover .nt-item-title {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 600;
     color: var(--text-color);
-    padding-right: 22px; /* 预留删除按钮位,悬停出现时不遮挡标题 */
+    padding-right: var(--ui-space-22, 22px); /* 预留删除按钮位,悬停出现时不遮挡标题 */
   }
   .notification-popover .nt-item.unread .nt-item-title {
     font-weight: 700;
   }
   .notification-popover .nt-item-content {
-    margin-top: 2px;
-    font-size: 12px;
+    margin-top: var(--ui-space-2, 2px);
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1041,18 +1043,18 @@
   .nt-detail {
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    padding: 2px;
-    width: 400px;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-2, 2px);
+    width: var(--ui-layout-400, 400px);
     max-width: 84vw;
     box-sizing: border-box;
   }
   .nt-detail-time {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
   }
   .nt-detail-content {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     line-height: 1.7;
     color: var(--text-color);
     white-space: pre-wrap;
@@ -1062,13 +1064,13 @@
     overflow-y: auto;
   }
   .nt-detail-empty {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     color: var(--desc-color);
-    padding: 8px 0;
+    padding: var(--ui-space-8, 8px) 0;
   }
   .notification-popover .nt-item-time {
-    margin-top: 4px;
-    font-size: 11px;
+    margin-top: var(--ui-space-4, 4px);
+    font-size: var(--ui-font-11, 11px);
     color: var(--desc-color);
     opacity: 0.8;
   }
@@ -1076,19 +1078,19 @@
     display: flex;
     align-items: center;
     flex-wrap: nowrap;
-    gap: 6px;
-    margin-top: 8px;
+    gap: var(--ui-space-6, 6px);
+    margin-top: var(--ui-space-8, 8px);
   }
   .notification-popover .nt-todo-action {
     flex: 0 0 auto;
     width: auto;
     min-width: 0;
-    height: 26px;
-    padding: 0 10px;
+    height: var(--ui-control-26, 26px);
+    padding: 0 var(--ui-space-10, 10px);
     border-radius: 7px;
-    line-height: 26px;
+    line-height: var(--ui-control-26, 26px);
     white-space: nowrap;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 600;
   }
   .notification-popover .nt-todo-action--complete {
@@ -1106,12 +1108,12 @@
   }
   .notification-popover .nt-more {
     width: 100%;
-    padding: 8px;
-    margin-top: 4px;
+    padding: var(--ui-space-8, 8px);
+    margin-top: var(--ui-space-4, 4px);
     border: none;
     background: transparent;
     color: var(--primary-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     cursor: pointer;
   }
   .notification-popover .nt-more:disabled {

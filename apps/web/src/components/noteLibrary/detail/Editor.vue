@@ -311,7 +311,7 @@
     <BModal
       v-model:visible="mentionPickerVisible"
       :title="t('note.resourceMention.title')"
-      width="460px"
+      width="var(--ui-layout-460, 460px)"
       :show-footer="false"
       @close="closeMentionPicker"
     >
@@ -333,7 +333,7 @@
     <BModal
       v-model:visible="shortcutHelpVisible"
       :title="t('noteDetail.editor.shortcutsTitle')"
-      width="min(560px, calc(100vw - 24px))"
+      width="min(var(--ui-layout-560, 560px), calc(100vw - 24px))"
       :show-footer="false"
     >
       <div class="note-shortcuts">
@@ -369,7 +369,7 @@
     <BModal
       v-model:visible="richMermaidEditorVisible"
       :title="t('noteDetail.editor.diagramEditTitle')"
-      width="min(720px, calc(100vw - 24px))"
+      width="min(var(--ui-layout-720, 720px), calc(100vw - 24px))"
       :show-footer="false"
       :mask-closable="false"
       @close="closeRichMermaidEditor"
@@ -396,7 +396,7 @@
       :title="
         richColorMode === 'text' ? t('noteDetail.editor.customTextColor') : t('noteDetail.editor.customBackgroundColor')
       "
-      width="420px"
+      width="var(--ui-layout-420, 420px)"
       :show-footer="false"
       :mask-closable="false"
       @close="closeRichColorDialog"
@@ -441,7 +441,7 @@
     <BModal
       v-model:visible="richTextGradientDialogVisible"
       :title="t('noteDetail.editor.gradientText')"
-      width="460px"
+      width="var(--ui-layout-460, 460px)"
       :show-footer="false"
       :mask-closable="false"
       @close="closeRichTextGradientDialog"
@@ -547,7 +547,7 @@
       :title="conversionTargetType === 'markdown' ? t('note.switchToMd') : t('note.switchToHtml')"
       :show-footer="false"
       :mask-closable="false"
-      width="min(860px, calc(100vw - 24px))"
+      width="min(var(--ui-layout-860, 860px), calc(100vw - 24px))"
     >
       <div v-if="conversionReport" class="note-conversion-preview">
         <p class="note-conversion-preview__notice">{{ t('noteDetail.editor.conversion.restorePoint') }}</p>
@@ -772,8 +772,8 @@
     noteHtmlToMarkdown,
     promoteEmptyMarkdownTaskToken,
   } from '@/utils/noteHtmlToMarkdown';
-  import { scrollIntoContainer } from '@/utils/zoom.ts';
-  import { getRootZoom } from '@/utils/zoom.ts';
+  import { scrollIntoContainer } from '@/utils/scrolling';
+
   import {
     applyContentImageSizeToElement,
     decorateRenderedMarkdownImageIndexes,
@@ -2063,13 +2063,13 @@
   }
 
   function setInlineMentionAnchor(rect: Pick<DOMRect, 'top' | 'left' | 'height'>) {
-    const zoom = getRootZoom();
+
     // 锚点比光标行高多留 6px:浮层贴着光标展开会压住正在写的那一行,看不见自己刚打的字
-    const anchorHeight = (Math.max(rect.height, 18) + 6) / zoom;
+    const anchorHeight = (Math.max(rect.height, 18) + 6);
     inlineMentionAnchorStyle.value = {
       position: 'fixed',
-      left: `${rect.left / zoom}px`,
-      top: `${rect.top / zoom}px`,
+      left: `${rect.left}px`,
+      top: `${rect.top}px`,
       width: '1px',
       height: `${anchorHeight}px`,
       pointerEvents: 'none',
@@ -2077,13 +2077,13 @@
   }
 
   function setSlashCommandAnchor(rect: Pick<DOMRect, 'top' | 'left' | 'height'>) {
-    const zoom = getRootZoom();
+
     slashCommandAnchorStyle.value = {
       position: 'fixed',
-      left: `${rect.left / zoom}px`,
-      top: `${rect.top / zoom}px`,
+      left: `${rect.left}px`,
+      top: `${rect.top}px`,
       width: '1px',
-      height: `${(Math.max(rect.height, 18) + 6) / zoom}px`,
+      height: `${(Math.max(rect.height, 18) + 6)}px`,
       pointerEvents: 'none',
     };
   }
@@ -4950,10 +4950,9 @@
         event.stopImmediatePropagation();
         editor.selection?.select?.(image);
         editor.nodeChanged?.();
-        // 必须把图片作为 node 锚点传给 TinyMCE。省略 target 时，长按会按事件点贴到
-        // 图片右边缘，窄屏剩余宽度不足后工具条会被压成单列；随后普通点击又改用节点
-        // 锚点，才出现另一套横向排版。
-        editor.dispatch?.('contexttoolbar-show', { toolbarKey: 'imageselection', target: image });
+        // Silver 的 node 锚点接收 SugarElement（{ dom }），不是裸 DOM。
+        // 保留图片节点锚定；裸 DOM 会在内部读取 target.dom.nodeType 时抛错。
+        editor.dispatch?.('contexttoolbar-show', { toolbarKey: 'imageselection', target: { dom: image } });
       };
       const blockDesktopRichTextContextMenu = (event: Event) => {
         if (props.readonly || usesNativeTextSelectionMenu.value || resolveRichImageFromEvent(event)) return;
@@ -5812,7 +5811,7 @@
   }
 
   .note-shortcuts {
-    max-height: min(620px, 72vh);
+    max-height: min(var(--ui-layout-620, 620px), 72vh);
     overflow-y: auto;
     color: var(--text-color);
   }
@@ -5820,30 +5819,30 @@
   .note-shortcuts__intro {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 12px;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-12, 12px);
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     background: var(--surface-page-bg, var(--background-color));
 
     strong {
       display: block;
-      margin-bottom: 3px;
-      font-size: 14px;
+      margin-bottom: var(--ui-space-3, 3px);
+      font-size: var(--ui-font-14, 14px);
     }
 
     p {
       margin: 0;
       color: var(--desc-color);
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
       line-height: 1.55;
     }
   }
 
   .note-shortcuts__intro-icon {
     display: inline-flex;
-    width: 40px;
-    height: 40px;
+    width: var(--ui-layout-40, 40px);
+    height: var(--ui-layout-40, 40px);
     align-items: center;
     justify-content: center;
     flex: 0 0 auto;
@@ -5854,12 +5853,12 @@
   }
 
   .note-shortcuts__section {
-    margin-top: 18px;
+    margin-top: var(--ui-space-18, 18px);
 
     h3 {
-      margin: 0 0 8px;
+      margin: 0 0 var(--ui-space-8, 8px);
       color: var(--desc-color);
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
       font-weight: 600;
     }
   }
@@ -5873,11 +5872,11 @@
 
   .note-shortcuts__row {
     display: flex;
-    min-height: 48px;
+    min-height: var(--ui-control-48, 48px);
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
-    padding: 9px 12px;
+    gap: var(--ui-space-16, 16px);
+    padding: var(--ui-space-9, 9px) var(--ui-space-12, 12px);
 
     & + & {
       border-top: 1px solid var(--surface-divider-color, var(--surface-border-color));
@@ -5885,14 +5884,14 @@
 
     dt {
       min-width: 0;
-      font-size: 14px;
+      font-size: var(--ui-font-14, 14px);
     }
 
     small {
       display: block;
-      margin-top: 2px;
+      margin-top: var(--ui-space-2, 2px);
       color: var(--desc-color);
-      font-size: 11px;
+      font-size: var(--ui-font-11, 11px);
       line-height: 1.4;
     }
 
@@ -5900,21 +5899,21 @@
       display: flex;
       align-items: center;
       justify-content: flex-end;
-      gap: 6px;
+      gap: var(--ui-space-6, 6px);
       margin: 0;
       flex: 0 0 auto;
     }
 
     kbd {
-      min-width: 26px;
-      padding: 4px 7px;
+      min-width: var(--ui-layout-26, 26px);
+      padding: var(--ui-space-4, 4px) var(--ui-space-7, 7px);
       border: 1px solid var(--surface-border-color);
       border-bottom-width: 2px;
       border-radius: 6px;
       background: var(--surface-page-bg, var(--background-color));
       color: var(--text-color);
       font-family: var(--app-font-family);
-      font-size: 11px;
+      font-size: var(--ui-font-11, 11px);
       line-height: 1.2;
       text-align: center;
       white-space: nowrap;
@@ -5923,7 +5922,7 @@
 
   .note-shortcuts__or {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   @media (max-width: 520px) {
@@ -6226,32 +6225,33 @@
   }
 
   .rich-media-text-popover {
-    width: min(620px, calc(100vw - 16px));
-    padding: 10px;
+    /* ui-density-fixed: Keep the viewport edge clearance in physical CSS pixels. */
+    width: min(var(--ui-layout-620, 620px), calc(100vw - 16px));
+    padding: var(--ui-space-10, 10px);
   }
 
   .rich-media-text-toolbar {
     display: flex;
     align-items: flex-end;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
 
     &__heading {
       display: flex;
       align-items: center;
       align-self: center;
-      gap: 6px;
+      gap: var(--ui-space-6, 6px);
       color: var(--text-color);
       white-space: nowrap;
     }
 
     &__field {
       display: grid;
-      flex: 0 0 116px;
-      gap: 4px;
+      flex: 0 0 var(--ui-layout-116, 116px);
+      gap: var(--ui-space-4, 4px);
 
       > span {
         color: var(--desc-color, #737782);
-        font-size: 12px;
+        font-size: var(--ui-font-12, 12px);
         line-height: 1.2;
       }
 
@@ -6263,11 +6263,11 @@
     &__actions {
       display: flex;
       flex-wrap: wrap;
-      gap: 6px;
+      gap: var(--ui-space-6, 6px);
       margin-left: auto;
 
       .b_btn {
-        gap: 5px;
+        gap: var(--ui-space-5, 5px);
       }
     }
   }
@@ -6297,10 +6297,10 @@
   .mode-pill {
     display: inline-flex;
     align-items: center;
-    padding: 0 10px;
-    height: 22px;
+    padding: 0 var(--ui-space-10, 10px);
+    height: var(--ui-layout-22, 22px);
     border-radius: 11px;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 600;
     cursor: pointer;
     letter-spacing: 0.5px;
@@ -6323,14 +6323,14 @@
   .undo-switch-btn {
     display: inline-flex;
     align-items: center;
-    gap: 2px;
-    padding: 0 8px;
-    height: 22px;
+    gap: var(--ui-space-2, 2px);
+    padding: 0 var(--ui-space-8, 8px);
+    height: var(--ui-layout-22, 22px);
     border: 1px solid var(--card-border-color, #e8eaf2);
     border-radius: 6px;
     background: transparent;
     color: var(--text-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     cursor: pointer;
     transition: all 0.15s;
     &:hover {
@@ -6396,17 +6396,17 @@
   .note-editor .editor-toolbar-v2__trailing .md-view-switch {
     display: inline-flex;
     align-items: center;
-    gap: 2px;
-    height: 28px;
+    gap: var(--ui-space-2, 2px);
+    height: var(--ui-control-28, 28px);
     margin: 0;
     box-sizing: border-box;
     border: 0;
     background: transparent;
   }
   .note-editor .editor-toolbar-v2__trailing .md-view-switch__button {
-    width: 28px;
-    min-width: 28px;
-    height: 28px;
+    width: var(--ui-control-28, 28px);
+    min-width: var(--ui-control-28, 28px);
+    height: var(--ui-control-28, 28px);
     padding: 0;
     border: 0 !important;
     border-bottom: 2px solid transparent !important;
@@ -6839,7 +6839,7 @@
 
   .rich-color-dialog {
     display: grid;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     color: var(--text-color);
 
     > p {
@@ -6855,11 +6855,11 @@
 
   .rich-mermaid-editor {
     display: grid;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     color: var(--text-color);
 
     > p {
-      margin: 0 0 2px;
+      margin: 0 0 var(--ui-space-2, 2px);
       color: var(--desc-color);
       line-height: 1.55;
     }
@@ -6869,7 +6869,7 @@
     }
 
     .b-textarea {
-      min-height: min(46vh, 360px);
+      min-height: min(46vh, var(--ui-layout-360, 360px));
       font:
         13px/1.6 ui-monospace,
         SFMono-Regular,
@@ -6884,21 +6884,21 @@
   .rich-mermaid-editor__actions {
     display: flex;
     justify-content: flex-end;
-    gap: 8px;
-    margin-top: 4px;
+    gap: var(--ui-space-8, 8px);
+    margin-top: var(--ui-space-4, 4px);
   }
 
   .rich-color-dialog__palette {
     display: grid;
     grid-template-columns: repeat(6, minmax(0, 1fr));
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .rich-color-dialog__swatch.b_btn {
     width: 100%;
     min-width: 0;
-    height: 38px;
-    padding: 4px;
+    height: var(--ui-control-38, 38px);
+    padding: var(--ui-space-4, 4px);
     border: 2px solid var(--surface-border-color);
     background: var(--card-background);
 
@@ -6920,16 +6920,16 @@
   .rich-color-dialog__actions {
     display: flex;
     justify-content: flex-end;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
 
     .b_btn {
-      min-height: 40px;
+      min-height: var(--ui-control-40, 40px);
     }
   }
 
   .rich-text-gradient-dialog {
     display: grid;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
     color: var(--text-color);
 
     > p {
@@ -6940,17 +6940,17 @@
   }
 
   .rich-text-gradient-dialog__preview {
-    min-height: 76px;
+    min-height: var(--ui-layout-76, 76px);
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 10px 16px;
+    padding: var(--ui-space-10, 10px) var(--ui-space-16, 16px);
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     background: var(--surface-page-bg, var(--background-color));
 
     > span {
-      font-size: 26px;
+      font-size: var(--ui-font-26, 26px);
       font-weight: 750;
       line-height: 1.3;
       text-align: center;
@@ -6959,31 +6959,31 @@
 
   .rich-text-gradient-dialog__palette-title {
     display: block;
-    margin-bottom: 8px;
-    font-size: 13px;
+    margin-bottom: var(--ui-space-8, 8px);
+    font-size: var(--ui-font-13, 13px);
   }
 
   .rich-text-gradient-dialog__palette {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .rich-text-gradient-dialog__preset.b_btn {
     width: 100%;
     min-width: 0;
-    min-height: 54px;
+    min-height: var(--ui-control-54, 54px);
     height: auto;
-    padding: 5px;
+    padding: var(--ui-space-5, 5px);
     display: grid;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
     border: 2px solid var(--surface-border-color);
     background: var(--card-background);
 
     > span {
       display: block;
       width: 100%;
-      height: 24px;
+      height: var(--ui-layout-24, 24px);
       border: 1px solid rgba(0, 0, 0, 0.18);
       border-radius: 6px;
       background: linear-gradient(90deg, var(--gradient-preset-from), var(--gradient-preset-to));
@@ -6993,7 +6993,7 @@
       min-width: 0;
       overflow: hidden;
       color: var(--desc-color);
-      font-size: 11px;
+      font-size: var(--ui-font-11, 11px);
       text-overflow: ellipsis;
       white-space: nowrap;
     }
@@ -7006,9 +7006,9 @@
 
   .rich-text-gradient-dialog__fields {
     display: grid;
-    grid-template-columns: 112px minmax(0, 1fr);
+    grid-template-columns: var(--ui-layout-112, 112px) minmax(0, 1fr);
     align-items: center;
-    gap: 10px 12px;
+    gap: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
 
     > label {
       font-weight: 600;
@@ -7018,18 +7018,18 @@
   .rich-text-gradient-dialog__color-control {
     min-width: 0;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 44px;
+    grid-template-columns: minmax(0, 1fr) var(--ui-layout-44, 44px);
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .rich-text-gradient-dialog__color-picker-tooltip,
   .rich-text-gradient-dialog__color-picker {
-    width: 44px;
+    width: var(--ui-layout-44, 44px);
   }
 
   .rich-text-gradient-dialog__color-picker :deep(.b-input) {
-    padding: 3px !important;
+    padding: var(--ui-space-3, 3px) !important;
     border: 1px solid var(--surface-border-color) !important;
     background: var(--card-background);
     cursor: pointer;
@@ -7038,22 +7038,22 @@
   .rich-text-gradient-dialog__actions {
     display: flex;
     justify-content: flex-end;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
 
     .b_btn {
-      min-height: 40px;
+      min-height: var(--ui-control-40, 40px);
     }
   }
 
   .note-conversion-preview {
     display: grid;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
     color: var(--text-color);
   }
 
   .note-conversion-preview__notice {
     margin: 0;
-    padding: 11px 13px;
+    padding: var(--ui-space-11, 11px) var(--ui-space-13, 13px);
     border: 1px solid var(--primary-color);
     border-radius: 10px;
     color: var(--primary-color);
@@ -7065,12 +7065,12 @@
   .note-conversion-preview__summary {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
 
     > div {
       display: grid;
-      gap: 5px;
-      padding: 12px;
+      gap: var(--ui-space-5, 5px);
+      padding: var(--ui-space-12, 12px);
       border: 1px solid var(--surface-border-color);
       border-top-width: 3px;
       border-radius: 10px;
@@ -7078,7 +7078,7 @@
 
       span {
         color: var(--desc-color);
-        font-size: 12px;
+        font-size: var(--ui-font-12, 12px);
       }
     }
 
@@ -7101,12 +7101,12 @@
     border-radius: 10px;
 
     > div {
-      min-height: 40px;
-      padding: 0 12px;
+      min-height: var(--ui-control-40, 40px);
+      padding: 0 var(--ui-space-12, 12px);
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 12px;
+      gap: var(--ui-space-12, 12px);
       border-bottom: 1px solid var(--surface-border-color);
 
       &:last-child {
@@ -7124,13 +7124,13 @@
   .note-conversion-preview__content {
     min-height: 0;
     display: grid;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
 
     pre,
     .note-conversion-preview__rendered {
-      max-height: min(34vh, 300px);
+      max-height: min(34vh, var(--ui-layout-300, 300px));
       margin: 0;
-      padding: 12px;
+      padding: var(--ui-space-12, 12px);
       box-sizing: border-box;
       overflow: auto;
       border: 1px solid var(--surface-border-color);
@@ -7155,10 +7155,10 @@
   .note-conversion-preview__actions {
     display: flex;
     justify-content: flex-end;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
 
     .b_btn {
-      min-height: 40px;
+      min-height: var(--ui-control-40, 40px);
     }
   }
 

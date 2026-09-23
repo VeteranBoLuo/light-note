@@ -95,11 +95,11 @@
     background: transparent;
     color: var(--primary-color);
     padding: 0;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .mention-panel {
-    margin-top: 8px;
-    padding: 12px;
+    margin-top: var(--ui-space-8, 8px);
+    padding: var(--ui-space-12, 12px);
     border: 1px solid var(--surface-border-color);
     border-radius: 8px;
     background: var(--card-background);
@@ -109,7 +109,7 @@
   .mention-result {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .mention-search .input-container {
     flex: 1;
@@ -117,15 +117,15 @@
   }
   .mention-selected {
     flex-wrap: wrap;
-    margin-top: 10px;
+    margin-top: var(--ui-space-10, 10px);
   }
   .mention-result {
     justify-content: space-between;
-    padding-top: 10px;
-    font-size: 13px;
+    padding-top: var(--ui-space-10, 10px);
+    font-size: var(--ui-font-13, 13px);
   }
   .mention-result small {
     color: var(--desc-color);
-    margin-left: 6px;
+    margin-left: var(--ui-space-6, 6px);
   }
 </style>

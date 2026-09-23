@@ -72,11 +72,11 @@
 <style scoped>
   .settings-choices {
     display: flex;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     flex-wrap: wrap;
   }
   .settings-choice-select {
-    width: 180px;
+    width: var(--ui-layout-180, 180px);
     max-width: 100%;
   }
   .settings-choices .b_btn {

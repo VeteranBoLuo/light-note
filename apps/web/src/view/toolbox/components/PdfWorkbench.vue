@@ -64,12 +64,12 @@
   .pdf-workbench {
     min-width: 0;
     display: grid;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
   }
 
   .pdf-workbench__navigation {
     min-width: 0;
-    padding: 4px;
+    padding: var(--ui-space-4, 4px);
     overflow-x: auto;
     border: 1px solid var(--surface-border-color);
     border-radius: 14px;
@@ -87,11 +87,11 @@
   }
 
   .pdf-workbench__navigation :deep(.tab) {
-    min-height: 34px;
+    min-height: var(--ui-layout-34, 34px);
     flex: 1;
     justify-content: center;
-    padding-right: 18px;
-    padding-left: 18px;
+    padding-right: var(--ui-space-18, 18px);
+    padding-left: var(--ui-space-18, 18px);
   }
 
   .pdf-workbench__navigation :deep(.tab.is-active) {
@@ -105,18 +105,18 @@
 
   @media (max-width: 767px) {
     .pdf-workbench {
-      gap: 15px;
+      gap: var(--ui-space-15, 15px);
     }
 
     .pdf-workbench__navigation {
-      padding: 5px;
+      padding: var(--ui-space-5, 5px);
       border-radius: 12px;
     }
 
     .pdf-workbench__navigation :deep(.tab) {
-      min-height: 44px;
-      padding-right: 14px;
-      padding-left: 14px;
+      min-height: var(--ui-layout-44, 44px);
+      padding-right: var(--ui-space-14, 14px);
+      padding-left: var(--ui-space-14, 14px);
     }
   }
 

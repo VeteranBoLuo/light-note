@@ -109,54 +109,54 @@
   .rank-ladder {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    margin-top: 16px;
+    gap: var(--ui-space-8, 8px);
+    margin-top: var(--ui-space-16, 16px);
   }
   .rl-head {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 600;
     color: var(--desc-color);
     letter-spacing: 0.03em;
   }
   .rl-hint {
-    margin: 3px 0 0;
+    margin: var(--ui-space-3, 3px) 0 0;
     color: var(--desc-color);
-    font-size: 10.5px;
+    font-size: var(--ui-font-10_5, 10.5px);
     line-height: 1.45;
   }
   .rl-list {
     display: flex;
     flex-direction: column;
-    gap: 2px;
-    max-height: 264px;
+    gap: var(--ui-space-2, 2px);
+    max-height: var(--ui-layout-264, 264px);
     overflow-y: auto;
-    padding-right: 4px;
+    padding-right: var(--ui-space-4, 4px);
   }
   .rl-colhead {
     display: grid;
-    grid-template-columns: 24px 1fr auto auto;
+    grid-template-columns: var(--ui-layout-24, 24px) 1fr auto auto;
     align-items: center;
-    gap: 10px;
-    padding: 0 8px 6px;
-    font-size: 10.5px;
+    gap: var(--ui-space-10, 10px);
+    padding: 0 var(--ui-space-8, 8px) var(--ui-space-6, 6px);
+    font-size: var(--ui-font-10_5, 10.5px);
     font-weight: 600;
     color: var(--desc-color);
     opacity: 0.75;
     border-bottom: 1px solid color-mix(in srgb, var(--card-border-color) 45%, transparent);
-    margin-bottom: 4px;
+    margin-bottom: var(--ui-space-4, 4px);
   }
   .rl-colhead-r {
     text-align: right;
   }
   .rl-row {
     display: grid;
-    grid-template-columns: 24px 1fr auto auto;
+    grid-template-columns: var(--ui-layout-24, 24px) 1fr auto auto;
     align-items: center;
-    gap: 10px;
-    padding: 6px 8px;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-6, 6px) var(--ui-space-8, 8px);
     border: 1px solid transparent;
     border-radius: 8px;
-    font-size: 12.5px;
+    font-size: var(--ui-font-12_5, 12.5px);
     transition: background 0.15s;
   }
   .rl-row.done {
@@ -168,27 +168,27 @@
     opacity: 1;
   }
   .rl-lv {
-    width: 22px;
-    height: 22px;
+    width: var(--ui-layout-22, 22px);
+    height: var(--ui-layout-22, 22px);
     border-radius: 6px;
     display: flex;
     align-items: center;
     justify-content: center;
     color: #fff;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 700;
   }
   .rl-name {
     font-weight: 600;
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
     min-width: 0;
   }
   .rl-max {
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     font-weight: 600;
-    padding: 0 6px;
+    padding: 0 var(--ui-space-6, 6px);
     border-radius: 999px;
     color: #fff;
     background: linear-gradient(135deg, #f43f5e, #fb923c);
@@ -199,70 +199,70 @@
   }
   .rl-perk {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     white-space: nowrap;
   }
   .rl-free {
     display: inline-flex;
     align-items: center;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
     color: #d97706;
     font-weight: 600;
-    margin-left: 2px;
+    margin-left: var(--ui-space-2, 2px);
   }
   .rl-toggle.b_btn {
     width: 100%;
-    min-height: 30px;
+    min-height: var(--ui-control-30, 30px);
     border-color: var(--card-border-color);
     color: var(--text-color);
     background: var(--background-color);
   }
   .rank-ladder--compact {
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
     margin-top: 0;
   }
   .rank-ladder--compact .rl-head {
     color: var(--text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .rank-ladder--compact .rl-hint {
-    margin-top: 1px;
+    margin-top: var(--ui-space-1, 1px);
     overflow: hidden;
-    font-size: 9.5px;
+    font-size: var(--ui-font-9_5, 9.5px);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
   .rank-ladder--compact .rl-colhead {
-    gap: 6px;
-    margin-bottom: 1px;
-    padding: 0 5px 4px;
-    font-size: 9.5px;
+    gap: var(--ui-space-6, 6px);
+    margin-bottom: var(--ui-space-1, 1px);
+    padding: 0 var(--ui-space-5, 5px) var(--ui-space-4, 4px);
+    font-size: var(--ui-font-9_5, 9.5px);
   }
   .rank-ladder--compact .rl-list {
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
     padding-right: 0;
   }
   .rank-ladder--compact .rl-row {
-    grid-template-columns: 22px minmax(64px, 1fr) auto auto;
-    gap: 6px;
-    min-height: 30px;
+    grid-template-columns: var(--ui-layout-22, 22px) minmax(var(--ui-layout-64, 64px), 1fr) auto auto;
+    gap: var(--ui-space-6, 6px);
+    min-height: var(--ui-layout-30, 30px);
     box-sizing: border-box;
-    padding: 3px 5px;
-    font-size: 11px;
+    padding: var(--ui-space-3, 3px) var(--ui-space-5, 5px);
+    font-size: var(--ui-font-11, 11px);
   }
   .rank-ladder--compact .rl-lv {
-    width: 20px;
-    height: 20px;
-    font-size: 10px;
+    width: var(--ui-layout-20, 20px);
+    height: var(--ui-layout-20, 20px);
+    font-size: var(--ui-font-10, 10px);
   }
   .rank-ladder--compact .rl-perk {
-    font-size: 9.5px;
+    font-size: var(--ui-font-9_5, 9.5px);
   }
   .rank-ladder--compact .rl-exp {
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
   .rank-ladder--compact .rl-toggle.b_btn {
-    min-height: 27px;
-    font-size: 10.5px;
+    min-height: var(--ui-control-27, 27px);
+    font-size: var(--ui-font-10_5, 10.5px);
   }
 </style>

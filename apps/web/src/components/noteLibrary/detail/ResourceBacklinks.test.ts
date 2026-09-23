@@ -35,7 +35,7 @@ const populatedResult = {
   hasMoreByType: { note: false, todo: false },
 } as const;
 
-async function mountBacklinks(result: unknown = populatedResult) {
+async function mountBacklinks(result: unknown = populatedResult, compact = true) {
   if (result instanceof Error) fetchResourceBacklinks.mockRejectedValue(result);
   else fetchResourceBacklinks.mockResolvedValue(result);
   const host = document.createElement('div');
@@ -46,7 +46,7 @@ async function mountBacklinks(result: unknown = populatedResult) {
         targetType: 'file',
         targetId: 'file-1',
         placement: 'header',
-        compact: true,
+        compact,
       }),
   });
   app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
@@ -67,6 +67,16 @@ afterEach(() => {
 });
 
 describe('ResourceBacklinks', () => {
+  it('页头即使未指定紧凑样式，也在独立浮层中展开，不撑高标题栏', async () => {
+    await mountBacklinks(populatedResult, false);
+    await vi.waitFor(() => expect(document.querySelector('.resource-backlinks__trigger')).not.toBeNull());
+    const header = document.querySelector('.resource-backlinks--header')!;
+    (header.querySelector('.resource-backlinks__trigger') as HTMLButtonElement).click();
+    await nextTick();
+    expect(document.querySelector('.b-popover-panel .resource-backlinks__content')).not.toBeNull();
+    expect(header.querySelector('.resource-backlinks__content')).toBeNull();
+  });
+
   it('把笔记与待办按来源分组，紧凑入口使用合计数量', async () => {
     await mountBacklinks();
 

@@ -219,8 +219,7 @@
 
 <style scoped lang="less">
   .bAlert-bg {
-    /* fixed + inset:0:界面缩放(html zoom)下始终铺满可视视口;
-       原 absolute + 100vw/100vh 在缩放时会露白、且定位随滚动漂移。 */
+    /* 遮罩固定到视口，页面滚动时仍覆盖整个可见区域。 */
     position: fixed;
     inset: 0;
     background-color: rgba(0, 0, 0, 0.8);
@@ -229,41 +228,42 @@
     align-items: center;
     justify-content: center;
     box-sizing: border-box;
-    padding: 20px;
+    padding: var(--ui-space-20, 20px);
   }
   .bAlert {
     position: relative;
     box-sizing: border-box;
-    width: 460px;
+    width: var(--ui-layout-460, 460px);
     max-width: 100%;
     max-height: 100%;
-    min-height: 180px;
+    min-height: var(--ui-layout-180, 180px);
     //box-shadow: 0px 0px 12px rgba(0, 0, 0, 0.12);
     border-radius: 16px;
     z-index: 1;
     box-shadow: 0 0 24px rgba(0, 0, 0, 0.6);
     background-color: var(--background-color);
     animation: in-animation 0.3s ease;
-    padding: 22px;
+    padding: var(--ui-space-22, 22px);
     display: flex;
     flex-direction: column;
   }
   .bAlert--multi-action {
-    width: min(680px, calc(100vw - 40px));
+    /* ui-density-fixed: 40px 是左右视口安全预算，内容宽度通过密度变量调整。 */
+    width: min(var(--ui-layout-680, 680px), calc(100vw - 40px));
   }
   .bAlert-title {
     flex: 0 0 auto;
-    margin-bottom: 15px;
-    font-size: 16px;
+    margin-bottom: var(--ui-space-15, 15px);
+    font-size: var(--ui-font-16, 16px);
     font-weight: 600;
   }
   .bAlert-content {
     flex: 1 1 auto;
-    min-height: 42px;
-    max-height: min(45vh, 360px);
+    min-height: var(--ui-layout-42, 42px);
+    max-height: min(45vh, var(--ui-layout-360, 360px));
     overflow: auto;
     color: var(--desc-color);
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     line-height: 1.55;
     overflow-wrap: anywhere;
   }
@@ -271,7 +271,7 @@
   .bAlert-m-content :deep(.b-alert-rich-content) {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     text-align: left;
   }
   .bAlert-content :deep(.b-alert-rich-content p),
@@ -287,7 +287,7 @@
   }
   .bAlert-content :deep(.b-alert-rich-content__list),
   .bAlert-m-content :deep(.b-alert-rich-content__list) {
-    padding: 10px 12px;
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     border: 1px solid var(--card-border-color);
     border-radius: 10px;
     background: var(--bl-input-noBorder-bg-color);
@@ -295,17 +295,17 @@
   .bAlert-content :deep(.b-alert-rich-content__list-title),
   .bAlert-m-content :deep(.b-alert-rich-content__list-title) {
     display: block;
-    margin-bottom: 6px;
-    font-size: 13px;
+    margin-bottom: var(--ui-space-6, 6px);
+    font-size: var(--ui-font-13, 13px);
   }
   .bAlert-content :deep(.b-alert-rich-content ul),
   .bAlert-m-content :deep(.b-alert-rich-content ul) {
     margin: 0;
-    padding-left: 18px;
+    padding-left: var(--ui-space-18, 18px);
   }
   .bAlert-content :deep(.b-alert-rich-content li + li),
   .bAlert-m-content :deep(.b-alert-rich-content li + li) {
-    margin-top: 3px;
+    margin-top: var(--ui-space-3, 3px);
   }
   .bAlert-content :deep(.b-alert-rich-content__file),
   .bAlert-m-content :deep(.b-alert-rich-content__file) {
@@ -324,7 +324,7 @@
     align-items: center;
     justify-content: flex-end;
     min-width: 0;
-    padding-top: 18px;
+    padding-top: var(--ui-space-18, 18px);
     box-sizing: border-box;
   }
   .bAlert-footer :deep(.space-body) {
@@ -353,7 +353,7 @@
   }
 
   /* 移动端样式绑到 .bAlert--mobile(与 HTML 分支同源 isMobileLayout),不再用 @media (max-width:767px):
-     此前 HTML 用 JS innerWidth<768 门控、CSS 用媒体查询门控,界面缩放(html zoom)/断点边界会分叉 →「移动标记+桌面样式」按钮错位。
+     模板分支与样式使用同一个设备类型，避免断点边界分叉。
      高度自适应(不再固定 160px),标题正文正常流(不再 .row-center 绝对定位),底部按钮不撑破弹框。 */
   .bAlert.bAlert--mobile {
     width: min(78%, 320px);
@@ -371,8 +371,8 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 8px;
-    padding: 22px 20px 16px;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-22, 22px) var(--ui-space-20, 20px) var(--ui-space-16, 16px);
   }
   .bAlert--mobile .bAlert-m-title {
     font-size: 16px;
@@ -401,7 +401,7 @@
     min-width: 0;
     min-height: 44px;
     height: auto;
-    padding: 8px 6px;
+    padding: var(--ui-space-8, 8px) var(--ui-space-6, 6px);
     box-sizing: border-box;
     display: flex;
     align-items: center;
@@ -434,7 +434,7 @@
     width: 100%;
     flex: 0 0 48px;
     min-height: 48px;
-    padding: 0 18px;
+    padding: 0 var(--ui-space-18, 18px);
     white-space: nowrap;
     overflow-wrap: normal;
     word-break: keep-all;
@@ -458,12 +458,12 @@
     font-weight: 500;
   }
   .bAlert-choices-content .bAlert-choice-label {
-    margin: 16px 0 8px;
-    font-size: 12px;
+    margin: var(--ui-space-16, 16px) 0 var(--ui-space-8, 8px);
+    font-size: var(--ui-font-12, 12px);
   }
   .bAlert-choices-content .bAlert-choice-hint {
-    margin-top: 12px;
-    font-size: 12px;
+    margin-top: var(--ui-space-12, 12px);
+    font-size: var(--ui-font-12, 12px);
   }
   .bAlert.bAlert--mobile.bAlert--choices {
     width: 360px;

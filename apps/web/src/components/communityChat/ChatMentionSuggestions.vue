@@ -89,8 +89,8 @@
 <style scoped lang="less">
   .chat-mention-suggestions {
     width: 100%;
-    height: min(360px, 42vh);
-    max-height: min(360px, 42vh);
+    height: min(var(--ui-layout-360, 360px), 42vh);
+    max-height: min(var(--ui-layout-360, 360px), 42vh);
     display: grid;
     grid-template-rows: auto minmax(0, 1fr);
     overflow: hidden;
@@ -107,28 +107,28 @@
   }
 
   .chat-mention-suggestions > header {
-    padding: 9px 11px;
+    padding: var(--ui-space-9, 9px) var(--ui-space-11, 11px);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     border-bottom: 1px solid var(--surface-border-color);
   }
 
   .chat-mention-suggestions > header strong {
     color: var(--text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .chat-mention-suggestions > header small {
     color: var(--desc-color);
-    font-size: 9px;
+    font-size: var(--ui-font-9, 9px);
   }
 
   .chat-mention-suggestions__body {
     // Root 推荐行 + 紧凑 loading 与普通搜索空态共用稳定首屏高度，避免 BPopover
     // 因防抖/快速响应连续改变高度并触发顶部定位闪动。
-    min-height: 105px;
+    min-height: var(--ui-layout-105, 105px);
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -136,29 +136,29 @@
 
   .chat-mention-suggestions__list {
     min-height: 0;
-    padding: 5px;
+    padding: var(--ui-space-5, 5px);
     display: grid;
     grid-auto-rows: max-content;
     align-content: start;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
     flex: 1 1 auto;
     overflow-y: auto;
   }
 
   .chat-mention-suggestions__body.is-loading .chat-mention-suggestions__list {
-    max-height: calc(100% - 72px);
+    max-height: calc(100% - var(--ui-layout-72, 72px));
     flex: 0 1 auto;
   }
 
   .chat-mention-suggestions__item {
     width: 100%;
     height: auto !important;
-    min-height: 54px;
-    padding: 7px 9px;
+    min-height: var(--ui-layout-54, 54px);
+    padding: var(--ui-space-7, 7px) var(--ui-space-9, 9px);
     display: grid;
-    grid-template-columns: 32px minmax(0, 1fr) auto;
+    grid-template-columns: var(--ui-layout-32, 32px) minmax(0, 1fr) auto;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     border: 1px solid transparent !important;
     border-radius: 9px;
     background: transparent !important;
@@ -179,18 +179,18 @@
   }
 
   .chat-mention-suggestions__everyone {
-    min-height: 58px;
+    min-height: var(--ui-layout-58, 58px);
   }
 
   .chat-mention-suggestions__everyone-mark {
-    width: 30px;
-    height: 30px;
+    width: var(--ui-layout-30, 30px);
+    height: var(--ui-layout-30, 30px);
     display: grid;
     place-items: center;
     border-radius: 50%;
     color: #fff;
     background: var(--primary-color);
-    font-size: 18px;
+    font-size: var(--ui-font-18, 18px);
     font-weight: 700;
   }
 
@@ -202,7 +202,7 @@
   .chat-mention-suggestions__copy {
     min-width: 0;
     display: grid;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
     line-height: 1.35;
   }
 
@@ -215,37 +215,37 @@
 
   .chat-mention-suggestions__item strong {
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 600;
   }
 
   .chat-mention-suggestions__item small,
   .chat-mention-suggestions__item em {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     font-style: normal;
     line-height: 1.35;
   }
 
   .chat-mention-suggestions__item em {
-    max-width: 88px;
+    max-width: var(--ui-layout-88, 88px);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .chat-mention-suggestions__state {
-    min-height: 96px;
+    min-height: var(--ui-layout-96, 96px);
     margin: 0;
     display: grid;
     place-items: center;
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .chat-mention-suggestions__loading {
-    min-height: 32px;
-    padding: 0 10px 5px;
+    min-height: var(--ui-layout-32, 32px);
+    padding: 0 var(--ui-space-10, 10px) var(--ui-space-5, 5px);
     display: grid;
     place-items: center;
     flex: 0 0 auto;
@@ -253,14 +253,14 @@
   }
 
   .chat-mention-suggestions__body.is-loading .chat-mention-suggestions__loading {
-    min-height: 72px;
-    padding: 8px;
+    min-height: var(--ui-layout-72, 72px);
+    padding: var(--ui-space-8, 8px);
     flex: 1 1 auto;
   }
 
   .chat-mention-suggestions__loading.is-standalone {
-    min-height: 88px;
-    padding: 8px;
+    min-height: var(--ui-layout-88, 88px);
+    padding: var(--ui-space-8, 8px);
   }
 
   .chat-mention-suggestions__body.is-loading .chat-mention-suggestions__loading.is-standalone {
@@ -268,9 +268,9 @@
   }
 
   .chat-mention-suggestions__loading :deep(.b-loading-inline) {
-    min-height: 28px;
-    gap: 7px;
-    font-size: 10px;
+    min-height: var(--ui-layout-28, 28px);
+    gap: var(--ui-space-7, 7px);
+    font-size: var(--ui-font-10, 10px);
   }
 
   .chat-mention-suggestions__loading :deep(.b-loading-inline__indicator i) {

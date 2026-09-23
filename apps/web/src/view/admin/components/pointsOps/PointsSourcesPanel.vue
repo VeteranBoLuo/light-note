@@ -78,32 +78,32 @@
     { label: '自定义', value: 'custom' },
   ];
   const sourceColumns = [
-    { title: '来源 / 策略', key: 'name', width: 'minmax(200px, 1fr)', ellipsis: false },
-    { title: '产出', key: 'issuedLabel', width: '110px' },
-    { title: '用户', key: 'usersLabel', width: '90px' },
-    { title: '笔数', key: 'operationsLabel', width: '90px' },
+    { title: '来源 / 策略', key: 'name', width: 'minmax(var(--ui-layout-200, 200px), 1fr)', ellipsis: false },
+    { title: '产出', key: 'issuedLabel', width: 'var(--ui-layout-110, 110px)' },
+    { title: '用户', key: 'usersLabel', width: 'var(--ui-layout-90, 90px)' },
+    { title: '笔数', key: 'operationsLabel', width: 'var(--ui-layout-90, 90px)' },
   ];
   const destinationColumns = [
-    { title: '操作 / 商品', key: 'name', width: 'minmax(180px, 1fr)', ellipsis: false },
-    { title: '消耗', key: 'spentLabel', width: '100px' },
-    { title: '用户', key: 'usersLabel', width: '80px' },
-    { title: '附加输出', key: 'output', width: 'minmax(160px, 1fr)', ellipsis: false },
+    { title: '操作 / 商品', key: 'name', width: 'minmax(var(--ui-layout-180, 180px), 1fr)', ellipsis: false },
+    { title: '消耗', key: 'spentLabel', width: 'var(--ui-layout-100, 100px)' },
+    { title: '用户', key: 'usersLabel', width: 'var(--ui-layout-80, 80px)' },
+    { title: '附加输出', key: 'output', width: 'minmax(var(--ui-layout-160, 160px), 1fr)', ellipsis: false },
   ];
   const legacyColumns = [
-    { title: '来源', key: 'name', width: 'minmax(200px, 1fr)', ellipsis: false },
-    { title: '消耗', key: 'spentLabel', width: '100px' },
-    { title: '用户', key: 'usersLabel', width: '90px' },
-    { title: '笔数', key: 'operationsLabel', width: '90px' },
+    { title: '来源', key: 'name', width: 'minmax(var(--ui-layout-200, 200px), 1fr)', ellipsis: false },
+    { title: '消耗', key: 'spentLabel', width: 'var(--ui-layout-100, 100px)' },
+    { title: '用户', key: 'usersLabel', width: 'var(--ui-layout-90, 90px)' },
+    { title: '笔数', key: 'operationsLabel', width: 'var(--ui-layout-90, 90px)' },
   ];
   const productColumns = [
-    { title: '商品', key: 'name', width: 'minmax(170px, 1fr)', ellipsis: false },
-    { title: '人数 / 次数', key: 'volumeLabel', width: '120px' },
-    { title: '消耗', key: 'spentLabel', width: '100px' },
-    { title: '首兑账号天数 P50', key: 'registrationLabel', width: '145px' },
-    { title: '兑前余额 P50', key: 'preBalanceLabel', width: '125px' },
-    { title: '30 天再消费', key: 'repurchaseLabel', width: '120px' },
-    { title: '佩戴率', key: 'wearLabel', width: '90px' },
-    { title: '使用归因', key: 'attributionLabel', width: '120px', ellipsis: false },
+    { title: '商品', key: 'name', width: 'minmax(var(--ui-layout-170, 170px), 1fr)', ellipsis: false },
+    { title: '人数 / 次数', key: 'volumeLabel', width: 'var(--ui-layout-120, 120px)' },
+    { title: '消耗', key: 'spentLabel', width: 'var(--ui-layout-100, 100px)' },
+    { title: '首兑账号天数 P50', key: 'registrationLabel', width: 'var(--ui-layout-145, 145px)' },
+    { title: '兑前余额 P50', key: 'preBalanceLabel', width: 'var(--ui-layout-125, 125px)' },
+    { title: '30 天再消费', key: 'repurchaseLabel', width: 'var(--ui-layout-120, 120px)' },
+    { title: '佩戴率', key: 'wearLabel', width: 'var(--ui-layout-90, 90px)' },
+    { title: '使用归因', key: 'attributionLabel', width: 'var(--ui-layout-120, 120px)', ellipsis: false },
   ];
   const format = (value: unknown) => Number(value || 0).toLocaleString('zh-CN');
   const sourceRows = computed(() =>
@@ -199,14 +199,14 @@
   @import '@/assets/css/admin-breakpoints.less';
   .points-sources {
     display: grid;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
   .points-sources__toolbar,
   .points-sources__panel header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
   h2,
   h3,
@@ -215,23 +215,23 @@
   }
   h2 {
     color: var(--text-color);
-    font-size: 18px;
+    font-size: var(--ui-font-18, 18px);
   }
   h3 {
     color: var(--text-color);
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
   }
   p,
   header span {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .points-sources__footnote {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .points-sources__range {
-    width: 132px;
+    width: var(--ui-layout-132, 132px);
     flex: 0 0 auto;
   }
   .points-sources__filters {
@@ -239,21 +239,21 @@
     align-items: center;
     justify-content: flex-end;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .points-sources__filters :deep(.input-container) {
-    width: 148px;
+    width: var(--ui-layout-148, 148px);
   }
   .points-sources__grid {
     display: grid;
     grid-template-columns: 1fr 1.15fr;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
   .points-sources__panel {
     display: grid;
     min-width: 0;
-    gap: 12px;
-    padding: 15px;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-15, 15px);
     border: 1px solid var(--card-border-color);
     border-radius: 12px;
     background: var(--workbench-subcard-bg);

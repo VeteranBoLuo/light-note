@@ -6,9 +6,9 @@
     <BDrawer
       :open="open"
       :title="t('settingsRefine.push.help')"
-      width="510px"
+      width="var(--ui-layout-510, 510px)"
       mobile-full-screen
-      body-padding="24px"
+      body-padding="var(--ui-space-24, 24px)"
       @close="open = false"
       @after-close="restoreFocus"
     >
@@ -82,12 +82,12 @@
 <style scoped>
   .push-help-content {
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.7;
   }
   .push-help-section + .push-help-section {
-    margin-top: 24px;
-    padding-top: 24px;
+    margin-top: var(--ui-space-24, 24px);
+    padding-top: var(--ui-space-24, 24px);
     border-top: 1px solid var(--surface-divider-color, var(--border-color));
   }
   .push-help-section__heading {
@@ -95,25 +95,25 @@
     align-items: center;
     justify-content: space-between;
     flex-wrap: wrap;
-    gap: 12px;
-    margin-bottom: 12px;
+    gap: var(--ui-space-12, 12px);
+    margin-bottom: var(--ui-space-12, 12px);
   }
   .push-help-content h3 {
     margin: 0;
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     font-weight: 600;
   }
   .push-help__platform {
-    width: 132px;
+    width: var(--ui-layout-132, 132px);
   }
   .push-help__hint {
-    margin: 10px 0 0;
-    font-size: 12px;
+    margin: var(--ui-space-10, 10px) 0 0;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
   }
   .push-help__instruction {
-    margin-top: 14px;
-    padding: 14px 16px;
+    margin-top: var(--ui-space-14, 14px);
+    padding: var(--ui-space-14, 14px) var(--ui-space-16, 16px);
     background: var(--chip-neutral-bg);
     border: 1px solid var(--chip-neutral-border);
     border-radius: 10px;

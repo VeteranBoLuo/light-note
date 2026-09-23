@@ -2,8 +2,7 @@
  * 横向筛选条(chips)的选中项自动滚动:点击部分可见/贴边的条目时,把它平滑滚到容器中间,
  * 首尾条目经夹取后自然贴边。与搜索中心移动端类型筛选的交互一致。
  *
- * 说明:使用 offsetLeft(布局坐标)而非 getBoundingClientRect(视觉坐标),
- * 以免界面缩放(html zoom)下产生偏差;调用方需保证容器是目标的 offsetParent
+ * 使用相对于容器的 offsetLeft；调用方需保证容器是目标的 offsetParent
  * (容器设置 position: relative)。
  */
 export function resolveChipScrollLeft(metrics: {

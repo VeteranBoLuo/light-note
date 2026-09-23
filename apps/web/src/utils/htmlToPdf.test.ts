@@ -181,30 +181,7 @@ describe('generatePDF 分页', () => {
   });
 });
 
-describe('withNormalizedZoom / forcePdfLightTheme', () => {
-  it('渲染期间原文档 zoom 归一为 1，结束后恢复原值（含异常路径）', async () => {
-    const { withNormalizedZoom } = await import('./htmlToPdf');
-    document.documentElement.style.zoom = '1.25';
-    document.body.style.zoom = '0.9';
-    let zoomDuringRun = '';
-    await withNormalizedZoom(async () => {
-      zoomDuringRun = `${document.documentElement.style.zoom}/${document.body.style.zoom}`;
-    });
-    expect(zoomDuringRun).toBe('1/1');
-    expect(document.documentElement.style.zoom).toBe('1.25');
-    expect(document.body.style.zoom).toBe('0.9');
-
-    await expect(
-      withNormalizedZoom(async () => {
-        throw new Error('boom');
-      }),
-    ).rejects.toThrow('boom');
-    // 失败也必须恢复，导出报错不能把用户界面缩放弄丢
-    expect(document.documentElement.style.zoom).toBe('1.25');
-    document.documentElement.style.zoom = '';
-    document.body.style.zoom = '';
-  });
-
+describe('forcePdfLightTheme', () => {
   it('克隆文档主题固定为浅色（day）', async () => {
     const { forcePdfLightTheme } = await import('./htmlToPdf');
     const cloned = document.implementation.createHTMLDocument('');

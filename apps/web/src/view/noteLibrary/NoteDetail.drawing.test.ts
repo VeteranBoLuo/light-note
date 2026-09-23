@@ -6,7 +6,7 @@ const source = readFileSync(resolve(process.cwd(), 'src/view/noteLibrary/NoteDet
 const drawingSource = readFileSync(
   resolve(process.cwd(), 'src/components/noteLibrary/drawing/DrawingNoteEditor.vue'),
   'utf8',
-);
+).replace(/var\(--ui-[\w-]+, ([\d.]+px)\)/g, '$1');
 const drawingStyleSource = readFileSync(
   resolve(process.cwd(), 'src/components/noteLibrary/drawing/DrawingStylePanel.vue'),
   'utf8',

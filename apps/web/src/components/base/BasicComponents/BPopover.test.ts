@@ -1,8 +1,8 @@
-import { createApp, defineComponent, nextTick, ref } from 'vue';
+import { createApp, defineComponent, h, nextTick, ref } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import BPopover from './BPopover.vue';
-
-vi.mock('@/utils/zoom', () => ({ getRootZoom: () => 1 }));
+import BSelect from './BSelect.vue';
+import { createI18n } from 'vue-i18n';
 
 class ResizeObserverStub {
   observe() {}
@@ -73,6 +73,34 @@ describe('BPopover 键盘关闭', () => {
 
     expect(document.querySelector('#single-content')).toBeNull();
     expect(document.activeElement).toBe(trigger);
+  });
+
+  it.each(['single', 'multiple'] as const)('内部 %s 选择器先消费 Escape，再允许关闭外层', async (mode) => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp({ render: () => h(BPopover, { trigger: 'click' }, {
+      default: () => h('button', { id: 'nested-trigger' }, 'Open'),
+      content: () => h(BSelect, { mode, showSearch: true, options: [{ label: 'One', value: 'one' }] }),
+    }) });
+    app.use(createI18n({ legacy: false, locale: 'en', messages: { en: { common: { pleaseSelect: 'Select', searchPlaceholder: 'Search' } } } }));
+    app.mount(host);
+    mounted.push({ app, host });
+    host.querySelector<HTMLButtonElement>('button')!.click();
+    await nextTick();
+    const trigger = document.querySelector<HTMLElement>('.select-trigger')!;
+    trigger.click();
+    await nextTick();
+    const input = document.querySelector<HTMLInputElement>(mode === 'multiple' ? '.select-search-input' : '.select-search-inline')!;
+    input.focus();
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    await waitForLeaveTransition();
+    expect(document.querySelector('.b-popover-panel')).not.toBeNull();
+    expect(document.querySelector<HTMLElement>('.select-dropdown')!.style.display).toBe('none');
+    trigger.focus();
+    trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    await waitForLeaveTransition();
+    expect(document.querySelector('.b-popover-panel')).toBeNull();
+    expect(document.activeElement).toBe(host.querySelector('#nested-trigger'));
   });
 
   it('同时存在多个浮层时一次 Escape 只关闭最上层', async () => {

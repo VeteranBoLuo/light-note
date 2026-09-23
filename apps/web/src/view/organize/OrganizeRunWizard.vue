@@ -490,20 +490,20 @@
   }
   @media (min-width: 761px) {
     .is-check-step .wizard-content {
-      padding: 22px 28px;
-      gap: 14px;
+      padding: var(--ui-space-22, 22px) var(--ui-space-28, 28px);
+      gap: var(--ui-space-14, 14px);
     }
     .is-check-step .check-option.b_btn {
-      padding: 14px 16px;
-      gap: 9px;
+      padding: var(--ui-space-14, 14px) var(--ui-space-16, 16px);
+      gap: var(--ui-space-9, 9px);
     }
     .is-check-step .wizard-heading {
-      gap: 6px;
+      gap: var(--ui-space-6, 6px);
     }
   }
   .wizard-nav {
     padding: 0;
-    width: 380px;
+    width: var(--ui-layout-380, 380px);
   }
   .wizard-nav ol {
     display: flex;
@@ -525,8 +525,8 @@
   .wizard-nav li:not(:last-child)::after {
     content: '';
     flex: 1;
-    min-width: 18px;
-    margin: 0 8px;
+    min-width: var(--ui-layout-18, 18px);
+    margin: 0 var(--ui-space-8, 8px);
     height: 2px;
     border-radius: 1px;
     background: var(--desc-color);
@@ -545,8 +545,8 @@
     padding: 0;
     display: flex;
     flex-direction: row;
-    gap: 5px;
-    font-size: 12px;
+    gap: var(--ui-space-5, 5px);
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.4;
     color: var(--desc-color);
     opacity: 1;
@@ -555,14 +555,14 @@
     display: none;
   }
   .step-number {
-    width: 24px;
-    height: 24px;
+    width: var(--ui-layout-24, 24px);
+    height: var(--ui-layout-24, 24px);
     flex-shrink: 0;
     display: grid;
     place-items: center;
     border: 1px solid var(--surface-border-color);
     border-radius: 50%;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .current .b_btn,
   .complete .b_btn {
@@ -579,23 +579,23 @@
   }
   .wizard-content {
     flex: 1;
-    padding: 28px;
+    padding: var(--ui-space-28, 28px);
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: var(--ui-space-20, 20px);
   }
   .wizard-heading {
     display: grid;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
   }
   .wizard-eyebrow {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     letter-spacing: 0.08em;
   }
   .wizard-heading h3 {
     margin: 0;
-    font-size: 23px;
+    font-size: var(--ui-font-23, 23px);
     line-height: 1.45;
     font-weight: 600;
     outline: none;
@@ -603,19 +603,19 @@
   .wizard-heading p,
   .wizard-hint {
     margin: 0;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.75;
     color: var(--desc-color);
   }
   .wizard-options {
     display: grid;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .wizard-option.b_btn {
     width: 100%;
     height: auto;
-    padding: 18px;
-    gap: 16px;
+    padding: var(--ui-space-18, 18px);
+    gap: var(--ui-space-16, 16px);
     background: var(--surface-panel-bg);
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
@@ -641,8 +641,8 @@
   .resource-symbol {
     display: grid;
     place-items: center;
-    width: 44px;
-    height: 44px;
+    width: var(--ui-layout-44, 44px);
+    height: var(--ui-layout-44, 44px);
     border-radius: 12px;
     background: var(--background-color);
     color: var(--desc-color);
@@ -654,14 +654,14 @@
   .option-copy {
     flex: 1;
     display: grid;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   .wizard-option strong {
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
     font-weight: 600;
   }
   .wizard-option small {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
     font-weight: 400;
     line-height: 1.65;
@@ -670,11 +670,11 @@
     display: grid;
     place-items: center;
     flex-shrink: 0;
-    width: 21px;
-    height: 21px;
+    width: var(--ui-layout-21, 21px);
+    height: var(--ui-layout-21, 21px);
     border: 1px solid var(--surface-border-color);
     border-radius: 6px;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .chosen .option-check {
     background: var(--primary-color);
@@ -698,30 +698,30 @@
   .check-option.b_btn {
     flex-direction: column;
     align-items: stretch;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .option-top,
   .option-bottom {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .option-bottom {
     margin-top: auto;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     color: var(--desc-color);
     flex-wrap: wrap;
   }
   .wizard-context {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px 16px;
+    gap: var(--ui-space-6, 6px) var(--ui-space-16, 16px);
     align-items: center;
     background: var(--background-color);
-    padding: 12px 14px;
+    padding: var(--ui-space-12, 12px) var(--ui-space-14, 14px);
     border-radius: 9px;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.6;
     color: var(--desc-color);
   }
@@ -730,17 +730,17 @@
     color: var(--text-color);
   }
   .scope-recommend {
-    margin-left: 8px;
+    margin-left: var(--ui-space-8, 8px);
     color: var(--primary-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 400;
   }
   .wizard-picker {
     min-width: 0;
   }
   .wizard-picker h4 {
-    margin: 0 0 12px;
-    font-size: 14px;
+    margin: 0 0 var(--ui-space-12, 12px);
+    font-size: var(--ui-font-14, 14px);
   }
   .wizard-summary {
     border: 1px solid var(--surface-border-color);
@@ -749,13 +749,13 @@
   }
   .scan-total {
     display: grid;
-    gap: 10px;
-    padding: 24px 24px 12px;
-    font-size: 13px;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-24, 24px) var(--ui-space-24, 24px) var(--ui-space-12, 12px);
+    font-size: var(--ui-font-13, 13px);
     color: var(--desc-color);
   }
   .scan-total strong {
-    font-size: 38px;
+    font-size: var(--ui-font-38, 38px);
     line-height: 1.2;
     font-weight: 600;
     color: var(--text-color);
@@ -764,14 +764,14 @@
   .scan-types {
     display: flex;
     flex-wrap: wrap;
-    gap: 18px;
-    padding: 0 24px 24px;
-    font-size: 12px;
+    gap: var(--ui-space-18, 18px);
+    padding: 0 var(--ui-space-24, 24px) var(--ui-space-24, 24px);
+    font-size: var(--ui-font-12, 12px);
   }
   .scan-types > span {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     color: var(--desc-color);
   }
   .scan-types b {
@@ -780,47 +780,47 @@
   .scan-costs {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 18px;
-    padding: 20px 24px;
+    gap: var(--ui-space-18, 18px);
+    padding: var(--ui-space-20, 20px) var(--ui-space-24, 24px);
     border-top: 1px solid var(--surface-border-color);
   }
   .scan-costs > div {
     display: grid;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   .scan-costs span,
   .scan-costs small {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
   }
   .scan-costs strong {
-    font-size: 24px;
+    font-size: var(--ui-font-24, 24px);
     font-weight: 600;
   }
   .scan-tokens {
     display: flex;
     flex-wrap: wrap;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     background: var(--background-color);
-    padding: 16px 24px;
-    font-size: 13px;
+    padding: var(--ui-space-16, 16px) var(--ui-space-24, 24px);
+    font-size: var(--ui-font-13, 13px);
   }
   .wizard-observations {
     margin: 0;
-    padding-left: 20px;
+    padding-left: var(--ui-space-20, 20px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.8;
   }
   .wizard-footer .wizard-error {
     flex-basis: 100%;
     border-left: 3px solid var(--danger-color);
-    padding: 10px 14px;
+    padding: var(--ui-space-10, 10px) var(--ui-space-14, 14px);
     margin: 0;
     color: var(--danger-color);
     line-height: 1.6;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .wizard-footer {
     position: sticky;
@@ -830,42 +830,42 @@
     flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     border-top: 1px solid var(--surface-border-color);
     background: var(--surface-panel-bg);
-    padding: 18px 28px;
+    padding: var(--ui-space-18, 18px) var(--ui-space-28, 28px);
   }
   .wizard-footer p {
     margin: 0;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
   }
   .wizard-footer > div {
     display: flex;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     margin-left: auto;
   }
   .wizard-footer .b_btn {
-    height: 40px;
+    height: var(--ui-control-40, 40px);
     border-radius: 8px;
   }
   // 桌面浏览器工具栏会压缩可用高度；缩短间距，让四个范围选项完整容纳。
   @media (min-width: 601px) and (max-height: 850px) {
     .wizard-content {
-      padding: 20px 28px;
-      gap: 14px;
+      padding: var(--ui-space-20, 20px) var(--ui-space-28, 28px);
+      gap: var(--ui-space-14, 14px);
     }
     .wizard-heading {
-      gap: 6px;
+      gap: var(--ui-space-6, 6px);
     }
     .wizard-context {
-      padding: 8px 14px;
+      padding: var(--ui-space-8, 8px) var(--ui-space-14, 14px);
     }
     .scope-option.b_btn {
-      padding: 14px 18px;
+      padding: var(--ui-space-14, 14px) var(--ui-space-18, 18px);
     }
     .wizard-footer {
-      padding: 14px 28px;
+      padding: var(--ui-space-14, 14px) var(--ui-space-28, 28px);
     }
   }
   @media (max-width: 520px) {
@@ -900,39 +900,39 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     flex-wrap: wrap;
-    margin-bottom: 14px;
+    margin-bottom: var(--ui-space-14, 14px);
   }
   .picker-scope-summary {
-    padding: 12px 14px;
+    padding: var(--ui-space-12, 12px) var(--ui-space-14, 14px);
     border: 1px solid var(--surface-border-color);
     border-radius: 10px;
     background: var(--workspace-panel-bg-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .picker-hint {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.6;
-    margin: 10px 0;
+    margin: var(--ui-space-10, 10px) 0;
   }
   .picker-review {
-    padding: 12px;
+    padding: var(--ui-space-12, 12px);
     border: 1px solid var(--surface-border-color);
     border-radius: 10px;
   }
   .picker-selected-row {
     display: flex;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     align-items: center;
-    padding: 10px 0;
+    padding: var(--ui-space-10, 10px) 0;
     border-top: 1px solid var(--surface-border-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .picker-selected-row > span {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     flex-shrink: 0;
   }
   .picker-selected-row strong {
@@ -941,7 +941,7 @@
     overflow-wrap: anywhere;
   }
   .picker-toolbar :deep(.tab) {
-    padding: 7px 10px;
+    padding: var(--ui-space-7, 7px) var(--ui-space-10, 10px);
   }
 </style>
 

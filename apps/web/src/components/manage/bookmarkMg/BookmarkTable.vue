@@ -399,7 +399,7 @@
                         :key="t.id"
                         :tag="t"
                         interactive
-                        max-width="120px"
+                        max-width="var(--ui-layout-120, 120px)"
                         @click.stop="handleBookmarkTagClick(bookmarkItem.id, t.id)"
                       />
                     </div>
@@ -442,7 +442,7 @@
               :has-more="embedded && managementMode && externalHasMore && !externalLoadMoreError"
               @load-more="emit('load-more')"
               :columns="tagColumns"
-              style="margin-top: 10px; width: 100%; height: calc(100% - 50px)"
+              style="margin-top: var(--ui-space-10, 10px); width: 100%; height: calc(100% - var(--ui-layout-50, 50px))"
               :selectable="selectionMode"
               :selectedRows="selectedRows"
               preserve-selection
@@ -454,7 +454,7 @@
             >
               <template #bodyCell="{ column, text, record }">
                 <template v-if="column.key === 'name'">
-                  <div style="display: flex; align-items: center; gap: 10px" :title="text">
+                  <div style="display: flex; align-items: center; gap: var(--ui-space-10, 10px)" :title="text">
                     <BookmarkFavicon
                       :bookmark-id="(record as BookmarkInterface).id"
                       :src="(record as BookmarkInterface).iconUrl"
@@ -480,7 +480,7 @@
                       :key="t.id"
                       :tag="t"
                       interactive
-                      max-width="120px"
+                      max-width="var(--ui-layout-120, 120px)"
                       @click.stop="handleBookmarkTagClick((record as BookmarkInterface).id, t.id)"
                     />
                   </div>
@@ -1322,10 +1322,10 @@
     ellipsis?: boolean;
   };
   const tagColumns = ref<BookmarkColumn[]>([
-    { title: '书签', key: 'name', minWidth: '200px' },
-    { title: '网址', key: 'url', minWidth: '200px', ellipsis: true },
-    { title: '关联标签', key: 'tagList', minWidth: '180px' },
-    { title: '操作', key: 'operation', width: '90px' },
+    { title: '书签', key: 'name', minWidth: 'var(--ui-layout-200, 200px)' },
+    { title: '网址', key: 'url', minWidth: 'var(--ui-layout-200, 200px)', ellipsis: true },
+    { title: '关联标签', key: 'tagList', minWidth: 'var(--ui-layout-180, 180px)' },
+    { title: '操作', key: 'operation', width: 'var(--ui-layout-90, 90px)' },
   ]);
 
   const edit = (id: string) => {
@@ -1739,35 +1739,35 @@
   }
 
   .icon-batch-progress-card {
-    margin-bottom: 16px;
+    margin-bottom: var(--ui-space-16, 16px);
     border-left: 3px solid var(--resource-bookmark-color);
   }
 
   .icon-batch-progress-content {
     display: grid;
-    grid-template-columns: minmax(220px, 1fr) minmax(240px, auto) auto;
+    grid-template-columns: minmax(var(--ui-layout-220, 220px), 1fr) minmax(var(--ui-layout-240, 240px), auto) auto;
     align-items: center;
-    gap: 12px 20px;
+    gap: var(--ui-space-12, 12px) var(--ui-space-20, 20px);
   }
 
   .icon-batch-progress-title {
     color: var(--text-color);
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     font-weight: 650;
   }
 
   .icon-batch-progress-hint {
-    margin-top: 4px;
+    margin-top: var(--ui-space-4, 4px);
     color: var(--sub-text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.5;
   }
 
   .icon-batch-progress-track {
     position: relative;
-    width: min(360px, 100%);
+    width: min(var(--ui-layout-360, 360px), 100%);
     height: 5px;
-    margin-top: 10px;
+    margin-top: var(--ui-space-10, 10px);
     overflow: hidden;
     border-radius: 999px;
     background: color-mix(in srgb, var(--resource-bookmark-color) 10%, var(--bm-muted-bg));
@@ -1797,12 +1797,12 @@
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 8px 12px;
+    gap: var(--ui-space-8, 8px) var(--ui-space-12, 12px);
   }
 
   .icon-batch-progress-detail {
     color: var(--sub-text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .icon-batch-progress-actions {
@@ -1820,29 +1820,29 @@
   }
 
   :deep(.resource-page-actions .b_btn) {
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
 
   .bookmark-mode-control {
-    height: 36px;
-    padding: 0 11px;
+    height: var(--ui-control-36, 36px);
+    padding: 0 var(--ui-space-11, 11px);
     display: inline-flex;
     align-items: center;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
     border: 1px solid var(--resource-bookmark-color);
     border-radius: 10px;
     color: var(--resource-bookmark-color);
     background: var(--card-background);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     white-space: nowrap;
   }
 
   :deep(.resource-page-actions .resource-action) {
-    height: 36px;
-    padding: 0 13px;
+    height: var(--ui-control-36, 36px);
+    padding: 0 var(--ui-space-13, 13px);
     border: 1px solid transparent;
     border-radius: 9px;
-    line-height: 36px;
+    line-height: var(--ui-control-36, 36px);
     transition:
       color 0.18s ease,
       border-color 0.18s ease,
@@ -1875,9 +1875,9 @@
   }
 
   :deep(.resource-page-actions .resource-action--primary) {
-    min-width: 112px;
-    padding: 0 14px;
-    gap: 7px;
+    min-width: var(--ui-layout-112, 112px);
+    padding: 0 var(--ui-space-14, 14px);
+    gap: var(--ui-space-7, 7px);
     border-radius: 10px;
     box-sizing: border-box;
     box-shadow: 0 8px 18px -12px color-mix(in srgb, var(--resource-bookmark-color) 72%, transparent);
@@ -1892,21 +1892,21 @@
   }
 
   .bookmark-results-column {
-    --bookmark-card-min-width: 270px;
+    --bookmark-card-min-width: var(--ui-layout-270, 270px);
     min-width: 0;
     min-height: 0;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .result-toolbar {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 14px;
-    gap: 16px;
-    padding: 10px 12px;
+    margin-bottom: var(--ui-space-14, 14px);
+    gap: var(--ui-space-16, 16px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     background: var(--card-background);
@@ -1915,7 +1915,7 @@
   .result-toolbar-left {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     flex-shrink: 0;
   }
 
@@ -1925,33 +1925,33 @@
   }
 
   .result-search {
-    width: 200px;
+    width: var(--ui-layout-200, 200px);
   }
 
   .view-toggle {
     display: flex;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
     background: var(--bm-muted-bg);
     border-radius: 8px;
-    padding: 3px;
+    padding: var(--ui-space-3, 3px);
   }
 
   .view-toggle-btn {
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
     border: 0;
     border-radius: 6px;
-    padding: 5px 12px;
-    font-size: 12px;
+    padding: var(--ui-space-5, 5px) var(--ui-space-12, 12px);
+    font-size: var(--ui-font-12, 12px);
     cursor: pointer;
     color: var(--desc-color);
     background: transparent;
     transition: all 0.18s ease;
     white-space: nowrap;
     width: auto;
-    height: 28px;
-    line-height: 28px;
+    height: var(--ui-control-28, 28px);
+    line-height: var(--ui-control-28, 28px);
     &.active {
       background: var(--bm-card-bg);
       color: var(--text-color);
@@ -1966,7 +1966,7 @@
   .hero-stats {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .stat-card {
@@ -2006,26 +2006,26 @@
   }
 
   .stat-label {
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     opacity: @opacity-secondary;
   }
   .stat-value {
-    margin-top: 4px;
-    font-size: 22px;
+    margin-top: var(--ui-space-4, 4px);
+    font-size: var(--ui-font-22, 22px);
     font-weight: 700;
   }
   .stat-desc {
-    margin-top: 2px;
-    font-size: 11px;
+    margin-top: var(--ui-space-2, 2px);
+    font-size: var(--ui-font-11, 11px);
     opacity: @opacity-secondary;
   }
 
   // ── Layout ──
   .content-layout {
     display: grid;
-    grid-template-columns: 228px minmax(0, 1fr);
+    grid-template-columns: var(--ui-layout-228, 228px) minmax(0, 1fr);
     align-items: stretch;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
     margin-top: 0;
     flex: 1;
     min-height: 0;
@@ -2036,8 +2036,8 @@
   }
 
   .bookmark-manage-load-more {
-    min-height: 38px;
-    padding: 12px 0 0;
+    min-height: var(--ui-layout-38, 38px);
+    padding: var(--ui-space-12, 12px) 0 0;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -2060,28 +2060,28 @@
   }
 
   .bookmark-directory-heading {
-    padding: 2px 6px 10px;
+    padding: var(--ui-space-2, 2px) var(--ui-space-6, 6px) var(--ui-space-10, 10px);
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
 
   .bookmark-directory-heading strong {
     color: var(--text-color);
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
   }
 
   .bookmark-directory-heading span {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     line-height: 1.45;
   }
 
   .bookmark-directory-section {
-    margin-top: 15px;
+    margin-top: var(--ui-space-15, 15px);
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
 
   .bookmark-directory-section :deep(.b-action-menu-anchor) {
@@ -2089,21 +2089,21 @@
   }
 
   .bookmark-directory-section__label {
-    padding: 0 7px 5px;
+    padding: 0 var(--ui-space-7, 7px) var(--ui-space-5, 5px);
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     font-weight: 650;
   }
 
   .bookmark-directory-section--other {
-    padding-top: 11px;
+    padding-top: var(--ui-space-11, 11px);
     border-top: 1px solid var(--surface-divider-color);
   }
 
   .bookmark-directory-empty {
-    margin: 2px 7px 0;
+    margin: var(--ui-space-2, 2px) var(--ui-space-7, 7px) 0;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.5;
   }
 
@@ -2115,7 +2115,7 @@
   }
 
   .bookmark-manage-page--batch .result-panel {
-    padding-bottom: 76px !important;
+    padding-bottom: var(--ui-space-76, 76px) !important;
     scroll-padding-bottom: 76px;
   }
 
@@ -2126,15 +2126,15 @@
   }
 
   .result-subtitle {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     opacity: @opacity-secondary;
   }
 
   // ── 卡片视图 ──
   .bookmark-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(min(100%, 270px), 1fr));
-    gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--ui-layout-270, 270px)), 1fr));
+    gap: var(--ui-space-12, 12px);
   }
 
   .bookmark-card {
@@ -2152,7 +2152,7 @@
       border-color 0.2s ease;
     position: relative;
     overflow: hidden;
-    min-height: 188px;
+    min-height: var(--ui-card-188, 188px);
     display: flex;
     flex-direction: column;
     &:hover {
@@ -2175,17 +2175,17 @@
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .bookmark-card.is-selection-mode .bookmark-card__head {
-    padding-right: 34px;
+    padding-right: var(--ui-space-34, 34px);
   }
 
   .bookmark-identity {
     display: flex;
     align-items: flex-start;
-    gap: 11px;
+    gap: var(--ui-space-11, 11px);
     min-width: 0;
     flex: 1;
   }
@@ -2193,8 +2193,8 @@
   .bookmark-selection-checkbox {
     position: absolute;
     z-index: 2;
-    top: 12px;
-    right: 12px;
+    top: var(--ui-space-12, 12px);
+    right: var(--ui-space-12, 12px);
     margin: 0;
     border-radius: 8px;
     background: var(--bm-card-bg);
@@ -2206,15 +2206,15 @@
     flex: 1;
   }
   .bookmark-name {
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
     font-weight: 650;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
   .bookmark-url {
-    margin-top: 4px;
-    font-size: 10.5px;
+    margin-top: var(--ui-space-4, 4px);
+    font-size: var(--ui-font-10_5, 10.5px);
     opacity: @opacity-secondary;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -2232,16 +2232,16 @@
   .bm-badges {
     display: flex;
     flex-wrap: nowrap;
-    gap: 6px;
-    margin-top: 6px;
-    padding-left: 45px;
+    gap: var(--ui-space-6, 6px);
+    margin-top: var(--ui-space-6, 6px);
+    padding-left: var(--ui-space-45, 45px);
   }
 
   .bookmark-desc {
-    margin-top: 12px;
-    font-size: 12px;
+    margin-top: var(--ui-space-12, 12px);
+    font-size: var(--ui-font-12, 12px);
     opacity: @opacity-primary;
-    line-height: 18px;
+    line-height: var(--ui-layout-18, 18px);
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
@@ -2250,22 +2250,22 @@
 
   .bookmark-actions {
     display: flex;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     flex-shrink: 0;
   }
 
   .bookmark-card__footer {
     justify-content: flex-end;
     margin-top: 0;
-    padding-top: 10px;
+    padding-top: var(--ui-space-10, 10px);
     border-top: 1px solid var(--surface-divider-color);
   }
 
   .bookmark-ai-action {
-    min-width: 32px;
-    height: 32px;
-    padding: 0 10px;
-    gap: 5px;
+    min-width: var(--ui-control-32, 32px);
+    height: var(--ui-control-32, 32px);
+    padding: 0 var(--ui-space-10, 10px);
+    gap: var(--ui-space-5, 5px);
     border-color: transparent;
     color: var(--primary-color);
     background: transparent;
@@ -2282,30 +2282,30 @@
 
   // ── 卡片内区块 ──
   .section-block {
-    min-height: 26px;
+    min-height: var(--ui-layout-26, 26px);
     margin-top: auto;
-    padding: 12px 0;
+    padding: var(--ui-space-12, 12px) 0;
   }
 
   .chip-list {
     display: flex;
     flex-wrap: nowrap;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     overflow: hidden;
   }
 
   .empty-inline {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     opacity: @opacity-secondary;
   }
 
   // ── 首次加载骨架 ──
   .bookmark-skeleton {
-    min-height: 320px;
+    min-height: var(--ui-layout-320, 320px);
   }
 
   .bookmark-skeleton-card {
-    min-height: 188px;
+    min-height: var(--ui-card-188, 188px);
     pointer-events: none;
   }
 
@@ -2316,7 +2316,7 @@
   }
 
   .skeleton-head {
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .skeleton-lines {
@@ -2324,7 +2324,7 @@
     flex: 1;
     flex-direction: column;
     align-items: flex-start;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .skeleton-block {
@@ -2334,46 +2334,46 @@
   }
 
   .skeleton-avatar {
-    width: 34px;
-    height: 34px;
-    flex: 0 0 34px;
+    width: var(--ui-layout-34, 34px);
+    height: var(--ui-layout-34, 34px);
+    flex: 0 0 var(--ui-layout-34, 34px);
     border-radius: 10px;
   }
 
   .skeleton-line {
-    height: 10px;
+    height: var(--ui-layout-10, 10px);
     border-radius: 999px;
   }
 
   .skeleton-line--title {
-    width: min(180px, 72%);
+    width: min(var(--ui-layout-180, 180px), 72%);
   }
 
   .skeleton-line--url {
-    width: min(260px, 88%);
+    width: min(var(--ui-layout-260, 260px), 88%);
   }
 
   .skeleton-line--body {
     width: 64%;
-    margin-top: 22px;
+    margin-top: var(--ui-space-22, 22px);
   }
 
   .skeleton-chip {
-    width: 58px;
-    height: 24px;
+    width: var(--ui-layout-58, 58px);
+    height: var(--ui-layout-24, 24px);
     border-radius: 999px;
   }
 
   .skeleton-chip--short {
-    width: 44px;
+    width: var(--ui-layout-44, 44px);
   }
 
   .skeleton-chip-row {
-    min-height: 26px;
+    min-height: var(--ui-layout-26, 26px);
     margin-top: auto;
-    padding: 12px 0;
+    padding: var(--ui-space-12, 12px) 0;
     display: flex;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     border-bottom: 1px solid var(--surface-divider-color);
   }
 
@@ -2387,11 +2387,11 @@
 
   .table-skeleton-row {
     display: grid;
-    grid-template-columns: 1.2fr 1.5fr 1fr 76px;
+    grid-template-columns: 1.2fr 1.5fr 1fr var(--ui-layout-76, 76px);
     align-items: center;
-    gap: 24px;
-    min-height: 54px;
-    padding: 0 18px;
+    gap: var(--ui-space-24, 24px);
+    min-height: var(--ui-layout-54, 54px);
+    padding: 0 var(--ui-space-18, 18px);
     border-bottom: 1px solid var(--surface-border-color);
 
     &:last-child {
@@ -2401,7 +2401,7 @@
 
   .table-skeleton-cell {
     width: 100%;
-    height: 10px;
+    height: var(--ui-layout-10, 10px);
     border-radius: 999px;
   }
 
@@ -2414,7 +2414,7 @@
   }
 
   .table-skeleton-cell--action {
-    width: 54px;
+    width: var(--ui-layout-54, 54px);
     justify-self: end;
   }
 
@@ -2430,29 +2430,29 @@
   // ── 导入、错误和空状态 ──
   .result-status {
     display: flex;
-    min-height: 320px;
+    min-height: var(--ui-layout-320, 320px);
     box-sizing: border-box;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 36px 24px;
+    padding: var(--ui-space-36, 36px) var(--ui-space-24, 24px);
     border: 1px dashed var(--surface-border-color);
     border-radius: @radius-card;
     background: linear-gradient(135deg, transparent 0%, var(--bm-muted-bg) 100%);
     text-align: center;
 
     h3 {
-      margin: 16px 0 8px;
+      margin: var(--ui-space-16, 16px) 0 var(--ui-space-8, 8px);
       color: var(--text-color);
-      font-size: 18px;
+      font-size: var(--ui-font-18, 18px);
       font-weight: 650;
     }
 
     p {
-      max-width: 520px;
+      max-width: var(--ui-layout-520, 520px);
       margin: 0;
       color: var(--sub-text-color);
-      font-size: 13px;
+      font-size: var(--ui-font-13, 13px);
       line-height: 1.7;
       overflow-wrap: anywhere;
     }
@@ -2460,8 +2460,8 @@
 
   .result-status-icon {
     display: grid;
-    width: 64px;
-    height: 64px;
+    width: var(--ui-layout-64, 64px);
+    height: var(--ui-layout-64, 64px);
     place-items: center;
     border: 1px solid color-mix(in srgb, var(--resource-bookmark-color) 22%, var(--surface-border-color));
     border-radius: 18px;
@@ -2487,8 +2487,8 @@
     align-items: center;
     justify-content: center;
     flex-wrap: wrap;
-    gap: 10px;
-    margin-top: 22px;
+    gap: var(--ui-space-10, 10px);
+    margin-top: var(--ui-space-22, 22px);
   }
 
   .import-status {
@@ -2501,9 +2501,9 @@
   }
 
   .import-progress-track {
-    width: min(420px, 100%);
+    width: min(var(--ui-layout-420, 420px), 100%);
     height: 6px;
-    margin-top: 22px;
+    margin-top: var(--ui-space-22, 22px);
     overflow: hidden;
     border-radius: 999px;
     background: color-mix(in srgb, var(--primary-color) 10%, var(--bm-muted-bg));
@@ -2529,28 +2529,28 @@
     align-items: center;
     justify-content: center;
     flex-wrap: wrap;
-    gap: 10px 18px;
-    margin-top: 24px;
+    gap: var(--ui-space-10, 10px) var(--ui-space-18, 18px);
+    margin-top: var(--ui-space-24, 24px);
   }
 
   .import-step {
     display: inline-flex;
     align-items: center;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     color: var(--sub-text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .import-step-dot {
     display: grid;
-    width: 22px;
-    height: 22px;
+    width: var(--ui-layout-22, 22px);
+    height: var(--ui-layout-22, 22px);
     place-items: center;
     border: 1px solid var(--surface-border-color);
     border-radius: 50%;
     background: var(--card-background);
     color: var(--sub-text-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-variant-numeric: tabular-nums;
   }
 
@@ -2633,8 +2633,8 @@
   }
 
   .empty-state .result-status-icon {
-    width: 48px;
-    height: 48px;
+    width: var(--ui-layout-48, 48px);
+    height: var(--ui-layout-48, 48px);
     border-radius: 14px;
   }
 
@@ -2642,18 +2642,18 @@
   .edit-tag-operation {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   @media (max-width: 1280px) {
     .bookmark-results-column {
-      --bookmark-card-min-width: 300px;
+      --bookmark-card-min-width: var(--ui-layout-300, 300px);
     }
     .content-layout {
-      grid-template-columns: 228px minmax(0, 1fr);
-      gap: 10px;
+      grid-template-columns: var(--ui-layout-228, 228px) minmax(0, 1fr);
+      gap: var(--ui-space-10, 10px);
     }
     .bookmark-grid {
-      grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--ui-layout-300, 300px)), 1fr));
     }
   }
 

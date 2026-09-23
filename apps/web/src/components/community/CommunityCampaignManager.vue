@@ -3,7 +3,7 @@
     :visible="true"
     :title="t('community.feed.rechargeManagement')"
     :show-footer="false"
-    width="min(640px,94vw)"
+    width="min(var(--ui-layout-640, 640px),94vw)"
     @close="$emit('close')"
   >
     <p class="campaign-visibility-hint">{{ t('community.feed.rechargeVisibilityHint') }}</p>
@@ -104,30 +104,30 @@
 </script>
 <style scoped>
   .campaign-visibility-hint {
-    margin: 0 0 16px;
+    margin: 0 0 var(--ui-space-16, 16px);
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.7;
   }
   .campaign-visibility-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
-    padding: 16px 0;
+    gap: var(--ui-space-16, 16px);
+    padding: var(--ui-space-16, 16px) 0;
     border-bottom: 1px solid var(--workspace-divider);
   }
   .campaign-visibility-row > div {
     min-width: 0;
   }
   .campaign-visibility-row strong {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     overflow-wrap: anywhere;
   }
   .campaign-visibility-row p {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
-    margin: 6px 0 0;
+    margin: var(--ui-space-6, 6px) 0 0;
   }
   .campaign-visibility-row :deep(.b_btn) {
     flex-shrink: 0;

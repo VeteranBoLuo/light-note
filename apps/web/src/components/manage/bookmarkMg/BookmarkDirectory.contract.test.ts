@@ -1,5 +1,8 @@
 // @vitest-environment node
-import { readFileSync } from 'node:fs';
+import { readFileSync as rawReadFileSync } from 'node:fs';
+import { standardDensitySource } from '@/test/standardDensitySource';
+
+const readFileSync = (path: string, encoding: 'utf8') => standardDensitySource(rawReadFileSync(path, encoding));
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 

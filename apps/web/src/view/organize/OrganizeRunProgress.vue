@@ -260,7 +260,7 @@
   .run-progress {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    padding: 10px 18px 14px;
+    padding: var(--ui-space-10, 10px) var(--ui-space-18, 18px) var(--ui-space-14, 14px);
     gap: 0;
   }
   .run-progress.legacy {
@@ -268,12 +268,12 @@
   }
   .run-metric {
     min-width: 0;
-    padding: 0 16px;
+    padding: 0 var(--ui-space-16, 16px);
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-content: start;
     align-items: center;
-    gap: 5px 12px;
+    gap: var(--ui-space-5, 5px) var(--ui-space-12, 12px);
   }
   .run-metric:first-child {
     padding-left: 0;
@@ -285,32 +285,32 @@
     margin: 0;
     display: flex;
     align-items: center;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     color: var(--workspace-muted);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 500;
   }
   strong {
     display: block;
     color: var(--workspace-text);
-    font-size: 24px;
+    font-size: var(--ui-font-24, 24px);
     line-height: 1.3;
     font-variant-numeric: tabular-nums;
     overflow-wrap: anywhere;
   }
   strong small {
-    margin-left: 4px;
-    font-size: 13px;
+    margin-left: var(--ui-space-4, 4px);
+    font-size: var(--ui-font-13, 13px);
     font-weight: 400;
     color: var(--workspace-muted);
   }
   strong.metric-label {
-    font-size: 16px;
+    font-size: var(--ui-font-16, 16px);
     min-height: 0;
   }
   p {
     color: var(--workspace-muted);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.6;
     margin: 0;
     overflow-wrap: anywhere;
@@ -330,11 +330,11 @@
     color: var(--ow-red);
   }
   .run-metric :deep(.b-progress) {
-    margin-top: 2px;
+    margin-top: var(--ui-space-2, 2px);
   }
   .run-review {
     border-top: 1px solid var(--workspace-divider);
-    padding: 12px 18px;
+    padding: var(--ui-space-12, 12px) var(--ui-space-18, 18px);
   }
   .run-summary {
     display: flex;
@@ -355,50 +355,50 @@
     border-top: 1px solid var(--workspace-divider);
     display: flex;
     flex-wrap: wrap;
-    gap: 12px 28px;
-    padding: 12px 20px;
+    gap: var(--ui-space-12, 12px) var(--ui-space-28, 28px);
+    padding: var(--ui-space-12, 12px) var(--ui-space-20, 20px);
   }
   .finished .run-metric {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 6px 10px;
+    gap: var(--ui-space-6, 6px) var(--ui-space-10, 10px);
     padding: 0;
     border: 0;
   }
   .finished .run-metric h4 {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     margin: 0;
     align-items: center;
   }
   .finished .run-metric > h4,
   .finished .run-metric > strong,
   .finished .run-metric > p {
-    line-height: 24px;
+    line-height: var(--ui-layout-24, 24px);
   }
   .finished .run-metric strong small {
     line-height: inherit;
   }
   .finished .run-metric strong,
   .finished .run-metric strong.metric-label {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
   }
   .finished .run-metric > p:not(.metric-warning) {
     display: none;
   }
   .finished .run-metric .metric-warning {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .review-counts {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 20px;
-    padding: 10px 0 18px;
+    gap: var(--ui-space-20, 20px);
+    padding: var(--ui-space-10, 10px) 0 var(--ui-space-18, 18px);
   }
   .result-kpi {
     min-width: 0;
     border-left: 1px solid var(--workspace-divider);
-    padding-left: 20px;
+    padding-left: var(--ui-space-20, 20px);
   }
   .result-kpi:first-child {
     border: 0;
@@ -406,20 +406,20 @@
   }
   .result-kpi h4 {
     color: var(--workspace-text);
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     font-weight: 500;
-    margin: 0 0 10px;
+    margin: 0 0 var(--ui-space-10, 10px);
   }
   .result-kpi strong {
-    font-size: 38px;
+    font-size: var(--ui-font-38, 38px);
     font-weight: 650;
     line-height: 1.1;
     letter-spacing: -1px;
-    margin-bottom: 9px;
+    margin-bottom: var(--ui-space-9, 9px);
   }
   .result-kpi strong small {
-    font-size: 13px;
-    margin-left: 6px;
+    font-size: var(--ui-font-13, 13px);
+    margin-left: var(--ui-space-6, 6px);
     letter-spacing: 0;
   }
   .result-primary strong {
@@ -429,27 +429,27 @@
     color: var(--ow-red);
   }
   .result-kpi p {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .outcome-summary {
     border-top: 1px solid var(--workspace-divider);
-    padding-top: 12px;
+    padding-top: var(--ui-space-12, 12px);
   }
   .outcome-heading {
     display: flex;
     align-items: baseline;
-    gap: 4px 16px;
+    gap: var(--ui-space-4, 4px) var(--ui-space-16, 16px);
     flex-wrap: wrap;
   }
   .outcome-track {
     display: flex;
-    gap: 3px;
-    margin: 3px 0 6px;
+    gap: var(--ui-space-3, 3px);
+    margin: var(--ui-space-3, 3px) 0 var(--ui-space-6, 6px);
   }
   .outcome-segment {
     flex-basis: 0;
     min-width: 2px;
-    height: 20px;
+    height: var(--ui-layout-20, 20px);
   }
   .outcome-fill {
     display: block;
@@ -464,7 +464,7 @@
     height: 8px;
     border-radius: 2px;
     background: var(--outcome-color, var(--workspace-divider));
-    margin-right: 6px;
+    margin-right: var(--ui-space-6, 6px);
     border: 1px solid var(--outcome-color, var(--workspace-muted));
     box-sizing: border-box;
   }
@@ -487,19 +487,19 @@
     --outcome-color: var(--ow-muted);
   }
   .outcome-title {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .outcome-counts {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px 16px;
+    gap: var(--ui-space-8, 8px) var(--ui-space-16, 16px);
     margin: 0;
   }
   .outcome-counts > div {
     display: flex;
     align-items: baseline;
-    gap: 5px;
-    font-size: 12px;
+    gap: var(--ui-space-5, 5px);
+    font-size: var(--ui-font-12, 12px);
     color: var(--workspace-muted);
   }
   .outcome-counts dd {
@@ -508,10 +508,10 @@
     font-variant-numeric: tabular-nums;
   }
   .outcome-counts small {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .review-guidance {
-    margin-top: 8px;
+    margin-top: var(--ui-space-8, 8px);
   }
   .run-summary.mobile .review-counts {
     grid-template-columns: repeat(2, minmax(0, 1fr));

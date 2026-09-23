@@ -35,8 +35,8 @@
 </script>
 <style scoped lang="less">
   .import-warnings {
-    margin-top: 8px;
-    font-size: 12px;
+    margin-top: var(--ui-space-8, 8px);
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.6;
   }
   .import-warnings p {
@@ -47,12 +47,12 @@
   }
   .import-warnings__toggle {
     color: var(--warning-color);
-    padding: 3px 0;
+    padding: var(--ui-space-3, 3px) 0;
     background: transparent;
   }
   .import-warnings__details {
-    padding: 8px 10px;
-    margin-top: 6px;
+    padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px);
+    margin-top: var(--ui-space-6, 6px);
     border-left: 2px solid var(--warning-color);
     color: var(--desc-color);
     overflow-wrap: anywhere;

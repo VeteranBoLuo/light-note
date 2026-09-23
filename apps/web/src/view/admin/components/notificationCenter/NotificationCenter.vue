@@ -102,7 +102,7 @@
 
           <div class="nc-field">
             <label class="nc-label">{{ t('notificationAdmin.inApp.compose.type') }}</label>
-            <BSelect v-model:value="form.type" :options="typeOptions" mode="single" style="width: 160px" />
+            <BSelect v-model:value="form.type" :options="typeOptions" mode="single" style="width: var(--ui-layout-160, 160px)" />
           </div>
 
           <div class="nc-field">
@@ -213,7 +213,7 @@
       <BModal
         v-model:visible="recipientsVisible"
         :title="recipientsTitle"
-        width="min(560px, 94vw)"
+        width="min(var(--ui-layout-560, 560px), 94vw)"
         :show-footer="false"
       >
         <div class="nc-recipients">
@@ -488,10 +488,10 @@
   const pageSize = ref(10);
   const columns = computed(() => [
     { title: t('notificationAdmin.inApp.history.notification'), key: 'title', width: '1fr' },
-    { title: t('notificationAdmin.inApp.history.type'), key: 'type', width: '72px' },
-    { title: t('notificationAdmin.inApp.history.readRate'), key: 'readRate', width: '150px' },
-    { title: t('notificationAdmin.inApp.history.sentAt'), key: 'createTime', width: '160px' },
-    { title: t('notificationAdmin.inApp.history.operation'), key: 'operation', width: '138px' },
+    { title: t('notificationAdmin.inApp.history.type'), key: 'type', width: 'var(--ui-layout-72, 72px)' },
+    { title: t('notificationAdmin.inApp.history.readRate'), key: 'readRate', width: 'var(--ui-layout-150, 150px)' },
+    { title: t('notificationAdmin.inApp.history.sentAt'), key: 'createTime', width: 'var(--ui-layout-160, 160px)' },
+    { title: t('notificationAdmin.inApp.history.operation'), key: 'operation', width: 'var(--ui-layout-138, 138px)' },
   ]);
 
   function asBatch(record: unknown): Batch {
@@ -648,41 +648,41 @@
   /* 概览 */
   .nc-stats {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-    gap: 12px;
-    margin-bottom: 18px;
+    grid-template-columns: repeat(auto-fit, minmax(var(--ui-layout-130, 130px), 1fr));
+    gap: var(--ui-space-12, 12px);
+    margin-bottom: var(--ui-space-18, 18px);
   }
   .nc-stat {
     display: flex;
     flex-direction: column;
-    gap: 3px;
-    padding: 14px 16px;
+    gap: var(--ui-space-3, 3px);
+    padding: var(--ui-space-14, 14px) var(--ui-space-16, 16px);
     border-radius: 12px;
     border: 1px solid color-mix(in srgb, var(--card-border-color) 55%, transparent);
     background: var(--workbench-subcard-bg);
   }
   .nc-stat-icon {
-    font-size: 18px;
+    font-size: var(--ui-font-18, 18px);
   }
   .nc-stat-val {
-    font-size: 22px;
+    font-size: var(--ui-font-22, 22px);
     font-weight: 800;
     font-variant-numeric: tabular-nums;
   }
   .nc-stat-label {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
   }
 
   /* body 两栏 */
   .nc-body {
     display: flex;
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
     align-items: flex-start;
   }
   .nc-compose {
-    flex: 0 0 380px;
-    width: 380px;
+    flex: 0 0 var(--ui-layout-380, 380px);
+    width: var(--ui-layout-380, 380px);
   }
   .nc-history {
     flex: 1 1 auto;
@@ -705,12 +705,12 @@
     border: 1px solid color-mix(in srgb, var(--card-border-color) 55%, transparent);
     border-radius: 14px;
     background: var(--workbench-subcard-bg);
-    padding: 18px;
+    padding: var(--ui-space-18, 18px);
     box-sizing: border-box;
   }
   .nc-card-title {
-    margin: 0 0 14px;
-    font-size: 15px;
+    margin: 0 0 var(--ui-space-14, 14px);
+    font-size: var(--ui-font-15, 15px);
     font-weight: 700;
   }
 
@@ -718,26 +718,26 @@
   .nc-field {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    margin-bottom: 14px;
+    gap: var(--ui-space-6, 6px);
+    margin-bottom: var(--ui-space-14, 14px);
   }
   .nc-label {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 500;
     color: var(--desc-color);
   }
   .nc-seg {
     display: flex;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .nc-seg-btn {
     flex: 1 1 0;
-    padding: 8px 12px;
+    padding: var(--ui-space-8, 8px) var(--ui-space-12, 12px);
     border-radius: 9px;
     border: 1px solid var(--card-border-color);
     background: var(--background-color);
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     cursor: pointer;
     transition: all 0.15s;
   }
@@ -750,33 +750,33 @@
   .nc-picker {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .nc-chips {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   .nc-chip {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    padding: 3px 6px 3px 10px;
+    gap: var(--ui-space-5, 5px);
+    padding: var(--ui-space-3, 3px) var(--ui-space-6, 6px) var(--ui-space-3, 3px) var(--ui-space-10, 10px);
     border-radius: 999px;
     background: color-mix(in srgb, var(--primary-color) 12%, transparent);
     color: var(--primary-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .nc-chip-x {
     .admin-focus-ring(4px);
 
-    padding: 0 2px;
+    padding: 0 var(--ui-space-2, 2px);
     border: none;
     background: none;
     color: inherit;
     cursor: pointer;
     font-style: normal;
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     line-height: 1;
     opacity: 0.7;
   }
@@ -787,16 +787,16 @@
     border: 1px solid color-mix(in srgb, var(--card-border-color) 55%, transparent);
     border-radius: 9px;
     overflow: hidden;
-    max-height: 220px;
+    max-height: var(--ui-layout-220, 220px);
     overflow-y: auto;
   }
   .nc-result {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 8px 11px;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-11, 11px);
     cursor: pointer;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .nc-result:hover {
     background: color-mix(in srgb, var(--primary-color) 7%, transparent);
@@ -811,7 +811,7 @@
     flex: 1 1 auto;
     min-width: 0;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -821,28 +821,28 @@
     font-weight: 700;
   }
   .nc-results-empty {
-    font-size: 12.5px;
+    font-size: var(--ui-font-12_5, 12.5px);
     color: var(--desc-color);
-    padding: 8px 2px;
+    padding: var(--ui-space-8, 8px) var(--ui-space-2, 2px);
   }
 
   .nc-compose-foot {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    margin-top: 4px;
+    gap: var(--ui-space-12, 12px);
+    margin-top: var(--ui-space-4, 4px);
   }
   .nc-target-hint {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
   }
   .nc-send {
-    padding: 9px 26px;
+    padding: var(--ui-space-9, 9px) var(--ui-space-26, 26px);
     border-radius: 9px;
     border: none;
     color: #fff;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 600;
     cursor: pointer;
     background: linear-gradient(135deg, var(--primary-color), color-mix(in srgb, var(--primary-color) 76%, #4b46cc));
@@ -855,7 +855,7 @@
 
   /* 历史表格单元 */
   .nc-h-title {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 600;
     color: var(--text-color);
   }
@@ -864,18 +864,18 @@
     color: var(--desc-color);
   }
   .nc-h-content {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
-    margin-top: 2px;
+    margin-top: var(--ui-space-2, 2px);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
   .nc-type {
     display: inline-block;
-    padding: 1px 8px;
+    padding: var(--ui-space-1, 1px) var(--ui-space-8, 8px);
     border-radius: 999px;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 600;
   }
   .nc-type.t-system {
@@ -891,7 +891,7 @@
   .nc-rate {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .nc-rate-bar {
     flex: 1 1 auto;
@@ -906,13 +906,13 @@
     background: linear-gradient(90deg, var(--primary-color), #22d3ee);
   }
   .nc-rate-num {
-    font-size: 11.5px;
+    font-size: var(--ui-font-11_5, 11.5px);
     color: var(--desc-color);
     font-variant-numeric: tabular-nums;
     flex: 0 0 auto;
   }
   .nc-time {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
   }
   .nc-recall-btn {
@@ -924,21 +924,21 @@
     background: color-mix(in srgb, var(--danger-color) 10%, transparent);
   }
   .nc-recalled-tag {
-    font-size: 11.5px;
+    font-size: var(--ui-font-11_5, 11.5px);
     color: var(--desc-color);
   }
   .nc-delete-btn {
-    min-width: 48px;
+    min-width: var(--ui-layout-48, 48px);
   }
 
   /* 接收明细弹框 */
   .nc-recipients {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .nc-recipients-count {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     color: var(--text-color);
   }
   .nc-recipients-count b {
@@ -946,15 +946,15 @@
     font-variant-numeric: tabular-nums;
   }
   .nc-recipients-empty {
-    padding: 22px;
+    padding: var(--ui-space-22, 22px);
     text-align: center;
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .nc-recipients-list {
     display: flex;
     flex-direction: column;
-    max-height: min(420px, 58vh);
+    max-height: min(var(--ui-layout-420, 420px), 58vh);
     overflow-y: auto;
     overscroll-behavior: contain;
   }
@@ -962,8 +962,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    padding: 9px 4px;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-9, 9px) var(--ui-space-4, 4px);
     border-bottom: 1px solid color-mix(in srgb, var(--card-border-color) 40%, transparent);
   }
   .nc-recipient:last-child {
@@ -972,16 +972,16 @@
   .nc-recipient-main {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
     min-width: 0;
   }
   .nc-recipient-name {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 500;
     color: var(--text-color);
   }
   .nc-recipient-mail {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -990,13 +990,13 @@
   .nc-recipient-meta {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     flex: 0 0 auto;
   }
   .nc-recipient-status {
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 600;
-    padding: 1px 8px;
+    padding: var(--ui-space-1, 1px) var(--ui-space-8, 8px);
     border-radius: 999px;
   }
   .nc-recipient-status.is-read {
@@ -1008,7 +1008,7 @@
     background: color-mix(in srgb, var(--card-border-color) 40%, transparent);
   }
   .nc-recipient-time {
-    font-size: 11.5px;
+    font-size: var(--ui-font-11_5, 11.5px);
     color: var(--desc-color);
     font-variant-numeric: tabular-nums;
   }

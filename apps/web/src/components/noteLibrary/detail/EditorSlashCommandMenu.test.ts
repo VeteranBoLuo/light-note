@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({
   scrollNearestIntoContainer: vi.fn(),
 }));
 
-vi.mock('@/utils/zoom', () => ({
+vi.mock('@/utils/scrolling', () => ({
   scrollNearestIntoContainer: mocks.scrollNearestIntoContainer,
 }));
 

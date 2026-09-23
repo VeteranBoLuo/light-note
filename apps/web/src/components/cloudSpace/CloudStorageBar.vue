@@ -247,15 +247,15 @@
     display: flex;
     flex-direction: column;
     justify-content: center;
-    width: 250px;
-    min-width: 250px;
+    width: var(--ui-layout-250, 250px);
+    min-width: var(--ui-layout-250, 250px);
     height: auto;
-    padding: 3px 0;
-    gap: 6px;
+    padding: var(--ui-space-3, 3px) 0;
+    gap: var(--ui-space-6, 6px);
     border: 1px solid transparent;
     border-radius: 6px;
     background: transparent;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: normal;
     text-align: left;
 
@@ -267,9 +267,9 @@
   .storage-usage.storage-usage--compact {
     width: 100%;
     min-width: 0;
-    height: 40px;
-    padding: 6px 8px;
-    gap: 5px;
+    height: var(--ui-layout-40, 40px);
+    padding: var(--ui-space-6, 6px) var(--ui-space-8, 8px);
+    gap: var(--ui-space-5, 5px);
     border-color: var(--surface-border-color);
     border-radius: 10px;
     background: var(--menu-body-bg-color);
@@ -296,7 +296,7 @@
 
     .storage-percent {
       min-width: 0;
-      font-size: 11px;
+      font-size: var(--ui-font-11, 11px);
     }
   }
 
@@ -309,7 +309,7 @@
   .storage-head {
     justify-content: space-between;
     width: 100%;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .storage-title {
@@ -321,16 +321,16 @@
     display: inline-flex;
     align-self: flex-end;
     align-items: center;
-    gap: 3px;
-    min-height: 16px;
+    gap: var(--ui-space-3, 3px);
+    min-height: var(--ui-layout-16, 16px);
     color: #9a6300;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 700;
     white-space: nowrap;
   }
 
   .storage-meta {
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     min-width: 0;
   }
 
@@ -347,7 +347,7 @@
   }
 
   .storage-percent {
-    min-width: 40px;
+    min-width: var(--ui-layout-40, 40px);
     text-align: right;
     font-weight: 700;
     color: var(--resource-file-color, #ff8a00);
@@ -408,7 +408,7 @@
 
 <style lang="less">
   .cloud-storage-popover {
-    width: min(390px, calc(100vw - 24px));
+    width: min(var(--ui-layout-390, 390px), calc(100vw - var(--ui-layout-24, 24px)));
     max-height: calc(100vh - 16px);
     padding: 0;
     overflow-x: hidden;
@@ -419,14 +419,14 @@
   .storage-detail-panel {
     display: flex;
     flex-direction: column;
-    gap: 14px;
-    padding: 16px;
+    gap: var(--ui-space-14, 14px);
+    padding: var(--ui-space-16, 16px);
   }
 
   .storage-detail-header {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
 
     h3,
     p {
@@ -435,14 +435,14 @@
 
     h3 {
       color: var(--text-color);
-      font-size: 15px;
+      font-size: var(--ui-font-15, 15px);
       line-height: 1.4;
     }
 
     p {
-      margin-top: 2px;
+      margin-top: var(--ui-space-2, 2px);
       color: var(--desc-color);
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
 
       &.is-shortfall {
         color: #d12f3d;
@@ -461,8 +461,8 @@
   }
 
   .storage-detail-icon {
-    width: 36px;
-    height: 36px;
+    width: var(--ui-layout-36, 36px);
+    height: var(--ui-layout-36, 36px);
     color: var(--resource-file-color, #ff8a00);
     border: 1px solid #f2aa52;
     background: #fff7e8;
@@ -478,9 +478,9 @@
     > div {
       display: flex;
       flex-direction: column;
-      gap: 3px;
+      gap: var(--ui-space-3, 3px);
       min-width: 0;
-      padding: 10px;
+      padding: var(--ui-space-10, 10px);
     }
 
     > div + div {
@@ -489,13 +489,13 @@
 
     span {
       color: var(--desc-color);
-      font-size: 11px;
+      font-size: var(--ui-font-11, 11px);
     }
 
     strong {
       overflow: hidden;
       color: var(--text-color);
-      font-size: 13px;
+      font-size: var(--ui-font-13, 13px);
       text-overflow: ellipsis;
       white-space: nowrap;
     }
@@ -504,8 +504,8 @@
   .storage-detail-breakdown {
     display: flex;
     justify-content: space-between;
-    gap: 12px;
-    padding: 10px 12px;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     border: 1px solid var(--card-border-color);
     border-radius: 10px;
     background: var(--primary-btn-bg-color);
@@ -513,7 +513,7 @@
     > div {
       display: flex;
       flex-direction: column;
-      gap: 2px;
+      gap: var(--ui-space-2, 2px);
     }
 
     > div:last-child {
@@ -522,12 +522,12 @@
 
     span {
       color: var(--desc-color);
-      font-size: 11px;
+      font-size: var(--ui-font-11, 11px);
     }
 
     strong {
       color: var(--text-color);
-      font-size: 13px;
+      font-size: var(--ui-font-13, 13px);
     }
 
     .is-bonus {
@@ -538,18 +538,18 @@
   .storage-shared-note {
     display: flex;
     align-items: flex-start;
-    gap: 7px;
-    padding: 9px 10px;
+    gap: var(--ui-space-7, 7px);
+    padding: var(--ui-space-9, 9px) var(--ui-space-10, 10px);
     border: 1px solid var(--card-border-color);
     border-radius: 9px;
     color: var(--desc-color);
     background: var(--workspace-panel-bg-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.5;
 
     svg {
       flex: 0 0 auto;
-      margin-top: 1px;
+      margin-top: var(--ui-space-1, 1px);
       color: var(--resource-file-color, #ff8a00);
     }
   }
@@ -557,27 +557,27 @@
   .storage-location-breakdown {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
 
     > div {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 10px;
+      gap: var(--ui-space-10, 10px);
       min-width: 0;
-      padding: 8px 10px;
+      padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px);
       border: 1px solid var(--card-border-color);
       border-radius: 9px;
     }
 
     span {
       color: var(--desc-color);
-      font-size: 11px;
+      font-size: var(--ui-font-11, 11px);
     }
 
     strong {
       color: var(--text-color);
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
       white-space: nowrap;
     }
   }
@@ -585,15 +585,15 @@
   .storage-detail-actions {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .storage-option.b_btn {
     justify-content: flex-start;
     width: 100%;
     height: auto;
-    min-height: 54px;
-    padding: 9px 10px;
+    min-height: var(--ui-layout-54, 54px);
+    padding: var(--ui-space-9, 9px) var(--ui-space-10, 10px);
     border: 1px solid var(--card-border-color);
     border-radius: 10px;
     background: transparent;
@@ -611,9 +611,9 @@
   }
 
   .storage-option-icon {
-    width: 32px;
-    height: 32px;
-    margin-right: 10px;
+    width: var(--ui-layout-32, 32px);
+    height: var(--ui-layout-32, 32px);
+    margin-right: var(--ui-space-10, 10px);
     border: 1px solid var(--card-border-color);
 
     &.is-level {
@@ -629,19 +629,19 @@
     display: flex;
     flex: 1;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
     min-width: 0;
 
     strong {
       color: var(--text-color);
-      font-size: 13px;
+      font-size: var(--ui-font-13, 13px);
       line-height: 1.35;
     }
 
     small {
       overflow: hidden;
       color: var(--desc-color);
-      font-size: 11px;
+      font-size: var(--ui-font-11, 11px);
       line-height: 1.4;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -650,12 +650,12 @@
 
   .storage-cleanup.b_btn {
     align-self: center;
-    gap: 4px;
-    height: 26px;
-    padding: 0 8px;
+    gap: var(--ui-space-4, 4px);
+    height: var(--ui-layout-26, 26px);
+    padding: 0 var(--ui-space-8, 8px);
     color: var(--desc-color);
     background: transparent;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
 
     &:hover {
       color: var(--primary-color);

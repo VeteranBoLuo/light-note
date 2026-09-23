@@ -2,7 +2,7 @@
   <BDrawer
     :open="open"
     :title="t('resourceOutcome.title')"
-    width="620px"
+    width="var(--ui-layout-620, 620px)"
     :mobile-full-screen="true"
     body-padding="0"
     @close="closeDrawer"
@@ -384,6 +384,7 @@
   import { formatAiQuotaTokens, useAiQuotaStatus } from '@/composables/useAiQuotaStatus';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import { useGrowth } from '@/composables/useGrowth';
+  import { useDensityScrollAnchor } from '@/composables/useDensityScrollAnchor';
   import icon from '@/config/icon';
   import {
     isToolboxWorkflowTool,
@@ -450,6 +451,7 @@
   const creatingQuickNote = ref(false);
   const flowError = ref('');
   const drawerScrollRef = ref<HTMLElement | null>(null);
+  useDensityScrollAnchor(drawerScrollRef);
   let stateVersion = 0;
   let afterCloseResolver: (() => void) | null = null;
 
@@ -925,6 +927,7 @@
 
 <style scoped lang="less">
   .resource-outcome-drawer {
+    font-size: var(--ui-font-16, 16px);
     height: 100%;
     min-height: 0;
     display: flex;
@@ -936,22 +939,22 @@
     min-height: 0;
     flex: 1 1 auto;
     overflow: hidden auto;
-    padding: 18px 20px 24px;
+    padding: var(--ui-space-18, 18px) var(--ui-space-20, 20px) var(--ui-space-24, 24px);
     box-sizing: border-box;
   }
 
   .resource-outcome-drawer__intro {
     display: flex;
     align-items: flex-start;
-    gap: 12px;
-    margin-bottom: 16px;
+    gap: var(--ui-space-12, 12px);
+    margin-bottom: var(--ui-space-16, 16px);
   }
 
   .resource-outcome-drawer__intro-icon,
   .resource-outcome-quote__icon {
-    width: 42px;
-    height: 42px;
-    flex: 0 0 42px;
+    width: var(--ui-layout-42, 42px);
+    height: var(--ui-layout-42, 42px);
+    flex: 0 0 var(--ui-layout-42, 42px);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -963,21 +966,21 @@
 
   .resource-outcome-drawer__intro strong {
     display: block;
-    margin-bottom: 3px;
-    font-size: 16px;
+    margin-bottom: var(--ui-space-3, 3px);
+    font-size: var(--ui-font-16, 16px);
   }
 
   .resource-outcome-drawer__intro p,
   .resource-outcome-section__heading p {
     margin: 0;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.55;
   }
 
   .resource-outcome-section {
-    margin-top: 14px;
-    padding: 15px;
+    margin-top: var(--ui-space-14, 14px);
+    padding: var(--ui-space-15, 15px);
     border: 1px solid var(--surface-border-color);
     border-radius: 15px;
     background: var(--card-background);
@@ -992,13 +995,13 @@
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 12px;
+    gap: var(--ui-space-12, 12px);
+    margin-bottom: var(--ui-space-12, 12px);
   }
 
   .resource-outcome-section__heading h3 {
-    margin: 0 0 3px;
-    font-size: 14px;
+    margin: 0 0 var(--ui-space-3, 3px);
+    font-size: var(--ui-font-14, 14px);
   }
 
   .resource-outcome-link,
@@ -1009,29 +1012,29 @@
   }
 
   .resource-outcome-back {
-    margin-top: 16px;
+    margin-top: var(--ui-space-16, 16px);
   }
 
   .resource-outcome-materials__list {
     display: grid;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
 
   .resource-chip {
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 9px;
-    padding: 8px 10px;
+    gap: var(--ui-space-9, 9px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px);
     border: 1px solid var(--surface-border-color);
     border-radius: 10px;
     background: var(--card-background);
   }
 
   .resource-chip__icon {
-    width: 30px;
-    height: 30px;
-    flex: 0 0 30px;
+    width: var(--ui-layout-30, 30px);
+    height: var(--ui-layout-30, 30px);
+    flex: 0 0 var(--ui-layout-30, 30px);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -1060,18 +1063,18 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .resource-chip__copy small {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .resource-outcome-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
   }
 
   .outcome-tool-card__tooltip-anchor,
@@ -1086,10 +1089,10 @@
     width: 100%;
     min-width: 0;
     height: 100%;
-    min-height: 132px;
+    min-height: var(--ui-layout-132, 132px);
     align-items: flex-start;
-    gap: 10px;
-    padding: 13px;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-13, 13px);
     border: 1px solid var(--surface-border-color);
     border-radius: 13px;
     background: var(--card-background);
@@ -1108,9 +1111,9 @@
   }
 
   .outcome-tool-card__icon {
-    width: 36px;
-    height: 36px;
-    flex: 0 0 36px;
+    width: var(--ui-layout-36, 36px);
+    height: var(--ui-layout-36, 36px);
+    flex: 0 0 var(--ui-layout-36, 36px);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -1121,11 +1124,11 @@
   }
 
   .outcome-tool-card__copy {
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
 
   .outcome-tool-card__copy strong {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     line-height: 1.35;
   }
 
@@ -1133,7 +1136,7 @@
     display: -webkit-box;
     overflow: hidden;
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.45;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 3;
@@ -1142,42 +1145,42 @@
   .outcome-tool-card__copy em {
     margin-top: auto;
     color: var(--primary-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-style: normal;
     font-weight: 650;
   }
 
   .outcome-tool-card__reason {
     position: absolute;
-    right: 9px;
-    bottom: 8px;
-    max-width: calc(100% - 18px);
+    right: var(--ui-space-9, 9px);
+    bottom: var(--ui-space-8, 8px);
+    max-width: calc(100% - var(--ui-space-18, 18px));
     overflow: hidden;
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .resource-outcome-more {
     width: 100%;
-    margin-top: 10px;
+    margin-top: var(--ui-space-10, 10px);
   }
 
   .resource-outcome-quick-actions {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .resource-outcome-quick-action.b_btn {
     width: 100%;
     min-width: 0;
     height: auto;
-    min-height: 62px;
+    min-height: var(--ui-layout-62, 62px);
     justify-content: flex-start;
-    gap: 9px;
-    padding: 10px 12px;
+    gap: var(--ui-space-9, 9px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     border: 1px solid var(--surface-border-color);
     border-radius: 11px;
     background: var(--workspace-panel-bg-color);
@@ -1193,26 +1196,26 @@
   }
 
   .resource-outcome-quick-action strong {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .resource-outcome-quick-action small {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     line-height: 1.4;
   }
 
   .resource-outcome-quick-panel {
-    margin-top: 12px;
+    margin-top: var(--ui-space-12, 12px);
   }
 
   .resource-outcome-selected-tool {
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 11px;
-    margin-top: 10px;
-    padding: 13px;
+    gap: var(--ui-space-11, 11px);
+    margin-top: var(--ui-space-10, 10px);
+    padding: var(--ui-space-13, 13px);
     border: 2px solid var(--primary-color);
     border-radius: 14px;
     background: var(--card-background);
@@ -1225,7 +1228,7 @@
   .outcome-tool-card__price {
     flex: 0 0 auto;
     color: var(--primary-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 650;
   }
 
@@ -1236,19 +1239,19 @@
 
   .resource-outcome-intents {
     display: grid;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
 
   .resource-outcome-intent.b_btn {
     position: relative;
     width: 100%;
     height: auto;
-    min-height: 62px;
+    min-height: var(--ui-layout-62, 62px);
     justify-content: flex-start;
     align-items: flex-start;
     flex-direction: column;
-    gap: 2px;
-    padding: 10px 38px 10px 12px;
+    gap: var(--ui-space-2, 2px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-38, 38px) var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     border: 1px solid var(--surface-border-color);
     border-radius: 11px;
     background: var(--workspace-panel-bg-color);
@@ -1269,64 +1272,64 @@
   .resource-outcome-intent small,
   .resource-outcome-billing__item small {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 400;
     line-height: 1.45;
   }
 
   .resource-outcome-intent > :deep(svg) {
     position: absolute;
-    top: 12px;
-    right: 12px;
+    top: var(--ui-space-12, 12px);
+    right: var(--ui-space-12, 12px);
   }
 
   .resource-outcome-options,
   .resource-outcome-field {
     display: grid;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .resource-outcome-field + .resource-outcome-field {
-    margin-top: 14px;
+    margin-top: var(--ui-space-14, 14px);
   }
 
   .resource-outcome-field label,
   .resource-outcome-field__label {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 650;
   }
 
   .resource-outcome-field > small {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
 
   .resource-outcome-detail-options {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
 
   .resource-outcome-detail-options :deep(.b_btn) {
     width: 100%;
     height: auto;
-    min-height: 38px;
+    min-height: var(--ui-control-38, 38px);
     border-radius: 10px;
   }
 
   .resource-outcome-billing {
     display: grid;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .resource-outcome-billing__item.b_btn {
     position: relative;
     width: 100%;
     height: auto;
-    min-height: 64px;
+    min-height: var(--ui-layout-64, 64px);
     justify-content: flex-start;
-    gap: 10px;
-    padding: 9px 38px 9px 12px;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-9, 9px) var(--ui-space-38, 38px) var(--ui-space-9, 9px) var(--ui-space-12, 12px);
     border: 1px solid var(--surface-border-color);
     border-radius: 11px;
     background: var(--workspace-panel-bg-color);
@@ -1345,21 +1348,21 @@
 
   .resource-outcome-billing__item > :deep(svg:last-child) {
     position: absolute;
-    top: 12px;
-    right: 12px;
+    top: var(--ui-space-12, 12px);
+    right: var(--ui-space-12, 12px);
   }
 
   .resource-outcome-state {
-    min-height: 48px;
+    min-height: var(--ui-layout-48, 48px);
     display: flex;
     align-items: center;
-    gap: 9px;
-    padding: 10px 12px;
+    gap: var(--ui-space-9, 9px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     border: 1px solid var(--surface-border-color);
     border-radius: 11px;
     color: var(--desc-color);
     background: var(--workspace-panel-bg-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .resource-outcome-state.is-error {
@@ -1375,9 +1378,9 @@
   .resource-outcome-quote {
     display: flex;
     align-items: flex-start;
-    gap: 11px;
-    margin-top: 14px;
-    padding: 14px;
+    gap: var(--ui-space-11, 11px);
+    margin-top: var(--ui-space-14, 14px);
+    padding: var(--ui-space-14, 14px);
     border: 2px solid var(--primary-color);
     border-radius: 14px;
     background: var(--card-background);
@@ -1387,7 +1390,7 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
 
   .resource-outcome-quote span {
@@ -1397,7 +1400,7 @@
 
   .resource-outcome-quote small {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .resource-outcome-quote small.is-danger {
@@ -1405,13 +1408,14 @@
   }
 
   .resource-outcome-drawer__footer {
-    min-height: 76px;
+    min-height: var(--ui-layout-76, 76px);
     flex: 0 0 auto;
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 9px;
-    padding: 10px 16px max(10px, env(safe-area-inset-bottom));
+    gap: var(--ui-space-9, 9px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-16, 16px)
+      max(var(--ui-space-10, 10px), env(safe-area-inset-bottom));
     box-sizing: border-box;
     border-top: 1px solid var(--surface-divider-color);
     background: var(--card-background);
@@ -1425,16 +1429,16 @@
   }
 
   .resource-outcome-drawer__footer-copy strong {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
   }
 
   .resource-outcome-drawer__footer-copy small {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
 
   .resource-outcome-drawer__footer :deep(.b_btn) {
-    min-height: 42px;
+    min-height: var(--ui-control-42, 42px);
     border-radius: 11px;
   }
 

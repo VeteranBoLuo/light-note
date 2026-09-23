@@ -3,7 +3,7 @@
     v-model:visible="visible"
     :title="official ? t('coBuild.officialFormTitle') : t('coBuild.formTitle')"
     :show-footer="false"
-    width="min(620px, 92vw)"
+    width="min(var(--ui-layout-620, 620px), 92vw)"
     :mask-closable="!submitting"
     @close="close"
   >
@@ -133,61 +133,61 @@
 <style scoped lang="less">
   .request-form {
     display: grid;
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
   }
   .form-hint {
     margin: 0;
-    padding: 12px 14px;
+    padding: var(--ui-space-12, 12px) var(--ui-space-14, 14px);
     border-radius: 10px;
     color: var(--desc-color);
     background: color-mix(in srgb, var(--primary-color) 7%, var(--surface-panel-bg));
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.65;
   }
   .form-field {
     position: relative;
     display: grid;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .form-field label,
   .identity-setting strong {
     color: var(--text-color);
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     font-weight: 650;
   }
   .field-counter {
     justify-self: end;
-    margin-top: -4px;
+    margin-top: calc(-1 * var(--ui-space-4, 4px));
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .identity-setting {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 20px;
-    padding: 14px;
+    gap: var(--ui-space-20, 20px);
+    padding: var(--ui-space-14, 14px);
     border: 1px solid var(--surface-border-color);
     border-radius: 10px;
     background: var(--surface-panel-bg);
   }
   .identity-setting > div {
     display: grid;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
   .identity-setting span {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .form-actions {
     display: flex;
     justify-content: flex-end;
-    gap: 10px;
-    padding-top: 2px;
+    gap: var(--ui-space-10, 10px);
+    padding-top: var(--ui-space-2, 2px);
   }
   :deep(.b-textarea) {
     resize: vertical;
-    min-height: 148px;
+    min-height: var(--ui-layout-148, 148px);
     border-color: var(--surface-border-color);
     background: var(--surface-panel-bg) !important;
     font-family: inherit;
@@ -195,7 +195,7 @@
   }
   :deep(.b-input),
   :deep(.select-trigger) {
-    min-height: 40px;
+    min-height: var(--ui-control-40, 40px);
     border: 1px solid var(--surface-border-color) !important;
     background: var(--surface-panel-bg);
   }

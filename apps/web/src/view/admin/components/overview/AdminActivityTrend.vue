@@ -108,21 +108,21 @@
     min-width: 0;
   }
   .activity-trend__value {
-    min-height: 22px;
-    font-size: 13px;
+    min-height: var(--ui-layout-22, 22px);
+    font-size: var(--ui-font-13, 13px);
     font-weight: 600;
   }
   .activity-trend__plot {
     display: flex;
-    height: 112px;
-    gap: 8px;
+    height: var(--ui-layout-112, 112px);
+    gap: var(--ui-space-8, 8px);
   }
   .activity-trend__axis {
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    padding: 6px 0;
-    min-width: 24px;
+    padding: var(--ui-space-6, 6px) 0;
+    min-width: var(--ui-layout-24, 24px);
   }
   .activity-trend svg {
     width: 100%;
@@ -160,11 +160,11 @@
   .activity-trend__dates {
     display: flex;
     justify-content: space-between;
-    padding-left: 32px;
+    padding-left: var(--ui-space-32, 32px);
   }
   .activity-trend__axis,
   .activity-trend__dates {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 </style>

@@ -375,7 +375,7 @@
   }
   .b-datetime-trigger {
     width: 100%;
-    min-height: 38px;
+    min-height: var(--ui-control-38, 38px);
     justify-content: flex-start;
     overflow: hidden;
     text-align: left;
@@ -385,8 +385,8 @@
     opacity: 0.72;
   }
   .b-datetime-panel__header .b_btn {
-    width: 28px;
-    min-width: 28px;
+    width: var(--ui-control-28, 28px);
+    min-width: var(--ui-control-28, 28px);
     padding: 0;
   }
   .b-datetime-trigger span:last-child {
@@ -398,9 +398,9 @@
     color: var(--desc-color);
   }
   .b-datetime-panel {
-    width: 332px;
+    width: var(--ui-layout-332, 332px);
     max-width: calc(100vw - 24px);
-    padding: 12px;
+    padding: var(--ui-space-12, 12px);
     box-sizing: border-box;
   }
   .b-datetime-panel__header,
@@ -412,29 +412,29 @@
   }
   .b-datetime-panel__header {
     justify-content: space-between;
-    margin-bottom: 9px;
+    margin-bottom: var(--ui-space-9, 9px);
   }
   .b-datetime-panel__header strong {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
   }
   .b-datetime-weekdays,
   .b-datetime-days {
     display: grid;
     grid-template-columns: repeat(7, minmax(0, 1fr));
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
   .b-datetime-weekdays {
-    margin-bottom: 4px;
+    margin-bottom: var(--ui-space-4, 4px);
   }
   .b-datetime-weekdays span {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     text-align: center;
   }
   .b-datetime-day {
     width: 100%;
     min-width: 0;
-    height: 34px;
+    height: var(--ui-control-34, 34px);
     padding: 0;
     border-radius: 9px;
   }
@@ -457,9 +457,9 @@
   .b-datetime-times {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 8px;
-    margin-top: 12px;
-    padding-top: 11px;
+    gap: var(--ui-space-8, 8px);
+    margin-top: var(--ui-space-12, 12px);
+    padding-top: var(--ui-space-11, 11px);
     border-top: 1px solid var(--card-border-color);
   }
   .b-datetime-times.is-range {
@@ -470,30 +470,30 @@
   }
   .b-datetime-times section > span {
     display: block;
-    margin-bottom: 5px;
+    margin-bottom: var(--ui-space-5, 5px);
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .b-datetime-times section > div {
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
   .b-datetime-times :deep(.b-select) {
     flex: 1;
     min-width: 0;
   }
   .b-datetime-range-hint {
-    margin: 9px 0 0;
+    margin: var(--ui-space-9, 9px) 0 0;
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.5;
   }
   .b-datetime-panel__footer {
     justify-content: space-between;
-    gap: 10px;
-    margin-top: 12px;
+    gap: var(--ui-space-10, 10px);
+    margin-top: var(--ui-space-12, 12px);
   }
   .b-datetime-panel__footer > div {
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   @media (max-width: 420px) {
     .b-datetime-panel {

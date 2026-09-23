@@ -353,15 +353,15 @@
 
 <style lang="less" scoped>
   .admin-recent {
-    margin-top: 20px;
+    margin-top: var(--ui-space-20, 20px);
   }
 
   .admin-recent__heading {
     display: flex;
     align-items: flex-end;
     justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 10px;
+    gap: var(--ui-space-12, 12px);
+    margin-bottom: var(--ui-space-10, 10px);
 
     h3,
     p {
@@ -370,7 +370,7 @@
 
     h3 {
       color: var(--text-color);
-      font-size: 14px;
+      font-size: var(--ui-font-14, 14px);
       font-weight: 650;
       line-height: 1.5;
     }
@@ -378,7 +378,7 @@
     p,
     .admin-recent__updating {
       color: var(--sub-text-color);
-      font-size: 11px;
+      font-size: var(--ui-font-11, 11px);
       line-height: 1.5;
     }
   }
@@ -389,26 +389,26 @@
     align-items: center;
     justify-content: flex-end;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .admin-recent__filter--period {
-    width: 112px;
+    width: var(--ui-layout-112, 112px);
   }
 
   .admin-recent__filter--type {
-    width: 128px;
+    width: var(--ui-layout-128, 128px);
   }
 
   .admin-recent__filter :deep(.select-trigger) {
-    min-height: 30px;
-    font-size: 11px;
+    min-height: var(--ui-control-30, 30px);
+    font-size: var(--ui-font-11, 11px);
   }
 
   .admin-recent__grid {
     display: grid;
-    grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
-    gap: 12px;
+    grid-template-columns: minmax(0, 2fr) minmax(var(--ui-layout-280, 280px), 1fr);
+    gap: var(--ui-space-12, 12px);
     align-items: stretch;
   }
 
@@ -422,24 +422,24 @@
   }
 
   .admin-recent__card :deep(.card-container-header) {
-    min-height: 42px;
+    min-height: var(--ui-layout-42, 42px);
     margin: 0;
-    padding: 0 14px;
+    padding: 0 var(--ui-space-14, 14px);
     border-bottom: 1px solid var(--surface-border-color, var(--card-border-color));
   }
 
   .admin-recent__card-title {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .admin-recent__users-link {
-    height: 27px;
-    padding: 0 9px;
+    height: var(--ui-layout-27, 27px);
+    padding: 0 var(--ui-space-9, 9px);
     color: var(--primary-color);
     border: 1px solid var(--primary-color);
     background: transparent;
-    font-size: 11px;
-    line-height: 25px;
+    font-size: var(--ui-font-11, 11px);
+    line-height: var(--ui-layout-25, 25px);
   }
 
   .admin-recent__list {
@@ -457,16 +457,16 @@
     height: 100%;
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 8px 14px;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-14, 14px);
     box-sizing: border-box;
   }
 
   .admin-recent__resource-icon,
   .admin-recent__avatar {
-    width: 36px;
-    height: 36px;
-    flex: 0 0 36px;
+    width: var(--ui-layout-36, 36px);
+    height: var(--ui-layout-36, 36px);
+    flex: 0 0 var(--ui-layout-36, 36px);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -479,7 +479,7 @@
   .admin-recent__avatar {
     color: var(--primary-color);
     border-radius: 50%;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 700;
   }
 
@@ -489,12 +489,12 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
 
     strong {
       overflow: hidden;
       color: var(--text-color);
-      font-size: 13px;
+      font-size: var(--ui-font-13, 13px);
       font-weight: 600;
       line-height: 1.35;
       text-overflow: ellipsis;
@@ -505,9 +505,9 @@
       min-width: 0;
       display: flex;
       align-items: center;
-      gap: 7px;
+      gap: var(--ui-space-7, 7px);
       color: var(--sub-text-color);
-      font-size: 11px;
+      font-size: var(--ui-font-11, 11px);
     }
   }
 
@@ -534,7 +534,7 @@
   .admin-recent__time {
     flex: 0 0 auto;
     color: var(--sub-text-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     white-space: nowrap;
   }
 
@@ -542,11 +542,11 @@
   .admin-recent__stream-error,
   .admin-recent__stream-footer {
     color: var(--sub-text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .admin-recent__empty {
-    min-height: 180px;
+    min-height: var(--ui-layout-180, 180px);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -555,14 +555,14 @@
 
   .admin-recent__stream-error,
   .admin-recent__stream-footer {
-    min-height: 44px;
+    min-height: var(--ui-layout-44, 44px);
     margin: 0;
-    padding: 8px 14px;
+    padding: var(--ui-space-8, 8px) var(--ui-space-14, 14px);
     box-sizing: border-box;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     text-align: center;
   }
 
@@ -573,7 +573,7 @@
   }
 
   .admin-recent__skeleton-list {
-    padding: 0 14px;
+    padding: 0 var(--ui-space-14, 14px);
   }
 
   .admin-recent__skeleton-row span,
@@ -587,20 +587,20 @@
   .admin-recent__skeleton-row {
     display: flex;
     align-items: center;
-    gap: 10px;
-    min-height: 58px;
+    gap: var(--ui-space-10, 10px);
+    min-height: var(--ui-control-58, 58px);
 
     > span {
-      width: 36px;
-      height: 36px;
-      flex: 0 0 36px;
+      width: var(--ui-layout-36, 36px);
+      height: var(--ui-layout-36, 36px);
+      flex: 0 0 var(--ui-layout-36, 36px);
     }
 
     div {
       min-width: 0;
       flex: 1;
       display: grid;
-      gap: 7px;
+      gap: var(--ui-space-7, 7px);
     }
 
     i {

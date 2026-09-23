@@ -25,10 +25,10 @@
     display: inline-flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 5px;
-    font-size: 12px;
+    gap: var(--ui-space-5, 5px);
+    font-size: var(--ui-font-12, 12px);
     color: var(--error-color);
     line-height: 1.5;
-    margin-top: 6px;
+    margin-top: var(--ui-space-6, 6px);
   }
 </style>

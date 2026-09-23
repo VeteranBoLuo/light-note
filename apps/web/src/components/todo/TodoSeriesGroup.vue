@@ -180,9 +180,9 @@
 
   .todo-series-group__toggle {
     width: 100%;
-    min-height: 36px;
+    min-height: var(--ui-layout-36, 36px);
     justify-content: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     border: 0;
     border-top: 1px solid var(--surface-border-color, var(--card-border-color));
     border-radius: 0;
@@ -200,21 +200,21 @@
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 4px 7px;
-    padding: 0 16px 10px 40px;
+    gap: var(--ui-space-4, 4px) var(--ui-space-7, 7px);
+    padding: 0 var(--ui-space-16, 16px) var(--ui-space-10, 10px) var(--ui-space-40, 40px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.6;
   }
   .todo-series-group__view {
-    min-height: 28px;
+    min-height: var(--ui-layout-28, 28px);
     height: auto;
-    padding: 0 4px;
+    padding: 0 var(--ui-space-4, 4px);
     border: 0;
     border-radius: 4px;
     background: transparent;
     color: var(--todo-workspace-accent);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     &:hover {
       text-decoration: underline;
     }
@@ -234,7 +234,7 @@
 
   @media (max-width: 768px) {
     .todo-series-group__toggle {
-      min-height: 40px;
+      min-height: var(--ui-layout-40, 40px);
     }
   }
 </style>

@@ -230,33 +230,33 @@
 </script>
 <style scoped lang="less">
   .note-export-options {
-    --export-control-height: 38px;
+    --export-control-height: var(--ui-control-38, 38px);
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
     min-width: 0;
     color: var(--text-color);
   }
   .export-settings {
     display: flex;
     align-items: flex-start;
-    gap: 20px;
+    gap: var(--ui-space-20, 20px);
   }
   .export-field {
     display: flex;
     flex-direction: column;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
     min-width: 0;
   }
   .export-method-field {
     flex: 1;
   }
   .export-format-field {
-    flex: 0 0 160px;
+    flex: 0 0 var(--ui-layout-160, 160px);
   }
   .export-label {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.5;
   }
   .export-methods.tab-container.is-segment {
@@ -264,8 +264,8 @@
     box-sizing: border-box;
     border: 1px solid var(--surface-border-color);
     border-radius: 8px;
-    padding: 3px;
-    gap: 3px;
+    padding: var(--ui-space-3, 3px);
+    gap: var(--ui-space-3, 3px);
     background: var(--primary-btn-bg-color);
   }
   .export-methods.tab-container.is-segment :deep(.tab) {
@@ -277,10 +277,10 @@
     min-width: 0;
     min-height: 0;
     height: 100%;
-    padding: 0 8px;
+    padding: 0 var(--ui-space-8, 8px);
     border: 1px solid transparent;
     border-radius: 5px;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.3;
     text-align: center;
     background: transparent;
@@ -303,21 +303,21 @@
     border: 1px solid var(--surface-border-color);
     border-radius: 8px;
     background: var(--background-color);
-    padding: 0 12px;
-    font-size: 13px;
+    padding: 0 var(--ui-space-12, 12px);
+    font-size: var(--ui-font-13, 13px);
   }
   .export-name-field :deep(.b-input) {
     height: var(--export-control-height);
     box-sizing: border-box;
     border-radius: 8px;
     border: 1px solid var(--surface-border-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .export-title-options {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px 24px;
-    font-size: 13px;
+    gap: var(--ui-space-10, 10px) var(--ui-space-24, 24px);
+    font-size: var(--ui-font-13, 13px);
   }
   .is-mobile .export-title-options {
     flex-direction: column;
@@ -329,23 +329,23 @@
   .export-muted {
     margin: 0;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.65;
   }
   .export-summary {
-    margin-top: -4px;
+    margin-top: calc(-1 * var(--ui-space-4, 4px));
   }
   .export-order-heading {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding-top: 6px;
+    padding-top: var(--ui-space-6, 6px);
   }
   .export-order-title {
     display: flex;
     align-items: center;
-    gap: 8px;
-    font-size: 13px;
+    gap: var(--ui-space-8, 8px);
+    font-size: var(--ui-font-13, 13px);
   }
   .export-order-title span {
     color: var(--desc-color);
@@ -356,12 +356,12 @@
   .export-row-actions {
     display: flex;
     align-items: center;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
     flex-shrink: 0;
   }
   .export-order-hint {
-    margin-top: -16px;
-    padding-right: 78px;
+    margin-top: calc(-1 * var(--ui-space-16, 16px));
+    padding-right: var(--ui-space-78, 78px);
   }
   .export-order {
     border-top: 1px solid var(--surface-border-color);
@@ -369,8 +369,8 @@
   .export-row {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 12px 0;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-12, 12px) 0;
     border-bottom: 1px solid var(--surface-divider-color, var(--surface-border-color));
     border-radius: 4px;
   }
@@ -378,8 +378,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    flex: 0 0 24px;
-    height: 32px;
+    flex: 0 0 var(--ui-layout-24, 24px);
+    height: var(--ui-control-32, 32px);
     color: var(--desc-color);
     cursor: grab;
     touch-action: none;
@@ -392,9 +392,9 @@
     opacity: 0.4;
   }
   .export-number {
-    flex: 0 0 20px;
+    flex: 0 0 var(--ui-layout-20, 20px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     text-align: center;
     font-variant-numeric: tabular-nums;
   }
@@ -403,22 +403,22 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
   .export-note strong {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     line-height: 1.5;
     font-weight: 500;
     overflow-wrap: anywhere;
   }
   .export-note small {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.4;
   }
   .export-icon-action {
-    width: 32px;
-    height: 32px;
+    width: var(--ui-control-32, 32px);
+    height: var(--ui-control-32, 32px);
     padding: 0;
     background: transparent;
     color: var(--desc-color);
@@ -447,11 +447,11 @@
     background: var(--primary-btn-bg-color);
   }
   .export-format-hint {
-    padding-top: 2px;
+    padding-top: var(--ui-space-2, 2px);
   }
   .export-error {
     margin: 0;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.6;
     color: var(--error-color);
     overflow-wrap: anywhere;

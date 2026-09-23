@@ -271,7 +271,13 @@
                   : t('inbox.todoPlanReminderJobs', { count: preview.reminderMomentCount ?? '—' })
             }}</span>
             <span v-if="preview.nextReminderAt">{{
-              t(preview.normalizedPlan?.plan.type === 'once' && isTodoSingleReminder({ reminder: preview.normalizedPlan.reminder }) ? 'inbox.todoSingleReminderTime' : 'inbox.todoPlanNextReminder', { time: preview.nextReminderAt })
+              t(
+                preview.normalizedPlan?.plan.type === 'once' &&
+                  isTodoSingleReminder({ reminder: preview.normalizedPlan.reminder })
+                  ? 'inbox.todoSingleReminderTime'
+                  : 'inbox.todoPlanNextReminder',
+                { time: preview.nextReminderAt },
+              )
             }}</span>
           </div>
         </template>
@@ -787,7 +793,7 @@
   .todo-plan-editor {
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
   }
   .todo-plan-editor.is-desktop-layout {
     display: contents;
@@ -797,8 +803,8 @@
   .todo-plan-preview {
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    padding: 16px;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-16, 16px);
     border: 1px solid var(--surface-border-color);
     border-radius: 15px;
     background: var(--card-background);
@@ -817,41 +823,41 @@
     display: flex;
     min-width: 0;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
   .todo-plan-editor small,
   .todo-plan-preview p,
   .todo-plan-editor__meaning {
     margin: 0;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.6;
   }
   .todo-plan-editor label {
     display: flex;
     min-width: 0;
     flex-direction: column;
-    gap: 6px;
-    font-size: 13px;
+    gap: var(--ui-space-6, 6px);
+    font-size: var(--ui-font-13, 13px);
   }
   .todo-plan-editor__grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .todo-plan-editor__segment {
     display: flex;
     flex-wrap: wrap;
-    gap: 5px;
-    padding: 4px;
+    gap: var(--ui-space-5, 5px);
+    padding: var(--ui-space-4, 4px);
     border-radius: 12px;
     background: var(--workspace-panel-bg-color);
   }
   .todo-plan-editor__segment :deep(.b_btn) {
     min-width: 0;
-    min-height: 38px;
+    min-height: var(--ui-layout-38, 38px);
     flex: 1 1 0;
-    padding: 0 9px;
+    padding: 0 var(--ui-space-9, 9px);
     border: 0;
     border-radius: 9px;
     background: transparent;
@@ -866,33 +872,33 @@
   .todo-plan-editor__segment-label {
     width: 100%;
     flex: 0 0 100%;
-    padding: 3px 4px 0;
+    padding: var(--ui-space-3, 3px) var(--ui-space-4, 4px) 0;
     color: var(--text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 650;
   }
   .todo-plan-editor__inline,
   .todo-plan-editor__channels {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .todo-plan-editor__advanced {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .todo-plan-editor__scheduled-config {
     display: grid;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .todo-plan-editor__schedule-summary {
     width: 100%;
     height: auto;
-    min-height: 46px;
+    min-height: var(--ui-layout-46, 46px);
     align-items: center;
     justify-content: space-between;
-    padding: 8px 11px;
+    padding: var(--ui-space-8, 8px) var(--ui-space-11, 11px);
     border: 1px solid var(--surface-border-color);
     border-radius: 10px;
     background: var(--workspace-panel-bg-color);
@@ -900,11 +906,11 @@
   }
   .todo-plan-editor__schedule-summary > span {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .todo-plan-editor__schedule-summary > strong {
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .todo-plan-editor__advanced-toggle {
     align-self: flex-start;
@@ -918,20 +924,20 @@
   .todo-plan-editor__weekdays {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    font-size: 13px;
+    gap: var(--ui-space-8, 8px);
+    font-size: var(--ui-font-13, 13px);
   }
   .todo-plan-editor__weekdays > div {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px 16px;
+    gap: var(--ui-space-10, 10px) var(--ui-space-16, 16px);
   }
   .todo-plan-editor__current-badge {
-    padding: 5px 10px;
+    padding: var(--ui-space-5, 5px) var(--ui-space-10, 10px);
     border: 1px solid var(--primary-color);
     border-radius: 999px;
     color: var(--primary-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 600;
   }
   .todo-plan-preview {
@@ -942,10 +948,10 @@
     position: absolute;
     top: 0;
     right: 0;
-    width: 388px;
+    width: var(--ui-layout-388, 388px);
     min-height: 100%;
     box-sizing: border-box;
-    padding: 20px;
+    padding: var(--ui-space-20, 20px);
     border: 0;
     border-left: 1px solid var(--surface-border-color);
     border-radius: 0;
@@ -954,14 +960,14 @@
   .todo-plan-preview__content {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   @media (min-width: 981px) {
     .todo-plan-editor.is-desktop-layout .todo-plan-preview__content {
       position: sticky;
-      top: 20px;
-      max-height: calc(100vh - 110px);
-      max-height: calc(100dvh - 110px);
+      top: var(--ui-space-20, 20px);
+      max-height: calc(100vh - var(--ui-layout-110, 110px));
+      max-height: calc(100dvh - var(--ui-layout-110, 110px));
       overflow-y: auto;
       overscroll-behavior: contain;
     }
@@ -970,19 +976,19 @@
     border-color: var(--danger-color, #e5484d);
   }
   .todo-plan-preview__headline {
-    font-size: 18px;
+    font-size: var(--ui-font-18, 18px);
   }
   .todo-plan-preview__summary-list {
     display: grid;
-    gap: 11px;
-    margin-top: 2px;
+    gap: var(--ui-space-11, 11px);
+    margin-top: var(--ui-space-2, 2px);
   }
   .todo-plan-preview__summary-list > div {
     display: grid;
-    grid-template-columns: 72px minmax(0, 1fr);
+    grid-template-columns: var(--ui-layout-72, 72px) minmax(0, 1fr);
     align-items: start;
-    gap: 10px;
-    font-size: 13px;
+    gap: var(--ui-space-10, 10px);
+    font-size: var(--ui-font-13, 13px);
   }
   .todo-plan-preview__summary-list span {
     color: var(--desc-color);
@@ -993,20 +999,20 @@
   .todo-plan-preview__facts {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .todo-plan-preview__facts span {
-    padding: 4px 8px;
+    padding: var(--ui-space-4, 4px) var(--ui-space-8, 8px);
     border: 1px solid var(--card-border-color);
     border-radius: 999px;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .todo-plan-editor__past {
     display: grid;
-    gap: 10px;
-    margin-top: 2px;
-    padding: 12px;
+    gap: var(--ui-space-10, 10px);
+    margin-top: var(--ui-space-2, 2px);
+    padding: var(--ui-space-12, 12px);
     border: 1px solid var(--chip-pending-border, #d97706);
     border-radius: 12px;
     background: var(--chip-pending-bg, #fffbeb);
@@ -1018,16 +1024,16 @@
   }
   .todo-plan-editor__past-options {
     display: grid;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .todo-plan-editor__past-options :deep(.b_btn) {
     display: grid;
     width: 100%;
     height: auto;
-    min-height: 54px;
+    min-height: var(--ui-layout-54, 54px);
     justify-items: start;
-    gap: 2px;
-    padding: 9px 10px;
+    gap: var(--ui-space-2, 2px);
+    padding: var(--ui-space-9, 9px) var(--ui-space-10, 10px);
     border: 1px solid var(--surface-border-color);
     border-radius: 10px;
     background: var(--card-background);
@@ -1040,11 +1046,11 @@
     box-shadow: inset 3px 0 0 var(--primary-color);
   }
   .todo-plan-editor__past-options :deep(.b_btn strong) {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .todo-plan-editor__past-options :deep(.b_btn small) {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.45;
   }
   .todo-plan-preview__error {
@@ -1056,7 +1062,7 @@
       position: static;
       width: auto;
       min-height: 0;
-      padding: 16px;
+      padding: var(--ui-space-16, 16px);
       border: 1px solid var(--primary-color);
       border-radius: 15px;
       background: var(--card-background);
@@ -1064,7 +1070,7 @@
   }
   @media (max-width: 767px) {
     .todo-plan-editor.is-mobile-step {
-      gap: 15px;
+      gap: var(--ui-space-15, 15px);
     }
     .todo-plan-editor.is-mobile-step > .todo-plan-editor__section {
       padding: 0;
@@ -1090,13 +1096,13 @@
       width: 100%;
     }
     .todo-plan-editor.is-mobile-step > .todo-plan-preview {
-      padding: 15px;
+      padding: var(--ui-space-15, 15px);
       border: 1px solid var(--primary-color);
       border-radius: 16px;
       background: var(--card-background);
     }
     .todo-plan-preview__summary-list > div {
-      grid-template-columns: 68px minmax(0, 1fr);
+      grid-template-columns: var(--ui-layout-68, 68px) minmax(0, 1fr);
     }
   }
 </style>

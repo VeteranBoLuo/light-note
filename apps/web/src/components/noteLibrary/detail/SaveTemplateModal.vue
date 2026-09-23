@@ -1,5 +1,5 @@
 <template>
-  <BModal v-model:visible="visible" :title="t('note.saveAsTemplate')" :show-footer="false" width="min(480px, 92vw)">
+  <BModal v-model:visible="visible" :title="t('note.saveAsTemplate')" :show-footer="false" width="min(var(--ui-layout-480, 480px), 92vw)">
     <div class="tpl-form">
       <div class="form-field">
         <label>{{ t('note.tplNameLabel') }}</label>
@@ -100,49 +100,49 @@
 <style scoped lang="less">
   .tpl-form {
     display: grid;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
   .form-field {
     position: relative;
     display: grid;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
 
     label {
       color: var(--text-color);
-      font-size: 14px;
+      font-size: var(--ui-font-14, 14px);
       font-weight: 650;
     }
   }
   .field-counter {
     justify-self: end;
-    margin-top: -4px;
+    margin-top: calc(-1 * var(--ui-space-4, 4px));
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .var-hint {
     margin: 0;
-    padding: 10px 12px;
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     border-radius: 8px;
     color: var(--desc-color);
     background: var(--menu-item-h-bg-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.8;
 
     code {
-      margin: 0 3px;
-      padding: 1px 6px;
+      margin: 0 var(--ui-space-3, 3px);
+      padding: var(--ui-space-1, 1px) var(--ui-space-6, 6px);
       border-radius: 4px;
       background: var(--menu-item-bg-color);
       color: var(--primary-color);
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
     }
   }
   .form-actions {
     display: flex;
     justify-content: flex-end;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   :deep(.b-input) {
-    min-height: 38px;
+    min-height: var(--ui-control-38, 38px);
   }
 </style>

@@ -54,7 +54,7 @@
   .pdf-image-converter {
     min-width: 0;
     display: grid;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .pdf-image-converter__switcher {
@@ -63,18 +63,18 @@
   }
 
   .pdf-image-converter__switcher :deep(.tab-container) {
-    width: min(100%, 520px);
-    padding: 3px;
-    gap: 3px;
+    width: min(100%, var(--ui-layout-520, 520px));
+    padding: var(--ui-space-3, 3px);
+    gap: var(--ui-space-3, 3px);
     border-radius: 12px;
   }
 
   .pdf-image-converter__switcher :deep(.tab) {
     min-width: 0;
-    min-height: 34px;
+    min-height: var(--ui-layout-34, 34px);
     flex: 1;
     justify-content: center;
-    line-height: 34px;
+    line-height: var(--ui-layout-34, 34px);
     border: 1px solid transparent;
     border-radius: 8px;
   }
@@ -96,13 +96,13 @@
 
   @media (max-width: 767px) {
     .pdf-image-converter {
-      gap: 14px;
+      gap: var(--ui-space-14, 14px);
     }
 
     .pdf-image-converter__switcher :deep(.tab) {
-      min-height: 44px;
-      padding: 0 10px;
-      line-height: 44px;
+      min-height: var(--ui-layout-44, 44px);
+      padding: 0 var(--ui-space-10, 10px);
+      line-height: var(--ui-layout-44, 44px);
     }
   }
 

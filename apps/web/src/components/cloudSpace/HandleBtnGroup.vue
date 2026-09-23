@@ -459,9 +459,9 @@
   .upload-btn {
     position: relative;
     :deep(.ant-btn) {
-      height: 48px;
-      padding: 0 24px;
-      font-size: 16px;
+      height: var(--ui-layout-48, 48px);
+      padding: 0 var(--ui-space-24, 24px);
+      font-size: var(--ui-font-16, 16px);
       font-weight: 600;
       border-radius: 12px;
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -475,7 +475,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 8px;
+      gap: var(--ui-space-8, 8px);
 
       &::before {
         content: '';
@@ -505,8 +505,8 @@
 
       // 图标样式
       .anticon {
-        margin-right: 8px;
-        font-size: 18px;
+        margin-right: var(--ui-space-8, 8px);
+        font-size: var(--ui-font-18, 18px);
         transition: transform 0.3s ease;
       }
 
@@ -537,8 +537,8 @@
   .upload-container--mobile {
     .upload-btn {
       :deep(.ant-btn) {
-        width: 34px;
-        height: 32px;
+        width: var(--ui-layout-34, 34px);
+        height: var(--ui-layout-32, 32px);
         padding: 0;
         border-radius: 8px;
         box-shadow: none;
@@ -546,7 +546,7 @@
 
         .anticon {
           margin-right: 0;
-          font-size: 16px;
+          font-size: var(--ui-font-16, 16px);
         }
       }
     }
@@ -570,8 +570,8 @@
     top: 70px;
     right: 20px;
     z-index: 300;
-    width: 320px;
-    padding: 20px;
+    width: var(--ui-layout-320, 320px);
+    padding: var(--ui-space-20, 20px);
     background: rgba(255, 255, 255, 0.95);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
@@ -583,27 +583,27 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 12px;
+      margin-bottom: var(--ui-space-12, 12px);
 
       .progress-title {
         font-weight: 600;
         color: #1890ff;
-        font-size: 16px;
+        font-size: var(--ui-font-16, 16px);
       }
 
       .progress-actions {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: var(--ui-space-8, 8px);
 
         .progress-percent {
-          font-size: 14px;
+          font-size: var(--ui-font-14, 14px);
           color: #666;
           font-weight: 500;
         }
 
         .progress-speed {
-          font-size: 14px;
+          font-size: var(--ui-font-14, 14px);
           color: #666;
           font-weight: 500;
         }
@@ -620,7 +620,7 @@
     }
 
     .overall-progress {
-      margin-bottom: 16px;
+      margin-bottom: var(--ui-space-16, 16px);
 
       :deep(.ant-progress-bg) {
         background: linear-gradient(90deg, #1890ff 0%, #36cfc9 100%);
@@ -628,12 +628,12 @@
     }
 
     .file-progress-list {
-      max-height: 230px;
+      max-height: var(--ui-layout-230, 230px);
       overflow-y: auto;
 
       .file-progress-item {
-        margin-bottom: 12px;
-        padding: 8px 12px;
+        margin-bottom: var(--ui-space-12, 12px);
+        padding: var(--ui-space-8, 8px) var(--ui-space-12, 12px);
         background: rgba(249, 250, 251, 0.8);
         border-radius: 6px;
         border: 1px solid rgba(229, 231, 235, 0.5);
@@ -644,9 +644,9 @@
 
         .file-name {
           display: block;
-          font-size: 13px;
+          font-size: var(--ui-font-13, 13px);
           color: #374151;
-          margin-bottom: 6px;
+          margin-bottom: var(--ui-space-6, 6px);
           font-weight: 500;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -656,7 +656,7 @@
         .file-progress-wrapper {
           display: flex;
           align-items: center;
-          gap: 8px;
+          gap: var(--ui-space-8, 8px);
 
           :deep(.ant-progress) {
             flex: 1;
@@ -665,7 +665,7 @@
           .file-cancel-btn {
             flex-shrink: 0;
             color: #ef4444;
-            padding: 2px;
+            padding: var(--ui-space-2, 2px);
 
             &:hover {
               color: #dc2626;
@@ -749,12 +749,12 @@
     top: 35px;
     background-color: rgba(14, 8, 8, 0.8);
     color: white;
-    padding: 12px;
+    padding: var(--ui-space-12, 12px);
     border-radius: 8px;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.6;
     white-space: pre-wrap;
-    width: 200px;
+    width: var(--ui-layout-200, 200px);
     z-index: 300;
     opacity: 0;
     transition: opacity 0.3s ease;
@@ -783,21 +783,21 @@
   @media (max-width: 768px) {
     .upload-btn {
       :deep(.ant-btn) {
-        height: 44px;
-        padding: 0 20px;
-        font-size: 14px;
+        height: var(--ui-layout-44, 44px);
+        padding: 0 var(--ui-space-20, 20px);
+        font-size: var(--ui-font-14, 14px);
 
         .anticon {
-          font-size: 16px;
-          margin-right: 6px;
+          font-size: var(--ui-font-16, 16px);
+          margin-right: var(--ui-space-6, 6px);
         }
       }
     }
 
     .upload-tip {
       bottom: -90px;
-      max-width: 250px;
-      font-size: 11px;
+      max-width: var(--ui-layout-250, 250px);
+      font-size: var(--ui-font-11, 11px);
     }
 
     .upload-progress {
@@ -813,9 +813,9 @@
 
   /* 资源页统一的紧凑上传入口；BButton 不依赖 Ant 内部结构。 */
   .upload-action {
-    height: 36px;
-    padding: 0 14px;
-    gap: 7px;
+    height: var(--ui-layout-36, 36px);
+    padding: 0 var(--ui-space-14, 14px);
+    gap: var(--ui-space-7, 7px);
     border-radius: 10px;
     background: var(--resource-file-color, #ff8a00);
     box-shadow: 0 5px 14px color-mix(in srgb, var(--resource-file-color, #ff8a00) 22%, transparent);
@@ -826,9 +826,9 @@
   }
 
   .upload-container--mobile .upload-action {
-    width: 34px;
-    min-width: 34px;
-    height: 34px;
+    width: var(--ui-layout-34, 34px);
+    min-width: var(--ui-layout-34, 34px);
+    height: var(--ui-layout-34, 34px);
     padding: 0;
     border-radius: 9px;
     box-shadow: none;
@@ -852,7 +852,7 @@
   }
 
   .overall-progress {
-    margin-bottom: 14px;
+    margin-bottom: var(--ui-space-14, 14px);
   }
 
   .file-progress-track--success > span {

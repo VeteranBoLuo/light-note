@@ -33,18 +33,18 @@
     overflow: auto;
   }
   .settings-content {
-    max-width: 980px;
+    max-width: var(--ui-layout-980, 980px);
     margin: 0;
   }
   h1 {
     margin: 0;
-    font-size: 24px;
+    font-size: var(--ui-font-24, 24px);
   }
   .settings-description {
     color: var(--desc-color);
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     line-height: 1.7;
-    margin: 12px 0 28px;
+    margin: var(--ui-space-12, 12px) 0 var(--ui-space-28, 28px);
   }
   @media (max-width: 767px) {
     .settings-description {
@@ -55,62 +55,62 @@
   .settings-content :deep(.community-notification-settings.is-compact),
   .settings-content :deep(.community-feed-notifications),
   .settings-content :deep(.community-blocked-members) {
-    padding: 24px;
+    padding: var(--ui-space-24, 24px);
     border: 1px solid var(--workspace-border);
     border-radius: 10px;
     background: var(--workspace-content);
     box-sizing: border-box;
   }
   .settings-content :deep(.community-settings-panel) {
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
   .settings-content :deep(.community-blocked-members) {
-    margin-top: 16px;
+    margin-top: var(--ui-space-16, 16px);
   }
   .settings-content :deep(.community-notification-settings__head-icon) {
     display: none;
   }
   .settings-content :deep(.community-notification-settings__head strong) {
-    font-size: 16px;
+    font-size: var(--ui-font-16, 16px);
   }
   .settings-content :deep(.community-notification-settings__head-copy > span) {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .settings-content :deep(.community-notification-settings__rail) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .settings-content :deep(.community-notification-settings__option) {
     justify-content: flex-start;
-    padding: 14px;
-    font-size: 13px;
-    min-height: 48px;
+    padding: var(--ui-space-14, 14px);
+    font-size: var(--ui-font-13, 13px);
+    min-height: var(--ui-layout-48, 48px);
     border-radius: 8px;
   }
   .settings-content :deep(.community-notification-settings__compact-results) {
     background: transparent;
     border: 0;
-    padding: 4px 0;
+    padding: var(--ui-space-4, 4px) 0;
     display: grid;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   .settings-content :deep(.community-notification-settings__compact-result) {
     white-space: normal;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     overflow: visible;
   }
   .settings-content :deep(.community-settings-row + .community-settings-row) {
     border-top: 1px solid var(--workspace-divider);
   }
   .settings-content :deep(.community-section-loading) {
-    min-height: 70px;
+    min-height: var(--ui-layout-70, 70px);
   }
   .settings-content :deep(.community-blocked-members h2) {
-    margin: 0 0 16px;
+    margin: 0 0 var(--ui-space-16, 16px);
   }
   .settings-content :deep(.community-blocked-members p:not([role='alert'])) {
     text-align: center;
-    padding: 16px 0;
+    padding: var(--ui-space-16, 16px) 0;
   }
   @media (max-width: 767px) {
     .settings-content :deep(.community-notification-settings.is-compact),

@@ -446,12 +446,12 @@
 
 <style scoped lang="less">
   .growth-card {
-    min-height: 148px;
-    padding: 14px;
+    min-height: var(--ui-layout-148, 148px);
+    padding: var(--ui-space-14, 14px);
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     border: 1px solid color-mix(in srgb, var(--primary-color) 18%, var(--card-border-color));
     border-radius: 14px;
     color: var(--text-color);
@@ -470,8 +470,8 @@
 
   .growth-card--compact-today {
     min-height: 0;
-    padding: 16px;
-    gap: 13px;
+    padding: var(--ui-space-16, 16px);
+    gap: var(--ui-space-13, 13px);
     border-color: var(--primary-color);
     border-radius: 17px;
     background: var(--card-background);
@@ -497,17 +497,17 @@
   .growth-footer,
   .growth-progress-copy {
     justify-content: space-between;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .growth-identity {
     min-width: 0;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .growth-badge {
-    width: 40px;
-    height: 40px;
+    width: var(--ui-layout-40, 40px);
+    height: var(--ui-layout-40, 40px);
     flex: 0 0 auto;
     border-radius: 11px;
     display: flex;
@@ -518,7 +518,7 @@
   }
 
   .growth-badge span {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 800;
   }
 
@@ -526,16 +526,16 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
 
   .growth-name {
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
 
   .growth-name strong {
     min-width: 0;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -547,15 +547,15 @@
   .streak,
   .growth-progress-copy {
     color: var(--desc-color);
-    font-size: 10.5px;
+    font-size: var(--ui-font-10_5, 10.5px);
   }
 
   .max-badge {
-    padding: 2px 6px;
+    padding: var(--ui-space-2, 2px) var(--ui-space-6, 6px);
     border-radius: 999px;
     color: #fff;
     background: linear-gradient(135deg, #f43f5e, #fb923c);
-    font-size: 9px;
+    font-size: var(--ui-font-9, 9px);
     font-weight: 700;
   }
 
@@ -566,22 +566,22 @@
   }
 
   .growth-progress-area {
-    min-height: 36px;
+    min-height: var(--ui-layout-36, 36px);
     display: flex;
     flex-direction: column;
     justify-content: center;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
 
   .growth-progress-copy strong {
     color: var(--text-color);
-    font-size: 10.5px;
+    font-size: var(--ui-font-10_5, 10.5px);
     font-variant-numeric: tabular-nums;
   }
 
   .growth-progress-copy--today,
   .growth-progress-copy--today strong {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .growth-progress {
@@ -611,24 +611,24 @@
   .growth-insights {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
 
   .growth-insight {
     min-width: 0;
-    padding: 9px 7px;
+    padding: var(--ui-space-9, 9px) var(--ui-space-7, 7px);
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
     align-items: center;
-    gap: 4px 6px;
+    gap: var(--ui-space-4, 4px) var(--ui-space-6, 6px);
     border: 1px solid color-mix(in srgb, var(--primary-color) 14%, var(--card-border-color));
     border-radius: 11px;
     background: color-mix(in srgb, var(--primary-color) 4%, var(--menu-body-bg-color));
   }
 
   .growth-insight__icon {
-    width: 28px;
-    height: 28px;
+    width: var(--ui-layout-28, 28px);
+    height: var(--ui-layout-28, 28px);
     grid-row: 1 / 3;
     display: grid;
     place-items: center;
@@ -641,7 +641,7 @@
     min-width: 0;
     overflow: hidden;
     color: var(--desc-color);
-    font-size: 9.5px;
+    font-size: var(--ui-font-9_5, 9.5px);
     line-height: 1.2;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -649,7 +649,7 @@
 
   .growth-insight strong {
     color: var(--text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-variant-numeric: tabular-nums;
     line-height: 1.1;
   }
@@ -668,12 +668,12 @@
     width: 100%;
     min-width: 0;
     height: auto;
-    min-height: 68px;
-    padding: 10px;
+    min-height: var(--ui-layout-68, 68px);
+    padding: var(--ui-space-10, 10px);
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
     border: 1px solid color-mix(in srgb, var(--primary-color) 22%, var(--card-border-color));
     border-radius: 11px;
     color: var(--text-color);
@@ -683,8 +683,8 @@
   }
 
   .growth-next__icon {
-    width: 34px;
-    height: 34px;
+    width: var(--ui-layout-34, 34px);
+    height: var(--ui-layout-34, 34px);
     display: grid;
     place-items: center;
     border-radius: 10px;
@@ -695,13 +695,13 @@
   .growth-next__copy {
     min-width: 0;
     display: grid;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
 
   .growth-next__copy > small,
   .growth-next__meta {
     color: var(--desc-color);
-    font-size: 9.5px;
+    font-size: var(--ui-font-9_5, 9.5px);
   }
 
   .growth-next__copy > strong {
@@ -709,14 +709,14 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 11.5px;
+    font-size: var(--ui-font-11_5, 11.5px);
   }
 
   .growth-next__meta {
     min-width: 0;
     display: flex;
     flex-wrap: wrap;
-    gap: 2px 8px;
+    gap: var(--ui-space-2, 2px) var(--ui-space-8, 8px);
   }
 
   .growth-next__arrow {
@@ -741,12 +741,12 @@
 
     position: relative;
     min-width: 0;
-    min-height: 61px;
-    padding: 7px 9px;
+    min-height: var(--ui-layout-61, 61px);
+    padding: var(--ui-space-7, 7px) var(--ui-space-9, 9px);
     box-sizing: border-box;
     display: grid;
     align-content: center;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
 
   .growth-asset + .growth-asset {
@@ -754,7 +754,7 @@
   }
 
   .growth-asset--daily {
-    padding-bottom: 10px;
+    padding-bottom: var(--ui-space-10, 10px);
   }
 
   .growth-asset--permanent {
@@ -769,10 +769,10 @@
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
     overflow: hidden;
     color: var(--desc-color);
-    font-size: 9.5px;
+    font-size: var(--ui-font-9_5, 9.5px);
     line-height: 1.15;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -791,7 +791,7 @@
     min-width: 0;
     overflow: hidden;
     color: var(--text-color);
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
     font-variant-numeric: tabular-nums;
     line-height: 1.05;
     text-overflow: ellipsis;
@@ -800,7 +800,7 @@
 
   .growth-asset__value--loading {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 600;
   }
 
@@ -808,7 +808,7 @@
     min-width: 0;
     overflow: hidden;
     color: var(--desc-color);
-    font-size: 8.5px;
+    font-size: var(--ui-font-8_5, 8.5px);
     line-height: 1.15;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -840,12 +840,12 @@
   .growth-footer__summary {
     min-width: 0;
     display: grid;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
 
   .claimable-summary {
     color: var(--desc-color);
-    font-size: 10.5px;
+    font-size: var(--ui-font-10_5, 10.5px);
     white-space: nowrap;
   }
 
@@ -855,12 +855,12 @@
 
   .growth-actions {
     justify-content: flex-end;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
 
   .checkin-button,
   .claim-button {
-    min-width: 62px;
+    min-width: var(--ui-layout-62, 62px);
   }
 
   .claim-button {
@@ -892,19 +892,19 @@
     }
 
     .growth-card--compact-today .growth-badge {
-      width: 44px;
-      height: 44px;
+      width: var(--ui-layout-44, 44px);
+      height: var(--ui-layout-44, 44px);
       border-radius: 13px;
     }
 
     .growth-card--compact-today .growth-name strong {
-      font-size: 15px;
+      font-size: var(--ui-font-15, 15px);
     }
 
     .growth-card--compact-today .growth-meta > span,
     .growth-card--compact-today .streak,
     .growth-card--compact-today .claimable-summary {
-      font-size: 11.5px;
+      font-size: var(--ui-font-11_5, 11.5px);
     }
 
     .growth-actions {

@@ -33,23 +33,23 @@
   .quota-value {
     display: grid;
     grid-template-columns: 1.15fr 1fr 0.22fr;
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
     align-items: center;
-    padding: 14px 18px;
+    padding: var(--ui-space-14, 14px) var(--ui-space-18, 18px);
   }
   .quota-value__copy > span {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--primary-color);
     font-weight: 600;
   }
   h2 {
     font:
-      700 25px/1.35 'Songti SC',
+      700 var(--ui-font-25, 25px)/1.35 'Songti SC',
       serif;
-    margin: 5px 0 7px;
+    margin: var(--ui-space-5, 5px) 0 var(--ui-space-7, 7px);
   }
   p {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     line-height: 1.65;
     color: var(--desc-color);
     margin: 0;
@@ -58,13 +58,13 @@
     position: relative;
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .quota-compare__side {
     border: 1px solid var(--surface-border-color);
     background: var(--surface-panel-bg);
     border-radius: 10px;
-    padding: 12px;
+    padding: var(--ui-space-12, 12px);
     min-width: 0;
   }
   .quota-compare__side.is-selected {
@@ -74,17 +74,17 @@
   h3 {
     display: flex;
     align-items: center;
-    gap: 6px;
-    font-size: 14px;
-    margin: 0 0 8px;
+    gap: var(--ui-space-6, 6px);
+    font-size: var(--ui-font-14, 14px);
+    margin: 0 0 var(--ui-space-8, 8px);
   }
   .quota-compare__side p {
     display: flex;
     align-items: baseline;
-    gap: 5px;
-    font-size: 12px;
+    gap: var(--ui-space-5, 5px);
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.6;
-    margin-top: 5px;
+    margin-top: var(--ui-space-5, 5px);
   }
   .quota-compare__side p > span {
     flex-shrink: 0;
@@ -100,8 +100,8 @@
     transform: translate(-50%, -50%);
     border: 1px solid var(--surface-border-color);
     border-radius: 50%;
-    width: 34px;
-    height: 34px;
+    width: var(--ui-layout-34, 34px);
+    height: var(--ui-layout-34, 34px);
     display: grid;
     place-items: center;
     background: var(--card-background);
@@ -111,7 +111,7 @@
   .quota-value__note {
     white-space: pre-line;
     font:
-      italic 13px/1.9 'Songti SC',
+      italic var(--ui-font-13, 13px)/1.9 'Songti SC',
       serif;
     color: var(--primary-color);
     transform: rotate(-7deg);

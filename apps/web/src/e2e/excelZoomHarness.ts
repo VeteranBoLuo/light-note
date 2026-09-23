@@ -1,5 +1,5 @@
+import { applyUiDensity } from '@/composables/useUiDensity';
 import { createApp, h } from 'vue';
-import { normalizeMouseEventOffsetsForRootZoom } from '@/utils/zoom';
 import '@/assets/css/theme.less';
 import '@/assets/css/mobile-rendering-baseline.less';
 import ExcelJS from 'exceljs';
@@ -14,7 +14,9 @@ for (const name of ['坐标验收', '第二张表']) {
   }
 }
 const params = new URLSearchParams(location.search);
-document.documentElement.style.zoom = params.get('zoom') || '1';
+applyUiDensity(params.get('density'), params.get('renderProfile') === 'mobile');
+(window as any).setDensity = (preference: string) =>
+  applyUiDensity(preference, params.get('renderProfile') === 'mobile');
 document.documentElement.dataset.theme = params.get('theme') || 'day';
 document.documentElement.classList.toggle('light-note-mobile-rendering', params.get('renderProfile') === 'mobile');
 const buffer = await workbook.xlsx.writeBuffer();
@@ -53,9 +55,6 @@ if (params.has('fullPreview')) {
         'div',
         {
           style: 'position:fixed;inset:40px 20px 20px',
-          onMousedownCapture: normalizeMouseEventOffsetsForRootZoom,
-          onMousemoveCapture: normalizeMouseEventOffsetsForRootZoom,
-          onMouseoutCapture: normalizeMouseEventOffsetsForRootZoom,
         },
         [
           h(VueOfficeExcel, {

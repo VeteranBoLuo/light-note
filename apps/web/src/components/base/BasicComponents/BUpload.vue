@@ -200,8 +200,8 @@
   }
 
   .b-upload-default-card {
-    width: 80px;
-    height: 80px;
+    width: var(--ui-layout-80, 80px);
+    height: var(--ui-layout-80, 80px);
     color: #6c7074;
     border: 1px dashed var(--surface-border-color, #ccc);
     border-radius: 8px;

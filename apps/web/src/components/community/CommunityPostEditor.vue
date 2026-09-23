@@ -222,7 +222,7 @@
       v-if="confirming"
       :visible="true"
       :title="t('community.feed.publishConfirm')"
-      width="min(520px, 94vw)"
+      width="min(var(--ui-layout-520, 520px), 94vw)"
       :show-footer="false"
       :mask-closable="false"
       :close-disabled="busy"
@@ -904,14 +904,14 @@
   }
   .writing-workspace {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 360px;
+    grid-template-columns: minmax(0, 1fr) var(--ui-layout-360, 360px);
     align-items: stretch;
     height: 100%;
     min-height: 0;
-    gap: 40px;
-    max-width: 1400px;
+    gap: var(--ui-space-40, 40px);
+    max-width: var(--ui-layout-1400, 1400px);
     margin: 0 auto;
-    padding: 24px;
+    padding: var(--ui-space-24, 24px);
     box-sizing: border-box;
   }
   .writing-workspace:not(.has-materials) {
@@ -919,14 +919,14 @@
   }
   .mobile-publish-blocker {
     margin: 0;
-    padding: 10px 16px;
-    font-size: 12px;
+    padding: var(--ui-space-10, 10px) var(--ui-space-16, 16px);
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
   }
   .publish-blocker {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
-    max-width: 240px;
+    max-width: var(--ui-layout-240, 240px);
   }
   .writing-main {
     min-width: 0;
@@ -946,24 +946,24 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     flex-wrap: wrap;
-    padding: 20px 36px 0;
+    padding: var(--ui-space-20, 20px) var(--ui-space-36, 36px) 0;
   }
   .writing-mode :deep(.tab-container) {
     display: inline-flex;
     width: auto;
     padding: 0;
     margin: 0;
-    gap: 24px;
+    gap: var(--ui-space-24, 24px);
     border: 0;
     background: transparent;
   }
   .writing-mode :deep(.tab) {
     border: 0;
     border-radius: 0;
-    padding: 10px 0;
-    font-size: 13px;
+    padding: var(--ui-space-10, 10px) 0;
+    font-size: var(--ui-font-13, 13px);
     min-width: 0;
   }
   .writing-mode :deep(.tab.is-active) {
@@ -974,7 +974,7 @@
   }
   .writing-rich-toolbar {
     flex-shrink: 0;
-    padding: 8px 36px;
+    padding: var(--ui-space-8, 8px) var(--ui-space-36, 36px);
     border-bottom: 1px solid var(--workspace-border);
   }
   .writing-rich-toolbar :deep(.editor-toolbar-v2) {
@@ -989,20 +989,20 @@
   }
   .writing-toolbar {
     display: flex;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
     flex-wrap: wrap;
-    padding: 8px 36px;
-    min-height: 40px;
+    padding: var(--ui-space-8, 8px) var(--ui-space-36, 36px);
+    min-height: var(--ui-layout-40, 40px);
     box-sizing: border-box;
   }
   .writing-toolbar .b_btn {
     background: transparent;
-    min-width: 32px;
-    padding: 6px 9px;
-    font-size: 13px;
+    min-width: var(--ui-layout-32, 32px);
+    padding: var(--ui-space-6, 6px) var(--ui-space-9, 9px);
+    font-size: var(--ui-font-13, 13px);
   }
   .writing-title {
-    margin: 30px 36px 16px;
+    margin: var(--ui-space-30, 30px) var(--ui-space-36, 36px) var(--ui-space-16, 16px);
     width: auto;
   }
   .writing-title :deep(input),
@@ -1010,7 +1010,7 @@
     font-size: 28px;
     font-weight: 650;
     height: auto;
-    padding: 8px 0 !important;
+    padding: var(--ui-space-8, 8px) 0 !important;
     border: 0;
     background: transparent;
     box-shadow: none;
@@ -1019,11 +1019,11 @@
   .writing-view-switch {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
   .writing-view-switch .b_btn {
-    width: 30px;
-    height: 28px;
+    width: var(--ui-layout-30, 30px);
+    height: var(--ui-layout-28, 28px);
     padding: 0;
     background: transparent;
     color: var(--desc-color);
@@ -1034,14 +1034,14 @@
     background: var(--workspace-hover);
   }
   .writing-rich-toolbar :deep(.editor-toolbar-v2__trailing) {
-    margin-left: 8px;
+    margin-left: var(--ui-space-8, 8px);
   }
   .mobile-view-switch {
     flex-shrink: 0;
     padding: 0;
   }
   .writing-preview > div {
-    max-width: 920px;
+    max-width: var(--ui-layout-920, 920px);
     margin: 0 auto;
   }
   .writing-md-panes {
@@ -1057,7 +1057,7 @@
     overflow: auto;
   }
   .writing-md-preview {
-    padding: 16px;
+    padding: var(--ui-space-16, 16px);
     overflow-wrap: anywhere;
   }
   .writing-md-panes.split .writing-md-preview {
@@ -1068,7 +1068,7 @@
     min-height: 0;
     overflow: hidden;
     cursor: text;
-    padding: 0 36px;
+    padding: 0 var(--ui-space-36, 36px);
   }
   .writing-body :deep(.cm-editor) {
     cursor: text;
@@ -1085,7 +1085,7 @@
     overflow: auto;
   }
   .writing-body :deep(.cm-content) {
-    padding: 16px 0;
+    padding: var(--ui-space-16, 16px) 0;
   }
   .writing-body :deep(.cm-line) {
     padding: 0;
@@ -1112,24 +1112,24 @@
     flex: 1;
     min-height: 0;
     overflow: auto;
-    padding: 16px 36px;
+    padding: var(--ui-space-16, 16px) var(--ui-space-36, 36px);
     line-height: 1.9;
   }
   .writing-status {
     display: flex;
     justify-content: space-between;
-    gap: 12px;
-    margin: 10px 24px 0;
-    padding: 14px 0;
+    gap: var(--ui-space-12, 12px);
+    margin: var(--ui-space-10, 10px) var(--ui-space-24, 24px) 0;
+    padding: var(--ui-space-14, 14px) 0;
     border-top: 1px solid var(--workspace-border);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     color: var(--desc-color);
   }
   .writing-materials {
     position: sticky;
-    top: 24px;
+    top: var(--ui-space-24, 24px);
     min-width: 0;
-    padding: 20px;
+    padding: var(--ui-space-20, 20px);
     background: var(--workspace-open-canvas);
     border: 0;
     border-left: 1px solid var(--workspace-divider);
@@ -1143,11 +1143,11 @@
   }
   .draft-save-state {
     display: flex;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     align-items: center;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     color: var(--desc-color);
-    margin-right: 12px;
+    margin-right: var(--ui-space-12, 12px);
   }
   .draft-save-state i {
     width: 6px;
@@ -1161,11 +1161,11 @@
   .community-publish-confirm {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
   .community-publish-confirm p,
   .mobile-submit p {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.7;
     color: var(--desc-color);
     margin: 0;
@@ -1173,7 +1173,7 @@
   .composer-actions {
     display: flex;
     justify-content: flex-end;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .feed-error {
     color: var(--danger-color);
@@ -1182,14 +1182,14 @@
     position: sticky;
     bottom: 0;
     background: var(--workspace-open-canvas);
-    padding: 12px 0 max(10px, env(safe-area-inset-bottom));
+    padding: var(--ui-space-12, 12px) 0 max(var(--ui-space-10, 10px), env(safe-area-inset-bottom));
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .mobile-submit .b_btn {
     width: 100%;
-    min-height: 42px;
+    min-height: var(--ui-layout-42, 42px);
   }
   .writing-mobile-dock {
     position: fixed;
@@ -1198,17 +1198,18 @@
     right: 0;
     z-index: 1;
     display: flex;
-    gap: 6px;
-    padding: 10px 12px max(10px, env(safe-area-inset-bottom));
+    gap: var(--ui-space-6, 6px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px)
+      max(var(--ui-space-10, 10px), env(safe-area-inset-bottom));
     background: var(--workspace-open-canvas);
     border-top: 1px solid var(--workspace-border);
   }
   .writing-mobile-dock .b_btn {
     flex: 1;
     min-width: 0;
-    min-height: 38px;
-    padding: 8px 6px;
-    font-size: 12px;
+    min-height: var(--ui-layout-38, 38px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-6, 6px);
+    font-size: var(--ui-font-12, 12px);
   }
   @media (max-width: 767px) {
     .community-writing {

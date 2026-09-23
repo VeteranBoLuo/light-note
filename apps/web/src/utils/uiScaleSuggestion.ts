@@ -30,7 +30,7 @@ export function isCompactScaleSuggestionRoute(routeName: string): boolean {
 }
 
 /**
- * 中等宽度桌面在标准缩放下容易显得拥挤，给出一次“小号界面”建议。
+ * 中等宽度桌面给出一次紧凑密度建议，保留字号并减少界面留白。
  * 使用 CSS 视口宽度而非物理屏幕尺寸，兼容系统缩放和不同 DPI。
  */
 export function shouldSuggestCompactScale(state: CompactScaleSuggestionState): boolean {

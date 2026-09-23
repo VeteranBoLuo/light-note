@@ -74,15 +74,14 @@
           </div>
           <div v-else class="bookmark-ai-note">{{ $t('bookmarkEditor.aiHint') }}</div>
           <!-- 编辑时:网页快照入口紧挨网址(快照存的就是该网址的正文),比原来藏在页面右上角更易发现 -->
-          <button
+          <BButton
             v-if="handleType === 'edit'"
-            type="button"
             class="bookmark-snapshot-entry"
             @click="$emit('viewSnapshot')"
           >
             <SvgIcon :src="icon.bookmarkManage.snapshot" size="14" color="currentColor" />
             <span>{{ $t('bookmarkMg.snapshot') }}</span>
-          </button>
+          </BButton>
         </div>
       </div>
 
@@ -227,9 +226,9 @@
     align-items: center;
     flex-wrap: nowrap;
     flex-shrink: 0;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.55;
     min-width: 0;
   }
@@ -239,8 +238,8 @@
   }
 
   .bookmark-meta-undo {
-    height: 28px;
-    padding: 0 2px;
+    height: var(--ui-control-28, 28px);
+    padding: 0 var(--ui-space-2, 2px);
     background: transparent !important;
     border: 0;
     box-shadow: none;
@@ -261,10 +260,10 @@
   }
 
   .bookmark-editor {
-    width: min(800px, calc(100% - 48px));
+    width: min(var(--ui-layout-800, 800px), calc(100% - var(--ui-space-48, 48px)));
     min-height: 100%;
     margin: 0 auto;
-    padding: 18px 0 12px;
+    padding: var(--ui-space-18, 18px) 0 var(--ui-space-12, 12px);
     box-sizing: border-box;
     color: var(--text-color);
   }
@@ -272,8 +271,8 @@
   .bookmark-editor__form {
     display: flex;
     flex-direction: column;
-    gap: 18px;
-    padding: 20px;
+    gap: var(--ui-space-18, 18px);
+    padding: var(--ui-space-20, 20px);
     border: 1px solid var(--surface-border-color);
     border-radius: 14px;
     background: var(--workspace-panel-bg-color);
@@ -283,11 +282,11 @@
   .bookmark-field {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
 
     > label,
     .bookmark-field__heading label {
-      font-size: 13px;
+      font-size: var(--ui-font-13, 13px);
       font-weight: 650;
     }
   }
@@ -296,20 +295,20 @@
     display: flex;
     align-items: baseline;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .bookmark-field__hint,
   .bookmark-ai-note {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.55;
   }
 
   .bookmark-url-row {
     display: flex;
     align-items: stretch;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .bookmark-url-input {
@@ -322,23 +321,24 @@
     flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .bookmark-field__hints .bookmark-ai-note {
     flex: 1 1 auto;
     min-width: 0;
   }
   .bookmark-snapshot-entry {
+    height: auto;
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
     flex: 0 0 auto;
-    padding: 5px 11px;
+    padding: var(--ui-space-5, 5px) var(--ui-space-11, 11px);
     border: 1px solid color-mix(in srgb, var(--resource-bookmark-color) 22%, var(--surface-border-color));
     border-radius: 8px;
     background: color-mix(in srgb, var(--resource-bookmark-color) 8%, var(--card-background));
     color: var(--resource-bookmark-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1;
     cursor: pointer;
     transition:
@@ -351,9 +351,9 @@
   }
 
   .bookmark-generate-button {
-    height: 40px;
-    min-width: 188px;
-    gap: 7px;
+    height: var(--ui-control-40, 40px);
+    min-width: var(--ui-layout-188, 188px);
+    gap: var(--ui-space-7, 7px);
     border: 1px solid color-mix(in srgb, var(--resource-bookmark-color) 20%, var(--surface-border-color));
     border-radius: 9px;
     color: var(--resource-bookmark-color);
@@ -412,7 +412,7 @@
   }
 
   .bookmark-field__error {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .is-error :deep(.b-input),
@@ -421,9 +421,9 @@
   }
 
   :deep(.b-textarea) {
-    min-height: 88px;
+    min-height: var(--ui-layout-88, 88px);
     resize: vertical;
-    padding: 10px 12px !important;
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px) !important;
     border-color: var(--surface-border-color);
     border-radius: 8px;
     background: var(--card-background) !important;
@@ -444,7 +444,7 @@
   }
 
   :deep(.bookmark-tag-select .select-trigger) {
-    min-height: 40px;
+    min-height: var(--ui-control-40, 40px);
     border-color: var(--surface-border-color);
     border-radius: 8px;
     background: var(--card-background);
@@ -452,9 +452,9 @@
 
   .bookmark-add-tag {
     width: 100%;
-    height: 32px;
+    height: var(--ui-control-32, 32px);
     justify-content: flex-start;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     color: var(--primary-color);
     background: transparent;
   }
@@ -463,8 +463,8 @@
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: start;
-    gap: 12px;
-    padding: 14px 16px;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-14, 14px) var(--ui-space-16, 16px);
     border: 1px solid color-mix(in srgb, var(--surface-border-color) 72%, transparent);
     border-radius: 10px;
     background: var(--workspace-panel-bg-color);
@@ -474,8 +474,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
+    width: var(--ui-layout-28, 28px);
+    height: var(--ui-layout-28, 28px);
     border-radius: 8px;
     color: var(--resource-bookmark-color);
     background: color-mix(in srgb, var(--resource-bookmark-color) 10%, var(--card-background));
@@ -484,16 +484,16 @@
   .bookmark-snapshot-setting__content {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
     min-width: 0;
 
     strong {
-      font-size: 14px;
+      font-size: var(--ui-font-14, 14px);
     }
 
     span {
       color: var(--desc-color);
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
       line-height: 1.55;
     }
   }
@@ -501,14 +501,14 @@
   .bookmark-editor__footer {
     display: flex;
     justify-content: flex-end;
-    gap: 10px;
-    padding-top: 2px;
+    gap: var(--ui-space-10, 10px);
+    padding-top: var(--ui-space-2, 2px);
   }
 
   .bookmark-editor__cancel-button,
   .bookmark-editor__save-button {
-    min-width: 92px;
-    height: 36px;
+    min-width: var(--ui-layout-92, 92px);
+    height: var(--ui-control-36, 36px);
     border-radius: 9px;
   }
 

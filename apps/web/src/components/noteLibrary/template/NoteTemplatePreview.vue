@@ -101,7 +101,7 @@
     color: var(--text-color);
   }
   .note-template-preview > .b-loading {
-    min-height: 240px;
+    min-height: var(--ui-layout-240, 240px);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -110,12 +110,13 @@
     height: 100%;
     box-sizing: border-box;
     overflow: auto;
-    padding: 20px clamp(20px, 3vw, 40px) 40px;
+    padding: var(--ui-space-20, 20px) clamp(var(--ui-space-20, 20px), 3vw, var(--ui-space-40, 40px))
+      var(--ui-space-40, 40px);
   }
   .note-template-preview__header {
     display: flex;
     align-items: flex-start;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .note-template-preview__summary {
     min-width: 0;
@@ -125,28 +126,28 @@
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .note-template-preview__title-row h2 {
     min-width: 0;
     margin: 0;
     overflow: hidden;
-    font-size: clamp(22px, 2.4vw, 30px);
+    font-size: clamp(var(--ui-font-22, 22px), 2.4vw, var(--ui-font-30, 30px));
     line-height: 1.2;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
   .note-template-preview__header p {
-    margin: 5px 0 0;
+    margin: var(--ui-space-5, 5px) 0 0;
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.6;
   }
   .note-template-preview__format-icon {
-    width: 36px;
-    height: 36px;
+    width: var(--ui-layout-36, 36px);
+    height: var(--ui-layout-36, 36px);
     display: inline-flex;
-    flex: 0 0 36px;
+    flex: 0 0 var(--ui-layout-36, 36px);
     align-items: center;
     justify-content: center;
     border: 1px solid var(--resource-note-color);
@@ -159,51 +160,52 @@
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 6px 0;
-    margin: 10px 0 0;
+    gap: var(--ui-space-6, 6px) 0;
+    margin: var(--ui-space-10, 10px) 0 0;
   }
   .note-template-preview__meta > div {
     min-width: 0;
     display: inline-flex;
     align-items: baseline;
-    gap: 6px;
-    padding: 0 12px;
+    gap: var(--ui-space-6, 6px);
+    padding: 0 var(--ui-space-12, 12px);
     border-left: 1px solid var(--surface-border-color);
   }
   .note-template-preview__meta > div:first-child {
-    max-width: min(48%, 480px);
+    max-width: min(48%, var(--ui-layout-480, 480px));
     padding-left: 0;
     border-left: 0;
   }
   .note-template-preview__meta dt {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 650;
   }
   .note-template-preview__meta dd {
     margin: 0;
     overflow: hidden;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
   .note-template-preview__content-card {
-    min-height: 260px;
-    margin-top: 18px;
-    padding: 18px clamp(18px, 3vw, 34px) 44px;
+    min-height: var(--ui-layout-260, 260px);
+    margin-top: var(--ui-space-18, 18px);
+    padding: var(--ui-space-18, 18px) clamp(var(--ui-space-18, 18px), 3vw, var(--ui-space-34, 34px))
+      var(--ui-space-44, 44px);
     border: 1px solid var(--surface-border-color);
     border-radius: 14px;
     background: var(--card-background);
   }
   .note-template-preview__section-title {
-    padding-bottom: 12px;
+    padding-bottom: var(--ui-space-12, 12px);
     border-bottom: 1px solid var(--surface-divider-color);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 650;
   }
   .note-template-preview__content {
-    padding-top: 18px;
+    padding-top: var(--ui-space-18, 18px);
     color: var(--text-color);
     line-height: 1.75;
     overflow-wrap: anywhere;
@@ -216,18 +218,18 @@
     overflow: auto;
   }
   .note-template-preview__empty {
-    margin: 72px 0;
+    margin: var(--ui-space-72, 72px) 0;
     color: var(--desc-color);
     text-align: center;
   }
   .note-template-preview__status {
     height: 100%;
-    min-height: 240px;
+    min-height: var(--ui-layout-240, 240px);
     display: flex;
     align-items: center;
     justify-content: center;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     color: var(--desc-color);
   }
   .note-template-preview__status.is-error strong {

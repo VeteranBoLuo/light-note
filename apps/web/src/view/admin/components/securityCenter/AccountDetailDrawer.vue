@@ -1,5 +1,5 @@
 <template>
-  <b-drawer :open="visible" title="账号详情" width="640" @close="$emit('close')">
+  <b-drawer :open="visible" title="账号详情" width="var(--ui-layout-640, 640px)" @close="$emit('close')">
     <div class="security-detail">
       <section>
         <h3>{{ displayName }}</h3>
@@ -120,14 +120,14 @@
   @import './securityCenter.less';
 
   .detail-section {
-    padding: 8px 0;
+    padding: var(--ui-space-8, 8px) 0;
   }
 
   .detail-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 10px 0;
+    padding: var(--ui-space-10, 10px) 0;
     border-bottom: 1px solid var(--menu-item-h-bg-color);
 
     &:last-child {
@@ -136,13 +136,13 @@
   }
 
   .detail-label {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     color: var(--desc-color);
     flex-shrink: 0;
   }
 
   .detail-value {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     color: var(--text-color);
     text-align: right;
     word-break: break-all;
@@ -155,7 +155,7 @@
   .detail-actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px;
-    padding-top: 8px;
+    gap: var(--ui-space-10, 10px);
+    padding-top: var(--ui-space-8, 8px);
   }
 </style>

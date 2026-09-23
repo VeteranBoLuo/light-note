@@ -234,18 +234,18 @@
     color: var(--text-color);
   }
   .infra-module-content {
-    width: min(1320px, calc(100% - 48px));
+    width: min(var(--ui-layout-1320, 1320px), calc(100% - var(--ui-layout-48, 48px)));
     margin: 0 auto;
-    padding: 28px 0 48px;
+    padding: var(--ui-space-28, 28px) 0 var(--ui-space-48, 48px);
     display: grid;
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
   }
   .infra-state-card {
-    min-height: 150px;
+    min-height: var(--ui-layout-150, 150px);
     display: flex;
     align-items: center;
-    gap: 14px;
-    padding: 18px;
+    gap: var(--ui-space-14, 14px);
+    padding: var(--ui-space-18, 18px);
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     background: var(--card-background);
@@ -254,38 +254,38 @@
     flex: 1;
   }
   .infra-state-card p {
-    margin: 5px 0 0;
+    margin: var(--ui-space-5, 5px) 0 0;
     color: var(--desc-color);
   }
   .infra-stale-warning {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 10px 12px;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     border: 1px solid var(--warning-color, #ad6800);
     border-radius: 10px;
     color: var(--warning-color, #ad6800);
     background: var(--card-background);
   }
   .events-filter {
-    width: 130px;
+    width: var(--ui-layout-130, 130px);
   }
   .events-summary {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .events-summary :deep(.b-card) {
     display: grid;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .events-summary span,
   .events-count {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .events-summary strong {
-    font-size: 24px;
+    font-size: var(--ui-font-24, 24px);
   }
   .events-summary strong.is-failed {
     color: var(--error-color, #d14343);
@@ -295,11 +295,11 @@
   }
   .events-toolbar {
     display: grid;
-    grid-template-columns: minmax(180px, 280px) 130px auto;
-    gap: 8px;
+    grid-template-columns: minmax(var(--ui-layout-180, 180px), var(--ui-layout-280, 280px)) var(--ui-layout-130, 130px) auto;
+    gap: var(--ui-space-8, 8px);
   }
   .events-count {
-    margin: 0 0 12px;
+    margin: 0 0 var(--ui-space-12, 12px);
     text-align: right;
   }
   .events-timeline {
@@ -313,8 +313,8 @@
     position: relative;
     display: grid;
     grid-template-columns: 16px minmax(0, 1fr);
-    gap: 10px;
-    padding-bottom: 18px;
+    gap: var(--ui-space-10, 10px);
+    padding-bottom: var(--ui-space-18, 18px);
   }
   .events-timeline li:not(:last-child)::before {
     content: '';
@@ -329,7 +329,7 @@
     z-index: 1;
     width: 11px;
     height: 11px;
-    margin-top: 4px;
+    margin-top: var(--ui-space-4, 4px);
     border: 2px solid var(--card-background);
     border-radius: 50%;
     background: var(--desc-color);
@@ -349,19 +349,19 @@
   .events-timeline__content > div {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .events-timeline p {
-    margin: 6px 0;
+    margin: var(--ui-space-6, 6px) 0;
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .events-timeline small {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .events-empty {
-    min-height: 110px;
+    min-height: var(--ui-layout-110, 110px);
     display: flex;
     align-items: center;
     justify-content: center;

@@ -309,7 +309,7 @@ describe('dynamic BVirtualList', () => {
       globalThis.ResizeObserver = original;
     }
   });
-  it('remeasures visible rows when only the container width changes', async () => {
+  it('preserves fractional row heights when only the container width changes', async () => {
     const original = globalThis.ResizeObserver;
     const callbacks: ResizeObserverCallback[] = [];
     globalThis.ResizeObserver = class {
@@ -333,16 +333,19 @@ describe('dynamic BVirtualList', () => {
       );
       await nextTick();
       const rows = [...host.querySelectorAll<HTMLElement>('.b-virtual-list__item')];
-      for (const row of rows) Object.defineProperty(row, 'offsetHeight', { configurable: true, value: 242 });
-      callbacks[0](rows.map((target) => ({ target, borderBoxSize: [{ blockSize: 242 }] })) as any, {} as any);
+      for (const row of rows) {
+        Object.defineProperty(row, 'offsetHeight', { configurable: true, value: 242 });
+        vi.spyOn(row, 'getBoundingClientRect').mockReturnValue({ height: 242.375 } as DOMRect);
+      }
+      callbacks[0](rows.map((target) => ({ target, borderBoxSize: [{ blockSize: 242.375 }] })) as any, {} as any);
       await nextTick();
       const scroller = host.querySelector<HTMLElement>('.b-virtual-list')!;
       Object.defineProperty(scroller, 'clientWidth', { configurable: true, value: 599 });
       // Row heights did not change: the browser only notifies the container observer.
       callbacks[1]([{ target: scroller }] as any, {} as any);
       await nextTick();
-      expect(rows[1].style.top).toBe('254px');
-      expect(rows[2].style.top).toBe('508px');
+      expect(rows[1].style.top).toBe('254.375px');
+      expect(rows[2].style.top).toBe('508.75px');
     } finally {
       globalThis.ResizeObserver = original;
     }

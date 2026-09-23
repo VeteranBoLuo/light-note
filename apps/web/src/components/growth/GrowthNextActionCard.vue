@@ -113,11 +113,11 @@
   .growth-next-action {
     min-width: 0;
     height: 100%;
-    padding: 12px;
+    padding: var(--ui-space-12, 12px);
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     border: 1px solid var(--card-border-color);
     border-radius: 16px;
     color: var(--text-color);
@@ -131,23 +131,23 @@
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .growth-next-action__heading > div {
     min-width: 0;
     display: grid;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
 
   .growth-next-action__heading strong {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .growth-next-action__heading span {
     overflow: hidden;
     color: var(--desc-color);
-    font-size: 10.5px;
+    font-size: var(--ui-font-10_5, 10.5px);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -163,7 +163,7 @@
     display: grid;
     flex: 1 1 auto;
     grid-template-rows: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .growth-next-action__items.is-single {
@@ -173,18 +173,18 @@
   .growth-next-action__item {
     min-width: 0;
     display: grid;
-    grid-template-columns: 30px minmax(0, 1fr) auto auto;
+    grid-template-columns: var(--ui-layout-30, 30px) minmax(0, 1fr) auto auto;
     align-items: center;
-    gap: 8px;
-    padding: 9px;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-9, 9px);
     border: 1px solid var(--card-border-color);
     border-radius: 10px;
     background: var(--background-color);
   }
 
   .growth-next-action__icon {
-    width: 28px;
-    height: 28px;
+    width: var(--ui-layout-28, 28px);
+    height: var(--ui-layout-28, 28px);
     display: grid;
     place-items: center;
     border: 1px solid var(--primary-color);
@@ -196,13 +196,13 @@
   .growth-next-action__copy {
     min-width: 0;
     display: grid;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
 
   .growth-next-action__copy strong {
     overflow: hidden;
     color: var(--text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -210,7 +210,7 @@
   .growth-next-action__copy span,
   .growth-next-action__meta small {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
 
   .growth-next-action__copy span {
@@ -223,13 +223,13 @@
     display: flex;
     flex-wrap: wrap;
     justify-content: flex-end;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
 
   .growth-next-action__meta small {
     display: inline-flex;
     align-items: center;
-    padding: 2px 6px;
+    padding: var(--ui-space-2, 2px) var(--ui-space-6, 6px);
     border: 1px solid var(--card-border-color);
     border-radius: 999px;
     white-space: nowrap;

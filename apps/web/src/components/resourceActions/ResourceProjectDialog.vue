@@ -3,7 +3,7 @@
     :visible="visible"
     :title="t('toolbox.project.join')"
     :show-footer="false"
-    width="440px"
+    width="var(--ui-layout-440, 440px)"
     :close-disabled="busy"
     @update:visible="close"
   >
@@ -200,49 +200,49 @@
   .project-join,
   .project-join__create {
     display: grid;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
   .project-join.is-pending {
-    min-height: 205px;
+    min-height: var(--ui-layout-205, 205px);
     align-content: start;
   }
   .project-join__filters {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 112px;
-    gap: 10px;
+    grid-template-columns: minmax(0, 1fr) var(--ui-layout-112, 112px);
+    gap: var(--ui-space-10, 10px);
   }
   .project-join__field {
     display: grid;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     min-width: 0;
   }
   .project-join__label {
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 600;
   }
   .project-join__actions {
     display: flex;
-    gap: 10px;
-    padding-top: 4px;
+    gap: var(--ui-space-10, 10px);
+    padding-top: var(--ui-space-4, 4px);
   }
   .project-join__actions > .b_btn,
   .project-join__create > .b_btn {
     flex: 1;
     min-width: 0;
-    min-height: 44px;
+    min-height: var(--ui-control-44, 44px);
     height: auto;
     white-space: normal;
     line-height: 1.4;
-    padding: 8px 12px;
+    padding: var(--ui-space-8, 8px) var(--ui-space-12, 12px);
   }
   .project-join__empty {
-    padding: 12px 0;
-    font-size: 13px;
+    padding: var(--ui-space-12, 12px) 0;
+    font-size: var(--ui-font-13, 13px);
     text-align: center;
   }
   .project-join__summary {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .project-join p {
     margin: 0;
@@ -253,6 +253,6 @@
   }
   .project-join__create {
     border-top: 1px solid var(--surface-border-color);
-    padding-top: 16px;
+    padding-top: var(--ui-space-16, 16px);
   }
 </style>

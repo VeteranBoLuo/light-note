@@ -3,7 +3,12 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { suggestTodoPlanEndDate } from './todoDraftNormalizer';
 
-const readSource = (file: string) => readFileSync(resolve(process.cwd(), `src/components/todo/${file}`), 'utf8');
+// Layout contracts describe the standard size; other densities are checked in the browser.
+const readSource = (file: string) =>
+  readFileSync(resolve(process.cwd(), `src/components/todo/${file}`), 'utf8').replace(
+    /var\(--ui-[\w-]+,\s*([\d.]+px)\)/g,
+    '$1',
+  );
 const modalSource = readSource('TodoEditorModal.vue');
 const simpleSource = readSource('TodoSimpleEditorForm.vue');
 const editorSource = readSource('TodoEditorForm.vue');
@@ -20,7 +25,7 @@ const quickCaptureSource = readFileSync(resolve(process.cwd(), 'src/components/i
 
 describe('待办创建页原型布局', () => {
   it('所有 v2 待办共用新增编辑器，重复实例不回退到另一套表单', () => {
-    expect(modalSource).toContain("props.item?.planVersion === 2 ||");
+    expect(modalSource).toContain('props.item?.planVersion === 2 ||');
     expect(modalSource).not.toContain('!props.item.seriesId');
   });
 

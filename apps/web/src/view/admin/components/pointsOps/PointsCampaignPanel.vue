@@ -213,11 +213,11 @@
     partial_failed: '部分失败',
   };
   const sampleColumns = [
-    { title: '匿名用户', key: 'userHash', width: 'minmax(150px, 1fr)' },
-    { title: '积分', key: 'pointsLabel', width: '100px' },
-    { title: '状态', key: 'statusLabel', width: '110px' },
-    { title: '尝试', key: 'attemptsLabel', width: '80px' },
-    { title: '错误', key: 'errorCode', width: 'minmax(140px, 1fr)', ellipsis: false },
+    { title: '匿名用户', key: 'userHash', width: 'minmax(var(--ui-layout-150, 150px), 1fr)' },
+    { title: '积分', key: 'pointsLabel', width: 'var(--ui-layout-100, 100px)' },
+    { title: '状态', key: 'statusLabel', width: 'var(--ui-layout-110, 110px)' },
+    { title: '尝试', key: 'attemptsLabel', width: 'var(--ui-layout-80, 80px)' },
+    { title: '错误', key: 'errorCode', width: 'minmax(var(--ui-layout-140, 140px), 1fr)', ellipsis: false },
   ];
   const format = (value: unknown) => Number(value || 0).toLocaleString('zh-CN');
   const statusLabel = (status: string) => statusLabels[status] || status;
@@ -441,7 +441,7 @@
   @import '@/assets/css/admin-breakpoints.less';
   .points-campaign {
     display: grid;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
   .points-campaign__intro,
   .points-campaign__panel header,
@@ -449,7 +449,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
   h2,
   h3,
@@ -458,23 +458,23 @@
   }
   h2 {
     color: var(--text-color);
-    font-size: 18px;
+    font-size: var(--ui-font-18, 18px);
   }
   h3 {
     color: var(--text-color);
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
   }
   p,
   header span {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .points-campaign__intro > span {
-    padding: 5px 9px;
+    padding: var(--ui-space-5, 5px) var(--ui-space-9, 9px);
     border: 1px solid var(--danger-color);
     border-radius: 999px;
     color: var(--danger-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .points-campaign__intro > span.is-ready {
     border-color: var(--success-color);
@@ -483,14 +483,14 @@
   .points-campaign__layout {
     display: grid;
     grid-template-columns: 1.35fr 0.85fr;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
     align-items: start;
   }
   .points-campaign__panel {
     display: grid;
     min-width: 0;
-    gap: 14px;
-    padding: 15px;
+    gap: var(--ui-space-14, 14px);
+    padding: var(--ui-space-15, 15px);
     border: 1px solid var(--card-border-color);
     border-radius: 12px;
     background: var(--workbench-subcard-bg);
@@ -499,32 +499,32 @@
   .points-campaign__form-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .points-campaign__form-grid label {
     display: grid;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
     color: var(--text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .points-campaign__form-grid label.is-wide {
     grid-column: 1 / -1;
   }
   .points-campaign__audience-head strong {
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .points-campaign__switch {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .points-campaign__cards {
     display: grid;
-    gap: 8px;
-    max-height: 560px;
+    gap: var(--ui-space-8, 8px);
+    max-height: var(--ui-layout-560, 560px);
     overflow-y: auto;
   }
   .points-campaign__card {
@@ -532,8 +532,8 @@
     min-height: auto;
     display: grid;
     justify-items: start;
-    gap: 3px;
-    padding: 10px 12px;
+    gap: var(--ui-space-3, 3px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     border: 1px solid var(--card-border-color);
     background: var(--card-background);
     text-align: left;
@@ -543,35 +543,35 @@
   }
   .points-campaign__card strong {
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .points-campaign__card span,
   .points-campaign__card small,
   .points-campaign__empty {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .points-campaign__detail header > div:first-child {
     display: grid;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
   .points-campaign__actions {
     display: flex;
     flex-wrap: wrap;
     justify-content: flex-end;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .points-campaign__facts {
     display: flex;
     flex-wrap: wrap;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
   }
   .points-campaign__facts span {
-    padding: 8px 10px;
+    padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px);
     border-radius: 8px;
     background: var(--card-background);
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .points-campaign__facts b {
     color: var(--text-color);
@@ -580,13 +580,13 @@
   .points-campaign__preview {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px;
-    padding: 11px;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-11, 11px);
     border: 1px solid var(--primary-color);
     border-radius: 9px;
     background: var(--card-background);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .points-campaign__preview strong {
     color: var(--text-color);

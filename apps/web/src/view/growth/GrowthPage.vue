@@ -444,7 +444,7 @@
   import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
   import { resolveDailyQuestClaimFeedback } from '@/utils/dailyQuestClaim';
   import { resolveDailyQuestRoute, resolveGrowthActionRoute } from '@/utils/growthNavigation';
-  import { scrollIntoContainer } from '@/utils/zoom';
+  import { scrollIntoContainer } from '@/utils/scrolling';
 
   type GrowthSection = 'overview' | 'tasks' | 'achievements' | 'rewards';
   type RewardSection = 'shop' | 'lottery' | 'inventory' | 'ledger';
@@ -1004,7 +1004,7 @@
   .growth-page {
     height: 100%;
     overflow-y: auto;
-    padding: 28px 24px 64px;
+    padding: var(--ui-space-28, 28px) var(--ui-space-24, 24px) var(--ui-space-64, 64px);
     box-sizing: border-box;
     background: var(--background-color);
     color: var(--text-color);
@@ -1013,22 +1013,22 @@
     overflow: hidden;
   }
   .growth-container {
-    max-width: 720px;
+    max-width: var(--ui-layout-720, 720px);
     margin: 0 auto;
     display: flex;
     flex-direction: column;
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
   }
   /* 大屏放宽容器,容纳 GrowthCard 的左右两栏,消除 PC 两侧大片留白 */
   @media (min-width: 900px) {
     .growth-container {
-      max-width: 1120px;
+      max-width: var(--ui-layout-1120, 1120px);
     }
   }
   .growth-container.growth-container--wide {
     height: 100%;
     min-height: 0;
-    max-width: 1480px;
+    max-width: var(--ui-layout-1480, 1480px);
   }
   .growth-workspace {
     min-width: 0;
@@ -1037,16 +1037,16 @@
     display: grid;
     min-height: 0;
     flex: 1 1 auto;
-    grid-template-columns: 208px minmax(0, 1fr);
+    grid-template-columns: var(--ui-layout-208, 208px) minmax(0, 1fr);
     align-items: start;
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
     overflow: hidden;
   }
   .growth-main {
     display: flex;
     min-width: 0;
     flex-direction: column;
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
   }
   .growth-desktop-sidebar {
     position: static;
@@ -1064,13 +1064,13 @@
   }
   .growth-hero--sidebar {
     flex: 0 0 auto;
-    padding: 0 4px 16px;
+    padding: 0 var(--ui-space-4, 4px) var(--ui-space-16, 16px);
   }
   .growth-side-nav {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    padding: 10px;
+    gap: var(--ui-space-6, 6px);
+    padding: var(--ui-space-10, 10px);
     border: 1px solid var(--card-border-color);
     border-radius: 16px;
     background: var(--workbench-subcard-bg);
@@ -1089,9 +1089,9 @@
   .growth-side-nav-item.b_btn {
     position: relative;
     justify-content: flex-start;
-    gap: 10px;
-    height: 46px;
-    padding: 0 11px;
+    gap: var(--ui-space-10, 10px);
+    height: var(--ui-control-46, 46px);
+    padding: 0 var(--ui-space-11, 11px);
     overflow: hidden;
     border-radius: 11px;
     line-height: normal;
@@ -1123,9 +1123,9 @@
   }
   .growth-side-nav-icon {
     display: grid;
-    width: 30px;
-    height: 30px;
-    flex: 0 0 30px;
+    width: var(--ui-layout-30, 30px);
+    height: var(--ui-layout-30, 30px);
+    flex: 0 0 var(--ui-layout-30, 30px);
     place-items: center;
     border: 1px solid var(--card-border-color);
     border-radius: 9px;
@@ -1143,10 +1143,10 @@
     text-overflow: ellipsis;
   }
   .growth-side-nav-badge {
-    min-width: 20px;
-    height: 20px;
+    min-width: var(--ui-layout-20, 20px);
+    height: var(--ui-layout-20, 20px);
     margin-left: auto;
-    padding: 0 6px;
+    padding: 0 var(--ui-space-6, 6px);
     box-sizing: border-box;
     display: inline-flex;
     align-items: center;
@@ -1155,16 +1155,16 @@
     border-radius: 10px;
     background: var(--primary-color);
     color: #fff;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 700;
     line-height: 1;
   }
   .growth-side-report.b_btn {
     justify-content: flex-start;
-    gap: 8px;
-    height: 42px;
-    margin-top: 12px;
-    padding: 0 14px;
+    gap: var(--ui-space-8, 8px);
+    height: var(--ui-control-42, 42px);
+    margin-top: var(--ui-space-12, 12px);
+    padding: 0 var(--ui-space-14, 14px);
     border-color: var(--primary-color);
     border-radius: 11px;
     background: color-mix(in srgb, var(--primary-color) 8%, var(--background-color));
@@ -1177,21 +1177,21 @@
   .growth-hero {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   .growth-back {
     align-self: flex-start;
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    height: 30px !important;
-    padding: 0 12px 0 8px !important;
-    margin-bottom: 8px;
+    gap: var(--ui-space-5, 5px);
+    height: var(--ui-control-30, 30px) !important;
+    padding: 0 var(--ui-space-12, 12px) 0 var(--ui-space-8, 8px) !important;
+    margin-bottom: var(--ui-space-8, 8px);
     border-radius: 999px;
     border: 1px solid color-mix(in srgb, var(--card-border-color) 70%, transparent);
     background: transparent;
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     cursor: pointer;
     transition:
       color 0.15s,
@@ -1205,28 +1205,28 @@
   }
   .growth-title {
     margin: 0;
-    font-size: 24px;
+    font-size: var(--ui-font-24, 24px);
     font-weight: 700;
     letter-spacing: -0.01em;
   }
   .growth-subtitle {
     margin: 0;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     color: var(--desc-color);
   }
   .growth-report-btn {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     align-self: flex-start;
-    margin-top: 10px;
-    height: 32px !important;
-    padding: 0 14px !important;
+    margin-top: var(--ui-space-10, 10px);
+    height: var(--ui-control-32, 32px) !important;
+    padding: 0 var(--ui-space-14, 14px) !important;
     border-radius: 999px;
     border: 1px solid color-mix(in srgb, var(--primary-color) 40%, transparent);
     background: color-mix(in srgb, var(--primary-color) 8%, transparent);
     color: var(--primary-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 600;
     cursor: pointer;
     transition: background 0.15s;
@@ -1238,7 +1238,7 @@
     border: 1px solid color-mix(in srgb, var(--card-border-color) 62%, transparent);
     border-radius: 16px;
     background: var(--workbench-subcard-bg);
-    padding: 20px;
+    padding: var(--ui-space-20, 20px);
     scroll-margin-top: 18px;
     box-shadow:
       0 1px 2px rgba(0, 0, 0, 0.03),
@@ -1251,13 +1251,13 @@
   .growth-admin-notice {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    padding: 13px 15px;
+    gap: var(--ui-space-4, 4px);
+    padding: var(--ui-space-13, 13px) var(--ui-space-15, 15px);
     border: 1px solid color-mix(in srgb, var(--primary-color) 30%, transparent);
     border-radius: 12px;
     background: color-mix(in srgb, var(--primary-color) 7%, var(--workbench-subcard-bg));
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.55;
   }
   .growth-admin-notice span {
@@ -1266,7 +1266,7 @@
   /* 每日任务 + 数据统计:大屏并排,窄屏堆叠 */
   .growth-row {
     display: flex;
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
     align-items: stretch;
   }
   .growth-panel--flex {
@@ -1280,44 +1280,44 @@
     box-shadow: none;
   }
   .growth-page--wide .growth-panel--stats {
-    padding: 14px;
+    padding: var(--ui-space-14, 14px);
   }
   .growth-page--wide .growth-panel--level {
-    padding: 14px;
+    padding: var(--ui-space-14, 14px);
   }
   .growth-page--wide .growth-panel--stats :deep(.gs) {
     display: grid;
-    grid-template-columns: minmax(220px, 0.42fr) minmax(0, 1fr);
+    grid-template-columns: minmax(var(--ui-layout-220, 220px), 0.42fr) minmax(0, 1fr);
     align-items: stretch;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .growth-page--wide .growth-panel--stats :deep(.gs-hero) {
-    padding: 10px 12px;
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
   }
   .growth-page--wide .growth-panel--stats :deep(.gs-grid) {
-    grid-template-columns: repeat(9, minmax(64px, 1fr));
-    gap: 6px;
+    grid-template-columns: repeat(9, minmax(var(--ui-layout-64, 64px), 1fr));
+    gap: var(--ui-space-6, 6px);
   }
   .growth-page--wide .growth-panel--stats :deep(.gs-tile) {
     min-width: 0;
-    padding: 8px 4px;
+    padding: var(--ui-space-8, 8px) var(--ui-space-4, 4px);
   }
   .growth-knowledge-panel {
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
   }
   .growth-knowledge-panel__content {
     min-width: 0;
     display: grid;
-    grid-template-columns: minmax(300px, 0.72fr) minmax(0, 1.45fr);
+    grid-template-columns: minmax(var(--ui-layout-300, 300px), 0.72fr) minmax(0, 1.45fr);
     align-items: stretch;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
   .growth-knowledge-panel__heatmap,
   .growth-knowledge-panel__calendar {
     min-width: 0;
-    padding: 14px;
+    padding: var(--ui-space-14, 14px);
     box-sizing: border-box;
     border: 1px solid var(--card-border-color);
     border-radius: 13px;
@@ -1331,14 +1331,14 @@
     width: 100%;
   }
   .growth-knowledge-panel__calendar :deep(.cal-cell) {
-    min-height: 34px;
+    min-height: var(--ui-control-34, 34px);
   }
   .growth-overview-routine {
     min-width: 0;
     display: grid;
     grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
     align-items: stretch;
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
   }
   .growth-overview-routine--single {
     grid-template-columns: minmax(0, 1fr);
@@ -1346,7 +1346,7 @@
   .growth-overview-daily {
     height: 100%;
     min-width: 0;
-    padding: 12px;
+    padding: var(--ui-space-12, 12px);
     box-sizing: border-box;
   }
   .growth-task-center {
@@ -1355,29 +1355,29 @@
     overflow: hidden;
   }
   .growth-task-tabs {
-    padding: 0 16px;
+    padding: 0 var(--ui-space-16, 16px);
     border-bottom: 1px solid var(--card-border-color);
   }
   .growth-task-tabs :deep(.tab) {
-    min-height: 46px;
+    min-height: var(--ui-control-46, 46px);
   }
   .growth-task-workspace {
     min-width: 0;
-    padding: 16px;
+    padding: var(--ui-space-16, 16px);
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 280px;
+    grid-template-columns: minmax(0, 1fr) var(--ui-layout-280, 280px);
     align-items: start;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
   .growth-task-workspace__main {
     min-width: 0;
   }
   .growth-task-summary {
     min-width: 0;
-    padding: 15px;
+    padding: var(--ui-space-15, 15px);
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     border: 1px solid var(--card-border-color);
     border-radius: 13px;
     background: var(--background-color);
@@ -1385,7 +1385,7 @@
   .growth-task-summary header {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .growth-task-summary header > div {
     min-width: 0;
@@ -1395,16 +1395,16 @@
     margin: 0;
   }
   .growth-task-summary h3 {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
   }
   .growth-task-summary p {
-    margin-top: 2px;
+    margin-top: var(--ui-space-2, 2px);
     color: var(--desc-color);
-    font-size: 10.5px;
+    font-size: var(--ui-font-10_5, 10.5px);
   }
   .growth-task-summary__icon {
-    width: 36px;
-    height: 36px;
+    width: var(--ui-layout-36, 36px);
+    height: var(--ui-layout-36, 36px);
     flex: 0 0 auto;
     display: inline-flex;
     align-items: center;
@@ -1417,14 +1417,14 @@
   .growth-task-summary__progress {
     display: flex;
     align-items: baseline;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-variant-numeric: tabular-nums;
   }
   .growth-task-summary__progress strong {
     color: var(--primary-color);
-    font-size: 30px;
+    font-size: var(--ui-font-30, 30px);
     line-height: 1;
   }
   .growth-task-summary__track {
@@ -1445,15 +1445,15 @@
   }
   .growth-task-summary__sources {
     display: grid;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
   .growth-task-summary__sources div {
     display: grid;
     grid-template-columns: max-content minmax(0, 1fr);
     align-items: start;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .growth-task-summary__sources dt {
     white-space: nowrap;
@@ -1466,21 +1466,21 @@
     overflow-wrap: anywhere;
   }
   .growth-task-summary__points {
-    padding-top: 10px;
+    padding-top: var(--ui-space-10, 10px);
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     border-top: 1px solid var(--card-border-color);
     color: var(--desc-color);
-    font-size: 10.5px;
+    font-size: var(--ui-font-10_5, 10.5px);
   }
   .growth-task-summary__points strong {
     width: 100%;
     color: var(--text-color);
-    font-size: 11.5px;
+    font-size: var(--ui-font-11_5, 11.5px);
   }
   .growth-task-summary__points span {
-    padding: 4px 7px;
+    padding: var(--ui-space-4, 4px) var(--ui-space-7, 7px);
     border: 1px solid var(--card-border-color);
     border-radius: 999px;
     background: var(--workbench-subcard-bg);
@@ -1490,33 +1490,33 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
   .growth-section-heading h2,
   .growth-panel-heading h2 {
     margin: 0;
     color: var(--text-color);
-    font-size: 18px;
+    font-size: var(--ui-font-18, 18px);
   }
   .growth-section-heading p,
   .growth-panel-heading p {
-    margin: 3px 0 0;
+    margin: var(--ui-space-3, 3px) 0 0;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .growth-footprint {
     display: flex;
     flex-direction: column;
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
   }
   .growth-state {
-    min-height: 112px;
+    min-height: var(--ui-layout-112, 112px);
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .growth-state--error {
     flex-direction: column;
@@ -1524,11 +1524,11 @@
   }
   .growth-free-lottery-hint.b_btn {
     width: 100%;
-    min-height: 44px;
+    min-height: var(--ui-control-44, 44px);
     display: flex;
     justify-content: flex-start;
-    gap: 9px;
-    padding: 0 14px;
+    gap: var(--ui-space-9, 9px);
+    padding: 0 var(--ui-space-14, 14px);
     border: 1px solid var(--primary-color);
     border-radius: 12px;
     color: var(--primary-color);
@@ -1555,7 +1555,7 @@
     background: var(--background-color);
   }
   .growth-section-tabs :deep(.tab) {
-    min-height: 44px;
+    min-height: var(--ui-control-44, 44px);
     flex: 1 1 25%;
     justify-content: center;
   }
@@ -1577,18 +1577,18 @@
   }
   @media (max-width: 767px) {
     .growth-page {
-      padding: 18px 12px 36px;
+      padding: var(--ui-space-18, 18px) var(--ui-space-12, 12px) var(--ui-space-36, 36px);
     }
     .growth-container {
-      gap: 12px;
+      gap: var(--ui-space-12, 12px);
     }
     .growth-main {
-      gap: 12px;
+      gap: var(--ui-space-12, 12px);
     }
     .growth-section-tabs :deep(.tab) {
       min-width: 0;
       min-height: 44px;
-      padding: 0 8px;
+      padding: 0 var(--ui-space-8, 8px);
       flex: 1 1 25%;
       justify-content: center;
       line-height: 44px;
@@ -1601,7 +1601,7 @@
       font-size: 21px;
     }
     .growth-panel {
-      padding: 14px;
+      padding: var(--ui-space-14, 14px);
       border-radius: 14px;
 
       .cal {
@@ -1622,15 +1622,15 @@
       width: 100%;
     }
     .growth-task-tabs {
-      padding: 0 8px;
+      padding: 0 var(--ui-space-8, 8px);
       overflow-x: auto;
     }
     .growth-task-tabs :deep(.tab) {
       min-width: max-content;
-      padding-inline: 10px;
+      padding-inline: var(--ui-space-10, 10px);
     }
     .growth-task-workspace {
-      padding: 12px;
+      padding: var(--ui-space-12, 12px);
       grid-template-columns: minmax(0, 1fr);
     }
   }

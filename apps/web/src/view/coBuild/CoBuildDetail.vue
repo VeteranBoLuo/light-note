@@ -14,7 +14,7 @@
       <template v-else-if="detail">
         <div class="detail-grid">
           <div class="detail-main">
-            <BCard variant="raised" class="request-detail-card" padding="clamp(20px, 3vw, 38px)">
+            <BCard variant="raised" class="request-detail-card" padding="clamp(var(--ui-space-20, 20px), 3vw, var(--ui-space-38, 38px))">
               <div class="detail-meta">
                 <span class="source-pill" :class="`is-${detail.sourceType}`">
                   <SvgIcon
@@ -490,26 +490,26 @@
   .detail-shell {
     min-height: 100%;
     box-sizing: border-box;
-    padding: 24px clamp(24px, 3.2vw, 76px) 48px;
+    padding: var(--ui-space-24, 24px) clamp(var(--ui-space-24, 24px), 3.2vw, var(--ui-space-76, 76px)) var(--ui-space-48, 48px);
   }
   .back-button {
-    gap: 6px;
-    margin-bottom: 18px;
+    gap: var(--ui-space-6, 6px);
+    margin-bottom: var(--ui-space-18, 18px);
   }
   .detail-grid {
     display: grid;
-    grid-template-columns: minmax(0, 2.25fr) minmax(300px, 0.85fr);
-    gap: 18px;
+    grid-template-columns: minmax(0, 2.25fr) minmax(var(--ui-layout-300, 300px), 0.85fr);
+    gap: var(--ui-space-18, 18px);
     align-items: start;
   }
   .detail-main {
     display: grid;
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
   }
   .request-detail-card h1 {
-    max-width: 1000px;
-    margin: 22px 0 9px;
-    font-size: clamp(28px, 3vw, 44px);
+    max-width: var(--ui-layout-1000, 1000px);
+    margin: var(--ui-space-22, 22px) 0 var(--ui-space-9, 9px);
+    font-size: clamp(var(--ui-font-28, 28px), 3vw, var(--ui-font-44, 44px));
     line-height: 1.22;
     letter-spacing: -0.035em;
   }
@@ -518,7 +518,7 @@
   .panel-actions {
     display: flex;
     align-items: center;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
     flex-wrap: wrap;
   }
   .source-pill,
@@ -527,12 +527,12 @@
   .timeline-status {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    padding: 5px 9px;
+    gap: var(--ui-space-5, 5px);
+    padding: var(--ui-space-5, 5px) var(--ui-space-9, 9px);
     border-radius: 999px;
     color: var(--desc-color);
     background: var(--surface-panel-bg);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .source-pill.is-official {
     color: #8a5a00;
@@ -549,23 +549,23 @@
   }
   .author-row {
     display: flex;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .detail-content {
-    max-width: 1050px;
-    margin: 30px 0 0;
+    max-width: var(--ui-layout-1050, 1050px);
+    margin: var(--ui-space-30, 30px) 0 0;
     color: var(--text-color);
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
     line-height: 1.9;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
   .developer-reply,
   .merged-banner {
-    margin-top: 28px;
-    padding: 16px 18px;
+    margin-top: var(--ui-space-28, 28px);
+    padding: var(--ui-space-16, 16px) var(--ui-space-18, 18px);
     border: 1px solid color-mix(in srgb, var(--primary-color) 20%, var(--surface-border-color));
     border-radius: 14px;
     background: color-mix(in srgb, var(--primary-color) 6%, var(--surface-panel-bg));
@@ -574,27 +574,27 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .reply-heading {
     display: flex;
     align-items: center;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
     color: var(--primary-color);
   }
   .reply-icon {
     display: inline-flex;
   }
   .developer-reply p {
-    margin: 10px 0 0;
+    margin: var(--ui-space-10, 10px) 0 0;
     line-height: 1.75;
     white-space: pre-wrap;
   }
   .detail-actions {
-    margin-top: 28px;
+    margin-top: var(--ui-space-28, 28px);
   }
   .detail-actions :deep(.b_btn) {
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
   .detail-actions .is-voted {
     color: var(--primary-color);
@@ -608,21 +608,21 @@
   .addition-card :deep(.card-container-header),
   .admin-panel :deep(.card-container-header),
   .timeline-card :deep(.card-container-header) {
-    margin-bottom: 16px;
+    margin-bottom: var(--ui-space-16, 16px);
   }
   .panel-actions {
     justify-content: flex-end;
-    margin-top: 12px;
+    margin-top: var(--ui-space-12, 12px);
   }
   .admin-form {
     display: grid;
-    gap: 12px;
-    margin-top: 18px;
+    gap: var(--ui-space-12, 12px);
+    margin-top: var(--ui-space-18, 18px);
   }
   .admin-form > p {
     margin: 0;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .admin-form :deep(.b-input),
   .admin-form :deep(.select-trigger),
@@ -637,7 +637,7 @@
   }
   .timeline-column {
     position: sticky;
-    top: 18px;
+    top: var(--ui-space-18, 18px);
   }
   .timeline-list {
     display: grid;
@@ -645,9 +645,9 @@
   .timeline-item {
     position: relative;
     display: grid;
-    grid-template-columns: 18px minmax(0, 1fr);
-    gap: 10px;
-    padding-bottom: 24px;
+    grid-template-columns: var(--ui-layout-18, 18px) minmax(0, 1fr);
+    gap: var(--ui-space-10, 10px);
+    padding-bottom: var(--ui-space-24, 24px);
   }
   .timeline-item:not(:last-child)::before {
     content: '';
@@ -663,7 +663,7 @@
     z-index: 1;
     width: 11px;
     height: 11px;
-    margin-top: 3px;
+    margin-top: var(--ui-space-3, 3px);
     border: 3px solid var(--card-background);
     border-radius: 50%;
     background: var(--desc-color);
@@ -678,25 +678,25 @@
   .timeline-head {
     display: flex;
     justify-content: space-between;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .timeline-head strong {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .timeline-head time {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     white-space: nowrap;
   }
   .timeline-meta {
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
   .timeline-delete {
-    width: 24px;
-    min-width: 24px;
-    height: 24px;
+    width: var(--ui-control-24, 24px);
+    min-width: var(--ui-control-24, 24px);
+    height: var(--ui-control-24, 24px);
     padding: 0;
     border-radius: 7px;
     color: var(--desc-color);
@@ -707,28 +707,28 @@
     background: rgba(254, 44, 85, 0.1);
   }
   .timeline-body p {
-    margin: 7px 0 8px;
+    margin: var(--ui-space-7, 7px) 0 var(--ui-space-8, 8px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.65;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
   .timeline-status {
-    padding: 3px 7px;
+    padding: var(--ui-space-3, 3px) var(--ui-space-7, 7px);
   }
   .timeline-empty {
-    padding: 40px 0;
+    padding: var(--ui-space-40, 40px) 0;
     text-align: center;
     color: var(--desc-color);
   }
   .detail-loading {
     display: grid;
     grid-template-columns: 2.25fr 0.85fr;
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
   }
   .detail-loading span {
-    height: 500px;
+    height: var(--ui-layout-500, 500px);
     border-radius: 16px;
     background: linear-gradient(
       100deg,
@@ -745,7 +745,7 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
   @keyframes shimmer {
     to {

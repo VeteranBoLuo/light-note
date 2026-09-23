@@ -292,18 +292,18 @@
 <style scoped lang="less">
   .knowledge-maintenance {
     display: grid;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
 
   .maintenance-guest,
   .maintenance-state {
-    min-height: 420px;
-    padding: 32px;
+    min-height: var(--ui-layout-420, 420px);
+    padding: var(--ui-space-32, 32px);
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 11px;
+    gap: var(--ui-space-11, 11px);
     border: 1px solid var(--surface-border-color);
     border-radius: 17px;
     background: radial-gradient(circle at 50% 18%, rgba(97, 92, 237, 0.1), transparent 35%), var(--card-background);
@@ -312,8 +312,8 @@
 
   .maintenance-guest > span,
   .maintenance-state > span {
-    width: 62px;
-    height: 62px;
+    width: var(--ui-layout-62, 62px);
+    height: var(--ui-layout-62, 62px);
     display: grid;
     place-items: center;
     border-radius: 18px;
@@ -328,7 +328,7 @@
   }
   .maintenance-guest p,
   .maintenance-state p {
-    max-width: 560px;
+    max-width: var(--ui-layout-560, 560px);
     color: var(--desc-color);
     line-height: 1.7;
   }
@@ -337,11 +337,11 @@
   }
 
   .maintenance-toolbar {
-    padding: 11px 13px;
+    padding: var(--ui-space-11, 11px) var(--ui-space-13, 13px);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     border: 1px solid var(--surface-border-color);
     border-radius: 13px;
     background: var(--workspace-panel-bg-color);
@@ -352,12 +352,12 @@
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .maintenance-toolbar__info > span {
-    width: 34px;
-    height: 34px;
+    width: var(--ui-layout-34, 34px);
+    height: var(--ui-layout-34, 34px);
     display: grid;
     flex: 0 0 auto;
     place-items: center;
@@ -369,23 +369,23 @@
   .maintenance-toolbar__info > div {
     min-width: 0;
     display: grid;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
   .maintenance-toolbar__actions {
     flex: 0 0 auto;
   }
   .maintenance-toolbar small {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
 
   .audit-overview {
-    min-height: 190px;
-    padding: clamp(22px, 3vw, 36px);
+    min-height: var(--ui-layout-190, 190px);
+    padding: clamp(var(--ui-space-22, 22px), 3vw, var(--ui-space-36, 36px));
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
-    gap: clamp(20px, 4vw, 46px);
+    gap: clamp(var(--ui-space-20, 20px), 4vw, var(--ui-space-46, 46px));
     overflow: hidden;
     border: 1px solid var(--surface-border-color);
     border-radius: 19px;
@@ -397,31 +397,31 @@
   .audit-overview__copy {
     display: grid;
     justify-items: start;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .audit-overview__copy h2,
   .audit-overview__copy p {
     margin: 0;
   }
   .audit-overview__copy h2 {
-    font-size: clamp(23px, 3vw, 33px);
+    font-size: clamp(var(--ui-font-23, 23px), 3vw, var(--ui-font-33, 33px));
     letter-spacing: -0.04em;
   }
   .audit-overview__copy p {
-    max-width: 650px;
+    max-width: var(--ui-layout-650, 650px);
     color: var(--desc-color);
     line-height: 1.7;
   }
   .audit-overview__copy > small {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
 
   .audit-overview__signal {
-    min-width: 130px;
-    padding: 14px;
+    min-width: var(--ui-layout-130, 130px);
+    padding: var(--ui-space-14, 14px);
     display: grid;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
     border: 1px solid var(--surface-border-color);
     border-radius: 13px;
     background: var(--card-background);
@@ -430,33 +430,33 @@
   .audit-overview__signal span,
   .audit-overview__signal small {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
   .audit-overview__signal strong {
     color: var(--danger-color);
-    font-size: 28px;
+    font-size: var(--ui-font-28, 28px);
   }
 
   .audit-facts {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
   }
 
   .audit-facts article {
     min-width: 0;
-    padding: 13px;
+    padding: var(--ui-space-13, 13px);
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
-    gap: 8px 10px;
+    gap: var(--ui-space-8, 8px) var(--ui-space-10, 10px);
     border: 1px solid var(--surface-border-color);
     border-radius: 13px;
     background: var(--card-background);
   }
 
   .audit-facts article > span {
-    width: 34px;
-    height: 34px;
+    width: var(--ui-layout-34, 34px);
+    height: var(--ui-layout-34, 34px);
     display: grid;
     place-items: center;
     border-radius: 10px;
@@ -466,15 +466,15 @@
 
   .audit-facts article > div {
     display: grid;
-    gap: 1px;
+    gap: var(--ui-space-1, 1px);
   }
   .audit-facts small,
   .audit-facts p {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
   .audit-facts strong {
-    font-size: 19px;
+    font-size: var(--ui-font-19, 19px);
   }
   .audit-facts p {
     grid-column: 1 / -1;
@@ -484,9 +484,9 @@
   .audit-recommendations,
   .audit-issues {
     min-width: 0;
-    padding: 15px;
+    padding: var(--ui-space-15, 15px);
     display: grid;
-    gap: 13px;
+    gap: var(--ui-space-13, 13px);
     border: 1px solid var(--surface-border-color);
     border-radius: 16px;
     background: var(--card-background);
@@ -498,7 +498,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .audit-recommendations > header,
@@ -509,53 +509,53 @@
   .audit-recommendations header > div,
   .audit-issues header > div > div {
     display: grid;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
   .audit-recommendations header small,
   .audit-issues header small {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
 
   .maintenance-index {
-    width: 28px;
-    height: 28px;
+    width: var(--ui-layout-28, 28px);
+    height: var(--ui-layout-28, 28px);
     display: grid;
     flex: 0 0 auto;
     place-items: center;
     border-radius: 8px;
     color: #fff;
     background: var(--primary-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     font-weight: 750;
   }
 
   .audit-recommendations > div {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .audit-recommendations article {
     min-width: 0;
-    padding: 11px;
+    padding: var(--ui-space-11, 11px);
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: start;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
     border: 1px solid var(--surface-border-color);
     border-radius: 11px;
     background: var(--workspace-panel-bg-color);
   }
   .audit-recommendations article > span {
-    width: 25px;
-    height: 25px;
+    width: var(--ui-layout-25, 25px);
+    height: var(--ui-layout-25, 25px);
     display: grid;
     place-items: center;
     border: 1px solid var(--surface-border-color);
     border-radius: 8px;
     color: var(--primary-color);
     background: var(--card-background);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     font-weight: 750;
   }
   .audit-recommendations article.is-high {
@@ -568,28 +568,28 @@
     min-width: 0;
   }
   .audit-recommendations p {
-    margin: 3px 0 0;
+    margin: var(--ui-space-3, 3px) 0 0;
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     line-height: 1.55;
   }
 
   .audit-filter {
     display: flex;
     flex-wrap: wrap;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
   .audit-issue-list {
     display: grid;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
   .audit-issue-list article {
     min-width: 0;
-    padding: 11px 12px;
+    padding: var(--ui-space-11, 11px) var(--ui-space-12, 12px);
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     border: 1px solid var(--surface-border-color);
     border-radius: 11px;
     background: var(--workspace-panel-bg-color);
@@ -601,8 +601,8 @@
     border-left: 3px solid var(--warning-color);
   }
   .audit-issue-list__signal {
-    width: 22px;
-    height: 22px;
+    width: var(--ui-layout-22, 22px);
+    height: var(--ui-layout-22, 22px);
     display: grid;
     place-items: center;
     border: 1px solid var(--surface-border-color);
@@ -624,19 +624,19 @@
   .audit-issue-list article > div {
     min-width: 0;
     display: grid;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
   .audit-issue-list article > div > div {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
   .audit-issue-list p,
   .audit-issue-list small {
     margin: 0;
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     line-height: 1.5;
   }
   .audit-issue-list small {
@@ -648,12 +648,12 @@
     margin: 0 auto;
   }
   .audit-issues__empty {
-    min-height: 150px;
+    min-height: var(--ui-layout-150, 150px);
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     color: var(--desc-color);
   }
 

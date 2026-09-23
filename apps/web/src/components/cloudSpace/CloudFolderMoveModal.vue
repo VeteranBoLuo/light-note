@@ -127,25 +127,25 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .cloud-folder-move__hint {
     margin: 0;
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.5;
   }
 
   .cloud-folder-move__footer {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 10px;
-    padding: 8px 0 max(16px, env(safe-area-inset-bottom));
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-8, 8px) 0 max(var(--ui-space-16, 16px), env(safe-area-inset-bottom));
   }
 
   .cloud-folder-move__footer :deep(.b_btn) {
     width: 100%;
-    min-height: 44px;
+    min-height: var(--ui-layout-44, 44px);
   }
 </style>

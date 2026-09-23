@@ -59,7 +59,7 @@
           @keydown.stop="handleTriggerKeydown"
         />
         <span v-else class="select-text" :class="{ 'is-placeholder': !displayText }">
-          {{ displayText || placeholderText }}
+          <slot name="selected-label" :value="value">{{ displayText || placeholderText }}</slot>
         </span>
       </template>
 
@@ -78,7 +78,7 @@
         <span v-if="loading" class="select-loading" aria-hidden="true"></span>
         <span v-else-if="showClear" class="select-clear" @click.stop="handleClear">&times;</span>
         <span v-else class="select-arrow" aria-hidden="true">
-          <SvgIcon :src="icon.noteTree.chevron" :size="16" />
+          <slot name="arrow"><SvgIcon :src="icon.noteTree.chevron" :size="16" /></slot>
         </span>
       </span>
     </div>
@@ -145,11 +145,12 @@
 </template>
 
 <script setup lang="ts">
+  import { useUiDensity } from '@/composables/useUiDensity';
   import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
   import type { BaseOptions } from '@/config/bookmarkCfg.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
-  import { getRootZoom } from '@/utils/zoom';
+
   import { useI18n } from 'vue-i18n';
 
   const props = withDefaults(
@@ -170,6 +171,8 @@
       inputmode?: 'none' | 'text' | 'decimal' | 'numeric' | 'tel' | 'search' | 'email' | 'url';
       maxlength?: number;
       dropdownClassName?: string;
+      /** Fit compact selectors to their options while retaining the trigger minimum width. */
+      dropdownWidth?: 'content';
       selectOnFocus?: boolean;
     }>(),
     {
@@ -565,18 +568,23 @@
 
   function updateDropdownPosition() {
     if (!triggerRef.value) return;
-    // 界面缩放(html zoom)下,gBCR 是视觉坐标、fixed 会被二次缩放,坐标 ÷ zoom 换算回布局坐标;
-    // clientHeight/offsetHeight 本就是布局像素、不换算(见 utils/zoom.ts)。
-    const zoom = getRootZoom();
+
     const rect = triggerRef.value.getBoundingClientRect();
-    const rTop = rect.top / zoom;
-    const rBottom = rect.bottom / zoom;
-    const rLeft = rect.left / zoom;
-    const triggerWidth = rect.width / zoom;
-    const viewportWidth = document.documentElement.clientWidth / zoom;
-    const viewportGutter = 8 / zoom;
+    const rTop = rect.top;
+    const rBottom = rect.bottom;
+    const rLeft = rect.left;
+    const triggerWidth = rect.width;
+    const viewportWidth = document.documentElement.clientWidth;
+    const viewportGutter = 8;
     const availableWidth = Math.max(viewportWidth - viewportGutter * 2, 0);
-    const preferredMinWidth = document.documentElement.clientWidth <= 720 ? triggerWidth : 180;
+    let preferredMinWidth = document.documentElement.clientWidth <= 720 ? triggerWidth : dimension(180, 'layout');
+    if (props.dropdownWidth === 'content' && dropdownRef.value) {
+      const panel = dropdownRef.value;
+      const previousWidth = panel.style.width;
+      panel.style.width = 'max-content';
+      preferredMinWidth = panel.getBoundingClientRect().width;
+      panel.style.width = previousWidth;
+    }
     const dropdownWidth = Math.min(Math.max(triggerWidth, preferredMinWidth), availableWidth);
     const dropdownLeft = Math.min(
       Math.max(rLeft, viewportGutter),
@@ -608,8 +616,7 @@
     requestAnimationFrame(() => {
       if (!dropdownRef.value) return;
       const dh = dropdownRef.value.offsetHeight;
-      // documentElement.clientHeight 是视口高度(视觉像素),需 ÷zoom 换布局坐标再与 rBottom(布局)比较
-      const spaceBelow = document.documentElement.clientHeight / zoom - rBottom - 4;
+      const spaceBelow = document.documentElement.clientHeight - rBottom - 4;
       if (spaceBelow < dh && rTop - 4 > dh) {
         placementAbove = true;
         dropdownStyle.value = {
@@ -670,6 +677,11 @@
     }
   });
 
+  const { density, dimension } = useUiDensity();
+  watch(density, () => {
+    if (isOpen.value) nextTick(updateDropdownPosition);
+  });
+
   watch(filteredOptions, (options) => {
     if (!isOpen.value) return;
     if (
@@ -690,10 +702,10 @@
     &.is-multiple {
       .select-trigger {
         height: auto;
-        min-height: 32px;
+        min-height: var(--ui-control-32, 32px);
         flex-wrap: wrap;
-        gap: 4px;
-        padding: 2px 30px 2px 4px;
+        gap: var(--ui-space-4, 4px);
+        padding: var(--ui-space-2, 2px) var(--ui-space-30, 30px) var(--ui-space-2, 2px) var(--ui-space-4, 4px);
       }
     }
 
@@ -733,8 +745,8 @@
   }
 
   .b-select.is-multiple.is-tag-tone .select-trigger {
-    min-height: 40px;
-    padding: 6px 32px 6px 11px;
+    min-height: var(--ui-control-40, 40px);
+    padding: var(--ui-space-6, 6px) var(--ui-space-32, 32px) var(--ui-space-6, 6px) var(--ui-space-11, 11px);
     border-radius: 8px;
     font-weight: 400;
   }
@@ -742,8 +754,8 @@
   .select-trigger {
     display: flex;
     align-items: center;
-    height: 32px;
-    padding: 0 30px 0 11px;
+    height: var(--ui-control-32, 32px);
+    padding: 0 var(--ui-space-30, 30px) 0 var(--ui-space-11, 11px);
     border: 1px solid var(--bl-input-border-color);
     border-radius: 6px;
     cursor: pointer;
@@ -768,11 +780,11 @@
 
   .select-search-inline {
     flex: 1;
-    min-width: 30px;
+    min-width: var(--ui-layout-30, 30px);
     border: none;
     outline: none;
     background: transparent;
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     color: var(--text-color);
     padding: 0;
     margin: 0;
@@ -794,7 +806,7 @@
 
   .select-text {
     flex: 1;
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     color: var(--text-color);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -808,15 +820,15 @@
   .select-tag {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    height: 24px;
-    padding: 0 6px;
+    gap: var(--ui-space-4, 4px);
+    height: var(--ui-layout-24, 24px);
+    padding: 0 var(--ui-space-6, 6px);
     border-radius: 4px;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--text-color);
     background: color-mix(in srgb, var(--primary-color) 14%, transparent);
     border: 1px solid color-mix(in srgb, var(--primary-color) 20%, transparent);
-    max-width: 160px;
+    max-width: var(--ui-layout-160, 160px);
     cursor: default;
 
     &.is-overflow {
@@ -854,7 +866,7 @@
   }
 
   .select-tag-remove {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     line-height: 1;
     cursor: pointer;
     color: var(--desc-color);
@@ -869,18 +881,18 @@
 
   .select-suffix {
     position: absolute;
-    right: 10px;
+    right: var(--ui-space-10, 10px);
     top: 50%;
     transform: translateY(-50%);
     display: flex;
     align-items: center;
     flex-shrink: 0;
-    width: 16px;
+    width: var(--ui-layout-16, 16px);
     justify-content: center;
   }
 
   .select-clear {
-    font-size: 16px;
+    font-size: var(--ui-font-16, 16px);
     color: var(--desc-color, #999);
     cursor: pointer;
     display: flex;
@@ -894,8 +906,8 @@
   }
 
   .select-loading {
-    width: 14px;
-    height: 14px;
+    width: var(--ui-layout-14, 14px);
+    height: var(--ui-layout-14, 14px);
     box-sizing: border-box;
     border: 2px solid var(--card-border-color, #d9d9d9);
     border-top-color: var(--primary-color);
@@ -923,8 +935,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 16px;
-    height: 16px;
+    width: var(--ui-layout-16, 16px);
+    height: var(--ui-layout-16, 16px);
     flex-shrink: 0;
     color: var(--desc-color, #999);
     transition: transform 0.2s;
@@ -935,28 +947,28 @@
     position: fixed;
     z-index: 500;
     box-sizing: border-box;
-    padding: 4px;
+    padding: var(--ui-space-4, 4px);
     border-radius: 6px;
     background: var(--ant-select-dropdown-bg-color, #fff);
     border: 1px solid var(--surface-border-color, #e6e9f2);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-    max-height: 240px;
+    max-height: var(--ui-layout-240, 240px);
     overflow-y: auto;
   }
 
   .select-search-bar {
-    padding: 4px 4px 8px;
+    padding: var(--ui-space-4, 4px) var(--ui-space-4, 4px) var(--ui-space-8, 8px);
     border-bottom: 1px solid var(--card-border-color, #eee);
-    margin-bottom: 4px;
+    margin-bottom: var(--ui-space-4, 4px);
   }
 
   .select-search-input {
     width: 100%;
-    height: 30px;
-    padding: 0 8px;
+    height: var(--ui-control-30, 30px);
+    padding: 0 var(--ui-space-8, 8px);
     border: 1px solid var(--card-border-color, #d9d9d9);
     border-radius: 4px;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     color: var(--text-color);
     background: var(--background-color);
     outline: none;
@@ -972,12 +984,12 @@
   }
 
   .select-option {
-    height: 32px;
-    padding: 0 12px;
+    height: var(--ui-control-32, 32px);
+    padding: 0 var(--ui-space-12, 12px);
     display: flex;
     align-items: center;
-    gap: 8px;
-    font-size: 14px;
+    gap: var(--ui-space-8, 8px);
+    font-size: var(--ui-font-14, 14px);
     color: var(--text-color);
     border-radius: 4px;
     cursor: pointer;
@@ -1002,12 +1014,12 @@
 
   /* 选项之间留出细小的背景缝隙,避免 hover/选中态连成一整块 */
   .select-option + .select-option {
-    margin-top: 2px;
+    margin-top: var(--ui-space-2, 2px);
   }
 
   .select-option-check {
-    width: 16px;
-    height: 16px;
+    width: var(--ui-layout-16, 16px);
+    height: var(--ui-layout-16, 16px);
     border-radius: 3px;
     border: 1.5px solid var(--card-border-color, #d9d9d9);
     display: flex;
@@ -1023,7 +1035,7 @@
   }
 
   .check-icon {
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     color: #fff;
     line-height: 1;
   }
@@ -1035,11 +1047,11 @@
   }
 
   .select-no-data {
-    height: 40px;
+    height: var(--ui-control-40, 40px);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     color: var(--desc-color, #999);
   }
 
@@ -1052,8 +1064,8 @@
   .select-dropdown-footer {
     position: sticky;
     bottom: 0;
-    margin: 4px -4px 0;
-    padding: 4px;
+    margin: var(--ui-space-4, 4px) calc(-1 * var(--ui-space-4, 4px)) 0;
+    padding: var(--ui-space-4, 4px);
     border-top: 1px solid var(--card-border-color, #eee);
     background: var(--ant-select-dropdown-bg-color, #fff);
   }
@@ -1074,11 +1086,13 @@
     }
   }
   .select-dropdown.is-tag-tone {
-    padding: 6px;
+    padding: var(--ui-space-6, 6px);
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     background: var(--card-background);
-    box-shadow: 0 12px 32px rgba(25, 28, 50, 0.12), 0 2px 6px rgba(25, 28, 50, 0.04);
+    box-shadow:
+      0 12px 32px rgba(25, 28, 50, 0.12),
+      0 2px 6px rgba(25, 28, 50, 0.04);
     scrollbar-width: thin;
 
     &.has-footer {
@@ -1087,16 +1101,16 @@
 
     .select-search-bar {
       position: sticky;
-      top: -6px;
+      top: calc(-1 * var(--ui-space-6, 6px));
       z-index: 1;
-      margin: -6px -6px 6px;
-      padding: 12px;
+      margin: calc(-1 * var(--ui-space-6, 6px)) calc(-1 * var(--ui-space-6, 6px)) var(--ui-space-6, 6px);
+      padding: var(--ui-space-12, 12px);
       border-bottom: 1px solid var(--surface-divider-color);
       background: var(--card-background);
     }
     .select-search-input {
-      height: 36px;
-      padding: 0 11px;
+      height: var(--ui-control-36, 36px);
+      padding: 0 var(--ui-space-11, 11px);
       border: 1px solid transparent;
       border-radius: 8px;
       background: var(--workspace-panel-bg-color);
@@ -1107,11 +1121,11 @@
       background: var(--card-background);
     }
     .select-option {
-      height: 36px;
-      padding: 0 10px;
-      gap: 10px;
+      height: var(--ui-control-36, 36px);
+      padding: 0 var(--ui-space-10, 10px);
+      gap: var(--ui-space-10, 10px);
       border-radius: 7px;
-      font-size: 13px;
+      font-size: var(--ui-font-13, 13px);
       font-weight: 400;
     }
     .select-option.is-selected {
@@ -1121,13 +1135,13 @@
     }
     .select-option-check {
       box-sizing: border-box;
-      width: 16px;
-      height: 16px;
+      width: var(--ui-layout-16, 16px);
+      height: var(--ui-layout-16, 16px);
       border-radius: 5px;
     }
     .select-dropdown-footer {
-      margin: 6px -6px 0;
-      padding: 6px;
+      margin: var(--ui-space-6, 6px) calc(-1 * var(--ui-space-6, 6px)) 0;
+      padding: var(--ui-space-6, 6px);
       border-top: 1px solid var(--surface-divider-color);
       background: var(--card-background);
     }
@@ -1135,14 +1149,14 @@
       display: flex;
       align-items: center;
       justify-content: flex-start;
-      gap: 8px;
+      gap: var(--ui-space-8, 8px);
       width: 100%;
-      min-height: 36px;
-      padding: 8px 12px;
+      min-height: var(--ui-control-36, 36px);
+      padding: var(--ui-space-8, 8px) var(--ui-space-12, 12px);
       border-radius: 6px;
       background: transparent;
       color: var(--primary-color);
-      font-size: 13px;
+      font-size: var(--ui-font-13, 13px);
     }
     .select-dropdown-footer :deep(.b_btn:hover),
     .select-dropdown-footer :deep(.b_btn:focus-visible) {
@@ -1151,7 +1165,7 @@
       outline-offset: -1px;
     }
     .select-no-data {
-      min-height: 64px;
+      min-height: var(--ui-control-64, 64px);
     }
   }
 </style>

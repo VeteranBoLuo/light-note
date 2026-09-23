@@ -75,15 +75,15 @@
   .conversion-trend__legend {
     display: flex;
     flex-wrap: wrap;
-    gap: 12px;
-    margin-bottom: 10px;
+    gap: var(--ui-space-12, 12px);
+    margin-bottom: var(--ui-space-10, 10px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
 
     span {
       display: inline-flex;
       align-items: center;
-      gap: 5px;
+      gap: var(--ui-space-5, 5px);
     }
 
     i {
@@ -95,8 +95,8 @@
 
   .conversion-trend__body {
     display: flex;
-    gap: 8px;
-    height: 180px;
+    gap: var(--ui-space-8, 8px);
+    height: var(--ui-layout-180, 180px);
   }
 
   .conversion-trend__axis {
@@ -104,7 +104,7 @@
     flex-direction: column;
     justify-content: space-between;
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     font-variant-numeric: tabular-nums;
   }
 
@@ -137,9 +137,9 @@
   .conversion-trend__labels {
     display: flex;
     justify-content: space-between;
-    margin-top: 6px;
-    padding-left: 24px;
+    margin-top: var(--ui-space-6, 6px);
+    padding-left: var(--ui-space-24, 24px);
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
 </style>

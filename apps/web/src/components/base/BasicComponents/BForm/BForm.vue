@@ -103,7 +103,7 @@
     width: 100%;
     display: flex;
     flex-direction: column;
-    gap: 25px;
+    gap: var(--ui-space-25, 25px);
   }
   .horizontal {
     flex-direction: row;
@@ -115,10 +115,10 @@
   }
   .form-item {
     display: flex;
-    font-size: 14px;
-    gap: 10px;
+    font-size: var(--ui-font-14, 14px);
+    gap: var(--ui-space-10, 10px);
     :deep(.b-input) {
-      height: 30px;
+      height: var(--ui-control-30, 30px);
     }
     .form-item-label {
       text-align: right;
@@ -135,10 +135,10 @@
     top: 3px;
   }
   .require-tip {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--require-tip-color);
     position: absolute;
-    top: 33px;
+    top: calc(var(--ui-control-30, 30px) + var(--ui-space-3, 3px));
     display: flex;
     opacity: 0;
   }

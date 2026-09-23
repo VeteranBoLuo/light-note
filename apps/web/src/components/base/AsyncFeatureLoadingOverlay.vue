@@ -23,7 +23,7 @@
     transform: translate(-50%, -50%);
     display: flex;
     align-items: center;
-    padding: 10px 16px;
+    padding: var(--ui-space-10, 10px) var(--ui-space-16, 16px);
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     color: var(--text-color);

@@ -2,7 +2,7 @@
   <BModal
     v-model:visible="visible"
     :title="t('inbox.calendarModalTitle')"
-    width="430px"
+    width="var(--ui-layout-430, 430px)"
     :mask-closable="!exporting"
     :esc-closable="!exporting"
     @close="close"
@@ -100,55 +100,55 @@
   .todo-calendar {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     min-width: 0;
   }
   .todo-calendar__title {
     color: var(--text-color);
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
     line-height: 1.5;
     overflow-wrap: anywhere;
   }
   .todo-calendar__due {
     margin: 0;
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .todo-calendar__field {
     display: flex;
     align-items: center;
-    gap: 12px;
-    margin-top: 4px;
+    gap: var(--ui-space-12, 12px);
+    margin-top: var(--ui-space-4, 4px);
   }
   .todo-calendar__label {
     flex-shrink: 0;
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .todo-calendar__field :deep(.b-select) {
     min-width: 0;
     flex: 1;
   }
   .todo-calendar__note {
-    margin: 4px 0 0;
-    padding: 8px 10px;
+    margin: var(--ui-space-4, 4px) 0 0;
+    padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px);
     border-radius: 8px;
     background: var(--hover-background);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.6;
   }
   /* 自定义 #footer 会替换 BModal 默认底栏容器，需按约定自带内边距，否则按钮贴弹窗边缘 */
   .todo-calendar__footer {
     display: flex;
     justify-content: flex-end;
-    gap: 8px;
-    padding: 0 20px 16px;
+    gap: var(--ui-space-8, 8px);
+    padding: 0 var(--ui-space-20, 20px) var(--ui-space-16, 16px);
   }
 
   @media (max-width: 767px) {
     .todo-calendar__footer {
-      padding: 0 16px 12px;
+      padding: 0 var(--ui-space-16, 16px) var(--ui-space-12, 12px);
     }
   }
 </style>

@@ -216,7 +216,7 @@
   import type { ImageViewerItem } from '@/types/imageViewer';
   import { isLightNoteAndroidApp, postAndroidMessage, saveImageViaAndroid } from '@/utils/androidBridge';
   import { resolveImageViewportLayout, type ImageViewportPadding } from '@/utils/imageViewport';
-  import { getRootZoom } from '@/utils/zoom';
+
   import { canSaveImage, deriveImageFileName, isBase64ImageSrc, isHttpImageSrc } from './viewerSave';
 
   const MIN_SCALE = 0.25;
@@ -380,9 +380,9 @@
     const viewport = viewportRef.value;
     if (!viewport) return null;
     const rect = viewport.getBoundingClientRect();
-    const rootZoom = getRootZoom();
-    const offsetX = clientX == null ? viewport.clientWidth / 2 : (clientX - rect.left) / rootZoom;
-    const offsetY = clientY == null ? viewport.clientHeight / 2 : (clientY - rect.top) / rootZoom;
+
+    const offsetX = clientX == null ? viewport.clientWidth / 2 : (clientX - rect.left);
+    const offsetY = clientY == null ? viewport.clientHeight / 2 : (clientY - rect.top);
     return {
       ratioX: (viewport.scrollLeft + offsetX) / Math.max(1, viewport.scrollWidth),
       ratioY: (viewport.scrollTop + offsetY) / Math.max(1, viewport.scrollHeight),
@@ -509,9 +509,9 @@
     const state = pointerPanState;
     if (!viewport || !state || state.pointerId !== event.pointerId) return;
     event.preventDefault();
-    const rootZoom = getRootZoom();
-    viewport.scrollLeft = state.scrollLeft - (event.clientX - state.startX) / rootZoom;
-    viewport.scrollTop = state.scrollTop - (event.clientY - state.startY) / rootZoom;
+
+    viewport.scrollLeft = state.scrollLeft - (event.clientX - state.startX);
+    viewport.scrollTop = state.scrollTop - (event.clientY - state.startY);
   }
 
   function finishPointerPan(event: PointerEvent) {
@@ -838,7 +838,7 @@
     }
 
     .b-image-viewer-modal > .modal-header {
-      padding: 10px 16px;
+      padding: var(--ui-space-10, 10px) var(--ui-space-16, 16px);
     }
   }
 
@@ -883,26 +883,26 @@
   .b-image-viewer__title {
     display: inline-flex;
     align-items: baseline;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .b-image-viewer__title small {
     color: var(--image-viewer-muted-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 500;
   }
 
   .b-image-viewer__fullscreen-wrap {
     position: absolute !important;
     top: 50% !important;
-    right: 52px;
+    right: var(--ui-space-52, 52px);
     z-index: 1;
     transform: translateY(-50%);
   }
 
   .b-image-viewer__fullscreen-action.b_btn {
-    width: 30px;
-    height: 30px;
+    width: var(--ui-control-30, 30px);
+    height: var(--ui-control-30, 30px);
     padding: 0;
     display: grid;
     place-items: center;
@@ -1063,7 +1063,7 @@
 
   .b-image-viewer__error {
     flex-direction: column;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     pointer-events: auto;
   }
 
@@ -1082,17 +1082,17 @@
 
   .b-image-viewer__nav-wrap--previous {
     right: auto !important;
-    left: 14px !important;
+    left: var(--ui-space-14, 14px) !important;
   }
 
   .b-image-viewer__nav-wrap--next {
-    right: 14px !important;
+    right: var(--ui-space-14, 14px) !important;
     left: auto !important;
   }
 
   .b-image-viewer__nav.b_btn {
-    width: 40px;
-    height: 52px;
+    width: var(--ui-control-40, 40px);
+    height: var(--ui-control-52, 52px);
     padding: 0;
     display: grid;
     place-items: center;
@@ -1115,13 +1115,13 @@
   }
 
   .b-image-viewer__toolbar {
-    min-height: 50px;
+    min-height: var(--ui-control-50, 50px);
     box-sizing: border-box;
-    padding: 6px 12px calc(6px + env(safe-area-inset-bottom, 0px));
+    padding: var(--ui-space-6, 6px) var(--ui-space-12, 12px) calc(var(--ui-space-6, 6px) + env(safe-area-inset-bottom, 0px));
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     overflow-x: auto;
     border-top: 1px solid var(--image-viewer-divider-color);
     background: var(--image-viewer-chrome-bg);
@@ -1133,8 +1133,8 @@
   }
 
   .b-image-viewer__toolbar .b_btn {
-    width: 32px;
-    height: 32px;
+    width: var(--ui-control-32, 32px);
+    height: var(--ui-control-32, 32px);
     padding: 0;
     display: grid;
     place-items: center;
@@ -1157,17 +1157,17 @@
   }
 
   .b-image-viewer__scale {
-    min-width: 44px;
+    min-width: var(--ui-layout-44, 44px);
     flex: none;
     color: var(--image-viewer-muted-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     text-align: center;
   }
 
   .b-image-viewer__divider {
     width: 1px;
-    height: 20px;
-    margin: 0 2px;
+    height: var(--ui-layout-20, 20px);
+    margin: 0 var(--ui-space-2, 2px);
     flex: none;
     background: var(--image-viewer-divider-color);
   }

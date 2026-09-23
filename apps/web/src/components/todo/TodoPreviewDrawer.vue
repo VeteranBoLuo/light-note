@@ -7,7 +7,7 @@
     :mobile-centered-header="bookmark.isMobile"
     mobile-header-side-width="96px"
     :close-icon="bookmark.isMobile ? icon.arrow_left : undefined"
-    width="600px"
+    width="var(--ui-layout-600, 600px)"
     height="100%"
     body-padding="0"
     :mask-closable="true"
@@ -27,7 +27,12 @@
           <SvgIcon :src="icon.table_delete" size="17" aria-hidden="true" />
         </BButton>
       </BTooltip>
-      <BTooltip v-if="item.status === 'completed'" :title="t('inbox.todoReopenCompletion')" :disabled="bookmark.isMobile || disabled || reopening" :delay="80">
+      <BTooltip
+        v-if="item.status === 'completed'"
+        :title="t('inbox.todoReopenCompletion')"
+        :disabled="bookmark.isMobile || disabled || reopening"
+        :delay="80"
+      >
         <BButton
           icon-only
           class="todo-preview__action todo-preview__reopen"
@@ -39,7 +44,12 @@
           <SvgIcon :src="icon.noteDetail.toolbar.undo" size="17" aria-hidden="true" />
         </BButton>
       </BTooltip>
-      <BTooltip v-if="item.status !== 'completed'" :title="t('inbox.editTodo')" :disabled="bookmark.isMobile || disabled || deleting" :delay="80">
+      <BTooltip
+        v-if="item.status !== 'completed'"
+        :title="t('inbox.editTodo')"
+        :disabled="bookmark.isMobile || disabled || deleting"
+        :delay="80"
+      >
         <BButton
           class="todo-preview__action todo-preview__edit"
           :aria-label="t('inbox.editTodo')"
@@ -133,7 +143,12 @@
   import { bookmarkStore } from '@/store';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
   import { resolveResourceRoute, resolveTodoResourceReturnPath } from '@/utils/resourceNavigation';
-  import { formatTodoDateTime, isTodoSingleReminder, normalizeTodoDateOnly, todoNextReminderAt } from '@/utils/todoPlanning';
+  import {
+    formatTodoDateTime,
+    isTodoSingleReminder,
+    normalizeTodoDateOnly,
+    todoNextReminderAt,
+  } from '@/utils/todoPlanning';
 
   const props = withDefaults(
     defineProps<{
@@ -212,7 +227,9 @@
     if (nextReminderAt) {
       rows.push({
         key: 'next-reminder',
-        label: t(isTodoSingleReminder(props.item) ? 'inbox.todoPlanPreviewReminderTime' : 'inbox.todoPlanPreviewNextReminder'),
+        label: t(
+          isTodoSingleReminder(props.item) ? 'inbox.todoPlanPreviewReminderTime' : 'inbox.todoPlanPreviewNextReminder',
+        ),
         value: formatAbsolute(nextReminderAt),
       });
     }
@@ -277,7 +294,7 @@
     const itemSnapshot = JSON.parse(JSON.stringify(props.item)) as TodoItem;
     void closeCurrentMobileOverlayThen(
       () => (visible.value = false),
-      () => section ? emit('edit', itemSnapshot, section) : emit('edit', itemSnapshot),
+      () => (section ? emit('edit', itemSnapshot, section) : emit('edit', itemSnapshot)),
     );
   }
 
@@ -297,16 +314,16 @@
     min-height: 100%;
     display: grid;
     align-content: start;
-    gap: 14px;
-    padding: 20px 22px 28px;
+    gap: var(--ui-space-14, 14px);
+    padding: var(--ui-space-20, 20px) var(--ui-space-22, 22px) var(--ui-space-28, 28px);
     box-sizing: border-box;
     background: var(--page-background-color, var(--background-color));
   }
 
   :deep(.b_btn.todo-preview__action) {
-    width: 32px;
-    min-width: 32px;
-    height: 32px;
+    width: var(--ui-layout-32, 32px);
+    min-width: var(--ui-layout-32, 32px);
+    height: var(--ui-layout-32, 32px);
     padding: 0;
     border-radius: 8px;
   }
@@ -351,15 +368,15 @@
 
   .todo-preview__hero {
     display: grid;
-    gap: 8px;
-    padding: 12px 16px;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-12, 12px) var(--ui-space-16, 16px);
     border-top: 3px solid var(--todo-accent-color, var(--primary-color));
   }
 
   .todo-preview__hero h2 {
     margin: 0;
     color: var(--text-color);
-    font-size: 20px;
+    font-size: var(--ui-font-20, 20px);
     line-height: 1.3;
     overflow-wrap: anywhere;
   }
@@ -368,21 +385,21 @@
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
 
   .todo-preview__status,
   .todo-preview__priority {
     display: inline-flex;
-    min-height: 24px;
+    min-height: var(--ui-layout-24, 24px);
     align-items: center;
-    gap: 6px;
-    padding: 2px 8px;
+    gap: var(--ui-space-6, 6px);
+    padding: var(--ui-space-2, 2px) var(--ui-space-8, 8px);
     box-sizing: border-box;
     border: 1px solid var(--surface-border-color);
     border-radius: 999px;
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 700;
   }
 
@@ -414,17 +431,17 @@
 
   .todo-preview__section {
     display: grid;
-    gap: 12px;
-    padding: 17px 18px;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-17, 17px) var(--ui-space-18, 18px);
   }
 
   .todo-preview__section h3 {
     display: flex;
     align-items: center;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     margin: 0;
     color: var(--text-color);
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     line-height: 1.4;
   }
 
@@ -432,7 +449,7 @@
     margin: 0;
     white-space: pre-wrap;
     color: var(--text-color);
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     line-height: 1.75;
     overflow-wrap: anywhere;
   }
@@ -441,12 +458,12 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .todo-preview__section-head > span {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .todo-preview__schedule dl {
@@ -457,21 +474,21 @@
 
   .todo-preview__schedule dl > div {
     display: grid;
-    grid-template-columns: 112px minmax(0, 1fr);
-    gap: 12px;
-    padding: 10px 0;
+    grid-template-columns: var(--ui-layout-112, 112px) minmax(0, 1fr);
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-10, 10px) 0;
     border-top: 1px solid var(--surface-divider-color, var(--surface-border-color));
   }
 
   .todo-preview__schedule dt {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .todo-preview__schedule dd {
     margin: 0;
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.45;
     overflow-wrap: anywhere;
   }
@@ -480,22 +497,23 @@
     display: flex;
     flex-wrap: wrap;
     justify-content: space-between;
-    gap: 8px 18px;
-    padding: 0 3px;
+    gap: var(--ui-space-8, 8px) var(--ui-space-18, 18px);
+    padding: 0 var(--ui-space-3, 3px);
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   @media (max-width: 767px) {
     :deep(.b_btn.todo-preview__action) {
-      width: 44px;
-      min-width: 44px;
-      height: 44px;
+      width: var(--ui-layout-44, 44px);
+      min-width: var(--ui-layout-44, 44px);
+      height: var(--ui-layout-44, 44px);
     }
 
     .todo-preview {
-      gap: 12px;
-      padding: 14px 14px calc(24px + env(safe-area-inset-bottom));
+      gap: var(--ui-space-12, 12px);
+      padding: var(--ui-space-14, 14px) var(--ui-space-14, 14px)
+        calc(var(--ui-space-24, 24px) + env(safe-area-inset-bottom));
     }
 
     .todo-preview__hero,
@@ -504,19 +522,19 @@
     }
 
     .todo-preview__hero {
-      padding: 12px 14px;
+      padding: var(--ui-space-12, 12px) var(--ui-space-14, 14px);
     }
 
     .todo-preview__hero h2 {
-      font-size: 20px;
+      font-size: var(--ui-font-20, 20px);
     }
 
     .todo-preview__section {
-      padding: 15px;
+      padding: var(--ui-space-15, 15px);
     }
 
     .todo-preview__schedule dl > div {
-      grid-template-columns: 92px minmax(0, 1fr);
+      grid-template-columns: var(--ui-layout-92, 92px) minmax(0, 1fr);
     }
   }
 </style>

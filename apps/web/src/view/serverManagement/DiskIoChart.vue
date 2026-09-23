@@ -53,18 +53,18 @@
 <style scoped lang="less">
   .disk-io-chart {
     position: relative;
-    min-height: 250px;
+    min-height: var(--ui-layout-250, 250px);
   }
   .disk-io-chart__legend {
     display: flex;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .disk-io-chart__legend span {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   .disk-io-chart__legend i {
     width: 8px;
@@ -77,8 +77,8 @@
   }
   svg {
     width: 100%;
-    height: 210px;
-    margin-top: 10px;
+    height: var(--ui-layout-210, 210px);
+    margin-top: var(--ui-space-10, 10px);
     overflow: visible;
   }
   .grid-line {
@@ -96,7 +96,7 @@
     stroke: #e88a2e;
   }
   .disk-io-chart__empty {
-    height: 210px;
+    height: var(--ui-layout-210, 210px);
     display: grid;
     place-items: center;
     color: var(--desc-color);

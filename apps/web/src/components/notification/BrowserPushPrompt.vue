@@ -78,20 +78,20 @@
 </script>
 <style scoped lang="less">
   .push-prompt {
-    margin: 8px 12px;
-    padding: 12px;
+    margin: var(--ui-space-8, 8px) var(--ui-space-12, 12px);
+    padding: var(--ui-space-12, 12px);
     border: 1px solid var(--border-color);
     border-radius: 12px;
     display: flex;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .push-prompt__copy {
-    flex: 1 1 220px;
+    flex: 1 1 var(--ui-layout-220, 220px);
     min-width: 0;
     display: grid;
-    gap: 4px;
-    font-size: 12px;
+    gap: var(--ui-space-4, 4px);
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
   }
   .push-prompt__copy strong {
@@ -101,7 +101,7 @@
   .push-prompt__actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     align-items: center;
   }
 </style>

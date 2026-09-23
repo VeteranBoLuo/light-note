@@ -101,7 +101,7 @@ describe('BInput change payload', () => {
     };
     await nextTick();
 
-    expect(host.querySelector<HTMLInputElement>('input')?.style.paddingRight).toBe('35px');
+    expect(host.querySelector<HTMLInputElement>('input')?.style.paddingRight).toBe('var(--ui-space-35, 35px)');
     expect(host.querySelector('.input-clear-btn')).not.toBeNull();
   });
 

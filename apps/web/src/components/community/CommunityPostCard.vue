@@ -111,10 +111,10 @@
     border: 0;
     background: transparent;
     color: var(--desc-color);
-    padding: 0 4px;
-    height: 28px;
-    gap: 5px;
-    font-size: 12px;
+    padding: 0 var(--ui-space-4, 4px);
+    height: var(--ui-layout-28, 28px);
+    gap: var(--ui-space-5, 5px);
+    font-size: var(--ui-font-12, 12px);
   }
   .post-like.b_btn[aria-pressed='true'] {
     color: var(--primary-color);
@@ -122,8 +122,8 @@
   .post-like-error {
     display: block;
     color: var(--desc-color);
-    font-size: 12px;
-    margin-top: 8px;
+    font-size: var(--ui-font-12, 12px);
+    margin-top: var(--ui-space-8, 8px);
   }
   .community-post-card:not(.is-detail) {
     cursor: pointer;
@@ -142,7 +142,7 @@
     .feed-excerpt {
       margin: 0;
       color: var(--desc-color);
-      font-size: 14px;
+      font-size: var(--ui-font-14, 14px);
       font-weight: 400;
       line-height: 1.8;
       display: -webkit-box;
@@ -159,7 +159,7 @@
     .feed-excerpt :deep(h4),
     .feed-excerpt :deep(h5),
     .feed-excerpt :deep(h6) {
-      font-size: 15px;
+      font-size: var(--ui-font-15, 15px);
       line-height: 1.6;
       margin: 0.4em 0 0.2em;
     }
@@ -173,25 +173,25 @@
       margin-bottom: 0.35em;
     }
     .feed-excerpt :deep(pre) {
-      padding: 6px 10px;
+      padding: var(--ui-space-6, 6px) var(--ui-space-10, 10px);
       white-space: pre-wrap;
       overflow-wrap: anywhere;
     }
     .feed-excerpt :deep(> :first-child) {
       margin-top: 0;
     }
-    padding: 24px 0;
+    padding: var(--ui-space-24, 24px) 0;
     .post-author-row {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      gap: 12px;
-      margin-bottom: 14px;
+      gap: var(--ui-space-12, 12px);
+      margin-bottom: var(--ui-space-14, 14px);
     }
     .post-author {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: var(--ui-space-10, 10px);
       padding: 0;
       background: transparent;
       text-align: left;
@@ -200,8 +200,8 @@
     }
     .post-author img,
     .post-avatar-fallback {
-      width: 34px;
-      height: 34px;
+      width: var(--ui-layout-34, 34px);
+      height: var(--ui-layout-34, 34px);
       border-radius: 50%;
       object-fit: cover;
       flex-shrink: 0;
@@ -213,30 +213,30 @@
       background: var(--card-background);
       border: 1px solid var(--surface-border-color);
       color: var(--primary-color);
-      font-size: 14px;
+      font-size: var(--ui-font-14, 14px);
     }
     .post-author-copy {
       line-height: 1.4;
       display: flex;
       flex-direction: column;
-      gap: 3px;
+      gap: var(--ui-space-3, 3px);
       min-width: 0;
     }
     .post-author-copy strong {
-      font-size: 14px;
+      font-size: var(--ui-font-14, 14px);
       font-weight: 600;
       color: var(--text-color);
       overflow-wrap: anywhere;
     }
     .post-author-copy > span {
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
       color: var(--desc-color);
     }
     .post-labels {
       display: flex;
       align-items: center;
-      gap: 8px;
-      font-size: 12px;
+      gap: var(--ui-space-8, 8px);
+      font-size: var(--ui-font-12, 12px);
       color: var(--desc-color);
       flex-wrap: wrap;
       justify-content: flex-end;
@@ -244,23 +244,23 @@
     .post-state {
       border: 1px solid currentColor;
       border-radius: 4px;
-      padding: 2px 5px;
+      padding: var(--ui-space-2, 2px) var(--ui-space-5, 5px);
     }
     > h2 {
-      margin: 0 0 8px;
-      font-size: 18px;
+      margin: 0 0 var(--ui-space-8, 8px);
+      font-size: var(--ui-font-18, 18px);
       line-height: 1.5;
     }
     .feed-meta {
-      margin: 14px 0 0;
-      gap: 14px;
+      margin: var(--ui-space-14, 14px) 0 0;
+      gap: var(--ui-space-14, 14px);
     }
     &.is-detail {
-      padding-top: 24px;
+      padding-top: var(--ui-space-24, 24px);
     }
     &.is-detail > h2 {
-      font-size: 25px;
-      margin: 18px 0;
+      font-size: var(--ui-font-25, 25px);
+      margin: var(--ui-space-18, 18px) 0;
     }
     @media (max-width: 767px) {
       padding: 20px 0;
@@ -277,7 +277,7 @@
     color: var(--workspace-purple-text);
     background: var(--workspace-hover);
     border-radius: 5px;
-    padding: 2px 8px;
+    padding: var(--ui-space-2, 2px) var(--ui-space-8, 8px);
   }
   .community-post-card .feed-meta > span {
     line-height: 1.5;
@@ -295,38 +295,38 @@
   .feed-resource-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .feed-resource-grid :deep(.resource-card) {
     background: var(--workspace-content);
-    min-height: 68px;
-    padding: 12px;
-    gap: 10px;
+    min-height: var(--ui-layout-68, 68px);
+    padding: var(--ui-space-12, 12px);
+    gap: var(--ui-space-10, 10px);
   }
   .feed-resource-grid :deep(.resource-copy strong) {
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .feed-resource-grid :deep(.resource-read) {
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .community-post-card:not(.is-detail) {
-    padding-left: 46px;
+    padding-left: var(--ui-space-46, 46px);
     position: relative;
   }
   .community-post-card:not(.is-detail) .post-author img,
   .community-post-card:not(.is-detail) .post-avatar-fallback {
     position: absolute;
     left: 0;
-    top: 24px;
+    top: var(--ui-space-24, 24px);
   }
   .community-post-card:not(.is-detail) .post-author-copy {
     flex-direction: row;
     align-items: baseline;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     flex-wrap: wrap;
   }
   @media (max-width: 767px) {

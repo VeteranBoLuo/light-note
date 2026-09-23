@@ -118,7 +118,7 @@
 
   .resource-tag-chip__selected-icon {
     flex: 0 0 auto;
-    margin-right: 2px;
+    margin-right: var(--ui-space-2, 2px);
   }
 
   .resource-tag-chip.b-chip--tag.b-chip--selected {
@@ -145,13 +145,13 @@
     width: 100%;
     height: auto;
     min-height: inherit;
-    padding: 2px 7px;
+    padding: var(--ui-space-2, 2px) var(--ui-space-7, 7px);
     border: 0;
     border-radius: 999px;
     color: inherit;
     background: transparent;
     font: inherit;
-    line-height: 16px;
+    line-height: var(--ui-layout-16, 16px);
     overflow: hidden;
 
     &:hover {

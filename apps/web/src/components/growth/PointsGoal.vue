@@ -183,39 +183,39 @@
 
 <style scoped lang="less">
   .points-goal {
-    margin: 16px 0;
-    padding: 16px 0;
+    margin: var(--ui-space-16, 16px) 0;
+    padding: var(--ui-space-16, 16px) 0;
     border-block: 1px solid var(--card-border-color);
   }
   .points-goal-state {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     color: var(--desc-color);
   }
   .points-goal-card {
     display: grid;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     min-width: 0;
   }
   .points-center-heading h3 {
     margin: 0;
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
   }
   .points-center-heading p {
-    margin: 4px 0 0;
+    margin: var(--ui-space-4, 4px) 0 0;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .points-goal-controls {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto auto;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .points-goal-progress {
     display: grid;
-    gap: 9px;
-    padding: 13px;
+    gap: var(--ui-space-9, 9px);
+    padding: var(--ui-space-13, 13px);
     border: 1px solid var(--card-border-color);
     border-radius: 11px;
     background: var(--background-color);
@@ -225,12 +225,12 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .points-goal-title span,
   .points-goal-meta {
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .points-goal-unavailable {
     color: var(--danger-color) !important;
@@ -239,7 +239,7 @@
   .points-goal-empty {
     margin: 0;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.55;
   }
 

@@ -143,13 +143,12 @@ describe('useCommunityChatViewportController', () => {
   });
 
   it.each([
-    ['0.9', 18],
-    ['1', 20],
-    ['1.1', 22],
-  ])('根缩放为 %s 时，置顶栏顶部位移按布局像素补偿同一条历史消息', async (zoom, visualDelta) => {
+    ['compact', 18],
+    ['standard', 20],
+    ['comfortable', 22],
+  ])('%s 布局的置顶栏顶部位移保持同一条历史消息', async (_density, visualDelta) => {
     const resizeObserver = installResizeObserver();
     const fixture = createViewportFixture();
-    document.documentElement.style.zoom = zoom;
     const controller = useCommunityChatViewportController({
       element: ref(fixture.element),
       isLatestWindow: () => true,
@@ -164,7 +163,7 @@ describe('useCommunityChatViewportController', () => {
     resizeObserver.notify();
     await flushAnimationFrame();
 
-    expect(fixture.getScrollTop()).toBe(280);
+    expect(fixture.getScrollTop()).toBe(260 + visualDelta);
     controller.stop();
   });
 

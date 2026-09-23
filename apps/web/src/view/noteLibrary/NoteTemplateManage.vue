@@ -101,7 +101,7 @@
       v-model:visible="createDialogVisible"
       :title="t('note.templateManager.createTitle')"
       :show-footer="false"
-      width="min(500px, calc(100vw - 24px))"
+      width="min(var(--ui-layout-500, 500px), calc(100vw - 24px))"
     >
       <div class="note-template-create-dialog">
         <p>{{ t('note.templateManager.createHint') }}</p>
@@ -125,7 +125,7 @@
       :title="t('note.templateManager.conflictTitle')"
       :show-footer="false"
       :mask-closable="false"
-      width="min(520px, calc(100vw - 24px))"
+      width="min(var(--ui-layout-520, 520px), calc(100vw - 24px))"
     >
       <div class="note-template-conflict">
         <p>{{ t('note.templateManager.conflictDescription') }}</p>
@@ -545,14 +545,14 @@
     overflow: hidden;
   }
   .note-template-manager__action-bar {
-    min-height: 58px;
+    min-height: var(--ui-layout-58, 58px);
     box-sizing: border-box;
     display: flex;
     flex: 0 0 auto;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
-    padding: 9px 16px;
+    gap: var(--ui-space-16, 16px);
+    padding: var(--ui-space-9, 9px) var(--ui-space-16, 16px);
     border-bottom: 1px solid var(--surface-border-color);
     background: var(--card-background);
   }
@@ -560,7 +560,7 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
   .note-template-manager__action-copy strong {
     overflow: hidden;
@@ -569,16 +569,16 @@
   }
   .note-template-manager__action-copy span {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .note-template-manager__desktop-actions {
     display: flex;
     flex: 0 0 auto;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .note-template-manager__desktop-actions :deep(.b_btn) {
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   .note-template-manager__empty {
     height: 100%;
@@ -586,23 +586,23 @@
     align-items: center;
     justify-content: center;
     flex-direction: column;
-    gap: 10px;
-    padding: 24px;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-24, 24px);
     color: var(--desc-color);
     text-align: center;
   }
   .note-template-manager__empty strong {
     color: var(--text-color);
-    font-size: 17px;
+    font-size: var(--ui-font-17, 17px);
   }
   .note-template-manager__empty p {
-    max-width: 400px;
-    margin: 0 0 6px;
+    max-width: var(--ui-layout-400, 400px);
+    margin: 0 0 var(--ui-space-6, 6px);
     line-height: 1.6;
   }
   .note-template-manager__empty-icon {
-    width: 52px;
-    height: 52px;
+    width: var(--ui-layout-52, 52px);
+    height: var(--ui-layout-52, 52px);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -613,30 +613,30 @@
   }
   .note-template-create-dialog > p,
   .note-template-conflict > p {
-    margin: 0 0 16px;
+    margin: 0 0 var(--ui-space-16, 16px);
     color: var(--desc-color);
     line-height: 1.6;
   }
   .note-template-create-dialog > div {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .note-template-create-dialog__choice {
     width: 100%;
     height: auto;
-    min-height: 130px;
+    min-height: var(--ui-layout-130, 130px);
     display: flex;
     flex-direction: column;
-    gap: 7px;
-    padding: 16px;
+    gap: var(--ui-space-7, 7px);
+    padding: var(--ui-space-16, 16px);
     border: 1px solid var(--surface-border-color) !important;
     background: var(--card-background);
     white-space: normal;
   }
   .note-template-create-dialog__choice > span {
-    width: 42px;
-    height: 42px;
+    width: var(--ui-layout-42, 42px);
+    height: var(--ui-layout-42, 42px);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -651,7 +651,7 @@
   .note-template-conflict > div {
     display: flex;
     justify-content: flex-end;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
   }
   @media (max-width: 767px) {
     .note-template-manager {

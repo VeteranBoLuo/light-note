@@ -107,7 +107,7 @@
     <BModal
       v-model:visible="resourcePreviewVisible"
       :title="t('note.resourceMention.resourceActionsTitle')"
-      width="360px"
+      width="var(--ui-layout-360, 360px)"
       :show-footer="false"
       @close="closeResourcePreview"
     >
@@ -184,7 +184,7 @@
   import { handleNoteContentImagePreviewEvent, prepareNoteContentPreviewImages } from '@/utils/noteImagePreview';
   import { normalizeReferencedFilePreviewInfo, type ReferencedFilePreviewInfo } from '@/utils/noteResourceNavigation';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
-  import { scrollCenterIntoContainer, scrollIntoContainer } from '@/utils/zoom';
+  import { scrollCenterIntoContainer, scrollIntoContainer } from '@/utils/scrolling';
   import { resolveAiSourceNavigation, type AiSource, type AiSourceTarget } from '@/utils/aiSourceNavigation';
 
   const FilePreview = defineAsyncComponent(() => import('@/components/FilePreview.vue'));
@@ -679,12 +679,12 @@
 
   .note-readonly-preview__header {
     flex: 0 0 auto;
-    min-height: 74px;
-    padding: 8px 16px;
+    min-height: var(--ui-control-74, 74px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-16, 16px);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 20px;
+    gap: var(--ui-space-20, 20px);
     border-bottom: 1px solid var(--surface-border-color);
   }
 
@@ -708,15 +708,15 @@
 
   .note-readonly-preview__breadcrumb {
     min-width: 0;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     overflow: hidden;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
 
     .note-readonly-preview__crumb.b_btn {
       min-width: 0;
-      max-width: 180px;
-      min-height: 26px;
+      max-width: var(--ui-layout-180, 180px);
+      min-height: var(--ui-control-26, 26px);
       padding: 0;
       overflow: hidden;
       border: 0 !important;
@@ -739,16 +739,16 @@
 
   .note-readonly-preview__title-row {
     min-width: 0;
-    gap: 10px;
-    margin-top: 3px;
+    gap: var(--ui-space-10, 10px);
+    margin-top: var(--ui-space-3, 3px);
 
     h2 {
       min-width: 0;
       margin: 0;
       overflow: hidden;
       color: var(--text-color);
-      font-size: 20px;
-      line-height: 28px;
+      font-size: var(--ui-font-20, 20px);
+      line-height: var(--ui-layout-28, 28px);
       text-overflow: ellipsis;
       white-space: nowrap;
     }
@@ -756,23 +756,23 @@
 
   .note-readonly-preview__child-count.b_btn {
     flex: 0 0 auto;
-    height: 30px;
-    padding: 0 9px;
-    gap: 4px;
+    height: var(--ui-control-30, 30px);
+    padding: 0 var(--ui-space-9, 9px);
+    gap: var(--ui-space-4, 4px);
     border: 1px solid var(--surface-border-color);
     border-radius: 9px;
     color: var(--resource-note-color, #00a884);
     background: var(--card-background);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .note-readonly-preview__meta {
     min-width: 0;
     flex: 0 1 auto;
-    gap: 10px;
-    margin-left: 2px;
+    gap: var(--ui-space-10, 10px);
+    margin-left: var(--ui-space-2, 2px);
     color: var(--muted-text-color, var(--desc-color));
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .note-readonly-preview__meta.is-compact {
@@ -788,11 +788,11 @@
 
   .note-readonly-preview__mode {
     flex: 0 0 auto;
-    min-height: 22px;
-    padding: 1px 8px;
+    min-height: var(--ui-layout-22, 22px);
+    padding: var(--ui-space-1, 1px) var(--ui-space-8, 8px);
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
     border: 1px solid var(--resource-note-color, #00a884);
     border-radius: 999px;
     color: var(--resource-note-color, #00a884);
@@ -802,12 +802,12 @@
 
   .note-readonly-preview__actions {
     flex: 0 0 auto;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .note-readonly-preview__select {
-    min-height: 36px;
-    padding: 0 10px;
+    min-height: var(--ui-control-36, 36px);
+    padding: 0 var(--ui-space-10, 10px);
     border: 1px solid var(--card-border-color);
     border-radius: 8px;
     white-space: nowrap;
@@ -819,14 +819,14 @@
   }
 
   .note-readonly-preview__edit {
-    min-height: 36px;
-    padding: 0 14px;
+    min-height: var(--ui-control-36, 36px);
+    padding: 0 var(--ui-space-14, 14px);
   }
 
   .note-readonly-preview__more {
-    width: 36px;
-    min-width: 36px;
-    min-height: 36px;
+    width: var(--ui-layout-36, 36px);
+    min-width: var(--ui-layout-36, 36px);
+    min-height: var(--ui-control-36, 36px);
     padding: 0;
   }
 
@@ -932,25 +932,26 @@
   }
 
   .note-readonly-preview__resource-preview {
-    min-width: min(300px, calc(90vw - 32px));
+    /* ui-density-fixed: 32px 保留弹窗与视口的安全留白，内容宽度单独响应密度。 */
+    min-width: min(var(--ui-layout-300, 300px), calc(90vw - 32px));
     display: grid;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
   }
 
   .note-readonly-preview__resource-actions {
     display: flex;
     flex-wrap: wrap;
     justify-content: flex-end;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .note-readonly-preview__error,
   .note-readonly-preview__empty {
-    min-height: 180px;
+    min-height: var(--ui-layout-180, 180px);
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     color: var(--desc-color);
   }
 </style>

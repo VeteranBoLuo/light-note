@@ -3,7 +3,7 @@
     :open="store.reviewOpen && !!store.module"
     :title="t('resourceSelection.title')"
     :mobile-full-screen="true"
-    width="min(520px, 92vw)"
+    width="min(var(--ui-layout-520, 520px), 92vw)"
     body-padding="0"
     @close="store.reviewOpen = false"
   >
@@ -75,18 +75,19 @@
     flex-direction: column;
     overflow: hidden;
     color: var(--text-color);
+    font-size: var(--ui-font-16, 16px);
   }
   .selection-review__content {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
-    padding: 16px 24px;
+    padding: var(--ui-space-16, 16px) var(--ui-space-24, 24px);
   }
   .selection-review__footer {
     flex-shrink: 0;
     display: flex;
     justify-content: flex-end;
-    padding: 16px 24px max(16px, env(safe-area-inset-bottom));
+    padding: var(--ui-space-16, 16px) var(--ui-space-24, 24px) max(var(--ui-space-16, 16px), env(safe-area-inset-bottom));
     border-top: 1px solid var(--surface-border-color);
   }
   .selection-review__clear {
@@ -102,8 +103,8 @@
   .selection-review__row {
     display: flex;
     align-items: center;
-    gap: 12px;
-    min-height: 52px;
+    gap: var(--ui-space-12, 12px);
+    min-height: var(--ui-control-52, 52px);
     border-bottom: 1px solid var(--surface-border-color);
   }
   .selection-review__row strong {

@@ -195,6 +195,7 @@
                这里只保留状态、排序、视图等结构化筛选。 -->
                 <BTabs
                   v-model:active-tab="todo.status"
+                  class="todo-status-tabs"
                   :options="todoStatusTabOptions"
                   :aria-label="t('inbox.todoStatusGroupLabel')"
                   variant="pill"
@@ -220,7 +221,7 @@
                   <BTabs
                     v-if="todoView === 'list' || todoView === 'matrix'"
                     v-model:active-tab="todo.status"
-                    class="inbox-toolbar__todo-status"
+                    class="inbox-toolbar__todo-status todo-status-tabs"
                     :options="todoStatusTabOptions"
                     variant="pill"
                     :aria-label="t('inbox.todoStatusGroupLabel')"
@@ -475,7 +476,11 @@
             @touchend.passive="pullRefresh.onTouchEnd"
             @touchcancel.passive="pullRefresh.onTouchCancel"
           >
-            <BLoading :loading="pageLoading" :title="t(isTodoFocused ? 'todoWorkspace.loadingTasks' : 'common.loading')" class="inbox-loading">
+            <BLoading
+              :loading="pageLoading"
+              :title="t(isTodoFocused ? 'todoWorkspace.loadingTasks' : 'common.loading')"
+              class="inbox-loading"
+            >
               <div v-if="!pageLoading && pageLoadFailed && actionItems.length === 0" class="inbox-empty inbox-error">
                 <div class="inbox-empty__icon">!</div>
                 <h2>{{ t(isTodoFocused ? 'todoWorkspace.loadFailedTitle' : 'inbox.loadFailedTitle') }}</h2>
@@ -533,7 +538,10 @@
               <div v-else-if="isTodoFocused" class="todo-group-list">
                 <small v-if="hasTodoSeries" class="todo-count-hint">{{ t('todoWorkspace.instanceCountHint') }}</small>
                 <section v-for="group in todoGroupLists" :key="group.key" class="todo-group">
-                  <header :class="{ 'is-collapsed': collapsedGroups[group.key] }" @click="collapsedGroups[group.key] = !collapsedGroups[group.key]">
+                  <header
+                    :class="{ 'is-collapsed': collapsedGroups[group.key] }"
+                    @click="collapsedGroups[group.key] = !collapsedGroups[group.key]"
+                  >
                     <BButton
                       :aria-expanded="!collapsedGroups[group.key]"
                       @click.stop="collapsedGroups[group.key] = !collapsedGroups[group.key]"
@@ -587,7 +595,12 @@
                           <BButton v-if="group.failed" @click="todo.loadGroup(group.key, true)">{{
                             t('todoWorkspace.loadFailed')
                           }}</BButton>
-                          <BLoading v-else inline :loading="true" :title="t(group.loaded ? 'todoWorkspace.loadingMore' : 'common.loading')" />
+                          <BLoading
+                            v-else
+                            inline
+                            :loading="true"
+                            :title="t(group.loaded ? 'todoWorkspace.loadingMore' : 'common.loading')"
+                          />
                         </div>
                         <TodoSeriesGroup
                           v-else-if="node.kind === 'series'"
@@ -687,7 +700,10 @@
                       :item="action.item"
                       :selectable="!usesExplicitResourceSelection || resourceSelectionMode"
                       :selected="inbox.selectedKeys.includes(inbox.resourceKey(action.item))"
-                      :inspected="(bookmark.isDesktop || resourceInspectorOpen) && activeInspectedInboxKey === inbox.resourceKey(action.item)"
+                      :inspected="
+                        (bookmark.isDesktop || resourceInspectorOpen) &&
+                        activeInspectedInboxKey === inbox.resourceKey(action.item)
+                      "
                       :completing="completingKey === inbox.resourceKey(action.item)"
                       :deleting="deletingKey === inbox.resourceKey(action.item)"
                       :disabled="hasPendingOperation"
@@ -742,7 +758,7 @@
               : {
                   open: resourceInspectorOpen,
                   title: t('inbox.currentPendingResource'),
-                  width: '420px',
+                  width: 'var(--ui-layout-420, 420px)',
                   mobileFullScreen: true,
                   closeDisabled: hasPendingOperation,
                 }
@@ -768,7 +784,9 @@
               presentation="sidebar"
             />
             <template v-else-if="inspectedInboxItem">
-              <div v-if="bookmark.isDesktop" class="resource-inbox-inspector__eyebrow">{{ t('inbox.currentPendingResource') }}</div>
+              <div v-if="bookmark.isDesktop" class="resource-inbox-inspector__eyebrow">{{
+                t('inbox.currentPendingResource')
+              }}</div>
               <span class="resource-inbox-inspector__type">{{ t(`inbox.${inspectedInboxItem.resourceType}`) }}</span>
               <h2>{{ inspectedInboxItem.title || t('inbox.untitled') }}</h2>
               <p
@@ -886,7 +904,7 @@
               : 'todoWorkspace.modifyTags',
         )
       "
-      width="480px"
+      width="var(--ui-layout-480, 480px)"
     >
       <div class="todo-organization-dialog">
         <BSelect
@@ -1471,9 +1489,13 @@
   const pageLoading = computed(() => {
     // 列表或分组已出现后，由分组自身反馈加载，不再叠加首屏遮罩。
     if (
-      isTodoFocused.value && todoPageLoading.value &&
-      !todo.items.length && !todo.groups.length && !recentCompleted.value.length
-    ) return true;
+      isTodoFocused.value &&
+      todoPageLoading.value &&
+      !todo.items.length &&
+      !todo.groups.length &&
+      !recentCompleted.value.length
+    )
+      return true;
     if (isMobileTodoPrimary.value) return todo.loading;
     if (isMobileResourceInbox.value) return inbox.loading;
     return inbox.filterType === 'todo' ? todo.loading : inbox.loading;
@@ -2034,7 +2056,8 @@
         const requestGeneration = todo.requestId;
         const recent = await getTodoWorkspace({ status: 'completed', limit: 5 }).catch(() => null);
         if (generation !== pageRefreshGeneration) return false;
-        if (requestGeneration === todo.requestId) recentCompleted.value = recent?.status === 200 ? recent.data.items : [];
+        if (requestGeneration === todo.requestId)
+          recentCompleted.value = recent?.status === 200 ? recent.data.items : [];
       } else recentCompleted.value = [];
       await nextTick();
       if (resetScroll && scrollContainer.value) scrollContainer.value.scrollTop = 0;
@@ -2405,7 +2428,9 @@
         if (!completed) recentCompleted.value = recentCompleted.value.filter((recent) => recent.id !== item.id);
         if (previewTodoId.value === item.id) {
           previewTodoSeed.value = todo.items.find((current) => current.id === item.id) || {
-            ...item, status: completed ? 'completed' : 'pending', completedAt: completed ? item.completedAt : null,
+            ...item,
+            status: completed ? 'completed' : 'pending',
+            completedAt: completed ? item.completedAt : null,
           };
           if (!todo.items.some((current) => current.id === item.id)) {
             const detail = await getTodoWorkspace({ ids: [item.id], status: 'all' }).catch(() => null);
@@ -2694,20 +2719,20 @@
 
   .todo-organization-dialog {
     display: grid;
-    gap: 20px;
+    gap: var(--ui-space-20, 20px);
   }
   .todo-organization-dialog :deep(.todo-organization-fields) {
-    gap: 20px;
+    gap: var(--ui-space-20, 20px);
   }
   .todo-organization-dialog :deep(.todo-organization-fields > label),
   .todo-organization-dialog :deep(.todo-organization-fields__tags) {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 500;
     color: var(--text-color);
   }
   .todo-organization-dialog :deep(.select-trigger) {
     box-sizing: border-box;
-    min-height: 42px;
+    min-height: var(--ui-layout-42, 42px);
     border: 1px solid var(--surface-border-color);
     border-radius: 8px;
     background: var(--card-background);
@@ -2716,13 +2741,13 @@
   .todo-organization-dialog__footer {
     display: flex;
     justify-content: flex-end;
-    gap: 10px;
-    padding: 16px 20px;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-16, 16px) var(--ui-space-20, 20px);
     border-top: 1px solid var(--surface-divider-color);
   }
   .todo-organization-dialog__footer > .b_btn {
-    min-width: 76px;
-    min-height: 36px;
+    min-width: var(--ui-layout-76, 76px);
+    min-height: var(--ui-layout-36, 36px);
     border-radius: 8px;
   }
 
@@ -2735,7 +2760,7 @@
     display: flex;
     flex: 1;
     min-height: 0;
-    gap: 22px;
+    gap: var(--ui-space-22, 22px);
   }
   .todo-sidebar-layout .inbox-workspace-main {
     display: flex;
@@ -2745,8 +2770,8 @@
     min-height: 0;
   }
   .todo-side-panel {
-    flex: 0 0 224px;
-    width: 224px;
+    flex: 0 0 var(--ui-layout-224, 224px);
+    width: var(--ui-layout-224, 224px);
     overflow-y: auto;
   }
   .inbox-hero__actions {
@@ -2754,14 +2779,14 @@
     flex-wrap: wrap;
     align-items: center;
     justify-content: flex-end;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     flex: 0 1 auto;
   }
   .inbox-hero__actions > :deep(.b_btn) {
-    min-height: 40px;
+    min-height: var(--ui-layout-40, 40px);
   }
   .todo-hero-search {
-    width: clamp(180px, 18vw, 280px);
+    width: clamp(var(--ui-layout-180, 180px), 18vw, var(--ui-layout-280, 280px));
   }
   .todo-hero-search :deep(.b-input) {
     border-color: var(--todo-workspace-line);
@@ -2770,13 +2795,13 @@
   }
   .todo-workspace-filters {
     display: flex;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     flex-wrap: wrap;
     align-items: center;
-    margin-bottom: 12px;
+    margin-bottom: var(--ui-space-12, 12px);
   }
   .todo-workspace-filters > :last-child {
-    width: 160px;
+    width: var(--ui-layout-160, 160px);
   }
   .todo-sidebar-layout :deep(.todo-item) {
     border: 0;
@@ -2791,7 +2816,7 @@
     background: var(--card-background);
   }
   .todo-sidebar-layout .todo-group > header {
-    padding: 10px 14px;
+    padding: var(--ui-space-10, 10px) var(--ui-space-14, 14px);
     background: var(--workspace-panel-bg-color);
   }
 
@@ -2801,7 +2826,8 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    padding: 18px clamp(16px, 1.6vw, 40px) 24px;
+    padding: var(--ui-space-18, 18px) clamp(var(--ui-space-16, 16px), 1.6vw, var(--ui-space-40, 40px))
+      var(--ui-space-24, 24px);
     box-sizing: border-box;
     color: var(--text-color);
   }
@@ -2809,20 +2835,20 @@
     padding: 0;
   }
   .inbox-page--embedded > .inbox-workspace-body > .inbox-workspace-main > .todo-controls-row > .inbox-toolbar {
-    margin-bottom: 10px;
-    padding: 0 0 10px;
+    margin-bottom: var(--ui-space-10, 10px);
+    padding: 0 0 var(--ui-space-10, 10px);
     border-bottom: 1px solid var(--surface-divider-color);
     border-radius: 0;
     background: transparent;
   }
   .inbox-page--embedded .inbox-toolbar :deep(.tab-container.is-pill) {
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     padding: 0;
     background: transparent;
   }
   .inbox-page--embedded .inbox-toolbar :deep(.is-pill .tab) {
-    min-height: 36px;
-    padding: 0 10px;
+    min-height: var(--ui-layout-36, 36px);
+    padding: 0 var(--ui-space-10, 10px);
     border-color: transparent;
     border-radius: 9px;
     color: var(--desc-color);
@@ -2840,12 +2866,12 @@
     box-shadow: none;
   }
   .inbox-page--embedded .inbox-toolbar :deep(.tab-badge) {
-    min-width: 18px;
-    height: 18px;
-    padding: 0 5px;
+    min-width: var(--ui-layout-18, 18px);
+    height: var(--ui-layout-18, 18px);
+    padding: 0 var(--ui-space-5, 5px);
     color: var(--desc-color);
     background: var(--workspace-panel-bg-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
   .inbox-page--embedded .inbox-toolbar :deep(.is-pill .tab.is-active .tab-badge) {
     color: var(--primary-color);
@@ -2859,15 +2885,15 @@
   }
   .inbox-page--embedded .inbox-toolbar__right--resources {
     width: auto;
-    min-width: min(100%, 480px);
-    flex: 0 1 520px;
-    grid-template-columns: minmax(140px, 1fr) 118px auto auto;
+    min-width: min(100%, var(--ui-layout-480, 480px));
+    flex: 0 1 var(--ui-layout-520, 520px);
+    grid-template-columns: minmax(var(--ui-layout-140, 140px), 1fr) var(--ui-layout-118, 118px) auto auto;
   }
   .inbox-page--embedded .inbox-toolbar__right--resources :deep(.b-input),
   .inbox-page--embedded .inbox-toolbar__right--resources :deep(.select-trigger),
   .inbox-page--embedded .inbox-toolbar__right--resources > .b_btn:not(.b-batch-toggle) {
-    height: 40px;
-    min-height: 40px;
+    height: var(--ui-layout-40, 40px);
+    min-height: var(--ui-layout-40, 40px);
     box-sizing: border-box;
     border-radius: 10px;
   }
@@ -2878,8 +2904,8 @@
     --todo-navigation-soft-color: #efedff;
   }
   .section-switcher {
-    min-height: 34px;
-    margin-bottom: 8px;
+    min-height: var(--ui-layout-34, 34px);
+    margin-bottom: var(--ui-space-8, 8px);
     display: flex;
     align-items: center;
     flex-shrink: 0;
@@ -2893,19 +2919,19 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    min-height: 44px;
-    gap: 12px;
-    margin: 0 0 8px;
+    min-height: var(--ui-layout-44, 44px);
+    gap: var(--ui-space-12, 12px);
+    margin: 0 0 var(--ui-space-8, 8px);
     flex-shrink: 0;
   }
   /* 待整理与全部资源 / 知识地图是资源中心的同级视图。
      桌面资源态沿用 ResourcePageShell 的标题基线与正文间距，避免路由切换时整页上移。 */
   .inbox-page--resource-workspace > .inbox-hero {
-    min-height: 54px;
-    margin-bottom: 14px;
+    min-height: var(--ui-layout-54, 54px);
+    margin-bottom: var(--ui-space-14, 14px);
   }
   .inbox-page--resource-workspace .inbox-hero p {
-    margin-top: 5px;
+    margin-top: var(--ui-space-5, 5px);
   }
   .inbox-hero__heading {
     min-width: 0;
@@ -2915,7 +2941,7 @@
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
   }
   .inbox-hero__accent {
     width: 8px;
@@ -2933,8 +2959,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 10px;
+    gap: var(--ui-space-12, 12px);
+    margin-bottom: var(--ui-space-10, 10px);
   }
   .todo-workspace-toolbar__views {
     flex-shrink: 0;
@@ -2952,23 +2978,23 @@
     position: absolute;
   }
   .todo-page-tail {
-    min-height: 40px;
+    min-height: var(--ui-layout-40, 40px);
     display: flex;
     justify-content: center;
     align-items: center;
-    padding: 8px;
+    padding: var(--ui-space-8, 8px);
   }
   .todo-count-hint {
     color: var(--desc-color);
-    padding: 0 4px;
+    padding: 0 var(--ui-space-4, 4px);
   }
   .todo-group-list {
     display: grid;
-    gap: 14px;
-    padding: 6px 2px 24px;
+    gap: var(--ui-space-14, 14px);
+    padding: var(--ui-space-6, 6px) var(--ui-space-2, 2px) var(--ui-space-24, 24px);
   }
   .inbox-page--todo-focused.is-selection-mode .todo-group-list {
-    padding-bottom: 110px;
+    padding-bottom: var(--ui-space-110, 110px);
   }
   .todo-group {
     display: grid;
@@ -2981,26 +3007,26 @@
   }
   .todo-group > header {
     display: flex;
-    min-height: 48px;
+    min-height: var(--ui-layout-48, 48px);
     box-sizing: border-box;
     align-items: center;
-    gap: 7px;
-    padding: 0 15px;
+    gap: var(--ui-space-7, 7px);
+    padding: 0 var(--ui-space-15, 15px);
     border-bottom: 1px solid var(--surface-divider-color);
     color: var(--text-color);
   }
   .todo-group > header > span {
-    min-width: 21px;
-    padding: 2px 6px;
+    min-width: var(--ui-layout-21, 21px);
+    padding: var(--ui-space-2, 2px) var(--ui-space-6, 6px);
     border-radius: 999px;
     background: color-mix(in srgb, var(--primary-color) 10%, transparent);
     color: var(--primary-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     text-align: center;
   }
   .todo-group__items {
     display: grid;
-    min-height: 18px;
+    min-height: var(--ui-layout-18, 18px);
     gap: 0;
   }
   .todo-group__items :deep(.todo-item) {
@@ -3022,7 +3048,7 @@
     margin: 0;
     overflow: hidden;
     color: var(--text-color);
-    font-size: clamp(22px, 2vw, 28px);
+    font-size: clamp(var(--ui-font-22, 22px), 2vw, var(--ui-font-28, 28px));
     font-weight: 750;
     line-height: 1.2;
     letter-spacing: -0.025em;
@@ -3030,10 +3056,10 @@
     white-space: nowrap;
   }
   .inbox-hero p {
-    margin: 3px 0 0 17px;
+    margin: var(--ui-space-3, 3px) 0 0 var(--ui-space-17, 17px);
     overflow: hidden;
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.4;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -3041,17 +3067,17 @@
   .todo-summary-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 10px;
-    margin-bottom: 9px;
+    gap: var(--ui-space-10, 10px);
+    margin-bottom: var(--ui-space-9, 9px);
     flex-shrink: 0;
   }
   .todo-summary-card {
     display: flex;
-    min-height: 62px;
+    min-height: var(--ui-layout-62, 62px);
     box-sizing: border-box;
     align-items: center;
-    gap: 10px;
-    padding: 8px 12px;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-12, 12px);
     border: 1px solid var(--surface-border-color);
     border-radius: 15px;
     background: var(--card-background);
@@ -3059,8 +3085,8 @@
   .todo-summary-card__icon {
     box-sizing: border-box;
     display: grid;
-    width: 36px;
-    height: 36px;
+    width: var(--ui-layout-36, 36px);
+    height: var(--ui-layout-36, 36px);
     flex: 0 0 auto;
     place-items: center;
     border: 1px solid var(--todo-summary-icon-border);
@@ -3070,15 +3096,15 @@
   }
   .todo-summary-card > div {
     display: grid;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
   .todo-summary-card span {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .todo-summary-card strong {
     color: var(--text-color);
-    font-size: 19px;
+    font-size: var(--ui-font-19, 19px);
     line-height: 1.1;
   }
   .todo-summary-card.is-overdue strong {
@@ -3088,9 +3114,9 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 10px;
-    margin-bottom: 9px;
-    padding: 6px 8px;
+    gap: var(--ui-space-10, 10px);
+    margin-bottom: var(--ui-space-9, 9px);
+    padding: var(--ui-space-6, 6px) var(--ui-space-8, 8px);
     box-sizing: border-box;
     border: 0;
     border-radius: 14px;
@@ -3103,32 +3129,35 @@
     flex: 1;
   }
   .inbox-toolbar--todo-desktop {
-    min-height: 42px;
-    padding: 3px 0;
+    min-height: var(--ui-layout-42, 42px);
+    padding: var(--ui-space-3, 3px) 0;
     border-radius: 0;
     background: transparent;
   }
   .inbox-toolbar__right {
     display: grid;
-    grid-template-columns: minmax(180px, 280px) 130px;
-    gap: 8px;
+    grid-template-columns: minmax(var(--ui-layout-180, 180px), var(--ui-layout-280, 280px)) var(--ui-layout-130, 130px);
+    gap: var(--ui-space-8, 8px);
     flex-shrink: 0;
   }
   .inbox-toolbar__right--todo {
-    grid-template-columns: minmax(160px, 230px) 120px auto;
+    grid-template-columns: minmax(var(--ui-layout-160, 160px), var(--ui-layout-230, 230px)) var(
+        --ui-layout-120,
+        120px
+      ) auto;
   }
   .todo-toolbar-control {
     align-self: stretch;
   }
   .todo-toolbar-control--search :deep(.b-input),
   .todo-toolbar-control--sort :deep(.select-trigger) {
-    height: 40px;
-    min-height: 40px;
+    height: var(--ui-layout-40, 40px);
+    min-height: var(--ui-layout-40, 40px);
     box-sizing: border-box;
     border-radius: 10px;
   }
   .todo-toolbar-control--batch {
-    --batch-toggle-height: 40px;
+    --batch-toggle-height: var(--ui-layout-40, 40px);
   }
   .inbox-toolbar__right--resources {
     width: 100%;
@@ -3139,16 +3168,16 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   .inbox-resource-batch {
-    --batch-toggle-height: 40px;
+    --batch-toggle-height: var(--ui-layout-40, 40px);
   }
   .inbox-toolbar__todo-tabs {
     display: flex;
     min-width: 0;
     align-items: center;
-    gap: clamp(22px, 2vw, 32px);
+    gap: clamp(var(--ui-space-22, 22px), 2vw, var(--ui-space-32, 32px));
   }
   .inbox-toolbar .inbox-toolbar__todo-status {
     /* 工具栏通用规则会让 BTabs 根节点 flex: 1；状态栏若随父级收缩，
@@ -3156,19 +3185,19 @@
     width: max-content;
     min-width: max-content;
     flex: 0 0 auto;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
     margin: 0;
-    padding: 3px;
+    padding: var(--ui-space-3, 3px);
     border: 0;
     border-radius: 11px;
     background: var(--workspace-panel-bg-color, var(--background-color));
   }
   .inbox-toolbar__todo-status :deep(.tab) {
-    min-height: 32px;
-    padding: 0 12px;
+    min-height: var(--ui-layout-32, 32px);
+    padding: 0 var(--ui-space-12, 12px);
     border: 1px solid transparent;
     border-radius: 8px;
-    line-height: 32px;
+    line-height: var(--ui-layout-32, 32px);
   }
   .inbox-toolbar__todo-status :deep(.tab.is-active) {
     border-color: var(--todo-accent-color);
@@ -3177,18 +3206,26 @@
     box-shadow: none;
     font-weight: 700;
   }
+  /* 状态切换只改变颜色与底板，文字和数字的度量保持一致。 */
+  .inbox-page .todo-status-tabs :deep(.tab),
+  .inbox-page .todo-status-tabs :deep(.tab.is-active) {
+    font-weight: 600;
+  }
+  .todo-status-tabs :deep(.tab-badge) {
+    font-variant-numeric: tabular-nums;
+  }
   .inbox-toolbar__todo-views {
     min-width: 0;
     flex: 0 1 auto;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
     margin: 0;
-    padding: 0 0 4px;
+    padding: 0 0 var(--ui-space-4, 4px);
     border-bottom: 0;
   }
   .inbox-toolbar__todo-views :deep(.tab) {
-    min-height: 34px;
+    min-height: var(--ui-layout-34, 34px);
     box-sizing: border-box;
-    padding: 5px 1px 7px;
+    padding: var(--ui-space-5, 5px) var(--ui-space-1, 1px) var(--ui-space-7, 7px);
   }
   .inbox-toolbar__todo-views :deep(.tab.is-active) {
     color: var(--todo-accent-color);
@@ -3202,9 +3239,9 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 12px;
-    padding: 10px 14px;
-    min-height: 44px;
+    margin-bottom: var(--ui-space-12, 12px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-14, 14px);
+    min-height: var(--ui-layout-44, 44px);
     box-sizing: border-box;
     border: 1px solid color-mix(in srgb, var(--primary-color) 16%, transparent);
     border-radius: 12px;
@@ -3214,19 +3251,19 @@
   .inbox-batch__actions {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .inbox-batch__actions > span {
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .inbox-error-banner {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 12px;
-    margin-bottom: 12px;
-    padding: 10px 14px;
+    gap: var(--ui-space-12, 12px);
+    margin-bottom: var(--ui-space-12, 12px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-14, 14px);
     border-radius: 8px;
     color: var(--text-color);
     background: color-mix(in srgb, var(--danger-color, #e5484d) 10%, transparent);
@@ -3248,7 +3285,7 @@
     left: 0;
     right: 0;
     z-index: 2;
-    height: 44px;
+    height: var(--ui-layout-44, 44px);
     content: '';
     opacity: 0;
     pointer-events: none;
@@ -3281,8 +3318,8 @@
   .inbox-list {
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    padding: 10px 12px 22px;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px) var(--ui-space-22, 22px);
   }
   .resource-inbox-entry {
     min-width: 0;
@@ -3316,26 +3353,26 @@
   .resource-inbox-scope {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    padding: 12px 10px;
+    gap: var(--ui-space-4, 4px);
+    padding: var(--ui-space-12, 12px) var(--ui-space-10, 10px);
     overflow: hidden auto;
   }
 
   .resource-inbox-scope__title {
-    padding: 3px 10px 6px;
+    padding: var(--ui-space-3, 3px) var(--ui-space-10, 10px) var(--ui-space-6, 6px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 700;
   }
 
   .resource-inbox-scope__item {
     width: 100%;
-    min-height: 40px;
+    min-height: var(--ui-layout-40, 40px);
     display: grid;
     grid-template-columns: 8px minmax(0, 1fr) auto;
     align-items: center;
-    gap: 9px;
-    padding: 0 10px;
+    gap: var(--ui-space-9, 9px);
+    padding: 0 var(--ui-space-10, 10px);
     border: 1px solid transparent;
     border-radius: 11px;
     background: transparent;
@@ -3382,32 +3419,32 @@
 
   .resource-inbox-scope__count {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .resource-inbox-scope__divider {
     height: 1px;
-    margin: 8px 6px;
+    margin: var(--ui-space-8, 8px) var(--ui-space-6, 6px);
     background: var(--surface-border-color);
   }
 
   .resource-inbox-inspector {
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    padding: 18px;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-18, 18px);
   }
 
   .resource-inbox-inspector__eyebrow,
   .resource-inbox-inspector__type {
     color: var(--primary-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 700;
   }
 
   .resource-inbox-inspector h2 {
     margin: 0;
-    font-size: 18px;
+    font-size: var(--ui-font-18, 18px);
     line-height: 1.45;
   }
 
@@ -3415,7 +3452,7 @@
   .resource-inbox-inspector__empty p {
     margin: 0;
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.65;
   }
 
@@ -3437,9 +3474,9 @@
   .resource-inbox-inspector__meta {
     flex: 0 0 auto;
     display: grid;
-    gap: 10px;
-    margin: 4px 0 0;
-    padding: 12px;
+    gap: var(--ui-space-10, 10px);
+    margin: var(--ui-space-4, 4px) 0 0;
+    padding: var(--ui-space-12, 12px);
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     background: var(--workspace-panel-bg-color, var(--background-color));
@@ -3447,14 +3484,14 @@
 
   .resource-inbox-inspector__meta > div {
     display: grid;
-    grid-template-columns: 72px minmax(0, 1fr);
-    gap: 8px;
+    grid-template-columns: var(--ui-layout-72, 72px) minmax(0, 1fr);
+    gap: var(--ui-space-8, 8px);
   }
 
   .resource-inbox-inspector__meta dt,
   .resource-inbox-inspector__meta dd {
     margin: 0;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .resource-inbox-inspector__meta dt {
@@ -3471,18 +3508,18 @@
     flex: 0 0 auto;
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     margin-top: auto;
-    padding-top: 14px;
+    padding-top: var(--ui-space-14, 14px);
     border-top: 1px solid var(--surface-border-color);
   }
 
   .resource-inbox-inspector__actions :deep(.b_btn) {
     width: 100%;
     min-width: 0;
-    padding-inline: 12px;
-    font-size: 14px;
-    gap: 6px;
+    padding-inline: var(--ui-space-12, 12px);
+    font-size: var(--ui-font-14, 14px);
+    gap: var(--ui-space-6, 6px);
   }
 
   .resource-inbox-inspector__action--complete {
@@ -3498,19 +3535,19 @@
   }
 
   .resource-inbox-inspector__empty {
-    min-height: 220px;
+    min-height: var(--ui-layout-220, 220px);
     display: grid;
     align-content: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     text-align: center;
   }
 
   @media (min-width: 981px) {
     .inbox-page--resource-workspace {
       display: grid;
-      grid-template-columns: 210px minmax(0, 1fr) 320px;
+      grid-template-columns: var(--ui-layout-210, 210px) minmax(0, 1fr) var(--ui-layout-320, 320px);
       grid-template-rows: auto auto auto auto minmax(0, 1fr);
-      column-gap: 14px;
+      column-gap: var(--ui-space-14, 14px);
     }
 
     .inbox-page--resource-workspace > .inbox-hero {
@@ -3562,7 +3599,7 @@
 
   @media (min-width: 981px) and (max-width: 1380px) {
     .inbox-page--resource-workspace {
-      grid-template-columns: 210px minmax(0, 1fr);
+      grid-template-columns: var(--ui-layout-210, 210px) minmax(0, 1fr);
     }
 
     .resource-inbox-inspector {
@@ -3632,16 +3669,16 @@
     border: 0;
     border-radius: 0;
     padding: 0;
-    min-height: 320px;
+    min-height: var(--ui-layout-320, 320px);
   }
   .resource-inbox-inspector h2 {
     overflow-wrap: anywhere;
   }
   .inbox-page--embedded.has-resource-inspector {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 300px;
+    grid-template-columns: minmax(0, 1fr) var(--ui-layout-300, 300px);
     grid-template-rows: auto auto auto minmax(0, 1fr);
-    column-gap: 14px;
+    column-gap: var(--ui-space-14, 14px);
   }
   .inbox-page--embedded.has-resource-inspector .todo-controls-row,
   .inbox-page--embedded.has-resource-inspector .todo-controls-row > .inbox-toolbar {
@@ -3675,14 +3712,14 @@
     text-align: center;
   }
   .inbox-empty__icon {
-    width: 54px;
-    height: 54px;
+    width: var(--ui-layout-54, 54px);
+    height: var(--ui-layout-54, 54px);
     border-radius: 50%;
     display: grid;
     place-items: center;
     color: #fff;
     background: #615ced;
-    font-size: 24px;
+    font-size: var(--ui-font-24, 24px);
   }
   .inbox-error .inbox-empty__icon {
     background: var(--danger-color, #e5484d);
@@ -3693,15 +3730,15 @@
     color: var(--primary-color);
   }
   .inbox-empty h2 {
-    margin: 14px 0 6px;
+    margin: var(--ui-space-14, 14px) 0 var(--ui-space-6, 6px);
   }
   .inbox-empty p {
     color: var(--desc-color);
-    margin: 0 0 16px;
+    margin: 0 0 var(--ui-space-16, 16px);
   }
   @media (max-width: 900px) {
     .inbox-page {
-      padding: 12px;
+      padding: var(--ui-space-12, 12px);
     }
     .inbox-toolbar {
       align-items: stretch;
@@ -3709,22 +3746,22 @@
     }
     .inbox-toolbar__right {
       width: 100%;
-      grid-template-columns: minmax(0, 1fr) 130px auto;
+      grid-template-columns: minmax(0, 1fr) var(--ui-layout-130, 130px) auto;
     }
   }
   @media (max-width: 767px) {
     .mobile-todo-heading {
       display: grid;
-      gap: 4px;
-      margin: 2px 2px 15px;
+      gap: var(--ui-space-4, 4px);
+      margin: var(--ui-space-2, 2px) var(--ui-space-2, 2px) var(--ui-space-15, 15px);
       flex-shrink: 0;
     }
     .mobile-todo-heading__row {
-      min-height: 36px;
+      min-height: var(--ui-layout-36, 36px);
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 12px;
+      gap: var(--ui-space-12, 12px);
       min-width: 0;
     }
     .mobile-todo-heading__row h1 {
@@ -3733,25 +3770,25 @@
     .mobile-todo-heading__scope {
       min-width: 0;
       max-width: 72%;
-      min-height: 36px;
-      height: 36px;
-      padding: 4px 10px;
+      min-height: var(--ui-layout-36, 36px);
+      height: var(--ui-layout-36, 36px);
+      padding: var(--ui-space-4, 4px) var(--ui-space-10, 10px);
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
       border-radius: 10px;
     }
     .inbox-page--mobile-todo .todo-workspace-toolbar__select.b-batch-toggle.b_btn {
-      height: 36px;
-      min-height: 36px;
-      padding: 0 10px;
+      height: var(--ui-layout-36, 36px);
+      min-height: var(--ui-layout-36, 36px);
+      padding: 0 var(--ui-space-10, 10px);
       border-radius: 10px;
     }
     .mobile-todo-heading h1 {
       margin: 0;
       color: var(--text-color);
-      font-size: 27px;
+      font-size: var(--ui-font-27, 27px);
       font-weight: 780;
       line-height: 1.2;
       letter-spacing: -0.025em;
@@ -3759,26 +3796,26 @@
     .mobile-todo-heading p {
       margin: 0;
       color: var(--desc-color);
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
       line-height: 1.5;
     }
     /* 视图和完成状态分别占一行，批量入口由共享顶栏承载。 */
     .todo-workspace-toolbar {
       align-items: center;
-      gap: 8px;
+      gap: var(--ui-space-8, 8px);
     }
     .todo-workspace-toolbar__views {
       min-width: 0;
       flex: 1 1 auto;
     }
     .inbox-page--mobile-todo {
-      padding: 14px 14px 0;
+      padding: var(--ui-space-14, 14px) var(--ui-space-14, 14px) 0;
     }
 
     /* 顶栏在 SearchCenter 里位于页面容器之外、天然贴边；这里它在 .inbox-page 之内，
        必须去掉上内边距并用负 margin 抵消左右，否则两个分区的顶栏会错位。 */
     .inbox-page--mobile-resources {
-      padding: 0 12px;
+      padding: 0 var(--ui-space-12, 12px);
     }
 
     .inbox-page--embedded.inbox-page--mobile-resources {
@@ -3786,8 +3823,8 @@
     }
 
     .inbox-page--embedded > .inbox-workspace-body > .inbox-workspace-main > .todo-controls-row > .inbox-toolbar {
-      margin-bottom: 8px;
-      padding: 0 0 8px;
+      margin-bottom: var(--ui-space-8, 8px);
+      padding: 0 0 var(--ui-space-8, 8px);
       border-bottom: 0;
     }
 
@@ -3795,7 +3832,7 @@
       width: 100%;
       min-width: 0;
       flex: 0 0 auto;
-      grid-template-columns: minmax(0, 1fr) 112px;
+      grid-template-columns: minmax(0, 1fr) var(--ui-layout-112, 112px);
     }
 
     .inbox-page--embedded .inbox-resource-capture {
@@ -3808,53 +3845,53 @@
 
     .inbox-page--mobile-resources .section-switcher {
       width: 100%;
-      margin-top: 6px;
-      margin-bottom: 8px;
+      margin-top: var(--ui-space-6, 6px);
+      margin-bottom: var(--ui-space-8, 8px);
     }
 
     .inbox-hero {
       align-items: center;
     }
     .inbox-hero h1 {
-      font-size: 22px;
+      font-size: var(--ui-font-22, 22px);
     }
     .inbox-toolbar {
-      gap: 8px;
-      padding: 8px;
+      gap: var(--ui-space-8, 8px);
+      padding: var(--ui-space-8, 8px);
       overflow: visible;
     }
     .inbox-toolbar--todo-primary {
-      min-height: 40px;
-      margin-bottom: 12px;
+      min-height: var(--ui-layout-40, 40px);
+      margin-bottom: var(--ui-space-12, 12px);
       padding: 0;
       align-items: center;
       flex-direction: row;
-      gap: 6px;
+      gap: var(--ui-space-6, 6px);
       border: 0;
       border-radius: 0;
       background: transparent;
       box-shadow: none;
     }
     .inbox-toolbar--todo-primary :deep(.tab-container) {
-      min-height: 40px;
+      min-height: var(--ui-layout-40, 40px);
       box-sizing: border-box;
       min-width: 0;
       flex: 1 1 auto;
       overflow-x: auto;
-      gap: 2px;
-      padding: 3px;
+      gap: var(--ui-space-2, 2px);
+      padding: var(--ui-space-3, 3px);
       border: 0;
       border-radius: 11px;
       background: var(--workspace-panel-bg-color);
     }
     .inbox-toolbar--todo-primary :deep(.tab) {
-      min-height: 34px;
+      min-height: var(--ui-layout-34, 34px);
       flex: 1 1 0;
       justify-content: center;
-      padding: 0 8px;
+      padding: 0 var(--ui-space-8, 8px);
       border: 0;
       border-radius: 8px;
-      font-size: 13px;
+      font-size: var(--ui-font-13, 13px);
     }
     .inbox-toolbar--todo-primary :deep(.tab.is-active) {
       border: 0;
@@ -3868,13 +3905,13 @@
       background: var(--todo-navigation-color);
     }
     .mobile-todo-sort {
-      width: 112px;
-      min-width: 112px;
-      flex: 0 0 112px;
+      width: var(--ui-layout-112, 112px);
+      min-width: var(--ui-layout-112, 112px);
+      flex: 0 0 var(--ui-layout-112, 112px);
     }
     .mobile-todo-sort :deep(.select-trigger) {
-      height: 44px;
-      min-height: 44px;
+      height: var(--ui-layout-44, 44px);
+      min-height: var(--ui-layout-44, 44px);
       border: 0;
       border-radius: 10px;
       background: var(--workspace-panel-bg-color);
@@ -3882,19 +3919,19 @@
     .inbox-toolbar :deep(.tab-container) {
       width: 100%;
       overflow-x: auto;
-      padding-bottom: 2px;
+      padding-bottom: var(--ui-space-2, 2px);
       scrollbar-width: none;
     }
     .inbox-toolbar :deep(.tab-container::-webkit-scrollbar) {
       display: none;
     }
     .inbox-toolbar__right {
-      grid-template-columns: 1fr 110px;
+      grid-template-columns: 1fr var(--ui-layout-110, 110px);
       margin-top: 0;
     }
     .inbox-batch {
       align-items: flex-start;
-      gap: 8px;
+      gap: var(--ui-space-8, 8px);
     }
     /* 「全选当前 N 项」被右侧按钮挤压后会断成两行，这里不允许它压缩换行 */
     .inbox-batch > :deep(.b-checkbox) {
@@ -3911,7 +3948,7 @@
       text-align: right;
     }
     .inbox-list {
-      padding: 8px 8px 18px;
+      padding: var(--ui-space-8, 8px) var(--ui-space-8, 8px) var(--ui-space-18, 18px);
     }
     .inbox-page--mobile-todo .inbox-content {
       border: 0;
@@ -3920,16 +3957,16 @@
       box-shadow: none;
     }
     .inbox-page--mobile-todo .inbox-list {
-      gap: 8px;
-      padding: 0 0 18px;
+      gap: var(--ui-space-8, 8px);
+      padding: 0 0 var(--ui-space-18, 18px);
     }
     /* 分组列表(列表视图)此前保留了桌面的水平内边距,导致卡片比上方工具条多缩进一截 */
     .inbox-page--mobile-todo .todo-group-list {
-      gap: 14px;
-      padding: 0 0 18px;
+      gap: var(--ui-space-14, 14px);
+      padding: 0 0 var(--ui-space-18, 18px);
     }
     .inbox-page--mobile-todo.is-selection-mode .todo-group-list {
-      padding-bottom: 110px;
+      padding-bottom: var(--ui-space-110, 110px);
     }
     .inbox-page--mobile-todo .todo-group {
       gap: 0;
@@ -3943,10 +3980,10 @@
       gap: 0;
     }
     .inbox-page--mobile-todo .todo-group > header {
-      padding: 10px;
+      padding: var(--ui-space-10, 10px);
       flex-wrap: wrap;
       justify-content: space-between;
-      font-size: 16px;
+      font-size: var(--ui-font-16, 16px);
     }
     .inbox-page--mobile-todo .todo-group > header > span {
       min-width: 0;
@@ -3954,12 +3991,12 @@
       border-radius: 0;
       color: var(--desc-color);
       background: transparent;
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
     }
 
     .inbox-page--mobile-todo .todo-workspace-toolbar {
       width: 100%;
-      margin-bottom: 12px;
+      margin-bottom: var(--ui-space-12, 12px);
     }
     .inbox-page--mobile-todo .todo-workspace-toolbar__views {
       width: 100%;
@@ -3967,22 +4004,22 @@
     }
     /* BTabs 的 class 直接落在组件根节点 .tab-container 上，不能用后代选择器。 */
     .inbox-page--mobile-todo :deep(.todo-workspace-toolbar__views.tab-container) {
-      min-height: 40px;
+      min-height: var(--ui-layout-40, 40px);
       box-sizing: border-box;
-      gap: 2px;
-      padding: 3px;
+      gap: var(--ui-space-2, 2px);
+      padding: var(--ui-space-3, 3px);
       border: 0;
       border-radius: 11px;
       background: var(--workspace-panel-bg-color);
     }
     .inbox-page--mobile-todo .todo-workspace-toolbar__views :deep(.tab) {
-      min-height: 34px;
+      min-height: var(--ui-layout-34, 34px);
       flex: 1 1 0;
       justify-content: center;
-      padding: 0 8px;
+      padding: 0 var(--ui-space-8, 8px);
       border: 0;
       border-radius: 8px;
-      font-size: 13px;
+      font-size: var(--ui-font-13, 13px);
     }
     .inbox-page--mobile-todo .todo-workspace-toolbar__views :deep(.tab.is-active) {
       border: 0;
@@ -3994,8 +4031,8 @@
   }
 
   .inbox-page .todo-workspace-filters > .resource-tag-filter {
-    width: 240px;
-    flex: 0 1 240px;
+    width: var(--ui-layout-240, 240px);
+    flex: 0 1 var(--ui-layout-240, 240px);
     min-width: 0;
   }
   .inbox-page.inbox-page--mobile-todo .todo-workspace-filters > .resource-tag-filter {
@@ -4006,14 +4043,14 @@
   }
   .inbox-page--mobile-todo .todo-workspace-filters {
     flex-wrap: nowrap;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   .inbox-page--mobile-todo .todo-workspace-filters :deep(.resource-tag-filter__trigger) {
     grid-template-columns: minmax(0, 1fr) 14px;
-    height: 40px;
-    min-height: 40px;
-    gap: 4px;
-    padding: 4px 6px;
+    height: var(--ui-layout-40, 40px);
+    min-height: var(--ui-layout-40, 40px);
+    gap: var(--ui-space-4, 4px);
+    padding: var(--ui-space-4, 4px) var(--ui-space-6, 6px);
   }
   .inbox-page--mobile-todo .todo-workspace-filters :deep(.resource-tag-filter__trigger-icon) {
     display: none;
@@ -4026,16 +4063,19 @@
   @media (min-width: 1100px) {
     .inbox-page :deep(.todo-item.is-workspace) {
       grid-template-columns: minmax(0, 1fr) auto;
-      gap: 12px;
-      padding: 14px 16px;
+      gap: var(--ui-space-12, 12px);
+      padding: var(--ui-space-14, 14px) var(--ui-space-16, 16px);
     }
     .inbox-page :deep(.todo-item.is-workspace::before) {
       display: none;
     }
     .inbox-page :deep(.is-workspace .todo-item__body) {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(280px, 32%) 76px 150px;
-      gap: 5px 16px;
+      grid-template-columns: minmax(0, 1fr) minmax(var(--ui-layout-280, 280px), 32%) var(--ui-layout-76, 76px) var(
+          --ui-layout-150,
+          150px
+        );
+      gap: var(--ui-space-5, 5px) var(--ui-space-16, 16px);
       align-items: center;
     }
     .inbox-page :deep(.is-workspace .todo-item__main-line),
@@ -4046,7 +4086,7 @@
     .inbox-page :deep(.is-workspace .todo-item__description) {
       grid-column: 1;
       grid-row: 2;
-      margin: 0 0 0 30px;
+      margin: 0 0 0 var(--ui-space-30, 30px);
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -4056,11 +4096,11 @@
       grid-row: 1 / span 2;
       min-width: 0;
       margin: 0;
-      gap: 8px;
+      gap: var(--ui-space-8, 8px);
       flex-wrap: nowrap;
       overflow-x: auto;
       white-space: nowrap;
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
     }
     .inbox-page :deep(.is-workspace .todo-item__organization > span) {
       flex: 0 0 auto;
@@ -4078,12 +4118,12 @@
       grid-column: 4;
       grid-row: 1 / span 2;
       margin: 0;
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
     }
     .inbox-page :deep(.is-workspace .todo-subitems) {
       grid-column: 1 / -1;
       grid-row: 3;
-      margin-left: 30px;
+      margin-left: var(--ui-space-30, 30px);
       margin-top: 0;
     }
     .inbox-page :deep(.is-workspace .todo-reminder-summary) {
@@ -4138,32 +4178,32 @@
   }
   .todo-side-panel {
     box-sizing: border-box;
-    width: 224px;
+    width: var(--ui-layout-224, 224px);
   }
   .inbox-page--todo-focused .inbox-hero {
-    min-height: 54px;
-    margin-bottom: 14px;
-    gap: 16px;
+    min-height: var(--ui-layout-54, 54px);
+    margin-bottom: var(--ui-space-14, 14px);
+    gap: var(--ui-space-16, 16px);
     flex-wrap: wrap;
     min-width: 0;
   }
   .inbox-page--todo-focused .inbox-hero p {
-    margin-top: 5px;
+    margin-top: var(--ui-space-5, 5px);
   }
   .todo-summary-grid {
-    gap: 16px;
-    margin-bottom: 20px;
+    gap: var(--ui-space-16, 16px);
+    margin-bottom: var(--ui-space-20, 20px);
   }
   .todo-summary-card {
-    min-height: 126px;
-    gap: 18px;
-    padding: 20px;
+    min-height: var(--ui-layout-126, 126px);
+    gap: var(--ui-space-18, 18px);
+    padding: var(--ui-space-20, 20px);
     border-color: var(--todo-workspace-line);
     border-radius: 14px;
   }
   .todo-summary-card__icon {
-    width: 64px;
-    height: 64px;
+    width: var(--ui-layout-64, 64px);
+    height: var(--ui-layout-64, 64px);
     border: 0;
     border-radius: 50%;
     color: var(--primary-color);
@@ -4171,20 +4211,20 @@
   }
   .todo-summary-card > div {
     min-width: 0;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
   .todo-summary-card > div > span {
     color: var(--text-color);
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
     font-weight: 650;
   }
   .todo-summary-card strong {
     color: var(--primary-color);
-    font-size: 32px;
+    font-size: var(--ui-font-32, 32px);
   }
   .todo-summary-card small {
     color: var(--todo-workspace-muted);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.5;
   }
   .todo-summary-card.is-overdue .todo-summary-card__icon {
@@ -4212,7 +4252,7 @@
     flex-wrap: wrap;
     background: transparent;
     padding: 0;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .inbox-page--todo-focused .inbox-toolbar__right--todo {
     margin-left: auto;
@@ -4225,8 +4265,8 @@
     transition: background-color 0.15s;
     background: var(--todo-workspace-panel);
     border-bottom: 1px solid var(--todo-workspace-line);
-    min-height: 46px;
-    gap: 8px;
+    min-height: var(--ui-layout-46, 46px);
+    gap: var(--ui-space-8, 8px);
   }
   .inbox-page--todo-focused .todo-group > header:hover {
     background: color-mix(in srgb, var(--primary-color) 7%, var(--todo-workspace-panel));
@@ -4244,8 +4284,8 @@
     border: 0;
     display: flex;
     align-items: center;
-    gap: 8px;
-    font-size: 16px;
+    gap: var(--ui-space-8, 8px);
+    font-size: var(--ui-font-16, 16px);
     font-weight: 650;
     padding-left: 0;
   }
@@ -4253,9 +4293,9 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 16px;
-    height: 16px;
-    flex: 0 0 16px;
+    width: var(--ui-layout-16, 16px);
+    height: var(--ui-layout-16, 16px);
+    flex: 0 0 var(--ui-layout-16, 16px);
     transform: rotate(-90deg);
     transform-origin: center;
   }
@@ -4271,18 +4311,24 @@
   .todo-group__columns {
     margin-left: auto;
     display: grid;
-    grid-template-columns: minmax(120px, 1fr) 76px 150px;
-    gap: 16px;
-    width: calc(32% + 258px);
-    min-width: 538px;
-    padding-right: 44px;
+    grid-template-columns: minmax(var(--ui-layout-120, 120px), 1fr) var(--ui-layout-76, 76px) var(
+        --ui-layout-150,
+        150px
+      );
+    gap: var(--ui-space-16, 16px);
+    width: calc(32% + var(--ui-layout-76, 76px) + var(--ui-layout-150, 150px) + 2 * var(--ui-space-16, 16px));
+    min-width: calc(
+      var(--ui-layout-280, 280px) + var(--ui-layout-76, 76px) + var(--ui-layout-150, 150px) + 2 *
+        var(--ui-space-16, 16px)
+    );
+    padding-right: var(--ui-space-44, 44px);
     box-sizing: content-box;
     color: var(--todo-workspace-muted);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 500;
   }
   .inbox-page--todo-focused :deep(.is-workspace .todo-priority) {
-    min-width: 58px;
+    min-width: var(--ui-layout-58, 58px);
     justify-content: center;
     border-radius: 999px;
   }
@@ -4302,7 +4348,7 @@
   .inbox-page--todo-focused :deep(.is-workspace .todo-item__organization > span) {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
   .inbox-page--todo-focused :deep(.is-workspace .todo-item__organization > span .svg-icon) {
     color: var(--primary-color);
@@ -4314,31 +4360,31 @@
   }
   @media (min-width: 1600px) {
     .todo-sidebar-layout .inbox-workspace-body {
-      gap: 26px;
+      gap: var(--ui-space-26, 26px);
     }
     .todo-side-panel {
-      flex-basis: 252px;
-      width: 252px;
+      flex-basis: var(--ui-layout-252, 252px);
+      width: var(--ui-layout-252, 252px);
     }
     .todo-summary-card {
-      min-height: 144px;
+      min-height: var(--ui-layout-144, 144px);
     }
     .todo-summary-card__icon {
-      width: 76px;
-      height: 76px;
+      width: var(--ui-layout-76, 76px);
+      height: var(--ui-layout-76, 76px);
     }
   }
   @media (min-width: 1100px) and (max-width: 1399px) {
     .todo-summary-card {
-      gap: 12px;
-      padding: 15px;
+      gap: var(--ui-space-12, 12px);
+      padding: var(--ui-space-15, 15px);
     }
     .todo-summary-card__icon {
-      width: 48px;
-      height: 48px;
+      width: var(--ui-layout-48, 48px);
+      height: var(--ui-layout-48, 48px);
     }
     .todo-summary-card strong {
-      font-size: 28px;
+      font-size: var(--ui-font-28, 28px);
     }
   }
   @media (max-width: 1099px) {
@@ -4350,13 +4396,13 @@
     color: var(--primary-color);
   }
   .inbox-toolbar__todo-views.tab-container {
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     padding: 0;
     background: transparent;
   }
   .inbox-toolbar__todo-views :deep(.tab) {
-    min-height: 40px;
-    padding: 6px 12px;
+    min-height: var(--ui-layout-40, 40px);
+    padding: var(--ui-space-6, 6px) var(--ui-space-12, 12px);
     border: 1px solid transparent;
     border-radius: 10px;
     background: var(--todo-workspace-panel);
@@ -4390,29 +4436,29 @@
   }
 
   .inbox-page--todo-focused .todo-summary-grid {
-    gap: 12px;
-    margin-bottom: 12px;
+    gap: var(--ui-space-12, 12px);
+    margin-bottom: var(--ui-space-12, 12px);
   }
   .inbox-page--todo-focused .todo-summary-card {
-    min-height: 76px;
-    padding: 12px 16px;
-    gap: 12px;
+    min-height: var(--ui-layout-76, 76px);
+    padding: var(--ui-space-12, 12px) var(--ui-space-16, 16px);
+    gap: var(--ui-space-12, 12px);
   }
   .inbox-page--todo-focused .todo-summary-card__icon {
-    width: 42px;
-    height: 42px;
-    flex: 0 0 42px;
+    width: var(--ui-layout-42, 42px);
+    height: var(--ui-layout-42, 42px);
+    flex: 0 0 var(--ui-layout-42, 42px);
   }
   .inbox-page--todo-focused .todo-summary-card > div {
     display: grid;
     grid-template-columns: 1fr auto;
     align-items: center;
-    column-gap: 12px;
-    row-gap: 2px;
+    column-gap: var(--ui-space-12, 12px);
+    row-gap: var(--ui-space-2, 2px);
     flex: 1;
   }
   .inbox-page--todo-focused .todo-summary-card strong {
-    font-size: 26px;
+    font-size: var(--ui-font-26, 26px);
     line-height: 1.2;
   }
   .inbox-page--todo-focused .todo-summary-card small {
@@ -4421,18 +4467,18 @@
   .inbox-page .todo-workspace-filters > .todo-filter-controls {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     width: auto;
     margin-left: auto;
   }
   .todo-filter-controls > * {
-    width: 160px;
+    width: var(--ui-layout-160, 160px);
   }
   .inbox-page.inbox-page--mobile-todo .todo-workspace-filters > .todo-filter-controls {
     margin-left: 0;
     flex: 2 1 0;
     min-width: 0;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     flex-wrap: nowrap;
   }
   .inbox-page--mobile-todo .todo-filter-controls > * {
@@ -4441,14 +4487,14 @@
     flex: 1 1 0;
   }
   .inbox-page--mobile-todo .todo-filter-controls :deep(.select-trigger) {
-    padding: 0 8px;
-    gap: 4px;
-    font-size: 12px;
+    padding: 0 var(--ui-space-8, 8px);
+    gap: var(--ui-space-4, 4px);
+    font-size: var(--ui-font-12, 12px);
   }
   .todo-filter-controls :deep(.select-trigger) {
     border-radius: 10px;
-    height: 40px;
-    min-height: 40px;
+    height: var(--ui-layout-40, 40px);
+    min-height: var(--ui-layout-40, 40px);
     box-sizing: border-box;
   }
   .todo-controls-row {
@@ -4458,8 +4504,8 @@
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 10px 16px;
-    margin-bottom: 14px;
+    gap: var(--ui-space-10, 10px) var(--ui-space-16, 16px);
+    margin-bottom: var(--ui-space-14, 14px);
     flex-shrink: 0;
   }
   .todo-controls-row.is-desktop .inbox-toolbar {
@@ -4467,40 +4513,40 @@
     flex: 0 1 auto;
   }
   .todo-controls-row.is-desktop .inbox-toolbar__todo-tabs {
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
   .todo-controls-row.is-desktop .todo-workspace-filters {
     margin: 0 0 0 auto;
     flex-wrap: nowrap;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .inbox-page .todo-controls-row.is-desktop .todo-workspace-filters > .resource-tag-filter {
-    width: 128px;
+    width: var(--ui-layout-128, 128px);
     min-width: 0;
   }
   .todo-controls-row.is-desktop :deep(.resource-tag-filter__trigger) {
-    height: 40px;
-    min-height: 40px;
-    padding: 6px 10px;
-    gap: 6px;
+    height: var(--ui-layout-40, 40px);
+    min-height: var(--ui-layout-40, 40px);
+    padding: var(--ui-space-6, 6px) var(--ui-space-10, 10px);
+    gap: var(--ui-space-6, 6px);
   }
   .todo-controls-row.is-desktop :deep(.resource-tag-filter__trigger-copy small) {
     display: none;
   }
   .todo-controls-row.is-desktop :deep(.resource-tag-filter__trigger-copy strong) {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .todo-controls-row.is-desktop .todo-filter-controls {
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .todo-controls-row.is-desktop .todo-filter-controls > * {
-    width: 128px;
+    width: var(--ui-layout-128, 128px);
   }
   .todo-controls-row.is-desktop :deep(.tab) {
-    padding-inline: 10px;
+    padding-inline: var(--ui-space-10, 10px);
   }
   .inbox-page .todo-controls-row.is-desktop .todo-workspace-filters > .resource-tag-filter {
-    flex: 0 0 128px;
+    flex: 0 0 var(--ui-layout-128, 128px);
   }
   .todo-controls-row.is-desktop .todo-filter-controls {
     flex: 0 0 auto;
@@ -4513,12 +4559,12 @@
     display: flex;
     align-items: center;
     justify-content: flex-start;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     width: 100%;
-    min-height: 44px;
+    min-height: var(--ui-layout-44, 44px);
     height: auto;
     line-height: 1.5;
-    padding: 10px 16px;
+    padding: var(--ui-space-10, 10px) var(--ui-space-16, 16px);
     margin: 0;
     border: 0;
     border-radius: 0;
@@ -4542,21 +4588,21 @@
   }
   .todo-group > header > small {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .todo-workspace-filters > .todo-overview-toggle {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
-    min-height: 40px;
-    padding: 6px 10px;
+    gap: var(--ui-space-6, 6px);
+    min-height: var(--ui-layout-40, 40px);
+    padding: var(--ui-space-6, 6px) var(--ui-space-10, 10px);
     border: 1px solid transparent;
     border-radius: 9px;
     background: transparent;
     box-shadow: none;
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     white-space: nowrap;
   }
   .todo-workspace-filters > .todo-overview-toggle:hover {
@@ -4586,7 +4632,7 @@
     }
     .todo-group__items {
       .workspace-canvas-surface();
-      padding: 10px;
+      padding: var(--ui-space-10, 10px);
       border-radius: 0 0 12px 12px;
     }
     .todo-group__items :deep(.todo-item),
@@ -4598,7 +4644,7 @@
     }
     .todo-group__items :deep(.mobile-swipe-actions),
     .todo-group__items :deep(.todo-series-group) {
-      margin-bottom: 10px;
+      margin-bottom: var(--ui-space-10, 10px);
       --swipe-border-radius: 10px;
     }
     .todo-group__items :deep(.todo-series-group .mobile-swipe-actions) {
@@ -4609,8 +4655,8 @@
       border-radius: 0;
     }
     .todo-group__items :deep(.todo-item) {
-      padding: 12px;
-      gap: 6px;
+      padding: var(--ui-space-12, 12px);
+      gap: var(--ui-space-6, 6px);
     }
   }
 </style>

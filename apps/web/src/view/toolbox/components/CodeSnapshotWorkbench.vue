@@ -40,7 +40,7 @@
         <BInput
           v-model:value="source"
           type="textarea"
-          :rows="24"
+          :rows="dimension(24, 'layout')"
           :maxlength="200000"
           :placeholder="t('toolbox.codeSnapshot.placeholder')"
         />
@@ -108,9 +108,11 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
+  import { useUiDensity } from '@/composables/useUiDensity';
   import { downloadToolboxBlob } from '@/utils/toolboxLocal';
 
   const { t } = useI18n();
+  const { dimension } = useUiDensity();
   const captureRef = ref<HTMLElement | null>(null);
   const source = ref('');
   const language = ref('typescript');
@@ -206,30 +208,30 @@
 <style scoped lang="less">
   .code-snapshot-workbench {
     display: grid;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
 
   .code-snapshot-toolbar {
-    padding: 13px;
+    padding: var(--ui-space-13, 13px);
     display: flex;
     align-items: end;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     border: 1px solid var(--surface-border-color);
     border-radius: 15px;
     background: var(--card-background);
   }
 
   .code-snapshot-toolbar__intro {
-    min-width: 260px;
+    min-width: var(--ui-layout-260, 260px);
     margin-right: auto;
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .code-snapshot-toolbar__intro > span {
-    width: 43px;
-    height: 43px;
+    width: var(--ui-layout-43, 43px);
+    height: var(--ui-layout-43, 43px);
     display: grid;
     flex: 0 0 auto;
     place-items: center;
@@ -240,52 +242,52 @@
 
   .code-snapshot-toolbar__intro > div {
     display: grid;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
 
   .code-snapshot-toolbar__intro small {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
 
   .code-field {
-    min-width: 110px;
+    min-width: var(--ui-layout-110, 110px);
     display: grid;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
 
   .code-field label {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     font-weight: 650;
   }
 
   .code-snapshot-options {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
 
   .code-snapshot-options :deep(.b-checkbox) {
-    min-height: 34px;
-    padding: 5px 7px;
+    min-height: var(--ui-layout-34, 34px);
+    padding: var(--ui-space-5, 5px) var(--ui-space-7, 7px);
     border: 1px solid var(--surface-border-color);
     border-radius: 9px;
   }
 
   .code-snapshot-layout {
     display: grid;
-    grid-template-columns: minmax(300px, 0.42fr) minmax(0, 1fr);
-    gap: 13px;
+    grid-template-columns: minmax(var(--ui-layout-300, 300px), 0.42fr) minmax(0, 1fr);
+    gap: var(--ui-space-13, 13px);
     align-items: start;
   }
 
   .code-snapshot-editor,
   .code-snapshot-preview-shell {
     min-width: 0;
-    padding: 13px;
+    padding: var(--ui-space-13, 13px);
     display: grid;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     border: 1px solid var(--surface-border-color);
     border-radius: 16px;
     background: var(--card-background);
@@ -298,41 +300,41 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
   }
 
   .code-snapshot-editor > header > div,
   .code-snapshot-preview-shell > header > div {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .code-snapshot-editor > header span,
   .code-snapshot-preview-shell > header span {
-    width: 24px;
-    height: 24px;
+    width: var(--ui-layout-24, 24px);
+    height: var(--ui-layout-24, 24px);
     display: grid;
     place-items: center;
     border-radius: 7px;
     color: #fff;
     background: var(--primary-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     font-weight: 750;
   }
 
   .code-snapshot-editor > header small,
   .code-snapshot-preview-shell > header small {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
 
   .code-snapshot-editor :deep(textarea) {
-    min-height: 500px;
+    min-height: var(--ui-layout-500, 500px);
     resize: vertical;
     border-color: var(--surface-border-color);
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.65;
   }
 
@@ -341,8 +343,8 @@
   }
 
   .code-snapshot-stage {
-    min-height: 500px;
-    padding: clamp(24px, 5vw, 70px);
+    min-height: var(--ui-layout-500, 500px);
+    padding: clamp(var(--ui-space-24, 24px), 5vw, var(--ui-space-70, 70px));
     display: grid;
     place-items: center;
     overflow: hidden;
@@ -517,9 +519,9 @@
   .code-snapshot-preview-shell > footer > span {
     display: flex;
     align-items: center;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
 
   .code-snapshot-preview-shell > footer > span :deep(.svg-icon) {
@@ -553,12 +555,12 @@
     }
 
     .code-snapshot-editor :deep(textarea) {
-      min-height: 320px;
+      min-height: var(--ui-layout-320, 320px);
     }
 
     .code-snapshot-stage {
-      min-height: 360px;
-      padding: 18px;
+      min-height: var(--ui-layout-360, 360px);
+      padding: var(--ui-space-18, 18px);
       place-items: center;
       overflow: hidden;
     }

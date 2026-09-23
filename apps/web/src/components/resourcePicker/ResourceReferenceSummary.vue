@@ -35,7 +35,7 @@
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
 
     .is-todo {
       --b-chip-fg: var(--chip-todo-fg);
@@ -46,7 +46,7 @@
     h3 {
       margin: 0;
       color: var(--text-color);
-      font-size: 19px;
+      font-size: var(--ui-font-19, 19px);
       font-weight: 600;
       line-height: 1.5;
       overflow-wrap: anywhere;
@@ -56,19 +56,19 @@
   .reference-summary__identity {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
 
   .reference-summary__status {
     align-self: stretch;
     display: flex;
     align-items: baseline;
-    gap: 8px;
-    margin: 4px 0 0;
-    padding-top: 14px;
+    gap: var(--ui-space-8, 8px);
+    margin: var(--ui-space-4, 4px) 0 0;
+    padding-top: var(--ui-space-14, 14px);
     border-top: 1px solid var(--border-color);
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.6;
     overflow-wrap: anywhere;
 

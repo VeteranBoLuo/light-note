@@ -54,10 +54,11 @@
 </template>
 
 <script setup lang="ts">
+  import { useUiDensity } from '@/composables/useUiDensity';
   import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
-  import { getRootZoom } from '@/utils/zoom';
+
   import type { BActionMenuItem, BActionMenuPlacement, BActionMenuSource, BActionMenuTrigger } from './actionMenu';
 
   const props = withDefaults(
@@ -109,8 +110,11 @@
   let closeTimer: number | null = null;
   let resizeObserver: ResizeObserver | null = null;
 
+  const { density, dimension } = useUiDensity();
   const triggerSet = computed(() => new Set(props.triggers));
-  const menuWidth = computed(() => (typeof props.width === 'number' ? `${props.width}px` : props.width));
+  const menuWidth = computed(() =>
+    typeof props.width === 'number' ? `${dimension(props.width, 'layout')}px` : props.width,
+  );
 
   function clearOpenTimer() {
     if (openTimer === null) return;
@@ -130,12 +134,15 @@
   }
 
   function estimatePanelHeight() {
-    return props.items.reduce((height, item) => height + (item.divider ? 9 : 30), 10);
+    return props.items.reduce(
+      (height, item) => height + (item.divider ? 1 + 2 * dimension(4) : dimension(30, 'control')),
+      2 * dimension(5),
+    );
   }
 
   function numericMenuWidth() {
     if (panelRef.value?.offsetWidth) return panelRef.value.offsetWidth;
-    if (typeof props.width === 'number') return props.width;
+    if (typeof props.width === 'number') return dimension(props.width, 'layout');
     return Number.parseFloat(props.width) || 176;
   }
 
@@ -148,16 +155,15 @@
     const panel = panelRef.value;
     if (!anchor || !panel || !open.value) return;
 
-    const zoom = getRootZoom();
     const rect = anchor.getBoundingClientRect();
     const anchorRect = {
-      left: rect.left / zoom,
-      right: rect.right / zoom,
-      top: rect.top / zoom,
-      bottom: rect.bottom / zoom,
+      left: rect.left,
+      right: rect.right,
+      top: rect.top,
+      bottom: rect.bottom,
     };
-    const viewportWidth = document.documentElement.clientWidth / zoom;
-    const viewportHeight = document.documentElement.clientHeight / zoom;
+    const viewportWidth = document.documentElement.clientWidth;
+    const viewportHeight = document.documentElement.clientHeight;
     const panelWidth = numericMenuWidth();
     const panelHeight = panel.offsetHeight || estimatePanelHeight();
     const edge = 8;
@@ -223,9 +229,8 @@
     clearTimers();
     if (props.disabled || !props.items.some((item) => !item.divider)) return;
     if (source === 'contextmenu' && event instanceof MouseEvent) {
-      const zoom = getRootZoom();
-      contextPoint.x = event.clientX / zoom;
-      contextPoint.y = event.clientY / zoom + 5;
+      contextPoint.x = event.clientX;
+      contextPoint.y = event.clientY + 5;
     }
     openSource.value = source;
     panelStyle.visibility = 'hidden';
@@ -385,6 +390,9 @@
     resizeObserver?.disconnect();
     unbindOpenListeners();
   });
+  watch(density, () => {
+    if (open.value) nextTick(computePosition);
+  });
 </script>
 
 <style lang="less" scoped>
@@ -398,7 +406,7 @@
   .b-action-menu-panel {
     z-index: 500;
     max-width: calc(100vw - 16px);
-    padding: 5px 0;
+    padding: var(--ui-space-5, 5px) 0;
     box-sizing: border-box;
     border: 1px solid var(--action-menu-border-color, var(--surface-border-color));
     border-radius: 10px;
@@ -412,15 +420,15 @@
   .b-action-menu__item.b_btn {
     width: 100%;
     min-width: 0;
-    height: 30px;
-    padding: 0 12px;
+    height: var(--ui-control-30, 30px);
+    padding: 0 var(--ui-space-12, 12px);
     justify-content: flex-start;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     border: 0;
     border-radius: 0;
     color: var(--text-color);
     background: transparent;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.2;
     text-align: left;
   }
@@ -449,9 +457,9 @@
 
   .b-action-menu__icon {
     display: inline-flex;
-    width: 18px;
-    height: 18px;
-    flex: 0 0 18px;
+    width: var(--ui-layout-18, 18px);
+    height: var(--ui-layout-18, 18px);
+    flex: 0 0 var(--ui-layout-18, 18px);
     align-items: center;
     justify-content: center;
   }
@@ -465,7 +473,7 @@
 
   .b-action-menu__divider {
     height: 1px;
-    margin: 4px 12px;
+    margin: var(--ui-space-4, 4px) var(--ui-space-12, 12px);
     background: var(--surface-divider-color);
   }
 

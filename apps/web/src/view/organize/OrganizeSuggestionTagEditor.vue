@@ -34,7 +34,7 @@
     <BModal
       v-model:visible="createOpen"
       :title="t('navigation.newTag')"
-      width="min(420px, calc(100vw - 32px))"
+      width="min(var(--ui-layout-420, 420px), calc(100vw - 32px))"
       content-class="suggestion-tag-create"
       initial-focus=".b-input"
     >
@@ -169,9 +169,9 @@
   }
   .suggestion-tag-editor {
     display: grid;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     min-width: 0;
-    width: min(520px, 100%);
+    width: min(var(--ui-layout-520, 520px), 100%);
   }
   .suggestion-tag-editor small {
     color: var(--desc-color);
@@ -180,25 +180,25 @@
   .suggestion-tag-editor__error {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     color: var(--danger-color);
   }
   .suggestion-tag-editor__add {
     width: 100%;
-    height: 32px;
+    height: var(--ui-control-32, 32px);
     justify-content: flex-start;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     color: var(--primary-color);
     background: transparent;
   }
   .suggestion-tag-create__field {
     display: grid;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .suggestion-tag-create__actions {
     display: flex;
     justify-content: flex-end;
-    gap: 8px;
-    padding: 0 20px 20px;
+    gap: var(--ui-space-8, 8px);
+    padding: 0 var(--ui-space-20, 20px) var(--ui-space-20, 20px);
   }
 </style>

@@ -64,11 +64,11 @@
 
     width: 100%;
     min-width: 0;
-    min-height: 38px;
+    min-height: var(--ui-control-38, 38px);
     height: auto;
-    padding: 7px 8px;
+    padding: var(--ui-space-7, 7px) var(--ui-space-8, 8px);
     justify-content: flex-start;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     border: 1px solid transparent;
     border-radius: 10px;
     color: var(--desc-color);
@@ -102,8 +102,8 @@
   }
 
   .tag-directory-row__icon {
-    width: 24px;
-    height: 24px;
+    width: var(--ui-layout-24, 24px);
+    height: var(--ui-layout-24, 24px);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -118,7 +118,7 @@
     min-width: 0;
     overflow: hidden;
     flex: 1;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     text-align: left;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -127,7 +127,7 @@
   .tag-directory-row__count {
     flex: 0 0 auto;
     color: inherit;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-variant-numeric: tabular-nums;
   }
 
@@ -146,11 +146,11 @@
     flex: 1;
     min-width: 0;
     text-align: left;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
   .tag-directory-row__content small {
     white-space: normal;
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     color: var(--desc-color);
     line-height: 1.4;
   }

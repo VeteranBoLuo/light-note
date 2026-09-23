@@ -8,7 +8,7 @@
     modal-class="note-conflict-modal"
     content-class="note-conflict-modal__content"
     :show-footer="false"
-    width="min(920px, calc(100vw - 24px))"
+    width="min(var(--ui-layout-920, 920px), calc(100vw - 24px))"
   >
     <div class="note-conflict">
       <p class="note-conflict__notice">{{ t('noteDetail.conflict.notice') }}</p>
@@ -117,8 +117,9 @@
 <style scoped lang="less">
   .note-conflict {
     display: grid;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
     color: var(--text-color);
+    font-size: var(--ui-font-16, 16px);
   }
 
   .note-conflict__notice,
@@ -129,7 +130,7 @@
   }
 
   .note-conflict__notice {
-    padding: 11px 13px;
+    padding: var(--ui-space-11, 11px) var(--ui-space-13, 13px);
     border: 1px solid var(--primary-color);
     border-radius: 10px;
     color: var(--primary-color);
@@ -140,12 +141,12 @@
   .note-conflict__versions {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .note-conflict__version {
     min-width: 0;
-    padding: 14px;
+    padding: var(--ui-space-14, 14px);
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     background: var(--surface-page-bg, var(--background-color));
@@ -163,16 +164,16 @@
     display: flex;
     align-items: baseline;
     justify-content: space-between;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
 
     span {
       color: var(--desc-color);
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
     }
   }
 
   .note-conflict__title {
-    margin-top: 9px;
+    margin-top: var(--ui-space-9, 9px);
     overflow: hidden;
     font-weight: 650;
     text-overflow: ellipsis;
@@ -181,7 +182,7 @@
 
   pre {
     height: min(32vh, 260px);
-    margin: 10px 0 0;
+    margin: var(--ui-space-10, 10px) 0 0;
     padding: 11px;
     box-sizing: border-box;
     overflow: auto;
@@ -202,7 +203,7 @@
 
   .note-conflict__drawing-preview {
     height: min(34vh, 320px);
-    margin-top: 10px;
+    margin-top: var(--ui-space-10, 10px);
     overflow: auto;
     border: 1px solid var(--surface-border-color);
     border-radius: 8px;
@@ -216,11 +217,11 @@
   .note-conflict__actions {
     display: flex;
     justify-content: flex-end;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     flex-wrap: wrap;
 
     :deep(.b_btn) {
-      min-height: 40px;
+      min-height: var(--ui-control-40, 40px);
     }
   }
 

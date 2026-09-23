@@ -72,25 +72,25 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     pointer-events: none;
     width: max-content;
-    max-width: min(520px, calc(100vw - 24px));
+    max-width: min(var(--ui-layout-520, 520px), calc(100vw - var(--ui-space-24, 24px)));
   }
 
   .b-message-item {
     --message-accent: var(--message-info-color, #615ced);
     position: relative;
     width: max-content;
-    min-width: min(280px, calc(100vw - 24px));
-    max-width: min(520px, calc(100vw - 24px));
-    min-height: 48px;
+    min-width: min(var(--ui-layout-280, 280px), calc(100vw - var(--ui-space-24, 24px)));
+    max-width: min(var(--ui-layout-520, 520px), calc(100vw - var(--ui-space-24, 24px)));
+    min-height: var(--ui-layout-48, 48px);
     overflow: hidden;
     box-sizing: border-box;
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 9px 14px 9px 11px;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-9, 9px) var(--ui-space-14, 14px) var(--ui-space-9, 9px) var(--ui-space-11, 11px);
     border: 1px solid color-mix(in srgb, var(--message-accent) 18%, var(--card-border-color));
     border-radius: 12px;
     background: color-mix(
@@ -104,7 +104,7 @@
     -webkit-backdrop-filter: blur(14px);
     backdrop-filter: blur(14px);
     color: var(--text-color);
-    font-size: 13.5px;
+    font-size: var(--ui-font-13_5, 13.5px);
     line-height: 1.45;
     pointer-events: auto;
     animation: b-message-in 0.24s cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -120,8 +120,8 @@
   }
 
   .b-message-icon {
-    width: 30px;
-    height: 30px;
+    width: var(--ui-layout-30, 30px);
+    height: var(--ui-layout-30, 30px);
     flex-shrink: 0;
     display: inline-flex;
     align-items: center;
@@ -224,8 +224,8 @@
       top: auto;
       bottom: calc(var(--mobile-shell-bottom-height, env(safe-area-inset-bottom)) + 10px);
       width: max-content;
-      max-width: calc(100vw - 24px);
-      gap: 6px;
+      max-width: calc(100vw - var(--ui-space-24, 24px));
+      gap: var(--ui-space-6, 6px);
     }
 
     /* 写操作引导和被动浏览提示均占用底部安全区，消息统一叠在提示卡上方。 */
@@ -248,13 +248,13 @@
 
     .b-message-item {
       width: max-content;
-      min-width: min(180px, calc(100vw - 24px));
-      max-width: calc(100vw - 24px);
-      min-height: 44px;
-      gap: 8px;
-      padding: 7px 12px 7px 9px;
+      min-width: min(var(--ui-layout-180, 180px), calc(100vw - var(--ui-space-24, 24px)));
+      max-width: calc(100vw - var(--ui-space-24, 24px));
+      min-height: var(--ui-layout-44, 44px);
+      gap: var(--ui-space-8, 8px);
+      padding: var(--ui-space-7, 7px) var(--ui-space-12, 12px) var(--ui-space-7, 7px) var(--ui-space-9, 9px);
       border-radius: 12px;
-      font-size: 13px;
+      font-size: var(--ui-font-13, 13px);
       cursor: pointer;
       touch-action: manipulation;
     }
@@ -264,8 +264,8 @@
     }
 
     .b-message-icon {
-      width: 26px;
-      height: 26px;
+      width: var(--ui-layout-26, 26px);
+      height: var(--ui-layout-26, 26px);
       border-radius: 8px;
     }
 

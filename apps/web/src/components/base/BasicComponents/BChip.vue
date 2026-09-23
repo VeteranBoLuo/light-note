@@ -92,17 +92,17 @@
   }
 
   .b-chip--small {
-    min-height: 20px;
-    padding: 2px 7px;
-    font-size: 11px;
-    line-height: 16px;
+    min-height: var(--ui-layout-20, 20px);
+    padding: var(--ui-space-2, 2px) var(--ui-space-7, 7px);
+    font-size: var(--ui-font-11, 11px);
+    line-height: var(--ui-layout-16, 16px);
   }
 
   .b-chip--medium {
-    min-height: 22px;
-    padding: 3px 9px;
-    font-size: 12px;
-    line-height: 16px;
+    min-height: var(--ui-layout-22, 22px);
+    padding: var(--ui-space-3, 3px) var(--ui-space-9, 9px);
+    font-size: var(--ui-font-12, 12px);
+    line-height: var(--ui-layout-16, 16px);
   }
 
   .b-chip__content {

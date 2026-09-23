@@ -160,7 +160,7 @@
   <BModal
     v-model:visible="actionVisible"
     :title="t('communityChatModerationAdmin.dialogTitle')"
-    width="min(620px, 94vw)"
+    width="min(var(--ui-layout-620, 620px), 94vw)"
     :mask-closable="!saving"
     :show-footer="false"
   >
@@ -220,7 +220,7 @@
   <BModal
     v-model:visible="runtimeVisible"
     :title="runtimeDialogTitle"
-    width="min(560px, 94vw)"
+    width="min(var(--ui-layout-560, 560px), 94vw)"
     :mask-closable="!runtimeSaving"
     :show-footer="false"
   >
@@ -381,18 +381,33 @@
     {
       key: 'evidence',
       title: t('communityChatModerationAdmin.evidence'),
-      width: 'minmax(260px, 1.5fr)',
+      width: 'minmax(var(--ui-layout-260, 260px), 1.5fr)',
       ellipsis: false,
     },
-    { key: 'reason', title: t('communityChatModerationAdmin.reason'), width: 'minmax(160px, 0.9fr)', ellipsis: false },
-    { key: 'reporter', title: t('communityChatModerationAdmin.reportInfo'), width: '155px', ellipsis: false },
+    {
+      key: 'reason',
+      title: t('communityChatModerationAdmin.reason'),
+      width: 'minmax(var(--ui-layout-160, 160px), 0.9fr)',
+      ellipsis: false,
+    },
+    {
+      key: 'reporter',
+      title: t('communityChatModerationAdmin.reportInfo'),
+      width: 'var(--ui-layout-155, 155px)',
+      ellipsis: false,
+    },
     {
       key: 'status',
       title: t('communityChatModerationAdmin.statusLabel'),
-      width: 'minmax(150px, 0.8fr)',
+      width: 'minmax(var(--ui-layout-150, 150px), 0.8fr)',
       ellipsis: false,
     },
-    { key: 'actions', title: t('communityChatModerationAdmin.actions'), width: '92px', ellipsis: false },
+    {
+      key: 'actions',
+      title: t('communityChatModerationAdmin.actions'),
+      width: 'var(--ui-layout-92, 92px)',
+      ellipsis: false,
+    },
   ]);
 
   function formatCount(value: unknown) {
@@ -639,11 +654,11 @@
 
 <style scoped lang="less">
   .community-moderation-admin__filter {
-    width: 190px;
+    width: var(--ui-layout-190, 190px);
   }
 
   .community-moderation-admin__runtime-value {
-    min-height: 24px;
+    min-height: var(--ui-layout-24, 24px);
     display: flex;
     align-items: center;
   }
@@ -654,7 +669,7 @@
   .community-moderation-admin__status {
     min-width: 0;
     display: grid;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
 
   .community-moderation-admin__evidence-heading,
@@ -664,7 +679,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .community-moderation-admin__evidence span:not(.community-moderation-admin__evidence-heading),
@@ -683,11 +698,11 @@
   .community-moderation-admin__reporter time,
   .community-moderation-admin__status small {
     color: var(--sub-text-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .community-moderation-admin__empty {
-    min-height: 180px;
+    min-height: var(--ui-layout-180, 180px);
     margin: 0;
     display: grid;
     place-items: center;
@@ -729,24 +744,24 @@
 
   .community-moderation-admin__dialog {
     display: grid;
-    gap: 11px;
+    gap: var(--ui-space-11, 11px);
     color: var(--text-color);
   }
 
   .community-moderation-admin__runtime-dialog {
     display: grid;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     color: var(--text-color);
   }
 
   .community-moderation-admin__runtime-dialog > label {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 650;
   }
 
   .community-moderation-admin__runtime-description {
     margin: 0;
-    padding: 11px 12px;
+    padding: var(--ui-space-11, 11px) var(--ui-space-12, 12px);
     border: 1px solid var(--chip-pending-border);
     border-left: 4px solid var(--warning-color, #b96b00);
     border-radius: 12px;
@@ -757,19 +772,19 @@
   .community-moderation-admin__runtime-audit-hint {
     margin: 0;
     color: var(--sub-text-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.55;
   }
 
   .community-moderation-admin__dialog > label {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 650;
   }
 
   .community-moderation-admin__dialog-evidence {
-    padding: 11px 12px;
+    padding: var(--ui-space-11, 11px) var(--ui-space-12, 12px);
     display: grid;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     border: 1px solid var(--surface-border-color);
     border-left: 4px solid var(--danger-color);
     border-radius: 12px;
@@ -781,7 +796,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .community-moderation-admin__dialog-evidence p,
@@ -794,14 +809,14 @@
   .community-moderation-admin__dialog-evidence small,
   .community-moderation-admin__dialog-warning {
     color: var(--sub-text-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .community-moderation-admin__dialog-actions {
-    margin-top: 3px;
+    margin-top: var(--ui-space-3, 3px);
     display: flex;
     justify-content: flex-end;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   @media (max-width: 960px) {

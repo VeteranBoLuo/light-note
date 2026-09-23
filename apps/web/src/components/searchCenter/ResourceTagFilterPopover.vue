@@ -41,11 +41,7 @@
           </BButton>
         </header>
 
-        <BInput
-          v-model:value="search"
-          :placeholder="t('resourceCenter.tagSearchPlaceholder')"
-          clearable
-        >
+        <BInput v-model:value="search" :placeholder="t('resourceCenter.tagSearchPlaceholder')" clearable>
           <template #prefix>
             <SvgIcon :src="icon.navigation.search" size="16" aria-hidden="true" />
           </template>
@@ -138,12 +134,12 @@
   .resource-tag-filter__trigger {
     width: 100%;
     min-width: 0;
-    height: 48px;
-    padding: 5px 8px;
+    height: var(--ui-layout-48, 48px);
+    padding: var(--ui-space-5, 5px) var(--ui-space-8, 8px);
     display: grid;
-    grid-template-columns: 20px minmax(0, 1fr) auto;
+    grid-template-columns: var(--ui-layout-20, 20px) minmax(0, 1fr) auto;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     border: 1px solid var(--search-border-color);
     border-radius: 11px;
     color: var(--text-color);
@@ -157,8 +153,8 @@
   }
 
   .resource-tag-filter__trigger-icon {
-    width: 20px;
-    height: 20px;
+    width: var(--ui-layout-20, 20px);
+    height: var(--ui-layout-20, 20px);
     display: grid;
     place-items: center;
     color: var(--resource-tag-color);
@@ -168,7 +164,7 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
     line-height: 1.2;
   }
 
@@ -180,12 +176,12 @@
   }
 
   .resource-tag-filter__trigger-copy strong {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .resource-tag-filter__trigger-copy small {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     font-weight: 500;
   }
 
@@ -199,13 +195,13 @@
   }
 
   .resource-tag-picker {
-    width: min(310px, calc(100vw - 32px));
-    height: min(360px, calc(100vh - 32px));
-    padding: 12px;
+    width: min(var(--ui-layout-310, 310px), calc(100vw - var(--ui-layout-32, 32px)));
+    height: min(var(--ui-layout-360, 360px), calc(100vh - var(--ui-layout-32, 32px)));
+    padding: var(--ui-space-12, 12px);
     box-sizing: border-box;
     display: grid;
     grid-template-rows: auto auto minmax(0, 1fr);
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     overflow: hidden;
   }
 
@@ -214,7 +210,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .resource-tag-picker__header > span {
@@ -222,16 +218,16 @@
     display: flex;
     align-items: baseline;
     flex-wrap: wrap;
-    gap: 4px 8px;
+    gap: var(--ui-space-4, 4px) var(--ui-space-8, 8px);
   }
 
   .resource-tag-picker__header strong {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
   }
 
   .resource-tag-picker__header small {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .resource-tag-picker__clear {
@@ -247,17 +243,17 @@
   }
 
   .resource-tag-picker :deep(.b-input) {
-    height: 38px;
+    height: var(--ui-layout-38, 38px);
     border-radius: 10px;
     background: var(--search-muted-bg);
   }
 
   .resource-tag-picker__list {
     min-height: 0;
-    padding-right: 2px;
+    padding-right: var(--ui-space-2, 2px);
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
     overflow: hidden auto;
     overscroll-behavior: contain;
     scrollbar-gutter: stable;
@@ -266,14 +262,14 @@
   .resource-tag-picker__item {
     width: 100%;
     min-width: 0;
-    height: 34px;
-    min-height: 34px;
+    height: var(--ui-layout-34, 34px);
+    min-height: var(--ui-layout-34, 34px);
     flex: 0 0 auto;
-    padding: 3px 7px;
+    padding: var(--ui-space-3, 3px) var(--ui-space-7, 7px);
     display: grid;
-    grid-template-columns: 20px minmax(0, 1fr) 20px;
+    grid-template-columns: var(--ui-layout-20, 20px) minmax(0, 1fr) var(--ui-layout-20, 20px);
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     border: 1px solid transparent;
     border-radius: 10px;
     color: var(--text-color);
@@ -297,8 +293,8 @@
   }
 
   .resource-tag-picker__item-icon {
-    width: 20px;
-    height: 20px;
+    width: var(--ui-layout-20, 20px);
+    height: var(--ui-layout-20, 20px);
     display: grid;
     place-items: center;
     color: var(--resource-tag-color);
@@ -309,12 +305,12 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .resource-tag-picker__check {
-    width: 18px;
-    height: 18px;
+    width: var(--ui-layout-18, 18px);
+    height: var(--ui-layout-18, 18px);
     display: grid;
     place-items: center;
     border: 1px solid var(--search-border-color);
@@ -334,11 +330,11 @@
   }
 
   .resource-tag-picker__empty {
-    min-height: 120px;
+    min-height: var(--ui-layout-120, 120px);
     display: grid;
     place-items: center;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   :global(.b-popover-panel.resource-tag-filter-overlay) {
@@ -353,8 +349,8 @@
 
   @media (max-width: 767px) {
     .resource-tag-picker__item {
-      height: 44px;
-      min-height: 44px;
+      height: var(--ui-layout-44, 44px);
+      min-height: var(--ui-layout-44, 44px);
     }
   }
 

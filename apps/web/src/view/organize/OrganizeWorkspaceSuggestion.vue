@@ -136,7 +136,7 @@
           :id="`organize-title-${suggestion.id}`"
           v-model:value="title"
           theme="al-day"
-          height="40px"
+          height="var(--ui-control-40, 40px)"
           :maxlength="255"
           :disabled="busy"
         />
@@ -345,23 +345,23 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
-    gap: 12px;
-    padding: 16px 0;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-16, 16px) 0;
     border-bottom: 1px solid var(--workspace-divider);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     min-width: 0;
   }
   .workspace-suggestion:first-child {
-    padding-top: 4px;
+    padding-top: var(--ui-space-4, 4px);
   }
   .workspace-suggestion:last-of-type {
     border-bottom: 0;
   }
   .suggestion-copy {
     display: grid;
-    grid-template-columns: 130px minmax(0, 1fr);
+    grid-template-columns: var(--ui-layout-130, 130px) minmax(0, 1fr);
     align-items: start;
-    gap: 8px 18px;
+    gap: var(--ui-space-8, 8px) var(--ui-space-18, 18px);
     min-width: 0;
   }
   .suggestion-heading {
@@ -369,19 +369,19 @@
     grid-row: 1 / span 4;
     display: flex;
     align-items: center;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     flex-wrap: wrap;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .suggestion-kind-icon {
     color: var(--ow-purple, var(--primary-color));
     flex-shrink: 0;
   }
   .suggestion-heading :deep(.b-chip) {
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
   .suggestion-heading strong {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .suggestion-copy > p {
     grid-column: 2;
@@ -389,20 +389,20 @@
     color: var(--ow-muted, var(--desc-color));
     line-height: 1.6;
     overflow-wrap: anywhere;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .suggestion-change {
     grid-column: 2;
     display: flex;
     align-items: center;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     flex-wrap: wrap;
     min-width: 0;
   }
   .suggested-tag {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
     max-width: 100%;
     min-width: 0;
   }
@@ -418,7 +418,7 @@
     font-weight: 400;
   }
   .suggested-tag-dot {
-    margin-inline: 3px;
+    margin-inline: var(--ui-space-3, 3px);
     font-weight: 700;
   }
   .suggestion-change > span:first-child {
@@ -430,14 +430,14 @@
   .suggestion-actions {
     display: flex;
     align-items: center;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     flex-wrap: wrap;
   }
   .suggestion-actions .b_btn {
-    font-size: 11px;
-    min-height: 32px;
-    height: 32px;
-    padding: 0 12px;
+    font-size: var(--ui-font-11, 11px);
+    min-height: var(--ui-control-32, 32px);
+    height: var(--ui-control-32, 32px);
+    padding: 0 var(--ui-space-12, 12px);
     border-radius: 6px;
     border: 1px solid transparent;
     background: transparent;
@@ -459,17 +459,17 @@
   }
   .suggestion-edit {
     grid-column: 1/-1;
-    max-width: 640px;
+    max-width: var(--ui-layout-640, 640px);
     display: grid;
-    gap: 12px;
-    padding: 12px;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-12, 12px);
     border: 1px solid var(--ow-border, var(--surface-border-color));
     border-radius: 8px;
     background: var(--ow-surface, var(--card-background));
   }
   .title-editor {
     display: grid;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .suggestion-error {
     grid-column: 1/-1;
@@ -479,21 +479,21 @@
     grid-column: 2;
     min-width: 0;
     color: var(--ow-muted, var(--desc-color));
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.6;
     overflow-wrap: anywhere;
   }
   .tag-evidence p {
-    margin: 4px 0 0;
+    margin: var(--ui-space-4, 4px) 0 0;
   }
   .comparison {
     grid-column: 2;
     display: grid;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     min-width: 0;
   }
   .comparison article {
-    padding: 8px 10px;
+    padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px);
     border: 1px solid var(--ow-border, var(--surface-border-color));
     border-radius: 6px;
     background: var(--ow-surface, var(--card-background));
@@ -502,9 +502,9 @@
   .comparison small,
   .comparison p {
     display: block;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     color: var(--ow-muted, var(--desc-color));
-    margin: 4px 0;
+    margin: var(--ui-space-4, 4px) 0;
     overflow-wrap: anywhere;
   }
   .comparison .b_btn {
@@ -512,7 +512,7 @@
     height: auto;
     white-space: normal;
     text-align: left;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .suggestion-edit .suggestion-actions {
     justify-content: flex-end;

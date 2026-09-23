@@ -78,20 +78,20 @@
   .import-result {
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
   }
   .import-result__heading {
     display: flex;
     align-items: center;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
   }
   .import-result h3 {
     margin: 0;
-    font-size: 22px;
+    font-size: var(--ui-font-22, 22px);
   }
   .import-result p {
     margin: 0;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
     line-height: 1.7;
     overflow-wrap: anywhere;
@@ -99,31 +99,31 @@
   .import-result__symbol {
     display: grid;
     place-items: center;
-    width: 52px;
-    height: 52px;
+    width: var(--ui-layout-52, 52px);
+    height: var(--ui-layout-52, 52px);
     border-radius: 50%;
     border: 1px solid var(--chip-success-border);
     color: var(--workspace-note-text);
   }
   .import-result__counts {
     display: flex;
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
     flex-wrap: wrap;
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
   }
   .import-result__list {
     border-top: 1px solid var(--surface-border-color);
   }
   .import-result__item {
     display: grid;
-    grid-template-columns: 22px minmax(0, 1fr) auto;
-    gap: 12px;
-    padding: 16px 0;
+    grid-template-columns: var(--ui-layout-22, 22px) minmax(0, 1fr) auto;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-16, 16px) 0;
     border-bottom: 1px solid var(--surface-border-color);
   }
   .import-result__item > :first-child {
     color: var(--workspace-note-text);
-    margin-top: 4px;
+    margin-top: var(--ui-space-4, 4px);
   }
   .import-result__item strong {
     overflow-wrap: anywhere;
@@ -132,8 +132,8 @@
     display: flex;
     align-items: flex-end;
     flex-direction: column;
-    gap: 8px;
-    font-size: 12px;
+    gap: var(--ui-space-8, 8px);
+    font-size: var(--ui-font-12, 12px);
   }
   .import-result .import-result__issue {
     color: var(--warning-color);

@@ -283,7 +283,7 @@
   .managed-image-preview.managed-image-preview {
     position: relative;
     flex-direction: column;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -301,37 +301,37 @@
   }
   .managed-image-preview__placeholder {
     color: var(--bl-text-color-secondary, #888);
-    font-size: 24px;
+    font-size: var(--ui-layout-24, 24px);
   }
   .managed-image-preview__status {
-    padding: 2px 6px;
+    padding: var(--ui-space-2, 2px) var(--ui-space-6, 6px);
     display: grid;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
     text-align: center;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     overflow-wrap: anywhere;
   }
   .managed-image-preview__details {
-    max-width: min(260px, 72vw);
-    padding: 12px;
+    max-width: min(var(--ui-layout-260, 260px), 72vw);
+    padding: var(--ui-space-12, 12px);
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.6;
     overflow-wrap: anywhere;
   }
   .managed-image-preview__details p {
-    margin: 0 0 8px;
+    margin: 0 0 var(--ui-space-8, 8px);
   }
   .managed-image-preview__badge {
     position: absolute;
-    bottom: 8px;
-    right: 8px;
-    padding: 2px 6px;
+    bottom: var(--ui-space-8, 8px);
+    right: var(--ui-space-8, 8px);
+    padding: var(--ui-space-2, 2px) var(--ui-space-6, 6px);
     border: 1px solid var(--workspace-border);
     border-radius: 4px;
     background: var(--workspace-content);
     color: var(--text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 </style>

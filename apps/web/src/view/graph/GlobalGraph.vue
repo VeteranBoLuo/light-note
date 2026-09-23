@@ -601,7 +601,7 @@
     flex-direction: column;
     height: 100%;
     min-height: 0;
-    padding: 14px 20px 18px;
+    padding: var(--ui-space-14, 14px) var(--ui-space-20, 20px) var(--ui-space-18, 18px);
     box-sizing: border-box;
     color: var(--text-color);
   }
@@ -610,20 +610,20 @@
     display: flex;
     align-items: flex-end;
     justify-content: space-between;
-    gap: 24px;
+    gap: var(--ui-space-24, 24px);
     flex: 0 0 auto;
   }
 
   .km-warning {
-    max-width: 120px;
+    max-width: var(--ui-layout-120, 120px);
     color: var(--resource-file-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.25;
   }
 
   .km-stats {
     display: flex;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     flex: 0 0 auto;
     margin-left: auto;
   }
@@ -644,21 +644,21 @@
   .km-stat {
     display: flex;
     align-items: baseline;
-    gap: 5px;
-    min-width: 86px;
-    padding: 7px 10px;
+    gap: var(--ui-space-5, 5px);
+    min-width: var(--ui-layout-86, 86px);
+    padding: var(--ui-space-7, 7px) var(--ui-space-10, 10px);
     border: 1px solid var(--card-border-color);
     border-radius: 10px;
     background: color-mix(in srgb, var(--card-background) 92%, transparent);
 
     strong {
-      font-size: 17px;
+      font-size: var(--ui-font-17, 17px);
       font-variant-numeric: tabular-nums;
     }
 
     span {
       color: var(--sub-text-color);
-      font-size: 11px;
+      font-size: var(--ui-font-11, 11px);
       white-space: nowrap;
     }
   }
@@ -679,33 +679,33 @@
   .km-toolbar {
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin-top: 12px;
+    gap: var(--ui-space-8, 8px);
+    margin-top: var(--ui-space-12, 12px);
     flex: 0 0 auto;
   }
 
   .km-search {
-    width: min(380px, 32vw);
+    width: min(var(--ui-layout-380, 380px), 32vw);
   }
 
   .km-select {
-    width: 136px;
+    width: var(--ui-layout-136, 136px);
   }
 
   .km-select--strength {
-    width: 150px;
+    width: var(--ui-layout-150, 150px);
   }
 
   .km-toggle,
   .km-reset,
   .km-filter-trigger {
-    height: 38px;
-    line-height: 38px;
-    padding: 0 13px;
+    height: var(--ui-control-38, 38px);
+    line-height: var(--ui-control-38, 38px);
+    padding: 0 var(--ui-space-13, 13px);
   }
 
   .km-filter-trigger {
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
 
   .km-toggle.active {
@@ -715,11 +715,11 @@
 
   .km-content {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 320px;
-    gap: 12px;
+    grid-template-columns: minmax(0, 1fr) var(--ui-layout-320, 320px);
+    gap: var(--ui-space-12, 12px);
     flex: 1;
     min-height: 0;
-    margin-top: 10px;
+    margin-top: var(--ui-space-10, 10px);
   }
 
   .km-canvas-wrap {
@@ -730,17 +730,17 @@
 
   .km-canvas-note {
     position: absolute;
-    left: 14px;
-    bottom: 14px;
+    left: var(--ui-space-14, 14px);
+    bottom: var(--ui-space-14, 14px);
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 6px 9px;
+    gap: var(--ui-space-6, 6px);
+    padding: var(--ui-space-6, 6px) var(--ui-space-9, 9px);
     border: 1px solid var(--card-border-color);
     border-radius: 9px;
     background: color-mix(in srgb, var(--background-color) 86%, transparent);
     color: var(--sub-text-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     pointer-events: none;
   }
 
@@ -758,7 +758,7 @@
   .km-panel {
     min-width: 0;
     overflow: auto;
-    padding: 15px;
+    padding: var(--ui-space-15, 15px);
     border: 1px solid var(--card-border-color);
     border-radius: 12px;
     box-sizing: border-box;
@@ -766,8 +766,8 @@
 
   .km-panel-head {
     h2 {
-      margin: 5px 0 2px;
-      font-size: 18px;
+      margin: var(--ui-space-5, 5px) 0 var(--ui-space-2, 2px);
+      font-size: var(--ui-font-18, 18px);
       line-height: 1.35;
       word-break: break-word;
     }
@@ -775,7 +775,7 @@
     p {
       margin: 0;
       color: var(--sub-text-color);
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
       line-height: 1.5;
     }
   }
@@ -783,27 +783,27 @@
   .km-panel-kicker {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     color: var(--resource-tag-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 700;
   }
 
   .km-panel-actions {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 8px;
-    margin-top: 12px;
+    gap: var(--ui-space-8, 8px);
+    margin-top: var(--ui-space-12, 12px);
 
     :deep(.b_btn) {
       width: 100%;
-      padding: 0 8px;
+      padding: 0 var(--ui-space-8, 8px);
     }
   }
 
   .km-panel-section {
-    margin-top: 16px;
-    padding-top: 13px;
+    margin-top: var(--ui-space-16, 16px);
+    padding-top: var(--ui-space-13, 13px);
     border-top: 1px solid var(--card-border-color);
   }
 
@@ -811,8 +811,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 8px;
-    font-size: 13px;
+    margin-bottom: var(--ui-space-8, 8px);
+    font-size: var(--ui-font-13, 13px);
     font-weight: 700;
 
     small {
@@ -826,7 +826,7 @@
   .km-insights {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
 
   .km-related-item,
@@ -834,26 +834,26 @@
     width: 100%;
     min-width: 0;
     height: auto;
-    min-height: 34px;
-    padding: 7px 9px;
+    min-height: var(--ui-control-34, 34px);
+    padding: var(--ui-space-7, 7px) var(--ui-space-9, 9px);
     justify-content: space-between;
     line-height: 1.35;
     text-align: left;
 
     small {
       color: var(--sub-text-color);
-      font-size: 10px;
+      font-size: var(--ui-font-10, 10px);
     }
   }
 
   .km-resource-tabs {
     display: flex;
     flex-wrap: wrap;
-    gap: 5px;
-    margin-bottom: 8px;
+    gap: var(--ui-space-5, 5px);
+    margin-bottom: var(--ui-space-8, 8px);
 
     :deep(.b_btn) {
-      padding: 0 7px;
+      padding: 0 var(--ui-space-7, 7px);
     }
 
     .active {
@@ -871,7 +871,7 @@
     height: 7px;
     flex: 0 0 auto;
     border-radius: 50%;
-    margin-right: 10px;
+    margin-right: var(--ui-space-10, 10px);
   }
 
   .km-resource-type--bookmark {
@@ -899,14 +899,14 @@
   }
 
   .km-section-empty {
-    padding: 14px 8px;
+    padding: var(--ui-space-14, 14px) var(--ui-space-8, 8px);
     color: var(--sub-text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     text-align: center;
   }
 
   .km-insights {
-    margin-top: 14px;
+    margin-top: var(--ui-space-14, 14px);
   }
 
   .km-insight {
@@ -915,27 +915,27 @@
     width: 100%;
     min-width: 0;
     height: auto;
-    padding: 11px;
+    padding: var(--ui-space-11, 11px);
     box-sizing: border-box;
     text-align: left;
     line-height: 1.4;
 
     span {
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
       font-weight: 600;
     }
 
     strong {
       grid-row: span 2;
       color: var(--resource-tag-color);
-      font-size: 22px;
+      font-size: var(--ui-font-22, 22px);
       font-variant-numeric: tabular-nums;
     }
 
     small {
       min-width: 0;
       color: var(--sub-text-color);
-      font-size: 10px;
+      font-size: var(--ui-font-10, 10px);
       white-space: normal;
     }
   }

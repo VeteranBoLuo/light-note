@@ -120,7 +120,7 @@
       v-model:visible="editorVisible"
       :title="editorTitle"
       :mask-closable="false"
-      width="min(440px, 88vw)"
+      width="min(var(--ui-layout-440, 440px), 88vw)"
       initial-focus=".cloud-folder-editor-input .b-input"
       @ok="submitFolderEditor"
     >
@@ -621,18 +621,18 @@
 </script>
 
 <style lang="less" scoped>
-  @import (reference) "@/assets/css/workspace-surfaces.less";
+  @import (reference) '@/assets/css/workspace-surfaces.less';
   .folder-list {
     position: relative;
     height: 100%;
-    width: 300px;
+    width: var(--ui-layout-300, 300px);
     min-height: 0;
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     border-right: 1px solid var(--folder-list-border-color);
-    padding-right: 10px;
+    padding-right: var(--ui-space-10, 10px);
   }
 
   .cloud-folder-tree {
@@ -656,13 +656,14 @@
     position: relative;
     width: 100%;
     min-width: 0;
-    min-height: 34px;
-    height: 34px;
+    min-height: var(--ui-layout-34, 34px);
+    height: var(--ui-layout-34, 34px);
     display: flex;
     align-items: center;
     justify-content: flex-start;
-    gap: 7px;
-    padding: 0 8px 0 calc(8px + (var(--cloud-folder-depth, 1) - 1) * 16px);
+    gap: var(--ui-space-7, 7px);
+    padding: 0 var(--ui-space-8, 8px) 0
+      calc(var(--ui-space-8, 8px) + (var(--cloud-folder-depth, 1) - 1) * var(--ui-space-16, 16px));
     box-sizing: border-box;
     border: 1px solid transparent;
     border-radius: 8px;
@@ -673,8 +674,8 @@
   }
 
   .cloud-folder-row--all {
-    flex: 0 0 34px;
-    padding-left: 8px;
+    flex: 0 0 var(--ui-layout-34, 34px);
+    padding-left: var(--ui-space-8, 8px);
   }
 
   @media (hover: hover) and (pointer: fine) {
@@ -713,7 +714,7 @@
   .cloud-folder-row.is-sort-after::after {
     content: '';
     position: absolute;
-    left: calc(8px + (var(--cloud-folder-depth, 1) - 1) * 16px);
+    left: calc(var(--ui-space-8, 8px) + (var(--cloud-folder-depth, 1) - 1) * var(--ui-space-16, 16px));
     right: 6px;
     height: 3px;
     border-radius: 2px;
@@ -729,10 +730,10 @@
   }
 
   .cloud-folder-row__chevron {
-    width: 22px;
-    min-width: 22px;
-    height: 28px;
-    flex: 0 0 22px;
+    width: var(--ui-layout-22, 22px);
+    min-width: var(--ui-layout-22, 22px);
+    height: var(--ui-layout-28, 28px);
+    flex: 0 0 var(--ui-layout-22, 22px);
     padding: 0;
     border: 0 !important;
     border-radius: 6px;
@@ -741,10 +742,10 @@
   }
 
   .cloud-folder-row__chevron-placeholder {
-    width: 22px;
-    min-width: 22px;
-    height: 28px;
-    flex: 0 0 22px;
+    width: var(--ui-layout-22, 22px);
+    min-width: var(--ui-layout-22, 22px);
+    height: var(--ui-layout-28, 28px);
+    flex: 0 0 var(--ui-layout-22, 22px);
   }
 
   .cloud-folder-row.is-current .cloud-folder-row__chevron {
@@ -782,15 +783,15 @@
     min-width: 0;
     overflow: hidden;
     flex: 1 1 auto;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .cloud-folder-row__count {
-    min-width: 18px;
+    min-width: var(--ui-layout-18, 18px);
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     font-variant-numeric: tabular-nums;
     text-align: right;
   }
@@ -800,31 +801,31 @@
   }
 
   .cloud-folder-create {
-    flex: 0 0 40px;
-    min-height: 40px;
-    gap: 7px;
+    flex: 0 0 var(--ui-layout-40, 40px);
+    min-height: var(--ui-layout-40, 40px);
+    gap: var(--ui-space-7, 7px);
     color: var(--resource-file-color, #ff8a00);
   }
 
   .cloud-folder-drop-hint {
-    flex: 0 0 40px;
+    flex: 0 0 var(--ui-layout-40, 40px);
     width: 100%;
     min-width: 0;
-    min-height: 40px;
+    min-height: var(--ui-layout-40, 40px);
     margin: 0;
-    padding: 0 12px;
+    padding: 0 var(--ui-space-12, 12px);
     overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     box-sizing: border-box;
     border: 1px solid var(--resource-file-color, #ff8a00);
     border-radius: 9px;
     color: var(--resource-file-color, #ff8a00);
     background: var(--menu-body-bg-color);
     box-shadow: var(--resource-card-shadow);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 650;
     line-height: 1.35;
     text-align: center;
@@ -865,7 +866,7 @@
   }
 
   .cloud-folder-drop-hint__relation {
-    padding: 2px 6px;
+    padding: var(--ui-space-2, 2px) var(--ui-space-6, 6px);
     border: 1px solid rgba(255, 255, 255, 0.46);
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.16);
@@ -875,42 +876,42 @@
 
   .cloud-folder-empty {
     margin: 0;
-    padding: 24px 8px;
+    padding: var(--ui-space-24, 24px) var(--ui-space-8, 8px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.5;
     text-align: center;
   }
 
   .cloud-folder-editor {
-    width: min(360px, 72vw);
+    width: min(var(--ui-layout-360, 360px), 72vw);
     display: grid;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .cloud-folder-editor__parent {
     margin: 0;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.5;
   }
 
   .cloud-folder-editor__error {
     margin: 0;
     color: var(--danger-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .cloud-folder-skeleton {
     display: flex;
     flex-direction: column;
-    gap: 5px;
-    padding-top: 2px;
+    gap: var(--ui-space-5, 5px);
+    padding-top: var(--ui-space-2, 2px);
   }
 
   .cloud-folder-skeleton__row {
     position: relative;
-    height: 34px;
+    height: var(--ui-layout-34, 34px);
     overflow: hidden;
     border-radius: 8px;
     background: var(--bl-input-noBorder-bg-color);
@@ -948,13 +949,23 @@
     .workspace-open-surface();
   }
 
-  .folder-list { .workspace-navigation-colors(file); }
-  .cloud-folder-row { .workspace-navigation-default(); }
-  .cloud-folder-row:hover { .workspace-navigation-hover(); }
+  .folder-list {
+    .workspace-navigation-colors(file);
+  }
+  .cloud-folder-row {
+    .workspace-navigation-default();
+  }
+  .cloud-folder-row:hover {
+    .workspace-navigation-hover();
+  }
   .cloud-folder-row.is-current {
     .workspace-navigation-selected();
     border-color: var(--workspace-file-stat);
   }
-  .cloud-folder-row.is-current .cloud-folder-row__count { color: var(--workspace-file-stat); }
-  .cloud-folder-row.cloud-folder-row--all .cloud-folder-row__count { color: var(--workspace-file-stat); }
+  .cloud-folder-row.is-current .cloud-folder-row__count {
+    color: var(--workspace-file-stat);
+  }
+  .cloud-folder-row.cloud-folder-row--all .cloud-folder-row__count {
+    color: var(--workspace-file-stat);
+  }
 </style>

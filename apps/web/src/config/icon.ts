@@ -2,6 +2,10 @@ const achievementGlyph = (content: string) =>
   `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><g fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round">${content}</g></svg>`;
 
 export default {
+  pagination: {
+    chevron:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1L5 5L9 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
+  },
   todoWorkspace: {
     calendar: achievementGlyph(
       '<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M7 3v4M17 3v4M3 11h18M7 15h2M15 15h2M7 18h2"/>',

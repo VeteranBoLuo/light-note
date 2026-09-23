@@ -91,7 +91,7 @@ describe('整理中心 2.0 页面契约', () => {
   });
 
   it('桌面菜单切换只过渡颜色，选中前后不改变边框宽度或内边距', () => {
-    expect(source).toMatch(
+    expect(source.replace(/var\(--ui-[\w-]+, ([\d.]+px)\)/g, '$1')).toMatch(
       /\.organize-nav-item\.b_btn\s*\{[\s\S]*?padding:\s*0 10px 0 7px;[\s\S]*?transition:\s*color[\s\S]*?background-color[\s\S]*?border-color/,
     );
     expect(desktopNavStyle).not.toContain('transition: all');

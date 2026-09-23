@@ -169,17 +169,17 @@
   }
 
   .b-time-trigger {
-    min-width: 142px;
-    height: 36px;
-    min-height: 36px;
+    min-width: var(--ui-layout-142, 142px);
+    height: var(--ui-control-36, 36px);
+    min-height: var(--ui-control-36, 36px);
     justify-content: flex-start;
-    gap: 8px;
-    padding: 0 11px;
+    gap: var(--ui-space-8, 8px);
+    padding: 0 var(--ui-space-11, 11px);
     border: 1px solid var(--surface-border-color);
     border-radius: 9px;
     color: var(--text-color);
     background: var(--primary-btn-bg-color);
-    line-height: 36px;
+    line-height: var(--ui-control-36, 36px);
   }
 
   .b-time-trigger.is-open {
@@ -189,7 +189,7 @@
   }
 
   .b-time-trigger__value {
-    min-width: 42px;
+    min-width: var(--ui-layout-42, 42px);
     font-variant-numeric: tabular-nums;
   }
 
@@ -203,25 +203,25 @@
   }
 
   .b-time-panel {
-    width: 252px;
+    width: var(--ui-layout-252, 252px);
     max-width: calc(100vw - 24px);
-    padding: 14px;
+    padding: var(--ui-space-14, 14px);
     box-sizing: border-box;
   }
 
   .b-time-panel__header {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding-bottom: 12px;
+    gap: var(--ui-space-10, 10px);
+    padding-bottom: var(--ui-space-12, 12px);
     border-bottom: 1px solid var(--surface-divider-color);
   }
 
   .b-time-panel__icon {
-    width: 34px;
-    height: 34px;
+    width: var(--ui-control-34, 34px);
+    height: var(--ui-control-34, 34px);
     display: inline-flex;
-    flex: 0 0 34px;
+    flex: 0 0 var(--ui-control-34, 34px);
     align-items: center;
     justify-content: center;
     border: 1px solid var(--primary-color);
@@ -233,16 +233,16 @@
   .b-time-panel__header > div {
     min-width: 0;
     display: grid;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
 
   .b-time-panel__header strong {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .b-time-panel__header div > span {
     color: var(--primary-color);
-    font-size: 18px;
+    font-size: var(--ui-font-18, 18px);
     font-weight: 700;
     font-variant-numeric: tabular-nums;
   }
@@ -251,14 +251,14 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     align-items: end;
-    gap: 7px;
-    padding: 13px 0;
+    gap: var(--ui-space-7, 7px);
+    padding: var(--ui-space-13, 13px) 0;
   }
 
   .b-time-panel__fields label {
     min-width: 0;
     display: grid;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
 
   .b-time-panel__fields :deep(.b-select) {
@@ -269,11 +269,11 @@
 
   .b-time-panel__fields label > span {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .b-time-panel__separator {
-    padding-bottom: 8px;
+    padding-bottom: var(--ui-space-8, 8px);
     color: var(--desc-color);
     font-weight: 700;
   }
@@ -281,7 +281,7 @@
   .b-time-panel__fields :deep(.select-trigger) {
     width: 100%;
     min-width: 0;
-    min-height: 38px;
+    min-height: var(--ui-control-38, 38px);
     border-radius: 9px;
   }
 
@@ -293,14 +293,14 @@
   .b-time-panel__footer {
     display: flex;
     justify-content: flex-end;
-    gap: 7px;
-    padding-top: 11px;
+    gap: var(--ui-space-7, 7px);
+    padding-top: var(--ui-space-11, 11px);
     border-top: 1px solid var(--surface-divider-color);
   }
 
   :global(.select-dropdown.b-time-select-dropdown) {
-    max-height: 220px;
-    padding: 6px;
+    max-height: var(--ui-layout-220, 220px);
+    padding: var(--ui-space-6, 6px);
     border-color: color-mix(in srgb, var(--primary-color) 18%, var(--surface-border-color));
     border-radius: 12px;
     background: var(--card-background);
@@ -309,7 +309,7 @@
   }
 
   :global(.select-dropdown.b-time-select-dropdown .select-option) {
-    min-height: 32px;
+    min-height: var(--ui-control-32, 32px);
     border-radius: 8px;
     font-variant-numeric: tabular-nums;
   }

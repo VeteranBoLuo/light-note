@@ -31,7 +31,7 @@
       <div><strong>{{ t('securityV2.quality.principleTitle') }}</strong><p>{{ t('securityV2.quality.principleDesc') }}</p></div>
     </section>
 
-    <BDrawer :open="drawerOpen" :title="t('securityV2.quality.drawerTitle', { code: activeRule?.ruleCode || '-' })" width="680px" :mobile-full-screen="true" body-padding="0" @close="drawerOpen = false">
+    <BDrawer :open="drawerOpen" :title="t('securityV2.quality.drawerTitle', { code: activeRule?.ruleCode || '-' })" width="var(--ui-layout-680, 680px)" :mobile-full-screen="true" body-padding="0" @close="drawerOpen = false">
       <div class="security-rule-drawer">
         <section class="security-rule-current">
           <div class="security-rule-current-head">
@@ -130,12 +130,12 @@
   const ruleModes = new Set<RuleMode>(['observe', 'block', 'off']);
   const number = (value: unknown) => Number(value || 0);
   const columns = computed(() => [
-    { title: t('securityV2.quality.rule'), key: 'rule', width: 'minmax(230px,1.2fr)' },
-    { title: t('securityV2.quality.mode'), key: 'mode', width: '115px' },
-    { title: t('securityV2.quality.rawHits'), key: 'rawHits', width: '64px' },
-    { title: t('securityV2.quality.confirmed'), key: 'confirmedHits', width: '64px' },
-    { title: t('securityV2.quality.falseRate'), key: 'falseRate', width: '85px' },
-    { title: t('securityV2.quality.primaryRoute'), key: 'primaryRoute', width: 'minmax(110px,.7fr)' },
+    { title: t('securityV2.quality.rule'), key: 'rule', width: 'minmax(var(--ui-layout-230, 230px),1.2fr)' },
+    { title: t('securityV2.quality.mode'), key: 'mode', width: 'var(--ui-layout-115, 115px)' },
+    { title: t('securityV2.quality.rawHits'), key: 'rawHits', width: 'var(--ui-layout-64, 64px)' },
+    { title: t('securityV2.quality.confirmed'), key: 'confirmedHits', width: 'var(--ui-layout-64, 64px)' },
+    { title: t('securityV2.quality.falseRate'), key: 'falseRate', width: 'var(--ui-layout-85, 85px)' },
+    { title: t('securityV2.quality.primaryRoute'), key: 'primaryRoute', width: 'minmax(var(--ui-layout-110, 110px),.7fr)' },
   ]);
   const modeOptions = computed(() => [
     { value: 'observe', label: t('securityV2.common.observe') },

@@ -57,21 +57,24 @@
               <span>{{ capturePanelHint }}</span>
             </div>
 
-            <template v-if="captureType !== 'file'">
-              <BInput
-                v-model:value="content"
-                type="textarea"
-                :rows="7"
-                :maxlength="60000"
-                :placeholder="capturePlaceholder"
-                @input="detectType"
-              />
-              <div v-if="captureType === 'bookmark' && content" class="detected-type">
-                {{ validUrl ? t('inbox.detectedBookmark') : t('inbox.invalidUrl') }}
-              </div>
-            </template>
+            <BInput
+              v-if="captureType !== 'file' || density !== 'standard'"
+              v-model:value="content"
+              class="capture-resource-input"
+              :class="{ 'is-sizing-only': captureType === 'file' }"
+              :aria-hidden="captureType === 'file' || undefined"
+              :disabled="captureType === 'file'"
+              type="textarea"
+              :rows="7"
+              :maxlength="60000"
+              :placeholder="capturePlaceholder"
+              @input="detectType"
+            />
+            <div v-if="captureType === 'bookmark' && content" class="detected-type">
+              {{ validUrl ? t('inbox.detectedBookmark') : t('inbox.invalidUrl') }}
+            </div>
 
-            <div v-else class="file-capture">
+            <div v-if="captureType === 'file'" class="file-capture">
               <!-- 来源显式传 'picker',与 handleDrop/handlePaste 一致;别简写成 @change="addFiles",
                    那样 BUpload 以后多 emit 一个参数就会顶掉 source。整块面板作为 BButton，
                    让浅紫色选择区本身就是明确、可键盘访问的文件选择入口。 -->
@@ -83,7 +86,13 @@
                 :max-total-size="MAX_FILE_TOTAL_SIZE"
                 @change="(selected) => addFiles(selected, 'picker')"
               >
-                <BButton block class="file-capture__dropzone" :disabled="submitting" @dragover.prevent @drop.prevent.stop="handleDrop">
+                <BButton
+                  block
+                  class="file-capture__dropzone"
+                  :disabled="submitting"
+                  @dragover.prevent
+                  @drop.prevent.stop="handleDrop"
+                >
                   <strong>{{ t('inbox.chooseFiles') }}</strong>
                   <template v-if="!bookmark.isMobile">
                     <span>{{ t('inbox.dropOrPasteFiles') }}</span>
@@ -98,7 +107,9 @@
                     <strong>{{ t('inbox.selectedFiles', { count: files.length }) }}</strong>
                     <span>{{ formatFileSize(totalFileSize) }}</span>
                   </div>
-                  <BButton size="small" :disabled="submitting" @click="clearFiles">{{ t('inbox.clearSelectedFiles') }}</BButton>
+                  <BButton size="small" :disabled="submitting" @click="clearFiles">{{
+                    t('inbox.clearSelectedFiles')
+                  }}</BButton>
                 </div>
                 <div class="file-list">
                   <div v-for="(file, index) in files" :key="selectedFileKey(file)" class="file-list__item">
@@ -180,7 +191,12 @@
   import TodoEditorModal from '@/components/todo/TodoEditorModal.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import { apiBasePost } from '@/http/request';
-  import { createManagedUploadBatchRequest, uploadManagedCloudFile, type CloudUploadResult, type ManagedCloudUploadReceipt } from '@/api/cloudFileUploadApi';
+  import {
+    createManagedUploadBatchRequest,
+    uploadManagedCloudFile,
+    type CloudUploadResult,
+    type ManagedCloudUploadReceipt,
+  } from '@/api/cloudFileUploadApi';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import { bookmarkStore, inboxStore, todoStore, useUserStore } from '@/store';
   import {
@@ -208,16 +224,20 @@
   import icon from '@/config/icon';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
   import MobileNoticeStrip from '@/components/mobile/MobileNoticeStrip.vue';
+  import { useUiDensity } from '@/composables/useUiDensity';
 
   const MAX_FILE_TOTAL_SIZE = 200 * 1024 * 1024;
 
   const visible = defineModel<boolean>('visible');
   const emit = defineEmits<{ captured: [] }>();
   const { t } = useI18n();
+  const { density } = useUiDensity();
   const router = useRouter();
   const bookmark = bookmarkStore();
   const user = useUserStore();
-  const captureOwner = computed(() => JSON.stringify([user.id, user.adminContext?.id, user.adminContext?.subjectUserId]));
+  const captureOwner = computed(() =>
+    JSON.stringify([user.id, user.adminContext?.id, user.adminContext?.subjectUserId]),
+  );
   const inbox = inboxStore();
   const todo = todoStore();
   const captureType = ref<ActionCaptureType>(inbox.quickCaptureType);
@@ -250,7 +270,7 @@
           visible: quickShellVisible.value,
           title: shellTitle.value,
           showFooter: false,
-          width: 'min(680px, 92vw)',
+          width: 'min(var(--ui-layout-680, 680px), 92vw)',
           maskClosable: !submitting.value,
         },
   );
@@ -507,30 +527,34 @@
     const results: Array<CloudUploadResult | null> = batch.map(() => null);
     let next = 0;
     // 复用随机对象键、逐文件确认与确认回包恢复，且限制并发。
-    await Promise.all(Array.from({ length: Math.min(3, batch.length) }, async () => {
-      while (!controller.signal.aborted && generation === captureGeneration) {
-        const index = next++;
-        if (index >= batch.length) return;
-        try {
-          const receipt = fileUploadReceipts.get(batch[index]) || {};
-          fileUploadReceipts.set(batch[index], receipt);
-          results[index] = await uploadManagedCloudFile(batch[index], {
-            batchRequest,
-            receipt,
-            addToInbox: true,
-            inboxSource: 'quick_capture',
-            signal: controller.signal,
-          });
-        } catch {
-          // 只保留失败项供用户重试；已确认的文件不重传，也不回滚。
+    await Promise.all(
+      Array.from({ length: Math.min(3, batch.length) }, async () => {
+        while (!controller.signal.aborted && generation === captureGeneration) {
+          const index = next++;
+          if (index >= batch.length) return;
+          try {
+            const receipt = fileUploadReceipts.get(batch[index]) || {};
+            fileUploadReceipts.set(batch[index], receipt);
+            results[index] = await uploadManagedCloudFile(batch[index], {
+              batchRequest,
+              receipt,
+              addToInbox: true,
+              inboxSource: 'quick_capture',
+              signal: controller.signal,
+            });
+          } catch {
+            // 只保留失败项供用户重试；已确认的文件不重传，也不回滚。
+          }
         }
-      }
-    }));
+      }),
+    );
     if (generation !== captureGeneration) {
       throw Object.assign(new Error('Capture closed'), { code: 'CAPTURE_CANCELLED' });
     }
     fileUploadController = null;
-    batch.forEach((file, index) => { if (results[index]) fileUploadReceipts.delete(file); });
+    batch.forEach((file, index) => {
+      if (results[index]) fileUploadReceipts.delete(file);
+    });
     const failed = batch.filter((_, index) => !results[index]);
     const saved = results.filter((item): item is CloudUploadResult => Boolean(item));
     if (failed.length) {
@@ -538,7 +562,10 @@
       const remaining = new Set(failed.map(selectedFileKey));
       for (const key of pastedFileKeys) if (!remaining.has(key)) pastedFileKeys.delete(key);
       const hasUnknown = failed.some((file) => fileUploadReceipts.get(file)?.pending);
-      fileUploadNotice.value = t(hasUnknown ? 'inbox.captureFilesUnknown' : 'inbox.captureFilesPartial', { saved: saved.length, failed: failed.length });
+      fileUploadNotice.value = t(hasUnknown ? 'inbox.captureFilesUnknown' : 'inbox.captureFilesPartial', {
+        saved: saved.length,
+        failed: failed.length,
+      });
       if (saved.length) {
         await refreshQuickCaptureStores('file', captureWorkspaceActive('file'), inbox, todo);
       }
@@ -573,12 +600,7 @@
       files.value = [];
       pastedFileKeys.clear();
       manualType.value = false;
-      await refreshQuickCaptureStores(
-        captureType.value,
-        captureWorkspaceActive(captureType.value),
-        inbox,
-        todo,
-      );
+      await refreshQuickCaptureStores(captureType.value, captureWorkspaceActive(captureType.value), inbox, todo);
       if (generation !== captureGeneration) return;
       emit('captured');
       message.success(successText.value);
@@ -761,20 +783,20 @@
   .capture-modal {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
     min-width: 0;
   }
 
   .file-upload-status {
-    margin: 12px 0;
+    margin: var(--ui-space-12, 12px) 0;
     color: var(--text-color);
     line-height: 1.6;
   }
 
   .capture-intro {
     display: grid;
-    gap: 5px;
-    padding: 12px 14px;
+    gap: var(--ui-space-5, 5px);
+    padding: var(--ui-space-12, 12px) var(--ui-space-14, 14px);
     border: 1px solid color-mix(in srgb, var(--primary-color) 14%, var(--surface-border-color));
     border-radius: 12px;
     background: color-mix(in srgb, var(--primary-color) 5%, var(--card-background));
@@ -782,7 +804,7 @@
 
   .capture-intro__eyebrow {
     color: var(--primary-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 700;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -791,7 +813,7 @@
   .capture-intro p {
     margin: 0;
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.55;
   }
 
@@ -799,7 +821,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     min-width: 0;
   }
 
@@ -809,8 +831,8 @@
 
   .capture-intro__inbox-link {
     flex: 0 0 auto;
-    gap: 5px;
-    padding: 0 8px;
+    gap: var(--ui-space-5, 5px);
+    padding: 0 var(--ui-space-8, 8px);
     border: 1px solid color-mix(in srgb, var(--primary-color) 18%, transparent) !important;
     background: color-mix(in srgb, var(--primary-color) 7%, transparent);
     color: var(--primary-color);
@@ -822,13 +844,13 @@
   }
 
   .capture-intro__pending-count {
-    min-width: 18px;
-    padding: 1px 5px;
+    min-width: var(--ui-layout-18, 18px);
+    padding: var(--ui-space-1, 1px) var(--ui-space-5, 5px);
     border-radius: 999px;
     background: var(--primary-color);
     color: var(--primary-contrast-color, #fff);
-    font-size: 10px;
-    line-height: 16px;
+    font-size: var(--ui-font-10, 10px);
+    line-height: var(--ui-layout-16, 16px);
     text-align: center;
   }
 
@@ -849,8 +871,8 @@
 
   .capture-workspace {
     display: grid;
-    gap: 14px;
-    padding: 16px;
+    gap: var(--ui-space-14, 14px);
+    padding: var(--ui-space-16, 16px);
     border: 1px solid var(--surface-border-color);
     border-radius: 14px;
     background: var(--card-background);
@@ -864,72 +886,82 @@
     .capture-workspace.is-bookmark,
     .capture-workspace.is-note,
     .capture-workspace.is-file {
-      min-height: 263px;
+      min-height: var(--ui-layout-263, 263px);
       box-sizing: border-box;
     }
   }
 
   .capture-panel-intro {
     display: grid;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
 
   .capture-panel-intro strong {
     color: var(--text-color);
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
   }
 
   .capture-panel-intro span {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.5;
   }
   .detected-type {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .file-capture {
+    grid-area: 2 / 1;
     display: grid;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
+  }
+  .capture-resource-input {
+    grid-area: 2 / 1;
+  }
+  // 非标准档让文件区与七行输入框共用网格尺寸，避免切换时弹框居中位置跳动。
+  // 标准档保留原有文件区几何；占位输入框不可见、不可聚焦，也不参与文件捕获。
+  .capture-resource-input.is-sizing-only {
+    visibility: hidden;
+    pointer-events: none;
   }
   .file-capture__dropzone {
     width: 100%;
-    min-height: 112px;
+    min-height: var(--ui-layout-112, 112px);
     border: 1px dashed color-mix(in srgb, var(--primary-color) 28%, var(--card-border-color));
     border-radius: 12px;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     color: var(--desc-color);
-    padding: 18px;
+    padding: var(--ui-space-18, 18px);
     box-sizing: border-box;
     background: color-mix(in srgb, var(--primary-color) 2.5%, var(--card-background));
   }
   .file-capture__dropzone strong {
     color: var(--text-color);
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     font-weight: 600;
   }
   .file-capture__dropzone > span {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .file-capture__dropzone kbd {
-    padding: 3px 7px;
+    padding: var(--ui-space-3, 3px) var(--ui-space-7, 7px);
     border: 1px solid var(--surface-border-color);
     border-radius: 6px;
     background: var(--workspace-panel-bg-color);
     color: var(--text-color);
     font-family: inherit;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1;
     box-shadow: 0 1px 0 color-mix(in srgb, var(--text-color) 10%, transparent);
   }
   .file-selection {
     display: grid;
-    gap: 8px;
-    padding: 10px;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-10, 10px);
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     background: var(--workspace-panel-bg-color);
@@ -938,26 +970,26 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .file-selection__header > div {
     display: flex;
     align-items: baseline;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     min-width: 0;
   }
   .file-selection__header strong {
     color: var(--text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .file-selection__header span {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .file-list {
     display: grid;
-    gap: 6px;
-    max-height: 186px;
+    gap: var(--ui-space-6, 6px);
+    max-height: var(--ui-layout-186, 186px);
     overflow-y: auto;
     overscroll-behavior: contain;
   }
@@ -965,9 +997,9 @@
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
     min-width: 0;
-    padding: 8px 9px;
+    padding: var(--ui-space-8, 8px) var(--ui-space-9, 9px);
     border-radius: 9px;
     background: var(--card-background);
   }
@@ -975,15 +1007,15 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 30px;
-    height: 30px;
+    width: var(--ui-layout-30, 30px);
+    height: var(--ui-layout-30, 30px);
     border-radius: 9px;
     background: color-mix(in srgb, var(--file-color, #ff8a00) 10%, var(--card-background));
     color: var(--file-color, #ff8a00);
   }
   .file-list__content {
     display: grid;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
     min-width: 0;
   }
   .file-list__name {
@@ -991,18 +1023,18 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     color: var(--text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 600;
   }
   .file-list__meta {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .file-list__source {
-    padding: 1px 5px;
+    padding: var(--ui-space-1, 1px) var(--ui-space-5, 5px);
     border-radius: 999px;
     background: color-mix(in srgb, var(--primary-color) 9%, transparent);
     color: var(--primary-color);
@@ -1018,24 +1050,24 @@
     justify-content: space-between;
     align-items: center;
     flex-wrap: wrap;
-    gap: 16px;
-    padding: 8px 0 4px;
+    gap: var(--ui-space-16, 16px);
+    padding: var(--ui-space-8, 8px) 0 var(--ui-space-4, 4px);
     color: var(--text-color);
   }
   .capture-success__message {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     min-width: 0;
-    font-size: 13px;
-    line-height: 20px;
+    font-size: var(--ui-font-13, 13px);
+    line-height: var(--ui-layout-20, 20px);
   }
   .capture-success__icon {
     display: grid;
     place-items: center;
-    flex: 0 0 22px;
-    width: 22px;
-    height: 22px;
+    flex: 0 0 var(--ui-layout-22, 22px);
+    width: var(--ui-layout-22, 22px);
+    height: var(--ui-layout-22, 22px);
     border-radius: 50%;
     color: var(--workspace-note-text);
     background: var(--hover-background);
@@ -1045,14 +1077,14 @@
     align-items: center;
     justify-content: flex-end;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     margin-left: auto;
   }
   .capture-success__actions .b_btn {
-    height: 32px;
-    min-height: 32px;
-    padding: 0 10px;
-    font-size: 12px;
+    height: var(--ui-layout-32, 32px);
+    min-height: var(--ui-layout-32, 32px);
+    padding: 0 var(--ui-space-10, 10px);
+    font-size: var(--ui-font-12, 12px);
   }
   .capture-success__link.b_btn {
     background: transparent;
@@ -1070,7 +1102,7 @@
     display: flex;
     align-items: flex-end;
     justify-content: flex-end;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   /* 负 margin 抵消抽屉 body 内边距，让底栏通栏压住滚动内容 */
@@ -1078,14 +1110,16 @@
     position: sticky;
     bottom: -14px;
     z-index: 1;
-    margin: 4px -14px -14px;
-    padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+    /* ui-density-fixed: 仅手机 is-sticky 底栏抵消抽屉 bodyPadding 的固定 14px，与 bottom: -14px 一致。 */
+    margin: var(--ui-space-4, 4px) -14px -14px;
+    padding: var(--ui-space-10, 10px) var(--ui-space-14, 14px)
+      calc(var(--ui-space-10, 10px) + env(safe-area-inset-bottom));
     border-top: 1px solid var(--surface-divider-color, var(--card-border-color));
     background: var(--card-background);
   }
   :deep(.b-textarea) {
     resize: vertical;
-    min-height: 82px;
+    min-height: var(--ui-layout-82, 82px);
     border-color: var(--surface-border-color);
     border-radius: 10px;
     background: var(--card-background) !important;
@@ -1093,10 +1127,10 @@
   @media (max-width: 767px) {
     .capture-modal {
       height: 100%;
-      gap: 14px;
+      gap: var(--ui-space-14, 14px);
       overflow-x: hidden;
       overflow-y: auto;
-      padding-bottom: calc(82px + env(safe-area-inset-bottom));
+      padding-bottom: calc(var(--ui-space-82, 82px) + env(safe-area-inset-bottom));
       box-sizing: border-box;
       overscroll-behavior-y: contain;
       -webkit-overflow-scrolling: touch;
@@ -1105,30 +1139,30 @@
       /* 待办表单更高时，纵向 flex 不能拿提示条的高度补空间；
          四个 Tab 统一从 64px 起步，窄屏文案需要换行时允许自然增高。 */
       flex: 0 0 auto;
-      min-height: 64px;
-      padding: 9px 13px;
+      min-height: var(--ui-layout-64, 64px);
+      padding: var(--ui-space-9, 9px) var(--ui-space-13, 13px);
       border: 0;
       border-radius: 13px;
     }
     .capture-workspace {
-      gap: 14px;
-      padding: 16px;
+      gap: var(--ui-space-14, 14px);
+      padding: var(--ui-space-16, 16px);
       border-radius: 17px;
       box-shadow: none;
     }
     .capture-tabs :deep(.tab-container) {
-      gap: 4px;
-      padding: 4px;
+      gap: var(--ui-space-4, 4px);
+      padding: var(--ui-space-4, 4px);
       border: 0;
       border-radius: 13px;
       background: var(--workspace-panel-bg-color);
     }
     .capture-tabs :deep(.tab) {
-      min-height: 36px;
-      padding: 0 8px;
+      min-height: var(--ui-layout-36, 36px);
+      padding: 0 var(--ui-space-8, 8px);
       border: 0;
       border-radius: 10px;
-      font-size: 13px;
+      font-size: var(--ui-font-13, 13px);
     }
     .capture-tabs :deep(.tab.is-active) {
       color: var(--primary-color);
@@ -1144,7 +1178,7 @@
       width: 100%;
       margin-left: 0;
       justify-content: flex-start;
-      gap: 6px;
+      gap: var(--ui-space-6, 6px);
     }
     .capture-success__continue {
       margin-left: auto;
@@ -1160,11 +1194,12 @@
       left: 0;
       z-index: 2;
       margin: 0;
-      padding: 12px 14px calc(20px + env(safe-area-inset-bottom));
+      padding: var(--ui-space-12, 12px) var(--ui-space-14, 14px)
+        calc(var(--ui-space-20, 20px) + env(safe-area-inset-bottom));
     }
     .capture-actions.is-sticky :deep(.b_btn) {
-      height: 48px;
-      min-height: 48px;
+      height: var(--ui-layout-48, 48px);
+      min-height: var(--ui-layout-48, 48px);
     }
   }
 </style>

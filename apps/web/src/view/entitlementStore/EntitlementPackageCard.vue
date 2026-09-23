@@ -3,7 +3,7 @@
     as="article"
     class="package-card"
     :class="{ 'is-campaign': isCampaign, 'is-recommended': isRecommended }"
-    padding="12px"
+    padding="var(--ui-space-12, 12px)"
     radius="12px"
   >
     <span v-if="isRecommended" class="package-card__recommendation">{{ t('entitlementStore.recommended') }}</span>
@@ -11,7 +11,9 @@
       <span class="package-card__icon" aria-hidden="true">
         <SvgIcon :src="packageIcon" size="20" />
       </span>
-      <BChip v-if="isCampaign" tone="pending" max-width="160px">{{ campaignItem.campaignTitle }}</BChip>
+      <BChip v-if="isCampaign" tone="pending" max-width="var(--ui-layout-160, 160px)">{{
+        campaignItem.campaignTitle
+      }}</BChip>
       <BChip v-else :tone="firstPurchaseTone">{{ firstPurchaseLabel }}</BChip>
     </div>
 
@@ -181,26 +183,26 @@
   }
   .package-card__recommendation {
     position: absolute;
-    top: -10px;
-    right: 12px;
-    padding: 2px 10px;
+    top: calc(-1 * var(--ui-space-10, 10px));
+    right: var(--ui-space-12, 12px);
+    padding: var(--ui-space-2, 2px) var(--ui-space-10, 10px);
     border-radius: 13px;
     background: var(--primary-color);
     color: white;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.5;
   }
   .package-card__top {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 6px;
-    margin-bottom: 8px;
-    min-height: 32px;
+    gap: var(--ui-space-6, 6px);
+    margin-bottom: var(--ui-space-8, 8px);
+    min-height: var(--ui-layout-32, 32px);
   }
   .package-card__icon {
-    width: 32px;
-    height: 32px;
+    width: var(--ui-layout-32, 32px);
+    height: var(--ui-layout-32, 32px);
     flex-shrink: 0;
     display: grid;
     place-items: center;
@@ -210,61 +212,61 @@
     color: var(--primary-color);
   }
   .package-card__top :deep(.b-chip) {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     white-space: normal;
     line-height: 1.4;
   }
   .package-card__price {
     display: flex;
     align-items: baseline;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
     line-height: 1.2;
   }
   .package-card__price small {
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
   }
   .package-card__price strong {
-    font-size: 32px;
+    font-size: var(--ui-font-32, 32px);
     font-weight: 700;
     letter-spacing: -0.035em;
   }
   h3 {
     font:
-      700 16px/1.5 'Songti SC',
+      700 var(--ui-font-16, 16px)/1.5 'Songti SC',
       serif;
-    margin: 4px 0 0;
+    margin: var(--ui-space-4, 4px) 0 0;
   }
   .package-card__scenario {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     line-height: 1.6;
-    margin: 3px 0 10px;
+    margin: var(--ui-space-3, 3px) 0 var(--ui-space-10, 10px);
     color: var(--desc-color);
   }
   .package-card__benefits {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
     margin-top: auto;
-    margin-bottom: 8px;
-    padding-top: 10px;
+    margin-bottom: var(--ui-space-8, 8px);
+    padding-top: var(--ui-space-10, 10px);
   }
   .package-card__benefit-row {
     display: flex;
     flex-direction: column;
     justify-content: center;
     min-width: 0;
-    padding: 6px 7px;
+    padding: var(--ui-space-6, 6px) var(--ui-space-7, 7px);
     background: var(--primary-color-light);
     border: 1px solid var(--surface-border-color);
     border-radius: 6px;
   }
   .package-card__benefit-row span {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
     line-height: 1.5;
   }
   .package-card__benefit-row strong {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.6;
     overflow-wrap: break-word;
   }
@@ -273,9 +275,9 @@
   }
   .package-card__status-note,
   .package-card__saving {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.5;
-    margin: 0 0 8px;
+    margin: 0 0 var(--ui-space-8, 8px);
     color: var(--desc-color);
   }
   .package-card__action-wrap {
@@ -283,18 +285,18 @@
   }
   .package-card__action.b_btn {
     width: 100%;
-    min-height: 34px;
-    font-size: 13px;
+    min-height: var(--ui-layout-34, 34px);
+    font-size: var(--ui-font-13, 13px);
   }
   .is-campaign .package-card__benefits {
     grid-template-columns: 1fr;
   }
   .package-card__meta-list {
     display: grid;
-    gap: 3px;
-    font-size: 12px;
+    gap: var(--ui-space-3, 3px);
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
-    margin: 4px 0 10px;
+    margin: var(--ui-space-4, 4px) 0 var(--ui-space-10, 10px);
   }
   .is-mobile .package-card__action.b_btn {
     min-height: 40px;

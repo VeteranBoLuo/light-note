@@ -73,21 +73,22 @@
 
 <style lang="less" scoped>
   .cloud-folder-picker {
-    max-height: min(56vh, 440px);
+    max-height: min(56vh, var(--ui-layout-440, 440px));
     overflow-y: auto;
     display: grid;
     align-content: start;
-    gap: 5px;
-    padding: 2px;
+    gap: var(--ui-space-5, 5px);
+    padding: var(--ui-space-2, 2px);
   }
 
   .cloud-folder-picker__row {
     width: 100%;
-    min-height: 42px;
+    min-height: var(--ui-layout-42, 42px);
     height: auto;
     justify-content: flex-start;
-    gap: 9px;
-    padding: 6px 10px 6px calc(10px + (var(--cloud-folder-picker-depth, 1) - 1) * 18px);
+    gap: var(--ui-space-9, 9px);
+    padding: var(--ui-space-6, 6px) var(--ui-space-10, 10px) var(--ui-space-6, 6px)
+      calc(var(--ui-space-10, 10px) + (var(--cloud-folder-picker-depth, 1) - 1) * var(--ui-space-18, 18px));
     border: 1px solid transparent;
     border-radius: 9px;
     color: var(--text-color);
@@ -122,14 +123,14 @@
   .cloud-folder-picker__disabled {
     flex: 0 0 auto;
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .cloud-folder-picker__empty {
     margin: 0;
-    padding: 28px 12px;
+    padding: var(--ui-space-28, 28px) var(--ui-space-12, 12px);
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     text-align: center;
   }
 

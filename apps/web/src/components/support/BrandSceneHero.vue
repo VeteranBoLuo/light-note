@@ -77,8 +77,8 @@
   .brand-scene {
     position: relative;
     isolation: isolate;
-    min-height: 308px;
-    padding: 18px 0 24px;
+    min-height: var(--ui-layout-308, 308px);
+    padding: var(--ui-space-18, 18px) 0 var(--ui-space-24, 24px);
     box-sizing: border-box;
   }
   .brand-scene__art {
@@ -102,72 +102,72 @@
   }
   .brand-scene__inner {
     width: 74%;
-    max-width: 1260px;
+    max-width: var(--ui-layout-1260, 1260px);
     margin: auto;
   }
   .brand-scene h1 {
     font:
-      700 clamp(34px, 2.66vw, 46px)/1.24 'Songti SC',
+      700 clamp(var(--ui-font-34, 34px), 2.66vw, var(--ui-font-46, 46px))/1.24 'Songti SC',
       'STSong',
       serif;
     white-space: pre-line;
     letter-spacing: -0.04em;
-    margin: 13px 0 10px;
-    max-width: 720px;
+    margin: var(--ui-space-13, 13px) 0 var(--ui-space-10, 10px);
+    max-width: var(--ui-layout-720, 720px);
   }
   .brand-scene__eyebrow {
     display: inline-flex;
     align-items: center;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     margin: 0;
-    padding: 3px 11px;
+    padding: var(--ui-space-3, 3px) var(--ui-space-11, 11px);
     border: 1px solid var(--primary-color);
     border-radius: 18px;
     background: var(--hover-background);
     color: var(--primary-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .brand-scene__description {
     white-space: pre-line;
-    max-width: 650px;
-    font-size: 14px;
+    max-width: var(--ui-layout-650, 650px);
+    font-size: var(--ui-font-14, 14px);
     line-height: 1.7;
     margin: 0;
   }
   .brand-scene__features {
     display: flex;
-    gap: 10px;
-    max-width: 720px;
-    margin-top: 14px;
+    gap: var(--ui-space-10, 10px);
+    max-width: var(--ui-layout-720, 720px);
+    margin-top: var(--ui-space-14, 14px);
   }
   .brand-scene__feature {
     display: flex;
     align-items: center;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
     flex: 1;
     min-width: 0;
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
-    padding: 9px 11px;
+    padding: var(--ui-space-9, 9px) var(--ui-space-11, 11px);
     background: var(--card-background);
     background: color-mix(in srgb, var(--card-background) 87%, transparent);
   }
   .brand-scene__feature strong {
     display: block;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.5;
   }
   .brand-scene__feature small {
     display: block;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
     line-height: 1.5;
   }
   .brand-scene__orb {
     display: grid;
     place-items: center;
-    width: 44px;
-    height: 44px;
+    width: var(--ui-layout-44, 44px);
+    height: var(--ui-layout-44, 44px);
     flex-shrink: 0;
     border-radius: 50%;
     background: var(--hover-background);
@@ -175,19 +175,19 @@
   }
   .brand-scene__actions {
     display: flex;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     align-items: center;
     flex-wrap: wrap;
-    margin-top: 14px;
+    margin-top: var(--ui-space-14, 14px);
   }
   .brand-scene__accent {
     color: var(--primary-color);
   }
   .brand-scene--campaign {
-    min-height: 358px;
+    min-height: var(--ui-layout-358, 358px);
   }
   .brand-scene--campaign h1 {
-    font-size: clamp(40px, 3.6vw, 60px);
+    font-size: clamp(var(--ui-font-40, 40px), 3.6vw, var(--ui-font-60, 60px));
   }
   .brand-scene--campaign .brand-scene__inner {
     width: 74%;

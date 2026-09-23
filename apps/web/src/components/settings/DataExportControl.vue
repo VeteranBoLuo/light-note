@@ -1,6 +1,6 @@
 <template>
   <BButton type="primary" :disabled="!owner" @click="open">{{ entryLabel }}</BButton>
-  <BModal v-model:visible="visible" :title="t('dataExport.title')" width="540px" :show-footer="false">
+  <BModal v-model:visible="visible" :title="t('dataExport.title')" width="var(--ui-layout-540, 540px)" :show-footer="false">
     <div class="data-export">
       <p v-if="error" role="alert" class="export-error">{{ error }}</p>
       <BLoading v-if="loading && !task" :loading="true" />
@@ -344,48 +344,48 @@
     min-width: 0;
   }
   .export-intro {
-    margin: 0 0 16px;
+    margin: 0 0 var(--ui-space-16, 16px);
     font-weight: 600;
   }
   .export-option {
-    padding: 16px 0;
+    padding: var(--ui-space-16, 16px) 0;
     border-bottom: 1px solid var(--border-color);
   }
   .export-option p,
   .export-hint {
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.6;
-    margin: 8px 0;
+    margin: var(--ui-space-8, 8px) 0;
   }
   .export-note-options {
-    margin: 14px 0 0 26px;
+    margin: var(--ui-space-14, 14px) 0 0 var(--ui-space-26, 26px);
     display: grid;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .export-note-options label {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .export-note-options p {
     margin: 0;
   }
   .export-actions {
-    margin-top: 24px;
+    margin-top: var(--ui-space-24, 24px);
     display: flex;
     flex-wrap: wrap;
     justify-content: flex-end;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .export-status {
     border-left: 3px solid var(--primary-color);
-    padding-left: 10px;
+    padding-left: var(--ui-space-10, 10px);
     font-weight: 600;
   }
   .export-error {
     color: var(--danger-color);
   }
   .export-failures {
-    max-height: 220px;
+    max-height: var(--ui-layout-220, 220px);
     overflow: auto;
     overflow-wrap: anywhere;
   }

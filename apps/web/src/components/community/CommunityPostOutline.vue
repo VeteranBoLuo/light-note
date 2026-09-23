@@ -6,7 +6,7 @@
         v-for="(heading, index) in headings"
         :key="index"
         class="post-outline-item"
-        :style="{ paddingLeft: `${10 + Math.min(3, heading.level - minimumLevel) * 12}px` }"
+        :style="{ paddingLeft: `${dimension(10) + Math.min(3, heading.level - minimumLevel) * dimension(12)}px` }"
         :aria-current="activeIndex === index ? 'location' : undefined"
         @click="selectHeading(index)"
         >{{ heading.text }}</BButton
@@ -18,7 +18,9 @@
   import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
-  import { getRootZoom, scrollIntoContainer } from '@/utils/zoom';
+  import { scrollIntoContainer } from '@/utils/scrolling';
+  import { useUiDensity } from '@/composables/useUiDensity';
+  const { dimension } = useUiDensity();
   const props = defineProps<{
     contentRoot: HTMLElement | null;
     scrollContainer?: HTMLElement | null;
@@ -48,7 +50,7 @@
     }
     const container = props.scrollContainer;
     if (!container) return;
-    const top = container.getBoundingClientRect().top + 32 * getRootZoom();
+    const top = container.getBoundingClientRect().top + 32;
     let active = -1;
     headings.value.forEach((heading, index) => {
       if (heading.element.getBoundingClientRect().top <= top) active = index;
@@ -103,14 +105,14 @@
 <style scoped lang="less">
   .post-outline {
     border-top: 1px solid var(--workspace-divider);
-    padding-top: 24px;
+    padding-top: var(--ui-space-24, 24px);
     min-height: 0;
     display: flex;
     flex-direction: column;
   }
   .post-outline h2 {
-    font-size: 14px;
-    margin: 0 0 12px;
+    font-size: var(--ui-font-14, 14px);
+    margin: 0 0 var(--ui-space-12, 12px);
     font-weight: 600;
   }
   .post-outline nav {
@@ -118,14 +120,14 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
   .post-outline-item.b_btn {
     flex-shrink: 0;
     width: 100%;
     height: auto;
-    min-height: 36px;
-    padding: 8px 6px;
+    min-height: var(--ui-layout-36, 36px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-6, 6px);
     justify-content: flex-start;
     text-align: left;
     white-space: normal;

@@ -28,7 +28,8 @@
   import { computed, nextTick, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
-  import { scrollNearestIntoContainer } from '@/utils/zoom';
+  import { useUiDensity } from '@/composables/useUiDensity';
+  import { scrollNearestIntoContainer } from '@/utils/scrolling';
 
   interface NoteOutlineItem {
     id?: string;
@@ -65,8 +66,10 @@
     props.headings.length ? Math.min(...props.headings.map((heading) => Number(heading.level) || 1)) : 1,
   );
 
+  const { dimension } = useUiDensity();
+
   function headingIndent(level: number) {
-    return Math.min(3, Math.max(0, Number(level || 1) - minimumHeadingLevel.value)) * 16;
+    return Math.min(3, Math.max(0, Number(level || 1) - minimumHeadingLevel.value)) * dimension(16);
   }
 
   function headingKey(heading: NoteOutlineItem, index: number) {
@@ -117,12 +120,12 @@
 
 <style scoped lang="less">
   .note-outline-list {
-    height: calc(100% - 12px);
+    height: calc(100% - var(--ui-space-12, 12px));
     display: grid;
     align-content: start;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
     min-height: 0;
-    margin: 6px 0;
+    margin: var(--ui-space-6, 6px) 0;
     padding: 0;
     box-sizing: border-box;
     overflow-y: auto;
@@ -132,13 +135,13 @@
     position: relative;
     width: 100%;
     min-width: 0;
-    min-height: 36px;
+    min-height: var(--ui-control-36, 36px);
     height: auto;
-    padding: 7px 10px 7px calc(10px + var(--toc-indent));
+    padding: var(--ui-space-7, 7px) var(--ui-space-10, 10px) var(--ui-space-7, 7px) calc(var(--ui-space-10, 10px) + var(--toc-indent));
     display: flex;
     align-items: center;
     justify-content: flex-start;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
     border: 1px solid transparent;
     border-radius: 9px;
     color: var(--catalog-color);
@@ -186,7 +189,7 @@
   .toc-text {
     min-width: 0;
     overflow: hidden;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.45;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -216,11 +219,11 @@
   }
 
   .toc-empty {
-    min-height: 180px;
+    min-height: var(--ui-layout-180, 180px);
     margin: 0;
     display: grid;
     place-items: center;
     color: var(--desc-color);
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
   }
 </style>

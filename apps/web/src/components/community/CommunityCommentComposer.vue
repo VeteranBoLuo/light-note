@@ -1,7 +1,10 @@
 <template>
   <section class="comment-composer" @keydown.esc.stop="emojiOpen = false">
     <div v-if="replying" class="comment-reply-quote">
-      <div><strong>{{ t('community.feed.reply') }} {{ replying }}</strong><ChatInlineEmojiText :content="quote || ''" /></div>
+      <div
+        ><strong>{{ t('community.feed.reply') }} {{ replying }}</strong
+        ><ChatInlineEmojiText :content="quote || ''"
+      /></div>
       <BButton :disabled="busy" :aria-label="t('community.feed.cancelReply')" @click="$emit('cancel-reply')">×</BButton>
     </div>
     <ChatComposerInput
@@ -16,7 +19,12 @@
       @update:value="updateBody"
     />
     <div class="comment-composer-tools">
-      <BPopover v-model:open="emojiOpen" :disabled="busy" placement="top-left" overlay-class-name="comment-emoji-popover">
+      <BPopover
+        v-model:open="emojiOpen"
+        :disabled="busy"
+        placement="top-left"
+        overlay-class-name="comment-emoji-popover"
+      >
         <BButton
           class="comment-emoji-trigger"
           :disabled="busy"
@@ -78,17 +86,20 @@
     await nextTick();
     input.value?.focus();
   }
-  watch(() => props.replying, async (replying) => {
-    if (replying) {
-      await nextTick();
-      input.value?.focus();
-    }
-  });
+  watch(
+    () => props.replying,
+    async (replying) => {
+      if (replying) {
+        await nextTick();
+        input.value?.focus();
+      }
+    },
+  );
 </script>
 <style scoped lang="less">
   .comment-composer {
-    margin: 12px 0;
-    padding: 12px;
+    margin: var(--ui-space-12, 12px) 0;
+    padding: var(--ui-space-12, 12px);
     border: 1px solid var(--surface-border-color);
     border-radius: 10px;
     background: var(--card-background);
@@ -105,25 +116,25 @@
     background: transparent;
     outline: none;
     resize: none;
-    height: 84px;
-    min-height: 84px;
-    max-height: 84px;
+    height: var(--ui-layout-84, 84px);
+    min-height: var(--ui-layout-84, 84px);
+    max-height: var(--ui-layout-84, 84px);
     overflow-y: auto;
     word-break: break-all;
-    padding: 4px 11px !important;
+    padding: var(--ui-space-4, 4px) var(--ui-space-11, 11px) !important;
     font-size: 14px;
     line-height: 1.6;
   }
   .comment-composer-tools {
     display: flex;
     align-items: center;
-    gap: 12px;
-    margin-top: 8px;
+    gap: var(--ui-space-12, 12px);
+    margin-top: var(--ui-space-8, 8px);
   }
   .comment-composer-tools .comment-emoji-trigger {
     background: transparent;
     border: 0;
-    padding: 4px;
+    padding: var(--ui-space-4, 4px);
     color: var(--desc-color);
   }
   .comment-composer-tools small {
@@ -131,18 +142,43 @@
     color: var(--desc-color);
   }
   .comment-emoji-panel {
-    width: min(360px, calc(100vw - 24px));
-    height: min(320px, calc(100vh - 32px));
+    width: min(var(--ui-layout-360, 360px), calc(100vw - var(--ui-layout-24, 24px)));
+    height: min(var(--ui-layout-320, 320px), calc(100vh - var(--ui-layout-32, 32px)));
     overflow: hidden;
     border-radius: 12px;
   }
-
 </style>
 
 <style scoped>
-.comment-reply-quote { display:flex; gap:12px; align-items:flex-start; padding:8px 10px; margin-bottom:8px; border-left:2px solid var(--workspace-purple-text); background:var(--workspace-hover); font-size:12px; color:var(--desc-color); }
-.comment-reply-quote > div { flex:1; min-width:0; }
-.comment-reply-quote strong { display:block; margin-bottom:4px; color:var(--text-color); }
-.comment-reply-quote :deep(.chat-inline-emoji-text) { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
-.comment-reply-quote .b_btn { background:transparent; border:0; padding:0 4px; }
+  .comment-reply-quote {
+    display: flex;
+    gap: var(--ui-space-12, 12px);
+    align-items: flex-start;
+    padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px);
+    margin-bottom: var(--ui-space-8, 8px);
+    border-left: 2px solid var(--workspace-purple-text);
+    background: var(--workspace-hover);
+    font-size: var(--ui-font-12, 12px);
+    color: var(--desc-color);
+  }
+  .comment-reply-quote > div {
+    flex: 1;
+    min-width: 0;
+  }
+  .comment-reply-quote strong {
+    display: block;
+    margin-bottom: var(--ui-space-4, 4px);
+    color: var(--text-color);
+  }
+  .comment-reply-quote :deep(.chat-inline-emoji-text) {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .comment-reply-quote .b_btn {
+    background: transparent;
+    border: 0;
+    padding: 0 var(--ui-space-4, 4px);
+  }
 </style>

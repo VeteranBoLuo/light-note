@@ -195,15 +195,15 @@
     width: 100%;
     min-width: 0;
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(var(--ui-layout-148, 148px), 1fr));
     align-items: center;
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
     margin: 0;
     color: var(--text-color);
   }
 
   .organize-donut-chart__visual {
-    width: min(100%, 174px);
+    width: min(100%, var(--ui-layout-174, 174px));
     aspect-ratio: 1;
     position: relative;
     justify-self: center;
@@ -242,7 +242,7 @@
     align-items: center;
     justify-content: center;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
     border-radius: 50%;
     color: var(--text-color);
     text-align: center;
@@ -252,7 +252,7 @@
   .organize-donut-chart__center strong {
     max-width: 100%;
     overflow: hidden;
-    font-size: clamp(20px, 2.4vw, 28px);
+    font-size: clamp(var(--ui-font-20, 20px), 2.4vw, var(--ui-font-28, 28px));
     font-variant-numeric: tabular-nums;
     line-height: 1.1;
     text-overflow: ellipsis;
@@ -263,7 +263,7 @@
     max-width: 100%;
     overflow: hidden;
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.3;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -272,7 +272,7 @@
   .organize-donut-chart__legend {
     min-width: 0;
     display: grid;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
     margin: 0;
     padding: 0;
     list-style: none;
@@ -281,11 +281,12 @@
   .organize-donut-chart__legend-item {
     min-width: 0;
     display: grid;
-    grid-template-columns: 9px minmax(0, 1fr) auto minmax(42px, auto);
+    /* ui-density-fixed: 首列容纳固定 8px 图例色点及描边；图例装饰不参与密度缩放。 */
+    grid-template-columns: 9px minmax(0, 1fr) auto minmax(var(--ui-layout-42, 42px), auto);
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.35;
   }
 
@@ -328,7 +329,7 @@
   .organize-donut-chart__mobile-empty {
     display: none;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     text-align: center;
   }
 

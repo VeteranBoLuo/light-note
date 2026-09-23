@@ -317,7 +317,7 @@
     <BDrawer
       :open="isAssistantOpen"
       :title="t('help.aiTitle')"
-      width="420px"
+      width="var(--ui-layout-420, 420px)"
       height="min(78dvh, 680px)"
       :placement="isCompactHelpLayout ? 'bottom' : 'right'"
       :modal="isCompactHelpLayout"
@@ -838,10 +838,10 @@
     display: flex;
     width: 100%;
     height: 100%;
-    padding: clamp(12px, 1.4vw, 22px);
+    padding: clamp(var(--ui-space-12, 12px), 1.4vw, var(--ui-space-22, 22px));
     box-sizing: border-box;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     color: var(--text-color);
     background: var(--surface-page-bg);
   }
@@ -907,9 +907,9 @@
   .help-body {
     position: relative;
     display: grid;
-    grid-template-columns: 236px minmax(0, 1fr);
+    grid-template-columns: var(--ui-layout-236, 236px) minmax(0, 1fr);
     grid-template-areas: 'catalog content';
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
     flex: 1 1 auto;
     min-height: 0;
     overflow: hidden;
@@ -932,10 +932,10 @@
     display: flex;
     min-height: 0;
     flex: 1 1 auto;
-    padding: 12px 10px;
+    padding: var(--ui-space-12, 12px) var(--ui-space-10, 10px);
     box-sizing: border-box;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     overflow: hidden;
   }
 
@@ -943,18 +943,18 @@
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 6px;
-    padding-top: 12px;
-    margin-top: 12px;
+    gap: var(--ui-space-6, 6px);
+    padding-top: var(--ui-space-12, 12px);
+    margin-top: var(--ui-space-12, 12px);
     border-top: 1px solid var(--surface-divider-color);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .help-answer-source.b_btn {
     max-width: 100%;
     height: auto;
-    padding: 6px 8px;
+    padding: var(--ui-space-6, 6px) var(--ui-space-8, 8px);
     white-space: normal;
     overflow-wrap: anywhere;
     text-align: left;
@@ -965,10 +965,10 @@
   .help-home-link.b_btn {
     width: 100%;
     height: auto;
-    min-height: 58px;
-    padding: 8px;
+    min-height: var(--ui-layout-58, 58px);
+    padding: var(--ui-space-8, 8px);
     justify-content: flex-start;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
     border: 1px solid transparent !important;
     border-radius: 10px;
     color: var(--text-color);
@@ -985,9 +985,9 @@
 
   .help-home-link__icon {
     display: inline-flex;
-    width: 32px;
-    height: 32px;
-    flex: 0 0 32px;
+    width: var(--ui-layout-32, 32px);
+    height: var(--ui-layout-32, 32px);
+    flex: 0 0 var(--ui-layout-32, 32px);
     align-items: center;
     justify-content: center;
     border: 1px solid var(--surface-border-color);
@@ -1000,7 +1000,7 @@
     display: flex;
     min-width: 0;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
 
   .help-home-link__copy strong,
@@ -1012,18 +1012,18 @@
   }
 
   .help-home-link__copy strong {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
   }
 
   .help-home-link__copy small {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .help-catalog__label {
-    padding: 10px 8px 2px;
+    padding: var(--ui-space-10, 10px) var(--ui-space-8, 8px) var(--ui-space-2, 2px);
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 700;
     letter-spacing: 0.08em;
   }
@@ -1031,35 +1031,35 @@
   .help-catalog__scroll {
     min-height: 0;
     flex: 1 1 auto;
-    padding-right: 2px;
+    padding-right: var(--ui-space-2, 2px);
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior: contain;
   }
 
   .help-catalog-group + .help-catalog-group {
-    margin-top: 12px;
+    margin-top: var(--ui-space-12, 12px);
   }
 
   .help-catalog-group__title.b_btn {
     width: 100%;
-    height: 28px;
-    margin: 0 0 3px;
-    padding: 0 8px;
+    height: var(--ui-control-28, 28px);
+    margin: 0 0 var(--ui-space-3, 3px);
+    padding: 0 var(--ui-space-8, 8px);
     justify-content: space-between;
     border: 1px solid transparent !important;
     border-radius: 7px;
     color: var(--catalog-color);
     background: transparent;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 600;
-    line-height: 18px;
+    line-height: var(--ui-layout-18, 18px);
     text-align: left;
   }
 
   .help-catalog-group__title.b_btn small {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 500;
   }
 
@@ -1072,17 +1072,17 @@
   .help-catalog-item.b_btn {
     position: relative;
     width: 100%;
-    height: 34px;
+    height: var(--ui-control-34, 34px);
     min-width: 0;
-    padding: 0 9px;
+    padding: 0 var(--ui-space-9, 9px);
     justify-content: flex-start;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     overflow: hidden;
     border: 1px solid transparent !important;
     border-radius: 8px;
     color: var(--catalog-color);
     background: transparent;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     text-align: left;
   }
 
@@ -1105,14 +1105,14 @@
 
   .help-catalog-state {
     display: flex;
-    min-height: 100px;
-    padding: 12px;
+    min-height: var(--ui-layout-100, 100px);
+    padding: var(--ui-space-12, 12px);
     align-items: center;
     justify-content: center;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.5;
     text-align: center;
   }
@@ -1137,7 +1137,7 @@
 
   .help-workspace-header {
     display: flex;
-    padding: 14px 20px;
+    padding: var(--ui-space-14, 14px) var(--ui-space-20, 20px);
     min-width: 0;
     flex: 0 0 auto;
     justify-content: center;
@@ -1146,22 +1146,23 @@
   }
 
   .help-workspace-header.is-discovery {
-    padding: clamp(30px, 4vw, 52px) clamp(24px, 5vw, 64px) 34px;
+    padding: clamp(var(--ui-space-30, 30px), 4vw, var(--ui-space-52, 52px))
+      clamp(var(--ui-space-24, 24px), 5vw, var(--ui-space-64, 64px)) var(--ui-space-34, 34px);
     align-items: flex-start;
     flex-direction: column;
-    gap: 22px;
+    gap: var(--ui-space-22, 22px);
     background: var(--surface-raised-background);
   }
 
   .help-hero-copy {
-    max-width: 680px;
+    max-width: var(--ui-layout-680, 680px);
   }
 
   .help-hero-eyebrow {
     display: inline-flex;
-    margin-bottom: 10px;
+    margin-bottom: var(--ui-space-10, 10px);
     color: var(--resource-bookmark-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 800;
     letter-spacing: 0.08em;
   }
@@ -1169,16 +1170,16 @@
   .help-hero-copy h1 {
     margin: 0;
     color: var(--text-color);
-    font-size: clamp(28px, 3vw, 40px);
+    font-size: clamp(var(--ui-font-28, 28px), 3vw, var(--ui-font-40, 40px));
     line-height: 1.18;
     letter-spacing: -0.025em;
   }
 
   .help-hero-copy p {
-    max-width: 620px;
-    margin: 12px 0 0;
+    max-width: var(--ui-layout-620, 620px);
+    margin: var(--ui-space-12, 12px) 0 0;
     color: var(--desc-color);
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     line-height: 1.75;
   }
 
@@ -1214,10 +1215,10 @@
   .help-workspace-actions {
     display: flex;
     width: 100%;
-    max-width: 860px;
+    max-width: var(--ui-layout-860, 860px);
     min-width: 0;
     align-items: center;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
   }
 
   .help-workspace-actions > .b-popover-trigger {
@@ -1225,10 +1226,10 @@
   }
 
   .help-workspace-tool.b_btn {
-    height: 42px;
-    padding: 0 13px;
+    height: var(--ui-control-42, 42px);
+    padding: 0 var(--ui-space-13, 13px);
     flex: 0 0 auto;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     border: 1px solid var(--surface-border-color) !important;
     border-radius: 11px;
     color: var(--desc-color);
@@ -1236,7 +1237,7 @@
   }
 
   .help-workspace-header.is-discovery .help-workspace-tool.b_btn {
-    height: 50px;
+    height: var(--ui-control-50, 50px);
   }
 
   .help-workspace-tool.b_btn.active {
@@ -1263,7 +1264,7 @@
 
   .help-tools-outline {
     min-width: 0;
-    padding: 4px 0;
+    padding: var(--ui-space-4, 4px) 0;
     box-sizing: border-box;
     overflow: hidden;
     border: 0;
@@ -1271,9 +1272,10 @@
   }
 
   .help-outline-popover {
-    width: min(300px, calc(100vw - 16px));
-    max-height: min(62vh, 520px);
-    padding: 10px 8px;
+    /* ui-density-fixed: 16px 为浮层两侧各 8px 的视口安全边距，不随内容密度缩放。 */
+    width: min(var(--ui-layout-300, 300px), calc(100vw - 16px));
+    max-height: min(62vh, var(--ui-layout-520, 520px));
+    padding: var(--ui-space-10, 10px) var(--ui-space-8, 8px);
     box-sizing: border-box;
     overflow-x: hidden;
     overflow-y: auto;
@@ -1289,11 +1291,11 @@
 
   .help-assistant-intro {
     display: flex;
-    margin: 14px 16px 0;
-    padding: 12px;
+    margin: var(--ui-space-14, 14px) var(--ui-space-16, 16px) 0;
+    padding: var(--ui-space-12, 12px);
     flex: 0 0 auto;
     align-items: flex-start;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     background: var(--workspace-panel-bg-color);
@@ -1301,9 +1303,9 @@
 
   .help-assistant-intro__icon {
     display: inline-flex;
-    width: 32px;
-    height: 32px;
-    flex: 0 0 32px;
+    width: var(--ui-layout-32, 32px);
+    height: var(--ui-layout-32, 32px);
+    flex: 0 0 var(--ui-layout-32, 32px);
     align-items: center;
     justify-content: center;
     border: 1px solid var(--resource-bookmark-color);
@@ -1313,9 +1315,9 @@
   }
 
   .help-assistant-intro p {
-    margin: 1px 0 0;
+    margin: var(--ui-space-1, 1px) 0 0;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.65;
   }
 
@@ -1323,7 +1325,7 @@
     height: auto;
     min-height: 0;
     flex: 1 1 auto;
-    padding: 16px;
+    padding: var(--ui-space-16, 16px);
     overflow: hidden;
     border: 0;
     border-radius: 0;
@@ -1362,7 +1364,7 @@
     flex: 1 1 auto;
     min-width: 0;
     min-height: 0;
-    padding: clamp(28px, 4vw, 52px);
+    padding: clamp(var(--ui-space-28, 28px), 4vw, var(--ui-space-52, 52px));
     overflow: auto;
     box-sizing: border-box;
     background: var(--card-background);
@@ -1571,7 +1573,7 @@
   .help-topic-section {
     flex: 1 1 auto;
     min-height: 0;
-    padding: clamp(24px, 3vw, 38px);
+    padding: clamp(var(--ui-space-24, 24px), 3vw, var(--ui-space-38, 38px));
     box-sizing: border-box;
     overflow-x: hidden;
     overflow-y: auto;
@@ -1579,47 +1581,47 @@
 
   .help-topic-section__header {
     display: flex;
-    margin-bottom: 22px;
+    margin-bottom: var(--ui-space-22, 22px);
     align-items: flex-end;
     justify-content: space-between;
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
   }
 
   .help-topic-section__header h2 {
     margin: 0;
     color: var(--text-color);
-    font-size: 20px;
+    font-size: var(--ui-font-20, 20px);
     line-height: 1.35;
   }
 
   .help-topic-section__header p {
-    margin: 6px 0 0;
+    margin: var(--ui-space-6, 6px) 0 0;
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.6;
   }
 
   .help-topic-section__count {
     flex: 0 0 auto;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .help-topic-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .help-topic-card.b_btn {
     --help-topic-color: var(--resource-bookmark-color);
     width: 100%;
     height: auto;
-    min-height: 142px;
-    padding: 18px;
+    min-height: var(--ui-layout-142, 142px);
+    padding: var(--ui-space-18, 18px);
     align-items: flex-start;
     justify-content: flex-start;
-    gap: 13px;
+    gap: var(--ui-space-13, 13px);
     border: 1px solid var(--surface-border-color) !important;
     border-radius: 13px;
     color: var(--text-color);
@@ -1655,9 +1657,9 @@
 
   .help-topic-card__icon {
     display: inline-flex;
-    width: 40px;
-    height: 40px;
-    flex: 0 0 40px;
+    width: var(--ui-layout-40, 40px);
+    height: var(--ui-layout-40, 40px);
+    flex: 0 0 var(--ui-layout-40, 40px);
     align-items: center;
     justify-content: center;
     border: 1px solid var(--help-topic-color);
@@ -1676,38 +1678,38 @@
 
   .help-topic-card__copy strong {
     color: var(--text-color);
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
   }
 
   .help-topic-card__copy small {
-    min-height: 42px;
-    margin-top: 5px;
+    min-height: var(--ui-layout-42, 42px);
+    margin-top: var(--ui-space-5, 5px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.65;
   }
 
   .help-topic-card__copy > span {
-    margin-top: 10px;
+    margin-top: var(--ui-space-10, 10px);
     color: var(--help-topic-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 700;
   }
 
   .help-state-card {
     display: flex;
-    min-height: 150px;
-    padding: 24px;
+    min-height: var(--ui-layout-150, 150px);
+    padding: var(--ui-space-24, 24px);
     box-sizing: border-box;
     align-items: center;
     justify-content: center;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     border: 1px dashed var(--surface-border-color);
     border-radius: 12px;
     color: var(--desc-color);
     background: var(--workspace-panel-bg-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.6;
     text-align: center;
   }
@@ -1720,7 +1722,7 @@
   .help-section-panel {
     flex: 1 1 auto;
     min-height: 0;
-    padding: clamp(22px, 3vw, 36px);
+    padding: clamp(var(--ui-space-22, 22px), 3vw, var(--ui-space-36, 36px));
     box-sizing: border-box;
     overflow-x: hidden;
     overflow-y: auto;
@@ -1728,30 +1730,30 @@
 
   .help-section-panel__header {
     display: flex;
-    margin-bottom: 20px;
+    margin-bottom: var(--ui-space-20, 20px);
     flex-direction: column;
     align-items: flex-start;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
 
   .help-section-panel__header h2 {
     margin: 0;
     color: var(--text-color);
-    font-size: 24px;
+    font-size: var(--ui-font-24, 24px);
     line-height: 1.3;
   }
 
   .help-section-panel__header p {
-    margin: 6px 0 0;
+    margin: var(--ui-space-6, 6px) 0 0;
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .help-section-back.b_btn {
     width: max-content;
-    height: 34px;
-    padding: 0 10px;
-    gap: 6px;
+    height: var(--ui-control-34, 34px);
+    padding: 0 var(--ui-space-10, 10px);
+    gap: var(--ui-space-6, 6px);
     border: 1px solid var(--surface-border-color) !important;
     border-radius: 9px;
     color: var(--resource-bookmark-color);
@@ -1761,7 +1763,7 @@
   .help-section-list {
     display: flex;
     flex-direction: column;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
   }
 
   .help-section-list .search-result-card.b_btn {
@@ -1771,7 +1773,7 @@
   .search-results-panel {
     flex: 1 1 auto;
     min-height: 0;
-    padding: clamp(20px, 3vw, 34px);
+    padding: clamp(var(--ui-space-20, 20px), 3vw, var(--ui-space-34, 34px));
     box-sizing: border-box;
     overflow-x: hidden;
     overflow-y: auto;
@@ -1779,13 +1781,13 @@
 
   .search-results-header {
     display: flex;
-    margin-bottom: 16px;
-    padding-bottom: 12px;
+    margin-bottom: var(--ui-space-16, 16px);
+    padding-bottom: var(--ui-space-12, 12px);
     align-items: baseline;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     border-bottom: 1px solid var(--surface-divider-color);
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .search-results-count {
@@ -1795,19 +1797,19 @@
 
   .search-results-hint {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .search-result-card.b_btn {
     display: flex;
     width: 100%;
     height: auto;
-    min-height: 82px;
-    margin-bottom: 9px;
-    padding: 14px 16px;
+    min-height: var(--ui-layout-82, 82px);
+    margin-bottom: var(--ui-space-9, 9px);
+    padding: var(--ui-space-14, 14px) var(--ui-space-16, 16px);
     align-items: flex-start;
     justify-content: flex-start;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     border: 1px solid var(--surface-border-color) !important;
     border-radius: 11px;
     color: var(--text-color);
@@ -1821,9 +1823,9 @@
 
   .search-result-icon {
     display: inline-flex;
-    width: 34px;
-    height: 34px;
-    flex: 0 0 34px;
+    width: var(--ui-layout-34, 34px);
+    height: var(--ui-layout-34, 34px);
+    flex: 0 0 var(--ui-layout-34, 34px);
     align-items: center;
     justify-content: center;
     border: 1px solid var(--surface-border-color);
@@ -1841,9 +1843,9 @@
 
   .search-result-title {
     display: block;
-    margin-bottom: 6px;
+    margin-bottom: var(--ui-space-6, 6px);
     color: var(--text-color);
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
     font-weight: 600;
     line-height: 1.5;
   }
@@ -1851,14 +1853,14 @@
   .search-result-snippets {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
 
   .search-result-snippet {
     display: -webkit-box;
     overflow: hidden;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.6;
     text-overflow: ellipsis;
     -webkit-line-clamp: 2;
@@ -1866,7 +1868,7 @@
   }
 
   mark.search-highlight {
-    padding: 1px 2px;
+    padding: var(--ui-space-1, 1px) var(--ui-space-2, 2px);
     border-radius: 2px;
     color: #171717;
     background: #fde047;
@@ -1878,15 +1880,15 @@
 
   .search-back-bar.b_btn {
     width: max-content;
-    height: 34px;
-    margin: 0 0 24px;
-    padding: 0 10px;
-    gap: 6px;
+    height: var(--ui-control-34, 34px);
+    margin: 0 0 var(--ui-space-24, 24px);
+    padding: 0 var(--ui-space-10, 10px);
+    gap: var(--ui-space-6, 6px);
     border: 1px solid var(--surface-border-color) !important;
     border-radius: 9px;
     color: var(--resource-bookmark-color);
     background: var(--workspace-panel-bg-color);
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
   }
 
   @media (hover: hover) and (pointer: fine) {

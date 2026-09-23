@@ -1076,35 +1076,35 @@
 <style lang="less" scoped>
   @import (reference) '@/assets/css/workspace-surfaces.less';
   .cloud-count-chip {
-    height: 22px;
-    padding: 0 8px;
+    height: var(--ui-layout-22, 22px);
+    padding: 0 var(--ui-space-8, 8px);
     border-radius: 999px;
     display: inline-flex;
     align-items: center;
     color: var(--resource-file-color, #ff8a00);
     background: color-mix(in srgb, var(--resource-file-color, #ff8a00) 10%, transparent);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 650;
     font-variant-numeric: tabular-nums;
   }
 
   .cloud-view-toggle {
     display: flex;
-    gap: 3px;
-    padding: 3px;
+    gap: var(--ui-space-3, 3px);
+    padding: var(--ui-space-3, 3px);
     border-radius: 10px;
     background: var(--bl-input-noBorder-bg-color);
   }
 
   .cloud-sort-control {
     position: relative;
-    height: 36px;
-    width: 142px;
-    min-width: 142px;
+    height: var(--ui-layout-36, 36px);
+    width: var(--ui-layout-142, 142px);
+    min-width: var(--ui-layout-142, 142px);
     display: flex;
     align-items: center;
-    gap: 7px;
-    padding-left: 10px;
+    gap: var(--ui-space-7, 7px);
+    padding-left: var(--ui-space-10, 10px);
     border: 0;
     border-radius: 10px;
     color: var(--resource-file-color, #ff8a00);
@@ -1124,27 +1124,27 @@
   }
 
   .cloud-sort-select {
-    width: 110px;
+    width: var(--ui-layout-110, 110px);
     min-width: 0;
     color: var(--text-color);
   }
 
   .cloud-sort-select :deep(.select-trigger) {
-    height: 34px;
+    height: var(--ui-layout-34, 34px);
     border: 0;
     background: transparent;
   }
 
   @media (max-width: 1550px) and (min-width: 768px) {
     .cloud-sort-tooltip {
-      flex: 0 0 48px;
+      flex: 0 0 var(--ui-layout-48, 48px);
     }
 
     .cloud-sort-control {
-      width: 48px;
-      min-width: 48px;
+      width: var(--ui-layout-48, 48px);
+      min-width: var(--ui-layout-48, 48px);
       justify-content: center;
-      gap: 2px;
+      gap: var(--ui-space-2, 2px);
       padding-left: 0;
     }
 
@@ -1174,9 +1174,9 @@
   }
 
   .cloud-view-button {
-    width: 30px;
-    min-width: 30px;
-    height: 30px;
+    width: var(--ui-layout-30, 30px);
+    min-width: var(--ui-layout-30, 30px);
+    height: var(--ui-layout-30, 30px);
     padding: 0;
     border-radius: 8px;
     color: var(--desc-color);
@@ -1194,9 +1194,9 @@
   }
 
   .mobile-cloud-search-toggle {
-    flex: 0 0 44px;
-    width: 44px;
-    height: 44px;
+    flex: 0 0 var(--ui-layout-44, 44px);
+    width: var(--ui-layout-44, 44px);
+    height: var(--ui-layout-44, 44px);
     padding: 0;
     border: 1px solid transparent;
 
@@ -1209,15 +1209,15 @@
   .mobile-cloud-search {
     flex-shrink: 0;
     min-width: 0;
-    margin-bottom: 8px;
+    margin-bottom: var(--ui-space-8, 8px);
   }
 
   .cloud-search-action {
-    width: 220px;
+    width: var(--ui-layout-220, 220px);
   }
 
   .cloud-search-action :deep(.b-input) {
-    height: 36px;
+    height: var(--ui-layout-36, 36px);
     border-radius: 10px;
   }
 
@@ -1225,14 +1225,14 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    margin: 0 0 10px;
-    padding: 9px 12px;
+    gap: var(--ui-space-12, 12px);
+    margin: 0 0 var(--ui-space-10, 10px);
+    padding: var(--ui-space-9, 9px) var(--ui-space-12, 12px);
     border: 1px solid color-mix(in srgb, var(--primary-color) 18%, var(--card-border-color));
     border-radius: 8px;
     color: var(--desc-color);
     background: color-mix(in srgb, var(--primary-color) 8%, var(--background-color));
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .cloud-container {
     padding: 0;
@@ -1240,7 +1240,7 @@
     height: 100%;
     box-sizing: border-box;
     display: flex;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
     flex-direction: column;
     position: relative;
   }
@@ -1250,7 +1250,7 @@
     min-height: 0;
     overflow: hidden;
     display: flex;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
   }
 
   .header-handle-group {
@@ -1258,12 +1258,12 @@
   }
 
   .mobile-folder-filter {
-    margin-top: 4px;
+    margin-top: var(--ui-space-4, 4px);
   }
 
   .mobile-cloud-storage {
     display: flex;
-    min-width: 84px;
+    min-width: var(--ui-layout-84, 84px);
     flex: 1 1 auto;
 
     :deep(.storage-usage) {
@@ -1275,10 +1275,10 @@
   .mobile-folder-trigger {
     width: 100%;
     min-width: 0;
-    height: 40px;
+    height: var(--ui-layout-40, 40px);
     justify-content: flex-start;
-    gap: 8px;
-    padding: 0 11px;
+    gap: var(--ui-space-8, 8px);
+    padding: 0 var(--ui-space-11, 11px);
     border: 1px solid var(--card-border-color);
     border-radius: var(--mobile-control-radius, 10px);
     color: var(--text-color);
@@ -1294,7 +1294,7 @@
     min-width: 0;
     overflow: hidden;
     flex: 1 1 auto;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 600;
     text-align: left;
     text-overflow: ellipsis;
@@ -1307,8 +1307,8 @@
   }
 
   .content-area :deep(.folder-list) {
-    width: 230px;
-    padding: 12px;
+    width: var(--ui-layout-230, 230px);
+    padding: var(--ui-space-12, 12px);
     box-sizing: border-box;
     border: 1px solid color-mix(in srgb, var(--card-border-color) 72%, transparent);
     border-radius: 14px;
@@ -1346,18 +1346,18 @@
   .drag-content {
     text-align: center;
     color: var(--primary-color);
-    font-size: 20px;
+    font-size: var(--ui-font-20, 20px);
     font-weight: 500;
   }
 
   .drag-content p {
-    margin-top: 16px;
+    margin-top: var(--ui-space-16, 16px);
   }
 
   @media (max-width: 1000px) {
     .mobile-folder-filter {
       margin-top: 0;
-      margin-bottom: 6px;
+      margin-bottom: var(--ui-space-6, 6px);
     }
 
     .content-area {
@@ -1378,16 +1378,16 @@
 
     .cloud-view-toggle {
       min-width: 0;
-      height: 40px;
+      height: var(--ui-layout-40, 40px);
       box-sizing: border-box;
-      flex: 0 0 76px;
+      flex: 0 0 var(--ui-layout-76, 76px);
     }
 
     .cloud-view-button {
       width: 100%;
       min-width: 0;
-      height: 34px;
-      gap: 5px;
+      height: var(--ui-layout-34, 34px);
+      gap: var(--ui-space-5, 5px);
       flex: 1 1 0;
     }
 
@@ -1406,8 +1406,8 @@
 
     .cloud-type-filter {
       min-width: 0;
-      max-width: 112px;
-      flex: 0 1 112px;
+      max-width: var(--ui-layout-112, 112px);
+      flex: 0 1 var(--ui-layout-112, 112px);
     }
 
     .cloud-type-filter :deep(.b-popover-trigger) {
@@ -1418,10 +1418,10 @@
 
     .cloud-type-filter :deep(.filter-button) {
       width: 100%;
-      height: 40px;
-      padding: 0 8px;
-      gap: 5px;
-      font-size: 12px;
+      height: var(--ui-layout-40, 40px);
+      padding: 0 var(--ui-space-8, 8px);
+      gap: var(--ui-space-5, 5px);
+      font-size: var(--ui-font-12, 12px);
     }
 
     .header-handle-group {

@@ -1,9 +1,9 @@
 import { createApp, h, nextTick, ref } from 'vue';
 import { expect, it, vi } from 'vitest';
 import Outline from './CommunityPostOutline.vue';
-import { scrollIntoContainer } from '@/utils/zoom';
+import { scrollIntoContainer } from '@/utils/scrolling';
 vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }));
-vi.mock('@/utils/zoom', () => ({ getRootZoom: () => 1, scrollIntoContainer: vi.fn() }));
+vi.mock('@/utils/scrolling', () => ({ scrollIntoContainer: vi.fn() }));
 vi.mock('@/components/base/BasicComponents/BButton.vue', () => ({
   default: { template: '<button><slot /></button>' },
 }));

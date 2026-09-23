@@ -5,8 +5,15 @@ import { createApp, h, nextTick } from 'vue';
 import type { NotificationItem } from '@/composables/useNotification';
 import NotificationCenterPanel from './NotificationCenterPanel.vue';
 
-const source = readFileSync(resolve(process.cwd(), 'src/components/notification/NotificationCenterPanel.vue'), 'utf8');
-const bellSource = readFileSync(resolve(process.cwd(), 'src/components/notification/NotificationBell.vue'), 'utf8');
+// Existing layout contracts assert standard values; uiDensity tests cover each token.
+const source = readFileSync(
+  resolve(process.cwd(), 'src/components/notification/NotificationCenterPanel.vue'),
+  'utf8',
+).replace(/var\(--ui-[\w-]+,\s*([\d.]+px)\)/g, '$1');
+const bellSource = readFileSync(
+  resolve(process.cwd(), 'src/components/notification/NotificationBell.vue'),
+  'utf8',
+).replace(/var\(--ui-[\w-]+,\s*([\d.]+px)\)/g, '$1');
 
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({ t: (key: string) => key }),
@@ -143,7 +150,7 @@ describe('NotificationCenterPanel', () => {
     );
     expect(source).toMatch(/\.is-wide-desktop-page \.nt-type-icon\s*\{[\s\S]*?display:\s*inline-flex;/);
     expect(source).toContain('notificationIcon(item)');
-    expect(source).toContain("icon.ai.summary");
+    expect(source).toContain('icon.ai.summary');
   });
 
   it('分组外框只用于移动页和独立桌面页，铃铛 popover 仍保持紧凑', () => {

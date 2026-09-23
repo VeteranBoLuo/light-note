@@ -1,0 +1,22 @@
+// Import with (reference); these mixins emit no selectors or runtime code.
+// Arguments are standard-density px dimensions, not measured coordinates.
+.ui-density-value(@kind; @size) when (isunit(@size, px)) and (@size > 0px) {
+  @number: unit(@size);
+  @key: replace('@{number}', '\.', '_');
+  @value: ~'var(--ui-@{kind}-@{key}, @{size})';
+}
+.ui-space(@size) {
+  @value: .ui-density-value(space; @size) [];
+}
+.ui-control(@size) {
+  @value: .ui-density-value(control; @size) [];
+}
+.ui-layout(@size) {
+  @value: .ui-density-value(layout; @size) [];
+}
+.ui-font(@size) {
+  @value: .ui-density-value(font; @size) [];
+}
+.ui-card(@size) {
+  @value: .ui-density-value(card; @size) [];
+}

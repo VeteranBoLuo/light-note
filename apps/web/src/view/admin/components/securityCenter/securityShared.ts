@@ -211,13 +211,13 @@ export const ruleColumns = [
 ];
 
 export const whitelistColumns = [
-  { title: '类型', key: 'targetType', width: '80px' },
+  { title: '类型', key: 'targetType', width: 'var(--ui-layout-80, 80px)' },
   { title: '白名单对象', key: 'targetLabel' },
   { title: '备注', key: 'reason' },
-  { title: '状态', key: 'enabled', width: '80px' },
-  { title: '创建人', key: 'createdByLabel', width: '120px' },
-  { title: '更新时间', key: 'updatedAt', width: '180px', sortable: true },
-  { title: '操作', key: 'action', width: '100px' },
+  { title: '状态', key: 'enabled', width: 'var(--ui-layout-80, 80px)' },
+  { title: '创建人', key: 'createdByLabel', width: 'var(--ui-layout-120, 120px)' },
+  { title: '更新时间', key: 'updatedAt', width: 'var(--ui-layout-180, 180px)', sortable: true },
+  { title: '操作', key: 'action', width: 'var(--ui-layout-100, 100px)' },
 ];
 
 export const ipRecentColumns = [

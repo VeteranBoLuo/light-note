@@ -39,7 +39,7 @@
         :key="tag.id || tag.name"
         :tag="tag"
         show-detail-corner
-        max-width="120px"
+        max-width="var(--ui-layout-120, 120px)"
         @click="handleToTagPage(tag)"
         @detail="openTagDetail(tag)"
       />
@@ -121,12 +121,12 @@
 </script>
 
 <style lang="less" scoped>
-  @import (reference) "@/assets/css/workspace-surfaces.less";
+  @import (reference) '@/assets/css/workspace-surfaces.less';
   .card-body {
     border: 1px solid color-mix(in srgb, var(--card-border-color) 78%, transparent);
-    height: 164px;
+    height: var(--ui-card-164, 164px);
     border-radius: 13px;
-    padding: 14px 15px;
+    padding: var(--ui-space-14, 14px) var(--ui-space-15, 15px);
     box-sizing: border-box;
     cursor: pointer;
     position: relative;
@@ -164,7 +164,7 @@
     display: flex;
     min-width: 0;
     align-items: center;
-    gap: 11px;
+    gap: var(--ui-space-11, 11px);
 
     .card-title-copy {
       flex: 1;
@@ -178,9 +178,9 @@
       min-width: 0;
       overflow: hidden;
       color: var(--text-color);
-      font-size: 15px;
+      font-size: var(--ui-font-15, 15px);
       font-weight: 650;
-      line-height: 20px;
+      line-height: var(--ui-layout-20, 20px);
       text-overflow: ellipsis;
       white-space: nowrap;
     }
@@ -189,8 +189,8 @@
   .card-domain {
     overflow: hidden;
     color: var(--desc-color);
-    font-size: 10.5px;
-    line-height: 14px;
+    font-size: var(--ui-font-10_5, 10.5px);
+    line-height: var(--ui-layout-14, 14px);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -203,15 +203,15 @@
     word-break: break-word;
     overflow: hidden;
     width: 100%;
-    font-size: 12px;
-    line-height: 18px;
+    font-size: var(--ui-font-12, 12px);
+    line-height: var(--ui-layout-18, 18px);
     color: var(--desc-color);
-    margin-top: 12px;
-    height: 54px;
+    margin-top: var(--ui-space-12, 12px);
+    height: calc(var(--ui-layout-18, 18px) * var(--bookmark-description-lines, 3));
     display: -webkit-box;
     -webkit-box-orient: vertical;
-    -webkit-line-clamp: 3;
-    line-clamp: 3;
+    -webkit-line-clamp: var(--bookmark-description-lines, 3);
+    line-clamp: var(--bookmark-description-lines, 3);
   }
 
   .footer-tag {
@@ -230,9 +230,29 @@
 
   /* padding 为 ResourceTagChip 的详情角标预留外溢空间，避免被 footer 的 overflow 裁切。 */
 
+  // Keep the standard card's original positioning. Only compact cards need
+  // a flow footer so shorter previews cannot collide with their tags.
+  html[data-density='compact'] .card-body {
+    display: flex;
+    flex-direction: column;
+    .card-heading {
+      flex-shrink: 0;
+    }
+    .card-description {
+      min-height: 0;
+      flex-shrink: 1;
+    }
+    .footer-tag {
+      position: static;
+      flex-shrink: 0;
+      margin-top: auto;
+      padding-bottom: 0;
+    }
+  }
+
   @media (max-width: 1023px) {
     .card-body {
-      height: 154px;
+      height: var(--ui-card-154, 154px);
       &:hover {
         box-shadow: none; /* 移除 :hover 状态下的阴影 */
         border: 1px solid var(--card-border-color);
@@ -246,8 +266,8 @@
     .card-description {
       height: 3.6em;
       line-height: 1.2;
-      -webkit-line-clamp: 3;
-      line-clamp: 3;
+      -webkit-line-clamp: var(--bookmark-description-lines, 3);
+      line-clamp: var(--bookmark-description-lines, 3);
     }
   }
 

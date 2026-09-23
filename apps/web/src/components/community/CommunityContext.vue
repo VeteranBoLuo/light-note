@@ -50,29 +50,29 @@
 </script>
 <style scoped>
   .community-context section {
-    padding-bottom: 28px;
-    margin-bottom: 28px;
+    padding-bottom: var(--ui-space-28, 28px);
+    margin-bottom: var(--ui-space-28, 28px);
     border-bottom: 1px solid var(--workspace-divider);
   }
   .community-context section:last-child {
     border-bottom: 0;
   }
   .community-context h2 {
-    margin: 0 0 18px;
-    font-size: 14px;
+    margin: 0 0 var(--ui-space-18, 18px);
+    font-size: var(--ui-font-14, 14px);
     line-height: 1.6;
   }
   .community-context p {
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.9;
   }
   .context-topic {
     width: 100%;
     justify-content: flex-start;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     background: transparent;
-    margin: 4px 0;
+    margin: var(--ui-space-4, 4px) 0;
     outline: 1px solid transparent;
     outline-offset: 0;
     transition:

@@ -265,16 +265,16 @@
 <style scoped lang="less">
   .pdf-image-tool {
     display: grid;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
   .pdf-image-tool__drop-zone {
-    min-height: 200px;
-    padding: 20px;
+    min-height: var(--ui-layout-200, 200px);
+    padding: var(--ui-space-20, 20px);
     display: flex;
     align-items: center;
     justify-content: center;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     border: 1px dashed var(--surface-border-color);
     border-radius: 18px;
     text-align: center;
@@ -285,8 +285,8 @@
     background: var(--card-background);
   }
   .pdf-image-tool__drop-zone > span {
-    width: 44px;
-    height: 44px;
+    width: var(--ui-layout-44, 44px);
+    height: var(--ui-layout-44, 44px);
     display: grid;
     place-items: center;
     border-radius: 18px;
@@ -294,18 +294,18 @@
     background: var(--card-background);
   }
   .pdf-image-tool__drop-zone h2 {
-    margin: 4px 0 0;
-    font-size: 22px;
+    margin: var(--ui-space-4, 4px) 0 0;
+    font-size: var(--ui-font-22, 22px);
   }
   .pdf-image-tool__drop-zone p {
-    margin: 0 0 10px;
+    margin: 0 0 var(--ui-space-10, 10px);
     color: var(--desc-color);
   }
   .pdf-image-tool__settings {
-    padding: 14px;
+    padding: var(--ui-space-14, 14px);
     display: grid;
-    grid-template-columns: repeat(3, minmax(150px, 1fr)) auto auto;
-    gap: 10px;
+    grid-template-columns: repeat(3, minmax(var(--ui-layout-150, 150px), 1fr)) auto auto;
+    gap: var(--ui-space-10, 10px);
     align-items: end;
     border: 1px solid var(--surface-border-color);
     border-radius: 14px;
@@ -314,35 +314,35 @@
   .pdf-image-tool__settings > div {
     min-width: 0;
     display: grid;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   .pdf-image-tool__settings label {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 650;
   }
   .pdf-image-tool__files,
   .pdf-image-tool__results {
     display: grid;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
   }
   .pdf-image-tool__files {
-    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(var(--ui-layout-250, 250px), 1fr));
   }
   .pdf-image-tool__files article {
     min-width: 0;
-    padding: 10px 11px;
+    padding: var(--ui-space-10, 10px) var(--ui-space-11, 11px);
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     align-items: center;
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     background: var(--card-background);
   }
   .pdf-image-tool__files article > span {
-    width: 34px;
-    height: 34px;
+    width: var(--ui-layout-34, 34px);
+    height: var(--ui-layout-34, 34px);
     display: grid;
     place-items: center;
     border-radius: 9px;
@@ -353,7 +353,7 @@
   .pdf-image-tool__results article > div {
     min-width: 0;
     display: grid;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
   .pdf-image-tool__files strong,
   .pdf-image-tool__results strong {
@@ -365,13 +365,13 @@
   .pdf-image-tool__results small,
   .pdf-image-tool__result-head span {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .pdf-image-tool__result-head {
-    padding: 13px 15px;
+    padding: var(--ui-space-13, 13px) var(--ui-space-15, 15px);
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     border: 1px solid #07835f;
     border-radius: 14px;
     background: var(--workspace-panel-bg-color);
@@ -380,25 +380,25 @@
     min-width: 0;
     margin-right: auto;
     display: grid;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
   .pdf-image-tool__results {
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(var(--ui-layout-260, 260px), 1fr));
   }
   .pdf-image-tool__results article {
     min-width: 0;
-    padding: 10px;
+    padding: var(--ui-space-10, 10px);
     display: grid;
-    grid-template-columns: 72px minmax(0, 1fr);
-    gap: 10px;
+    grid-template-columns: var(--ui-layout-72, 72px) minmax(0, 1fr);
+    gap: var(--ui-space-10, 10px);
     align-items: center;
     border: 1px solid var(--surface-border-color);
     border-radius: 13px;
     background: var(--card-background);
   }
   .pdf-image-tool__results img {
-    width: 72px;
-    height: 82px;
+    width: var(--ui-layout-72, 72px);
+    height: var(--ui-layout-82, 82px);
     grid-row: span 2;
     display: block;
     object-fit: contain;
@@ -415,8 +415,8 @@
   }
   @media (max-width: 767px) {
     .pdf-image-tool__drop-zone {
-      min-height: 220px;
-      padding: 20px 16px;
+      min-height: var(--ui-layout-220, 220px);
+      padding: var(--ui-space-20, 20px) var(--ui-space-16, 16px);
     }
     .pdf-image-tool__settings {
       grid-template-columns: 1fr;

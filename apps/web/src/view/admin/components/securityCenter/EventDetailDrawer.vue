@@ -4,7 +4,7 @@
     :title="
       t('securityV2.review.eventTitle', { name: detail.event?.matchedRule || detail.event?.primaryRuleCode || '-' })
     "
-    width="680px"
+    width="var(--ui-layout-680, 680px)"
     :mobile-full-screen="true"
     body-padding="0"
     @close="emit('close')"

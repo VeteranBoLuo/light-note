@@ -256,14 +256,14 @@
   }
   .navigation-pill-entry {
     position: relative;
-    min-height: 34px;
-    padding: 5px 11px;
-    gap: 6px;
+    min-height: var(--ui-control-34, 34px);
+    padding: var(--ui-space-5, 5px) var(--ui-space-11, 11px);
+    gap: var(--ui-space-6, 6px);
     border: 1px solid var(--navigation-pill-border) !important;
     border-radius: 999px;
     color: var(--navigation-pill-fg);
     background: var(--navigation-pill-bg) !important;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 650;
     white-space: nowrap;
     transition:
@@ -275,13 +275,13 @@
     color: var(--navigation-pill-icon-fg);
   }
   .navigation-management-entry {
-    gap: 4px;
-    height: 34px;
-    padding: 0 3px;
+    gap: var(--ui-space-4, 4px);
+    height: var(--ui-control-34, 34px);
+    padding: 0 var(--ui-space-3, 3px);
     border-radius: 4px;
     color: var(--text-color);
     background: transparent !important;
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
   }
   .navigation-management-entry:hover,
   .navigation-management-entry.is-active {
@@ -301,9 +301,9 @@
     position: absolute;
     top: -7px;
     right: -8px;
-    min-width: 17px;
-    height: 17px;
-    padding: 0 4px;
+    min-width: var(--ui-layout-17, 17px);
+    height: var(--ui-layout-17, 17px);
+    padding: 0 var(--ui-space-4, 4px);
     box-sizing: border-box;
     display: inline-flex;
     align-items: center;
@@ -312,7 +312,7 @@
     border-radius: 999px;
     color: var(--danger-fill-fg, #fff);
     background: var(--danger-fill-bg, #d93b3b);
-    font-size: 9px;
+    font-size: var(--ui-font-9, 9px);
     line-height: 1;
     pointer-events: none;
   }
@@ -321,11 +321,11 @@
     top: -7px;
     right: -14px;
     display: inline-flex;
-    min-width: 16px;
-    height: 16px;
+    min-width: var(--ui-layout-16, 16px);
+    height: var(--ui-layout-16, 16px);
     align-items: center;
     justify-content: center;
-    padding: 0 4px;
+    padding: 0 var(--ui-space-4, 4px);
     box-sizing: border-box;
     border-radius: 999px;
     /*
@@ -338,7 +338,7 @@
        #ff6b6b，配白字只有 2.78:1。填充色对在两套主题都保证数字可读。 */
     background: var(--danger-fill-bg, #d93b3b);
     color: var(--danger-fill-fg, #fff);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     font-weight: 600;
     line-height: 1;
     font-variant-numeric: tabular-nums;
@@ -351,7 +351,7 @@
   }
 
   .navigation {
-    height: 60px;
+    height: var(--ui-layout-60, 60px);
     display: flex;
     align-items: center;
     width: 100%;
@@ -364,17 +364,17 @@
   }
   .navigation-title {
     height: 100%;
-    width: 200px;
+    width: var(--ui-layout-200, 200px);
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     font-weight: 550;
-    font-size: 20px;
-    padding-left: 20px;
+    font-size: var(--ui-font-20, 20px);
+    padding-left: var(--ui-space-20, 20px);
     .navigation-title-link {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: var(--ui-space-10, 10px);
       height: 100%;
       cursor: pointer;
     }
@@ -386,7 +386,7 @@
     .navigation-title {
       width: 64px;
       gap: 0;
-      padding-left: 20px;
+      padding-left: var(--ui-space-20, 20px);
       position: relative;
       z-index: 2;
 
@@ -403,11 +403,11 @@
   }
   @media (min-width: 768px) and (max-width: 1399px) {
     .navigation-title {
-      width: 140px;
+      width: var(--ui-layout-140, 140px);
     }
 
     .navigation-tab {
-      gap: 20px !important;
+      gap: var(--ui-space-20, 20px) !important;
     }
   }
   @media (min-width: 768px) and (max-width: 1199px) {
@@ -416,12 +416,12 @@
     }
 
     .navigation-tab {
-      gap: 13px !important;
+      gap: var(--ui-space-13, 13px) !important;
     }
 
     .navigation-pill-entry {
-      padding-right: 8px;
-      padding-left: 8px;
+      padding-right: var(--ui-space-8, 8px);
+      padding-left: var(--ui-space-8, 8px);
     }
   }
   .navigation-manage {

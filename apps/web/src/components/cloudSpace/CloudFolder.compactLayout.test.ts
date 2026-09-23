@@ -3,13 +3,13 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const componentRoot = resolve(process.cwd(), 'src/components/cloudSpace');
-const desktopSource = readFileSync(resolve(componentRoot, 'CloudFolder.vue'), 'utf8');
-const mobileSource = readFileSync(resolve(componentRoot, 'MobileCloudFolderDrawer.vue'), 'utf8');
-const pickerSource = readFileSync(resolve(componentRoot, 'CloudFolderPicker.vue'), 'utf8');
-const moveFileSource = readFileSync(resolve(componentRoot, 'MoveFile.vue'), 'utf8');
-const uploadSource = readFileSync(resolve(componentRoot, 'HandleBtnGroup.vue'), 'utf8');
-const fileListSource = readFileSync(resolve(componentRoot, 'fieldList.vue'), 'utf8');
-const pageSource = readFileSync(resolve(process.cwd(), 'src/view/cloudSpace/cloudSpace.vue'), 'utf8');
+const desktopSource = readFileSync(resolve(componentRoot, 'CloudFolder.vue'), 'utf8').replace(/var\(--ui-(?:space|control|layout|font|card)-\d+, (\d+px)\)/g, '$1');
+const mobileSource = readFileSync(resolve(componentRoot, 'MobileCloudFolderDrawer.vue'), 'utf8').replace(/var\(--ui-(?:space|control|layout|font|card)-\d+, (\d+px)\)/g, '$1');
+const pickerSource = readFileSync(resolve(componentRoot, 'CloudFolderPicker.vue'), 'utf8').replace(/var\(--ui-(?:space|control|layout|font|card)-\d+, (\d+px)\)/g, '$1');
+const moveFileSource = readFileSync(resolve(componentRoot, 'MoveFile.vue'), 'utf8').replace(/var\(--ui-(?:space|control|layout|font|card)-\d+, (\d+px)\)/g, '$1');
+const uploadSource = readFileSync(resolve(componentRoot, 'HandleBtnGroup.vue'), 'utf8').replace(/var\(--ui-(?:space|control|layout|font|card)-\d+, (\d+px)\)/g, '$1');
+const fileListSource = readFileSync(resolve(componentRoot, 'fieldList.vue'), 'utf8').replace(/var\(--ui-(?:space|control|layout|font|card)-\d+, (\d+px)\)/g, '$1');
+const pageSource = readFileSync(resolve(process.cwd(), 'src/view/cloudSpace/cloudSpace.vue'), 'utf8').replace(/var\(--ui-(?:space|control|layout|font|card)-\d+, (\d+px)\)/g, '$1');
 
 describe('云空间目录树紧凑布局', () => {
   it('根据完整目录快照切换平铺与树形模式，树形模式下同层图标保持对齐', () => {
@@ -126,8 +126,8 @@ describe('云空间目录树紧凑布局', () => {
   });
 
   it('桌面端和移动端共用目录文件清空弹窗，菜单语义明确且移动端先关闭抽屉', () => {
-    const clearModalSource = readFileSync(resolve(componentRoot, 'CloudFolderClearModal.vue'), 'utf8');
-    const mobileActionsSource = readFileSync(resolve(componentRoot, 'MobileCloudSpaceActionsDrawer.vue'), 'utf8');
+    const clearModalSource = readFileSync(resolve(componentRoot, 'CloudFolderClearModal.vue'), 'utf8').replace(/var\(--ui-(?:space|control|layout|font|card)-\d+, (\d+px)\)/g, '$1');
+    const mobileActionsSource = readFileSync(resolve(componentRoot, 'MobileCloudSpaceActionsDrawer.vue'), 'utf8').replace(/var\(--ui-(?:space|control|layout|font|card)-\d+, (\d+px)\)/g, '$1');
     expect(desktopSource).toContain("key: 'clear-files'");
     expect(desktopSource).toContain('<CloudFolderClearModal');
     expect(mobileActionsSource).toContain("'clear-folder-files': [folder: CloudFolderNode]");

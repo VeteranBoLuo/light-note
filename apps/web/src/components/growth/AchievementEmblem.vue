@@ -31,8 +31,13 @@
       <span class="achievement-emblem__core">
         <span class="achievement-emblem__pattern"></span>
         <span class="achievement-emblem__glyph-stack">
-          <SvgIcon class="achievement-emblem__glyph-shadow" :src="visual.icon" :size="iconSize" />
-          <SvgIcon class="achievement-emblem__glyph" :src="visual.icon" :size="iconSize" />
+          <SvgIcon
+            class="achievement-emblem__glyph-shadow"
+            :src="visual.icon"
+            :size="iconSize"
+            :density-aware="false"
+          />
+          <SvgIcon class="achievement-emblem__glyph" :src="visual.icon" :size="iconSize" :density-aware="false" />
         </span>
       </span>
     </span>

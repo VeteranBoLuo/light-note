@@ -13,7 +13,7 @@
   .bookmark-browse-directory {
     min-width: 0;
     min-height: 0;
-    padding: 12px;
+    padding: var(--ui-space-12, 12px);
     box-sizing: border-box;
     overflow: hidden;
     border: 1px solid color-mix(in srgb, var(--card-border-color) 72%, transparent);

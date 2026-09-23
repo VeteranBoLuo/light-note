@@ -49,25 +49,25 @@
 <style lang="less" scoped>
   .view-mode-toggle {
     display: flex;
-    gap: 3px;
-    padding: 3px;
+    gap: var(--ui-space-3, 3px);
+    padding: var(--ui-space-3, 3px);
     border-radius: 10px;
     background: color-mix(in srgb, var(--card-border-color) 42%, transparent);
   }
 
   .view-mode-button {
-    height: 30px;
-    padding: 0 9px;
-    gap: 5px;
+    height: var(--ui-control-30, 30px);
+    padding: 0 var(--ui-space-9, 9px);
+    gap: var(--ui-space-5, 5px);
     border-radius: 8px;
     color: var(--desc-color);
     background: transparent;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   /* 图标态:去掉文字后按钮要收成正方形，否则 padding 让它看着松垮 */
   .view-mode-toggle.is-compact .view-mode-button {
-    width: 32px;
+    width: var(--ui-control-32, 32px);
     padding: 0;
     justify-content: center;
   }

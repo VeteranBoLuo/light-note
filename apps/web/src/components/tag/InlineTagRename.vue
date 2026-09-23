@@ -140,14 +140,14 @@
     width: 100%;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   .inline-tag-rename__input {
     min-width: 0;
   }
   .inline-tag-rename__actions {
     display: flex;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
 
   @media (max-width: 767px) {

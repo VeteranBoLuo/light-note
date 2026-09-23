@@ -1,15 +1,10 @@
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, expect, it } from 'vitest';
 import { createApp, h, nextTick } from 'vue';
 import { createI18n } from 'vue-i18n';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import NoteInlineTags from './NoteInlineTags.vue';
 let cleanup: (() => void) | undefined;
-afterEach(() => {
-  cleanup?.();
-  vi.restoreAllMocks();
-  vi.unstubAllGlobals();
-  document.documentElement.style.zoom = '';
-});
+afterEach(() => cleanup?.());
 it('opens full labels, navigates by tag ID and respects route guards', async () => {
   const router = createRouter({
     history: createMemoryHistory(),
@@ -51,50 +46,4 @@ it('opens full labels, navigates by tag ID and respects route guards', async () 
   await new Promise((resolve) => setTimeout(resolve, 0));
   expect(router.currentRoute.value.path).toBe('/tag/tag%2Fone');
   expect(trigger.getAttribute('aria-expanded')).toBe('false');
-});
-
-it.each([0.9, 1, 1.1])('reserves fractional chip widths in layout pixels at zoom %s', async (zoom) => {
-  document.documentElement.style.zoom = String(zoom);
-  vi.stubGlobal(
-    'ResizeObserver',
-    class {
-      observe() {}
-      disconnect() {}
-    },
-  );
-  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
-    return { width: (this.classList.contains('resource-tag-chip') ? 60.2 : 30.2) * zoom } as DOMRect;
-  });
-  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(127);
-  // The rounded DOM width used before the fix loses the fractional space.
-  vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(60);
-  const host = document.createElement('div');
-  document.body.append(host);
-  const router = createRouter({
-    history: createMemoryHistory(),
-    routes: [{ path: '/:pathMatch(.*)*', component: { render: () => null } }],
-  });
-  const app = createApp({
-    render: () =>
-      h(NoteInlineTags, {
-        tags: [
-          { id: 'one', name: '轻笺待办' },
-          { id: 'two', name: '轻笺历史' },
-        ],
-      }),
-  });
-  app.use(router);
-  app.use(
-    createI18n({ legacy: false, locale: 'zh', messages: { zh: { noteDetail: { tagsWithCount: '标签（{count}）' } } } }),
-  );
-  app.directive('auto-scrollbar', {});
-  app.mount(host);
-  cleanup = () => {
-    app.unmount();
-    host.remove();
-  };
-  await nextTick();
-  await nextTick();
-  expect(host.querySelector<HTMLElement>('.note-inline-tags')!.style.width).toBe('127px');
-  expect(host.querySelectorAll('.note-inline-tags__chip')).toHaveLength(2);
 });

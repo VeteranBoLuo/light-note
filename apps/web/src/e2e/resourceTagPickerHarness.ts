@@ -1,3 +1,4 @@
+import { applyUiDensity } from '@/composables/useUiDensity';
 import { createApp } from 'vue';
 import { createPinia } from 'pinia';
 import { createI18n } from 'vue-i18n';
@@ -10,16 +11,15 @@ import '@/assets/css/index.less';
 import ResourceTagPickerHarness from './ResourceTagPickerHarness.vue';
 
 const params = new URLSearchParams(window.location.search);
+applyUiDensity(params.get('density'));
 const requestedView = params.get('view');
 const view =
   requestedView === 'tag' || requestedView === 'inline' || requestedView === 'todo' ? requestedView : 'resource';
 const theme = params.get('theme') === 'night' ? 'night' : 'day';
 const locale = params.get('locale') === 'en-US' ? 'en-US' : 'zh-CN';
-const zoom = ['0.9', '1.1'].includes(String(params.get('zoom'))) ? String(params.get('zoom')) : '';
 
 document.documentElement.dataset.theme = theme;
 document.documentElement.lang = locale;
-document.documentElement.style.zoom = zoom;
 document.documentElement.classList.toggle('light-note-mobile-rendering', window.innerWidth <= 600);
 document.body.dataset.tagIconSearchRequests = '0';
 

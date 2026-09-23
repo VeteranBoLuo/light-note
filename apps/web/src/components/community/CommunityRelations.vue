@@ -2,7 +2,7 @@
   <BModal
     :visible="true"
     :title="t('community.feed.' + kind)"
-    width="min(480px, 92vw)"
+    width="min(var(--ui-layout-480, 480px), 92vw)"
     :show-footer="false"
     @close="$emit('close')"
   >
@@ -11,7 +11,13 @@
         <BVirtualList
           v-if="members.length"
           class="relations-list"
-          :style="{ height: Math.min(380, members.length * 68 + (cursor ? 40 : 0)) + 'px' }"
+          :style="{
+            height:
+              Math.min(
+                dimension(380, 'layout'),
+                members.length * dimension(68, 'control') + (cursor ? dimension(40, 'layout') : 0),
+              ) + 'px',
+          }"
           :items="members"
           item-key="userPublicId"
           :item-height="68"
@@ -43,6 +49,7 @@
 </template>
 <script setup lang="ts">
   import { onBeforeUnmount, onMounted, ref } from 'vue';
+  import { useUiDensity } from '@/composables/useUiDensity';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
   import { feedGet } from '@/api/communityFeedApi';
@@ -54,6 +61,7 @@
   const emit = defineEmits<{ close: [] }>();
   const { t } = useI18n();
   const router = useRouter();
+  const { dimension } = useUiDensity();
   const members = ref<any[]>([]),
     cursor = ref<string | null>(null),
     loading = ref(false),
@@ -91,10 +99,10 @@
 </script>
 <style scoped>
   .community-relations {
-    min-height: 80px;
+    min-height: var(--ui-layout-80, 80px);
   }
   .relations-list {
-    height: 380px;
+    height: var(--ui-layout-380, 380px);
     max-height: 55vh;
   }
   .member-row.b_btn,
@@ -102,9 +110,9 @@
     display: flex;
     align-items: center;
     width: 100%;
-    height: 68px;
-    padding: 10px 4px;
-    gap: 14px;
+    height: var(--ui-control-68, 68px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-4, 4px);
+    gap: var(--ui-space-14, 14px);
     background: transparent;
     text-align: left;
   }
@@ -114,8 +122,8 @@
   .member-initial {
     display: grid;
     place-items: center;
-    width: 40px;
-    height: 40px;
+    width: var(--ui-layout-40, 40px);
+    height: var(--ui-layout-40, 40px);
     flex-shrink: 0;
     border-radius: 50%;
     color: var(--primary-color);
@@ -126,7 +134,7 @@
     flex: 1;
     min-width: 0;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
   .member-copy strong {
     overflow: hidden;
@@ -137,7 +145,7 @@
     color: var(--desc-color);
   }
   .relations-empty {
-    padding: 40px 0;
+    padding: var(--ui-space-40, 40px) 0;
     text-align: center;
   }
 </style>

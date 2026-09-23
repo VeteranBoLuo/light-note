@@ -1,6 +1,6 @@
 <template>
   <div class="tag-editor-form">
-    <BCard as="section" variant="card" padding="16px" class="tag-editor-base">
+    <BCard as="section" variant="card" padding="var(--ui-space-16, 16px)" class="tag-editor-base">
       <div class="tag-field">
         <span class="tag-field__label">{{ $t('tagManage.tagName') }}</span>
         <BInput v-model:value="tag.name" />
@@ -22,7 +22,7 @@
     <BCard
       as="section"
       variant="panel"
-      padding="14px"
+      padding="var(--ui-space-14, 14px)"
       class="tag-editor-resources"
       :style="{ '--section-color': activeResourceSection.color }"
     >
@@ -54,7 +54,7 @@
           :key="`${activeResourceType}-${item.rawId}`"
           as="label"
           variant="card"
-          padding="0 12px"
+          padding="0 var(--ui-space-12, 12px)"
           class="resource-card"
           :class="{ active: activeResourceSection.selectedIds.includes(item.rawId) }"
         >
@@ -129,12 +129,13 @@
 
 <style scoped lang="less">
   .tag-editor-form {
-    width: min(1180px, 100%);
+    font-size: var(--ui-font-16, 16px);
+    width: min(var(--ui-layout-1180, 1180px), 100%);
     height: 100%;
     margin: 0 auto;
     display: grid;
-    grid-template-rows: auto minmax(260px, 1fr) auto;
-    gap: 14px;
+    grid-template-rows: auto minmax(var(--ui-layout-260, 260px), 1fr) auto;
+    gap: var(--ui-space-14, 14px);
     color: var(--text-color);
   }
 
@@ -149,8 +150,8 @@
     --b-card-shadow: var(--surface-card-shadow);
 
     display: grid;
-    grid-template-columns: minmax(220px, 0.85fr) minmax(420px, 1.65fr);
-    gap: 14px;
+    grid-template-columns: minmax(var(--ui-layout-220, 220px), 0.85fr) minmax(var(--ui-layout-420, 420px), 1.65fr);
+    gap: var(--ui-space-14, 14px);
   }
 
   .tag-editor-base :deep(.b-input) {
@@ -169,12 +170,12 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .tag-field__label {
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .tag-field--description {
@@ -188,7 +189,7 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     overflow: hidden;
   }
 
@@ -196,27 +197,27 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
   }
 
   .resource-tabs {
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     overflow-x: auto;
   }
 
   .resource-tab {
-    height: 34px;
-    padding: 0 12px;
-    gap: 7px;
+    height: var(--ui-control-34, 34px);
+    padding: 0 var(--ui-space-12, 12px);
+    gap: var(--ui-space-7, 7px);
     color: var(--desc-color);
     border: 1px solid transparent;
     background: transparent;
 
     strong {
-      font-size: 11px;
+      font-size: var(--ui-font-11, 11px);
       font-weight: 550;
     }
 
@@ -235,7 +236,7 @@
   }
 
   .resource-search {
-    width: 260px;
+    width: var(--ui-layout-260, 260px);
     flex: 0 0 auto;
   }
 
@@ -243,10 +244,10 @@
     min-height: 0;
     flex: 1;
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    grid-auto-rows: 44px;
+    grid-template-columns: repeat(auto-fill, minmax(var(--ui-layout-200, 200px), 1fr));
+    grid-auto-rows: var(--ui-control-44, 44px);
     align-content: start;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     overflow: auto;
   }
 
@@ -256,11 +257,11 @@
     --b-card-shadow: var(--surface-card-shadow);
 
     min-width: 0;
-    height: 44px;
+    height: var(--ui-control-44, 44px);
     box-sizing: border-box;
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     border-radius: 9px;
     cursor: pointer;
 
@@ -273,34 +274,34 @@
   .resource-name {
     min-width: 0;
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .resource-empty {
     grid-column: 1 / -1;
-    padding: 40px 0;
+    padding: var(--ui-space-40, 40px) 0;
     color: var(--desc-color);
     text-align: center;
   }
 
   .tag-editor-footer {
-    min-height: 44px;
+    min-height: var(--ui-control-44, 44px);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .tag-editor-footer__actions {
     display: flex;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   /* 危险操作与常规操作留出间隔,避免和「取消/保存」误触 */
   .tag-editor-footer__delete {
-    margin-right: 10px;
+    margin-right: var(--ui-space-10, 10px);
   }
 
   @media (max-width: 1100px) {

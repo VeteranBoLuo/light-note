@@ -39,6 +39,7 @@
 </script>
 
 <script setup lang="ts">
+  import { useUiDensity } from '@/composables/useUiDensity';
   import { nextTick, onBeforeUnmount, onMounted, ref, watch, getCurrentInstance } from 'vue';
   import { markdownCodeLanguageControls } from '@/utils/markdownCodeLanguageControls';
   import { closeBrackets, closeBracketsKeymap, autocompletion, completionKeymap } from '@codemirror/autocomplete';
@@ -475,6 +476,9 @@
       view.dispatch({ effects: phrasesCompartment.reconfigure(EditorState.phrases.of(searchPhrases(locale))) });
     },
   );
+
+  const { density } = useUiDensity();
+  watch(density, () => nextTick(() => view?.requestMeasure()));
 
   onMounted(() => nextTick(createEditor));
 

@@ -121,7 +121,7 @@
       </div>
     </div>
 
-    <BModal v-model:visible="showBatchCategory" title="修改分类" width="360px" @ok="confirmBatchCategory">
+    <BModal v-model:visible="showBatchCategory" title="修改分类" width="var(--ui-layout-360, 360px)" @ok="confirmBatchCategory">
       <BSelect v-model:value="batchCategoryValue" :options="categoryOptions" class="kb-batch-category-select" />
     </BModal>
     <AdminRiskActionModal
@@ -580,15 +580,15 @@ watch(
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding: 20px;
+  padding: var(--ui-space-20, 20px);
   box-sizing: border-box;
 }
 .kb-header {
   flex-shrink: 0;
-  margin-bottom: 16px;
+  margin-bottom: var(--ui-space-16, 16px);
 }
 .kb-title {
-  font-size: 20px;
+  font-size: var(--ui-font-20, 20px);
   font-weight: 700;
   margin: 0;
   color: var(--text-color);
@@ -598,24 +598,24 @@ watch(
   flex: 1;
   min-height: 0;
   display: flex;
-  gap: 16px;
+  gap: var(--ui-space-16, 16px);
 }
 
 /* Left panel */
 .kb-left {
-  width: 320px;
-  min-width: 320px;
+  width: var(--ui-layout-320, 320px);
+  min-width: var(--ui-layout-320, 320px);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--ui-space-8, 8px);
   border: 1px solid var(--card-border-color);
   border-radius: 8px;
-  padding: 12px;
+  padding: var(--ui-space-12, 12px);
   box-sizing: border-box;
 }
 .kb-left-top {
   display: flex;
-  gap: 8px;
+  gap: var(--ui-space-8, 8px);
   align-items: center;
 }
 .kb-search-input {
@@ -623,7 +623,7 @@ watch(
 }
 .kb-filters {
   display: flex;
-  gap: 8px;
+  gap: var(--ui-space-8, 8px);
 }
 .kb-filter-select {
   flex: 1;
@@ -637,10 +637,10 @@ watch(
 .kb-list-item {
   display: flex;
   align-items: flex-start;
-  padding: 8px 6px;
+  padding: var(--ui-space-8, 8px) var(--ui-space-6, 6px);
   border-radius: 6px;
   cursor: pointer;
-  gap: 8px;
+  gap: var(--ui-space-8, 8px);
   transition: background 0.15s;
 }
 .kb-list-item:hover,
@@ -649,13 +649,13 @@ watch(
 }
 .kb-list-item-left {
   display: flex;
-  gap: 8px;
+  gap: var(--ui-space-8, 8px);
   align-items: flex-start;
   width: 100%;
   cursor: pointer;
 }
 .kb-checkbox {
-  margin-top: 3px;
+  margin-top: var(--ui-space-3, 3px);
   cursor: pointer;
 }
 .kb-list-item-info {
@@ -664,25 +664,25 @@ watch(
   cursor: pointer;
 }
 .kb-list-item-title {
-  font-size: 13px;
+  font-size: var(--ui-font-13, 13px);
   font-weight: 600;
   color: var(--text-color);
-  margin-bottom: 3px;
+  margin-bottom: var(--ui-space-3, 3px);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .kb-list-item-meta {
   display: flex;
-  gap: 6px;
+  gap: var(--ui-space-6, 6px);
   align-items: center;
-  font-size: 11px;
+  font-size: var(--ui-font-11, 11px);
 }
 
 /* Badge */
 .kb-badge {
-  font-size: 11px;
-  padding: 1px 5px;
+  font-size: var(--ui-font-11, 11px);
+  padding: var(--ui-space-1, 1px) var(--ui-space-5, 5px);
   border-radius: 3px;
 }
 .kb-badge--public {
@@ -693,34 +693,34 @@ watch(
 }
 .kb-category-label {
   color: var(--desc-color);
-  font-size: 11px;
+  font-size: var(--ui-font-11, 11px);
 }
 .kb-help-section-label {
   color: var(--resource-bookmark-color);
-  font-size: 11px;
+  font-size: var(--ui-font-11, 11px);
 }
 
 /* Batch */
 .kb-batch-bar {
   flex-shrink: 0;
   display: flex;
-  gap: 6px;
+  gap: var(--ui-space-6, 6px);
   align-items: center;
-  padding: 8px 0 0;
+  padding: var(--ui-space-8, 8px) 0 0;
   border-top: 1px solid var(--card-border-color);
   flex-wrap: wrap;
 }
 .kb-batch-count {
-  font-size: 12px;
+  font-size: var(--ui-font-12, 12px);
   color: var(--desc-color);
-  margin-right: 4px;
+  margin-right: var(--ui-space-4, 4px);
 }
 .kb-batch-btn {
   border: 1px solid var(--card-border-color);
   background: transparent;
   color: var(--text-color);
-  font-size: 12px;
-  padding: 3px 10px;
+  font-size: var(--ui-font-12, 12px);
+  padding: var(--ui-space-3, 3px) var(--ui-space-10, 10px);
   border-radius: 4px;
   cursor: pointer;
 }
@@ -745,7 +745,7 @@ watch(
 }
 .kb-return-bar {
   flex-shrink: 0;
-  padding: 8px 16px;
+  padding: var(--ui-space-8, 8px) var(--ui-space-16, 16px);
   border-bottom: 1px solid var(--card-border-color);
   background: var(--bl-input-noBorder-bg-color);
 }
@@ -753,7 +753,7 @@ watch(
   border: none;
   background: transparent;
   color: var(--primary-color);
-  font-size: 13px;
+  font-size: var(--ui-font-13, 13px);
   cursor: pointer;
   padding: 0;
 }
@@ -765,23 +765,23 @@ watch(
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 16px;
+  padding: var(--ui-space-16, 16px);
   overflow: hidden;
 }
 .kb-editor-top {
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin-bottom: 12px;
+  gap: var(--ui-space-10, 10px);
+  margin-bottom: var(--ui-space-12, 12px);
 }
 .kb-title-input {
   width: 100% !important;
 }
 .kb-editor-meta {
   display: flex;
-  gap: 16px;
-  font-size: 13px;
+  gap: var(--ui-space-16, 16px);
+  font-size: var(--ui-font-13, 13px);
   color: var(--text-color);
   align-items: center;
   flex-wrap: wrap;
@@ -789,7 +789,7 @@ watch(
 .kb-meta-label {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--ui-space-4, 4px);
   white-space: nowrap;
 }
 /* 去掉 BSelect 的外边框 */
@@ -797,31 +797,31 @@ watch(
   border: none;
   background: var(--bl-input-noBorder-bg-color);
   border-radius: 6px;
-  height: 28px;
+  height: var(--ui-control-28, 28px);
 }
 /* 分类输入框 */
 .kb-category-input {
-  width: 120px !important;
+  width: var(--ui-layout-120, 120px) !important;
 }
 .kb-help-section-input {
-  width: 150px !important;
+  width: var(--ui-layout-150, 150px) !important;
 }
 .kb-category-input .input-container {
-  height: 28px !important;
+  height: var(--ui-control-28, 28px) !important;
   min-width: 0 !important;
 }
 .kb-help-section-input .input-container {
-  height: 28px !important;
+  height: var(--ui-control-28, 28px) !important;
   min-width: 0 !important;
 }
 :deep(.kb-filter-select .select-trigger) {
   border: none;
   background: var(--bl-input-noBorder-bg-color);
   border-radius: 6px;
-  height: 32px;
+  height: var(--ui-control-32, 32px);
 }
 .kb-meta-select {
-  min-width: 110px;
+  min-width: var(--ui-layout-110, 110px);
   vertical-align: middle;
 }
 .kb-filter-select {
@@ -835,12 +835,12 @@ watch(
 .kb-editor-actions {
   flex-shrink: 0;
   display: flex;
-  gap: 8px;
+  gap: var(--ui-space-8, 8px);
   align-items: center;
-  padding-top: 12px;
+  padding-top: var(--ui-space-12, 12px);
 }
 .kb-editor-time {
-  font-size: 12px;
+  font-size: var(--ui-font-12, 12px);
   color: var(--desc-color);
   margin-left: auto;
 }
@@ -858,18 +858,18 @@ watch(
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 16px;
+  padding: var(--ui-space-16, 16px);
 }
 .kb-search-results-header {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding-bottom: 12px;
+  gap: var(--ui-space-12, 12px);
+  padding-bottom: var(--ui-space-12, 12px);
   border-bottom: 1px solid var(--card-border-color);
-  margin-bottom: 12px;
+  margin-bottom: var(--ui-space-12, 12px);
 }
 .kb-search-results-count {
-  font-size: 14px;
+  font-size: var(--ui-font-14, 14px);
   color: var(--desc-color);
 }
 .kb-search-clear {
@@ -877,21 +877,21 @@ watch(
   border: none;
   background: transparent;
   color: var(--primary-color);
-  font-size: 13px;
+  font-size: var(--ui-font-13, 13px);
   cursor: pointer;
 }
 .kb-search-empty {
   text-align: center;
-  padding: 40px;
+  padding: var(--ui-space-40, 40px);
   color: var(--desc-color);
 }
 .kb-search-card {
   display: flex;
-  gap: 10px;
-  padding: 10px 14px;
+  gap: var(--ui-space-10, 10px);
+  padding: var(--ui-space-10, 10px) var(--ui-space-14, 14px);
   border-radius: 6px;
   border: 1px solid var(--card-border-color);
-  margin-bottom: 6px;
+  margin-bottom: var(--ui-space-6, 6px);
   cursor: pointer;
   transition:
     border-color 0.15s,
@@ -902,7 +902,7 @@ watch(
   background: var(--bl-input-noBorder-bg-color);
 }
 .kb-search-card-icon {
-  font-size: 20px;
+  font-size: var(--ui-font-20, 20px);
   flex-shrink: 0;
   line-height: 1.4;
 }
@@ -911,18 +911,18 @@ watch(
   min-width: 0;
 }
 .kb-search-card-title {
-  font-size: 14px;
+  font-size: var(--ui-font-14, 14px);
   font-weight: 600;
   color: var(--text-color);
-  margin-bottom: 2px;
+  margin-bottom: var(--ui-space-2, 2px);
 }
 .kb-search-card-meta {
   display: flex;
-  gap: 6px;
-  margin-bottom: 4px;
+  gap: var(--ui-space-6, 6px);
+  margin-bottom: var(--ui-space-4, 4px);
 }
 .kb-search-card-snippet {
-  font-size: 12px;
+  font-size: var(--ui-font-12, 12px);
   color: var(--desc-color);
   line-height: 1.6;
   overflow: hidden;
@@ -933,7 +933,7 @@ watch(
 mark.kb-highlight {
   background: color-mix(in srgb, #facc15 72%, transparent);
   color: #171717;
-  padding: 1px 2px;
+  padding: var(--ui-space-1, 1px) var(--ui-space-2, 2px);
   border-radius: 2px;
 }
 
@@ -943,15 +943,15 @@ mark.kb-highlight {
 
 .kb-empty {
   text-align: center;
-  padding: 20px;
+  padding: var(--ui-space-20, 20px);
   color: var(--desc-color);
-  font-size: 13px;
+  font-size: var(--ui-font-13, 13px);
 }
 .kb-search-hint {
   text-align: center;
-  padding: 30px 10px;
+  padding: var(--ui-space-30, 30px) var(--ui-space-10, 10px);
   color: var(--desc-color);
-  font-size: 13px;
+  font-size: var(--ui-font-13, 13px);
   line-height: 1.6;
 }
 </style>

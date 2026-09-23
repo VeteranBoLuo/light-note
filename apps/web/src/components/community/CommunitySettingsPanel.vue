@@ -108,26 +108,26 @@
   .community-settings-panel {
     display: flex;
     flex-direction: column;
-    gap: 24px;
+    gap: var(--ui-space-24, 24px);
   }
   .community-feed-notifications {
-    padding: 20px 0;
+    padding: var(--ui-space-20, 20px) 0;
     border-top: 1px solid var(--workspace-divider);
   }
   .community-feed-notifications h2 {
-    font-size: 16px;
-    margin: 0 0 16px;
+    font-size: var(--ui-font-16, 16px);
+    margin: 0 0 var(--ui-space-16, 16px);
   }
   .community-settings-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 20px;
-    padding: 12px 0;
-    font-size: 14px;
+    gap: var(--ui-space-20, 20px);
+    padding: var(--ui-space-12, 12px) 0;
+    font-size: var(--ui-font-14, 14px);
   }
   .community-feed-notifications p {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     color: var(--desc-color);
   }
 </style>
@@ -135,7 +135,7 @@
 <style scoped>
   .community-section-loading {
     height: auto;
-    min-height: 120px;
+    min-height: var(--ui-layout-120, 120px);
   }
   .community-section-loading[aria-busy='true'] :deep(.b-loading-content) {
     pointer-events: none;

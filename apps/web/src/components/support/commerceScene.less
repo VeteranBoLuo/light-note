@@ -5,17 +5,17 @@
   --scene-shadow: 0 8px 30px color-mix(in srgb, var(--primary-color) 6%, transparent);
   color: var(--text-color);
   background: var(--background-color);
-  font-size: 14px;
+  font-size: var(--ui-font-14, 14px);
   .b_btn {
     border-radius: 7px;
     border: 1px solid var(--scene-line);
-    min-height: 34px;
+    min-height: var(--ui-layout-34, 34px);
     height: auto;
-    padding: 7px 14px;
+    padding: var(--ui-space-7, 7px) var(--ui-space-14, 14px);
     line-height: 1.4;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 550;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     background: var(--scene-paper);
     white-space: normal;
   }
@@ -36,25 +36,25 @@
     background: transparent;
     color: var(--primary-color);
     box-shadow: none;
-    padding: 4px 0;
-    min-height: 28px;
+    padding: var(--ui-space-4, 4px) 0;
+    min-height: var(--ui-layout-28, 28px);
   }
   .b_btn.small_btn {
-    font-size: 12px;
-    min-height: 30px;
-    padding: 5px 9px;
+    font-size: var(--ui-font-12, 12px);
+    min-height: var(--ui-layout-30, 30px);
+    padding: var(--ui-space-5, 5px) var(--ui-space-9, 9px);
   }
   .scene-panel {
     border: 1px solid var(--scene-line);
     border-radius: 13px;
     background: var(--scene-paper);
     box-shadow: var(--scene-shadow);
-    padding: 16px 18px;
+    padding: var(--ui-space-16, 16px) var(--ui-space-18, 18px);
     min-width: 0;
   }
   h2 {
     font:
-      700 21px/1.4 'Songti SC',
+      700 var(--ui-font-21, 21px)/1.4 'Songti SC',
       'STSong',
       serif;
     letter-spacing: -0.025em;
@@ -63,8 +63,8 @@
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 10px 24px;
-    padding: 14px 0 26px;
+    gap: var(--ui-space-10, 10px) var(--ui-space-24, 24px);
+    padding: var(--ui-space-14, 14px) 0 var(--ui-space-26, 26px);
   }
   .scene-footer-art {
     display: block;
@@ -84,7 +84,7 @@
   position: relative;
   isolation: isolate;
   min-height: 100%;
-  padding-bottom: 24px;
+  padding-bottom: var(--ui-space-24, 24px);
 }
 .commerce-landscape {
   position: absolute;
@@ -181,21 +181,21 @@ html[data-theme='night'] .commerce-surface .campaign-closing img {
   object-fit: cover;
 }
 .commerce-surface .brand-scene--campaign .brand-scene__features {
-  max-width: 860px;
+  max-width: var(--ui-layout-860, 860px);
 }
 .commerce-surface .brand-scene--campaign .brand-scene__actions {
-  max-width: 940px;
+  max-width: var(--ui-layout-940, 940px);
 }
 .commerce-surface .brand-scene--campaign .brand-scene__actions > .b_btn {
   order: -1;
-  min-width: 260px;
-  min-height: 46px;
+  min-width: var(--ui-layout-260, 260px);
+  min-height: var(--ui-layout-46, 46px);
   border-radius: 25px;
-  font-size: 15px;
+  font-size: var(--ui-font-15, 15px);
 }
 .commerce-surface .brand-scene--campaign .campaign-date {
   margin-left: auto;
-  min-width: 235px;
+  min-width: var(--ui-layout-235, 235px);
 }
 .commerce-surface.is-mobile .brand-scene--campaign .brand-scene__features {
   display: grid;

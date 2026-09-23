@@ -127,7 +127,7 @@
         <BInput
           v-model:value="sql"
           type="textarea"
-          :rows="10"
+          :rows="dimension(10, 'layout')"
           :maxlength="100000"
           :placeholder="t('toolbox.browserSql.placeholder')"
           :disabled="busy"
@@ -219,6 +219,7 @@
 
 <script setup lang="ts">
   import { computed, onBeforeUnmount, ref } from 'vue';
+  import { useUiDensity } from '@/composables/useUiDensity';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BChip from '@/components/base/BasicComponents/BChip.vue';
@@ -246,6 +247,7 @@
   import { downloadToolboxBlob, formatToolboxBytes } from '@/utils/toolboxLocal';
 
   const { t } = useI18n();
+  const { dimension } = useUiDensity();
   const files = ref<File[]>([]);
   const tables = ref<BrowserSqlTable[]>([]);
   const sql = ref('');
@@ -336,7 +338,11 @@
     (result.value?.rows.slice(0, BROWSER_SQL_PREVIEW_ROWS) || []).map((row, index) => ({ ...row, __rowId: index + 1 })),
   );
   const previewColumns = computed<Column[]>(() =>
-    visibleResultColumns.value.map((column) => ({ key: column, title: column, width: 'minmax(90px, 1fr)' })),
+    visibleResultColumns.value.map((column) => ({
+      key: column,
+      title: column,
+      width: 'minmax(var(--ui-layout-90, 90px), 1fr)',
+    })),
   );
   const resultDescription = computed(() =>
     result.value ? t('toolbox.browserSql.resultReady') : t('toolbox.browserSql.resultHint'),
@@ -458,14 +464,14 @@
 <style scoped lang="less">
   .browser-sql-workbench {
     display: grid;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
 
   .sql-stagebar {
-    padding: 9px;
+    padding: var(--ui-space-9, 9px);
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     border: 1px solid var(--surface-border-color);
     border-radius: 14px;
     background: var(--card-background);
@@ -473,25 +479,25 @@
 
   .sql-stagebar__item {
     min-width: 0;
-    padding: 9px 11px;
+    padding: var(--ui-space-9, 9px) var(--ui-space-11, 11px);
     display: flex;
     align-items: center;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
     border: 1px solid transparent;
     border-radius: 10px;
     color: var(--desc-color);
   }
 
   .sql-stagebar__item > span {
-    width: 27px;
-    height: 27px;
+    width: var(--ui-layout-27, 27px);
+    height: var(--ui-layout-27, 27px);
     display: grid;
     flex: 0 0 auto;
     place-items: center;
     border: 1px solid var(--surface-border-color);
     border-radius: 8px;
     background: var(--workspace-panel-bg-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     font-weight: 750;
   }
 
@@ -505,7 +511,7 @@
   .sql-result-panel header > div > div {
     min-width: 0;
     display: grid;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
 
   .sql-stagebar__item strong,
@@ -516,7 +522,7 @@
   }
 
   .sql-stagebar__item small {
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
 
   .sql-stagebar__item.is-active {
@@ -537,13 +543,13 @@
   }
 
   .sql-empty {
-    min-height: 500px;
-    padding: 48px 24px;
+    min-height: var(--ui-layout-500, 500px);
+    padding: var(--ui-space-48, 48px) var(--ui-space-24, 24px);
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
     overflow: hidden;
     border: 1px solid var(--surface-border-color);
     border-radius: 18px;
@@ -599,10 +605,10 @@
   }
 
   .sql-empty__copy {
-    max-width: 620px;
+    max-width: var(--ui-layout-620, 620px);
     display: grid;
     justify-items: center;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
   }
 
   .sql-empty h2,
@@ -610,7 +616,7 @@
     margin: 0;
   }
   .sql-empty h2 {
-    font-size: clamp(24px, 3vw, 36px);
+    font-size: clamp(var(--ui-font-24, 24px), 3vw, var(--ui-font-36, 36px));
     letter-spacing: -0.04em;
   }
   .sql-empty p,
@@ -621,16 +627,16 @@
     line-height: 1.7;
   }
   .sql-empty > small {
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .sql-source-panel,
   .sql-console,
   .sql-result-panel {
     min-width: 0;
-    padding: 15px;
+    padding: var(--ui-space-15, 15px);
     display: grid;
-    gap: 13px;
+    gap: var(--ui-space-13, 13px);
     border: 1px solid var(--surface-border-color);
     border-radius: 16px;
     background: var(--card-background);
@@ -645,7 +651,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .sql-source-panel > header > div:first-child,
@@ -655,15 +661,15 @@
   }
 
   .sql-section-index {
-    width: 28px;
-    height: 28px;
+    width: var(--ui-layout-28, 28px);
+    height: var(--ui-layout-28, 28px);
     display: grid;
     flex: 0 0 auto;
     place-items: center;
     border-radius: 8px;
     color: #fff;
     background: var(--primary-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     font-weight: 750;
   }
 
@@ -671,7 +677,7 @@
   .sql-console header small,
   .sql-result-panel header small {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
 
   .sql-source-panel__actions,
@@ -680,13 +686,13 @@
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
 
   .sql-engine-status {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   .sql-engine-status i {
     width: 6px;
@@ -698,23 +704,23 @@
   .sql-source-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .sql-source-card {
     min-width: 0;
-    padding: 10px;
+    padding: var(--ui-space-10, 10px);
     display: flex;
     align-items: center;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
     border: 1px solid var(--surface-border-color);
     border-radius: 11px;
     background: var(--workspace-panel-bg-color);
   }
 
   .sql-source-card > span {
-    width: 35px;
-    height: 35px;
+    width: var(--ui-layout-35, 35px);
+    height: var(--ui-layout-35, 35px);
     display: grid;
     flex: 0 0 auto;
     place-items: center;
@@ -727,7 +733,7 @@
     min-width: 0;
     margin-right: auto;
     display: grid;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
   .sql-source-card strong,
   .sql-source-card small {
@@ -737,26 +743,26 @@
   }
   .sql-source-card small {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
 
   .sql-schema-strip {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .sql-schema-strip > div {
     min-width: 0;
-    padding: 9px 11px;
+    padding: var(--ui-space-9, 9px) var(--ui-space-11, 11px);
     display: grid;
     grid-template-columns: auto auto auto minmax(0, 1fr);
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     border-left: 3px solid var(--primary-color);
     border-radius: 8px;
     background: var(--workspace-panel-bg-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .sql-schema-strip span,
@@ -770,13 +776,13 @@
   }
 
   .sql-console :deep(textarea) {
-    min-height: 230px;
+    min-height: var(--ui-layout-230, 230px);
     resize: vertical;
     border-color: var(--surface-border-color);
     background: #151724;
     color: #edf0ff;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.7;
   }
 
@@ -784,27 +790,27 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .sql-console__footer > span {
     display: inline-flex;
     align-items: center;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .sql-console__footer .b_btn small {
-    margin-left: 7px;
+    margin-left: var(--ui-space-7, 7px);
     opacity: 0.7;
   }
 
   .sql-error {
-    padding: 13px 15px;
+    padding: var(--ui-space-13, 13px) var(--ui-space-15, 15px);
     display: flex;
     align-items: flex-start;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     border: 1px solid #dc4c4c;
     border-radius: 13px;
     color: #c13838;
@@ -812,8 +818,8 @@
   }
 
   .sql-error > span {
-    width: 28px;
-    height: 28px;
+    width: var(--ui-layout-28, 28px);
+    height: var(--ui-layout-28, 28px);
     display: grid;
     flex: 0 0 auto;
     place-items: center;
@@ -825,20 +831,20 @@
     margin-right: auto;
   }
   .sql-error p {
-    margin: 3px 0 0;
+    margin: var(--ui-space-3, 3px) 0 0;
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.6;
     overflow-wrap: anywhere;
   }
 
   .sql-result-state {
-    min-height: 260px;
+    min-height: var(--ui-layout-260, 260px);
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     border: 1px dashed var(--surface-border-color);
     border-radius: 12px;
     background: var(--workspace-panel-bg-color);
@@ -846,10 +852,10 @@
   }
 
   .sql-result-state p {
-    max-width: 560px;
+    max-width: var(--ui-layout-560, 560px);
     margin: 0;
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .sql-result-state.is-idle > span {
     color: var(--primary-color);
@@ -860,13 +866,13 @@
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .sql-result-facts > div {
-    padding: 10px 12px;
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     display: grid;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
     border: 1px solid var(--surface-border-color);
     border-radius: 10px;
     background: var(--workspace-panel-bg-color);
@@ -874,10 +880,10 @@
 
   .sql-result-facts span {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
   .sql-result-facts strong {
-    font-size: 18px;
+    font-size: var(--ui-font-18, 18px);
   }
   .sql-result-table {
     min-width: 0;
@@ -888,7 +894,7 @@
   .sql-preview-note {
     margin: 0;
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
 
   @media (max-width: 767px) {
@@ -899,8 +905,8 @@
       white-space: normal;
     }
     .sql-empty {
-      min-height: 440px;
-      padding: 38px 18px;
+      min-height: var(--ui-layout-440, 440px);
+      padding: var(--ui-space-38, 38px) var(--ui-space-18, 18px);
     }
     .sql-source-panel > header,
     .sql-console > header,
@@ -924,7 +930,7 @@
       grid-column: 1 / -1;
     }
     .sql-console :deep(textarea) {
-      min-height: 260px;
+      min-height: var(--ui-layout-260, 260px);
     }
     .sql-console__footer .b_btn {
       width: 100%;
@@ -934,21 +940,21 @@
     }
     .sql-result-mobile {
       display: grid;
-      gap: 8px;
+      gap: var(--ui-space-8, 8px);
     }
     .sql-result-mobile article {
-      padding: 11px;
+      padding: var(--ui-space-11, 11px);
       display: grid;
-      gap: 7px;
+      gap: var(--ui-space-7, 7px);
       border: 1px solid var(--surface-border-color);
       border-radius: 11px;
       background: var(--workspace-panel-bg-color);
     }
     .sql-result-mobile article > div {
       display: grid;
-      grid-template-columns: minmax(80px, 0.38fr) minmax(0, 1fr);
-      gap: 9px;
-      font-size: 11px;
+      grid-template-columns: minmax(var(--ui-layout-80, 80px), 0.38fr) minmax(0, 1fr);
+      gap: var(--ui-space-9, 9px);
+      font-size: var(--ui-font-11, 11px);
     }
     .sql-result-mobile span {
       color: var(--desc-color);

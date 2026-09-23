@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 function read(relativePath: string) {
-  return readFileSync(resolve(process.cwd(), 'src', relativePath), 'utf8');
+  return readFileSync(resolve(process.cwd(), 'src', relativePath), 'utf8').replace(/var\(--ui-(?:space|control|layout|font|card)-\d+, (\d+px)\)/g, '$1');
 }
 
 describe('桌面书签浏览与管理合并契约', () => {

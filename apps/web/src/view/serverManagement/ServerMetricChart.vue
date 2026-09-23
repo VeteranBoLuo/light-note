@@ -74,20 +74,20 @@
 <style scoped lang="less">
   .server-metric-chart {
     display: grid;
-    min-height: 230px;
-    gap: 12px;
+    min-height: var(--ui-layout-230, 230px);
+    gap: var(--ui-space-12, 12px);
   }
   .server-metric-chart__legend {
     display: flex;
     flex-wrap: wrap;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .server-metric-chart__legend span {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   .server-metric-chart__legend i {
     width: 8px;
@@ -100,8 +100,8 @@
   }
   .server-metric-chart__canvas svg {
     width: 100%;
-    min-width: 560px;
-    height: 190px;
+    min-width: var(--ui-layout-560, 560px);
+    height: var(--ui-layout-190, 190px);
     overflow: visible;
   }
   .server-metric-chart__grid line {
@@ -121,11 +121,11 @@
     vector-effect: non-scaling-stroke;
   }
   .server-metric-chart__empty {
-    min-height: 170px;
+    min-height: var(--ui-layout-170, 170px);
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     color: var(--desc-color);
     border: 1px dashed var(--surface-border-color);
     border-radius: 12px;

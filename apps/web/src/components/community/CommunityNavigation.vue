@@ -127,22 +127,22 @@
   .community-navigation {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     height: 100%;
-    min-height: 300px;
+    min-height: var(--ui-layout-300, 300px);
   }
   .community-navigation-title {
-    margin: 6px 12px 16px;
-    font-size: 12px;
+    margin: var(--ui-space-6, 6px) var(--ui-space-12, 12px) var(--ui-space-16, 16px);
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
   }
   .community-destination {
     position: relative;
     width: 100%;
     justify-content: flex-start;
-    gap: 10px;
-    min-height: 44px;
-    padding: 10px 12px;
+    gap: var(--ui-space-10, 10px);
+    min-height: var(--ui-layout-44, 44px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     border: 0;
     border-radius: 8px;
     background: transparent;
@@ -157,8 +157,8 @@
     content: '';
     position: absolute;
     left: 0;
-    top: 13px;
-    bottom: 13px;
+    top: var(--ui-space-13, 13px);
+    bottom: var(--ui-space-13, 13px);
     width: 3px;
     border-radius: 2px;
     background: var(--workspace-purple-text);
@@ -169,39 +169,41 @@
     justify-content: center;
     align-self: center;
     flex: 0 0 auto;
-    height: 18px;
+    height: var(--ui-layout-18, 18px);
     line-height: 1;
-    padding: 0 5px;
+    padding: 0 var(--ui-space-5, 5px);
     box-sizing: border-box;
     white-space: nowrap;
     margin-left: auto;
-    font-size: 11px;
-    min-width: 18px;
+    font-size: var(--ui-font-11, 11px);
+    min-width: var(--ui-layout-18, 18px);
     border-radius: 10px;
     background: var(--workspace-hover);
   }
   .community-navigation-footer {
     flex-shrink: 0;
-    margin: auto -20px 0;
-    padding: 6px 12px;
+    margin: auto calc(-1 * var(--ui-space-20, 20px)) 0;
+    padding: var(--ui-space-6, 6px) var(--ui-space-12, 12px);
     border-top: 1px solid var(--workspace-divider);
   }
   .community-navigation-profile {
-    height: 44px;
-    min-height: 44px;
-    padding: 6px 8px;
+    height: var(--ui-layout-44, 44px);
+    min-height: var(--ui-layout-44, 44px);
+    padding: var(--ui-space-6, 6px) var(--ui-space-8, 8px);
     border: 0;
     border-radius: 8px;
     background: transparent;
     width: 100%;
     justify-content: flex-start;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     text-align: left;
   }
   .community-navigation-profile:hover {
     background: var(--workspace-hover);
   }
   .community-navigation-profile img {
+    width: var(--ui-layout-28, 28px);
+    height: var(--ui-layout-28, 28px);
     border-radius: 50%;
     object-fit: cover;
     flex-shrink: 0;
@@ -210,11 +212,11 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
   .community-navigation-profile .community-navigation-avatar {
-    width: 28px;
-    height: 28px;
+    width: var(--ui-layout-28, 28px);
+    height: var(--ui-layout-28, 28px);
     flex-shrink: 0;
     border-radius: 50%;
     align-items: center;
@@ -223,13 +225,13 @@
     color: var(--workspace-purple-text);
   }
   .community-navigation-profile strong {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
   .community-navigation-profile small {
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     color: var(--desc-color);
   }
   @media (max-width: 767px) {

@@ -23,7 +23,7 @@
       {{ t('adminSupport.campaigns.empty') }}
     </div>
     <div v-else class="campaign-admin__list">
-      <BCard v-for="campaign in campaigns" :key="campaign.id" padding="18px" radius="14px">
+      <BCard v-for="campaign in campaigns" :key="campaign.id" padding="var(--ui-space-18, 18px)" radius="14px">
         <div class="campaign-admin__card-head">
           <div>
             <div class="campaign-admin__title-row">
@@ -91,7 +91,7 @@
   <BModal
     v-model:visible="showcaseVisible"
     :title="t('autumn.preview')"
-    width="min(1520px, 98vw)"
+    width="min(var(--ui-layout-1520, 1520px), 98vw)"
     height="90vh"
     :show-footer="false"
   >
@@ -100,8 +100,8 @@
   <BModal
     v-model:visible="createVisible"
     :title="t('adminSupport.campaigns.createTitle')"
-    width="min(920px, 96vw)"
-    height="min(760px, 90vh)"
+    width="min(var(--ui-layout-920, 920px), 96vw)"
+    height="min(var(--ui-layout-760, 760px), 90vh)"
     content-class="campaign-admin__modal-content"
     :show-footer="true"
     :close-disabled="creating"
@@ -206,8 +206,8 @@
   <BModal
     v-model:visible="grantsVisible"
     :title="t('adminSupport.campaigns.grantsTitle', { name: grantsCampaign?.title || '' })"
-    width="min(940px, 96vw)"
-    height="min(680px, 88vh)"
+    width="min(var(--ui-layout-940, 940px), 96vw)"
+    height="min(var(--ui-layout-680, 680px), 88vh)"
     :show-footer="false"
   >
     <div v-if="grantsLoading" class="campaign-admin__state"><BLoading inline loading /></div>
@@ -238,7 +238,7 @@
         </template>
       </BTable>
       <div class="campaign-admin__grant-cards">
-        <BCard v-for="grant in grants" :key="grant.id" padding="14px" radius="12px">
+        <BCard v-for="grant in grants" :key="grant.id" padding="var(--ui-space-14, 14px)" radius="12px">
           <div class="campaign-admin__grant-card-head">
             <div>
               <strong>{{ grant.skuId }}</strong>
@@ -441,10 +441,10 @@
   const grantColumns = computed(() => [
     { title: t('adminSupport.campaigns.order'), key: 'providerOrderNo' },
     { title: 'SKU', key: 'skuId' },
-    { title: t('adminSupport.campaigns.paid'), key: 'paidAmount', width: '90px' },
+    { title: t('adminSupport.campaigns.paid'), key: 'paidAmount', width: 'var(--ui-layout-90, 90px)' },
     { title: t('adminSupport.campaigns.benefit'), key: 'benefit' },
-    { title: t('adminSupport.campaigns.status'), key: 'status', width: '120px' },
-    { title: t('adminSupport.campaigns.time'), key: 'time', width: '160px' },
+    { title: t('adminSupport.campaigns.status'), key: 'status', width: 'var(--ui-layout-120, 120px)' },
+    { title: t('adminSupport.campaigns.time'), key: 'time', width: 'var(--ui-layout-160, 160px)' },
   ]);
 
   function normalizeSkus(): AdminSupportCampaignSkuInput[] {
@@ -644,10 +644,17 @@
 </script>
 
 <style scoped lang="less">
+  .campaign-admin,
+  .campaign-admin__form,
+  .campaign-admin__grant-table,
+  .campaign-admin__grant-cards {
+    font-size: var(--ui-font-16, 16px);
+  }
+
   .campaign-admin {
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
   }
 
   .campaign-admin__header,
@@ -661,7 +668,7 @@
   .campaign-admin__modal-footer {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .campaign-admin__header,
@@ -683,7 +690,7 @@
 
   .campaign-admin__header h2 {
     color: var(--text-color);
-    font-size: 18px;
+    font-size: var(--ui-font-18, 18px);
   }
 
   .campaign-admin__header p,
@@ -691,18 +698,18 @@
   .campaign-admin__description,
   .campaign-admin__immutable,
   .campaign-admin__cost-blocked {
-    margin-top: 5px;
+    margin-top: var(--ui-space-5, 5px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.6;
   }
 
   .campaign-admin__state {
-    min-height: 150px;
+    min-height: var(--ui-layout-150, 150px);
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     color: var(--desc-color);
@@ -715,17 +722,17 @@
 
   .campaign-admin__list {
     display: grid;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .campaign-admin__skus {
-    margin-top: 12px;
+    margin-top: var(--ui-space-12, 12px);
     display: grid;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
 
   .campaign-admin__sku {
-    padding: 9px 10px;
+    padding: var(--ui-space-9, 9px) var(--ui-space-10, 10px);
     border: 1px solid var(--surface-border-color);
     border-radius: 9px;
     background: var(--workspace-panel-bg-color);
@@ -737,18 +744,18 @@
   }
 
   .campaign-admin__sku small {
-    margin-top: 3px;
+    margin-top: var(--ui-space-3, 3px);
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .campaign-admin__immutable {
-    padding-left: 9px;
+    padding-left: var(--ui-space-9, 9px);
     border-left: 3px solid var(--primary-color);
   }
 
   .campaign-admin__cost-blocked {
-    padding-left: 9px;
+    padding-left: var(--ui-space-9, 9px);
     border-left: 3px solid var(--error-color, #c33f47);
     color: var(--error-color, #c33f47);
   }
@@ -760,13 +767,13 @@
   .campaign-admin__form {
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
   }
 
   .campaign-admin__form-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .campaign-admin__form-grid.is-sku {
@@ -777,27 +784,27 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .campaign-admin__sku-form {
-    padding: 12px;
+    padding: var(--ui-space-12, 12px);
     border: 1px solid var(--surface-border-color);
     border-radius: 11px;
     background: var(--workspace-panel-bg-color);
   }
 
   .campaign-admin__sku-form-head {
-    margin-bottom: 9px;
+    margin-bottom: var(--ui-space-9, 9px);
   }
 
   .campaign-admin__cost,
   .campaign-admin__preview-row span {
-    margin-top: 8px;
+    margin-top: var(--ui-space-8, 8px);
     color: var(--success-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .campaign-admin__cost.is-failed,
@@ -807,7 +814,7 @@
 
   .campaign-admin__modal-footer {
     justify-content: flex-end;
-    padding: 12px 16px;
+    padding: var(--ui-space-12, 12px) var(--ui-space-16, 16px);
     border-top: 1px solid var(--surface-border-color);
   }
 
@@ -819,7 +826,7 @@
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .campaign-admin__grant-card-head strong,
@@ -828,27 +835,27 @@
   }
 
   .campaign-admin__grant-card-head small {
-    margin-top: 3px;
+    margin-top: var(--ui-space-3, 3px);
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .campaign-admin__grant-cards dl {
     display: grid;
-    gap: 7px;
-    margin: 12px 0 0;
+    gap: var(--ui-space-7, 7px);
+    margin: var(--ui-space-12, 12px) 0 0;
   }
 
   .campaign-admin__grant-cards dl > div {
     display: grid;
-    grid-template-columns: minmax(72px, auto) minmax(0, 1fr);
-    gap: 10px;
+    grid-template-columns: minmax(var(--ui-layout-72, 72px), auto) minmax(0, 1fr);
+    gap: var(--ui-space-10, 10px);
   }
 
   .campaign-admin__grant-cards dt,
   .campaign-admin__grant-cards dd {
     margin: 0;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.5;
   }
 

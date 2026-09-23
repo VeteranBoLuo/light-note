@@ -26,7 +26,7 @@
         <BInput
           v-model:value="source"
           type="textarea"
-          :rows="16"
+          :rows="dimension(16, 'layout')"
           :maxlength="500000"
           :disabled="converting"
           :placeholder="inputPlaceholder"
@@ -41,7 +41,7 @@
         <BInput
           v-model:value="output"
           type="textarea"
-          :rows="16"
+          :rows="dimension(16, 'layout')"
           readonly
           :placeholder="t('toolbox.local.outputPlaceholder')"
         />
@@ -83,11 +83,13 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
+  import { useUiDensity } from '@/composables/useUiDensity';
   import { copyTextToClipboard } from '@/utils/clipboard';
   import { convertMarkup, ToolboxTextError, type MarkupDirection } from '@/utils/toolboxTextTools';
   import { downloadToolboxBlob } from '@/utils/toolboxLocal';
 
   const { t } = useI18n();
+  const { dimension } = useUiDensity();
   const direction = ref<MarkupDirection>('markdown_to_html');
   const source = ref('');
   const output = ref('');
@@ -172,40 +174,40 @@
 <style scoped lang="less">
   .markup-tool {
     display: grid;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
   .markup-tool__toolbar {
-    padding: 13px;
+    padding: var(--ui-space-13, 13px);
     display: flex;
     align-items: end;
     justify-content: flex-end;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
     border: 1px solid var(--surface-border-color);
     border-radius: 14px;
     background: var(--card-background);
   }
   .markup-tool__toolbar > div {
-    width: min(300px, 100%);
+    width: min(var(--ui-layout-300, 300px), 100%);
     margin-right: auto;
     display: grid;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   .markup-tool__toolbar label {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 650;
   }
   .markup-tool__editors {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     align-items: stretch;
   }
   .markup-tool__editors > div {
     min-width: 0;
-    padding: 12px;
+    padding: var(--ui-space-12, 12px);
     display: grid;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
     border: 1px solid var(--surface-border-color);
     border-radius: 14px;
     background: var(--card-background);
@@ -215,23 +217,23 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .markup-tool__editors header span,
   .markup-tool__preview header span {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .markup-tool__editors :deep(textarea) {
-    min-height: 340px;
+    min-height: var(--ui-layout-340, 340px);
     resize: vertical;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     line-height: 1.6;
   }
   .markup-tool__bridge {
     align-self: center;
-    width: 34px;
-    height: 34px;
+    width: var(--ui-layout-34, 34px);
+    height: var(--ui-layout-34, 34px);
     display: grid;
     place-items: center;
     border: 1px solid var(--surface-border-color);
@@ -240,11 +242,11 @@
     background: var(--card-background);
   }
   .markup-tool__actions {
-    padding: 12px 14px;
+    padding: var(--ui-space-12, 12px) var(--ui-space-14, 14px);
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
     border: 1px solid var(--surface-border-color);
     border-radius: 13px;
     background: var(--workspace-panel-bg-color);
@@ -252,19 +254,19 @@
   .markup-tool__actions > span {
     margin-right: auto;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .markup-tool__error {
-    padding: 11px 13px;
+    padding: var(--ui-space-11, 11px) var(--ui-space-13, 13px);
     border: 1px solid var(--danger-color, #dc3e4d);
     border-radius: 11px;
     color: var(--danger-color, #dc3e4d);
     background: var(--card-background);
   }
   .markup-tool__preview {
-    padding: 16px;
+    padding: var(--ui-space-16, 16px);
     display: grid;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
     border: 1px solid var(--surface-border-color);
     border-radius: 14px;
     background: var(--card-background);
@@ -309,7 +311,7 @@
       margin-right: 0;
     }
     .markup-tool__editors :deep(textarea) {
-      min-height: 260px;
+      min-height: var(--ui-layout-260, 260px);
     }
     .markup-tool__actions {
       align-items: stretch;

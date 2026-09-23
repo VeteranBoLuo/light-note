@@ -2,7 +2,7 @@
   <BModal
     v-model:visible="visible"
     :title="t('cloudSpace.folderTagsAction')"
-    width="min(460px, calc(100vw - 28px))"
+    width="min(var(--ui-layout-460, 460px), calc(100vw - 28px))"
     :mask-closable="!loading"
     :close-disabled="loading"
     :esc-closable="!loading"
@@ -119,7 +119,7 @@
 <style scoped lang="less">
   .folder-tags {
     display: grid;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
     color: var(--text-color);
   }
   .folder-tags p {
@@ -129,8 +129,8 @@
   .folder-tags__scope {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 14px;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-14, 14px);
     border: 1px solid var(--surface-border-color);
     border-radius: 10px;
     background: var(--workspace-panel-bg-color);
@@ -144,12 +144,12 @@
     overflow-wrap: anywhere;
   }
   .folder-tags__hint {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     color: var(--desc-color);
   }
   .folder-tags__count {
     border-top: 1px solid var(--surface-border-color);
-    padding-top: 14px;
+    padding-top: var(--ui-space-14, 14px);
     font-weight: 600;
   }
   .folder-tags__error {
@@ -158,12 +158,12 @@
   .folder-tags__footer {
     display: flex;
     justify-content: flex-end;
-    gap: 10px;
-    padding: 16px 20px;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-16, 16px) var(--ui-space-20, 20px);
     border-top: 1px solid var(--surface-border-color);
   }
   .folder-tags :deep(.b-checkbox),
   .folder-tags__footer :deep(.b_btn) {
-    min-height: 44px;
+    min-height: var(--ui-layout-44, 44px);
   }
 </style>

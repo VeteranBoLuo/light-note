@@ -51,7 +51,7 @@
 
 <style scoped lang="less">
   .organize-list-state {
-    min-height: 240px;
+    min-height: var(--ui-layout-240, 240px);
     flex: 1 1 auto;
   }
 
@@ -60,13 +60,13 @@
   }
 
   .organize-state {
-    min-height: 230px;
+    min-height: var(--ui-layout-230, 230px);
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    padding: 24px;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-24, 24px);
     box-sizing: border-box;
     color: var(--desc-color);
     text-align: center;
@@ -74,18 +74,18 @@
 
   .organize-state strong {
     color: var(--text-color);
-    font-size: 16px;
+    font-size: var(--ui-font-16, 16px);
   }
 
   .organize-state__mark {
-    width: 46px;
-    height: 46px;
+    width: var(--ui-layout-46, 46px);
+    height: var(--ui-layout-46, 46px);
     display: grid;
     place-items: center;
     border: 2px solid var(--success-color, #00a884);
     border-radius: 50%;
     color: var(--success-color, #00a884);
-    font-size: 21px;
+    font-size: var(--ui-font-21, 21px);
     font-weight: 800;
   }
 
@@ -98,14 +98,14 @@
   .organize-inline-warning {
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin-bottom: 10px;
-    padding: 9px 11px;
+    gap: var(--ui-space-8, 8px);
+    margin-bottom: var(--ui-space-10, 10px);
+    padding: var(--ui-space-9, 9px) var(--ui-space-11, 11px);
     border: 1px solid var(--danger-color, #dc3f4f);
     border-radius: 10px;
     color: var(--danger-color, #dc3f4f);
     background: var(--card-background);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.45;
   }
 </style>

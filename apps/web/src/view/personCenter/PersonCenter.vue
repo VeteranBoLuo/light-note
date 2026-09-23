@@ -20,7 +20,7 @@
               v-if="equippedFrameId"
               :frame-id="equippedFrameId"
               :src="user.headPicture || icon.navigation.user"
-              :size="40"
+              :size="dimension(40, 'icon')"
               :decorative="false"
               class="dom-hover"
               @click="zoomImage"
@@ -91,13 +91,13 @@
             :menu-options="themeMenuOptions"
             :get-popup-container="getSettingPopupContainer"
           >
-            <button class="setting-card">
+            <BButton class="setting-card">
               <span class="setting-left">
                 <svg-icon size="14" :src="icon.theme" />
                 {{ $t('personCenter.themeMode') }}
               </span>
               <span class="setting-right">{{ ThemeName }}</span>
-            </button>
+            </BButton>
           </b-dropdown>
           <b-dropdown
             :trigger="['click']"
@@ -106,13 +106,13 @@
             :menu-options="langMenuOptions"
             :get-popup-container="getSettingPopupContainer"
           >
-            <button class="setting-card">
+            <BButton class="setting-card">
               <span class="setting-left">
                 <svg-icon size="14" :src="icon.language" />
                 {{ $t('personCenter.language') }}
               </span>
               <span class="setting-right">{{ LanguageName }}</span>
-            </button>
+            </BButton>
           </b-dropdown>
         </div>
 
@@ -174,13 +174,13 @@
         </div>
       </div>
     </template>
-    <div class="navigation-icon" :class="{ 'has-frame': equippedFrameId }" style="margin-left: 5px; position: relative">
+    <div class="navigation-icon" :class="{ 'has-frame': equippedFrameId }" style="margin-left: var(--ui-space-5, 5px); position: relative">
       <!-- 外层不裁剪提醒与头像框；普通头像由下方内层单独裁圆。 -->
       <AvatarFramePreview
         v-if="equippedFrameId"
         :frame-id="equippedFrameId"
         :src="user.headPicture || icon.navigation.user"
-        :size="32"
+        :size="dimension(32, 'icon')"
         layout-mode="slot"
       />
       <span v-else class="navigation-avatar-clip">
@@ -193,6 +193,8 @@
 </template>
 
 <script setup lang="ts">
+  import { useUiDensity } from '@/composables/useUiDensity';
+  const { dimension } = useUiDensity();
   import router from '@/router';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -396,11 +398,11 @@
     display: grid;
     grid-template: minmax(0, 1fr) / minmax(0, 1fr);
     place-items: center;
-    width: 40px;
+    width: var(--ui-layout-40, 40px);
     min-width: 0;
-    height: 40px;
+    height: var(--ui-layout-40, 40px);
     min-height: 0;
-    flex: 0 0 40px;
+    flex: 0 0 var(--ui-layout-40, 40px);
     align-items: center;
     overflow: visible;
     cursor: pointer;
@@ -410,8 +412,8 @@
   .navigation-avatar-clip {
     display: grid;
     place-items: center;
-    width: 32px;
-    height: 32px;
+    width: var(--ui-layout-32, 32px);
+    height: var(--ui-layout-32, 32px);
     clip-path: circle(50% at 50% 50%);
   }
 
@@ -423,27 +425,27 @@
   }
 
   .header_menu_ul {
-    margin-top: 8px;
-    margin-bottom: 2px;
+    margin-top: var(--ui-space-8, 8px);
+    margin-bottom: var(--ui-space-2, 2px);
     box-sizing: border-box;
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
 
     .menu-entry {
       position: relative;
       box-sizing: border-box;
       width: 100%;
       min-width: 0;
-      height: 36px;
+      height: var(--ui-control-36, 36px);
       justify-content: flex-start;
-      padding: 0 10px;
+      padding: 0 var(--ui-space-10, 10px);
       border: 1px solid transparent;
       border-radius: 10px;
       color: var(--text-color);
-      gap: 8px;
+      gap: var(--ui-space-8, 8px);
       background: var(--primary-btn-bg-color);
-      font-size: 13px;
+      font-size: var(--ui-font-13, 13px);
       font-weight: 500;
       line-height: 1.2;
       text-align: left;
@@ -461,9 +463,9 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 24px;
-      height: 24px;
-      flex: 0 0 24px;
+      width: var(--ui-layout-24, 24px);
+      height: var(--ui-layout-24, 24px);
+      flex: 0 0 var(--ui-layout-24, 24px);
       border-radius: 8px;
       color: var(--person-center-menu-icon-fg);
       background: var(--person-center-menu-icon-bg);
@@ -504,7 +506,7 @@
     .menu-group-divider {
       grid-column: 1 / -1;
       height: 1px;
-      margin: 2px 0;
+      margin: var(--ui-space-2, 2px) 0;
       background: var(--surface-divider-color);
     }
   }
@@ -514,7 +516,7 @@
     display: block;
     height: 90%;
     width: 80%;
-    max-width: 700px;
+    max-width: var(--ui-layout-700, 700px);
   }
 
   .modal-content {
@@ -535,11 +537,11 @@
   }
 
   .user-card {
-    width: 368px;
-    max-width: calc(100vw - 28px);
+    width: var(--ui-layout-368, 368px);
+    max-width: calc(100vw - var(--ui-layout-28, 28px));
     background: var(--user-body-bg-color);
     border-radius: 14px;
-    padding: 14px;
+    padding: var(--ui-space-14, 14px);
     box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12);
     position: relative;
   }
@@ -547,26 +549,26 @@
   .user-top {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding-bottom: 10px;
+    gap: var(--ui-space-12, 12px);
+    padding-bottom: var(--ui-space-10, 10px);
     border-bottom: 1px dashed var(--menu-item-h-bg-color);
   }
 
   .avatar-ring {
     display: grid;
     place-items: center;
-    width: 52px;
-    height: 52px;
-    flex: 0 0 52px;
+    width: var(--ui-layout-52, 52px);
+    height: var(--ui-layout-52, 52px);
+    flex: 0 0 var(--ui-layout-52, 52px);
     border-radius: 14px;
     background: linear-gradient(135deg, rgba(79, 134, 255, 0.25), rgba(82, 196, 186, 0.18));
     border: 1px solid rgba(255, 255, 255, 0.08);
   }
 
   .avatar-ring--framed {
-    width: 80px;
-    height: 80px;
-    flex-basis: 80px;
+    width: var(--ui-layout-80, 80px);
+    height: var(--ui-layout-80, 80px);
+    flex-basis: var(--ui-layout-80, 80px);
     overflow: visible;
     border-color: transparent;
     background: transparent;
@@ -583,27 +585,27 @@
   .user-meta {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
 
   .user-name-row {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     color: var(--text-color);
   }
 
   .user-name {
     font-weight: 700;
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
   }
 
   .lv-badge {
     position: relative;
     flex: 0 0 auto;
-    padding: 1px 8px;
+    padding: var(--ui-space-1, 1px) var(--ui-space-8, 8px);
     border-radius: 999px;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 700;
     color: #fff;
     letter-spacing: -0.01em;
@@ -629,22 +631,22 @@
   }
 
   .user-sub {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--text-secondary-color, #9aa0ad);
   }
 
   .stat-grid {
-    margin-top: 10px;
+    margin-top: var(--ui-space-10, 10px);
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .stat-card {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 8px;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-8, 8px);
     border-radius: 10px;
     background: linear-gradient(135deg, rgba(79, 134, 255, 0.12), rgba(82, 196, 186, 0.08));
     border: 1px solid rgba(255, 255, 255, 0.06);
@@ -660,8 +662,8 @@
   }
 
   .stat-icon {
-    width: 28px;
-    height: 28px;
+    width: var(--ui-layout-28, 28px);
+    height: var(--ui-layout-28, 28px);
     border-radius: 8px;
     display: grid;
     place-items: center;
@@ -671,16 +673,16 @@
   .stat-text {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
 
   .stat-label {
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     color: var(--text-secondary-color, #8a8f99);
   }
 
   .stat-value {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 700;
     color: var(--text-color);
     overflow: hidden;
@@ -689,40 +691,45 @@
   }
 
   .settings-grid {
-    margin-top: 10px;
+    margin-top: var(--ui-space-10, 10px);
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .profile-asset-grid {
-    margin-top: 10px;
+    margin-top: var(--ui-space-10, 10px);
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-auto-rows: 82px;
-    gap: 8px;
+    grid-auto-rows: var(--ui-layout-82, 82px);
+    gap: var(--ui-space-8, 8px);
   }
 
   .profile-asset-grid > * {
-    height: 82px;
-    min-height: 82px;
+    height: var(--ui-layout-82, 82px);
+    min-height: var(--ui-layout-82, 82px);
     box-sizing: border-box;
   }
 
-  .setting-card {
+  .setting-card.b_btn {
+    height: auto;
+    line-height: normal;
+    font-weight: normal;
+    white-space: normal;
+    transition: none;
     width: 100%;
     min-width: 0;
-    min-height: 40px;
+    min-height: var(--ui-control-40, 40px);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 8px 10px;
+    padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px);
     border-radius: 10px;
     border: 1px dashed var(--menu-item-h-bg-color);
     background: rgba(255, 255, 255, 0.04);
     color: inherit;
     cursor: pointer;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .setting-card:hover {
@@ -733,16 +740,16 @@
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     color: var(--text-color);
     white-space: nowrap;
   }
 
   .setting-right {
     flex: 0 0 auto;
-    margin-left: 6px;
+    margin-left: var(--ui-space-6, 6px);
     color: var(--text-secondary-color, #9aa0ad);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     white-space: nowrap;
   }
 
@@ -769,7 +776,7 @@
   }
 
   .menu-divider {
-    margin: 12px 0 6px;
+    margin: var(--ui-space-12, 12px) 0 var(--ui-space-6, 6px);
     height: 1px;
     background: linear-gradient(90deg, transparent, var(--menu-item-h-bg-color), transparent);
     border: none;

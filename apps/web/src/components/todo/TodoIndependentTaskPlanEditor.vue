@@ -3,7 +3,11 @@
     <div ref="timingFieldsRef" class="todo-independent-plan__timing">
       <div class="todo-independent-plan__field todo-independent-plan__date">
         <span>{{ t(currentOnly ? 'todoWorkspace.occurrenceDate' : 'todoWorkspace.firstDate') }}</span>
-        <BDateTimePicker v-model:value="anchorDate" :show-time="false" :aria-label="t(currentOnly ? 'todoWorkspace.occurrenceDate' : 'todoWorkspace.firstDate')" />
+        <BDateTimePicker
+          v-model:value="anchorDate"
+          :show-time="false"
+          :aria-label="t(currentOnly ? 'todoWorkspace.occurrenceDate' : 'todoWorkspace.firstDate')"
+        />
       </div>
       <label ref="startFieldRef" class="todo-independent-plan__time-target">
         <span>{{ t(currentOnly ? 'inbox.todoStartAt' : 'todoWorkspace.eachStart') }}</span>
@@ -13,7 +17,9 @@
         <span>{{ t(currentOnly ? 'inbox.todoDueAt' : 'todoWorkspace.eachDue') }}</span>
         <div class="todo-independent-plan__due">
           <BTimePicker v-model:value="eachDue" />
-          <BCheckbox controlled :model-value="nextDay" @update:model-value="nextDay = $event">{{ t('todoWorkspace.dueNextDay') }}</BCheckbox>
+          <BCheckbox controlled :model-value="nextDay" @update:model-value="nextDay = $event">{{
+            t('todoWorkspace.dueNextDay')
+          }}</BCheckbox>
         </div>
       </div>
     </div>
@@ -105,7 +111,12 @@
       <div v-if="endMode !== 'never'" class="todo-independent-plan__fields">
         <div v-if="endMode === 'until'" class="todo-independent-plan__field todo-independent-plan__wide">
           <span>{{ t('todoWorkspace.endDate') }}</span>
-          <BDateTimePicker class="todo-independent-plan__date" v-model:value="untilDate" :show-time="false" :aria-label="t('todoWorkspace.endDate')" />
+          <BDateTimePicker
+            class="todo-independent-plan__date"
+            v-model:value="untilDate"
+            :show-time="false"
+            :aria-label="t('todoWorkspace.endDate')"
+          />
           <small class="todo-independent-plan__field-hint">{{ t('inbox.todoPlanEndByDateHint') }}</small>
         </div>
         <label v-else-if="endMode === 'count'">
@@ -267,9 +278,12 @@
   } from '@/api/todoApi';
   import { suggestTodoPlanEndDate, todoTodayInTimezone, type TodoCreateDraftV3 } from './todoDraftNormalizer';
 
-  const props = withDefaults(defineProps<{ draft: TodoCreateDraftV3; needsPastPolicy?: boolean; currentOnly?: boolean }>(), {
-    needsPastPolicy: false,
-  });
+  const props = withDefaults(
+    defineProps<{ draft: TodoCreateDraftV3; needsPastPolicy?: boolean; currentOnly?: boolean }>(),
+    {
+      needsPastPolicy: false,
+    },
+  );
   const timingFieldsRef = ref<HTMLElement | null>(null);
   const startFieldRef = ref<HTMLElement | null>(null);
   const dueFieldRef = ref<HTMLElement | null>(null);
@@ -584,7 +598,7 @@
 <style scoped lang="less">
   .todo-independent-plan {
     display: grid;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .todo-independent-plan__intro,
@@ -600,8 +614,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
-    padding: 12px 14px;
+    gap: var(--ui-space-16, 16px);
+    padding: var(--ui-space-12, 12px) var(--ui-space-14, 14px);
     border: 1px solid var(--primary-color);
     background: var(--mobile-selected-bg, var(--workspace-panel-bg-color));
   }
@@ -611,13 +625,13 @@
   .todo-independent-plan__more-head > div,
   .todo-independent-plan__past > header {
     display: grid;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
     min-width: 0;
   }
 
   .todo-independent-plan__intro strong {
     color: var(--primary-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .todo-independent-plan__intro span,
@@ -625,7 +639,7 @@
   .todo-independent-plan__more-head small,
   .todo-independent-plan__past header small {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.5;
   }
 
@@ -633,14 +647,14 @@
     display: flex;
     flex: 0 0 auto;
     align-items: center;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     color: var(--primary-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 700;
   }
 
   .todo-independent-plan__flow span {
-    padding: 3px 7px;
+    padding: var(--ui-space-3, 3px) var(--ui-space-7, 7px);
     border: 1px solid var(--primary-color);
     border-radius: 999px;
     color: var(--primary-color);
@@ -654,42 +668,42 @@
 
   .todo-independent-plan__step {
     display: grid;
-    gap: 11px;
-    padding: 14px;
+    gap: var(--ui-space-11, 11px);
+    padding: var(--ui-space-14, 14px);
   }
 
   .todo-independent-plan__step-head {
     display: flex;
     align-items: flex-start;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .todo-independent-plan__step-head strong,
   .todo-independent-plan__more-head strong,
   .todo-independent-plan__past header strong {
     color: var(--text-color);
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     line-height: 1.45;
   }
 
   .todo-independent-plan__step-index {
     display: inline-flex;
-    width: 24px;
-    height: 24px;
-    flex: 0 0 24px;
+    width: var(--ui-layout-24, 24px);
+    height: var(--ui-layout-24, 24px);
+    flex: 0 0 var(--ui-layout-24, 24px);
     align-items: center;
     justify-content: center;
     border-radius: 50%;
     background: var(--primary-color);
     color: #fff;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 800;
   }
 
   .todo-independent-plan__choices {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
 
   .todo-independent-plan__choices--two {
@@ -701,8 +715,8 @@
     width: 100%;
     min-width: 0;
     height: auto;
-    min-height: 40px;
-    padding: 7px 10px;
+    min-height: var(--ui-layout-40, 40px);
+    padding: var(--ui-space-7, 7px) var(--ui-space-10, 10px);
     border: 1px solid var(--surface-border-color) !important;
     border-radius: 9px;
     background: var(--workspace-panel-bg-color);
@@ -721,7 +735,7 @@
   .todo-independent-plan__selection-hint {
     margin: -2px 0 0;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.55;
   }
 
@@ -729,7 +743,7 @@
     display: flex;
     flex-wrap: wrap;
     align-items: flex-start;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
     scroll-margin-top: 16px;
   }
   .todo-independent-plan__time-target:focus-within {
@@ -738,72 +752,72 @@
     border-radius: 6px;
   }
   .todo-independent-plan__date {
-    width: 220px;
+    width: var(--ui-layout-220, 220px);
     max-width: 100%;
   }
   .todo-independent-plan__due {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .todo-independent-plan .b-checkbox {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    min-height: 36px;
+    gap: var(--ui-space-6, 6px);
+    min-height: var(--ui-layout-36, 36px);
     box-sizing: border-box;
     white-space: nowrap;
   }
   .todo-independent-plan__fields {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
-    padding-top: 2px;
+    gap: var(--ui-space-12, 12px);
+    padding-top: var(--ui-space-2, 2px);
   }
 
   .todo-independent-plan label:not(.b-checkbox),
   .todo-independent-plan__field {
     display: grid;
     align-content: start;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     min-width: 0;
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 600;
   }
 
   .todo-independent-plan__field-hint {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 400;
     line-height: 1.5;
   }
 
   .todo-independent-plan__subsection {
     display: grid;
-    gap: 9px;
-    padding-top: 11px;
+    gap: var(--ui-space-9, 9px);
+    padding-top: var(--ui-space-11, 11px);
     border-top: 1px solid var(--surface-border-color);
   }
 
   .todo-independent-plan__subsection > strong {
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .todo-independent-plan__linked-note {
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     flex-wrap: wrap;
     display: flex;
     align-items: center;
-    padding: 9px 11px;
+    padding: var(--ui-space-9, 9px) var(--ui-space-11, 11px);
     border-left: 3px solid var(--primary-color);
     border-radius: 8px;
     background: var(--workspace-panel-bg-color);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.5;
   }
 
@@ -815,24 +829,24 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     font-weight: 400;
   }
 
   .todo-independent-plan__inline--select {
-    grid-template-columns: minmax(0, 1fr) minmax(110px, 0.4fr);
+    grid-template-columns: minmax(0, 1fr) minmax(var(--ui-layout-110, 110px), 0.4fr);
   }
 
   .todo-independent-plan__nudge-hint {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.55;
   }
 
   .todo-independent-plan__days {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
 
   .todo-independent-plan__days :deep(.b_btn.is-active) {
@@ -844,15 +858,15 @@
 
   .todo-independent-plan__past {
     display: grid;
-    gap: 11px;
-    padding: 13px 14px;
+    gap: var(--ui-space-11, 11px);
+    padding: var(--ui-space-13, 13px) var(--ui-space-14, 14px);
     border-left: 4px solid var(--warning-color, #d97706);
   }
 
   .todo-independent-plan__past-options {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
 
   .todo-independent-plan__past-options :deep(.b_btn) {
@@ -861,18 +875,21 @@
     width: 100%;
     min-width: 0;
     height: auto;
-    min-height: 68px;
+    min-height: var(--ui-layout-68, 68px);
     align-items: flex-start;
     justify-content: center;
     flex-direction: column;
-    gap: 2px;
-    padding: 8px 10px;
+    gap: var(--ui-space-2, 2px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px);
     border: 2px solid var(--surface-border-color) !important;
     background: var(--workspace-panel-bg-color);
     line-height: 1.4;
     text-align: left;
     white-space: normal;
-    transition: border-color 0.2s, background-color 0.2s, color 0.2s;
+    transition:
+      border-color 0.2s,
+      background-color 0.2s,
+      color 0.2s;
   }
 
   .todo-independent-plan__past-options :deep(.b_btn.is-active) {
@@ -882,19 +899,19 @@
 
   .todo-independent-plan__past-options :deep(.b_btn strong) {
     color: var(--text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .todo-independent-plan__past-options :deep(.b_btn small) {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.45;
   }
 
   .todo-independent-plan__more {
     display: grid;
-    gap: 12px;
-    padding: 12px 14px;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-12, 12px) var(--ui-space-14, 14px);
     background: var(--workspace-panel-bg-color);
   }
 
@@ -906,7 +923,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .todo-independent-plan__more-head :deep(.b_btn) {
@@ -939,9 +956,9 @@
     }
 
     .todo-independent-plan__choices :deep(.b_btn) {
-      min-height: 44px;
-      padding-inline: 6px;
-      font-size: 12px;
+      min-height: var(--ui-layout-44, 44px);
+      padding-inline: var(--ui-space-6, 6px);
+      font-size: var(--ui-font-12, 12px);
     }
 
     .todo-independent-plan__more-head {

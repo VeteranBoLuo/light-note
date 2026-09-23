@@ -2,7 +2,7 @@
   <BModal
     v-model:visible="visible"
     :title="t('adminUserManagement.remarkModalTitle')"
-    width="min(440px, calc(100vw - 32px))"
+    width="min(var(--ui-layout-440, 440px), calc(100vw - var(--ui-layout-32, 32px)))"
     :show-footer="false"
     :mask-closable="!saving"
     :esc-closable="!saving"
@@ -103,7 +103,7 @@
   .admin-user-remark {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .admin-user-remark__target {
@@ -116,7 +116,7 @@
 
   .admin-user-remark__input {
     :deep(.b-input) {
-      height: 40px;
+      height: var(--ui-control-40, 40px);
       border: 1px solid var(--card-border-color) !important;
       background: var(--background-color);
     }
@@ -126,9 +126,9 @@
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
 
     span:first-child {
       flex: 1;
@@ -142,13 +142,13 @@
 
   .admin-user-remark__hint {
     color: var(--sub-text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .admin-user-remark__actions {
     display: flex;
     justify-content: flex-end;
-    gap: 8px;
-    padding-top: 4px;
+    gap: var(--ui-space-8, 8px);
+    padding-top: var(--ui-space-4, 4px);
   }
 </style>

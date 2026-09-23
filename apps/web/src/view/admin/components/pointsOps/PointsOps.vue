@@ -426,9 +426,9 @@
     { label: '其他', value: 'other' },
   ];
   const logColumns = [
-    { title: '时间', key: 'timeLabel', width: '130px', ellipsis: false },
-    { title: '真实来源', key: 'source', width: 'minmax(220px, 1fr)', ellipsis: false },
-    { title: '变动', key: 'deltaLabel', width: '90px', ellipsis: false },
+    { title: '时间', key: 'timeLabel', width: 'var(--ui-layout-130, 130px)', ellipsis: false },
+    { title: '真实来源', key: 'source', width: 'minmax(var(--ui-layout-220, 220px), 1fr)', ellipsis: false },
+    { title: '变动', key: 'deltaLabel', width: 'var(--ui-layout-90, 90px)', ellipsis: false },
   ];
   const logRows = computed(() =>
     (detail.value?.log || []).map((item: any, index: number) => ({
@@ -621,17 +621,17 @@
   .pops-cols {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
   .points-governance-tabs {
-    margin-bottom: 4px;
+    margin-bottom: var(--ui-space-4, 4px);
   }
   .points-internal-filter {
     display: inline-flex;
     align-items: center;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     white-space: nowrap;
   }
   @media (max-width: @admin-bp-mobile) {
@@ -646,8 +646,8 @@
   .pops-block {
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    padding: 14px 16px;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-14, 14px) var(--ui-space-16, 16px);
     border-radius: 12px;
     border: 1px solid color-mix(in srgb, var(--card-border-color) 62%, transparent);
     background: var(--workbench-subcard-bg);
@@ -656,7 +656,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 600;
     color: var(--desc-color);
   }
@@ -665,21 +665,21 @@
   .pops-log-row {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 6px 0;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-6, 6px) 0;
     border-bottom: 1px dashed color-mix(in srgb, var(--card-border-color) 30%, transparent);
-    font-size: 12.5px;
+    font-size: var(--ui-font-12_5, 12.5px);
   }
   .pops-reason-name {
     flex: 1 1 auto;
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
   .pops-reason-name small {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     font-weight: 400;
     line-height: 1.35;
   }
@@ -697,12 +697,12 @@
   }
   .pops-reason-cnt {
     color: var(--desc-color);
-    font-size: 11px;
-    min-width: 52px;
+    font-size: var(--ui-font-11, 11px);
+    min-width: var(--ui-layout-52, 52px);
     text-align: right;
   }
   .pops-top-rank {
-    width: 20px;
+    width: var(--ui-layout-20, 20px);
     color: var(--desc-color);
     font-weight: 700;
   }
@@ -717,11 +717,11 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 1px;
+    gap: var(--ui-space-1, 1px);
     cursor: pointer;
   }
   .pops-top-alias {
-    font-size: 12.5px;
+    font-size: var(--ui-font-12_5, 12.5px);
     font-weight: 600;
     color: var(--text-color);
     white-space: nowrap;
@@ -729,28 +729,28 @@
     text-overflow: ellipsis;
   }
   .pops-top-email {
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     color: var(--desc-color);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
   .pops-empty {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
-    padding: 8px 0;
+    padding: var(--ui-space-8, 8px) 0;
   }
   .pops-grant {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .pops-selected-user {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    padding: 12px;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-12, 12px);
     border: 2px solid var(--primary-color);
     border-radius: 10px;
     background: var(--card-background);
@@ -758,19 +758,19 @@
     > div {
       display: grid;
       min-width: 0;
-      gap: 2px;
+      gap: var(--ui-space-2, 2px);
     }
 
     strong {
       color: var(--text-color);
-      font-size: 14px;
+      font-size: var(--ui-font-14, 14px);
     }
 
     span,
     code {
       overflow: hidden;
       color: var(--desc-color);
-      font-size: 11px;
+      font-size: var(--ui-font-11, 11px);
       text-overflow: ellipsis;
       white-space: nowrap;
     }
@@ -779,79 +779,79 @@
   .pops-select-hint {
     margin: 0;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .pops-user-controls,
   .pops-log-toolbar {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .pops-user-controls :deep(.b-select) {
-    width: 116px;
+    width: var(--ui-layout-116, 116px);
   }
   .pops-field {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
     flex: 1 1 auto;
   }
   .pops-field label {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
   }
   .pops-field-row {
     display: flex;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .pops-actions {
     display: flex;
-    gap: 10px;
-    margin-top: 2px;
+    gap: var(--ui-space-10, 10px);
+    margin-top: var(--ui-space-2, 2px);
   }
   .pops-detail {
-    margin-top: 12px;
-    padding-top: 12px;
+    margin-top: var(--ui-space-12, 12px);
+    padding-top: var(--ui-space-12, 12px);
     border-top: 1px solid color-mix(in srgb, var(--card-border-color) 40%, transparent);
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .pops-detail-user {
     display: flex;
     align-items: baseline;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .pops-detail-user b {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
   }
   .pops-detail-user span {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
   }
   .pops-detail-user code {
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     color: var(--desc-color);
     font-family: monospace;
   }
   .pops-detail-bal {
     display: flex;
     flex-wrap: wrap;
-    gap: 16px;
-    font-size: 13px;
+    gap: var(--ui-space-16, 16px);
+    font-size: var(--ui-font-13, 13px);
   }
   .pops-window {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
-    padding: 10px 12px;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     border: 1px solid var(--card-border-color);
     border-radius: 9px;
     background: var(--card-background);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
 
     strong {
       color: var(--text-color);
@@ -860,30 +860,30 @@
   .pops-detail-log {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .pops-log-toolbar strong {
     color: var(--text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .pops-log-toolbar :deep(.b-select) {
-    width: 132px;
+    width: var(--ui-layout-132, 132px);
   }
   .pops-log-source {
     display: grid;
     min-width: 0;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
 
     strong {
       color: var(--text-color);
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
     }
 
     small,
     code {
       overflow: hidden;
       color: var(--desc-color);
-      font-size: 10.5px;
+      font-size: var(--ui-font-10_5, 10.5px);
       text-overflow: ellipsis;
       white-space: nowrap;
     }
@@ -893,8 +893,8 @@
   }
   .pops-log-time {
     color: var(--desc-color);
-    font-size: 11px;
-    width: 92px;
+    font-size: var(--ui-font-11, 11px);
+    width: var(--ui-layout-92, 92px);
     text-align: right;
     font-variant-numeric: tabular-nums;
   }

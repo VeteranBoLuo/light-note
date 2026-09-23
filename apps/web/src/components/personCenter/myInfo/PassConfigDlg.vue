@@ -44,7 +44,7 @@
             <label>{{ t('myInfo.verifyCodeLabel') }}</label>
             <BInput
               :maxlength="6"
-              height="46px"
+              height="var(--ui-control-46, 46px)"
               autocomplete="one-time-code"
               v-model:value="forgotData.code"
               :placeholder="t('myInfo.enterCode')"
@@ -59,7 +59,7 @@
           <div class="forgot-field">
             <label>{{ t('myInfo.newPassword') }}</label>
             <BInput
-              height="46px"
+              height="var(--ui-control-46, 46px)"
               type="password"
               autocomplete="new-password"
               :maxlength="64"
@@ -70,7 +70,7 @@
           <div class="forgot-field">
             <label>{{ t('myInfo.confirmNewPassword') }}</label>
             <BInput
-              height="46px"
+              height="var(--ui-control-46, 46px)"
               type="password"
               autocomplete="new-password"
               :maxlength="64"
@@ -196,7 +196,7 @@
       : {
           visible: visible.value === true,
           title: passwordTitle.value,
-          width: '460px',
+          width: 'var(--ui-layout-460, 460px)',
           maskClosable: false,
           showFooter: false,
         },
@@ -390,17 +390,17 @@
   }
 
   .password-cfg-container :deep(.form-container) {
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
   }
 
   .password-cfg-container :deep(.form-item) {
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
 
   .password-cfg-container :deep(.form-item-label) {
     flex: none !important;
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 600;
     line-height: 1.4;
     text-align: left;
@@ -413,11 +413,11 @@
   .password-cfg-container :deep(.require-tip) {
     position: static;
     min-height: 0;
-    margin-top: 3px;
+    margin-top: var(--ui-space-3, 3px);
   }
 
   .forgot-entry {
-    margin-top: 10px;
+    margin-top: var(--ui-space-10, 10px);
     display: flex;
     justify-content: flex-end;
   }
@@ -425,17 +425,17 @@
   .forgot-link {
     width: max-content;
     height: auto;
-    min-height: 32px;
-    gap: 5px;
-    padding: 0 4px;
+    min-height: var(--ui-control-32, 32px);
+    gap: var(--ui-space-5, 5px);
+    padding: 0 var(--ui-space-4, 4px);
     border: 0;
     color: var(--primary-color);
     background: transparent;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .forgot-back {
-    margin-bottom: 14px;
+    margin-bottom: var(--ui-space-14, 14px);
   }
 
   .forgot-link--back {
@@ -445,9 +445,9 @@
   .forgot-email {
     display: flex;
     align-items: flex-start;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .forgot-email-label {
@@ -462,46 +462,46 @@
   }
 
   .forgot-hint {
-    margin: 6px 0 16px;
+    margin: var(--ui-space-6, 6px) 0 var(--ui-space-16, 16px);
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.45;
   }
 
   .forgot-field {
-    margin-bottom: 14px;
+    margin-bottom: var(--ui-space-14, 14px);
   }
 
   .forgot-field label {
     display: block;
-    margin-bottom: 7px;
+    margin-bottom: var(--ui-space-7, 7px);
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 600;
   }
 
   .code-btn {
     width: max-content;
-    height: 28px;
-    min-height: 28px;
+    height: var(--ui-control-28, 28px);
+    min-height: var(--ui-control-28, 28px);
     padding: 0;
     border: 0;
     color: var(--primary-color);
     background: transparent;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .password-actions {
     display: flex;
     justify-content: flex-end;
-    gap: 8px;
-    margin-top: 20px;
+    gap: var(--ui-space-8, 8px);
+    margin-top: var(--ui-space-20, 20px);
   }
 
   .password-actions__primary,
   .password-actions__cancel {
-    min-width: 84px;
-    min-height: 40px;
+    min-width: var(--ui-layout-84, 84px);
+    min-height: var(--ui-control-40, 40px);
   }
 
   .password-shell--mobile {

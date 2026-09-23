@@ -41,7 +41,7 @@
                   <AvatarFramePreview
                     :frame-id="frame.id"
                     :src="avatarSrc"
-                    :size="isMobileLayout ? 58 : 64"
+                    :size="isMobileLayout ? 58 : dimension(64, 'layout')"
                     pause-when-offscreen
                   />
                   <span class="frame-card__copy">
@@ -79,7 +79,7 @@
 
         <aside v-if="selectedFrame && !isMobileLayout" class="frame-picker__detail">
           <div class="frame-picker__detail-preview">
-            <AvatarFramePreview :frame-id="selectedFrame.id" :src="avatarSrc" :size="86" />
+            <AvatarFramePreview :frame-id="selectedFrame.id" :src="avatarSrc" :size="dimension(86, 'layout')" />
           </div>
           <span class="frame-picker__rarity" :class="`is-${selectedFrame.rarity || 'basic'}`">
             {{ frameRarityName(selectedFrame.rarity || 'basic') }}
@@ -161,6 +161,7 @@
   import AvatarFramePreview from '@/components/growth/AvatarFramePreview.vue';
   import icon from '@/config/icon';
   import { sortFramesByRarity } from '@/config/growthFrames';
+  import { useUiDensity } from '@/composables/useUiDensity';
   import { useMobileLayout } from '@/composables/useMobileLayout';
 
   const props = defineProps<{ open: boolean; zIndex?: number }>();
@@ -169,6 +170,7 @@
     navigate: [destination: 'growth' | 'tasks' | 'achievements'];
   }>();
   const { t, te } = useI18n();
+  const { dimension } = useUiDensity();
   const user = useUserStore();
   const bookmark = bookmarkStore();
   const { dashboard, shop, shopLoading, loadDashboard, loadShop, buyItem, equipFrame, claimAchievement } = useGrowth();
@@ -192,8 +194,8 @@
       : {
           visible: props.open,
           title: t('myInfo.avatarDecorations'),
-          width: '940px',
-          height: 'min(82vh, 720px)',
+          width: 'var(--ui-layout-940, 940px)',
+          height: 'min(82vh, var(--ui-layout-720, 720px))',
           showFooter: false,
           maskClosable: true,
           modalClass: 'frame-picker-modal',
@@ -476,31 +478,31 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    padding: 12px 16px;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-12, 12px) var(--ui-space-16, 16px);
   }
 
   .frame-picker__balance {
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
 
   .frame-picker__balance span {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .frame-picker__balance strong {
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
     color: #b45309;
-    font-size: 18px;
+    font-size: var(--ui-font-18, 18px);
   }
 
   .frame-picker__earn {
-    min-height: 36px;
+    min-height: var(--ui-control-36, 36px);
     border: 1px solid var(--surface-border-color);
     border-radius: 10px;
     color: var(--primary-color);
@@ -508,23 +510,23 @@
   }
 
   .frame-picker > :deep(.tab-container) {
-    margin: 0 16px;
+    margin: 0 var(--ui-space-16, 16px);
   }
 
   .frame-picker > :deep(.tab-container.is-segment) {
-    min-height: 38px;
-    flex: 0 0 38px;
+    min-height: var(--ui-control-38, 38px);
+    flex: 0 0 var(--ui-control-38, 38px);
     align-items: stretch;
     box-sizing: border-box;
   }
 
   .frame-picker > :deep(.tab-container.is-segment .tab) {
-    height: 36px;
-    min-height: 36px;
+    height: var(--ui-control-36, 36px);
+    min-height: var(--ui-control-36, 36px);
     flex: 1 1 50%;
     justify-content: center;
     box-sizing: border-box;
-    line-height: 36px;
+    line-height: var(--ui-control-36, 36px);
   }
 
   .frame-picker__workspace {
@@ -536,7 +538,7 @@
   .frame-picker__content {
     min-height: 0;
     height: 100%;
-    padding: 14px 16px;
+    padding: var(--ui-space-14, 14px) var(--ui-space-16, 16px);
     box-sizing: border-box;
     overflow-y: auto;
     overscroll-behavior-y: contain;
@@ -549,19 +551,19 @@
   }
 
   .frame-picker__groups {
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
   }
 
   .frame-picker__group {
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
   }
 
   .frame-picker__group-title {
     display: flex;
     align-items: center;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     color: var(--text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .frame-picker__group-title strong {
@@ -569,33 +571,33 @@
   }
 
   .frame-picker__group-title span {
-    min-width: 19px;
-    height: 19px;
+    min-width: var(--ui-layout-19, 19px);
+    height: var(--ui-layout-19, 19px);
     display: inline-flex;
     align-items: center;
     justify-content: center;
     border-radius: 999px;
     color: var(--desc-color);
     background: var(--surface-panel-bg);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     font-variant-numeric: tabular-nums;
   }
 
   .frame-picker__grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .frame-card {
     position: relative;
     width: 100%;
     height: auto;
-    min-height: 128px;
-    padding: 13px 8px 10px;
+    min-height: var(--ui-layout-128, 128px);
+    padding: var(--ui-space-13, 13px) var(--ui-space-8, 8px) var(--ui-space-10, 10px);
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     border: 1px solid var(--surface-border-color);
     border-radius: 15px;
     color: var(--text-color);
@@ -621,8 +623,8 @@
     position: absolute;
     top: 8px;
     right: 8px;
-    width: 22px;
-    height: 22px;
+    width: var(--ui-layout-22, 22px);
+    height: var(--ui-layout-22, 22px);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -635,7 +637,7 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
     line-height: 1.25;
   }
 
@@ -644,7 +646,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     flex-wrap: wrap;
   }
 
@@ -656,12 +658,12 @@
   }
 
   .frame-card__copy strong {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .frame-card__copy small {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .frame-card__copy .frame-card__cost,
@@ -672,7 +674,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
 
   .frame-card__copy .frame-card__cost {
@@ -697,7 +699,7 @@
   }
 
   .frame-picker__empty {
-    padding: 40px 16px;
+    padding: var(--ui-space-40, 40px) var(--ui-space-16, 16px);
     color: var(--desc-color);
     text-align: center;
   }
@@ -744,57 +746,57 @@
   }
 
   .frame-picker--desktop .frame-picker__toolbar {
-    padding: 14px 20px 10px;
+    padding: var(--ui-space-14, 14px) var(--ui-space-20, 20px) var(--ui-space-10, 10px);
   }
 
   .frame-picker--desktop > :deep(.tab-container) {
-    width: 330px;
-    margin: 0 20px 12px;
+    width: var(--ui-layout-330, 330px);
+    margin: 0 var(--ui-space-20, 20px) var(--ui-space-12, 12px);
   }
 
   .frame-picker--desktop .frame-picker__workspace {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 270px;
+    grid-template-columns: minmax(0, 1fr) var(--ui-layout-270, 270px);
     gap: 0;
     border-top: 1px solid var(--surface-border-color);
   }
 
   .frame-picker--desktop .frame-picker__content {
-    padding: 18px 20px 22px;
+    padding: var(--ui-space-18, 18px) var(--ui-space-20, 20px) var(--ui-space-22, 22px);
     scrollbar-gutter: stable;
   }
 
   .frame-picker--desktop .frame-picker__groups {
-    gap: 22px;
+    gap: var(--ui-space-22, 22px);
   }
 
   .frame-picker--desktop .frame-picker__group-title {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .frame-picker--desktop .frame-picker__grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 11px;
+    gap: var(--ui-space-11, 11px);
   }
 
   .frame-picker--desktop .frame-card {
-    min-height: 144px;
+    min-height: var(--ui-layout-144, 144px);
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
     align-items: center;
-    gap: 13px;
-    padding: 13px 14px;
+    gap: var(--ui-space-13, 13px);
+    padding: var(--ui-space-13, 13px) var(--ui-space-14, 14px);
     border-radius: 13px;
     text-align: left;
   }
 
   .frame-picker--desktop .frame-card__copy {
     align-items: flex-start;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
 
   .frame-picker--desktop .frame-card__copy strong {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
   }
 
   .frame-picker--desktop .frame-card__meta {
@@ -813,7 +815,7 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 12px 18px 14px;
+    padding: var(--ui-space-12, 12px) var(--ui-space-18, 18px) var(--ui-space-14, 14px);
     box-sizing: border-box;
     overflow: hidden;
     border-left: 1px solid var(--surface-border-color);
@@ -824,20 +826,20 @@
   }
 
   .frame-picker__detail-preview {
-    min-height: 190px;
+    min-height: var(--ui-layout-190, 190px);
     display: flex;
     align-items: center;
     justify-content: center;
   }
 
   .frame-picker__rarity {
-    margin-top: 1px;
-    padding: 2px 8px;
+    margin-top: var(--ui-space-1, 1px);
+    padding: var(--ui-space-2, 2px) var(--ui-space-8, 8px);
     border: 1px solid var(--surface-border-color);
     border-radius: 999px;
     color: var(--desc-color);
     background: var(--background-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     font-weight: 800;
     letter-spacing: 0.05em;
   }
@@ -858,15 +860,15 @@
   }
 
   .frame-picker__detail-name {
-    margin-top: 6px;
+    margin-top: var(--ui-space-6, 6px);
     color: var(--text-color);
-    font-size: 16px;
+    font-size: var(--ui-font-16, 16px);
   }
 
   .frame-picker__detail-desc {
-    margin-top: 3px;
+    margin-top: var(--ui-space-3, 3px);
     color: var(--desc-color);
-    font-size: 11.5px;
+    font-size: var(--ui-font-11_5, 11.5px);
     line-height: 1.4;
   }
 
@@ -874,9 +876,9 @@
     width: 100%;
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    margin-top: 9px;
-    padding: 10px;
+    gap: var(--ui-space-6, 6px);
+    margin-top: var(--ui-space-9, 9px);
+    padding: var(--ui-space-10, 10px);
     box-sizing: border-box;
     border: 1px solid var(--surface-border-color);
     border-radius: 10px;
@@ -889,8 +891,8 @@
   .frame-picker__detail-requirement {
     display: flex;
     align-items: center;
-    gap: 6px;
-    font-size: 11px;
+    gap: var(--ui-space-6, 6px);
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.35;
   }
 
@@ -906,9 +908,9 @@
   .frame-picker__detail-cost {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
     color: #b45309 !important;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-variant-numeric: tabular-nums;
   }
 
@@ -920,8 +922,8 @@
 
   .frame-picker__detail-action {
     width: 100%;
-    min-height: 38px;
-    margin-top: 10px;
+    min-height: var(--ui-control-38, 38px);
+    margin-top: var(--ui-space-10, 10px);
     flex: 0 0 auto;
     border-radius: 10px;
   }

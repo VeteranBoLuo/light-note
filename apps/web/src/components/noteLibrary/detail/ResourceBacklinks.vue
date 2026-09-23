@@ -5,14 +5,16 @@
     :class="[`resource-backlinks--${placement}`, { 'resource-backlinks--compact': compact }]"
   >
     <BPopover
-      v-if="compactHeader"
+      v-if="headerPopover"
       v-model:open="expanded"
       trigger="click"
       placement="bottom-right"
       overlay-class-name="resource-backlinks-popover"
     >
       <BButton class="resource-backlinks__trigger" :aria-expanded="expanded" :title="t('note.resourceBacklinks.title')">
-        <span class="resource-backlinks__title">{{ t('note.resourceBacklinks.compactTitle') }}</span>
+        <span class="resource-backlinks__title">{{
+          t(compact ? 'note.resourceBacklinks.compactTitle' : 'note.resourceBacklinks.title')
+        }}</span>
         <span class="resource-backlinks__count">{{ items.length }}{{ hasMore ? '+' : '' }}</span>
       </BButton>
       <template #content>
@@ -79,7 +81,8 @@
   let requestVersion = 0;
 
   const visible = computed(() => initialized.value && available.value && items.value.length > 0);
-  const compactHeader = computed(() => props.compact && props.placement === 'header');
+  // Placement chooses the container; compact only changes the content presentation.
+  const headerPopover = computed(() => props.placement === 'header');
   const groups = computed(() =>
     (['note', 'todo'] as const)
       .map((type) => ({
@@ -150,7 +153,7 @@
 
 <style scoped lang="less">
   .resource-backlinks {
-    margin: 8px 12px 12px;
+    margin: var(--ui-space-8, 8px) var(--ui-space-12, 12px) var(--ui-space-12, 12px);
     border: 1px solid color-mix(in srgb, var(--primary-color) 16%, var(--surface-border-color));
     border-radius: 12px;
     background: var(--card-background);
@@ -175,12 +178,12 @@
 
     :deep(.resource-backlinks__trigger.b_btn.default_btn) {
       width: auto;
-      min-height: 28px;
-      padding: 4px 8px;
+      min-height: var(--ui-control-28, 28px);
+      padding: var(--ui-space-4, 4px) var(--ui-space-8, 8px);
       border-radius: 8px;
       background: color-mix(in srgb, var(--primary-color) 7%, var(--card-background));
       color: var(--primary-color);
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
       line-height: 1.2;
 
       &:hover {
@@ -195,9 +198,9 @@
 
   .resource-backlinks__trigger {
     width: 100%;
-    min-height: 40px;
+    min-height: var(--ui-control-40, 40px);
     height: auto;
-    padding: 7px 12px;
+    padding: var(--ui-space-7, 7px) var(--ui-space-12, 12px);
     box-shadow: none;
     transition:
       background-color 0.2s,
@@ -206,11 +209,11 @@
 
   :deep(.resource-backlinks__trigger.b_btn.default_btn) {
     justify-content: space-between;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     color: var(--text-color);
     border-radius: 0;
     background: color-mix(in srgb, var(--primary-color) 4%, var(--card-background));
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     text-align: left;
 
     &:hover {
@@ -233,23 +236,27 @@
   .resource-backlinks__count {
     flex: 0 0 auto;
     color: var(--primary-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-variant-numeric: tabular-nums;
   }
 
   .resource-backlinks--compact {
     :deep(.resource-backlinks__trigger.b_btn.default_btn) {
-      min-height: 32px;
-      padding: 4px 9px;
-      font-size: 12px;
+      min-height: var(--ui-control-32, 32px);
+      padding: var(--ui-space-4, 4px) var(--ui-space-9, 9px);
+      font-size: var(--ui-font-12, 12px);
       line-height: 1.2;
     }
   }
 
-  :global(.b-popover-panel.resource-backlinks-popover) {
+  :global(html .b-popover-panel.resource-backlinks-popover) {
     z-index: 930;
-    width: min(320px, calc(100vw - 20px));
+    /* ui-density-fixed: viewport edge clearance stays in viewport pixels. */
+    width: min(var(--ui-layout-320, 320px), calc(100vw - 20px));
     overflow: hidden;
+    border-color: var(--surface-border-color);
+    border-radius: 10px;
+    box-shadow: 0 4px 12px -6px var(--message-shadow-color);
   }
 
   @media (max-width: 767px) {

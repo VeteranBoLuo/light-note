@@ -71,17 +71,17 @@
   .tl {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .tl-head {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     font-weight: 700;
   }
   .tl-empty {
-    font-size: 12.5px;
+    font-size: var(--ui-font-12_5, 12.5px);
     color: var(--desc-color);
     text-align: center;
-    padding: 12px 0;
+    padding: var(--ui-space-12, 12px) 0;
   }
   .tl-list {
     display: flex;
@@ -90,9 +90,9 @@
   .tl-row {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 9px 2px;
-    font-size: 13px;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-9, 9px) var(--ui-space-2, 2px);
+    font-size: var(--ui-font-13, 13px);
   }
   .tl-row + .tl-row {
     border-top: 1px dashed color-mix(in srgb, var(--card-border-color) 30%, transparent);
@@ -129,14 +129,14 @@
     min-width: 0;
     display: flex;
     align-items: baseline;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     overflow: hidden;
     white-space: nowrap;
   }
   .tl-kind {
     flex: 0 0 auto;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .tl-name {
     flex: 1 1 auto;
@@ -147,17 +147,17 @@
   }
   .tl-exp {
     flex: 0 0 auto;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 700;
     color: var(--primary-color);
     font-variant-numeric: tabular-nums;
   }
   .tl-time {
     flex: 0 0 auto;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     color: var(--desc-color);
     opacity: 0.85;
-    min-width: 52px;
+    min-width: var(--ui-layout-52, 52px);
     text-align: right;
   }
 </style>

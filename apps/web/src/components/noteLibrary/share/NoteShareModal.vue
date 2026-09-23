@@ -2,7 +2,7 @@
   <BModal
     v-model:visible="visible"
     :title="t('noteShare.manageTitle')"
-    width="560px"
+    width="var(--ui-layout-560, 560px)"
     :show-footer="false"
     fullscreen-mobile
     @close="closeModal"
@@ -358,14 +358,14 @@
 <style scoped lang="less">
   .note-share-modal {
     display: grid;
-    gap: 20px;
+    gap: var(--ui-space-20, 20px);
   }
 
   .note-share-modal__target {
     display: flex;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     align-items: flex-start;
-    padding: 14px;
+    padding: var(--ui-space-14, 14px);
     border: 1px solid var(--card-border-color);
     border-radius: 12px;
     background: var(--menu-item-bg-color);
@@ -377,17 +377,17 @@
     }
 
     p {
-      margin: 4px 0 0;
+      margin: var(--ui-space-4, 4px) 0 0;
       color: var(--desc-color);
-      font-size: 13px;
+      font-size: var(--ui-font-13, 13px);
     }
   }
 
   .note-share-modal__target-icon {
     display: grid;
     place-items: center;
-    width: 34px;
-    height: 34px;
+    width: var(--ui-layout-34, 34px);
+    height: var(--ui-layout-34, 34px);
     flex: 0 0 auto;
     border-radius: 10px;
     color: var(--primary-color);
@@ -397,23 +397,23 @@
 
   .note-share-modal__form {
     display: grid;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
 
     label {
       color: var(--text-color);
-      font-size: 13px;
+      font-size: var(--ui-font-13, 13px);
       font-weight: 600;
     }
   }
 
   .note-share-modal__scope-hint {
-    margin: -2px 0 4px;
+    margin: calc(-1 * var(--ui-space-2, 2px)) 0 var(--ui-space-4, 4px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.55;
 
     &.is-warning {
-      padding: 9px 10px;
+      padding: var(--ui-space-9, 9px) var(--ui-space-10, 10px);
       color: var(--warning-text-color, #8a5700);
       border: 1px solid var(--warning-color, #d89b28);
       border-radius: 9px;
@@ -424,11 +424,11 @@
   .note-share-modal__grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
 
     > div {
       display: grid;
-      gap: 7px;
+      gap: var(--ui-space-7, 7px);
       min-width: 0;
     }
   }
@@ -436,23 +436,23 @@
   .note-share-modal__actions {
     display: flex;
     justify-content: flex-end;
-    padding-top: 4px;
+    padding-top: var(--ui-space-4, 4px);
   }
 
   .note-share-modal__new-link {
     display: grid;
-    gap: 7px;
-    padding: 11px;
+    gap: var(--ui-space-7, 7px);
+    padding: var(--ui-space-11, 11px);
     color: var(--text-color);
     border: 1px solid var(--primary-color);
     border-radius: 10px;
     background: var(--selected-bg-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
 
     .note-share-modal__record-heading {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: var(--ui-space-8, 8px);
       min-width: 0;
     }
   }
@@ -461,48 +461,48 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
 
     :deep(.b_btn) {
-      min-height: 36px;
+      min-height: var(--ui-control-36, 36px);
     }
   }
 
   .note-share-modal__records {
     display: grid;
-    gap: 10px;
-    padding-top: 16px;
+    gap: var(--ui-space-10, 10px);
+    padding-top: var(--ui-space-16, 16px);
     border-top: 1px solid var(--card-border-color);
   }
 
   .note-share-modal__records-title {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
 
     h3 {
       margin: 0;
       color: var(--text-color);
-      font-size: 14px;
+      font-size: var(--ui-font-14, 14px);
     }
 
     span {
       color: var(--desc-color);
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
     }
   }
 
   .note-share-modal__empty {
-    margin: 4px 0;
+    margin: var(--ui-space-4, 4px) 0;
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .note-share-modal__record {
     display: flex;
     justify-content: space-between;
-    gap: 12px;
-    padding: 12px;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-12, 12px);
     border: 1px solid var(--card-border-color);
     border-radius: 10px;
   }
@@ -513,27 +513,27 @@
     > div {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: var(--ui-space-8, 8px);
     }
 
     p {
-      margin: 4px 0 0;
+      margin: var(--ui-space-4, 4px) 0 0;
       color: var(--desc-color);
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
     }
   }
 
   .note-share-modal__record-stats {
     display: grid;
-    grid-template-columns: repeat(2, minmax(88px, 1fr));
-    gap: 8px;
-    max-width: 240px;
-    margin-top: 8px;
+    grid-template-columns: repeat(2, minmax(var(--ui-layout-88, 88px), 1fr));
+    gap: var(--ui-space-8, 8px);
+    max-width: var(--ui-layout-240, 240px);
+    margin-top: var(--ui-space-8, 8px);
 
     > div {
       display: grid;
-      gap: 2px;
-      padding: 7px 9px;
+      gap: var(--ui-space-2, 2px);
+      padding: var(--ui-space-7, 7px) var(--ui-space-9, 9px);
       border: 1px solid var(--card-border-color);
       border-radius: 8px;
       background: var(--menu-item-bg-color);
@@ -541,24 +541,24 @@
 
     span {
       color: var(--desc-color);
-      font-size: 11px;
+      font-size: var(--ui-font-11, 11px);
       line-height: 1.35;
     }
 
     strong {
       color: var(--text-color);
-      font-size: 13px;
+      font-size: var(--ui-font-13, 13px);
       line-height: 1.4;
     }
   }
 
   .note-share-modal__state {
-    padding: 2px 6px;
+    padding: var(--ui-space-2, 2px) var(--ui-space-6, 6px);
     border-radius: 999px;
     color: var(--desc-color);
     background: var(--menu-item-bg-color);
     border: 1px solid var(--card-border-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
 
     &.is-active {
       color: var(--primary-color);
@@ -570,7 +570,7 @@
   .note-share-modal__record-actions {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     flex: 0 0 auto;
   }
 

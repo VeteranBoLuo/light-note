@@ -211,13 +211,13 @@
 
 <style scoped lang="less">
   .archive-preview {
-    width: min(1080px, calc(100% - 32px));
-    height: min(760px, calc(100% - 32px));
+    width: min(var(--ui-layout-1080, 1080px), calc(100% - var(--ui-layout-32, 32px)));
+    height: min(var(--ui-layout-760, 760px), calc(100% - var(--ui-layout-32, 32px)));
     min-height: 0;
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    padding: 16px;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-16, 16px);
     box-sizing: border-box;
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
@@ -239,26 +239,26 @@
 
   .archive-toolbar {
     justify-content: space-between;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
 
   .archive-search {
     flex: 1;
-    max-width: 520px;
-    gap: 8px;
+    max-width: var(--ui-layout-520, 520px);
+    gap: var(--ui-space-8, 8px);
   }
 
   .archive-summary,
   .archive-entry-meta {
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     color: var(--sub-text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .archive-warning {
     flex-wrap: wrap;
-    gap: 6px 10px;
-    padding: 9px 12px;
+    gap: var(--ui-space-6, 6px) var(--ui-space-10, 10px);
+    padding: var(--ui-space-9, 9px) var(--ui-space-12, 12px);
     border: 1px solid var(--warning-color, #d97706);
     border-radius: 8px;
     color: var(--warning-color, #b45309);
@@ -267,13 +267,13 @@
 
   .archive-breadcrumbs {
     min-width: 0;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
     overflow-x: auto;
   }
 
   .archive-breadcrumb,
   .archive-entry-action {
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
 
   .archive-separator {
@@ -282,22 +282,22 @@
 
   .archive-search-state {
     justify-content: space-between;
-    gap: 12px;
-    font-size: 13px;
+    gap: var(--ui-space-12, 12px);
+    font-size: var(--ui-font-13, 13px);
   }
 
   .archive-list {
     flex: 1;
     min-height: 0;
     overflow: auto;
-    padding-right: 4px;
+    padding-right: var(--ui-space-4, 4px);
     border-top: 1px solid var(--surface-border-color);
   }
 
   .archive-entry {
-    min-height: 52px;
-    gap: 12px;
-    padding: 6px 8px;
+    min-height: var(--ui-layout-52, 52px);
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-6, 6px) var(--ui-space-8, 8px);
     border-bottom: 1px solid var(--surface-border-color);
   }
 
@@ -311,7 +311,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .archive-entry-action {
@@ -333,7 +333,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    min-height: 120px;
+    min-height: var(--ui-layout-120, 120px);
     color: var(--sub-text-color);
   }
 
@@ -343,14 +343,14 @@
   }
 
   .archive-load-more {
-    min-height: 56px;
+    min-height: var(--ui-layout-56, 56px);
   }
 
   @media (max-width: 767px) {
     .archive-preview {
       width: calc(100% - 16px);
       height: calc(100% - 16px);
-      padding: 12px;
+      padding: var(--ui-space-12, 12px);
     }
 
     .archive-toolbar {
@@ -359,9 +359,9 @@
     }
 
     .archive-entry {
-      min-height: 64px;
-      gap: 10px;
-      padding: 8px 4px;
+      min-height: var(--ui-layout-64, 64px);
+      gap: var(--ui-space-10, 10px);
+      padding: var(--ui-space-8, 8px) var(--ui-space-4, 4px);
     }
 
     .archive-entry-main {
@@ -381,7 +381,7 @@
 
     .archive-entry-action,
     .archive-breadcrumb {
-      min-height: 44px;
+      min-height: var(--ui-layout-44, 44px);
     }
 
     .archive-entry-action {
@@ -389,7 +389,7 @@
       max-width: none;
       flex: 1;
       justify-content: flex-start;
-      padding: 0 4px;
+      padding: 0 var(--ui-space-4, 4px);
       border: 0;
       background: transparent;
       text-align: left;

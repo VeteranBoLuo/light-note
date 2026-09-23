@@ -6,6 +6,8 @@ const readSource = (path: string) => readFileSync(resolve(process.cwd(), path), 
 
 describe('AI 额度快捷展示契约', () => {
   const summarySource = readSource('src/components/aiSkills/AiQuotaSummary.vue');
+  // Existing size assertions describe the unchanged standard-density contract.
+  const standardSummarySource = summarySource.replace(/var\(--ui-[\w-]+, ([\d.]+px)\)/g, '$1');
   const desktopProfileSource = readSource('src/view/personCenter/PersonCenter.vue');
   const mobileProfileSource = readSource('src/view/personCenter/PersonCenterMobile.vue');
   const settingsSource = readSource('src/view/settings/Settings.vue');
@@ -58,7 +60,7 @@ describe('AI 额度快捷展示契约', () => {
     expect(summarySource).toContain('class="ai-quota-summary__secondary-value"');
     expect(summarySource).toContain("t('personCenter.aiQuotaPermanentShort')");
     expect(summarySource).not.toContain("layout !== 'tile'");
-    expect(summarySource).toContain('min-height: 68px');
+    expect(standardSummarySource).toContain('min-height: 68px');
     expect(summarySource).toContain('.ai-quota-summary.is-tile :deep(.b-progress__trail)');
     expect(summarySource).not.toContain('text-overflow: ellipsis');
     expect(summarySource).toContain("module: 'AI 用量与计费'");
@@ -70,7 +72,7 @@ describe('AI 额度快捷展示契约', () => {
     expect(summarySource).toContain('permanent: formatAiQuotaTokens(status.value.bonusTokens');
     expect(summarySource).toContain(':percent="remainingPercent"');
     expect(summarySource).toContain('v-if="!loginRequired && status && !status.exempt && !unavailable"');
-    expect(summarySource).toMatch(/\.ai-quota-summary__primary-value strong\s*\{[\s\S]*?font-size:\s*13px;/);
+    expect(standardSummarySource).toMatch(/\.ai-quota-summary__primary-value strong\s*\{[\s\S]*?font-size:\s*13px;/);
     expect(summarySource).toMatch(
       /\.ai-quota-summary__secondary-value strong\s*\{[\s\S]*?color:\s*var\(--desc-color\);/,
     );

@@ -6,7 +6,7 @@
     :mobile-full-screen="bookmark.isMobile"
     :mobile-centered-header="bookmark.isMobile"
     :close-icon="bookmark.isMobile ? icon.arrow_left : undefined"
-    width="min(1280px, 94vw)"
+    width="min(var(--ui-layout-1280, 1280px), 94vw)"
     height="100%"
     body-padding="0"
     :mask-closable="true"
@@ -16,7 +16,7 @@
       v-auto-scrollbar
       class="todo-editor-shell"
       :class="{ 'is-mobile': bookmark.isMobile, 'uses-simple-editor': useSimpleEditor }"
-      :style="{ '--todo-editor-sticky-gutter': bookmark.isMobile ? '16px' : '22px' }"
+      :style="{ '--todo-editor-sticky-gutter': bookmark.isMobile ? '16px' : 'var(--ui-space-22, 22px)' }"
     >
       <TodoSimpleEditorForm
         ref="simpleFormRef"
@@ -243,7 +243,7 @@
   }
   .todo-editor-step-count {
     color: var(--primary-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 700;
   }
 </style>

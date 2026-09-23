@@ -77,7 +77,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, onMounted, ref } from 'vue';
+  import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRoute } from 'vue-router';
   import { apiBaseGet, apiBasePost } from '@/http/request.ts';
@@ -154,14 +154,33 @@
     }, 80);
   }
 
+  const identityController = new AbortController();
+  let disposed = false;
+  onBeforeUnmount(() => {
+    disposed = true;
+    identityController.abort();
+  });
+
   onMounted(async () => {
+    const requestedIdentity = [user.id, user.role].join('|');
     try {
       const response = await apiBaseGet('/api/user/me', undefined, {
         silent: true,
         suppressAuthExpired: true,
+        signal: identityController.signal,
       });
-      if (response?.data) user.setUserInfo(response.data);
+      if (disposed || requestedIdentity !== [user.id, user.role].join('|')) return;
+      if (response?.data) {
+        // Guest display preferences belong to this browser, not the shared visitor account.
+        const guestPreferences = !user.id || user.role === RoleEnum.VISITOR ? { ...user.preferences } : null;
+        user.setUserInfo(response.data);
+        if (guestPreferences && (!user.id || user.role === RoleEnum.VISITOR)) {
+          delete guestPreferences.homePage;
+          user.preferences = { ...user.preferences, ...guestPreferences };
+        }
+      }
     } catch {
+      if (disposed) return;
       errorMessage.value = t('extensionAuthorize.identityFailed');
     } finally {
       loadingIdentity.value = false;

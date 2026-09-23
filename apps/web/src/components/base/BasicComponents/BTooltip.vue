@@ -18,8 +18,8 @@
 </template>
 
 <script setup lang="ts">
+  import { useUiDensity } from '@/composables/useUiDensity';
   import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
-  import { getRootZoom } from '@/utils/zoom';
 
   const props = defineProps<{
     title: string;
@@ -50,16 +50,15 @@
     const wrap = wrapRef.value;
     const popup = popupRef.value;
     if (!visible.value || !wrap || !popup) return;
-    // 鼠标和 DOMRect 为视觉坐标；fixed 浮层使用根 zoom 下的布局坐标。
-    const zoom = getRootZoom();
+
     const pW = popup.offsetWidth;
     const pH = popup.offsetHeight;
-    const viewportWidth = document.documentElement.clientWidth / zoom;
-    const viewportHeight = document.documentElement.clientHeight / zoom;
+    const viewportWidth = document.documentElement.clientWidth;
+    const viewportHeight = document.documentElement.clientHeight;
     if (props.followCursor) {
-      const x = cursorX / zoom;
-      const y = cursorY / zoom;
-      const gap = 12 / zoom;
+      const x = cursorX;
+      const y = cursorY;
+      const gap = 12;
       const left = x + gap + pW <= viewportWidth - 4 ? x + gap : x - gap - pW;
       const top = y + gap + pH <= viewportHeight - 4 ? y + gap : y - gap - pH;
       popupStyle.left = `${Math.max(4, Math.min(left, viewportWidth - pW - 4))}px`;
@@ -67,9 +66,9 @@
       return;
     }
     const rect = wrap.getBoundingClientRect();
-    const top = rect.top / zoom;
-    const centerX = (rect.left + rect.width / 2) / zoom - pW / 2;
-    popupStyle.top = `${top > pH + 10 ? top - pH - 6 : rect.bottom / zoom + 6}px`;
+    const top = rect.top;
+    const centerX = rect.left + rect.width / 2 - pW / 2;
+    popupStyle.top = `${top > pH + 10 ? top - pH - 6 : rect.bottom + 6}px`;
     popupStyle.left = `${Math.max(4, Math.min(centerX, viewportWidth - pW - 4))}px`;
   }
 
@@ -125,12 +124,21 @@
   );
 
   watch(
-    () => visible.value && props.followCursor,
+    () => visible.value,
     (tracking, _, onCleanup) => {
       if (!tracking) return;
+      const viewport = window.visualViewport;
+      const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updatePosition);
+      if (wrapRef.value) observer?.observe(wrapRef.value);
+      if (popupRef.value) observer?.observe(popupRef.value);
+      viewport?.addEventListener('resize', updatePosition);
+      viewport?.addEventListener('scroll', updatePosition);
       window.addEventListener('resize', updatePosition);
       window.addEventListener('scroll', updatePosition, true);
       onCleanup(() => {
+        observer?.disconnect();
+        viewport?.removeEventListener('resize', updatePosition);
+        viewport?.removeEventListener('scroll', updatePosition);
         window.removeEventListener('resize', updatePosition);
         window.removeEventListener('scroll', updatePosition, true);
       });
@@ -139,6 +147,10 @@
 
   onBeforeUnmount(() => {
     clearTimer();
+  });
+  const { density } = useUiDensity();
+  watch(density, () => {
+    if (visible.value) nextTick(updatePosition);
   });
 </script>
 
@@ -150,9 +162,9 @@
   }
   .b-tooltip-popup {
     position: fixed;
-    padding: 6px 12px;
+    padding: var(--ui-space-6, 6px) var(--ui-space-12, 12px);
     border-radius: 8px;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.5;
     color: var(--text-color);
     background: var(--menu-body-bg-color);
@@ -160,7 +172,7 @@
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
     z-index: 1100;
     pointer-events: none;
-    max-width: 280px;
+    max-width: var(--ui-layout-280, 280px);
     white-space: normal;
     text-align: center;
   }

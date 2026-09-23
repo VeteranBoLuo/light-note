@@ -167,8 +167,8 @@
       : {
           visible: visible.value,
           title: t(isBatchMove.value ? 'note.movePages' : 'note.movePage'),
-          width: 'min(580px, 88vw)',
-          height: 'min(720px, 82vh)',
+          width: 'min(var(--ui-layout-580, 580px), 88vw)',
+          height: 'min(var(--ui-layout-720, 720px), 82vh)',
           maskClosable: false,
         },
   );
@@ -435,7 +435,7 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .note-move-summary,
@@ -444,13 +444,13 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
-    padding: 10px 12px;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     border: 1px solid var(--surface-border-color);
     border-radius: 10px;
     color: var(--desc-color);
     background: var(--workspace-panel-bg-color, var(--menu-body-bg-color));
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .note-move-summary strong,
@@ -465,7 +465,7 @@
   .note-move-placement {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
 
     > * {
       width: 100%;
@@ -482,14 +482,14 @@
   }
 
   .note-move-outcome {
-    min-height: 18px;
+    min-height: var(--ui-layout-18, 18px);
     margin: 0;
     color: var(--desc-color);
-    font-size: 12px;
-    line-height: 18px;
+    font-size: var(--ui-font-12, 12px);
+    line-height: var(--ui-layout-18, 18px);
 
     span {
-      margin-left: 4px;
+      margin-left: var(--ui-space-4, 4px);
       color: var(--resource-note-color, #00a884);
       font-weight: 600;
     }
@@ -497,17 +497,17 @@
 
   .note-move-list {
     flex: 1;
-    min-height: 180px;
+    min-height: var(--ui-layout-180, 180px);
     overflow-y: auto;
   }
 
   .note-move-row {
     width: 100%;
-    min-height: 38px;
-    margin-block: 2px;
-    padding: 5px 8px 5px calc(10px + var(--note-move-depth, 0) * 14px);
+    min-height: var(--ui-control-38, 38px);
+    margin-block: var(--ui-space-2, 2px);
+    padding: var(--ui-space-5, 5px) var(--ui-space-8, 8px) var(--ui-space-5, 5px) calc(var(--ui-space-10, 10px) + var(--note-move-depth, 0) * var(--ui-space-14, 14px));
     justify-content: flex-start;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     border: 1px solid transparent;
     border-radius: 9px;
     color: var(--desc-color);
@@ -515,7 +515,7 @@
     text-align: left;
 
     &.is-root {
-      padding-left: 10px;
+      padding-left: var(--ui-space-10, 10px);
     }
 
     &.is-selected {
@@ -540,13 +540,13 @@
 
   .note-move-count {
     margin-left: auto;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .note-move-disabled-label {
     margin-left: auto;
     color: var(--danger-color, #dc2626);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .note-move-check {
@@ -556,7 +556,7 @@
   .note-move-error {
     margin: 0;
     color: var(--danger-color, #dc2626);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .note-move-footer {
@@ -578,8 +578,8 @@
   .note-move-desktop-footer {
     display: flex;
     justify-content: flex-end;
-    gap: 8px;
-    padding: 0 20px 16px;
+    gap: var(--ui-space-8, 8px);
+    padding: 0 var(--ui-space-20, 20px) var(--ui-space-16, 16px);
   }
 
   .note-move-shell.is-mobile .note-move-list {

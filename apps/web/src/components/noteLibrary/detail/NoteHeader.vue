@@ -106,7 +106,7 @@
               {{ noteType === 'html' ? 'HTML' : 'MD' }}
             </span>
           </BTooltip>
-          <span v-if="hasBackup" style="margin-left: 5px">
+          <span v-if="hasBackup" style="margin-left: var(--ui-space-5, 5px)">
             <BTooltip :title="$t('note.undoSwitchTitle')">
               <span class="undo-switch-btn" @click.stop="$emit('undoSwitch')">↩</span>
             </BTooltip>
@@ -836,11 +836,11 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 20px;
-    height: var(--note-detail-header-height, 60px);
+    gap: var(--ui-space-20, 20px);
+    height: var(--note-detail-header-height, var(--ui-layout-60, 60px));
     width: 100%;
     box-sizing: border-box;
-    padding: 0 20px;
+    padding: 0 var(--ui-space-20, 20px);
     background-color: var(--note-header-bg-color);
     border-bottom: 1px solid var(--notePage-topBody-border-color);
     position: fixed;
@@ -855,27 +855,27 @@
   }
   .note-header-leading {
     min-width: 0;
-    gap: 20px;
+    gap: var(--ui-space-20, 20px);
   }
   .note-header-inline-tags {
     margin-left: auto;
   }
   .note-header-actions {
     flex: 0 0 auto;
-    gap: 20px;
+    gap: var(--ui-space-20, 20px);
   }
   .note-header--tablet {
-    gap: 12px;
-    padding: 0 14px;
+    gap: var(--ui-space-12, 12px);
+    padding: 0 var(--ui-space-14, 14px);
 
     .note-header-leading {
       flex: 1 1 auto;
-      gap: 12px;
+      gap: var(--ui-space-12, 12px);
       overflow: hidden;
     }
 
     .note-header-actions {
-      gap: 10px;
+      gap: var(--ui-space-10, 10px);
     }
 
     .note-header-title {
@@ -901,14 +901,14 @@
   }
   .note-header--mobile {
     justify-content: flex-start;
-    gap: 6px;
-    padding: 0 10px;
+    gap: var(--ui-space-6, 6px);
+    padding: 0 var(--ui-space-10, 10px);
 
     .note-header-mobile-actions {
       display: flex;
       flex: 0 0 auto;
       align-items: center;
-      gap: 6px;
+      gap: var(--ui-space-6, 6px);
       margin-left: auto;
     }
 
@@ -970,18 +970,18 @@
       display: inline-flex;
       align-items: center;
       justify-content: flex-start;
-      gap: 5px;
+      gap: var(--ui-space-5, 5px);
       width: 100%;
       min-width: 0;
       height: 28px;
-      padding: 0 7px;
+      padding: 0 var(--ui-space-7, 7px);
       color: var(--desc-color);
       background: color-mix(in srgb, var(--resource-note-color, #00a884) 8%, var(--card-background));
       border: 0 !important;
       outline: 0 !important;
       box-shadow: none !important;
       border-radius: 999px;
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
       line-height: 1;
       cursor: pointer;
       transition:
@@ -1028,10 +1028,10 @@
       flex: 0 0 auto;
       min-width: 44px;
       height: 28px;
-      padding: 0 9px;
+      padding: 0 var(--ui-space-9, 9px);
       border: 0;
       border-radius: 999px;
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
       font-weight: 700;
       letter-spacing: 0.2px;
 
@@ -1047,15 +1047,15 @@
     }
   }
   .note-header-mobile-save-detail {
-    padding: 10px 12px;
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     color: var(--text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.5;
     white-space: nowrap;
   }
   .note-header-save-retry.b_btn {
     display: inline-flex;
-    margin-left: 6px;
+    margin-left: var(--ui-space-6, 6px);
   }
   .note-header-save-state {
     min-width: 0;
@@ -1063,25 +1063,25 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     color: #c0c0c0;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .note-header-pending-badge {
     flex: 0 0 auto;
   }
   .note-header-child-chip.b_btn {
     flex: 0 0 auto;
-    height: 30px;
-    padding: 0 9px;
-    gap: 4px;
+    height: var(--ui-control-30, 30px);
+    padding: 0 var(--ui-space-9, 9px);
+    gap: var(--ui-space-4, 4px);
     border: 1px solid var(--surface-border-color);
     border-radius: 9px;
     color: var(--resource-note-color, #00a884);
     background: var(--card-background);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .note-header-title {
-    padding: 0 10px;
-    height: 28px;
+    padding: 0 var(--ui-space-10, 10px);
+    height: var(--ui-control-28, 28px);
     display: flex;
     align-items: center;
     border-radius: 6px;
@@ -1101,8 +1101,8 @@
     }
   }
   .note-header-title-icon {
-    width: 36px;
-    height: 36px;
+    width: var(--ui-control-36, 36px);
+    height: var(--ui-control-36, 36px);
     box-sizing: border-box;
     background: var(--card-background);
     border: 1px solid var(--card-border-color);
@@ -1187,11 +1187,11 @@
   }
 
   .inline-note-tags {
-    margin-left: 12px;
+    margin-left: var(--ui-space-12, 12px);
     display: flex;
     align-items: center;
-    gap: 5px;
-    max-width: 320px;
+    gap: var(--ui-space-5, 5px);
+    max-width: var(--ui-layout-320, 320px);
     overflow: hidden;
     white-space: nowrap;
   }

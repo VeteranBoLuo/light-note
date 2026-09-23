@@ -136,7 +136,7 @@
     <BModal
       v-model:visible="deletionVisible"
       :title="t('accountSettings.delete')"
-      width="520px"
+      width="var(--ui-layout-520, 520px)"
       :show-footer="false"
       :mask-closable="!deleting"
       :esc-closable="!deleting"
@@ -592,17 +592,17 @@
   .acc-sec {
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
     padding-top: 0;
   }
   .acc-sec .account-field {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
     box-sizing: border-box;
-    min-height: 56px;
-    padding: 12px 0;
+    min-height: var(--ui-layout-56, 56px);
+    padding: var(--ui-space-12, 12px) 0;
     border-bottom: 1px solid var(--card-border-color);
     &:last-child {
       border-bottom: 0;
@@ -618,11 +618,11 @@
   .field-head {
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
   .acc-sec .field-head--row {
-    margin-bottom: 8px;
-    gap: 8px;
+    margin-bottom: var(--ui-space-8, 8px);
+    gap: var(--ui-space-8, 8px);
     width: 100%;
     max-width: none;
     flex: 0 0 auto;
@@ -633,30 +633,30 @@
     justify-content: space-between;
   }
   .field-label {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     color: var(--text-color);
   }
   .field-desc {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
   }
   .binding {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px 16px;
+    gap: var(--ui-space-6, 6px) var(--ui-space-16, 16px);
     justify-content: flex-start;
     width: 100%;
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     color: var(--desc-color);
   }
   .sess-actions {
     display: flex;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .sess-empty {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
-    padding: 6px 0;
+    padding: var(--ui-space-6, 6px) 0;
   }
   .acc-sec .sess-item {
     width: 100%;
@@ -664,17 +664,17 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     box-sizing: border-box;
-    padding: 10px 0;
-    min-height: 58px;
+    padding: var(--ui-space-10, 10px) 0;
+    min-height: var(--ui-layout-58, 58px);
     border-bottom: 1px solid var(--card-border-color);
   }
   .sess-item:last-child {
     border-bottom: 0;
   }
   .acc-sec :deep(.settings-section-card__head) {
-    padding-bottom: 10px;
+    padding-bottom: var(--ui-space-10, 10px);
   }
   .sess-item.is-current {
     .sess-device {
@@ -684,27 +684,27 @@
   .acc-sec .sess-main {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
     min-width: 0;
   }
   .sess-device {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     color: var(--text-color);
   }
   .sess-meta {
     overflow-wrap: anywhere;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
   }
   .sess-badge {
-    font-size: 11px;
-    padding: 1px 6px;
+    font-size: var(--ui-font-11, 11px);
+    padding: var(--ui-space-1, 1px) var(--ui-space-6, 6px);
     border-radius: 999px;
     background: color-mix(in srgb, var(--primary-color) 15%, transparent);
     color: var(--primary-color);
   }
   .sess-revoke {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--primary-color);
     cursor: pointer;
     flex-shrink: 0;
@@ -714,7 +714,7 @@
   }
   .account-error {
     color: var(--danger-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .sess-actions {
     flex-wrap: wrap;
@@ -722,26 +722,26 @@
   .password-actions {
     display: flex;
     justify-content: flex-end;
-    gap: 8px;
-    padding: 12px 20px 18px;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-12, 12px) var(--ui-space-20, 20px) var(--ui-space-18, 18px);
   }
   .pw-form {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .pw-row {
     display: flex;
     flex-direction: column;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
   .pw-row label {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     color: var(--desc-color);
   }
   .danger-zone {
     border-top: 0;
-    padding-top: 16px;
+    padding-top: var(--ui-space-16, 16px);
   }
   .danger-zone__title {
     color: var(--danger-color, #e5484d);
@@ -749,11 +749,11 @@
   .deletion-flow {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
     width: 100%;
   }
   .deletion-warning {
-    padding: 14px 16px;
+    padding: var(--ui-space-14, 14px) var(--ui-space-16, 16px);
     border-radius: 10px;
     color: var(--text-color);
     background: color-mix(in srgb, var(--danger-color, #e5484d) 9%, var(--background-color));
@@ -761,36 +761,36 @@
   }
   .deletion-warning strong {
     color: var(--danger-color, #e5484d);
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
   }
   .deletion-warning ul {
-    margin: 10px 0 0;
-    padding-left: 20px;
+    margin: var(--ui-space-10, 10px) 0 0;
+    padding-left: var(--ui-space-20, 20px);
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.7;
   }
   .deletion-backup {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .deletion-backup > div {
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
   .deletion-backup__title {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     color: var(--text-color);
   }
   .deletion-code-tip,
   .deletion-policy-note {
     margin: 0;
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.6;
   }
   .deletion-code-tip strong {
@@ -799,11 +799,11 @@
   .deletion-form-row {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   .deletion-form-row label {
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .deletion-resend {
     display: flex;
@@ -812,7 +812,7 @@
   .deletion-actions {
     display: flex;
     justify-content: flex-end;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   @media (max-width: 767px) {

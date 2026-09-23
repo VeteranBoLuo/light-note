@@ -176,8 +176,8 @@
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
-    gap: 14px;
-    padding: 16px;
+    gap: var(--ui-space-14, 14px);
+    padding: var(--ui-space-16, 16px);
     border: 1px solid color-mix(in srgb, var(--card-border-color) 82%, transparent);
     border-radius: 16px;
     background: linear-gradient(
@@ -229,25 +229,25 @@
   }
 
   .inbox-item__select-placeholder {
-    width: 18px;
-    height: 18px;
-    flex: 0 0 18px;
+    width: var(--ui-layout-18, 18px);
+    height: var(--ui-layout-18, 18px);
+    flex: 0 0 var(--ui-layout-18, 18px);
   }
   .inbox-item__meta {
     display: flex;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     align-items: center;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .inbox-item__type {
     color: var(--type-color);
     font-weight: 600;
   }
   h3 {
-    margin: 6px 0 4px;
+    margin: var(--ui-space-6, 6px) 0 var(--ui-space-4, 4px);
     color: var(--text-color);
-    font-size: 16px;
+    font-size: var(--ui-font-16, 16px);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -255,7 +255,7 @@
   p {
     margin: 0;
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.6;
     display: -webkit-box;
     -webkit-line-clamp: 2;
@@ -264,9 +264,9 @@
   }
   .inbox-item__detail {
     display: block;
-    margin-top: 5px;
+    margin-top: var(--ui-space-5, 5px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -275,7 +275,7 @@
     display: flex;
     flex-wrap: nowrap;
     justify-content: flex-end;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     min-width: max-content;
   }
   .inbox-item__actions--mobile {
@@ -288,7 +288,7 @@
     .inbox-item {
       grid-template-columns: auto minmax(0, 1fr);
       align-items: start;
-      padding: 13px;
+      padding: var(--ui-space-13, 13px);
     }
     .inbox-item__actions--mobile {
       position: absolute;
@@ -297,16 +297,16 @@
       display: block;
     }
     .inbox-item__more {
-      width: 36px;
-      min-width: 36px;
-      height: 36px;
+      width: var(--ui-layout-36, 36px);
+      min-width: var(--ui-layout-36, 36px);
+      height: var(--ui-layout-36, 36px);
       padding: 0;
       border-radius: 10px;
       color: var(--desc-color);
       background: transparent !important;
     }
     .inbox-item__body {
-      padding-right: 34px;
+      padding-right: var(--ui-space-34, 34px);
     }
     .inbox-item--selection .inbox-item__body {
       padding-right: 0;

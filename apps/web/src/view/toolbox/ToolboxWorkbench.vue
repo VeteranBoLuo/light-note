@@ -987,13 +987,13 @@
 
 <style scoped lang="less">
   .toolbox-ocr-mode {
-    margin-bottom: 16px;
+    margin-bottom: var(--ui-space-16, 16px);
   }
   .toolbox-ocr-mode p {
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.6;
-    margin-top: 10px;
+    margin-top: var(--ui-space-10, 10px);
   }
   @import (reference) '@/assets/css/workspace-surfaces.less';
   .toolbox-mobile-execute {
@@ -1003,26 +1003,27 @@
 
   .toolbox-workbench {
     .toolbox-page-scroll();
-    padding: 24px clamp(20px, 4vw, 52px) 50px;
+    padding: var(--ui-space-24, 24px) clamp(var(--ui-space-20, 20px), 4vw, var(--ui-space-52, 52px))
+      var(--ui-space-50, 50px);
     color: var(--text-color);
   }
   .toolbox-workbench__inner {
-    width: min(1120px, 100%);
+    width: min(var(--ui-layout-1120, 1120px), 100%);
     margin: 0 auto;
   }
   .toolbox-workbench__back {
     transition: none;
     position: sticky;
     z-index: 8;
-    top: 8px;
-    height: 32px;
-    margin-bottom: 14px;
-    padding: 0 8px;
+    top: var(--ui-space-8, 8px);
+    height: var(--ui-layout-32, 32px);
+    margin-bottom: var(--ui-space-14, 14px);
+    padding: 0 var(--ui-space-8, 8px);
     border: 1px solid var(--surface-border-color);
     border-radius: 999px;
     background: var(--card-background);
     box-shadow: 0 6px 18px rgba(20, 24, 40, 0.08);
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     color: var(--desc-color);
   }
   @media (hover: hover) and (pointer: fine) {
@@ -1033,21 +1034,21 @@
     }
   }
   .toolbox-workbench__state {
-    min-height: 360px;
+    min-height: var(--ui-layout-360, 360px);
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .toolbox-workbench__hero {
     --tool-accent: var(--primary-color);
     position: relative;
-    min-height: 132px;
-    padding: 24px;
+    min-height: var(--ui-layout-132, 132px);
+    padding: var(--ui-space-24, 24px);
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
     overflow: hidden;
     box-sizing: border-box;
     border: 1px solid var(--surface-border-color);
@@ -1083,8 +1084,8 @@
     content: '';
   }
   .toolbox-workbench__icon {
-    width: 62px;
-    height: 62px;
+    width: var(--ui-layout-62, 62px);
+    height: var(--ui-layout-62, 62px);
     display: grid;
     place-items: center;
     border: 1px solid color-mix(in srgb, var(--tool-accent) 24%, var(--surface-border-color));
@@ -1094,38 +1095,38 @@
   }
   .toolbox-workbench__badges {
     display: flex;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
   .toolbox-workbench__hero h1 {
-    margin: 7px 0 5px;
-    font-size: 25px;
+    margin: var(--ui-space-7, 7px) 0 var(--ui-space-5, 5px);
+    font-size: var(--ui-font-25, 25px);
     letter-spacing: -0.025em;
   }
   .toolbox-workbench__hero p {
-    max-width: 700px;
+    max-width: var(--ui-layout-700, 700px);
     margin: 0;
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.6;
   }
   .toolbox-workbench__price {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     color: var(--tool-accent);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 700;
   }
   .toolbox-workbench__surface,
   .toolbox-workbench__paid {
-    margin-top: 18px;
-    padding: 20px;
+    margin-top: var(--ui-space-18, 18px);
+    padding: var(--ui-space-20, 20px);
     border: 1px solid var(--surface-border-color);
     border-radius: 20px;
     background: var(--card-background);
   }
   .toolbox-steps {
-    margin-bottom: 18px;
+    margin-bottom: var(--ui-space-18, 18px);
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     overflow: hidden;
@@ -1133,28 +1134,28 @@
     border-radius: 13px;
   }
   .toolbox-steps > div {
-    min-height: 46px;
-    padding: 8px 12px;
+    min-height: var(--ui-layout-46, 46px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-12, 12px);
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     color: var(--desc-color);
     background: var(--surface-subtle-bg, var(--hover-background));
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .toolbox-steps > div + div {
     border-left: 1px solid var(--surface-border-color);
   }
   .toolbox-steps span {
-    width: 22px;
-    height: 22px;
+    width: var(--ui-layout-22, 22px);
+    height: var(--ui-layout-22, 22px);
     display: grid;
     place-items: center;
     border: 1px solid var(--surface-border-color);
     border-radius: 50%;
     background: var(--card-background);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .toolbox-steps .is-active {
     color: var(--primary-color);
@@ -1174,12 +1175,12 @@
   }
   .toolbox-paid-panel {
     display: grid;
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
   }
   .toolbox-upload-panel {
-    padding: 13px;
+    padding: var(--ui-space-13, 13px);
     display: grid;
-    gap: 11px;
+    gap: var(--ui-space-11, 11px);
     border: 1px solid var(--surface-border-color);
     border-radius: 14px;
     background: var(--surface-subtle-bg, var(--hover-background));
@@ -1188,36 +1189,36 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .toolbox-upload-panel__head > div {
     display: grid;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
   .toolbox-upload-panel__head span {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .toolbox-upload-panel__head :deep(.b_btn) {
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   .toolbox-upload-list {
     display: grid;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   .toolbox-upload-list article {
     min-width: 0;
-    padding: 8px 9px;
+    padding: var(--ui-space-8, 8px) var(--ui-space-9, 9px);
     display: flex;
     align-items: center;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
     border: 1px solid var(--surface-border-color);
     border-radius: 10px;
     background: var(--card-background);
   }
   .toolbox-upload-list__icon {
-    width: 30px;
-    height: 30px;
+    width: var(--ui-layout-30, 30px);
+    height: var(--ui-layout-30, 30px);
     display: grid;
     place-items: center;
     border-radius: 8px;
@@ -1228,11 +1229,11 @@
     min-width: 0;
     margin-right: auto;
     display: grid;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
   .toolbox-upload-list strong {
     overflow: hidden;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -1240,29 +1241,29 @@
     color: var(--desc-color);
   }
   .toolbox-upload-list article > :deep(.b_btn) {
-    width: 30px;
-    height: 30px;
+    width: var(--ui-layout-30, 30px);
+    height: var(--ui-layout-30, 30px);
     padding: 0;
     color: var(--desc-color);
     background: transparent;
   }
   .toolbox-options {
     display: grid;
-    grid-template-columns: minmax(180px, 0.4fr) minmax(0, 1fr);
-    gap: 14px;
+    grid-template-columns: minmax(var(--ui-layout-180, 180px), 0.4fr) minmax(0, 1fr);
+    gap: var(--ui-space-14, 14px);
   }
   .toolbox-field {
     min-width: 0;
     display: grid;
     align-content: start;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
   .toolbox-field.is-wide {
     grid-column: 1 / -1;
   }
   .toolbox-field label {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 650;
   }
   .toolbox-field :deep(.b-input) {
@@ -1274,38 +1275,38 @@
     background: var(--surface-subtle-bg, var(--hover-background)) !important;
   }
   .toolbox-paid-panel__footer {
-    padding-top: 16px;
+    padding-top: var(--ui-space-16, 16px);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
     border-top: 1px solid var(--surface-divider-color);
   }
   .toolbox-paid-panel__footer > :deep(.b_btn),
   .toolbox-quote__actions :deep(.b_btn) {
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
   .toolbox-billing-note {
-    max-width: 680px;
+    max-width: var(--ui-layout-680, 680px);
     display: flex;
     align-items: flex-start;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.55;
   }
   .toolbox-billing-choice {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
   .toolbox-billing-choice__item.b_btn {
     width: 100%;
     height: auto;
-    min-height: 54px;
-    padding: 9px 10px;
+    min-height: var(--ui-layout-54, 54px);
+    padding: var(--ui-space-9, 9px) var(--ui-space-10, 10px);
     justify-content: flex-start;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
     border: 1px solid var(--surface-border-color);
     border-radius: 11px;
     color: var(--text-color);
@@ -1320,7 +1321,7 @@
   .toolbox-billing-choice__item > span {
     min-width: 0;
     display: grid;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
   .toolbox-billing-choice__item strong,
   .toolbox-billing-choice__item small {
@@ -1328,11 +1329,11 @@
     white-space: normal;
   }
   .toolbox-billing-choice__item strong {
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .toolbox-billing-choice__item small {
     color: var(--desc-color);
-    font-size: 9.5px;
+    font-size: var(--ui-font-9_5, 9.5px);
   }
   .toolbox-billing-choice__item.is-selected {
     border-color: var(--primary-color);
@@ -1358,18 +1359,18 @@
     color: #ad6b0d;
   }
   .toolbox-quote {
-    padding: 22px;
+    padding: var(--ui-space-22, 22px);
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
     border: 1px solid color-mix(in srgb, #ad6b0d 30%, var(--surface-border-color));
     border-radius: 17px;
     background: color-mix(in srgb, #ad6b0d 5%, var(--card-background));
   }
   .toolbox-quote__icon {
-    width: 52px;
-    height: 52px;
+    width: var(--ui-layout-52, 52px);
+    height: var(--ui-layout-52, 52px);
     display: grid;
     place-items: center;
     border-radius: 15px;
@@ -1382,115 +1383,116 @@
   .toolbox-quote__copy,
   .toolbox-quote__balance {
     display: grid;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
   .toolbox-quote__copy > span,
   .toolbox-quote__balance span {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .toolbox-quote__copy > strong {
-    font-size: 24px;
+    font-size: var(--ui-font-24, 24px);
   }
   .toolbox-quote__copy small {
     color: var(--desc-color);
   }
   .toolbox-quote__balance {
-    min-width: 110px;
-    padding-left: 20px;
+    min-width: var(--ui-layout-110, 110px);
+    padding-left: var(--ui-space-20, 20px);
     border-left: 1px solid var(--surface-divider-color);
   }
   .toolbox-quote__balance strong {
-    font-size: 19px;
+    font-size: var(--ui-font-19, 19px);
   }
   .toolbox-quote__rules {
     display: grid;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .toolbox-quote__rules p {
     margin: 0;
     display: flex;
     align-items: flex-start;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.55;
   }
   .toolbox-quote__insufficient {
-    padding: 10px 12px;
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     border: 1px solid var(--danger-fill-bg, #d93b3b);
     border-radius: 10px;
     color: var(--danger-fill-bg, #d93b3b);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .toolbox-quote__actions {
     display: flex;
     justify-content: flex-end;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
   }
   @media (max-width: 767px) {
     .toolbox-workbench__inner {
-      padding-bottom: 110px;
+      padding-bottom: var(--ui-space-110, 110px);
     }
     .toolbox-mobile-execute {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      gap: 12px;
+      gap: var(--ui-space-12, 12px);
       position: fixed;
       bottom: 12px;
       bottom: max(12px, env(safe-area-inset-bottom));
-      left: 12px;
-      right: 12px;
+      left: var(--ui-space-12, 12px);
+      right: var(--ui-space-12, 12px);
       z-index: 40;
-      padding: 12px;
+      padding: var(--ui-space-12, 12px);
       border: 1px solid var(--surface-border-color);
       border-radius: 14px;
       background: var(--card-background);
     }
 
     .toolbox-workbench {
-      padding: 10px 12px calc(24px + env(safe-area-inset-bottom));
+      padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px)
+        calc(var(--ui-space-24, 24px) + env(safe-area-inset-bottom));
     }
     .toolbox-workbench__back {
       display: none;
     }
     .toolbox-workbench__hero {
       min-height: 0;
-      padding: 17px 15px;
+      padding: var(--ui-space-17, 17px) var(--ui-space-15, 15px);
       grid-template-columns: auto minmax(0, 1fr);
-      gap: 12px;
+      gap: var(--ui-space-12, 12px);
       border-radius: 17px;
     }
     .toolbox-workbench__icon {
-      width: 48px;
-      height: 48px;
+      width: var(--ui-layout-48, 48px);
+      height: var(--ui-layout-48, 48px);
       border-radius: 14px;
     }
     .toolbox-workbench__hero h1 {
-      font-size: 20px;
+      font-size: var(--ui-font-20, 20px);
     }
     .toolbox-workbench__hero p {
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
     }
     .toolbox-workbench__price {
       grid-column: 1 / -1;
-      padding-top: 10px;
+      padding-top: var(--ui-space-10, 10px);
       border-top: 1px solid var(--surface-divider-color);
     }
     .toolbox-workbench__surface,
     .toolbox-workbench__paid {
-      margin-top: 11px;
-      padding: 12px;
+      margin-top: var(--ui-space-11, 11px);
+      padding: var(--ui-space-12, 12px);
       border-radius: 16px;
     }
     .toolbox-steps > div {
-      padding: 7px 4px;
-      gap: 4px;
+      padding: var(--ui-space-7, 7px) var(--ui-space-4, 4px);
+      gap: var(--ui-space-4, 4px);
     }
     .toolbox-steps strong {
       overflow: hidden;
-      font-size: 10px;
+      font-size: var(--ui-font-10, 10px);
       text-overflow: ellipsis;
       white-space: nowrap;
     }
@@ -1511,12 +1513,12 @@
       grid-column: auto;
     }
     .toolbox-quote {
-      padding: 16px;
+      padding: var(--ui-space-16, 16px);
       grid-template-columns: auto minmax(0, 1fr);
     }
     .toolbox-quote__balance {
       grid-column: 1 / -1;
-      padding: 10px 0 0;
+      padding: var(--ui-space-10, 10px) 0 0;
       grid-template-columns: 1fr auto;
       border-top: 1px solid var(--surface-divider-color);
       border-left: 0;
@@ -1534,13 +1536,13 @@
 
   /* 共享详情壳：知识工具、OCR 与本地工具保持同一层级，以下规则覆盖上方的旧工作台基线。 */
   .toolbox-workbench__inner {
-    width: min(1240px, 100%);
+    width: min(var(--ui-layout-1240, 1240px), 100%);
   }
   .toolbox-workbench__hero {
-    min-height: 166px;
-    padding: 27px 30px;
-    grid-template-columns: auto minmax(0, 1fr) 156px;
-    gap: 22px;
+    min-height: var(--ui-layout-166, 166px);
+    padding: var(--ui-space-27, 27px) var(--ui-space-30, 30px);
+    grid-template-columns: auto minmax(0, 1fr) var(--ui-layout-156, 156px);
+    gap: var(--ui-space-22, 22px);
     border-radius: 24px;
     background: linear-gradient(
       122deg,
@@ -1554,8 +1556,8 @@
     width: 5px;
   }
   .toolbox-workbench__icon {
-    width: 68px;
-    height: 68px;
+    width: var(--ui-layout-68, 68px);
+    height: var(--ui-layout-68, 68px);
     border-radius: 20px;
     box-shadow: 0 15px 34px -26px var(--tool-accent);
   }
@@ -1564,49 +1566,49 @@
   }
   .toolbox-workbench__category {
     color: var(--tool-accent);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 720;
     letter-spacing: 0.08em;
   }
   .toolbox-workbench__hero h1 {
-    margin: 5px 0 6px;
-    font-size: clamp(25px, 2.3vw, 31px);
+    margin: var(--ui-space-5, 5px) 0 var(--ui-space-6, 6px);
+    font-size: clamp(var(--ui-font-25, 25px), 2.3vw, var(--ui-font-31, 31px));
     font-weight: 760;
   }
   .toolbox-workbench__hero p {
-    max-width: 760px;
+    max-width: var(--ui-layout-760, 760px);
   }
   .toolbox-workbench__execution {
     width: fit-content;
-    max-width: 760px;
-    margin-top: 14px;
+    max-width: var(--ui-layout-760, 760px);
+    margin-top: var(--ui-space-14, 14px);
     display: flex;
     align-items: flex-start;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     color: var(--tool-accent);
   }
   .toolbox-workbench__execution > :deep(svg) {
-    margin-top: 2px;
+    margin-top: var(--ui-space-2, 2px);
     flex: 0 0 auto;
   }
   .toolbox-workbench__execution > span {
     display: grid;
-    gap: 1px;
+    gap: var(--ui-space-1, 1px);
   }
   .toolbox-workbench__execution strong {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .toolbox-workbench__execution small {
     color: var(--desc-color);
-    font-size: 10.5px;
+    font-size: var(--ui-font-10_5, 10.5px);
     line-height: 1.45;
   }
   .toolbox-workbench__price {
-    min-width: 132px;
-    padding: 15px 16px;
+    min-width: var(--ui-layout-132, 132px);
+    padding: var(--ui-space-15, 15px) var(--ui-space-16, 16px);
     display: grid;
     align-items: initial;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
     box-sizing: border-box;
     border: 1px solid color-mix(in srgb, var(--tool-accent) 22%, var(--surface-border-color));
     border-radius: 16px;
@@ -1614,43 +1616,43 @@
   }
   .toolbox-workbench__price small {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
   .toolbox-workbench__price strong {
     color: var(--tool-accent);
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
     font-variant-numeric: tabular-nums;
   }
   .toolbox-workbench__price.is-free strong {
     color: var(--success-color, #07835f);
   }
   .toolbox-workbench__surface {
-    padding: 22px;
+    padding: var(--ui-space-22, 22px);
     border-radius: 22px;
     box-shadow: var(--surface-card-shadow);
   }
   .toolbox-workbench__paid {
-    margin-top: 18px;
+    margin-top: var(--ui-space-18, 18px);
     padding: 0;
     border: 0;
     border-radius: 0;
     background: transparent;
   }
   .toolbox-paid-panel {
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
   }
   .toolbox-workflow-switch {
     display: none;
   }
   .toolbox-workflow-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1.12fr) minmax(390px, 0.88fr);
+    grid-template-columns: minmax(0, 1.12fr) minmax(var(--ui-layout-390, 390px), 0.88fr);
     align-items: start;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
   }
   .toolbox-workflow-grid.is-prompt {
     display: block;
-    width: min(980px, 100%);
+    width: min(var(--ui-layout-980, 980px), 100%);
     margin: 0 auto;
   }
   .toolbox-workflow-rail {
@@ -1660,21 +1662,21 @@
     align-self: start;
     display: grid;
     align-content: start;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     overscroll-behavior: contain;
   }
   .toolbox-workflow-grid.is-prompt .toolbox-workflow-rail {
     position: static;
-    grid-template-columns: minmax(0, 1.55fr) minmax(290px, 0.45fr);
+    grid-template-columns: minmax(0, 1.55fr) minmax(var(--ui-layout-290, 290px), 0.45fr);
     align-items: start;
   }
   .toolbox-workflow-card,
   .toolbox-confirmation {
     min-width: 0;
-    padding: 20px;
+    padding: var(--ui-space-20, 20px);
     display: grid;
     align-content: start;
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
     box-sizing: border-box;
     border: 1px solid var(--surface-border-color);
     border-radius: 20px;
@@ -1688,42 +1690,42 @@
   }
   .toolbox-workflow-card__head {
     display: grid;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
   .toolbox-workflow-card__head > span {
     color: var(--primary-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     font-weight: 720;
     letter-spacing: 0.07em;
   }
   .toolbox-workflow-card__head h2 {
     margin: 0;
-    font-size: 18px;
+    font-size: var(--ui-font-18, 18px);
     font-weight: 730;
     letter-spacing: -0.02em;
   }
   .toolbox-workflow-card__head p {
     margin: 0;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.55;
   }
   .toolbox-upload-panel {
-    padding: 13px 14px;
+    padding: var(--ui-space-13, 13px) var(--ui-space-14, 14px);
   }
   .toolbox-upload-list__copy {
     min-width: 0;
     margin-right: auto;
     display: grid;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
   .toolbox-upload-list__status {
     flex: 0 0 auto;
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
   .toolbox-upload-list__status::before {
     width: 6px;
@@ -1744,37 +1746,37 @@
   }
   .toolbox-intents {
     display: grid;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .toolbox-intents__head {
     display: grid;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
   .toolbox-intents__head strong,
   .toolbox-outcomes > div strong {
-    font-size: 12.5px;
+    font-size: var(--ui-font-12_5, 12.5px);
   }
   .toolbox-intents__head span,
   .toolbox-outcomes > div span {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.45;
   }
   .toolbox-intents__grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
   .toolbox-intent.b_btn {
     position: relative;
     width: 100%;
     height: auto;
-    min-height: 70px;
-    padding: 11px 27px 10px 10px;
+    min-height: var(--ui-layout-70, 70px);
+    padding: var(--ui-space-11, 11px) var(--ui-space-27, 27px) var(--ui-space-10, 10px) var(--ui-space-10, 10px);
     display: grid;
     align-content: center;
     justify-items: start;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
     overflow: hidden;
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
@@ -1786,12 +1788,12 @@
   }
   .toolbox-intent strong {
     min-width: 0;
-    font-size: 11.5px;
+    font-size: var(--ui-font-11_5, 11.5px);
   }
   .toolbox-intent span {
     min-width: 0;
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     overflow-wrap: anywhere;
   }
   .toolbox-intent.is-selected {
@@ -1801,52 +1803,52 @@
   }
   .toolbox-intent.is-selected::after {
     position: absolute;
-    top: 8px;
-    right: 8px;
-    width: 16px;
-    height: 16px;
+    top: var(--ui-space-8, 8px);
+    right: var(--ui-space-8, 8px);
+    width: var(--ui-layout-16, 16px);
+    height: var(--ui-layout-16, 16px);
     display: grid;
     place-items: center;
     border-radius: 50%;
     color: #fff;
     background: var(--primary-color);
     content: '✓';
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     font-weight: 800;
   }
   .toolbox-options {
     grid-template-columns: 1fr;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .toolbox-field label {
     display: flex;
     align-items: center;
-    gap: 6px;
-    font-size: 11.5px;
+    gap: var(--ui-space-6, 6px);
+    font-size: var(--ui-font-11_5, 11.5px);
   }
   .toolbox-field label small {
     color: var(--primary-color);
-    font-size: 9px;
+    font-size: var(--ui-font-9, 9px);
     font-weight: 600;
   }
   .toolbox-field__hint {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     line-height: 1.45;
   }
   .toolbox-detail-options {
-    padding: 3px;
+    padding: var(--ui-space-3, 3px);
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
     border: 1px solid var(--surface-border-color);
     border-radius: 11px;
     background: var(--surface-subtle-bg, var(--hover-background));
   }
   .toolbox-detail-options :deep(.b_btn) {
     width: 100%;
-    min-height: 31px;
-    padding: 0 8px;
+    min-height: var(--ui-layout-31, 31px);
+    padding: 0 var(--ui-space-8, 8px);
     border-color: transparent;
     color: var(--desc-color);
     background: transparent;
@@ -1858,16 +1860,16 @@
     box-shadow: var(--surface-card-shadow);
   }
   .toolbox-outcomes {
-    padding: 13px;
+    padding: var(--ui-space-13, 13px);
     display: grid;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     border: 1px solid color-mix(in srgb, var(--primary-color) 17%, var(--surface-border-color));
     border-radius: 14px;
     background: color-mix(in srgb, var(--primary-color) 3.5%, var(--card-background));
   }
   .toolbox-outcomes > div {
     display: grid;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
   .toolbox-outcomes ol,
   .toolbox-ocr-outcomes {
@@ -1875,7 +1877,7 @@
     padding: 0;
     display: grid;
     grid-template-columns: 1fr;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     list-style: none;
   }
   .toolbox-outcomes li,
@@ -1883,23 +1885,23 @@
     min-width: 0;
     display: flex;
     align-items: flex-start;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     color: var(--text-color);
-    font-size: 10.5px;
+    font-size: var(--ui-font-10_5, 10.5px);
     line-height: 1.4;
   }
   .toolbox-outcomes li > span,
   .toolbox-ocr-outcomes li > span {
-    width: 17px;
-    height: 17px;
-    flex: 0 0 17px;
+    width: var(--ui-layout-17, 17px);
+    height: var(--ui-layout-17, 17px);
+    flex: 0 0 var(--ui-layout-17, 17px);
     display: grid;
     place-items: center;
     border: 1px solid color-mix(in srgb, var(--primary-color) 40%, var(--surface-border-color));
     border-radius: 6px;
     color: var(--primary-color);
     background: var(--card-background);
-    font-size: 8px;
+    font-size: var(--ui-font-8, 8px);
     font-weight: 750;
   }
   .toolbox-workflow-card.is-ocr-output {
@@ -1907,44 +1909,44 @@
   }
   .toolbox-ocr-outcomes {
     grid-template-columns: 1fr;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .toolbox-ocr-outcomes li {
-    padding: 13px;
+    padding: var(--ui-space-13, 13px);
     align-items: center;
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     background: var(--surface-subtle-bg, var(--hover-background));
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .toolbox-paid-panel__footer {
-    padding: 16px;
+    padding: var(--ui-space-16, 16px);
     display: grid;
     align-items: stretch;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     border: 1px solid var(--surface-border-color);
     border-radius: 16px;
     background: var(--card-background);
     box-shadow: var(--surface-card-shadow);
   }
   .toolbox-run-summary__title {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .toolbox-run-summary {
     margin: 0;
     display: grid;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .toolbox-run-summary > div {
     display: grid;
-    grid-template-columns: 88px minmax(0, 1fr);
+    grid-template-columns: var(--ui-layout-88, 88px) minmax(0, 1fr);
     align-items: baseline;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .toolbox-run-summary dt,
   .toolbox-run-summary dd {
     margin: 0;
-    font-size: 10.5px;
+    font-size: var(--ui-font-10_5, 10.5px);
     line-height: 1.45;
   }
   .toolbox-run-summary dt {
@@ -1958,22 +1960,23 @@
   }
   .toolbox-paid-panel__footer > :deep(.b_btn) {
     width: 100%;
-    min-height: 39px;
+    min-height: var(--ui-layout-39, 39px);
   }
   .toolbox-confirmation {
-    width: min(720px, 100%);
+    width: min(var(--ui-layout-720, 720px), 100%);
     margin: 0 auto;
-    padding: 23px;
+    padding: var(--ui-space-23, 23px);
   }
   @media (min-width: 768px) {
     .toolbox-workbench.is-resource-workspace {
-      padding: 12px clamp(14px, 2vw, 28px) 14px;
+      padding: var(--ui-space-12, 12px) clamp(var(--ui-space-14, 14px), 2vw, var(--ui-space-28, 28px))
+        var(--ui-space-14, 14px);
       overflow-y: hidden;
       overscroll-behavior: none;
     }
     .toolbox-workbench.is-resource-workspace .toolbox-workbench__inner {
       position: relative;
-      width: min(1500px, 100%);
+      width: min(var(--ui-layout-1500, 1500px), 100%);
       height: 100%;
       min-height: 0;
       display: grid;
@@ -1982,10 +1985,10 @@
     .toolbox-workbench.is-resource-workspace .toolbox-workbench__back {
       position: absolute;
       z-index: 9;
-      top: 20px;
-      left: 12px;
-      width: 32px;
-      height: 32px;
+      top: var(--ui-space-20, 20px);
+      left: var(--ui-space-12, 12px);
+      width: var(--ui-layout-32, 32px);
+      height: var(--ui-layout-32, 32px);
       margin: 0;
       padding: 0;
       justify-content: center;
@@ -2000,10 +2003,10 @@
       display: none;
     }
     .toolbox-workbench.is-resource-workspace .toolbox-workbench__hero {
-      min-height: 72px;
-      padding: 10px 14px 10px 56px;
-      grid-template-columns: 42px minmax(0, 1fr) auto;
-      gap: 12px;
+      min-height: var(--ui-layout-72, 72px);
+      padding: var(--ui-space-10, 10px) var(--ui-space-14, 14px) var(--ui-space-10, 10px) var(--ui-space-56, 56px);
+      grid-template-columns: var(--ui-layout-42, 42px) minmax(0, 1fr) auto;
+      gap: var(--ui-space-12, 12px);
       border-radius: 17px;
       box-shadow: var(--surface-card-shadow);
     }
@@ -2011,17 +2014,17 @@
       width: 3px;
     }
     .toolbox-workbench.is-resource-workspace .toolbox-workbench__icon {
-      width: 42px;
-      height: 42px;
+      width: var(--ui-layout-42, 42px);
+      height: var(--ui-layout-42, 42px);
       border-radius: 12px;
       box-shadow: none;
     }
     .toolbox-workbench.is-resource-workspace .toolbox-workbench__category {
-      font-size: 9px;
+      font-size: var(--ui-font-9, 9px);
     }
     .toolbox-workbench.is-resource-workspace .toolbox-workbench__hero h1 {
-      margin: 2px 0 0;
-      font-size: 20px;
+      margin: var(--ui-space-2, 2px) 0 0;
+      font-size: var(--ui-font-20, 20px);
     }
     .toolbox-workbench.is-resource-workspace .toolbox-workbench__hero-copy > p,
     .toolbox-workbench.is-resource-workspace .toolbox-workbench__execution {
@@ -2029,7 +2032,7 @@
     }
     .toolbox-workbench.is-resource-workspace .toolbox-workbench__price {
       min-width: 0;
-      padding: 8px 10px;
+      padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px);
       display: flex;
       align-items: center;
       border-radius: 12px;
@@ -2038,7 +2041,7 @@
       display: none;
     }
     .toolbox-workbench.is-resource-workspace .toolbox-workbench__price strong {
-      font-size: 13px;
+      font-size: var(--ui-font-13, 13px);
     }
     .toolbox-workbench.is-resource-workspace .toolbox-workbench__paid,
     .toolbox-workbench.is-resource-workspace .toolbox-paid-panel,
@@ -2047,7 +2050,7 @@
       min-height: 0;
     }
     .toolbox-workbench.is-resource-workspace .toolbox-workbench__paid {
-      margin-top: 10px;
+      margin-top: var(--ui-space-10, 10px);
       overflow: hidden;
     }
     .toolbox-workbench.is-resource-workspace .toolbox-paid-panel {
@@ -2063,16 +2066,16 @@
       align-self: stretch;
     }
     .toolbox-workbench.is-resource-workspace .toolbox-workflow-card.is-sources {
-      padding: 12px;
-      gap: 8px;
+      padding: var(--ui-space-12, 12px);
+      gap: var(--ui-space-8, 8px);
     }
     .toolbox-workbench.is-resource-workspace .toolbox-workflow-card.is-sources > .toolbox-workflow-card__head {
       display: flex;
       align-items: baseline;
-      gap: 7px;
+      gap: var(--ui-space-7, 7px);
     }
     .toolbox-workbench.is-resource-workspace .toolbox-workflow-card.is-sources > .toolbox-workflow-card__head h2 {
-      font-size: 16px;
+      font-size: var(--ui-font-16, 16px);
     }
     .toolbox-workbench.is-resource-workspace .toolbox-workflow-card.is-sources > .toolbox-workflow-card__head p {
       display: none;
@@ -2085,19 +2088,19 @@
     .toolbox-workbench.is-resource-workspace .toolbox-workflow-rail {
       overflow-x: hidden;
       overflow-y: auto;
-      gap: 9px;
+      gap: var(--ui-space-9, 9px);
     }
     .toolbox-workbench.is-resource-workspace .toolbox-workflow-card.is-design {
-      padding: 13px;
-      gap: 10px;
+      padding: var(--ui-space-13, 13px);
+      gap: var(--ui-space-10, 10px);
     }
     .toolbox-workbench.is-resource-workspace .toolbox-workflow-card.is-design > .toolbox-workflow-card__head {
       display: flex;
       align-items: baseline;
-      gap: 7px;
+      gap: var(--ui-space-7, 7px);
     }
     .toolbox-workbench.is-resource-workspace .toolbox-workflow-card.is-design > .toolbox-workflow-card__head h2 {
-      font-size: 16px;
+      font-size: var(--ui-font-16, 16px);
     }
     .toolbox-workbench.is-resource-workspace .toolbox-workflow-card.is-design > .toolbox-workflow-card__head p,
     .toolbox-workbench.is-resource-workspace .toolbox-intents__head > span,
@@ -2109,29 +2112,29 @@
       display: none;
     }
     .toolbox-workbench.is-resource-workspace .toolbox-intents {
-      gap: 6px;
+      gap: var(--ui-space-6, 6px);
     }
     .toolbox-workbench.is-resource-workspace .toolbox-intents__grid {
-      gap: 6px;
+      gap: var(--ui-space-6, 6px);
     }
     .toolbox-workbench.is-resource-workspace .toolbox-intent.b_btn {
-      min-height: 56px;
-      padding-top: 8px;
-      padding-bottom: 8px;
+      min-height: var(--ui-layout-56, 56px);
+      padding-top: var(--ui-space-8, 8px);
+      padding-bottom: var(--ui-space-8, 8px);
     }
     .toolbox-workbench.is-resource-workspace .toolbox-options {
-      gap: 8px;
+      gap: var(--ui-space-8, 8px);
     }
     .toolbox-workbench.is-resource-workspace .toolbox-field {
-      gap: 5px;
+      gap: var(--ui-space-5, 5px);
     }
     .toolbox-workbench.is-resource-workspace .toolbox-detail-options :deep(.b_btn) {
-      min-height: 29px;
+      min-height: var(--ui-layout-29, 29px);
     }
     .toolbox-workbench.is-resource-workspace .toolbox-paid-panel__footer {
-      padding: 10px;
+      padding: var(--ui-space-10, 10px);
       grid-template-columns: minmax(0, 1fr);
-      gap: 8px;
+      gap: var(--ui-space-8, 8px);
       border-radius: 14px;
       box-shadow: none;
     }
@@ -2140,11 +2143,11 @@
       align-items: stretch;
     }
     .toolbox-workbench.is-resource-workspace .toolbox-billing-choice__item.b_btn {
-      min-height: 46px;
-      padding: 7px 9px;
+      min-height: var(--ui-layout-46, 46px);
+      padding: var(--ui-space-7, 7px) var(--ui-space-9, 9px);
     }
     .toolbox-workbench.is-resource-workspace .toolbox-paid-panel__footer > :deep(.b_btn) {
-      min-height: 36px;
+      min-height: var(--ui-layout-36, 36px);
     }
     .toolbox-workbench.is-resource-workspace .toolbox-paid-panel__footer.has-billing-choice > :deep(.b_btn) {
       height: 100%;
@@ -2152,7 +2155,7 @@
   }
   @media (min-width: 1200px) {
     .toolbox-workbench.is-resource-workspace .toolbox-workflow-grid {
-      grid-template-columns: minmax(0, 1.08fr) minmax(440px, 0.92fr);
+      grid-template-columns: minmax(0, 1.08fr) minmax(var(--ui-layout-440, 440px), 0.92fr);
     }
     .toolbox-workbench.is-resource-workspace .toolbox-paid-panel {
       grid-template-rows: minmax(0, 1fr);
@@ -2160,58 +2163,58 @@
   }
   @media (min-width: 768px) and (max-height: 820px) {
     .toolbox-workbench.is-resource-workspace {
-      padding-top: 8px;
-      padding-bottom: 10px;
+      padding-top: var(--ui-space-8, 8px);
+      padding-bottom: var(--ui-space-10, 10px);
     }
     .toolbox-workbench.is-resource-workspace .toolbox-workbench__hero {
-      min-height: 64px;
-      padding-top: 8px;
-      padding-bottom: 8px;
-      grid-template-columns: 38px minmax(0, 1fr) auto;
-      gap: 10px;
+      min-height: var(--ui-layout-64, 64px);
+      padding-top: var(--ui-space-8, 8px);
+      padding-bottom: var(--ui-space-8, 8px);
+      grid-template-columns: var(--ui-layout-38, 38px) minmax(0, 1fr) auto;
+      gap: var(--ui-space-10, 10px);
     }
     .toolbox-workbench.is-resource-workspace .toolbox-workbench__back {
-      top: 16px;
-      left: 10px;
-      width: 30px;
-      height: 30px;
+      top: var(--ui-space-16, 16px);
+      left: var(--ui-space-10, 10px);
+      width: var(--ui-layout-30, 30px);
+      height: var(--ui-layout-30, 30px);
     }
     .toolbox-workbench.is-resource-workspace .toolbox-workbench__icon {
-      width: 38px;
-      height: 38px;
+      width: var(--ui-layout-38, 38px);
+      height: var(--ui-layout-38, 38px);
       border-radius: 11px;
     }
     .toolbox-workbench.is-resource-workspace .toolbox-workbench__hero h1 {
-      font-size: 18px;
+      font-size: var(--ui-font-18, 18px);
     }
     .toolbox-workbench.is-resource-workspace .toolbox-workbench__price {
-      padding: 7px 9px;
+      padding: var(--ui-space-7, 7px) var(--ui-space-9, 9px);
     }
     .toolbox-workbench.is-resource-workspace .toolbox-workflow-card.is-sources {
-      padding: 10px;
-      gap: 7px;
+      padding: var(--ui-space-10, 10px);
+      gap: var(--ui-space-7, 7px);
     }
     .toolbox-workbench.is-resource-workspace .toolbox-workflow-card.is-sources :deep(.toolbox-resource-selector) {
-      gap: 7px;
+      gap: var(--ui-space-7, 7px);
     }
     .toolbox-workbench.is-resource-workspace
       .toolbox-workflow-card.is-sources
       :deep(.toolbox-resource-selector__picker) {
-      padding: 7px;
+      padding: var(--ui-space-7, 7px);
     }
     .toolbox-workbench.is-resource-workspace .toolbox-workflow-card.is-design {
-      padding: 10px;
-      gap: 8px;
+      padding: var(--ui-space-10, 10px);
+      gap: var(--ui-space-8, 8px);
     }
     .toolbox-workbench.is-resource-workspace .toolbox-intent.b_btn {
-      min-height: 50px;
+      min-height: var(--ui-layout-50, 50px);
     }
     .toolbox-workbench.is-resource-workspace .toolbox-paid-panel__footer {
-      padding: 8px;
-      gap: 7px;
+      padding: var(--ui-space-8, 8px);
+      gap: var(--ui-space-7, 7px);
     }
     .toolbox-workbench.is-resource-workspace .toolbox-billing-choice__item.b_btn {
-      min-height: 42px;
+      min-height: var(--ui-layout-42, 42px);
     }
   }
   @keyframes toolbox-pulse {
@@ -2230,17 +2233,17 @@
       position: sticky;
       z-index: 7;
       top: 0;
-      padding: 3px;
+      padding: var(--ui-space-3, 3px);
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 3px;
+      gap: var(--ui-space-3, 3px);
       border: 1px solid var(--surface-border-color);
       border-radius: 12px;
       background: var(--surface-subtle-bg, var(--hover-background));
     }
     .toolbox-workflow-switch :deep(.b_btn) {
       width: 100%;
-      min-height: 38px;
+      min-height: var(--ui-layout-38, 38px);
       border-color: transparent;
       color: var(--desc-color);
       background: transparent;
@@ -2268,45 +2271,45 @@
   }
   @media (max-width: 767px) {
     .toolbox-workbench__hero {
-      padding: 17px 15px 15px;
+      padding: var(--ui-space-17, 17px) var(--ui-space-15, 15px) var(--ui-space-15, 15px);
       grid-template-columns: auto minmax(0, 1fr);
-      gap: 12px;
+      gap: var(--ui-space-12, 12px);
     }
     .toolbox-workbench__execution {
-      margin-top: 9px;
+      margin-top: var(--ui-space-9, 9px);
     }
     .toolbox-workbench__execution small {
-      font-size: 9.5px;
+      font-size: var(--ui-font-9_5, 9.5px);
     }
     .toolbox-workbench__price {
       min-width: 0;
-      padding: 10px 12px;
+      padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
       grid-template-columns: 1fr auto;
       align-items: center;
       border-radius: 12px;
     }
     .toolbox-workbench__surface {
-      padding: 12px;
+      padding: var(--ui-space-12, 12px);
     }
     .toolbox-workbench__paid {
-      margin-top: 11px;
+      margin-top: var(--ui-space-11, 11px);
       padding: 0;
     }
     .toolbox-workflow-card,
     .toolbox-confirmation {
-      padding: 14px;
-      gap: 14px;
+      padding: var(--ui-space-14, 14px);
+      gap: var(--ui-space-14, 14px);
       border-radius: 16px;
     }
     .toolbox-workflow-card__head h2 {
-      font-size: 16px;
+      font-size: var(--ui-font-16, 16px);
     }
     .toolbox-intents__grid,
     .toolbox-outcomes ol {
       grid-template-columns: 1fr;
     }
     .toolbox-intent.b_btn {
-      min-height: 58px;
+      min-height: var(--ui-layout-58, 58px);
     }
     .toolbox-options {
       grid-template-columns: 1fr;
@@ -2315,13 +2318,13 @@
       grid-column: auto;
     }
     .toolbox-paid-panel__footer {
-      padding: 13px;
+      padding: var(--ui-space-13, 13px);
     }
     .toolbox-billing-choice {
       grid-template-columns: 1fr;
     }
     .toolbox-run-summary > div {
-      grid-template-columns: 82px minmax(0, 1fr);
+      grid-template-columns: var(--ui-layout-82, 82px) minmax(0, 1fr);
     }
   }
   html.light-note-mobile-rendering .toolbox-outcomes,
@@ -2350,54 +2353,54 @@
   .toolbox-reading-scope {
     margin: 0;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.6;
   }
   .toolbox-workbench.is-local-workspace {
-    padding-top: 16px;
-    padding-bottom: 20px;
+    padding-top: var(--ui-space-16, 16px);
+    padding-bottom: var(--ui-space-20, 20px);
   }
   .is-local-workspace .toolbox-workbench__back {
     position: static;
-    margin-bottom: 10px;
+    margin-bottom: var(--ui-space-10, 10px);
     box-shadow: none;
   }
   .is-local-workspace .toolbox-workbench__hero {
     min-height: 0;
-    padding: 14px 18px;
-    gap: 14px;
-    grid-template-columns: 44px minmax(0, 1fr);
+    padding: var(--ui-space-14, 14px) var(--ui-space-18, 18px);
+    gap: var(--ui-space-14, 14px);
+    grid-template-columns: var(--ui-layout-44, 44px) minmax(0, 1fr);
     border-radius: 16px;
     box-shadow: none;
   }
   .is-local-workspace .toolbox-workbench__icon {
-    width: 44px;
-    height: 44px;
+    width: var(--ui-layout-44, 44px);
+    height: var(--ui-layout-44, 44px);
     border-radius: 12px;
     box-shadow: none;
   }
   .is-local-workspace .toolbox-workbench__hero h1 {
-    margin: 2px 0 4px;
-    font-size: 22px;
+    margin: var(--ui-space-2, 2px) 0 var(--ui-space-4, 4px);
+    font-size: var(--ui-font-22, 22px);
   }
   .is-local-workspace .toolbox-workbench__execution {
-    margin-top: 6px;
+    margin-top: var(--ui-space-6, 6px);
     align-items: center;
   }
   .is-local-workspace .toolbox-workbench__execution > span {
     display: flex;
     flex-wrap: wrap;
     align-items: baseline;
-    gap: 4px 10px;
+    gap: var(--ui-space-4, 4px) var(--ui-space-10, 10px);
   }
   .is-local-workspace .toolbox-workbench__surface {
-    margin-top: 12px;
-    padding: 14px;
+    margin-top: var(--ui-space-12, 12px);
+    padding: var(--ui-space-14, 14px);
     border-radius: 16px;
   }
   .toolbox-workbench.is-project-list .toolbox-workbench__back {
     position: static;
-    margin-bottom: 12px;
+    margin-bottom: var(--ui-space-12, 12px);
     box-shadow: none;
   }
   .toolbox-workbench.is-project-detail .toolbox-workbench__back {
@@ -2405,7 +2408,7 @@
   }
   @media (min-width: 1200px) {
     .toolbox-workbench.is-project-detail .toolbox-workbench__inner {
-      max-width: 1440px;
+      max-width: var(--ui-layout-1440, 1440px);
     }
     .toolbox-workbench.is-project-detail .toolbox-workbench__back {
       display: none;

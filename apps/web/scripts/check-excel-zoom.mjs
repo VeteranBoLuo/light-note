@@ -11,7 +11,7 @@ try {
   for (const mobile of [false, true]) {
     let baseline;
     for (const theme of ['day', 'night']) {
-      for (const zoom of [1, 0.9, 1.1]) {
+      for (const density of ['medium', 'small', 'large']) {
         const page = await browser.newPage({
           viewport: mobile ? { width: 390, height: 844 } : { width: 1400, height: 900 },
         });
@@ -19,11 +19,11 @@ try {
         page.on('pageerror', (error) => errors.push(error.message));
         await page.route(/^https?:\/\/[^/]+\/api\//, (route) => route.abort());
         await page.goto(
-          `${origin}/e2e/excel-zoom.html?zoom=${zoom}&theme=${theme}${mobile ? '&renderProfile=mobile' : ''}`,
+          `${origin}/e2e/excel-zoom.html?density=${density}&theme=${theme}${mobile ? '&renderProfile=mobile' : ''}`,
         );
         await page.waitForSelector('body[data-ready=true]', { state: 'attached' });
         const grid = page.locator('.x-spreadsheet-overlayer');
-        const point = async (x, y, scale = zoom) => {
+        const point = async (x, y, scale = 1) => {
           const box = await grid.boundingBox();
           return { x: box.x + x * scale, y: box.y + y * scale };
         };
@@ -58,21 +58,21 @@ try {
         await page.waitForSelector('body[data-ready=true]', { state: 'attached' });
         // Existing previews must use the current preference without remounting.
         await page.evaluate(() => {
-          document.documentElement.style.zoom = '1.1';
+          window.setDensity('large');
           window.dispatchEvent(new Event('resize'));
         });
         await page.waitForTimeout(250);
-        const changed = await click(x, 250, 1.1);
+        const changed = await click(x, 250);
         const result = { selected, range, scrolled, switched, changed };
         if (!baseline) baseline = result;
-        else assert.deepEqual(result, baseline, `${mobile ? 'mobile' : 'desktop'} ${theme} ${zoom}`);
+        else assert.deepEqual(result, baseline, `${mobile ? 'mobile' : 'desktop'} ${theme} ${density}`);
         assert.deepEqual(errors, []);
         if (process.env.LIGHTNOTE_SCREENSHOT_DIR) {
           await page.screenshot({
-            path: `${process.env.LIGHTNOTE_SCREENSHOT_DIR}/${mobile ? 'mobile' : 'desktop'}-${theme}-${zoom}.png`,
+            path: `${process.env.LIGHTNOTE_SCREENSHOT_DIR}/${mobile ? 'mobile' : 'desktop'}-${theme}-${density}.png`,
           });
         }
-        console.log(`PASS ${mobile ? 'mobile' : 'desktop'} ${theme} ${zoom}: ${JSON.stringify(result)}`);
+        console.log(`PASS ${mobile ? 'mobile' : 'desktop'} ${theme} ${density}: ${JSON.stringify(result)}`);
         await page.close();
       }
     }
@@ -87,29 +87,49 @@ try {
       page.on('pageerror', (error) => errors.push(error.message));
       await page.route(/^https?:\/\/[^/]+\/api\//, (route) => route.abort());
       await page.goto(
-        `${origin}/e2e/excel-zoom.html?zoom=0.9&fullPreview=1&theme=${theme}${mobile ? '&renderProfile=mobile' : ''}`,
+        `${origin}/e2e/excel-zoom.html?density=small&fullPreview=1&theme=${theme}${mobile ? '&renderProfile=mobile' : ''}`,
       );
       await page.waitForSelector('.x-spreadsheet-bottombar li.active');
       await page.waitForTimeout(300);
-      const grid = await page.locator('.x-spreadsheet-overlayer').boundingBox();
-      const x = grid.x + (mobile ? 260 : 740) * 0.9;
-      const y = grid.y + 250 * 0.9;
-      await page.mouse.click(x, y);
-      const boxes = await page
-        .locator('.x-spreadsheet-selector-area')
-        .filter({ visible: true })
-        .evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().toJSON()));
-      assert.ok(
-        boxes.some((box) => x >= box.left && x <= box.right && y >= box.top && y <= box.bottom),
-        'Selection must contain the clicked point',
-      );
-      assert.deepEqual(errors, []);
-      if (process.env.LIGHTNOTE_SCREENSHOT_DIR) {
-        await page.screenshot({
-          path: `${process.env.LIGHTNOTE_SCREENSHOT_DIR}/full-${mobile ? 'mobile' : 'desktop'}-${theme}.png`,
-        });
+      for (const density of ['medium', 'small', 'large']) {
+        await page.evaluate((d) => window.setDensity(d), density);
+        await page.waitForTimeout(300);
+        const checkClick = async () => {
+          const grid = await page.locator('.x-spreadsheet-overlayer').boundingBox();
+          const x = grid.x + (mobile ? 260 : 740),
+            y = grid.y + 250;
+          await page.mouse.click(x, y);
+          const boxes = await page
+            .locator('.x-spreadsheet-selector-area')
+            .filter({ visible: true })
+            .evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().toJSON()));
+          assert.ok(
+            boxes.some((box) => x >= box.left && x <= box.right && y >= box.top && y <= box.bottom),
+            `Selection contains click: ${mobile ? 'mobile' : 'desktop'}/${theme}/${density}`,
+          );
+        };
+        await checkClick();
+        await page.mouse.wheel(0, 240);
+        await page.waitForTimeout(300);
+        await checkClick();
+        await page
+          .locator('.x-spreadsheet-bottombar li')
+          .filter({ hasText: /^第二张表$/ })
+          .click();
+        await page.waitForTimeout(250);
+        await checkClick();
+        await page
+          .locator('.x-spreadsheet-bottombar li')
+          .filter({ hasText: /^坐标验收$/ })
+          .click();
+        await page.waitForTimeout(250);
+        assert.deepEqual(errors, []);
+        if (process.env.LIGHTNOTE_SCREENSHOT_DIR)
+          await page.screenshot({
+            path: `${process.env.LIGHTNOTE_SCREENSHOT_DIR}/full-${mobile ? 'mobile' : 'desktop'}-${theme}-${density}.png`,
+          });
+        console.log(`PASS shared FilePreview ${mobile ? 'mobile' : 'desktop'} ${theme} ${density}`);
       }
-      console.log(`PASS shared FilePreview ${mobile ? 'mobile' : 'desktop'} ${theme}`);
       await page.close();
     }
   }

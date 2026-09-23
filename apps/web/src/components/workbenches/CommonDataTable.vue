@@ -69,14 +69,14 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     height: 100%;
-    min-height: 120px;
+    min-height: var(--ui-layout-120, 120px);
     color: var(--desc-color, #888);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .cdt-empty-icon {
-    font-size: 30px;
+    font-size: var(--ui-font-30, 30px);
     opacity: 0.6;
   }
 
@@ -91,29 +91,29 @@
     overflow: hidden;
   }
   :deep(.table-body) {
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     flex: 1;
     overflow-y: auto;
     max-height: none;
-    padding: 2px;
+    padding: var(--ui-space-2, 2px);
   }
   :deep(.table-header) {
     flex-shrink: 0;
-    height: 38px;
+    height: var(--ui-layout-38, 38px);
     border-radius: 9px;
     background: linear-gradient(180deg, var(--workbench-table-header-bg), transparent 190%);
     border: 1px solid var(--workbench-table-inner-border);
-    padding: 0 10px;
+    padding: 0 var(--ui-space-10, 10px);
   }
 
   :deep(.header-cell) {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 600;
     color: var(--desc-color);
   }
 
   :deep(.table-row) {
-    height: 38px;
+    height: var(--ui-layout-38, 38px);
     border-radius: 9px;
     border: 1px solid transparent;
     transition:
@@ -122,7 +122,7 @@
   }
 
   :deep(.table-cell) {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   :deep(.table-row:hover) {

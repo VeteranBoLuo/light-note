@@ -399,7 +399,7 @@
 
 <style lang="less" scoped>
   .card-panel-wrap {
-    --bookmark-card-min-width: 260px;
+    --bookmark-card-min-width: var(--ui-layout-260, 260px);
 
     min-height: 100%;
     display: flex;
@@ -407,7 +407,7 @@
     container-type: inline-size;
 
     @supports (width: 1cqi) {
-      --bookmark-card-min-width: clamp(260px, 15cqi, 360px);
+      --bookmark-card-min-width: clamp(var(--ui-layout-260, 260px), 15cqi, var(--ui-layout-360, 360px));
     }
   }
 
@@ -430,8 +430,8 @@
     margin-top: 0;
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(var(--bookmark-card-min-width), 1fr));
-    padding: 16px;
-    gap: 14px;
+    padding: var(--ui-space-16, 16px);
+    gap: var(--ui-space-14, 14px);
     align-content: start;
   }
   .bookmark-card-wrap {
@@ -440,8 +440,8 @@
   }
   .bookmark-card-checkbox {
     position: absolute;
-    top: 10px;
-    right: 10px;
+    top: var(--ui-space-10, 10px);
+    right: var(--ui-space-10, 10px);
     z-index: 4;
   }
   .bookmark-card-wrap--selected :deep(.card-body) {
@@ -451,8 +451,8 @@
   }
 
   .bookmark-load-sentinel {
-    min-height: 24px;
-    padding: 8px 16px;
+    min-height: var(--ui-layout-24, 24px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-16, 16px);
     box-sizing: border-box;
     display: flex;
     align-items: center;
@@ -460,22 +460,22 @@
   }
 
   .bookmark-empty-state {
-    min-height: 300px;
-    padding: 48px 20px;
+    min-height: var(--ui-layout-300, 300px);
+    padding: var(--ui-space-48, 48px) var(--ui-space-20, 20px);
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     color: var(--desc-color);
     text-align: center;
   }
 
   .bookmark-empty-icon {
-    width: 54px;
-    height: 54px;
-    margin-bottom: 4px;
+    width: var(--ui-layout-54, 54px);
+    height: var(--ui-layout-54, 54px);
+    margin-bottom: var(--ui-space-4, 4px);
     border-radius: 16px;
     display: flex;
     align-items: center;
@@ -486,25 +486,25 @@
 
   .bookmark-empty-state strong {
     color: var(--text-color);
-    font-size: 16px;
+    font-size: var(--ui-font-16, 16px);
   }
 
   .bookmark-empty-state p {
     margin: 0;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .empty-add-button {
-    margin-top: 6px;
+    margin-top: var(--ui-space-6, 6px);
   }
   .skeleton-panel {
     margin-top: 0;
   }
   .card-skeleton {
     border: 1px solid var(--surface-border-color, var(--card-border-color));
-    height: 150px;
+    height: var(--ui-layout-150, 150px);
     border-radius: 1rem;
-    padding: 14px;
+    padding: var(--ui-space-14, 14px);
     box-sizing: border-box;
     background: var(--card-background);
     position: relative;
@@ -524,34 +524,34 @@
   .skeleton-title {
     display: flex;
     align-items: center;
-    gap: 10px;
-    margin-bottom: 10px;
+    gap: var(--ui-space-10, 10px);
+    margin-bottom: var(--ui-space-10, 10px);
   }
   .skeleton-avatar {
-    width: 24px;
-    height: 24px;
+    width: var(--ui-layout-24, 24px);
+    height: var(--ui-layout-24, 24px);
     border-radius: 8px;
     background: rgba(120, 120, 120, 0.18);
   }
   .skeleton-line {
-    height: 10px;
+    height: var(--ui-layout-10, 10px);
     border-radius: 6px;
     background: rgba(120, 120, 120, 0.18);
-    margin-bottom: 8px;
+    margin-bottom: var(--ui-space-8, 8px);
   }
   .skeleton-line.short {
-    width: 120px;
+    width: var(--ui-layout-120, 120px);
   }
   .skeleton-tags {
     display: flex;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     position: absolute;
-    bottom: 14px;
-    left: 14px;
+    bottom: var(--ui-space-14, 14px);
+    left: var(--ui-space-14, 14px);
   }
   .skeleton-chip {
-    width: 50px;
-    height: 16px;
+    width: var(--ui-layout-50, 50px);
+    height: var(--ui-layout-16, 16px);
     border-radius: 8px;
     background: rgba(120, 120, 120, 0.18);
   }
@@ -563,7 +563,7 @@
   .card-panel > div {
     min-width: 0;
     content-visibility: auto;
-    contain-intrinsic-size: 164px;
+    contain-intrinsic-size: var(--ui-card-164, 164px);
   }
   @keyframes skeleton-shine {
     0% {
@@ -575,17 +575,17 @@
   }
   @media (max-width: 1200px) {
     .card-panel {
-      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-      gap: 12px;
-      padding: 0 12px;
+      grid-template-columns: repeat(auto-fill, minmax(var(--ui-card-260, 260px), 1fr));
+      gap: var(--ui-space-12, 12px);
+      padding: 0 var(--ui-space-12, 12px);
     }
   }
   @media (max-width: 1000px) {
     .card-panel {
       justify-content: center;
       grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-      gap: 12px;
-      padding: 12px;
+      gap: var(--ui-space-12, 12px);
+      padding: var(--ui-space-12, 12px);
     }
   }
   .panel-loading {
@@ -608,8 +608,8 @@
 
     .card-panel {
       grid-template-columns: minmax(0, 1fr);
-      padding: 2px 2px 12px;
-      gap: 12px;
+      padding: var(--ui-space-2, 2px) var(--ui-space-2, 2px) var(--ui-space-12, 12px);
+      gap: var(--ui-space-12, 12px);
     }
   }
 

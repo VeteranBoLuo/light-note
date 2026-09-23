@@ -2481,7 +2481,7 @@
 
 <style lang="less">
   .note-container {
-    --note-detail-header-height: 58px;
+    --note-detail-header-height: var(--ui-layout-58, 58px);
 
     width: 100%;
     height: 100%;
@@ -2495,7 +2495,7 @@
     --note-detail-header-height: 56px;
   }
   .note-body-title {
-    height: 56px;
+    height: var(--ui-layout-56, 56px);
     flex-shrink: 0;
     box-sizing: border-box;
     border-bottom: 1px solid var(--surface-border-color);
@@ -2512,14 +2512,14 @@
 
     .b-input {
       height: 100%;
-      padding: 0 16px !important;
+      padding: 0 var(--ui-space-16, 16px) !important;
       border: 0 !important;
       border-radius: 0;
       outline: none;
       box-shadow: none !important;
       background: transparent !important;
       color: var(--bl-input-color);
-      font-size: 21px;
+      font-size: var(--ui-font-21, 21px);
       font-weight: 650;
 
       &:hover,
@@ -2535,43 +2535,43 @@
   }
   .note-detail-breadcrumb-row {
     min-width: 0;
-    height: 30px;
+    height: var(--ui-layout-30, 30px);
     flex: 0 0 auto;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     border-bottom: 1px solid var(--surface-border-color);
     color: var(--muted-text-color, var(--desc-color));
     background: var(--surface-page-bg, var(--background-color));
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .note-detail-breadcrumb {
     min-width: 0;
     height: 100%;
-    padding: 0 12px;
+    padding: 0 var(--ui-space-12, 12px);
     flex: 1 1 auto;
     display: flex;
     align-items: center;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
     overflow: hidden;
   }
 
   .note-detail-complete-inbox.b_btn {
     flex: 0 0 auto;
-    height: 24px;
-    margin-right: 8px;
-    padding: 0 10px;
+    height: var(--ui-control-24, 24px);
+    margin-right: var(--ui-space-8, 8px);
+    padding: 0 var(--ui-space-10, 10px);
     border-radius: 7px;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .note-detail-crumb {
     min-width: 0;
-    max-width: 180px;
-    height: 22px;
-    padding: 0 3px;
+    max-width: var(--ui-layout-180, 180px);
+    height: var(--ui-layout-22, 22px);
+    padding: 0 var(--ui-space-3, 3px);
     display: inline-flex;
     align-items: center;
     overflow: hidden;
@@ -2579,8 +2579,8 @@
     border: 0 !important;
     border-radius: 4px;
     background: transparent !important;
-    font-size: 11px;
-    line-height: 22px;
+    font-size: var(--ui-font-11, 11px);
+    line-height: var(--ui-layout-22, 22px);
     text-overflow: ellipsis;
     white-space: nowrap;
 
@@ -2604,7 +2604,7 @@
 
   .note-detail-crumb-ellipsis {
     flex: 0 0 auto;
-    padding: 0 3px;
+    padding: 0 var(--ui-space-3, 3px);
     color: var(--muted-text-color, var(--desc-color));
     font-weight: 650;
   }
@@ -2641,7 +2641,7 @@
   .note-body > .note-workspace-shell__main {
     min-width: 0;
     min-height: 0;
-    padding: 16px;
+    padding: var(--ui-space-16, 16px);
     display: flex;
     box-sizing: border-box;
   }
@@ -2650,7 +2650,7 @@
     width: 100%;
     height: 100%;
     min-height: 0;
-    padding: 12px;
+    padding: var(--ui-space-12, 12px);
     box-sizing: border-box;
   }
 
@@ -2733,7 +2733,7 @@
   /* AI 侧栏加载时保持同一块完整底色，避免异步组件到位前出现白闪。 */
   .ai-panel-skeleton {
     height: 100%;
-    padding: 16px;
+    padding: var(--ui-space-16, 16px);
     box-sizing: border-box;
     border: 0;
     border-radius: 0;
@@ -2749,8 +2749,8 @@
     justify-content: center;
     flex-shrink: 0;
     border-radius: 50%;
-    height: 30px;
-    width: 30px;
+    height: var(--ui-layout-30, 30px);
+    width: var(--ui-layout-30, 30px);
     cursor: pointer;
     border: 1px solid var(--surface-border-color);
     transition: border-color 0.1s linear;
@@ -2764,17 +2764,17 @@
     min-height: 0;
   }
   .tag-container {
-    padding-left: 15px;
+    padding-left: var(--ui-space-15, 15px);
     .note-tag {
-      height: 20px;
+      height: var(--ui-layout-20, 20px);
       box-sizing: border-box;
       cursor: pointer;
       line-height: 16px;
       width: max-content;
       color: var(--desc-color);
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
       font-weight: 550;
-      padding: 2px 6px;
+      padding: var(--ui-space-2, 2px) var(--ui-space-6, 6px);
       background-color: var(--common-tag-bg-color);
       border-radius: 4px;
     }

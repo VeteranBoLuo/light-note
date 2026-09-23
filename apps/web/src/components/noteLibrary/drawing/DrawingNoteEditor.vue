@@ -474,8 +474,9 @@
     drawingFillContainsPoint,
     paintDrawingFill,
   } from '@/utils/drawingFill';
-  import { getRootZoom } from '@/utils/zoom';
+
   import { useMobileLayout } from '@/composables/useMobileLayout';
+  import { useUiDensity } from '@/composables/useUiDensity';
   import {
     constrainDrawingShapeEnd,
     drawingShapeBounds,
@@ -513,6 +514,7 @@
   }>();
   const { t } = useI18n();
   const isMobileLayout = useMobileLayout();
+  const { density } = useUiDensity();
   const activePinia = getCurrentInstance()?.appContext.config.globalProperties.$pinia as
     { state: { value: Record<string, unknown> } } | undefined;
 
@@ -1101,10 +1103,10 @@
     if (!workspace) return { x: 0, y: 0 };
     const style = getComputedStyle(workspace);
     const rect = workspace.getBoundingClientRect();
-    const rootZoom = getRootZoom();
+
     return {
-      x: (clientX - rect.left) / rootZoom - (Number.parseFloat(style.paddingLeft) || 0),
-      y: (clientY - rect.top) / rootZoom - (Number.parseFloat(style.paddingTop) || 0),
+      x: (clientX - rect.left) - (Number.parseFloat(style.paddingLeft) || 0),
+      y: (clientY - rect.top) - (Number.parseFloat(style.paddingTop) || 0),
     };
   }
 
@@ -1158,7 +1160,7 @@
     if (activePointerId !== null) return;
     rootRef.value?.focus({ preventScroll: true });
     const size = workspaceContentSize();
-    const rootZoom = getRootZoom();
+
     const anchor = workspacePointFromClient(event.clientX, event.clientY);
     const rawDeltaX = normalizedWheelDelta(event.deltaX, event.deltaMode, size.width);
     const rawDeltaY = normalizedWheelDelta(event.deltaY, event.deltaMode, size.height);
@@ -1170,7 +1172,7 @@
       scheduleCanvasResize();
     }
     if (Math.abs(horizontalDelta) >= 0.01) {
-      cameraX.value -= horizontalDelta / rootZoom;
+      cameraX.value -= horizontalDelta;
       clampCamera();
     }
   }
@@ -2491,7 +2493,17 @@
     } else {
       fitEditablePage();
       if (typeof ResizeObserver !== 'undefined' && workspaceRef.value) {
-        workspaceResizeObserver = new ResizeObserver(fitEditablePage);
+        let observedDensity = density.value;
+        workspaceResizeObserver = new ResizeObserver(() => {
+          if (observedDensity !== density.value) {
+            observedDensity = density.value;
+            // Toolbar density changes the viewport, not the user's document zoom.
+            clampCamera();
+            resizeCanvas();
+          } else {
+            fitEditablePage();
+          }
+        });
         workspaceResizeObserver.observe(workspaceRef.value);
       }
     }
@@ -2536,9 +2548,9 @@
     display: flex;
     flex: 0 0 auto;
     align-items: center;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
     min-width: 0;
-    padding: 8px 10px;
+    padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px);
     overflow: hidden;
     border-bottom: 1px solid var(--surface-border-color, var(--card-border-color));
     background: var(--card-background);
@@ -2549,7 +2561,7 @@
     flex: 0 1 auto;
     align-items: center;
     min-width: 0;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
     overflow-x: auto;
     overscroll-behavior-inline: contain;
     scrollbar-width: none;
@@ -2572,11 +2584,11 @@
     display: flex;
     flex: 0 0 auto;
     align-items: center;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
 
   .drawing-toolbar-history {
-    padding-left: 8px;
+    padding-left: var(--ui-space-8, 8px);
     border-left: 1px solid var(--surface-border-color, var(--card-border-color));
   }
 
@@ -2588,13 +2600,13 @@
   .drawing-style-trigger,
   .drawing-value-button {
     flex: 0 0 auto;
-    min-width: 30px;
-    padding: 0 7px;
+    min-width: var(--ui-control-30, 30px);
+    padding: 0 var(--ui-space-7, 7px);
     border: 1px solid transparent !important;
   }
 
   .drawing-tool-button {
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
 
   .drawing-tool-button.is-active,
@@ -2605,9 +2617,9 @@
   }
 
   .drawing-style-trigger {
-    gap: 5px;
-    min-width: 48px;
-    padding-inline: 7px;
+    gap: var(--ui-space-5, 5px);
+    min-width: var(--ui-control-48, 48px);
+    padding-inline: var(--ui-space-7, 7px);
   }
 
   .drawing-style-trigger-mobile {
@@ -2626,18 +2638,18 @@
 
   .drawing-color-dot {
     flex: 0 0 auto;
-    width: 14px;
-    height: 14px;
+    width: var(--ui-layout-14, 14px);
+    height: var(--ui-layout-14, 14px);
     border: 1px solid rgba(0, 0, 0, 0.14);
     border-radius: 50%;
   }
 
   .drawing-style-size {
-    flex: 0 0 24px;
-    width: 24px;
+    flex: 0 0 var(--ui-layout-24, 24px);
+    width: var(--ui-layout-24, 24px);
     color: var(--desc-color);
     font-variant-numeric: tabular-nums;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1;
     text-align: right;
   }
@@ -2645,45 +2657,45 @@
   .drawing-toolbar-separator {
     flex: 0 0 auto;
     width: 1px;
-    height: 20px;
-    margin: 0 3px;
+    height: var(--ui-layout-20, 20px);
+    margin: 0 var(--ui-space-3, 3px);
     background: var(--surface-border-color, var(--card-border-color));
   }
 
   .drawing-zoom-label {
-    flex: 0 0 42px;
+    flex: 0 0 var(--ui-layout-42, 42px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     text-align: center;
   }
 
   .drawing-shape-panel {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    width: 268px;
-    padding: 12px;
+    width: var(--ui-layout-268, 268px);
+    padding: var(--ui-space-12, 12px);
     box-sizing: border-box;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     color: var(--text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .drawing-shape-option {
     display: flex;
     min-width: 0;
-    height: 42px;
-    padding: 0 10px;
+    height: var(--ui-control-42, 42px);
+    padding: 0 var(--ui-space-10, 10px);
     align-items: center;
     justify-content: flex-start;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     border: 1px solid var(--surface-border-color, var(--card-border-color)) !important;
     background: var(--card-background);
   }
 
   .drawing-help-button {
-    width: 30px;
-    min-width: 30px;
-    max-width: 30px;
+    width: var(--ui-control-30, 30px);
+    min-width: var(--ui-control-30, 30px);
+    max-width: var(--ui-control-30, 30px);
     padding: 0;
     color: var(--primary-color, #615ced);
     border-radius: 6px;
@@ -2693,41 +2705,42 @@
 
   .drawing-help-panel {
     display: grid;
-    width: min(620px, calc(100vw - 24px));
-    max-height: min(70vh, 520px);
-    padding: 14px;
+    /* ui-density-fixed: Keep the popup viewport clearance independent of interface density. */
+    width: min(var(--ui-layout-620, 620px), calc(100vw - 24px));
+    max-height: min(70vh, var(--ui-layout-520, 520px));
+    padding: var(--ui-space-14, 14px);
     overflow: auto;
     box-sizing: border-box;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     color: var(--text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .drawing-help-panel dl {
     display: grid;
     margin: 0;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .drawing-help-sections {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     align-items: start;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .drawing-help-section {
     min-width: 0;
-    padding: 10px;
+    padding: var(--ui-space-10, 10px);
     border: 1px solid var(--surface-border-color, var(--card-border-color));
     border-radius: 8px;
     background: var(--surface-panel-bg, var(--card-background));
   }
 
   .drawing-help-section h3 {
-    margin: 0 0 8px;
+    margin: 0 0 var(--ui-space-8, 8px);
     color: var(--text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.4;
   }
 
@@ -2737,14 +2750,14 @@
 
   .drawing-help-section--canvas dl {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    column-gap: 16px;
+    column-gap: var(--ui-space-16, 16px);
   }
 
   .drawing-help-panel dl > div {
     display: grid;
-    grid-template-columns: minmax(108px, auto) 1fr;
+    grid-template-columns: minmax(var(--ui-layout-108, 108px), auto) 1fr;
     align-items: center;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .drawing-help-panel dt,
@@ -2762,14 +2775,14 @@
   }
 
   .drawing-help-panel kbd {
-    padding: 2px 5px;
+    padding: var(--ui-space-2, 2px) var(--ui-space-5, 5px);
     border: 1px solid var(--surface-border-color, var(--card-border-color));
     border-bottom-width: 2px;
     border-radius: 5px;
     color: var(--text-color);
     background: var(--surface-panel-bg, #f4f5f7);
     font-family: inherit;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .drawing-help-clear {

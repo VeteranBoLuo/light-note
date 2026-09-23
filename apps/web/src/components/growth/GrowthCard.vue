@@ -351,12 +351,12 @@
   .growth-card {
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
   }
   .gc-main {
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
     min-width: 0;
   }
   /* 完整桌面直接展示等级路线；手机和平板继续使用弹框，避免压缩主信息。 */
@@ -364,15 +364,15 @@
     .growth-card {
       flex-direction: row;
       align-items: stretch;
-      gap: 28px;
+      gap: var(--ui-space-28, 28px);
     }
     .gc-main {
       flex: 1 1 auto;
     }
     .gc-ladder {
       display: flex;
-      width: 360px;
-      flex: 0 0 360px;
+      width: var(--ui-layout-360, 360px);
+      flex: 0 0 var(--ui-layout-360, 360px);
       flex-direction: column;
     }
     .gc-ladder :deep(.rank-ladder) {
@@ -383,13 +383,13 @@
     .gc-ladder :deep(.rl-list) {
       flex: 0 1 auto;
       min-height: 0;
-      max-height: 216px;
+      max-height: var(--ui-layout-216, 216px);
     }
     .growth-card--compact {
-      gap: 18px;
+      gap: var(--ui-space-18, 18px);
     }
     .growth-card--compact .gc-main {
-      gap: 7px;
+      gap: var(--ui-space-7, 7px);
     }
     .growth-card--compact .gc-daily {
       display: none;
@@ -398,54 +398,54 @@
       margin-top: 0;
     }
     .growth-card--compact .gc-top {
-      gap: 10px;
+      gap: var(--ui-space-10, 10px);
     }
     .growth-card--compact .gc-badge {
-      width: 44px;
-      height: 44px;
+      width: var(--ui-layout-44, 44px);
+      height: var(--ui-layout-44, 44px);
       border-radius: 12px;
     }
     .growth-card--compact .gc-checkin {
-      height: 32px !important;
-      padding: 0 14px !important;
+      height: var(--ui-control-32, 32px) !important;
+      padding: 0 var(--ui-space-14, 14px) !important;
     }
     .growth-card--compact .gc-progress {
       height: 6px;
     }
     .growth-card--compact .gc-tonext {
       margin-top: -4px;
-      font-size: 10.5px;
+      font-size: var(--ui-font-10_5, 10.5px);
     }
     .growth-card--compact .gc-perks {
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 7px;
+      gap: var(--ui-space-7, 7px);
     }
     .growth-card--compact .gc-perk {
       min-width: 0;
-      padding: 7px 9px;
+      padding: var(--ui-space-7, 7px) var(--ui-space-9, 9px);
     }
     .growth-card--compact .gc-perk-label {
-      font-size: 10.5px;
+      font-size: var(--ui-font-10_5, 10.5px);
     }
     .growth-card--compact .gc-perk-val {
-      font-size: 12.5px;
+      font-size: var(--ui-font-12_5, 12.5px);
     }
     .growth-card--compact .gc-perk-bonus {
       overflow: hidden;
-      font-size: 9.5px;
+      font-size: var(--ui-font-9_5, 9.5px);
       text-overflow: ellipsis;
       white-space: nowrap;
     }
     .growth-card--compact .gc-protect {
-      min-height: 30px;
+      min-height: var(--ui-layout-30, 30px);
       box-sizing: border-box;
-      padding: 5px 9px;
-      font-size: 11px;
+      padding: var(--ui-space-5, 5px) var(--ui-space-9, 9px);
+      font-size: var(--ui-font-11, 11px);
     }
     .growth-card--compact .gc-protect-hint {
       overflow: hidden;
-      font-size: 10px;
+      font-size: var(--ui-font-10, 10px);
       text-overflow: ellipsis;
       white-space: nowrap;
     }
@@ -453,12 +453,12 @@
   .gc-top {
     display: flex;
     align-items: center;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
   }
   .gc-badge {
     flex: 0 0 auto;
-    width: 52px;
-    height: 52px;
+    width: var(--ui-layout-52, 52px);
+    height: var(--ui-layout-52, 52px);
     border-radius: 14px;
     display: flex;
     align-items: center;
@@ -467,7 +467,7 @@
     box-shadow: 0 8px 18px -10px rgba(0, 0, 0, 0.5);
   }
   .gc-lv {
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
     font-weight: 800;
     letter-spacing: -0.02em;
   }
@@ -476,27 +476,27 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
   .gc-name {
-    font-size: 16px;
+    font-size: var(--ui-font-16, 16px);
     font-weight: 700;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   .gc-max {
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 600;
-    padding: 1px 7px;
+    padding: var(--ui-space-1, 1px) var(--ui-space-7, 7px);
     border-radius: 999px;
     color: #fff;
     background: linear-gradient(135deg, #f43f5e, #fb923c);
   }
   .gc-earn-trigger {
-    width: 22px;
-    min-width: 22px;
-    height: 22px !important;
+    width: var(--ui-layout-22, 22px);
+    min-width: var(--ui-layout-22, 22px);
+    height: var(--ui-layout-22, 22px) !important;
     padding: 0 !important;
     border: 0 !important;
     border-radius: 6px;
@@ -511,33 +511,33 @@
     outline-offset: 2px;
   }
   .gc-title-badge {
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 600;
-    padding: 1px 8px;
+    padding: var(--ui-space-1, 1px) var(--ui-space-8, 8px);
     border-radius: 999px;
     color: #fff;
     background: linear-gradient(135deg, var(--primary-color), #22d3ee);
     white-space: nowrap;
   }
   .gc-exp {
-    font-size: 12.5px;
+    font-size: var(--ui-font-12_5, 12.5px);
     color: var(--desc-color);
     font-variant-numeric: tabular-nums;
   }
   .gc-points {
     display: inline-flex;
     align-items: center;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
     color: #d97706;
     font-weight: 600;
   }
   .gc-checkin {
     flex: 0 0 auto;
-    height: 36px !important;
-    padding: 0 18px !important;
+    height: var(--ui-control-36, 36px) !important;
+    padding: 0 var(--ui-space-18, 18px) !important;
     border-radius: 10px;
     border: none;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 600;
     color: #fff;
     cursor: pointer;
@@ -570,27 +570,27 @@
     transition: width 0.4s ease;
   }
   .gc-tonext {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
     margin-top: -6px;
   }
   .gc-perks {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .gc-ranks-btn {
     align-self: flex-start;
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    min-height: 34px !important;
-    padding: 0 12px !important;
+    gap: var(--ui-space-6, 6px);
+    min-height: var(--ui-control-34, 34px) !important;
+    padding: 0 var(--ui-space-12, 12px) !important;
     border: 1px solid var(--card-border-color);
     border-radius: 9px;
     background: var(--background-color);
     color: var(--primary-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 700;
   }
   .gc-ladder-modal :deep(.rank-ladder) {
@@ -601,11 +601,11 @@
   }
   .gc-perk {
     flex: 1 1 calc(25% - 8px);
-    min-width: 88px;
+    min-width: var(--ui-layout-88, 88px);
     display: flex;
     flex-direction: column;
-    gap: 3px;
-    padding: 10px 12px;
+    gap: var(--ui-space-3, 3px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     border-radius: 10px;
     background: color-mix(in srgb, var(--primary-color) 5%, var(--background-color));
     border: 1px solid color-mix(in srgb, var(--card-border-color) 40%, transparent);
@@ -613,28 +613,28 @@
   .gc-protect {
     display: flex;
     align-items: center;
-    gap: 10px;
-    margin-top: 10px;
-    padding: 8px 12px;
+    gap: var(--ui-space-10, 10px);
+    margin-top: var(--ui-space-10, 10px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-12, 12px);
     border-radius: 10px;
     background: color-mix(in srgb, #f59e0b 8%, var(--background-color));
     border: 1px solid color-mix(in srgb, #f59e0b 30%, transparent);
-    font-size: 12.5px;
+    font-size: var(--ui-font-12_5, 12.5px);
   }
   .gc-protect-info {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
     font-weight: 600;
   }
   .gc-protect-btn {
     margin-left: auto;
-    padding: 4px 12px;
+    padding: var(--ui-space-4, 4px) var(--ui-space-12, 12px);
     border-radius: 999px;
     border: none;
     background: linear-gradient(135deg, #f59e0b, #f97316);
     color: #fff;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     cursor: pointer;
   }
   .gc-protect-btn:disabled {
@@ -644,34 +644,34 @@
   .gc-protect-hint {
     margin-left: auto;
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .gc-perk-label {
-    font-size: 11.5px;
+    font-size: var(--ui-font-11_5, 11.5px);
     color: var(--desc-color);
   }
   .gc-perk-val {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     font-weight: 700;
     font-variant-numeric: tabular-nums;
   }
   .gc-perk-bonus {
-    font-size: 10.5px;
+    font-size: var(--ui-font-10_5, 10.5px);
     font-weight: 600;
     color: #d97706;
-    margin-top: 1px;
+    margin-top: var(--ui-space-1, 1px);
   }
   /* 每日经验 */
   .gc-daily {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   .gc-daily-head {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
   }
   .gc-daily-num {
@@ -698,7 +698,7 @@
     background: linear-gradient(90deg, var(--primary-color), #f43f5e);
   }
   .gc-daily-tip {
-    font-size: 11.5px;
+    font-size: var(--ui-font-11_5, 11.5px);
     color: var(--primary-color);
   }
   .gc-earn-popover {
@@ -706,25 +706,25 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .gc-earn-popover-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    padding-bottom: 8px;
+    gap: var(--ui-space-12, 12px);
+    padding-bottom: var(--ui-space-8, 8px);
     border-bottom: 1px solid color-mix(in srgb, var(--card-border-color) 45%, transparent);
   }
   .gc-earn-popover-title {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 700;
     color: var(--text-color);
   }
   .gc-earn-popover-progress {
     flex: 0 0 auto;
     color: var(--desc-color);
-    font-size: 11.5px;
+    font-size: var(--ui-font-11_5, 11.5px);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
@@ -740,10 +740,10 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     min-width: 0;
-    font-size: 12px;
-    padding: 7px 0;
+    font-size: var(--ui-font-12, 12px);
+    padding: var(--ui-space-7, 7px) 0;
     border-bottom: 1px dashed color-mix(in srgb, var(--card-border-color) 30%, transparent);
   }
   .gc-earn-item:last-child {
@@ -758,11 +758,11 @@
   }
   .gc-earn-popover-hint {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.5;
   }
   .gc-earn-popover-tip {
-    font-size: 11.5px;
+    font-size: var(--ui-font-11_5, 11.5px);
     color: var(--primary-color);
   }
   @media (max-width: 560px) {
@@ -781,8 +781,8 @@
   /* Teleport 到 body 的面板需要全局选择器；内容样式仍由上方 scoped 样式负责。 */
   .gc-earn-popover-panel {
     box-sizing: border-box;
-    width: min(280px, calc(100vw - 24px));
-    padding: 12px 14px;
+    width: min(var(--ui-layout-280, 280px), calc(100vw - var(--ui-layout-24, 24px)));
+    padding: var(--ui-space-12, 12px) var(--ui-space-14, 14px);
     border: 1px solid var(--surface-border-color, var(--card-border-color));
     border-radius: 14px;
     background: var(--card-background);

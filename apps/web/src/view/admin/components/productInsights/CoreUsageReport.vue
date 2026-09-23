@@ -113,11 +113,11 @@
       : [],
   );
   const columns = computed<Column[]>(() => [
-    { key: 'label', title: t('coreUsageReport.metric'), width: 'minmax(190px, 1.3fr)', ellipsis: false },
-    { key: 'observed', title: t('coreUsageReport.observed'), width: '110px' },
-    { key: 'eligible', title: t('coreUsageReport.eligible'), width: '100px' },
-    { key: 'value', title: t('coreUsageReport.rate'), width: '90px' },
-    { key: 'status', title: t('coreUsageReport.status'), width: 'minmax(200px, 1fr)', ellipsis: false },
+    { key: 'label', title: t('coreUsageReport.metric'), width: 'minmax(var(--ui-layout-190, 190px), 1.3fr)', ellipsis: false },
+    { key: 'observed', title: t('coreUsageReport.observed'), width: 'var(--ui-layout-110, 110px)' },
+    { key: 'eligible', title: t('coreUsageReport.eligible'), width: 'var(--ui-layout-100, 100px)' },
+    { key: 'value', title: t('coreUsageReport.rate'), width: 'var(--ui-layout-90, 90px)' },
+    { key: 'status', title: t('coreUsageReport.status'), width: 'minmax(var(--ui-layout-200, 200px), 1fr)', ellipsis: false },
   ]);
   const generatedTime = computed(() =>
     report.value ? new Date(report.value.asOf).toLocaleString(locale.value, { timeZone: 'Asia/Shanghai' }) : '',
@@ -173,8 +173,8 @@
   .core-usage {
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    padding: 14px 0;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-14, 14px) 0;
     border-block: 1px solid var(--surface-border-color);
     min-width: 0;
   }
@@ -182,38 +182,38 @@
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     flex-wrap: wrap;
   }
   .core-usage__header h3 {
     margin: 0;
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
     color: var(--text-color);
   }
   .core-usage__header p,
   .core-usage__hint {
-    margin: 4px 0 0;
-    font-size: 12px;
+    margin: var(--ui-space-4, 4px) 0 0;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.6;
     color: var(--sub-text-color);
   }
   .core-usage__actions {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     flex-wrap: wrap;
   }
   .core-usage__reason {
     display: block;
-    margin-top: 4px;
-    font-size: 12px;
+    margin-top: var(--ui-space-4, 4px);
+    font-size: var(--ui-font-12, 12px);
     color: var(--sub-text-color);
     white-space: normal;
   }
   .core-usage__error {
     margin: 0;
     color: var(--error-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .core-usage__list article {
     padding: 12px 0;

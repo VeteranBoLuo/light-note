@@ -1,4 +1,7 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync as rawReadFileSync } from 'node:fs';
+import { standardDensitySource } from '@/test/standardDensitySource';
+
+const readFileSync = (path: string, encoding: 'utf8') => standardDensitySource(rawReadFileSync(path, encoding));
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { AVATAR_FRAME_ARTWORK } from '@/config/avatarFrameArtwork';
@@ -6,14 +9,18 @@ import { AVATAR_FRAME_ARTWORK } from '@/config/avatarFrameArtwork';
 const source = (relativePath: string) => readFileSync(resolve(process.cwd(), relativePath), 'utf8');
 
 const personCenterSource = source('src/view/personCenter/PersonCenterMobile.vue');
-const desktopPersonCenterSource = source('src/view/personCenter/PersonCenter.vue');
+const desktopPersonCenterSource = source('src/view/personCenter/PersonCenter.vue')
+  .replace(/var\(--ui-[\w-]+, ([\d.]+px)\)/g, '$1')
+  .replace(/dimension\((\d+), 'icon'\)/g, '$1');
 const personCenterEntriesSource = source('src/config/personCenterEntries.ts');
-const communityChatSource = source('src/view/communityChat/CommunityChatWorkspace.vue');
+const communityChatSource = source('src/view/communityChat/CommunityChatWorkspace.vue').replace(/var\(--ui-[\w-]+, ([\d.]+px)\)/g, '$1');
 const myInfoSource = source('src/components/personCenter/myInfo/MyInfoMobile.vue');
-const desktopMyInfoSource = source('src/components/personCenter/myInfo/ProfileEditorForm.vue');
+const desktopMyInfoSource = source('src/components/personCenter/myInfo/ProfileEditorForm.vue')
+  .replace(/var\(--ui-[\w-]+, ([\d.]+px)\)/g, '$1')
+  .replace(/dimension\((\d+), 'icon'\)/g, '$1');
 const framePickerSource = source('src/components/growth/AvatarFramePickerDrawer.vue');
 const avatarFrameSource = source('src/components/growth/AvatarFramePreview.vue');
-const avatarPickerSource = source('src/components/personCenter/myInfo/AvatarPicker.vue');
+const avatarPickerSource = source('src/components/personCenter/myInfo/AvatarPicker.vue').replace(/var\(--ui-[\w-]+, ([\d.]+px)\)/g, '$1');
 const avatarArtworkSource = source('src/config/avatarFrameArtwork.ts');
 const pointsShopSource = source('src/components/growth/PointsShop.vue');
 const achievementWallSource = source('src/components/growth/AchievementWall.vue');
@@ -77,7 +84,7 @@ describe('mobile personal center experience', () => {
     expect(framePickerSource).toContain("modalClass: 'frame-picker-modal'");
     expect(framePickerSource).toContain('frame-picker__detail');
     expect(framePickerSource).toMatch(/\.frame-picker__detail\s*\{[\s\S]*?overflow:\s*hidden;/);
-    expect(framePickerSource).toContain(':size="86"');
+    expect(framePickerSource).toContain(':size="dimension(86, \'layout\')"');
     expect(framePickerSource).toContain('sortFramesByRarity(');
     expect(framePickerSource).toContain('achievementRequirement(frame)');
     expect(framePickerSource).toContain("t('growth.frameAchievementConditionWithLevel'");
@@ -200,7 +207,7 @@ describe('mobile personal center experience', () => {
     expect(mobileTopBarSource).toContain(':size="26"');
     expect(mobileTopBarSource).toContain('layout-mode="slot"');
     expect(personCenterSource).toContain(':class="{ \'profile-card__avatar--framed\': equippedFrameId }"');
-    expect(personCenterSource).toContain(':size="48"');
+    expect(personCenterSource).toContain(':size="dimension(48, \'icon\')"');
     expect(personCenterSource).toMatch(/\.profile-card\s*\{[\s\S]*?padding:\s*20px 16px 16px;/);
     const maxProfileArtworkOverflow = Math.max(
       ...Object.values(AVATAR_FRAME_ARTWORK).map(({ artSize, outerSize }) =>

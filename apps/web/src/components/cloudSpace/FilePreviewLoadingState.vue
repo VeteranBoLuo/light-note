@@ -33,23 +33,23 @@
     z-index: 10001;
     inset: 0;
     display: grid;
-    grid-template-rows: 58px minmax(0, 1fr);
+    grid-template-rows: var(--ui-layout-58, 58px) minmax(0, 1fr);
     color: var(--font-color);
     background: var(--background-color);
   }
 
   .file-preview-loading-state__header {
-    padding: 0 20px;
+    padding: 0 var(--ui-space-20, 20px);
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     border-bottom: 1px solid var(--surface-divider-color);
     background: var(--surface-page-bg, var(--background-color));
   }
 
   .file-preview-loading-state__content {
     min-height: 0;
-    padding: 28px;
+    padding: var(--ui-space-28, 28px);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -58,12 +58,12 @@
   }
 
   .file-preview-loading-state__document {
-    width: min(760px, 88vw);
-    height: min(620px, 76vh);
-    padding: 52px 58px;
+    width: min(var(--ui-layout-760, 760px), 88vw);
+    height: min(var(--ui-layout-620, 620px), 76vh);
+    padding: var(--ui-space-52, 52px) var(--ui-space-58, 58px);
     display: flex;
     flex-direction: column;
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
     box-sizing: border-box;
     border: 1px solid var(--surface-divider-color);
     border-radius: 14px;
@@ -78,30 +78,30 @@
   }
 
   .skeleton--badge {
-    width: 42px;
-    height: 24px;
+    width: var(--ui-layout-42, 42px);
+    height: var(--ui-layout-24, 24px);
   }
 
   .skeleton--name {
-    width: min(260px, 38vw);
-    height: 18px;
+    width: min(var(--ui-layout-260, 260px), 38vw);
+    height: var(--ui-layout-18, 18px);
   }
 
   .skeleton--action {
-    width: 32px;
-    height: 32px;
+    width: var(--ui-layout-32, 32px);
+    height: var(--ui-layout-32, 32px);
     margin-left: auto;
   }
 
   .skeleton--title {
     width: 48%;
-    height: 32px;
-    margin-bottom: 18px;
+    height: var(--ui-layout-32, 32px);
+    margin-bottom: var(--ui-space-18, 18px);
   }
 
   .skeleton--line {
     width: 78%;
-    height: 16px;
+    height: var(--ui-layout-16, 16px);
   }
 
   .skeleton--line-wide {
@@ -114,8 +114,8 @@
 
   .skeleton--block {
     width: 100%;
-    height: 180px;
-    margin-top: 16px;
+    height: var(--ui-layout-180, 180px);
+    margin-top: var(--ui-space-16, 16px);
   }
 
   .sr-only {

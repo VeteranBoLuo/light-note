@@ -64,7 +64,7 @@
       :title="t('inbox.mobileMenu')"
       @click="menuOpen = true"
     >
-        <SvgIcon :src="icon.common.more" size="19" aria-hidden="true" />
+      <SvgIcon :src="icon.common.more" size="19" aria-hidden="true" />
     </BButton>
     <BButton
       v-else
@@ -90,9 +90,7 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
-  import MobilePageActionsDrawer, {
-    type MobilePageActionItem,
-  } from '@/components/mobile/MobilePageActionsDrawer.vue';
+  import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
   import icon from '@/config/icon';
 
   const props = withDefaults(
@@ -158,21 +156,21 @@
 
 <style scoped lang="less">
   .resource-center-topbar {
-    height: 56px;
-    padding: 0 8px 0 4px;
+    height: var(--ui-layout-56, 56px);
+    padding: 0 var(--ui-space-8, 8px) 0 var(--ui-space-4, 4px);
     box-sizing: border-box;
-    flex: 0 0 56px;
+    flex: 0 0 var(--ui-layout-56, 56px);
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     border-bottom: 1px solid var(--surface-divider-color);
     background: var(--surface-page-bg, var(--background-color));
   }
 
   .resource-center-topbar__back {
-    width: 44px;
-    min-width: 44px;
-    height: 44px;
+    width: var(--ui-layout-44, 44px);
+    min-width: var(--ui-layout-44, 44px);
+    height: var(--ui-layout-44, 44px);
     padding: 0;
     flex: 0 0 auto;
     border-radius: 11px;
@@ -191,7 +189,7 @@
     flex: 1 1 auto;
     overflow: hidden;
     color: var(--text-color);
-    font-size: 16px;
+    font-size: var(--ui-font-16, 16px);
     font-weight: 700;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -205,24 +203,24 @@
     display: flex;
     flex: 0 0 auto;
     align-items: center;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
 
   .resource-center-topbar__selection-actions :deep(.b_btn) {
-    height: 40px;
-    padding: 0 9px;
-    font-size: 11px;
+    height: var(--ui-layout-40, 40px);
+    padding: 0 var(--ui-space-9, 9px);
+    font-size: var(--ui-font-11, 11px);
   }
 
   .resource-center-topbar__input :deep(.b-input) {
     border-radius: 10px;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .resource-center-topbar__action {
-    width: 44px;
-    min-width: 44px;
-    height: 44px;
+    width: var(--ui-layout-44, 44px);
+    min-width: var(--ui-layout-44, 44px);
+    height: var(--ui-layout-44, 44px);
     padding: 0;
     flex: 0 0 auto;
     border-radius: 11px;
@@ -231,9 +229,9 @@
   }
 
   .resource-center-topbar__menu {
-    width: 44px;
-    min-width: 44px;
-    height: 44px;
+    width: var(--ui-layout-44, 44px);
+    min-width: var(--ui-layout-44, 44px);
+    height: var(--ui-layout-44, 44px);
     padding: 0;
     flex: 0 0 auto;
     border-radius: 11px;

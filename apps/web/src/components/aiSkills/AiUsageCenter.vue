@@ -605,7 +605,7 @@
 <style scoped lang="less">
   .ai-usage-center {
     min-width: 0;
-    padding-top: 4px;
+    padding-top: var(--ui-space-4, 4px);
   }
 
   .usage-head,
@@ -620,8 +620,8 @@
 
   .usage-head {
     justify-content: space-between;
-    gap: 16px;
-    margin-bottom: 12px;
+    gap: var(--ui-space-16, 16px);
+    margin-bottom: var(--ui-space-12, 12px);
   }
 
   .usage-head h3,
@@ -632,7 +632,7 @@
   }
 
   .usage-head h3 {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
   }
 
   .usage-head p,
@@ -640,25 +640,25 @@
   .rule-section-title p,
   .rule-callout p,
   .free-card p {
-    margin: 3px 0 0;
+    margin: var(--ui-space-3, 3px) 0 0;
     color: var(--desc-color);
-    font-size: 11.5px;
+    font-size: var(--ui-font-11_5, 11.5px);
     line-height: 1.5;
   }
 
   .usage-refresh {
     flex: 0 0 auto;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
 
   .usage-inline-warning {
-    gap: 6px;
-    margin: 10px 0;
-    padding: 8px 10px;
+    gap: var(--ui-space-6, 6px);
+    margin: var(--ui-space-10, 10px) 0;
+    padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px);
     border: 1px solid var(--warning-color, #d98a00);
     border-radius: 8px;
     color: var(--warning-color, #b36b00);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .usage-state,
@@ -667,18 +667,18 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 7px;
-    min-height: 180px;
-    padding: 20px;
+    gap: var(--ui-space-7, 7px);
+    min-height: var(--ui-layout-180, 180px);
+    padding: var(--ui-space-20, 20px);
     color: var(--desc-color);
     text-align: center;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .usage-state strong,
   .usage-empty strong {
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .usage-state--error {
@@ -688,35 +688,35 @@
 
   .usage-filters {
     display: flex;
-    gap: 10px;
-    margin: 12px 0;
+    gap: var(--ui-space-10, 10px);
+    margin: var(--ui-space-12, 12px) 0;
   }
 
   .usage-filters label {
     display: grid;
-    grid-template-columns: auto minmax(110px, 1fr);
+    grid-template-columns: auto minmax(var(--ui-layout-110, 110px), 1fr);
     align-items: center;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .usage-filters :deep(.b-select) {
-    min-width: 130px;
+    min-width: var(--ui-layout-130, 130px);
   }
 
   .usage-summary {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .summary-card {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
     min-width: 0;
-    padding: 11px 12px;
+    padding: var(--ui-space-11, 11px) var(--ui-space-12, 12px);
     border: 1px solid var(--surface-border-color);
     border-radius: 10px;
     background: var(--workspace-panel-bg-color);
@@ -725,44 +725,47 @@
   .summary-card span,
   .summary-card small {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.35;
   }
 
   .summary-card strong {
     color: var(--text-color);
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
   }
 
   .usage-section,
   .rule-section {
-    margin-top: 14px;
-    padding-top: 14px;
+    margin-top: var(--ui-space-14, 14px);
+    padding-top: var(--ui-space-14, 14px);
     border-top: 1px solid var(--surface-divider-color);
   }
 
   .usage-section-head {
     justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 10px;
+    gap: var(--ui-space-12, 12px);
+    margin-bottom: var(--ui-space-10, 10px);
   }
 
   .usage-section h4,
   .rule-section h4 {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .module-breakdown {
     display: grid;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .module-row {
     display: grid;
-    grid-template-columns: 64px minmax(70px, 1fr) 72px 68px;
+    grid-template-columns: var(--ui-layout-64, 64px) minmax(var(--ui-layout-70, 70px), 1fr) var(
+        --ui-layout-72,
+        72px
+      ) var(--ui-layout-68, 68px);
     align-items: center;
-    gap: 8px;
-    font-size: 11.5px;
+    gap: var(--ui-space-8, 8px);
+    font-size: var(--ui-font-11_5, 11.5px);
   }
 
   .module-name,
@@ -792,7 +795,7 @@
 
   .usage-chart {
     overflow-x: auto;
-    padding: 6px 0 2px;
+    padding: var(--ui-space-6, 6px) 0 var(--ui-space-2, 2px);
     scrollbar-width: thin;
   }
 
@@ -837,24 +840,24 @@
   }
 
   .usage-empty--compact {
-    min-height: 72px;
-    padding: 8px;
+    min-height: var(--ui-layout-72, 72px);
+    padding: var(--ui-space-8, 8px);
   }
 
   .usage-records {
     display: grid;
-    gap: 7px;
-    margin-bottom: 12px;
+    gap: var(--ui-space-7, 7px);
+    margin-bottom: var(--ui-space-12, 12px);
   }
 
   .usage-record {
     display: grid;
-    grid-template-columns: 34px minmax(0, 1fr) auto 16px;
+    grid-template-columns: var(--ui-layout-34, 34px) minmax(0, 1fr) auto var(--ui-layout-16, 16px);
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     width: 100%;
     height: auto;
-    padding: 10px;
+    padding: var(--ui-space-10, 10px);
     border: 1px solid var(--surface-border-color);
     border-radius: 10px;
     background: var(--workspace-panel-bg-color);
@@ -875,8 +878,8 @@
 
   .record-icon {
     display: inline-flex;
-    width: 34px;
-    height: 34px;
+    width: var(--ui-layout-34, 34px);
+    height: var(--ui-layout-34, 34px);
     align-items: center;
     justify-content: center;
     border-radius: 9px;
@@ -891,37 +894,37 @@
   .record-title-row,
   .record-meta {
     flex-wrap: wrap;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
 
   .record-title-row > strong {
     min-width: 0;
     color: var(--text-color);
-    font-size: 12.5px;
+    font-size: var(--ui-font-12_5, 12.5px);
   }
 
   .record-meta {
-    margin-top: 4px;
+    margin-top: var(--ui-space-4, 4px);
     color: var(--desc-color);
-    font-size: 10.5px;
+    font-size: var(--ui-font-10_5, 10.5px);
   }
 
   .record-meta span + span::before {
     content: '·';
-    margin-right: 6px;
+    margin-right: var(--ui-space-6, 6px);
   }
 
   .status-badge,
   .estimate-badge {
     display: inline-flex;
     align-items: center;
-    gap: 3px;
-    min-height: 18px;
+    gap: var(--ui-space-3, 3px);
+    min-height: var(--ui-layout-18, 18px);
     box-sizing: border-box;
-    padding: 1px 6px;
+    padding: var(--ui-space-1, 1px) var(--ui-space-6, 6px);
     border: 1px solid currentColor;
     border-radius: 999px;
-    font-size: 9.5px;
+    font-size: var(--ui-font-9_5, 9.5px);
     line-height: 1;
   }
 
@@ -946,8 +949,8 @@
   .record-covered,
   .record-settlement {
     display: block;
-    margin-top: 4px;
-    font-size: 10.5px;
+    margin-top: var(--ui-space-4, 4px);
+    font-size: var(--ui-font-10_5, 10.5px);
   }
 
   .record-covered {
@@ -958,15 +961,15 @@
     display: flex;
     flex-direction: column;
     align-items: flex-end;
-    min-width: 72px;
+    min-width: var(--ui-layout-72, 72px);
     color: var(--desc-color);
-    font-size: 9.5px;
+    font-size: var(--ui-font-9_5, 9.5px);
     font-variant-numeric: tabular-nums;
   }
 
   .record-charge strong {
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .record-open {
@@ -978,9 +981,9 @@
 
   .rule-callout {
     display: flex;
-    gap: 10px;
-    margin-top: 12px;
-    padding: 12px;
+    gap: var(--ui-space-10, 10px);
+    margin-top: var(--ui-space-12, 12px);
+    padding: var(--ui-space-12, 12px);
     border: 1px solid var(--primary-color);
     border-radius: 10px;
     background: var(--workspace-panel-bg-color);
@@ -988,8 +991,8 @@
 
   .rule-callout-icon {
     display: inline-flex;
-    width: 34px;
-    height: 34px;
+    width: var(--ui-layout-34, 34px);
+    height: var(--ui-layout-34, 34px);
     flex: 0 0 auto;
     align-items: center;
     justify-content: center;
@@ -1000,21 +1003,21 @@
 
   .rule-callout strong {
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .rule-section-title {
     display: flex;
     align-items: flex-start;
-    gap: 9px;
-    margin-bottom: 10px;
+    gap: var(--ui-space-9, 9px);
+    margin-bottom: var(--ui-space-10, 10px);
   }
 
   .rule-dot {
     width: 9px;
     height: 9px;
     flex: 0 0 auto;
-    margin-top: 4px;
+    margin-top: var(--ui-space-4, 4px);
     border: 2px solid currentColor;
     border-radius: 50%;
   }
@@ -1032,13 +1035,13 @@
   .rule-groups {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .rule-group,
   .free-card {
     min-width: 0;
-    padding: 10px;
+    padding: var(--ui-space-10, 10px);
     border: 1px solid var(--surface-border-color);
     border-radius: 9px;
     background: var(--workspace-panel-bg-color);
@@ -1047,71 +1050,71 @@
   .rule-group > strong,
   .free-card strong {
     color: var(--text-color);
-    font-size: 11.5px;
+    font-size: var(--ui-font-11_5, 11.5px);
   }
 
   .rule-action-list {
     display: flex;
     flex-wrap: wrap;
-    gap: 5px;
-    margin-top: 7px;
+    gap: var(--ui-space-5, 5px);
+    margin-top: var(--ui-space-7, 7px);
   }
 
   .rule-action {
     display: inline-flex;
     align-items: center;
-    gap: 3px;
-    padding: 3px 6px;
+    gap: var(--ui-space-3, 3px);
+    padding: var(--ui-space-3, 3px) var(--ui-space-6, 6px);
     border: 1px solid var(--surface-divider-color);
     border-radius: 6px;
     color: var(--desc-color);
-    font-size: 10.5px;
+    font-size: var(--ui-font-10_5, 10.5px);
   }
 
   .rule-action small {
     color: var(--primary-color);
-    font-size: 9px;
+    font-size: var(--ui-font-9, 9px);
   }
 
   .free-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .free-card {
     display: flex;
     align-items: flex-start;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .free-card > :first-child {
     flex: 0 0 auto;
-    margin-top: 1px;
+    margin-top: var(--ui-space-1, 1px);
     color: var(--success-color, #23845b);
   }
 
   .boundary-notes {
     display: grid;
-    gap: 7px;
-    margin-top: 12px;
-    padding: 10px;
+    gap: var(--ui-space-7, 7px);
+    margin-top: var(--ui-space-12, 12px);
+    padding: var(--ui-space-10, 10px);
     border: 1px solid var(--surface-divider-color);
     border-radius: 9px;
   }
 
   .boundary-notes p {
     align-items: flex-start;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     margin: 0;
     color: var(--desc-color);
-    font-size: 10.5px;
+    font-size: var(--ui-font-10_5, 10.5px);
     line-height: 1.5;
   }
 
   .boundary-notes p > :first-child {
     flex: 0 0 auto;
-    margin-top: 1px;
+    margin-top: var(--ui-space-1, 1px);
     color: var(--primary-color);
   }
 
@@ -1200,17 +1203,17 @@
 
   .ai-usage-center.is-settings {
     .usage-head {
-      padding-bottom: 18px;
+      padding-bottom: var(--ui-space-18, 18px);
       border-bottom: 1px solid var(--card-border-color);
     }
     .usage-head h3 {
-      font-size: 16px;
+      font-size: var(--ui-font-16, 16px);
     }
     .usage-head p {
-      font-size: 13px;
+      font-size: var(--ui-font-13, 13px);
     }
     .usage-summary {
-      gap: 12px;
+      gap: var(--ui-space-12, 12px);
     }
     .summary-card {
       background: transparent;
@@ -1219,8 +1222,8 @@
       align-self: flex-start;
       justify-content: flex-start;
       width: auto;
-      gap: 8px;
-      padding: 8px 0;
+      gap: var(--ui-space-8, 8px);
+      padding: var(--ui-space-8, 8px) 0;
       border: 0;
       background: transparent;
     }
@@ -1228,9 +1231,12 @@
       gap: 0;
     }
     .usage-record {
-      grid-template-columns: minmax(0, 1fr) minmax(130px, 19%) minmax(75px, 12%) 16px;
-      min-height: 90px;
-      padding: 18px 0;
+      grid-template-columns: minmax(0, 1fr) minmax(var(--ui-layout-130, 130px), 19%) minmax(
+          var(--ui-layout-75, 75px),
+          12%
+        ) var(--ui-layout-16, 16px);
+      min-height: var(--ui-layout-90, 90px);
+      padding: var(--ui-space-18, 18px) 0;
       border: 0;
       border-bottom: 1px solid var(--card-border-color);
       border-radius: 0;
@@ -1243,7 +1249,7 @@
       display: none;
     }
     .record-time {
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
       color: var(--desc-color);
     }
   }

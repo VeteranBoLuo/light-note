@@ -6,7 +6,11 @@ import { createI18n } from 'vue-i18n';
 import type { TodoResourceRefView } from '@/api/todoApi';
 import TodoResourceLinks from './TodoResourceLinks.vue';
 
-const source = readFileSync(resolve(process.cwd(), 'src/components/todo/TodoResourceLinks.vue'), 'utf8');
+// Keep the standard-size contract while allowing the shared density tokens.
+const source = readFileSync(resolve(process.cwd(), 'src/components/todo/TodoResourceLinks.vue'), 'utf8').replace(
+  /var\(--ui-[\w-]+,\s*([\d.]+px)\)/g,
+  '$1',
+);
 let cleanup: (() => void) | undefined;
 
 const resources: TodoResourceRefView[] = [

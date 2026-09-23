@@ -337,7 +337,7 @@
     v-model:visible="detailsVisible"
     :title="t('growth.dailyReviewTitle')"
     :show-footer="false"
-    width="860px"
+    width="var(--ui-layout-860, 860px)"
     content-class="daily-review-modal__content"
   >
     <DailyReviewCard v-if="detailsVisible" :read-only="readOnly" display-all />
@@ -759,7 +759,7 @@
     position: relative;
     min-width: 0;
     overflow: hidden;
-    padding: 16px;
+    padding: var(--ui-space-16, 16px);
     box-sizing: border-box;
     border: 1px solid var(--surface-border-color, var(--card-border-color));
     border-radius: 16px;
@@ -777,24 +777,24 @@
   }
 
   .daily-review--compact {
-    padding-top: 13px;
-    padding-bottom: 13px;
+    padding-top: var(--ui-space-13, 13px);
+    padding-bottom: var(--ui-space-13, 13px);
   }
 
   .daily-review--summary {
-    min-height: 118px;
+    min-height: var(--ui-layout-118, 118px);
     display: flex;
     flex-direction: column;
   }
   .daily-review__summary-state {
-    min-height: 52px;
+    min-height: var(--ui-layout-52, 52px);
     flex: 1 1 auto;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     text-align: center;
   }
   .daily-review__summary-state.is-error { color: var(--danger-color); }
@@ -803,26 +803,26 @@
     flex: 1 1 auto;
     flex-direction: column;
     justify-content: flex-end;
-    gap: 8px;
-    padding-top: 8px;
+    gap: var(--ui-space-8, 8px);
+    padding-top: var(--ui-space-8, 8px);
   }
   .daily-review__summary-progress {
     display: grid;
-    grid-template-columns: auto minmax(100px, 1fr);
+    grid-template-columns: auto minmax(var(--ui-layout-100, 100px), 1fr);
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .daily-review__summary-action {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .daily-review__summary-action > span {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .daily-review.daily-review--all {
@@ -851,11 +851,11 @@
   }
 
   .daily-review--all .daily-review__heading p {
-    margin-top: 5px;
+    margin-top: var(--ui-space-5, 5px);
   }
 
   :global(.daily-review-modal__content) {
-    padding: 16px;
+    padding: var(--ui-space-16, 16px);
     overflow: auto;
   }
 
@@ -868,8 +868,8 @@
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto auto auto;
     align-items: center;
-    gap: 11px;
-    min-height: 40px;
+    gap: var(--ui-space-11, 11px);
+    min-height: var(--ui-layout-40, 40px);
   }
 
   .daily-review__compact-state.is-completed {
@@ -882,19 +882,19 @@
 
   .daily-review__compact-copy {
     display: grid;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
     min-width: 0;
   }
 
   .daily-review__compact-copy strong {
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .daily-review__compact-copy > span {
     overflow: hidden;
     color: var(--desc-color);
-    font-size: 11.5px;
+    font-size: var(--ui-font-11_5, 11.5px);
     line-height: 1.4;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -903,9 +903,9 @@
 
   .daily-review__header {
     display: grid;
-    grid-template-columns: 40px minmax(0, 1fr) auto;
+    grid-template-columns: var(--ui-layout-40, 40px) minmax(0, 1fr) auto;
     align-items: center;
-    gap: 11px;
+    gap: var(--ui-space-11, 11px);
   }
 
   .daily-review__title-icon,
@@ -918,8 +918,8 @@
   }
 
   .daily-review__title-icon {
-    width: 40px;
-    height: 40px;
+    width: var(--ui-layout-40, 40px);
+    height: var(--ui-layout-40, 40px);
     border: 1px solid var(--primary-color);
     border-radius: 12px;
     color: var(--primary-color);
@@ -934,7 +934,7 @@
   .daily-review__title-row {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     flex-wrap: wrap;
   }
 
@@ -945,7 +945,7 @@
   }
 
   .daily-review__heading h2 {
-    font-size: 16px;
+    font-size: var(--ui-font-16, 16px);
     line-height: 1.35;
     font-weight: 700;
   }
@@ -957,26 +957,26 @@
   }
 
   .daily-review__heading p {
-    margin-top: 2px;
-    font-size: 12px;
+    margin-top: var(--ui-space-2, 2px);
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.45;
   }
 
   .daily-review__date {
-    padding: 5px 9px;
+    padding: var(--ui-space-5, 5px) var(--ui-space-9, 9px);
     border: 1px solid var(--surface-border-color, var(--card-border-color));
     border-radius: 999px;
     color: var(--desc-color);
     background: var(--menu-body-bg-color, var(--card-background));
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
 
   .daily-review__loading,
   .daily-review__state {
-    min-height: 116px;
-    margin-top: 14px;
+    min-height: var(--ui-layout-116, 116px);
+    margin-top: var(--ui-space-14, 14px);
     box-sizing: border-box;
   }
 
@@ -991,8 +991,8 @@
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
-    gap: 12px;
-    padding: 16px;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-16, 16px);
     border: 1px solid var(--surface-border-color, var(--card-border-color));
     border-radius: 13px;
     background: var(--menu-body-bg-color, var(--card-background));
@@ -1007,8 +1007,8 @@
   }
 
   .daily-review__state-icon {
-    width: 34px;
-    height: 34px;
+    width: var(--ui-layout-34, 34px);
+    height: var(--ui-layout-34, 34px);
     border: 1px solid currentColor;
     border-radius: 10px;
   }
@@ -1031,17 +1031,17 @@
 
   .daily-review__state > div {
     display: grid;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
     min-width: 0;
   }
 
   .daily-review__state strong {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .daily-review__state span {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.45;
   }
 
@@ -1049,12 +1049,12 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
-    margin-top: 12px;
-    padding: 8px 10px;
+    gap: var(--ui-space-10, 10px);
+    margin-top: var(--ui-space-12, 12px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px);
     border: 1px solid currentColor;
     border-radius: 10px;
-    font-size: 11.5px;
+    font-size: var(--ui-font-11_5, 11.5px);
     line-height: 1.4;
   }
 
@@ -1067,53 +1067,53 @@
   }
 
   .daily-review__notice strong {
-    margin-right: 4px;
+    margin-right: var(--ui-space-4, 4px);
   }
 
   .daily-review__progress-row {
     display: grid;
-    grid-template-columns: auto minmax(90px, 180px);
+    grid-template-columns: auto minmax(var(--ui-layout-90, 90px), var(--ui-layout-180, 180px));
     align-items: center;
     justify-content: end;
-    gap: 10px;
-    margin-top: 13px;
+    gap: var(--ui-space-10, 10px);
+    margin-top: var(--ui-space-13, 13px);
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-variant-numeric: tabular-nums;
   }
 
   .daily-review__progress {
-    width: 180px;
+    width: var(--ui-layout-180, 180px);
     max-width: 100%;
   }
 
   .daily-review__progress-row--all {
-    grid-template-columns: auto minmax(120px, 240px);
-    margin-top: 12px;
+    grid-template-columns: auto minmax(var(--ui-layout-120, 120px), var(--ui-layout-240, 240px));
+    margin-top: var(--ui-space-12, 12px);
   }
 
   .daily-review__completion-summary {
-    margin: 10px 0 0;
+    margin: var(--ui-space-10, 10px) 0 0;
     display: flex;
     flex-wrap: wrap;
-    gap: 4px 10px;
+    gap: var(--ui-space-4, 4px) var(--ui-space-10, 10px);
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
 
     span {
       color: var(--desc-color);
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
     }
   }
 
   .daily-review--completed-desktop .daily-review__all-item {
-    grid-template-columns: 24px minmax(0, 1fr) auto;
-    padding: 11px 0;
+    grid-template-columns: var(--ui-layout-24, 24px) minmax(0, 1fr) auto;
+    padding: var(--ui-space-11, 11px) 0;
   }
 
   .daily-review--completed-desktop .daily-review__all-item .daily-review__resource-icon {
-    width: 24px;
-    height: 24px;
+    width: var(--ui-layout-24, 24px);
+    height: var(--ui-layout-24, 24px);
   }
 
   .daily-review--completed-desktop .daily-review__all-item .daily-review__item-meta,
@@ -1123,7 +1123,7 @@
 
   .daily-review__all-list {
     display: grid;
-    margin-top: 10px;
+    margin-top: var(--ui-space-10, 10px);
     border-top: 1px solid var(--surface-border-color, var(--card-border-color));
   }
 
@@ -1132,10 +1132,10 @@
 
     min-width: 0;
     display: grid;
-    grid-template-columns: 36px minmax(0, 1fr) auto;
+    grid-template-columns: var(--ui-layout-36, 36px) minmax(0, 1fr) auto;
     align-items: center;
-    gap: 10px;
-    padding: 14px 0;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-14, 14px) 0;
     border-bottom: 1px solid var(--surface-border-color, var(--card-border-color));
   }
 
@@ -1152,33 +1152,33 @@
   }
 
   .daily-review__all-item .daily-review__resource-icon {
-    width: 36px;
-    height: 36px;
+    width: var(--ui-layout-36, 36px);
+    height: var(--ui-layout-36, 36px);
     border: 0;
     border-radius: 9px;
   }
 
   .daily-review__all-item > .daily-review__open {
-    height: 32px;
-    min-height: 32px;
-    padding: 0 10px;
+    height: var(--ui-layout-32, 32px);
+    min-height: var(--ui-layout-32, 32px);
+    padding: 0 var(--ui-space-10, 10px);
     color: var(--primary-color);
   }
 
   .daily-review__all-item h3 {
-    margin: 3px 0 0;
+    margin: var(--ui-space-3, 3px) 0 0;
     overflow: hidden;
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.35;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .daily-review__all-item .daily-review__reason {
-    margin-top: 2px;
+    margin-top: var(--ui-space-2, 2px);
     overflow: hidden;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -1188,11 +1188,11 @@
     --review-accent: var(--primary-color);
 
     display: grid;
-    grid-template-columns: 46px minmax(0, 1fr) auto;
+    grid-template-columns: var(--ui-layout-46, 46px) minmax(0, 1fr) auto;
     align-items: center;
-    gap: 13px;
-    margin-top: 10px;
-    padding: 14px;
+    gap: var(--ui-space-13, 13px);
+    margin-top: var(--ui-space-10, 10px);
+    padding: var(--ui-space-14, 14px);
     border: 1px solid var(--surface-border-color, var(--card-border-color));
     border-left: 3px solid var(--review-accent);
     border-radius: 13px;
@@ -1212,8 +1212,8 @@
   }
 
   .daily-review__resource-icon {
-    width: 44px;
-    height: 44px;
+    width: var(--ui-layout-44, 44px);
+    height: var(--ui-layout-44, 44px);
     border: 1px solid var(--review-accent);
     border-radius: 12px;
     color: var(--review-accent);
@@ -1223,15 +1223,15 @@
   .daily-review__item-meta {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     color: var(--desc-color);
-    font-size: 10.5px;
+    font-size: var(--ui-font-10_5, 10.5px);
   }
 
   .daily-review__item h3 {
-    margin-top: 5px;
+    margin-top: var(--ui-space-5, 5px);
     overflow: hidden;
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
     line-height: 1.35;
     font-weight: 700;
     text-overflow: ellipsis;
@@ -1239,9 +1239,9 @@
   }
 
   .daily-review__reason {
-    margin-top: 3px;
+    margin-top: var(--ui-space-3, 3px);
     overflow: hidden;
-    font-size: 11.5px;
+    font-size: var(--ui-font-11_5, 11.5px);
     line-height: 1.4;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1252,13 +1252,13 @@
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     flex-wrap: wrap;
   }
 
   .daily-review__open,
   .daily-review__next {
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
 
   .daily-review__next {
@@ -1269,16 +1269,16 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    margin-top: 10px;
+    gap: var(--ui-space-12, 12px);
+    margin-top: var(--ui-space-10, 10px);
   }
 
   .daily-review__position {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
@@ -1292,7 +1292,7 @@
 
 
   .daily-review__more {
-    width: 32px;
+    width: var(--ui-layout-32, 32px);
     padding: 0;
   }
 
@@ -1307,17 +1307,17 @@
 
   @media (max-width: 767px) {
     .daily-review {
-      padding: 14px 12px 12px;
+      padding: var(--ui-space-14, 14px) var(--ui-space-12, 12px) var(--ui-space-12, 12px);
       border-radius: 16px;
     }
 
     .daily-review--compact {
-      padding-top: 12px;
+      padding-top: var(--ui-space-12, 12px);
     }
 
     .daily-review__compact-state {
       grid-template-columns: auto minmax(0, 1fr) auto;
-      gap: 9px;
+      gap: var(--ui-space-9, 9px);
     }
 
     .daily-review__compact-state .daily-review__date {
@@ -1329,13 +1329,13 @@
 
 
     .daily-review__header {
-      grid-template-columns: 38px minmax(0, 1fr);
-      gap: 9px;
+      grid-template-columns: var(--ui-layout-38, 38px) minmax(0, 1fr);
+      gap: var(--ui-space-9, 9px);
     }
 
     .daily-review__title-icon {
-      width: 38px;
-      height: 38px;
+      width: var(--ui-layout-38, 38px);
+      height: var(--ui-layout-38, 38px);
     }
 
     .daily-review__date {
@@ -1351,7 +1351,7 @@
     }
 
     .daily-review__progress-row {
-      grid-template-columns: auto minmax(80px, 1fr);
+      grid-template-columns: auto minmax(var(--ui-layout-80, 80px), 1fr);
     }
 
     .daily-review__progress {
@@ -1359,9 +1359,9 @@
     }
 
     .daily-review__item {
-      grid-template-columns: 42px minmax(0, 1fr);
-      gap: 10px;
-      padding: 12px 10px;
+      grid-template-columns: var(--ui-layout-42, 42px) minmax(0, 1fr);
+      gap: var(--ui-space-10, 10px);
+      padding: var(--ui-space-12, 12px) var(--ui-space-10, 10px);
     }
 
     .daily-review__all-item h3 {
@@ -1373,13 +1373,13 @@
 
     .daily-review__all-item .daily-review__item-meta {
       flex-wrap: wrap;
-      gap: 4px 6px;
+      gap: var(--ui-space-4, 4px) var(--ui-space-6, 6px);
     }
 
 
     .daily-review__resource-icon {
-      width: 40px;
-      height: 40px;
+      width: var(--ui-layout-40, 40px);
+      height: var(--ui-layout-40, 40px);
     }
 
     .daily-review__item h3,
@@ -1399,7 +1399,7 @@
 
     .daily-review__primary-actions :deep(.b_btn) {
       width: 100%;
-      min-height: 44px;
+      min-height: var(--ui-layout-44, 44px);
     }
 
     .daily-review__open:only-child {
@@ -1414,28 +1414,28 @@
     .daily-review__state .daily-review__retry {
       grid-column: 1 / -1;
       width: 100%;
-      min-height: 44px;
+      min-height: var(--ui-layout-44, 44px);
     }
 
     .daily-review__notice :deep(.b_btn) {
       width: 100%;
-      min-height: 44px;
+      min-height: var(--ui-layout-44, 44px);
     }
 
     .daily-review__actions {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 44px;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) var(--ui-layout-44, 44px);
       width: 100%;
     }
 
     .daily-review__actions :deep(.b_btn) {
       width: 100%;
-      min-height: 44px;
+      min-height: var(--ui-layout-44, 44px);
     }
 
     .daily-review__actions :deep(.b-action-menu-anchor) {
       grid-column: 3;
-      width: 44px;
+      width: var(--ui-layout-44, 44px);
     }
 
     .daily-review__more {
@@ -1444,7 +1444,7 @@
   }
 
   .daily-review.daily-review--line {
-    padding: 8px 12px;
+    padding: var(--ui-space-8, 8px) var(--ui-space-12, 12px);
     border-radius: 12px;
     box-shadow: none;
   }
@@ -1457,9 +1457,9 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    min-height: 32px;
-    font-size: 13px;
+    gap: var(--ui-space-12, 12px);
+    min-height: var(--ui-layout-32, 32px);
+    font-size: var(--ui-font-13, 13px);
   }
 
   .daily-review__line-label {
@@ -1471,13 +1471,13 @@
   .daily-review__line-completed {
     display: inline-flex;
     align-items: center;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     color: var(--success-color);
   }
   .daily-review__line :deep(.b_btn) {
     flex-shrink: 0;
-    height: 32px;
-    min-height: 32px;
+    height: var(--ui-layout-32, 32px);
+    min-height: var(--ui-layout-32, 32px);
     color: var(--primary-color);
   }
 

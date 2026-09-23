@@ -34,7 +34,7 @@
         <BInput
           v-model:value="source"
           type="textarea"
-          :rows="16"
+          :rows="dimension(16, 'layout')"
           :maxlength="1000000"
           :placeholder="t('toolbox.local.tableInputPlaceholder')"
         />
@@ -73,7 +73,7 @@
           v-else
           v-model:value="output"
           type="textarea"
-          :rows="16"
+          :rows="dimension(16, 'layout')"
           readonly
           :placeholder="t('toolbox.local.outputPlaceholder')"
         />
@@ -114,11 +114,13 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
+  import { useUiDensity } from '@/composables/useUiDensity';
   import { copyTextToClipboard } from '@/utils/clipboard';
   import { convertTable, ToolboxTextError, type TableFormat } from '@/utils/toolboxTextTools';
   import { downloadToolboxBlob } from '@/utils/toolboxLocal';
 
   const { t } = useI18n();
+  const { dimension } = useUiDensity();
   const inputFormat = ref<TableFormat>('csv');
   const outputFormat = ref<TableFormat>('markdown');
   const source = ref('');
@@ -141,7 +143,7 @@
     (resultTable.value[0] || []).slice(0, 20).map((header, index) => ({
       key: `column_${index}`,
       title: header.trim() || t('toolbox.local.unnamedColumn', { index: index + 1 }),
-      width: '112px',
+      width: `${dimension(112, 'layout')}px`,
     })),
   );
   const previewRows = computed(() =>
@@ -150,7 +152,9 @@
       ...Object.fromEntries(previewColumns.value.map((column, columnIndex) => [column.key, row[columnIndex] ?? ''])),
     })),
   );
-  const previewTableStyle = computed(() => ({ minWidth: `${Math.max(112, previewColumns.value.length * 122)}px` }));
+  const previewTableStyle = computed(() => ({
+    minWidth: `${Math.max(dimension(112, 'layout'), previewColumns.value.length * dimension(122, 'layout'))}px`,
+  }));
   const previewNote = computed(() =>
     stats.value
       ? t('toolbox.local.tablePreviewLimit', {
@@ -267,13 +271,15 @@
 <style scoped lang="less">
   .table-tool {
     display: grid;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
   .table-tool__toolbar {
-    padding: 13px;
+    padding: var(--ui-space-13, 13px);
     display: grid;
-    grid-template-columns: minmax(150px, 1fr) auto minmax(150px, 1fr) auto auto auto;
-    gap: 9px;
+    grid-template-columns:
+      minmax(var(--ui-layout-150, 150px), 1fr) auto minmax(var(--ui-layout-150, 150px), 1fr)
+      auto auto auto;
+    gap: var(--ui-space-9, 9px);
     align-items: end;
     border: 1px solid var(--surface-border-color);
     border-radius: 14px;
@@ -282,11 +288,11 @@
   .table-tool__toolbar > div {
     min-width: 0;
     display: grid;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   .table-tool__toolbar label {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 650;
   }
   .table-tool__swap {
@@ -295,14 +301,14 @@
   .table-tool__editors {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     align-items: stretch;
   }
   .table-tool__editors > div {
     min-width: 0;
-    padding: 12px;
+    padding: var(--ui-space-12, 12px);
     display: grid;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
     border: 1px solid var(--surface-border-color);
     border-radius: 14px;
     background: var(--card-background);
@@ -311,38 +317,38 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .table-tool__editors header span {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .table-tool__result-header {
-    min-height: 28px;
+    min-height: var(--ui-layout-28, 28px);
   }
   .table-tool__view-switch {
     margin-left: auto;
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
   .table-tool__result-header > span {
-    min-width: 34px;
+    min-width: var(--ui-layout-34, 34px);
     text-align: right;
   }
   .table-tool__editors :deep(textarea) {
-    min-height: 340px;
+    min-height: var(--ui-layout-340, 340px);
     resize: vertical;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     line-height: 1.55;
   }
   .table-tool__preview {
-    height: 340px;
-    padding: 10px;
+    height: var(--ui-layout-340, 340px);
+    padding: var(--ui-space-10, 10px);
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
     overflow: hidden;
     border: 1px solid var(--surface-border-color);
     border-radius: 8px;
@@ -364,12 +370,12 @@
   .table-tool__preview > small {
     margin-top: auto;
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .table-tool__bridge {
     align-self: center;
-    width: 34px;
-    height: 34px;
+    width: var(--ui-layout-34, 34px);
+    height: var(--ui-layout-34, 34px);
     display: grid;
     place-items: center;
     border: 1px solid var(--surface-border-color);
@@ -378,11 +384,11 @@
     background: var(--card-background);
   }
   .table-tool__actions {
-    padding: 11px 13px;
+    padding: var(--ui-space-11, 11px) var(--ui-space-13, 13px);
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
     border: 1px solid var(--surface-border-color);
     border-radius: 13px;
     background: var(--workspace-panel-bg-color);
@@ -394,15 +400,15 @@
   .table-tool__actions > div {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .table-tool__actions > div span,
   .table-tool__actions > span {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .table-tool__error {
-    padding: 11px 13px;
+    padding: var(--ui-space-11, 11px) var(--ui-space-13, 13px);
     border: 1px solid var(--danger-color, #dc3e4d);
     border-radius: 11px;
     color: var(--danger-color, #dc3e4d);
@@ -427,10 +433,10 @@
       grid-template-columns: 1fr;
     }
     .table-tool__editors :deep(textarea) {
-      min-height: 260px;
+      min-height: var(--ui-layout-260, 260px);
     }
     .table-tool__preview {
-      height: 260px;
+      height: var(--ui-layout-260, 260px);
     }
     .table-tool__result-header {
       flex-wrap: wrap;

@@ -39,15 +39,15 @@
 <style scoped>
   .push-facts {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-    gap: 16px;
-    padding: 16px 0;
+    grid-template-columns: repeat(auto-fit, minmax(var(--ui-layout-160, 160px), 1fr));
+    gap: var(--ui-space-16, 16px);
+    padding: var(--ui-space-16, 16px) 0;
   }
   .push-facts > div {
     display: grid;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     border-left: 1px solid var(--surface-divider-color, var(--border-color));
-    padding-left: 16px;
+    padding-left: var(--ui-space-16, 16px);
   }
   .push-facts > div:first-child {
     border: 0;
@@ -55,11 +55,11 @@
   }
   .push-facts span,
   .push-facts-time {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
   }
   .push-facts strong {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 500;
     color: var(--text-color);
   }
@@ -72,8 +72,8 @@
     display: flex;
     justify-content: space-between;
     align-items: baseline;
-    gap: 16px;
-    padding: 10px 0;
+    gap: var(--ui-space-16, 16px);
+    padding: var(--ui-space-10, 10px) 0;
     border: 0;
   }
   .push-facts--stacked > div + div {

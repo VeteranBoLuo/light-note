@@ -124,7 +124,7 @@ input[type='checkbox'] {
 .flex-align-center-gap {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--ui-space-10, 10px);
 }
 
 .flex-justify-center {
@@ -134,7 +134,7 @@ input[type='checkbox'] {
 .flex-justify-center-gap {
   display: flex;
   justify-content: center;
-  gap: 10px;
+  gap: var(--ui-space-10, 10px);
 }
 
 .flex-center {
@@ -146,7 +146,7 @@ input[type='checkbox'] {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: var(--ui-space-10, 10px);
 }
 
 .dom-hover {
@@ -232,8 +232,8 @@ h1 {
   top: -5px;
   right: -4px;
   z-index: 3;
-  width: 15px;
-  height: 15px;
+  width: var(--ui-layout-15, 15px);
+  height: var(--ui-layout-15, 15px);
   opacity: 0;
   pointer-events: none;
   transform: translate(2px, 2px) scale(0.72);
@@ -243,12 +243,12 @@ h1 {
 }
 
 .tag-detail-corner {
-  /* 尺寸写死并带 !important:BButton 自身的 scoped 样式特异性更高,不然会被撑成 30x32。
-     BTooltip 包裹层和按钮都是 15px，点击区域不会通过透明层向筛选主体扩张。 */
-  width: 15px !important;
-  min-width: 15px !important;
-  height: 15px !important;
-  min-height: 15px !important;
+  /* 包裹层与按钮共用密度尺寸；保留 !important 覆盖 BButton scoped 样式，避免被撑成 30x32。
+     标准档包裹层和按钮均为 15px，点击区域不会通过透明层向筛选主体扩张。 */
+  width: var(--ui-layout-15, 15px) !important;
+  min-width: var(--ui-layout-15, 15px) !important;
+  height: var(--ui-layout-15, 15px) !important;
+  min-height: var(--ui-layout-15, 15px) !important;
   padding: 0 !important;
   /* 配色一律带 !important:BButton 的 scoped 选择器是 .b_btn[data-v-x](0,2,0),
      特异性高于这里的 .tag-detail-corner(0,1,0),不加就会被它的默认按钮底色吃掉 */
@@ -517,12 +517,12 @@ h1 {
   /* 图右上角的工具条:紧凑/宽松、手绘、复制源码、下载、放大 */
   &__tools {
     position: absolute;
-    right: 8px;
-    top: 8px;
+    right: var(--ui-space-8, 8px);
+    top: var(--ui-space-8, 8px);
     display: flex;
     align-items: center;
-    gap: 2px;
-    padding: 2px;
+    gap: var(--ui-space-2, 2px);
+    padding: var(--ui-space-2, 2px);
     border: 1px solid var(--surface-border-color);
     border-radius: 8px;
     background: var(--card-background);
@@ -534,14 +534,14 @@ h1 {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 26px;
-    height: 26px;
+    width: var(--ui-layout-26, 26px);
+    height: var(--ui-layout-26, 26px);
     padding: 0;
     border: 0;
     border-radius: 6px;
     background: transparent;
     color: var(--desc-color);
-    font-size: 16px;
+    font-size: var(--ui-font-16, 16px);
     line-height: 1;
     cursor: pointer;
 
@@ -896,16 +896,6 @@ h1 {
  * 用 CSS 会出现「页面上是品牌紫、点开放大变回藏蓝」的不一致。
  */
 
-/*
- * TinyMCE 的 tooltip / 下拉菜单挂在 body 下的 .tox-tinymce-aux 里,由它自己按
- * getBoundingClientRect(视觉坐标,已含 <html> 的 zoom)算位置、再写进 style.left/top(布局坐标)。
- * 布局坐标会被 zoom 再放大一次,于是界面缩放一开,提示框就飘到离图标很远的地方
- * (实测 1.25 倍下水平偏出 109px)。这里套一层反向缩放把多出来的那次抵消掉。
- * 系数由 utils/savePreference.ts 跟随缩放设置写入。
- */
-.tox-tinymce-aux {
-  zoom: var(--ln-aux-zoom, 1);
-}
 
 @keyframes mermaid-figure-breathe {
   0%,

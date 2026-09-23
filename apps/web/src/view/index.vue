@@ -36,8 +36,8 @@
         }
       : {
           position: 'fixed',
-          top: showNavigation.value ? '60px' : '0',
-          height: showNavigation.value ? 'calc(100% - 60px)' : '100%',
+          top: showNavigation.value ? 'var(--ui-layout-60, 60px)' : '0',
+          height: showNavigation.value ? 'calc(100% - var(--ui-layout-60, 60px))' : '100%',
           width: '100%',
           boxSizing: 'border-box',
         },

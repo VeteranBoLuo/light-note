@@ -12,7 +12,7 @@ import {
 } from '@/utils/noteTreeDrop';
 import { resolveNoteTreeDragScrollStep } from '@/utils/noteTreeDragScroll';
 import { requestNoteShareExposureConfirmation } from '@/utils/noteShareExposure';
-import { getRootZoom } from '@/utils/zoom';
+
 import type { NoteTreeMoveItemResult } from '@/api/noteTree';
 
 type BoolRef = Readonly<Ref<boolean> | ComputedRef<boolean>>;
@@ -253,7 +253,7 @@ export function useNoteTreeDragDrop(options: NoteTreeDragDropOptions) {
     const step = resolveNoteTreeDragScrollStep({
       ...pointer,
       rect: container.getBoundingClientRect(),
-      rootZoom: getRootZoom(),
+
     });
     if (!step) return stopTreeDragAutoScroll();
     const previousTop = container.scrollTop;
@@ -274,7 +274,7 @@ export function useNoteTreeDragDrop(options: NoteTreeDragDropOptions) {
     const step = resolveNoteTreeDragScrollStep({
       ...pointer,
       rect: container.getBoundingClientRect(),
-      rootZoom: getRootZoom(),
+
     });
     if (!step) {
       stopTreeDragAutoScroll();

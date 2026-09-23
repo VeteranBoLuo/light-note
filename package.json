@@ -25,6 +25,7 @@
     }
   },
   "scripts": {
+    "hooks:install": "node scripts/installGitHooks.mjs",
     "dev:web": "pnpm --filter web dev",
     "dev:web:device": "pnpm --filter web exec vite --host 0.0.0.0 --port 5175 --strictPort",
     "build:web": "pnpm --filter web build",

@@ -52,9 +52,9 @@
 
 <style scoped lang="less">
   .b-batch-toggle.b_btn {
-    --_batch-height: 36px;
-    --_batch-font-size: 14px;
-    --_batch-padding-x: 13px;
+    --_batch-height: var(--ui-control-36, 36px);
+    --_batch-font-size: var(--ui-font-14, 14px);
+    --_batch-padding-x: var(--ui-space-13, 13px);
     --_batch-radius: 10px;
     position: relative;
     flex: 0 0 auto;
@@ -75,16 +75,16 @@
       color 0.16s;
 
     &.b-batch-toggle--small {
-      --_batch-height: 28px;
-      --_batch-font-size: 12px;
-      --_batch-padding-x: 10px;
+      --_batch-height: var(--ui-control-28, 28px);
+      --_batch-font-size: var(--ui-font-12, 12px);
+      --_batch-padding-x: var(--ui-space-10, 10px);
       --_batch-radius: 8px;
     }
 
     &.b-batch-toggle--large {
-      --_batch-height: 44px;
-      --_batch-font-size: 16px;
-      --_batch-padding-x: 16px;
+      --_batch-height: var(--ui-control-44, 44px);
+      --_batch-font-size: var(--ui-font-16, 16px);
+      --_batch-padding-x: var(--ui-space-16, 16px);
       --_batch-radius: 12px;
     }
 

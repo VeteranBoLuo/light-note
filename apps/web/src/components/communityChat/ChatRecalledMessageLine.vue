@@ -41,15 +41,15 @@
   .community-message__recall-line {
     position: relative;
     min-width: 0;
-    max-width: calc(100% - 40px);
-    min-height: 26px;
+    max-width: calc(100% - var(--ui-layout-40, 40px));
+    min-height: var(--ui-layout-26, 26px);
     display: inline-flex;
     align-items: center;
     justify-content: center;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.45;
     text-align: center;
   }
@@ -61,13 +61,13 @@
   .community-message__recall-reedit,
   .community-message__recall-audit-action {
     min-width: 0;
-    min-height: 24px;
-    height: 24px;
-    padding: 2px 6px !important;
+    min-height: var(--ui-layout-24, 24px);
+    height: var(--ui-layout-24, 24px);
+    padding: var(--ui-space-2, 2px) var(--ui-space-6, 6px) !important;
     border: 0 !important;
     color: var(--primary-color) !important;
     background: transparent !important;
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
 
   @media (max-width: 767px) {

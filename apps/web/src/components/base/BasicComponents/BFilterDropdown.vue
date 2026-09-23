@@ -108,7 +108,7 @@
   .filter-container {
     display: inline-block;
     position: relative;
-    margin-left: 10px;
+    margin-left: var(--ui-space-10, 10px);
   }
 
   .filter-dropdown {
@@ -121,15 +121,15 @@
     text-align: center;
     box-sizing: border-box;
     cursor: pointer;
-    height: 32px;
-    line-height: 32px;
+    height: var(--ui-control-32, 32px);
+    line-height: var(--ui-control-32, 32px);
     width: max-content;
     display: flex;
     justify-content: center;
     align-items: center;
-    padding: 0 15px;
-    font-size: 14px;
-    gap: 8px;
+    padding: 0 var(--ui-space-15, 15px);
+    font-size: var(--ui-font-14, 14px);
+    gap: var(--ui-space-8, 8px);
     color: var(--text-color);
     background-color: var(--primary-btn-bg-color);
     transition: all 0.3s;
@@ -157,28 +157,28 @@
     position: absolute;
     top: 100%;
     left: 0;
-    margin-top: 5px;
+    margin-top: var(--ui-space-5, 5px);
     border-radius: 8px;
     box-shadow: 0 0 2px rgba(0, 0, 0, 0.6);
     z-index: 300;
-    width: 200px;
-    padding: 12px;
+    width: var(--ui-layout-200, 200px);
+    padding: var(--ui-space-12, 12px);
     background-color: var(--menu-body-bg-color);
   }
 
   .filter-header {
     display: flex;
     justify-content: space-between;
-    margin-bottom: 10px;
-    padding-bottom: 10px;
-    margin-left: 5px;
+    margin-bottom: var(--ui-space-10, 10px);
+    padding-bottom: var(--ui-space-10, 10px);
+    margin-left: var(--ui-space-5, 5px);
     border-bottom: 1px solid #eee;
   }
 
   .select-all {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     cursor: pointer;
     font-weight: 500;
   }
@@ -188,8 +188,8 @@
     border: none;
     color: #409eff;
     cursor: pointer;
-    padding: 2px 5px;
-    font-size: 13px;
+    padding: var(--ui-space-2, 2px) var(--ui-space-5, 5px);
+    font-size: var(--ui-font-13, 13px);
   }
 
   .clear-btn:hover {
@@ -199,16 +199,16 @@
   .filter-options {
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    max-height: 300px;
+    gap: var(--ui-space-10, 10px);
+    max-height: var(--ui-layout-300, 300px);
     overflow-y: auto;
   }
 
   .filter-option {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 6px;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-6, 6px);
     border-radius: 4px;
     cursor: pointer;
     transition: background-color 0.2s;
@@ -221,8 +221,8 @@
 
   .file-icon {
     display: inline-block;
-    width: 18px;
-    height: 18px;
+    width: var(--ui-layout-18, 18px);
+    height: var(--ui-layout-18, 18px);
     border-radius: 3px;
     flex-shrink: 0;
   }

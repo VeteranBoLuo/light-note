@@ -96,18 +96,18 @@
 </script>
 
 <style scoped lang="less">
-  .growth-preferences { display: flex; flex-direction: column; gap: 12px; }
-  header { display: flex; align-items: center; gap: 10px; }
-  h2 { margin: 0; color: var(--text-color); font-size: 16px; }
-  p { margin: 2px 0 0; color: var(--desc-color); font-size: 12px; }
-  .growth-preferences__icon { display: grid; width: 36px; height: 36px; place-items: center; border: 1px solid var(--primary-color); border-radius: 10px; color: var(--primary-color); }
-  .growth-preferences__row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 10px 0; border-top: 1px solid var(--card-border-color); }
+  .growth-preferences { display: flex; flex-direction: column; gap: var(--ui-space-12, 12px); }
+  header { display: flex; align-items: center; gap: var(--ui-space-10, 10px); }
+  h2 { margin: 0; color: var(--text-color); font-size: var(--ui-font-16, 16px); }
+  p { margin: var(--ui-space-2, 2px) 0 0; color: var(--desc-color); font-size: var(--ui-font-12, 12px); }
+  .growth-preferences__icon { display: grid; width: var(--ui-layout-36, 36px); height: var(--ui-layout-36, 36px); place-items: center; border: 1px solid var(--primary-color); border-radius: 10px; color: var(--primary-color); }
+  .growth-preferences__row { display: flex; align-items: center; justify-content: space-between; gap: var(--ui-space-14, 14px); padding: var(--ui-space-10, 10px) 0; border-top: 1px solid var(--card-border-color); }
   .growth-preferences__row > div { display: flex; min-width: 0; flex-direction: column; }
-  .growth-preferences__row strong { color: var(--text-color); font-size: 13px; }
-  .growth-preferences__row span { color: var(--desc-color); font-size: 11.5px; }
-  .growth-preferences__row :deep(.b-select) { width: 150px; flex: 0 0 auto; }
-  .growth-preferences__loading { display: grid; min-height: 100px; place-items: center; }
-  .growth-preferences__error { display: flex; min-height: 100px; align-items: center; justify-content: center; gap: 8px; color: var(--desc-color); font-size: 12px; }
+  .growth-preferences__row strong { color: var(--text-color); font-size: var(--ui-font-13, 13px); }
+  .growth-preferences__row span { color: var(--desc-color); font-size: var(--ui-font-11_5, 11.5px); }
+  .growth-preferences__row :deep(.b-select) { width: var(--ui-layout-150, 150px); flex: 0 0 auto; }
+  .growth-preferences__loading { display: grid; min-height: var(--ui-layout-100, 100px); place-items: center; }
+  .growth-preferences__error { display: flex; min-height: var(--ui-layout-100, 100px); align-items: center; justify-content: center; gap: var(--ui-space-8, 8px); color: var(--desc-color); font-size: var(--ui-font-12, 12px); }
   .growth-preferences > .b_btn { align-self: flex-end; }
   @media (max-width: 560px) { .growth-preferences__row { align-items: flex-start; } .growth-preferences__row :deep(.b-select) { width: 125px; } }
 </style>

@@ -30,13 +30,13 @@
     display: inline-flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.5;
   }
   .todo-search-meta__status {
-    padding: 0 5px;
+    padding: 0 var(--ui-space-5, 5px);
     border: 1px solid currentColor;
     border-radius: 5px;
     color: var(--todo-accent-color);

@@ -1,5 +1,6 @@
 <template>
   <AdminDataPage
+    class="support-admin-page"
     eyebrow="Admin / Support"
     :title="t('adminSupport.title')"
     :subtitle="t('adminSupport.subtitle')"
@@ -16,12 +17,16 @@
       <li class="admin-stat-card is-success">
         <span class="admin-stat-label">{{ t('adminSupport.metrics.supportAmount') }}</span>
         <strong class="admin-stat-value">¥{{ overview.supportAmount }}</strong>
-        <span class="admin-stat-hint">{{ t('adminSupport.metrics.supportAmountHint', { count: overview.supportOrders }) }}</span>
+        <span class="admin-stat-hint">{{
+          t('adminSupport.metrics.supportAmountHint', { count: overview.supportOrders })
+        }}</span>
       </li>
       <li class="admin-stat-card">
         <span class="admin-stat-label">{{ t('adminSupport.metrics.purchaseAmount') }}</span>
         <strong class="admin-stat-value">¥{{ overview.purchaseAmount }}</strong>
-        <span class="admin-stat-hint">{{ t('adminSupport.metrics.purchaseAmountHint', { count: overview.purchaseOrders }) }}</span>
+        <span class="admin-stat-hint">{{
+          t('adminSupport.metrics.purchaseAmountHint', { count: overview.purchaseOrders })
+        }}</span>
       </li>
       <li class="admin-stat-card">
         <span class="admin-stat-label">{{ t('adminSupport.metrics.orders') }}</span>
@@ -78,19 +83,19 @@
     </template>
 
     <div v-if="activeTab === 'overview'" class="support-admin__overview">
-      <BCard padding="18px">
+      <BCard padding="var(--ui-space-18, 18px)">
         <strong>{{ t('adminSupport.overview.privacyTitle') }}</strong>
         <p>{{ t('adminSupport.overview.privacyDescription') }}</p>
       </BCard>
-      <BCard padding="18px">
+      <BCard padding="var(--ui-space-18, 18px)">
         <strong>{{ t('adminSupport.overview.timeTitle') }}</strong>
         <p>{{ t('adminSupport.overview.timeDescription') }}</p>
       </BCard>
-      <BCard padding="18px">
+      <BCard padding="var(--ui-space-18, 18px)">
         <strong>{{ t('adminSupport.overview.safetyTitle') }}</strong>
         <p>{{ t('adminSupport.overview.safetyDescription') }}</p>
       </BCard>
-      <BCard padding="18px">
+      <BCard padding="var(--ui-space-18, 18px)">
         <strong>{{ t('adminSupport.overview.rewardTitle') }}</strong>
         <p>{{ t('adminSupport.overview.rewardDescription') }}</p>
       </BCard>
@@ -122,7 +127,9 @@
         </template>
         <template v-else-if="column.key === 'amount'">¥{{ record.totalAmount }}</template>
         <template v-else-if="column.key === 'purpose'">
-          <BChip :tone="purposeTone(record as AdminSupportOrder)">{{ purposeLabel(record as AdminSupportOrder) }}</BChip>
+          <BChip :tone="purposeTone(record as AdminSupportOrder)">{{
+            purposeLabel(record as AdminSupportOrder)
+          }}</BChip>
         </template>
         <template v-else-if="column.key === 'reward'">
           <BChip :tone="rewardTone(record)">{{ rewardLabel(record) }}</BChip>
@@ -168,7 +175,7 @@
   <BModal
     v-model:visible="visibilityModal"
     :title="visibilityTarget?.adminHidden ? t('adminSupport.restoreIdentity') : t('adminSupport.hideIdentity')"
-    width="min(520px, 94vw)"
+    width="min(var(--ui-layout-520, 520px), 94vw)"
     :show-footer="true"
     @ok="saveVisibility"
   >
@@ -291,22 +298,22 @@
     activeTab.value === 'supporters'
       ? [
           { title: t('adminSupport.columns.supporter'), key: 'identity' },
-          { title: t('adminSupport.columns.amount'), key: 'amount', width: '110px' },
-          { title: t('adminSupport.columns.reward'), key: 'reward', width: '150px' },
-          { title: t('adminSupport.columns.orders'), key: 'orderCount', width: '90px' },
-          { title: t('adminSupport.columns.visibility'), key: 'visibility', width: '130px' },
-          { title: t('adminSupport.columns.lastSupport'), key: 'time', width: '150px' },
-          { title: t('adminSupport.columns.operation'), key: 'actions', width: '110px' },
+          { title: t('adminSupport.columns.amount'), key: 'amount', width: 'var(--ui-layout-110, 110px)' },
+          { title: t('adminSupport.columns.reward'), key: 'reward', width: 'var(--ui-layout-150, 150px)' },
+          { title: t('adminSupport.columns.orders'), key: 'orderCount', width: 'var(--ui-layout-90, 90px)' },
+          { title: t('adminSupport.columns.visibility'), key: 'visibility', width: 'var(--ui-layout-130, 130px)' },
+          { title: t('adminSupport.columns.lastSupport'), key: 'time', width: 'var(--ui-layout-150, 150px)' },
+          { title: t('adminSupport.columns.operation'), key: 'actions', width: 'var(--ui-layout-110, 110px)' },
         ]
       : [
           { title: t('adminSupport.columns.order'), key: 'providerOrderNo' },
           { title: t('adminSupport.columns.supporter'), key: 'identity' },
-          { title: t('adminSupport.columns.amount'), key: 'amount', width: '110px' },
-          { title: t('adminSupport.columns.purpose'), key: 'purpose', width: '120px' },
-          { title: t('adminSupport.columns.status'), key: 'status', width: '110px' },
-          { title: t('adminSupport.columns.reward'), key: 'reward', width: '160px' },
-          { title: t('adminSupport.columns.time'), key: 'time', width: '150px' },
-          { title: t('adminSupport.columns.operation'), key: 'actions', width: '120px' },
+          { title: t('adminSupport.columns.amount'), key: 'amount', width: 'var(--ui-layout-110, 110px)' },
+          { title: t('adminSupport.columns.purpose'), key: 'purpose', width: 'var(--ui-layout-120, 120px)' },
+          { title: t('adminSupport.columns.status'), key: 'status', width: 'var(--ui-layout-110, 110px)' },
+          { title: t('adminSupport.columns.reward'), key: 'reward', width: 'var(--ui-layout-160, 160px)' },
+          { title: t('adminSupport.columns.time'), key: 'time', width: 'var(--ui-layout-150, 150px)' },
+          { title: t('adminSupport.columns.operation'), key: 'actions', width: 'var(--ui-layout-120, 120px)' },
         ],
   );
 
@@ -541,49 +548,52 @@
 </script>
 
 <style scoped lang="less">
+  .support-admin-page {
+    font-size: var(--ui-font-16, 16px);
+  }
   .support-admin__search {
-    width: min(280px, 100%);
+    width: min(var(--ui-layout-280, 280px), 100%);
   }
 
   .support-admin__select {
-    width: 140px;
+    width: var(--ui-layout-140, 140px);
   }
 
   .support-admin__overview {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .support-admin__overview strong {
     color: var(--text-color);
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
   }
 
   .support-admin__overview p,
   .support-admin__modal-copy {
-    margin: 7px 0 0;
+    margin: var(--ui-space-7, 7px) 0 0;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.7;
   }
 
   small {
     display: block;
-    margin-top: 2px;
+    margin-top: var(--ui-space-2, 2px);
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .support-admin__modal-copy {
-    margin: 0 0 12px;
+    margin: 0 0 var(--ui-space-12, 12px);
   }
 
   .support-admin__modal-footer {
-    padding: 12px 16px;
+    padding: var(--ui-space-12, 12px) var(--ui-space-16, 16px);
     display: flex;
     justify-content: flex-end;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     border-top: 1px solid var(--surface-border-color);
   }
 

@@ -369,13 +369,12 @@ describe('BDrawer compositor cleanup', () => {
     expect(panel?.style.minWidth).toBe('0px');
   });
 
-  it('normalizes pointer coordinates under root zoom and clamps to a narrow desktop viewport', async () => {
+  it('uses CSS pointer coordinates and clamps to a narrow desktop viewport', async () => {
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
       callback(0);
       return 1;
     });
     vi.stubGlobal('cancelAnimationFrame', vi.fn());
-    document.documentElement.style.zoom = '1.25';
     Object.defineProperty(document.documentElement, 'clientWidth', { configurable: true, value: 960 });
 
     const host = document.createElement('div');
@@ -419,12 +418,12 @@ describe('BDrawer compositor cleanup', () => {
     // 按下不改宽度(修复「按一下就跳变/闪」):仍是初始 640
     expect(panel?.style.width).toBe('640px');
 
-    // 拖动:向左移(clientX 减小)增宽;位移经 root zoom 归一化(50 / 1.25 = 40)→ 640 + 40 = 680
+    // 拖动:向左移(clientX 减小)增宽;位移为 50 CSS px → 640 + 50 = 690
     const pointerMove = new Event('pointermove', { bubbles: true });
     Object.defineProperty(pointerMove, 'clientX', { value: 450 });
     window.dispatchEvent(pointerMove);
     await nextTick();
-    expect(panel?.style.width).toBe('680px');
+    expect(panel?.style.width).toBe('690px');
 
     Object.defineProperty(document.documentElement, 'clientWidth', { configurable: true, value: 400 });
     window.dispatchEvent(new Event('resize'));

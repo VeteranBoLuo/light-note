@@ -2,7 +2,7 @@
   <BModal
     v-if="visible"
     :visible="true"
-    width="min(560px, 94vw)"
+    width="min(var(--ui-layout-560, 560px), 94vw)"
     :title="t('myInfo.title')"
     :mask-closable="false"
     :show-footer="false"

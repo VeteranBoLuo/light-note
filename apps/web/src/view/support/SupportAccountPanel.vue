@@ -1,5 +1,5 @@
 <template>
-  <BCard as="section" class="support-account-panel" variant="panel" padding="20px" radius="18px">
+  <BCard as="section" class="support-account-panel" variant="panel" padding="var(--ui-space-20, 20px)" radius="18px">
     <div class="support-account-panel__header">
       <span class="support-account-panel__icon" aria-hidden="true">
         <SvgIcon :src="icon.settings.account" size="22" />
@@ -181,20 +181,20 @@
 <style scoped lang="less">
   .support-account-panel {
     --b-card-background: var(--surface-panel-bg);
-    margin-top: 20px;
+    margin-top: var(--ui-space-20, 20px);
     border-color: var(--surface-border-color);
   }
 
   .support-account-panel__header {
     display: grid;
-    grid-template-columns: 46px minmax(0, 1fr) auto;
+    grid-template-columns: var(--ui-layout-46, 46px) minmax(0, 1fr) auto;
     align-items: center;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
   }
 
   .support-account-panel__icon {
-    width: 46px;
-    height: 46px;
+    width: var(--ui-layout-46, 46px);
+    height: var(--ui-layout-46, 46px);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -209,7 +209,7 @@
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   h2,
@@ -219,42 +219,42 @@
   }
 
   h2 {
-    font-size: 17px;
+    font-size: var(--ui-font-17, 17px);
   }
 
   h3 {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
   }
 
   p,
   span,
   time {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.6;
   }
 
   .support-account-panel__heading p {
-    margin-top: 4px;
-    font-size: 13px;
+    margin-top: var(--ui-space-4, 4px);
+    font-size: var(--ui-font-13, 13px);
   }
 
   .support-account-panel__status {
-    padding: 2px 8px;
+    padding: var(--ui-space-2, 2px) var(--ui-space-8, 8px);
     border: 1px solid var(--success-color);
     border-radius: 999px;
     color: var(--success-color);
     background: var(--card-background);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 700;
   }
 
   .support-account-panel__provider {
-    margin-top: 18px;
-    padding: 12px;
+    margin-top: var(--ui-space-18, 18px);
+    padding: var(--ui-space-12, 12px);
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     background: var(--card-background);
@@ -262,8 +262,8 @@
 
   .support-account-panel__provider img,
   .support-account-panel__provider-fallback {
-    width: 36px;
-    height: 36px;
+    width: var(--ui-layout-36, 36px);
+    height: var(--ui-layout-36, 36px);
     flex: 0 0 auto;
     border-radius: 50%;
     object-fit: cover;
@@ -286,19 +286,19 @@
   }
 
   .support-account-panel__provider strong {
-    margin-top: 1px;
-    font-size: 14px;
+    margin-top: var(--ui-space-1, 1px);
+    font-size: var(--ui-font-14, 14px);
   }
 
   .support-account-panel__stats {
-    margin-top: 14px;
+    margin-top: var(--ui-space-14, 14px);
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .support-account-panel__stats > div {
-    padding: 12px;
+    padding: var(--ui-space-12, 12px);
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     background: var(--card-background);
@@ -310,38 +310,38 @@
   }
 
   .support-account-panel__stats strong {
-    margin-top: 3px;
+    margin-top: var(--ui-space-3, 3px);
     color: var(--text-color);
-    font-size: 16px;
+    font-size: var(--ui-font-16, 16px);
   }
 
   .support-account-panel__privacy {
-    margin-top: 14px;
-    padding: 14px;
+    margin-top: var(--ui-space-14, 14px);
+    padding: var(--ui-space-14, 14px);
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto auto;
     align-items: center;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
     border: 1px solid var(--primary-color);
     border-radius: 12px;
     background: var(--card-background);
   }
 
   .support-account-panel__privacy p {
-    margin-top: 3px;
+    margin-top: var(--ui-space-3, 3px);
   }
 
   .support-account-panel__privacy-title {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .support-account-panel__privacy-control {
     display: flex;
     align-items: center;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
   }
 
   .support-account-panel__privacy-control > span {
@@ -349,7 +349,7 @@
   }
 
   .support-account-panel__participation {
-    min-height: 36px;
+    min-height: var(--ui-layout-36, 36px);
     height: auto;
   }
 
@@ -359,38 +359,38 @@
   }
 
   .support-account-panel__orders {
-    margin-top: 14px;
-    padding-top: 14px;
+    margin-top: var(--ui-space-14, 14px);
+    padding-top: var(--ui-space-14, 14px);
     border-top: 1px solid var(--surface-border-color);
   }
 
   .support-account-panel__orders-heading {
     justify-content: space-between;
-    margin-bottom: 4px;
+    margin-bottom: var(--ui-space-4, 4px);
   }
 
   .support-account-panel__order {
-    min-height: 38px;
+    min-height: var(--ui-layout-38, 38px);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .support-account-panel__order-main {
     display: flex;
     align-items: baseline;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .support-account-panel__order strong {
     color: var(--text-color);
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
   }
 
   .support-account-panel__warning {
-    margin-top: 12px;
+    margin-top: var(--ui-space-12, 12px);
   }
 
   @media (max-width: 720px) {

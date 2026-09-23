@@ -33,6 +33,7 @@
 
 <script lang="ts" setup>
   import { computed, nextTick, onBeforeUnmount, onMounted, PropType, ref, watch } from 'vue';
+  import { useUiDensity } from '@/composables/useUiDensity';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import {
     captureResourceListScrollAnchor,
@@ -40,7 +41,7 @@
     type ResourceListScrollAnchor,
     type ResourceListScrollPosition,
   } from '@/utils/resourceListScroll';
-  import { getRootZoom } from '@/utils/zoom';
+
   import { findScrollContainer } from '@/utils/scrollContainer';
 
   const props = defineProps({
@@ -71,10 +72,13 @@
     loadMore: [];
     'scroll-position': [position: ResourceListScrollPosition];
   }>();
+  const { density, dimension } = useUiDensity();
+  const itemHeight = computed(() => dimension(props.itemHeight, 'control'));
+  const itemGap = computed(() => dimension(props.gap));
   const scrollerRef = ref<HTMLElement | null>(null);
   const scrollTop = ref(0);
   const viewportHeight = ref(0);
-  const pitch = computed(() => Math.max(1, props.itemHeight) + Math.max(0, props.gap));
+  const pitch = computed(() => Math.max(1, itemHeight.value) + Math.max(0, itemGap.value));
   const logicalItemCount = computed(() =>
     Math.max(props.items.length, Math.max(0, Math.trunc(Number(props.totalCount) || 0))),
   );
@@ -86,8 +90,8 @@
     for (let i = 0; i < logicalItemCount.value; i++)
       values.push(
         values[i] +
-          (props.dynamicHeight ? measuredHeights.value.get(rowKey(i)) || props.itemHeight : props.itemHeight) +
-          Math.max(0, props.gap),
+          (props.dynamicHeight ? measuredHeights.value.get(rowKey(i)) || itemHeight.value : itemHeight.value) +
+          Math.max(0, itemGap.value),
       );
     return values;
   });
@@ -124,10 +128,10 @@
     return indices.map((index) => ({ item: props.items[index], index, loaded: index < props.items.length }));
   });
   const sizerStyle = computed(() => ({
-    height: `${Math.max(0, offsets.value[logicalItemCount.value] - (logicalItemCount.value ? props.gap : 0))}px`,
+    height: `${Math.max(0, offsets.value[logicalItemCount.value] - (logicalItemCount.value ? itemGap.value : 0))}px`,
   }));
   const windowStyle = computed(() => ({
-    gap: `${Math.max(0, props.gap)}px`,
+    gap: `${Math.max(0, itemGap.value)}px`,
     transform: `translateY(${offsets.value[start.value] || 0}px)`,
   }));
   function entryStyle(index: number) {
@@ -138,7 +142,7 @@
           top: `${offsets.value[index] - (offsets.value[start.value] || 0)}px`,
           overflow: 'visible',
         }
-      : { height: `${Math.max(1, props.itemHeight)}px` };
+      : { height: `${Math.max(1, itemHeight.value)}px` };
   }
   const rowElements = new Map<HTMLElement, number>();
   let rowObserver: ResizeObserver | null = null;
@@ -156,6 +160,12 @@
       if (!scrollerRef.value?.contains(document.activeElement)) focusedKey.value = null;
     });
   }
+  // Density changes layout dimensions directly; preserve fractional row heights
+  // when rebuilding the cache, just as ResizeObserver's borderBoxSize does.
+  function rowBorderBoxHeight(element: HTMLElement): number {
+    return element.getBoundingClientRect().height;
+  }
+
   function measureEntries(entries: ResizeObserverEntry[]) {
     const anchor = props.dynamicHeight ? captureScrollAnchor() : null;
     let changed = false;
@@ -168,7 +178,7 @@
         continue;
       }
       const index = Number(element.dataset.virtualIndex);
-      const height = entry.borderBoxSize?.[0]?.blockSize || element.offsetHeight;
+      const height = entry.borderBoxSize?.[0]?.blockSize || rowBorderBoxHeight(element);
       if (height > 0 && Math.abs((heights.get(rowKey(index)) || 0) - height) > 0.5) {
         heights.set(rowKey(index), height);
         changed = true;
@@ -197,12 +207,12 @@
     const listRect = list.getBoundingClientRect();
     const documentScroller = ancestor === document.documentElement || ancestor === document.body;
     const ancestorRect = documentScroller ? { top: 0, bottom: window.innerHeight } : ancestor.getBoundingClientRect();
-    const zoom = props.dynamicHeight ? getRootZoom() : 1;
-    const top = Math.max(0, ancestorRect.top - listRect.top) / zoom;
-    const bottom = Math.max(0, Math.min(listRect.height, ancestorRect.bottom - listRect.top)) / zoom;
+
+    const top = Math.max(0, ancestorRect.top - listRect.top);
+    const bottom = Math.max(0, Math.min(listRect.height, ancestorRect.bottom - listRect.top));
     return {
       ancestor,
-      listOffset: (listRect.top - ancestorRect.top) / zoom + ancestor.scrollTop,
+      listOffset: listRect.top - ancestorRect.top + ancestor.scrollTop,
       top,
       height: Math.max(0, bottom - top),
     };
@@ -226,7 +236,7 @@
     if (!scroller || props.paused || props.loading || !props.hasMore || loadQueued) return;
     if (props.scrollMode === 'ancestor' && !ancestorViewport()?.height) return;
     const loadedCount = props.items.length;
-    const loadedHeight = Math.max(0, (offsets.value[loadedCount] || 0) - (loadedCount ? props.gap : 0));
+    const loadedHeight = Math.max(0, (offsets.value[loadedCount] || 0) - (loadedCount ? itemGap.value : 0));
     const remaining =
       loadedHeight -
       (props.scrollMode === 'ancestor'
@@ -320,14 +330,14 @@
     if (!scroller || !props.items.length) return;
     const normalizedIndex = Math.min(props.items.length - 1, Math.max(0, Math.trunc(Number(index) || 0)));
     const itemTop = offsets.value[normalizedIndex];
-    const itemBottom = offsets.value[normalizedIndex + 1] - props.gap;
+    const itemBottom = offsets.value[normalizedIndex + 1] - itemGap.value;
     const ancestor = props.scrollMode === 'ancestor' ? ancestorViewport() : null;
     const viewportTop = ancestor?.top ?? scroller.scrollTop;
     const currentViewportHeight = ancestor?.height ?? scroller.clientHeight;
     const viewportBottom = viewportTop + currentViewportHeight;
     let target = viewportTop;
     if (align === 'start') target = itemTop;
-    else if (align === 'center') target = itemTop - (currentViewportHeight - Math.max(1, props.itemHeight)) / 2;
+    else if (align === 'center') target = itemTop - (currentViewportHeight - Math.max(1, itemHeight.value)) / 2;
     else if (itemTop < viewportTop) target = itemTop;
     else if (itemBottom > viewportBottom) target = itemBottom - currentViewportHeight;
     else return;
@@ -385,7 +395,7 @@
       let offset = 0,
         index = 0;
       while (index < previous.length - 1) {
-        const height = (measuredHeights.value.get(previous[index][props.itemKey]) || props.itemHeight) + props.gap;
+        const height = (measuredHeights.value.get(previous[index][props.itemKey]) || itemHeight.value) + itemGap.value;
         if (offset + height > scrollTop.value) break;
         offset += height;
         index++;
@@ -404,6 +414,52 @@
           }
         if (anchor) restoreScrollAnchor(anchor);
       });
+    },
+    { flush: 'pre' },
+  );
+
+  watch(
+    [itemHeight, itemGap, density],
+    async (_, [previousHeight, previousGap], onCleanup) => {
+      let cancelled = false;
+      onCleanup(() => {
+        cancelled = true;
+      });
+      updateViewport();
+      let index = 0;
+      let offset = 0;
+      while (index < props.items.length - 1) {
+        const height =
+          (props.dynamicHeight ? measuredHeights.value.get(rowKey(index)) || previousHeight : previousHeight) +
+          previousGap;
+        if (offset + height > scrollTop.value) break;
+        offset += height;
+        index++;
+      }
+      const viewport = props.scrollMode === 'ancestor' ? ancestorViewport() : null;
+      const shouldAnchor =
+        props.scrollMode === 'self' || Boolean(viewport?.height && viewport.listOffset <= viewport.ancestor.scrollTop);
+      const anchor =
+        shouldAnchor && props.items.length
+          ? { key: String(rowKey(index)), index, offset: scrollTop.value - offset }
+          : null;
+      // Offscreen estimates from another density must not survive the change.
+      measuredHeights.value = new Map();
+      await nextTick();
+      if (cancelled) return;
+      if (props.dynamicHeight) {
+        const heights = new Map<string | number, number>();
+        for (const element of rowElements.keys()) {
+          if (!element.isConnected) continue;
+          const height = rowBorderBoxHeight(element);
+          if (height > 0) heights.set(rowKey(Number(element.dataset.virtualIndex)), height);
+        }
+        measuredHeights.value = heights;
+        await nextTick();
+      }
+      if (cancelled) return;
+      if (anchor) restoreScrollAnchor(anchor);
+      updateViewport();
     },
     { flush: 'pre' },
   );
@@ -432,7 +488,7 @@
               rowElements.delete(element);
               continue;
             }
-            const height = element.offsetHeight;
+            const height = rowBorderBoxHeight(element);
             if (height > 0) visibleHeights.set(rowKey(Number(element.dataset.virtualIndex)), height);
           }
           measuredHeights.value = visibleHeights;
@@ -497,7 +553,7 @@
   }
 
   .b-virtual-list__item.is-placeholder {
-    padding: 8px 6px;
+    padding: var(--ui-space-8, 8px) var(--ui-space-6, 6px);
   }
 
   .b-virtual-list__placeholder {
@@ -510,8 +566,8 @@
   }
 
   .b-virtual-list__loading {
-    min-height: 32px;
-    margin-top: 8px;
+    min-height: var(--ui-control-32, 32px);
+    margin-top: var(--ui-space-8, 8px);
     display: flex;
     align-items: center;
     justify-content: center;

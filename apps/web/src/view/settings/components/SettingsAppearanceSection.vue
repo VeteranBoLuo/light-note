@@ -39,12 +39,12 @@
         ]"
       />
       <SettingsPreferenceField
-        v-if="!bookmark.isMobile"
+        v-if="bookmark.isDesktop"
         pref-key="uiScale"
         :label="t('settings.uiScale')"
         :description="t('settings.uiScaleDesc')"
         default-value="medium"
-        :options="scales"
+        :options="densities"
       />
     </SettingsSectionCard>
   </div>
@@ -69,7 +69,7 @@
     { value: 'day', label: t('navigation.light') },
     { value: 'night', label: t('navigation.dark') },
   ]);
-  const scales = computed(() => [
+  const densities = computed(() => [
     { v: 'small', label: t('settings.uiScaleSmall') },
     { v: 'medium', label: t('settings.uiScaleMedium') },
     { v: 'large', label: t('settings.uiScaleLarge') },
@@ -82,15 +82,15 @@
   .theme-previews {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 12px;
-    padding: 16px 0 10px;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-16, 16px) 0 var(--ui-space-10, 10px);
   }
   .theme-preview.b_btn {
     display: flex;
     width: 100%;
     flex-direction: column;
     align-items: stretch;
-    padding: 10px;
+    padding: var(--ui-space-10, 10px);
     height: auto;
     min-width: 0;
     border: 1px solid var(--surface-border-color);
@@ -106,7 +106,7 @@
   .theme-preview__window {
     display: flex;
     position: relative;
-    height: 68px;
+    height: var(--ui-layout-68, 68px);
     border: 1px solid var(--surface-border-color);
     border-radius: 6px;
     overflow: hidden;
@@ -119,10 +119,10 @@
   }
   .theme-preview__lines {
     flex: 1;
-    padding: 14px 10px;
+    padding: var(--ui-space-14, 14px) var(--ui-space-10, 10px);
     display: grid;
     align-content: start;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
   .theme-preview__lines i {
     height: 5px;
@@ -150,9 +150,9 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 4px;
-    margin-top: 10px;
-    font-size: 13px;
+    gap: var(--ui-space-4, 4px);
+    margin-top: var(--ui-space-10, 10px);
+    font-size: var(--ui-font-13, 13px);
     white-space: normal;
     text-align: left;
   }
@@ -160,15 +160,15 @@
     color: var(--primary-color);
   }
   :global(.settings-page .is-mobile-sub .theme-previews) {
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   :global(.settings-page .is-mobile-sub .theme-preview.b_btn) {
-    padding: 8px;
+    padding: var(--ui-space-8, 8px);
   }
   :global(.settings-page .is-mobile-sub .theme-preview__window) {
-    height: 60px;
+    height: var(--ui-layout-60, 60px);
   }
   :global(.settings-page .is-mobile-sub .theme-preview__label) {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 </style>

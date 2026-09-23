@@ -3,7 +3,7 @@
     :visible="visible"
     @update:visible="emit('update:visible', $event)"
     :title="t('note.batchExportTitle')"
-    width="min(760px, 92vw)"
+    width="min(var(--ui-layout-760, 760px), 92vw)"
     fullscreen-mobile
     :close-disabled="busy"
     :mask-closable="!busy"
@@ -54,11 +54,12 @@
   }
   .export-dialog-footer {
     flex-shrink: 0;
-    padding: 10px 20px calc(10px + env(safe-area-inset-bottom));
+    padding: var(--ui-space-10, 10px) var(--ui-space-20, 20px)
+      calc(var(--ui-space-10, 10px) + env(safe-area-inset-bottom));
     border-top: 1px solid var(--surface-border-color);
     display: flex;
     justify-content: flex-end;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .export-dialog-footer.is-mobile :deep(.b_btn) {
     height: 44px;

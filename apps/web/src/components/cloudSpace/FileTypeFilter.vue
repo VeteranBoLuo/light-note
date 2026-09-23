@@ -126,17 +126,17 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 8px 8px 4px;
+    padding: var(--ui-space-8, 8px) var(--ui-space-8, 8px) var(--ui-space-4, 4px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .clear-action {
-    height: 28px;
-    padding: 0 4px;
+    height: var(--ui-layout-28, 28px);
+    padding: 0 var(--ui-space-4, 4px);
     border: 0;
     background: transparent;
     color: var(--resource-file-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .filter-container {
     display: inline-block;
@@ -146,13 +146,13 @@
   .filter-button {
     display: flex;
     align-items: center;
-    gap: 7px;
-    height: 36px;
-    padding: 0 12px;
+    gap: var(--ui-space-7, 7px);
+    height: var(--ui-layout-36, 36px);
+    padding: 0 var(--ui-space-12, 12px);
     border-radius: 10px;
     border: 1px solid transparent;
     cursor: pointer;
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     font-weight: 500;
     transition: all 0.22s ease;
     color: var(--catalog-color);
@@ -182,11 +182,11 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 18px;
-    height: 18px;
-    padding: 0 5px;
+    min-width: var(--ui-layout-18, 18px);
+    height: var(--ui-layout-18, 18px);
+    padding: 0 var(--ui-space-5, 5px);
     border-radius: 999px;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 700;
     color: #fff;
     background: var(--resource-file-color, #ff8a00);
@@ -207,10 +207,10 @@
   }
 
   .filter-menu {
-    width: 248px;
-    max-height: min(440px, calc(100vh - 24px));
-    max-height: min(440px, calc(100dvh - 24px));
-    padding: 6px;
+    width: var(--ui-layout-248, 248px);
+    max-height: min(var(--ui-layout-440, 440px), calc(100vh - var(--ui-layout-24, 24px)));
+    max-height: min(var(--ui-layout-440, 440px), calc(100dvh - var(--ui-layout-24, 24px)));
+    padding: var(--ui-space-6, 6px);
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
@@ -223,8 +223,8 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 8px;
-    padding: 2px 8px 10px;
+    margin-bottom: var(--ui-space-8, 8px);
+    padding: var(--ui-space-2, 2px) var(--ui-space-8, 8px) var(--ui-space-10, 10px);
     border-bottom: 1px solid var(--noteType-border-color);
   }
 
@@ -239,7 +239,7 @@
   }
 
   .selected-info {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-variant-numeric: tabular-nums;
     color: var(--desc-color);
   }
@@ -247,7 +247,7 @@
   .select-all {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     cursor: pointer;
     font-weight: 500;
   }
@@ -257,8 +257,8 @@
     border: none;
     color: #409eff;
     cursor: pointer;
-    padding: 2px 5px;
-    font-size: 13px;
+    padding: var(--ui-space-2, 2px) var(--ui-space-5, 5px);
+    font-size: var(--ui-font-13, 13px);
   }
 
   .clear-btn:hover {
@@ -268,20 +268,20 @@
   .filter-options {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
     min-height: 0;
     max-height: none;
     flex: 1;
     overflow-y: auto;
-    padding: 0 2px 2px 0;
+    padding: 0 var(--ui-space-2, 2px) var(--ui-space-2, 2px) 0;
   }
 
   .filter-option {
     display: flex;
     align-items: center;
-    gap: 6px;
-    height: 34px;
-    padding: 0 8px;
+    gap: var(--ui-space-6, 6px);
+    height: var(--ui-layout-34, 34px);
+    padding: 0 var(--ui-space-8, 8px);
     border-radius: 7px;
     cursor: pointer;
     transition: background-color 0.2s ease;
@@ -307,8 +307,8 @@
 
   .file-icon {
     display: inline-block;
-    width: 18px;
-    height: 18px;
+    width: var(--ui-layout-18, 18px);
+    height: var(--ui-layout-18, 18px);
     border-radius: 3px;
     flex-shrink: 0;
   }
@@ -328,7 +328,7 @@
       width: 100%;
       min-width: 0;
       justify-content: center;
-      padding: 0 10px;
+      padding: 0 var(--ui-space-10, 10px);
     }
 
     .filter-button-label {
@@ -352,18 +352,18 @@
     }
 
     .filter-menu {
-      width: min(320px, calc(100vw - 32px));
-      max-height: min(420px, calc(100vh - 24px));
-      max-height: min(420px, calc(100dvh - 24px));
+      width: min(var(--ui-layout-320, 320px), calc(100vw - var(--ui-layout-32, 32px)));
+      max-height: min(var(--ui-layout-420, 420px), calc(100vh - var(--ui-layout-24, 24px)));
+      max-height: min(var(--ui-layout-420, 420px), calc(100dvh - var(--ui-layout-24, 24px)));
       box-sizing: border-box;
       overflow: hidden;
-      padding: 12px;
+      padding: var(--ui-space-12, 12px);
     }
 
     .filter-options {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 6px;
+      gap: var(--ui-space-6, 6px);
       max-height: none;
       overflow-y: auto;
       padding-right: 0;
@@ -371,7 +371,7 @@
 
     .filter-option {
       min-width: 0;
-      padding: 0 8px;
+      padding: 0 var(--ui-space-8, 8px);
     }
 
     .filter-option :deep(span:last-child) {

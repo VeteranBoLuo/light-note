@@ -160,13 +160,13 @@
   .wc {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .wc-title {
     display: flex;
     align-items: center;
-    gap: 6px;
-    font-size: 15px;
+    gap: var(--ui-space-6, 6px);
+    font-size: var(--ui-font-15, 15px);
     font-weight: 700;
   }
   .wc-title-row {
@@ -174,33 +174,33 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .wc-total {
     color: var(--primary-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-variant-numeric: tabular-nums;
   }
   .wc-sub {
-    margin-top: 3px;
-    font-size: 12px;
+    margin-top: var(--ui-space-3, 3px);
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
   }
   .wc-reset {
-    margin-top: 3px;
+    margin-top: var(--ui-space-3, 3px);
     color: var(--primary-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .wc-list {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .wc-item {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 10px 12px;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     border-radius: 10px;
     background: var(--background-color);
     border: 1px solid color-mix(in srgb, var(--card-border-color) 40%, transparent);
@@ -218,24 +218,24 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
   .wc-name {
     flex-wrap: wrap;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 600;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .wc-target {
-    font-size: 11.5px;
+    font-size: var(--ui-font-11_5, 11.5px);
     color: var(--desc-color);
     font-variant-numeric: tabular-nums;
   }
   .wc-description {
     color: var(--desc-color);
-    font-size: 11.5px;
+    font-size: var(--ui-font-11_5, 11.5px);
     line-height: 1.4;
   }
   .wc-bar {
@@ -258,18 +258,18 @@
     display: inline-flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
     color: var(--success-color, #12a579);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 700;
     white-space: nowrap;
   }
   .wc-claim {
-    padding: 5px 12px;
+    padding: var(--ui-space-5, 5px) var(--ui-space-12, 12px);
     border-radius: 999px;
     border: none;
     cursor: pointer;
-    font-size: 11.5px;
+    font-size: var(--ui-font-11_5, 11.5px);
     font-weight: 700;
     color: #fff;
     background: linear-gradient(135deg, #f59e0b, #f97316);
@@ -282,16 +282,16 @@
   .wc-claimed {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    font-size: 11.5px;
+    gap: var(--ui-space-4, 4px);
+    font-size: var(--ui-font-11_5, 11.5px);
     font-weight: 700;
     color: #16a34a;
   }
   .wc-reward {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    font-size: 12px;
+    gap: var(--ui-space-4, 4px);
+    font-size: var(--ui-font-12, 12px);
     font-weight: 600;
     color: #d97706;
   }
@@ -302,12 +302,12 @@
   .wc-error,
   .wc-empty {
     display: flex;
-    min-height: 90px;
+    min-height: var(--ui-layout-90, 90px);
     align-items: center;
     justify-content: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   html.light-note-mobile-rendering .wc-item.done {
     border-color: #f59e0b;

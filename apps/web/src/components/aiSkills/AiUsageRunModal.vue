@@ -3,8 +3,8 @@
     v-model:visible="visible"
     :title="t('settings.ai.usage.actions.organizeRun')"
     :show-footer="false"
-    width="min(760px, 94vw)"
-    height="min(720px, 86vh)"
+    width="min(var(--ui-layout-760, 760px), 94vw)"
+    height="min(var(--ui-layout-720, 720px), 86vh)"
     fullscreen-mobile
   >
     <div class="run-usage">
@@ -140,32 +140,32 @@
 <style scoped lang="less">
   .run-usage {
     display: grid;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
     color: var(--text-color);
   }
   .run-hint {
     margin: 0;
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.6;
   }
   .run-heading {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .run-calls {
     display: grid;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .run-call {
     line-height: 1.5;
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     text-align: left;
-    padding: 14px;
+    padding: var(--ui-space-14, 14px);
     border: 1px solid var(--border-color);
     border-radius: 12px;
     height: auto;
@@ -174,24 +174,24 @@
     flex: 1;
     min-width: 0;
     display: grid;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
     white-space: normal;
   }
   .call-info small,
   .call-tokens small {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .call-tokens {
     display: grid;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
     text-align: right;
   }
   .run-error {
     color: var(--danger-color);
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   @media (max-width: 600px) {
     .run-usage {

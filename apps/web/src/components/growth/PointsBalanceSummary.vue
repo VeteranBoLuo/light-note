@@ -76,11 +76,11 @@
     width: 100%;
     min-width: 0;
     height: auto;
-    min-height: 68px;
+    min-height: var(--ui-layout-68, 68px);
     display: flex;
     justify-content: flex-start;
-    gap: 9px;
-    padding: 8px;
+    gap: var(--ui-space-9, 9px);
+    padding: var(--ui-space-8, 8px);
     border: 1px solid var(--surface-border-color);
     border-radius: 11px;
     color: var(--text-color);
@@ -91,9 +91,9 @@
   }
 
   .points-balance-summary__icon {
-    width: 28px;
-    height: 28px;
-    flex: 0 0 28px;
+    width: var(--ui-layout-28, 28px);
+    height: var(--ui-layout-28, 28px);
+    flex: 0 0 var(--ui-layout-28, 28px);
     display: grid;
     place-items: center;
     border-radius: 8px;
@@ -107,8 +107,8 @@
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 2px;
-    padding-right: 13px;
+    gap: var(--ui-space-2, 2px);
+    padding-right: var(--ui-space-13, 13px);
   }
 
   .points-balance-summary__body {
@@ -118,13 +118,13 @@
 
   .points-balance-summary__copy span {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
 
   .points-balance-summary__copy strong {
     max-width: 100%;
     color: var(--text-color);
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     line-height: 1.35;
     font-variant-numeric: tabular-nums;
     overflow-wrap: anywhere;
@@ -132,7 +132,7 @@
 
   .points-balance-summary__copy small {
     color: var(--desc-color);
-    font-size: 9px;
+    font-size: var(--ui-font-9, 9px);
     line-height: 1.2;
   }
 
@@ -143,8 +143,8 @@
 
   .points-balance-summary.is-tile .points-balance-summary__arrow {
     position: absolute;
-    top: 8px;
-    right: 7px;
+    top: var(--ui-space-8, 8px);
+    right: var(--ui-space-7, 7px);
   }
 
   .points-balance-summary.is-loading .points-balance-summary__copy strong,

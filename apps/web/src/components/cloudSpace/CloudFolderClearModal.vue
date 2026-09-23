@@ -6,7 +6,7 @@
     :esc-closable="!submitting"
     :history-closable="!submitting"
     :close-disabled="submitting"
-    width="min(480px, calc(100vw - 32px))"
+    width="min(var(--ui-layout-480, 480px), calc(100vw - 32px))"
   >
     <div class="cloud-folder-clear">
       <div class="cloud-folder-clear__intro">
@@ -169,20 +169,20 @@
 <style lang="less" scoped>
   .cloud-folder-clear {
     display: grid;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
     color: var(--text-color);
   }
 
   .cloud-folder-clear__intro {
     display: grid;
-    grid-template-columns: 36px minmax(0, 1fr);
+    grid-template-columns: var(--ui-layout-36, 36px) minmax(0, 1fr);
     align-items: start;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .cloud-folder-clear__danger-icon {
-    width: 36px;
-    height: 36px;
+    width: var(--ui-layout-36, 36px);
+    height: var(--ui-layout-36, 36px);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -193,8 +193,8 @@
 
   .cloud-folder-clear__intro strong {
     display: block;
-    margin: 1px 0 4px;
-    font-size: 15px;
+    margin: var(--ui-space-1, 1px) 0 var(--ui-space-4, 4px);
+    font-size: var(--ui-font-15, 15px);
     line-height: 1.45;
   }
 
@@ -202,13 +202,13 @@
   .cloud-folder-clear__option p {
     margin: 0;
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.6;
   }
 
   .cloud-folder-clear__scope,
   .cloud-folder-clear__option {
-    padding: 14px;
+    padding: var(--ui-space-14, 14px);
     border: 1px solid var(--card-border-color);
     border-radius: 12px;
     background: var(--workspace-panel-bg-color, var(--card-background));
@@ -216,15 +216,15 @@
 
   .cloud-folder-clear__scope > span {
     display: block;
-    margin-bottom: 6px;
+    margin-bottom: var(--ui-space-6, 6px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .cloud-folder-clear__scope > strong {
     display: block;
     overflow: hidden;
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     line-height: 1.5;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -233,16 +233,16 @@
   .cloud-folder-clear__summary {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 10px;
+    gap: var(--ui-space-8, 8px);
+    margin-top: var(--ui-space-10, 10px);
   }
 
   .cloud-folder-clear__summary span {
-    padding: 3px 8px;
+    padding: var(--ui-space-3, 3px) var(--ui-space-8, 8px);
     border: 1px solid var(--card-border-color);
     border-radius: 999px;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.4;
   }
 
@@ -255,21 +255,21 @@
   }
 
   .cloud-folder-clear__option p {
-    padding: 4px 4px 0 26px;
+    padding: var(--ui-space-4, 4px) var(--ui-space-4, 4px) 0 var(--ui-space-26, 26px);
   }
 
   .cloud-folder-clear__error {
     margin: -4px 0 0;
     color: var(--danger-color, #e5484d);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.5;
   }
 
   .cloud-folder-clear__footer {
     display: flex;
     justify-content: flex-end;
-    gap: 10px;
-    padding: 0 20px 20px;
+    gap: var(--ui-space-10, 10px);
+    padding: 0 var(--ui-space-20, 20px) var(--ui-space-20, 20px);
   }
 
   html.light-note-mobile-rendering .cloud-folder-clear__footer {

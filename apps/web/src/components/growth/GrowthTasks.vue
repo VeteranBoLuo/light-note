@@ -201,34 +201,34 @@
   .growth-tasks {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .growth-tasks__header {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   h2 {
     margin: 0;
     color: var(--text-color);
-    font-size: 16px;
+    font-size: var(--ui-font-16, 16px);
     font-weight: 700;
   }
 
   .growth-tasks__header p,
   .growth-tasks__remaining {
-    margin: 4px 0 0;
+    margin: var(--ui-space-4, 4px) 0 0;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .growth-tasks__progress {
     flex: 0 0 auto;
     color: var(--primary-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 700;
     white-space: nowrap;
   }
@@ -251,7 +251,7 @@
   .growth-tasks__list {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .growth-tasks__list--completed {
@@ -261,9 +261,9 @@
   .growth-task {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     min-width: 0;
-    padding: 10px 12px;
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     border: 1px solid color-mix(in srgb, var(--card-border-color) 40%, transparent);
     border-radius: 10px;
     background: var(--background-color);
@@ -280,7 +280,7 @@
   }
 
   .growth-task__marker {
-    width: 22px;
+    width: var(--ui-layout-22, 22px);
     text-align: center;
     flex: 0 0 auto;
     color: var(--primary-color);
@@ -290,13 +290,13 @@
 
   .growth-task--completed .growth-task__marker {
     color: var(--primary-color);
-    font-size: 16px;
+    font-size: var(--ui-font-16, 16px);
     font-weight: 700;
   }
 
   .growth-task--claimed .growth-task__marker {
     color: #10b981;
-    font-size: 16px;
+    font-size: var(--ui-font-16, 16px);
     font-weight: 700;
   }
 
@@ -305,13 +305,13 @@
     flex: 1 1 auto;
     min-width: 0;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
 
   .growth-task__body strong {
     overflow: hidden;
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 600;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -320,7 +320,7 @@
   .growth-task__body span {
     overflow: hidden;
     color: var(--desc-color);
-    font-size: 11.5px;
+    font-size: var(--ui-font-11_5, 11.5px);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -328,30 +328,30 @@
   .growth-task__reward {
     flex: 0 0 auto;
     color: #d97706;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 600;
     white-space: nowrap;
   }
 
   .growth-task__go {
     flex: 0 0 auto;
-    min-width: 54px;
-    padding: 4px 9px;
+    min-width: var(--ui-layout-54, 54px);
+    padding: var(--ui-space-4, 4px) var(--ui-space-9, 9px);
     border: 1px solid color-mix(in srgb, var(--primary-color) 35%, transparent);
     border-radius: 7px;
     color: var(--primary-color);
-    font-size: 11.5px;
+    font-size: var(--ui-font-11_5, 11.5px);
   }
 
   .growth-task__claim {
     flex: 0 0 auto;
-    min-width: 54px;
+    min-width: var(--ui-layout-54, 54px);
   }
 
   .growth-task__completed,
   .growth-task__readonly {
     flex: 0 0 auto;
-    font-size: 11.5px;
+    font-size: var(--ui-font-11_5, 11.5px);
     white-space: nowrap;
   }
 
@@ -365,11 +365,11 @@
   }
 
   .growth-tasks__empty {
-    padding: 13px;
+    padding: var(--ui-space-13, 13px);
     border-radius: 10px;
     background: color-mix(in srgb, var(--primary-color) 7%, var(--workbench-subcard-bg));
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     text-align: center;
   }
 
@@ -380,10 +380,10 @@
   }
 
   .growth-tasks--compact {
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
   }
 
   .growth-tasks--compact .growth-task {
-    padding: 9px 10px;
+    padding: var(--ui-space-9, 9px) var(--ui-space-10, 10px);
   }
 </style>

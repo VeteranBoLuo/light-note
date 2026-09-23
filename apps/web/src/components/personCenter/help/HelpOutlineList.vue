@@ -6,7 +6,7 @@
       :key="heading.id"
       class="help-outline-list__item"
       :class="{ active: activeId === heading.id }"
-      :style="{ paddingLeft: `${Math.max(heading.level - 1, 0) * 12 + 10}px` }"
+      :style="{ paddingLeft: `${dimension(Math.max(heading.level - 1, 0) * 12 + 10)}px` }"
       @click="emit('select', heading.id)"
     >
       <span class="help-outline-list__marker" aria-hidden="true"></span>
@@ -16,7 +16,10 @@
 </template>
 
 <script setup lang="ts">
+  import { useUiDensity } from '@/composables/useUiDensity';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+
+  const { dimension } = useUiDensity();
 
   defineProps<{
     title: string;
@@ -41,9 +44,9 @@
   }
 
   .help-outline-list__title {
-    padding: 0 10px 8px;
+    padding: 0 var(--ui-space-10, 10px) var(--ui-space-8, 8px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 700;
   }
 
@@ -52,18 +55,18 @@
     min-width: 0;
     max-width: 100%;
     height: auto;
-    min-height: 30px;
+    min-height: var(--ui-control-30, 30px);
     justify-content: flex-start;
-    gap: 7px;
-    padding: 5px 10px;
+    gap: var(--ui-space-7, 7px);
+    padding: var(--ui-space-5, 5px) var(--ui-space-10, 10px);
     overflow: hidden;
     border: 0;
     border-radius: 6px;
     color: var(--catalog-color);
     background: transparent;
     font: inherit;
-    font-size: 13px;
-    line-height: 20px;
+    font-size: var(--ui-font-13, 13px);
+    line-height: var(--ui-layout-20, 20px);
     text-align: left;
   }
 

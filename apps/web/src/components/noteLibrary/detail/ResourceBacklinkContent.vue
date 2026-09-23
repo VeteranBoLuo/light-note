@@ -74,39 +74,39 @@
 <style scoped lang="less">
   .resource-backlinks__content {
     display: grid;
-    gap: 3px;
-    padding: 5px;
+    gap: var(--ui-space-3, 3px);
+    padding: var(--ui-space-5, 5px);
     border-top: 1px solid color-mix(in srgb, var(--surface-border-color) 76%, transparent);
     background: color-mix(in srgb, var(--primary-color) 2%, var(--card-background));
   }
 
   .resource-backlinks__group {
     display: grid;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
     min-width: 0;
   }
 
   .resource-backlinks__group + .resource-backlinks__group {
-    margin-top: 4px;
-    padding-top: 6px;
+    margin-top: var(--ui-space-4, 4px);
+    padding-top: var(--ui-space-6, 6px);
     border-top: 1px solid var(--surface-divider-color, var(--surface-border-color));
   }
 
   .resource-backlinks__group h3 {
     margin: 0;
-    padding: 3px 8px 1px;
+    padding: var(--ui-space-3, 3px) var(--ui-space-8, 8px) var(--ui-space-1, 1px);
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 600;
     line-height: 1.35;
   }
 
   :deep(.resource-backlinks__item.b_btn.default_btn) {
     width: 100%;
-    min-height: 40px;
+    min-height: var(--ui-control-40, 40px);
     height: auto;
     justify-content: flex-start;
-    padding: 7px 12px;
+    padding: var(--ui-space-7, 7px) var(--ui-space-12, 12px);
     border-radius: 7px;
     background: transparent;
     box-shadow: none;
@@ -124,13 +124,13 @@
   .resource-backlinks__item-copy {
     display: grid;
     min-width: 0;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
 
   .resource-backlinks__item-meta {
     display: grid;
     min-width: 0;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
 
   .resource-backlinks__item-copy strong,
@@ -148,39 +148,39 @@
 
   .resource-backlinks__item-copy small {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.35;
   }
 
   .resource-backlinks__content--compact {
-    gap: 1px;
-    padding: 3px;
+    gap: var(--ui-space-1, 1px);
+    padding: var(--ui-space-3, 3px);
 
     :deep(.resource-backlinks__item.b_btn.default_btn) {
-      min-height: 44px;
-      padding: 6px 8px;
+      min-height: var(--ui-control-44, 44px);
+      padding: var(--ui-space-6, 6px) var(--ui-space-8, 8px);
     }
 
     .resource-backlinks__item-copy {
       width: 100%;
-      gap: 3px;
+      gap: var(--ui-space-3, 3px);
     }
 
     .resource-backlinks__item-copy strong {
-      font-size: 13px;
+      font-size: var(--ui-font-13, 13px);
       line-height: 1.3;
     }
 
     .resource-backlinks__item-meta {
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: var(--ui-space-6, 6px);
       overflow: hidden;
     }
 
     .resource-backlinks__item-meta small {
       min-width: 0;
-      font-size: 11px;
+      font-size: var(--ui-font-11, 11px);
       line-height: 1.3;
     }
 
@@ -194,29 +194,29 @@
     }
 
     .resource-backlinks__item-meta small + small::before {
-      margin-right: 6px;
+      margin-right: var(--ui-space-6, 6px);
       color: var(--desc-color);
       content: '·';
     }
 
     :deep(.resource-backlinks__more.b_btn.default_btn) {
-      min-height: 32px;
-      padding: 4px 8px;
+      min-height: var(--ui-control-32, 32px);
+      padding: var(--ui-space-4, 4px) var(--ui-space-8, 8px);
       line-height: 1.2;
     }
   }
 
   :deep(.resource-backlinks__more.b_btn.default_btn) {
     width: auto;
-    min-height: 40px;
+    min-height: var(--ui-control-40, 40px);
     height: auto;
     justify-self: start;
-    padding: 7px 12px;
+    padding: var(--ui-space-7, 7px) var(--ui-space-12, 12px);
     border-radius: 6px;
     color: var(--primary-color);
     background: transparent;
     box-shadow: none;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
 
     &:hover {
       background: color-mix(in srgb, var(--primary-color) 8%, var(--card-background));

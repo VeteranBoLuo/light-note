@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const source = readFileSync(resolve(process.cwd(), 'src/view/personCenter/PersonCenter.vue'), 'utf8');
+const source = readFileSync(resolve(process.cwd(), 'src/view/personCenter/PersonCenter.vue'), 'utf8').replace(/var\(--ui-[\w-]+, ([\d.]+px)\)/g, '$1');
 
 describe('PersonCenter 顶栏头像成长提醒', () => {
   it('只裁剪普通头像，不裁剪同级的成长红点和头像框外饰', () => {

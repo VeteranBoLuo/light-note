@@ -123,30 +123,30 @@
     color: var(--text-color);
   }
   .infra-module-content {
-    width: min(1320px, calc(100% - 48px));
+    width: min(var(--ui-layout-1320, 1320px), calc(100% - var(--ui-layout-48, 48px)));
     margin: 0 auto;
-    padding: 28px 0 48px;
+    padding: var(--ui-space-28, 28px) 0 var(--ui-space-48, 48px);
     display: grid;
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
   }
   .infra-state-card {
-    min-height: 150px;
+    min-height: var(--ui-layout-150, 150px);
     display: flex;
     align-items: center;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
   }
   .infra-state-card div {
     flex: 1;
   }
   .infra-state-card p {
-    margin: 5px 0 0;
+    margin: var(--ui-space-5, 5px) 0 0;
     color: var(--desc-color);
   }
   .infra-stale-warning {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 10px 12px;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     border: 1px solid var(--warning-color, #ad6800);
     border-radius: 10px;
     color: var(--warning-color, #ad6800);
@@ -155,32 +155,32 @@
   .storage-metrics {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
   }
   .storage-metric-card {
     display: grid;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .storage-metric-card span,
   .storage-metric-card small {
     color: var(--desc-color);
   }
   .storage-metric-card strong {
-    font-size: 24px;
+    font-size: var(--ui-font-24, 24px);
     font-variant-numeric: tabular-nums;
   }
   .storage-mount {
     display: grid;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .storage-mount__heading {
     display: flex;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .storage-mount__heading span {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .storage-track {
     height: 7px;
@@ -200,7 +200,7 @@
     margin: 0;
   }
   dl div {
-    padding: 4px 16px;
+    padding: var(--ui-space-4, 4px) var(--ui-space-16, 16px);
     border-left: 1px solid var(--surface-divider-color);
   }
   dl div:first-child {
@@ -209,14 +209,14 @@
   }
   dt {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   dd {
-    margin: 5px 0 0;
+    margin: var(--ui-space-5, 5px) 0 0;
     font-weight: 600;
   }
   .storage-empty {
-    min-height: 100px;
+    min-height: var(--ui-layout-100, 100px);
     display: grid;
     place-items: center;
     color: var(--desc-color);

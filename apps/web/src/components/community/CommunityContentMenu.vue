@@ -121,9 +121,9 @@
   .community-content-more {
     background: transparent;
     color: var(--desc-color);
-    width: 32px;
-    height: 32px;
-    padding: 6px;
+    width: var(--ui-layout-32, 32px);
+    height: var(--ui-layout-32, 32px);
+    padding: var(--ui-space-6, 6px);
   }
   .community-content-more.is-mobile {
     width: 44px;

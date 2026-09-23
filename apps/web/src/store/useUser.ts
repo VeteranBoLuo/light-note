@@ -53,7 +53,7 @@ interface UserInfo {
     noteParentOpenMode?: 'children' | 'preview'; // PC 点击父页面时打开子页面目录或预览当前页面
     lang?: 'zh-CN' | 'en-US'; // 语言
     homePage?: 'landing' | 'workbench' | 'resourceCenter' | 'bookmark' | 'noteLibrary' | 'cloudSpace'; // 默认首页
-    uiScale?: 'small' | 'medium' | 'large'; // 界面缩放(整体风格:小/标准/大,用 zoom 实现)
+    uiScale?: 'small' | 'medium' | 'large'; // 界面密度：small/medium/large 兼容存储，分别为紧凑/标准/宽松
     resourceView?: 'card' | 'list'; // 资源中心视图
     todoSubitemsExpanded?: boolean; // 默认展开子事项
     todoView?: 'list' | 'agenda' | 'calendar' | 'matrix'; // 待办默认视图

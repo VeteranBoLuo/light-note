@@ -116,7 +116,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 20px 20px 88px;
+    padding: var(--ui-space-20, 20px) var(--ui-space-20, 20px) var(--ui-space-88, 88px);
   }
 
   .video-stage {
@@ -127,8 +127,8 @@
     width: fit-content;
     max-width: 100%;
     height: fit-content;
-    max-height: calc(100vh - 160px);
-    max-height: calc(100dvh - 160px);
+    max-height: calc(100vh - var(--ui-layout-160, 160px));
+    max-height: calc(100dvh - var(--ui-layout-160, 160px));
     overflow: hidden;
     border: 1px solid var(--card-border-color);
     border-radius: 14px;
@@ -141,23 +141,25 @@
     width: auto;
     max-width: 100%;
     height: auto;
-    max-height: calc(100vh - 162px);
-    max-height: calc(100dvh - 162px);
+    /* ui-density-fixed: subtract the two 1px stage borders from the video height budget */
+    max-height: calc(100vh - var(--ui-layout-160, 160px) - 2px);
+    /* ui-density-fixed: same border budget for dynamic viewport fallback */
+    max-height: calc(100dvh - var(--ui-layout-160, 160px) - 2px);
     background: #000;
     object-fit: contain;
   }
 
   .video-format {
     position: absolute;
-    top: 12px;
-    left: 12px;
+    top: var(--ui-space-12, 12px);
+    left: var(--ui-space-12, 12px);
     z-index: 2;
-    padding: 4px 8px;
+    padding: var(--ui-space-4, 4px) var(--ui-space-8, 8px);
     border: 1px solid rgba(255, 255, 255, 0.28);
     border-radius: 999px;
     background: rgba(0, 0, 0, 0.72);
     color: #fff;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 700;
     line-height: 1;
     pointer-events: none;
@@ -171,9 +173,9 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 68px;
-    min-width: 68px;
-    height: 68px;
+    width: var(--ui-control-68, 68px);
+    min-width: var(--ui-control-68, 68px);
+    height: var(--ui-control-68, 68px);
     padding: 0;
     border: 2px solid rgba(255, 255, 255, 0.92);
     border-radius: 50%;

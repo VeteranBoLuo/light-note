@@ -106,7 +106,7 @@
   import icon from '@/config/icon';
   import type { NoteTreeItem } from '@/types/noteTree';
   import type { NoteTreeDropPosition } from '@/utils/noteTreeDrop';
-  import { scrollNearestIntoContainer } from '@/utils/zoom';
+  import { scrollNearestIntoContainer } from '@/utils/scrolling';
 
   const props = withDefaults(
     defineProps<{
@@ -294,7 +294,7 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   :deep(.tab-container.is-segment) {
@@ -320,22 +320,22 @@
 
   .note-tree-search {
     flex: 0 0 auto;
-    margin-bottom: 5px;
+    margin-bottom: var(--ui-space-5, 5px);
   }
 
   .note-tree-search :deep(.b-input) {
-    height: 34px;
+    height: var(--ui-control-34, 34px);
     border-radius: 9px;
   }
 
   .note-tree-root {
     position: relative;
     width: 100%;
-    height: 36px;
+    height: var(--ui-control-36, 36px);
     flex: 0 0 auto;
     justify-content: flex-start;
-    gap: 8px;
-    padding: 0 9px;
+    gap: var(--ui-space-8, 8px);
+    padding: 0 var(--ui-space-9, 9px);
     border: 1px solid transparent;
     border-radius: 9px;
     color: var(--desc-color);
@@ -359,7 +359,7 @@
     }
 
     &.is-drop-root-start {
-      margin-bottom: 12px;
+      margin-bottom: var(--ui-space-12, 12px);
       transform: translateY(-2px);
       transition:
         margin 180ms cubic-bezier(0.22, 0.61, 0.36, 1),
@@ -381,15 +381,15 @@
 
   .note-tree-root-count {
     margin-left: auto;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-variant-numeric: tabular-nums;
   }
 
   .note-tree-scroll {
     flex: 1;
     min-height: 0;
-    margin: 4px 0 0;
-    padding: 0 3px 0 0;
+    margin: var(--ui-space-4, 4px) 0 0;
+    padding: 0 var(--ui-space-3, 3px) 0 0;
     overflow-y: auto;
     list-style: none;
   }
@@ -397,10 +397,10 @@
   .note-tree-loading {
     min-height: 0;
     flex: 1;
-    padding: 5px 6px 0;
+    padding: var(--ui-space-5, 5px) var(--ui-space-6, 6px) 0;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     overflow: hidden;
   }
 
@@ -408,10 +408,10 @@
     position: relative;
     height: 32px;
     flex: 0 0 auto;
-    padding: 0 8px;
+    padding: 0 var(--ui-space-8, 8px);
     display: flex;
     align-items: center;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
     overflow: hidden;
     border-radius: 8px;
     background: var(--card-background);
@@ -444,7 +444,7 @@
   }
 
   .note-tree-skeleton-row:nth-child(3n + 2) {
-    padding-left: 25px;
+    padding-left: var(--ui-space-25, 25px);
 
     .note-tree-skeleton-line {
       width: 54%;
@@ -466,15 +466,15 @@
   }
 
   .note-tree-error {
-    margin: 6px 4px 0;
+    margin: var(--ui-space-6, 6px) var(--ui-space-4, 4px) 0;
     color: var(--danger-color, #dc2626);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .note-tree-empty {
-    margin: 12px 6px 0;
+    margin: var(--ui-space-12, 12px) var(--ui-space-6, 6px) 0;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     text-align: center;
   }
 

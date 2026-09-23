@@ -60,7 +60,7 @@
       v-if="settingsLayout"
       :visible="Boolean(selected)"
       :title="t('settingsRefine.ledger.detail')"
-      width="460px"
+      width="var(--ui-layout-460, 460px)"
       :show-footer="false"
       @close="selected = null"
     >
@@ -203,7 +203,7 @@
   .ledger {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .ledger :deep(.tab-container) {
     min-width: 0;
@@ -218,12 +218,12 @@
   }
   .ledger-head h3 {
     margin: 0;
-    font-size: 16px;
+    font-size: var(--ui-font-16, 16px);
   }
   .ledger-head p {
-    margin: 4px 0 0;
+    margin: var(--ui-space-4, 4px) 0 0;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .ledger-list {
     width: 100%;
@@ -231,8 +231,8 @@
   .ledger-row {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 10px 4px;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-4, 4px);
     border-bottom: 1px solid var(--card-border-color);
   }
   .ledger-main {
@@ -240,14 +240,14 @@
     flex: 1 1 auto;
     min-width: 0;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
   .ledger-main b {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .ledger-main span {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .ledger-row strong {
     font-variant-numeric: tabular-nums;
@@ -265,44 +265,44 @@
   }
   .ledger-loading {
     display: grid;
-    min-height: 150px;
+    min-height: var(--ui-layout-150, 150px);
     place-items: center;
   }
   .ledger-empty {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .ledger-all,
   .ledger-empty {
     align-self: center;
-    padding: 16px;
-    font-size: 12px;
+    padding: var(--ui-space-16, 16px);
+    font-size: var(--ui-font-12, 12px);
   }
   .ledger-detail {
     display: grid;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .ledger-detail dt {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .ledger-detail dd {
-    margin: 0 0 12px;
+    margin: 0 0 var(--ui-space-12, 12px);
     overflow-wrap: anywhere;
   }
   .ledger.is-settings {
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
     .ledger-head {
       border-bottom: 1px solid var(--card-border-color);
-      padding-bottom: 18px;
+      padding-bottom: var(--ui-space-18, 18px);
     }
     .ledger-head h3 {
-      font-size: 16px;
+      font-size: var(--ui-font-16, 16px);
     }
     .ledger-head p {
-      font-size: 13px;
+      font-size: var(--ui-font-13, 13px);
     }
     .ledger-row {
       width: 100%;
@@ -312,19 +312,22 @@
       white-space: normal;
       background: transparent;
       line-height: 1.6;
-      padding: 20px 0;
-      min-height: 78px;
+      padding: var(--ui-space-20, 20px) 0;
+      min-height: var(--ui-layout-78, 78px);
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(140px, 20%) minmax(80px, 15%);
+      grid-template-columns: minmax(0, 1fr) minmax(var(--ui-layout-140, 140px), 20%) minmax(
+          var(--ui-layout-80, 80px),
+          15%
+        );
     }
     .ledger-main {
-      gap: 7px;
+      gap: var(--ui-space-7, 7px);
     }
     .ledger-main b {
-      font-size: 14px;
+      font-size: var(--ui-font-14, 14px);
     }
     .ledger-main span {
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
     }
     .ledger-row > strong {
       text-align: right;
@@ -332,7 +335,7 @@
     }
     .ledger-time {
       color: var(--desc-color);
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
     }
     .ledger-time-inline {
       display: none;

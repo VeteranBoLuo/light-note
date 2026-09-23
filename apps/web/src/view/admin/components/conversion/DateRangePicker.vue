@@ -66,7 +66,6 @@
 <script lang="ts" setup>
   import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
-  import { getRootZoom } from '@/utils/zoom';
 
   const props = withDefaults(
     defineProps<{
@@ -323,14 +322,13 @@
     const panel = panelRef.value;
     if (!trigger || !panel) return;
 
-    const zoom = getRootZoom();
-    const viewportWidth = document.documentElement.clientWidth / zoom;
-    const viewportHeight = document.documentElement.clientHeight / zoom;
-    const viewportGutter = 12 / zoom;
-    const panelGap = 6 / zoom;
+    const viewportWidth = document.documentElement.clientWidth;
+    const viewportHeight = document.documentElement.clientHeight;
+    const viewportGutter = 12;
+    const panelGap = 6;
     const triggerRect = trigger.getBoundingClientRect();
-    const triggerTop = triggerRect.top / zoom;
-    const triggerBottom = triggerRect.bottom / zoom;
+    const triggerTop = triggerRect.top;
+    const triggerBottom = triggerRect.bottom;
     const panelHeight = Math.min(panel.offsetHeight, viewportHeight - viewportGutter * 2);
     const belowTop = triggerBottom + panelGap;
     const aboveTop = triggerTop - panelHeight - panelGap;
@@ -403,25 +401,25 @@
   .drp { position: relative; }
 
   .drp-trigger.b_btn {
-    display: inline-flex; align-items: center; gap: 6px;
+    display: inline-flex; align-items: center; gap: var(--ui-space-6, 6px);
     width: max-content;
-    height: 32px;
+    height: var(--ui-control-32, 32px);
     line-height: 1;
-    padding: 6px 12px;
+    padding: var(--ui-space-6, 6px) var(--ui-space-12, 12px);
     border: 1px solid var(--card-border-color, #ddd);
     border-radius: 6px;
     background: var(--background-color);
     color: var(--text-color);
-    cursor: pointer; font-size: 13px; white-space: nowrap;
+    cursor: pointer; font-size: var(--ui-font-13, 13px); white-space: nowrap;
   }
   .drp-trigger:hover { border-color: var(--primary-color); }
-  .drp-arrow { font-size: 10px; color: var(--sub-text-color, #888); }
+  .drp-arrow { font-size: var(--ui-font-10, 10px); color: var(--sub-text-color, #888); }
 
   .drp-panel {
-    position: absolute; top: calc(100% + 6px); left: 0; z-index: 100;
+    position: absolute; top: calc(100% + var(--ui-space-6, 6px)); left: 0; z-index: 100;
     display: flex; gap: 0;
     box-sizing: border-box;
-    padding: 16px;
+    padding: var(--ui-space-16, 16px);
     border: 1px solid var(--card-border-color, #ddd);
     border-radius: 10px;
     background: var(--card-background, var(--background-color));
@@ -431,74 +429,74 @@
 
   /* 左侧预设 */
   .drp-presets {
-    display: flex; flex-direction: column; gap: 4px;
-    min-width: 110px;
+    display: flex; flex-direction: column; gap: var(--ui-space-4, 4px);
+    min-width: var(--ui-layout-110, 110px);
   }
   .drp-section-title {
-    margin: 0 0 6px;
-    font-size: 12px; font-weight: 600;
+    margin: 0 0 var(--ui-space-6, 6px);
+    font-size: var(--ui-font-12, 12px); font-weight: 600;
     color: var(--sub-text-color, #888);
   }
   .drp-preset-btn.b_btn {
     display: block; width: 100%;
     height: auto; line-height: 1.4;
-    padding: 6px 12px; border: 0; border-radius: 6px;
+    padding: var(--ui-space-6, 6px) var(--ui-space-12, 12px); border: 0; border-radius: 6px;
     background: transparent; color: var(--text-color);
-    text-align: left; cursor: pointer; font-size: 13px;
+    text-align: left; cursor: pointer; font-size: var(--ui-font-13, 13px);
   }
   .drp-preset-btn:hover { background: rgba(97,92,237,.1); }
   .drp-preset-btn.active { background: var(--primary-color); color: #fff; }
 
   .drp-divider {
-    width: 1px; margin: 0 16px;
+    width: 1px; margin: 0 var(--ui-space-16, 16px);
     background: var(--card-border-color, #ddd);
   }
 
   /* 右侧日历面板 */
   .drp-calendar {
-    display: flex; flex-direction: column; gap: 8px;
+    display: flex; flex-direction: column; gap: var(--ui-space-8, 8px);
   }
 
   /* 导航 */
   .drp-cal-header {
-    display: flex; align-items: center; justify-content: center; gap: 8px;
+    display: flex; align-items: center; justify-content: center; gap: var(--ui-space-8, 8px);
   }
   .drp-nav-btn.b_btn {
-    width: 28px; height: 28px; line-height: 1;
-    padding: 2px 6px; border: 0; border-radius: 4px;
+    width: var(--ui-layout-28, 28px); height: var(--ui-control-28, 28px); line-height: 1;
+    padding: var(--ui-space-2, 2px) var(--ui-space-6, 6px); border: 0; border-radius: 4px;
     background: transparent; color: var(--text-color);
-    cursor: pointer; font-size: 12px; line-height: 1;
+    cursor: pointer; font-size: var(--ui-font-12, 12px); line-height: 1;
   }
   .drp-nav-btn:hover { background: rgba(97,92,237,.1); }
   .drp-month-label {
-    min-width: 90px; text-align: center;
-    font-size: 14px; font-weight: 600; color: var(--text-color);
+    min-width: var(--ui-layout-90, 90px); text-align: center;
+    font-size: var(--ui-font-14, 14px); font-weight: 600; color: var(--text-color);
   }
 
   /* 双月网格 */
   .drp-cal-grids {
-    display: flex; gap: 16px;
+    display: flex; gap: var(--ui-space-16, 16px);
   }
-  .drp-month { display: flex; flex-direction: column; gap: 2px; }
+  .drp-month { display: flex; flex-direction: column; gap: var(--ui-space-2, 2px); }
 
   .drp-weekdays {
-    display: grid; grid-template-columns: repeat(7, 32px);
+    display: grid; grid-template-columns: repeat(7, var(--ui-layout-32, 32px));
     text-align: center;
   }
   .drp-weekdays span {
-    font-size: 11px; color: var(--sub-text-color, #888);
-    padding: 4px 0; line-height: 1;
+    font-size: var(--ui-font-11, 11px); color: var(--sub-text-color, #888);
+    padding: var(--ui-space-4, 4px) 0; line-height: 1;
   }
 
   .drp-days {
-    display: grid; grid-template-columns: repeat(7, 32px);
+    display: grid; grid-template-columns: repeat(7, var(--ui-layout-32, 32px));
     text-align: center;
   }
   .drp-day.b_btn {
-    width: 32px; height: auto; min-height: 27px; line-height: 1.4;
-    padding: 4px 0; border: 0; border-radius: 4px;
+    width: var(--ui-layout-32, 32px); height: auto; min-height: var(--ui-control-27, 27px); line-height: 1.4;
+    padding: var(--ui-space-4, 4px) 0; border: 0; border-radius: 4px;
     background: transparent; color: var(--text-color);
-    cursor: pointer; font-size: 12px; line-height: 1.4;
+    cursor: pointer; font-size: var(--ui-font-12, 12px); line-height: 1.4;
   }
   .drp-day:hover {
     background: rgba(97,92,237,.15);
@@ -523,18 +521,18 @@
   /* 底部 */
   .drp-cal-footer {
     display: flex; align-items: center; justify-content: space-between;
-    margin-top: 4px;
+    margin-top: var(--ui-space-4, 4px);
   }
   .drp-cal-range-hint {
-    font-size: 12px; color: var(--sub-text-color, #888);
+    font-size: var(--ui-font-12, 12px); color: var(--sub-text-color, #888);
   }
   .drp-cal-actions {
-    display: flex; gap: 8px;
+    display: flex; gap: var(--ui-space-8, 8px);
   }
   .drp-btn.b_btn {
-    width: max-content; height: 32px; line-height: 1;
-    padding: 6px 14px; border: 0; border-radius: 6px;
-    background: var(--primary-color); color: #fff; cursor: pointer; font-size: 13px;
+    width: max-content; height: var(--ui-control-32, 32px); line-height: 1;
+    padding: var(--ui-space-6, 6px) var(--ui-space-14, 14px); border: 0; border-radius: 6px;
+    background: var(--primary-color); color: #fff; cursor: pointer; font-size: var(--ui-font-13, 13px);
   }
   .drp-btn.ghost {
     background: transparent; border: 1px solid var(--card-border-color, #ddd);

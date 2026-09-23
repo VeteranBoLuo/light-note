@@ -56,11 +56,11 @@ describe('ChatMentionSuggestions', () => {
   });
 
   it('覆盖 BButton 固定高度并只用左侧实色边标表达键盘选中态', () => {
-    expect(componentSource).toContain('height: min(360px, 42vh)');
+    expect(componentSource).toContain('height: min(var(--ui-layout-360, 360px), 42vh)');
     expect(componentSource).toContain('height: min(300px, calc(var(--mobile-visible-viewport-height, 100vh) * 0.38))');
     expect(componentSource).toContain('grid-auto-rows: max-content');
-    expect(componentSource).toContain('min-height: 105px');
-    expect(componentSource).toContain('max-height: calc(100% - 72px)');
+    expect(componentSource).toContain('min-height: var(--ui-layout-105, 105px)');
+    expect(componentSource).toContain('max-height: calc(100% - var(--ui-layout-72, 72px))');
     expect(componentSource).toContain('flex: 1 1 auto');
     expect(componentSource).toContain('height: auto !important');
     expect(componentSource).toContain('line-height: 1.35 !important');

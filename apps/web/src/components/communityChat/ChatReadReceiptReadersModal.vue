@@ -2,7 +2,7 @@
   <BModal
     v-model:visible="visible"
     :title="t('communityChat.readReceipt.readersTitle')"
-    width="min(540px, 92vw)"
+    width="min(var(--ui-layout-540, 540px), 92vw)"
     :show-footer="false"
     :fullscreen-mobile="true"
   >
@@ -28,7 +28,7 @@
             <AvatarFramePreview
               :frame-id="reader.frameId"
               :src="reader.avatar || icon.communityChat.defaultAvatar"
-              :size="38"
+              :size="dimension(38, 'layout')"
               :animated="false"
               class="chat-read-receipt-readers-modal__avatar"
             />
@@ -80,6 +80,8 @@
   import AvatarFramePreview from '@/components/growth/AvatarFramePreview.vue';
   import icon from '@/config/icon';
 
+  import { useUiDensity } from '@/composables/useUiDensity';
+  const { dimension } = useUiDensity();
   withDefaults(
     defineProps<{
       items?: CommunityChatReadReceiptReader[];
@@ -126,38 +128,38 @@
 
 <style scoped lang="less">
   .chat-read-receipt-readers-modal {
-    --chat-read-receipt-avatar-column: 82px;
+    --chat-read-receipt-avatar-column: var(--ui-layout-82, 82px);
 
     display: grid;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     color: var(--text-color);
   }
 
   .chat-read-receipt-readers-modal__summary {
     display: grid;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
 
   .chat-read-receipt-readers-modal__summary strong {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .chat-read-receipt-readers-modal__summary span,
   .chat-read-receipt-readers-modal__privacy {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.6;
   }
 
   .chat-read-receipt-readers-modal__state {
-    min-height: 132px;
-    padding: 18px;
+    min-height: var(--ui-layout-132, 132px);
+    padding: var(--ui-space-18, 18px);
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     background: var(--workspace-panel-bg-color);
@@ -165,12 +167,12 @@
   }
 
   .chat-read-receipt-readers-modal__state strong {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .chat-read-receipt-readers-modal__state span {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.5;
   }
 
@@ -179,11 +181,11 @@
   }
 
   .chat-read-receipt-readers-modal__list {
-    max-height: min(430px, 54vh);
+    max-height: min(var(--ui-layout-430, 430px), 54vh);
     margin: 0;
     padding: 0;
     display: grid;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     overflow-x: hidden;
     overflow-y: auto;
     list-style: none;
@@ -191,13 +193,13 @@
 
   .chat-read-receipt-readers-modal__list li {
     min-width: 0;
-    min-height: 62px;
-    padding: 8px 10px;
+    min-height: var(--ui-layout-62, 62px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px);
     box-sizing: border-box;
     display: grid;
     grid-template-columns: var(--chat-read-receipt-avatar-column) minmax(0, 1fr);
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     background: var(--card-background);
@@ -213,7 +215,7 @@
   .chat-read-receipt-readers-modal__copy {
     min-width: 0;
     display: grid;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
 
   .chat-read-receipt-readers-modal__copy strong,
@@ -224,12 +226,12 @@
   }
 
   .chat-read-receipt-readers-modal__copy strong {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .chat-read-receipt-readers-modal__copy small {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .chat-read-receipt-readers-modal__more {
@@ -243,7 +245,7 @@
   .chat-read-receipt-readers-modal__actions {
     display: flex;
     justify-content: flex-end;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   @media (max-width: 767px) {

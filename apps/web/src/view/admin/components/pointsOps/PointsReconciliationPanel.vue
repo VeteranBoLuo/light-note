@@ -77,17 +77,17 @@
   const reconciliation = ref<any>(null);
   const anomalies = ref<any>(null);
   const mismatchColumns = [
-    { title: '用户', key: 'identity', width: 'minmax(190px, 1fr)', ellipsis: false },
-    { title: '当前余额', key: 'balanceLabel', width: '100px' },
-    { title: '预期余额', key: 'expectedLabel', width: '100px' },
-    { title: '差额', key: 'differenceLabel', width: '100px' },
-    { title: '操作', key: 'action', width: '130px', ellipsis: false },
+    { title: '用户', key: 'identity', width: 'minmax(var(--ui-layout-190, 190px), 1fr)', ellipsis: false },
+    { title: '当前余额', key: 'balanceLabel', width: 'var(--ui-layout-100, 100px)' },
+    { title: '预期余额', key: 'expectedLabel', width: 'var(--ui-layout-100, 100px)' },
+    { title: '差额', key: 'differenceLabel', width: 'var(--ui-layout-100, 100px)' },
+    { title: '操作', key: 'action', width: 'var(--ui-layout-130, 130px)', ellipsis: false },
   ];
   const anomalyColumns = [
-    { title: '严重性', key: 'severityLabel', width: '90px' },
-    { title: '规则', key: 'codeLabel', width: 'minmax(220px, 1fr)', ellipsis: false },
-    { title: '对象', key: 'target', width: 'minmax(150px, 1fr)', ellipsis: false },
-    { title: '数值', key: 'value', width: '110px' },
+    { title: '严重性', key: 'severityLabel', width: 'var(--ui-layout-90, 90px)' },
+    { title: '规则', key: 'codeLabel', width: 'minmax(var(--ui-layout-220, 220px), 1fr)', ellipsis: false },
+    { title: '对象', key: 'target', width: 'minmax(var(--ui-layout-150, 150px), 1fr)', ellipsis: false },
+    { title: '数值', key: 'value', width: 'var(--ui-layout-110, 110px)' },
   ];
   const codeLabels: Record<string, string> = {
     DAILY_STABLE_OVER_CAP: '单日签到与每日任务超过稳定上限',
@@ -220,7 +220,7 @@
   @import '@/assets/css/admin-breakpoints.less';
   .points-recon {
     display: grid;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
   .points-recon__toolbar,
   .points-recon__panel header,
@@ -228,7 +228,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
   h2,
   h3,
@@ -237,30 +237,30 @@
   }
   h2 {
     color: var(--text-color);
-    font-size: 18px;
+    font-size: var(--ui-font-18, 18px);
   }
   h3 {
     color: var(--text-color);
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
   }
   p,
   header span,
   .points-recon__pager span {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .points-recon__summary {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .points-recon__summary span {
-    padding: 9px 12px;
+    padding: var(--ui-space-9, 9px) var(--ui-space-12, 12px);
     border: 1px solid var(--card-border-color);
     border-radius: 9px;
     background: var(--workbench-subcard-bg);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .points-recon__summary b {
     color: var(--text-color);
@@ -275,8 +275,8 @@
   .points-recon__panel {
     display: grid;
     min-width: 0;
-    gap: 12px;
-    padding: 15px;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-15, 15px);
     border: 1px solid var(--card-border-color);
     border-radius: 12px;
     background: var(--workbench-subcard-bg);

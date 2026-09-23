@@ -98,16 +98,16 @@
     { key: 'activeUsers', label: '模拟用户数', hint: '仅参与总量估算' },
   ];
   const tierColumns = [
-    { title: '档位', key: 'tierLabel', width: '90px' },
-    { title: '免费次数/日', key: 'drawsLabel', width: '110px' },
-    { title: '周期望', key: 'weekLabel', width: '110px' },
-    { title: '月期望', key: 'monthLabel', width: '110px' },
-    { title: '年期望', key: 'yearLabel', width: '120px' },
+    { title: '档位', key: 'tierLabel', width: 'var(--ui-layout-90, 90px)' },
+    { title: '免费次数/日', key: 'drawsLabel', width: 'var(--ui-layout-110, 110px)' },
+    { title: '周期望', key: 'weekLabel', width: 'var(--ui-layout-110, 110px)' },
+    { title: '月期望', key: 'monthLabel', width: 'var(--ui-layout-110, 110px)' },
+    { title: '年期望', key: 'yearLabel', width: 'var(--ui-layout-120, 120px)' },
   ];
   const goalColumns = [
-    { title: '商品', key: 'name', width: 'minmax(160px, 1fr)', ellipsis: false },
-    { title: '积分', key: 'costLabel', width: '100px' },
-    { title: '稳定周数', key: 'weeksLabel', width: '110px' },
+    { title: '商品', key: 'name', width: 'minmax(var(--ui-layout-160, 160px), 1fr)', ellipsis: false },
+    { title: '积分', key: 'costLabel', width: 'var(--ui-layout-100, 100px)' },
+    { title: '稳定周数', key: 'weeksLabel', width: 'var(--ui-layout-110, 110px)' },
   ];
   const format = (value: unknown) => Number(value || 0).toLocaleString('zh-CN');
   const tierRows = computed(() =>
@@ -188,13 +188,13 @@
   @import '@/assets/css/admin-breakpoints.less';
   .points-simulator {
     display: grid;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
   .points-simulator__intro {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
   h2,
   h3,
@@ -203,47 +203,47 @@
   }
   h2 {
     color: var(--text-color);
-    font-size: 18px;
+    font-size: var(--ui-font-18, 18px);
   }
   h3 {
     color: var(--text-color);
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
   }
   p,
   small {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .points-simulator__intro > span {
-    padding: 5px 9px;
+    padding: var(--ui-space-5, 5px) var(--ui-space-9, 9px);
     border: 1px solid var(--success-color);
     border-radius: 999px;
     color: var(--success-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .points-simulator__inputs {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .points-simulator__inputs label {
     display: grid;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
   .points-simulator__inputs label > span {
     color: var(--text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 600;
   }
   .points-simulator__actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .points-simulator__metrics {
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .points-simulator__metrics article,
   .points-simulator__panel {
@@ -253,28 +253,28 @@
   }
   .points-simulator__metrics article {
     display: grid;
-    gap: 5px;
-    padding: 13px;
+    gap: var(--ui-space-5, 5px);
+    padding: var(--ui-space-13, 13px);
   }
   .points-simulator__metrics span {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .points-simulator__metrics strong {
     color: var(--text-color);
-    font-size: 18px;
+    font-size: var(--ui-font-18, 18px);
     font-variant-numeric: tabular-nums;
   }
   .points-simulator__grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
   .points-simulator__panel {
     display: grid;
     min-width: 0;
-    gap: 12px;
-    padding: 15px;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-15, 15px);
     overflow: hidden;
   }
   @media (max-width: @admin-bp-mobile) {

@@ -94,15 +94,15 @@
     text-align: center;
     box-sizing: border-box;
     cursor: pointer;
-    height: 32px;
-    line-height: 32px;
+    height: var(--ui-control-32, 32px);
+    line-height: var(--ui-control-32, 32px);
     transition: color 0.2s;
     width: max-content;
     display: flex;
     justify-content: center;
     align-items: center;
-    padding: 0 15px;
-    font-size: 14px;
+    padding: 0 var(--ui-space-15, 15px);
+    font-size: var(--ui-font-14, 14px);
     font-family: inherit;
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
@@ -119,7 +119,7 @@
   .text_btn {
     background: transparent;
     color: var(--workspace-purple-text, var(--primary-color));
-    padding-inline: 4px;
+    padding-inline: var(--ui-space-4, 4px);
   }
 
   .primary_btn {
@@ -173,17 +173,17 @@
   }
 
   .small_btn {
-    height: 24px;
-    line-height: 24px;
-    padding: 0 10px;
-    font-size: 12px;
+    height: var(--ui-control-24, 24px);
+    line-height: var(--ui-control-24, 24px);
+    padding: 0 var(--ui-space-10, 10px);
+    font-size: var(--ui-font-12, 12px);
   }
 
   .large_btn {
-    height: 40px;
-    line-height: 40px;
-    padding: 0 20px;
-    font-size: 16px;
+    height: var(--ui-control-40, 40px);
+    line-height: var(--ui-control-40, 40px);
+    padding: 0 var(--ui-space-20, 20px);
+    font-size: var(--ui-font-16, 16px);
   }
 
   .b_btn.loading {
@@ -202,9 +202,9 @@
 
   .btn-spinner {
     display: inline-block;
-    width: 14px;
-    height: 14px;
-    margin-right: 6px;
+    width: var(--ui-layout-14, 14px);
+    height: var(--ui-layout-14, 14px);
+    margin-right: var(--ui-space-6, 6px);
     border: 2px solid currentColor;
     border-top-color: transparent;
     border-radius: 50%;

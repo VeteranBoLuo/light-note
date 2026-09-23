@@ -53,13 +53,20 @@
         :z-index="650"
         :disabled="user.adminContext?.mode === 'readonly'"
         @select="handleListAction(list, $event)"
-        ><BButton
-          class="todo-workspace-sidebar__mobile-more"
-          size="small"
-          :aria-label="`${t('common.more')} ${list.name}`"
-          >…</BButton
-        ></BActionMenu
       >
+        <template #default="{ open }">
+          <BButton
+            class="todo-workspace-sidebar__mobile-more"
+            :class="{ 'is-open': open }"
+            type="text"
+            size="small"
+            :aria-expanded="open"
+            aria-haspopup="menu"
+            :aria-label="`${t('common.more')} ${list.name}`"
+            >…</BButton
+          >
+        </template>
+      </BActionMenu>
     </BActionMenu>
     <BButton
       :class="{ active: current === 'unassigned' }"
@@ -81,7 +88,7 @@
       v-model:visible="editing"
       :title="t(form.id ? 'todoWorkspace.editList' : 'todoWorkspace.newList')"
       :show-footer="false"
-      width="420px"
+      width="var(--ui-layout-420, 420px)"
     >
       <div class="todo-list-form">
         <label>{{ t('todoWorkspace.listName') }}<BInput v-model:value="form.name" :maxlength="40" /></label>
@@ -253,9 +260,9 @@
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     min-width: 0;
-    padding: 16px 12px;
+    padding: var(--ui-space-16, 16px) var(--ui-space-12, 12px);
     border: 1px solid var(--surface-border-color);
     border-radius: 16px;
   }
@@ -263,16 +270,16 @@
   .todo-workspace-sidebar__list-title {
     width: 100%;
     min-width: 0;
-    min-height: 40px;
+    min-height: var(--ui-layout-40, 40px);
     justify-content: flex-start;
-    gap: 10px;
-    padding: 8px 10px;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px);
     border: 1px solid transparent;
     border-radius: 9px;
     box-shadow: none;
     background: transparent;
     color: var(--desc-color);
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     text-align: left;
   }
   .todo-workspace-sidebar :deep(button:focus-visible) {
@@ -280,7 +287,7 @@
     outline-offset: 1px;
   }
   @media (hover: hover) and (pointer: fine) {
-    .todo-workspace-sidebar :deep(button:not(.active):not(:disabled):hover) {
+    .todo-workspace-sidebar :deep(button:not(.active):not(:disabled):not(.todo-workspace-sidebar__mobile-more):hover) {
       background: var(--category-item-ba-color);
       color: var(--text-color);
     }
@@ -302,7 +309,7 @@
     flex-shrink: 0;
     margin-left: auto;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-variant-numeric: tabular-nums;
   }
   .todo-workspace-sidebar :deep(.active) small {
@@ -311,28 +318,28 @@
   .todo-workspace-sidebar__caption {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 2px 10px 8px;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-2, 2px) var(--ui-space-10, 10px) var(--ui-space-8, 8px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .todo-workspace-sidebar header {
     display: flex;
     align-items: center;
-    gap: 10px;
-    margin-top: 14px;
-    padding: 16px 10px 6px;
+    gap: var(--ui-space-10, 10px);
+    margin-top: var(--ui-space-14, 14px);
+    padding: var(--ui-space-16, 16px) var(--ui-space-10, 10px) var(--ui-space-6, 6px);
     border-top: 1px solid var(--surface-divider-color);
     color: var(--desc-color);
   }
   .todo-workspace-sidebar header strong {
     flex: 1;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 500;
   }
   .todo-workspace-sidebar header :deep(button) {
-    min-width: 26px;
-    min-height: 26px;
+    min-width: var(--ui-layout-26, 26px);
+    min-height: var(--ui-layout-26, 26px);
     padding: 0;
     color: var(--desc-color);
     background: transparent;
@@ -349,13 +356,10 @@
   .todo-workspace-sidebar__list-title {
     flex: 1;
   }
-  .todo-workspace-sidebar__mobile-more {
-    padding: 0 8px;
-  }
   .todo-workspace-sidebar i {
     width: 9px;
     height: 9px;
-    margin-inline: 5px 6px;
+    margin-inline: var(--ui-space-5, 5px) var(--ui-space-6, 6px);
     border-radius: 50%;
     flex-shrink: 0;
   }
@@ -363,30 +367,30 @@
     padding: 0;
     border: 0;
     border-radius: 0;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
   .todo-workspace-sidebar--picker > :deep(button),
   .todo-workspace-sidebar--picker .todo-workspace-sidebar__list-title {
-    min-height: 44px;
-    padding: 8px 10px;
+    min-height: var(--ui-layout-44, 44px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px);
   }
   .todo-workspace-sidebar--picker header {
-    margin-top: 8px;
-    padding: 8px 10px 0;
+    margin-top: var(--ui-space-8, 8px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px) 0;
   }
   .todo-workspace-sidebar--picker header :deep(button),
   .todo-workspace-sidebar--picker .todo-workspace-sidebar__mobile-more {
-    min-width: 44px;
-    min-height: 44px;
+    min-width: var(--ui-layout-44, 44px);
+    min-height: var(--ui-layout-44, 44px);
   }
   .todo-list-form,
   .todo-list-form label {
     display: grid;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .todo-list-form footer {
     display: flex;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     justify-content: flex-end;
   }
   // 共享工作区表面：仅改变颜色，布局与滚动由原组件负责。
@@ -397,10 +401,39 @@
   .todo-workspace-sidebar {
     .workspace-navigation-colors();
   }
-  .todo-workspace-sidebar :deep(button:not(.active):not(:disabled):hover) {
+  .todo-workspace-sidebar :deep(button:not(.active):not(:disabled):not(.todo-workspace-sidebar__mobile-more):hover) {
     .workspace-navigation-hover();
   }
   .todo-workspace-sidebar :deep(button.active) {
     .workspace-navigation-selected();
+  }
+  /* 此按钮只在 isMobile 分支渲染，触控区域与可见底色分开。 */
+  .todo-workspace-sidebar .todo-workspace-sidebar__mobile-more.b_btn {
+    position: relative;
+    isolation: isolate;
+    /* ui-density-fixed: 仅移动端渲染，保持 44px 触控区域。 */
+    width: 44px;
+    /* ui-density-fixed: 仅移动端渲染，保持 44px 触控区域。 */
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    color: var(--desc-color);
+  }
+  .todo-workspace-sidebar__mobile-more::before {
+    position: absolute;
+    z-index: -1;
+    inset: 6px;
+    border-radius: 8px;
+    background: transparent;
+    content: '';
+    pointer-events: none;
+  }
+  .todo-workspace-sidebar__mobile-more.is-open::before,
+  .todo-workspace-sidebar__mobile-more:active::before {
+    background: var(--workspace-hover);
   }
 </style>

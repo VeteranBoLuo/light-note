@@ -107,16 +107,16 @@
   .b-loading-inline {
     display: inline-flex;
     align-items: center;
-    min-height: 32px;
-    gap: 9px;
+    min-height: var(--ui-layout-32, 32px);
+    gap: var(--ui-space-9, 9px);
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .b-loading-inline__indicator {
     display: inline-flex;
     align-items: center;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
 
   .b-loading-inline__indicator i {
@@ -168,7 +168,7 @@
     width: 100%;
   }
   .loader-container.is-standalone {
-    min-height: 100px;
+    min-height: var(--ui-layout-100, 100px);
   }
   .loader-container.both-center {
     position: absolute;
@@ -188,13 +188,13 @@
     align-items: center;
     justify-content: center;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     color: var(--desc-color);
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     pointer-events: none;
   }
   .b-loading-overlay .b-loading-inline__indicator {
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
   .b-loading-overlay .b-loading-inline__indicator i {
     width: 8px;

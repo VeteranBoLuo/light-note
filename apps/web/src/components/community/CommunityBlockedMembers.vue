@@ -74,21 +74,22 @@
 </script>
 <style scoped>
   .community-blocked-members {
-    padding: 20px 0;
+    padding: var(--ui-space-20, 20px) 0;
     border-top: 1px solid var(--workspace-divider);
   }
   h2 {
-    font-size: 16px;
+    font-size: var(--ui-font-16, 16px);
   }
   .blocked-member-row {
+    font-size: var(--ui-font-16, 16px);
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 16px;
-    padding: 10px 0;
+    gap: var(--ui-space-16, 16px);
+    padding: var(--ui-space-10, 10px) 0;
   }
   p {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     color: var(--desc-color);
   }
 </style>
@@ -96,7 +97,7 @@
 <style scoped>
   .community-section-loading {
     height: auto;
-    min-height: 100px;
+    min-height: var(--ui-layout-100, 100px);
   }
   .community-section-loading[aria-busy='true'] :deep(.b-loading-content) {
     pointer-events: none;

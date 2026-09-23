@@ -2,7 +2,7 @@
   <BModal
     :visible="true"
     :title="t('community.feed.manageTopics')"
-    width="min(720px, 94vw)"
+    width="min(var(--ui-layout-720, 720px), 94vw)"
     :show-footer="false"
     :mask-closable="!busy"
     :close-disabled="busy"
@@ -293,17 +293,17 @@
   .topic-visibility-hint {
     margin: 0;
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.6;
   }
   .topic-reward-config {
     border-top: 1px solid var(--surface-border-color);
-    padding-top: 16px;
+    padding-top: var(--ui-space-16, 16px);
     display: grid;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
   .topic-reward-config p {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.7;
     color: var(--desc-color);
     margin: 0;
@@ -311,56 +311,56 @@
   .topic-manager-hint {
     color: var(--desc-color);
     line-height: 1.7;
-    margin: 0 0 20px;
-    font-size: 13px;
+    margin: 0 0 var(--ui-space-20, 20px);
+    font-size: var(--ui-font-13, 13px);
   }
   .topic-list-toolbar {
     display: flex;
     align-items: center;
     justify-content: space-between;
     flex-wrap: wrap;
-    gap: 12px;
-    padding-bottom: 16px;
+    gap: var(--ui-space-12, 12px);
+    padding-bottom: var(--ui-space-16, 16px);
     border-bottom: 1px solid var(--workspace-border);
   }
   .topic-list-summary {
     display: flex;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     flex-wrap: wrap;
   }
   .topic-manager-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 18px 0;
+    padding: var(--ui-space-18, 18px) 0;
     border-bottom: 1px solid var(--workspace-divider);
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
   .topic-row-copy {
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .topic-row-title {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 8px 12px;
+    gap: var(--ui-space-8, 8px) var(--ui-space-12, 12px);
   }
   .topic-row-title strong {
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
     line-height: 1.5;
     overflow-wrap: anywhere;
   }
   .topic-state {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
     border: 1px solid currentColor;
     border-radius: 5px;
-    padding: 2px 7px;
-    font-size: 12px;
+    padding: var(--ui-space-2, 2px) var(--ui-space-7, 7px);
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.5;
     font-weight: 600;
     white-space: nowrap;
@@ -385,14 +385,14 @@
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 6px 12px;
+    gap: var(--ui-space-6, 6px) var(--ui-space-12, 12px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.5;
   }
   .topic-row-meta small {
     font-size: inherit;
-    padding-left: 12px;
+    padding-left: var(--ui-space-12, 12px);
     border-left: 1px solid var(--workspace-border);
   }
   .topic-row-edit {
@@ -401,18 +401,18 @@
   .topic-form {
     display: flex;
     flex-direction: column;
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
   }
   .topic-form label {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    font-size: 13px;
+    gap: var(--ui-space-8, 8px);
+    font-size: var(--ui-font-13, 13px);
   }
   .topic-form-pair {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
   .topic-form label.topic-toggle {
     flex-direction: row;
@@ -422,8 +422,8 @@
   .topic-form footer {
     display: flex;
     justify-content: flex-end;
-    gap: 10px;
-    padding-top: 16px;
+    gap: var(--ui-space-10, 10px);
+    padding-top: var(--ui-space-16, 16px);
     border-top: 1px solid var(--workspace-divider);
   }
   @media (max-width: 767px) {

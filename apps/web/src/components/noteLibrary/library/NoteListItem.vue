@@ -69,7 +69,7 @@
             :key="tag.id || tag.name"
             :tag="tag"
             show-detail-corner
-            max-width="120px"
+            max-width="var(--ui-layout-120, 120px)"
             @click.stop="handleTagClick(tag)"
             @detail="handleTagDetail(tag)"
             v-click-log="{ module: '笔记库', operation: `筛选标签【${tag.name}】` }"
@@ -259,14 +259,14 @@
   @import (reference) "@/assets/css/workspace-surfaces.less";
   .note-list-item {
     // 标题与右侧时间共用同一行高,时间不再靠写死的 line-height 去凑基线
-    --note-row-line: 22px;
+    --note-row-line: var(--ui-layout-22, 22px);
 
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto auto;
-    column-gap: 12px;
+    column-gap: var(--ui-space-12, 12px);
     align-items: flex-start;
-    padding: 11px 14px;
-    margin-bottom: 8px;
+    padding: var(--ui-space-11, 11px) var(--ui-space-14, 14px);
+    margin-bottom: var(--ui-space-8, 8px);
     border: 1px solid var(--surface-border-color);
     border-radius: 8px;
     cursor: pointer;
@@ -288,7 +288,7 @@
     }
 
     &.is-batch-mode:not(.is-mobile) {
-      grid-template-columns: 26px minmax(0, 1fr) auto auto;
+      grid-template-columns: var(--ui-layout-26, 26px) minmax(0, 1fr) auto auto;
     }
 
     /*
@@ -302,25 +302,25 @@
      */
     &.is-mobile {
       grid-template-columns: minmax(0, 1fr) 44px;
-      column-gap: 2px;
+      column-gap: var(--ui-space-2, 2px);
       // 操作按钮对齐标题行，而不是整条居中：居中时它会掉到标题下方 36px，看着没有归属
       align-items: start;
       // 触控端不跟着桌面一起压扁
-      padding: 11px 8px 11px 14px;
+      padding: var(--ui-space-11, 11px) var(--ui-space-8, 8px) var(--ui-space-11, 11px) var(--ui-space-14, 14px);
 
       // 下面这些覆盖必须写到 .note-info 里层。原规则是
       // `.note-list-item .note-info .note-description`(3 个 class)，
       // 只写 `&.is-mobile .note-description` 权重相同而源码在前，会被静默覆盖。
       .note-info {
         .note-title-row {
-          margin-bottom: 1px;
+          margin-bottom: var(--ui-space-1, 1px);
         }
 
         // 摘要与 chip 行上下堆叠，各自拿满整行宽
         .note-meta-row {
           flex-direction: column;
           align-items: flex-start;
-          gap: 4px;
+          gap: var(--ui-space-4, 4px);
           // 桌面靠 min-height 保证行高一致；手机没有摘要就该更矮，不留空行
           min-height: 0;
         }
@@ -344,13 +344,13 @@
           order: 0;
           width: 100%;
           flex-wrap: wrap;
-          row-gap: 4px;
+          row-gap: var(--ui-space-4, 4px);
         }
 
         .note-title-row .note-time.is-inline {
           flex: 0 0 auto;
           margin-left: auto;
-          padding-left: 8px;
+          padding-left: var(--ui-space-8, 8px);
           line-height: var(--note-row-line);
         }
       }
@@ -382,8 +382,8 @@
 
     .note-select-column {
       --primary-color: var(--resource-note-color, #00a884);
-      width: 26px;
-      min-width: 26px;
+      width: var(--ui-layout-26, 26px);
+      min-width: var(--ui-layout-26, 26px);
       height: var(--note-row-line);
       display: flex;
       align-items: center;
@@ -395,12 +395,12 @@
       .note-title-row {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: var(--ui-space-8, 8px);
         min-width: 0;
-        margin-bottom: 3px;
+        margin-bottom: var(--ui-space-3, 3px);
       }
       .note-title {
-        font-size: 15px;
+        font-size: var(--ui-font-15, 15px);
         font-weight: 500;
         color: var(--text-color);
         margin-bottom: 0;
@@ -414,9 +414,9 @@
       .note-meta-row {
         display: flex;
         align-items: center;
-        gap: 12px;
+        gap: var(--ui-space-12, 12px);
         // 无摘要也无标签时保持同样的行高
-        min-height: 20px;
+        min-height: var(--ui-layout-20, 20px);
       }
       .note-parent-path {
         order: -2;
@@ -428,9 +428,9 @@
       .note-description {
         flex: 1 1 auto;
         min-width: 0;
-        font-size: 13px;
+        font-size: var(--ui-font-13, 13px);
         color: var(--desc-color);
-        line-height: 20px;
+        line-height: var(--ui-layout-20, 20px);
         // break-all 会把英文单词从中间劈开
         overflow-wrap: anywhere;
         white-space: nowrap;
@@ -441,20 +441,20 @@
         order: -1;
         flex: 0 0 auto;
         display: flex;
-        gap: 6px;
+        gap: var(--ui-space-6, 6px);
         align-items: center;
       }
     }
 
     .note-child-count {
-      height: 24px;
-      padding: 0 6px;
-      gap: 3px;
+      height: var(--ui-control-24, 24px);
+      padding: 0 var(--ui-space-6, 6px);
+      gap: var(--ui-space-3, 3px);
       border: 1px solid var(--surface-border-color);
       border-radius: 7px;
       color: var(--resource-note-color, #00a884);
       background: transparent;
-      font-size: 11px;
+      font-size: var(--ui-font-11, 11px);
     }
 
     .note-child-count-column {
@@ -462,7 +462,7 @@
       white-space: nowrap;
     }
     .note-time {
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
       color: var(--desc-color);
       white-space: nowrap;
       align-self: flex-start;

@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { createApp, h, nextTick } from 'vue';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import BDropdown from './BDropdown.vue';
+import { applyUiDensity } from '@/composables/useUiDensity';
 
 const dropdownSource = readFileSync(
   resolve(process.cwd(), 'src/components/base/BasicComponents/BDropdown.vue'),
@@ -22,8 +23,35 @@ describe('BDropdown 视口定位', () => {
   afterEach(() => {
     cleanup?.();
     cleanup = null;
+    applyUiDensity('medium');
     document.body.innerHTML = '';
     vi.restoreAllMocks();
+  });
+
+  it('密度切换后继续跟随延迟完成布局的父浮层', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const app = createApp({
+      render: () => h(BDropdown, { trigger: 'click', menuOptions: [{ label: '主题' }] },
+        { default: () => h('button', '设置') }),
+    });
+    app.mount(host);
+    cleanup = () => app.unmount();
+    const trigger = host.querySelector<HTMLElement>('.b-dropdown-trigger')!;
+    let top = 100;
+    vi.spyOn(trigger, 'getBoundingClientRect').mockImplementation(() => ({
+      top, bottom: top + 30, left: 40, right: 140, width: 100, height: 30,
+    }) as DOMRect);
+    trigger.click();
+    await flushPosition();
+    const panel = document.querySelector<HTMLElement>('.b-dropdown-panel')!;
+    expect(panel.style.top).toBe('136px');
+    await new Promise(resolve => setTimeout(resolve, 200));
+    applyUiDensity('small');
+    await flushPosition();
+    top = 150;
+    await flushPosition();
+    expect(panel.style.top).toBe('186px');
   });
 
   it('触发按钮靠近视口底部时自动向上展开并保持在屏幕内', async () => {

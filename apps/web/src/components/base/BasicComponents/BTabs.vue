@@ -169,19 +169,19 @@
   .tab-container {
     position: relative;
     border-bottom: 1px solid var(--card-border-color);
-    padding-bottom: 5px;
-    margin-bottom: 10px;
+    padding-bottom: var(--ui-space-5, 5px);
+    margin-bottom: var(--ui-space-10, 10px);
     display: flex;
-    gap: 24px;
+    gap: var(--ui-space-24, 24px);
   }
 
   .tab {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    font-size: 14px;
+    gap: var(--ui-space-6, 6px);
+    font-size: var(--ui-font-14, 14px);
     cursor: pointer;
-    padding: 4px 0;
+    padding: var(--ui-space-4, 4px) 0;
     color: var(--desc-color);
     transition: color 0.2s;
     white-space: nowrap;
@@ -192,17 +192,17 @@
     }
   }
   .tab-badge {
-    min-width: 18px;
-    height: 18px;
+    min-width: var(--ui-layout-18, 18px);
+    height: var(--ui-layout-18, 18px);
     box-sizing: border-box;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 0 5px;
+    padding: 0 var(--ui-space-5, 5px);
     border-radius: 9px;
     background: var(--hover-background);
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1;
   }
   .tab-badge.is-zero {
@@ -219,15 +219,15 @@
       width 0.3s ease;
   }
   .tab-container.is-pill {
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
     margin: 0;
     padding: 0;
     border-bottom: 0;
   }
   .is-pill .tab {
-    min-height: 34px;
+    min-height: var(--ui-control-34, 34px);
     box-sizing: border-box;
-    padding: 7px 10px;
+    padding: var(--ui-space-7, 7px) var(--ui-space-10, 10px);
     border: 1px solid transparent;
     border-radius: 9px;
     transition:
@@ -264,13 +264,13 @@
 
   .is-segment .tab {
     position: relative;
-    min-height: 32px;
+    min-height: var(--ui-control-32, 32px);
     margin: 0;
-    padding: 0 14px;
+    padding: 0 var(--ui-space-14, 14px);
     border-right: 1px solid var(--surface-border-color, var(--card-border-color));
     color: var(--desc-color);
-    font-size: 12px;
-    line-height: 32px;
+    font-size: var(--ui-font-12, 12px);
+    line-height: var(--ui-control-32, 32px);
     transition:
       color 0.16s ease,
       background 0.16s ease,
@@ -296,9 +296,9 @@
   .tab-container.is-solid {
     width: fit-content;
     max-width: 100%;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
     margin: 0;
-    padding: 4px;
+    padding: var(--ui-space-4, 4px);
     overflow: hidden;
     border: 1px solid var(--surface-border-color, var(--card-border-color));
     border-radius: 14px;
@@ -306,15 +306,15 @@
   }
 
   .is-solid .tab {
-    min-width: 122px;
-    min-height: 40px;
+    min-width: var(--ui-layout-122, 122px);
+    min-height: var(--ui-control-40, 40px);
     justify-content: center;
     margin: 0;
-    padding: 0 18px;
+    padding: 0 var(--ui-space-18, 18px);
     border: 0;
     border-radius: 10px;
     color: var(--text-color-secondary, var(--desc-color));
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     line-height: 1.35;
     transition:
       color 0.16s ease,

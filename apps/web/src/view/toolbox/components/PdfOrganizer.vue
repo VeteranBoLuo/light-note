@@ -344,11 +344,11 @@
 <style scoped lang="less">
   .local-tool {
     display: grid;
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
   }
   .local-tool__drop-zone {
-    min-height: 200px;
-    padding: 20px;
+    min-height: var(--ui-layout-200, 200px);
+    padding: var(--ui-space-20, 20px);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -369,9 +369,9 @@
     background: color-mix(in srgb, var(--primary-color) 8%, var(--card-background));
   }
   .local-tool__drop-icon {
-    width: 44px;
-    height: 44px;
-    margin-bottom: 10px;
+    width: var(--ui-layout-44, 44px);
+    height: var(--ui-layout-44, 44px);
+    margin-bottom: var(--ui-space-10, 10px);
     display: grid;
     place-items: center;
     border: 1px solid color-mix(in srgb, var(--primary-color) 20%, var(--surface-border-color));
@@ -382,21 +382,21 @@
   }
   .local-tool__drop-zone h2 {
     margin: 0;
-    font-size: 21px;
+    font-size: var(--ui-font-21, 21px);
   }
   .local-tool__drop-zone p {
-    max-width: 480px;
-    margin: 8px 0 14px;
+    max-width: var(--ui-layout-480, 480px);
+    margin: var(--ui-space-8, 8px) 0 var(--ui-space-14, 14px);
     color: var(--desc-color);
     line-height: 1.65;
   }
   .local-tool__drop-zone :deep(.b_btn),
   .local-tool__toolbar-actions :deep(.b_btn),
   .local-tool__selection-bar :deep(.b_btn) {
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
   .local-tool__loading {
-    min-height: 260px;
+    min-height: var(--ui-layout-260, 260px);
     display: grid;
     place-items: center;
   }
@@ -405,28 +405,28 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
   }
   .local-tool__toolbar > div:first-child {
     display: grid;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
   .local-tool__toolbar strong {
-    font-size: 16px;
+    font-size: var(--ui-font-16, 16px);
   }
   .local-tool__toolbar span {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .local-tool__toolbar-actions,
   .local-tool__selection-bar > div {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .local-tool__selection-bar {
-    min-height: 50px;
-    padding: 8px 10px 8px 14px;
+    min-height: var(--ui-layout-50, 50px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px) var(--ui-space-8, 8px) var(--ui-space-14, 14px);
     box-sizing: border-box;
     border: 1px solid var(--surface-border-color);
     border-radius: 13px;
@@ -439,14 +439,14 @@
   }
   .pdf-page-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(156px, 1fr));
-    gap: 14px;
+    grid-template-columns: repeat(auto-fill, minmax(var(--ui-layout-156, 156px), 1fr));
+    gap: var(--ui-space-14, 14px);
     align-items: start;
   }
   .pdf-page-card {
     position: relative;
     min-width: 0;
-    padding: 8px;
+    padding: var(--ui-space-8, 8px);
     overflow: hidden;
     border: 1px solid var(--surface-border-color);
     border-radius: 15px;
@@ -464,9 +464,9 @@
   .pdf-page-card__top {
     position: absolute;
     z-index: 2;
-    top: 11px;
-    right: 11px;
-    left: 11px;
+    top: var(--ui-space-11, 11px);
+    right: var(--ui-space-11, 11px);
+    left: var(--ui-space-11, 11px);
     display: flex;
     justify-content: space-between;
     pointer-events: none;
@@ -476,13 +476,13 @@
     pointer-events: auto;
   }
   .pdf-page-card__top :deep(.b-checkbox) {
-    padding: 3px;
+    padding: var(--ui-space-3, 3px);
     border-radius: 7px;
     background: var(--card-background);
   }
   .pdf-page-card__top :deep(.pdf-page-card__drag) {
-    width: 30px;
-    height: 30px;
+    width: var(--ui-layout-30, 30px);
+    height: var(--ui-layout-30, 30px);
     padding: 0;
     display: grid;
     place-items: center;
@@ -532,37 +532,37 @@
   }
   .pdf-page-card__meta {
     min-width: 0;
-    padding: 9px 2px 7px;
+    padding: var(--ui-space-9, 9px) var(--ui-space-2, 2px) var(--ui-space-7, 7px);
     display: flex;
     align-items: center;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
   .pdf-page-card__meta strong {
-    min-width: 23px;
-    height: 23px;
+    min-width: var(--ui-layout-23, 23px);
+    height: var(--ui-layout-23, 23px);
     display: grid;
     place-items: center;
     border-radius: 7px;
     color: var(--primary-color);
     background: color-mix(in srgb, var(--primary-color) 9%, transparent);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .pdf-page-card__meta span {
     min-width: 0;
     overflow: hidden;
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
   .pdf-page-card__actions {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
   .pdf-page-card__actions :deep(.b_btn) {
     width: 100%;
-    height: 28px;
+    height: var(--ui-layout-28, 28px);
     padding: 0;
     color: var(--desc-color);
     background: transparent;
@@ -579,11 +579,11 @@
   }
   @media (max-width: 767px) {
     .local-tool {
-      gap: 13px;
+      gap: var(--ui-space-13, 13px);
     }
     .local-tool__drop-zone {
-      min-height: 220px;
-      padding: 20px 16px;
+      min-height: var(--ui-layout-220, 220px);
+      padding: var(--ui-space-20, 20px) var(--ui-space-16, 16px);
       border-radius: 16px;
     }
     .local-tool__toolbar {
@@ -606,7 +606,7 @@
     }
     .pdf-page-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 10px;
+      gap: var(--ui-space-10, 10px);
     }
   }
   html.light-note-mobile-rendering .local-tool__drop-zone,

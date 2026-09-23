@@ -130,7 +130,7 @@
 <style scoped lang="less">
   .todo-checklist-editor {
     display: grid;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     min-width: 0;
     scroll-margin-top: 16px;
   }
@@ -139,23 +139,23 @@
     align-items: center;
     justify-content: space-between;
     flex-wrap: wrap;
-    gap: 12px;
-    padding: 10px 12px;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     background: var(--workspace-panel-bg-color);
   }
   .todo-checklist-editor__heading {
     display: grid;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
     min-width: 0;
   }
   .todo-checklist-editor__heading strong {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     color: var(--text-color);
   }
   .todo-checklist-editor__heading small {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
     line-height: 1.5;
   }
@@ -163,10 +163,10 @@
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .todo-checklist-editor .todo-checklist-editor__toggle {
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
     color: var(--workspace-purple-text);
     background: transparent;
   }
@@ -183,33 +183,33 @@
   }
   .todo-checklist-editor__list {
     display: grid;
-    gap: 9px;
-    padding: 0 12px 4px;
+    gap: var(--ui-space-9, 9px);
+    padding: 0 var(--ui-space-12, 12px) var(--ui-space-4, 4px);
   }
   .todo-checklist-editor__row {
     display: grid;
-    grid-template-columns: 20px minmax(0, 1fr) 32px;
+    grid-template-columns: var(--ui-layout-20, 20px) minmax(0, 1fr) var(--ui-layout-32, 32px);
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .todo-checklist-editor__number {
     text-align: center;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-variant-numeric: tabular-nums;
     color: var(--desc-color);
   }
   .todo-checklist-editor .todo-checklist-editor__remove {
-    width: 32px;
-    height: 32px;
+    width: var(--ui-layout-32, 32px);
+    height: var(--ui-layout-32, 32px);
     padding: 0;
     color: var(--desc-color);
     background: transparent;
   }
   .todo-checklist-editor .todo-checklist-editor__add {
-    gap: 5px;
-    height: 30px;
-    margin-left: 28px;
-    padding: 0 6px;
+    gap: var(--ui-space-5, 5px);
+    height: var(--ui-layout-30, 30px);
+    margin-left: calc(var(--ui-layout-20, 20px) + var(--ui-space-8, 8px));
+    padding: 0 var(--ui-space-6, 6px);
     color: var(--workspace-purple-text);
     background: transparent;
   }

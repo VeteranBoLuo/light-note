@@ -113,11 +113,11 @@
 
   .todo-create-page__header {
     position: relative;
-    min-height: calc(56px + env(safe-area-inset-top));
-    padding: env(safe-area-inset-top) 12px 0;
+    min-height: calc(var(--ui-layout-56, 56px) + env(safe-area-inset-top));
+    padding: env(safe-area-inset-top) var(--ui-space-12, 12px) 0;
     box-sizing: border-box;
     display: grid;
-    grid-template-columns: 44px minmax(0, 1fr) 44px;
+    grid-template-columns: var(--ui-control-44, 44px) minmax(0, 1fr) var(--ui-control-44, 44px);
     align-items: center;
     flex: 0 0 auto;
     border-bottom: 1px solid var(--surface-divider-color);
@@ -128,7 +128,7 @@
     margin: 0;
     overflow: hidden;
     color: var(--text-color);
-    font-size: 18px;
+    font-size: var(--ui-font-18, 18px);
     font-weight: 700;
     line-height: 1;
     text-align: center;
@@ -137,9 +137,9 @@
   }
 
   .todo-create-page__back {
-    width: 44px;
-    min-width: 44px;
-    height: 44px;
+    width: var(--ui-control-44, 44px);
+    min-width: var(--ui-control-44, 44px);
+    height: var(--ui-control-44, 44px);
     padding: 0;
     color: var(--text-color);
     background: transparent !important;
@@ -154,7 +154,7 @@
 
   @media (min-width: 768px) {
     .todo-create-page__body {
-      width: min(760px, 100%);
+      width: min(var(--ui-layout-760, 760px), 100%);
       margin: 0 auto;
     }
   }

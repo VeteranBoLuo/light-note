@@ -62,27 +62,27 @@
     min-width: 0;
     width: fit-content;
     max-width: 100%;
-    height: 24px;
-    padding: 0 5px 0 2px;
+    height: var(--ui-control-24, 24px);
+    padding: 0 var(--ui-space-5, 5px) 0 var(--ui-space-2, 2px);
     display: inline-flex;
     align-items: center;
     justify-content: flex-start;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
     overflow: hidden;
     border: 0;
     border-radius: 7px;
     color: var(--desc-color);
     background: transparent;
-    font-size: 12px;
-    line-height: 22px;
+    font-size: var(--ui-font-12, 12px);
+    line-height: var(--ui-layout-22, 22px);
     text-align: left;
     white-space: nowrap;
 
     &__prefix,
     &__text.b_btn {
       min-width: 0;
-      height: 24px;
-      padding: 0 2px;
+      height: var(--ui-control-24, 24px);
+      padding: 0 var(--ui-space-2, 2px);
       border: 0;
       background: transparent;
       font-size: inherit;
@@ -108,13 +108,13 @@
 
     &__prefix {
       flex: 0 0 auto;
-      gap: 5px;
+      gap: var(--ui-space-5, 5px);
     }
 
     &__icon-shell {
-      width: 18px;
-      height: 18px;
-      flex: 0 0 18px;
+      width: var(--ui-layout-18, 18px);
+      height: var(--ui-layout-18, 18px);
+      flex: 0 0 var(--ui-layout-18, 18px);
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -132,7 +132,7 @@
     &__separator {
       flex: 0 0 auto;
       color: var(--resource-note-color, #00a884);
-      font-size: 15px;
+      font-size: var(--ui-font-15, 15px);
       line-height: 1;
       opacity: 0.62;
     }

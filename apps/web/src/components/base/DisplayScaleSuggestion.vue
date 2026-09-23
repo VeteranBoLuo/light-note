@@ -154,16 +154,17 @@
   .scale-suggestion {
     position: fixed;
     left: 50%;
-    bottom: 22px;
+    bottom: var(--ui-space-22, 22px);
     z-index: 400;
-    width: min(820px, calc(100% - 40px));
-    min-height: 74px;
+    /* ui-density-fixed: 视口两侧保留固定安全留白。 */
+    width: min(var(--ui-layout-820, 820px), calc(100% - 40px));
+    min-height: var(--ui-layout-74, 74px);
     transform: translateX(-50%);
     box-sizing: border-box;
     display: flex;
     align-items: center;
-    gap: 13px;
-    padding: 12px 46px 12px 14px;
+    gap: var(--ui-space-13, 13px);
+    padding: var(--ui-space-12, 12px) var(--ui-space-46, 46px) var(--ui-space-12, 12px) var(--ui-space-14, 14px);
     border: 1px solid color-mix(in srgb, var(--primary-color) 20%, var(--card-border-color));
     border-radius: 16px;
     background: color-mix(in srgb, var(--card-background, var(--background-color)) 96%, var(--primary-color));
@@ -172,9 +173,9 @@
   }
 
   .scale-suggestion__icon {
-    width: 42px;
-    height: 42px;
-    flex: 0 0 42px;
+    width: var(--ui-layout-42, 42px);
+    height: var(--ui-layout-42, 42px);
+    flex: 0 0 var(--ui-layout-42, 42px);
     border-radius: 12px;
     display: inline-flex;
     align-items: center;
@@ -188,16 +189,16 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
 
     strong {
-      font-size: 14px;
+      font-size: var(--ui-font-14, 14px);
       line-height: 1.45;
     }
 
     span {
       color: var(--desc-color);
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
       line-height: 1.5;
     }
   }
@@ -206,11 +207,11 @@
     flex: 0 0 auto;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .scale-suggestion__actions :deep(.b_btn) {
-    height: 34px;
+    height: var(--ui-control-34, 34px);
     border-radius: 9px;
   }
 
@@ -220,10 +221,10 @@
 
   .scale-suggestion__close {
     position: absolute;
-    top: 8px;
-    right: 8px;
-    width: 28px;
-    height: 28px;
+    top: var(--ui-space-8, 8px);
+    right: var(--ui-space-8, 8px);
+    width: var(--ui-control-28, 28px);
+    height: var(--ui-control-28, 28px);
     padding: 0;
     border-radius: 8px;
     color: var(--desc-color);

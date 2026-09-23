@@ -49,7 +49,7 @@
       </section>
     </BLoading>
 
-    <BModal v-model:visible="modalOpen" :title="modalTitle" width="620px" modal-class="security-policy-modal" @ok="submitPolicy">
+    <BModal v-model:visible="modalOpen" :title="modalTitle" width="var(--ui-layout-620, 620px)" modal-class="security-policy-modal" @ok="submitPolicy">
       <div v-if="createType === 'accounts'" class="security-modal-form">
         <label><span>{{ t('securityV2.access.userId') }}</span><BInput v-model:value="accountDraft.userId" /></label>
         <label><span>{{ t('securityV2.access.restrictionType') }}</span><BSelect v-model:value="accountDraft.restrictionType" :options="restrictionOptions" /></label>
@@ -157,8 +157,8 @@
   .security-modal-footer {
     display: flex;
     justify-content: flex-end;
-    gap: 8px;
-    padding: 0 20px 16px;
+    gap: var(--ui-space-8, 8px);
+    padding: 0 var(--ui-space-20, 20px) var(--ui-space-16, 16px);
   }
 
   @media (max-width: 767px) {

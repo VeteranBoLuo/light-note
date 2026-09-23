@@ -26,7 +26,7 @@
       :key="selected.publicId"
       :visible="true"
       :title="selected.title"
-      width="min(800px, 94vw)"
+      width="min(var(--ui-layout-800, 800px), 94vw)"
       :show-footer="false"
       @close="close"
     >
@@ -144,25 +144,25 @@
 <style scoped>
   .community-resources {
     display: grid;
-    gap: 10px;
-    margin: 18px 0;
+    gap: var(--ui-space-10, 10px);
+    margin: var(--ui-space-18, 18px) 0;
   }
   .resource-row {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     min-width: 0;
   }
   .resource-card.b_btn {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     flex: 1;
     min-width: 0;
     width: 100%;
-    padding: 14px 16px;
+    padding: var(--ui-space-14, 14px) var(--ui-space-16, 16px);
     height: auto;
-    min-height: 72px;
+    min-height: var(--ui-layout-72, 72px);
     line-height: 1.5;
     box-sizing: border-box;
     background: var(--workspace-content);
@@ -177,7 +177,7 @@
   .resource-glyph {
     display: flex;
     flex-shrink: 0;
-    padding: 9px;
+    padding: var(--ui-space-9, 9px);
     border-radius: 8px;
     color: var(--workspace-note-text);
     background: var(--card-background);
@@ -186,24 +186,24 @@
     color: var(--primary-color);
   }
   .resource-glyph :deep(svg) {
-    width: 22px;
-    height: 22px;
+    width: var(--ui-layout-22, 22px);
+    height: var(--ui-layout-22, 22px);
   }
   .resource-copy {
     min-width: 0;
     flex: 1;
     display: grid;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
   .resource-copy strong {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     color: var(--text-color);
     overflow-wrap: anywhere;
   }
   .resource-copy > span,
   .resource-read {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .resource-read {
     flex-shrink: 0;
@@ -218,21 +218,21 @@
   }
   .is-compact .resource-card.b_btn {
     display: grid;
-    grid-template-columns: 28px minmax(0, 1fr);
-    gap: 10px;
-    padding: 12px;
+    grid-template-columns: var(--ui-layout-28, 28px) minmax(0, 1fr);
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-12, 12px);
     border: 0;
     border-radius: 0;
     background: transparent;
   }
   .is-compact .resource-glyph {
-    padding: 5px;
+    padding: var(--ui-space-5, 5px);
     border-radius: 6px;
     background: var(--workspace-hover);
   }
   .is-compact .resource-glyph :deep(svg) {
-    width: 18px;
-    height: 18px;
+    width: var(--ui-layout-18, 18px);
+    height: var(--ui-layout-18, 18px);
   }
   .is-compact .resource-copy strong {
     display: -webkit-box;
@@ -245,23 +245,23 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .is-compact .resource-read {
     display: block;
     grid-column: 1 / -1;
     border-top: 1px solid var(--workspace-border);
-    padding-top: 10px;
-    line-height: 28px;
+    padding-top: var(--ui-space-10, 10px);
+    line-height: var(--ui-layout-28, 28px);
     color: var(--workspace-purple-text);
   }
   .is-compact .resource-remove.b_btn {
     position: absolute;
-    right: 10px;
-    bottom: 12px;
-    min-height: 28px;
-    padding: 3px 8px;
-    font-size: 12px;
+    right: var(--ui-space-10, 10px);
+    bottom: var(--ui-space-12, 12px);
+    min-height: var(--ui-layout-28, 28px);
+    padding: var(--ui-space-3, 3px) var(--ui-space-8, 8px);
+    font-size: var(--ui-font-12, 12px);
     background: transparent;
     color: var(--desc-color);
   }
@@ -272,21 +272,21 @@
   .reader-heading {
     display: flex;
     align-items: center;
-    gap: 9px;
-    font-size: 14px;
+    gap: var(--ui-space-9, 9px);
+    font-size: var(--ui-font-14, 14px);
     color: var(--desc-color);
   }
   .reader-heading :deep(svg) {
-    width: 18px;
-    height: 18px;
+    width: var(--ui-layout-18, 18px);
+    height: var(--ui-layout-18, 18px);
   }
   .resource-reader {
     min-width: 0;
   }
   .reader-paper {
     position: relative;
-    margin: 4px 6px 14px;
-    padding: 44px 48px 48px;
+    margin: var(--ui-space-4, 4px) var(--ui-space-6, 6px) var(--ui-space-14, 14px);
+    padding: var(--ui-space-44, 44px) var(--ui-space-48, 48px) var(--ui-space-48, 48px);
     border: 1px solid var(--workspace-border);
     border-radius: 3px 12px 12px 3px;
     background: var(--workspace-content);
@@ -306,11 +306,14 @@
     border-radius: 0 0 8px 2px;
   }
   .resource-reader h2 {
-    margin: 0 0 28px;
+    margin: 0 0 var(--ui-space-28, 28px);
     color: var(--text-color);
-    font-size: 25px;
+    font-size: var(--ui-font-25, 25px);
     line-height: 1.5;
     overflow-wrap: anywhere;
+  }
+  .reader-paper h2 {
+    font-size: 25px;
   }
   .resource-text {
     white-space: pre-wrap;
@@ -328,14 +331,14 @@
   .browser-bar {
     display: flex;
     align-items: center;
-    gap: 20px;
-    padding: 12px 18px;
+    gap: var(--ui-space-20, 20px);
+    padding: var(--ui-space-12, 12px) var(--ui-space-18, 18px);
     background: var(--workspace-open-canvas);
     border-bottom: 1px solid var(--workspace-border);
   }
   .browser-dots {
     display: flex;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   .browser-dots i {
     width: 7px;
@@ -348,43 +351,43 @@
     flex: 1;
     min-width: 0;
     text-align: center;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
     overflow-wrap: anywhere;
-    padding-right: 33px;
+    padding-right: var(--ui-space-33, 33px);
   }
   .browser-page {
-    padding: 38px 32px;
+    padding: var(--ui-space-38, 38px) var(--ui-space-32, 32px);
     text-align: center;
   }
   .bookmark-emblem {
     display: inline-flex;
-    padding: 14px;
+    padding: var(--ui-space-14, 14px);
     border: 1px solid var(--workspace-border);
     border-radius: 16px;
     color: var(--primary-color);
-    margin-bottom: 20px;
+    margin-bottom: var(--ui-space-20, 20px);
   }
   .bookmark-emblem :deep(svg) {
-    width: 28px;
-    height: 28px;
+    width: var(--ui-layout-28, 28px);
+    height: var(--ui-layout-28, 28px);
   }
   .browser-page h2 {
-    margin-bottom: 12px;
+    margin-bottom: var(--ui-space-12, 12px);
   }
   .resource-url {
     overflow-wrap: anywhere;
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.7;
-    margin: 0 0 26px;
+    margin: 0 0 var(--ui-space-26, 26px);
   }
   .resource-visit {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     color: var(--primary-color);
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     text-decoration: none;
   }
   .resource-visit:hover {
@@ -395,24 +398,25 @@
     height: 16px;
   }
   .reader-meta {
-    margin-top: 18px;
+    margin-top: var(--ui-space-18, 18px);
   }
   .version-toggle.b_btn {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 4px 0;
+    gap: var(--ui-space-6, 6px);
+    padding: var(--ui-space-4, 4px) 0;
     height: auto;
     background: transparent;
     border: 0;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   @media (max-width: 767px) {
     .reader-paper {
       padding: 36px 20px 28px;
       margin: 2px 4px 12px 0;
     }
+    .reader-paper h2,
     .resource-reader h2 {
       font-size: 21px;
     }
@@ -421,7 +425,7 @@
     }
   }
   .resource-loading {
-    min-height: 180px;
+    min-height: var(--ui-layout-180, 180px);
     display: grid;
     place-content: center;
     text-align: center;

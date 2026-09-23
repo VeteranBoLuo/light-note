@@ -14,7 +14,7 @@
             v-if="equippedFrameId"
             :frame-id="equippedFrameId"
             :src="headPicture || icon.navigation.user"
-            :size="80"
+            :size="dimension(80, 'icon')"
             :decorative="false"
           />
           <svg-icon v-else :src="headPicture || icon.navigation.user" :size="80" />
@@ -24,8 +24,8 @@
         </BButton>
       </div>
       <div class="home-user-body">
-        <div class="flex-align-center" style="gap: 20px">
-          <div class="flex-justify-center" style="gap: 20px">
+        <div class="flex-align-center" style="gap: var(--ui-space-20, 20px)">
+          <div class="flex-justify-center" style="gap: var(--ui-space-20, 20px)">
             <span class="user-item-label">{{ t('myInfo.role') }}</span>
             <span style="color: #8f9096">{{ getRoleName() }}</span>
           </div>
@@ -117,6 +117,8 @@
 </template>
 
 <script lang="ts" setup>
+  import { useUiDensity } from '@/composables/useUiDensity';
+  const { dimension } = useUiDensity();
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import { bookmarkStore, useUserStore } from '@/store';
   import { computed, ref } from 'vue';
@@ -313,37 +315,37 @@
     box-sizing: border-box;
     width: 100%;
     padding: 0;
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
   }
   // 80px 头像下，最高档素材盒(artSize 137)会达到约 171px；弹窗正文从标题分隔线开始裁切，必须在正文内部预留上半径出血。
   .home-container--framed {
-    padding-top: 56px;
+    padding-top: var(--ui-layout-56, 56px);
   }
   .home-user-body {
-    margin-top: 30px;
+    margin-top: var(--ui-space-30, 30px);
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
   }
   .home-container--framed .home-user-body {
-    margin-top: 54px;
+    margin-top: var(--ui-layout-54, 54px);
   }
   .user-item {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     width: 100%;
     .user-item-label {
-      width: 80px;
+      width: var(--ui-layout-80, 80px);
       text-overflow: ellipsis;
       overflow: hidden;
       white-space: nowrap;
     }
   }
   .user_icon {
-    height: 80px;
-    width: 80px;
+    height: var(--ui-layout-80, 80px);
+    width: var(--ui-layout-80, 80px);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -371,8 +373,8 @@
     position: absolute;
     right: 0;
     bottom: 0;
-    width: 25px;
-    height: 25px;
+    width: var(--ui-layout-25, 25px);
+    height: var(--ui-layout-25, 25px);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -384,10 +386,10 @@
   }
   .frame-picker-entry {
     width: 100%;
-    min-height: 56px;
+    min-height: var(--ui-layout-56, 56px);
     justify-content: space-between;
-    gap: 12px;
-    padding: 10px 12px;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     color: var(--text-color);
@@ -398,7 +400,7 @@
     min-width: 0;
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     color: var(--text-color);
   }
   .frame-picker-entry__current > span {
@@ -433,7 +435,7 @@
   .community-profile-fields {
     width: 100%;
     display: grid;
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
   }
   .profile-field-heading {
     display: flex;
@@ -442,18 +444,18 @@
   .profile-field-heading small,
   .private-info-hint {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: normal;
   }
   .private-info-hint {
     width: 100%;
     border-top: 1px solid var(--surface-border-color);
-    padding-top: 18px;
-    margin: 0 0 -8px;
+    padding-top: var(--ui-space-18, 18px);
+    margin: 0 0 calc(-1 * var(--ui-space-8, 8px));
   }
   .profile-save-footer {
-    margin-top: 20px;
-    padding-top: 16px;
+    margin-top: var(--ui-space-20, 20px);
+    padding-top: var(--ui-space-16, 16px);
     border-top: 1px solid var(--surface-border-color);
   }
 </style>

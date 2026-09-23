@@ -1,5 +1,5 @@
 import { nextTick, watch, type Ref } from 'vue';
-import { findVerticalScrollContainer, scrollCenterIntoContainer } from '@/utils/zoom';
+import { findVerticalScrollContainer, scrollCenterIntoContainer } from '@/utils/scrolling';
 
 /** The caller supplies a whitelisted field selector, never a raw URL selector. */
 export function useSettingsFieldFocus(root: Ref<HTMLElement | null>, target: () => string | null) {

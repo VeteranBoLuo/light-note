@@ -1,8 +1,14 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync as rawReadFileSync } from 'node:fs';
+import { standardDensitySource } from '@/test/standardDensitySource';
+
+const readFileSync = (path: string, encoding: 'utf8') => standardDensitySource(rawReadFileSync(path, encoding));
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const source = readFileSync(resolve(process.cwd(), 'src/components/cloudSpace/fieldList.vue'), 'utf8');
+const source = readFileSync(resolve(process.cwd(), 'src/components/cloudSpace/fieldList.vue'), 'utf8').replace(
+  /var\(--ui-[\w-]+,\s*([\d.]+px)\)/g,
+  '$1',
+);
 const batchBarSource = readFileSync(
   resolve(process.cwd(), 'src/components/resourceActions/ResourceBatchActionBar.vue'),
   'utf8',
@@ -41,9 +47,9 @@ describe('cloud file empty state layout', () => {
 
   it('桌面卡片与列表的更多菜单都复用单文件分析能力，并按文件支持范围显示', () => {
     expect(source.match(/:items="desktopFileActions\(item\)"/g)).toHaveLength(4);
-    expect(source).toContain("isAiDocumentFileNameSupported(file.fileName)");
+    expect(source).toContain('isAiDocumentFileNameSupported(file.fileName)');
     expect(source).toContain("label: t('cloudSpace.aiUseFile')");
-    expect(source).toContain("handleFileAction(mobileActionFile.value, action.key)");
+    expect(source).toContain('handleFileAction(mobileActionFile.value, action.key)');
   });
 
   it('桌面批量栏脱离文档流，数量变化不会重排文件列表和后续操作', () => {

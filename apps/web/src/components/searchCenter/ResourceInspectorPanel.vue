@@ -53,7 +53,7 @@
         :key="tag"
         :tag="{ name: tag }"
         size="small"
-        max-width="min(100%, 180px)"
+        max-width="min(100%, var(--ui-layout-180, 180px))"
       />
     </div>
 
@@ -151,15 +151,15 @@
     display: flex;
     flex: 1 1 auto;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .resource-inspector-hero {
     --inspector-accent: var(--primary-color);
     display: flex;
     flex-direction: column;
-    gap: 11px;
-    padding: 14px;
+    gap: var(--ui-space-11, 11px);
+    padding: var(--ui-space-14, 14px);
     border: 1px solid var(--surface-border-color);
     border-radius: 14px;
   }
@@ -187,15 +187,16 @@
   }
 
   .resource-inspector-identity {
+    flex-shrink: 0;
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .resource-inspector-icon {
-    width: 42px;
-    height: 42px;
-    flex: 0 0 42px;
+    width: var(--ui-layout-42, 42px);
+    height: var(--ui-layout-42, 42px);
+    flex: 0 0 var(--ui-layout-42, 42px);
     display: grid;
     place-items: center;
     border: 1px solid color-mix(in srgb, var(--inspector-accent) 28%, var(--surface-border-color));
@@ -208,7 +209,7 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
 
   .resource-inspector-identity__copy > span,
@@ -218,19 +219,20 @@
   }
 
   .resource-inspector-identity__copy > span {
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .resource-inspector-identity__copy > strong {
     color: var(--inspector-accent);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .resource-inspector-hero h2 {
+    flex-shrink: 0;
     margin: 0;
     display: -webkit-box;
     overflow: hidden;
-    font-size: 17px;
+    font-size: var(--ui-font-17, 17px);
     line-height: 1.4;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
@@ -240,7 +242,7 @@
     margin: 0;
     display: -webkit-box;
     overflow: hidden;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.55;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 3;
@@ -256,9 +258,9 @@
 
   .resource-inspector-meta {
     display: grid;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     margin: 0;
-    padding: 10px;
+    padding: var(--ui-space-10, 10px);
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     background: var(--surface-panel-bg);
@@ -266,14 +268,14 @@
 
   .resource-inspector-meta > div {
     display: grid;
-    grid-template-columns: 74px minmax(0, 1fr);
-    gap: 8px;
+    grid-template-columns: var(--ui-layout-74, 74px) minmax(0, 1fr);
+    gap: var(--ui-space-8, 8px);
   }
 
   .resource-inspector-meta dt,
   .resource-inspector-meta dd {
     margin: 0;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .resource-inspector-meta dt {
@@ -290,21 +292,21 @@
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
 
   .resource-inspector-tags__label {
     width: 100%;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .resource-inspector-actions {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     margin-top: auto;
-    padding-top: 10px;
+    padding-top: var(--ui-space-10, 10px);
     border-top: 1px solid var(--surface-border-color);
   }
 
@@ -318,9 +320,9 @@
   }
 
   .resource-inspector-actions :deep(.b_btn) {
-    padding-inline: 10px;
-    gap: 6px;
-    font-size: 13px;
+    padding-inline: var(--ui-space-10, 10px);
+    gap: var(--ui-space-6, 6px);
+    font-size: var(--ui-font-13, 13px);
   }
 
   .resource-inspector-action--inbox,
@@ -335,22 +337,22 @@
   }
 
   .resource-inspector-empty {
-    min-height: 220px;
+    min-height: var(--ui-layout-220, 220px);
     display: grid;
     align-content: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     text-align: center;
   }
 
   .resource-inspector-empty p {
     margin: 0;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.55;
   }
 
   @media (max-width: 720px) {
     .resource-inspector-panel {
-      padding-bottom: max(4px, env(safe-area-inset-bottom));
+      padding-bottom: max(var(--ui-space-4, 4px), env(safe-area-inset-bottom));
     }
 
     .resource-inspector-hero--expanded {
@@ -360,7 +362,7 @@
     .resource-inspector-actions {
       position: sticky;
       bottom: 0;
-      padding: 10px 0 0;
+      padding: var(--ui-space-10, 10px) 0 0;
       background: var(--background-color);
     }
   }

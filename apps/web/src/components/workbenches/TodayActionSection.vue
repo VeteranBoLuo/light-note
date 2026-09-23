@@ -468,13 +468,13 @@
 <style scoped lang="less">
   .today-actions {
     display: grid;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     min-width: 0;
   }
 
   .today-actions__content {
     display: grid;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     min-width: 0;
   }
 
@@ -538,23 +538,23 @@
   .today-actions__header {
     display: flex;
     align-items: baseline;
-    padding: 0 2px 1px;
+    padding: 0 var(--ui-space-2, 2px) var(--ui-space-1, 1px);
   }
 
   .today-actions__heading {
     display: grid;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
 
   .today-actions__header strong {
     color: var(--text-color);
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
     font-weight: 700;
   }
 
   .today-actions__header span {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .today-actions__group {
@@ -568,10 +568,10 @@
   .today-actions__group-head {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 10px 14px;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-14, 14px);
     border-bottom: 1px solid var(--surface-divider-color, var(--card-border-color));
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
 
     strong {
       color: var(--text-color);
@@ -579,18 +579,18 @@
     }
 
     .today-actions__group-count {
-      min-width: 20px;
-      padding: 0 6px;
+      min-width: var(--ui-layout-20, 20px);
+      padding: 0 var(--ui-space-6, 6px);
       border-radius: 999px;
       background: color-mix(in srgb, var(--primary-color) 10%, transparent);
       color: var(--primary-color);
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
       text-align: center;
     }
   }
 
   .today-actions__view-all.b_btn {
-    min-height: 30px;
+    min-height: var(--ui-layout-30, 30px);
     margin-left: auto;
     color: var(--primary-color);
     background: var(--workspace-panel-bg-color, var(--hover-background));
@@ -603,9 +603,9 @@
   .today-action-row {
     display: flex;
     align-items: center;
-    gap: 10px;
-    min-height: 64px;
-    padding: 12px 14px;
+    gap: var(--ui-space-10, 10px);
+    min-height: var(--ui-layout-64, 64px);
+    padding: var(--ui-space-12, 12px) var(--ui-space-14, 14px);
     box-sizing: border-box;
 
     & + .today-action-row {
@@ -614,17 +614,17 @@
   }
 
   .today-action-row__check {
-    width: 28px;
+    width: var(--ui-layout-28, 28px);
     box-sizing: border-box;
     justify-content: center;
-    flex: 0 0 28px;
+    flex: 0 0 var(--ui-layout-28, 28px);
   }
 
   .today-action-row__icon {
     display: grid;
     place-items: center;
-    width: 28px;
-    height: 28px;
+    width: var(--ui-layout-28, 28px);
+    height: var(--ui-layout-28, 28px);
     flex: 0 0 auto;
     border-radius: 8px;
     color: var(--resource-bookmark-color, var(--primary-color));
@@ -644,34 +644,34 @@
   // 资源图标、标题和操作共享第一行中心；日期只作为标题的副信息。
   .today-action-row--inbox {
     display: grid;
-    grid-template-columns: 20px minmax(0, 1fr) 44px;
+    grid-template-columns: var(--ui-layout-20, 20px) minmax(0, 1fr) var(--ui-layout-44, 44px);
     align-items: start;
 
     .today-action-row__icon {
-      width: 20px;
-      height: 20px;
+      width: var(--ui-layout-20, 20px);
+      height: var(--ui-layout-20, 20px);
       border-radius: 0;
       background: transparent;
     }
 
     .today-action-row__actions {
-      height: 20px;
+      height: var(--ui-layout-20, 20px);
       justify-content: center;
     }
   }
 
   .today-action-row__main {
     display: grid;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
     min-width: 0;
     flex: 1 1 auto;
   }
 
   .today-action-row__title {
     color: var(--text-color);
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     font-weight: 500;
-    line-height: 20px;
+    line-height: var(--ui-layout-20, 20px);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -693,9 +693,9 @@
 
   .today-action-row__meta {
     display: flex;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 16px;
     flex-wrap: wrap;
 
@@ -707,14 +707,14 @@
 
   .today-action-row__actions {
     display: flex;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     flex: 0 0 auto;
   }
 
   .today-action-row__actions .b_btn {
-    height: 32px;
-    min-height: 32px;
-    padding: 0 10px;
+    height: var(--ui-layout-32, 32px);
+    min-height: var(--ui-layout-32, 32px);
+    padding: 0 var(--ui-space-10, 10px);
     line-height: normal;
     border: 1px solid var(--surface-border-color);
     background: var(--card-background);
@@ -730,9 +730,9 @@
 
   .today-action-row__actions .today-action-row__complete.b_btn {
     position: relative;
-    width: 20px;
-    height: 20px;
-    min-height: 20px;
+    width: var(--ui-layout-20, 20px);
+    height: var(--ui-layout-20, 20px);
+    min-height: var(--ui-layout-20, 20px);
     padding: 0;
     border: 0;
     border-radius: 4px;
@@ -753,8 +753,8 @@
     }
 
     :deep(.btn-spinner) {
-      width: 16px;
-      height: 16px;
+      width: var(--ui-layout-16, 16px);
+      height: var(--ui-layout-16, 16px);
       box-sizing: border-box;
       margin-right: 0;
     }
@@ -780,9 +780,9 @@
   .today-actions__empty {
     display: grid;
     justify-items: center;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
     min-width: 0;
-    padding: 22px 14px;
+    padding: var(--ui-space-22, 22px) var(--ui-space-14, 14px);
     box-sizing: border-box;
     border: 1px dashed var(--card-border-color);
     border-radius: 14px;
@@ -790,8 +790,8 @@
   }
 
   .today-actions__empty-icon {
-    width: 38px;
-    height: 38px;
+    width: var(--ui-layout-38, 38px);
+    height: var(--ui-layout-38, 38px);
     display: inline-grid;
     place-items: center;
     border: 1px solid color-mix(in srgb, var(--success-color, #07865c) 24%, var(--card-border-color));
@@ -804,34 +804,34 @@
     min-width: 0;
     display: grid;
     justify-items: center;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
 
     strong {
       color: var(--text-color);
-      font-size: 14px;
+      font-size: var(--ui-font-14, 14px);
     }
 
     span {
       color: var(--desc-color);
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
     }
   }
 
   .today-actions__empty-action {
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
 
   .today-actions--compact-empty .today-actions__empty {
-    padding: 10px 12px;
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     grid-template-columns: auto minmax(0, 1fr);
     justify-items: start;
     align-items: center;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
     text-align: left;
 
     .today-actions__empty-icon {
-      width: 32px;
-      height: 32px;
+      width: var(--ui-layout-32, 32px);
+      height: var(--ui-layout-32, 32px);
       grid-row: 1;
     }
 
@@ -876,30 +876,30 @@
   .today-actions__skeleton-head {
     display: flex;
     align-items: center;
-    gap: 8px;
-    min-height: 33px;
-    padding: 8px 14px;
+    gap: var(--ui-space-8, 8px);
+    min-height: var(--ui-layout-33, 33px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-14, 14px);
     box-sizing: border-box;
     border-bottom: 1px solid var(--surface-divider-color, var(--card-border-color));
   }
 
   .skeleton-group-title {
-    width: 52px;
+    width: var(--ui-layout-52, 52px);
     height: 12px;
   }
 
   .skeleton-group-count {
-    width: 24px;
-    height: 18px;
+    width: var(--ui-layout-24, 24px);
+    height: var(--ui-layout-18, 18px);
     border-radius: 999px;
   }
 
   .today-actions__skeleton-row {
     display: flex;
     align-items: center;
-    gap: 10px;
-    min-height: 64px;
-    padding: 12px 14px;
+    gap: var(--ui-space-10, 10px);
+    min-height: var(--ui-layout-64, 64px);
+    padding: var(--ui-space-12, 12px) var(--ui-space-14, 14px);
     box-sizing: border-box;
   }
 
@@ -914,8 +914,8 @@
   }
 
   .skeleton-row-icon {
-    width: 28px;
-    height: 28px;
+    width: var(--ui-layout-28, 28px);
+    height: var(--ui-layout-28, 28px);
     flex: 0 0 auto;
   }
 
@@ -923,28 +923,28 @@
     min-width: 0;
     flex: 1 1 auto;
     display: grid;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
 
   .skeleton-row-title {
-    width: min(58%, 460px);
+    width: min(58%, var(--ui-layout-460, 460px));
     height: 12px;
   }
 
   .skeleton-row-subtitle {
-    width: min(22%, 150px);
+    width: min(22%, var(--ui-layout-150, 150px));
     height: 9px;
   }
 
   .skeleton-row-actions {
     display: flex;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     flex: 0 0 auto;
   }
 
   .skeleton-row-button {
-    width: 28px;
-    height: 28px;
+    width: var(--ui-layout-28, 28px);
+    height: var(--ui-layout-28, 28px);
     border-radius: 50%;
   }
 
@@ -963,26 +963,26 @@
     /* 内容与操作保持同一行：换行会让每张卡片凭空高出一整行、右侧留下大片空白，
        也让左侧的图标和标题看起来贴在卡片上部。按钮改用紧凑尺寸腾出标题宽度。 */
     .today-action-row {
-      min-height: 64px;
-      padding: 12px;
-      gap: 8px;
+      min-height: var(--ui-layout-64, 64px);
+      padding: var(--ui-space-12, 12px);
+      gap: var(--ui-space-8, 8px);
     }
 
     .today-action-row__meta {
-      gap: 6px;
+      gap: var(--ui-space-6, 6px);
       overflow: hidden;
       white-space: nowrap;
     }
 
     .today-action-row__actions {
-      gap: 6px;
+      gap: var(--ui-space-6, 6px);
     }
 
     .today-action-row__actions :deep(.b_btn:not(.today-action-row__complete)) {
-      height: 32px;
-      min-height: 32px;
-      padding: 0 9px;
-      font-size: 12px;
+      height: var(--ui-layout-32, 32px);
+      min-height: var(--ui-layout-32, 32px);
+      padding: 0 var(--ui-space-9, 9px);
+      font-size: var(--ui-font-12, 12px);
     }
   }
 </style>

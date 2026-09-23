@@ -126,8 +126,8 @@
 
 <style scoped lang="less">
   .today-growth {
-    min-height: 150px;
-    padding: 18px;
+    min-height: var(--ui-layout-150, 150px);
+    padding: var(--ui-space-18, 18px);
     border: 1px solid var(--card-border-color);
     border-radius: 16px;
     background: linear-gradient(
@@ -141,35 +141,35 @@
   .today-growth__error {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .today-growth__header {
     justify-content: space-between;
   }
   .today-growth__eyebrow {
     color: var(--primary-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 700;
     letter-spacing: 0.08em;
   }
   h2 {
-    margin: 2px 0 0;
+    margin: var(--ui-space-2, 2px) 0 0;
     color: var(--text-color);
-    font-size: 18px;
+    font-size: var(--ui-font-18, 18px);
   }
   .today-growth__metrics {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 10px;
-    margin-top: 15px;
+    gap: var(--ui-space-10, 10px);
+    margin-top: var(--ui-space-15, 15px);
   }
   .today-growth__metric {
     display: grid;
     grid-template-columns: auto 1fr auto;
     align-items: center;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     min-width: 0;
-    padding: 10px;
+    padding: var(--ui-space-10, 10px);
     border: 1px solid var(--card-border-color);
     border-radius: 11px;
     background: var(--background-color);
@@ -178,7 +178,7 @@
   .today-growth__metric > span {
     overflow: hidden;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -186,7 +186,7 @@
     display: flex;
     min-width: 0;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
   .today-growth__metric-copy > span {
     overflow: hidden;
@@ -195,19 +195,19 @@
   }
   .today-growth__metric-copy small {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     line-height: 1.25;
     white-space: normal;
   }
   .today-growth__metric strong {
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-variant-numeric: tabular-nums;
   }
   .today-growth__next {
     height: auto;
-    margin-top: 12px;
-    padding: 11px 12px;
+    margin-top: var(--ui-space-12, 12px);
+    padding: var(--ui-space-11, 11px) var(--ui-space-12, 12px);
     border-color: var(--primary-color);
     border-radius: 11px;
     background: var(--background-color);
@@ -215,20 +215,20 @@
   }
   .today-growth--compact {
     min-height: 0;
-    padding: 10px 12px;
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
   }
   .today-growth--compact .today-growth__header {
     display: none;
   }
   .today-growth--compact .today-growth__metrics {
     grid-template-columns: repeat(5, minmax(0, 1fr)) auto;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     margin-top: 0;
   }
   .today-growth--compact .today-growth__metric {
-    min-height: 38px;
+    min-height: var(--ui-layout-38, 38px);
     box-sizing: border-box;
-    padding: 6px 8px;
+    padding: var(--ui-space-6, 6px) var(--ui-space-8, 8px);
   }
   .today-growth--compact .today-growth__metric-copy small {
     display: none;
@@ -238,7 +238,7 @@
     white-space: nowrap;
   }
   .today-growth__error {
-    min-height: 110px;
+    min-height: var(--ui-layout-110, 110px);
     justify-content: center;
     color: var(--warning-color, #b7791f);
   }
@@ -248,24 +248,24 @@
   }
   .today-growth__error span {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .today-growth__skeleton {
     display: grid;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .today-growth__skeleton span {
-    height: 26px;
+    height: var(--ui-layout-26, 26px);
     border-radius: 9px;
     background: linear-gradient(90deg, var(--hover-background), var(--card-border-color), var(--hover-background));
     background-size: 200% 100%;
     animation: today-growth-shimmer 1.2s linear infinite;
   }
   .today-growth__skeleton span:nth-child(2) {
-    height: 52px;
+    height: var(--ui-layout-52, 52px);
   }
   .today-growth__skeleton span:nth-child(3) {
-    height: 44px;
+    height: var(--ui-layout-44, 44px);
   }
   @keyframes today-growth-shimmer {
     to {

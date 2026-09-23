@@ -186,7 +186,7 @@
     <BModal
       v-model:visible="logsVisible"
       :title="t('serverManagement.logsTitle', { service: selectedService ? serviceName(selectedService.id) : '' })"
-      width="min(900px, 94vw)"
+      width="min(var(--ui-layout-900, 900px), 94vw)"
       :show-footer="false"
       fullscreen-mobile
     >
@@ -405,12 +405,12 @@
   });
   const columns = computed(() => [
     { key: 'name', title: t('serverManagement.columns.service'), width: '1.5fr', ellipsis: false },
-    { key: 'state', title: t('serverManagement.columns.state'), width: '110px', ellipsis: false },
-    { key: 'cpu', title: 'CPU', width: '90px', ellipsis: false },
-    { key: 'memory', title: t('serverManagement.memory'), width: '110px', ellipsis: false },
-    { key: 'restarts', title: t('serverManagement.servicesPage.restarts'), width: '90px', ellipsis: false },
-    { key: 'uptime', title: t('serverManagement.columns.uptime'), width: '110px', ellipsis: false },
-    { key: 'actions', title: t('serverManagement.columns.actions'), width: 'minmax(180px, auto)', ellipsis: false },
+    { key: 'state', title: t('serverManagement.columns.state'), width: 'var(--ui-layout-110, 110px)', ellipsis: false },
+    { key: 'cpu', title: 'CPU', width: 'var(--ui-layout-90, 90px)', ellipsis: false },
+    { key: 'memory', title: t('serverManagement.memory'), width: 'var(--ui-layout-110, 110px)', ellipsis: false },
+    { key: 'restarts', title: t('serverManagement.servicesPage.restarts'), width: 'var(--ui-layout-90, 90px)', ellipsis: false },
+    { key: 'uptime', title: t('serverManagement.columns.uptime'), width: 'var(--ui-layout-110, 110px)', ellipsis: false },
+    { key: 'actions', title: t('serverManagement.columns.actions'), width: 'minmax(var(--ui-layout-180, 180px), auto)', ellipsis: false },
   ]);
   const logsVisible = ref(false);
   const logsLoading = ref(false);
@@ -680,30 +680,30 @@
     color: var(--text-color);
   }
   .infra-module-content {
-    width: min(1320px, calc(100% - 48px));
+    width: min(var(--ui-layout-1320, 1320px), calc(100% - var(--ui-layout-48, 48px)));
     margin: 0 auto;
-    padding: 28px 0 48px;
+    padding: var(--ui-space-28, 28px) 0 var(--ui-space-48, 48px);
     display: grid;
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
   }
   .infra-state-card {
-    min-height: 150px;
+    min-height: var(--ui-layout-150, 150px);
     display: flex;
     align-items: center;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
   }
   .infra-state-card div {
     flex: 1;
   }
   .infra-state-card p {
-    margin: 5px 0 0;
+    margin: var(--ui-space-5, 5px) 0 0;
     color: var(--desc-color);
   }
   .infra-stale-warning {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 10px 12px;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     border: 1px solid var(--warning-color, #ad6800);
     border-radius: 10px;
     color: var(--warning-color, #ad6800);
@@ -714,13 +714,13 @@
   }
   .action-receipt__summary {
     display: grid;
-    grid-template-columns: 38px minmax(0, 1fr) auto;
+    grid-template-columns: var(--ui-layout-38, 38px) minmax(0, 1fr) auto;
     align-items: center;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .action-receipt__icon {
-    width: 36px;
-    height: 36px;
+    width: var(--ui-layout-36, 36px);
+    height: var(--ui-layout-36, 36px);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -729,34 +729,34 @@
     color: var(--success-color, #27965b);
   }
   .action-receipt__summary p {
-    margin: 4px 0 0;
+    margin: var(--ui-space-4, 4px) 0 0;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .action-receipt__details {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-    margin: 14px 0 0;
+    gap: var(--ui-space-10, 10px);
+    margin: var(--ui-space-14, 14px) 0 0;
   }
   .action-receipt__details > div {
     min-width: 0;
     display: grid;
-    gap: 4px;
-    padding: 10px;
+    gap: var(--ui-space-4, 4px);
+    padding: var(--ui-space-10, 10px);
     border: 1px solid var(--surface-border-color);
     border-radius: 9px;
     background: var(--workspace-panel-bg-color);
   }
   .action-receipt__details dt {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .action-receipt__details dd {
     min-width: 0;
     margin: 0;
     overflow-wrap: anywhere;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .action-receipt__details dd.is-verified {
     color: var(--success-color, #27965b);
@@ -767,40 +767,40 @@
   .action-receipt__actions {
     display: flex;
     justify-content: flex-end;
-    gap: 8px;
-    margin-top: 12px;
+    gap: var(--ui-space-8, 8px);
+    margin-top: var(--ui-space-12, 12px);
   }
   .service-summary-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
   }
   .service-summary-card {
     display: grid;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .service-summary-card span,
   .service-summary-card small {
     color: var(--desc-color);
   }
   .service-summary-card strong {
-    font-size: 25px;
+    font-size: var(--ui-font-25, 25px);
     font-variant-numeric: tabular-nums;
   }
   .services-toolbar {
     display: grid;
-    grid-template-columns: minmax(220px, 1fr) 150px auto;
+    grid-template-columns: minmax(var(--ui-layout-220, 220px), 1fr) var(--ui-layout-150, 150px) auto;
     align-items: center;
-    gap: 10px;
-    margin-bottom: 12px;
+    gap: var(--ui-space-10, 10px);
+    margin-bottom: var(--ui-space-12, 12px);
   }
   .services-toolbar > span {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     text-align: right;
   }
   .services-empty {
-    min-height: 100px;
+    min-height: var(--ui-layout-100, 100px);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -809,7 +809,7 @@
   .service-name {
     display: inline-flex;
     align-items: center;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     font-weight: 600;
   }
   .service-actions,
@@ -817,20 +817,20 @@
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
   .service-actions :deep(.b_btn),
   .service-mobile-actions :deep(.b_btn) {
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
   .services-mobile {
     display: none;
   }
   .service-logs {
-    min-height: 310px;
+    min-height: var(--ui-layout-310, 310px);
     display: grid;
     grid-template-rows: auto auto auto minmax(0, 1fr);
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .service-logs__toolbar,
   .service-logs__identity,
@@ -845,29 +845,29 @@
   .service-logs__toolbar {
     min-width: 0;
     justify-content: space-between;
-    gap: 18px;
-    padding-bottom: 12px;
+    gap: var(--ui-space-18, 18px);
+    padding-bottom: var(--ui-space-12, 12px);
     border-bottom: 1px solid var(--surface-divider-color);
   }
   .service-logs__identity {
     min-width: 0;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .service-logs__identity > div {
     min-width: 0;
     flex-wrap: wrap;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
   .service-logs__identity strong {
     overflow: hidden;
     color: var(--text-color);
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
   .service-logs__icon {
-    width: 34px;
-    height: 34px;
+    width: var(--ui-layout-34, 34px);
+    height: var(--ui-layout-34, 34px);
     flex: 0 0 auto;
     display: inline-flex;
     align-items: center;
@@ -879,36 +879,36 @@
   }
   .service-logs__controls {
     flex: 0 0 auto;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .service-logs__controls label {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .service-logs__limit {
-    width: 132px;
+    width: var(--ui-layout-132, 132px);
   }
   .service-logs__filters {
     display: grid;
-    grid-template-columns: minmax(180px, 1fr) 120px 145px auto auto;
+    grid-template-columns: minmax(var(--ui-layout-180, 180px), 1fr) var(--ui-layout-120, 120px) var(--ui-layout-145, 145px) auto auto;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .service-logs__meta {
-    min-height: 18px;
+    min-height: var(--ui-layout-18, 18px);
     flex-wrap: wrap;
-    gap: 6px 14px;
+    gap: var(--ui-space-6, 6px) var(--ui-space-14, 14px);
     color: var(--pre-muted-color, var(--desc-color));
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-variant-numeric: tabular-nums;
   }
   .service-logs__meta .is-warning {
     color: var(--warning-color, #ad6800);
   }
   .service-logs__state {
-    min-height: 240px;
+    min-height: var(--ui-layout-240, 240px);
     justify-content: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     border: 1px dashed var(--surface-border-color);
     border-radius: 12px;
     color: var(--desc-color);
@@ -920,7 +920,7 @@
     color: var(--error-color, #d14343);
   }
   .service-log-viewer {
-    max-height: min(58vh, 560px);
+    max-height: min(58vh, var(--ui-layout-560, 560px));
     overflow: auto;
     border: 1px solid var(--pre-border-color);
     border-radius: 12px;
@@ -932,7 +932,7 @@
   .service-log-viewer li {
     min-width: max-content;
     display: grid;
-    grid-template-columns: 58px minmax(660px, 1fr);
+    grid-template-columns: var(--ui-layout-58, 58px) minmax(var(--ui-layout-660, 660px), 1fr);
   }
   .service-log-viewer__header {
     position: sticky;
@@ -941,12 +941,12 @@
     border-bottom: 1px solid var(--pre-border-color);
     color: var(--pre-muted-color);
     background: var(--pre-bg-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     font-weight: 600;
     letter-spacing: 0.04em;
   }
   .service-log-viewer__header span {
-    padding: 8px 12px;
+    padding: var(--ui-space-8, 8px) var(--ui-space-12, 12px);
   }
   .service-log-viewer__header span:first-child,
   .service-log-viewer li > span {
@@ -969,9 +969,9 @@
   }
   .service-log-viewer li > span,
   .service-log-viewer code {
-    padding: 5px 12px;
+    padding: var(--ui-space-5, 5px) var(--ui-space-12, 12px);
     font:
-      11px/1.55 'Fira Code',
+      var(--ui-font-11, 11px)/1.55 'Fira Code',
       ui-monospace,
       SFMono-Regular,
       Menlo,

@@ -6,6 +6,7 @@
 </template>
 
 <script setup lang="ts">
+  import { useUiDensity } from '@/composables/useUiDensity';
   import { computed, onBeforeUnmount, ref, watch } from 'vue';
   import icon from '@/config/icon.ts';
   import {
@@ -31,9 +32,10 @@
     },
   );
 
+  const { dimension } = useUiDensity();
   const faviconStyle = computed(() => ({
-    '--bookmark-favicon-size': `${props.size}px`,
-    '--bookmark-favicon-tile-size': `${props.tileSize}px`,
+    '--bookmark-favicon-size': `${dimension(props.size, 'icon')}px`,
+    '--bookmark-favicon-tile-size': `${dimension(props.tileSize, 'layout')}px`,
   }));
   const runtimeState = computed(() => getBookmarkIconRuntimeState(props.bookmarkId));
   const resolvedSrc = computed(() => resolveBookmarkIconSource(props.bookmarkId, props.src));

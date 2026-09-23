@@ -124,29 +124,29 @@
     flex: 0 0 auto;
     align-items: center;
     justify-content: flex-end;
-    gap: 6px;
-    min-height: 44px;
-    padding: 6px 10px;
+    gap: var(--ui-space-6, 6px);
+    min-height: var(--ui-layout-44, 44px);
+    padding: var(--ui-space-6, 6px) var(--ui-space-10, 10px);
     border-bottom: 1px solid var(--surface-border-color, #e1e5f0);
     background: var(--surface-panel-bg, var(--note-editor-header-bg, var(--background-color)));
     box-sizing: border-box;
 
     &__input {
-      flex: 0 1 210px;
-      width: 210px;
-      min-width: 140px;
+      flex: 0 1 var(--ui-layout-210, 210px);
+      width: var(--ui-layout-210, 210px);
+      min-width: var(--ui-layout-140, 140px);
 
       &--replace {
-        flex-basis: 180px;
-        width: 180px;
+        flex-basis: var(--ui-layout-180, 180px);
+        width: var(--ui-layout-180, 180px);
       }
 
       :deep(.b-input) {
-        height: 30px;
+        height: var(--ui-control-30, 30px);
         border: 1px solid var(--surface-border-color, #d8dce8);
         background: var(--card-background, #fff);
         color: var(--text-color);
-        font-size: 13px;
+        font-size: var(--ui-font-13, 13px);
 
         &:focus {
           border-color: var(--primary-color, #615ced);
@@ -162,30 +162,31 @@
       display: inline-flex;
       flex: 0 0 auto;
       align-items: center;
-      gap: 4px;
+      gap: var(--ui-space-4, 4px);
     }
 
     &__options {
-      gap: 2px;
+      gap: var(--ui-space-2, 2px);
 
       :deep(.b-checkbox) {
-        padding: 2px 3px;
+        padding: var(--ui-space-2, 2px) var(--ui-space-3, 3px);
       }
 
       :deep(.b-checkbox__label) {
-        font-size: 12px;
+        font-size: var(--ui-font-12, 12px);
         white-space: nowrap;
       }
     }
 
     :deep(.b_btn) {
       min-width: 0;
-      height: 28px;
-      padding: 0 9px;
+      height: var(--ui-control-28, 28px);
+      padding: 0 var(--ui-space-9, 9px);
       border: 1px solid var(--surface-border-color, #d8dce8) !important;
       background: var(--card-background, #fff);
-      font-size: 12px;
-      line-height: 26px;
+      font-size: var(--ui-font-12, 12px);
+      /* ui-density-fixed: 减去上下各 1px 的固定边框，行高仍随控件高度变化。 */
+      line-height: calc(var(--ui-control-28, 28px) - 2px);
 
       &:hover:not(.disabled) {
         border-color: var(--primary-color, #615ced) !important;
@@ -196,7 +197,7 @@
     &__status {
       flex: 0 0 auto;
       color: var(--desc-color);
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
       white-space: nowrap;
 
       &.is-empty {
@@ -206,7 +207,7 @@
     }
 
     &__close {
-      width: 28px;
+      width: var(--ui-control-28, 28px);
       padding: 0;
       color: var(--desc-color);
     }
@@ -230,7 +231,7 @@
   @media (max-width: 767px) {
     .editor-find-bar {
       justify-content: flex-start;
-      padding-right: 8px;
+      padding-right: var(--ui-space-8, 8px);
 
       &__input {
         flex-basis: calc(100% - 108px);

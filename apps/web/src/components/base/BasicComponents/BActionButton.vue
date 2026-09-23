@@ -40,8 +40,8 @@
   .b-action-button {
     --action-color: var(--primary-color);
     display: inline-flex;
-    width: 30px;
-    height: 30px;
+    width: var(--ui-layout-30, 30px);
+    height: var(--ui-layout-30, 30px);
     align-items: center;
     justify-content: center;
     box-sizing: border-box;
@@ -79,10 +79,10 @@
 
   .b-action-button--with-label {
     width: auto;
-    min-width: 30px;
-    padding: 0 9px;
-    gap: 5px;
-    font-size: 12px;
+    min-width: var(--ui-layout-30, 30px);
+    padding: 0 var(--ui-space-9, 9px);
+    gap: var(--ui-space-5, 5px);
+    font-size: var(--ui-font-12, 12px);
     font-weight: 600;
   }
 

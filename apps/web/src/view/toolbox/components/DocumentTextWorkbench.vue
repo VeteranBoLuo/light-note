@@ -96,7 +96,7 @@
             <div v-if="activeWarning" class="document-text-warning"
               ><SvgIcon :src="icon.message.info" size="17" /><span>{{ activeWarning }}</span></div
             >
-            <BInput v-model:value="activeOutput" type="textarea" :rows="22" readonly />
+            <BInput v-model:value="activeOutput" type="textarea" :rows="dimension(22, 'layout')" readonly />
           </template>
 
           <div v-else class="document-text-placeholder">
@@ -136,6 +136,7 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
+  import { useUiDensity } from '@/composables/useUiDensity';
   import { TOOLBOX_PRESENTATION } from '@/config/toolbox';
   import { copyTextToClipboard } from '@/utils/clipboard';
   import {
@@ -159,6 +160,7 @@
     },
   );
   const { t } = useI18n();
+  const { dimension } = useUiDensity();
   const router = useRouter();
   function saveAsNote() {
     const token = stageAiNoteDraft({
@@ -356,18 +358,18 @@
 <style scoped lang="less">
   .document-text-workbench {
     display: grid;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
 
   .document-text-empty {
-    min-height: 230px;
+    min-height: var(--ui-layout-230, 230px);
     box-sizing: border-box;
-    padding: 20px;
+    padding: var(--ui-space-20, 20px);
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
     border: 1px dashed rgba(97, 92, 237, 0.5);
     border-radius: 20px;
     text-align: center;
@@ -375,8 +377,8 @@
   }
 
   .document-text-empty > span {
-    width: 44px;
-    height: 44px;
+    width: var(--ui-layout-44, 44px);
+    height: var(--ui-layout-44, 44px);
     display: grid;
     place-items: center;
     border: 1px solid rgba(97, 92, 237, 0.42);
@@ -387,10 +389,10 @@
   }
 
   .document-text-empty > div {
-    max-width: 570px;
+    max-width: var(--ui-layout-570, 570px);
     display: grid;
     justify-items: center;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
 
   .document-text-empty h2,
@@ -401,22 +403,22 @@
   }
 
   .document-text-empty h2 {
-    font-size: 21px;
+    font-size: var(--ui-font-21, 21px);
   }
 
   .document-text-empty p,
   .document-text-empty > small {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.65;
   }
 
   .document-text-sourcebar {
-    padding: 11px 13px;
+    padding: var(--ui-space-11, 11px) var(--ui-space-13, 13px);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     border: 1px solid var(--surface-border-color);
     border-radius: 14px;
     background: var(--card-background);
@@ -426,12 +428,12 @@
   .document-text-sourcebar__actions {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .document-text-sourcebar__copy > span {
-    width: 40px;
-    height: 40px;
+    width: var(--ui-layout-40, 40px);
+    height: var(--ui-layout-40, 40px);
     display: grid;
     place-items: center;
     border-radius: 11px;
@@ -441,27 +443,27 @@
 
   .document-text-sourcebar__copy > div {
     display: grid;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
 
   .document-text-sourcebar small {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
 
   .document-text-layout {
     display: grid;
-    grid-template-columns: minmax(230px, 0.26fr) minmax(0, 1fr);
-    gap: 13px;
+    grid-template-columns: minmax(var(--ui-layout-230, 230px), 0.26fr) minmax(0, 1fr);
+    gap: var(--ui-space-13, 13px);
     align-items: start;
   }
 
   .document-text-files,
   .document-text-main {
     min-width: 0;
-    padding: 15px;
+    padding: var(--ui-space-15, 15px);
     display: grid;
-    gap: 11px;
+    gap: var(--ui-space-11, 11px);
     border: 1px solid var(--surface-border-color);
     border-radius: 17px;
     background: var(--card-background);
@@ -472,16 +474,16 @@
     align-items: center;
     justify-content: space-between;
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .document-text-files article {
     min-width: 0;
-    padding: 10px;
+    padding: var(--ui-space-10, 10px);
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     border: 1px solid transparent;
     border-radius: 11px;
     background: var(--workspace-panel-bg-color);
@@ -493,8 +495,8 @@
   }
 
   .document-text-files article > span {
-    width: 30px;
-    height: 30px;
+    width: var(--ui-layout-30, 30px);
+    height: var(--ui-layout-30, 30px);
     display: grid;
     place-items: center;
     border-radius: 8px;
@@ -505,7 +507,7 @@
   .document-text-files article > div {
     min-width: 0;
     display: grid;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
 
   .document-text-files article strong,
@@ -516,30 +518,30 @@
   }
 
   .document-text-files article strong {
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .document-text-files article small {
     color: var(--desc-color);
-    font-size: 9px;
+    font-size: var(--ui-font-9, 9px);
   }
 
   .document-text-main__head {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .document-text-main__head > div:first-child {
     min-width: 0;
     display: grid;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
 
   .document-text-main__head > div:first-child > span {
     color: var(--primary-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     font-weight: 750;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -547,25 +549,25 @@
 
   .document-text-main__head h2 {
     overflow: hidden;
-    font-size: 19px;
+    font-size: var(--ui-font-19, 19px);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .document-text-main__head p {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .document-text-main__head > div:last-child {
     display: flex;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
 
   .document-text-progress {
-    padding: 12px;
+    padding: var(--ui-space-12, 12px);
     display: grid;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     border: 1px solid rgba(97, 92, 237, 0.45);
     border-radius: 12px;
     background: var(--workspace-panel-bg-color);
@@ -574,25 +576,25 @@
   .document-text-progress > div {
     display: flex;
     justify-content: space-between;
-    gap: 8px;
-    font-size: 11px;
+    gap: var(--ui-space-8, 8px);
+    font-size: var(--ui-font-11, 11px);
   }
 
   .document-text-progress small {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
 
   .document-text-error,
   .document-text-warning {
-    padding: 10px 12px;
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     border: 1px solid var(--danger-color, #dc3e4d);
     border-radius: 11px;
     color: var(--danger-color, #dc3e4d);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .document-text-warning {
@@ -603,15 +605,15 @@
   .document-text-stats {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .document-text-stats > div {
-    min-height: 66px;
-    padding: 10px;
+    min-height: var(--ui-layout-66, 66px);
+    padding: var(--ui-space-10, 10px);
     display: grid;
     align-content: center;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
     border: 1px solid var(--surface-border-color);
     border-radius: 11px;
     background: var(--workspace-panel-bg-color);
@@ -619,35 +621,35 @@
 
   .document-text-stats span {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
 
   .document-text-stats strong {
-    font-size: 18px;
+    font-size: var(--ui-font-18, 18px);
   }
 
   .document-text-main :deep(textarea) {
-    min-height: 450px;
+    min-height: var(--ui-layout-450, 450px);
     resize: vertical;
     border-color: var(--surface-border-color);
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.65;
   }
 
   .document-text-placeholder {
-    min-height: 430px;
+    min-height: var(--ui-layout-430, 430px);
     display: grid;
     place-content: center;
     justify-items: center;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     color: var(--desc-color);
     text-align: center;
   }
 
   .document-text-placeholder > span {
-    width: 64px;
-    height: 64px;
+    width: var(--ui-layout-64, 64px);
+    height: var(--ui-layout-64, 64px);
     display: grid;
     place-items: center;
     border-radius: 18px;
@@ -656,17 +658,17 @@
   }
 
   .document-text-placeholder p {
-    max-width: 460px;
-    font-size: 11px;
+    max-width: var(--ui-layout-460, 460px);
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.55;
   }
 
   .document-text-runbar {
-    padding: 11px 12px;
+    padding: var(--ui-space-11, 11px) var(--ui-space-12, 12px);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     background: var(--workspace-panel-bg-color);
@@ -675,9 +677,9 @@
   .document-text-runbar > div {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .document-text-runbar > div :deep(.svg-icon) {
@@ -705,11 +707,11 @@
     }
 
     .document-text-main :deep(textarea) {
-      min-height: 320px;
+      min-height: var(--ui-layout-320, 320px);
     }
 
     .document-text-placeholder {
-      min-height: 300px;
+      min-height: var(--ui-layout-300, 300px);
     }
   }
 

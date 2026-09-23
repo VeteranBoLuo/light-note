@@ -48,10 +48,11 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, onBeforeUnmount, nextTick, reactive, ref } from 'vue';
+  import { createAnchorPositionTracker } from '@/utils/anchorPositionTracking';
+  import { useUiDensity } from '@/composables/useUiDensity';
+  import { computed, onBeforeUnmount, nextTick, reactive, ref, watch } from 'vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
-  import { getRootZoom } from '@/utils/zoom';
 
   type BDropdownTrigger = 'hover' | 'click';
 
@@ -103,7 +104,6 @@
     visibility: 'hidden',
   });
   let closeTimer: number | null = null;
-  let positionFrame: number | null = null;
   let resizeObserver: ResizeObserver | null = null;
   /** 打开时刻，用于忽略上一次滑动的惯性余速(见 onScrollClose) */
   let openedAt = 0;
@@ -114,17 +114,17 @@
   const isClick = computed(() => triggerModes.value.includes('click'));
 
   // 定位:贴触发元素正下方、左对齐(同 antd 默认 bottomLeft)。
-  // 挂在 body 用 fixed(视口坐标);挂在自定义定位容器用相对容器的 absolute(规避容器 transform 破坏 fixed)。
+  // body 与自定义挂载容器均使用视口坐标；容器用于维持嵌套菜单的交互归属。
   function computePosition() {
     const el = triggerRef.value;
     if (!el) return;
-    const zoom = getRootZoom();
+
     const rect = el.getBoundingClientRect();
-    const rTop = rect.top / zoom;
-    const rBottom = rect.bottom / zoom;
-    const rLeft = rect.left / zoom;
-    const rRight = rect.right / zoom;
-    const rWidth = rect.width / zoom;
+    const rTop = rect.top;
+    const rBottom = rect.bottom;
+    const rLeft = rect.left;
+    const rRight = rect.right;
+    const rWidth = rect.width;
     const panelW = panelRef.value?.offsetWidth ?? 0;
     const panelH = panelRef.value?.offsetHeight ?? 0;
     const viewportGap = 8;
@@ -134,10 +134,9 @@
     if (props.align === 'center') vLeft = rLeft + rWidth / 2 - panelW / 2;
     else if (props.align === 'right') vLeft = rRight - panelW;
     // 统一用 fixed(视口坐标),不依赖容器是否为定位元素 —— 原 absolute 分支在静态容器下会错位(缩放尤甚)。
-    // 口径:getBoundingClientRect=视觉(÷zoom 得布局);offsetWidth=布局;clientWidth=视觉(÷zoom 得布局);style=布局。
     let left = vLeft;
-    const vw = (document.documentElement.clientWidth || window.innerWidth) / zoom; // 视口宽(布局像素)
-    const vh = (document.documentElement.clientHeight || window.innerHeight) / zoom; // 视口高(布局像素)
+    const vw = document.documentElement.clientWidth || window.innerWidth; // 视口宽(布局像素)
+    const vh = document.documentElement.clientHeight || window.innerHeight; // 视口高(布局像素)
     const maxPanelHeight = Math.max(0, vh - viewportGap * 2);
     const visiblePanelHeight = panelH ? Math.min(panelH, maxPanelHeight) : 0;
     const belowTop = rBottom + triggerGap;
@@ -160,10 +159,16 @@
     panelStyle.visibility = 'visible';
   }
 
-  function cancelPositionFrame() {
-    if (positionFrame === null) return;
-    cancelAnimationFrame(positionFrame);
-    positionFrame = null;
+  const { start: startPositionTracking, stop: stopPositionTracking } = createAnchorPositionTracker({
+    getAnchor: () => triggerRef.value,
+    isActive: () => visible.value,
+    update: computePosition,
+  });
+
+  function refreshPosition() {
+    if (!visible.value) return;
+    computePosition();
+    startPositionTracking();
   }
 
   function clearCloseTimer() {
@@ -182,23 +187,22 @@
     visible.value = true;
     emit('openChange', true);
     nextTick(() => {
-      computePosition();
-      // 旧 WebView 在 Teleport 节点首帧完成布局后，菜单宽度可能才稳定；再校准一次避免右对齐漂移。
-      cancelPositionFrame();
-      positionFrame = requestAnimationFrame(() => {
-        positionFrame = null;
-        computePosition();
-      });
+      if (!visible.value) return;
+      refreshPosition();
       resizeObserver?.disconnect();
       if (panelRef.value && typeof ResizeObserver !== 'undefined') {
-        resizeObserver = new ResizeObserver(computePosition);
+        resizeObserver = new ResizeObserver(refreshPosition);
         resizeObserver.observe(panelRef.value);
+        if (triggerRef.value) resizeObserver.observe(triggerRef.value);
       }
     });
     // 滚动关闭而不是跟随重定位：浮层是 fixed 层，内容一滚就与触发元素脱节，
     // 与其让它跟着飘，不如像右键菜单那样直接关掉。resize 仍然重定位(软键盘、窗口变化)。
     window.addEventListener('scroll', onScrollClose, true);
-    window.addEventListener('resize', computePosition);
+    window.addEventListener('resize', refreshPosition);
+    document.addEventListener('transitionrun', startPositionTracking, true);
+    document.addEventListener('transitionstart', startPositionTracking, true);
+    document.addEventListener('animationstart', startPositionTracking, true);
     if (isClick.value) document.addEventListener('mousedown', onDocMouseDown, true);
   }
 
@@ -207,11 +211,14 @@
     if (!visible.value) return;
     visible.value = false;
     emit('openChange', false);
-    cancelPositionFrame();
+    stopPositionTracking();
     resizeObserver?.disconnect();
     resizeObserver = null;
     window.removeEventListener('scroll', onScrollClose, true);
-    window.removeEventListener('resize', computePosition);
+    window.removeEventListener('resize', refreshPosition);
+    document.removeEventListener('transitionrun', startPositionTracking, true);
+    document.removeEventListener('transitionstart', startPositionTracking, true);
+    document.removeEventListener('animationstart', startPositionTracking, true);
     document.removeEventListener('mousedown', onDocMouseDown, true);
   }
 
@@ -267,11 +274,18 @@
 
   onBeforeUnmount(() => {
     clearCloseTimer();
-    cancelPositionFrame();
+    stopPositionTracking();
     resizeObserver?.disconnect();
     window.removeEventListener('scroll', onScrollClose, true);
-    window.removeEventListener('resize', computePosition);
+    window.removeEventListener('resize', refreshPosition);
+    document.removeEventListener('transitionrun', startPositionTracking, true);
+    document.removeEventListener('transitionstart', startPositionTracking, true);
+    document.removeEventListener('animationstart', startPositionTracking, true);
     document.removeEventListener('mousedown', onDocMouseDown, true);
+  });
+  const { density } = useUiDensity();
+  watch(density, () => {
+    if (visible.value) nextTick(refreshPosition);
   });
 </script>
 
@@ -288,7 +302,7 @@
   /* 非 scoped:面板 Teleport 到 body/自定义容器,scoped 选择器命不中 */
   .b-dropdown-panel {
     z-index: 800; /* 高于导航栏 */
-    padding: 4px;
+    padding: var(--ui-space-4, 4px);
     border-radius: 8px;
     background: var(--menu-body-bg-color);
     color: var(--text-color);
@@ -300,16 +314,16 @@
   .b-dropdown-panel .b-dropdown-item.b_btn {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 5px 12px;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-5, 5px) var(--ui-space-12, 12px);
     height: auto;
     justify-content: flex-start;
     text-align: left;
     border: 0 !important;
     border-radius: 4px;
     background: transparent !important;
-    font-size: 14px;
-    line-height: 22px;
+    font-size: var(--ui-font-14, 14px);
+    line-height: var(--ui-layout-22, 22px);
     color: var(--text-color);
     cursor: pointer;
     white-space: nowrap;
@@ -344,7 +358,7 @@
   }
   .b-dropdown-divider {
     height: 1px;
-    margin: 4px 8px;
+    margin: var(--ui-space-4, 4px) var(--ui-space-8, 8px);
     background: var(--card-border-color);
   }
   .b-dropdown-fade-enter-active,
@@ -360,10 +374,10 @@
   }
   .b-dropdown-item__description {
     display: block;
-    max-width: 240px;
-    margin-top: 4px;
+    max-width: var(--ui-layout-240, 240px);
+    margin-top: var(--ui-space-4, 4px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.5;
     white-space: normal;
     overflow-wrap: anywhere;

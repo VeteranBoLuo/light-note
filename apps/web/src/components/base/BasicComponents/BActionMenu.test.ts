@@ -1,12 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h, nextTick, reactive } from 'vue';
 import BActionMenu from './BActionMenu.vue';
+import { applyUiDensity } from '@/composables/useUiDensity';
 
 let cleanup: (() => void) | undefined;
 
 afterEach(() => {
   cleanup?.();
   cleanup = undefined;
+  applyUiDensity('medium');
   document.querySelectorAll('.b-action-menu-panel').forEach((panel) => panel.remove());
   vi.clearAllTimers();
   vi.useRealTimers();
@@ -69,6 +71,29 @@ async function advance(ms: number) {
 }
 
 describe('BActionMenu', () => {
+  it('已打开的数字宽度菜单随密度变化，恢复标准后保持原宽度', async () => {
+    const { anchor } = mountMenu({ width: 208, triggers: ['click'] });
+    anchor.click();
+    await nextTick();
+    const panel = document.querySelector<HTMLElement>('.b-action-menu-panel')!;
+    expect(panel.style.width).toBe('208px');
+    applyUiDensity('small');
+    await nextTick();
+    expect(panel.style.width).toBe('187px');
+    applyUiDensity('large');
+    await nextTick();
+    expect(panel.style.width).toBe('229px');
+    applyUiDensity('medium');
+    await nextTick();
+    expect(panel.style.width).toBe('208px');
+  });
+  it('调用方提供的 CSS 宽度不重复转换', async () => {
+    applyUiDensity('small');
+    const { anchor } = mountMenu({ width: '320px', triggers: ['click'] });
+    anchor.click();
+    await nextTick();
+    expect(document.querySelector<HTMLElement>('.b-action-menu-panel')!.style.width).toBe('320px');
+  });
   it('调用方切换同一资源的菜单入口时可关闭已打开的右键菜单', async () => {
     const { anchor, close, onOpenChange } = mountMenu({ triggers: ['contextmenu'] });
     anchor.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));

@@ -1,5 +1,9 @@
 <template>
-  <div class="todo-simple-editor" :class="{ 'is-mobile': mobile }" :style="{ '--todo-footer-height': `${footerHeight}px` }">
+  <div
+    class="todo-simple-editor"
+    :class="{ 'is-mobile': mobile }"
+    :style="{ '--todo-footer-height': `${footerHeight}px` }"
+  >
     <div class="todo-simple-editor__body">
       <main ref="editorBodyRef" class="todo-simple-editor__main">
         <div v-if="draft.independentTasks.enabled && !item" class="todo-simple-editor__mode-notice">
@@ -13,7 +17,20 @@
         </div>
 
         <section v-if="item?.seriesId" class="todo-simple-editor__section todo-simple-editor__scope">
-          <header><div><strong>{{ t('inbox.todoPlanEditScope') }}</strong><small>{{ t(scope === 'current' ? 'inbox.todoPlanScopeCurrentHint' : scope === 'future' ? 'inbox.todoPlanScopeFutureHint' : 'inbox.todoPlanScopeSeriesHint') }}</small></div></header>
+          <header
+            ><div
+              ><strong>{{ t('inbox.todoPlanEditScope') }}</strong
+              ><small>{{
+                t(
+                  scope === 'current'
+                    ? 'inbox.todoPlanScopeCurrentHint'
+                    : scope === 'future'
+                      ? 'inbox.todoPlanScopeFutureHint'
+                      : 'inbox.todoPlanScopeSeriesHint',
+                )
+              }}</small></div
+            ></header
+          >
           <BSelect v-model:value="scope" :options="scopeOptions" :disabled="saving" />
         </section>
         <section class="todo-simple-editor__section todo-simple-editor__content">
@@ -54,7 +71,7 @@
           <BModal
             v-model:visible="resourcePickerVisible"
             :title="t('inbox.todoAddResource')"
-            width="460px"
+            width="var(--ui-layout-460, 460px)"
             :show-footer="false"
           >
             <ResourcePickerPanel
@@ -86,14 +103,18 @@
             </div>
           </div>
           <div ref="checklistSectionRef">
-            <TodoChecklistEditor v-model="draft.task.checklist" v-model:open="checklistOpen" :todo-id="item?.id" :title="draft.task.title" :description="draft.task.description" :disabled="saving" />
+            <TodoChecklistEditor
+              v-model="draft.task.checklist"
+              v-model:open="checklistOpen"
+              :todo-id="item?.id"
+              :title="draft.task.title"
+              :description="draft.task.description"
+              :disabled="saving"
+            />
           </div>
         </section>
 
-        <section
-          v-if="!draft.independentTasks.enabled"
-          class="todo-simple-editor__section todo-simple-editor__time"
-        >
+        <section v-if="!draft.independentTasks.enabled" class="todo-simple-editor__section todo-simple-editor__time">
           <header>
             <div>
               <strong>{{ t('inbox.todoTime') }}</strong>
@@ -136,7 +157,10 @@
               <strong>{{ t(item ? 'inbox.todoPlanTitle' : 'inbox.todoAdvanced') }}</strong>
               <small>{{ t(item ? 'inbox.todoPlanHint' : 'inbox.todoIndependentEntryHint') }}</small>
             </div>
-            <BSwitch v-if="!item || (!item.seriesId && draft.independentTasks.plan.type !== 'once')" v-model:checked="draft.independentTasks.enabled" />
+            <BSwitch
+              v-if="!item || (!item.seriesId && draft.independentTasks.plan.type !== 'once')"
+              v-model:checked="draft.independentTasks.enabled"
+            />
           </header>
           <div v-if="!draft.independentTasks.enabled" class="todo-simple-editor__advanced-summary">
             <strong>{{ t('inbox.todoIndependentToggleTitle') }}</strong>
@@ -145,7 +169,9 @@
           <TodoIndependentTaskPlanEditor
             v-else
             :draft="draft"
-            :current-only="!!item && scope === 'current' && (!!item.seriesId || draft.independentTasks.plan.type === 'once')"
+            :current-only="
+              !!item && scope === 'current' && (!!item.seriesId || draft.independentTasks.plan.type === 'once')
+            "
             :needs-past-policy="needsPastPolicy"
           />
         </section>
@@ -263,10 +289,22 @@
   const { draft, reset } = useTodoCreateDraft();
   const scope = ref<TodoPlanScope>('current');
   let scopeTimings: Partial<Record<TodoPlanScope, TodoPlanTiming>> = {};
-  const scopeOptions = computed(() => ['current', 'future', 'series'].map(value => ({value, label: t(value === 'current' ? 'inbox.todoPlanScopeCurrent' : value === 'future' ? 'inbox.todoPlanScopeFuture' : 'inbox.todoPlanScopeSeries')})));
+  const scopeOptions = computed(() =>
+    ['current', 'future', 'series'].map((value) => ({
+      value,
+      label: t(
+        value === 'current'
+          ? 'inbox.todoPlanScopeCurrent'
+          : value === 'future'
+            ? 'inbox.todoPlanScopeFuture'
+            : 'inbox.todoPlanScopeSeries',
+      ),
+    })),
+  );
   function buildDraft() {
     const payload = normalizeTodoCreateDraft(draft);
-    if (props.item?.seriesId && scope.value === 'current' && draft.independentTasks.enabled) payload.plan = { type: 'once', pastPolicy: payload.plan.pastPolicy };
+    if (props.item?.seriesId && scope.value === 'current' && draft.independentTasks.enabled)
+      payload.plan = { type: 'once', pastPolicy: payload.plan.pastPolicy };
     return payload;
   }
   let advancedInitialized = false;
@@ -295,7 +333,9 @@
   const footerHeight = ref(76);
   watch(footerRef, (element, _, onCleanup) => {
     if (!element || typeof ResizeObserver === 'undefined') return;
-    const observer = new ResizeObserver(() => { footerHeight.value = element.offsetHeight; });
+    const observer = new ResizeObserver(() => {
+      footerHeight.value = element.offsetHeight;
+    });
     observer.observe(element);
     onCleanup(() => observer.disconnect());
   });
@@ -343,10 +383,13 @@
   );
   // 展示沿用最近一次结果；提交仍只接受当前草稿的有效 preview。
   const needsPastPolicy = computed(() =>
-    Boolean(draft.independentTasks.enabled && (
-      displayedPreview.value?.requiredChoices?.includes('pastPolicy') ||
-      displayedPreview.value?.warnings?.some(({ code }) => code === 'PAST_OCCURRENCE' || code === 'PAST_SCHEDULE_RESTARTED')
-    )),
+    Boolean(
+      draft.independentTasks.enabled &&
+      (displayedPreview.value?.requiredChoices?.includes('pastPolicy') ||
+        displayedPreview.value?.warnings?.some(
+          ({ code }) => code === 'PAST_OCCURRENCE' || code === 'PAST_SCHEDULE_RESTARTED',
+        )),
+    ),
   );
   const submitBlockedReason = computed(() => {
     if (canSubmit.value || props.saving) return '';
@@ -366,7 +409,17 @@
     return props.mobile ? t('inbox.todoCreateNow') : t('inbox.todoCreateSingle');
   });
   const footerHint = computed(() =>
-    props.item?.seriesId ? t(scope.value === 'current' ? 'inbox.todoPlanScopeCurrentHint' : scope.value === 'future' ? 'inbox.todoPlanScopeFutureHint' : 'inbox.todoPlanScopeSeriesHint') : draft.independentTasks.enabled ? t('inbox.todoIndependentFooterHint') : t('inbox.todoSingleFooterHint'),
+    props.item?.seriesId
+      ? t(
+          scope.value === 'current'
+            ? 'inbox.todoPlanScopeCurrentHint'
+            : scope.value === 'future'
+              ? 'inbox.todoPlanScopeFutureHint'
+              : 'inbox.todoPlanScopeSeriesHint',
+        )
+      : draft.independentTasks.enabled
+        ? t('inbox.todoIndependentFooterHint')
+        : t('inbox.todoSingleFooterHint'),
   );
 
   watch(
@@ -386,17 +439,25 @@
     },
     { immediate: true },
   );
-  watch(scope, (next, previous) => {
-    if (props.item?.series?.timing) {
-      scopeTimings[previous] = JSON.parse(JSON.stringify(draft.independentTasks.timing));
-      const timing = props.item.series.timing;
-      draft.independentTasks.timing = JSON.parse(JSON.stringify(scopeTimings[next] || {
-        ...timing,
-        anchorDate: next === 'series' ? timing.anchorDate : props.item.occurrenceDate || timing.anchorDate,
-      }));
-    }
-    schedulePreview();
-  }, { flush: 'sync' });
+  watch(
+    scope,
+    (next, previous) => {
+      if (props.item?.series?.timing) {
+        scopeTimings[previous] = JSON.parse(JSON.stringify(draft.independentTasks.timing));
+        const timing = props.item.series.timing;
+        draft.independentTasks.timing = JSON.parse(
+          JSON.stringify(
+            scopeTimings[next] || {
+              ...timing,
+              anchorDate: next === 'series' ? timing.anchorDate : props.item.occurrenceDate || timing.anchorDate,
+            },
+          ),
+        );
+      }
+      schedulePreview();
+    },
+    { flush: 'sync' },
+  );
   watch(draft, schedulePreview, { deep: true, flush: 'sync' });
   watch(
     () => draft.independentTasks.enabled,
@@ -584,7 +645,11 @@
     });
   }
 
-  defineExpose({ submit, revealChecklist, isDirty: () => scope.value !== 'current' || JSON.stringify(draft) !== initialFingerprint });
+  defineExpose({
+    submit,
+    revealChecklist,
+    isDirty: () => scope.value !== 'current' || JSON.stringify(draft) !== initialFingerprint,
+  });
 </script>
 
 <style scoped lang="less">
@@ -600,7 +665,7 @@
 
   .todo-simple-editor__body {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 390px;
+    grid-template-columns: minmax(0, 1fr) var(--ui-layout-390, 390px);
     min-height: 0;
     overflow: hidden;
   }
@@ -610,14 +675,14 @@
     min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
-    padding: 20px 22px 36px;
+    padding: var(--ui-space-20, 20px) var(--ui-space-22, 22px) var(--ui-space-36, 36px);
   }
 
   .todo-simple-editor__section {
     display: grid;
-    gap: 18px;
-    margin-bottom: 14px;
-    padding: 16px;
+    gap: var(--ui-space-18, 18px);
+    margin-bottom: var(--ui-space-14, 14px);
+    padding: var(--ui-space-16, 16px);
     border: 1px solid var(--surface-border-color);
     border-radius: 16px;
     background: var(--card-background);
@@ -626,7 +691,7 @@
   .todo-simple-editor__section > header {
     display: flex;
     align-items: flex-start;
-    gap: 11px;
+    gap: var(--ui-space-11, 11px);
   }
 
   .todo-simple-editor__section > header > div {
@@ -634,12 +699,12 @@
     flex: 1;
     align-items: baseline;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .todo-simple-editor__section header strong {
     color: var(--text-color);
-    font-size: 17px;
+    font-size: var(--ui-font-17, 17px);
     line-height: 1.4;
   }
 
@@ -647,7 +712,7 @@
   .todo-simple-editor__section label > small,
   .todo-simple-editor__advanced-summary span {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.55;
   }
 
@@ -658,20 +723,20 @@
     flex: 0 0 auto;
     border: 0;
     color: var(--text-color);
-    font-size: 17px;
+    font-size: var(--ui-font-17, 17px);
     font-weight: 800;
   }
 
   .todo-simple-editor__mode-notice {
     display: grid;
-    gap: 3px;
-    margin-bottom: 14px;
-    padding: 10px 12px;
+    gap: var(--ui-space-3, 3px);
+    margin-bottom: var(--ui-space-14, 14px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     border: 1px solid #d5d1ff;
     border-radius: 12px;
     background: var(--primary-soft-color, var(--workspace-panel-bg-color));
     color: var(--primary-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.55;
   }
 
@@ -680,7 +745,7 @@
     min-width: 0;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .todo-simple-editor__mode-head strong {
@@ -692,7 +757,7 @@
     border: 0 !important;
     background: transparent !important;
     color: var(--primary-color);
-    padding: 0 4px;
+    padding: 0 var(--ui-space-4, 4px);
     font-weight: 700;
     white-space: nowrap;
   }
@@ -700,10 +765,10 @@
   .todo-simple-editor label:not(.b-checkbox),
   .todo-simple-editor__priority {
     display: grid;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     min-width: 0;
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 600;
   }
 
@@ -730,14 +795,14 @@
   .todo-simple-editor__priority > div {
     display: flex;
     flex-wrap: wrap;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
 
   .todo-simple-editor__resource-hint {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .todo-simple-editor__resource-list {
@@ -754,7 +819,7 @@
   .todo-simple-editor__time-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
   }
 
   .todo-simple-editor__time-grid label:last-child {
@@ -765,7 +830,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .todo-simple-editor__advanced-summary {
@@ -773,7 +838,7 @@
   }
 
   .todo-simple-editor__advanced-summary > span {
-    max-width: 420px;
+    max-width: var(--ui-layout-420, 420px);
     text-align: right;
   }
 
@@ -782,27 +847,27 @@
     min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
-    padding: 24px;
+    padding: var(--ui-space-24, 24px);
     border-left: 1px solid var(--surface-divider-color);
     background: var(--card-background);
   }
 
   .todo-simple-editor__preview-sticky {
     display: grid;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
   }
 
   .todo-simple-editor__preview-note {
     display: grid;
-    gap: 4px;
-    padding: 11px 12px;
+    gap: var(--ui-space-4, 4px);
+    padding: var(--ui-space-11, 11px) var(--ui-space-12, 12px);
     border-radius: 12px;
     background: var(--workspace-panel-bg-color);
   }
 
   .todo-simple-editor__preview-note span {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.55;
   }
 
@@ -810,37 +875,37 @@
     position: relative;
     z-index: 5;
     display: flex;
-    min-height: 56px;
+    min-height: var(--ui-layout-56, 56px);
     box-sizing: border-box;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
-    padding: 8px 20px;
+    gap: var(--ui-space-16, 16px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-20, 20px);
     border-top: 1px solid var(--surface-divider-color);
     background: var(--card-background);
   }
 
   .todo-simple-editor__footer > div {
     display: flex;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
   }
 
   .todo-simple-editor__footer-status {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 6px 12px;
+    gap: var(--ui-space-6, 6px) var(--ui-space-12, 12px);
     min-width: 0;
   }
 
   .todo-simple-editor__footer-hint {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .todo-simple-editor__footer :deep(.b_btn[type='primary']),
   .todo-simple-editor__footer :deep(.b_btn.b_btn-primary) {
-    min-width: 150px;
+    min-width: var(--ui-layout-150, 150px);
   }
 
   .todo-simple-editor.is-mobile {
@@ -848,7 +913,7 @@
     height: auto;
     min-height: 100%;
     overflow: visible;
-    padding-bottom: calc(var(--todo-footer-height, 76px) + 20px);
+    padding-bottom: calc(var(--todo-footer-height, var(--ui-space-76, 76px)) + var(--ui-space-20, 20px));
     background: var(--workspace-panel-bg-color);
   }
 
@@ -861,13 +926,13 @@
   .is-mobile .todo-simple-editor__main {
     display: grid;
     overflow: visible;
-    gap: 12px;
-    padding: 12px 12px 24px;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-12, 12px) var(--ui-space-12, 12px) var(--ui-space-24, 24px);
   }
 
   .is-mobile .todo-simple-editor__section {
-    gap: 15px;
-    padding: 16px 14px;
+    gap: var(--ui-space-15, 15px);
+    padding: var(--ui-space-16, 16px) var(--ui-space-14, 14px);
     border: 1px solid var(--surface-border-color);
     border-radius: 15px;
     background: var(--card-background);
@@ -879,7 +944,7 @@
 
   .is-mobile .todo-simple-editor__section > header > div {
     display: grid;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
 
   .is-mobile .todo-simple-editor__content > header,
@@ -892,7 +957,7 @@
   }
 
   .is-mobile .todo-simple-editor__mode-notice :deep(.todo-simple-editor__mode-exit.b_btn) {
-    min-height: 44px;
+    min-height: var(--ui-layout-44, 44px);
   }
 
   .is-mobile .todo-simple-editor__advanced.is-enabled > header {
@@ -918,13 +983,14 @@
   .is-mobile .todo-simple-editor__footer {
     flex-direction: column;
     align-items: stretch;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     position: fixed;
     right: 0;
     bottom: 0;
     left: 0;
     min-height: 0;
-    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px)
+      calc(var(--ui-space-10, 10px) + env(safe-area-inset-bottom));
   }
 
   .is-mobile .todo-simple-editor__footer > div,
@@ -933,6 +999,6 @@
   }
 
   .is-mobile .todo-simple-editor__footer :deep(.b_btn) {
-    min-height: 48px;
+    min-height: var(--ui-layout-48, 48px);
   }
 </style>

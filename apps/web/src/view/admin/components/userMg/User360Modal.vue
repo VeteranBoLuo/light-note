@@ -3,8 +3,8 @@
     v-if="visible"
     v-model:visible="visible"
     :title="t('adminUserManagement.detail.title')"
-    width="920px"
-    height="calc(100vh - 80px)"
+    width="var(--ui-layout-920, 920px)"
+    height="calc(100vh - var(--ui-space-80, 80px))"
     :show-footer="false"
     fullscreen-mobile
     content-class="user-360-modal-content"
@@ -20,7 +20,7 @@
               v-if="equippedFrameId"
               :frame-id="equippedFrameId"
               :src="userInfo?.headPicture || icon.navigation.user"
-              :size="38"
+              :size="dimension(38, 'icon')"
               layout-mode="slot"
               pause-when-offscreen
             />
@@ -313,6 +313,7 @@
 
 <script setup lang="ts">
   import { computed, ref, watch } from 'vue';
+  import { useUiDensity } from '@/composables/useUiDensity';
   import { useI18n } from 'vue-i18n';
   import router from '@/router';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -351,6 +352,7 @@
   const props = defineProps<{ userInfo?: Record<string, any> | null }>();
   const emit = defineEmits<{ preview: [user: Record<string, any> | null | undefined] }>();
   const { t, locale } = useI18n();
+  const { dimension } = useUiDensity();
   const bookmark = bookmarkStore();
   const loading = ref(false);
   const detail = ref<UserAdminDetail | null>(null);
@@ -478,10 +480,11 @@
 
 <style scoped lang="less">
   .user-360 {
+    font-size: var(--ui-font-16, 16px);
     height: 100%;
     min-height: 0;
     box-sizing: border-box;
-    padding: 18px 20px 24px;
+    padding: var(--ui-space-18, 18px) var(--ui-space-20, 20px) var(--ui-space-24, 24px);
     overflow: auto;
     color: var(--text-color);
   }
@@ -489,19 +492,19 @@
   .user-360__identity {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     min-width: 0;
-    padding: 14px;
+    padding: var(--ui-space-14, 14px);
     border: 1px solid var(--surface-border-color);
     border-radius: 14px;
     background: var(--surface-raised-background);
   }
 
   .user-360__avatar {
-    width: 52px;
-    height: 52px;
+    width: var(--ui-layout-52, 52px);
+    height: var(--ui-layout-52, 52px);
     display: inline-flex;
-    flex: 0 0 52px;
+    flex: 0 0 var(--ui-layout-52, 52px);
     align-items: center;
     justify-content: center;
     overflow: hidden;
@@ -513,8 +516,8 @@
 
   .user-360__plain-avatar {
     display: inline-flex;
-    width: 38px;
-    height: 38px;
+    width: var(--ui-layout-38, 38px);
+    height: var(--ui-layout-38, 38px);
     align-items: center;
     justify-content: center;
     overflow: hidden;
@@ -541,7 +544,7 @@
     display: flex;
     flex: 1 1 auto;
     flex-direction: column;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
 
   .user-360__identity-copy strong,
@@ -553,49 +556,49 @@
   }
 
   .user-360__identity-copy strong {
-    font-size: 18px;
+    font-size: var(--ui-font-18, 18px);
     font-weight: 700;
   }
 
   .user-360__identity-copy span,
   .user-360__identity-copy small {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .user-360__chips {
     display: flex;
     flex-wrap: wrap;
     justify-content: flex-end;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
 
   .user-360__partial-notice {
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin-top: 12px;
-    padding: 10px 12px;
+    gap: var(--ui-space-8, 8px);
+    margin-top: var(--ui-space-12, 12px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     border: 1px solid var(--warning-color);
     border-radius: 10px;
     background: var(--card-background);
     color: var(--warning-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .user-360__metrics {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 10px;
-    margin: 14px 0;
+    gap: var(--ui-space-10, 10px);
+    margin: var(--ui-space-14, 14px) 0;
   }
 
   .user-360__metrics article {
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    padding: 12px;
+    gap: var(--ui-space-4, 4px);
+    padding: var(--ui-space-12, 12px);
     border: 1px solid var(--surface-border-color);
     border-left: 3px solid var(--primary-color);
     border-radius: 10px;
@@ -605,22 +608,22 @@
   .user-360__metrics span,
   .user-360__metrics small {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .user-360__metrics strong {
-    font-size: 22px;
+    font-size: var(--ui-font-22, 22px);
     font-variant-numeric: tabular-nums;
   }
 
   .user-360__tabs {
-    margin-bottom: 14px;
+    margin-bottom: var(--ui-space-14, 14px);
   }
 
   .user-360__section-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .user-360__section-grid--single {
@@ -629,7 +632,7 @@
 
   .user-360__section-card {
     min-width: 0;
-    padding: 14px;
+    padding: var(--ui-space-14, 14px);
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     background: var(--card-background);
@@ -640,8 +643,8 @@
   }
 
   .user-360__section-card h3 {
-    margin: 0 0 12px;
-    font-size: 15px;
+    margin: 0 0 var(--ui-space-12, 12px);
+    font-size: var(--ui-font-15, 15px);
     font-weight: 700;
   }
 
@@ -649,8 +652,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
-    margin-bottom: 12px;
+    gap: var(--ui-space-10, 10px);
+    margin-bottom: var(--ui-space-12, 12px);
   }
 
   .user-360__section-heading h3 {
@@ -660,7 +663,7 @@
   .user-360__definition-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px 14px;
+    gap: var(--ui-space-10, 10px) var(--ui-space-14, 14px);
     margin: 0;
   }
 
@@ -677,15 +680,15 @@
   }
 
   .user-360__definition-grid dt {
-    margin-bottom: 3px;
+    margin-bottom: var(--ui-space-3, 3px);
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .user-360__definition-grid dd {
     margin: 0;
     overflow-wrap: anywhere;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .user-360__community-id {
@@ -697,27 +700,27 @@
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
 
   .user-360__location-separator {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .user-360__resource-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .user-360__resource-grid div {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
-    gap: 7px;
-    min-height: 42px;
-    padding: 0 10px;
+    gap: var(--ui-space-7, 7px);
+    min-height: var(--ui-layout-42, 42px);
+    padding: 0 var(--ui-space-10, 10px);
     border: 1px solid var(--surface-border-color);
     border-radius: 9px;
     background: var(--workspace-panel-bg-color);
@@ -738,7 +741,7 @@
 
   .user-360__resource-grid span {
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .user-360__timeline,
@@ -755,8 +758,8 @@
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 9px;
-    padding: 10px 0;
+    gap: var(--ui-space-9, 9px);
+    padding: var(--ui-space-10, 10px) 0;
     border-bottom: 1px solid var(--surface-divider-color);
   }
 
@@ -771,7 +774,7 @@
     display: flex;
     flex: 1 1 auto;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
 
   .user-360__devices li > span:last-child {
@@ -793,7 +796,7 @@
   .user-360__devices small,
   .user-360__devices time {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .user-360__timeline time {
@@ -810,18 +813,18 @@
   }
 
   .user-360__empty {
-    margin: 24px 0;
+    margin: var(--ui-space-24, 24px) 0;
     color: var(--desc-color);
     text-align: center;
   }
 
   .user-360__error {
-    min-height: 260px;
+    min-height: var(--ui-layout-260, 260px);
     display: flex;
     align-items: center;
     justify-content: center;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     color: var(--danger-color);
   }
 

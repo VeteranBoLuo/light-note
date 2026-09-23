@@ -94,6 +94,7 @@
     backdrop-filter: blur(4px);
     cursor: pointer;
   }
+  /* 庆祝场景的徽章、光环和彩带共用固定绘制坐标；界面文字独立响应密度。 */
   .lvup-stage {
     position: relative;
     width: 320px;
@@ -207,7 +208,7 @@
     margin-bottom: 80px;
   }
   .lvup-lv {
-    font-size: 24px;
+    font-size: var(--ui-font-24, 24px);
     font-weight: 800;
     letter-spacing: -0.02em;
     z-index: 1;
@@ -271,28 +272,28 @@
     animation: lvup-text-in 0.6s ease-out 0.35s both;
   }
   .lvup-title {
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
     font-weight: 700;
     letter-spacing: 0.28em;
     color: #ffe9a8;
     text-indent: 0.28em;
   }
   .lvup-name {
-    margin-top: 6px;
-    font-size: 30px;
+    margin-top: var(--ui-space-6, 6px);
+    font-size: var(--ui-font-30, 30px);
     font-weight: 800;
     color: #fff;
     text-shadow: 0 2px 18px rgba(124, 92, 255, 0.6);
   }
   .lvup-sub {
-    margin-top: 4px;
-    font-size: 13px;
+    margin-top: var(--ui-space-4, 4px);
+    font-size: var(--ui-font-13, 13px);
     color: rgba(255, 255, 255, 0.7);
   }
   .lvup-hint {
     position: absolute;
     bottom: 8px;
-    font-size: 11.5px;
+    font-size: var(--ui-font-11_5, 11.5px);
     color: rgba(255, 255, 255, 0.42);
   }
 

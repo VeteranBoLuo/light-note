@@ -38,43 +38,42 @@
     min-height: 0;
     overflow: auto;
     box-sizing: border-box;
-    background: var(--workspace-canvas);
+    background: var(--workspace-open-canvas);
   }
 </style>
 <style scoped lang="less">
   .community-layout {
     display: grid;
-    grid-template-columns: 200px minmax(0, 1fr);
+    grid-template-columns: var(--ui-layout-200, 200px) minmax(0, 1fr);
     width: 100%;
-    max-width: 1600px;
+    max-width: var(--ui-layout-1600, 1600px);
     box-sizing: border-box;
-    border-inline: 1px solid var(--workspace-divider);
     min-height: 100%;
     margin: 0 auto;
     background: var(--workspace-open-canvas);
     color: var(--text-color);
   }
   .community-layout.has-context {
-    grid-template-columns: 200px minmax(0, 1fr) 260px;
+    grid-template-columns: var(--ui-layout-200, 200px) minmax(0, 1fr) var(--ui-layout-260, 260px);
   }
   .community-layout-nav {
     position: sticky;
     top: 0;
     height: 100%;
-    max-height: var(--community-available-height, calc(100vh - 80px));
+    max-height: var(--community-available-height, calc(100vh - var(--ui-layout-80, 80px)));
     overflow: auto;
     box-sizing: border-box;
     border-right: 1px solid var(--workspace-divider);
-    padding: 28px 20px 0;
+    padding: var(--ui-space-28, 28px) var(--ui-space-20, 20px) 0;
     min-width: 0;
   }
   .community-layout-content {
     min-width: 0;
-    padding: 32px 38px 72px;
+    padding: var(--ui-space-32, 32px) var(--ui-space-38, 38px) var(--ui-space-72, 72px);
     box-sizing: border-box;
   }
   .community-layout-context {
-    padding: 32px 24px;
+    padding: var(--ui-space-32, 32px) var(--ui-space-24, 24px);
     border-left: 1px solid var(--workspace-divider);
     min-width: 0;
   }
@@ -82,7 +81,7 @@
     position: sticky;
     top: 0;
     align-self: start;
-    max-height: var(--community-available-height, calc(100vh - 80px));
+    max-height: var(--community-available-height, calc(100vh - var(--ui-layout-80, 80px)));
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
@@ -113,30 +112,27 @@
   }
   .community-layout.is-disabled {
     display: block;
-    padding: 18px;
+    padding: var(--ui-space-18, 18px);
     box-sizing: border-box;
   }
   .is-disabled .community-layout-content {
-    max-width: 1080px;
+    max-width: var(--ui-layout-1080, 1080px);
     margin: 0 auto;
   }
   @media (max-width: 1199px) {
     .community-layout,
     .community-layout.has-context {
-      grid-template-columns: 176px minmax(0, 1fr);
+      grid-template-columns: var(--ui-layout-176, 176px) minmax(0, 1fr);
     }
     .community-layout-context,
     .community-layout.is-post-detail .community-layout-context {
       display: none;
     }
     .community-layout-content {
-      padding: 28px 28px 72px;
+      padding: var(--ui-space-28, 28px) var(--ui-space-28, 28px) var(--ui-space-72, 72px);
     }
   }
   @media (max-width: 767px) {
-    .community-layout {
-      border-inline: 0;
-    }
     // The mobile navigation already names the page; retain a heading for assistive technology.
     :deep(.community-page-title) {
       position: absolute;
@@ -160,11 +156,11 @@
       max-height: none;
       border-right: 0;
       border-bottom: 1px solid var(--workspace-divider);
-      padding: 8px 12px;
+      padding: var(--ui-space-8, 8px) var(--ui-space-12, 12px);
       flex: 0 0 auto;
     }
     .community-layout-content {
-      padding: 20px 16px 88px;
+      padding: var(--ui-space-20, 20px) var(--ui-space-16, 16px) var(--ui-space-88, 88px);
     }
     .is-chat .community-layout-content {
       flex: 1;

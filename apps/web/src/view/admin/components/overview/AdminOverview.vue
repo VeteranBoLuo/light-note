@@ -325,7 +325,7 @@
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
-  import { findVerticalScrollContainer, scrollIntoContainer } from '@/utils/zoom.ts';
+  import { findVerticalScrollContainer, scrollIntoContainer } from '@/utils/scrolling';
 
   const bookmark = bookmarkStore();
   const { t } = useI18n();
@@ -704,22 +704,22 @@
   .ov-hide-internal {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     white-space: nowrap;
     cursor: pointer;
   }
 
   .ov-today {
     display: grid;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .ov-today__header {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .ov-today__header h3,
   .ov-today__header p {
@@ -727,25 +727,25 @@
   }
   .ov-today__header h3 {
     color: var(--text-color);
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
   }
   .ov-today__header p {
-    margin-top: 3px;
+    margin-top: var(--ui-space-3, 3px);
     color: var(--sub-text-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .ov-today__capacity {
     display: grid;
-    flex: 0 1 340px;
+    flex: 0 1 var(--ui-layout-340, 340px);
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
-    width: min(100%, 340px);
+    gap: var(--ui-space-8, 8px);
+    width: min(100%, var(--ui-layout-340, 340px));
   }
   .ov-today__capacity-item {
     display: grid;
     min-width: 0;
-    gap: 2px;
-    padding: 8px 10px;
+    gap: var(--ui-space-2, 2px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px);
     border: 1px solid var(--card-border-color);
     border-radius: 10px;
     background: var(--card-background);
@@ -758,12 +758,12 @@
   .ov-today__capacity-hint {
     overflow-wrap: anywhere;
     color: var(--sub-text-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
   .ov-today__capacity-value {
     overflow-wrap: anywhere;
     color: var(--text-color);
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     line-height: 1.25;
   }
   .ov-today__capacity-item.is-warning .ov-today__capacity-hint {
@@ -776,11 +776,11 @@
   .ov-today__stat-action.b_btn {
     width: 100%;
     height: 100%;
-    min-height: 118px;
+    min-height: var(--ui-layout-118, 118px);
     align-items: flex-start;
     justify-content: flex-start;
     flex-direction: column;
-    padding: 12px 14px;
+    padding: var(--ui-space-12, 12px) var(--ui-space-14, 14px);
     border-radius: 11px;
     background: transparent;
     color: var(--text-color);
@@ -794,17 +794,17 @@
   }
   .ov-today__stat-link {
     margin-top: auto;
-    padding-top: 7px;
+    padding-top: var(--ui-space-7, 7px);
     color: var(--primary-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 600;
   }
   .ov-today__baseline {
     display: block;
-    margin-top: 4px;
+    margin-top: var(--ui-space-4, 4px);
     overflow-wrap: anywhere;
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     line-height: 1.35;
   }
   .ov-today__stats,
@@ -814,7 +814,7 @@
 
   .ov-loading {
     margin: 0;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     color: var(--desc-color);
   }
 
@@ -822,13 +822,13 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    padding: 10px 12px;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     border: 1px solid var(--danger-color);
     border-radius: 10px;
     background: var(--card-background);
     color: var(--danger-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 600;
   }
 
@@ -843,17 +843,17 @@
   .ov-section-title {
     display: flex;
     align-items: baseline;
-    gap: 8px;
-    margin: 20px 0 10px;
-    font-size: 13px;
+    gap: var(--ui-space-8, 8px);
+    margin: var(--ui-space-20, 20px) 0 var(--ui-space-10, 10px);
+    font-size: var(--ui-font-13, 13px);
     font-weight: 600;
     color: var(--text-color);
   }
   .ov-section-title:first-of-type {
-    margin-top: 10px;
+    margin-top: var(--ui-space-10, 10px);
   }
   .ov-section-tip {
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 400;
     color: var(--sub-text-color, #888);
   }
@@ -862,13 +862,13 @@
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 12px;
-    padding: 10px 14px;
+    gap: var(--ui-space-8, 8px);
+    margin-top: var(--ui-space-12, 12px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-14, 14px);
     border-radius: 10px;
     background: color-mix(in srgb, var(--warning-color) 12%, var(--background-color));
     border: 1px solid color-mix(in srgb, var(--warning-color) 35%, transparent);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     color: var(--text-color);
   }
   .ov-todo-icon {
@@ -878,14 +878,14 @@
     font-weight: 600;
   }
   .ov-todo-chip {
-    min-height: 26px;
+    min-height: var(--ui-layout-26, 26px);
     height: auto !important;
-    padding: 4px 10px !important;
+    padding: var(--ui-space-4, 4px) var(--ui-space-10, 10px) !important;
     border: 0;
     border-radius: 999px;
     background: color-mix(in srgb, var(--warning-color) 22%, transparent);
     color: var(--text-color);
-    font-size: 12.5px;
+    font-size: var(--ui-font-12_5, 12.5px);
     line-height: 1.35 !important;
     cursor: pointer;
     transition:
@@ -920,9 +920,9 @@
   .ov-insights {
     display: flex;
     align-items: flex-start;
-    gap: 12px;
-    margin-top: 12px;
-    padding: 10px 12px;
+    gap: var(--ui-space-12, 12px);
+    margin-top: var(--ui-space-12, 12px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     border: 1px solid var(--card-border-color);
     border-left: 3px solid var(--primary-color);
     border-radius: 10px;
@@ -931,13 +931,13 @@
   }
   .ov-insights__title {
     flex: none;
-    padding-top: 5px;
-    font-size: 12px;
+    padding-top: var(--ui-space-5, 5px);
+    font-size: var(--ui-font-12, 12px);
   }
   .ov-insights__list {
     display: grid;
     flex: 1;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     margin: 0;
     padding: 0;
     list-style: none;
@@ -946,10 +946,10 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     min-width: 0;
     color: var(--text-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.45;
   }
   .ov-insights__item.is-down {
@@ -974,8 +974,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    margin-top: 20px;
+    gap: var(--ui-space-12, 12px);
+    margin-top: var(--ui-space-20, 20px);
 
     .ov-section-title {
       margin: 0;
@@ -985,20 +985,20 @@
   .ov-trend-control {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .ov-trend-loading {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .ov-trend-error {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     color: var(--danger-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 600;
   }
 
@@ -1059,7 +1059,7 @@
   .ov-api-health {
     display: flex;
     flex-wrap: wrap;
-    gap: 3px 10px;
+    gap: var(--ui-space-3, 3px) var(--ui-space-10, 10px);
     line-height: 1.45;
   }
   .ov-warn {

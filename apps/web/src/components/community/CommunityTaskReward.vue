@@ -98,10 +98,10 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 24px;
-    padding: 22px 0;
+    gap: var(--ui-space-24, 24px);
+    padding: var(--ui-space-22, 22px) 0;
     border-top: 1px solid var(--surface-border-color);
-    margin-top: 16px;
+    margin-top: var(--ui-space-16, 16px);
   }
   .task-reward-copy {
     min-width: 0;
@@ -109,31 +109,31 @@
   .task-reward-eyebrow,
   .task-reward-date,
   .task-reward-action small {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
     line-height: 1.6;
   }
   .task-reward-amount {
     display: flex;
-    gap: 22px;
+    gap: var(--ui-space-22, 22px);
     align-items: baseline;
-    margin: 7px 0;
+    margin: var(--ui-space-7, 7px) 0;
   }
   .task-reward-amount strong {
-    font-size: 26px;
+    font-size: var(--ui-font-26, 26px);
     font-weight: 600;
     letter-spacing: -0.5px;
     color: var(--text-color);
   }
   .task-reward-amount small {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 400;
     letter-spacing: 0;
     color: var(--desc-color);
   }
   .task-reward-copy p {
-    margin: 4px 0;
-    font-size: 13px;
+    margin: var(--ui-space-4, 4px) 0;
+    font-size: var(--ui-font-13, 13px);
     color: var(--text-color);
     line-height: 1.6;
   }
@@ -141,35 +141,35 @@
     display: flex;
     flex-direction: column;
     align-items: flex-end;
-    gap: 8px;
-    max-width: 220px;
+    gap: var(--ui-space-8, 8px);
+    max-width: var(--ui-layout-220, 220px);
   }
   .task-reward-action small {
     text-align: right;
   }
   .task-reward-done {
     color: var(--primary-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     white-space: nowrap;
   }
   .task-reward-action p {
     color: var(--danger-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .task-reward.is-compact {
     flex-direction: row;
     align-items: center;
     flex-wrap: wrap;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .is-compact .task-reward-amount {
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
   .is-compact .task-reward-amount strong {
-    font-size: 22px;
+    font-size: var(--ui-font-22, 22px);
   }
   .is-compact .task-reward-copy p {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   @media (max-width: 767px) {
     .task-reward {

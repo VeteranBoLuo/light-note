@@ -62,7 +62,7 @@
   const visible = defineModel<boolean>('visible');
   const bookmark = bookmarkStore();
 
-  const WIDTH = bookmark.isMobile ? '80vw' : '600px';
+  const WIDTH = bookmark.isMobile ? '80vw' : 'var(--ui-layout-600, 600px)';
 
   interface ActionItem {
     key: string;
@@ -111,24 +111,24 @@
 <style scoped lang="less">
   .action-card-modal {
     .section {
-      margin-bottom: 12px;
+      margin-bottom: var(--ui-space-12, 12px);
       .section-header {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 8px;
-        margin-bottom: 16px;
+        gap: var(--ui-space-8, 8px);
+        margin-bottom: var(--ui-space-16, 16px);
 
         h3 {
           margin: 0;
           color: var(--text-color);
-          font-size: 16px;
+          font-size: var(--ui-font-16, 16px);
           font-weight: 600;
         }
 
         .section-header-action {
           flex: 0 0 auto;
-          gap: 5px;
+          gap: var(--ui-space-5, 5px);
           border: 1px solid var(--card-border-color) !important;
           background: transparent;
           color: var(--resource-note-color);
@@ -144,15 +144,15 @@
       .cards-grid {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 16px;
+        gap: var(--ui-space-16, 16px);
       }
 
       .section-hint {
-        padding: 12px 14px;
+        padding: var(--ui-space-12, 12px) var(--ui-space-14, 14px);
         border-radius: 10px;
         background-color: var(--menu-item-bg-color);
         color: var(--desc-color);
-        font-size: 12px;
+        font-size: var(--ui-font-12, 12px);
         line-height: 1.6;
       }
 
@@ -160,8 +160,8 @@
         position: relative;
         display: flex;
         align-items: center;
-        gap: 12px;
-        padding: 16px;
+        gap: var(--ui-space-12, 12px);
+        padding: var(--ui-space-16, 16px);
         background-color: var(--menu-item-bg-color);
         border: 1px solid var(--menu-item-h-bg-color);
         border-radius: 12px;
@@ -177,8 +177,8 @@
 
         &.action-card--with-icon {
           align-items: flex-start;
-          min-height: 132px;
-          padding: 14px;
+          min-height: var(--ui-layout-132, 132px);
+          padding: var(--ui-space-14, 14px);
         }
 
         .card-icon {
@@ -186,8 +186,8 @@
           display: flex;
           align-items: center;
           justify-content: center;
-          width: 36px;
-          height: 36px;
+          width: var(--ui-layout-36, 36px);
+          height: var(--ui-layout-36, 36px);
           border: 1px solid color-mix(in srgb, var(--resource-note-color) 18%, var(--card-border-color));
           border-radius: 10px;
           background: color-mix(in srgb, var(--resource-note-color) 10%, var(--card-background));
@@ -206,13 +206,13 @@
 
         .card-remove {
           position: absolute;
-          top: 6px;
-          right: 6px;
+          top: var(--ui-space-6, 6px);
+          right: var(--ui-space-6, 6px);
           display: flex;
           align-items: center;
           justify-content: center;
-          width: 24px;
-          height: 24px;
+          width: var(--ui-layout-24, 24px);
+          height: var(--ui-layout-24, 24px);
           border-radius: 6px;
           color: var(--sub-text-color);
           opacity: 0.6;
@@ -232,20 +232,20 @@
           h4 {
             display: flex;
             align-items: center;
-            gap: 6px;
-            margin: 0 0 4px 0;
+            gap: var(--ui-space-6, 6px);
+            margin: 0 0 var(--ui-space-4, 4px) 0;
             color: var(--text-color);
-            font-size: 14px;
+            font-size: var(--ui-font-14, 14px);
             font-weight: 500;
           }
 
           .card-tag {
             flex-shrink: 0;
-            padding: 1px 7px;
+            padding: var(--ui-space-1, 1px) var(--ui-space-7, 7px);
             border-radius: 999px;
             background-color: var(--menu-item-h-bg-color);
             color: var(--sub-text-color);
-            font-size: 11px;
+            font-size: var(--ui-font-11, 11px);
             font-weight: 400;
             line-height: 1.6;
           }
@@ -253,21 +253,21 @@
           p {
             margin: 0;
             color: var(--desc-color);
-            font-size: 12px;
+            font-size: var(--ui-font-12, 12px);
             line-height: 1.5;
           }
 
           .card-preview {
             display: grid;
-            gap: 4px;
-            margin-top: 10px;
+            gap: var(--ui-space-4, 4px);
+            margin-top: var(--ui-space-10, 10px);
 
             span {
               display: block;
-              padding-left: 8px;
+              padding-left: var(--ui-space-8, 8px);
               border-left: 2px solid color-mix(in srgb, var(--resource-note-color) 45%, transparent);
               color: var(--sub-text-color);
-              font-size: 11px;
+              font-size: var(--ui-font-11, 11px);
               line-height: 1.35;
               overflow: hidden;
               text-overflow: ellipsis;
@@ -281,9 +281,9 @@
     .note-section {
       display: flex;
       align-items: flex-start;
-      gap: 8px;
-      margin-top: 24px;
-      padding: 12px;
+      gap: var(--ui-space-8, 8px);
+      margin-top: var(--ui-space-24, 24px);
+      padding: var(--ui-space-12, 12px);
       background-color: var(--menu-item-h-bg-color);
       border-radius: 8px;
       border-left: 4px solid var(--primary-color);
@@ -291,13 +291,13 @@
       .note-icon {
         flex-shrink: 0;
         color: var(--primary-color);
-        margin-top: 2px;
+        margin-top: var(--ui-space-2, 2px);
       }
 
       p {
         margin: 0;
         color: var(--desc-color);
-        font-size: 14px;
+        font-size: var(--ui-font-14, 14px);
         line-height: 1.5;
       }
     }

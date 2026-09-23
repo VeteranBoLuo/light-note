@@ -1229,8 +1229,8 @@ describe('FilePreview 文本请求归属', () => {
   });
 });
 
-describe('FilePreview 表格缩放坐标接入', () => {
-  it('捕获阶段为点击、拖选与移出事件还原布局坐标', async () => {
+describe('FilePreview 表格原生坐标', () => {
+  it('点击、拖选与移出事件保留浏览器原生坐标', async () => {
     const host = document.createElement('div');
     document.body.append(host);
     const app = createApp({ render: () => h(FilePreview, {
@@ -1240,14 +1240,16 @@ describe('FilePreview 表格缩放坐标接入', () => {
     app.mount(host);
     cleanup = () => { app.unmount(); host.remove(); document.documentElement.style.zoom = ''; };
     await vi.waitFor(() => expect(document.querySelector('.office-retry-fixture')).not.toBeNull());
-    document.documentElement.style.zoom = '0.9';
     const target = document.querySelector<HTMLElement>('.office-retry-fixture')!;
     vi.spyOn(target, 'getBoundingClientRect').mockReturnValue({ left: 18, top: 36 } as DOMRect);
     for (const type of ['mousedown', 'mousemove', 'mouseout']) {
       const receive = vi.fn((event: MouseEvent) => [event.offsetX, event.offsetY]);
       target.addEventListener(type, receive);
       target.dispatchEvent(new MouseEvent(type, { bubbles: true, clientX: 648, clientY: 261 }));
-      expect(receive.mock.results[0].value).toEqual([700, 250]);
+      expect(receive).toHaveBeenCalledOnce();
+      const event = receive.mock.calls[0][0];
+      expect(Object.hasOwn(event, 'offsetX')).toBe(false);
+      expect(Object.hasOwn(event, 'offsetY')).toBe(false);
     }
   });
 });

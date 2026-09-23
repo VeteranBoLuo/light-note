@@ -3,14 +3,20 @@
     <div class="tag-space-entry">
       <BLoading v-if="loading" :loading="true" class="tag-space-entry__loading" />
 
-      <BCard v-else-if="loadError" variant="card" padding="28px" class="tag-space-entry__state" role="alert">
+      <BCard
+        v-else-if="loadError"
+        variant="card"
+        padding="var(--ui-space-28, 28px)"
+        class="tag-space-entry__state"
+        role="alert"
+      >
         <span class="tag-space-entry__symbol">!</span>
         <strong>{{ t('tagSpace.loadFailedTitle') }}</strong>
         <p>{{ t('tagSpace.loadFailedDesc') }}</p>
         <BButton type="primary" @click="enterTagSpace">{{ t('common.retry') }}</BButton>
       </BCard>
 
-      <BCard v-else variant="card" padding="28px" class="tag-space-entry__state">
+      <BCard v-else variant="card" padding="var(--ui-space-28, 28px)" class="tag-space-entry__state">
         <span class="tag-space-entry__symbol"><SvgIcon :src="icon.resource.tag" size="22" /></span>
         <strong>{{ t('tagSpace.emptyTitle') }}</strong>
         <p>{{ t('tagSpace.emptyDesc') }}</p>
@@ -123,11 +129,13 @@
 </script>
 
 <style scoped lang="less">
-  @import (reference) "@/assets/css/workspace-surfaces.less";
+  @import (reference) '@/assets/css/workspace-surfaces.less';
   .tag-space-entry-route {
+    font-size: var(--ui-font-16, 16px);
     width: 100%;
     height: 100%;
-    padding: 18px clamp(16px, 1.6vw, 40px) 24px;
+    padding: var(--ui-space-18, 18px) clamp(var(--ui-space-16, 16px), 1.6vw, var(--ui-space-40, 40px))
+      var(--ui-space-24, 24px);
     box-sizing: border-box;
     background: var(--surface-page-bg, var(--background-color));
   }
@@ -142,31 +150,31 @@
 
   .tag-space-entry__loading {
     width: 100%;
-    min-height: 260px;
+    min-height: var(--ui-layout-260, 260px);
   }
 
   .tag-space-entry__state {
-    width: min(480px, 100%);
-    min-height: 270px;
+    width: min(var(--ui-layout-480, 480px), 100%);
+    min-height: var(--ui-layout-270, 270px);
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     text-align: center;
   }
 
   .tag-space-entry__state p {
-    max-width: 360px;
+    max-width: var(--ui-layout-360, 360px);
     margin: 0;
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.6;
   }
 
   .tag-space-entry__symbol {
-    width: 42px;
-    height: 42px;
+    width: var(--ui-layout-42, 42px);
+    height: var(--ui-layout-42, 42px);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -174,7 +182,7 @@
     border-radius: 12px;
     color: var(--resource-tag-color, #ec4899);
     background: var(--workspace-panel-bg-color);
-    font-size: 20px;
+    font-size: var(--ui-font-20, 20px);
     font-weight: 750;
   }
 

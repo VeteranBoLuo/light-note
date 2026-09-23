@@ -133,24 +133,24 @@
 </script>
 <style scoped lang="less">
   .study-result-cards {
-    padding: 20px;
+    padding: var(--ui-space-20, 20px);
     border: 1px solid var(--surface-border-color);
     border-radius: 14px;
-    margin-bottom: 20px;
+    margin-bottom: var(--ui-space-20, 20px);
   }
   .study-result-cards article {
-    padding: 20px 0;
-    min-height: 160px;
+    padding: var(--ui-space-20, 20px) 0;
+    min-height: var(--ui-layout-160, 160px);
   }
   .study-result-cards__answer {
     white-space: pre-wrap;
   }
   .study-result-cards__actions {
     display: flex;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     flex-wrap: wrap;
   }
   .study-result-cards__actions :deep(button) {
-    min-height: 44px;
+    min-height: var(--ui-layout-44, 44px);
   }
 </style>

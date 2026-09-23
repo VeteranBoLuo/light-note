@@ -20,18 +20,18 @@
 </script>
 <style scoped>
   .campaign-entry {
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     flex-shrink: 0;
     color: var(--primary-color);
     border: 1px solid var(--primary-color);
     border-radius: 12px;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .campaign-entry--row {
     width: 100%;
     justify-content: flex-start;
-    padding: 12px 14px;
-    min-height: 44px;
+    padding: var(--ui-space-12, 12px) var(--ui-space-14, 14px);
+    min-height: var(--ui-layout-44, 44px);
     height: auto;
   }
   .campaign-entry__hint {
@@ -42,6 +42,6 @@
     white-space: nowrap;
     text-align: left;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 </style>

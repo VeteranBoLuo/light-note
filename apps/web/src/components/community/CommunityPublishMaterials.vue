@@ -20,7 +20,9 @@
           :disabled="busy || preview"
           :aria-pressed="draft.topics.includes(topic.value)"
           @click="$emit('topic', draft.topics.includes(topic.value) ? [] : [topic.value])"
-          ><span class="publish-topic-symbol" aria-hidden="true">{{ draft.topics.includes(topic.value) ? '✓' : '#' }}</span
+          ><span class="publish-topic-symbol" aria-hidden="true">{{
+            draft.topics.includes(topic.value) ? '✓' : '#'
+          }}</span
           ><span>{{ topic.label }}</span></BButton
         ></div
       >
@@ -137,36 +139,36 @@
   .publish-materials {
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: var(--ui-space-20, 20px);
     min-width: 0;
   }
   h2 {
-    font-size: 14px;
-    margin: 0 0 12px;
+    font-size: var(--ui-font-14, 14px);
+    margin: 0 0 var(--ui-space-12, 12px);
   }
   .publish-topic-options {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .publish-topic-options .b_btn {
     width: 100%;
-    padding: 12px 8px;
+    padding: var(--ui-space-12, 12px) var(--ui-space-8, 8px);
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     background: var(--workspace-hover);
     border: 0;
     border-radius: 8px;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .publish-topic-symbol {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    flex: 0 0 18px;
-    width: 18px;
-    height: 18px;
+    flex: 0 0 var(--ui-layout-18, 18px);
+    width: var(--ui-layout-18, 18px);
+    height: var(--ui-layout-18, 18px);
     line-height: 1;
   }
   .publish-topic-options [aria-pressed='true'] {
@@ -177,10 +179,10 @@
   .writing-image-tools {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   .writing-image-tools > span {
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     color: var(--desc-color);
     line-height: 1.6;
   }
@@ -188,10 +190,10 @@
     width: 100%;
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 8px 0;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-8, 8px) 0;
     background: transparent;
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     text-align: left;
   }
   .material-add-symbol {
@@ -199,22 +201,22 @@
     margin-left: auto;
     border: 0;
     border-radius: 7px;
-    width: 28px;
-    height: 28px;
-    line-height: 26px;
+    width: var(--ui-layout-28, 28px);
+    height: var(--ui-layout-28, 28px);
+    line-height: var(--ui-layout-26, 26px);
     text-align: center;
     color: var(--primary-color);
-    font-size: 22px;
+    font-size: var(--ui-font-22, 22px);
   }
   .material-count {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .writing-images {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
-    margin-top: -12px;
+    gap: var(--ui-space-8, 8px);
+    margin-top: calc(-1 * var(--ui-space-12, 12px));
   }
   .writing-image {
     position: relative;
@@ -239,37 +241,37 @@
     object-fit: cover;
   }
   .writing-image [role='status'] {
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     color: var(--desc-color);
   }
   .writing-image-actions {
     display: flex;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
   .image-remove.b_btn {
     position: absolute;
-    right: 4px;
-    top: 4px;
+    right: var(--ui-space-4, 4px);
+    top: var(--ui-space-4, 4px);
     background: #252530d9;
     color: white;
     border: 1px solid #ffffff80;
     border-radius: 50%;
     padding: 0;
-    width: 22px;
-    height: 22px;
-    font-size: 17px;
-    line-height: 20px;
+    width: var(--ui-layout-22, 22px);
+    height: var(--ui-layout-22, 22px);
+    font-size: var(--ui-font-17, 17px);
+    line-height: var(--ui-layout-20, 20px);
   }
   .publish-materials :deep(.community-resources) {
-    margin: -12px 0 0;
+    margin: calc(-1 * var(--ui-space-12, 12px)) 0 0;
   }
   .publish-materials :deep(.resource-row.is-compact .resource-card) {
-    padding: 10px;
+    padding: var(--ui-space-10, 10px);
     border: 0;
     background: var(--workspace-hover);
   }
   .publish-materials :deep(.resource-row.is-compact .resource-read) {
-    padding-top: 4px;
+    padding-top: var(--ui-space-4, 4px);
   }
   @media (prefers-reduced-motion: no-preference) {
     .b_btn {

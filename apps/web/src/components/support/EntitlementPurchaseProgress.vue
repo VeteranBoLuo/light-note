@@ -1,6 +1,11 @@
 <template>
   <BButton v-if="intentId && !visible" size="small" @click="visible = true">{{ t('autumn.viewOrder') }}</BButton>
-  <BModal v-model:visible="visible" :title="t('autumn.checkoutTitle')" width="480px" :show-footer="false">
+  <BModal
+    v-model:visible="visible"
+    :title="t('autumn.checkoutTitle')"
+    width="var(--ui-layout-480, 480px)"
+    :show-footer="false"
+  >
     <div class="purchase-progress">
       <BLoading v-if="creating" inline loading :title="t('autumn.creating')" />
       <template v-else>
@@ -170,8 +175,8 @@
 <style scoped>
   .purchase-progress {
     display: grid;
-    gap: 14px;
-    font-size: 14px;
+    gap: var(--ui-space-14, 14px);
+    font-size: var(--ui-font-14, 14px);
     line-height: 1.7;
     overflow-wrap: anywhere;
   }
@@ -182,6 +187,6 @@
   .purchase-progress__actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 </style>

@@ -184,19 +184,19 @@
 
 <style scoped lang="less">
   .chat-attachments {
-    width: min(360px, 100%);
+    width: min(var(--ui-layout-360, 360px), 100%);
     display: grid;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
 
   .chat-attachments__images {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
 
   .chat-attachments__images.has-1 {
-    width: min(320px, 100%);
+    width: min(var(--ui-layout-320, 320px), 100%);
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -207,8 +207,8 @@
     width: 100%;
     min-width: 0;
     height: auto !important;
-    min-height: 92px;
-    max-height: 280px;
+    min-height: var(--ui-layout-92, 92px);
+    max-height: var(--ui-layout-280, 280px);
     line-height: 0 !important;
     padding: 0 !important;
     overflow: hidden;
@@ -241,8 +241,8 @@
     z-index: 1;
     width: 100%;
     height: 100%;
-    min-height: 92px;
-    max-height: 280px;
+    min-height: var(--ui-layout-92, 92px);
+    max-height: var(--ui-layout-280, 280px);
     display: block;
     object-fit: cover;
     opacity: 0;
@@ -259,16 +259,16 @@
 
   .chat-attachments__files {
     display: grid;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
 
   .chat-attachments__file {
     min-width: 0;
-    min-height: 58px;
+    min-height: var(--ui-layout-58, 58px);
     display: flex;
     align-items: center;
-    gap: 5px;
-    padding: 5px;
+    gap: var(--ui-space-5, 5px);
+    padding: var(--ui-space-5, 5px);
     border: 1px solid var(--surface-border-color);
     border-radius: 11px;
     background: var(--workspace-panel-bg-color);
@@ -285,8 +285,8 @@
     flex: 1;
     display: flex !important;
     justify-content: flex-start !important;
-    gap: 9px;
-    padding: 5px 6px !important;
+    gap: var(--ui-space-9, 9px);
+    padding: var(--ui-space-5, 5px) var(--ui-space-6, 6px) !important;
     border: 0 !important;
     background: transparent !important;
     text-align: left;
@@ -296,7 +296,7 @@
     min-width: 0;
     flex: 1;
     display: grid;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
 
   .chat-attachments__file-copy strong,
@@ -308,19 +308,19 @@
 
   .chat-attachments__file-copy strong {
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 650;
   }
 
   .chat-attachments__file-copy small {
     color: var(--text-color-secondary);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .chat-attachments__download {
-    width: 34px;
-    min-width: 34px;
-    height: 34px;
+    width: var(--ui-layout-34, 34px);
+    min-width: var(--ui-layout-34, 34px);
+    height: var(--ui-layout-34, 34px);
     padding: 0 !important;
     color: var(--text-color-secondary) !important;
   }

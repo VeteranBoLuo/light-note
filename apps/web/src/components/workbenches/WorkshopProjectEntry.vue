@@ -131,8 +131,8 @@
 </script>
 <style scoped lang="less">
   .workshop-entry {
-    margin: 16px 0;
-    padding: 16px 20px;
+    margin: var(--ui-space-16, 16px) 0;
+    padding: var(--ui-space-16, 16px) var(--ui-space-20, 20px);
     border: 1px solid var(--surface-border-color);
     border-radius: 14px;
     background: var(--card-background);
@@ -143,27 +143,27 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .workshop-entry p {
-    margin: 5px 0 0;
+    margin: var(--ui-space-5, 5px) 0 0;
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .workshop-entry__projects {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
-    margin-top: 12px;
+    gap: var(--ui-space-12, 12px);
+    margin-top: var(--ui-space-12, 12px);
   }
   .workshop-entry__project.b_btn {
     width: 100%;
     height: auto;
-    min-height: 64px;
+    min-height: var(--ui-layout-64, 64px);
     text-align: left;
     justify-content: flex-start;
-    gap: 12px;
-    padding: 12px;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-12, 12px);
     white-space: normal;
     background: var(--workspace-panel-bg-color);
   }
@@ -172,7 +172,7 @@
   }
   @media (max-width: 767px) {
     .workshop-entry {
-      padding: 14px;
+      padding: var(--ui-space-14, 14px);
     }
     .workshop-entry__row {
       flex-wrap: wrap;
@@ -184,56 +184,56 @@
       flex-wrap: wrap;
     }
     .workshop-entry :deep(.b_btn) {
-      min-height: 44px;
+      min-height: var(--ui-layout-44, 44px);
     }
   }
   .workshop-entry.is-inline {
-    margin: 0 0 10px;
-    padding: 0 0 10px;
+    margin: 0 0 var(--ui-space-10, 10px);
+    padding: 0 0 var(--ui-space-10, 10px);
     border: 0;
     border-bottom: 1px solid var(--surface-divider-color);
     border-radius: 0;
     background: transparent;
     .workshop-entry__row {
-      gap: 6px;
+      gap: var(--ui-space-6, 6px);
       flex-wrap: wrap;
     }
     .workshop-entry__row strong {
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
       color: var(--desc-color);
     }
     .workshop-entry__actions {
-      gap: 4px;
+      gap: var(--ui-space-4, 4px);
       flex-wrap: wrap;
     }
     .workshop-entry__actions .b_btn {
-      font-size: 12px;
-      min-height: 30px;
-      padding: 4px 7px;
+      font-size: var(--ui-font-12, 12px);
+      min-height: var(--ui-layout-30, 30px);
+      padding: var(--ui-space-4, 4px) var(--ui-space-7, 7px);
     }
     .workshop-entry__projects {
       grid-template-columns: minmax(0, 1fr);
-      gap: 2px;
-      margin-top: 4px;
+      gap: var(--ui-space-2, 2px);
+      margin-top: var(--ui-space-4, 4px);
     }
     .workshop-entry__project.b_btn {
-      min-height: 50px;
-      padding: 6px;
-      gap: 8px;
+      min-height: var(--ui-layout-50, 50px);
+      padding: var(--ui-space-6, 6px);
+      gap: var(--ui-space-8, 8px);
       background: transparent;
     }
     .workshop-entry__project.b_btn:hover {
       background: var(--hover-background);
     }
     .workshop-entry__project strong {
-      font-size: 13px;
+      font-size: var(--ui-font-13, 13px);
       display: -webkit-box;
       -webkit-line-clamp: 2;
       -webkit-box-orient: vertical;
       overflow: hidden;
     }
     .workshop-entry__project small {
-      font-size: 11px;
+      font-size: var(--ui-font-11, 11px);
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -241,9 +241,9 @@
   }
   @media (max-width: 767px) {
     .workshop-entry.is-inline .workshop-entry__actions .b_btn {
-      height: 32px;
-      min-height: 32px;
-      padding: 0 10px;
+      height: var(--ui-layout-32, 32px);
+      min-height: var(--ui-layout-32, 32px);
+      padding: 0 var(--ui-space-10, 10px);
       line-height: normal;
     }
   }
@@ -271,16 +271,16 @@
   .workshop-entry .workshop-entry__project.b_btn,
   .workshop-entry.is-inline .workshop-entry__project.b_btn {
     display: grid;
-    grid-template-columns: 22px minmax(0, 1fr) auto 15px;
-    grid-template-rows: 20px 16px;
-    column-gap: 8px;
-    row-gap: 4px;
+    grid-template-columns: var(--ui-layout-22, 22px) minmax(0, 1fr) auto var(--ui-layout-15, 15px);
+    grid-template-rows: var(--ui-layout-20, 20px) var(--ui-layout-16, 16px);
+    column-gap: var(--ui-space-8, 8px);
+    row-gap: var(--ui-space-4, 4px);
     align-content: center;
     align-items: center;
     height: auto;
-    min-height: 60px;
-    padding: 8px;
-    line-height: 20px;
+    min-height: var(--ui-layout-60, 60px);
+    padding: var(--ui-space-8, 8px);
+    line-height: var(--ui-layout-20, 20px);
     background: transparent;
   }
   .workshop-entry .project-row__icon {
@@ -294,13 +294,13 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .workshop-entry .workshop-entry__project .project-row__type {
     grid-column: 3;
     grid-row: 1;
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .workshop-entry .project-row__arrow {
     grid-column: 4;
@@ -315,7 +315,7 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     text-align: left;
   }
   .workshop-entry .workshop-entry__project.b_btn:hover {

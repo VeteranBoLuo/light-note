@@ -401,11 +401,11 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     color: var(--sub-text-color, #888);
     text-align: center;
-    padding: 24px;
-    font-size: 14px;
+    padding: var(--ui-space-24, 24px);
+    font-size: var(--ui-font-14, 14px);
   }
   // 共享工作区表面：仅改变颜色，布局与滚动由原组件负责。
   .global-graph-canvas {

@@ -294,19 +294,19 @@
 
 <style lang="less" scoped>
   .filter-section-heading {
-    padding: 8px 8px 0;
+    padding: var(--ui-space-8, 8px) var(--ui-space-8, 8px) 0;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .noteType-select.b_btn {
-    height: 36px;
-    padding: 0 11px;
+    height: var(--ui-control-36, 36px);
+    padding: 0 var(--ui-space-11, 11px);
     border-radius: 10px;
     border: 1px solid transparent;
     color: var(--text-color);
     background: var(--primary-btn-bg-color);
     display: flex;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
 
     &:hover {
       border-color: var(--workspace-note-text);
@@ -327,12 +327,12 @@
   }
 
   .filter-label {
-    max-width: 112px;
+    max-width: var(--ui-layout-112, 112px);
   }
   .noteType-select.is-compact {
-    height: 36px;
-    min-height: 36px;
-    gap: 3px;
+    height: var(--ui-control-36, 36px);
+    min-height: var(--ui-control-36, 36px);
+    gap: var(--ui-space-3, 3px);
     padding-inline: 0;
   }
   .filter-chevron {
@@ -359,10 +359,12 @@
   }
   .filter-container {
     /* 背景/圆角/阴影由 BPopover 面板统一提供,这里只管尺寸与布局,避免双重卡片 */
-    width: 248px;
-    max-height: min(440px, calc(100vh - 24px));
-    max-height: min(440px, calc(100dvh - 24px));
-    padding: 5px;
+    width: var(--ui-layout-248, 248px);
+    /* ui-density-fixed: 24px reserves the fixed viewport safety gap, independent of panel density. */
+    max-height: min(var(--ui-layout-440, 440px), calc(100vh - 24px));
+    /* ui-density-fixed: Keep the same viewport safety gap for the dynamic viewport override. */
+    max-height: min(var(--ui-layout-440, 440px), calc(100dvh - 24px));
+    padding: var(--ui-space-5, 5px);
     display: flex;
     flex-direction: column;
     gap: 0;
@@ -377,15 +379,15 @@
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
   .scrollable-section {
-    margin-top: 5px;
+    margin-top: var(--ui-space-5, 5px);
     flex: 1;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
     min-height: 0; /* Allow flex item to shrink below content size */
   }
   .divider {
@@ -397,27 +399,27 @@
   .filter-header {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 4px 0;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-4, 4px) 0;
   }
   .clear-action {
     width: auto;
-    height: 28px;
-    padding: 0 4px;
+    height: var(--ui-control-28, 28px);
+    padding: 0 var(--ui-space-4, 4px);
     border: 0 !important;
     background: transparent !important;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--workspace-note-text);
     white-space: nowrap;
   }
   .filter-toggle {
-    min-height: 28px;
-    padding: 0 10px;
+    min-height: var(--ui-control-28, 28px);
+    padding: 0 var(--ui-space-10, 10px);
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     cursor: pointer;
     user-select: none;
   }
@@ -425,13 +427,13 @@
     text-align: left;
     color: var(--desc-color);
     justify-content: flex-start;
-    gap: 8px;
-    padding: 0 11px;
+    gap: var(--ui-space-8, 8px);
+    padding: 0 var(--ui-space-11, 11px);
     box-sizing: border-box;
     border: 1px solid transparent !important;
     border-radius: 8px;
     width: 100%;
-    height: 30px;
+    height: var(--ui-control-30, 30px);
     flex-shrink: 0;
     display: flex;
     align-items: center;
@@ -450,9 +452,9 @@
     font-weight: 600;
   }
   .filter-empty {
-    padding: 8px 12px;
+    padding: var(--ui-space-8, 8px) var(--ui-space-12, 12px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .check-mark {
     margin-left: auto;

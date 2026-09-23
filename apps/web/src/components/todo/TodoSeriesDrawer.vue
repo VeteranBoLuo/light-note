@@ -2,7 +2,7 @@
   <BDrawer
     :open="open"
     :title="t('inbox.todoSeriesDrawerTitle', { title: representative.title })"
-    width="620px"
+    width="var(--ui-layout-620, 620px)"
     :mobile-full-screen="true"
     body-padding="0"
     :mask-closable="true"
@@ -234,14 +234,14 @@
     justify-content: space-between;
     align-items: center;
     flex-wrap: wrap;
-    gap: 10px;
-    padding: 14px 18px 4px;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-14, 14px) var(--ui-space-18, 18px) var(--ui-space-4, 4px);
   }
   .todo-series-drawer__filters > .b-select {
-    width: 145px;
+    width: var(--ui-layout-145, 145px);
   }
   .todo-series-drawer__pages {
-    padding: 14px 18px 24px;
+    padding: var(--ui-space-14, 14px) var(--ui-space-18, 18px) var(--ui-space-24, 24px);
   }
   .todo-series-drawer__pages :deep(.todo-item) {
     border-radius: 10px;
@@ -249,24 +249,24 @@
   }
   @media (max-width: 767px) {
     .todo-series-drawer__filters {
-      padding: 12px 14px 0;
+      padding: var(--ui-space-12, 12px) var(--ui-space-14, 14px) 0;
     }
     .todo-series-drawer__pages {
-      padding: 12px 14px 24px;
+      padding: var(--ui-space-12, 12px) var(--ui-space-14, 14px) var(--ui-space-24, 24px);
     }
     .todo-series-drawer__filters > .b-select {
-      width: 130px;
+      width: var(--ui-layout-130, 130px);
     }
   }
   .todo-series-drawer__empty {
-    padding: 18px;
+    padding: var(--ui-space-18, 18px);
     color: var(--desc-color);
   }
   .todo-series-drawer__summary {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 12px 18px;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-12, 12px) var(--ui-space-18, 18px);
     border-bottom: 1px solid var(--surface-border-color, var(--card-border-color));
     color: var(--desc-color);
     background: var(--workspace-panel-bg-color, var(--hover-background));
@@ -274,27 +274,27 @@
 
   .todo-series-drawer__list {
     display: grid;
-    gap: 16px;
-    padding: 14px;
+    gap: var(--ui-space-16, 16px);
+    padding: var(--ui-space-14, 14px);
   }
 
   .todo-series-drawer__section {
     display: grid;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
   }
 
   .todo-series-drawer__section > header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 2px;
+    padding: 0 var(--ui-space-2, 2px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .todo-series-drawer__more {
     display: flex;
     justify-content: center;
-    padding: 0 14px 18px;
+    padding: 0 var(--ui-space-14, 14px) var(--ui-space-18, 18px);
   }
 </style>

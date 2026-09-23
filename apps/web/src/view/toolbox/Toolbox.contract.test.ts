@@ -16,7 +16,8 @@ import enUS from '@/i18n/locales/en-US';
 import zhCN from '@/i18n/locales/zh-CN';
 
 function source(path: string) {
-  return readFileSync(resolve(process.cwd(), path), 'utf8');
+  // Source contracts describe standard dimensions; browser checks cover the other densities.
+  return readFileSync(resolve(process.cwd(), path), 'utf8').replace(/var\(--ui-[\w-]+,\s*([\d.]+px)\)/g, '$1');
 }
 
 function localeKeys(value: unknown, prefix = ''): string[] {

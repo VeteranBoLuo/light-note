@@ -10,7 +10,7 @@ describe('业务 AI 入口能力契约', () => {
     const presentation = read('utils/fileAiSummary.ts');
 
     expect(source).toContain("import { isAiDocumentFileNameSupported } from '@lightnote/shared'");
-    expect(source).toContain('isAiDocumentFileNameSupported(item.fileName)');
+    expect(source).toContain('isAiDocumentFileNameSupported(file.fileName)');
     expect(source).toContain('<ResourceBatchActionBar');
     expect(source).toContain('<ResourceOutcomeDrawer');
     expect(source).toContain('quickReadable: isAiDocumentFileNameSupported(file.fileName)');

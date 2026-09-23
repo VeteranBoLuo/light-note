@@ -16,7 +16,7 @@
           <BInput
             v-model:value="draft.name"
             class="note-template-edit__input"
-            height="34px"
+            height="var(--ui-control-34, 34px)"
             :maxlength="60"
             :placeholder="t('note.tplNamePlaceholder')"
           />
@@ -27,7 +27,7 @@
           <BInput
             v-model:value="draft.titleTemplate"
             class="note-template-edit__input"
-            height="34px"
+            height="var(--ui-control-34, 34px)"
             :maxlength="255"
             :placeholder="t('note.tplTitlePlaceholder')"
           />
@@ -37,7 +37,7 @@
           <BInput
             v-model:value="draft.description"
             class="note-template-edit__input"
-            height="34px"
+            height="var(--ui-control-34, 34px)"
             :maxlength="255"
             :placeholder="t('note.tplDescPlaceholder')"
           />
@@ -160,71 +160,75 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    padding: 10px clamp(16px, 2.4vw, 30px) 10px;
+    padding: var(--ui-space-10, 10px) clamp(var(--ui-space-16, 16px), 2.4vw, var(--ui-space-30, 30px))
+      var(--ui-space-10, 10px);
   }
   .note-template-edit__header {
     min-width: 0;
     display: flex;
     flex: 0 0 auto;
     align-items: center;
-    gap: 8px 14px;
-    margin-bottom: 8px;
+    gap: var(--ui-space-8, 8px) var(--ui-space-14, 14px);
+    margin-bottom: var(--ui-space-8, 8px);
   }
   .note-template-edit__heading-row {
     min-width: 0;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
   .note-template-edit__header h2 {
     margin: 0;
-    font-size: 16px;
+    font-size: var(--ui-font-16, 16px);
     font-weight: 700;
     line-height: 1.3;
   }
   .note-template-edit__heading-row > span {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
   .note-template-edit__header p {
     min-width: 0;
     margin: 0 0 0 auto;
     overflow: hidden;
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.4;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
   .note-template-edit__fields {
     display: grid;
-    grid-template-columns: minmax(150px, 0.8fr) minmax(220px, 1.1fr) minmax(220px, 1.3fr);
-    gap: 10px;
-    margin-bottom: 8px;
+    grid-template-columns: minmax(var(--ui-layout-150, 150px), 0.8fr) minmax(var(--ui-layout-220, 220px), 1.1fr) minmax(
+        var(--ui-layout-220, 220px),
+        1.3fr
+      );
+    gap: var(--ui-space-10, 10px);
+    margin-bottom: var(--ui-space-8, 8px);
   }
   .note-template-edit__fields label {
     position: relative;
     min-width: 0;
     display: grid;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
     color: var(--text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 550;
   }
   .note-template-edit__fields small {
     position: absolute;
-    right: 8px;
+    right: var(--ui-space-8, 8px);
     top: 0;
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     font-weight: 400;
   }
   .note-template-edit__input :deep(.b-input) {
     border: 1px solid var(--surface-border-color) !important;
     background: var(--card-background) !important;
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     transition:
       border-color 0.16s ease,
       background-color 0.16s ease;
@@ -252,21 +256,21 @@
     overflow: hidden;
   }
   .note-template-edit__actions {
-    height: 50px;
-    min-height: 50px;
+    height: var(--ui-layout-50, 50px);
+    min-height: var(--ui-layout-50, 50px);
     box-sizing: border-box;
     display: flex;
-    flex: 0 0 50px;
+    flex: 0 0 var(--ui-layout-50, 50px);
     align-items: center;
     justify-content: flex-end;
-    gap: 10px;
-    padding: 5px 14px;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-5, 5px) var(--ui-space-14, 14px);
     border-top: 1px solid var(--surface-border-color);
     background: var(--workspace-panel-bg-color);
   }
   @media (max-width: 1199px) {
     .note-template-edit__fields {
-      grid-template-columns: minmax(180px, 0.8fr) minmax(220px, 1.2fr);
+      grid-template-columns: minmax(var(--ui-layout-180, 180px), 0.8fr) minmax(var(--ui-layout-220, 220px), 1.2fr);
     }
     .note-template-edit__description {
       grid-column: 1 / -1;

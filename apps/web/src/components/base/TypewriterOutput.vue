@@ -259,4 +259,7 @@
     color: #9aa0a6;
     font-size: 12px;
   }
+  .typewriter-output > .empty {
+    font-size: var(--ui-font-12, 12px);
+  }
 </style>

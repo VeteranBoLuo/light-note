@@ -108,7 +108,7 @@ describe('修改密码响应式容器', () => {
     const modal = host.querySelector<HTMLElement>('.modal-stub');
 
     expect(modal).not.toBeNull();
-    expect(modal?.dataset.width).toBe('460px');
+    expect(modal?.dataset.width?.replace(/var\(--ui-[\w-]+, ([\d.]+px)\)/g, '$1')).toBe('460px');
     expect(modal?.querySelector('.password-shell--mobile')).toBeNull();
     expect(modal?.querySelectorAll('.password-actions button')).toHaveLength(2);
     expect(host.querySelector('.drawer-stub')).toBeNull();

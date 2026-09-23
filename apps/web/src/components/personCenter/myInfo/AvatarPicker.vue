@@ -7,7 +7,7 @@
             v-if="frameId && !showSpritePreview"
             :frame-id="frameId"
             :src="previewSource"
-            :size="isMobileLayout ? 82 : 92"
+            :size="isMobileLayout ? 82 : dimension(92, 'icon')"
             :decorative="false"
           />
           <span
@@ -99,6 +99,7 @@
 </template>
 
 <script setup lang="ts">
+  import { useUiDensity } from '@/composables/useUiDensity';
   import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -133,6 +134,7 @@
   }>();
 
   const { t } = useI18n();
+  const { dimension } = useUiDensity();
   const isMobileLayout = useMobileLayout();
   const selectedId = ref<BuiltinAvatarId | null>(null);
   const sourceKind = ref<AvatarSourceKind>('current');
@@ -156,8 +158,8 @@
       : {
           visible: props.open,
           title: t('myInfo.chooseAvatar'),
-          width: '760px',
-          height: 'min(84vh, 740px)',
+          width: 'var(--ui-layout-760, 760px)',
+          height: 'min(84vh, var(--ui-layout-740, 740px))',
           showFooter: false,
           maskClosable: true,
           modalClass: 'avatar-picker-modal',
@@ -271,7 +273,7 @@
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
-    padding: 0 18px 20px;
+    padding: 0 var(--ui-space-18, 18px) var(--ui-space-20, 20px);
     overscroll-behavior: contain;
   }
 
@@ -279,9 +281,9 @@
     flex: 0 0 auto;
     display: flex;
     align-items: center;
-    gap: 18px;
-    margin: 16px 18px 0;
-    padding: 16px 18px;
+    gap: var(--ui-space-18, 18px);
+    margin: var(--ui-space-16, 16px) var(--ui-space-18, 18px) 0;
+    padding: var(--ui-space-16, 16px) var(--ui-space-18, 18px);
     border: 1px solid var(--surface-border-color);
     border-radius: 18px;
     background: var(--surface-panel-bg);
@@ -290,9 +292,9 @@
 
   .avatar-picker__preview-shell {
     // 92px 头像下，124px 天花板外径会等比放大到约 178px；预览槽必须按框体而非头像尺寸预留。
-    width: 180px;
-    height: 180px;
-    flex: 0 0 180px;
+    width: var(--ui-layout-180, 180px);
+    height: var(--ui-layout-180, 180px);
+    flex: 0 0 var(--ui-layout-180, 180px);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -302,8 +304,8 @@
 
   .avatar-picker__preview-art,
   .avatar-picker__preview-image {
-    width: 92px;
-    height: 92px;
+    width: var(--ui-layout-92, 92px);
+    height: var(--ui-layout-92, 92px);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -328,59 +330,59 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
 
   .avatar-picker__hero-copy strong {
-    font-size: 18px;
+    font-size: var(--ui-font-18, 18px);
     line-height: 1.3;
   }
 
   .avatar-picker__hero-copy span {
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.5;
   }
 
   .avatar-picker__hero-copy small {
     width: max-content;
-    padding: 3px 8px;
+    padding: var(--ui-space-3, 3px) var(--ui-space-8, 8px);
     border: 1px solid var(--primary-color);
     border-radius: 999px;
     color: var(--primary-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.2;
     background: var(--surface-card-bg);
   }
 
   .avatar-picker__section {
-    margin-top: 20px;
+    margin-top: var(--ui-space-20, 20px);
   }
 
   .avatar-picker__section-heading {
-    min-height: 38px;
-    margin-bottom: 10px;
+    min-height: var(--ui-layout-38, 38px);
+    margin-bottom: var(--ui-space-10, 10px);
     display: flex;
     align-items: flex-end;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .avatar-picker__section-heading > div {
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
 
   .avatar-picker__section-heading strong {
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
   }
 
   .avatar-picker__section-heading span,
   .avatar-picker__section-heading small {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.4;
   }
 
@@ -391,18 +393,18 @@
   .avatar-picker__grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .avatar-picker-card.b_btn {
     width: 100%;
     height: auto;
     min-width: 0;
-    min-height: 92px;
+    min-height: var(--ui-layout-92, 92px);
     justify-content: flex-start;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     position: relative;
-    padding: 10px;
+    padding: var(--ui-space-10, 10px);
     overflow: hidden;
     border: 1px solid var(--surface-border-color);
     border-radius: 14px;
@@ -419,14 +421,15 @@
 
   .avatar-picker-card.b_btn.is-selected {
     border: 2px solid var(--primary-color);
-    padding: 9px;
+    /* ui-density-fixed: 选中边框从 1px 增至 2px，减去固定 1px 保持内容位置不跳动。 */
+    padding: calc(var(--ui-space-10, 10px) - 1px);
     background: var(--surface-panel-bg);
   }
 
   .avatar-picker-card__art {
-    width: 66px;
-    height: 66px;
-    flex: 0 0 66px;
+    width: var(--ui-layout-66, 66px);
+    height: var(--ui-layout-66, 66px);
+    flex: 0 0 var(--ui-layout-66, 66px);
     border: 2px solid var(--surface-border-color);
     border-radius: 50%;
     background-color: var(--surface-panel-bg);
@@ -441,7 +444,7 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
 
   .avatar-picker-card__copy strong,
@@ -451,7 +454,7 @@
   }
 
   .avatar-picker-card__copy strong {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.25;
     white-space: nowrap;
   }
@@ -459,7 +462,7 @@
   .avatar-picker-card__copy small {
     display: -webkit-box;
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 400;
     line-height: 1.35;
     white-space: normal;
@@ -468,8 +471,8 @@
   }
 
   .avatar-picker-card__check {
-    width: 22px;
-    height: 22px;
+    width: var(--ui-layout-22, 22px);
+    height: var(--ui-layout-22, 22px);
     position: absolute;
     top: 6px;
     right: 6px;
@@ -483,7 +486,7 @@
   }
 
   .avatar-picker__section--custom {
-    padding: 14px;
+    padding: var(--ui-space-14, 14px);
     border: 1px solid var(--surface-border-color);
     border-radius: 14px;
     background: var(--surface-panel-bg);
@@ -491,19 +494,19 @@
 
   .avatar-picker__section--custom .avatar-picker__section-heading {
     min-height: 0;
-    margin-bottom: 12px;
+    margin-bottom: var(--ui-space-12, 12px);
   }
 
   .avatar-picker__custom-actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .avatar-picker__upload.b_btn,
   .avatar-picker__restore.b_btn {
-    min-height: 40px;
-    gap: 7px;
+    min-height: var(--ui-control-40, 40px);
+    gap: var(--ui-space-7, 7px);
     border: 1px solid var(--surface-border-color);
     background: var(--surface-card-bg);
   }
@@ -517,16 +520,16 @@
     flex: 0 0 auto;
     display: flex;
     justify-content: flex-end;
-    gap: 10px;
-    padding: 12px 18px max(12px, env(safe-area-inset-bottom));
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-12, 12px) var(--ui-space-18, 18px) max(var(--ui-space-12, 12px), env(safe-area-inset-bottom));
     border-top: 1px solid var(--surface-border-color);
     background: var(--background-color);
   }
 
   .avatar-picker__cancel.b_btn,
   .avatar-picker__confirm.b_btn {
-    min-width: 112px;
-    height: 42px;
+    min-width: var(--ui-layout-112, 112px);
+    height: var(--ui-control-42, 42px);
   }
 
   :global(.avatar-picker-modal__content) {

@@ -101,7 +101,7 @@
     height: 100%;
     min-width: 0;
     min-height: 0;
-    padding-bottom: 16px;
+    padding-bottom: var(--ui-space-16, 16px);
     box-sizing: border-box;
   }
 
@@ -110,11 +110,11 @@
     height: 100%;
     min-width: 0;
     min-height: 0;
-    padding: 12px 20px 20px;
+    padding: var(--ui-space-12, 12px) var(--ui-space-20, 20px) var(--ui-space-20, 20px);
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     overflow: hidden;
     border-radius: 18px;
     background: var(--background-color);
@@ -150,9 +150,9 @@
   }
 
   .admin-data-page__eyebrow {
-    margin: 0 0 4px;
+    margin: 0 0 var(--ui-space-4, 4px);
     color: var(--sub-text-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.4;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -163,21 +163,21 @@
     display: flex;
     align-items: flex-end;
     justify-content: space-between;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
 
   .admin-data-page__title {
     margin: 0;
     color: var(--text-color);
-    font-size: 22px;
+    font-size: var(--ui-font-22, 22px);
     font-weight: 600;
     line-height: 1.3;
   }
 
   .admin-data-page__subtitle {
-    margin: 2px 0 0;
+    margin: var(--ui-space-2, 2px) 0 0;
     color: var(--sub-text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.5;
   }
 
@@ -185,7 +185,7 @@
     flex: 0 0 auto;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .admin-data-page__metrics {
@@ -193,15 +193,15 @@
     margin: 0;
     padding: 0;
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 10px;
+    grid-template-columns: repeat(auto-fit, minmax(var(--ui-layout-180, 180px), 1fr));
+    gap: var(--ui-space-10, 10px);
     list-style: none;
   }
 
   .admin-data-page__metrics :deep(.admin-stat-card) {
     min-width: 0;
-    min-height: 76px;
-    padding: 10px 12px;
+    min-height: var(--ui-layout-76, 76px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     box-sizing: border-box;
     color: var(--text-color);
     border: 1px solid color-mix(in srgb, var(--primary-color) 16%, var(--card-border-color, rgba(82, 115, 255, 0.16)));
@@ -215,22 +215,22 @@
 
   .admin-data-page__metrics :deep(.admin-stat-label) {
     color: var(--sub-text-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.4;
     text-transform: uppercase;
   }
 
   .admin-data-page__metrics :deep(.admin-stat-value) {
     display: block;
-    margin: 2px 0;
+    margin: var(--ui-space-2, 2px) 0;
     color: var(--text-color);
-    font-size: 19px;
+    font-size: var(--ui-font-19, 19px);
     line-height: 1.25;
   }
 
   .admin-data-page__metrics :deep(.admin-stat-hint) {
     color: var(--sub-text-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.4;
   }
 
@@ -243,7 +243,7 @@
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .admin-data-page__toolbar-main {
@@ -251,20 +251,20 @@
     flex: 1;
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .admin-data-page__summary {
     flex: 0 0 auto;
     color: var(--sub-text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     white-space: nowrap;
   }
 
   .admin-data-page__toolbar-hint {
-    margin: 4px 0 0;
+    margin: var(--ui-space-4, 4px) 0 0;
     color: var(--sub-text-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.4;
   }
 
@@ -280,7 +280,7 @@
   /* 组合页：内容按自然高度排布并整块滚动，子块不再被 flex 平分挤压 */
   .admin-data-page__table[data-layout='scroll'] {
     overflow-y: auto;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
 
     > * {
       flex: none;

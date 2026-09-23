@@ -95,11 +95,11 @@
     --resource-page-content-width: min(100%, 1540px);
     width: 100%;
     height: 100%;
-    padding: 18px clamp(16px, 2vw, 28px) 24px;
+    padding: var(--ui-space-18, 18px) clamp(var(--ui-space-16, 16px), 2vw, var(--ui-space-28, 28px)) var(--ui-space-24, 24px);
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
     overflow: hidden;
     color: var(--text-color);
     background: var(--surface-page-bg, var(--background-color));
@@ -132,19 +132,19 @@
 
   .resource-page-header {
     width: var(--resource-page-content-width);
-    min-height: 54px;
+    min-height: var(--ui-control-54, 54px);
     margin: 0 auto;
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     flex: 0 0 auto;
   }
 
   .resource-page-back {
     display: flex;
-    width: 36px;
-    min-width: 36px;
-    height: 36px;
+    width: var(--ui-control-36, 36px);
+    min-width: var(--ui-control-36, 36px);
+    height: var(--ui-control-36, 36px);
     padding: 0;
     border: 1px solid transparent;
     border-radius: 9px;
@@ -181,7 +181,7 @@
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
   }
 
   .resource-page-accent {
@@ -198,7 +198,7 @@
     margin: 0;
     overflow: hidden;
     color: var(--text-color);
-    font-size: clamp(22px, 2vw, 28px);
+    font-size: clamp(var(--ui-font-22, 22px), 2vw, var(--ui-font-28, 28px));
     font-weight: 750;
     line-height: 1.2;
     letter-spacing: -0.025em;
@@ -234,10 +234,10 @@
   }
 
   p {
-    margin: 5px 0 0 17px;
+    margin: var(--ui-space-5, 5px) 0 0 var(--ui-space-17, 17px);
     overflow: hidden;
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.4;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -248,7 +248,7 @@
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     flex-wrap: wrap;
   }
 
@@ -262,17 +262,17 @@
   @media (max-width: 767px) {
     .resource-page-shell {
       padding: 12px 12px max(14px, env(safe-area-inset-bottom));
-      gap: 10px;
+      gap: var(--ui-space-10, 10px);
     }
 
     .resource-page-shell:not(.resource-page-shell--with-back) {
-      padding-top: 6px;
+      padding-top: var(--ui-space-6, 6px);
     }
 
     .resource-page-header {
-      min-height: 40px;
+      min-height: var(--ui-control-40, 40px);
       align-items: center;
-      gap: 6px;
+      gap: var(--ui-space-6, 6px);
       flex-wrap: wrap;
     }
 
@@ -299,7 +299,7 @@
     }
 
     h1 {
-      font-size: 20px;
+      font-size: var(--ui-font-20, 20px);
       font-weight: 720;
     }
 
@@ -316,9 +316,9 @@
     }
 
     .resource-page-shell--mobile-compact {
-      padding-top: 8px;
-      padding-bottom: 10px;
-      gap: 8px;
+      padding-top: var(--ui-space-8, 8px);
+      padding-bottom: var(--ui-space-10, 10px);
+      gap: var(--ui-space-8, 8px);
     }
 
     .resource-page-shell--mobile-compact .resource-page-heading {
@@ -334,7 +334,7 @@
     }
 
     .resource-page-shell--mobile-compact .resource-page-header {
-      min-height: 40px;
+      min-height: var(--ui-control-40, 40px);
       flex-wrap: nowrap;
     }
 

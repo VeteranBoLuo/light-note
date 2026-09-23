@@ -2,8 +2,8 @@
   <BModal
     v-model:visible="visible"
     :title="t('communityChat.poll.composerTitle')"
-    width="min(560px, 94vw)"
-    height="min(720px, 88vh)"
+    width="min(var(--ui-layout-560, 560px), 94vw)"
+    height="min(var(--ui-layout-720, 720px), 88vh)"
     content-class="chat-poll-composer-content"
     :show-footer="false"
     :mask-closable="!submitting"
@@ -282,30 +282,30 @@
 
   .chat-poll-composer {
     display: grid;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
     color: var(--text-color);
   }
 
   .chat-poll-composer__description {
     margin: 0;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.65;
   }
 
   .chat-poll-composer section {
     display: grid;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
 
   .chat-poll-composer label {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 700;
   }
 
   .chat-poll-composer small {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     line-height: 1.5;
   }
 
@@ -317,7 +317,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .chat-poll-composer__selection :deep(.tab-container) {
@@ -331,10 +331,10 @@
 
   .chat-poll-composer__selection-limit {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(150px, 200px);
+    grid-template-columns: minmax(0, 1fr) minmax(var(--ui-layout-150, 150px), var(--ui-layout-200, 200px));
     align-items: center;
-    gap: 10px;
-    padding: 9px 10px;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-9, 9px) var(--ui-space-10, 10px);
     border: 1px solid var(--surface-border-color);
     border-radius: 9px;
     background: var(--workspace-panel-bg-color);
@@ -342,59 +342,59 @@
 
   .chat-poll-composer__options {
     display: grid;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
 
   .chat-poll-composer__options > div {
     min-width: 0;
     display: grid;
-    grid-template-columns: 24px minmax(0, 1fr) 34px;
+    grid-template-columns: var(--ui-layout-24, 24px) minmax(0, 1fr) var(--ui-layout-34, 34px);
     align-items: center;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
 
   .chat-poll-composer__options > div > span {
-    width: 24px;
-    height: 24px;
+    width: var(--ui-layout-24, 24px);
+    height: var(--ui-layout-24, 24px);
     display: grid;
     place-items: center;
     border: 1px solid var(--surface-border-color);
     border-radius: 50%;
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
 
   .chat-poll-composer__remove {
-    width: 34px;
-    min-width: 34px;
-    height: 34px;
+    width: var(--ui-layout-34, 34px);
+    min-width: var(--ui-layout-34, 34px);
+    height: var(--ui-layout-34, 34px);
     padding: 0;
     color: var(--danger-color);
   }
 
   .chat-poll-composer__add {
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
     color: var(--primary-color);
   }
 
   .chat-poll-composer__error {
     margin: 0;
-    padding: 8px 10px;
+    padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px);
     border: 1px solid var(--danger-color);
     border-radius: 9px;
     color: var(--danger-color);
     background: var(--card-background);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .chat-poll-composer footer {
     display: flex;
     justify-content: flex-end;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .chat-poll-composer footer .b_btn {
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
 
   @media (max-width: 767px) {

@@ -12,7 +12,7 @@
     </header>
 
     <div class="governance-summary__metrics">
-      <BCard class="governance-summary__ai-entry" padding="20px" radius="12px">
+      <BCard class="governance-summary__ai-entry" padding="var(--ui-space-20, 20px)" radius="12px">
         <div class="governance-summary__ai-icon" aria-hidden="true">
           <SvgIcon :src="icon.common.magicWand" size="22" />
         </div>
@@ -29,7 +29,7 @@
         v-for="metric in metrics"
         :key="metric.key"
         class="governance-summary__metric"
-        padding="20px"
+        padding="var(--ui-space-20, 20px)"
         radius="12px"
       >
         <div class="governance-summary__metric-title"
@@ -54,7 +54,7 @@
     <p class="governance-summary__scope">{{ t('organize.overview.governanceOverlapHint') }}</p>
 
     <div class="governance-summary__charts">
-      <BCard class="governance-summary__panel" padding="24px" radius="12px">
+      <BCard class="governance-summary__panel" padding="var(--ui-space-24, 24px)" radius="12px">
         <header
           ><div
             ><h3>{{ t('organize.summaryView.untaggedComposition') }}</h3
@@ -77,7 +77,7 @@
             : t('organize.summaryView.typeScope')
         }}</footer>
       </BCard>
-      <BCard class="governance-summary__panel" padding="24px" radius="12px">
+      <BCard class="governance-summary__panel" padding="var(--ui-space-24, 24px)" radius="12px">
         <header
           ><div
             ><h3>{{ t('organize.overview.healthStatus') }}</h3
@@ -108,7 +108,7 @@
         <div v-else class="governance-summary__empty" role="status">{{ t('organize.summaryView.unavailable') }}</div>
         <footer>{{ t('organize.summaryView.healthScope') }}</footer>
       </BCard>
-      <BCard class="governance-summary__panel" padding="24px" radius="12px">
+      <BCard class="governance-summary__panel" padding="var(--ui-space-24, 24px)" radius="12px">
         <header
           ><div
             ><h3>{{ t('organize.overview.pendingComposition') }}</h3
@@ -265,9 +265,9 @@
   .governance-summary {
     --summary-surface: var(--workspace-content);
     display: grid;
-    gap: 20px;
+    gap: var(--ui-space-20, 20px);
     min-width: 0;
-    padding: 20px;
+    padding: var(--ui-space-20, 20px);
     box-sizing: border-box;
     color: var(--text-color);
   }
@@ -280,18 +280,18 @@
     margin: 0;
   }
   .governance-summary h2 {
-    font-size: 22px;
+    font-size: var(--ui-font-22, 22px);
     line-height: 1.4;
   }
   .governance-summary h3 {
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
     line-height: 1.4;
   }
   .governance-summary p,
   .governance-summary footer,
   .governance-summary small {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.6;
   }
   .governance-summary__heading,
@@ -299,16 +299,16 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     flex-wrap: wrap;
   }
   .governance-summary__heading p {
-    margin-top: 6px;
+    margin-top: var(--ui-space-6, 6px);
   }
   .governance-summary__metrics {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
   }
   .governance-summary__metric,
   .governance-summary__ai-entry,
@@ -319,15 +319,15 @@
   }
   .governance-summary__ai-entry {
     display: grid;
-    grid-template-columns: 44px minmax(0, 1fr);
+    grid-template-columns: var(--ui-layout-44, 44px) minmax(0, 1fr);
     align-items: center;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     border-color: var(--primary-color);
     background: var(--mobile-selected-bg, var(--summary-surface));
   }
   .governance-summary__ai-icon {
-    width: 42px;
-    height: 42px;
+    width: var(--ui-layout-42, 42px);
+    height: var(--ui-layout-42, 42px);
     display: grid;
     place-items: center;
     border: 1px solid var(--primary-color);
@@ -340,24 +340,24 @@
   }
   .governance-summary__ai-copy > span {
     display: block;
-    margin-bottom: 2px;
+    margin-bottom: var(--ui-space-2, 2px);
     color: var(--primary-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     font-weight: 750;
     letter-spacing: 0.06em;
   }
   .governance-summary__ai-copy p {
-    margin-top: 5px;
+    margin-top: var(--ui-space-5, 5px);
   }
   .governance-summary__ai-action.b_btn {
     grid-column: 1 / -1;
     width: 100%;
-    min-height: 36px;
+    min-height: var(--ui-control-36, 36px);
   }
   .governance-summary__metric-title {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .governance-summary__metric-title > :first-child,
   .governance-summary__panel header > :last-child {
@@ -367,17 +367,17 @@
   .governance-summary__value {
     display: flex;
     align-items: baseline;
-    gap: 8px;
-    margin: 18px 0 6px;
+    gap: var(--ui-space-8, 8px);
+    margin: var(--ui-space-18, 18px) 0 var(--ui-space-6, 6px);
   }
   .governance-summary__value strong {
-    font-size: 32px;
+    font-size: var(--ui-font-32, 32px);
     font-weight: 600;
     line-height: 1.1;
     font-variant-numeric: tabular-nums;
   }
   .governance-summary__value span {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
   }
   .governance-summary__link.b_btn {
@@ -385,12 +385,12 @@
     background: transparent;
     border: 0;
     color: var(--desc-color);
-    height: 32px;
-    gap: 8px;
-    font-size: 12px;
+    height: var(--ui-control-32, 32px);
+    gap: var(--ui-space-8, 8px);
+    font-size: var(--ui-font-12, 12px);
   }
   .governance-summary__metric .governance-summary__link {
-    margin-top: 12px;
+    margin-top: var(--ui-space-12, 12px);
   }
   .governance-summary__link.b_btn:hover {
     color: var(--primary-color);
@@ -401,51 +401,51 @@
     border-radius: 4px;
   }
   .governance-summary__scope {
-    margin-top: -10px !important;
+    margin-top: calc(-1 * var(--ui-space-10, 10px)) !important;
   }
   .governance-summary__charts {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 20px;
+    gap: var(--ui-space-20, 20px);
     align-items: start;
   }
   .governance-summary__panel {
     display: flex;
     flex-direction: column;
-    min-height: 330px;
+    min-height: var(--ui-layout-330, 330px);
   }
   .governance-summary__panel header {
     display: flex;
     align-items: start;
     justify-content: space-between;
-    gap: 14px;
-    margin-bottom: 22px;
+    gap: var(--ui-space-14, 14px);
+    margin-bottom: var(--ui-space-22, 22px);
   }
   .governance-summary__panel header p {
-    margin-top: 6px;
+    margin-top: var(--ui-space-6, 6px);
   }
   .governance-summary__panel footer {
     border-top: 1px solid var(--surface-divider-color);
-    padding-top: 14px;
+    padding-top: var(--ui-space-14, 14px);
     margin-top: auto;
   }
   .governance-summary__panel :deep(.organize-donut-chart) {
-    margin: 0 0 24px;
-    grid-template-columns: 140px minmax(0, 1fr);
-    gap: 24px;
+    margin: 0 0 var(--ui-space-24, 24px);
+    grid-template-columns: var(--ui-layout-140, 140px) minmax(0, 1fr);
+    gap: var(--ui-space-24, 24px);
   }
   .governance-summary__panel :deep(.organize-donut-chart__visual) {
-    width: 140px;
+    width: var(--ui-layout-140, 140px);
   }
   .governance-summary__panel :deep(.organize-donut-chart__legend-item) {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .governance-summary__coverage {
     display: flex;
     justify-content: space-between;
-    gap: 10px;
-    font-size: 12px;
-    margin-bottom: 10px;
+    gap: var(--ui-space-10, 10px);
+    font-size: var(--ui-font-12, 12px);
+    margin-bottom: var(--ui-space-10, 10px);
     color: var(--desc-color);
   }
   .governance-summary__coverage strong {
@@ -454,16 +454,16 @@
   .governance-summary__health {
     list-style: none;
     padding: 0;
-    margin: 18px 0 20px;
+    margin: var(--ui-space-18, 18px) 0 var(--ui-space-20, 20px);
     display: grid;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .governance-summary__health li {
     display: grid;
     grid-template-columns: 8px 1fr auto;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     align-items: center;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
   }
   .governance-summary__health li > span:first-child {
@@ -476,21 +476,21 @@
     font-variant-numeric: tabular-nums;
   }
   .governance-summary__empty {
-    min-height: 160px;
+    min-height: var(--ui-layout-160, 160px);
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     text-align: center;
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.7;
-    padding: 16px;
-    gap: 12px;
+    padding: var(--ui-space-16, 16px);
+    gap: var(--ui-space-12, 12px);
     flex: 1;
   }
   .governance-summary__empty--clear strong {
-    font-size: 42px;
+    font-size: var(--ui-font-42, 42px);
     font-weight: 600;
     color: var(--text-color);
   }
@@ -502,11 +502,11 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
     .governance-summary__panel :deep(.organize-donut-chart) {
-      grid-template-columns: 110px minmax(0, 1fr);
-      gap: 14px;
+      grid-template-columns: var(--ui-layout-110, 110px) minmax(0, 1fr);
+      gap: var(--ui-space-14, 14px);
     }
     .governance-summary__panel :deep(.organize-donut-chart__visual) {
-      width: 110px;
+      width: var(--ui-layout-110, 110px);
     }
   }
   @media (max-width: 950px) {

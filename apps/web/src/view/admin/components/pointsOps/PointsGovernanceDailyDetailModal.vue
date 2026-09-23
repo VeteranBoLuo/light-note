@@ -3,8 +3,8 @@
     v-model:visible="visible"
     :title="t('adminPointsGovernance.dailyDetail.title', { day: summary?.day || '' })"
     :show-footer="false"
-    width="min(960px, 94vw)"
-    height="min(720px, 86vh)"
+    width="min(var(--ui-layout-960, 960px), 94vw)"
+    height="min(var(--ui-layout-720, 720px), 86vh)"
     content-class="points-daily-detail-modal__content"
     fullscreen-mobile
   >
@@ -187,17 +187,17 @@
           {
             title: t('adminPointsGovernance.dailyDetail.user'),
             key: 'user',
-            width: 'minmax(180px, 1fr)',
+            width: 'minmax(var(--ui-layout-180, 180px), 1fr)',
             ellipsis: false,
           },
-          { title: t('adminPointsGovernance.dailyDetail.delta'), key: 'deltaLabel', width: '110px', ellipsis: false },
+          { title: t('adminPointsGovernance.dailyDetail.delta'), key: 'deltaLabel', width: 'var(--ui-layout-110, 110px)', ellipsis: false },
           {
             title: t('adminPointsGovernance.dailyDetail.behavior'),
             key: 'behavior',
-            width: 'minmax(230px, 1.35fr)',
+            width: 'minmax(var(--ui-layout-230, 230px), 1.35fr)',
             ellipsis: false,
           },
-          { title: t('adminPointsGovernance.dailyDetail.time'), key: 'timeLabel', width: '104px', ellipsis: false },
+          { title: t('adminPointsGovernance.dailyDetail.time'), key: 'timeLabel', width: 'var(--ui-layout-104, 104px)', ellipsis: false },
         ],
   );
   const rowHeight = computed(() => (isMobile.value ? 84 : 66));
@@ -327,7 +327,7 @@
   .points-daily-detail {
     display: grid;
     grid-template-rows: auto minmax(0, 1fr) auto;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     width: 100%;
     height: 100%;
     min-width: 0;
@@ -338,8 +338,8 @@
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 16px;
-    padding: 12px 14px;
+    gap: var(--ui-space-16, 16px);
+    padding: var(--ui-space-12, 12px) var(--ui-space-14, 14px);
     border: 1px solid var(--surface-border-color);
     border-radius: 10px;
     background: var(--workbench-subcard-bg);
@@ -348,7 +348,7 @@
   .points-daily-detail__summary > div:first-child {
     display: grid;
     min-width: 0;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
 
   .points-daily-detail__summary strong {
@@ -359,7 +359,7 @@
   .points-daily-detail__footer,
   .points-daily-detail__state span {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .points-daily-detail__metrics {
@@ -367,13 +367,13 @@
     align-items: center;
     flex-wrap: wrap;
     justify-content: flex-end;
-    gap: 8px 14px;
+    gap: var(--ui-space-8, 8px) var(--ui-space-14, 14px);
     font-variant-numeric: tabular-nums;
   }
 
   .points-daily-detail__metrics span {
     display: inline-flex;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
 
   .points-daily-detail__metrics .is-issued b,
@@ -404,7 +404,7 @@
     width: 100%;
     height: auto;
     min-width: 0;
-    padding: 5px 6px;
+    padding: var(--ui-space-5, 5px) var(--ui-space-6, 6px);
     border: 1px solid transparent !important;
     background: transparent;
     line-height: 1.3;
@@ -433,14 +433,14 @@
   .points-daily-detail__behavior strong,
   .points-daily-detail__activity b {
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .points-daily-detail__user small,
   .points-daily-detail__behavior small,
   .points-daily-detail__activity small {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .points-daily-detail__delta,
@@ -457,7 +457,7 @@
   .points-daily-detail__activity {
     display: grid;
     min-width: 0;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
 
   .points-daily-detail__activity > span {
@@ -465,16 +465,16 @@
     grid-template-columns: auto minmax(0, 1fr);
     align-items: center;
     min-width: 0;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .points-daily-detail__state {
     display: grid;
     place-content: center;
     justify-items: center;
-    min-height: 220px;
-    gap: 8px;
-    padding: 24px;
+    min-height: var(--ui-layout-220, 220px);
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-24, 24px);
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     color: var(--text-color);
@@ -490,8 +490,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    min-height: 32px;
-    gap: 10px;
+    min-height: var(--ui-layout-32, 32px);
+    gap: var(--ui-space-10, 10px);
     text-align: center;
   }
 

@@ -297,7 +297,7 @@
                   v-model:value="keyword"
                   clearable
                   :placeholder="t('toolbox.searchPlaceholder')"
-                  height="42px"
+                  height="var(--ui-layout-42, 42px)"
                 >
                   <template #prefix><SvgIcon :src="icon.navigation.search" size="18" /></template>
                 </BInput>
@@ -436,6 +436,7 @@
   import { useGrowth } from '@/composables/useGrowth';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import icon from '@/config/icon';
+  import { useUiDensity } from '@/composables/useUiDensity';
   import {
     TOOLBOX_HOME_GROUPS,
     TOOLBOX_DEFAULT_QUICK_TOOL_IDS,
@@ -475,6 +476,7 @@
   }
 
   const { t, locale } = useI18n();
+  const { dimension } = useUiDensity();
   const router = useRouter();
   const route = useRoute();
   const user = useUserStore();
@@ -696,18 +698,17 @@
     if (!nav) return null;
     const owner = findScrollContainer(nav);
     const documentOwner = owner === document.scrollingElement;
-    const scale = documentOwner ? 1 : owner.getBoundingClientRect().height / owner.offsetHeight || 1;
     const top = documentOwner ? 0 : owner.getBoundingClientRect().top;
     const rail = getComputedStyle(nav).flexDirection === 'column';
-    const inset = (parseFloat(getComputedStyle(nav).top) || 0) + (rail ? 0 : nav.offsetHeight) + 20;
-    return { nav, owner, scale, top, inset };
+    const inset = (parseFloat(getComputedStyle(nav).top) || 0) + (rail ? 0 : nav.offsetHeight) + dimension(20);
+    return { nav, owner, top, inset };
   }
   function syncToolGroup() {
     groupScrollFrame = 0;
     if (homeView.value !== 'catalog') return;
     const context = groupScrollContext();
     if (!context) return;
-    const { nav, owner, scale, top, inset } = context;
+    const { nav, owner, top, inset } = context;
     const sections = visibleGroups.value
       .map((group) => ({
         id: group.id,
@@ -716,7 +717,7 @@
       .filter((item) => item.element);
     let current = sections[0];
     for (const section of sections) {
-      if (section.element!.getBoundingClientRect().top <= top + (inset + 4) * scale) current = section;
+      if (section.element!.getBoundingClientRect().top <= top + inset + dimension(4)) current = section;
     }
     if (owner.scrollTop > 0 && owner.scrollTop + owner.clientHeight >= owner.scrollHeight - 4)
       current = sections.at(-1);
@@ -738,9 +739,9 @@
     const context = groupScrollContext();
     const section = document.getElementById(`toolbox-home-group-${groupId}`);
     if (!context || !section) return;
-    const { owner, scale, top, inset } = context;
+    const { owner, top, inset } = context;
     owner.scrollTo({
-      top: Math.max(0, owner.scrollTop + (section.getBoundingClientRect().top - top) / scale - inset),
+      top: Math.max(0, owner.scrollTop + section.getBoundingClientRect().top - top - inset),
       behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
     });
     onToolGroupScroll();
@@ -946,8 +947,8 @@
   @import (reference) '@/assets/css/workspace-surfaces.less';
   .toolbox-home__views {
     display: flex;
-    gap: 8px;
-    margin: 16px 0 20px;
+    gap: var(--ui-space-8, 8px);
+    margin: var(--ui-space-16, 16px) 0 var(--ui-space-20, 20px);
   }
   .toolbox-home .toolbox-overview__eyebrow {
     display: none;
@@ -960,7 +961,8 @@
 
   .toolbox-home {
     .toolbox-page-scroll();
-    padding: 24px clamp(22px, 3.5vw, 54px) 56px;
+    padding: var(--ui-space-24, 24px) clamp(var(--ui-space-22, 22px), 3.5vw, var(--ui-space-54, 54px))
+      var(--ui-space-56, 56px);
     color: var(--text-color);
     --workshop-border: #e2e5eb;
     --workshop-card-shadow: 0 2px 6px rgba(24, 32, 56, 0.025);
@@ -977,11 +979,11 @@
   }
   .toolbox-overview {
     position: relative;
-    padding: 8px 0 24px;
+    padding: var(--ui-space-8, 8px) 0 var(--ui-space-24, 24px);
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto auto;
     align-items: center;
-    gap: 24px;
+    gap: var(--ui-space-24, 24px);
     box-sizing: border-box;
     border-bottom: 1px solid var(--workspace-border);
   }
@@ -994,24 +996,24 @@
     min-width: 0;
     display: grid;
     justify-items: start;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   .toolbox-overview__eyebrow,
   .toolbox-section__head > span:first-child {
     display: inline-flex;
     align-items: center;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     color: var(--primary-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 700;
     letter-spacing: 0.04em;
   }
 
   .toolbox-overview p {
-    max-width: 700px;
+    max-width: var(--ui-layout-700, 700px);
     margin: 0;
     color: var(--desc-color);
-    font-size: 12.5px;
+    font-size: var(--ui-font-12_5, 12.5px);
     line-height: 1.6;
   }
   .toolbox-overview__assets {
@@ -1019,18 +1021,18 @@
     z-index: 1;
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
   }
   .toolbox-asset.b_btn {
     width: 100%;
     min-width: 0;
-    min-height: 55px;
+    min-height: var(--ui-layout-55, 55px);
     height: auto;
-    padding: 8px 10px;
+    padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px);
     display: grid;
-    grid-template-columns: 34px minmax(0, 1fr);
+    grid-template-columns: var(--ui-layout-34, 34px) minmax(0, 1fr);
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     box-sizing: border-box;
     border: 1px solid var(--surface-border-color);
     border-radius: 13px;
@@ -1040,9 +1042,9 @@
     text-align: left;
   }
   .toolbox-asset__icon {
-    width: 34px;
-    height: 34px;
-    padding: 6px;
+    width: var(--ui-layout-34, 34px);
+    height: var(--ui-layout-34, 34px);
+    padding: var(--ui-space-6, 6px);
     box-sizing: border-box;
     border: 1px solid #e8bd72;
     border-radius: 10px;
@@ -1057,7 +1059,7 @@
   .toolbox-asset__copy {
     min-width: 0;
     display: grid;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
   .toolbox-asset__copy small,
   .toolbox-asset__copy strong {
@@ -1067,19 +1069,19 @@
   }
   .toolbox-asset__copy small {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
   .toolbox-asset__copy strong {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .toolbox-guest-guide {
-    min-height: 88px;
-    margin-top: 22px;
-    padding: 16px 18px;
+    min-height: var(--ui-layout-88, 88px);
+    margin-top: var(--ui-space-22, 22px);
+    padding: var(--ui-space-16, 16px) var(--ui-space-18, 18px);
     display: grid;
-    grid-template-columns: 42px minmax(0, 1fr) auto;
+    grid-template-columns: var(--ui-layout-42, 42px) minmax(0, 1fr) auto;
     align-items: center;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
     box-sizing: border-box;
     border: 1px solid var(--surface-border-color);
     border-radius: 16px;
@@ -1088,8 +1090,8 @@
   }
   .toolbox-guest-guide__icon,
   .toolbox-home__state-icon {
-    width: 42px;
-    height: 42px;
+    width: var(--ui-layout-42, 42px);
+    height: var(--ui-layout-42, 42px);
     display: grid;
     place-items: center;
     border: 1px solid color-mix(in srgb, var(--primary-color) 20%, var(--surface-border-color));
@@ -1099,56 +1101,56 @@
   }
   .toolbox-guest-guide h2 {
     margin: 0;
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
   }
   .toolbox-guest-guide p {
-    margin: 4px 0 0;
+    margin: var(--ui-space-4, 4px) 0 0;
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.55;
   }
   .toolbox-section {
-    margin-top: 28px;
+    margin-top: var(--ui-space-28, 28px);
   }
 
   .toolbox-section__head > span:first-child {
     grid-row: 1 / 3;
     align-self: start;
-    padding-top: 4px;
+    padding-top: var(--ui-space-4, 4px);
   }
   .toolbox-section__head h2 {
     margin: 0;
-    font-size: 20px;
+    font-size: var(--ui-font-20, 20px);
     font-weight: 730;
     letter-spacing: -0.025em;
   }
   .toolbox-section__head p {
     margin: 0;
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.55;
   }
   .toolbox-start-content {
     display: grid;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
   }
   .toolbox-start-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .toolbox-start-card.b_btn {
     --tool-accent: var(--primary-color);
     width: 100%;
     min-width: 0;
-    min-height: 112px;
+    min-height: var(--ui-layout-112, 112px);
     height: auto;
-    padding: 14px;
+    padding: var(--ui-space-14, 14px);
     display: grid;
-    grid-template-columns: 40px minmax(0, 1fr);
+    grid-template-columns: var(--ui-layout-40, 40px) minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr) auto;
     align-items: start;
-    gap: 10px 11px;
+    gap: var(--ui-space-10, 10px) var(--ui-space-11, 11px);
     overflow: hidden;
     border: 1px solid color-mix(in srgb, var(--tool-accent) 24%, var(--surface-border-color));
     border-radius: 16px;
@@ -1175,8 +1177,8 @@
     --tool-accent: #c24b68;
   }
   .toolbox-start-card__icon {
-    width: 40px;
-    height: 40px;
+    width: var(--ui-layout-40, 40px);
+    height: var(--ui-layout-40, 40px);
     display: grid;
     place-items: center;
     border: 1px solid color-mix(in srgb, var(--tool-accent) 30%, var(--surface-border-color));
@@ -1187,20 +1189,20 @@
   .toolbox-start-card__copy {
     min-width: 0;
     display: grid;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
   .toolbox-start-card__meta {
-    min-height: 20px;
+    min-height: var(--ui-layout-20, 20px);
   }
   .toolbox-start-card__copy strong {
-    font-size: 13.5px;
+    font-size: var(--ui-font-13_5, 13.5px);
     line-height: 1.25;
   }
   .toolbox-start-card__copy > small {
     display: -webkit-box;
     overflow: hidden;
     color: var(--desc-color);
-    font-size: 10.5px;
+    font-size: var(--ui-font-10_5, 10.5px);
     line-height: 1.45;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
@@ -1211,31 +1213,31 @@
     display: inline-flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
     color: var(--tool-accent);
-    font-size: 10.5px;
+    font-size: var(--ui-font-10_5, 10.5px);
     font-weight: 700;
   }
   .toolbox-quick-grid {
     display: grid;
     grid-template-columns: repeat(6, minmax(0, 1fr));
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .toolbox-quick__switch,
   .toolbox-group-filter {
     display: flex;
     flex-wrap: wrap;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
   .toolbox-quick__switch {
-    margin: -3px 0 11px 28px;
+    margin: calc(-1 * var(--ui-space-3, 3px)) 0 var(--ui-space-11, 11px) var(--ui-space-28, 28px);
   }
   .toolbox-group-filter {
     position: sticky;
     top: 0;
     z-index: 6;
-    margin: -3px 0 12px;
-    padding: 9px 10px;
+    margin: calc(-1 * var(--ui-space-3, 3px)) 0 var(--ui-space-12, 12px);
+    padding: var(--ui-space-9, 9px) var(--ui-space-10, 10px);
     flex-wrap: nowrap;
     overflow-x: auto;
     border: 1px solid var(--surface-border-color);
@@ -1248,13 +1250,13 @@
     flex: 0 0 auto;
   }
   .toolbox-group-filter small {
-    min-width: 17px;
-    margin-left: 3px;
-    padding: 1px 5px;
+    min-width: var(--ui-layout-17, 17px);
+    margin-left: var(--ui-space-3, 3px);
+    padding: var(--ui-space-1, 1px) var(--ui-space-5, 5px);
     border-radius: 999px;
     color: var(--desc-color);
     background: var(--surface-muted-bg, var(--active-background-color));
-    font-size: 9px;
+    font-size: var(--ui-font-9, 9px);
     text-align: center;
   }
   .toolbox-quick-card.is-amber {
@@ -1269,7 +1271,7 @@
   .toolbox-quick-card__copy {
     min-width: 0;
     display: grid;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
 
   .toolbox-quick-card__copy strong {
@@ -1279,7 +1281,7 @@
     white-space: normal;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
-    font-size: 12.5px;
+    font-size: var(--ui-font-12_5, 12.5px);
     line-height: 1.25;
   }
   .toolbox-quick-card__copy small {
@@ -1287,15 +1289,15 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     color: var(--desc-color);
-    font-size: 9.5px;
+    font-size: var(--ui-font-9_5, 9.5px);
   }
   .toolbox-home__state {
-    min-height: 94px;
-    padding: 16px 18px;
+    min-height: var(--ui-layout-94, 94px);
+    padding: var(--ui-space-16, 16px) var(--ui-space-18, 18px);
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 13px;
+    gap: var(--ui-space-13, 13px);
     box-sizing: border-box;
     border: 1px solid var(--surface-border-color);
     border-radius: 15px;
@@ -1306,14 +1308,14 @@
     min-width: 0;
     flex: 1;
     display: grid;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
   .toolbox-home__state-copy strong {
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .toolbox-home__state-copy small {
-    font-size: 10.5px;
+    font-size: var(--ui-font-10_5, 10.5px);
     line-height: 1.5;
   }
   .toolbox-home__state.is-error {
@@ -1326,13 +1328,13 @@
   .toolbox-activity-card.b_btn {
     width: 100%;
     min-width: 0;
-    min-height: 118px;
+    min-height: var(--ui-layout-118, 118px);
     height: auto;
-    padding: 14px;
+    padding: var(--ui-space-14, 14px);
     display: grid;
-    grid-template-columns: 42px minmax(0, 1fr);
+    grid-template-columns: var(--ui-layout-42, 42px) minmax(0, 1fr);
     align-items: start;
-    gap: 11px;
+    gap: var(--ui-space-11, 11px);
     border: 1px solid var(--surface-border-color);
     border-radius: 15px;
     color: var(--text-color);
@@ -1343,8 +1345,8 @@
     white-space: normal;
   }
   .toolbox-activity-card__icon {
-    width: 42px;
-    height: 42px;
+    width: var(--ui-layout-42, 42px);
+    height: var(--ui-layout-42, 42px);
     display: grid;
     place-items: center;
     border: 1px solid color-mix(in srgb, var(--primary-color) 22%, var(--surface-border-color));
@@ -1359,77 +1361,77 @@
   .toolbox-activity-card__copy {
     min-width: 0;
     display: grid;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
   .toolbox-activity-card__topline {
     min-width: 0;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .toolbox-activity-card__badges {
     min-width: 0;
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
   .toolbox-activity-card__type {
-    max-width: 104px;
+    max-width: var(--ui-layout-104, 104px);
   }
   .toolbox-activity-card__topline small {
     overflow: hidden;
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
   .toolbox-activity-card__copy > strong {
     overflow: hidden;
-    margin-top: 2px;
-    font-size: 14px;
+    margin-top: var(--ui-space-2, 2px);
+    font-size: var(--ui-font-14, 14px);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
   .toolbox-activity-card__copy > small {
     color: var(--desc-color);
-    font-size: 9.5px;
+    font-size: var(--ui-font-9_5, 9.5px);
   }
   .toolbox-activity-card__copy > span:not(.toolbox-activity-card__topline) {
     display: -webkit-box;
     overflow: hidden;
-    min-height: 16px;
-    font-size: 11px;
+    min-height: var(--ui-layout-16, 16px);
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.45;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 1;
   }
   .toolbox-activity-card__action {
     grid-column: 2;
-    min-height: 24px;
+    min-height: var(--ui-layout-24, 24px);
     display: inline-flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
     color: var(--primary-color);
-    font-size: 10.5px;
+    font-size: var(--ui-font-10_5, 10.5px);
     font-weight: 650;
   }
   .toolbox-recent-list {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
-    gap: 10px;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--ui-layout-260, 260px)), 1fr));
+    gap: var(--ui-space-10, 10px);
   }
   .toolbox-recent-row.b_btn {
     width: 100%;
     min-width: 0;
-    min-height: 76px;
+    min-height: var(--ui-layout-76, 76px);
     height: auto;
-    padding: 10px 12px;
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     display: grid;
-    grid-template-columns: 34px minmax(0, 1fr) auto;
+    grid-template-columns: var(--ui-layout-34, 34px) minmax(0, 1fr) auto;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     border: 1px solid var(--surface-border-color);
     border-radius: 14px;
     color: var(--text-color);
@@ -1438,8 +1440,8 @@
     text-align: left;
   }
   .toolbox-recent-row__icon {
-    width: 34px;
-    height: 34px;
+    width: var(--ui-layout-34, 34px);
+    height: var(--ui-layout-34, 34px);
     display: grid;
     place-items: center;
     border-radius: 10px;
@@ -1449,7 +1451,7 @@
   .toolbox-recent-row__copy {
     min-width: 0;
     display: grid;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
   .toolbox-recent-row__copy strong,
   .toolbox-recent-row__copy small {
@@ -1458,34 +1460,34 @@
     white-space: nowrap;
   }
   .toolbox-recent-row__copy strong {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .toolbox-recent-row__copy small,
   .toolbox-recent-row__time {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
   .toolbox-catalog__controls {
-    margin-bottom: 16px;
+    margin-bottom: var(--ui-space-16, 16px);
     display: grid;
-    grid-template-columns: minmax(260px, 500px) minmax(0, 1fr);
+    grid-template-columns: minmax(var(--ui-layout-260, 260px), var(--ui-layout-500, 500px)) minmax(0, 1fr);
     align-items: center;
-    gap: 12px 18px;
+    gap: var(--ui-space-12, 12px) var(--ui-space-18, 18px);
   }
   .toolbox-catalog__notice {
-    min-height: 42px;
-    margin: -4px 0 14px;
-    padding: 7px 10px;
+    min-height: var(--ui-layout-42, 42px);
+    margin: calc(-1 * var(--ui-space-4, 4px)) 0 var(--ui-space-14, 14px);
+    padding: var(--ui-space-7, 7px) var(--ui-space-10, 10px);
     display: grid;
-    grid-template-columns: 18px minmax(0, 1fr) auto;
+    grid-template-columns: var(--ui-layout-18, 18px) minmax(0, 1fr) auto;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     box-sizing: border-box;
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     color: var(--desc-color);
     background: var(--surface-muted-bg, var(--active-background-color));
-    font-size: 10.5px;
+    font-size: var(--ui-font-10_5, 10.5px);
     line-height: 1.45;
   }
   .toolbox-catalog__notice > :first-child {
@@ -1499,9 +1501,9 @@
     position: absolute;
     z-index: 2;
     top: 50%;
-    right: 10px;
-    min-width: 38px;
-    height: 22px;
+    right: var(--ui-space-10, 10px);
+    min-width: var(--ui-layout-38, 38px);
+    height: var(--ui-layout-22, 22px);
     display: grid;
     place-items: center;
     transform: translateY(-50%);
@@ -1509,7 +1511,7 @@
     border-radius: 7px;
     color: var(--desc-color);
     background: var(--workspace-panel-bg-color);
-    font-size: 9.5px;
+    font-size: var(--ui-font-9_5, 9.5px);
     pointer-events: none;
   }
   .toolbox-catalog__search :deep(.input-container) {
@@ -1521,7 +1523,7 @@
     color: var(--text-color);
     background: var(--card-background);
     font-family: inherit;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .toolbox-catalog__search :deep(.b-input:hover) {
     border-color: var(--primary-color) !important;
@@ -1535,11 +1537,11 @@
     display: flex;
     flex-wrap: wrap;
     justify-content: flex-end;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
   .toolbox-home-groups {
     display: grid;
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
   }
   .toolbox-home-group.is-teal {
     --group-accent: var(--success-color);
@@ -1547,13 +1549,13 @@
   .toolbox-home-group__head {
     min-width: 0;
     display: grid;
-    grid-template-columns: 38px minmax(0, 1fr) auto;
+    grid-template-columns: var(--ui-layout-38, 38px) minmax(0, 1fr) auto;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .toolbox-home-group__head > span:first-child {
-    width: 38px;
-    height: 38px;
+    width: var(--ui-layout-38, 38px);
+    height: var(--ui-layout-38, 38px);
     display: grid;
     place-items: center;
     border: 1px solid color-mix(in srgb, var(--group-accent) 24%, var(--surface-border-color));
@@ -1563,12 +1565,12 @@
   }
   .toolbox-home-group__head h3 {
     margin: 0;
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
   }
   .toolbox-home-group__head p {
-    margin: 2px 0 0;
+    margin: var(--ui-space-2, 2px) 0 0;
     color: var(--desc-color);
-    font-size: 10.5px;
+    font-size: var(--ui-font-10_5, 10.5px);
     line-height: 1.45;
   }
   .toolbox-card-wrap {
@@ -1596,15 +1598,15 @@
   .toolbox-card__pin-wrap {
     position: absolute;
     z-index: 3;
-    top: 8px;
-    right: 8px;
+    top: var(--ui-space-8, 8px);
+    right: var(--ui-space-8, 8px);
     opacity: 0;
     transition: opacity 0.16s ease;
   }
   .toolbox-card__pin.b_btn {
-    width: 28px;
-    min-width: 28px;
-    height: 28px;
+    width: var(--ui-layout-28, 28px);
+    min-width: var(--ui-layout-28, 28px);
+    height: var(--ui-layout-28, 28px);
     padding: 0;
     display: grid;
     place-items: center;
@@ -1679,90 +1681,91 @@
 
   @media (max-width: 767px) {
     .toolbox-home {
-      padding: 13px 12px calc(28px + env(safe-area-inset-bottom));
+      padding: var(--ui-space-13, 13px) var(--ui-space-12, 12px)
+        calc(var(--ui-space-28, 28px) + env(safe-area-inset-bottom));
     }
     .toolbox-overview {
       min-height: 0;
-      padding: 4px 0 16px;
+      padding: var(--ui-space-4, 4px) 0 var(--ui-space-16, 16px);
       grid-template-columns: 1fr;
-      gap: 12px;
+      gap: var(--ui-space-12, 12px);
     }
     .toolbox-overview h1 {
-      font-size: 28px;
+      font-size: var(--ui-font-28, 28px);
     }
     .toolbox-overview p {
-      font-size: 11.5px;
+      font-size: var(--ui-font-11_5, 11.5px);
     }
     .toolbox-overview__assets {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
     .toolbox-asset.b_btn {
-      min-height: 45px;
-      padding: 6px 8px;
-      grid-template-columns: 30px minmax(0, 1fr);
+      min-height: var(--ui-layout-45, 45px);
+      padding: var(--ui-space-6, 6px) var(--ui-space-8, 8px);
+      grid-template-columns: var(--ui-layout-30, 30px) minmax(0, 1fr);
     }
     .toolbox-asset__icon {
-      width: 30px;
-      height: 30px;
-      padding: 4px;
+      width: var(--ui-layout-30, 30px);
+      height: var(--ui-layout-30, 30px);
+      padding: var(--ui-space-4, 4px);
     }
     .toolbox-guest-guide {
       min-height: 0;
-      margin-top: 16px;
-      padding: 14px;
-      grid-template-columns: 38px minmax(0, 1fr);
+      margin-top: var(--ui-space-16, 16px);
+      padding: var(--ui-space-14, 14px);
+      grid-template-columns: var(--ui-layout-38, 38px) minmax(0, 1fr);
       border-radius: 14px;
     }
     .toolbox-guest-guide__icon {
-      width: 38px;
-      height: 38px;
+      width: var(--ui-layout-38, 38px);
+      height: var(--ui-layout-38, 38px);
     }
     .toolbox-guest-guide > .b_btn {
       grid-column: 1 / -1;
       width: 100%;
-      min-height: 44px;
+      min-height: var(--ui-layout-44, 44px);
     }
     .toolbox-section {
-      margin-top: 24px;
+      margin-top: var(--ui-space-24, 24px);
     }
     .toolbox-start-grid {
       grid-template-columns: 1fr;
-      gap: 8px;
+      gap: var(--ui-space-8, 8px);
     }
     .toolbox-start-card.b_btn {
-      min-height: 96px;
-      padding: 11px;
-      grid-template-columns: 38px minmax(0, 1fr);
-      gap: 8px;
+      min-height: var(--ui-layout-96, 96px);
+      padding: var(--ui-space-11, 11px);
+      grid-template-columns: var(--ui-layout-38, 38px) minmax(0, 1fr);
+      gap: var(--ui-space-8, 8px);
       border-radius: 14px;
     }
     .toolbox-start-card__icon {
-      width: 38px;
-      height: 38px;
+      width: var(--ui-layout-38, 38px);
+      height: var(--ui-layout-38, 38px);
       border-radius: 10px;
     }
     .toolbox-start-card__copy {
-      gap: 4px;
+      gap: var(--ui-space-4, 4px);
     }
     .toolbox-start-card__copy strong {
-      font-size: 12.5px;
+      font-size: var(--ui-font-12_5, 12.5px);
     }
     .toolbox-start-card__copy > small {
-      font-size: 9.5px;
+      font-size: var(--ui-font-9_5, 9.5px);
     }
     .toolbox-quick-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 8px;
+      gap: var(--ui-space-8, 8px);
     }
     .toolbox-quick__switch,
     .toolbox-group-filter {
       margin-left: 0;
     }
     .toolbox-group-filter {
-      margin-right: -12px;
-      margin-left: -12px;
-      padding-right: 12px;
-      padding-left: 12px;
+      margin-right: calc(-1 * var(--ui-space-12, 12px));
+      margin-left: calc(-1 * var(--ui-space-12, 12px));
+      padding-right: var(--ui-space-12, 12px);
+      padding-left: var(--ui-space-12, 12px);
       border-right: 0;
       border-left: 0;
       border-radius: 0;
@@ -1771,20 +1774,20 @@
       display: none;
     }
     .toolbox-section__head h2 {
-      font-size: 18px;
+      font-size: var(--ui-font-18, 18px);
     }
     .toolbox-home__state {
-      min-height: 86px;
-      padding: 13px;
+      min-height: var(--ui-layout-86, 86px);
+      padding: var(--ui-space-13, 13px);
       justify-content: flex-start;
       border-radius: 14px;
     }
     .toolbox-home__state > .b_btn {
-      min-height: 44px;
+      min-height: var(--ui-layout-44, 44px);
     }
     .toolbox-activity-card.b_btn {
-      min-height: 104px;
-      padding: 12px;
+      min-height: var(--ui-layout-104, 104px);
+      padding: var(--ui-space-12, 12px);
       border: 0;
       border-radius: 0;
       box-shadow: none;
@@ -1793,63 +1796,63 @@
       border-top: 1px solid var(--surface-divider-color);
     }
     .toolbox-activity-card__action {
-      min-height: 26px;
+      min-height: var(--ui-layout-26, 26px);
     }
     .toolbox-recent-row.b_btn {
-      min-height: 62px;
-      padding: 8px 10px;
-      grid-template-columns: 34px minmax(0, 1fr);
+      min-height: var(--ui-layout-62, 62px);
+      padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px);
+      grid-template-columns: var(--ui-layout-34, 34px) minmax(0, 1fr);
     }
     .toolbox-recent-list {
       grid-template-columns: 1fr;
-      gap: 8px;
+      gap: var(--ui-space-8, 8px);
     }
     .toolbox-recent-row__time {
       grid-column: 2;
       grid-row: 2;
     }
     .toolbox-catalog__controls {
-      gap: 10px;
+      gap: var(--ui-space-10, 10px);
     }
     .toolbox-catalog__notice {
-      min-height: 48px;
-      grid-template-columns: 18px minmax(0, 1fr);
+      min-height: var(--ui-layout-48, 48px);
+      grid-template-columns: var(--ui-layout-18, 18px) minmax(0, 1fr);
     }
     .toolbox-catalog__notice > .b_btn {
       grid-column: 1 / -1;
       width: 100%;
-      min-height: 40px;
+      min-height: var(--ui-layout-40, 40px);
     }
     .toolbox-catalog__search > span {
       display: none;
     }
     .toolbox-catalog__search :deep(.b-input) {
-      min-height: 44px;
+      min-height: var(--ui-layout-44, 44px);
     }
     .toolbox-category-filter :deep(.b-chip--interactive) {
-      min-height: 44px;
-      padding-right: 14px;
-      padding-left: 14px;
+      min-height: var(--ui-layout-44, 44px);
+      padding-right: var(--ui-space-14, 14px);
+      padding-left: var(--ui-space-14, 14px);
     }
     .toolbox-home-groups {
-      gap: 20px;
+      gap: var(--ui-space-20, 20px);
     }
     .toolbox-home-group__head {
-      grid-template-columns: 36px minmax(0, 1fr) auto;
+      grid-template-columns: var(--ui-layout-36, 36px) minmax(0, 1fr) auto;
     }
     .toolbox-home-group__head > span:first-child {
-      width: 36px;
-      height: 36px;
+      width: var(--ui-layout-36, 36px);
+      height: var(--ui-layout-36, 36px);
     }
     .toolbox-card__pin-wrap {
-      top: 4px;
-      right: 4px;
+      top: var(--ui-space-4, 4px);
+      right: var(--ui-space-4, 4px);
       opacity: 1;
     }
     .toolbox-card__pin.b_btn {
-      width: 44px;
-      min-width: 44px;
-      height: 44px;
+      width: var(--ui-layout-44, 44px);
+      min-width: var(--ui-layout-44, 44px);
+      height: var(--ui-layout-44, 44px);
     }
   }
 
@@ -1886,7 +1889,7 @@
   }
   .toolbox-overview h1 {
     margin: 0;
-    font-size: 28px;
+    font-size: var(--ui-font-28, 28px);
     font-weight: 780;
     letter-spacing: -0.052em;
     line-height: 1.08;
@@ -1899,32 +1902,32 @@
     min-width: 0;
   }
   .toolbox-task-list .toolbox-task-row .toolbox-activity-card.b_btn {
-    padding-right: 60px;
+    padding-right: var(--ui-space-60, 60px);
   }
   .toolbox-task-dismiss {
     position: absolute;
-    right: 8px;
+    right: var(--ui-space-8, 8px);
     top: 50%;
     transform: translateY(-50%);
   }
   .toolbox-task-dismiss .b_btn {
-    width: 44px;
-    height: 44px;
+    width: var(--ui-layout-44, 44px);
+    height: var(--ui-layout-44, 44px);
     padding: 0;
     color: var(--workspace-muted);
     background: transparent;
   }
   .toolbox-task-list {
     display: grid;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .toolbox-task-list .toolbox-activity-card {
     min-height: 0;
     width: 100%;
     display: flex;
     align-items: center;
-    padding: 12px 16px;
-    gap: 12px;
+    padding: var(--ui-space-12, 12px) var(--ui-space-16, 16px);
+    gap: var(--ui-space-12, 12px);
   }
   .toolbox-task-list .toolbox-activity-card__copy {
     flex: 1;
@@ -1966,12 +1969,12 @@
   .workshop-attention.b_btn {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     width: 100%;
     height: auto;
-    min-height: 44px;
-    margin-bottom: 20px;
-    padding: 10px 14px;
+    min-height: var(--ui-layout-44, 44px);
+    margin-bottom: var(--ui-space-20, 20px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-14, 14px);
     border: 1px solid var(--workshop-border);
     border-radius: 10px;
     background: var(--workspace-content);
@@ -2013,21 +2016,21 @@
   @media (min-width: 1200px) {
     .toolbox-catalog__layout {
       display: grid;
-      grid-template-columns: 180px minmax(0, 1fr);
-      gap: 24px;
+      grid-template-columns: var(--ui-layout-180, 180px) minmax(0, 1fr);
+      gap: var(--ui-space-24, 24px);
       align-items: start;
     }
     .toolbox-catalog__layout > .toolbox-group-filter {
       flex-direction: column;
-      top: 16px;
+      top: var(--ui-space-16, 16px);
       margin: 0;
-      padding: 8px;
+      padding: var(--ui-space-8, 8px);
       overflow: visible;
     }
     .toolbox-catalog__layout > .toolbox-group-filter :deep(.b-chip) {
       width: 100%;
       justify-content: space-between;
-      min-height: 42px;
+      min-height: var(--ui-layout-42, 42px);
       border-radius: 8px;
     }
     .toolbox-catalog__controls {
@@ -2077,21 +2080,21 @@
   .toolbox-home__balances {
     display: grid;
     grid-template-columns: repeat(2, max-content);
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .toolbox-home__balance.b_btn {
     .workspace-content-surface();
     --balance-accent: var(--workspace-purple-text);
     position: relative;
     display: grid;
-    grid-template-columns: auto auto 14px;
+    grid-template-columns: auto auto var(--ui-layout-14, 14px);
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     width: 100%;
     min-width: 0;
     height: auto;
-    min-height: 40px;
-    padding: 8px 10px;
+    min-height: var(--ui-layout-40, 40px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px);
     border: 1px solid var(--workshop-border);
     border-radius: 14px;
     text-align: left;
@@ -2106,9 +2109,9 @@
     grid-row: 1;
     display: flex;
     align-items: center;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     color: var(--workspace-muted);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .balance-label > :first-child {
     color: var(--balance-accent);
@@ -2117,7 +2120,7 @@
     grid-column: 2;
     grid-row: 1;
     color: var(--workspace-text);
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     font-weight: 700;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
@@ -2129,17 +2132,17 @@
     color: var(--workspace-muted);
   }
   .toolbox-home__create.b_btn {
-    height: 40px;
-    gap: 6px;
+    height: var(--ui-layout-40, 40px);
+    gap: var(--ui-space-6, 6px);
     border-radius: 10px;
   }
   .workshop-view-switch {
     position: relative;
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    width: min(300px, 100%);
-    padding: 4px;
-    margin: 24px 0 28px;
+    width: min(var(--ui-layout-300, 300px), 100%);
+    padding: var(--ui-space-4, 4px);
+    margin: var(--ui-space-24, 24px) 0 var(--ui-space-28, 28px);
     border: 0;
     border-radius: 12px;
     background: var(--workspace-hover);
@@ -2147,8 +2150,8 @@
   }
   .workshop-view-switch__indicator {
     position: absolute;
-    inset: 4px auto 4px 4px;
-    width: calc(50% - 4px);
+    inset: var(--ui-space-4, 4px) auto var(--ui-space-4, 4px) var(--ui-space-4, 4px);
+    width: calc(50% - var(--ui-space-4, 4px));
     border-radius: 9px;
     background: var(--workspace-content);
     border: 1px solid var(--workshop-border);
@@ -2161,8 +2164,8 @@
     width: 100%;
     justify-content: center;
     font-weight: 600;
-    min-height: 36px;
-    padding: 8px 14px;
+    min-height: var(--ui-layout-36, 36px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-14, 14px);
     border: 0;
     background: transparent;
     color: var(--workspace-muted);
@@ -2176,8 +2179,8 @@
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 8px 12px;
-    margin-bottom: 16px;
+    gap: var(--ui-space-8, 8px) var(--ui-space-12, 12px);
+    margin-bottom: var(--ui-space-16, 16px);
   }
   .toolbox-section__head > .b_btn {
     background: transparent;
@@ -2186,7 +2189,7 @@
   .toolbox-activity-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
   .workshop-project.b_btn {
     .workspace-content-surface();
@@ -2198,8 +2201,8 @@
     width: 100%;
     min-width: 0;
     height: auto;
-    padding: 16px;
-    gap: 12px;
+    padding: var(--ui-space-16, 16px);
+    gap: var(--ui-space-12, 12px);
     border: 1px solid var(--workshop-border);
     border-radius: 16px;
     color: var(--workspace-text);
@@ -2216,12 +2219,12 @@
   .workshop-project__head {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     min-width: 0;
   }
   .workshop-project__icon {
-    flex: 0 0 42px;
-    height: 42px;
+    flex: 0 0 var(--ui-layout-42, 42px);
+    height: var(--ui-layout-42, 42px);
     display: grid;
     place-items: center;
     border-radius: 12px;
@@ -2233,10 +2236,10 @@
     flex: 1;
     min-width: 0;
     display: grid;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
   .workshop-project__identity strong {
-    font-size: 17px;
+    font-size: var(--ui-font-17, 17px);
     font-weight: 600;
     line-height: 1.45;
   }
@@ -2251,7 +2254,7 @@
   .workshop-project__identity .toolbox-activity-card__type {
     max-width: none;
     color: var(--project-accent);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .workshop-project__head :deep(.b-chip) {
     flex-shrink: 0;
@@ -2259,17 +2262,17 @@
   .workshop-project__next {
     display: flex;
     align-items: baseline;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .workshop-project__next small {
     flex-shrink: 0;
   }
   .workshop-project__next small {
     color: var(--workspace-muted);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .workshop-project__next > span {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     line-height: 1.6;
     color: var(--workspace-text);
   }
@@ -2281,33 +2284,33 @@
     display: flex;
     align-items: flex-end;
     justify-content: space-between;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .workshop-project__meta {
     display: flex;
     align-items: baseline;
     flex-wrap: wrap;
-    gap: 4px 10px;
+    gap: var(--ui-space-4, 4px) var(--ui-space-10, 10px);
     color: var(--workspace-muted);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .workshop-project__meta small {
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
   .workshop-project__action {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
     color: var(--workspace-purple-text);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 600;
     flex-shrink: 0;
   }
   .toolbox-task-list .toolbox-activity-card.b_btn {
     display: grid;
-    grid-template-columns: 40px minmax(0, 1fr) auto;
-    gap: 14px;
-    padding: 16px;
+    grid-template-columns: var(--ui-layout-40, 40px) minmax(0, 1fr) auto;
+    gap: var(--ui-space-14, 14px);
+    padding: var(--ui-space-16, 16px);
     border: 1px solid var(--workshop-border);
     border-radius: 14px;
     box-shadow: none;
@@ -2316,18 +2319,18 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
   }
   .toolbox-task-time {
     align-self: center;
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     white-space: nowrap;
   }
   .toolbox-task-list .toolbox-activity-card__action {
     grid-column: auto;
     color: var(--workspace-purple-text);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .toolbox-activity-card__icon {
     border: 0;
@@ -2338,11 +2341,11 @@
     width: 100%;
     min-width: 0;
     height: auto;
-    min-height: 76px;
-    padding: 14px 12px;
+    min-height: var(--ui-layout-76, 76px);
+    padding: var(--ui-space-14, 14px) var(--ui-space-12, 12px);
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     border: 1px solid var(--workspace-divider);
     border-radius: 14px;
     text-align: left;
@@ -2355,8 +2358,8 @@
     flex-shrink: 0;
     display: grid;
     place-items: center;
-    width: 40px;
-    height: 40px;
+    width: var(--ui-layout-40, 40px);
+    height: var(--ui-layout-40, 40px);
     border: 0;
     border-radius: 11px;
     color: var(--tool-accent, var(--workspace-purple-text));
@@ -2364,44 +2367,44 @@
   }
   .toolbox-home-group {
     --group-accent: var(--workspace-purple-text);
-    scroll-margin-top: 76px;
+    scroll-margin-top: var(--ui-space-76, 76px);
     padding: 0;
     display: grid;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
     border: 0;
     border-radius: 0;
     box-shadow: none;
   }
   .toolbox-home-groups {
     display: grid;
-    gap: 28px;
+    gap: var(--ui-space-28, 28px);
   }
   .toolbox-home-group__head > span:first-child {
     border: 0;
     background: var(--workspace-canvas);
   }
   .toolbox-home-group__head h3 {
-    font-size: 16px;
+    font-size: var(--ui-font-16, 16px);
   }
   .toolbox-home-group__head p {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .toolbox-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
-    gap: 12px;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--ui-layout-260, 260px)), 1fr));
+    gap: var(--ui-space-12, 12px);
   }
   .toolbox-card.b_btn {
     .workspace-content-surface();
     --tool-accent: var(--workspace-purple-text);
     display: grid;
-    grid-template-columns: 40px minmax(0, 1fr);
+    grid-template-columns: var(--ui-layout-40, 40px) minmax(0, 1fr);
     align-items: start;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     width: 100%;
     min-width: 0;
     height: 100%;
-    padding: 18px;
+    padding: var(--ui-space-18, 18px);
     border: 1px solid var(--workshop-border);
     border-radius: 14px;
     text-align: left;
@@ -2420,12 +2423,12 @@
   }
   .toolbox-card__copy {
     display: grid;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     min-width: 0;
-    padding-right: 16px;
+    padding-right: var(--ui-space-16, 16px);
   }
   .toolbox-card__copy strong {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     white-space: normal;
   }
   .toolbox-card__copy > span {
@@ -2434,11 +2437,11 @@
     -webkit-line-clamp: 2;
     overflow: hidden;
     color: var(--workspace-muted);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.6;
   }
   .toolbox-card__copy small {
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     color: var(--workspace-muted);
     white-space: normal;
   }
@@ -2469,7 +2472,7 @@
   @media (max-width: 767px) {
     .toolbox-overview {
       grid-template-columns: minmax(0, 1fr) auto;
-      gap: 16px 10px;
+      gap: var(--ui-space-16, 16px) var(--ui-space-10, 10px);
     }
     .toolbox-overview__copy {
       display: contents;
@@ -2485,8 +2488,8 @@
     .toolbox-home__create.b_btn {
       grid-column: 2;
       grid-row: 1;
-      height: 44px;
-      padding: 0 12px;
+      height: var(--ui-layout-44, 44px);
+      padding: 0 var(--ui-space-12, 12px);
     }
     .toolbox-home__balances {
       grid-column: 1 / -1;
@@ -2494,35 +2497,35 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
     .toolbox-home__balance.b_btn {
-      padding: 10px 12px;
+      padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     }
     .toolbox-home__balance strong {
-      font-size: 14px;
+      font-size: var(--ui-font-14, 14px);
     }
     .toolbox-overview h1 {
-      font-size: 25px;
+      font-size: var(--ui-font-25, 25px);
       overflow-wrap: anywhere;
     }
     .toolbox-activity-grid {
       grid-template-columns: minmax(0, 1fr);
-      gap: 12px;
+      gap: var(--ui-space-12, 12px);
     }
     .workshop-project.b_btn {
-      padding: 14px;
-      gap: 10px;
+      padding: var(--ui-space-14, 14px);
+      gap: var(--ui-space-10, 10px);
     }
     .workshop-project__head {
       flex-wrap: wrap;
-      gap: 10px;
+      gap: var(--ui-space-10, 10px);
     }
     .workshop-project__identity {
-      min-width: 140px;
+      min-width: var(--ui-layout-140, 140px);
     }
     .workshop-project__identity strong {
-      font-size: 16px;
+      font-size: var(--ui-font-16, 16px);
     }
     .workshop-project__head :deep(.b-chip) {
-      margin-left: 52px;
+      margin-left: var(--ui-space-52, 52px);
     }
     .workshop-project__foot {
       flex-wrap: wrap;
@@ -2536,19 +2539,19 @@
     }
     .workshop-view-switch :deep(.tab) {
       box-sizing: border-box;
-      height: 36px;
-      min-height: 36px;
-      padding: 0 8px;
+      height: var(--ui-layout-36, 36px);
+      min-height: var(--ui-layout-36, 36px);
+      padding: 0 var(--ui-space-8, 8px);
       line-height: 1.4;
     }
     .toolbox-task-list .toolbox-activity-card.b_btn {
-      grid-template-columns: 40px minmax(0, 1fr);
+      grid-template-columns: var(--ui-layout-40, 40px) minmax(0, 1fr);
     }
     .toolbox-task-meta {
       grid-column: 2;
       min-width: 0;
       flex-wrap: wrap;
-      gap: 6px 12px;
+      gap: var(--ui-space-6, 6px) var(--ui-space-12, 12px);
     }
     .toolbox-task-list .toolbox-activity-card__action {
       grid-column: 2;
@@ -2557,13 +2560,13 @@
       grid-template-columns: minmax(0, 1fr);
     }
     .toolbox-card__pin.b_btn {
-      min-width: 44px;
-      width: 44px;
-      height: 44px;
+      min-width: var(--ui-layout-44, 44px);
+      width: var(--ui-layout-44, 44px);
+      height: var(--ui-layout-44, 44px);
       box-shadow: none;
     }
     .toolbox-card__copy {
-      padding-right: 26px;
+      padding-right: var(--ui-space-26, 26px);
     }
   }
   .workshop-project.b_btn,
@@ -2577,7 +2580,7 @@
     background: color-mix(in srgb, var(--tool-accent, var(--workspace-purple-text)) 9%, var(--workspace-content));
   }
   .toolbox-tasks {
-    scroll-margin-top: 20px;
+    scroll-margin-top: var(--ui-space-20, 20px);
   }
   .workshop-attention.b_btn {
     background: var(--workspace-purple-selected);
@@ -2595,29 +2598,29 @@
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 12px 24px;
-    margin-top: 24px;
+    gap: var(--ui-space-12, 12px) var(--ui-space-24, 24px);
+    margin-top: var(--ui-space-24, 24px);
     box-shadow: none;
   }
   .toolbox-external-card__copy {
-    flex: 1 1 240px;
+    flex: 1 1 var(--ui-layout-240, 240px);
     min-width: 0;
   }
   .toolbox-external-card h3 {
     margin: 0;
     color: var(--workspace-text);
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
     line-height: 1.5;
   }
   .toolbox-external-card p {
-    margin: 4px 0 0;
+    margin: var(--ui-space-4, 4px) 0 0;
     color: var(--workspace-muted);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.6;
     overflow-wrap: anywhere;
   }
   .toolbox-external-link.b_btn {
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     flex-shrink: 0;
     color: var(--workspace-purple-text);
   }
@@ -2627,7 +2630,7 @@
       order: 1;
     }
     .toolbox-external-card {
-      gap: 8px;
+      gap: var(--ui-space-8, 8px);
     }
   }
 </style>

@@ -45,9 +45,9 @@
     --badge-accent: var(--primary-color);
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    min-height: 24px;
-    padding: 2px 9px 2px 5px;
+    gap: var(--ui-space-5, 5px);
+    min-height: var(--ui-control-24, 24px);
+    padding: var(--ui-space-2, 2px) var(--ui-space-9, 9px) var(--ui-space-2, 2px) var(--ui-space-5, 5px);
     border: 1px solid color-mix(in srgb, var(--badge-color) 24%, transparent);
     border-radius: 999px;
     color: var(--badge-color);
@@ -57,7 +57,7 @@
       color-mix(in srgb, var(--badge-accent) 6%, var(--card-background, var(--background-color)))
     );
     box-shadow: inset 0 1px 0 color-mix(in srgb, white 13%, transparent);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 600;
     line-height: 1;
     white-space: nowrap;
@@ -89,10 +89,10 @@
   }
 
   .bookmark-capability--compact {
-    width: 25px;
-    min-width: 25px;
-    height: 25px;
-    min-height: 25px;
+    width: var(--ui-control-25, 25px);
+    min-width: var(--ui-control-25, 25px);
+    height: var(--ui-control-25, 25px);
+    min-height: var(--ui-control-25, 25px);
     justify-content: center;
     padding: 0;
     border-radius: 8px;
@@ -100,8 +100,8 @@
 
   .bookmark-capability__icon {
     display: inline-flex;
-    width: 17px;
-    height: 17px;
+    width: var(--ui-layout-17, 17px);
+    height: var(--ui-layout-17, 17px);
     align-items: center;
     justify-content: center;
     border-radius: 6px;
@@ -110,8 +110,8 @@
   }
 
   .bookmark-capability--compact .bookmark-capability__icon {
-    width: 18px;
-    height: 18px;
+    width: var(--ui-layout-18, 18px);
+    height: var(--ui-layout-18, 18px);
     background: transparent;
   }
 

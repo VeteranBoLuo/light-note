@@ -2,7 +2,7 @@
   <BModal
     v-model:visible="visible"
     :title="t('communityChat.report.title')"
-    width="min(500px, 92vw)"
+    width="min(var(--ui-layout-500, 500px), 92vw)"
     :show-footer="false"
     :mask-closable="!submitting"
   >
@@ -106,7 +106,7 @@
 <style scoped lang="less">
   .chat-report-modal {
     display: grid;
-    gap: 11px;
+    gap: var(--ui-space-11, 11px);
     color: var(--text-color);
   }
 
@@ -118,23 +118,23 @@
   }
 
   .chat-report-modal__description {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .chat-report-modal__evidence-hint {
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .chat-report-modal label {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 650;
   }
 
   .chat-report-modal__actions {
-    margin-top: 3px;
+    margin-top: var(--ui-space-3, 3px);
     display: flex;
     justify-content: flex-end;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   @media (max-width: 767px) {

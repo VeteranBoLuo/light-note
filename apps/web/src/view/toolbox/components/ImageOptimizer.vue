@@ -435,11 +435,11 @@
 <style scoped lang="less">
   .image-tool {
     display: grid;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
   }
   .image-tool__drop-zone {
-    min-height: 200px;
-    padding: 20px;
+    min-height: var(--ui-layout-200, 200px);
+    padding: var(--ui-space-20, 20px);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -460,9 +460,9 @@
     background: color-mix(in srgb, var(--primary-color) 8%, var(--card-background));
   }
   .image-tool__drop-icon {
-    width: 44px;
-    height: 44px;
-    margin-bottom: 10px;
+    width: var(--ui-layout-44, 44px);
+    height: var(--ui-layout-44, 44px);
+    margin-bottom: var(--ui-space-10, 10px);
     display: grid;
     place-items: center;
     border: 1px solid color-mix(in srgb, var(--primary-color) 20%, var(--surface-border-color));
@@ -473,10 +473,10 @@
   }
   .image-tool__drop-zone h2 {
     margin: 0;
-    font-size: 21px;
+    font-size: var(--ui-font-21, 21px);
   }
   .image-tool__drop-zone p {
-    margin: 8px 0 14px;
+    margin: var(--ui-space-8, 8px) 0 var(--ui-space-14, 14px);
     color: var(--desc-color);
     line-height: 1.65;
   }
@@ -484,13 +484,16 @@
   .image-tool__settings :deep(.b_btn),
   .image-tool__summary :deep(.b_btn),
   .image-result-card :deep(.b_btn) {
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
   .image-tool__settings {
-    padding: 14px;
+    padding: var(--ui-space-14, 14px);
     display: grid;
-    grid-template-columns: minmax(140px, 0.8fr) minmax(180px, 1fr) auto auto;
-    gap: 10px;
+    grid-template-columns: minmax(var(--ui-layout-140, 140px), 0.8fr) minmax(
+        var(--ui-layout-180, 180px),
+        1fr
+      ) auto auto;
+    gap: var(--ui-space-10, 10px);
     align-items: end;
     border: 1px solid var(--surface-border-color);
     border-radius: 15px;
@@ -499,20 +502,20 @@
   .image-tool__setting {
     min-width: 0;
     display: grid;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   .image-tool__setting label {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 600;
   }
   .image-tool__format-hint {
-    margin: -5px 2px 0;
+    margin: calc(-1 * var(--ui-space-5, 5px)) var(--ui-space-2, 2px) 0;
     display: flex;
     align-items: center;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.5;
   }
   .image-tool__format-hint :deep(svg) {
@@ -520,39 +523,39 @@
     color: var(--primary-color);
   }
   .image-tool__summary {
-    min-height: 66px;
-    padding: 11px 12px 11px 15px;
+    min-height: var(--ui-layout-66, 66px);
+    padding: var(--ui-space-11, 11px) var(--ui-space-12, 12px) var(--ui-space-11, 11px) var(--ui-space-15, 15px);
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
-    gap: 20px;
+    gap: var(--ui-space-20, 20px);
     border: 1px solid var(--surface-border-color);
     border-radius: 14px;
     background: var(--card-background);
   }
   .image-tool__summary-files {
-    min-width: 108px;
+    min-width: var(--ui-layout-108, 108px);
     display: grid;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
   .image-tool__summary strong {
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
   }
   .image-tool__summary span {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .image-tool__summary-flow {
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .image-tool__summary-metric {
-    min-width: 118px;
-    padding: 8px 11px;
+    min-width: var(--ui-layout-118, 118px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-11, 11px);
     display: grid;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
     border: 1px solid var(--surface-border-color);
     border-radius: 11px;
     background: var(--surface-subtle-bg, var(--hover-background));
@@ -562,7 +565,7 @@
   }
   .image-tool__summary-metric small {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .image-tool__summary-metric .is-saving,
   .image-result-card__copy .is-saving {
@@ -576,10 +579,10 @@
     color: var(--error-color, #d93b3b);
   }
   .image-tool__summary-arrow {
-    width: 28px;
-    height: 28px;
+    width: var(--ui-layout-28, 28px);
+    height: var(--ui-layout-28, 28px);
     display: grid;
-    flex: 0 0 28px;
+    flex: 0 0 var(--ui-layout-28, 28px);
     place-items: center;
     border: 1px solid var(--surface-border-color);
     border-radius: 50%;
@@ -588,13 +591,13 @@
   }
   .image-result-list {
     display: grid;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .image-result-card {
     min-width: 0;
-    padding: 12px;
+    padding: var(--ui-space-12, 12px);
     display: grid;
-    gap: 11px;
+    gap: var(--ui-space-11, 11px);
     border: 1px solid var(--surface-border-color);
     border-radius: 15px;
     background: var(--card-background);
@@ -604,14 +607,14 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .image-result-card__comparison {
     min-width: 0;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 34px minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) var(--ui-layout-34, 34px) minmax(0, 1fr);
     align-items: stretch;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .image-result-card__side {
     min-width: 0;
@@ -628,26 +631,26 @@
   }
   .image-result-card__side-head {
     min-width: 0;
-    min-height: 32px;
-    padding: 6px 9px;
+    min-height: var(--ui-layout-32, 32px);
+    padding: var(--ui-space-6, 6px) var(--ui-space-9, 9px);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     box-sizing: border-box;
     background: var(--card-background);
   }
   .image-result-card__side-head strong {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .image-result-card__side-head span {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-variant-numeric: tabular-nums;
   }
   .image-result-card__preview {
     width: 100%;
-    height: 118px;
+    height: var(--ui-layout-118, 118px);
     overflow: hidden;
     border-top: 1px solid var(--surface-divider-color);
     border-bottom: 1px solid var(--surface-divider-color);
@@ -667,17 +670,17 @@
   .image-result-card__preview.is-empty > span {
     display: grid;
     place-items: center;
-    gap: 6px;
-    font-size: 11px;
+    gap: var(--ui-space-6, 6px);
+    font-size: var(--ui-font-11, 11px);
   }
   .image-result-card__side > small {
-    min-height: 27px;
-    padding: 5px 9px;
+    min-height: var(--ui-layout-27, 27px);
+    padding: var(--ui-space-5, 5px) var(--ui-space-9, 9px);
     display: block;
     box-sizing: border-box;
     color: var(--desc-color);
     background: var(--card-background);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-variant-numeric: tabular-nums;
   }
   .image-result-card__bridge {
@@ -685,8 +688,8 @@
     place-items: center;
   }
   .image-result-card__bridge span {
-    width: 30px;
-    height: 30px;
+    width: var(--ui-layout-30, 30px);
+    height: var(--ui-layout-30, 30px);
     display: grid;
     place-items: center;
     border: 1px solid var(--surface-border-color);
@@ -697,7 +700,7 @@
   .image-result-card__copy {
     min-width: 0;
     display: grid;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
   .image-result-card__copy strong {
     overflow: hidden;
@@ -706,15 +709,15 @@
   }
   .image-result-card__copy span {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .image-result-card__actions {
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
   .image-result-card__actions > :deep(.b_btn:last-child) {
-    width: 32px;
+    width: var(--ui-layout-32, 32px);
     padding: 0;
     color: var(--desc-color);
     background: transparent;
@@ -726,11 +729,11 @@
   }
   @media (max-width: 767px) {
     .image-tool {
-      gap: 13px;
+      gap: var(--ui-space-13, 13px);
     }
     .image-tool__drop-zone {
-      min-height: 220px;
-      padding: 20px 16px;
+      min-height: var(--ui-layout-220, 220px);
+      padding: var(--ui-space-20, 20px) var(--ui-space-16, 16px);
       border-radius: 16px;
     }
     .image-tool__settings {
@@ -745,7 +748,7 @@
     }
     .image-tool__summary {
       grid-template-columns: 1fr;
-      gap: 11px;
+      gap: var(--ui-space-11, 11px);
     }
     .image-tool__summary-files {
       min-width: 0;
@@ -754,8 +757,8 @@
     }
     .image-tool__summary-flow {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) 26px minmax(0, 1fr);
-      gap: 6px;
+      grid-template-columns: minmax(0, 1fr) var(--ui-layout-26, 26px) minmax(0, 1fr);
+      gap: var(--ui-space-6, 6px);
     }
     .image-tool__summary-metric {
       min-width: 0;
@@ -766,24 +769,24 @@
       width: 100%;
     }
     .image-result-card {
-      padding: 10px;
+      padding: var(--ui-space-10, 10px);
     }
     .image-result-card__preview {
-      height: 92px;
+      height: var(--ui-layout-92, 92px);
     }
     .image-result-card__comparison {
-      grid-template-columns: minmax(0, 1fr) 24px minmax(0, 1fr);
-      gap: 5px;
+      grid-template-columns: minmax(0, 1fr) var(--ui-layout-24, 24px) minmax(0, 1fr);
+      gap: var(--ui-space-5, 5px);
     }
     .image-result-card__bridge span {
-      width: 24px;
-      height: 24px;
+      width: var(--ui-layout-24, 24px);
+      height: var(--ui-layout-24, 24px);
     }
     .image-result-card__side-head {
-      min-height: 46px;
+      min-height: var(--ui-layout-46, 46px);
       align-items: flex-start;
       flex-direction: column;
-      gap: 1px;
+      gap: var(--ui-space-1, 1px);
     }
     .image-result-card__actions {
       justify-content: flex-end;

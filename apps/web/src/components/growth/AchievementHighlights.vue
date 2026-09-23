@@ -60,14 +60,14 @@
 </script>
 
 <style scoped lang="less">
-  .achievement-highlights { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
-  section { min-width: 0; padding: 14px; border: 1px solid var(--card-border-color); border-radius: 13px; background: var(--workbench-subcard-bg); }
-  h2 { display: flex; align-items: center; gap: 7px; margin: 0 0 10px; color: var(--text-color); font-size: 14px; }
+  .achievement-highlights { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--ui-space-14, 14px); }
+  section { min-width: 0; padding: var(--ui-space-14, 14px); border: 1px solid var(--card-border-color); border-radius: 13px; background: var(--workbench-subcard-bg); }
+  h2 { display: flex; align-items: center; gap: var(--ui-space-7, 7px); margin: 0 0 var(--ui-space-10, 10px); color: var(--text-color); font-size: var(--ui-font-14, 14px); }
   h2 :deep(svg) { color: var(--primary-color); }
-  .achievement-highlights__list { display: flex; flex-direction: column; gap: 8px; }
-  article { display: flex; align-items: center; gap: 9px; min-width: 0; }
+  .achievement-highlights__list { display: flex; flex-direction: column; gap: var(--ui-space-8, 8px); }
+  article { display: flex; align-items: center; gap: var(--ui-space-9, 9px); min-width: 0; }
   article > div { display: flex; min-width: 0; flex-direction: column; }
-  strong { overflow: hidden; color: var(--text-color); font-size: 12.5px; text-overflow: ellipsis; white-space: nowrap; }
-  span, p { margin: 0; color: var(--desc-color); font-size: 11.5px; }
+  strong { overflow: hidden; color: var(--text-color); font-size: var(--ui-font-12_5, 12.5px); text-overflow: ellipsis; white-space: nowrap; }
+  span, p { margin: 0; color: var(--desc-color); font-size: var(--ui-font-11_5, 11.5px); }
   @media (max-width: 640px) { .achievement-highlights { grid-template-columns: 1fr; } }
 </style>

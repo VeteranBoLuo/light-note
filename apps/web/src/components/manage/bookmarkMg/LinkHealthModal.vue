@@ -1,5 +1,5 @@
 <template>
-  <BModal v-model:visible="visible" :title="$t('bookmarkMg.healthCheck')" :show-footer="false" width="480px">
+  <BModal v-model:visible="visible" :title="$t('bookmarkMg.healthCheck')" :show-footer="false" width="var(--ui-layout-480, 480px)">
     <div class="lh">
       <p class="lh-desc">{{ $t('bookmarkMg.healthDesc') }}</p>
 
@@ -237,25 +237,25 @@
   .lh {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     max-width: 88vw;
     box-sizing: border-box;
   }
   .lh-desc {
     margin: 0;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
     line-height: 1.6;
   }
   .lh-hint {
     margin: 0;
-    font-size: 11.5px;
+    font-size: var(--ui-font-11_5, 11.5px);
     line-height: 1.6;
     color: #d97706;
     background: color-mix(in srgb, #f59e0b 8%, transparent);
     border: 1px solid color-mix(in srgb, #f59e0b 22%, transparent);
     border-radius: 8px;
-    padding: 8px 10px;
+    padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px);
   }
   a.lh-item-name {
     text-decoration: none;
@@ -269,21 +269,21 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    padding: 10px 12px;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     border-radius: 10px;
     background: color-mix(in srgb, var(--card-border-color) 14%, transparent);
   }
   .lh-stats {
     display: grid;
-    gap: 2px;
-    font-size: 13px;
+    gap: var(--ui-space-2, 2px);
+    font-size: var(--ui-font-13, 13px);
     color: var(--text-color);
     font-variant-numeric: tabular-nums;
   }
   .lh-stats small {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .lh-dead-n {
     color: #dc2626;
@@ -291,23 +291,23 @@
   }
   .lh-empty {
     text-align: center;
-    padding: 20px 0;
-    font-size: 14px;
+    padding: var(--ui-space-20, 20px) 0;
+    font-size: var(--ui-font-14, 14px);
     color: #16a34a;
     font-weight: 600;
   }
   .lh-list {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     max-height: 50vh;
     overflow-y: auto;
   }
   .lh-item {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 9px 10px;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-9, 9px) var(--ui-space-10, 10px);
     border-radius: 8px;
     border: 1px solid color-mix(in srgb, #dc2626 22%, transparent);
     background: color-mix(in srgb, #dc2626 5%, transparent);
@@ -319,7 +319,7 @@
   .lh-item-name {
     display: block;
     min-width: 0;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 600;
     color: var(--text-color);
     overflow: hidden;
@@ -327,7 +327,7 @@
     white-space: nowrap;
   }
   .lh-item-url {
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     color: var(--desc-color);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -336,15 +336,15 @@
   .lh-item-actions {
     flex: 0 0 auto;
     display: flex;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .lh-act {
-    padding: 4px 12px;
+    padding: var(--ui-space-4, 4px) var(--ui-space-12, 12px);
     border-radius: 999px;
     border: 1px solid color-mix(in srgb, var(--card-border-color) 55%, transparent);
     background: transparent;
     color: var(--text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     cursor: pointer;
   }
   .lh-act.snap {

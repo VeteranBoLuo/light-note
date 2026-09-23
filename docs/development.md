@@ -147,13 +147,20 @@ try {
 - Flex 子项需要省略或收缩时设置 `min-width: 0`；页面明确唯一滚动容器，避免嵌套滚动。
 - 移动控件高度、可用宽度、留白与点击区域遵循[移动端尺寸、布局密度与触控](./design.md#移动端尺寸布局密度与触控)，不以移动触控要求统一拉高元素；危险操作必须有可发现入口和二次确认，不能只依赖左滑或长按。
 
-### 浮层、历史与 CSS zoom
+### 浮层、历史与界面密度
 
 - 移动端 `BModal`、`BDrawer` 和全屏预览统一接入 `utils/mobileOverlayHistory.ts`。
 - 从一个占 history 的浮层导航或打开下一层时，使用 `closeCurrentMobileOverlayThen()` 等待旧占位出栈；后续需要的数据在关闭前复制为普通对象快照。
 - `BPopover` / `BDropdown` 不占 history；Escape 和系统返回只关闭最上层可关闭对象。
 - Android 系统返回先向焦点控件派发 Escape，让最上层菜单或浮层消费；未消费时回退移动浮层 history，再通过 `light-note-system-back` 复用当前页面的返回动作。自画页头也须注册动作，动态返回状态使用 `canGoBack`。底栏可见不代表一级首页，带有效返回动作的页面不能触发退回桌面。
-- 桌面界面缩放通过根节点 CSS `zoom` 实现。视觉坐标与布局坐标混用前使用 `getRootZoom()` 换算；滚动定位复用 `utils/zoom.ts`。
+- 界面密度使用 `config/uiDensity.ts` 的尺寸规则；CSS 按用途使用 `--ui-space-*`、`--ui-control-*`、`--ui-layout-*`、`--ui-font-*`、`--ui-card-*`，数值布局使用 `useUiDensity()`。`BActionMenu` 的数字 `width` 由组件内部转换，调用方传标准档尺寸，禁止重复换算；CSS 字符串宽度原样使用，需要密度变化时引用统一变量。不得对根节点使用 `zoom` / `transform: scale()`，不得改写鼠标事件或为密度乘除坐标；滚动定位复用 `utils/scrolling.ts`。密度切换时需要保持阅读位置的普通滚动面板复用 `useDensityScrollAnchor()`；虚拟列表继续使用自身的行键锚点，不重复接入。设计边界见[界面密度](./design.md#界面密度)。
+- `BCard` 的 `padding` 纯 px 简写（含 `0`）和 `size` 数字/纯 px 字符串按标准档尺寸传入，组件内部响应密度；不得提前乘密度系数。含 CSS 变量、相对单位或 `calc()` 的参数由调用方负责尺寸，组件原样输出；圆角参数不随密度换算。
+- Less 自定义布局可用编译期简写：先 `@import (reference) '@/assets/css/ui-density.less';`，再写 `width: .ui-layout(60px)[];`、`gap: .ui-space(12px)[];`；同样提供 `.ui-control()`、`.ui-font()`、`.ui-card()`。参数必须是尺寸目录已有的标准档 px 字面值，输出与显式 `var(--ui-layout-60, 60px)` 相同；不会增加运行时代码。普通 CSS 和模板内样式继续使用 CSS 变量，动态数值继续使用 `useUiDensity()`。简写只减少输入，不会自动适配第三方组件或识别漏写的原始 px。
+- 新增或修改界面密度尺寸后运行 `pnpm --dir apps/web run check:ui-density`，验证变量已在尺寸目录定义，且显式 px 回退值与标准档一致。该检查不代表原始尺寸已全部迁移，也不能替代三档与移动端视觉验收。
+- 每次新增或修改 Web UI，交付及提交前都执行密度自检，不以“本次没有主动调整缩放”为跳过理由。逐项审查 CSS/Less、模板内联样式、组件尺寸 props、JS 数值布局和第三方外壳；沿用已接入密度的基础组件，避免重复换算。标准档与改动前对照，紧凑/宽松档检查容量、裁切、换行和浮层定位，移动端确认不受桌面档位影响；只看标准档不能判定通过。验收范围按受影响行为选择，不要求局部变动全站重测。
+- 新增固定 CSS 尺寸检查运行 `pnpm --dir apps/web run check:ui-density-new`，默认与本地 `HEAD` 比较；评审分支时传 `--base <明确的基线提交>`，不能用已经包含改动的提交当基线。新声明需使用密度尺寸；文档几何、装饰或移动专用尺寸等例外，在对应声明前紧邻写 `/* ui-density-fixed: 具体原因 */`，一条注释只覆盖下一条声明。该门禁比较尺寸声明及数量，也检查以尺寸、间距或定位方向命名的组件自定义变量（如 `--ai-skill-action-padding`、`--ai-skill-chat-composer-action-right`）；任意命名的自定义变量仍需人工检查。不代表存量已迁移，也不覆盖模板内联样式、JS 数值或第三方内部样式；这些仍需全量盘点与浏览器验收。
+- CI 的质量检查运行上述两项密度门禁：PR 使用事件中的目标分支基线提交，主分支 push 使用推送前提交；取完整 Git 历史，基线缺失时失败，不回退到 `HEAD` 自身比较。工作流检查通过不等于已覆盖全部页面，仍须完成受影响界面的视觉验收。
+- 新 checkout 执行 `pnpm hooks:install`，启用仓库级 `.githooks/pre-commit`；安装器遇到已有钩子时停止，不覆盖原配置，须将检查接入原钩子。每次提交自动运行 `node apps/web/scripts/check-density-raw.mjs --staged`，读取 Git 暂存区而非工作树，避免“工作树已修复、实际提交仍漏改”。它拦截新建或改动的固定 CSS 尺寸；未暂存文件不属于这次提交。不得使用 `--no-verify` 绕过失败；本地钩子不随 clone 自动启用，CI 继续作为独立门禁。仓库分支保护须将 CI 设为必需检查才能强制禁止失败合并，不能仅凭工作流文件声称已启用远程保护。
 - Teleport 浮层必须响应页面/容器滚动、缩放、视口和软键盘变化，不能假设触发器打开后保持静止。
 
 ## 移动浏览器 / Android App 共享渲染基线

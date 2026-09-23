@@ -7,10 +7,10 @@
     <div class="opinion-page__bg" />
     <section class="opinion-page__container">
       <header class="opinion-page__hero">
-        <button class="opinion-page__back" @click="goBack">
+        <BButton class="opinion-page__back" @click="goBack">
           <svg-icon :src="icon.arrow_left" size="18" />
           <span>{{ t('common.back') }}</span>
-        </button>
+        </BButton>
         <div class="opinion-page__hero-main">
           <h1 class="opinion-page__title">{{ t('personCenter.feedback') }}</h1>
           <p class="opinion-page__desc">{{ t('personCenter.opinions.pageDesc') }}</p>
@@ -32,6 +32,7 @@
 </template>
 
 <script setup lang="ts">
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
   import OpinionPanel from '@/components/personCenter/opinions/OpinionPanel.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -84,7 +85,7 @@
   .opinion-page {
     height: 100vh;
     position: relative;
-    padding: 20px 24px 20px;
+    padding: var(--ui-space-20, 20px) var(--ui-space-24, 24px) var(--ui-space-20, 20px);
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
@@ -116,20 +117,20 @@
 
   .opinion-page__container {
     position: relative;
-    max-width: 1180px;
+    max-width: var(--ui-layout-1180, 1180px);
     width: 100%;
     margin: 0 auto;
     flex: 1;
     min-height: 0;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
 
   .opinion-page__hero {
     border: 1px solid color-mix(in srgb, var(--border-color) 92%, transparent);
     border-radius: 18px;
-    padding: 16px 22px;
+    padding: var(--ui-space-16, 16px) var(--ui-space-22, 22px);
     background:
       linear-gradient(
         135deg,
@@ -140,16 +141,21 @@
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.05);
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     flex: none;
   }
 
-  .opinion-page__back {
+  .opinion-page__back.b_btn.default_btn {
+    height: auto;
+    line-height: normal;
+    white-space: normal;
+    // Preserve the native button's 13⅓px standard font while following interface density.
+    font-size: calc(var(--ui-font-20, 20px) * 2 / 3);
     width: fit-content;
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    padding: 8px 14px;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-14, 14px);
     border-radius: 999px;
     border: 1px solid var(--border-color);
     background: var(--background-color);
@@ -158,15 +164,15 @@
   }
 
   .opinion-page__eyebrow {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--sub-text-color);
   }
 
   .opinion-page__title {
-    margin: 0 0 6px;
-    font-size: 20px;
+    margin: 0 0 var(--ui-space-6, 6px);
+    font-size: var(--ui-font-20, 20px);
     font-weight: 600;
     line-height: 1.3;
     color: var(--text-color);
@@ -174,8 +180,8 @@
 
   .opinion-page__desc {
     margin: 0;
-    max-width: 700px;
-    font-size: 13px;
+    max-width: var(--ui-layout-700, 700px);
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.6;
     color: var(--sub-text-color);
   }
@@ -190,9 +196,9 @@
   .opinion-page__side {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
     position: sticky;
-    top: 20px;
+    top: var(--ui-layout-20, 20px);
   }
 
   .opinion-page__side-card,
@@ -204,16 +210,16 @@
   }
 
   .opinion-page__side-card {
-    padding: 18px;
+    padding: var(--ui-space-18, 18px);
     color: var(--sub-text-color);
     line-height: 1.7;
   }
 
   .opinion-page__side-title {
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
     font-weight: 700;
     color: var(--text-color);
-    margin-bottom: 8px;
+    margin-bottom: var(--ui-space-8, 8px);
   }
 
   .opinion-page__side-card p {
@@ -221,7 +227,7 @@
   }
 
   .opinion-page__main {
-    padding: 20px;
+    padding: var(--ui-space-20, 20px);
     min-width: 0;
     flex: 1;
     min-height: 0;
@@ -233,16 +239,16 @@
       height: auto;
       min-height: 100vh;
       overflow: visible;
-      padding: 18px 14px 24px;
+      padding: var(--ui-space-18, 18px) var(--ui-space-14, 14px) var(--ui-space-24, 24px);
     }
 
     .opinion-page__hero {
-      padding: 14px 16px;
+      padding: var(--ui-space-14, 14px) var(--ui-space-16, 16px);
       border-radius: 16px;
     }
 
     .opinion-page__title {
-      font-size: 20px;
+      font-size: var(--ui-font-20, 20px);
     }
 
     .opinion-page__body {

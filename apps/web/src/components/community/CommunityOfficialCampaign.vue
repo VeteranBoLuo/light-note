@@ -73,14 +73,14 @@
   .official-campaigns {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    gap: 16px;
-    margin: 4px 0 24px;
+    gap: var(--ui-space-16, 16px);
+    margin: var(--ui-space-4, 4px) 0 var(--ui-space-24, 24px);
   }
   .official-campaign {
     display: flex;
     flex-direction: column;
     min-width: 0;
-    padding: 20px;
+    padding: var(--ui-space-20, 20px);
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     background: var(--background-color);
@@ -90,7 +90,7 @@
     flex-direction: row;
     flex: 1;
     align-items: stretch;
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
     width: 100%;
     height: auto;
     padding: 0;
@@ -103,7 +103,7 @@
   .official-campaign-link img {
     display: block;
     width: 34%;
-    max-width: 300px;
+    max-width: var(--ui-layout-300, 300px);
     height: auto;
     align-self: center;
     border-radius: 8px;
@@ -115,19 +115,19 @@
     min-width: 0;
     flex-direction: column;
     align-items: flex-start;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     color: var(--text-color);
   }
   .official-campaign-copy small {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
   }
   .official-campaign-copy strong {
-    font-size: 18px;
+    font-size: var(--ui-font-18, 18px);
     line-height: 1.5;
   }
   .official-campaign-copy > span {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.65;
     color: var(--desc-color);
     display: -webkit-box;
@@ -139,29 +139,29 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     flex-wrap: wrap;
   }
   .campaign-manage-action.b_btn {
     align-self: flex-end;
-    margin-top: 8px;
-    height: 28px;
-    font-size: 12px;
+    margin-top: var(--ui-space-8, 8px);
+    height: var(--ui-layout-28, 28px);
+    font-size: var(--ui-font-12, 12px);
     color: var(--primary-color);
     background: transparent;
   }
   .official-campaign-action.b_btn {
     align-self: flex-start;
-    margin-top: 8px;
-    padding: 4px 0;
-    height: 36px;
+    margin-top: var(--ui-space-8, 8px);
+    padding: var(--ui-space-4, 4px) 0;
+    height: var(--ui-layout-36, 36px);
     background: transparent;
     color: var(--primary-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .task-campaign :deep(.task-reward) {
-    margin-top: 16px;
-    padding: 14px 0 0;
+    margin-top: var(--ui-space-16, 16px);
+    padding: var(--ui-space-14, 14px) 0 0;
     border-top: 1px solid var(--surface-border-color);
   }
   .task-campaign :deep(.task-reward-eyebrow) {

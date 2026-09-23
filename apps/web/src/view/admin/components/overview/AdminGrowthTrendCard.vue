@@ -229,12 +229,12 @@
   .growth-trend {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
   }
 
   .growth-trend__panel {
     min-width: 0;
-    padding: 14px;
+    padding: var(--ui-space-14, 14px);
     border: 1px solid var(--card-border-color);
     border-radius: 12px;
     background: var(--card-background);
@@ -244,30 +244,30 @@
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     flex-wrap: wrap;
-    margin-bottom: 12px;
+    margin-bottom: var(--ui-space-12, 12px);
   }
 
   .growth-trend__title strong {
     display: block;
     color: var(--text-color);
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
   }
 
   .growth-trend__legend {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px;
-    margin-top: 5px;
+    gap: var(--ui-space-10, 10px);
+    margin-top: var(--ui-space-5, 5px);
   }
 
   .growth-trend__legend-item {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
 
     i {
       width: 8px;
@@ -278,23 +278,23 @@
 
   .growth-trend__summary {
     display: flex;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
     margin: 0;
 
     div {
       display: grid;
-      gap: 2px;
+      gap: var(--ui-space-2, 2px);
     }
 
     dt {
       color: var(--desc-color);
-      font-size: 11px;
+      font-size: var(--ui-font-11, 11px);
     }
 
     dd {
       margin: 0;
       color: var(--text-color);
-      font-size: 14px;
+      font-size: var(--ui-font-14, 14px);
       font-weight: 600;
       font-variant-numeric: tabular-nums;
     }
@@ -302,8 +302,8 @@
 
   .growth-trend__chart {
     display: flex;
-    gap: 8px;
-    height: 150px;
+    gap: var(--ui-space-8, 8px);
+    height: var(--ui-layout-150, 150px);
   }
 
   .growth-trend__axis {
@@ -312,7 +312,7 @@
     justify-content: space-between;
     flex: 0 0 auto;
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     font-variant-numeric: tabular-nums;
     text-align: right;
   }
@@ -372,15 +372,15 @@
     top: 4px;
     z-index: 2;
     display: grid;
-    gap: 3px;
-    min-width: 116px;
-    padding: 7px 9px;
+    gap: var(--ui-space-3, 3px);
+    min-width: var(--ui-layout-116, 116px);
+    padding: var(--ui-space-7, 7px) var(--ui-space-9, 9px);
     border: 1px solid var(--card-border-color);
     border-radius: 8px;
     background: var(--menu-body-bg-color, var(--card-background));
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
     color: var(--text-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     pointer-events: none;
     transform: translateX(-50%);
 
@@ -393,13 +393,13 @@
     }
 
     strong {
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
     }
 
     span {
       display: flex;
       align-items: center;
-      gap: 5px;
+      gap: var(--ui-space-5, 5px);
       color: var(--desc-color);
     }
 
@@ -420,10 +420,10 @@
   .growth-trend__x {
     display: flex;
     justify-content: space-between;
-    margin-top: 6px;
-    padding-left: 26px;
+    margin-top: var(--ui-space-6, 6px);
+    padding-left: var(--ui-space-26, 26px);
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
 
     .is-active {
       color: var(--primary-color);

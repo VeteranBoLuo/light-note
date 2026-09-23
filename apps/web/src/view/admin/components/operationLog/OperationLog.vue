@@ -80,12 +80,15 @@
           :title="record.operation || ''"
           >{{ record.operation || '-' }}</span
         >
-        <span v-else-if="column.key === 'system'" :style="{ color: getApiLogOsColor(text?.os), fontSize: '12px' }">
+        <span
+          v-else-if="column.key === 'system'"
+          :style="{ color: getApiLogOsColor(text?.os), fontSize: 'var(--ui-font-12, 12px)' }"
+        >
           {{ text?.os || t('apiLog.unknown') }}
         </span>
         <span
           v-else-if="column.key === 'runtime'"
-          :style="{ color: getApiLogRuntimeColor(record.system?.runtime), fontSize: '12px' }"
+          :style="{ color: getApiLogRuntimeColor(record.system?.runtime), fontSize: 'var(--ui-font-12, 12px)' }"
         >
           {{ runtimeLabel(record) }}
         </span>
@@ -96,7 +99,7 @@
   <BModal
     v-model:visible="detailVisible"
     :title="t('adminOperationLog.detail.title')"
-    width="min(620px, 94vw)"
+    width="min(var(--ui-layout-620, 620px), 94vw)"
     :show-footer="false"
     :mask-closable="true"
     content-class="admin-log-detail-content"
@@ -209,12 +212,12 @@
           { title: t('adminOperationLog.columns.operation'), key: 'mobileOperation' },
         ]
       : [
-          { title: t('adminOperationLog.columns.user'), key: 'alias', width: '150px' },
-          { title: t('adminOperationLog.columns.module'), key: 'module', width: '100px' },
+          { title: t('adminOperationLog.columns.user'), key: 'alias', width: 'var(--ui-layout-150, 150px)' },
+          { title: t('adminOperationLog.columns.module'), key: 'module', width: 'var(--ui-layout-100, 100px)' },
           { title: t('adminOperationLog.columns.operation'), key: 'operation' },
-          { title: t('adminOperationLog.columns.ip'), key: 'ip', width: '150px' },
-          { title: t('apiLog.operatingSystem'), key: 'system', width: '80px' },
-          { title: t('apiLog.runtime'), key: 'runtime', width: '80px' },
+          { title: t('adminOperationLog.columns.ip'), key: 'ip', width: 'var(--ui-layout-150, 150px)' },
+          { title: t('apiLog.operatingSystem'), key: 'system', width: 'var(--ui-layout-80, 80px)' },
+          { title: t('apiLog.runtime'), key: 'runtime', width: 'var(--ui-layout-80, 80px)' },
           { title: t('adminOperationLog.columns.time'), key: 'createTime' },
         ],
   );
@@ -321,16 +324,16 @@
   @import '@/assets/css/admin-breakpoints.less';
 
   .operation-filter {
-    width: 150px;
+    width: var(--ui-layout-150, 150px);
   }
   .operation-filter--search {
-    width: min(270px, 28vw);
+    width: min(var(--ui-layout-270, 270px), 28vw);
   }
   .operation-filter--user {
-    width: min(190px, 20vw);
+    width: min(var(--ui-layout-190, 190px), 20vw);
   }
   .operation-filter--range {
-    width: 210px;
+    width: var(--ui-layout-210, 210px);
   }
   .operation-filter--range :deep(.drp-trigger.b_btn) {
     width: 100%;
@@ -339,9 +342,9 @@
   .admin-toolbar-switch {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     color: var(--text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     white-space: nowrap;
   }
   .admin-log-mobile-user,
@@ -356,17 +359,17 @@
   .operation-detail {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px 20px;
+    gap: var(--ui-space-12, 12px) var(--ui-space-20, 20px);
     margin: 0;
   }
   .operation-detail > div {
     min-width: 0;
     display: grid;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
   .operation-detail dt {
     color: var(--sub-text-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .operation-detail dd {
     margin: 0;

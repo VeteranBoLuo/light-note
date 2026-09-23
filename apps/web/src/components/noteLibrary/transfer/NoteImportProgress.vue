@@ -92,17 +92,17 @@
     --primary-color: var(--workspace-note-text);
     display: flex;
     flex-direction: column;
-    gap: 18px;
-    min-height: 230px;
+    gap: var(--ui-space-18, 18px);
+    min-height: var(--ui-layout-230, 230px);
   }
   .import-progress__heading {
     display: flex;
     align-items: center;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
   }
   .import-progress__symbol {
-    width: 50px;
-    height: 50px;
+    width: var(--ui-layout-50, 50px);
+    height: var(--ui-layout-50, 50px);
     display: grid;
     place-items: center;
     border: 1px solid var(--chip-success-border);
@@ -111,23 +111,23 @@
   }
   .import-progress h3 {
     margin: 0;
-    font-size: 21px;
+    font-size: var(--ui-font-21, 21px);
     color: var(--text-color);
   }
   .import-progress p {
     margin: 0;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.7;
   }
   .import-progress .import-progress__eyebrow {
-    margin-bottom: 3px;
+    margin-bottom: var(--ui-space-3, 3px);
   }
   .import-progress__activity {
-    padding: 18px 0;
+    padding: var(--ui-space-18, 18px) 0;
     border-top: 1px solid var(--surface-border-color);
     border-bottom: 1px solid var(--surface-border-color);
-    min-height: 92px;
+    min-height: var(--ui-layout-92, 92px);
     animation: import-stage 0.18s ease-out;
   }
   @keyframes import-stage {
@@ -140,14 +140,14 @@
   }
   .import-progress .import-progress__file {
     color: var(--text-color);
-    margin-top: 8px;
+    margin-top: var(--ui-space-8, 8px);
     overflow-wrap: anywhere;
   }
   .import-progress__counts {
     display: flex;
     flex-wrap: wrap;
-    gap: 18px;
-    font-size: 13px;
+    gap: var(--ui-space-18, 18px);
+    font-size: var(--ui-font-13, 13px);
   }
   .disable-animations .import-progress :deep(*) {
     transition: none !important;

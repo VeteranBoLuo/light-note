@@ -292,7 +292,7 @@
     <BModal
       v-model:visible="retryVisible"
       :title="t('adminActionCenter.retry.title')"
-      width="min(520px, 92vw)"
+      width="min(var(--ui-layout-520, 520px), 92vw)"
       :mask-closable="!retryLoading"
       :esc-closable="!retryLoading"
       initial-focus=".action-center__retry-reason textarea"
@@ -332,7 +332,7 @@
     <BModal
       v-model:visible="todoDiagnosticVisible"
       :title="t('adminActionCenter.diagnostic.title')"
-      width="min(760px, 94vw)"
+      width="min(var(--ui-layout-760, 760px), 94vw)"
       :mask-closable="!todoDiagnosticLoading"
       :esc-closable="!todoDiagnosticLoading"
     >
@@ -410,7 +410,7 @@
     <BModal
       v-model:visible="filePreviewDiagnosticVisible"
       :title="t('adminActionCenter.filePreviewDiagnostic.title')"
-      width="min(760px, 94vw)"
+      width="min(var(--ui-layout-760, 760px), 94vw)"
       :mask-closable="!filePreviewDiagnosticLoading"
       :esc-closable="!filePreviewDiagnosticLoading"
     >
@@ -1365,10 +1365,10 @@
 
 <style scoped lang="less">
   .action-center__select {
-    width: 154px;
+    width: var(--ui-layout-154, 154px);
   }
   .action-center__search {
-    width: min(300px, 32vw);
+    width: min(var(--ui-layout-300, 300px), 32vw);
   }
   .admin-stat-card.has-warning {
     border-color: #d97706 !important;
@@ -1382,24 +1382,24 @@
   .action-center__warning {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px 10px;
-    padding: 10px 12px;
+    gap: var(--ui-space-4, 4px) var(--ui-space-10, 10px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     border: 1px solid #d97706;
     border-radius: 10px;
     color: var(--text-color);
     background: var(--card-background);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .action-center__source-section {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 8px;
+    grid-template-columns: repeat(auto-fit, minmax(var(--ui-layout-180, 180px), 1fr));
+    gap: var(--ui-space-8, 8px);
   }
   .action-center__source-card header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .action-center__source-card {
     cursor: pointer;
@@ -1416,31 +1416,31 @@
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   .action-center__source-selected {
     color: var(--primary-color, #615ced);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 700;
     white-space: nowrap;
   }
   .action-center__source-card p {
-    margin: 6px 0 0;
+    margin: var(--ui-space-6, 6px) 0 0;
     color: var(--sub-text-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.5;
   }
   .action-center__items {
     display: grid;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .action-center__batch {
-    min-height: 52px;
+    min-height: var(--ui-layout-52, 52px);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    padding: 9px 12px;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-9, 9px) var(--ui-space-12, 12px);
     border: 1px solid var(--card-border-color);
     border-radius: 10px;
     background: var(--card-background);
@@ -1449,24 +1449,24 @@
   .action-center__batch-actions {
     display: flex;
     align-items: center;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
   }
   .action-center__batch-select {
-    width: 240px;
+    width: var(--ui-layout-240, 240px);
   }
   .action-center__batch-hint {
     color: var(--sub-text-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .action-center__item {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
     box-shadow: none;
   }
   .action-center__item-select-slot {
-    width: 24px;
+    width: var(--ui-layout-24, 24px);
     flex: 0 0 auto;
     display: flex;
     align-items: center;
@@ -1479,20 +1479,20 @@
     flex: 1 1 auto;
     min-width: 0;
     display: grid;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
   .action-center__item-actions {
     flex: 0 0 auto;
     display: flex;
     align-items: center;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
   .action-center__item-heading {
     min-width: 0;
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   .action-center__item-heading strong {
     min-width: 0;
@@ -1503,9 +1503,9 @@
     margin: 0;
     display: flex;
     flex-wrap: wrap;
-    gap: 4px 12px;
+    gap: var(--ui-space-4, 4px) var(--ui-space-12, 12px);
     color: var(--sub-text-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.5;
   }
   .action-center__job-meta code {
@@ -1517,10 +1517,10 @@
     font-weight: 700;
   }
   .action-center__empty {
-    min-height: 180px;
+    min-height: var(--ui-layout-180, 180px);
     display: grid;
     place-content: center;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
     color: var(--sub-text-color);
     text-align: center;
   }
@@ -1529,48 +1529,48 @@
   }
   .action-center__retry {
     display: grid;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .action-center__retry p {
     margin: 0;
     line-height: 1.55;
   }
   .action-center__retry-warning {
-    padding: 9px 11px;
+    padding: var(--ui-space-9, 9px) var(--ui-space-11, 11px);
     border: 1px solid #d97706;
     border-radius: 9px;
     color: var(--text-color);
     background: var(--card-background);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .action-center__retry label {
     display: grid;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     color: var(--text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .action-center__retry-footer {
     display: flex;
     justify-content: flex-end;
-    gap: 8px;
-    padding: 12px 16px;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-12, 12px) var(--ui-space-16, 16px);
     border-top: 1px solid var(--card-border-color);
   }
   .action-center__diagnostic {
     display: grid;
-    gap: 14px;
-    padding: 2px 2px 8px;
+    gap: var(--ui-space-14, 14px);
+    padding: var(--ui-space-2, 2px) var(--ui-space-2, 2px) var(--ui-space-8, 8px);
   }
   .action-center__diagnostic-heading {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
   }
   .action-center__diagnostic-heading > div {
     min-width: 0;
     display: grid;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
   .action-center__diagnostic-heading small,
   .action-center__diagnostic-primary small,
@@ -1579,20 +1579,20 @@
   }
   .action-center__diagnostic-heading strong {
     color: var(--text-color);
-    font-size: 18px;
+    font-size: var(--ui-font-18, 18px);
     overflow-wrap: anywhere;
   }
   .action-center__diagnostic-primary {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .action-center__diagnostic-primary > div {
     min-width: 0;
     display: grid;
     align-content: start;
-    gap: 5px;
-    padding: 12px;
+    gap: var(--ui-space-5, 5px);
+    padding: var(--ui-space-12, 12px);
     border: 1px solid var(--card-border-color);
     border-radius: 10px;
     background: var(--workspace-panel-bg-color);
@@ -1603,7 +1603,7 @@
   .action-center__diagnostic-primary span,
   .action-center__diagnostic-section h4 {
     color: var(--sub-text-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 600;
   }
   .action-center__diagnostic-primary strong {
@@ -1613,12 +1613,12 @@
   }
   .action-center__diagnostic-primary .is-time strong {
     color: var(--todo-accent-color, #0ea5e9);
-    font-size: 17px;
+    font-size: var(--ui-font-17, 17px);
   }
   .action-center__diagnostic-section {
     display: grid;
-    gap: 8px;
-    padding-top: 12px;
+    gap: var(--ui-space-8, 8px);
+    padding-top: var(--ui-space-12, 12px);
     border-top: 1px solid var(--card-border-color);
   }
   .action-center__diagnostic-section h4,
@@ -1632,9 +1632,9 @@
   .action-center__diagnostic-meta {
     display: flex;
     flex-wrap: wrap;
-    gap: 5px 14px;
+    gap: var(--ui-space-5, 5px) var(--ui-space-14, 14px);
     color: var(--sub-text-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .action-center__diagnostic-jobs {
     display: grid;
@@ -1643,12 +1643,12 @@
     overflow: hidden;
   }
   .action-center__diagnostic-jobs > div {
-    min-height: 42px;
+    min-height: var(--ui-layout-42, 42px);
     display: grid;
-    grid-template-columns: minmax(160px, 1fr) auto minmax(72px, auto);
+    grid-template-columns: minmax(var(--ui-layout-160, 160px), 1fr) auto minmax(var(--ui-layout-72, 72px), auto);
     align-items: center;
-    gap: 10px;
-    padding: 7px 10px;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-7, 7px) var(--ui-space-10, 10px);
     color: var(--text-color);
   }
   .action-center__diagnostic-jobs > div + div {

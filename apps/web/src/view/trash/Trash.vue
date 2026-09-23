@@ -19,7 +19,7 @@
 
     <BCard
       variant="card"
-      padding="14px"
+      padding="var(--ui-space-14, 14px)"
       class="trash-page"
       :class="{ 'is-mobile-batch': bookmark.isMobile && mobileBatchMode }"
     >
@@ -377,10 +377,10 @@
   });
 
   const columns = computed(() => [
-    { key: 'resourceType', title: t('trash.resourceType'), width: '120px' },
+    { key: 'resourceType', title: t('trash.resourceType'), width: 'var(--ui-layout-120, 120px)' },
     { key: 'name', title: t('trash.name') },
-    { key: 'deletedAt', title: t('trash.deletedAt'), width: '180px' },
-    { key: 'action', title: t('trash.action'), width: '150px' },
+    { key: 'deletedAt', title: t('trash.deletedAt'), width: 'var(--ui-layout-180, 180px)' },
+    { key: 'action', title: t('trash.action'), width: 'var(--ui-layout-150, 150px)' },
   ]);
 </script>
 
@@ -428,11 +428,11 @@
   .trash-info-bar {
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin-top: 12px;
-    padding: 6px 14px;
+    gap: var(--ui-space-8, 8px);
+    margin-top: var(--ui-space-12, 12px);
+    padding: var(--ui-space-6, 6px) var(--ui-space-14, 14px);
     border-radius: 8px;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     border: 1px solid var(--surface-border-color);
     background: var(--workspace-panel-bg-color);
     color: var(--desc-color);
@@ -441,11 +441,11 @@
   .trash-size-warning {
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin-top: 12px;
-    padding: 8px 14px;
+    gap: var(--ui-space-8, 8px);
+    margin-top: var(--ui-space-12, 12px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-14, 14px);
     border-radius: 8px;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
 
     &.is-warning {
       background: rgba(250, 173, 20, 0.08);
@@ -465,19 +465,19 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin: 16px 0 16px 0;
+    margin: var(--ui-space-16, 16px) 0 var(--ui-space-16, 16px) 0;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .trash-toolbar-right {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .trash-search-input {
-    width: 220px;
+    width: var(--ui-layout-220, 220px);
   }
 
   // ---- 表格容器 ----
@@ -486,7 +486,7 @@
 
     :deep(.table-container) {
       border-radius: 14px;
-      padding: 10px;
+      padding: var(--ui-space-10, 10px);
       box-shadow: var(--surface-card-shadow);
       background: var(--card-background);
       border: 1px solid var(--surface-border-color);
@@ -495,17 +495,17 @@
     :deep(.table-header) {
       background: var(--workspace-panel-bg-color);
       border-radius: 9px;
-      height: 38px;
+      height: var(--ui-layout-38, 38px);
     }
 
     :deep(.header-cell) {
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
       font-weight: 600;
       color: var(--desc-color);
     }
 
     :deep(.table-row) {
-      min-height: 42px;
+      min-height: var(--ui-layout-42, 42px);
       border-radius: 9px;
       border: 1px solid transparent;
       transition: background 0.15s;
@@ -517,7 +517,7 @@
     }
 
     :deep(.table-cell) {
-      font-size: 13px;
+      font-size: var(--ui-font-13, 13px);
     }
   }
 
@@ -525,10 +525,10 @@
   .trash-type-badge {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 3px 10px;
+    gap: var(--ui-space-6, 6px);
+    padding: var(--ui-space-3, 3px) var(--ui-space-10, 10px);
     border-radius: 6px;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 500;
   }
 
@@ -567,7 +567,7 @@
   .trash-name-cell-wrap {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     min-width: 0;
   }
 
@@ -580,15 +580,15 @@
   }
 
   .trash-name-size {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
     flex-shrink: 0;
   }
 
   // ---- 操作按钮 ----
   .trash-action-btn {
-    padding: 2px 6px;
-    font-size: 13px;
+    padding: var(--ui-space-2, 2px) var(--ui-space-6, 6px);
+    font-size: var(--ui-font-13, 13px);
   }
 
   // ---- 空状态 ----
@@ -597,13 +597,13 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 80px 0;
-    gap: 12px;
+    padding: var(--ui-space-80, 80px) 0;
+    gap: var(--ui-space-12, 12px);
   }
 
   .trash-empty-icon {
-    width: 64px;
-    height: 64px;
+    width: var(--ui-layout-64, 64px);
+    height: var(--ui-layout-64, 64px);
     border-radius: 16px;
     background: var(--table-header-bg-color);
     display: flex;
@@ -613,7 +613,7 @@
   }
 
   .trash-empty-text {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     color: var(--desc-color);
     margin: 0;
   }
@@ -621,30 +621,30 @@
   // ---- 批量操作栏 ----
   .trash-batch-bar {
     position: fixed;
-    bottom: 28px;
+    bottom: var(--ui-space-28, 28px);
     left: 50%;
     transform: translateX(-50%);
     background: var(--card-background);
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
-    padding: 10px 22px;
+    padding: var(--ui-space-10, 10px) var(--ui-space-22, 22px);
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
     box-shadow: var(--surface-hover-shadow);
     z-index: 100;
     backdrop-filter: blur(12px);
   }
 
   .batch-count {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 500;
     color: var(--text-color);
   }
 
   .batch-actions {
     display: flex;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   // ---- 过渡动画 ----
@@ -666,14 +666,14 @@
   }
 
   .trash-type-btn {
-    height: 32px;
-    padding: 4px 16px;
+    height: var(--ui-layout-32, 32px);
+    padding: var(--ui-space-4, 4px) var(--ui-space-16, 16px);
     border: none;
     border-right: 1px solid var(--card-border-color, #6e6e77);
     border-radius: 0;
     background: transparent !important;
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     cursor: pointer;
     white-space: nowrap;
     transition: all 0.2s;

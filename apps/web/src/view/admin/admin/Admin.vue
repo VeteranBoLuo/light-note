@@ -153,18 +153,18 @@
 
   .admin-container {
     display: flex;
-    gap: 10px;
-    padding: 20px;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-20, 20px);
     box-sizing: border-box;
     height: 100%; /* 子路由根被内联固定高度;这里撑满,让内容区在框内滚动而非被裁 */
   }
 
   .admin-nav {
-    width: 200px;
-    flex: 0 0 200px;
+    width: var(--ui-layout-200, 200px);
+    flex: 0 0 var(--ui-layout-200, 200px);
     min-height: 0;
     overflow-y: auto;
-    padding: 4px 0;
+    padding: var(--ui-space-4, 4px) 0;
   }
 
   .admin-nav__groups,
@@ -175,29 +175,29 @@
   }
 
   .admin-nav__group + .admin-nav__group {
-    margin-top: 10px;
+    margin-top: var(--ui-space-10, 10px);
   }
 
   /* 组内条目必须留缝：选中态和 hover 都是整块填充圆角背景，零间距时相邻两项的
      背景会拼成一整片，圆角互相抵消，看不出「哪一项被选中」。 */
   .admin-nav__items > li + li {
-    margin-top: 3px;
+    margin-top: var(--ui-space-3, 3px);
   }
 
   /* 顶层条目（加粗、无组头）夹在两个分组之间时，若上下间距与组间距相同，会被读成
      上一组的最后一项。加大间距把它从相邻分组里断开。 */
   .admin-nav__group.is-standalone-group + .admin-nav__group,
   .admin-nav__group + .admin-nav__group.is-standalone-group {
-    margin-top: 16px;
+    margin-top: var(--ui-space-16, 16px);
   }
 
   .admin-nav__group-title {
     display: flex;
     align-items: center;
-    gap: 6px;
-    margin: 0 0 4px;
-    padding: 0 8px;
-    font-size: 11px;
+    gap: var(--ui-space-6, 6px);
+    margin: 0 0 var(--ui-space-4, 4px);
+    padding: 0 var(--ui-space-8, 8px);
+    font-size: var(--ui-font-11, 11px);
     font-weight: 600;
     letter-spacing: 0.04em;
     color: var(--desc-color);
@@ -214,17 +214,17 @@
     display: flex;
     align-items: center;
     justify-content: flex-start;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     width: 100%;
-    padding: 5px 10px 5px 26px; /* 左缩进对齐分组标题的文字起点，让层级一眼可见 */
+    padding: var(--ui-space-5, 5px) var(--ui-space-10, 10px) var(--ui-space-5, 5px) var(--ui-space-26, 26px); /* 左缩进对齐分组标题的文字起点，让层级一眼可见 */
     height: auto;
-    min-height: 30px;
+    min-height: var(--ui-control-30, 30px);
     line-height: 1.3;
     border: none;
     border-radius: 8px;
     background: none;
     font: inherit;
-    font-size: 12.5px;
+    font-size: var(--ui-font-12_5, 12.5px);
     text-align: left;
     color: var(--text-color);
     cursor: pointer;
@@ -241,7 +241,7 @@
 
   /* 无组头的顶层条目（总览、安全中心）：不缩进，自带类别图标，与分组标题同一层级 */
   .admin-nav__item.b_btn.is-standalone {
-    padding-left: 8px;
+    padding-left: var(--ui-space-8, 8px);
     font-weight: 600;
   }
 
@@ -261,13 +261,13 @@
   .admin-nav__badge {
     position: relative; /* 兜住内部只给读屏的绝对定位说明，否则它会挂到更外层的定位祖先上 */
     flex-shrink: 0;
-    min-width: 18px;
-    padding: 0 5px;
+    min-width: var(--ui-layout-18, 18px);
+    padding: 0 var(--ui-space-5, 5px);
     border-radius: 999px;
     background: var(--danger-fill-bg);
     color: var(--danger-fill-fg);
-    font-size: 11px;
-    line-height: 17px;
+    font-size: var(--ui-font-11, 11px);
+    line-height: var(--ui-layout-17, 17px);
     text-align: center;
     font-variant-numeric: tabular-nums;
   }
@@ -287,13 +287,13 @@
 
   .admin-nav__external {
     flex-shrink: 0;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     color: var(--desc-color);
   }
 
   .admin-view-panel {
     flex: 1 1 0;
-    width: calc(100% - 210px);
+    width: calc(100% - var(--ui-layout-200, 200px) - var(--ui-space-10, 10px));
     min-width: 0; /* 子路由中的宽表格/网格不得以 min-content 撑宽整个后台 */
     min-height: 0; /* flex 子项允许收缩,配合 overflow 才能滚 */
     overflow-x: hidden;

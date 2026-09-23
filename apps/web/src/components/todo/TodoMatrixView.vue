@@ -21,7 +21,12 @@
             <span class="todo-matrix__dot" aria-hidden="true"></span>
             <strong>{{ t(`inbox.todoMatrixQuadrants.${quadrant.key}`) }}</strong>
           </span>
-          <span class="todo-matrix__count" :aria-label="loading ? t('todoWorkspace.loadingTasks') : t('inbox.todoMatrixCount', { count: quadrant.items.length })">
+          <span
+            class="todo-matrix__count"
+            :aria-label="
+              loading ? t('todoWorkspace.loadingTasks') : t('inbox.todoMatrixCount', { count: quadrant.items.length })
+            "
+          >
             {{ loading ? '—' : quadrant.items.length }}
           </span>
         </span>
@@ -45,7 +50,12 @@
             <strong>{{ t(`inbox.todoMatrixQuadrants.${quadrant.key}`) }}</strong>
             <p>{{ t(`inbox.todoMatrixDescriptions.${quadrant.key}`) }}</p>
           </div>
-          <span class="todo-matrix__count" :aria-label="loading ? t('todoWorkspace.loadingTasks') : t('inbox.todoMatrixCount', { count: quadrant.items.length })">
+          <span
+            class="todo-matrix__count"
+            :aria-label="
+              loading ? t('todoWorkspace.loadingTasks') : t('inbox.todoMatrixCount', { count: quadrant.items.length })
+            "
+          >
             {{ loading ? '—' : quadrant.items.length }}
           </span>
         </header>
@@ -163,7 +173,9 @@
             </template>
           </MobileListRow>
         </MobileListSurface>
-        <p v-else class="todo-matrix__empty" :class="{ 'is-loading': loading }" :aria-hidden="loading || undefined">{{ t('inbox.todoMatrixEmpty') }}</p>
+        <p v-else class="todo-matrix__empty" :class="{ 'is-loading': loading }" :aria-hidden="loading || undefined">{{
+          t('inbox.todoMatrixEmpty')
+        }}</p>
       </section>
     </div>
 
@@ -455,18 +467,18 @@
   }
   .todo-matrix {
     display: grid;
-    gap: 12px;
-    padding: 6px 2px 24px;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-6, 6px) var(--ui-space-2, 2px) var(--ui-space-24, 24px);
   }
 
   .todo-matrix__guide {
     margin: 0;
-    padding: 10px 13px;
+    padding: var(--ui-space-10, 10px) var(--ui-space-13, 13px);
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     background: var(--workspace-panel-bg-color);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.6;
   }
 
@@ -475,7 +487,7 @@
     overflow: hidden;
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 1px;
+    gap: var(--ui-space-1, 1px);
     border: 1px solid var(--surface-border-color);
     border-radius: 18px;
     background: var(--surface-divider-color, var(--surface-border-color));
@@ -511,12 +523,12 @@
 
   .todo-matrix__quadrant {
     min-width: 0;
-    min-height: 178px;
+    min-height: var(--ui-layout-178, 178px);
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    padding: 17px;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-17, 17px);
     background: var(--card-background);
   }
 
@@ -525,15 +537,15 @@
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .todo-matrix__heading {
     position: relative;
     min-width: 0;
     display: grid;
-    gap: 4px;
-    padding-left: 12px;
+    gap: var(--ui-space-4, 4px);
+    padding-left: var(--ui-space-12, 12px);
   }
 
   .todo-matrix__heading::before {
@@ -550,7 +562,7 @@
   .todo-matrix__heading strong {
     min-width: 0;
     color: var(--text-color);
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     line-height: 1.35;
   }
 
@@ -559,31 +571,31 @@
     margin: 0;
     overflow: hidden;
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.45;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .todo-matrix__count {
-    min-width: 26px;
+    min-width: var(--ui-layout-26, 26px);
     box-sizing: border-box;
     flex: 0 0 auto;
-    padding: 2px 8px;
+    padding: var(--ui-space-2, 2px) var(--ui-space-8, 8px);
     border: 1px solid var(--matrix-border);
     border-radius: 999px;
     background: var(--matrix-soft);
     color: var(--matrix-accent);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 650;
-    line-height: 18px;
+    line-height: var(--ui-layout-18, 18px);
     text-align: center;
   }
 
   .todo-matrix__items {
-    --mobile-row-min-height: 58px;
-    --mobile-row-padding-x: 10px;
-    --mobile-row-padding-y: 7px;
+    --mobile-row-min-height: var(--ui-layout-58, 58px);
+    --mobile-row-padding-x: var(--ui-space-10, 10px);
+    --mobile-row-padding-y: var(--ui-space-7, 7px);
 
     width: 100%;
     border-radius: 12px;
@@ -591,7 +603,7 @@
 
   .todo-matrix__items :deep(.todo-matrix-card) {
     min-width: 0;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .todo-matrix__items :deep(.mobile-list-row__leading) {
@@ -604,25 +616,25 @@
   }
 
   .todo-matrix__items :deep(.mobile-list-row__trailing) {
-    min-width: 32px;
+    min-width: var(--ui-layout-32, 32px);
   }
 
   .todo-matrix-card__body {
     width: 100%;
-    min-height: 42px;
+    min-height: var(--ui-layout-42, 42px);
     min-width: 0;
     display: flex;
     flex-direction: column;
     align-items: flex-start;
     justify-content: center;
-    gap: 1px;
+    gap: var(--ui-space-1, 1px);
     overflow: hidden;
   }
 
   .todo-matrix-card :deep(.todo-matrix-card__content) {
     width: 100%;
     height: auto;
-    min-height: 20px;
+    min-height: var(--ui-layout-20, 20px);
     min-width: 0;
     justify-content: flex-start;
     padding: 0;
@@ -639,7 +651,7 @@
     width: 100%;
     overflow: hidden;
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 650;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -650,10 +662,10 @@
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     overflow: hidden;
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
 
   .todo-matrix-card__priority {
@@ -664,7 +676,7 @@
   .todo-matrix-card :deep(.todo-matrix-card__series-trigger) {
     min-width: 0;
     max-width: 100%;
-    height: 24px;
+    height: var(--ui-layout-24, 24px);
     flex: 0 1 auto;
     padding: 0;
     border: 0;
@@ -679,15 +691,15 @@
     display: inline-flex;
     flex: 0 1 auto;
     align-items: center;
-    gap: 3px;
-    padding: 1px 6px;
+    gap: var(--ui-space-3, 3px);
+    padding: var(--ui-space-1, 1px) var(--ui-space-6, 6px);
     overflow: hidden;
     border: 1px solid var(--todo-accent-color);
     border-radius: 999px;
     background: var(--workspace-panel-bg-color);
     color: var(--todo-accent-color);
     font-weight: 650;
-    line-height: 15px;
+    line-height: var(--ui-layout-15, 15px);
     white-space: nowrap;
   }
 
@@ -724,9 +736,9 @@
   }
 
   .todo-matrix-card :deep(.todo-matrix-card__more) {
-    width: 32px;
-    min-width: 32px;
-    height: 32px;
+    width: var(--ui-layout-32, 32px);
+    min-width: var(--ui-layout-32, 32px);
+    height: var(--ui-layout-32, 32px);
     padding: 0;
     border: 1px solid transparent;
     border-radius: 8px;
@@ -747,34 +759,34 @@
   }
 
   .todo-matrix__empty {
-    min-height: 76px;
+    min-height: var(--ui-layout-76, 76px);
     margin: 0;
     display: grid;
     flex: 1;
     place-items: center;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     text-align: center;
   }
 
   .todo-matrix__overview {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .todo-matrix :deep(.todo-matrix__overview-button) {
     position: relative;
     width: 100%;
     height: auto;
-    min-height: 102px;
+    min-height: var(--ui-layout-102, 102px);
     min-width: 0;
     display: flex;
     flex-direction: column;
     align-items: stretch;
     justify-content: flex-start;
-    gap: 8px;
-    padding: 13px;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-13, 13px);
     border: 1px solid var(--surface-border-color) !important;
     border-radius: 14px;
     background: var(--card-background) !important;
@@ -786,7 +798,7 @@
 
   .todo-matrix :deep(.todo-matrix__overview-button.is-selected) {
     border: 2px solid var(--todo-accent-color) !important;
-    padding: 12px;
+    padding: var(--ui-space-12, 12px);
     color: var(--todo-accent-color);
   }
 
@@ -799,11 +811,11 @@
 
   .todo-matrix__overview-heading {
     justify-content: space-between;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .todo-matrix__overview-title {
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     overflow: hidden;
   }
 
@@ -811,7 +823,7 @@
     min-width: 0;
     overflow: hidden;
     color: inherit;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.35;
     text-overflow: ellipsis;
   }
@@ -828,7 +840,7 @@
     display: -webkit-box;
     overflow: hidden;
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     line-height: 1.45;
     text-overflow: ellipsis;
     -webkit-box-orient: vertical;
@@ -846,8 +858,8 @@
   }
 
   .todo-matrix.is-mobile {
-    gap: 12px;
-    padding: 0 0 18px;
+    gap: var(--ui-space-12, 12px);
+    padding: 0 0 var(--ui-space-18, 18px);
   }
 
   .todo-matrix.is-mobile .todo-matrix__grid {
@@ -857,12 +869,12 @@
 
   .todo-matrix.is-mobile .todo-matrix__quadrant {
     min-height: 0;
-    gap: 13px;
-    padding: 15px;
+    gap: var(--ui-space-13, 13px);
+    padding: var(--ui-space-15, 15px);
   }
 
   .todo-matrix.is-mobile .todo-matrix__heading strong {
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
   }
 
   .todo-matrix.is-mobile .todo-matrix__heading p {
@@ -870,62 +882,62 @@
   }
 
   .todo-matrix.is-mobile .todo-matrix__items {
-    --mobile-row-min-height: 68px;
-    --mobile-row-padding-x: 10px;
-    --mobile-row-padding-y: 8px;
+    --mobile-row-min-height: var(--ui-layout-68, 68px);
+    --mobile-row-padding-x: var(--ui-space-10, 10px);
+    --mobile-row-padding-y: var(--ui-space-8, 8px);
 
     border-radius: 13px;
   }
 
   .todo-matrix.is-mobile .todo-matrix-card :deep(.todo-matrix-card__more) {
-    min-height: 44px;
+    min-height: var(--ui-layout-44, 44px);
   }
 
   .todo-matrix.is-mobile .todo-matrix-card :deep(.todo-matrix-card__series-trigger) {
-    min-height: 44px;
+    min-height: var(--ui-layout-44, 44px);
   }
 
   .todo-matrix.is-mobile .todo-matrix-card :deep(.todo-matrix-card__more) {
-    width: 44px;
-    min-width: 44px;
-    height: 44px;
+    width: var(--ui-layout-44, 44px);
+    min-width: var(--ui-layout-44, 44px);
+    height: var(--ui-layout-44, 44px);
   }
 
   .todo-matrix.is-mobile .todo-matrix__items :deep(.mobile-list-row__trailing) {
-    min-width: 44px;
+    min-width: var(--ui-layout-44, 44px);
   }
 
   .todo-matrix.is-mobile .todo-matrix__empty {
-    min-height: 88px;
+    min-height: var(--ui-layout-88, 88px);
   }
 
   @media (max-width: 359px) {
     .todo-matrix :deep(.todo-matrix__overview-button) {
-      min-height: 96px;
-      padding: 11px;
+      min-height: var(--ui-layout-96, 96px);
+      padding: var(--ui-space-11, 11px);
     }
 
     .todo-matrix :deep(.todo-matrix__overview-button.is-selected) {
-      padding: 10px;
+      padding: var(--ui-space-10, 10px);
     }
 
     .todo-matrix__overview-title strong {
-      font-size: 11px;
+      font-size: var(--ui-font-11, 11px);
     }
   }
   .todo-matrix__guide-compact {
     display: flex;
     justify-content: flex-end;
     align-items: center;
-    min-height: 28px;
-    gap: 12px;
-    margin-bottom: 6px;
+    min-height: var(--ui-layout-28, 28px);
+    gap: var(--ui-space-12, 12px);
+    margin-bottom: var(--ui-space-6, 6px);
   }
   @media (min-width: 768px) and (max-height: 819px) {
     .todo-matrix:not(.is-mobile) .todo-matrix__quadrant {
-      min-height: 140px;
-      padding: 12px;
-      gap: 8px;
+      min-height: var(--ui-layout-140, 140px);
+      padding: var(--ui-space-12, 12px);
+      gap: var(--ui-space-8, 8px);
     }
   }
 </style>

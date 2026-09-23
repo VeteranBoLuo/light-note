@@ -71,7 +71,8 @@ describe('安全中心访问控制', () => {
   });
 
   it('自定义弹框 footer 在 PC 和移动端保留统一安全间距', () => {
-    for (const source of [accessControlSource, whitelistSource]) {
+    for (const rawSource of [accessControlSource, whitelistSource]) {
+      const source = rawSource.replace(/var\(--ui-[\w-]+, ([\d.]+px)\)/g, '$1');
       expect(source).toMatch(/modal-footer\s*\{[\s\S]*?padding:\s*0 20px 16px;/);
       expect(source).toMatch(
         /@media \(max-width:\s*767px\)[\s\S]*?modal-footer\s*\{[\s\S]*?padding:\s*0 16px 12px;/,

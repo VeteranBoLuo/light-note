@@ -1,0 +1,100 @@
+// TinyMCE loads its skin outside Vite. Adapt interface chrome only; never target editable content.
+html[data-density='compact'] .tox,
+html[data-density='comfortable'] .tox {
+  --tox-private-button-padding-y: var(--ui-space-4, 4px);
+  --tox-private-button-padding-x: var(--ui-space-16, 16px);
+
+  .tox-tbtn {
+    height: var(--ui-control-28, 28px);
+    margin: var(--ui-space-6, 6px) var(--ui-space-1, 1px) var(--ui-space-5, 5px) 0;
+  }
+  .tox-toolbar__group {
+    padding: 0 var(--ui-space-11, 11px) 0 var(--ui-space-12, 12px);
+  }
+  .tox-collection--list .tox-collection__item {
+    padding: var(--ui-space-4, 4px) var(--ui-space-8, 8px);
+  }
+  .tox-dialog__header {
+    padding: var(--ui-space-8, 8px) var(--ui-space-16, 16px) 0;
+  }
+  .tox-dialog__body-content {
+    padding: var(--ui-space-16, 16px);
+  }
+  .tox-dialog__footer {
+    padding: var(--ui-space-8, 8px) var(--ui-space-16, 16px);
+  }
+}
+
+// Keep standard/mobile on the vendor skin. These are dialog controls, not document content.
+html[data-density='compact'] .tox,
+html[data-density='comfortable'] .tox {
+  .tox-dialog {
+    max-width: var(--ui-layout-480, 480px);
+  }
+  .tox-dialog--width-md {
+    max-width: var(--ui-layout-800, 800px);
+  }
+  .tox-dialog--width-lg {
+    height: var(--ui-layout-650, 650px);
+    max-width: var(--ui-layout-1200, 1200px);
+  }
+  .tox-dialog--fullscreen {
+    height: 100%;
+    max-width: 100%;
+  }
+  .tox-dialog__title {
+    font-size: var(--ui-font-20, 20px);
+  }
+  .tox-dialog__body,
+  .tox-dialog__header {
+    font-size: var(--ui-font-16, 16px);
+  }
+  .tox-dialog {
+    --tox-private-button-font-size: var(--ui-font-14, 14px);
+    --tox-private-control-line-height: var(--ui-layout-24, 24px);
+
+    .tox-label {
+      font-size: var(--ui-font-14, 14px);
+    }
+    .tox-form__group {
+      margin-bottom: var(--ui-space-4, 4px);
+    }
+    .tox-textfield,
+    .tox-listboxfield .tox-listbox--select,
+    .tox-selectfield select {
+      font-size: var(--ui-font-16, 16px);
+      line-height: var(--ui-layout-24, 24px);
+      min-height: var(--ui-control-34, 34px);
+      padding-top: var(--ui-space-5, 5px);
+      padding-bottom: var(--ui-space-5, 5px);
+    }
+  }
+}
+
+// Lists and object toolbars are rendered in TinyMCE's body-level UI container.
+html[data-density='compact'] .tox,
+html[data-density='comfortable'] .tox {
+  .tox-menu.tox-collection--list {
+    padding-inline: var(--ui-space-4, 4px);
+  }
+  .tox-collection--list .tox-collection__group {
+    padding-block: var(--ui-space-4, 4px);
+  }
+  .tox-collection__item-label,
+  .tox-collection__item-accessory {
+    font-size: var(--ui-font-14, 14px);
+    line-height: var(--ui-layout-24, 24px);
+  }
+  .tox-collection__item-accessory {
+    height: var(--ui-layout-24, 24px);
+  }
+  .tox-collection__item-caret {
+    min-height: var(--ui-layout-24, 24px);
+  }
+  .tox-tbtn {
+    font-size: var(--ui-font-14, 14px);
+  }
+  .tox-tbtn:not(.tox-tbtn--select):not(.tox-tbtn--labeled):not(.tox-tbtn--md):not(.tox-tbtn--lg):not(.tox-tbtn--return):not(.tox-tbtn-more) {
+    width: var(--ui-control-34, 34px);
+  }
+}

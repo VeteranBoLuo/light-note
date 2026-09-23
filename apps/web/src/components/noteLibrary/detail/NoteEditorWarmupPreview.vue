@@ -65,6 +65,7 @@
     overflow-wrap: anywhere;
   }
 
+  // 与 Markdown 编辑正文保持相同内容几何，不参与界面密度缩放。
   .note-editor-warmup__markdown {
     box-sizing: border-box;
     min-height: 100%;

@@ -123,6 +123,7 @@
 <script setup lang="ts">
   import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import { useUiDensity } from '@/composables/useUiDensity';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
@@ -167,6 +168,7 @@
   }>();
 
   const { t } = useI18n();
+  const { dimension } = useUiDensity();
   const shellRef = ref<HTMLElement | null>(null);
   // 首帧先按可见窗口推断，等 ResizeObserver 接管后再以工作区容器为准。
   // 不能用 0：那会让桌面端首帧短暂按 mobile 隐藏双侧栏，形成明显闪动。
@@ -225,9 +227,10 @@
   const showMainAiTrigger = computed(
     () => props.hasAi && effectiveAiPresentation.value !== 'hidden' && !aiVisible.value,
   );
+  // 用户拖动保存的侧栏宽度与正文阅读下限保持实际 CSS 像素。
   const shellStyle = computed(() => ({
     '--note-workspace-sidebar-width': `${Math.min(360, Math.max(220, props.sidebarWidth))}px`,
-    '--note-workspace-ai-width': `${Math.max(300, props.aiWidth)}px`,
+    '--note-workspace-ai-width': `${dimension(Math.max(300, props.aiWidth), 'layout')}px`,
     '--note-workspace-main-min-width': `${Math.max(0, props.mainMinWidth)}px`,
   }));
 
@@ -480,7 +483,7 @@
 
     &:focus-visible::after {
       width: 1px;
-      height: 42px;
+      height: var(--ui-layout-42, 42px);
       border-radius: 999px;
       background: var(--resource-note-color, #00a884);
       content: '';
@@ -492,10 +495,10 @@
     position: absolute;
     z-index: 8;
     top: 50%;
-    width: 28px;
-    min-width: 28px;
-    height: 44px;
-    min-height: 44px;
+    width: var(--ui-control-28, 28px);
+    min-width: var(--ui-control-28, 28px);
+    height: var(--ui-control-44, 44px);
+    min-height: var(--ui-control-44, 44px);
     padding: 0;
     transform: translateY(-50%);
     border: 1px solid var(--surface-border-color, #e4e7ef);
@@ -511,7 +514,7 @@
   }
 
   .note-workspace-shell__sidebar-boundary-toggle--close.b_btn {
-    right: -14px;
+    right: calc(var(--ui-control-28, 28px) / -2);
     border-radius: 10px;
   }
 
@@ -522,7 +525,7 @@
   }
 
   .note-workspace-shell__ai-boundary-toggle--close.b_btn {
-    left: -14px;
+    left: calc(var(--ui-control-28, 28px) / -2);
     border-radius: 10px;
   }
 
@@ -539,8 +542,8 @@
 
   .note-workspace-shell__ai-boundary-toggle--open.b_btn {
     right: 0;
-    width: 34px;
-    min-width: 34px;
+    width: var(--ui-control-34, 34px);
+    min-width: var(--ui-control-34, 34px);
     border-right: 0;
     border-radius: 10px 0 0 10px;
   }

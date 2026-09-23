@@ -1,5 +1,4 @@
 import { nextTick, type Ref } from 'vue';
-import { getRootZoom } from '@/utils/zoom';
 
 export type CommunityChatViewportIntent = 'follow-latest' | 'preserve-position';
 
@@ -190,7 +189,7 @@ export function useCommunityChatViewportController(options: UseCommunityChatView
       // 置顶栏等上方布局会同时移动并压缩消息区。历史浏览态补偿同等 scrollTop，
       // 让屏幕中的同一条消息保持原位；单纯底边/输入区变化则保留原 scrollTop 即可。
       if (heightChanged && Math.abs(visualTopDelta) > GEOMETRY_EPSILON_PX) {
-        adjustScrollTop(visualTopDelta / getRootZoom(), { intent: 'preserve-position' });
+        adjustScrollTop(visualTopDelta, { intent: 'preserve-position' });
         return;
       }
     }

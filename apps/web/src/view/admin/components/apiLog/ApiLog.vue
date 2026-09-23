@@ -85,12 +85,15 @@
         <span v-else-if="column.key === 'durationMs'" :class="{ 'is-slow': Number(record.durationMs) >= 1000 }">
           {{ formatDuration(record.durationMs) }}
         </span>
-        <span v-else-if="column.key === 'system'" :style="{ color: getApiLogOsColor(text?.os), fontSize: '12px' }">
+        <span
+          v-else-if="column.key === 'system'"
+          :style="{ color: getApiLogOsColor(text?.os), fontSize: 'var(--ui-font-12, 12px)' }"
+        >
           {{ text?.os || t('apiLog.unknown') }}
         </span>
         <span
           v-else-if="column.key === 'runtime'"
-          :style="{ color: getApiLogRuntimeColor(record.system?.runtime), fontSize: '12px' }"
+          :style="{ color: getApiLogRuntimeColor(record.system?.runtime), fontSize: 'var(--ui-font-12, 12px)' }"
         >
           {{ t(getApiLogRuntimeLabelKey(record.system?.runtime))
           }}{{ getApiLogAppVersionSuffix(record.system?.runtime, record.system?.appVersion) }}
@@ -103,7 +106,7 @@
   <BModal
     v-model:visible="detailVisible"
     :title="t('adminApiLog.detail.title')"
-    width="min(720px, 94vw)"
+    width="min(var(--ui-layout-720, 720px), 94vw)"
     :show-footer="false"
     :mask-closable="true"
     content-class="admin-log-detail-content"
@@ -250,14 +253,14 @@
           { title: t('adminOperationLog.columns.operation'), key: 'action', width: 'minmax(0, 1fr)' },
         ]
       : [
-          { title: t('adminApiLog.columns.user'), key: 'alias', width: '150px' },
+          { title: t('adminApiLog.columns.user'), key: 'alias', width: 'var(--ui-layout-150, 150px)' },
           { title: t('adminApiLog.columns.time'), key: 'requestTime' },
-          { title: t('adminApiLog.columns.method'), key: 'method', width: '72px' },
-          { title: t('adminApiLog.columns.status'), key: 'statusCode', width: '74px', ellipsis: false },
-          { title: t('adminApiLog.columns.duration'), key: 'durationMs', width: '88px' },
+          { title: t('adminApiLog.columns.method'), key: 'method', width: 'var(--ui-layout-72, 72px)' },
+          { title: t('adminApiLog.columns.status'), key: 'statusCode', width: 'var(--ui-layout-74, 74px)', ellipsis: false },
+          { title: t('adminApiLog.columns.duration'), key: 'durationMs', width: 'var(--ui-layout-88, 88px)' },
           { title: t('adminApiLog.columns.url'), key: 'url', width: '1fr' },
-          { title: t('apiLog.operatingSystem'), key: 'system', width: '80px' },
-          { title: t('apiLog.runtime'), key: 'runtime', width: '80px' },
+          { title: t('apiLog.operatingSystem'), key: 'system', width: 'var(--ui-layout-80, 80px)' },
+          { title: t('apiLog.runtime'), key: 'runtime', width: 'var(--ui-layout-80, 80px)' },
         ],
   );
 
@@ -421,19 +424,19 @@
   @import '@/assets/css/admin-breakpoints.less';
 
   .log-filter {
-    width: 126px;
+    width: var(--ui-layout-126, 126px);
   }
   .log-filter--search {
-    width: min(240px, 24vw);
+    width: min(var(--ui-layout-240, 240px), 24vw);
   }
   .log-filter--request {
-    width: min(210px, 21vw);
+    width: min(var(--ui-layout-210, 210px), 21vw);
   }
   .log-filter--duration {
-    width: 118px;
+    width: var(--ui-layout-118, 118px);
   }
   .log-filter--range {
-    width: 210px;
+    width: var(--ui-layout-210, 210px);
   }
   .log-filter--range :deep(.drp-trigger.b_btn) {
     width: 100%;
@@ -442,9 +445,9 @@
   .admin-toolbar-switch {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     color: var(--text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     white-space: nowrap;
   }
   .is-slow {
@@ -453,7 +456,7 @@
   }
   .api-log__request-id {
     color: var(--sub-text-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .admin-log-mobile-user,
   .admin-log-mobile-time,
@@ -477,20 +480,20 @@
   .api-log-detail {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px 18px;
+    gap: var(--ui-space-10, 10px) var(--ui-space-18, 18px);
     margin: 0;
   }
   .api-log-detail > div {
     min-width: 0;
     display: grid;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
   .api-log-detail > div.is-wide {
     grid-column: 1 / -1;
   }
   .api-log-detail dt {
     color: var(--sub-text-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .api-log-detail dd {
     min-width: 0;
@@ -499,14 +502,14 @@
     overflow-wrap: anywhere;
   }
   .api-log-detail pre {
-    max-height: 240px;
+    max-height: var(--ui-layout-240, 240px);
     margin: 0;
-    padding: 10px;
+    padding: var(--ui-space-10, 10px);
     overflow: auto;
     border: 1px solid var(--card-border-color);
     border-radius: 8px;
     font:
-      12px/1.55 ui-monospace,
+      var(--ui-font-12, 12px)/1.55 ui-monospace,
       SFMono-Regular,
       Menlo,
       Consolas,

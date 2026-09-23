@@ -191,43 +191,44 @@
 <style scoped lang="less">
   .drawing-style-panel {
     display: grid;
-    width: min(340px, calc(100vw - 28px));
-    max-height: min(72vh, 620px);
-    padding: 14px;
+    /* ui-density-fixed: 视口两侧安全留白保持固定。 */
+    width: min(var(--ui-layout-340, 340px), calc(100vw - 28px));
+    max-height: min(72vh, var(--ui-layout-620, 620px));
+    padding: var(--ui-space-14, 14px);
     overflow: auto;
     box-sizing: border-box;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
     color: var(--text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .drawing-style-section {
     display: grid;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .drawing-style-colors {
     display: grid;
     grid-template-columns: repeat(8, minmax(0, 1fr));
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
 
   .drawing-style-color {
-    width: 34px;
-    min-width: 34px;
-    height: 34px;
-    min-height: 34px;
-    padding: 3px;
+    width: var(--ui-control-34, 34px);
+    min-width: var(--ui-control-34, 34px);
+    height: var(--ui-control-34, 34px);
+    min-height: var(--ui-control-34, 34px);
+    padding: var(--ui-space-3, 3px);
     border: 1px solid transparent !important;
     border-radius: 8px;
     background: transparent;
   }
 
   .drawing-style-color--compact {
-    width: 34px;
-    min-width: 34px;
-    height: 30px;
-    min-height: 30px;
+    width: var(--ui-control-34, 34px);
+    min-width: var(--ui-control-34, 34px);
+    height: var(--ui-control-30, 30px);
+    min-height: var(--ui-control-30, 30px);
   }
 
   .drawing-style-color.is-active {
@@ -243,7 +244,7 @@
     border: 1px solid rgba(31, 41, 55, 0.24);
     border-radius: 5px;
     color: #fff;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 700;
     line-height: 1;
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.65);
@@ -253,15 +254,15 @@
   .drawing-style-range-row {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .drawing-style-color-input {
-    flex: 0 0 48px;
+    flex: 0 0 var(--ui-layout-48, 48px);
   }
 
   .drawing-style-color-input :deep(.b-input) {
-    padding: 3px !important;
+    padding: var(--ui-space-3, 3px) !important;
     border: 1px solid var(--surface-border-color) !important;
     cursor: pointer;
   }
@@ -280,13 +281,13 @@
   .drawing-style-size-options {
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .drawing-style-size-option {
     min-width: 0;
-    height: 40px;
-    padding: 0 8px;
+    height: var(--ui-control-40, 40px);
+    padding: 0 var(--ui-space-8, 8px);
     border: 1px solid var(--surface-border-color, var(--card-border-color)) !important;
     background: var(--card-background);
   }
@@ -300,14 +301,14 @@
   .drawing-style-range {
     flex: 1 1 auto;
     min-width: 0;
-    height: 32px;
+    height: var(--ui-control-32, 32px);
     margin: 0;
     accent-color: #615ced;
     cursor: pointer;
   }
 
   .drawing-style-size-current {
-    flex: 0 0 46px;
+    flex: 0 0 var(--ui-layout-46, 46px);
     color: var(--desc-color);
     text-align: right;
   }

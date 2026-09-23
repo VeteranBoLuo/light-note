@@ -86,7 +86,7 @@
   <BModal
     v-model:visible="detailVisible"
     :title="t('aiFeedback.detailTitle')"
-    width="min(820px, 94vw)"
+    width="min(var(--ui-layout-820, 820px), 94vw)"
     :show-footer="false"
     fullscreen-mobile
   >
@@ -254,13 +254,13 @@
     { value: 'urgent', label: t('aiFeedback.triage.priorities.urgent') },
   ]);
   const columns = computed(() => [
-    { title: t('aiFeedback.columns.rating'), key: 'rating', width: '90px', ellipsis: false },
+    { title: t('aiFeedback.columns.rating'), key: 'rating', width: 'var(--ui-layout-90, 90px)', ellipsis: false },
     { title: t('aiFeedback.columns.question'), key: 'question', width: '1.4fr', ellipsis: true },
     { title: t('aiFeedback.columns.answer'), key: 'answer', width: '1.8fr', ellipsis: true },
-    { title: t('aiFeedback.columns.reason'), key: 'reason', width: '112px', ellipsis: true },
-    { title: t('aiFeedback.columns.user'), key: 'userAlias', width: '110px', ellipsis: true },
-    { title: t('aiFeedback.columns.status'), key: 'triageStatus', width: '104px', ellipsis: false },
-    { title: t('aiFeedback.columns.time'), key: 'createdAt', width: '150px', ellipsis: false },
+    { title: t('aiFeedback.columns.reason'), key: 'reason', width: 'var(--ui-layout-112, 112px)', ellipsis: true },
+    { title: t('aiFeedback.columns.user'), key: 'userAlias', width: 'var(--ui-layout-110, 110px)', ellipsis: true },
+    { title: t('aiFeedback.columns.status'), key: 'triageStatus', width: 'var(--ui-layout-104, 104px)', ellipsis: false },
+    { title: t('aiFeedback.columns.time'), key: 'createdAt', width: 'var(--ui-layout-150, 150px)', ellipsis: false },
   ]);
   const helpfulRate = computed(() =>
     summary.value.total ? ((summary.value.helpful / summary.value.total) * 100).toFixed(1) : '0.0',
@@ -407,11 +407,11 @@
 <style scoped lang="less">
   @import '@/assets/css/admin-breakpoints.less';
   .ai-feedback__search {
-    width: min(320px, 34vw);
+    width: min(var(--ui-layout-320, 320px), 34vw);
   }
 
   .ai-feedback__filter {
-    width: 132px;
+    width: var(--ui-layout-132, 132px);
   }
 
   .admin-stat-value.is-helpful,
@@ -428,12 +428,12 @@
   .ai-feedback__status {
     display: inline-flex;
     align-items: center;
-    min-height: 24px;
-    padding: 2px 7px;
+    min-height: var(--ui-layout-24, 24px);
+    padding: var(--ui-space-2, 2px) var(--ui-space-7, 7px);
     box-sizing: border-box;
     border-radius: 999px;
     background: color-mix(in srgb, currentColor 9%, transparent);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 600;
     line-height: 1.2;
   }
@@ -455,31 +455,31 @@
 
   .ai-feedback-detail {
     display: grid;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
   }
 
   .ai-feedback-detail__meta {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 8px 14px;
+    gap: var(--ui-space-8, 8px) var(--ui-space-14, 14px);
     color: var(--sub-text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .ai-feedback-detail__links {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .ai-feedback-detail__block {
     display: grid;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
 
     label {
       color: var(--sub-text-color);
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
       font-weight: 600;
     }
 
@@ -494,8 +494,8 @@
     }
 
     pre {
-      max-height: 260px;
-      padding: 10px 12px;
+      max-height: var(--ui-layout-260, 260px);
+      padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
       overflow: auto;
       border-radius: 8px;
     }
@@ -503,8 +503,8 @@
 
   .ai-feedback-triage {
     display: grid;
-    gap: 12px;
-    padding: 14px;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-14, 14px);
     border: 1px solid var(--card-border-color);
     border-left: 3px solid var(--primary-color);
     border-radius: 12px;
@@ -516,28 +516,28 @@
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .ai-feedback-triage > header p {
-    margin: 3px 0 0;
+    margin: var(--ui-space-3, 3px) 0 0;
     color: var(--sub-text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.5;
   }
 
   .ai-feedback-triage__controls {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .ai-feedback-triage__controls label,
   .ai-feedback-triage__note {
     display: grid;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
     color: var(--sub-text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .ai-feedback-triage > footer {

@@ -228,17 +228,17 @@
 <style scoped lang="less">
   .featured-selected {
     display: grid;
-    gap: 6px;
-    margin: 12px 0 18px;
+    gap: var(--ui-space-6, 6px);
+    margin: var(--ui-space-12, 12px) 0 var(--ui-space-18, 18px);
   }
   .featured-selected .b_btn {
     width: 100%;
     display: flex;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     text-align: left;
     background: transparent;
     border: 1px solid var(--workspace-border);
-    padding: 8px 10px;
+    padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px);
     height: auto;
     color: var(--primary-color);
   }
@@ -246,11 +246,11 @@
     flex: 1;
     min-width: 0;
     overflow-wrap: anywhere;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .featured-selected span {
     flex-shrink: 0;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .profile-showcase {
@@ -260,21 +260,21 @@
       display: flex;
       align-items: flex-start;
       justify-content: space-between;
-      gap: 20px;
+      gap: var(--ui-space-20, 20px);
     }
     h2 {
-      font-size: 18px;
+      font-size: var(--ui-font-18, 18px);
       margin: 0;
     }
     p {
       color: var(--desc-color);
-      font-size: 13px;
+      font-size: var(--ui-font-13, 13px);
       line-height: 1.7;
-      margin: 8px 0 16px;
+      margin: var(--ui-space-8, 8px) 0 var(--ui-space-16, 16px);
     }
     h3 {
-      font-size: 14px;
-      margin: 0 0 16px;
+      font-size: var(--ui-font-14, 14px);
+      margin: 0 0 var(--ui-space-16, 16px);
       display: flex;
       justify-content: space-between;
     }
@@ -284,9 +284,9 @@
     }
   }
   .showcase-section {
-    padding: 24px 0;
+    padding: var(--ui-space-24, 24px) 0;
     border-top: 1px solid var(--workspace-divider);
-    margin-top: 20px;
+    margin-top: var(--ui-space-20, 20px);
   }
   [aria-pressed='true'].b_btn {
     color: var(--primary-color);
@@ -294,11 +294,11 @@
     background: var(--workspace-hover);
   }
   .featured-choices {
-    height: 440px;
-    max-height: 440px;
+    height: var(--ui-layout-440, 440px);
+    max-height: var(--ui-layout-440, 440px);
     overflow: auto;
-    padding: 2px;
-    margin-bottom: 12px;
+    padding: var(--ui-space-2, 2px);
+    margin-bottom: var(--ui-space-12, 12px);
   }
   .featured-choices .b_btn {
     width: 100%;
@@ -308,8 +308,8 @@
     display: flex;
     align-items: flex-start;
     justify-content: flex-start;
-    gap: 12px;
-    padding: 16px;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-16, 16px);
     border: 1px solid var(--workspace-border);
     border-radius: 12px;
     background: var(--workspace-open-canvas);
@@ -323,26 +323,26 @@
     opacity: 1;
   }
   .selection-mark {
-    flex: 0 0 20px;
-    width: 20px;
-    height: 22.4px;
-    line-height: 22.4px;
+    flex: 0 0 var(--ui-layout-20, 20px);
+    width: var(--ui-layout-20, 20px);
+    height: var(--ui-layout-22_4, 22.4px);
+    line-height: var(--ui-layout-22_4, 22.4px);
     text-align: center;
     color: var(--primary-color);
-    font-size: 18px;
+    font-size: var(--ui-font-18, 18px);
   }
   .featured-copy {
     flex: 1;
     min-width: 0;
     display: grid;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     strong {
-      font-size: 14px;
+      font-size: var(--ui-font-14, 14px);
       line-height: 1.6;
     }
     span {
       color: var(--desc-color);
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
       line-height: 1.6;
       display: -webkit-box;
       -webkit-line-clamp: 2;
@@ -351,7 +351,7 @@
     }
   }
   .showcase-empty {
-    padding: 24px;
+    padding: var(--ui-space-24, 24px);
     border-radius: 12px;
     background: var(--workspace-hover);
   }
@@ -360,7 +360,7 @@
 <style scoped>
   .community-section-loading {
     height: auto;
-    min-height: 240px;
+    min-height: var(--ui-layout-240, 240px);
   }
   .community-section-loading[aria-busy='true'] :deep(.b-loading-content) {
     pointer-events: none;

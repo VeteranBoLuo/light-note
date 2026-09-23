@@ -79,7 +79,8 @@ const COLOR_PROPERTIES = [
 ];
 
 /** `color(srgb r g b / a)` —— Chromium 对 color-mix() 计算结果的序列化形式。 */
-const SRGB_COLOR_FUNCTION = /color\(\s*srgb\s+([\d.eE+-]+)\s+([\d.eE+-]+)\s+([\d.eE+-]+)\s*(?:\/\s*([\d.eE+-]+%?)\s*)?\)/gi;
+const SRGB_COLOR_FUNCTION =
+  /color\(\s*srgb\s+([\d.eE+-]+)\s+([\d.eE+-]+)\s+([\d.eE+-]+)\s*(?:\/\s*([\d.eE+-]+%?)\s*)?\)/gi;
 
 /**
  * 把 CSS Color 4 的 `color(srgb …)` 改写成等价的 `rgb()/rgba()`。
@@ -172,32 +173,6 @@ export function withPrintWidth<T>(target: HTMLElement, widthPx: number, run: () 
     restore('max-width', saved.maxWidth, saved.maxWidthPriority);
     restore('flex', saved.flex, saved.flexPriority);
   });
-}
-
-/**
- * 渲染期间把「原文档」的界面缩放临时归一,返回恢复函数。
- *
- * 轻笺的界面缩放是 <html> 的 CSS zoom,而 html2canvas 不支持 zoom:
- * 它的布局测量读原文档的 rect(视觉像素、被 zoom 缩放),文字度量却按字体尺寸
- * (布局像素)计算,两套坐标一叠加,缩放≠100% 时整篇字距错乱、叠字甚至丢字。
- * 只改克隆文档没用 —— rect 测量发生在原文档上,必须在渲染前归一、渲染后恢复
- * (导出瞬间页面缩放会闪一下,属可接受代价)。
- */
-function withNormalizedDocumentZoom<T>(targetDocument: Document, run: () => Promise<T>): Promise<T> {
-  const rootStyle = targetDocument.documentElement.style;
-  const bodyStyle = targetDocument.body.style;
-  const prevRoot = rootStyle.zoom;
-  const prevBody = bodyStyle.zoom;
-  rootStyle.zoom = '1';
-  bodyStyle.zoom = '1';
-  return run().finally(() => {
-    rootStyle.zoom = prevRoot;
-    bodyStyle.zoom = prevBody;
-  });
-}
-
-export function withNormalizedZoom<T>(run: () => Promise<T>): Promise<T> {
-  return withNormalizedDocumentZoom(document, run);
 }
 
 function replacePdfCheckboxes(clonedDocument: Document) {
@@ -311,23 +286,21 @@ async function renderPdfDocument(targetOrSelector: string | HTMLElement, options
     // 纸张内容宽换算成 CSS 像素:按此宽度渲染,放置时缩放比恰为 1
     const printWidthPx = Math.round(contentWidth * PT_TO_CSS_PX);
 
-    // 生成 canvas(渲染期间固定元素宽度 + 原文档 zoom 归一,克隆文档固定浅色主题)
+    // 生成 canvas(渲染期间固定元素宽度，克隆文档固定浅色主题)
     const canvas = await withPrintWidth(target, printWidthPx, () =>
-      withNormalizedDocumentZoom(target.ownerDocument, () =>
-        html2canvas(target, {
-          scale,
-          useCORS: true,
-          logging: false,
-          backgroundColor: '#FFFFFF',
-          onclone: (clonedDocument: Document) => {
-            forcePdfLightTheme(clonedDocument);
-            hideMermaidSourceBlocks(clonedDocument);
-            // 顺序有意义:先定浅色主题,再固化颜色计算值,最后才替换勾选框(它会改动 DOM 结构)
-            normalizeUnsupportedColorFunctions(clonedDocument);
-            replacePdfCheckboxes(clonedDocument);
-          },
-        }),
-      ),
+      html2canvas(target, {
+        scale,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#FFFFFF',
+        onclone: (clonedDocument: Document) => {
+          forcePdfLightTheme(clonedDocument);
+          hideMermaidSourceBlocks(clonedDocument);
+          // 顺序有意义:先定浅色主题,再固化颜色计算值,最后才替换勾选框(它会改动 DOM 结构)
+          normalizeUnsupportedColorFunctions(clonedDocument);
+          replacePdfCheckboxes(clonedDocument);
+        },
+      }),
     );
 
     // 创建 PDF 实例

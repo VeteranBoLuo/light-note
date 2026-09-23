@@ -10,7 +10,7 @@ import ResourcePickerPanel from './ResourcePickerPanel.vue';
 const componentSource = readFileSync(
   resolve(process.cwd(), 'src/components/resourcePicker/ResourcePickerPanel.vue'),
   'utf8',
-);
+).replace(/var\(--ui-[\w-]+,\s*([\d.]+px)\)/g, '$1');
 
 vi.mock('@/api/search', () => ({
   fetchGlobalSearch: vi.fn().mockResolvedValue({ items: [] }),

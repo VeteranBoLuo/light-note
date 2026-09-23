@@ -28,7 +28,7 @@
                   as="article"
                   class="support-tier-card"
                   :class="{ 'is-recommended': option.key === 'server' }"
-                  padding="12px"
+                  padding="var(--ui-space-12, 12px)"
                   radius="12px"
                 >
                   <span v-if="option.key === 'server'" class="support-tier-card__recommended">{{
@@ -60,7 +60,9 @@
                   >
                 </BCard>
               </div>
-              <p v-if="!supportConfigured" class="support-privacy-summary" role="status">{{ t('support.unavailable') }}</p>
+              <p v-if="!supportConfigured" class="support-privacy-summary" role="status">{{
+                t('support.unavailable')
+              }}</p>
               <p v-if="supportStateError" role="alert"
                 >{{ t('autumn.stateError') }}
                 <BButton size="small" @click="loadSupportState">{{ t('common.retry') }}</BButton></p
@@ -83,7 +85,7 @@
               >
               <p v-else class="support-privacy-summary">{{ supportPrimaryActionHint }}</p>
             </section>
-            <BCard as="aside" class="support-store-gateway" padding="18px" radius="13px">
+            <BCard as="aside" class="support-store-gateway" padding="var(--ui-space-18, 18px)" radius="13px">
               <h2><SvgIcon :src="icon.support.store" size="24" />{{ t('support.storeGatewayTitle') }}</h2
               ><p>{{ t('autumn.reference.resourceInvitation') }}</p>
               <div class="support-cross-art"
@@ -175,7 +177,11 @@
           ></section> </main
       ></div>
     </div>
-    <BModal v-model:visible="accountVisible" :title="t('support.accountTitle')" width="700px" :show-footer="false"
+    <BModal
+      v-model:visible="accountVisible"
+      :title="t('support.accountTitle')"
+      width="var(--ui-layout-700, 700px)"
+      :show-footer="false"
       ><SupportAccountPanel
         v-if="supportStateReady && !supportStateError"
         :state="supportState"
@@ -512,19 +518,19 @@
   }
   .support-shell {
     width: 94%;
-    max-width: 1600px;
+    max-width: var(--ui-layout-1600, 1600px);
     margin: auto;
-    padding: 0 0 32px;
+    padding: 0 0 var(--ui-space-32, 32px);
     position: relative;
   }
   .support-top {
     display: grid;
     grid-template-columns: minmax(0, 2.15fr) minmax(0, 1fr);
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     align-items: stretch;
   }
   .support-section {
-    padding: 16px 18px;
+    padding: var(--ui-space-16, 16px) var(--ui-space-18, 18px);
     border: 1px solid var(--surface-border-color);
     border-radius: 13px;
     background: var(--card-background);
@@ -532,42 +538,42 @@
     box-shadow: var(--scene-shadow);
   }
   h2 {
-    margin: 0 0 6px;
+    margin: 0 0 var(--ui-space-6, 6px);
   }
   h3 {
     font:
-      700 14px/1.5 'Songti SC',
+      700 var(--ui-font-14, 14px)/1.5 'Songti SC',
       serif;
-    margin: 4px 0;
+    margin: var(--ui-space-4, 4px) 0;
   }
   p {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     line-height: 1.65;
     color: var(--desc-color);
-    margin: 4px 0;
+    margin: var(--ui-space-4, 4px) 0;
   }
   .support-tier-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 10px;
-    margin-top: 16px;
+    gap: var(--ui-space-10, 10px);
+    margin-top: var(--ui-space-16, 16px);
   }
   .support-tier-card {
     position: relative;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     min-width: 0;
     border: 1px solid var(--surface-border-color);
   }
   .support-tier-card__header {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .support-tier-card__icon {
-    width: 48px;
-    height: 48px;
+    width: var(--ui-layout-48, 48px);
+    height: var(--ui-layout-48, 48px);
     display: grid;
     place-items: center;
     border-radius: 50%;
@@ -578,17 +584,17 @@
   .support-tier-card__amount {
     display: flex;
     align-items: baseline;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
     line-height: 1.2;
   }
   .support-tier-card__amount strong {
-    font-size: 27px;
+    font-size: var(--ui-font-27, 27px);
   }
   .support-tier-card__amount span {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .support-tier-card__amount strong.support-tier-card__custom {
-    font-size: 18px;
+    font-size: var(--ui-font-18, 18px);
   }
   .support-tier-card__action {
     width: 100%;
@@ -597,14 +603,14 @@
   .support-tier-card p {
     flex: 1;
     margin: 0;
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
   }
   .support-tier-card__recommended {
     position: absolute;
-    top: -10px;
-    right: 10px;
-    padding: 2px 10px;
-    font-size: 12px;
+    top: calc(-1 * var(--ui-space-10, 10px));
+    right: var(--ui-space-10, 10px);
+    padding: var(--ui-space-2, 2px) var(--ui-space-10, 10px);
+    font-size: var(--ui-font-12, 12px);
     background: var(--primary-color);
     color: white;
     border-radius: 13px;
@@ -613,23 +619,23 @@
   .support-privacy-summary {
     display: flex;
     align-items: center;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     flex-wrap: wrap;
-    font-size: 12px;
-    margin-top: 8px;
+    font-size: var(--ui-font-12, 12px);
+    margin-top: var(--ui-space-8, 8px);
   }
   .support-store-gateway {
     position: relative;
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     box-shadow: var(--scene-shadow);
   }
   .support-store-gateway h2 {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .support-store-gateway h2 > .svg-icon {
     color: var(--primary-color);
@@ -639,7 +645,7 @@
     display: grid;
     grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
     align-items: center;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     width: 100%;
   }
   .support-cross-footer > .b_btn {
@@ -649,9 +655,9 @@
   .support-cross-art {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     width: 100%;
-    margin: 8px 0;
+    margin: var(--ui-space-8, 8px) 0;
   }
   .support-cross-art img {
     width: 48%;
@@ -661,22 +667,22 @@
   }
   .support-cross-art > div {
     display: grid;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   .support-cross-art span {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     border: 1px solid var(--surface-border-color);
     border-radius: 5px;
-    padding: 4px 8px;
-    font-size: 12px;
+    padding: var(--ui-space-4, 4px) var(--ui-space-8, 8px);
+    font-size: var(--ui-font-12, 12px);
   }
   .support-lower {
     display: grid;
     grid-template-columns: 1.43fr 1fr 0.95fr;
-    gap: 12px;
-    margin-top: 12px;
+    gap: var(--ui-space-12, 12px);
+    margin-top: var(--ui-space-12, 12px);
     align-items: stretch;
   }
   .support-lower > * {
@@ -685,35 +691,35 @@
   .support-card-grid--usage {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 7px;
-    margin-top: 12px;
+    gap: var(--ui-space-7, 7px);
+    margin-top: var(--ui-space-12, 12px);
   }
   .support-usage-card {
-    padding: 12px 9px;
+    padding: var(--ui-space-12, 12px) var(--ui-space-9, 9px);
     background: var(--hover-background);
     border-radius: 9px;
     min-width: 0;
   }
   .support-usage-card > .svg-icon {
     color: var(--primary-color);
-    margin-bottom: 6px;
+    margin-bottom: var(--ui-space-6, 6px);
   }
   .support-usage-card__icon {
     display: block;
     color: var(--primary-color);
-    margin-bottom: 12px;
+    margin-bottom: var(--ui-space-12, 12px);
   }
   .support-usage-card p {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .support-account-summary__row {
     display: flex;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     align-items: center;
     border: 1px solid var(--surface-border-color);
     border-radius: 9px;
-    padding: 9px;
-    margin: 12px 0;
+    padding: var(--ui-space-9, 9px);
+    margin: var(--ui-space-12, 12px) 0;
   }
   .support-account-summary__row > div {
     flex: 1;
@@ -727,12 +733,12 @@
   }
   .support-account-summary__row small {
     display: block;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
     line-height: 1.5;
   }
   .support-account-summary__row strong {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
   }
   .support-account-summary > .b_btn {
     width: 100%;
@@ -741,12 +747,12 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 24px;
-    padding: 20px 10% 12px;
+    gap: var(--ui-space-24, 24px);
+    padding: var(--ui-space-20, 20px) 10% var(--ui-space-12, 12px);
     border-top: 1px solid var(--surface-border-color);
   }
   .support-closing p {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .support-closing > .b_btn {
     flex-shrink: 0;
@@ -758,7 +764,7 @@
     flex-direction: column;
   }
   .support-lower :deep(.support-leaderboard__heading) {
-    margin: 0 0 10px;
+    margin: 0 0 var(--ui-space-10, 10px);
     display: block;
   }
   .support-lower :deep(.support-leaderboard__heading > div > span) {
@@ -766,13 +772,13 @@
   }
   .support-lower :deep(.support-leaderboard__heading p),
   .support-lower :deep(.support-leaderboard__footnote) {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.6;
   }
   .support-lower :deep(.support-leaderboard__state) {
-    min-height: 100px;
-    padding: 12px;
-    font-size: 12px;
+    min-height: var(--ui-layout-100, 100px);
+    padding: var(--ui-space-12, 12px);
+    font-size: var(--ui-font-12, 12px);
   }
   .support-lower :deep(.support-leaderboard__state > span:last-child) {
     display: none;
@@ -788,14 +794,14 @@
   }
   .support-lower h2,
   .support-lower :deep(.support-leaderboard h2) {
-    margin: 0 0 6px;
+    margin: 0 0 var(--ui-space-6, 6px);
     font:
-      700 20px/1.4 'Songti SC',
+      700 var(--ui-font-20, 20px)/1.4 'Songti SC',
       'STSong',
       serif;
   }
   .support-lower > .support-section > p {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .support-card-grid--usage {
     flex: 1;
@@ -808,11 +814,11 @@
     margin-top: auto;
   }
   .support-account-summary__row {
-    margin: 14px 0;
+    margin: var(--ui-space-14, 14px) 0;
   }
   .support-ranking-note {
-    margin: 10px 0 16px;
-    font-size: 12px;
+    margin: var(--ui-space-10, 10px) 0 var(--ui-space-16, 16px);
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.6;
   }
   .support-lower :deep(.support-leaderboard__card) {
@@ -822,12 +828,12 @@
   }
   .support-lower :deep(.support-leaderboard__state) {
     flex: 1;
-    min-height: 110px;
-    gap: 8px;
-    padding: 12px 0;
+    min-height: var(--ui-layout-110, 110px);
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-12, 12px) 0;
   }
   .support-lower :deep(.support-leaderboard__state strong) {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     text-align: center;
   }
   .support-lower :deep(.support-leaderboard ol) {
@@ -835,16 +841,16 @@
     flex-direction: column;
     gap: 0;
     padding: 0;
-    max-height: 200px;
+    max-height: var(--ui-layout-200, 200px);
     overflow-y: auto;
   }
   .support-lower :deep(.support-leaderboard li),
   .support-lower :deep(.support-leaderboard li.is-featured) {
     display: grid;
-    grid-template-columns: 20px 24px minmax(0, 1fr) auto;
-    gap: 6px;
-    min-height: 40px;
-    padding: 6px 0;
+    grid-template-columns: var(--ui-layout-20, 20px) var(--ui-layout-24, 24px) minmax(0, 1fr) auto;
+    gap: var(--ui-space-6, 6px);
+    min-height: var(--ui-layout-40, 40px);
+    padding: var(--ui-space-6, 6px) 0;
     border: 0;
     border-bottom: 1px solid var(--surface-border-color);
     border-radius: 0;
@@ -854,21 +860,21 @@
   .support-lower :deep(.support-leaderboard__rank),
   .support-lower :deep(li.is-featured .support-leaderboard__rank) {
     position: static;
-    width: 20px;
-    height: 20px;
+    width: var(--ui-layout-20, 20px);
+    height: var(--ui-layout-20, 20px);
     border: 0;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .support-lower :deep(.support-leaderboard__avatar),
   .support-lower :deep(li.is-featured .support-leaderboard__avatar) {
-    width: 24px;
-    height: 24px;
+    width: var(--ui-layout-24, 24px);
+    height: var(--ui-layout-24, 24px);
     border: 0;
     box-shadow: none;
   }
   .support-lower :deep(.support-leaderboard__identity strong),
   .support-lower :deep(li.is-featured .support-leaderboard__amount) {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .support-lower :deep(.support-leaderboard__identity span) {
     display: none;
@@ -877,11 +883,11 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .support-account-avatar {
-    width: 36px;
-    height: 36px;
+    width: var(--ui-layout-36, 36px);
+    height: var(--ui-layout-36, 36px);
     border-radius: 50%;
     object-fit: cover;
     flex-shrink: 0;
@@ -891,26 +897,26 @@
     place-items: center;
     background: linear-gradient(135deg, var(--primary-color), var(--desc-color));
     color: white;
-    font-size: 17px;
+    font-size: var(--ui-font-17, 17px);
   }
   .support-account-actions {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     margin-top: auto;
   }
   .support-account-actions .b_btn {
     width: 100%;
   }
   .support-account-summary__totals {
-    margin: 0 0 12px;
+    margin: 0 0 var(--ui-space-12, 12px);
   }
   .support-margin-note {
     margin: 0;
     min-width: 0;
     justify-self: end;
     font:
-      italic 14px/1.8 'Songti SC',
+      italic var(--ui-font-14, 14px)/1.8 'Songti SC',
       serif;
     color: var(--primary-color);
     white-space: pre-line;
@@ -924,7 +930,7 @@
     width: 94%;
   }
   .is-compact .support-top {
-    grid-template-columns: minmax(0, 2.6fr) minmax(200px, 1fr);
+    grid-template-columns: minmax(0, 2.6fr) minmax(var(--ui-layout-200, 200px), 1fr);
   }
   .is-compact .support-tier-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));

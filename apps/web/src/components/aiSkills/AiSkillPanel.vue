@@ -513,8 +513,8 @@
     display: flex;
     min-width: 0;
     flex-direction: column;
-    gap: var(--ai-skill-panel-gap, 12px);
-    padding: var(--ai-skill-panel-padding, 15px);
+    gap: var(--ai-skill-panel-gap, var(--ui-space-12, 12px));
+    padding: var(--ai-skill-panel-padding, var(--ui-space-15, 15px));
     border: 1px solid var(--surface-border-color);
     border-radius: 14px;
     color: var(--text-color);
@@ -525,25 +525,25 @@
     display: flex;
     flex: 0 0 auto;
     align-items: flex-start;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .ai-skill-panel__header > span:last-child {
     display: flex;
     min-width: 0;
     flex-direction: column;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
 
   .ai-skill-panel__header strong {
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
   }
 
   .ai-skill-panel__header small,
   .ai-skill-panel__state,
   .ai-skill-panel__coverage {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.55;
   }
 
@@ -560,8 +560,8 @@
   }
 
   .ai-skill-panel.is-sidebar .ai-skill-panel__composer :deep(.b-textarea) {
-    min-height: 80px;
-    max-height: 160px;
+    min-height: var(--ui-layout-80, 80px);
+    max-height: var(--ui-layout-160, 160px);
   }
 
   .ai-skill-panel.is-sidebar .ai-skill-panel__composer :deep(.b_btn) {
@@ -585,9 +585,9 @@
 
   .ai-skill-panel__icon {
     display: inline-flex;
-    width: 36px;
-    height: 36px;
-    flex: 0 0 36px;
+    width: var(--ui-layout-36, 36px);
+    height: var(--ui-layout-36, 36px);
+    flex: 0 0 var(--ui-layout-36, 36px);
     align-items: center;
     justify-content: center;
     border: 1px solid #8b84ff;
@@ -601,16 +601,16 @@
 
   .ai-skill-panel__scope {
     max-width: 100%;
-    min-height: 27px;
+    min-height: var(--ui-layout-27, 27px);
     flex: 0 0 auto;
     align-self: flex-start;
-    padding: 4px 9px;
+    padding: var(--ui-space-4, 4px) var(--ui-space-9, 9px);
     box-sizing: border-box;
     overflow: hidden;
     border: 1px solid var(--surface-border-color);
     border-radius: 999px;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     background: var(--workspace-panel-bg-color);
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -619,12 +619,12 @@
   .ai-skill-panel__action-section {
     display: grid;
     flex: 0 0 auto;
-    gap: var(--ai-skill-action-section-gap, 8px);
+    gap: var(--ai-skill-action-section-gap, var(--ui-space-8, 8px));
   }
 
   .ai-skill-panel__actions-label {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 600;
   }
 
@@ -632,13 +632,13 @@
   .ai-skill-panel__sources {
     display: flex;
     flex-wrap: wrap;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
 
   .ai-skill-panel__actions {
     flex: 0 0 auto;
     flex-wrap: var(--ai-skill-actions-wrap, wrap);
-    gap: var(--ai-skill-actions-gap, 7px);
+    gap: var(--ai-skill-actions-gap, var(--ui-space-7, 7px));
     overflow-x: var(--ai-skill-actions-overflow-x, visible);
     scrollbar-width: var(--ai-skill-actions-scrollbar-width, auto);
   }
@@ -648,14 +648,14 @@
   }
 
   .ai-skill-panel__actions :deep(.b_btn) {
-    min-height: var(--ai-skill-action-min-height, 34px);
+    min-height: var(--ai-skill-action-min-height, var(--ui-control-34, 34px));
     height: auto;
-    padding: var(--ai-skill-action-padding, 6px 10px);
+    padding: var(--ai-skill-action-padding, var(--ui-space-6, 6px) var(--ui-space-10, 10px));
     border-color: var(--surface-border-color);
     border-radius: 9px;
     color: var(--text-color);
     background: var(--workspace-panel-bg-color);
-    font-size: var(--ai-skill-action-font-size, 12px);
+    font-size: var(--ai-skill-action-font-size, var(--ui-font-12, 12px));
     line-height: 1.35;
     white-space: var(--ai-skill-action-white-space, normal);
   }
@@ -672,11 +672,11 @@
     flex: 0 0 auto;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: end;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .ai-skill-panel__composer :deep(.b-textarea) {
-    min-height: 68px;
+    min-height: var(--ui-layout-68, 68px);
     border-color: var(--surface-border-color);
     color: var(--text-color);
     background: var(--bl-input-noBorder-bg-color);
@@ -704,9 +704,9 @@
   }
 
   .ai-skill-panel__composer.is-chat :deep(.b-textarea) {
-    min-height: var(--ai-skill-chat-composer-min-height, 112px);
-    max-height: var(--ai-skill-chat-composer-max-height, 180px);
-    padding: var(--ai-skill-chat-composer-padding, 13px 14px 50px) !important;
+    min-height: var(--ai-skill-chat-composer-min-height, var(--ui-layout-112, 112px));
+    max-height: var(--ai-skill-chat-composer-max-height, var(--ui-layout-180, 180px));
+    padding: var(--ai-skill-chat-composer-padding, var(--ui-space-13, 13px) var(--ui-space-14, 14px) var(--ui-space-50, 50px)) !important;
     resize: none;
     border: 0 !important;
     border-radius: 15px;
@@ -719,19 +719,19 @@
 
   .ai-skill-panel__composer.is-chat :deep(.b_btn) {
     position: absolute;
-    right: var(--ai-skill-chat-composer-action-right, 10px);
-    bottom: var(--ai-skill-chat-composer-action-bottom, 10px);
+    right: var(--ai-skill-chat-composer-action-right, var(--ui-space-10, 10px));
+    bottom: var(--ai-skill-chat-composer-action-bottom, var(--ui-space-10, 10px));
     width: auto;
-    height: 32px;
-    padding: 0 14px;
+    height: var(--ui-control-32, 32px);
+    padding: 0 var(--ui-space-14, 14px);
     border-radius: 9px;
-    font-size: 12px;
-    line-height: 32px;
+    font-size: var(--ui-font-12, 12px);
+    line-height: var(--ui-control-32, 32px);
   }
 
   .ai-skill-panel.is-sidebar .ai-skill-panel__composer.is-chat :deep(.b-textarea) {
-    min-height: var(--ai-skill-chat-composer-min-height, 112px);
-    max-height: var(--ai-skill-chat-composer-max-height, 180px);
+    min-height: var(--ai-skill-chat-composer-min-height, var(--ui-layout-112, 112px));
+    max-height: var(--ai-skill-chat-composer-max-height, var(--ui-layout-180, 180px));
   }
 
   .ai-skill-panel.is-sidebar .ai-skill-panel__composer.is-chat :deep(.b_btn) {
@@ -742,7 +742,7 @@
   .ai-skill-panel__result {
     min-width: 0;
     max-width: 100%;
-    padding: 12px;
+    padding: var(--ui-space-12, 12px);
     box-sizing: border-box;
     border: 1px solid var(--surface-border-color);
     border-radius: 10px;
@@ -752,14 +752,14 @@
   .ai-skill-panel__state.is-error {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
     border-color: var(--danger-color);
     color: var(--danger-color);
   }
 
   .ai-skill-panel.has-reserved-result-space .ai-skill-panel__state,
   .ai-skill-panel.has-reserved-result-space .ai-skill-panel__result {
-    min-height: min(370px, 50vh);
+    min-height: min(var(--ui-layout-370, 370px), 50vh);
   }
 
   .ai-skill-panel.has-reserved-result-space .ai-skill-panel__state.is-loading {
@@ -770,19 +770,19 @@
 
   .ai-skill-panel__retry {
     align-self: flex-start;
-    margin-top: 4px;
+    margin-top: var(--ui-space-4, 4px);
   }
 
   .ai-skill-panel__state.is-unavailable {
     display: grid;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
 
   .ai-skill-panel__result-actions {
     display: flex;
     justify-content: flex-end;
-    gap: 8px;
-    margin-top: 12px;
+    gap: var(--ui-space-8, 8px);
+    margin-top: var(--ui-space-12, 12px);
   }
 
   .ai-skill-panel__result-actions:empty {
@@ -791,15 +791,15 @@
 
   .ai-skill-panel__sources {
     align-items: center;
-    margin-top: 12px;
-    padding-top: 10px;
+    margin-top: var(--ui-space-12, 12px);
+    padding-top: var(--ui-space-10, 10px);
     border-top: 1px solid var(--surface-divider-color);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .ai-skill-panel__source {
-    padding: 3px 7px;
+    padding: var(--ui-space-3, 3px) var(--ui-space-7, 7px);
     border: 1px solid var(--surface-border-color);
     border-radius: 999px;
     color: var(--text-color);
@@ -817,10 +817,10 @@
 
   .ai-skill-panel__coverage {
     display: flex;
-    margin-top: 8px;
-    padding: 8px 10px;
+    margin-top: var(--ui-space-8, 8px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px);
     flex-direction: column;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
     border: 1px solid var(--surface-border-color);
     border-left: 3px solid var(--warning-color);
     border-radius: 8px;

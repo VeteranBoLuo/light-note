@@ -260,7 +260,7 @@
   import type { AiScopeRef } from '@/types/aiScope';
   import type { ResourceListScrollAnchor, ResourceListScrollPosition } from '@/utils/resourceListScroll';
   import { findScrollContainer, restoreScrollTop } from '@/utils/scrollContainer';
-  import { scrollNearestIntoContainer } from '@/utils/zoom';
+  import { scrollNearestIntoContainer } from '@/utils/scrolling';
 
   /**
    * 全站唯一的资源选择面板。
@@ -862,17 +862,17 @@
     flex-direction: column;
     width: 100%;
     max-width: none;
-    max-height: min(340px, calc(100vh - 140px));
-    max-height: min(340px, calc(100dvh - 140px));
+    max-height: min(var(--ui-layout-340, 340px), calc(100vh - var(--ui-layout-140, 140px)));
+    max-height: min(var(--ui-layout-340, 340px), calc(100dvh - var(--ui-layout-140, 140px)));
     padding: 0;
     box-sizing: border-box;
     overflow: hidden;
   }
 
   .resource-picker-panel.is-inline {
-    width: 320px;
-    max-width: min(360px, calc(100vw - 24px));
-    padding: 6px;
+    width: var(--ui-layout-320, 320px);
+    max-width: min(var(--ui-layout-360, 360px), calc(100vw - var(--ui-space-24, 24px)));
+    padding: var(--ui-space-6, 6px);
   }
 
   .resource-picker-panel.is-fill {
@@ -891,7 +891,7 @@
     display: grid;
     grid-auto-rows: max-content;
     align-content: start;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
     min-height: 0;
     min-width: 0;
     overflow-x: hidden;
@@ -917,41 +917,41 @@
   }
 
   .resource-picker-panel__virtual-list .resource-picker-panel__item--scope {
-    padding-top: 6px;
-    padding-bottom: 6px;
+    padding-top: var(--ui-space-6, 6px);
+    padding-bottom: var(--ui-space-6, 6px);
   }
 
   .resource-picker-panel.has-search .resource-picker-panel__results {
-    margin-top: 8px;
+    margin-top: var(--ui-space-8, 8px);
   }
 
   .resource-picker-panel__batch {
-    min-height: 34px;
-    margin-top: 8px;
-    padding: 0 4px 7px 8px;
+    min-height: var(--ui-layout-34, 34px);
+    margin-top: var(--ui-space-8, 8px);
+    padding: 0 var(--ui-space-4, 4px) var(--ui-space-7, 7px) var(--ui-space-8, 8px);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     border-bottom: 1px solid var(--surface-divider-color);
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .resource-picker-panel__batch :deep(.b_btn) {
-    min-height: 27px;
+    min-height: var(--ui-layout-27, 27px);
   }
 
   .resource-picker-panel__group {
-    padding: 7px 8px 3px;
+    padding: var(--ui-space-7, 7px) var(--ui-space-8, 8px) var(--ui-space-3, 3px);
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 600;
     letter-spacing: 0.02em;
   }
 
   .resource-picker-panel__group:first-child {
-    padding-top: 2px;
+    padding-top: var(--ui-space-2, 2px);
   }
 
   .resource-picker-panel__item {
@@ -959,11 +959,11 @@
     min-width: 0;
     max-width: 100%;
     height: auto;
-    min-height: 30px;
+    min-height: var(--ui-layout-30, 30px);
     align-items: center;
     justify-content: flex-start;
-    gap: 8px;
-    padding: 7px 8px;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-7, 7px) var(--ui-space-8, 8px);
     overflow: hidden;
     border: 1px solid transparent;
     border-radius: 8px;
@@ -998,9 +998,9 @@
   }
 
   .resource-picker-panel__check {
-    width: 17px;
-    height: 17px;
-    flex: 0 0 17px;
+    width: var(--ui-layout-17, 17px);
+    height: var(--ui-layout-17, 17px);
+    flex: 0 0 var(--ui-layout-17, 17px);
     display: grid;
     place-items: center;
     box-sizing: border-box;
@@ -1016,20 +1016,20 @@
   }
 
   .resource-picker-panel__group--scope {
-    margin-top: 4px;
+    margin-top: var(--ui-space-4, 4px);
     border-top: 1px solid var(--surface-border-color);
   }
 
   .resource-picker-panel__item--scope {
-    min-height: 62px;
-    padding-top: 8px;
-    padding-bottom: 8px;
+    min-height: var(--ui-layout-62, 62px);
+    padding-top: var(--ui-space-8, 8px);
+    padding-bottom: var(--ui-space-8, 8px);
   }
 
   .resource-picker-panel__pinned-tag {
     flex: 0 0 auto;
     color: var(--info-color, #1c7ed6);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 600;
   }
 
@@ -1042,8 +1042,8 @@
 
   .resource-picker-panel__scope-icon {
     display: inline-flex;
-    width: 24px;
-    height: 24px;
+    width: var(--ui-layout-24, 24px);
+    height: var(--ui-layout-24, 24px);
     flex: 0 0 auto;
     align-items: center;
     justify-content: center;
@@ -1058,15 +1058,15 @@
     justify-content: center;
     min-width: 0;
     min-height: 100%;
-    gap: 3px;
-    padding: 2px 0;
+    gap: var(--ui-space-3, 3px);
+    padding: var(--ui-space-2, 2px) 0;
     text-align: left;
   }
 
   .resource-picker-panel__copy small {
     overflow: hidden;
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 400;
     line-height: 1.3;
     text-overflow: ellipsis;
@@ -1079,31 +1079,31 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 500;
   }
 
   .resource-picker-panel__hint {
-    padding: 16px 8px;
+    padding: var(--ui-space-16, 16px) var(--ui-space-8, 8px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     text-align: center;
   }
 
   .resource-picker-panel__load-error {
-    min-height: 36px;
-    padding: 5px 8px 0;
+    min-height: var(--ui-layout-36, 36px);
+    padding: var(--ui-space-5, 5px) var(--ui-space-8, 8px) 0;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     border-top: 1px solid var(--surface-divider-color);
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .resource-picker-panel__load-error :deep(.b_btn) {
-    min-height: 28px;
+    min-height: var(--ui-layout-28, 28px);
     flex: 0 0 auto;
   }
 

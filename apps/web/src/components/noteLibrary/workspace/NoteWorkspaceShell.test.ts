@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import NoteWorkspaceShell from './NoteWorkspaceShell.vue';
 import { NOTE_WORKSPACE_DEFAULT_SIDEBAR_WIDTH } from '@/utils/noteWorkspaceLayout';
 import message from '@/components/base/BasicComponents/BMessage/BMessage';
+import { applyUiDensity } from '@/composables/useUiDensity';
 
 vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({ default: { render: () => null } }));
 vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }));
@@ -42,6 +43,7 @@ afterEach(() => {
   host.remove();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  applyUiDensity('medium');
 });
 async function pointer(type: string, x = 100) {
   const target = type === 'pointerdown' ? host.querySelector('.note-workspace-shell__resizer')! : document;
@@ -112,4 +114,17 @@ it('卸载不会触发引导', async () => {
   app.unmount();
   await pointer('pointerup');
   expect(message.info).not.toHaveBeenCalled();
+});
+
+it('密度仅调整 AI 面板宽度，保留用户侧栏宽度和正文阅读下限', async () => {
+  width.value = 312;
+  for (const [preference, aiWidth] of [['small', '295px'], ['large', '361px'], ['medium', '328px']]) {
+    applyUiDensity(preference);
+    await nextTick();
+    const shell = host.querySelector<HTMLElement>('.note-workspace-shell')!;
+    expect(shell.style.getPropertyValue('--note-workspace-ai-width')).toBe(aiWidth);
+    expect(shell.style.getPropertyValue('--note-workspace-sidebar-width')).toBe('312px');
+    expect(shell.style.getPropertyValue('--note-workspace-main-min-width')).toBe('680px');
+    expect(width.value).toBe(312);
+  }
 });

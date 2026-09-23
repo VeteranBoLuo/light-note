@@ -2,7 +2,7 @@
   <BDrawer
     :open="open"
     :title="t('resourceCenter.batch.manageTags')"
-    width="640px"
+    width="var(--ui-layout-640, 640px)"
     mobile-full-screen
     :mask-closable="!submitLoading"
     :keyboard="!submitLoading"
@@ -41,7 +41,7 @@
                 <span class="item-title" :title="item.title">{{ item.title || item.id }}</span>
               </div>
               <div class="item-tags">
-                <ResourceTagChip v-for="tag in getItemTags(item)" :key="tag.id" :tag="tag" max-width="150px" />
+                <ResourceTagChip v-for="tag in getItemTags(item)" :key="tag.id" :tag="tag" max-width="var(--ui-layout-150, 150px)" />
                 <span v-if="!getItemTags(item).length" class="panel-hint">{{
                   t('resourceCenter.batch.noItemTags')
                 }}</span>
@@ -107,7 +107,7 @@
                     selected
                     show-selected-indicator
                     :disabled="submitLoading"
-                    max-width="220px"
+                    max-width="var(--ui-layout-220, 220px)"
                   />
                 </BButton>
               </div>
@@ -523,11 +523,11 @@
     min-height: 0;
     flex: 1;
     overflow-y: auto;
-    padding: 20px 24px;
+    padding: var(--ui-space-20, 20px) var(--ui-space-24, 24px);
   }
   .resource-panel {
-    padding-bottom: 18px;
-    margin-bottom: 20px;
+    padding-bottom: var(--ui-space-18, 18px);
+    margin-bottom: var(--ui-space-20, 20px);
     border-bottom: 1px solid var(--surface-border-color);
   }
   .panel-heading,
@@ -535,30 +535,30 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .summary-row {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .summary-row strong {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
   }
   h2 {
     margin: 0;
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     font-weight: 600;
   }
   .panel-hint {
-    margin: 10px 0;
+    margin: var(--ui-space-10, 10px) 0;
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.6;
   }
   .item-row {
-    padding: 12px 0;
+    padding: var(--ui-space-12, 12px) 0;
     border-bottom: 1px solid var(--surface-border-color);
   }
   .item-heading,
@@ -566,52 +566,52 @@
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   .item-title {
     overflow-wrap: anywhere;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .item-tags {
-    margin-top: 6px;
+    margin-top: var(--ui-space-6, 6px);
   }
   .resource-toggle {
-    margin-top: 10px;
+    margin-top: var(--ui-space-10, 10px);
   }
   .mode-tabs {
     width: fit-content;
     --primary-color: var(--batch-toggle-accent);
   }
   .workspace-status {
-    min-height: 220px;
+    min-height: var(--ui-layout-220, 220px);
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
     color: var(--desc-color);
     text-align: center;
   }
   .tag-search {
-    margin: 18px 0 12px;
+    margin: var(--ui-space-18, 18px) 0 var(--ui-space-12, 12px);
   }
   .selection-toolbar {
-    margin-bottom: 12px;
+    margin-bottom: var(--ui-space-12, 12px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     flex-wrap: wrap;
   }
   .tag-options {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .tag-option {
     box-sizing: border-box;
     min-width: 0;
-    min-height: 44px;
-    padding: 10px 12px;
-    gap: 10px;
+    min-height: var(--ui-control-44, 44px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
+    gap: var(--ui-space-10, 10px);
     border: 1px solid var(--surface-border-color);
     border-radius: 8px;
     background: var(--card-background);
@@ -619,17 +619,17 @@
   .tag-option :deep(.b-checkbox__label) {
     min-width: 0;
     display: grid;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
     flex: 1;
   }
   .tag-option-name {
     overflow-wrap: anywhere;
     color: var(--text-color);
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
   }
   .tag-option-status {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.4;
   }
   .tag-option:hover:not(.is-disabled),
@@ -649,20 +649,20 @@
     opacity: 0.65;
   }
   .preview-box {
-    margin: 0 0 8px;
-    padding: 12px 0 4px;
+    margin: 0 0 var(--ui-space-8, 8px);
+    padding: var(--ui-space-12, 12px) 0 var(--ui-space-4, 4px);
     border-top: 1px solid var(--surface-border-color);
   }
   .selected-tags {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
-    margin: 10px 0;
+    gap: var(--ui-space-6, 6px);
+    margin: var(--ui-space-10, 10px) 0;
   }
   .selected-tag-action.b_btn {
     min-width: 0;
     height: auto;
-    padding: 4px 2px;
+    padding: var(--ui-space-4, 4px) var(--ui-space-2, 2px);
     border: 0;
     background: transparent;
     box-shadow: none;
@@ -674,42 +674,42 @@
   .tag-chip.tag-chip--selected.b-chip--tag.b-chip--selected {
     border-color: var(--chip-tag-fg);
     border-width: 1px;
-    min-height: 26px;
-    padding: 3px 9px;
+    min-height: var(--ui-control-26, 26px);
+    padding: var(--ui-space-3, 3px) var(--ui-space-9, 9px);
   }
   .empty-tip {
-    padding: 30px 12px;
+    padding: var(--ui-space-30, 30px) var(--ui-space-12, 12px);
     color: var(--desc-color);
     text-align: center;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .batch-footer {
     flex-shrink: 0;
-    padding: 16px 24px max(16px, env(safe-area-inset-bottom));
+    padding: var(--ui-space-16, 16px) var(--ui-space-24, 24px) max(var(--ui-space-16, 16px), env(safe-area-inset-bottom));
     border-top: 1px solid var(--surface-border-color);
     background: var(--card-background);
   }
   .preview-result {
     margin: 0;
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     font-weight: 600;
   }
   .batch-preview .panel-hint {
-    margin: 5px 0 0;
+    margin: var(--ui-space-5, 5px) 0 0;
   }
   .batch-footer-actions {
     display: flex;
     justify-content: flex-end;
-    gap: 10px;
-    margin-top: 14px;
+    gap: var(--ui-space-10, 10px);
+    margin-top: var(--ui-space-14, 14px);
   }
   .submit-error {
-    margin: 0 0 12px;
-    padding: 10px;
+    margin: 0 0 var(--ui-space-12, 12px);
+    padding: var(--ui-space-10, 10px);
     color: var(--error-color);
     border: 1px solid var(--error-color);
     border-radius: 8px;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .batch-workspace--mobile .batch-scroll {
     padding: 16px;

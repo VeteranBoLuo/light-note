@@ -2,7 +2,7 @@
   <BModal
     :visible="true"
     :title="t('community.feed.' + (kind === 'note' ? 'saveNote' : 'saveBookmark'))"
-    width="560px"
+    width="var(--ui-layout-560, 560px)"
     fullscreen-mobile
     :mask-closable="!busy"
     :close-disabled="busy"
@@ -303,23 +303,23 @@
 <style scoped>
   .save-post-form {
     display: grid;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
   .save-post-form label,
   .save-location-field {
     display: grid;
-    gap: 8px;
-    margin-bottom: 16px;
+    gap: var(--ui-space-8, 8px);
+    margin-bottom: var(--ui-space-16, 16px);
     color: var(--text-color);
   }
   .save-post-actions {
     display: flex;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     justify-content: flex-end;
   }
   .save-post-hint {
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.6;
   }
   @media (max-width: 768px) {

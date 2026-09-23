@@ -57,34 +57,42 @@
 
         <div v-else class="workspace-card-grid">
           <article v-for="item in filteredWorkspaces" :key="item.id" class="workspace-card-container">
-          <BButton
-            class="workspace-card"
-            :disabled="!!deletingId"
-            :aria-label="t('toolbox.workspace.openWorkspace', { title: item.title })"
-            @click="openWorkspace(item.id)"
-          >
-            <span class="workspace-card__top">
-              <span class="workspace-card__icon"><SvgIcon :src="templateIcons[item.kind]" size="21" /></span>
-              <span class="workspace-card__copy">
-                <strong :title="item.title">{{ item.title }}</strong>
-                <small>{{ item.goal || item.description || t(`toolbox.tool.${item.kind}_workspace.name`) }}</small>
+            <BButton
+              class="workspace-card"
+              :disabled="!!deletingId"
+              :aria-label="t('toolbox.workspace.openWorkspace', { title: item.title })"
+              @click="openWorkspace(item.id)"
+            >
+              <span class="workspace-card__top">
+                <span class="workspace-card__icon"><SvgIcon :src="templateIcons[item.kind]" size="21" /></span>
+                <span class="workspace-card__copy">
+                  <strong :title="item.title">{{ item.title }}</strong>
+                  <small>{{ item.goal || item.description || t(`toolbox.tool.${item.kind}_workspace.name`) }}</small>
+                </span>
+                <BChip :tone="statusTone(item.status)">{{ statusLabel(item.status) }}</BChip>
               </span>
-              <BChip :tone="statusTone(item.status)">{{ statusLabel(item.status) }}</BChip>
-            </span>
-            <span class="workspace-card__next">
-              <small>{{ t('toolbox.workspace.nextStep') }}</small>
-              <strong>{{ item.nextStep || t('toolbox.workspace.noNextStep') }}</strong>
-            </span>
-            <span class="workspace-card__meta">
-              <span>{{ t('toolbox.workspace.materialCount', { count: item.resourceCount }) }}</span>
-              <span>{{ t('toolbox.workspace.openItemCount', { count: item.openItemCount }) }}</span>
-              <span>{{ formatRelative(item.updatedAt) }}</span>
-              <SvgIcon :src="icon.toolbox.arrow" size="15" />
-            </span>
-          </BButton>
-          <BButton icon-only v-if="!visitorPreview" class="project-delete-trigger" :disabled="!!deletingId" :loading="deletingId === item.id"
-            :aria-label="t('toolbox.project.deleteNamed', { title: item.title })" :title="t('toolbox.project.delete')"
-            @click="confirmDeleteProject(item)"><SvgIcon :src="icon.toolbox.delete" size="16" /></BButton>
+              <span class="workspace-card__next">
+                <small>{{ t('toolbox.workspace.nextStep') }}</small>
+                <strong>{{ item.nextStep || t('toolbox.workspace.noNextStep') }}</strong>
+              </span>
+              <span class="workspace-card__meta">
+                <span>{{ t('toolbox.workspace.materialCount', { count: item.resourceCount }) }}</span>
+                <span>{{ t('toolbox.workspace.openItemCount', { count: item.openItemCount }) }}</span>
+                <span>{{ formatRelative(item.updatedAt) }}</span>
+                <SvgIcon :src="icon.toolbox.arrow" size="15" />
+              </span>
+            </BButton>
+            <BButton
+              icon-only
+              v-if="!visitorPreview"
+              class="project-delete-trigger"
+              :disabled="!!deletingId"
+              :loading="deletingId === item.id"
+              :aria-label="t('toolbox.project.deleteNamed', { title: item.title })"
+              :title="t('toolbox.project.delete')"
+              @click="confirmDeleteProject(item)"
+              ><SvgIcon :src="icon.toolbox.delete" size="16"
+            /></BButton>
           </article>
         </div>
       </section>
@@ -121,7 +129,14 @@
           <span class="project-section-navigation__number">{{ String(index + 1).padStart(2, '0') }}</span>
           <span class="project-section-navigation__label">{{ section.label }}</span>
         </BButton>
-        <BButton class="project-settings-trigger project-settings-trigger--mobile" :disabled="mutating" :aria-label="t('toolbox.project.manage')" :title="t('toolbox.project.manage')" @click="openEditModal"><SvgIcon :src="icon.userCenter.menu.settings" size="18" /></BButton>
+        <BButton
+          class="project-settings-trigger project-settings-trigger--mobile"
+          :disabled="mutating"
+          :aria-label="t('toolbox.project.manage')"
+          :title="t('toolbox.project.manage')"
+          @click="openEditModal"
+          ><SvgIcon :src="icon.userCenter.menu.settings" size="18"
+        /></BButton>
       </nav>
       <section class="workspace-summary">
         <div class="workspace-summary__main">
@@ -174,7 +189,6 @@
         <BButton @click="focusProgressForm">{{ templateText('recordAction') }}</BButton>
       </section>
 
-
       <section ref="progressSection" class="workspace-section workspace-progress-section">
         <header class="workspace-section__head"
           ><div>
@@ -206,7 +220,7 @@
               v-model:value="progressNextStep"
               @update:value="progressDraftEdited = true"
               :maxlength="500"
-              height="42px"
+              height="var(--ui-layout-42, 42px)"
               :placeholder="templateText('nextStepPlaceholder')"
             />
           </label>
@@ -253,7 +267,10 @@
           <article
             v-for="resource in filteredResources"
             :key="`${resource.type}:${resource.resourceId}`"
-            :class="{ 'is-selected': selectedResourceKeys.includes(`${resource.type}:${resource.resourceId}`), 'is-unavailable': resource.available === false }"
+            :class="{
+              'is-selected': selectedResourceKeys.includes(`${resource.type}:${resource.resourceId}`),
+              'is-unavailable': resource.available === false,
+            }"
             @click="selectResourceRow(resource, $event)"
           >
             <BCheckbox
@@ -297,7 +314,14 @@
             <p>{{ templateText('boardDescription') }}</p>
           </div>
         </header>
-        <WorkspaceBoard :key="workspace.id" v-model:lane="mobileLane" :workspace="workspace" :readonly="visitorPreview" :mobile="isMobileLayout" @updated="handleBoardUpdated" />
+        <WorkspaceBoard
+          :key="workspace.id"
+          v-model:lane="mobileLane"
+          :workspace="workspace"
+          :readonly="visitorPreview"
+          :mobile="isMobileLayout"
+          @updated="handleBoardUpdated"
+        />
       </section>
 
       <section ref="timelineSection" class="workspace-section workspace-timeline-section">
@@ -345,14 +369,17 @@
     <BModal
       v-model:visible="createModalVisible"
       :title="workspaceFormMode === 'edit' ? t('toolbox.project.manage') : templateText('createModalTitle')"
-      width="620px"
+      width="var(--ui-layout-620, 620px)"
       :show-footer="false"
       fullscreen-mobile
       initial-focus=".workspace-create-title"
     >
       <div
         class="workspace-modal-form"
-        :class="{ 'workspace-settings-form': workspaceFormMode === 'edit', 'workspace-modal-form--mobile': isMobileLayout }"
+        :class="{
+          'workspace-settings-form': workspaceFormMode === 'edit',
+          'workspace-modal-form--mobile': isMobileLayout,
+        }"
       >
         <label v-if="workspaceFormMode !== 'edit'">
           <span>{{ t('toolbox.workspace.projectTemplate') }}</span>
@@ -375,7 +402,7 @@
             v-model:value="createForm.title"
             class="workspace-create-title"
             :maxlength="120"
-            height="42px"
+            height="var(--ui-layout-42, 42px)"
             :placeholder="templateText('titlePlaceholder')"
           />
         </label>
@@ -399,7 +426,7 @@
             <BInput
               v-model:value="createForm.nextStep"
               :maxlength="500"
-              height="42px"
+              height="var(--ui-layout-42, 42px)"
               :placeholder="templateText('nextStepPlaceholder')"
             />
           </label>
@@ -413,10 +440,22 @@
           >{{ t('toolbox.back') }}</BButton
         >
         <div class="workspace-modal-actions">
-          <BButton v-if="workspaceFormMode === 'edit' && workspace" class="project-settings-delete" type="danger" :loading="!!deletingId"
-            :disabled="creating || mutating || savingProgress || !!deletingId" @click="confirmDeleteProject(workspace)">{{ t('toolbox.project.delete') }}</BButton>
+          <BButton
+            v-if="workspaceFormMode === 'edit' && workspace"
+            class="project-settings-delete"
+            type="danger"
+            :loading="!!deletingId"
+            :disabled="creating || mutating || savingProgress || !!deletingId"
+            @click="confirmDeleteProject(workspace)"
+            >{{ t('toolbox.project.delete') }}</BButton
+          >
           <BButton :disabled="!!deletingId" @click="createModalVisible = false">{{ t('common.cancel') }}</BButton>
-          <BButton type="primary" :loading="creating" :disabled="!createForm.title.trim() || !!deletingId" @click="saveWorkspaceForm">
+          <BButton
+            type="primary"
+            :loading="creating"
+            :disabled="!createForm.title.trim() || !!deletingId"
+            @click="saveWorkspaceForm"
+          >
             {{ workspaceFormMode === 'edit' ? t('toolbox.workspace.updateAction') : templateText('createAction') }}
           </BButton>
         </div>
@@ -426,7 +465,7 @@
     <BModal
       v-model:visible="resourceModalVisible"
       :title="stepText('resources', 'addAction')"
-      width="880px"
+      width="var(--ui-layout-880, 880px)"
       :show-footer="true"
       fullscreen-mobile
     >
@@ -450,8 +489,6 @@
         </div>
       </template>
     </BModal>
-
-
   </div>
 </template>
 
@@ -498,6 +535,7 @@
     type ToolboxWorkspaceSummary,
   } from '@/api/toolbox';
   import icon from '@/config/icon';
+  import { useUiDensity } from '@/composables/useUiDensity';
   import { toolboxWorkspaceKind } from '@/config/toolbox';
   import type { ToolboxSelectedResource } from '@/utils/toolboxResourceSelection';
   import ToolboxResourceSelector from './ToolboxResourceSelector.vue';
@@ -506,6 +544,7 @@
   const props = defineProps<{ toolId: ToolboxToolId | string }>();
   const { t, locale } = useI18n();
   const isMobileLayout = useMobileLayout();
+  const { dimension } = useUiDensity();
   const route = useRoute();
   const router = useRouter();
   const user = useUserStore();
@@ -655,12 +694,16 @@
   let chromeObserver: ResizeObserver | null = null;
   function stickyInset() {
     const head = projectHead.value?.offsetHeight ?? 48;
-    const rail = sectionNav.value && getComputedStyle(sectionNav.value).getPropertyValue('--project-nav-layout').trim() === 'rail';
+    const rail =
+      sectionNav.value && getComputedStyle(sectionNav.value).getPropertyValue('--project-nav-layout').trim() === 'rail';
     const scrollPadding = scrollOwner ? parseFloat(getComputedStyle(scrollOwner).paddingTop) || 0 : 0;
-    return scrollPadding + head + (rail ? 0 : sectionNav.value?.offsetHeight || 0) + 20;
+    return scrollPadding + head + (rail ? 0 : sectionNav.value?.offsetHeight || 0) + dimension(20);
   }
   function measureProjectChrome() {
-    rootRef.value?.style.setProperty('--project-scroll-padding', `${scrollOwner ? parseFloat(getComputedStyle(scrollOwner).paddingTop) || 0 : 0}px`);
+    rootRef.value?.style.setProperty(
+      '--project-scroll-padding',
+      `${scrollOwner ? parseFloat(getComputedStyle(scrollOwner).paddingTop) || 0 : 0}px`,
+    );
     rootRef.value?.style.setProperty('--project-head-height', `${projectHead.value?.offsetHeight ?? 48}px`);
     rootRef.value?.style.setProperty('--project-sticky-inset', `${stickyInset()}px`);
   }
@@ -674,9 +717,11 @@
     scrollFrame = 0;
     if (!workspace.value || !sectionNav.value || !scrollOwner) return;
     measureProjectChrome();
-    headerPinned.value = !!projectHead.value && projectHead.value.getBoundingClientRect().top <= scrollOwner.getBoundingClientRect().top + (parseFloat(getComputedStyle(scrollOwner).paddingTop) || 0) + 1;
-    const scale = scrollOwner.getBoundingClientRect().height / scrollOwner.offsetHeight || 1;
-    const threshold = scrollOwner.getBoundingClientRect().top + (stickyInset() + 4) * scale;
+    headerPinned.value =
+      !!projectHead.value &&
+      projectHead.value.getBoundingClientRect().top <=
+        scrollOwner.getBoundingClientRect().top + (parseFloat(getComputedStyle(scrollOwner).paddingTop) || 0) + 1;
+    const threshold = scrollOwner.getBoundingClientRect().top + stickyInset() + dimension(4);
     const elements = sectionElements();
     let index = 0;
     elements.forEach((element, i) => {
@@ -723,12 +768,9 @@
     const section = sectionElements()[index];
     if (!section || !rootRef.value || !sectionNav.value) return;
     const container = findScrollContainer(rootRef.value);
-    const scale = container.getBoundingClientRect().height / container.offsetHeight || 1;
     const inset = stickyInset();
     const top =
-      container.scrollTop +
-      (section.getBoundingClientRect().top - container.getBoundingClientRect().top) / scale -
-      inset;
+      container.scrollTop + section.getBoundingClientRect().top - container.getBoundingClientRect().top - inset;
     container.scrollTo({
       top: Math.max(0, top),
       behavior: smooth && !window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'smooth' : 'auto',
@@ -873,7 +915,8 @@
       workspaces.value = workspaceList;
       if (workspaceDetail) {
         applyWorkspace(workspaceDetail);
-        if (!visitorPreview.value) void markToolboxWorkspaceOpened(requestedWorkspaceId, entrySource.value).catch(() => undefined);
+        if (!visitorPreview.value)
+          void markToolboxWorkspaceOpened(requestedWorkspaceId, entrySource.value).catch(() => undefined);
       } else {
         workspace.value = null;
         if (!requestedWorkspaceId && String(route.query.create || '') === '1') {
@@ -1080,7 +1123,9 @@
       content: t('toolbox.workspace.removeResourceConfirm'),
       okText: t('common.confirm'),
       cancelText: t('common.cancel'),
-      onOk: () => { if (version === initializationVersion) return removeResource(resource); },
+      onOk: () => {
+        if (version === initializationVersion) return removeResource(resource);
+      },
     });
   }
   async function removeResource(resource: ToolboxWorkspaceResource) {
@@ -1100,7 +1145,11 @@
     }
   }
   function selectResourceRow(resource: ToolboxWorkspaceResource, event: MouseEvent) {
-    if (resource.available === false || (event.target as HTMLElement).closest('button, input, label, [role="checkbox"]')) return;
+    if (
+      resource.available === false ||
+      (event.target as HTMLElement).closest('button, input, label, [role="checkbox"]')
+    )
+      return;
     toggleResource(resource, !selectedResourceKeys.value.includes(`${resource.type}:${resource.resourceId}`));
   }
   function handleBoardUpdated(value: ToolboxWorkspace) {
@@ -1133,13 +1182,13 @@
 </script>
 
 <style lang="less" scoped>
-  @import (reference) "@/assets/css/workspace-surfaces.less";
+  @import (reference) '@/assets/css/workspace-surfaces.less';
   .knowledge-workspace {
     --workspace-accent: #615ced;
     --workspace-accent-soft: rgba(97, 92, 237, 0.09);
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    gap: 20px;
+    gap: var(--ui-space-20, 20px);
     min-width: 0;
     color: var(--text-color);
   }
@@ -1152,12 +1201,12 @@
     --workspace-accent-soft: rgba(18, 155, 119, 0.09);
   }
   .knowledge-workspace__state {
-    min-height: 280px;
+    min-height: var(--ui-layout-280, 280px);
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     color: var(--desc-color);
   }
   .knowledge-workspace__state.is-error strong {
@@ -1165,7 +1214,7 @@
   }
   .knowledge-workspace__state-actions {
     display: flex;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .workspace-list-intro,
   .workspace-detail-head,
@@ -1174,18 +1223,18 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
   }
   .workspace-list-intro {
-    padding: 4px 4px 0;
+    padding: var(--ui-space-4, 4px) var(--ui-space-4, 4px) 0;
   }
   .workspace-list-intro__copy {
-    max-width: 760px;
+    max-width: var(--ui-layout-760, 760px);
   }
   .workspace-kicker,
   .workspace-section__kicker {
     color: var(--workspace-accent);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 750;
     letter-spacing: 0.04em;
   }
@@ -1193,31 +1242,31 @@
   .workspace-summary h2,
   .workspace-section h3,
   .workspace-list-section h3 {
-    margin: 6px 0 0;
+    margin: var(--ui-space-6, 6px) 0 0;
     color: var(--text-color);
   }
   .workspace-list-intro h2 {
-    font-size: clamp(24px, 3vw, 34px);
+    font-size: clamp(var(--ui-font-24, 24px), 3vw, var(--ui-font-34, 34px));
     line-height: 1.18;
   }
   .workspace-list-intro p,
   .workspace-section__head p,
   .workspace-list-section > header p {
-    margin: 7px 0 0;
+    margin: var(--ui-space-7, 7px) 0 0;
     color: var(--desc-color);
     line-height: 1.65;
   }
   .workspace-loop {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .workspace-loop article {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     min-width: 0;
-    padding: 16px;
+    padding: var(--ui-space-16, 16px);
     border: 1px solid var(--surface-border-color);
     border-radius: 14px;
     background: var(--workspace-panel-bg-color);
@@ -1234,14 +1283,14 @@
     background: var(--workspace-accent-soft);
   }
   .workspace-loop article > span {
-    width: 38px;
-    height: 38px;
+    width: var(--ui-layout-38, 38px);
+    height: var(--ui-layout-38, 38px);
     border-radius: 11px;
   }
   .workspace-loop div {
     display: grid;
     min-width: 0;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
   .workspace-loop small {
     color: var(--desc-color);
@@ -1256,9 +1305,11 @@
     border-radius: 18px;
     box-shadow: var(--surface-card-shadow);
   }
-  :deep(.board-card) { scroll-margin-top: var(--project-sticky-inset, 150px); }
+  :deep(.board-card) {
+    scroll-margin-top: var(--project-sticky-inset, 150px);
+  }
   .workspace-section {
-    padding: 22px;
+    padding: var(--ui-space-22, 22px);
   }
   .workspace-list-section {
     padding: 0;
@@ -1275,23 +1326,29 @@
   }
   .workspace-card-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
-    gap: 12px;
-    margin-top: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--ui-layout-300, 300px)), 1fr));
+    gap: var(--ui-space-12, 12px);
+    margin-top: var(--ui-space-12, 12px);
   }
-  .workspace-card-container { position: relative; min-width: 0; display: flex; }
+  .workspace-card-container {
+    position: relative;
+    min-width: 0;
+    display: flex;
+  }
   .workspace-card-container :deep(.project-delete-trigger) {
     position: absolute;
     right: 10px;
     bottom: 14px;
-    width: 32px;
-    height: 32px;
+    width: var(--ui-layout-32, 32px);
+    height: var(--ui-layout-32, 32px);
     padding: 0;
     color: var(--desc-color);
     background: transparent;
     border: 1px solid transparent;
     border-radius: 6px;
-    transition: color 0.15s ease, background-color 0.15s ease;
+    transition:
+      color 0.15s ease,
+      background-color 0.15s ease;
   }
   .workspace-card-container :deep(.project-delete-trigger:focus-visible) {
     color: var(--danger-color);
@@ -1304,21 +1361,31 @@
       background: var(--primary-btn-h-bg-color);
     }
   }
-  .workspace-card-container .workspace-card__meta { min-height: 32px; padding-right: 34px; }
+  .workspace-card-container .workspace-card__meta {
+    min-height: var(--ui-layout-32, 32px);
+    padding-right: var(--ui-space-34, 34px);
+  }
   @media (pointer: coarse), (max-width: 767px) {
-    .workspace-card-container :deep(.project-delete-trigger) { width: 44px; height: 44px; right: 6px; }
-    .workspace-card-container .workspace-card__meta { min-height: 44px; padding-right: 42px; }
+    .workspace-card-container :deep(.project-delete-trigger) {
+      width: var(--ui-layout-44, 44px);
+      height: var(--ui-layout-44, 44px);
+      right: 6px;
+    }
+    .workspace-card-container .workspace-card__meta {
+      min-height: var(--ui-layout-44, 44px);
+      padding-right: var(--ui-space-42, 42px);
+    }
   }
   .workspace-card-grid :deep(.workspace-card) {
     width: 100%;
     height: auto;
-    padding: 14px 16px;
+    padding: var(--ui-space-14, 14px) var(--ui-space-16, 16px);
     line-height: 1.4;
     display: flex;
     flex-direction: column;
     align-items: stretch;
     justify-content: flex-start;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     text-align: left;
     white-space: normal;
     border: 1px solid var(--surface-border-color);
@@ -1330,7 +1397,7 @@
   .workspace-timeline header {
     display: flex;
     align-items: center;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
   }
   .workspace-card__top {
     align-items: center;
@@ -1344,17 +1411,17 @@
     min-width: 0;
   }
   .workspace-card__icon {
-    width: 34px;
-    height: 34px;
+    width: var(--ui-layout-34, 34px);
+    height: var(--ui-layout-34, 34px);
     border-radius: 10px;
   }
   .workspace-card__copy,
   .workspace-card__next {
     display: grid;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   .workspace-card__copy > strong {
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
     line-height: 1.4;
     display: -webkit-box;
     -webkit-box-orient: vertical;
@@ -1368,7 +1435,7 @@
     color: var(--desc-color);
   }
   .workspace-card__copy small {
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.4;
     display: -webkit-box;
     overflow: hidden;
@@ -1378,17 +1445,17 @@
   .workspace-card__next {
     display: flex;
     align-items: baseline;
-    gap: 8px;
-    padding: 9px 10px;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-9, 9px) var(--ui-space-10, 10px);
     border-radius: 8px;
     background: var(--workspace-canvas);
   }
   .workspace-card__next small {
     flex-shrink: 0;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .workspace-card__next strong {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 500;
     line-height: 1.5;
     display: -webkit-box;
@@ -1400,25 +1467,25 @@
   .workspace-card__meta {
     margin-top: auto;
     flex-wrap: wrap;
-    gap: 4px 8px;
-    font-size: 11px;
+    gap: var(--ui-space-4, 4px) var(--ui-space-8, 8px);
+    font-size: var(--ui-font-11, 11px);
   }
   .workspace-card__meta > :last-child {
     margin-left: auto;
     color: var(--workspace-accent);
   }
   .workspace-empty {
-    min-height: 260px;
+    min-height: var(--ui-layout-260, 260px);
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     text-align: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .workspace-empty > span {
-    width: 58px;
-    height: 58px;
+    width: var(--ui-layout-58, 58px);
+    height: var(--ui-layout-58, 58px);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -1431,7 +1498,7 @@
     margin: 0;
   }
   .workspace-empty p {
-    max-width: 480px;
+    max-width: var(--ui-layout-480, 480px);
     color: var(--desc-color);
     line-height: 1.6;
   }
@@ -1440,38 +1507,49 @@
     top: 0;
     z-index: 14;
     align-self: start;
-    min-height: 48px;
+    min-height: var(--ui-layout-48, 48px);
     min-width: 0;
-    padding: 6px 0;
+    padding: var(--ui-space-6, 6px) 0;
     background: var(--workspace-open-canvas, var(--card-background));
     border-bottom: 1px solid var(--surface-border-color);
   }
-  .workspace-detail-head::before { content: ''; position: absolute; bottom: 100%; left: 0; right: 0; height: var(--project-scroll-padding, 0px); background: inherit; pointer-events: none; }
-  .workspace-detail-head.is-pinned { box-shadow: 0 5px 12px -10px rgba(20, 24, 40, .35); }
+  .workspace-detail-head::before {
+    content: '';
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    right: 0;
+    height: var(--project-scroll-padding, 0px);
+    background: inherit;
+    pointer-events: none;
+  }
+  .workspace-detail-head.is-pinned {
+    box-shadow: 0 5px 12px -10px rgba(20, 24, 40, 0.35);
+  }
   .workspace-detail-head__actions {
     display: flex;
     flex-wrap: wrap;
     justify-content: flex-end;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   :deep(.workspace-detail-head__back) {
     padding-left: 0;
     background: transparent;
   }
   .workspace-summary {
-    padding: 24px;
+    padding: var(--ui-space-24, 24px);
     display: grid;
-    grid-template-columns: minmax(0, 1.6fr) minmax(420px, 1fr);
-    gap: 24px;
+    grid-template-columns: minmax(0, 1.6fr) minmax(var(--ui-layout-420, 420px), 1fr);
+    gap: var(--ui-space-24, 24px);
   }
   .workspace-summary__main {
     display: flex;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
     min-width: 0;
   }
   .workspace-summary__icon {
-    width: 58px;
-    height: 58px;
+    width: var(--ui-layout-58, 58px);
+    height: var(--ui-layout-58, 58px);
     border-radius: 17px;
   }
   .workspace-summary__main > div {
@@ -1480,60 +1558,60 @@
   .workspace-summary__meta small {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
     color: var(--desc-color);
   }
   .workspace-summary h2 {
-    font-size: clamp(24px, 3vw, 32px);
+    font-size: clamp(var(--ui-font-24, 24px), 3vw, var(--ui-font-32, 32px));
     overflow-wrap: anywhere;
   }
   .workspace-summary__main p {
-    margin: 8px 0 0;
+    margin: var(--ui-space-8, 8px) 0 0;
     color: var(--desc-color);
     line-height: 1.6;
   }
   .workspace-summary__metrics {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     align-self: center;
   }
   .workspace-summary__metrics article {
     display: grid;
-    gap: 3px;
-    padding: 12px 10px;
+    gap: var(--ui-space-3, 3px);
+    padding: var(--ui-space-12, 12px) var(--ui-space-10, 10px);
     text-align: center;
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     background: var(--workspace-panel-bg-color);
   }
   .workspace-summary__metrics strong {
-    font-size: 21px;
+    font-size: var(--ui-font-21, 21px);
   }
   .workspace-summary__metrics span {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .workspace-summary__metrics .is-streak strong {
     color: var(--workspace-accent);
   }
   .workspace-resume {
     display: grid;
-    grid-template-columns: minmax(260px, 1fr) minmax(280px, 1.4fr) auto;
+    grid-template-columns: minmax(var(--ui-layout-260, 260px), 1fr) minmax(var(--ui-layout-280, 280px), 1.4fr) auto;
     align-items: center;
-    gap: 20px;
-    padding: 18px 20px;
+    gap: var(--ui-space-20, 20px);
+    padding: var(--ui-space-18, 18px) var(--ui-space-20, 20px);
     border-left: 4px solid var(--workspace-accent);
   }
   .workspace-resume__lead {
     display: flex;
     align-items: center;
-    gap: 11px;
+    gap: var(--ui-space-11, 11px);
     min-width: 0;
   }
   .workspace-resume__lead > span {
-    width: 38px;
-    height: 38px;
+    width: var(--ui-layout-38, 38px);
+    height: var(--ui-layout-38, 38px);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -1546,7 +1624,7 @@
   .workspace-resume__copy {
     display: grid;
     min-width: 0;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
   .workspace-resume__lead small,
   .workspace-resume__copy p {
@@ -1562,35 +1640,35 @@
     margin: 0;
   }
   .workspace-section-nav {
-    padding: 7px;
+    padding: var(--ui-space-7, 7px);
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     border: 1px solid var(--surface-border-color);
     border-radius: 14px;
     background: var(--workspace-panel-bg-color);
   }
   .workspace-section-nav :deep(.workspace-section-nav__item) {
     width: 100%;
-    height: 46px;
-    padding: 0 12px;
+    height: var(--ui-layout-46, 46px);
+    padding: 0 var(--ui-space-12, 12px);
     justify-content: flex-start;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
     color: var(--desc-color);
     border: 1px solid transparent;
     border-radius: 10px;
     background: transparent;
   }
   .workspace-section-nav__item > span {
-    width: 27px;
-    height: 27px;
+    width: var(--ui-layout-27, 27px);
+    height: var(--ui-layout-27, 27px);
     display: inline-grid;
     place-items: center;
     flex: 0 0 auto;
     color: var(--workspace-accent);
     border: 1px solid var(--workspace-accent);
     border-radius: 8px;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 750;
     line-height: 1;
   }
@@ -1610,19 +1688,19 @@
   }
   .workspace-progress-form {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 150px auto;
+    grid-template-columns: minmax(0, 1fr) var(--ui-layout-150, 150px) auto;
     align-items: end;
-    gap: 12px;
-    margin-top: 18px;
+    gap: var(--ui-space-12, 12px);
+    margin-top: var(--ui-space-18, 18px);
   }
   .workspace-progress-form__summary,
   .workspace-progress-form__hint {
     grid-column: 1 / -1;
   }
   .workspace-progress-form__hint {
-    margin: -3px 0 2px;
+    margin: calc(-1 * var(--ui-space-3, 3px)) 0 var(--ui-space-2, 2px);
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.5;
   }
   .workspace-progress-form__hint.is-ready {
@@ -1631,10 +1709,10 @@
   .workspace-progress-form label,
   .workspace-modal-form label {
     display: grid;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     min-width: 0;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 650;
   }
   .workspace-progress-form :deep(.b-textarea),
@@ -1644,10 +1722,10 @@
     background: var(--workspace-panel-bg-color);
   }
   .workspace-progress-form :deep(.b-textarea) {
-    height: 118px;
-    min-height: 118px;
-    max-height: 118px;
-    padding: 11px 12px !important;
+    height: var(--ui-layout-118, 118px);
+    min-height: var(--ui-layout-118, 118px);
+    max-height: var(--ui-layout-118, 118px);
+    padding: var(--ui-space-11, 11px) var(--ui-space-12, 12px) !important;
     resize: none;
     line-height: 1.6;
   }
@@ -1663,30 +1741,30 @@
     outline-offset: 1px;
   }
   .workspace-progress-form :deep(.select-trigger) {
-    min-height: 42px;
+    min-height: var(--ui-layout-42, 42px);
   }
   .workspace-modal-form :deep(.b-datetime-trigger) {
-    min-height: 42px;
+    min-height: var(--ui-layout-42, 42px);
   }
   .workspace-resource-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 10px;
-    margin-top: 18px;
+    gap: var(--ui-space-10, 10px);
+    margin-top: var(--ui-space-18, 18px);
   }
   .workspace-resource-grid article {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     min-width: 0;
-    padding: 11px 12px;
+    padding: var(--ui-space-11, 11px) var(--ui-space-12, 12px);
     border: 1px solid var(--surface-border-color);
     border-radius: 11px;
     background: var(--workspace-panel-bg-color);
   }
   .workspace-resource-grid__icon {
-    width: 34px;
-    height: 34px;
+    width: var(--ui-layout-34, 34px);
+    height: var(--ui-layout-34, 34px);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -1705,7 +1783,7 @@
     min-width: 0;
     flex: 1;
     display: grid;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
   .workspace-resource-grid strong,
   .workspace-resource-grid small {
@@ -1718,19 +1796,28 @@
   }
   .workspace-resource-grid article > :deep(.b_btn) {
     margin-left: auto;
-    width: 32px;
+    width: var(--ui-layout-32, 32px);
     padding: 0;
   }
-  .workspace-resource-grid article:not(.is-unavailable) { cursor: pointer; }
-  .workspace-resource-grid article.is-selected { border-color: var(--workspace-accent); }
-  .workspace-resource-grid article:focus-within { outline: 2px solid var(--workspace-accent); outline-offset: 2px; }
+  .workspace-resource-grid article:not(.is-unavailable) {
+    cursor: pointer;
+  }
+  .workspace-resource-grid article.is-selected {
+    border-color: var(--workspace-accent);
+  }
+  .workspace-resource-grid article:focus-within {
+    outline: 2px solid var(--workspace-accent);
+    outline-offset: 2px;
+  }
   .workspace-resource-link.b_btn,
-  .workspace-resource-link.b_btn:hover { background: transparent; }
+  .workspace-resource-link.b_btn:hover {
+    background: transparent;
+  }
   .workspace-resource-link {
     display: block;
     width: 100%;
     height: auto;
-    min-height: 32px;
+    min-height: var(--ui-layout-32, 32px);
     padding: 0;
     text-align: left;
     line-height: 1.5;
@@ -1740,12 +1827,12 @@
     background: transparent;
   }
   .workspace-section-empty {
-    min-height: 110px;
+    min-height: var(--ui-layout-110, 110px);
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    margin-top: 16px;
+    gap: var(--ui-space-8, 8px);
+    margin-top: var(--ui-space-16, 16px);
     color: var(--desc-color);
     border: 1px dashed var(--surface-border-color);
     border-radius: 12px;
@@ -1753,15 +1840,15 @@
   }
   .workspace-timeline {
     display: grid;
-    margin-top: 18px;
+    margin-top: var(--ui-space-18, 18px);
   }
   .workspace-timeline article {
     position: relative;
     display: grid;
-    grid-template-columns: 18px minmax(0, 1fr);
-    gap: 10px;
+    grid-template-columns: var(--ui-layout-18, 18px) minmax(0, 1fr);
+    gap: var(--ui-space-10, 10px);
     min-width: 0;
-    padding-bottom: 18px;
+    padding-bottom: var(--ui-space-18, 18px);
   }
   .workspace-timeline article:not(:last-child)::before {
     content: '';
@@ -1776,14 +1863,14 @@
     z-index: 1;
     width: 11px;
     height: 11px;
-    margin-top: 4px;
+    margin-top: var(--ui-space-4, 4px);
     border: 3px solid var(--card-background);
     border-radius: 50%;
     background: var(--workspace-accent);
     box-shadow: 0 0 0 1px var(--workspace-accent);
   }
   .workspace-timeline article > div {
-    padding: 12px 14px;
+    padding: var(--ui-space-12, 12px) var(--ui-space-14, 14px);
     border: 1px solid var(--surface-border-color);
     border-radius: 11px;
     background: var(--workspace-panel-bg-color);
@@ -1793,71 +1880,74 @@
   }
   .workspace-timeline p,
   .workspace-timeline small {
-    margin: 7px 0 0;
+    margin: var(--ui-space-7, 7px) 0 0;
     color: var(--desc-color);
     line-height: 1.6;
   }
   .workspace-timeline small {
     display: block;
   }
-  .workspace-modal-actions :deep(.project-settings-delete) { margin-right: auto; }
+  .workspace-modal-actions :deep(.project-settings-delete) {
+    margin-right: auto;
+  }
   .workspace-modal-form,
   .workspace-resource-modal {
     display: grid;
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
   }
   .workspace-modal-form--mobile {
     height: 100%;
     box-sizing: border-box;
     overflow-y: auto;
     align-content: start;
-    padding: 16px var(--mobile-page-gutter, 16px) calc(20px + env(safe-area-inset-bottom));
+    padding: var(--ui-space-16, 16px) var(--mobile-page-gutter, var(--ui-space-16, 16px))
+      calc(var(--ui-space-20, 20px) + env(safe-area-inset-bottom));
   }
   .workspace-modal-callout {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 14px;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-14, 14px);
     border-radius: 12px;
     background: var(--workspace-accent-soft);
   }
   .workspace-modal-callout > span {
-    width: 40px;
-    height: 40px;
+    width: var(--ui-layout-40, 40px);
+    height: var(--ui-layout-40, 40px);
     border-radius: 11px;
   }
   .workspace-modal-callout p {
-    margin: 3px 0 0;
+    margin: var(--ui-space-3, 3px) 0 0;
     color: var(--desc-color);
     line-height: 1.5;
   }
   .workspace-modal-form__row {
     display: grid;
-    grid-template-columns: 180px minmax(0, 1fr);
-    gap: 12px;
+    grid-template-columns: var(--ui-layout-180, 180px) minmax(0, 1fr);
+    gap: var(--ui-space-12, 12px);
   }
   .workspace-modal-actions {
     display: flex;
     justify-content: flex-end;
-    gap: 9px;
-    padding-top: 4px;
+    gap: var(--ui-space-9, 9px);
+    padding-top: var(--ui-space-4, 4px);
   }
   .workspace-resource-modal {
     min-height: 0;
   }
   .workspace-resource-modal__footer {
     flex: 0 0 auto;
-    padding: 12px 20px 16px;
+    padding: var(--ui-space-12, 12px) var(--ui-space-20, 20px) var(--ui-space-16, 16px);
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
     border-top: 1px solid var(--surface-border-color);
     background: var(--card-background);
     box-shadow: 0 -10px 24px rgba(31, 34, 66, 0.04);
   }
   .workspace-resource-modal__footer :deep(.b_btn) {
-    min-width: 92px;
+    min-width: var(--ui-layout-92, 92px);
   }
   @media (hover: hover) and (pointer: fine) {
     .workspace-card-grid :deep(.workspace-card:hover) {
@@ -1874,10 +1964,10 @@
       grid-template-columns: 1fr;
     }
     .workspace-summary__metrics {
-      max-width: 580px;
+      max-width: var(--ui-layout-580, 580px);
     }
     .workspace-progress-form {
-      grid-template-columns: minmax(0, 1fr) 150px auto;
+      grid-template-columns: minmax(0, 1fr) var(--ui-layout-150, 150px) auto;
     }
     .workspace-resume {
       grid-template-columns: 1fr auto;
@@ -1895,21 +1985,22 @@
   @media (max-width: 767px) {
     .workspace-resource-modal {
       height: 100%;
-      padding: 12px 16px;
+      padding: var(--ui-space-12, 12px) var(--ui-space-16, 16px);
       box-sizing: border-box;
       grid-template-rows: minmax(0, 1fr);
       gap: 0;
     }
     .workspace-resource-modal__footer {
-      padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+      padding: var(--ui-space-10, 10px) var(--ui-space-16, 16px)
+        calc(var(--ui-space-10, 10px) + env(safe-area-inset-bottom));
     }
     .workspace-resource-modal__footer :deep(.b_btn) {
       flex: 1;
       width: auto;
-      min-height: 44px;
+      min-height: var(--ui-layout-44, 44px);
     }
     .knowledge-workspace {
-      gap: 14px;
+      gap: var(--ui-space-14, 14px);
     }
     .workspace-list-intro,
     .workspace-section__head,
@@ -1920,17 +2011,17 @@
     .workspace-list-intro :deep(.b_btn),
     .workspace-section__head :deep(.b_btn) {
       width: 100%;
-      min-height: 44px;
+      min-height: var(--ui-layout-44, 44px);
     }
     .workspace-loop {
-      gap: 8px;
+      gap: var(--ui-space-8, 8px);
     }
     .workspace-loop article {
-      padding: 12px;
+      padding: var(--ui-space-12, 12px);
     }
     .workspace-section,
     .workspace-summary {
-      padding: 16px;
+      padding: var(--ui-space-16, 16px);
       border-radius: 15px;
     }
     .workspace-card-grid,
@@ -1948,7 +2039,7 @@
     }
     .workspace-section-nav :deep(.workspace-section-nav__item) {
       min-width: 0;
-      padding: 0 9px;
+      padding: 0 var(--ui-space-9, 9px);
     }
     .workspace-progress-form__summary,
     .workspace-progress-form__hint {
@@ -1967,21 +2058,21 @@
       display: none;
     }
     .workspace-detail-head__actions :deep(.b_btn) {
-      min-height: 36px;
+      min-height: var(--ui-layout-36, 36px);
     }
     .workspace-summary__main {
       align-items: flex-start;
     }
     .workspace-summary__icon {
-      width: 48px;
-      height: 48px;
+      width: var(--ui-layout-48, 48px);
+      height: var(--ui-layout-48, 48px);
     }
     .workspace-summary__metrics {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
     .workspace-resume {
       grid-template-columns: 1fr;
-      padding: 15px;
+      padding: var(--ui-space-15, 15px);
     }
     .workspace-resume__copy {
       grid-column: auto;
@@ -1990,25 +2081,25 @@
     .workspace-resume :deep(.b_btn),
     .workspace-progress-form > :deep(.b_btn) {
       width: 100%;
-      min-height: 44px;
+      min-height: var(--ui-layout-44, 44px);
     }
     .workspace-resource-grid article {
-      min-height: 52px;
+      min-height: var(--ui-layout-52, 52px);
     }
     .workspace-modal-actions {
       position: sticky;
       bottom: 0;
-      padding: 10px 0 0;
+      padding: var(--ui-space-10, 10px) 0 0;
       background: var(--card-background);
     }
     .workspace-modal-actions :deep(.b_btn) {
       flex: 1;
       width: auto;
       min-width: 0;
-      padding: 0 10px;
+      padding: 0 var(--ui-space-10, 10px);
       white-space: normal;
       line-height: 1.3;
-      min-height: 44px;
+      min-height: var(--ui-layout-44, 44px);
     }
   }
   :global(html.light-note-mobile-rendering .workspace-section.is-section-focused) {
@@ -2023,16 +2114,16 @@
   .workspace-filters {
     display: flex;
     flex-wrap: wrap;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     align-items: center;
   }
   .workspace-filters > :first-child {
     flex: 1;
-    min-width: 180px;
+    min-width: var(--ui-layout-180, 180px);
   }
   .workspace-summary {
     grid-template-columns: minmax(0, 1fr);
-    padding: 20px;
+    padding: var(--ui-space-20, 20px);
   }
   .workspace-summary__main p.is-collapsed {
     display: -webkit-box;
@@ -2063,7 +2154,7 @@
   @media (max-width: 767px) {
     .workspace-resume {
       grid-template-columns: minmax(0, 1fr);
-      gap: 14px;
+      gap: var(--ui-space-14, 14px);
     }
     .workspace-resume > :deep(.b_btn) {
       width: 100%;
@@ -2073,15 +2164,15 @@
     }
     .workspace-summary__main {
       align-items: flex-start;
-      gap: 12px;
+      gap: var(--ui-space-12, 12px);
     }
     .workspace-summary__icon {
-      width: 38px;
-      height: 38px;
-      flex-basis: 38px;
+      width: var(--ui-layout-38, 38px);
+      height: var(--ui-layout-38, 38px);
+      flex-basis: var(--ui-layout-38, 38px);
     }
     .workspace-summary {
-      padding: 16px;
+      padding: var(--ui-space-16, 16px);
     }
     .workspace-summary__meta {
       flex-wrap: wrap;
@@ -2112,8 +2203,8 @@
     z-index: 12;
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 6px;
-    padding: 7px;
+    gap: var(--ui-space-6, 6px);
+    padding: var(--ui-space-7, 7px);
     border: 1px solid var(--surface-border-color);
     border-radius: 15px;
     box-shadow: 0 6px 22px rgba(20, 24, 40, 0.06);
@@ -2121,9 +2212,9 @@
   .project-section-navigation > .b_btn {
     width: 100%;
     height: auto;
-    min-height: 48px;
+    min-height: var(--ui-layout-48, 48px);
     justify-content: flex-start;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
     white-space: normal;
     background: transparent;
     color: var(--desc-color);
@@ -2141,14 +2232,14 @@
     font-weight: 600;
   }
   .project-section-navigation__number {
-    flex: 0 0 27px;
-    width: 27px;
-    height: 27px;
+    flex: 0 0 var(--ui-layout-27, 27px);
+    width: var(--ui-layout-27, 27px);
+    height: var(--ui-layout-27, 27px);
     display: grid;
     place-items: center;
     border: 1px solid var(--surface-border-color);
     border-radius: 7px;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     color: var(--workspace-accent);
   }
   .is-current .project-section-navigation__number {
@@ -2158,38 +2249,38 @@
   }
   .workspace-summary {
     grid-template-columns: minmax(0, 1fr) auto;
-    gap: 24px;
-    padding: 28px;
+    gap: var(--ui-space-24, 24px);
+    padding: var(--ui-space-28, 28px);
   }
   .project-overview-metrics {
     display: flex;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     align-items: center;
   }
   .project-overview-metrics > div {
     display: grid;
-    gap: 6px;
-    min-width: 70px;
-    padding: 14px;
+    gap: var(--ui-space-6, 6px);
+    min-width: var(--ui-layout-70, 70px);
+    padding: var(--ui-space-14, 14px);
     text-align: center;
     border-left: 1px solid var(--surface-border-color);
   }
   .project-overview-metrics strong {
-    font-size: 22px;
+    font-size: var(--ui-font-22, 22px);
     font-variant-numeric: tabular-nums;
   }
   .project-overview-metrics small {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .workspace-section {
     animation: none;
-    padding: 26px;
+    padding: var(--ui-space-26, 26px);
     border-radius: 18px;
     box-shadow: none;
   }
   .workspace-section__head {
-    margin-bottom: 22px;
+    margin-bottom: var(--ui-space-22, 22px);
   }
   .workspace-resume {
     border-left: 3px solid var(--workspace-accent);
@@ -2213,23 +2304,27 @@
     }
   }
   @media (max-width: 1199px) {
-    .project-section-navigation { margin-top: -20px; border-top: 0; border-radius: 0 0 14px 14px; }
+    .project-section-navigation {
+      margin-top: calc(-1 * var(--ui-space-20, 20px));
+      border-top: 0;
+      border-radius: 0 0 14px 14px;
+    }
   }
   @media (max-width: 767px) {
     .project-section-navigation {
       top: var(--project-head-height, 48px);
-      gap: 3px;
-      padding: 4px;
+      gap: var(--ui-space-3, 3px);
+      padding: var(--ui-space-4, 4px);
     }
     .project-section-navigation > .b_btn {
       flex-direction: column;
-      padding: 7px 3px;
-      gap: 5px;
-      font-size: 11px;
+      padding: var(--ui-space-7, 7px) var(--ui-space-3, 3px);
+      gap: var(--ui-space-5, 5px);
+      font-size: var(--ui-font-11, 11px);
     }
     .workspace-section,
     .workspace-summary {
-      padding: 18px;
+      padding: var(--ui-space-18, 18px);
     }
     .workspace-resource-grid {
       grid-template-columns: minmax(0, 1fr);
@@ -2242,8 +2337,8 @@
   }
   @media (min-width: 1200px) {
     .knowledge-workspace.has-project-rail {
-      grid-template-columns: 150px minmax(0, 1fr);
-      column-gap: 24px;
+      grid-template-columns: var(--ui-layout-150, 150px) minmax(0, 1fr);
+      column-gap: var(--ui-space-24, 24px);
       align-items: start;
     }
     .has-project-rail > section {
@@ -2254,10 +2349,10 @@
       grid-column: 1;
       grid-row: 1 / span 7;
       align-self: start;
-      top: 24px;
+      top: var(--ui-space-24, 24px);
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      gap: var(--ui-space-6, 6px);
       padding: 0;
       border: 0;
       border-radius: 0;
@@ -2265,10 +2360,10 @@
       background: transparent;
     }
     .has-project-rail .project-section-navigation > .b_btn {
-      min-height: 44px;
-      padding: 9px 8px;
-      font-size: 12px;
-      gap: 8px;
+      min-height: var(--ui-layout-44, 44px);
+      padding: var(--ui-space-9, 9px) var(--ui-space-8, 8px);
+      font-size: var(--ui-font-12, 12px);
+      gap: var(--ui-space-8, 8px);
       border-left: 3px solid transparent;
     }
     .has-project-rail .project-section-navigation > .is-current {
@@ -2281,14 +2376,14 @@
     flex: 1;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     min-width: 0;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .project-breadcrumb > .b_btn {
     background: transparent;
-    padding: 4px 2px;
+    padding: var(--ui-space-4, 4px) var(--ui-space-2, 2px);
     flex-shrink: 0;
     font-size: inherit;
   }
@@ -2300,36 +2395,69 @@
   .project-breadcrumb__mobile-back {
     display: none;
   }
-  .project-section-navigation > .project-settings-trigger--mobile { display: none; }
+  .project-section-navigation > .project-settings-trigger--mobile {
+    display: none;
+  }
   @media (max-width: 767px) {
-    .project-breadcrumb { display: none; }
-    .workspace-detail-head { display: none; }
+    .project-breadcrumb {
+      display: none;
+    }
+    .workspace-detail-head {
+      display: none;
+    }
     .project-section-navigation {
       top: 0;
       margin-top: 0;
-      grid-template-columns: repeat(4, minmax(0, 1fr)) 40px;
+      grid-template-columns: repeat(4, minmax(0, 1fr)) var(--ui-layout-40, 40px);
       border: 1px solid var(--surface-border-color);
       border-radius: 12px;
     }
-    .project-section-navigation::before { content: ''; position: absolute; bottom: 100%; left: 0; right: 0; height: var(--project-scroll-padding, 0px); background: inherit; pointer-events: none; }
-    .project-section-navigation__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .project-section-navigation > .project-settings-trigger--mobile { display: inline-flex; width: 40px; padding: 0; border: 0; border-left: 1px solid var(--surface-border-color); border-radius: 0; }
+    .project-section-navigation::before {
+      content: '';
+      position: absolute;
+      bottom: 100%;
+      left: 0;
+      right: 0;
+      height: var(--project-scroll-padding, 0px);
+      background: inherit;
+      pointer-events: none;
+    }
+    .project-section-navigation__label {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .project-section-navigation > .project-settings-trigger--mobile {
+      display: inline-flex;
+      width: var(--ui-layout-40, 40px);
+      padding: 0;
+      border: 0;
+      border-left: 1px solid var(--surface-border-color);
+      border-radius: 0;
+    }
 
-    .project-settings-trigger.b_btn { padding: 0 10px; font-size: 11px; min-height: 36px; }
+    .project-settings-trigger.b_btn {
+      padding: 0 var(--ui-space-10, 10px);
+      font-size: var(--ui-font-11, 11px);
+      min-height: var(--ui-layout-36, 36px);
+    }
     .project-section-navigation > .b_btn {
       flex-direction: row;
       justify-content: center;
       align-items: center;
       text-align: center;
       gap: 0;
-      min-height: 40px;
-      padding: 4px 2px;
+      min-height: var(--ui-layout-40, 40px);
+      padding: var(--ui-space-4, 4px) var(--ui-space-2, 2px);
       line-height: 1.3;
     }
-    .project-section-navigation__number { display: none; }
+    .project-section-navigation__number {
+      display: none;
+    }
   }
   .project-settings-status {
-    padding: 16px;
+    padding: var(--ui-space-16, 16px);
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     background: var(--workspace-panel-bg-color);
@@ -2342,21 +2470,38 @@
   }
   @media (max-width: 767px) {
     .workspace-settings-form {
-      padding: 16px;
+      padding: var(--ui-space-16, 16px);
     }
   }
 
   // 共享工作区表面：仅改变颜色，布局与滚动由原组件负责。
-  .knowledge-workspace, .project-section-navigation {
+  .knowledge-workspace,
+  .project-section-navigation {
     .workspace-open-surface();
   }
-  .workspace-list-section, .workspace-section, .workspace-summary, .workspace-resume, .workspace-card-grid :deep(.workspace-card), .workspace-resource-grid > article {
+  .workspace-list-section,
+  .workspace-section,
+  .workspace-summary,
+  .workspace-resume,
+  .workspace-card-grid :deep(.workspace-card),
+  .workspace-resource-grid > article {
     .workspace-content-surface();
   }
 
-  .knowledge-workspace { .workspace-navigation-colors(); }
-  .knowledge-workspace.is-learning { .workspace-navigation-colors(note); }
-  .project-section-navigation > .b_btn:hover { .workspace-navigation-hover(); }
-  .project-section-navigation > .b_btn.is-current { .workspace-navigation-selected(); }
-  .workspace-kicker, .workspace-section__kicker { color: var(--workspace-nav-text); }
+  .knowledge-workspace {
+    .workspace-navigation-colors();
+  }
+  .knowledge-workspace.is-learning {
+    .workspace-navigation-colors(note);
+  }
+  .project-section-navigation > .b_btn:hover {
+    .workspace-navigation-hover();
+  }
+  .project-section-navigation > .b_btn.is-current {
+    .workspace-navigation-selected();
+  }
+  .workspace-kicker,
+  .workspace-section__kicker {
+    color: var(--workspace-nav-text);
+  }
 </style>

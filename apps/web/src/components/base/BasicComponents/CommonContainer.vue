@@ -105,7 +105,7 @@
   .phone-container {
     position: fixed !important;
     top: 0 !important;
-    padding: 0 20px 20px 20px;
+    padding: 0 var(--ui-space-20, 20px) var(--ui-space-20, 20px) var(--ui-space-20, 20px);
     box-sizing: border-box;
     width: 100%;
     height: 100% !important;
@@ -130,7 +130,7 @@
     width: calc(100% - 40px);
     position: fixed;
     top: 60px;
-    padding-top: 20px;
+    padding-top: var(--ui-space-20, 20px);
     box-sizing: border-box;
     overflow: auto;
   }
@@ -146,7 +146,7 @@
     top: auto !important;
     height: 100% !important;
     min-height: 0;
-    padding: 0 20px 20px;
+    padding: 0 var(--ui-space-20, 20px) var(--ui-space-20, 20px);
   }
 
   .phone-container--embedded .phone-navigation {

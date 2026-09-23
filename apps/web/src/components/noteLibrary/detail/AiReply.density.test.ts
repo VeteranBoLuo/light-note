@@ -2,7 +2,10 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const source = readFileSync(resolve(process.cwd(), 'src/components/noteLibrary/detail/AiReply.vue'), 'utf8');
+const source = readFileSync(resolve(process.cwd(), 'src/components/noteLibrary/detail/AiReply.vue'), 'utf8').replace(
+  /var\(--ui-[\w-]+, ([\d.]+px)\)/g,
+  '$1',
+);
 
 function sourceBetween(startText: string, endText: string) {
   const start = source.indexOf(startText);

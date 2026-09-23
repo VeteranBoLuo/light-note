@@ -27,7 +27,7 @@
             :tag="tag"
             size="medium"
             interactive
-            max-width="140px"
+            max-width="var(--ui-layout-140, 140px)"
             v-click-log="{ module: '首页', operation: `点击相关标签【${tag.name}】` }"
           />
         </div>
@@ -93,14 +93,14 @@
 <style lang="less" scoped>
   .category-panel {
     width: 100%;
-    min-height: 88px;
+    min-height: var(--ui-layout-88, 88px);
     flex: 0 0 auto;
-    padding: 16px 18px;
+    padding: var(--ui-space-16, 16px) var(--ui-space-18, 18px);
     box-sizing: border-box;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
     border-bottom: 1px solid color-mix(in srgb, var(--card-border-color) 70%, transparent);
     background: linear-gradient(
       135deg,
@@ -116,7 +116,7 @@
       display: block;
       margin-bottom: 4px;
       color: var(--resource-bookmark-color, #615ced);
-      font-size: 10px;
+      font-size: var(--ui-font-10, 10px);
       font-weight: 700;
       letter-spacing: 0.08em;
       text-transform: uppercase;
@@ -125,7 +125,7 @@
     .category-title {
       margin: 0;
       color: var(--text-color);
-      font-size: 20px;
+      font-size: var(--ui-font-20, 20px);
       font-weight: 720;
       line-height: 1.25;
     }
@@ -133,7 +133,7 @@
     .category-content {
       margin: 5px 0 0;
       color: var(--desc-color);
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
     }
 
     .category-tag {
@@ -148,7 +148,7 @@
 
   .guest-own-hint {
     margin-top: 5px !important;
-    font-size: 11px !important;
+    font-size: var(--ui-font-11, 11px) !important;
     color: var(--desc-color);
   }
 
@@ -185,13 +185,13 @@
       }
 
       .category-title {
-        font-size: 14px;
+        font-size: var(--ui-font-14, 14px);
         line-height: 20px;
       }
 
       .category-content {
         margin-top: 1px;
-        font-size: 11px;
+        font-size: var(--ui-font-11, 11px);
         line-height: 16px;
       }
 
@@ -213,7 +213,7 @@
       border-radius: 8px;
       color: var(--resource-bookmark-color, #615ced);
       background: color-mix(in srgb, var(--resource-bookmark-color, #615ced) 8%, transparent);
-      font-size: 11px;
+      font-size: var(--ui-font-11, 11px);
     }
   }
 </style>

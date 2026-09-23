@@ -195,9 +195,9 @@
   .nt-locate-state {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 10px 16px;
-    font-size: 12px;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-16, 16px);
+    font-size: var(--ui-font-12, 12px);
     color: var(--primary-color);
   }
   .nt-item.is-target {
@@ -209,8 +209,9 @@
   }
 
   .nt-panel {
-    width: 370px;
-    max-width: calc(100vw - 24px);
+    font-size: var(--ui-font-16, 16px);
+    width: var(--ui-layout-370, 370px);
+    max-width: calc(100vw - var(--ui-space-24, 24px));
     color: var(--text-color);
     background: var(--card-background);
   }
@@ -232,36 +233,36 @@
 
   .nt-head {
     justify-content: space-between;
-    padding: 12px 14px;
+    padding: var(--ui-space-12, 12px) var(--ui-space-14, 14px);
     border-bottom: 1px solid var(--surface-divider-color);
   }
 
   .nt-title {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     font-weight: 700;
   }
 
   .nt-markall {
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
     color: var(--primary-color);
     background: transparent !important;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .nt-tabs {
-    gap: 6px;
-    padding: 10px 12px 6px;
+    gap: var(--ui-space-6, 6px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px) var(--ui-space-6, 6px);
   }
 
   .nt-tab {
     min-width: 0;
     flex: 1 1 0;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
     border: 1px solid transparent;
     border-radius: var(--mobile-control-radius, 10px);
     color: var(--desc-color);
     background: transparent !important;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 400;
     transition:
       color 0.15s,
@@ -280,13 +281,13 @@
     align-items: center;
     justify-content: center;
     flex: 0 0 auto;
-    min-width: 16px;
-    height: 16px;
+    min-width: var(--ui-layout-16, 16px);
+    height: var(--ui-layout-16, 16px);
     padding: 0;
     border-radius: 999px;
     color: var(--danger-fill-fg, #fff);
     background: var(--danger-fill-bg, #d93b3b);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     line-height: 1;
     text-align: center;
     white-space: nowrap;
@@ -295,18 +296,18 @@
   }
 
   .nt-tab-badge.is-wide {
-    min-width: 22px;
-    padding: 0 5px;
+    min-width: var(--ui-layout-22, 22px);
+    padding: 0 var(--ui-space-5, 5px);
   }
 
   .nt-tab-badge.is-capped {
-    min-width: 28px;
+    min-width: var(--ui-layout-28, 28px);
   }
 
   .nt-list {
-    max-height: 420px;
+    max-height: var(--ui-layout-420, 420px);
     overflow-y: auto;
-    padding: 6px;
+    padding: var(--ui-space-6, 6px);
   }
 
   .is-mobile .nt-list {
@@ -321,30 +322,30 @@
   }
 
   .nt-state {
-    min-height: 220px;
+    min-height: var(--ui-layout-220, 220px);
     display: grid;
     place-content: center;
     justify-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .nt-group-label {
     margin: 0;
-    padding: 12px 2px 7px;
+    padding: var(--ui-space-12, 12px) var(--ui-space-2, 2px) var(--ui-space-7, 7px);
     color: var(--text-color);
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     font-weight: 700;
   }
 
   .nt-item {
     position: relative;
-    min-height: 72px;
+    min-height: var(--ui-layout-72, 72px);
     box-sizing: border-box;
     display: flex;
-    gap: 10px;
-    padding: 12px 52px 12px 12px;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-12, 12px) var(--ui-space-52, 52px) var(--ui-space-12, 12px) var(--ui-space-12, 12px);
     border-left: 0;
     background: var(--card-background);
     cursor: pointer;
@@ -361,7 +362,7 @@
   .nt-dot {
     width: 8px;
     height: 8px;
-    margin-top: 6px;
+    margin-top: var(--ui-space-6, 6px);
     flex: 0 0 8px;
     border-radius: 50%;
     background: var(--surface-border-color);
@@ -390,7 +391,7 @@
 
   .nt-item-title {
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 600;
     line-height: 1.4;
   }
@@ -400,11 +401,11 @@
   }
 
   .nt-item-content {
-    margin-top: 2px;
+    margin-top: var(--ui-space-2, 2px);
     display: -webkit-box;
     overflow: hidden;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.45;
     white-space: pre-wrap;
     -webkit-box-orient: vertical;
@@ -412,18 +413,18 @@
   }
 
   .nt-item-time {
-    margin-top: 4px;
+    margin-top: var(--ui-space-4, 4px);
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .nt-item-action {
     position: absolute;
     top: 0;
-    right: 6px;
-    width: 44px;
-    min-width: 44px;
-    height: 44px;
+    right: var(--ui-space-6, 6px);
+    width: var(--ui-control-44, 44px);
+    min-width: var(--ui-control-44, 44px);
+    height: var(--ui-control-44, 44px);
     padding: 0;
     color: var(--desc-color);
     background: transparent !important;
@@ -432,16 +433,16 @@
   .nt-todo-actions {
     display: flex;
     align-items: center;
-    gap: 6px;
-    margin-top: 8px;
+    gap: var(--ui-space-6, 6px);
+    margin-top: var(--ui-space-8, 8px);
   }
 
   .nt-todo-state {
-    min-height: 24px;
-    padding: 1px 9px;
+    min-height: var(--ui-control-24, 24px);
+    padding: var(--ui-space-1, 1px) var(--ui-space-9, 9px);
     border-radius: 7px;
-    font-size: 11px;
-    line-height: 20px;
+    font-size: var(--ui-font-11, 11px);
+    line-height: var(--ui-layout-20, 20px);
   }
 
   .nt-todo-action {
@@ -459,7 +460,7 @@
 
   .nt-more {
     width: 100%;
-    margin-top: 8px;
+    margin-top: var(--ui-space-8, 8px);
     color: var(--primary-color);
     background: transparent !important;
   }
@@ -478,19 +479,19 @@
   .is-desktop-page .nt-tabs {
     flex: 0 0 auto;
     flex-wrap: wrap;
-    gap: 8px;
-    padding: 14px 16px 12px;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-14, 14px) var(--ui-space-16, 16px) var(--ui-space-12, 12px);
     border-bottom: 1px solid var(--surface-divider-color);
   }
 
   .is-desktop-page .nt-tab {
-    min-width: 92px;
-    min-height: 36px;
+    min-width: var(--ui-layout-92, 92px);
+    min-height: var(--ui-control-36, 36px);
     flex: 0 0 auto;
-    padding: 0 14px;
+    padding: 0 var(--ui-space-14, 14px);
     border-color: var(--surface-border-color);
     border-radius: 9px;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .is-desktop-page .nt-tab.active {
@@ -504,12 +505,12 @@
     min-height: 0;
     flex: 1 1 auto;
     overflow-y: auto;
-    padding: 8px 16px 24px;
+    padding: var(--ui-space-8, 8px) var(--ui-space-16, 16px) var(--ui-space-24, 24px);
   }
 
   .is-desktop-page .nt-group-label {
-    padding: 14px 3px 8px;
-    font-size: 13px;
+    padding: var(--ui-space-14, 14px) var(--ui-space-3, 3px) var(--ui-space-8, 8px);
+    font-size: var(--ui-font-13, 13px);
   }
 
   .is-desktop-page .nt-group-surface {
@@ -520,9 +521,9 @@
   }
 
   .is-desktop-page .nt-item {
-    min-height: 78px;
-    gap: 12px;
-    padding: 14px 56px 14px 16px;
+    min-height: var(--ui-layout-78, 78px);
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-14, 14px) var(--ui-space-56, 56px) var(--ui-space-14, 14px) var(--ui-space-16, 16px);
     border-left: 3px solid transparent;
     transition:
       border-color 0.16s ease,
@@ -545,7 +546,7 @@
   .is-desktop-page .nt-item-main {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
-    column-gap: 24px;
+    column-gap: var(--ui-space-24, 24px);
   }
 
   .is-desktop-page .nt-item-title,
@@ -555,47 +556,47 @@
   }
 
   .is-desktop-page .nt-item-title {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
   }
 
   .is-desktop-page .nt-item-content {
-    max-width: 920px;
+    max-width: var(--ui-layout-920, 920px);
   }
 
   .is-desktop-page .nt-item-time {
     grid-column: 2;
     grid-row: 1;
-    margin: 1px 0 0;
+    margin: var(--ui-space-1, 1px) 0 0;
     white-space: nowrap;
   }
 
   .is-desktop-page .nt-item-action {
-    top: 10px;
-    right: 8px;
+    top: var(--ui-space-10, 10px);
+    right: var(--ui-space-8, 8px);
   }
 
   .is-desktop-page .nt-state {
-    min-height: 320px;
+    min-height: var(--ui-layout-320, 320px);
   }
 
   /* 原型式宽桌面页：一个外层画布承载日期分组，去掉组内再套卡片的层级。 */
   .is-wide-desktop-page .nt-tabs {
-    gap: 9px;
-    padding: 13px 16px 12px;
+    gap: var(--ui-space-9, 9px);
+    padding: var(--ui-space-13, 13px) var(--ui-space-16, 16px) var(--ui-space-12, 12px);
   }
 
   .is-wide-desktop-page .nt-tab {
-    min-width: 96px;
-    min-height: 35px;
+    min-width: var(--ui-layout-96, 96px);
+    min-height: var(--ui-control-35, 35px);
     border-radius: 9px;
   }
 
   .is-wide-desktop-page .nt-list {
-    padding: 4px 16px 24px;
+    padding: var(--ui-space-4, 4px) var(--ui-space-16, 16px) var(--ui-space-24, 24px);
   }
 
   .is-wide-desktop-page .nt-group-label {
-    padding: 15px 4px 8px;
+    padding: var(--ui-space-15, 15px) var(--ui-space-4, 4px) var(--ui-space-8, 8px);
   }
 
   .is-wide-desktop-page .nt-group-surface {
@@ -606,10 +607,10 @@
   }
 
   .is-wide-desktop-page .nt-item {
-    min-height: 70px;
-    padding: 12px 58px 12px 12px;
+    min-height: var(--ui-layout-70, 70px);
+    padding: var(--ui-space-12, 12px) var(--ui-space-58, 58px) var(--ui-space-12, 12px) var(--ui-space-12, 12px);
     align-items: flex-start;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .is-wide-desktop-page .nt-dot {
@@ -617,9 +618,9 @@
   }
 
   .is-wide-desktop-page .nt-type-icon {
-    width: 30px;
-    height: 30px;
-    flex: 0 0 30px;
+    width: var(--ui-layout-30, 30px);
+    height: var(--ui-layout-30, 30px);
+    flex: 0 0 var(--ui-layout-30, 30px);
     display: inline-flex;
     align-items: center;
     justify-content: center;

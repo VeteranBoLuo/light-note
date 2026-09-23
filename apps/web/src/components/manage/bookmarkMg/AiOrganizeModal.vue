@@ -1,5 +1,10 @@
 <template>
-  <BModal v-model:visible="visible" :title="$t('bookmarkMg.aiOrganizeTitle')" :show-footer="false" width="600px">
+  <BModal
+    v-model:visible="visible"
+    :title="$t('bookmarkMg.aiOrganizeTitle')"
+    :show-footer="false"
+    width="var(--ui-layout-600, 600px)"
+  >
     <div class="aio">
       <!-- 确认额度 -->
       <template v-if="step === 'confirm'">
@@ -414,7 +419,7 @@
 </script>
 
 <style lang="less" scoped>
-  /* BModal 外框固定为桌面 600px、窄屏由其 max-width 自动收缩；内容只填充可用内宽，不能反向撑大外框。 */
+  /* BModal 外框以标准档 600px 为基准、窄屏由其 max-width 自动收缩；内容只填充可用内宽，不能反向撑大外框。 */
   .aio {
     width: 100%;
     max-width: 100%;
@@ -422,33 +427,33 @@
     box-sizing: border-box;
   }
   .aio-admin-notice {
-    margin-bottom: 12px;
-    padding: 10px 12px;
+    margin-bottom: var(--ui-space-12, 12px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     border: 1px solid color-mix(in srgb, var(--primary-color) 30%, transparent);
     border-radius: 10px;
     background: color-mix(in srgb, var(--primary-color) 7%, var(--workbench-subcard-bg));
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.55;
   }
   .aio-hint {
-    margin: 0 0 12px;
-    font-size: 13px;
+    margin: 0 0 var(--ui-space-12, 12px);
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.6;
     color: var(--desc-color);
   }
   .aio-muted {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .aio-center {
     text-align: center;
-    padding: 24px 8px;
+    padding: var(--ui-space-24, 24px) var(--ui-space-8, 8px);
   }
   .aio-stat {
-    margin: 0 0 14px;
-    padding-left: 18px;
-    font-size: 14px;
+    margin: 0 0 var(--ui-space-14, 14px);
+    padding-left: var(--ui-space-18, 18px);
+    font-size: var(--ui-font-14, 14px);
     line-height: 1.9;
   }
   .aio-actions {
@@ -458,8 +463,8 @@
     align-items: center;
     justify-content: flex-end;
     flex-wrap: wrap;
-    gap: 12px;
-    margin-top: 12px;
+    gap: var(--ui-space-12, 12px);
+    margin-top: var(--ui-space-12, 12px);
     box-sizing: border-box;
   }
   .aio-actions :deep(.b_btn) {
@@ -480,9 +485,9 @@
     }
   }
   .aio-spin {
-    width: 34px;
-    height: 34px;
-    margin: 0 auto 12px;
+    width: var(--ui-layout-34, 34px);
+    height: var(--ui-layout-34, 34px);
+    margin: 0 auto var(--ui-space-12, 12px);
     border-radius: 50%;
     border: 3px solid color-mix(in srgb, var(--primary-color) 18%, transparent);
     border-top-color: var(--primary-color);
@@ -499,24 +504,24 @@
     align-items: center;
     justify-content: space-between;
     flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 8px;
-    font-size: 13px;
+    gap: var(--ui-space-8, 8px);
+    margin-bottom: var(--ui-space-8, 8px);
+    font-size: var(--ui-font-13, 13px);
     font-weight: 600;
   }
   .aio-fill {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
     font-weight: 400;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
     cursor: pointer;
   }
   .aio-new-tag-hint {
-    margin: 0 0 8px;
+    margin: 0 0 var(--ui-space-8, 8px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.5;
   }
   .aio-list {
@@ -527,7 +532,7 @@
     overflow-x: hidden;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     box-sizing: border-box;
   }
   .aio-item {
@@ -539,7 +544,7 @@
     flex-shrink: 0;
     border: 1px solid var(--card-border-color);
     border-radius: 10px;
-    padding: 10px 12px;
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     box-sizing: border-box;
     overflow: hidden;
     transition: opacity 0.15s;
@@ -551,12 +556,12 @@
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     cursor: pointer;
-    margin-bottom: 8px;
+    margin-bottom: var(--ui-space-8, 8px);
   }
   .aio-item-name {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 600;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -566,26 +571,26 @@
     min-width: 0;
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
-    padding-left: 22px;
+    gap: var(--ui-space-6, 6px);
+    padding-left: var(--ui-space-22, 22px);
     box-sizing: border-box;
   }
   .aio-tag {
     max-width: 100%;
-    height: 26px;
+    height: var(--ui-control-26, 26px);
   }
   .aio-tag--new {
     border-style: dashed;
   }
   .aio-done .aio-check {
-    width: 44px;
-    height: 44px;
-    margin: 0 auto 10px;
+    width: var(--ui-layout-44, 44px);
+    height: var(--ui-layout-44, 44px);
+    margin: 0 auto var(--ui-space-10, 10px);
     border-radius: 50%;
     background: color-mix(in srgb, var(--primary-color) 16%, transparent);
     color: var(--primary-color);
-    font-size: 24px;
-    line-height: 44px;
+    font-size: var(--ui-font-24, 24px);
+    line-height: var(--ui-layout-44, 44px);
     font-weight: 700;
   }
 </style>

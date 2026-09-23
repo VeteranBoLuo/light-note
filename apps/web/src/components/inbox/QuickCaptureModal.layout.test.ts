@@ -2,7 +2,10 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const source = readFileSync(resolve(process.cwd(), 'src/components/inbox/QuickCaptureModal.vue'), 'utf8');
+const source = readFileSync(resolve(process.cwd(), 'src/components/inbox/QuickCaptureModal.vue'), 'utf8').replace(
+  /var\(--ui-(?:space|control|layout|font|card)-[\d_]+, ([\d.]+px)\)/g,
+  '$1',
+);
 
 describe('QuickCaptureModal 移动端布局', () => {
   it('待办面板变高时不允许捕获类型 Tab 被纵向 flex 压缩', () => {
@@ -14,16 +17,12 @@ describe('QuickCaptureModal 移动端布局', () => {
   });
 
   it('四个捕获类型的顶部提示条保持统一起始高度且不参与纵向压缩', () => {
-    expect(source).toMatch(
-      /\.capture-intro-strip\s*\{[^}]*flex:\s*0 0 auto;[^}]*min-height:\s*64px;/,
-    );
+    expect(source).toMatch(/\.capture-intro-strip\s*\{[^}]*flex:\s*0 0 auto;[^}]*min-height:\s*64px;/);
     expect(source).not.toMatch(/\.capture-intro-strip\s*\{[^}]*max-height:/);
   });
 
   it('文件选择把整块浅紫区域作为 BButton 触发入口', () => {
-    expect(source).toMatch(
-      /<BUpload\s+block[\s\S]*?<BButton block class="file-capture__dropzone"/,
-    );
+    expect(source).toMatch(/<BUpload\s+block[\s\S]*?<BButton\s+block\s+class="file-capture__dropzone"/);
     expect(source).toMatch(/\.file-capture__dropzone\s*\{[\s\S]*?width:\s*100%;/);
     expect(source).not.toContain('file-capture__picker');
   });

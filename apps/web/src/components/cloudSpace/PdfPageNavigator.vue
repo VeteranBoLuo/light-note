@@ -26,7 +26,7 @@
         :key="item.id"
         class="pdf-navigator__outline-item"
         :class="{ 'is-active': item.pageNumber === activePage }"
-        :style="{ paddingInlineStart: `${12 + item.depth * 16}px` }"
+        :style="{ paddingInlineStart: `calc(var(--ui-space-12, 12px) + ${item.depth} * var(--ui-space-16, 16px))` }"
         :disabled="!item.pageNumber"
         @click="item.pageNumber && emit('select-page', item.pageNumber)"
       >
@@ -195,7 +195,7 @@
     flex-direction: column;
     min-height: 0;
     height: 100%;
-    padding: 12px;
+    padding: var(--ui-space-12, 12px);
     box-sizing: border-box;
     background: var(--background-color);
   }
@@ -219,9 +219,9 @@
     flex-direction: column;
     width: 100%;
     height: auto;
-    padding: 9px 8px 7px;
-    margin-bottom: 8px;
-    gap: 6px;
+    padding: var(--ui-space-9, 9px) var(--ui-space-8, 8px) var(--ui-space-7, 7px);
+    margin-bottom: var(--ui-space-8, 8px);
+    gap: var(--ui-space-6, 6px);
     line-height: 1;
     border: 1px solid transparent !important;
     background: transparent;
@@ -255,15 +255,15 @@
 
   .pdf-navigator__page-label {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   :deep(.pdf-navigator__outline-item.b_btn) {
     justify-content: space-between;
     width: 100%;
-    height: 36px;
-    padding-right: 10px;
-    gap: 8px;
+    height: var(--ui-layout-36, 36px);
+    padding-right: var(--ui-space-10, 10px);
+    gap: var(--ui-space-8, 8px);
     line-height: 1.2;
     background: transparent;
   }
@@ -282,13 +282,13 @@
   .pdf-navigator__outline-page {
     flex: 0 0 auto;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .pdf-navigator__empty {
-    padding: 32px 12px;
+    padding: var(--ui-space-32, 32px) var(--ui-space-12, 12px);
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     text-align: center;
   }
 </style>

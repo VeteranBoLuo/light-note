@@ -217,14 +217,14 @@
 
 <style scoped lang="less">
   .chat-sticker-panel {
-    width: min(360px, 100%);
-    height: min(380px, 42vh);
-    min-height: 260px;
-    padding: 10px;
+    width: min(var(--ui-layout-360, 360px), 100%);
+    height: min(var(--ui-layout-380, 380px), 42vh);
+    min-height: var(--ui-layout-260, 260px);
+    padding: var(--ui-space-10, 10px);
     box-sizing: border-box;
     display: grid;
     grid-template-rows: auto minmax(0, 1fr) auto;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
     overflow: hidden;
     border: 1px solid var(--surface-border-color);
     border-radius: 14px;
@@ -240,25 +240,25 @@
 
   .chat-sticker-panel__header {
     justify-content: space-between;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .chat-sticker-panel__header > span {
     min-width: 0;
     flex-direction: column;
     align-items: flex-start;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
 
   .chat-sticker-panel__header strong {
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .chat-sticker-panel__header small,
   .chat-sticker-panel__hint {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
 
   .chat-sticker-panel__state,
@@ -267,14 +267,14 @@
     align-items: center;
     justify-content: center;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     color: var(--desc-color);
     text-align: center;
   }
 
   .chat-sticker-panel__empty > span {
-    width: 44px;
-    height: 44px;
+    width: var(--ui-layout-44, 44px);
+    height: var(--ui-layout-44, 44px);
     display: grid;
     place-items: center;
     border-radius: 12px;
@@ -284,7 +284,7 @@
 
   .chat-sticker-panel__empty strong {
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .chat-sticker-panel__empty p,
@@ -294,14 +294,14 @@
   }
 
   .chat-sticker-panel__empty p {
-    max-width: 260px;
+    max-width: var(--ui-layout-260, 260px);
   }
 
   .chat-sticker-panel__grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     align-content: start;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     overflow-y: auto;
     overscroll-behavior: contain;
   }
@@ -315,7 +315,7 @@
   .chat-sticker-panel__image {
     width: 100%;
     height: 100%;
-    padding: 5px;
+    padding: var(--ui-space-5, 5px);
     border: 1px solid transparent;
     border-radius: 8px;
     background: transparent;
@@ -343,8 +343,8 @@
     position: absolute;
     top: 2px;
     right: 2px;
-    width: 22px;
-    height: 22px;
+    width: var(--ui-layout-22, 22px);
+    height: var(--ui-layout-22, 22px);
     padding: 0;
     border: 1px solid var(--surface-border-color);
     border-radius: 50%;

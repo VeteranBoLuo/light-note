@@ -36,7 +36,12 @@
         >
           <div class="aw-badge__main">
             <div class="aw-medal">
-              <AchievementEmblem :achievement-key="a.key" :group="a.group" :locked="!a.unlocked" />
+              <AchievementEmblem
+                :size="dimension(46, 'layout')"
+                :achievement-key="a.key"
+                :group="a.group"
+                :locked="!a.unlocked"
+              />
               <span v-if="!a.unlocked" class="aw-lock">
                 <SvgIcon :src="icon.growth.lock" size="11" />
               </span>
@@ -47,7 +52,12 @@
             </div>
           </div>
           <div v-if="a.frameId" class="aw-frame-reward">
-            <AvatarFramePreview :frame-id="a.frameId" :src="icon.navigation.user" :size="30" :animated="false" />
+            <AvatarFramePreview
+              :frame-id="a.frameId"
+              :src="icon.navigation.user"
+              :size="dimension(30, 'layout')"
+              :animated="false"
+            />
             <span>{{ t('growth.achFrameReward', { name: frameName(a.frameId) }) }}</span>
           </div>
           <div class="aw-footer">
@@ -83,16 +93,27 @@
     </div>
 
     <!-- 成就详情 -->
-    <BModal v-if="detail" v-model:visible="detailVisible" :show-footer="false" width="340px" :mask-closable="true">
+    <BModal
+      v-if="detail"
+      v-model:visible="detailVisible"
+      :show-footer="false"
+      width="var(--ui-layout-340, 340px)"
+      :mask-closable="true"
+    >
       <div class="awd">
-        <AchievementEmblem :achievement-key="detail.key" :group="detail.group" :size="76" :locked="!detail.unlocked" />
+        <AchievementEmblem
+          :achievement-key="detail.key"
+          :group="detail.group"
+          :size="dimension(76, 'layout')"
+          :locked="!detail.unlocked"
+        />
         <div class="awd-name">{{ t(`growth.achName.${detail.key}`) }}</div>
         <div class="awd-desc">{{ conditionOf(detail) }}</div>
         <div v-if="detail.reward" class="awd-reward">
           {{ t('growth.achRewardLabel') }} <SvgIcon :src="icon.growth.coin" size="14" /> {{ detail.reward }}
         </div>
         <div v-if="detail.frameId" class="awd-frame-reward">
-          <AvatarFramePreview :frame-id="detail.frameId" :src="icon.navigation.user" :size="46" />
+          <AvatarFramePreview :frame-id="detail.frameId" :src="icon.navigation.user" :size="dimension(46, 'layout')" />
           <span>{{ t('growth.achFrameReward', { name: frameName(detail.frameId) }) }}</span>
         </div>
         <BButton
@@ -136,6 +157,7 @@
 </template>
 
 <script setup lang="ts">
+  import { useUiDensity } from '@/composables/useUiDensity';
   import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import type { Achievement } from '@/composables/useGrowth.ts';
@@ -169,6 +191,7 @@
   );
   const emit = defineEmits<{ (e: 'claim', key: string): void }>();
   const { t } = useI18n();
+  const { dimension } = useUiDensity();
 
   type AchievementFilter = 'all' | 'claimable' | 'near' | 'unlocked';
   const activeFilter = ref<AchievementFilter>('all');
@@ -291,20 +314,20 @@
   .aw {
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
   }
   .aw-head {
     display: flex;
     align-items: baseline;
     justify-content: space-between;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .aw-title {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     font-weight: 700;
   }
   .aw-count {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 600;
     color: var(--primary-color);
     font-variant-numeric: tabular-nums;
@@ -327,26 +350,26 @@
   .aw-group {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .aw-group-title {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 600;
     color: var(--desc-color);
     letter-spacing: 0.03em;
   }
   .aw-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-    gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(var(--ui-layout-220, 220px), 1fr));
+    gap: var(--ui-space-12, 12px);
   }
   .aw-badge {
     display: flex;
     flex-direction: column;
     align-items: stretch;
-    gap: 10px;
-    min-height: 146px;
-    padding: 14px;
+    gap: var(--ui-space-10, 10px);
+    min-height: var(--ui-layout-146, 146px);
+    padding: var(--ui-space-14, 14px);
     box-sizing: border-box;
     border-radius: 14px;
     border: 1px solid color-mix(in srgb, var(--card-border-color) 40%, transparent);
@@ -389,14 +412,14 @@
   .aw-badge__main {
     min-width: 0;
     display: grid;
-    grid-template-columns: 46px minmax(0, 1fr);
+    grid-template-columns: var(--ui-layout-46, 46px) minmax(0, 1fr);
     align-items: center;
-    gap: 11px;
+    gap: var(--ui-space-11, 11px);
   }
   .aw-medal {
     position: relative;
-    width: 46px;
-    height: 46px;
+    width: var(--ui-layout-46, 46px);
+    height: var(--ui-layout-46, 46px);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -405,14 +428,14 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
   .aw-lock {
     position: absolute;
     right: -2px;
     bottom: -2px;
-    width: 17px;
-    height: 17px;
+    width: var(--ui-layout-17, 17px);
+    height: var(--ui-layout-17, 17px);
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -423,7 +446,7 @@
     pointer-events: none;
   }
   .aw-name {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 700;
     color: var(--text-color);
     line-height: 1.25;
@@ -435,7 +458,7 @@
     display: -webkit-box;
     overflow: hidden;
     color: var(--desc-color);
-    font-size: 10.5px;
+    font-size: var(--ui-font-10_5, 10.5px);
     line-height: 1.4;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
@@ -444,13 +467,13 @@
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 7px 9px;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-7, 7px) var(--ui-space-9, 9px);
     border: 1px solid color-mix(in srgb, var(--primary-color) 24%, var(--surface-border-color));
     border-radius: 10px;
     color: var(--primary-color);
     background: color-mix(in srgb, var(--primary-color) 5%, var(--background-color));
-    font-size: 10.5px;
+    font-size: var(--ui-font-10_5, 10.5px);
     font-weight: 700;
   }
   .aw-frame-reward span {
@@ -459,7 +482,7 @@
     white-space: nowrap;
   }
   .aw-footer {
-    min-height: 24px;
+    min-height: var(--ui-layout-24, 24px);
     display: flex;
     align-items: center;
     margin-top: auto;
@@ -467,8 +490,8 @@
   .aw-got {
     display: inline-flex;
     align-items: center;
-    gap: 3px;
-    font-size: 10.5px;
+    gap: var(--ui-space-3, 3px);
+    font-size: var(--ui-font-10_5, 10.5px);
     font-weight: 700;
     color: #f59e0b;
     letter-spacing: 0.04em;
@@ -476,22 +499,22 @@
   .aw-claimable {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    font-size: 11.5px;
+    gap: var(--ui-space-4, 4px);
+    font-size: var(--ui-font-11_5, 11.5px);
     font-weight: 700;
     color: #d97706;
     margin-left: auto;
-    margin-right: 8px;
+    margin-right: var(--ui-space-8, 8px);
   }
   .aw-claim {
     display: inline-flex;
     align-items: center;
-    gap: 3px;
-    padding: 3px 10px;
+    gap: var(--ui-space-3, 3px);
+    padding: var(--ui-space-3, 3px) var(--ui-space-10, 10px);
     border-radius: 999px;
     border: none;
     cursor: pointer;
-    font-size: 10.5px;
+    font-size: var(--ui-font-10_5, 10.5px);
     font-weight: 700;
     color: #fff;
     background: linear-gradient(135deg, #f59e0b, #f97316);
@@ -519,8 +542,8 @@
   .aw-reward-hint {
     display: inline-flex;
     align-items: center;
-    gap: 2px;
-    font-size: 9.5px;
+    gap: var(--ui-space-2, 2px);
+    font-size: var(--ui-font-9_5, 9.5px);
     color: #d97706;
     font-weight: 600;
     white-space: nowrap;
@@ -529,18 +552,18 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
     width: 100%;
   }
   .aw-mini-progress {
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     flex: 1 1 auto;
   }
   .aw-mini-bar {
-    min-width: 42px;
+    min-width: var(--ui-layout-42, 42px);
     flex: 1 1 auto;
     height: 4px;
     border-radius: 999px;
@@ -555,17 +578,17 @@
   }
   .aw-mini-num {
     flex: 0 0 auto;
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     color: var(--desc-color);
     font-variant-numeric: tabular-nums;
   }
   .aw-mini-level {
     flex: 0 0 auto;
-    padding: 1px 5px;
+    padding: var(--ui-space-1, 1px) var(--ui-space-5, 5px);
     border: 1px solid color-mix(in srgb, var(--primary-color) 38%, transparent);
     border-radius: 999px;
     color: var(--primary-color);
-    font-size: 9px;
+    font-size: var(--ui-font-9, 9px);
     font-weight: 700;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
@@ -645,17 +668,17 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 10px;
-    padding: 22px 20px 8px;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-22, 22px) var(--ui-space-20, 20px) var(--ui-space-8, 8px);
     text-align: center;
   }
   .awd-name {
-    font-size: 17px;
+    font-size: var(--ui-font-17, 17px);
     font-weight: 700;
     color: var(--text-color);
   }
   .awd-desc {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     color: var(--desc-color);
     line-height: 1.5;
   }
@@ -663,44 +686,44 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     width: 100%;
-    margin-top: 4px;
+    margin-top: var(--ui-space-4, 4px);
   }
   .awd-status.unlocked {
     flex-direction: row;
     justify-content: center;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 700;
     color: #f59e0b;
   }
   .awd-reward {
     display: flex;
     align-items: center;
-    gap: 4px;
-    font-size: 13px;
+    gap: var(--ui-space-4, 4px);
+    font-size: var(--ui-font-13, 13px);
     font-weight: 600;
     color: #d97706;
   }
   .awd-frame-reward {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 8px 12px;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-12, 12px);
     border: 1px solid var(--primary-color);
     border-radius: 12px;
     color: var(--primary-color);
     background: var(--background-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 700;
   }
   .awd-claim {
-    margin-top: 6px;
-    padding: 8px 22px;
+    margin-top: var(--ui-space-6, 6px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-22, 22px);
     border-radius: 999px;
     border: none;
     cursor: pointer;
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     font-weight: 700;
     color: #fff;
     background: linear-gradient(135deg, #f59e0b, #f97316);
@@ -709,7 +732,7 @@
   }
   .awd-community {
     width: 100%;
-    margin-top: 8px;
+    margin-top: var(--ui-space-8, 8px);
     border: 1px solid var(--primary-color);
     color: var(--primary-color);
   }
@@ -734,7 +757,7 @@
     transition: width 0.4s ease;
   }
   .awd-num {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
     font-variant-numeric: tabular-nums;
   }

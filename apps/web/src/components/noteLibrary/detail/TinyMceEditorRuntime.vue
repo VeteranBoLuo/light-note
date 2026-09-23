@@ -3,6 +3,7 @@
 </template>
 
 <script setup lang="ts">
+  import '@/assets/css/editor-density.less';
   import TinyMceEditor from '@tinymce/tinymce-vue';
   import 'tinymce/tinymce';
   import 'tinymce/icons/default';

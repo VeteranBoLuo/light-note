@@ -203,8 +203,8 @@
     background: transparent;
   }
   .resource-batch-action-bar__review.b_btn {
-    min-height: 32px;
-    padding: 6px 16px;
+    min-height: var(--ui-control-32, 32px);
+    padding: var(--ui-space-6, 6px) var(--ui-space-16, 16px);
     border-radius: 8px;
   }
   .resource-batch-action-bar {
@@ -215,13 +215,13 @@
     left: 50%;
     width: max-content;
     max-width: calc(100vw - 48px);
-    min-height: 50px;
+    min-height: var(--ui-control-50, 50px);
     box-sizing: border-box;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 8px;
-    padding: 5px 7px 5px 9px;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-5, 5px) var(--ui-space-7, 7px) var(--ui-space-5, 5px) var(--ui-space-9, 9px);
     border: 1px solid var(--surface-border-color);
     border-radius: 15px;
     background: var(--card-background);
@@ -231,17 +231,17 @@
   }
 
   .resource-batch-action-bar__selection {
-    min-width: 176px;
+    min-width: var(--ui-layout-176, 176px);
     display: flex;
     flex: 1 1 auto;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .resource-batch-action-bar__leading {
-    width: 28px;
-    height: 28px;
-    flex: 0 0 28px;
+    width: var(--ui-layout-28, 28px);
+    height: var(--ui-layout-28, 28px);
+    flex: 0 0 var(--ui-layout-28, 28px);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -256,7 +256,7 @@
     display: flex;
     flex: 1 1 auto;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
     line-height: 1.35;
   }
 
@@ -268,13 +268,13 @@
   }
 
   .resource-batch-action-bar__copy strong {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     font-weight: 700;
   }
 
   .resource-batch-action-bar__copy small {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .resource-batch-action-bar__actions {
@@ -283,7 +283,7 @@
     flex: 0 1 auto;
     flex-wrap: wrap;
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
 
   .resource-batch-action-bar__actions > :deep(*),
@@ -295,7 +295,7 @@
   .resource-batch-action-bar__actions :deep(.b_btn),
   .resource-batch-action-bar__clear,
   .resource-batch-action-bar__primary {
-    min-height: 32px;
+    min-height: var(--ui-control-32, 32px);
     border-radius: 8px;
     white-space: nowrap;
   }
@@ -309,8 +309,8 @@
   }
 
   .resource-batch-action-bar__primary {
-    min-width: 116px;
-    gap: 7px;
+    min-width: var(--ui-layout-116, 116px);
+    gap: var(--ui-space-7, 7px);
     font-weight: 700;
   }
 
@@ -323,7 +323,7 @@
   }
 
   .resource-batch-action-bar--mobile.resource-batch-action-bar--mobile {
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
 
   .resource-batch-action-bar--mobile.has-project-action {
@@ -339,7 +339,7 @@
   }
   .resource-batch-action-bar--mobile .resource-batch-action-bar__selection {
     min-width: 0;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
 
   .resource-batch-action-bar--mobile .resource-batch-action-bar__leading {
@@ -363,7 +363,7 @@
   }
 
   .resource-batch-action-bar--mobile .resource-batch-action-bar__copy strong {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .resource-batch-action-bar--mobile .resource-batch-action-bar__copy small {
@@ -373,7 +373,7 @@
   .resource-batch-action-bar--mobile.has-selection-session .resource-batch-action-bar__copy small {
     display: block;
     white-space: normal;
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
 
   .resource-batch-action-bar--mobile :deep(.b-tooltip-wrap) {
@@ -388,16 +388,16 @@
 
   .resource-batch-action-bar--mobile :deep(.batch-action-delete.b_btn) {
     color: var(--danger-color);
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
   .resource-batch-action-bar--mobile.has-project-action > :deep(.b_btn) {
-    padding: 8px 10px;
+    padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px);
     line-height: 1.35;
   }
   .resource-batch-action-bar--mobile .resource-batch-action-bar__mobile-more {
     min-width: 96px;
     flex: 0 0 96px;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
 
   .resource-batch-action-bar--mobile.has-project-action .resource-batch-action-bar__mobile-more {
@@ -407,7 +407,7 @@
 
   .resource-batch-action-bar--mobile .resource-batch-action-bar__primary {
     min-width: 0;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
 
   .resource-batch-action-bar-enter-active,
@@ -431,7 +431,7 @@
   @media (max-width: 900px) and (min-width: 768px) {
     .resource-batch-action-bar {
       width: calc(100vw - 32px);
-      gap: 8px;
+      gap: var(--ui-space-8, 8px);
     }
 
     .resource-batch-action-bar__selection {

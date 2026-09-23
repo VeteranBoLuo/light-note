@@ -1,5 +1,6 @@
 <template>
   <AdminDataPage
+    class="user-opinion-page"
     :eyebrow="t('adminUserOpinion.eyebrow')"
     :title="t('adminUserOpinion.title')"
     :subtitle="t('adminUserOpinion.subtitle')"
@@ -73,7 +74,7 @@
   <BModal
     v-model:visible="detailVisible"
     :title="t('adminUserOpinion.detail.title')"
-    width="min(640px, 94vw)"
+    width="min(var(--ui-layout-640, 640px), 94vw)"
     :show-footer="false"
     :mask-closable="!replying"
     :esc-closable="!replying"
@@ -158,13 +159,13 @@
   } = useAdminUserOpinion({ initialPageSize: 20 });
 
   const opinionColumns = computed(() => [
-    { title: t('adminUserOpinion.columns.user'), key: 'alias', width: 'minmax(120px, 1fr)' },
-    { title: t('adminUserOpinion.columns.contact'), key: 'phone', width: '130px' },
-    { title: t('adminUserOpinion.columns.type'), key: 'type', width: '110px' },
-    { title: t('adminUserOpinion.columns.status'), key: 'status', width: '100px' },
-    { title: t('adminUserOpinion.columns.submittedAt'), key: 'createTime', width: '170px' },
-    { title: t('adminUserOpinion.columns.repliedAt'), key: 'replyTime', width: '170px' },
-    { title: t('adminUserOpinion.columns.operation'), key: 'operation', width: '64px' },
+    { title: t('adminUserOpinion.columns.user'), key: 'alias', width: 'minmax(var(--ui-layout-120, 120px), 1fr)' },
+    { title: t('adminUserOpinion.columns.contact'), key: 'phone', width: 'var(--ui-layout-130, 130px)' },
+    { title: t('adminUserOpinion.columns.type'), key: 'type', width: 'var(--ui-layout-110, 110px)' },
+    { title: t('adminUserOpinion.columns.status'), key: 'status', width: 'var(--ui-layout-100, 100px)' },
+    { title: t('adminUserOpinion.columns.submittedAt'), key: 'createTime', width: 'var(--ui-layout-170, 170px)' },
+    { title: t('adminUserOpinion.columns.repliedAt'), key: 'replyTime', width: 'var(--ui-layout-170, 170px)' },
+    { title: t('adminUserOpinion.columns.operation'), key: 'operation', width: 'var(--ui-layout-64, 64px)' },
   ]);
 
   async function submitSelected() {
@@ -182,21 +183,25 @@
 <style lang="less" scoped>
   @import '@/assets/css/admin-breakpoints.less';
 
+  .user-opinion-page {
+    font-size: var(--ui-font-16, 16px);
+  }
+
   .user-opinion__search {
-    min-width: 220px;
+    min-width: var(--ui-layout-220, 220px);
     flex: 1;
   }
 
   .user-opinion__status-filter {
-    width: 160px;
+    width: var(--ui-layout-160, 160px);
   }
 
   .user-opinion__hide-internal {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     white-space: nowrap;
   }
 

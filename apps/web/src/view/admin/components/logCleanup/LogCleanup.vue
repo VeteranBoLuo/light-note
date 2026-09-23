@@ -170,27 +170,27 @@
 
   .log-cleanup__grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-    gap: 16px;
+    grid-template-columns: repeat(auto-fit, minmax(var(--ui-layout-320, 320px), 1fr));
+    gap: var(--ui-space-16, 16px);
   }
 
   .log-cleanup__card {
-    padding: 18px;
+    padding: var(--ui-space-18, 18px);
     border-radius: 14px;
     background: var(--card-background);
     border: 1px solid var(--surface-border-color);
   }
 
   .log-cleanup__card-title {
-    margin: 0 0 6px;
-    font-size: 15px;
+    margin: 0 0 var(--ui-space-6, 6px);
+    font-size: var(--ui-font-15, 15px);
     font-weight: 700;
     color: var(--text-color);
   }
 
   .log-cleanup__card-hint {
-    margin: 0 0 14px;
-    font-size: 12px;
+    margin: 0 0 var(--ui-space-14, 14px);
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.6;
     color: var(--desc-color);
   }
@@ -199,21 +199,21 @@
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .log-cleanup__input {
-    flex: 1 1 200px;
-    min-width: 160px;
+    flex: 1 1 var(--ui-layout-200, 200px);
+    min-width: var(--ui-layout-160, 160px);
   }
 
   .log-cleanup__stats {
-    margin-top: 4px;
+    margin-top: var(--ui-space-4, 4px);
   }
 
   .log-cleanup__empty,
   .log-cleanup__note {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
   }
 </style>

@@ -17,8 +17,8 @@
       @compositionstart="$emit('compositionstart', $event)"
       @compositionend="$emit('compositionend', $event)"
       :style="{
-        paddingLeft: hasPrefixSlot ? '30px' : '11px',
-        paddingRight: hasSuffixSlot || showClearBtn ? '30px' : '11px',
+        paddingLeft: hasPrefixSlot ? 'var(--ui-space-30, 30px)' : 'var(--ui-space-11, 11px)',
+        paddingRight: hasSuffixSlot || showClearBtn ? 'var(--ui-space-30, 30px)' : 'var(--ui-space-11, 11px)',
       }"
       :autocomplete="autocomplete"
       :placeholder="computedPlaceholder"
@@ -39,8 +39,8 @@
       @compositionstart="$emit('compositionstart', $event)"
       @compositionend="$emit('compositionend', $event)"
       :style="{
-        paddingLeft: hasPrefixSlot ? '35px' : '11px',
-        paddingRight: hasSuffixSlot || showClearBtn ? '35px' : '11px',
+        paddingLeft: hasPrefixSlot ? 'var(--ui-space-35, 35px)' : 'var(--ui-space-11, 11px)',
+        paddingRight: hasSuffixSlot || showClearBtn ? 'var(--ui-space-35, 35px)' : 'var(--ui-space-11, 11px)',
       }"
       :autocomplete="autocomplete"
       :maxlength="maxlength"
@@ -65,6 +65,7 @@
 <script setup lang="ts">
   import { useSlots, computed, Ref, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import { useUiDensity } from '@/composables/useUiDensity';
 
   const { t } = useI18n();
 
@@ -97,6 +98,12 @@
       disabled: false,
       readonly: false,
     },
+  );
+  const { dimension } = useUiDensity();
+  const controlHeight = computed(() =>
+    /^\d+(?:\.\d+)?px$/.test(props.height) && props.type !== 'textarea'
+      ? `${dimension(parseFloat(props.height), 'control')}px`
+      : props.height,
   );
   const value: Ref<string | number | undefined> = defineModel('value');
   const emit = defineEmits([
@@ -227,14 +234,14 @@
     }
   }
   .b-input {
-    padding: 0 11px;
-    height: v-bind(height);
+    padding: 0 var(--ui-space-11, 11px);
+    height: v-bind(controlHeight);
   }
   .b-textarea {
     // Continuous Latin input should use the remaining line width instead of moving as one word.
     word-break: break-all;
     overflow-wrap: anywhere;
-    padding: 4px 11px;
+    padding: var(--ui-space-4, 4px) var(--ui-space-11, 11px);
   }
   @media (hover: hover) and (pointer: fine) {
     .b-input,
@@ -254,18 +261,18 @@
 
   .prefix-icon {
     position: absolute;
-    left: 10px;
+    left: var(--ui-space-10, 10px);
     top: 0;
-    min-width: 16px;
+    min-width: var(--ui-layout-16, 16px);
     height: 100%;
     display: grid;
     place-items: center;
   }
   .suffix-icon {
     position: absolute;
-    right: 10px;
+    right: var(--ui-space-10, 10px);
     top: 0;
-    min-width: 16px;
+    min-width: var(--ui-layout-16, 16px);
     height: 100%;
     display: grid;
     place-items: center;
@@ -278,17 +285,17 @@
   }
   .input-clear-btn {
     position: absolute;
-    right: 10px;
+    right: var(--ui-space-10, 10px);
     top: 50%;
     transform: translateY(-50%);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 18px;
-    height: 18px;
+    width: var(--ui-layout-18, 18px);
+    height: var(--ui-layout-18, 18px);
     border-radius: 50%;
     cursor: pointer;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
     transition:
       background 0.15s,

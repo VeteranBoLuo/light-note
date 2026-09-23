@@ -21,8 +21,9 @@
     >
       <div class="todo-item__body" :class="{ 'is-editable': cardPreviewable }" @click.stop="openPreviewFromCard">
         <!-- 标题始终独立于勾选框:完成/恢复只能点方框,点名字不触发状态切换 -->
-        <div v-if="!selectable" class="todo-item__main-line">
+        <div :class="selectable ? 'todo-item__selection-line' : 'todo-item__main-line'">
           <BCheckbox
+            v-if="!selectable"
             controlled
             class="todo-item__main-check"
             :model-value="item.status === 'completed'"
@@ -31,13 +32,8 @@
             @click.stop
             @update:model-value="$emit('toggle-complete', $event)"
           />
-          <BButton v-if="cardPreviewable" class="todo-item__title" @click.stop="emit('preview')">
-            {{ item.title }}
-          </BButton>
-          <span v-else class="todo-item__title todo-item__title--static">{{ item.title }}</span>
-        </div>
-        <div v-else class="todo-item__selection-line">
           <BCheckbox
+            v-else
             class="todo-item__select"
             :model-value="selected"
             :disabled="writeDisabled"
@@ -45,7 +41,31 @@
             @click.stop
             @update:model-value="$emit('select', $event)"
           />
-          <span class="todo-item__selection-title">{{ item.title }}</span>
+          <div class="todo-item__title-content">
+            <span v-if="selectable" class="todo-item__selection-title">{{ item.title }}</span>
+            <BButton v-else-if="cardPreviewable" class="todo-item__title" @click.stop="emit('preview')">
+              {{ item.title }}
+            </BButton>
+            <span v-else class="todo-item__title todo-item__title--static">{{ item.title }}</span>
+            <section v-if="item.resourceRefs?.length" class="todo-resource-refs" @click.stop>
+              <TodoResourceLinks :items="item.resourceRefs.slice(0, 1)" @open="openResourceRef" />
+              <BPopover v-if="item.resourceRefs.length > 1" trigger="click" placement="bottom-left">
+                <BButton
+                  class="todo-resource-refs__more"
+                  type="text"
+                  :aria-label="t('inbox.todoMoreResources', { count: item.resourceRefs.length - 1 })"
+                  >+{{ item.resourceRefs.length - 1 }}</BButton
+                >
+                <template #content>
+                  <TodoResourceLinks
+                    class="todo-resource-refs__panel"
+                    :items="item.resourceRefs.slice(1)"
+                    @open="openResourceRef"
+                  />
+                </template>
+              </BPopover>
+            </section>
+          </div>
         </div>
         <div v-if="startLabel || item.dueAt || occurrenceLabel" class="todo-item__meta">
           <span v-if="startLabel" class="todo-start-label">{{ startLabel }}</span>
@@ -82,14 +102,13 @@
             @click="router.push({ name: 'tagDetail', params: { id: tag.id } })"
           />
         </div>
-        <!-- 参考资料:共享紧凑胶囊最多展示 3 个,失效目标标注不可用且不可点击 -->
-        <section v-if="item.resourceRefs?.length" class="todo-resource-refs" @click.stop>
-          <span class="todo-resource-refs__label">{{ t('inbox.todoResourceRefsTitle') }}</span>
-          <TodoResourceLinks :items="item.resourceRefs" :max-visible="3" @open="openResourceRef" />
-        </section>
         <section v-if="reminderLabel" class="todo-reminder-summary" :class="{ 'is-past': pastReminderLabel }">
           <strong>{{ reminderLabel }}</strong>
-          <span v-if="nextReminderLabel">{{ t(isTodoSingleReminder(item) ? 'inbox.todoSingleReminderTime' : 'inbox.todoNextReminder', { time: nextReminderLabel }) }}</span>
+          <span v-if="nextReminderLabel">{{
+            t(isTodoSingleReminder(item) ? 'inbox.todoSingleReminderTime' : 'inbox.todoNextReminder', {
+              time: nextReminderLabel,
+            })
+          }}</span>
           <span v-else-if="pastReminderLabel" class="todo-reminder-summary__past">
             {{ t('inbox.todoPastReminder', { time: pastReminderLabel }) }}
           </span>
@@ -645,26 +664,26 @@
 
 <style scoped lang="less">
   .todo-menu-snooze {
-    padding: 7px 12px;
+    padding: var(--ui-space-7, 7px) var(--ui-space-12, 12px);
   }
   .todo-menu-snooze__label {
     display: block;
-    margin-bottom: 7px;
+    margin-bottom: var(--ui-space-7, 7px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .todo-menu-snooze__options {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   .todo-menu-snooze__options .b_btn {
     width: 100%;
-    height: 30px;
-    padding: 0 4px;
+    height: var(--ui-layout-30, 30px);
+    padding: 0 var(--ui-space-4, 4px);
     border: 1px solid var(--surface-border-color);
     background: transparent;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .todo-menu-snooze__options .b_btn:hover,
   .todo-menu-snooze__options .b_btn:focus-visible {
@@ -674,8 +693,8 @@
   .todo-item__organization {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 8px;
+    gap: var(--ui-space-8, 8px);
+    margin-top: var(--ui-space-8, 8px);
     align-items: center;
   }
   .todo-item {
@@ -684,8 +703,8 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: start;
-    gap: 12px;
-    padding: 15px 16px;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-15, 15px) var(--ui-space-16, 16px);
     border: 1px solid var(--surface-border-color, var(--card-border-color));
     border-radius: 15px;
     background: var(--card-background, var(--background-color));
@@ -696,7 +715,7 @@
     white-space: nowrap;
   }
   .todo-occurrence-priority {
-    width: 100px;
+    width: var(--ui-layout-100, 100px);
   }
   .todo-recurrence-label {
     color: var(--success-color, #2e8b57);
@@ -707,7 +726,7 @@
   }
   .todo-plan-state-label,
   .todo-legacy-label {
-    padding: 1px 6px;
+    padding: var(--ui-space-1, 1px) var(--ui-space-6, 6px);
     border-radius: 999px;
     font-weight: 600;
   }
@@ -763,10 +782,10 @@
   .todo-item__meta {
     display: flex;
     flex-wrap: wrap;
-    gap: 5px 10px;
-    margin: 4px 0 0 30px;
+    gap: var(--ui-space-5, 5px) var(--ui-space-10, 10px);
+    margin: var(--ui-space-4, 4px) 0 0 var(--ui-space-30, 30px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .todo-item__meta .overdue {
     color: var(--danger-color, #e5484d);
@@ -776,20 +795,20 @@
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 6px;
-    margin: 8px 0 0 30px;
+    gap: var(--ui-space-6, 6px);
+    margin: var(--ui-space-8, 8px) 0 0 var(--ui-space-30, 30px);
   }
   .todo-item__chips > span {
-    min-height: 20px;
+    min-height: var(--ui-layout-20, 20px);
     box-sizing: border-box;
     display: inline-flex;
     align-items: center;
-    padding: 2px 8px;
+    padding: var(--ui-space-2, 2px) var(--ui-space-8, 8px);
     border: 1px solid var(--surface-border-color, var(--card-border-color));
     border-radius: 999px;
     background: var(--workspace-panel-bg-color, var(--background-color));
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.35;
   }
   .todo-item__chips > .todo-recurrence-label {
@@ -827,14 +846,28 @@
   .todo-item__selection-line {
     display: flex;
     align-items: flex-start;
-    gap: 6px;
-    margin-top: 5px;
+    gap: var(--ui-space-6, 6px);
+    margin-top: var(--ui-space-5, 5px);
+    min-width: 0;
+  }
+  .todo-item__title-content {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ui-space-6, 6px) var(--ui-space-10, 10px);
+    min-width: 0;
+    flex: 1;
+  }
+  .todo-item__title-content > .todo-item__title,
+  .todo-item__title-content > .todo-item__selection-title {
+    flex: 0 1 auto;
+    max-width: 100%;
   }
   /* 方框与标题第一行共用 24px 行盒，换行后仍对齐首行。 */
   .todo-item__main-check,
   .todo-item__select {
-    flex: 0 0 24px;
-    height: 24px;
+    flex: 0 0 var(--ui-layout-24, 24px);
+    height: var(--ui-layout-24, 24px);
     box-sizing: border-box;
     align-items: center;
     justify-content: center;
@@ -845,8 +878,8 @@
   }
   .todo-item__main-check :deep(.b-checkbox__inner),
   .todo-item__select :deep(.b-checkbox__inner) {
-    width: 19px;
-    height: 19px;
+    width: var(--ui-layout-19, 19px);
+    height: var(--ui-layout-19, 19px);
     border-radius: 6px;
   }
   .todo-item__title,
@@ -854,9 +887,9 @@
     display: block;
     min-width: 0;
     color: var(--text-color);
-    font-size: 16px;
+    font-size: var(--ui-font-16, 16px);
     font-weight: 600;
-    line-height: 24px;
+    line-height: var(--ui-layout-24, 24px);
     overflow-wrap: anywhere;
   }
   .todo-item__title.b_btn {
@@ -883,16 +916,16 @@
     text-decoration: line-through;
   }
   .todo-item__description {
-    margin: 5px 0 0 30px;
+    margin: var(--ui-space-5, 5px) 0 0 var(--ui-space-30, 30px);
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.6;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
   .todo-checklist {
-    margin: 11px 0 0 30px;
-    padding: 9px 10px 8px;
+    margin: var(--ui-space-11, 11px) 0 0 var(--ui-space-30, 30px);
+    padding: var(--ui-space-9, 9px) var(--ui-space-10, 10px) var(--ui-space-8, 8px);
     border: 0;
     border-radius: 11px;
     background: var(--workspace-panel-bg-color, var(--hover-background));
@@ -901,10 +934,10 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    padding: 0 4px 5px;
+    gap: var(--ui-space-12, 12px);
+    padding: 0 var(--ui-space-4, 4px) var(--ui-space-5, 5px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .todo-checklist__header > span:first-child {
     color: var(--text-color);
@@ -913,13 +946,13 @@
   .todo-checklist__items {
     display: flex;
     flex-direction: column;
-    gap: 1px;
+    gap: var(--ui-space-1, 1px);
   }
   .todo-checklist__item {
     width: 100%;
     box-sizing: border-box;
     border-radius: 7px;
-    padding: 5px 4px;
+    padding: var(--ui-space-5, 5px) var(--ui-space-4, 4px);
   }
   .todo-checklist__item:hover {
     background: color-mix(in srgb, var(--primary-color) 6%, transparent);
@@ -930,32 +963,44 @@
   }
   .todo-resource-refs {
     display: flex;
-    align-items: flex-start;
-    gap: 8px;
-    margin: 9px 0 0 30px;
-    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ui-space-5, 5px);
+    min-width: 0;
+    max-width: 100%;
+    flex: 0 1 auto;
   }
-
-  .todo-resource-refs__label {
+  .todo-resource-refs > :deep(.b-popover-trigger) {
     flex: 0 0 auto;
-    padding-top: 4px;
+  }
+  .todo-resource-refs__panel {
+    box-sizing: border-box;
+    width: var(--ui-layout-280, 280px);
+    max-width: calc(100vw - var(--ui-space-48, 48px));
+    max-height: var(--ui-layout-240, 240px);
+    overflow-y: auto;
+    padding: var(--ui-space-10, 10px);
+  }
+  .todo-resource-refs__more.b_btn {
+    height: var(--ui-layout-24, 24px);
+    min-height: var(--ui-layout-24, 24px);
+    padding: 0 var(--ui-space-4, 4px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .todo-reminder-summary {
     display: grid;
-    gap: 2px;
-    margin: 10px 0 0 30px;
-    padding: 9px 11px;
+    gap: var(--ui-space-2, 2px);
+    margin: var(--ui-space-10, 10px) 0 0 var(--ui-space-30, 30px);
+    padding: var(--ui-space-9, 9px) var(--ui-space-11, 11px);
     border-radius: 10px;
     background: var(--workspace-panel-bg-color, var(--hover-background));
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .todo-reminder-summary strong {
     color: var(--text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 650;
   }
   .todo-reminder-summary.is-past {
@@ -973,36 +1018,36 @@
     flex-wrap: wrap;
     align-items: center;
     justify-content: flex-end;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   .todo-item__actions--desktop {
     align-self: start;
     flex-wrap: nowrap;
-    margin-top: 5px;
+    margin-top: var(--ui-space-5, 5px);
   }
   .todo-item__actions--mobile {
     display: none;
   }
   .todo-item__priority-select {
-    width: 92px;
+    width: var(--ui-layout-92, 92px);
   }
   .todo-item__actions :deep(.select-trigger),
   .todo-item__actions :deep(.b_btn) {
-    height: 34px;
-    min-height: 34px;
+    height: var(--ui-layout-34, 34px);
+    min-height: var(--ui-layout-34, 34px);
     box-sizing: border-box;
     border: 0;
     border-radius: 9px;
     background: var(--workspace-panel-bg-color);
   }
   .todo-item__actions :deep(.b_btn) {
-    padding: 0 11px;
-    line-height: 34px;
+    padding: 0 var(--ui-space-11, 11px);
+    line-height: var(--ui-layout-34, 34px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .todo-item__actions :deep(.todo-more-button) {
-    width: 34px;
+    width: var(--ui-layout-34, 34px);
     padding: 0;
     color: var(--text-color);
   }
@@ -1010,20 +1055,20 @@
     display: grid;
     width: max-content;
     min-width: 0;
-    padding: 4px;
-    gap: 2px;
+    padding: var(--ui-space-4, 4px);
+    gap: var(--ui-space-2, 2px);
   }
   .todo-snooze-menu :deep(.b_btn) {
     width: 100%;
     justify-content: flex-start;
-    height: 30px;
-    min-height: 30px;
-    padding: 0 10px;
-    font-size: 13px;
+    height: var(--ui-layout-30, 30px);
+    min-height: var(--ui-layout-30, 30px);
+    padding: 0 var(--ui-space-10, 10px);
+    font-size: var(--ui-font-13, 13px);
   }
   @media (pointer: coarse) {
     .todo-snooze-menu :deep(.b_btn) {
-      min-height: 44px;
+      min-height: var(--ui-layout-44, 44px);
     }
   }
   @media (min-width: 768px) and (max-width: 900px) {
@@ -1033,14 +1078,20 @@
     .todo-item__actions--desktop {
       grid-column: 1 / -1;
       justify-self: end;
-      margin: 0 0 0 30px;
+      margin: 0 0 0 var(--ui-space-30, 30px);
     }
   }
   @media (max-width: 767px) {
+    .todo-item__organization {
+      margin-left: var(--ui-space-30, 30px);
+    }
+    .todo-resource-refs {
+      flex-basis: 100%;
+    }
     .todo-item {
       grid-template-columns: minmax(0, 1fr);
-      gap: 10px;
-      padding: 14px;
+      gap: var(--ui-space-10, 10px);
+      padding: var(--ui-space-14, 14px);
       border-radius: 17px;
       border: 1px solid var(--surface-border-color);
       border-left: 4px solid var(--todo-accent-color);
@@ -1060,12 +1111,12 @@
       background: var(--card-background);
     }
     .todo-item__meta {
-      margin-left: 30px;
-      gap: 6px;
-      font-size: 12px;
+      margin-left: var(--ui-space-30, 30px);
+      gap: var(--ui-space-6, 6px);
+      font-size: var(--ui-font-12, 12px);
     }
     .todo-item__chips {
-      margin-left: 30px;
+      margin-left: var(--ui-space-30, 30px);
     }
     .todo-item__chips > .todo-priority {
       display: none;
@@ -1076,8 +1127,8 @@
     .todo-item__actions--mobile {
       display: flex;
       width: auto;
-      margin-left: 30px;
-      gap: 7px;
+      margin-left: var(--ui-space-30, 30px);
+      gap: var(--ui-space-7, 7px);
       align-items: center;
       justify-content: flex-end;
     }
@@ -1087,13 +1138,13 @@
       isolation: isolate;
       width: auto;
       min-width: 0;
-      height: var(--mobile-touch-size, 44px);
-      min-height: var(--mobile-touch-size, 44px);
-      padding-inline: 12px;
+      height: var(--mobile-touch-size, var(--ui-layout-44, 44px));
+      min-height: var(--mobile-touch-size, var(--ui-layout-44, 44px));
+      padding-inline: var(--ui-space-12, 12px);
       border: 0;
       border-radius: 10px;
       background: transparent !important;
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
       white-space: nowrap;
     }
     .todo-item__actions--mobile :deep(.b_btn::before) {
@@ -1117,7 +1168,7 @@
     }
     .todo-checklist {
       margin-right: 0;
-      padding: 11px;
+      padding: var(--ui-space-11, 11px);
       border-radius: 12px;
       border: 0;
       background: var(--workspace-panel-bg-color);

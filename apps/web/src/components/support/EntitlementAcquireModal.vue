@@ -2,7 +2,7 @@
   <BModal
     v-model:visible="visible"
     :title="t(asset === 'ai' ? 'support.acquire.aiTitle' : 'support.acquire.storageTitle')"
-    width="min(520px, 94vw)"
+    width="min(var(--ui-layout-520, 520px), 94vw)"
     :show-footer="false"
     fullscreen-mobile
   >
@@ -121,33 +121,33 @@
   .entitlement-acquire {
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
   }
 
   .entitlement-acquire__intro,
   .entitlement-acquire__note {
     margin: 0;
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.65;
   }
 
   .entitlement-acquire__options {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .entitlement-acquire__option.b_btn {
     width: 100%;
     min-width: 0;
-    min-height: 106px;
+    min-height: var(--ui-layout-106, 106px);
     height: auto;
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
-    gap: 11px;
-    padding: 15px;
+    gap: var(--ui-space-11, 11px);
+    padding: var(--ui-space-15, 15px);
     border: 1px solid var(--surface-border-color);
     border-radius: 14px;
     background: var(--workspace-panel-bg-color);
@@ -162,8 +162,8 @@
   }
 
   .entitlement-acquire__icon {
-    width: 40px;
-    height: 40px;
+    width: var(--ui-layout-40, 40px);
+    height: var(--ui-layout-40, 40px);
     display: grid;
     place-items: center;
     border: 1px solid var(--surface-border-color);
@@ -180,23 +180,23 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
 
   .entitlement-acquire__copy strong {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
   }
 
   .entitlement-acquire__copy small {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.55;
     white-space: normal;
   }
 
   .entitlement-acquire__note {
-    padding-top: 2px;
-    font-size: 12px;
+    padding-top: var(--ui-space-2, 2px);
+    font-size: var(--ui-font-12, 12px);
   }
 
   @media (max-width: 600px) {

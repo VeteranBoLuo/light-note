@@ -113,7 +113,6 @@
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import growthApi from '@/api/growthApi.ts';
-  import { getRootZoom } from '@/utils/zoom.ts';
 
   const activityTypes = ['bookmark', 'note', 'file', 'todo', 'organize', 'checkin'] as const;
   type ActivityType = (typeof activityTypes)[number];
@@ -324,10 +323,9 @@
       container.scrollLeft = 0;
       return;
     }
-    // gBCR 是视觉坐标，scrollLeft/clientWidth 是布局坐标；按项目 zoom 约定先换算。
-    const zoom = getRootZoom();
+
     const left =
-      (todayCell.getBoundingClientRect().left - container.getBoundingClientRect().left) / zoom + container.scrollLeft;
+      (todayCell.getBoundingClientRect().left - container.getBoundingClientRect().left) + container.scrollLeft;
     container.scrollLeft = Math.max(0, left - container.clientWidth / 2 + todayCell.offsetWidth / 2);
   }
 
@@ -376,7 +374,7 @@
     --heatmap-gap: 3px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     min-width: 0;
   }
   .activity-heatmap__head,
@@ -384,7 +382,7 @@
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     flex-wrap: wrap;
   }
   .activity-heatmap__heading {
@@ -398,21 +396,21 @@
     margin: 0;
   }
   .activity-heatmap__title {
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
     line-height: 1.35;
     font-weight: 700;
     color: var(--text-color);
   }
   .activity-heatmap__caption {
-    margin-top: 3px;
-    font-size: 12px;
+    margin-top: var(--ui-space-3, 3px);
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
   }
   .activity-heatmap__year {
-    width: 100px;
+    width: var(--ui-layout-100, 100px);
     flex: 0 0 auto;
   }
-  .activity-heatmap__type { width: 128px; flex: 0 0 auto; }
+  .activity-heatmap__type { width: var(--ui-layout-128, 128px); flex: 0 0 auto; }
   .activity-heatmap__skeleton { display: grid; grid-template-columns: repeat(7, 13px); gap: 4px; min-height: 116px; align-content: center; }
   .activity-heatmap__skeleton span { width: 13px; height: 13px; border-radius: 3px; background: var(--hover-background); animation: heatmap-pulse 1.1s ease-in-out infinite alternate; }
   .activity-heatmap__scroll {
@@ -504,39 +502,39 @@
     animation: heatmap-pulse 1.1s ease-in-out infinite alternate;
   }
   .activity-heatmap__selected {
-    padding: 7px 10px;
+    padding: var(--ui-space-7, 7px) var(--ui-space-10, 10px);
     border: 1px solid color-mix(in srgb, var(--primary-color) 24%, var(--card-border-color));
     border-radius: 8px;
     background: color-mix(in srgb, var(--primary-color) 6%, var(--card-background));
     color: var(--text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.5;
   }
   .activity-heatmap__stats,
   .activity-heatmap__legend {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .activity-heatmap__stats {
     flex-wrap: wrap;
-    gap: 6px 14px;
+    gap: var(--ui-space-6, 6px) var(--ui-space-14, 14px);
   }
   .activity-heatmap__legend {
-    gap: 3px;
-    font-size: 11px;
+    gap: var(--ui-space-3, 3px);
+    font-size: var(--ui-font-11, 11px);
   }
   .activity-heatmap__legend span {
-    margin: 0 2px;
+    margin: 0 var(--ui-space-2, 2px);
   }
   .activity-heatmap__legend .activity-heatmap__cell {
     cursor: default;
   }
   .activity-heatmap__empty,
   .activity-heatmap__error {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     text-align: center;
   }
   .activity-heatmap__empty {
@@ -546,10 +544,10 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     color: var(--danger-color, var(--text-color));
   }
-  .activity-heatmap__rules { margin: 0; color: var(--desc-color); font-size: 10.5px; line-height: 1.5; }
+  .activity-heatmap__rules { margin: 0; color: var(--desc-color); font-size: var(--ui-font-10_5, 10.5px); line-height: 1.5; }
   @keyframes heatmap-pulse {
     from {
       opacity: 0.5;

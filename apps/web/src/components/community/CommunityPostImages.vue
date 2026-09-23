@@ -78,16 +78,16 @@
 </script>
 <style scoped>
   .image-unavailable {
-    padding: 24px 12px;
+    padding: var(--ui-space-24, 24px) var(--ui-space-12, 12px);
     white-space: normal;
     color: var(--text-color-secondary);
   }
   .community-post-images {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
-    max-width: 560px;
-    margin: 16px 0;
+    gap: var(--ui-space-8, 8px);
+    max-width: var(--ui-layout-560, 560px);
+    margin: var(--ui-space-16, 16px) 0;
   }
   .community-post-images .b_btn {
     height: auto;
@@ -108,14 +108,14 @@
   }
   .community-post-images.is-single {
     grid-template-columns: minmax(0, 1fr);
-    max-width: 380px;
+    max-width: var(--ui-layout-380, 380px);
   }
   .community-post-images.is-article:not(.is-single) {
     max-width: none;
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(var(--ui-layout-160, 160px), 1fr));
   }
   .community-post-images.is-article:not(.is-single) .b_btn {
-    max-height: 240px;
+    max-height: var(--ui-layout-240, 240px);
   }
   @media (max-width: 767px) {
     .community-post-images.is-article:not(.is-single) {
@@ -124,11 +124,11 @@
   }
   .community-post-images.is-single .b_btn {
     aspect-ratio: auto;
-    max-height: 360px;
+    max-height: var(--ui-layout-360, 360px);
   }
   .community-post-images.is-single img {
     object-fit: contain;
-    max-height: 360px;
+    max-height: var(--ui-layout-360, 360px);
     height: auto;
   }
 </style>

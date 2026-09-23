@@ -7,7 +7,7 @@
     :style="{ width: compact ? undefined : `${naturalWidth}px` }"
   >
     <div ref="measure" class="note-inline-tags__measure" aria-hidden="true" inert>
-      <ResourceTagChip v-for="(tag, index) in tags.slice(0, 2)" :key="index" :tag="tag" max-width="120px" />
+      <ResourceTagChip v-for="(tag, index) in tags.slice(0, 2)" :key="index" :tag="tag" max-width="var(--ui-layout-120, 120px)" />
       <BChip tone="tag">+{{ tags.length }}</BChip>
     </div>
     <BPopover v-model:open="open" class="note-inline-tags__trigger" placement="bottom-right">
@@ -49,9 +49,9 @@
 
 <script setup lang="ts">
   import { computed, onBeforeUnmount, ref, watch } from 'vue';
+  import { useUiDensity } from '@/composables/useUiDensity';
   import { useRouter } from 'vue-router';
   import { resolveResourceRoute } from '@/utils/resourceNavigation';
-  import { normalizeRectForRootZoom } from '@/utils/zoom';
   import { useI18n } from 'vue-i18n';
   import BChip from '@/components/base/BasicComponents/BChip.vue';
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
@@ -66,12 +66,13 @@
   const width = ref(0);
   const measure = ref<HTMLElement | null>(null);
   const chipWidths = ref<number[]>([]);
-  const moreWidth = ref(36);
+  const { dimension } = useUiDensity();
+  const moreWidth = ref(dimension(36, 'layout'));
   const rowWidth = (count: number) =>
     chipWidths.value.slice(0, count).reduce((sum, item) => sum + item, 0) +
     (props.tags.length > count ? moreWidth.value : 0) +
-    Math.max(0, count + (props.tags.length > count ? 1 : 0) - 1) * 5;
-  const naturalWidth = computed(() => Math.min(280, Math.max(44, rowWidth(Math.min(2, props.tags.length)))));
+    Math.max(0, count + (props.tags.length > count ? 1 : 0) - 1) * dimension(5);
+  const naturalWidth = computed(() => Math.min(dimension(280, 'layout'), Math.max(dimension(44, 'layout'), rowWidth(Math.min(2, props.tags.length)))));
   const visibleCount = computed(() => {
     if (props.compact || !chipWidths.value.length) return 0;
     for (let count = Math.min(2, props.tags.length); count > 0; count--) {
@@ -89,10 +90,10 @@
   function measureChips() {
     if (!measure.value) return;
     const children = Array.from(measure.value.children) as HTMLElement[];
-    // offsetWidth 会四舍五入；缩放后少分配不足 1px 也会触发整字省略。
-    const widths = children.map((item) => Math.ceil(normalizeRectForRootZoom(item.getBoundingClientRect()).width));
+    // Preserve fractional text widths so the allocated row never rounds below its content.
+    const widths = children.map((item) => Math.ceil(item.getBoundingClientRect().width));
     chipWidths.value = widths.slice(0, -1);
-    moreWidth.value = widths.at(-1) || 36;
+    moreWidth.value = widths.at(-1) || dimension(36, 'layout');
   }
   let measureObserver: ResizeObserver | undefined;
   watch(
@@ -138,8 +139,8 @@
   .note-inline-tags {
     position: relative;
     flex: 0 1 auto;
-    min-width: 44px;
-    max-width: 280px;
+    min-width: var(--ui-layout-44, 44px);
+    max-width: var(--ui-layout-280, 280px);
     &.is-compact {
       flex: 0 0 auto;
       width: auto;
@@ -150,7 +151,7 @@
     top: 0;
     left: 0;
     display: flex;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
     width: max-content;
     visibility: hidden;
     pointer-events: none;
@@ -159,30 +160,30 @@
     display: flex;
     align-items: center;
     justify-content: flex-start;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
     min-width: 0;
   }
   .note-inline-tags__chip {
-    flex: 0 0 auto;
-    max-width: 120px;
+    flex: 0 1 auto;
+    max-width: var(--ui-layout-120, 120px);
   }
   .note-inline-tags__more {
     flex: 0 0 auto;
   }
   .note-inline-tags__panel {
-    width: 280px;
+    width: var(--ui-layout-280, 280px);
     max-width: calc(100vw - 48px);
-    padding: 12px;
+    padding: var(--ui-space-12, 12px);
     color: var(--text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .note-inline-tags__list {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
-    max-height: 240px;
+    gap: var(--ui-space-8, 8px);
+    max-height: var(--ui-layout-240, 240px);
     overflow: auto;
-    margin-top: 10px;
+    margin-top: var(--ui-space-10, 10px);
     :deep(.resource-tag-chip) {
       max-width: 100%;
     }

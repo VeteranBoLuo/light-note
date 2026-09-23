@@ -74,8 +74,9 @@ describe('移动浏览器与 App 渲染一致性门禁', () => {
     expect(style).toBeDefined();
 
     const compiled = compileStyle({
-      source: style!.content,
-      filename: 'LotteryDraw.vue',
+      // compileStyle runs outside Vite; resolve the same @ alias used by the build.
+      source: style!.content.replace(/(['"])@\//g, `$1${sourceRoot.replaceAll('\\', '/')}/`),
+      filename: resolve(sourceRoot, 'components/growth/LotteryDraw.vue'),
       id: 'data-v-lottery-gate',
       scoped: true,
       preprocessLang: style!.lang,

@@ -125,7 +125,7 @@
     <BModal
       v-model:visible="detailVisible"
       :title="t('adminAudit.detail.title')"
-      width="min(680px, 94vw)"
+      width="min(var(--ui-layout-680, 680px), 94vw)"
       :show-footer="false"
       fullscreen-mobile
     >
@@ -233,12 +233,12 @@
     { value: 'intent', label: t('adminAudit.outcomes.intent') },
   ]);
   const columns = computed<Column[]>(() => [
-    { key: 'action', title: t('adminAudit.columns.action'), width: 'minmax(150px, 1fr)' },
-    { key: 'outcome', title: t('adminAudit.columns.outcome'), width: '100px' },
-    { key: 'actor', title: t('adminAudit.columns.actor'), width: '150px' },
-    { key: 'target', title: t('adminAudit.columns.target'), width: 'minmax(150px, 1fr)' },
-    { key: 'reason', title: t('adminAudit.columns.reason'), width: 'minmax(180px, 1.3fr)' },
-    { key: 'createTime', title: t('adminAudit.columns.time'), width: '170px' },
+    { key: 'action', title: t('adminAudit.columns.action'), width: 'minmax(var(--ui-layout-150, 150px), 1fr)' },
+    { key: 'outcome', title: t('adminAudit.columns.outcome'), width: 'var(--ui-layout-100, 100px)' },
+    { key: 'actor', title: t('adminAudit.columns.actor'), width: 'var(--ui-layout-150, 150px)' },
+    { key: 'target', title: t('adminAudit.columns.target'), width: 'minmax(var(--ui-layout-150, 150px), 1fr)' },
+    { key: 'reason', title: t('adminAudit.columns.reason'), width: 'minmax(var(--ui-layout-180, 180px), 1.3fr)' },
+    { key: 'createTime', title: t('adminAudit.columns.time'), width: 'var(--ui-layout-170, 170px)' },
   ]);
 
   function numberValue(value: unknown) {
@@ -350,13 +350,13 @@
 
 <style scoped lang="less">
   .admin-audit__select {
-    width: 150px;
+    width: var(--ui-layout-150, 150px);
   }
   .admin-audit__search {
-    width: min(260px, 25vw);
+    width: min(var(--ui-layout-260, 260px), 25vw);
   }
   .admin-audit__range {
-    width: 210px;
+    width: var(--ui-layout-210, 210px);
   }
   .admin-audit__range :deep(.drp-trigger.b_btn) {
     width: 100%;
@@ -374,7 +374,7 @@
   .admin-audit__action-cell {
     min-width: 0;
     display: grid;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
   .admin-audit__action-cell small {
     color: var(--sub-text-color);
@@ -428,13 +428,13 @@
   .admin-audit__detail {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .admin-audit__detail > div {
     min-width: 0;
     display: grid;
-    gap: 4px;
-    padding: 10px;
+    gap: var(--ui-space-4, 4px);
+    padding: var(--ui-space-10, 10px);
     border: 1px solid var(--card-border-color);
     border-radius: 10px;
     background: var(--card-background);
@@ -448,17 +448,17 @@
   }
   .admin-audit__detail dt {
     color: var(--sub-text-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .admin-audit__detail dd {
     overflow-wrap: anywhere;
   }
   .admin-audit__detail pre {
-    max-height: 260px;
+    max-height: var(--ui-layout-260, 260px);
     margin: 0;
     overflow: auto;
     white-space: pre-wrap;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   @media (max-width: 767px) {

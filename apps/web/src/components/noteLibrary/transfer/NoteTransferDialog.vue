@@ -130,11 +130,7 @@
               <span
                 class="note-transfer__status"
                 :data-status="record.status === 'completed' && record.failedCount > 0 ? 'partial' : record.status"
-                >{{
-                  t(
-                    `noteTransfer.status.${importDisplayStatus(record)}`,
-                  )
-                }}</span
+                >{{ t(`noteTransfer.status.${importDisplayStatus(record)}`) }}</span
               >
               <span class="note-transfer__record-open"
                 >{{ t(`noteTransfer.${recordAction(record.status)}`) }} <SvgIcon :src="icon.noteTree.chevron" size="12"
@@ -249,16 +245,10 @@
               :data-status="
                 task.status === 'completed' && task.items.some((i) => i.status === 'failed') ? 'partial' : task.status
               "
-              >{{
-                t(
-                  `noteTransfer.status.${taskDisplayStatus}`,
-                )
-              }}</span
+              >{{ t(`noteTransfer.status.${taskDisplayStatus}`) }}</span
             >
           </div>
-          <p v-if="task.errorCode" class="note-transfer__error"
-            >{{ t(noteImportErrorKey(task.errorCode)) }}</p
-          >
+          <p v-if="task.errorCode" class="note-transfer__error">{{ t(noteImportErrorKey(task.errorCode)) }}</p>
           <div class="note-transfer__destination"
             ><SvgIcon :src="icon.common.folderOutline" size="19" /><div class="note-transfer__destination-copy"
               ><span class="note-transfer__eyebrow">{{ t('noteTransfer.target') }}</span
@@ -291,9 +281,7 @@
                   }}</span></div
                 >
                 <NoteImportWarnings :item="item" />
-                <p v-if="item.errorCode" class="note-transfer__error"
-                  >{{ t(noteImportErrorKey(item.errorCode)) }}</p
-                >
+                <p v-if="item.errorCode" class="note-transfer__error">{{ t(noteImportErrorKey(item.errorCode)) }}</p>
               </div>
               <div class="note-transfer__item-actions"
                 ><span class="note-transfer__status" :data-status="item.status">{{
@@ -389,7 +377,7 @@
   <BModal
     v-model:visible="previewVisible"
     :title="t('noteTransfer.preview')"
-    width="min(760px, 94vw)"
+    width="min(var(--ui-layout-760, 760px), 94vw)"
     :show-footer="false"
     fullscreen-mobile
   >
@@ -540,8 +528,8 @@
   const dragging = ref(false);
   const dialogWidth = computed(() =>
     mode.value === 'import' && task.value && !['uploading', 'expired', 'failed'].includes(task.value.status)
-      ? 'min(800px, 94vw)'
-      : 'min(600px, 94vw)',
+      ? 'min(var(--ui-layout-800, 800px), 94vw)'
+      : 'min(var(--ui-layout-600, 600px), 94vw)',
   );
   function importDisplayStatus(current: {
     status: string;
@@ -550,11 +538,14 @@
     items?: NoteImportItem[];
   }) {
     if (current.status === 'uploading' && current.uploadBytes) return 'uploaded';
-    if (current.status === 'completed' && (current.failedCount || current.items?.some((item) => item.status === 'failed')))
+    if (
+      current.status === 'completed' &&
+      (current.failedCount || current.items?.some((item) => item.status === 'failed'))
+    )
       return 'partial';
     return current.status;
   }
-  const taskDisplayStatus = computed(() => task.value ? importDisplayStatus(task.value) : 'uploading');
+  const taskDisplayStatus = computed(() => (task.value ? importDisplayStatus(task.value) : 'uploading'));
   const stepIndex = computed(() =>
     !task.value || ['uploading', 'parsing'].includes(task.value.status) ? 0 : task.value.status === 'review' ? 1 : 2,
   );
@@ -985,7 +976,10 @@
       if (r.status !== 200) throw new Error();
       if (g === generation) {
         scope.value = r.data;
-        exportSettings.value = createNoteExportSettings(r.data.nodes || [], exportNode.value?.title || t('note.untitled'));
+        exportSettings.value = createNoteExportSettings(
+          r.data.nodes || [],
+          exportNode.value?.title || t('note.untitled'),
+        );
         exportCompleted.value = 0;
       }
     });
@@ -1163,36 +1157,36 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     min-width: 0;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .note-transfer__navigation .b_btn {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .note-transfer__retention {
     order: 1;
-    padding-top: 12px;
+    padding-top: var(--ui-space-12, 12px);
     border-top: 1px solid var(--surface-border-color);
   }
   .note-transfer__retention > .b_btn {
     padding: 0;
     background: transparent;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .note-transfer__retention p {
-    margin-top: 8px;
+    margin-top: var(--ui-space-8, 8px);
   }
 
   .note-transfer__skeleton {
-    min-height: 260px;
+    min-height: var(--ui-layout-260, 260px);
     display: flex;
     flex-direction: column;
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
   }
   .note-transfer__skeleton > div {
-    height: 42px;
+    height: var(--ui-layout-42, 42px);
     border-radius: 8px;
     background: var(--surface-divider-color);
   }
@@ -1221,10 +1215,10 @@
     outline: none;
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: var(--ui-space-20, 20px);
     color: var(--text-color);
     min-width: 0;
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     line-height: 1.6;
   }
   .note-transfer p,
@@ -1233,23 +1227,23 @@
   }
   .note-transfer__muted {
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.65;
   }
   .note-transfer__steps {
     list-style: none;
     display: flex;
-    margin: 0 0 2px;
+    margin: 0 0 var(--ui-space-2, 2px);
     padding: 0;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .note-transfer__steps li {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     flex: 1;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     white-space: nowrap;
   }
   .note-transfer__steps li:not(:last-child)::after {
@@ -1257,16 +1251,16 @@
     height: 1px;
     flex: 1;
     background: var(--surface-border-color);
-    margin-left: 4px;
+    margin-left: var(--ui-space-4, 4px);
   }
   .note-transfer__step-number {
     display: grid;
     place-items: center;
-    width: 24px;
-    height: 24px;
+    width: var(--ui-layout-24, 24px);
+    height: var(--ui-layout-24, 24px);
     border: 1px solid var(--surface-border-color);
     border-radius: 50%;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     flex-shrink: 0;
   }
   .note-transfer__steps .is-current {
@@ -1286,8 +1280,8 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 10px;
-    padding: 30px 20px 26px;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-30, 30px) var(--ui-space-20, 20px) var(--ui-space-26, 26px);
     border: 1px dashed var(--surface-border-color);
     border-radius: 14px;
     text-align: center;
@@ -1302,15 +1296,15 @@
   .note-transfer__upload-symbol {
     display: grid;
     place-items: center;
-    width: 60px;
-    height: 60px;
+    width: var(--ui-layout-60, 60px);
+    height: var(--ui-layout-60, 60px);
     border-radius: 16px;
     background: var(--chip-success-bg);
     color: var(--workspace-note-text);
-    margin-bottom: 4px;
+    margin-bottom: var(--ui-space-4, 4px);
   }
   .note-transfer__drop h3 {
-    font-size: 17px;
+    font-size: var(--ui-font-17, 17px);
     font-weight: 600;
     line-height: 1.5;
   }
@@ -1318,24 +1312,24 @@
     display: inline-flex;
     justify-content: center;
     width: auto;
-    margin: 8px 0 4px;
+    margin: var(--ui-space-8, 8px) 0 var(--ui-space-4, 4px);
   }
   .note-transfer__pick {
-    min-width: 168px;
-    min-height: 38px;
+    min-width: var(--ui-layout-168, 168px);
+    min-height: var(--ui-control-38, 38px);
     justify-content: center;
   }
   .note-transfer__formats {
     display: flex;
     flex-wrap: wrap;
     justify-content: center;
-    gap: 7px;
-    margin-top: 6px;
+    gap: var(--ui-space-7, 7px);
+    margin-top: var(--ui-space-6, 6px);
   }
   .note-transfer__formats span {
-    font-size: 11px;
-    line-height: 22px;
-    padding: 0 9px;
+    font-size: var(--ui-font-11, 11px);
+    line-height: var(--ui-layout-22, 22px);
+    padding: 0 var(--ui-space-9, 9px);
     border: 1px solid var(--surface-border-color);
     border-radius: 6px;
     color: var(--desc-color);
@@ -1343,13 +1337,13 @@
   .note-transfer__upload-meta {
     display: flex;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     margin-top: -6px;
   }
   .note-transfer__footnote {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
     text-align: center;
   }
@@ -1357,8 +1351,8 @@
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 10px;
-    padding: 16px 20px;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-16, 16px) var(--ui-space-20, 20px);
     border-top: 1px solid var(--surface-border-color);
     flex-shrink: 0;
   }
@@ -1370,22 +1364,22 @@
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
   .note-transfer__section-head strong {
     display: block;
-    font-size: 16px;
-    margin-bottom: 4px;
+    font-size: var(--ui-font-16, 16px);
+    margin-bottom: var(--ui-space-4, 4px);
   }
   .note-transfer__status {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     white-space: nowrap;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 500;
-    line-height: 22px;
-    padding: 0 8px;
+    line-height: var(--ui-layout-22, 22px);
+    padding: 0 var(--ui-space-8, 8px);
     border-radius: 6px;
     background: var(--chip-neutral-bg);
     color: var(--chip-neutral-fg);
@@ -1414,10 +1408,10 @@
   .note-transfer__destination {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     border: 1px solid var(--surface-border-color);
     border-radius: 10px;
-    padding: 12px 14px;
+    padding: var(--ui-space-12, 12px) var(--ui-space-14, 14px);
   }
   .note-transfer__destination > :first-child {
     color: var(--desc-color);
@@ -1430,12 +1424,12 @@
     flex-direction: column;
   }
   .note-transfer__destination strong {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 500;
     overflow-wrap: anywhere;
   }
   .note-transfer__eyebrow {
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     color: var(--desc-color);
   }
   .note-transfer__items {
@@ -1443,13 +1437,13 @@
   }
   .note-transfer__item {
     display: grid;
-    grid-template-columns: 24px minmax(0, 1fr) auto;
-    gap: 10px;
-    padding: 16px 0;
+    grid-template-columns: var(--ui-layout-24, 24px) minmax(0, 1fr) auto;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-16, 16px) 0;
     border-bottom: 1px solid var(--surface-border-color);
   }
   .note-transfer__item-leading {
-    padding-top: 7px;
+    padding-top: var(--ui-space-7, 7px);
     color: var(--workspace-note-text);
   }
   .note-transfer__item-main {
@@ -1460,22 +1454,22 @@
     display: flex;
     align-items: flex-end;
     flex-direction: column;
-    gap: 8px;
-    padding-top: 3px;
+    gap: var(--ui-space-8, 8px);
+    padding-top: var(--ui-space-3, 3px);
   }
   .note-transfer__file-meta {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     color: var(--desc-color);
-    font-size: 11px;
-    margin-top: 7px;
+    font-size: var(--ui-font-11, 11px);
+    margin-top: var(--ui-space-7, 7px);
     min-width: 0;
   }
   .note-transfer__file-type {
-    font-size: 10px;
-    line-height: 18px;
-    padding: 0 5px;
+    font-size: var(--ui-font-10, 10px);
+    line-height: var(--ui-layout-18, 18px);
+    padding: 0 var(--ui-space-5, 5px);
     border: 1px solid var(--surface-border-color);
     border-radius: 4px;
     flex-shrink: 0;
@@ -1491,19 +1485,19 @@
   .note-transfer__subject {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding-bottom: 18px;
+    gap: var(--ui-space-12, 12px);
+    padding-bottom: var(--ui-space-18, 18px);
     border-bottom: 1px solid var(--surface-border-color);
   }
   .note-transfer__subject strong {
-    font-size: 16px;
+    font-size: var(--ui-font-16, 16px);
     overflow-wrap: anywhere;
   }
   .note-transfer__symbol {
     display: grid;
     place-items: center;
-    width: 46px;
-    height: 46px;
+    width: var(--ui-layout-46, 46px);
+    height: var(--ui-layout-46, 46px);
     border-radius: 12px;
     background: var(--chip-success-bg);
     color: var(--workspace-note-text);
@@ -1512,30 +1506,30 @@
   .note-transfer__fields {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
   .note-transfer__field {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     min-width: 0;
   }
   .note-transfer__field label {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 500;
   }
   .note-transfer__notice {
-    padding: 12px 14px;
+    padding: var(--ui-space-12, 12px) var(--ui-space-14, 14px);
     border-radius: 8px;
     background: var(--chip-neutral-bg);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .note-transfer__error {
     color: var(--danger-color);
     border-left: 3px solid currentColor;
-    padding: 4px 0 4px 10px;
-    font-size: 12px;
+    padding: var(--ui-space-4, 4px) 0 var(--ui-space-4, 4px) var(--ui-space-10, 10px);
+    font-size: var(--ui-font-12, 12px);
     overflow-wrap: anywhere;
   }
   .note-transfer__records {
@@ -1546,14 +1540,14 @@
   }
   .note-transfer__record {
     height: auto;
-    min-height: 82px;
+    min-height: var(--ui-layout-82, 82px);
     white-space: normal;
     line-height: 1.5;
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     width: 100%;
-    padding: 12px 8px;
+    padding: var(--ui-space-12, 12px) var(--ui-space-8, 8px);
     border: 0;
     border-bottom: 1px solid var(--surface-border-color);
     border-radius: 0;
@@ -1565,25 +1559,25 @@
     text-align: left;
     display: flex;
     flex-direction: column;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
   .note-transfer__record-title strong {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     overflow-wrap: anywhere;
     white-space: normal;
   }
   .note-transfer__record-title small,
   .note-transfer__record-summary {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .note-transfer__record-icon,
   .note-transfer__history-symbol {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 34px;
-    height: 34px;
+    width: var(--ui-layout-34, 34px);
+    height: var(--ui-layout-34, 34px);
     flex-shrink: 0;
     border: 1px solid var(--surface-border-color);
     border-radius: 8px;
@@ -1594,14 +1588,14 @@
     display: flex;
     flex-direction: column;
     align-items: flex-end;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     flex-shrink: 0;
   }
   .note-transfer__record-open {
     display: flex;
     align-items: center;
-    gap: 5px;
-    font-size: 11px;
+    gap: var(--ui-space-5, 5px);
+    font-size: var(--ui-font-11, 11px);
     color: var(--desc-color);
   }
   .note-transfer__record-open > :last-child {
@@ -1610,21 +1604,21 @@
   .note-transfer__history-head {
     display: flex;
     align-items: center;
-    gap: 12px;
-    margin-bottom: 4px;
+    gap: var(--ui-space-12, 12px);
+    margin-bottom: var(--ui-space-4, 4px);
   }
   .note-transfer__history-head strong {
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
   }
   .note-transfer__history-head p {
-    margin: 5px 0 0;
-    font-size: 12px;
+    margin: var(--ui-space-5, 5px) 0 0;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
   }
   .note-transfer__live {
     margin-left: auto;
     color: var(--workspace-note-text);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     white-space: nowrap;
   }
   .note-transfer.is-mobile .note-transfer__live {
@@ -1635,8 +1629,8 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 14px;
-    padding: 40px 0;
+    gap: var(--ui-space-14, 14px);
+    padding: var(--ui-space-40, 40px) 0;
     color: var(--desc-color);
   }
   .note-transfer__source {

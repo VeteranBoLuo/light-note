@@ -13,7 +13,7 @@ import {
 
 const source = (relativePath: string) => readFileSync(resolve(process.cwd(), relativePath), 'utf8');
 
-const desktopSource = source('src/view/personCenter/PersonCenter.vue');
+const desktopSource = source('src/view/personCenter/PersonCenter.vue').replace(/var\(--ui-[\w-]+, ([\d.]+px)\)/g, '$1');
 const mobileSource = source('src/view/personCenter/PersonCenterMobile.vue');
 
 describe('personal center menu contract', () => {

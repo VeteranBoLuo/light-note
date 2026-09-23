@@ -169,14 +169,14 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   .inline-tag-create__input {
     min-width: 0;
   }
   .inline-tag-create__actions {
     display: flex;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
 
   @media (max-width: 767px) {

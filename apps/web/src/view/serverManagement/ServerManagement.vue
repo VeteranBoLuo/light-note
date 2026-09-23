@@ -341,18 +341,18 @@
     color: var(--text-color);
   }
   .server-management-shell {
-    width: min(1440px, calc(100% - 48px));
+    width: min(var(--ui-layout-1440, 1440px), calc(100% - var(--ui-layout-48, 48px)));
     margin: 0 auto;
-    padding: 28px 0 48px;
+    padding: var(--ui-space-28, 28px) 0 var(--ui-space-48, 48px);
     display: grid;
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
   }
   .server-management-header {
     min-width: 0;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 20px;
+    gap: var(--ui-space-20, 20px);
   }
   .server-management-header__main,
   .server-management-title-row,
@@ -365,7 +365,7 @@
   }
   .server-management-header__main {
     min-width: 0;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .server-management-header__icon,
   .server-metric-card__icon {
@@ -378,13 +378,13 @@
     background: var(--card-background);
   }
   .server-management-header__icon {
-    width: 46px;
-    height: 46px;
+    width: var(--ui-layout-46, 46px);
+    height: var(--ui-layout-46, 46px);
     border-radius: 14px;
   }
   .server-management-title-row {
     flex-wrap: wrap;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .server-management-title-row h1,
   .server-management-unavailable h2 {
@@ -392,50 +392,50 @@
     color: var(--text-color);
   }
   .server-management-title-row h1 {
-    font-size: 24px;
+    font-size: var(--ui-font-24, 24px);
     line-height: 1.35;
   }
   .server-management-hostline {
-    margin: 5px 0 0;
+    margin: var(--ui-space-5, 5px) 0 0;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.45;
   }
   .server-management-status-dot {
     display: inline-block;
     width: 7px;
     height: 7px;
-    margin-right: 5px;
+    margin-right: var(--ui-space-5, 5px);
     border: 1px solid currentColor;
     border-radius: 50%;
     background: currentColor;
   }
   .server-management-back {
     display: none;
-    width: 36px;
+    width: var(--ui-layout-36, 36px);
     padding: 0;
   }
   .server-management-refresh-controls {
     flex: 0 0 auto;
     justify-content: flex-end;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .server-management-refresh-state {
-    min-width: 150px;
+    min-width: var(--ui-layout-150, 150px);
     display: grid;
     justify-items: end;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
     line-height: 1.3;
   }
   .server-management-refresh-state strong {
     color: var(--text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .server-management-refresh-state span {
     display: inline-flex;
     align-items: center;
     color: var(--success-color, #27965b);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-variant-numeric: tabular-nums;
   }
   .server-management-refresh-state span.is-error {
@@ -447,21 +447,21 @@
   .server-management-refresh-state span i {
     width: 7px;
     height: 7px;
-    margin-right: 5px;
+    margin-right: var(--ui-space-5, 5px);
     border: 1px solid currentColor;
     border-radius: 50%;
     background: currentColor;
   }
   .server-management-refresh-state small {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     font-variant-numeric: tabular-nums;
   }
   .server-management-refresh-select {
-    width: 142px;
+    width: var(--ui-layout-142, 142px);
   }
   .server-management-refresh-select :deep(.select-trigger) {
-    min-height: 36px;
+    min-height: var(--ui-control-36, 36px);
   }
   .server-management-refresh {
     flex: 0 0 auto;
@@ -469,33 +469,33 @@
   .server-management-metrics {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
   }
   .server-metric-card {
     display: grid;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
   }
   .server-metric-card__heading {
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 600;
   }
   .server-metric-card__icon {
-    width: 30px;
-    height: 30px;
+    width: var(--ui-layout-30, 30px);
+    height: var(--ui-layout-30, 30px);
     border-radius: 9px;
   }
   .server-metric-card > strong {
     color: var(--text-color);
-    font-size: 26px;
+    font-size: var(--ui-font-26, 26px);
     font-variant-numeric: tabular-nums;
   }
   .server-metric-card > span {
-    min-height: 18px;
+    min-height: var(--ui-layout-18, 18px);
     overflow: hidden;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -512,7 +512,7 @@
     background: var(--primary-color);
   }
   .server-management-skeleton {
-    height: 96px;
+    height: var(--ui-layout-96, 96px);
     border-radius: 10px;
     background: linear-gradient(
       90deg,
@@ -524,7 +524,7 @@
     animation: server-management-skeleton 1.3s ease-in-out infinite;
   }
   .server-management-skeleton--large {
-    height: 230px;
+    height: var(--ui-layout-230, 230px);
   }
   @keyframes server-management-skeleton {
     to {
@@ -532,33 +532,33 @@
     }
   }
   .server-management-unavailable {
-    min-height: 220px;
+    min-height: var(--ui-layout-220, 220px);
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
     border-color: var(--error-color, #d14343);
   }
   .server-management-unavailable > svg {
     color: var(--error-color, #d14343);
   }
   .server-management-unavailable h2 {
-    font-size: 18px;
+    font-size: var(--ui-font-18, 18px);
   }
   .server-management-unavailable p {
-    margin: 7px 0 0;
+    margin: var(--ui-space-7, 7px) 0 0;
     color: var(--desc-color);
     line-height: 1.65;
   }
   .server-management-unavailable code {
     display: block;
-    margin-top: 8px;
+    margin-top: var(--ui-space-8, 8px);
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .server-management-warning {
-    gap: 10px;
-    padding: 11px 14px;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-11, 11px) var(--ui-space-14, 14px);
     border: 1px solid var(--warning-color, #ad6800);
     border-radius: 10px;
     color: var(--warning-color, #ad6800);
@@ -567,18 +567,18 @@
   .server-management-warning div {
     min-width: 0;
     display: grid;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
   .server-management-warning span {
     overflow: hidden;
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
   .server-management-refresh-warning {
-    gap: 10px;
-    padding: 11px 14px;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-11, 11px) var(--ui-space-14, 14px);
     border: 1px solid var(--error-color, #d14343);
     border-radius: 10px;
     color: var(--error-color, #d14343);
@@ -588,11 +588,11 @@
     min-width: 0;
     flex: 1;
     display: grid;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
   .server-management-refresh-warning span {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .server-management-runtime__grid {
     display: grid;
@@ -602,10 +602,10 @@
   .server-management-runtime__grid > div {
     min-width: 0;
     display: grid;
-    grid-template-columns: 28px minmax(0, 1fr);
+    grid-template-columns: var(--ui-layout-28, 28px) minmax(0, 1fr);
     align-items: center;
-    gap: 2px 8px;
-    padding: 2px 18px;
+    gap: var(--ui-space-2, 2px) var(--ui-space-8, 8px);
+    padding: var(--ui-space-2, 2px) var(--ui-space-18, 18px);
     border-left: 1px solid var(--surface-divider-color, var(--card-border-color));
   }
   .server-management-runtime__grid > div:first-child {
@@ -617,8 +617,8 @@
   }
   .server-management-runtime__icon {
     grid-row: 1 / 3;
-    width: 28px;
-    height: 28px;
+    width: var(--ui-layout-28, 28px);
+    height: var(--ui-layout-28, 28px);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -629,19 +629,19 @@
   }
   .server-management-runtime__grid span:not(.server-management-runtime__icon) {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .server-management-runtime__grid strong {
     min-width: 0;
     overflow: hidden;
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
   .server-management-sampled-at {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 400;
   }
   html.light-note-mobile-rendering .server-management-header__icon,

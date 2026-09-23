@@ -95,7 +95,8 @@ describe('NoteMoveModal', () => {
   }
 
   it('桌面自定义 footer 保留 BModal 默认安全间距', () => {
-    expect(noteMoveModalSource).toMatch(
+    const standardSource = noteMoveModalSource.replace(/var\(--ui-[\w-]+, (\d+px)\)/g, '$1');
+    expect(standardSource).toMatch(
       /\.note-move-desktop-footer\s*\{[\s\S]*?padding:\s*0 20px 16px;/,
     );
   });

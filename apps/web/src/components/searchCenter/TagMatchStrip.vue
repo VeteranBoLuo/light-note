@@ -52,8 +52,8 @@
 <style scoped lang="less">
   .tag-match-strip {
     display: grid;
-    gap: 10px;
-    padding: 12px 0 14px;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-12, 12px) 0 var(--ui-space-14, 14px);
     border-bottom: 1px solid var(--surface-border-color);
   }
 
@@ -61,26 +61,26 @@
     display: flex;
     align-items: flex-end;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .tag-match-strip__heading > div {
     min-width: 0;
     display: flex;
     align-items: baseline;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .tag-match-strip__heading strong {
     color: var(--text-color);
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
   }
 
   .tag-match-strip__list {
     display: flex;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     overflow-x: auto;
     overscroll-behavior-x: contain;
     scroll-snap-type: x proximity;
@@ -88,16 +88,16 @@
   }
 
   .tag-match-card {
-    flex: 0 0 min(360px, calc(50% - 4px));
-    width: min(360px, calc(50% - 4px));
+    flex: 0 0 min(var(--ui-layout-360, 360px), calc(50% - var(--ui-space-8, 8px) / 2));
+    width: min(var(--ui-layout-360, 360px), calc(50% - var(--ui-space-8, 8px) / 2));
     min-width: 0;
     height: auto;
-    min-height: 76px;
-    padding: 10px 12px;
+    min-height: var(--ui-layout-76, 76px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     background: var(--card-background);
@@ -119,8 +119,8 @@
   }
 
   .tag-match-card__icon {
-    width: 40px;
-    height: 40px;
+    width: var(--ui-layout-40, 40px);
+    height: var(--ui-layout-40, 40px);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -135,7 +135,7 @@
   .tag-match-card__body {
     min-width: 0;
     display: grid;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
 
   .tag-match-card__body > strong,
@@ -148,12 +148,12 @@
   .tag-match-card__description,
   .tag-match-card__counts {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .tag-match-card__counts {
     display: flex;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     overflow: hidden;
     white-space: nowrap;
   }
@@ -169,7 +169,7 @@
 
   @media (max-width: 720px) {
     .tag-match-strip {
-      padding: 10px 0 12px;
+      padding: var(--ui-space-10, 10px) 0 var(--ui-space-12, 12px);
     }
 
     .tag-match-strip__heading > div > span {
@@ -185,9 +185,9 @@
     }
 
     .tag-match-card {
-      flex: 0 0 min(82vw, 320px);
-      width: min(82vw, 320px);
-      min-height: 72px;
+      flex: 0 0 min(82vw, var(--ui-layout-320, 320px));
+      width: min(82vw, var(--ui-layout-320, 320px));
+      min-height: var(--ui-layout-72, 72px);
     }
   }
 </style>

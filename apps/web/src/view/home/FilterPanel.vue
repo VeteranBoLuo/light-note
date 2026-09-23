@@ -106,7 +106,7 @@
       :title="t('common.reName')"
       :mask-closable="false"
       :close-disabled="renameSaving"
-      width="min(440px, 88vw)"
+      width="min(var(--ui-layout-440, 440px), 88vw)"
       initial-focus=".tag-rename-input .b-input"
       @ok="handleRename"
     >
@@ -431,7 +431,7 @@
   .filter-tools {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   :deep(.tag-search-input .b-input) {
@@ -484,8 +484,8 @@
   .filter-all-entry {
     min-height: 52px;
     justify-content: flex-start;
-    gap: 9px;
-    padding: 0 10px;
+    gap: var(--ui-space-9, 9px);
+    padding: 0 var(--ui-space-10, 10px);
     border: 1px solid transparent;
     color: var(--text-color);
     background: transparent;
@@ -503,16 +503,16 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 600;
   }
 
   .filter-all-count,
   .tag-item-count {
-    width: 34px;
-    flex: 0 0 34px;
+    width: var(--ui-layout-34, 34px);
+    flex: 0 0 var(--ui-layout-34, 34px);
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-variant-numeric: tabular-nums;
     text-align: right;
   }
@@ -530,35 +530,35 @@
   .mobile-empty-tag-toggle {
     min-height: 44px;
     justify-content: space-between;
-    padding: 0 10px;
+    padding: 0 var(--ui-space-10, 10px);
     border-bottom: 1px solid var(--surface-divider-color);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .desktop-empty-tag-toggle {
-    min-height: 28px;
+    min-height: var(--ui-control-28, 28px);
     justify-content: space-between;
-    gap: 8px;
-    padding: 0 7px;
+    gap: var(--ui-space-8, 8px);
+    padding: 0 var(--ui-space-7, 7px);
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .filter-panel-footer {
     min-width: 0;
-    min-height: 42px;
+    min-height: var(--ui-layout-42, 42px);
     flex: 0 0 auto;
-    margin-top: 6px;
-    padding: 7px 2px 0;
+    margin-top: var(--ui-space-6, 6px);
+    padding: var(--ui-space-7, 7px) var(--ui-space-2, 2px) 0;
     box-sizing: border-box;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     border-top: 1px solid var(--surface-divider-color);
     color: var(--desc-color);
-    font-size: 10.5px;
+    font-size: var(--ui-font-10_5, 10.5px);
   }
 
   .filter-panel-footer > span {
@@ -569,8 +569,8 @@
   }
 
   .filter-panel-footer :deep(.b_btn) {
-    min-height: 28px;
-    padding-inline: 8px;
+    min-height: var(--ui-control-28, 28px);
+    padding-inline: var(--ui-space-8, 8px);
     border-radius: 7px;
     white-space: nowrap;
   }
@@ -594,19 +594,19 @@
   // 移动抽屉继续由下方规则保留 54px 触控高度和更舒展的字号。
   @media (min-width: 768px) {
     .filter-all-entry {
-      min-height: 38px;
-      margin: 2px 0 6px;
+      min-height: var(--ui-control-38, 38px);
+      margin: var(--ui-space-2, 2px) 0 var(--ui-space-6, 6px);
       border-radius: 9px;
     }
 
     .category-item {
       position: relative;
-      height: 34px;
-      margin: 2px 0;
-      padding: 0 8px;
-      gap: 8px;
+      height: var(--ui-control-34, 34px);
+      margin: var(--ui-space-2, 2px) 0;
+      padding: 0 var(--ui-space-8, 8px);
+      gap: var(--ui-space-8, 8px);
       color: var(--desc-color);
-      font-size: 13px;
+      font-size: var(--ui-font-13, 13px);
       font-weight: 400;
       line-height: 1.2;
       transition:
@@ -655,7 +655,7 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .skeleton-input,
@@ -667,7 +667,7 @@
   }
 
   .skeleton-input {
-    height: 34px;
+    height: var(--ui-control-34, 34px);
     border-radius: 8px;
   }
 
@@ -709,13 +709,13 @@
   .tag-rename-footer {
     display: flex;
     justify-content: flex-end;
-    gap: 10px;
-    padding: 0 20px 16px;
+    gap: var(--ui-space-10, 10px);
+    padding: 0 var(--ui-space-20, 20px) var(--ui-space-16, 16px);
   }
 
   .filter-panel-menu {
     height: calc(100% - 53px);
-    padding-right: 10px;
+    padding-right: var(--ui-space-10, 10px);
     width: 180px;
     overflow: hidden auto;
   }
@@ -736,7 +736,7 @@
       position: sticky;
       z-index: 2;
       top: 0;
-      padding-bottom: 4px;
+      padding-bottom: var(--ui-space-4, 4px);
       background: var(--card-background);
     }
 
@@ -744,7 +744,7 @@
       width: 100%;
       min-height: 54px;
       margin: 0;
-      padding: 8px 10px;
+      padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px);
       border-left: 3px solid transparent;
       border-radius: 8px;
 
@@ -771,11 +771,11 @@
     justify-content: center;
     align-items: center;
     height: 100%;
-    padding: 20px;
+    padding: var(--ui-space-20, 20px);
 
     .empty-card {
       background: transparent;
-      padding: 24px 12px;
+      padding: var(--ui-space-24, 24px) var(--ui-space-12, 12px);
       text-align: center;
       max-width: 200px;
       width: 100%;
@@ -785,19 +785,19 @@
 
       .empty-icon {
         color: var(--primary-color, #1890ff);
-        margin-bottom: 16px;
+        margin-bottom: var(--ui-space-16, 16px);
       }
 
       h3 {
-        margin: 0 0 8px 0;
-        font-size: 16px;
+        margin: 0 0 var(--ui-space-8, 8px) 0;
+        font-size: var(--ui-font-16, 16px);
         color: var(--text-color, #333);
         font-weight: 500;
       }
 
       p {
-        margin: 0 0 16px 0;
-        font-size: 14px;
+        margin: 0 0 var(--ui-space-16, 16px) 0;
+        font-size: var(--ui-font-14, 14px);
         color: var(--text-secondary-color, #666);
       }
 

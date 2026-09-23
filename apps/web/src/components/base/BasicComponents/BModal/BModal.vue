@@ -283,8 +283,7 @@
 <style lang="less" scoped>
   .mask-container {
     position: fixed;
-    /* 用 inset:0 而非 100vw/100vh:界面缩放(html zoom)下 vw/vh 会算出比可视视口更小的尺寸,
-       导致遮罩盖不满、右/下露白;inset:0 由固定定位的包含块(视口)约束,缩放下始终铺满。 */
+    /* 遮罩固定到视口，页面滚动时仍覆盖整个可见区域。 */
     inset: 0;
     display: flex;
     align-items: center;
@@ -305,7 +304,7 @@
     padding: 0;
     border-radius: 12px;
     min-width: 0;
-    min-height: 100px;
+    min-height: var(--ui-layout-100, 100px);
     max-width: 90%;
     max-height: calc(100% - 32px);
     width: max-content;
@@ -328,13 +327,13 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 18px 20px 14px;
+    padding: var(--ui-space-18, 18px) var(--ui-space-20, 20px) var(--ui-space-14, 14px);
     border-bottom: 1px solid var(--menu-item-h-bg-color);
     flex-shrink: 0;
   }
 
   .modal-title {
-    font-size: 16px;
+    font-size: var(--ui-font-16, 16px);
     font-weight: 600;
     color: var(--text-color);
     margin: 0;
@@ -356,8 +355,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
+    width: var(--ui-control-28, 28px);
+    height: var(--ui-control-28, 28px);
     border: none;
     border-radius: 6px;
     background: transparent;
@@ -374,7 +373,7 @@
   }
 
   .modal-content {
-    padding: 16px 20px 20px;
+    padding: var(--ui-space-16, 16px) var(--ui-space-20, 20px) var(--ui-space-20, 20px);
     word-wrap: break-word;
     overflow-wrap: break-word;
     min-height: 0;
@@ -383,7 +382,7 @@
   }
 
   .modal-footer {
-    padding: 0 20px 16px;
+    padding: 0 var(--ui-space-20, 20px) var(--ui-space-16, 16px);
     place-self: end;
     flex-shrink: 0;
   }
@@ -429,13 +428,13 @@
       top: 50%;
     }
     .modal-content {
-      padding: 12px 16px 16px;
+      padding: var(--ui-space-12, 12px) var(--ui-space-16, 16px) var(--ui-space-16, 16px);
     }
     .modal-header {
-      padding: 14px 16px 12px;
+      padding: var(--ui-space-14, 14px) var(--ui-space-16, 16px) var(--ui-space-12, 12px);
     }
     .modal-footer {
-      padding: 0 16px 12px;
+      padding: 0 var(--ui-space-16, 16px) var(--ui-space-12, 12px);
     }
 
     .mask-container.is-mobile-fullscreen {

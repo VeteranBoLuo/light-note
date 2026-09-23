@@ -41,15 +41,15 @@
   .chat-read-receipt-badge {
     width: fit-content;
     min-width: 0;
-    min-height: 24px;
-    height: 24px;
-    padding: 2px 7px !important;
-    gap: 4px;
+    min-height: var(--ui-layout-24, 24px);
+    height: var(--ui-layout-24, 24px);
+    padding: var(--ui-space-2, 2px) var(--ui-space-7, 7px) !important;
+    gap: var(--ui-space-4, 4px);
     border: 1px solid var(--surface-border-color) !important;
     border-radius: 999px;
     color: var(--desc-color) !important;
     background: var(--card-background) !important;
-    font-size: 9px;
+    font-size: var(--ui-font-9, 9px);
     line-height: 1;
   }
 

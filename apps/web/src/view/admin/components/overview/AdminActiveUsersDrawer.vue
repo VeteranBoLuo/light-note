@@ -2,7 +2,7 @@
   <BDrawer
     :open="open"
     :title="t('adminActivity.title')"
-    width="620px"
+    width="var(--ui-layout-620, 620px)"
     :mobile-full-screen="true"
     @close="emit('close')"
     @after-close="restoreFocus"
@@ -232,7 +232,7 @@
   .activity-drawer {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     height: 100%;
     min-height: 0;
     color: var(--text-color);
@@ -246,19 +246,19 @@
     align-items: center;
     justify-content: space-between;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .activity-drawer__date {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 8px;
-    font-size: 14px;
+    gap: var(--ui-space-8, 8px);
+    font-size: var(--ui-font-14, 14px);
   }
   .activity-drawer__rules {
-    max-width: 280px;
+    max-width: var(--ui-layout-280, 280px);
     color: var(--text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.6;
   }
   .activity-drawer__heading {
@@ -266,12 +266,12 @@
     align-items: baseline;
     flex-wrap: wrap;
     justify-content: space-between;
-    gap: 4px 12px;
-    padding-top: 4px;
+    gap: var(--ui-space-4, 4px) var(--ui-space-12, 12px);
+    padding-top: var(--ui-space-4, 4px);
   }
   .activity-drawer__hint {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.6;
   }
   .activity-drawer__list {
@@ -282,11 +282,11 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: start;
-    gap: 12px;
-    padding: 10px 0;
-    line-height: 18px;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-10, 10px) 0;
+    line-height: var(--ui-layout-18, 18px);
     border-bottom: 1px solid var(--surface-border-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
   }
   .activity-drawer__identity,
@@ -294,7 +294,7 @@
     display: flex;
     flex-direction: column;
     min-width: 0;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
   .activity-drawer__times {
     text-align: right;
@@ -303,7 +303,7 @@
   }
   .activity-drawer__row strong {
     color: var(--text-color);
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
   }
   .activity-drawer__ellipsis,
   .activity-drawer__row strong {
@@ -314,7 +314,7 @@
   .activity-drawer__error {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     color: var(--danger-color);
   }
 </style>

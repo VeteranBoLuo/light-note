@@ -2,7 +2,10 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const source = readFileSync(resolve(process.cwd(), 'src/components/cloudSpace/CloudStorageBar.vue'), 'utf8');
+const source = readFileSync(resolve(process.cwd(), 'src/components/cloudSpace/CloudStorageBar.vue'), 'utf8').replace(
+  /var\(--ui-[\w-]+,\s*([\d.]+px)\)/g,
+  '$1',
+);
 const pageSource = readFileSync(resolve(process.cwd(), 'src/view/cloudSpace/cloudSpace.vue'), 'utf8');
 
 describe('CloudStorageBar compact layout', () => {

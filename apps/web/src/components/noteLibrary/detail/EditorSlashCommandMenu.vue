@@ -66,7 +66,7 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
-  import { scrollNearestIntoContainer } from '@/utils/zoom';
+  import { scrollNearestIntoContainer } from '@/utils/scrolling';
 
   export interface EditorSlashCommand {
     key: string;
@@ -192,10 +192,12 @@
 
 <style scoped lang="less">
   .slash-command-menu {
-    width: min(360px, calc(100vw - 24px));
+    /* ui-density-fixed: 视口左右安全距离保持固定。 */
+    width: min(var(--ui-layout-360, 360px), calc(100vw - 24px));
     // 与 @ 资源选择器保持同一高度预算；过高会在界面缩放后让上下两侧都放不下，
     // BPopover 被迫钳进视口并跨过触发字符。更多命令由内部滚动承载。
-    max-height: min(340px, calc(100vh - 140px));
+    /* ui-density-fixed: 编辑器上下可用视口预算保持固定。 */
+    max-height: min(var(--ui-layout-340, 340px), calc(100vh - 140px));
     display: flex;
     flex-direction: column;
     color: var(--text-color);
@@ -204,56 +206,56 @@
   .slash-command-menu__scroll {
     min-height: 0;
     overflow-y: auto;
-    padding: 4px;
+    padding: var(--ui-space-4, 4px);
     overscroll-behavior: contain;
   }
 
   .slash-command-menu__group-label {
-    padding: 6px 8px 3px;
+    padding: var(--ui-space-6, 6px) var(--ui-space-8, 8px) var(--ui-space-3, 3px);
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 600;
   }
 
   .slash-command-menu__subheader {
-    min-height: 54px;
+    min-height: var(--ui-layout-54, 54px);
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 6px 10px;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-6, 6px) var(--ui-space-10, 10px);
     border-bottom: 1px solid var(--surface-divider-color, var(--card-border-color));
   }
 
   .slash-command-menu__subheader > div {
     min-width: 0;
     display: grid;
-    gap: 1px;
+    gap: var(--ui-space-1, 1px);
   }
 
   .slash-command-menu__subheader strong {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .slash-command-menu__subheader small {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .slash-command-menu__back {
-    width: 34px;
-    min-width: 34px;
-    height: 34px;
+    width: var(--ui-control-34, 34px);
+    min-width: var(--ui-control-34, 34px);
+    height: var(--ui-control-34, 34px);
     padding: 0;
     border-radius: 8px;
   }
 
   .slash-command-menu__item {
     width: 100%;
-    min-height: 40px;
+    min-height: var(--ui-control-40, 40px);
     height: auto;
     justify-content: flex-start;
-    gap: 8px;
-    padding: 4px 8px;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-4, 4px) var(--ui-space-8, 8px);
     border: 1px solid transparent;
     border-radius: 8px;
     background: transparent !important;
@@ -268,10 +270,10 @@
 
   .slash-command-menu__language {
     width: 100%;
-    min-height: 40px;
-    height: 40px;
+    min-height: var(--ui-control-40, 40px);
+    height: var(--ui-control-40, 40px);
     justify-content: space-between;
-    padding: 0 10px;
+    padding: 0 var(--ui-space-10, 10px);
     border: 1px solid transparent;
     border-radius: 8px;
     background: transparent !important;
@@ -285,14 +287,14 @@
 
   .slash-command-menu__language code {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .slash-command-menu__icon {
-    width: 28px;
-    height: 28px;
+    width: var(--ui-layout-28, 28px);
+    height: var(--ui-layout-28, 28px);
     display: inline-flex;
-    flex: 0 0 28px;
+    flex: 0 0 var(--ui-layout-28, 28px);
     align-items: center;
     justify-content: center;
     box-sizing: border-box;
@@ -310,7 +312,7 @@
 
   .slash-command-menu__copy strong {
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 600;
     line-height: 1.3;
   }
@@ -332,31 +334,31 @@
     flex: 0 0 auto;
     color: var(--desc-color);
     font-family: var(--code-font-family, ui-monospace, SFMono-Regular, Consolas, monospace);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 500;
     line-height: 1;
   }
 
   .slash-command-menu__empty {
-    padding: 28px 16px;
+    padding: var(--ui-space-28, 28px) var(--ui-space-16, 16px);
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     text-align: center;
   }
 
   .slash-command-menu__footer {
-    min-height: 34px;
+    min-height: var(--ui-control-34, 34px);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 12px;
+    padding: 0 var(--ui-space-12, 12px);
     border-top: 1px solid var(--surface-divider-color, var(--card-border-color));
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .slash-command-menu__footer kbd {
-    padding: 1px 6px;
+    padding: var(--ui-space-1, 1px) var(--ui-space-6, 6px);
     border: 1px solid var(--surface-border-color, var(--card-border-color));
     border-radius: 5px;
     background: var(--background-color);

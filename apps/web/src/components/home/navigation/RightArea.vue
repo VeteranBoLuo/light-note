@@ -2,7 +2,7 @@
   <div
     class="navigation-right-area"
     :class="{ 'phone-top-menu': bookmark.isMobile }"
-    :style="{ marginLeft: 'auto', gap: bookmark.isMobile ? '15px' : '5px' }"
+    :style="{ marginLeft: 'auto', gap: bookmark.isMobile ? '15px' : 'var(--ui-space-5, 5px)' }"
   >
     <GlobalSearch />
     <BTooltip v-if="showQuickCapture" :title="$t('inbox.quickCapture')">
@@ -150,7 +150,7 @@
   .navigation-right-area {
     display: flex;
     align-items: center;
-    min-width: 220px;
+    min-width: var(--ui-layout-220, 220px);
     justify-content: flex-end;
     position: absolute;
     right: 40px;
@@ -159,11 +159,11 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 40px;
+    width: var(--ui-layout-40, 40px);
     min-width: 0;
-    height: 40px;
+    height: var(--ui-layout-40, 40px);
     min-height: 0;
-    flex: 0 0 40px;
+    flex: 0 0 var(--ui-layout-40, 40px);
     clip-path: circle(50% at 50% 50%);
     cursor: pointer;
   }
@@ -186,7 +186,7 @@
     right: 14px;
     width: unset !important;
     min-width: 0;
-    gap: 8px !important;
+    gap: var(--ui-space-8, 8px) !important;
   }
   .phone-top-menu :deep(.global-search) {
     flex: 1;
@@ -198,8 +198,8 @@
     flex: 0 0 auto;
   }
   .phone-top-menu .guest-register-link {
-    padding-right: 12px;
-    padding-left: 12px;
+    padding-right: var(--ui-space-12, 12px);
+    padding-left: var(--ui-space-12, 12px);
   }
   .mobile-github-btn {
     border: 0;
@@ -213,8 +213,8 @@
   }
   .more-menu-trigger {
     position: relative;
-    width: 36px;
-    height: 36px;
+    width: var(--ui-control-36, 36px);
+    height: var(--ui-control-36, 36px);
     padding: 0;
     display: flex;
     align-items: center;
@@ -227,8 +227,8 @@
   .quick-capture-btn {
     position: relative;
     flex: 0 0 auto;
-    width: 36px;
-    height: 36px;
+    width: var(--ui-control-36, 36px);
+    height: var(--ui-control-36, 36px);
     padding: 0;
     border-radius: 9px;
     line-height: 1;
@@ -249,13 +249,13 @@
     }
   }
   .guest-register-link {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 500;
     color: #fff;
     background: #615ced;
     cursor: pointer;
     white-space: nowrap;
-    padding: 5px 14px;
+    padding: var(--ui-space-5, 5px) var(--ui-space-14, 14px);
     border-radius: 999px;
     transition:
       opacity 0.2s,

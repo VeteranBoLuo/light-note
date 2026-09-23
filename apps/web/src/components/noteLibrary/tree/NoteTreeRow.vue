@@ -322,11 +322,11 @@
     transition: padding 180ms cubic-bezier(0.22, 0.61, 0.36, 1);
 
     &.is-drop-before {
-      padding-top: 14px;
+      padding-top: var(--ui-space-14, 14px);
     }
 
     &.is-drop-after {
-      padding-bottom: 14px;
+      padding-bottom: var(--ui-space-14, 14px);
     }
 
     &.is-drop-before::before,
@@ -388,8 +388,8 @@
   .note-tree-row {
     position: relative;
     min-width: 0;
-    height: 34px;
-    margin-block: 2px;
+    height: var(--ui-control-34, 34px);
+    margin-block: var(--ui-space-2, 2px);
     padding-left: calc(var(--note-tree-depth) * 14px);
     display: grid;
     grid-template-columns: 22px minmax(0, 1fr);
@@ -473,8 +473,8 @@
   }
 
   .note-tree-checkbox {
-    height: 30px;
-    padding: 0 6px;
+    height: var(--ui-control-30, 30px);
+    padding: 0 var(--ui-space-6, 6px);
     box-sizing: border-box;
   }
 
@@ -482,7 +482,7 @@
   .note-tree-title,
   .note-tree-action {
     min-width: 0;
-    height: 30px;
+    height: var(--ui-control-30, 30px);
     padding: 0;
     border: 0;
     color: inherit;
@@ -490,7 +490,7 @@
   }
 
   .note-tree-toggle {
-    width: 22px;
+    width: var(--ui-layout-22, 22px);
     transition: transform 160ms ease;
 
     :deep(.icon-base64) {
@@ -508,15 +508,15 @@
   }
 
   .note-tree-toggle-placeholder {
-    width: 12px;
-    height: 12px;
+    width: var(--ui-layout-12, 12px);
+    height: var(--ui-layout-12, 12px);
   }
 
   .note-tree-title {
     width: 100%;
     justify-content: flex-start;
-    gap: 6px;
-    padding-right: 28px;
+    gap: var(--ui-space-6, 6px);
+    padding-right: var(--ui-space-28, 28px);
     overflow: hidden;
     text-align: left;
   }
@@ -535,7 +535,7 @@
 
   .note-tree-pin {
     flex: 0 0 auto;
-    height: 18px;
+    height: var(--ui-layout-18, 18px);
     display: inline-flex;
     align-items: center;
     color: var(--primary-color);
@@ -544,7 +544,7 @@
   .note-tree-count {
     margin-left: auto;
     color: var(--muted-text-color, var(--desc-color));
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-variant-numeric: tabular-nums;
   }
 
@@ -552,14 +552,14 @@
     position: absolute;
     right: 2px;
     top: 1px;
-    height: 30px;
+    height: var(--ui-control-30, 30px);
     display: flex;
     align-items: center;
     opacity: 0;
   }
 
   .note-tree-action {
-    width: 23px;
+    width: var(--ui-layout-23, 23px);
   }
 
   .note-tree-row:hover .note-tree-actions,

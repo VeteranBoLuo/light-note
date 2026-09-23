@@ -20,13 +20,13 @@
 
 <style scoped lang="less">
   .overview-preview-state {
-    min-height: 112px;
+    min-height: var(--ui-layout-112, 112px);
     display: grid;
     place-items: center;
-    padding: 14px;
+    padding: var(--ui-space-14, 14px);
     box-sizing: border-box;
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     text-align: center;
   }
 

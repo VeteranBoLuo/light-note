@@ -78,6 +78,9 @@ jobs:
     steps:
       - name: 读取仓库内容
         uses: actions/checkout@v4
+        with:
+          # 密度增量检查需要 PR 目标基线或 push 前提交，不能只取当前 HEAD。
+          fetch-depth: 0
 
       - name: 安装 pnpm
         uses: pnpm/action-setup@v4
@@ -93,6 +96,22 @@ jobs:
 
       - name: 安装依赖
         run: pnpm install --frozen-lockfile
+
+      - name: 检查新增固定界面尺寸
+        shell: bash
+        env:
+          DENSITY_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$DENSITY_BASE_SHA" =~ ^[0-9a-f]{40}$ || "$DENSITY_BASE_SHA" =~ ^0+$ ]]; then
+            echo '缺少有效的密度检查基线，禁止退回 HEAD 自身比较。' >&2
+            exit 1
+          fi
+          git cat-file -e "$DENSITY_BASE_SHA^{commit}"
+          pnpm --dir apps/web run check:ui-density-new --base "$DENSITY_BASE_SHA"
+
+      - name: 检查界面密度尺寸目录与标准档回退
+        run: pnpm --dir apps/web run check:ui-density
 
       - name: 安装真实图片转换测试运行时
         run: |

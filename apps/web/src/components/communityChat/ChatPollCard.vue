@@ -273,12 +273,12 @@
 
 <style scoped lang="less">
   .chat-poll-card {
-    width: min(430px, 72vw);
-    min-width: min(330px, 72vw);
-    padding: 13px;
+    width: min(var(--ui-layout-430, 430px), 72vw);
+    min-width: min(var(--ui-layout-330, 330px), 72vw);
+    padding: var(--ui-space-13, 13px);
     box-sizing: border-box;
     display: grid;
-    gap: 11px;
+    gap: var(--ui-space-11, 11px);
     border: 1px solid var(--primary-color);
     border-radius: 15px;
     color: var(--text-color);
@@ -300,16 +300,16 @@
   .chat-poll-card__footer > .chat-poll-card__footer-actions {
     flex: 0 0 auto;
     flex-wrap: nowrap;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
 
   .chat-poll-card__header {
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
 
   .chat-poll-card__mark {
-    width: 28px;
-    height: 28px;
+    width: var(--ui-layout-28, 28px);
+    height: var(--ui-layout-28, 28px);
     display: grid;
     place-items: center;
     border: 1px solid var(--primary-color);
@@ -319,7 +319,7 @@
 
   .chat-poll-card__kind,
   .chat-poll-card__state {
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     font-weight: 700;
   }
 
@@ -329,7 +329,7 @@
 
   .chat-poll-card__state {
     margin-left: auto;
-    padding: 2px 7px;
+    padding: var(--ui-space-2, 2px) var(--ui-space-7, 7px);
     border: 1px solid var(--surface-border-color);
     border-radius: 999px;
     color: var(--desc-color);
@@ -342,24 +342,24 @@
 
   .chat-poll-card h3 {
     margin: 0;
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     line-height: 1.55;
     overflow-wrap: anywhere;
   }
 
   .chat-poll-card__options {
     display: grid;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
 
   .chat-poll-card__option {
     width: 100%;
-    min-height: 42px;
+    min-height: var(--ui-layout-42, 42px);
     height: auto;
-    padding: 7px 9px !important;
+    padding: var(--ui-space-7, 7px) var(--ui-space-9, 9px) !important;
     display: flex;
     justify-content: flex-start;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     border: 1px solid var(--surface-border-color) !important;
     border-radius: 11px;
     color: var(--text-color) !important;
@@ -385,9 +385,9 @@
   }
 
   .chat-poll-card__choice {
-    width: 18px;
-    height: 18px;
-    flex: 0 0 18px;
+    width: var(--ui-layout-18, 18px);
+    height: var(--ui-layout-18, 18px);
+    flex: 0 0 var(--ui-layout-18, 18px);
     display: grid;
     place-items: center;
     border: 1px solid var(--surface-border-color);
@@ -409,7 +409,7 @@
     min-width: 0;
     flex: 1 1 auto;
     display: grid;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
     overflow-wrap: anywhere;
   }
 
@@ -432,16 +432,16 @@
   .chat-poll-card__count {
     flex: 0 0 auto;
     color: var(--desc-color);
-    font-size: 9px;
+    font-size: var(--ui-font-9, 9px);
   }
 
   .chat-poll-card__multiple-actions {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
 
   .chat-poll-card__multiple-actions > span.is-limit {
@@ -451,15 +451,15 @@
 
   .chat-poll-card__footer {
     justify-content: space-between;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     color: var(--desc-color);
   }
 
   .chat-poll-card__footer > div {
     min-width: 0;
     flex-wrap: wrap;
-    gap: 3px 9px;
-    font-size: 9px;
+    gap: var(--ui-space-3, 3px) var(--ui-space-9, 9px);
+    font-size: var(--ui-font-9, 9px);
   }
 
   @media (max-width: 767px) {

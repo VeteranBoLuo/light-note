@@ -2,7 +2,10 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const source = readFileSync(resolve(process.cwd(), 'src/components/growth/LotteryDraw.vue'), 'utf8');
+const source = readFileSync(resolve(process.cwd(), 'src/components/growth/LotteryDraw.vue'), 'utf8').replace(
+  /var\(--ui-[\w-]+, ([\d.]+px)\)/g,
+  '$1',
+);
 
 describe('LotteryDraw 自适应设计', () => {
   it('桌面端使用抽奖舞台与权益奖池双栏布局', () => {

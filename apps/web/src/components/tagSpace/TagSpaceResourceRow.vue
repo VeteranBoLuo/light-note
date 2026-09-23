@@ -109,12 +109,12 @@
 <style scoped lang="less">
   .tag-space-resource-row {
     --resource-row-accent: var(--resource-bookmark-color, #615ced);
-    min-height: 68px;
-    padding: 10px 12px !important;
+    min-height: var(--ui-layout-68, 68px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px) !important;
     display: grid;
-    grid-template-columns: auto minmax(190px, 0.9fr) minmax(230px, 1.3fr) minmax(90px, auto) auto auto;
+    grid-template-columns: auto minmax(var(--ui-layout-190, 190px), 0.9fr) minmax(var(--ui-layout-230, 230px), 1.3fr) minmax(var(--ui-layout-90, 90px), auto) auto auto;
     align-items: center;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     cursor: pointer;
   }
 
@@ -132,8 +132,8 @@
   }
 
   .resource-row-icon {
-    width: 40px;
-    height: 40px;
+    width: var(--ui-layout-40, 40px);
+    height: var(--ui-layout-40, 40px);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -147,7 +147,7 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
 
   .resource-row-identity strong,
@@ -160,14 +160,14 @@
 
   .resource-row-identity strong {
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .resource-row-identity span,
   .tag-space-resource-row > p,
   .tag-space-resource-row > time {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .tag-space-resource-row > p {
@@ -177,15 +177,15 @@
   .resource-row-tags {
     min-width: 0;
     display: flex;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
     overflow: hidden;
   }
 
   .resource-row-tags span {
-    max-width: 92px;
+    max-width: var(--ui-layout-92, 92px);
     overflow: hidden;
     color: var(--resource-tag-color, #ec4899);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -196,7 +196,7 @@
 
   .resource-row-open {
     color: var(--desc-color);
-    font-size: 16px;
+    font-size: var(--ui-font-16, 16px);
   }
 
   @media (max-width: 1180px) {

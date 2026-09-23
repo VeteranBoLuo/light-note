@@ -27,7 +27,7 @@
       </header>
 
       <section v-if="activeTab === 'public'" class="summary-grid">
-        <BCard v-for="summary in summaryCards" :key="summary.key" class="summary-card" padding="15px 18px">
+        <BCard v-for="summary in summaryCards" :key="summary.key" class="summary-card" padding="var(--ui-space-15, 15px) var(--ui-space-18, 18px)">
           <span class="summary-value">{{ summary.value }}</span>
           <span class="summary-label">{{ summary.label }}</span>
         </BCard>
@@ -89,7 +89,7 @@
             :key="item.id"
             interactive
             class="request-card"
-            padding="18px"
+            padding="var(--ui-space-18, 18px)"
             @click="openDetail(item.id)"
           >
             <div class="card-meta">
@@ -394,14 +394,14 @@
     width: 100%;
     min-height: 100%;
     box-sizing: border-box;
-    padding: 24px clamp(24px, 3.2vw, 76px) 48px;
+    padding: var(--ui-space-24, 24px) clamp(var(--ui-space-24, 24px), 3.2vw, var(--ui-space-76, 76px)) var(--ui-space-48, 48px);
   }
   .co-build-hero {
     display: flex;
     align-items: flex-end;
     justify-content: space-between;
-    gap: 28px;
-    padding: clamp(24px, 3vw, 42px);
+    gap: var(--ui-space-28, 28px);
+    padding: clamp(var(--ui-space-24, 24px), 3vw, var(--ui-space-42, 42px));
     border: 1px solid color-mix(in srgb, var(--primary-color) 18%, var(--surface-border-color));
     border-radius: 20px;
     background:
@@ -410,14 +410,14 @@
     box-shadow: var(--surface-raised-shadow);
   }
   .hero-copy {
-    max-width: 860px;
+    max-width: var(--ui-layout-860, 860px);
   }
   .hero-kicker {
     display: flex;
     align-items: center;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
     color: var(--primary-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 700;
   }
   .hero-icon,
@@ -425,64 +425,64 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 38px;
-    height: 38px;
+    width: var(--ui-layout-38, 38px);
+    height: var(--ui-layout-38, 38px);
     border-radius: 12px;
     background: color-mix(in srgb, var(--primary-color) 12%, var(--card-background));
   }
   .co-build-hero h1 {
-    margin: 14px 0 8px;
-    font-size: clamp(30px, 3vw, 48px);
+    margin: var(--ui-space-14, 14px) 0 var(--ui-space-8, 8px);
+    font-size: clamp(var(--ui-font-30, 30px), 3vw, var(--ui-font-48, 48px));
     line-height: 1.1;
     letter-spacing: -0.04em;
   }
   .co-build-hero p {
     margin: 0;
     color: var(--desc-color);
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
     line-height: 1.75;
   }
   .visitor-hint {
-    margin-top: 18px;
-    padding-left: 12px;
+    margin-top: var(--ui-space-18, 18px);
+    padding-left: var(--ui-space-12, 12px);
     border-left: 3px solid var(--primary-color);
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.6;
   }
   .hero-actions {
     display: flex;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     flex-wrap: wrap;
     justify-content: flex-end;
   }
   .hero-actions :deep(.b_btn) {
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
   .summary-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 14px;
-    margin-top: 18px;
+    gap: var(--ui-space-14, 14px);
+    margin-top: var(--ui-space-18, 18px);
   }
   .summary-card {
     display: flex;
     align-items: baseline;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .summary-value {
     color: var(--text-color);
-    font-size: 24px;
+    font-size: var(--ui-font-24, 24px);
     font-weight: 750;
     font-variant-numeric: tabular-nums;
   }
   .summary-label {
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .board-section {
-    margin-top: 18px;
-    padding: 20px;
+    margin-top: var(--ui-space-18, 18px);
+    padding: var(--ui-space-20, 20px);
     border: 1px solid var(--surface-border-color);
     border-radius: 20px;
     background: var(--surface-panel-bg);
@@ -491,17 +491,17 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
   .mine-hint {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .filter-row {
     display: grid;
-    grid-template-columns: minmax(260px, 1fr) repeat(3, minmax(150px, 190px));
-    gap: 10px;
-    margin: 16px 0;
+    grid-template-columns: minmax(var(--ui-layout-260, 260px), 1fr) repeat(3, minmax(var(--ui-layout-150, 150px), var(--ui-layout-190, 190px)));
+    gap: var(--ui-space-10, 10px);
+    margin: var(--ui-space-16, 16px) 0;
   }
   .filter-search {
     min-width: 0;
@@ -511,19 +511,19 @@
   }
   .filter-row :deep(.b-input),
   .filter-row :deep(.select-trigger) {
-    height: 40px;
+    height: var(--ui-control-40, 40px);
     border: 1px solid var(--surface-border-color) !important;
     background: var(--card-background);
   }
   .request-grid,
   .board-loading {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
-    gap: 14px;
-    margin-top: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(min(var(--ui-layout-320, 320px), 100%), 1fr));
+    gap: var(--ui-space-14, 14px);
+    margin-top: var(--ui-space-16, 16px);
   }
   .request-card {
-    min-height: 260px;
+    min-height: var(--ui-card-260, 260px);
     display: flex;
     flex-direction: column;
     cursor: pointer;
@@ -534,7 +534,7 @@
   .card-meta {
     display: flex;
     align-items: center;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     flex-wrap: wrap;
   }
   .source-pill,
@@ -543,12 +543,12 @@
   .progress-pill {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    min-height: 24px;
+    gap: var(--ui-space-5, 5px);
+    min-height: var(--ui-layout-24, 24px);
     box-sizing: border-box;
-    padding: 3px 8px;
+    padding: var(--ui-space-3, 3px) var(--ui-space-8, 8px);
     border-radius: 999px;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1;
   }
   .source-pill.is-official {
@@ -565,8 +565,8 @@
     background: var(--surface-panel-bg);
   }
   .request-card h2 {
-    margin: 16px 0 9px;
-    font-size: 18px;
+    margin: var(--ui-space-16, 16px) 0 var(--ui-space-9, 9px);
+    font-size: var(--ui-font-18, 18px);
     line-height: 1.45;
   }
   .request-content {
@@ -574,20 +574,20 @@
     margin: 0;
     overflow: hidden;
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.7;
     -webkit-line-clamp: 3;
     -webkit-box-orient: vertical;
   }
   .reply-preview {
     display: grid;
-    gap: 4px;
-    margin-top: 14px;
-    padding: 10px 12px;
+    gap: var(--ui-space-4, 4px);
+    margin-top: var(--ui-space-14, 14px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     border-radius: 10px;
     background: color-mix(in srgb, var(--primary-color) 6%, var(--surface-panel-bg));
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .reply-preview strong {
     color: var(--primary-color);
@@ -601,13 +601,13 @@
     display: flex;
     align-items: flex-end;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     margin-top: auto;
-    padding-top: 18px;
+    padding-top: var(--ui-space-18, 18px);
   }
   .footer-status {
     display: grid;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
   .progress-pill {
     width: max-content;
@@ -624,10 +624,10 @@
   }
   .updated-time {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .vote-button {
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
     color: var(--desc-color);
   }
   .vote-button.is-voted {
@@ -635,7 +635,7 @@
     background: color-mix(in srgb, var(--primary-color) 11%, var(--card-background));
   }
   .loading-card {
-    height: 260px;
+    height: var(--ui-card-260, 260px);
     border: 1px solid var(--surface-border-color);
     border-radius: 14px;
     background: linear-gradient(
@@ -648,7 +648,7 @@
     animation: shimmer 1.3s infinite linear;
   }
   .board-empty {
-    min-height: 330px;
+    min-height: var(--ui-layout-330, 330px);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -656,17 +656,17 @@
     text-align: center;
   }
   .board-empty strong {
-    margin-top: 16px;
-    font-size: 18px;
+    margin-top: var(--ui-space-16, 16px);
+    font-size: var(--ui-font-18, 18px);
   }
   .board-empty p {
-    max-width: 480px;
-    margin: 8px 0 18px;
+    max-width: var(--ui-layout-480, 480px);
+    margin: var(--ui-space-8, 8px) 0 var(--ui-space-18, 18px);
     color: var(--desc-color);
     line-height: 1.7;
   }
   .board-section :deep(.bpagination) {
-    margin-top: 24px;
+    margin-top: var(--ui-space-24, 24px);
   }
   @keyframes shimmer {
     to {

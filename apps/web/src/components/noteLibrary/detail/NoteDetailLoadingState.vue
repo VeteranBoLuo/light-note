@@ -4,7 +4,11 @@
     :class="`note-detail-loading-state--${variant}`"
     :role="error ? 'alert' : 'status'"
     :aria-live="error ? 'assertive' : 'polite'"
-    :aria-label="error ? t(unavailable ? 'noteDetail.unavailableTitle' : 'noteDetail.loadFailedTitle') : t('noteDetail.loadingTitle')"
+    :aria-label="
+      error
+        ? t(unavailable ? 'noteDetail.unavailableTitle' : 'noteDetail.loadFailedTitle')
+        : t('noteDetail.loadingTitle')
+    "
   >
     <div v-if="error" class="note-detail-loading-state__error">
       <h2>{{ t(unavailable ? 'noteDetail.unavailableTitle' : 'noteDetail.loadFailedTitle') }}</h2>
@@ -70,38 +74,38 @@
 <style scoped lang="less">
   .note-detail-loading-state {
     width: 100%;
-    min-height: 280px;
+    min-height: var(--ui-layout-280, 280px);
     box-sizing: border-box;
     color: var(--font-color);
     background: var(--background-color);
   }
 
   .note-detail-loading-state--page {
-    min-height: calc(100vh - 64px);
+    min-height: calc(100vh - var(--ui-layout-64, 64px));
   }
 
   .note-detail-loading-state__header {
-    height: 64px;
-    padding: 0 24px;
+    height: var(--ui-layout-64, 64px);
+    padding: 0 var(--ui-space-24, 24px);
     display: flex;
     align-items: center;
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
     border-bottom: 1px solid var(--surface-divider-color);
   }
 
   .note-detail-loading-state__breadcrumb {
-    min-height: 42px;
-    padding: 0 24px;
+    min-height: var(--ui-layout-42, 42px);
+    padding: 0 var(--ui-space-24, 24px);
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     box-sizing: border-box;
     border-bottom: 1px solid var(--surface-divider-color);
   }
 
   .note-detail-loading-state__title-row {
-    min-height: 74px;
-    padding: 0 24px;
+    min-height: var(--ui-layout-74, 74px);
+    padding: 0 var(--ui-space-24, 24px);
     display: flex;
     align-items: center;
     box-sizing: border-box;
@@ -109,16 +113,17 @@
   }
 
   .note-detail-loading-state__toolbar {
-    min-height: 58px;
-    padding: 7px 16px;
+    min-height: var(--ui-layout-58, 58px);
+    padding: var(--ui-space-7, 7px) var(--ui-space-16, 16px);
     display: flex;
     align-items: stretch;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     box-sizing: border-box;
     border-bottom: 1px solid var(--surface-divider-color);
     background: var(--surface-panel-bg, var(--background-color));
   }
 
+  // 正文骨架模拟文档内容，阅读宽度、字号占位与段落间距不随界面密度变化。
   .note-detail-loading-state__body {
     width: min(920px, calc(100% - 48px));
     margin: 0 auto;
@@ -136,44 +141,44 @@
   }
 
   .skeleton--back {
-    width: 34px;
-    height: 34px;
+    width: var(--ui-layout-34, 34px);
+    height: var(--ui-layout-34, 34px);
     border-radius: 50%;
   }
 
   .skeleton--heading {
-    width: 152px;
-    height: 22px;
+    width: var(--ui-layout-152, 152px);
+    height: var(--ui-layout-22, 22px);
   }
 
   .skeleton--action {
-    width: 82px;
-    height: 32px;
+    width: var(--ui-layout-82, 82px);
+    height: var(--ui-layout-32, 32px);
     margin-left: auto;
   }
 
   .skeleton--crumb {
-    width: 52px;
-    height: 14px;
+    width: var(--ui-layout-52, 52px);
+    height: var(--ui-layout-14, 14px);
   }
 
   .skeleton--crumb-divider {
-    width: 5px;
-    height: 14px;
+    width: var(--ui-space-5, 5px);
+    height: var(--ui-layout-14, 14px);
   }
 
   .skeleton--crumb-current {
-    width: 116px;
+    width: var(--ui-layout-116, 116px);
   }
 
   .skeleton--page-title {
-    width: min(320px, 54%);
-    height: 30px;
+    width: min(var(--ui-layout-320, 320px), 54%);
+    height: var(--ui-layout-30, 30px);
   }
 
   .skeleton--tool {
-    width: 92px;
-    height: 44px;
+    width: var(--ui-layout-92, 92px);
+    height: var(--ui-layout-44, 44px);
   }
 
   .skeleton--title {
@@ -202,8 +207,9 @@
   }
 
   .note-detail-loading-state__error {
-    min-height: 320px;
-    padding: 40px 24px;
+    font-size: var(--ui-font-16, 16px);
+    min-height: var(--ui-layout-320, 320px);
+    padding: var(--ui-space-40, 40px) var(--ui-space-24, 24px);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -213,13 +219,13 @@
   }
 
   .note-detail-loading-state__error h2 {
-    margin: 0 0 10px;
-    font-size: 20px;
+    margin: 0 0 var(--ui-space-10, 10px);
+    font-size: var(--ui-font-20, 20px);
   }
 
   .note-detail-loading-state__error p {
-    max-width: 420px;
-    margin: 0 0 20px;
+    max-width: var(--ui-layout-420, 420px);
+    margin: 0 0 var(--ui-space-20, 20px);
     color: var(--desc-color);
     line-height: 1.65;
   }

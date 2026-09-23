@@ -92,8 +92,8 @@
 <style scoped lang="less">
   .tag-todo-panel {
     display: grid;
-    gap: 12px;
-    padding: 18px;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-18, 18px);
     background: var(--card-background);
     border: 1px solid var(--border-color);
     border-radius: 12px;
@@ -103,8 +103,8 @@
     background: transparent;
     border: 1px solid var(--border-color);
     display: flex;
-    gap: 10px;
-    min-height: 52px;
+    gap: var(--ui-space-10, 10px);
+    min-height: var(--ui-layout-52, 52px);
     height: auto;
     text-align: left;
   }

@@ -82,6 +82,7 @@
   import { throttle } from 'lodash-es';
   import { setLocale } from './i18n';
   import { applyDisplaySettings } from '@/utils/savePreference';
+  import { requiresStandardDensity } from '@/config/uiDensity';
   import { RoleEnum } from '@/config/bookmarkCfg.ts';
   import { DEFAULT_NOTE_VIEW_MODE, getHomePagePreference } from '@/utils/preferences.ts';
   import { getRuntimeApplicationHomePath, getRuntimeGuestEntryPath } from '@/utils/appEntry.ts';
@@ -173,18 +174,6 @@
   const isOnline = ref(typeof navigator === 'undefined' ? true : navigator.onLine !== false);
   const NOTICE_POLLING_INTERVAL = 300 * 1000;
   const NOTICE_MIN_REFRESH_GAP = 10 * 1000;
-  const scaleExcludedRouter = new Set([
-    'updateLogs',
-    'githubCallBack',
-    'not-found',
-    'not-role',
-    'landing',
-    'banned',
-    'quickSave',
-    'browserExtensionLanding',
-    'extensionAuthorize',
-    'noteShare',
-  ]);
 
   // 监听主题变化
   watch(
@@ -194,25 +183,15 @@
     },
   );
 
-  // 缩放只排除营销页、独立入口页等固定排版页面。
-  // 路由鉴权放行由 skipRouter 单独负责，避免公开访问规则误伤帮助中心等应用内页面的界面缩放。
-  function applyScaleForRoute(routeName?: string) {
-    const name = String(routeName ?? router.currentRoute.value.name ?? '');
-    if (scaleExcludedRouter.has(name)) {
-      document.documentElement.style.zoom = '';
-    } else {
-      // 手机端已有独立响应式布局，不再叠加桌面端界面缩放；这里只改变运行时效果，
-      // 不回写 uiScale，确保用户回到电脑后仍保留原来的小/标准/大偏好。
-      applyDisplaySettings({ forceStandard: bookmark.isMobile });
-    }
+  // Density changes actual interface dimensions; public and touch layouts retain their own sizing.
+  function applyDensityForRoute(route = router.currentRoute.value) {
+    applyDisplaySettings({ forceStandard: requiresStandardDensity(route, bookmark.isDesktop) });
   }
 
-  // 监听界面缩放和手机布局变化 → 按当前路由重设 <html> zoom
   watch(
-    () => [user.preferences?.uiScale, bookmark.isMobile],
-    () => {
-      applyScaleForRoute();
-    },
+    () => [user.preferences?.uiScale, bookmark.isDesktop, user.id],
+    () => applyDensityForRoute(),
+    { immediate: true },
   );
 
   // 账号切换(登录/登出/换号)→ 刷新成长缓存,防个人中心徽章/成长页显示上一个账号的等级数据
@@ -239,7 +218,9 @@
   const mobileBottomNavActive = computed(
     () => bookmark.isMobile && router.currentRoute.value.meta.mobileBottomNav === true,
   );
-  const mobilePreviewActive = computed(() => bookmark.isMobile && Boolean(user.adminContext) && !publicStandaloneRoute.value);
+  const mobilePreviewActive = computed(
+    () => bookmark.isMobile && Boolean(user.adminContext) && !publicStandaloneRoute.value,
+  );
   // `mobileShell` 表示该路由需要统一移动端顶栏；资源切换器与底部导航是两个独立开关。
   // 二级页（例如模板管理）只需要「返回 + 标题 + 页面动作」，不能因为两项导航都关闭就把顶栏一并卸载。
   const mobileShellEnabled = computed(() => bookmark.isMobile && Boolean(router.currentRoute.value.meta.mobileShell));
@@ -474,9 +455,9 @@
   }, 100);
   function initApp() {
     localStorage.removeItem('theme');
-    // 偏好已在 setup 阶段同步恢复(见上方,早于子路由 setup),此处不再重复恢复,直接应用主题/缩放。
+    // 偏好已在 setup 阶段同步恢复(见上方,早于子路由 setup),此处不再重复恢复,直接应用主题/密度。
     applyTheme();
-    applyScaleForRoute(); // 启动即应用缩放(仅应用内页;landing 等入口页不缩放)
+    applyDensityForRoute(); // 启动即应用密度；公开独立页面保持标准
     // 请求拦截器会在首个 API 前同步生成；这里复用同一结果，避免子组件先发请求时出现空指纹。
     window['fingerprint'] = getLogFingerprint();
 
@@ -1011,9 +992,9 @@
     next();
   });
 
-  // 每次路由切换后按目标页决定是否缩放：固定排版入口页清零，帮助中心等应用内页面按 uiScale。
+  // 每次路由切换后应用目标页面密度，公开独立页面保持标准。
   router.afterEach((to) => {
-    applyScaleForRoute(<string>to.name);
+    applyDensityForRoute(to);
     if (to.name === 'landing' && landingAuthStatus.value === 'error') {
       scheduleLandingAuthRetry();
     } else if (to.name !== 'landing') {
@@ -1135,22 +1116,22 @@
   .app-offline-banner {
     position: fixed;
     z-index: 1190;
-    top: 3px;
+    top: var(--ui-space-3, 3px);
     left: 50%;
     transform: translateX(-50%);
     display: inline-flex;
     align-items: center;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     max-width: calc(100vw - 24px);
-    padding: 7px 13px;
+    padding: var(--ui-space-7, 7px) var(--ui-space-13, 13px);
     box-sizing: border-box;
     border: 1px solid var(--warning-color, #a05f00);
     border-radius: 0 0 10px 10px;
     color: var(--text-color);
     background: var(--card-background);
     box-shadow: 0 6px 18px rgba(31, 35, 48, 0.14);
-    font-size: 12px;
-    line-height: 18px;
+    font-size: var(--ui-font-12, 12px);
+    line-height: var(--ui-layout-18, 18px);
     text-align: center;
   }
 
@@ -1216,7 +1197,7 @@
   }
 
   .app-loading {
-    /* 固定边界随视口铺满，避免根节点 zoom 再次缩小 vw/vh 尺寸。 */
+    /* 固定边界铺满视口。 */
     position: fixed;
     inset: 0;
     background: var(--surface-page-bg, var(--background-color));
@@ -1236,7 +1217,7 @@
     font-size: 2rem;
     font-weight: 700;
     color: var(--text-color);
-    margin: 0 0 10px 0;
+    margin: 0 0 var(--ui-space-10, 10px) 0;
     animation: fadeInUp 1s ease-out;
   }
 
@@ -1248,7 +1229,7 @@
   }
 
   .auth-startup-retry {
-    margin: 20px auto 0;
+    margin: var(--ui-space-20, 20px) auto 0;
   }
 
   @keyframes fadeInUp {

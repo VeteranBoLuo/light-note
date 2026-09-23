@@ -6,7 +6,7 @@ const source = readFileSync(resolve(process.cwd(), 'src/components/noteLibrary/d
 const menuSource = readFileSync(
   resolve(process.cwd(), 'src/components/noteLibrary/detail/EditorSlashCommandMenu.vue'),
   'utf8',
-);
+).replace(/var\(--ui-[\w-]+, (\d+px)\)/g, '$1');
 
 describe('HTML / Markdown 斜杠命令', () => {
   it('两种编辑器共享菜单并与资源提及互斥', () => {
@@ -26,7 +26,7 @@ describe('HTML / Markdown 斜杠命令', () => {
 
   it('菜单与资源选择器共用紧凑高度预算，翻转时不覆盖触发字符', () => {
     expect(menuSource).toContain('max-height: min(340px, calc(100vh - 140px))');
-    expect(source).toContain('height: `${(Math.max(rect.height, 18) + 6) / zoom}px`');
+    expect(source).toContain('height: `${(Math.max(rect.height, 18) + 6)}px`');
   });
 
   it('菜单项按参考交互采用单行视觉密度，同时保留说明的辅助语义', () => {

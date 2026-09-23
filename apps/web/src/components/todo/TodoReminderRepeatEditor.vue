@@ -222,13 +222,13 @@
 <style scoped lang="less">
   .todo-reminder-repeat {
     display: grid;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
   }
 
   .todo-reminder-repeat__segment {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    padding: 3px;
+    padding: var(--ui-space-3, 3px);
     border-radius: 10px;
     background: var(--workspace-panel-bg-color);
   }
@@ -250,16 +250,16 @@
   .todo-reminder-repeat__grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .todo-reminder-repeat label,
   .todo-reminder-repeat__field {
     display: grid;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     min-width: 0;
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 600;
   }
 
@@ -269,14 +269,14 @@
 
   .todo-reminder-repeat__interval {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 112px;
-    gap: 8px;
+    grid-template-columns: minmax(0, 1fr) var(--ui-layout-112, 112px);
+    gap: var(--ui-space-8, 8px);
   }
 
   .todo-reminder-repeat__days {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
 
   .todo-reminder-repeat__days :deep(.b_btn.is-active) {
@@ -292,19 +292,19 @@
   }
 
   .todo-reminder-repeat label :deep(.b-time-trigger) {
-    min-height: 38px;
+    min-height: var(--ui-layout-38, 38px);
   }
 
   .todo-reminder-repeat__stop {
-    padding-top: 14px;
+    padding-top: var(--ui-space-14, 14px);
     border-top: 1px solid var(--surface-divider-color);
   }
 
   @media (max-width: 767px) {
     .todo-reminder-repeat__segment :deep(.b_btn) {
       height: auto;
-      min-height: 44px;
-      padding-block: 6px;
+      min-height: var(--ui-layout-44, 44px);
+      padding-block: var(--ui-space-6, 6px);
       line-height: 1.35;
       white-space: normal;
     }

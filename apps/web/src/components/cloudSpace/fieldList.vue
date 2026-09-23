@@ -139,9 +139,7 @@
             <span class="file-card-type" :class="`file-card-type--${getFileCategory(item)}`">{{
               getFileTypeLabel(item)
             }}</span>
-            <BTooltip v-if="item.isTop" :title="$t('common.pinned')"
-              ><SvgIcon class="file-pin-mark" :src="icon.contextMenu.pin" size="16" :aria-label="$t('common.pinned')"
-            /></BTooltip>
+            <PinBadge v-if="item.isTop" />
             <InboxPendingBadge v-if="item.isPending" />
             <span class="file-card-size">{{ formatFileSize(item.fileSize) }}</span>
           </div>
@@ -274,12 +272,12 @@
             />
           </span>
           <div v-if="!item.isRename" class="file-label flex-align-center" @click.stop="onFileLabelClick(item)">
-            <svg-icon :src="icon.cloudSpace.fileIcon[getFileCategory(item)]" size="20" style="min-width: 20px" />
+            <svg-icon :src="icon.cloudSpace.fileIcon[getFileCategory(item)]" size="20" style="min-width: var(--ui-layout-20, 20px)" />
             <span class="file-name text-hidden">{{ item.fileName }}</span>
-            <BTooltip v-if="item.isTop" :title="$t('common.pinned')"
-              ><SvgIcon class="file-pin-mark" :src="icon.contextMenu.pin" size="16" :aria-label="$t('common.pinned')"
-            /></BTooltip>
-            <InboxPendingBadge v-if="item.isPending" />
+            <span v-if="item.isTop || item.isPending" class="file-status-badges">
+              <PinBadge v-if="item.isTop" />
+              <InboxPendingBadge v-if="item.isPending" />
+            </span>
           </div>
           <b-input
             v-else
@@ -385,7 +383,7 @@
                 :tag="tag"
                 size="medium"
                 interactive
-                max-width="90px"
+                max-width="var(--ui-layout-90, 90px)"
                 @click.stop="onFileTagClick(item, tag.id)"
                 v-click-log="{ module: '云空间', operation: `点击文件关联标签【${tag.name}】` }"
               />
@@ -430,7 +428,7 @@
     <BModal
       v-model:visible="batchDownloadChoiceVisible"
       :title="$t('cloudSpace.batchDownloadChooseTitle')"
-      width="520px"
+      width="var(--ui-layout-520, 520px)"
       :show-footer="false"
     >
       <div class="batch-download-choice">
@@ -469,7 +467,7 @@
     <b-modal
       v-model:visible="shareDescVisible"
       :title="$t('cloudSpace.share')"
-      width="600px"
+      width="var(--ui-layout-600, 600px)"
       :show-footer="false"
       fullscreen-mobile
     >
@@ -711,10 +709,10 @@
       v-model:visible="renameModalVisible"
       initial-focus=".rename-modal-input .b-input"
       :title="$t('common.reName')"
-      width="400px"
+      width="var(--ui-layout-400, 400px)"
       :show-footer="false"
       :mask-closable="true"
-      @close="renameModalFile = null"
+      @close="renameModalVisible = false; renameModalFile = null"
     >
       <div class="rename-modal-field">
         <b-input
@@ -787,6 +785,7 @@
   import { useInboxEnqueue } from '@/composables/useInboxEnqueue';
   import { CLOUD_FILE_CATEGORY_ORDER } from '@/constants/cloudFileCategory';
   import InboxPendingBadge from '@/components/inbox/InboxPendingBadge.vue';
+  import PinBadge from '@/components/base/PinBadge.vue';
   import AiSkillDialog from '@/components/aiSkills/AiSkillDialog.vue';
   import { isAiDocumentFileNameSupported } from '@lightnote/shared';
   import type { AiSkillResourceRef, AiSkillResponse } from '@lightnote/shared/ai-skill-protocol';
@@ -2193,21 +2192,17 @@
 <style scoped lang="less">
   .file-more-button.b_btn {
     padding: 0;
-    width: 28px;
-    height: 28px;
+    width: var(--ui-layout-28, 28px);
+    height: var(--ui-layout-28, 28px);
     background: transparent;
   }
   .file-card.b-action-menu-anchor {
     display: block;
   }
 
-  .file-pin-mark {
-    flex-shrink: 0;
-    color: var(--workspace-purple-text);
-  }
   @import (reference) '@/assets/css/workspace-surfaces.less';
   .field-list {
-    --file-card-min-width: 260px;
+    --file-card-min-width: var(--ui-layout-260, 260px);
 
     flex: 1;
     min-height: 0;
@@ -2217,7 +2212,7 @@
     container-type: inline-size;
 
     @supports (width: 1cqi) {
-      --file-card-min-width: clamp(260px, 15cqi, 360px);
+      --file-card-min-width: clamp(var(--ui-layout-260, 260px), 15cqi, var(--ui-layout-360, 360px));
     }
   }
   .download-progress-track {
@@ -2237,33 +2232,33 @@
     }
   }
   .field-header {
-    min-height: 46px;
+    min-height: var(--ui-layout-46, 46px);
     display: flex;
     align-items: center;
-    padding: 0 16px;
+    padding: 0 var(--ui-space-16, 16px);
     box-sizing: border-box;
     border-bottom: 1px solid var(--surface-divider-color);
     color: var(--desc-color);
     font-weight: 650;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .field-header-label {
     flex-shrink: 0;
-    line-height: 28px;
+    line-height: var(--ui-layout-28, 28px);
   }
   .field-sort-trigger.b_btn {
-    min-height: 28px;
+    min-height: var(--ui-layout-28, 28px);
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
     margin: 0;
-    padding: 0 4px;
+    padding: 0 var(--ui-space-4, 4px);
     border: 1px solid transparent;
     border-radius: 6px;
     background: transparent;
     color: var(--desc-color);
     box-shadow: none;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 650;
   }
   .field-sort-trigger.b_btn:hover,
@@ -2276,10 +2271,10 @@
     color: var(--resource-file-color, #ff8a00);
   }
   .field-sort-icons {
-    width: 10px;
+    width: var(--ui-layout-10, 10px);
     display: inline-flex;
     flex-direction: column;
-    gap: 1px;
+    gap: var(--ui-space-1, 1px);
     color: var(--desc-color);
   }
   .field-sort-icons > * {
@@ -2293,20 +2288,20 @@
     position: absolute;
     top: 12px;
     right: 12px;
-    width: min(380px, calc(100% - 24px));
+    width: min(var(--ui-layout-380, 380px), calc(100% - var(--ui-layout-24, 24px)));
     z-index: 30;
     background: var(--bl-input-noBorder-bg-color);
     border: 1px solid var(--folder-list-border-color);
     border-radius: 10px;
-    padding: 10px 12px;
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     box-shadow: 0 8px 18px rgba(0, 0, 0, 0.12);
     .download-progress-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
       color: var(--desc-color);
-      margin-bottom: 6px;
+      margin-bottom: var(--ui-space-6, 6px);
       .download-progress-title {
         font-weight: 600;
         color: var(--text-color);
@@ -2314,38 +2309,38 @@
       .download-progress-ops {
         display: flex;
         align-items: center;
-        gap: 6px;
+        gap: var(--ui-space-6, 6px);
       }
       .download-cancel-btn {
-        padding: 0 4px;
-        height: 20px;
+        padding: 0 var(--ui-space-4, 4px);
+        height: var(--ui-layout-20, 20px);
         color: var(--text-color);
       }
     }
   }
   .batch-download-choice {
     display: grid;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
   .batch-download-choice__hint {
     margin: 0;
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.6;
   }
   .batch-download-choice__options {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .batch-download-choice__option.b_btn {
     width: 100%;
     min-width: 0;
     height: auto;
-    min-height: 112px;
-    padding: 18px;
+    min-height: var(--ui-layout-112, 112px);
+    padding: var(--ui-space-18, 18px);
     justify-content: flex-start;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     white-space: normal;
     text-align: left;
     line-height: 1.4;
@@ -2358,8 +2353,8 @@
     background: var(--menu-active-bg-color);
   }
   .batch-download-choice__icon {
-    width: 42px;
-    height: 42px;
+    width: var(--ui-layout-42, 42px);
+    height: var(--ui-layout-42, 42px);
     flex: 0 0 auto;
     display: inline-flex;
     align-items: center;
@@ -2371,15 +2366,15 @@
   .batch-download-choice__copy {
     min-width: 0;
     display: grid;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
   .batch-download-choice__copy strong {
     color: var(--text-color);
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
   }
   .batch-download-choice__copy small {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.55;
   }
   .file-container {
@@ -2396,8 +2391,8 @@
     bottom: 12px;
     z-index: 4;
     transform: translateX(-50%);
-    min-height: 30px;
-    padding: 4px 10px;
+    min-height: var(--ui-layout-30, 30px);
+    padding: var(--ui-space-4, 4px) var(--ui-space-10, 10px);
     border-radius: 999px;
     color: var(--desc-color);
     background: color-mix(in srgb, var(--menu-body-bg-color) 92%, transparent);
@@ -2405,14 +2400,14 @@
     pointer-events: none;
   }
   .field-item {
-    min-height: 58px;
-    padding: 0 16px;
+    min-height: var(--ui-layout-58, 58px);
+    padding: 0 var(--ui-space-16, 16px);
     box-sizing: border-box;
     display: flex;
     align-items: center;
     border-bottom: 1px solid var(--surface-divider-color);
     content-visibility: auto;
-    contain-intrinsic-size: 58px;
+    contain-intrinsic-size: var(--ui-layout-58, 58px);
     transition:
       background-color 0.18s,
       box-shadow 0.18s;
@@ -2437,7 +2432,7 @@
       position: absolute;
       right: 8px;
       z-index: 1;
-      gap: 10px;
+      gap: var(--ui-space-10, 10px);
       flex-wrap: nowrap;
       transition: opacity 0.2s;
       div {
@@ -2452,17 +2447,17 @@
     }
   }
   .edit-file-input {
-    width: min(400px, calc(100% - 120px));
+    width: min(var(--ui-layout-400, 400px), calc(100% - var(--ui-layout-120, 120px)));
 
     &.edit-file-input--saving {
       :deep(.b-input) {
-        padding-right: 110px !important;
+        padding-right: var(--ui-space-110, 110px) !important;
       }
     }
   }
   .rename-saving-indicator {
-    min-width: 24px;
-    height: 24px;
+    min-width: var(--ui-layout-24, 24px);
+    height: var(--ui-layout-24, 24px);
     padding: 0;
 
     :deep(.btn-spinner) {
@@ -2471,45 +2466,56 @@
   }
   .rename-saving-text {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     white-space: nowrap;
   }
   .file-label {
     // 桌面端固定为下载、重命名、标签和更多四个操作预留空间，待整理角标不能压到按钮上。
-    width: calc(100% - 140px);
+    width: calc(100% - var(--ui-layout-140, 140px));
     cursor: pointer;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     color: var(--text-color);
     font-weight: 520;
   }
   .file-name {
     min-width: 0;
-    flex: 1 1 auto;
+    flex: 0 1 auto;
+  }
+  .file-status-badges {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: var(--ui-space-8, 8px);
   }
   .row-checkbox {
-    margin-right: 10px;
+    margin-right: var(--ui-space-10, 10px);
   }
   .default-area {
     display: grid;
-    grid-template-columns: minmax(86px, 0.7fr) minmax(130px, 1.15fr) minmax(74px, 0.55fr) minmax(130px, 0.9fr);
+    grid-template-columns:
+      minmax(var(--ui-layout-86, 86px), 0.7fr) minmax(var(--ui-layout-130, 130px), 1.15fr) minmax(
+        var(--ui-layout-74, 74px),
+        0.55fr
+      )
+      minmax(var(--ui-layout-130, 130px), 0.9fr);
     align-items: center;
     flex: 1;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
     div {
       flex: 1;
       min-width: 0;
-      padding-right: 12px;
+      padding-right: var(--ui-space-12, 12px);
     }
   }
   .share-desc-body {
     &.is-mobile {
-      padding: 16px;
+      padding: var(--ui-space-16, 16px);
       box-sizing: border-box;
     }
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .share-target-name {
     overflow-wrap: anywhere;
@@ -2517,7 +2523,7 @@
   }
   .share-new-link-row {
     display: flex;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     min-width: 0;
     > :first-child {
       flex: 1;
@@ -2528,57 +2534,57 @@
     }
   }
   .share-history-toggle {
-    margin-top: 10px;
+    margin-top: var(--ui-space-10, 10px);
   }
   .share-field-label {
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 600;
   }
   .share-limit-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     > div {
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: var(--ui-space-8, 8px);
       min-width: 0;
     }
   }
   .share-desc-actions {
     display: flex;
     justify-content: flex-end;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .share-new-link {
     display: grid;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     min-width: 0;
     p {
       margin: 0;
       color: var(--desc-color);
-      font-size: 13px;
+      font-size: var(--ui-font-13, 13px);
     }
   }
   .share-records {
-    margin-top: 4px;
-    padding-top: 12px;
+    margin-top: var(--ui-space-4, 4px);
+    padding-top: var(--ui-space-12, 12px);
     border-top: 1px solid var(--surface-divider-color);
     h4 {
-      margin: 0 0 8px;
+      margin: 0 0 var(--ui-space-8, 8px);
       color: var(--text-color);
     }
   }
   .share-records-empty {
     margin: 0;
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .share-record {
     display: grid;
-    gap: 8px;
-    padding: 10px 0;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-10, 10px) 0;
     border-bottom: 1px solid var(--surface-divider-color);
     .share-record-head,
     .share-record-meta,
@@ -2586,11 +2592,11 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      gap: 8px;
+      gap: var(--ui-space-8, 8px);
     }
     span {
       color: var(--desc-color);
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
     }
   }
   .share-record-actions {
@@ -2606,10 +2612,10 @@
   }
   @media (max-width: 1024px) {
     .field-header {
-      padding: 0 10px 10px 10px;
+      padding: 0 var(--ui-space-10, 10px) var(--ui-space-10, 10px) var(--ui-space-10, 10px);
     }
     .field-item {
-      padding: 0 10px;
+      padding: 0 var(--ui-space-10, 10px);
       .flex-align-center:first-child {
         .file-label {
           min-width: 0;
@@ -2620,7 +2626,7 @@
       }
     }
     .edit-file-input {
-      width: calc(100% - 92px);
+      width: calc(100% - var(--ui-layout-92, 92px));
     }
   }
   @media (max-width: 767px) {
@@ -2628,18 +2634,23 @@
       grid-template-columns: 1fr;
     }
     .batch-download-choice__option.b_btn {
-      min-height: 92px;
+      min-height: var(--ui-layout-92, 92px);
     }
     .file-label {
-      // 右侧“更多”现在是完整 44px 触控按钮；额外留出 10px 呼吸位，
-      // 避免待整理角标紧贴按钮，看起来像整组操作被挤到了标题旁边。
-      width: calc(100% - 54px);
+      // 为更多操作保留触控空间，状态另起一行，避免挤占文件名。
+      width: calc(100% - var(--ui-layout-54, 54px));
+      display: grid;
+      /* ui-density-fixed: 仅手机媒体规则使用的文件图标列，移动布局固定标准尺寸。 */
+      grid-template-columns: 20px minmax(0, 1fr);
+      row-gap: var(--ui-space-4, 4px);
+      padding: var(--ui-space-6, 6px) 0;
     }
     .field-item--batch .file-label {
       width: 100%;
     }
-    .file-label :deep(.inbox-pending-badge) {
-      margin-left: auto;
+    .file-status-badges {
+      grid-column: 2;
+      flex-wrap: wrap;
     }
     .field-item--selected {
       background: color-mix(in srgb, var(--resource-file-color, #ff8a00) 4%, var(--card-background));
@@ -2657,8 +2668,8 @@
   .file-tags-list {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
-    max-height: 40px;
+    gap: var(--ui-space-6, 6px);
+    max-height: var(--ui-layout-40, 40px);
     overflow: hidden;
   }
 
@@ -2671,24 +2682,30 @@
   .file-card-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(var(--file-card-min-width), 1fr));
-    gap: 14px;
-    padding: 14px;
+    gap: var(--ui-space-14, 14px);
+    padding: var(--ui-space-14, 14px);
     box-sizing: border-box;
     overflow-y: auto;
     height: 100%;
     align-content: start;
   }
 
+  // Density changes must not compress grid rows below their visible content.
+  html[data-density='compact'] .file-card-grid,
+  html[data-density='comfortable'] .file-card-grid {
+    grid-auto-rows: max-content;
+  }
+
   .field-list--batch-mode .file-container,
   .field-list--batch-mode .file-card-grid {
-    padding-bottom: 112px;
-    scroll-padding-bottom: 112px;
+    padding-bottom: var(--ui-space-112, 112px);
+    scroll-padding-bottom: var(--ui-space-112, 112px);
   }
 
   .file-card {
     display: flex;
     flex-direction: column;
-    min-height: 278px;
+    min-height: var(--ui-card-278, 278px);
     border-radius: 13px;
     border: 1px solid var(--surface-border-color);
     cursor: pointer;
@@ -2716,7 +2733,7 @@
   .file-card-cover {
     position: relative;
     width: 100%;
-    height: 142px;
+    height: var(--ui-layout-142, 142px);
     background: color-mix(in srgb, var(--bl-input-noBorder-bg-color) 92%, transparent);
     display: flex;
     align-items: center;
@@ -2762,8 +2779,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 46px;
-    height: 46px;
+    width: var(--ui-layout-46, 46px);
+    height: var(--ui-layout-46, 46px);
     border: 2px solid rgba(255, 255, 255, 0.92);
     border-radius: 50%;
     background: rgba(0, 0, 0, 0.76);
@@ -2776,12 +2793,12 @@
     position: absolute;
     right: 9px;
     bottom: 9px;
-    padding: 3px 6px;
+    padding: var(--ui-space-3, 3px) var(--ui-space-6, 6px);
     border: 1px solid rgba(255, 255, 255, 0.26);
     border-radius: 6px;
     background: rgba(0, 0, 0, 0.78);
     color: #fff;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 700;
     font-variant-numeric: tabular-nums;
     line-height: 1;
@@ -2809,16 +2826,16 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     color: inherit;
     opacity: 0.88;
   }
 
   .file-card-placeholder-inner span {
-    max-width: 160px;
-    padding: 3px 10px;
+    max-width: var(--ui-layout-160, 160px);
+    padding: var(--ui-space-3, 3px) var(--ui-space-10, 10px);
     border-radius: 999px;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 600;
     color: color-mix(in srgb, var(--desc-color) 92%, transparent);
     background: color-mix(in srgb, var(--common-tag-bg-color) 78%, transparent);
@@ -2893,8 +2910,8 @@
     display: flex;
     align-items: flex-start;
     justify-content: flex-end;
-    gap: 8px;
-    padding: 8px 32px 8px 8px;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-32, 32px) var(--ui-space-8, 8px) var(--ui-space-8, 8px);
     opacity: 0;
     transition: opacity 0.2s ease;
     background: linear-gradient(to bottom, rgba(0, 0, 0, 0.3) 0%, transparent 40%);
@@ -2923,9 +2940,9 @@
   }
 
   .mobile-file-more.b_btn {
-    width: 44px;
-    min-width: 44px;
-    height: 44px;
+    width: var(--ui-layout-44, 44px);
+    min-width: var(--ui-layout-44, 44px);
+    height: var(--ui-layout-44, 44px);
     padding: 0;
     border: 0;
     background: transparent;
@@ -2942,26 +2959,26 @@
   }
 
   .rename-modal-input {
-    margin-bottom: 16px;
+    margin-bottom: var(--ui-space-16, 16px);
   }
   .rename-modal-field {
     display: flex;
     align-items: center;
-    gap: 4px;
-    margin-bottom: 16px;
+    gap: var(--ui-space-4, 4px);
+    margin-bottom: var(--ui-space-16, 16px);
   }
   .rename-modal-field .rename-modal-input {
     margin-bottom: 0;
     flex: 1;
   }
   .rename-modal-ext {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     color: #888;
     white-space: nowrap;
   }
   .rename-modal-actions {
     display: flex;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     justify-content: flex-end;
   }
 
@@ -2970,28 +2987,28 @@
   }
 
   .file-card-body {
-    padding: 12px 14px 13px;
+    padding: var(--ui-space-12, 12px) var(--ui-space-14, 14px) var(--ui-space-13, 13px);
     box-sizing: border-box;
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 7px;
-    min-height: 136px;
+    gap: var(--ui-space-7, 7px);
+    min-height: var(--ui-layout-136, 136px);
   }
 
   .file-card-headline {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .file-card-type {
     display: inline-flex;
     align-items: center;
-    padding: 2px 8px;
+    padding: var(--ui-space-2, 2px) var(--ui-space-8, 8px);
     border-radius: 999px;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 600;
     color: color-mix(in srgb, var(--resource-file-color) 86%, var(--desc-color));
     background: color-mix(in srgb, var(--resource-file-color) 9%, transparent);
@@ -2999,7 +3016,7 @@
 
   .file-card-size {
     margin-left: auto;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
     font-weight: 600;
     opacity: 0.86;
@@ -3010,7 +3027,7 @@
   }
 
   .file-card-name {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     font-weight: 600;
     line-height: 1.4;
     display: -webkit-box;
@@ -3024,21 +3041,21 @@
   .file-empty-state {
     min-height: 0;
     flex: 1;
-    padding: 28px 20px;
+    padding: var(--ui-space-28, 28px) var(--ui-space-20, 20px);
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     color: var(--desc-color);
     text-align: center;
   }
 
   .file-empty-icon {
-    width: 54px;
-    height: 54px;
-    margin-bottom: 4px;
+    width: var(--ui-layout-54, 54px);
+    height: var(--ui-layout-54, 54px);
+    margin-bottom: var(--ui-space-4, 4px);
     border-radius: 16px;
     display: flex;
     align-items: center;
@@ -3049,27 +3066,27 @@
 
   .file-empty-state strong {
     color: var(--text-color);
-    font-size: 16px;
+    font-size: var(--ui-font-16, 16px);
   }
 
   .file-empty-state p {
     margin: 0;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .file-empty-action {
-    margin-top: 6px;
+    margin-top: var(--ui-space-6, 6px);
   }
 
   .file-card-meta {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     line-height: 1.4;
     min-width: 0;
-    min-height: 18px;
+    min-height: var(--ui-layout-18, 18px);
   }
 
   .meta-label {
@@ -3094,24 +3111,24 @@
       min-width: 0;
     }
     .file-card-grid {
-      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-      column-gap: 12px;
-      row-gap: 12px;
-      padding: 10px;
+      grid-template-columns: repeat(auto-fill, minmax(var(--ui-layout-220, 220px), 1fr));
+      column-gap: var(--ui-space-12, 12px);
+      row-gap: var(--ui-space-12, 12px);
+      padding: var(--ui-space-10, 10px);
     }
 
     .field-list--batch-mode .file-container,
     .field-list--batch-mode .file-card-grid {
-      padding-bottom: 164px;
-      scroll-padding-bottom: 164px;
+      padding-bottom: var(--ui-space-164, 164px);
+      scroll-padding-bottom: var(--ui-space-164, 164px);
     }
 
     .file-card {
-      min-height: 260px;
+      min-height: var(--ui-layout-260, 260px);
     }
 
     .file-card-cover {
-      height: 128px;
+      height: var(--ui-layout-128, 128px);
     }
   }
 

@@ -268,7 +268,7 @@ describe('BImageViewer', () => {
     expect(currentImage()?.src).toContain('/images/two.png');
   });
 
-  it('桌面放大后直接滚动原生视口，按根节点缩放换算且不在移动中写响应式位置', async () => {
+  it('桌面放大后直接滚动原生视口，使用 CSS 位移且不在移动中写响应式位置', async () => {
     await mountViewer();
     currentImage()?.dispatchEvent(new Event('load'));
     await nextTick();
@@ -293,14 +293,13 @@ describe('BImageViewer', () => {
     await nextTick();
     viewport.scrollLeft = 300;
     viewport.scrollTop = 200;
-    document.documentElement.style.zoom = '1.1';
 
     dispatchPointer(viewport, 'pointerdown', { clientX: 200, clientY: 180 });
     dispatchPointer(viewport, 'pointermove', { clientX: 310, clientY: 235 });
     await nextTick();
 
-    expect(viewport.scrollLeft).toBeCloseTo(200);
-    expect(viewport.scrollTop).toBeCloseTo(150);
+    expect(viewport.scrollLeft).toBeCloseTo(190);
+    expect(viewport.scrollTop).toBeCloseTo(145);
     expect(viewport.classList.contains('is-pointer-panning')).toBe(true);
     expect(viewerSource).toContain('viewport.scrollLeft = state.scrollLeft');
     expect(viewerSource).not.toMatch(/handlePointerMove[\s\S]*?position\.value\s*=/u);
@@ -319,12 +318,13 @@ describe('BImageViewer', () => {
   });
 
   it('桌面端扩大默认画布并压缩固定工具区域，把更多空间留给图片', () => {
-    expect(viewerSource).toContain('width="min(1600px, calc(100vw - 48px))"');
-    expect(viewerSource).toContain('height="min(1080px, calc(100vh - 32px))"');
-    expect(viewerSource).toMatch(
+    const standardSource = viewerSource.replace(/var\(--ui-[\w-]+, (\d+px)\)/g, '$1');
+    expect(standardSource).toContain('width="min(1600px, calc(100vw - 48px))"');
+    expect(standardSource).toContain('height="min(1080px, calc(100vh - 32px))"');
+    expect(standardSource).toMatch(
       /\.b-image-viewer__viewport\s*\{[\s\S]*?--b-image-viewer-padding-x:\s*32px;[\s\S]*?--b-image-viewer-padding-top:\s*16px;/u,
     );
-    expect(viewerSource).toMatch(
+    expect(standardSource).toMatch(
       /\.b-image-viewer__toolbar\s*\{[\s\S]*?min-height:\s*50px;[\s\S]*?\.b-image-viewer__toolbar \.b_btn\s*\{[\s\S]*?width:\s*32px;[\s\S]*?height:\s*32px;/u,
     );
   });

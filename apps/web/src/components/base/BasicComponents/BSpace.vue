@@ -6,6 +6,8 @@
 
 <script lang="ts" setup>
   import { computed } from 'vue';
+  import { useUiDensity } from '@/composables/useUiDensity';
+  const { dimension } = useUiDensity();
 
   const props = defineProps({
     size: {
@@ -19,7 +21,7 @@
   });
 
   const gap = computed(() => {
-    return props.size + 'px';
+    return dimension(props.size, 'space') + 'px';
   });
   const isWrap = computed(() => {
     return props.wrap ? 'wrap' : '';

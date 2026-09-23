@@ -9,7 +9,8 @@
         :disabled="current === 1"
         @click="goTo(current - 1)"
         :title="t('common.prevPage')"
-      >‹</button>
+        >‹</button
+      >
 
       <template v-for="p in visiblePages" :key="p">
         <span v-if="p === '...'" class="bpagination__ellipsis">…</span>
@@ -18,7 +19,8 @@
           class="bpagination__btn"
           :class="{ 'bpagination__btn--active': p === current }"
           @click="goTo(p as number)"
-        >{{ p }}</button>
+          >{{ p }}</button
+        >
       </template>
 
       <button
@@ -26,45 +28,30 @@
         :disabled="current >= totalPages"
         @click="goTo(current + 1)"
         :title="t('common.nextPage')"
-      >›</button>
+        >›</button
+      >
     </div>
 
-    <!-- 每页条数（自定义下拉） -->
-    <div class="bpagination__sizer" ref="sizerRef">
-      <div
-        class="bpagination__sizer-trigger"
-        :class="{ 'bpagination__sizer-trigger--open': dropdownOpen }"
-        @click="toggleDropdown"
-      >
-        <span>{{ t('common.perPage', { n: pageSize }) }}</span>
-        <svg
-          class="bpagination__sizer-arrow"
-          :class="{ 'bpagination__sizer-arrow--open': dropdownOpen }"
-          width="10" height="6" viewBox="0 0 10 6" fill="none"
-        ><path d="M1 1L5 5L9 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-      </div>
-      <Teleport to="body">
-        <div
-          v-if="dropdownOpen"
-          class="bpagination__sizer-dropdown"
-          :style="dropdownStyle"
-        >
-          <div
-            v-for="opt in sizeOptions"
-            :key="opt.value"
-            class="bpagination__sizer-option"
-            :class="{ 'bpagination__sizer-option--selected': opt.value === pageSize }"
-            @click="selectSize(opt.value)"
-          >{{ opt.label }}</div>
-        </div>
-      </Teleport>
-    </div>
+    <BSelect
+      class="bpagination__sizer"
+      dropdown-class-name="bpagination__sizer-dropdown"
+      dropdown-width="content"
+      :value="pageSize"
+      :options="sizeOptions"
+      @change="selectSize"
+    >
+      <template #selected-label>{{ t('common.perPage', { n: pageSize }) }}</template>
+      <template #arrow><SvgIcon :src="icon.pagination.chevron" :size="10" :density-aware="false" /></template>
+    </BSelect>
   </div>
 </template>
 
 <script lang="ts" setup>
-  import { computed, ref, onMounted, onBeforeUnmount } from 'vue';
-  import { getRootZoom } from '@/utils/zoom';
+  import { computed } from 'vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon';
+  import BSelect from '@/components/base/BasicComponents/BSelect.vue';
+
   import { useI18n } from 'vue-i18n';
 
   const { t } = useI18n();
@@ -87,68 +74,9 @@
     { label: t('common.perPage', { n: 100 }), value: 100 },
   ]);
 
-  // 下拉状态
-  const dropdownOpen = ref(false);
-  const sizerRef = ref<HTMLElement | null>(null);
-  const dropdownStyle = ref({});
-
-  function toggleDropdown() {
-    if (dropdownOpen.value) {
-      closeDropdown();
-    } else {
-      openDropdown();
-    }
+  function selectSize(value: string | number | (string | number)[]) {
+    emit('sizeChange', Number(value));
   }
-
-  function openDropdown() {
-    if (!sizerRef.value) return;
-    // 界面缩放(html zoom):gBCR 含 zoom → ÷ zoom 换布局坐标;clientHeight 是布局像素、不换算
-    const zoom = getRootZoom();
-    const rect = sizerRef.value.getBoundingClientRect();
-    const rTop = rect.top / zoom;
-    const rBottom = rect.bottom / zoom;
-    const rLeft = rect.left / zoom;
-    const rWidth = rect.width / zoom;
-    const estimatedHeight = 140; // 4 个选项预估高度
-    const gap = 4;
-    // documentElement.clientHeight 是视口高度(视觉像素),÷zoom 换布局坐标再与 rBottom(布局)比较
-    const spaceBelow = document.documentElement.clientHeight / zoom - rBottom;
-    const showAbove = spaceBelow < estimatedHeight && rTop > estimatedHeight;
-
-    dropdownStyle.value = {
-      position: 'fixed',
-      left: `${rLeft}px`,
-      top: showAbove ? `${rTop - gap - estimatedHeight}px` : `${rBottom + gap}px`,
-      minWidth: `${rWidth}px`,
-    };
-    dropdownOpen.value = true;
-  }
-
-  function closeDropdown() {
-    dropdownOpen.value = false;
-  }
-
-  function selectSize(value: number) {
-    emit('sizeChange', value);
-    closeDropdown();
-  }
-
-  // 点击外部关闭
-  function onDocumentClick(e: MouseEvent) {
-    if (!dropdownOpen.value) return;
-    const target = e.target as Node;
-    if (sizerRef.value && !sizerRef.value.contains(target)) {
-      closeDropdown();
-    }
-  }
-
-  onMounted(() => {
-    document.addEventListener('click', onDocumentClick, true);
-  });
-
-  onBeforeUnmount(() => {
-    document.removeEventListener('click', onDocumentClick, true);
-  });
 
   const totalPages = computed(() => Math.max(1, Math.ceil(props.total / props.pageSize)));
 
@@ -186,23 +114,23 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
     flex-wrap: wrap;
-    padding: 2px 0;
+    padding: var(--ui-space-2, 2px) 0;
   }
 
   .bpagination__total {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
     white-space: nowrap;
     flex-shrink: 0;
-    min-width: 60px;
+    min-width: var(--ui-layout-60, 60px);
   }
 
   .bpagination__pages {
     display: flex;
     align-items: center;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
     flex-shrink: 0;
   }
 
@@ -210,14 +138,14 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 30px;
-    height: 30px;
-    padding: 0 6px;
+    min-width: var(--ui-layout-30, 30px);
+    height: var(--ui-control-30, 30px);
+    padding: 0 var(--ui-space-6, 6px);
     border-radius: 6px;
     border: 1px solid transparent;
     background: transparent;
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     cursor: pointer;
     transition: all 0.15s ease;
     flex-shrink: 0;
@@ -230,10 +158,10 @@
     }
 
     &--nav {
-      font-size: 16px;
+      font-size: var(--ui-font-16, 16px);
       font-weight: 300;
-      padding: 0 4px;
-      min-width: 26px;
+      padding: 0 var(--ui-space-4, 4px);
+      min-width: var(--ui-layout-26, 26px);
     }
 
     &--active {
@@ -258,10 +186,10 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 30px;
+    width: var(--ui-layout-28, 28px);
+    height: var(--ui-control-30, 30px);
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     user-select: none;
     opacity: 0.4;
   }
@@ -271,70 +199,63 @@
     position: relative;
   }
 
-  .bpagination__sizer-trigger {
+  // Keep the original pagination appearance while sharing BSelect positioning and keyboard handling.
+  .bpagination__sizer :deep(.select-trigger) {
+    // Preserve the host pagination box model when replacing its legacy trigger.
+    box-sizing: inherit;
     display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    height: 30px;
-    padding: 0 10px;
-    border: 1px solid var(--menu-item-h-bg-color);
-    border-radius: 6px;
+    gap: var(--ui-space-6, 6px);
+    height: var(--ui-control-30, 30px);
+    padding: 0 var(--ui-space-10, 10px);
+    border-color: var(--menu-item-h-bg-color);
     background: transparent;
-    color: var(--text-color);
-    font-size: 12px;
-    cursor: pointer;
+    font-size: var(--ui-font-12, 12px);
     transition: all 0.15s ease;
-    white-space: nowrap;
-    user-select: none;
-
-    &:hover {
-      border-color: #615ced;
-      background: var(--menu-item-h-bg-color);
-    }
-
-    &--open {
-      border-color: #615ced;
-    }
   }
-
-  .bpagination__sizer-arrow {
-    flex-shrink: 0;
-    color: var(--desc-color);
-    transition: transform 0.2s ease;
-
-    &--open {
-      transform: rotate(180deg);
-    }
+  .bpagination__sizer :deep(.select-text) {
+    flex: none;
+    font-size: inherit;
   }
-
-  .bpagination__sizer-dropdown {
-    z-index: 300;
-    background: var(--ant-select-dropdown-bg-color);
-    border: 1px solid var(--menu-item-h-bg-color);
+  .bpagination__sizer :deep(.select-trigger:hover) {
+    border-color: #615ced;
+    background: var(--menu-item-h-bg-color);
+  }
+  .bpagination__sizer.is-open :deep(.select-trigger) {
+    border-color: #615ced;
+  }
+  .bpagination__sizer :deep(.select-suffix) {
+    position: static;
+    transform: none;
+    width: var(--ui-layout-10, 10px);
+  }
+  .bpagination__sizer :deep(.select-arrow) {
+    width: var(--ui-layout-10, 10px);
+    height: var(--ui-layout-6, 6px);
+  }
+  .bpagination__sizer :deep(.select-arrow > *) {
+    width: var(--ui-layout-10, 10px) !important;
+    height: var(--ui-layout-6, 6px) !important;
+  }
+  :global(.bpagination__sizer-dropdown.select-dropdown) {
+    border-color: var(--menu-item-h-bg-color);
     border-radius: 8px;
-    padding: 4px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-    overflow: hidden;
   }
-
-  .bpagination__sizer-option {
-    padding: 6px 12px;
-    font-size: 12px;
+  :global(.bpagination__sizer-dropdown .select-option) {
+    height: auto;
+    padding: var(--ui-space-6, 6px) var(--ui-space-12, 12px);
+    margin-top: 0;
+    font-size: var(--ui-font-12, 12px);
+  }
+  :global(.bpagination__sizer-dropdown.select-dropdown .select-option + .select-option) {
+    margin-top: 0;
+  }
+  :global(.bpagination__sizer-dropdown .select-option:hover),
+  :global(.bpagination__sizer-dropdown .select-option.is-active) {
+    background: var(--menu-item-h-bg-color);
+  }
+  :global(.bpagination__sizer-dropdown .select-option.is-selected) {
+    background: var(--common-tag-bg-color);
     color: var(--text-color);
-    border-radius: 4px;
-    cursor: pointer;
-    transition: background 0.12s ease;
-    white-space: nowrap;
-    user-select: none;
-
-    &:hover {
-      background: var(--menu-item-h-bg-color);
-    }
-
-    &--selected {
-      background: var(--common-tag-bg-color);
-      color: var(--text-color);
-      font-weight: 500;
-    }
   }
 </style>

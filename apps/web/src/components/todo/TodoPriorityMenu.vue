@@ -26,24 +26,24 @@
 </script>
 <style scoped lang="less">
   .todo-priority-menu {
-    padding: 7px 12px;
+    padding: var(--ui-space-7, 7px) var(--ui-space-12, 12px);
   }
   .todo-priority-menu__label {
     display: block;
-    margin-bottom: 7px;
+    margin-bottom: var(--ui-space-7, 7px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .todo-priority-menu__options {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
   .todo-priority-menu__options .b_btn {
     width: 100%;
-    height: 30px;
-    padding: 0 3px;
-    font-size: 12px;
+    height: var(--ui-layout-30, 30px);
+    padding: 0 var(--ui-space-3, 3px);
+    font-size: var(--ui-font-12, 12px);
     background: transparent;
     border: 1px solid var(--surface-border-color);
   }

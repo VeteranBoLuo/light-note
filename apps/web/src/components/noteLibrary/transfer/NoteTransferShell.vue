@@ -17,7 +17,7 @@
     v-else
     :open="visible"
     :title="title"
-    width="760px"
+    width="var(--ui-layout-760, 760px)"
     mobile-full-screen
     body-padding="0"
     :close-disabled="busy"
@@ -89,7 +89,7 @@
   }
   .transfer-shell__navigation {
     flex: none;
-    padding: 12px 24px;
+    padding: var(--ui-space-12, 12px) var(--ui-space-24, 24px);
     border-bottom: 1px solid var(--surface-border-color);
   }
   .transfer-shell :deep(.note-transfer) {
@@ -97,8 +97,8 @@
     height: auto;
     min-height: 0;
     overflow-y: auto;
-    padding: 24px;
-    gap: 18px;
+    padding: var(--ui-space-24, 24px);
+    gap: var(--ui-space-18, 18px);
     overscroll-behavior: contain;
   }
   .transfer-shell :deep(.note-transfer.is-mobile) {

@@ -135,7 +135,7 @@
     v-if="detailAchievement"
     v-model:visible="detailVisible"
     :title="t('communityChat.profile.achievementDetailTitle')"
-    width="min(380px, 90vw)"
+    width="min(var(--ui-layout-380, 380px), 90vw)"
     :show-footer="false"
     :mask-closable="true"
   >
@@ -285,6 +285,7 @@
             })
           : h(SvgIcon, {
               class: 'chat-profile-content__avatar-image',
+              densityAware: false,
               src: profile.avatar || icon.communityChat.defaultAvatar,
               size: props.compact ? 52 : 68,
             });
@@ -411,10 +412,10 @@
 
 <style lang="less">
   .chat-profile-content {
-    min-height: 260px;
+    min-height: var(--ui-layout-260, 260px);
     display: grid;
     align-content: start;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
     color: var(--text-color);
   }
 
@@ -426,30 +427,30 @@
 
   .chat-profile-content__state,
   .chat-profile-content__subview-state {
-    min-height: 240px;
+    min-height: var(--ui-layout-240, 240px);
     display: flex;
     align-items: center;
     justify-content: center;
     flex-direction: column;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
     color: var(--desc-color);
     text-align: center;
   }
 
   .chat-profile-content__state strong {
     color: var(--text-color);
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
   }
 
   .chat-profile-content__state > span:not(.chat-profile-content__state-icon) {
-    max-width: 340px;
-    font-size: 11px;
+    max-width: var(--ui-layout-340, 340px);
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.6;
   }
 
   .chat-profile-content__state-icon {
-    width: 40px;
-    height: 40px;
+    width: var(--ui-layout-40, 40px);
+    height: var(--ui-layout-40, 40px);
     display: grid;
     place-items: center;
     border: 1px solid var(--primary-color);
@@ -459,10 +460,10 @@
 
   .chat-profile-content__identity {
     min-width: 0;
-    padding: 15px;
+    padding: var(--ui-space-15, 15px);
     display: flex;
     align-items: center;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
     border: 1px solid var(--surface-border-color);
     border-radius: 16px;
     background: var(--workspace-panel-bg-color);
@@ -504,25 +505,25 @@
   .chat-profile-content__identity-copy {
     min-width: 0;
     display: grid;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
 
   .chat-profile-content__identity-copy > strong {
     overflow: hidden;
     color: var(--text-color);
-    font-size: 18px;
+    font-size: var(--ui-font-18, 18px);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .chat-profile-content__identity-copy > small {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .chat-profile-content__community-id {
     width: fit-content;
-    padding: 2px 7px;
+    padding: var(--ui-space-2, 2px) var(--ui-space-7, 7px);
     border: 1px solid var(--surface-border-color);
     border-radius: 999px;
     color: var(--primary-color) !important;
@@ -535,19 +536,19 @@
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
 
   .chat-profile-content__level.growth-level-chip {
-    min-height: 22px;
-    padding: 2px 8px;
-    font-size: 10px;
+    min-height: var(--ui-layout-22, 22px);
+    padding: var(--ui-space-2, 2px) var(--ui-space-8, 8px);
+    font-size: var(--ui-font-10, 10px);
   }
 
   .chat-profile-content__role,
   .chat-profile-content__rarity {
-    min-height: 22px;
-    padding: 2px 8px;
+    min-height: var(--ui-layout-22, 22px);
+    padding: var(--ui-space-2, 2px) var(--ui-space-8, 8px);
     box-sizing: border-box;
     display: inline-flex;
     align-items: center;
@@ -555,7 +556,7 @@
     border-radius: 999px;
     color: var(--primary-color);
     background: var(--card-background);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     font-weight: 700;
   }
 
@@ -576,14 +577,14 @@
   .chat-profile-content__subview {
     min-width: 0;
     display: grid;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .chat-profile-content__bio > p,
   .chat-profile-content__subview-description {
     margin: 0;
     color: var(--text-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.7;
   }
 
@@ -594,7 +595,7 @@
   .chat-profile-content__tenure {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     color: var(--desc-color) !important;
   }
 
@@ -606,28 +607,28 @@
 
   .chat-profile-content__section-heading {
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .chat-profile-content__section-heading > span {
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     color: var(--primary-color);
   }
 
   .chat-profile-content__section-heading strong {
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .chat-profile-content__section-heading small {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
 
   .chat-profile-content__achievement-list {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .chat-profile-content__achievement-list--expanded {
@@ -636,13 +637,13 @@
 
   .chat-profile-content__achievement {
     min-width: 0;
-    min-height: 50px;
-    padding: 7px 9px;
+    min-height: var(--ui-layout-50, 50px);
+    padding: var(--ui-space-7, 7px) var(--ui-space-9, 9px);
     box-sizing: border-box;
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     background: var(--card-background);
@@ -665,7 +666,7 @@
   .chat-profile-content__available-item > span:nth-child(2) {
     min-width: 0;
     display: grid;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
 
   .chat-profile-content__achievement strong,
@@ -683,39 +684,39 @@
   .chat-profile-content__selected-item strong,
   .chat-profile-content__available-item strong {
     color: var(--text-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .chat-profile-content__achievement small,
   .chat-profile-content__selected-item small,
   .chat-profile-content__available-item small {
     color: var(--desc-color);
-    font-size: 9px;
+    font-size: var(--ui-font-9, 9px);
   }
 
   .chat-profile-content__empty,
   .chat-profile-content__selection-empty {
-    min-height: 72px;
+    min-height: var(--ui-layout-72, 72px);
     margin: 0;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-direction: column;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     border: 1px dashed var(--surface-border-color);
     border-radius: 12px;
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     text-align: center;
   }
 
   .chat-profile-content__view-all.b_btn {
     width: auto;
-    padding: 6px 0;
+    padding: var(--ui-space-6, 6px) 0;
     border: 0;
-    font-size: 13px;
-    min-height: 36px;
-    gap: 5px;
+    font-size: var(--ui-font-13, 13px);
+    min-height: var(--ui-layout-36, 36px);
+    gap: var(--ui-space-5, 5px);
     color: var(--primary-color);
     background: transparent;
   }
@@ -723,7 +724,7 @@
   .chat-profile-content__actions {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .chat-profile-content__actions--own {
@@ -740,15 +741,15 @@
 
   .chat-profile-content__actions .b_btn {
     width: 100%;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
 
   .chat-profile-content__visitor-action {
-    padding: 11px;
+    padding: var(--ui-space-11, 11px);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     border: 1px solid var(--primary-color);
     border-radius: 12px;
     background: var(--workspace-panel-bg-color);
@@ -756,7 +757,7 @@
 
   .chat-profile-content__visitor-action > span {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     line-height: 1.5;
   }
 
@@ -764,15 +765,15 @@
     margin: 0;
     display: flex;
     align-items: flex-start;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     line-height: 1.6;
   }
 
   .chat-profile-content__privacy .svg-icon {
     flex: 0 0 auto;
-    margin-top: 1px;
+    margin-top: var(--ui-space-1, 1px);
   }
 
   .chat-profile-content__subview-header {
@@ -780,23 +781,23 @@
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .chat-profile-content__subview-header > strong {
     grid-column: 2;
     overflow: hidden;
     color: var(--text-color);
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     text-align: center;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .chat-profile-content__back {
-    min-width: 78px;
-    padding-inline: 8px;
-    gap: 3px;
+    min-width: var(--ui-layout-78, 78px);
+    padding-inline: var(--ui-space-8, 8px);
+    gap: var(--ui-space-3, 3px);
     color: var(--desc-color);
     background: transparent;
   }
@@ -807,28 +808,28 @@
 
   .chat-profile-content__achievement-detail {
     min-width: 0;
-    padding: 8px 6px 6px;
+    padding: var(--ui-space-8, 8px) var(--ui-space-6, 6px) var(--ui-space-6, 6px);
     display: grid;
     justify-items: center;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     text-align: center;
   }
 
   .chat-profile-content__achievement-detail-copy {
     min-width: 0;
     display: grid;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
 
   .chat-profile-content__achievement-detail-copy strong {
     color: var(--text-color);
-    font-size: 18px;
+    font-size: var(--ui-font-18, 18px);
   }
 
   .chat-profile-content__achievement-detail-copy span,
   .chat-profile-content__achievement-detail p {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .chat-profile-content__achievement-detail p {
@@ -837,8 +838,8 @@
   }
 
   .chat-profile-content__achievement-unlocked {
-    min-height: 26px;
-    padding: 3px 11px;
+    min-height: var(--ui-layout-26, 26px);
+    padding: var(--ui-space-3, 3px) var(--ui-space-11, 11px);
     box-sizing: border-box;
     display: inline-flex;
     align-items: center;
@@ -846,7 +847,7 @@
     border-radius: 999px;
     color: var(--primary-color);
     background: var(--workspace-panel-bg-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     font-weight: 700;
   }
 

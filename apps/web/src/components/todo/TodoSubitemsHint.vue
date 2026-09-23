@@ -56,12 +56,12 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto auto;
     align-items: center;
-    gap: 4px 8px;
-    padding: 8px 12px;
-    margin-bottom: 10px;
+    gap: var(--ui-space-4, 4px) var(--ui-space-8, 8px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-12, 12px);
+    margin-bottom: var(--ui-space-10, 10px);
     border: 1px solid var(--workspace-border);
     border-radius: 8px;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   p {
     min-width: 0;
@@ -70,10 +70,10 @@
   }
   .todo-subitems-hint__settings.b_btn,
   .todo-subitems-hint__close.b_btn {
-    height: 32px;
-    padding: 0 8px;
+    height: var(--ui-layout-32, 32px);
+    padding: 0 var(--ui-space-8, 8px);
     background: transparent;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .todo-subitems-hint__settings.b_btn {
     color: var(--workspace-purple-text);

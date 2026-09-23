@@ -30,7 +30,7 @@
       v-model:visible="pickerVisible"
       :title="t('tagManage.iconPickerTitle')"
       :show-footer="false"
-      width="min(720px, calc(100vw - 32px))"
+      width="min(var(--ui-layout-720, 720px), calc(100vw - var(--ui-space-32, 32px)))"
     >
       <div class="picker-modal-body">
         <div class="search-row">
@@ -145,7 +145,7 @@
           </div>
         </div>
 
-        <BLoading :loading="searching || resolving" style="min-height: 240px">
+        <BLoading :loading="searching || resolving" style="min-height: var(--ui-layout-240, 240px)">
           <div v-if="resultIcons.length" class="icon-grid">
             <BButton
               v-for="iconName in resultIcons"
@@ -155,7 +155,12 @@
               :title="iconName"
               @click="chooseIcon(iconName)"
             >
-              <Icon :icon="iconName" width="30" height="30" :style="{ color: selectedPreviewColor }" />
+              <Icon
+                :icon="iconName"
+                :width="dimension(30, 'icon')"
+                :height="dimension(30, 'icon')"
+                :style="{ color: selectedPreviewColor }"
+              />
               <span>{{ iconLabel(iconName) }}</span>
             </BButton>
           </div>
@@ -191,6 +196,7 @@
   import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { Icon } from '@iconify/vue';
+  import { useUiDensity } from '@/composables/useUiDensity';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
@@ -223,6 +229,7 @@
   const emit = defineEmits<{ choice: [value: { iconName: string; iconUrl: string; color: string }] }>();
   const value = defineModel<string | undefined>('value', { default: '' });
   const { t } = useI18n();
+  const { dimension } = useUiDensity();
   const pickerVisible = ref(false);
   const searchQuery = ref('');
   const resultIcons = ref<string[]>([]);
@@ -517,18 +524,19 @@
 
 <style scoped lang="less">
   .tag-icon-picker {
+    font-size: var(--ui-font-16, 16px);
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     min-width: 0;
   }
 
   .picker-controls {
     display: grid;
-    grid-template-columns: 32px auto auto minmax(180px, 1fr);
+    grid-template-columns: var(--ui-layout-32, 32px) auto auto minmax(var(--ui-layout-180, 180px), 1fr);
     grid-template-areas: 'preview smart upload input';
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     min-width: 0;
   }
 
@@ -541,24 +549,24 @@
 
   .picker-footer {
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .page-actions {
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .picker-label,
   .translation-hint,
   .color-picker-label {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     color: var(--desc-color);
   }
 
   .icon-preview {
     grid-area: preview;
-    width: 32px;
-    height: 32px;
+    width: var(--ui-layout-32, 32px);
+    height: var(--ui-layout-32, 32px);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -598,23 +606,24 @@
   }
 
   .picker-modal-body {
+    font-size: var(--ui-font-16, 16px);
     min-width: 0;
   }
 
   .search-row {
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .translation-hint {
-    margin-top: 8px;
+    margin-top: var(--ui-space-8, 8px);
   }
 
   .color-picker-row {
     display: flex;
     align-items: center;
-    gap: 12px;
-    margin-top: 10px;
-    padding: 9px 10px;
+    gap: var(--ui-space-12, 12px);
+    margin-top: var(--ui-space-10, 10px);
+    padding: var(--ui-space-9, 9px) var(--ui-space-10, 10px);
     border: 1px solid color-mix(in srgb, var(--card-border-color) 58%, transparent);
     border-radius: 10px;
     background: color-mix(in srgb, var(--resource-tag-color) 4%, var(--background-color));
@@ -628,13 +637,13 @@
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
 
   :deep(.color-option) {
-    width: 26px;
-    height: 26px;
-    min-width: 26px;
+    width: var(--ui-control-26, 26px);
+    height: var(--ui-control-26, 26px);
+    min-width: var(--ui-control-26, 26px);
     padding: 0;
     border: 1px solid transparent;
     border-radius: 7px;
@@ -644,14 +653,14 @@
 
   :deep(.color-option.is-default) {
     width: auto;
-    padding: 0 7px;
-    gap: 5px;
+    padding: 0 var(--ui-space-7, 7px);
+    gap: var(--ui-space-5, 5px);
   }
 
   :deep(.color-option--custom) {
     width: auto;
-    padding: 0 7px;
-    gap: 5px;
+    padding: 0 var(--ui-space-7, 7px);
+    gap: var(--ui-space-5, 5px);
   }
 
   :deep(.color-option:hover) {
@@ -665,8 +674,8 @@
   }
 
   .color-dot {
-    width: 14px;
-    height: 14px;
+    width: var(--ui-layout-14, 14px);
+    height: var(--ui-layout-14, 14px);
     flex: 0 0 auto;
     border: 1px solid color-mix(in srgb, var(--text-color) 18%, transparent);
     border-radius: 50%;
@@ -691,22 +700,22 @@
 
   .default-color-text,
   .custom-color-text {
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .icon-grid {
     display: grid;
     grid-template-columns: repeat(6, minmax(0, 1fr));
-    gap: 10px;
-    padding: 16px 0;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-16, 16px) 0;
   }
 
   :deep(.icon-option) {
     width: 100%;
-    height: 76px;
-    padding: 8px 4px;
+    height: var(--ui-layout-76, 76px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-4, 4px);
     flex-direction: column;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     line-height: 1.1;
     overflow: hidden;
     color: var(--text-color);
@@ -717,7 +726,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     color: var(--desc-color);
   }
 
@@ -726,12 +735,12 @@
   }
 
   .empty-state {
-    min-height: 240px;
+    min-height: var(--ui-layout-240, 240px);
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     text-align: center;
     color: var(--desc-color);
   }
@@ -741,12 +750,12 @@
   }
 
   .picker-footer {
-    min-height: 32px;
+    min-height: var(--ui-layout-32, 32px);
   }
 
   .picker-footer a {
     color: var(--resource-tag-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   @media (max-width: 720px) {
@@ -781,22 +790,23 @@
 <style lang="less">
   /* BPopover 会 Teleport 到 body，取色浮层样式必须使用非 scoped 选择器。 */
   .tag-icon-color-popover {
-    width: 224px;
-    padding: 12px;
+    width: var(--ui-layout-224, 224px);
+    padding: var(--ui-space-12, 12px);
     box-sizing: border-box;
     border: 1px solid color-mix(in srgb, var(--card-border-color) 64%, transparent);
   }
 
   .tag-icon-color-picker {
+    font-size: var(--ui-font-16, 16px);
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .tag-icon-color-plane {
     position: relative;
     width: 100%;
-    height: 132px;
+    height: var(--ui-layout-132, 132px);
     overflow: hidden;
     border-radius: 9px;
     cursor: crosshair;
@@ -812,8 +822,8 @@
 
   .tag-icon-color-handle {
     position: absolute;
-    width: 14px;
-    height: 14px;
+    width: var(--ui-layout-14, 14px);
+    height: var(--ui-layout-14, 14px);
     border: 2px solid #ffffff;
     border-radius: 50%;
     box-sizing: border-box;
@@ -824,7 +834,7 @@
 
   .tag-icon-hue-slider {
     width: 100%;
-    height: 12px;
+    height: var(--ui-layout-12, 12px);
     margin: 0;
     border: 0;
     border-radius: 999px;
@@ -834,8 +844,8 @@
   }
 
   .tag-icon-hue-slider::-webkit-slider-thumb {
-    width: 16px;
-    height: 16px;
+    width: var(--ui-layout-16, 16px);
+    height: var(--ui-layout-16, 16px);
     border: 2px solid #ffffff;
     border-radius: 50%;
     appearance: none;
@@ -844,8 +854,8 @@
   }
 
   .tag-icon-hue-slider::-moz-range-thumb {
-    width: 13px;
-    height: 13px;
+    width: var(--ui-layout-13, 13px);
+    height: var(--ui-layout-13, 13px);
     border: 2px solid #ffffff;
     border-radius: 50%;
     background: transparent;
@@ -855,12 +865,12 @@
   .tag-icon-color-value {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .tag-icon-color-preview {
-    width: 30px;
-    height: 30px;
+    width: var(--ui-layout-30, 30px);
+    height: var(--ui-layout-30, 30px);
     flex: 0 0 auto;
     border: 1px solid color-mix(in srgb, var(--text-color) 18%, transparent);
     border-radius: 8px;

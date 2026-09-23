@@ -95,19 +95,19 @@
 <style scoped lang="less">
   .todo-reminder-editor-v3 {
     display: grid;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
 
   .todo-reminder-editor-v3__email small {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.5;
   }
 
   .todo-reminder-editor-v3__mode {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    padding: 3px;
+    padding: var(--ui-space-3, 3px);
     border-radius: 11px;
     background: var(--workspace-panel-bg-color);
   }
@@ -128,9 +128,9 @@
 
   @media (max-width: 767px) {
     .todo-reminder-editor-v3__mode :deep(.b_btn) {
-      height: 44px;
-      min-height: 44px;
-      padding: 0 4px;
+      height: var(--ui-layout-44, 44px);
+      min-height: var(--ui-layout-44, 44px);
+      padding: 0 var(--ui-space-4, 4px);
       line-height: 1.35;
       white-space: nowrap;
     }
@@ -139,15 +139,15 @@
   .todo-reminder-editor-v3__channels {
     display: flex;
     flex-wrap: wrap;
-    gap: 12px;
-    padding-top: 4px;
+    gap: var(--ui-space-12, 12px);
+    padding-top: var(--ui-space-4, 4px);
   }
 
   .todo-reminder-editor-v3__email {
     display: grid;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 600;
   }
 </style>

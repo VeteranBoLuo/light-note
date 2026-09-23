@@ -113,9 +113,9 @@
 </script>
 <style scoped lang="less">
   .icon-suggestion {
-    padding: 18px;
+    padding: var(--ui-space-18, 18px);
     display: grid;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
     min-width: 0;
   }
   .icon-suggestion-heading,
@@ -124,7 +124,7 @@
   .icon-comparison {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     flex-wrap: wrap;
   }
   .icon-suggestion-heading {
@@ -134,9 +134,9 @@
   .icon-after {
     display: grid;
     justify-items: center;
-    gap: 8px;
-    padding: 12px;
-    min-width: 72px;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-12, 12px);
+    min-width: var(--ui-layout-72, 72px);
     border: 1px solid var(--border-color);
     border-radius: 10px;
   }
@@ -147,8 +147,8 @@
     border-color: var(--primary-color);
   }
   .icon-alternatives :deep(.b_btn) {
-    min-width: 44px;
-    min-height: 44px;
+    min-width: var(--ui-control-44, 44px);
+    min-height: var(--ui-control-44, 44px);
   }
   .icon-alternatives .chosen {
     border: 1px solid var(--primary-color);
@@ -157,7 +157,7 @@
   p,
   small {
     margin: 0;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--text-secondary-color);
   }
   .icon-actions {

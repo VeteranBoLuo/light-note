@@ -23,9 +23,9 @@
     --b-chip-bg: var(--card-background);
     --b-chip-bg: color-mix(in srgb, var(--b-chip-fg) 7%, var(--card-background));
     min-height: 0;
-    padding: 1px 6px;
-    font-size: 9px;
-    line-height: 14px;
+    padding: var(--ui-space-1, 1px) var(--ui-space-6, 6px);
+    font-size: var(--ui-font-9, 9px);
+    line-height: var(--ui-layout-14, 14px);
     font-weight: 700;
   }
 

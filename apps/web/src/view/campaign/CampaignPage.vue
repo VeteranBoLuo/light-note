@@ -152,11 +152,11 @@
   .campaign-page__back {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px;
-    padding: 12px 20px;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-12, 12px) var(--ui-space-20, 20px);
   }
   .campaign-page__state {
     text-align: center;
-    padding: 60px 20px;
+    padding: var(--ui-space-60, 60px) var(--ui-space-20, 20px);
   }
 </style>

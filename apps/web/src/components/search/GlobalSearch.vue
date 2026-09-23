@@ -106,7 +106,7 @@
                             :tag="tag"
                             :selected="isTagHit(tag.name)"
                             show-hash
-                            max-width="100px"
+                            max-width="var(--ui-layout-100, 100px)"
                           />
                         </span>
                       </span>
@@ -386,12 +386,12 @@
 
 <style scoped lang="less">
   .global-search {
-    width: 38px;
-    flex: 0 0 38px;
+    width: var(--ui-layout-38, 38px);
+    flex: 0 0 var(--ui-layout-38, 38px);
   }
   .global-search__trigger {
-    width: 36px;
-    height: 36px;
+    width: var(--ui-control-36, 36px);
+    height: var(--ui-control-36, 36px);
     padding: 0;
     border-radius: 10px;
     color: var(--text-color);
@@ -404,16 +404,16 @@
   .global-search__workshop.b_btn {
     width: 100%;
     height: auto;
-    padding: 12px;
-    gap: 12px;
+    padding: var(--ui-space-12, 12px);
+    gap: var(--ui-space-12, 12px);
     text-align: left;
     white-space: normal;
-    margin-bottom: 12px;
+    margin-bottom: var(--ui-space-12, 12px);
     border: 1px solid var(--surface-border-color);
   }
   .global-search__workshop span {
     display: grid;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
   .global-search__workshop small {
     color: var(--desc-color);
@@ -425,7 +425,7 @@
     position: fixed;
     z-index: 1000;
     inset: 0;
-    padding: 76px 20px 24px;
+    padding: var(--ui-space-76, 76px) var(--ui-space-20, 20px) var(--ui-space-24, 24px);
     display: flex;
     align-items: flex-start;
     justify-content: center;
@@ -435,9 +435,10 @@
     animation: global-search-fade 0.14s ease-out;
   }
   .global-search-dialog {
-    width: min(720px, calc(100vw - 40px));
+    font-size: var(--ui-font-16, 16px);
+    width: min(var(--ui-layout-720, 720px), calc(100vw - var(--ui-space-40, 40px)));
     // 各搜索状态共用固定外框；小窗口按可用高度收缩，结果区独立滚动。
-    height: min(600px, calc(100vh - 100px));
+    height: min(var(--ui-layout-600, 600px), calc(100vh - var(--ui-space-100, 100px)));
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
@@ -451,30 +452,30 @@
   }
   .global-search-dialog__header {
     flex-shrink: 0;
-    padding: 18px 18px 14px;
+    padding: var(--ui-space-18, 18px) var(--ui-space-18, 18px) var(--ui-space-14, 14px);
     border-bottom: 1px solid var(--surface-divider-color);
   }
   .global-search-dialog__heading {
-    margin-bottom: 13px;
+    margin-bottom: var(--ui-space-13, 13px);
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
   }
   .global-search-dialog__heading > div {
     display: grid;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
   .global-search-dialog__heading strong {
-    font-size: 18px;
+    font-size: var(--ui-font-18, 18px);
   }
   .global-search-dialog__heading span {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .global-search-dialog__heading > .b_btn {
-    width: 32px;
-    height: 32px;
+    width: var(--ui-control-32, 32px);
+    height: var(--ui-control-32, 32px);
     padding: 0;
     color: var(--desc-color);
     background: transparent;
@@ -483,42 +484,42 @@
     position: relative;
   }
   .global-search-dialog__input .b-input {
-    padding-right: 72px !important;
+    padding-right: var(--ui-space-72, 72px) !important;
     border-radius: 14px;
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
   }
   .global-search-dialog__input .prefix-icon {
     color: var(--workspace-purple-text);
   }
   .global-search-dialog__input kbd {
-    padding: 2px 5px;
+    padding: var(--ui-space-2, 2px) var(--ui-space-5, 5px);
     border: 1px solid var(--surface-border-color);
     border-radius: 6px;
     color: var(--desc-color);
     background: transparent;
     font-family: inherit;
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
   .global-search-dialog__body {
     flex: 1 1 0;
     min-height: 0;
-    padding: 6px 12px 12px;
+    padding: var(--ui-space-6, 6px) var(--ui-space-12, 12px) var(--ui-space-12, 12px);
     overflow-y: auto;
     overscroll-behavior: contain;
   }
   .global-search-group {
-    margin-top: 10px;
+    margin-top: var(--ui-space-10, 10px);
   }
   .global-search-group h3 {
-    margin: 0 8px 5px;
+    margin: 0 var(--ui-space-8, 8px) var(--ui-space-5, 5px);
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 700;
     letter-spacing: 0.04em;
   }
   .global-search-result {
     width: 100%;
-    min-height: 58px;
+    min-height: var(--ui-layout-58, 58px);
     display: grid;
     grid-template-columns: minmax(0, 1fr) max-content;
     align-items: center;
@@ -531,12 +532,12 @@
   .global-search-result__open.b_btn {
     width: 100%;
     height: auto;
-    min-height: 58px;
-    padding: 8px 7px 8px 9px;
+    min-height: var(--ui-layout-58, 58px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-7, 7px) var(--ui-space-8, 8px) var(--ui-space-9, 9px);
     display: grid;
     grid-template-columns: 9px minmax(0, 1fr);
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     border-radius: 12px;
     text-align: left;
     white-space: normal;
@@ -570,19 +571,19 @@
   .global-search-result__main {
     min-width: 0;
     display: grid;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
   .global-search-result__title-row {
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   .global-search-result__title {
     min-width: 0;
     overflow: hidden;
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 680;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -590,26 +591,26 @@
   .global-search-result__tags {
     min-width: 0;
     display: flex;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
     overflow: hidden;
   }
   .global-search-result__description {
     overflow: hidden;
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.45;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
   .global-search-result__extra {
-    max-width: 170px;
-    padding-right: 9px;
+    max-width: var(--ui-layout-170, 170px);
+    padding-right: var(--ui-space-9, 9px);
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
     overflow: hidden;
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     white-space: nowrap;
     text-overflow: ellipsis;
   }
@@ -618,14 +619,14 @@
     text-overflow: ellipsis;
   }
   .global-search-result__extra .b_btn {
-    width: 28px;
-    height: 28px;
+    width: var(--ui-control-28, 28px);
+    height: var(--ui-control-28, 28px);
     padding: 0;
     color: var(--desc-color);
     background: transparent !important;
   }
   .global-search-dialog mark.gs-hl {
-    padding: 0 1px;
+    padding: 0 var(--ui-space-1, 1px);
     border-radius: 3px;
     color: inherit;
     background: color-mix(in srgb, var(--primary-color) 25%, transparent);
@@ -651,16 +652,16 @@
     animation: global-search-shimmer 1.4s infinite;
   }
   .global-search-group h3.global-search__skeleton-heading {
-    width: 48px;
+    width: var(--ui-layout-48, 48px);
     height: 12px;
-    margin: 0 8px 5px;
+    margin: 0 var(--ui-space-8, 8px) var(--ui-space-5, 5px);
   }
   .global-search__skeleton-row {
     display: flex;
     align-items: center;
-    gap: 10px;
-    height: 58px;
-    padding: 8px 9px;
+    gap: var(--ui-space-10, 10px);
+    height: var(--ui-layout-58, 58px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-9, 9px);
     box-sizing: border-box;
   }
   .global-search__skeleton-dot {
@@ -672,7 +673,7 @@
     flex: 1;
     min-width: 0;
     display: grid;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
   }
   .global-search__skeleton-title {
     width: 62%;
@@ -689,7 +690,7 @@
     width: 72%;
   }
   .global-search__skeleton-meta {
-    flex: 0 0 68px;
+    flex: 0 0 var(--ui-layout-68, 68px);
     height: 10px;
   }
   .global-search__empty {
@@ -702,9 +703,9 @@
     text-align: center;
   }
   .global-search__empty-icon {
-    width: 54px;
-    height: 54px;
-    margin-bottom: 12px;
+    width: var(--ui-layout-54, 54px);
+    height: var(--ui-layout-54, 54px);
+    margin-bottom: var(--ui-space-12, 12px);
     display: grid;
     place-items: center;
     border: 1px solid var(--surface-border-color);
@@ -716,29 +717,29 @@
     color: var(--text-color);
   }
   .global-search__empty > span:last-child {
-    margin-top: 5px;
-    font-size: 12px;
+    margin-top: var(--ui-space-5, 5px);
+    font-size: var(--ui-font-12, 12px);
   }
   .global-search-dialog__footer {
     flex-shrink: 0;
-    min-height: 49px;
-    padding: 8px 14px;
+    min-height: var(--ui-layout-49, 49px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-14, 14px);
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 13px;
+    gap: var(--ui-space-13, 13px);
     border-top: 1px solid var(--surface-divider-color);
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
   .global-search-dialog__footer span {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
     white-space: nowrap;
   }
   .global-search-dialog__footer kbd {
-    padding: 2px 5px;
+    padding: var(--ui-space-2, 2px) var(--ui-space-5, 5px);
     border: 1px solid var(--surface-border-color);
     border-radius: 5px;
     background: var(--card-background);
@@ -747,13 +748,13 @@
   .global-search-dialog__footer > .global-search-dialog__view-all {
     margin-left: auto;
     flex-shrink: 0;
-    gap: 8px;
-    padding: 0 12px;
+    gap: var(--ui-space-8, 8px);
+    padding: 0 var(--ui-space-12, 12px);
     border: 1px solid color-mix(in srgb, var(--primary-color) 18%, var(--surface-border-color));
     border-radius: 9px;
     color: var(--workspace-purple-text);
     background: var(--workspace-purple-selected);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 600;
     transition:
       background-color 0.18s ease,

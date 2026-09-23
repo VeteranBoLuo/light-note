@@ -256,7 +256,7 @@
     min-width: 0;
     box-sizing: border-box;
     display: grid;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
     color: var(--text-color);
   }
 
@@ -265,36 +265,36 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
   }
 
   .community-notification-settings__head-copy,
   .community-notification-settings__explanation {
     min-width: 0;
     display: grid;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
   }
 
   .community-notification-settings__head strong,
   .community-notification-settings__explanation strong {
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .community-notification-settings__head-copy > span,
   .community-notification-settings__explanation span,
   .community-notification-settings__hint {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.6;
   }
 
   .community-notification-settings__state {
-    min-height: 112px;
+    min-height: var(--ui-layout-112, 112px);
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     border: 1px solid var(--surface-border-color);
     border-radius: 14px;
     background: var(--workspace-panel-bg-color);
@@ -303,29 +303,29 @@
   .community-notification-settings__state.is-error {
     flex-direction: column;
     color: var(--danger-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .community-notification-settings__rail {
     min-width: 0;
     display: grid;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .community-notification-settings__option {
     width: 100%;
     height: auto;
-    min-height: 42px;
-    padding: 8px 7px;
+    min-height: var(--ui-layout-42, 42px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-7, 7px);
     display: flex;
     justify-content: center;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     border: 1px solid var(--surface-border-color) !important;
     border-radius: 10px;
     color: var(--desc-color);
     background: var(--card-background) !important;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     white-space: normal;
   }
 
@@ -360,8 +360,8 @@
   }
 
   .community-notification-settings__explanation {
-    min-height: 58px;
-    padding: 10px 12px;
+    min-height: var(--ui-layout-58, 58px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     box-sizing: border-box;
     border: 1px solid var(--primary-color);
     border-radius: 12px;
@@ -372,21 +372,21 @@
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .community-notification-settings__channels span {
-    min-height: 26px;
-    padding: 3px 9px;
+    min-height: var(--ui-layout-26, 26px);
+    padding: var(--ui-space-3, 3px) var(--ui-space-9, 9px);
     box-sizing: border-box;
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     border: 1px solid var(--surface-border-color);
     border-radius: 999px;
     color: var(--desc-color);
     background: var(--card-background);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
 
   .community-notification-settings__channels span.is-active {
@@ -402,12 +402,12 @@
   }
 
   .community-notification-settings__hint {
-    margin: -6px 0 0;
+    margin: calc(-1 * var(--ui-space-6, 6px)) 0 0;
   }
 
   .community-notification-settings.is-compact {
-    gap: 11px;
-    padding: 14px;
+    gap: var(--ui-space-11, 11px);
+    padding: var(--ui-space-14, 14px);
     border: 1px solid var(--surface-border-color);
     border-radius: 16px;
     background: var(--card-background);
@@ -415,13 +415,13 @@
 
   .is-compact .community-notification-settings__head {
     align-items: flex-start;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .community-notification-settings__head-icon {
-    width: 32px;
-    height: 32px;
-    flex: 0 0 32px;
+    width: var(--ui-layout-32, 32px);
+    height: var(--ui-layout-32, 32px);
+    flex: 0 0 var(--ui-layout-32, 32px);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -433,7 +433,7 @@
 
   .is-compact .community-notification-settings__head-copy {
     flex: 1;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
 
   .is-compact .community-notification-settings__head-copy > span {
@@ -441,35 +441,35 @@
   }
 
   .is-compact .community-notification-settings__rail {
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
 
   .is-compact .community-notification-settings__option {
-    min-height: 40px;
-    padding: 7px 6px;
+    min-height: var(--ui-layout-40, 40px);
+    padding: var(--ui-space-7, 7px) var(--ui-space-6, 6px);
   }
 
   .community-notification-settings__compact-results {
     min-width: 0;
-    min-height: 36px;
-    padding: 8px 10px;
+    min-height: var(--ui-layout-36, 36px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px);
     box-sizing: border-box;
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 5px 16px;
+    gap: var(--ui-space-5, 5px) var(--ui-space-16, 16px);
     border: 1px solid var(--surface-border-color);
     border-radius: 10px;
     color: var(--desc-color);
     background: var(--workspace-panel-bg-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     line-height: 1.5;
   }
 
   .community-notification-settings__compact-result {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
 
   .community-notification-settings__compact-result.is-badge {

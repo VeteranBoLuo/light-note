@@ -8,7 +8,7 @@ import { createPinia } from 'pinia';
 import TodoItem from './TodoItem.vue';
 import type { TodoItem as TodoItemType } from '@/api/todoApi';
 
-const todoItemSource = readFileSync(resolve(process.cwd(), 'src/components/todo/TodoItem.vue'), 'utf8');
+const todoItemSource = readFileSync(resolve(process.cwd(), 'src/components/todo/TodoItem.vue'), 'utf8').replace(/var\(--ui-(?:space|control|layout|font|card)-\d+, (\d+px)\)/g, '$1');
 
 const routerPush = vi.fn();
 const { recordOperation } = vi.hoisted(() => ({ recordOperation: vi.fn() }));
@@ -309,6 +309,29 @@ describe('TodoItem card preview', () => {
     await nextTick();
 
     expect(onPreview).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([false, true])('展开额外参考资料不触发预览或批量选择（批量模式：%s）', async (selectable) => {
+    const first = todo.resourceRefs![0];
+    const { host, onPreview, onSelect } = mountTodoItem({
+      ...todo,
+      resourceRefs: [first, { ...first, id: 'note-2', title: '第二条资料' }, { ...first, id: 'missing', available: false }],
+    }, { selectable });
+    await nextTick();
+
+    expect(host.querySelectorAll('.todo-resource-link')).toHaveLength(1);
+    const more = host.querySelector<HTMLButtonElement>('.todo-resource-refs__more')!;
+    expect(more.textContent?.trim()).toBe('+2');
+    more.click();
+    await nextTick();
+
+    const links = document.querySelectorAll<HTMLButtonElement>('.b-popover-panel .todo-resource-link__open');
+    expect(links).toHaveLength(2);
+    expect(links[1].disabled).toBe(true);
+    links[0].click();
+    expect(routerPush).toHaveBeenCalledWith(expect.objectContaining({ path: '/noteLibrary/note-2' }));
+    expect(onPreview).not.toHaveBeenCalled();
+    expect(onSelect).not.toHaveBeenCalled();
   });
 
   it('从待办打开关联笔记时携带当前待办地址', async () => {

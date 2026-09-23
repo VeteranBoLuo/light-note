@@ -3,7 +3,7 @@
     :visible="open"
     @update:visible="emit('update:open', $event)"
     :title="`${list.name} · ${t('todoWorkspace.manageAssociations')}`"
-    width="720px"
+    width="var(--ui-layout-720, 720px)"
     :show-footer="false"
   >
     <div class="todo-list-associations">
@@ -52,7 +52,7 @@
                   <SvgIcon :src="icon.common.folderOutline" size="14" aria-hidden="true" />
                   {{ item.list?.name || t('todoWorkspace.unassigned') }}
                 </span>
-                <ResourceTagChip v-for="tag in item.tags" :key="tag.id" :tag="tag" max-width="180px" />
+                <ResourceTagChip v-for="tag in item.tags" :key="tag.id" :tag="tag" max-width="var(--ui-layout-180, 180px)" />
               </div>
               <div v-if="item.startAt || item.dueAt || item.occurrenceDate" class="todo-list-associations__dates">
                 <span v-if="item.startAt">{{ t('inbox.todoStarts', { time: formatTime(item.startAt) }) }}</span>
@@ -226,36 +226,36 @@
 <style scoped lang="less">
   .todo-list-associations {
     display: grid;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
     min-width: 0;
   }
   .todo-list-associations > p {
     margin: 0;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.6;
   }
   .todo-list-associations__rows {
-    height: 430px;
+    height: var(--ui-layout-430, 430px);
     max-height: 50vh;
   }
   .todo-list-associations__row {
     display: flex;
     align-items: flex-start;
-    gap: 16px;
-    padding: 18px 12px;
+    gap: var(--ui-space-16, 16px);
+    padding: var(--ui-space-18, 18px) var(--ui-space-12, 12px);
     border-bottom: 1px solid var(--surface-border-color);
   }
   .todo-list-associations__content {
     display: grid;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     min-width: 0;
     flex: 1;
   }
   .todo-list-associations__row strong {
     font-weight: 600;
     overflow-wrap: anywhere;
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
   }
   .todo-list-associations__heading,
   .todo-list-associations__metadata,
@@ -263,22 +263,22 @@
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 6px 12px;
+    gap: var(--ui-space-6, 6px) var(--ui-space-12, 12px);
     line-height: 1.6;
   }
   .todo-list-associations__heading {
-    gap: 6px 8px;
+    gap: var(--ui-space-6, 6px) var(--ui-space-8, 8px);
   }
   .todo-list-associations__metadata,
   .todo-list-associations__dates,
   .todo-list-associations__description {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .todo-list-associations__metadata > span {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
     min-width: 0;
     overflow-wrap: anywhere;
   }
@@ -306,13 +306,13 @@
   }
   @media (max-width: 600px) {
     .todo-list-associations__row {
-      padding: 16px 2px;
-      gap: 10px;
+      padding: var(--ui-space-16, 16px) var(--ui-space-2, 2px);
+      gap: var(--ui-space-10, 10px);
     }
     .todo-list-associations__dates {
       flex-direction: column;
       align-items: flex-start;
-      gap: 2px;
+      gap: var(--ui-space-2, 2px);
     }
   }
   .todo-list-associations__row .b_btn {
@@ -326,8 +326,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     color: var(--danger-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 </style>

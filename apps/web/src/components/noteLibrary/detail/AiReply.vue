@@ -105,11 +105,13 @@
 
     <div class="ai-output">
       <div class="output-header">
-        <span style="max-width: 100px; min-width: 0" class="text-hidden">{{ t('ai.reply.outputTitle') }}</span>
+        <span style="max-width: var(--ui-layout-100, 100px); min-width: 0" class="text-hidden">{{
+          t('ai.reply.outputTitle')
+        }}</span>
         <div v-if="outputFull" class="output-actions">
           <BButton
             v-if="canApplyBody"
-            style="max-width: 100px"
+            style="max-width: var(--ui-layout-100, 100px)"
             class="ghost-btn text-hidden"
             @click="requestApply('body')"
             :title="t('ai.reply.replaceContent')"
@@ -118,7 +120,7 @@
           >
           <BButton
             v-if="canApplyTitle"
-            style="max-width: 100px"
+            style="max-width: var(--ui-layout-100, 100px)"
             class="ghost-btn text-hidden"
             @click="requestApply('title')"
             :title="t('ai.reply.replaceTitle')"
@@ -799,6 +801,7 @@
 
 <style lang="less" scoped>
   .ai-container {
+    font-size: var(--ui-font-16, 16px);
     --ai-section-bg: #f8f9ff;
     --ai-section-border: #e1e5f0;
     --ai-action-bg: #ffffff;
@@ -808,26 +811,26 @@
     height: 100%;
     background: var(--workspace-panel-bg-color);
     border-radius: 0;
-    padding: 16px;
+    padding: var(--ui-space-16, 16px);
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     border: 0;
   }
 
   .ai-header {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    padding: 2px 0 12px;
+    gap: var(--ui-space-6, 6px);
+    padding: var(--ui-space-2, 2px) 0 var(--ui-space-12, 12px);
     border-bottom: 1px solid var(--ai-section-border);
   }
   .ai-title {
     display: flex;
     align-items: center;
-    gap: 8px;
-    font-size: 15px;
+    gap: var(--ui-space-8, 8px);
+    font-size: var(--ui-font-15, 15px);
     font-weight: 700;
     letter-spacing: 0.01em;
     color: var(--text-color);
@@ -841,7 +844,7 @@
     box-sizing: border-box;
   }
   .ai-subtitle {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
   }
 
@@ -849,10 +852,10 @@
     background: var(--ai-section-bg);
     border: 1px solid var(--ai-section-border);
     border-radius: 10px;
-    padding: 10px 12px;
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .meta-row {
     display: flex;
@@ -860,14 +863,14 @@
     justify-content: space-between;
     flex: 1;
     min-width: 0;
-    gap: 8px;
-    font-size: 12px;
+    gap: var(--ui-space-8, 8px);
+    font-size: var(--ui-font-12, 12px);
   }
   .meta-row:first-child {
     flex: 1.6;
   }
   .meta-row + .meta-row {
-    padding-left: 12px;
+    padding-left: var(--ui-space-12, 12px);
     border-left: 1px solid var(--surface-divider-color);
   }
   .meta-row .label {
@@ -889,15 +892,15 @@
   .ai-actions {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .action-btn {
     width: 100%;
-    height: 32px;
+    height: var(--ui-control-32, 32px);
     border: 1px solid var(--ai-section-border);
     background: var(--ai-action-bg);
     border-radius: 8px;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 500;
     color: var(--text-color);
     cursor: pointer;
@@ -914,27 +917,27 @@
 
   .ai-input {
     display: grid;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     --ai-requirement-bg: var(--card-background);
     --ai-requirement-border: var(--surface-border-color);
     --ai-requirement-text: var(--text-color);
     --ai-requirement-placeholder: var(--desc-color);
   }
   .input-label {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--sub-text-color, var(--text-color));
     font-weight: 600;
   }
   .ai-input :deep(.b-textarea) {
     width: 100%;
-    min-height: 56px;
-    max-height: 120px;
+    min-height: var(--ui-layout-56, 56px);
+    max-height: var(--ui-layout-120, 120px);
     resize: vertical;
     border: 1px solid var(--ai-requirement-border);
     border-radius: 8px;
     box-sizing: border-box;
-    padding: 8px 10px;
-    font-size: 12px;
+    padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px);
+    font-size: var(--ui-font-12, 12px);
     background-color: var(--ai-requirement-bg) !important;
     color: var(--ai-requirement-text);
     outline: none;
@@ -958,12 +961,12 @@
   }
   .primary-btn {
     width: 100%;
-    height: 34px;
+    height: var(--ui-control-34, 34px);
     border: none;
     border-radius: 8px;
     background: linear-gradient(135deg, #6b7cff, #4e5bff);
     color: #ffffff;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     cursor: pointer;
   }
   .primary-btn:disabled {
@@ -973,17 +976,17 @@
 
   .stop-btn {
     width: 100%;
-    height: 34px;
+    height: var(--ui-control-34, 34px);
     border: 1px solid color-mix(in srgb, var(--message-error-color) 42%, var(--surface-border-color));
     border-radius: 8px;
     background: color-mix(in srgb, var(--message-error-color) 8%, var(--card-background));
     color: var(--message-error-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     transition: all 0.2s;
   }
   .stop-btn:hover {
@@ -998,8 +1001,8 @@
   }
 
   .ai-output {
-    flex: 1 1 280px;
-    min-height: 220px;
+    flex: 1 1 var(--ui-layout-280, 280px);
+    min-height: var(--ui-layout-220, 220px);
     min-width: 0;
     display: flex;
     flex-direction: column;
@@ -1009,28 +1012,28 @@
     overflow: hidden;
   }
   .output-header {
-    padding: 10px 12px;
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     display: flex;
     justify-content: space-between;
     align-items: center;
     border-bottom: 1px solid var(--surface-divider-color);
     background: var(--ai-output-header-bg);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--sub-text-color, var(--text-color));
     font-weight: 600;
   }
   .output-actions {
     display: flex;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
     flex-shrink: 0;
   }
   .ghost-btn {
-    height: 26px;
+    height: var(--ui-control-26, 26px);
     border: 1px solid var(--surface-border-color);
     background: var(--workspace-panel-bg-color);
     border-radius: 6px;
-    font-size: 11px;
-    padding: 0 8px;
+    font-size: var(--ui-font-11, 11px);
+    padding: 0 var(--ui-space-8, 8px);
     cursor: pointer;
     color: var(--desc-color);
     white-space: nowrap;
@@ -1042,7 +1045,7 @@
   }
   /* 放大/清空为图标按钮:窄面板里一行放得下 4 个动作,文字动作(插入/替换标题)保留可读 */
   .icon-btn {
-    width: 28px;
+    width: var(--ui-layout-28, 28px);
     padding: 0;
     display: inline-flex;
     align-items: center;
@@ -1056,17 +1059,17 @@
   .output-body {
     flex: 1 1 auto;
     min-height: 0;
-    padding: 12px;
+    padding: var(--ui-space-12, 12px);
     overflow: auto;
     box-sizing: border-box;
     background: var(--ai-output-body-bg);
   }
   .format-warning {
-    padding: 8px 12px;
+    padding: var(--ui-space-8, 8px) var(--ui-space-12, 12px);
     border-bottom: 1px solid color-mix(in srgb, var(--resource-file-color) 24%, transparent);
     background: color-mix(in srgb, var(--resource-file-color) 10%, transparent);
     color: color-mix(in srgb, var(--resource-file-color) 75%, var(--text-color));
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.5;
   }
   .truncation-warning,
@@ -1074,10 +1077,10 @@
   .generation-status {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 8px 12px;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-12, 12px);
     border-bottom: 1px solid var(--card-border-color, rgba(0, 0, 0, 0.08));
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.5;
   }
   .truncation-warning,
@@ -1094,7 +1097,7 @@
     background: color-mix(in srgb, var(--resource-note-color) 5%, var(--card-background));
   }
   .generation-status :deep(.b-loading-inline) {
-    min-height: 20px;
+    min-height: var(--ui-layout-20, 20px);
     color: inherit;
     font-size: inherit;
   }
@@ -1113,7 +1116,7 @@
   }
   .truncation-warning > span,
   .generation-feedback > span {
-    flex: 1 1 140px;
+    flex: 1 1 var(--ui-layout-140, 140px);
     min-width: 0;
   }
   .generation-feedback-actions {
@@ -1121,22 +1124,22 @@
     flex: 0 0 auto;
     flex-wrap: wrap;
     justify-content: flex-end;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   .status-action-btn {
-    height: 24px;
-    padding: 0 7px;
+    height: var(--ui-control-24, 24px);
+    padding: 0 var(--ui-space-7, 7px);
     border: 1px solid var(--card-border-color, rgba(0, 0, 0, 0.1));
     border-radius: 6px;
     background: var(--card-background);
     color: inherit;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     white-space: nowrap;
   }
   .title-suggestion {
     display: grid;
-    gap: 4px;
-    padding: 8px 12px 9px;
+    gap: var(--ui-space-4, 4px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-12, 12px) var(--ui-space-9, 9px);
     border-bottom: 1px solid color-mix(in srgb, var(--resource-note-color) 20%, transparent);
     background: linear-gradient(
       90deg,
@@ -1146,15 +1149,15 @@
   }
   .title-suggestion .title-suggestion-label {
     width: fit-content;
-    padding: 1px 6px;
+    padding: var(--ui-space-1, 1px) var(--ui-space-6, 6px);
     border-radius: 4px;
     background: color-mix(in srgb, var(--resource-note-color) 12%, transparent);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     line-height: 1.4;
     letter-spacing: 0.02em;
   }
   .title-suggestion .title-suggestion-value {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.45;
   }
   .title-suggestion-label {
@@ -1171,6 +1174,7 @@
   }
   .output-body :deep(.typewriter-content) {
     margin: 0;
+    /* ui-density-fixed: AI 结果正文排版独立于界面密度。 */
     font-size: 12px;
     line-height: 1.5;
     color: var(--text-color);
@@ -1183,6 +1187,7 @@
     white-space: pre-wrap;
   }
   .output-body :deep(p) {
+    /* ui-density-fixed: AI 结果正文排版独立于界面密度。 */
     margin: 0 0 6px;
   }
   .output-body :deep(h1),
@@ -1191,22 +1196,27 @@
   .output-body :deep(h4),
   .output-body :deep(h5),
   .output-body :deep(h6) {
+    /* ui-density-fixed: AI 结果正文排版独立于界面密度。 */
     margin: 9px 0 4px;
     line-height: 1.4;
   }
   .output-body :deep(ul),
   .output-body :deep(ol) {
+    /* ui-density-fixed: AI 结果正文排版独立于界面密度。 */
     margin: 5px 0;
     padding-left: 1.55em;
   }
   .output-body :deep(li) {
+    /* ui-density-fixed: AI 结果正文排版独立于界面密度。 */
     margin: 2px 0;
   }
   .output-body :deep(li > ul),
   .output-body :deep(li > ol) {
+    /* ui-density-fixed: AI 结果正文排版独立于界面密度。 */
     margin: 2px 0;
   }
   .output-body :deep(blockquote) {
+    /* ui-density-fixed: AI 结果正文排版独立于界面密度。 */
     margin: 6px 0;
   }
   .output-body :deep(.typewriter-content--markup > :first-child) {
@@ -1221,6 +1231,7 @@
   }
   /* 旧的统一 8px margin 会同时叠加在列表容器和每个 li 上，窄栏里显得松散。 */
   .output-body :deep(pre) {
+    /* ui-density-fixed: AI 结果正文排版独立于界面密度。 */
     margin: 6px 0;
   }
   .output-body :deep(p:last-child),
@@ -1238,7 +1249,7 @@
   }
   .empty {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   [data-theme='night'] .ai-container {
@@ -1308,20 +1319,21 @@
 
   /* 放大预览窗:定宽约束 BModal 的 min-width:max-content,给足阅读空间 */
   .ai-preview {
-    width: 680px;
+    font-size: var(--ui-font-16, 16px);
+    width: var(--ui-layout-680, 680px);
     max-width: 86vw;
     box-sizing: border-box;
   }
   /* 放大预览:左「原文」/ 右「AI 生成」对比,窗口更宽 */
   .ai-preview--split {
-    width: min(980px, 92vw);
+    width: min(var(--ui-layout-980, 980px), 92vw);
   }
   .ai-preview-split {
     display: grid;
     /* minmax(0,1fr) 而非 1fr:grid item 默认 min-width:auto,列内 v-html 的宽元素(code/表格)会按 min-content
        把本列撑大、把另一列挤没。minmax(0,…) 强制两列可收缩到 0 再均分,两栏才各占稳定的一半宽度。 */
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
     align-items: stretch;
   }
   /* 每栏 = 列头 + 内容区,整栏定高 68vh、内容区撑满并各自滚动(左右是不同内容,不做联动) */
@@ -1333,17 +1345,17 @@
   }
   .ai-preview-col-head {
     flex: 0 0 auto;
-    margin-bottom: 8px;
-    padding-bottom: 6px;
+    margin-bottom: var(--ui-space-8, 8px);
+    padding-bottom: var(--ui-space-6, 6px);
     border-bottom: 1px solid var(--card-border-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 600;
     color: var(--desc-color);
   }
   .ai-preview-col--origin .ai-preview-body {
     background: var(--workbench-subcard-bg, var(--card-background));
     border-radius: 8px;
-    padding: 10px 12px;
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
   }
   /* 窄屏/移动端:单栏只保留「AI 生成」(原文可回编辑器看),避免两栏挤压 */
   @media (max-width: 768px) {
@@ -1368,9 +1380,9 @@
   /* 放大预览里的「追问迭代」输入区 */
   .ai-preview-followup {
     display: flex;
-    gap: 8px;
-    margin-top: 14px;
-    padding-top: 12px;
+    gap: var(--ui-space-8, 8px);
+    margin-top: var(--ui-space-14, 14px);
+    padding-top: var(--ui-space-12, 12px);
     border-top: 1px solid var(--card-border-color);
   }
   .ai-preview-followup :deep(.b-input) {
@@ -1382,17 +1394,18 @@
   }
   .ai-preview-followup__stop {
     width: auto;
-    min-width: 92px;
+    min-width: var(--ui-layout-92, 92px);
   }
   .ai-preview-title {
     display: flex;
     align-items: baseline;
-    gap: 8px;
-    margin-bottom: 12px;
-    padding: 10px 12px;
+    gap: var(--ui-space-8, 8px);
+    margin-bottom: var(--ui-space-12, 12px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     border: 1px solid color-mix(in srgb, var(--resource-note-color) 24%, transparent);
     border-radius: 8px;
     background: color-mix(in srgb, var(--resource-note-color) 8%, var(--card-background));
+    /* ui-density-fixed: AI 结果正文排版独立于界面密度。 */
     font-size: 14px;
     line-height: 1.5;
   }
@@ -1405,10 +1418,11 @@
        用 normal 让浏览器折叠 HTML 空白,段间距交给下方 p/li/h* 的 margin 控制。 */
     white-space: normal;
     word-break: break-word;
+    /* ui-density-fixed: AI 结果正文排版独立于界面密度。 */
     font-size: 15px;
     line-height: 1.7;
     color: var(--text-color);
-    padding: 4px 2px;
+    padding: var(--ui-space-4, 4px) var(--ui-space-2, 2px);
   }
   .ai-preview-body.is-markdown {
     white-space: pre-wrap;
@@ -1417,19 +1431,21 @@
   .ai-preview-body :deep(p),
   .ai-preview-body :deep(li),
   .ai-preview-body :deep(blockquote) {
+    /* ui-density-fixed: AI 结果正文排版独立于界面密度。 */
     margin: 0 0 10px;
   }
   .ai-preview-body :deep(h1),
   .ai-preview-body :deep(h2),
   .ai-preview-body :deep(h3) {
+    /* ui-density-fixed: AI 结果正文排版独立于界面密度。 */
     margin: 14px 0 8px;
   }
   .ai-preview-actions {
     display: flex;
     justify-content: flex-end;
-    gap: 10px;
-    margin-top: 14px;
-    padding-top: 12px;
+    gap: var(--ui-space-10, 10px);
+    margin-top: var(--ui-space-14, 14px);
+    padding-top: var(--ui-space-12, 12px);
     border-top: 1px solid var(--card-border-color, rgba(0, 0, 0, 0.08));
   }
 </style>

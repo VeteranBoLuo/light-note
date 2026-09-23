@@ -92,7 +92,7 @@
 
 <style lang="less" scoped>
   :global(.resource-page-shell.bookmark-edit-shell) {
-    padding-bottom: 10px;
+    padding-bottom: var(--ui-space-10, 10px);
   }
 
   .bookmark-edit-page {
@@ -111,23 +111,23 @@
   }
 
   .bookmark-edit-page__footer {
-    padding-top: 6px;
+    padding-top: var(--ui-space-6, 6px);
     border-top: 1px solid color-mix(in srgb, var(--surface-border-color) 65%, transparent);
     background: var(--surface-page-bg, var(--background-color));
   }
 
   .bookmark-edit-page__footer-inner {
-    width: min(800px, calc(100% - 48px));
+    width: min(var(--ui-layout-800, 800px), calc(100% - var(--ui-space-48, 48px)));
     margin: 0 auto;
     display: flex;
     justify-content: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .bookmark-edit-page__cancel,
   .bookmark-edit-page__save {
-    min-width: 92px;
-    height: 34px;
+    min-width: var(--ui-layout-92, 92px);
+    height: var(--ui-control-34, 34px);
     border-radius: 8px;
   }
 </style>

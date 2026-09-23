@@ -206,7 +206,7 @@
   });
   const columns = [
     { title: '功能接口', key: 'context', width: '2fr', ellipsis: true },
-    { title: '撞墙次数', key: 'cnt', width: '120px' },
+    { title: '撞墙次数', key: 'cnt', width: 'var(--ui-layout-120, 120px)' },
   ];
 
   const rate = (value: number, base: number) => (base > 0 ? Math.round((value / base) * 1000) / 10 : 0);
@@ -376,9 +376,9 @@
   .funnel-block {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     min-width: 0;
-    padding: 16px;
+    padding: var(--ui-space-16, 16px);
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     background: var(--card-background);
@@ -388,19 +388,19 @@
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
 
     p {
-      margin: 4px 0 0;
+      margin: var(--ui-space-4, 4px) 0 0;
       color: var(--desc-color);
-      font-size: 12px;
+      font-size: var(--ui-font-12, 12px);
     }
   }
 
   .funnel-section-title {
     margin: 0;
     color: var(--text-color);
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     font-weight: 600;
   }
 
@@ -408,11 +408,11 @@
     display: grid;
     justify-items: end;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
 
     strong {
       color: var(--primary-color);
-      font-size: 24px;
+      font-size: var(--ui-font-24, 24px);
       line-height: 1.15;
     }
   }
@@ -434,8 +434,8 @@
   .funnel-chain__card {
     position: relative;
     box-sizing: border-box;
-    min-width: 220px;
-    padding: 12px 18px;
+    min-width: var(--ui-layout-220, 220px);
+    padding: var(--ui-space-12, 12px) var(--ui-space-18, 18px);
     border: 1px solid var(--primary-color);
     border-radius: 10px;
     background: var(--surface-raised-background);
@@ -454,31 +454,31 @@
 
   .funnel-chain__label {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .funnel-chain__value {
-    margin-top: 2px;
+    margin-top: var(--ui-space-2, 2px);
     color: var(--text-color);
-    font-size: 22px;
+    font-size: var(--ui-font-22, 22px);
     font-variant-numeric: tabular-nums;
   }
 
   .funnel-chain__path-label {
     display: block;
-    margin-top: 3px;
+    margin-top: var(--ui-space-3, 3px);
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .funnel-chain__weak-label {
     display: inline-block;
-    margin-top: 5px;
-    padding: 2px 7px;
+    margin-top: var(--ui-space-5, 5px);
+    padding: var(--ui-space-2, 2px) var(--ui-space-7, 7px);
     border-radius: 999px;
     background: var(--danger-color);
     color: #fff;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 600;
   }
 
@@ -486,33 +486,33 @@
     display: grid;
     grid-template-columns: auto auto auto;
     align-items: center;
-    gap: 7px;
-    min-height: 42px;
+    gap: var(--ui-space-7, 7px);
+    min-height: var(--ui-layout-42, 42px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
 
     strong {
       color: var(--text-color);
-      font-size: 13px;
+      font-size: var(--ui-font-13, 13px);
     }
   }
 
   .funnel-chain__summary {
     margin: 0;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     text-align: center;
   }
 
   .funnel-entry-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
 
   .funnel-entry {
     min-width: 0;
-    padding: 14px;
+    padding: var(--ui-space-14, 14px);
     border: 1px solid var(--surface-border-color);
     border-radius: 10px;
   }
@@ -521,7 +521,7 @@
     display: flex;
     justify-content: space-between;
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
 
     span {
       color: var(--desc-color);
@@ -531,7 +531,7 @@
   .funnel-entry__bar {
     display: flex;
     height: 12px;
-    margin: 12px 0;
+    margin: var(--ui-space-12, 12px) 0;
     overflow: hidden;
     border: 1px solid var(--surface-border-color);
     border-radius: 999px;
@@ -553,7 +553,7 @@
   .funnel-entry dl {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     margin: 0;
 
     div {
@@ -563,9 +563,9 @@
     dt {
       display: flex;
       align-items: center;
-      gap: 5px;
+      gap: var(--ui-space-5, 5px);
       color: var(--desc-color);
-      font-size: 11px;
+      font-size: var(--ui-font-11, 11px);
     }
 
     i {
@@ -575,9 +575,9 @@
     }
 
     dd {
-      margin: 3px 0 0;
+      margin: var(--ui-space-3, 3px) 0 0;
       color: var(--text-color);
-      font-size: 13px;
+      font-size: var(--ui-font-13, 13px);
       font-weight: 600;
     }
   }
@@ -587,24 +587,24 @@
   }
 
   .funnel-failures {
-    padding-top: 12px;
+    padding-top: var(--ui-space-12, 12px);
     border-top: 1px solid var(--surface-border-color);
 
     h4 {
-      margin: 0 0 10px;
+      margin: 0 0 var(--ui-space-10, 10px);
       color: var(--text-color);
-      font-size: 13px;
+      font-size: var(--ui-font-13, 13px);
     }
   }
 
   .funnel-failure {
     display: grid;
-    grid-template-columns: minmax(90px, 160px) minmax(100px, 1fr) 60px;
+    grid-template-columns: minmax(var(--ui-layout-90, 90px), var(--ui-layout-160, 160px)) minmax(var(--ui-layout-100, 100px), 1fr) var(--ui-layout-60, 60px);
     align-items: center;
-    gap: 10px;
-    margin-top: 8px;
+    gap: var(--ui-space-10, 10px);
+    margin-top: var(--ui-space-8, 8px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
 
     > div {
       height: 8px;

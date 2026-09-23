@@ -91,26 +91,26 @@
 
 <style scoped lang="less">
   .chat-pending-attachments {
-    min-height: 58px;
-    padding: 10px 12px 2px;
+    min-height: var(--ui-layout-58, 58px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px) var(--ui-space-2, 2px);
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
 
   .chat-pending-attachment {
     position: relative;
     min-width: 0;
-    max-width: min(250px, 100%);
-    height: 56px;
+    max-width: min(var(--ui-layout-250, 250px), 100%);
+    height: var(--ui-layout-56, 56px);
     border: 1px solid var(--surface-border-color);
     border-radius: 10px;
     background: var(--workspace-panel-bg-color);
   }
 
   .chat-pending-attachment.is-image {
-    width: 56px;
+    width: var(--ui-layout-56, 56px);
   }
 
   .chat-pending-attachment.is-failed {
@@ -135,12 +135,12 @@
   }
 
   .chat-pending-attachment__file {
-    width: min(240px, 64vw);
+    width: min(var(--ui-layout-240, 240px), 64vw);
     height: 100%;
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 6px 8px;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-6, 6px) var(--ui-space-8, 8px);
     box-sizing: border-box;
   }
 
@@ -148,7 +148,7 @@
     min-width: 0;
     flex: 1;
     display: grid;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
 
   .chat-pending-attachment__copy strong,
@@ -159,12 +159,12 @@
   }
 
   .chat-pending-attachment__copy strong {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .chat-pending-attachment__copy small {
     color: var(--text-color-secondary);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
   }
 
   .chat-pending-attachment__copy small.is-error {
@@ -173,9 +173,9 @@
   }
 
   .chat-pending-attachment__retry {
-    width: 30px;
-    min-width: 30px;
-    height: 30px;
+    width: var(--ui-layout-30, 30px);
+    min-width: var(--ui-layout-30, 30px);
+    height: var(--ui-layout-30, 30px);
     padding: 0 !important;
     color: var(--danger-color) !important;
   }
@@ -200,10 +200,10 @@
   }
 
   .chat-pending-attachment__remove {
-    width: 24px;
-    min-width: 24px;
-    height: 24px;
-    min-height: 24px;
+    width: var(--ui-layout-24, 24px);
+    min-width: var(--ui-layout-24, 24px);
+    height: var(--ui-layout-24, 24px);
+    min-height: var(--ui-layout-24, 24px);
     padding: 0 !important;
     position: absolute;
     top: -7px;

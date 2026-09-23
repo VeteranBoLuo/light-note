@@ -3,8 +3,8 @@
     :title="t('cloudSpace.moveFileTitle')"
     :mask-closable="false"
     :close-disabled="moving"
-    width="min(520px, 88vw)"
-    height="min(620px, 78vh)"
+    width="min(var(--ui-layout-520, 520px), 88vw)"
+    height="min(var(--ui-layout-620, 620px), 78vh)"
     @ok="moveFile"
     v-model:visible="visible"
   >
@@ -107,6 +107,6 @@
     display: flex;
     justify-content: flex-end;
     flex-shrink: 0;
-    padding: 0 20px 16px;
+    padding: 0 var(--ui-space-20, 20px) var(--ui-space-16, 16px);
   }
 </style>

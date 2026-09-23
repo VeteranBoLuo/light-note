@@ -28,7 +28,7 @@
         <BInput
           v-model:value="source"
           type="textarea"
-          :rows="20"
+          :rows="dimension(20, 'layout')"
           :maxlength="100000"
           :placeholder="t('toolbox.local.mermaidPlaceholder')"
         />
@@ -73,6 +73,7 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
+  import { useUiDensity } from '@/composables/useUiDensity';
   import { copyTextToClipboard } from '@/utils/clipboard';
   import { renderMermaidSource } from '@/utils/mermaidRender';
   import { downloadToolboxBlob, toolboxSvgToPng } from '@/utils/toolboxLocal';
@@ -90,6 +91,7 @@
   };
 
   const { t } = useI18n();
+  const { dimension } = useUiDensity();
   const sampleType = ref<SampleType>('flowchart');
   const source = ref(samples.flowchart);
   const svg = ref('');
@@ -189,48 +191,48 @@
 <style scoped lang="less">
   .mermaid-tool {
     display: grid;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
   .mermaid-tool__toolbar {
-    padding: 13px;
+    padding: var(--ui-space-13, 13px);
     display: flex;
     align-items: end;
     justify-content: flex-end;
-    gap: 9px;
+    gap: var(--ui-space-9, 9px);
     border: 1px solid var(--surface-border-color);
     border-radius: 14px;
     background: var(--card-background);
   }
   .mermaid-tool__toolbar > div:first-child {
-    width: min(280px, 100%);
+    width: min(var(--ui-layout-280, 280px), 100%);
     margin-right: auto;
     display: grid;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   .mermaid-tool__toolbar label {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 650;
   }
   .mermaid-tool__toolbar > span {
     align-self: center;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .mermaid-tool__workspace {
     display: grid;
-    grid-template-columns: minmax(330px, 0.8fr) minmax(0, 1.2fr);
-    gap: 12px;
+    grid-template-columns: minmax(var(--ui-layout-330, 330px), 0.8fr) minmax(0, 1.2fr);
+    gap: var(--ui-space-12, 12px);
     align-items: stretch;
   }
   .mermaid-tool__editor,
   .mermaid-tool__preview {
     min-width: 0;
-    min-height: 520px;
-    padding: 12px;
+    min-height: var(--ui-layout-520, 520px);
+    padding: var(--ui-space-12, 12px);
     display: grid;
     align-content: start;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     border: 1px solid var(--surface-border-color);
     border-radius: 14px;
     background: var(--card-background);
@@ -240,15 +242,15 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .mermaid-tool__editor header span,
   .mermaid-tool__preview header span {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .mermaid-tool__editor :deep(textarea) {
-    min-height: 455px;
+    min-height: var(--ui-layout-455, 455px);
     resize: vertical;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     line-height: 1.6;
@@ -257,13 +259,13 @@
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .mermaid-tool__canvas,
   .mermaid-tool__loading,
   .mermaid-tool__error,
   .mermaid-tool__empty {
-    min-height: 455px;
+    min-height: var(--ui-layout-455, 455px);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -271,7 +273,7 @@
     background: var(--workspace-panel-bg-color);
   }
   .mermaid-tool__canvas {
-    padding: 18px;
+    padding: var(--ui-space-18, 18px);
     overflow: auto;
   }
   .mermaid-tool__canvas :deep(svg) {
@@ -279,8 +281,8 @@
     height: auto;
   }
   .mermaid-tool__error {
-    padding: 24px;
-    gap: 9px;
+    padding: var(--ui-space-24, 24px);
+    gap: var(--ui-space-9, 9px);
     border: 1px solid var(--danger-color, #dc3e4d);
     color: var(--danger-color, #dc3e4d);
     text-align: left;
@@ -307,14 +309,14 @@
     }
     .mermaid-tool__editor,
     .mermaid-tool__preview {
-      min-height: 390px;
+      min-height: var(--ui-layout-390, 390px);
     }
     .mermaid-tool__editor :deep(textarea),
     .mermaid-tool__canvas,
     .mermaid-tool__loading,
     .mermaid-tool__error,
     .mermaid-tool__empty {
-      min-height: 330px;
+      min-height: var(--ui-layout-330, 330px);
     }
     .mermaid-tool__preview > header {
       align-items: flex-start;

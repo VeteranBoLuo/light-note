@@ -20,7 +20,7 @@
   }
 
   .pin-badge :deep(.b-chip__content) {
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
 
   .pin-badge__icon {

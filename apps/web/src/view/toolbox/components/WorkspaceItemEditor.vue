@@ -3,7 +3,7 @@
     :key="modalKey"
     :visible="true"
     :title="title"
-    width="580px"
+    width="var(--ui-layout-580, 580px)"
     fullscreen-mobile
     :show-footer="false"
     :close-disabled="busy"
@@ -89,22 +89,22 @@
 <style scoped>
   .board-editor {
     display: grid;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
   .board-editor label {
     display: grid;
-    gap: 7px;
-    font-size: 13px;
+    gap: var(--ui-space-7, 7px);
+    font-size: var(--ui-font-13, 13px);
   }
   .board-editor__hint {
     margin: 0;
     color: var(--desc-color);
     line-height: 1.6;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .board-editor__footer {
     display: flex;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     justify-content: flex-end;
   }
   .board-editor__source.b_btn {

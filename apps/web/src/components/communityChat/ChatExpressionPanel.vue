@@ -84,10 +84,10 @@
 
 <style scoped lang="less">
   .chat-expression-panel {
-    width: 360px;
+    width: var(--ui-layout-360, 360px);
     max-width: 100%;
-    height: min(420px, 46vh);
-    min-height: 300px;
+    height: min(var(--ui-layout-420, 420px), 46vh);
+    min-height: var(--ui-layout-300, 300px);
     box-sizing: border-box;
     display: grid;
     grid-template-rows: minmax(0, 1fr) auto;
@@ -104,32 +104,32 @@
   }
 
   .chat-expression-panel__tabs {
-    height: 46px;
-    min-height: 46px;
+    height: var(--ui-layout-46, 46px);
+    min-height: var(--ui-layout-46, 46px);
     box-sizing: border-box;
     display: flex;
     align-items: stretch;
-    gap: 4px;
-    padding: 3px 8px;
+    gap: var(--ui-space-4, 4px);
+    padding: var(--ui-space-3, 3px) var(--ui-space-8, 8px);
     border-top: 1px solid var(--surface-border-color);
     background: var(--card-background);
   }
 
   .chat-expression-panel__tab.b_btn {
-    min-width: 68px;
-    height: 39px;
+    min-width: var(--ui-layout-68, 68px);
+    height: var(--ui-layout-39, 39px);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
-    padding: 0 8px;
+    gap: var(--ui-space-6, 6px);
+    padding: 0 var(--ui-space-8, 8px);
     border: 1px solid transparent;
     color: var(--desc-color);
     background: transparent;
   }
 
   .chat-expression-panel__tab > small {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .chat-expression-panel__tab.b_btn.is-active {

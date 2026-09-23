@@ -66,16 +66,16 @@
   .settings-index {
     display: flex;
     flex-direction: column;
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
   }
   .settings-index-group {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .settings-index-group-title {
-    margin: 0 4px;
-    font-size: 12px;
+    margin: 0 var(--ui-space-4, 4px);
+    font-size: var(--ui-font-12, 12px);
     font-weight: 700;
     color: var(--desc-color);
   }
@@ -97,11 +97,11 @@
      那个顺序不该被依赖）。整行可点，最小高度 72px 已远超 48px 触控下限。 */
   .settings-index-card .settings-index-row {
     width: 100%;
-    min-height: 72px;
+    min-height: var(--ui-layout-72, 72px);
     height: auto;
     line-height: 1.35;
-    padding: 12px 14px;
-    gap: 12px;
+    padding: var(--ui-space-12, 12px) var(--ui-space-14, 14px);
+    gap: var(--ui-space-12, 12px);
     border: 0;
     border-radius: 0;
     border-bottom: 1px solid color-mix(in srgb, var(--card-border-color) 42%, transparent);
@@ -131,8 +131,8 @@
     flex: 0 0 auto;
     display: grid;
     place-items: center;
-    width: 40px;
-    height: 40px;
+    width: var(--ui-layout-40, 40px);
+    height: var(--ui-layout-40, 40px);
     border-radius: 12px;
   }
   /* 图标底色是分类着色、不表达状态。混向 transparent 而不是混向卡片底色：
@@ -152,15 +152,15 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
   .settings-index-title {
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
     font-weight: 600;
   }
   /* 摘要恒为一行:超出省略而不是把行撑高,目录才能保持等高、好扫 */
   .settings-index-summary {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
     white-space: nowrap;
     overflow: hidden;
@@ -172,9 +172,9 @@
   }
 
   .settings-index-foot {
-    margin: 2px 0 0;
+    margin: var(--ui-space-2, 2px) 0 0;
     text-align: center;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
   }
 </style>

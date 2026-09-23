@@ -58,21 +58,21 @@
 <style scoped lang="less">
   .settings-notification-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
-    column-gap: 28px;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--ui-layout-320, 320px)), 1fr));
+    column-gap: var(--ui-space-28, 28px);
   }
   .settings-push-card {
-    padding-bottom: 4px;
+    padding-bottom: var(--ui-space-4, 4px);
   }
   .settings-chat-panel {
-    padding: 0 0 14px;
+    padding: 0 0 var(--ui-space-14, 14px);
   }
   .settings-chat-panel :deep(.community-notification-settings__rail) {
-    margin-top: 16px;
+    margin-top: var(--ui-space-16, 16px);
   }
   .settings-chat-panel :deep(.community-notification-settings__compact-results) {
     display: grid;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
   .settings-chat-panel.community-notification-settings {
     border: 0;

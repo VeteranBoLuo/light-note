@@ -93,7 +93,10 @@
           :run="run"
           :mobile="bookmark.isMobile"
         />
-        <div v-else-if="loading" class="workspace-empty" :style="{ minHeight: bookmark.isMobile ? '360px' : '180px' }"
+        <div
+          v-else-if="loading"
+          class="workspace-empty"
+          :style="{ minHeight: bookmark.isMobile ? '360px' : 'var(--ui-layout-180, 180px)' }"
           ><BLoading :loading="true" inline
         /></div>
         <p v-if="run.ruleRetrying" class="workspace-ai-warning" role="status">{{
@@ -156,7 +159,12 @@
       <p v-if="pageError" class="workspace-notice" role="alert"
         >{{ pageError }} <BButton @click="refresh">{{ t('common.retry') }}</BButton></p
       >
-      <div ref="listShell" class="workspace-list-shell" :style="{ minHeight: `${listFloor}px` }" :aria-busy="loading">
+      <div
+        ref="listShell"
+        class="workspace-list-shell"
+        :style="{ minHeight: `max(var(--ui-layout-240, 240px), ${listFloor}px)` }"
+        :aria-busy="loading"
+      >
         <div v-if="switching && !pageError" class="workspace-switch-feedback" role="status">
           <BLoading v-if="loading" :loading="true" inline />
           <span>{{ pageError || t('organizeWorkspace.loading') }}</span>
@@ -503,7 +511,7 @@
     <BDrawer
       :open="drawer"
       :title="t('organize.aiSuggestions.regenerate')"
-      width="660px"
+      width="var(--ui-layout-660, 660px)"
       body-padding="0"
       @close="closeDrawer"
     >
@@ -540,6 +548,8 @@
   </section>
 </template>
 <script setup lang="ts">
+  import { useUiDensity } from '@/composables/useUiDensity';
+  const { dimension } = useUiDensity();
   import OrganizeRunProgress from './OrganizeRunProgress.vue';
   import { resourceGroup, resourceWork, reviewDisposition } from './organizeResourceState';
   import { organizeOverviewStatus } from '@lightnote/shared/organize-progress';
@@ -643,7 +653,7 @@
     kind = ref('all');
   const scrollRoot = ref<HTMLElement | null>(null),
     listShell = ref<HTMLElement | null>(null),
-    listFloor = ref(240);
+    listFloor = ref(0);
   const switching = ref(false),
     displayedKind = ref('all');
   const controlling = ref(false);
@@ -702,7 +712,7 @@
     pinnedGroup.value =
       Array.from(root.querySelectorAll<HTMLElement>('.result-group')).find((group) => {
         const rect = group.getBoundingClientRect();
-        return rect.top < top && rect.bottom > top + 48;
+        return rect.top < top && rect.bottom > top + dimension(48, 'control');
       })?.dataset.group || '';
   }
   function toggleGroup(key: string) {
@@ -1404,7 +1414,7 @@
       // 保留旧列表几何；空结果也至少填满当前可见区域，避免浏览器压缩 scrollTop。
       if (scrollRoot.value && listShell.value) {
         const offset = listShell.value.getBoundingClientRect().top - scrollRoot.value.getBoundingClientRect().top;
-        listFloor.value = Math.max(240, scrollRoot.value.clientHeight - offset);
+        listFloor.value = Math.max(0, scrollRoot.value.clientHeight - offset);
       }
       switching.value = true;
       void loadPage();
@@ -1551,8 +1561,8 @@
     scrollbar-gutter: stable;
     overflow-anchor: none;
     box-sizing: border-box;
-    --group-sticky-top: -24px;
-    padding: 24px 28px;
+    --group-sticky-top: calc(-1 * var(--ui-space-24, 24px));
+    padding: var(--ui-space-24, 24px) var(--ui-space-28, 28px);
     color: var(--text-color);
   }
   :global(html[data-theme='night'] .organize-suggestion-workspace) {
@@ -1577,14 +1587,14 @@
     margin: 0;
   }
   h2 {
-    font-size: 23px;
+    font-size: var(--ui-font-23, 23px);
     letter-spacing: -0.5px;
   }
   h3 {
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
   }
   h4 {
-    font-size: 14px;
+    font-size: var(--ui-font-14, 14px);
     line-height: 1.5;
     overflow-wrap: anywhere;
   }
@@ -1592,28 +1602,28 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
-    margin-bottom: 22px;
+    gap: var(--ui-space-16, 16px);
+    margin-bottom: var(--ui-space-22, 22px);
   }
   .workspace-header p {
-    margin-top: 7px;
-    font-size: 13px;
+    margin-top: var(--ui-space-7, 7px);
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.6;
     color: var(--ow-muted);
   }
   .workspace-tools {
     display: flex;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     align-items: center;
     flex-wrap: wrap;
   }
   .workspace-tools .b_btn {
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .workspace-tools .workspace-retry-files {
     background: transparent;
     color: var(--ow-purple);
-    padding-inline: 8px;
+    padding-inline: var(--ui-space-8, 8px);
     box-shadow: none;
   }
   .workspace-tools .workspace-retry-files:disabled {
@@ -1633,25 +1643,25 @@
     border: 1px solid var(--ow-border);
     border-radius: 12px !important;
     background: var(--ow-surface);
-    margin-bottom: 18px;
+    margin-bottom: var(--ui-space-18, 18px);
   }
   .workspace-run-header {
     display: flex;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     align-items: center;
-    padding: 12px 18px 6px;
+    padding: var(--ui-space-12, 12px) var(--ui-space-18, 18px) var(--ui-space-6, 6px);
   }
   .workspace-run-identity {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .workspace-run-status {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
   .status-spinning {
     animation: organize-status-spin 1s linear infinite;
@@ -1673,41 +1683,41 @@
     animation: none !important;
   }
   .workspace-run-identity small {
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     color: var(--ow-muted);
   }
   .workspace-count-hint {
-    margin: -8px 0 12px;
+    margin: calc(-1 * var(--ui-space-8, 8px)) 0 var(--ui-space-12, 12px);
     color: var(--workspace-muted);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .workspace-background {
-    padding: 0 20px 12px;
-    font-size: 12px;
+    padding: 0 var(--ui-space-20, 20px) var(--ui-space-12, 12px);
+    font-size: var(--ui-font-12, 12px);
     color: var(--ow-muted);
   }
   .workspace-filters {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 14px;
+    gap: var(--ui-space-12, 12px);
+    margin-bottom: var(--ui-space-14, 14px);
   }
   .workspace-filters > .b-select {
-    width: 180px;
+    width: var(--ui-layout-180, 180px);
   }
   .workspace-tabs {
-    gap: 6px !important;
+    gap: var(--ui-space-6, 6px) !important;
     padding: 0 !important;
     background: transparent !important;
   }
   .workspace-tabs :deep(.tab) {
-    min-height: 36px;
-    padding: 7px 14px !important;
+    min-height: var(--ui-control-36, 36px);
+    padding: var(--ui-space-7, 7px) var(--ui-space-14, 14px) !important;
     border: 1px solid transparent !important;
     border-radius: 8px;
     background: var(--ow-inset);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 600 !important;
     box-sizing: border-box;
     transition:
@@ -1724,7 +1734,7 @@
   }
   .resource-tab-label {
     display: flex;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     align-items: center;
   }
   .resource-tab-label {
@@ -1737,17 +1747,17 @@
     color: var(--ow-green);
   }
   .workspace-tabs :deep(.tab-badge) {
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     background: var(--ow-purple-soft) !important;
     color: var(--ow-purple) !important;
   }
   .workspace-list-heading {
     display: flex;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     color: var(--ow-muted);
-    font-size: 11px;
-    margin: 0 0 10px;
+    font-size: var(--ui-font-11, 11px);
+    margin: 0 0 var(--ui-space-10, 10px);
   }
   .workspace-list-heading > span {
     font-weight: 600;
@@ -1755,7 +1765,7 @@
   }
   .workspace-list-shell {
     position: relative;
-    min-height: 240px;
+    min-height: var(--ui-layout-240, 240px);
   }
   .is-switching {
     visibility: hidden;
@@ -1767,12 +1777,12 @@
     display: flex;
     justify-content: center;
     align-items: flex-start;
-    gap: 10px;
-    padding-top: 50px;
+    gap: var(--ui-space-10, 10px);
+    padding-top: var(--ui-space-50, 50px);
     color: var(--ow-muted);
   }
   .organize-suggestion-workspace.has-icon-batch {
-    padding-bottom: calc(180px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(var(--ui-space-180, 180px) + env(safe-area-inset-bottom, 0px));
   }
   .group-heading {
     position: sticky;
@@ -1787,21 +1797,21 @@
     display: none;
   }
   .group-heading.is-pinned .group-toggle {
-    min-height: 48px;
-    padding-top: 8px;
-    padding-bottom: 8px;
+    min-height: var(--ui-control-48, 48px);
+    padding-top: var(--ui-space-8, 8px);
+    padding-bottom: var(--ui-space-8, 8px);
   }
   .group-heading.has-batch-action .group-copy {
-    padding-right: 110px;
+    padding-right: var(--ui-space-110, 110px);
   }
   .batch-entry.b_btn {
     position: absolute;
-    right: 34px;
+    right: var(--ui-space-34, 34px);
     top: 50%;
     transform: translateY(-50%);
-    height: 32px;
-    padding: 0 12px;
-    font-size: 12px;
+    height: var(--ui-control-32, 32px);
+    padding: 0 var(--ui-space-12, 12px);
+    font-size: var(--ui-font-12, 12px);
     color: var(--ow-purple);
     background: var(--ow-purple-soft);
     border: 1px solid transparent;
@@ -1814,9 +1824,9 @@
     align-items: center;
     justify-content: space-between;
     flex-wrap: wrap;
-    gap: 12px;
-    padding: 10px 12px;
-    margin-bottom: 12px;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
+    margin-bottom: var(--ui-space-12, 12px);
     border-radius: 8px;
     background: var(--workspace-content);
   }
@@ -1825,34 +1835,34 @@
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .batch-selection-actions {
     margin-left: auto;
   }
   .batch-selection-actions .b_btn {
-    height: 32px;
-    font-size: 12px;
+    height: var(--ui-control-32, 32px);
+    font-size: var(--ui-font-12, 12px);
   }
   .batch-selection-info > span,
   .batch-selection-actions > span,
   .batch-outcome {
     color: var(--ow-muted);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .result-group {
-    margin-bottom: 20px;
-    padding: 12px 16px 16px;
+    margin-bottom: var(--ui-space-20, 20px);
+    padding: var(--ui-space-12, 12px) var(--ui-space-16, 16px) var(--ui-space-16, 16px);
     border-radius: 16px;
     background: var(--workspace-canvas);
   }
   .group-toggle.b_btn {
     width: 100%;
     height: auto;
-    min-height: 60px;
-    padding: 10px 2px 14px;
+    min-height: var(--ui-control-60, 60px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-2, 2px) var(--ui-space-14, 14px);
     display: flex;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     align-items: center;
     text-align: left;
     white-space: normal;
@@ -1866,8 +1876,8 @@
   .group-symbol {
     display: grid;
     place-items: center;
-    width: 29px;
-    height: 29px;
+    width: var(--ui-layout-29, 29px);
+    height: var(--ui-layout-29, 29px);
     border-radius: 50%;
     flex-shrink: 0;
     background: #9297aa;
@@ -1888,17 +1898,17 @@
     flex: 1;
     min-width: 0;
     display: grid;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
   .group-copy strong {
     display: flex;
     align-items: center;
-    gap: 9px;
-    font-size: 14px;
-    line-height: 20px;
+    gap: var(--ui-space-9, 9px);
+    font-size: var(--ui-font-14, 14px);
+    line-height: var(--ui-layout-20, 20px);
   }
   .group-copy small {
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     font-weight: 400;
     color: var(--ow-muted);
     line-height: 1.5;
@@ -1907,15 +1917,15 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 22px;
-    height: 20px;
+    min-width: var(--ui-layout-22, 22px);
+    height: var(--ui-layout-20, 20px);
     box-sizing: border-box;
-    padding: 0 6px;
+    padding: 0 var(--ui-space-6, 6px);
     border-radius: 10px;
     background: var(--ow-inset);
     color: var(--ow-muted);
-    font-size: 11px;
-    line-height: 20px;
+    font-size: var(--ui-font-11, 11px);
+    line-height: var(--ui-layout-20, 20px);
   }
   .group-priority .group-count {
     background: var(--ow-purple-soft);
@@ -1932,7 +1942,7 @@
   }
   .group-content {
     display: grid;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
   }
   .group-content .workspace-resource {
     margin: 0;
@@ -1943,8 +1953,8 @@
   .workspace-resource > header {
     display: flex;
     align-items: center;
-    gap: 11px;
-    padding: 16px 18px;
+    gap: var(--ui-space-11, 11px);
+    padding: var(--ui-space-16, 16px) var(--ui-space-18, 18px);
     border-radius: 13px;
     transition: background-color 0.15s;
   }
@@ -1977,21 +1987,21 @@
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 16px;
-    padding: 24px;
-    font-size: 14px;
+    gap: var(--ui-space-16, 16px);
+    padding: var(--ui-space-24, 24px);
+    font-size: var(--ui-font-14, 14px);
     line-height: 1.7;
     color: var(--text-color);
   }
   .file-reading-details {
     margin: 0;
-    padding: 12px 0;
+    padding: var(--ui-space-12, 12px) 0;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
     color: var(--desc-color);
     overflow-wrap: anywhere;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .reading-warning {
     color: var(--workspace-file-text);
@@ -2012,8 +2022,8 @@
     display: grid;
     place-items: center;
     flex-shrink: 0;
-    width: 36px;
-    height: 38px;
+    width: var(--ui-layout-36, 36px);
+    height: var(--ui-layout-38, 38px);
     border-radius: 9px;
     background: var(--ow-purple-soft);
     color: var(--ow-purple);
@@ -2031,20 +2041,20 @@
     min-width: 0;
   }
   .resource-identity small {
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.5;
     color: var(--ow-muted);
   }
   .resource-conclusion-tools {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
     flex-shrink: 0;
   }
   .resource-issue-label {
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     border-radius: 6px;
-    padding: 3px 8px;
+    padding: var(--ui-space-3, 3px) var(--ui-space-8, 8px);
     color: var(--ow-amber);
     background: var(--ow-amber-soft);
   }
@@ -2054,16 +2064,16 @@
   }
   .resource-detail-toggle.b_btn {
     display: flex;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
     align-items: center;
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     color: var(--ow-muted);
     background: transparent;
-    padding: 4px;
-    min-height: 28px;
+    padding: var(--ui-space-4, 4px);
+    min-height: var(--ui-control-28, 28px);
   }
   .resource-conclusion {
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
     color: var(--ow-muted);
   }
   .conclusion-clear {
@@ -2081,38 +2091,38 @@
     transform: rotate(180deg);
   }
   .resource-state-detail {
-    margin: 0 18px 12px 65px;
+    margin: 0 var(--ui-space-18, 18px) var(--ui-space-12, 12px) var(--ui-space-65, 65px);
     color: var(--workspace-file-text);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .resource-work-details {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px 16px;
+    gap: var(--ui-space-8, 8px) var(--ui-space-16, 16px);
     color: var(--workspace-file-text);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .resource-expanded {
-    margin: 0 18px 16px 65px;
+    margin: 0 var(--ui-space-18, 18px) var(--ui-space-16, 16px) var(--ui-space-65, 65px);
   }
   .resource-guards {
-    padding: 10px 0;
+    padding: var(--ui-space-10, 10px) 0;
     color: var(--ow-muted);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .resource-check-summary {
-    padding: 12px 0 0;
+    padding: var(--ui-space-12, 12px) 0 0;
     color: var(--ow-muted);
   }
   .resource-check-details {
     display: flex;
-    gap: 10px 24px;
+    gap: var(--ui-space-10, 10px) var(--ui-space-24, 24px);
     flex-wrap: wrap;
   }
   .resource-check-details > div {
     display: flex;
-    gap: 10px;
-    font-size: 11px;
+    gap: var(--ui-space-10, 10px);
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.5;
   }
   .resource-check-details > div > span {
@@ -2122,27 +2132,27 @@
     color: var(--ow-muted);
   }
   .workspace-empty {
-    padding: 52px 20px;
+    padding: var(--ui-space-52, 52px) var(--ui-space-20, 20px);
     text-align: center;
     display: grid;
     justify-items: center;
-    gap: 14px;
+    gap: var(--ui-space-14, 14px);
     color: var(--ow-muted);
   }
   .workspace-notice {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 16px 0;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-16, 16px) 0;
     color: var(--danger-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .review-entry {
     color: var(--workspace-muted);
     flex-wrap: wrap;
   }
   .workspace-more {
-    margin: 12px 0;
+    margin: var(--ui-space-12, 12px) 0;
   }
   @media (max-width: 760px) {
     .organize-suggestion-workspace {

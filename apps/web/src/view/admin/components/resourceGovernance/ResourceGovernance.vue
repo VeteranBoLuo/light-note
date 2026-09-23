@@ -321,7 +321,7 @@
     <BDrawer
       :open="inspectorOpen"
       :title="t('resourceGovernance.inspectorTitle')"
-      :width="bookmark.isMobile ? '100%' : '520px'"
+      :width="bookmark.isMobile ? '100%' : 'var(--ui-layout-520, 520px)'"
       :mobile-full-screen="bookmark.isMobile"
       @close="closeInspector"
     >
@@ -374,7 +374,7 @@
             : 'resourceGovernance.cleanupConfirmTitle',
         )
       "
-      :width="bookmark.isMobile ? '92%' : '520px'"
+      :width="bookmark.isMobile ? '92%' : 'var(--ui-layout-520, 520px)'"
       :show-footer="false"
       :mask-closable="false"
       initial-focus=".governance-confirm-input input"
@@ -563,27 +563,27 @@
     })),
   ]);
   const findingColumns = computed(() => [
-    { title: '', key: 'select', width: '44px', ellipsis: false },
+    { title: '', key: 'select', width: 'var(--ui-layout-44, 44px)', ellipsis: false },
     { title: t('resourceGovernance.columns.issue'), key: 'issueCode' },
-    { title: t('resourceGovernance.columns.resource'), key: 'resourceType', width: '110px' },
-    { title: t('resourceGovernance.columns.risk'), key: 'riskLevel', width: '110px' },
+    { title: t('resourceGovernance.columns.resource'), key: 'resourceType', width: 'var(--ui-layout-110, 110px)' },
+    { title: t('resourceGovernance.columns.risk'), key: 'riskLevel', width: 'var(--ui-layout-110, 110px)' },
     { title: t('resourceGovernance.columns.target'), key: 'targetId', width: '1fr' },
-    { title: t('resourceGovernance.columns.space'), key: 'estimatedBytes', width: '100px' },
+    { title: t('resourceGovernance.columns.space'), key: 'estimatedBytes', width: 'var(--ui-layout-100, 100px)' },
     { title: t('resourceGovernance.columns.verified'), key: 'lastVerifiedAt' },
   ]);
   const jobColumns = computed(() => [
     { title: t('resourceGovernance.columns.job'), key: 'id', width: '1fr' },
-    { title: t('resourceGovernance.columns.status'), key: 'status', width: '150px' },
-    { title: t('resourceGovernance.columns.result'), key: 'result', width: '130px' },
-    { title: t('resourceGovernance.columns.released'), key: 'releasedBytes', width: '110px' },
-    { title: t('resourceGovernance.columns.created'), key: 'createTime', width: '160px' },
-    { title: t('resourceGovernance.columns.actions'), key: 'actions', width: '130px', ellipsis: false },
+    { title: t('resourceGovernance.columns.status'), key: 'status', width: 'var(--ui-layout-150, 150px)' },
+    { title: t('resourceGovernance.columns.result'), key: 'result', width: 'var(--ui-layout-130, 130px)' },
+    { title: t('resourceGovernance.columns.released'), key: 'releasedBytes', width: 'var(--ui-layout-110, 110px)' },
+    { title: t('resourceGovernance.columns.created'), key: 'createTime', width: 'var(--ui-layout-160, 160px)' },
+    { title: t('resourceGovernance.columns.actions'), key: 'actions', width: 'var(--ui-layout-130, 130px)', ellipsis: false },
   ]);
   const auditColumns = computed(() => [
     { title: t('resourceGovernance.columns.action'), key: 'action', width: '1fr' },
     { title: t('resourceGovernance.columns.target'), key: 'targetId', width: '1fr' },
-    { title: t('resourceGovernance.columns.outcome'), key: 'outcome', width: '150px' },
-    { title: t('resourceGovernance.columns.created'), key: 'createTime', width: '160px' },
+    { title: t('resourceGovernance.columns.outcome'), key: 'outcome', width: 'var(--ui-layout-150, 150px)' },
+    { title: t('resourceGovernance.columns.created'), key: 'createTime', width: 'var(--ui-layout-160, 160px)' },
   ]);
 
   function riskLabel(risk: GovernanceRisk) {
@@ -923,15 +923,15 @@
   .admin-stat-card {
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
   .admin-stat-card strong {
-    font-size: 26px;
+    font-size: var(--ui-font-26, 26px);
     color: var(--text-color);
   }
   .admin-stat-card small {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .admin-stat-card.is-safe {
     border-color: var(--chip-success-border);
@@ -944,16 +944,16 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 14px;
-    padding: 12px 14px;
+    gap: var(--ui-space-14, 14px);
+    padding: var(--ui-space-12, 12px) var(--ui-space-14, 14px);
     border: 1px solid var(--card-border-color);
     border-radius: 14px;
     background: var(--card-background, var(--background-color));
   }
   .governance-scan p {
-    margin: 3px 0 0;
+    margin: var(--ui-space-3, 3px) 0 0;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .governance-scan.is-running,
   .governance-scan.is-pending {
@@ -972,18 +972,18 @@
   }
   .governance-toolbar {
     display: grid;
-    grid-template-columns: minmax(220px, 1fr) 150px 160px;
-    gap: 10px;
-    margin-bottom: 12px;
+    grid-template-columns: minmax(var(--ui-layout-220, 220px), 1fr) var(--ui-layout-150, 150px) var(--ui-layout-160, 160px);
+    gap: var(--ui-space-10, 10px);
+    margin-bottom: var(--ui-space-12, 12px);
   }
   .governance-batch-bar {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    min-height: 48px;
-    margin-bottom: 12px;
-    padding: 8px 12px;
+    gap: var(--ui-space-12, 12px);
+    min-height: var(--ui-layout-48, 48px);
+    margin-bottom: var(--ui-space-12, 12px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-12, 12px);
     border: 1px solid var(--card-border-color);
     border-radius: 12px;
     background: var(--card-background, var(--background-color));
@@ -992,7 +992,7 @@
   .governance-batch-bar__actions {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .governance-batch-bar__actions {
     justify-content: flex-end;
@@ -1004,7 +1004,7 @@
   .governance-batch-bar__hint,
   .governance-batch-bar__empty {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .governance-link-button {
     padding: 0;
@@ -1043,29 +1043,29 @@
   .governance-job-actions {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   .governance-inspector {
     display: flex;
     flex-direction: column;
-    gap: 18px;
+    gap: var(--ui-space-18, 18px);
   }
   .governance-inspector__headline {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .governance-inspector dl {
     margin: 0;
     display: grid;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   .governance-inspector dl div,
   .governance-evidence div {
     display: grid;
-    grid-template-columns: minmax(110px, 0.45fr) 1fr;
-    gap: 12px;
-    padding-bottom: 8px;
+    grid-template-columns: minmax(var(--ui-layout-110, 110px), 0.45fr) 1fr;
+    gap: var(--ui-space-12, 12px);
+    padding-bottom: var(--ui-space-8, 8px);
     border-bottom: 1px solid var(--card-border-color);
   }
   .governance-inspector dt,
@@ -1077,11 +1077,11 @@
     overflow-wrap: anywhere;
   }
   .governance-evidence h3 {
-    margin: 0 0 12px;
+    margin: 0 0 var(--ui-space-12, 12px);
   }
   .governance-evidence {
     display: grid;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .governance-evidence strong {
     text-align: right;
@@ -1089,7 +1089,7 @@
   }
   .governance-inspector__guard {
     margin: 0;
-    padding: 12px;
+    padding: var(--ui-space-12, 12px);
     border-radius: 12px;
     background: var(--chip-neutral-bg);
     color: var(--desc-color);
@@ -1098,7 +1098,7 @@
   .governance-confirm {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
   .governance-confirm > p {
     margin: 0;
@@ -1109,8 +1109,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    padding: 12px;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-12, 12px);
     border: 1px solid var(--chip-danger-border);
     border-radius: 12px;
     background: var(--chip-neutral-bg);
@@ -1124,7 +1124,7 @@
   .governance-confirm__actions {
     display: flex;
     justify-content: flex-end;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
   @media (max-width: 900px) {
     .governance-toolbar {

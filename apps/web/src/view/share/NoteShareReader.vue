@@ -215,7 +215,7 @@
   } from '@/api/noteShare';
   import { normalizeNoteContentResourceUrls, noteContentToHtml } from '@/utils/common';
   import { parseResourceHref } from '@/utils/noteResourceRefs';
-  import { scrollIntoContainer } from '@/utils/zoom';
+  import { scrollIntoContainer } from '@/utils/scrolling';
 
   const DrawingNoteEditor = defineAsyncComponent(
     () => import('@/components/noteLibrary/drawing/DrawingNoteEditor.vue'),

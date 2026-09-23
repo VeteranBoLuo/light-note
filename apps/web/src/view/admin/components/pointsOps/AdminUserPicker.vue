@@ -154,27 +154,27 @@
 
 <style lang="less">
   .admin-user-picker-trigger {
-    width: min(560px, 100%);
+    width: min(var(--ui-layout-560, 560px), 100%);
   }
 
   .admin-user-picker-popover {
-    width: min(560px, calc(100vw - 24px));
-    max-height: 360px;
+    width: min(var(--ui-layout-560, 560px), calc(100vw - var(--ui-layout-24, 24px)));
+    max-height: var(--ui-layout-360, 360px);
     overflow-y: auto;
   }
 
   .admin-user-picker__panel {
     display: flex;
     flex-direction: column;
-    gap: 2px;
-    padding: 6px;
+    gap: var(--ui-space-2, 2px);
+    padding: var(--ui-space-6, 6px);
   }
 
   .admin-user-picker__empty {
     margin: 0;
-    padding: 18px 12px;
+    padding: var(--ui-space-18, 18px) var(--ui-space-12, 12px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     text-align: center;
   }
 
@@ -183,8 +183,8 @@
     align-items: center;
     justify-content: space-between;
     width: 100%;
-    min-height: 52px;
-    padding: 7px 10px !important;
+    min-height: var(--ui-control-52, 52px);
+    padding: var(--ui-space-7, 7px) var(--ui-space-10, 10px) !important;
     border: 1px solid transparent !important;
     border-radius: 8px !important;
     background: transparent !important;
@@ -210,15 +210,15 @@
     }
 
     small {
-      margin-top: 2px;
+      margin-top: var(--ui-space-2, 2px);
       color: var(--desc-color);
     }
   }
 
   .admin-user-picker__points {
     flex: 0 0 auto;
-    margin-left: 12px;
+    margin-left: var(--ui-space-12, 12px);
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 </style>

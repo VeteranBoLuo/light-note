@@ -2,7 +2,7 @@
   <BModal
     v-model:visible="visible"
     :title="title"
-    width="min(520px, 94vw)"
+    width="min(var(--ui-layout-520, 520px), 94vw)"
     :show-footer="false"
     :mask-closable="!loading"
     :esc-closable="!loading"
@@ -113,7 +113,7 @@
 <style scoped lang="less">
   .admin-risk-action {
     display: grid;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
 
   .admin-risk-action__impact,
@@ -123,7 +123,7 @@
   }
 
   .admin-risk-action__impact {
-    padding: 12px 14px;
+    padding: var(--ui-space-12, 12px) var(--ui-space-14, 14px);
     border: 1px solid var(--error-color, #d14343);
     border-radius: 10px;
     background: var(--surface-background, var(--card-background));
@@ -132,26 +132,26 @@
 
   .admin-risk-action__field {
     display: grid;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
     color: var(--text-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .admin-risk-action__field b {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-weight: 500;
   }
 
   .admin-risk-action__audit {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .admin-risk-action__footer {
     display: flex;
     justify-content: flex-end;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   html.light-note-mobile-rendering .admin-risk-action__impact {

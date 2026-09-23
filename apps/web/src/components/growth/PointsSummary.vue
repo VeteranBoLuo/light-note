@@ -173,46 +173,46 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
+    gap: var(--ui-space-16, 16px);
   }
   .balance {
     display: grid;
-    gap: 4px;
+    gap: var(--ui-space-4, 4px);
     min-width: 0;
   }
   .balance span,
   .totals span {
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .balance strong {
-    font-size: 32px;
+    font-size: var(--ui-font-32, 32px);
     font-variant-numeric: tabular-nums;
     overflow-wrap: anywhere;
   }
   .summary-bottom {
-    margin-top: 18px;
+    margin-top: var(--ui-space-18, 18px);
     flex-wrap: wrap;
   }
   .totals {
     display: flex;
-    gap: 32px;
+    gap: var(--ui-space-32, 32px);
   }
   .totals > div {
     display: grid;
-    gap: 5px;
+    gap: var(--ui-space-5, 5px);
   }
   .totals b {
-    font-size: 19px;
+    font-size: var(--ui-font-19, 19px);
     font-variant-numeric: tabular-nums;
   }
   .summary-actions {
     display: flex;
-    gap: 8px;
+    gap: var(--ui-space-8, 8px);
   }
   .summary-disclosure {
-    gap: 6px;
-    padding: 0 6px;
+    gap: var(--ui-space-6, 6px);
+    padding: 0 var(--ui-space-6, 6px);
     color: var(--desc-color);
     background: transparent;
     box-shadow: none;
@@ -247,18 +247,18 @@
   .summary-state {
     display: flex;
     align-items: center;
-    gap: 8px;
-    min-height: 65px;
+    gap: var(--ui-space-8, 8px);
+    min-height: var(--ui-layout-65, 65px);
   }
   .summary-details {
-    margin-top: 18px;
-    padding-top: 16px;
+    margin-top: var(--ui-space-18, 18px);
+    padding-top: var(--ui-space-16, 16px);
     border-top: 1px solid var(--card-border-color);
   }
   h3,
   h4 {
-    margin: 0 0 12px;
-    font-size: 14px;
+    margin: 0 0 var(--ui-space-12, 12px);
+    font-size: var(--ui-font-14, 14px);
   }
   h4 {
     color: var(--desc-color);
@@ -267,14 +267,14 @@
   .source-groups {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 32px;
+    gap: var(--ui-space-32, 32px);
   }
   .source-row {
     display: flex;
     justify-content: space-between;
-    gap: 16px;
-    padding: 8px 0;
-    font-size: 13px;
+    gap: var(--ui-space-16, 16px);
+    padding: var(--ui-space-8, 8px) 0;
+    font-size: var(--ui-font-13, 13px);
   }
   .source-row span {
     overflow-wrap: anywhere;
@@ -286,21 +286,21 @@
   .empty,
   .rules-hint {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
   .rules {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 16px;
-    margin: 16px 0 0;
+    gap: var(--ui-space-16, 16px);
+    margin: var(--ui-space-16, 16px) 0 0;
   }
   .rules dt {
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
   .rules dd {
-    margin: 4px 0 0;
-    font-size: 15px;
+    margin: var(--ui-space-4, 4px) 0 0;
+    font-size: var(--ui-font-15, 15px);
   }
   @media (max-width: 767px) {
     .totals {

@@ -203,12 +203,12 @@
   );
   const number = (value: unknown) => Number(value || 0);
   const columns = computed(() => [
-    { title: t('securityV2.review.time'), key: 'time', width: '85px' },
-    { title: t('securityV2.review.score'), key: 'score', width: '105px' },
-    { title: t('securityV2.review.ruleRoute'), key: 'ruleRoute', width: 'minmax(190px,1fr)' },
-    { title: t('securityV2.review.actor'), key: 'actor', width: 'minmax(145px,.8fr)' },
-    { title: t('securityV2.review.hit'), key: 'hits', width: '72px' },
-    { title: t('securityV2.review.action'), key: 'action', width: '90px' },
+    { title: t('securityV2.review.time'), key: 'time', width: 'var(--ui-layout-85, 85px)' },
+    { title: t('securityV2.review.score'), key: 'score', width: 'var(--ui-layout-105, 105px)' },
+    { title: t('securityV2.review.ruleRoute'), key: 'ruleRoute', width: 'minmax(var(--ui-layout-190, 190px),1fr)' },
+    { title: t('securityV2.review.actor'), key: 'actor', width: 'minmax(var(--ui-layout-145, 145px),.8fr)' },
+    { title: t('securityV2.review.hit'), key: 'hits', width: 'var(--ui-layout-72, 72px)' },
+    { title: t('securityV2.review.action'), key: 'action', width: 'var(--ui-layout-90, 90px)' },
   ]);
   const dispositionOptions = computed(() => [
     { value: 'unknown', label: t('securityV2.review.pending') },

@@ -2,7 +2,7 @@
   <BModal
     v-model:visible="visible"
     :title="t('communityChat.onlineMembers.title')"
-    width="min(520px, 92vw)"
+    width="min(var(--ui-layout-520, 520px), 92vw)"
     :show-footer="false"
   >
     <div class="chat-online-members-modal" :style="{ '--chat-online-members-row-height': `${memberRowHeight}px` }">
@@ -37,17 +37,13 @@
         <BButton size="small" @click="emit('retry')">{{ t('communityChat.onlineMembers.retry') }}</BButton>
       </div>
       <template v-else>
-        <ul
-          v-if="resultRowCount"
-          class="chat-online-members-modal__list"
-          :style="{ minHeight: resultListMinHeight }"
-        >
+        <ul v-if="resultRowCount" class="chat-online-members-modal__list" :style="{ minHeight: resultListMinHeight }">
           <li v-for="(member, index) in snapshot?.members || []" :key="`${member.alias}-${member.role}-${index}`">
             <span class="chat-online-members-modal__avatar-slot">
               <AvatarFramePreview
                 :frame-id="member.frameId"
                 :src="member.avatar || icon.communityChat.defaultAvatar"
-                :size="38"
+                :size="avatarSize"
                 :animated="false"
                 class="chat-online-members-modal__avatar"
               />
@@ -94,6 +90,9 @@
   import icon from '@/config/icon';
   import { AVATAR_FRAME_ARTWORK } from '@/config/avatarFrameArtwork';
 
+  import { useUiDensity } from '@/composables/useUiDensity';
+  const { dimension } = useUiDensity();
+  const avatarSize = computed(() => dimension(38, 'layout'));
   const props = withDefaults(
     defineProps<{
       onlineCount?: number;
@@ -113,9 +112,15 @@
   const { t } = useI18n();
   // 38px 头像按 64px 设计基准缩放；预留目录最大外径及行内边距、边框。
   // 骨架与结果必须用同一行高，不能让真实头像框在请求完成后撑高居中弹框。
-  const memberRowHeight = Math.max(
-    62,
-    Math.round((Math.max(...Object.values(AVATAR_FRAME_ARTWORK).map((artwork) => artwork.outerSize)) * 38) / 64) + 18,
+  const memberRowHeight = computed(() =>
+    Math.max(
+      dimension(62, 'layout'),
+      Math.round(
+        (Math.max(...Object.values(AVATAR_FRAME_ARTWORK).map((artwork) => artwork.outerSize)) * avatarSize.value) / 64,
+      ) +
+        dimension(8) * 2 +
+        2,
+    ),
   );
   const reservedRowCount = ref(1);
   function boundedRowCount(value: number) {
@@ -134,8 +139,8 @@
   const loadingRowCount = computed(() => reservedRowCount.value);
   function listMinHeight(rowCount: number) {
     const boundedCount = boundedRowCount(rowCount);
-    const rowsHeight = boundedCount * memberRowHeight + (boundedCount - 1) * 7;
-    return `min(${Math.min(rowsHeight, 430)}px, 54vh)`;
+    const rowsHeight = boundedCount * memberRowHeight.value + (boundedCount - 1) * dimension(7);
+    return `min(${Math.min(rowsHeight, dimension(430, 'layout'))}px, 54vh)`;
   }
   const loadingListMinHeight = computed(() => {
     return listMinHeight(loadingRowCount.value);
@@ -153,10 +158,10 @@
 
 <style scoped lang="less">
   .chat-online-members-modal {
-    --chat-online-members-avatar-column: 88px;
+    --chat-online-members-avatar-column: var(--ui-layout-88, 88px);
 
     display: grid;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     color: var(--text-color);
   }
 
@@ -165,13 +170,13 @@
   .chat-online-members-modal__empty {
     margin: 0;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.6;
   }
 
   .chat-online-members-modal__state,
   .chat-online-members-modal__empty {
-    min-height: 116px;
+    min-height: var(--ui-layout-116, 116px);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -179,7 +184,7 @@
 
   .chat-online-members-modal__state {
     flex-direction: column;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     background: var(--workspace-panel-bg-color);
@@ -187,22 +192,22 @@
   }
 
   .chat-online-members-modal__state strong {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .chat-online-members-modal__state span {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .chat-online-members-modal__list {
-    max-height: min(430px, 54vh);
+    max-height: min(var(--ui-layout-430, 430px), 54vh);
     margin: 0;
     padding: 0;
     display: grid;
     grid-auto-rows: minmax(var(--chat-online-members-row-height), max-content);
     align-content: start;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     overflow-y: auto;
     list-style: none;
   }
@@ -211,12 +216,12 @@
   .chat-online-members-modal__skeleton-row {
     min-width: 0;
     min-height: var(--chat-online-members-row-height);
-    padding: 8px 10px;
+    padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px);
     box-sizing: border-box;
     display: grid;
     grid-template-columns: var(--chat-online-members-avatar-column) minmax(0, 1fr) auto;
     align-items: center;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     background: var(--card-background);
@@ -239,25 +244,25 @@
   }
 
   .chat-online-members-modal__skeleton-avatar {
-    width: 38px;
-    height: 38px;
+    width: var(--ui-layout-38, 38px);
+    height: var(--ui-layout-38, 38px);
     justify-self: center;
     border-radius: 50%;
   }
 
   .chat-online-members-modal__skeleton-copy {
     display: grid;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
 
   .chat-online-members-modal__skeleton-copy i {
-    width: min(132px, 55%);
+    width: min(var(--ui-layout-132, 132px), 55%);
     height: 10px;
     border-radius: 5px;
   }
 
   .chat-online-members-modal__skeleton-copy i:last-child {
-    width: min(82px, 36%);
+    width: min(var(--ui-layout-82, 82px), 36%);
     height: 8px;
   }
 
@@ -295,7 +300,7 @@
   .chat-online-members-modal__copy {
     min-width: 0;
     display: grid;
-    gap: 3px;
+    gap: var(--ui-space-3, 3px);
   }
 
   /*
@@ -318,12 +323,12 @@
   }
 
   .chat-online-members-modal__copy strong {
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .chat-online-members-modal__copy small {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .chat-online-members-modal__list li > i {
@@ -334,8 +339,8 @@
   }
 
   .chat-online-members-modal__guest-avatar {
-    width: 38px;
-    height: 38px;
+    width: var(--ui-layout-38, 38px);
+    height: var(--ui-layout-38, 38px);
     justify-self: center;
     display: grid;
     place-items: center;
@@ -343,12 +348,12 @@
     border-radius: 50%;
     background: var(--workspace-panel-bg-color);
     color: var(--desc-color);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     font-weight: 700;
   }
 
   .chat-online-members-modal__privacy {
-    padding-top: 2px;
+    padding-top: var(--ui-space-2, 2px);
   }
 
   .chat-online-members-modal__actions {

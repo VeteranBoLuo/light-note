@@ -107,8 +107,8 @@
       : {
           visible: visible.value,
           title: t('note.attachPagesTitle'),
-          width: 'min(620px, 88vw)',
-          height: 'min(740px, 84vh)',
+          width: 'min(var(--ui-layout-620, 620px), 88vw)',
+          height: 'min(var(--ui-layout-740, 740px), 84vh)',
           maskClosable: false,
           showFooter: false,
         },
@@ -276,20 +276,20 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
   }
 
   .note-attach-summary {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
-    padding: 10px 12px;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     border: 1px solid var(--surface-border-color);
     border-radius: 10px;
     color: var(--desc-color);
     background: var(--workspace-panel-bg-color, var(--menu-body-bg-color));
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .note-attach-summary strong {
@@ -304,23 +304,23 @@
   .note-attach-empty {
     margin: 0;
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     line-height: 1.6;
   }
 
   .note-attach-list {
     flex: 1;
-    min-height: 180px;
+    min-height: var(--ui-layout-180, 180px);
     overflow-y: auto;
   }
 
   .note-attach-row {
     width: 100%;
-    min-height: 38px;
-    margin-block: 2px;
-    padding: 5px 8px 5px calc(10px + var(--note-attach-depth, 0) * 14px);
+    min-height: var(--ui-control-38, 38px);
+    margin-block: var(--ui-space-2, 2px);
+    padding: var(--ui-space-5, 5px) var(--ui-space-8, 8px) var(--ui-space-5, 5px) calc(var(--ui-space-10, 10px) + var(--note-attach-depth, 0) * var(--ui-space-14, 14px));
     justify-content: flex-start;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
     border: 1px solid transparent;
     border-radius: 9px;
     color: var(--desc-color);
@@ -349,7 +349,7 @@
   .note-attach-disabled {
     margin-left: auto;
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
 
   .note-attach-check {
@@ -360,13 +360,13 @@
   .note-attach-error {
     margin: 0;
     color: var(--danger-color, #ff4d4f);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .note-attach-footer {
     display: flex;
-    gap: 8px;
-    padding: 8px 0 max(12px, env(safe-area-inset-bottom));
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-8, 8px) 0 max(var(--ui-space-12, 12px), env(safe-area-inset-bottom));
 
     > * {
       flex: 1;

@@ -79,17 +79,18 @@
     height: 100%;
     min-height: 0;
     display: grid;
-    grid-template-columns: 216px minmax(0, 1fr);
+    grid-template-columns: var(--ui-layout-216, 216px) minmax(0, 1fr);
     overflow: hidden;
     background: var(--background-color);
     color: var(--text-color);
+    font-size: var(--ui-font-16, 16px);
   }
   .infra-shell__sidebar {
     min-height: 0;
     display: flex;
     flex-direction: column;
-    gap: 18px;
-    padding: 24px 16px 18px;
+    gap: var(--ui-space-18, 18px);
+    padding: var(--ui-space-24, 24px) var(--ui-space-16, 16px) var(--ui-space-18, 18px);
     overflow-y: auto;
     border-right: 1px solid var(--surface-border-color);
     background: var(--card-background);
@@ -97,12 +98,12 @@
   .infra-shell__brand {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 0 8px 8px;
+    gap: var(--ui-space-10, 10px);
+    padding: 0 var(--ui-space-8, 8px) var(--ui-space-8, 8px);
   }
   .infra-shell__brand > span {
-    width: 38px;
-    height: 38px;
+    width: var(--ui-layout-38, 38px);
+    height: var(--ui-layout-38, 38px);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -114,25 +115,25 @@
   .infra-shell__brand div {
     min-width: 0;
     display: grid;
-    gap: 2px;
+    gap: var(--ui-space-2, 2px);
   }
   .infra-shell__brand strong {
-    font-size: 15px;
+    font-size: var(--ui-font-15, 15px);
   }
   .infra-shell__brand small,
   .infra-shell__boundary {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: var(--ui-font-11, 11px);
   }
   .infra-shell__nav {
     display: grid;
-    gap: 6px;
+    gap: var(--ui-space-6, 6px);
   }
   .infra-shell__nav-item {
     width: 100%;
-    min-height: 42px;
+    min-height: var(--ui-control-42, 42px);
     justify-content: flex-start;
-    gap: 10px;
+    gap: var(--ui-space-10, 10px);
     border-color: transparent;
     background: transparent;
     color: var(--desc-color);
@@ -150,7 +151,7 @@
     font-weight: 600;
   }
   .infra-shell__boundary {
-    margin: auto 8px 0;
+    margin: auto var(--ui-space-8, 8px) 0;
     line-height: 1.65;
   }
   .infra-shell__workspace {

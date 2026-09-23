@@ -1,5 +1,6 @@
 <template>
   <AdminDataPage
+    class="usermg-page"
     eyebrow="Admin / Users"
     :title="t('adminUserManagement.title')"
     :subtitle="t('adminUserManagement.subtitle')"
@@ -64,7 +65,7 @@
                 v-if="frameVariant(record.equippedFrame)"
                 :frame-id="record.equippedFrame"
                 :src="record.headPicture || icon.navigation.user"
-                :size="30"
+                :size="dimension(30, 'icon')"
                 layout-mode="slot"
                 pause-when-offscreen
               />
@@ -134,7 +135,7 @@
   <BModal
     v-if="editVisible"
     :title="t('adminUserManagement.editTitle')"
-    width="600px"
+    width="var(--ui-layout-600, 600px)"
     v-model:visible="editVisible"
     @close="editVisible = false"
     @ok="openEditConfirmation"
@@ -163,6 +164,7 @@
 
 <script lang="ts" setup>
   import { computed, ref } from 'vue';
+  import { useUiDensity } from '@/composables/useUiDensity';
   import { useI18n } from 'vue-i18n';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -186,6 +188,7 @@
   import { formatAdminDeviceLabel, formatAdminUserAgent } from './userAgentFormat.ts';
 
   const { t } = useI18n();
+  const { dimension } = useUiDensity();
   const tableRef = ref<InstanceType<typeof BTable> | null>(null);
   const {
     items: userList,
@@ -234,12 +237,17 @@
   } = useAdminUserOperations({ t, items: userList, reloadUsers });
 
   const userColumns = computed(() => [
-    { title: t('adminUserManagement.columns.avatar'), key: 'headPicture', width: '88px', overflowVisible: true },
-    { title: t('adminUserManagement.columns.alias'), key: 'alias', width: '150px' },
-    { title: t('adminUserManagement.remarkColumn'), key: 'adminRemark', width: '150px' },
+    {
+      title: t('adminUserManagement.columns.avatar'),
+      key: 'headPicture',
+      width: 'var(--ui-layout-88, 88px)',
+      overflowVisible: true,
+    },
+    { title: t('adminUserManagement.columns.alias'), key: 'alias', width: 'var(--ui-layout-150, 150px)' },
+    { title: t('adminUserManagement.remarkColumn'), key: 'adminRemark', width: 'var(--ui-layout-150, 150px)' },
     { title: t('adminUserManagement.email'), key: 'email', width: '1fr' },
-    { title: 'IP', key: 'ip', width: '150px' },
-    { title: t('adminUserManagement.columns.browser'), key: 'browser', width: '125px' },
+    { title: 'IP', key: 'ip', width: 'var(--ui-layout-150, 150px)' },
+    { title: t('adminUserManagement.columns.browser'), key: 'browser', width: 'var(--ui-layout-125, 125px)' },
     {
       title: t('adminUserManagement.columns.lastActive'),
       key: 'lastActiveTime',
@@ -247,7 +255,7 @@
       sortable: true,
     },
     { title: t('adminUserManagement.columns.createdAt'), key: 'createTime', width: '1fr', sortable: true },
-    { title: t('adminUserManagement.columns.actions'), key: 'operation', width: '100px' },
+    { title: t('adminUserManagement.columns.actions'), key: 'operation', width: 'var(--ui-layout-100, 100px)' },
   ]);
 
   function onRowClick(record: any) {
@@ -298,30 +306,33 @@
 
 <style lang="less" scoped>
   @import '@/assets/css/admin-mixins.less';
+  .usermg-page {
+    font-size: var(--ui-font-16, 16px);
+  }
   .log-search-input {
     flex: 1;
   }
 
   .usermg-filter {
-    width: 132px;
-    flex: 0 0 132px;
+    width: var(--ui-layout-132, 132px);
+    flex: 0 0 var(--ui-layout-132, 132px);
   }
 
   .usermg-filter--activity {
-    width: 168px;
-    flex-basis: 168px;
+    width: var(--ui-layout-168, 168px);
+    flex-basis: var(--ui-layout-168, 168px);
   }
 
   .user-detail__grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px 20px;
+    gap: var(--ui-space-12, 12px) var(--ui-space-20, 20px);
   }
 
   .user-detail__grid label {
     display: block;
-    margin-bottom: 4px;
-    font-size: 12px;
+    margin-bottom: var(--ui-space-4, 4px);
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
   }
 
@@ -345,13 +356,13 @@
   }
 
   .usermg-avatar {
-    width: 36px;
-    min-width: 36px;
-    max-width: 36px;
-    height: 36px;
-    min-height: 36px;
-    max-height: 36px;
-    flex: 0 0 36px;
+    width: var(--ui-layout-36, 36px);
+    min-width: var(--ui-layout-36, 36px);
+    max-width: var(--ui-layout-36, 36px);
+    height: var(--ui-layout-36, 36px);
+    min-height: var(--ui-layout-36, 36px);
+    max-height: var(--ui-layout-36, 36px);
+    flex: 0 0 var(--ui-layout-36, 36px);
     box-sizing: border-box;
     display: inline-flex;
     align-items: center;
@@ -366,12 +377,12 @@
   .usermg-avatar-cell {
     display: inline-flex;
     align-items: center;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
 
   .usermg-avatar-cell small {
     color: var(--desc-color);
-    font-size: 10px;
+    font-size: var(--ui-font-10, 10px);
     font-weight: 600;
     white-space: nowrap;
   }
@@ -380,7 +391,7 @@
     display: block;
     overflow: hidden;
     color: var(--text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -410,7 +421,7 @@
 
     display: inline-flex;
     align-items: center;
-    padding: 2px;
+    padding: var(--ui-space-2, 2px);
     border: none;
     border-radius: 6px;
     background: none;
