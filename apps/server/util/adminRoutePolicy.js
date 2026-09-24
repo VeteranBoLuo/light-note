@@ -413,6 +413,8 @@ declare(ADMIN_POLICIES.READ, 'toolbox', [
   ['GET', '/toolbox/workspaces/:workspaceId'],
   ['GET', '/toolbox/workspaces/:workspaceId/items/:itemId'],
   ['GET', '/toolbox/tasks'],
+  ['GET', '/toolbox/translation/history'],
+  ['GET', '/toolbox/translation/history/:jobId'],
   ['GET', '/toolbox/jobs'],
   ['GET', '/toolbox/jobs/:jobId'],
   ['GET', '/toolbox/artifacts/:artifactId'],
@@ -422,6 +424,8 @@ declare(ADMIN_POLICIES.READ, 'toolbox', [
 // 代管上下文中替数据主体执行，哪怕当前模式是 maintain。
 declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'toolbox', [
   ['POST', '/toolbox/quotes'],
+  ['POST', '/toolbox/translation/stream'],
+  ['POST', '/toolbox/translation/history/delete'],
   ['POST', '/toolbox/project-entry/dismiss'],
   ['POST', '/toolbox/workspaces'],
   ['PATCH', '/toolbox/workspaces/:workspaceId'],

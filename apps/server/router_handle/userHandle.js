@@ -18,6 +18,7 @@ import { validateQueryParams } from '../util/request.js';
 import { fetchGitHubApiJson, fetchGitHubTokenSafely, GitHubOAuthError } from '../util/githubOAuth.js';
 import { createNotification } from '../util/notification.js';
 import { verifyPassword, hashPassword, validatePassword } from '../util/password.js';
+import { hasLoginPassword } from '../util/loginPasswordState.js';
 import { sendTrackedEmail } from '../util/emailDelivery.js';
 import crypto from 'crypto';
 import {
@@ -92,10 +93,7 @@ import {
 } from '../util/services/featureAnnouncementService.js';
 import { preserveCommunityPreference } from '../util/communityPreferences.js';
 import { preserveDailyBriefPreference } from '../util/dailyBriefFeature.js';
-let redisClient;
-if (process.platform === 'linux') {
-  redisClient = (await import('../util/redisClient.js')).default;
-}
+import redisClient from '../util/redisClient.js';
 
 const isActiveIpBan = (ipReputation) => {
   const bannedUntil = ipReputation?.banned_until ? new Date(ipReputation.banned_until).getTime() : 0;
@@ -198,7 +196,9 @@ const queryUserInfoById = async (id) => {
 const sanitizeUser = (user) => {
   if (!user) return user;
   const safeUser = { ...user };
-  safeUser.password = safeUser.password ? '******' : '';
+  safeUser.hasPassword = hasLoginPassword(user);
+  safeUser.password = safeUser.hasPassword === false ? '' : safeUser.password ? '******' : '';
+  delete safeUser.github_access_token;
   return safeUser;
 };
 
@@ -209,7 +209,7 @@ export const login = async (req, res) => {
     const ipReputation = await getIpReputation(getClientIp(req));
     const isIpBanned = isActiveIpBan(ipReputation);
     const [result] = await pool.query('SELECT * FROM user WHERE email = ?', [email]);
-    if (result.length === 0 || !verifyPassword(password, result[0].password)) {
+    if (result.length === 0 || hasLoginPassword(result[0]) === false || !verifyPassword(password, result[0].password)) {
       if (isIpBanned) {
         res.send(resultData(null, 403, 'IP 已处于封禁期，禁止登录'));
         return;
@@ -263,6 +263,12 @@ export const login = async (req, res) => {
       pool
         .query("UPDATE user SET password = ?, password_method = 'scrypt' WHERE id = ?", [upgradedHash, result[0].id])
         .catch((e) => console.warn('[auth] 明文密码透明升级失败 code=%s', stableAgentErrorCode(e))); // 非关键,留痕不阻断
+    }
+    if (result[0].login_password_set == null) {
+      await pool.query('UPDATE user SET login_password_set = 1 WHERE id = ? AND password <=> ?', [
+        result[0].id,
+        result[0].password,
+      ]);
     }
     const sid = await issueLoginSession(req, res, result[0], Boolean(rememberMe));
     const userInfo = await queryUserInfoById(result[0].id);
@@ -431,6 +437,7 @@ export const registerUser = async (req, res) => {
     if (params.password) {
       params.password = hashPassword(params.password);
       params.password_method = 'scrypt';
+      params.login_password_set = 1;
     }
 
     // 插入新用户。并发双注册竞态兜底:SELECT 预检后两个请求仍可能同时 INSERT,
@@ -786,15 +793,17 @@ export const getUserList = async (req, res) => {
         [req.user.id, ...filterParams, ...cursorParams, take, ...(cursorMode ? [] : [skip])],
       ),
       !cursorMode || !cursor
-        ? pool.query(
-            `SELECT COUNT(*) AS total
+        ? pool
+            .query(
+              `SELECT COUNT(*) AS total
              FROM user u
              ${activityWindow === 'all' ? '' : USER_LAST_INTERACTION_JOIN}
              LEFT JOIN admin_user_remarks aur
                ON aur.admin_user_id = ? AND aur.target_user_id = u.id
              WHERE ${whereSql}`,
-            [req.user.id, ...filterParams],
-          ).then(([totalRes]) => Number(totalRes[0].total || 0))
+              [req.user.id, ...filterParams],
+            )
+            .then(([totalRes]) => Number(totalRes[0].total || 0))
         : Promise.resolve(undefined),
     ]);
     const hasMore = cursorMode && rows.length > pageSize;
@@ -1704,16 +1713,17 @@ export const handleUserDatabaseOperation = async (githubUser, req, { duplicateRe
       // 兼容清理历史版本曾分配的固定 GitHub 初始密码；仅在用户再次通过 GitHub 证明身份后轮换。
       if (
         user.login_type === 'github' &&
+        user.login_password_set == null &&
         typeof user.password === 'string' &&
         user.password &&
         verifyPassword('123456', user.password)
       ) {
         const rotatedPassword = hashPassword(crypto.randomBytes(32).toString('base64url'));
-        await connection.query(`UPDATE user SET password = ?, password_method = 'scrypt' WHERE id = ?`, [
-          rotatedPassword,
-          user.id,
-        ]);
-        user = { ...user, password: rotatedPassword, password_method: 'scrypt' };
+        await connection.query(
+          `UPDATE user SET password = ?, password_method = 'scrypt', login_password_set = 0 WHERE id = ?`,
+          [rotatedPassword, user.id],
+        );
+        user = { ...user, password: rotatedPassword, password_method: 'scrypt', login_password_set: 0 };
       }
     } else {
       const [existingByEmail] = await connection.query(`SELECT * FROM user WHERE email = ? LIMIT 1 FOR UPDATE`, [
@@ -1728,8 +1738,8 @@ export const handleUserDatabaseOperation = async (githubUser, req, { duplicateRe
           });
         }
         await connection.query(
-          `UPDATE user SET github_id = ?, login_type = 'github' WHERE id = ? AND (github_id IS NULL OR github_id = ?)`,
-          [githubId, existingByEmail[0].id, githubId],
+          `UPDATE user SET github_id = ?, login_password_set = ?, login_type = 'github' WHERE id = ? AND (github_id IS NULL OR github_id = ?)`,
+          [githubId, hasLoginPassword(existingByEmail[0]), existingByEmail[0].id, githubId],
         );
         const [updatedUser] = await connection.query(`SELECT * FROM user WHERE id = ? LIMIT 1`, [
           existingByEmail[0].id,
@@ -1749,8 +1759,8 @@ export const handleUserDatabaseOperation = async (githubUser, req, { duplicateRe
         });
         await connection.query(
           `INSERT INTO user
-            (id, email, github_id, login_type, head_picture, password, password_method, alias, role, preferences)
-           VALUES (?, ?, ?, 'github', ?, ?, 'scrypt', ?, 'user', ?)`,
+            (id, email, github_id, login_type, head_picture, password, password_method, login_password_set, alias, role, preferences)
+           VALUES (?, ?, ?, 'github', ?, ?, 'scrypt', 0, ?, 'user', ?)`,
           [
             createdUserId,
             safeEmail,
@@ -1820,44 +1830,72 @@ export const handleUserDatabaseOperation = async (githubUser, req, { duplicateRe
 
 export const configPassword = async (req, res) => {
   try {
-    const id = req.user?.id; // 获取用户ID
+    const id = req.user?.id;
     if (!id || req.user?.role === 'visitor') {
       return res.send(resultData(null, 401, L(req, '请先登录', 'Please sign in first.')));
     }
-    const { password, type } = req.body;
-    const pwdCheck = validatePassword(password, reqLang(req));
-    if (!pwdCheck.ok) {
-      return res.send(resultData(null, 400, pwdCheck.msg));
-    }
-    const [oldUser] = await pool.query(`SELECT * FROM user WHERE id = ? LIMIT 1`, [id]);
-    if (type === 'update') {
-      const { oldPassword } = req.body;
-      if (!verifyPassword(oldPassword, oldUser[0].password)) {
-        throw new Error('原密码错误');
+    const { password, oldPassword, code } = req.body || {};
+    const check = validatePassword(password, reqLang(req));
+    if (!check.ok) return res.send(resultData(null, 400, check.msg));
+    const [[user]] = await pool.query('SELECT * FROM user WHERE id = ? LIMIT 1', [id]);
+    if (!user) return res.send(resultData(null, 401, L(req, '请重新登录', 'Please sign in again.')));
+    // 身份证明由服务端验证；客户端 type 不能跳过原密码/验证码。
+    if (code) {
+      if (!(await consumePasswordCode(normalizeEmail(user.email), code))) {
+        return res.send(resultData(null, 400, L(req, '验证码错误或已过期', 'The code is incorrect or expired.')));
       }
-      if (verifyPassword(password, oldUser[0].password)) {
-        throw new Error('新密码不能与原密码相同');
-      }
+    } else if (hasLoginPassword(user) === false || !verifyPassword(oldPassword, user.password)) {
+      return res.send(
+        resultData(null, 400, L(req, '请验证当前密码或邮箱验证码', 'Verify your current password or email code.')),
+      );
     }
-    const hashedPassword = hashPassword(password);
-    pool
-      .query('update user set password=?, password_method=? where id=?', [hashedPassword, 'scrypt', id])
-      .then(async ([result]) => {
-        await recordServerOperation(req, {
-          module: '账号安全',
-          operation: type === 'update' ? '修改密码成功' : '设置密码成功',
-        }).catch((error) => console.warn('记录密码操作失败:', error.message));
-        await removeUserSessions(id);
-        await logoutCurrentSession(req, res);
-        res.send(resultData(result));
-      })
-      .catch((err) => {
-        res.send(resultData(null, 500, L(req, '服务器内部错误: ', 'Server error: ') + err.message)); // 设置状态码为500
-      });
-  } catch (e) {
-    res.send(resultData(null, 400, e.message)); // 设置状态码为400
+    if (!code && verifyPassword(password, user.password)) {
+      return res.send(
+        resultData(
+          null,
+          400,
+          L(req, '新密码不能与原密码相同', 'The new password must differ from the current password.'),
+        ),
+      );
+    }
+    const [result] = await pool.query(
+      'UPDATE user SET password = ?, password_method = ?, login_password_set = 1 WHERE id = ? AND password <=> ? AND email <=> ?',
+      [hashPassword(password), 'scrypt', id, user.password, user.email],
+    );
+    if (!result.affectedRows) {
+      return res.send(
+        resultData(null, 409, L(req, '密码已发生变化，请重新验证', 'Your password changed. Please verify again.')),
+      );
+    }
+    await finishPasswordChange(req, res, id, '设置或修改密码成功');
+    res.send(resultData(result));
+  } catch (error) {
+    console.error('[password-change] failed code=%s', stableAgentErrorCode(error));
+    res.send(resultData(null, 500, L(req, '密码更新失败，请重试', 'Could not update password. Please retry.')));
   }
 };
+
+// 原子消费验证码：并发提交只有一次成功，避免 GET/DEL 之间重复使用。
+async function consumePasswordCode(email, code) {
+  if (!email || typeof code !== 'string' || !/^\d{6}$/.test(code)) return false;
+  return (
+    Number(
+      await redisClient.eval(
+        "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) else return 0 end",
+        { keys: [`email:code:${email}`], arguments: [code] },
+      ),
+    ) === 1
+  );
+}
+
+async function finishPasswordChange(req, res, userId, operation) {
+  await removeUserSessions(userId);
+  // 匿名找回密码或正在登录另一账号时，不清除无关账号的当前会话。
+  if (req.user?.id === userId) await logoutCurrentSession(req, res);
+  await recordServerOperation(req, { module: '账号安全', operation, userId }).catch((error) =>
+    console.warn('[password-change] audit failed code=%s', stableAgentErrorCode(error)),
+  );
+}
 
 // 发送验证码接口
 export const sendEmail = async (req, res) => {
@@ -1866,7 +1904,7 @@ export const sendEmail = async (req, res) => {
     if (!email) {
       return res.send(resultData(null, 400, L(req, '邮箱不能为空', 'Email is required.')));
     }
-    const code = Math.floor(100000 + Math.random() * 900000).toString(); // 6位数字验证码
+    const code = crypto.randomInt(100000, 1000000).toString(); // 6位数字验证码
 
     // 1. 存储验证码到Redis（5分钟过期）
     await redisClient.setEx(`email:code:${email}`, 300, code);
@@ -1909,36 +1947,24 @@ export const verifyCode = async (req, res) => {
       return res.send(resultData(null, 400, pwdCheck.msg));
     }
 
-    // 1. 从Redis获取存储的验证码
-    const storedCode = await redisClient.get(`email:code:${email}`);
-
-    // 2. 验证逻辑
-    if (!storedCode) {
-      res.send(
-        resultData(null, 400, L(req, '验证码已过期或未发送', 'The verification code has expired or was never sent.')),
+    const [[user]] = await pool.query('SELECT id, password, email FROM user WHERE email = ? LIMIT 1', [email]);
+    if (!user || !(await consumePasswordCode(email, code))) {
+      return res.send(resultData(null, 400, L(req, '验证码错误或已过期', 'The code is incorrect or expired.')));
+    }
+    const [updated] = await pool.query(
+      'UPDATE user SET password = ?, password_method = ?, login_password_set = 1 WHERE id = ? AND password <=> ? AND email <=> ?',
+      [hashPassword(password), 'scrypt', user.id, user.password, user.email],
+    );
+    if (!updated.affectedRows) {
+      return res.send(
+        resultData(null, 409, L(req, '密码已发生变化，请重新验证', 'Your password changed. Please verify again.')),
       );
-      return;
     }
-    if (storedCode !== code) {
-      res.send(resultData(null, 400, L(req, '验证码错误', 'Incorrect verification code.')));
-      return;
-    }
-    // 3. 验证成功后，确认账号存在，再消费验证码并设置新密码
-    const [users] = await pool.query('SELECT id FROM user WHERE email = ? LIMIT 1', [email]);
-    if (!users.length) {
-      return res.send(resultData(null, 404, L(req, '账号不存在', 'Account not found.')));
-    }
-    await redisClient.del(`email:code:${email}`);
-    const hashedPassword = hashPassword(password);
-    await pool.query('update user set password=?, password_method=? where email=?', [hashedPassword, 'scrypt', email]);
-    await recordServerOperation(req, {
-      module: '账号安全',
-      operation: '邮箱验证码重置密码成功',
-      userId: users[0].id,
-    }).catch((error) => console.warn('记录密码重置操作失败:', error.message));
+    await finishPasswordChange(req, res, user.id, '邮箱验证码重置密码成功');
     res.send(resultData(L(req, '重置密码成功', 'Password reset successfully.')));
   } catch (e) {
-    res.send(resultData(null, 500, L(req, '验证服务异常:', 'Verification service error: ') + e.message)); // 设置状态码为400
+    console.error('[password-reset] failed code=%s', stableAgentErrorCode(e));
+    res.send(resultData(null, 500, L(req, '密码重置失败，请重试', 'Could not reset password. Please retry.')));
   }
 };
 

@@ -44,7 +44,7 @@ describe('toolbox worker contracts', () => {
   });
 
   it('keeps shared AI tools, registered Skills and Worker strategies bidirectionally identical', () => {
-    const protocolTools = TOOLBOX_TOOL_CATALOG.filter((tool) => tool.executionMode === 'ai_skill');
+    const protocolTools = TOOLBOX_TOOL_CATALOG.filter((tool) => tool.executionMode === 'ai_skill' && tool.id !== 'translation');
     const protocolIds = protocolTools.map((tool) => tool.id).sort();
     const skillIds = toolboxSkills.map((skill) => skill.id.replace(/^toolbox\./u, '')).sort();
     const strategyIds = Object.keys(toolboxWorkerInternals.AI_TOOL_STRATEGIES).sort();

@@ -29,6 +29,7 @@
 </template>
 
 <script setup lang="ts">
+  import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
   import { computed, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
@@ -71,13 +72,14 @@
 
   async function createNoteFromAnalysis(response: AiSkillResponse) {
     if (creatingNote.value) return;
+    const source = JSON.stringify(resourceRefs.value);
     creatingNote.value = true;
     try {
-      const handoff = await persistAiMarkdownResultAsNote(response, generatedNoteTitle.value);
+      const handoff = await persistAiMarkdownResultAsNote(response, generatedNoteTitle.value, () => props.visible && JSON.stringify(resourceRefs.value) === source);
       if (!handoff) return;
       message.success(t('aiSkills.noteCreated'));
-      emit('update:visible', false);
-      await router.push(handoff.route);
+      if (!handoff.openAfterSave) return;
+      await closeCurrentMobileOverlayThen(() => emit('update:visible', false), () => router.push(handoff.route));
     } catch (error: any) {
       message.error(String(error?.message || t('aiSkills.noteCreateFailed')));
     } finally {

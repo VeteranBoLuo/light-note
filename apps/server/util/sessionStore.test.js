@@ -9,7 +9,8 @@ vi.mock('./redisClient.js', () => ({
   default: { get: vi.fn(), expire: vi.fn(), setEx: vi.fn(), del: redisDel },
 }));
 
-const { createSession, getSessionDeviceKey, groupUserSessions, touchUserLastActive } = await import('./sessionStore.js');
+const { createSession, getSessionDeviceKey, groupUserSessions, touchUserLastActive, removeUserSessions } =
+  await import('./sessionStore.js');
 
 function createConnection() {
   return {
@@ -146,5 +147,18 @@ describe('用户最近活跃时间', () => {
 
     expect(query).toHaveBeenCalledTimes(2);
     expect(query.mock.calls[0][0]).toContain('UPDATE user SET last_active_time = NOW()');
+  });
+});
+
+describe('密码变更后的整账号会话撤销', () => {
+  it('同时删除数据库会话与所有设备的 Redis 缓存', async () => {
+    query
+      .mockReset()
+      .mockResolvedValueOnce([[{ sid: 'desktop-sid' }, { sid: 'android-sid' }]])
+      .mockResolvedValueOnce([{ affectedRows: 2 }]);
+    redisDel.mockResolvedValue(2);
+    await removeUserSessions('password-user');
+    expect(query).toHaveBeenCalledWith('DELETE FROM user_sessions WHERE user_id = ?', ['password-user']);
+    expect(redisDel).toHaveBeenCalledWith(['session:desktop-sid', 'session:android-sid']);
   });
 });

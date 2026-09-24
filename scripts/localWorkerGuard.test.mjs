@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { inspectLocalWorkers } from "./localWorkerGuard.mjs";
+import { inspectLocalWorkers, localWorkerOwnerArg } from "./localWorkerGuard.mjs";
 
 test("仅回收同仓库已失去启动器的 pnpm Worker 组，保留活跃、手动和其他仓库进程", () => {
   const run = (file, args) => {
@@ -26,6 +26,30 @@ test("仅回收同仓库已失去启动器的 pnpm Worker 组，保留活跃、�
     orphanGroups: [20, 50],
     launchers: [],
   });
+});
+
+test("领头进程消失后只回收有本仓库标记的孤儿组，兼容 watch 子进程", () => {
+  const owner = localWorkerOwnerArg("/repo");
+  const otherOwner = localWorkerOwnerArg("/other");
+  const run = (file, args) => {
+    if (file === "ps") return [
+      `21 1 20 node node noteImportWorker.js ${owner}`,
+      `31 1 30 node node --watch resourceGovernanceWorker.js ${owner}`,
+      `32 31 30 /long/node/path /long/node/path/bin/node resourceGovernanceWorker.js ${owner}`,
+      "41 1 40 node node noteImportWorker.js",
+      `51 1 50 node node noteImportWorker.js ${otherOwner}`,
+      `61 1 60 node node noteImportWorker.js ${owner}`,
+      "62 1 60 node node unrelated.js",
+      `71 1 70 node node noteImportWorker.js ${owner}`,
+      `81 999 80 node node noteImportWorker.js ${owner}`,
+      `90 1 90 node node /bin/pnpm --filter server run worker:documents ${owner}`,
+      `91 90 90 node node documentWorker.js ${owner}`,
+    ].join("\n");
+    return `n${args[2] === "71" ? "/other/apps/server" : args[2] === "90" ? "/repo" : "/repo/apps/server"}`;
+  };
+  const result = inspectLocalWorkers("/repo/apps/server", run);
+  assert.deepEqual(result.orphanGroups, [20, 30, 90]);
+  assert.deepEqual(result.workers, [21, 31, 32, 41, 51, 61, 81, 91]);
 });
 
 test("进程退出或无法确认工作目录时不回收进程组", () => {

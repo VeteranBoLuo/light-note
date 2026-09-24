@@ -78,3 +78,28 @@ describe('账号设备下线', () => {
     expect(mocks.post.mock.calls.filter((c) => c[0].endsWith('revokeSession'))).toHaveLength(0);
   });
 });
+
+describe('账号绑定与密码状态展示', () => {
+  it('按 camelCase 接口显示 GitHub 已绑定和设置密码按钮', async () => {
+    mocks.get.mockResolvedValue({
+      status: 200,
+      data: {
+        email: 'fixture@example.com',
+        githubId: '123',
+        loginType: 'github',
+        hasPassword: false,
+        password: '******',
+      },
+    });
+    await mount();
+    expect(host.querySelector('.binding')?.textContent).toContain('GitHub：已绑定');
+    expect(host.querySelector('.binding')?.textContent).toContain('登录方式：GitHub');
+    expect(host.textContent).toContain('设置密码');
+    expect(host.textContent).not.toContain('修改密码');
+  });
+  it('不把历史未知密码状态误报成未设置', async () => {
+    mocks.get.mockResolvedValue({ status: 200, data: { hasPassword: null } });
+    await mount();
+    expect(host.textContent).toContain('设置或修改密码');
+  });
+});

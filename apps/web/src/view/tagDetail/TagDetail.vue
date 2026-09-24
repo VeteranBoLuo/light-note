@@ -624,6 +624,7 @@
 </template>
 
 <script setup lang="ts">
+  import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
   import TagTodoPanel from '@/components/todo/TagTodoPanel.vue';
   import useTodoStore from '@/store/todo';
   import { computed, onActivated, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
@@ -1138,21 +1139,21 @@
 
   async function createNoteFromTagAnalysis(response: AiSkillResponse) {
     if (creatingTagNote.value || isReadOnly.value || blockGuestWrite('tag-ai-save-note')) return;
+    const sourceId = tag.value?.id;
     creatingTagNote.value = true;
     try {
       const handoff = await persistAiMarkdownResultAsNote(
         response,
         t('tagManage.aiGeneratedNoteTitle', { tag: tag.value?.name || t('tagManage.unnamedTag') }),
+        () => tag.value?.id === sourceId && !isReadOnly.value,
       );
       if (!handoff) return;
       message.success(t('aiSkills.noteCreated'));
-      tagAiVisible.value = false;
-      tagAiExpandedVisible.value = false;
+      if (!handoff.openAfterSave) return;
+      if (tagAiExpandedVisible.value) await closeCurrentMobileOverlayThen(() => { tagAiExpandedVisible.value = false; }, () => undefined);
+      await closeCurrentMobileOverlayThen(() => { tagAiVisible.value = false; }, () => router.push({path: handoff.route.path,query:{from:route.fullPath}}));
       recordOperation({ module: '标签', operation: '标签问答结果存为笔记' });
-      await router.push({
-        path: handoff.route.path,
-        query: { from: route.fullPath },
-      });
+
     } catch (error: any) {
       message.error(String(error?.message || t('aiSkills.noteCreateFailed')));
     } finally {

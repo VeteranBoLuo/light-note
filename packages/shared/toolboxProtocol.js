@@ -1,3 +1,5 @@
+export const TOOLBOX_TRANSLATION_MAX_CHARS = 30_000;
+export const TOOLBOX_TRANSLATION_LANGUAGES = Object.freeze(['zh-CN', 'zh-TW', 'en', 'ja', 'ko', 'fr', 'de', 'es', 'pt', 'ru']);
 export const TOOLBOX_OCR_FILE_EXTENSIONS = Object.freeze(["pdf", "jpg", "jpeg", "png", "webp"]);
 /**
  * 轻笺知识工坊前后端共享协议。
@@ -41,6 +43,7 @@ export const TOOLBOX_SAVE_STATUSES = Object.freeze([
   "save_failed",
 ]);
 export const TOOLBOX_ARTIFACT_TYPES = Object.freeze([
+  "translation",
   "note_draft",
   "research_brief",
   "study_kit",
@@ -90,6 +93,9 @@ function tool(definition) {
  * 运行时 feature flag 灰度开放。availability.enabled 是代码默认值，服务端仍可关闭工具。
  */
 export const TOOLBOX_TOOL_CATALOG = Object.freeze([
+  tool({ id: 'translation', phase: 'launch', executionMode: 'ai_skill', billingMedium: 'ai_quota', billingMedia: ['ai_quota'],
+    input: { kind: 'translation', minItems: 0, maxItems: 1, resourceTypes: ['note', 'bookmark', 'file'], maxChars: TOOLBOX_TRANSLATION_MAX_CHARS },
+    output: { artifactType: 'translation', contentType: 'text/markdown', canSaveToNote: true }, availability: { enabled: true } }),
   tool({ id: "forms", phase: "launch", executionMode: "service", billingMedium: "free", input: { kind: "account", minItems: 1, maxItems: 1 }, output: { artifactType: null, contentType: "application/json", canSaveToNote: false }, availability: { enabled: true } }),
   tool({
     id: "research_workspace",
@@ -894,5 +900,5 @@ export function isToolboxTerminalStatus(status) {
 }
 
 export function isToolboxPaidTool(toolId) {
-  return getToolboxTool(toolId)?.billingMedium === "points";
+  return ["points", "ai_quota"].includes(getToolboxTool(toolId)?.billingMedium);
 }

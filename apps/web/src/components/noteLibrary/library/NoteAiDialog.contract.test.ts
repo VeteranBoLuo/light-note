@@ -29,7 +29,8 @@ describe('笔记分析与新笔记持久化契约', () => {
     expect(dialogSource).toContain('#result-actions');
     expect(dialogSource).toContain("t('aiSkills.saveAsNote')");
     expect(dialogSource).toContain('persistAiMarkdownResultAsNote(response');
-    expect(dialogSource).toContain('await router.push(handoff.route)');
+    expect(dialogSource).toContain('if (!handoff.openAfterSave) return');
+    expect(dialogSource).toContain("await closeCurrentMobileOverlayThen(() => emit('update:visible', false), () => router.push(handoff.route))");
     expect(dialogSource).not.toContain('persistAiNotePreview(response');
     expect(dialogSource).not.toContain('createAiNoteDraftHandoff(response');
     expect(detailSource).toContain('readAiNoteDraft(query.aiDraft)');

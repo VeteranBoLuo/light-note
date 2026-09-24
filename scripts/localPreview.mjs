@@ -1,3 +1,4 @@
+import { stopManagedChild } from "./localProcessLifecycle.mjs";
 import net from "node:net";
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
@@ -119,6 +120,7 @@ async function ensurePortAvailable(port, serviceName) {
 }
 
 function runPnpm(label, args) {
+  if (shuttingDown) throw new Error("本地预览正在停止，已取消启动。");
   const child = spawn(pnpmCommand, args, {
     cwd: rootDir,
     detached: process.platform !== "win32",
@@ -133,7 +135,7 @@ function runPnpm(label, args) {
   });
 
   child.once("exit", (code, signal) => {
-    children.delete(child);
+    // 保留已退出的 pnpm，以便回收仍存活的进程组。
     if (!shuttingDown) {
       const reason = signal ? `信号 ${signal}` : `退出码 ${code ?? "未知"}`;
       console.error(
@@ -146,23 +148,11 @@ function runPnpm(label, args) {
   return child;
 }
 
-function sendSignal(child, signal) {
-  if (process.platform !== "win32" && child.pid) {
-    try {
-      process.kill(-child.pid, signal);
-      return;
-    } catch (error) {
-      if (error.code !== "ESRCH") throw error;
-    }
-  }
-
-  child.kill(signal);
-}
-
 async function waitForPort(port, child, serviceName, timeout = 60_000) {
   const deadline = Date.now() + timeout;
 
   while (Date.now() < deadline) {
+    if (shuttingDown) throw new Error("本地预览启动已取消。");
     if (child.exitCode !== null || child.signalCode !== null) {
       throw new Error(`${serviceName}启动失败，请查看上方日志。`);
     }
@@ -177,29 +167,20 @@ async function waitForPort(port, child, serviceName, timeout = 60_000) {
 
 async function ensureChildStable(child, serviceName, milliseconds = 800) {
   await sleep(milliseconds);
+  if (shuttingDown) throw new Error("本地预览启动已取消。");
   if (child.exitCode !== null || child.signalCode !== null) {
     throw new Error(`${serviceName}启动失败，请查看上方日志。`);
   }
 }
 
-async function stopChild(child) {
-  if (child.exitCode !== null || child.signalCode !== null) return;
-
-  sendSignal(child, "SIGTERM");
-  await Promise.race([
-    new Promise((resolve) => child.once("exit", resolve)),
-    sleep(5_000),
-  ]);
-
-  if (child.exitCode === null && child.signalCode === null)
-    sendSignal(child, "SIGKILL");
-}
-
 async function stopAll(exitCode) {
   if (shuttingDown) return;
   shuttingDown = true;
-  await Promise.all([...children].map(stopChild));
-  process.exitCode = exitCode;
+  const results = await Promise.allSettled([...children].map((child) => stopManagedChild(child)));
+  const failures = results.filter((result) => result.status === "rejected");
+  for (const failure of failures)
+    console.error(`[本地预览] 停止失败：${failure.reason.message}`);
+  process.exitCode = failures.length ? 1 : exitCode;
 }
 
 async function main() {

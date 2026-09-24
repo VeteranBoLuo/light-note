@@ -3984,3 +3984,25 @@ SELECT 'missing_collection_identity_column' AS assertion, expected.column_name
 FROM (SELECT 'respondent_hash' column_name UNION ALL SELECT 'updated_at') expected
 LEFT JOIN information_schema.columns actual ON actual.table_schema=DATABASE() AND actual.table_name='collection_submissions' AND actual.column_name=expected.column_name
 WHERE actual.column_name IS NULL;
+
+-- Translation snapshots contain full text; quotes and job inputs contain references/metadata only.
+SELECT 'translation_missing_column' AS check_name, e.col AS detail FROM (
+ SELECT 'quote_id' col UNION ALL SELECT 'job_id' UNION ALL SELECT 'user_id'
+ UNION ALL SELECT 'content' UNION ALL SELECT 'segments_json' UNION ALL SELECT 'expires_at'
+) e LEFT JOIN information_schema.columns c ON c.table_schema=DATABASE()
+ AND c.table_name='toolbox_translation_inputs' AND c.column_name=e.col WHERE c.column_name IS NULL;
+SELECT 'translation_index_contract' AS check_name, e.idx AS detail FROM (
+ SELECT 'PRIMARY' idx, 'quote_id' cols, 0 non_unique UNION ALL SELECT 'uk_translation_job','job_id',0
+ UNION ALL SELECT 'idx_translation_owner','user_id',1 UNION ALL SELECT 'idx_translation_expiry','expires_at',1
+) e LEFT JOIN (SELECT index_name,non_unique,GROUP_CONCAT(column_name ORDER BY seq_in_index) cols
+ FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='toolbox_translation_inputs'
+ GROUP BY index_name,non_unique) s ON s.index_name=e.idx
+ WHERE s.index_name IS NULL OR s.cols<>e.cols OR s.non_unique<>e.non_unique;
+
+-- 独立登录密码状态必须先于账号安全版本部署。
+SELECT 'missing_login_password_state' AS check_name, 'user.login_password_set' AS detail
+FROM DUAL
+WHERE NOT EXISTS (
+  SELECT 1 FROM information_schema.columns
+  WHERE table_schema = DATABASE() AND table_name = 'user' AND column_name = 'login_password_set'
+);

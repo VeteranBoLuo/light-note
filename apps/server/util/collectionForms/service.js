@@ -142,6 +142,7 @@ export function createFormsService(pool) {
   async function create(userId, input) {
     enabled();
     const definition = validateDefinition(input.definition);
+    definition.submissionPolicy = 'replace';
     return transaction(async (db) => {
       await activeOwner(db, userId, true);
       const [{ total }] = await rows(db, 'SELECT COUNT(*) total FROM collection_forms WHERE user_id=?', [userId]);
@@ -164,6 +165,7 @@ export function createFormsService(pool) {
       const form = await owned(db, userId, id, true);
       if (input.version !== form.version) throw new FormError('表单已更新，请重新加载后操作', 409);
       const definition = validateDefinition(input.definition);
+      if (!form.published) definition.submissionPolicy = 'replace';
       if (form.published && canonical(definition.questions) !== canonical(form.definition.questions))
         throw new FormError('发布后题目已锁定，请复制为新表单', 409);
       if (
@@ -198,6 +200,10 @@ export function createFormsService(pool) {
       const next = { publish: 'collecting', pause: 'paused', resume: 'collecting', end: 'ended' }[input.action];
       const allowed = { draft: ['publish'], collecting: ['pause', 'end'], paused: ['resume', 'end'], ended: [] };
       if (!allowed[form.status]?.includes(input.action)) throw new FormError('当前状态不支持此操作', 409);
+      if (input.action === 'publish' && !form.published) {
+        form.definition.submissionPolicy = 'replace';
+        await db.query('UPDATE collection_forms SET definition=? WHERE id=?', [JSON.stringify(form.definition), id]);
+      }
       if (next === 'collecting') {
         enabled();
         if (form.definition.submissionPolicy === 'replace') requireIdentityConfig();

@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import {
+  TOOLBOX_TRANSLATION_MAX_CHARS, TOOLBOX_TRANSLATION_LANGUAGES,
   getToolboxTool,
   TOOLBOX_PRICING_VERSION,
   TOOLBOX_PROCESSING_REQUIREMENT_MAX_CHARS,
@@ -102,7 +103,8 @@ function normalizeSourceIds(value) {
 }
 
 function normalizeOptions(toolId, value) {
-  if (value == null) return Object.freeze({});
+  if (value == null && toolId !== 'translation') return Object.freeze({});
+  if (value == null) value = {};
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw toolboxError('TOOLBOX_OPTIONS_INVALID', '工具选项必须是对象');
   }
@@ -112,6 +114,7 @@ function normalizeOptions(toolId, value) {
     'intent',
     'detailLevel',
     'targetLength',
+    ...(toolId === 'translation' ? ['sourceLanguage', 'targetLanguage', 'acceptPartial'] : []),
     ...(toolId === 'ocr_to_text' ? ['recognitionMode'] : []),
   ]);
   const unknown = Object.keys(value).filter((key) => !allowed.has(key));
@@ -141,7 +144,10 @@ function normalizeOptions(toolId, value) {
       throw toolboxError('TOOLBOX_TARGET_LENGTH_INVALID', '目标篇幅必须是 200～10000 之间的整数');
     }
   }
+  if (toolId === 'translation' && (!TOOLBOX_TRANSLATION_LANGUAGES.includes(value.targetLanguage) || (value.sourceLanguage && value.sourceLanguage !== 'auto' && !TOOLBOX_TRANSLATION_LANGUAGES.includes(value.sourceLanguage))))
+    throw toolboxError('TOOLBOX_TRANSLATION_LANGUAGE_INVALID', '请选择有效的翻译语言');
   return Object.freeze({
+    ...(toolId === 'translation' ? { sourceLanguage: value.sourceLanguage || 'auto', targetLanguage: value.targetLanguage, acceptPartial: value.acceptPartial === true } : {}),
     ...(value.recognitionMode ? { recognitionMode: value.recognitionMode } : {}),
     ...(title ? { title } : {}),
     ...(question ? { question } : {}),
@@ -161,7 +167,7 @@ export function normalizeToolboxInput(toolId, rawInput) {
     throw toolboxError('TOOLBOX_FREE_SERVICE_NO_JOB', '该免费工具直接读取当前知识库，不创建报价或异步任务');
   }
   const input = rawInput && typeof rawInput === 'object' && !Array.isArray(rawInput) ? rawInput : {};
-  const unknown = Object.keys(input).filter((key) => !['resourceRefs', 'sourceIds', 'options'].includes(key));
+  const unknown = Object.keys(input).filter((key) => !['resourceRefs', 'sourceIds', 'options', ...(toolId === 'translation' ? ['text'] : [])].includes(key));
   if (unknown.length) throw toolboxError('TOOLBOX_INPUT_UNKNOWN_FIELD', `工具输入包含未知字段：${unknown.join(', ')}`);
   const resourceRefs = normalizeResourceRefs(input.resourceRefs);
   const sourceIds = normalizeSourceIds(input.sourceIds);
@@ -178,13 +184,17 @@ export function normalizeToolboxInput(toolId, rawInput) {
   const unsupported = resourceRefs.find((ref) => !definition.input.resourceTypes?.includes(ref.type));
   if (unsupported) throw toolboxError('TOOLBOX_INPUT_TYPE_INVALID', `该工具不能处理 ${unsupported.type} 类型材料`);
   const count = resourceRefs.length + sourceIds.length;
+  if (toolId === 'translation') {
+    if (sourceIds.length || (input.text != null && typeof input.text !== 'string') || (Boolean(input.text?.trim()) === Boolean(resourceRefs.length)) || (input.text?.length || 0) > TOOLBOX_TRANSLATION_MAX_CHARS)
+      throw toolboxError('TOOLBOX_TRANSLATION_INPUT_INVALID', '请选择一份资料或输入不超过 30000 字符的文字');
+  }
   if (count < definition.input.minItems || count > definition.input.maxItems) {
     throw toolboxError(
       'TOOLBOX_INPUT_COUNT_INVALID',
       `该工具需要选择 ${definition.input.minItems}～${definition.input.maxItems} 项材料`,
     );
   }
-  return Object.freeze({ resourceRefs: Object.freeze(resourceRefs), sourceIds: Object.freeze(sourceIds), options });
+  return Object.freeze({ resourceRefs: Object.freeze(resourceRefs), sourceIds: Object.freeze(sourceIds), options, ...(toolId === 'translation' && input.text ? { text: input.text } : {}) });
 }
 
 export function quoteToolboxPoints(toolId, { itemCount, totalBytes = 0, snapshot = null, options = null } = {}) {
@@ -216,7 +226,9 @@ export function getPublicToolboxCatalog({ disabledToolIds = [] } = {}) {
     tools: TOOLBOX_TOOL_CATALOG.map((definition) => ({
       ...definition,
       availability: { enabled: definition.availability.enabled && !disabled.has(definition.id) },
-      ...(definition.billingMedium === 'points'
+      ...(definition.billingMedium === 'ai_quota'
+        ? { price: { kind: 'quota', currency: 'ai_quota', min: 0, max: 0 } }
+        : definition.billingMedium === 'points'
         ? { price: { kind: 'quote', currency: 'points', ...PAID_PRICE_RANGES[definition.id] } }
         : { price: { kind: 'free', currency: null, min: 0, max: 0 } }),
     })),

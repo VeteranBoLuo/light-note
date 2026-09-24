@@ -55,9 +55,7 @@ describe('resolveNoteDetailReturnPath', () => {
   });
 
   it('允许待办作为明确来源并保留页签与目标参数', () => {
-    expect(resolveNoteDetailReturnPath('/inbox?tab=todo&todoId=todo-1')).toBe(
-      '/inbox?tab=todo&todoId=todo-1',
-    );
+    expect(resolveNoteDetailReturnPath('/inbox?tab=todo&todoId=todo-1')).toBe('/inbox?tab=todo&todoId=todo-1');
   });
 
   it('允许知识结构完整整理页作为明确来源', () => {
@@ -114,4 +112,10 @@ describe('resolveDeletedNoteFallbackId', () => {
   it('目录缓存尚未包含当前页时，仍选择一个可见同级页面', () => {
     expect(resolveDeletedNoteFallbackId({ currentId: 'missing', parentId: 'parent', siblings })).toBe('before');
   });
+});
+
+it('翻译页返回来源保留记录，拒绝扩展路径和外部地址', () => {
+  expect(resolveNoteDetailReturnPath('/toolbox/translation?record=job-1')).toBe('/toolbox/translation?record=job-1');
+  expect(resolveNoteDetailReturnPath('/toolbox/translation/extra')).toBe('');
+  expect(resolveNoteDetailReturnPath('https://example.com/toolbox/translation')).toBe('');
 });

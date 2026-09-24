@@ -18,15 +18,11 @@
       <!-- 修改密码 -->
       <div class="account-field">
         <div class="field-head">
-          <span class="field-label">{{
-            hasPassword ? t('accountSettings.changePassword') : t('accountSettings.setPassword')
-          }}</span>
-          <span class="field-desc">{{
-            hasPassword ? t('accountSettings.passwordDesc') : t('accountSettings.setPasswordDesc')
-          }}</span>
+          <span class="field-label">{{ passwordLabel }}</span>
+          <span class="field-desc">{{ passwordDescription }}</span>
         </div>
         <BButton size="small" :disabled="accountLoading || accountFailed" @click="pwVisible = true">{{
-          hasPassword ? t('accountSettings.changePassword') : t('accountSettings.setPassword')
+          passwordLabel
         }}</BButton>
       </div>
     </SettingsSectionCard>
@@ -83,55 +79,7 @@
         }}</BButton>
       </div>
     </SettingsSectionCard>
-    <!-- 改密弹窗 -->
-    <BModal
-      v-model:visible="pwVisible"
-      :title="hasPassword ? t('accountSettings.changePassword') : t('accountSettings.setPassword')"
-      :mask-closable="false"
-      :close-disabled="passwordSaving"
-      @ok="submitPassword"
-    >
-      <div class="pw-form">
-        <div v-if="hasPassword" class="pw-row">
-          <label>{{ t('accountSettings.oldPassword') }}</label>
-          <BInput
-            v-model:value="oldPwd"
-            type="password"
-            maxlength="64"
-            autocomplete="current-password"
-            :placeholder="t('accountSettings.oldPlaceholder')"
-          />
-        </div>
-        <div class="pw-row">
-          <label>{{ t('accountSettings.newPassword') }}</label>
-          <BInput
-            v-model:value="newPwd"
-            type="password"
-            maxlength="64"
-            autocomplete="new-password"
-            :placeholder="t('accountSettings.newPlaceholder')"
-          />
-        </div>
-        <div class="pw-row">
-          <label>{{ t('accountSettings.confirmPassword') }}</label>
-          <BInput
-            v-model:value="confirmPwd"
-            type="password"
-            maxlength="64"
-            autocomplete="new-password"
-            :placeholder="t('accountSettings.confirmPlaceholder')"
-          />
-        </div>
-      </div>
-      <template #footer
-        ><div class="password-actions"
-          ><BButton :disabled="passwordSaving" @click="pwVisible = false">{{ t('common.cancel') }}</BButton
-          ><BButton type="primary" :loading="passwordSaving" @click="submitPassword">{{
-            t('common.confirm')
-          }}</BButton></div
-        ></template
-      >
-    </BModal>
+    <AccountPasswordDialog v-model:visible="pwVisible" />
 
     <BModal
       v-model:visible="deletionVisible"
@@ -156,9 +104,7 @@
             <span class="deletion-backup__title">{{ t('accountSettings.backupTitle') }}</span>
             <span class="field-desc">{{ t('accountSettings.backupDesc') }}</span>
           </div>
-          <BButton :disabled="codeSending" @click="exportAll">{{
-            t('accountSettings.export')
-          }}</BButton>
+          <BButton :disabled="codeSending" @click="exportAll">{{ t('accountSettings.export') }}</BButton>
         </div>
         <div class="deletion-actions">
           <BButton :disabled="codeSending" @click="closeDeletion">{{ t('accountSettings.cancel') }}</BButton>
@@ -234,6 +180,7 @@
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import { apiBaseGet, apiBasePost } from '@/http/request';
+  import AccountPasswordDialog from './AccountPasswordDialog.vue';
   import { clearLoginHistory } from '@/utils/authStorage';
 
   const { t } = useI18n();
@@ -241,10 +188,25 @@
   let generation = 0;
   const accountFailed = ref(false);
   const accountLoading = ref(true);
-  const passwordSaving = ref(false);
-  // 账号信息从 /me 拉(store 未存 github_id/login_type;password 用 sanitizeUser 的 '******'/'' 判断是否已设)
-  const acc = ref({ email: '', githubBound: false, loginType: 'local', hasPassword: true });
-  const hasPassword = computed(() => acc.value.hasPassword);
+  const acc = ref({ email: '', githubBound: false, loginType: 'local', hasPassword: null as boolean | null });
+  const passwordLabel = computed(() =>
+    t(
+      acc.value.hasPassword === false
+        ? 'accountSettings.setPassword'
+        : acc.value.hasPassword === true
+          ? 'accountSettings.changePassword'
+          : 'accountSettings.configurePassword',
+    ),
+  );
+  const passwordDescription = computed(() =>
+    t(
+      acc.value.hasPassword === false
+        ? 'accountSettings.setPasswordDesc'
+        : acc.value.hasPassword === true
+          ? 'accountSettings.passwordDesc'
+          : 'accountSettings.legacyPasswordDesc',
+    ),
+  );
   const loginTypeText = computed(() =>
     acc.value.loginType === 'github' ? 'GitHub' : t('accountSettings.emailPassword'),
   );
@@ -260,9 +222,9 @@
       const d: any = res?.data || {};
       acc.value = {
         email: d.email || '',
-        githubBound: !!d.github_id,
-        loginType: d.login_type || 'local',
-        hasPassword: !!d.password,
+        githubBound: !!d.githubId,
+        loginType: d.loginType || 'local',
+        hasPassword: typeof d.hasPassword === 'boolean' ? d.hasPassword : null,
       };
     } catch {
       if (owner === generation) accountFailed.value = true;
@@ -384,44 +346,6 @@
 
   // —— 改密 ——
   const pwVisible = ref(false);
-  const oldPwd = ref('');
-  const newPwd = ref('');
-  const confirmPwd = ref('');
-
-  async function submitPassword() {
-    if (hasPassword.value && !oldPwd.value) return message.warning(t('accountSettings.oldPlaceholder'));
-    if (!newPwd.value || newPwd.value.length < 6) return message.warning(t('accountSettings.minPassword'));
-    if (newPwd.value !== confirmPwd.value) return message.warning(t('accountSettings.mismatch'));
-    const body: any = { password: newPwd.value };
-    if (hasPassword.value) {
-      body.type = 'update';
-      body.oldPassword = oldPwd.value;
-    }
-    if (passwordSaving.value) return;
-    const owner = generation;
-    passwordSaving.value = true;
-    try {
-      const res = await apiBasePost('/api/user/configPassword', body);
-      if (owner !== generation) return;
-      if (res.status === 200) {
-        pwVisible.value = false;
-        oldPwd.value = newPwd.value = confirmPwd.value = '';
-        // 后端改密后会清所有会话,提示并跳登录
-        message.success(t('accountSettings.passwordUpdated'));
-        setTimeout(() => {
-          if (owner !== generation) return;
-          window.dispatchEvent(new CustomEvent('light-note:auth-expired'));
-        }, 800);
-      } else {
-        message.error(res.msg || t('accountSettings.updateFailed'));
-      }
-    } catch {
-      if (owner === generation) message.error(t('accountSettings.updateFailed'));
-    } finally {
-      if (owner === generation) passwordSaving.value = false;
-    }
-  }
-
   // —— 账号注销 ——
   const DELETION_CONFIRMATION_TEXT = '注销账号';
   const deletionVisible = ref(false);
@@ -567,13 +491,11 @@
     () => {
       generation++;
       sessions.value = [];
-      acc.value = { email: '', githubBound: false, loginType: 'local', hasPassword: true };
+      acc.value = { email: '', githubBound: false, loginType: 'local', hasPassword: null as boolean | null };
       revoking.value = false;
-      passwordSaving.value = false;
       deleting.value = false;
       revokingId.value = null;
       pwVisible.value = false;
-      oldPwd.value = newPwd.value = confirmPwd.value = '';
       deletionVisible.value = false;
       resetDeletionFlow();
       void loadAccount();
@@ -718,26 +640,6 @@
   }
   .sess-actions {
     flex-wrap: wrap;
-  }
-  .password-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: var(--ui-space-8, 8px);
-    padding: var(--ui-space-12, 12px) var(--ui-space-20, 20px) var(--ui-space-18, 18px);
-  }
-  .pw-form {
-    display: flex;
-    flex-direction: column;
-    gap: var(--ui-space-12, 12px);
-  }
-  .pw-row {
-    display: flex;
-    flex-direction: column;
-    gap: var(--ui-space-5, 5px);
-  }
-  .pw-row label {
-    font-size: var(--ui-font-13, 13px);
-    color: var(--desc-color);
   }
   .danger-zone {
     border-top: 0;

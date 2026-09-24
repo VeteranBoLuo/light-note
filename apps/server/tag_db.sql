@@ -1190,6 +1190,7 @@ CREATE TABLE `user` (
   `alias` varchar(255) NOT NULL DEFAULT '默认昵称' COMMENT '别名，昵称',
   `password` varchar(255) DEFAULT NULL,
   `password_method` varchar(20) NOT NULL DEFAULT 'plain' COMMENT '密码存储方式: plain(明文待升级)/scrypt',
+  `login_password_set` tinyint(1) DEFAULT NULL COMMENT '独立登录密码: 1已设置/0未设置/NULL历史未知',
   `email` varchar(255) DEFAULT NULL,
   `phone_number` int(11) DEFAULT NULL,
   `role` varchar(255) DEFAULT NULL,

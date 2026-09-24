@@ -1,3 +1,4 @@
+import { TOOLBOX_TRANSLATION_MAX_CHARS } from '@lightnote/shared/toolbox-protocol';
 import { AI_DOCUMENT_SUMMARY_MAX_CHARS } from '@lightnote/shared/ai-skill-protocol';
 import { validatePushSubscription } from '../browserPushPolicy.js';
 import { MAX_BOOKMARK_INPUT_LENGTH } from '@lightnote/shared';
@@ -336,7 +337,9 @@ export const resolveRequestFieldPolicy = (context = {}, field = '') => {
     ? '/daily-review/items/:id/action'
     : normalizedPath;
   const routeKey = `${method} ${policyPath}`;
-  const definition = method === 'POST' && policyPath === '/ai/skills/execute' &&
+  const definition = method === 'POST' && policyPath === '/toolbox/quotes' && field === 'body.input.text' && context.body?.toolId === 'translation'
+    ? policy({ semantic: 'translation-text', maxSize: TOOLBOX_TRANSLATION_MAX_CHARS, skipSignatureRules: '*' })
+    : method === 'POST' && policyPath === '/ai/skills/execute' &&
     field === 'body.input.text' && context.body?.skillId === 'toolbox.summarize_text'
     ? policy({ semantic: 'ai-document-summary-text', maxSize: AI_DOCUMENT_SUMMARY_MAX_CHARS, skipSignatureRules: '*' })
     : REQUEST_FIELD_POLICIES.get(routeKey)?.get(String(field));

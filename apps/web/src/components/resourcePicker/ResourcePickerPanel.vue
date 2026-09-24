@@ -93,7 +93,9 @@
             <SvgIcon v-if="resourceSelected(entry.item)" :src="icon.message.success" size="13" />
           </span>
           <span v-if="entry.pinned" class="resource-picker-panel__pinned-tag">{{ t('ai.currentPage') }}</span>
-          <span v-else class="resource-picker-panel__dot" :style="{ background: typeColor(entry.item.type) }" />
+          <slot v-else name="resource-icon" :item="entry.item"
+            ><span class="resource-picker-panel__dot" :style="{ background: typeColor(entry.item.type) }"
+          /></slot>
           <span class="resource-picker-panel__copy">
             <span class="resource-picker-panel__title">{{ entry.item.title }}</span>
             <small v-if="exhaustive"
@@ -186,7 +188,9 @@
           <span v-if="multiSelect" class="resource-picker-panel__check" aria-hidden="true">
             <SvgIcon v-if="resourceSelected(entry.item)" :src="icon.message.success" size="13" />
           </span>
-          <span class="resource-picker-panel__dot" :style="{ background: typeColor(entry.item.type) }" />
+          <slot name="resource-icon" :item="entry.item"
+            ><span class="resource-picker-panel__dot" :style="{ background: typeColor(entry.item.type) }"
+          /></slot>
           <span class="resource-picker-panel__copy">
             <span class="resource-picker-panel__title">{{ entry.item.title }}</span>
             <small v-if="entry.item.path">{{ entry.item.path }}</small>

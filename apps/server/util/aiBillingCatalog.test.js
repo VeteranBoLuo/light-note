@@ -122,7 +122,7 @@ describe('aiBillingCatalog', () => {
   });
 
   it('知识工坊纯 AI Profile 支持积分或 AI 额度二选一，并进入公开 AI 用量目录', () => {
-    const toolboxActions = AI_BILLING_ACTIONS.filter((action) => action.module === 'toolbox' && action.id !== 'toolbox.summarize_text');
+    const toolboxActions = AI_BILLING_ACTIONS.filter((action) => action.module === 'toolbox' && !['toolbox.summarize_text','toolbox.translation'].includes(action.id));
     expect(toolboxActions.map((action) => action.id)).toContain('toolbox.idea_to_draft');
     expect(toolboxActions.every((action) => action.publicCatalog === true)).toBe(true);
     expect(toolboxActions.every((action) => action.allowedBillingPolicies.join(',') === 'user,system')).toBe(true);

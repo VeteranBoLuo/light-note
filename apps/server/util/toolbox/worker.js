@@ -1,3 +1,4 @@
+import { executeTranslationJob } from './translationWorker.js';
 import { toolboxWorkerEnabled } from './workerPolicy.js';
 import { extractStudyCards } from './studyCards.js';
 import { executeFreeOcr } from './freeOcr.js';
@@ -687,6 +688,7 @@ async function completeToolboxJob(job, workerId, artifact, database = pool) {
 }
 
 function shouldRetryJob(job, error) {
+  if (job.tool_id === 'translation') return false;
   const code = String(error?.code || '');
   if (Number(job.attempts || 0) >= Number(job.max_attempts || 3)) return false;
   if (
@@ -731,6 +733,7 @@ async function failOrRetryToolboxJob(job, workerId, error, database = pool) {
       await connection.commit();
       return true;
     }
+    if (current.tool_id === 'translation') await connection.query('DELETE FROM toolbox_translation_inputs WHERE job_id=? AND user_id=?', [current.id, current.user_id]);
     const settlement = await settleToolboxBilling(connection, current, {
       outcome: 'failed',
       reasonCode: parsed.code,
@@ -758,6 +761,10 @@ export async function runSingleToolboxJob(workerId, database = pool) {
   const job = await claimNextToolboxJob(workerId, database);
   if (!job) return false;
   if (job.terminalized) return true;
+  return runClaimedToolboxJob(job, database);
+}
+
+export async function runClaimedToolboxJob(job, database = pool, { onProgress, signal } = {}) {
   const leaseOwner = job.locked_by;
   try {
     const artifact = await withToolboxLeaseHeartbeat(
@@ -768,6 +775,16 @@ export async function runSingleToolboxJob(workerId, database = pool) {
         await updateToolboxJobStage(job, leaseOwner, 'validating', 16, database);
         const identity = await loadWorkerIdentity(job.user_id, database);
         await assertResourceVersionsCurrent(job, inputs, database);
+        if (job.tool_id === 'translation') return executeTranslationJob(job, identity, database, {
+          requestId: toolboxAttemptRequestId(job),
+          onProgress, signal,
+          beforeSegment: async (index, total) => {
+            await heartbeatToolboxJob(job, leaseOwner, database);
+            await markExternalCostCommitted(job, leaseOwner, 'generating', database);
+            await updateToolboxJobStage(job, leaseOwner, 'generating', 30 + Math.floor(55 * index / total), database);
+          },
+          commit: artifact => completeToolboxJob(job, leaseOwner, artifact, database),
+        });
         if (job.tool_id === 'ocr_to_text' && job.billing_medium === 'free') return executeFreeOcr(job, database);
         const promptOnly = job.tool_id === 'idea_to_draft';
         await updateToolboxJobStage(job, leaseOwner, promptOnly ? 'preparing_prompt' : 'reading_sources', 28, database);
@@ -794,6 +811,7 @@ export async function runSingleToolboxJob(workerId, database = pool) {
       },
       database,
     );
+    if (artifact?.persisted) return true;
     await updateToolboxJobStage(job, leaseOwner, 'preparing_result', 84, database);
     await updateToolboxJobStage(job, leaseOwner, 'saving_result', 94, database);
     await completeToolboxJob(job, leaseOwner, artifact, database);
@@ -801,7 +819,7 @@ export async function runSingleToolboxJob(workerId, database = pool) {
     if (error instanceof ToolboxDocumentWait || error?.code === 'TOOLBOX_DOCUMENT_WAIT') {
       await requeueForDocuments(job, leaseOwner, database);
     } else {
-      console.warn('[toolbox-worker] job=%s worker=%s code=%s', job.id, workerId, safeWorkerError(error).code);
+      console.warn('[toolbox-worker] job=%s worker=%s code=%s', job.id, leaseOwner, safeWorkerError(error).code);
       await failOrRetryToolboxJob(job, leaseOwner, error, database);
     }
   }
@@ -862,6 +880,8 @@ export async function cleanupExpiredToolboxData(database = pool) {
     WHERE job.expires_at <= NOW() AND job.status NOT IN ('queued', 'processing')`);
   await database.query(`DELETE progress FROM toolbox_study_progress progress JOIN toolbox_artifacts artifact ON artifact.id COLLATE utf8mb4_unicode_ci = progress.artifact_id
     WHERE artifact.status = 'expired'`);
+  await database.query(`DELETE input FROM toolbox_translation_inputs input LEFT JOIN toolbox_jobs job ON job.id COLLATE utf8mb4_unicode_ci=input.job_id
+    WHERE input.expires_at<=NOW() OR job.status IN ('failed','cancelled','expired')`);
   return { expiredJobs: expiredJobCount, expiredArtifacts: Number(expiredArtifacts.affectedRows || 0) };
 }
 

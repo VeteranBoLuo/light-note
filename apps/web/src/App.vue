@@ -49,6 +49,7 @@
         <ResourceBatchTagsHost v-if="!publicStandaloneRoute" />
         <EntitlementReturnHost v-if="!publicStandaloneRoute" />
         <ResourceProjectHost v-if="!publicStandaloneRoute" />
+        <SaveAsNoteHost v-if="!publicStandaloneRoute" />
         <ResourceSelectionDrawer v-if="!publicStandaloneRoute" />
         <AdminContextBanner v-if="user.adminContext && !publicStandaloneRoute && !mobilePreviewActive" />
         <QuickCaptureModal
@@ -66,6 +67,7 @@
   import { openNotificationPanel } from '@/utils/notificationEntry';
   import { useNotification } from '@/composables/useNotification';
   import EntitlementReturnHost from '@/components/support/EntitlementReturnHost.vue';
+  import SaveAsNoteHost from '@/components/noteLibrary/save/SaveAsNoteHost.vue';
   import ResourceProjectHost from '@/components/resourceActions/ResourceProjectHost.vue';
   import ResourceBatchTagsHost from '@/components/resourceActions/ResourceBatchTagsHost.vue';
   import ResourceSelectionDrawer from '@/components/resourceActions/ResourceSelectionDrawer.vue';

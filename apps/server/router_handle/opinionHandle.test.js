@@ -27,7 +27,7 @@ vi.mock('../util/notification.js', () => ({ createNotification: mocks.createNoti
 vi.mock('../util/agent/logSafety.js', () => ({ stableAgentErrorCode: () => 'TEST_ERROR' }));
 vi.mock('../util/adminOperationAudit.js', () => ({ recordAdminOperationAudit: mocks.recordAudit }));
 
-const { delOpinion, getOpinionList, opinionHandleInternals, recordOpinion, replyOpinion } =
+const { delOpinion, getOpinionList, markOpinionReplyViewed, opinionHandleInternals, recordOpinion, replyOpinion } =
   await import('./opinionHandle.js');
 
 function createResponse() {
@@ -95,6 +95,50 @@ describe('opinion handler', () => {
   });
 
   describe('getOpinionList', () => {
+    it.each([
+      ['root', undefined],
+      ['user', 'viewer-1'],
+      ['test', 'viewer-1'],
+    ])('history scope for %s includes internal accounts without bypassing ownership', async (role, owner) => {
+      mocks.query.mockResolvedValue([[]]);
+      const res = createResponse();
+      await getOpinionList(
+        {
+          user: { id: 'viewer-1', role },
+          body: { currentPage: 1, pageSize: 20, filters: { hideInternal: false } },
+        },
+        res,
+      );
+      expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200 }));
+      expect(mocks.query).toHaveBeenCalledTimes(3);
+      for (const [sql, params] of mocks.query.mock.calls) {
+        expect(sql).not.toContain('u.role NOT IN');
+        if (owner) {
+          expect(sql).toContain('o.user_id = ?');
+          expect(params).toContain(owner);
+        } else {
+          expect(sql).not.toContain('o.user_id = ?');
+        }
+      }
+    });
+
+    it('ignores a forged owner when an ordinary user requests all history', async () => {
+      mocks.query.mockResolvedValue([[]]);
+      const res = createResponse();
+      await getOpinionList(
+        {
+          user: { id: 'user-1', role: 'user' },
+          body: { currentPage: 1, pageSize: 20, userId: 'another-user', filters: { hideInternal: false } },
+        },
+        res,
+      );
+      for (const [sql, params] of mocks.query.mock.calls) {
+        expect(sql).toContain('o.user_id = ?');
+        expect(params).toContain('user-1');
+        expect(params).not.toContain('another-user');
+      }
+    });
+
     it('reuses the list endpoint for an exact deep link and caps the page size', async () => {
       mocks.query.mockImplementation(async (sql) => {
         const statement = String(sql);
@@ -134,6 +178,24 @@ describe('opinion handler', () => {
       expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 400 }));
       expect(mocks.query).not.toHaveBeenCalled();
     });
+  });
+
+  it('administrator reading history can only mark their own replies viewed', async () => {
+    mocks.query.mockResolvedValue([{ affectedRows: 0 }]);
+    const res = createResponse();
+    await markOpinionReplyViewed(
+      {
+        user: { id: 'root-1', role: 'root' },
+        body: { ids: ['someone-elses-opinion'] },
+      },
+      res,
+    );
+    expect(mocks.query).toHaveBeenCalledWith(expect.stringContaining('WHERE user_id = ?'), [
+      'viewed',
+      'root-1',
+      'replied',
+      'someone-elses-opinion',
+    ]);
   });
 
   describe('replyOpinion', () => {

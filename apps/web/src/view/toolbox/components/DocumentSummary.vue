@@ -64,6 +64,7 @@
   </BModal>
 </template>
 <script setup lang="ts">
+  import { saveToolboxNote } from '@/utils/saveToolboxNote';
   import { computed, onDeactivated, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
@@ -78,7 +79,6 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import icon from '@/config/icon';
   import { copyTextToClipboard } from '@/utils/clipboard';
-  import { saveToolboxArtifact, createToolboxArtifactSaveRequestId } from '@/api/toolbox';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
   const props = defineProps<{ file: File; text: string; hasText: boolean; warning: string }>();
   const { t } = useI18n();
@@ -108,24 +108,15 @@
     message[copied ? 'success' : 'error'](t(copied ? 'toolbox.local.copySuccess' : 'toolbox.local.copyFailed'));
   }
   async function saveSummary() {
-    if (!current.value.content || saving.value) return;
+    if (!current.value.artifactId || saving.value) return;
+    const artifactId = current.value.artifactId;
     saving.value = true;
     try {
-      const owner = buildNoteDetailRequestScope(user);
-      const artifactId = current.value.artifactId;
-      const result = await saveToolboxArtifact(artifactId, createToolboxArtifactSaveRequestId(artifactId, 1));
-      if (owner !== buildNoteDetailRequestScope(user) || artifactId !== current.value.artifactId) return;
-      await closeCurrentMobileOverlayThen(
-        () => {
-          visible.value = false;
-        },
-        () => router.push({ path: `/noteLibrary/${encodeURIComponent(result.targetId)}` }),
-      );
-    } catch {
-      message.error(t('toolbox.documentSummary.saveFailed'));
-    } finally {
-      saving.value = false;
-    }
+      const result = await saveToolboxNote({ artifactId, version: 1, title: `${props.file.name.replace(/\.[^.]+$/, '')} · ${t('toolbox.documentSummary.title')}`,
+        isCurrent: () => current.value.artifactId === artifactId,
+      });
+      if (result?.openAfterSave) await closeCurrentMobileOverlayThen(() => { visible.value = false; }, () => router.push(`/noteLibrary/${encodeURIComponent(result.noteId)}`));
+    } finally { saving.value = false; }
   }
   watch(
     () => buildNoteDetailRequestScope(user),

@@ -7,11 +7,7 @@ router.use('/dataExports', dataExports);
 
 import * as userHandle from '../router_handle/userHandle.js';
 import { saveAdminUserRemark } from '../router_handle/adminUserRemarkHandle.js';
-import {
-  disableAdminUser,
-  restoreAdminUser,
-  updateAdminUser,
-} from '../router_handle/adminUserOperationsHandle.js';
+import { disableAdminUser, restoreAdminUser, updateAdminUser } from '../router_handle/adminUserOperationsHandle.js';
 
 const loginLimiter = rateLimit({
   windowMs: 5 * 60 * 1000,
@@ -118,7 +114,7 @@ router.post('/extension/exchange', extensionExchangeLimiter, userHandle.exchange
 
 router.post('/logout', userHandle.logout);
 
-router.post('/configPassword', userHandle.configPassword);
+router.post('/configPassword', verifyCodeLimiter, userHandle.configPassword);
 
 router.post('/getMySessions', userHandle.getMySessions);
 

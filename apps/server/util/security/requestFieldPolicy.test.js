@@ -225,3 +225,10 @@ it('浏览器推送凭据豁免绑定精确 POST 和字段形态', () => {
     )?.trustedEnvelope,
   ).toBe(false);
 });
+
+it('limits translation prose to the quote input field and shared character budget', () => {
+ const context={method:'POST',path:'/api/toolbox/quotes',body:{toolId:'translation',input:{text:'sudo rm -rf /'}}};
+ expect(resolveRequestFieldPolicy(context,'body.input.text')).toMatchObject({trustedEnvelope:true,maxSize:30000});
+ expect(resolveRequestFieldPolicy({...context,path:'/api/toolbox/jobs'},'body.input.text')).toBeNull();
+ expect(resolveRequestFieldPolicy({...context,body:{toolId:'translation',input:{text:'x'.repeat(30001)}}},'body.input.text')).toMatchObject({trustedEnvelope:false,overBudget:true});
+});

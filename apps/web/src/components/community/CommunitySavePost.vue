@@ -1,7 +1,8 @@
 <template>
   <BModal
+    v-if="kind === 'bookmark'"
     :visible="true"
-    :title="t('community.feed.' + (kind === 'note' ? 'saveNote' : 'saveBookmark'))"
+    :title="t('community.feed.saveBookmark')"
     width="var(--ui-layout-560, 560px)"
     fullscreen-mobile
     :mask-closable="!busy"
@@ -22,10 +23,6 @@
             >{{ t('community.feed.saveTitle')
             }}<BInput v-model:value="title" :maxlength="255" :disabled="busy || Boolean(createdId)"
           /></label>
-          <div v-if="kind === 'note'" class="save-location-field">
-            <span>{{ t('community.feed.saveLocation') }}</span>
-            <CommunityNoteLocation v-model:value="parentId" :disabled="busy || Boolean(createdId)" />
-          </div>
           <div class="save-location-field">
             <span>{{ t('community.feed.saveTags') }}</span>
             <BSelect
@@ -50,22 +47,19 @@
             </BSelect>
           </div>
           <label
-            >{{ t(kind === 'note' ? 'community.feed.myThoughts' : 'community.feed.bookmarkDescription')
+            >{{ t('community.feed.bookmarkDescription')
             }}<BInput
               v-model:value="thoughts"
               type="textarea"
               :rows="3"
               :placeholder="
-                t(kind === 'note' ? 'community.feed.noteThoughtsHint' : 'community.feed.bookmarkThoughtsHint')
+                t('community.feed.bookmarkThoughtsHint')
               "
               :maxlength="2000"
               :disabled="busy || Boolean(createdId)"
           /></label>
           <p class="save-post-hint">{{
-            t(kind === 'note' ? 'community.feed.noteSnapshotHint' : 'community.feed.bookmarkHint')
-          }}</p>
-          <p v-if="post.images?.length && kind === 'note'" class="save-post-hint">{{
-            t('community.feed.saveImagesHint', { count: post.images.length })
+            t('community.feed.bookmarkHint')
           }}</p>
           <p v-if="error" role="alert">{{ error }}</p>
           <div class="save-post-actions"
@@ -88,10 +82,13 @@
   </BModal>
 </template>
 <script setup lang="ts">
+  import { retainNoteSaveSource } from '@/components/noteLibrary/save/saveAsNoteState';
+  import { openSaveAsNote } from '@/composables/useSaveAsNote';
+  import { createNoteFromContent } from '@/utils/aiNoteDraft';
   import { computed, ref, onMounted, onBeforeUnmount } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
-  import { useUserStore, useNoteWorkspaceStore } from '@/store';
+  import { useUserStore } from '@/store';
   import type { FeedPost } from '@/api/communityFeedApi';
   import { feedGet } from '@/api/communityFeedApi';
   import { apiBasePost, apiQueryPost } from '@/http/request';
@@ -99,9 +96,7 @@
   import { buildNoteDetailRequestScope } from '@/api/noteDetailPrefetch';
   import { resolveResourceRoute } from '@/utils/resourceNavigation';
   import { communityNoteContent, communityPostUrl } from '@/utils/communityPostSave';
-  import { confirmNoteShareExposure } from '@/utils/noteShareExposure';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
-  import CommunityNoteLocation from './CommunityNoteLocation.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import InlineTagCreate from '@/components/tag/InlineTagCreate.vue';
@@ -114,17 +109,16 @@
   const { t } = useI18n();
   const router = useRouter();
   const user = useUserStore();
-  const workspace = useNoteWorkspaceStore();
   const owner = user.id;
+  const sourceId = props.post.publicId;
   let disposed = false;
-  const current = () => !disposed && user.id === owner && !user.adminContext;
+  const current = () => !disposed && user.id === owner && props.post.publicId === sourceId && !user.adminContext;
   onBeforeUnmount(() => {
     disposed = true;
   });
   const title = ref(props.post.title),
     thoughts = ref(''),
-    tags = ref<string[]>([]),
-    parentId = ref('');
+    tags = ref<string[]>([]);
   const tagOptions = ref<Array<{ value: string; label: string }>>([]);
   const existingTags = computed(() => tagOptions.value.map((tag) => ({ id: tag.value, name: tag.label })));
   const selectableTags = computed(() =>
@@ -156,9 +150,30 @@
     createdId = ref('');
   const existing = ref<{ id: string; deleted: boolean } | null>(null);
   let key = '';
-  let folderId: string | undefined;
-  const copies = new Map<string, { file?: File; id?: string; receipt: ManagedCloudUploadReceipt }>();
-  onMounted(initialize);
+  const copyState = retainNoteSaveSource(buildNoteDetailRequestScope(user), `community:${sourceId}`, () => ({ folderId: undefined as string | undefined, copies: new Map<string, { file?: File; id?: string; receipt: ManagedCloudUploadReceipt }>() }));
+  const copies = copyState.copies;
+  onMounted(async () => {
+    if (props.kind === 'bookmark') { await initialize(); return; }
+    const result = await openSaveAsNote({
+      sourceKey: `community:${props.post.publicId}`, title: props.post.title, type: 'html',
+      description: t('community.feed.noteSnapshotHint'),
+      notice: props.post.images?.length ? t('community.feed.saveImagesHint', { count: props.post.images.length }) : '',
+      personalThoughts: true, isCurrent: current,
+      lookup: async () => {
+        const saved = await feedGet(`posts/${props.post.publicId}/saved`);
+        key = saved.key;
+        return saved.note ? { noteId: saved.note.id, unavailable: saved.note.deleted } : null;
+      },
+      save: async options => {
+        await feedGet(`posts/${props.post.publicId}`);
+        const imageIds = await copyImages();
+        if (!current()) throw Object.assign(new Error('Source changed'), { status: 409 });
+        return createNoteFromContent({ title: options.title, type: 'html', content: communityNoteContent(props.post, imageIds, options.thoughts, t('community.feed.sourcePost'), t('community.feed.thoughtsHeading')) }, key, options, current);
+      },
+    });
+    if (result?.openAfterSave) openSaved(result.noteId);
+    else emit('close');
+  });
   async function initialize() {
     initializing.value = true;
     error.value = '';
@@ -201,9 +216,9 @@
           );
         }
         if (!current()) throw new Error();
-        if (!folderId) folderId = (await ensureCloudFolder(t('community.feed.savedImageFolder'))).id;
+        if (!copyState.folderId) copyState.folderId = (await ensureCloudFolder(t('community.feed.savedImageFolder'))).id;
         if (!current()) throw new Error();
-        entry.id = (await uploadManagedCloudFile(entry.file, { folderId, receipt: entry.receipt })).fileId;
+        entry.id = (await uploadManagedCloudFile(entry.file, { folderId: copyState.folderId, receipt: entry.receipt })).fileId;
       }
       ids.push(entry.id);
     }
@@ -229,33 +244,6 @@
           return;
         }
         let response;
-        if (props.kind === 'note') {
-          const imageIds = await copyImages();
-          if (!current()) return;
-          const payload = {
-            title: title.value.trim(),
-            type: 'html',
-            content: communityNoteContent(
-              props.post,
-              imageIds,
-              thoughts.value,
-              t('community.feed.sourcePost'),
-              t('community.feed.thoughtsHeading'),
-            ),
-            parentId: parentId.value || null,
-            idempotencyKey: key,
-          };
-          response = await apiBasePost('/api/note/addNote', payload, { silent: true });
-          if (!current()) return;
-          const decision = await confirmNoteShareExposure(response);
-          if (decision === false) return;
-          if (decision === true && current())
-            response = await apiBasePost(
-              '/api/note/addNote',
-              { ...payload, shareExposureAcknowledged: true },
-              { silent: true },
-            );
-        } else {
           response = await apiBasePost(
             '/api/bookmark/addBookmark',
             {
@@ -268,26 +256,9 @@
             },
             { silent: true },
           );
-        }
         if (!current()) return;
         if (response?.status !== 200 || !response.data?.id) throw new Error();
         createdId.value = String(response.data.id);
-      }
-      if (props.kind === 'note') {
-        const response = await apiBasePost(
-          '/api/note/updateNoteTags',
-          { noteId: createdId.value, tags: tags.value },
-          { silent: true },
-        );
-        if (!current()) return;
-        if (response.status !== 200) throw new Error();
-        workspace.ensureOwner(buildNoteDetailRequestScope(user));
-        workspace.insertCreatedNote({
-          id: createdId.value,
-          title: title.value,
-          type: 'html',
-          parentId: parentId.value || null,
-        });
       }
       if (current()) {
         emit('close');

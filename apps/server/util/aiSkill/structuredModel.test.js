@@ -7,6 +7,9 @@ const { requestAi, estimateAiProviderTokens } = await import('../agent/aiGateway
 const tool = { name: 'submit', description: 'submit', parameters: { type: 'object', properties: {} } };
 
 describe('structured skill model', () => {
+  it('rejects truncated output even when the returned JSON is parseable', () => {
+    expect(() => aiSkillStructuredModelInternals.parseToolArguments({finishReason:'length',toolCalls:[{function:{name:'submit',arguments:'{}'}}]}, 'submit')).toThrow();
+  });
   it('结构化请求估算包含工具 Schema 与输出预算，且不外发模型请求', () => {
     requestAi.mockClear();
     const messages = [{ role: 'user', content: '整理资源' }];

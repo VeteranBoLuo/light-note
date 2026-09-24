@@ -1,3 +1,5 @@
+import { translationZh } from './translation';
+import { saveAsNoteZh } from './saveAsNote';
 import { workshopPresentationZh } from './workshopPresentation';
 import { collectionFormsZh } from './collectionForms';
 import { dataExportZh } from './dataExport';
@@ -13,6 +15,8 @@ import { accountSettingsZh } from './accountSettings';
 import { settingsRefineZh } from './settingsRefine';
 import { notificationMessages } from '@lightnote/shared/notification-presentation';
 export default {
+  translation: translationZh,
+  saveAsNote: saveAsNoteZh,
   collectionForms: collectionFormsZh,
   dataExport: dataExportZh,
   community: communityZh,
@@ -1691,6 +1695,9 @@ export default {
     coreToolsTitle: '从任务开始',
     coreToolsDescription: '只保留能直接产出知识成果、维护知识库或准备资料的常用工具',
     home: {
+      allCategories: '全部分类',
+      allBillingFilter: '全部',
+      aiPointsFilter: 'AI / 积分',
       guestTitle: '先逛逛示例项目，看看知识如何持续积累',
       guestDescription: '这是游客示例，可查看目标、资料、看板和推进记录。注册后即可创建和编辑自己的项目。',
       guestAction: '登录或注册',
@@ -1743,8 +1750,8 @@ export default {
       lastResult: '上次成果：{title}',
       lastToolState: '上次状态：{state}',
       openToolAgain: '重新打开工具',
-      pinTool: '固定到常用工具',
-      unpinTool: '取消固定',
+      pinTool: '固定到工坊概览的常用工具',
+      unpinTool: '从工坊概览的常用工具中取消固定',
       pinLimit: '最多固定 {count} 个工具',
       developerToolbox: '开发者工具箱',
       developerToolboxDescription: '网页提取、编码转换、网络查询等独立工具。',
@@ -1868,6 +1875,7 @@ export default {
       text: '文本与数据',
     },
     tool: {
+      translation: { name: '翻译', description: '完整翻译资料，保留结构并保存为笔记', output: '译文或双语对照笔记' },
       forms: { name: '公开收集', description: '分享独立表单，收集反馈、问题与意见，统一查看提交和统计。', output: '表单、提交记录与统计图表' },
       research_workspace: {
         name: '研究项目',
@@ -8690,6 +8698,7 @@ export default {
           noteBatchSummarize: '批量总结笔记',
           noteBatchCompare: '比较笔记',
           noteCreateFromSources: '根据材料生成笔记草稿',
+          toolboxTranslation: '知识工坊·翻译',
           toolboxSummarizeText: '知识工坊·PDF 文字总结',
           noteTransformText: '笔记润色、改写或翻译',
           bookmarkSummarizePage: '网页摘要',

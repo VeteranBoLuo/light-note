@@ -1,3 +1,5 @@
+import { translationEn } from './translation';
+import { saveAsNoteEn } from './saveAsNote';
 import { workshopPresentationEn } from './workshopPresentation';
 import { collectionFormsEn } from './collectionForms';
 import { dataExportEn } from './dataExport';
@@ -13,6 +15,8 @@ import { accountSettingsEn } from './accountSettings';
 import { settingsRefineEn } from './settingsRefine';
 import { notificationMessages } from '@lightnote/shared/notification-presentation';
 export default {
+  translation: translationEn,
+  saveAsNote: saveAsNoteEn,
   collectionForms: collectionFormsEn,
   dataExport: dataExportEn,
   community: communityEn,
@@ -1774,6 +1778,9 @@ export default {
     coreToolsTitle: 'Start with a task',
     coreToolsDescription: 'Focused tools for creating knowledge, maintaining your library, and preparing sources',
     home: {
+      allCategories: 'All categories',
+      allBillingFilter: 'All',
+      aiPointsFilter: 'AI / Points',
       guestTitle: 'Explore how knowledge grows through example projects',
       guestDescription:
         'Explore goals, resources, boards and activity in these examples. Sign up to create and edit your own projects.',
@@ -1830,8 +1837,8 @@ export default {
       lastResult: 'Last result: {title}',
       lastToolState: 'Last status: {state}',
       openToolAgain: 'Open tool again',
-      pinTool: 'Pin to everyday tools',
-      unpinTool: 'Unpin tool',
+      pinTool: 'Pin to Everyday tools in Workshop overview',
+      unpinTool: 'Unpin from Everyday tools in Workshop overview',
       pinLimit: 'You can pin up to {count} tools',
       developerToolbox: 'Developer toolkit',
       developerToolboxDescription: 'Standalone tools for web extraction, encoding conversion, and network queries.',
@@ -1969,6 +1976,7 @@ export default {
       text: 'Text & data',
     },
     tool: {
+      translation: { name: 'Translation', description: 'Translate complete materials and save as a note', output: 'Translation or bilingual note' },
       forms: { name: 'Public collection', description: 'Share standalone forms to collect feedback, questions and ideas, with private submissions and statistics.', output: 'Forms, submissions and charts' },
       research_workspace: {
         name: 'Research project',
@@ -9134,6 +9142,7 @@ export default {
           noteBatchSummarize: 'Summarize notes',
           noteBatchCompare: 'Compare notes',
           noteCreateFromSources: 'Create note draft from sources',
+          toolboxTranslation: 'Knowledge Workshop · Translation',
           toolboxSummarizeText: 'Knowledge Workshop · PDF text summary',
           noteTransformText: 'Polish, rewrite, or translate note text',
           bookmarkSummarizePage: 'Summarize webpage',

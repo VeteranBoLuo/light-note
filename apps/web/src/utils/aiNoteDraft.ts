@@ -1,3 +1,6 @@
+import { useUserStore } from '@/store';
+import { buildNoteDetailRequestScope } from '@/api/noteDetailPrefetch';
+import { openSaveAsNote, type SaveAsNoteOptions } from '@/composables/useSaveAsNote';
 import type { AiSkillResponse } from '@lightnote/shared/ai-skill-protocol';
 import { apiBasePost } from '@/http/request';
 import { stripAiAnalysisCitations } from '@/utils/aiAnalysisContent';
@@ -22,6 +25,7 @@ export interface AiNoteDraftHandoff {
 
 export interface PersistedAiNoteHandoff {
   noteId: string;
+  openAfterSave?: boolean;
   route: { path: string };
 }
 
@@ -95,6 +99,7 @@ export function createAiNoteDraftHandoff(
 async function persistAiNoteDraft(
   response: AiSkillResponse,
   draft: AiNoteDraft | null,
+  isCurrent?: () => boolean,
 ): Promise<PersistedAiNoteHandoff | null> {
   if (!draft) return null;
   const requestId = String(response.requestId || '').trim();
@@ -104,34 +109,19 @@ async function persistAiNoteDraft(
       status: 422,
     });
   }
-  const payload = {
-    ...draft,
-    idempotencyKey: `ai-skill-note:${requestId}`.slice(0, 512),
-  };
-  let result = await apiBasePost('/api/note/addNote', payload, { silent: true });
-  const exposureDecision = await confirmNoteShareExposure(result);
-  if (exposureDecision === false) return null;
-  if (exposureDecision === true) {
-    result = await apiBasePost('/api/note/addNote', { ...payload, shareExposureAcknowledged: true }, { silent: true });
-  }
-  const noteId = String(result?.data?.id || '').trim();
-  if (Number(result?.status) !== 200 || !noteId) {
-    throw Object.assign(new Error(String(result?.msg || '笔记创建失败，请稍后重试')), {
-      code: String(result?.data?.code || 'AI_NOTE_CREATE_FAILED'),
-      status: Number(result?.status || 500),
-    });
-  }
-  return {
-    noteId,
-    route: { path: `/noteLibrary/${encodeURIComponent(noteId)}` },
-  };
+  const result = await openSaveAsNote({
+    sourceKey: `ai:${requestId}`, isCurrent, title: draft.title, type: draft.type,
+    save: options => createNoteFromContent(draft, `ai-skill-note:${requestId}`.slice(0, 512), options, isCurrent),
+  });
+  return result ? { ...result, route: { path: `/noteLibrary/${encodeURIComponent(result.noteId)}` } } : null;
 }
 
 export function persistAiNotePreview(
   response: AiSkillResponse,
   fallbackTitle = 'AI 生成笔记',
+  isCurrent?: () => boolean,
 ): Promise<PersistedAiNoteHandoff | null> {
-  return persistAiNoteDraft(response, notePreviewFromResponse(response, fallbackTitle));
+  return persistAiNoteDraft(response, notePreviewFromResponse(response, fallbackTitle), isCurrent);
 }
 
 /**
@@ -141,8 +131,9 @@ export function persistAiNotePreview(
 export function persistAiMarkdownResultAsNote(
   response: AiSkillResponse,
   fallbackTitle = 'AI 生成笔记',
+  isCurrent?: () => boolean,
 ): Promise<PersistedAiNoteHandoff | null> {
-  return persistAiNoteDraft(response, markdownResultFromResponse(response, fallbackTitle));
+  return persistAiNoteDraft(response, markdownResultFromResponse(response, fallbackTitle), isCurrent);
 }
 
 export function readAiNoteDraft(token: unknown): AiNoteDraft | null {
@@ -177,3 +168,19 @@ export function consumeAiNoteDraft(token: unknown): AiNoteDraft | null {
 }
 
 export const aiNoteDraftInternals = { STORAGE_PREFIX, DEFAULT_TTL_MS };
+
+/** Shared note domain adapter; no AI execution occurs here. */
+export async function createNoteFromContent(draft: AiNoteDraft, idempotencyKey: string, options: Readonly<SaveAsNoteOptions>, isCurrent: () => boolean = () => true) {
+  const owner = buildNoteDetailRequestScope(useUserStore());
+  const assertCurrent = () => { if (!isCurrent() || owner !== buildNoteDetailRequestScope(useUserStore())) throw Object.assign(new Error('Source changed'), {status:409}); };
+  assertCurrent();
+  const payload = { ...draft, title: options.title, parentId: options.parentId, idempotencyKey };
+  let result = await apiBasePost('/api/note/addNote', payload, { silent: true });
+  const decision = await confirmNoteShareExposure(result);
+  if (decision === false) throw Object.assign(new Error('Cancelled'), { code: 'SAVE_NOTE_CANCELLED' });
+  assertCurrent();
+  if (decision === true) result = await apiBasePost('/api/note/addNote', { ...payload, shareExposureAcknowledged: true }, { silent: true });
+  const noteId = String(result?.data?.id || '');
+  if (Number(result?.status) !== 200 || !noteId) throw Object.assign(new Error('Note save failed'), { status: Number(result?.status || 500), code: result?.data?.code });
+  return { noteId };
+}

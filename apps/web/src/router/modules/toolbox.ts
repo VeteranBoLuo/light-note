@@ -14,6 +14,7 @@ const homeMeta = {
 } as const;
 
 const toolboxRouter: RouteRecordRaw[] = [
+  { path: '/toolbox/translation', name: 'toolboxTranslation', meta: { ...commonMeta, title: '翻译' }, component: () => import('@/view/toolbox/TranslationWorkbench.vue') },
   {
     path: '/toolbox/forms/:formId?',
     name: 'collectionForms',

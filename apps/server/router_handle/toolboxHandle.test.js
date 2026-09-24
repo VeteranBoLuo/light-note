@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
+  streamTranslation: vi.fn(),
   ensureNotVisitor: vi.fn(),
   ensureUserOrAdminPolicy: vi.fn(),
   recordServerOperation: vi.fn(),
@@ -52,6 +53,7 @@ vi.mock('../util/toolbox/errors.js', () => ({
 vi.mock('../util/toolbox/knowledgeStructure.js', () => ({
   getToolboxKnowledgeOverview: mocks.getToolboxKnowledgeOverview,
 }));
+vi.mock('../util/toolbox/translationStream.js', () => ({ streamTranslation: mocks.streamTranslation }));
 vi.mock('../util/toolbox/service.js', () => ({
   cancelToolboxJob: mocks.cancelToolboxJob,
   dismissToolboxJob: mocks.dismissToolboxJob,
@@ -81,6 +83,7 @@ vi.mock('../util/toolbox/workspace.js', () => ({
 }));
 const {
   addWorkspaceResources,
+  translateStream,
   cancelJob,
   dismissJob,
   createJob,
@@ -265,6 +268,8 @@ describe('toolbox home handlers', () => {
       artifactId: 'artifact-1',
       clientRequestId: 'recreate-request-1234',
       action: 'recreate_missing_target',
+      shareExposureAcknowledged: false,
+      saveFormat: undefined,
       request,
     });
     expect(response.send).toHaveBeenCalledWith({ data: receipt, status: 200, msg: 'success' });
@@ -436,5 +441,23 @@ it('uses the authorized owner for visitor entry and source-item reads', async ()
     userId: 'visitor-owner',
     workspaceId: 'example',
     itemId: 'source',
+  });
+});
+
+describe('translation stream handler', () => {
+  it('refuses visitors before streaming or creating a job', async () => {
+    mocks.streamTranslation.mockReset(); mocks.ensureNotVisitor.mockReturnValue(false);
+    await translateStream({ user: { id: 'guest' }, body: {} }, createResponse());
+    expect(mocks.streamTranslation).not.toHaveBeenCalled();
+  });
+  it('uses the authenticated owner and marks uncertain failures without authorizing a new paid retry', async () => {
+    mocks.ensureNotVisitor.mockReturnValue(true);
+    mocks.streamTranslation.mockImplementation(async ({ emit }) => { emit('start', { jobId: 'j' }); throw Object.assign(new Error('private detail'), { code: 'DB_FAILED' }); });
+    const res = createResponse(); res.set = vi.fn().mockReturnValue(res); res.flushHeaders = vi.fn(); res.write = vi.fn(); res.end = vi.fn();
+    await translateStream({ user: { id: 'owner' }, body: { userId: 'other', quoteId: 'q', clientRequestId: 'r' } }, res);
+    expect(mocks.streamTranslation.mock.calls[0][0]).toMatchObject({ userId: 'owner', quoteId: 'q', clientRequestId: 'r' });
+    const events = res.write.mock.calls.map(c => c[0]).join('');
+    expect(events).toContain('"definitive":false'); expect(events).not.toContain('private detail');
+    expect(res.end).toHaveBeenCalledOnce();
   });
 });

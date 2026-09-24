@@ -11,6 +11,7 @@ import {
 } from "./toolboxProtocol.js";
 
 const ACTIVE_TOOL_IDS = [
+  "translation",
   "forms",
   "research_workspace",
   "learning_workspace",
@@ -43,7 +44,7 @@ describe("toolbox protocol", () => {
   });
 
   it("keeps every tool id unique and every execution contract explicit", () => {
-    expect(TOOLBOX_TOOL_CATALOG).toHaveLength(42);
+    expect(TOOLBOX_TOOL_CATALOG).toHaveLength(43);
     expect(new Set(TOOLBOX_TOOL_CATALOG.map((item) => item.id)).size).toBe(
       TOOLBOX_TOOL_CATALOG.length,
     );
@@ -51,6 +52,9 @@ describe("toolbox protocol", () => {
       if (item.input.kind === "prompt") {
         expect(item.input.minItems).toBe(0);
         expect(item.input.maxItems).toBe(0);
+      } else if (item.input.kind === "translation") {
+        expect(item.input.maxChars).toBe(30000);
+        expect(item.billingMedia).toEqual(["ai_quota"]);
       } else {
         expect(item.input.minItems).toBeGreaterThan(0);
       }
@@ -97,7 +101,7 @@ describe("toolbox protocol", () => {
       availability: { enabled: true },
       input: { minItems: 1, maxItems: 2, maxBytes: 30 * 1024 * 1024 },
     });
-    expect(ACTIVE_TOOL_IDS).toHaveLength(18);
+    expect(ACTIVE_TOOL_IDS).toHaveLength(19);
   });
 
   it("does not treat browser-local utilities as paid jobs", () => {
@@ -119,6 +123,7 @@ describe("toolbox protocol", () => {
     expect(isToolboxPaidTool("research_workspace")).toBe(false);
     expect(isToolboxPaidTool("knowledge_structure_audit")).toBe(false);
     expect(isToolboxPaidTool("research_brief")).toBe(true);
+    expect(isToolboxPaidTool("translation")).toBe(true);
     expect(isToolboxPaidTool("idea_to_draft")).toBe(true);
     expect(getToolboxTool("idea_to_draft")?.billingMedia).toEqual([
       "points",

@@ -1,3 +1,4 @@
+import { streamTranslation } from '../util/toolbox/translationStream.js';
 import { operateBoard, readBoardItem } from '../util/toolbox/board.js';
 import { readProjectEntry, dismissProjectIntro } from '../util/toolbox/projectEntry.js';
 import { ensureNotVisitor, ensureUserOrAdminPolicy } from '../util/auth.js';
@@ -20,6 +21,9 @@ import {
   getToolboxJob,
   listToolboxHomeTasks,
   listToolboxJobs,
+  listTranslationHistory,
+  deleteTranslationHistory,
+  getTranslationRecord,
   prepareToolboxUpload,
   saveToolboxArtifactToNote,
 } from '../util/toolbox/service.js';
@@ -318,6 +322,23 @@ export async function createJob(req, res) {
   }
 }
 
+export async function removeTranslationHistory(req, res) {
+  if (!requireWrite(req, res)) return;
+  try {
+    return res.send(resultData(await deleteTranslationHistory({ userId: req.user.id, jobIds: req.body?.jobIds, all: req.body?.all === true })));
+  } catch (error) { return sendError(res, error); }
+}
+export async function translationHistory(req, res) {
+  if (!requireRead(req, res)) return;
+  try { return res.send(resultData(await listTranslationHistory({ userId: readUserId(req), cursor: req.query?.cursor, keyword: req.query?.keyword }))); }
+  catch (error) { return sendError(res, error); }
+}
+export async function translationRecord(req, res) {
+  if (!requireRead(req, res)) return;
+  try { return res.send(resultData(await getTranslationRecord({ userId: readUserId(req), jobId: req.params.jobId }))); }
+  catch (error) { return sendError(res, error); }
+}
+
 export async function listJobs(req, res) {
   if (!requireRead(req, res)) return;
   try {
@@ -380,6 +401,8 @@ export async function saveArtifact(req, res) {
       clientRequestId: req.body?.clientRequestId,
       action: req.body?.action,
       title: req.body?.title,
+      shareExposureAcknowledged: req.body?.shareExposureAcknowledged === true,
+      saveFormat: req.body?.saveFormat,
       parentId: req.body?.parentId,
       request: req,
     });
@@ -454,5 +477,27 @@ export async function getWorkspaceBoardItem(req, res) {
     );
   } catch (error) {
     return sendError(res, error);
+  }
+}
+
+export async function translateStream(req, res) {
+  if (!requireWrite(req, res)) return;
+  const emit = (event, data) => {
+    if (res.destroyed || res.writableEnded) return;
+    if (!res.headersSent) {
+      res.status(200).set({ 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache, no-transform', 'X-Accel-Buffering': 'no' });
+      res.flushHeaders?.();
+    }
+    if (event === 'snapshot' && res.writableLength > 256 * 1024) return;
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+  try {
+    await streamTranslation({ userId: req.user.id, quoteId: req.body?.quoteId, clientRequestId: req.body?.clientRequestId, emit,
+      disconnected: () => res.destroyed || res.writableEnded });
+  } catch (error) {
+    const failure = parseToolboxError(error);
+    emit('error', { code: failure.code, message: failure.message, status: failure.status, definitive: error.definitive === true });
+  } finally {
+    if (!res.destroyed && !res.writableEnded) res.end();
   }
 }

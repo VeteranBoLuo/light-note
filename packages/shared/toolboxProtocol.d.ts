@@ -1,3 +1,5 @@
+export const TOOLBOX_TRANSLATION_MAX_CHARS: 30000;
+export const TOOLBOX_TRANSLATION_LANGUAGES: readonly string[];
 export declare const TOOLBOX_OCR_FILE_EXTENSIONS: readonly string[];
 export type ToolboxExecutionMode =
   "browser" | "service" | "worker" | "ai_skill";
@@ -20,6 +22,7 @@ export type ToolboxBillingStatus =
 export type ToolboxSaveStatus = "unsaved" | "saving" | "saved" | "save_failed";
 export type ToolboxResourceType = "note" | "bookmark" | "file";
 export type ToolboxToolId =
+  | "translation"
   | "forms"
   | "research_workspace"
   | "learning_workspace"
@@ -80,6 +83,7 @@ export interface ToolboxToolDefinition {
   billingMedia: readonly ToolboxBillingMedium[];
   input: Readonly<{
     kind:
+      | "translation"
       | "resources"
       | "local_files"
       | "local_text"
@@ -95,6 +99,7 @@ export interface ToolboxToolDefinition {
   }>;
   output: Readonly<{
     artifactType:
+      | "translation"
       | "note_draft"
       | "research_brief"
       | "study_kit"
@@ -119,6 +124,7 @@ export const TOOLBOX_JOB_STATUSES: readonly ToolboxJobStatus[];
 export const TOOLBOX_BILLING_STATUSES: readonly ToolboxBillingStatus[];
 export const TOOLBOX_SAVE_STATUSES: readonly ToolboxSaveStatus[];
 export const TOOLBOX_ARTIFACT_TYPES: readonly (
+  | "translation"
   | "note_draft"
   | "research_brief"
   | "study_kit"

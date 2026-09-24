@@ -829,11 +829,9 @@ describe('mobile personal center experience', () => {
     expect(tabsSource).toMatch(/emit\('select', value\);[\s\S]*?if \(activeValue\.value === value\)/);
   });
 
-  it('uses a mobile password drawer while retaining the desktop modal', () => {
-    expect(passwordDialogSource).toContain('isMobile.value ? BDrawer : BModal');
-    expect(passwordDialogSource).toContain("placement: 'bottom' as const");
-    expect(passwordDialogSource).toContain('password-shell--mobile');
-    expect(passwordDialogSource).toContain('<BInput');
+  it('shares the account password flow with settings', () => {
+    expect(passwordDialogSource).toContain('<AccountPasswordDialog v-model:visible="visible"');
+    expect(passwordDialogSource).toContain('@/components/settings/AccountPasswordDialog.vue');
     expect(passwordDialogSource).not.toMatch(/<(?:button|input|select|textarea|svg)\b/i);
   });
 

@@ -13,7 +13,7 @@ vi.mock('@/components/base/BasicComponents/BPopover.vue', () => ({
     template: `<div><div @click="!disabled && $emit('update:open', !open)"><slot /></div><div v-if="open" class="panel"><slot name="content" /></div></div>`,
   },
 }));
-import Location from './CommunityNoteLocation.vue';
+import Location from './NoteSaveLocation.vue';
 const tree = {
   status: 200,
   data: {
@@ -71,7 +71,10 @@ it('expands children in place, selects their ID and displays the complete path o
   await click('.note-location-expand');
   expect(selected).not.toHaveBeenCalled();
   expect(host.textContent).toContain('PC');
-  await click('.note-location-row:nth-of-type(2) .note-location-choice');
+  Array.from(host.querySelectorAll<HTMLButtonElement>('.note-location-row .note-location-choice'))
+    .find((button) => button.textContent?.trim() === 'PC')!
+    .click();
+  await flush();
   expect(selected).toHaveBeenLastCalledWith('child');
   expect(host.querySelector('.note-location-trigger')?.textContent).toContain('开发文档 / PC');
   expect(host.querySelector('.panel')).toBeNull();
@@ -83,7 +86,10 @@ it('expands children in place, selects their ID and displays the complete path o
 it('disables destinations at the depth limit while still allowing their parents', async () => {
   const { host, click } = await mount();
   await click('.note-location-expand');
-  await click('.note-location-row:nth-of-type(2) .note-location-expand');
+  Array.from(host.querySelectorAll<HTMLButtonElement>('.note-location-expand'))
+    .find((button) => button.getAttribute('aria-label')?.includes('PC'))!
+    .click();
+  await flush();
   const buttons = Array.from(host.querySelectorAll<HTMLButtonElement>('.note-location-choice'));
   expect(buttons.find((button) => button.textContent?.includes('深层页面'))?.disabled).toBe(true);
   expect(buttons.find((button) => button.textContent?.trim() === 'PC')?.disabled).toBe(false);

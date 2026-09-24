@@ -31,6 +31,9 @@ const {
   getStudyProgress,
   saveStudyProgress,
   listToolboxHomeTasks,
+  listTranslationHistory,
+  deleteTranslationHistory,
+  getTranslationRecord,
   dismissToolboxJob,
   saveToolboxArtifactToNote,
   toolboxServiceInternals,
@@ -1487,4 +1490,103 @@ describe('source project transaction boundary', () => {
       ['source', 'owner'],
     ]);
   });
+});
+
+it('direct translation claims its lease before commit, leaving no queued window for legacy Workers', async () => {
+  const snapshot = { resourceRefs: [], options: { sourceLanguage: 'auto', targetLanguage: 'en', acceptPartial: true }, translation: { characters: 2, segments: 1 } };
+  const quote = { id: 'q', tool_id: 'translation', pricing_version: 'toolbox-billing-v2', billing_medium: 'ai_quota', input_snapshot_json: JSON.stringify(snapshot), input_digest: toolboxInputDigest({ toolId: 'translation', input: snapshot }), status: 'active', expires_at: new Date(Date.now() + 60000) };
+  const operations = [];
+  const connection = { beginTransaction: vi.fn(), release: vi.fn(), rollback: vi.fn(), commit: vi.fn(() => operations.push('commit')), query: vi.fn(async (sql) => {
+    operations.push(sql);
+    if (sql.startsWith('SELECT * FROM toolbox_jobs')) return [[]];
+    if (sql.startsWith('SELECT * FROM toolbox_quotes')) return [[quote]];
+    return [{ affectedRows: 1 }];
+  }) };
+  const job = await createToolboxJob({ userId: 'u', quoteId: 'q', clientRequestId: 'translation-test-request', translationLease: 'owned-lease', database: { getConnection: async () => connection } });
+  expect(job.status).toBe('processing');
+  const claimIndex = operations.findIndex(sql => sql.includes("SET status='processing'"));
+  expect(claimIndex).toBeGreaterThan(0);
+  expect(claimIndex).toBeLessThan(operations.indexOf('commit'));
+  expect(connection.query.mock.calls[claimIndex][1][0]).toBe('owned-lease');
+});
+
+
+describe('translation history', () => {
+  it('paginates owned translations with a stable cursor and bounded previews', async () => {
+    const rows = Array.from({length:31}, (_, i) => ({id:`job-${i}`, tool_id:'translation', options_json: JSON.stringify({targetLanguage:'en'}), original_preview:'\n# **Hello** world', create_time:'2026-09-24', status:'succeeded'}));
+    const database = {query:vi.fn().mockResolvedValue([rows])};
+    const result = await listTranslationHistory({userId:'owner', cursor:'older', keyword:'Hello', database});
+    expect(result.items).toHaveLength(30);
+    expect(result.nextCursor).toBe('job-29');
+    expect(result.items[0]).toMatchObject({preview:'Hello world',targetLanguage:'en'});
+    expect(database.query.mock.calls[0][1]).toEqual(['owner','Hello','Hello','older','older','owner']);
+    expect(database.query.mock.calls[0][0]).toContain("job.tool_id = 'translation'");
+    expect(database.query.mock.calls[0][0]).toContain('job.expires_at > NOW()');
+  });
+  it('prefers the material title and ends pagination without a phantom next page', async () => {
+    const database = {query:vi.fn().mockResolvedValue([[{id:'job', options_json:JSON.stringify({title:'Source note'}), original_preview:'Different first line'}]])};
+    const result = await listTranslationHistory({userId:'owner',database});
+    expect(result.items[0].preview).toBe('Source note');
+    expect(result.nextCursor).toBeNull();
+  });
+  it('cannot read a missing, expired or foreign translation record', async () => {
+    const database = {query:vi.fn().mockResolvedValue([[]])};
+    await expect(getTranslationRecord({userId:'owner',jobId:'foreign',database})).rejects.toMatchObject({status:404});
+    expect(database.query.mock.calls[0][1]).toEqual(['foreign','owner']);
+    expect(database.query).toHaveBeenCalledOnce();
+  });
+  it('restores the existing request identity and source without executing AI', async () => {
+    const database = {query:vi.fn()
+      .mockResolvedValueOnce([[{quote_id:'quote',client_request_id:'request',content:'Original',options_json:JSON.stringify({sourceLanguage:'en',targetLanguage:'ja',question:'Keep code'})}]])
+      .mockResolvedValueOnce([[{id:'job',user_id:'owner',tool_id:'translation',status:'processing'}]])};
+    const result = await getTranslationRecord({userId:'owner',jobId:'job',database});
+    expect(result).toMatchObject({quoteId:'quote',clientRequestId:'request',original:'Original',options:{targetLanguage:'ja',question:'Keep code'},job:{id:'job',status:'processing'}});
+  });
+});
+
+describe('delete translation history', () => {
+  const connectionFor = rows => ({
+    beginTransaction: vi.fn(), commit: vi.fn(), rollback: vi.fn(), release: vi.fn(),
+    query: vi.fn().mockResolvedValueOnce([rows]).mockResolvedValue([{}]),
+  });
+  it('soft deletes an owned batch atomically and preserves receipts', async () => {
+    const connection = connectionFor([{id:'a',status:'succeeded'},{id:'b',status:'failed'}]);
+    const result = await deleteTranslationHistory({userId:'owner',jobIds:['b','a','a'],database:{getConnection:async()=>connection}});
+    expect(result.deletedIds).toEqual(['a','b']);
+    expect(connection.query.mock.calls[0][1]).toEqual(['owner','a','b']);
+    expect(connection.query.mock.calls[0][0]).toContain("tool_id = 'translation'");
+    expect(connection.query.mock.calls[1][0]).toContain('translationHistoryDeleted');
+    expect(connection.query.mock.calls[1][0]).not.toMatch(/DELETE FROM|billing_status|save_status/);
+    expect(connection.commit).toHaveBeenCalledOnce();
+  });
+  it.each([
+    [[], 'TOOLBOX_JOB_NOT_FOUND'],
+    [[{id:'a',status:'processing'}], 'TOOLBOX_JOB_CANNOT_DISMISS'],
+    [[{id:'a',status:'succeeded',save_status:'saving'}], 'TOOLBOX_JOB_CANNOT_DISMISS'],
+  ])('rejects foreign or active records without a partial delete', async (rows,code) => {
+    const connection = connectionFor(rows);
+    await expect(deleteTranslationHistory({userId:'owner',jobIds:['a'],database:{getConnection:async()=>connection}})).rejects.toMatchObject({code});
+    expect(connection.query).toHaveBeenCalledOnce();
+    expect(connection.rollback).toHaveBeenCalledOnce();
+    expect(connection.commit).not.toHaveBeenCalled();
+  });
+  it('rejects empty and oversized selections before opening a transaction', async () => {
+    for (const jobIds of [[],Array(101).fill('a')]) {
+      await expect(deleteTranslationHistory({userId:'owner',jobIds,database:{}})).rejects.toMatchObject({status:400});
+    }
+  });
+});
+
+it('clears all owned finished translations without a page limit, while retaining active saves and receipts', async () => {
+  const database = {query: vi.fn().mockResolvedValue([{affectedRows:75}])};
+  const result = await deleteTranslationHistory({userId:'owner',all:true,database});
+  expect(result).toMatchObject({cleared:true,count:75});
+  const [sql, values] = database.query.mock.calls[0];
+  expect(values[0]).toBe('owner');
+  expect(values).not.toContain('queued');
+  expect(values).not.toContain('processing');
+  expect(sql).toContain("tool_id = 'translation'");
+  expect(sql).toContain("COALESCE(save_status, '') <> 'saving'");
+  expect(sql).not.toMatch(/LIMIT|DELETE FROM|artifact_id\s*=/);
+  expect(database.query).toHaveBeenCalledOnce();
 });

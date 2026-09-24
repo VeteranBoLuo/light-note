@@ -6,9 +6,13 @@ import type { ResourcePickerItem } from '@/composables/useResourcePickerSearch';
 
 export type ToolboxResourceRef = Pick<ResourcePickerItem, 'type' | 'id'> & { version?: string };
 export type ToolboxInput = {
+  text?: string;
   resourceRefs?: ToolboxResourceRef[];
   sourceIds?: string[];
   options?: {
+    sourceLanguage?: string;
+    targetLanguage?: string;
+    acceptPartial?: boolean;
     recognitionMode?: 'ai' | 'basic';
     title?: string;
     question?: string;
@@ -19,7 +23,7 @@ export type ToolboxInput = {
 };
 
 export type ToolboxCatalogItem = ToolboxToolDefinition & {
-  price: { kind: 'free' | 'quote'; currency: 'points' | null; min: number; max: number };
+  price: { kind: 'free' | 'quote' | 'quota'; currency: 'points' | 'ai_quota' | null; min: number; max: number };
 };
 
 export type ToolboxCatalog = {
@@ -149,7 +153,12 @@ export type ToolboxQuote = {
   quotedPoints: number;
   status: 'active' | 'consumed' | 'expired';
   expiresAt: string;
-  inputSummary: { itemCount: number; resourceCount: number; uploadCount: number };
+  inputSummary: {
+    itemCount: number;
+    resourceCount: number;
+    uploadCount: number;
+    translation?: { characters: number; segments: number; partial: boolean; estimatedTokens?: number };
+  };
 };
 
 export type ToolboxJob = {
@@ -330,7 +339,9 @@ export async function markToolboxWorkspaceOpened(
 
 export async function deleteToolboxWorkspace(workspaceId: string): Promise<void> {
   try {
-    const response = await apiBaseDelete(`/api/toolbox/workspaces/${encodeURIComponent(workspaceId)}`, undefined, { silent: true });
+    const response = await apiBaseDelete(`/api/toolbox/workspaces/${encodeURIComponent(workspaceId)}`, undefined, {
+      silent: true,
+    });
     if (response.status !== 200 && !(response.status === 404 && response.data?.code === 'TOOLBOX_WORKSPACE_NOT_FOUND'))
       throw apiFailure(response, 'TOOLBOX_WORKSPACE_DELETE_FAILED');
   } catch (error) {
@@ -490,7 +501,12 @@ export async function saveToolboxArtifact(
   artifactId: string,
   clientRequestId: string,
   action: 'save' | 'recreate_missing_target' = 'save',
-  placement: { title?: string; parentId?: string | null } = {},
+  placement: {
+    title?: string;
+    parentId?: string | null;
+    shareExposureAcknowledged?: boolean;
+    saveFormat?: 'translationOnly' | 'bilingual';
+  } = {},
 ) {
   const response = await apiBasePost(
     `/api/toolbox/artifacts/${encodeURIComponent(artifactId)}/save`,
@@ -582,5 +598,36 @@ export async function readToolboxBoardItem(workspaceId: string, itemId: string):
     { silent: true },
   );
   if (response.status !== 200) throw apiFailure(response, 'BOARD_ITEM_UNAVAILABLE');
+  return response.data;
+}
+
+export async function fetchTranslationHistory(
+  cursor = '',
+  keyword = '',
+): Promise<{ items: Array<ToolboxJob & { preview?: string; targetLanguage?: string }>; nextCursor: string | null }> {
+  const response = await apiBaseGet('/api/toolbox/translation/history', { cursor, keyword }, { silent: true });
+  if (response.status !== 200) throw apiFailure(response, 'TOOLBOX_TASKS_FAILED');
+  return response.data;
+}
+export async function fetchTranslationRecord(id: string): Promise<{
+  job: ToolboxJob;
+  original: string;
+  options: { sourceLanguage: string; targetLanguage: string; question: string };
+  quoteId: string;
+  clientRequestId: string;
+}> {
+  const response = await apiBaseGet(`/api/toolbox/translation/history/${encodeURIComponent(id)}`, undefined, {
+    silent: true,
+  });
+  if (response.status !== 200) throw apiFailure(response, 'TOOLBOX_JOB_FAILED');
+  return response.data;
+}
+
+export async function deleteTranslationHistory(
+  jobIds: string[],
+  all = false,
+): Promise<{ deletedIds: string[]; cleared?: boolean; count?: number }> {
+  const response = await apiBasePost('/api/toolbox/translation/history/delete', { jobIds, all }, { silent: true });
+  if (response.status !== 200) throw apiFailure(response, 'TOOLBOX_HISTORY_DELETE_FAILED');
   return response.data;
 }

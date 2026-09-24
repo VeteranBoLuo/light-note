@@ -37,7 +37,7 @@
     >
       <BTabs
         v-model:active-tab="homeView"
-        variant="line"
+        variant="solid"
         :options="[
           { key: 'work', label: t('toolbox.project.overview') },
           { key: 'catalog', label: t('toolbox.home.allToolsTitle') },
@@ -338,7 +338,7 @@
                   :aria-label="t('toolbox.presentation.allFees')"
                 />
               </div>
-              <div class="toolbox-category-filter" :aria-label="t('toolbox.home.allToolsTitle')">
+              <div class="toolbox-category-filter" :aria-label="t('toolbox.presentation.allFees')">
                 <BChip
                   v-for="category in categoryOptions"
                   :key="category.value"
@@ -559,9 +559,9 @@
     }).format(points);
   });
   const categoryOptions = computed(() => [
-    { value: 'all' as const, label: t('toolbox.allTools') },
-    { value: 'free' as const, label: t('toolbox.freeTools') },
-    { value: 'points' as const, label: t('toolbox.pointsTools') },
+    { value: 'all' as const, label: t('toolbox.home.allBillingFilter') },
+    { value: 'free' as const, label: t('toolbox.free') },
+    { value: 'points' as const, label: t('toolbox.home.aiPointsFilter') },
   ]);
   const mobileCategoryOptions = computed(() =>
     categoryOptions.value.map((option) => ({
@@ -570,7 +570,7 @@
     })),
   );
   const groupOptions = computed(() => [
-    { value: 'all' as const, label: t('toolbox.home.allToolsTitle') },
+    { value: 'all' as const, label: t('toolbox.home.allCategories') },
     ...TOOLBOX_HOME_GROUPS.map((group) => ({
       value: group.id,
       label: t(`toolbox.homeGroup.${group.id}.title`),
@@ -842,6 +842,7 @@
   const toolName = (toolId: string) => t('toolbox.tool.' + toolId + '.name');
   const toolDescription = (toolId: string) => t('toolbox.tool.' + toolId + '.description');
   function billingLabel(tool: ToolboxCatalogItem) {
+    if (tool.id === 'translation') return t('translation.quota');
     if (tool.id === 'ocr_to_text') return t('toolbox.ocrBillingLabel');
     if (tool.price.kind !== 'free') {
       return tool.billingMedia.includes('ai_quota') ? t('toolbox.billingChoiceLabel') : t('toolbox.pointsLabel');
@@ -1107,14 +1108,39 @@
     border-radius: 8px;
   }
   .workshop-view-switch {
-    margin-bottom: var(--ui-space-24, 24px);
-    border-bottom: 1px solid var(--workspace-divider);
+    margin-bottom: var(--ui-space-20, 20px);
   }
   .workshop-view-switch :deep(.tab-container) {
     margin: 0;
+    padding: var(--ui-space-4, 4px);
+    border: 1px solid var(--workspace-border);
+    border-radius: 12px;
+    gap: var(--ui-space-4, 4px);
+    background: var(--workspace-canvas);
   }
   .workshop-view-switch :deep(.tab) {
-    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
+    box-sizing: border-box;
+    min-width: var(--ui-layout-104, 104px);
+    min-height: var(--ui-control-36, 36px);
+    padding: 0 var(--ui-space-20, 20px);
+    border-radius: 8px;
+    font-size: var(--ui-font-14, 14px);
+    font-weight: 600;
+    line-height: 1.5;
+    color: var(--workspace-text);
+  }
+  .workshop-view-switch :deep(.tab:hover) {
+    background: var(--workspace-hover);
+  }
+  .workshop-view-switch :deep(.tab.is-active) {
+    color: #fff;
+    background: var(--primary-color);
+    font-weight: 600;
+  }
+  .workshop-view-switch :deep(.tab:focus-visible) {
+    outline: 2px solid var(--workspace-purple-text);
+    outline-offset: 2px;
+    border-radius: 4px;
   }
   .workshop-view-content.is-overview {
     display: grid;
@@ -1462,6 +1488,7 @@
   }
   .toolbox-group-filter :deep(.b-chip.b-chip--selected) {
     .workspace-navigation-selected();
+    border-color: transparent;
   }
   .toolbox-catalog__content {
     min-width: 0;
@@ -1496,9 +1523,9 @@
     color: var(--workspace-muted);
   }
   .toolbox-category-filter :deep(.b-chip--selected) {
-    color: var(--workspace-purple-text);
-    border-color: var(--workspace-purple-text);
-    background: var(--workspace-purple-selected);
+    color: var(--workspace-text);
+    border-color: var(--workspace-border);
+    background: var(--workspace-hover);
   }
   .toolbox-mobile-filters {
     display: none;
@@ -1697,6 +1724,9 @@
       margin-top: var(--ui-space-8, 8px);
       margin-bottom: var(--ui-space-16, 16px);
     }
+    .workshop-view-switch :deep(.tab) {
+      padding-inline: var(--ui-space-14, 14px);
+    }
     .workshop-view-content.is-overview {
       gap: var(--ui-space-22, 22px);
     }
@@ -1776,6 +1806,18 @@
     .toolbox-card__pin.b_btn {
       width: var(--ui-control-44, 44px);
       height: var(--ui-control-44, 44px);
+    }
+    .toolbox-card__pin-wrap {
+      bottom: 1px;
+    }
+    .toolbox-card.b_btn {
+      padding-bottom: 0;
+    }
+    .toolbox-card :deep(.toolbox-tool-card__billing) {
+      display: flex;
+      align-items: center;
+      min-height: var(--ui-control-44, 44px);
+      padding-right: var(--ui-space-44, 44px);
     }
     .toolbox-task-meta {
       padding-right: var(--ui-space-32, 32px);

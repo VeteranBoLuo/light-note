@@ -1,3 +1,8 @@
+import translationSkill from '../aiSkill/skills/translationSkill.js';
+import { createAiSkillExecutionConfig } from '../aiBillingCatalog.js';
+import { loadTranslationResource } from '../aiSkill/resourceEvidence.js';
+import { splitTranslationText, translationNoteContent } from './translationText.js';
+import { insertTranslationQuote } from './translationQuote.js';
 import { prepareFreeOcrInputs, reserveFreeOcr, getFreeOcrUsage, FREE_OCR_POLICY } from './freeOcr.js';
 import crypto from 'node:crypto';
 import { stripAiAnalysisCitations } from '@lightnote/shared/ai-citation-presentation';
@@ -73,6 +78,7 @@ function formatQuote(row) {
         itemCount: (snapshot.resourceRefs?.length || 0) + (snapshot.sourceIds?.length || 0),
         resourceCount: snapshot.resourceRefs?.length || 0,
         uploadCount: snapshot.sourceIds?.length || 0,
+        ...(snapshot.translation ? { translation: snapshot.translation } : {}),
       };
     })(),
   };
@@ -144,7 +150,7 @@ function formatJob(row, { includeArtifactSummary = true } = {}) {
     artifact: includeArtifactSummary ? artifact : null,
     artifactState,
     canCancel:
-      (row.billing_medium === 'free' && ['queued', 'processing'].includes(row.status)) ||
+      ((row.billing_medium === 'free' || row.tool_id === 'translation') && ['queued', 'processing'].includes(row.status)) ||
       (row.status === 'queued' && !Number(row.external_cost_committed || 0)),
     createdAt: row.create_time,
     updatedAt: row.updated_at,
@@ -256,13 +262,24 @@ async function resolveOwnedToolboxInput({ userId, toolId, rawInput, database = p
     cloudFileBytes + sourceRows.reduce((sum, row) => sum + Number(row.file_size || 0), 0) > definition.input.maxBytes
   )
     throw toolboxError('TOOLBOX_UPLOAD_TOO_LARGE', '文件总大小不能超过 20 MB', 413);
+  let translation = null;
+  if (toolId === 'translation') {
+    const material = input.text ? { text: input.text, title: input.options.title || '', partial: false }
+      : await loadTranslationResource({ userId, ref: authoritativeRefs[0], database });
+    const segments = splitTranslationText(material.text);
+    const verified = await resolvePersonalKnowledgeResourceVersions({ userId, resourceRefs: authoritativeRefs, database });
+    if (JSON.stringify(verified) !== JSON.stringify(authoritativeRefs)) throw toolboxError('TOOLBOX_RESOURCE_STALE', '资料已变化，请重新选择', 409);
+    translation = { ...material, segments };
+  }
   const snapshot = Object.freeze({
     resourceRefs: Object.freeze(authoritativeRefs.map((ref) => Object.freeze({ ...ref }))),
     sourceIds: Object.freeze([...input.sourceIds]),
-    options: input.options,
+    options: translation ? { ...input.options, title: input.options.title || String(translation.title || '').slice(0,200) } : input.options,
+    ...(translation ? { translation: { characters: translation.text.length, segments: translation.segments.length, estimatedTokens: createAiSkillExecutionConfig(translationSkill, { input: { text: translation.text, sourceLanguage: input.options.sourceLanguage, targetLanguage: input.options.targetLanguage, instruction: input.options.question || '' }, scope: { resourceRefs: [] } }).reservationTokens, partial: translation.partial, contentHash: toolboxInputDigest(translation.text) } } : {}),
   });
   return {
     snapshot,
+    ...(translation ? { translation } : {}),
     inputDigest: toolboxInputDigest({ toolId, input: snapshot }),
     itemCount: snapshot.resourceRefs.length + snapshot.sourceIds.length,
     totalBytes: cloudFileBytes + sourceRows.reduce((total, row) => total + Math.max(0, Number(row.file_size || 0)), 0),
@@ -292,6 +309,7 @@ export async function createToolboxQuote({
   const normalizedBillingMedium = normalizeToolboxBillingMedium(toolId, billingMedium);
   const requestId = normalizeToolboxRequestId(clientRequestId, '报价请求标识');
   const resolved = await resolveOwnedToolboxInput({ userId, toolId, rawInput, database });
+  if (toolId === 'translation') return formatQuote(await insertTranslationQuote({ database, userId, requestId, resolved, ttlMs: TOOLBOX_QUOTE_TTL_MS }));
   if (toolId === 'ocr_to_text' && resolved.snapshot.options.recognitionMode !== 'ai')
     throw toolboxError('TOOLBOX_OPTIONS_INVALID', '请明确选择 AI 识别');
   const quotedPoints = normalizedBillingMedium === 'points' ? quoteToolboxPoints(toolId, resolved) : 0;
@@ -444,7 +462,7 @@ export async function createFreeOcrJob({ userId, rawInput, clientRequestId, data
   }
 }
 
-export async function createToolboxJob({ userId, quoteId, clientRequestId, sourceWorkspaceId, database = pool }) {
+export async function createToolboxJob({ userId, quoteId, clientRequestId, sourceWorkspaceId, translationLease, database = pool }) {
   if (sourceWorkspaceId != null && typeof sourceWorkspaceId !== 'string')
     throw toolboxError('TOOLBOX_WORKSPACE_INVALID', '项目标识无效', 400);
   const sourceId = String(sourceWorkspaceId || '').trim();
@@ -478,6 +496,7 @@ export async function createToolboxJob({ userId, quoteId, clientRequestId, sourc
     );
     const quote = quoteRows[0];
     if (!quote) throw toolboxError('TOOLBOX_QUOTE_NOT_FOUND', '报价不存在，请重新报价', 404);
+    if (translationLease && quote.tool_id !== 'translation') throw toolboxError('TOOLBOX_TOOL_INVALID', '该入口仅支持翻译');
     assertToolAvailable(quote.tool_id);
     if (quote.pricing_version !== TOOLBOX_PRICING_VERSION) {
       throw toolboxError('TOOLBOX_PRICING_CHANGED', '计费规则已更新，请重新确认', 409, { refresh: true });
@@ -514,6 +533,8 @@ export async function createToolboxJob({ userId, quoteId, clientRequestId, sourc
       );
       if (!projects.length) throw toolboxError('TOOLBOX_WORKSPACE_UNAVAILABLE', '项目已不可用', 409);
     }
+    if (quote.tool_id === 'translation' && snapshot.translation?.partial && snapshot.options?.acceptPartial !== true)
+      throw toolboxError('TOOLBOX_TRANSLATION_PARTIAL_CONFIRMATION', '请确认仅翻译当前已提取的文字', 409);
     const billingMedium = normalizeToolboxBillingMedium(quote.tool_id, quote.billing_medium || 'points');
     const jobId = crypto.randomUUID();
     const reservation =
@@ -549,6 +570,14 @@ export async function createToolboxJob({ userId, quoteId, clientRequestId, sourc
         expiresAt,
       ],
     );
+    if (translationLease) {
+      // Claim before commit: an older queue Worker must never see this as queued.
+      await connection.query("UPDATE toolbox_jobs SET status='processing', stage='generating', locked_by=?, locked_at=NOW(), started_at=NOW(), attempts=1, max_attempts=1 WHERE id=?", [translationLease, jobId]);
+    }
+    if (quote.tool_id === 'translation') {
+      const [updated] = await connection.query('UPDATE toolbox_translation_inputs SET job_id=?,expires_at=? WHERE quote_id=? AND user_id=? AND job_id IS NULL', [jobId, expiresAt, quote.id, userId]);
+      if (updated.affectedRows !== 1) throw toolboxError('TOOLBOX_TRANSLATION_INPUT_UNAVAILABLE', '翻译输入已过期', 409);
+    }
     let inputIndex = 0;
     for (const ref of snapshot.resourceRefs || []) {
       await connection.query(
@@ -578,7 +607,7 @@ export async function createToolboxJob({ userId, quoteId, clientRequestId, sourc
       tool_id: quote.tool_id,
       quote_id: quote.id,
       billing_medium: billingMedium,
-      status: 'queued',
+      status: translationLease ? 'processing' : 'queued',
       billing_status: initialBillingStatus,
       save_status: 'unsaved',
       progress: 0,
@@ -605,12 +634,94 @@ export async function listToolboxJobs({ userId, limit = 20, database = pool }) {
             artifact.status AS artifact_status, artifact.expires_at AS artifact_expires_at
        FROM toolbox_jobs job
        LEFT JOIN toolbox_artifacts artifact ON artifact.id = job.artifact_id
-      WHERE job.user_id = ?
+      WHERE job.user_id = ? AND job.tool_id <> 'translation'
       ORDER BY job.create_time DESC, job.id DESC
       LIMIT ?`,
     [userId, take],
   );
   return rows.map((row) => formatJob(row));
+}
+
+// Translation history is independent of the workshop overview and paginated before formatting.
+// Soft deletion affects translation history only; billing and note receipts remain authoritative.
+export async function deleteTranslationHistory({ userId, jobIds, all = false, database = pool }) {
+  const ownerId = requiredUserId(userId);
+  if (all === true) {
+    const statuses = [...TERMINAL_JOB_STATUSES];
+    const [result] = await database.query(
+      `UPDATE toolbox_jobs SET options_json = JSON_SET(COALESCE(options_json, JSON_OBJECT()), '$.translationHistoryDeleted', true)
+       WHERE user_id = ? AND tool_id = 'translation'
+         AND status IN (${statuses.map(() => '?').join(',')})
+         AND COALESCE(save_status, '') <> 'saving'
+         AND COALESCE(JSON_UNQUOTE(JSON_EXTRACT(options_json, '$.translationHistoryDeleted')), 'false') NOT IN ('true', '1')`,
+      [ownerId, ...statuses]);
+    return { deletedIds: [], cleared: true, count: result.affectedRows };
+  }
+  if (!Array.isArray(jobIds) || !jobIds.length || jobIds.length > 100 ||
+      jobIds.some(id => typeof id !== 'string' || !id.trim() || id.length > 128)) {
+    throw toolboxError('TOOLBOX_INVALID_INPUT', '请选择 1 至 100 条翻译记录', 400);
+  }
+  const ids = [...new Set(jobIds.map(id => id.trim()))].sort();
+  const connection = await database.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [rows] = await connection.query(
+      `SELECT id, status, save_status FROM toolbox_jobs
+       WHERE user_id = ? AND tool_id = 'translation' AND id IN (${ids.map(() => '?').join(',')})
+       ORDER BY id FOR UPDATE`, [ownerId, ...ids]);
+    if (rows.length !== ids.length) throw toolboxError('TOOLBOX_JOB_NOT_FOUND', '翻译记录不存在', 404);
+    if (rows.some(row => !TERMINAL_JOB_STATUSES.has(row.status) || row.save_status === 'saving')) {
+      throw toolboxError('TOOLBOX_JOB_CANNOT_DISMISS', '翻译或保存尚未完成，请稍后删除', 409);
+    }
+    await connection.query(
+      `UPDATE toolbox_jobs SET options_json = JSON_SET(COALESCE(options_json, JSON_OBJECT()), '$.translationHistoryDeleted', true)
+       WHERE user_id = ? AND tool_id = 'translation' AND id IN (${ids.map(() => '?').join(',')})`,
+      [ownerId, ...ids]);
+    await connection.commit();
+    return { deletedIds: ids };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally { connection.release(); }
+}
+
+export async function listTranslationHistory({ userId, cursor, keyword = '', database = pool }) {
+  const ownerId = requiredUserId(userId);
+  const search = String(keyword).trim().slice(0, 200);
+  const [rows] = await database.query(
+    `SELECT job.*, LEFT(input.content, 100) AS original_preview, artifact.artifact_type, artifact.title AS artifact_title,
+            artifact.content_type AS artifact_content_type, artifact.artifact_version,
+            artifact.status AS artifact_status, artifact.expires_at AS artifact_expires_at
+       FROM toolbox_jobs job
+       LEFT JOIN toolbox_artifacts artifact ON artifact.id = job.artifact_id
+       LEFT JOIN toolbox_translation_inputs input ON input.job_id = job.id COLLATE utf8mb4_unicode_ci AND input.user_id = job.user_id COLLATE utf8mb4_unicode_ci AND input.expires_at > NOW()
+      WHERE job.user_id = ? AND job.tool_id = 'translation' AND job.expires_at > NOW()
+        AND COALESCE(JSON_UNQUOTE(JSON_EXTRACT(job.options_json, '$.translationHistoryDeleted')), 'false') NOT IN ('true', '1')
+        AND (? = '' OR LOCATE(CONVERT(? USING utf8mb4) COLLATE utf8mb4_unicode_ci, CONVERT(CONCAT(COALESCE(artifact.title, ''), ' ', COALESCE(LEFT(input.content, 100), '')) USING utf8mb4) COLLATE utf8mb4_unicode_ci) > 0)
+        AND (? = '' OR (job.create_time, job.id) <
+          (SELECT create_time, id FROM toolbox_jobs WHERE id = ? AND user_id = ? AND tool_id = 'translation'))
+      ORDER BY job.create_time DESC, job.id DESC LIMIT 31`,
+    [ownerId, search, search, String(cursor || ''), String(cursor || ''), ownerId],
+  );
+  return { items: rows.slice(0, 30).map(row => ({ ...formatJob(row), preview: String(parseJson(row.options_json)?.title || String(row.original_preview || '').split('\n').find(line => line.trim()) || '').replace(/^\s*(?:#{1,6}\s+|[-*>]\s+)/, '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/[*_`]/g, '').trim().slice(0, 80), targetLanguage: parseJson(row.options_json)?.targetLanguage || '' })), nextCursor: rows.length > 30 ? rows[29].id : null };
+}
+
+export async function getTranslationRecord({ userId, jobId, database = pool }) {
+  const ownerId = requiredUserId(userId);
+  const [rows] = await database.query(
+    `SELECT job.quote_id, job.client_request_id, job.options_json, input.content
+       FROM toolbox_jobs job LEFT JOIN toolbox_translation_inputs input
+         ON input.job_id = job.id COLLATE utf8mb4_unicode_ci AND input.user_id = job.user_id COLLATE utf8mb4_unicode_ci AND input.expires_at > NOW()
+      WHERE job.id = ? AND job.user_id = ? AND job.tool_id = 'translation' AND job.expires_at > NOW()
+        AND COALESCE(JSON_UNQUOTE(JSON_EXTRACT(job.options_json, '$.translationHistoryDeleted')), 'false') NOT IN ('true', '1')`,
+    [jobId, ownerId],
+  );
+  if (!rows.length) throw toolboxError('TOOLBOX_JOB_NOT_FOUND', '翻译记录不存在或已过期', 404);
+  const row = rows[0];
+  const options = parseJson(row.options_json) || {};
+  return { job: await getToolboxJob({ userId: ownerId, jobId, database }), original: row.content || '',
+    options: { sourceLanguage: options.sourceLanguage || 'auto', targetLanguage: options.targetLanguage || 'zh-CN', question: options.question || '' },
+    quoteId: row.quote_id, clientRequestId: row.client_request_id };
 }
 
 export async function listToolboxHomeTasks({ userId, database = pool } = {}) {
@@ -625,7 +736,7 @@ export async function listToolboxHomeTasks({ userId, database = pool } = {}) {
             artifact.status AS artifact_status, artifact.expires_at AS artifact_expires_at
        FROM toolbox_jobs job
        LEFT JOIN toolbox_artifacts artifact ON artifact.id = job.artifact_id
-      WHERE job.user_id = ?
+      WHERE job.user_id = ? AND job.tool_id <> 'translation'
         AND COALESCE(JSON_UNQUOTE(JSON_EXTRACT(job.options_json, '$.homeDismissed')), 'false') NOT IN ('true', '1')
       ORDER BY CASE
                  WHEN job.status IN ('queued', 'processing') THEN 0
@@ -704,9 +815,10 @@ export async function cancelToolboxJob({ userId, jobId, database = pool }) {
       await connection.commit();
       return formatJob(job);
     }
-    if (job.billing_medium !== 'free' && (job.status !== 'queued' || Number(job.external_cost_committed || 0))) {
+    if (job.tool_id !== 'translation' && job.billing_medium !== 'free' && (job.status !== 'queued' || Number(job.external_cost_committed || 0))) {
       throw toolboxError('TOOLBOX_JOB_CANNOT_CANCEL', '任务已开始消耗处理资源，当前不能取消', 409);
     }
+    if (job.tool_id === 'translation') await connection.query('DELETE FROM toolbox_translation_inputs WHERE job_id=? AND user_id=?', [job.id, userId]);
     const settlement = await settleToolboxBilling(connection, job, {
       outcome: 'cancelled',
       reasonCode: 'USER_CANCELLED_BEFORE_PROCESSING',
@@ -884,6 +996,8 @@ export async function saveToolboxArtifactToNote({
   artifactId,
   clientRequestId,
   action = 'save',
+  shareExposureAcknowledged = false,
+  saveFormat,
   title,
   parentId,
   request,
@@ -1011,12 +1125,13 @@ export async function saveToolboxArtifactToNote({
       note: {
         title: typeof title === 'string' && title.trim() ? title.trim() : artifact.title,
         parentId: parentId || null,
-        content: stripAiAnalysisCitations(artifact.content),
+        content: artifact.toolId === 'translation' ? translationNoteContent(artifact, saveFormat) : stripAiAnalysisCitations(artifact.content),
         type: 'markdown',
       },
       request,
       suppressUserRewards: true,
       idempotencyKey: noteSaveIdempotencyKey(artifact, saveGeneration),
+      shareExposureAcknowledged,
     });
     try {
       await persistToolboxSaveState({

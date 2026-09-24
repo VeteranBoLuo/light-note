@@ -4,7 +4,7 @@
       <BButton
         class="collection-mobile-header__back"
         :aria-label="t('common.back')"
-        @click="formId ? navigate('') : router.push('/toolbox')"
+        @click="formId ? navigate('') : returnToToolbox()"
         ><SvgIcon :src="icon.arrow_left" size="20" aria-hidden="true"
       /></BButton>
       <h1 :title="formId && form?.id === formId ? form.title : t('collectionForms.title')">{{
@@ -26,7 +26,7 @@
       </BActionMenu>
     </header>
     <aside ref="directoryRef" class="collection-directory collection-stack" data-mobile-resource-scroll>
-      <BButton v-if="!isMobile" type="text" class="collection-directory-back" @click="router.push('/toolbox')">
+      <BButton v-if="!isMobile" type="text" class="collection-directory-back" @click="returnToToolbox()">
         <SvgIcon :src="icon.toolbox.back" size="16" /><span>{{ t('toolbox.title') }}</span>
       </BButton>
       <div v-if="!isMobile" class="collection-row"
@@ -457,16 +457,20 @@
         ><FormMetadata v-if="definition" v-model="definition" v-model:tag-ids="tagIds" :tags="tags" />
         <section class="collection-card collection-stack">
           <h3>{{ t('collectionForms.submissionPolicy') }}</h3>
-          <BSelect
-            v-model:value="definition.submissionPolicy"
-            :disabled="!!form.published"
-            :aria-label="t('collectionForms.submissionPolicy')"
-            :options="[
-              { value: 'multiple', label: t('collectionForms.allowMultiple') },
-              { value: 'replace', label: t('collectionForms.replaceLatest') },
-            ]"
-          />
-          <p class="collection-muted">{{ t('collectionForms.policyLockedHint') }}</p>
+          <p>{{
+            t(
+              form.published && definition.submissionPolicy === 'multiple'
+                ? 'collectionForms.allowMultiple'
+                : 'collectionForms.replaceLatest',
+            )
+          }}</p>
+          <p class="collection-muted">{{
+            t(
+              form.published && definition.submissionPolicy === 'multiple'
+                ? 'collectionForms.legacyPolicyHint'
+                : 'collectionForms.unifiedPolicyHint',
+            )
+          }}</p>
         </section>
         <section
           class="collection-card collection-stack collection-publish-card"
@@ -617,6 +621,7 @@
   import { useI18n } from 'vue-i18n';
   const { t, locale } = useI18n();
   import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue';
+  import { returnFromToolboxPage } from '@/utils/toolboxNavigation';
   import { useRoute, useRouter, onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router';
   import type { FormDefinition, FormQuestion } from '@lightnote/shared/collection-forms';
   import { validateDefinition } from '@lightnote/shared/collection-forms';
@@ -817,10 +822,13 @@
     detailRef = ref<HTMLElement | null>(null);
   useDensityScrollAnchor(directoryRef);
   useDensityScrollAnchor(detailRef);
+  function returnToToolbox() {
+    returnFromToolboxPage(router, 'workbench');
+  }
   useMobileTopBar(['collectionForms'], {
     ownTopBar: true,
     title: () => t('collectionForms.title'),
-    onBack: () => (formId.value ? navigate('') : void router.push('/toolbox')),
+    onBack: () => (formId.value ? navigate('') : void returnToToolbox()),
   });
   let detailGeneration = 0,
     listGeneration = 0,
@@ -905,7 +913,10 @@
       if (g !== detailGeneration) return;
       form.value = data;
       definition.value = JSON.parse(
-        JSON.stringify({ ...data.definition, submissionPolicy: data.definition.submissionPolicy ?? 'multiple' }),
+        JSON.stringify({
+          ...data.definition,
+          submissionPolicy: data.published ? (data.definition.submissionPolicy ?? 'multiple') : 'replace',
+        }),
       );
       tagIds.value = [...data.tagIds];
       saved.value = snapshot();
@@ -1055,7 +1066,7 @@
       }
       const data = await formsApi('', 'POST', {
         definition: {
-          submissionPolicy: template.value === 'poll' ? 'replace' : 'multiple',
+          submissionPolicy: 'replace',
           title: newTitle.value,
           description: '',
           successMessage: t('collectionForms.thanks'),

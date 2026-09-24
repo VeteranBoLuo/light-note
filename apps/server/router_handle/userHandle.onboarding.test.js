@@ -18,6 +18,8 @@ const completeGrowthTask = vi.fn();
 const ensureCommunityChatIdentity = vi.fn();
 const verifyPassword = vi.fn();
 const hashPassword = vi.fn();
+const removeUserSessions = vi.fn();
+const logoutCurrentSession = vi.fn();
 const createExtensionAuthorizationCode = vi.fn();
 const consumeExtensionAuthorizationCode = vi.fn();
 
@@ -32,9 +34,16 @@ vi.mock('../util/password.js', () => ({
   hashPassword,
   validatePassword: vi.fn(() => ({ ok: true, msg: '' })),
 }));
+vi.mock('../util/sessionStore.js', () => ({
+  removeUserSessions,
+  groupUserSessions: vi.fn(),
+  createSession: vi.fn(),
+  listUserSessions: vi.fn(),
+  removeSession: vi.fn(),
+}));
 vi.mock('../util/auth.js', () => ({
   issueLoginSession,
-  logoutCurrentSession: vi.fn(),
+  logoutCurrentSession,
   ensureNotVisitor: vi.fn(() => true),
   getRequestSid: vi.fn(() => ''),
 }));
@@ -59,6 +68,8 @@ vi.mock('../util/extensionAuth.js', () => ({
 // common.js↔router↔handler 循环依赖：先加载 common.js，与现有 handler 测试保持一致。
 await import('../util/common.js');
 const {
+  configPassword,
+  verifyCode,
   authorizeExtension,
   exchangeExtensionAuthorization,
   handleUserDatabaseOperation,
@@ -101,24 +112,31 @@ describe('浏览器插件授权 handler', () => {
       userId: 'user-1',
       request: req.body,
     });
-    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({
-      status: 200,
-      data: {
-        redirectUrl: 'https://abcdefghijklmnopabcdefghijklmnop.chromiumapp.org/light-note-auth?code=authorization-code&state=state-token',
-        expiresIn: 300,
-      },
-    }));
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 200,
+        data: {
+          redirectUrl:
+            'https://abcdefghijklmnopabcdefghijklmnop.chromiumapp.org/light-note-auth?code=authorization-code&state=state-token',
+          expiresIn: 300,
+        },
+      }),
+    );
   });
 
   it('授权码交换绑定请求设备并签发独立记住登录 SID', async () => {
     consumeExtensionAuthorizationCode.mockResolvedValue({ userId: 'user-1', clientId: 'client-id' });
-    query.mockResolvedValue([[{
-      id: 'user-1',
-      alias: '轻笺用户',
-      role: 'user',
-      head_picture: '/avatar.png',
-      del_flag: 0,
-    }]]);
+    query.mockResolvedValue([
+      [
+        {
+          id: 'user-1',
+          alias: '轻笺用户',
+          role: 'user',
+          head_picture: '/avatar.png',
+          del_flag: 0,
+        },
+      ],
+    ]);
     issueLoginSession.mockResolvedValue('extension-sid');
     const req = {
       headers: { 'x-device-id': 'device-1' },
@@ -143,13 +161,15 @@ describe('浏览器插件授权 handler', () => {
       expect.objectContaining({ id: 'user-1', role: 'user' }),
       true,
     );
-    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({
-      status: 200,
-      data: expect.objectContaining({
-        sid: 'extension-sid',
-        user: expect.objectContaining({ id: 'user-1', headPicture: '/avatar.png' }),
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 200,
+        data: expect.objectContaining({
+          sid: 'extension-sid',
+          user: expect.objectContaining({ id: 'user-1', headPicture: '/avatar.png' }),
+        }),
       }),
-    }));
+    );
   });
 });
 
@@ -430,10 +450,10 @@ describe('新用户示例数据接入注册流程', () => {
     );
 
     expect(verifyPassword).toHaveBeenCalledWith('123456', 'legacy-hash');
-    expect(query).toHaveBeenCalledWith("UPDATE user SET password = ?, password_method = 'scrypt' WHERE id = ?", [
-      'hashed-password',
-      'legacy-user',
-    ]);
+    expect(query).toHaveBeenCalledWith(
+      "UPDATE user SET password = ?, password_method = 'scrypt', login_password_set = 0 WHERE id = ?",
+      ['hashed-password', 'legacy-user'],
+    );
     expect(user.password).toBe('hashed-password');
   });
 
@@ -453,8 +473,8 @@ describe('新用户示例数据接入注册流程', () => {
     expect(seedNewUserWorkspaceData).not.toHaveBeenCalled();
     expect(seedNewUserCloudFile).not.toHaveBeenCalled();
     expect(query).toHaveBeenCalledWith(
-      "UPDATE user SET github_id = ?, login_type = 'github' WHERE id = ? AND (github_id IS NULL OR github_id = ?)",
-      ['123', 'email-user', '123'],
+      "UPDATE user SET github_id = ?, login_password_set = ?, login_type = 'github' WHERE id = ? AND (github_id IS NULL OR github_id = ?)",
+      ['123', false, 'email-user', '123'],
     );
   });
 
@@ -500,5 +520,97 @@ describe('新用户示例数据接入注册流程', () => {
     expect(getConnection).toHaveBeenCalledTimes(2);
     expect(connection.release).toHaveBeenCalledTimes(2);
     expect(seedNewUserWorkspaceData).not.toHaveBeenCalled();
+  });
+});
+
+const { default: passwordRedis } = await import('../util/redisClient.js');
+describe('密码身份校验与会话撤销', () => {
+  beforeEach(() => {
+    query.mockReset();
+    verifyPassword.mockReset().mockReturnValue(false);
+    hashPassword.mockReset().mockReturnValue('new-hash');
+    removeUserSessions.mockReset().mockResolvedValue(undefined);
+    logoutCurrentSession.mockReset().mockResolvedValue(undefined);
+    passwordRedis.eval = vi.fn().mockResolvedValue(1);
+  });
+  const account = { id: 'password-user', email: 'owner@example.com', password: 'old-hash', login_password_set: 1 };
+  const request = (body, user = { id: account.id, role: 'user' }) => ({ body, user, headers: {} });
+  it.each([undefined, 'set', 'sZet', 'update'])('客户端 type=%s 无法跳过身份校验', async (type) => {
+    query.mockResolvedValueOnce([[account]]);
+    const res = mockRes();
+    await configPassword(request({ password: 'new-password', type }), res);
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 400 }));
+    expect(query).toHaveBeenCalledTimes(1);
+    expect(removeUserSessions).not.toHaveBeenCalled();
+  });
+  it('未设置密码不能使用随机占位密码通过验证', async () => {
+    query.mockResolvedValueOnce([[{ ...account, login_password_set: 0 }]]);
+    verifyPassword.mockReturnValue(true);
+    const res = mockRes();
+    await configPassword(request({ password: 'new-password', oldPassword: 'placeholder' }), res);
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 400 }));
+    expect(verifyPassword).not.toHaveBeenCalled();
+  });
+  it('首次设置校验数据库邮箱，不相信请求体的邮箱；成功后撤销所有会话', async () => {
+    query.mockResolvedValueOnce([[{ ...account, login_password_set: 0 }]]).mockResolvedValueOnce([{ affectedRows: 1 }]);
+    const res = mockRes();
+    await configPassword(request({ password: 'new-password', code: '234567', email: 'other@example.com' }), res);
+    expect(passwordRedis.eval).toHaveBeenCalledWith(expect.any(String), {
+      keys: ['email:code:owner@example.com'],
+      arguments: ['234567'],
+    });
+    expect(removeUserSessions).toHaveBeenCalledWith(account.id);
+    expect(logoutCurrentSession).toHaveBeenCalled();
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200 }));
+  });
+  it('已有密码验证成功后将历史状态标为已设置', async () => {
+    query
+      .mockResolvedValueOnce([[{ ...account, login_password_set: null }]])
+      .mockResolvedValueOnce([{ affectedRows: 1 }]);
+    verifyPassword.mockImplementation((candidate) => candidate === 'current');
+    const res = mockRes();
+    await configPassword(request({ password: 'new-password', oldPassword: 'current' }), res);
+    expect(query).toHaveBeenLastCalledWith(expect.stringContaining('login_password_set = 1'), [
+      'new-hash',
+      'scrypt',
+      account.id,
+      'old-hash',
+      account.email,
+    ]);
+    expect(removeUserSessions).toHaveBeenCalledWith(account.id);
+  });
+  it.each([0, null])('错误或重复消费的验证码不能更新密码 (%s)', async (consumed) => {
+    query.mockResolvedValueOnce([[account]]);
+    passwordRedis.eval.mockResolvedValue(consumed);
+    const res = mockRes();
+    await verifyCode(request({ email: account.email, code: '234567', password: 'new-password' }), res);
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 400 }));
+    expect(query).toHaveBeenCalledTimes(1);
+  });
+  it('匿名找回密码撤销目标账号会话，不退出无关账号', async () => {
+    query.mockResolvedValueOnce([[account]]).mockResolvedValueOnce([{ affectedRows: 1 }]);
+    const res = mockRes();
+    await verifyCode(
+      request({ email: account.email, code: '234567', password: 'new-password' }, { id: 'other-user' }),
+      res,
+    );
+    expect(removeUserSessions).toHaveBeenCalledWith(account.id);
+    expect(logoutCurrentSession).not.toHaveBeenCalled();
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200 }));
+  });
+  it('原密码验证路径仍拒绝新旧密码相同', async () => {
+    query.mockResolvedValueOnce([[account]]);
+    verifyPassword.mockReturnValue(true);
+    const res = mockRes();
+    await configPassword(request({ password: 'same-password', oldPassword: 'same-password' }), res);
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 400 }));
+    expect(query).toHaveBeenCalledTimes(1);
+  });
+  it('并发密码变更冲突不能覆盖较新的密码', async () => {
+    query.mockResolvedValueOnce([[account]]).mockResolvedValueOnce([{ affectedRows: 0 }]);
+    const res = mockRes();
+    await configPassword(request({ password: 'new-password', code: '234567' }), res);
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 409 }));
+    expect(removeUserSessions).not.toHaveBeenCalled();
   });
 });

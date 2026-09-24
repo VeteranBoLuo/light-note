@@ -419,7 +419,8 @@ export default {
 
   // 知识工坊：与外链开发者工具 `toolkit` 分域，避免产品能力与开发者资源误用同一语义。
   toolbox: {
-    home: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M4 7.5h16v11.25A2.25 2.25 0 0 1 17.75 21H6.25A2.25 2.25 0 0 1 4 18.75V7.5Z" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round"/><path d="M3 4.5h18v3H3v-3ZM8 4.5V3h8v1.5M8.5 12h7M12 9v6" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    // 图案绕中心缩小 10%，描边补偿缩放以保持原有粗细；外层尺寸仍由 SvgIcon 控制。
+    home: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g transform="translate(1.2 1.2) scale(0.9)" fill="none" stroke="currentColor" stroke-width="1.888889" stroke-linecap="round" stroke-linejoin="round"><path d="m14.2 5.2 3.6-3.6a1.4 1.4 0 0 1 2 0l2.6 2.6a1.4 1.4 0 0 1 0 2L9.2 19.4l-5.3 1.3 1.3-5.3 5.6-5.6M16 3.4l4.6 4.6M5.2 15.4l4 4"/><path d="M7.8 10.8a5 5 0 0 1-5.7-6.5l3 3 2.8-2.8-3-3a5 5 0 0 1 6.5 5.7M14.7 13.7l6 6a1.5 1.5 0 0 1-2.1 2.1l-6-6"/></g></svg>',
     materialNote:
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M6 3.25h8l4 4V20.5H6V3.25Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M14 3.25V7.5h4M9 12h6M9 15.5h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="m19.2 12l.65 1.75L21.5 14.4l-1.65.65l-.65 1.75l-.65-1.75l-1.65-.65l1.65-.65l.65-1.75Z" fill="currentColor"/></svg>',
     research:

@@ -1,3 +1,5 @@
+import TurndownService from 'turndown';
+import gfm from 'turndown-plugin-gfm';
 import crypto from 'node:crypto';
 import pool from '../../db/index.js';
 import { normalizePersonalKnowledgeText } from '../personalKnowledgeSearch.js';
@@ -432,3 +434,24 @@ export const aiSkillResourceEvidenceInternals = Object.freeze({
   splitEvidenceWarnings,
   PUBLIC_FILE_PREPARATION_ERRORS,
 });
+
+/** Read only prepared full text for translation; never starts extraction or a Provider. */
+export async function loadTranslationResource({ userId, ref, database = pool }) {
+  const rows = await loadRowsByType({ database, userId, refs: [ref] });
+  if (ref.type === 'file') {
+    const [current] = await database.query(`SELECT ds.id FROM ai_document_sources ds JOIN files f ON f.id=ds.file_id AND f.create_by=ds.user_id WHERE ds.user_id=? AND ds.file_id=? AND f.del_flag=0 AND ds.source_type='cloud' AND ds.object_key=f.obs_key AND ds.file_size=f.file_size`, [userId,ref.id]);
+    if (!current.some(item => String(item.id) === String(rows.get(`file:${ref.id}`)?.source_id))) throw aiSkillError('TOOLBOX_TRANSLATION_TEXT_NOT_READY', '请先提取当前文件正文', 409);
+  }
+  const row = rows.get(`${ref.type}:${ref.id}`);
+  if (!row) throw aiSkillError('TOOLBOX_RESOURCE_UNAVAILABLE', '资料不可用', 404);
+  const converter = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
+  converter.use(gfm.gfm);
+  if (ref.type === 'note') return { title: row.title, text: row.type === 'drawing' ? '' : ['markdown','md'].includes(row.type) ? String(row.content || '') : converter.turndown(String(row.content || '')), partial: false };
+  if (ref.type === 'bookmark') return { title: row.name, text: converter.turndown(String(row.snapshot_content || '')), partial: true };
+  if (row.source_status !== 'ready' || (row.expires_at && new Date(row.expires_at).getTime() <= Date.now()))
+    throw aiSkillError('TOOLBOX_TRANSLATION_TEXT_NOT_READY', '请先提取文件正文，再进行翻译', 409);
+  const chunks = await loadFileChunks({ database, rows });
+  const coverage = normalizeJson(row.coverage_metadata, {});
+  const text = (chunks.get(String(row.source_id)) || []).map(chunk => String(chunk.content || '')).join('\n\n');
+  return { title: row.file_name, text, partial: coverage.complete !== true || coverage.truncated === true || coverage.coverageRatio < 1 || !!coverage.failedRanges?.length };
+}

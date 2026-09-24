@@ -11,6 +11,7 @@ import enUS from '@/i18n/locales/en-US';
 import zhCN from '@/i18n/locales/zh-CN';
 import { bookmarkStore, useUserStore } from '@/store';
 import BViewer from '@/components/base/Viewer/BViewer.vue';
+import SaveAsNoteHost from '@/components/noteLibrary/save/SaveAsNoteHost.vue';
 import ToolboxTask from '@/view/toolbox/ToolboxTask.vue';
 import '@/assets/css/index.less';
 
@@ -19,7 +20,7 @@ const state = ['queued', 'retrying', 'processing', 'success', 'partial', 'failed
   ? String(params.get('state'))
   : 'partial';
 const toolId =
-  params.get('tool') === 'study_kit'
+  params.get('tool') === 'translation' ? 'translation' : params.get('tool') === 'study_kit'
     ? 'study_kit'
     : params.get('tool') === 'concept_map'
       ? 'concept_map'
@@ -68,7 +69,7 @@ function jobFixture() {
               ? 'failed'
               : 'completed',
     billing: {
-      medium: 'points',
+      medium: toolId === 'translation' ? 'ai_quota' : 'points',
       status: terminal ? (state === 'failed' ? 'released' : 'settled') : 'reserved',
       quotedPoints: 28,
       actualPoints: state === 'failed' ? 0 : state === 'partial' ? 20 : terminal ? 28 : 0,
@@ -101,6 +102,7 @@ function jobFixture() {
 }
 
 function artifactFixture() {
+  if (toolId === 'translation') return {id:'visual-toolbox-artifact',jobId:'visual-toolbox-job',toolId,type:'translation',version:1,title:'知识管理 · 简体中文译文',content:'# 知识管理\n\n保留资料来源与完整上下文。',contentType:'markdown',sources:[],coverage:{complete:true},meta:{translation:{sourceLanguage:'en',targetLanguage:'zh-CN',segments:[{id:'1',original:'# Knowledge management\n\nKeep sources and full context.',translated:'# 知识管理\n\n保留资料来源与完整上下文。'}]}},save:{status:'unsaved'},createdAt:now,expiresAt:'2026-12-24T00:00:00Z'};
   const partial = state === 'partial';
   return {
     id: 'visual-toolbox-artifact',
@@ -321,7 +323,7 @@ const router = createRouter({
 await router.push('/toolbox/task/visual-toolbox-job');
 
 const pinia = createPinia();
-const app = createApp({ render: () => [h(RouterView), ...(bookmarkStore(pinia).viewerKey ? [h(BViewer)] : [])] });
+const app = createApp({ render: () => [h(RouterView), h(SaveAsNoteHost), ...(bookmarkStore(pinia).viewerKey ? [h(BViewer)] : [])] });
 app.use(pinia);
 app.use(router);
 app.use(

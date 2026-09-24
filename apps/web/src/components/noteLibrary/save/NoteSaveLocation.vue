@@ -5,16 +5,21 @@
       class="note-location-trigger"
       :disabled="disabled"
       :aria-expanded="open"
-      :aria-label="t('community.feed.saveLocation')"
+      :aria-label="t('saveAsNote.location')"
       :title="selectedPath"
     >
       <span>{{ selectedPath }}</span
       ><SvgIcon :src="icon.noteTree.chevron" size="16" />
     </BButton>
     <template #content>
-      <div class="note-location-panel" role="group" :aria-label="t('community.feed.saveLocation')">
+      <div class="note-location-panel" role="group" :aria-label="t('saveAsNote.location')">
+        <BInput
+          v-model:value="search"
+          :placeholder="t('saveAsNote.searchLocation')"
+          :aria-label="t('saveAsNote.searchLocation')"
+        />
         <BButton class="note-location-choice" :class="{ selected: !value }" :aria-pressed="!value" @click="select('')">
-          {{ t('community.feed.saveRoot') }}
+          {{ t('saveAsNote.root') }}
         </BButton>
         <BLoading v-if="loading" inline loading :title="t('common.loading')" />
         <div v-else-if="error" class="note-location-error" role="alert">
@@ -63,6 +68,7 @@
   import { buildNoteDetailRequestScope } from '@/api/noteDetailPrefetch';
   import { flattenNoteTree } from '@/utils/noteTree';
   import type { NoteTreeItem, NoteTreeQueryResult } from '@/types/noteTree';
+  import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
@@ -75,6 +81,7 @@
   const value = defineModel<string>('value', { default: '' });
   const { t } = useI18n();
   const user = useUserStore();
+  const search = ref('');
   const open = ref(false),
     loading = ref(false),
     loaded = ref(false),
@@ -87,6 +94,10 @@
   const byId = computed(() => new Map(flat.value.map((item) => [item.id, item])));
   const visibleItems = computed(() =>
     flat.value.filter((item) => {
+      if (search.value.trim())
+        return String(item.title || '')
+          .toLowerCase()
+          .includes(search.value.trim().toLowerCase());
       let parent = byId.value.get(item.parentId || '');
       const seen = new Set<string>([item.id]);
       while (parent && !seen.has(parent.id)) {
@@ -106,7 +117,7 @@
       seen.add(item.id);
       item = byId.value.get(item.parentId || '');
     }
-    return path.join(' / ') || t('community.feed.saveRoot');
+    return path.join(' / ') || t('saveAsNote.root');
   });
   function toggle(id: string) {
     const next = new Set(expanded.value);
@@ -235,11 +246,14 @@
   @media (max-width: 768px) {
     .note-location-choice,
     .note-location-expand {
+      /* ui-density-fixed: Mobile touch target remains 44px at every desktop density. */
       min-height: 44px;
     }
     .note-location-expand,
     .note-location-spacer {
+      /* ui-density-fixed: Mobile touch target remains 44px at every desktop density. */
       flex-basis: 44px;
+      /* ui-density-fixed: Mobile touch target remains 44px at every desktop density. */
       width: 44px;
     }
   }

@@ -57,6 +57,7 @@ function resolveNoteDetailSourcePath(value: unknown, includeFeatureSources: bool
         parsed.pathname === ORGANIZE_PATH ||
         parsed.pathname === TODO_PATH ||
         parsed.pathname === KNOWLEDGE_AUDIT_PATH ||
+        parsed.pathname === '/toolbox/translation' ||
         TAG_DETAIL_PATH_PATTERN.test(parsed.pathname) ||
         TOOLBOX_TASK_PATH_PATTERN.test(parsed.pathname))
     ) {

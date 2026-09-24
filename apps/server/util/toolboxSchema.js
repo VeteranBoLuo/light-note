@@ -1,3 +1,4 @@
+import { TRANSLATION_SCHEMA } from './toolbox/translationSchema.js';
 import { BOARD_COLUMNS, BOARD_OPERATIONS_SCHEMA } from './toolbox/boardSchema.js';
 import { STUDY_SCHEMA } from './toolbox/studyCards.js';
 import pool from '../db/index.js';
@@ -31,6 +32,7 @@ async function toolboxColumnMissing(database, tableName, columnName) {
  * 工具箱长任务的 Schema 必须在 HTTP 与 Worker 接单前完整就绪。
  */
 export async function ensureToolboxSchema(database = pool) {
+  await database.query(TRANSLATION_SCHEMA);
   await database.query(STUDY_SCHEMA);
   for (const statement of FREE_OCR_SCHEMA) await database.query(statement);
   if (await pointsOperationStatusTooShort(database)) {

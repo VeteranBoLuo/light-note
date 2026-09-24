@@ -223,7 +223,7 @@ describe('知识工具箱前端边界', () => {
 
     expect(groupedToolIds).toEqual(activeToolIds);
     expect(new Set(groupedToolIds).size).toBe(groupedToolIds.length);
-    expect(activeToolIds).toHaveLength(18);
+    expect(activeToolIds).toHaveLength(19);
     expect(TOOLBOX_HOME_GROUPS.find((group) => group.id === 'prepare')?.toolIds).toEqual([
       'pdf_organizer',
       'image_optimizer',
@@ -650,5 +650,40 @@ describe('知识工具箱前端边界', () => {
 
   it('工具箱中英文文案键保持完全一致', () => {
     expect(localeKeys(enUS.toolbox).sort()).toEqual(localeKeys(zhCN.toolbox).sort());
+  });
+
+  it('每个启用工具的卡片都具备中英文名称、描述和输出文案', () => {
+    for (const messages of [zhCN, enUS]) {
+      for (const tool of TOOLBOX_TOOL_CATALOG.filter((item) => item.availability.enabled)) {
+        for (const field of ['name', 'description', 'output']) {
+          const value = (messages.toolbox.tool as Record<string, Record<string, string>>)[tool.id]?.[field];
+          expect(value, `toolbox.tool.${tool.id}.${field}`).toEqual(expect.any(String));
+          expect(value?.trim(), `toolbox.tool.${tool.id}.${field}`).toBeTruthy();
+        }
+      }
+    }
+    expect(localeKeys(enUS.translation).sort()).toEqual(localeKeys(zhCN.translation).sort());
+    expect(localeKeys(enUS.saveAsNote).sort()).toEqual(localeKeys(zhCN.saveAsNote).sort());
+  });
+
+  it('翻译与通用保存界面引用的静态文案在两种语言中均可解析', () => {
+    const paths = [
+      'src/view/toolbox/TranslationWorkbench.vue',
+      'src/view/toolbox/ToolboxTask.vue',
+      'src/view/toolbox/components/TranslationResult.vue',
+      'src/components/noteLibrary/save/SaveAsNoteDialog.vue',
+      'src/components/noteLibrary/save/NoteSaveLocation.vue',
+      'src/utils/toolboxErrorPresentation.ts',
+    ];
+    for (const path of paths) {
+      const keys = [...source(path).matchAll(/['"]((?:translation|saveAsNote)\.[\w.]+)['"]/g)].map((match) => match[1]);
+      for (const messages of [zhCN, enUS]) {
+        for (const key of keys) {
+          const value = key.split('.').reduce<any>((node, part) => node?.[part], messages);
+          expect(value, `${path}: ${key}`).toEqual(expect.any(String));
+          expect(value?.trim(), `${path}: ${key}`).toBeTruthy();
+        }
+      }
+    }
   });
 });

@@ -1,4 +1,6 @@
 export const collectionFormsZh = {
+  unifiedPolicyHint: '同一浏览器再次填写会回填并更新原答案，不新增提交记录。',
+  legacyPolicyHint: '此表单沿用发布时的多次提交规则。复制为新表单即可使用保留最新一份。',
   incompatibleServer: '当前服务版本不支持安全提交，请更新后端后重试。',
   missingPreviousSubmission:
     '未能识别之前的提交，请确认已允许本站 Cookie，并使用原浏览器和原填写地址重试。为避免新增记录，暂不允许修改。',
@@ -245,6 +247,10 @@ export const collectionFormsZh = {
   formLink: '填写链接：{url}',
 };
 export const collectionFormsEn = {
+  unifiedPolicyHint:
+    'Returning in the same browser restores and updates the original answers without adding a submission.',
+  legacyPolicyHint:
+    'This form retains its published multiple-submission rule. Copy it to use one latest response per browser.',
   incompatibleServer: 'The server does not support safe submissions. Please update the server and retry.',
   missingPreviousSubmission:
     'Your previous submission could not be identified. Allow site cookies and use the original browser and URL. Editing is blocked to prevent creating a duplicate.',

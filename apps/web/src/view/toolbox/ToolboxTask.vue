@@ -1,5 +1,5 @@
 <template>
-  <main ref="pageRef" class="toolbox-task" data-mobile-resource-scroll>
+  <main ref="pageRef" class="toolbox-task" :class="{ 'is-translation': isTranslation }" data-mobile-resource-scroll>
     <div class="toolbox-task__inner">
       <BButton class="toolbox-task__back" @click="returnToToolboxParent">
         <SvgIcon :src="icon.toolbox.back" size="16" />{{ t('toolbox.task.backHome') }}
@@ -28,7 +28,11 @@
           <span>{{ t('toolbox.project.linkFailed') }}</span>
           <BButton :loading="linkingProject" @click="retryProjectLink">{{ t('toolbox.project.retryLink') }}</BButton>
         </div>
-        <header class="toolbox-task__header">
+        <header v-if="isTranslation" class="translation-task-heading"
+          ><h1>{{ t('translation.title') }}</h1
+          ><p>{{ t('translation.subtitle') }}</p></header
+        >
+        <header v-if="!isTranslation" class="toolbox-task__header">
           <span class="toolbox-task__tool-icon"><SvgIcon :src="presentation.icon" size="24" /></span>
           <div class="toolbox-task__title">
             <span>{{ t(`toolbox.tool.${job.toolId}.name`) }}</span>
@@ -110,7 +114,42 @@
           >
         </section>
 
-        <template v-if="artifact">
+        <template v-if="artifact && isTranslation">
+          <div class="translation-task-source"
+            ><SvgIcon :src="icon.toolbox.markdown" size="20" /><strong>{{ artifact.title }}</strong
+            ><span>{{ translationLanguages }}</span
+            ><span class="translation-task-complete">● {{ t('toolbox.task.succeeded') }}</span></div
+          >
+          <TranslationResult
+            v-model="translationMode"
+            :content="artifact.content"
+            :pairs="artifact.meta?.translation?.segments || []"
+          >
+            <template #actions
+              ><BButton type="text" @click="router.push('/toolbox/translation')"
+                ><SvgIcon :src="icon.toolbox.rotate" size="14" />{{ t('translation.again') }}</BButton
+              ><BButton type="text" @click="copyResult"
+                ><SvgIcon :src="icon.toolbox.copy" size="14" />{{ t('translation.copy') }}</BButton
+              ><BButton
+                v-if="artifactSaved && !savedTargetUnavailable"
+                type="primary"
+                :loading="openingSavedNote"
+                @click="openSavedNote"
+                >{{ t('toolbox.task.openNote') }}</BButton
+              ><BButton
+                v-else
+                type="primary"
+                :loading="saving"
+                @click="openSaveDialog(savedTargetUnavailable ? 'recreate_missing_target' : 'save')"
+                >{{ t('saveAsNote.title') }}</BButton
+              ></template
+            >
+          </TranslationResult>
+          <p class="translation-task-save-form">{{
+            t('translation.saveForm', { format: t(`translation.${translationMode}`) })
+          }}</p>
+        </template>
+        <template v-else-if="artifact">
           <section v-if="showDraftBanner" class="toolbox-task__draft-banner">
             <SvgIcon :src="icon.message.warning" size="20" />
             <div
@@ -140,8 +179,14 @@
                     }}</BButton></div
                   >
                 </div>
+                <TranslationResult
+                  v-if="artifact.meta?.translation"
+                  v-model="translationMode"
+                  :content="artifact.content"
+                  :pairs="artifact.meta.translation.segments"
+                />
                 <StudyResultCards
-                  v-if="artifact.meta?.study?.cards?.length"
+                  v-else-if="artifact.meta?.study?.cards?.length"
                   :artifact-id="artifact.id"
                   :version="artifact.version"
                   :cards="artifact.meta.study.cards"
@@ -156,7 +201,10 @@
                 ></article>
               </div>
               <aside class="toolbox-result__rail">
-                <section v-if="!isPromptCreation && !isDocumentSummary" class="toolbox-result__evidence-note">
+                <section
+                  v-if="!isPromptCreation && !isDocumentSummary && !isTranslation"
+                  class="toolbox-result__evidence-note"
+                >
                   <span><SvgIcon :src="icon.toolbox.locate" size="19" /></span>
                   <div>
                     <strong>{{ t('toolbox.task.evidenceTitle') }}</strong>
@@ -183,6 +231,9 @@
                       }}
                     </span>
                   </div>
+                  <p v-if="isTranslation">{{
+                    t('translation.saveForm', { format: t(`translation.${translationMode}`) })
+                  }}</p>
                   <BButton
                     v-if="savedTargetUnavailable"
                     type="primary"
@@ -299,70 +350,12 @@
         </div>
       </template>
     </div>
-    <BModal
-      v-model:visible="saveDialogVisible"
-      :title="t('toolbox.task.saveToNote')"
-      width="var(--ui-layout-640, 640px)"
-      :mask-closable="!saving"
-      fullscreen-mobile
-    >
-      <div class="toolbox-save-form">
-        <div class="toolbox-save-field">
-          <label for="toolbox-save-title">{{ t('toolbox.task.noteTitle') }}</label>
-          <BInput
-            id="toolbox-save-title"
-            v-model:value="saveTitle"
-            :maxlength="120"
-            :disabled="saving"
-            :aria-label="t('toolbox.task.noteTitle')"
-          />
-        </div>
-        <div class="toolbox-save-field">
-          <span id="toolbox-save-location-label">{{ t('toolbox.task.saveLocation') }}</span>
-          <BSelect
-            v-model:value="saveParentId"
-            :options="saveParentOptions"
-            :disabled="saving"
-            :aria-label="t('toolbox.task.saveLocation')"
-            :placeholder="t('toolbox.task.rootLocation')"
-          />
-          <div class="toolbox-save-location-actions">
-            <BButton size="small" :disabled="saving" @click="loadSaveParents(null)">{{
-              t('toolbox.task.rootLocation')
-            }}</BButton>
-            <BButton size="small" :disabled="!saveParentId || saving" @click="loadSaveParents(saveParentId)">{{
-              t('toolbox.task.browseChildren')
-            }}</BButton>
-          </div>
-        </div>
-        <div v-if="saveProjectOptions.length" class="toolbox-save-field">
-          <span>{{ t('toolbox.task.linkProject') }}</span>
-          <BSelect
-            v-model:value="saveProjectId"
-            :options="saveProjectOptions"
-            :disabled="saving || saveProjectsLoading"
-            :aria-label="t('toolbox.task.linkProject')"
-            :placeholder="t('toolbox.task.noProject')"
-          />
-        </div>
-      </div>
-      <template #footer>
-        <div class="toolbox-save-actions">
-          <BButton :disabled="saving" @click="saveDialogVisible = false">{{ t('common.cancel') }}</BButton>
-          <BButton
-            type="primary"
-            :loading="saving"
-            :disabled="!saveTitle.trim() || saveProjectsLoading"
-            @click="confirmSaveDialog"
-            >{{ t('toolbox.task.saveToNote') }}</BButton
-          >
-        </div>
-      </template>
-    </BModal>
   </main>
 </template>
 
 <script setup lang="ts">
+  import TranslationResult from './components/TranslationResult.vue';
+  import { translationMarkdown } from '@/utils/translationResult';
   import StudyResultCards from './components/StudyResultCards.vue';
   import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { resolveResourceRoute } from '@/utils/resourceNavigation';
@@ -371,9 +364,7 @@
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
   import type { ToolboxToolId } from '@lightnote/shared/toolbox-protocol';
-  import BInput from '@/components/base/BasicComponents/BInput.vue';
-  import BSelect from '@/components/base/BasicComponents/BSelect.vue';
-  import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
+  import { saveToolboxNote } from '@/utils/saveToolboxNote';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
@@ -382,10 +373,8 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import {
     cancelToolboxJob,
-    createToolboxArtifactSaveRequestId,
     fetchToolboxArtifact,
     fetchToolboxJob,
-    saveToolboxArtifact,
     fetchToolboxWorkspaces,
     addToolboxWorkspaceResources,
     type ToolboxArtifact,
@@ -395,7 +384,7 @@
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import icon from '@/config/icon';
   import { TOOLBOX_PRESENTATION } from '@/config/toolbox';
-  import { useNoteWorkspaceStore, useUserStore } from '@/store';
+  import { useUserStore } from '@/store';
   import { buildNoteDetailRequestScope } from '@/api/noteDetailPrefetch';
   import { stripAiAnalysisCitations } from '@/utils/aiAnalysisContent';
   import { renderMermaidBlocks } from '@/utils/mermaidRender';
@@ -423,7 +412,6 @@
   const route = useRoute();
   const router = useRouter();
   const user = useUserStore();
-  const noteWorkspace = useNoteWorkspaceStore();
   const { load: loadGrowth } = useGrowth();
   const job = ref<ToolboxJob | null>(null);
   const pageRef = ref<HTMLElement | null>(null);
@@ -522,7 +510,17 @@
     return job.value?.status === 'failed' ? t('toolbox.task.finalFailureMessage') : t('toolbox.task.processingFailed');
   });
   const showProgress = computed(() => ['queued', 'processing'].includes(job.value?.status || ''));
-  const isDocumentSummary = computed(() => job.value?.toolId === 'pdf_text_extractor' && artifact.value?.type === 'document_summary');
+  const translationLanguages = computed(() => {
+    const data = artifact.value?.meta?.translation;
+    if (!data?.targetLanguage) return '';
+    const names = new Intl.DisplayNames([locale.value], { type: 'language' });
+    const source = data.sourceLanguage === 'auto' ? t('translation.auto') : names.of(data.sourceLanguage || 'en');
+    return `${source} → ${data.targetLanguage === 'zh-CN' && locale.value.startsWith('zh') ? '简体中文' : data.targetLanguage === 'zh-TW' && locale.value.startsWith('zh') ? '繁体中文' : names.of(data.targetLanguage)}`;
+  });
+  const isTranslation = computed(() => job.value?.toolId === 'translation');
+  const isDocumentSummary = computed(
+    () => job.value?.toolId === 'pdf_text_extractor' && artifact.value?.type === 'document_summary',
+  );
   const isPromptCreation = computed(() => job.value?.toolId === 'idea_to_draft');
   const statusIcon = computed(() => {
     if (isRetrying.value) return icon.message.loading;
@@ -610,12 +608,20 @@
     return Number.isFinite(value) && value > 0 ? Math.round(value) : sourcePresentations.value.length;
   });
   const resultMaterialSummary = computed(() =>
-    isPromptCreation.value
-      ? t('toolbox.task.resultPromptSummary')
-      : t('toolbox.task.resultMaterialCount', {
-          represented: sourcePresentations.value.filter((source) => source.state !== 'unavailable').length,
-          requested: requestedSourceCount.value,
-        }),
+    isTranslation.value
+      ? t('translation.range', {
+          characters: (artifact.value?.meta?.translation?.segments || []).reduce(
+            (sum: number, pair: any) => sum + String(pair.original || '').length,
+            0,
+          ),
+          segments: artifact.value?.meta?.translation?.segments?.length || 0,
+        })
+      : isPromptCreation.value
+        ? t('toolbox.task.resultPromptSummary')
+        : t('toolbox.task.resultMaterialCount', {
+            represented: sourcePresentations.value.filter((source) => source.state !== 'unavailable').length,
+            requested: requestedSourceCount.value,
+          }),
   );
   const sourceReviewCount = computed(
     () => sourcePresentations.value.filter((source) => source.state !== 'complete').length,
@@ -636,6 +642,12 @@
     },
     { flush: 'post' },
   );
+  const translationMode = ref<'translationOnly' | 'bilingual'>('translationOnly');
+  const deliveredContent = computed(() =>
+    artifact.value?.meta?.translation
+      ? translationMarkdown(artifact.value.content, artifact.value.meta.translation.segments, translationMode.value)
+      : artifact.value?.content || '',
+  );
   const renderedContent = computed(() => {
     const content = stripAiAnalysisCitations(artifact.value?.content).replace(
       /^>\s*草稿已生成\s*·\s*待核验\s*\n+/u,
@@ -653,10 +665,12 @@
   );
   const tabOptions = computed(() => [
     { key: 'output', label: t('toolbox.task.outputTab') },
-    ...(!isPromptCreation.value && !isDocumentSummary.value
+    ...(!isPromptCreation.value && !isDocumentSummary.value && !isTranslation.value
       ? [{ key: 'sources', label: t('toolbox.task.sourcesTab'), badge: sourcePresentations.value.length }]
       : []),
-    ...(job.value?.billing.medium === 'free' || isDocumentSummary.value ? [] : [{ key: 'billing', label: t('toolbox.task.billingTab') }]),
+    ...(job.value?.billing.medium === 'free' || isDocumentSummary.value
+      ? []
+      : [{ key: 'billing', label: t('toolbox.task.billingTab') }]),
   ]);
 
   function returnToToolboxParent() {
@@ -664,13 +678,13 @@
   }
 
   async function copyResult() {
-    const ok = await copyTextToClipboard(String(artifact.value?.content || ''));
+    const ok = await copyTextToClipboard(deliveredContent.value);
     message[ok ? 'success' : 'error'](t(ok ? 'toolbox.local.copySuccess' : 'toolbox.local.copyFailed'));
   }
   function downloadResult() {
     if (!artifact.value) return;
     downloadToolboxBlob(
-      new Blob([artifact.value.content], { type: 'text/markdown;charset=utf-8' }),
+      new Blob([deliveredContent.value], { type: 'text/markdown;charset=utf-8' }),
       `${safeDownloadBaseName(artifact.value.title)}.md`,
     );
   }
@@ -687,7 +701,7 @@
   }
 
   useMobileTopBar(['toolboxTask'], {
-    title: () => artifact.value?.title || t('toolbox.task.title'),
+    title: () => (isTranslation.value ? t('translation.title') : artifact.value?.title || t('toolbox.task.title')),
     onBack: returnToToolboxParent,
     searchMode: 'icon',
     showNotification: false,
@@ -708,6 +722,11 @@
     try {
       const value = await fetchToolboxJob(jobId.value);
       if (version !== requestVersion) return;
+      if (value.toolId === 'translation') {
+        clearPoll();
+        await router.replace({ path: '/toolbox/translation', query: { record: value.id } });
+        return;
+      }
       job.value = value;
       recordToolboxRecentUse(user, value.toolId);
       loadFailed.value = false;
@@ -788,127 +807,35 @@
       cancelling.value = false;
     }
   }
-  const saveDialogVisible = ref(false);
-  const saveProjectId = ref('');
-  const saveProjectsLoading = ref(false);
-  const saveProjectOptions = ref<{ value: string; label: string }[]>([]);
-  const saveTitle = ref('');
-  const saveParentId = ref('');
-  const saveAction = ref<'save' | 'recreate_missing_target'>('save');
-  const saveParentOptions = ref<{ value: string; label: string }[]>([]);
-  async function loadSaveParents(parentId: string | null) {
-    const ownerKey = toolboxRecentUseIdentityKey(user);
-    const currentJobId = jobId.value;
-    noteWorkspace.ensureOwner(buildNoteDetailRequestScope(user));
-    const items = await noteWorkspace.loadChildren(parentId);
-    if (ownerKey !== toolboxRecentUseIdentityKey(user) || currentJobId !== jobId.value) return;
-    saveParentOptions.value = [
-      { value: '', label: t('toolbox.task.rootLocation') },
-      ...(parentId ? saveParentOptions.value.filter((item) => item.value === parentId) : []),
-      ...items.map((item) => ({ value: item.id, label: item.title })),
-    ];
-    saveParentId.value = parentId || '';
-  }
   async function openSaveDialog(action: 'save' | 'recreate_missing_target') {
-    saveAction.value = action;
-    saveProjectId.value = '';
-    saveProjectOptions.value = [];
-    saveProjectsLoading.value = true;
-    const ownerKey = toolboxRecentUseIdentityKey(user);
-    const currentJobId = jobId.value;
-    void fetchToolboxWorkspaces()
-      .then((projects) => {
-        if (ownerKey !== toolboxRecentUseIdentityKey(user) || currentJobId !== jobId.value) return;
-        saveProjectId.value = projects.some(
-          (p) => p.id === job.value?.sourceWorkspaceId && ['active', 'paused'].includes(p.status),
-        )
-          ? job.value!.sourceWorkspaceId!
-          : '';
-        saveProjectOptions.value = [
-          { value: '', label: t('toolbox.task.noProject') },
-          ...projects
-            .filter((project) => ['active', 'paused'].includes(project.status))
-            .map((project) => ({ value: project.id, label: project.title })),
-        ];
-      })
-      .catch(() => {
-        if (ownerKey === toolboxRecentUseIdentityKey(user) && currentJobId === jobId.value)
-          saveProjectOptions.value = [];
-      })
-      .finally(() => {
-        if (ownerKey === toolboxRecentUseIdentityKey(user) && currentJobId === jobId.value)
-          saveProjectsLoading.value = false;
-      });
-    saveTitle.value = artifact.value?.title || '';
-    saveParentId.value = '';
-    saveParentOptions.value = [{ value: '', label: t('toolbox.task.rootLocation') }];
-    saveDialogVisible.value = true;
-    try {
-      await loadSaveParents(null);
-    } catch {
-      message.warning(t('toolbox.task.locationUnavailable'));
-    }
-  }
-  async function confirmSaveDialog() {
-    const id = await saveArtifact(saveAction.value);
-    if (id) saveDialogVisible.value = false;
-  }
-  async function saveArtifact(action: 'save' | 'recreate_missing_target' = 'save') {
-    if (!artifact.value) return '';
-    if (saving.value) return savedNoteId.value;
-    if (action === 'save' && savedNoteId.value) return savedNoteId.value;
-    const ownerKey = toolboxRecentUseIdentityKey(user);
-    const currentArtifactId = artifact.value.id;
-    const selectedProjectId = saveProjectId.value;
-    const isCurrent = () => ownerKey === toolboxRecentUseIdentityKey(user) && artifact.value?.id === currentArtifactId;
+    const current = artifact.value;
+    if (!current || saving.value) return;
     saving.value = true;
     try {
-      const result = await saveToolboxArtifact(
-        artifact.value.id,
-        createToolboxArtifactSaveRequestId(artifact.value.id, artifact.value.version),
+      const result = await saveToolboxNote({
+        artifactId: current.id,
+        version: current.version,
+        title: current.title,
+        projectId: job.value?.sourceWorkspaceId || undefined,
         action,
-        { title: saveTitle.value || artifact.value.title, parentId: saveParentId.value || null },
-      );
-      if (!isCurrent()) return '';
-      savedNoteId.value = result.targetId;
+        saveFormat: current.meta?.translation ? translationMode.value : undefined,
+        description: current.meta?.translation
+          ? t('translation.saveForm', { format: t(`translation.${translationMode.value}`) })
+          : undefined,
+        isCurrent: () => artifact.value?.id === current.id,
+      });
+      if (!result || artifact.value?.id !== current.id) return;
+      savedNoteId.value = result.noteId;
       artifact.value.save = {
         status: 'saved',
         targetType: 'note',
-        targetId: result.targetId,
+        targetId: result.noteId,
         targetAvailability: 'available',
       };
-      registerSavedNoteInWorkspace(result.targetId);
-      if (selectedProjectId) {
-        try {
-          await addToolboxWorkspaceResources(selectedProjectId, [{ type: 'note', id: result.targetId }], 'result');
-        } catch {
-          if (isCurrent()) {
-            pendingProjectLink.value = { projectId: selectedProjectId, noteId: result.targetId };
-            persistProjectLink();
-          }
-        }
-      }
-      if (!isCurrent()) return '';
-      if (!pendingProjectLink.value) message.success(t('toolbox.task.saved'));
-      return result.targetId;
-    } catch (error: any) {
-      if (isCurrent()) message.error(t(toolboxErrorMessageKey(error, 'toolbox.task.saveFailed')));
-      return '';
+      if (result.openAfterSave) await openSavedNote();
     } finally {
-      if (isCurrent()) saving.value = false;
+      saving.value = false;
     }
-  }
-  function registerSavedNoteInWorkspace(noteId: string) {
-    const normalizedId = String(noteId || '').trim();
-    if (!normalizedId || !artifact.value) return;
-    noteWorkspace.ensureOwner(buildNoteDetailRequestScope(user));
-    noteWorkspace.insertCreatedNote({
-      id: normalizedId,
-      parentId: saveParentId.value || null,
-      title: saveTitle.value || artifact.value.title,
-      type: 'markdown',
-    });
-    noteWorkspace.seedBreadcrumb(normalizedId, [{ id: normalizedId, title: artifact.value.title }]);
   }
   async function openSavedNote() {
     if (!savedNoteId.value || !artifact.value || openingSavedNote.value) return;
@@ -922,7 +849,6 @@
         message.warning(t('toolbox.task.savedTargetUnavailableHint'));
         return;
       }
-      registerSavedNoteInWorkspace(savedNoteId.value);
       rememberTaskScroll();
       await router.push({
         path: `/noteLibrary/${encodeURIComponent(savedNoteId.value)}`,
@@ -1002,11 +928,10 @@
     savedNoteId.value = '';
     pendingProjectLink.value = null;
     sourceProjectAvailable.value = false;
-    saveProjectsLoading.value = false;
     linkingProject.value = false;
     saving.value = false;
-    saveDialogVisible.value = false;
     activeTab.value = 'output';
+    translationMode.value = 'translationOnly';
     loadFailed.value = false;
     refreshFailed.value = false;
     pollFailureCount = 0;
@@ -2004,6 +1929,104 @@
   @media (prefers-reduced-motion: reduce) {
     .is-spinning {
       animation: none;
+    }
+  }
+</style>
+
+<style scoped lang="less">
+  .is-translation .toolbox-task__back {
+    border: 0;
+    box-shadow: none;
+    background: transparent;
+    padding: 0;
+    min-height: 0;
+    color: var(--desc-color);
+    font-size: var(--ui-font-12, 12px);
+  }
+  .toolbox-task.is-translation {
+    background: var(--surface-panel-bg);
+  }
+  .is-translation .toolbox-task__inner {
+    max-width: var(--ui-layout-1200, 1200px);
+    padding: var(--ui-space-24, 24px);
+    border: 1px solid var(--surface-border-color);
+    border-radius: 12px;
+    background: var(--background-color);
+  }
+  .translation-task-heading {
+    display: flex;
+    align-items: baseline;
+    gap: var(--ui-space-16, 16px);
+    margin: var(--ui-space-12, 12px) 0 var(--ui-space-20, 20px);
+  }
+  .translation-task-heading h1 {
+    font-size: var(--ui-font-24, 24px);
+    margin: 0;
+  }
+  .translation-task-heading p,
+  .translation-task-heading > span,
+  .translation-task-save-form {
+    font-size: var(--ui-font-12, 12px);
+    color: var(--desc-color);
+  }
+  .translation-task-heading > span {
+    margin-left: auto;
+  }
+  .translation-task-source {
+    display: flex;
+    align-items: center;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-12, 12px);
+    border: 1px solid var(--surface-border-color);
+    border-radius: 6px;
+    background: var(--surface-panel-bg);
+    font-size: var(--ui-font-12, 12px);
+  }
+  .translation-task-source > :first-child {
+    color: var(--primary-color);
+  }
+  .translation-task-source strong {
+    font-weight: 500;
+    font-size: var(--ui-font-14, 14px);
+    overflow-wrap: anywhere;
+  }
+  .translation-task-source > span {
+    color: var(--desc-color);
+  }
+  .translation-task-source .translation-task-complete {
+    color: var(--success-color);
+  }
+  .translation-task-save-form {
+    margin: var(--ui-space-8, 8px) 0 0;
+  }
+  @media (max-width: 767px) {
+    .translation-task-heading h1 {
+      display: none;
+    }
+    .is-translation .toolbox-task__inner {
+      padding: var(--ui-space-16, 16px);
+    }
+    .translation-task-heading {
+      flex-wrap: wrap;
+    }
+    .translation-task-heading p {
+      display: none;
+    }
+    .translation-task-source {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      gap: var(--ui-space-6, 6px) var(--ui-space-8, 8px);
+    }
+    .translation-task-source strong {
+      grid-column: 2 / 4;
+    }
+    .translation-task-source > span:not(.translation-task-complete) {
+      grid-column: 2;
+    }
+
+    .translation-task-source strong {
+      flex: 1;
+      min-width: 0;
     }
   }
 </style>

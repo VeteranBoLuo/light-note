@@ -1,5 +1,6 @@
 import net from "node:net";
-import { inspectLocalWorkers } from "./localWorkerGuard.mjs";
+import { inspectLocalWorkers, localWorkerOwnerArg } from "./localWorkerGuard.mjs";
+import { stopManagedChild, stopProcessGroup } from "./localProcessLifecycle.mjs";
 import { spawn } from "node:child_process";
 import path from "node:path";
 import process from "node:process";
@@ -38,6 +39,7 @@ function canConnect(port) {
 }
 
 function runChild(label, command, args, { persistent = true } = {}) {
+  if (shuttingDown) throw new Error("本地后端正在停止，已取消启动。");
   const child = spawn(command, args, {
     cwd: rootDir,
     detached: process.platform !== "win32",
@@ -51,7 +53,8 @@ function runChild(label, command, args, { persistent = true } = {}) {
       console.error(`\n[本地后端] 无法启动${label}：${error.message}`);
   });
   child.once("exit", (code, signal) => {
-    children.delete(child);
+    // pnpm 退出不代表其进程组里的 Worker 已退出。
+    if (!persistent) children.delete(child);
     if (!shuttingDown && persistent) {
       const reason = signal ? `信号 ${signal}` : `退出码 ${code ?? "未知"}`;
       console.error(
@@ -64,19 +67,10 @@ function runChild(label, command, args, { persistent = true } = {}) {
 }
 
 function runPnpm(label, args) {
-  return runChild(label, pnpmCommand, args);
-}
-
-function sendSignal(child, signal) {
-  if (process.platform !== "win32" && child.pid) {
-    try {
-      process.kill(-child.pid, signal);
-      return;
-    } catch (error) {
-      if (error.code !== "ESRCH") throw error;
-    }
-  }
-  child.kill(signal);
+  const managedArgs = args.some((arg) => arg.startsWith("worker:"))
+    ? [...args, localWorkerOwnerArg(rootDir)]
+    : args;
+  return runChild(label, pnpmCommand, managedArgs);
 }
 
 async function waitForExit(child, label) {
@@ -97,6 +91,7 @@ async function waitForExit(child, label) {
 async function waitForPort(port, child, timeout = 60_000) {
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
+    if (shuttingDown) throw new Error("本地后端启动已取消。");
     if (child.exitCode !== null || child.signalCode !== null) {
       throw new Error("HTTP 服务启动失败，请查看上方日志。");
     }
@@ -110,27 +105,20 @@ async function waitForPort(port, child, timeout = 60_000) {
 
 async function ensureChildStable(child, label, milliseconds = 800) {
   await sleep(milliseconds);
+  if (shuttingDown) throw new Error("本地后端启动已取消。");
   if (child.exitCode !== null || child.signalCode !== null) {
     throw new Error(`${label}启动失败，请查看上方日志。`);
   }
 }
 
-async function stopChild(child) {
-  if (child.exitCode !== null || child.signalCode !== null) return;
-  sendSignal(child, "SIGTERM");
-  await Promise.race([
-    new Promise((resolve) => child.once("exit", resolve)),
-    sleep(5_000),
-  ]);
-  if (child.exitCode === null && child.signalCode === null)
-    sendSignal(child, "SIGKILL");
-}
-
 async function stopAll(exitCode) {
   if (shuttingDown) return;
   shuttingDown = true;
-  await Promise.all([...children].map(stopChild));
-  process.exitCode = exitCode;
+  const results = await Promise.allSettled([...children].map((child) => stopManagedChild(child)));
+  const failures = results.filter((result) => result.status === "rejected");
+  for (const failure of failures)
+    console.error(`[本地后端] 停止失败：${failure.reason.message}`);
+  process.exitCode = failures.length ? 1 : exitCode;
 }
 
 async function main() {
@@ -154,24 +142,13 @@ async function main() {
       await sleep(200);
     }
     const { orphanGroups } = inspectLocalWorkers(serverDirectory);
-    for (const group of orphanGroups) {
+    await Promise.all(orphanGroups.map(async (group) => {
+      // 发信号前重新验证归属，不接管手动或其他仓库的进程。
+      if (!inspectLocalWorkers(serverDirectory).orphanGroups.includes(group)) return;
       console.log(`[本地后端] 回收旧启动器遗留的 Worker 进程组 ${group}…`);
-      try {
-        process.kill(-group, "SIGTERM");
-      } catch (error) {
-        if (error.code !== "ESRCH") throw error;
-      }
-    }
-    const deadline = Date.now() + 5_000;
-    let remaining = inspectLocalWorkers(serverDirectory);
-    while (
-      orphanGroups.length &&
-      remaining.workers.length &&
-      Date.now() < deadline
-    ) {
-      await sleep(200);
-      remaining = inspectLocalWorkers(serverDirectory);
-    }
+      await stopProcessGroup(group);
+    }));
+    const remaining = inspectLocalWorkers(serverDirectory);
     if (remaining.workers.length)
       throw new Error(
         `当前仓库仍有 Worker（PID ${remaining.workers.join(", ")}）。请先结束原来的本地后端或 Worker，再启动，避免新旧代码同时领取任务。`,

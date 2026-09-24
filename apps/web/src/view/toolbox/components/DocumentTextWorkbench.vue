@@ -66,6 +66,7 @@
               <BButton :disabled="!activeOutput" @click="copyActive"
                 ><SvgIcon :src="icon.toolbox.copy" size="15" />{{ t('toolbox.local.copyResult') }}</BButton
               >
+              <BButton :disabled="!activeOutput" @click="translateOutput">{{ t('translation.title') }}</BButton>
               <BButton :disabled="!activeOutput" @click="saveAsNote">{{ t('toolbox.task.saveToNote') }}</BButton>
               <BButton @click="downloadResults"
                 ><SvgIcon :src="icon.toolbox.download" size="15" />{{ downloadLabel }}</BButton
@@ -131,10 +132,12 @@
 </template>
 
 <script setup lang="ts">
+  import { stageTranslation } from '@/utils/translationHandoff';
   import { computed, reactive, ref, watch } from 'vue';
   import DocumentSummary from './DocumentSummary.vue';
   import { useRouter } from 'vue-router';
-  import { stageAiNoteDraft } from '@/utils/aiNoteDraft';
+  import { openSaveAsNote } from '@/composables/useSaveAsNote';
+  import { createNoteFromContent } from '@/utils/aiNoteDraft';
   import { useI18n } from 'vue-i18n';
   import type { ToolboxToolId } from '@lightnote/shared/toolbox-protocol';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -171,13 +174,23 @@
   const { t } = useI18n();
   const { dimension } = useUiDensity();
   const router = useRouter();
-  function saveAsNote() {
-    const token = stageAiNoteDraft({
-      title: activeFileName.value.replace(/\.[^.]+$/, ''),
-      content: activeOutput.value,
-      type: 'markdown',
+  const saveDraftKeys = new WeakMap<File, {content: string; key: string}>();
+  function translateOutput() {
+    if (!activeOutput.value) return;
+    stageTranslation(activeOutput.value, activeFileName.value.replace(/\.[^.]+$/, ''));
+    void router.push('/toolbox/translation');
+  }
+  async function saveAsNote() {
+    const file = files.value[activeFile.value];
+    if (!file || !activeOutput.value) return;
+    if (saveDraftKeys.get(file)?.content !== activeOutput.value) saveDraftKeys.set(file, {content: activeOutput.value, key: crypto.randomUUID()});
+    const draft = { title: activeFileName.value.replace(/\.[^.]+$/, ''), content: activeOutput.value, type: 'markdown' as const };
+    const key = `document-text:${saveDraftKeys.get(file)?.key}`;
+    const result = await openSaveAsNote({ sourceKey: key, ...draft,
+      isCurrent: () => files.value[activeFile.value] === file && activeOutput.value === draft.content,
+      save: options => createNoteFromContent(draft, key, options),
     });
-    void router.push({ path: '/noteLibrary/add', query: { type: 'markdown', aiDraft: token } });
+    if (result?.openAfterSave) await router.push(`/noteLibrary/${encodeURIComponent(result.noteId)}`);
   }
   const files = ref<File[]>([]);
   const pdfResults = ref<PdfTextFileResult[]>([]);

@@ -15,7 +15,7 @@ pnpm dev:web
 pnpm dev:server
 ```
 
-macOS / Linux 再次运行 `pnpm dev:server` 或监听模式时，会先通知同仓库的旧本地启动器退出，等待其 HTTP 服务与 Worker 停止后再启动。手动 Worker、其他仓库的启动器与 Worker，以及无法确认归属的 Worker 不自动接管；旧 Worker 未退出时停止启动，避免新旧代码同时领取任务。
+macOS / Linux 再次运行 `pnpm dev:server` 或监听模式时，会先通知同仓库的旧本地启动器退出，等待其 HTTP 服务与 Worker 停止后再启动。本地启动器与预览脚本停止服务时检查整个托管进程组，宽限期后强制回收并确认退出，不以 pnpm 退出作为 Worker 已停止的依据。开发启动器给 Worker 传递仓库归属标记，领头进程已消失时仅回收全部成员均可确认归属的孤儿 Worker 组。手动 Worker、其他仓库的启动器与 Worker，以及无法确认归属的 Worker（含无标记的旧版残留）不自动接管；旧 Worker 未退出时停止启动，避免新旧代码同时领取任务。
 
 真机 HMR 使用：
 
@@ -60,6 +60,10 @@ pnpm preview
 用户可见 UI 的浏览器验收至少覆盖受影响端型、浅色/深色和关键状态。移动样式还需对照 `?renderProfile=mobile` 与 Debug App。结构测试、构建和截图像素不能替代交互与视觉验收。
 
 ## Schema 与 Worker 门禁
+
+账号密码状态版本部署前须显式应用 `apps/server/migrations/20260924_login_password_state.sql`，再运行 Schema 门禁；该迁移只补列，历史密码及未知状态保留，不做批量密码回填。业务入口不在运行时自动执行此迁移。
+
+工坊翻译启用前显式应用 `apps/server/migrations/20260924_toolbox_translation.sql`，并通过 `check:schema`。正文快照表兼容 MySQL 5.7；启动不自动迁移，回滚代码可保留表，清理 Worker 与账号注销路径必须同步发布。
 
 AI 管理员入参摘要启用前显式应用加法迁移 `apps/server/migrations/20260923_ai_execution_input_diagnostics.sql`，再通过 `check:schema`。历史记录不回填，应用启动不自动补字段；回滚代码可保留新增列。
 

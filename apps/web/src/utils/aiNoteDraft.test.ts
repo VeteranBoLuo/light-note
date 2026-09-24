@@ -1,6 +1,10 @@
+vi.mock('@/store', () => ({useUserStore: () => ({id:'owner'})}));
+vi.mock('@/api/noteDetailPrefetch', () => ({buildNoteDetailRequestScope: () => 'owner'}));
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 const apiBasePostMock = vi.hoisted(() => vi.fn());
 const confirmNoteShareExposureMock = vi.hoisted(() => vi.fn());
+
+vi.mock('@/composables/useSaveAsNote', () => ({ openSaveAsNote: async (request: any) => { const result = await request.save({ title: request.title, parentId: null, tags: [], projectId: '', thoughts: '' }); return {...result, openAfterSave: true}; } }));
 
 vi.mock('@/http/request', () => ({ apiBasePost: apiBasePostMock }));
 vi.mock('@/utils/noteShareExposure', () => ({ confirmNoteShareExposure: confirmNoteShareExposureMock }));
@@ -109,7 +113,7 @@ describe('aiNoteDraft', () => {
     };
 
     await expect(persistAiNotePreview(response, '备用标题')).resolves.toEqual({
-      noteId: 'note/created',
+      noteId: 'note/created', openAfterSave: true,
       route: { path: '/noteLibrary/note%2Fcreated' },
     });
     expect(apiBasePostMock).toHaveBeenCalledWith(
@@ -118,6 +122,7 @@ describe('aiNoteDraft', () => {
         title: '今日总结',
         content: '# 正文',
         type: 'markdown',
+        parentId: null,
         idempotencyKey: 'ai-skill-note:request-1',
       },
       { silent: true },
@@ -144,7 +149,7 @@ describe('aiNoteDraft', () => {
     };
 
     await expect(persistAiMarkdownResultAsNote(response, '网页资料整理')).resolves.toEqual({
-      noteId: 'bookmark-summary-note',
+      noteId: 'bookmark-summary-note', openAfterSave: true,
       route: { path: '/noteLibrary/bookmark-summary-note' },
     });
     expect(apiBasePostMock).toHaveBeenCalledWith(
@@ -153,6 +158,7 @@ describe('aiNoteDraft', () => {
         title: '网页资料整理',
         content: '# 网页总结\n核心信息',
         type: 'markdown',
+        parentId: null,
         idempotencyKey: 'ai-skill-note:bookmark-summary-request',
       },
       { silent: true },
@@ -199,7 +205,7 @@ describe('aiNoteDraft', () => {
     };
 
     await expect(persistAiNotePreview(response)).rejects.toMatchObject({
-      message: '写入失败',
+      message: 'Note save failed',
       code: 'WRITE_FAILED',
       status: 500,
     });

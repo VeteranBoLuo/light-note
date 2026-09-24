@@ -8,7 +8,7 @@ function createRouterStub(historyBack: unknown) {
   const resolve = vi.fn((target: string) => {
     const path = target.split(/[?#]/u, 1)[0];
     const name =
-      path === '/toolbox' ? 'toolboxHome' : path.startsWith('/toolbox/task/') ? 'toolboxTask' : 'toolboxWorkbench';
+      path === '/toolbox' ? 'toolboxHome' : path === '/toolbox/translation' ? 'toolboxTranslation' : path.startsWith('/toolbox/task/') ? 'toolboxTask' : 'toolboxWorkbench';
     return {
       name,
       meta: path.startsWith('/toolbox') ? { mobileShell: 'toolbox' } : {},
@@ -24,6 +24,19 @@ function createRouterStub(historyBack: unknown) {
 }
 
 describe('returnFromToolboxPage', () => {
+  it.each(['/toolbox?view=catalog', '/toolbox?view=work'])('返回保留来源 tab 的历史条目 %s', (path) => {
+    const { router, back, replace, resolve } = createRouterStub(path);
+    expect(returnFromToolboxPage(router, 'workbench')).toBe('back');
+    expect(resolve).toHaveBeenCalledWith(path);
+    expect(back).toHaveBeenCalledOnce();
+    expect(replace).not.toHaveBeenCalled();
+  });
+  it('翻译结果返回发起翻译的页面，不跳过来源导航链', () => {
+    const { router, back, replace } = createRouterStub('/toolbox/translation');
+    expect(returnFromToolboxPage(router, 'task')).toBe('back');
+    expect(back).toHaveBeenCalledOnce();
+    expect(replace).not.toHaveBeenCalled();
+  });
   it('工作台有工具箱首页历史时使用真实返回', () => {
     const { router, back, replace } = createRouterStub('/toolbox');
 

@@ -791,10 +791,11 @@
       const handoff = await persistAiMarkdownResultAsNote(
         response,
         action.generatedNoteTitle || t('resourceOutcome.quickGeneratedNoteTitle'),
+        () => version === stateVersion,
       );
       if (version !== stateVersion || !handoff) return;
       message.success(t('aiSkills.noteCreated'));
-      await closeAndNavigate(handoff.route.path);
+      if (handoff.openAfterSave) await closeAndNavigate(handoff.route.path);
     } catch (error: any) {
       if (version !== stateVersion) return;
       message.error(String(error?.message || t('aiSkills.noteCreateFailed')));
@@ -811,10 +812,11 @@
       const handoff = await persistAiNotePreview(
         response,
         selectedQuickAction.value?.generatedNoteTitle || t('resourceOutcome.quickGeneratedNoteTitle'),
+        () => version === stateVersion,
       );
       if (version !== stateVersion || !handoff) return;
       message.success(t('aiSkills.noteCreated'));
-      await closeAndNavigate(handoff.route.path);
+      if (handoff.openAfterSave) await closeAndNavigate(handoff.route.path);
     } catch (error: any) {
       if (version !== stateVersion) return;
       message.error(String(error?.message || t('aiSkills.noteCreateFailed')));

@@ -541,6 +541,7 @@ export async function purgeToolboxWorkspace(connection, tables, userId) {
     'DELETE FROM toolbox_study_progress WHERE user_id = ?',
     [userId],
   );
+  await deleteIfPresent(connection, tables, 'toolbox_translation_inputs', 'DELETE FROM toolbox_translation_inputs WHERE user_id = ?', [userId]);
   await deleteIfPresent(connection, tables, 'toolbox_ocr_inputs', 'DELETE FROM toolbox_ocr_inputs WHERE user_id = ?', [
     userId,
   ]);

@@ -1,3 +1,4 @@
+import { postDetail as getCommunitySaveSource } from '../util/communityFeed/posts.js';
 import { insertNoteVersion } from '../util/insertNoteVersion.js';
 import { readNoteExportScope, readScopedNotesForExport } from '../util/services/noteExportService.js';
 import { previewDescriptor, hydrateImagePreviewStates } from '../util/imagePreview/service.js';
@@ -264,6 +265,9 @@ export const addNote = async (req, res) => {
     const idempotencyKey =
       typeof rawIdempotencyKey === 'string' ? rawIdempotencyKey.trim().slice(0, 512) || null : null;
     if (String(noteBody.parentId || '').trim()) assertNoteTreeFeature(req, NOTE_TREE_FEATURE.WRITE);
+    const communityPrefix = `community-save:${userId}:`;
+    const communitySourceId = idempotencyKey?.startsWith(communityPrefix) ? idempotencyKey.slice(communityPrefix.length) : null;
+    if (communitySourceId) await getCommunitySaveSource({ user: req.user, id: communitySourceId });
     const result = await createNote({
       userId,
       userRole: req.user.role,

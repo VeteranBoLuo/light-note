@@ -9,6 +9,8 @@ export function estimateStructuredSkillModelTokens({ messages, structuredTool, m
 }
 
 function parseToolArguments(response, toolName) {
+  if (['length', 'content_filter', 'consumer_stop'].includes(response?.finishReason))
+    throw aiSkillError('AI_SKILL_STRUCTURED_OUTPUT_INVALID', 'AI 输出未完整结束', 502);
   const calls = Array.isArray(response?.toolCalls) ? response.toolCalls : [];
   const matching = calls.filter((call) => String(call?.function?.name || '') === toolName);
   if (matching.length !== 1 || calls.length !== 1) {

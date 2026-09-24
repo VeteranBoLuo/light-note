@@ -5,7 +5,7 @@ export type ToolboxReturnDecision = 'back' | 'replace-home';
 
 const ALLOWED_PARENT_ROUTE_NAMES: Record<ToolboxReturnContext, readonly string[]> = {
   workbench: ['toolboxHome'],
-  task: ['toolboxHome', 'toolboxWorkbench'],
+  task: ['toolboxHome', 'toolboxWorkbench', 'toolboxTranslation'],
 };
 
 const TOOLBOX_SCROLL_STATE_KEY = '__lightnoteToolboxScroll';

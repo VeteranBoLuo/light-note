@@ -459,7 +459,8 @@
       const res = await opinionApi.getOpinionList({
         currentPage: 1,
         pageSize: 20,
-        userId: user.id,
+        // 管理员查看全部账号；普通用户的归属范围由后端登录身份限定。
+        filters: { hideInternal: false },
       });
       if (res.status === 200) {
         opinionHistory.value = res.data.items || [];

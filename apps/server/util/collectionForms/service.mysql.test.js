@@ -27,6 +27,12 @@ const definition = {
 async function published(policy = 'multiple') {
   const { id } = await service.create('u', { definition: { ...definition, submissionPolicy: policy }, tagIds: ['t'] });
   await service.action('u', id, { action: 'publish', version: 1 });
+  // Explicit historical fixture: production creation no longer allows multiple submissions.
+  if (policy === 'multiple')
+    await pool.query(
+      "UPDATE collection_forms SET definition=JSON_SET(definition, '$.submissionPolicy', 'multiple') WHERE id=?",
+      [id],
+    );
   return service.get('u', id);
 }
 describe.skipIf(!socketPath)('公开收集 MySQL 原子性和统计', () => {
@@ -314,6 +320,22 @@ describe.skipIf(!socketPath)('公开收集 MySQL 原子性和统计', () => {
     expect(count).toBe(10000);
     console.log('[collection performance] 10000 submissions aggregate ms=%s', Math.round(elapsed));
   }, 15000);
+  it('新建、复制和旧草稿首次发布均强制保留最新一份，历史发布规则不变', async () => {
+    const { id } = await service.create('u', { definition: { ...definition, submissionPolicy: 'multiple' } });
+    expect((await service.get('u', id)).definition.submissionPolicy).toBe('replace');
+    await service.update('u', id, { version: 1, definition: { ...definition, submissionPolicy: 'multiple' } });
+    expect((await service.get('u', id)).definition.submissionPolicy).toBe('replace');
+    await pool.query(
+      "UPDATE collection_forms SET definition=JSON_SET(definition, '$.submissionPolicy', 'multiple') WHERE id=?",
+      [id],
+    );
+    await service.action('u', id, { action: 'publish', version: 2 });
+    expect((await service.get('u', id)).definition.submissionPolicy).toBe('replace');
+    const legacy = await published('multiple');
+    const copy = await service.action('u', legacy.id, { action: 'copy' });
+    expect((await service.get('u', copy.id)).definition.submissionPolicy).toBe('replace');
+    expect((await service.get('u', legacy.id)).definition.submissionPolicy).toBe('multiple');
+  });
   it('修改指定原记录时，身份变化不能退化为新增', async () => {
     const f = await published('replace');
     const original = await service.submit(
@@ -355,6 +377,10 @@ describe.skipIf(!socketPath)('公开收集 MySQL 原子性和统计', () => {
     const { id } = await service.create('u', { definition: d, tagIds: ['t'] });
     await service.action('u', id, { action: 'publish', version: 1 });
     const f = await service.get('u', id);
+    await pool.query(
+      "UPDATE collection_forms SET definition=JSON_SET(definition, '$.submissionPolicy', 'multiple') WHERE id=?",
+      [id],
+    );
     for (const key of ['abcdefghijklmnop', 'ABCDEFGHIJKLMNOP'])
       await service.submit(f.public_id, { requestKey: key, answers: { Q: ['a', 'A'] } });
     expect(await service.list('u', { tagId: 't' })).toHaveLength(1);

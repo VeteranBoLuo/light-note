@@ -1,4 +1,13 @@
 export const accountSettingsZh = {
+  configurePassword: '设置或修改密码',
+  legacyPasswordDesc: '可通过邮箱验证设置密码，已有密码仍可使用。',
+  passwordSessionHint: '保存后所有设备将退出登录，请重新登录。',
+  usableEmailRequired: '请先在个人资料中填写可接收验证码的邮箱，再回来验证并设置密码。',
+  sendPasswordCode: '获取验证码',
+  passwordCodeSent: '验证码已发送，请查收邮箱。',
+  useCurrentPassword: '使用当前密码验证',
+  forgotPassword: '忘记密码？通过邮箱验证',
+
   binding: '账号绑定',
   bindingDesc: '登录方式与绑定信息',
   unbound: '未绑定',
@@ -71,6 +80,16 @@ export const accountSettingsZh = {
   accountFailed: '账号信息加载失败。',
 };
 export const accountSettingsEn = {
+  configurePassword: 'Set or change password',
+  legacyPasswordDesc: 'Verify your email to set a password. Any existing password remains valid.',
+  passwordSessionHint: 'Saving signs out all devices. Please sign in again.',
+  usableEmailRequired:
+    'First add an email address you can access in your profile, then return to verify it and set a password.',
+  sendPasswordCode: 'Get code',
+  passwordCodeSent: 'Verification code sent. Check your email.',
+  useCurrentPassword: 'Verify with current password',
+  forgotPassword: 'Forgot password? Verify by email',
+
   binding: 'Account information',
   bindingDesc: 'Sign-in methods and linked accounts',
   unbound: 'Not linked',
@@ -100,11 +119,10 @@ export const accountSettingsEn = {
   irreversible: 'This action is permanent',
   deleteDevices: 'All devices will be signed out immediately. This account cannot sign in again.',
   deleteContent: 'Bookmarks, notes, tasks, AI conversations and cloud content will be permanently deleted.',
-  backupScope: "Finish exporting and download anything you want to keep before deleting your account.",
-  backupTitle: "Export your data first",
-  backupDesc:
-    'Choose notes, bookmarks and files to save to your device in a ZIP.',
-  export: "Export data first",
+  backupScope: 'Finish exporting and download anything you want to keep before deleting your account.',
+  backupTitle: 'Export your data first',
+  backupDesc: 'Choose notes, bookmarks and files to save to your device in a ZIP.',
+  export: 'Export data first',
   cancel: 'Cancel',
   getCode: 'Get verification code and continue',
   codePrefix: 'A six-digit code was sent to',

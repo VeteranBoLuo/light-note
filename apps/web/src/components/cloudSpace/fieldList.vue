@@ -737,6 +737,7 @@
   </div>
 </template>
 <script setup lang="ts">
+  import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
   import ManagedImagePreview from '@/components/imagePreview/ManagedImagePreview.vue';
   import { readFileShareToken, copyFileShareUrl, buildFileShareUrl } from '@/utils/fileShareLinks';
   import { copyTextToClipboard } from '@/utils/clipboard';
@@ -1256,13 +1257,14 @@
 
   async function createNoteFromFileAnalysis(response: AiSkillResponse) {
     if (creatingAiNote.value) return;
+    const source = JSON.stringify(fileAiResourceRefs.value);
     creatingAiNote.value = true;
     try {
-      const handoff = await persistAiMarkdownResultAsNote(response, fileAiGeneratedNoteTitle.value);
+      const handoff = await persistAiMarkdownResultAsNote(response, fileAiGeneratedNoteTitle.value, () => fileAiVisible.value && JSON.stringify(fileAiResourceRefs.value) === source);
       if (!handoff) return;
       message.success(t('aiSkills.noteCreated'));
-      fileAiVisible.value = false;
-      await router.push(handoff.route);
+      if (!handoff.openAfterSave) return;
+      await closeCurrentMobileOverlayThen(() => { fileAiVisible.value = false; }, () => router.push(handoff.route));
     } catch (error: any) {
       message.error(String(error?.message || t('aiSkills.noteCreateFailed')));
     } finally {

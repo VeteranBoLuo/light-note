@@ -1,3 +1,4 @@
+import { resetNoteSaveDrafts } from '@/components/noteLibrary/save/saveAsNoteState';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createApp, nextTick } from 'vue';
 import SavePost from './CommunitySavePost.vue';
@@ -9,18 +10,13 @@ const mocks = vi.hoisted(() => ({
   insert: vi.fn(),
   close: vi.fn(),
   success: vi.fn(),
+  dialog: vi.fn(),
 }));
+vi.mock('@/composables/useSaveAsNote', () => ({openSaveAsNote: mocks.dialog}));
 vi.mock('@/components/base/BasicComponents/BMessage/BMessage', () => ({
   default: { success: mocks.success, error: vi.fn() },
 }));
 vi.mock('@/components/tag/InlineTagCreate.vue', () => ({ default: { template: '<div />' } }));
-vi.mock('./CommunityNoteLocation.vue', () => ({
-  default: {
-    props: ['value', 'disabled'],
-    emits: ['update:value'],
-    template: `<button class="choose-parent" :disabled="disabled" @click="$emit('update:value', 'child-page')">Choose child</button>`,
-  },
-}));
 vi.mock('@/api/communityFeedApi', () => ({ feedGet: mocks.get }));
 vi.mock('@/http/request', () => ({ apiBasePost: mocks.post, apiQueryPost: async () => ({ status: 200, data: [] }) }));
 vi.mock('@/store', () => ({
@@ -66,6 +62,8 @@ const flush = async () => {
 };
 beforeEach(() => {
   vi.clearAllMocks();
+  resetNoteSaveDrafts();
+  mocks.dialog.mockImplementation(() => new Promise(() => {}));
   mocks.get.mockResolvedValue({ key: 'stable', note: null, bookmark: null });
   mocks.post.mockResolvedValue({ status: 200, data: { id: 'saved' } });
   mocks.upload.mockResolvedValue({ fileId: 'own-image' });
@@ -100,31 +98,32 @@ async function save(host: HTMLElement) {
     .click();
   await flush();
 }
-it('copies images before creating the note and retries failed tags without duplicating the note or images', async () => {
-  let tagCalls = 0;
-  mocks.post.mockImplementation(async (url: string) =>
-    url.includes('updateNoteTags') ? { status: ++tagCalls === 1 ? 500 : 200 } : { status: 200, data: { id: 'saved' } },
-  );
-  const host = await mount('note', [{ publicId: 'image', url: '/api/community/images/image' }]);
-  await save(host);
-  expect(host.textContent).toContain('community.feed.savedTagsFailed');
-  expect(mocks.push).not.toHaveBeenCalled();
-  await save(host);
+const options = {title:'自定义标题',parentId:'child-page',tags:[],projectId:'',thoughts:'我的补充'};
+async function adapter(images: any[] = []) { await mount('note',images); const request = mocks.dialog.mock.calls[0][0]; await request.lookup(); return request; }
+it('preserves thoughts, parent, source and image copies across save retries', async () => {
+  const request = await adapter([{publicId:'image',url:'/api/community/images/image'}]);
+  await request.save(options); await request.save(options);
   expect(mocks.upload).toHaveBeenCalledTimes(1);
-  const creates = mocks.post.mock.calls.filter(([url]) => url.endsWith('/addNote'));
-  expect(creates).toHaveLength(1);
-  expect(creates[0][1].content).toContain('/api/file/image/own-image');
-  expect(mocks.push).not.toHaveBeenCalled();
-  expect(mocks.close).toHaveBeenCalledOnce();
-  expect(mocks.success).toHaveBeenCalledWith('common.saveSuccess');
+  const create = mocks.post.mock.calls.find(([url]) => url.endsWith('/addNote'));
+  expect(create?.[1]).toMatchObject({title:options.title,parentId:'child-page',idempotencyKey:'stable'});
+  expect(create?.[1].content).toContain('/api/file/image/own-image');
+  const node = document.createElement('div'); node.innerHTML=create?.[1].content;
+  expect(node.querySelector('blockquote')?.textContent).toContain('我的补充');
 });
-it('opens existing resources without creating replacements', async () => {
-  mocks.get.mockResolvedValue({ key: 'stable', note: { id: 'existing', deleted: false } });
-  const host = await mount();
-  host.querySelector('button')!.click();
-  await flush();
+it('returns existing note and trash state without creating replacements', async () => {
+  mocks.get.mockResolvedValue({key:'stable',note:{id:'existing',deleted:true}});
+  const request = await adapter();
+  expect(await request.lookup()).toEqual({noteId:'existing',unavailable:true});
   expect(mocks.post).not.toHaveBeenCalled();
-  expect(mocks.push).toHaveBeenCalledWith({ path: '/noteLibrary/existing' });
+});
+it('does not create a note when image copy or source permission fails', async () => {
+  mocks.upload.mockRejectedValue(new Error('quota'));
+  const request=await adapter([{publicId:'image',url:'/api/community/images/image'}]);
+  await expect(request.save(options)).rejects.toThrow('quota');
+  expect(mocks.post).not.toHaveBeenCalled();
+  mocks.get.mockRejectedValue(new Error('forbidden'));
+  await expect(request.save(options)).rejects.toThrow('forbidden');
+  expect(mocks.upload).toHaveBeenCalledTimes(1);
 });
 it('saves bookmarks, closes the modal and confirms success without navigating', async () => {
   const host = await mount('bookmark');
@@ -134,23 +133,6 @@ it('saves bookmarks, closes the modal and confirms success without navigating', 
   expect(mocks.close).toHaveBeenCalledOnce();
   expect(mocks.success).toHaveBeenCalledWith('common.saveSuccess');
 });
-it('does not create a note when image copying fails', async () => {
-  mocks.upload.mockRejectedValue(new Error('quota'));
-  const host = await mount('note', [{ publicId: 'image', url: '/api/community/images/image' }]);
-  await save(host);
-  expect(mocks.post).not.toHaveBeenCalled();
-  expect(host.textContent).toContain('community.feed.saveFailed');
-});
-
-it('passes the selected child page to note creation', async () => {
-  const host = await mount();
-  (host.querySelector('.choose-parent') as HTMLButtonElement).click();
-  await flush();
-  await save(host);
-  const create = mocks.post.mock.calls.find(([url]) => url.endsWith('/addNote'));
-  expect(create?.[1].parentId).toBe('child-page');
-});
-
 it('labels bookmark thoughts as description and saves the entered description', async () => {
   const host = await mount('bookmark');
   expect(host.textContent).toContain('community.feed.bookmarkDescription');
@@ -161,16 +143,4 @@ it('labels bookmark thoughts as description and saves the entered description', 
   await flush();
   await save(host);
   expect(mocks.post.mock.calls[0][1].description).toBe('稍后阅读');
-});
-it('appends personal thoughts to the saved note in a quote block', async () => {
-  const host = await mount();
-  const input = host.querySelector('[data-type="textarea"]') as HTMLInputElement;
-  input.value = '我的补充';
-  input.dispatchEvent(new Event('input'));
-  await flush();
-  await save(host);
-  const create = mocks.post.mock.calls.find(([url]) => url.endsWith('/addNote'));
-  const node = document.createElement('div');
-  node.innerHTML = create?.[1].content;
-  expect(node.querySelector('blockquote')?.textContent).toContain('我的补充');
 });
