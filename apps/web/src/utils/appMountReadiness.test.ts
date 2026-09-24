@@ -16,6 +16,27 @@ function createAnimation(name: string, currentTime: number | null, iterations: n
 }
 
 describe('application mount readiness', () => {
+  it('匿名隔离入口即使是空壳也等待路由，普通运行时不会提前挂载', async () => {
+    let resolveRoute!: () => void;
+    let mounted = false;
+    const readiness = waitForApplicationMountReadiness({
+      appRoot: document.createElement('div'),
+      prepareLocale: () => Promise.resolve(),
+      waitForInitialRoute: () =>
+        new Promise<void>((resolve) => {
+          resolveRoute = resolve;
+        }),
+      requireInitialRoute: true,
+    }).then(() => {
+      mounted = true;
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(mounted).toBe(false);
+    resolveRoute();
+    await readiness;
+    expect(mounted).toBe(true);
+  });
   it('普通 SPA 空壳不额外等待首路由', async () => {
     const appRoot = document.createElement('div');
     const prepareLocale = vi.fn(() => Promise.resolve());

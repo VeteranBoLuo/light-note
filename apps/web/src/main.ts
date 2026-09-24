@@ -48,6 +48,8 @@ async function mountApplication() {
     appRoot,
     prepareLocale: prepareInitialLocale,
     waitForInitialRoute: () => router.isReady(),
+    // 匿名表单没有预渲染正文，仍须先确定路由，避免根组件按普通页面启动账号运行时。
+    requireInitialRoute: /^\/f(?:\/|$)/.test(window.location.pathname),
   });
   // 客户端 mount 会重建预渲染节点。同步移交持续动画相位，避免慢网络下已经运行数秒的
   // 光晕与标题动画在接管瞬间跳回首帧；空壳应用和不支持 Web Animations API 的浏览器无操作。
