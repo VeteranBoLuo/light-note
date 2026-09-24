@@ -57,7 +57,12 @@ describe('独立填写页', () => {
       vi.fn(async (_url: string, options: any) => {
         calls.push(options);
         if (options.method === 'GET')
-          return { ok: true, json: async () => ({ data: { status: 'collecting', definition } }) };
+          return {
+            ok: true,
+            json: async () => ({
+              data: { status: 'collecting', definition, submissionPolicy: 'multiple', mySubmission: null },
+            }),
+          };
         if (fail) {
           fail = false;
           throw new Error('network');
@@ -89,7 +94,12 @@ describe('独立填写页', () => {
     expect(host.textContent).toContain('请填写此题');
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () => ({ ok: true, json: async () => ({ data: { status: 'paused', definition } }) })),
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          data: { status: 'paused', definition, submissionPolicy: 'multiple', mySubmission: null },
+        }),
+      })),
     );
     const paused = mount(PublicForm);
     await flush();
@@ -129,4 +139,53 @@ it('匿名回填最新答案，更新成功并保留修改入口', async () => {
   expect(host.textContent).toContain('提交已更新');
   expect(host.textContent).toContain('修改我的提交');
   expect(JSON.parse(calls[1].body).answers.q).toBe('新答案');
+});
+
+it('旧后端缺少协议时禁止填写，避免将修改错误计为新增', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => ({ ok: true, json: async () => ({ data: { status: 'collecting', definition } }) })),
+  );
+  const host = mount(PublicForm);
+  await flush();
+  expect(host.querySelector('form')).toBeNull();
+  expect(host.textContent).toContain('请更新后端');
+});
+
+it('修改入口重新读取最新答案；凭证丢失时阻止退化成新增', async () => {
+  let answers = { q: '旧答案' },
+    lost = false;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (_url, options) => ({
+      ok: true,
+      json: async () => {
+        if (options.method === 'POST') {
+          answers = JSON.parse(options.body).answers;
+          return { data: { receipt: 'r', outcome: 'updated' } };
+        }
+        return {
+          data: {
+            status: 'collecting',
+            definition,
+            submissionPolicy: 'replace',
+            mySubmission: lost ? null : { receipt: 'r', answers },
+          },
+        };
+      },
+    })),
+  );
+  const host = mount(PublicForm);
+  await flush();
+  await fill(host, '最新答案');
+  await submit(host);
+  host.querySelector('button')!.click();
+  await flush();
+  expect(host.querySelector('input')!.value).toBe('最新答案');
+  await submit(host);
+  lost = true;
+  host.querySelector('button')!.click();
+  await flush();
+  expect(host.querySelector('form')).toBeNull();
+  expect(host.textContent).toContain('未能识别之前的提交');
 });

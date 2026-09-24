@@ -314,6 +314,28 @@ describe.skipIf(!socketPath)('公开收集 MySQL 原子性和统计', () => {
     expect(count).toBe(10000);
     console.log('[collection performance] 10000 submissions aggregate ms=%s', Math.round(elapsed));
   }, 15000);
+  it('修改指定原记录时，身份变化不能退化为新增', async () => {
+    const f = await published('replace');
+    const original = await service.submit(
+      f.public_id,
+      { requestKey: randomUUID(), answers: { choice: ['a'] } },
+      'browser-a',
+    );
+    await expect(
+      service.submit(
+        f.public_id,
+        { requestKey: randomUUID(), expectedReceipt: original.receipt, answers: { choice: ['b'] } },
+        'browser-b',
+      ),
+    ).rejects.toThrow('未能识别之前的提交');
+    const updated = await service.submit(
+      f.public_id,
+      { requestKey: randomUUID(), expectedReceipt: original.receipt, answers: { choice: ['b'] } },
+      'browser-a',
+    );
+    expect(updated).toEqual({ receipt: original.receipt, outcome: 'updated' });
+    expect(Number((await service.statistics('u', f.id)).summary.valid)).toBe(1);
+  });
   it('题目、选项和幂等键区分大小写，并使用标签存量字符集', async () => {
     const d = {
       ...definition,

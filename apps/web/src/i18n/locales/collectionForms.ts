@@ -1,4 +1,12 @@
 export const collectionFormsZh = {
+  incompatibleServer: '当前服务版本不支持安全提交，请更新后端后重试。',
+  missingPreviousSubmission:
+    '未能识别之前的提交，请确认已允许本站 Cookie，并使用原浏览器和原填写地址重试。为避免新增记录，暂不允许修改。',
+  publicBrand: '轻笺 · 公开收集',
+  savedCloseHint: '已保存你的回答，可以关闭此页面。',
+  poweredBy: '由轻笺提供支持',
+  answerContent: '填写内容',
+  notePlaceholder: '添加备注，记录后续跟进事项',
   deleteAfterPause: '删除表单（请先暂停）',
   saveBeforeManage: '请先保存未保存的修改',
   statusUpdated: '收集状态已更新',
@@ -237,6 +245,14 @@ export const collectionFormsZh = {
   formLink: '填写链接：{url}',
 };
 export const collectionFormsEn = {
+  incompatibleServer: 'The server does not support safe submissions. Please update the server and retry.',
+  missingPreviousSubmission:
+    'Your previous submission could not be identified. Allow site cookies and use the original browser and URL. Editing is blocked to prevent creating a duplicate.',
+  publicBrand: 'Light Note · Forms',
+  savedCloseHint: 'Your answers are saved. You can close this page.',
+  poweredBy: 'Powered by Light Note',
+  answerContent: 'Answers',
+  notePlaceholder: 'Add a note for follow-up',
   deleteAfterPause: 'Delete (pause first)',
   saveBeforeManage: 'Save your changes first',
   statusUpdated: 'Collection status updated',

@@ -269,6 +269,8 @@ export function createFormsService(pool) {
             [form.id, browserHash],
           )
         : [];
+      if (input.expectedReceipt != null && (!replace || previous?.id !== input.expectedReceipt))
+        throw new FormError('未能识别之前的提交，请使用原浏览器和原填写地址重新打开', 409);
       const changed = previous && previous.payload_hash !== hash;
       const outcome = previous ? (changed ? 'updated' : 'unchanged') : 'created';
       const data =

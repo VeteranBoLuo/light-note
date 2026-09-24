@@ -530,34 +530,85 @@
       @close="responseOpen = false"
       :title="t('collectionForms.responseDetail')"
       mobile-full-screen
-      ><div v-if="activeResponse && form" class="collection-stack"
-        ><p v-if="error" class="collection-error" role="alert">{{ error }}</p
-        ><span>{{ t('collectionForms.firstSubmittedAt') }}：{{ date(activeResponse.created_at) }}</span
-        ><span
-          >{{ t('collectionForms.lastUpdatedAt') }}：{{
-            date(activeResponse.updated_at || activeResponse.created_at)
-          }}</span
-        ><section v-for="q in form.definition.questions" :key="q.id"
-          ><strong>{{ q.title }}</strong
-          ><p class="collection-description">{{ answerLabel(q, activeResponse.answers[q.id]) }}</p></section
-        ><label
-          >{{ t('collectionForms.privateNote')
-          }}<BInput v-model:value="privateNote" type="textarea" :maxlength="5000" /></label
-        ><BButton :disabled="busy" @click="mark('note', [activeResponse.id], privateNote)">{{
-          t('collectionForms.saveNote')
-        }}</BButton
-        ><div class="collection-toolbar"
-          ><BButton
+      body-padding="0"
+      width="var(--ui-layout-560, 560px)"
+      ><div v-if="activeResponse && form" class="response-detail">
+        <div class="response-detail-scroll">
+          <p v-if="error" class="collection-error" role="alert">{{ error }}</p>
+          <h2>{{ form.definition.title }}</h2>
+          <div class="response-detail-badges"
+            ><span>{{ t(activeResponse.is_read ? 'collectionForms.read' : 'collectionForms.unread') }}</span
+            ><span class="response-detail-state">{{
+              t(
+                activeResponse.spam
+                  ? 'collectionForms.spam'
+                  : activeResponse.processed
+                    ? 'collectionForms.processed'
+                    : 'collectionForms.pending',
+              )
+            }}</span></div
+          >
+          <dl class="response-detail-times"
+            ><div
+              ><dt>{{ t('collectionForms.firstSubmittedAt') }}</dt
+              ><dd>{{ date(activeResponse.created_at) }}</dd></div
+            ><div
+              ><dt>{{ t('collectionForms.lastUpdatedAt') }}</dt
+              ><dd>{{ date(activeResponse.updated_at || activeResponse.created_at) }}</dd></div
+            ></dl
+          >
+          <h3 class="response-section-title">{{ t('collectionForms.answerContent') }}</h3>
+          <section v-for="(q, index) in form.definition.questions" :key="q.id" class="response-answer">
+            <div class="response-answer-type"
+              >{{ String(index + 1).padStart(2, '0') }} · {{ t(typeLabels[q.type]) }}</div
+            >
+            <h4>{{ q.title }}</h4>
+            <div
+              v-if="(q.type === 'single' || q.type === 'multiple') && activeResponse.answers[q.id] != null"
+              class="response-answer-options"
+              ><span v-for="(label, i) in answerOptions(q, activeResponse.answers[q.id])" :key="i">{{
+                label
+              }}</span></div
+            >
+            <p
+              v-else
+              class="collection-description"
+              :class="{ 'collection-muted': activeResponse.answers[q.id] == null }"
+              >{{ answerLabel(q, activeResponse.answers[q.id]) }}</p
+            >
+          </section>
+          <div class="response-note-heading"
+            ><label for="response-private-note">{{ t('collectionForms.privateNote') }}</label
+            ><BButton
+              :disabled="busy || privateNote === (activeResponse.private_note || '')"
+              @click="mark('note', [activeResponse.id], privateNote)"
+              >{{ t('collectionForms.saveNote') }}</BButton
+            ></div
+          >
+          <BInput
+            id="response-private-note"
+            v-model:value="privateNote"
+            type="textarea"
+            :maxlength="5000"
+            :placeholder="t('collectionForms.notePlaceholder')"
+          />
+        </div>
+        <div class="response-detail-footer">
+          <BButton :disabled="busy" @click="mark(activeResponse.spam ? 'restore' : 'spam', [activeResponse.id])"
+            ><SvgIcon :src="activeResponse.spam ? icon.toolbox.rotate : icon.toolbox.delete" size="18" />{{
+              t(activeResponse.spam ? 'collectionForms.restoreValid' : 'collectionForms.markSpam')
+            }}</BButton
+          >
+          <BButton
+            type="primary"
             :disabled="busy"
             @click="mark(activeResponse.processed ? 'pending' : 'processed', [activeResponse.id])"
-            >{{
-              activeResponse.processed ? t('collectionForms.markPending') : t('collectionForms.markProcessed')
+            ><SvgIcon :src="icon.organize.check" size="18" />{{
+              t(activeResponse.processed ? 'collectionForms.markPending' : 'collectionForms.markProcessed')
             }}</BButton
-          ><BButton :disabled="busy" @click="mark(activeResponse.spam ? 'restore' : 'spam', [activeResponse.id])">{{
-            activeResponse.spam ? t('collectionForms.restoreValid') : t('collectionForms.markSpam')
-          }}</BButton></div
-        ></div
-      ></BDrawer
+          >
+        </div>
+      </div></BDrawer
     >
   </main>
 </template>
@@ -591,7 +642,7 @@
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import { useUserStore } from '@/store';
-  import { formsApi, statusLabel, type CollectionForm, type Submission } from './api';
+  import { formsApi, statusLabel, typeLabels, type CollectionForm, type Submission } from './api';
   const isMobile = useMobileLayout();
   const mobilePreview = ref(false);
   const metadataOpen = ref(false);
@@ -1070,10 +1121,17 @@
       if (id === formId.value && generation === detailGeneration) await Promise.all([loadResponses(), loadList()]);
     });
   }
+  function answerOptions(q: FormQuestion, value: unknown) {
+    return (Array.isArray(value) ? value : [value]).map((v) => q.options?.find((o) => o.id === v)?.label || String(v));
+  }
   function answerLabel(q: FormQuestion, value: unknown) {
     if (value == null) return t('collectionForms.unanswered');
     if (q.type === 'single') return q.options.find((o) => o.id === value)?.label || '—';
     if (Array.isArray(value)) return value.map((v) => q.options.find((o) => o.id === v)?.label || v).join('、');
+    if (q.type === 'date')
+      return String(value)
+        .replace(/^(\d{4})-(\d{2})-(\d{2})/, '$1/$2/$3')
+        .replace('T', ' ');
     return String(value);
   }
   async function copyLink() {
@@ -2039,6 +2097,127 @@
     .collection-stat-controls .b_btn {
       padding-inline: var(--ui-space-6, 6px);
       font-size: var(--ui-font-12, 12px);
+    }
+  }
+</style>
+
+<style scoped>
+  .response-detail {
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    color: var(--workspace-text);
+    background: var(--workspace-content);
+  }
+  .response-detail-scroll {
+    min-height: 0;
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--ui-space-24, 24px);
+  }
+  .response-detail h2 {
+    margin: 0 0 var(--ui-space-12, 12px);
+    font-size: var(--ui-font-18, 18px);
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+  }
+  .response-detail-badges {
+    display: flex;
+    gap: var(--ui-space-8, 8px);
+    font-size: var(--ui-font-12, 12px);
+  }
+  .response-detail-badges span {
+    padding: var(--ui-space-4, 4px) var(--ui-space-8, 8px);
+    background: var(--workspace-canvas);
+    border-radius: var(--ui-space-6, 6px);
+  }
+  .response-detail-state {
+    color: var(--primary-color);
+  }
+  .response-detail-times {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--ui-space-16, 16px);
+    padding: var(--ui-space-16, 16px);
+    margin: var(--ui-space-20, 20px) 0 var(--ui-space-24, 24px);
+    background: var(--workspace-canvas);
+    border-radius: var(--ui-space-8, 8px);
+  }
+  .response-detail-times dt,
+  .response-answer-type {
+    font-size: var(--ui-font-12, 12px);
+    color: var(--workspace-muted);
+  }
+  .response-detail-times dd {
+    margin: var(--ui-space-8, 8px) 0 0;
+    font-size: var(--ui-font-14, 14px);
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+  }
+  .response-section-title {
+    margin: 0;
+    padding-bottom: var(--ui-space-12, 12px);
+    font-size: var(--ui-font-16, 16px);
+    border-bottom: 1px solid var(--workspace-border);
+  }
+  .response-answer {
+    padding: var(--ui-space-20, 20px) 0;
+    border-bottom: 1px solid var(--workspace-border);
+  }
+  .response-answer h4 {
+    margin: var(--ui-space-8, 8px) 0 var(--ui-space-12, 12px);
+    font-size: var(--ui-font-14, 14px);
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+  }
+  .response-answer p {
+    margin: 0;
+    line-height: 1.7;
+    font-size: var(--ui-font-14, 14px);
+  }
+  .response-answer-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ui-space-8, 8px);
+  }
+  .response-answer-options span {
+    padding: var(--ui-space-6, 6px) var(--ui-space-12, 12px);
+    border: 1px solid var(--workspace-border);
+    border-radius: var(--ui-space-8, 8px);
+    color: var(--primary-color);
+    background: var(--workspace-canvas);
+    font-size: var(--ui-font-14, 14px);
+    overflow-wrap: anywhere;
+    max-width: 100%;
+  }
+  .response-note-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ui-space-12, 12px);
+    margin: var(--ui-space-20, 20px) 0 var(--ui-space-12, 12px);
+    font-size: var(--ui-font-14, 14px);
+  }
+  .response-detail-footer > * {
+    width: 100%;
+  }
+  .response-detail-footer {
+    flex-shrink: 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-16, 16px) var(--ui-space-24, 24px);
+    padding-bottom: max(var(--ui-space-16, 16px), env(safe-area-inset-bottom));
+    border-top: 1px solid var(--workspace-border);
+    background: var(--workspace-content);
+  }
+  @media (max-width: 767px) {
+    .response-detail-scroll {
+      padding: var(--ui-space-16, 16px);
+    }
+    .response-detail-footer {
+      padding-inline: var(--ui-space-16, 16px);
     }
   }
 </style>
