@@ -55,7 +55,6 @@ const {
   getDeepSeekBalance,
   getAgentLogsSummary,
   getNoticeSummary,
-  getAiFeedback,
   clearImages,
   getHelpConfig,
   resolveHelpSources,
@@ -1678,73 +1677,6 @@ describe('getAgentLogsSummary AI 质量指标', () => {
   });
 });
 
-describe('getAiFeedback AI 回答反馈看板', () => {
-  beforeEach(() => query.mockReset());
-
-  it('非 root 无法读取反馈正文', async () => {
-    const res = mockRes();
-    await getAiFeedback({ user: { role: 'user' }, body: {} }, res);
-    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 403 }));
-    expect(query).not.toHaveBeenCalled();
-  });
-
-  it('只读取仍保留且未删除会话中的反馈，并返回列表、汇总和原因分布', async () => {
-    query.mockImplementation((sql) => {
-      const activity = mockActivityStatement(sql);
-      if (activity) return activity;
-      const statement = String(sql);
-      if (statement.includes('GROUP BY f.reason')) return Promise.resolve([[{ reason: 'incorrect', count: 1 }]]);
-      if (statement.includes('SUM(f.rating')) {
-        return Promise.resolve([[{ total: 1, helpful: 0, unhelpful: 1, pending: 1 }]]);
-      }
-      if (statement.includes('COUNT(*) AS total')) return Promise.resolve([[{ total: 1 }]]);
-      return Promise.resolve([
-        [
-          {
-            id: 'feedback-1',
-            conversation_id: 'conversation-1',
-            message_id: 'message-1',
-            request_id: 'request-1',
-            rating: 'unhelpful',
-            reason: 'incorrect',
-            resolved: 0,
-            comment: '答案有误',
-            user_alias: '测试用户',
-            conversation_title: '测试会话',
-            question: '问题',
-            answer: '回答',
-            model_meta_json: null,
-            create_time: '2026-07-23 12:00:00',
-            update_time: '2026-07-23 12:00:00',
-          },
-        ],
-      ]);
-    });
-    const res = mockRes();
-    await getAiFeedback(
-      { user: { role: 'root' }, body: { rating: 'unhelpful', resolved: 'pending', keyword: '答案' } },
-      res,
-    );
-    const payload = res.send.mock.calls[0][0];
-    expect(payload.status).toBe(200);
-    expect(payload.data.summary).toMatchObject({ total: 1, helpful: 0, unhelpful: 1, pending: 1 });
-    expect(payload.data.items[0]).toMatchObject({
-      rating: 'unhelpful',
-      question: '问题',
-      answer: '回答',
-      triageStatus: 'open',
-      triagePriority: 'normal',
-    });
-    expect(payload.data.reasons).toEqual([{ reason: 'incorrect', count: 1 }]);
-    const statements = query.mock.calls.map(([sql]) => String(sql)).join('\n');
-    expect(statements).toContain("c.status IN ('active', 'archived')");
-    expect(statements).toContain("retention_mode <> 'temporary'");
-    expect(statements).toContain('q.id = m.parent_message_id');
-    expect(statements).toContain('LEFT JOIN admin_ai_feedback_triage');
-    expect(statements).not.toContain('q.request_id = f.request_id');
-  });
-});
-
 describe('后台日志组合筛选', () => {
   beforeEach(() => query.mockReset());
 
@@ -2040,7 +1972,6 @@ describe('入口提醒汇总并发读取', () => {
     expect(res.send.mock.calls[0][0]).toMatchObject({ status: 200, data: { hasNotice: false } });
   });
 });
-
 
 describe('操作日志首屏并发统计', () => {
   beforeEach(() => { query.mockReset(); });

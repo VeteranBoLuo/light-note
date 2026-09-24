@@ -21,7 +21,6 @@ const ACTION_CENTER_SOURCES = new Set([
   'opinion',
   'security',
   'community_report',
-  'ai_feedback',
   'feature_request',
   'resource_governance',
   'ai_document',
@@ -251,60 +250,6 @@ async function loadCommunityReportWork(limit) {
       createdAt: row.create_time,
       updatedAt: row.update_time,
       targetUrl: `/admin/communityChatModeration?reportId=${encodeURIComponent(row.id)}`,
-    })),
-  );
-}
-
-async function loadAiFeedbackWork(limit) {
-  const [[summaryRows], [rows]] = await Promise.all([
-    pool.query(
-      `SELECT COUNT(*) AS total,
-              COALESCE(SUM(COALESCE(t.priority, 'normal') = 'urgent'), 0) AS critical
-         FROM ai_feedback f
-         JOIN ai_conversations c ON c.id = f.conversation_id
-         LEFT JOIN admin_ai_feedback_triage t ON t.feedback_id = f.id
-        WHERE f.rating = 'unhelpful'
-          AND COALESCE(t.status, 'open') IN ('open', 'investigating')
-          AND c.status IN ('active', 'archived')
-          AND (c.retention_mode <> 'temporary' OR (c.expire_at IS NOT NULL AND c.expire_at > CURRENT_TIMESTAMP))`,
-    ),
-    pool.query(
-      `SELECT f.id, f.reason, f.actor_user_id, f.create_time, f.update_time,
-              COALESCE(t.status, 'open') AS triage_status,
-              COALESCE(t.priority, 'normal') AS triage_priority,
-              u.alias
-         FROM ai_feedback f
-         JOIN ai_conversations c ON c.id = f.conversation_id
-         LEFT JOIN admin_ai_feedback_triage t ON t.feedback_id = f.id
-         LEFT JOIN user u ON u.id = f.actor_user_id
-        WHERE f.rating = 'unhelpful'
-          AND COALESCE(t.status, 'open') IN ('open', 'investigating')
-          AND c.status IN ('active', 'archived')
-          AND (c.retention_mode <> 'temporary' OR (c.expire_at IS NOT NULL AND c.expire_at > CURRENT_TIMESTAMP))
-        ORDER BY (COALESCE(t.priority, 'normal') = 'urgent') DESC,
-                 (COALESCE(t.priority, 'normal') = 'high') DESC,
-                 f.update_time DESC, f.id DESC
-        LIMIT ?`,
-      [limit],
-    ),
-  ]);
-  return workResult(
-    'ai_feedback',
-    'AI 回答反馈',
-    summaryRows[0]?.total,
-    summaryRows[0]?.critical,
-    rows.map((row) => ({
-      id: String(row.id),
-      source: 'ai_feedback',
-      status: 'pending',
-      severity: row.triage_priority === 'urgent' ? 'critical' : row.triage_priority === 'high' ? 'high' : 'normal',
-      title: row.reason || 'AI 回答点踩',
-      ownerLabel: row.alias || row.actor_user_id || '',
-      userId: row.actor_user_id || null,
-      rawStatus: row.triage_status,
-      createdAt: row.create_time,
-      updatedAt: row.update_time,
-      targetUrl: `/admin/aiFeedback?feedbackId=${encodeURIComponent(row.id)}`,
     })),
   );
 }
@@ -1063,7 +1008,6 @@ const ACTION_CENTER_LOADERS = Object.freeze({
   opinion: loadOpinionWork,
   security: loadSecurityWork,
   community_report: loadCommunityReportWork,
-  ai_feedback: loadAiFeedbackWork,
   feature_request: loadFeatureRequestWork,
   resource_governance: loadResourceGovernanceWork,
   ai_document: loadAiDocumentJobs,

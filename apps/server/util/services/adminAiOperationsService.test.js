@@ -359,6 +359,35 @@ describe('adminAiOperationsService', () => {
     expect(JSON.stringify(result)).not.toMatch(/question|answer|content|resourceTitle|url/iu);
   });
 
+  it('仅详情返回经过二次过滤的入参和模型前失败说明，旧记录没有伪造入参', async () => {
+    const database = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce([
+          [
+            executionRow({
+              skill_id: 'bookmark.parse_url',
+              status: 'failed',
+              provider_call_count: 0,
+              error_code: 'BOOKMARK_PAGE_UNREADABLE',
+              input_diagnostics_json: JSON.stringify({
+                version: 1,
+                url: 'https://example.com/?id=42&token=secret',
+                question: 'private',
+              }),
+            }),
+          ],
+        ])
+        .mockResolvedValueOnce([[]]),
+    };
+    const result = await getAdminAiExecutionDetail(EXECUTION_ONE, database);
+    expect(result.inputDiagnostics.url).toBe('https://example.com/?id=42');
+    expect(result.failure).toMatchObject({ code: 'BOOKMARK_PAGE_UNREADABLE', beforeModelCall: true });
+    expect(result.failure.message).toContain('可靠内容');
+    expect(JSON.stringify(result)).not.toMatch(/secret|private/);
+    expect(result.calls).toEqual([]);
+  });
+
   it('存储异常收口为稳定 503，不泄露数据库连接信息', async () => {
     const database = { query: vi.fn().mockRejectedValue(new Error('password@private-db-host')) };
     await expect(getAdminAiOperationsOverview({}, database)).rejects.toMatchObject({

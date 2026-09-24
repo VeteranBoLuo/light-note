@@ -22,6 +22,7 @@ function sendInfo(params) {
   // 创建虚拟节点   第一个参数为要创建的虚拟节点  第二个参数为props的参数
   const vNode = createVNode(modal, {
     title,
+    mobilePlacement: params.mobilePlacement,
     okText,
     okType,
     cancelText,
@@ -50,6 +51,7 @@ function onCancel() {
 export default {
   alert(params: {
     title: string;
+    mobilePlacement?: 'center' | 'bottom';
     keyboard?: boolean;
     okText?: string;
     okType?: 'primary' | 'danger' | 'success' | 'function';

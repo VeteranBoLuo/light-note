@@ -23,7 +23,6 @@ const MOBILE_ROUTES = new Set([
   '/resourceGovernance',
   '/communityChatModeration',
   '/agentLog',
-  '/aiFeedback',
   '/productInsights',
   '/conversion',
   '/supportManagement',
@@ -67,7 +66,7 @@ function allItems(entries: AdminNavEntry[]) {
 }
 
 describe('后台导航菜单', () => {
-  it('覆盖全部 23 个常驻后台模块，专业诊断工具不占菜单入口', () => {
+  it('覆盖全部 21 个常驻后台模块，专业诊断工具不占菜单入口', () => {
     const ids = allItems(nav()).map((item) => item.id);
     // 后台子路由与跨外壳入口统一由一个配置维护；独立任务系列诊断只保留专业深链。
     expect(ids).toEqual(
@@ -77,7 +76,6 @@ describe('后台导航菜单', () => {
         'userMg',
         'userOpinion',
         'agentLog',
-        'aiFeedback',
         'productInsights',
         'conversion',
         'supportManagement',
@@ -96,8 +94,8 @@ describe('后台导航菜单', () => {
     expect(ids).toEqual(
       expect.arrayContaining(['knowledgeBase', 'notificationCenter', 'securityCenter', 'serverManagement']),
     );
-    expect(ids).toHaveLength(22);
-    expect(new Set(ids).size).toBe(22);
+    expect(ids).toHaveLength(21);
+    expect(new Set(ids).size).toBe(21);
     expect(ids.at(-1)).toBe('serverManagement');
   });
 

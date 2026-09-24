@@ -1,3 +1,4 @@
+import documentSummarySkill from './skills/documentSummarySkill.js';
 import helpAnswer from './skills/helpAnswer.js';
 import searchAnswer from './skills/searchAnswer.js';
 import { bookmarkSkills } from './skills/bookmarkSkills.js';
@@ -27,6 +28,7 @@ const definitions = Object.freeze([
   ...todoExtractionSkills,
   tagAnalysisSkill,
   ...scopedConversationSkills,
+  documentSummarySkill,
   routineDailyBriefSkill,
   ...toolboxSkills,
 ]);

@@ -1,3 +1,5 @@
+import { readAiInputDiagnostics } from '../aiExecution/diagnostics.js';
+import { resolvePublicAiExecutionError } from '../aiExecution/publicError.js';
 import pool from '../../db/index.js';
 import { INTERNAL_ROLES } from '../internalRoles.js';
 import {
@@ -558,7 +560,7 @@ export async function getAdminAiExecutionDetail(executionId, database = pool) {
   }
   try {
     const [executionRows] = await database.query(
-      `SELECT ${executionSelect()}
+      `SELECT ${executionSelect()}, e.input_diagnostics_json
          FROM ai_executions e
          ${ROOT_JOINS}
         WHERE e.id = ?
@@ -588,11 +590,20 @@ export async function getAdminAiExecutionDetail(executionId, database = pool) {
     const waiveUserCharge = execution.status === 'failed' && execution.chargedTokens === 0;
     return {
       execution,
+      inputDiagnostics: readAiInputDiagnostics(row.input_diagnostics_json, row.skill_id),
+      failure: execution.errorCode
+        ? {
+            code: execution.errorCode,
+            message: resolvePublicAiExecutionError({ code: execution.errorCode }, '执行未完成，请结合错误码排查')
+              .message,
+            beforeModelCall: execution.status === 'failed' && execution.providerCallCount === 0,
+          }
+        : null,
       calls: spans.map((span, index) => ({
         ...mapAiUsageProviderSpan(span, index + 1, { waiveUserCharge }),
         estimatedCost: span.estimated_cost === null ? null : safeDecimal(span.estimated_cost),
       })),
-      privacy: 'governance_metadata_only',
+      privacy: 'admin_input_allowlist',
     };
   } catch (error) {
     throw serviceError(error);

@@ -27,6 +27,7 @@ const EXPECTED_SKILLS = Object.freeze([
   ['tag.analyze', 'tag', 'read'],
   ['tag.ask', 'tag', 'read'],
   ['note.ask_directory', 'note', 'read'],
+  ['toolbox.summarize_text', 'toolbox', 'read'],
 ]);
 const EXPECTED_INTERNAL_SKILLS = Object.freeze([
   ['routine.daily_brief', 'routine', 'read'],

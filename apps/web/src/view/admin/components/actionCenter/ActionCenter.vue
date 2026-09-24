@@ -710,7 +710,6 @@
     'opinion',
     'security',
     'community_report',
-    'ai_feedback',
     'feature_request',
     'resource_governance',
   ] as const;

@@ -126,7 +126,6 @@ export function buildAdminNav({
       icon: icons.ai,
       items: [
         { id: 'agentLog', title: 'AI 运行中心' },
-        { id: 'aiFeedback', title: 'AI 回答反馈' },
         { id: 'knowledgeBase', title: 'AI 知识库', path: EXTERNAL_PATHS.knowledgeBase, external: true },
       ],
     },
@@ -221,7 +220,6 @@ const MOBILE_PATHS: Record<string, string> = {
   userMg: '/userMg',
   userOpinion: '/userOpinion',
   agentLog: '/agentLog',
-  aiFeedback: '/aiFeedback',
   productInsights: '/productInsights',
   conversion: '/conversion',
   supportManagement: '/supportManagement',

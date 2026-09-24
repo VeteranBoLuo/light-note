@@ -1,3 +1,4 @@
+import { applyUiDensity } from '@/composables/useUiDensity';
 import { createApp } from 'vue';
 import { createPinia } from 'pinia';
 import { createI18n } from 'vue-i18n';
@@ -20,6 +21,7 @@ const now = Date.now();
 const requestCounts = new Map<string, number>();
 
 document.documentElement.dataset.theme = theme;
+applyUiDensity(params.get('density'), window.innerWidth < 1200);
 document.documentElement.lang = locale;
 document.documentElement.classList.toggle('light-note-mobile-rendering', window.innerWidth <= 600);
 document.body.dataset.visualState = state;
@@ -342,6 +344,32 @@ function overviewFixture() {
 
 function detailFixture(executionId: string) {
   const execution = executionItems().find((item) => item.id === executionId) || executionItems()[0];
+  if (params.get('diagnostics') === 'bookmark')
+    return {
+      execution: {
+        ...execution,
+        labelKey: 'bookmarkParseUrl',
+        module: 'bookmark',
+        status: 'failed',
+        providerCallCount: 0,
+        chargedTokens: 0,
+        providerTokens: 0,
+        platformCoveredTokens: 0,
+      },
+      calls: [],
+      inputDiagnostics: {
+        version: 1,
+        url: 'https://example.com/articles/a-long-bookmark-recognition-example/2026/09/23?id=42',
+        urlRedacted: true,
+        pageContextProvided: false,
+      },
+      failure: {
+        code: 'BOOKMARK_PAGE_UNREADABLE',
+        message: '未能从该网页读取到可靠内容，请手动填写书签信息',
+        beforeModelCall: true,
+      },
+      privacy: 'admin_input_allowlist',
+    };
   return {
     execution,
     privacy: 'governance_metadata_only',
@@ -440,6 +468,8 @@ request.defaults.adapter = async (config) => {
     return response(config, { query: payload, items, total: items.length, hasMore: false, nextCursor: null });
   }
   if (url === '/api/admin/ai-operations/executions/detail') {
+    if (params.get('detailState') === 'loading') await new Promise(() => {});
+    if (params.get('detailState') === 'error') throw new Error('VISUAL_DETAIL_UNAVAILABLE');
     const payload = parsePayload(config.data);
     return response(config, detailFixture(String(payload.executionId || '')));
   }

@@ -61,6 +61,8 @@ pnpm preview
 
 ## Schema 与 Worker 门禁
 
+AI 管理员入参摘要启用前显式应用加法迁移 `apps/server/migrations/20260923_ai_execution_input_diagnostics.sql`，再通过 `check:schema`。历史记录不回填，应用启动不自动补字段；回滚代码可保留新增列。
+
 云文件置顶启用前需显式应用加法迁移 `apps/server/migrations/20260922_file_pin.sql`，再通过 `check:schema`；应用启动不自动建表。回滚 API 可保留新增字段与索引，文件原件和预览 Worker 不受影响。
 
 所有后端发布在目标环境重启前运行：

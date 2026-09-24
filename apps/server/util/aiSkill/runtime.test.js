@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createAiGateway } from '../agent/aiGateway.js';
 import { executeAiSkill } from './runtime.js';
 import helpAnswer from './skills/helpAnswer.js';
+import bookmarkParse from './skills/bookmarkParseSkill.js';
 
 function createExecutionPersistence() {
   return {
@@ -43,6 +44,38 @@ function resolvedContext(scopeDigest) {
 }
 
 describe('executeAiSkill', () => {
+  it('书签前置读取失败也原子保存脱敏入参，且不产生模型调用', async () => {
+    const persistence = createExecutionPersistence();
+    const callModel = vi.fn();
+    await expect(
+      executeAiSkill(
+        { ...request(), skillId: 'bookmark.parse_url', input: { url: 'https://example.com/watch?id=42&token=secret' } },
+        { user: { id: 'u-1', role: 'user' } },
+        {
+          persistence,
+          resolveSkill: () => ({
+            ...bookmarkParse,
+            prepare: async () => {
+              throw Object.assign(new Error('private error'), { code: 'BOOKMARK_PAGE_UNREADABLE' });
+            },
+          }),
+          assertDomainEnabled: vi.fn(),
+          resolveContext: async () => resolvedContext('a'.repeat(64)),
+          resolveThread: async () => null,
+          callModel,
+        },
+      ),
+    ).rejects.toMatchObject({ code: 'BOOKMARK_PAGE_UNREADABLE' });
+    expect(persistence.insertAiExecution.mock.calls[0][0].inputDiagnostics).toEqual({
+      version: 1,
+      url: 'https://example.com/watch?id=42',
+      urlRedacted: true,
+      pageContextProvided: false,
+    });
+    expect(persistence.settleAiExecution.mock.calls[0][0]).toMatchObject({ status: 'failed', providerCallCount: 0 });
+    expect(callModel).not.toHaveBeenCalled();
+  });
+
   it('帮助无命中仍调用模型，保留空来源且不返回误导告警或无效按钮', async () => {
     const callModel = vi.fn().mockResolvedValue({ kind: 'grounded_markdown', content: '你好！想了解轻笺的什么功能？' });
     const result = await executeAiSkill(

@@ -5,6 +5,17 @@
     :style="{ marginLeft: 'auto', gap: bookmark.isMobile ? '15px' : 'var(--ui-space-5, 5px)' }"
   >
     <GlobalSearch />
+    <BTooltip v-if="!bookmark.isMobile" :title="t('navigation.toolbox')">
+      <BButton
+        class="workshop-entry-btn"
+        :class="{ 'is-active': isWorkshopActive }"
+        :aria-label="t('navigation.toolbox')"
+        :aria-current="isWorkshopActive ? 'page' : undefined"
+        @click="knowledgeWorkshopClick"
+      >
+        <SvgIcon size="26" :src="icon.toolbox.home" />
+      </BButton>
+    </BTooltip>
     <BTooltip v-if="showQuickCapture" :title="$t('inbox.quickCapture')">
       <BButton
         class="quick-capture-btn"
@@ -92,15 +103,11 @@
   const showQuickCapture = computed(() => !bookmark.isMobile && Boolean(user.id) && user.role !== 'visitor');
   const showMobileHomeExtra = computed(() => bookmark.isMobile && isMobileHomeRoute(route.name, user.preferences));
   const showGuestRegister = computed(() => !user.adminContext && !user.visitorWorkspace && user.role === 'visitor');
+  const isWorkshopActive = computed(() => route.path === '/toolbox' || route.path.startsWith('/toolbox/'));
   const moreMenuOptions = computed(() => [
     ...(user.role === 'visitor'
       ? [{ label: t('navigation.coBuild'), icon: icon.support.heart, function: coBuildClick }]
       : []),
-    {
-      label: t('navigation.toolbox'),
-      icon: icon.toolbox.home,
-      function: knowledgeWorkshopClick,
-    },
     { label: t('home.officialSite'), icon: icon.userCenter.home, function: officialSiteClick },
     { label: t('navigation.projectAddress'), icon: icon.github, function: githubClick },
   ]);
@@ -116,7 +123,7 @@
 
   function knowledgeWorkshopClick() {
     void router.push('/toolbox');
-    recordOperation({ module: '导航栏', operation: '从更多入口打开知识工坊' });
+    recordOperation({ module: '导航栏', operation: '从顶栏打开知识工坊' });
   }
 
   function officialSiteClick() {
@@ -211,7 +218,8 @@
     cursor: pointer;
     flex: 0 0 auto;
   }
-  .more-menu-trigger {
+  .more-menu-trigger,
+  .workshop-entry-btn {
     position: relative;
     width: var(--ui-control-36, 36px);
     height: var(--ui-control-36, 36px);
@@ -224,6 +232,9 @@
     background: transparent;
     cursor: pointer;
   }
+  .workshop-entry-btn.is-active {
+    color: var(--primary-color);
+  }
   .quick-capture-btn {
     position: relative;
     flex: 0 0 auto;
@@ -232,18 +243,22 @@
     padding: 0;
     border-radius: 9px;
     line-height: 1;
-    color: var(--primary-color, #615ced);
+    color: var(--text-color);
     background: transparent;
     transition:
       color 0.2s ease,
       background-color 0.2s ease;
 
-    &.is-open {
+    &.is-open,
+    &:focus-visible,
+    &:active {
+      color: var(--primary-color, #615ced);
       background: color-mix(in srgb, var(--primary-color, #615ced) 10%, var(--background-color));
     }
 
     @media (hover: hover) and (pointer: fine) {
       &:hover {
+        color: var(--primary-color, #615ced);
         background: color-mix(in srgb, var(--primary-color, #615ced) 10%, var(--background-color));
       }
     }

@@ -1,3 +1,5 @@
+import { workshopPresentationEn } from './workshopPresentation';
+import { collectionFormsEn } from './collectionForms';
 import { dataExportEn } from './dataExport';
 import { communityEn } from './community';
 import { coreUsageReportEn } from './coreUsageReport';
@@ -11,6 +13,7 @@ import { accountSettingsEn } from './accountSettings';
 import { settingsRefineEn } from './settingsRefine';
 import { notificationMessages } from '@lightnote/shared/notification-presentation';
 export default {
+  collectionForms: collectionFormsEn,
   dataExport: dataExportEn,
   community: communityEn,
   coreUsageReport: coreUsageReportEn,
@@ -462,13 +465,44 @@ export default {
     reviewVisible: 'Showing {count} handled resources',
     skippedExplanation: 'No check was performed in this run; this does not mean the resource passed.',
     reviewFilter: 'Filter handled results',
-    reviewFilters: { all: 'All handled', applied: 'Applied', ignored: 'Ignored', mixed: 'Applied and ignored', closed: 'Closed' },
+    reviewFilters: {
+      all: 'All handled',
+      applied: 'Applied',
+      ignored: 'Ignored',
+      mixed: 'Applied and ignored',
+      closed: 'Closed',
+    },
     stateUnknown: 'Status unconfirmed',
     workDetail: '{kind} · {state}',
-    workKinds: { prepare: 'Resource check', analysis: 'Content analysis', duplicate: 'Duplicate check', compare: 'Duplicate check', archive: 'Page archive', tag_icon: 'Icon matching', tags: 'Tag analysis', title: 'Title analysis', empty: 'Empty content check' },
-    workStates: { queued: 'Queued', waiting: 'Waiting for content', running: 'Processing', paused: 'Paused', failed: 'Failed', conflict: 'Resource changed', cancelled: 'Cancelled', partial: 'Partially completed', unfinished: 'Unfinished' },
+    workKinds: {
+      prepare: 'Resource check',
+      analysis: 'Content analysis',
+      duplicate: 'Duplicate check',
+      compare: 'Duplicate check',
+      archive: 'Page archive',
+      tag_icon: 'Icon matching',
+      tags: 'Tag analysis',
+      title: 'Title analysis',
+      empty: 'Empty content check',
+    },
+    workStates: {
+      queued: 'Queued',
+      waiting: 'Waiting for content',
+      running: 'Processing',
+      paused: 'Paused',
+      failed: 'Failed',
+      conflict: 'Resource changed',
+      cancelled: 'Cancelled',
+      partial: 'Partially completed',
+      unfinished: 'Unfinished',
+    },
     dispositions: { applied: 'Applied', ignored: 'Ignored', mixed: 'Handled', closed: 'Handled' },
-    partialDispositions: { applied: 'Some suggestions applied', ignored: 'Some suggestions ignored', mixed: 'Some suggestions handled', closed: 'Some suggestions handled' },
+    partialDispositions: {
+      applied: 'Some suggestions applied',
+      ignored: 'Some suggestions ignored',
+      mixed: 'Some suggestions handled',
+      closed: 'Some suggestions handled',
+    },
     resourceUnfinished: 'Unfinished',
     resourceProcessing: 'Processing',
     filteredClear: 'No issues found for this check',
@@ -1594,6 +1628,7 @@ export default {
     },
   },
   toolbox: {
+    presentation: workshopPresentationEn,
     retired: 'This tool has been retired. Existing resources are retained.',
     error: {
       ocrBusy: 'An OCR task is already active. Finish or cancel it first.',
@@ -1609,6 +1644,7 @@ export default {
       aiQuotaExhausted: 'Your AI quota is used up. Switch to points, add permanent quota, or wait for the daily reset.',
       aiQuotaTaskInsufficient:
         'You still have AI quota, but not enough for this task. Reduce the material scope, switch to points, or add quota.',
+      executionUnavailable: 'The server could not create the AI execution record. The task cannot continue. Contact an administrator to check the service configuration.',
       temporarilyUnavailable: 'The service is temporarily busy. Your current content remains available.',
       invalidInput: 'This input is no longer valid. Review it and submit again.',
       documentUnavailable: 'The file cannot be read. Check its format, size, or parsing status.',
@@ -1807,6 +1843,12 @@ export default {
       toolCategoryLabel: 'Tool capability groups',
     },
     project: {
+      directory: 'On this page',
+      projectOverview: 'Project overview',
+      addShort: 'Add',
+      resourceTitle: 'Title',
+      resourceType: 'Type',
+      resourceActions: 'Actions',
       delete: 'Delete project',
       deleteNamed: 'Delete project “{title}”',
       deleteConfirm:
@@ -1861,7 +1903,7 @@ export default {
       loading: 'Loading projects…',
       failed: 'Projects are temporarily unavailable',
       createThenJoin: 'Create and add',
-      loaded: 'Add {count} loaded items',
+      loaded: 'Add first {count} items',
       matches: '{total} matches · {count} loaded',
     },
     homeGroup: {
@@ -1927,6 +1969,7 @@ export default {
       text: 'Text & data',
     },
     tool: {
+      forms: { name: 'Public collection', description: 'Share standalone forms to collect feedback, questions and ideas, with private submissions and statistics.', output: 'Forms, submissions and charts' },
       research_workspace: {
         name: 'Research project',
         description: 'Keep sources, findings, next steps, and progress history around a question over time.',
@@ -2443,14 +2486,14 @@ export default {
       stepRun: 'Start processing',
       sourceStep: '01 · Choose sources',
       promptStep: '01 · Capture the idea',
-      designStep: '02 · Design result',
+      designStep: '02 · Set up the result',
       confirmStep: '03 · Confirm points',
-      sourceSectionTitle: 'Which sources should be used?',
+      sourceSectionTitle: 'Choose notes, bookmarks, or files',
       sourceSectionDescription:
         'Choose only the Light Note material needed for this run. Source links stay verifiable.',
       promptSectionTitle: 'What do you want to create?',
       promptSectionDescription: 'A topic, opinion, or goal is enough. You do not need to prepare sources first.',
-      intentTitle: 'What kind of job is this?',
+      intentTitle: 'What should AI focus on?',
       intentDescription: 'Choose a working mode to shape the result, then add any specific requirements below.',
       promptIntentDescription:
         'Choose the kind of draft you need to shape its voice and structure, then add the audience, focus, or format below.',
@@ -2487,9 +2530,9 @@ export default {
       selectedResources: 'Selected sources',
       addResources: 'Add sources',
       resourceSearchPlaceholder: 'Search notes, bookmarks, or files',
-      selectHint: 'Select continuously, add all visible results, or include a parent note with every descendant',
+      selectHint: 'Select sources below to get started. You can also add a batch or a note with all its child notes.',
       backToResourceTop: 'Back to source top',
-      selectionCount: '{count}/{max} selected',
+      selectionCount: '{count} selected · Maximum {max}',
       remove: 'Remove {title}',
       clearSelected: 'Clear',
       typeFilter: 'Source type',
@@ -2509,7 +2552,7 @@ export default {
       resourceSearchFailed: 'Materials could not be loaded. Try again.',
       requestLabel: 'Processing request',
       requestHint: 'Put the question, audience, priorities, decision criteria, and output format in this one field.',
-      requestPlaceholder: '{primary}; you can also add: {secondary}',
+      requestPlaceholder: '{primary}\n{secondary}',
       questionLabel: 'Question to answer',
       questionPlaceholder: 'For example: What should I understand, compare, or turn into action?',
       instructionLabel: 'Additional guidance (optional)',
@@ -2581,61 +2624,65 @@ export default {
           },
         },
         material_to_note: {
-          designTitle: 'Choose how this note should be organized',
-          designDescription: 'Best for turning scattered saves into one topic note you can keep editing and using.',
-          questionLabel: 'Note topic or organizing focus',
-          questionPlaceholder: 'For example: create a note on configuring and renewing free SSL certificates',
+          generateLabel: 'Generate note',
+          designTitle: 'Turn sources into one note',
+          designDescription:
+            'AI summarizes the selected sources into an editable note, keeping differences and missing information visible.',
+          questionLabel: 'What should the note cover?',
+          questionPlaceholder: 'For example: turn these reading notes into a note on time management',
           instructionLabel: 'Content to preserve',
-          instructionPlaceholder:
-            'For example: keep commands, version differences, and pitfalls; remove repeated introductions',
+          instructionPlaceholder: 'Keep practical methods and examples, and remove repeated content',
           intents: {
             synthesize: {
-              label: 'Synthesize',
+              label: 'Summarize key points',
               description: 'Group conclusions and evidence by theme',
               instruction:
                 'Synthesize the material by theme, merge repetition, and preserve evidence, disagreements, and unknowns.',
             },
             outline: {
-              label: 'Build an outline',
-              description: 'Create a clear chapter structure first',
+              label: 'Organize by outline',
+              description: 'Create chapters and place content in each',
               instruction:
                 'Build a clear hierarchical outline first, then place source material into the appropriate sections.',
             },
             merge: {
-              label: 'Merge drafts',
+              label: 'Merge and deduplicate',
               description: 'Deduplicate while preserving version differences',
               instruction:
                 'Merge similar sources, remove repeated wording, and clearly mark conflicts or version differences.',
             },
           },
           outcomes: {
-            structure: 'Well-structured Markdown content',
+            structure: 'Note content with headings and sections',
             evidence: 'Key conclusions with source evidence',
             openQuestions: 'Conflicts, omissions, and open questions',
           },
         },
         research_brief: {
-          designTitle: 'Define the question this brief must answer',
-          designDescription: 'Best for quickly creating verifiable decision material around a focused question.',
-          questionLabel: 'Core research question',
-          questionPlaceholder: 'For example: which self-hosted knowledge base best fits a small team?',
+          generateLabel: 'Generate brief',
+          designTitle: 'Find conclusions and supporting evidence',
+          designDescription:
+            'AI uses your selected sources to answer your question, with evidence and uncertainties. It does not check the web.',
+          questionLabel: 'What do you want to find out?',
+          questionPlaceholder:
+            'For example: which study method in these sources works best for someone with a full-time job?',
           instructionLabel: 'Audience and decision criteria',
-          instructionPlaceholder: 'For example: for a tech lead; focus on cost, deployment effort, and data control',
+          instructionPlaceholder: 'Compare daily time needed, suitable situations, and drawbacks',
           intents: {
             decision: {
-              label: 'Support a decision',
+              label: 'Help me choose',
               description: 'Show conclusions, evidence, and limits',
               instruction:
                 'Organize conclusions around the decision, with supporting evidence, counterexamples, limits, and items to verify.',
             },
             landscape: {
-              label: 'Map the landscape',
+              label: 'Get an overview',
               description: 'Show the big picture and major branches',
               instruction:
                 'Start with the overall landscape, then map major viewpoints, participants, branches, and coverage limits.',
             },
             verify: {
-              label: 'Verify claims',
+              label: 'Compare claims',
               description: 'Separate agreement, conflict, and evidence gaps',
               instruction:
                 'Verify key claims in the sources, separating supporting evidence, conflicting evidence, and unresolved items.',
@@ -2648,29 +2695,30 @@ export default {
           },
         },
         study_kit: {
-          designTitle: 'Choose how you want to learn',
-          designDescription: 'Turn sources into a set for understanding, memorizing, and testing yourself.',
-          questionLabel: 'Learning objective',
-          questionPlaceholder: 'For example: understand the OAuth 2.0 flow and explain common grant types',
+          generateLabel: 'Create study kit',
+          designTitle: 'Turn sources into study materials and a quiz',
+          designDescription:
+            'AI creates a knowledge outline, explanations, flashcards, and a quiz with answers. Every option includes all of these; only the emphasis changes.',
+          questionLabel: 'What do you want to learn?',
+          questionPlaceholder: 'For example: understand the basics in these sources and prepare for an exam',
           instructionLabel: 'Current background or weak spots',
-          instructionPlaceholder:
-            'For example: comfortable with web development but unfamiliar with PKCE and refresh tokens',
+          instructionPlaceholder: 'I am a beginner. Use simple explanations and more examples',
           intents: {
             understand: {
-              label: 'Build understanding',
-              description: 'Create the framework before details',
+              label: 'Understand the basics',
+              description: 'Focus on concepts, connections, and common mistakes',
               instruction:
                 'Prioritize understanding: start with a knowledge framework, then explain core concepts, relations, and common confusions.',
             },
             memorize: {
               label: 'Memorize essentials',
-              description: 'Create high-density flashcards',
+              description: 'Focus on question-and-answer flashcards',
               instruction:
                 'Prioritize retention by extracting key definitions, distinctions, conditions, and high-quality flashcards.',
             },
             practice: {
               label: 'Practice and test',
-              description: 'Check comprehension and application',
+              description: 'Focus on practice questions with answers',
               instruction:
                 'Prioritize self-testing with increasingly difficult comprehension and application questions; keep answers separate.',
             },
@@ -2994,6 +3042,24 @@ export default {
       exporting: 'Generating',
       exportPng: 'Export PNG',
       exportFailed: 'Could not generate the image. Try again.',
+    },
+    documentSummary: {
+      sourceHint: 'Generated from the text extracted from this PDF',
+      retained: 'Added to Tasks & Results · View',
+      copy: 'Copy',
+      back: 'Back',
+      title: 'AI summary',
+      generate: 'AI summary',
+      view: 'View summary',
+      generating: 'Summarizing…',
+      privacy: 'Only extracted text is sent to AI. The PDF stays on this device.',
+      regenerate: 'Regenerate',
+      retry: 'Retry',
+      empty: 'No text to summarize. Extract text first.',
+      tooLong: 'The extracted text exceeds {count} characters. Split the PDF and summarize each part.',
+      failed: 'Summary failed. Please try again.',
+      saveFailed: 'Could not save the note. Please retry.',
+      noteTitle: '{name} · Summary',
     },
     documentText: {
       emptyTitle: {
@@ -3553,7 +3619,7 @@ export default {
       retry: 'Reload',
       retryingTitle: 'Retrying',
       finalFailureMessage:
-        'The task still could not finish after multiple attempts. Billing for work without a usable result was released.',
+        'This task could not be completed. Billing for work without a usable result was released.',
       processingFailed: 'This run did not finish. Billing for work without a usable result will be released.',
       progress: 'Progress',
       progressTruthfulHint:
@@ -4824,78 +4890,7 @@ export default {
       time: 'Time',
     },
   },
-  aiFeedback: {
-    title: 'AI answer feedback',
-    subtitle: 'Review retained feedback and move each issue through investigation, improvement, and closure.',
-    toolbarHint: 'Search questions, answers, users, reasons, and comments. Cleared conversations have no text copy.',
-    searchPlaceholder: 'Search questions, answers, users, or feedback',
-    hideInternal: 'Hide internal accounts',
-    metrics: {
-      total: 'Total feedback',
-      totalHint: 'Within the current filters',
-      helpful: 'Likes',
-      helpfulHint: '{rate}% helpful',
-      unhelpful: 'Dislikes',
-      unhelpfulHint: 'Answers needing improvement',
-      pending: 'Open dislikes',
-    },
-    filters: { allRatings: 'All ratings', allStatus: 'All user states', allTriageStatus: 'All triage states' },
-    rating: { helpful: 'Like', unhelpful: 'Dislike' },
-    status: { pending: 'Open', resolved: 'Resolved' },
-    userStatus: { pending: 'Not resolved by user', resolved: 'Resolved by user' },
-    columns: {
-      rating: 'Rating',
-      question: 'Question',
-      answer: 'Answer',
-      reason: 'Reason',
-      user: 'User',
-      status: 'Status',
-      time: 'Time',
-    },
-    detailTitle: 'Answer feedback details',
-    detail: {
-      user: 'User: {user}',
-      request: 'Request: {id}',
-      reason: 'Reason',
-      comment: 'Comment',
-      question: 'Question',
-      answer: 'Answer',
-    },
-    actions: {
-      openAgentLog: 'Open AI operations record',
-      openApiLog: 'Open API request',
-    },
-    triage: {
-      title: 'Admin triage loop',
-      hint: 'This state is separate from the user’s “resolved” flag and tracks operational follow-through only.',
-      status: 'Triage status',
-      priority: 'Priority',
-      note: 'Triage note',
-      notePlaceholder:
-        'Record reproduction, cause, fix, or dismissal basis. Never include passwords, tokens, or unrelated user text.',
-      noteRequired: 'Add a triage note of at least 6 characters before closing or dismissing feedback',
-      save: 'Save triage status',
-      saved: 'Feedback triage status saved',
-      saveFailed: 'Could not save feedback triage status',
-      updatedAt: 'Last updated: {time}',
-      statuses: { open: 'Open', investigating: 'Investigating', actioned: 'Actioned', dismissed: 'Dismissed' },
-      priorities: { low: 'Low', normal: 'Normal', high: 'High', urgent: 'Urgent' },
-    },
-    reasons: {
-      incorrect: 'Incorrect',
-      unsupported: 'Unsupported',
-      outdated: 'Outdated',
-      irrelevant: 'Irrelevant',
-      unsafe_action: 'Unsafe action',
-      hard_to_use: 'Hard to use',
-      other: 'Other',
-    },
-    topReason: 'Top reason: {reason} · {count}',
-    noUnhelpful: 'No dislike reasons yet',
-    noReason: '—',
-    unknownUser: 'Unknown user',
-    questionUnavailable: 'Original question unavailable',
-  },
+
   inbox: {
     pendingFilter: 'Only pending',
     pendingFilterEmpty: 'No pending items match these filters',
@@ -9039,8 +9034,29 @@ export default {
           usageMissing:
             'The provider omitted usage. The conservative pre-call budget was {n} tokens; final charging follows the execution total.',
           noCalls: 'No model call records are available for this execution yet.',
+          inputsTitle: 'Diagnostic inputs',
+          copyInputs: 'Copy inputs',
+          inputsUnavailable:
+            'No input snapshot is available. Older records were not collected; some capabilities do not retain inputs.',
+          urlRedacted:
+            'Credentials, fragments and query parameters outside the allowlist were removed. Reproduction may require restoring parameters manually.',
+          beforeModelCall: 'This execution failed before a model call, so there are no model call records.',
+          adminPrivacy:
+            'Only administrators can view allowlisted input summaries. Body text, images, full prompts and model responses are not stored.',
+          yes: 'Yes',
+          no: 'No',
+          copied: 'Inputs copied',
+          copyFailed: 'Copy failed. Select and copy the text manually.',
+          inputFields: {
+            url: 'Recognition URL',
+            pageContextProvided: 'Page context provided',
+            operation: 'Operation',
+            detailLevel: 'Detail level',
+            targetLength: 'Target length',
+            resourceTypes: 'Resource types',
+          },
           privacy:
-            'Details retain only stage, model, status, and usage—not prompts, content, titles, URLs, images, or model responses.',
+            'This view shows only stage, model, status, and usage. Prompts, content, titles, URLs, images, and model responses are not displayed.',
           providerUnknown: 'Model information not recorded',
           stages: {
             image_recognition: 'Image text recognition',
@@ -9118,6 +9134,7 @@ export default {
           noteBatchSummarize: 'Summarize notes',
           noteBatchCompare: 'Compare notes',
           noteCreateFromSources: 'Create note draft from sources',
+          toolboxSummarizeText: 'Knowledge Workshop · PDF text summary',
           noteTransformText: 'Polish, rewrite, or translate note text',
           bookmarkSummarizePage: 'Summarize webpage',
           bookmarkComparePages: 'Compare webpages',

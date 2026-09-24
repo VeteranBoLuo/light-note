@@ -2637,7 +2637,6 @@
       key: 'templates',
       label: t('note.templateManager.title'),
       icon: icon.noteDetail.template,
-      dividerBefore: true,
     },
     {
       key: 'batch',

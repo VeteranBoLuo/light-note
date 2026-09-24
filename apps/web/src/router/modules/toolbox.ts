@@ -15,6 +15,12 @@ const homeMeta = {
 
 const toolboxRouter: RouteRecordRaw[] = [
   {
+    path: '/toolbox/forms/:formId?',
+    name: 'collectionForms',
+    meta: { ...commonMeta, title: '公开收集' },
+    component: () => import('@/view/toolbox/forms/FormsWorkspace.vue'),
+  },
+  {
     path: '/toolbox',
     name: 'toolboxHome',
     meta: { ...homeMeta, title: '知识工坊' },

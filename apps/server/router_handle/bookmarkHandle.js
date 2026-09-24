@@ -426,6 +426,7 @@ export const delTag = async (req, res) => {
       id = req.body.id;
     await connection.query('SELECT id FROM tag WHERE id = ? AND user_id = ? FOR UPDATE', [id, userId]);
     await connection.query('DELETE FROM todo_tag_relations WHERE tag_id = ? AND user_id = ?', [id, userId]);
+    await connection.query('DELETE FROM collection_form_tags WHERE tag_id = ? AND user_id = ?', [id, userId]);
     const [result] = await connection.query('DELETE FROM tag WHERE id = ? AND user_id = ?', [id, userId]);
     await connection.commit();
     res.send(resultData(result));

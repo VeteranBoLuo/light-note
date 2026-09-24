@@ -111,7 +111,7 @@ const adminRouter: RouteRecordRaw[] = [
       },
       {
         path: 'aiFeedback',
-        component: () => import('@/view/admin/components/aiFeedback/AiFeedback.vue'),
+        redirect: '/admin/agentLog',
       },
       {
         path: 'productInsights',
@@ -206,7 +206,7 @@ const adminRouter: RouteRecordRaw[] = [
   {
     path: 'aiFeedback',
     meta: MOBILE_ADMIN_META,
-    component: () => import('@/view/admin/components/aiFeedback/AiFeedback.vue'),
+    redirect: '/agentLog',
   },
   {
     path: 'productInsights',

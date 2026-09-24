@@ -165,6 +165,7 @@
   );
   const isAndroidApp = isLightNoteAndroidApp();
   const publicStandaloneRoute = computed(() => router.currentRoute.value.meta.publicStandalone === true);
+  const publicCollectionRoute = computed(() => router.currentRoute.value.name === 'publicCollectionForm');
   // 已安装的 2026-08 灰度壳不会随 Web 更新自动删除旧通知。新页面启动时只做迁移清理，
   // 不再建立通知 WebSocket、轮询未读或发送新的系统通知；DownloadManager 通知不走此桥。
   if (isAndroidApp) {
@@ -200,12 +201,14 @@
     () => {
       resetBookmarkIconRefreshRequests();
       resetBookmarkIconRuntime();
-      useGrowth().load(true);
+      if (!publicCollectionRoute.value) useGrowth().load(true);
     },
   );
 
   // 用户切换页面时节流刷新成长:升级为后端异步事件,让右上角头像红点在正常使用中较快出现,不必主动点头像
-  const throttledGrowthRefresh = throttle(() => useGrowth().load(true), 30000);
+  const throttledGrowthRefresh = throttle(() => {
+    if (!publicCollectionRoute.value) useGrowth().load(true);
+  }, 30000);
   watch(
     () => router.currentRoute.value.fullPath,
     () => throttledGrowthRefresh(),
@@ -229,7 +232,7 @@
   useCommunityChatUnreadRuntime({
     userId: computed(() => user.id),
     userRole: computed(() => user.role),
-    realtimeActive: computed(() => !communityChatWorkspaceActive.value),
+    realtimeActive: computed(() => !publicCollectionRoute.value && !communityChatWorkspaceActive.value),
     previewContextId: computed(() => user.adminContext?.id || ''),
   });
   watch(
@@ -459,31 +462,33 @@
     applyTheme();
     applyDensityForRoute(); // 启动即应用密度；公开独立页面保持标准
     // 请求拦截器会在首个 API 前同步生成；这里复用同一结果，避免子组件先发请求时出现空指纹。
-    window['fingerprint'] = getLogFingerprint();
+    if (!publicCollectionRoute.value && !location.pathname.startsWith('/f/')) {
+      window['fingerprint'] = getLogFingerprint();
 
-    // 游客访问量埋点:fingerprint 就绪后再上报,每浏览器会话一次(后端只对游客落库,已登录不计)
-    try {
-      if (!sessionStorage.getItem('ln_pv_sent')) {
-        sessionStorage.setItem('ln_pv_sent', '1');
-        // page_view 的 source 只记规范页面名,不存完整 pathname(/share/:id 等含 ID/PII)
-        const pvPage =
-          location.pathname === '/' || location.pathname === '/landing'
-            ? 'landing'
-            : location.pathname === '/browser-extension'
-              ? 'browser_extension'
-              : location.pathname.startsWith('/share')
-                ? 'share'
-                : location.pathname === '/home'
-                  ? 'home'
-                  : 'app';
-        apiBasePost(
-          '/api/common/recordConversion',
-          { event: 'page_view', source: pvPage },
-          { silent: true, feedback: false },
-        ).catch(() => {});
+      // 游客访问量埋点:fingerprint 就绪后再上报,每浏览器会话一次(后端只对游客落库,已登录不计)
+      try {
+        if (!sessionStorage.getItem('ln_pv_sent')) {
+          sessionStorage.setItem('ln_pv_sent', '1');
+          // page_view 的 source 只记规范页面名,不存完整 pathname(/share/:id 等含 ID/PII)
+          const pvPage =
+            location.pathname === '/' || location.pathname === '/landing'
+              ? 'landing'
+              : location.pathname === '/browser-extension'
+                ? 'browser_extension'
+                : location.pathname.startsWith('/share')
+                  ? 'share'
+                  : location.pathname === '/home'
+                    ? 'home'
+                    : 'app';
+          apiBasePost(
+            '/api/common/recordConversion',
+            { event: 'page_view', source: pvPage },
+            { silent: true, feedback: false },
+          ).catch(() => {});
+        }
+      } catch (e) {
+        /* 隐私模式 sessionStorage 不可用时忽略 */
       }
-    } catch (e) {
-      /* 隐私模式 sessionStorage 不可用时忽略 */
     }
 
     // 通过 onSystemThemeChange 而不是直接监听媒体查询：App 内 prefers-color-scheme 不可信，
@@ -936,6 +941,11 @@
 
   // 路由发生变化触发
   router.beforeEach(async (to, from, next) => {
+    if (to.meta.publicStandalone === true) {
+      bookmark.isShowLogin = false;
+      next();
+      return;
+    }
     let authResolved = true;
     if (from.name === 'githubCallBack') {
       authResolved = await getUserInfo(true);
@@ -1051,7 +1061,7 @@
       console.warn('Android 首屏就绪通知失败:', error);
     }
     // 根路径是纯官网展示页，不应该出现任何账号相关的通知/弹窗。
-    if (router.currentRoute.value.name === 'landing') return;
+    if (router.currentRoute.value.name === 'landing' || publicCollectionRoute.value) return;
     startOpinionNoticePolling();
   });
 

@@ -738,6 +738,19 @@ describe('toolbox service boundaries', () => {
     expect(database.query.mock.calls[0][1]).toEqual(['user-1']);
   });
 
+  it.each(['AI_EXECUTION_STORE_UNAVAILABLE', 'AI_EXECUTION_SCHEMA_UNAVAILABLE'])(
+    'explains execution failure %s',
+    (code) => {
+      expect(
+        toolboxServiceInternals.formatJobError({
+          status: 'failed',
+          error_code: code,
+          error_message: '工具任务遇到临时问题',
+        }),
+      ).toEqual({ code, message: '服务端无法建立 AI 执行记录，任务无法继续。请联系管理员检查服务配置。' });
+    },
+  );
+
   it('distinguishes an active automatic retry from a terminal failure in public task messages', () => {
     expect(
       toolboxServiceInternals.formatJobError({
@@ -759,7 +772,7 @@ describe('toolbox service boundaries', () => {
       }),
     ).toEqual({
       code: 'AI_EXECUTION_REQUEST_DUPLICATED',
-      message: '多次尝试后仍未完成，预占积分已退回；请稍后重新发起。',
+      message: '本次任务未能完成，预占积分已退回；请稍后重新发起。',
     });
     expect(
       toolboxServiceInternals.formatJobError({
@@ -771,7 +784,7 @@ describe('toolbox service boundaries', () => {
       }),
     ).toEqual({
       code: 'AI_QUOTA_EXCEEDED',
-      message: '多次尝试后仍未完成，未产生可用成果的 AI 额度已按规则释放；请稍后重新发起。',
+      message: '本次任务未能完成，未产生可用成果的 AI 额度已按规则释放；请稍后重新发起。',
     });
     expect(
       toolboxServiceInternals.formatJobError({
@@ -893,12 +906,15 @@ describe('toolbox service boundaries', () => {
     expect(toolboxServiceInternals.saveIdempotencyKey({ ...input, artifactId: 'artifact-2' })).not.toBe(first);
   });
 
-  it('removes numeric source markers from the saved note while keeping the artifact immutable', async () => {
+  it.each([
+    ['research_brief', 'research_brief'],
+    ['pdf_text_extractor', 'document_summary'],
+  ])('saves %s artifacts through the shared receipt without mutating the artifact', async (toolId, artifactType) => {
     const artifactRow = {
       id: 'artifact-1',
       job_id: 'job-1',
-      tool_id: 'research_brief',
-      artifact_type: 'research_brief',
+      tool_id: toolId,
+      artifact_type: artifactType,
       artifact_version: 1,
       title: '研究速读包',
       content: '# 结论\n\n主要结论 [1]，补充结论 [2]。\n\n`rows[1]` 保持不变。',

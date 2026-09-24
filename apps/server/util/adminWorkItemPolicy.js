@@ -19,12 +19,6 @@ const ADMIN_WORK_ITEM_POLICIES = Object.freeze({
     defaultMinutes: 8 * 60,
     severityMinutes: { critical: 2 * 60, high: 8 * 60, normal: 24 * 60 },
   },
-  ai_feedback: {
-    section: 'work',
-    ownerTeam: 'AI 产品运营',
-    defaultMinutes: 72 * 60,
-    severityMinutes: { critical: 8 * 60, high: 24 * 60, normal: 72 * 60 },
-  },
   feature_request: {
     section: 'work',
     ownerTeam: '产品共建',

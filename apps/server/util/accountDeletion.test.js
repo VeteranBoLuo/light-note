@@ -361,6 +361,14 @@ describe('账号注销后台清理', () => {
     expect(versionSql).toContain('CONVERT(note_id USING utf8mb4) COLLATE utf8mb4_unicode_ci');
   });
 
+  it('注销时删除本账号公开表单以触发回答级联清理', async () => {
+    const connection = createConnection(async () => [{ affectedRows: 1 }]);
+    await purgeOwnedResources(connection, new Set(['collection_forms']), 'user-1');
+    expect(connection.query).toHaveBeenCalledExactlyOnceWith('DELETE FROM collection_forms WHERE user_id = ?', [
+      'user-1',
+    ]);
+  });
+
   it('先删除每日回顾条目再删除会话，且随后清理共享回顾抑制状态', async () => {
     const connection = createConnection(async () => [{ affectedRows: 1 }]);
     const tables = new Set(['daily_content_review_items', 'daily_content_review_sessions', 'growth_recap_state']);
@@ -435,7 +443,9 @@ describe('账号注销后台清理', () => {
     const result = await processAccountDeletionRequest(requestId);
 
     expect(result).toEqual({ claimed: true, completed: true });
-    expect(connection.query).toHaveBeenCalledWith('DELETE FROM resource_reuse_milestones WHERE user_id = ?', ['user-1']);
+    expect(connection.query).toHaveBeenCalledWith('DELETE FROM resource_reuse_milestones WHERE user_id = ?', [
+      'user-1',
+    ]);
     expect(deleteObjectFromObs).toHaveBeenCalledWith('files/user-1/a.png');
     expect(cleanupOrphanNoteImages).toHaveBeenCalledWith(['https://boluo66.top/uploads/note-a.png'], { strict: true });
     expect(cleanupBookmarkIconFiles).toHaveBeenCalledWith([
@@ -625,4 +635,7 @@ describe('账号注销后台清理', () => {
   });
 });
 
-vi.mock('./imagePreview/cleanup.js', () => ({ deferCloudImageDeletion: vi.fn(), deleteUnmanagedObject: (...args) => deleteObjectFromObs(...args) }));
+vi.mock('./imagePreview/cleanup.js', () => ({
+  deferCloudImageDeletion: vi.fn(),
+  deleteUnmanagedObject: (...args) => deleteObjectFromObs(...args),
+}));

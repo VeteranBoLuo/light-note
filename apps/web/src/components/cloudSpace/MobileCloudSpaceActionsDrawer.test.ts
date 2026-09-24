@@ -72,8 +72,8 @@ function mountDrawer(props: Record<string, unknown> = {}) {
     locale: 'zh-CN',
     messages: {
       'zh-CN': {
-        common: { back: '返回', close: '关闭', cancel: '取消', delete: '删除' },
-        navigation: { resourceCenter: '资源中心' },
+        common: { back: '返回', close: '关闭', cancel: '取消', delete: '删除', batchActions: '批量操作' },
+        navigation: { resourceCenter: '资源中心', toolbox: '知识工坊' },
         organize: { title: '资源整理' },
         cloudSpace: {
           mobileActionsTitle: '云空间操作',
@@ -126,6 +126,13 @@ afterEach(() => {
   cleanup = undefined;
 });
 
+function pageAction(host: HTMLElement, label: string): HTMLButtonElement {
+  const button = [...host.querySelectorAll<HTMLButtonElement>('.mobile-page-actions__item')]
+    .find((item) => item.querySelector('strong')?.textContent === label);
+  if (!button) throw new Error(`Missing action: ${label}`);
+  return button;
+}
+
 describe('MobileCloudSpaceActionsDrawer', () => {
   it.each([true, false])('标签菜单按写权限显示，交接目标文件夹：%s', async (canManageTags) => {
     const onManageFolderTags = vi.fn();
@@ -135,7 +142,7 @@ describe('MobileCloudSpaceActionsDrawer', () => {
       onManageFolderTags,
     });
     await nextTick();
-    host.querySelectorAll<HTMLButtonElement>('.mobile-page-actions__item')[2].click();
+    pageAction(host, '文件夹管理').click();
     await nextTick();
     host.querySelector<HTMLButtonElement>('.mobile-folder-manager__action')!.click();
     await nextTick();
@@ -156,12 +163,14 @@ describe('MobileCloudSpaceActionsDrawer', () => {
 
     expect(host.querySelector('.drawer-stub')?.getAttribute('data-title')).toBe('云空间操作');
     const actions = host.querySelectorAll<HTMLButtonElement>('.mobile-page-actions__item');
-    expect(actions).toHaveLength(5);
+    expect(actions).toHaveLength(6);
+    expect(actions[2].textContent).toContain('知识工坊');
+    expect(host.querySelector('.has-divider')).toBeNull();
     expect(actions[0].textContent).toContain('资源中心');
     expect(actions[1].textContent).toContain('资源整理');
     expect(host.textContent).not.toContain('新建子级、移动、重命名或删除文件夹');
 
-    actions[2].click();
+    pageAction(host, '文件夹管理').click();
     await nextTick();
     expect(host.querySelector('.drawer-stub')?.getAttribute('data-title')).toBe('文件夹管理');
     host.querySelector<HTMLButtonElement>('.mobile-folder-manager__create')?.click();
@@ -194,13 +203,12 @@ describe('MobileCloudSpaceActionsDrawer', () => {
     });
     await nextTick();
 
-    const actions = host.querySelectorAll<HTMLButtonElement>('.mobile-page-actions__item');
-    actions[2].click();
+    pageAction(host, '文件夹管理').click();
     await nextTick();
     expect(beforeManageFolders).toHaveBeenCalledOnce();
     expect(host.querySelector('.drawer-stub')?.getAttribute('data-title')).toBe('云空间操作');
 
-    actions[4].click();
+    pageAction(host, '批量操作').click();
     expect(onOpenChange).toHaveBeenCalledWith(false);
     expect(onBatch).toHaveBeenCalledOnce();
   });
@@ -220,7 +228,7 @@ describe('MobileCloudSpaceActionsDrawer', () => {
     });
     await nextTick();
 
-    host.querySelectorAll<HTMLButtonElement>('.mobile-page-actions__item')[3].click();
+    pageAction(host, '文件排序').click();
     await nextTick();
     expect(host.querySelector('.drawer-stub')?.getAttribute('data-title')).toBe('文件排序');
     expect(host.querySelector('.mobile-cloud-sort__option.is-selected')?.textContent).toContain('名称 A–Z');
@@ -235,7 +243,7 @@ describe('MobileCloudSpaceActionsDrawer', () => {
     const host = mountDrawer({ 'onUpdate:open': onOpenChange });
     await nextTick();
 
-    host.querySelectorAll<HTMLButtonElement>('.mobile-page-actions__item')[2].click();
+    pageAction(host, '文件夹管理').click();
     await nextTick();
     host.querySelector<HTMLButtonElement>('.mobile-folder-manager__create')?.click();
     await nextTick();
@@ -247,7 +255,7 @@ describe('MobileCloudSpaceActionsDrawer', () => {
     expect(host.querySelector('.drawer-stub')?.getAttribute('data-title')).toBe('云空间操作');
     expect(onOpenChange).not.toHaveBeenCalled();
 
-    host.querySelectorAll<HTMLButtonElement>('.mobile-page-actions__item')[2].click();
+    pageAction(host, '文件夹管理').click();
     await nextTick();
     host.querySelector<HTMLButtonElement>('.mobile-folder-manager__create')?.click();
     await nextTick();
@@ -259,7 +267,7 @@ describe('MobileCloudSpaceActionsDrawer', () => {
     const host = mountDrawer();
     await nextTick();
 
-    host.querySelectorAll<HTMLButtonElement>('.mobile-page-actions__item')[2].click();
+    pageAction(host, '文件夹管理').click();
     await nextTick();
     expect(host.querySelector('.drawer-stub')?.getAttribute('data-title')).toBe('文件夹管理');
     expect(host.querySelector('.mobile-folder-manager__empty')?.textContent).toContain('还没有文件夹');
@@ -287,7 +295,7 @@ describe('MobileCloudSpaceActionsDrawer', () => {
     });
     await nextTick();
 
-    host.querySelectorAll<HTMLButtonElement>('.mobile-page-actions__item')[2].click();
+    pageAction(host, '文件夹管理').click();
     await nextTick();
     expect(host.querySelector('.drawer-stub')?.getAttribute('data-title')).toBe('文件夹管理');
     expect(host.querySelector('.mobile-folder-manager__create')).not.toBeNull();
@@ -343,7 +351,7 @@ describe('MobileCloudSpaceActionsDrawer', () => {
       onMoveFolder,
     });
     await nextTick();
-    host.querySelectorAll<HTMLButtonElement>('.mobile-page-actions__item')[2].click();
+    pageAction(host, '文件夹管理').click();
     await nextTick();
 
     expect(host.querySelectorAll('.mobile-folder-manager__row')).toHaveLength(2);

@@ -127,7 +127,7 @@ export async function getAiSkillsConfig(): Promise<AiProductFeatureState> {
 
 export async function executeAiSkill(
   request: AiSkillRequest,
-  options: Pick<RequestOptions, 'signal'> = {},
+  options: Pick<RequestOptions, 'signal' | 'timeout'> = {},
 ): Promise<AiSkillResponse> {
   try {
     const response = await apiBasePost('/api/ai/skills/execute', request, { silent: true, ...options });

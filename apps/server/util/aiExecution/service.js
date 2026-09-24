@@ -1,3 +1,4 @@
+import { readAiInputDiagnostics } from './diagnostics.js';
 import { estimateAiUsageCost } from '../aiCostPolicy.js';
 import crypto from 'node:crypto';
 import { AI_QUOTA_ERROR_CODES, isAiQuotaErrorCode } from '@lightnote/shared/ai-quota-protocol';
@@ -89,6 +90,7 @@ function createExecution(config, identity) {
   return {
     id: crypto.randomUUID(),
     requestId,
+    inputDiagnostics: readAiInputDiagnostics(config.inputDiagnostics, config.skillId),
     // 仅受信任整理 Worker 可传入；不从请求 body/query 读取。
     organizeRunId:
       config.skillId === 'organize.metadata' &&

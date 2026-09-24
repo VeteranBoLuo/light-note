@@ -17,6 +17,7 @@ import WorkshopProjectEntry from '@/components/workbenches/WorkshopProjectEntry.
 import ResourceProjectHost from '@/components/resourceActions/ResourceProjectHost.vue';
 import BButton from '@/components/base/BasicComponents/BButton.vue';
 import { useProjectResourceAction } from '@/composables/useProjectResourceAction';
+import ToolboxTask from '@/view/toolbox/ToolboxTask.vue';
 import ToolboxHome from '@/view/toolbox/ToolboxHome.vue';
 import type { ToolboxHomeWorkspaceSummary, ToolboxWorkspace, ToolboxJob } from '@/api/toolbox';
 import '@/assets/css/index.less';
@@ -188,6 +189,32 @@ const workspaceFixture: ToolboxWorkspace = {
   ],
 };
 
+if (params.get('sparse') === '1') {
+  Object.assign(workspaceFixture, {
+    title: 'twst',
+    goal: '',
+    nextStep: '',
+    targetDate: null,
+    resourceCount: 1,
+    openItemCount: 1,
+    completedItemCount: 0,
+    resources: [workspaceFixture.resources[1]],
+    items: [{ ...workspaceFixture.items[1], title: '整理知识管理工具的使用差异', content: '比较资料收集与回顾方式。' }],
+    sessions: [],
+  });
+}
+if (params.get('detailEmpty') === '1') {
+  Object.assign(workspaceFixture, {
+    resources: [],
+    items: [],
+    sessions: [],
+    nextStep: '',
+    resourceCount: 0,
+    openItemCount: 0,
+    completedItemCount: 0,
+  });
+}
+
 if (params.get('legacyLearning') === '1') workspaceFixture.items[0].status = 'done';
 
 if (params.get('boardEmpty') === '1') workspaceFixture.items = [];
@@ -310,9 +337,41 @@ function response(config: any, data: unknown, status = 200) {
   };
 }
 
+const summaryJob: ToolboxJob = {
+  id: 'summary-job', toolId: 'pdf_text_extractor', status: 'succeeded', stage: 'completed',
+  billing: { medium: 'ai_quota', status: 'settled', quotedPoints: 0, actualPoints: 0, refundedPoints: 0 },
+  save: { status: 'unsaved' }, error: null,
+  artifact: { id: 'summary-artifact', type: 'document_summary', title: '旅行安排 · AI 总结', contentType: 'markdown', version: 1 },
+  artifactState: 'ready', canCancel: false, createdAt: now, updatedAt: now, startedAt: now, completedAt: now,
+};
 let entryDismissed = false;
 request.defaults.adapter = async (config) => {
   const url = String(config.url || '');
+  if (params.get('summaryMock') === '1' && url === '/api/toolbox/artifacts/summary-artifact/save') {
+    summaryJob.save.status = 'saved';
+    (window as any).summarySaveCalls = ((window as any).summarySaveCalls || 0) + 1;
+    return response(config, { status: 'saved', targetType: 'note', targetId: 'summary-note', targetAvailability: 'available', idempotent: false });
+  }
+  if (params.get('summaryMock') === '1' && url === '/api/toolbox/jobs/summary-job') return response(config, summaryJob);
+  if (params.get('summaryMock') === '1' && url === '/api/toolbox/artifacts/summary-artifact') return response(config, {
+    ...summaryJob.artifact, jobId: summaryJob.id, toolId: summaryJob.toolId, content: '# 行程要点\n\n行程以自然景观为主。',
+    sources: [], coverage: { complete: true }, meta: {}, save: summaryJob.save, createdAt: now, expiresAt: '2026-12-23T00:00:00Z',
+  });
+  if (params.get('summaryMock') === '1' && url === '/api/ai/skills/config') {
+    return response(config, { kernelEnabled: true, skills: { toolbox: true }, availableSkills: [{ id: 'toolbox.summarize_text' }] });
+  }
+  if (params.get('summaryMock') === '1' && url === '/api/ai/skills/execute') {
+    const body = typeof config.data === 'string' ? JSON.parse(config.data) : config.data;
+    const testWindow = window as any;
+    (testWindow.summaryCalls ||= []).push(body);
+    await new Promise(resolve => setTimeout(resolve, 350));
+    if (testWindow.summaryFail) return response(config, { code: 'AI_QUOTA_EXCEEDED' }, 403);
+    return response(config, { protocolVersion: 1, requestId: body.requestId, skillId: body.skillId,
+      skillVersion: 1, status: 'completed', threadId: null, scopeDigest: null,
+      result: { kind: 'grounded_markdown', content: '# 行程要点\n\n行程以自然景观为主，预留交通与休息时间。\n\n- 提前确认开放时间与预约要求。\n- 根据天气调整户外活动。\n- 保留必要的机动时间。' },
+      sources: [], coverage: { complete: true }, availableActions: [], receipt: { modelCalled: true, toolboxJobId: 'summary-job', toolboxArtifactId: 'summary-artifact' }, error: null });
+  }
+
   if (
     view === 'home' &&
     state === 'loading' &&
@@ -501,6 +560,13 @@ request.defaults.adapter = async (config) => {
     workspaceFixture.items = workspaceFixture.items.filter((entry) => entry.status !== 'archived');
     return response(config, JSON.parse(JSON.stringify(workspaceFixture)));
   }
+  if (url === '/api/toolbox/workspaces/visual-workspace/sessions') {
+    if (params.get('sessionError') === '1') return response(config, { code: 'VISUAL_SESSION_ERROR' }, 500);
+    const input = typeof config.data === 'string' ? JSON.parse(config.data) : config.data;
+    workspaceFixture.sessions.unshift({ ...input, id: `session-${Date.now()}`, createdAt: now });
+    if (input.nextStep) workspaceFixture.nextStep = input.nextStep;
+    return response(config, JSON.parse(JSON.stringify(workspaceFixture)), 201);
+  }
   if (url === '/api/toolbox/workspaces/visual-workspace') return response(config, workspaceFixture);
   if (url.startsWith('/api/toolbox/workspaces/')) return response(config, workspaceFixture);
   if (url === '/api/toolbox/workspaces' && String(config.method).toLowerCase() === 'post') {
@@ -541,7 +607,7 @@ request.defaults.adapter = async (config) => {
       },
       tasks: {
         active: state === 'empty' ? [] : homeTaskFixtures.filter((job) => !sessionStorage.getItem(`toolbox-dismissed-${job.id}`)).filter((job) => job.status !== 'succeeded'),
-        ready: state === 'empty' ? [] : homeTaskFixtures.filter((job) => !sessionStorage.getItem(`toolbox-dismissed-${job.id}`)).filter((job) => job.status === 'succeeded'),
+        ready: params.get('summaryMock') === '1' ? (summaryJob.save.status === 'saved' ? [] : [summaryJob]) : state === 'empty' ? [] : homeTaskFixtures.filter((job) => !sessionStorage.getItem(`toolbox-dismissed-${job.id}`)).filter((job) => job.status === 'succeeded'),
         recent: [],
       },
     });
@@ -555,6 +621,8 @@ request.defaults.adapter = async (config) => {
 const router = createRouter({
   history: createMemoryHistory(),
   routes: [
+    { path: '/toolbox/task/:jobId', component: ToolboxTask },
+    { path: '/noteLibrary/:noteId', component: { render: () => h('p', { 'data-fixture-destination': 'summaryNote' }, 'Saved summary note') } },
     { path: '/toolbox', name: 'toolboxHome', meta: { mobileShell: 'toolbox' }, component: ToolboxHome },
     {
       path: '/ai-usage',

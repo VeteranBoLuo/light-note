@@ -92,6 +92,10 @@
     "./note-export-document": {
       "types": "./noteExportDocument.d.ts",
       "default": "./noteExportDocument.js"
+    },
+    "./collection-forms": {
+      "types": "./collectionForms.d.ts",
+      "default": "./collectionForms.js"
     }
   },
   "devDependencies": {

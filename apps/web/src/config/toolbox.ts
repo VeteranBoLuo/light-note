@@ -31,6 +31,7 @@ export const TOOLBOX_DEFAULT_QUICK_TOOL_IDS: ToolboxToolId[] = [
   'research_brief',
   'study_kit',
   'pdf_organizer',
+  'forms',
   'image_optimizer',
   'ocr_to_text',
 ];
@@ -68,6 +69,7 @@ export const TOOLBOX_PRESENTATION: Record<
   ToolboxToolId,
   { icon: string; category: ToolboxCategory; accent: 'violet' | 'blue' | 'amber' | 'teal' | 'rose' }
 > = {
+  forms: { icon: icon.toolbox.table, category: 'workspace', accent: 'teal' },
   research_workspace: { icon: icon.toolbox.research, category: 'workspace', accent: 'blue' },
   learning_workspace: { icon: icon.toolbox.study, category: 'workspace', accent: 'teal' },
   writing_workspace: { icon: icon.toolbox.materialNote, category: 'workspace', accent: 'violet' },
@@ -158,25 +160,25 @@ export const TOOLBOX_HOME_GROUPS = [
     id: 'workspace',
     icon: icon.toolbox.actionPlan,
     accent: 'violet',
-    toolIds: ['research_workspace', 'learning_workspace', 'writing_workspace'],
+    toolIds: ['research_workspace', 'learning_workspace', 'writing_workspace', 'forms'],
   },
   {
     id: 'create',
     icon: icon.toolbox.materialNote,
     accent: 'violet',
-    toolIds: ['idea_to_draft', 'material_to_note', 'research_brief', 'source_comparison', 'study_kit', 'concept_map'],
+    toolIds: ['material_to_note', 'research_brief', 'source_comparison', 'study_kit', 'concept_map', 'idea_to_draft'],
+  },
+  {
+    id: 'prepare',
+    icon: icon.toolbox.pdf,
+    accent: 'blue',
+    toolIds: ['pdf_organizer', 'image_optimizer', 'docx_to_markdown', 'ocr_to_text'],
   },
   {
     id: 'maintain',
     icon: icon.toolbox.audit,
     accent: 'teal',
     toolIds: ['knowledge_structure_audit', 'knowledge_audit'],
-  },
-  {
-    id: 'prepare',
-    icon: icon.toolbox.pdf,
-    accent: 'blue',
-    toolIds: ['docx_to_markdown', 'ocr_to_text', 'pdf_organizer', 'image_optimizer'],
   },
   {
     id: 'data',

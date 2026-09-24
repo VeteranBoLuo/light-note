@@ -20,6 +20,7 @@ export type ToolboxBillingStatus =
 export type ToolboxSaveStatus = "unsaved" | "saving" | "saved" | "save_failed";
 export type ToolboxResourceType = "note" | "bookmark" | "file";
 export type ToolboxToolId =
+  | "forms"
   | "research_workspace"
   | "learning_workspace"
   | "writing_workspace"

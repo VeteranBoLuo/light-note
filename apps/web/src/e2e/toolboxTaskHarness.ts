@@ -1,3 +1,4 @@
+import { densityCssVariables, type UiDensity } from '@/config/uiDensity';
 import { h } from 'vue';
 import { createApp } from 'vue';
 import { createPinia } from 'pinia';
@@ -29,6 +30,13 @@ const now = new Date('2026-08-29T01:20:00+08:00').toISOString();
 
 document.documentElement.dataset.theme = theme;
 document.documentElement.lang = locale;
+const density = ['compact', 'comfortable'].includes(params.get('density') || '')
+  ? (params.get('density') as UiDensity)
+  : 'standard';
+for (const [key, value] of Object.entries(densityCssVariables(window.innerWidth <= 600 ? 'standard' : density))) {
+  document.documentElement.style.setProperty(key, value);
+}
+
 document.documentElement.classList.toggle('light-note-mobile-rendering', window.innerWidth <= 600);
 document.body.dataset.visualState = state;
 
@@ -69,7 +77,7 @@ function jobFixture() {
     save: { status: 'unsaved' },
     error:
       state === 'failed'
-        ? { code: 'TOOLBOX_PROVIDER_FAILED', message: '工具任务处理失败，系统将自动重试' }
+        ? { code: params.get('errorCode') || 'TOOLBOX_PROVIDER_FAILED', message: '工具任务处理失败，系统将自动重试' }
         : state === 'retrying'
           ? { code: 'AI_GATEWAY_TIMEOUT', message: '遇到临时问题，正在自动重试；无需重新提交任务。' }
           : null,

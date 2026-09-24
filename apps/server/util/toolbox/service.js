@@ -85,6 +85,9 @@ function formatJobError(row) {
   if (row.status === 'queued' && row.stage === 'retrying') {
     return { code, message: '遇到临时问题，正在自动重试；无需重新提交任务。' };
   }
+  if (row.status === 'failed' && ['AI_EXECUTION_STORE_UNAVAILABLE', 'AI_EXECUTION_SCHEMA_UNAVAILABLE'].includes(code)) {
+    return { code, message: '服务端无法建立 AI 执行记录，任务无法继续。请联系管理员检查服务配置。' };
+  }
   if (
     row.status === 'failed' &&
     (!storedMessage || /工具任务(?:处理失败|遇到临时问题)|系统将自动重试/u.test(storedMessage))
@@ -93,10 +96,10 @@ function formatJobError(row) {
       code,
       message:
         row.billing_medium === 'free'
-          ? '多次尝试后仍未完成，未处理的免费识别页数已释放；请稍后重新发起。'
+          ? '本次任务未能完成，未处理的免费识别页数已释放；请稍后重新发起。'
           : String(row.billing_medium || 'points') === 'ai_quota'
-            ? '多次尝试后仍未完成，未产生可用成果的 AI 额度已按规则释放；请稍后重新发起。'
-            : '多次尝试后仍未完成，预占积分已退回；请稍后重新发起。',
+            ? '本次任务未能完成，未产生可用成果的 AI 额度已按规则释放；请稍后重新发起。'
+            : '本次任务未能完成，预占积分已退回；请稍后重新发起。',
     };
   }
   return { code, message: storedMessage || '任务处理失败' };
@@ -896,7 +899,9 @@ export async function saveToolboxArtifactToNote({
   }
   const artifact = await getToolboxArtifact({ userId, artifactId, database });
   const definition = getToolboxTool(artifact.toolId);
-  if (!definition?.output.canSaveToNote) throw toolboxError('TOOLBOX_ARTIFACT_NOT_SAVABLE', '该产物不能保存到笔记');
+  const isDocumentSummary = artifact.toolId === 'pdf_text_extractor' && artifact.type === 'document_summary';
+  if (!definition?.output.canSaveToNote && !isDocumentSummary)
+    throw toolboxError('TOOLBOX_ARTIFACT_NOT_SAVABLE', '该产物不能保存到笔记');
   const receiptKey = saveReceiptKey({ userId, artifactId: artifact.id, version: artifact.version, targetType: 'note' });
   let saveGeneration = 1;
   let idempotencyKey = saveIdempotencyKey({

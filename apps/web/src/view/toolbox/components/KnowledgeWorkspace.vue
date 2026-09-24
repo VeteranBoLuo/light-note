@@ -99,262 +99,338 @@
     </template>
 
     <template v-else>
-      <section ref="projectHead" class="workspace-detail-head" :class="{ 'is-pinned': headerPinned }">
-        <nav class="project-breadcrumb" :aria-label="t('toolbox.project.myProjects')">
-          <BButton class="project-breadcrumb__workshop" @click="emit('return-to-workshop')">{{
-            t('toolbox.title')
-          }}</BButton>
-          <span class="project-breadcrumb__separator" aria-hidden="true">/</span>
-          <BButton @click="leaveWorkspace"
-            ><SvgIcon class="project-breadcrumb__mobile-back" :src="icon.toolbox.back" size="16" />{{
-              t('toolbox.project.myProjects')
-            }}</BButton
+      <aside class="project-directory">
+        <nav ref="sectionNav" class="project-section-navigation" :aria-label="t('toolbox.workspace.sectionNavigation')">
+          <div class="project-directory-back"
+            ><BButton type="text" @click="leaveWorkspace"
+              ><SvgIcon :src="icon.toolbox.back" size="16" />{{ t('toolbox.project.myProjects') }}</BButton
+            ></div
           >
-          <span class="project-breadcrumb__separator" aria-hidden="true">/</span>
-          <span class="project-breadcrumb__current" aria-current="page">{{ workspace.title }}</span>
-        </nav>
-        <BButton class="project-settings-trigger" :disabled="mutating" @click="openEditModal">{{
-          t('toolbox.project.manage')
-        }}</BButton>
-      </section>
-
-      <nav ref="sectionNav" class="project-section-navigation" :aria-label="t('toolbox.workspace.sectionNavigation')">
-        <BButton
-          v-for="(section, index) in projectTabs"
-          :key="section.key"
-          :aria-current="activeSection === section.key ? 'location' : undefined"
-          :class="{ 'is-current': activeSection === section.key }"
-          @click="selectProjectTab(section.key)"
-        >
-          <span class="project-section-navigation__number">{{ String(index + 1).padStart(2, '0') }}</span>
-          <span class="project-section-navigation__label">{{ section.label }}</span>
-        </BButton>
-        <BButton
-          class="project-settings-trigger project-settings-trigger--mobile"
-          :disabled="mutating"
-          :aria-label="t('toolbox.project.manage')"
-          :title="t('toolbox.project.manage')"
-          @click="openEditModal"
-          ><SvgIcon :src="icon.userCenter.menu.settings" size="18"
-        /></BButton>
-      </nav>
-      <section class="workspace-summary">
-        <div class="workspace-summary__main">
-          <span class="workspace-summary__icon"><SvgIcon :src="templateIcon" size="27" /></span>
-          <div>
-            <span class="workspace-summary__meta">
-              <BChip tone="neutral">{{ t(`toolbox.tool.${kind}_workspace.name`) }}</BChip>
-              <BChip :tone="statusTone(workspace.status)">{{ statusLabel(workspace.status) }}</BChip>
-              <small v-if="workspace.targetDate">
-                <SvgIcon :src="icon.common.calendar" size="14" />{{ formatDate(workspace.targetDate) }}
-              </small>
-            </span>
-            <h2>{{ workspace.title }}</h2>
-            <p
-              :class="{ 'is-collapsed': !goalExpanded && (workspace.goal || workspace.description || '').length > 140 }"
-              >{{ workspace.goal || workspace.description || templateText('cardFallback') }}</p
-            >
-            <BButton
-              v-if="(workspace.goal || workspace.description || '').length > 140"
-              size="small"
-              @click="goalExpanded = !goalExpanded"
-              >{{ t(goalExpanded ? 'toolbox.project.goalLess' : 'toolbox.project.goalMore') }}</BButton
-            >
-          </div>
-        </div>
-        <div class="project-overview-metrics">
-          <div
-            ><strong>{{ workspace.resources.length }}</strong
-            ><small>{{ t('toolbox.workspace.metrics.materials') }}</small></div
-          >
-          <div
-            ><strong>{{ workspace.openItemCount }}</strong
-            ><small>{{ t('toolbox.workspace.metrics.openItems') }}</small></div
-          >
-          <div
-            ><strong>{{ workspace.completedItemCount }}</strong
-            ><small>{{ t('toolbox.workspace.metrics.completed') }}</small></div
-          >
-        </div>
-      </section>
-
-      <section class="workspace-resume">
-        <div class="workspace-resume__lead">
-          <span><SvgIcon :src="icon.noteTemplate.daily" size="20" /></span>
-          <div>
-            <small>{{ t('toolbox.workspace.nextStep') }}</small>
-            <strong>{{ workspace.nextStep || t('toolbox.workspace.noNextStep') }}</strong>
-          </div>
-        </div>
-        <BButton @click="focusProgressForm">{{ templateText('recordAction') }}</BButton>
-      </section>
-
-      <section ref="progressSection" class="workspace-section workspace-progress-section">
-        <header class="workspace-section__head"
-          ><div>
-            <span class="workspace-section__kicker">01 · {{ stepText('progress', 'label') }}</span>
-            <h3>{{ stepText('progress', 'title') }}</h3>
-            <p>{{ stepText('progress', 'description') }}</p>
-          </div></header
-        >
-        <p v-if="visitorPreview">{{ t('toolbox.project.previewHint') }}</p>
-        <div v-else class="workspace-progress-form">
-          <label class="workspace-progress-form__summary">
-            <span>{{ stepText('progress', 'summaryLabel') }}</span>
-            <BInput
-              ref="progressInput"
-              v-model:value="progressSummary"
-              @update:value="progressDraftEdited = true"
-              type="textarea"
-              :rows="3"
-              :maxlength="1000"
-              :placeholder="templateText('progressPlaceholder')"
-            />
-          </label>
-          <p class="workspace-progress-form__hint" :class="{ 'is-ready': canSaveProgress }" aria-live="polite">
-            {{ stepText('progress', canSaveProgress ? 'readyHint' : 'requiredHint') }}
-          </p>
-          <label class="workspace-progress-form__next">
-            <span>{{ stepText('progress', 'nextLabel') }}</span>
-            <BInput
-              v-model:value="progressNextStep"
-              @update:value="progressDraftEdited = true"
-              :maxlength="500"
-              height="var(--ui-layout-42, 42px)"
-              :placeholder="templateText('nextStepPlaceholder')"
-            />
-          </label>
-          <label class="workspace-progress-form__duration">
-            <span>{{ t('toolbox.workspace.durationLabel') }}</span>
-            <BSelect v-model:value="progressDuration" :options="durationOptions" />
-          </label>
           <BButton
-            class="workspace-progress-form__submit"
-            type="primary"
-            size="large"
-            :loading="savingProgress"
-            :disabled="!canSaveProgress"
-            @click="saveProgress"
-            >{{ stepText('progress', 'submit') }}</BButton
+            v-for="section in projectTabs"
+            :key="section.key"
+            :aria-current="activeSection === section.key ? 'location' : undefined"
+            :class="{ 'is-current': activeSection === section.key }"
+            @click="selectProjectTab(section.key)"
           >
-        </div>
-      </section>
-
-      <section ref="resourcesSection" class="workspace-section workspace-resources-section">
-        <header class="workspace-section__head">
-          <div>
-            <span class="workspace-section__kicker">02 · {{ stepText('resources', 'label') }}</span>
-            <h3>{{ stepText('resources', 'title') }}</h3>
-            <p>{{ stepText('resources', 'description') }}</p>
-          </div>
-          <BButton @click="openResourceModal">
-            <SvgIcon :src="icon.common.plus" size="15" />{{ stepText('resources', 'addAction') }}
+            <SvgIcon class="project-section-navigation__icon" :src="section.icon" size="18" />
+            <span class="project-section-navigation__label">{{ section.label }}</span>
           </BButton>
-        </header>
-        <div v-if="!workspace.resources.length" class="workspace-section-empty">
-          <SvgIcon :src="icon.toolbox.locate" size="22" />
-          <span>{{ stepText('resources', 'empty') }}</span>
-        </div>
-        <div class="workspace-filters">
-          <BInput v-model:value="resourceSearch" :placeholder="t('toolbox.project.searchResources')" />
-          <BButton type="primary" :disabled="!outcomeResources.length" @click="outcomeOpen = true"
-            >{{ t('toolbox.project.generate') }} · {{ outcomeResources.length }}</BButton
-          >
-        </div>
-        <p v-if="workspace.resources.length && !filteredResources.length">{{ t('toolbox.project.noResources') }}</p>
-        <p v-if="workspace.resources.length && !outcomeResources.length">{{ t('toolbox.project.selectHint') }}</p>
-        <div v-if="workspace.resources.length" class="workspace-resource-grid">
-          <article
-            v-for="resource in filteredResources"
-            :key="`${resource.type}:${resource.resourceId}`"
-            :class="{
-              'is-selected': selectedResourceKeys.includes(`${resource.type}:${resource.resourceId}`),
-              'is-unavailable': resource.available === false,
-            }"
-            @click="selectResourceRow(resource, $event)"
-          >
-            <BCheckbox
-              :model-value="selectedResourceKeys.includes(`${resource.type}:${resource.resourceId}`)"
-              :disabled="resource.available === false"
-              :aria-label="resource.title"
-              @click.stop
-              @update:model-value="toggleResource(resource, $event)"
-            />
-            <span class="workspace-resource-grid__icon" :class="`is-${resource.type}`">
-              <SvgIcon :src="resourceIcon(resource.type)" size="17" />
-            </span>
-            <div>
+        </nav>
+      </aside>
+      <div class="project-content">
+        <section ref="projectHead" class="workspace-detail-head" :class="{ 'is-pinned': headerPinned }">
+          <nav class="project-breadcrumb" :aria-label="t('toolbox.project.myProjects')">
+            <BButton class="project-breadcrumb__workshop" @click="emit('return-to-workshop')">{{
+              t('toolbox.title')
+            }}</BButton>
+            <span class="project-breadcrumb__separator" aria-hidden="true">/</span>
+            <BButton :aria-label="t('toolbox.project.myProjects')" @click="leaveWorkspace"
+              ><SvgIcon class="project-breadcrumb__mobile-back" :src="icon.arrow_left" size="20" aria-hidden="true" />
+              <span class="project-breadcrumb__desktop-label">{{ t('toolbox.project.myProjects') }}</span></BButton
+            >
+            <h1 class="project-breadcrumb__mobile-title">{{ t('toolbox.project.myProjects') }}</h1>
+          </nav>
+          <div class="project-mobile-controls">
+            <BActionMenu
+              :items="projectTabs"
+              :aria-label="t('toolbox.project.directory')"
+              @select="(key) => selectProjectTab(key)"
+            >
               <BButton
-                class="workspace-resource-link"
-                :disabled="resource.available === false"
-                @click.stop="openLinkedResource(resource)"
-                >{{ resource.title || resource.resourceId }}</BButton
-              >
-              <small>{{
-                resource.available === false
-                  ? t('toolbox.workspace.resourceUnavailable')
-                  : t(`ai.sourceTypes.${resource.type}`)
-              }}</small>
-            </div>
+                type="text"
+                icon-only
+                class="project-directory-trigger"
+                :aria-label="t('toolbox.project.directory')"
+                ><SvgIcon :src="icon.filterPanel.list" size="22"
+              /></BButton>
+            </BActionMenu>
             <BButton
-              :aria-label="t('toolbox.workspace.removeResource', { title: resource.title || resource.resourceId })"
+              icon-only
+              class="project-settings-trigger"
+              :aria-label="t('toolbox.project.manage')"
               :disabled="mutating"
-              @click.stop="confirmRemoveResource(resource)"
-              ><SvgIcon :src="icon.toolbox.delete" size="15"
+              @click="openEditModal"
+              ><SvgIcon :src="icon.userCenter.menu.settings" size="22"
             /></BButton>
-          </article>
-        </div>
-      </section>
-
-      <section ref="boardSection" class="workspace-section workspace-board-section">
-        <header class="workspace-section__head">
-          <div>
-            <span class="workspace-section__kicker">03 · {{ stepText('board', 'label') }}</span>
-            <h3>{{ stepText('board', 'title') }}</h3>
-            <p>{{ templateText('boardDescription') }}</p>
           </div>
-        </header>
-        <WorkspaceBoard
-          :key="workspace.id"
-          v-model:lane="mobileLane"
-          :workspace="workspace"
-          :readonly="visitorPreview"
-          :mobile="isMobileLayout"
-          @updated="handleBoardUpdated"
-        />
-      </section>
+        </section>
 
-      <section ref="timelineSection" class="workspace-section workspace-timeline-section">
-        <header class="workspace-section__head">
-          <div>
-            <span class="workspace-section__kicker">04 · {{ stepText('timeline', 'label') }}</span>
-            <h3>{{ stepText('timeline', 'title') }}</h3>
-            <p>{{ stepText('timeline', 'description') }}</p>
-          </div>
-          <BButton @click="focusProgressForm">{{ t('toolbox.project.record') }}</BButton>
-        </header>
-        <div v-if="!workspace.sessions.length" class="workspace-section-empty">
-          <SvgIcon :src="icon.common.time" size="21" />
-          <span>{{ stepText('timeline', 'empty') }}</span>
-        </div>
-        <div v-else class="workspace-timeline">
-          <article v-for="session in workspace.sessions" :key="session.id">
-            <span class="workspace-timeline__dot"></span>
-            <div>
-              <header>
-                <strong>{{ formatDateTime(session.createdAt) }}</strong>
-                <BChip v-if="session.durationMinutes" tone="neutral">{{
-                  t('toolbox.workspace.durationMinutes', { count: session.durationMinutes })
-                }}</BChip>
-              </header>
-              <p v-if="session.summary">{{ session.summary }}</p>
-              <small v-if="session.nextStep"
-                ><b>{{ t('toolbox.workspace.nextStep') }}：</b>{{ session.nextStep }}</small
+        <div class="project-overview-panel">
+          <section ref="progressSection" class="workspace-summary">
+            <div class="workspace-summary__main">
+              <div>
+                <div class="project-title-row"
+                  ><h2>{{ workspace.title }}</h2>
+                  <span class="workspace-summary__meta">
+                    <BChip class="project-kind" tone="neutral">{{ t(`toolbox.tool.${kind}_workspace.name`) }}</BChip>
+                    <span class="project-status" :data-status="workspace.status"
+                      ><i aria-hidden="true"></i>{{ statusLabel(workspace.status) }}</span
+                    >
+                    <small v-if="workspace.targetDate">
+                      <SvgIcon :src="icon.common.calendar" size="14" />{{ formatDate(workspace.targetDate) }}
+                    </small>
+                  </span></div
+                >
+                <p
+                  :class="{
+                    'is-collapsed': !goalExpanded && (workspace.goal || workspace.description || '').length > 140,
+                  }"
+                  >{{ workspace.goal || workspace.description || templateText('cardFallback') }}</p
+                >
+                <BButton
+                  v-if="(workspace.goal || workspace.description || '').length > 140"
+                  size="small"
+                  @click="goalExpanded = !goalExpanded"
+                  >{{ t(goalExpanded ? 'toolbox.project.goalLess' : 'toolbox.project.goalMore') }}</BButton
+                >
+              </div>
+            </div>
+            <div class="project-summary-actions">
+              <div class="project-overview-metrics">
+                <div
+                  ><strong>{{ workspace.resources.length }}</strong
+                  ><small>{{ t('toolbox.workspace.metrics.materials') }}</small></div
+                >
+                <div
+                  ><strong>{{ workspace.openItemCount }}</strong
+                  ><small>{{ t('toolbox.workspace.metrics.openItems') }}</small></div
+                >
+                <div
+                  ><strong>{{ workspace.completedItemCount }}</strong
+                  ><small>{{ t('toolbox.workspace.metrics.completed') }}</small></div
+                > </div
+              ><BButton class="project-settings-desktop" :disabled="mutating" @click="openEditModal"
+                ><SvgIcon :src="icon.userCenter.menu.settings" size="16" />{{ t('toolbox.project.manage') }}</BButton
+              >
+              <BButton
+                ref="progressTrigger"
+                type="primary"
+                :aria-expanded="progressOpen"
+                aria-controls="project-progress-editor"
+                @click="focusProgressForm"
+                ><SvgIcon :src="icon.common.plus" size="16" />{{ t('toolbox.project.record') }}</BButton
               >
             </div>
-          </article>
+          </section>
+
+          <section class="workspace-resume">
+            <div class="workspace-resume__lead">
+              <span><SvgIcon :src="icon.toolbox.arrow" size="20" /></span>
+              <div>
+                <small>{{ t('toolbox.workspace.nextStep') }}</small>
+                <strong>{{ workspace.nextStep || t('toolbox.workspace.noNextStep') }}</strong>
+              </div>
+            </div>
+          </section>
         </div>
-      </section>
+        <section v-if="progressOpen" id="project-progress-editor" class="workspace-section workspace-progress-section">
+          <header class="workspace-section__head"
+            ><div>
+              <span class="workspace-section__kicker">01 · {{ stepText('progress', 'label') }}</span>
+              <h3>{{ stepText('progress', 'title') }}</h3>
+              <p>{{ stepText('progress', 'description') }}</p> </div
+            ><BButton type="text" :disabled="savingProgress" @click="collapseProgress">{{
+              t('common.collapse')
+            }}</BButton></header
+          >
+          <p v-if="visitorPreview">{{ t('toolbox.project.previewHint') }}</p>
+          <div v-else class="workspace-progress-form">
+            <label class="workspace-progress-form__summary">
+              <span>{{ stepText('progress', 'summaryLabel') }}</span>
+              <BInput
+                ref="progressInput"
+                v-model:value="progressSummary"
+                @update:value="progressDraftEdited = true"
+                type="textarea"
+                :rows="3"
+                :maxlength="1000"
+                :placeholder="templateText('progressPlaceholder')"
+              />
+            </label>
+            <p class="workspace-progress-form__hint" :class="{ 'is-ready': canSaveProgress }" aria-live="polite">
+              {{ stepText('progress', canSaveProgress ? 'readyHint' : 'requiredHint') }}
+            </p>
+            <label class="workspace-progress-form__next">
+              <span>{{ stepText('progress', 'nextLabel') }}</span>
+              <BInput
+                v-model:value="progressNextStep"
+                @update:value="progressDraftEdited = true"
+                :maxlength="500"
+                height="var(--ui-layout-42, 42px)"
+                :placeholder="templateText('nextStepPlaceholder')"
+              />
+            </label>
+            <label class="workspace-progress-form__duration">
+              <span>{{ t('toolbox.workspace.durationLabel') }}</span>
+              <BSelect v-model:value="progressDuration" :options="durationOptions" />
+            </label>
+            <BButton
+              class="workspace-progress-form__submit"
+              type="primary"
+              size="large"
+              :loading="savingProgress"
+              :disabled="!canSaveProgress"
+              @click="saveProgress"
+              >{{ stepText('progress', 'submit') }}</BButton
+            >
+          </div>
+        </section>
+
+        <section ref="resourcesSection" class="workspace-section workspace-resources-section">
+          <header class="workspace-section__head">
+            <div>
+              <h3
+                >{{ stepText('resources', 'label') }} <BChip tone="neutral">{{ workspace.resources.length }}</BChip></h3
+              >
+            </div>
+            <div class="workspace-resource-toolbar">
+              <BInput
+                class="project-resource-search"
+                v-model:value="resourceSearch"
+                :placeholder="t('toolbox.project.searchResources')"
+                ><template #prefix><SvgIcon :src="icon.navigation.phone_search" size="16" /></template
+              ></BInput>
+              <BButton class="project-resource-add" @click="openResourceModal">
+                <SvgIcon :src="icon.common.plus" size="15" /><span class="project-add-label">{{
+                  stepText('resources', 'addAction')
+                }}</span
+                ><span class="project-add-short">{{ t('toolbox.project.addShort') }}</span>
+              </BButton>
+              <BButton
+                class="project-resource-generate"
+                :type="outcomeResources.length ? 'primary' : undefined"
+                :disabled="!outcomeResources.length"
+                @click="outcomeOpen = true"
+                >{{ t('toolbox.project.generate') }} · {{ outcomeResources.length }}</BButton
+              >
+            </div>
+          </header>
+          <div v-if="!workspace.resources.length" class="workspace-section-empty">
+            <SvgIcon :src="icon.toolbox.locate" size="22" />
+            <span>{{ stepText('resources', 'empty') }}</span>
+          </div>
+
+          <p v-if="workspace.resources.length && !filteredResources.length">{{ t('toolbox.project.noResources') }}</p>
+          <div v-if="workspace.resources.length" class="workspace-resource-grid">
+            <div class="project-resource-columns">
+              <BCheckbox
+                :model-value="allVisibleSelected"
+                :indeterminate="someVisibleSelected && !allVisibleSelected"
+                :disabled="!selectableResources.length"
+                :aria-label="t('common.selectAll')"
+                @update:model-value="selectVisibleResources"
+              />
+              <span>{{ t('toolbox.project.resourceTitle') }}</span
+              ><span>{{ t('toolbox.project.resourceType') }}</span
+              ><span>{{ t('toolbox.project.resourceActions') }}</span>
+            </div>
+            <article
+              v-for="resource in filteredResources"
+              :key="`${resource.type}:${resource.resourceId}`"
+              :class="{
+                'is-selected': selectedResourceKeys.includes(`${resource.type}:${resource.resourceId}`),
+                'is-unavailable': resource.available === false,
+              }"
+              @click="selectResourceRow(resource, $event)"
+            >
+              <BCheckbox
+                :model-value="selectedResourceKeys.includes(`${resource.type}:${resource.resourceId}`)"
+                :disabled="resource.available === false"
+                :aria-label="resource.title"
+                @click.stop
+                @update:model-value="toggleResource(resource, $event)"
+              />
+              <span class="workspace-resource-grid__icon" :class="`is-${resource.type}`">
+                <SvgIcon :src="resourceIcon(resource.type)" size="17" />
+              </span>
+              <div>
+                <BButton
+                  class="workspace-resource-link"
+                  :disabled="resource.available === false"
+                  @click.stop="openLinkedResource(resource)"
+                  >{{ resource.title || resource.resourceId }}</BButton
+                >
+                <small>{{
+                  resource.available === false
+                    ? t('toolbox.workspace.resourceUnavailable')
+                    : t(`ai.sourceTypes.${resource.type}`)
+                }}</small>
+              </div>
+              <BActionMenu
+                :items="[
+                  {
+                    key: 'remove',
+                    label: t('toolbox.workspace.removeResource', { title: resource.title || resource.resourceId }),
+                    icon: icon.toolbox.delete,
+                    danger: true,
+                  },
+                ]"
+                :disabled="mutating"
+                @select="confirmRemoveResource(resource)"
+                @click.stop
+              >
+                <BButton icon-only type="text" :aria-label="t('toolbox.board.actions')"
+                  ><SvgIcon :src="icon.common.more" size="18"
+                /></BButton>
+              </BActionMenu>
+            </article>
+          </div>
+        </section>
+
+        <section ref="boardSection" class="workspace-section workspace-board-section">
+          <header class="workspace-section__head">
+            <div>
+              <h3
+                >{{ stepText('board', 'label') }}
+                <BChip tone="neutral">{{
+                  workspace.items.filter((item) => item.status !== 'archived').length
+                }}</BChip></h3
+              >
+            </div>
+          </header>
+          <WorkspaceBoard
+            :key="workspace.id"
+            v-model:lane="mobileLane"
+            :workspace="workspace"
+            :readonly="visitorPreview"
+            :mobile="isMobileLayout"
+            @updated="handleBoardUpdated"
+          />
+        </section>
+
+        <section ref="timelineSection" class="workspace-section workspace-timeline-section">
+          <header class="workspace-section__head">
+            <div>
+              <h3
+                >{{ stepText('timeline', 'label') }} <BChip tone="neutral">{{ workspace.sessions.length }}</BChip></h3
+              >
+            </div>
+            <BButton @click="focusProgressForm">{{ t('toolbox.project.record') }}</BButton>
+          </header>
+          <div v-if="!workspace.sessions.length" class="workspace-section-empty">
+            <SvgIcon :src="icon.common.time" size="21" />
+            <span>{{ stepText('timeline', 'empty') }}</span>
+          </div>
+          <div v-else class="workspace-timeline">
+            <article v-for="session in workspace.sessions" :key="session.id">
+              <span class="workspace-timeline__dot"></span>
+              <div>
+                <header>
+                  <strong>{{ formatDateTime(session.createdAt) }}</strong>
+                  <BChip v-if="session.durationMinutes" tone="neutral">{{
+                    t('toolbox.workspace.durationMinutes', { count: session.durationMinutes })
+                  }}</BChip>
+                </header>
+                <p v-if="session.summary">{{ session.summary }}</p>
+                <small v-if="session.nextStep"
+                  ><b>{{ t('toolbox.workspace.nextStep') }}：</b>{{ session.nextStep }}</small
+                >
+              </div>
+            </article>
+          </div>
+        </section>
+      </div>
     </template>
 
     <ResourceOutcomeDrawer
@@ -497,6 +573,8 @@
   import WorkspaceBoard from './WorkspaceBoard.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert';
   import { resolveResourceRoute } from '@/utils/resourceNavigation';
+  import BActionMenu from '@/components/base/BasicComponents/BActionMenu.vue';
+  import { scrollIntoContainer } from '@/utils/scrolling';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import ResourceOutcomeDrawer from '@/components/resourceActions/ResourceOutcomeDrawer.vue';
   import { useUserStore } from '@/store';
@@ -579,6 +657,8 @@
   const workspaceFormMode = ref<'create' | 'edit'>('create');
   const resourceModalVisible = ref(false);
   const pendingResources = ref<ToolboxSelectedResource[]>([]);
+  const progressOpen = ref(false);
+  const progressTrigger = ref<InstanceType<typeof BButton> | null>(null);
   const progressSummary = ref('');
   const progressNextStep = ref('');
   const progressDuration = ref(0);
@@ -635,7 +715,13 @@
   const projectTabs = computed(() =>
     ['progress', 'resources', 'board', 'timeline'].map((key) => ({
       key,
-      label: stepText(key as WorkspaceSectionKey, 'label'),
+      label: key === 'progress' ? t('toolbox.project.projectOverview') : stepText(key as WorkspaceSectionKey, 'label'),
+      icon: {
+        progress: icon.toolbox.materialNote,
+        resources: icon.organize.file,
+        board: icon.toolbox.conceptMap,
+        timeline: icon.common.time,
+      }[key],
     })),
   );
   const projectSearch = computed({
@@ -694,22 +780,23 @@
   let chromeObserver: ResizeObserver | null = null;
   function stickyInset() {
     const head = projectHead.value?.offsetHeight ?? 48;
-    const rail =
-      sectionNav.value && getComputedStyle(sectionNav.value).getPropertyValue('--project-nav-layout').trim() === 'rail';
     const scrollPadding = scrollOwner ? parseFloat(getComputedStyle(scrollOwner).paddingTop) || 0 : 0;
-    return scrollPadding + head + (rail ? 0 : sectionNav.value?.offsetHeight || 0) + dimension(20);
+    return scrollPadding + head + dimension(12);
   }
   function measureProjectChrome() {
     rootRef.value?.style.setProperty(
       '--project-scroll-padding',
       `${scrollOwner ? parseFloat(getComputedStyle(scrollOwner).paddingTop) || 0 : 0}px`,
     );
+    rootRef.value?.style.setProperty('--project-scroll-height', `${scrollOwner?.clientHeight ?? window.innerHeight}px`);
     rootRef.value?.style.setProperty('--project-head-height', `${projectHead.value?.offsetHeight ?? 48}px`);
     rootRef.value?.style.setProperty('--project-sticky-inset', `${stickyInset()}px`);
   }
   let scrollOwner: HTMLElement | null = null;
   let scrollFrame = 0;
   let locationTimer = 0;
+  let navigationTarget: string | null = null;
+  let navigationTop = 0;
   function sectionElements() {
     return [progressSection.value, resourcesSection.value, boardSection.value, timelineSection.value];
   }
@@ -727,14 +814,23 @@
     elements.forEach((element, i) => {
       if (element && element.getBoundingClientRect().top <= threshold) index = i;
     });
-    if (scrollOwner.scrollTop > 0 && scrollOwner.scrollTop + scrollOwner.clientHeight >= scrollOwner.scrollHeight - 4)
+    if (navigationTarget && Math.abs(scrollOwner.scrollTop - navigationTop) <= 2) {
+      index = ['progress', 'resources', 'board', 'timeline'].indexOf(navigationTarget);
+    } else if (
+      scrollOwner.scrollTop > 0 &&
+      scrollOwner.scrollTop + scrollOwner.clientHeight >= scrollOwner.scrollHeight - 4
+    ) {
       index = 3;
+    }
     const key = ['progress', 'resources', 'board', 'timeline'][index];
     activeSection.value = key;
     window.clearTimeout(locationTimer);
     locationTimer = window.setTimeout(() => {
       if (workspace.value && route.query.tab !== key) void router.replace({ query: { ...route.query, tab: key } });
     }, 180);
+  }
+  function onManualProjectScroll() {
+    navigationTarget = null;
   }
   function onProjectScroll() {
     if (!scrollFrame) scrollFrame = window.requestAnimationFrame(syncSection);
@@ -743,11 +839,16 @@
     chromeObserver?.disconnect();
     chromeObserver = null;
     scrollOwner?.removeEventListener('scroll', onProjectScroll);
+    scrollOwner?.removeEventListener('wheel', onManualProjectScroll);
+    scrollOwner?.removeEventListener('touchstart', onManualProjectScroll);
+    scrollOwner?.removeEventListener('keydown', onManualProjectScroll);
     window.removeEventListener('resize', onProjectScroll);
     window.cancelAnimationFrame(scrollFrame);
     window.clearTimeout(locationTimer);
     scrollFrame = 0;
     scrollOwner = null;
+    navigationTarget = null;
+    navigationTop = 0;
   }
   function attachProjectScroll() {
     detachProjectScroll();
@@ -756,10 +857,14 @@
     measureProjectChrome();
     if (typeof ResizeObserver !== 'undefined') {
       chromeObserver = new ResizeObserver(measureProjectChrome);
+      chromeObserver.observe(scrollOwner);
       if (projectHead.value) chromeObserver.observe(projectHead.value);
       if (sectionNav.value) chromeObserver.observe(sectionNav.value);
     }
     scrollOwner.addEventListener('scroll', onProjectScroll, { passive: true });
+    scrollOwner.addEventListener('wheel', onManualProjectScroll, { passive: true });
+    scrollOwner.addEventListener('touchstart', onManualProjectScroll, { passive: true });
+    scrollOwner.addEventListener('keydown', onManualProjectScroll);
     window.addEventListener('resize', onProjectScroll, { passive: true });
     onProjectScroll();
   }
@@ -771,10 +876,14 @@
     const inset = stickyInset();
     const top =
       container.scrollTop + section.getBoundingClientRect().top - container.getBoundingClientRect().top - inset;
-    container.scrollTo({
-      top: Math.max(0, top),
-      behavior: smooth && !window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'smooth' : 'auto',
-    });
+    navigationTarget = tab;
+    navigationTop = Math.max(0, Math.min(top, container.scrollHeight - container.clientHeight));
+    scrollIntoContainer(
+      container,
+      section,
+      inset,
+      smooth !== false && !window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'smooth' : 'auto',
+    );
     onProjectScroll();
   }
   function templateText(key: string) {
@@ -874,6 +983,7 @@
           selected: [...selectedResourceKeys.value],
           pageScroll: container?.scrollTop || 0,
           mobileLane: mobileLane.value,
+          progressOpen: progressOpen.value,
           summary: progressSummary.value,
           nextStep: progressNextStep.value,
           duration: progressDuration.value,
@@ -896,6 +1006,7 @@
     progressNextStep.value = String(state.nextStep ?? workspace.value?.nextStep ?? '');
     progressDraftEdited.value = Boolean(state.summary) || progressNextStep.value !== (workspace.value?.nextStep || '');
     progressDuration.value = Number(state.duration) || 0;
+    progressOpen.value = Boolean(state.progressOpen);
     await nextTick();
     const container = rootRef.value ? findScrollContainer(rootRef.value) : null;
     if (container) container.scrollTop = Number(state.pageScroll) || 0;
@@ -1049,9 +1160,16 @@
   }
   async function focusProgressForm() {
     if (blockGuestWrite('toolbox-project')) return;
-    progressDraftEdited.value = true;
-    await selectProjectTab('progress');
+    progressOpen.value = true;
+    await nextTick();
+    const editor = rootRef.value?.querySelector<HTMLElement>('#project-progress-editor');
+    if (editor && rootRef.value) scrollIntoContainer(findScrollContainer(rootRef.value), editor, stickyInset(), 'auto');
     progressInput.value?.$el?.querySelector('textarea')?.focus({ preventScroll: true });
+  }
+  async function collapseProgress() {
+    progressOpen.value = false;
+    await nextTick();
+    progressTrigger.value?.$el?.focus({ preventScroll: true });
   }
   async function saveProgress() {
     if (blockGuestWrite('toolbox-project')) return;
@@ -1070,6 +1188,8 @@
       await loadWorkspaceList();
       message.success(t('toolbox.workspace.progressSaved'));
       progressDraftEdited.value = false;
+      progressOpen.value = false;
+      await nextTick();
       await selectProjectTab('timeline');
     } catch (error) {
       showMutationError(error);
@@ -1144,10 +1264,28 @@
       if (mutationVersion === initializationVersion) mutating.value = false;
     }
   }
+  const selectableResources = computed(() =>
+    filteredResources.value.filter((resource) => resource.available !== false),
+  );
+  const allVisibleSelected = computed(
+    () =>
+      selectableResources.value.length > 0 &&
+      selectableResources.value.every((resource) =>
+        selectedResourceKeys.value.includes(`${resource.type}:${resource.resourceId}`),
+      ),
+  );
+  const someVisibleSelected = computed(() =>
+    selectableResources.value.some((resource) =>
+      selectedResourceKeys.value.includes(`${resource.type}:${resource.resourceId}`),
+    ),
+  );
+  function selectVisibleResources(selected: boolean) {
+    selectableResources.value.forEach((resource) => toggleResource(resource, selected));
+  }
   function selectResourceRow(resource: ToolboxWorkspaceResource, event: MouseEvent) {
     if (
       resource.available === false ||
-      (event.target as HTMLElement).closest('button, input, label, [role="checkbox"]')
+      (event.target as HTMLElement).closest('button, input, label, [role="checkbox"], .b-action-menu-anchor')
     )
       return;
     toggleResource(resource, !selectedResourceKeys.value.includes(`${resource.type}:${resource.resourceId}`));
@@ -1172,6 +1310,7 @@
     resourceSearch.value = '';
     progressDraftEdited.value = false;
     goalExpanded.value = false;
+    progressOpen.value = false;
     void initialize();
   });
   onMounted(initialize);
@@ -2003,13 +2142,11 @@
       gap: var(--ui-space-14, 14px);
     }
     .workspace-list-intro,
-    .workspace-section__head,
     .workspace-list-section > header {
       align-items: stretch;
       flex-direction: column;
     }
-    .workspace-list-intro :deep(.b_btn),
-    .workspace-section__head :deep(.b_btn) {
+    .workspace-list-intro :deep(.b_btn) {
       width: 100%;
       min-height: var(--ui-layout-44, 44px);
     }
@@ -2044,9 +2181,6 @@
     .workspace-progress-form__summary,
     .workspace-progress-form__hint {
       grid-column: auto;
-    }
-    .workspace-detail-head {
-      align-items: flex-start;
     }
     .workspace-detail-head__actions {
       flex-wrap: nowrap;
@@ -2503,5 +2637,788 @@
   .workspace-kicker,
   .workspace-section__kicker {
     color: var(--workspace-nav-text);
+  }
+</style>
+
+<style scoped lang="less">
+  @import (reference) '@/assets/css/workspace-surfaces.less';
+
+  // Continuous project detail: a desktop outline, a compact touch menu, one page scroll.
+  .knowledge-workspace.has-project-rail {
+    .workspace-canvas-surface();
+    --workspace-accent: var(--workspace-purple-text);
+    --workspace-accent-soft: var(--workspace-purple-selected);
+    display: grid;
+    grid-template-columns: var(--ui-layout-150, 150px) minmax(0, 1fr);
+    gap: var(--ui-space-24, 24px);
+    align-items: start;
+    .project-content {
+      display: grid;
+      gap: var(--ui-space-20, 20px);
+      min-width: 0;
+    }
+    .project-directory {
+      .workspace-open-surface();
+      align-self: stretch;
+      min-width: 0;
+      min-height: var(--project-scroll-height, 100vh);
+      border-right: 1px solid var(--workspace-border);
+    }
+    .project-section-navigation {
+      .workspace-open-surface();
+      max-height: var(--project-scroll-height, 100vh);
+      overflow-y: auto;
+      box-sizing: border-box;
+      grid-column: auto;
+      grid-row: auto;
+      position: sticky;
+      top: 0;
+      display: flex;
+      flex-direction: column;
+      gap: var(--ui-space-6, 6px);
+      padding: var(--ui-space-8, 8px);
+      border: 1px solid var(--workspace-border);
+      border-radius: 10px;
+      box-shadow: none;
+      margin: 0;
+      min-width: 0;
+    }
+    .project-directory-back {
+      padding-bottom: var(--ui-space-10, 10px);
+      margin-bottom: var(--ui-space-6, 6px);
+      border-bottom: 1px solid var(--workspace-divider);
+    }
+    .project-directory-back .b_btn {
+      gap: var(--ui-space-4, 4px);
+    }
+    .project-section-navigation > .b_btn {
+      width: 100%;
+      min-height: var(--ui-layout-40, 40px);
+      padding: var(--ui-space-8, 8px);
+      font-size: var(--ui-font-14, 14px);
+      text-align: left;
+      justify-content: flex-start;
+      gap: var(--ui-space-8, 8px);
+      border: 1px solid transparent;
+      border-left-width: 3px;
+      border-radius: 7px;
+      background: transparent;
+      color: var(--workspace-muted);
+    }
+    .project-section-navigation > .b_btn:hover {
+      .workspace-navigation-hover();
+    }
+    .project-section-navigation > .b_btn.is-current {
+      background: var(--workspace-purple-selected);
+      border-left-color: var(--workspace-purple-text);
+      color: var(--workspace-purple-text);
+    }
+    .project-section-navigation__icon {
+      display: block;
+    }
+    .project-mobile-controls {
+      display: none;
+    }
+    .project-breadcrumb__mobile-title {
+      display: none;
+    }
+    .workspace-detail-head {
+      .workspace-canvas-surface();
+      display: flex;
+      position: sticky;
+      top: 0;
+      min-height: var(--ui-layout-32, 32px);
+      padding: 0;
+      border: 0;
+      box-shadow: none;
+    }
+    .workspace-detail-head.is-pinned {
+      border-bottom: 1px solid var(--workspace-border);
+    }
+    .workspace-summary,
+    .workspace-section {
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+      padding: 0;
+      min-width: 0;
+      background: transparent;
+    }
+    .workspace-summary {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: var(--ui-space-12, 12px) var(--ui-space-24, 24px);
+    }
+    .workspace-summary__main {
+      flex: 1 1 var(--ui-layout-360, 360px);
+      min-width: 0;
+    }
+    .workspace-summary__main > div {
+      width: 100%;
+    }
+    .project-title-row {
+      display: flex;
+      align-items: center;
+      gap: var(--ui-space-12, 12px);
+      flex-wrap: wrap;
+    }
+    .workspace-summary h2 {
+      margin: 0;
+      font-size: var(--ui-font-28, 28px);
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+    .workspace-summary__meta {
+      flex-wrap: wrap;
+    }
+    .workspace-summary__main p {
+      margin: var(--ui-space-8, 8px) 0 0;
+      font-size: var(--ui-font-14, 14px);
+      color: var(--workspace-muted);
+      line-height: 1.6;
+      overflow-wrap: anywhere;
+    }
+    .project-summary-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--ui-space-10, 10px);
+      min-width: 0;
+    }
+    .project-summary-actions .b_btn {
+      gap: var(--ui-space-6, 6px);
+    }
+    .project-overview-metrics {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--ui-space-12, 12px);
+      margin-right: var(--ui-space-6, 6px);
+    }
+    .project-overview-metrics > div {
+      display: flex;
+      align-items: baseline;
+      gap: var(--ui-space-4, 4px);
+      min-width: 0;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      flex: none;
+    }
+    .project-overview-metrics strong,
+    .project-overview-metrics small {
+      font-size: var(--ui-font-13, 13px);
+      font-weight: 400;
+    }
+    .workspace-resume {
+      display: block;
+      padding: var(--ui-space-10, 10px) var(--ui-space-14, 14px);
+      border: 1px solid var(--workspace-border);
+      border-radius: 10px;
+      box-shadow: none;
+      background: var(--workspace-purple-selected);
+    }
+    .workspace-resume__lead {
+      gap: var(--ui-space-10, 10px);
+      min-width: 0;
+    }
+    .workspace-resume__lead > span {
+      width: var(--ui-layout-22, 22px);
+      height: var(--ui-layout-22, 22px);
+      background: transparent;
+      color: var(--workspace-purple-text);
+      flex-shrink: 0;
+    }
+    .workspace-resume__lead > div {
+      display: flex;
+      align-items: baseline;
+      gap: var(--ui-space-12, 12px);
+      min-width: 0;
+    }
+    .workspace-resume__lead small {
+      flex-shrink: 0;
+      color: var(--workspace-purple-text);
+    }
+    .workspace-resume__lead strong {
+      font-size: var(--ui-font-14, 14px);
+      font-weight: 500;
+      line-height: 1.5;
+    }
+    .workspace-section__head {
+      margin-bottom: var(--ui-space-12, 12px);
+      gap: var(--ui-space-12, 12px);
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .workspace-section h3 {
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: var(--ui-space-10, 10px);
+      font-size: var(--ui-font-20, 20px);
+      line-height: 1.5;
+    }
+    .workspace-section__head p {
+      font-size: var(--ui-font-13, 13px);
+    }
+    .workspace-resource-toolbar {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: var(--ui-space-8, 8px);
+      min-width: 0;
+    }
+    .workspace-resource-toolbar > .project-resource-search {
+      width: var(--ui-layout-260, 260px);
+      flex: 0 1 var(--ui-layout-260, 260px);
+      max-width: 100%;
+    }
+    .workspace-resource-grid {
+      .workspace-content-surface();
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0;
+      margin-top: 0;
+      border: 1px solid var(--workspace-border);
+      border-radius: 10px;
+    }
+    .workspace-resource-grid article {
+      padding: var(--ui-space-6, 6px) var(--ui-space-12, 12px);
+      border: 1px solid transparent;
+      border-bottom-color: var(--workspace-divider);
+      border-radius: 0;
+      min-width: 0;
+    }
+    .workspace-resource-grid article:first-child {
+      border-radius: 9px 9px 0 0;
+    }
+    .workspace-resource-grid article:last-child {
+      border-bottom-color: transparent;
+      border-radius: 0 0 9px 9px;
+    }
+    .workspace-resource-grid article:only-child {
+      border-radius: 9px;
+    }
+    .workspace-resource-grid article.is-selected {
+      border-color: var(--workspace-purple-text);
+      background: var(--workspace-purple-selected);
+    }
+    .workspace-resource-grid__icon {
+      background: transparent;
+      width: var(--ui-layout-28, 28px);
+    }
+    .workspace-resource-grid article > div:not(.b-action-menu-anchor) {
+      display: flex;
+      align-items: center;
+      gap: var(--ui-space-12, 12px);
+    }
+    .workspace-resource-grid article > .b-action-menu-anchor {
+      flex: none;
+      display: block;
+    }
+    .workspace-resource-grid small {
+      flex: 0 0 auto;
+      min-width: var(--ui-layout-64, 64px);
+      font-size: var(--ui-font-12, 12px);
+    }
+    .workspace-resource-link.b_btn {
+      flex: 1;
+      min-width: 0;
+      color: var(--workspace-text);
+      font-weight: 500;
+      font-size: var(--ui-font-14, 14px);
+    }
+    .workspace-resource-link.b_btn:hover {
+      color: var(--workspace-purple-text);
+    }
+    .workspace-section-empty {
+      .workspace-content-surface();
+      min-height: var(--ui-layout-64, 64px);
+      padding: var(--ui-space-14, 14px);
+      border: 1px solid var(--workspace-border);
+      border-radius: 10px;
+      flex-direction: row;
+      justify-content: flex-start;
+      text-align: left;
+      font-size: var(--ui-font-13, 13px);
+    }
+    .workspace-progress-section {
+      .workspace-content-surface();
+      padding: var(--ui-space-16, 16px);
+      border: 1px solid var(--workspace-border);
+      border-radius: 10px;
+      animation: project-view-enter 160ms ease-out;
+    }
+    .workspace-progress-form {
+      margin-top: 0;
+    }
+    @media (max-width: 1199px) {
+      grid-template-columns: minmax(0, 1fr);
+      .project-directory {
+        display: none;
+      }
+      .project-mobile-controls {
+        display: flex;
+        align-items: center;
+        gap: var(--ui-space-6, 6px);
+      }
+      .project-directory-trigger {
+        gap: var(--ui-space-6, 6px);
+      }
+      .project-settings-desktop {
+        display: none;
+      }
+      .project-summary-actions {
+        flex: 1 1 100%;
+        justify-content: space-between;
+      }
+      .workspace-resource-toolbar {
+        flex: 1 1 auto;
+        justify-content: flex-end;
+      }
+    }
+    @media (max-width: 767px) {
+      .project-content {
+        gap: var(--ui-space-16, 16px);
+      }
+      .workspace-detail-head {
+        min-height: var(--ui-layout-44, 44px);
+      }
+      .project-breadcrumb {
+        display: flex;
+      }
+      .project-breadcrumb__mobile-back {
+        display: inline-block;
+      }
+      .project-breadcrumb__workshop,
+      .project-breadcrumb__desktop-label,
+      .project-breadcrumb__separator,
+      .project-breadcrumb__current {
+        display: none;
+      }
+      .project-breadcrumb {
+        font-size: var(--ui-font-18, 18px);
+        font-weight: 600;
+      }
+      .project-breadcrumb > .b_btn {
+        width: var(--ui-layout-44, 44px);
+        min-width: var(--ui-layout-44, 44px);
+        height: var(--ui-layout-44, 44px);
+        min-height: var(--ui-layout-44, 44px);
+        padding: 0;
+        border-radius: 11px;
+        color: var(--text-color);
+      }
+      .project-breadcrumb__mobile-title {
+        display: block;
+        min-width: 0;
+        margin: 0;
+        flex: 1 1 auto;
+        overflow: hidden;
+        color: var(--text-color);
+        font-size: var(--ui-font-18, 18px);
+        font-weight: 720;
+        line-height: 1.2;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .project-mobile-controls .project-directory-trigger,
+      .project-mobile-controls .project-settings-trigger {
+        min-width: var(--ui-layout-44, 44px);
+        height: var(--ui-layout-44, 44px);
+        border: 0;
+      }
+      .workspace-summary h2 {
+        font-size: var(--ui-font-22, 22px);
+      }
+      .project-title-row {
+        gap: var(--ui-space-8, 8px);
+      }
+      .workspace-summary {
+        gap: var(--ui-space-10, 10px);
+      }
+      .project-summary-actions {
+        gap: var(--ui-space-10, 10px);
+      }
+      .project-overview-metrics {
+        gap: var(--ui-space-8, 8px);
+      }
+      .workspace-resume__lead > span {
+        display: none;
+      }
+      .workspace-resume__lead > div {
+        flex-wrap: wrap;
+        gap: var(--ui-space-4, 4px) var(--ui-space-10, 10px);
+      }
+      .workspace-section h3 {
+        font-size: var(--ui-font-18, 18px);
+      }
+      .workspace-resources-section > .workspace-section__head {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+      }
+      .workspace-resource-toolbar {
+        display: contents;
+      }
+      .project-resource-add {
+        grid-column: 2;
+        grid-row: 1;
+      }
+      .workspace-resource-toolbar > .project-resource-search {
+        grid-column: 1;
+        grid-row: 2;
+        width: 100%;
+        min-width: 0;
+      }
+      .project-resource-generate {
+        grid-column: 2;
+        grid-row: 2;
+      }
+      .workspace-resource-grid article {
+        padding: var(--ui-space-8, 8px);
+        gap: var(--ui-space-8, 8px);
+      }
+      .workspace-resource-grid article > div:not(.b-action-menu-anchor) {
+        display: grid;
+        gap: 0;
+      }
+      .workspace-resource-link.b_btn {
+        min-height: var(--ui-layout-26, 26px);
+      }
+      .workspace-progress-form {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .workspace-progress-section {
+        animation: none;
+      }
+    }
+  }
+
+  // Approved neutral prototype: white work panels on a quiet canvas.
+  .knowledge-workspace.has-project-rail {
+    gap: var(--ui-space-32, 32px);
+    grid-template-columns: var(--ui-layout-160, 160px) minmax(0, 1fr);
+    .project-content {
+      padding: var(--ui-space-16, 16px) var(--ui-space-24, 24px) var(--ui-space-24, 24px) 0;
+      gap: var(--ui-space-24, 24px);
+    }
+    .project-section-navigation {
+      border: 0;
+      border-radius: 0;
+      padding: var(--ui-space-16, 16px) var(--ui-space-8, 8px);
+      min-height: 0;
+      gap: var(--ui-space-2, 2px);
+    }
+    .project-directory-back {
+      padding-bottom: 0;
+      border: 0;
+      margin-bottom: var(--ui-space-16, 16px);
+    }
+    .project-directory-back .b_btn {
+      color: var(--workspace-muted);
+    }
+    .project-section-navigation > .b_btn {
+      min-height: var(--ui-layout-36, 36px);
+      line-height: 1.4;
+    }
+    .workspace-detail-head {
+      min-height: var(--ui-layout-24, 24px);
+      margin-bottom: calc(-1 * var(--ui-space-16, 16px));
+    }
+    .project-overview-panel {
+      display: grid;
+      gap: var(--ui-space-12, 12px);
+      min-width: 0;
+    }
+    .project-kind {
+      background: var(--workspace-hover);
+      color: var(--workspace-muted);
+      border-color: transparent;
+    }
+    .project-status {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--ui-space-8, 8px);
+      font-size: var(--ui-font-13, 13px);
+      color: var(--workspace-text);
+    }
+    .project-status i {
+      width: var(--ui-layout-8, 8px);
+      height: var(--ui-layout-8, 8px);
+      border-radius: 50%;
+      background: var(--workspace-muted);
+    }
+    .project-status[data-status='active'] i {
+      background: var(--success-color);
+    }
+    .project-status[data-status='paused'] i {
+      background: var(--warning-color);
+    }
+    .project-overview-metrics > div {
+      flex-direction: column;
+      align-items: center;
+      padding: 0 var(--ui-space-12, 12px);
+    }
+    .project-overview-metrics > div + div {
+      border-left: 1px solid var(--workspace-divider);
+    }
+    .project-overview-metrics strong {
+      font-size: var(--ui-font-16, 16px);
+      font-weight: 600;
+    }
+    .project-settings-desktop {
+      background: var(--workspace-content);
+      border: 1px solid var(--workspace-border);
+    }
+    .workspace-resume {
+      background: transparent;
+      border-color: var(--workspace-border);
+      border-radius: 6px;
+      padding: var(--ui-space-10, 10px) var(--ui-space-16, 16px);
+    }
+    .workspace-resume__lead small {
+      color: var(--workspace-text);
+      padding-right: var(--ui-space-12, 12px);
+      border-right: 1px solid var(--workspace-divider);
+    }
+    .workspace-resume__lead strong {
+      color: var(--workspace-muted);
+      font-weight: 400;
+    }
+    .workspace-resume__lead > span {
+      display: none;
+    }
+    .workspace-section {
+      background: var(--workspace-content);
+      border: 1px solid var(--workspace-border);
+      border-radius: 8px;
+      padding: var(--ui-space-16, 16px);
+    }
+    .workspace-section h3 {
+      font-size: var(--ui-font-18, 18px);
+    }
+    .workspace-resources-section {
+      padding: 0;
+      overflow: hidden;
+    }
+    .workspace-resources-section > .workspace-section__head {
+      padding: var(--ui-space-12, 12px) var(--ui-space-16, 16px);
+      margin: 0;
+    }
+    .workspace-resource-grid {
+      border: 0;
+      border-radius: 0;
+    }
+    .workspace-resources-section > .workspace-section-empty {
+      margin: 0 var(--ui-space-16, 16px) var(--ui-space-16, 16px);
+    }
+    .project-resource-add {
+      background: var(--workspace-content);
+      border: 1px solid var(--workspace-border);
+      color: var(--workspace-text);
+    }
+    .project-add-short {
+      display: none;
+    }
+    .project-resource-generate:disabled {
+      background: var(--workspace-hover);
+      border: 1px solid var(--workspace-border);
+    }
+    .workspace-section h3 :deep(.b-chip) {
+      background: var(--workspace-hover);
+      border: 0;
+      border-radius: 5px;
+      font-size: var(--ui-font-12, 12px);
+      font-weight: 400;
+      color: var(--workspace-muted);
+    }
+    .project-resource-columns {
+      display: grid;
+      grid-template-columns: var(--ui-layout-44, 44px) minmax(0, 1fr) var(--ui-layout-160, 160px) var(
+          --ui-layout-32,
+          32px
+        );
+      align-items: center;
+      padding: var(--ui-space-6, 6px) var(--ui-space-12, 12px);
+      background: var(--workspace-canvas);
+      border-top: 1px solid var(--workspace-divider);
+      border-bottom: 1px solid var(--workspace-divider);
+      border-radius: 0;
+      font-size: var(--ui-font-12, 12px);
+      color: var(--workspace-muted);
+    }
+    .workspace-resource-grid article {
+      padding-top: var(--ui-space-3, 3px);
+      padding-bottom: var(--ui-space-3, 3px);
+    }
+    .workspace-resource-grid small {
+      min-width: var(--ui-layout-150, 150px);
+    }
+    .workspace-resource-grid__icon {
+      border-radius: 5px;
+    }
+    .workspace-resource-grid__icon.is-bookmark {
+      background: var(--workspace-purple-selected);
+    }
+    .workspace-resource-grid__icon.is-note {
+      background: var(--workspace-note-selected);
+    }
+    .workspace-resource-grid__icon.is-file {
+      background: var(--workspace-file-selected);
+    }
+    .workspace-board-section {
+      position: relative;
+    }
+    .workspace-board-section :deep(.project-board__toolbar) {
+      justify-content: flex-end;
+      margin-top: calc(-1 * var(--ui-space-36, 36px));
+      min-height: var(--ui-layout-24, 24px);
+      margin-bottom: var(--ui-space-12, 12px);
+      padding-left: var(--ui-layout-180, 180px);
+    }
+    .workspace-board-section :deep(.project-board__hint) {
+      flex: none;
+      text-align: right;
+    }
+    .workspace-timeline {
+      gap: var(--ui-space-10, 10px);
+    }
+    .workspace-timeline article > div {
+      background: transparent;
+      border: 0;
+      padding: 0;
+    }
+    .workspace-timeline article::before {
+      display: none;
+    }
+    .workspace-timeline article {
+      background: var(--workspace-content);
+      border: 1px solid var(--workspace-border);
+      border-radius: 8px;
+      padding: var(--ui-space-16, 16px);
+    }
+    @media (max-width: 1199px) {
+      grid-template-columns: minmax(0, 1fr);
+      .project-content {
+        padding: var(--ui-space-16, 16px);
+      }
+    }
+    @media (max-width: 767px) {
+      .project-content {
+        padding: 0;
+        gap: var(--ui-space-10, 10px);
+      }
+      .project-content > :not(.workspace-detail-head) {
+        margin-inline: var(--ui-space-10, 10px);
+      }
+      .workspace-detail-head {
+        margin: 0;
+        padding: 0 var(--ui-space-8, 8px) 0 var(--ui-space-12, 12px);
+        height: var(--ui-layout-56, 56px);
+        min-height: var(--ui-layout-56, 56px);
+        box-sizing: border-box;
+        background: var(--workspace-content);
+        border-bottom: 1px solid var(--workspace-border);
+      }
+      .project-directory-trigger {
+        color: var(--workspace-text);
+      }
+      .project-overview-panel,
+      .workspace-section {
+        padding: var(--ui-space-14, 14px);
+        background: var(--workspace-content);
+        border: 1px solid var(--workspace-border);
+        border-radius: 12px;
+      }
+      .project-overview-panel {
+        gap: var(--ui-space-12, 12px);
+      }
+      .workspace-summary h2 {
+        font-size: var(--ui-font-24, 24px);
+      }
+      .workspace-summary__meta {
+        gap: var(--ui-space-12, 12px);
+      }
+      .workspace-resume {
+        padding: var(--ui-space-12, 12px) 0 0;
+        border: 0;
+        border-top: 1px solid var(--workspace-divider);
+        border-radius: 0;
+      }
+      .workspace-resume__lead small {
+        border: 0;
+      }
+      .project-overview-metrics {
+        gap: var(--ui-space-8, 8px);
+      }
+      .project-overview-metrics > div {
+        flex-direction: row;
+        padding: 0;
+        border: 0;
+      }
+      .project-overview-metrics strong {
+        font-size: var(--ui-font-13, 13px);
+        font-weight: 400;
+      }
+      .workspace-resources-section > .workspace-section__head {
+        padding: 0;
+        margin-bottom: var(--ui-space-12, 12px);
+      }
+      .workspace-resume__lead > div {
+        display: grid;
+        gap: var(--ui-space-4, 4px);
+      }
+      .workspace-resume__lead small {
+        font-weight: 600;
+      }
+      .project-resource-add {
+        justify-self: end;
+        border: 0;
+        padding-right: 0;
+        background: transparent;
+      }
+      .project-add-label {
+        display: none;
+      }
+      .project-add-short {
+        display: inline;
+      }
+      .project-resource-columns {
+        display: none;
+      }
+      .workspace-resource-grid {
+        border: 0;
+        border-radius: 0;
+      }
+      .workspace-resource-grid article {
+        padding: var(--ui-space-8, 8px) 0;
+        border-top: 1px solid var(--workspace-divider);
+        border-bottom: 0;
+      }
+      .workspace-resource-grid small {
+        min-width: 0;
+      }
+      .workspace-resource-grid__icon {
+        width: var(--ui-layout-28, 28px);
+        height: var(--ui-layout-30, 30px);
+      }
+      .workspace-board-section :deep(.project-board__toolbar) {
+        margin: 0 0 var(--ui-space-12, 12px);
+        padding: 0;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        justify-content: stretch;
+        gap: var(--ui-space-6, 6px);
+      }
+      .workspace-board-section :deep(.project-board__hint) {
+        text-align: left;
+      }
+      .workspace-board-section :deep(.project-board__lane-select) {
+        width: 100%;
+      }
+    }
   }
 </style>

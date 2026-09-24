@@ -126,13 +126,13 @@
             >{{ t('toolbox.task.partialReading') }}</p
           >
           <section class="toolbox-result">
-            <BTabs v-model:active-tab="activeTab" variant="line" :options="tabOptions" />
+            <BTabs v-if="tabOptions.length > 1" v-model:active-tab="activeTab" variant="line" :options="tabOptions" />
 
             <div v-if="activeTab === 'output'" class="toolbox-result__output">
               <div class="toolbox-result__document">
                 <div class="toolbox-result__document-head">
                   <span>{{ t('toolbox.task.resultEyebrow') }}</span>
-                  <p>{{ resultMaterialSummary }}</p>
+                  <p>{{ isDocumentSummary ? t('toolbox.documentSummary.sourceHint') : resultMaterialSummary }}</p>
                   <div class="toolbox-result__deliver"
                     ><BButton size="small" @click="copyResult">{{ t('toolbox.local.copyResult') }}</BButton
                     ><BButton size="small" @click="downloadResult">{{
@@ -156,7 +156,7 @@
                 ></article>
               </div>
               <aside class="toolbox-result__rail">
-                <section v-if="!isPromptCreation" class="toolbox-result__evidence-note">
+                <section v-if="!isPromptCreation && !isDocumentSummary" class="toolbox-result__evidence-note">
                   <span><SvgIcon :src="icon.toolbox.locate" size="19" /></span>
                   <div>
                     <strong>{{ t('toolbox.task.evidenceTitle') }}</strong>
@@ -522,6 +522,7 @@
     return job.value?.status === 'failed' ? t('toolbox.task.finalFailureMessage') : t('toolbox.task.processingFailed');
   });
   const showProgress = computed(() => ['queued', 'processing'].includes(job.value?.status || ''));
+  const isDocumentSummary = computed(() => job.value?.toolId === 'pdf_text_extractor' && artifact.value?.type === 'document_summary');
   const isPromptCreation = computed(() => job.value?.toolId === 'idea_to_draft');
   const statusIcon = computed(() => {
     if (isRetrying.value) return icon.message.loading;
@@ -652,10 +653,10 @@
   );
   const tabOptions = computed(() => [
     { key: 'output', label: t('toolbox.task.outputTab') },
-    ...(!isPromptCreation.value
+    ...(!isPromptCreation.value && !isDocumentSummary.value
       ? [{ key: 'sources', label: t('toolbox.task.sourcesTab'), badge: sourcePresentations.value.length }]
       : []),
-    ...(job.value?.billing.medium === 'free' ? [] : [{ key: 'billing', label: t('toolbox.task.billingTab') }]),
+    ...(job.value?.billing.medium === 'free' || isDocumentSummary.value ? [] : [{ key: 'billing', label: t('toolbox.task.billingTab') }]),
   ]);
 
   function returnToToolboxParent() {

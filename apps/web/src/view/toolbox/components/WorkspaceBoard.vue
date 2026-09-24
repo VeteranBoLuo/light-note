@@ -1,5 +1,11 @@
 <template>
-  <div ref="boardRoot" class="project-board" @pointermove="trackPointer" @pointerleave="clearHover">
+  <div
+    ref="boardRoot"
+    class="project-board"
+    :class="{ 'is-mobile': mobile }"
+    @pointermove="trackPointer"
+    @pointerleave="clearHover"
+  >
     <div class="project-board__toolbar">
       <div v-if="mobile" class="project-board__lane-select">
         <span v-for="lane in BOARD_LANES" :key="lane" class="project-board__lane-measure" aria-hidden="true">{{
@@ -7,7 +13,7 @@
         }}</span>
         <BSelect
           v-model:value="mobileLane"
-          :options="BOARD_LANES.map((lane) => ({ value: lane, label: laneText(lane) }))"
+          :options="BOARD_LANES.map((lane) => ({ value: lane, label: `${laneText(lane)} · ${lists[lane].length}` }))"
         />
       </div>
       <span v-if="!readonly" class="project-board__hint">{{
@@ -22,13 +28,14 @@
       <section v-for="lane in visibleLanes" :key="lane" class="project-board__lane" :data-lane="lane">
         <header
           ><div
-            ><h4>{{ laneText(lane) }}</h4
+            ><h4
+              >{{ laneText(lane) }} <span class="project-board__count">{{ lists[lane].length }}</span></h4
             ><p :class="{ 'is-drop-description': dragged && lane !== dragged.lane && !mobile }">{{
               dragged && lane !== dragged.lane && !mobile
                 ? t(`toolbox.board.${boardConversion(dragged.lane, lane)}Hint`)
                 : laneText(lane, 'description')
             }}</p></div
-          ><BChip tone="neutral">{{ lists[lane].length }}</BChip></header
+          ></header
         >
         <VueDraggable
           :key="`${dragKey}-${lane}`"
@@ -496,6 +503,7 @@
   }
 </script>
 <style scoped lang="less">
+  @import (reference) '@/assets/css/workspace-surfaces.less';
   .project-board__lane-select {
     display: grid;
     width: max-content;
@@ -522,7 +530,7 @@
     gap: var(--ui-space-12, 12px);
     align-items: center;
     flex-wrap: wrap;
-    margin: var(--ui-space-16, 16px) 0;
+    margin: 0 0 var(--ui-space-12, 12px);
   }
   .project-board__hint {
     font-size: var(--ui-font-12, 12px);
@@ -532,15 +540,49 @@
   .project-board__lanes {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: var(--ui-space-14, 14px);
-    align-items: start;
+    gap: 0;
+    align-items: stretch;
   }
   .project-board__lane {
     min-width: 0;
-    padding: var(--ui-space-12, 12px);
-    border: 1px solid var(--surface-border-color);
-    border-radius: 16px;
-    background: var(--workspace-panel-bg-color);
+    padding: 0 var(--ui-space-14, 14px);
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    display: flex;
+    flex-direction: column;
+  }
+  .project-board__lane:first-child {
+    padding-left: 0;
+  }
+  .project-board__lane:last-child {
+    padding-right: 0;
+  }
+  .project-board__lane + .project-board__lane {
+    border-left: 1px solid var(--workspace-divider);
+  }
+  .project-board__count {
+    font-weight: 400;
+    color: var(--workspace-muted);
+    margin-left: var(--ui-space-6, 6px);
+    background: var(--workspace-hover);
+    padding: var(--ui-space-2, 2px) var(--ui-space-6, 6px);
+    border-radius: 5px;
+    font-size: var(--ui-font-12, 12px);
+  }
+  .project-board__lane header p {
+    display: none;
+  }
+  .project-board__lane header p.is-drop-description {
+    display: block;
+  }
+  .project-board.is-mobile .project-board__lane {
+    background: transparent;
+    border: 0;
+    padding: 0;
+  }
+  .project-board.is-mobile .project-board__lane > header {
+    display: none;
   }
   .project-board__lane header {
     display: flex;
@@ -554,9 +596,8 @@
     font-size: var(--ui-font-15, 15px);
   }
   .project-board__lane header p {
-    height: var(--ui-layout-32, 32px);
-    line-height: var(--ui-layout-16, 16px);
-    overflow: hidden;
+    min-height: var(--ui-layout-32, 32px);
+    line-height: 1.5;
     margin: var(--ui-space-5, 5px) 0 0;
     color: var(--desc-color);
     font-size: var(--ui-font-11, 11px);
@@ -568,26 +609,30 @@
     display: grid;
     gap: var(--ui-space-10, 10px);
     min-height: var(--ui-layout-32, 32px);
+    padding-bottom: var(--ui-space-12, 12px);
   }
   .project-board__empty {
     font-size: var(--ui-font-12, 12px);
     line-height: 1.6;
     text-align: center;
     color: var(--desc-color);
-    padding: var(--ui-space-16, 16px) var(--ui-space-6, 6px);
-    margin: 0;
+    padding: var(--ui-space-24, 24px) var(--ui-space-6, 6px);
+    margin: auto 0;
   }
   .project-board__add.b_btn {
-    margin-top: var(--ui-space-12, 12px);
+    margin-top: auto;
     background: transparent;
-    border: 1px dashed var(--surface-border-color);
+    border: 0;
+    justify-content: flex-start;
+    border-radius: 6px;
+    color: var(--workspace-purple-text);
     white-space: normal;
     height: auto;
     min-height: var(--ui-layout-34, 34px);
     font-size: var(--ui-font-12, 12px);
     gap: var(--ui-space-6, 6px);
     line-height: 1.4;
-    padding: var(--ui-space-6, 6px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-6, 6px);
   }
   .project-board__drop:empty {
     min-height: var(--ui-layout-64, 64px);

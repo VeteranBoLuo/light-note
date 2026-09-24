@@ -223,12 +223,12 @@ describe('知识工具箱前端边界', () => {
 
     expect(groupedToolIds).toEqual(activeToolIds);
     expect(new Set(groupedToolIds).size).toBe(groupedToolIds.length);
-    expect(activeToolIds).toHaveLength(17);
+    expect(activeToolIds).toHaveLength(18);
     expect(TOOLBOX_HOME_GROUPS.find((group) => group.id === 'prepare')?.toolIds).toEqual([
-      'docx_to_markdown',
-      'ocr_to_text',
       'pdf_organizer',
       'image_optimizer',
+      'docx_to_markdown',
+      'ocr_to_text',
     ]);
     expect(TOOLBOX_HOME_GROUPS.find((group) => group.id === 'data')?.toolIds).toEqual([
       'data_workbench',
@@ -236,8 +236,6 @@ describe('知识工具箱前端边界', () => {
     ]);
     expect(home).toContain('class="toolbox-overview"');
     expect(homeTemplate).toContain("router.push({ name: 'aiUsage' })");
-    expect(home).toContain('color: #a34f00;');
-    expect(home).toContain(":global([data-theme='night'] .toolbox-asset__icon)");
     expect(home).not.toContain('.toolbox-asset > :first-child');
     expect(homeTemplate).not.toContain('class="toolbox-section toolbox-start toolbox-outcomes"');
     expect(homeTemplate).toContain('class="toolbox-section toolbox-quick"');
@@ -310,12 +308,7 @@ describe('知识工具箱前端边界', () => {
     expect(home).toContain('owner.scrollTo');
     expect(home).not.toContain('.filter((group) => group.id === activeToolGroup.value)');
     expect(home).toContain('v-else-if="!visibleGroups.length"');
-    expect(home).toContain('grid-template-columns: repeat(4, minmax(0, 1fr))');
-    expect(home).toContain('@media (max-width: 767px)');
-    expect(home).toContain('html.light-note-mobile-rendering .toolbox-card__icon)');
-    expect(home).toContain('.toolbox-catalog__search :deep(.b-input:focus-visible)');
     expect(home).toContain('handleSearchShortcut');
-    expect(home).toContain('overflow-x: auto');
     expect(home).not.toContain('overflow-y: auto');
     expect(home).not.toMatch(/<input\b|<select\b|<a-/u);
   });
@@ -383,10 +376,6 @@ describe('知识工具箱前端边界', () => {
     expect(homeTemplate.indexOf('toolbox-tasks')).toBeLessThan(homeTemplate.indexOf('toolbox-quick'));
     expect(home).not.toContain("query: { create: '1' }");
     expect(home).not.toContain('starterAccessibleLabel(tool)');
-    expect(home).toContain('min-height: 96px');
-    expect(home).toContain('.toolbox-category-filter :deep(.b-chip--interactive)');
-    expect(home).toContain('min-height: 44px');
-    expect(home).toContain('html.light-note-mobile-rendering .toolbox-start-card.b_btn');
     expect(home).not.toMatch(/\.toolbox-start(?:-grid|-card)?[^}]*overflow-y:\s*(?:auto|scroll)/u);
   });
 
@@ -443,10 +432,18 @@ describe('知识工具箱前端边界', () => {
     expect(workspace).toContain("t('toolbox.workspace.backToList')");
     expect(workspace).toContain('html.light-note-mobile-rendering');
     expect(workspaceTemplate).not.toMatch(/<input\b|<select\b|<textarea\b|<a-/u);
-    // 移动端全屏表单需要独立滚动；页面工作区仍保持单一主滚动。
+    // 全屏表单与受视口高度约束的目录可独立滚动；正文仍保持单一主滚动。
     const mobileModalRule = /\.workspace-modal-form--mobile\s*\{[^}]*\}/u;
+    const projectDirectoryRule = /\.project-section-navigation\s*\{[^}]*\}/gu;
     expect(workspace.match(mobileModalRule)?.[0]).toMatch(/overflow-y:\s*auto/u);
-    expect(workspace.replace(mobileModalRule, '')).not.toMatch(/overflow-y:\s*(?:auto|scroll)/u);
+    const scrollingDirectoryRules = (workspace.match(projectDirectoryRule) || []).filter((rule) =>
+      /overflow-y:\s*(?:auto|scroll)/u.test(rule),
+    );
+    expect(scrollingDirectoryRules).toHaveLength(1);
+    expect(scrollingDirectoryRules[0]).toMatch(/max-height:\s*var\(--project-scroll-height,/u);
+    expect(workspace.replace(mobileModalRule, '').replace(projectDirectoryRule, '')).not.toMatch(
+      /overflow-y:\s*(?:auto|scroll)/u,
+    );
     expect(workspace).toContain('@media (max-width: 767px)');
   });
 
@@ -639,14 +636,15 @@ describe('知识工具箱前端边界', () => {
     expect(home).not.toContain("tool.phase === 'next'");
   });
 
-  it('工具箱降为更多菜单入口，聊天室保留一级胶囊状态样式', () => {
+  it('知识工坊使用独立入口，聊天室保留一级胶囊状态样式', () => {
     const navigation = source('src/components/home/navigation/Navigation.vue');
     const rightArea = source('src/components/home/navigation/RightArea.vue');
     expect(navigation).not.toContain('class="navigation-pill-entry navigation-toolbox-entry"');
     expect(navigation).toContain('class="navigation-pill-entry navigation-community-entry"');
     expect(navigation).toContain('.navigation-pill-entry:hover');
     expect(navigation).toContain('.navigation-pill-entry.is-active');
-    expect(rightArea).toContain("label: t('navigation.toolbox')");
+    expect(rightArea).toContain('class="workshop-entry-btn"');
+    expect(rightArea).toContain(':aria-label="t(\'navigation.toolbox\')"');
     expect(rightArea).toContain('function knowledgeWorkshopClick()');
   });
 

@@ -1,3 +1,4 @@
+import { toolboxWorkerEnabled } from './workerPolicy.js';
 import { extractStudyCards } from './studyCards.js';
 import { executeFreeOcr } from './freeOcr.js';
 import { executeAiOcr } from './aiOcr.js';
@@ -753,6 +754,7 @@ async function failOrRetryToolboxJob(job, workerId, error, database = pool) {
 }
 
 export async function runSingleToolboxJob(workerId, database = pool) {
+  if (!toolboxWorkerEnabled()) return false;
   const job = await claimNextToolboxJob(workerId, database);
   if (!job) return false;
   if (job.terminalized) return true;
@@ -799,6 +801,7 @@ export async function runSingleToolboxJob(workerId, database = pool) {
     if (error instanceof ToolboxDocumentWait || error?.code === 'TOOLBOX_DOCUMENT_WAIT') {
       await requeueForDocuments(job, leaseOwner, database);
     } else {
+      console.warn('[toolbox-worker] job=%s worker=%s code=%s', job.id, workerId, safeWorkerError(error).code);
       await failOrRetryToolboxJob(job, leaseOwner, error, database);
     }
   }
@@ -806,6 +809,7 @@ export async function runSingleToolboxJob(workerId, database = pool) {
 }
 
 export async function cleanupExpiredToolboxData(database = pool) {
+  if (!toolboxWorkerEnabled()) return;
   await database.query("UPDATE toolbox_quotes SET status = 'expired' WHERE status = 'active' AND expires_at <= NOW()");
   const [expiredJobs] = await database.query(
     `SELECT id, user_id FROM toolbox_jobs

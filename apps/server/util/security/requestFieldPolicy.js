@@ -1,3 +1,4 @@
+import { AI_DOCUMENT_SUMMARY_MAX_CHARS } from '@lightnote/shared/ai-skill-protocol';
 import { validatePushSubscription } from '../browserPushPolicy.js';
 import { MAX_BOOKMARK_INPUT_LENGTH } from '@lightnote/shared';
 import { DRAWING_SCENE_MAX_BYTES } from '@lightnote/shared/drawing-note';
@@ -335,7 +336,10 @@ export const resolveRequestFieldPolicy = (context = {}, field = '') => {
     ? '/daily-review/items/:id/action'
     : normalizedPath;
   const routeKey = `${method} ${policyPath}`;
-  const definition = REQUEST_FIELD_POLICIES.get(routeKey)?.get(String(field));
+  const definition = method === 'POST' && policyPath === '/ai/skills/execute' &&
+    field === 'body.input.text' && context.body?.skillId === 'toolbox.summarize_text'
+    ? policy({ semantic: 'ai-document-summary-text', maxSize: AI_DOCUMENT_SUMMARY_MAX_CHARS, skipSignatureRules: '*' })
+    : REQUEST_FIELD_POLICIES.get(routeKey)?.get(String(field));
   if (!definition) return null;
   const value = requestFieldValue(context, field);
   const size = definition.sizeUnit === 'utf8-bytes' ? utf8Length(value) : definition.measure(value);

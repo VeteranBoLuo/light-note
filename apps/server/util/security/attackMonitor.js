@@ -55,7 +55,10 @@ export const attackMonitor = async (req, res, next) => {
     evidenceList.filter((item) => item.policyMode === 'block'),
     {},
   );
-  const decision = decideSecurityAction({ threatScore: blockingThreat.threatScore, ipReputation: effectiveIpReputation });
+  const decision = decideSecurityAction({
+    threatScore: blockingThreat.threatScore,
+    ipReputation: effectiveIpReputation,
+  });
   debugSecurity(context.method, context.originalUrl, evidenceList.length, threat.threatScore, decision.actionTaken);
 
   let responsePayload = '';
@@ -70,7 +73,11 @@ export const attackMonitor = async (req, res, next) => {
       return;
     }
     const responseContext = { ...context, routeMatched: Boolean(req.route) };
-    const responseEvidence = detectResponseBehavior(responseContext, res.statusCode, responsePayload);
+    const responseEvidence = detectResponseBehavior(
+      responseContext,
+      res.statusCode,
+      context.privateCollection ? '[PRIVATE_COLLECTION_CONTENT]' : responsePayload,
+    );
     const responsePolicyResult = await applySecurityPolicies({
       context: responseContext,
       evidenceList: responseEvidence,

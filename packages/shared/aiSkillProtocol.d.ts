@@ -1,3 +1,4 @@
+export declare const AI_DOCUMENT_SUMMARY_MAX_CHARS: number;
 export declare const AI_SKILL_PROTOCOL_VERSION: 1;
 export declare const AI_SCOPED_CONVERSATION_MAX_RESOURCES: 50;
 export type AiSkillStatus =

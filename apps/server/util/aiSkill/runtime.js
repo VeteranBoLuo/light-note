@@ -1,3 +1,4 @@
+import { buildAiInputDiagnostics } from '../aiExecution/diagnostics.js';
 import {
   AI_SKILL_PROTOCOL_VERSION,
   validateAiSkillRequest,
@@ -112,6 +113,7 @@ export async function executeAiSkill(rawRequest, req, dependencies = {}) {
     assertDomainEnabled(skill.domain);
     const result = await runExecution(
       createAiSkillExecutionConfig(skill, request, {
+        inputDiagnostics: buildAiInputDiagnostics(request),
         requestId: request.requestId,
         request: req,
         identity: req?.billingUser || req?.user,

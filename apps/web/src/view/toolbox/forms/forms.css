@@ -1,0 +1,64 @@
+/* Shared collection-form primitives. Component layout and state styles live in their Vue owners. */
+.collection-card {
+  padding: var(--ui-space-20, 20px);
+  border: 1px solid var(--workspace-border);
+  border-radius: var(--ui-space-12, 12px);
+  background: var(--workspace-content);
+}
+.collection-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ui-space-16, 16px);
+}
+.collection-description {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.collection-muted {
+  color: var(--workspace-muted);
+  font-size: var(--ui-font-12, 12px);
+}
+.collection-error {
+  color: var(--danger-color);
+  overflow-wrap: anywhere;
+}
+.collection-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ui-space-8, 8px);
+}
+.collection-toolbar > * {
+  min-width: 0;
+}
+.collection-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ui-space-12, 12px);
+}
+
+.collection-card {
+  box-sizing: border-box;
+}
+.collection-toolbar > .input-container {
+  width: var(--ui-layout-180, 180px);
+  max-width: 100%;
+}
+.collection-row > .input-container {
+  flex: 1;
+}
+@media (max-width: 768px) {
+  .collection-toolbar > .input-container {
+    flex: 1;
+    min-width: var(--ui-layout-120, 120px);
+  }
+}
+
+.collection-card > .collection-row {
+  flex-wrap: wrap;
+}
+.collection-card h3,
+.collection-card strong {
+  overflow-wrap: anywhere;
+}

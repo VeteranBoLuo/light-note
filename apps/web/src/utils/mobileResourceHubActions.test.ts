@@ -5,14 +5,18 @@ import icon from '@/config/icon';
 import { createMobileResourceHubActions, mobileResourceHubPath } from './mobileResourceHubActions';
 
 describe('移动资料共享入口', () => {
-  it('按资源中心、整理中心顺序复用统一图标和无筛选路由', () => {
+  it('按资源中心、整理中心、知识工坊顺序复用统一图标和无筛选路由', () => {
     const actions = createMobileResourceHubActions((key) => key);
     expect(actions).toEqual([
       { key: 'resource-center', label: 'navigation.resourceCenter', icon: icon.navigation.search },
       { key: 'organize-center', label: 'organize.title', icon: icon.ai.organize },
+      { key: 'toolbox', label: 'navigation.toolbox', icon: icon.toolbox.home },
     ]);
     expect(mobileResourceHubPath('resource-center')).toBe('/search');
     expect(mobileResourceHubPath('organize-center')).toBe('/organize');
+    expect(mobileResourceHubPath('toolbox')).toBe('/toolbox');
+    expect(icon.toolbox.home).toBeTruthy();
+    expect(icon.toolbox.home).not.toBe(icon.nullImg);
     expect(mobileResourceHubPath('unknown')).toBeNull();
   });
 

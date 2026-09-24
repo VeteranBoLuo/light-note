@@ -65,6 +65,33 @@ afterEach(() => {
 });
 
 describe('AiUsageDetailModal', () => {
+  it('管理员可见入参和模型前失败说明，个人详情不展示后台摘要', async () => {
+    requestMocks.apiBasePost.mockResolvedValue({
+      status: 200,
+      data: {
+        execution: { ...execution(), status: 'failed', providerCallCount: 0 },
+        calls: [],
+        inputDiagnostics: {
+          version: 1,
+          url: 'https://example.com/?id=42',
+          urlRedacted: true,
+          pageContextProvided: false,
+        },
+        failure: { code: 'BOOKMARK_PAGE_UNREADABLE', message: '未读到网页', beforeModelCall: true },
+      },
+    });
+    const admin = mountDetail({ detailEndpoint: '/api/admin/ai-operations/executions/detail' });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(admin.textContent).toContain('https://example.com/?id=42');
+    expect(admin.textContent).toContain('BOOKMARK_PAGE_UNREADABLE');
+    expect(admin.textContent).toContain('settings.ai.usage.detail.beforeModelCall');
+    cleanup?.();
+    const personal = mountDetail();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(personal.textContent).not.toContain('https://example.com');
+    expect(personal.querySelector('.detail-inputs')).toBeNull();
+  });
+
   it('移动全屏详情通过业务内容区接管纵向触摸滚动', () => {
     expect(source).toContain('content-class="ai-usage-detail-modal__content"');
     expect(source).toMatch(

@@ -239,6 +239,7 @@
             </div>
 
             <div class="tag-profile-side">
+              <BButton v-if="tag.formCount" @click="router.push({ path: '/toolbox/forms', query: { tagId: tag.id } })">{{ t('collectionForms.tagEntry', { count: tag.formCount }) }}</BButton>
               <div class="tag-profile-stats" :aria-label="t('tagSpace.spaceOverview')">
                 <div class="profile-stat profile-stat--total">
                   <span>{{ t('tagSpace.totalResources') }}</span>

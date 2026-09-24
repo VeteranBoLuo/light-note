@@ -284,7 +284,6 @@
       key: 'batch',
       label: t('common.batchActions'),
       icon: icon.filterPanel.check,
-      dividerBefore: true,
     },
   ]);
   const allVisibleSelected = computed(

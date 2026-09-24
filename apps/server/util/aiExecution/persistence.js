@@ -18,8 +18,8 @@ export async function insertAiExecution(execution, database = pool) {
       `INSERT INTO ai_executions
         (id, request_id, actor_user_id, subject_user_id, billing_policy, surface, task_type,
          skill_id, skill_version, billing_rule_version, validation_rule_version, status,
-         quota_reservation_key, lease_expires_at${grouped ? ', organize_run_id, organize_item_id' : ''})
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'running', ?, ?${grouped ? ', ?, ?' : ''})`,
+         quota_reservation_key, lease_expires_at, input_diagnostics_json${grouped ? ', organize_run_id, organize_item_id' : ''})
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'running', ?, ?, ?${grouped ? ', ?, ?' : ''})`,
       [
         execution.id,
         execution.requestId,
@@ -34,6 +34,7 @@ export async function insertAiExecution(execution, database = pool) {
         execution.validationRuleVersion,
         execution.quotaHandle?.reservationKey || null,
         execution.leaseExpiresAt,
+        execution.inputDiagnostics ? JSON.stringify(execution.inputDiagnostics) : null,
         ...(grouped ? [execution.organizeRunId, execution.organizeItemId] : []),
       ],
     );
@@ -41,7 +42,30 @@ export async function insertAiExecution(execution, database = pool) {
   } catch (error) {
     if (error?.code === 'ER_DUP_ENTRY') throw persistenceError('AI_EXECUTION_REQUEST_DUPLICATED');
     if (error?.code?.startsWith?.('AI_EXECUTION_')) throw error;
-    throw persistenceError('AI_EXECUTION_STORE_UNAVAILABLE');
+    // 只记录数据库错误分类，不输出 SQL、参数、原始消息或用户材料。
+    const databaseCode = new Set([
+      'ER_BAD_FIELD_ERROR',
+      'ER_NO_SUCH_TABLE',
+      'ER_TABLEACCESS_DENIED_ERROR',
+      'ER_ACCESS_DENIED_ERROR',
+      'ER_DATA_TOO_LONG',
+      'ER_TRUNCATED_WRONG_VALUE',
+      'ER_BAD_NULL_ERROR',
+      'ER_NO_DEFAULT_FOR_FIELD',
+      'ER_LOCK_DEADLOCK',
+      'ER_LOCK_WAIT_TIMEOUT',
+      'ECONNREFUSED',
+      'ECONNRESET',
+      'ETIMEDOUT',
+    ]).has(error?.code)
+      ? error.code
+      : 'DATABASE_ERROR';
+    console.error('[ai-execution] insert failed code=%s', databaseCode);
+    throw persistenceError(
+      ['ER_BAD_FIELD_ERROR', 'ER_NO_SUCH_TABLE'].includes(databaseCode)
+        ? 'AI_EXECUTION_SCHEMA_UNAVAILABLE'
+        : 'AI_EXECUTION_STORE_UNAVAILABLE',
+    );
   }
 }
 

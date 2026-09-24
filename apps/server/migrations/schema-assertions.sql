@@ -3957,3 +3957,30 @@ SELECT '[file_pin] missing_column' AS check_name, 'files.is_top' AS detail FROM 
 WHERE NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='files' AND column_name='is_top' AND data_type='tinyint' AND is_nullable='NO' AND column_default='0');
 SELECT '[file_pin] missing_index' AS check_name, 'idx_files_owner_pin_time' AS detail FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='files' AND index_name='idx_files_owner_pin_time');
+
+SELECT 'ai_execution_input_diagnostics_missing' AS check_name, 'ai_executions.input_diagnostics_json 缺失' AS detail FROM DUAL
+WHERE NOT EXISTS (
+  SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE()
+    AND TABLE_NAME='ai_executions' AND COLUMN_NAME='input_diagnostics_json' AND DATA_TYPE='json'
+);
+
+-- Public collections require all typed-answer tables before serving requests.
+SELECT 'missing_collection_table' AS assertion, expected.table_name
+FROM (SELECT 'collection_forms' table_name UNION ALL SELECT 'collection_submissions' UNION ALL SELECT 'collection_answers' UNION ALL SELECT 'collection_choices' UNION ALL SELECT 'collection_form_tags' UNION ALL SELECT 'collection_submission_requests') expected
+LEFT JOIN information_schema.tables actual ON actual.table_schema = DATABASE() AND actual.table_name = expected.table_name
+WHERE actual.table_name IS NULL;
+
+SELECT 'missing_collection_unique_key' AS assertion, expected.table_name, expected.index_name
+FROM (SELECT 'collection_forms' table_name, 'uq_collection_public' index_name UNION ALL SELECT 'collection_submissions','uq_collection_request' UNION ALL SELECT 'collection_submissions','uq_collection_respondent' UNION ALL SELECT 'collection_submission_requests','uq_collection_receipt') expected
+LEFT JOIN information_schema.statistics actual ON actual.table_schema=DATABASE() AND actual.table_name=expected.table_name AND actual.index_name=expected.index_name AND actual.non_unique=0
+WHERE actual.index_name IS NULL;
+
+SELECT 'missing_collection_cascade' AS assertion, expected.constraint_name
+FROM (SELECT 'fk_collection_submission' constraint_name UNION ALL SELECT 'fk_collection_answer' UNION ALL SELECT 'fk_collection_choice' UNION ALL SELECT 'fk_collection_tag' UNION ALL SELECT 'fk_collection_receipt') expected
+LEFT JOIN information_schema.referential_constraints actual ON actual.constraint_schema=DATABASE() AND actual.constraint_name=expected.constraint_name AND actual.delete_rule='CASCADE'
+WHERE actual.constraint_name IS NULL;
+
+SELECT 'missing_collection_identity_column' AS assertion, expected.column_name
+FROM (SELECT 'respondent_hash' column_name UNION ALL SELECT 'updated_at') expected
+LEFT JOIN information_schema.columns actual ON actual.table_schema=DATABASE() AND actual.table_name='collection_submissions' AND actual.column_name=expected.column_name
+WHERE actual.column_name IS NULL;

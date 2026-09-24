@@ -54,6 +54,7 @@ function liveResourceStatsJoin(singleTag = false) {
 const LIVE_RESOURCE_STATS_JOIN = liveResourceStatsJoin();
 
 const TODO_TAG_COUNT = `(SELECT COUNT(*) FROM todo_tag_relations tr INNER JOIN todo_items ti ON ti.id = tr.target_id AND ti.user_id = tr.user_id AND ti.del_flag = 0 AND COALESCE(ti.instance_state, 'normal') = 'normal' WHERE tr.target_type = 'todo' AND tr.tag_id = t.id AND tr.user_id = t.user_id)`;
+const FORM_TAG_COUNT = `(SELECT COUNT(*) FROM collection_form_tags ft INNER JOIN collection_forms cf ON cf.id=ft.form_id AND cf.user_id=ft.user_id WHERE ft.tag_id=t.id AND ft.user_id=t.user_id)`;
 const TODO_TAG_PENDING = TODO_TAG_COUNT.slice(0, -1) + " AND ti.status = 'pending')";
 
 const TAG_BASE_COLUMNS = `
@@ -68,6 +69,7 @@ const TAG_BASE_COLUMNS = `
   COALESCE(stats.file_count, 0) AS file_count,
   stats.last_activity_time,
   ${TODO_TAG_COUNT} AS todo_count,
+  ${FORM_TAG_COUNT} AS form_count,
   ${TODO_TAG_PENDING} AS todo_pending_count
 `;
 
@@ -214,6 +216,7 @@ function normalizeSummaryRow(row) {
     sort: Number(row?.sort || 0),
     createTime: row?.create_time || null,
     lastActivityTime: row?.last_activity_time || null,
+    formCount: Number(row?.form_count || 0),
     todoCounts: { total: Number(row?.todo_count || 0), pending: Number(row?.todo_pending_count || 0) },
     counts: {
       bookmark,
@@ -244,13 +247,13 @@ function filterCondition(filter) {
     return `(
       COALESCE(stats.bookmark_count, 0)
       + COALESCE(stats.note_count, 0)
-      + COALESCE(stats.file_count, 0) + ${TODO_TAG_COUNT}
+      + COALESCE(stats.file_count, 0) + ${TODO_TAG_COUNT} + ${FORM_TAG_COUNT}
     ) = 0`;
   }
   return `(
     COALESCE(stats.bookmark_count, 0)
     + COALESCE(stats.note_count, 0)
-    + COALESCE(stats.file_count, 0) + ${TODO_TAG_COUNT}
+    + COALESCE(stats.file_count, 0) + ${TODO_TAG_COUNT} + ${FORM_TAG_COUNT}
   ) > 0`;
 }
 
@@ -279,7 +282,7 @@ async function queryFacetSummary(db, { userId, keyword = '' }) {
        SUM(CASE WHEN (
          COALESCE(stats.bookmark_count, 0)
          + COALESCE(stats.note_count, 0)
-         + COALESCE(stats.file_count, 0) + ${TODO_TAG_COUNT}
+         + COALESCE(stats.file_count, 0) + ${TODO_TAG_COUNT} + ${FORM_TAG_COUNT}
        ) > 0 THEN 1 ELSE 0 END) AS active_count,
        SUM(CASE WHEN COALESCE(stats.bookmark_count, 0) > 0 THEN 1 ELSE 0 END) AS bookmark_count,
        SUM(CASE WHEN COALESCE(stats.note_count, 0) > 0 THEN 1 ELSE 0 END) AS note_count,

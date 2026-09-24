@@ -668,8 +668,6 @@ declare(ADMIN_POLICIES.ADMIN_ONLY, 'admin', [
   ['POST', '/common/getAgentLogs'],
   ['POST', '/common/getAgentLogChain'],
   ['POST', '/common/getAgentLogsSummary'],
-  ['POST', '/common/getAiFeedback'],
-  ['POST', '/common/updateAdminAiFeedbackTriage'],
   ['POST', '/common/getDeepSeekBalance'],
   ['POST', '/common/getAdminOverviewSnapshot'],
   ['POST', '/common/getAdminOverviewActiveUsers'],

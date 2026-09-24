@@ -832,6 +832,7 @@ export async function purgeOwnedResources(connection, tables, userId) {
   await deleteIfPresent(connection, tables, 'bookmark', 'DELETE FROM bookmark WHERE user_id = ?', [userId]);
   await deleteIfPresent(connection, tables, 'files', 'DELETE FROM files WHERE create_by = ?', [userId]);
   await deleteIfPresent(connection, tables, 'folders', 'DELETE FROM folders WHERE create_by = ?', [userId]);
+  await deleteIfPresent(connection, tables, 'collection_forms', 'DELETE FROM collection_forms WHERE user_id = ?', [userId]);
   await deleteIfPresent(connection, tables, 'tag', 'DELETE FROM tag WHERE user_id = ?', [userId]);
   await deleteIfPresent(connection, tables, 'todo_reminders', 'DELETE FROM todo_reminders WHERE user_id = ?', [userId]);
   await deleteIfPresent(connection, tables, 'todo_items', 'DELETE FROM todo_items WHERE user_id = ?', [userId]);

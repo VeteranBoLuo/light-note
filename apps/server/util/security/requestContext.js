@@ -11,22 +11,28 @@ export const getClientIp = (req) => {
 
 export const buildRequestContext = (req) => {
   const sourceIp = getClientIp(req);
+  const privateCollection = /^\/(?:api\/)?toolbox\/forms(?:[/?]|$)/.test(req.path || req.url || '');
+  const body = privateCollection ? { collection: '[PRIVATE_COLLECTION_CONTENT]' } : req.body || {};
+  const query = privateCollection ? {} : req.query || {};
   return {
     method: req.method,
     path: req.path || req.url || '',
-    originalUrl: req.originalUrl || req.url || '',
+    originalUrl: privateCollection
+      ? String(req.originalUrl || req.url || '').split('?')[0]
+      : req.originalUrl || req.url || '',
+    privateCollection,
     sourceIp,
     xForwardedFor: req.headers['x-forwarded-for'] || '',
     userAgent: req.headers['user-agent'] || '',
     userId: req.user?.id || req.headers['x-user-id'] || '',
     role: req.user?.role || req.headers.role || '',
-    query: req.query || {},
-    body: req.body || {},
+    query,
+    body,
     params: req.params || {},
     headers: req.headers || {},
     payloadSummary: sanitizeObject({
-      query: req.query || {},
-      body: isBrowserPushSubscriptionRequest(req) ? { subscription: '[PUSH_CREDENTIALS_REDACTED]' } : req.body || {},
+      query,
+      body: isBrowserPushSubscriptionRequest(req) ? { subscription: '[PUSH_CREDENTIALS_REDACTED]' } : body,
       params: req.params || {},
     }),
     headersSummary: sanitizeObject({

@@ -4,6 +4,7 @@
     class="toolbox-workbench"
     :class="{
       'is-resource-workspace': resourceWorkspaceActive,
+      'has-source-guide': hasSourceGuide,
       'is-local-workspace': Boolean(localToolComponent),
       'is-project-detail': routeToolId.endsWith('_workspace') && Boolean(route.query.workspace),
       'is-project-list': routeToolId.endsWith('_workspace') && !route.query.workspace,
@@ -71,7 +72,7 @@
           class="toolbox-workbench__surface"
           :class="{ 'is-project': tool.id.endsWith('_workspace') }"
         >
-          <component :is="serviceToolComponent" :tool-id="tool.id" @return-to-workshop="returnToToolboxParent" />
+          <component :is="serviceToolComponent" :tool-id="tool.id" @return-to-workshop="openWorkshopHome" />
         </section>
         <section v-else-if="tool.executionMode === 'service'" class="toolbox-workbench__state is-error" role="alert">
           <span>{{
@@ -371,11 +372,7 @@
                       ><SvgIcon :src="selectedBillingIcon" size="16" /><span>{{ selectedBillingRule }}</span></div
                     >
                     <BButton type="primary" :loading="quoting || uploading" :disabled="!canQuote" @click="requestQuote">
-                      {{
-                        quoting
-                          ? t('common.loading')
-                          : t(isBasicOcr ? 'toolbox.workbench.startFreeOcr' : 'toolbox.workbench.getQuote')
-                      }}
+                      {{ quoting ? t('common.loading') : generateLabel }}
                       <SvgIcon :src="icon.toolbox.arrow" size="15" />
                     </BButton>
                   </section>
@@ -456,9 +453,7 @@
           compactWorkflowStep === 'sources' && !isPromptTool ? selectCompactWorkflowStep('design') : requestQuote()
         "
         >{{
-          compactWorkflowStep === 'sources' && !isPromptTool
-            ? t('toolbox.workbench.designStep')
-            : t(isBasicOcr ? 'toolbox.workbench.startFreeOcr' : 'toolbox.workbench.getQuote')
+          compactWorkflowStep === 'sources' && !isPromptTool ? t('toolbox.workbench.designStep') : generateLabel
         }}</BButton
       >
     </section>
@@ -563,6 +558,14 @@
   const toolId = computed(() => canonicalToolboxToolId(routeToolId.value));
   const workflow = computed(() =>
     isToolboxWorkflowTool(toolId.value) ? TOOLBOX_WORKFLOW_PRESENTATION[toolId.value] : null,
+  );
+  const hasSourceGuide = computed(() => ['material_to_note', 'research_brief', 'study_kit'].includes(toolId.value));
+  const generateLabel = computed(() =>
+    isBasicOcr.value
+      ? t('toolbox.workbench.startFreeOcr')
+      : hasSourceGuide.value
+        ? workflowText('generateLabel')
+        : t('toolbox.workbench.getQuote'),
   );
   const selectedIntent = ref(workflow.value?.defaultIntent || '');
   const ocrOutcomeKeys = ['searchable', 'separated', 'reusable'] as const;
@@ -710,7 +713,22 @@
     }),
   );
 
+  function openWorkshopHome() {
+    void router.push({ name: 'toolboxHome' });
+  }
+
   function returnToToolboxParent() {
+    if (routeToolId.value.endsWith('_workspace') && route.query.workspace) {
+      const query = { ...route.query };
+      delete query.workspace;
+      delete query.tab;
+      void router.push({ query });
+      return;
+    }
+    if (routeToolId.value.endsWith('_workspace')) {
+      openWorkshopHome();
+      return;
+    }
     returnFromToolboxPage(router, 'workbench');
   }
 
@@ -737,12 +755,13 @@
   useMobileTopBar(['toolboxWorkbench'], {
     title: () =>
       tool.value?.id.endsWith('_workspace')
-        ? t('toolbox.workspace.myProjects')
+        ? t('toolbox.title')
         : tool.value
           ? t(`toolbox.tool.${tool.value.id}.name`)
           : t('toolbox.title'),
     onBack: returnToToolboxParent,
     searchMode: 'icon',
+    ownTopBar: () => routeToolId.value.endsWith('_workspace') && Boolean(route.query.workspace),
     showNotification: false,
   });
 
@@ -2111,6 +2130,13 @@
     .toolbox-workbench.is-resource-workspace .toolbox-billing-note {
       display: none;
     }
+    .toolbox-workbench.is-resource-workspace.has-source-guide .is-design > .toolbox-workflow-card__head {
+      flex-wrap: wrap;
+    }
+    .toolbox-workbench.is-resource-workspace.has-source-guide .is-design > .toolbox-workflow-card__head p {
+      display: block;
+      flex-basis: 100%;
+    }
     .toolbox-workbench.is-resource-workspace .toolbox-intents {
       gap: var(--ui-space-6, 6px);
     }
@@ -2345,6 +2371,7 @@
     }
   }
   .toolbox-workbench__surface.is-project {
+    margin-top: 0;
     padding: 0;
     border: 0;
     background: transparent;
@@ -2403,12 +2430,24 @@
     margin-bottom: var(--ui-space-12, 12px);
     box-shadow: none;
   }
+  .toolbox-workbench.is-project-detail {
+    .workspace-canvas-surface();
+    padding: 0;
+  }
+  .toolbox-workbench.is-project-detail .toolbox-workbench__inner {
+    width: 100%;
+  }
+  @media (max-width: 767px) {
+    .toolbox-workbench.is-project-detail {
+      padding: 0 0 var(--ui-space-16, 16px);
+    }
+  }
   .toolbox-workbench.is-project-detail .toolbox-workbench__back {
     display: none;
   }
   @media (min-width: 1200px) {
     .toolbox-workbench.is-project-detail .toolbox-workbench__inner {
-      max-width: var(--ui-layout-1440, 1440px);
+      max-width: none;
     }
     .toolbox-workbench.is-project-detail .toolbox-workbench__back {
       display: none;

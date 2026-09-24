@@ -24,6 +24,7 @@ export interface TagSpacePreviewResource {
 }
 
 export interface TagSpaceSummary {
+  formCount?: number;
   todoCounts?: { total: number; pending: number };
   id: string;
   name: string;

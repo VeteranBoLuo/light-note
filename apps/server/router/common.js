@@ -12,7 +12,6 @@ import {
   retryAdminAsyncJob,
 } from '../router_handle/adminActionCenterHandle.js';
 import { getAdminOperationAudits } from '../router_handle/adminAuditHandle.js';
-import { updateAdminAiFeedbackTriage } from '../router_handle/adminAiFeedbackHandle.js';
 import { getAdminGovernance, getAdminProductInsights } from '../router_handle/adminInsightsHandle.js';
 import { recordUserActivity, getAdminOverviewActiveUsers } from '../router_handle/userActivityHandle.js';
 import { userActivityRateLimiter, resourceReuseRateLimiter } from '../util/requestRateLimit.js';
@@ -64,8 +63,6 @@ router.get('/noticeSummary', commonHandle.getNoticeSummary);
 router.post('/getAgentLogs', commonHandle.getAgentLogs);
 router.post('/getAgentLogChain', commonHandle.getAgentLogChain);
 router.post('/getAgentLogsSummary', commonHandle.getAgentLogsSummary);
-router.post('/getAiFeedback', commonHandle.getAiFeedback);
-router.post('/updateAdminAiFeedbackTriage', updateAdminAiFeedbackTriage);
 router.post('/getDeepSeekBalance', commonHandle.getDeepSeekBalance);
 router.post('/getAdminOverviewSnapshot', commonHandle.getAdminOverviewSnapshot);
 router.post('/getAdminOverview', commonHandle.getAdminOverview);

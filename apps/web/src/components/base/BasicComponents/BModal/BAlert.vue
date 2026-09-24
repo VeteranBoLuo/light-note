@@ -1,6 +1,6 @@
 <template>
   <Teleport to="body" v-if="isMobileLayout">
-    <div class="bAlert-bg">
+    <div class="bAlert-bg" :class="{ 'bAlert-bg--bottom': mobilePlacement === 'bottom' }">
       <!-- 移动端弹框使用正常 flex 流；三个以上操作改为整宽纵向排列，避免窄屏下长文案被压成多行。 -->
       <div
         class="bAlert bAlert--mobile"
@@ -118,6 +118,7 @@
   const props = withDefaults(
     defineProps<{
       title: string;
+      mobilePlacement?: 'center' | 'bottom';
       keyboard?: boolean;
       okText: string;
       okType: 'primary' | 'danger' | 'success' | 'function';
@@ -131,6 +132,7 @@
     }>(),
     {
       title: '',
+      mobilePlacement: 'center',
       okText: '',
       okType: 'primary',
       cancelText: '',
@@ -479,5 +481,26 @@
   .bAlert--mobile.bAlert--choices .bAlert-m-content {
     text-align: left;
     max-height: 65vh;
+  }
+
+  .bAlert-bg.bAlert-bg--bottom {
+    padding: 0;
+    background-color: rgba(0, 0, 0, 0.4);
+    align-items: flex-end;
+  }
+  .bAlert-bg--bottom .bAlert.bAlert--mobile {
+    width: 100%;
+    max-width: none;
+    border-radius: var(--ui-space-16, 16px) var(--ui-space-16, 16px) 0 0;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .bAlert-bg--bottom .bAlert-m-body {
+    align-items: stretch;
+    text-align: left;
+    padding: var(--ui-space-24, 24px);
+  }
+  .bAlert-bg--bottom .bAlert-m-content {
+    text-align: left;
+    line-height: 1.7;
   }
 </style>

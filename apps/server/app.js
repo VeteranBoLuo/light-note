@@ -1,3 +1,4 @@
+import { publicFormsRouter } from './router/collectionForms.js';
 import { startCommunityFeedScheduler } from './util/communityFeed/scheduler.js';
 import { ensureBookmarkArchiveSchema } from './util/bookmarkArchiveJobs.js';
 import express from 'express';
@@ -74,6 +75,7 @@ app.set('trust proxy', 1);
 app.use(requestTraceMiddleware);
 // 在 Body 解析、鉴权和安全正则之前提供高上限的匿名来源保护，先挡住明显资源耗尽流量。
 app.use(earlyAnonymousRateLimiter);
+app.use('/public/forms', publicFormsRouter);
 app.use(bodyParser.json({ limit: '10mb', extended: true }));
 //  解析请求体中的JSON数据
 app.use(express.json());

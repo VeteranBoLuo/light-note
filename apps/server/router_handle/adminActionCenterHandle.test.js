@@ -60,23 +60,6 @@ function rowsFor(sql) {
   }
   if (statement.includes('FROM community_chat_reports'))
     throw Object.assign(new Error('missing'), { code: 'ER_NO_SUCH_TABLE' });
-  if (statement.includes('FROM ai_feedback')) {
-    return summary
-      ? [[{ total: 1, critical: 0 }]]
-      : [
-          [
-            {
-              id: 'feedback-1',
-              reason: 'incorrect',
-              actor_user_id: 'u-3',
-              alias: '用户丙',
-              triage_status: 'open',
-              triage_priority: 'high',
-              update_time: '2026-08-09 11:30:00',
-            },
-          ],
-        ];
-  }
   if (statement.includes('FROM feature_requests')) {
     return summary
       ? [[{ total: 1, critical: 0 }]]
@@ -288,11 +271,12 @@ describe('后台统一待处理中心', () => {
       status: 200,
       data: {
         unavailableSources: ['community_report'],
-        work: { total: 6, critical: 1 },
+        work: { total: 5, critical: 1 },
         jobs: { attention: 7, running: 2, waiting: 4, completed24h: 37 },
         sla: { policyVersion: expect.any(String), sampled: true },
       },
     });
+    expect(query.mock.calls.some(([sql]) => String(sql).includes('ai_feedback'))).toBe(false);
     expect(res.body.data.jobs.items.find((item) => item.source === 'todo_reminder')).toMatchObject({
       status: 'attention',
       canRetry: false,

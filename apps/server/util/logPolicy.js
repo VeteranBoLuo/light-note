@@ -116,6 +116,7 @@ export function summarizeApiLogPayload(originalUrl, payload) {
  */
 export function shouldSkipApiLog(originalUrl) {
   const url = String(originalUrl || '');
+  if (/\/(?:toolbox|public)\/forms(?:[/?]|$)/.test(url)) return true;
   if (API_LOG_SKIP_SUBSTRINGS.some((key) => url.includes(key))) return true;
   const path = normalizeApiPath(url);
   return (

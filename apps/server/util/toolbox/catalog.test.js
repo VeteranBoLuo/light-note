@@ -88,13 +88,13 @@ describe('toolbox catalog', () => {
       'points',
       'free',
     ]);
-    expect(catalog.tools).toHaveLength(41);
-    expect(getPublicToolboxCatalog().tools.filter((item) => item.availability.enabled)).toHaveLength(17);
-    expect(catalog.tools.filter((item) => item.availability.enabled)).toHaveLength(16);
+    expect(catalog.tools).toHaveLength(42);
+    expect(getPublicToolboxCatalog().tools.filter((item) => item.availability.enabled)).toHaveLength(18);
+    expect(catalog.tools.filter((item) => item.availability.enabled)).toHaveLength(17);
     expect(catalog.tools.find((item) => item.id === 'action_plan')?.availability.enabled).toBe(false);
     expect(catalog.tools.find((item) => item.id === 'browser_sql')?.availability.enabled).toBe(false);
     expect(catalog.tools.filter((item) => item.executionMode === 'browser')).toHaveLength(27);
-    expect(catalog.tools.filter((item) => item.executionMode === 'service')).toHaveLength(5);
+    expect(catalog.tools.filter((item) => item.executionMode === 'service')).toHaveLength(6);
     expect(
       catalog.tools
         .filter((item) => item.executionMode === 'browser')

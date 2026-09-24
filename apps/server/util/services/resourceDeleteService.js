@@ -79,6 +79,7 @@ export async function softDeleteResources(db, { userId, items: rawItems }) {
           [userId, ...validIds],
         );
       } else {
+        await db.query(`DELETE FROM collection_form_tags WHERE user_id = ? AND tag_id IN (${placeholders})`, [userId, ...validIds]);
         await db.query(
           `DELETE FROM resource_tag_relations WHERE user_id = ? AND tag_id IN (${placeholders})`,
           [userId, ...validIds],

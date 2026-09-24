@@ -52,6 +52,7 @@ function tokenAction({
 }
 
 export const AI_BILLING_ACTIONS = Object.freeze([
+  tokenAction({ id: 'toolbox.summarize_text', module: 'toolbox', labelKey: 'toolboxSummarizeText', taskTypes: ['skill_toolbox_summarize_text'], allowedBillingPolicies: ['user'] }),
   tokenAction({ id: 'organize.metadata', module: 'organize', labelKey: 'organizeMetadata', taskTypes: ['organize_resource_metadata'], unit: 'item', maxUserProviderCalls: 1, maxPlatformProviderCalls: 1 }),
   tokenAction({
     id: 'search.answer',

@@ -15,6 +15,8 @@ const EXACT_ERROR_KEYS: Readonly<Record<string, string>> = Object.freeze({
   POINTS_INSUFFICIENT: 'toolbox.error.pointsInsufficient',
   AI_QUOTA_EXCEEDED: 'toolbox.error.aiQuotaExhausted',
   AI_QUOTA_INSUFFICIENT_FOR_REQUEST: 'toolbox.error.aiQuotaTaskInsufficient',
+  AI_EXECUTION_STORE_UNAVAILABLE: 'toolbox.error.executionUnavailable',
+  AI_EXECUTION_SCHEMA_UNAVAILABLE: 'toolbox.error.executionUnavailable',
   AI_RATE_LIMITED: 'toolbox.error.temporarilyUnavailable',
   AI_PROVIDER_ERROR: 'toolbox.error.temporarilyUnavailable',
   AI_GATEWAY_TIMEOUT: 'toolbox.error.temporarilyUnavailable',

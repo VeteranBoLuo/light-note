@@ -18,13 +18,6 @@
         ><SvgIcon :src="icon.todo.drag" size="16"
       /></BButton>
       <div class="board-card__identity">
-        <span class="board-card__type"
-          ><SvgIcon
-            v-if="item.lane !== 'inbox'"
-            :src="item.lane === 'knowledge' ? icon.organize.bulb : icon.todoWorkspace.checkSquare"
-            size="14"
-          />{{ typeLabel }}</span
-        >
         <strong>{{ item.title }}</strong>
       </div>
       <BActionMenu
@@ -93,13 +86,14 @@
   }
 </script>
 <style scoped lang="less">
+  @import (reference) '@/assets/css/workspace-surfaces.less';
   .board-card {
-    padding: var(--ui-space-14, 14px);
-    border: 1px solid var(--surface-border-color);
-    border-radius: 14px;
-    background: var(--card-background);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
+    border: 1px solid var(--workspace-border);
+    border-radius: 10px;
+    .workspace-content-surface();
     display: grid;
-    gap: var(--ui-space-10, 10px);
+    gap: var(--ui-space-6, 6px);
     cursor: pointer;
     min-width: 0;
   }
@@ -130,7 +124,7 @@
   }
   .board-card__heading strong {
     min-width: 0;
-    font-size: var(--ui-font-16, 16px);
+    font-size: var(--ui-font-15, 15px);
     line-height: 1.5;
     overflow-wrap: anywhere;
     display: -webkit-box;
@@ -159,10 +153,13 @@
     font-size: var(--ui-font-11, 11px);
     color: var(--desc-color);
   }
+  .board-card__meta :deep(.b-chip--pending) {
+    background: var(--workspace-purple-selected);
+    color: var(--workspace-purple-text);
+    border-color: transparent;
+  }
   .board-card__description {
-    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
-    border-radius: 8px;
-    background: var(--workspace-panel-bg-color);
+    padding: 0;
     display: grid;
     gap: var(--ui-space-4, 4px);
   }
@@ -217,6 +214,8 @@
     overflow-wrap: anywhere;
   }
   .board-card__footer {
+    border-top: 0;
+    padding-top: 0;
     display: flex;
     justify-content: flex-end;
     align-items: center;
@@ -225,8 +224,42 @@
   }
   .board-card__footer .b_btn {
     background: transparent;
-    border: 1px solid var(--surface-border-color);
+    border: 0;
     color: var(--workspace-purple-text, var(--primary-color));
+  }
+  @media (min-width: 768px) {
+    .board-card {
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+    .board-card__heading {
+      grid-column: 1 / -1;
+    }
+    .board-card__meta {
+      grid-column: 1;
+      grid-row: 2;
+    }
+    .board-card__description {
+      grid-column: 1;
+      grid-row: 3;
+    }
+    .board-card__source {
+      grid-column: 1;
+      grid-row: 4;
+    }
+    .board-card__footer {
+      grid-column: 1 / -1;
+      grid-row: 5;
+      justify-content: flex-start;
+      align-items: center;
+      max-width: 100%;
+    }
+    .board-card__footer .b_btn {
+      height: auto;
+      min-height: var(--ui-layout-26, 26px);
+      white-space: normal;
+      line-height: 1.4;
+      padding: var(--ui-space-4, 4px) var(--ui-space-8, 8px);
+    }
   }
   .is-complete .board-card__heading strong {
     color: var(--desc-color);
@@ -237,6 +270,42 @@
     }
   }
   @media (max-width: 767px) {
+    .board-card {
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+    .board-card__heading {
+      grid-column: 1 / -1;
+    }
+    .board-card__meta {
+      grid-column: 1;
+      grid-row: 2;
+    }
+    .board-card__description {
+      grid-column: 1;
+      grid-row: 3;
+    }
+    .board-card__source {
+      grid-column: 1;
+      grid-row: 4;
+    }
+    .board-card__footer {
+      grid-column: 2;
+      grid-row: 2 / 5;
+      align-self: end;
+      max-width: var(--ui-layout-100, 100px);
+      flex-direction: column;
+      align-items: flex-end;
+    }
+    .board-card__footer .b_btn {
+      height: auto;
+      white-space: normal;
+      line-height: 1.4;
+    }
+
+    .board-card__footer .b_btn {
+      border: 0;
+      padding-right: 0;
+    }
     .board-card__footer .b_btn,
     .board-card__menu.b_btn,
     .board-drag.b_btn {

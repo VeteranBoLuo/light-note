@@ -47,7 +47,7 @@
           ><strong>{{ action.label }}</strong></span
         >
       </BButton>
-      <BButton class="mobile-page-actions__item has-divider" role="menuitem" @click="openManageFolders">
+      <BButton class="mobile-page-actions__item" role="menuitem" @click="openManageFolders">
         <span class="mobile-page-actions__icon" aria-hidden="true">
           <SvgIcon :src="icon.common.folderOutline" size="20" />
         </span>
@@ -187,7 +187,11 @@
   import icon from '@/config/icon';
   import type { CloudFolderNode } from '@/types/cloudFolder';
   import { flattenCloudFolderTree, normalizeCloudFolderList } from '@/utils/cloudFolderTree';
-  import { createMobileResourceHubActions, mobileResourceHubPath } from '@/utils/mobileResourceHubActions';
+  import {
+    createMobileResourceHubActions,
+    mobileResourceHubPath,
+    type MobileResourceHubPath,
+  } from '@/utils/mobileResourceHubActions';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
 
   type DrawerView = 'actions' | 'sort' | 'create-folder' | 'manage-folders' | 'rename-folder';
@@ -235,7 +239,7 @@
     'manage-folder-tags': [folder: CloudFolderNode];
     'clear-folder-files': [folder: CloudFolderNode];
     'delete-folder': [folder: CloudFolderNode];
-    navigate: [path: '/search' | '/organize'];
+    navigate: [path: MobileResourceHubPath];
   }>();
 
   const { t } = useI18n();

@@ -121,10 +121,10 @@ afterEach(() => {
 });
 
 describe('Navigation', () => {
-  it('聊天室保留一级胶囊状态，知识工坊降级到更多入口', () => {
+  it('聊天室保留胶囊状态，知识工坊使用右侧独立图标入口', () => {
     expect(navigationSource).not.toContain('id="nav-toolbox-entry"');
     expect(navigationSource).toContain('class="navigation-pill-entry navigation-community-entry"');
-    expect(rightAreaSource).toContain("label: t('navigation.toolbox')");
+    expect(rightAreaSource).toContain('class="workshop-entry-btn"');
     expect(rightAreaSource).toContain('function knowledgeWorkshopClick()');
     expect(navigationSource).toContain('background: var(--navigation-pill-bg) !important');
     expect(navigationSource).toContain('color: var(--navigation-pill-hover-fg)');

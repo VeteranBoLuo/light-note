@@ -90,6 +90,7 @@ function tool(definition) {
  * 运行时 feature flag 灰度开放。availability.enabled 是代码默认值，服务端仍可关闭工具。
  */
 export const TOOLBOX_TOOL_CATALOG = Object.freeze([
+  tool({ id: "forms", phase: "launch", executionMode: "service", billingMedium: "free", input: { kind: "account", minItems: 1, maxItems: 1 }, output: { artifactType: null, contentType: "application/json", canSaveToNote: false }, availability: { enabled: true } }),
   tool({
     id: "research_workspace",
     phase: "launch",

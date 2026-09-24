@@ -23,6 +23,35 @@ function database() {
 }
 
 describe('aiExecution persistence', () => {
+  it.each([
+    ['ER_BAD_FIELD_ERROR', 'AI_EXECUTION_SCHEMA_UNAVAILABLE'],
+    ['ER_NO_SUCH_TABLE', 'AI_EXECUTION_SCHEMA_UNAVAILABLE'],
+    ['ECONNREFUSED', 'AI_EXECUTION_STORE_UNAVAILABLE'],
+    ['private error detail', 'AI_EXECUTION_STORE_UNAVAILABLE'],
+  ])('classifies %s without leaking SQL or parameters', async (code, expected) => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const db = { query: vi.fn().mockRejectedValue({ code, message: 'secret', sql: 'private SQL' }) };
+      await expect(insertAiExecution(execution(), db)).rejects.toMatchObject({ code: expected, status: 503 });
+      expect(db.query).toHaveBeenCalledTimes(1);
+      expect(log).toHaveBeenCalledWith(
+        '[ai-execution] insert failed code=%s',
+        code === 'private error detail' ? 'DATABASE_ERROR' : code,
+      );
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('摘要与根执行同次插入，无摘要写 NULL', async () => {
+    const db = database();
+    await insertAiExecution(execution({ inputDiagnostics: { version: 1, targetLength: 300 } }), db);
+    expect(db.query.mock.calls[0][0]).toContain('input_diagnostics_json');
+    expect(db.query.mock.calls[0][1]).toContain('{"version":1,"targetLength":300}');
+    await insertAiExecution(execution(), db);
+    expect(db.query.mock.calls[1][1][13]).toBeNull();
+  });
+
   it('整理任务和资源关联与 Execution 原子写入，不改变单次请求去重键', async () => {
     const db = database();
     await insertAiExecution(execution({ requestId: 'lease', organizeRunId: 'run', organizeItemId: 'item' }), db);

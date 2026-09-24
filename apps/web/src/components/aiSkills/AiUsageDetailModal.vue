@@ -16,7 +16,7 @@
       <SvgIcon :src="icon.message.warning" size="24" aria-hidden="true" />
       <strong>{{ t('settings.ai.usage.detail.errorTitle') }}</strong>
       <span>{{ t('settings.ai.usage.detail.errorDescription') }}</span>
-      <BButton size="small" @click="load(true)">{{ t('settings.ai.usage.retry') }}</BButton>
+      <BButton size="small" @click="load()">{{ t('settings.ai.usage.retry') }}</BButton>
     </div>
 
     <div v-else-if="detail" class="usage-call-detail">
@@ -64,6 +64,33 @@
         </div>
       </section>
 
+      <section v-if="isAdminDetail" class="detail-inputs" aria-labelledby="usage-detail-inputs-title">
+        <div class="detail-section-head">
+          <h4 id="usage-detail-inputs-title">{{ t('settings.ai.usage.detail.inputsTitle') }}</h4>
+          <BButton v-if="inputRows.length" size="small" @click="copyInputs">
+            {{ t('settings.ai.usage.detail.copyInputs') }}
+          </BButton>
+        </div>
+        <dl v-if="inputRows.length" class="detail-input-list">
+          <div v-for="row in inputRows" :key="row.key">
+            <dt>{{ t(`settings.ai.usage.detail.inputFields.${row.key}`) }}</dt>
+            <dd>{{ row.value }}</dd>
+          </div>
+        </dl>
+        <p v-else class="detail-input-hint">{{ t('settings.ai.usage.detail.inputsUnavailable') }}</p>
+        <p v-if="detail.inputDiagnostics?.urlRedacted" class="detail-input-hint">
+          {{ t('settings.ai.usage.detail.urlRedacted') }}
+        </p>
+        <p v-if="copyStatus" class="detail-input-hint" role="status">{{
+          t(`settings.ai.usage.detail.${copyStatus}`)
+        }}</p>
+        <div v-if="detail.failure" class="call-error detail-failure">
+          <strong>{{ detail.failure.code }}</strong>
+          <span>{{ detail.failure.message }}</span>
+          <span v-if="detail.failure.beforeModelCall">{{ t('settings.ai.usage.detail.beforeModelCall') }}</span>
+        </div>
+      </section>
+
       <section class="detail-calls" aria-labelledby="usage-detail-calls-title">
         <div class="detail-section-head">
           <div>
@@ -72,7 +99,7 @@
             </h4>
             <p>{{ t('settings.ai.usage.detail.callsHint') }}</p>
           </div>
-          <BButton class="detail-refresh" size="small" :loading="loading" @click="load(true)">
+          <BButton class="detail-refresh" size="small" :loading="loading" @click="load()">
             <SvgIcon v-if="!loading" :src="icon.infrastructure.refresh" size="13" aria-hidden="true" />
             {{ t('settings.ai.usage.refresh') }}
           </BButton>
@@ -151,14 +178,14 @@
 
       <p class="detail-privacy">
         <SvgIcon :src="icon.message.info" size="14" aria-hidden="true" />
-        {{ t('settings.ai.usage.detail.privacy') }}
+        {{ t(`settings.ai.usage.detail.${isAdminDetail ? 'adminPrivacy' : 'privacy'}`) }}
       </p>
     </div>
   </BModal>
 </template>
 
 <script setup lang="ts">
-  import { ref, watch } from 'vue';
+  import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { apiBasePost } from '@/http/request';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -167,6 +194,7 @@
   import { aiUsageModuleKey } from '@/components/aiSkills/aiUsageModules';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
+  import { copyTextToClipboard } from '@/utils/clipboard';
 
   interface UsageExecution {
     id: string;
@@ -202,12 +230,14 @@
   interface UsageDetail {
     execution: UsageExecution;
     calls: ProviderCall[];
+    inputDiagnostics?: Record<string, unknown> | null;
+    failure?: { code: string; message: string; beforeModelCall: boolean } | null;
   }
 
   const props = withDefaults(
     defineProps<{
       execution: UsageExecution | null;
-      /** 管理端与个人用量页共用同一套低敏调用链展示，只替换受权读取端点。 */
+      /** 共用调用链展示；入参摘要仅由管理员本人详情端点提供。 */
       detailEndpoint?: string;
     }>(),
     { detailEndpoint: '/api/chat/aiUsageDetail' },
@@ -217,37 +247,59 @@
   const loading = ref(false);
   const errorCode = ref('');
   const detail = ref<UsageDetail | null>(null);
-  const cache = new Map<string, UsageDetail>();
+  const isAdminDetail = computed(() => props.detailEndpoint === '/api/admin/ai-operations/executions/detail');
+  const copyStatus = ref('');
+  const inputRows = computed(() => {
+    if (!isAdminDetail.value) return [];
+    const input = detail.value?.inputDiagnostics;
+    return ['url', 'pageContextProvided', 'operation', 'detailLevel', 'targetLength', 'resourceTypes']
+      .filter((key) => input?.[key] !== undefined && input?.[key] !== null)
+      .map((key) => ({
+        key,
+        value:
+          typeof input![key] === 'boolean'
+            ? t(`settings.ai.usage.detail.${input![key] ? 'yes' : 'no'}`)
+            : Array.isArray(input![key])
+              ? (input![key] as string[]).join(', ') || '—'
+              : String(input![key]),
+      }));
+  });
+
+  async function copyInputs() {
+    const target = props.execution?.id;
+    const ok = await copyTextToClipboard(inputRows.value.map((row) => `${row.key}: ${row.value}`).join('\n'));
+    if (target === props.execution?.id && visible.value) copyStatus.value = ok ? 'copied' : 'copyFailed';
+  }
   let requestSequence = 0;
 
   watch(
-    () => [visible.value === true, props.execution?.id || ''] as const,
+    () => [visible.value === true, props.execution?.id || '', props.detailEndpoint] as const,
     ([isVisible, executionId]) => {
-      if (!isVisible || !executionId) return;
-      const cached = cache.get(executionId);
-      detail.value = cached || null;
+      ++requestSequence;
+      detail.value = null;
       errorCode.value = '';
-      void load(false);
+      copyStatus.value = '';
+      loading.value = false;
+      if (isVisible && executionId) void load();
     },
     { immediate: true },
   );
 
-  async function load(force = false) {
+  async function load() {
     const executionId = props.execution?.id;
+    const endpoint = props.detailEndpoint;
     if (!executionId || !visible.value) return;
-    if (!force && cache.has(executionId)) return;
     const current = ++requestSequence;
     loading.value = true;
     errorCode.value = '';
     try {
-      const response = await apiBasePost(props.detailEndpoint, { executionId }, { silent: true });
-      if (current !== requestSequence || executionId !== props.execution?.id) return;
+      const response = await apiBasePost(endpoint, { executionId }, { silent: true });
+      if (current !== requestSequence || executionId !== props.execution?.id || endpoint !== props.detailEndpoint)
+        return;
       if (Number(response?.status) !== 200 || !response?.data) throw new Error('AI_USAGE_DETAIL_REQUEST_FAILED');
-      const next = response.data as UsageDetail;
-      cache.set(executionId, next);
-      detail.value = next;
+      detail.value = response.data as UsageDetail;
     } catch (error: any) {
-      if (current !== requestSequence || executionId !== props.execution?.id) return;
+      if (current !== requestSequence) return;
       errorCode.value = String(error?.data?.code || error?.code || 'AI_USAGE_DETAIL_REQUEST_FAILED');
     } finally {
       if (current === requestSequence) loading.value = false;
@@ -341,6 +393,37 @@
 </script>
 
 <style scoped lang="less">
+  .detail-inputs {
+    margin-top: var(--ui-space-16, 16px);
+  }
+  .detail-input-list {
+    margin: 0;
+    font-size: var(--ui-font-12, 12px);
+    line-height: 1.6;
+  }
+  .detail-input-list > div {
+    padding-block: var(--ui-space-6, 6px);
+    border-bottom: 1px solid var(--surface-divider-color);
+  }
+  .detail-input-list dt,
+  .detail-input-hint {
+    color: var(--desc-color);
+  }
+  .detail-input-list dd {
+    margin: 0;
+    color: var(--text-color);
+    overflow-wrap: anywhere;
+    user-select: text;
+  }
+  .detail-input-hint {
+    font-size: var(--ui-font-11, 11px);
+    line-height: 1.6;
+  }
+  .detail-failure {
+    flex-direction: column;
+    overflow-wrap: anywhere;
+  }
+
   .detail-state {
     display: flex;
     min-height: var(--ui-layout-280, 280px);

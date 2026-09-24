@@ -43,6 +43,18 @@ function getStoredPreferences() {
 
 export const routes: RouteRecordRaw[] = [
   {
+    path: '/f/:publicId',
+    name: 'publicCollectionForm',
+    meta: {
+      title: '公开收集',
+      publicStandalone: true,
+      hideAiAssistant: true,
+      seoIndexable: false,
+      mobileTopBar: false,
+    },
+    component: () => import('@/view/toolbox/forms/PublicForm.vue'),
+  },
+  {
     meta: {
       roles: ALL_ROLES,
     },

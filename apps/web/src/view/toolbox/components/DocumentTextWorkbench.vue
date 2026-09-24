@@ -57,12 +57,12 @@
 
         <section class="document-text-main">
           <header class="document-text-main__head">
-            <div>
+            <div class="document-text-main__title">
               <span>{{ t('toolbox.documentText.outputEyebrow') }}</span>
-              <h2>{{ activeFileName }}</h2>
-              <p>{{ resultDescription }}</p>
+              <h2 :title="activeFileName">{{ activeFileName }}</h2>
+              <p v-if="activeResult">{{ resultDescription }}</p>
             </div>
-            <div v-if="hasResults">
+            <div v-if="hasResults" class="document-text-main__actions">
               <BButton :disabled="!activeOutput" @click="copyActive"
                 ><SvgIcon :src="icon.toolbox.copy" size="15" />{{ t('toolbox.local.copyResult') }}</BButton
               >
@@ -72,6 +72,14 @@
               >
             </div>
           </header>
+
+          <DocumentSummary
+            v-if="isPdf && activeResult && files[activeFile]"
+            :file="files[activeFile]!"
+            :text="activeOutput"
+            :has-text="Boolean((activeResult as PdfTextFileResult).pages.some((page) => page.text.trim()))"
+            :warning="activeWarning"
+          />
 
           <div v-if="running" class="document-text-progress">
             <div
@@ -124,6 +132,7 @@
 
 <script setup lang="ts">
   import { computed, reactive, ref, watch } from 'vue';
+  import DocumentSummary from './DocumentSummary.vue';
   import { useRouter } from 'vue-router';
   import { stageAiNoteDraft } from '@/utils/aiNoteDraft';
   import { useI18n } from 'vue-i18n';
@@ -533,13 +542,14 @@
     gap: var(--ui-space-12, 12px);
   }
 
-  .document-text-main__head > div:first-child {
+  .document-text-main__title {
     min-width: 0;
+    flex: 1;
     display: grid;
     gap: var(--ui-space-4, 4px);
   }
 
-  .document-text-main__head > div:first-child > span {
+  .document-text-main__title > span {
     color: var(--primary-color);
     font-size: var(--ui-font-10, 10px);
     font-weight: 750;
@@ -559,8 +569,10 @@
     font-size: var(--ui-font-11, 11px);
   }
 
-  .document-text-main__head > div:last-child {
+  .document-text-main__actions {
     display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
     gap: var(--ui-space-7, 7px);
   }
 
@@ -638,7 +650,7 @@
   }
 
   .document-text-placeholder {
-    min-height: var(--ui-layout-430, 430px);
+    padding: var(--ui-space-24, 24px) var(--ui-space-12, 12px);
     display: grid;
     place-content: center;
     justify-items: center;
@@ -694,9 +706,8 @@
 
   @media (max-width: 767px) {
     .document-text-sourcebar,
-    .document-text-sourcebar__actions,
     .document-text-main__head,
-    .document-text-main__head > div:last-child,
+    .document-text-main__actions,
     .document-text-runbar {
       align-items: stretch;
       flex-direction: column;
@@ -711,7 +722,12 @@
     }
 
     .document-text-placeholder {
-      min-height: var(--ui-layout-300, 300px);
+      padding-block: var(--ui-space-12, 12px);
+    }
+
+    .document-text-placeholder > span {
+      width: var(--ui-layout-44, 44px);
+      height: var(--ui-layout-44, 44px);
     }
   }
 

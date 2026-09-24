@@ -1,4 +1,5 @@
 export const AI_SKILL_PROTOCOL_VERSION = 1;
+export const AI_DOCUMENT_SUMMARY_MAX_CHARS = 100_000;
 // 标签问答与目录问答共用同一项安全上限。前后端必须从这里读取，避免界面提示与服务端拒绝阈值漂移。
 export const AI_SCOPED_CONVERSATION_MAX_RESOURCES = 50;
 

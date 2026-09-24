@@ -19,7 +19,8 @@ vi.mock('@/store', () => ({
   useUserStore: () => user,
 }));
 vi.mock('@/router', () => ({ default: { push: mocks.routerPush } }));
-vi.mock('vue-router', () => ({ useRoute: () => ({ name: 'home' }) }));
+const route = { name: 'home', path: '/home' };
+vi.mock('vue-router', () => ({ useRoute: () => route }));
 vi.mock('@/api/commonApi.ts', () => ({ recordOperation: mocks.recordOperation }));
 vi.mock('@/api/userApi.ts', () => ({
   default: { markFeatureAnnouncementSeen: mocks.markAnnouncementSeen },
@@ -79,6 +80,8 @@ beforeEach(() => {
   user.id = 'user-1';
   user.role = 'user';
   user.preferences = {};
+  route.path = '/home';
+  bookmark.isMobile = false;
   mocks.routerPush.mockClear();
   mocks.markAnnouncementSeen.mockReset().mockResolvedValue({ status: 200 });
 });
@@ -98,7 +101,8 @@ describe('知识工坊常规入口', () => {
     expect(host.querySelector('.more-menu-trigger__unread-dot')).toBeNull();
     expect(host.querySelector('.test-menu-dot')).toBeNull();
     host.querySelector<HTMLElement>('.more-menu-trigger')?.click();
-    host.querySelector<HTMLElement>('[data-label="知识工坊"]')?.click();
+    expect(host.querySelector('[data-label="知识工坊"]')).toBeNull();
+    host.querySelector<HTMLElement>('.workshop-entry-btn')?.click();
     await nextTick();
     expect(mocks.routerPush).toHaveBeenCalledWith('/toolbox');
     expect(mocks.markAnnouncementSeen).not.toHaveBeenCalled();
@@ -109,5 +113,18 @@ describe('知识工坊常规入口', () => {
     const remounted = await mountRightArea();
     expect(remounted.querySelector('.more-menu-trigger__unread-dot')).toBeNull();
     expect(remounted.querySelector('.test-menu-dot')).toBeNull();
+  });
+  it.each(['/toolbox', '/toolbox/forms/sample', '/toolbox/research_workspace'])('工坊路由 %s 标记当前入口', async (path) => {
+    route.path = path;
+    const host = await mountRightArea();
+    expect(host.querySelector('.workshop-entry-btn')?.getAttribute('aria-current')).toBe('page');
+  });
+  it('其他页面不选中，移动端不增加桌面入口', async () => {
+    const host = await mountRightArea();
+    expect(host.querySelector('.workshop-entry-btn')?.hasAttribute('aria-current')).toBe(false);
+    cleanup?.();
+    bookmark.isMobile = true;
+    const mobile = await mountRightArea();
+    expect(mobile.querySelector('.workshop-entry-btn')).toBeNull();
   });
 });
