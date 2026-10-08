@@ -1,7 +1,7 @@
 import pool from '../../db/index.js';
 import { createNotification } from '../notification.js';
 import { notificationSchedulerEnabled } from '../notificationSchedulerPolicy.js';
-import { json, transaction } from './organizeSuggestionStorage.js';
+import { json, diagnosedTransaction } from './organizeSuggestionStorage.js';
 
 export const ORGANIZE_NOTIFICATION_MIN_MS = 30_000;
 
@@ -31,7 +31,7 @@ export async function runOrganizeCompletionNotifications(_workerId, db = pool, n
       AND JSON_UNQUOTE(JSON_EXTRACT(summary_json,'$.completionNotification'))='pending'
     ORDER BY updated_at, id LIMIT 20`);
   for (const candidate of candidates) {
-    await transaction(db, async (c) => {
+    await diagnosedTransaction(db, 'organize.notification.complete', async (c) => {
       // 与启动、账号注销保持用户 -> 任务的锁顺序；开关采用投递时的最新值。
       const [users] = await c.query('SELECT preferences FROM user WHERE id=? AND del_flag=0 FOR UPDATE', [
         candidate.user_id,

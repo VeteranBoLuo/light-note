@@ -8,7 +8,7 @@ import {
   organizeReviewDisposition,
 } from '@lightnote/shared/organize-progress';
 import { supportsOrganizeCheck } from '@lightnote/shared/organize-capabilities';
-import { json, transaction } from './organizeSuggestionStorage.js';
+import { json, diagnosedTransaction } from './organizeSuggestionStorage.js';
 import { readSuggestionCandidates, readCurrentSuggestionSource } from './organizeSuggestionSources.js';
 import { buildRuleSuggestions, normalizeName, hash, suggestionError } from './organizeSuggestionRules.js';
 import { writeSuggestions } from './organizeSuggestionLifecycle.js';
@@ -44,7 +44,7 @@ async function addJob(c, run, itemId, kind, lane = 'direct', status = 'queued', 
 
 // Only IDs, names, ownership and icon presence are read here. Processing waits for rule_phase=completed.
 export async function runOrganizeInspection(_workerId, db = pool, dependencies = {}) {
-  return transaction(db, async (c) => {
+  return diagnosedTransaction(db, 'organize.inspect', async (c) => {
     const [runs] = await c.query(`SELECT * FROM organize_suggestion_runs WHERE run_version=3 AND status IN (${active})
       AND rule_phase='pending' ORDER BY created_at,id LIMIT 1 FOR UPDATE`);
     if (!runs.length) return false;
@@ -226,7 +226,7 @@ export async function readOrganizeOverview(c, run, ruleProgress, itemOutcomes) {
 }
 
 async function claimDirect(db) {
-  return transaction(db, async (c) => {
+  return diagnosedTransaction(db, 'organize.direct.claim', async (c) => {
     const [runs] =
       await c.query(`SELECT * FROM organize_suggestion_runs r WHERE run_version=3 AND rule_phase='completed' AND status IN (${active})
       AND EXISTS(SELECT 1 FROM organize_processing_jobs j WHERE j.run_id=r.id AND j.lane='direct' AND j.kind<>'duplicate'
@@ -252,7 +252,7 @@ async function claimDirect(db) {
   });
 }
 async function finishDirect(db, job, work, status = 'completed', error = null) {
-  return transaction(db, async (c) => {
+  return diagnosedTransaction(db, 'organize.direct.finish', async (c) => {
     const run = await lockRun(c, job.run_id);
     if (!run || !['running', 'paused'].includes(run.status)) return false;
     const [leases] = await c.query(
@@ -546,7 +546,7 @@ export async function runOrganizeDirect(_workerId, db = pool, dependencies = {})
 
 // Run before claiming a paid item, including during AI pause: a new cache hit is free work.
 export async function reclassifyCachedIcons(_workerId, db = pool) {
-  return transaction(db, async (c) => {
+  return diagnosedTransaction(db, 'organize.icons.reclassify', async (c) => {
     const [runs] =
       await c.query(`SELECT * FROM organize_suggestion_runs r WHERE r.run_version=3 AND r.rule_phase='completed' AND r.status IN ('running','paused')
       AND EXISTS(SELECT 1 FROM organize_processing_jobs j JOIN organize_suggestion_items i ON i.id=j.item_id WHERE j.run_id=r.id AND j.lane='ai' AND j.status='queued' AND (j.next_check_at IS NULL OR j.next_check_at<=NOW()) AND i.resource_type='tag') ORDER BY r.created_at,r.id LIMIT 1 FOR UPDATE`);

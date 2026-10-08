@@ -1,3 +1,4 @@
+import { withWorkerStage } from '../workerDiagnostics.js';
 import { withPreparedCloudFileRename } from './cloudFileRenameService.js';
 import {
   lockOrganizeRunOwner,
@@ -53,7 +54,7 @@ import {
 } from './organizeSuggestionModel.js';
 import { applySuggestionMutation } from './organizeSuggestionActions.js';
 import { invalidatePersonalKnowledgeCache } from '../personalKnowledgeSearch.js';
-import { json, transaction } from './organizeSuggestionStorage.js';
+import { json, transaction, diagnosedTransaction } from './organizeSuggestionStorage.js';
 export { json, transaction } from './organizeSuggestionStorage.js';
 const uuid = (value) =>
   /^[\da-f]{8}-[\da-f]{4}-[1-5][\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/iu.test(String(value || ''));
@@ -451,7 +452,10 @@ export async function actOnSuggestion(
   void invalidatePersonalKnowledgeCache(userId).catch(() => {});
   return result;
 }
-async function finishItem(c, job, status, result, errorCode = null) {
+async function finishItem(...args) {
+  return withWorkerStage('organize.ai.finish', () => finishItemImpl(...args));
+}
+async function finishItemImpl(c, job, status, result, errorCode = null) {
   const run = await ownedRun(c, job.user_id, job.run_id, true);
   if (
     ['file', 'tag'].includes(job.resource_type) &&
@@ -556,7 +560,7 @@ export async function runSingleSuggestionItem(workerId, db = pool, dependencies 
   let job;
   try {
     if (!dependencies.skipRules && (await runRuleBatch(db))) return true;
-    job = await transaction(db, async (c) => {
+    job = await diagnosedTransaction(db, 'organize.ai.claim', async (c) => {
       // MySQL 5.7: serialize the short claim transaction; release locks before any AI call.
       const [runs] = await c.query(`SELECT r.id,r.status,r.run_version,r.options_json FROM organize_suggestion_runs r
         WHERE ${dependencies.pipeline === 'v3' ? 'r.run_version=3 AND' : dependencies.pipeline === 'legacy' ? 'r.run_version<>3 AND' : ''} r.status IN ('running','paused','ended','cancelled') AND (r.run_version<>3 OR r.rule_phase='completed') AND EXISTS (

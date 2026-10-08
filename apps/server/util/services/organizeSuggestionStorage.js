@@ -1,3 +1,4 @@
+import { withWorkerStage } from '../workerDiagnostics.js';
 export const json = (value) => (typeof value === 'string' ? JSON.parse(value) : value);
 export async function transaction(db, work) {
   const c = typeof db.getConnection === 'function' ? await db.getConnection() : db;
@@ -12,4 +13,8 @@ export async function transaction(db, work) {
   } finally {
     if (c !== db) c.release();
   }
+}
+
+export function diagnosedTransaction(db, stage, work) {
+  return withWorkerStage(stage, () => transaction(db, work));
 }

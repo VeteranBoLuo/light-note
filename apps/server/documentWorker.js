@@ -1,3 +1,4 @@
+import { withWorkerDiagnostics, withWorkerStage } from './util/workerDiagnostics.js';
 import { cleanupLegacyCloudObject } from './util/services/cloudLegacyObjectLifecycle.js';
 import { cleanupRenameStage } from './util/services/cloudFileRenameStaging.js';
 import {
@@ -48,13 +49,13 @@ const wait = (ms) =>
     wakeups.add(wake);
   });
 
-async function pipelineLoop(work) {
+async function pipelineLoop(channel, work) {
   while (!stopping) {
     try {
-      const handled = await work();
+      const handled = await withWorkerDiagnostics(channel, work);
       if (!handled && !stopping) await wait(1200);
     } catch (error) {
-      console.error('[organize-pipeline] code=%s', stableAgentErrorCode(error));
+      // The named operation logs once, including failures handled by inner services.
       if (!stopping) await wait(3000);
     }
   }
@@ -66,7 +67,7 @@ function rotatingQueue(queues) {
     for (let offset = 0; offset < queues.length && !stopping; offset += 1) {
       const index = next;
       next = (next + 1) % queues.length;
-      if (await queues[index](workerId)) return true;
+      if (await withWorkerStage(queues[index][0], () => queues[index][1](workerId))) return true;
     }
     return false;
   };
@@ -100,7 +101,7 @@ async function run() {
   pipelineLoops.push(
     ...(videoRuntime.ready
       ? [
-          pipelineLoop(() =>
+          pipelineLoop('video', () =>
             runMedia(
               () => runSingleVideoPreviewJob(workerId),
               () => stopping,
@@ -108,51 +109,76 @@ async function run() {
           ),
         ]
       : []),
-    pipelineLoop(async () => (await runOrganizeInspection(workerId)) || runRuleBatch(pool)),
-    ...Array.from({ length: 2 }, () =>
-      pipelineLoop(async () => {
+    pipelineLoop(
+      'organize-inspection',
+      async () =>
+        (await runOrganizeInspection(workerId)) || withWorkerStage('organize.rules', () => runRuleBatch(pool)),
+    ),
+    ...Array.from({ length: 2 }, (_, index) =>
+      pipelineLoop(`organize-direct-${index + 1}`, async () => {
         await reclassifyCachedIcons(workerId);
         return runOrganizeDirect(workerId);
       }),
     ),
-    pipelineLoop(() => runSingleSuggestionItem(workerId, pool, { skipRules: true, pipeline: 'v3' })),
-    pipelineLoop(() => runMedia(rotatingDocumentQueue, () => stopping)),
-    pipelineLoop(() =>
+    pipelineLoop('organize-ai-v3', () => runSingleSuggestionItem(workerId, pool, { skipRules: true, pipeline: 'v3' })),
+    pipelineLoop('document-preview', () => runMedia(rotatingDocumentQueue, () => stopping)),
+    pipelineLoop('image', () =>
       runMedia(
         () => runSingleImagePreviewJob(workerId),
         () => stopping,
       ),
     ),
     pipelineLoop(
+      'ai',
       rotatingQueue([
-        (worker) => runSingleToolboxJob(worker, pool, { runLocalProcessing: runMedia }),
-        runSingleOrganizeAiSuggestionBatch,
-        (worker) => runSingleSuggestionItem(worker, pool, { skipRules: true, pipeline: 'legacy' }),
+        ['toolbox', (worker) => runSingleToolboxJob(worker, pool, { runLocalProcessing: runMedia })],
+        ['organize.ai.batch', runSingleOrganizeAiSuggestionBatch],
+        [
+          'organize.ai.legacy',
+          (worker) => runSingleSuggestionItem(worker, pool, { skipRules: true, pipeline: 'legacy' }),
+        ],
       ]),
     ),
-    pipelineLoop(() => runOrganizeCompletionNotifications(workerId)),
-    pipelineLoop(rotatingQueue([() => cleanupRenameStage(), () => cleanupLegacyCloudObject()])),
+    pipelineLoop('organize-notification', () => runOrganizeCompletionNotifications(workerId)),
+    pipelineLoop(
+      'object-cleanup',
+      rotatingQueue([
+        ['rename.cleanup', () => cleanupRenameStage()],
+        ['legacy.cleanup', () => cleanupLegacyCloudObject()],
+      ]),
+    ),
   );
   while (!stopping) {
     try {
       const now = Date.now();
       if (now - lastCleanupAt > 60 * 60 * 1000) {
-        await cleanupExpiredDocumentSources();
-        await cleanupStaleFilePreviewArtifacts();
-        await cleanupImageAssets();
-        await cleanupExpiredToolboxData();
+        await withWorkerDiagnostics('periodic-cleanup', () =>
+          withWorkerStage('document.expire', () => cleanupExpiredDocumentSources()),
+        );
+        await withWorkerDiagnostics('periodic-cleanup', () =>
+          withWorkerStage('file-preview.expire', () => cleanupStaleFilePreviewArtifacts()),
+        );
+        await withWorkerDiagnostics('periodic-cleanup', () =>
+          withWorkerStage('image.expire', () => cleanupImageAssets()),
+        );
+        await withWorkerDiagnostics('periodic-cleanup', () =>
+          withWorkerStage('toolbox.expire', () => cleanupExpiredToolboxData()),
+        );
         lastCleanupAt = now;
       }
       if (!stopping) await wait(60 * 60 * 1000);
     } catch (error) {
-      console.error('[AI 文档] Worker 循环异常 code=%s', stableAgentErrorCode(error));
+      // Cleanup stages report their own safe diagnostic before reaching this retry.
       await wait(3000);
     }
   }
   console.log('[AI 文档/文件预览/知识工具箱/整理建议] 解析 Worker 已停止');
 }
 
-const rotatingDocumentQueue = rotatingQueue([runSingleDocumentJob, runSingleFilePreviewJob]);
+const rotatingDocumentQueue = rotatingQueue([
+  ['document', runSingleDocumentJob],
+  ['file-preview', runSingleFilePreviewJob],
+]);
 
 function stop() {
   stopping = true;
