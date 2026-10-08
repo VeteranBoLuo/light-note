@@ -4,6 +4,7 @@
     class="toolbox-workbench"
     :class="{
       'is-resource-workspace': resourceWorkspaceActive,
+      'is-prompt-workspace': isPromptTool,
       'has-source-guide': hasSourceGuide,
       'is-local-workspace': Boolean(localToolComponent),
       'is-project-detail': routeToolId.endsWith('_workspace') && Boolean(route.query.workspace),
@@ -118,6 +119,29 @@
                   'is-compact-design': !isPromptTool && compactWorkflowStep === 'design',
                 }"
               >
+                <section v-if="isPromptTool" class="toolbox-workflow-card is-idea">
+                  <div class="toolbox-workflow-card__head">
+                    <span>{{ t('toolbox.workbench.promptStep') }}</span>
+                    <h2>{{ t('toolbox.workbench.promptInputTitle') }}</h2>
+                  </div>
+                  <div class="toolbox-field">
+                    <label for="toolbox-question">
+                      {{ workflowText('questionLabel') }}
+                      <small>{{ t('toolbox.workbench.required') }}</small>
+                    </label>
+                    <BInput
+                      id="toolbox-question"
+                      v-model:value="question"
+                      type="textarea"
+                      :maxlength="TOOLBOX_PROCESSING_REQUIREMENT_MAX_CHARS"
+                      :rows="10"
+                      :disabled="quoting || uploading"
+                      :placeholder="requestPlaceholder"
+                    />
+                    <small class="toolbox-field__hint">{{ t('toolbox.workbench.promptInputHint') }}</small>
+                  </div>
+                </section>
+
                 <section v-if="!isPromptTool" class="toolbox-workflow-card is-sources">
                   <div class="toolbox-workflow-card__head">
                     <span>{{ t('toolbox.workbench.sourceStep') }}</span>
@@ -190,14 +214,14 @@
                   <section v-if="workflow" class="toolbox-workflow-card is-design">
                     <div class="toolbox-workflow-card__head">
                       <span>{{
-                        isPromptTool ? t('toolbox.workbench.promptStep') : t('toolbox.workbench.designStep')
+                        isPromptTool ? t('toolbox.workbench.promptDesignStep') : t('toolbox.workbench.designStep')
                       }}</span>
                       <h2>{{ workflowText('designTitle') }}</h2>
-                      <p>{{ workflowText('designDescription') }}</p>
+                      <p v-if="!isPromptTool">{{ workflowText('designDescription') }}</p>
                     </div>
 
                     <div class="toolbox-intents">
-                      <div class="toolbox-intents__head">
+                      <div v-if="!isPromptTool" class="toolbox-intents__head">
                         <strong>{{ t('toolbox.workbench.intentTitle') }}</strong>
                         <span>{{
                           t(
@@ -224,7 +248,7 @@
                     </div>
 
                     <div class="toolbox-options">
-                      <div class="toolbox-field is-wide">
+                      <div v-if="!isPromptTool" class="toolbox-field is-wide">
                         <label for="toolbox-question">
                           {{ workflowText('questionLabel') }}
                           <small>{{
@@ -236,7 +260,7 @@
                           v-model:value="question"
                           type="textarea"
                           :maxlength="TOOLBOX_PROCESSING_REQUIREMENT_MAX_CHARS"
-                          :rows="isPromptTool ? 7 : 3"
+                          :rows="3"
                           :disabled="quoting || uploading"
                           :placeholder="requestPlaceholder"
                         />
@@ -257,7 +281,7 @@
                             {{ option.label }}
                           </BButton>
                         </div>
-                        <small class="toolbox-field__hint">{{
+                        <small v-if="!isPromptTool" class="toolbox-field__hint">{{
                           t(
                             isPromptTool
                               ? 'toolbox.workbench.promptDetailDescription'
@@ -267,7 +291,7 @@
                       </div>
                     </div>
 
-                    <div class="toolbox-outcomes">
+                    <div v-if="!isPromptTool" class="toolbox-outcomes">
                       <div>
                         <strong>{{ t('toolbox.workbench.outputPreviewTitle') }}</strong>
                         <span>{{ t('toolbox.workbench.outputPreviewDescription') }}</span>
@@ -314,8 +338,10 @@
                   </section>
 
                   <section class="toolbox-paid-panel__footer" :class="{ 'has-billing-choice': supportsAiQuota }">
-                    <strong class="toolbox-run-summary__title">{{ t('toolbox.workbench.runSummaryTitle') }}</strong>
-                    <dl class="toolbox-run-summary">
+                    <strong v-if="!isPromptTool" class="toolbox-run-summary__title">{{
+                      t('toolbox.workbench.runSummaryTitle')
+                    }}</strong>
+                    <dl v-if="!isPromptTool" class="toolbox-run-summary">
                       <div>
                         <dt>{{
                           t(isPromptTool ? 'toolbox.workbench.runSummaryIdea' : 'toolbox.workbench.runSummaryInput')
@@ -435,7 +461,10 @@
         </section>
       </template>
     </div>
-    <section v-if="tool && ['ai_skill', 'worker'].includes(tool.executionMode)" class="toolbox-mobile-execute">
+    <section
+      v-if="tool && !isPromptTool && ['ai_skill', 'worker'].includes(tool.executionMode)"
+      class="toolbox-mobile-execute"
+    >
       <span>{{
         isPromptTool
           ? selectedBillingSummary
@@ -1669,11 +1698,6 @@
     align-items: start;
     gap: var(--ui-space-14, 14px);
   }
-  .toolbox-workflow-grid.is-prompt {
-    display: block;
-    width: min(var(--ui-layout-980, 980px), 100%);
-    margin: 0 auto;
-  }
   .toolbox-workflow-rail {
     position: static;
     min-width: 0;
@@ -1683,11 +1707,6 @@
     align-content: start;
     gap: var(--ui-space-12, 12px);
     overscroll-behavior: contain;
-  }
-  .toolbox-workflow-grid.is-prompt .toolbox-workflow-rail {
-    position: static;
-    grid-template-columns: minmax(0, 1.55fr) minmax(var(--ui-layout-290, 290px), 0.45fr);
-    align-items: start;
   }
   .toolbox-workflow-card,
   .toolbox-confirmation {
@@ -2001,7 +2020,7 @@
       display: grid;
       grid-template-rows: auto minmax(0, 1fr);
     }
-    .toolbox-workbench.is-resource-workspace .toolbox-workbench__back {
+    .toolbox-workbench:is(.is-resource-workspace, .is-prompt-workspace) .toolbox-workbench__back {
       position: absolute;
       z-index: 9;
       top: var(--ui-space-20, 20px);
@@ -2018,10 +2037,10 @@
       background: transparent;
       box-shadow: none;
     }
-    .toolbox-workbench.is-resource-workspace .toolbox-workbench__back-label {
+    .toolbox-workbench:is(.is-resource-workspace, .is-prompt-workspace) .toolbox-workbench__back-label {
       display: none;
     }
-    .toolbox-workbench.is-resource-workspace .toolbox-workbench__hero {
+    .toolbox-workbench:is(.is-resource-workspace, .is-prompt-workspace) .toolbox-workbench__hero {
       min-height: var(--ui-layout-72, 72px);
       padding: var(--ui-space-10, 10px) var(--ui-space-14, 14px) var(--ui-space-10, 10px) var(--ui-space-56, 56px);
       grid-template-columns: var(--ui-layout-42, 42px) minmax(0, 1fr) auto;
@@ -2029,37 +2048,37 @@
       border-radius: 17px;
       box-shadow: var(--surface-card-shadow);
     }
-    .toolbox-workbench.is-resource-workspace .toolbox-workbench__hero::before {
+    .toolbox-workbench:is(.is-resource-workspace, .is-prompt-workspace) .toolbox-workbench__hero::before {
       width: 3px;
     }
-    .toolbox-workbench.is-resource-workspace .toolbox-workbench__icon {
+    .toolbox-workbench:is(.is-resource-workspace, .is-prompt-workspace) .toolbox-workbench__icon {
       width: var(--ui-layout-42, 42px);
       height: var(--ui-layout-42, 42px);
       border-radius: 12px;
       box-shadow: none;
     }
-    .toolbox-workbench.is-resource-workspace .toolbox-workbench__category {
+    .toolbox-workbench:is(.is-resource-workspace, .is-prompt-workspace) .toolbox-workbench__category {
       font-size: var(--ui-font-9, 9px);
     }
-    .toolbox-workbench.is-resource-workspace .toolbox-workbench__hero h1 {
+    .toolbox-workbench:is(.is-resource-workspace, .is-prompt-workspace) .toolbox-workbench__hero h1 {
       margin: var(--ui-space-2, 2px) 0 0;
       font-size: var(--ui-font-20, 20px);
     }
-    .toolbox-workbench.is-resource-workspace .toolbox-workbench__hero-copy > p,
-    .toolbox-workbench.is-resource-workspace .toolbox-workbench__execution {
+    .toolbox-workbench:is(.is-resource-workspace, .is-prompt-workspace) .toolbox-workbench__hero-copy > p,
+    .toolbox-workbench:is(.is-resource-workspace, .is-prompt-workspace) .toolbox-workbench__execution {
       display: none;
     }
-    .toolbox-workbench.is-resource-workspace .toolbox-workbench__price {
+    .toolbox-workbench:is(.is-resource-workspace, .is-prompt-workspace) .toolbox-workbench__price {
       min-width: 0;
       padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px);
       display: flex;
       align-items: center;
       border-radius: 12px;
     }
-    .toolbox-workbench.is-resource-workspace .toolbox-workbench__price small {
+    .toolbox-workbench:is(.is-resource-workspace, .is-prompt-workspace) .toolbox-workbench__price small {
       display: none;
     }
-    .toolbox-workbench.is-resource-workspace .toolbox-workbench__price strong {
+    .toolbox-workbench:is(.is-resource-workspace, .is-prompt-workspace) .toolbox-workbench__price strong {
       font-size: var(--ui-font-13, 13px);
     }
     .toolbox-workbench.is-resource-workspace .toolbox-workbench__paid,
@@ -2451,6 +2470,70 @@
     }
     .toolbox-workbench.is-project-detail .toolbox-workbench__back {
       display: none;
+    }
+  }
+
+  .toolbox-workbench.is-prompt-workspace {
+    padding: var(--ui-space-12, 12px) clamp(var(--ui-space-14, 14px), 2vw, var(--ui-space-28, 28px))
+      var(--ui-space-24, 24px);
+  }
+  .is-prompt-workspace .toolbox-workbench__inner {
+    position: relative;
+    width: min(var(--ui-layout-1500, 1500px), 100%);
+  }
+  .is-prompt-workspace .toolbox-workbench__paid {
+    margin-top: var(--ui-space-10, 10px);
+  }
+  .is-prompt-workspace .toolbox-workflow-grid {
+    align-items: stretch;
+  }
+  .is-prompt-workspace .toolbox-workflow-rail {
+    overflow: visible;
+  }
+  .is-prompt-workspace .is-idea :deep(textarea) {
+    min-height: var(--ui-layout-260, 260px);
+  }
+  .is-prompt-workspace .toolbox-workflow-card__head h2 {
+    font-size: var(--ui-font-18, 18px);
+  }
+  .is-prompt-workspace .toolbox-options {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .is-prompt-workspace .toolbox-billing-note {
+    max-width: none;
+  }
+  @media (max-width: 1199px) {
+    .is-prompt-workspace .toolbox-workflow-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  @media (max-width: 767px) {
+    .is-prompt-workspace .toolbox-workbench__inner {
+      padding-bottom: 0;
+    }
+    .is-prompt-workspace .toolbox-workbench__hero {
+      min-height: 0;
+      padding: var(--ui-space-12, 12px);
+    }
+    .is-prompt-workspace .toolbox-workbench__icon {
+      width: var(--ui-layout-32, 32px);
+      height: var(--ui-layout-32, 32px);
+      box-shadow: none;
+    }
+    .is-prompt-workspace .toolbox-workbench__hero h1 {
+      margin: 0;
+      font-size: var(--ui-font-18, 18px);
+    }
+    .is-prompt-workspace .toolbox-workbench__category {
+      display: none;
+    }
+    .is-prompt-workspace .toolbox-workbench__hero-copy > p,
+    .is-prompt-workspace .toolbox-workbench__execution {
+      display: none;
+    }
+    .is-prompt-workspace .is-idea :deep(textarea) {
+      min-height: var(--ui-layout-160, 160px);
+      height: var(--ui-layout-160, 160px);
     }
   }
 
