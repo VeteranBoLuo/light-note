@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+    <!-- Diagnostic build only; never merged into ordinary Debug or Release. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <application android:usesCleartextTraffic="true" tools:replace="android:usesCleartextTraffic">
+        <activity android:name=".NotificationSmokeActivity" android:exported="false" android:configChanges="keyboardHidden|orientation|screenSize" android:label="轻笺通知测试" />
+    </application>
+</manifest>

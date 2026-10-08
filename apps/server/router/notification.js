@@ -11,6 +11,7 @@ router.post('/browser/subscribe', pushLimit, browserPush.subscribe);
 router.post('/browser/activate', pushLimit, browserPush.activate);
 router.post('/browser/unsubscribe', pushLimit, browserPush.unsubscribe);
 
+router.post('/native/sync', pushLimit, notificationHandle.nativeSync);
 router.post('/list', notificationHandle.list);
 router.post('/unreadCount', notificationHandle.unreadCount);
 router.post('/markRead', notificationHandle.markRead);

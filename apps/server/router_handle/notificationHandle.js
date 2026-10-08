@@ -1,3 +1,5 @@
+import { COMMUNITY_CHAT_TARGETED_NOTIFICATION_SQL } from '../util/notificationVisibility.js';
+import { readNativeNotifications } from '../util/nativeNotificationSync.js';
 import { markNotificationSnapshotRead } from '../util/notificationReadSnapshot.js';
 import { communityFeedSchemaReady } from '../util/communityFeed/schema.js';
 import { feedNotificationVisibleSql, feedNotificationContentSql } from '../util/communityFeed/notifications.js';
@@ -21,12 +23,6 @@ const ADMIN_TYPES = ['system', 'other'];
 const GROUP_KEY = 'COALESCE(batch_id, id)';
 const EMAIL_TYPES = ['verification', 'todo_reminder', 'system'];
 const EMAIL_STATUSES = ['sending', 'accepted', 'failed', 'unknown'];
-// 聊天室普通消息只驱动入口角标；通用通知中心仅展示回复与显式 @ 两类定向消息。
-// 这条过滤同时兜住升级前已生成的旧聊天室通知，避免历史普通消息继续形成通知噪音。
-const COMMUNITY_CHAT_TARGETED_NOTIFICATION_SQL = `(
-  (type <> 'community_chat' AND COALESCE(source_type, '') <> 'community_chat_message')
-  OR COALESCE(JSON_UNQUOTE(JSON_EXTRACT(meta, '$.kind')), '') IN ('reply', 'mention')
-)`;
 const COMMUNITY_CHAT_EXCLUDED_SQL =
   "type <> 'community_chat' AND COALESCE(source_type, '') <> 'community_chat_message'";
 const NOTIFICATION_TYPE_GROUPS = Object.freeze({
@@ -699,5 +695,16 @@ export const adminEmailDetail = async (req, res) => {
     return res.send(resultData(rows[0]));
   } catch {
     return res.send(resultData(null, 500, '获取邮件详情失败'));
+  }
+};
+
+// Read-only foreground synchronization. User identity always comes from the authenticated session.
+export const nativeSync = async (req, res) => {
+  if (!req.user?.id || req.user.role === 'visitor' || req.adminContext)
+    return res.send(resultData(null, 403, '没有操作权限'));
+  try {
+    return res.send(resultData(await readNativeNotifications(pool, req.user.id, req.body || {})));
+  } catch (error) {
+    return res.send(resultData(null, error.code === 'INVALID_NATIVE_CURSOR' ? 400 : 500, '通知同步暂不可用'));
   }
 };

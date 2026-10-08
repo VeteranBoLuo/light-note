@@ -115,6 +115,7 @@ public final class MainActivity extends Activity {
     private boolean launchOverlayHidden;
     private boolean unsupportedWebView;
     private boolean resolvedNightTheme;
+    private NativeNotificationSync nativeNotificationSync;
     private boolean backNavigationPending;
     private long lastRootBackPressedAt;
     private int backHintAnimationGeneration;
@@ -133,6 +134,8 @@ public final class MainActivity extends Activity {
             finish();
             return;
         }
+        nativeNotificationSync = new NativeNotificationSync(this);
+        nativeNotificationSync.open(getIntent());
         disableSystemSplashExitAnimation();
         registerSystemBackCallback();
         resolvedNightTheme = WindowInsetsSupport.isNightMode(this);
@@ -145,8 +148,9 @@ public final class MainActivity extends Activity {
         launchOverlay.postDelayed(launchTimeout, LAUNCH_TIMEOUT_MS);
 
         if (savedInstanceState == null || webView.restoreState(savedInstanceState) == null) {
-            webView.loadUrl(WebViewSupport.HOME_URL);
+            webView.loadUrl(notificationSmokeTarget(getIntent()));
         }
+        if (savedInstanceState == null) openNotificationSmoke(getIntent());
     }
 
     /**
@@ -185,6 +189,30 @@ public final class MainActivity extends Activity {
         super.onNewIntent(intent);
         // singleTask 从桌面恢复时只更新启动 Intent，保留现有 WebView、路由和滚动状态。
         setIntent(intent);
+        if (nativeNotificationSync != null && intent.hasExtra("native_notification_owner")) {
+            nativeNotificationSync.open(intent);
+            if (webView != null) webView.evaluateJavascript("window.dispatchEvent(new Event('light-note:native-notification-open'))", null);
+        }
+        if (BuildConfig.NOTIFICATION_SMOKE && intent.getBooleanExtra("light_note_notification_smoke", false)
+            && webView != null && PrivacyConsentStore.isAccepted(this)) {
+            // Diagnostic APK only. Production notification navigation will use the trusted bridge.
+            webView.loadUrl(notificationSmokeTarget(intent));
+        }
+        if (Intent.ACTION_MAIN.equals(intent.getAction())) openNotificationSmoke(intent);
+    }
+
+    private void openNotificationSmoke(Intent intent) {
+        if (BuildConfig.NOTIFICATION_SMOKE && PrivacyConsentStore.isAccepted(this)
+            && (intent == null || !intent.getBooleanExtra("light_note_notification_smoke", false))) {
+            startActivity(new Intent().setClassName(this, "top.boluo66.lightnote.NotificationSmokeActivity"));
+        }
+    }
+
+    private String notificationSmokeTarget(Intent intent) {
+        if (BuildConfig.NOTIFICATION_SMOKE && intent != null && intent.getBooleanExtra("light_note_notification_smoke", false)) {
+            return Uri.parse(WebViewSupport.HOME_URL).buildUpon().path("/notifications").clearQuery().fragment(null).build().toString();
+        }
+        return WebViewSupport.HOME_URL;
     }
 
     /**
@@ -648,6 +676,7 @@ public final class MainActivity extends Activity {
 
             @Override
             public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
+                if (nativeNotificationSync != null) nativeNotificationSync.pageChanged();
                 errorView.setVisibility(View.GONE);
             }
 
@@ -920,7 +949,18 @@ public final class MainActivity extends Activity {
         try {
             JSONObject payload = new JSONObject(message.getData());
             String messageType = payload.optString("type");
-            if ("download".equals(messageType)) {
+            if ("nativeNotifications".equals(messageType)) {
+                runOnUiThread(() -> {
+                    JSONObject reply;
+                    try {
+                        reply = nativeNotificationSync.handle(payload);
+                    } catch (Exception error) {
+                        reply = new JSONObject();
+                        try { reply.put("token", payload.optString("token")).put("ok", false); } catch (Exception ignored) {}
+                    }
+                    sourceView.evaluateJavascript("window.__lightNoteNativeNotificationResult?.(" + reply.toString() + ")", null);
+                });
+            } else if ("download".equals(messageType)) {
                 String token = payload.optString("token");
                 String url = payload.optString("url");
                 String fileName = payload.optString("fileName");
@@ -1016,6 +1056,7 @@ public final class MainActivity extends Activity {
     }
 
     private void restartForPrivacyConsent() {
+        if (nativeNotificationSync != null) nativeNotificationSync.clear();
         PrivacyConsentStore.clear(this);
         Intent intent = new Intent(this, PrivacyConsentActivity.class);
         intent.addFlags(

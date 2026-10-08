@@ -9,6 +9,12 @@ val debugHomeUrl = providers.gradleProperty("lightNoteHomeUrl")
     .orElse("https://boluo66.top/app")
     .get()
 
+val notificationSmokeEnabled = providers.gradleProperty("lightNoteNotificationSmoke")
+    .map(String::toBoolean).getOrElse(false)
+
+val notificationSyncEnabled = providers.gradleProperty("lightNoteNotificationSync")
+    .map(String::toBoolean).getOrElse(false)
+
 val releaseSigningPropertiesFile = rootProject.file("keystore.properties")
 val releaseSigningProperties = Properties()
 
@@ -67,6 +73,8 @@ android {
         targetSdk = 35
         versionCode = 10002
         versionName = "1.0.2"
+        buildConfigField("boolean", "NOTIFICATION_SMOKE", "false")
+        buildConfigField("boolean", "NOTIFICATION_SYNC", "false")
         buildConfigField("String", "HOME_URL", "\"https://boluo66.top/app\"")
     }
 
@@ -84,6 +92,8 @@ android {
     buildTypes {
         debug {
             applicationIdSuffix = ".preview"
+            buildConfigField("boolean", "NOTIFICATION_SMOKE", notificationSmokeEnabled.toString())
+            buildConfigField("boolean", "NOTIFICATION_SYNC", notificationSyncEnabled.toString())
             buildConfigField("String", "HOME_URL", "\"$debugHomeUrl\"")
         }
         release {
@@ -106,6 +116,14 @@ android {
     }
 
     sourceSets {
+        check(!(notificationSmokeEnabled && notificationSyncEnabled)) { "Choose one notification test mode" }
+        if (notificationSyncEnabled) {
+            getByName("debug").manifest.srcFile("src/notificationSync/AndroidManifest.xml")
+        }
+        if (notificationSmokeEnabled) {
+            getByName("debug").manifest.srcFile("src/notificationSmoke/AndroidManifest.xml")
+            getByName("debug").java.srcDir("src/notificationSmoke/java")
+        }
         getByName("main").assets.srcDir(
             layout.buildDirectory.dir("generated/legal-assets"),
         )

@@ -18,7 +18,7 @@ vi.mock('../util/emailDelivery.js', () => ({
   maskEmail: (value) => String(value).replace(/^(.{2}).*(@.*)$/u, '$1***$2'),
 }));
 
-const { adminStats, adminList, adminDelete, adminEmailStats, adminEmailList, adminEmailDetail, list, unreadCount, markAllRead } =
+const { nativeSync, adminStats, adminList, adminDelete, adminEmailStats, adminEmailList, adminEmailDetail, list, unreadCount, markAllRead } =
   await import('./notificationHandle.js');
 
 const mockRes = () => ({ send: vi.fn() });
@@ -355,5 +355,24 @@ describe('通知管理只读优化', () => {
     query.mockRejectedValueOnce(new Error('list failure')).mockRejectedValueOnce(new Error('count failure'));
     const res=mockRes();await adminList({user:{role:'root'},body:{}},res);
     expect(res.send).toHaveBeenCalledWith({status:500,data:null,msg:'获取发送记录失败: list failure'});
+  });
+});
+
+
+describe('原生通知同步权限', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+  it('游客、无身份与管理代操作上下文均不允许读取', async () => {
+    for (const req of [{}, { user: { id: 'v', role: 'visitor' } }, { user: { id: 'root', role: 'root' }, adminContext: {} }]) {
+      const res = mockRes(); await nativeSync(req, res);
+      expect(res.send.mock.calls[0][0].status).toBe(403);
+    }
+    expect(query).not.toHaveBeenCalled();
+  });
+  it('基线绑定会话身份，忽略客户端传入的其他账号', async () => {
+    query.mockResolvedValueOnce([[{ now: '2026-10-08 12:00:00.000000' }]]);
+    const res = mockRes();
+    await nativeSync({ user: { id: 'alice', role: 'user' }, body: { owner: 'bob', userId: 'bob' } }, res);
+    expect(res.send.mock.calls[0][0].data.owner).toBe('alice');
+    expect(res.send.mock.calls[0][0].data.items).toEqual([]);
   });
 });

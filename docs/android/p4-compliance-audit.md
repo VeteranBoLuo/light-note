@@ -32,7 +32,7 @@
     防止登录串号、授权码替换和授权码重放。
 
 当前隐私同意版本为 `2026-08-11`；用户协议继续使用 `2026-07-28`。该版本曾用于披露 Root 灰度包的
-Android 通知权限；灰度能力已经停用，当前源码与已发布 APK 均不再申请该权限。
+Android 通知权限；旧灰度能力已停用，普通 Debug、Release 与已发布 APK 均不再申请该权限。显式启用的本机通知诊断/通知同步 Debug 验证包单独声明 `POST_NOTIFICATIONS`，不引入推送 SDK；构建与数据边界见 [Android 说明](../../apps/android/README.md#通知中心同步验证包)。
 
 ## 2. APK 权限证据
 
@@ -46,7 +46,7 @@ Android 通知权限；灰度能力已经停用，当前源码与已发布 APK �
 | `android.permission.REQUEST_INSTALL_PACKAGES`              | 应用声明          | 应用内更新：把已下载的轻笺安装包交给系统安装器  | 否；需用户在系统设置授权 |
 | `<applicationId>.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` | AndroidX 自动生成 | 限制应用内动态广播接收器通信                    | 否；签名级应用内权限   |
 
-当前源码与已发布 APK 均不声明通知、相机、相册/存储、定位、麦克风、通讯录、短信、电话等运行时权限。
+普通 Debug、Release 源码与已发布 APK 均不声明通知、相机、相册/存储、定位、麦克风、通讯录、短信、电话等运行时权限。
 文件和图片由 Android 系统选择器提供；拍照入口由系统相机 Intent 完成。
 
 ### 2.1 `REQUEST_INSTALL_PACKAGES` 最小化说明

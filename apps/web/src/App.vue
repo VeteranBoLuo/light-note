@@ -64,6 +64,7 @@
 </template>
 <script setup lang="ts">
   import { syncBrowserPushOwner } from '@/composables/useBrowserPush';
+  import { useNativeNotificationSync } from '@/composables/useNativeNotificationSync';
   import { openNotificationPanel } from '@/utils/notificationEntry';
   import { useNotification } from '@/composables/useNotification';
   import EntitlementReturnHost from '@/components/support/EntitlementReturnHost.vue';
@@ -169,7 +170,7 @@
   const publicStandaloneRoute = computed(() => router.currentRoute.value.meta.publicStandalone === true);
   const publicCollectionRoute = computed(() => router.currentRoute.value.name === 'publicCollectionForm');
   // 已安装的 2026-08 灰度壳不会随 Web 更新自动删除旧通知。新页面启动时只做迁移清理，
-  // 不再建立通知 WebSocket、轮询未读或发送新的系统通知；DownloadManager 通知不走此桥。
+  // 旧协议只做停用清理；新同步测试使用独立的 nativeNotifications 协议。
   if (isAndroidApp) {
     postAndroidMessage({ type: 'notifications.configure', enabled: false });
     postAndroidMessage({ type: 'notifications.clear' });
@@ -361,6 +362,15 @@
     'noteShare',
   ];
   const applicationAuthStatus = ref<ApplicationAuthStatus>('pending');
+  useNativeNotificationSync(
+    computed(() => {
+      if (applicationAuthStatus.value === 'pending') return null;
+      return applicationAuthStatus.value === 'ready' && !user.adminContext && !isAdminLoginPreview()
+        && user.role !== 'visitor' ? String(user.id || '') : '';
+    }),
+    () => { void router.push({ name: 'notifications' }); },
+  );
+
   watch(
     () => [applicationAuthStatus.value, user.id, user.role] as const,
     ([status, id, role]) => {
