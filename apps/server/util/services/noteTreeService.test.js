@@ -185,6 +185,63 @@ describe('noteTreeService 只读树模型', () => {
     expect(complete.items[0].children).toBeDefined();
   });
 
+  it('展开普通目录只读父链和直属子级，保留置顶排序及子级数量', async () => {
+    const db = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce([[{ breadcrumb_0_id: 'root-a' }]])
+        .mockResolvedValueOnce([
+          [
+            { id: 'a', parent_id: 'root-a', title: '普通', sort: 0, child_count: 3 },
+            { id: 'b', parent_id: 'root-a', title: '置顶', sort: 1, is_top: 1, child_count: 0 },
+          ],
+        ]),
+    };
+    const result = await queryOwnedNoteTree({ userId: 'owner', parentId: 'root-a', depth: 1, db });
+    expect(result.items.map((item) => item.id)).toEqual(['b', 'a']);
+    expect(result.items[1]).toMatchObject({ parentId: 'root-a', childCount: 3, hasChildren: true });
+    expect(result.items[0]).toMatchObject({ childCount: 0, hasChildren: false });
+    expect(db.query).toHaveBeenCalledTimes(2);
+    expect(db.query.mock.calls[0][1]).toEqual(['root-a', 'owner']);
+    expect(db.query.mock.calls[1][1]).toEqual(['owner', 'root-a']);
+    expect(db.query.mock.calls[1][0]).toContain('n.parent_id = ?');
+    expect(db.query.mock.calls[1][0]).not.toContain('content');
+  });
+
+  it('展开空目录返回空数组，外账号或已删除父级保持 404', async () => {
+    const db = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce([[{ breadcrumb_0_id: 'root' }]])
+        .mockResolvedValueOnce([[]]),
+    };
+    await expect(queryOwnedNoteTree({ userId: 'owner', parentId: 'root', db })).resolves.toMatchObject({ items: [] });
+    const absent = { query: vi.fn().mockResolvedValue([[]]) };
+    await expect(queryOwnedNoteTree({ userId: 'owner', parentId: 'other', db: absent })).rejects.toMatchObject({
+      code: 'NOTE_TREE_PARENT_NOT_FOUND',
+      status: 404,
+    });
+    expect(absent.query).toHaveBeenCalledTimes(1);
+  });
+
+  it('异常循环父链回退全量恢复，不将环节点错误展示为子级', async () => {
+    const db = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce([[{ breadcrumb_0_id: 'a', breadcrumb_1_id: 'b', breadcrumb_2_id: 'a' }]])
+        .mockResolvedValueOnce([
+          [
+            { id: 'a', parent_id: 'b' },
+            { id: 'b', parent_id: 'a' },
+            { id: 'child', parent_id: 'a' },
+          ],
+        ]),
+    };
+    const result = await queryOwnedNoteTree({ userId: 'owner', parentId: 'a', db });
+    expect(result.items.map((item) => item.id)).toEqual(['child']);
+    expect(db.query.mock.calls[1][1]).toEqual(['owner']);
+  });
+
   it('目录搜索只返回当前子树命中节点与完整祖先路径，不携带正文或范围外兄弟', async () => {
     const searchRows = [
       ...rows,

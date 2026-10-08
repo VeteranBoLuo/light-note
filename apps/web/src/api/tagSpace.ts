@@ -39,7 +39,7 @@ export interface TagSpaceSummary {
 
 export interface TagSpaceListResponse {
   items: TagSpaceSummary[];
-  total: number;
+  total?: number;
   page: number;
   pageSize: number;
   hasMore: boolean;
@@ -47,8 +47,8 @@ export interface TagSpaceListResponse {
   sort: TagSpaceSort;
   keyword: string;
   includeEmpty: boolean;
-  facets: Record<TagSpaceFilter, number>;
-  overview: {
+  facets?: Record<TagSpaceFilter, number>;
+  overview?: {
     tagTotal: number;
     activeTagTotal: number;
     emptyTagTotal: number;
@@ -116,6 +116,7 @@ export async function fetchTagSpaces(params: {
   filter?: TagSpaceFilter;
   sort?: TagSpaceSort;
   includeEmpty?: boolean;
+  includeMetadata?: boolean;
   page?: number;
   pageSize?: number;
 }): Promise<TagSpaceListResponse> {

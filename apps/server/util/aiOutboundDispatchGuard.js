@@ -1,10 +1,46 @@
-/**
- * 在账号注销事务使用的同一行锁上建立一次 AI 外发屏障。
- *
- * 锁必须覆盖真正的 Provider 调用：若注销先取得锁，后续外发会在读到 deleted
- * 后停止；若外发先取得锁，注销会等该次调用交付/失败后才提交。这样跨进程实例
- * 也不会出现“注销已提交但旧 Worker 仍开始外发”的 TOCTOU 窗口。
- */
+import { acquireAccountAiLifecycleConnection } from './accountAiLifecycleLock.js';
+
+// Lifecycle exclusion spans the Provider call and delivery, but the user row
+// is locked only during initial validation so ordinary account writes can proceed.
+const admissions = new WeakMap();
+const MAX_WAITING_DISPATCHES = 64;
+
+// Waiting for a model (or another dispatch of the same account) must not exhaust
+// the pool used by the callback's independent billing/delivery transactions.
+function acquireDispatchSlot(database, userId) {
+  let state = admissions.get(database);
+  if (!state) {
+    const poolSize = Number(database.pool?.config?.connectionLimit || 10);
+    state = { active: new Set(), waiting: [], limit: Math.min(2, poolSize - 1) };
+    admissions.set(database, state);
+  }
+  if (state.limit < 1 || state.waiting.length >= MAX_WAITING_DISPATCHES) {
+    return Promise.reject(
+      Object.assign(new Error('AI 外发队列繁忙，请稍后重试'), {
+        code: 'AI_DISPATCH_BUSY',
+        status: 503,
+      }),
+    );
+  }
+  const key = String(userId);
+  return new Promise((resolve) => {
+    const drain = () => {
+      while (state.active.size < state.limit) {
+        const index = state.waiting.findIndex((entry) => !state.active.has(entry.key));
+        if (index < 0) break;
+        const [entry] = state.waiting.splice(index, 1);
+        state.active.add(entry.key);
+        entry.resolve(() => {
+          state.active.delete(entry.key);
+          drain();
+        });
+      }
+    };
+    state.waiting.push({ key, resolve });
+    drain();
+  });
+}
+
 export async function lockActiveUserForUpdate(connection, userId) {
   const [rows] = await connection.query(
     `SELECT id, role, del_flag
@@ -31,10 +67,17 @@ export async function withActiveUserAiDispatch(database, userId, callback) {
     error.status = 503;
     throw error;
   }
-  const connection = await database.getConnection();
+  const releaseSlot = await acquireDispatchSlot(database, userId);
+  let connection;
+  let releaseLifecycle;
   try {
+    ({ connection, releaseLifecycle } = await acquireAccountAiLifecycleConnection(database, userId));
     await connection.beginTransaction();
     const user = await lockActiveUserForUpdate(connection, userId);
+    await connection.commit();
+    // Keep the callback's transaction contract (including visitor-subject locks)
+    // without carrying the authenticated user's row lock through model latency.
+    await connection.beginTransaction();
     const result = await callback({
       connection,
       user,
@@ -42,9 +85,14 @@ export async function withActiveUserAiDispatch(database, userId, callback) {
     await connection.commit();
     return result;
   } catch (error) {
-    await connection.rollback().catch(() => {});
+    await connection?.rollback().catch(() => {});
     throw error;
   } finally {
-    connection.release();
+    try {
+      await releaseLifecycle?.();
+      connection?.release();
+    } finally {
+      releaseSlot();
+    }
   }
 }

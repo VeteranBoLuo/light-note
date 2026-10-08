@@ -10,11 +10,11 @@ const detailDirectory = path.resolve(
 );
 const versionHistorySource = fs.readFileSync(path.resolve(detailDirectory, 'NoteVersionHistory.vue'), 'utf8');
 const zhLocaleSource = fs.readFileSync(
-  path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../i18n/locales/zh-CN.ts'),
+  path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../i18n/locales/zh-CN-core.ts'),
   'utf8',
 );
 const enLocaleSource = fs.readFileSync(
-  path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../i18n/locales/en-US.ts'),
+  path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../i18n/locales/en-US-core.ts'),
   'utf8',
 );
 

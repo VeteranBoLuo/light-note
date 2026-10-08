@@ -1,3 +1,4 @@
+import { withPreparedCloudFileRename } from './cloudFileRenameService.js';
 import {
   lockOrganizeRunOwner,
   publicOrganizeOptions,
@@ -293,152 +294,157 @@ export async function actOnSuggestion(
     preparedIcon = await prepareTagIconChoice(value, json(rows[0].payload_json)?.candidates || []);
   }
   let cleanup;
-  const result = await transaction(db, async (c) => {
-    await lockOrganizeRunOwner(c, userId, runId);
-    const run = await ownedRun(c, userId, runId, true);
-    if (run.status === 'preview') throw suggestionError('ORGANIZE_RUN_NOT_STARTED', '请先确认并开始整理', 409);
-    const [rows] = await c.query(
-      'SELECT * FROM organize_suggestions WHERE id=? AND run_id=? AND user_id=? FOR UPDATE',
-      [suggestionId, runId, userId],
-    );
-    const suggestion = rows[0];
-    if (!suggestion) throw suggestionError('ORGANIZE_SUGGESTION_NOT_FOUND', '建议不存在', 404);
-    if (batchOnly && !['archive', 'tags', 'title'].includes(suggestion.kind))
-      throw suggestionError('ORGANIZE_BATCH_UNSUPPORTED', '此建议需要单独处理', 409);
-    if (['applied', 'ignored'].includes(suggestion.status)) return { status: suggestion.status };
-    if (suggestion.status === 'expired') {
-      const expired = json(suggestion.payload_json);
-      throw suggestionError(
-        expired.reasonCode || 'ORGANIZE_RESOURCE_UNAVAILABLE',
-        expired.reason || '建议已失效，请重新检查',
-        409,
+  const result = await withPreparedCloudFileRename((preparation) =>
+    transaction(db, async (c) => {
+      await lockOrganizeRunOwner(c, userId, runId);
+      const run = await ownedRun(c, userId, runId, true);
+      if (run.status === 'preview') throw suggestionError('ORGANIZE_RUN_NOT_STARTED', '请先确认并开始整理', 409);
+      const [rows] = await c.query(
+        'SELECT * FROM organize_suggestions WHERE id=? AND run_id=? AND user_id=? FOR UPDATE',
+        [suggestionId, runId, userId],
       );
-    }
-    if (
-      !['pending', 'insufficient', 'no_suggestion', 'info'].includes(suggestion.status) &&
-      !(suggestion.kind === 'tag_icon' && suggestion.status === 'failed')
-    )
-      throw suggestionError('ORGANIZE_SUGGESTION_STATE', '当前建议不能操作', 409);
-    const payload = json(suggestion.payload_json);
-    if (
-      batchOnly &&
-      (suggestion.status !== 'pending' ||
-        (suggestion.kind === 'archive'
-          ? payload.archiveDraft?.status !== 'ready'
-          : suggestion.kind === 'tags'
-            ? !Array.isArray(payload.after) || !payload.after.length
-            : typeof payload.after !== 'string' || !payload.after.trim()))
-    )
-      throw suggestionError('ORGANIZE_SUGGESTION_STATE', '此建议没有可直接应用的结果', 409);
-    if (action === 'ignore') {
-      await c.query("UPDATE organize_suggestions SET status='ignored',applied_request_id=? WHERE id=?", [
-        requestId,
-        suggestionId,
+      const suggestion = rows[0];
+      if (!suggestion) throw suggestionError('ORGANIZE_SUGGESTION_NOT_FOUND', '建议不存在', 404);
+      if (batchOnly && !['archive', 'tags', 'title'].includes(suggestion.kind))
+        throw suggestionError('ORGANIZE_BATCH_UNSUPPORTED', '此建议需要单独处理', 409);
+      if (['applied', 'ignored'].includes(suggestion.status)) return { status: suggestion.status };
+      if (suggestion.status === 'expired') {
+        const expired = json(suggestion.payload_json);
+        throw suggestionError(
+          expired.reasonCode || 'ORGANIZE_RESOURCE_UNAVAILABLE',
+          expired.reason || '建议已失效，请重新检查',
+          409,
+        );
+      }
+      if (
+        !['pending', 'insufficient', 'no_suggestion', 'info'].includes(suggestion.status) &&
+        !(suggestion.kind === 'tag_icon' && suggestion.status === 'failed')
+      )
+        throw suggestionError('ORGANIZE_SUGGESTION_STATE', '当前建议不能操作', 409);
+      const payload = json(suggestion.payload_json);
+      if (
+        batchOnly &&
+        (suggestion.status !== 'pending' ||
+          (suggestion.kind === 'archive'
+            ? payload.archiveDraft?.status !== 'ready'
+            : suggestion.kind === 'tags'
+              ? !Array.isArray(payload.after) || !payload.after.length
+              : typeof payload.after !== 'string' || !payload.after.trim()))
+      )
+        throw suggestionError('ORGANIZE_SUGGESTION_STATE', '此建议没有可直接应用的结果', 409);
+      if (action === 'ignore') {
+        await c.query("UPDATE organize_suggestions SET status='ignored',applied_request_id=? WHERE id=?", [
+          requestId,
+          suggestionId,
+        ]);
+        return { status: 'ignored' };
+      }
+      const [itemRows] = await c.query('SELECT * FROM organize_suggestion_items WHERE id=? AND user_id=? FOR UPDATE', [
+        suggestion.item_id,
+        userId,
       ]);
-      return { status: 'ignored' };
-    }
-    const [itemRows] = await c.query('SELECT * FROM organize_suggestion_items WHERE id=? AND user_id=? FOR UPDATE', [
-      suggestion.item_id,
-      userId,
-    ]);
-    const item = itemRows[0];
-    const [table, owner] = {
-      tag: ['tag', 'user_id'],
-      note: ['note', 'create_by'],
-      bookmark: ['bookmark', 'user_id'],
-      file: ['files', 'create_by'],
-    }[item.resource_type];
-    await c.query(`SELECT id FROM ${table} WHERE id=? AND ${owner}=? AND del_flag=0 FOR UPDATE`, [
-      item.resource_id,
-      userId,
-    ]);
-    // 清理前的第一份一致性读取必须晚于关系锁，避免引用/分享使用旧快照。
-    if (item.resource_type === 'note' && ['empty', 'duplicate'].includes(suggestion.kind)) {
-      await c.query('SELECT id FROM note WHERE create_by=? AND del_flag=0 ORDER BY id FOR UPDATE', [userId]);
-      await c.query('SELECT id FROM note_shares WHERE owner_user_id=? FOR UPDATE', [userId]);
-      await c.query(
-        "SELECT target_id FROM note_resource_refs WHERE source_user_id=? AND target_type='note' AND target_id=? FOR UPDATE",
-        [userId, item.resource_id],
-      );
-      await c.query(
-        "SELECT target_id FROM todo_resource_refs WHERE user_id=? AND target_type='note' AND target_id=? FOR UPDATE",
-        [userId, item.resource_id],
-      );
-      await c.query(
-        "SELECT resource_id FROM todo_series_resource_refs WHERE user_id=? AND resource_type='note' AND resource_id=? FOR UPDATE",
-        [userId, item.resource_id],
-      );
-    }
-    const expire = async (code, message) => {
-      await c.query("UPDATE organize_suggestions SET status='expired',payload_json=? WHERE id=?", [
-        JSON.stringify({ ...payload, reason: message, reasonCode: code }),
-        suggestionId,
-      ]);
-      return { conflict: { code, message } };
-    };
-    const current = await readCurrentSuggestionSource(c, userId, item.resource_type, item.resource_id);
-    if (!current) {
-      const [deleted] = await c.query(`SELECT del_flag FROM ${table} WHERE id=? AND ${owner}=?`, [
+      const item = itemRows[0];
+      const [table, owner] = {
+        tag: ['tag', 'user_id'],
+        note: ['note', 'create_by'],
+        bookmark: ['bookmark', 'user_id'],
+        file: ['files', 'create_by'],
+      }[item.resource_type];
+      await c.query(`SELECT id FROM ${table} WHERE id=? AND ${owner}=? AND del_flag=0 FOR UPDATE`, [
         item.resource_id,
         userId,
       ]);
-      const trashed = Number(deleted[0]?.del_flag) === 1;
-      return expire(
-        trashed ? 'ORGANIZE_RESOURCE_TRASHED' : 'ORGANIZE_RESOURCE_UNAVAILABLE',
-        unavailableReason(trashed),
-      );
-    }
-    if (current.version !== item.version_hash)
-      return expire('ORGANIZE_RESOURCE_CHANGED', '资料已更新，需重新检查后再应用');
-    if (['queued', 'running'].includes(item.ai_status))
-      throw suggestionError('ORGANIZE_ANALYSIS_RUNNING', '请等待当前资料分析完成后再应用', 409);
-    const mutation = await applySuggestionMutation(c, {
-      userId,
-      current,
-      payload,
-      value,
-      kind: suggestion.kind,
-      runId,
-      preparedIcon,
-    });
-    cleanup = mutation.cleanup;
-    if (mutation.deleted) {
-      if (Number(run.run_version) === 3) {
+      // 清理前的第一份一致性读取必须晚于关系锁，避免引用/分享使用旧快照。
+      if (item.resource_type === 'note' && ['empty', 'duplicate'].includes(suggestion.kind)) {
+        await c.query('SELECT id FROM note WHERE create_by=? AND del_flag=0 ORDER BY id FOR UPDATE', [userId]);
+        await c.query('SELECT id FROM note_shares WHERE owner_user_id=? FOR UPDATE', [userId]);
         await c.query(
-          "UPDATE organize_processing_jobs SET status='skipped',lease_token=NULL,lease_expires_at=NULL WHERE item_id=? AND status IN ('queued','waiting','running')",
+          "SELECT target_id FROM note_resource_refs WHERE source_user_id=? AND target_type='note' AND target_id=? FOR UPDATE",
+          [userId, item.resource_id],
+        );
+        await c.query(
+          "SELECT target_id FROM todo_resource_refs WHERE user_id=? AND target_type='note' AND target_id=? FOR UPDATE",
+          [userId, item.resource_id],
+        );
+        await c.query(
+          "SELECT resource_id FROM todo_series_resource_refs WHERE user_id=? AND resource_type='note' AND resource_id=? FOR UPDATE",
+          [userId, item.resource_id],
+        );
+      }
+      const expire = async (code, message) => {
+        await c.query("UPDATE organize_suggestions SET status='expired',payload_json=? WHERE id=?", [
+          JSON.stringify({ ...payload, reason: message, reasonCode: code }),
+          suggestionId,
+        ]);
+        return { conflict: { code, message } };
+      };
+      const current = await readCurrentSuggestionSource(c, userId, item.resource_type, item.resource_id);
+      if (!current) {
+        const [deleted] = await c.query(`SELECT del_flag FROM ${table} WHERE id=? AND ${owner}=?`, [
+          item.resource_id,
+          userId,
+        ]);
+        const trashed = Number(deleted[0]?.del_flag) === 1;
+        return expire(
+          trashed ? 'ORGANIZE_RESOURCE_TRASHED' : 'ORGANIZE_RESOURCE_UNAVAILABLE',
+          unavailableReason(trashed),
+        );
+      }
+      if (current.version !== item.version_hash)
+        return expire('ORGANIZE_RESOURCE_CHANGED', '资料已更新，需重新检查后再应用');
+      if (['queued', 'running'].includes(item.ai_status))
+        throw suggestionError('ORGANIZE_ANALYSIS_RUNNING', '请等待当前资料分析完成后再应用', 409);
+      const mutation = await applySuggestionMutation(c, {
+        userId,
+        current,
+        payload,
+        value,
+        kind: suggestion.kind,
+        runId,
+        preparedIcon,
+        preparation,
+      });
+      cleanup = mutation.cleanup;
+      if (mutation.deleted) {
+        if (Number(run.run_version) === 3) {
+          await c.query(
+            "UPDATE organize_processing_jobs SET status='skipped',lease_token=NULL,lease_expires_at=NULL WHERE item_id=? AND status IN ('queued','waiting','running')",
+            [item.id],
+          );
+          await settleProcessingRun(c, run.id);
+        }
+        if (isRunV2(run))
+          await c.query(
+            "UPDATE organize_suggestion_items SET rule_status='removed',ai_status='not_needed' WHERE id=?",
+            [item.id],
+          );
+        await c.query(
+          "UPDATE organize_suggestions SET status='closed' WHERE item_id=? AND status NOT IN ('applied','ignored')",
           [item.id],
         );
-        await settleProcessingRun(c, run.id);
-      }
-      if (isRunV2(run))
-        await c.query("UPDATE organize_suggestion_items SET rule_status='removed',ai_status='not_needed' WHERE id=?", [
+      } else {
+        const next = await readCurrentSuggestionSource(c, userId, current.type, current.id);
+        if (current.type === 'file' && json(item.snapshot_json)?.reading)
+          next.reading = json(item.snapshot_json).reading;
+        await c.query('UPDATE organize_suggestion_items SET version_hash=?,snapshot_json=? WHERE id=?', [
+          next.version,
+          JSON.stringify(next),
           item.id,
         ]);
-      await c.query(
-        "UPDATE organize_suggestions SET status='closed' WHERE item_id=? AND status NOT IN ('applied','ignored')",
-        [item.id],
-      );
-    } else {
-      const next = await readCurrentSuggestionSource(c, userId, current.type, current.id);
-      if (current.type === 'file' && json(item.snapshot_json)?.reading) next.reading = json(item.snapshot_json).reading;
-      await c.query('UPDATE organize_suggestion_items SET version_hash=?,snapshot_json=? WHERE id=?', [
-        next.version,
-        JSON.stringify(next),
-        item.id,
+      }
+      await c.query("UPDATE organize_suggestions SET status='applied',payload_json=?,applied_request_id=? WHERE id=?", [
+        JSON.stringify({
+          ...payload,
+          proposedAfter: payload.after,
+          after: ['tags', 'title', 'tag_icon'].includes(suggestion.kind) ? mutation.applied : payload.after,
+          applied: mutation.applied,
+        }),
+        requestId,
+        suggestionId,
       ]);
-    }
-    await c.query("UPDATE organize_suggestions SET status='applied',payload_json=?,applied_request_id=? WHERE id=?", [
-      JSON.stringify({
-        ...payload,
-        proposedAfter: payload.after,
-        after: ['tags', 'title', 'tag_icon'].includes(suggestion.kind) ? mutation.applied : payload.after,
-        applied: mutation.applied,
-      }),
-      requestId,
-      suggestionId,
-    ]);
-    return { status: 'applied', applied: mutation.applied };
-  });
+      return { status: 'applied', applied: mutation.applied };
+    }),
+  );
   if (result.conflict) throw suggestionError(result.conflict.code, result.conflict.message, 409);
   // 提交完成后的派生缓存清理失败不能伪装成业务写入失败。
   if (cleanup) void cleanup().catch(() => {});
@@ -827,7 +833,7 @@ export async function runSingleSuggestionItem(workerId, db = pool, dependencies 
           );
           await beforeCall();
           if (filePrepared) result.reading = current.reading;
-          // Provider 成果在根 Execution 成功前入库，使用外发屏障事务保证注销互斥。
+          // Provider 成果在根 Execution 成功前入库，使用外发生命周期屏障保证注销互斥。
           const delivered = await transaction(db, async (c) => {
             if (filePrepared)
               await c.query('UPDATE organize_suggestion_items SET snapshot_json=? WHERE id=? AND lease_token=?', [

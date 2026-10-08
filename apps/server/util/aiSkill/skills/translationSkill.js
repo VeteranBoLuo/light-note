@@ -26,12 +26,13 @@ export default Object.freeze({
       sources: [], coverage: { complete: true, warnings: [], totalCharacters: input.text.length, analyzedCharacters: input.text.length, batchCount: segments.length }, availableActions: [],
       async callModel({ signal, trace, modelPolicy }) {
         const pairs = [];
+        let completedContent = '';
         dependencies.onProgress?.({ original: input.text, content: '' });
-        const publish = (draft = '') => dependencies.onProgress?.({ original: input.text, content: pairs.map(pair => pair.translated).join('') + draft });
+        const publish = (draft = '') => dependencies.onProgress?.({ original: input.text, content: completedContent + draft });
         const invoke = dependencies.callStructuredSkillModel || callStructuredSkillModel;
         for (const segment of segments) {
           signal?.throwIfAborted();
-          if (!segment.source.trim()) { pairs.push({id:segment.id,original:segment.original,translated:segment.original}); continue; }
+          if (!segment.source.trim()) { pairs.push({id:segment.id,original:segment.original,translated:segment.original}); completedContent += segment.original; continue; }
           const pair = await invoke({
             stream: typeof dependencies.onProgress === 'function',
             beforeRequest: () => dependencies.beforeSegment?.(pairs.length, segments.length),
@@ -53,9 +54,10 @@ export default Object.freeze({
             repairableErrorCodes: ['AI_SKILL_STRUCTURED_OUTPUT_MISSING', 'AI_SKILL_STRUCTURED_OUTPUT_INVALID', 'AI_TRANSLATION_OUTPUT_INVALID'],
           });
           pairs.push(pair);
+          completedContent += pair.translated;
           publish();
         }
-        const content = pairs.map(pair => pair.translated).join('');
+        const content = completedContent;
         if (!content.trim() || content.length > 60000) throw aiSkillError('AI_TRANSLATION_OUTPUT_INVALID', '译文超出可交付范围', 502);
         dependencies.onTranslated?.(pairs);
         return { kind: 'grounded_markdown', content };

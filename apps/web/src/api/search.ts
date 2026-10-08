@@ -13,6 +13,7 @@ export type SearchType = ResourceSearchType;
 export type { GlobalSearchType };
 
 export interface SearchCursor {
+  seek?: { v: 1; scope: string; values: Array<string | number | null> };
   score?: number;
   time?: string;
   resourceType?: string;
@@ -169,11 +170,28 @@ function normalizeSearchCursor(value: unknown): SearchCursor | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const raw = value as Partial<SearchCursor>;
   if (raw.type !== 'all' && !GLOBAL_SEARCH_TYPES.includes(raw.type as GlobalSearchType)) return null;
+  const seek = raw.seek;
+  if (
+    seek &&
+    (seek.v !== 1 ||
+      typeof seek.scope !== 'string' ||
+      !/^[a-f0-9]{64}$/.test(seek.scope) ||
+      !Array.isArray(seek.values) ||
+      seek.values.length > 12 ||
+      seek.values.some(
+        (value) =>
+          value !== null &&
+          !(typeof value === 'string' && value.length <= 4096) &&
+          !(typeof value === 'number' && Number.isFinite(value)),
+      ))
+  )
+    return null;
   const offset = Number(raw.offset);
   if (!Number.isFinite(offset) || offset < 0) return null;
   return {
     type: raw.type as GlobalSearchType | 'all',
     offset: Math.floor(offset),
+    ...(seek ? { seek: { v: 1 as const, scope: seek.scope, values: [...seek.values] } } : {}),
     ...(raw.type === 'all' &&
     typeof raw.id === 'string' &&
     typeof raw.time === 'string' &&

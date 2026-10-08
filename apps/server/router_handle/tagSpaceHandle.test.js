@@ -42,6 +42,13 @@ describe('tagSpaceHandle', () => {
     );
   });
 
+  it('续页元数据选项透传给领域服务', async () => {
+    await queryTagSpaces({ user: { id: 'user-1' }, body: { page: 2, includeMetadata: false } }, createResponse());
+    expect(mocks.queryTagSpaceList).toHaveBeenCalledWith(
+      expect.anything(), expect.objectContaining({ userId: 'user-1', page: 2, includeMetadata: false }),
+    );
+  });
+
   it('管理员代看时统一读取 subject，而不是管理员自己的资源', async () => {
     const request = {
       user: { id: 'root-1' },

@@ -39,16 +39,17 @@ const fixtureAdapter: NonNullable<typeof request.defaults.adapter> = async (conf
           controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
         emit('start', { jobId: 'visual-job' });
         const count = params.has('slow') ? 80 : 8;
+        let delivered = '';
         for (let step = 1; step <= count; step++) {
           await new Promise((resolve) => setTimeout(resolve, params.has('slow') ? 350 : 160));
           if (config.signal?.aborted) {
             controller.close();
             return;
           }
-          emit('snapshot', {
-            original: pair.original,
-            content: pair.translated.slice(0, Math.ceil((pair.translated.length * step) / count)),
-          });
+          const content = pair.translated.slice(0, Math.ceil((pair.translated.length * step) / count));
+          if (params.has('delta') && step > 1) emit('delta', { offset: delivered.length, content: content.slice(delivered.length) });
+          else emit('snapshot', { original: pair.original, content });
+          delivered = content;
         }
         if (params.has('streamError'))
           emit('error', {

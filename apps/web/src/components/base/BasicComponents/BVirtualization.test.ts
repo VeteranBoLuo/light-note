@@ -274,6 +274,61 @@ describe('virtual list scroll layout', () => {
 });
 
 describe('dynamic BVirtualList', () => {
+  it('retains an active operation row, releases it afterwards, and unobserves recycled DOM', async () => {
+    const original = globalThis.ResizeObserver;
+    const observed = new Set<Element>();
+    globalThis.ResizeObserver = class {
+      observe(element: Element) {
+        observed.add(element);
+      }
+      unobserve(element: Element) {
+        observed.delete(element);
+      }
+      disconnect() {
+        observed.clear();
+      }
+    } as any;
+    try {
+      const retained = ref([0]);
+      const items = Array.from({ length: 5000 }, (_, id) => ({ id }));
+      const host = mount(
+        {
+          setup: () => () =>
+            h(
+              BVirtualList,
+              {
+                items,
+                dynamicHeight: true,
+                itemHeight: 40,
+                overscan: 2,
+                retainedKeys: retained.value,
+              },
+              { default: ({ item }: any) => `row-${item.id}` },
+            ),
+        },
+        {},
+      );
+      await nextTick();
+      const first = host.querySelector('[data-virtual-index="0"]');
+      const scroller = host.querySelector<HTMLElement>('.b-virtual-list')!;
+      Object.defineProperty(scroller, 'clientHeight', { configurable: true, value: 120 });
+      for (const top of [1000, 10000, 50000]) {
+        scroller.scrollTop = top;
+        scroller.dispatchEvent(new Event('scroll'));
+        await nextTick();
+        expect(host.querySelector('[data-virtual-index="0"]')).toBe(first);
+        expect(observed.size).toBeLessThan(15);
+        expect([...observed].every((element) => element.isConnected)).toBe(true);
+      }
+      retained.value = [];
+      await nextTick();
+      expect(host.querySelector('[data-virtual-index="0"]')).toBeNull();
+      expect(observed.has(first!)).toBe(false);
+    } finally {
+      globalThis.ResizeObserver = original;
+    }
+  });
+
   it('measures expanded rows without fixing their height and preserves the visible anchor', async () => {
     const original = globalThis.ResizeObserver;
     const callbacks: ResizeObserverCallback[] = [];

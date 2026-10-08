@@ -919,13 +919,15 @@
         const result = await fetchTagSpaces({
           sort: 'recent',
           includeEmpty: true,
+          includeMetadata: page === 1,
           page,
           pageSize: 50,
         });
         if (sequence !== sidebarSequence) return;
         const previousSize = collected.size;
         result.items.forEach((item) => collected.set(String(item.id), item));
-        sidebarTotal.value = result.overview.tagTotal || result.total;
+        const total = result.overview?.tagTotal ?? result.total;
+        if (total !== undefined) sidebarTotal.value = total;
         hasMore = result.hasMore;
         if (hasMore && (!result.items.length || collected.size === previousSize)) {
           console.warn('[tag-space] stopped detail directory pagination because the response made no progress');

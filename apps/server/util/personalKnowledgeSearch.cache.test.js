@@ -1,9 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const db = vi.hoisted(() => ({ query: vi.fn(), getConnection: vi.fn() }));
 vi.mock('../db/index.js', () => ({ default: db }));
 
 import { __testing, invalidatePersonalKnowledgeCache, searchPersonalKnowledge } from './personalKnowledgeSearch.js';
+
+import { indexClient } from './personalSearchIndexClient.js';
+afterAll(() => indexClient.close());
 
 const TTL = 180_000;
 const note = { id: 'note-1', title: 'alpha', content: 'alpha memory', type: 'markdown', update_time: '2026-09-01' };
@@ -25,8 +28,8 @@ describe('personal knowledge cache lifetime', () => {
     vi.resetAllMocks();
     documentLoads = 0;
     db.query.mockImplementation(async (sql) => {
-      if (sql.includes('ORDER BY update_time DESC LIMIT 3000')) {
-        documentLoads += 1;
+      if (sql.includes('FROM note') && !sql.includes('title AS resource_title')) {
+        if (sql.includes('AND id IN')) documentLoads += 1;
         return [[note]];
       }
       if (sql.includes('title AS resource_title')) return [[note]];
@@ -46,6 +49,24 @@ describe('personal knowledge cache lifetime', () => {
     vi.useRealTimers();
   });
 
+  it('persists a second invalidation arriving after the first database commit but before its acknowledgement', async () => {
+    const committed = deferred(), acknowledge = deferred();
+    let commits = 0, updates = 0;
+    db.getConnection.mockImplementation(async () => ({
+      beginTransaction: async () => {},
+      query: async (sql) => { if (sql.includes('INSERT INTO ai_content_generations')) updates += 1; return [{ affectedRows: 1 }]; },
+      commit: async () => { if (++commits === 1) { committed.resolve(); await acknowledge.promise; } },
+      rollback: async () => {}, release: () => {},
+    }));
+    const first = invalidatePersonalKnowledgeCache('commit-race', { persist: true });
+    await committed.promise;
+    const second = invalidatePersonalKnowledgeCache('commit-race', { persist: true });
+    acknowledge.resolve();
+    await Promise.all([first, second]);
+    expect(updates).toBe(2);
+    expect(commits).toBe(2);
+  });
+
   it('releases expired indexes without another request or database work', async () => {
     const bundle = await __testing.loadBundle('expiry');
     await vi.advanceTimersByTimeAsync(TTL - 1);
@@ -54,7 +75,7 @@ describe('personal knowledge cache lifetime', () => {
     await vi.advanceTimersByTimeAsync(1);
     expect(__testing.cache.has('expiry')).toBe(false);
     expect(db.query).toHaveBeenCalledTimes(calls);
-    expect(bundle.index.search('alpha')).toHaveLength(1);
+    expect(await bundle.index.search('alpha')).toHaveLength(1);
     expect(vi.getTimerCount()).toBe(0);
   });
 
@@ -121,5 +142,57 @@ describe('personal knowledge cache lifetime', () => {
     await invalidatePersonalKnowledgeCache();
     expect(__testing.cache.size).toBe(0);
     expect(vi.getTimerCount()).toBe(0);
+  });
+  it('bounds cold reads and rechecks generations after waiting', async () => {
+    vi.useRealTimers();
+    const entered = deferred(),
+      resume = deferred();
+    const query = db.query.getMockImplementation();
+    let held = false;
+    db.query.mockImplementation(async (sql, params) => {
+      if (!held && params?.[0] === 'gate-first' && sql.includes('AND id IN')) {
+        held = true;
+        entered.resolve();
+        await resume.promise;
+      }
+      return query(sql, params);
+    });
+    const firstPromise = __testing.loadBundle('gate-first');
+    await entered.promise;
+    const pending = __testing.loadBundle('gate-second');
+    const duplicate = __testing.loadBundle('gate-second');
+    await new Promise(setImmediate);
+    expect(documentLoads).toBe(0);
+    await invalidatePersonalKnowledgeCache('gate-second', { persist: false });
+    resume.resolve();
+    const [first, second, same] = await Promise.all([firstPromise, pending, duplicate]);
+    expect(second).toBe(same);
+    expect(second.localGeneration).toBe(1);
+    expect(documentLoads).toBe(2);
+    expect(await first.index.search('alpha')).toHaveLength(1);
+    expect(await second.index.search('alpha')).toHaveLength(1);
+  });
+
+  it('releases admission after a build lifecycle fails so another account can proceed', async () => {
+    const query = db.query.getMockImplementation();
+    let generationReads = 0;
+    db.query.mockImplementation(async (sql, params) => {
+      if (params?.[0] === 'gate-failure' && sql.includes('SELECT generation')) {
+        generationReads += 1;
+        if (generationReads === 2) throw new Error('database temporarily unavailable');
+      }
+      return query(sql, params);
+    });
+    await expect(__testing.loadBundle('gate-failure')).rejects.toThrow('database temporarily unavailable');
+    expect(await (await __testing.loadBundle('gate-recovery')).index.search('alpha')).toHaveLength(1);
+  });
+  it('cold rebuilds do not borrow a write connection or persist duplicate private bodies', async () => {
+    const first = await __testing.loadBundle('read-only-build');
+    expect(await first.index.search('alpha')).toHaveLength(1);
+    await invalidatePersonalKnowledgeCache('read-only-build', { persist: false });
+    const rebuilt = await __testing.loadBundle('read-only-build');
+    expect(await rebuilt.index.search('alpha')).toHaveLength(1);
+    expect(db.getConnection).not.toHaveBeenCalled();
+    expect(db.query.mock.calls.every(([sql]) => !/^\s*(INSERT|UPDATE|DELETE)/iu.test(sql))).toBe(true);
   });
 });

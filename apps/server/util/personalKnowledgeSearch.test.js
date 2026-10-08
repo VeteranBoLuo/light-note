@@ -1,10 +1,12 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const dbMock = vi.hoisted(() => ({ getConnection: vi.fn(), query: vi.fn() }));
 
 vi.mock('../db/index.js', () => ({ default: dbMock }));
 
 import { __testing, invalidatePersonalKnowledgeCache } from './personalKnowledgeSearch.js';
+import { indexClient } from './personalSearchIndexClient.js';
+afterAll(() => indexClient.close());
 
 describe('personal knowledge lexical index', () => {
   beforeEach(() => {
@@ -34,6 +36,34 @@ describe('personal knowledge lexical index', () => {
     expect(terms).toContain('light');
     expect(terms).toContain('知识');
     expect(terms).toContain('检索');
+  });
+
+  it('large asynchronous builds yield to timers and preserve synchronous search ranking', async () => {
+    const documents = Array.from({ length: 600 }, (_, i) =>
+      __testing.chunkResource({
+        userId: 'large',
+        resourceType: 'note',
+        resourceId: String(i),
+        version: 'v1',
+        title: i === 599 ? '霜叶协议 finale' : `普通笔记 ${i}`,
+        content: '共同背景。'.repeat(100) + (i === 599 ? '霜叶协议最终证据 finale' : ''),
+        contentType: 'markdown',
+      }),
+    ).flat();
+    let timerRan = false;
+    const timer = setTimeout(() => {
+      timerRan = true;
+    }, 0);
+    const pending = __testing.buildBundleAsync(documents);
+    expect(timerRan).toBe(false);
+    const asynchronous = await pending;
+    clearTimeout(timer);
+    expect(timerRan).toBe(true);
+    const synchronous = __testing.buildBundle(documents);
+    const options = { combineWith: 'OR', boost: { title: 5, content: 1 } };
+    expect(await asynchronous.index.search('霜叶协议 finale', options)).toEqual(
+      synchronous.index.search('霜叶协议 finale', options),
+    );
   });
 
   it('extracts evidence around the matching passage', () => {
@@ -80,48 +110,6 @@ describe('personal knowledge lexical index', () => {
     expect(results[0]).toMatchObject({ resourceId: 'note-tagged', tags: '北极星计划' });
   });
 
-  it('physically removes inactive private chunks after a successful rebuild', async () => {
-    const query = vi.fn().mockResolvedValue([{}]);
-    const connection = {
-      beginTransaction: vi.fn().mockResolvedValue(undefined),
-      query,
-      commit: vi.fn().mockResolvedValue(undefined),
-      rollback: vi.fn().mockResolvedValue(undefined),
-      release: vi.fn(),
-    };
-    dbMock.getConnection.mockResolvedValue(connection);
-
-    await __testing.persistChunks('user-1', []);
-
-    expect(query).toHaveBeenNthCalledWith(1, 'UPDATE ai_content_chunks SET active = 0 WHERE subject_user_id = ?', [
-      'user-1',
-    ]);
-    expect(query).toHaveBeenNthCalledWith(2, 'DELETE FROM ai_content_chunks WHERE subject_user_id = ? AND active = 0', [
-      'user-1',
-    ]);
-    expect(connection.commit).toHaveBeenCalledOnce();
-    expect(connection.rollback).not.toHaveBeenCalled();
-    expect(connection.release).toHaveBeenCalledOnce();
-  });
-
-  it('业务写入失效发生在持久化途中时回滚旧快照，不把旧正文重新写回', async () => {
-    const connection = {
-      beginTransaction: vi.fn(async () => invalidatePersonalKnowledgeCache('user-race')),
-      query: vi.fn(),
-      commit: vi.fn(),
-      rollback: vi.fn(),
-      release: vi.fn(),
-    };
-    dbMock.getConnection.mockResolvedValue(connection);
-
-    const result = await __testing.persistChunks('user-race', [], 0);
-
-    expect(result).toEqual({ persisted: false, stale: true });
-    expect(connection.query).not.toHaveBeenCalled();
-    expect(connection.rollback).toHaveBeenCalledOnce();
-    expect(connection.commit).not.toHaveBeenCalled();
-  });
-
   it('资源变更可直接物理清除该用户的持久分块镜像，缺表时安全跳过', async () => {
     dbMock.query.mockResolvedValueOnce([{ affectedRows: 4 }]);
     await expect(__testing.purgePersonalKnowledgeChunks('user-1', dbMock)).resolves.toEqual({
@@ -166,38 +154,7 @@ describe('personal knowledge lexical index', () => {
     expect(connection.rollback).not.toHaveBeenCalled();
   });
 
-  it('旧实例在持久化前发现数据库代际已变化会回滚，且权威资源复核会删除已移除命中', async () => {
-    const connection = {
-      beginTransaction: vi.fn(),
-      commit: vi.fn(),
-      rollback: vi.fn(),
-      release: vi.fn(),
-      query: vi
-        .fn()
-        .mockResolvedValueOnce([{ affectedRows: 1 }])
-        .mockResolvedValueOnce([[{ generation: 2 }]]),
-    };
-    dbMock.getConnection.mockResolvedValue(connection);
-    const staleDocuments = __testing.chunkResource({
-      userId: 'user-race-db',
-      resourceType: 'note',
-      resourceId: 'deleted-note',
-      version: '2026-07-19T00:00:00.000Z',
-      title: '已删除笔记',
-      content: '不应重新持久化的私密正文',
-      contentType: 'markdown',
-      target: { type: 'note-detail', id: 'deleted-note' },
-    });
-
-    await expect(__testing.persistChunks('user-race-db', staleDocuments, 0, 1)).resolves.toEqual({
-      persisted: false,
-      stale: true,
-    });
-    expect(connection.rollback).toHaveBeenCalledOnce();
-    expect(connection.query.mock.calls.some(([sql]) => String(sql).includes('INSERT INTO ai_content_chunks'))).toBe(
-      false,
-    );
-
+  it('权威资源复核会删除已移除命中', async () => {
     dbMock.query.mockResolvedValueOnce([[]]);
     await expect(
       __testing.validateAuthoritativeHits('user-race-db', [
@@ -209,5 +166,69 @@ describe('personal knowledge lexical index', () => {
       ]),
     ).resolves.toEqual([]);
     expect(dbMock.query.mock.calls.at(-1)[0]).toContain('create_by = ? AND del_flag = 0');
+  });
+});
+
+describe('private search weighted cache retention', () => {
+  beforeEach(async () => {
+    await invalidatePersonalKnowledgeCache();
+  });
+
+  function fixture(id, content = 'alpha evidence') {
+    return __testing.chunkResource({
+      userId: 'budget',
+      resourceType: 'note',
+      resourceId: id,
+      version: 'v1',
+      title: 'Evidence',
+      content,
+      contentType: 'markdown',
+    });
+  }
+
+  it('accounts stored content and vocabulary without query-dependent weight changes', async () => {
+    const documents = fixture('a');
+    const bundle = __testing.buildBundle(documents);
+    const asynchronous = await __testing.buildBundleAsync(documents);
+    const weight = bundle.estimatedMemoryBytes;
+    expect(weight).toBeGreaterThan(JSON.stringify(documents).length * 2);
+    expect(asynchronous.estimatedMemoryBytes).toBe(weight);
+    bundle.index.search('alpha extra query vocabulary');
+    expect(bundle.estimatedMemoryBytes).toBe(weight);
+    const diverse = __testing.buildBundle(fixture('a', Array.from({ length: 100 }, (_, i) => `term${i}`).join(' ')));
+    expect(diverse.estimatedMemoryBytes).toBeGreaterThan(weight);
+  });
+
+  it('evicts oldest retained accounts by aggregate weight, not just account count', () => {
+    const a = __testing.buildBundle(fixture('a'));
+    const b = __testing.buildBundle(fixture('b'));
+    const c = __testing.buildBundle(fixture('c'));
+    const budget = a.estimatedMemoryBytes + b.estimatedMemoryBytes;
+    __testing.retainBundle('a', a, budget);
+    __testing.retainBundle('b', b, budget);
+    // Refresh recency using the same operation as a cache hit, without changing TTL.
+    const builtAt = a.builtAt;
+    __testing.cache.delete('a');
+    __testing.cache.set('a', a);
+    __testing.retainBundle('c', c, budget);
+    expect([...__testing.cache.keys()]).toEqual(['a', 'c']);
+    expect(a.builtAt).toBe(builtAt);
+    // Eviction only releases cache ownership; a request already using b still works.
+    expect(b.index.search('alpha')[0].resourceId).toBe('b');
+  });
+
+  it('serves oversized bundles completely without flushing other accounts', async () => {
+    const small = __testing.buildBundle(fixture('s'));
+    const large = __testing.buildBundle(fixture('l', 'alpha '.repeat(100) + 'uniqueending'));
+    const budget = small.estimatedMemoryBytes;
+    __testing.retainBundle('s', small, budget);
+    __testing.retainBundle('l', large, budget);
+    expect([...__testing.cache.keys()]).toEqual(['s']);
+    expect(large.index.search('uniqueending')[0].resourceId).toBe('l');
+    await invalidatePersonalKnowledgeCache('s', { persist: false });
+    __testing.retainBundle('s', small, budget);
+    expect(__testing.cache.size).toBe(1);
+    await invalidatePersonalKnowledgeCache();
+    expect(__testing.cache.size).toBe(0);
   });
 });

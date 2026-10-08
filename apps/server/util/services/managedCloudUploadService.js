@@ -1,4 +1,10 @@
-import { uniqueCloudFileName } from './cloudFileNameService.js';
+import {
+  lockCloudObjectForPublication,
+  beginCloudObjectDeletion,
+  finishCloudObjectDeletion,
+} from './cloudObjectPublication.js';
+import { assertOwnedCloudFolder } from './cloudFolderAccess.js';
+import { uniqueCloudFileName, assertCloudFileDisplayName } from './cloudFileNameService.js';
 import { syncCloudImageById } from '../imagePreview/references.js';
 import crypto from 'node:crypto';
 import path from 'node:path';
@@ -23,13 +29,7 @@ function normalizeFileName(value) {
   const fileName = String(value || '')
     .normalize('NFC')
     .trim();
-  if (!fileName) throw serviceError('FILE_NAME_REQUIRED', '请输入文件名');
-  if (fileName.length > 255) throw serviceError('FILE_NAME_TOO_LONG', '文件名不能超过 255 个字符');
-  if (/[\\/<>\u0000-\u001f\u007f]/u.test(fileName)) {
-    throw serviceError('FILE_NAME_INVALID', '文件名不能包含路径分隔符、控制字符、< 或 >');
-  }
-  if (fileName === '.' || fileName === '..') throw serviceError('FILE_NAME_INVALID', '文件名无效');
-  return fileName;
+  return assertCloudFileDisplayName(fileName);
 }
 
 function normalizeFileType(value) {
@@ -70,26 +70,6 @@ export function assertOwnedManagedObjectKey(userId, objectKey) {
     throw serviceError('UPLOAD_KEY_INVALID', '上传凭据无效或已过期');
   }
   return String(objectKey);
-}
-
-function normalizeFolderId(value) {
-  if (value == null || String(value).trim() === '') return null;
-  const folderId = Number(value);
-  if (!Number.isSafeInteger(folderId) || folderId <= 0) {
-    throw serviceError('FOLDER_ID_INVALID', '目标文件夹无效');
-  }
-  return folderId;
-}
-
-async function assertOwnedFolder(connection, userId, folderId) {
-  const normalizedId = normalizeFolderId(folderId);
-  if (normalizedId == null) return null;
-  const [rows] = await connection.query(
-    'SELECT id FROM folders WHERE id = ? AND create_by = ? AND del_flag = 0 LIMIT 1 FOR UPDATE',
-    [normalizedId, userId],
-  );
-  if (!rows.length) throw serviceError('FOLDER_NOT_FOUND', '目标文件夹不存在或不属于当前账号');
-  return normalizedId;
 }
 
 async function findFileByObjectKey(db, userId, objectKey) {
@@ -191,6 +171,7 @@ export async function abortManagedCloudUpload({ userId, objectKey } = {}) {
   const ownedKey = assertOwnedManagedObjectKey(userId, objectKey);
   const connection = await pool.getConnection();
   let existing = null;
+  let claim = null;
   let transactionStarted = false;
   try {
     await withUploadObjectLock(connection, ownedKey, async () => {
@@ -198,11 +179,15 @@ export async function abortManagedCloudUpload({ userId, objectKey } = {}) {
       transactionStarted = true;
       await connection.query('SELECT id FROM user WHERE id = ? LIMIT 1 FOR UPDATE', [userId]);
       existing = await findFileByObjectKey(connection, userId, ownedKey);
+      if (!existing) claim = await beginCloudObjectDeletion(connection, userId, ownedKey);
       await connection.commit();
       transactionStarted = false;
       // Object lock protects against insertion, while slow storage no longer
       // blocks unrelated uploads or account writes behind the owner row lock.
-      if (!existing) await deleteObjectFromObs(ownedKey);
+      if (claim) {
+        await deleteObjectFromObs(ownedKey);
+        await finishCloudObjectDeletion(connection, claim);
+      }
     });
   } catch (error) {
     if (transactionStarted) {
@@ -223,7 +208,7 @@ export async function abortManagedCloudUpload({ userId, objectKey } = {}) {
       ...formatResult(existing, true),
     };
   }
-  return { deleted: true, alreadyConfirmed: false };
+  return { deleted: Boolean(claim), alreadyConfirmed: false };
 }
 
 /** Caller holds the owner row lock and owns commit/rollback. Metadata and quota stay authoritative. */
@@ -233,9 +218,10 @@ export async function insertVerifiedCloudFile(
 ) {
   const ownedKey = assertOwnedManagedObjectKey(userId, objectKey);
   return withUploadObjectLock(connection, ownedKey, async () => {
+    await lockCloudObjectForPublication(connection, userId, ownedKey);
     const metadata = await getObjectMetadataFromObs(ownedKey);
     const verifiedSize = normalizeFileSize(metadata?.contentLength);
-    const targetFolderId = await assertOwnedFolder(connection, userId, folderId);
+    const targetFolderId = await assertOwnedCloudFolder(connection, userId, folderId);
     const usedBytes = await getAccountedStorageBytes(connection, userId);
     if (usedBytes + verifiedSize > Number(quotaMB) * BYTES_PER_MB) {
       throw quotaError(quotaMB, usedBytes, verifiedSize);

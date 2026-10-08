@@ -228,6 +228,7 @@ export async function uploadCloudFile(file: File, folderId: string | null): Prom
       files: [
         {
           fileName: uploadInfo.filename || metadata.fileName,
+          ...(uploadInfo.objectKey ? { objectKey: uploadInfo.objectKey } : {}),
           fileType: uploadInfo.fileType || metadata.fileType,
           fileSize: metadata.fileSize,
         },

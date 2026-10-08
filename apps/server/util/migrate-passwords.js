@@ -32,8 +32,8 @@ async function main() {
   );
   if (sample.length > 0) {
     const { id, password } = sample[0];
-    const hashed = hashPassword(password);
-    if (!verifyPassword(password, hashed)) {
+    const hashed = await hashPassword(password);
+    if (!(await verifyPassword(password, hashed))) {
       throw new Error('内部错误：哈希验证不通过');
     }
     console.log(`样例通过 — id: ${id}`);
@@ -51,7 +51,7 @@ async function main() {
 
     for (const row of rows) {
       if (!row.password) continue;
-      const hashed = hashPassword(row.password);
+      const hashed = await hashPassword(row.password);
       await pool.query(
         "UPDATE user SET password = ?, password_method = 'scrypt' WHERE id = ?",
         [hashed, row.id]

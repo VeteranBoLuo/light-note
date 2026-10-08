@@ -58,7 +58,7 @@ describe('返回任务材料核验', () => {
     mocks.preview.mockResolvedValue({ status: 200, data: { unavailableItems: [] } });
     const host = await mount();
     expect(mocks.preview).toHaveBeenCalledWith({ mode: 'explicit', items: [{ type: 'bookmark', id: 'one' }] });
-    expect(host.querySelector('.restored-panel')?.textContent).toBe('saved input');
+    await vi.waitFor(() => expect(host.querySelector('.restored-panel')?.textContent).toBe('saved input'));
   });
   it('资源已删除时停留原页面并禁止恢复执行面板', async () => {
     mocks.preview.mockResolvedValue({ status: 200, data: { unavailableItems: [{ id: 'one' }] } });

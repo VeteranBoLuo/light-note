@@ -136,6 +136,9 @@ describe('账号注销提交', () => {
     const code = extractCodeFromEmail();
 
     const connection = createConnection(async (sql) => {
+      if (sql === 'SELECT id FROM user WHERE id = ? LIMIT 1') return [[{ id: 'user-1' }]];
+      if (sql.includes('GET_LOCK')) return [[{ acquired: 1 }]];
+      if (sql.includes('RELEASE_LOCK')) return [[{ released: 1 }]];
       if (sql.includes('FROM user') && sql.includes('FOR UPDATE')) {
         return [[{ id: 'user-1', email: 'owner@example.com', role: 'user', del_flag: 0 }]];
       }
@@ -178,6 +181,8 @@ describe('账号注销提交', () => {
     expect(connection.commit).toHaveBeenCalledTimes(1);
     expect(connection.rollback).not.toHaveBeenCalled();
     expect(connection.release).toHaveBeenCalledTimes(1);
+    expect(connection.query.mock.calls[1][0]).toContain('GET_LOCK');
+    expect(connection.query.mock.calls.at(-1)[0]).toContain('RELEASE_LOCK');
     expect(connection.query.mock.calls.some(([sql]) => sql.includes("role = 'deleted'"))).toBe(true);
     expect(connection.query.mock.calls.some(([sql]) => sql.includes('email = NULL'))).toBe(true);
     const disableIndex = connection.query.mock.calls.findIndex(([sql]) =>
@@ -359,6 +364,12 @@ describe('账号注销后台清理', () => {
     expect(refSql).toContain('CONVERT(target_id USING utf8mb4) COLLATE utf8mb4_unicode_ci');
     expect(refSql).toContain('CONVERT(id USING utf8mb4) COLLATE utf8mb4_unicode_ci');
     expect(versionSql).toContain('CONVERT(note_id USING utf8mb4) COLLATE utf8mb4_unicode_ci');
+  });
+
+  it('purges upload compatibility aliases with their owner', async () => {
+    const connection = { query: vi.fn().mockResolvedValue([[]]) };
+    await purgeOwnedResources(connection, new Set(['cloud_legacy_object_lifecycle']), 'user-1');
+    expect(connection.query).toHaveBeenCalledExactlyOnceWith('DELETE FROM cloud_legacy_object_lifecycle WHERE user_id = ?', ['user-1']);
   });
 
   it('注销时删除本账号公开表单以触发回答级联清理', async () => {

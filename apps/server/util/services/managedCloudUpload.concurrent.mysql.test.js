@@ -1,34 +1,43 @@
+import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import mysql from 'mysql2/promise';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Explicit disposable local database only. OBS and post-create effects are controlled substitutes.
 const state = vi.hoisted(() => ({ db: null, head: vi.fn(), remove: vi.fn(), quota: 1 }));
-vi.mock('../../db/index.js', () => ({ default: {
-  query: (...args) => state.db.query(...args),
-  getConnection: (...args) => state.db.getConnection(...args),
-} }));
+vi.mock('../../db/index.js', () => ({
+  default: {
+    query: (...args) => state.db.query(...args),
+    getConnection: (...args) => state.db.getConnection(...args),
+  },
+}));
 vi.mock('../growth.js', () => ({ getUserSpaceMb: async () => state.quota }));
 vi.mock('../obsClient.js', () => ({
-  bucketBaseUrl: 'https://example.invalid', createUploadSignedUrl: vi.fn(),
+  bucketBaseUrl: 'https://example.invalid',
+  createUploadSignedUrl: vi.fn(),
   getObjectMetadataFromObs: (...args) => state.head(...args),
   deleteObjectFromObs: (...args) => state.remove(...args),
 }));
 vi.mock('../imagePreview/references.js', () => ({ syncCloudImageById: async () => {} }));
 vi.mock('../resourceInbox.js', () => ({ enqueueResources: async () => {} }));
 vi.mock('./resourceCreateEffects.js', () => ({ triggerResourceCreateEffects: async () => {} }));
-const { confirmManagedCloudUpload, abortManagedCloudUpload, insertVerifiedCloudFile } = await import('./managedCloudUploadService.js');
+const { confirmManagedCloudUpload, abortManagedCloudUpload, insertVerifiedCloudFile } =
+  await import('./managedCloudUploadService.js');
 const socketPath = process.env.Q01_TEST_MYSQL_SOCKET;
 const schema = `q01_upload_${randomUUID().replaceAll('-', '')}`;
 let admin;
 let created = false;
 const upload = (owner = 'one') => ({
-  userId: owner, objectKey: `files/${owner}/uploads/${randomUUID()}.pdf`,
-  fileName: '资料.pdf', fileType: 'application/pdf',
+  userId: owner,
+  objectKey: `files/${owner}/uploads/${randomUUID()}.pdf`,
+  fileName: '资料.pdf',
+  fileType: 'application/pdf',
 });
 function deferred() {
   let resolve;
-  const promise = new Promise((done) => { resolve = done; });
+  const promise = new Promise((done) => {
+    resolve = done;
+  });
   return { promise, resolve };
 }
 
@@ -41,6 +50,12 @@ describe.skipIf(!socketPath)('托管上传真实 MySQL 并发', () => {
     state.db = mysql.createPool({ socketPath, user: 'root', database: schema, connectionLimit: 6 });
     await state.db.query('CREATE TABLE user (id VARCHAR(32) PRIMARY KEY) ENGINE=InnoDB');
     await state.db.query("INSERT INTO user VALUES ('one'), ('two')");
+    await state.db.query(
+      await readFile(new URL('../../migrations/20260925_cloud_legacy_object_lifecycle.sql', import.meta.url), 'utf8'),
+    );
+    await state.db.query(
+      'CREATE TABLE image_assets (id INT PRIMARY KEY, storage_kind VARCHAR(20), source_locator VARCHAR(500)) ENGINE=InnoDB',
+    );
     await state.db.query(`CREATE TABLE files (
       id BIGINT PRIMARY KEY AUTO_INCREMENT, create_by VARCHAR(32), file_name VARCHAR(255),
       file_type VARCHAR(255), file_size BIGINT, directory VARCHAR(255), folder_id BIGINT,
@@ -50,6 +65,7 @@ describe.skipIf(!socketPath)('托管上传真实 MySQL 并发', () => {
   });
   beforeEach(async () => {
     await state.db.query('DELETE FROM files');
+    await state.db.query('DELETE FROM cloud_legacy_object_lifecycle');
     state.quota = 1;
     state.head.mockReset().mockResolvedValue({ contentLength: 700000 });
     state.remove.mockReset().mockResolvedValue({});
@@ -68,7 +84,10 @@ describe.skipIf(!socketPath)('托管上传真实 MySQL 并发', () => {
     expect((await state.db.query('SELECT COUNT(*) AS n FROM files'))[0][0].n).toBe(1);
   });
   it('两个文件同时确认时重新计算容量，不会一起突破剩余配额', async () => {
-    const results = await Promise.allSettled([confirmManagedCloudUpload(upload()), confirmManagedCloudUpload(upload())]);
+    const results = await Promise.allSettled([
+      confirmManagedCloudUpload(upload()),
+      confirmManagedCloudUpload(upload()),
+    ]);
     expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
     expect(results.find((r) => r.status === 'rejected').reason.code).toBe('STORAGE_QUOTA_EXCEEDED');
     expect(Number((await state.db.query('SELECT SUM(file_size) AS bytes FROM files'))[0][0].bytes)).toBe(700000);
@@ -89,7 +108,10 @@ describe.skipIf(!socketPath)('托管上传真实 MySQL 并发', () => {
     const entered = deferred();
     const firstItem = upload();
     state.head.mockImplementation(async (key) => {
-      if (key === firstItem.objectKey) { entered.resolve(); await gate.promise; }
+      if (key === firstItem.objectKey) {
+        entered.resolve();
+        await gate.promise;
+      }
       return { contentLength: 100 };
     });
     const first = confirmManagedCloudUpload(firstItem);
@@ -97,7 +119,10 @@ describe.skipIf(!socketPath)('托管上传真实 MySQL 并发', () => {
     try {
       await entered.promise;
       let secondDone = false;
-      second = confirmManagedCloudUpload(upload()).then((result) => { secondDone = true; return result; });
+      second = confirmManagedCloudUpload(upload()).then((result) => {
+        secondDone = true;
+        return result;
+      });
       const other = await confirmManagedCloudUpload(upload('two'));
       expect(other.fileId).toBeTruthy();
       expect(secondDone).toBe(false);
@@ -112,20 +137,34 @@ describe.skipIf(!socketPath)('托管上传真实 MySQL 并发', () => {
     const gate = deferred();
     const entered = deferred();
     const item = upload();
-    state.head.mockImplementation(async () => { entered.resolve(); await gate.promise; return { contentLength: 100 }; });
+    state.head.mockImplementation(async () => {
+      entered.resolve();
+      await gate.promise;
+      return { contentLength: 100 };
+    });
     const confirming = confirmManagedCloudUpload(item);
     try {
       await entered.promise;
       await expect(abortManagedCloudUpload(item)).rejects.toMatchObject({ code: 'UPLOAD_BUSY' });
-    } finally { gate.resolve(); }
+    } finally {
+      gate.resolve();
+    }
     const confirmed = await confirming;
-    expect(await abortManagedCloudUpload(item)).toMatchObject({ deleted: false, alreadyConfirmed: true, fileId: confirmed.fileId });
+    expect(await abortManagedCloudUpload(item)).toMatchObject({
+      deleted: false,
+      alreadyConfirmed: true,
+      fileId: confirmed.fileId,
+    });
     expect(state.remove).not.toHaveBeenCalled();
   });
   it('慢删除期间同账号其他文件可确认，原对象与维护插入均不能落库', async () => {
-    const gate = deferred(), entered = deferred();
+    const gate = deferred(),
+      entered = deferred();
     const item = upload();
-    state.remove.mockImplementation(async () => { entered.resolve(); await gate.promise; });
+    state.remove.mockImplementation(async () => {
+      entered.resolve();
+      await gate.promise;
+    });
     const aborting = abortManagedCloudUpload(item);
     try {
       await entered.promise;
@@ -136,9 +175,17 @@ describe.skipIf(!socketPath)('托管上传真实 MySQL 并发', () => {
       try {
         await connection.beginTransaction();
         await connection.query('SELECT id FROM user WHERE id = ? FOR UPDATE', [item.userId]);
-        await expect(insertVerifiedCloudFile(connection, { ...item, quotaMB: 10 })).rejects.toMatchObject({ code: 'UPLOAD_BUSY' });
-      } finally { await connection.rollback(); connection.release(); }
-    } finally { gate.resolve(); await aborting; }
+        await expect(insertVerifiedCloudFile(connection, { ...item, quotaMB: 10 })).rejects.toMatchObject({
+          code: 'UPLOAD_BUSY',
+        });
+      } finally {
+        await connection.rollback();
+        connection.release();
+      }
+    } finally {
+      gate.resolve();
+      await aborting;
+    }
     expect((await state.db.query('SELECT COUNT(*) AS n FROM files'))[0][0].n).toBe(1);
   });
   it('取消已进入删除时，并发确认不能用已删除对象创建记录', async () => {

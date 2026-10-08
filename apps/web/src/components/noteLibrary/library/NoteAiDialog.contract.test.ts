@@ -9,7 +9,7 @@ const dialogSource = readFileSync(
 const panelSource = readFileSync(resolve(process.cwd(), 'src/components/aiSkills/AiSkillPanel.vue'), 'utf8');
 const detailSource = readFileSync(resolve(process.cwd(), 'src/view/noteLibrary/NoteDetail.vue'), 'utf8');
 const replySource = readFileSync(resolve(process.cwd(), 'src/components/noteLibrary/detail/AiReply.vue'), 'utf8');
-const zhLocaleSource = readFileSync(resolve(process.cwd(), 'src/i18n/locales/zh-CN.ts'), 'utf8');
+const zhLocaleSource = readFileSync(resolve(process.cwd(), 'src/i18n/locales/zh-CN-core.ts'), 'utf8');
 
 describe('笔记分析与新笔记持久化契约', () => {
   it('笔记分析打开即执行单一只读能力，不再要求用户先选总结、比较或生成', () => {

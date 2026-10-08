@@ -61,6 +61,10 @@ pnpm preview
 
 ## Schema 与 Worker 门禁
 
+普通/托管上传的对象发布与回收保护、历史文件两阶段改名启用前，显式应用 `apps/server/migrations/20260925_cloud_file_rename_staging.sql` 与 `apps/server/migrations/20260925_cloud_legacy_object_lifecycle.sql` 并通过 `check:schema`，再部署 API 与文档 Worker。迁移只新增生命周期与暂存清理账本，不回填文件、不在请求或启动路径建表；回滚 API 时保留表与能够消费剩余暂存记录的清理 Worker。普通名称上传不得重新允许路径式文件名，否则随机副本清理的独占命名空间前提不成立。 所有 API 实例切换到随机上传地址后才能启用旧对象清理 Worker；回滚须保留随机地址签发与确认兼容层，不能恢复向已退休的名称地址签发上传链接。生命周期表中的退休标记与旧客户端名称映射不得作为临时日志清空，随账号注销清理。
+
+搜索时间续页索引通过加法迁移 `apps/server/migrations/20260925_search_seek_indexes.sql` 显式安装，并通过 `check:schema` 核验完整列顺序及非前缀索引。迁移保留既有报表、置顶索引，不回填业务数据；应用不在启动时执行 DDL，回滚 API 可以保留新索引。线上执行仍需迁移授权，建索引的磁盘、写入负载和短暂元数据锁须纳入发布窗口。
+
 账号密码状态版本部署前须显式应用 `apps/server/migrations/20260924_login_password_state.sql`，再运行 Schema 门禁；该迁移只补列，历史密码及未知状态保留，不做批量密码回填。业务入口不在运行时自动执行此迁移。
 
 工坊翻译启用前显式应用 `apps/server/migrations/20260924_toolbox_translation.sql`，并通过 `check:schema`。正文快照表兼容 MySQL 5.7；启动不自动迁移，回滚代码可保留表，清理 Worker 与账号注销路径必须同步发布。
@@ -146,6 +150,8 @@ FCM 备用出口使用 `scripts/browser-push-relay/worker.mjs`，以独立托管
 2. Host Agent 或领域 Worker；
 3. Express API；
 4. Web / PWA / 扩展分发产物。
+
+账号 AI 生命周期屏障属于 API 与文档 Worker 的共同协议：该后端包发布和回滚时先停止旧文档 Worker，再切换并重启 API，确认旧 API 已退出后才启动相同版本的 Worker。不能让新 Worker 与仍只使用用户行锁的旧注销入口共存；多 API 实例也须先全部切换生命周期锁协议，才能启用新 Worker。`deploy-server.sh` 按此顺序执行单 API 实例部署；回滚也必须同时恢复 API 与文档 Worker。此顺序优先于上面的通用依赖顺序。
 
 只发布受影响部分，但不能跳过其依赖。例如扩展新增 API 时先发布并验证后端，再提交商店包；Host Agent 协议变化时先保证服务端与 Agent 兼容窗口。
 

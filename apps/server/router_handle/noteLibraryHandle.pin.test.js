@@ -598,25 +598,23 @@ describe('笔记置顶 handler', () => {
     poolQuery
       .mockResolvedValueOnce([
         [
-          { id: 'root', parent_id: null, title: '根页面', sort: 0, is_top: 0, del_flag: 0 },
-          { id: 'child', parent_id: 'root', title: '子页面', sort: 0, is_top: 0, del_flag: 0 },
-        ],
-      ])
-      .mockResolvedValueOnce([
-        [
           { id: 'root', parent_id: null, title: '根页面', tags: null },
           { id: 'child', parent_id: 'root', title: '子页面', tags: null },
         ],
       ])
-      .mockResolvedValueOnce([[{ total: 2 }]]);
+      .mockResolvedValueOnce([[{ total: 2 }]])
+      .mockResolvedValueOnce([[
+        { breadcrumb_0_id: 'root', breadcrumb_0_title: '根页面' },
+        { breadcrumb_0_id: 'child', breadcrumb_0_title: '子页面', breadcrumb_1_id: 'root', breadcrumb_1_title: '根页面' },
+      ]]);
     const res = mockRes();
 
     await queryNoteList({ user: { id: 'u1' }, body: { page: 1, pageSize: 48, parentId: null } }, res);
 
-    expect(poolQuery.mock.calls[0][0]).toContain('SELECT id, parent_id, title');
-    expect(poolQuery.mock.calls[1][0]).not.toContain('n.parent_id IS NULL');
-    expect(poolQuery.mock.calls[1][0]).toContain('ORDER BY n.is_top DESC, n.update_time DESC');
-    expect(poolQuery.mock.calls[1][1]).toEqual(['u1', 48, 0]);
+    expect(poolQuery.mock.calls[0][0]).not.toContain('n.parent_id IS NULL');
+    expect(poolQuery.mock.calls[0][0]).toContain('ORDER BY n.is_top DESC, n.update_time DESC');
+    expect(poolQuery.mock.calls[0][1]).toEqual(['u1', 48, 0]);
+    expect(poolQuery.mock.calls[2][1]).toEqual(['root', 'child', 'u1']);
     expect(lastSent(res)).toMatchObject({
       status: 200,
       data: {
@@ -631,18 +629,16 @@ describe('笔记置顶 handler', () => {
 
   it('进入具体目录后仍只查询直属子页面', async () => {
     poolQuery
-      .mockResolvedValueOnce([
-        [
-          { id: 'parent', parent_id: null, title: '父页面', sort: 0, is_top: 0, del_flag: 0 },
-          { id: 'child', parent_id: 'parent', title: '子页面', sort: 0, is_top: 0, del_flag: 0 },
-        ],
-      ])
+      .mockResolvedValueOnce([[{ id: 'parent' }]])
       .mockResolvedValueOnce([[{ id: 'child', parent_id: 'parent', title: '子页面', tags: null }]])
       .mockResolvedValueOnce([[{ total: 1 }]]);
     const res = mockRes();
 
     await queryNoteList({ user: { id: 'u1' }, body: { page: 1, pageSize: 48, parentId: 'parent' } }, res);
 
+    expect(poolQuery.mock.calls[0]).toEqual([
+      'SELECT id FROM note WHERE id = ? AND create_by = ? AND del_flag = 0 LIMIT 1', ['parent', 'u1'],
+    ]);
     expect(poolQuery.mock.calls[1][0]).toContain('n.parent_id = ?');
     expect(poolQuery.mock.calls[1][1]).toEqual(['u1', 'parent', 48, 0]);
     expect(lastSent(res)).toMatchObject({ status: 200, data: { total: 1 } });

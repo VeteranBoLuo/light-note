@@ -124,7 +124,7 @@ describe('统一标签模块交互契约', () => {
 
   it('完整桌面按原型保留目录、内容与问答三栏，窄端仍沿用既有折叠边界', () => {
     const detail = read('view/tagDetail/TagDetail.vue').replace(/var\(--ui-[\w-]+, ([\d.]+px)\)/g, '$1');
-    const zhLocale = read('i18n/locales/zh-CN.ts');
+    const zhLocale = read('i18n/locales/zh-CN-core.ts');
     expect(detail).toMatch(/\.tag-space-workspace\.has-ai\s*\{[\s\S]*?220px minmax\(0, 1fr\) 360px/u);
     expect(detail).toMatch(/@media \(max-width: 1500px\)[\s\S]*?196px minmax\(0, 1fr\) 324px/u);
     expect(detail).toMatch(/@media \(min-width: 1200px\)[\s\S]*?background:\s*var\(--background-color\)/u);

@@ -1,3 +1,10 @@
+vi.mock('./cloudLegacyObjectLifecycle.js', () => ({ queueLegacyObjectRetirement: vi.fn().mockResolvedValue(false) }));
+vi.mock('./cloudFileRenameStaging.js', () => ({
+  reserveRenameStage: vi.fn().mockResolvedValue(),
+  adoptRenameStage: vi.fn().mockResolvedValue(),
+  releaseRenameStage: vi.fn().mockResolvedValue(),
+  cleanupRenameStage: vi.fn().mockResolvedValue(true),
+}));
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../../db/index.js', () => ({
   default: {
@@ -11,6 +18,14 @@ vi.mock('./organizeSuggestionSources.js', () => ({
   readSuggestionCandidates: vi.fn(),
   readCurrentSuggestionSource: vi.fn(),
 }));
+vi.mock('../obsClient.js', () => ({
+  bucketBaseUrl: 'https://obs.invalid',
+  buildObjectKey: (user, name) => `files/${user}/${name}`,
+  copyObjectInObs: vi.fn().mockResolvedValue(),
+  getObjectMetadataFromObs: vi.fn().mockResolvedValue({ etag: 'v1' }),
+  deleteObjectFromObs: vi.fn(),
+}));
+vi.mock('../imagePreview/relocate.js', () => ({ relocateCloudImage: vi.fn().mockResolvedValue() }));
 vi.mock('./organizeSuggestionActions.js', () => ({ applySuggestionMutation: vi.fn() }));
 vi.mock('./organizeSuggestionModel.js', () => ({
   suggestResourceMetadata: vi.fn(),
@@ -25,6 +40,8 @@ import {
   readSuggestionCandidates,
   readCurrentSuggestionSource,
 } from './organizeSuggestionSources.js';
+import { renameOwnedCloudFile } from './cloudFileRenameService.js';
+import { copyObjectInObs } from '../obsClient.js';
 import { applySuggestionMutation } from './organizeSuggestionActions.js';
 import { suggestResourceMetadata } from './organizeSuggestionModel.js';
 import { getActiveAiExecution } from '../aiExecution/context.js';
@@ -857,4 +874,47 @@ it('已处理筛选在分页前覆盖整轮资源，分组计数不使用当前�
   expect(result.groupTotals).toEqual({ reviewed: 1 });
   expect(result.review.outcomes.reviewed).toBe(3);
   expect(db.query.mock.calls.some(([sql]) => /^(UPDATE|INSERT|DELETE)/.test(sql))).toBe(false);
+});
+
+it('revalidates file suggestions in a fresh transaction after remote copying', async () => {
+  const file = { id: 1, create_by: 'u', file_name: 'old.pdf', obs_key: 'files/u/old.pdf' };
+  const db = database((sql) => {
+    if (sql.includes('FROM organize_suggestion_runs')) return [[{ ...run, status: 'completed' }]];
+    if (sql.startsWith('SELECT * FROM organize_suggestions'))
+      return [[{ id: 's', item_id: 'i', kind: 'title', status: 'pending', payload_json: { after: 'new' } }]];
+    if (sql.includes('FROM organize_suggestion_items'))
+      return [[{ id: 'i', resource_type: 'file', resource_id: '1', version_hash: 'before', ai_status: 'completed' }]];
+    if (sql.startsWith('SELECT * FROM files')) return [[file]];
+    if (sql.startsWith('SELECT id FROM files')) return sql.includes('id<>?') ? [[]] : [[{ id: 1 }]];
+  });
+  readCurrentSuggestionSource
+    .mockResolvedValueOnce({ type: 'file', id: '1', version: 'before' })
+    .mockResolvedValueOnce({ type: 'file', id: '1', version: 'before' })
+    .mockResolvedValueOnce({ type: 'file', id: '1', version: 'after' });
+  applySuggestionMutation.mockImplementation(async (c, args) => {
+    const renamed = await renameOwnedCloudFile(c, {
+      userId: args.userId,
+      id: 1,
+      name: 'new',
+      preserveExtension: true,
+      preparation: args.preparation,
+    });
+    return { applied: renamed.name };
+  });
+  copyObjectInObs.mockImplementationOnce(async () => {
+    expect(db.rollback).toHaveBeenCalledOnce();
+    expect(db.commit).not.toHaveBeenCalled();
+  });
+  try {
+    expect(
+      await actOnSuggestion(db, { userId: 'u', runId: 'run', suggestionId: 's', action: 'apply', requestId }),
+    ).toEqual({ status: 'applied', applied: 'new.pdf' });
+    expect(db.beginTransaction).toHaveBeenCalledTimes(2);
+    expect(db.rollback).toHaveBeenCalledOnce();
+    expect(db.commit).toHaveBeenCalledOnce();
+    expect(db.query.mock.calls.filter(([sql]) => sql.includes("SET status='applied'"))).toHaveLength(1);
+    expect(readCurrentSuggestionSource).toHaveBeenCalledTimes(3);
+  } finally {
+    applySuggestionMutation.mockReset();
+  }
 });

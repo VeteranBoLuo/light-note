@@ -1,3 +1,12 @@
+import { lockCloudObjectForPublication } from '../util/services/cloudObjectPublication.js';
+import { assertOwnedCloudFolder } from '../util/services/cloudFolderAccess.js';
+import {
+  prepareLegacyCloudUpload,
+  lockActiveUploadOwner,
+  reserveLegacyUploadConfirmation,
+  lockLegacyUploadForConfirmation,
+} from '../util/services/cloudLegacyObjectLifecycle.js';
+import { assertCloudFileDisplayName } from '../util/services/cloudFileNameService.js';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { readOwnedCloudImage } from '../util/services/cloudImageReadService.js';
@@ -17,7 +26,6 @@ import {
   buildObjectKey,
   buildObjectUrl,
   createDownloadSignedUrl,
-  createUploadSignedUrl,
   deleteObjectFromObs,
   getObjectMetadataFromObs,
   putObjectToObs,
@@ -33,7 +41,7 @@ import * as fileShareHandle from '../router_handle/fileShareHandle.js';
 import * as filePreviewHandle from '../router_handle/filePreviewHandle.js';
 import { ensureNotVisitor, ensureUserOrAdminPolicy } from '../util/auth.js';
 import { recordFirstOwnResource } from '../util/conversion.js';
-import { attachPendingStatus, enqueueResources, removeInboxRelations } from '../util/resourceInbox.js';
+import { attachPendingStatus, enqueueResources } from '../util/resourceInbox.js';
 import { purgeDocumentSourcesForCloudFiles } from '../util/aiDocument/service.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 import { buildPagedResult, normalizeOptionalPagination } from '../util/pagination.js';
@@ -134,6 +142,21 @@ async function storageQuotaMB(user) {
   return await getUserSpaceMb(user?.id, user?.role);
 }
 
+function parseLegacyUploadName(value) {
+  const fileName = String(value || '').trim();
+  try {
+    assertCloudFileDisplayName(fileName);
+    return { fileName, validationError: null };
+  } catch (error) {
+    return {
+      fileName: '',
+      filename: '',
+      fileSize: 0,
+      validationError: fileName ? error.message.replace(/^[A-Z_]+:\s*/u, '') : '缺少文件名',
+    };
+  }
+}
+
 function summarizeIncomingFiles(files) {
   const sizeByName = new Map();
   for (const file of Array.isArray(files) ? files : []) {
@@ -183,7 +206,11 @@ router.post('/uploadFiles', async (req, res) => {
     }
 
     // 容量早拦:签发预签名 URL 前先按前端上报的 fileSize 拦一道,避免白传 OBS(无 size 时留给 /confirmUpload 权威拦)
-    const { fileNames, incomingBytes } = summarizeIncomingFiles(files);
+    const preparedFiles = files.map((file) => ({
+      ...file,
+      ...parseLegacyUploadName(file?.fileName || file?.filename),
+    }));
+    const { fileNames, incomingBytes } = summarizeIncomingFiles(preparedFiles);
     if (incomingBytes > 0) {
       const [usedBytes, replacementBytes] = await Promise.all([
         getAccountedStorageBytes(pool, userId),
@@ -195,29 +222,37 @@ router.post('/uploadFiles', async (req, res) => {
       }
     }
 
-    const results = files.map((file) => {
-      const fileName = file.fileName || file.filename;
-      const fileType = file.fileType || file.mimetype || 'application/octet-stream';
+    const results = await Promise.all(
+      preparedFiles.map(async (file) => {
+        const fileName = file.fileName;
+        const fileType = file?.fileType || file?.mimetype || 'application/octet-stream';
 
-      if (!fileName) {
-        return { filename: '', status: '处理失败', error: '缺少文件名' };
-      }
+        if (file.validationError) return { filename: '', status: '处理失败', error: file.validationError };
 
-      const objectKey = buildObjectKey(userId, fileName);
-      const { url, headers, expiresIn } = createUploadSignedUrl({
-        objectKey,
-        contentType: fileType,
-      });
+        let signed;
+        try {
+          signed = await prepareLegacyCloudUpload({ userId, fileName, fileType });
+        } catch (error) {
+          if (
+            ['FILE_UPLOAD_OBJECT_BUSY', 'UPLOAD_OWNER_INACTIVE', 'FOLDER_ID_INVALID', 'FOLDER_NOT_FOUND'].includes(
+              error.code,
+            )
+          )
+            return { filename: fileName, status: '处理失败', error: error.message };
+          throw error;
+        }
+        const { url, headers, expiresIn, objectKey } = signed;
 
-      return {
-        filename: fileName,
-        fileType,
-        objectKey,
-        uploadUrl: url,
-        headers,
-        expiresIn,
-      };
-    });
+        return {
+          filename: fileName,
+          fileType,
+          objectKey,
+          uploadUrl: url,
+          headers,
+          expiresIn,
+        };
+      }),
+    );
 
     res.send(resultData(results));
   } catch (e) {
@@ -292,7 +327,7 @@ router.post('/abortManagedUpload', async (req, res) => {
 // 前端直传 OBS 成功后回调此接口，将文件信息写入数据库
 router.post('/confirmUpload', async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
-  const connection = await pool.getConnection();
+  let connection;
   const supersededObjectKeys = new Set();
   let transactionStarted = false;
   try {
@@ -308,28 +343,83 @@ router.post('/confirmUpload', async (req, res) => {
     }
 
     // 浏览器直传完成后以 OBS 元数据为准，客户端 fileSize 只用于签名阶段的提前提示，不能作为最终容量依据。
-    const verifiedFiles = await Promise.all(
+    const reservedFiles = await Promise.all(
       files.map(async (file) => {
-        const fileName = String(file?.fileName || '').trim();
-        if (!fileName) return { ...file, fileName: '', fileSize: 0 };
-        const objectKey = buildObjectKey(userId, fileName);
-        const metadata = await getObjectMetadataFromObs(objectKey);
-        const fileSize = Number(metadata?.contentLength);
-        if (!Number.isSafeInteger(fileSize) || fileSize < 0) {
-          throw new Error('OBS_UPLOAD_INVALID_SIZE');
-        }
-        return { ...file, fileName, fileSize, objectKey };
+        const parsedName = parseLegacyUploadName(file?.fileName);
+        if (parsedName.validationError) return parsedName;
+        const { fileName } = parsedName;
+        const { generation, objectKey } = await reserveLegacyUploadConfirmation({
+          userId,
+          fileName,
+          objectKey: file.objectKey,
+        });
+        return { fileType: file.fileType, fileName, objectKey, generation };
       }),
     );
 
+    if (reservedFiles.every((file) => !file.fileName)) {
+      return res.send(
+        resultData(
+          reservedFiles.map((file) => ({
+            filename: '',
+            status: '处理失败',
+            error: file.validationError || '缺少文件名',
+          })),
+        ),
+      );
+    }
+
+    const reservedKeys = reservedFiles.filter((file) => file.fileName).map((file) => file.objectKey);
+    if (new Set(reservedKeys).size !== reservedKeys.length) {
+      throw Object.assign(new Error('同一批次不能重复确认同一个上传对象'), {
+        code: 'UPLOAD_DUPLICATE_OBJECT',
+        status: 400,
+      });
+    }
+    const verifiedFiles = await Promise.all(
+      reservedFiles.map(async (file) => {
+        if (!file.fileName) return file;
+        const metadata = await getObjectMetadataFromObs(file.objectKey);
+        const fileSize = Number(metadata?.contentLength);
+        if (!Number.isSafeInteger(fileSize) || fileSize < 0) throw new Error('OBS_UPLOAD_INVALID_SIZE');
+        return { ...file, fileSize };
+      }),
+    );
+    connection = await pool.getConnection();
     await connection.beginTransaction();
     transactionStarted = true;
     // 与 AI“保存到云空间”共用账号行锁，串行化同一账号的选名、覆盖和容量核算。
     // 否则普通直传与 AI 保存并发时，即使 OBS 对象键互不冲突，也可能写出两条同名文件记录。
-    await connection.query('SELECT id FROM user WHERE id = ? LIMIT 1 FOR UPDATE', [userId]);
+    await lockActiveUploadOwner(connection, userId);
+
+    for (const file of verifiedFiles) {
+      if (file.fileName && file.generation)
+        await lockLegacyUploadForConfirmation(connection, userId, file.fileName, file.generation);
+    }
+
+    // The owner lock serializes publication. Replays return the original identity,
+    // even if it was renamed or moved after the first successful confirmation.
+    for (const file of verifiedFiles) {
+      if (!file.fileName) continue;
+      await lockCloudObjectForPublication(connection, userId, file.objectKey);
+      const [rows] = await connection.query(
+        'SELECT id, file_name, del_flag FROM files WHERE create_by = ? AND obs_key = ? LIMIT 1 FOR UPDATE',
+        [userId, file.objectKey],
+      );
+      if (rows.length) {
+        if (Number(rows[0].del_flag) === 1) {
+          throw Object.assign(new Error('文件已在回收站，请先恢复'), { code: 'UPLOAD_FILE_TRASHED', status: 409 });
+        }
+        file.confirmed = rows[0];
+      }
+    }
+
+    const targetFolderId = verifiedFiles.some((file) => file.fileName && !file.confirmed)
+      ? await assertOwnedCloudFolder(connection, userId, folderId)
+      : null;
 
     // 容量强校验（权威）：正常文件与回收站文件共享容量，同名覆盖只计算新旧差额。
-    const { fileNames, incomingBytes } = summarizeIncomingFiles(verifiedFiles);
+    const { fileNames, incomingBytes } = summarizeIncomingFiles(verifiedFiles.filter((file) => !file.confirmed));
     if (incomingBytes > 0) {
       const usedBytes = await getAccountedStorageBytes(connection, userId);
       const replacementBytes = await getActiveReplacementBytes(connection, userId, fileNames);
@@ -350,10 +440,19 @@ router.post('/confirmUpload', async (req, res) => {
       const fileSize = file.fileSize || 0;
 
       if (!fileName) {
-        results.push({ filename: '', status: '处理失败', error: '缺少文件名' });
+        results.push({ filename: '', status: '处理失败', error: file.validationError || '缺少文件名' });
         continue;
       }
 
+      if (file.confirmed) {
+        results.push({
+          filename: file.confirmed.file_name,
+          status: '已上传',
+          fileId: file.confirmed.id,
+          alreadyConfirmed: true,
+        });
+        continue;
+      }
       const objectKey = file.objectKey || buildObjectKey(userId, fileName);
       const directory = `${bucketBaseUrl}/files/${userId}/`;
 
@@ -364,7 +463,7 @@ router.post('/confirmUpload', async (req, res) => {
         file_size: fileSize,
         directory,
         obs_key: objectKey,
-        folder_id: folderId || null,
+        folder_id: targetFolderId,
       };
 
       const selectSql = 'SELECT * FROM files WHERE create_by = ? AND file_name = ? AND del_flag = 0';
@@ -374,24 +473,28 @@ router.post('/confirmUpload', async (req, res) => {
         const existingObjectKey = existingRows[0].obs_key || buildObjectKey(userId, existingRows[0].file_name);
         // AI 保存使用随机对象键；普通同名上传覆盖数据库记录后，提交成功再清理被替换的旧对象。
         if (existingObjectKey && existingObjectKey !== objectKey) supersededObjectKeys.add(existingObjectKey);
-        await removeInboxRelations(connection, {
-          userId,
-          items: [{ resourceType: 'file', resourceId: String(existingRows[0].id) }],
-        });
         await purgeDocumentSourcesForCloudFiles(connection, userId, [existingRows[0].id]);
-        const deleteSql = 'DELETE FROM files WHERE id = ?';
-        await removeImageReferences(connection,'cloud_file',[existingRows[0].id]);
-        await connection.query(deleteSql, [existingRows[0].id]);
+        await removeImageReferences(connection, 'cloud_file', [existingRows[0].id]);
       }
 
-      const insertSql = 'INSERT INTO files SET ?';
-      const [insertResult] = await connection.query(insertSql, [snakeCaseKeys(fileInfo)]);
-      await registerCloudImage(connection, { ...fileInfo,id:insertResult.insertId });
+      let fileId;
+      if (existingRows.length) {
+        fileId = existingRows[0].id;
+        await connection.query('UPDATE files SET ? WHERE id = ? AND create_by = ?', [
+          snakeCaseKeys(fileInfo),
+          fileId,
+          userId,
+        ]);
+      } else {
+        const [insertResult] = await connection.query('INSERT INTO files SET ?', [snakeCaseKeys(fileInfo)]);
+        fileId = insertResult.insertId;
+      }
+      await registerCloudImage(connection, { ...fileInfo, id: fileId });
 
       if (addToInbox === true) {
         await enqueueResources(connection, {
           userId,
-          items: [{ resourceType: 'file', resourceId: String(insertResult.insertId) }],
+          items: [{ resourceType: 'file', resourceId: String(fileId) }],
           source: inboxSource,
         });
       }
@@ -399,12 +502,14 @@ router.post('/confirmUpload', async (req, res) => {
       results.push({
         filename: fileName,
         status: existingRows.length > 0 ? '已覆盖' : '已上传',
-        fileId: insertResult.insertId,
+        fileId,
       });
     }
 
     await connection.commit();
     transactionStarted = false;
+    connection?.release();
+    connection = null;
     if (supersededObjectKeys.size) {
       const cleanupKeys = [...supersededObjectKeys];
       const cleanupResults = await Promise.allSettled(cleanupKeys.map((objectKey) => deleteUnmanagedObject(objectKey)));
@@ -414,7 +519,7 @@ router.post('/confirmUpload', async (req, res) => {
         }
       });
     }
-    const newlyCreatedFiles = results.filter((result) => result.status === '已上传');
+    const newlyCreatedFiles = results.filter((result) => result.status === '已上传' && !result.alreadyConfirmed);
     // C5 即时任务事实必须在响应前落库；经验仍是提交后的旁路，失败不反向影响文件上传。
     if (!req.suppressUserRewards) {
       await Promise.allSettled(
@@ -432,9 +537,23 @@ router.post('/confirmUpload', async (req, res) => {
     }
   } catch (error) {
     if (transactionStarted) await connection.rollback();
+    if (
+      [
+        'FILE_UPLOAD_OBJECT_BUSY',
+        'UPLOAD_OWNER_INACTIVE',
+        'FOLDER_ID_INVALID',
+        'FOLDER_NOT_FOUND',
+        'UPLOAD_BUSY',
+        'UPLOAD_FILE_TRASHED',
+        'UPLOAD_OBJECT_RETIRED',
+        'UPLOAD_DUPLICATE_OBJECT',
+      ].includes(error.code)
+    )
+      return res.send(resultData(null, error.status || 409, error.message));
     return sendFileServerError(res, 'confirm-upload', error);
   } finally {
-    connection.release();
+    connection?.release();
+    connection = null;
   }
 });
 
@@ -446,20 +565,23 @@ router.post('/setFilePin', async (req, res) => {
     return res.send(resultData(null, 400, L(req, '置顶参数无效', 'Invalid pin parameters')));
   }
   try {
-    const [result] = await pool.query(
-      'UPDATE files SET is_top = ? WHERE id = ? AND create_by = ? AND del_flag = 0',
-      [isTop ? 1 : 0, String(id), req.user.id],
-    );
+    const [result] = await pool.query('UPDATE files SET is_top = ? WHERE id = ? AND create_by = ? AND del_flag = 0', [
+      isTop ? 1 : 0,
+      String(id),
+      req.user.id,
+    ]);
     if (!result.affectedRows) {
-      const [rows] = await pool.query(
-        'SELECT id FROM files WHERE id = ? AND create_by = ? AND del_flag = 0',
-        [String(id), req.user.id],
-      );
+      const [rows] = await pool.query('SELECT id FROM files WHERE id = ? AND create_by = ? AND del_flag = 0', [
+        String(id),
+        req.user.id,
+      ]);
       if (!rows.length) return res.send(resultData(null, 404, L(req, '文件不存在或无权访问', 'File not found')));
     }
     return res.send(resultData({ id: String(id), isTop }, 200));
   } catch {
-    return res.send(resultData(null, 500, L(req, '置顶状态更新失败，请稍后重试', 'Could not update pin. Try again later.')));
+    return res.send(
+      resultData(null, 500, L(req, '置顶状态更新失败，请稍后重试', 'Could not update pin. Try again later.')),
+    );
   }
 });
 
@@ -529,7 +651,7 @@ router.post('/queryFiles', async (req, res) => {
          WHERE r.resource_type = 'file' AND r.resource_id = files.id AND t.del_flag = 0
         ) AS tags
        FROM files
-       LEFT JOIN folders ON files.folder_id = folders.id
+       LEFT JOIN folders ON files.folder_id = folders.id AND folders.create_by = files.create_by AND folders.del_flag = 0
        WHERE ${whereSql}
        ORDER BY ${orderBy}`;
     const listParams = [...params];
@@ -557,7 +679,7 @@ router.post('/queryFiles', async (req, res) => {
       console.warn('[待整理角标] 文件状态回填失败(忽略) code=%s', String(error?.code || 'INBOX_STATUS_FAILED'));
     }
 
-    await hydrateImagePreviewStates(formattedFiles,userId);
+    await hydrateImagePreviewStates(formattedFiles, userId);
     if (!pagination.enabled) {
       return res.send(resultData(formattedFiles));
     }
@@ -608,7 +730,7 @@ router.post('/downloadFileById', async (req, res) => {
       return res.send(resultData(null, 403, '无权访问该文件'));
     }
     const objectKey = file.obs_key || buildObjectKey(file.create_by, file.file_name);
-    const { url, expiresIn } = createDownloadSignedUrl({ objectKey, expires: 600 });
+    const { url, expiresIn } = createDownloadSignedUrl({ objectKey, expires: 600, fileName: file.file_name });
 
     if (!url) {
       return res.send(resultData(null, 500, '获取下载链接失败'));
@@ -706,10 +828,7 @@ router.post('/queryTotalFileSize', async (req, res) => {
     const userId = req.user.id;
 
     // 用量与等级配额独立读取，复用现有服务保持共享容量与扩容口径。
-    const [usage, quotaMB] = await Promise.all([
-      getStorageUsageBreakdown(pool, userId),
-      storageQuotaMB(req.user),
-    ]);
+    const [usage, quotaMB] = await Promise.all([getStorageUsageBreakdown(pool, userId), storageQuotaMB(req.user)]);
     res.send(
       resultData({
         totalSizeMB: storageBytesToMb(usage.totalBytes),
@@ -789,23 +908,31 @@ router.post('/hermesBackup', backupUpload.single('file'), async (req, res) => {
       return res.send(resultData(null, 400, '未收到文件'));
     }
 
-    const objectKey = buildObjectKey(HERMES_BACKUP_USER_ID, HERMES_BACKUP_FILENAME);
+    const { objectKey } = await prepareLegacyCloudUpload({
+      userId: HERMES_BACKUP_USER_ID,
+      fileName: HERMES_BACKUP_FILENAME,
+      fileType: 'application/gzip',
+    });
 
     // 1. 直传 OBS
     await putObjectToObs(objectKey, filePath, 'application/gzip');
 
     // 2. 写入 files 表（同名覆盖）
+    let supersededKey;
     const connection = await pool.getConnection();
     try {
       await connection.beginTransaction();
 
+      await lockActiveUploadOwner(connection, HERMES_BACKUP_USER_ID);
+      await lockCloudObjectForPublication(connection, HERMES_BACKUP_USER_ID, objectKey);
+
       const [existing] = await connection.query(
-        'SELECT id FROM files WHERE create_by = ? AND file_name = ? AND del_flag = 0',
+        'SELECT id,obs_key,file_name FROM files WHERE create_by = ? AND file_name = ? AND del_flag = 0',
         [HERMES_BACKUP_USER_ID, HERMES_BACKUP_FILENAME],
       );
       if (existing.length > 0) {
+        supersededKey = existing[0].obs_key || buildObjectKey(HERMES_BACKUP_USER_ID, existing[0].file_name);
         await purgeDocumentSourcesForCloudFiles(connection, HERMES_BACKUP_USER_ID, [existing[0].id]);
-        await connection.query('DELETE FROM files WHERE id = ?', [existing[0].id]);
       }
 
       const directory = `${bucketBaseUrl}/files/${HERMES_BACKUP_USER_ID}/`;
@@ -818,16 +945,29 @@ router.post('/hermesBackup', backupUpload.single('file'), async (req, res) => {
         obs_key: objectKey,
         folder_id: null,
       };
-      await connection.query('INSERT INTO files SET ?', [snakeCaseKeys(fileInfo)]);
+      if (existing.length) {
+        await connection.query('UPDATE files SET ? WHERE id = ? AND create_by = ?', [
+          snakeCaseKeys(fileInfo),
+          existing[0].id,
+          HERMES_BACKUP_USER_ID,
+        ]);
+      } else {
+        await connection.query('INSERT INTO files SET ?', [snakeCaseKeys(fileInfo)]);
+      }
 
       await connection.commit();
-      res.send(resultData({ fileName: HERMES_BACKUP_FILENAME, size: req.file.size }, 200, '备份上传成功'));
     } catch (dbErr) {
       await connection.rollback();
       throw dbErr;
     } finally {
       connection.release();
     }
+    if (supersededKey && supersededKey !== objectKey) {
+      await deleteUnmanagedObject(supersededKey).catch((error) => {
+        console.warn('[file] backup object cleanup failed code=%s', stableAgentErrorCode(error));
+      });
+    }
+    res.send(resultData({ fileName: HERMES_BACKUP_FILENAME, size: req.file.size }, 200, '备份上传成功'));
   } catch (e) {
     return sendFileServerError(res, 'hermes-backup', e, '备份上传失败，请稍后重试');
   } finally {

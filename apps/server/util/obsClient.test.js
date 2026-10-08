@@ -8,10 +8,15 @@ const sdk = vi.hoisted(() => {
   process.env.OBS_BUCKET_NAME = 'test-bucket';
 
   const getObject = vi.fn();
+  const copyObject = vi.fn();
   const putObject = vi.fn();
+  const sign = vi.fn(() => ({ SignedUrl: 'https://obs.test/signed' }));
   class MockObsClient {
-    createSignedUrlSync() {
-      return { SignedUrl: 'https://obs.test/signed' };
+    createSignedUrlSync(params) {
+      return sign(params);
+    }
+    copyObject(...args) {
+      return copyObject(...args);
     }
     getObject(...args) {
       return getObject(...args);
@@ -21,12 +26,29 @@ const sdk = vi.hoisted(() => {
       return putObject(...args);
     }
   }
-  return { getObject, putObject, MockObsClient };
+  return { getObject, copyObject, putObject, sign, MockObsClient };
 });
 
 vi.mock('esdk-obs-nodejs', () => ({ default: sdk.MockObsClient }));
 
-import { getObjectBufferFromObs, getObjectRangeFromObs, putObjectBodyToObs } from './obsClient.js';
+import {
+  createDownloadSignedUrl,
+  copyObjectInObs,
+  getObjectBufferFromObs,
+  getObjectRangeFromObs,
+  putObjectBodyToObs,
+} from './obsClient.js';
+
+it('download signing uses the current display name while preview URLs stay inline', () => {
+  createDownloadSignedUrl({ objectKey: 'files/u/uploads/stable.pdf', fileName: '新名字 (1).pdf\r\n' });
+  const signed = sdk.sign.mock.lastCall[0];
+  expect(signed.Key).toBe('files/u/uploads/stable.pdf');
+  expect(signed.QueryParams['response-content-disposition']).toBe(
+    `attachment; filename="download"; filename*=UTF-8''${encodeURIComponent('新名字 ')}%281%29.pdf`,
+  );
+  createDownloadSignedUrl({ objectKey: 'files/u/uploads/stable.pdf' });
+  expect(sdk.sign.mock.lastCall[0]).not.toHaveProperty('QueryParams');
+});
 
 function mockObjectResult(content, contentLength) {
   sdk.getObject.mockImplementationOnce((params, callback) => {
@@ -152,4 +174,25 @@ describe('OBS metadata ranges', () => {
       code: 'OBS_RANGE_INVALID',
     });
   });
+});
+
+it('uses OBS source ETag preconditions and does not retry a changed source unconditionally', async () => {
+  sdk.copyObject.mockImplementationOnce((_params, callback) =>
+    callback(null, { CommonMsg: { Status: 412, Code: 'PreconditionFailed' } }),
+  );
+  await expect(copyObjectInObs('source', 'destination', { sourceEtag: '"observed-version"' })).rejects.toThrow(
+    'PreconditionFailed',
+  );
+  expect(sdk.copyObject).toHaveBeenCalledExactlyOnceWith(
+    {
+      Bucket: 'test-bucket',
+      Key: 'destination',
+      CopySource: 'test-bucket/source',
+      CopySourceIfMatch: '"observed-version"',
+    },
+    expect.any(Function),
+  );
+  sdk.copyObject.mockImplementationOnce((_params, callback) => callback(null, { CommonMsg: { Status: 200 } }));
+  await copyObjectInObs('source', 'destination');
+  expect(sdk.copyObject.mock.lastCall[0]).not.toHaveProperty('CopySourceIfMatch');
 });

@@ -27,7 +27,7 @@ describe('cloudFileUploadApi', () => {
       .mockResolvedValueOnce({
         status: 200,
         msg: '',
-        data: [{ filename: '周报.png', fileType: 'image/png', uploadUrl: 'https://obs.example/upload', headers: {} }],
+        data: [{ filename: '周报.png', fileType: 'image/png', objectKey: 'files/owner/uploads/unique', uploadUrl: 'https://obs.example/upload', headers: {} }],
       })
       .mockResolvedValueOnce({
         status: 200,
@@ -47,7 +47,7 @@ describe('cloudFileUploadApi', () => {
     });
     expect(postMock).toHaveBeenLastCalledWith(
       '/api/file/confirmUpload',
-      { files: [{ fileName: '周报.png', fileType: 'image/png', fileSize: file.size }], folderId: '7' },
+      { files: [{ fileName: '周报.png', objectKey: 'files/owner/uploads/unique', fileType: 'image/png', fileSize: file.size }], folderId: '7' },
       { silent: true },
     );
   });

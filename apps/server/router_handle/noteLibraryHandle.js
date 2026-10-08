@@ -67,11 +67,13 @@ import {
   moveOwnedNoteNodes,
   NoteTreeError,
   loadOwnedNoteTree,
+  assertOwnedNoteParent,
   prepareOwnedNotePlacement,
   queryOwnedNoteTree,
   resolveNoteBreadcrumbFromSnapshot,
   resolveNoteDescendantIdsFromSnapshot,
   resolveOwnedNoteBreadcrumb,
+  resolveOwnedNoteListPaths,
   resolveOwnedNoteCreateTarget,
 } from '../util/services/noteTreeService.js';
 import {
@@ -994,12 +996,16 @@ export const queryNoteList = async (req, res) => {
     const rootTreeScope = treeMode && parentId === null;
     let treeSnapshot = null;
 
-    if (treeMode) {
-      treeSnapshot = await loadOwnedNoteTree(userId);
-      if (parentId && !treeSnapshot.nodesById.has(parentId)) {
-        throw new NoteTreeError('NOTE_TREE_PARENT_NOT_FOUND', '目录不存在', 404);
+    if (treeMode && parentId) {
+      if (!hasTreeFilter) {
+        await assertOwnedNoteParent({ userId, parentId });
+      } else {
+        treeSnapshot = await loadOwnedNoteTree(userId);
+        if (!treeSnapshot.nodesById.has(parentId)) {
+          throw new NoteTreeError('NOTE_TREE_PARENT_NOT_FOUND', '目录不存在', 404);
+        }
       }
-      if (hasTreeFilter && parentId) {
+      if (hasTreeFilter) {
         // 搜索/标签筛选始终由服务端扩展当前页面的全部后代；不信任客户端上传的 includeDescendants。
         const descendantIds = resolveNoteDescendantIdsFromSnapshot(treeSnapshot, parentId);
         if (descendantIds.length) {
@@ -1008,7 +1014,7 @@ export const queryNoteList = async (req, res) => {
         } else {
           where.push('1 = 0');
         }
-      } else if (!hasTreeFilter && parentId) {
+      } else {
         // 根“笔记库”代表完整内容范围；只有进入具体目录后才限制为直属子页面。
         where.push('n.parent_id = ?');
         params.push(parentId);
@@ -1114,6 +1120,9 @@ export const queryNoteList = async (req, res) => {
     ]);
     const [result] = listQueryResult;
     const total = pagination.enabled ? Number(totalQueryResult?.[0]?.[0]?.total || 0) : result.length;
+    const pagePaths = rootTreeScope
+      ? await resolveOwnedNoteListPaths({ userId, noteIds: result.map((note) => note.id) })
+      : null;
 
     // 处理 tags 为数组，如果 NULL 或包含无效标签则为空数组。
     result.forEach((note) => {
@@ -1149,8 +1158,10 @@ export const queryNoteList = async (req, res) => {
         if (lightweightCardPreview) delete note.content;
         else if (drawing) note.content = '';
       }
-      if (treeSnapshot && (hasTreeFilter || rootTreeScope)) {
-        const path = resolveNoteBreadcrumbFromSnapshot(treeSnapshot, String(note.id));
+      if (pagePaths || (treeSnapshot && hasTreeFilter)) {
+        const path = pagePaths
+          ? pagePaths.get(String(note.id)) || []
+          : resolveNoteBreadcrumbFromSnapshot(treeSnapshot, String(note.id));
         note.path = path;
         note.path_text = path
           .slice(0, -1)

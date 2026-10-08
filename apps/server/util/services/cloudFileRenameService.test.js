@@ -1,17 +1,28 @@
+vi.mock('./cloudLegacyObjectLifecycle.js', () => ({ queueLegacyObjectRetirement: vi.fn().mockResolvedValue(false) }));
+vi.mock('./cloudFileRenameStaging.js', () => ({
+  reserveRenameStage: vi.fn().mockResolvedValue(),
+  adoptRenameStage: vi.fn().mockResolvedValue(),
+  releaseRenameStage: vi.fn().mockResolvedValue(),
+  cleanupRenameStage: vi.fn().mockResolvedValue(true),
+}));
+import { cleanupRenameStage } from './cloudFileRenameStaging.js';
 import { beforeEach, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({ cleanupConnection: vi.fn() }));
 vi.mock('../obsClient.js', () => ({
   bucketBaseUrl: 'https://obs.invalid',
   buildObjectKey: (user, name) => `files/${user}/${name}`,
   copyObjectInObs: vi.fn().mockResolvedValue(),
+  getObjectMetadataFromObs: vi.fn().mockResolvedValue({ etag: '"version-1"' }),
   deleteObjectFromObs: vi.fn().mockResolvedValue(),
 }));
 vi.mock('../imagePreview/relocate.js', () => ({ relocateCloudImage: vi.fn().mockResolvedValue() }));
 vi.mock('../aiDocument/service.js', () => ({ purgeDocumentSourcesForCloudFiles: vi.fn().mockResolvedValue() }));
 vi.mock('../../db/index.js', () => ({ default: { getConnection: mocks.cleanupConnection } }));
-import { copyObjectInObs, deleteObjectFromObs } from '../obsClient.js';
+import { copyObjectInObs, deleteObjectFromObs, getObjectMetadataFromObs } from '../obsClient.js';
 import { relocateCloudImage } from '../imagePreview/relocate.js';
-import { renameOwnedCloudFile } from './cloudFileRenameService.js';
+import { renameOwnedCloudFile as applyRename, withPreparedCloudFileRename } from './cloudFileRenameService.js';
+const renameOwnedCloudFile = (connection, input) =>
+  withPreparedCloudFileRename((preparation) => applyRename(connection, { ...input, preparation }));
 function db(file, duplicates = [], occupied = []) {
   return {
     query: vi.fn(async (sql) =>
@@ -38,6 +49,24 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.cleanupConnection.mockResolvedValue(cleanupDb());
 });
+it.each(['uploads', 'renamed'])('随机对象改名只写元数据，保留原件地址、引用和预览租约 %s', async (namespace) => {
+  const objectKey = `files/u/${namespace}/5d14916a-335b-4cfe-960e-c45571a5a8a0.pdf`;
+  const connection = db({ file_name: 'original.pdf', obs_key: objectKey });
+  const result = await renameOwnedCloudFile(connection, { userId: 'u', id: 1, name: '新名字' });
+  expect(result.name).toBe('新名字.pdf');
+  expect(connection.query).toHaveBeenCalledWith(expect.stringContaining('UPDATE files'), [
+    '新名字.pdf',
+    objectKey,
+    'https://obs.invalid/files/u/',
+    1,
+    'u',
+  ]);
+  await result.cleanup();
+  expect(copyObjectInObs).not.toHaveBeenCalled();
+  expect(deleteObjectFromObs).not.toHaveBeenCalled();
+  expect(relocateCloudImage).not.toHaveBeenCalled();
+  expect(mocks.cleanupConnection).not.toHaveBeenCalled();
+});
 it.each([
   ['report.PDF', '新名称', '新名称.PDF'],
   ['report.pdf', '新名称.pdf', '新名称.pdf'],
@@ -49,13 +78,15 @@ it.each([
   expect(relocateCloudImage).toHaveBeenCalledWith(
     connection,
     expect.objectContaining({ id: 1, create_by: 'u', obs_key: 'files/u/stable-id.pdf' }),
-    `files/u/${expected}`,
+    expect.stringMatching(/^files\/u\/renamed\//),
     expected,
   );
-  expect(copyObjectInObs).toHaveBeenCalledWith('files/u/stable-id.pdf', `files/u/${expected}`);
+  expect(copyObjectInObs).toHaveBeenCalledWith('files/u/stable-id.pdf', expect.stringMatching(/^files\/u\/renamed\//), {
+    sourceEtag: '"version-1"',
+  });
   expect(connection.query).toHaveBeenCalledWith(expect.stringContaining('UPDATE files'), [
     expected,
-    `files/u/${expected}`,
+    expect.stringMatching(/^files\/u\/renamed\//),
     'https://obs.invalid/files/u/',
     1,
     'u',
@@ -89,9 +120,9 @@ it('复制失败不写文件名也不清理旧原图', async () => {
   copyObjectInObs.mockRejectedValueOnce(Error('copy failed'));
   await expect(renameOwnedCloudFile(c, { userId: 'u', id: 1, name: 'new.jpg' })).rejects.toThrow('copy failed');
   expect(c.query.mock.calls.some(([s]) => s.startsWith('UPDATE'))).toBe(false);
-  expect(deleteObjectFromObs).not.toHaveBeenCalled();
+  expect(deleteObjectFromObs).not.toHaveBeenCalledWith('files/u/old.jpg');
 });
-it.each(['file', 'asset'])('回收站或保留图片占用目标时使用独立地址 (%s)', async (kind) => {
+it.each(['file'])('回收站或保留图片占用目标时使用独立地址 (%s)', async (kind) => {
   const c = db({ file_name: 'old.jpg', obs_key: 'files/u/old.jpg' }, [], kind === 'file' ? [{ id: 2 }] : []);
   if (kind === 'asset')
     relocateCloudImage.mockRejectedValueOnce(Object.assign(Error('conflict'), { code: 'FILE_IMAGE_TARGET_CONFLICT' }));
@@ -99,7 +130,7 @@ it.each(['file', 'asset'])('回收站或保留图片占用目标时使用独立�
   expect(result.name).toBe('new.jpg');
   const target = copyObjectInObs.mock.calls[0][1];
   expect(target).toMatch(/^files\/u\/renamed\/[0-9a-f-]+\.jpg$/);
-  expect(copyObjectInObs).toHaveBeenCalledExactlyOnceWith('files/u/old.jpg', target);
+  expect(copyObjectInObs).toHaveBeenCalledExactlyOnceWith('files/u/old.jpg', target, { sourceEtag: '"version-1"' });
   expect(relocateCloudImage).toHaveBeenLastCalledWith(expect.anything(), expect.anything(), target, 'new.jpg');
   expect(c.query).toHaveBeenCalledWith(expect.stringContaining('UPDATE files'), [
     'new.jpg',
@@ -111,12 +142,13 @@ it.each(['file', 'asset'])('回收站或保留图片占用目标时使用独立�
   await result.cleanup();
   expect(deleteObjectFromObs).not.toHaveBeenCalledWith('files/u/new.jpg');
 });
-it('图片源状态冲突仍拒绝，不复制原件', async () => {
+it('图片源状态冲突仍拒绝，清理尚未提交的新副本', async () => {
   relocateCloudImage.mockRejectedValueOnce(Object.assign(Error('conflict'), { code: 'FILE_IMAGE_SOURCE_CONFLICT' }));
   await expect(
     renameOwnedCloudFile(db({ file_name: 'old.jpg' }), { userId: 'u', id: 1, name: 'new.jpg' }),
   ).rejects.toMatchObject({ code: 'FILE_IMAGE_SOURCE_CONFLICT' });
-  expect(copyObjectInObs).not.toHaveBeenCalled();
+  expect(copyObjectInObs).toHaveBeenCalledOnce();
+  expect(deleteObjectFromObs).not.toHaveBeenCalledWith('files/u/old.jpg');
 });
 it.each(['file', 'asset'])('延迟清理时旧地址重新被使用则保留原图 (%s)', async (kind) => {
   const cleanup = cleanupDb(kind === 'file' ? [{ id: 1 }] : [], kind === 'asset' ? [{ id: 8 }] : []);
@@ -126,4 +158,65 @@ it.each(['file', 'asset'])('延迟清理时旧地址重新被使用则保留原�
   expect(deleteObjectFromObs).not.toHaveBeenCalled();
   expect(cleanup.commit).toHaveBeenCalled();
   expect(cleanup.release).toHaveBeenCalled();
+});
+
+it('reports a changed OBS source without retrying an unconditional copy', async () => {
+  copyObjectInObs.mockRejectedValueOnce(Object.assign(new Error('private provider detail'), { obsStatus: 412 }));
+  await expect(
+    renameOwnedCloudFile(db({ file_name: 'old.pdf' }), { userId: 'u', id: 1, name: 'new.pdf' }),
+  ).rejects.toMatchObject({ code: 'FILE_RENAME_SOURCE_CHANGED', status: 409 });
+  expect(copyObjectInObs).toHaveBeenCalledOnce();
+  expect(deleteObjectFromObs).not.toHaveBeenCalledWith('files/u/old.pdf');
+});
+
+it('does not copy without an authoritative source ETag', async () => {
+  getObjectMetadataFromObs.mockResolvedValueOnce({ etag: '' });
+  await expect(
+    renameOwnedCloudFile(db({ file_name: 'old.pdf' }), { userId: 'u', id: 1, name: 'new.pdf' }),
+  ).rejects.toMatchObject({ code: 'FILE_RENAME_SOURCE_UNVERIFIED' });
+  expect(copyObjectInObs).not.toHaveBeenCalled();
+});
+
+it('keeps a destination referenced after an ambiguous commit failure', async () => {
+  mocks.cleanupConnection.mockResolvedValue(cleanupDb([{ id: 1 }]));
+  const connection = db({ file_name: 'old.pdf' });
+  await expect(
+    withPreparedCloudFileRename(async (preparation) => {
+      await applyRename(connection, { userId: 'u', id: 1, name: 'new.pdf', preparation });
+      throw new Error('commit acknowledgement lost');
+    }),
+  ).rejects.toThrow('commit acknowledgement lost');
+  expect(copyObjectInObs).toHaveBeenCalledOnce();
+  expect(deleteObjectFromObs).not.toHaveBeenCalled();
+});
+
+it('cleans an unused staged destination if the second transaction finds the operation already applied', async () => {
+  let attempts = 0;
+  const result = await withPreparedCloudFileRename(async (preparation) => {
+    if (++attempts === 2) return { status: 'applied' };
+    return applyRename(db({ file_name: 'old.pdf' }), { userId: 'u', id: 1, name: 'new.pdf', preparation });
+  });
+  expect(result).toEqual({ status: 'applied' });
+  expect(cleanupRenameStage).toHaveBeenCalledExactlyOnceWith({ id: expect.any(String) });
+  expect(deleteObjectFromObs).not.toHaveBeenCalled();
+});
+
+it.each([
+  'files/u/ai/123e4567-e89b-42d3-a456-426614174000.pdf',
+  'files/u/system/onboarding-v1.md',
+  'files/u/archive/original/report.pdf',
+])('keeps the server-owned nested key on display-name changes: %s', async (objectKey) => {
+  const connection = db({ file_name: 'old.pdf', obs_key: objectKey });
+  const result = await renameOwnedCloudFile(connection, { userId: 'u', id: 1, name: 'new.pdf' });
+  await result.cleanup();
+  expect(connection.query).toHaveBeenCalledWith(expect.stringContaining('UPDATE files'), [
+    'new.pdf',
+    objectKey,
+    'https://obs.invalid/files/u/',
+    1,
+    'u',
+  ]);
+  expect(copyObjectInObs).not.toHaveBeenCalled();
+  expect(deleteObjectFromObs).not.toHaveBeenCalled();
+  expect(relocateCloudImage).not.toHaveBeenCalled();
 });

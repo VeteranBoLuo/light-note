@@ -39,6 +39,42 @@ it('distinguishes a definitive failure from a lost completion response', async (
   await expect(streamTranslation(input, handlers)).rejects.toMatchObject({ code: 'TRANSLATION_STREAM_UNKNOWN' });
 });
 
+it('reconstructs deltas and resets on repaired snapshots, including surrogate pairs', async () => {
+  const encode = (event: string, data: unknown) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  response([
+    encode('snapshot', { original: 'source', content: '你😀' }),
+    encode('delta', { offset: 3, content: '好' }),
+    encode('snapshot', { content: '修复' }),
+    encode('delta', { offset: 2, content: '完成' }),
+    encode('complete', { id: 'artifact', content: '修复完成' }),
+  ]);
+  const onSnapshot = vi.fn();
+  await streamTranslation(
+    { quoteId: 'q', clientRequestId: 'r' },
+    {
+      signal: new AbortController().signal,
+      onStart: vi.fn(),
+      onSnapshot,
+    },
+  );
+  expect(onSnapshot.mock.calls.map(([update]) => update.content)).toEqual(['你😀', '你😀好', '修复', '修复完成']);
+  expect(request.mock.lastCall?.[0].data).toEqual({ quoteId: 'q', clientRequestId: 'r', streamVersion: 2 });
+});
+
+it('a mismatched delta is an uncertain connection failure, not permission to create another job', async () => {
+  response(['event: delta\ndata: {"offset":5,"content":"lost"}\n\n']);
+  await expect(
+    streamTranslation(
+      { quoteId: 'q', clientRequestId: 'r' },
+      {
+        signal: new AbortController().signal,
+        onStart: vi.fn(),
+        onSnapshot: vi.fn(),
+      },
+    ),
+  ).rejects.toMatchObject({ code: 'TRANSLATION_STREAM_UNKNOWN' });
+});
+
 it('HTTP route rejection unlocks editing, but timeouts and server errors remain uncertain', async () => {
   const input = { quoteId: 'q', clientRequestId: 'r' };
   const handlers = { signal: new AbortController().signal, onStart: vi.fn(), onSnapshot: vi.fn() };

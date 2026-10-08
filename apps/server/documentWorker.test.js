@@ -1,3 +1,5 @@
+vi.mock('./util/services/cloudLegacyObjectLifecycle.js', () => ({ cleanupLegacyCloudObject: async () => false }));
+vi.mock('./util/services/cloudFileRenameStaging.js', () => ({ cleanupRenameStage: async () => false }));
 vi.mock('./util/services/organizeProcessingPipeline.js', () => ({
   runOrganizeInspection: async () => false,
   runOrganizeDirect: async () => false,
@@ -11,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   ensure: vi.fn(),
   destroy: vi.fn(),
   document: vi.fn(async () => false),
+  toolbox: vi.fn(async () => false),
 }));
 vi.mock('./util/redisClient.js', () => ({ default: { isOpen: true, destroy: mocks.destroy } }));
 vi.mock('./db/index.js', () => ({ default: { end: mocks.end } }));
@@ -35,7 +38,7 @@ vi.mock('./util/filePreview/service.js', () => ({
 }));
 vi.mock('./util/toolbox/worker.js', () => ({
   cleanupExpiredToolboxData: async () => {},
-  runSingleToolboxJob: async () => false,
+  runSingleToolboxJob: mocks.toolbox,
 }));
 vi.mock('./util/services/organizeAiSuggestionService.js', () => ({
   runSingleOrganizeAiSuggestionBatch: async () => false,
@@ -94,7 +97,9 @@ vi.mock('./util/imagePreview/worker.js', () => ({
   cleanupImageAssets: vi.fn(),
 }));
 vi.mock('./util/imagePreview/runtime.js', () => ({ inspectImagePreviewRuntime: vi.fn(async () => ({ ready: true })) }));
-vi.mock('./util/imagePreview/videoCover.js', () => ({ inspectVideoPreviewRuntime: vi.fn(async () => ({ ready: true })) }));
+vi.mock('./util/imagePreview/videoCover.js', () => ({
+  inspectVideoPreviewRuntime: vi.fn(async () => ({ ready: true })),
+}));
 
 it('数据库关闭失败仍释放 Redis 连接', async () => {
   mocks.ensure.mockRejectedValueOnce(new Error('fixture startup failure'));
@@ -138,4 +143,39 @@ it('does not claim video jobs when the decoder runtime is unavailable', async ()
   await import('./documentWorker.js');
   await vi.waitFor(() => expect(mocks.end).toHaveBeenCalledOnce());
   expect(runSingleVideoPreviewJob).not.toHaveBeenCalled();
+});
+
+it('serves image previews while a document and toolbox model remain in flight, then drains on stop', async () => {
+  const { runSingleImagePreviewJob } = await import('./util/imagePreview/worker.js');
+  let finishDocument;
+  let finishModel;
+  mocks.item.mockResolvedValue(false);
+  mocks.document.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finishDocument = resolve;
+      }),
+  );
+  mocks.toolbox.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finishModel = resolve;
+      }),
+  );
+  runSingleImagePreviewJob.mockImplementationOnce(async () => {
+    await vi.waitFor(() => {
+      expect(finishDocument).toBeTypeOf('function');
+      expect(finishModel).toBeTypeOf('function');
+    });
+    process.emit('SIGTERM');
+    expect(mocks.end).not.toHaveBeenCalled();
+    finishDocument(true);
+    finishModel(true);
+    return true;
+  });
+  await import('./documentWorker.js');
+  await vi.waitFor(() => expect(mocks.end).toHaveBeenCalledOnce());
+  expect(runSingleImagePreviewJob).toHaveBeenCalledOnce();
+  expect(mocks.document).toHaveBeenCalledOnce();
+  expect(mocks.toolbox).toHaveBeenCalledOnce();
 });

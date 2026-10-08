@@ -3,8 +3,8 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const source = readFileSync(resolve(process.cwd(), 'src/components/growth/WeeklyReportModal.vue'), 'utf8');
-const zhSource = readFileSync(resolve(process.cwd(), 'src/i18n/locales/zh-CN.ts'), 'utf8');
-const enSource = readFileSync(resolve(process.cwd(), 'src/i18n/locales/en-US.ts'), 'utf8');
+const zhSource = readFileSync(resolve(process.cwd(), 'src/i18n/locales/zh-CN-core.ts'), 'utf8');
+const enSource = readFileSync(resolve(process.cwd(), 'src/i18n/locales/en-US-core.ts'), 'utf8');
 
 describe('成长周报 V2', () => {
   it('使用标准弹框、BButton 和统一图标，不再自建原生交互控件', () => {

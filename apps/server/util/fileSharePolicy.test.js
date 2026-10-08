@@ -16,11 +16,11 @@ describe('file share policy', () => {
     expect(hashShareToken(token)).not.toContain(token);
   });
 
-  it('hashes and verifies access codes without storing the original code', () => {
-    const encoded = hashShareAccessCode('A12345');
+  it('hashes and verifies access codes without storing the original code', async () => {
+    const encoded = await hashShareAccessCode('A12345');
     expect(encoded).not.toContain('A12345');
-    expect(verifyShareAccessCode('A12345', encoded)).toBe(true);
-    expect(verifyShareAccessCode('A12346', encoded)).toBe(false);
+    expect(await verifyShareAccessCode('A12345', encoded)).toBe(true);
+    expect(await verifyShareAccessCode('A12346', encoded)).toBe(false);
   });
 
   it('defaults to seven days and validates limits and access code shape', () => {

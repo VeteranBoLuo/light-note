@@ -58,12 +58,19 @@ export const createUploadSignedUrl = ({ objectKey, contentType, expires = 900 })
   };
 };
 
-export const createDownloadSignedUrl = ({ objectKey, expires = 900 }) => {
+export const createDownloadSignedUrl = ({ objectKey, expires = 900, fileName }) => {
+  const downloadName = String(fileName || '')
+    .replace(/[\r\n\x00]/gu, '')
+    .toWellFormed();
+  const disposition = downloadName
+    ? `attachment; filename="download"; filename*=UTF-8''${encodeURIComponent(downloadName).replace(/[!'()*]/gu, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`)}`
+    : null;
   const { SignedUrl } = obsClient.createSignedUrlSync({
     Method: 'GET',
     Bucket: bucketName,
     Key: objectKey,
     Expires: expires,
+    ...(disposition ? { QueryParams: { 'response-content-disposition': disposition } } : {}),
   });
 
   return { url: SignedUrl, expiresIn: expires };
@@ -77,7 +84,7 @@ const wrapObsCall = (fn, params) =>
       }
       if (result?.CommonMsg?.Status && result.CommonMsg.Status >= 300) {
         const message = result.CommonMsg.Message || result.CommonMsg.Code || `OBS error ${result.CommonMsg.Status}`;
-        return reject(new Error(message));
+        return reject(Object.assign(new Error(message), { obsStatus: Number(result.CommonMsg.Status) }));
       }
       resolve(result);
     });
@@ -86,11 +93,12 @@ const wrapObsCall = (fn, params) =>
 export const deleteObjectFromObs = async (objectKey) =>
   wrapObsCall(obsClient.deleteObject.bind(obsClient), { Bucket: bucketName, Key: objectKey });
 
-export const copyObjectInObs = async (sourceKey, targetKey) =>
+export const copyObjectInObs = async (sourceKey, targetKey, { sourceEtag } = {}) =>
   wrapObsCall(obsClient.copyObject.bind(obsClient), {
     Bucket: bucketName,
     Key: targetKey,
     CopySource: `${bucketName}/${sourceKey}`,
+    ...(sourceEtag ? { CopySourceIfMatch: sourceEtag } : {}),
   });
 
 export const putObjectToObs = async (objectKey, filePath, contentType = 'application/octet-stream') =>

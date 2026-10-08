@@ -32,7 +32,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, nextTick, onBeforeUnmount, onMounted, PropType, ref, watch } from 'vue';
+  import { computed, nextTick, onBeforeUnmount, onMounted, onUpdated, PropType, ref, watch } from 'vue';
   import { useUiDensity } from '@/composables/useUiDensity';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import {
@@ -55,6 +55,8 @@
     itemHeight: { type: Number, default: 80 },
     dynamicHeight: { type: Boolean, default: false },
     paused: { type: Boolean, default: false },
+    /** Keep active drag/edit rows mounted even when they leave the viewport. */
+    retainedKeys: { type: Array as PropType<Array<string | number>>, default: () => [] },
     gap: { type: Number, default: 0 },
     overscan: { type: Number, default: 6 },
     loading: { type: Boolean, default: false },
@@ -121,9 +123,14 @@
   );
   const visibleItems = computed(() => {
     const indices = Array.from({ length: Math.max(0, end.value - start.value) }, (_, offset) => start.value + offset);
-    if (props.dynamicHeight && focusedKey.value !== null) {
-      const index = props.items.findIndex((item) => item[props.itemKey] === focusedKey.value);
-      if (index >= 0 && !indices.includes(index)) indices.push(index);
+    if (props.dynamicHeight) {
+      const retained = new Set(props.retainedKeys);
+      if (focusedKey.value !== null) retained.add(focusedKey.value);
+      for (const key of retained) {
+        const index = props.items.findIndex((item) => item[props.itemKey] === key);
+        if (index >= 0 && !indices.includes(index)) indices.push(index);
+      }
+      indices.sort((a, b) => a - b);
     }
     return indices.map((index) => ({ item: props.items[index], index, loaded: index < props.items.length }));
   });
@@ -151,6 +158,15 @@
     rowElements.set(element, index);
     rowObserver?.observe(element);
   }
+  // Scrolling replaces rows without replacing items. Release observer references
+  // after each patch, rather than retaining every row visited in a long session.
+  onUpdated(() => {
+    for (const element of rowElements.keys()) {
+      if (element.isConnected) continue;
+      rowObserver?.unobserve(element);
+      rowElements.delete(element);
+    }
+  });
   function rememberFocus(event: FocusEvent) {
     const row = (event.target as HTMLElement)?.closest<HTMLElement>('[data-virtual-index]');
     if (row) focusedKey.value = rowKey(Number(row.dataset.virtualIndex));

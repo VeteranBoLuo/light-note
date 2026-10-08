@@ -16,6 +16,26 @@ describe('tagSpaceService', () => {
     vi.clearAllMocks();
   });
 
+  it.each([0, 2, 3])('轻量续页只执行列表查询，返回 %i 条时正确判断末页', async (count) => {
+    const rows = Array.from({ length: count }, (_, i) => ({ id: `tag-${i}`, name: `标签 ${i}` }));
+    const db = { query: vi.fn().mockResolvedValue([rows]) };
+    const result = await queryTagSpaceList(db, {
+      userId: 'owner', keyword: '50%', filter: 'note', sort: 'nameAsc',
+      page: 3, pageSize: 2, includeMetadata: false,
+    });
+    expect(db.query).toHaveBeenCalledTimes(1);
+    expect(db.query.mock.calls[0][1]).toEqual([
+      'owner', 'owner', 'owner', 'owner', 'owner', '%50!%%', '%50!%%', 3, 4,
+    ]);
+    expect(db.query.mock.calls[0][0]).toContain('COALESCE(stats.note_count, 0) > 0');
+    expect(result.items.map((item) => item.id)).toEqual(rows.slice(0, 2).map((row) => row.id));
+    expect(result.hasMore).toBe(count > 2);
+    expect(result).toMatchObject({ page: 3, pageSize: 2, keyword: '50%', filter: 'note', sort: 'nameAsc' });
+    expect(result).not.toHaveProperty('total');
+    expect(result).not.toHaveProperty('overview');
+    expect(result).not.toHaveProperty('facets');
+  });
+
   it('在数据库分页并只统计仍存在且属于当前用户的资源', async () => {
     const db = {
       query: vi

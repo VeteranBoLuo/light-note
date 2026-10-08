@@ -7,7 +7,10 @@ import { snapshotOwnedNoteVersion } from './noteService.js';
 import { deleteOwnedNoteSubtrees } from './noteTreeService.js';
 import { softDeleteOwnedCloudFiles } from './cloudFileDeletionService.js';
 import { renameOwnedCloudFile } from './cloudFileRenameService.js';
-export async function applySuggestionMutation(c, { userId, current, payload, value, kind, runId, preparedIcon }) {
+export async function applySuggestionMutation(
+  c,
+  { userId, current, payload, value, kind, runId, preparedIcon, preparation },
+) {
   if (kind === 'tag_icon') {
     if (current.type !== 'tag' || current.iconUrl.trim() || !preparedIcon)
       throw suggestionError('ORGANIZE_ICON_INVALID', '请选择图标，且仅能补全默认图标');
@@ -68,7 +71,13 @@ export async function applySuggestionMutation(c, { userId, current, payload, val
     } else if (current.type === 'bookmark')
       await c.query('UPDATE bookmark SET name=? WHERE id=? AND user_id=? AND del_flag=0', [name, current.id, userId]);
     else {
-      const result = await renameOwnedCloudFile(c, { userId, id: current.id, name, preserveExtension: true });
+      const result = await renameOwnedCloudFile(c, {
+        userId,
+        id: current.id,
+        name,
+        preserveExtension: true,
+        ...(preparation ? { preparation } : {}),
+      });
       return { applied: result.name, cleanup: result.cleanup };
     }
     return { applied: name };

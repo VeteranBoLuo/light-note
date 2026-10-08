@@ -10,7 +10,7 @@ function read(relativePath: string) {
 describe('桌面书签浏览与管理合并契约', () => {
   const homeSource = read('view/home/Home.vue');
   const managementSource = read('components/manage/bookmarkMg/BookmarkTable.vue');
-  const zhLocaleSource = read('i18n/locales/zh-CN.ts');
+  const zhLocaleSource = read('i18n/locales/zh-CN-core.ts');
 
   it('只在真正桌面预挂载管理界面，mode=manage 仅切换显隐，手机和平板保留独立页面', () => {
     expect(homeSource).toContain("String(route.query.mode || '') === 'manage'");

@@ -12,7 +12,8 @@ const params = new URLSearchParams(location.search);
 const pinia = createPinia();
 setActivePinia(pinia);
 // 使用内存文件驱动真实云空间页面，滚动验收不访问业务服务。
-const items = Array.from({ length: 60 }, (_, i) => ({
+const fileCount = Math.min(5000, Math.max(1, Number(params.get('count')) || 60));
+const items = Array.from({ length: fileCount }, (_, i) => ({
   id: String(i + 1),
   fileName: `滚动验收资料 ${i + 1}.zip`,
   fileType: 'application/zip',
@@ -27,7 +28,16 @@ request.defaults.adapter = async (config) => {
   if (url.endsWith('/queryFiles')) {
     if (params.has('slow')) await new Promise((resolve) => setTimeout(resolve, 1500));
     const files = params.has('empty') ? [] : items;
-    data = { items: files, total: files.length, page: 1, hasMore: false };
+    const body = typeof config.data === 'string' ? JSON.parse(config.data) : config.data || {};
+    const page = Math.max(1, Number(body.currentPage) || 1);
+    const pageSize = params.has('paged') ? Math.max(1, Number(body.pageSize) || 48) : files.length;
+    const start = (page - 1) * pageSize;
+    data = {
+      items: files.slice(start, start + pageSize),
+      total: files.length,
+      page,
+      hasMore: start + pageSize < files.length,
+    };
   } else if (url.endsWith('/queryFolder')) data = { items: [], allFileCount: params.has('empty') ? 0 : items.length };
   else if (url.endsWith('/queryTotalFileSize')) data = { totalSizeMB: 1, quotaMB: 1024 };
   return { config, status: 200, statusText: 'OK', headers: {}, data: { status: 200, data } };

@@ -4,8 +4,8 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const source = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), 'components/SettingsGeneralSection.vue'), 'utf8');
-const zhLocaleSource = readFileSync(resolve(process.cwd(), 'src/i18n/locales/zh-CN.ts'), 'utf8');
-const enLocaleSource = readFileSync(resolve(process.cwd(), 'src/i18n/locales/en-US.ts'), 'utf8');
+const zhLocaleSource = readFileSync(resolve(process.cwd(), 'src/i18n/locales/zh-CN-core.ts'), 'utf8');
+const enLocaleSource = readFileSync(resolve(process.cwd(), 'src/i18n/locales/en-US-core.ts'), 'utf8');
 
 describe('设置页浏览器收集入口', () => {
   it('把完整扩展与轻量书签栏收藏作为两种独立方式展示', () => {

@@ -1,4 +1,6 @@
 import pool from '../db/index.js';
+import { buildRelevantSearchQuery, relevanceReason } from '../util/searchRelevancePagination.js';
+import { searchSeekScope, searchOrderKeys, buildSearchSeek, takeSearchSeekRows } from '../util/searchSeekPagination.js';
 import { MAX_EXPLICIT_RESOURCE_SELECTION } from '@lightnote/shared/resource-selection';
 import { resolveExplicitResourceSelection } from '../util/services/resourceSelectionService.js';
 import { resolveCloudFolderTagSelection } from '../util/services/cloudFolderTreeService.js';
@@ -7,11 +9,7 @@ import { resolveFileCategory } from '../util/fileCategory.js';
 import { normalizeTagIds } from '../util/resourceTags.js';
 import { ensureNotVisitor } from '../util/auth.js';
 import { enqueueResources } from '../util/resourceInbox.js';
-import {
-  getNoteTreeChildren,
-  loadOwnedNoteTree,
-  resolveNoteBreadcrumbFromSnapshot,
-} from '../util/services/noteTreeService.js';
+import { resolveOwnedNoteSearchMetadata } from '../util/services/noteTreeService.js';
 import { appendResourceTagFilters } from '../util/services/resourceInventoryService.js';
 import { batchWriteResourceTags, queryOwnedResourceIds } from '../util/services/resourceTagWriteService.js';
 import {
@@ -194,11 +192,13 @@ function normalizeOrderedCursor(value, selectedTypes) {
     const selectedType = selectedTypes[0];
     return {
       type: selectedType,
+      ...(raw.seek ? { seek: raw.seek } : {}),
       offset: rawType === selectedType || rawType === 'all' ? normalizeSearchOffset(raw.offset) : 0,
     };
   }
   return {
     type: selectedTypes.includes(rawType) ? rawType : selectedTypes[0],
+    ...(raw.seek ? { seek: raw.seek } : {}),
     offset: normalizeSearchOffset(raw.offset),
   };
 }
@@ -225,40 +225,56 @@ function searchItemRelevance(item, keyword) {
   return { score: 10 + pending, reason: 'content' };
 }
 
-async function queryRelevantSearchItems({ userId, options, lang, offset, pageSize, selectedTypes = SEARCH_TYPES }) {
-  const candidateLimit = Math.min(offset + pageSize + 1, 500);
-  const results = await Promise.all(
-    selectedTypes.map((type) =>
-      SEARCH_QUERY_BY_TYPE[type](
-        userId,
-        {
-          ...options,
-          pageSize: candidateLimit,
-          offset: 0,
-        },
-        lang,
-        true,
-        false,
-      ),
-    ),
+async function queryRelevantSearchItems({
+  userId,
+  options,
+  lang,
+  cursor,
+  offset,
+  pageSize,
+  selectedTypes = SEARCH_TYPES,
+}) {
+  const query = buildRelevantSearchQuery({
+    userId,
+    options,
+    selectedTypes,
+    cursor,
+    offset,
+    pageSize,
+    definitions: SEARCH_ORDER_DEFINITIONS,
+    filters: Object.fromEntries(selectedTypes.map((type) => [type, SEARCH_FILTER_BY_TYPE[type](userId, options)])),
+  });
+  const [rows] = await pool.query(query.sql, query.params);
+  const anchors = takeSearchSeekRows(rows);
+  const page = rows.slice(0, pageSize);
+  const hydrated = await Promise.all(
+    selectedTypes.map((type) => {
+      const ids = page.filter((item) => item.type === type).map((item) => item.id);
+      return ids.length
+        ? SEARCH_QUERY_BY_TYPE[type](
+            userId,
+            { ...options, materialIds: ids, pageSize: ids.length, offset: 0 },
+            lang,
+            true,
+            false,
+          )
+        : { items: [] };
+    }),
   );
-  const ranked = results
-    .flatMap((result) => result.items)
-    .map((item, index) => {
-      const relevance = searchItemRelevance(item, options.keyword);
-      return {
-        ...item,
-        matchReason: relevance.reason,
-        snippet: item.description || '',
-        _score: relevance.score,
-        _stableIndex: index,
-      };
-    })
-    .sort((a, b) => b._score - a._score || a._stableIndex - b._stableIndex);
-  const items = ranked.slice(offset, offset + pageSize).map(({ _score, _stableIndex, ...item }) => item);
+  const byKey = new Map(hydrated.flatMap((result) => result.items).map((item) => [`${item.type}:${item.id}`, item]));
   return {
-    items,
-    nextCursor: ranked.length > offset + pageSize ? { type: 'all', offset: offset + items.length } : null,
+    items: page.flatMap((row) => {
+      const item = byKey.get(`${row.type}:${row.id}`);
+      return item ? [{ ...item, matchReason: relevanceReason(row.score), snippet: item.description || '' }] : [];
+    }),
+    nextCursor:
+      rows.length > pageSize
+        ? {
+            type: 'all',
+            offset: offset + page.length,
+            seek: { v: 1, scope: query.scope, values: anchors[page.length - 1] },
+          }
+        : null,
   };
 }
 
@@ -286,37 +302,57 @@ function buildDateCondition(column, date) {
   return days ? `${column} >= DATE_SUB(NOW(), INTERVAL ${days} DAY)` : '';
 }
 
-function buildSearchOrder({ sort, keyword, titleColumn, updatedColumn, fallbackOrder, idColumn }) {
-  if (sort === 'name') {
-    return {
-      sql: `LOWER(COALESCE(${titleColumn}, '')) ASC, ${idColumn} DESC`,
-      params: [],
-    };
-  }
-  if (sort === 'updated') {
-    return {
-      sql: `${updatedColumn} DESC, ${idColumn} DESC`,
-      params: [],
-    };
-  }
-  if (keyword) {
-    return {
-      sql: `
-        CASE
-          WHEN LOWER(COALESCE(${titleColumn}, '')) = LOWER(?) THEN 3
-          WHEN LOWER(COALESCE(${titleColumn}, '')) LIKE LOWER(?) THEN 2
-          WHEN LOWER(COALESCE(${titleColumn}, '')) LIKE LOWER(?) THEN 1
-          ELSE 0
-        END DESC,
-        ${fallbackOrder},
-        ${idColumn} DESC
-      `,
-      params: [keyword, `${keyword}%`, `%${keyword}%`],
-    };
-  }
+const SEARCH_ORDER_DEFINITIONS = {
+  bookmark: {
+    titleColumn: 'b.name',
+    updatedColumn: 'b.create_time',
+    fallbackOrder: 'b.is_top DESC, b.sort, b.create_time DESC',
+    idColumn: 'b.id',
+    pin: 'b.is_top',
+    position: 'b.sort',
+    description: 'b.description',
+    url: 'b.url',
+  },
+  note: {
+    titleColumn: 'n.title',
+    updatedColumn: 'COALESCE(n.update_time, n.create_time)',
+    fallbackOrder: 'n.is_top DESC, n.sort, COALESCE(n.update_time, n.create_time) DESC',
+    idColumn: 'n.id',
+    pin: 'n.is_top',
+    position: 'n.sort',
+    description: "IF(n.type = 'drawing', '', n.content)",
+  },
+  file: {
+    titleColumn: 'files.file_name',
+    updatedColumn: 'files.create_time',
+    fallbackOrder: 'files.create_time DESC',
+    idColumn: 'files.id',
+    description: 'folders.name',
+  },
+  tag: {
+    titleColumn: 't.name',
+    updatedColumn: 't.create_time',
+    fallbackOrder: 't.sort, t.create_time DESC',
+    idColumn: 't.id',
+    position: 't.sort',
+    description: 't.description',
+  },
+  todo: {
+    titleColumn: 't.title',
+    updatedColumn: 't.update_time',
+    fallbackOrder: "(t.status = 'pending') DESC, t.due_at IS NULL ASC, t.due_at ASC, t.update_time DESC",
+    idColumn: 't.id',
+    pin: "(t.status = 'pending')",
+    description: 't.description',
+  },
+};
+
+function buildSearchOrder(input) {
+  const keys = searchOrderKeys(input);
   return {
-    sql: `${fallbackOrder}, ${idColumn} DESC`,
-    params: [],
+    keys,
+    sql: keys.map((key) => `${key.sql} ${key.direction}`).join(', '),
+    params: keys.flatMap((key) => key.params || []),
   };
 }
 
@@ -510,6 +546,10 @@ function buildTagSearchFilter(userId, options) {
   const { keyword, tagNames, untagged, date } = options;
   const where = ['t.user_id = ?', 't.del_flag = 0'];
   const params = [userId];
+  if (options.materialIds?.length) {
+    where.push(`t.id IN (${options.materialIds.map(() => '?').join(',')})`);
+    params.push(...options.materialIds);
+  }
   if (keyword) {
     where.push('(t.name LIKE ? OR t.description LIKE ?)');
     const like = buildLike(keyword);
@@ -530,6 +570,7 @@ const SEARCH_FILTER_BY_TYPE = {
   note: buildNoteSearchFilter,
   file: buildFileSearchFilter,
   tag: buildTagSearchFilter,
+  todo: buildTodoSearchFilter,
 };
 
 function normalizeSelectionItems(items, allowedTypes) {
@@ -606,7 +647,7 @@ function chunkItems(items, size = BATCH_CHUNK_SIZE) {
 }
 
 async function queryBookmarks(userId, options, lang, includeItems, includeTotal = true) {
-  const { keyword, sort, pageSize, offset } = options;
+  const { keyword, sort } = options;
   const { whereSql, params } = buildBookmarkSearchFilter(userId, options);
   const countPromise = includeTotal
     ? pool.query(`SELECT COUNT(*) AS total FROM bookmark b WHERE ${whereSql}`, params)
@@ -614,17 +655,11 @@ async function queryBookmarks(userId, options, lang, includeItems, includeTotal 
 
   let rows = [];
   if (includeItems) {
-    const order = buildSearchOrder({
-      sort,
-      keyword,
-      titleColumn: 'b.name',
-      updatedColumn: 'b.create_time',
-      fallbackOrder: 'b.is_top DESC, b.sort, b.create_time DESC',
-      idColumn: 'b.id',
-    });
+    const order = buildSearchOrder({ sort, keyword, ...SEARCH_ORDER_DEFINITIONS.bookmark });
+    const seek = buildSearchSeek(order.keys, options);
     const [result] = await pool.query(
       `
-        SELECT
+        SELECT ${seek.projection}
           b.*,
           (
             SELECT JSON_ARRAYAGG(JSON_OBJECT('id', t.id, 'name', t.name))
@@ -637,17 +672,19 @@ async function queryBookmarks(userId, options, lang, includeItems, includeTotal 
               AND t.del_flag = 0
           ) AS tag_list
         FROM bookmark b
-        WHERE ${whereSql}
+        WHERE ${whereSql}${seek.where}
         ORDER BY ${order.sql}
-        LIMIT ? OFFSET ?
+        ${seek.limitSql}
       `,
-      [userId, userId, ...params, ...order.params, pageSize, offset],
+      [...seek.selectParams, userId, userId, ...params, ...seek.whereParams, ...order.params, ...seek.limitParams],
     );
     rows = result;
   }
   const [totalRows] = countPromise ? await countPromise : [[]];
   const text = getSearchText(lang);
+  const seekValues = takeSearchSeekRows(rows);
   return {
+    seekValues,
     total: Number(totalRows?.[0]?.total || 0),
     items: rows.map((item) => ({
       id: toText(item.id),
@@ -665,26 +702,20 @@ async function queryBookmarks(userId, options, lang, includeItems, includeTotal 
 }
 
 async function queryNotes(userId, options, lang, includeItems, includeTotal = true) {
-  const { keyword, sort, pageSize, offset } = options;
+  const { keyword, sort } = options;
   const { whereSql, params } = buildNoteSearchFilter(userId, options);
   const countPromise = includeTotal
     ? pool.query(`SELECT COUNT(*) AS total FROM note n WHERE ${whereSql}`, params)
     : null;
 
   let rows = [];
-  let treeSnapshot = null;
+  let treeMetadata = new Map();
   if (includeItems) {
-    const order = buildSearchOrder({
-      sort,
-      keyword,
-      titleColumn: 'n.title',
-      updatedColumn: 'COALESCE(n.update_time, n.create_time)',
-      fallbackOrder: 'n.is_top DESC, n.sort, COALESCE(n.update_time, n.create_time) DESC',
-      idColumn: 'n.id',
-    });
+    const order = buildSearchOrder({ sort, keyword, ...SEARCH_ORDER_DEFINITIONS.note });
+    const seek = buildSearchSeek(order.keys, options);
     const [result] = await pool.query(
       `
-        SELECT
+        SELECT ${seek.projection}
           n.id,
           n.title,
           IF(n.type = 'drawing', '', n.content) AS content,
@@ -711,43 +742,31 @@ async function queryNotes(userId, options, lang, includeItems, includeTotal = tr
               AND nt.del_flag = 0
           ) AS tags
         FROM note n
-        WHERE ${whereSql}
+        WHERE ${whereSql}${seek.where}
         ORDER BY ${order.sql}
-        LIMIT ? OFFSET ?
+        ${seek.limitSql}
       `,
-      [userId, userId, ...params, ...order.params, pageSize, offset],
+      [...seek.selectParams, userId, userId, ...params, ...seek.whereParams, ...order.params, ...seek.limitParams],
     );
     rows = result;
-    // 搜索结果要用路径区分重名页面，并为 AI 目录候选提供权威后代数量。
-    // 只读取当前 owner 的轻量树元数据；正文与后代 ID 不进入搜索响应。
-    treeSnapshot = await loadOwnedNoteTree(userId);
+    // Paths and subtree counts are scoped to the returned page; descendants are never hydrated as search results.
+    treeMetadata = await resolveOwnedNoteSearchMetadata({ userId, noteIds: rows.map((row) => row.id) });
   }
   const [totalRows] = countPromise ? await countPromise : [[]];
   const text = getSearchText(lang);
+  const seekValues = takeSearchSeekRows(rows);
   return {
+    seekValues,
     total: Number(totalRows?.[0]?.total || 0),
     items: rows.map((item) => {
       const id = toText(item.id);
-      let path = '';
-      let childCount = 0;
-      let descendantCount = 0;
-      if (treeSnapshot?.nodesById?.has(id)) {
-        const breadcrumb = resolveNoteBreadcrumbFromSnapshot(treeSnapshot, id);
-        path = breadcrumb
-          .slice(0, -1)
-          .map((node) => toText(node.title) || text.unnamedNote)
-          .join(' / ');
-        childCount = getNoteTreeChildren(treeSnapshot, id).length;
-        const queue = [...getNoteTreeChildren(treeSnapshot, id)];
-        const visited = new Set();
-        while (queue.length) {
-          const node = queue.shift();
-          if (!node || visited.has(node.id)) continue;
-          visited.add(node.id);
-          descendantCount += 1;
-          queue.push(...getNoteTreeChildren(treeSnapshot, node.id));
-        }
-      }
+      const metadata = treeMetadata.get(id);
+      const path = (metadata?.items || [])
+        .slice(0, -1)
+        .map((node) => toText(node.title) || text.unnamedNote)
+        .join(' / ');
+      const childCount = metadata?.childCount || 0;
+      const descendantCount = metadata?.descendantCount || 0;
       return {
         id,
         type: 'note',
@@ -767,7 +786,7 @@ async function queryNotes(userId, options, lang, includeItems, includeTotal = tr
 }
 
 async function queryFiles(userId, options, lang, includeItems, includeTotal = true) {
-  const { keyword, sort, pageSize, offset } = options;
+  const { keyword, sort } = options;
   const { whereSql, params } = buildFileSearchFilter(userId, options);
   const countPromise = includeTotal
     ? pool.query(
@@ -778,17 +797,11 @@ async function queryFiles(userId, options, lang, includeItems, includeTotal = tr
 
   let rows = [];
   if (includeItems) {
-    const order = buildSearchOrder({
-      sort,
-      keyword,
-      titleColumn: 'files.file_name',
-      updatedColumn: 'files.create_time',
-      fallbackOrder: 'files.create_time DESC',
-      idColumn: 'files.id',
-    });
+    const order = buildSearchOrder({ sort, keyword, ...SEARCH_ORDER_DEFINITIONS.file });
+    const seek = buildSearchSeek(order.keys, options);
     const [result] = await pool.query(
       `
-        SELECT files.*, folders.name AS folder_name,
+        SELECT ${seek.projection} files.*, folders.name AS folder_name,
           (
             SELECT JSON_ARRAYAGG(JSON_OBJECT('id', ft.id, 'name', ft.name))
             FROM resource_tag_relations ftr
@@ -801,17 +814,19 @@ async function queryFiles(userId, options, lang, includeItems, includeTotal = tr
           ) AS tags
         FROM files
         LEFT JOIN folders ON files.folder_id = folders.id
-        WHERE ${whereSql}
+        WHERE ${whereSql}${seek.where}
         ORDER BY ${order.sql}
-        LIMIT ? OFFSET ?
+        ${seek.limitSql}
       `,
-      [userId, userId, ...params, ...order.params, pageSize, offset],
+      [...seek.selectParams, userId, userId, ...params, ...seek.whereParams, ...order.params, ...seek.limitParams],
     );
     rows = result;
   }
   const [totalRows] = countPromise ? await countPromise : [[]];
   const text = getSearchText(lang);
+  const seekValues = takeSearchSeekRows(rows);
   return {
+    seekValues,
     total: Number(totalRows?.[0]?.total || 0),
     items: rows.map((item) => ({
       id: toText(item.id),
@@ -831,7 +846,7 @@ async function queryFiles(userId, options, lang, includeItems, includeTotal = tr
 }
 
 async function queryTags(userId, options, lang, includeItems, includeTotal = true) {
-  const { keyword, sort, pageSize, offset } = options;
+  const { keyword, sort } = options;
   const { whereSql, params } = buildTagSearchFilter(userId, options);
   const countPromise = includeTotal
     ? pool.query(`SELECT COUNT(*) AS total FROM tag t WHERE ${whereSql}`, params)
@@ -839,31 +854,27 @@ async function queryTags(userId, options, lang, includeItems, includeTotal = tru
 
   let rows = [];
   if (includeItems) {
-    const order = buildSearchOrder({
-      sort,
-      keyword,
-      titleColumn: 't.name',
-      updatedColumn: 't.create_time',
-      fallbackOrder: 't.sort, t.create_time DESC',
-      idColumn: 't.id',
-    });
+    const order = buildSearchOrder({ sort, keyword, ...SEARCH_ORDER_DEFINITIONS.tag });
+    const seek = buildSearchSeek(order.keys, options);
     const [result] = await pool.query(
       `
-        SELECT t.*, COUNT(r.resource_id) AS resource_count
+        SELECT ${seek.projection} t.*, COUNT(r.resource_id) AS resource_count
         FROM tag t
         LEFT JOIN resource_tag_relations r ON t.id = r.tag_id AND r.user_id = ?
-        WHERE ${whereSql}
+        WHERE ${whereSql}${seek.where}
         GROUP BY t.id
         ORDER BY ${order.sql}
-        LIMIT ? OFFSET ?
+        ${seek.limitSql}
       `,
-      [userId, ...params, ...order.params, pageSize, offset],
+      [...seek.selectParams, userId, ...params, ...seek.whereParams, ...order.params, ...seek.limitParams],
     );
     rows = result;
   }
   const [totalRows] = countPromise ? await countPromise : [[]];
   const text = getSearchText(lang);
+  const seekValues = takeSearchSeekRows(rows);
   return {
+    seekValues,
     total: Number(totalRows?.[0]?.total || 0),
     items: rows.map((item) => ({
       id: toText(item.id),
@@ -926,13 +937,17 @@ function buildTodoExtra(item, text) {
 }
 
 // 待办使用独立标签关系参与全局搜索；不进入资料批量语义。
-async function queryTodos(userId, options, lang, includeItems, includeTotal = true) {
-  const { keyword, tagNames, untagged, date, sort, pageSize, offset } = options;
+function buildTodoSearchFilter(userId, options) {
+  const { keyword, tagNames, untagged, date } = options;
   const todoStatus = normalizeTodoStatus(options.todoStatus);
   const todoPriorities = normalizeTodoPriorities(options.todoPriorities);
   const todoDue = normalizeTodoDue(options.todoDue);
   const where = ['t.user_id = ?', 't.del_flag = 0'];
   const params = [userId];
+  if (options.materialIds?.length) {
+    where.push(`t.id IN (${options.materialIds.map(() => '?').join(',')})`);
+    params.push(...options.materialIds);
+  }
   if (keyword) {
     const like = buildLike(keyword);
     where.push(
@@ -960,24 +975,23 @@ async function queryTodos(userId, options, lang, includeItems, includeTotal = tr
   const dateCondition = buildDateCondition('t.update_time', date);
   if (dateCondition) where.push(dateCondition);
   const whereSql = where.join(' AND ');
+  return { fromSql: 'todo_items t', idColumn: 't.id', whereSql, params };
+}
+
+async function queryTodos(userId, options, lang, includeItems, includeTotal = true) {
+  const { keyword, sort } = options;
+  const { whereSql, params } = buildTodoSearchFilter(userId, options);
   const countPromise = includeTotal
     ? pool.query(`SELECT COUNT(*) AS total FROM todo_items t WHERE ${whereSql}`, params)
     : null;
 
   let rows = [];
   if (includeItems) {
-    const order = buildSearchOrder({
-      sort,
-      keyword,
-      titleColumn: 't.title',
-      updatedColumn: 't.update_time',
-      // 未完成优先只在同一相关度档位内生效，紧接着才是截止时间与更新时间
-      fallbackOrder: "(t.status = 'pending') DESC, t.due_at IS NULL ASC, t.due_at ASC, t.update_time DESC",
-      idColumn: 't.id',
-    });
+    const order = buildSearchOrder({ sort, keyword, ...SEARCH_ORDER_DEFINITIONS.todo });
+    const seek = buildSearchSeek(order.keys, options);
     const [result] = await pool.query(
       `
-        SELECT
+        SELECT ${seek.projection}
           t.id,
           t.title,
           t.description,
@@ -993,17 +1007,19 @@ async function queryTodos(userId, options, lang, includeItems, includeTotal = tr
             WHERE r.todo_id = t.id AND r.user_id = ?
           ) AS reference_count
         FROM todo_items t
-        WHERE ${whereSql}
+        WHERE ${whereSql}${seek.where}
         ORDER BY ${order.sql}
-        LIMIT ? OFFSET ?
+        ${seek.limitSql}
       `,
-      [userId, ...params, ...order.params, pageSize, offset],
+      [...seek.selectParams, userId, ...params, ...seek.whereParams, ...order.params, ...seek.limitParams],
     );
     rows = result;
   }
   const [totalRows] = countPromise ? await countPromise : [[]];
   const text = getSearchText(lang);
+  const seekValues = takeSearchSeekRows(rows);
   return {
+    seekValues,
     total: Number(totalRows?.[0]?.total || 0),
     items: rows.map((item) => ({
       id: toText(item.id),
@@ -1129,21 +1145,25 @@ async function queryOrderedSearchItems({ userId, options, lang, selectedTypes, c
   const orderedTypes = selectedTypes;
   let typeIndex = Math.max(0, orderedTypes.indexOf(cursor.type));
   let typeOffset = cursor.offset;
+  let typeSeek = cursor.seek;
   let remaining = pageSize;
   const items = [];
   let nextCursor = null;
 
   while (remaining > 0 && typeIndex < orderedTypes.length) {
     const type = orderedTypes[typeIndex];
+    const seekScope = searchSeekScope(userId, options, selectedTypes, type);
     const queryType = SEARCH_QUERY_BY_TYPE[type];
     // 多取一条只用于判断当前类型是否仍有下一页；额外行不会进入响应，
-    // 下一批会从当前已返回数量对应的 offset 继续读取。
+    // 新游标按完整排序键续查；offset 保留供旧游标及元数据进度兼容。
     const result = await queryType(
       userId,
       {
         ...options,
         pageSize: remaining + 1,
         offset: typeOffset,
+        orderedSeekScope: seekScope,
+        cursorSeek: typeSeek,
       },
       lang,
       true,
@@ -1155,12 +1175,14 @@ async function queryOrderedSearchItems({ userId, options, lang, selectedTypes, c
     remaining -= pageItems.length;
 
     if (result.items.length > pageItems.length) {
-      nextCursor = { type, offset: typeOffset };
+      const values = result.seekValues?.[pageItems.length - 1];
+      nextCursor = { type, offset: typeOffset, ...(values ? { seek: { v: 1, scope: seekScope, values } } : {}) };
       break;
     }
 
     typeIndex += 1;
     typeOffset = 0;
+    typeSeek = undefined;
     if (remaining === 0 && typeIndex < orderedTypes.length) {
       nextCursor = { type: orderedTypes[typeIndex], offset: 0 };
     }
@@ -1351,8 +1373,12 @@ export const globalSearch = async (req, res) => {
 
     if (paginationMode !== 'perType') {
       const cursor = normalizeOrderedCursor(req.body?.cursor, selectedTypes);
-      const includeMetadata = req.body?.includeMetadata !== false;
       const useGlobalRelevance = Boolean(keyword) && options.sort === 'relevance' && selectedTypes.length > 1;
+      const cursorKind = paginationMode === 'ordered' && useGlobalRelevance ? 'relevance' : cursor.type;
+      if (cursor.seek && cursor.seek.scope !== searchSeekScope(userId, options, selectedTypes, cursorKind)) {
+        throw Object.assign(new Error('Invalid search cursor scope'), { code: 'SEARCH_CURSOR_INVALID' });
+      }
+      const includeMetadata = req.body?.includeMetadata !== false;
       const relevanceOffset = req.body?.cursor?.type === 'all' ? normalizeSearchOffset(req.body.cursor.offset) : 0;
       const orderedItemsPromise =
         paginationMode === 'global'
@@ -1362,6 +1388,7 @@ export const globalSearch = async (req, res) => {
                 userId,
                 options,
                 lang,
+                cursor: req.body?.cursor,
                 offset: relevanceOffset,
                 pageSize,
                 selectedTypes,

@@ -21,7 +21,7 @@ vi.mock('@/api/toolbox', () => ({
 }));
 vi.mock('@/components/base/BasicComponents/BModal/Alert', () => ({ default: { alert: vi.fn() } }));
 vi.mock('@/api/translationStream', () => ({ streamTranslation: mocks.job }));
-vi.mock('@/utils/aiMessageRender', () => ({ renderStreamingMarkdown: (text: string) => text }));
+vi.mock('@/utils/aiMessageRender', () => ({ createStreamingMarkdownRenderer: () => (text: string) => text }));
 vi.mock('@/utils/saveToolboxNote', () => ({ saveToolboxNote: mocks.save }));
 vi.mock('@/store', () => ({ useUserStore: () => ({ id: 'owner' }) }));
 vi.mock('@/api/noteDetailPrefetch', () => ({ buildNoteDetailRequestScope: () => 'owner' }));

@@ -573,6 +573,7 @@ export async function queryTagSpaceList(
     filter = 'all',
     sort = 'recent',
     includeEmpty = false,
+    includeMetadata = true,
     page = 1,
     pageSize = DEFAULT_PAGE_SIZE,
   } = {},
@@ -589,7 +590,8 @@ export async function queryTagSpaceList(
 
   const rowParams = [ownerId, ownerId, ownerId, ownerId, ownerId];
   const keywordCondition = buildKeywordCondition(normalizedKeyword, rowParams);
-  rowParams.push(normalizedPageSize, offset);
+  // 续页通过多读一条判断末页，不重复扫描整个账号计算分面与覆盖率。
+  rowParams.push(normalizedPageSize + (includeMetadata === false ? 1 : 0), offset);
   const rowsPromise = db.query(
     `SELECT ${TAG_SUMMARY_COLUMNS}
      FROM tag t
@@ -601,6 +603,19 @@ export async function queryTagSpaceList(
      LIMIT ? OFFSET ?`,
     rowParams,
   );
+  if (includeMetadata === false) {
+    const [rows] = await rowsPromise;
+    return {
+      items: (rows || []).slice(0, normalizedPageSize).map(normalizeSummaryRow),
+      page: normalizedPage,
+      pageSize: normalizedPageSize,
+      hasMore: (rows || []).length > normalizedPageSize,
+      filter: normalizedFilter,
+      sort: normalizedSort,
+      keyword: normalizedKeyword,
+      includeEmpty: normalizedIncludeEmpty,
+    };
+  }
   const scopedFacetsPromise = queryFacetSummary(db, { userId: ownerId, keyword: normalizedKeyword });
   const overallFacetsPromise = normalizedKeyword ? queryFacetSummary(db, { userId: ownerId }) : scopedFacetsPromise;
   const coveredPromise = queryCoveredResourceCounts(db, ownerId);

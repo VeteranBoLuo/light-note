@@ -8,6 +8,7 @@ const reverseStamp = (sql) => `LPAD(99999999999999 - CAST(${stamp(sql)} AS UNSIG
 const attention = "(i.status = 'pending' AND (i.priority = 2 OR i.due_at < NOW()))";
 const scheduled =
   "(i.status = 'pending' AND i.plan_version = 2 AND s.id IS NOT NULL AND s.repeat_mode IN ('scheduled', 'after_completion'))";
+const nodeIdentity = `IF(${scheduled}, CONCAT('series:', i.series_id), CONCAT('todo:', i.id))`;
 
 export function workspaceGrouped(input) {
   return (
@@ -137,7 +138,7 @@ export function workspaceNodeQuery(userId, raw, clocks = []) {
     ? `CASE WHEN i.status = 'completed' THEN 'completed' WHEN ${attention} THEN 'focus' ELSE COALESCE(i.list_id, 'unassigned') END`
     : "'all'";
   // A series appears once in the current filtered result. Any attention occurrence promotes the whole summary.
-  const node = `IF(${scheduled}, CONCAT('series:', i.series_id), CONCAT('todo:', i.id))`;
+  const node = nodeIdentity;
   const clockJoin = clocks.length
     ? `LEFT JOIN (${clocks.map(() => 'SELECT ? AS timezone, CAST(? AS DATETIME) AS localNow').join(' UNION ALL ')}) clock ON clock.timezone = COALESCE(i.instance_timezone, s.timezone)`
     : '';
@@ -156,19 +157,62 @@ export function workspaceNodeQuery(userId, raw, clocks = []) {
     SUBSTRING_INDEX(MIN(representativeOrder), '|', -1) AS representativeId FROM (${members}) membership GROUP BY nodeKey`;
   return { input, params: [...clocks.flat(), ...filter.params], sql: grouped };
 }
+function directMembership(userId, input) {
+  const filter = filterSql(userId, input);
+  return {
+    sql: `FROM todo_items i LEFT JOIN todo_series s ON s.id = i.series_id AND s.user_id = i.user_id
+      WHERE ${filter.where.join(' AND ')}`,
+    params: filter.params,
+  };
+}
+
+export function workspaceNodeCountQuery(userId, raw) {
+  const input = normalize(raw);
+  const members = directMembership(userId, input);
+  if (!workspaceGrouped(input)) {
+    return {
+      sql: `SELECT COUNT(DISTINCT ${nodeIdentity}) AS total ${members.sql} AND ? = 'all'`,
+      params: [...members.params, input.groupKey],
+    };
+  }
+  if (input.groupKey === 'focus') {
+    // Any matching focus member promotes its node. Preserve even legacy list IDs
+    // named "focus", which the original CASE also placed in this group.
+    return {
+      sql: `SELECT COUNT(DISTINCT ${nodeIdentity}) AS total ${members.sql}
+        AND (${attention} OR (i.status = 'pending' AND i.list_id = 'focus'))`,
+      params: members.params,
+    };
+  }
+  // Other groups may depend on which dated occurrence represents a mixed-list
+  // series. Keep the full grouping semantics for those counts.
+  return null;
+}
+
 export async function todoWorkspaceGroups(db, userId, raw) {
-  normalize(raw);
-  const query = workspaceNodeQuery(userId, raw, await workspaceClocks(db, userId));
-  const [rows] = await db.query(
-    `SELECT groupKey AS \`key\`, COUNT(*) AS nodeCount, SUM(instanceCount) AS instanceCount FROM (${query.sql}) nodes GROUP BY groupKey ORDER BY CASE groupKey WHEN 'focus' THEN 0 WHEN 'completed' THEN 2 ELSE 1 END, groupKey`,
-    query.params,
-  );
+  const input = normalize(raw);
+  let rows;
+  if (!workspaceGrouped(input)) {
+    const members = directMembership(userId, input);
+    [rows] = await db.query(
+      `SELECT 'all' AS \`key\`, COUNT(DISTINCT ${nodeIdentity}) AS nodeCount, COUNT(*) AS instanceCount
+        ${members.sql} HAVING COUNT(*) > 0`,
+      members.params,
+    );
+  } else {
+    const query = workspaceNodeQuery(userId, input, await workspaceClocks(db, userId));
+    [rows] = await db.query(
+      `SELECT groupKey AS \`key\`, COUNT(*) AS nodeCount, SUM(instanceCount) AS instanceCount FROM (${query.sql}) nodes GROUP BY groupKey ORDER BY CASE groupKey WHEN 'focus' THEN 0 WHEN 'completed' THEN 2 ELSE 1 END, groupKey`,
+      query.params,
+    );
+  }
   return {
     groups: rows.map((row) => ({ ...row, nodeCount: Number(row.nodeCount), instanceCount: Number(row.instanceCount) })),
     items: [],
     nextCursor: null,
   };
 }
+
 function nodeOrder(sort) {
   const at = 'COALESCE(r.occurrence_date, r.start_at, r.due_at)';
   const created = 'COALESCE(s.create_time, r.create_time)';
@@ -216,10 +260,11 @@ export async function todoWorkspaceGroupPage(db, userId, raw) {
       input.limit + 1,
     ],
   );
-  const [[count]] = await db.query(`SELECT COUNT(*) AS total FROM (${query.sql}) nodes WHERE groupKey = ?`, [
-    ...query.params,
-    input.groupKey,
-  ]);
+  const countQuery = workspaceNodeCountQuery(userId, input) || {
+    sql: `SELECT COUNT(*) AS total FROM (${query.sql}) nodes WHERE groupKey = ?`,
+    params: [...query.params, input.groupKey],
+  };
+  const [[count]] = await db.query(countQuery.sql, countQuery.params);
   const more = rows.length > input.limit;
   const page = rows.slice(0, input.limit);
   const hydrated = page.length

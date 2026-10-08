@@ -1,3 +1,4 @@
+import { acquireAccountAiLifecycleConnection } from '../util/accountAiLifecycleLock.js';
 import pool from '../db/index.js';
 import { resultData } from '../util/common.js';
 import { removeUserSessions } from '../util/sessionStore.js';
@@ -43,7 +44,10 @@ async function appendFailureAudit(context, error) {
 }
 
 function sendAdminActionError(res, error, fallbackMessage) {
-  const response = adminActionErrorResponse(error, fallbackMessage);
+  const response =
+    error?.code === 'AI_ACCOUNT_LIFECYCLE_BUSY'
+      ? { code: error.code, status: 503, message: error.message }
+      : adminActionErrorResponse(error, fallbackMessage);
   return res.send(resultData({ code: response.code }, response.status, response.message));
 }
 
@@ -53,13 +57,14 @@ export async function updateAdminUser(req, res) {
   if (!targetUserId) return res.send(resultData(null, 400, '缺少目标用户'));
   let actionContext = null;
   let connection = null;
+  let releaseLifecycle;
   try {
     actionContext = await beginAdminAction(req, {
       action: 'user.update',
       targetId: targetUserId,
       expectedConfirmText: resolveExpectedConfirmText('update', req.body?.confirmText),
     });
-    connection = await pool.getConnection();
+    ({ connection, releaseLifecycle } = await acquireAccountAiLifecycleConnection(pool, targetUserId));
     await connection.beginTransaction();
     const [rows] = await connection.query('SELECT id, alias, email, role, del_flag FROM user WHERE id = ? FOR UPDATE', [
       targetUserId,
@@ -120,6 +125,7 @@ export async function updateAdminUser(req, res) {
     await appendFailureAudit(actionContext, error);
     return sendAdminActionError(res, error, '修改用户失败');
   } finally {
+    await releaseLifecycle?.();
     connection?.release();
   }
 }
@@ -128,18 +134,16 @@ async function setAdminUserDisabled(req, res, disabled) {
   const targetUserId = String(req.body?.userId || '').trim();
   if (!targetUserId) return res.send(resultData(null, 400, '缺少目标用户'));
   const action = disabled ? 'user.delete' : 'user.restore';
-  const expectedConfirmText = resolveExpectedConfirmText(
-    disabled ? 'disable' : 'restore',
-    req.body?.confirmText,
-  );
+  const expectedConfirmText = resolveExpectedConfirmText(disabled ? 'disable' : 'restore', req.body?.confirmText);
   let actionContext = null;
   let connection = null;
+  let releaseLifecycle;
   try {
     actionContext = await beginAdminAction(req, { action, targetId: targetUserId, expectedConfirmText });
     if (targetUserId === req.user.id) {
       throw new AdminActionError('ADMIN_SELF_DISABLE_FORBIDDEN', '不能停用或恢复自己的账号', 409);
     }
-    connection = await pool.getConnection();
+    ({ connection, releaseLifecycle } = await acquireAccountAiLifecycleConnection(pool, targetUserId));
     await connection.beginTransaction();
     const [rows] = await connection.query('SELECT id, role, del_flag FROM user WHERE id = ? FOR UPDATE', [
       targetUserId,
@@ -193,6 +197,7 @@ async function setAdminUserDisabled(req, res, disabled) {
     await appendFailureAudit(actionContext, error);
     return sendAdminActionError(res, error, disabled ? '停用用户失败' : '恢复用户失败');
   } finally {
+    await releaseLifecycle?.();
     connection?.release();
   }
 }

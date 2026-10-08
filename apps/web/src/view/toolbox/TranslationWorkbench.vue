@@ -120,7 +120,7 @@
               <article
                 v-else-if="originalText"
                 class="translation-prose"
-                v-html="renderStreamingMarkdown(originalText)"
+                v-html="originalHtml"
               ></article>
               <p v-if="mode === 'resource'" class="translation-source-hint">{{ t('translation.availableText') }}</p>
             </div>
@@ -134,7 +134,7 @@
               <article
                 v-if="showResult"
                 class="translation-prose"
-                v-html="renderStreamingMarkdown(artifact?.content ?? streamedText)"
+                v-html="translatedHtml"
               ></article>
               <div v-else class="translation-empty"
                 ><SvgIcon :src="icon.resource.note" size="36" /><strong>{{ t('translation.emptyTitle') }}</strong
@@ -239,7 +239,7 @@
   import { saveToolboxNote } from '@/utils/saveToolboxNote';
   import { copyTextToClipboard } from '@/utils/clipboard';
   import type { TranslationPair } from '@/utils/translationResult';
-  import { renderStreamingMarkdown } from '@/utils/aiMessageRender';
+  import { createStreamingMarkdownRenderer } from '@/utils/aiMessageRender';
   import TranslationHistory from './components/TranslationHistory.vue';
   import ResourcePickerPanel from '@/components/resourcePicker/ResourcePickerPanel.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
@@ -259,6 +259,10 @@
     sourceOpen = ref(false),
     stopping = ref(false);
   const showResult = computed(() => busy.value || !!artifact.value || !!streamedText.value || uncertain.value);
+  const renderOriginal = createStreamingMarkdownRenderer();
+  const renderTranslation = createStreamingMarkdownRenderer();
+  const originalHtml = computed(() => renderOriginal(originalText.value));
+  const translatedHtml = computed(() => renderTranslation(artifact.value?.content ?? streamedText.value));
   const outputScroll = ref<HTMLElement | null>(null);
   let followOutput = true;
   function trackOutputScroll() {

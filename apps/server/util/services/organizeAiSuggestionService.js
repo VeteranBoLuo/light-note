@@ -1190,8 +1190,8 @@ async function processClaimedBatch(database, job, identity, dependencies = {}) {
           ['queued', 'running'],
         );
         try {
-          // Provider 外发必须与账号注销使用同一 user 行锁。单纯“调用前再 SELECT”仍有
-          // 检查后注销提交、随后外发的竞态；行锁覆盖调用才能在多实例间真正封住窗口。
+          // Provider 外发与账号注销共用生命周期锁。单纯“调用前再 SELECT”仍有
+          // 检查后注销提交、随后外发的竞态；独立屏障不阻塞普通账号行写入。
           const withDispatch = dependencies.withActiveUserAiDispatch || withActiveUserAiDispatch;
           const result = validateSuggestionModelResult(
             await withDispatch(database, job.userId, async () => {

@@ -361,3 +361,40 @@ it('分组与精简建议不共用缓存', async () => {
   expect(mocks.apiBasePost).toHaveBeenCalledTimes(2);
   expect(mocks.apiBasePost.mock.calls[1][1].suggestLayout).toBe('grouped');
 });
+
+it('preserves ordered seek values in both directions while retaining the legacy offset', async () => {
+  const cursor = {
+    type: 'bookmark' as const,
+    offset: 25000,
+    seek: { v: 1 as const, scope: 'a'.repeat(64), values: [3, null, '2026-09-01 00:00:00.000001', '9007199254740993'] },
+  };
+  mocks.apiBasePost.mockResolvedValueOnce({ status: 200, data: { items: [], nextCursor: cursor, hasMore: true } });
+  const result = await fetchGlobalSearch('alpha', 40, true, {
+    paginationMode: 'ordered',
+    types: ['bookmark'],
+    cursor,
+    includeMetadata: false,
+  });
+  expect(mocks.apiBasePost).toHaveBeenLastCalledWith('/api/search/global', expect.objectContaining({ cursor }));
+  expect(result.nextCursor).toEqual(cursor);
+});
+
+it('round-trips cross-type relevance cursors without dropping sort keys or requiring material cursor fields', async () => {
+  const cursor = {
+    type: 'all' as const,
+    offset: 520,
+    seek: {
+      v: 1 as const,
+      scope: 'b'.repeat(64),
+      values: [32, 4, 0, 1, 0, 0, '2026-09-01 00:00:00.000001', null, '0', 'todo-1'],
+    },
+  };
+  mocks.apiBasePost.mockResolvedValueOnce({ status: 200, data: { items: [], nextCursor: cursor, hasMore: true } });
+  const result = await fetchGlobalSearch('needle', 40, true, {
+    paginationMode: 'ordered',
+    types: ['bookmark', 'todo'],
+    cursor,
+  });
+  expect(mocks.apiBasePost).toHaveBeenLastCalledWith('/api/search/global', expect.objectContaining({ cursor }));
+  expect(result.nextCursor).toEqual(cursor);
+});

@@ -8,155 +8,160 @@
     @touchend.passive="pullRefresh.onTouchEnd"
     @touchcancel.passive="pullRefresh.onTouchCancel"
   >
-    <div
+    <CloudVirtualGrid
       v-if="viewMode === 'card' && (cloud.loading || cloud.fileList.length)"
       class="file-card-grid"
-      data-mobile-resource-scroll
-      @scroll.passive="onFileListScroll"
+      :items="cloud.fileList"
+      :retained-keys="retainedFileKeys"
+      :loading="cloud.loading || cloud.loadingMore"
+      :has-more="cloud.fileHasMore"
+      @load-more="cloud.loadMoreFiles()"
     >
-      <BActionMenu
-        :ref="(menu) => setFileContextMenu(item.id, menu)"
-        :items="desktopFileActions(item)"
-        :triggers="['contextmenu']"
-        :disabled="bookmark.isMobile || batchMode || Boolean(item.isRename)"
-        :aria-label="item.fileName"
-        :tabindex="bookmark.isMobile || batchMode ? undefined : 0"
-        @select="handleFileAction(item, $event)"
-        v-for="item in cloud.fileList"
-        :key="item.id"
-        class="file-card"
-        :class="{
-          'file-card--draggable': canDragFile(item),
-          'file-card--batch': batchMode,
-          'file-card--selected': batchMode && selectedRows.includes(item.id),
-        }"
-        :draggable="canDragFile(item)"
-        @click="
-          closeFileContext(item);
-          onCardClick(item);
-        "
-        @dragstart="onFileDragStart($event, item)"
-        @dragend="onFileDragEnd"
-      >
-        <div class="file-card-cover">
-          <span v-if="batchMode" class="card-checkbox" @click.stop>
-            <BCheckbox
-              controlled
-              :checked="selectedRows.includes(String(item.id))"
-              :disabled="selection.busy.value || cloud.loading"
-              @update:checked="(val: boolean) => toggleRow(item.id, val)"
-            />
-          </span>
-          <ManagedImagePreview
-            v-if="isPreviewableImage(item)"
-            :source="{ sourceType: 'cloud_file', sourceId: String(item.id) }"
-            :initial="item.imagePreview"
-            :original-url="item.fileUrl"
-            :original-bytes="item.fileSize"
-            class="file-card-thumb"
-            :alt="item.fileName"
-            loading="lazy"
-            decoding="async"
-          />
-          <ManagedImagePreview
-            v-else-if="/\.mp3$/i.test(item.fileName || '')"
-            :source="{ sourceType: 'cloud_file', sourceId: String(item.id) }"
-            :initial="item.imagePreview"
-            class="file-card-thumb file-card-audio-cover"
-            :alt="item.fileName"
-          >
-            <template #fallback>
-              <div class="file-card-placeholder file-card-placeholder--audio">
-                <div class="file-card-placeholder-inner">
-                  <SvgIcon :src="icon.cloudSpace.fileIcon.audio" size="34" />
-                  <span>{{ getFilePreviewLabel(item) }}</span>
-                </div>
-              </div>
-            </template>
-          </ManagedImagePreview>
-          <div v-else-if="getFileCategory(item) === 'video'" class="file-card-video-preview">
+      <template #default="{ item }">
+        <BActionMenu
+          :ref="(menu) => setFileContextMenu(item.id, menu)"
+          :items="desktopFileActions(item)"
+          :triggers="['contextmenu']"
+          :disabled="bookmark.isMobile || batchMode || Boolean(item.isRename)"
+          :aria-label="item.fileName"
+          :tabindex="bookmark.isMobile || batchMode ? undefined : 0"
+          @select="handleFileAction(item, $event)"
+          :key="item.id"
+          class="file-card"
+          :data-cloud-file-id="item.id"
+          :class="{
+            'file-card--draggable': canDragFile(item),
+            'file-card--batch': batchMode,
+            'file-card--selected': batchMode && selectedRows.includes(item.id),
+          }"
+          :draggable="canDragFile(item)"
+          @click="
+            closeFileContext(item);
+            onCardClick(item);
+          "
+          @dragstart="onFileDragStart($event, item)"
+          @dragend="onFileDragEnd"
+        >
+          <div class="file-card-cover">
+            <span v-if="batchMode" class="card-checkbox" @click.stop>
+              <BCheckbox
+                controlled
+                :checked="selectedRows.includes(String(item.id))"
+                :disabled="selection.busy.value || cloud.loading"
+                @update:checked="(val: boolean) => toggleRow(item.id, val)"
+              />
+            </span>
             <ManagedImagePreview
-              class="file-card-thumb file-card-video-thumb"
+              v-if="isPreviewableImage(item)"
               :source="{ sourceType: 'cloud_file', sourceId: String(item.id) }"
               :initial="item.imagePreview"
+              :original-url="item.fileUrl"
+              :original-bytes="item.fileSize"
+              class="file-card-thumb"
               :alt="item.fileName"
-              media-kind="video"
+              loading="lazy"
+              decoding="async"
+            />
+            <ManagedImagePreview
+              v-else-if="/\.mp3$/i.test(item.fileName || '')"
+              :source="{ sourceType: 'cloud_file', sourceId: String(item.id) }"
+              :initial="item.imagePreview"
+              class="file-card-thumb file-card-audio-cover"
+              :alt="item.fileName"
             >
-              <template #overlay="{ state, hasPreview }">
-                <span v-if="hasPreview" class="file-card-video-play" aria-hidden="true">
-                  <SvgIcon :src="icon.ai.play" size="22" />
-                </span>
-                <span v-if="formatMediaDuration(state?.durationSeconds)" class="file-card-video-duration">
-                  {{ formatMediaDuration(state?.durationSeconds) }}
-                </span>
+              <template #fallback>
+                <div class="file-card-placeholder file-card-placeholder--audio">
+                  <div class="file-card-placeholder-inner">
+                    <SvgIcon :src="icon.cloudSpace.fileIcon.audio" size="34" />
+                    <span>{{ getFilePreviewLabel(item) }}</span>
+                  </div>
+                </div>
               </template>
             </ManagedImagePreview>
-          </div>
-          <div v-else-if="isTextFile(item)" class="file-card-text-preview">
-            <CloudTextCardPreview :file-info="item" />
-          </div>
-          <div v-else class="file-card-placeholder" :class="`file-card-placeholder--${getFileCategory(item)}`">
-            <div class="file-card-placeholder-inner">
-              <svg-icon :src="icon.cloudSpace.fileIcon[getFileCategory(item)]" size="34" />
-              <span>{{ getFilePreviewLabel(item) }}</span>
+            <div v-else-if="getFileCategory(item) === 'video'" class="file-card-video-preview">
+              <ManagedImagePreview
+                class="file-card-thumb file-card-video-thumb"
+                :source="{ sourceType: 'cloud_file', sourceId: String(item.id) }"
+                :initial="item.imagePreview"
+                :alt="item.fileName"
+                media-kind="video"
+              >
+                <template #overlay="{ state, hasPreview }">
+                  <span v-if="hasPreview" class="file-card-video-play" aria-hidden="true">
+                    <SvgIcon :src="icon.ai.play" size="22" />
+                  </span>
+                  <span v-if="formatMediaDuration(state?.durationSeconds)" class="file-card-video-duration">
+                    {{ formatMediaDuration(state?.durationSeconds) }}
+                  </span>
+                </template>
+              </ManagedImagePreview>
+            </div>
+            <div v-else-if="isTextFile(item)" class="file-card-text-preview">
+              <CloudTextCardPreview :file-info="item" />
+            </div>
+            <div v-else class="file-card-placeholder" :class="`file-card-placeholder--${getFileCategory(item)}`">
+              <div class="file-card-placeholder-inner">
+                <svg-icon :src="icon.cloudSpace.fileIcon[getFileCategory(item)]" size="34" />
+                <span>{{ getFilePreviewLabel(item) }}</span>
+              </div>
+            </div>
+            <div v-if="!batchMode && !bookmark.isMobile" class="file-card-overlay">
+              <BTooltip :title="$t('cloudSpace.download')">
+                <svg-icon
+                  class="overlay-btn"
+                  :src="icon.cloudSpace.download"
+                  size="18"
+                  @click.stop="handleDownloadFile(item)"
+                />
+              </BTooltip>
+            </div>
+            <div v-if="!batchMode" class="file-card-more" @click.stop="closeFileContext(item)">
+              <BActionMenu
+                v-if="!bookmark.isMobile"
+                :items="desktopFileActions(item)"
+                :triggers="['click']"
+                placement="bottom-right"
+                :aria-label="$t('common.more')"
+                @select="handleFileAction(item, $event)"
+              >
+                <BButton class="file-more-button" :aria-label="$t('common.more')" icon-only>
+                  <SvgIcon :src="icon.common.more" size="20" />
+                </BButton>
+              </BActionMenu>
+              <BButton
+                v-else
+                class="mobile-file-more"
+                :aria-label="$t('common.more')"
+                @click="openMobileFileActions(item)"
+              >
+                <SvgIcon :src="icon.common.more" size="20" aria-hidden="true" />
+              </BButton>
             </div>
           </div>
-          <div v-if="!batchMode && !bookmark.isMobile" class="file-card-overlay">
-            <BTooltip :title="$t('cloudSpace.download')">
-              <svg-icon
-                class="overlay-btn"
-                :src="icon.cloudSpace.download"
-                size="18"
-                @click.stop="handleDownloadFile(item)"
-              />
-            </BTooltip>
+          <div class="file-card-body">
+            <div class="file-card-headline">
+              <span class="file-card-type" :class="`file-card-type--${getFileCategory(item)}`">{{
+                getFileTypeLabel(item)
+              }}</span>
+              <PinBadge v-if="item.isTop" />
+              <InboxPendingBadge v-if="item.isPending" />
+              <span class="file-card-size">{{ formatFileSize(item.fileSize) }}</span>
+            </div>
+            <div class="file-card-name" :title="item.fileName">{{ item.fileName }}</div>
+            <div class="file-card-meta">
+              <span class="meta-label">{{ $t('cloudSpace.uploadTime') }}</span>
+              <span class="text-hidden">{{ item.uploadTime || '-' }}</span>
+            </div>
+            <div class="file-card-meta">
+              <span class="meta-label">{{ $t('cloudSpace.relateTags') }}</span>
+              <span class="text-hidden">{{
+                item.tags?.length ? item.tags.map((tag) => tag.name).join(' / ') : '-'
+              }}</span>
+            </div>
           </div>
-          <div v-if="!batchMode" class="file-card-more" @click.stop="closeFileContext(item)">
-            <BActionMenu
-              v-if="!bookmark.isMobile"
-              :items="desktopFileActions(item)"
-              :triggers="['click']"
-              placement="bottom-right"
-              :aria-label="$t('common.more')"
-              @select="handleFileAction(item, $event)"
-            >
-              <BButton class="file-more-button" :aria-label="$t('common.more')" icon-only>
-                <SvgIcon :src="icon.common.more" size="20" />
-              </BButton>
-            </BActionMenu>
-            <BButton
-              v-else
-              class="mobile-file-more"
-              :aria-label="$t('common.more')"
-              @click="openMobileFileActions(item)"
-            >
-              <SvgIcon :src="icon.common.more" size="20" aria-hidden="true" />
-            </BButton>
-          </div>
-        </div>
-        <div class="file-card-body">
-          <div class="file-card-headline">
-            <span class="file-card-type" :class="`file-card-type--${getFileCategory(item)}`">{{
-              getFileTypeLabel(item)
-            }}</span>
-            <PinBadge v-if="item.isTop" />
-            <InboxPendingBadge v-if="item.isPending" />
-            <span class="file-card-size">{{ formatFileSize(item.fileSize) }}</span>
-          </div>
-          <div class="file-card-name" :title="item.fileName">{{ item.fileName }}</div>
-          <div class="file-card-meta">
-            <span class="meta-label">{{ $t('cloudSpace.uploadTime') }}</span>
-            <span class="text-hidden">{{ item.uploadTime || '-' }}</span>
-          </div>
-          <div class="file-card-meta">
-            <span class="meta-label">{{ $t('cloudSpace.relateTags') }}</span>
-            <span class="text-hidden">{{
-              item.tags?.length ? item.tags.map((tag) => tag.name).join(' / ') : '-'
-            }}</span>
-          </div>
-        </div>
-      </BActionMenu>
-    </div>
+        </BActionMenu>
+      </template>
+    </CloudVirtualGrid>
     <div v-if="downloadProgress.visible" class="download-progress-floating">
       <div class="download-progress-header">
         <div class="download-progress-title">{{ downloadProgress.phaseText }}</div>
@@ -232,176 +237,188 @@
         <div> {{ $t('cloudSpace.uploadTime') }} </div>
       </div>
     </div>
-    <div
+    <BVirtualList
       v-if="viewMode === 'table' && (cloud.loading || cloud.fileList.length)"
       class="file-container"
       data-mobile-resource-scroll
-      @scroll.passive="onFileListScroll"
+      :items="cloud.fileList"
+      :item-height="58"
+      dynamic-height
+      :retained-keys="retainedFileKeys"
+      :loading="cloud.loading || cloud.loadingMore"
+      :show-loading-indicator="false"
+      :has-more="cloud.fileHasMore"
+      @load-more="cloud.loadMoreFiles()"
     >
-      <BActionMenu
-        :ref="(menu) => setFileContextMenu(item.id, menu)"
-        :items="desktopFileActions(item)"
-        :triggers="['contextmenu']"
-        :disabled="bookmark.isMobile || batchMode || Boolean(item.isRename)"
-        :aria-label="item.fileName"
-        :tabindex="bookmark.isMobile || batchMode ? undefined : 0"
-        @select="handleFileAction(item, $event)"
-        class="field-item"
-        :class="{
-          'field-item-draggable': canDragFile(item),
-          'field-item--batch': batchMode,
-          'field-item--selected': batchMode && selectedRows.includes(item.id),
-        }"
-        :draggable="canDragFile(item)"
-        @click="
-          closeFileContext(item);
-          onListRowClick(item);
-        "
-        @dragstart="onFileDragStart($event, item)"
-        @dragend="onFileDragEnd"
-        v-for="item in cloud.fileList"
-        :key="item.id"
-      >
-        <div class="flex-align-center" :style="{ position: 'relative', width: fieldNameWidth }">
-          <span v-if="batchMode" class="row-checkbox" @click.stop>
-            <BCheckbox
-              controlled
-              :checked="selectedRows.includes(String(item.id))"
-              :disabled="selection.busy.value || cloud.loading"
-              @update:checked="(val: boolean) => toggleRow(item.id, val)"
-            />
-          </span>
-          <div v-if="!item.isRename" class="file-label flex-align-center" @click.stop="onFileLabelClick(item)">
-            <svg-icon :src="icon.cloudSpace.fileIcon[getFileCategory(item)]" size="20" style="min-width: var(--ui-layout-20, 20px)" />
-            <span class="file-name text-hidden">{{ item.fileName }}</span>
-            <span v-if="item.isTop || item.isPending" class="file-status-badges">
-              <PinBadge v-if="item.isTop" />
-              <InboxPendingBadge v-if="item.isPending" />
+      <template #default="{ item }">
+        <BActionMenu
+          :ref="(menu) => setFileContextMenu(item.id, menu)"
+          :items="desktopFileActions(item)"
+          :triggers="['contextmenu']"
+          :disabled="bookmark.isMobile || batchMode || Boolean(item.isRename)"
+          :aria-label="item.fileName"
+          :tabindex="bookmark.isMobile || batchMode ? undefined : 0"
+          @select="handleFileAction(item, $event)"
+          class="field-item"
+          :class="{
+            'field-item-draggable': canDragFile(item),
+            'field-item--batch': batchMode,
+            'field-item--selected': batchMode && selectedRows.includes(item.id),
+          }"
+          :draggable="canDragFile(item)"
+          @click="
+            closeFileContext(item);
+            onListRowClick(item);
+          "
+          @dragstart="onFileDragStart($event, item)"
+          @dragend="onFileDragEnd"
+          :key="item.id"
+        >
+          <div class="flex-align-center" :style="{ position: 'relative', width: fieldNameWidth }">
+            <span v-if="batchMode" class="row-checkbox" @click.stop>
+              <BCheckbox
+                controlled
+                :checked="selectedRows.includes(String(item.id))"
+                :disabled="selection.busy.value || cloud.loading"
+                @update:checked="(val: boolean) => toggleRow(item.id, val)"
+              />
             </span>
-          </div>
-          <b-input
-            v-else
-            class="edit-file-input"
-            :class="{ 'edit-file-input--saving': isFileRenaming(item) }"
-            v-model:value="item.fileName"
-            :disabled="isFileRenaming(item)"
-            @click.stop
-            @enter="submitReName(item)"
-          >
-            <template #suffix>
-              <div class="flex-align-center-gap">
-                <BButton
-                  v-if="isFileRenaming(item)"
-                  class="rename-saving-indicator"
-                  type="primary"
-                  size="small"
-                  :loading="true"
-                  :aria-label="$t('cloudSpace.renameSaving')"
-                  :title="$t('cloudSpace.renameSaving')"
-                />
-                <span v-if="isFileRenaming(item)" class="rename-saving-text" role="status">
-                  {{ $t('cloudSpace.renameSaving') }}
-                </span>
-                <svg-icon
-                  v-else
-                  :src="icon.filterPanel.check"
-                  size="18"
-                  class="dom-hover"
-                  @click="submitReName(item)"
-                />
-                <svg-icon
-                  v-if="!isFileRenaming(item)"
-                  :src="icon.common.close"
-                  size="18"
-                  class="dom-hover"
-                  @click="cancelRename(item)"
-                />
-              </div>
-            </template>
-          </b-input>
-          <div
-            v-if="!item.isRename && !batchMode"
-            class="flex-align-center handle-btn"
-            @click.stop="closeFileContext(item)"
-          >
-            <BTooltip v-if="!bookmark.isMobile" :title="$t('cloudSpace.download')">
+            <div v-if="!item.isRename" class="file-label flex-align-center" @click.stop="onFileLabelClick(item)">
               <svg-icon
-                class="download-icon"
-                :src="icon.cloudSpace.download"
+                :src="icon.cloudSpace.fileIcon[getFileCategory(item)]"
                 size="20"
-                @click="handleDownloadFile(item)"
+                style="min-width: var(--ui-layout-20, 20px)"
               />
-            </BTooltip>
-            <BTooltip :title="$t('common.reName')" v-if="!bookmark.isMobile">
-              <svg-icon
-                class="download-icon"
-                :src="icon.cloudSpace.rename"
-                size="20"
-                @click="handleReName(item)"
-                v-click-log="{ module: '云空间', operation: `编辑文件名【${item.fileName}】` }"
-              />
-            </BTooltip>
-            <BTooltip v-if="!bookmark.isMobile" :title="$t('cloudSpace.relateTags')">
-              <svg-icon
-                class="download-icon"
-                :src="icon.manage_categoryBtn_tag"
-                size="20"
-                @click="openTagDialog(item)"
-                v-click-log="{ module: '云空间', operation: `打开文件标签配置【${item.fileName}】` }"
-              />
-            </BTooltip>
-            <BActionMenu
-              v-if="!bookmark.isMobile"
-              :items="desktopFileActions(item)"
-              :triggers="['click']"
-              placement="bottom-right"
-              :aria-label="$t('common.more')"
-              @select="handleFileAction(item, $event)"
-            >
-              <BButton class="file-more-button" :aria-label="$t('common.more')" icon-only>
-                <SvgIcon :src="icon.common.more" size="20" />
-              </BButton>
-            </BActionMenu>
-            <BButton
+              <span class="file-name text-hidden">{{ item.fileName }}</span>
+              <span v-if="item.isTop || item.isPending" class="file-status-badges">
+                <PinBadge v-if="item.isTop" />
+                <InboxPendingBadge v-if="item.isPending" />
+              </span>
+            </div>
+            <b-input
               v-else
-              class="mobile-file-more"
-              :aria-label="$t('common.more')"
-              @click="openMobileFileActions(item)"
+              class="edit-file-input"
+              :class="{ 'edit-file-input--saving': isFileRenaming(item) }"
+              v-model:value="item.fileName"
+              :disabled="isFileRenaming(item)"
+              @click.stop
+              @enter="submitReName(item)"
             >
-              <SvgIcon :src="icon.common.more" size="20" aria-hidden="true" />
-            </BButton>
-          </div>
-        </div>
-        <div class="default-area" v-if="!bookmark.isMobile">
-          <div>{{ item.folderName }}</div>
-          <div class="file-tags-cell">
-            <span v-if="!item.tags?.length" class="file-tags-empty">-</span>
-            <div v-else class="file-tags-list">
-              <ResourceTagChip
-                v-for="tag in item.tags"
-                :key="tag.id"
-                :tag="tag"
-                size="medium"
-                interactive
-                max-width="var(--ui-layout-90, 90px)"
-                @click.stop="onFileTagClick(item, tag.id)"
-                v-click-log="{ module: '云空间', operation: `点击文件关联标签【${tag.name}】` }"
-              />
+              <template #suffix>
+                <div class="flex-align-center-gap">
+                  <BButton
+                    v-if="isFileRenaming(item)"
+                    class="rename-saving-indicator"
+                    type="primary"
+                    size="small"
+                    :loading="true"
+                    :aria-label="$t('cloudSpace.renameSaving')"
+                    :title="$t('cloudSpace.renameSaving')"
+                  />
+                  <span v-if="isFileRenaming(item)" class="rename-saving-text" role="status">
+                    {{ $t('cloudSpace.renameSaving') }}
+                  </span>
+                  <svg-icon
+                    v-else
+                    :src="icon.filterPanel.check"
+                    size="18"
+                    class="dom-hover"
+                    @click="submitReName(item)"
+                  />
+                  <svg-icon
+                    v-if="!isFileRenaming(item)"
+                    :src="icon.common.close"
+                    size="18"
+                    class="dom-hover"
+                    @click="cancelRename(item)"
+                  />
+                </div>
+              </template>
+            </b-input>
+            <div
+              v-if="!item.isRename && !batchMode"
+              class="flex-align-center handle-btn"
+              @click.stop="closeFileContext(item)"
+            >
+              <BTooltip v-if="!bookmark.isMobile" :title="$t('cloudSpace.download')">
+                <svg-icon
+                  class="download-icon"
+                  :src="icon.cloudSpace.download"
+                  size="20"
+                  @click="handleDownloadFile(item)"
+                />
+              </BTooltip>
+              <BTooltip :title="$t('common.reName')" v-if="!bookmark.isMobile">
+                <svg-icon
+                  class="download-icon"
+                  :src="icon.cloudSpace.rename"
+                  size="20"
+                  @click="handleReName(item)"
+                  v-click-log="{ module: '云空间', operation: `编辑文件名【${item.fileName}】` }"
+                />
+              </BTooltip>
+              <BTooltip v-if="!bookmark.isMobile" :title="$t('cloudSpace.relateTags')">
+                <svg-icon
+                  class="download-icon"
+                  :src="icon.manage_categoryBtn_tag"
+                  size="20"
+                  @click="openTagDialog(item)"
+                  v-click-log="{ module: '云空间', operation: `打开文件标签配置【${item.fileName}】` }"
+                />
+              </BTooltip>
+              <BActionMenu
+                v-if="!bookmark.isMobile"
+                :items="desktopFileActions(item)"
+                :triggers="['click']"
+                placement="bottom-right"
+                :aria-label="$t('common.more')"
+                @select="handleFileAction(item, $event)"
+              >
+                <BButton class="file-more-button" :aria-label="$t('common.more')" icon-only>
+                  <SvgIcon :src="icon.common.more" size="20" />
+                </BButton>
+              </BActionMenu>
+              <BButton
+                v-else
+                class="mobile-file-more"
+                :aria-label="$t('common.more')"
+                @click="openMobileFileActions(item)"
+              >
+                <SvgIcon :src="icon.common.more" size="20" aria-hidden="true" />
+              </BButton>
             </div>
           </div>
-          <div>{{
-            item.fileSize >= 1024 * 1024
-              ? Number(item.fileSize / (1024 * 1024))
-                  .toFixed(1)
-                  .replace(/\B(?=(\d{3})+(?!\d))/g, ',') + ' MB'
-              : Number(item.fileSize / 1024)
-                  .toFixed()
-                  .replace(/\B(?=(\d{3})+(?!\d))/g, ',') + ' KB'
-          }}</div>
-          <div v-if="!bookmark.isMobile" class="text-hidden" :title="item.uploadTime">{{ item.uploadTime }} </div>
-        </div>
-      </BActionMenu>
-    </div>
+          <div class="default-area" v-if="!bookmark.isMobile">
+            <div>{{ item.folderName }}</div>
+            <div class="file-tags-cell">
+              <span v-if="!item.tags?.length" class="file-tags-empty">-</span>
+              <div v-else class="file-tags-list">
+                <ResourceTagChip
+                  v-for="tag in item.tags"
+                  :key="tag.id"
+                  :tag="tag"
+                  size="medium"
+                  interactive
+                  max-width="var(--ui-layout-90, 90px)"
+                  @click.stop="onFileTagClick(item, tag.id)"
+                  v-click-log="{ module: '云空间', operation: `点击文件关联标签【${tag.name}】` }"
+                />
+              </div>
+            </div>
+            <div>{{
+              item.fileSize >= 1024 * 1024
+                ? Number(item.fileSize / (1024 * 1024))
+                    .toFixed(1)
+                    .replace(/\B(?=(\d{3})+(?!\d))/g, ',') + ' MB'
+                : Number(item.fileSize / 1024)
+                    .toFixed()
+                    .replace(/\B(?=(\d{3})+(?!\d))/g, ',') + ' KB'
+            }}</div>
+            <div v-if="!bookmark.isMobile" class="text-hidden" :title="item.uploadTime">{{ item.uploadTime }} </div>
+          </div>
+        </BActionMenu>
+      </template>
+    </BVirtualList>
     <div v-if="!cloud.loading && !cloud.fileList.length" class="file-empty-state">
       <span class="file-empty-icon">
         <SvgIcon :src="icon.file_upload" size="28" />
@@ -712,7 +729,10 @@
       width="var(--ui-layout-400, 400px)"
       :show-footer="false"
       :mask-closable="true"
-      @close="renameModalVisible = false; renameModalFile = null"
+      @close="
+        renameModalVisible = false;
+        renameModalFile = null;
+      "
     >
       <div class="rename-modal-field">
         <b-input
@@ -792,7 +812,8 @@
   import type { AiSkillResourceRef, AiSkillResponse } from '@lightnote/shared/ai-skill-protocol';
   import { persistAiMarkdownResultAsNote } from '@/utils/aiNoteDraft';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
-  import { isNearResourceScrollEnd } from '@/utils/resourcePagination';
+  import BVirtualList from '@/components/base/BasicComponents/BVirtualList.vue';
+  import CloudVirtualGrid from '@/components/cloudSpace/CloudVirtualGrid.vue';
   import { resolveFileAiSummaryPresentation } from '@/utils/fileAiSummary';
   import CloudTextCardPreview from '@/components/cloudSpace/CloudTextCardPreview.vue';
   import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
@@ -848,6 +869,9 @@
 
   const batchMode = computed(() => props.batchMode ?? false);
   const fieldListRef = ref<HTMLElement | null>(null);
+  const retainedFileKeys = computed(() =>
+    cloud.fileList.filter((file) => file.isRename || String(file.id) === cloud.draggingFile?.id).map((file) => file.id),
+  );
   const mobileFileActionsOpen = ref(false);
   const mobileActionFile = ref<any | null>(null);
   const mobileFileActions = computed(() => (mobileActionFile.value ? fileActions(mobileActionFile.value) : []));
@@ -981,13 +1005,6 @@
       // 有文件正在重命名时刷新会把输入框里的内容冲掉
       cloud.fileList?.some((item: any) => item?.isRename) !== true,
   });
-
-  function onFileListScroll(event: Event) {
-    const target = event.currentTarget;
-    if (target instanceof HTMLElement && isNearResourceScrollEnd(target)) {
-      void cloud.loadMoreFiles();
-    }
-  }
 
   function clearFileFilters() {
     cloud.searchFileName = '';
@@ -1260,11 +1277,20 @@
     const source = JSON.stringify(fileAiResourceRefs.value);
     creatingAiNote.value = true;
     try {
-      const handoff = await persistAiMarkdownResultAsNote(response, fileAiGeneratedNoteTitle.value, () => fileAiVisible.value && JSON.stringify(fileAiResourceRefs.value) === source);
+      const handoff = await persistAiMarkdownResultAsNote(
+        response,
+        fileAiGeneratedNoteTitle.value,
+        () => fileAiVisible.value && JSON.stringify(fileAiResourceRefs.value) === source,
+      );
       if (!handoff) return;
       message.success(t('aiSkills.noteCreated'));
       if (!handoff.openAfterSave) return;
-      await closeCurrentMobileOverlayThen(() => { fileAiVisible.value = false; }, () => router.push(handoff.route));
+      await closeCurrentMobileOverlayThen(
+        () => {
+          fileAiVisible.value = false;
+        },
+        () => router.push(handoff.route),
+      );
     } catch (error: any) {
       message.error(String(error?.message || t('aiSkills.noteCreateFailed')));
     } finally {
@@ -2682,20 +2708,12 @@
 
   // ── 卡片视图 ──
   .file-card-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(var(--file-card-min-width), 1fr));
-    gap: var(--ui-space-14, 14px);
+    display: block;
     padding: var(--ui-space-14, 14px);
     box-sizing: border-box;
     overflow-y: auto;
     height: 100%;
     align-content: start;
-  }
-
-  // Density changes must not compress grid rows below their visible content.
-  html[data-density='compact'] .file-card-grid,
-  html[data-density='comfortable'] .file-card-grid {
-    grid-auto-rows: max-content;
   }
 
   .field-list--batch-mode .file-container,
@@ -3113,9 +3131,6 @@
       min-width: 0;
     }
     .file-card-grid {
-      grid-template-columns: repeat(auto-fill, minmax(var(--ui-layout-220, 220px), 1fr));
-      column-gap: var(--ui-space-12, 12px);
-      row-gap: var(--ui-space-12, 12px);
       padding: var(--ui-space-10, 10px);
     }
 

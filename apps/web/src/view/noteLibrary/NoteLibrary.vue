@@ -4242,4 +4242,13 @@
   .note-workspace, .note-directory-header, .note-main-panel {
     .workspace-canvas-surface();
   }
+
+  @media (max-width: 767px) {
+    // 同时清除共享壳和内部面板的画布色，移动卡片流直接沿用页面底色。
+    .note-workspace.note-workspace-shell,
+    .note-directory-header,
+    .note-main-panel {
+      background: transparent;
+    }
+  }
 </style>

@@ -756,15 +756,15 @@ async function failOrRetryToolboxJob(job, workerId, error, database = pool) {
   }
 }
 
-export async function runSingleToolboxJob(workerId, database = pool) {
+export async function runSingleToolboxJob(workerId, database = pool, options = {}) {
   if (!toolboxWorkerEnabled()) return false;
   const job = await claimNextToolboxJob(workerId, database);
   if (!job) return false;
   if (job.terminalized) return true;
-  return runClaimedToolboxJob(job, database);
+  return runClaimedToolboxJob(job, database, options);
 }
 
-export async function runClaimedToolboxJob(job, database = pool, { onProgress, signal } = {}) {
+export async function runClaimedToolboxJob(job, database = pool, { onProgress, signal, runLocalProcessing = work => work() } = {}) {
   const leaseOwner = job.locked_by;
   try {
     const artifact = await withToolboxLeaseHeartbeat(
@@ -785,7 +785,8 @@ export async function runClaimedToolboxJob(job, database = pool, { onProgress, s
           },
           commit: artifact => completeToolboxJob(job, leaseOwner, artifact, database),
         });
-        if (job.tool_id === 'ocr_to_text' && job.billing_medium === 'free') return executeFreeOcr(job, database);
+        if (job.tool_id === 'ocr_to_text' && job.billing_medium === 'free')
+          return runLocalProcessing(() => executeFreeOcr(job, database));
         const promptOnly = job.tool_id === 'idea_to_draft';
         await updateToolboxJobStage(job, leaseOwner, promptOnly ? 'preparing_prompt' : 'reading_sources', 28, database);
         if (job.tool_id === 'ocr_to_text' && safeJson(job.options_json, {})?.recognitionMode === 'ai') {

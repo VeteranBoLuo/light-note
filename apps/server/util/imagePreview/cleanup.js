@@ -1,3 +1,9 @@
+import pool from '../../db/index.js';
+import {
+  cloudObjectOwner,
+  beginCloudObjectDeletion,
+  finishCloudObjectDeletion,
+} from '../services/cloudObjectPublication.js';
 import { isManagedImage } from './managedImage.js';
 import { localImageLocator } from './sources.js';
 import { deleteObjectFromObs } from '../obsClient.js';
@@ -15,6 +21,26 @@ export async function deferCloudImageDeletion(db, files) {
   }
 }
 export async function deleteUnmanagedObject(objectKey) {
-  if (await isManagedImage('obs', objectKey)) return;
+  const userId = cloudObjectOwner(objectKey);
+  if (!userId) {
+    if (await isManagedImage('obs', objectKey)) return;
+    await deleteObjectFromObs(objectKey);
+    return;
+  }
+  const connection = await pool.getConnection();
+  let claim;
+  try {
+    await connection.beginTransaction();
+    await connection.query('SELECT id FROM user WHERE id=? FOR UPDATE', [userId]);
+    claim = await beginCloudObjectDeletion(connection, userId, objectKey);
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+  if (!claim) return;
   await deleteObjectFromObs(objectKey);
+  await finishCloudObjectDeletion(pool, claim);
 }

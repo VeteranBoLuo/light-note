@@ -60,6 +60,7 @@ CREATE TABLE `bookmark` (
   PRIMARY KEY (`id`) USING BTREE,
   KEY `fk_bookmark_user_id` (`user_id`),
   KEY `idx_bookmark_owner_create` (`create_time`,`del_flag`,`user_id`),
+  KEY `idx_bookmark_search_time` (`user_id`,`del_flag`,`create_time`,`id`),
   CONSTRAINT `fk_bookmark_user_id` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 ROW_FORMAT=DYNAMIC;
 
@@ -125,6 +126,7 @@ CREATE TABLE `files` (
   KEY `idx_files_owner_pin_time` (`create_by`(64),`del_flag`,`is_top`,`create_time`,`id`),
   KEY `fk_folder_id` (`folder_id`),
   KEY `idx_files_owner_create` (`create_time`,`del_flag`,`create_by`),
+  KEY `idx_files_search_time` (`create_by`,`del_flag`,`create_time`,`id`),
   CONSTRAINT `fk_folder_id` FOREIGN KEY (`folder_id`) REFERENCES `folders` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB AUTO_INCREMENT=298 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文件信息表';
 
@@ -1773,4 +1775,36 @@ CREATE TABLE IF NOT EXISTS image_asset_refs (
  PRIMARY KEY(asset_id,ref_type,ref_id),
  KEY idx_image_ref(ref_type,ref_id),
  CONSTRAINT fk_image_ref_asset FOREIGN KEY(asset_id) REFERENCES image_assets(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Durable, private cleanup identities for uncommitted rename copies. No business backfill.
+CREATE TABLE IF NOT EXISTS cloud_file_rename_staging (
+  id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  user_id VARCHAR(255) NOT NULL,
+  file_id BIGINT NOT NULL,
+  target_key VARCHAR(500) NOT NULL,
+  state ENUM('pending','adopted','deleting') NOT NULL DEFAULT 'pending',
+  available_at DATETIME NOT NULL,
+  lease_token CHAR(36) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL,
+  attempts INT UNSIGNED NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_cloud_rename_due (available_at,id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Coordinate legacy filename PUT signatures, confirmations and retirement.
+CREATE TABLE IF NOT EXISTS cloud_legacy_object_lifecycle (
+  object_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  generation CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  user_id VARCHAR(255) NOT NULL,
+  object_key VARCHAR(500) NOT NULL,
+  upload_key VARCHAR(500) DEFAULT NULL,
+  state ENUM('active','pending','deleting','retired') NOT NULL DEFAULT 'active',
+  upload_until DATETIME NOT NULL DEFAULT '1970-01-01 00:00:00',
+  available_at DATETIME DEFAULT NULL,
+  lease_token CHAR(36) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL,
+  attempts INT UNSIGNED NOT NULL DEFAULT 0,
+  PRIMARY KEY (object_hash),
+  KEY idx_cloud_legacy_owner (user_id),
+  KEY idx_cloud_legacy_due (available_at,object_hash)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

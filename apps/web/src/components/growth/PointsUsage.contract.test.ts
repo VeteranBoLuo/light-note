@@ -14,8 +14,8 @@ describe('积分资产入口与明细页契约', () => {
   const desktopProfileSource = readSource('src/view/personCenter/PersonCenter.vue');
   const mobileProfileSource = readSource('src/view/personCenter/PersonCenterMobile.vue');
   const usagePageSource = readSource('src/view/pointsUsage/PointsUsagePage.vue');
-  const zhLocaleSource = readSource('src/i18n/locales/zh-CN.ts');
-  const enLocaleSource = readSource('src/i18n/locales/en-US.ts');
+  const zhLocaleSource = readSource('src/i18n/locales/zh-CN-core.ts');
+  const enLocaleSource = readSource('src/i18n/locales/en-US-core.ts');
 
   it('桌面和移动个人中心都把积分与 AI 额度并列为可进入的资产卡', () => {
     for (const profileSource of [desktopProfileSource, mobileProfileSource]) {

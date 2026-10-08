@@ -63,6 +63,9 @@ try {
             return { canvas: read(canvas), content: read(content), nav: read(nav) };
           }, item);
           const expected = theme === 'day' ? [item.lightCanvas === 'white' ? 'rgb(255, 255, 255)' : 'rgb(246, 247, 251)', 'rgb(255, 255, 255)'] : ['rgb(37, 39, 46)', 'rgb(46, 48, 56)'];
+          if (viewport.width < 768 && ['bookmarks', 'notes'].includes(item.name)) {
+            expected[0] = 'rgba(0, 0, 0, 0)';
+          }
           for (const [role, color] of [['canvas', expected[0]], ['content', expected[1]]]) {
             assert(checks[role].length, `${id}: missing visible ${role}`);
             for (const c of checks[role]) {

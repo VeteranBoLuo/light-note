@@ -1,48 +1,68 @@
 import crypto from 'node:crypto';
-import MiniSearch from 'minisearch';
+import { setImmediate as yieldToEventLoop } from 'node:timers/promises';
 import pool from '../db/index.js';
-import { extractTokens, splitKnowledgeContent } from './knowledgeService.js';
+import { acquirePersonalSearchBuild } from './personalSearchBuildGate.js';
+import { readPersonalSearchSource } from './personalSearchSourceReader.js';
+import { buildBundle, tokenize, INDEX_CACHE_POLICY } from './personalSearchIndexCore.js';
+import { buildIsolatedIndex } from './personalSearchIndexClient.js';
+import { cleanText, chunkResource } from './personalKnowledgeText.js';
+import { createPersonalSearchPreprocessor } from './personalSearchPreprocessor.js';
 
-const CACHE_TTL_MS = 3 * 60 * 1000;
-const MAX_CACHED_USERS = 20;
+const CACHE_TTL_MS = INDEX_CACHE_POLICY.ttlMs;
+const MAX_CACHED_USERS = INDEX_CACHE_POLICY.maxUsers;
+// Weighted retention budget, not a V8 heap/RSS hard limit. Includes estimated
+// postings and stored documents; transient builds and active requests are separate.
+const MAX_CACHE_ESTIMATED_BYTES = INDEX_CACHE_POLICY.estimatedBytes;
 const MAX_DOCUMENTS_PER_USER = 12_000;
 const cache = new Map();
 let cacheExpiryTimer = null;
 const loading = new Map();
 const generations = new Map();
 const pendingPersistentInvalidations = new Map();
-let chunkPersistenceWarningShown = false;
+
+function evictBundle(key) {
+  cache.get(key)?.index.dispose?.();
+  cache.delete(key);
+}
 
 function scheduleCacheExpiry() {
   clearTimeout(cacheExpiryTimer);
   cacheExpiryTimer = null;
   if (!cache.size) return;
   const expiresAt = Math.min(...Array.from(cache.values(), (bundle) => bundle.builtAt + CACHE_TTL_MS));
-  cacheExpiryTimer = setTimeout(() => {
-    cacheExpiryTimer = null;
-    const now = Date.now();
-    // Only drop cache references; in-flight searches keep their own bundles.
-    for (const [key, bundle] of cache) {
-      if (now - bundle.builtAt >= CACHE_TTL_MS) cache.delete(key);
-    }
-    scheduleCacheExpiry();
-  }, Math.max(1, expiresAt - Date.now()));
+  cacheExpiryTimer = setTimeout(
+    () => {
+      cacheExpiryTimer = null;
+      const now = Date.now();
+      // Only drop cache references; in-flight searches keep their own bundles.
+      for (const [key, bundle] of cache) {
+        if (now - bundle.builtAt >= CACHE_TTL_MS) evictBundle(key);
+      }
+      scheduleCacheExpiry();
+    },
+    Math.max(1, expiresAt - Date.now()),
+  );
   cacheExpiryTimer.unref();
+}
+
+function retainBundle(key, bundle, maxBytes = MAX_CACHE_ESTIMATED_BYTES) {
+  if (cache.get(key) !== bundle) evictBundle(key);
+  // Large accounts still receive their complete bundle for this request. Do not
+  // evict every other account to retain a bundle larger than the entire budget.
+  if (bundle.estimatedMemoryBytes <= maxBytes) {
+    cache.set(key, bundle);
+    let bytes = Array.from(cache.values()).reduce((sum, item) => sum + item.estimatedMemoryBytes, 0);
+    while (cache.size > MAX_CACHED_USERS || bytes > maxBytes) {
+      const oldest = cache.keys().next().value;
+      bytes -= cache.get(oldest).estimatedMemoryBytes;
+      evictBundle(oldest);
+    }
+  }
+  scheduleCacheExpiry();
 }
 
 function isOptionalSchemaMissing(error) {
   return ['ER_NO_SUCH_TABLE', 'ER_BAD_FIELD_ERROR'].includes(error?.code);
-}
-
-function cleanText(value) {
-  return String(value || '')
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/giu, ' ')
-    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/giu, ' ')
-    .replace(/<[^>]+>/gu, ' ')
-    .replace(/&nbsp;/giu, ' ')
-    .replace(/&amp;/giu, '&')
-    .replace(/\s+/gu, ' ')
-    .trim();
 }
 
 /**
@@ -52,10 +72,6 @@ function cleanText(value) {
  */
 export function normalizePersonalKnowledgeText(value) {
   return cleanText(value);
-}
-
-function tokenize(value) {
-  return extractTokens(value).filter((term) => term.length > 1 || /^[a-z0-9]+$/iu.test(term));
 }
 
 function normalizeJson(value, fallback = null) {
@@ -93,119 +109,151 @@ function excerptAround(text, query, radius = 360) {
   return `${start ? '…' : ''}${content.slice(start, end)}${end < content.length ? '…' : ''}`;
 }
 
-function chunkResource({
-  userId,
-  resourceType,
-  resourceId,
-  version,
-  title,
-  content,
-  contentType,
-  target,
-  coverage,
-  tagNames = [],
-}) {
-  const chunks = splitKnowledgeContent(content, contentType);
-  const fallback = cleanText(content);
-  const usable = chunks.length ? chunks : fallback ? [{ heading: '', content: fallback }] : [];
-  return usable.map((chunk, index) => {
-    const normalized = cleanText(chunk.content).slice(0, 4000);
-    const contentHash = crypto.createHash('sha256').update(normalized).digest('hex');
-    return {
-      id: `${resourceType}:${resourceId}:${version}:${index}`,
-      userId,
-      resourceType,
-      resourceId: String(resourceId),
-      resourceVersion: String(version || 'unknown'),
-      chunkIndex: index,
-      title: String(title || '').slice(0, 255),
-      sectionTitle: String(chunk.heading || '').slice(0, 255),
-      tags: [...new Set(tagNames.map((name) => cleanText(name)).filter(Boolean))].join(' ').slice(0, 1000),
-      content: normalized,
-      contentHash,
-      locator: { type: chunk.heading ? 'section' : 'paragraph', value: chunk.heading || `chunk:${index + 1}` },
-      target,
-      coverage: coverage || null,
-    };
-  });
-}
-
-async function queryOptional(sql, params) {
-  try {
-    const [rows] = await pool.query(sql, params);
-    return rows;
-  } catch (error) {
-    if (isOptionalSchemaMissing(error)) return [];
-    throw error;
-  }
-}
-
-async function loadFileChunks(userId) {
-  const baseSql = `SELECT f.id AS file_id, f.file_name, f.create_time AS update_time, ds.id AS source_id,
+async function* loadFileChunkBatches(userId, remainingCapacity) {
+  let after = null;
+  let coverageSupported = true;
+  while (remainingCapacity() > 0) {
+    // Select lightweight chunk identities first, then read complete bodies in
+    // byte-budgeted batches. Oversized individual chunks are read alone.
+    const take = Math.min(128, remainingCapacity());
+    const cursorSql = after ? 'AND (f.id > ? OR (f.id = ? AND dc.chunk_index > ?))' : '';
+    const baseSql = `SELECT CAST(f.id AS CHAR) AS file_id, f.file_name, f.create_time AS update_time, ds.id AS source_id,
                           ds.extracted_chars, ds.chunk_count, ds.coverage_metadata,
                           dc.chunk_index, dc.content, dc.locator_type, dc.locator_value, dc.content_hash
                      FROM files f
                      JOIN ai_document_sources ds ON ds.file_id = f.id AND ds.user_id = f.create_by AND ds.status = 'ready'
                      JOIN ai_document_chunks dc ON dc.source_id = ds.id
-                    WHERE f.create_by = ? AND f.del_flag = 0
-                    ORDER BY f.id, dc.chunk_index`;
+                    WHERE f.create_by = ? AND f.del_flag = 0 ${cursorSql}
+                    ORDER BY f.id, dc.chunk_index LIMIT ?`;
+    const params = after ? [userId, after.file_id, after.file_id, after.chunk_index, take] : [userId, take];
+    const metadataSql = `SELECT CAST(f.id AS CHAR) AS file_id, ds.id AS source_id,
+      dc.chunk_index, OCTET_LENGTH(dc.content) AS body_bytes ${baseSql.slice(baseSql.indexOf('FROM files'))}`;
+    let rows;
+    try {
+      [rows] = await pool.query(metadataSql, params);
+    } catch (error) {
+      if (error?.code === 'ER_NO_SUCH_TABLE' && !after) return;
+      throw error;
+    }
+    if (!rows.length) return;
+    // Keep scalar cursor values only; do not retain the previous batch's body.
+    const last = rows[rows.length - 1];
+    after = { file_id: last.file_id, chunk_index: last.chunk_index };
+    for (let offset = 0; offset < rows.length && remainingCapacity() > 0;) {
+      const batch = [];
+      let bytes = 0;
+      const capacity = remainingCapacity();
+      while (offset < rows.length && batch.length < capacity) {
+        const row = rows[offset];
+        const size = Math.max(0, Number(row.body_bytes) || 0);
+        if (batch.length && bytes + size > 1024 * 1024) break;
+        batch.push(row);
+        bytes += size;
+        offset += 1;
+      }
+      const identities = batch.map(() => '(f.id = ? AND ds.id = ? AND dc.chunk_index = ?)').join(' OR ');
+      const bodySql = baseSql
+        .replace(cursorSql, '')
+        .replace('ORDER BY f.id, dc.chunk_index LIMIT ?', `AND (${identities}) ORDER BY f.id, dc.chunk_index LIMIT ?`);
+      const bodyParams = [
+        userId,
+        ...batch.flatMap((row) => [row.file_id, row.source_id, row.chunk_index]),
+        batch.length,
+      ];
+      const legacySql = bodySql.replace('ds.coverage_metadata,', 'NULL AS coverage_metadata,');
+      let bodies;
+      try {
+        [bodies] = await pool.query(coverageSupported ? bodySql : legacySql, bodyParams);
+      } catch (error) {
+        if (!coverageSupported || error?.code !== 'ER_BAD_FIELD_ERROR') throw error;
+        coverageSupported = false;
+        [bodies] = await pool.query(legacySql, bodyParams);
+      }
+      if (bodies.length) yield bodies;
+      await yieldToEventLoop();
+    }
+    if (rows.length < take) return;
+    await yieldToEventLoop();
+  }
+}
+
+async function hydrateDocumentTags(userId, documents) {
   try {
-    const [rows] = await pool.query(baseSql, [userId]);
-    return rows;
-  } catch (error) {
-    if (error?.code === 'ER_NO_SUCH_TABLE') return [];
-    if (error?.code !== 'ER_BAD_FIELD_ERROR') throw error;
-    const [rows] = await pool.query(baseSql.replace('ds.coverage_metadata,', 'NULL AS coverage_metadata,'), [userId]);
-    return rows;
+    for (const type of ['note', 'bookmark', 'file']) {
+      const byResource = new Map();
+      for (const document of documents) {
+        if (document.resourceType !== type) continue;
+        const entries = byResource.get(document.resourceId) || [];
+        entries.push(document);
+        byResource.set(document.resourceId, entries);
+      }
+      const ids = [...byResource.keys()];
+      for (let offset = 0; offset < ids.length; offset += 64) {
+        const batch = ids.slice(offset, offset + 64);
+        const [rows] = await pool.query(
+          `SELECT r.resource_id, t.name FROM resource_tag_relations r
+           JOIN tag t ON t.id = r.tag_id AND t.user_id = r.user_id AND t.del_flag = 0
+           WHERE r.user_id = ? AND r.resource_type = ? AND r.resource_id IN (${batch.map(() => '?').join(',')})
+           ORDER BY r.resource_id, t.name`,
+          [userId, type, ...batch],
+        );
+        const names = new Map();
+        for (const row of rows) {
+          const key = String(row.resource_id);
+          const values = names.get(key) || [];
+          values.push(String(row.name || ''));
+          names.set(key, values);
+        }
+        for (const id of batch) {
+          const values = names.get(id) || [];
+          // Keep the original per-source normalization and 1000 character cap.
+          const tags = (type === 'file' ? values : [...new Set(values.map(cleanText).filter(Boolean))])
+            .join(' ')
+            .slice(0, 1000);
+          for (const document of byResource.get(id)) document.tags = tags;
+        }
+        await yieldToEventLoop();
+      }
+    }
+  } catch {
+    // The former single tag query also returned no tags when it failed.
+    for (const document of documents) document.tags = '';
   }
 }
 
 async function loadDocuments(userId) {
-  const [notesResult, bookmarksResult, filesResult, todosResult, tagsResult] = await Promise.allSettled([
-    queryOptional(
-      `SELECT id, title, IF(type = 'drawing', '', content) AS content, type, update_time
-         FROM note
-        WHERE create_by = ? AND del_flag = '0'
-        ORDER BY update_time DESC LIMIT 3000`,
-      [userId],
-    ),
-    queryOptional(
-      `SELECT b.id, b.name, b.url, b.description, b.create_time, s.summary, s.content, s.update_time
-         FROM bookmark b LEFT JOIN bookmark_snapshot s ON s.bookmark_id = b.id
-        WHERE b.user_id = ? AND b.del_flag = 0
-        ORDER BY b.create_time DESC LIMIT 3000`,
-      [userId],
-    ),
-    loadFileChunks(userId),
-    queryOptional(
-      `SELECT id, title, description, checklist, status, due_at, update_time
-         FROM todo_items WHERE user_id = ? AND del_flag = 0 ORDER BY update_time DESC LIMIT 2000`,
-      [userId],
-    ),
-    queryOptional(
-      `SELECT r.resource_type, r.resource_id, t.name
-         FROM resource_tag_relations r
-         JOIN tag t ON t.id = r.tag_id AND t.user_id = r.user_id AND t.del_flag = 0
-        WHERE r.user_id = ? AND r.resource_type IN ('note', 'bookmark', 'file')
-        ORDER BY r.resource_type, r.resource_id, t.name`,
-      [userId],
-    ),
-  ]);
-  const tagsByResource = new Map();
-  const tagRows = tagsResult.status === 'fulfilled' ? tagsResult.value : [];
-  for (const row of tagRows) {
-    const key = `${String(row.resource_type)}:${String(row.resource_id)}`;
-    const names = tagsByResource.get(key) || [];
-    names.push(String(row.name || ''));
-    tagsByResource.set(key, names);
+  const preprocessor = createPersonalSearchPreprocessor();
+  try {
+    return await loadDocumentsWithPreprocessor(userId, preprocessor);
+  } finally {
+    await preprocessor.close();
   }
+}
+
+async function loadDocumentsWithPreprocessor(userId, preprocessor) {
   const documents = [];
-  const notes = notesResult.status === 'fulfilled' ? notesResult.value : [];
-  for (const note of notes) {
+  const hasCapacity = () => documents.length < MAX_DOCUMENTS_PER_USER;
+  async function appendSource(type, append) {
+    const start = documents.length;
+    let processing = false;
+    try {
+      for await (const row of readPersonalSearchSource(pool, userId, type, hasCapacity)) {
+        processing = true;
+        await append(row);
+        processing = false;
+      }
+    } catch (error) {
+      if (processing) throw error;
+      // Match the previous allSettled source isolation, including a late-page failure.
+      documents.length = start;
+    }
+  }
+  await appendSource('note', async (note) => {
     // 第一版手绘只参与标题检索，不把 scene JSON 当作自然语言索引或 AI 证据。
     const drawing = String(note.type || '') === 'drawing';
     documents.push(
-      ...chunkResource({
+      ...(await preprocessor.chunk({
+        maxChunks: MAX_DOCUMENTS_PER_USER - documents.length,
         userId,
         resourceType: 'note',
         resourceId: note.id,
@@ -214,15 +262,14 @@ async function loadDocuments(userId) {
         content: drawing ? note.title : note.content,
         contentType: drawing ? 'html' : note.type,
         target: { type: 'note-detail', id: String(note.id), path: `/noteLibrary/${note.id}` },
-        tagNames: tagsByResource.get(`note:${String(note.id)}`),
-      }),
+      })),
     );
-  }
-  const bookmarks = bookmarksResult.status === 'fulfilled' ? bookmarksResult.value : [];
-  for (const bookmark of bookmarks) {
+  });
+  await appendSource('bookmark', async (bookmark) => {
     const content = [bookmark.description, bookmark.summary, bookmark.content].filter(Boolean).join('\n');
     documents.push(
-      ...chunkResource({
+      ...(await preprocessor.chunk({
+        maxChunks: MAX_DOCUMENTS_PER_USER - documents.length,
         userId,
         resourceType: 'bookmark',
         resourceId: bookmark.id,
@@ -234,44 +281,59 @@ async function loadDocuments(userId) {
           bookmark.content || bookmark.summary
             ? { type: 'bookmark-snapshot', id: String(bookmark.id) }
             : { type: 'bookmark-url', id: String(bookmark.id), url: bookmark.url || '' },
-        tagNames: tagsByResource.get(`bookmark:${String(bookmark.id)}`),
-      }),
+      })),
     );
+  });
+  const beforeFiles = documents.length;
+  let processingFile = false;
+  try {
+    for await (const fileRows of loadFileChunkBatches(userId, () => MAX_DOCUMENTS_PER_USER - documents.length)) {
+      for (const row of fileRows) {
+        processingFile = true;
+        const content = await preprocessor.fileText(row.content);
+        processingFile = false;
+        if (!content) continue;
+        const version = versionOf(row.update_time);
+        const contentHash = row.content_hash || crypto.createHash('sha256').update(content).digest('hex');
+        documents.push({
+          id: `file:${row.file_id}:${version}:${row.chunk_index}`,
+          userId,
+          resourceType: 'file',
+          resourceId: String(row.file_id),
+          resourceVersion: version,
+          chunkIndex: Number(row.chunk_index || 0),
+          title: String(row.file_name || '文件').slice(0, 255),
+          sectionTitle: '',
+          tags: '',
+          content,
+          contentHash,
+          locator: {
+            type: row.locator_type || 'paragraph',
+            value: row.locator_value || `chunk:${row.chunk_index + 1}`,
+          },
+          target: { type: 'cloud-file', id: String(row.file_id), sourceId: String(row.source_id) },
+          coverage: normalizeJson(row.coverage_metadata, {
+            processedChars: Number(row.extracted_chars || 0),
+            processedChunks: Number(row.chunk_count || 0),
+          }),
+        });
+      }
+    }
+  } catch (error) {
+    // Processing failures must remain visible, not masquerade as missing evidence.
+    if (processingFile) throw error;
+    // Preserve the previous allSettled behavior: a failed source contributes no
+    // partial snapshot. The next generation/TTL rebuild can retry the source.
+    documents.length = beforeFiles;
   }
-  const fileRows = filesResult.status === 'fulfilled' ? filesResult.value : [];
-  for (const row of fileRows) {
-    const content = cleanText(row.content).slice(0, 4000);
-    if (!content) continue;
-    const version = versionOf(row.update_time);
-    const contentHash = row.content_hash || crypto.createHash('sha256').update(content).digest('hex');
-    documents.push({
-      id: `file:${row.file_id}:${version}:${row.chunk_index}`,
-      userId,
-      resourceType: 'file',
-      resourceId: String(row.file_id),
-      resourceVersion: version,
-      chunkIndex: Number(row.chunk_index || 0),
-      title: String(row.file_name || '文件').slice(0, 255),
-      sectionTitle: '',
-      tags: (tagsByResource.get(`file:${String(row.file_id)}`) || []).join(' ').slice(0, 1000),
-      content,
-      contentHash,
-      locator: { type: row.locator_type || 'paragraph', value: row.locator_value || `chunk:${row.chunk_index + 1}` },
-      target: { type: 'cloud-file', id: String(row.file_id), sourceId: String(row.source_id) },
-      coverage: normalizeJson(row.coverage_metadata, {
-        processedChars: Number(row.extracted_chars || 0),
-        processedChunks: Number(row.chunk_count || 0),
-      }),
-    });
-  }
-  const todos = todosResult.status === 'fulfilled' ? todosResult.value : [];
-  for (const todo of todos) {
+  await appendSource('todo', async (todo) => {
     const checklist = normalizeJson(todo.checklist, []);
     const checklistText = Array.isArray(checklist)
       ? checklist.map((item) => (typeof item === 'string' ? item : item?.text || item?.title || '')).join('\n')
       : '';
     documents.push(
-      ...chunkResource({
+      ...(await preprocessor.chunk({
+        maxChunks: MAX_DOCUMENTS_PER_USER - documents.length,
         userId,
         resourceType: 'todo',
         resourceId: todo.id,
@@ -280,35 +342,17 @@ async function loadDocuments(userId) {
         content: [todo.description, checklistText, todo.status, todo.due_at].filter(Boolean).join('\n'),
         contentType: 'markdown',
         target: { type: 'todo', id: String(todo.id), path: '/inbox' },
-      }),
+      })),
     );
-  }
-  return documents.slice(0, MAX_DOCUMENTS_PER_USER);
+  });
+  await hydrateDocumentTags(userId, documents);
+  return documents;
 }
 
-function buildBundle(documents, metadata = {}) {
-  const index = new MiniSearch({
-    fields: ['title', 'sectionTitle', 'tags', 'content'],
-    storeFields: [
-      'resourceType',
-      'resourceId',
-      'resourceVersion',
-      'chunkIndex',
-      'title',
-      'sectionTitle',
-      'tags',
-      'content',
-      'contentHash',
-      'locator',
-      'target',
-      'coverage',
-    ],
-    tokenize,
-    processTerm: (term) => String(term || '').toLowerCase() || null,
-  });
-  index.addAll(documents);
+async function buildBundleAsync(documents, metadata = {}) {
+  const isolated = await buildIsolatedIndex(documents);
   return {
-    index,
+    ...isolated,
     documents,
     builtAt: Date.now(),
     localGeneration: Number(metadata.localGeneration || 0),
@@ -330,96 +374,6 @@ async function readPersistentGeneration(userId, database = pool, { lock = false 
   } catch (error) {
     if (isOptionalSchemaMissing(error)) return null;
     throw error;
-  }
-}
-
-async function ensurePersistentGenerationRow(connection, userId) {
-  try {
-    await connection.query(
-      `INSERT INTO ai_content_generations (subject_user_id, generation) VALUES (?, 0)
-       ON DUPLICATE KEY UPDATE subject_user_id = VALUES(subject_user_id)`,
-      [String(userId)],
-    );
-    return true;
-  } catch (error) {
-    if (isOptionalSchemaMissing(error)) return false;
-    throw error;
-  }
-}
-
-async function persistChunks(
-  userId,
-  documents,
-  expectedGeneration = currentGeneration(userId),
-  expectedPersistentGeneration = null,
-) {
-  if (currentGeneration(userId) !== expectedGeneration) return { persisted: false, stale: true };
-  const connection = await pool.getConnection();
-  try {
-    await connection.beginTransaction();
-    if (currentGeneration(userId) !== expectedGeneration) {
-      await connection.rollback();
-      return { persisted: false, stale: true };
-    }
-    if (expectedPersistentGeneration != null) {
-      const generationAvailable = await ensurePersistentGenerationRow(connection, userId);
-      const persistentGeneration = generationAvailable
-        ? await readPersistentGeneration(userId, connection, { lock: true })
-        : null;
-      if (persistentGeneration == null || persistentGeneration !== expectedPersistentGeneration) {
-        await connection.rollback();
-        return { persisted: false, stale: true };
-      }
-    }
-    await connection.query('UPDATE ai_content_chunks SET active = 0 WHERE subject_user_id = ?', [userId]);
-    const batchSize = 150;
-    for (let start = 0; start < documents.length; start += batchSize) {
-      const batch = documents.slice(start, start + batchSize);
-      if (!batch.length) continue;
-      const placeholders = batch.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)').join(',');
-      const values = batch.flatMap((document) => [
-        userId,
-        document.resourceType,
-        document.resourceId,
-        document.resourceVersion,
-        document.chunkIndex,
-        document.title,
-        document.sectionTitle || null,
-        document.content,
-        document.contentHash,
-        Math.ceil(document.content.length / 3),
-        JSON.stringify(document.locator || null),
-      ]);
-      await connection.query(
-        `INSERT INTO ai_content_chunks
-          (subject_user_id, resource_type, resource_id, resource_version, chunk_index, title, section_title,
-           content, content_hash, token_estimate, locator_json, active)
-         VALUES ${placeholders}
-         ON DUPLICATE KEY UPDATE title = VALUES(title), section_title = VALUES(section_title), content = VALUES(content),
-           content_hash = VALUES(content_hash), token_estimate = VALUES(token_estimate), locator_json = VALUES(locator_json),
-           active = 1, update_time = CURRENT_TIMESTAMP`,
-        values,
-      );
-    }
-    // 资源删除、回收站移动或正文版本变化后，不保留旧的私密正文副本。
-    // 先将本轮仍存在的分块重新激活，再在同一事务内物理清除其余旧分块。
-    await connection.query('DELETE FROM ai_content_chunks WHERE subject_user_id = ? AND active = 0', [userId]);
-    if (currentGeneration(userId) !== expectedGeneration) {
-      await connection.rollback();
-      return { persisted: false, stale: true };
-    }
-    await connection.commit();
-    return { persisted: true, stale: false };
-  } catch (error) {
-    await connection.rollback();
-    if (!isOptionalSchemaMissing(error)) throw error;
-    if (!chunkPersistenceWarningShown) {
-      chunkPersistenceWarningShown = true;
-      console.warn('[personal-search] ai_content_chunks 尚未迁移，当前仅使用进程内索引。');
-    }
-    return { persisted: false, stale: false };
-  } finally {
-    connection.release();
   }
 }
 
@@ -488,37 +442,36 @@ async function loadBundle(userId) {
   }
   if (loading.has(key)) return loading.get(key);
   const promise = (async () => {
-    let documents = [];
-    let generation = currentGeneration(key);
-    let databaseGeneration = persistentGeneration;
-    let stable = false;
-    // 构建前后同时核对本进程与数据库代际；跨实例写入发生时重新读取权威资源。
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      generation = currentGeneration(key);
-      databaseGeneration = await readPersistentGeneration(key);
-      documents = await loadDocuments(key);
-      const afterDatabaseGeneration = await readPersistentGeneration(key);
-      stable =
-        generation === currentGeneration(key) &&
-        (databaseGeneration == null || databaseGeneration === afterDatabaseGeneration);
-      if (stable) break;
+    const release = await acquirePersonalSearchBuild();
+    try {
+      let documents = [];
+      let generation = currentGeneration(key);
+      let databaseGeneration = persistentGeneration;
+      let stable = false;
+      // 构建前后同时核对本进程与数据库代际；跨实例写入发生时重新读取权威资源。
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        generation = currentGeneration(key);
+        databaseGeneration = await readPersistentGeneration(key);
+        documents = await loadDocuments(key);
+        const afterDatabaseGeneration = await readPersistentGeneration(key);
+        stable =
+          generation === currentGeneration(key) &&
+          (databaseGeneration == null || databaseGeneration === afterDatabaseGeneration);
+        if (stable) break;
+      }
+      const bundle = await buildBundleAsync(documents, {
+        localGeneration: generation,
+        persistentGeneration: databaseGeneration,
+      });
+      if (stable && generation === currentGeneration(key)) {
+        retainBundle(key, bundle);
+      } else {
+        bundle.index.dispose();
+      }
+      return bundle;
+    } finally {
+      release();
     }
-    const bundle = buildBundle(documents, {
-      localGeneration: generation,
-      persistentGeneration: databaseGeneration,
-    });
-    if (stable && generation === currentGeneration(key)) {
-      cache.set(key, bundle);
-      while (cache.size > MAX_CACHED_USERS) cache.delete(cache.keys().next().value);
-      scheduleCacheExpiry();
-      void persistChunks(key, documents, generation, databaseGeneration).catch((error) =>
-        console.error(
-          '[personal-search] chunk persistence failed code=%s',
-          String(error?.code || 'AI_CHUNK_PERSIST_FAILED'),
-        ),
-      );
-    }
-    return bundle;
   })();
   loading.set(key, promise);
   try {
@@ -531,7 +484,7 @@ async function loadBundle(userId) {
 export function invalidatePersonalKnowledgeCache(userId, { database = pool, persist } = {}) {
   if (userId) {
     const key = String(userId);
-    cache.delete(key);
+    evictBundle(key);
     scheduleCacheExpiry();
     generations.set(key, currentGeneration(key) + 1);
     const shouldPersist = persist ?? process.env.NODE_ENV !== 'test';
@@ -539,21 +492,33 @@ export function invalidatePersonalKnowledgeCache(userId, { database = pool, pers
     if (database === pool && pendingPersistentInvalidations.has(key)) {
       return pendingPersistentInvalidations.get(key);
     }
-    const invalidation = advancePersistentGenerationAndPurge(key, database)
-      .catch((error) => {
+    const invalidation = (async () => {
+      try {
+        let result;
+        let persistedLocalGeneration;
+        do {
+          persistedLocalGeneration = currentGeneration(key);
+          result = await advancePersistentGenerationAndPurge(key, database);
+          // Another business write can commit while the first invalidation's
+          // commit acknowledgement is in flight. Persist a new fence for it.
+        } while (database === pool && persistedLocalGeneration !== currentGeneration(key));
+        return result;
+      } catch (error) {
         console.error(
           '[personal-search] persistent invalidation failed code=%s',
           String(error?.code || 'AI_KNOWLEDGE_INVALIDATION_FAILED'),
         );
         return { generationAdvanced: false, deleted: 0, skipped: true };
-      })
-      .finally(() => {
+      } finally {
+        // Clear synchronously with the last generation check; later writes must
+        // start their own invalidation instead of joining an already settled one.
         if (database === pool) pendingPersistentInvalidations.delete(key);
-      });
+      }
+    })();
     if (database === pool) pendingPersistentInvalidations.set(key, invalidation);
     return invalidation;
   } else {
-    cache.clear();
+    for (const key of cache.keys()) evictBundle(key);
     scheduleCacheExpiry();
     for (const key of loading.keys()) generations.set(key, currentGeneration(key) + 1);
     return Promise.resolve({ generationAdvanced: false, deleted: 0, skipped: true });
@@ -717,13 +682,7 @@ export async function searchPersonalKnowledge({ userId, query, limit = 8, scope 
   const normalizedScope = normalizeScope(scope);
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const bundle = await loadBundle(key);
-    const results = bundle.index.search(normalizedQuery, {
-      boost: { title: 5, tags: 3.5, sectionTitle: 2.5, content: 1 },
-      combineWith: 'OR',
-      prefix: (term) => /^[a-z0-9]{3,}$/iu.test(term),
-      fuzzy: (term) => (/^[a-z0-9]{4,}$/iu.test(term) ? 0.2 : false),
-      maxFuzzy: 1,
-    });
+    const results = await bundle.index.searchCandidates(normalizedQuery, normalizedScope, take);
     const seenPerResource = new Map();
     const candidates = [];
     for (const result of results) {
@@ -759,7 +718,7 @@ export async function searchPersonalKnowledge({ userId, query, limit = 8, scope 
       bundle.localGeneration !== currentGeneration(key) ||
       (bundle.persistentGeneration != null && bundle.persistentGeneration !== afterPersistentGeneration);
     if (stale && attempt === 0) {
-      cache.delete(key);
+      evictBundle(key);
       scheduleCacheExpiry();
       continue;
     }
@@ -811,14 +770,17 @@ export async function searchPersonalKnowledge({ userId, query, limit = 8, scope 
 
 export const __testing = {
   cache,
+  retainBundle,
   loadBundle,
+  loadDocuments,
+  loadFileChunkBatches,
   buildBundle,
+  buildBundleAsync,
   chunkResource,
   excerptAround,
   normalizeScope,
   advancePersistentGenerationAndPurge,
   authoritativeResourceVersions,
-  persistChunks,
   purgePersonalKnowledgeChunks,
   readPersistentGeneration,
   tokenize,

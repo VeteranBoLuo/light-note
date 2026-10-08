@@ -9,9 +9,10 @@ export { MAX_NOTE_TREE_DEPTH, NOTE_TREE_ROOT_KEY } from '../noteTreeConstants.js
 
 const ACTIVE_NOTE = 0;
 const MAX_NOTE_TREE_SEARCH_LENGTH = 120;
+const NOTE_TREE_READ_BATCH_SIZE = 100;
 // 写路径最多允许 8 层；额外联结 1 层只用于识别历史超深父链，避免返回截断且误导性的面包屑。
 const NOTE_BREADCRUMB_LOOKUP_NODE_COUNT = MAX_NOTE_TREE_DEPTH + 1;
-const OWNED_NOTE_BREADCRUMB_SQL = (() => {
+function buildOwnedNoteBreadcrumbSql(idCount = 1) {
   const selectColumns = Array.from({ length: NOTE_BREADCRUMB_LOOKUP_NODE_COUNT }, (_, index) => {
     const alias = `breadcrumb_node_${index}`;
     return `${alias}.id AS breadcrumb_${index}_id, ${alias}.title AS breadcrumb_${index}_title`;
@@ -28,11 +29,12 @@ const OWNED_NOTE_BREADCRUMB_SQL = (() => {
   return `SELECT ${selectColumns}
       FROM note breadcrumb_node_0
       ${joins}
-     WHERE breadcrumb_node_0.id = ?
+     WHERE breadcrumb_node_0.id ${idCount === 1 ? '= ?' : `IN (${Array.from({ length: idCount }, () => '?').join(',')})`}
        AND breadcrumb_node_0.create_by = ?
        AND breadcrumb_node_0.del_flag = ${ACTIVE_NOTE}
-     LIMIT 1`;
-})();
+     LIMIT ${idCount}`;
+}
+const OWNED_NOTE_BREADCRUMB_SQL = buildOwnedNoteBreadcrumbSql();
 
 function normalizeId(value) {
   const normalized = String(value ?? '').trim();
@@ -113,7 +115,7 @@ function normalizeTreeNode(row = {}) {
  * 让整个笔记库不可用，而是把相关节点作为根层孤儿返回并标记 invalidParent。
  * 所有写路径仍会严格拒绝这些结构。
  */
-export function buildNoteTree(rows = []) {
+export function buildNoteTree(rows = [], { sortChildren = true } = {}) {
   const nodesById = new Map();
   for (const row of Array.isArray(rows) ? rows : []) {
     const node = normalizeTreeNode(row);
@@ -158,7 +160,7 @@ export function buildNoteTree(rows = []) {
     if (!childrenByParent.has(key)) childrenByParent.set(key, []);
     childrenByParent.get(key).push(node);
   }
-  for (const children of childrenByParent.values()) children.sort(compareNodes);
+  if (sortChildren) for (const children of childrenByParent.values()) children.sort(compareNodes);
 
   return { nodesById, childrenByParent, invalidParentIds };
 }
@@ -416,17 +418,120 @@ export function searchNoteTreeFromSnapshot(snapshot, keyword, { parentId = null 
   };
 }
 
+export async function assertOwnedNoteParent({ userId, parentId, db = pool }) {
+  const ownerId = normalizeId(userId);
+  if (!ownerId) throw new NoteTreeError('NOTE_TREE_USER_REQUIRED', '缺少用户身份', 401);
+  const [rows] = await queryDb(db).query(
+    'SELECT id FROM note WHERE id = ? AND create_by = ? AND del_flag = 0 LIMIT 1',
+    [normalizeParentId(parentId), ownerId],
+  );
+  if (!rows?.length) throw new NoteTreeError('NOTE_TREE_PARENT_NOT_FOUND', '目录不存在', 404);
+}
+
+async function queryDirectNoteChildren(userId, parentId, db) {
+  const ownerId = normalizeId(userId);
+  if (!ownerId) throw new NoteTreeError('NOTE_TREE_USER_REQUIRED', '缺少用户身份', 401);
+  const database = queryDb(db);
+  const [parents] = await database.query(OWNED_NOTE_BREADCRUMB_SQL, [parentId, ownerId]);
+  const parent = parents?.[0];
+  if (!parent) throw new NoteTreeError('NOTE_TREE_PARENT_NOT_FOUND', '目录不存在', 404);
+  // 异常父链沿用完整快照的恢复语义，包括超过读取上限的历史环。
+  const ancestors = new Set();
+  for (let index = 0; index < NOTE_BREADCRUMB_LOOKUP_NODE_COUNT; index += 1) {
+    const id = normalizeId(parent[`breadcrumb_${index}_id`]);
+    if (!id) break;
+    if (ancestors.has(id) || index >= MAX_NOTE_TREE_DEPTH) return null;
+    ancestors.add(id);
+  }
+  const [rows] = await database.query(
+    `SELECT n.id, n.parent_id, n.title, n.type, n.revision, n.sort, n.is_top, n.update_time,
+            (SELECT COUNT(*) FROM note child
+              WHERE child.create_by = n.create_by AND child.parent_id = n.id AND child.del_flag = 0) AS child_count
+       FROM note n
+      WHERE n.create_by = ? AND n.parent_id = ? AND n.del_flag = 0`,
+    [ownerId, parentId],
+  );
+  return (rows || [])
+    .map((row) => ({ node: normalizeTreeNode(row), childCount: numberOrZero(row.child_count) }))
+    .filter(({ node }) => node)
+    .sort((left, right) => compareNodes(left.node, right.node))
+    .map(({ node, childCount }) => ({
+      id: node.id,
+      parentId,
+      title: node.title,
+      type: node.type,
+      revision: node.revision,
+      childCount,
+      hasChildren: childCount > 0,
+      isTop: node.isTop,
+      sort: node.sort,
+      updateTime: node.updateTime,
+    }));
+}
+
+async function queryRootNoteChildren(userId, db) {
+  const ownerId = normalizeId(userId);
+  if (!ownerId) throw new NoteTreeError('NOTE_TREE_USER_REQUIRED', '缺少用户身份', 401);
+  const database = queryDb(db);
+  // Root recovery must see the complete parent graph (including arbitrarily long
+  // historical cycles). Descendant titles and list fields are not needed for it.
+  const isRoot = "NULLIF(TRIM(parent_id), '') IS NULL";
+  const fields = ['title', 'type', 'revision', 'sort', 'is_top', 'update_time'];
+  const [rows] = await database.query(
+    `SELECT id, parent_id, (${isRoot}) AS root_metadata,
+            ${fields.map((field) => `IF(${isRoot}, ${field}, NULL) AS ${field}`).join(', ')}
+       FROM note WHERE create_by = ? AND del_flag = 0`,
+    [ownerId],
+  );
+  const snapshot = buildNoteTree(rows, { sortChildren: false });
+  const roots = getNoteTreeChildren(snapshot, null);
+  const rawById = new Map((rows || []).map((row) => [normalizeId(row.id), row]));
+  const recover = roots.filter((node) => !Number(rawById.get(node.id)?.root_metadata));
+  if (recover.length > NOTE_TREE_READ_BATCH_SIZE) {
+    // In a badly damaged graph most nodes may become roots. One full snapshot is
+    // cheaper and more coherent than issuing many root-hydration batches.
+    const complete = await loadOwnedNoteTree(ownerId, { db });
+    return getNoteTreeChildren(complete, null).map((node) => decorateTreeItem(complete, node, 1));
+  }
+  if (recover.length) {
+    const [recoveredRows] = await database.query(
+      `SELECT id, parent_id, title, type, revision, sort, is_top, update_time
+         FROM note WHERE create_by = ? AND del_flag = 0 AND id IN (${recover.map(() => '?').join(',')})`,
+      [ownerId, ...recover.map((node) => rawById.get(node.id).id)],
+    );
+    const recovered = new Map((recoveredRows || []).map((row) => [normalizeId(row.id), row]));
+    if (
+      recover.some(
+        (node) => !recovered.has(node.id) || normalizeParentId(recovered.get(node.id).parent_id) !== node.parentId,
+      )
+    ) {
+      // Reparenting/deletion during the two reads must not hide newly orphaned children.
+      const complete = await loadOwnedNoteTree(ownerId, { db });
+      return getNoteTreeChildren(complete, null).map((node) => decorateTreeItem(complete, node, 1));
+    }
+    for (const node of recover) Object.assign(node, normalizeTreeNode(recovered.get(node.id)));
+  }
+  return roots.sort(compareNodes).map((node) => decorateTreeItem(snapshot, node, 1));
+}
+
 export async function queryOwnedNoteTree({ userId, parentId = null, depth = 1, keyword = '', db = pool } = {}) {
   const normalizedDepth = depth === 'all' ? MAX_NOTE_TREE_DEPTH : Number(depth);
   if (!Number.isInteger(normalizedDepth) || normalizedDepth < 1 || normalizedDepth > MAX_NOTE_TREE_DEPTH) {
     throw new NoteTreeError('NOTE_TREE_INVALID_DEPTH', `depth 必须在 1 到 ${MAX_NOTE_TREE_DEPTH} 之间`, 400);
   }
-  const snapshot = await loadOwnedNoteTree(userId, { db });
   const normalizedParentId = normalizeParentId(parentId);
+  const normalizedKeyword = String(keyword ?? '').trim();
+  if (!normalizedParentId && normalizedDepth === 1 && !normalizedKeyword) {
+    return { parentId: null, maxDepth: MAX_NOTE_TREE_DEPTH, items: await queryRootNoteChildren(userId, db) };
+  }
+  if (normalizedParentId && normalizedDepth === 1 && !normalizedKeyword) {
+    const items = await queryDirectNoteChildren(userId, normalizedParentId, db);
+    if (items) return { parentId: normalizedParentId, maxDepth: MAX_NOTE_TREE_DEPTH, items };
+  }
+  const snapshot = await loadOwnedNoteTree(userId, { db });
   if (normalizedParentId && !snapshot.nodesById.has(normalizedParentId)) {
     throw new NoteTreeError('NOTE_TREE_PARENT_NOT_FOUND', '目录不存在', 404);
   }
-  const normalizedKeyword = String(keyword ?? '').trim();
   if (normalizedKeyword) {
     const search = searchNoteTreeFromSnapshot(snapshot, normalizedKeyword, { parentId: normalizedParentId });
     return {
@@ -456,6 +561,113 @@ export async function resolveOwnedNoteBreadcrumb({ userId, noteId, db = pool } =
   const row = Array.isArray(rows) ? rows[0] : null;
   if (!row) throw new NoteTreeError('NOTE_TREE_NODE_NOT_FOUND', '笔记不存在', 404);
   return { items: resolveTargetedNoteBreadcrumb(row) };
+}
+
+/** 列表仅批量补齐当前页路径；超深历史结构才回退完整恢复逻辑。 */
+async function readOwnedNoteListPaths({ userId, noteIds = [], db = pool }) {
+  const ownerId = normalizeId(userId);
+  if (!ownerId) throw new NoteTreeError('NOTE_TREE_USER_REQUIRED', '缺少用户身份', 401);
+  const ids = [...new Set(noteIds.map(normalizeId).filter(Boolean))];
+  const paths = new Map();
+  for (let offset = 0; offset < ids.length; offset += NOTE_TREE_READ_BATCH_SIZE) {
+    const batch = ids.slice(offset, offset + NOTE_TREE_READ_BATCH_SIZE);
+    const [rows] = await queryDb(db).query(buildOwnedNoteBreadcrumbSql(batch.length), [...batch, ownerId]);
+    for (const row of rows || []) {
+      try {
+        paths.set(String(row.breadcrumb_0_id), resolveTargetedNoteBreadcrumb(row));
+      } catch (error) {
+        if (error.code !== 'NOTE_TREE_DEPTH_EXCEEDED') throw error;
+        const snapshot = await loadOwnedNoteTree(ownerId, { db });
+        return { paths: new Map(ids.map((id) => [id, resolveNoteBreadcrumbFromSnapshot(snapshot, id)])), snapshot };
+      }
+    }
+  }
+  return { paths, snapshot: null };
+}
+
+export async function resolveOwnedNoteListPaths(options) {
+  return (await readOwnedNoteListPaths(options)).paths;
+}
+
+// The recovered topology is a forest. Accumulate each subtree once, including when
+// the page contains both an ancestor and its descendants; no repeated BFS/shift().
+function countRecoveredNoteSubtrees(snapshot) {
+  const counts = new Map();
+  const remaining = new Map();
+  const leaves = [];
+  for (const node of snapshot.nodesById.values()) {
+    const childCount = snapshot.childrenByParent.get(node.id)?.length || 0;
+    counts.set(node.id, { childCount, descendantCount: 0 });
+    remaining.set(node.id, childCount);
+    if (!childCount) leaves.push(node);
+  }
+  while (leaves.length) {
+    const node = leaves.pop();
+    const parent = snapshot.nodesById.get(node.effectiveParentId);
+    if (!parent) continue;
+    counts.get(parent.id).descendantCount += 1 + counts.get(node.id).descendantCount;
+    const pending = remaining.get(parent.id) - 1;
+    remaining.set(parent.id, pending);
+    if (!pending) leaves.push(parent);
+  }
+  return counts;
+}
+
+/** Search page paths and authoritative subtree sizes, without loading unrelated notes. */
+export async function resolveOwnedNoteSearchMetadata({ userId, noteIds = [], db = pool }) {
+  const { paths, snapshot: pathSnapshot } = await readOwnedNoteListPaths({ userId, noteIds, db });
+  if (!paths.size) return new Map();
+  const ownerId = normalizeId(userId);
+  const database = queryDb(db);
+  let snapshot = pathSnapshot;
+  if (!snapshot) {
+    const nodes = new Map([...paths.keys()].map((id) => [id, { id, parent_id: null }]));
+    let frontier = [...nodes.keys()];
+    const expanded = new Set();
+    for (let depth = 0; frontier.length; depth += 1) {
+      if (depth >= MAX_NOTE_TREE_DEPTH) {
+        // Arbitrarily deep legacy chains/cycles retain the full recovery semantics
+        // instead of turning into unbounded per-level round trips or partial counts.
+        snapshot = await loadOwnedNoteTree(ownerId, { db });
+        break;
+      }
+      const next = new Set();
+      for (const id of frontier) expanded.add(id);
+      for (let offset = 0; offset < frontier.length; offset += NOTE_TREE_READ_BATCH_SIZE) {
+        const batch = frontier.slice(offset, offset + NOTE_TREE_READ_BATCH_SIZE);
+        // This schema-required parent index bounds each probe by the requested IDs.
+        // Owner-only plans under stale statistics can scan the account once per child.
+        const [rows] = await database.query(
+          `SELECT child.id, child.parent_id,
+                  EXISTS (SELECT 1 FROM note grandchild FORCE INDEX (idx_note_parent)
+                    WHERE grandchild.create_by = child.create_by AND grandchild.parent_id = child.id
+                      AND grandchild.del_flag = 0) AS has_children
+             FROM note child FORCE INDEX (idx_note_parent)
+            WHERE child.create_by = ? AND child.del_flag = 0
+              AND child.parent_id IN (${batch.map(() => '?').join(',')})`,
+          [ownerId, ...batch],
+        );
+        for (const row of rows || []) {
+          const id = normalizeId(row.id);
+          if (!id) continue;
+          nodes.set(id, row);
+          if (Number(row.has_children) && !expanded.has(id)) next.add(id);
+        }
+      }
+      frontier = [...next];
+    }
+    snapshot ||= buildNoteTree([...nodes.values()], { sortChildren: false });
+  }
+  const counts = countRecoveredNoteSubtrees(snapshot);
+  return new Map(
+    [...paths].map(([id, items]) => [
+      id,
+      {
+        items,
+        ...(counts.get(id) || { childCount: 0, descendantCount: 0 }),
+      },
+    ]),
+  );
 }
 
 /**
@@ -864,7 +1076,9 @@ function normalizeNoteIdList(values, { max = null, required = true } = {}) {
 function normalizeDeleteItems(items) {
   const rawItems = Array.isArray(items) ? items : [];
   if (rawItems.length === 0 || rawItems.length > MAX_NOTE_BATCH_ACTION_ITEMS) {
-    throw new NoteTreeError('NOTE_TREE_INVALID_DELETE_REQUEST', '删除参数无效', 400, { max: MAX_NOTE_BATCH_ACTION_ITEMS });
+    throw new NoteTreeError('NOTE_TREE_INVALID_DELETE_REQUEST', '删除参数无效', 400, {
+      max: MAX_NOTE_BATCH_ACTION_ITEMS,
+    });
   }
   const normalized = [];
   const seen = new Map();

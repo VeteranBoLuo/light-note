@@ -1,3 +1,5 @@
+import { cleanupLegacyCloudObject } from './util/services/cloudLegacyObjectLifecycle.js';
+import { cleanupRenameStage } from './util/services/cloudFileRenameStaging.js';
 import {
   runOrganizeInspection,
   runOrganizeDirect,
@@ -24,12 +26,15 @@ import { ensureToolboxSchema } from './util/toolboxSchema.js';
 import { cleanupExpiredToolboxData, runSingleToolboxJob } from './util/toolbox/worker.js';
 import { runSingleOrganizeAiSuggestionBatch } from './util/services/organizeAiSuggestionService.js';
 import { ensureOrganizeSchema } from './util/organizeSchema.js';
+import { createWorkerResourceGate } from './util/workerResourceGate.js';
 
 const workerId = `${os.hostname()}:${process.pid}`;
 let stopping = false;
 let lastCleanupAt = 0;
-let nextQueueIndex = 0;
 const pipelineLoops = [];
+// Preserve the previous ceiling of two media jobs (main loop + video), while
+// allowing thumbnails to proceed independently of a long document or AI call.
+const runMedia = createWorkerResourceGate(2);
 
 const wakeups = new Set();
 const wait = (ms) =>
@@ -53,6 +58,18 @@ async function pipelineLoop(work) {
       if (!stopping) await wait(3000);
     }
   }
+}
+
+function rotatingQueue(queues) {
+  let next = 0;
+  return async () => {
+    for (let offset = 0; offset < queues.length && !stopping; offset += 1) {
+      const index = next;
+      next = (next + 1) % queues.length;
+      if (await queues[index](workerId)) return true;
+    }
+    return false;
+  };
 }
 
 async function run() {
@@ -81,7 +98,16 @@ async function run() {
   }
   console.log(`[AI 文档/文件预览/知识工具箱/整理建议] 解析 Worker 已启动: ${workerId}`);
   pipelineLoops.push(
-    ...(videoRuntime.ready ? [pipelineLoop(() => runSingleVideoPreviewJob(workerId))] : []),
+    ...(videoRuntime.ready
+      ? [
+          pipelineLoop(() =>
+            runMedia(
+              () => runSingleVideoPreviewJob(workerId),
+              () => stopping,
+            ),
+          ),
+        ]
+      : []),
     pipelineLoop(async () => (await runOrganizeInspection(workerId)) || runRuleBatch(pool)),
     ...Array.from({ length: 2 }, () =>
       pipelineLoop(async () => {
@@ -90,6 +116,22 @@ async function run() {
       }),
     ),
     pipelineLoop(() => runSingleSuggestionItem(workerId, pool, { skipRules: true, pipeline: 'v3' })),
+    pipelineLoop(() => runMedia(rotatingDocumentQueue, () => stopping)),
+    pipelineLoop(() =>
+      runMedia(
+        () => runSingleImagePreviewJob(workerId),
+        () => stopping,
+      ),
+    ),
+    pipelineLoop(
+      rotatingQueue([
+        (worker) => runSingleToolboxJob(worker, pool, { runLocalProcessing: runMedia }),
+        runSingleOrganizeAiSuggestionBatch,
+        (worker) => runSingleSuggestionItem(worker, pool, { skipRules: true, pipeline: 'legacy' }),
+      ]),
+    ),
+    pipelineLoop(() => runOrganizeCompletionNotifications(workerId)),
+    pipelineLoop(rotatingQueue([() => cleanupRenameStage(), () => cleanupLegacyCloudObject()])),
   );
   while (!stopping) {
     try {
@@ -101,22 +143,7 @@ async function run() {
         await cleanupExpiredToolboxData();
         lastCleanupAt = now;
       }
-      const queues = [
-        runSingleDocumentJob,
-        runSingleFilePreviewJob,
-        runSingleImagePreviewJob,
-        runSingleToolboxJob,
-        runSingleOrganizeAiSuggestionBatch,
-        (worker) => runSingleSuggestionItem(worker, pool, { skipRules: true, pipeline: 'legacy' }),
-        runOrganizeCompletionNotifications,
-      ];
-      let handled = false;
-      for (let offset = 0; offset < queues.length && !handled; offset += 1) {
-        const index = (nextQueueIndex + offset) % queues.length;
-        handled = await queues[index](workerId);
-      }
-      nextQueueIndex = (nextQueueIndex + 1) % queues.length;
-      if (!handled) await wait(1200);
+      if (!stopping) await wait(60 * 60 * 1000);
     } catch (error) {
       console.error('[AI 文档] Worker 循环异常 code=%s', stableAgentErrorCode(error));
       await wait(3000);
@@ -124,6 +151,8 @@ async function run() {
   }
   console.log('[AI 文档/文件预览/知识工具箱/整理建议] 解析 Worker 已停止');
 }
+
+const rotatingDocumentQueue = rotatingQueue([runSingleDocumentJob, runSingleFilePreviewJob]);
 
 function stop() {
   stopping = true;

@@ -75,8 +75,8 @@ describe('业务 AI 入口能力契约', () => {
   });
 
   it('书签存档弹窗不在按钮上重复标记免费或额度信息', () => {
-    const zhLocale = read('i18n/locales/zh-CN.ts');
-    const enLocale = read('i18n/locales/en-US.ts');
+    const zhLocale = read('i18n/locales/zh-CN-core.ts');
+    const enLocale = read('i18n/locales/en-US-core.ts');
     const snapshot = read('components/manage/bookmarkEditMg/BookmarkSnapshotModal.vue');
 
     expect(zhLocale).toContain("snapshotCreateArchive: '保存网页正文'");

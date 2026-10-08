@@ -31,16 +31,20 @@
   </BModal>
 </template>
 <script setup lang="ts">
-  import { ref, watch } from 'vue';
+  import { defineAsyncComponent, h, ref, watch } from 'vue';
   import { useRoute } from 'vue-router';
   import { useI18n } from 'vue-i18n';
   import { useUserStore } from '@/store';
   import { readEntitlementJourney, finishEntitlementReturn, type EntitlementJourney } from '@/utils/entitlementJourney';
   import { previewSearchBatchSelection, type BatchResourceItem } from '@/api/search';
-  import AiSkillPanel from '@/components/aiSkills/AiSkillPanel.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  const AiSkillPanel = defineAsyncComponent({
+    loader: () => import('@/components/aiSkills/AiSkillPanel.vue').then((module) => module.default),
+    loadingComponent: { render: () => h(BLoading, { loading: true, inline: true }) },
+    delay: 200,
+  });
   const { t } = useI18n();
   const route = useRoute();
   const user = useUserStore();

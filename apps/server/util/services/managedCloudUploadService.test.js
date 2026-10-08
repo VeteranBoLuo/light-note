@@ -1,3 +1,8 @@
+vi.mock('./cloudObjectPublication.js', () => ({
+  lockCloudObjectForPublication: vi.fn(),
+  beginCloudObjectDeletion: vi.fn(async () => ({ hash: 'test', token: 'test' })),
+  finishCloudObjectDeletion: vi.fn(),
+}));
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -112,7 +117,7 @@ describe('managedCloudUploadService', () => {
     { occupied: 999, expected: '资料 (999).pdf' },
     { occupied: 1000, expected: null },
   ])('大量同名文件分批选取首个空位，保留千个候选的上限：$occupied', async ({ occupied, expected }) => {
-    const names = new Set(Array.from({ length: occupied }, (_, i) => i ? `资料 (${i}).pdf` : '资料.pdf'));
+    const names = new Set(Array.from({ length: occupied }, (_, i) => (i ? `资料 (${i}).pdf` : '资料.pdf')));
     let nameQueries = 0;
     const connection = connectionWith(async (sql, params) => {
       const text = String(sql);
@@ -121,7 +126,9 @@ describe('managedCloudUploadService', () => {
         const size = (params.length - 1) / 2;
         expect(size).toBeLessThanOrEqual(32);
         expect(params[size]).toBe('user-1');
-        return [[Object.fromEntries(params.slice(0, size).map((name, i) => [`occupied${i}`, Number(names.has(name))]))]];
+        return [
+          [Object.fromEntries(params.slice(0, size).map((name, i) => [`occupied${i}`, Number(names.has(name))]))],
+        ];
       }
       if (text.includes('file_name = ?')) {
         nameQueries += 1;
@@ -166,7 +173,9 @@ describe('managedCloudUploadService', () => {
       items: [{ resourceType: 'file', resourceId: '23' }],
       source: 'browser_extension',
     });
-    expect(mocks.enqueueResources.mock.invocationCallOrder[0]).toBeLessThan(connection.commit.mock.invocationCallOrder[0]);
+    expect(mocks.enqueueResources.mock.invocationCallOrder[0]).toBeLessThan(
+      connection.commit.mock.invocationCallOrder[0],
+    );
     expect(result).toMatchObject({ fileId: '23', addedToInbox: true });
   });
 
@@ -259,11 +268,15 @@ describe('managedCloudUploadService', () => {
 
   it('确认失败回滚后，清理前发现另一请求已保存同一对象时不删除', async () => {
     const failed = connectionWith(async () => [[]]);
-    const cleanup = connectionWith(async (sql) => String(sql).includes('obs_key = ?')
-      ? [[{ id: 31, file_name: '资料.pdf', file_type: 'application/pdf', file_size: 2048 }]] : [[]]);
+    const cleanup = connectionWith(async (sql) =>
+      String(sql).includes('obs_key = ?')
+        ? [[{ id: 31, file_name: '资料.pdf', file_type: 'application/pdf', file_size: 2048 }]]
+        : [[]],
+    );
     mocks.pool.getConnection.mockResolvedValueOnce(failed).mockResolvedValueOnce(cleanup);
-    await expect(confirmManagedCloudUpload({ userId: 'user-1', objectKey, fileName: '资料.pdf', folderId: '99' }))
-      .rejects.toMatchObject({ code: 'FOLDER_NOT_FOUND' });
+    await expect(
+      confirmManagedCloudUpload({ userId: 'user-1', objectKey, fileName: '资料.pdf', folderId: '99' }),
+    ).rejects.toMatchObject({ code: 'FOLDER_NOT_FOUND' });
     expect(failed.rollback).toHaveBeenCalledOnce();
     expect(cleanup.commit).toHaveBeenCalledOnce();
     expect(mocks.deleteObjectFromObs).not.toHaveBeenCalled();
@@ -284,10 +297,7 @@ describe('managedCloudUploadService', () => {
       fileId: '30',
       filename: '资料.pdf',
     });
-    expect(connection.query.mock.calls[1]).toEqual([
-      'SELECT id FROM user WHERE id = ? LIMIT 1 FOR UPDATE',
-      ['user-1'],
-    ]);
+    expect(connection.query.mock.calls[1]).toEqual(['SELECT id FROM user WHERE id = ? LIMIT 1 FOR UPDATE', ['user-1']]);
     expect(mocks.deleteObjectFromObs).not.toHaveBeenCalled();
   });
 
@@ -296,10 +306,14 @@ describe('managedCloudUploadService', () => {
     mocks.pool.getConnection.mockResolvedValue(connection);
     let finishDelete;
     let started;
-    const deleting = new Promise((resolve) => { started = resolve; });
+    const deleting = new Promise((resolve) => {
+      started = resolve;
+    });
     mocks.deleteObjectFromObs.mockImplementation(() => {
       started();
-      return new Promise((resolve) => { finishDelete = resolve; });
+      return new Promise((resolve) => {
+        finishDelete = resolve;
+      });
     });
     const pending = abortManagedCloudUpload({ userId: 'user-1', objectKey });
     await deleting;
@@ -327,7 +341,9 @@ describe('managedCloudUploadService', () => {
     const connection = connectionWith(async () => [[]]);
     connection.query.mockResolvedValue([[{ acquired: 0 }]]);
     mocks.pool.getConnection.mockResolvedValue(connection);
-    await expect(abortManagedCloudUpload({ userId: 'user-1', objectKey })).rejects.toMatchObject({ code: 'UPLOAD_BUSY' });
+    await expect(abortManagedCloudUpload({ userId: 'user-1', objectKey })).rejects.toMatchObject({
+      code: 'UPLOAD_BUSY',
+    });
     expect(connection.beginTransaction).not.toHaveBeenCalled();
     expect(mocks.deleteObjectFromObs).not.toHaveBeenCalled();
     expect(connection.release).toHaveBeenCalledOnce();
@@ -335,11 +351,11 @@ describe('managedCloudUploadService', () => {
   it('对象锁释放失败时销毁连接，不将锁泄漏到连接池', async () => {
     const connection = connectionWith(async () => [[]]);
     const query = connection.query.getMockImplementation();
-    connection.query.mockImplementation((sql, ...args) => sql.includes('RELEASE_LOCK(')
-      ? Promise.reject(new Error('connection lost')) : query(sql, ...args));
+    connection.query.mockImplementation((sql, ...args) =>
+      sql.includes('RELEASE_LOCK(') ? Promise.reject(new Error('connection lost')) : query(sql, ...args),
+    );
     mocks.pool.getConnection.mockResolvedValue(connection);
     await expect(abortManagedCloudUpload({ userId: 'user-1', objectKey })).resolves.toMatchObject({ deleted: true });
     expect(connection.destroy).toHaveBeenCalledOnce();
   });
-
 });

@@ -1,4 +1,4 @@
-import { renameOwnedCloudFile } from '../util/services/cloudFileRenameService.js';
+import { renameOwnedCloudFile, withPreparedCloudFileRename } from '../util/services/cloudFileRenameService.js';
 import pool from '../db/index.js';
 import { resultData, insertData, L } from '../util/common.js';
 import { buildSignedDownloadUrl } from '../router/file.js';
@@ -67,24 +67,31 @@ export const getFileInfo = async (req, res) => {
 
 export const updateFile = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
-  let connection;
   try {
-    connection = await pool.getConnection();
-    await connection.beginTransaction();
-    const result = await renameOwnedCloudFile(connection, {
-      userId: req.user.id,
-      id: req.body.id,
-      name: req.body.fileName,
+    const result = await withPreparedCloudFileRename(async (preparation) => {
+      const connection = await pool.getConnection();
+      try {
+        await connection.beginTransaction();
+        const renamed = await renameOwnedCloudFile(connection, {
+          userId: req.user.id,
+          id: req.body.id,
+          name: req.body.fileName,
+          preparation,
+        });
+        await connection.commit();
+        return renamed;
+      } catch (error) {
+        await connection.rollback();
+        throw error;
+      } finally {
+        connection.release();
+      }
     });
-    await connection.commit();
     res.send(resultData({ id: req.body.id, fileName: result.name }));
     void Promise.allSettled([result.cleanup(), invalidatePersonalKnowledgeCache(req.user.id)]);
   } catch (error) {
-    await connection?.rollback();
     const status = error.status || 500;
     res.send(resultData(null, status, status >= 500 ? '文件重命名暂时失败，请稍后重试' : error.message));
-  } finally {
-    connection?.release();
   }
 };
 

@@ -196,15 +196,19 @@ export function decorateAiCitations(html: string, citationKeys: string[] = [], a
 
 export function renderAssistantMarkdown(content: string, citationKeys: string[] = [], anchorScope = ''): string {
   try {
-    const html = DOMPurify.sanitize(marked.parse(String(content || '')) as string, {
-      ALLOWED_TAGS,
-      ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'target', 'class', 'data-citation-key', 'aria-label'],
-      ALLOWED_URI_REGEXP: /^(?:(?:https?):|[^a-z]|[a-z+.-]+(?:[^a-z+.-:]|$))/i,
-    });
+    const html = sanitizeMarkdownHtml(marked.parse(String(content || '')) as string);
     return decorateAiCitations(repairAiBareUrlBoundaries(html), citationKeys, anchorScope);
   } catch {
     return DOMPurify.sanitize(String(content || ''), { ALLOWED_TAGS: [], ALLOWED_ATTR: [] }).replace(/\n/g, '<br>');
   }
+}
+
+function sanitizeMarkdownHtml(html: string): string {
+  return DOMPurify.sanitize(html, {
+    ALLOWED_TAGS,
+    ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'target', 'class', 'data-citation-key', 'aria-label'],
+    ALLOWED_URI_REGEXP: /^(?:(?:https?):|[^a-z]|[a-z+.-]+(?:[^a-z+.-:]|$))/i,
+  });
 }
 
 /**
@@ -254,4 +258,41 @@ export function closeStreamingMarkdown(content: string): string {
  */
 export function renderStreamingMarkdown(content: string): string {
   return renderAssistantMarkdown(closeStreamingMarkdown(content));
+}
+
+/** Per-view cache: keep only blocks in the current document, never global private text. */
+export function createStreamingMarkdownRenderer(): (content: string) => string {
+  let previous = new Map<string, string>();
+  return (content) => {
+    try {
+      const tokens = marked.lexer(closeStreamingMarkdown(content));
+      let hasHtml = false;
+      marked.walkTokens(tokens, (token) => {
+        if (token.type === 'html') hasHtml = true;
+      });
+      // Raw HTML can span Markdown blocks; preserve whole-document sanitization.
+      if (hasHtml) {
+        previous.clear();
+        return renderStreamingMarkdown(content);
+      }
+      const next = new Map<string, string>();
+      const html = tokens
+        .map((token) => {
+          // Include resolved inline tokens so late reference-link definitions invalidate the block.
+          const key = JSON.stringify(token);
+          let rendered = previous.get(key) ?? next.get(key);
+          if (rendered === undefined) {
+            rendered = repairAiBareUrlBoundaries(sanitizeMarkdownHtml(marked.parser([token]) as string));
+          }
+          next.set(key, rendered);
+          return rendered;
+        })
+        .join('');
+      previous = next;
+      return html;
+    } catch {
+      previous.clear();
+      return renderStreamingMarkdown(content);
+    }
+  };
 }

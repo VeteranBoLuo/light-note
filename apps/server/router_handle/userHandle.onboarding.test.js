@@ -192,8 +192,8 @@ describe('新用户示例数据接入注册流程', () => {
     ensureCommunityChatIdentity.mockReset();
     verifyPassword.mockReset();
     hashPassword.mockReset();
-    verifyPassword.mockReturnValue(false);
-    hashPassword.mockReturnValue('hashed-password');
+    verifyPassword.mockResolvedValue(false);
+    hashPassword.mockResolvedValue('hashed-password');
     completeGrowthTask.mockResolvedValue({ completed: true });
     ensureCommunityChatIdentity.mockResolvedValue({
       userPublicId: '11111111-1111-4111-8111-111111111111',
@@ -437,7 +437,7 @@ describe('新用户示例数据接入注册流程', () => {
   });
 
   it('历史 GitHub 固定初始密码在再次完成 GitHub 认证后自动轮换', async () => {
-    verifyPassword.mockReturnValue(true);
+    verifyPassword.mockResolvedValue(true);
     query
       .mockResolvedValueOnce([
         [{ id: 'legacy-user', alias: 'octo', role: 'user', login_type: 'github', password: 'legacy-hash' }],
@@ -527,8 +527,8 @@ const { default: passwordRedis } = await import('../util/redisClient.js');
 describe('密码身份校验与会话撤销', () => {
   beforeEach(() => {
     query.mockReset();
-    verifyPassword.mockReset().mockReturnValue(false);
-    hashPassword.mockReset().mockReturnValue('new-hash');
+    verifyPassword.mockReset().mockResolvedValue(false);
+    hashPassword.mockReset().mockResolvedValue('new-hash');
     removeUserSessions.mockReset().mockResolvedValue(undefined);
     logoutCurrentSession.mockReset().mockResolvedValue(undefined);
     passwordRedis.eval = vi.fn().mockResolvedValue(1);
@@ -545,7 +545,7 @@ describe('密码身份校验与会话撤销', () => {
   });
   it('未设置密码不能使用随机占位密码通过验证', async () => {
     query.mockResolvedValueOnce([[{ ...account, login_password_set: 0 }]]);
-    verifyPassword.mockReturnValue(true);
+    verifyPassword.mockResolvedValue(true);
     const res = mockRes();
     await configPassword(request({ password: 'new-password', oldPassword: 'placeholder' }), res);
     expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 400 }));
@@ -567,7 +567,7 @@ describe('密码身份校验与会话撤销', () => {
     query
       .mockResolvedValueOnce([[{ ...account, login_password_set: null }]])
       .mockResolvedValueOnce([{ affectedRows: 1 }]);
-    verifyPassword.mockImplementation((candidate) => candidate === 'current');
+    verifyPassword.mockImplementation(async (candidate) => candidate === 'current');
     const res = mockRes();
     await configPassword(request({ password: 'new-password', oldPassword: 'current' }), res);
     expect(query).toHaveBeenLastCalledWith(expect.stringContaining('login_password_set = 1'), [
@@ -600,7 +600,7 @@ describe('密码身份校验与会话撤销', () => {
   });
   it('原密码验证路径仍拒绝新旧密码相同', async () => {
     query.mockResolvedValueOnce([[account]]);
-    verifyPassword.mockReturnValue(true);
+    verifyPassword.mockResolvedValue(true);
     const res = mockRes();
     await configPassword(request({ password: 'same-password', oldPassword: 'same-password' }), res);
     expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 400 }));

@@ -137,7 +137,7 @@ async function insertShare(connection, { fileId, ownerUserId, input }) {
       hashShareToken(token),
       token.slice(-8),
       input.description,
-      hashShareAccessCode(input.accessCode),
+      await hashShareAccessCode(input.accessCode),
       input.expiresInDays,
       input.maxAccessCount,
       input.maxDownloadCount,
@@ -308,7 +308,7 @@ async function authorizePublicShare(req, res, { eventType, countColumn, previewO
       publicError(req, res, 403, 'SHARE_CODE_REQUIRED', '请输入提取码', 'Enter the access code');
       return null;
     }
-    if (!verifyShareAccessCode(req.body?.accessCode, row.access_code_hash)) {
+    if (!(await verifyShareAccessCode(req.body?.accessCode, row.access_code_hash))) {
       await appendShareEvent(connection, req, row.id, eventType, 'code_invalid');
       await connection.commit();
       publicError(req, res, 403, 'SHARE_CODE_INVALID', '提取码错误', 'The access code is incorrect');
@@ -413,7 +413,7 @@ export async function downloadFileShare(req, res) {
   });
   if (!row) return;
   const objectKey = row.obs_key || buildObjectKey(row.file_owner_id, row.file_name);
-  const { url, expiresIn } = createDownloadSignedUrl({ objectKey, expires: 600 });
+  const { url, expiresIn } = createDownloadSignedUrl({ objectKey, expires: 600, fileName: row.file_name });
   if (!url) {
     return publicError(
       req,

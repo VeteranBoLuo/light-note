@@ -35,6 +35,9 @@ function connectionWith(user) {
     release: vi.fn(),
     query: vi.fn(async (sql) => {
       const statement = String(sql);
+      if (statement === 'SELECT id FROM user WHERE id = ? LIMIT 1') return [[{ id: user.id }]];
+      if (statement.includes('GET_LOCK')) return [[{ acquired: 1 }]];
+      if (statement.includes('RELEASE_LOCK')) return [[{ released: 1 }]];
       if (statement.includes('SELECT id, alias')) return [[user]];
       if (statement.includes('SELECT id, role')) return [[user]];
       return [{ affectedRows: 1 }];
@@ -86,6 +89,8 @@ describe('后台用户高风险操作', () => {
       res,
     );
     expect(connection.commit).toHaveBeenCalledOnce();
+    expect(connection.query.mock.calls[1][0]).toContain('GET_LOCK');
+    expect(connection.query.mock.calls.at(-1)[0]).toContain('RELEASE_LOCK');
     expect(connection.query).toHaveBeenCalledWith('UPDATE user SET alias = ?, email = ?, role = ? WHERE id = ?', [
       '新昵称',
       'new@example.com',

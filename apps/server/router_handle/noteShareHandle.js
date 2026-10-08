@@ -127,7 +127,7 @@ async function insertNoteShare(connection, { rootNoteId, ownerUserId, input }) {
       hashShareToken(token),
       token.slice(-8),
       input.description,
-      hashShareAccessCode(input.accessCode),
+      await hashShareAccessCode(input.accessCode),
       input.expiresInDays,
       input.maxAccessCount,
     ],
@@ -339,7 +339,7 @@ export async function resolveNoteShare(req, res) {
       transactionStarted = false;
       return publicError(req, res, 403, 'SHARE_CODE_REQUIRED', '请输入访问码', 'Enter the access code');
     }
-    if (!resumesReadingSession && !verifyShareAccessCode(req.body?.accessCode, row.access_code_hash)) {
+    if (!resumesReadingSession && !(await verifyShareAccessCode(req.body?.accessCode, row.access_code_hash))) {
       await appendShareEvent(connection, req, row.id, 'viewed', 'code_invalid');
       await connection.commit();
       transactionStarted = false;

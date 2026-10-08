@@ -36,6 +36,7 @@ export async function queryTagSpaces(req, res) {
       filter: req.body?.filter,
       sort: req.body?.sort,
       includeEmpty: req.body?.includeEmpty,
+      includeMetadata: req.body?.includeMetadata,
       page: req.body?.page ?? req.body?.currentPage,
       pageSize: req.body?.pageSize,
     });

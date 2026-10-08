@@ -6,6 +6,14 @@ import mysql from 'mysql2/promise';
 
 // These suites create and remove their own random schemas. Never load application .env.
 const suites = {
+  'router/file.confirmUpload.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
+  'util/services/cloudLegacyObjectLifecycle.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
+  'util/services/cloudFileRenameStaging.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
+  'util/aiOutboundDispatchGuard.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
+  'util/personalKnowledgeSearch.read.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
+  'util/services/todoWorkspaceService.test.js': 'TODO_WORKSPACE_TEST_SOCKET',
+  'util/searchSeekPagination.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
+  'util/searchRelevancePagination.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/loginPasswordState.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/collectionForms/service.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/services/cloudFileRestore.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
@@ -18,6 +26,7 @@ const suites = {
   'util/services/managedCloudUpload.concurrent.mysql.test.js': 'Q01_TEST_MYSQL_SOCKET',
   'router_handle/noteLibraryHandle.sort.mysql.test.js': 'API_SORT_MYSQL_SOCKET',
   'util/services/noteTreeService.move.mysql.test.js': 'API_SORT_MYSQL_SOCKET',
+  'util/services/noteTreeService.read.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/services/cloudFolderTreeService.sort.mysql.test.js': 'API_SORT_MYSQL_SOCKET',
   'util/services/growthMeasurement.mysql.test.js': 'M01_TEST_MYSQL_SOCKET',
   'util/services/coreUsageReport.mysql.test.js': 'M02_TEST_MYSQL_SOCKET',

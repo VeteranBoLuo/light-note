@@ -9,6 +9,18 @@ const { fetchTagSpace, fetchTagSpaceResources, fetchTagSpaces } = await import('
 describe('tagSpace api', () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it('续页允许省略统计，不将未知总数伪造成零', async () => {
+    const data = { items: [{ id: 'tag-next' }], page: 2, pageSize: 50, hasMore: false };
+    mocks.apiBasePost.mockResolvedValue({ status: 200, data });
+    const result = await fetchTagSpaces({ page: 2, includeMetadata: false });
+    expect(result).toEqual(data);
+    expect(result.total).toBeUndefined();
+    expect(result.overview).toBeUndefined();
+    expect(mocks.apiBasePost).toHaveBeenCalledWith(
+      '/api/bookmark/queryTagSpaces', { page: 2, includeMetadata: false }, { silent: true, feedback: false },
+    );
+  });
+
   it('首页只向摘要接口下发分页、筛选、排序和空标签包含条件', async () => {
     mocks.apiBasePost.mockResolvedValue({ status: 200, data: { items: [], total: 0 } });
     await fetchTagSpaces({

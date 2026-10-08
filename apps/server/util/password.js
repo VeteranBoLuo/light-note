@@ -1,16 +1,17 @@
 import crypto from 'crypto';
+import { deriveScrypt } from './asyncScrypt.js';
 
 const SCRYPT_KEYLEN = 64;
 const SALT_LENGTH = 16;
 const SEPARATOR = ':';
 
 /**
- * 哈希密码（同步，约 100ms）
+ * 异步哈希密码，保持历史 scrypt 参数和存储格式。
  * 返回格式: hexSalt:hexHash
  */
-export function hashPassword(plainPassword) {
+export async function hashPassword(plainPassword) {
   const salt = crypto.randomBytes(SALT_LENGTH);
-  const hash = crypto.scryptSync(plainPassword, salt, SCRYPT_KEYLEN);
+  const hash = await deriveScrypt(plainPassword, salt, SCRYPT_KEYLEN);
   return salt.toString('hex') + SEPARATOR + hash.toString('hex');
 }
 
@@ -18,9 +19,9 @@ export function hashPassword(plainPassword) {
  * 验证密码
  * @param {string} plainPassword 用户输入的明文
  * @param {string} storedPassword 数据库存的哈希（格式: salt:hash）或明文
- * @returns {boolean}
+ * @returns {Promise<boolean>}
  */
-export function verifyPassword(plainPassword, storedPassword) {
+export async function verifyPassword(plainPassword, storedPassword) {
   if (!storedPassword || !plainPassword) return false;
   const parts = storedPassword.split(SEPARATOR);
   // 老密码是纯明文（不含分隔符）
@@ -29,7 +30,7 @@ export function verifyPassword(plainPassword, storedPassword) {
   }
   const [saltHex, hashHex] = parts;
   const salt = Buffer.from(saltHex, 'hex');
-  const hash = crypto.scryptSync(plainPassword, salt, SCRYPT_KEYLEN);
+  const hash = await deriveScrypt(plainPassword, salt, SCRYPT_KEYLEN);
   return hash.toString('hex') === hashHex;
 }
 

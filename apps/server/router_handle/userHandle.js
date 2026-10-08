@@ -209,7 +209,7 @@ export const login = async (req, res) => {
     const ipReputation = await getIpReputation(getClientIp(req));
     const isIpBanned = isActiveIpBan(ipReputation);
     const [result] = await pool.query('SELECT * FROM user WHERE email = ?', [email]);
-    if (result.length === 0 || hasLoginPassword(result[0]) === false || !verifyPassword(password, result[0].password)) {
+    if (result.length === 0 || hasLoginPassword(result[0]) === false || !(await verifyPassword(password, result[0].password))) {
       if (isIpBanned) {
         res.send(resultData(null, 403, 'IP 已处于封禁期，禁止登录'));
         return;
@@ -259,9 +259,9 @@ export const login = async (req, res) => {
     }
     // 透明升级：老明文密码 → scrypt 哈希
     if (result[0].password_method === 'plain' && result[0].password) {
-      const upgradedHash = hashPassword(result[0].password);
+      const upgradedHash = await hashPassword(result[0].password);
       pool
-        .query("UPDATE user SET password = ?, password_method = 'scrypt' WHERE id = ?", [upgradedHash, result[0].id])
+        .query("UPDATE user SET password = ?, password_method = 'scrypt' WHERE id = ? AND password = ? AND password_method = 'plain'", [upgradedHash, result[0].id, result[0].password])
         .catch((e) => console.warn('[auth] 明文密码透明升级失败 code=%s', stableAgentErrorCode(e))); // 非关键,留痕不阻断
     }
     if (result[0].login_password_set == null) {
@@ -435,7 +435,7 @@ export const registerUser = async (req, res) => {
       lang: detectLangFromReq(req),
     });
     if (params.password) {
-      params.password = hashPassword(params.password);
+      params.password = await hashPassword(params.password);
       params.password_method = 'scrypt';
       params.login_password_set = 1;
     }
@@ -1716,9 +1716,9 @@ export const handleUserDatabaseOperation = async (githubUser, req, { duplicateRe
         user.login_password_set == null &&
         typeof user.password === 'string' &&
         user.password &&
-        verifyPassword('123456', user.password)
+        (await verifyPassword('123456', user.password))
       ) {
-        const rotatedPassword = hashPassword(crypto.randomBytes(32).toString('base64url'));
+        const rotatedPassword = await hashPassword(crypto.randomBytes(32).toString('base64url'));
         await connection.query(
           `UPDATE user SET password = ?, password_method = 'scrypt', login_password_set = 0 WHERE id = ?`,
           [rotatedPassword, user.id],
@@ -1748,7 +1748,7 @@ export const handleUserDatabaseOperation = async (githubUser, req, { duplicateRe
       } else {
         createdUserId = generateUUID();
         // GitHub 账号没有可用于邮箱登录的初始密码，使用不可预测随机值，用户可在登录后主动设置密码。
-        const githubHashedPassword = hashPassword(crypto.randomBytes(32).toString('base64url'));
+        const githubHashedPassword = await hashPassword(crypto.randomBytes(32).toString('base64url'));
         const defaultPreferences = JSON.stringify({
           theme: 'day',
           noteViewMode: 'card',
@@ -1844,12 +1844,12 @@ export const configPassword = async (req, res) => {
       if (!(await consumePasswordCode(normalizeEmail(user.email), code))) {
         return res.send(resultData(null, 400, L(req, '验证码错误或已过期', 'The code is incorrect or expired.')));
       }
-    } else if (hasLoginPassword(user) === false || !verifyPassword(oldPassword, user.password)) {
+    } else if (hasLoginPassword(user) === false || !(await verifyPassword(oldPassword, user.password))) {
       return res.send(
         resultData(null, 400, L(req, '请验证当前密码或邮箱验证码', 'Verify your current password or email code.')),
       );
     }
-    if (!code && verifyPassword(password, user.password)) {
+    if (!code && (await verifyPassword(password, user.password))) {
       return res.send(
         resultData(
           null,
@@ -1860,7 +1860,7 @@ export const configPassword = async (req, res) => {
     }
     const [result] = await pool.query(
       'UPDATE user SET password = ?, password_method = ?, login_password_set = 1 WHERE id = ? AND password <=> ? AND email <=> ?',
-      [hashPassword(password), 'scrypt', id, user.password, user.email],
+      [await hashPassword(password), 'scrypt', id, user.password, user.email],
     );
     if (!result.affectedRows) {
       return res.send(
@@ -1953,7 +1953,7 @@ export const verifyCode = async (req, res) => {
     }
     const [updated] = await pool.query(
       'UPDATE user SET password = ?, password_method = ?, login_password_set = 1 WHERE id = ? AND password <=> ? AND email <=> ?',
-      [hashPassword(password), 'scrypt', user.id, user.password, user.email],
+      [await hashPassword(password), 'scrypt', user.id, user.password, user.email],
     );
     if (!updated.affectedRows) {
       return res.send(

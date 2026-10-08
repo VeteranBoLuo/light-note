@@ -271,6 +271,7 @@
         .filter((result) => result.uploadStatus === 'success')
         .map((result) => ({
           fileName: result.filename,
+          ...(result.objectKey ? { objectKey: result.objectKey } : {}),
           fileType: result.fileType,
           fileSize: filesData.find((f) => f.fileName === result.filename)?.fileSize || 0,
         }));

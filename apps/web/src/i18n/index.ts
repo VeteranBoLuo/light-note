@@ -1,5 +1,5 @@
 import { createI18n } from 'vue-i18n';
-import zhCN from '@/i18n/locales/zh-CN';
+import zhCN from '@/i18n/locales/zh-CN-core';
 import { getAdminLoginPreviewPreferences, isAdminLoginPreview } from '@/utils/authStorage.ts';
 
 export type AppLocale = 'zh-CN' | 'en-US';
@@ -36,6 +36,35 @@ const i18n = createI18n({
 });
 
 let englishLocaleRequest: Promise<void> | null = null;
+let englishLocaleLoaded = false;
+let serverManagementRequested = false;
+const serverManagementRequests = new Map<AppLocale, Promise<void>>();
+
+async function ensureServerManagementMessages(lang: AppLocale): Promise<void> {
+  let pending = serverManagementRequests.get(lang);
+  if (!pending) {
+    pending = (
+      lang === 'zh-CN' ? import('./locales/zh-CN-serverManagement') : import('./locales/en-US-serverManagement')
+    )
+      .then(({ default: serverManagement }) => {
+        i18n.global.mergeLocaleMessage(lang, { serverManagement });
+      })
+      .catch((error) => {
+        serverManagementRequests.delete(lang);
+        throw error;
+      });
+    serverManagementRequests.set(lang, pending);
+  }
+  await pending;
+}
+
+/** Wait before entering server management, including Chinese fallback and subsequent language switches. */
+export async function prepareServerManagementLocale(): Promise<void> {
+  serverManagementRequested = true;
+  const lang = i18n.global.locale.value as AppLocale;
+  await ensureLocaleMessages(lang);
+  await Promise.all([ensureServerManagementMessages('zh-CN'), ensureServerManagementMessages(lang)]);
+}
 
 function syncDocumentLocale(lang: AppLocale): void {
   if (typeof document !== 'undefined') {
@@ -50,15 +79,16 @@ function applyLocale(lang: AppLocale): void {
 }
 
 function ensureLocaleMessages(lang: AppLocale): Promise<void> {
-  if (lang === 'zh-CN' || Object.keys(i18n.global.getLocaleMessage(lang)).length > 0) {
+  if (lang === 'zh-CN' || englishLocaleLoaded) {
     return Promise.resolve();
   }
   if (!englishLocaleRequest) {
     // 英文词典比中文词典还大，绝大多数 App 用户却不会使用。按需加载可让中文首屏
     // 少解析约 26 万字节源码，同时语言切换仍然只下载一次并由浏览器长期缓存。
-    englishLocaleRequest = import('@/i18n/locales/en-US')
+    englishLocaleRequest = import('@/i18n/locales/en-US-core')
       .then(({ default: messages }) => {
         i18n.global.setLocaleMessage('en-US', messages);
+        englishLocaleLoaded = true;
       })
       .catch((error) => {
         englishLocaleRequest = null;
@@ -80,7 +110,8 @@ export async function prepareInitialLocale(): Promise<void> {
 
 // 切换语言的方法
 export function setLocale(lang: AppLocale, options: { shouldApply?: () => boolean } = {}): Promise<void> {
-  return ensureLocaleMessages(lang).then(() => {
+  return ensureLocaleMessages(lang).then(async () => {
+    if (serverManagementRequested) await ensureServerManagementMessages(lang);
     if (options.shouldApply && !options.shouldApply()) return;
     if (!isAdminLoginPreview()) {
       try {

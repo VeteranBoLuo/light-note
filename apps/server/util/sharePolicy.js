@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { deriveScrypt } from './asyncScrypt.js';
 
 export const SHARE_DEFAULT_DAYS = 7;
 export const SHARE_ALLOWED_DAYS = Object.freeze([1, 7, 30]);
@@ -13,24 +14,26 @@ export function hashShareToken(token) {
   return crypto.createHash('sha256').update(String(token || ''), 'utf8').digest('hex');
 }
 
-export function hashShareAccessCode(code) {
+export async function hashShareAccessCode(code) {
   const normalized = String(code || '').trim();
   if (!normalized) return null;
   const salt = crypto.randomBytes(16);
-  const derived = crypto.scryptSync(normalized, salt, 32);
+  const derived = await deriveScrypt(normalized, salt, 32);
   return `scrypt$${salt.toString('base64url')}$${derived.toString('base64url')}`;
 }
 
-export function verifyShareAccessCode(code, encodedHash) {
+export async function verifyShareAccessCode(code, encodedHash) {
   if (!encodedHash) return true;
   const [algorithm, saltValue, hashValue] = String(encodedHash).split('$');
   if (algorithm !== 'scrypt' || !saltValue || !hashValue) return false;
   try {
     const salt = Buffer.from(saltValue, 'base64url');
     const expected = Buffer.from(hashValue, 'base64url');
-    const actual = crypto.scryptSync(String(code || '').trim(), salt, expected.length);
+    const actual = await deriveScrypt(String(code || '').trim(), salt, expected.length);
     return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
-  } catch {
+  } catch (error) {
+    // Admission failures are service failures, not an incorrect access code.
+    if (error?.code === 'SCRYPT_BUSY') throw error;
     return false;
   }
 }

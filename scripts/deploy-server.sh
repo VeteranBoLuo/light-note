@@ -98,8 +98,9 @@ ssh -i "$KEY" "$HOST" "cd '$REMOTE' && '$REMOTE_NODE' scripts/checkNoteImportRun
 echo "🔎  检查数据导出 Schema 与暂存空间…"
 ssh -i "$KEY" "$HOST" "cd '$REMOTE' && '$REMOTE_NODE' scripts/checkDataExportRuntime.js"
 
-echo "♻️  先重启 Worker，再重启 ${PM2}…"
-ssh -i "$KEY" "$HOST" "if pm2 describe '$DOCUMENT_WORKER_PM2' >/dev/null 2>&1; then \
+echo "♻️  先重启 ${PM2}，再启动 Worker…"
+ssh -i "$KEY" "$HOST" "pm2 restart $PM2 --update-env --interpreter '$REMOTE_NODE' && \
+  if pm2 describe '$DOCUMENT_WORKER_PM2' >/dev/null 2>&1; then \
     pm2 restart '$DOCUMENT_WORKER_PM2' --update-env --interpreter '$REMOTE_NODE'; \
   else \
     cd '$REMOTE' && pm2 start documentWorker.js --interpreter '$REMOTE_NODE' --name '$DOCUMENT_WORKER_PM2'; \
@@ -129,7 +130,7 @@ ssh -i "$KEY" "$HOST" "if pm2 describe '$DOCUMENT_WORKER_PM2' >/dev/null 2>&1; t
   else \
     cd '$REMOTE' && pm2 start browserPushWorker.js --interpreter '$REMOTE_NODE' --name 'light-note-browser-push'; \
   fi && \
-  pm2 restart $PM2 --update-env --interpreter '$REMOTE_NODE' && pm2 save"
+  pm2 save"
 
 echo "⏳  等待后端重启就绪并健康检查(重启窗口会短暂 502,属正常)…"
 code=000
@@ -142,6 +143,6 @@ if [ "$code" = "200" ]; then
   echo "✅  后端健康检查 HTTP 200"
 else
   echo "⚠️  后端健康检查 HTTP $code —— 请查 pm2 logs app;必要时回滚:"
-  echo "    ssh -i $KEY $HOST \"rm -rf $REMOTE && mv ${REMOTE}_bak_$TS $REMOTE && pm2 restart $PM2 --update-env\""
+  echo "    先停止 $DOCUMENT_WORKER_PM2，再恢复备份目录 ${REMOTE}_bak_$TS；重启 $PM2 后，再用同一备份版本启动 $DOCUMENT_WORKER_PM2。"
   exit 1
 fi

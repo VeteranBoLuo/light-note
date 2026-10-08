@@ -4006,3 +4006,63 @@ WHERE NOT EXISTS (
   SELECT 1 FROM information_schema.columns
   WHERE table_schema = DATABASE() AND table_name = 'user' AND column_name = 'login_password_set'
 );
+
+-- Seek needs full owner equality followed by deletion state, time, and exact ID.
+SELECT 'search_seek_index_contract' AS check_name, CONCAT(e.tn, '.', e.ix) AS detail
+FROM (
+  SELECT 'bookmark' tn, 'idx_bookmark_search_time' ix, 'user_id,del_flag,create_time,id' cols
+  UNION ALL SELECT 'files', 'idx_files_search_time', 'create_by,del_flag,create_time,id'
+) e LEFT JOIN (
+  SELECT table_name, index_name, non_unique, index_type,
+    GROUP_CONCAT(column_name ORDER BY seq_in_index) cols, SUM(sub_part IS NOT NULL) prefixes
+  FROM information_schema.statistics WHERE table_schema=DATABASE()
+  GROUP BY table_name,index_name,non_unique,index_type
+) s ON s.table_name=e.tn AND s.index_name=e.ix
+WHERE s.index_name IS NULL OR s.cols<>e.cols OR s.prefixes<>0 OR s.non_unique<>1 OR s.index_type<>'BTREE';
+
+
+SELECT 'cloud_legacy_lifecycle_schema' AS check_name, e.col AS detail
+FROM (
+ SELECT 'object_hash' col UNION ALL SELECT 'upload_key' UNION ALL SELECT 'generation' UNION ALL SELECT 'user_id' UNION ALL SELECT 'object_key'
+ UNION ALL SELECT 'state' UNION ALL SELECT 'upload_until' UNION ALL SELECT 'available_at'
+ UNION ALL SELECT 'lease_token' UNION ALL SELECT 'attempts'
+) e LEFT JOIN information_schema.columns c ON c.table_schema=DATABASE()
+ AND c.table_name='cloud_legacy_object_lifecycle' AND c.column_name=e.col
+WHERE c.column_name IS NULL;
+SELECT 'cloud_legacy_lifecycle_contract' AS check_name, 'state/engine/due-index' AS detail
+FROM DUAL WHERE NOT EXISTS (
+ SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE()
+ AND table_name='cloud_legacy_object_lifecycle' AND column_name='state'
+ AND column_type="enum('active','pending','deleting','retired')"
+) OR NOT EXISTS (
+ SELECT 1 FROM information_schema.tables WHERE table_schema=DATABASE()
+ AND table_name='cloud_legacy_object_lifecycle' AND engine='InnoDB'
+) OR NOT EXISTS (
+ SELECT 1 FROM information_schema.statistics WHERE table_schema=DATABASE()
+ AND table_name='cloud_legacy_object_lifecycle' AND index_name='idx_cloud_legacy_due'
+ GROUP BY index_name HAVING GROUP_CONCAT(column_name ORDER BY seq_in_index)='available_at,object_hash'
+ AND SUM(sub_part IS NOT NULL)=0 AND MAX(non_unique)=1
+);
+
+SELECT 'cloud_rename_staging_schema' AS check_name, e.col AS detail
+FROM (
+ SELECT 'id' col UNION ALL SELECT 'user_id' UNION ALL SELECT 'file_id' UNION ALL SELECT 'target_key'
+ UNION ALL SELECT 'state' UNION ALL SELECT 'available_at' UNION ALL SELECT 'lease_token'
+ UNION ALL SELECT 'attempts' UNION ALL SELECT 'created_at'
+) e LEFT JOIN information_schema.columns c ON c.table_schema=DATABASE()
+ AND c.table_name='cloud_file_rename_staging' AND c.column_name=e.col
+WHERE c.column_name IS NULL;
+SELECT 'cloud_rename_staging_contract' AS check_name, 'state/engine/due-index' AS detail
+FROM DUAL WHERE NOT EXISTS (
+ SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE()
+ AND table_name='cloud_file_rename_staging' AND column_name='state'
+ AND column_type="enum('pending','adopted','deleting')"
+) OR NOT EXISTS (
+ SELECT 1 FROM information_schema.tables WHERE table_schema=DATABASE()
+ AND table_name='cloud_file_rename_staging' AND engine='InnoDB'
+) OR NOT EXISTS (
+ SELECT 1 FROM information_schema.statistics WHERE table_schema=DATABASE()
+ AND table_name='cloud_file_rename_staging' AND index_name='idx_cloud_rename_due'
+ GROUP BY index_name HAVING GROUP_CONCAT(column_name ORDER BY seq_in_index)='available_at,id'
+ AND SUM(sub_part IS NOT NULL)=0 AND MAX(non_unique)=1
+);

@@ -9,7 +9,7 @@ import { toolboxError } from './errors.js';
  * A replay observes the same job, never launches a second provider request.
  */
 export async function streamTranslation(
-  { userId, quoteId, clientRequestId, emit, disconnected = () => false },
+  { userId, quoteId, clientRequestId, streamVersion = 1, emit, disconnected = () => false },
   deps = {},
 ) {
   const database = deps.database || pool;
@@ -45,16 +45,32 @@ export async function streamTranslation(
   let executionError;
   let lastUpdate = 0;
   let sourceSent = false;
+  let deliveredContent = '';
+  let lastSnapshot = 0;
   let execution;
   if (claimed) {
     execution = run(claimed, database, {
       signal: controller.signal,
       onProgress: (update) => {
-        // Bounded snapshots tolerate repair resets and slow readers.
+        // Only advance the delta base after the transport accepts the event.
+        // Repairs and periodic checkpoints send complete snapshots for recovery.
         if (!disconnected() && Date.now() - lastUpdate >= 100) {
           lastUpdate = Date.now();
-          emit('snapshot', { content: update.content, ...(!sourceSent ? { original: update.original } : {}) });
-          sourceSent = true;
+          const content = String(update.content || '');
+          const snapshot =
+            streamVersion !== 2 ||
+            !sourceSent ||
+            !content.startsWith(deliveredContent) ||
+            lastUpdate - lastSnapshot >= 10000;
+          if (!snapshot && content === deliveredContent) return;
+          const accepted = snapshot
+            ? emit('snapshot', { content, ...(!sourceSent ? { original: update.original } : {}) })
+            : emit('delta', { offset: deliveredContent.length, content: content.slice(deliveredContent.length) });
+          if (accepted !== false) {
+            deliveredContent = content;
+            sourceSent = true;
+            if (snapshot) lastSnapshot = lastUpdate;
+          }
         }
       },
     }).catch((error) => {

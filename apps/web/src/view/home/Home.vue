@@ -944,5 +944,9 @@
   // 共享工作区表面：仅改变颜色，布局与滚动由原组件负责。
   .bookmark-main-panel {
     .workspace-canvas-surface();
+
+    @media (max-width: 767px) {
+      background: transparent;
+    }
   }
 </style>

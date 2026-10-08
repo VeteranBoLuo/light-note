@@ -483,16 +483,18 @@ export async function getWorkspaceBoardItem(req, res) {
 export async function translateStream(req, res) {
   if (!requireWrite(req, res)) return;
   const emit = (event, data) => {
-    if (res.destroyed || res.writableEnded) return;
+    if (res.destroyed || res.writableEnded) return false;
     if (!res.headersSent) {
       res.status(200).set({ 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache, no-transform', 'X-Accel-Buffering': 'no' });
       res.flushHeaders?.();
     }
-    if (event === 'snapshot' && res.writableLength > 256 * 1024) return;
+    if (['snapshot', 'delta'].includes(event) && res.writableLength > 256 * 1024) return false;
     res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    return true;
   };
   try {
     await streamTranslation({ userId: req.user.id, quoteId: req.body?.quoteId, clientRequestId: req.body?.clientRequestId, emit,
+      streamVersion: req.body?.streamVersion === 2 ? 2 : 1,
       disconnected: () => res.destroyed || res.writableEnded });
   } catch (error) {
     const failure = parseToolboxError(error);

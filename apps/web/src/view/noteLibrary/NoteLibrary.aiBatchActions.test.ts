@@ -50,8 +50,8 @@ const noteHeaderSource = readFileSync(
   'utf8',
 );
 const aiReplySource = readFileSync(resolve(process.cwd(), 'src/components/noteLibrary/detail/AiReply.vue'), 'utf8');
-const zhLocaleSource = readFileSync(resolve(process.cwd(), 'src/i18n/locales/zh-CN.ts'), 'utf8');
-const enLocaleSource = readFileSync(resolve(process.cwd(), 'src/i18n/locales/en-US.ts'), 'utf8');
+const zhLocaleSource = readFileSync(resolve(process.cwd(), 'src/i18n/locales/zh-CN-core.ts'), 'utf8');
+const enLocaleSource = readFileSync(resolve(process.cwd(), 'src/i18n/locales/en-US-core.ts'), 'utf8');
 
 describe('笔记库批量 AI 操作语义', () => {
   it('首次列表请求启动前保持加载态，避免目录功能快照期间闪出空状态', () => {

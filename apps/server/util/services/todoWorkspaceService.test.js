@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import mysql from 'mysql2/promise';
+import { randomUUID } from 'node:crypto';
+import { performance } from 'node:perf_hooks';
 import { Temporal } from '@js-temporal/polyfill';
 vi.mock('./todoService.js', () => ({
   listTodoPage: vi.fn(async (db, userId, { ids }) => {
@@ -15,6 +17,7 @@ import {
   todoWorkspaceGroupPage,
   todoWorkspaceSeriesPage,
   workspaceNodeQuery,
+  workspaceNodeCountQuery,
 } from './todoWorkspaceService.js';
 
 it('validates filters and page size before accessing data', () => {
@@ -31,14 +34,18 @@ it('binds malformed and cross-scope cursors before group queries', async () => {
 });
 
 // Explicitly opt in to a disposable local socket. Never uses application database configuration.
-const socket = process.env.TODO_WORKSPACE_TEST_SOCKET;
+const socket = process.env.TODO_WORKSPACE_TEST_SOCKET || process.env.LIGHTNOTE_TEST_MYSQL_SOCKET;
 describe.skipIf(!socket)('workspace SQL against isolated MySQL', () => {
   let db;
-  const database = `todo_workspace_test_${process.pid}`;
+  let created = false;
+  const database = `todo_workspace_test_${randomUUID().replaceAll('-', '')}`;
   beforeAll(async () => {
-    if (!socket.startsWith('/tmp/light-note-todo-mysql/')) throw new Error('Use the isolated test socket');
+    if (!/^\/(?:private\/)?tmp\//.test(socket)) throw new Error('Use a temporary isolated test socket');
     db = await mysql.createConnection({ socketPath: socket, user: 'root', dateStrings: true });
+    const [[isolation]] = await db.query('SELECT @@global.skip_networking AS isolated');
+    if (Number(isolation.isolated) !== 1) throw new Error('Disposable MySQL must disable TCP');
     await db.query(`CREATE DATABASE ${database} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
+    created = true;
     await db.query(`USE ${database}`);
     await db.query(`CREATE TABLE todo_items (id VARCHAR(64) PRIMARY KEY, user_id VARCHAR(64), title VARCHAR(200) DEFAULT '', description TEXT,
       status VARCHAR(16) DEFAULT 'pending', priority INT DEFAULT 1, list_id VARCHAR(64), series_id VARCHAR(64), plan_version INT DEFAULT 2,
@@ -56,7 +63,7 @@ describe.skipIf(!socket)('workspace SQL against isolated MySQL', () => {
   });
   afterAll(async () => {
     if (db) {
-      await db.query(`DROP DATABASE ${database}`);
+      if (created) await db.query(`DROP DATABASE ${database}`);
       await db.end();
     }
   });
@@ -214,5 +221,109 @@ describe.skipIf(!socket)('workspace SQL against isolated MySQL', () => {
     const [plan] = await db.query(`EXPLAIN ${query.sql}`, query.params);
     expect(plan.length).toBeGreaterThan(0);
     expect(plan.some((row) => row.table === 'i')).toBe(true);
+  });
+  it('specialized counts match full aggregation across filtered membership and legacy states', async () => {
+    await db.query("UPDATE todo_series SET repeat_mode='after_completion' WHERE id='series-b'");
+    const past = `${await date(-1)} 10:00:00`;
+    const rows = [
+      ['a', { series_id: 'series-a', priority: 2, title: 'match' }],
+      ['b', { series_id: 'series-a', list_id: 'list-x', title: 'excluded' }],
+      ['c', { series_id: 'series-b', due_at: past, title: 'match' }],
+      ['d', { series_id: 'series-b', list_id: 'list-y' }],
+      ['done', { series_id: 'series-a', status: 'completed', priority: 2 }],
+      ['legacy-list', { list_id: 'focus' }],
+      ['legacy-plan', { series_id: 'series-a', plan_version: 1, priority: 2 }],
+      ['missing', { series_id: 'missing', priority: 2 }],
+      ['foreign-series', { series_id: 'foreign', priority: 2 }],
+      ['deleted', { del_flag: 1, priority: 2 }],
+      ['hidden-state', { instance_state: 'skipped', priority: 2 }],
+      ['null-state', { instance_state: null }],
+      ['foreign-user', { user_id: 'other', priority: 2 }],
+    ];
+    for (const [id, patch] of rows) await add(id, patch);
+    await db.query("INSERT INTO tag VALUES ('tag-a', 'owner', 0)");
+    await db.query("INSERT INTO todo_tag_relations VALUES ('owner','todo','a','tag-a')");
+    for (const input of [
+      { sort: 'due', groupKey: 'all' },
+      { status: 'completed', groupKey: 'all' },
+      { groupKey: 'focus' },
+      { groupKey: 'focus', keyword: 'match' },
+      { groupKey: 'focus', tagIds: ['tag-a'] },
+      { groupKey: 'focus', priority: 2 },
+      { groupKey: 'all', listId: null },
+      { groupKey: 'all', sort: 'newest', ids: ['a', 'b', 'done'] },
+      { groupKey: 'all', sort: 'oldest', ids: [] },
+      { groupKey: 'wrong', sort: 'due' },
+      { groupKey: 'ALL', sort: 'due' },
+      { groupKey: 'áll', sort: 'due' },
+    ]) {
+      const baseline = workspaceNodeQuery('owner', input);
+      const [[old]] = await db.query(`SELECT COUNT(*) AS total FROM (${baseline.sql}) nodes WHERE groupKey = ?`, [
+        ...baseline.params,
+        input.groupKey,
+      ]);
+      const query = workspaceNodeCountQuery('owner', input);
+      const [[current]] = await db.query(query.sql, query.params);
+      expect(Number(current.total), JSON.stringify(input)).toBe(Number(old.total));
+    }
+    expect(workspaceNodeCountQuery('owner', { groupKey: 'unassigned' })).toBeNull();
+    expect(workspaceNodeCountQuery('owner', { groupKey: 'list-x' })).toBeNull();
+  });
+
+  it('counts an ungrouped overview without representative/date aggregation and preserves empty results', async () => {
+    await add('a', { series_id: 'series-a' });
+    await add('b', { series_id: 'series-a' });
+    await add('done', { status: 'completed' });
+    const measured = { query: vi.fn((...args) => db.query(...args)) };
+    expect((await todoWorkspaceGroups(measured, 'owner', { sort: 'due' })).groups).toEqual([
+      { key: 'all', nodeCount: 2, instanceCount: 3 },
+    ]);
+    expect(measured.query).toHaveBeenCalledTimes(1);
+    expect((await todoWorkspaceGroups(measured, 'owner', { sort: 'due', keyword: 'no-match' })).groups).toEqual([]);
+  });
+
+  it('compares count plans and timings on 20000 occurrences without changing totals', async () => {
+    await db.query('INSERT INTO todo_series (id,user_id) VALUES ?', [
+      Array.from({ length: 1000 }, (_, i) => [`scale-${i}`, 'owner']),
+    ]);
+    for (let start = 0; start < 20000; start += 1000) {
+      await db.query('INSERT INTO todo_items (id,user_id,series_id,title,priority,occurrence_date) VALUES ?', [
+        Array.from({ length: 1000 }, (_, offset) => {
+          const i = start + offset;
+          return [`scale-${i}`, 'owner', `scale-${i % 1000}`, 'scale fixture', i < 1000 ? 2 : 1, '2030-01-01'];
+        }),
+      ]);
+    }
+    const measurements = [];
+    for (const input of [{ groupKey: 'focus' }, { sort: 'due', groupKey: 'all' }]) {
+      const baseline = workspaceNodeQuery('owner', input);
+      const old = {
+        sql: `SELECT COUNT(*) AS total FROM (${baseline.sql}) nodes WHERE groupKey = ?`,
+        params: [...baseline.params, input.groupKey],
+      };
+      const optimized = workspaceNodeCountQuery('owner', input);
+      const queries = [old, optimized];
+      const samples = [[], []];
+      for (const query of queries) {
+        const [[result]] = await db.query(query.sql, query.params);
+        expect(Number(result.total)).toBe(1000);
+      }
+      // Warm both plans and alternate execution order; compare medians without
+      // a timing assertion that could make shared-runner tests flaky.
+      for (let round = 0; round < 3; round += 1) {
+        for (const index of round % 2 ? [1, 0] : [0, 1]) {
+          const query = queries[index];
+          const started = performance.now();
+          const [[result]] = await db.query(query.sql, query.params);
+          samples[index].push(performance.now() - started);
+          expect(Number(result.total)).toBe(1000);
+        }
+      }
+      const times = samples.map((values) => Number(values.sort((a, b) => a - b)[1].toFixed(2)));
+      const [plan] = await db.query(`EXPLAIN ${optimized.sql}`, optimized.params);
+      expect(plan.some((row) => row.select_type === 'DERIVED')).toBe(false);
+      measurements.push({ group: input.groupKey, oldMedianMs: times[0], optimizedMedianMs: times[1], total: 1000 });
+    }
+    console.log('[todo-workspace-count-benchmark]', JSON.stringify(measurements));
   });
 });

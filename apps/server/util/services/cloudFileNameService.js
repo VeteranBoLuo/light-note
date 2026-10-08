@@ -1,5 +1,19 @@
 import path from 'node:path';
 
+// Validate a display name, never an OBS path. Normalization remains the caller's
+// responsibility so existing managed and legacy upload naming semantics stay explicit.
+export function assertCloudFileDisplayName(fileName) {
+  const fail = (code, message) => {
+    throw Object.assign(new Error(`${code}: ${message}`), { code });
+  };
+  if (!fileName) fail('FILE_NAME_REQUIRED', '请输入文件名');
+  if (fileName.length > 255) fail('FILE_NAME_TOO_LONG', '文件名不能超过 255 个字符');
+  if (/[\\/<>\u0000-\u001f\u007f]/u.test(fileName))
+    fail('FILE_NAME_INVALID', '文件名不能包含路径分隔符、控制字符、< 或 >');
+  if (fileName === '.' || fileName === '..') fail('FILE_NAME_INVALID', '文件名无效');
+  return fileName;
+}
+
 // 调用方先持有账号锁；数据库判等，并使用 current read 避免事务旧快照漏掉刚提交的名称。
 export async function uniqueCloudFileName(connection, userId, requestedName, { includeDeleted = true } = {}) {
   const deletionFilter = includeDeleted ? 'del_flag IN (0, 1)' : 'del_flag = 0';

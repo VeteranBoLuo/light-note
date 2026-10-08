@@ -11,7 +11,7 @@ export async function streamTranslation(
   const response = await request({
     url: '/api/toolbox/translation/stream',
     method: 'post',
-    data: input,
+    data: { ...input, streamVersion: 2 },
     adapter: 'fetch',
     responseType: 'stream',
     signal: handlers.signal,
@@ -35,6 +35,7 @@ export async function streamTranslation(
   const decoder = new TextDecoder();
   let buffer = '',
     completed: ToolboxArtifact | undefined;
+  let content = '';
   const frame = (value: string) => {
     const lines = value.split('\n');
     const event = lines
@@ -48,7 +49,18 @@ export async function streamTranslation(
     if (!data) return;
     const parsed = JSON.parse(data);
     if (event === 'start') handlers.onStart(parsed.jobId);
-    if (event === 'snapshot') handlers.onSnapshot(parsed);
+    if (event === 'snapshot') {
+      if (typeof parsed.content !== 'string') throw new Error('Invalid translation snapshot');
+      content = parsed.content;
+      handlers.onSnapshot(parsed);
+    }
+    if (event === 'delta') {
+      if (parsed.offset !== content.length || typeof parsed.content !== 'string') {
+        throw Object.assign(new Error('Translation stream out of sync'), { code: 'TRANSLATION_STREAM_UNKNOWN' });
+      }
+      content += parsed.content;
+      handlers.onSnapshot({ content });
+    }
     if (event === 'complete') {
       if (!parsed.id || typeof parsed.content !== 'string') throw new Error('Invalid translation result');
       completed = parsed;

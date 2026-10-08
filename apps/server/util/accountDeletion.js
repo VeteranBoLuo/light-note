@@ -1,6 +1,8 @@
 import { purgeCommunityFeedData } from './communityFeed/lifecycle.js';
 import { deferCloudImageDeletion, deleteUnmanagedObject } from './imagePreview/cleanup.js';
 import crypto from 'node:crypto';
+import { deriveScrypt } from './asyncScrypt.js';
+import { acquireAccountAiLifecycleConnection } from './accountAiLifecycleLock.js';
 import pool from '../db/index.js';
 import redisClient from './redisClient.js';
 import { sendTrackedEmail } from './emailDelivery.js';
@@ -104,8 +106,8 @@ function sha256(value) {
     .digest('hex');
 }
 
-function deletionCodeDigest(code, salt) {
-  return crypto.scryptSync(String(code || ''), Buffer.from(salt, 'hex'), 32).toString('hex');
+async function deletionCodeDigest(code, salt) {
+  return (await deriveScrypt(String(code || ''), Buffer.from(salt, 'hex'), 32)).toString('hex');
 }
 
 function timingSafeHexEqual(left, right) {
@@ -166,7 +168,7 @@ export async function sendAccountDeletionCode({ userId }) {
   const code = String(crypto.randomInt(100000, 1000000));
   const salt = crypto.randomBytes(16).toString('hex');
   const challenge = {
-    digest: deletionCodeDigest(code, salt),
+    digest: await deletionCodeDigest(code, salt),
     salt,
     emailHash: sha256(email),
     issuedAt: Date.now(),
@@ -216,7 +218,7 @@ async function verifyDeletionCode(userId, code) {
     throw accountDeletionError('ACCOUNT_DELETION_CODE_EXPIRED', '验证码已失效，请重新获取');
   }
 
-  const digest = deletionCodeDigest(normalizedCode, String(challenge.salt || ''));
+  const digest = await deletionCodeDigest(normalizedCode, String(challenge.salt || ''));
   if (!timingSafeHexEqual(digest, challenge.digest)) {
     throw accountDeletionError('ACCOUNT_DELETION_CODE_MISMATCH', '验证码错误');
   }
@@ -250,6 +252,17 @@ async function collectCleanupArtifacts(connection, tables, userId) {
       const key =
         String(row.obs_key || '').trim() || (buildObjectKey ? buildObjectKey(row.create_by, row.file_name) : '');
       if (key) objectKeys.push(key);
+    }
+  }
+
+  if (tables.has('cloud_legacy_object_lifecycle')) {
+    const [rows] = await connection.query(
+      'SELECT object_key,upload_key FROM cloud_legacy_object_lifecycle WHERE user_id=?',
+      [userId],
+    );
+    for (const row of rows) {
+      if (row.object_key) objectKeys.push(row.object_key);
+      if (row.upload_key) objectKeys.push(row.upload_key);
     }
   }
 
@@ -331,7 +344,7 @@ export async function requestAccountDeletion({ userId, code, confirmation }) {
     );
   }
   const challenge = await verifyDeletionCode(userId, code);
-  const connection = await pool.getConnection();
+  const { connection, releaseLifecycle } = await acquireAccountAiLifecycleConnection(pool, userId);
   let requestId = '';
   try {
     await connection.beginTransaction();
@@ -415,7 +428,7 @@ export async function requestAccountDeletion({ userId, code, confirmation }) {
       [userId],
     );
 
-    // 注销事务从入口起持有 user 行锁；所有后台 AI Provider 外发持有同一把锁，
+    // 注销事务从入口起持有账号生命周期锁；后台 AI Provider 外发持有同一把锁，
     // 因而这里提交前会等待已开始的调用，提交后新调用只能读到 deleted 并失败关闭。
     // 批次租约另作结果写入围栏，避免旧 Worker 在注销后继续回写或复活批次。
     if (tables.has('organize_ai_tag_batches')) {
@@ -454,12 +467,13 @@ export async function requestAccountDeletion({ userId, code, confirmation }) {
     await connection.commit();
     invalidateAfdianLeaderboardCache();
   } catch (error) {
-    await connection.rollback();
+    await connection.rollback().catch(() => {});
     if (error?.code === 'ER_DUP_ENTRY') {
       throw accountDeletionError('ACCOUNT_DELETION_IN_PROGRESS', '账号注销已提交，请勿重复操作', 409);
     }
     throw error;
   } finally {
+    await releaseLifecycle?.();
     connection.release();
   }
 
@@ -832,6 +846,10 @@ export async function purgeOwnedResources(connection, tables, userId) {
   await deleteIfPresent(connection, tables, 'note_tags', 'DELETE FROM note_tags WHERE user_id = ?', [userId]);
   await deleteIfPresent(connection, tables, 'bookmark', 'DELETE FROM bookmark WHERE user_id = ?', [userId]);
   await deleteIfPresent(connection, tables, 'files', 'DELETE FROM files WHERE create_by = ?', [userId]);
+  await deleteIfPresent(
+    connection, tables, 'cloud_legacy_object_lifecycle',
+    'DELETE FROM cloud_legacy_object_lifecycle WHERE user_id = ?', [userId],
+  );
   await deleteIfPresent(connection, tables, 'folders', 'DELETE FROM folders WHERE create_by = ?', [userId]);
   await deleteIfPresent(connection, tables, 'collection_forms', 'DELETE FROM collection_forms WHERE user_id = ?', [userId]);
   await deleteIfPresent(connection, tables, 'tag', 'DELETE FROM tag WHERE user_id = ?', [userId]);
