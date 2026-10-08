@@ -148,12 +148,20 @@
       </div>
     </div>
 
-    <TodoEditorModal v-model:visible="todoEditorVisible" :item="editingTodo" @saved="afterTodoSaved" />
+    <AsyncFeatureLoadingOverlay v-if="todoEditorLoading" />
+    <component
+      :is="todoEditor"
+      v-if="todoEditor"
+      :key="editorIdentity"
+      v-model:visible="todoEditorVisible"
+      :item="editingTodo"
+      @saved="afterTodoSaved"
+    />
   </section>
 </template>
 
 <script setup lang="ts">
-  import { computed, ref, watch } from 'vue';
+  import { computed, ref, shallowRef, watch, onBeforeUnmount, nextTick, type Component } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -161,7 +169,10 @@
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
-  import TodoEditorModal from '@/components/todo/TodoEditorModal.vue';
+  import AsyncFeatureLoadingOverlay from '@/components/base/AsyncFeatureLoadingOverlay.vue';
+  import { loadTodayTodoEditor } from './todayTodoEditorLoader';
+  import { useUserStore } from '@/store';
+  import { buildNoteDetailRequestScope } from '@/api/noteDetailPrefetch';
   import icon from '@/config/icon';
   import { completeInbox, type InboxResourceType } from '@/api/inboxApi';
   import {
@@ -226,6 +237,11 @@
   const removedInboxKeys = ref<Set<string>>(new Set());
   const mutatingTodoId = ref('');
   const mutatingInboxKey = ref('');
+  const user = useUserStore();
+  const editorIdentity = computed(() => buildNoteDetailRequestScope(user));
+  const todoEditor = shallowRef<Component | null>(null);
+  const todoEditorLoading = ref(false);
+  let editorRequest = 0;
   const todoEditorVisible = ref(false);
   const editingTodo = ref<TodoItem | null>(null);
 
@@ -408,12 +424,36 @@
     }
   }
 
-  function editTodo(item: TodayTodoRow) {
+  async function editTodo(item: TodayTodoRow) {
     recordOperation({ module: '工作台', operation: '今日行动编辑待办' });
     const { overdue: _overdue, dueLabel: _dueLabel, ...raw } = item;
     editingTodo.value = raw;
-    todoEditorVisible.value = true;
+    const request = ++editorRequest;
+    todoEditorLoading.value = !todoEditor.value;
+    try {
+      const editor = todoEditor.value || (await loadTodayTodoEditor());
+      if (request !== editorRequest) return;
+      todoEditor.value = editor;
+      // Mount closed first: the shared editor initializes its form/config on the
+      // false -> true transition rather than with an immediate watcher.
+      await nextTick();
+      if (request !== editorRequest) return;
+      todoEditorVisible.value = true;
+    } catch {
+      if (request === editorRequest) message.error(t('common.requestFailed'));
+    } finally {
+      if (request === editorRequest) todoEditorLoading.value = false;
+    }
   }
+
+  function resetEditor() {
+    editorRequest += 1;
+    todoEditorLoading.value = false;
+    todoEditorVisible.value = false;
+    editingTodo.value = null;
+  }
+  watch([editorIdentity, () => router.currentRoute.value.fullPath], resetEditor, { flush: 'sync' });
+  onBeforeUnmount(resetEditor);
 
   function afterTodoSaved() {
     editingTodo.value = null;

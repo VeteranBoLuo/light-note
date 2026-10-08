@@ -32,7 +32,7 @@ vi.mock('@/api/inboxApi', () => ({ completeInbox }));
 vi.mock('@/api/commonApi', () => ({ recordOperation: vi.fn() }));
 vi.mock('@/utils/common', () => ({ generateUUID: vi.fn(() => 'todo-idempotency-key') }));
 vi.mock('@/composables/useGuestGuard', () => ({ blockGuestWrite: vi.fn(() => false) }));
-vi.mock('@/store', () => ({ inboxStore: () => ({ refreshCount: vi.fn() }) }));
+vi.mock('@/store', () => ({ inboxStore: () => ({ refreshCount: vi.fn() }), useUserStore: () => ({ id: 'test' }) }));
 vi.mock('@/components/base/BasicComponents/BMessage/BMessage', () => ({
   default: { success, error, warning: vi.fn(), info: vi.fn() },
 }));
