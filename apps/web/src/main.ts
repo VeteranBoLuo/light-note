@@ -1,3 +1,4 @@
+import { isLocallyHandledModuleLoadError } from '@/utils/retryableModuleLoader';
 import { createApp } from 'vue';
 import App from '@/App.vue';
 import router, { getPendingNavigationTarget, reloadOnceTo } from '@/router';
@@ -70,6 +71,8 @@ void mountApplication();
 // preload 失败事件自动刷新页面拉取最新版本,避免用户手动强制刷新。
 // 跳转目标用 router.beforeEach 记录的"用户正要去哪"(见 router/index.ts),
 // 而不是简单 reload 当前页——否则可能刷新回点击前的旧页面,还得用户再点一次。
-window.addEventListener('vite:preloadError', () => {
+window.addEventListener('vite:preloadError', (event) => {
+  // Optional features can retry their own entry without discarding page state.
+  if (isLocallyHandledModuleLoadError((event as Event & { payload?: unknown }).payload)) return;
   reloadOnceTo(getPendingNavigationTarget());
 });

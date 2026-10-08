@@ -1,6 +1,19 @@
-import ExcelJS from 'exceljs';
+import { createRetryableModuleLoader } from './retryableModuleLoader';
 
-const { Workbook } = ExcelJS;
+const importExcel = () => import('exceljs');
+const loadExcel = createRetryableModuleLoader(
+  importExcel,
+  [/^\/assets\/exceljs(?:\.min)?-[\w-]+\.js$/, /^\/node_modules\/\.vite\/deps\/exceljs\.js$/],
+  (module) => {
+    // Rollup can expose the CommonJS namespace under a generated named export.
+    // Recover by its Workbook contract, never by an unstable minified name.
+    const namespace = module.default?.Workbook
+      ? module
+      : Object.values(module).find((value) => typeof value?.default?.Workbook === 'function');
+    if (!namespace) throw new Error('EXCEL_MODULE_INVALID');
+    return namespace as Awaited<ReturnType<typeof importExcel>>;
+  },
+);
 
 export interface ExcelColumn<T extends Record<string, unknown>> {
   header: string;
@@ -17,6 +30,7 @@ export async function exportExcelFile<T extends Record<string, unknown>>(
   fileName: string,
   sheetName = 'bookmark',
 ) {
+  const { Workbook } = (await loadExcel()).default;
   const workbook = new Workbook();
   const worksheet = workbook.addWorksheet(sheetName);
   worksheet.columns = columns.map((column) => ({
@@ -45,6 +59,7 @@ export async function readFirstExcelSheet(file: File): Promise<Record<string, st
     throw new Error('Excel 文件不能超过 5MB');
   }
 
+  const { Workbook } = (await loadExcel()).default;
   const workbook = new Workbook();
   await workbook.xlsx.load((await file.arrayBuffer()) as any);
   const worksheet = workbook.worksheets[0];
