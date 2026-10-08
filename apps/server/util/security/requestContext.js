@@ -1,3 +1,4 @@
+import { isHuaweiSubscriptionRequest } from '../huaweiPushPolicy.js';
 import { isBrowserPushSubscriptionRequest } from '../browserPushPolicy.js';
 import { sanitizeObject } from './payloadSanitizer.js';
 
@@ -32,7 +33,10 @@ export const buildRequestContext = (req) => {
     headers: req.headers || {},
     payloadSummary: sanitizeObject({
       query,
-      body: isBrowserPushSubscriptionRequest(req) ? { subscription: '[PUSH_CREDENTIALS_REDACTED]' } : body,
+      body:
+        isBrowserPushSubscriptionRequest(req) || isHuaweiSubscriptionRequest(req)
+          ? { subscription: '[PUSH_CREDENTIALS_REDACTED]' }
+          : body,
       params: req.params || {},
     }),
     headersSummary: sanitizeObject({

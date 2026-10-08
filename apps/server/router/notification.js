@@ -1,3 +1,4 @@
+import * as huaweiPush from '../router_handle/huaweiPushHandle.js';
 import * as browserPush from '../router_handle/browserPushHandle.js';
 import rateLimit from 'express-rate-limit';
 import express from 'express';
@@ -10,6 +11,10 @@ router.post('/browser/config', pushLimit, browserPush.config);
 router.post('/browser/subscribe', pushLimit, browserPush.subscribe);
 router.post('/browser/activate', pushLimit, browserPush.activate);
 router.post('/browser/unsubscribe', pushLimit, browserPush.unsubscribe);
+
+router.post('/huawei/subscribe', pushLimit, huaweiPush.subscribe);
+router.post('/huawei/activate', pushLimit, huaweiPush.activate);
+router.post('/huawei/unsubscribe', pushLimit, huaweiPush.unsubscribe);
 
 router.post('/native/sync', pushLimit, notificationHandle.nativeSync);
 router.post('/list', notificationHandle.list);

@@ -1,0 +1,25 @@
+import { notificationSchedulerEnabled } from './notificationSchedulerPolicy.js';
+
+// Internal endpoint namespace, never accepted by the browser subscription endpoint.
+export const HUAWEI_ENDPOINT = 'huawei:';
+export const isHuaweiEndpoint = (value) => typeof value === 'string' && value.startsWith(HUAWEI_ENDPOINT);
+export function huaweiPushEnabled(env = process.env) {
+  return (
+    notificationSchedulerEnabled(env) &&
+    env.HUAWEI_PUSH_ENABLED === 'true' &&
+    /^\d+$/.test(env.HUAWEI_PUSH_APP_ID || '') &&
+    /^\d+$/.test(env.HUAWEI_PUSH_PROJECT_ID || '') &&
+    Boolean(env.HUAWEI_PUSH_APP_SECRET && env.HUAWEI_PUSH_ORIGIN)
+  );
+}
+export function huaweiSubscription(token) {
+  if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{32,1024}$/.test(token))
+    throw Object.assign(new Error('INVALID_HUAWEI_TOKEN'), { code: 'INVALID_HUAWEI_TOKEN' });
+  return { endpoint: HUAWEI_ENDPOINT + token, keys: { p256dh: '', auth: '' } };
+}
+// WORK approval covers user-scheduled todo reminders only. Recheck the authoritative job before sending.
+export const huaweiWorkNotification = (n) =>
+  n?.type === 'todo_reminder' && n?.source_type === 'todo_reminder_job' && Boolean(n?.source_id);
+export const isHuaweiSubscriptionRequest = (context) =>
+  String(context.method).toUpperCase() === 'POST' &&
+  /^(?:\/api)?\/notification\/huawei\/subscribe\/?$/.test(String(context.path || context.url || ''));

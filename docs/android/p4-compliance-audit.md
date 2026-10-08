@@ -77,11 +77,19 @@ Android 通知权限；旧灰度能力已停用，普通 Debug、Release 与已�
 | `androidx.webkit:webkit:1.12.1` | WebView 兼容、安全浏览、受信 Web 消息与本地资源加载 | 否，AndroidX 基础库              |
 
 其传递依赖包括 AndroidX Annotation、Collection、Lifecycle、Profile Installer、Startup、
-Tracing、VersionedParcelable，以及 Kotlin 标准库和协程运行时。当前 APK 未嵌入广告、统计、
+Tracing、VersionedParcelable，以及 Kotlin 标准库和协程运行时。当前普通 Debug 与 Release APK 未嵌入广告、统计、
 推送、支付、地图、社交分享或第三方登录移动 SDK。
 
 备案系统中的“是否应用 SDK 服务”应以最终 Release 依赖和 APK 扫描结果为准。服务端调用或网页
 跳转到第三方服务，不应误报成嵌入式 Android SDK；反之，未来新增的移动 SDK 也不能漏报。
+
+### 3.1 显式启用的华为诊断包
+
+`lightNoteHuaweiPushProbe=true` 仅为 Debug 引入华为 Push Kit `6.13.0.301` 和 AGConnect Core `1.9.6.300`，增加通知权限及 SDK 自带的签名级推送权限/组件；与上述普通包审计边界分开。构建拒绝包含密钥的客户端配置，自动初始化 Provider 被移除，用户另行同意测试说明后才注册设备 Token。诊断披露应用信息、设备及系统信息、AAID 和 Push Token 用途；Token 仅设备本地保存和用户主动复制，不上传轻笺、不绑定业务账号。停止测试清除本地状态并尝试远端撤销，失败明确提示。构建方式和设备验收边界见 [Android 说明](../../apps/android/README.md#华为远程推送诊断包)。
+
+`lightNoteHuaweiPush=true` 的业务联调包复用相同 SDK，并在单独告知后向轻笺上传 Token、绑定当前账号，用于获批 WORK 场景的待办提醒；退出撤销、离线重试及数据清理边界见 [业务联调说明](../../apps/android/README.md#华为待办推送联调包)。
+
+上述诊断及联调包不作为正式分发候选包。正式引入前须更新政策版本和 SDK 清单，重新执行实际网络流量、权限、撤回和设备兼容性验收。
 
 ## 4. 业务涉及的第三方服务
 

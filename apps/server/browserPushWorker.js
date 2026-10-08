@@ -1,3 +1,4 @@
+import { huaweiPushEnabled } from './util/huaweiPushPolicy.js';
 import { assertBrowserPushRuntime } from './util/browserPushRuntime.js';
 import { pathToFileURL } from 'node:url';
 import pool from './db/index.js';
@@ -11,11 +12,12 @@ export async function mainLoop() {
   process.once('SIGTERM', stop);
   process.once('SIGINT', stop);
   const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-  if (process.env.BROWSER_PUSH_ENABLED === 'true') await assertBrowserPushRuntime(pool);
+  if (process.env.BROWSER_PUSH_ENABLED === 'true' || process.env.HUAWEI_PUSH_ENABLED === 'true')
+    await assertBrowserPushRuntime(pool);
   const counts = {};
   let lastReport = Date.now();
   while (running) {
-    if (!browserPushEnabled()) {
+    if (!browserPushEnabled() && !huaweiPushEnabled()) {
       await pause(1000);
       continue;
     }

@@ -1,3 +1,5 @@
+import { huaweiPushEnabled, huaweiSubscription, huaweiWorkNotification, isHuaweiEndpoint } from './huaweiPushPolicy.js';
+import { deliverHuaweiPush } from './huaweiPushTransport.js';
 import { browserPushQuietUntil } from './browserPushQuietHours.js';
 import { browserNotificationPresentation } from '@lightnote/shared/notification-presentation';
 import { randomUUID } from 'node:crypto';
@@ -12,7 +14,14 @@ import {
 } from './browserPushPolicy.js';
 
 export async function bindPushSubscription(userId, raw, locale, db = pool) {
-  const subscription = validatePushSubscription(raw);
+  return bindSubscription(userId, validatePushSubscription(raw), locale, db);
+}
+
+export async function bindHuaweiSubscription(userId, token, db = pool) {
+  return bindSubscription(userId, huaweiSubscription(token), 'zh-CN', db);
+}
+
+async function bindSubscription(userId, subscription, locale, db) {
   const conn = await db.getConnection();
   try {
     await conn.beginTransaction();
@@ -41,7 +50,8 @@ export async function bindPushSubscription(userId, raw, locale, db = pool) {
       'SELECT COUNT(*) AS total FROM browser_push_subscriptions WHERE user_id = ? AND active IN (1, 2)',
       [userId],
     );
-    if (Number(count.total) >= 20 && ![1, 2].includes(Number(previous?.active))) throw new Error('PUSH_DEVICE_LIMIT');
+    if (Number(count.total) >= 20 && (previous?.user_id !== userId || ![1, 2].includes(Number(previous?.active))))
+      throw new Error('PUSH_DEVICE_LIMIT');
     let id = previous?.id || randomUUID();
     const generation = randomUUID();
     await conn.query(
@@ -113,7 +123,7 @@ export async function unbindPushSubscription(userId, id, generation, db = pool) 
 // Transactional outbox expansion: the notification row and this pending marker were
 // inserted together. Subscription generation/time prevent re-enable and late binding replay.
 export async function expandPushOutbox(db = pool, env = process.env) {
-  if (!browserPushEnabled(env)) return 0;
+  if (!browserPushEnabled(env) && !huaweiPushEnabled(env)) return 0;
   const conn = await db.getConnection();
   try {
     await conn.beginTransaction();
@@ -127,8 +137,10 @@ export async function expandPushOutbox(db = pool, env = process.env) {
         FROM notification n JOIN browser_push_subscriptions s ON s.user_id = n.user_id
         WHERE n.id = ? AND s.active = 1 AND s.enabled_at <= n.browser_push_created_at
           AND n.browser_push_created_at > DATE_SUB(NOW(6), INTERVAL 24 HOUR)
-          AND n.del_flag = 0 AND n.recalled = 0`,
-        [row.id],
+          AND n.del_flag = 0 AND n.recalled = 0
+          AND ((s.endpoint NOT LIKE 'huawei:%' AND ? = 1) OR
+            (s.endpoint LIKE 'huawei:%' AND ? = 1 AND n.type = 'todo_reminder' AND n.source_type = 'todo_reminder_job'))`,
+        [row.id, Number(browserPushEnabled(env)), Number(huaweiPushEnabled(env))],
       );
       await conn.query('UPDATE notification SET browser_push_pending = 0 WHERE id = ?', [row.id]);
     }
@@ -143,11 +155,13 @@ export async function expandPushOutbox(db = pool, env = process.env) {
 }
 
 export async function sendWebPush(subscription, payload, ttl, env = process.env) {
-  return deliverBrowserPush(subscription, payload, ttl, env);
+  return isHuaweiEndpoint(subscription.endpoint)
+    ? deliverHuaweiPush(subscription, payload, ttl, env)
+    : deliverBrowserPush(subscription, payload, ttl, env);
 }
 
 export async function processNextPush({ db = pool, send = sendWebPush, env = process.env } = {}) {
-  if (!browserPushEnabled(env)) return null;
+  if (!browserPushEnabled(env) && !huaweiPushEnabled(env)) return null;
   const lease = randomUUID();
   // Atomic MySQL 5.7 claim, one job at a time: a network timeout cannot outlive the lease.
   const [claim] = await db.query(
@@ -179,6 +193,26 @@ export async function processNextPush({ db = pool, send = sendWebPush, env = pro
     );
     if (job.ttl <= 0) status = 'expired';
     else if (subscription && notification) {
+      const huawei = isHuaweiEndpoint(subscription.endpoint);
+      if (huawei ? !huaweiPushEnabled(env) : !browserPushEnabled(env))
+        throw Object.assign(new Error('PUSH_DISABLED'), { statusCode: 503 });
+      if (huawei) {
+        const [[source]] = huaweiWorkNotification(notification)
+          ? await db.query(
+              `SELECT j.id FROM todo_reminder_jobs j JOIN todo_items i ON i.id = j.todo_id AND i.user_id = j.user_id
+           WHERE j.id = ? AND j.user_id = ? AND j.channel = 'in_app' AND j.status IN ('processing', 'sent')
+             AND i.del_flag = 0 AND i.status = 'pending' LIMIT 1`,
+              [notification.source_id, subscription.user_id],
+            )
+          : [[]];
+        if (!source) {
+          await db.query(
+            "UPDATE browser_push_jobs SET status = 'cancelled', last_code = 'HUAWEI_CATEGORY_DENIED', lease_until = NULL WHERE id = ? AND lease_token = ? AND status = 'sending'",
+            [job.id, lease],
+          );
+          return { status: 'cancelled', delaySeconds: Number(job.delay_seconds || 0) };
+        }
+      }
       let preferences = subscription.push_preferences || {};
       if (typeof preferences === 'string') {
         try {
@@ -223,7 +257,11 @@ export async function processNextPush({ db = pool, send = sendWebPush, env = pro
   } catch (error) {
     const httpCode = Number(error?.statusCode || 0);
     status = error?.code === 'PUSH_EXPIRED' ? 'expired' : pushFailure(httpCode, job.attempts);
-    code = httpCode ? `HTTP_${httpCode}` : 'PUSH_TRANSPORT_ERROR';
+    code = /^HUAWEI_[A-Z_]+$/.test(error?.code || '')
+      ? error.code
+      : httpCode
+        ? `HTTP_${httpCode}`
+        : 'PUSH_TRANSPORT_ERROR';
     if (status === 'invalid')
       await db.query('UPDATE browser_push_subscriptions SET active = 3 WHERE id = ? AND generation = ?', [
         job.subscription_id,

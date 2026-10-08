@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <queries><package android:name="com.huawei.hwid" /><package android:name="com.huawei.hms" /></queries>
+    <application>
+        <meta-data android:name="com.huawei.hms.client.appid" android:value="appid=${huaweiProbeAppId}" />
+        <meta-data android:name="push_kit_auto_init_enabled" android:value="false" />
+        <!-- SDK initialization is explicit and follows the separate diagnostic consent. -->
+        <provider android:name="com.huawei.agconnect.core.provider.AGConnectInitializeProvider" tools:node="remove" />
+        <provider android:name="com.huawei.hms.aaid.InitProvider" tools:node="remove" />
+        <activity android:name=".HuaweiPushProbeActivity" android:exported="false" android:label="华为远程推送诊断" />
+        <activity android:name=".HuaweiPushClickActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="top.boluo66.lightnote.HUAWEI_PUSH_TEST" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+        <service android:name=".HuaweiPushProbeService" android:exported="false">
+            <intent-filter><action android:name="com.huawei.push.action.MESSAGING_EVENT" /></intent-filter>
+        </service>
+    </application>
+</manifest>

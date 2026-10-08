@@ -99,6 +99,8 @@ pnpm --filter server check:schema
 
 浏览器推送需先经授权应用 `apps/server/migrations/20260908_browser_push.sql`，再运行 `pnpm --filter server check:browser-push` 验证 Schema 与 VAPID 配置。API 与 `browserPushWorker.js` 使用同一持久 VAPID 密钥和站点 Origin；默认服务开关关闭，启动本地预览及部署脚本均纳入该 Worker。密钥不由部署过程临时生成，服务开关关闭不影响站内通知。推送凭据不进入日志，测试应区分厂商受理、设备展示及点击定位，不能用模拟推送替代真实网络与设备验收。
 
+华为 App 待办推送复用同一 Worker 与订阅/任务表，无新增 Schema；启用前给 API 和 Worker 配置 `HUAWEI_PUSH_*`，应用密钥仅保存在服务端，并运行 `check:browser-push` 检查共同运行条件。仅发布服务端不会开启手机接收，须配套显式华为联调 APK 与 Web；实际待办来源、前后台、点击、退出/换号及失效恢复须真机验收。关闭华为开关保留站内及前台同步；队列只由生产环境消费，不能启动本地 Worker 验证线上发送。正式包开放前另行完成 SDK 披露与隐私版本更新。
+
 FCM 备用出口使用 `scripts/browser-push-relay/worker.mjs`，以独立托管实例配置主、备用地址与各自的服务端凭据（`BROWSER_PUSH_RELAYS`）。实例需设置 `RELAY_TOKEN`，关闭请求正文与凭据日志；示例 `wrangler.jsonc` 只提供部署结构，不含线上地址或密钥。每条出口上线前分别验证生产服务器到实际中转域名、中转到厂商以及真实设备展示；官网可访问或模拟测试不算出口验收。未配置中转保持直连，停用中转清空该配置即可；不得为验证而重开本地队列消费者。
 
 笔记导入需显式应用 `apps/server/migrations/20260909_note_import_tasks.sql`，再应用进度字段迁移 `apps/server/migrations/20260909_note_import_progress.sql`，随后执行 `pnpm --filter server check:note-imports`；API 与 `noteImportWorker.js` 必须共享持久私有暂存目录（`NOTE_IMPORT_STORAGE_DIR`）和笔记图片目录。导入 Worker 已接入本地启动与部署脚本，不能在未安装 Schema 时对外开放入口。帮助内容通过独立的 `20260909_note_transfer_knowledge.sql` 幂等更新；任务入口与删除说明通过 `20260909_note_import_task_help.sql` 更新，进度与结果页说明通过独立的 `20260909_note_import_progress_help.sql` 幂等更新，清空与文件保留说明通过 `20260909_note_import_cleanup_help.sql` 更新，均不混入应用启动。关闭导入 Worker 可停止领取新任务，已创建笔记保留；恢复后按租约续跑。

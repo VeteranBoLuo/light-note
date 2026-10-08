@@ -24,6 +24,7 @@ const COMPLETED_RECORD_RETENTION_DAYS = 180;
 const COMPLETED_RECORD_CLEANUP_BATCH_SIZE = 500;
 
 const DIRECT_DELETE_TABLES = Object.freeze([
+  ['browser_push_subscriptions', 'user_id'],
   ['notification', 'user_id'],
   ['opinion', 'user_id'],
   ['resource_inbox', 'user_id'],
@@ -720,6 +721,9 @@ async function purgeFeatureRequests(connection, tables, userId) {
 }
 
 export async function purgeOwnedResources(connection, tables, userId) {
+  if (tables.has('browser_push_jobs') && tables.has('browser_push_subscriptions')) {
+    await connection.query('DELETE j FROM browser_push_jobs j JOIN browser_push_subscriptions s ON s.id = j.subscription_id WHERE s.user_id = ?', [userId]);
+  }
   await purgeCommunityFeedData(connection,tables,userId);
   if (tables.has('image_assets') && tables.has('image_asset_refs')) {
     if (tables.has('files')) {

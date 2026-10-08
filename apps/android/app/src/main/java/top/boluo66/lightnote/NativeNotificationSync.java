@@ -39,12 +39,14 @@ final class NativeNotificationSync {
     }
     void clear() {
         owner = ""; epoch = ""; openOwner = "";
+        remote("clear");
         prefs.edit().remove("owner").remove("since").remove("seen").apply();
         clearVisible();
     }
     private void clearVisible() {
         if (manager == null) return;
         try {
+            if (BuildConfig.HUAWEI_PUSH) { manager.cancelAll(); return; }
             for (StatusBarNotification item : manager.getActiveNotifications()) {
                 if (item.getTag() != null && item.getTag().startsWith(TAG_PREFIX)) manager.cancel(item.getTag(), item.getId());
             }
@@ -60,15 +62,24 @@ final class NativeNotificationSync {
             && manager.getNotificationChannel(CHANNEL).getImportance() != NotificationManager.IMPORTANCE_NONE;
     }
     private void offerPermission() {
-        if (prefs.getBoolean("offered", false)) return;
-        prefs.edit().putBoolean("offered", true).apply();
-        new AlertDialog.Builder(activity).setTitle("开启通知同步测试")
-            .setMessage("将轻笺通知中心的新消息显示到手机通知栏。此测试版仅在 App 页面运行时同步，关闭 App 后不保证送达。系统通知不显示消息正文。")
+        String offerKey = BuildConfig.HUAWEI_PUSH ? "huawei_offered" : "offered";
+        if (prefs.getBoolean(offerKey, false)) return;
+        prefs.edit().putBoolean(offerKey, true).apply();
+        new AlertDialog.Builder(activity).setTitle(BuildConfig.HUAWEI_PUSH ? "开启轻笺通知" : "开启通知同步测试")
+            .setMessage(BuildConfig.HUAWEI_PUSH ? "允许后，轻笺将初始化华为 Push Kit，向华为申请设备推送标识，并将此标识上传轻笺、绑定当前账号，用于关闭 App 后接收你设置的待办提醒。华为 SDK 会处理应用、设备及网络相关信息。系统通知不显示待办正文；其他通知在 App 前台同步。退出账号时会停止当前设备绑定；离线时撤销可能延迟。可在系统通知设置关闭通知，或撤回隐私同意停止 SDK。" : "将轻笺通知中心的新消息显示到手机通知栏。此测试版仅在 App 页面运行时同步，关闭 App 后不保证送达。系统通知不显示消息正文。")
             .setPositiveButton("允许通知", (d, w) -> {
                 prefs.edit().putBoolean("allowed", true).apply();
+                remote("allow");
                 if (Build.VERSION.SDK_INT >= 33 && activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
                     activity.requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 2311);
             }).setNegativeButton("暂不开启", (d, w) -> prefs.edit().putBoolean("allowed", false).apply()).show();
+    }
+    private String remote(String action) {
+        if (!BuildConfig.HUAWEI_PUSH) return "";
+        try {
+            return (String) Class.forName("top.boluo66.lightnote.HuaweiPushAccount")
+                .getMethod("handle", android.content.Context.class, String.class).invoke(null, activity, action);
+        } catch (ReflectiveOperationException ignored) { return ""; }
     }
     JSONObject handle(JSONObject request) throws Exception {
         JSONObject reply = new JSONObject().put("token", request.optString("token")).put("ok", false);
@@ -80,6 +91,7 @@ final class NativeNotificationSync {
         if (requestedOwner.isEmpty() || requestedOwner.length() > 64 || requestedEpoch.isEmpty() || requestedEpoch.length() > 100) return reply;
         if ("bind".equals(action)) {
             if (!requestedOwner.equals(prefs.getString("owner", ""))) {
+                if (!prefs.getString("owner", "").isEmpty()) remote("clear");
                 // Keep a pending click only if it belongs to the newly authenticated account.
                 clearVisible();
                 prefs.edit().remove("since").remove("seen").putString("owner", requestedOwner).apply();
@@ -89,6 +101,7 @@ final class NativeNotificationSync {
             offerPermission();
         }
         if (!owner.equals(requestedOwner) || !epoch.equals(requestedEpoch)) return reply;
+        if ("resetRemote".equals(action)) remote("clear");
         if ("deliver".equals(action)) {
             String since = request.optString("since");
             if (!since.matches("\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{6}")) return reply;
@@ -112,6 +125,7 @@ final class NativeNotificationSync {
                     String id = items.getJSONObject(i).optString("id");
                     if (!id.matches("[a-fA-F0-9-]{36}")) return reply;
                     if (seen.has(id)) continue;
+                    if (items.getJSONObject(i).optBoolean("remote", false)) { seen.put(id, now); continue; }
                     Intent intent = new Intent(activity, MainActivity.class).putExtra("native_notification_owner", owner)
                         .setAction("lightnote.notification." + id).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
                     PendingIntent click = PendingIntent.getActivity(activity, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
@@ -133,7 +147,8 @@ final class NativeNotificationSync {
         }
         boolean shouldOpen = "bind".equals(action) && owner.equals(openOwner);
         if ("bind".equals(action)) openOwner = "";
-        return reply.put("ok", true).put("enabled", enabled())
+        String remoteToken = enabled() ? remote("token") : "";
+        return reply.put("huaweiToken", remoteToken).put("ok", true).put("enabled", enabled())
             .put("since", prefs.getString("since", "")).put("open", shouldOpen);
     }
 }

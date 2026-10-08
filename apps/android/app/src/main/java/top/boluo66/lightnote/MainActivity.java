@@ -198,10 +198,16 @@ public final class MainActivity extends Activity {
             // Diagnostic APK only. Production notification navigation will use the trusted bridge.
             webView.loadUrl(notificationSmokeTarget(intent));
         }
+        if (BuildConfig.HUAWEI_PUSH_PROBE && intent.getBooleanExtra("huawei_probe_center", false)
+            && webView != null && PrivacyConsentStore.isAccepted(this)) webView.loadUrl(notificationSmokeTarget(intent));
         if (Intent.ACTION_MAIN.equals(intent.getAction())) openNotificationSmoke(intent);
     }
 
     private void openNotificationSmoke(Intent intent) {
+        if (BuildConfig.HUAWEI_PUSH_PROBE && PrivacyConsentStore.isAccepted(this)
+            && (intent == null || !intent.getBooleanExtra("huawei_probe_center", false))) {
+            startActivity(new Intent().setClassName(this, "top.boluo66.lightnote.HuaweiPushProbeActivity"));
+        }
         if (BuildConfig.NOTIFICATION_SMOKE && PrivacyConsentStore.isAccepted(this)
             && (intent == null || !intent.getBooleanExtra("light_note_notification_smoke", false))) {
             startActivity(new Intent().setClassName(this, "top.boluo66.lightnote.NotificationSmokeActivity"));
@@ -209,7 +215,8 @@ public final class MainActivity extends Activity {
     }
 
     private String notificationSmokeTarget(Intent intent) {
-        if (BuildConfig.NOTIFICATION_SMOKE && intent != null && intent.getBooleanExtra("light_note_notification_smoke", false)) {
+        if (intent != null && ((BuildConfig.NOTIFICATION_SMOKE && intent.getBooleanExtra("light_note_notification_smoke", false))
+            || (BuildConfig.HUAWEI_PUSH_PROBE && intent.getBooleanExtra("huawei_probe_center", false)))) {
             return Uri.parse(WebViewSupport.HOME_URL).buildUpon().path("/notifications").clearQuery().fragment(null).build().toString();
         }
         return WebViewSupport.HOME_URL;

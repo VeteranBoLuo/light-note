@@ -369,7 +369,10 @@ describe('账号注销后台清理', () => {
   it('purges upload compatibility aliases with their owner', async () => {
     const connection = { query: vi.fn().mockResolvedValue([[]]) };
     await purgeOwnedResources(connection, new Set(['cloud_legacy_object_lifecycle']), 'user-1');
-    expect(connection.query).toHaveBeenCalledExactlyOnceWith('DELETE FROM cloud_legacy_object_lifecycle WHERE user_id = ?', ['user-1']);
+    expect(connection.query).toHaveBeenCalledExactlyOnceWith(
+      'DELETE FROM cloud_legacy_object_lifecycle WHERE user_id = ?',
+      ['user-1'],
+    );
   });
 
   it('注销时删除本账号公开表单以触发回答级联清理', async () => {
@@ -650,3 +653,13 @@ vi.mock('./imagePreview/cleanup.js', () => ({
   deferCloudImageDeletion: vi.fn(),
   deleteUnmanagedObject: (...args) => deleteObjectFromObs(...args),
 }));
+
+it('removes push delivery jobs before deleting account device bindings', async () => {
+  const connection = { query: vi.fn(async () => [{ affectedRows: 1 }]) };
+  await purgeOwnedResources(connection, new Set(['browser_push_jobs', 'browser_push_subscriptions']), 'user-1');
+  expect(connection.query.mock.calls[0]).toEqual([
+    'DELETE j FROM browser_push_jobs j JOIN browser_push_subscriptions s ON s.id = j.subscription_id WHERE s.user_id = ?',
+    ['user-1'],
+  ]);
+  expect(connection.query).toHaveBeenCalledWith('DELETE FROM browser_push_subscriptions WHERE user_id = ?', ['user-1']);
+});

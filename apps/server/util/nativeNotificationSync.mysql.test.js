@@ -1,5 +1,13 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import mysql from 'mysql2/promise';
+import { browserPushTableSql } from './browserPushSchema.js';
+import {
+  bindHuaweiSubscription,
+  activatePushSubscription,
+  unbindPushSubscription,
+  expandPushOutbox,
+  processNextPush,
+} from './browserPushService.js';
 import { randomUUID } from 'node:crypto';
 import { readNativeNotifications, validateNativeCursor } from './nativeNotificationSync.js';
 
@@ -20,9 +28,19 @@ describe.skipIf(!socketPath)('native notification real SQL', () => {
     if (!Number(runtime.isolated)) throw new Error('Isolated MySQL required');
     await admin.query(`CREATE DATABASE ${schema}`);
     db = mysql.createPool({ socketPath, user: 'root', database: schema });
+    for (const sql of browserPushTableSql) await db.query(sql);
+    await db.query(
+      "CREATE TABLE user (id char(36) PRIMARY KEY, del_flag tinyint DEFAULT 0, role varchar(20) DEFAULT 'user', preferences json)",
+    );
+    await db.query(
+      "CREATE TABLE todo_items (id char(36) PRIMARY KEY, user_id char(36), del_flag tinyint DEFAULT 0, status varchar(20) DEFAULT 'pending')",
+    );
+    await db.query(
+      'CREATE TABLE todo_reminder_jobs (id varchar(64) PRIMARY KEY, todo_id char(36), user_id char(36), channel varchar(20), status varchar(20))',
+    );
     await db.query(`CREATE TABLE notification (
-      id char(36) PRIMARY KEY, user_id char(36), type varchar(32), source_type varchar(40),
-      meta json, del_flag tinyint DEFAULT 0, recalled tinyint DEFAULT 0,
+      id char(36) PRIMARY KEY, user_id char(36), type varchar(32), source_type varchar(40), source_id varchar(64),
+      title varchar(255), content text, browser_push_pending tinyint DEFAULT 0, meta json, del_flag tinyint DEFAULT 0, recalled tinyint DEFAULT 0,
       create_time datetime DEFAULT CURRENT_TIMESTAMP, browser_push_created_at datetime(6),
       KEY idx_user_time(user_id,create_time))`);
   });
@@ -34,13 +52,97 @@ describe.skipIf(!socketPath)('native notification real SQL', () => {
     }
   });
   beforeEach(async () => {
+    vi.unstubAllEnvs();
     await db.query('DELETE FROM notification');
+    await db.query('DELETE FROM browser_push_subscriptions');
+    await db.query('DELETE FROM browser_push_jobs');
+    await db.query('DELETE FROM user');
+    await db.query('DELETE FROM todo_items');
+    await db.query('DELETE FROM todo_reminder_jobs');
   });
   async function add(values = {}, connection = db) {
     const row = { id: randomUUID(), user_id: 'alice', type: 'system', ...values };
     await connection.query('INSERT INTO notification SET ?,browser_push_created_at=NOW(6)', [row]);
     return row.id;
   }
+  it('reuses the actual queue with activation, WORK source checks, lease and account-generation invalidation', async () => {
+    const env = {
+      LIGHTNOTE_RUNTIME_ENV: 'production',
+      HUAWEI_PUSH_ENABLED: 'true',
+      HUAWEI_PUSH_APP_ID: '1',
+      HUAWEI_PUSH_PROJECT_ID: '2',
+      HUAWEI_PUSH_APP_SECRET: 'test',
+      HUAWEI_PUSH_ORIGIN: 'https://test.invalid',
+    };
+    await db.query("INSERT INTO user (id) VALUES ('alice'), ('bob')");
+    await db.query("INSERT INTO todo_items (id,user_id) VALUES ('t','alice')");
+    await db.query("INSERT INTO todo_reminder_jobs VALUES ('j','t','alice','in_app','sent')");
+    const token = 'a'.repeat(100);
+    const binding = await bindHuaweiSubscription('alice', token, db);
+    expect(await activatePushSubscription('bob', binding.id, binding.generation, db)).toBe(false);
+    expect(await activatePushSubscription('alice', binding.id, binding.generation, db)).toBe(true);
+    expect(await bindHuaweiSubscription('alice', token, db)).toEqual(binding);
+    const n = await add({
+      type: 'todo_reminder',
+      source_type: 'todo_reminder_job',
+      source_id: 'j',
+      browser_push_pending: 1,
+    });
+    await add({ type: 'system', browser_push_pending: 1 });
+    expect(await expandPushOutbox(db, env)).toBe(2);
+    const [[count]] = await db.query('SELECT COUNT(*) AS total FROM browser_push_jobs');
+    expect(count.total).toBe(1);
+    const send = vi.fn();
+    expect((await processNextPush({ db, env, send })).status).toBe('accepted');
+    expect(send).toHaveBeenCalledOnce();
+    expect(send.mock.calls[0][1].notificationId).toBe(n);
+    expect(await processNextPush({ db, env, send })).toBeNull();
+    await add({ type: 'todo_reminder', source_type: 'todo_reminder_job', source_id: 'j', browser_push_pending: 1 });
+    await expandPushOutbox(db, env);
+    const switched = await bindHuaweiSubscription('bob', token, db);
+    expect(switched.generation).not.toBe(binding.generation);
+    await unbindPushSubscription('alice', binding.id, binding.generation, db);
+    expect(await activatePushSubscription('bob', switched.id, switched.generation, db)).toBe(true);
+    const [[old]] = await db.query(
+      "SELECT COUNT(*) AS total FROM browser_push_jobs WHERE status IN ('pending','sending')",
+    );
+    expect(old.total).toBe(0);
+  });
+  it('suppresses only this active Huawei generation and approved source, preserving badge IDs', async () => {
+    for (const [key, value] of Object.entries({
+      LIGHTNOTE_RUNTIME_ENV: 'production',
+      HUAWEI_PUSH_ENABLED: 'true',
+      HUAWEI_PUSH_APP_ID: '1',
+      HUAWEI_PUSH_PROJECT_ID: '2',
+      HUAWEI_PUSH_APP_SECRET: 'test',
+      HUAWEI_PUSH_ORIGIN: 'https://test.invalid',
+    }))
+      vi.stubEnv(key, value);
+    await db.query(
+      "INSERT INTO browser_push_subscriptions (id,user_id,endpoint_hash,endpoint,p256dh,auth,generation,active) VALUES ('s','alice','hash','huawei:test','','','g',1)",
+    );
+    const { since } = await readNativeNotifications(db, 'alice');
+    const todo = await add({
+      type: 'todo_reminder',
+      source_type: 'todo_reminder_job',
+      source_id: 'j',
+      browser_push_pending: 1,
+    });
+    const other = await add();
+    const binding = { id: 's', generation: 'g' };
+    const page = await readNativeNotifications(db, 'alice', { since, huaweiBinding: binding });
+    expect(page.items.find((row) => row.id === todo)?.remote).toBe(true);
+    expect(page.items.find((row) => row.id === other)?.remote).toBeUndefined();
+    const stale = await readNativeNotifications(db, 'alice', {
+      since,
+      huaweiBinding: { ...binding, generation: 'old' },
+    });
+    expect(stale.items.some((row) => row.remote)).toBe(false);
+    await db.query("UPDATE browser_push_subscriptions SET user_id='bob' WHERE id='s'");
+    const switched = await readNativeNotifications(db, 'alice', { since, huaweiBinding: binding });
+    expect(switched.items.some((row) => row.remote)).toBe(false);
+    vi.unstubAllEnvs();
+  });
   it('first activation returns no historical rows; later sweeps are owner-scoped', async () => {
     await add();
     const baseline = await readNativeNotifications(db, 'alice');

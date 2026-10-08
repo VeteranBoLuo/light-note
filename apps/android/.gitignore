@@ -5,3 +5,6 @@
 /**/build/
 *.jks
 *.keystore
+
+# Downloaded Huawei client configuration is supplied explicitly at build time.
+**/agconnect-services*.json

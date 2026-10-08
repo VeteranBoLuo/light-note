@@ -545,6 +545,9 @@ declare(ADMIN_POLICIES.ADMIN_ONLY, 'support', [
 declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'notification', [
   // Sync can display native reminders; never run on behalf of a previewed account.
   ['POST', '/notification/native/sync'],
+  ['POST', '/notification/huawei/subscribe'],
+  ['POST', '/notification/huawei/activate'],
+  ['POST', '/notification/huawei/unsubscribe'],
   ['POST', '/notification/browser/config'],
   ['POST', '/notification/browser/subscribe'],
   ['POST', '/notification/browser/activate'],

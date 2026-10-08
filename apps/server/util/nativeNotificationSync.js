@@ -1,3 +1,4 @@
+import { huaweiPushEnabled } from './huaweiPushPolicy.js';
 import { communityFeedSchemaReady } from './communityFeed/schema.js';
 import { feedNotificationVisibleSql } from './communityFeed/notifications.js';
 import { COMMUNITY_CHAT_TARGETED_NOTIFICATION_SQL } from './notificationVisibility.js';
@@ -35,6 +36,26 @@ export async function readNativeNotifications(db, userId, input = {}) {
     ORDER BY browser_push_created_at,id LIMIT 100`,
     [userId, input.since, until, ...(after ? [after.time, after.time, after.id] : [])],
   );
+  // Only suppress local alerts for this exact, active device generation. The inbox still returns every ID.
+  if (input.huaweiBinding && huaweiPushEnabled()) {
+    const [[binding]] = await db.query(
+      "SELECT id FROM browser_push_subscriptions WHERE id = ? AND generation = ? AND user_id = ? AND active = 1 AND endpoint LIKE 'huawei:%'",
+      [String(input.huaweiBinding.id || ''), String(input.huaweiBinding.generation || ''), userId],
+    );
+    if (binding && rows.length) {
+      const [remote] = await db.query(
+        `SELECT n.id FROM notification n JOIN browser_push_subscriptions s ON s.id = ?
+         WHERE n.user_id = ? AND n.id IN (?) AND n.type = 'todo_reminder' AND n.source_type = 'todo_reminder_job' AND n.source_id IS NOT NULL
+           AND s.enabled_at <= n.browser_push_created_at
+           AND (n.browser_push_pending = 1 OR EXISTS (SELECT 1 FROM browser_push_jobs j
+             WHERE j.notification_id = n.id AND j.subscription_id = s.id AND j.generation = s.generation
+               AND j.status IN ('pending', 'sending', 'accepted')))`,
+        [binding.id, userId, rows.map((row) => row.id)],
+      );
+      const ids = new Set(remote.map((row) => row.id));
+      for (const row of rows) if (ids.has(row.id)) row.remote = true;
+    }
+  }
   const last = rows.at(-1);
   // Every sweep restarts at the activation baseline (bounded to 24h). This also catches late commits
   // and avoids timestamp watermark loss; native IDs deduplicate previously delivered notifications.
