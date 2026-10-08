@@ -543,6 +543,8 @@ declare(ADMIN_POLICIES.ADMIN_ONLY, 'support', [
 ]);
 
 declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'notification', [
+  // Sync can display native reminders; never run on behalf of a previewed account.
+  ['POST', '/notification/native/sync'],
   ['POST', '/notification/browser/config'],
   ['POST', '/notification/browser/subscribe'],
   ['POST', '/notification/browser/activate'],

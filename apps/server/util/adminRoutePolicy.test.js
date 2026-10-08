@@ -363,6 +363,16 @@ describe('adminRoutePolicyMiddleware', () => {
     expect(readonlyRes.json).toHaveBeenCalled();
   });
 
+  it('原生通知同步拒绝只读和维护代操作上下文', () => {
+    for (const mode of ['readonly', 'maintain']) {
+      const next = vi.fn();
+      const res = createRes();
+      adminRoutePolicyMiddleware(createReq('/notification/native/sync', 'POST', mode), res, next);
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(403);
+    }
+  });
+
   it('管理员预览时放行目标用户的通知查询', () => {
     for (const path of ['/notification/list', '/notification/unreadCount']) {
       const next = vi.fn();
