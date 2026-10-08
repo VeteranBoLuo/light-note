@@ -29,6 +29,129 @@ const facts = [
 }));
 
 describe('routine.daily_brief', () => {
+  it.each(['zh-CN', 'en-US'])('无关联时统一收紧模型事实、工具枚举与校验，保留原快照（%s）', async (locale) => {
+    const connection = { id: 'resource_connection', label: '关联', count: 0, route: '/tag', samples: [] };
+    const input = validateDailyBriefInput({
+      date: '2026-10-08',
+      timezone: 'Asia/Shanghai',
+      locale,
+      facts: [...facts, connection],
+      unchangedFactIds: ['resource_connection', 'todo_due_today'],
+    });
+    const prepared = await routineDailyBriefSkill.prepare({ input });
+    const schema = prepared.structuredTool.parameters.properties.insights.items.properties.factIds;
+    expect(schema.items.enum).toEqual(facts.map((fact) => fact.id));
+    expect(schema.maxItems).toBe(facts.length);
+    expect(prepared.messages.at(-1).content).not.toContain('resource_connection');
+    expect(input.facts.at(-1)).toEqual(connection);
+    expect(input.unchangedFactIds).toContain('resource_connection');
+    const valid = draft('今天有 {{todo_due_today.count}} 项待办。');
+    expect(prepared.validateArguments(valid).insights).toHaveLength(1);
+    for (const invalid of [
+      { ...valid, insights: [{ factIds: ['resource_connection', 'todo_due_today'], text: '资料有关联。' }] },
+      { ...valid, headline: '{{resource_connection.count}}' },
+      { ...valid, recommendation: '{{resource_connection.sample}}' },
+      { ...valid, insights: [{ factIds: ['todo_due_today'], text: '{{resource_connection.count}}' }] },
+    ]) {
+      expect(() => prepared.validateArguments(invalid)).toThrowError(
+        expect.objectContaining({ code: 'AI_SKILL_DAILY_BRIEF_OUTPUT_INVALID' }),
+      );
+    }
+    const available = await routineDailyBriefSkill.prepare({
+      input: {
+        ...input,
+        facts: [...facts, { ...connection, count: 1, samples: ['资料共享标签'] }],
+      },
+    });
+    expect(available.structuredTool.parameters.properties.insights.items.properties.factIds.items.enum).toContain(
+      'resource_connection',
+    );
+    expect(schema.items.enum).not.toContain('resource_connection');
+    expect(
+      available.validateArguments({
+        ...valid,
+        insights: [{ factIds: ['resource_connection'], text: '{{resource_connection.sample}}，可对照原资料。' }],
+      }).insights,
+    ).toHaveLength(1);
+    expect(() =>
+      available.validateArguments({
+        ...valid,
+        insights: [{ factIds: ['resource_connection'], text: '可对照原资料。' }],
+      }),
+    ).toThrowError(
+      expect.objectContaining({ details: expect.objectContaining({ reason: 'CONNECTION_EVIDENCE_REQUIRED' }) }),
+    );
+  });
+
+  it.each([true, false])('无关联的混合洞察只允许一次定向修复，修复成功=%s', async (validRepair) => {
+    vi.mocked(requestAi).mockReset();
+    const input = validateDailyBriefInput({
+      date: '2026-10-08',
+      timezone: 'Asia/Shanghai',
+      locale: 'zh-CN',
+      facts: [...facts, { id: 'resource_connection', label: '关联', count: 0, route: '/tag', samples: [] }],
+    });
+    const prepared = await routineDailyBriefSkill.prepare({ input });
+    const valid = draft('今天有 {{todo_due_today.count}} 项待办。');
+    const invalid = {
+      ...valid,
+      insights: [{ factIds: ['resource_connection', 'todo_due_today'], text: '待办与资料有关联。' }],
+    };
+    const response = (args) => ({
+      content: '',
+      toolCalls: [
+        {
+          function: {
+            name: prepared.structuredTool.name,
+            arguments: JSON.stringify(args),
+          },
+        },
+      ],
+    });
+    vi.mocked(requestAi)
+      .mockResolvedValueOnce(response(invalid))
+      .mockResolvedValueOnce(response(validRepair ? valid : invalid));
+    const operation = callStructuredSkillModel({ ...prepared, modelPolicy: routineDailyBriefSkill.modelPolicy });
+    if (validRepair) await expect(operation).resolves.toMatchObject({ insights: valid.insights });
+    else await expect(operation).rejects.toMatchObject({ code: 'AI_SKILL_DAILY_BRIEF_OUTPUT_INVALID' });
+    expect(requestAi).toHaveBeenCalledTimes(2);
+    const [messages, options] = vi.mocked(requestAi).mock.calls[1];
+    expect(messages.at(-1).content).toContain('本次没有已核验的资料关联');
+    expect(messages.at(-1).content).toContain('不能只删事实 ID');
+    expect(messages.at(-1).content).toContain(JSON.stringify(invalid));
+    expect(options.billingScope).toBe('platform');
+  });
+
+  it('全零且无关联时，通过准备后的完整调用链直接交付平静日简报', async () => {
+    vi.mocked(requestAi).mockReset();
+    const input = validateDailyBriefInput({
+      date: '2026-10-08',
+      timezone: 'Asia/Shanghai',
+      locale: 'zh-CN',
+      facts: [
+        ...facts.map((fact) => ({ ...fact, count: 0, samples: [] })),
+        { id: 'resource_connection', label: '关联', count: 0, route: '/tag', samples: [] },
+      ],
+    });
+    const prepared = await routineDailyBriefSkill.prepare({ input });
+    const args = draft('今天待办为 {{todo_due_today.count}} 项，可以按自己的节奏推进。');
+    vi.mocked(requestAi).mockResolvedValueOnce({
+      content: '',
+      toolCalls: [
+        {
+          function: {
+            name: prepared.structuredTool.name,
+            arguments: JSON.stringify(args),
+          },
+        },
+      ],
+    });
+    await expect(
+      callStructuredSkillModel({ ...prepared, modelPolicy: routineDailyBriefSkill.modelPolicy }),
+    ).resolves.toMatchObject({ insights: args.insights });
+    expect(requestAi).toHaveBeenCalledTimes(1);
+  });
+
   it('从有效精确占位符补齐漏报的引用，并仍拒绝无标题来源与未知声明', () => {
     const args = {
       headline: '近期重点',
