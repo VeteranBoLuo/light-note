@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 vi.mock('../db/index.js', () => ({ default: { query: vi.fn() } }));
-import { huaweiPushEnabled, huaweiSubscription } from './huaweiPushPolicy.js';
+import { huaweiNotificationPresentation, huaweiPushEnabled, huaweiSubscription } from './huaweiPushPolicy.js';
 import { createHuaweiTransport } from './huaweiPushTransport.js';
 import { processNextPush } from './browserPushService.js';
 const env = {
@@ -26,7 +26,19 @@ describe('Huawei transport', () => {
       .mockResolvedValueOnce(response({ access_token: 'test-access', expires_in: 3600 }))
       .mockResolvedValue(response({ code: '80000000' }));
     const send = createHuaweiTransport(fetcher);
-    await send(huaweiSubscription(token), { notificationId: 'n1', content: 'private content' }, 900, env);
+    await send(
+      huaweiSubscription(token),
+      {
+        notificationId: 'n1',
+        content: 'private content',
+        huawei: huaweiNotificationPresentation(
+          { type: 'todo_reminder', source_type: 'todo_reminder_job', source_id: 'j' },
+          env,
+        ),
+      },
+      900,
+      env,
+    );
     await send(huaweiSubscription(token), { notificationId: 'n1' }, 900, env);
     expect(fetcher).toHaveBeenCalledTimes(3);
     expect(fetcher.mock.calls[0][1].body).toContain('client_id=123');
@@ -74,10 +86,10 @@ describe('Huawei business routing', () => {
     { type: 'system' },
     { type: 'todo_reminder' },
     { type: 'community_chat', source_type: 'todo_reminder_job', source_id: 'j' },
-  ])('rejects unapproved notification %j', async (notification) => {
+  ])('routes other notification types without claiming WORK %j', async (notification) => {
     const send = vi.fn();
-    expect((await processNextPush({ db: workerDb(notification), env, send })).status).toBe('cancelled');
-    expect(send).not.toHaveBeenCalled();
+    expect((await processNextPush({ db: workerDb(notification), env, send })).status).toBe('accepted');
+    expect(send.mock.calls[0][1].huawei.category).toBeUndefined();
   });
   it('requires an existing active todo reminder source', async () => {
     const n = { id: 'n', type: 'todo_reminder', source_type: 'todo_reminder_job', source_id: 'j' };
@@ -87,4 +99,51 @@ describe('Huawei business routing', () => {
     expect((await processNextPush({ db: workerDb(n), env, send })).status).toBe('accepted');
     expect(send).toHaveBeenCalledOnce();
   });
+});
+
+it('uses approved category only, preserving privacy and a fixed destination for all types', () => {
+  const n = { type: 'community_chat', meta: { kind: 'reply' }, content: 'private message' };
+  expect(huaweiNotificationPresentation(n, env).category).toBeUndefined();
+  expect(
+    huaweiNotificationPresentation(n, { ...env, HUAWEI_PUSH_APPROVED_CATEGORIES: 'WORK,SUBSCRIPTION' }).category,
+  ).toBe('SUBSCRIPTION');
+  expect(
+    huaweiNotificationPresentation(
+      { type: 'community_feed', meta: { kind: 'like' } },
+      { ...env, HUAWEI_PUSH_APPROVED_CATEGORIES: 'SUBSCRIPTION' },
+    ).category,
+  ).toBe('SUBSCRIPTION');
+  expect(huaweiNotificationPresentation({ type: 'system' }, env).category).toBeUndefined();
+  expect(JSON.stringify(huaweiNotificationPresentation(n, env))).not.toContain('private message');
+});
+it('does not label generic messages as WORK in the actual provider request', async () => {
+  const fetcher = vi
+    .fn()
+    .mockResolvedValueOnce(response({ access_token: 'access', expires_in: 3600 }))
+    .mockResolvedValue(response({ code: '80000000' }));
+  await createHuaweiTransport(fetcher)(
+    huaweiSubscription(token),
+    { notificationId: 'n', huawei: huaweiNotificationPresentation({ type: 'system' }, env) },
+    300,
+    env,
+  );
+  const message = JSON.parse(fetcher.mock.calls[1][1].body).message;
+  expect(message.android.category).toBeUndefined();
+  expect(message.notification.title).toBe('轻笺通知');
+});
+
+it('queues community feed as well as generic notifications when only Huawei is enabled', async () => {
+  vi.stubEnv('LIGHTNOTE_RUNTIME_ENV', 'production');
+  for (const [key, value] of Object.entries(env)) vi.stubEnv(key, value);
+  vi.stubEnv('BROWSER_PUSH_ENABLED', 'false');
+  const { createNotification } = await import('./notification.js');
+  const db = { query: vi.fn().mockResolvedValue([{ affectedRows: 1 }]) };
+  try {
+    for (const type of ['system', 'community_feed', 'community_chat', 'opinion_reply', 'level_up']) {
+      await createNotification('u', { type, title: 'Notification' }, db);
+      expect(db.query.mock.lastCall[1][0].browser_push_pending).toBe(1);
+    }
+  } finally {
+    vi.unstubAllEnvs();
+  }
 });

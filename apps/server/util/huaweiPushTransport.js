@@ -60,9 +60,12 @@ export function createHuaweiTransport(fetcher = globalThis.fetch) {
         validate_only: false,
         message: {
           token: [subscription.endpoint.slice(HUAWEI_ENDPOINT.length)],
-          notification: { title: '轻笺待办提醒', body: '你设置的待办提醒时间到了，点击打开通知中心。' },
+          notification: {
+            title: payload.huawei?.title || '轻笺通知',
+            body: payload.huawei?.body || '你有一条新通知，点击打开通知中心查看。',
+          },
           android: {
-            category: 'WORK',
+            ...(payload.huawei?.category ? { category: payload.huawei.category } : {}),
             ttl: `${Math.max(1, Math.min(300, Math.floor(ttl)))}s`,
             notification: {
               tag: payload.notificationId,

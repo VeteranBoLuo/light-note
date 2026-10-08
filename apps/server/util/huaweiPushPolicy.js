@@ -23,3 +23,41 @@ export const huaweiWorkNotification = (n) =>
 export const isHuaweiSubscriptionRequest = (context) =>
   String(context.method).toUpperCase() === 'POST' &&
   /^(?:\/api)?\/notification\/huawei\/subscribe\/?$/.test(String(context.path || context.url || ''));
+
+// Only explicitly approved service categories are sent as such. Other messages use Huawei's
+// normal classification rather than borrowing the WORK entitlement.
+export function huaweiNotificationPresentation(n, env = process.env) {
+  let meta = n?.meta || {};
+  if (typeof meta === 'string') {
+    try {
+      meta = JSON.parse(meta);
+    } catch {
+      meta = {};
+    }
+  }
+  let category = null;
+  let title = '轻笺通知';
+  let body = '你有一条新通知，点击打开通知中心查看。';
+  if (huaweiWorkNotification(n)) {
+    category = 'WORK';
+    title = '轻笺待办提醒';
+    body = '你设置的待办提醒时间到了，点击打开通知中心。';
+  } else if (n?.type === 'community_chat' && ['reply', 'mention'].includes(meta?.kind)) {
+    category = 'SUBSCRIPTION';
+    title = '轻笺订阅提醒';
+    body = '你订阅的聊天室互动有新回复或提及，点击打开通知中心查看。';
+  } else if (
+    n?.type === 'community_feed' &&
+    ['reply', 'mention', 'comment', 'subscription', 'like'].includes(meta?.kind)
+  ) {
+    category = 'SUBSCRIPTION';
+    title = '轻笺订阅提醒';
+    body = '你订阅的社区互动有新消息，点击打开通知中心查看。';
+  }
+  const approved = new Set(
+    String(env.HUAWEI_PUSH_APPROVED_CATEGORIES || 'WORK')
+      .split(',')
+      .map((x) => x.trim()),
+  );
+  return { title, body, ...(category && approved.has(category) ? { category } : {}) };
+}

@@ -1,3 +1,4 @@
+import { huaweiPushEnabled } from '../huaweiPushPolicy.js';
 import { browserPushEnabled } from '../browserPushPolicy.js';
 import pool from '../../db/index.js';
 import { COMMUNITY_CHAT_PRIMARY_ROOM_SLUG, getCommunityChatFeatureState } from '../communityChatFeature.js';
@@ -201,7 +202,7 @@ export async function deliverCommunityChatMessageNotifications({
             0,
             'community_chat_message',
             message.public_id,
-            ${browserPushEnabled(env) ? 1 : 0}, CURRENT_TIMESTAMP(6)
+            ${browserPushEnabled(env) || huaweiPushEnabled(env) ? 1 : 0}, CURRENT_TIMESTAMP(6)
        FROM community_chat_messages message
        JOIN community_chat_rooms room ON room.id = message.room_id AND room.status = 'active'
        JOIN user sender ON sender.id = message.user_id AND sender.del_flag = 0

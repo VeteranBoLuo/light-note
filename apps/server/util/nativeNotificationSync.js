@@ -45,7 +45,7 @@ export async function readNativeNotifications(db, userId, input = {}) {
     if (binding && rows.length) {
       const [remote] = await db.query(
         `SELECT n.id FROM notification n JOIN browser_push_subscriptions s ON s.id = ?
-         WHERE n.user_id = ? AND n.id IN (?) AND n.type = 'todo_reminder' AND n.source_type = 'todo_reminder_job' AND n.source_id IS NOT NULL
+         WHERE n.user_id = ? AND n.id IN (?)
            AND s.enabled_at <= n.browser_push_created_at
            AND (n.browser_push_pending = 1 OR EXISTS (SELECT 1 FROM browser_push_jobs j
              WHERE j.notification_id = n.id AND j.subscription_id = s.id AND j.generation = s.generation

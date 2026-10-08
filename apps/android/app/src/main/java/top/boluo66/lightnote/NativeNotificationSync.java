@@ -62,11 +62,12 @@ final class NativeNotificationSync {
             && manager.getNotificationChannel(CHANNEL).getImportance() != NotificationManager.IMPORTANCE_NONE;
     }
     private void offerPermission() {
-        String offerKey = BuildConfig.HUAWEI_PUSH ? "huawei_offered" : "offered";
+        String offerKey = BuildConfig.HUAWEI_PUSH ? "huawei_all_offered" : "offered";
         if (prefs.getBoolean(offerKey, false)) return;
-        prefs.edit().putBoolean(offerKey, true).apply();
+        prefs.edit().putBoolean(offerKey, true).putBoolean("allowed", false).apply();
+        if (BuildConfig.HUAWEI_PUSH) { remote("clear"); clearVisible(); }
         new AlertDialog.Builder(activity).setTitle(BuildConfig.HUAWEI_PUSH ? "开启轻笺通知" : "开启通知同步测试")
-            .setMessage(BuildConfig.HUAWEI_PUSH ? "允许后，轻笺将初始化华为 Push Kit，向华为申请设备推送标识，并将此标识上传轻笺、绑定当前账号，用于关闭 App 后接收你设置的待办提醒。华为 SDK 会处理应用、设备及网络相关信息。系统通知不显示待办正文；其他通知在 App 前台同步。退出账号时会停止当前设备绑定；离线时撤销可能延迟。可在系统通知设置关闭通知，或撤回隐私同意停止 SDK。" : "将轻笺通知中心的新消息显示到手机通知栏。此测试版仅在 App 页面运行时同步，关闭 App 后不保证送达。系统通知不显示消息正文。")
+            .setMessage(BuildConfig.HUAWEI_PUSH ? "允许后，轻笺将初始化华为 Push Kit，向华为申请设备推送标识，并将此标识上传轻笺、绑定当前账号，用于关闭 App 后接收通知中心的新消息，包括待办提醒、社区互动和系统通知。华为 SDK 会处理应用、设备及网络相关信息。系统通知不显示消息正文；送达和提醒方式受华为消息分类及系统设置影响。退出账号时会停止当前设备绑定；离线时撤销可能延迟。可在系统通知设置关闭通知，或撤回隐私同意停止 SDK。" : "将轻笺通知中心的新消息显示到手机通知栏。此测试版仅在 App 页面运行时同步，关闭 App 后不保证送达。系统通知不显示消息正文。")
             .setPositiveButton("允许通知", (d, w) -> {
                 prefs.edit().putBoolean("allowed", true).apply();
                 remote("allow");

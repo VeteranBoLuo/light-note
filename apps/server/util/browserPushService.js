@@ -1,4 +1,13 @@
-import { huaweiPushEnabled, huaweiSubscription, huaweiWorkNotification, isHuaweiEndpoint } from './huaweiPushPolicy.js';
+import { communityFeedSchemaReady } from './communityFeed/schema.js';
+import { feedNotificationVisibleSql } from './communityFeed/notifications.js';
+import { COMMUNITY_CHAT_TARGETED_NOTIFICATION_SQL } from './notificationVisibility.js';
+import {
+  huaweiNotificationPresentation,
+  huaweiPushEnabled,
+  huaweiSubscription,
+  huaweiWorkNotification,
+  isHuaweiEndpoint,
+} from './huaweiPushPolicy.js';
 import { deliverHuaweiPush } from './huaweiPushTransport.js';
 import { browserPushQuietUntil } from './browserPushQuietHours.js';
 import { browserNotificationPresentation } from '@lightnote/shared/notification-presentation';
@@ -138,8 +147,8 @@ export async function expandPushOutbox(db = pool, env = process.env) {
         WHERE n.id = ? AND s.active = 1 AND s.enabled_at <= n.browser_push_created_at
           AND n.browser_push_created_at > DATE_SUB(NOW(6), INTERVAL 24 HOUR)
           AND n.del_flag = 0 AND n.recalled = 0
-          AND ((s.endpoint NOT LIKE 'huawei:%' AND ? = 1) OR
-            (s.endpoint LIKE 'huawei:%' AND ? = 1 AND n.type = 'todo_reminder' AND n.source_type = 'todo_reminder_job'))`,
+          AND ((s.endpoint NOT LIKE 'huawei:%' AND ? = 1 AND n.type <> 'community_feed') OR
+            (s.endpoint LIKE 'huawei:%' AND ? = 1))`,
         [row.id, Number(browserPushEnabled(env)), Number(huaweiPushEnabled(env))],
       );
       await conn.query('UPDATE notification SET browser_push_pending = 0 WHERE id = ?', [row.id]);
@@ -187,24 +196,25 @@ export async function processNextPush({ db = pool, send = sendWebPush, env = pro
       WHERE s.id = ? AND s.generation = ? AND s.active = 1`,
       [job.subscription_id, job.generation],
     );
-    const [[notification]] = await db.query(
-      `SELECT * FROM notification WHERE id = ? AND user_id = ? AND ${notificationVisibleSql}`,
-      [job.notification_id, subscription?.user_id || ''],
-    );
+    const huawei = isHuaweiEndpoint(subscription?.endpoint);
+    const visible = huawei
+      ? `del_flag = 0 AND recalled = 0 AND ${COMMUNITY_CHAT_TARGETED_NOTIFICATION_SQL} AND ${feedNotificationVisibleSql(await communityFeedSchemaReady(db).catch(() => false))}`
+      : notificationVisibleSql;
+    const [[notification]] = await db.query(`SELECT * FROM notification WHERE id = ? AND user_id = ? AND ${visible}`, [
+      job.notification_id,
+      subscription?.user_id || '',
+    ]);
     if (job.ttl <= 0) status = 'expired';
     else if (subscription && notification) {
-      const huawei = isHuaweiEndpoint(subscription.endpoint);
       if (huawei ? !huaweiPushEnabled(env) : !browserPushEnabled(env))
         throw Object.assign(new Error('PUSH_DISABLED'), { statusCode: 503 });
-      if (huawei) {
-        const [[source]] = huaweiWorkNotification(notification)
-          ? await db.query(
-              `SELECT j.id FROM todo_reminder_jobs j JOIN todo_items i ON i.id = j.todo_id AND i.user_id = j.user_id
+      if (huawei && huaweiWorkNotification(notification)) {
+        const [[source]] = await db.query(
+          `SELECT j.id FROM todo_reminder_jobs j JOIN todo_items i ON i.id = j.todo_id AND i.user_id = j.user_id
            WHERE j.id = ? AND j.user_id = ? AND j.channel = 'in_app' AND j.status IN ('processing', 'sent')
              AND i.del_flag = 0 AND i.status = 'pending' LIMIT 1`,
-              [notification.source_id, subscription.user_id],
-            )
-          : [[]];
+          [notification.source_id, subscription.user_id],
+        );
         if (!source) {
           await db.query(
             "UPDATE browser_push_jobs SET status = 'cancelled', last_code = 'HUAWEI_CATEGORY_DENIED', lease_until = NULL WHERE id = ? AND lease_token = ? AND status = 'sending'",
@@ -242,6 +252,7 @@ export async function processNextPush({ db = pool, send = sendWebPush, env = pro
       await send(
         { endpoint: subscription.endpoint, keys: { p256dh: subscription.p256dh, auth: subscription.auth } },
         {
+          ...(huawei ? { huawei: huaweiNotificationPresentation(notification, env) } : {}),
           version: 1,
           notificationId: notification.id,
           subscriptionId: subscription.id,

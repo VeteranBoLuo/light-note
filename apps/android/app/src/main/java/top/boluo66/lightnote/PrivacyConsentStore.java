@@ -27,7 +27,7 @@ final class PrivacyConsentStore {
 
     static void clear(Context context) {
         if (BuildConfig.HUAWEI_PUSH) {
-            context.getSharedPreferences("native_notification_sync", Context.MODE_PRIVATE).edit().remove("huawei_offered").commit();
+            context.getSharedPreferences("native_notification_sync", Context.MODE_PRIVATE).edit().remove("huawei_offered").remove("huawei_all_offered").commit();
             context.getSharedPreferences("huawei_push_account", Context.MODE_PRIVATE).edit().putBoolean("consent", false).commit();
             try {
                 Class.forName("top.boluo66.lightnote.HuaweiPushAccount").getMethod("handle", Context.class, String.class).invoke(null, context, "clear");

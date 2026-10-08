@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import mysql from 'mysql2/promise';
+import * as feedSchema from './communityFeed/schema.js';
 import { browserPushTableSql } from './browserPushSchema.js';
 import {
   bindHuaweiSubscription,
@@ -91,11 +92,13 @@ describe.skipIf(!socketPath)('native notification real SQL', () => {
     await add({ type: 'system', browser_push_pending: 1 });
     expect(await expandPushOutbox(db, env)).toBe(2);
     const [[count]] = await db.query('SELECT COUNT(*) AS total FROM browser_push_jobs');
-    expect(count.total).toBe(1);
+    expect(count.total).toBe(2);
     const send = vi.fn();
     expect((await processNextPush({ db, env, send })).status).toBe('accepted');
     expect(send).toHaveBeenCalledOnce();
     expect(send.mock.calls[0][1].notificationId).toBe(n);
+    expect((await processNextPush({ db, env, send })).status).toBe('accepted');
+    expect(send.mock.calls[1][1].huawei.category).toBeUndefined();
     expect(await processNextPush({ db, env, send })).toBeNull();
     await add({ type: 'todo_reminder', source_type: 'todo_reminder_job', source_id: 'j', browser_push_pending: 1 });
     await expandPushOutbox(db, env);
@@ -108,7 +111,7 @@ describe.skipIf(!socketPath)('native notification real SQL', () => {
     );
     expect(old.total).toBe(0);
   });
-  it('suppresses only this active Huawei generation and approved source, preserving badge IDs', async () => {
+  it('suppresses all queued types only for this active Huawei generation, preserving badge IDs', async () => {
     for (const [key, value] of Object.entries({
       LIGHTNOTE_RUNTIME_ENV: 'production',
       HUAWEI_PUSH_ENABLED: 'true',
@@ -128,11 +131,13 @@ describe.skipIf(!socketPath)('native notification real SQL', () => {
       source_id: 'j',
       browser_push_pending: 1,
     });
-    const other = await add();
+    const other = await add({ browser_push_pending: 1 });
+    const localOnly = await add();
     const binding = { id: 's', generation: 'g' };
     const page = await readNativeNotifications(db, 'alice', { since, huaweiBinding: binding });
     expect(page.items.find((row) => row.id === todo)?.remote).toBe(true);
-    expect(page.items.find((row) => row.id === other)?.remote).toBeUndefined();
+    expect(page.items.find((row) => row.id === other)?.remote).toBe(true);
+    expect(page.items.find((row) => row.id === localOnly)?.remote).toBeUndefined();
     const stale = await readNativeNotifications(db, 'alice', {
       since,
       huaweiBinding: { ...binding, generation: 'old' },
@@ -142,6 +147,61 @@ describe.skipIf(!socketPath)('native notification real SQL', () => {
     const switched = await readNativeNotifications(db, 'alice', { since, huaweiBinding: binding });
     expect(switched.items.some((row) => row.remote)).toBe(false);
     vi.unstubAllEnvs();
+  });
+  it('checks current community result visibility before sending rather than trusting the queued notification', async () => {
+    const schemaSpy = vi.spyOn(feedSchema, 'communityFeedSchemaReady').mockResolvedValue(true);
+    const tables = [
+      'community_posts',
+      'community_comments',
+      'community_chat_blocks',
+      'community_chat_user_identities',
+      'community_chat_members',
+      'community_moderation_actions',
+    ];
+    try {
+      await db.query(
+        'CREATE TABLE community_posts(id int, public_id varchar(64),author_id char(36),status varchar(32),pending_revision_id int)',
+      );
+      await db.query(
+        'CREATE TABLE community_comments(id int, public_id varchar(64),post_id int,author_id char(36),status varchar(32))',
+      );
+      await db.query('CREATE TABLE community_chat_blocks(user_id char(36),blocked_user_id char(36))');
+      await db.query('CREATE TABLE community_chat_user_identities(user_id char(36),public_id varchar(64))');
+      await db.query('CREATE TABLE community_chat_members(user_id char(36),status varchar(32))');
+      await db.query('CREATE TABLE community_moderation_actions(public_id varchar(64),subject_id char(36))');
+      await db.query("INSERT INTO user(id) VALUES('alice')");
+      await db.query("INSERT INTO community_moderation_actions VALUES('result-1','alice')");
+      const binding = await bindHuaweiSubscription('alice', 'b'.repeat(100), db);
+      await activatePushSubscription('alice', binding.id, binding.generation, db);
+      const env = {
+        LIGHTNOTE_RUNTIME_ENV: 'production',
+        HUAWEI_PUSH_ENABLED: 'true',
+        HUAWEI_PUSH_APP_ID: '1',
+        HUAWEI_PUSH_PROJECT_ID: '2',
+        HUAWEI_PUSH_APP_SECRET: 'test',
+        HUAWEI_PUSH_ORIGIN: 'https://test.invalid',
+      };
+      const send = vi.fn();
+      const value = {
+        type: 'community_feed',
+        source_type: 'community_feed_result',
+        source_id: 'result-1',
+        meta: '{"kind":"result"}',
+        browser_push_pending: 1,
+      };
+      await add(value);
+      await expandPushOutbox(db, env);
+      expect((await processNextPush({ db, env, send })).status).toBe('accepted');
+      expect(send).toHaveBeenCalledOnce();
+      await add(value);
+      await expandPushOutbox(db, env);
+      await db.query('DELETE FROM community_moderation_actions');
+      expect((await processNextPush({ db, env, send })).status).toBe('cancelled');
+      expect(send).toHaveBeenCalledOnce();
+    } finally {
+      schemaSpy.mockRestore();
+      for (const table of tables) await db.query(`DROP TABLE IF EXISTS ${table}`);
+    }
   });
   it('first activation returns no historical rows; later sweeps are owner-scoped', async () => {
     await add();

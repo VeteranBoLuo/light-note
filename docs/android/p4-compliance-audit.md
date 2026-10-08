@@ -87,7 +87,7 @@ Tracing、VersionedParcelable，以及 Kotlin 标准库和协程运行时。当�
 
 `lightNoteHuaweiPushProbe=true` 仅为 Debug 引入华为 Push Kit `6.13.0.301` 和 AGConnect Core `1.9.6.300`，增加通知权限及 SDK 自带的签名级推送权限/组件；与上述普通包审计边界分开。构建拒绝包含密钥的客户端配置，自动初始化 Provider 被移除，用户另行同意测试说明后才注册设备 Token。诊断披露应用信息、设备及系统信息、AAID 和 Push Token 用途；Token 仅设备本地保存和用户主动复制，不上传轻笺、不绑定业务账号。停止测试清除本地状态并尝试远端撤销，失败明确提示。构建方式和设备验收边界见 [Android 说明](../../apps/android/README.md#华为远程推送诊断包)。
 
-`lightNoteHuaweiPush=true` 的业务联调包复用相同 SDK，并在单独告知后向轻笺上传 Token、绑定当前账号，用于获批 WORK 场景的待办提醒；退出撤销、离线重试及数据清理边界见 [业务联调说明](../../apps/android/README.md#华为待办推送联调包)。
+`lightNoteHuaweiPush=true` 的业务联调包复用相同 SDK，并在单独告知后向轻笺上传 Token、绑定当前账号，用于通知中心的新消息提醒，分类权益与厂商频控按真实场景处理；退出撤销、离线重试及数据清理边界见 [业务联调说明](../../apps/android/README.md#华为通知推送联调包)。
 
 上述诊断及联调包不作为正式分发候选包。正式引入前须更新政策版本和 SDK 清单，重新执行实际网络流量、权限、撤回和设备兼容性验收。
 
