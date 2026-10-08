@@ -1,3 +1,5 @@
+import { isLightNoteAndroidApp } from '@/utils/androidBridge.ts';
+
 export const CHROME_WEB_STORE_EXTENSION_ID = 'hfdpgaiggloacopnkihfkloicjepldig';
 
 /**
@@ -22,4 +24,24 @@ export function openChromeWebStore(openWindow?: ExternalWindowOpener): boolean {
   if (!opener) return false;
   opener(CHROME_WEB_STORE_URL, '_blank', 'noopener,noreferrer');
   return true;
+}
+
+interface ExtensionStoreNavigator {
+  userAgent: string;
+  userAgentData?: { mobile?: boolean; brands?: readonly { brand: string }[] };
+  brave?: unknown;
+}
+
+/** 仅决定安装入口的展示，不用于布局或权限判断。优先使用浏览器品牌信息。 */
+export function canShowExtensionStoreEntry(
+  browser: ExtensionStoreNavigator | undefined = typeof navigator === 'undefined' ? undefined : navigator,
+  androidApp = isLightNoteAndroidApp(),
+): boolean {
+  if (!browser || androidApp || browser.userAgentData?.mobile || browser.brave) return false;
+  const ua = browser.userAgent;
+  if (/Android|iPhone|iPad|iPod|Mobile|\bwv\b/i.test(ua)) return false;
+  if (/OPR\/|Opera|Vivaldi|SamsungBrowser|YaBrowser|UCBrowser|QQBrowser|Whale|Electron/i.test(ua)) return false;
+  const brands = browser.userAgentData?.brands;
+  if (brands?.length) return brands.some(({ brand }) => brand === 'Google Chrome' || brand === 'Microsoft Edge');
+  return /(?:Chrome|Edg)\/\d+/.test(ua);
 }

@@ -1116,6 +1116,7 @@ export default {
     moreEntries: '更多入口',
     moreEntriesWithNew: '更多入口，有新功能',
     newFeature: '新功能',
+    browserExtension: '浏览器插件',
     projectAddress: '项目地址',
     coBuild: '共建轻笺',
   },

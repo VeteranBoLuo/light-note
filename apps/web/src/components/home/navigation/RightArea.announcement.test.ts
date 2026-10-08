@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, nextTick, ref } from 'vue';
 import { createI18n } from 'vue-i18n';
 import zhCN from '@/i18n/locales/zh-CN';
+import { CHROME_WEB_STORE_URL } from '@/config/browserExtension';
+import icon from '@/config/icon';
 const mocks = vi.hoisted(() => ({
   routerPush: vi.fn(() => Promise.resolve()),
   recordOperation: vi.fn(),
@@ -10,7 +12,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 const user = { id: 'user-1', role: 'user', preferences: {}, adminContext: null, visitorWorkspace: null };
-const bookmark = { isMobile: false, isFold: false, openAuthModal: vi.fn() };
+const bookmark = { isMobile: false, isDesktop: true, isFold: false, openAuthModal: vi.fn() };
 const inbox = { openQuickCapture: vi.fn() };
 
 vi.mock('@/store', () => ({
@@ -82,6 +84,7 @@ beforeEach(() => {
   user.preferences = {};
   route.path = '/home';
   bookmark.isMobile = false;
+  bookmark.isDesktop = true;
   mocks.routerPush.mockClear();
   mocks.markAnnouncementSeen.mockReset().mockResolvedValue({ status: 200 });
 });
@@ -89,6 +92,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup?.();
   cleanup = undefined;
+  vi.restoreAllMocks();
   vi.useRealTimers();
 });
 
@@ -114,11 +118,14 @@ describe('知识工坊常规入口', () => {
     expect(remounted.querySelector('.more-menu-trigger__unread-dot')).toBeNull();
     expect(remounted.querySelector('.test-menu-dot')).toBeNull();
   });
-  it.each(['/toolbox', '/toolbox/forms/sample', '/toolbox/research_workspace'])('工坊路由 %s 标记当前入口', async (path) => {
-    route.path = path;
-    const host = await mountRightArea();
-    expect(host.querySelector('.workshop-entry-btn')?.getAttribute('aria-current')).toBe('page');
-  });
+  it.each(['/toolbox', '/toolbox/forms/sample', '/toolbox/research_workspace'])(
+    '工坊路由 %s 标记当前入口',
+    async (path) => {
+      route.path = path;
+      const host = await mountRightArea();
+      expect(host.querySelector('.workshop-entry-btn')?.getAttribute('aria-current')).toBe('page');
+    },
+  );
   it('其他页面不选中，移动端不增加桌面入口', async () => {
     const host = await mountRightArea();
     expect(host.querySelector('.workshop-entry-btn')?.hasAttribute('aria-current')).toBe(false);
@@ -126,5 +133,35 @@ describe('知识工坊常规入口', () => {
     bookmark.isMobile = true;
     const mobile = await mountRightArea();
     expect(mobile.querySelector('.workshop-entry-btn')).toBeNull();
+  });
+});
+
+describe('顶部插件入口', () => {
+  function setChrome() {
+    vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue('Mozilla/5.0 Chrome/140.0.0.0 Safari/537.36');
+  }
+  it.each(['user', 'visitor'])('%s 可从菜单直接在新标签页打开商店', async (role) => {
+    setChrome();
+    user.role = role;
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    const host = await mountRightArea();
+    const entry = host.querySelector<HTMLElement>('[data-label="浏览器插件"]');
+    expect(entry).not.toBeNull();
+    expect(icon.navigation.browserExtension).toBeTruthy();
+    expect(icon.navigation.browserExtension).not.toBe(icon.nullImg);
+    entry!.click();
+    expect(open).toHaveBeenCalledWith(CHROME_WEB_STORE_URL, '_blank', 'noopener,noreferrer');
+  });
+  it('非桌面布局隐藏安装入口', async () => {
+    setChrome();
+    bookmark.isDesktop = false;
+    const host = await mountRightArea();
+    expect(host.querySelector('[data-label="浏览器插件"]')).toBeNull();
+  });
+  it('Safari 隐藏插件入口并保留其他菜单项', async () => {
+    vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue('Mozilla/5.0 Version/18 Safari/605.1.15');
+    const host = await mountRightArea();
+    expect(host.querySelector('[data-label="浏览器插件"]')).toBeNull();
+    expect(host.querySelector('[data-label="项目地址"]')).not.toBeNull();
   });
 });

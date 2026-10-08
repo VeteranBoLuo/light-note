@@ -69,6 +69,7 @@
 
 <script lang="ts" setup>
   import icon from '@/config/icon.ts';
+  import { canShowExtensionStoreEntry, openChromeWebStore } from '@/config/browserExtension.ts';
   import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import PersonCenter from '@/view/personCenter/PersonCenter.vue';
@@ -109,6 +110,15 @@
       ? [{ label: t('navigation.coBuild'), icon: icon.support.heart, function: coBuildClick }]
       : []),
     { label: t('home.officialSite'), icon: icon.userCenter.home, function: officialSiteClick },
+    ...(bookmark.isDesktop && canShowExtensionStoreEntry()
+      ? [
+          {
+            label: t('navigation.browserExtension'),
+            icon: icon.navigation.browserExtension,
+            function: () => openChromeWebStore(),
+          },
+        ]
+      : []),
     { label: t('navigation.projectAddress'), icon: icon.github, function: githubClick },
   ]);
 

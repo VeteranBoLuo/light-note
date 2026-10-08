@@ -1155,6 +1155,7 @@ export default {
     moreEntries: 'More destinations',
     moreEntriesWithNew: 'More destinations, new feature available',
     newFeature: 'New feature',
+    browserExtension: 'Browser Extension',
     projectAddress: 'Project Address',
     coBuild: 'Co-build',
   },
