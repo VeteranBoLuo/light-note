@@ -194,7 +194,8 @@ export async function processNextPush({ db = pool, send = sendWebPush, env = pro
   try {
     const [[subscription]] = await db.query(
       `SELECT s.*, u.preferences AS push_preferences, JSON_UNQUOTE(JSON_EXTRACT(u.preferences, '$.lang')) AS preferred_locale FROM browser_push_subscriptions s
-      JOIN user u ON u.id = s.user_id AND u.del_flag = 0 AND u.role <> 'visitor'
+      JOIN user u ON u.id COLLATE utf8mb4_general_ci = s.user_id
+        AND u.del_flag = 0 AND u.role <> 'visitor'
       WHERE s.id = ? AND s.generation = ? AND s.active = 1`,
       [job.subscription_id, job.generation],
     );
