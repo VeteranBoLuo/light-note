@@ -15,6 +15,11 @@ export async function purgeCommunityFeedData(connection, tables, userId) {
     await connection.query('DELETE FROM community_task_awards WHERE user_id=?', [userId]);
   // Called only after the existing permanent-deletion lifecycle gate, never for temporary suspension.
   if (tables.has('community_posts')) {
+    if (tables.has('community_post_review_jobs'))
+      await connection.query(
+        'DELETE j FROM community_post_review_jobs j JOIN community_posts p ON p.id=j.post_id WHERE p.author_id=?',
+        [userId],
+      );
     await connection.query(
       "UPDATE community_posts SET status='withdrawn',pending_revision_id=NULL,solution_comment_id=NULL,row_revision=row_revision+1 WHERE author_id=?",
       [userId],

@@ -8788,6 +8788,7 @@ export default {
           tagAnalyze: 'Analyze all tag resources',
           tagAsk: 'Ask tagged materials',
           noteAskDirectory: 'Ask a note directory',
+          communityReviewScreen: 'Community text review',
           routineDailyBrief: 'Generate daily brief',
           toolboxIdeaToDraft: 'Knowledge Workshop · Idea to draft',
           toolboxMaterialToNote: 'Knowledge Workshop · Materials to note',

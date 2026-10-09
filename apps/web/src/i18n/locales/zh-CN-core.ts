@@ -8386,6 +8386,7 @@ export default {
           tagAnalyze: '完整分析标签资料',
           tagAsk: '标签资料问答',
           noteAskDirectory: '笔记目录问答',
+          communityReviewScreen: '社区文本审核',
           routineDailyBrief: '生成今日简报',
           toolboxIdeaToDraft: '知识工坊·灵感成稿',
           toolboxMaterialToNote: '知识工坊·资料转笔记',

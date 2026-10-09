@@ -190,7 +190,9 @@ describe.skipIf(!socket)('durable rename staging (isolated MySQL)', () => {
   });
   it('checks the new schema contract and detects a missing due index', async () => {
     const assertions = await readFile(new URL('../../migrations/schema-assertions.sql', import.meta.url), 'utf8');
-    const checks = assertions.slice(assertions.indexOf("SELECT 'cloud_rename_staging_schema'"));
+    const start = assertions.indexOf("SELECT 'cloud_rename_staging_schema'");
+    expect(start).toBeGreaterThanOrEqual(0);
+    const checks = `${assertions.slice(start).split(';').slice(0, 2).join(';')};`;
     const [good] = await database.query(checks);
     expect(good.flat()).toEqual([]);
     await database.query('ALTER TABLE cloud_file_rename_staging DROP INDEX idx_cloud_rename_due');

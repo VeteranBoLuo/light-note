@@ -1,3 +1,4 @@
+import { startCommunityReviewScheduler } from './util/communityFeed/reviewWorker.js';
 import { publicFormsRouter } from './router/collectionForms.js';
 import { startCommunityFeedScheduler } from './util/communityFeed/scheduler.js';
 import { ensureBookmarkArchiveSchema } from './util/bookmarkArchiveJobs.js';
@@ -292,6 +293,7 @@ function scheduleGrowthNudges() {
 }
 scheduleGrowthNudges();
 startCommunityFeedScheduler();
+startCommunityReviewScheduler();
 startTodoReminderScheduler();
 if (getTodoPlanFeatureState().schedulerEnabled) {
   startTodoReminderV2Scheduler();
