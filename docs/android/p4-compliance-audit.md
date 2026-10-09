@@ -2,7 +2,7 @@
 
 > 审计日期：2026-07-28
 >
-> 最近技术复核：2026-08-11
+> 最近技术复核：2026-10-09
 >
 > 分支：`feature/android-apk`
 >
@@ -31,12 +31,11 @@
     授权码同时使用 PKCE 约束，换取令牌时再次提交同一回调地址，且仅向预先探测选定的线路提交一次，
     防止登录串号、授权码替换和授权码重放。
 
-当前隐私同意版本为 `2026-08-11`；用户协议继续使用 `2026-07-28`。该版本曾用于披露 Root 灰度包的
-Android 通知权限；旧灰度能力已停用，普通 Debug、Release 与已发布 APK 均不再申请该权限。显式启用的本机通知诊断/通知同步 Debug 验证包单独声明 `POST_NOTIFICATIONS`，不引入推送 SDK；构建与数据边界见 [Android 说明](../../apps/android/README.md#通知中心同步验证包)。
+源码中的隐私同意版本为 `2026-10-09-2`；用户协议继续使用 `2026-07-28`。已发布的旧 APK 仍按其内置版本运行。普通 Debug、Release 不申请通知权限；显式启用的本机通知诊断/通知同步 Debug 验证包单独声明 `POST_NOTIFICATIONS`，不引入推送 SDK；构建与数据边界见 [Android 说明](../../apps/android/README.md#通知中心同步验证包)。
 
 ## 2. APK 权限证据
 
-当前 Android 源码 Manifest 与 `2026-08-11` 正式 Release APK 均已移除 `POST_NOTIFICATIONS`。
+Android 普通 Release 的主 Manifest 与 `2026-08-11` 已发布 APK 均不含 `POST_NOTIFICATIONS`；显式启用的华为候选包须按下文单独核验。
 `ANDROID_RELEASE` 保存本次替换包的真实权限、哈希和大小：
 
 | 权限                                                       | 来源              | 用途                                            | Android 运行时敏感权限 |
@@ -89,7 +88,7 @@ Tracing、VersionedParcelable，以及 Kotlin 标准库和协程运行时。当�
 
 `lightNoteHuaweiPush=true` 的业务联调包复用相同 SDK，并在单独告知后向轻笺上传 Token、绑定当前账号，用于通知中心的新消息提醒，分类权益与厂商频控按真实场景处理；退出撤销、离线重试及数据清理边界见 [业务联调说明](../../apps/android/README.md#华为通知推送联调包)。
 
-上述诊断及联调包不作为正式分发候选包。正式引入前须更新政策版本和 SDK 清单，重新执行实际网络流量、权限、撤回和设备兼容性验收。
+诊断及联调包不作为正式分发候选包。`lightNoteHuaweiPushRelease=true` 可构建正式包名的华为推送候选包，复用业务桥与 SDK，但不包含诊断入口；该包要求正式 AGC Android 应用配置和长期签名，不能复用 `.preview` 配置。政策版本已更新至 `2026-10-09-2` 并披露华为 SDK 与聊天室通知摘要；本审计的普通 Release 权限和依赖结论**不适用于**华为候选包。其最终 Manifest、依赖、实际网络流量、权限拒绝、撤回、真机送达和兼容性仍须基于真实签名 APK 复核，未完成前不能称为正式分发验收通过。
 
 ## 4. 业务涉及的第三方服务
 

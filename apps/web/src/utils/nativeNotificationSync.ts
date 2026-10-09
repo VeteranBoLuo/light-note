@@ -20,7 +20,7 @@ interface Cursor {
 export interface NativeNotificationPage {
   owner: string;
   since: string;
-  items: { id: string; time: string; remote?: boolean }[];
+  items: { id: string; time: string; remote?: boolean; todo?: boolean; chat?: boolean; title?: string; body?: string }[];
   cursor: Cursor | null;
 }
 declare global {

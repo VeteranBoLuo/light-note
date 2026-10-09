@@ -2,6 +2,8 @@ import { huaweiPushEnabled } from './huaweiPushPolicy.js';
 import { communityFeedSchemaReady } from './communityFeed/schema.js';
 import { feedNotificationVisibleSql } from './communityFeed/notifications.js';
 import { COMMUNITY_CHAT_TARGETED_NOTIFICATION_SQL } from './notificationVisibility.js';
+import { todoPushPresentation } from './todoPushPresentation.js';
+import { readCommunityChatPushPresentations } from './communityChatPushPresentation.js';
 
 const timestamp = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{6}$/;
 const isTime = (value) => typeof value === 'string' && timestamp.test(value);
@@ -26,7 +28,7 @@ export async function readNativeNotifications(db, userId, input = {}) {
   const until = input.cursor?.until || clock.now;
   const after = input.cursor;
   const [rows] = await db.query(
-    `SELECT id,
+    `SELECT id, type, source_type, source_id, meta,
       DATE_FORMAT(browser_push_created_at,'%Y-%m-%d %H:%i:%s.%f') AS time
     FROM notification WHERE user_id=? AND del_flag=0 AND COALESCE(recalled,0)=0
       AND create_time >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
@@ -56,8 +58,40 @@ export async function readNativeNotifications(db, userId, input = {}) {
       for (const row of rows) if (ids.has(row.id)) row.remote = true;
     }
   }
+  const todoIds = [...new Set(rows.filter((row) => row.type === 'todo_reminder' && !row.remote)
+    .map((row) => {
+      let meta = row.meta;
+      if (typeof meta === 'string') {
+        try { meta = JSON.parse(meta); } catch { return null; }
+      }
+      return typeof meta?.todoId === 'string' && meta.todoId.length <= 64 ? meta.todoId : null;
+    }).filter(Boolean))];
+  const todos = new Map();
+  if (todoIds.length) {
+    const [owned] = await db.query(
+      "SELECT id, title, description FROM todo_items WHERE id IN (?) AND user_id = ? AND del_flag = 0 AND status = 'pending'",
+      [todoIds, userId],
+    );
+    for (const todo of owned) todos.set(todo.id, todo);
+  }
+  const chatPresentations = await readCommunityChatPushPresentations(
+    db, userId, rows.filter((row) => !row.remote), process.env,
+  );
+  const items = rows.map((row) => {
+    const item = { id: row.id, time: row.time, ...(row.remote ? { remote: true } : {}) };
+    const chat = chatPresentations.get(row.id);
+    if (chat) return { ...item, chat: true, ...chat };
+    if (row.type !== 'todo_reminder' || row.remote) return item;
+    let meta = row.meta;
+    if (typeof meta === 'string') {
+      try { meta = JSON.parse(meta); } catch { return item; }
+    }
+    const todo = todos.get(meta?.todoId);
+    return todo ? { ...item, todo: true, ...todoPushPresentation(todo) } : item;
+  });
   const last = rows.at(-1);
   // Every sweep restarts at the activation baseline (bounded to 24h). This also catches late commits
   // and avoids timestamp watermark loss; native IDs deduplicate previously delivered notifications.
-  return { owner: userId, since: input.since, items: rows, cursor: rows.length === 100 ? { ...last, until } : null };
+  return { owner: userId, since: input.since, items,
+    cursor: rows.length === 100 ? { id: last.id, time: last.time, until } : null };
 }

@@ -66,9 +66,11 @@ export function createHuaweiTransport(fetcher = globalThis.fetch) {
           },
           android: {
             ...(payload.huawei?.category ? { category: payload.huawei.category } : {}),
-            ttl: `${Math.max(1, Math.min(300, Math.floor(ttl)))}s`,
+            // Personal todo details should not wait in the provider queue after an account change.
+            ttl: `${Math.max(1, Math.min(payload.huawei?.visibility === 'SECRET' ? 60 : 300, Math.floor(ttl)))}s`,
             notification: {
               tag: payload.notificationId,
+              ...(payload.huawei?.visibility === 'SECRET' ? { visibility: 'SECRET' } : {}),
               click_action: { type: 1, action: 'top.boluo66.lightnote.HUAWEI_PUSH_TEST' },
             },
           },
