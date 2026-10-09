@@ -144,7 +144,8 @@ export async function expandPushOutbox(db = pool, env = process.env) {
         `INSERT IGNORE INTO browser_push_jobs
         (notification_id, subscription_id, generation, expires_at)
         SELECT n.id, s.id, s.generation, DATE_ADD(n.browser_push_created_at, INTERVAL 24 HOUR)
-        FROM notification n JOIN browser_push_subscriptions s ON s.user_id = n.user_id
+        FROM notification n JOIN browser_push_subscriptions s
+          ON s.user_id = n.user_id COLLATE utf8mb4_general_ci
         WHERE n.id = ? AND s.active = 1 AND s.enabled_at <= n.browser_push_created_at
           AND n.browser_push_created_at > DATE_SUB(NOW(6), INTERVAL 24 HOUR)
           AND n.del_flag = 0 AND n.recalled = 0
