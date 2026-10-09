@@ -270,4 +270,4 @@ ADB 安装用于开发阶段免费验证，不需要 Android 开发者身份付�
 
 正式候选包在新的隐私政策同意后、首次登录绑定账号时直接触发 Android 系统通知权限弹窗，不再展示联调包的长篇自定义弹窗。允许且系统通知通道可用后才初始化华为 SDK、申请并绑定 Token；拒绝时站内通知继续可用，系统设置中后来开启权限可在再次绑定时恢复。隐私政策内披露华为推送 SDK、设备与网络信息及 Token 用途；退出、账号切换和撤回同意沿用联调包的解绑与撤销路径。
 
-发布前需用真实正式配置与长期签名运行 `./scripts/release-build.sh clean lintRelease assembleRelease -PlightNoteHuaweiPushRelease=true -PlightNoteHuaweiReleaseConfig=/absolute/path/agconnect-services.json`，核对 APK 包名、签名、Manifest 权限、SDK 组件和内置政策版本；再用真机验证首次同意、允许/拒绝与系统设置改权、真实待办及社区通知的前台/锁屏/划掉 App、点击通知中心、退出/换号、离线撤销与更新覆盖安装。华为类别权益只按控制台实际获批项启用；厂商返回成功不能替代设备显示验收。
+发布前需用真实正式配置与长期签名运行 `./scripts/release-build.sh clean lintRelease assembleRelease -PlightNoteHuaweiPushRelease=true -PlightNoteHuaweiReleaseConfig=/absolute/path/agconnect-services.json -PlightNoteReleaseVersionCode=10003 -PlightNoteReleaseVersionName=1.0.3`（后续候选版递增版本参数）。仓库默认版本仍对应当前公开的 1.0.2 下载包，候选版仅在显式传参时生成；正式发布时再同步下载包与共享发布元数据。核对 APK 包名、签名、Manifest 权限、SDK 组件和内置政策版本；再用真机验证首次同意、允许/拒绝与系统设置改权、真实待办及社区通知的前台/锁屏/划掉 App、点击通知中心、退出/换号、离线撤销与更新覆盖安装。华为类别权益只按控制台实际获批项启用；厂商返回成功不能替代设备显示验收。

@@ -28,8 +28,10 @@ describe('Android 发布元数据一致性', () => {
 
   it('build.gradle.kts 的 versionName / versionCode 与公示一致', () => {
     const gradle = readFileSync(GRADLE_PATH, 'utf-8');
-    expect(gradle).toContain(`versionName = "${ANDROID_RELEASE.versionName}"`);
-    expect(gradle).toContain(`versionCode = ${ANDROID_RELEASE.versionCode}`);
+    expect(gradle).toContain(`val publishedVersionName = "${ANDROID_RELEASE.versionName}"`);
+    expect(gradle).toContain(`val publishedVersionCode = ${ANDROID_RELEASE.versionCode}`);
+    expect(gradle).toContain('versionName = releaseVersionName');
+    expect(gradle).toContain('versionCode = releaseVersionCode');
   });
 
   it('永久地址是固定的、不含版本号', () => {

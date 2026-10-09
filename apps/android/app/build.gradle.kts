@@ -17,6 +17,23 @@ val huaweiPushEnabled = providers.gradleProperty("lightNoteHuaweiPush")
     .map(String::toBoolean).getOrElse(false)
 val huaweiPushReleaseEnabled = providers.gradleProperty("lightNoteHuaweiPushRelease")
     .map(String::toBoolean).getOrElse(false)
+val publishedVersionCode = 10002
+val publishedVersionName = "1.0.2"
+val releaseVersionCodeOverride = providers.gradleProperty("lightNoteReleaseVersionCode").orNull
+val releaseVersionNameOverride = providers.gradleProperty("lightNoteReleaseVersionName").orNull
+check((releaseVersionCodeOverride == null) == (releaseVersionNameOverride == null)) {
+    "Provide both lightNoteReleaseVersionCode and lightNoteReleaseVersionName"
+}
+if (huaweiPushReleaseEnabled) {
+    check(releaseVersionCodeOverride != null) { "Provide explicit version for Huawei release candidate" }
+}
+val releaseVersionCode = releaseVersionCodeOverride?.let {
+    requireNotNull(it.toIntOrNull()) { "lightNoteReleaseVersionCode must be an integer" }
+        .also { code -> check(code > publishedVersionCode) { "Release version code must increase" } }
+} ?: publishedVersionCode
+val releaseVersionName = releaseVersionNameOverride?.also {
+    check(it.isNotBlank()) { "lightNoteReleaseVersionName cannot be empty" }
+} ?: publishedVersionName
 
 val notificationSyncEnabled = providers.gradleProperty("lightNoteNotificationSync")
     .map(String::toBoolean).getOrElse(false) || huaweiPushEnabled
@@ -101,8 +118,8 @@ android {
         applicationId = "top.boluo66.lightnote"
         minSdk = 26
         targetSdk = 35
-        versionCode = 10003
-        versionName = "1.0.3"
+        versionCode = releaseVersionCode
+        versionName = releaseVersionName
         buildConfigField("boolean", "NOTIFICATION_SMOKE", "false")
         buildConfigField("boolean", "NOTIFICATION_SYNC", "false")
         buildConfigField("boolean", "HUAWEI_PUSH_PROBE", "false")
