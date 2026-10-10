@@ -3,6 +3,8 @@ export const BOARD_COLUMNS = [
   ['toolbox_workspace_items', 'source_item_id', 'CHAR(36) DEFAULT NULL'],
   ['toolbox_workspace_items', 'source_title', "VARCHAR(255) NOT NULL DEFAULT ''"],
   ['toolbox_workspace_items', 'source_content', 'TEXT DEFAULT NULL'],
+  ['toolbox_workspace_items', 'details_json', 'JSON DEFAULT NULL'],
+  ['toolbox_workspace_items', 'linked_todo_id', 'CHAR(36) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL'],
 ];
 export const BOARD_OPERATIONS_SCHEMA = `CREATE TABLE IF NOT EXISTS toolbox_board_operations (
   workspace_id CHAR(36) NOT NULL, user_id VARCHAR(64) NOT NULL, request_id VARCHAR(64) NOT NULL,

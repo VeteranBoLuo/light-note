@@ -2,7 +2,7 @@
   <div
     ref="rootRef"
     class="knowledge-workspace"
-    :class="[`is-${kind}`, { 'has-project-rail': workspace && !loading && !loadError }]"
+    :class="[`is-${kind}`, { 'has-project-rail': workspace && !loading && !loadError, 'has-item-detail': detailOpen }]"
   >
     <div v-if="loading" class="knowledge-workspace__state">
       <BLoading inline loading :title="t('toolbox.workspace.loading')" />
@@ -277,6 +277,28 @@
           </div>
         </section>
 
+        <section ref="boardSection" class="workspace-section workspace-board-section">
+          <header class="workspace-section__head">
+            <div>
+              <h3
+                >{{ stepText('board', 'label') }}
+                <BChip tone="neutral">{{
+                  workspace.items.filter((item) => item.status !== 'archived').length
+                }}</BChip></h3
+              >
+            </div>
+          </header>
+          <WorkspaceBoard
+            :key="workspace.id"
+            v-model:lane="mobileLane"
+            :workspace="workspace"
+            :readonly="visitorPreview"
+            :mobile="isMobileLayout"
+            @updated="handleBoardUpdated"
+            @detail-open="detailOpen = $event"
+          />
+        </section>
+
         <section ref="resourcesSection" class="workspace-section workspace-resources-section">
           <header class="workspace-section__head">
             <div>
@@ -376,27 +398,6 @@
               </BActionMenu>
             </article>
           </div>
-        </section>
-
-        <section ref="boardSection" class="workspace-section workspace-board-section">
-          <header class="workspace-section__head">
-            <div>
-              <h3
-                >{{ stepText('board', 'label') }}
-                <BChip tone="neutral">{{
-                  workspace.items.filter((item) => item.status !== 'archived').length
-                }}</BChip></h3
-              >
-            </div>
-          </header>
-          <WorkspaceBoard
-            :key="workspace.id"
-            v-model:lane="mobileLane"
-            :workspace="workspace"
-            :readonly="visitorPreview"
-            :mobile="isMobileLayout"
-            @updated="handleBoardUpdated"
-          />
         </section>
 
         <section ref="timelineSection" class="workspace-section workspace-timeline-section">
@@ -711,9 +712,10 @@
 
   const rootRef = ref<HTMLElement | null>(null);
   const goalExpanded = ref(false);
+  const detailOpen = ref(false);
   const mobileLane = ref<ToolboxWorkspaceLane>('inbox');
   const projectTabs = computed(() =>
-    ['progress', 'resources', 'board', 'timeline'].map((key) => ({
+    ['progress', 'board', 'resources', 'timeline'].map((key) => ({
       key,
       label: key === 'progress' ? t('toolbox.project.projectOverview') : stepText(key as WorkspaceSectionKey, 'label'),
       icon: {
@@ -798,7 +800,7 @@
   let navigationTarget: string | null = null;
   let navigationTop = 0;
   function sectionElements() {
-    return [progressSection.value, resourcesSection.value, boardSection.value, timelineSection.value];
+    return [progressSection.value, boardSection.value, resourcesSection.value, timelineSection.value];
   }
   function syncSection() {
     scrollFrame = 0;
@@ -815,14 +817,14 @@
       if (element && element.getBoundingClientRect().top <= threshold) index = i;
     });
     if (navigationTarget && Math.abs(scrollOwner.scrollTop - navigationTop) <= 2) {
-      index = ['progress', 'resources', 'board', 'timeline'].indexOf(navigationTarget);
+      index = ['progress', 'board', 'resources', 'timeline'].indexOf(navigationTarget);
     } else if (
       scrollOwner.scrollTop > 0 &&
       scrollOwner.scrollTop + scrollOwner.clientHeight >= scrollOwner.scrollHeight - 4
     ) {
       index = 3;
     }
-    const key = ['progress', 'resources', 'board', 'timeline'][index];
+    const key = ['progress', 'board', 'resources', 'timeline'][index];
     activeSection.value = key;
     window.clearTimeout(locationTimer);
     locationTimer = window.setTimeout(() => {
@@ -869,7 +871,7 @@
     onProjectScroll();
   }
   async function selectProjectTab(tab: string, smooth = true) {
-    const index = ['progress', 'resources', 'board', 'timeline'].indexOf(tab);
+    const index = ['progress', 'board', 'resources', 'timeline'].indexOf(tab);
     const section = sectionElements()[index];
     if (!section || !rootRef.value || !sectionNav.value) return;
     const container = findScrollContainer(rootRef.value);
@@ -3419,6 +3421,11 @@
       .workspace-board-section :deep(.project-board__lane-select) {
         width: 100%;
       }
+    }
+  }
+  @media (min-width: 1200px) {
+    .knowledge-workspace.has-item-detail {
+      padding-right: var(--ui-layout-480, 480px);
     }
   }
 </style>

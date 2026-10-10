@@ -3667,7 +3667,9 @@ SELECT 'toolbox_board_missing_column' AS check_name, CONCAT(required.table_name,
  SELECT 'toolbox_workspaces' AS table_name, 'board_version' AS column_name UNION ALL
  SELECT 'toolbox_workspace_items', 'source_item_id' UNION ALL
  SELECT 'toolbox_workspace_items', 'source_title' UNION ALL
- SELECT 'toolbox_workspace_items', 'source_content'
+ SELECT 'toolbox_workspace_items', 'source_content' UNION ALL
+ SELECT 'toolbox_workspace_items', 'details_json' UNION ALL
+ SELECT 'toolbox_workspace_items', 'linked_todo_id'
 ) required LEFT JOIN information_schema.columns actual ON actual.table_schema=DATABASE() AND actual.table_name=required.table_name AND actual.column_name=required.column_name WHERE actual.column_name IS NULL;
 SELECT 'toolbox_board_missing_receipts' AS check_name, 'toolbox_board_operations' AS detail FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='toolbox_board_operations');
 

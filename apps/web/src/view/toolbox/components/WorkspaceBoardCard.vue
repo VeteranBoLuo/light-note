@@ -1,7 +1,11 @@
 <template>
   <article
     class="board-card"
-    :class="{ 'is-hovered': hovered, 'is-complete': item.lane === 'action' && item.status === 'done' }"
+    :class="{
+      'is-hovered': hovered,
+      'is-selected': selected,
+      'is-complete': item.lane === 'action' && item.status === 'done',
+    }"
     :data-item-id="item.id"
     tabindex="0"
     @click="open"
@@ -32,12 +36,16 @@
         /></BButton>
       </BActionMenu>
     </div>
-    <div v-if="item.lane !== 'knowledge'" class="board-card__meta">
+    <div v-if="item.lane !== 'knowledge' || item.details?.conclusionStatus" class="board-card__meta">
       <BChip
         :tone="
           item.status === 'done' && item.lane === 'action' ? 'success' : item.status === 'open' ? 'neutral' : 'pending'
         "
-        >{{ state || t('toolbox.board.notStarted') }}</BChip
+        >{{
+          item.lane === 'knowledge'
+            ? t(`toolbox.itemDetail.${item.details?.conclusionStatus}`)
+            : state || t('toolbox.board.notStarted')
+        }}</BChip
       >
     </div>
     <div v-if="item.content" class="board-card__description">
@@ -47,6 +55,13 @@
     <BButton v-if="item.sourceItemId || item.sourceTitle" class="board-card__source" @click.stop="$emit('source')">{{
       t('toolbox.board.from', { title: item.sourceTitle })
     }}</BButton>
+    <div v-if="item.details?.evidence.length || item.details?.conclusionNote || item.todoId" class="board-card__links">
+      <span v-if="item.details?.evidence.length">{{
+        t('toolbox.itemDetail.evidenceCount', { count: item.details.evidence.length })
+      }}</span>
+      <span v-if="item.details?.conclusionNote">{{ t('toolbox.itemDetail.noteLinked') }}</span>
+      <span v-if="item.todoId">{{ t('toolbox.itemDetail.todoLinked') }}</span>
+    </div>
     <div class="board-card__footer">
       <span v-if="item.dueOn" class="board-card__date"
         ><SvgIcon :src="icon.todoWorkspace.calendar" size="14" /><span
@@ -74,6 +89,7 @@
     disabled: boolean;
     readonly?: boolean;
     hovered: boolean;
+    selected?: boolean;
     typeLabel: string;
     menu: BActionMenuItem[];
     state: string;
@@ -315,5 +331,18 @@
     .board-drag.b_btn {
       width: var(--ui-layout-28, 28px);
     }
+  }
+  .board-card.is-selected {
+    border-color: var(--workspace-purple-text);
+    box-shadow: inset 3px 0 var(--workspace-purple-text);
+  }
+  .board-card__links {
+    grid-column: 1 / -1;
+    grid-row: 6;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ui-space-8, 8px);
+    color: var(--desc-color);
+    font-size: var(--ui-font-11, 11px);
   }
 </style>

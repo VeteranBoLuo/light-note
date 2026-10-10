@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { boardTodoJoin, boardOpenSql, boardDueSql } from '../toolbox/itemDetails.js';
 
 export const WORKSHOP_BRIEF_DEFINITIONS = Object.freeze([
   ['workshop_result', '值得查看的新成果', 'New workshop result'],
@@ -28,25 +29,25 @@ export async function compileWorkshopBriefFacts(database, userId, calendar, { pr
   );
   const [projects] = await database.query(
     `SELECT w.id,w.kind,w.title,w.next_step,w.board_version,DATE_FORMAT(w.target_date, '%Y-%m-%d') AS target_date,
-      (SELECT COUNT(*) FROM toolbox_workspace_items i WHERE i.workspace_id=w.id AND i.user_id=w.user_id
-        AND i.lane IN ('inbox','action') AND i.status IN ('open','in_progress')) AS pending,
-      (SELECT DATE_FORMAT(i.due_on, '%Y-%m-%d') FROM toolbox_workspace_items i
+      (SELECT COUNT(*) FROM toolbox_workspace_items i ${boardTodoJoin('i')} WHERE i.workspace_id=w.id AND i.user_id=w.user_id
+        AND ${boardOpenSql('i')}) AS pending,
+      (SELECT DATE_FORMAT(${boardDueSql('i')}, '%Y-%m-%d') FROM toolbox_workspace_items i ${boardTodoJoin('i')}
         WHERE i.workspace_id=w.id AND i.user_id=w.user_id AND i.lane='action'
-          AND i.status IN ('open','in_progress') AND i.due_on < DATE_ADD(?, INTERVAL 8 DAY)
-        ORDER BY (i.due_on = ?) DESC, i.due_on, i.id LIMIT 1) AS action_date,
-      (SELECT i.title FROM toolbox_workspace_items i
+          AND ${boardOpenSql('i')} AND ${boardDueSql('i')} < DATE_ADD(?, INTERVAL 8 DAY)
+        ORDER BY (${boardDueSql('i')} = ?) DESC, ${boardDueSql('i')}, i.id LIMIT 1) AS action_date,
+      (SELECT i.title FROM toolbox_workspace_items i ${boardTodoJoin('i')}
         WHERE i.workspace_id=w.id AND i.user_id=w.user_id AND i.lane='action'
-          AND i.status IN ('open','in_progress') AND i.due_on < DATE_ADD(?, INTERVAL 8 DAY)
-        ORDER BY (i.due_on = ?) DESC, i.due_on, i.id LIMIT 1) AS action_title
+          AND ${boardOpenSql('i')} AND ${boardDueSql('i')} < DATE_ADD(?, INTERVAL 8 DAY)
+        ORDER BY (${boardDueSql('i')} = ?) DESC, ${boardDueSql('i')}, i.id LIMIT 1) AS action_title
     FROM toolbox_workspaces w WHERE w.user_id = ? AND w.status = 'active'
-      AND EXISTS (SELECT 1 FROM toolbox_workspace_items p WHERE p.workspace_id=w.id AND p.user_id=w.user_id AND p.lane IN ('inbox','action') AND p.status IN ('open','in_progress'))
+      AND EXISTS (SELECT 1 FROM toolbox_workspace_items p ${boardTodoJoin('p')} WHERE p.workspace_id=w.id AND p.user_id=w.user_id AND ${boardOpenSql('p')})
       ${projectIds ? 'AND w.id IN (?)' : ''}
       AND (w.updated_at >= ? OR w.target_date < DATE_ADD(?, INTERVAL 8 DAY)
-        OR EXISTS (SELECT 1 FROM toolbox_workspace_items i WHERE i.workspace_id=w.id AND i.user_id=w.user_id
-          AND i.lane='action' AND i.status IN ('open','in_progress') AND i.due_on < DATE_ADD(?, INTERVAL 8 DAY)))
-    ORDER BY ((w.target_date = ? AND EXISTS (SELECT 1 FROM toolbox_workspace_items p WHERE p.workspace_id=w.id AND p.user_id=w.user_id AND p.lane IN ('inbox','action') AND p.status IN ('open','in_progress'))) OR EXISTS (SELECT 1 FROM toolbox_workspace_items i
+        OR EXISTS (SELECT 1 FROM toolbox_workspace_items i ${boardTodoJoin('i')} WHERE i.workspace_id=w.id AND i.user_id=w.user_id
+          AND i.lane='action' AND ${boardOpenSql('i')} AND ${boardDueSql('i')} < DATE_ADD(?, INTERVAL 8 DAY)))
+    ORDER BY ((w.target_date = ? AND EXISTS (SELECT 1 FROM toolbox_workspace_items p ${boardTodoJoin('p')} WHERE p.workspace_id=w.id AND p.user_id=w.user_id AND ${boardOpenSql('p')})) OR EXISTS (SELECT 1 FROM toolbox_workspace_items i ${boardTodoJoin('i')}
         WHERE i.workspace_id=w.id AND i.user_id=w.user_id AND i.lane='action'
-          AND i.status IN ('open','in_progress') AND i.due_on = ?)) DESC,
+          AND ${boardOpenSql('i')} AND ${boardDueSql('i')} = ?)) DESC,
       w.target_date IS NULL, w.target_date, w.updated_at DESC, w.id LIMIT 20`,
     [
       calendar.date,

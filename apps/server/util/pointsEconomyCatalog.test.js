@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   C4_POINTS_ECONOMY_VERSION,
   C5_POINTS_ECONOMY_VERSION,
+  C6_POINTS_ECONOMY_VERSION,
   freeDrawsFor,
   getEconomyCatalogSnapshot,
   getEconomyRuntime,
@@ -9,10 +10,10 @@ import {
   POINTS_ECONOMY_VERSION,
 } from './pointsEconomyCatalog.js';
 
-describe('积分经济 C6 单一目录', () => {
+describe('积分经济 C7 单一目录', () => {
   const snapshot = getEconomyCatalogSnapshot();
 
-  it('固定经济版本并完整覆盖 6 个实用商品和 13 个积分框', () => {
+  it('固定经济版本并完整覆盖 7 个实用商品和 13 个积分框', () => {
     expect(snapshot.version).toBe(POINTS_ECONOMY_VERSION);
     expect(snapshot.utilityItems.map(({ id, cost, purchaseLimit }) => [id, cost, purchaseLimit])).toEqual([
       ['ai_pack_starter', 60, 1],
@@ -21,6 +22,7 @@ describe('积分经济 C6 单一目录', () => {
       ['storage_128', 500, 1],
       ['storage_512', 1600, 1],
       ['storage_2g', 5200, 1],
+      ['makeup_card', 300, null],
     ]);
     expect(snapshot.frameItems.map(({ id, cost, minLevel }) => [id, cost, minLevel])).toEqual([
       ['frame_mint', 80, 0],
@@ -40,10 +42,26 @@ describe('积分经济 C6 单一目录', () => {
     expect(snapshot.frameItems.reduce((sum, item) => sum + item.cost, 0)).toBe(55180);
   });
 
+  it('C7 增加补签卡但不改变 C6 商品、奖池与限兑快照', () => {
+    const previous = getEconomyCatalogSnapshot(C6_POINTS_ECONOMY_VERSION);
+    expect(snapshot.utilityItems.slice(0, -1)).toEqual(previous.utilityItems);
+    expect(snapshot.frameItems).toEqual(previous.frameItems);
+    expect(snapshot.freePolicy).toEqual(previous.freePolicy);
+    expect(snapshot.paidPolicy).toEqual(previous.paidPolicy);
+    expect(getEconomyRuntime({ POINTS_ECONOMY_C6_ENABLED: 'true', POINTS_ECONOMY_C7_ENABLED: 'true' })).toMatchObject({
+      economyVersion: POINTS_ECONOMY_VERSION,
+      c5Active: true,
+      requireWriteVersion: true,
+    });
+    expect(
+      getEconomyRuntime({ POINTS_ECONOMY_C6_ENABLED: 'true', POINTS_ECONOMY_C7_ENABLED: 'invalid' }).economyVersion,
+    ).toBe(C6_POINTS_ECONOMY_VERSION);
+  });
+
   it('C6 保留 C5 价格快照与限购能力', () => {
     expect(getEconomyCatalogSnapshot(C5_POINTS_ECONOMY_VERSION).frameItems[0].cost).toBe(220);
     expect(getEconomyRuntime({ POINTS_ECONOMY_C6_ENABLED: 'true' })).toMatchObject({
-      economyVersion: POINTS_ECONOMY_VERSION,
+      economyVersion: C6_POINTS_ECONOMY_VERSION,
       c5Active: true,
       requireWriteVersion: true,
     });

@@ -12,6 +12,7 @@ describe('workshop translation paths', () => {
   it('resolves actual UI keys and all three template paths in Chinese and English', () => {
     const paths = [
       'src/view/toolbox/components/KnowledgeWorkspace.vue',
+      'src/view/toolbox/components/WorkspaceItemDetail.vue',
       'src/components/workbenches/WorkshopProjectEntry.vue',
       'src/components/resourceActions/ResourceProjectDialog.vue',
       'src/view/toolbox/ToolboxHome.vue',
@@ -27,6 +28,7 @@ describe('workshop translation paths', () => {
       for (const key of [
         ...staticKeys,
         ...keys(zh.toolbox.project, 'toolbox.project.'),
+        ...keys(zh.toolbox.itemDetail, 'toolbox.itemDetail.'),
         ...keys(zh.toolbox.workspace, 'toolbox.workspace.'),
       ])
         expect(i18n.global.te(key), `${locale}: ${key}`).toBe(true);

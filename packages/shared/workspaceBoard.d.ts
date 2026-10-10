@@ -1,7 +1,15 @@
 export type BoardLane = "inbox" | "knowledge" | "action";
 export type BoardCommand = {
   type:
-    "create" | "edit" | "status" | "convert" | "repeat" | "reorder" | "undo";
+    | "create"
+    | "edit"
+    | "status"
+    | "convert"
+    | "repeat"
+    | "reorder"
+    | "undo"
+    | "details"
+    | "createTodo";
   itemId?: string;
   lane?: BoardLane;
   status?: "open" | "in_progress" | "done" | "archived";
@@ -11,6 +19,17 @@ export type BoardCommand = {
   ids?: string[];
   targetIndex?: number;
   undoId?: string;
+  todoId?: string | null;
+  details?: {
+    evidence: {
+      type: "note" | "bookmark" | "file";
+      resourceId: string;
+      explanation: string;
+      refresh?: boolean;
+    }[];
+    conclusionStatus: "tentative" | "confirmed" | "review" | null;
+    conclusionNoteId: string | null;
+  };
 };
 export const BOARD_LANES: BoardLane[];
 export function boardConversion(

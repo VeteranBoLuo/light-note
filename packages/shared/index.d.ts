@@ -1,3 +1,6 @@
+// 补签卡全局持有上限，赠送、兑换、抽奖与展示共用。
+export declare const MAKEUP_CARD_MAX_INVENTORY: 3;
+
 export type ApiStatus =
   200 | 400 | 401 | 403 | 404 | 423 | 500 | 'preview' | 'visitor';
 

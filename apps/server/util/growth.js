@@ -473,7 +473,7 @@ export async function getGrowth(userId, { userRole = null, db = pool, calendar =
     aiTokenDaily: rank.aiTokenDaily,
     trashDays: rank.trashDays,
     streak,
-    protectCards, // 补签卡数量(上限 2)
+    protectCards, // 补签卡当前库存
     points, // 积分余额(消费货币)
     equippedTitle, // 已佩戴称号 id
     equippedTitleName: titleName(equippedTitle), // 称号显示名

@@ -1,3 +1,4 @@
+import { MAKEUP_CARD_MAX_INVENTORY } from '@lightnote/shared';
 import { randomInt, randomUUID } from 'node:crypto';
 import pool from '../db/index.js';
 import { levelForExp } from './growth.js';
@@ -377,7 +378,7 @@ export async function getLotteryStatus(userId, { userRole = null, calendar = nul
     pool: paidPool,
     overflowPolicy: {
       itemId: 'makeup_card',
-      maxInventory: 2,
+      maxInventory: MAKEUP_CARD_MAX_INVENTORY,
       compensationPoints: runtime.catalog.paidPolicy.cardOverflowPoints,
     },
   };

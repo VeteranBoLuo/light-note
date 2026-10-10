@@ -9,11 +9,17 @@
         <div class="ml-day">{{ t('growth.milestoneDayN', { n: m.days }) }}</div>
         <div class="ml-rewards">
           <span class="ml-rw"><SvgIcon :src="icon.growth.coin" size="12" /> {{ m.points }}</span>
-          <span v-if="m.storageMb" class="ml-rw"><SvgIcon :src="icon.growth.storage" size="12" /> {{ fmtMb(m.storageMb) }}</span>
-          <span v-if="m.cards" class="ml-rw"><SvgIcon :src="icon.growth.reward" size="12" /> {{ m.cards }}</span>
+          <span v-if="m.storageMb" class="ml-rw"
+            ><SvgIcon :src="icon.growth.storage" size="12" /> {{ fmtMb(m.storageMb) }}</span
+          >
+          <span v-if="m.cards" class="ml-rw"
+            ><SvgIcon :src="icon.growth.reward" size="12" /> {{ t('growth.prizeCard', { n: m.cards }) }}</span
+          >
         </div>
         <div class="ml-state">
-          <span v-if="m.reached" class="ml-reached"><SvgIcon :src="icon.filterPanel.check" size="12" /> {{ t('growth.milestoneReached') }}</span>
+          <span v-if="m.reached" class="ml-reached"
+            ><SvgIcon :src="icon.filterPanel.check" size="12" /> {{ t('growth.milestoneReached') }}</span
+          >
           <span v-else class="ml-remain">{{ Math.max(0, m.days - (currentStreak || 0)) }}d</span>
         </div>
       </div>

@@ -51,6 +51,21 @@ export type ToolboxWorkspaceResource = {
 };
 
 export type ToolboxWorkspaceItem = {
+  details?: {
+    evidence: ToolboxItemEvidence[];
+    conclusionStatus: 'tentative' | 'confirmed' | 'review' | null;
+    conclusionNote: (ToolboxItemSourceSnapshot & { id: string }) | null;
+    todoTitle: string;
+  };
+  todoId?: string | null;
+  linkedTodo?: {
+    id: string;
+    title: string;
+    available: boolean;
+    status: 'pending' | 'completed' | null;
+    dueOn: string | null;
+    completedAt: string | null;
+  } | null;
   sourceItemId?: string | null;
   sourceTitle?: string;
   sourceContent?: string;
@@ -64,6 +79,20 @@ export type ToolboxWorkspaceItem = {
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
+};
+
+export type ToolboxItemSourceSnapshot = {
+  title: string;
+  version: string;
+  currentTitle?: string;
+  available?: boolean;
+  changed?: boolean;
+};
+export type ToolboxItemEvidence = ToolboxItemSourceSnapshot & {
+  type: 'note' | 'bookmark' | 'file';
+  resourceId: string;
+  explanation: string;
+  refresh?: boolean;
 };
 
 export type ToolboxWorkspaceSession = {

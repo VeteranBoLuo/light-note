@@ -3,10 +3,12 @@ import pool from '../../db/index.js';
 import { applyBoardOperation } from '@lightnote/shared/workspace-board';
 import { getToolboxWorkspace } from './workspace.js';
 import { toolboxError } from './errors.js';
+import { readItemDetails, prepareItemDetails, hydrateItemDetails, readLinkedTodos } from './itemDetails.js';
 const parse = (x) => (typeof x === 'string' ? JSON.parse(x) : x);
 const iso = (x) => (x ? new Date(x).toISOString() : null);
 export function boardItem(row) {
   return {
+    ...readItemDetails(row),
     id: row.id,
     lane: row.lane,
     title: row.title,
@@ -32,7 +34,7 @@ export async function readBoardItem({ userId, workspaceId, itemId, database = po
     [workspaceId, userId, itemId],
   );
   if (!rows[0]) throw toolboxError('BOARD_ITEM_UNAVAILABLE', '来源已不可访问', 404);
-  return boardItem(rows[0]);
+  return (await hydrateItemDetails(database, userId, [boardItem(rows[0])]))[0];
 }
 export async function operateBoard({ userId, workspaceId, input, database = pool, legacy = false }) {
   if (!userId || !workspaceId) throw toolboxError('BOARD_OWNER_REQUIRED', '缺少项目身份', 401);
@@ -44,6 +46,7 @@ export async function operateBoard({ userId, workspaceId, input, database = pool
   )
     throw toolboxError('BOARD_INVALID_REQUEST', '无效看板请求', 400);
   const command = input.command;
+  if (!command || typeof command.type !== 'string') throw toolboxError('BOARD_INVALID_REQUEST', '无效看板请求', 400);
   const hash = crypto
     .createHash('sha256')
     .update(JSON.stringify({ command, expectedVersion: input.expectedVersion }))
@@ -96,10 +99,66 @@ export async function operateBoard({ userId, workspaceId, input, database = pool
             ? previous.find((x) => x.id === item.id) || { ...item, status: 'archived', updatedAt: now }
             : item,
         );
+      } else if (command.type === 'details' || command.type === 'createTodo') {
+        const item = before.find((row) => row.id === command.itemId && row.status !== 'archived');
+        if (!item) throw toolboxError('BOARD_ITEM_UNAVAILABLE', '事项不可访问', 404);
+        after = structuredClone(before);
+        const target = after.find((row) => row.id === item.id);
+        if (command.type === 'details') {
+          const prepared = await prepareItemDetails(connection, userId, workspaceId, item, command);
+          // Apply ordinary field validation without allowing a bound task's date to diverge.
+          if (item.todoId && command.dueOn !== undefined)
+            throw toolboxError('BOARD_TODO_AUTHORITY', '请在待办中修改日期', 409);
+          const edited = applyBoardOperation(before, { ...command, type: 'edit' }, { id: '', now });
+          Object.assign(
+            target,
+            edited.items.find((row) => row.id === item.id),
+            prepared,
+            { updatedAt: now },
+          );
+          if (item.todoId && !prepared.todoId)
+            Object.assign(target, { status: 'open', completedAt: null, dueOn: null });
+        } else {
+          if (item.lane !== 'action' || item.todoId)
+            throw toolboxError('BOARD_TODO_ALREADY_BOUND', '此行动已有待办或不是行动卡', 409);
+          const { createTodo } = await import('../services/todoService.js');
+          const result = await createTodo(connection, userId, {
+            title: item.title.slice(0, 200),
+            description: item.content,
+            dueAt: item.dueOn ? `${item.dueOn} 23:59:59` : null,
+          });
+          Object.assign(target, {
+            todoId: result.id,
+            details: { ...item.details, todoTitle: item.title.slice(0, 200) },
+            updatedAt: now,
+          });
+        }
+        focusItemId = item.id;
       } else {
+        const target = before.find((row) => row.id === command.itemId);
+        let operationItems = before;
+        if (target?.todoId) {
+          if (
+            (command.type === 'status' && command.status !== 'archived') ||
+            (command.type === 'edit' && command.dueOn !== undefined) ||
+            (legacy && (command.status !== undefined || command.lane !== undefined)) ||
+            (command.type === 'convert' && command.lane !== 'knowledge')
+          ) {
+            throw toolboxError('BOARD_TODO_AUTHORITY', '已绑定待办，请在待办中修改状态和日期', 409);
+          }
+          if (['convert', 'repeat'].includes(command.type)) {
+            const todo = (await readLinkedTodos(connection, userId, [target.todoId], true)).get(target.todoId);
+            if (todo?.status !== 'completed')
+              throw toolboxError('BOARD_TODO_NOT_COMPLETED', '请先在待办中完成此行动', 409);
+            operationItems = before.map((item) => (item.id === target.id ? { ...item, status: 'done' } : item));
+          }
+        }
         try {
           if (legacy && command.type === 'edit') {
-            ({ items: after, focusItemId } = applyBoardOperation(before, command, { id: crypto.randomUUID(), now }));
+            ({ items: after, focusItemId } = applyBoardOperation(operationItems, command, {
+              id: crypto.randomUUID(),
+              now,
+            }));
             const item = after.find((x) => x.id === command.itemId);
             if (command.lane !== undefined) {
               if (!['inbox', 'knowledge', 'action'].includes(command.lane)) throw Error('lane');
@@ -117,9 +176,16 @@ export async function operateBoard({ userId, workspaceId, input, database = pool
             if (item.lane === 'knowledge' && item.status !== 'archived') item.status = 'done';
             item.completedAt = item.status === 'done' ? item.completedAt || now : null;
           } else
-            ({ items: after, focusItemId } = applyBoardOperation(before, command, { id: crypto.randomUUID(), now }));
+            ({ items: after, focusItemId } = applyBoardOperation(operationItems, command, {
+              id: crypto.randomUUID(),
+              now,
+            }));
         } catch (error) {
           throw toolboxError(error.code || 'BOARD_INVALID_OPERATION', '看板操作无效，请检查内容与状态', 400);
+        }
+        if (operationItems !== before) {
+          const restored = after.find((item) => item.id === target.id);
+          Object.assign(restored, { status: target.status, completedAt: target.completedAt });
         }
       }
       const changed = after.filter(
@@ -127,8 +193,8 @@ export async function operateBoard({ userId, workspaceId, input, database = pool
       );
       for (const item of changed) {
         await connection.query(
-          `INSERT INTO toolbox_workspace_items (id,workspace_id,user_id,lane,title,content,status,position,due_on,completed_at,create_time,updated_at,source_item_id,source_title,source_content)
-          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE lane=VALUES(lane),title=VALUES(title),content=VALUES(content),status=VALUES(status),position=VALUES(position),due_on=VALUES(due_on),completed_at=VALUES(completed_at),updated_at=VALUES(updated_at)`,
+          `INSERT INTO toolbox_workspace_items (id,workspace_id,user_id,lane,title,content,status,position,due_on,completed_at,create_time,updated_at,source_item_id,source_title,source_content,details_json,linked_todo_id)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE lane=VALUES(lane),title=VALUES(title),content=VALUES(content),status=VALUES(status),position=VALUES(position),due_on=VALUES(due_on),completed_at=VALUES(completed_at),updated_at=VALUES(updated_at),details_json=VALUES(details_json),linked_todo_id=VALUES(linked_todo_id)`,
           [
             item.id,
             workspaceId,
@@ -145,6 +211,8 @@ export async function operateBoard({ userId, workspaceId, input, database = pool
             item.sourceItemId,
             item.sourceTitle,
             item.sourceContent,
+            item.details ? JSON.stringify(item.details) : null,
+            item.todoId || null,
           ],
         );
       }
