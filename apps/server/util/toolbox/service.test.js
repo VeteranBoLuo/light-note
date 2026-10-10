@@ -1590,3 +1590,16 @@ it('clears all owned finished translations without a page limit, while retaining
   expect(sql).not.toMatch(/LIMIT|DELETE FROM|artifact_id\s*=/);
   expect(database.query).toHaveBeenCalledOnce();
 });
+
+it('rejects a table changed between loading and claiming the save lease without creating a stale note', async () => {
+  const createNoteFn = vi.fn();
+  const connection = { beginTransaction: vi.fn(), commit: vi.fn(), rollback: vi.fn(), release: vi.fn(), query: vi.fn().mockResolvedValue([[{ artifact_version: 2 }]]) };
+  const database = {
+    query: vi.fn().mockResolvedValue([[{ id: 'table-1', job_id: 'job-1', tool_id: 'source_comparison', artifact_type: 'comparison', artifact_version: 1, title: 'Table', content: '|old|', content_type: 'markdown', meta_json: { comparisonTable: { columns: [], rows: [] } }, save_status: 'unsaved', status: 'ready' }]]),
+    getConnection: async () => connection,
+  };
+  await expect(saveToolboxArtifactToNote({ userId: 'owner', userRole: 'user', artifactId: 'table-1', clientRequestId: 'save-request-table', request: {}, database, createNoteFn })).rejects.toMatchObject({ code: 'TOOLBOX_COMPARISON_CONFLICT', status: 409 });
+  expect(createNoteFn).not.toHaveBeenCalled();
+  expect(connection.query.mock.calls[0][1]).toEqual(['table-1', 'owner']);
+  expect(connection.rollback).toHaveBeenCalledOnce();
+});

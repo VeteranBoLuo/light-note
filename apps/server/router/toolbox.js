@@ -40,6 +40,7 @@ router.post('/jobs', aiActionRateLimiter, toolboxHandle.createJob);
 router.get('/jobs/:jobId', toolboxHandle.getJob);
 router.post('/jobs/:jobId/dismiss', localProcessingRateLimiter, toolboxHandle.dismissJob);
 router.post('/jobs/:jobId/cancel', toolboxHandle.cancelJob);
+router.patch('/artifacts/:artifactId/comparison', localProcessingRateLimiter, toolboxHandle.reviewComparison);
 router.get('/artifacts/:artifactId', toolboxHandle.getArtifact);
 router.post('/artifacts/:artifactId/save', toolboxHandle.saveArtifact);
 router.get('/artifacts/:artifactId/study', toolboxHandle.readStudy);

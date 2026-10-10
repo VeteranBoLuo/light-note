@@ -4,7 +4,7 @@
     v-bind="$attrs"
     class="b-popover-trigger"
     @mouseenter="onTriggerEnter"
-    @mouseleave="onLeave"
+    @mouseleave="onTriggerLeave"
     @click="onTriggerClick"
   >
     <slot />
@@ -30,6 +30,7 @@
 <script lang="ts" setup>
   import { createAnchorPositionTracker } from '@/utils/anchorPositionTracking';
   import { useUiDensity } from '@/composables/useUiDensity';
+  import { registerHoverTrigger, isRevealedHoverBlocked, clearRevealedHover } from '@/utils/revealedHover';
   import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
 
   // 组件同时渲染触发器与 Teleport，Vue 无法自动决定非 prop 属性应落到哪个根节点。
@@ -209,7 +210,21 @@
     closeTimer = window.setTimeout(doClose, 150);
   }
 
+  watch(
+    [triggerRef, isHover],
+    ([element, hover], _, onCleanup) => {
+      if (element && hover) onCleanup(registerHoverTrigger(element));
+    },
+    { flush: 'post' },
+  );
+
+  function onTriggerLeave() {
+    if (triggerRef.value) clearRevealedHover(triggerRef.value);
+    onLeave();
+  }
+
   function onTriggerEnter() {
+    if (triggerRef.value && isRevealedHoverBlocked(triggerRef.value)) return;
     if (isHover.value) doOpen();
   }
   function onPanelEnter() {
@@ -219,6 +234,12 @@
     if (isHover.value) scheduleClose();
   }
   function onTriggerClick() {
+    // An explicit click/keyboard activation is intentional, even without leaving.
+    if (isHover.value && triggerRef.value && isRevealedHoverBlocked(triggerRef.value)) {
+      clearRevealedHover(triggerRef.value);
+      doOpen();
+      return;
+    }
     if (!isClick.value) return;
     open.value ? doClose() : doOpen();
   }

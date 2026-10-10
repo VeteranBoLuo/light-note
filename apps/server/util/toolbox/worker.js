@@ -503,6 +503,7 @@ async function executeAiTool(job, inputs, identity) {
       threadId: null,
       input: {
         title,
+        ...(job.tool_id === 'source_comparison' && options.resultMode === 'table' ? { resultMode: 'table', columns: options.columns } : {}),
         question: String(options.question || '').trim(),
         instruction: toolboxIntentInstruction(job.tool_id, options.intent),
         detailLevel: options.detailLevel || 'balanced',
@@ -548,6 +549,7 @@ async function executeAiTool(job, inputs, identity) {
     sources: Array.isArray(response.sources) ? response.sources : [],
     coverage: response.coverage || { complete: false, warnings: ['coverage_missing'] },
     meta: {
+      ...(response.result?.comparisonTable ? { comparisonTable: response.result.comparisonTable } : {}),
       ...(job.tool_id === 'study_kit' ? { study: extractStudyCards(content) } : {}),
       draftState: strategy.draftState,
       sourceCount: Array.isArray(response.sources) ? response.sources.length : 0,

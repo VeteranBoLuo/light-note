@@ -18,6 +18,7 @@ it('keeps visitor details and source accessible while hiding mutation controls',
     render: () =>
       h(WorkspaceBoardCard, {
         readonly: readonly.value,
+        workspaceKind: 'research',
         disabled: true,
         hovered: false,
         item: {
@@ -47,7 +48,7 @@ it('keeps visitor details and source accessible while hiding mutation controls',
   expect(host.textContent).not.toContain('Start review');
   host.querySelector('article')!.click();
   expect(edit).toHaveBeenCalledTimes(1);
-  (host.querySelector('.board-card__source') as HTMLElement).click();
+  (host.querySelector('.board-card__source button') as HTMLButtonElement).click();
   expect(source).toHaveBeenCalledTimes(1);
   expect(edit).toHaveBeenCalledTimes(1);
   host.querySelector('article')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));

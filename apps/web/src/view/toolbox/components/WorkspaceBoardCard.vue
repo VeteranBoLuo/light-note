@@ -52,9 +52,15 @@
       <p>{{ item.content }}</p>
     </div>
     <small v-if="item.lane === 'inbox' && item.status === 'done'">{{ t('toolbox.board.legacyHint') }}</small>
-    <BButton v-if="item.sourceItemId || item.sourceTitle" class="board-card__source" @click.stop="$emit('source')">{{
-      t('toolbox.board.from', { title: item.sourceTitle })
-    }}</BButton>
+    <WorkspaceItemSource
+      v-if="item.sourceItemId || item.sourceTitle"
+      class="board-card__source"
+      compact
+      :source="sourceItem"
+      :title="item.sourceTitle"
+      :kind="workspaceKind"
+      @open="$emit('source')"
+    />
     <div v-if="item.details?.evidence.length || item.details?.conclusionNote || item.todoId" class="board-card__links">
       <span v-if="item.details?.evidence.length">{{
         t('toolbox.itemDetail.evidenceCount', { count: item.details.evidence.length })
@@ -76,6 +82,7 @@
   </article>
 </template>
 <script setup lang="ts">
+  import WorkspaceItemSource from './WorkspaceItemSource.vue';
   import { useI18n } from 'vue-i18n';
   import type { ToolboxWorkspaceItem } from '@/api/toolbox';
   import type { BActionMenuItem } from '@/components/base/BasicComponents/actionMenu';
@@ -86,6 +93,8 @@
   import icon from '@/config/icon';
   defineProps<{
     item: ToolboxWorkspaceItem;
+    sourceItem?: ToolboxWorkspaceItem;
+    workspaceKind: 'research' | 'learning' | 'writing';
     disabled: boolean;
     readonly?: boolean;
     hovered: boolean;
@@ -214,20 +223,6 @@
   .board-card small {
     font-size: var(--ui-font-11, 11px);
     color: var(--desc-color);
-  }
-  .board-card__source.b_btn {
-    height: auto;
-    min-height: var(--ui-layout-24, 24px);
-    width: 100%;
-    padding: 0;
-    background: transparent;
-    text-align: left;
-    justify-content: flex-start;
-    line-height: 1.4;
-    white-space: normal;
-    color: var(--workspace-purple-text, var(--primary-color));
-    font-size: var(--ui-font-11, 11px);
-    overflow-wrap: anywhere;
   }
   .board-card__footer {
     border-top: 0;

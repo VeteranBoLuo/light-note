@@ -167,20 +167,30 @@
           <section class="toolbox-result">
             <BTabs v-if="tabOptions.length > 1" v-model:active-tab="activeTab" variant="line" :options="tabOptions" />
 
-            <div v-if="activeTab === 'output'" class="toolbox-result__output">
+            <div
+              v-if="activeTab === 'output'"
+              class="toolbox-result__output"
+              :class="{ 'is-comparison-table': artifact.meta?.comparisonTable }"
+            >
               <div class="toolbox-result__document">
                 <div class="toolbox-result__document-head">
                   <span>{{ t('toolbox.task.resultEyebrow') }}</span>
                   <p>{{ isDocumentSummary ? t('toolbox.documentSummary.sourceHint') : resultMaterialSummary }}</p>
                   <div class="toolbox-result__deliver"
                     ><BButton size="small" @click="copyResult">{{ t('toolbox.local.copyResult') }}</BButton
-                    ><BButton size="small" @click="downloadResult">{{
+                    ><BButton v-if="!artifact.meta?.comparisonTable" size="small" @click="downloadResult">{{
                       t('toolbox.local.downloadResult')
                     }}</BButton></div
                   >
                 </div>
+                <ComparisonTableResult
+                  v-if="artifact.meta?.comparisonTable"
+                  :artifact="artifact"
+                  @updated="artifact = $event"
+                  @busy="comparisonBusy = $event"
+                />
                 <TranslationResult
-                  v-if="artifact.meta?.translation"
+                  v-else-if="artifact.meta?.translation"
                   v-model="translationMode"
                   :content="artifact.content"
                   :pairs="artifact.meta.translation.segments"
@@ -202,7 +212,7 @@
               </div>
               <aside class="toolbox-result__rail">
                 <section
-                  v-if="!isPromptCreation && !isDocumentSummary && !isTranslation"
+                  v-if="!isPromptCreation && !isDocumentSummary && !isTranslation && !artifact.meta?.comparisonTable"
                   class="toolbox-result__evidence-note"
                 >
                   <span><SvgIcon :src="icon.toolbox.locate" size="19" /></span>
@@ -238,11 +248,18 @@
                     v-if="savedTargetUnavailable"
                     type="primary"
                     :loading="saving"
+                    :disabled="comparisonBusy"
                     @click="openSaveDialog('recreate_missing_target')"
                   >
                     {{ saving ? t('toolbox.task.saving') : t('toolbox.task.saveAsNewNote') }}
                   </BButton>
-                  <BButton v-else-if="!artifactSaved" type="primary" :loading="saving" @click="openSaveDialog('save')">
+                  <BButton
+                    v-else-if="!artifactSaved"
+                    type="primary"
+                    :loading="saving"
+                    :disabled="comparisonBusy"
+                    @click="openSaveDialog('save')"
+                  >
                     {{ saving ? t('toolbox.task.saving') : t('toolbox.task.saveToNote') }}
                   </BButton>
                   <BButton v-else type="primary" :loading="openingSavedNote" @click="openSavedNote">
@@ -354,6 +371,7 @@
 </template>
 
 <script setup lang="ts">
+  import ComparisonTableResult from './components/ComparisonTableResult.vue';
   import TranslationResult from './components/TranslationResult.vue';
   import { translationMarkdown } from '@/utils/translationResult';
   import StudyResultCards from './components/StudyResultCards.vue';
@@ -415,6 +433,7 @@
   const { load: loadGrowth } = useGrowth();
   const job = ref<ToolboxJob | null>(null);
   const pageRef = ref<HTMLElement | null>(null);
+  const comparisonBusy = ref(false);
   const artifact = ref<ToolboxArtifact | null>(null);
   const loading = ref(true);
   const loadFailed = ref(false);
@@ -809,7 +828,7 @@
   }
   async function openSaveDialog(action: 'save' | 'recreate_missing_target') {
     const current = artifact.value;
-    if (!current || saving.value) return;
+    if (!current || saving.value || comparisonBusy.value) return;
     saving.value = true;
     try {
       const result = await saveToolboxNote({
@@ -1212,6 +1231,9 @@
     border: 1px solid var(--surface-border-color);
     border-radius: 18px;
     background: var(--card-background);
+  }
+  .toolbox-result__output.is-comparison-table {
+    grid-template-columns: minmax(0, 1fr);
   }
   .toolbox-result__output {
     display: grid;

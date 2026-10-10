@@ -1,3 +1,4 @@
+import { withComparisonTableMode } from './comparisonTable.js';
 import { aiSkillError } from '../errors.js';
 import { AI_SKILL_AUTHENTICATED_ROLES } from '../accessPolicy.js';
 import { createResourceTaskInputValidator } from '../inputValidators.js';
@@ -371,14 +372,14 @@ export const toolboxSkills = Object.freeze([
     systemRole: '你是轻笺知识工具箱的行动项清单 Skill。',
     modelPolicy: { temperature: 0.15, maxTokens: 4_500 },
   }),
-  createToolboxSkill({
+  withComparisonTableMode(createToolboxSkill({
     profileId: 'source_comparison',
     minResources: 2,
     maxResources: 10,
     taskLabel: '按统一维度比较本轮多份材料',
     systemRole: '你是轻笺知识工具箱的多资料对比 Skill。',
     modelPolicy: { temperature: 0.15, maxTokens: 5_000 },
-  }),
+  })),
   createToolboxSkill({
     profileId: 'knowledge_audit',
     minResources: 2,

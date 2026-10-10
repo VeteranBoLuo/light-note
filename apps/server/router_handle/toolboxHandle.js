@@ -1,3 +1,4 @@
+import { reviewComparisonCell } from '../util/toolbox/comparisonReview.js';
 import { streamTranslation } from '../util/toolbox/translationStream.js';
 import { operateBoard, readBoardItem } from '../util/toolbox/board.js';
 import { readProjectEntry, dismissProjectIntro } from '../util/toolbox/projectEntry.js';
@@ -458,7 +459,11 @@ export async function operateWorkspaceBoard(req, res) {
   if (!requireWrite(req, res)) return;
   try {
     const result = await operateBoard({ userId: req.user.id, workspaceId: req.params.workspaceId, input: req.body });
-    if (req.body?.command?.type === 'createTodo' && !req.suppressUserRewards && !req.adminContext) {
+    if (
+      (req.body?.command?.type === 'createTodo' || req.body?.command?.createLinkedTodo === true) &&
+      !req.suppressUserRewards &&
+      !req.adminContext
+    ) {
       // Match the todo entry point: completion is idempotent and follows the committed creation.
       import('../util/growthTaskCompletion.js')
         .then(({ completeGrowthTask }) => completeGrowthTask(req.user.id, 'first_todo', { userRole: req.user.role }))
@@ -508,4 +513,12 @@ export async function translateStream(req, res) {
   } finally {
     if (!res.destroyed && !res.writableEnded) res.end();
   }
+}
+
+export async function reviewComparison(req, res) {
+  if (!requireWrite(req, res)) return;
+  try {
+    const receipt = await reviewComparisonCell({ userId: req.user.id, artifactId: req.params.artifactId, input: req.body });
+    return res.send(resultData(receipt));
+  } catch (error) { return sendError(res, error); }
 }

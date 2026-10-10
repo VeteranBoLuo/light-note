@@ -49,6 +49,10 @@
       "types": "./aiQuotaProtocol.d.ts",
       "default": "./aiQuotaProtocol.js"
     },
+    "./comparison-table": {
+      "types": "./comparisonTable.d.ts",
+      "default": "./comparisonTable.js"
+    },
     "./toolbox-protocol": {
       "types": "./toolboxProtocol.d.ts",
       "default": "./toolboxProtocol.js"

@@ -1,3 +1,4 @@
+import { createComparisonFixture } from './comparisonFixture';
 import { applyBoardOperation } from '@lightnote/shared/workspace-board';
 import { createApp, h, defineAsyncComponent, ref } from 'vue';
 import { createPinia } from 'pinia';
@@ -17,6 +18,9 @@ import WorkshopProjectEntry from '@/components/workbenches/WorkshopProjectEntry.
 import ResourceProjectHost from '@/components/resourceActions/ResourceProjectHost.vue';
 import SaveAsNoteHost from '@/components/noteLibrary/save/SaveAsNoteHost.vue';
 import { densityCssVariables } from '@/config/uiDensity';
+import TodoPreviewDrawer from '@/components/todo/TodoPreviewDrawer.vue';
+import type { TodoItem } from '@/api/todoApi';
+import BPopover from '@/components/base/BasicComponents/BPopover.vue';
 import BButton from '@/components/base/BasicComponents/BButton.vue';
 import { useProjectResourceAction } from '@/composables/useProjectResourceAction';
 const ToolboxTask = () => import('@/view/toolbox/ToolboxTask.vue');
@@ -372,7 +376,9 @@ const summaryJob: ToolboxJob = {
   artifactState: 'ready', canCancel: false, createdAt: now, updatedAt: now, startedAt: now, completedAt: now,
 };
 let entryDismissed = false;
+const comparisonFixture = createComparisonFixture(params);
 request.defaults.adapter = async (config) => {
+  if (toolId === 'source_comparison') { const reply = comparisonFixture(config); if (reply) return reply; }
   const url = String(config.url || '');
   if (params.get('summaryMock') === '1' && url === '/api/toolbox/artifacts/summary-artifact/save') {
     summaryJob.save.status = 'saved';
@@ -550,6 +556,12 @@ request.defaults.adapter = async (config) => {
   if (url === '/api/toolbox/workspaces' && String(config.method).toLowerCase() === 'get') {
     return response(config, { items: state === 'empty' ? [] : listFixture });
   }
+  if (url === '/api/todo/workspace') {
+    const body = typeof config.data === 'string' ? JSON.parse(config.data) : config.data;
+    if (params.get('todoPicker') === 'error') return response(config, {}, 500);
+    const items = [...fixtureTodos.values()].filter(todo => (body.status === 'all' || body.status === todo.status) && todo.title.includes(body.keyword || '')).map(todo => ({ ...todo, dueAt: todo.dueOn ? `${todo.dueOn} 23:59:59` : null, list: { name: 'Project tasks' } }));
+    return response(config, { items, nextCursor: null });
+  }
   if (url === '/api/toolbox/workspaces/visual-workspace/board') {
     const body = typeof config.data === 'string' ? JSON.parse(config.data) : config.data;
     const { command, requestId, expectedVersion } = body;
@@ -583,6 +595,13 @@ request.defaults.adapter = async (config) => {
       } else {
         const applied=applyBoardOperation(workspaceFixture.items,command,{id:crypto.randomUUID(),now:new Date().toISOString()});
         workspaceFixture.items=applied.items;focusItemId=applied.focusItemId;
+        const target = workspaceFixture.items.find(item => item.id === focusItemId);
+        if (target && command.details) {
+          target.details = { evidence: command.details.evidence.map((ref:any) => ({ ...workspaceFixture.resources.find(resource => resource.type === ref.type && resource.resourceId === ref.resourceId), ...ref, available: true })), conclusionStatus: command.details.conclusionStatus, conclusionNote: command.details.conclusionNoteId ? { id: command.details.conclusionNoteId, title: fixtureNotes.get(command.details.conclusionNoteId)?.title || 'Note', version: 'v1', available: true } : null, todoTitle: fixtureTodos.get(command.todoId)?.title || '' };
+          target.todoId = command.todoId;
+          if (command.createLinkedTodo) { const id = crypto.randomUUID(); fixtureTodos.set(id, { id, title: target.title, status: 'pending', dueOn: target.dueOn }); target.todoId = id; }
+        }
+
       }
       workspaceFixture.boardVersion=version+1;
       boardReceipts.set(requestId,{before,afterVersion:version+1,hash,focusItemId});
@@ -618,7 +637,7 @@ request.defaults.adapter = async (config) => {
   }
   if (url === '/api/toolbox/workspaces/visual-workspace/resources') {
     const input=typeof config.data==='string'?JSON.parse(config.data):config.data;
-    for (const ref of input.resourceRefs || []) if (!workspaceFixture.resources.some(row=>row.type===ref.type&&row.resourceId===ref.id)) workspaceFixture.resources.push({id:workspaceFixture.resources.length+1,type:ref.type,resourceId:ref.id,title:fixtureNotes.get(ref.id)?.title||ref.id,version:'v1',available:true,createdAt:now});
+    for (const ref of input.resourceRefs || []) if (!workspaceFixture.resources.some(row=>row.type===ref.type&&row.resourceId===ref.id)) workspaceFixture.resources.push({id:workspaceFixture.resources.length+1,type:ref.type,resourceId:ref.id,title:fixtureNotes.get(ref.id)?.title||(ref.id.startsWith('material-') ? `材料 ${Number(ref.id.slice(9))+1} · Complete material ${Number(ref.id.slice(9))+1}` : ref.id),version:'v1',available:true,createdAt:now});
     return response(config,workspaceFixture);
   }
   if (url === '/api/toolbox/workspaces/visual-workspace') {hydrateFixture();return response(config,JSON.parse(JSON.stringify(workspaceFixture)));}
@@ -672,6 +691,8 @@ request.defaults.adapter = async (config) => {
   });
 };
 
+if (params.get('resources') === 'empty') { workspaceFixture.resources = []; workspaceFixture.resourceCount = 0; }
+
 const router = createRouter({
   history: createMemoryHistory(),
   routes: [
@@ -712,6 +733,7 @@ const pinia = createPinia();
 const app = createApp({
   setup() {
     const { joinProject } = useProjectResourceAction();
+    const previewVisible = ref(false);
     return () =>
       h('div', { style: { height: '100%', minHeight: '0' } }, [
         view === 'desktop'
@@ -729,6 +751,20 @@ const app = createApp({
                     () => '加入项目验收',
                   )
                 : h(RouterView),
+        params.get('profileHover') === '1'
+          ? h('div', { style: { position: 'fixed', top: 'var(--ui-space-16, 16px)', right: 'var(--ui-space-24, 24px)', zIndex: 50, display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: 'calc(100vw - var(--ui-space-48, 48px))', gap: 'var(--ui-space-12, 12px)' } }, [
+              h(BButton, { onClick: () => { previewVisible.value = true; } }, () => '测试待办抽屉'),
+              h(BPopover, { trigger: 'click' }, { default: () => h(BButton, {}, () => '点击菜单'), content: () => h('div', '点击菜单内容') }),
+              h(BPopover, { trigger: 'hover' }, { default: () => h(BButton, {}, () => '其他悬停入口'), content: () => h('div', '其他悬停菜单') }),
+              h(BPopover, { trigger: 'hover' }, { default: () => h(BButton, { 'aria-label': '个人中心测试入口' }, () => '个人中心'), content: () => h('div', '个人中心悬停菜单') }),
+            ])
+          : null,
+        params.get('profileHover') === '1' ? h(TodoPreviewDrawer, {
+          visible: previewVisible.value,
+          'onUpdate:visible': (value: boolean) => { previewVisible.value = value; },
+          item: { id: 'hover-todo', title: '抽屉关闭悬停验收', description: '虚构测试数据', status: 'pending', priority: 0, startAt: null, dueAt: null, reminder: null, createdAt: now, updatedAt: now, checklist: [] } as TodoItem,
+        }) : null,
+
         h(ResourceProjectHost),
         h(SaveAsNoteHost),
       ]);

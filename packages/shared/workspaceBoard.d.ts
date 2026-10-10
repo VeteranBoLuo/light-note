@@ -20,6 +20,8 @@ export type BoardCommand = {
   targetIndex?: number;
   undoId?: string;
   todoId?: string | null;
+  /** Atomically create a concrete todo with a newly created/derived action. */
+  createLinkedTodo?: boolean;
   details?: {
     evidence: {
       type: "note" | "bookmark" | "file";

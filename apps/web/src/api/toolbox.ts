@@ -1,3 +1,4 @@
+import type { ComparisonColumn } from '@lightnote/shared/comparison-table';
 import { invalidateToolboxProjects } from '@/utils/toolboxProjectState';
 import { recordAiProductEvent, type AiProductEventDimensions } from '@/api/aiTelemetry';
 import type { ToolboxToolDefinition } from '@lightnote/shared/toolbox-protocol';
@@ -19,6 +20,8 @@ export type ToolboxInput = {
     intent?: string;
     detailLevel?: 'concise' | 'balanced' | 'detailed';
     targetLength?: number;
+    resultMode?: 'report' | 'table';
+    columns?: ComparisonColumn[];
   };
 };
 
@@ -658,5 +661,11 @@ export async function deleteTranslationHistory(
 ): Promise<{ deletedIds: string[]; cleared?: boolean; count?: number }> {
   const response = await apiBasePost('/api/toolbox/translation/history/delete', { jobIds, all }, { silent: true });
   if (response.status !== 200) throw apiFailure(response, 'TOOLBOX_HISTORY_DELETE_FAILED');
+  return response.data;
+}
+
+export async function reviewToolboxComparison(artifactId: string, input: { version: number; sourceId: string; columnIndex: number; value: string }): Promise<{ version: number }> {
+  const response = await apiBasePatch(`/api/toolbox/artifacts/${encodeURIComponent(artifactId)}/comparison`, input, { silent: true });
+  if (response.status !== 200) throw apiFailure(response, 'TOOLBOX_COMPARISON_FAILED');
   return response.data;
 }

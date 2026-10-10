@@ -354,6 +354,7 @@ export async function loadExplicitResourceEvidence({
   const resources = [];
   const sources = [];
   const blocks = [];
+  const sourceTexts = {};
   let usedChars = 0;
   for (const ref of refs) {
     const row = rows.get(`${ref.type}:${ref.id}`);
@@ -401,6 +402,7 @@ export async function loadExplicitResourceEvidence({
       },
     };
     sources.push(source);
+    sourceTexts[source.id] = fitted.text;
     blocks.push(
       `[${source.citationKey}] evidenceRef=${source.evidenceRef}\n类型：${ref.type}\n标题：${source.title}\n状态：${raw.status}\n内容：\n${fitted.text}`,
     );
@@ -409,6 +411,7 @@ export async function loadExplicitResourceEvidence({
   const warningGroups = splitEvidenceWarnings(uniqueWarnings);
   return {
     evidence: blocks.join('\n\n'),
+    sourceTexts,
     sources,
     coverage: {
       complete: warningGroups.structuralWarnings.length === 0 && sources.length === refs.length,

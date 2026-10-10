@@ -62,6 +62,8 @@
             v-for="(item, index) in lists[lane]"
             :key="item.id"
             :item="item"
+            :source-item="workspace.items.find((source) => source.id === item.sourceItemId)"
+            :workspace-kind="workspace.kind"
             :hovered="hoveredId === item.id"
             :selected="detailId === item.id"
             :readonly="readonly"
@@ -101,26 +103,22 @@
       @select="detailId = $event"
       @derive="deriveFromDetail"
       @source="sourceFromDetail"
+      @updated="emit('updated', $event)"
     />
-    <WorkspaceItemEditor
-      v-if="editor"
+    <WorkspaceItemDetail
+      v-if="editor && editorItem"
+      ref="creationRef"
       :key="editor.key"
-      :title="editor.title"
-      :hint="editor.hint"
-      :state="editor.item ? stateText(editor.item) || t('toolbox.board.notStarted') : ''"
-      :source-title="
-        ['convert', 'repeat'].includes(editor.command.type) ? editor.item?.title : editor.item?.sourceTitle
-      "
-      :initial="editor.initial"
+      :item="editorItem"
+      :creation="editor"
+      :workspace="workspace"
+      :mobile="mobile"
       :readonly="readonly || workspace.status === 'archived'"
       :busy="busy"
       :error="error"
+      :commit="saveCreation"
       @close="editor = null"
-      @save="save"
-      @source="
-        editor.item &&
-        (['convert', 'repeat'].includes(editor.command.type) ? (sourceView = editor.item) : showSource(editor.item))
-      "
+      @updated="emit('updated', $event)"
     />
     <WorkspaceItemEditor
       v-if="sourceView"
@@ -168,14 +166,14 @@
   import WorkspaceBoardCard from './WorkspaceBoardCard.vue';
   import WorkspaceItemEditor from './WorkspaceItemEditor.vue';
   import WorkspaceItemDetail from './WorkspaceItemDetail.vue';
+  import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
   const props = defineProps<{ workspace: ToolboxWorkspace; mobile: boolean; readonly?: boolean }>();
-  const emit = defineEmits<{ updated: [workspace: ToolboxWorkspace]; 'detail-open': [open: boolean] }>();
+  const emit = defineEmits<{ updated: [workspace: ToolboxWorkspace] }>();
   const detailId = ref<string | null>(null);
   const detailRef = ref<InstanceType<typeof WorkspaceItemDetail> | null>(null);
   const detailItem = computed(() =>
     props.workspace.items.find((item) => item.id === detailId.value && item.status !== 'archived'),
   );
-  watch(detailItem, (item) => emit('detail-open', Boolean(item)));
   const saveDetail = (command: BoardCommand, version?: number) => send(command, false, version);
   function deriveFromDetail() {
     const item = detailItem.value;
@@ -265,7 +263,6 @@
     window.removeEventListener('scroll', refreshHover, true);
     window.removeEventListener('focus', refreshLinkedState);
     document.removeEventListener('visibilitychange', refreshLinkedState);
-    emit('detail-open', false);
   });
   type Editor = {
     key: string;
@@ -277,6 +274,26 @@
   };
   const editor = ref<Editor | null>(null),
     sourceView = ref<ToolboxWorkspaceItem | null>(null);
+  const creationRef = ref<InstanceType<typeof WorkspaceItemDetail> | null>(null);
+  const editorItem = computed<ToolboxWorkspaceItem | undefined>(() => {
+    const value = editor.value;
+    if (!value) return;
+    const lane = value.command.lane || 'action';
+    const source = props.workspace.items.find((item) => item.id === value.item?.id) || value.item;
+    const moving = value.command.type === 'convert' && value.item && boardConversion(value.item.lane, lane) === 'move';
+    return {
+      ...(moving ? source : {}),
+      id: moving ? value.item!.id : value.key,
+      lane,
+      ...(moving && source ? { title: source.title, content: source.content, dueOn: source.dueOn } : value.initial),
+      status: lane === 'knowledge' ? 'done' : 'open',
+      position: 0,
+      createdAt: value.item?.createdAt || '',
+      updatedAt: value.item?.updatedAt || '',
+      completedAt: null,
+    };
+  });
+  const saveCreation = (command: BoardCommand, version?: number) => send(command, true, version);
   let pending: { fingerprint: string; requestId: string; expectedVersion: number; command: BoardCommand } | null = null;
   function sync() {
     for (const lane of BOARD_LANES)
@@ -476,12 +493,10 @@
       status: key === 'start' ? 'in_progress' : key === 'finish' ? 'done' : 'open',
     });
   }
-  async function save(data: { title: string; content: string; dueOn: string | null }) {
-    if (editor.value) await send({ ...editor.value.command, ...data }, true);
-  }
   function outsideDetail(next: () => void) {
-    if (!detailItem.value) return false;
-    detailRef.value?.beforeLeave(() => {
+    if (!detailItem.value && !editor.value) return false;
+    (editor.value ? creationRef.value : detailRef.value)?.beforeLeave(() => {
+      editor.value = null;
       detailId.value = null;
       next();
     });
@@ -513,7 +528,17 @@
       emit('updated', result.workspace);
       // Wait for the parent to publish the authoritative board before final synchronization.
       await nextTick();
-      if (closeEditor) editor.value = null;
+      if (closeEditor) {
+        await closeCurrentMobileOverlayThen(
+          () => {
+            editor.value = null;
+          },
+          () => {
+            // A successful creation returns to the board; focusItemId only locates the card.
+            detailId.value = null;
+          },
+        );
+      }
       const focus = result.workspace.items.find((x) => x.id === result.focusItemId);
       if (focus) {
         mobileLane.value = focus.lane;
@@ -522,7 +547,7 @@
       }
       return result.workspace;
     } catch (e: any) {
-      if (!alive) return;
+      if (!alive || props.workspace.id !== owner) return;
       error.value = t(
         [
           'BOARD_REFERENCE_UNAVAILABLE',
@@ -539,7 +564,7 @@
         error.value = t('toolbox.board.conflict');
         try {
           const fresh = await fetchToolboxWorkspace(owner);
-          if (alive) {
+          if (alive && props.workspace.id === owner) {
             emit('updated', fresh);
             await nextTick();
           }
