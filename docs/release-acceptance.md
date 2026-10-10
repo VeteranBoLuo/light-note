@@ -101,7 +101,7 @@ pnpm --filter server check:schema
 
 浏览器推送需先经授权应用 `apps/server/migrations/20260908_browser_push.sql`，再运行 `pnpm --filter server check:browser-push` 验证 Schema 与 VAPID 配置。API 与 `browserPushWorker.js` 使用同一持久 VAPID 密钥和站点 Origin；默认服务开关关闭，启动本地预览及部署脚本均纳入该 Worker。密钥不由部署过程临时生成，服务开关关闭不影响站内通知。推送凭据不进入日志，测试应区分厂商受理、设备展示及点击定位，不能用模拟推送替代真实网络与设备验收。
 
-华为 App 通知推送复用同一 Worker 与订阅/任务表，无新增 Schema；启用前给 API 和 Worker 配置 `HUAWEI_PUSH_*`，应用密钥仅保存在服务端，`HUAWEI_PUSH_APPROVED_CATEGORIES` 只能填写控制台实际获批的类型，未获批消息使用智能分类并受频控；运行 `check:browser-push` 检查共同运行条件。仅发布服务端不会开启手机接收，须配套显式华为联调 APK 与 Web；实际待办来源、前后台、点击、退出/换号及失效恢复须真机验收。关闭华为开关保留站内及前台同步；队列只由生产环境消费，不能启动本地 Worker 验证线上发送。正式包开放前另行完成 SDK 披露与隐私版本更新。
+华为 App 通知推送复用同一 Worker 与订阅/任务表，无新增 Schema；启用前给 API 和 Worker 配置 `HUAWEI_PUSH_*`，应用密钥仅保存在服务端，`HUAWEI_PUSH_APPROVED_CATEGORIES` 只能填写控制台实际获批的类型，未获批消息使用智能分类并受频控；运行 `check:browser-push` 检查共同运行条件。仅发布服务端不会开启手机接收，须配套显式华为 APK 与 Web；实际待办来源、前后台、点击、退出/换号及失效恢复须真机验收。关闭华为开关保留站内及前台同步；队列只由生产环境消费，不能启动本地 Worker 验证线上发送。正式候选包必须使用正式包名的 AGC Android 应用和正式签名，逐项核对 SDK 披露、隐私版本与 APK 实际权限；详见 [Android 推送说明](../apps/android/README.md#华为通知正式候选包)。
 
 FCM 备用出口使用 `scripts/browser-push-relay/worker.mjs`，以独立托管实例配置主、备用地址与各自的服务端凭据（`BROWSER_PUSH_RELAYS`）。实例需设置 `RELAY_TOKEN`，关闭请求正文与凭据日志；示例 `wrangler.jsonc` 只提供部署结构，不含线上地址或密钥。每条出口上线前分别验证生产服务器到实际中转域名、中转到厂商以及真实设备展示；官网可访问或模拟测试不算出口验收。未配置中转保持直连，停用中转清空该配置即可；不得为验证而重开本地队列消费者。
 

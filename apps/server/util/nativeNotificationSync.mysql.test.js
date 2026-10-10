@@ -35,7 +35,7 @@ describe.skipIf(!socketPath)('native notification real SQL', () => {
       "CREATE TABLE user (id char(36) PRIMARY KEY, del_flag tinyint DEFAULT 0, role varchar(20) DEFAULT 'user', preferences json)",
     );
     await db.query(
-      "CREATE TABLE todo_items (id char(36) PRIMARY KEY, user_id char(36), del_flag tinyint DEFAULT 0, status varchar(20) DEFAULT 'pending')",
+      "CREATE TABLE todo_items (id char(36) PRIMARY KEY, user_id char(36), title varchar(255), description text, del_flag tinyint DEFAULT 0, status varchar(20) DEFAULT 'pending')",
     );
     await db.query(
       'CREATE TABLE todo_reminder_jobs (id varchar(64) PRIMARY KEY, todo_id char(36), user_id char(36), channel varchar(20), status varchar(20))',
@@ -213,6 +213,24 @@ describe.skipIf(!socketPath)('native notification real SQL', () => {
     const page = await readNativeNotifications(db, 'alice', { since: baseline.since });
     expect(page.items.map((x) => x.id)).toEqual([own]);
     expect(page.owner).toBe('alice');
+  });
+  it('shows current todo details only when the reminder still belongs to the account and is pending', async () => {
+    const { since } = await readNativeNotifications(db, 'alice');
+    const ownTodoId = randomUUID();
+    const otherTodoId = randomUUID();
+    await db.query('INSERT INTO todo_items (id,user_id,title,description) VALUES (?,?,?,?),(?,?,?,?)',
+      [ownTodoId, 'alice', '整理资料', '检查本周资料\n并发送总结', otherTodoId, 'bob', '他人的待办', '私密说明']);
+    const own = await add({ type: 'todo_reminder', meta: JSON.stringify({ todoId: ownTodoId }) });
+    const other = await add({ type: 'todo_reminder', meta: JSON.stringify({ todoId: otherTodoId }) });
+    const page = await readNativeNotifications(db, 'alice', { since });
+    expect(page.items.find((row) => row.id === own)).toMatchObject({
+      todo: true, title: '待办：整理资料', body: '检查本周资料 并发送总结',
+    });
+    expect(page.items.find((row) => row.id === other)).toEqual(expect.objectContaining({ id: other }));
+    expect(page.items.find((row) => row.id === other)).not.toHaveProperty('body');
+    await db.query("UPDATE todo_items SET status = 'completed' WHERE id = ?", [ownTodoId]);
+    const afterCompletion = await readNativeNotifications(db, 'alice', { since });
+    expect(afterCompletion.items.find((row) => row.id === own)).not.toHaveProperty('body');
   });
   it('filters deleted/recalled/non-targeted chat and unavailable community content', async () => {
     const { since } = await readNativeNotifications(db, 'alice');

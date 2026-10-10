@@ -1,4 +1,5 @@
 import { notificationSchedulerEnabled } from './notificationSchedulerPolicy.js';
+import { todoPushPresentation } from './todoPushPresentation.js';
 
 // Internal endpoint namespace, never accepted by the browser subscription endpoint.
 export const HUAWEI_ENDPOINT = 'huawei:';
@@ -26,7 +27,7 @@ export const isHuaweiSubscriptionRequest = (context) =>
 
 // Only explicitly approved service categories are sent as such. Other messages use Huawei's
 // normal classification rather than borrowing the WORK entitlement.
-export function huaweiNotificationPresentation(n, env = process.env) {
+export function huaweiNotificationPresentation(n, env = process.env, verifiedTodo = null, verifiedChat = null) {
   let meta = n?.meta || {};
   if (typeof meta === 'string') {
     try {
@@ -54,10 +55,17 @@ export function huaweiNotificationPresentation(n, env = process.env) {
     title = '轻笺订阅提醒';
     body = '你订阅的社区互动有新消息，点击打开通知中心查看。';
   }
+  const detailedTodo = n?.type === 'todo_reminder' && verifiedTodo;
+  if (detailedTodo) {
+    ({ title, body } = todoPushPresentation(verifiedTodo));
+  } else if (n?.type === 'community_chat' && verifiedChat) {
+    ({ title, body } = verifiedChat);
+  }
   const approved = new Set(
-    String(env.HUAWEI_PUSH_APPROVED_CATEGORIES || 'WORK')
+    String(env.HUAWEI_PUSH_APPROVED_CATEGORIES || '')
       .split(',')
       .map((x) => x.trim()),
   );
-  return { title, body, ...(category && approved.has(category) ? { category } : {}) };
+  return { title, body, ...(detailedTodo || verifiedChat ? { visibility: 'SECRET' } : {}),
+    ...(category && approved.has(category) ? { category } : {}) };
 }

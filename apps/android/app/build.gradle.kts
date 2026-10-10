@@ -15,6 +15,28 @@ val notificationSmokeEnabled = providers.gradleProperty("lightNoteNotificationSm
 
 val huaweiPushEnabled = providers.gradleProperty("lightNoteHuaweiPush")
     .map(String::toBoolean).getOrElse(false)
+val huaweiPushReleaseEnabled = providers.gradleProperty("lightNoteHuaweiPushRelease")
+    .map(String::toBoolean).getOrElse(false)
+val publishedVersionCode = 10003
+val publishedVersionName = "1.0.3"
+val releaseVersionCodeOverride = providers.gradleProperty("lightNoteReleaseVersionCode").orNull
+val releaseVersionNameOverride = providers.gradleProperty("lightNoteReleaseVersionName").orNull
+check((releaseVersionCodeOverride == null) == (releaseVersionNameOverride == null)) {
+    "Provide both lightNoteReleaseVersionCode and lightNoteReleaseVersionName"
+}
+if (huaweiPushReleaseEnabled) {
+    check(releaseVersionCodeOverride != null) { "Provide explicit version for Huawei release candidate" }
+}
+val releaseVersionCode = releaseVersionCodeOverride?.let {
+    requireNotNull(it.toIntOrNull()) { "lightNoteReleaseVersionCode must be an integer" }
+        .also { code -> check(code >= publishedVersionCode) { "Release version code cannot precede the published version" } }
+} ?: publishedVersionCode
+val releaseVersionName = releaseVersionNameOverride?.also {
+    check(it.isNotBlank()) { "lightNoteReleaseVersionName cannot be empty" }
+} ?: publishedVersionName
+check(releaseVersionCode != publishedVersionCode || releaseVersionName == publishedVersionName) {
+    "Rebuilding a published version must keep its version name"
+}
 
 val notificationSyncEnabled = providers.gradleProperty("lightNoteNotificationSync")
     .map(String::toBoolean).getOrElse(false) || huaweiPushEnabled
@@ -22,9 +44,10 @@ val notificationSyncEnabled = providers.gradleProperty("lightNoteNotificationSyn
 val huaweiPushProbeEnabled = providers.gradleProperty("lightNoteHuaweiPushProbe")
     .map(String::toBoolean).getOrElse(false)
 val huaweiConfigFile = providers.gradleProperty("lightNoteHuaweiConfig").orNull?.let { file(it) }
-val huaweiAppId = if (huaweiPushProbeEnabled || huaweiPushEnabled) {
-    check(huaweiConfigFile?.isFile == true) { "Provide -PlightNoteHuaweiConfig=/absolute/path/agconnect-services.json" }
-    val config = JsonSlurper().parse(huaweiConfigFile!!) as Map<*, *>
+val huaweiReleaseConfigFile = providers.gradleProperty("lightNoteHuaweiReleaseConfig").orNull?.let { file(it) }
+fun huaweiAppId(configFile: java.io.File?, packageName: String, propertyName: String): String {
+    check(configFile?.isFile == true) { "Provide -P$propertyName=/absolute/path/agconnect-services.json" }
+    val config = JsonSlurper().parse(configFile!!) as Map<*, *>
     fun containsSecret(value: Any?): Boolean = when (value) {
         is Map<*, *> -> value.any { (key, child) ->
             ((key.toString().contains("secret", true) || key == "api_key") && !child?.toString().isNullOrBlank()) || containsSecret(child)
@@ -34,9 +57,13 @@ val huaweiAppId = if (huaweiPushProbeEnabled || huaweiPushEnabled) {
     }
     check(!containsSecret(config)) { "Download client configuration with 'Exclude secrets' enabled" }
     val client = config["client"] as Map<*, *>
-    check(client["package_name"] == "top.boluo66.lightnote.preview") { "Huawei configuration must match the preview package" }
-    client["app_id"].toString().also { check(it.matches(Regex("[0-9]+"))) }
-} else ""
+    check(client["package_name"] == packageName) { "Huawei configuration must match $packageName" }
+    return client["app_id"].toString().also { check(it.matches(Regex("[0-9]+"))) }
+}
+val huaweiDebugAppId = if (huaweiPushProbeEnabled || huaweiPushEnabled)
+    huaweiAppId(huaweiConfigFile, "top.boluo66.lightnote.preview", "lightNoteHuaweiConfig") else ""
+val huaweiReleaseAppId = if (huaweiPushReleaseEnabled)
+    huaweiAppId(huaweiReleaseConfigFile, "top.boluo66.lightnote", "lightNoteHuaweiReleaseConfig") else ""
 
 val releaseSigningPropertiesFile = rootProject.file("keystore.properties")
 val releaseSigningProperties = Properties()
@@ -94,8 +121,8 @@ android {
         applicationId = "top.boluo66.lightnote"
         minSdk = 26
         targetSdk = 35
-        versionCode = 10002
-        versionName = "1.0.2"
+        versionCode = releaseVersionCode
+        versionName = releaseVersionName
         buildConfigField("boolean", "NOTIFICATION_SMOKE", "false")
         buildConfigField("boolean", "NOTIFICATION_SYNC", "false")
         buildConfigField("boolean", "HUAWEI_PUSH_PROBE", "false")
@@ -119,13 +146,16 @@ android {
             applicationIdSuffix = ".preview"
             buildConfigField("boolean", "HUAWEI_PUSH_PROBE", huaweiPushProbeEnabled.toString())
             buildConfigField("boolean", "HUAWEI_PUSH", huaweiPushEnabled.toString())
-            manifestPlaceholders["huaweiProbeAppId"] = huaweiAppId
+            manifestPlaceholders["huaweiAppId"] = huaweiDebugAppId
             buildConfigField("boolean", "NOTIFICATION_SMOKE", notificationSmokeEnabled.toString())
             buildConfigField("boolean", "NOTIFICATION_SYNC", notificationSyncEnabled.toString())
             buildConfigField("String", "HOME_URL", "\"$debugHomeUrl\"")
         }
         release {
             isMinifyEnabled = false
+            buildConfigField("boolean", "HUAWEI_PUSH", huaweiPushReleaseEnabled.toString())
+            buildConfigField("boolean", "NOTIFICATION_SYNC", huaweiPushReleaseEnabled.toString())
+            manifestPlaceholders["huaweiAppId"] = huaweiReleaseAppId
             signingConfig = signingConfigs.findByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -146,9 +176,18 @@ android {
     sourceSets {
         check(listOf(notificationSmokeEnabled, notificationSyncEnabled, huaweiPushProbeEnabled).count { it } <= 1) { "Choose one notification test mode" }
         if (huaweiPushProbeEnabled || huaweiPushEnabled) {
-            getByName("debug").manifest.srcFile("src/huaweiPushProbe/AndroidManifest.xml")
+            getByName("debug").manifest.srcFile("src/huaweiPush/AndroidManifest.xml")
+            getByName("debug").java.srcDir("src/huaweiPush/java")
+            getByName("debug").assets.srcDir(layout.buildDirectory.dir("generated/huawei-debug-assets"))
+        }
+        if (huaweiPushProbeEnabled) {
+            getByName("debug").manifest.srcFile(layout.buildDirectory.file("generated/huawei-probe/AndroidManifest.xml"))
             getByName("debug").java.srcDir("src/huaweiPushProbe/java")
-            getByName("debug").assets.srcDir(layout.buildDirectory.dir("generated/huawei-probe-assets"))
+        }
+        if (huaweiPushReleaseEnabled) {
+            getByName("release").manifest.srcFile("src/huaweiPush/AndroidManifest.xml")
+            getByName("release").java.srcDir("src/huaweiPush/java")
+            getByName("release").assets.srcDir(layout.buildDirectory.dir("generated/huawei-release-assets"))
         }
         if (notificationSyncEnabled && !huaweiPushEnabled) {
             getByName("debug").manifest.srcFile("src/notificationSync/AndroidManifest.xml")
@@ -167,6 +206,10 @@ dependencies {
     if (huaweiPushProbeEnabled || huaweiPushEnabled) {
         debugImplementation("com.huawei.hms:push:6.13.0.301")
         debugImplementation("com.huawei.agconnect:agconnect-core:1.9.6.300")
+    }
+    if (huaweiPushReleaseEnabled) {
+        releaseImplementation("com.huawei.hms:push:6.13.0.301")
+        releaseImplementation("com.huawei.agconnect:agconnect-core:1.9.6.300")
     }
     //noinspection GradleDependency
     implementation("androidx.core:core:1.15.0")
@@ -238,11 +281,44 @@ tasks.named("preBuild") {
     dependsOn(validateLauncherIconConsistency)
 }
 
+if (huaweiPushProbeEnabled) {
+    val generateHuaweiProbeManifest by tasks.registering {
+        val sharedManifest = file("src/huaweiPush/AndroidManifest.xml")
+        val probeManifest = file("src/huaweiPushProbe/AndroidManifest.xml")
+        val output = layout.buildDirectory.file("generated/huawei-probe/AndroidManifest.xml")
+        inputs.files(sharedManifest, probeManifest)
+        outputs.file(output)
+        doLast {
+            val factory = javax.xml.parsers.DocumentBuilderFactory.newInstance()
+            val shared = factory.newDocumentBuilder().parse(sharedManifest)
+            val probe = factory.newDocumentBuilder().parse(probeManifest)
+            val application = shared.getElementsByTagName("application").item(0)
+            val additions = probe.getElementsByTagName("application").item(0).childNodes
+            for (index in 0 until additions.length) {
+                application.appendChild(shared.importNode(additions.item(index), true))
+            }
+            output.get().asFile.parentFile.mkdirs()
+            javax.xml.transform.TransformerFactory.newInstance().newTransformer().transform(
+                javax.xml.transform.dom.DOMSource(shared),
+                javax.xml.transform.stream.StreamResult(output.get().asFile),
+            )
+        }
+    }
+    tasks.matching { it.name == "preDebugBuild" }.configureEach { dependsOn(generateHuaweiProbeManifest) }
+}
 if (huaweiPushProbeEnabled || huaweiPushEnabled) {
-    val syncHuaweiProbeConfig by tasks.registering(Sync::class) {
+    val syncHuaweiDebugConfig by tasks.registering(Sync::class) {
         from(huaweiConfigFile)
         rename { "agconnect-services.json" }
-        into(layout.buildDirectory.dir("generated/huawei-probe-assets"))
+        into(layout.buildDirectory.dir("generated/huawei-debug-assets"))
     }
-    tasks.matching { it.name == "preDebugBuild" }.configureEach { dependsOn(syncHuaweiProbeConfig) }
+    tasks.matching { it.name == "preDebugBuild" }.configureEach { dependsOn(syncHuaweiDebugConfig) }
+}
+if (huaweiPushReleaseEnabled) {
+    val syncHuaweiReleaseConfig by tasks.registering(Sync::class) {
+        from(huaweiReleaseConfigFile)
+        rename { "agconnect-services.json" }
+        into(layout.buildDirectory.dir("generated/huawei-release-assets"))
+    }
+    tasks.matching { it.name == "preReleaseBuild" }.configureEach { dependsOn(syncHuaweiReleaseConfig) }
 }

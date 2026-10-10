@@ -105,7 +105,8 @@ public final class PrivacyConsentActivity extends Activity {
         ));
         addPrivacyPoint(points, R.string.privacy_point_data, false);
         addPrivacyPoint(points, R.string.privacy_point_permissions, true);
-        addPrivacyPoint(points, R.string.privacy_point_third_party, true);
+        addPrivacyPoint(points, BuildConfig.HUAWEI_PUSH && !BuildConfig.DEBUG
+            ? R.string.privacy_point_huawei_push : R.string.privacy_point_third_party, true);
         content.addView(points, matchWidthTopMarginParams(dp(16)));
 
         LinearLayout documentActions = new LinearLayout(this);

@@ -23,8 +23,23 @@ describe('Android 权限公示', () => {
     expect([...ANDROID_SOURCE_PERMISSIONS].sort()).toEqual([...manifestPermissions()].sort());
   });
 
-  it('已发布 APK 权限与当前源码权限完全一致', () => {
-    expect([...ANDROID_RELEASE.permissions].sort()).toEqual([...ANDROID_SOURCE_PERMISSIONS].sort());
+  it('华为正式 APK 权限包含基础、推送与 AndroidX 签名级权限', () => {
+    const pushManifest = readFileSync(
+      resolve(__dirname, '../../../android/app/src/huaweiPush/AndroidManifest.xml'),
+      'utf-8',
+    );
+    const pushPermissions = Array.from(pushManifest.matchAll(/<uses-permission\s+android:name="([^"]+)"/g)).map(
+      (m) => m[1],
+    );
+    expect([...ANDROID_RELEASE.permissions].sort()).toEqual(
+      [
+        ...ANDROID_SOURCE_PERMISSIONS,
+        ...pushPermissions,
+        `${ANDROID_RELEASE.packageName}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`,
+        `${ANDROID_RELEASE.packageName}.permission.PROCESS_PUSH_MSG`,
+        `${ANDROID_RELEASE.packageName}.permission.PUSH_PROVIDER`,
+      ].sort(),
+    );
   });
 
   it('不含运行时敏感权限 —— 相机/存储/定位等一旦出现必须先过合规评审', () => {
@@ -46,8 +61,8 @@ describe('Android 权限公示', () => {
     expect(ANDROID_RELEASE.permissions).toContain('android.permission.REQUEST_INSTALL_PACKAGES');
   });
 
-  it('当前源码和已发布 APK 均不再申请通知权限', () => {
+  it('基础构建不含通知权限，正式推送包显式声明通知权限', () => {
     expect(ANDROID_SOURCE_PERMISSIONS).not.toContain('android.permission.POST_NOTIFICATIONS');
-    expect(ANDROID_RELEASE.permissions).not.toContain('android.permission.POST_NOTIFICATIONS');
+    expect(ANDROID_RELEASE.permissions).toContain('android.permission.POST_NOTIFICATIONS');
   });
 });

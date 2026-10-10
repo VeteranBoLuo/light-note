@@ -254,6 +254,12 @@ public final class MainActivity extends Activity {
     }
 
     @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grants) {
+        super.onRequestPermissionsResult(requestCode, permissions, grants);
+        if (nativeNotificationSync != null) nativeNotificationSync.permissionResult(requestCode, grants);
+    }
+
+    @Override
     protected void onPause() {
         WebViewSupport.flushCookies();
         super.onPause();

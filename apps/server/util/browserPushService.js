@@ -1,6 +1,7 @@
 import { communityFeedSchemaReady } from './communityFeed/schema.js';
 import { feedNotificationVisibleSql } from './communityFeed/notifications.js';
 import { COMMUNITY_CHAT_TARGETED_NOTIFICATION_SQL } from './notificationVisibility.js';
+import { readCommunityChatPushPresentations } from './communityChatPushPresentation.js';
 import {
   huaweiNotificationPresentation,
   huaweiPushEnabled,
@@ -217,9 +218,11 @@ export async function processNextPush({ db = pool, send = sendWebPush, env = pro
     else if (subscription && notification) {
       if (huawei ? !huaweiPushEnabled(env) : !browserPushEnabled(env))
         throw Object.assign(new Error('PUSH_DISABLED'), { statusCode: 503 });
+      let verifiedTodo = null;
+      let verifiedChat = null;
       if (huawei && huaweiWorkNotification(notification)) {
         const [[source]] = await db.query(
-          `SELECT j.id FROM todo_reminder_jobs j JOIN todo_items i ON i.id = j.todo_id AND i.user_id = j.user_id
+          `SELECT j.id, i.title, i.description FROM todo_reminder_jobs j JOIN todo_items i ON i.id = j.todo_id AND i.user_id = j.user_id
            WHERE j.id = ? AND j.user_id = ? AND j.channel = 'in_app' AND j.status IN ('processing', 'sent')
              AND i.del_flag = 0 AND i.status = 'pending' LIMIT 1`,
           [notification.source_id, subscription.user_id],
@@ -231,6 +234,22 @@ export async function processNextPush({ db = pool, send = sendWebPush, env = pro
           );
           return { status: 'cancelled', delaySeconds: Number(job.delay_seconds || 0) };
         }
+        verifiedTodo = source;
+      } else if (huawei && notification.type === 'todo_reminder') {
+        let meta = notification.meta;
+        if (typeof meta === 'string') {
+          try { meta = JSON.parse(meta); } catch { meta = null; }
+        }
+        if (typeof meta?.todoId === 'string' && meta.todoId.length <= 64) {
+          const [[todo]] = await db.query(
+            "SELECT title, description FROM todo_items WHERE id = ? AND user_id = ? AND del_flag = 0 AND status = 'pending' LIMIT 1",
+            [meta.todoId, subscription.user_id],
+          );
+          verifiedTodo = todo || null;
+        }
+      } else if (huawei && notification.type === 'community_chat') {
+        const presentations = await readCommunityChatPushPresentations(db, subscription.user_id, [notification], env);
+        verifiedChat = presentations.get(notification.id) || null;
       }
       let preferences = subscription.push_preferences || {};
       if (typeof preferences === 'string') {
@@ -261,7 +280,7 @@ export async function processNextPush({ db = pool, send = sendWebPush, env = pro
       await send(
         { endpoint: subscription.endpoint, keys: { p256dh: subscription.p256dh, auth: subscription.auth } },
         {
-          ...(huawei ? { huawei: huaweiNotificationPresentation(notification, env) } : {}),
+          ...(huawei ? { huawei: huaweiNotificationPresentation(notification, env, verifiedTodo, verifiedChat) } : {}),
           version: 1,
           notificationId: notification.id,
           subscriptionId: subscription.id,

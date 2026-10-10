@@ -16,8 +16,9 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import java.util.Iterator;
 
-/** Foreground WebView delivery only. No remote push credentials or native authentication storage. */
+/** Account-scoped notification bridge; Huawei builds add a remote channel after consent. */
 final class NativeNotificationSync {
+    static final int NOTIFICATION_PERMISSION_REQUEST = 2311;
     private static final String CHANNEL = "light_note_notification_center";
     private static final String TAG_PREFIX = "light-note-center:";
     private final Activity activity;
@@ -55,25 +56,55 @@ final class NativeNotificationSync {
         }
     }
 
-    private boolean enabled() {
-        return prefs.getBoolean("allowed", false) && manager != null && manager.areNotificationsEnabled()
+    private boolean systemAllowed() {
+        return manager != null && manager.areNotificationsEnabled()
             && (Build.VERSION.SDK_INT < 33 || activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED)
             && manager.getNotificationChannel(CHANNEL) != null
             && manager.getNotificationChannel(CHANNEL).getImportance() != NotificationManager.IMPORTANCE_NONE;
     }
+    private boolean enabled() { return prefs.getBoolean("allowed", false) && systemAllowed(); }
     private void offerPermission() {
-        String offerKey = BuildConfig.HUAWEI_PUSH ? "huawei_all_offered" : "offered";
-        if (prefs.getBoolean(offerKey, false)) return;
+        boolean formalHuawei = BuildConfig.HUAWEI_PUSH && !BuildConfig.DEBUG;
+        String offerKey = formalHuawei ? "huawei_release_offered" : BuildConfig.HUAWEI_PUSH ? "huawei_all_offered" : "offered";
+        if (prefs.getBoolean(offerKey, false)) {
+            if (formalHuawei) {
+                boolean allowed = systemAllowed();
+                boolean wasAllowed = prefs.getBoolean("allowed", false);
+                if (allowed != wasAllowed) {
+                    prefs.edit().putBoolean("allowed", allowed).apply();
+                    remote(allowed ? "allow" : "clear");
+                }
+            }
+            return;
+        }
         prefs.edit().putBoolean(offerKey, true).putBoolean("allowed", false).apply();
         if (BuildConfig.HUAWEI_PUSH) { remote("clear"); clearVisible(); }
-        new AlertDialog.Builder(activity).setTitle(BuildConfig.HUAWEI_PUSH ? "开启轻笺通知" : "开启通知同步测试")
-            .setMessage(BuildConfig.HUAWEI_PUSH ? "允许后，轻笺将初始化华为 Push Kit，向华为申请设备推送标识，并将此标识上传轻笺、绑定当前账号，用于关闭 App 后接收通知中心的新消息，包括待办提醒、社区互动和系统通知。华为 SDK 会处理应用、设备及网络相关信息。系统通知不显示消息正文；送达和提醒方式受华为消息分类及系统设置影响。退出账号时会停止当前设备绑定；离线时撤销可能延迟。可在系统通知设置关闭通知，或撤回隐私同意停止 SDK。" : "将轻笺通知中心的新消息显示到手机通知栏。此测试版仅在 App 页面运行时同步，关闭 App 后不保证送达。系统通知不显示消息正文。")
-            .setPositiveButton("允许通知", (d, w) -> {
+        if (formalHuawei) {
+            if (Build.VERSION.SDK_INT >= 33 && activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                activity.requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, NOTIFICATION_PERMISSION_REQUEST);
+            } else if (systemAllowed()) {
                 prefs.edit().putBoolean("allowed", true).apply();
                 remote("allow");
-                if (Build.VERSION.SDK_INT >= 33 && activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
-                    activity.requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 2311);
+            }
+            return;
+        }
+        new AlertDialog.Builder(activity).setTitle(BuildConfig.HUAWEI_PUSH ? "开启轻笺通知" : "开启通知同步测试")
+            .setMessage(BuildConfig.HUAWEI_PUSH ? "允许后，轻笺将初始化华为 Push Kit，向华为申请设备推送标识，并将此标识上传轻笺、绑定当前账号，用于关闭 App 后接收通知中心的新消息，包括待办提醒、社区互动和系统通知。华为 SDK 会处理应用、设备及网络相关信息。待办可显示标题和简短说明；聊天室提及、回复可显示发送者和简短消息，锁屏请求隐藏正文。送达和提醒方式受华为消息分类及系统设置影响。退出账号时会停止当前设备绑定；离线时撤销可能延迟。可在系统通知设置关闭通知，或撤回隐私同意停止 SDK。" : "将轻笺通知中心的新消息显示到手机通知栏。此测试版仅在 App 页面运行时同步，关闭 App 后不保证送达。待办可显示标题和简短说明；聊天室提及、回复可显示发送者和简短消息，锁屏请求隐藏正文。")
+            .setPositiveButton("允许通知", (d, w) -> {
+                if (Build.VERSION.SDK_INT >= 33 && activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                    activity.requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, NOTIFICATION_PERMISSION_REQUEST);
+                } else {
+                    boolean allowed = systemAllowed();
+                    prefs.edit().putBoolean("allowed", allowed).apply();
+                    remote(allowed ? "allow" : "clear");
+                }
             }).setNegativeButton("暂不开启", (d, w) -> prefs.edit().putBoolean("allowed", false).apply()).show();
+    }
+    void permissionResult(int requestCode, int[] grants) {
+        if (requestCode != NOTIFICATION_PERMISSION_REQUEST || !BuildConfig.NOTIFICATION_SYNC) return;
+        boolean granted = grants.length > 0 && grants[0] == PackageManager.PERMISSION_GRANTED && systemAllowed();
+        prefs.edit().putBoolean("allowed", granted).apply();
+        remote(granted ? "allow" : "clear");
     }
     private String remote(String action) {
         if (!BuildConfig.HUAWEI_PUSH) return "";
@@ -130,11 +161,19 @@ final class NativeNotificationSync {
                     Intent intent = new Intent(activity, MainActivity.class).putExtra("native_notification_owner", owner)
                         .setAction("lightnote.notification." + id).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
                     PendingIntent click = PendingIntent.getActivity(activity, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+                    JSONObject incoming = items.getJSONObject(i);
+                    String title = incoming.optString("title", "").replaceAll("[\\p{Cntrl}]", " ").trim();
+                    String body = incoming.optString("body", "").replaceAll("[\\p{Cntrl}]", " ").trim();
+                    boolean detailed = (incoming.optBoolean("todo", false) || incoming.optBoolean("chat", false))
+                        && !title.isEmpty() && !body.isEmpty()
+                        && title.length() <= 80 && body.length() <= 240;
                     // Keep the newest 20 visible reminders; all records remain in the notification center.
                     while (visible.size() >= 20) manager.cancel(visible.removeFirst(), 0);
                     manager.notify(TAG_PREFIX + id, 0, new NotificationCompat.Builder(activity, CHANNEL)
-                        .setSmallIcon(android.R.drawable.ic_dialog_info).setContentTitle("轻笺有新通知")
-                        .setContentText("点击打开通知中心").setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+                        .setSmallIcon(android.R.drawable.ic_dialog_info)
+                        .setContentTitle(detailed ? title : "轻笺有新通知")
+                        .setContentText(detailed ? body : "点击打开通知中心")
+                        .setVisibility(detailed ? NotificationCompat.VISIBILITY_SECRET : NotificationCompat.VISIBILITY_PRIVATE)
                         .setOnlyAlertOnce(true).setContentIntent(click).setAutoCancel(true).build());
                     seen.put(id, now);
                     visible.remove(TAG_PREFIX + id);

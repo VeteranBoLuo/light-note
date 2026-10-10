@@ -10,6 +10,7 @@ const env = {
   HUAWEI_PUSH_PROJECT_ID: '456',
   HUAWEI_PUSH_APP_SECRET: 'test-only',
   HUAWEI_PUSH_ORIGIN: 'https://test.invalid',
+  HUAWEI_PUSH_APPROVED_CATEGORIES: 'WORK',
 };
 const token = 'a'.repeat(100);
 const response = (body) => ({ ok: true, json: async () => body });
@@ -20,7 +21,7 @@ describe('Huawei transport', () => {
     expect(huaweiPushEnabled({ ...env, HUAWEI_PUSH_APP_SECRET: '' })).toBe(false);
     for (const bad of ['', 'x', {}, token + '\n', token + '/']) expect(() => huaweiSubscription(bad)).toThrow();
   });
-  it('uses application OAuth, a fixed project endpoint and generic WORK content; caches OAuth', async () => {
+  it('uses application OAuth, a fixed project endpoint and bounded todo details; caches OAuth', async () => {
     const fetcher = vi
       .fn()
       .mockResolvedValueOnce(response({ access_token: 'test-access', expires_in: 3600 }))
@@ -34,6 +35,7 @@ describe('Huawei transport', () => {
         huawei: huaweiNotificationPresentation(
           { type: 'todo_reminder', source_type: 'todo_reminder_job', source_id: 'j' },
           env,
+          { title: '整理资料', description: '检查本周资料\n并发送总结' },
         ),
       },
       900,
@@ -46,7 +48,8 @@ describe('Huawei transport', () => {
     expect(url).toBe('https://push-api.cloud.huawei.com/v2/456/messages:send');
     expect(request.redirect).toBe('error');
     const body = JSON.parse(request.body);
-    expect(body.message.android).toMatchObject({ category: 'WORK', ttl: '300s', notification: { tag: 'n1' } });
+    expect(body.message.android).toMatchObject({ category: 'WORK', ttl: '60s', notification: { tag: 'n1', visibility: 'SECRET' } });
+    expect(body.message.notification).toMatchObject({ title: '待办：整理资料', body: '检查本周资料 并发送总结' });
     expect(request.body).not.toContain('private content');
     expect(body.message.token).toEqual([token]);
   });
@@ -76,7 +79,8 @@ function workerDb(notification, source = true) {
         return [[{ id: 's', user_id: 'u', generation: 'g', ...huaweiSubscription(token) }]];
       if (sql.includes('FROM user WHERE id')) return [[{ push_preferences: '{}', preferred_locale: 'zh-CN' }]];
       if (sql.startsWith('SELECT * FROM notification')) return [[notification]];
-      if (sql.includes('FROM todo_reminder_jobs')) return [source ? [{ id: 'j' }] : []];
+      if (sql.includes('FROM todo_reminder_jobs')) return [source ? [{ id: 'j', title: '整理资料', description: '检查说明' }] : []];
+      if (sql.includes('FROM todo_items')) return [[{ title: '旧待办', description: '旧说明' }]];
       if (sql.startsWith('SELECT id FROM browser_push_jobs')) return [[{ id: 1 }]];
       return [{ affectedRows: 1 }];
     }),
@@ -99,11 +103,25 @@ describe('Huawei business routing', () => {
     expect(send).not.toHaveBeenCalled();
     expect((await processNextPush({ db: workerDb(n), env, send })).status).toBe('accepted');
     expect(send).toHaveBeenCalledOnce();
+    expect(send.mock.calls[0][1].huawei).toMatchObject({ title: '待办：整理资料', body: '检查说明', category: 'WORK', visibility: 'SECRET' });
+  });
+  it('uses the current owner-scoped todo for legacy reminder details without claiming WORK', async () => {
+    const send = vi.fn();
+    const n = { id: 'n', type: 'todo_reminder', meta: { todoId: 'todo-1' } };
+    const db = workerDb(n);
+    expect((await processNextPush({ db, env, send })).status).toBe('accepted');
+    expect(send.mock.calls[0][1].huawei).toMatchObject({ title: '待办：旧待办', body: '旧说明', visibility: 'SECRET' });
+    expect(send.mock.calls[0][1].huawei.category).toBeUndefined();
+    expect(db.query.mock.calls.some(([sql, params]) => sql.includes('FROM todo_items') && params[1] === 'u')).toBe(true);
   });
 });
 
 it('uses approved category only, preserving privacy and a fixed destination for all types', () => {
   const n = { type: 'community_chat', meta: { kind: 'reply' }, content: 'private message' };
+  expect(huaweiNotificationPresentation(
+    { type: 'todo_reminder', source_type: 'todo_reminder_job', source_id: 'j' },
+    { ...env, HUAWEI_PUSH_APPROVED_CATEGORIES: '' },
+  ).category).toBeUndefined();
   expect(huaweiNotificationPresentation(n, env).category).toBeUndefined();
   expect(
     huaweiNotificationPresentation(n, { ...env, HUAWEI_PUSH_APPROVED_CATEGORIES: 'WORK,SUBSCRIPTION' }).category,
@@ -116,6 +134,18 @@ it('uses approved category only, preserving privacy and a fixed destination for 
   ).toBe('SUBSCRIPTION');
   expect(huaweiNotificationPresentation({ type: 'system' }, env).category).toBeUndefined();
   expect(JSON.stringify(huaweiNotificationPresentation(n, env))).not.toContain('private message');
+  expect(huaweiNotificationPresentation(n, env, null, {
+    title: '小明回复了你', body: '消息摘要', visibility: 'SECRET',
+  })).toMatchObject({ title: '小明回复了你', body: '消息摘要', visibility: 'SECRET' });
+  const todo = huaweiNotificationPresentation(
+    { type: 'todo_reminder', source_type: 'todo_reminder_job', source_id: 'j' },
+    env,
+    { title: '长'.repeat(50), description: '说明\n' + '字'.repeat(150) },
+  );
+  expect(Array.from(todo.title).length).toBeLessThanOrEqual(35);
+  expect(Array.from(todo.body).length).toBeLessThanOrEqual(120);
+  expect(todo.body).not.toContain('\n');
+  expect(todo.visibility).toBe('SECRET');
 });
 it('does not label generic messages as WORK in the actual provider request', async () => {
   const fetcher = vi

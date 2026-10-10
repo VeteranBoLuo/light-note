@@ -881,32 +881,34 @@ export const RESOURCE_REF_TEST_VECTORS = Object.freeze([
  * 两者必须来自同一次 Release 构建。前端仍从 @/config/androidRelease 引用，那边只做转出。
  */
 export const ANDROID_RELEASE = Object.freeze({
-  versionName: '1.0.2',
-  versionCode: 10002,
+  versionName: '1.0.3',
+  versionCode: 10003,
   packageName: 'top.boluo66.lightnote',
-  releaseDate: '2026-09-14',
-  fileSizeBytes: 1783186,
-  sha256: '89e121a49be8c0bd6bef5de7a5e35961e86ea99ccffaad337470a9e7b68dcb26',
+  releaseDate: '2026-10-10',
+  fileSizeBytes: 2298590,
+  sha256: '8b4421662b43f7c59ecd000afe71d1664688028858db9fae08cd348ad1193340',
   certificateSha256:
     '23:D3:65:AA:C9:33:A3:8D:71:07:0E:0C:2B:DD:C0:CD:B7:E1:7B:41:67:7F:FC:5E:45:2C:96:D8:9A:1C:77:B4',
-  downloadPath: '/downloads/android/light-note-1.0.2-r2.apk',
+  downloadPath: '/downloads/android/light-note-1.0.3.apk',
   minAndroidVersion: '8.0',
   permissions: Object.freeze([
+    'android.permission.POST_NOTIFICATIONS',
     'android.permission.INTERNET',
     'android.permission.ACCESS_NETWORK_STATE',
-    // 应用内更新:把已下载的轻笺安装包交给系统安装器。仅限来自本域名的自身安装包,
-    // 是否安装由系统确认页决定,不具备静默安装能力。与 AndroidManifest 必须一致。
     'android.permission.REQUEST_INSTALL_PACKAGES',
+    'top.boluo66.lightnote.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION',
+    'top.boluo66.lightnote.permission.PROCESS_PUSH_MSG',
+    'top.boluo66.lightnote.permission.PUSH_PROVIDER',
   ]),
   released: true,
 });
 
 /**
- * 当前 Android 源码声明的权限。
+ * 当前 Android 基础 Manifest 声明的权限。
  *
  * 这份清单可以领先于 ANDROID_RELEASE：新能力合入源码后、正式 APK 尚未构建时，已发布包的
  * 版本/哈希/权限元数据仍必须保持不变。真正发新版时，用同一次 Release 构建结果更新上面的
- * ANDROID_RELEASE，并让 permissions 与这里重新一致。
+ * ANDROID_RELEASE；华为正式包还须计入推送清单与依赖合并的权限。
  */
 export const ANDROID_SOURCE_PERMISSIONS = Object.freeze([
   'android.permission.INTERNET',

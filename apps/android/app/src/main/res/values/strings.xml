@@ -34,6 +34,7 @@
     <string name="privacy_point_data">仅在提供功能时处理必要的账号、内容、文件与安全日志</string>
     <string name="privacy_point_permissions">当前 APK 不申请通讯录、定位、麦克风或存储运行时权限</string>
     <string name="privacy_point_third_party">GitHub 登录、AI 与文件服务会按政策说明使用相应第三方服务</string>
+    <string name="privacy_point_huawei_push">登录后可选择允许系统通知；华为推送 SDK 会处理设备与推送标识，待办提醒可显示标题和简短说明</string>
     <string name="privacy_consent_notice">点击“同意并继续”即表示您同意当前版本的两份文档；之后可在“设置 → 隐私与协议”中查看，并可从隐私政策全文页撤回同意。</string>
     <string name="privacy_policy">隐私政策</string>
     <string name="user_agreement">用户协议</string>
