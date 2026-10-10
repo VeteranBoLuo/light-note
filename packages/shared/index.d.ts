@@ -250,7 +250,7 @@ export declare const ANDROID_RELEASE: {
   readonly released: boolean;
 };
 
-/** 当前 Android 源码的 Manifest 权限；可以在下一版 APK 构建前领先于 ANDROID_RELEASE。 */
+/** 当前 Android 基础 Manifest 权限；正式推送包另含华为清单与依赖合并的权限。 */
 export declare const ANDROID_SOURCE_PERMISSIONS: ReadonlyArray<string>;
 
 /** 唯一正式分发域名。 */

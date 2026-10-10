@@ -17,8 +17,8 @@ val huaweiPushEnabled = providers.gradleProperty("lightNoteHuaweiPush")
     .map(String::toBoolean).getOrElse(false)
 val huaweiPushReleaseEnabled = providers.gradleProperty("lightNoteHuaweiPushRelease")
     .map(String::toBoolean).getOrElse(false)
-val publishedVersionCode = 10002
-val publishedVersionName = "1.0.2"
+val publishedVersionCode = 10003
+val publishedVersionName = "1.0.3"
 val releaseVersionCodeOverride = providers.gradleProperty("lightNoteReleaseVersionCode").orNull
 val releaseVersionNameOverride = providers.gradleProperty("lightNoteReleaseVersionName").orNull
 check((releaseVersionCodeOverride == null) == (releaseVersionNameOverride == null)) {
@@ -29,11 +29,14 @@ if (huaweiPushReleaseEnabled) {
 }
 val releaseVersionCode = releaseVersionCodeOverride?.let {
     requireNotNull(it.toIntOrNull()) { "lightNoteReleaseVersionCode must be an integer" }
-        .also { code -> check(code > publishedVersionCode) { "Release version code must increase" } }
+        .also { code -> check(code >= publishedVersionCode) { "Release version code cannot precede the published version" } }
 } ?: publishedVersionCode
 val releaseVersionName = releaseVersionNameOverride?.also {
     check(it.isNotBlank()) { "lightNoteReleaseVersionName cannot be empty" }
 } ?: publishedVersionName
+check(releaseVersionCode != publishedVersionCode || releaseVersionName == publishedVersionName) {
+    "Rebuilding a published version must keep its version name"
+}
 
 val notificationSyncEnabled = providers.gradleProperty("lightNoteNotificationSync")
     .map(String::toBoolean).getOrElse(false) || huaweiPushEnabled
