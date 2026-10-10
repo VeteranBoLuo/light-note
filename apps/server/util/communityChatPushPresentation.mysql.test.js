@@ -15,7 +15,7 @@ describe.skipIf(!socketPath)('chat push preview against real SQL', () => {
     admin = await mysql.createConnection({ socketPath, user: 'root' });
     const [[runtime]] = await admin.query('SELECT @@global.skip_networking AS isolated');
     if (!Number(runtime.isolated)) throw new Error('Isolated MySQL required');
-    await admin.query(`CREATE DATABASE ${schema}`);
+    await admin.query(`CREATE DATABASE ${schema} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
     db = mysql.createPool({ socketPath, user: 'root', database: schema });
     await db.query("CREATE TABLE user(id varchar(255) PRIMARY KEY, alias varchar(80), role varchar(20) DEFAULT 'user', del_flag tinyint DEFAULT 0, preferences json)");
     for (const sql of COMMUNITY_CHAT_TABLE_SQL) await db.query(sql);

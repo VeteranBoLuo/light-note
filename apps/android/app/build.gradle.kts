@@ -178,7 +178,7 @@ android {
             getByName("debug").assets.srcDir(layout.buildDirectory.dir("generated/huawei-debug-assets"))
         }
         if (huaweiPushProbeEnabled) {
-            getByName("debug").manifest.srcFile("src/huaweiPushProbe/AndroidManifest.xml")
+            getByName("debug").manifest.srcFile(layout.buildDirectory.file("generated/huawei-probe/AndroidManifest.xml"))
             getByName("debug").java.srcDir("src/huaweiPushProbe/java")
         }
         if (huaweiPushReleaseEnabled) {
@@ -278,6 +278,31 @@ tasks.named("preBuild") {
     dependsOn(validateLauncherIconConsistency)
 }
 
+if (huaweiPushProbeEnabled) {
+    val generateHuaweiProbeManifest by tasks.registering {
+        val sharedManifest = file("src/huaweiPush/AndroidManifest.xml")
+        val probeManifest = file("src/huaweiPushProbe/AndroidManifest.xml")
+        val output = layout.buildDirectory.file("generated/huawei-probe/AndroidManifest.xml")
+        inputs.files(sharedManifest, probeManifest)
+        outputs.file(output)
+        doLast {
+            val factory = javax.xml.parsers.DocumentBuilderFactory.newInstance()
+            val shared = factory.newDocumentBuilder().parse(sharedManifest)
+            val probe = factory.newDocumentBuilder().parse(probeManifest)
+            val application = shared.getElementsByTagName("application").item(0)
+            val additions = probe.getElementsByTagName("application").item(0).childNodes
+            for (index in 0 until additions.length) {
+                application.appendChild(shared.importNode(additions.item(index), true))
+            }
+            output.get().asFile.parentFile.mkdirs()
+            javax.xml.transform.TransformerFactory.newInstance().newTransformer().transform(
+                javax.xml.transform.dom.DOMSource(shared),
+                javax.xml.transform.stream.StreamResult(output.get().asFile),
+            )
+        }
+    }
+    tasks.matching { it.name == "preDebugBuild" }.configureEach { dependsOn(generateHuaweiProbeManifest) }
+}
 if (huaweiPushProbeEnabled || huaweiPushEnabled) {
     val syncHuaweiDebugConfig by tasks.registering(Sync::class) {
         from(huaweiConfigFile)

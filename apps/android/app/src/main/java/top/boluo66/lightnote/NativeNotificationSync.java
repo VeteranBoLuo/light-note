@@ -101,7 +101,7 @@ final class NativeNotificationSync {
             }).setNegativeButton("暂不开启", (d, w) -> prefs.edit().putBoolean("allowed", false).apply()).show();
     }
     void permissionResult(int requestCode, int[] grants) {
-        if (requestCode != NOTIFICATION_PERMISSION_REQUEST || !BuildConfig.HUAWEI_PUSH) return;
+        if (requestCode != NOTIFICATION_PERMISSION_REQUEST || !BuildConfig.NOTIFICATION_SYNC) return;
         boolean granted = grants.length > 0 && grants[0] == PackageManager.PERMISSION_GRANTED && systemAllowed();
         prefs.edit().putBoolean("allowed", granted).apply();
         remote(granted ? "allow" : "clear");
