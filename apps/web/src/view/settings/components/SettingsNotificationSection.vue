@@ -10,6 +10,7 @@
         kind="switch"
         :default-value="true"
       />
+      <NativeNotificationStatus />
     </SettingsSectionCard>
     <SettingsSectionCard v-if="desktop && !bookmark.isMobileDevice" class="settings-push-card">
       <BrowserPushSettings><BrowserPushQuietHoursSettings /></BrowserPushSettings>
@@ -34,6 +35,7 @@
 </template>
 <script setup lang="ts">
   import { computed } from 'vue';
+  import NativeNotificationStatus from '@/components/notification/NativeNotificationStatus.vue';
   import { useI18n } from 'vue-i18n';
   import { bookmarkStore } from '@/store';
   import { isGuestUser } from '@/utils/savePreference';

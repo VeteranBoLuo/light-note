@@ -99,7 +99,7 @@ describe('native notification synchronization', () => {
         }),
     );
     const old = sync.tick();
-    await Promise.resolve();
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
     sync.setOwner('bob');
     sync.setOwner('alice');
     resolve({ owner: 'alice', since, items: [], cursor: null });
@@ -146,7 +146,7 @@ describe('native notification synchronization', () => {
         }),
     );
     const old = sync.tick();
-    await Promise.resolve();
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
     sync.pause();
     resolve({ owner: 'alice', since, items: [], cursor: null });
     await old;
@@ -196,12 +196,184 @@ describe('Huawei binding lifecycle', () => {
     const sync = createNativeNotificationSync({ bridge, fetch, remote, open: vi.fn(), refreshUnread: vi.fn() });
     sync.setOwner('alice');
     const pending = sync.tick();
-    await Promise.resolve();
+    await vi.waitFor(() => expect(remote.bind).toHaveBeenCalledOnce());
     sync.setOwner('');
     finish(binding);
     await pending;
     expect(remote.activate).not.toHaveBeenCalled();
     expect(remote.unbind).toHaveBeenCalledWith(binding);
     expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe('notification connection readiness and recovery', () => {
+  function connection() {
+    const binding = { id: 'device', generation: 'g', userId: 'alice' };
+    const remote = { bind: vi.fn(async () => binding), activate: vi.fn(async () => {}), unbind: vi.fn(async () => {}) };
+    const bridge = vi.fn<
+      (_input: Record<string, unknown>) => Promise<import('./nativeNotificationSync').NativeNotificationReply>
+    >(async () => ({ ok: true, enabled: true, since, huaweiToken: 'token' }));
+    const fetch = vi.fn(async () => ({ owner: 'alice', since, items: [], cursor: null }));
+    const onState = vi.fn();
+    const sync = createNativeNotificationSync({
+      bridge,
+      fetch,
+      remote,
+      onState,
+      open: vi.fn(),
+      refreshUnread: vi.fn(),
+    });
+    sync.setOwner('alice');
+    return { sync, bridge, fetch, remote, onState, binding };
+  }
+  it('only reports connected after the activation acknowledgement', async () => {
+    const { sync, remote, onState } = connection();
+    let finish!: () => void;
+    remote.activate.mockImplementationOnce(
+      () =>
+        new Promise<void>((r) => {
+          finish = r;
+        }),
+    );
+    const task = sync.tick();
+    await vi.waitFor(() => expect(remote.activate).toHaveBeenCalledOnce());
+    expect(onState).toHaveBeenLastCalledWith('connecting', 'alice');
+    finish();
+    await task;
+    expect(onState).toHaveBeenLastCalledWith('connected', 'alice');
+  });
+  it('detects a delayed token without waiting for the normal notification polling interval', async () => {
+    const { sync, bridge, remote, fetch, onState } = connection();
+    bridge.mockResolvedValueOnce({ ok: true, enabled: true, huaweiToken: '' });
+    await sync.tick({ syncNotifications: false });
+    expect(sync.nextDelay()).toBe(1000);
+    expect(remote.bind).not.toHaveBeenCalled();
+    await sync.tick({ syncNotifications: false });
+    expect(remote.bind).toHaveBeenCalledOnce();
+    expect(fetch).not.toHaveBeenCalled();
+    expect(onState).toHaveBeenLastCalledWith('connected', 'alice');
+    expect(sync.nextDelay()).toBe(15000);
+  });
+  it('recovers from a bridge timeout instead of permanently disabling synchronization', async () => {
+    const { sync, bridge, onState } = connection();
+    bridge.mockResolvedValueOnce({ ok: false });
+    await sync.tick();
+    expect(onState).toHaveBeenLastCalledWith('unavailable', 'alice');
+    await sync.tick();
+    expect(onState).toHaveBeenLastCalledWith('connected', 'alice');
+  });
+  it('revalidates an existing connection immediately after the bridge recovers', async () => {
+    const { sync, bridge, remote, onState } = connection();
+    await sync.tick();
+    bridge.mockResolvedValueOnce({ ok: false });
+    await sync.tick();
+    expect(onState).toHaveBeenLastCalledWith('unavailable', 'alice');
+    await sync.tick();
+    expect(remote.activate).toHaveBeenCalledTimes(2);
+    expect(onState).toHaveBeenLastCalledWith('connected', 'alice');
+  });
+  it('backs off failed registration and lets a network recovery retry immediately', async () => {
+    let now = 100000;
+    const clock = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    try {
+      const { sync, remote, onState } = connection();
+      remote.bind.mockRejectedValue(new Error('offline'));
+      for (const delay of [1000, 2000, 5000, 10000, 30000, 60000, 60000]) {
+        const calls = remote.bind.mock.calls.length;
+        await sync.tick();
+        expect(remote.bind).toHaveBeenCalledTimes(calls + 1);
+        expect(onState).toHaveBeenLastCalledWith('retrying', 'alice');
+        await sync.tick();
+        expect(remote.bind).toHaveBeenCalledTimes(calls + 1);
+        now += delay;
+      }
+      remote.bind.mockResolvedValue({ id: 'device', generation: 'g', userId: 'alice' });
+      sync.retry();
+      await sync.tick();
+      expect(onState).toHaveBeenLastCalledWith('connected', 'alice');
+    } finally {
+      clock.mockRestore();
+    }
+  });
+  it('does not report success when activation fails and resumes activation on retry', async () => {
+    const { sync, remote, onState, fetch } = connection();
+    remote.activate.mockRejectedValueOnce(new Error('timeout'));
+    await sync.tick();
+    expect(onState).toHaveBeenLastCalledWith('retrying', 'alice');
+    expect(fetch.mock.calls[0]).toEqual([{ since, cursor: null }]);
+    sync.retry();
+    await sync.tick();
+    expect(remote.activate).toHaveBeenCalledTimes(2);
+    expect(onState).toHaveBeenLastCalledWith('connected', 'alice');
+  });
+  it('resets provider-invalid tokens and never passes that binding to notification synchronization', async () => {
+    const { sync, remote, bridge, fetch } = connection();
+    remote.bind.mockRejectedValueOnce(Object.assign(new Error('invalid'), { invalidToken: true }));
+    await sync.tick();
+    expect(bridge).toHaveBeenCalledWith(expect.objectContaining({ action: 'resetRemote', owner: 'alice' }));
+    expect(fetch).toHaveBeenCalledWith({ since, cursor: null });
+    sync.retry();
+    await sync.tick();
+    expect(remote.activate).toHaveBeenCalledOnce();
+  });
+  it('clears ready state when permission is removed and reconnects when restored', async () => {
+    const { sync, remote, bridge, onState, binding } = connection();
+    await sync.tick();
+    bridge.mockResolvedValueOnce({ ok: true, enabled: false });
+    await sync.tick();
+    expect(remote.unbind).toHaveBeenCalledWith(binding);
+    expect(onState).toHaveBeenLastCalledWith('disabled', 'alice');
+    await sync.tick();
+    expect(onState).toHaveBeenLastCalledWith('connected', 'alice');
+  });
+  it('keeps permission pending checks fast initially, then reduces the check rate', async () => {
+    let now = 100000;
+    const clock = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    try {
+      const { sync, bridge, remote } = connection();
+      bridge.mockResolvedValue({ ok: true, enabled: false });
+      await sync.tick();
+      expect(sync.nextDelay()).toBe(1000);
+      now += 31000;
+      await sync.tick();
+      expect(sync.nextDelay()).toBe(15000);
+      expect(remote.bind).not.toHaveBeenCalled();
+    } finally {
+      clock.mockRestore();
+    }
+  });
+  it('does not claim background support when no token arrives', async () => {
+    let now = 100000;
+    const clock = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    try {
+      const { sync, bridge, onState } = connection();
+      bridge.mockResolvedValue({ ok: true, enabled: true, huaweiToken: '' });
+      await sync.tick({ syncNotifications: false });
+      now += 125000;
+      await sync.tick({ syncNotifications: false });
+      expect(onState).toHaveBeenLastCalledWith('unavailable', 'alice');
+      expect(sync.nextDelay()).toBe(15000);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+  it('does not restore connected state from an old activation after an account switch', async () => {
+    const { sync, remote, onState } = connection();
+    let finish!: () => void;
+    remote.activate.mockImplementationOnce(
+      () =>
+        new Promise<void>((r) => {
+          finish = r;
+        }),
+    );
+    const task = sync.tick();
+    await vi.waitFor(() => expect(remote.activate).toHaveBeenCalledOnce());
+    sync.setOwner('bob');
+    finish();
+    await task;
+    expect(onState).toHaveBeenLastCalledWith('checking', 'bob');
+    expect(remote.unbind).toHaveBeenCalledOnce();
+    sync.pause();
+    expect(onState).toHaveBeenLastCalledWith('idle', '');
   });
 });

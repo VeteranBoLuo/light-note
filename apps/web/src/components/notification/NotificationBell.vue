@@ -72,7 +72,7 @@
       @more="openNotificationActions"
       @delete="onDelete"
       @load-more="loadMore"
-      ><template #browser-push-prompt><BrowserPushPrompt /></template
+      ><template #browser-push-prompt><BrowserPushPrompt /><NativeNotificationStatus /></template
     ></NotificationCenterPanel>
   </section>
   <BPopover
@@ -121,7 +121,7 @@
           @complete-todo="completeReminderTodo"
           @delete="onDelete"
           @load-more="loadMore"
-          ><template #browser-push-prompt><BrowserPushPrompt /></template
+          ><template #browser-push-prompt><BrowserPushPrompt /><NativeNotificationStatus /></template
         ></NotificationCenterPanel>
         <BButton class="nt-open-page" @click="openNotificationPage">
           {{ t('notification.viewAll') }}
@@ -165,6 +165,7 @@
 
 <script setup lang="ts">
   import BrowserPushPrompt from './BrowserPushPrompt.vue';
+  import NativeNotificationStatus from './NativeNotificationStatus.vue';
   import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
   import { notificationPresentation } from '@lightnote/shared/notification-presentation';
   import { useI18n } from 'vue-i18n';

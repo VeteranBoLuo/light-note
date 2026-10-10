@@ -16,6 +16,34 @@ import { accountSettingsEn } from './accountSettings';
 import { settingsRefineEn } from './settingsRefine';
 import { notificationMessages } from '@lightnote/shared/notification-presentation';
 export default {
+  nativePush: {
+    title: 'App notification connection',
+    retry: 'Check again',
+    inAppOff: 'In-app notifications are off. Turn them on in notification settings to receive new messages.',
+    state: {
+      idle: 'Not connected',
+      checking: 'Checking notifications',
+      connecting: 'Connecting notifications',
+      connected: 'Notifications connected',
+      disabled: 'Notifications are off',
+      retrying: 'Reconnecting notifications',
+      unavailable: 'Background notifications not connected',
+      offline: 'Waiting for a connection',
+    },
+    description: {
+      idle: 'Sign in and allow notifications to connect automatically.',
+      checking: 'Checking notification status on this device.',
+      connecting: 'First-time setup takes a moment. Keep the app open until connected; no manual binding is needed.',
+      connected:
+        'This account is connected to background notifications, including after dismissing the app. Display follows your phone settings.',
+      disabled: 'Allow Light Note notifications in your phone settings. Connection resumes when you return to the app.',
+      retrying: 'Connection is not confirmed yet. We retry automatically while the app is open; you can keep using it.',
+      unavailable:
+        'Background notification support is not confirmed on this device. We keep checking while the app is open. In-app notifications remain available.',
+      offline: 'Connection will be checked and restored when you are back online. No need to sign in again.',
+    },
+  },
+
   translation: translationEn,
   saveAsNote: saveAsNoteEn,
   comparisonTable: comparisonTableEn,

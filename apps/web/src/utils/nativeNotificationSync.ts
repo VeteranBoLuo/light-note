@@ -7,6 +7,9 @@ export interface NativeNotificationReply {
   since?: string;
   open?: boolean;
 }
+export type NativeNotificationState =
+  'idle' | 'checking' | 'connecting' | 'connected' | 'disabled' | 'retrying' | 'unavailable';
+
 export interface HuaweiBinding {
   id: string;
   generation: string;
@@ -20,7 +23,15 @@ interface Cursor {
 export interface NativeNotificationPage {
   owner: string;
   since: string;
-  items: { id: string; time: string; remote?: boolean; todo?: boolean; chat?: boolean; title?: string; body?: string }[];
+  items: {
+    id: string;
+    time: string;
+    remote?: boolean;
+    todo?: boolean;
+    chat?: boolean;
+    title?: string;
+    body?: string;
+  }[];
   cursor: Cursor | null;
 }
 declare global {
@@ -66,16 +77,41 @@ export function createNativeNotificationSync(deps: {
   };
   open: () => void;
   refreshUnread: () => Promise<void>;
+  onState?: (state: NativeNotificationState, owner: string) => void;
 }) {
   let owner = '',
     epoch = '',
     generation = 0;
   let remoteBinding: HuaweiBinding | undefined;
   let remoteToken = '';
-  let remoteCheckedAt = 0;
+  let remoteNextAt = 0;
+  let failures = 0;
+  let startedAt = Date.now();
+  let connectionState: NativeNotificationState = 'idle';
+  function report(state: NativeNotificationState) {
+    connectionState = state;
+    deps.onState?.(state, owner);
+  }
+  function nextDelay() {
+    if (!owner) return 60000;
+    if (connectionState === 'connected') return 15000;
+    if (connectionState === 'disabled' && Date.now() - startedAt >= 30000) return 15000;
+    if (failures) return Math.max(1000, Math.min(15000, remoteNextAt - Date.now()));
+    const elapsed = Date.now() - startedAt;
+    return elapsed < 30000 ? 1000 : elapsed < 120000 ? 5000 : 15000;
+  }
+  function retry() {
+    remoteNextAt = 0;
+    failures = 0;
+    startedAt = Date.now();
+  }
+  function failed() {
+    const delay = [1000, 2000, 5000, 10000, 30000, 60000][Math.min(failures++, 5)];
+    remoteNextAt = Date.now() + delay;
+    report('retrying');
+  }
   let cursor: Cursor | null = null;
   let busy: number | null = null;
-  let supported: boolean | null = null;
   let knownIds = new Set<string>();
   let sweepIds = new Set<string>();
   function setOwner(next: string) {
@@ -87,12 +123,12 @@ export function createNativeNotificationSync(deps: {
     if (remoteBinding) void deps.remote?.unbind(remoteBinding).catch(() => {});
     remoteBinding = undefined;
     remoteToken = '';
-    remoteCheckedAt = 0;
+    retry();
     owner = next;
     epoch = requestId();
     generation++;
     cursor = null;
-    supported = null;
+    report(owner ? 'checking' : 'idle');
     knownIds.clear();
     sweepIds.clear();
     // Clear even while a previous fetch/bridge call is pending.
@@ -103,61 +139,84 @@ export function createNativeNotificationSync(deps: {
     epoch = '';
     remoteBinding = undefined;
     remoteToken = '';
-    remoteCheckedAt = 0;
+    retry();
     generation++;
     cursor = null;
-    supported = null;
+    report(owner ? 'checking' : 'idle');
     knownIds.clear();
     sweepIds.clear();
   }
-  async function tick() {
-    if (!owner || supported === false || busy === generation) return;
+  async function tick({ syncNotifications = true } = {}) {
+    if (!owner || busy === generation) return;
     const active = generation,
       uid = owner,
       nonce = epoch;
     const current = () => generation === active;
     busy = active;
     try {
-      const state = await deps.bridge({ action: 'bind', owner: uid, epoch: nonce });
+      const state = await deps
+        .bridge({ action: 'bind', owner: uid, epoch: nonce })
+        .catch(() => ({ ok: false }) as NativeNotificationReply);
       if (!current()) return;
-      supported = state.ok;
-      if (!state.ok) return;
+      if (!state.ok) {
+        remoteNextAt = 0;
+        report('unavailable');
+        return;
+      }
       if (state.open) deps.open();
-      if (!state.enabled) return;
-      if (
-        deps.remote &&
-        state.huaweiToken &&
-        (remoteToken !== state.huaweiToken || Date.now() - remoteCheckedAt > 60000)
-      ) {
-        if (remoteToken !== state.huaweiToken) remoteBinding = undefined;
-        try {
-          const binding = await deps.remote.bind(state.huaweiToken);
-          if (!current() || binding.userId !== uid) {
-            await deps.remote.unbind(binding);
-            return;
-          }
-          await deps.remote.activate(binding);
-          if (!current()) {
-            await deps.remote.unbind(binding);
-            return;
-          }
-          remoteBinding = binding;
+      if (!state.enabled) {
+        const previous = remoteBinding;
+        remoteBinding = undefined;
+        remoteToken = '';
+        if (previous) void deps.remote?.unbind(previous).catch(() => {});
+        failures = 0;
+        remoteNextAt = 0;
+        report('disabled');
+        return;
+      }
+      if (connectionState === 'disabled') retry();
+      if (deps.remote && state.huaweiToken) {
+        if (remoteToken !== state.huaweiToken) {
+          remoteBinding = undefined;
           remoteToken = state.huaweiToken;
-          remoteCheckedAt = Date.now();
-        } catch (error) {
-          if (!current()) return;
-          if ((error as { invalidToken?: boolean })?.invalidToken) {
-            remoteBinding = undefined;
-            await deps.bridge({ action: 'resetRemote', owner: uid, epoch: nonce });
+          retry();
+        }
+        if (Date.now() >= remoteNextAt) {
+          if (!remoteBinding) report('connecting');
+          try {
+            const binding = await deps.remote.bind(state.huaweiToken);
+            if (!current() || binding.userId !== uid) {
+              await deps.remote.unbind(binding);
+              if (current()) failed();
+              return;
+            }
+            await deps.remote.activate(binding);
+            if (!current()) {
+              await deps.remote.unbind(binding);
+              return;
+            }
+            remoteBinding = binding;
+            failures = 0;
+            remoteNextAt = Date.now() + 60000;
+            report('connected');
+          } catch (error) {
+            if (!current()) return;
+            // Do not present a stale successful check as the current connection state.
+            // Keep the last binding for deduplication on transient network failures.
+            failed();
+            if ((error as { invalidToken?: boolean })?.invalidToken) {
+              remoteBinding = undefined;
+              await deps.bridge({ action: 'resetRemote', owner: uid, epoch: nonce });
+            }
           }
-          remoteToken = state.huaweiToken;
-          remoteCheckedAt = Date.now();
         }
       } else if (!state.huaweiToken) {
         remoteBinding = undefined;
         remoteToken = '';
+        // Old/non-Huawei shells also return no token: never claim remote support from permission alone.
+        report(Date.now() - startedAt < 120000 ? 'connecting' : 'unavailable');
       }
-      if (!current()) return;
+      if (!current() || !syncNotifications) return;
       const page = await deps.fetch({
         since: state.since || null,
         cursor,
@@ -196,5 +255,5 @@ export function createNativeNotificationSync(deps: {
       if (busy === active) busy = null;
     }
   }
-  return { setOwner, pause, tick };
+  return { setOwner, pause, tick, retry, nextDelay };
 }

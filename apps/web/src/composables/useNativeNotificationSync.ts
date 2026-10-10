@@ -3,6 +3,7 @@ import { apiBasePost } from '@/http/request';
 import { hasAndroidBridge } from '@/utils/androidBridge';
 import { createNativeNotificationSync, nativeNotificationMessage } from '@/utils/nativeNotificationSync';
 import { useNotification } from './useNotification';
+import { updateNativeNotificationStatus, updateNativeNotificationOnline } from './useNativeNotificationStatus';
 
 export function useNativeNotificationSync(owner: Ref<string | null>, open: () => void) {
   const { refreshUnread } = useNotification();
@@ -37,46 +38,69 @@ export function useNativeNotificationSync(owner: Ref<string | null>, open: () =>
     },
     open,
     refreshUnread,
+    onState: updateNativeNotificationStatus,
   });
-  const tick = () => {
-    if (hasAndroidBridge() && document.visibilityState === 'visible' && navigator.onLine !== false)
-      void sync.tick().catch(() => {
-        /* Retry on the next bounded foreground tick. */
-      });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let mounted = false;
+  let lastNotificationSync = 0;
+  const canRun = () =>
+    hasAndroidBridge() && Boolean(owner.value) && document.visibilityState === 'visible' && navigator.onLine !== false;
+  const schedule = () => {
+    clearTimeout(timer);
+    if (mounted && canRun()) timer = setTimeout(tick, sync.nextDelay());
+  };
+  const tick = async () => {
+    if (!canRun()) return;
+    const syncNotifications = !lastNotificationSync || Date.now() - lastNotificationSync >= 15000;
+    if (syncNotifications) lastNotificationSync = Date.now();
+    try {
+      await sync.tick({ syncNotifications });
+    } catch {
+      /* A bridge/API timeout is retried without interrupting the user. */
+    } finally {
+      schedule();
+    }
   };
   const resume = () => {
-    if (!hasAndroidBridge() || !owner.value || document.visibilityState !== 'visible' || navigator.onLine === false)
-      return;
-    void refreshUnread();
-    tick();
+    updateNativeNotificationOnline(navigator.onLine !== false);
+    clearTimeout(timer);
+    if (!canRun()) return;
+    sync.retry();
+    lastNotificationSync = 0;
+    void refreshUnread().catch(() => {});
+    void tick();
   };
   const stop = watch(
     owner,
     (value) => {
       if (!hasAndroidBridge()) return;
-      if (value === null) {
-        sync.pause();
-        return;
-      }
-      sync.setOwner(value);
-      tick();
+      clearTimeout(timer);
+      lastNotificationSync = 0;
+      if (value === null) sync.pause();
+      else sync.setOwner(value);
+      void tick();
     },
     { immediate: true, flush: 'sync' },
   );
-  let timer: ReturnType<typeof setInterval> | undefined;
   onMounted(() => {
-    timer = setInterval(tick, 15000);
+    mounted = true;
+    updateNativeNotificationOnline(navigator.onLine !== false);
     document.addEventListener('visibilitychange', resume);
     window.addEventListener('online', resume);
+    window.addEventListener('offline', resume);
     window.addEventListener('light-note:native-notification-open', resume);
-    tick();
+    window.addEventListener('light-note:native-notification-retry', resume);
+    void tick();
   });
   onBeforeUnmount(() => {
-    clearInterval(timer);
+    mounted = false;
+    clearTimeout(timer);
     stop();
     document.removeEventListener('visibilitychange', resume);
     window.removeEventListener('online', resume);
+    window.removeEventListener('offline', resume);
     window.removeEventListener('light-note:native-notification-open', resume);
+    window.removeEventListener('light-note:native-notification-retry', resume);
     sync.pause();
   });
 }

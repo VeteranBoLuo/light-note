@@ -6,6 +6,7 @@ import { bookmarkStore, useUserStore } from '@/store';
 import NotificationBell from '@/components/notification/NotificationBell.vue';
 import BrowserPushQuietHoursSettings from '@/components/notification/BrowserPushQuietHoursSettings.vue';
 import BrowserPushSettings from '@/components/notification/BrowserPushSettings.vue';
+import { updateNativeNotificationStatus } from '@/composables/useNativeNotificationStatus';
 import { useBrowserPush } from '@/composables/useBrowserPush';
 import { openNotificationPanel } from '@/utils/notificationEntry';
 import request from '@/http/request';
@@ -16,6 +17,10 @@ import '@/assets/css/index.less';
 const params = new URLSearchParams(location.search);
 // Isolated UI fixture: never request real notification permission or bind a real device.
 const scenario = params.get('pushState');
+if (params.has('native')) {
+  window.LightNoteAndroid = { postMessage: () => {} };
+  updateNativeNotificationStatus('connected', 'fixture-user');
+}
 let fixtureInvalid = scenario === 'invalid' || scenario === 'error';
 let fixtureBinding: any = { id: 'fixture-subscription', generation: 'fixture-generation', userId: 'fixture-user' };
 let fixtureSubscription: any;
@@ -60,6 +65,9 @@ const targetId = '00000000-0000-4000-8000-000000000001';
 const metrics = { writes: [] as string[], lists: [] as any[], retry: 0 };
 (window as any).__pushAcceptance = metrics;
 document.documentElement.dataset.theme = theme;
+// Match the full-width application shell rather than the global body's flex intrinsic width.
+document.body.style.display = 'block';
+document.querySelector<HTMLElement>('#app')!.style.cssText = 'width:100%;margin:0;min-width:0';
 document.documentElement.classList.toggle('light-note-mobile-rendering', params.get('renderProfile') === 'mobile');
 const items = [
   {

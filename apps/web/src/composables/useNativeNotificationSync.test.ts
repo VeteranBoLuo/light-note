@@ -14,7 +14,13 @@ vi.mock('@/http/request', () => ({ apiBasePost: vi.fn() }));
 vi.mock('./useNotification', () => ({ useNotification: () => ({ refreshUnread: mocks.refreshUnread }) }));
 vi.mock('@/utils/nativeNotificationSync', () => ({
   nativeNotificationMessage: vi.fn(),
-  createNativeNotificationSync: () => ({ tick: mocks.tick, setOwner: mocks.setOwner, pause: mocks.pause }),
+  createNativeNotificationSync: () => ({
+    tick: mocks.tick,
+    setOwner: mocks.setOwner,
+    pause: mocks.pause,
+    retry: vi.fn(),
+    nextDelay: () => 15000,
+  }),
 }));
 let app: ReturnType<typeof createApp> | undefined;
 function mount(owner = ref<string | null>('alice')) {

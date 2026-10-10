@@ -16,6 +16,32 @@ import { accountSettingsZh } from './accountSettings';
 import { settingsRefineZh } from './settingsRefine';
 import { notificationMessages } from '@lightnote/shared/notification-presentation';
 export default {
+  nativePush: {
+    title: 'App 通知连接',
+    retry: '重新检查',
+    inAppOff: '站内通知已关闭；如需接收新消息，请在通知设置中开启站内通知。',
+    state: {
+      idle: '尚未连接',
+      checking: '正在检查通知',
+      connecting: '正在连接通知',
+      connected: '通知已连接',
+      disabled: '通知未开启',
+      retrying: '正在重新连接',
+      unavailable: '后台通知尚未连接',
+      offline: '等待网络恢复',
+    },
+    description: {
+      idle: '登录并允许通知后自动连接。',
+      checking: '正在确认当前设备的通知状态。',
+      connecting: '首次开启需要一点时间，请先保持 App 打开。连接完成后无需手动绑定。',
+      connected: '当前账号已连接后台通知，切到后台或划掉 App 后仍可接收。显示方式遵循手机通知设置。',
+      disabled: '请在手机系统设置中允许轻笺通知，返回 App 后会自动连接。',
+      retrying: '连接暂未确认，App 打开时会自动重试，你可以继续使用。',
+      unavailable: '尚未确认此设备支持后台通知。App 打开时会继续检查，站内通知仍可使用。',
+      offline: '联网后会自动检查并恢复连接，无需重新登录。',
+    },
+  },
+
   translation: translationZh,
   saveAsNote: saveAsNoteZh,
   comparisonTable: comparisonTableZh,
