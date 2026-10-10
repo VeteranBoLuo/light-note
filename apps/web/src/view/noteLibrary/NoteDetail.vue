@@ -216,7 +216,7 @@
               ref="editorRef"
               class="editor-component"
               v-model:content="note.content"
-              :type="note.type"
+              :type="note.type === 'markdown' ? 'markdown' : 'html'"
               :revision="note.revision"
               :persist-mode-conversion="persistEditorModeConversion"
               @update:type="note.type = $event"
@@ -701,7 +701,7 @@
     scrollToMarkdownHeading?: (index: number, sourceOffset?: number) => void;
     scrollToResourceRef?: (href: string) => void | Promise<void>;
     triggerModeSwitch?: () => void | Promise<void>;
-    triggerUndoSwitch?: boolean;
+    triggerUndoSwitch?: () => void | Promise<void>;
   }
   const editorRef = ref<NoteEditorHandle | null>(null);
   const noteContentKey = ref('note-content:initial');
@@ -1078,7 +1078,7 @@
       }
       return {
         content: String(response.data.content || ''),
-        type: normalizeNoteType(response.data.type),
+        type: response.data.type === 'markdown' ? ('markdown' as const) : ('html' as const),
         revision: Math.max(1, Number(response.data.revision || payload.baseRevision + 1)),
         updateTime: response.data.updateTime ?? null,
       };

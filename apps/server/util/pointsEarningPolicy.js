@@ -1,3 +1,4 @@
+import { MAKEUP_CARD_MAX_INVENTORY } from '@lightnote/shared';
 export const LEGACY_POINTS_EARNING_POLICY_VERSION = 'points-earning-legacy';
 export const POINTS_EARNING_C5_POLICY_VERSION = 'points-earning-c5';
 export const POINTS_EARNING_C6_POLICY_VERSION = 'points-earning-c6';
@@ -75,7 +76,7 @@ const ACHIEVEMENT_OVERRIDES = Object.freeze({
 export const MAKEUP_CARD_SUPPLY_POLICY = Object.freeze({
   streakMilestones: Object.freeze([7, 30]),
   levelMilestones: Object.freeze([5, 10, 15]),
-  stackMax: 2,
+  stackMax: MAKEUP_CARD_MAX_INVENTORY,
   freeLotteryEnabled: false,
   paidLotteryOverflowPoints: 120,
 });

@@ -15,6 +15,7 @@ const messageMocks = vi.hoisted(() => ({
   warning: vi.fn(),
   error: vi.fn(),
 }));
+const bookmarkState = vi.hoisted(() => ({ isMobile: false }));
 
 vi.mock('@/api/communityChatApi', () => ({
   getCommunityChatAdminReports: apiMocks.list,
@@ -22,7 +23,7 @@ vi.mock('@/api/communityChatApi', () => ({
   getCommunityChatAdminRuntimePolicy: apiMocks.getRuntimePolicy,
   updateCommunityChatAdminRuntimePolicy: apiMocks.updateRuntimePolicy,
 }));
-vi.mock('@/store', () => ({ bookmarkStore: () => ({ isMobile: false }) }));
+vi.mock('@/store', () => ({ bookmarkStore: () => bookmarkState }));
 vi.mock('@/components/base/BasicComponents/BMessage/BMessage', () => ({ default: messageMocks }));
 vi.mock('@/components/admin/AdminDataPage.vue', () => ({
   default: {
@@ -68,13 +69,13 @@ const pendingReport = {
   actionExpiresAt: null,
 };
 
-function mockPages() {
+function mockPages(total = 1) {
   apiMocks.list.mockImplementation((params: { status: string }) =>
     Promise.resolve({
       status: 200,
       data: {
         items: params.status === 'pending' ? [pendingReport] : [],
-        total: params.status === 'pending' ? 1 : 0,
+        total: params.status === 'pending' ? total : 0,
         page: 1,
         pageSize: 20,
         status: params.status,
@@ -103,7 +104,8 @@ describe('CommunityChatModerationAdmin', () => {
   let cleanup: (() => void) | undefined;
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    bookmarkState.isMobile = false;
     mockPages();
     apiMocks.review.mockResolvedValue({
       status: 200,
@@ -149,6 +151,26 @@ describe('CommunityChatModerationAdmin', () => {
     expect(mounted.host.textContent).toContain('新手问答');
     expect(mounted.host.textContent).toContain('举报用户');
     expect(mounted.host.textContent).not.toContain('账号 ID');
+  });
+
+  it.each([false, true])('每页数量变化正确传入请求（移动端=%s）', async (mobile) => {
+    bookmarkState.isMobile = mobile;
+    mockPages(120);
+    const mounted = mountPage();
+    cleanup = mounted.unmount;
+    await vi.waitFor(() => expect(mounted.host.textContent).toContain('违规成员'));
+    const trigger = mounted.host.querySelector<HTMLButtonElement>('.bpagination__sizer .select-trigger');
+    expect(trigger).not.toBeNull();
+    trigger!.click();
+    await nextTick();
+    const option = Array.from(document.querySelectorAll<HTMLElement>('.select-option')).find(
+      (item) => item.textContent?.trim() === zhCN.common.perPage.replace('{n}', '50'),
+    );
+    expect(option).toBeDefined();
+    option!.click();
+    await vi.waitFor(() =>
+      expect(apiMocks.list).toHaveBeenCalledWith(expect.objectContaining({ page: 1, pageSize: 50 })),
+    );
   });
 
   it('投票举报把问题和选项一起展示给审核人，但不展示投票人名单', async () => {

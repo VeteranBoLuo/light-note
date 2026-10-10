@@ -73,7 +73,7 @@
               <b-button
                 v-for="btn in footer"
                 class="btn"
-                :type="btn.type"
+                :type="btn.type === 'dashed' ? undefined : btn.type"
                 @click="btn.function ? btnFunc(btn.function) : obClose()"
                 >{{ btn.label }}</b-button
               >

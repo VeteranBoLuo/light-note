@@ -758,12 +758,17 @@
     goRegister(source);
   }
 
+  function readLandingAuthStatus() {
+    return landingAuth?.status.value;
+  }
+
   async function resolveConfirmedIdentity() {
     if (landingAuth?.status.value === 'authenticated' && isLoggedIn.value) return 'authenticated';
     if (landingAuth?.status.value === 'anonymous') return 'anonymous';
     await landingAuth?.retry();
-    if (landingAuth?.status.value === 'authenticated' && isLoggedIn.value) return 'authenticated';
-    return landingAuth?.status.value === 'anonymous' ? 'anonymous' : 'error';
+    const status = readLandingAuthStatus();
+    if (status === 'authenticated' && isLoggedIn.value) return 'authenticated';
+    return status === 'anonymous' ? 'anonymous' : 'error';
   }
 
   async function navigateWithIdentity(action: 'primary' | 'account', source: string) {

@@ -48,6 +48,9 @@
           <div class="ps-item-body">
             <div class="ps-item-name">{{ itemName(it) }}</div>
             <div class="ps-item-desc">{{ itemDesc(it) }}</div>
+            <BChip v-if="it.effect === 'makeup_card'" tone="neutral" class="ps-item-limit">
+              {{ t('growth.shopCardInventory', { n: shop?.protectCards || 0, max: MAKEUP_CARD_MAX_INVENTORY }) }}
+            </BChip>
             <BChip v-if="hasPurchaseLimit(it)" :tone="isLimitReached(it) ? 'success' : 'neutral'" class="ps-item-limit">
               {{ purchaseLimitLabel(it) }}
             </BChip>
@@ -173,24 +176,15 @@
       </div>
 
       <div v-if="!consumables.length && !frames.length" class="ps-empty">{{ t('growth.shopEmpty') }}</div>
-
-      <!-- 兑换确认 -->
-      <BModal
-        v-model:visible="confirmVisible"
-        :title="t('growth.shopBuy')"
-        width="var(--ui-layout-360, 360px)"
-        @ok="confirmBuy"
-      >
-        <div class="ps-confirm">{{ pending ? purchaseConfirmation(pending) : '' }}</div>
-      </BModal>
     </template>
   </div>
 </template>
 
 <script setup lang="ts">
+  import { MAKEUP_CARD_MAX_INVENTORY } from '@lightnote/shared';
   import { readEntitlementJourney, prepareEntitlementReturn } from '@/utils/entitlementJourney';
   import { recordEntitlementEvent } from '@/api/entitlementEvents';
-  import { computed, nextTick, onMounted, ref, watch } from 'vue';
+  import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
   import { useGrowth, type ShopItem } from '@/composables/useGrowth.ts';
@@ -198,7 +192,7 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BChip from '@/components/base/BasicComponents/BChip.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
-  import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
+  import Alert from '@/components/base/BasicComponents/BModal/Alert';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import PointsGoal from '@/components/growth/PointsGoal.vue';
   import AvatarFramePreview from '@/components/growth/AvatarFramePreview.vue';
@@ -282,6 +276,12 @@
 
   function purchaseConfirmation(it: ShopItem) {
     const params = { n: it.cost, name: itemName(it) };
+    if (it.effect === 'makeup_card')
+      return t('growth.shopBuyConfirmCard', {
+        ...params,
+        held: shop.value?.protectCards || 0,
+        max: MAKEUP_CARD_MAX_INVENTORY,
+      });
     return hasPurchaseLimit(it) ? t('growth.shopBuyConfirmLimited', params) : t('growth.shopBuyConfirm', params);
   }
 
@@ -301,7 +301,7 @@
   }
   function itemDesc(it: ShopItem) {
     const k = 'growth.shopItems.' + it.id + '.desc';
-    return te(k) ? t(k) : it.desc;
+    return te(k) ? t(k, { max: MAKEUP_CARD_MAX_INVENTORY }) : it.desc;
   }
 
   function frameStyleName(frameId: string) {
@@ -391,7 +391,7 @@
     if (!s || !s.purchaseEnabled || s.isVisitor || canEquipFrame(it) || it.acquisition === 'achievement') return false;
     if (isLimitReached(it)) return false;
     if (it.minLevel && (s.level || 0) < it.minLevel) return false;
-    if (it.effect === 'makeup_card' && (s.protectCards || 0) >= 2) return false;
+    if (it.effect === 'makeup_card' && (s.protectCards || 0) >= MAKEUP_CARD_MAX_INVENTORY) return false;
     return (s.points || 0) >= Number(it.cost || 0);
   }
 
@@ -402,7 +402,8 @@
     if (!s.purchaseEnabled) return t('growth.shopMaintenance');
     if (s.isVisitor) return t('growth.shopLoginRequired');
     if (it.minLevel && (s.level || 0) < it.minLevel) return t('growth.shopLevelNeed', { n: it.minLevel });
-    if (it.effect === 'makeup_card' && (s.protectCards || 0) >= 2) return t('growth.shopCardMax');
+    if (it.effect === 'makeup_card' && (s.protectCards || 0) >= MAKEUP_CARD_MAX_INVENTORY)
+      return t('growth.shopCardMax', { max: MAKEUP_CARD_MAX_INVENTORY });
     const shortfall = Math.max(0, Number(it.cost || 0) - Number(s.points || 0));
     return shortfall > 0 ? t('growth.shopShortfall', { n: shortfall }) : '';
   }
@@ -412,7 +413,8 @@
     if (isLimitReached(it)) return t('growth.shopRedeemed');
     if (canBuyNow(it)) return t('growth.shopBuy');
     if (shop.value && !shop.value.purchaseEnabled) return t('growth.shopMaintenanceShort');
-    if (it.id === 'makeup_card' && (shop.value?.protectCards || 0) >= 2) return t('growth.shopCardMax');
+    if (it.id === 'makeup_card' && (shop.value?.protectCards || 0) >= MAKEUP_CARD_MAX_INVENTORY)
+      return t('growth.shopCardMax', { max: MAKEUP_CARD_MAX_INVENTORY });
     if ((shop.value?.points || 0) < Number(it.cost || 0)) return t('growth.shopInsufficient');
     return t('growth.shopBuy');
   }
@@ -428,21 +430,30 @@
   const buyingId = ref<string | null>(null);
   const equippingId = ref<string | null>(null);
   const claimingId = ref<string | null>(null);
-  const confirmVisible = ref(false);
-  const pending = ref<ShopItem | null>(null);
+
+  let disposed = false;
+  onBeforeUnmount(() => {
+    disposed = true;
+  });
 
   function askBuy(it: ShopItem) {
     if (readOnly.value || !canBuyNow(it)) return;
     recordEntitlementEvent('select_item', { ...journey.value, skuId: it.id });
-    pending.value = it;
-    confirmVisible.value = true;
+    const ownerId = user.id;
+    Alert.alert({
+      title: t('growth.shopBuy'),
+      content: purchaseConfirmation(it),
+      okText: t('growth.shopBuy'),
+      cancelText: t('common.cancel'),
+      onOk: () => {
+        if (!disposed && ownerId === user.id) return confirmBuy(it);
+      },
+    });
   }
 
-  async function confirmBuy() {
+  async function confirmBuy(it: ShopItem) {
     if (readOnly.value) return;
-    const it = pending.value;
-    confirmVisible.value = false;
-    if (!it) return;
+    if (buyingId.value) return;
     buyingId.value = it.id;
     try {
       const res = await buyItem(it.id);
@@ -461,7 +472,6 @@
       console.error('兑换失败:', err);
     } finally {
       buyingId.value = null;
-      pending.value = null;
     }
   }
 
@@ -1021,11 +1031,6 @@
     color: var(--desc-color);
     font-size: var(--ui-font-13, 13px);
     padding: var(--ui-space-20, 20px) 0;
-  }
-  .ps-confirm {
-    font-size: var(--ui-font-14, 14px);
-    line-height: 1.6;
-    padding: var(--ui-space-4, 4px) var(--ui-space-2, 2px);
   }
   @media (max-width: 560px) {
     .ps-frame-toolbar {

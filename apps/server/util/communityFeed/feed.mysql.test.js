@@ -1,3 +1,4 @@
+import { consumePostReview } from './reviewWorker.js';
 import { communityGrowthMetrics, communityWeekPosts } from './growthMetrics.js';
 import { taskRewardStates, claimTaskRewards } from './taskRewards.js';
 import { listTopics, topicDetail, saveTopic } from './topics.js';
@@ -92,6 +93,15 @@ describe.skipIf(!socketPath)('P2 real database boundaries', () => {
     await db.query(
       'CREATE TABLE points_earning_period_policy(period_type varchar(8),period_key varchar(8),policy_version varchar(80),PRIMARY KEY(period_type,period_key))',
     );
+    await db.query(
+      'CREATE TABLE IF NOT EXISTS ai_executions(id char(36) PRIMARY KEY,request_id char(36),skill_id varchar(80),status varchar(32),provider_tokens int,provider_call_count int)',
+    );
+    await db.query(
+      'CREATE TABLE IF NOT EXISTS ai_provider_spans(id char(36) PRIMARY KEY,execution_id char(36),usage_status varchar(16))',
+    );
+    await db.query(
+      'CREATE TABLE IF NOT EXISTS security_account_restrictions(id int PRIMARY KEY,user_id varchar(255),restriction_type varchar(32),scope_json json,reason varchar(255),status varchar(20),expires_at datetime,created_at datetime)',
+    );
     await ensureCommunityFeedSchema(db);
     await ensureCommunityFeedSchema(db);
     await db.query(
@@ -118,6 +128,199 @@ describe.skipIf(!socketPath)('P2 real database boundaries', () => {
         `测试成员${u.id}`,
         '{}',
       ]);
+  });
+  const reviewEnv = { ...env, COMMUNITY_AI_REVIEW_ENABLED: 'true' };
+  const reviewSubmit = (values = {}) => submitPost({ user: A, input: postInput(values), env: reviewEnv, db });
+  const reviewDependencies = (beforeCommit = async () => {}, decision = 'pass') => ({
+    db,
+    env: reviewEnv,
+    withDispatch: async (_db, userId, callback) => callback({ user: { id: userId, role: 'user' } }),
+    runSkill: vi.fn(async (request, _req, dependencies) => {
+      expect(dependencies.executionConfigOverrides).toEqual({ billingPolicy: 'system', systemId: 'community_review' });
+      await beforeCommit();
+      await dependencies.commitValidatedResult({
+        response: {
+          result: { decision, categories: decision === 'pass' ? [] : ['uncertain'], reason: '测试审核结论' },
+        },
+      });
+      const executionId = randomUUID();
+      await db.query('INSERT INTO ai_executions VALUES (?,?,?,?,?,?)', [
+        executionId,
+        request.requestId,
+        'community.review_screen',
+        'completed',
+        1000,
+        1,
+      ]);
+      await db.query('INSERT INTO ai_provider_spans VALUES (?,?,?)', [randomUUID(), executionId, 'reported']);
+    }),
+  });
+  it('automatically publishes pure text once with platform budget, audit and result notification', async () => {
+    const submitted = await reviewSubmit();
+    expect((await db.query("SELECT * FROM community_outbox WHERE kind='review'"))[0]).toHaveLength(0);
+    const dependencies = reviewDependencies();
+    expect(await consumePostReview(dependencies)).toBe(true);
+    expect(await consumePostReview(dependencies)).toBe(false);
+    expect(dependencies.runSkill).toHaveBeenCalledTimes(1);
+    expect((await postDetail({ user: B, id: submitted.publicId, env, db })).body).toBe(postInput().body);
+    expect((await db.query('SELECT status FROM community_post_review_jobs'))[0][0].status).toBe('passed');
+    expect((await db.query("SELECT * FROM community_moderation_actions WHERE reason='ai_pass'"))[0]).toHaveLength(1);
+    expect((await db.query("SELECT * FROM community_outbox WHERE kind='result'"))[0]).toHaveLength(1);
+    expect(
+      Number((await db.query('SELECT consumed_tokens FROM community_review_daily_budget'))[0][0].consumed_tokens),
+    ).toBe(1000);
+  });
+  it.each(['hold', 'failure', 'disabled', 'budget', 'expired'])(
+    'falls back to manual review on %s without publishing',
+    async (mode) => {
+      await reviewSubmit();
+      const dependencies = reviewDependencies(async () => {}, 'hold');
+      if (mode === 'failure') dependencies.runSkill.mockRejectedValue(new Error('provider secret'));
+      if (mode === 'disabled') dependencies.env = { ...reviewEnv, COMMUNITY_AI_REVIEW_ENABLED: 'false' };
+      if (mode === 'budget') dependencies.env = { ...reviewEnv, COMMUNITY_AI_REVIEW_DAILY_BUDGET_TOKENS: '0' };
+      if (mode === 'expired')
+        await db.query(
+          "UPDATE community_post_review_jobs SET status='processing',lease_until=DATE_SUB(NOW(6), INTERVAL 1 SECOND)",
+        );
+      await consumePostReview(dependencies);
+      expect((await db.query('SELECT status FROM community_post_review_jobs'))[0][0].status).toBe('hold');
+      expect((await db.query("SELECT * FROM community_posts WHERE status='published'"))[0]).toHaveLength(0);
+      expect((await db.query("SELECT * FROM community_outbox WHERE kind='review'"))[0]).toHaveLength(1);
+      if (['disabled', 'budget', 'expired'].includes(mode)) expect(dependencies.runSkill).not.toHaveBeenCalled();
+    },
+  );
+  it.each(['withdraw', 'edit', 'reject', 'switch', 'lease'])('does not publish after concurrent %s', async (mode) => {
+    const submitted = await reviewSubmit();
+    const dependencies = reviewDependencies(async () => {
+      if (mode === 'withdraw')
+        await run(withdrawPost, A, input({ postId: submitted.publicId, expectedRevision: submitted.revision }));
+      if (mode === 'edit')
+        await reviewSubmit({ postId: submitted.publicId, expectedRevision: submitted.revision, body: '新修订' });
+      if (mode === 'reject')
+        await run(
+          moderatePost,
+          ROOT,
+          input({
+            postId: submitted.publicId,
+            expectedRevision: submitted.revision,
+            action: 'reject',
+            reason: '人工审核',
+          }),
+        );
+      if (mode === 'switch') dependencies.env = disabledEnv;
+      if (mode === 'lease')
+        await db.query('UPDATE community_post_review_jobs SET lease_until=DATE_SUB(NOW(6),INTERVAL 1 SECOND)');
+    });
+    const disabledEnv = { ...reviewEnv };
+    if (mode === 'switch') {
+      dependencies.env = disabledEnv;
+      dependencies.runSkill = reviewDependencies(async () => {
+        disabledEnv.COMMUNITY_AI_REVIEW_ENABLED = 'false';
+      }).runSkill;
+    }
+    await consumePostReview(dependencies);
+    expect((await db.query("SELECT * FROM community_moderation_actions WHERE reason='ai_pass'"))[0]).toHaveLength(0);
+    expect((await db.query("SELECT * FROM community_posts WHERE status='published'"))[0]).toHaveLength(0);
+  });
+  it('keeps markup media on manual path and preserves the default-off behavior', async () => {
+    await reviewSubmit({ body: '![image](https://example.com/image.png)' });
+    await run(submitPost, A, postInput());
+    expect((await db.query('SELECT * FROM community_post_review_jobs'))[0]).toHaveLength(0);
+    expect((await db.query("SELECT * FROM community_outbox WHERE kind='review'"))[0]).toHaveLength(2);
+  });
+  it('serializes competing consumers across connections', async () => {
+    await reviewSubmit();
+    let enter, release;
+    const entered = new Promise((resolve) => {
+      enter = resolve;
+    });
+    const blocked = new Promise((resolve) => {
+      release = resolve;
+    });
+    const firstDeps = reviewDependencies(async () => {
+      enter();
+      await blocked;
+    });
+    const firstRun = consumePostReview(firstDeps);
+    await entered;
+    const secondDeps = reviewDependencies();
+    expect(await consumePostReview(secondDeps)).toBe(false);
+    expect(secondDeps.runSkill).not.toHaveBeenCalled();
+    release();
+    await firstRun;
+  });
+  it('respects the shared daily budget across consecutive posts', async () => {
+    await reviewSubmit();
+    await reviewSubmit();
+    const dependencies = reviewDependencies();
+    dependencies.env = { ...reviewEnv, COMMUNITY_AI_REVIEW_DAILY_BUDGET_TOKENS: '48000' };
+    await consumePostReview(dependencies);
+    await consumePostReview(dependencies);
+    expect(dependencies.runSkill).toHaveBeenCalledTimes(1);
+    expect(
+      (await db.query("SELECT * FROM community_post_review_jobs WHERE reason_code='budget_or_switch'"))[0],
+    ).toHaveLength(1);
+  });
+  it('retains the conservative reservation when repair usage is missing', async () => {
+    await reviewSubmit();
+    const dependencies = reviewDependencies();
+    const runModel = dependencies.runSkill;
+    dependencies.runSkill = async (...args) => {
+      await runModel(...args);
+      const [rows] = await db.query('SELECT id FROM ai_executions');
+      await db.query('INSERT INTO ai_provider_spans VALUES (?,?,?)', [randomUUID(), rows[0].id, 'missing']);
+      await db.query('UPDATE ai_executions SET provider_call_count=2');
+    };
+    await consumePostReview(dependencies);
+    expect(
+      Number((await db.query('SELECT consumed_tokens FROM community_review_daily_budget'))[0][0].consumed_tokens),
+    ).toBe(48000);
+  });
+  it('does not externalize a withdrawn revision after waiting for account admission', async () => {
+    const submitted = await reviewSubmit();
+    const dependencies = reviewDependencies();
+    dependencies.withDispatch = async (_db, userId, callback) => {
+      await run(withdrawPost, A, input({ postId: submitted.publicId, expectedRevision: submitted.revision }));
+      return callback({ user: { id: userId, role: 'user' } });
+    };
+    await consumePostReview(dependencies);
+    expect(dependencies.runSkill).not.toHaveBeenCalled();
+  });
+  it('does not call the model for an AI-restricted account', async () => {
+    await reviewSubmit();
+    await db.query(
+      "INSERT INTO security_account_restrictions VALUES (1,'a','ai_lock',NULL,'test','active',NULL,NOW())",
+    );
+    const dependencies = reviewDependencies();
+    await consumePostReview(dependencies);
+    expect(dependencies.runSkill).not.toHaveBeenCalled();
+    expect((await db.query('SELECT reason_code FROM community_post_review_jobs'))[0][0].reason_code).toBe(
+      'account_restricted',
+    );
+  });
+  it('checks new schema assertions against the migrated isolated database', async () => {
+    const sql = await fs.readFile(new URL('../../migrations/schema-assertions.sql', import.meta.url), 'utf8');
+    const statements = sql
+      .split('\n')
+      .filter((line) => line.includes("'community_review_") && line.startsWith('SELECT'));
+    expect(statements.length).toBeGreaterThan(15);
+    for (const statement of statements) expect((await db.query(statement))[0]).toEqual([]);
+  });
+  it('exposes AI review reasons only in the root moderation view', async () => {
+    await reviewSubmit();
+    await consumePostReview(reviewDependencies(async () => {}, 'hold'));
+    const own = await ownPosts({ user: A, env, db });
+    expect(own.items[0]).not.toHaveProperty('review');
+    const adminView = await ownPosts({ user: ROOT, env, db, moderation: true });
+    expect(adminView.items[0].review).toMatchObject({ status: 'hold', reasonCode: 'ai_hold' });
+    await expect(ownPosts({ user: A, env, db, moderation: true })).rejects.toMatchObject({
+      code: 'COMMUNITY_ACCESS_DENIED',
+    });
+  });
+  it('deletion purges stored AI reasons and outstanding tasks', async () => {
+    await reviewSubmit();
+    await purgeCommunityFeedData(db, new Set(COMMUNITY_FEED_TABLES), A.id);
+    expect((await db.query('SELECT * FROM community_post_review_jobs'))[0]).toHaveLength(0);
   });
   it('loads only the requested author post and its latest revision for editing', async () => {
     const target = await published(A);

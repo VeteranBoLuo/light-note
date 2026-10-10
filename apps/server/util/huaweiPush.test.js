@@ -77,6 +77,7 @@ function workerDb(notification, source = true) {
         return [[{ id: 1, notification_id: 'n', subscription_id: 's', generation: 'g', ttl: 300, attempts: 1 }]];
       if (sql.includes('SELECT s.*'))
         return [[{ id: 's', user_id: 'u', generation: 'g', ...huaweiSubscription(token) }]];
+      if (sql.includes('FROM user WHERE id')) return [[{ push_preferences: '{}', preferred_locale: 'zh-CN' }]];
       if (sql.startsWith('SELECT * FROM notification')) return [[notification]];
       if (sql.includes('FROM todo_reminder_jobs')) return [source ? [{ id: 'j', title: '整理资料', description: '检查说明' }] : []];
       if (sql.includes('FROM todo_items')) return [[{ title: '旧待办', description: '旧说明' }]];

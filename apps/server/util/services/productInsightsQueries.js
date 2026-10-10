@@ -4,6 +4,16 @@ export const ACTIVE_USERS_QUERY = `SELECT COUNT(*) AS users FROM user u
     AND EXISTS (SELECT 1 FROM api_logs l WHERE l.user_id = u.id AND l.del_flag = '0'
       AND l.request_time >= DATE_SUB(NOW(), INTERVAL ? DAY))`;
 
+// 采用人数按账号去重；events 保持事件数语义，兼容历史助手与现行模块化 AI。
+// 打开面板、失败日志和后台自动执行不单独构成采用。
+export const AI_ADOPTION_QUERY = `SELECT COUNT(DISTINCT e.subject_user_id) AS users, COUNT(*) AS events
+  FROM ai_product_events e
+  JOIN user u ON u.id = e.subject_user_id AND u.role = 'user' AND u.del_flag = '0'
+  WHERE e.admin_context_mode = 'normal'
+    AND e.event_name IN ('ai_prompt_submitted', 'ai_completed', 'ai_change_succeeded',
+      'ai_skill_started', 'ai_skill_completed', 'ai_skill_applied')
+    AND e.create_time >= DATE_SUB(NOW(), INTERVAL ? DAY)`;
+
 // 有界后台读模型；注册后滚动窗口，分子与分母必须等待完整观察期。
 export const ACTIVATION_QUERY = `SELECT COUNT(DISTINCT u.id) AS new_users,
                 COUNT(DISTINCT f.user_id) AS activated_users

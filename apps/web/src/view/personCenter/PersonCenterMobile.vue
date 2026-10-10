@@ -252,6 +252,7 @@
     MOBILE_PERSON_CENTER_COMMUNICATION_ENTRIES,
     MOBILE_PERSON_CENTER_MANAGEMENT_ENTRIES,
     MOBILE_PERSON_CENTER_QUICK_ENTRIES,
+    type PersonCenterEntry,
   } from '@/config/personCenterEntries';
 
   const MyInfo = defineAsyncComponent(() => import('@/components/personCenter/myInfo/MyInfo.vue'));
@@ -264,14 +265,14 @@
   const userVisible = ref(false);
 
   const user = useUserStore();
-  const mobileQuickEntries = MOBILE_PERSON_CENTER_QUICK_ENTRIES;
+  const mobileQuickEntries: readonly PersonCenterEntry[] = MOBILE_PERSON_CENTER_QUICK_ENTRIES;
   const { entry: campaignEntry, path: campaignPath } = useCampaignEntry();
-  const mobileManagementEntries = computed(() =>
+  const mobileManagementEntries = computed<readonly PersonCenterEntry[]>(() =>
     campaignEntry.value
       ? [{ ...PERSON_CENTER_ENTRIES.campaign, path: campaignPath.value }, ...MOBILE_PERSON_CENTER_MANAGEMENT_ENTRIES]
       : MOBILE_PERSON_CENTER_MANAGEMENT_ENTRIES,
   );
-  const mobileCommunicationEntries = MOBILE_PERSON_CENTER_COMMUNICATION_ENTRIES;
+  const mobileCommunicationEntries: readonly PersonCenterEntry[] = MOBILE_PERSON_CENTER_COMMUNICATION_ENTRIES;
   const { growth: growthInfo, loading: growthLoading, load: loadGrowth } = useGrowth();
   const equippedFrameId = computed(() => {
     const id = growthInfo.value?.equippedFrame;
@@ -405,7 +406,6 @@
     }
   }
 
-  ref<Viewer>();
   function zoomImage() {
     bookmark.refreshViewer(user.headPicture || icon.navigation.user);
     menuVisible.value = false;

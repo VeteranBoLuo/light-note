@@ -74,7 +74,7 @@
                 :value="filter"
                 :options="filterOptions"
                 :aria-label="t('serverManagement.diagnosticsPage.filterLabel')"
-                @change="filter = String($event)"
+                @change="filter = $event"
               />
               <BButton size="small" @click="copyReport">
                 <SvgIcon :src="icon.infrastructure.copy" size="14" />{{

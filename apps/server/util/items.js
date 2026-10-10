@@ -1,3 +1,4 @@
+import { MAKEUP_CARD_MAX_INVENTORY } from '@lightnote/shared';
 import { randomUUID } from 'node:crypto';
 import pool from '../db/index.js';
 import { creditAiBonusTokens } from './aiBonusWallet.js';
@@ -11,7 +12,7 @@ import { creditAiBonusTokens } from './aiBonusWallet.js';
 //  - AI 加油包已改为 user_growth.ai_bonus_tokens 永久余额，新获得的包即时到账；
 //    user_item 中仅可能保留历史包，用户点一次即可转入永久余额。
 //
-//  补签卡是特例:逻辑成熟(上限 2、最近 3 个自然日补签、续连签),存储沿用 user_growth.streak_protect_cards,
+//  补签卡是特例:逻辑成熟(上限由共享契约定义、最近 3 个自然日补签、续连签),存储沿用 user_growth.streak_protect_cards,
 //  "使用"仍走 growth.useProtectCard(需要"可补漏签日期"这个上下文)。这里只集中它的"发放写入口径"
 //  (grantItem)与"背包展示"(getInventory),不迁移其存储与使用流程,避免动到已验证的连签逻辑。
 //
@@ -35,8 +36,8 @@ export const CONSUMABLES = {
     name: '补签卡',
     icon: 'checkin',
     backing: 'card_column',
-    stackMax: 2,
-    desc: '可补最近 3 个自然日内的漏签、续上连签(上限 2 张)。补签不发经验、积分或额外奖励。',
+    stackMax: MAKEUP_CARD_MAX_INVENTORY,
+    desc: `可补今天之前 3 个自然日的漏签、续上连签(上限 ${MAKEUP_CARD_MAX_INVENTORY} 张)。补签不发经验、积分或额外奖励。`,
     action: 'makeup', // 前端:走「补签」(最近 3 个自然日内有漏签且有卡时可用)
   },
 };
@@ -61,7 +62,7 @@ export async function grantItem(conn, userId, itemId, qty = 1) {
   if (n <= 0) return { ok: false, reason: 'bad_qty' };
   if (def.backing === 'card_column') {
     // 返回实际到账量，调用方可对满仓溢出做显式补偿。事务调用时 FOR UPDATE 也会串行化抽奖/兑换。
-    const stackMax = def.stackMax || 2;
+    const stackMax = def.stackMax || MAKEUP_CARD_MAX_INVENTORY;
     const [[row]] = await db.query('SELECT streak_protect_cards AS qty FROM user_growth WHERE user_id = ? FOR UPDATE', [
       userId,
     ]);

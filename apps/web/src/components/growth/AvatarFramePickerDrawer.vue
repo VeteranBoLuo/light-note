@@ -222,7 +222,7 @@
     { key: 'owned', label: t('myInfo.ownedFrames'), badge: frames.value.filter((item) => item.owned).length },
   ]);
 
-  const actionType = computed<'primary' | ''>(() => (selectedFrame.value?.equipped ? '' : 'primary'));
+  const actionType = computed<'primary' | undefined>(() => (selectedFrame.value?.equipped ? undefined : 'primary'));
   const actionDisabled = computed(() => {
     const frame = selectedFrame.value;
     if (!frame || processingId.value) return true;

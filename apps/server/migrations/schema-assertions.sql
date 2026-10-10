@@ -3667,7 +3667,9 @@ SELECT 'toolbox_board_missing_column' AS check_name, CONCAT(required.table_name,
  SELECT 'toolbox_workspaces' AS table_name, 'board_version' AS column_name UNION ALL
  SELECT 'toolbox_workspace_items', 'source_item_id' UNION ALL
  SELECT 'toolbox_workspace_items', 'source_title' UNION ALL
- SELECT 'toolbox_workspace_items', 'source_content'
+ SELECT 'toolbox_workspace_items', 'source_content' UNION ALL
+ SELECT 'toolbox_workspace_items', 'details_json' UNION ALL
+ SELECT 'toolbox_workspace_items', 'linked_todo_id'
 ) required LEFT JOIN information_schema.columns actual ON actual.table_schema=DATABASE() AND actual.table_name=required.table_name AND actual.column_name=required.column_name WHERE actual.column_name IS NULL;
 SELECT 'toolbox_board_missing_receipts' AS check_name, 'toolbox_board_operations' AS detail FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='toolbox_board_operations');
 
@@ -4066,3 +4068,26 @@ FROM DUAL WHERE NOT EXISTS (
  GROUP BY index_name HAVING GROUP_CONCAT(column_name ORDER BY seq_in_index)='available_at,id'
  AND SUM(sub_part IS NOT NULL)=0 AND MAX(non_unique)=1
 );
+
+-- Community plain-text automatic review (explicit additive migration).
+SELECT 'community_review_column' AS check_name,'community_post_review_jobs.id' AS detail FROM DUAL WHERE NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='community_post_review_jobs' AND column_name='id');
+SELECT 'community_review_column' AS check_name,'community_post_review_jobs.post_id' AS detail FROM DUAL WHERE NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='community_post_review_jobs' AND column_name='post_id');
+SELECT 'community_review_column' AS check_name,'community_post_review_jobs.revision_id' AS detail FROM DUAL WHERE NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='community_post_review_jobs' AND column_name='revision_id');
+SELECT 'community_review_column' AS check_name,'community_post_review_jobs.status' AS detail FROM DUAL WHERE NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='community_post_review_jobs' AND column_name='status');
+SELECT 'community_review_column' AS check_name,'community_post_review_jobs.policy_version' AS detail FROM DUAL WHERE NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='community_post_review_jobs' AND column_name='policy_version');
+SELECT 'community_review_column' AS check_name,'community_post_review_jobs.request_id' AS detail FROM DUAL WHERE NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='community_post_review_jobs' AND column_name='request_id');
+SELECT 'community_review_column' AS check_name,'community_post_review_jobs.lease_token' AS detail FROM DUAL WHERE NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='community_post_review_jobs' AND column_name='lease_token');
+SELECT 'community_review_column' AS check_name,'community_post_review_jobs.lease_until' AS detail FROM DUAL WHERE NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='community_post_review_jobs' AND column_name='lease_until');
+SELECT 'community_review_column' AS check_name,'community_post_review_jobs.budget_day' AS detail FROM DUAL WHERE NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='community_post_review_jobs' AND column_name='budget_day');
+SELECT 'community_review_column' AS check_name,'community_post_review_jobs.reserved_tokens' AS detail FROM DUAL WHERE NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='community_post_review_jobs' AND column_name='reserved_tokens');
+SELECT 'community_review_column' AS check_name,'community_post_review_jobs.result_json' AS detail FROM DUAL WHERE NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='community_post_review_jobs' AND column_name='result_json');
+SELECT 'community_review_column' AS check_name,'community_post_review_jobs.reason_code' AS detail FROM DUAL WHERE NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='community_post_review_jobs' AND column_name='reason_code');
+SELECT 'community_review_column' AS check_name,'community_post_review_jobs.created_at' AS detail FROM DUAL WHERE NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='community_post_review_jobs' AND column_name='created_at');
+SELECT 'community_review_column' AS check_name,'community_post_review_jobs.finished_at' AS detail FROM DUAL WHERE NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='community_post_review_jobs' AND column_name='finished_at');
+SELECT 'community_review_column' AS check_name,'community_review_daily_budget.budget_day' AS detail FROM DUAL WHERE NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='community_review_daily_budget' AND column_name='budget_day');
+SELECT 'community_review_column' AS check_name,'community_review_daily_budget.consumed_tokens' AS detail FROM DUAL WHERE NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='community_review_daily_budget' AND column_name='consumed_tokens');
+SELECT 'community_review_index' AS check_name,'community_post_review_jobs.PRIMARY' AS detail FROM DUAL WHERE NOT EXISTS(SELECT 1 FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='community_post_review_jobs' AND index_name='PRIMARY' GROUP BY index_name HAVING GROUP_CONCAT(column_name ORDER BY seq_in_index)='id' AND MAX(non_unique)=0);
+SELECT 'community_review_index' AS check_name,'community_post_review_jobs.uk_revision' AS detail FROM DUAL WHERE NOT EXISTS(SELECT 1 FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='community_post_review_jobs' AND index_name='uk_revision' GROUP BY index_name HAVING GROUP_CONCAT(column_name ORDER BY seq_in_index)='revision_id' AND MAX(non_unique)=0);
+SELECT 'community_review_index' AS check_name,'community_post_review_jobs.idx_pending' AS detail FROM DUAL WHERE NOT EXISTS(SELECT 1 FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='community_post_review_jobs' AND index_name='idx_pending' GROUP BY index_name HAVING GROUP_CONCAT(column_name ORDER BY seq_in_index)='status,id' AND MAX(non_unique)=1);
+SELECT 'community_review_index' AS check_name,'community_post_review_jobs.idx_post' AS detail FROM DUAL WHERE NOT EXISTS(SELECT 1 FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='community_post_review_jobs' AND index_name='idx_post' GROUP BY index_name HAVING GROUP_CONCAT(column_name ORDER BY seq_in_index)='post_id' AND MAX(non_unique)=1);
+SELECT 'community_review_index' AS check_name,'community_review_daily_budget.PRIMARY' AS detail FROM DUAL WHERE NOT EXISTS(SELECT 1 FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='community_review_daily_budget' AND index_name='PRIMARY' GROUP BY index_name HAVING GROUP_CONCAT(column_name ORDER BY seq_in_index)='budget_day' AND MAX(non_unique)=0);

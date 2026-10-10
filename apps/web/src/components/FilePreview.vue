@@ -241,7 +241,7 @@
                   <BButton
                     size="small"
                     @click="toggleWrap"
-                    :type="wrapText ? 'primary' : 'default'"
+                    :type="wrapText ? 'primary' : undefined"
                     class="toolbar-btn"
                   >
                     <SvgIcon :src="icon.cloudSpace.preview.alignLeft" size="15" />

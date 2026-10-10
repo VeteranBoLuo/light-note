@@ -1,5 +1,5 @@
 import { applyBoardOperation } from '@lightnote/shared/workspace-board';
-import { createApp, h } from 'vue';
+import { createApp, h, defineAsyncComponent, ref } from 'vue';
 import { createPinia } from 'pinia';
 import { createI18n } from 'vue-i18n';
 import { createMemoryHistory, createRouter, RouterView } from 'vue-router';
@@ -10,15 +10,17 @@ import request from '@/http/request.ts';
 import enUS from '@/i18n/locales/en-US';
 import zhCN from '@/i18n/locales/zh-CN';
 import { bookmarkStore, useUserStore } from '@/store';
-import ToolboxWorkbench from '@/view/toolbox/ToolboxWorkbench.vue';
-import DesktopWorkbenchView from '@/view/workbenches/DesktopWorkbenchView.vue';
-import MobileTodayView from '@/view/workbenches/MobileTodayView.vue';
+const ToolboxWorkbench = () => import('@/view/toolbox/ToolboxWorkbench.vue');
+const DesktopWorkbenchView = defineAsyncComponent(() => import('@/view/workbenches/DesktopWorkbenchView.vue'));
+const MobileTodayView = defineAsyncComponent(() => import('@/view/workbenches/MobileTodayView.vue'));
 import WorkshopProjectEntry from '@/components/workbenches/WorkshopProjectEntry.vue';
 import ResourceProjectHost from '@/components/resourceActions/ResourceProjectHost.vue';
+import SaveAsNoteHost from '@/components/noteLibrary/save/SaveAsNoteHost.vue';
+import { densityCssVariables } from '@/config/uiDensity';
 import BButton from '@/components/base/BasicComponents/BButton.vue';
 import { useProjectResourceAction } from '@/composables/useProjectResourceAction';
-import ToolboxTask from '@/view/toolbox/ToolboxTask.vue';
-import ToolboxHome from '@/view/toolbox/ToolboxHome.vue';
+const ToolboxTask = () => import('@/view/toolbox/ToolboxTask.vue');
+const ToolboxHome = () => import('@/view/toolbox/ToolboxHome.vue');
 import type { ToolboxHomeWorkspaceSummary, ToolboxWorkspace, ToolboxJob } from '@/api/toolbox';
 import '@/assets/css/index.less';
 
@@ -40,7 +42,8 @@ const now = '2026-08-29T14:30:00.000Z';
 
 document.documentElement.dataset.theme = theme;
 document.documentElement.lang = locale;
-document.documentElement.classList.toggle('light-note-mobile-rendering', window.innerWidth <= 767);
+document.documentElement.classList.toggle('light-note-mobile-rendering', window.innerWidth <= 767 || params.get('renderProfile') === 'mobile');
+for (const [key, value] of Object.entries(densityCssVariables(window.innerWidth <= 767 ? 'standard' : params.get('density') === 'compact' ? 'compact' : params.get('density') === 'comfortable' ? 'comfortable' : 'standard'))) document.documentElement.style.setProperty(key, value);
 document.body.dataset.visualState = `${state}-${view}-${kind}`;
 
 const workspaceFixture: ToolboxWorkspace = {
@@ -219,6 +222,30 @@ if (params.get('legacyLearning') === '1') workspaceFixture.items[0].status = 'do
 
 if (params.get('boardEmpty') === '1') workspaceFixture.items = [];
 if (params.get('emptyLane')) workspaceFixture.items = workspaceFixture.items.filter(item => item.lane !== params.get('emptyLane'));
+
+
+const fixtureNotes = new Map<string, { id: string; title: string; content: string }>([['conclusion-note', {id:'conclusion-note',title:'长期上下文与用户回访',content:'已经保存的完整结论'}]]);
+const fixtureTodos = new Map<string, { id:string; title:string; status:'pending'|'completed'; dueOn:string|null }>([['linked-task',{id:'linked-task',title:'访谈验证长期上下文的价值',status:'pending',dueOn:'2026-10-15'}],['existing-task',{id:'existing-task',title:'整理项目验证结果',status:'pending',dueOn:null}]]);
+const noteReceipts = new Map<string,string>();
+const detailCase = params.get('details');
+if (detailCase && workspaceFixture.items.length) {
+  const finding = workspaceFixture.items.find(item=>item.id==='item-3');
+  if (finding) finding.details = {evidence:workspaceFixture.resources.slice(0,2).map((ref,index)=>({...ref,explanation:index?'对照相邻产品的长期使用路径。':'访谈记录提供了判断依据。',available:detailCase!=='unavailable',changed:detailCase==='changed'})),conclusionStatus:'tentative',conclusionNote: detailCase === 'empty' ? null : {id:'conclusion-note',title:'长期上下文与用户回访',version:'v1',available:detailCase!=='unavailable',changed:false},todoTitle:''};
+  const action = workspaceFixture.items.find(item=>item.id==='item-5');
+  if (action) {action.sourceItemId='item-3';action.sourceTitle=finding?.title;action.todoId=detailCase==='empty'?null:'linked-task';action.details={evidence:[],conclusionStatus:null,conclusionNote:null,todoTitle:'访谈验证长期上下文的价值'};}
+}
+function hydrateFixture() {
+  for (const item of workspaceFixture.items) {
+    if (item.todoId) {
+      const todo=fixtureTodos.get(item.todoId);
+      item.linkedTodo=todo ? {...todo,available:detailCase!=='unavailable',completedAt:todo.status==='completed'?now:null} : {id:item.todoId,title:item.details?.todoTitle || '',status:null,dueOn:null,completedAt:null,available:false};
+      item.status=todo?.status==='completed'?'done':'open';item.dueOn=todo?.dueOn || null;
+    } else item.linkedTodo=null;
+  }
+  workspaceFixture.openItemCount=workspaceFixture.items.filter(item=>item.lane!=='knowledge'&&['open','in_progress'].includes(item.status)&&item.linkedTodo?.available!==false).length;
+  workspaceFixture.completedItemCount=workspaceFixture.items.filter(item=>item.lane==='action'&&item.status==='done'&&item.linkedTodo?.available!==false).length;
+}
+hydrateFixture();
 
 const boardReceipts = new Map<string, { before: typeof workspaceFixture.items; afterVersion: number; hash: string; focusItemId: string | null }>();
 const listFixture = [
@@ -437,6 +464,15 @@ request.defaults.adapter = async (config) => {
     entryDismissed = true;
     return response(config, { dismissed: true });
   }
+  if (url === '/api/note/addNote') {
+    const input=typeof config.data==='string'?JSON.parse(config.data):config.data;
+    const id=noteReceipts.get(input.idempotencyKey)||crypto.randomUUID();
+    fixtureNotes.set(id,{id,title:input.title,content:input.content});noteReceipts.set(input.idempotencyKey,id);
+    return response(config,{id});
+  }
+  if (url === '/api/note/queryNoteTree') return response(config,{items:[],maxDepth:10});
+  if (url === '/api/bookmark/queryTagList') return response(config,[]);
+  if (url === '/api/note/batchAddTags') return response(config,{});
   if (url === '/api/search/global') {
     const count = Number(params.get('materials')) || (state === 'empty' ? 0 : 1);
     const body = typeof config.data === 'string' ? JSON.parse(config.data) : config.data || {};
@@ -447,6 +483,8 @@ request.defaults.adapter = async (config) => {
       description: 'Fixture',
       tags: [],
     }));
+    if (body.types?.includes('note')) all.push(...[...fixtureNotes.values()].map(note=>({type:'note',id:note.id,title:note.title,description:'Fixture',tags:[]})));
+    if (body.types?.includes('todo')) all.push(...[...fixtureTodos.values()].map(todo=>({type:'todo',id:todo.id,title:todo.title,description:'Fixture',tags:[]})));
     const matches = all.filter(
       (item) =>
         (!body.types?.length || body.types.includes(item.type)) &&
@@ -462,7 +500,7 @@ request.defaults.adapter = async (config) => {
       groups: [],
       total: matches.length,
       typeTotals: Object.fromEntries(
-        ['note', 'bookmark', 'file'].map((type) => [type, matches.filter((item) => item.type === type).length]),
+        ['note', 'bookmark', 'file', 'todo'].map((type) => [type, matches.filter((item) => item.type === type).length]),
       ),
       hasMore,
       nextCursor:
@@ -530,6 +568,18 @@ request.defaults.adapter = async (config) => {
         const receipt=boardReceipts.get(command.undoId);
         if(!receipt||receipt.afterVersion!==version)return response(config,{code:'BOARD_VERSION_CONFLICT'},409);
         workspaceFixture.items=structuredClone(receipt.before);
+      } else if (command.type==='details') {
+        if(params.get('linkFailure')==='1' && command.details.conclusionNoteId && fixtureNotes.has(command.details.conclusionNoteId)) return response(config,{code:'BOARD_OPERATION_FAILED'},500);
+        const target=workspaceFixture.items.find(item=>item.id===command.itemId)!;
+        Object.assign(target, {title:command.title,content:command.content,...(command.dueOn!==undefined?{dueOn:command.dueOn}:{}),todoId:command.todoId,details:{evidence:command.details.evidence.map((ref:any)=>{
+          const resource=workspaceFixture.resources.find(item=>item.type===ref.type&&item.resourceId===ref.resourceId);
+          const old=target.details?.evidence.find(item=>item.type===ref.type&&item.resourceId===ref.resourceId);
+          return {...resource,...old,...ref,refresh:undefined,available:old?.available!==false,changed:ref.refresh?false:old?.changed||false};
+        }),conclusionStatus:command.details.conclusionStatus,conclusionNote:command.details.conclusionNoteId?{id:command.details.conclusionNoteId,title:fixtureNotes.get(command.details.conclusionNoteId)?.title||'结论笔记',version:'v1',available:true}:null,todoTitle:fixtureTodos.get(command.todoId)?.title||''},updatedAt:new Date().toISOString()});
+        focusItemId=target.id;
+      } else if(command.type==='createTodo') {
+        const target=workspaceFixture.items.find(item=>item.id===command.itemId)!;
+        const id=crypto.randomUUID();fixtureTodos.set(id,{id,title:target.title,status:'pending',dueOn:target.dueOn});target.todoId=id;focusItemId=target.id;
       } else {
         const applied=applyBoardOperation(workspaceFixture.items,command,{id:crypto.randomUUID(),now:new Date().toISOString()});
         workspaceFixture.items=applied.items;focusItemId=applied.focusItemId;
@@ -537,8 +587,7 @@ request.defaults.adapter = async (config) => {
       workspaceFixture.boardVersion=version+1;
       boardReceipts.set(requestId,{before,afterVersion:version+1,hash,focusItemId});
     }
-    workspaceFixture.openItemCount=workspaceFixture.items.filter(x=>x.lane!=='knowledge'&&['open','in_progress'].includes(x.status)).length;
-    workspaceFixture.completedItemCount=workspaceFixture.items.filter(x=>x.lane==='action'&&x.status==='done').length;
+    hydrateFixture();
     const receipt=boardReceipts.get(requestId)!;
     return response(config,{workspace:JSON.parse(JSON.stringify({...workspaceFixture,items:workspaceFixture.items.filter(x=>x.status!=='archived')})),undoId:command.type!=='undo'&&receipt.afterVersion===workspaceFixture.boardVersion?requestId:null,focusItemId:receipt.focusItemId});
   }
@@ -567,7 +616,12 @@ request.defaults.adapter = async (config) => {
     if (input.nextStep) workspaceFixture.nextStep = input.nextStep;
     return response(config, JSON.parse(JSON.stringify(workspaceFixture)), 201);
   }
-  if (url === '/api/toolbox/workspaces/visual-workspace') return response(config, workspaceFixture);
+  if (url === '/api/toolbox/workspaces/visual-workspace/resources') {
+    const input=typeof config.data==='string'?JSON.parse(config.data):config.data;
+    for (const ref of input.resourceRefs || []) if (!workspaceFixture.resources.some(row=>row.type===ref.type&&row.resourceId===ref.id)) workspaceFixture.resources.push({id:workspaceFixture.resources.length+1,type:ref.type,resourceId:ref.id,title:fixtureNotes.get(ref.id)?.title||ref.id,version:'v1',available:true,createdAt:now});
+    return response(config,workspaceFixture);
+  }
+  if (url === '/api/toolbox/workspaces/visual-workspace') {hydrateFixture();return response(config,JSON.parse(JSON.stringify(workspaceFixture)));}
   if (url.startsWith('/api/toolbox/workspaces/')) return response(config, workspaceFixture);
   if (url === '/api/toolbox/workspaces' && String(config.method).toLowerCase() === 'post') {
     return response(config, workspaceFixture, 201);
@@ -622,7 +676,8 @@ const router = createRouter({
   history: createMemoryHistory(),
   routes: [
     { path: '/toolbox/task/:jobId', component: ToolboxTask },
-    { path: '/noteLibrary/:noteId', component: { render: () => h('p', { 'data-fixture-destination': 'summaryNote' }, 'Saved summary note') } },
+    { path: '/noteLibrary/:noteId', component: { render: () => h('div', [h('h2', fixtureNotes.get(String(router.currentRoute.value.params.noteId))?.title || 'Saved summary note'), h('p',fixtureNotes.get(String(router.currentRoute.value.params.noteId))?.content || ''),h(BButton,{onClick:()=>router.back()},()=> '返回项目')]) } },
+    {path:'/inbox',component:{setup(){const revision=ref(0);return()=>{void revision.value;const task=fixtureTodos.get(String(router.currentRoute.value.query.todoId));return h('div',[h('p','待办目标页 · 虚构测试数据'),h('h2',task?.title),h('p',task?.status==='completed'?'已完成':'未完成'),h(BButton,{onClick:()=>{if(task)task.status='completed';hydrateFixture();revision.value++;}},()=> '完成待办'),h(BButton,{onClick:()=>router.back()},()=> '返回项目')]);};}}},
     { path: '/toolbox', name: 'toolboxHome', meta: { mobileShell: 'toolbox' }, component: ToolboxHome },
     {
       path: '/ai-usage',
@@ -675,6 +730,7 @@ const app = createApp({
                   )
                 : h(RouterView),
         h(ResourceProjectHost),
+        h(SaveAsNoteHost),
       ]);
   },
 });

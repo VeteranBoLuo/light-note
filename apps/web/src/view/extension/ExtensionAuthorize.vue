@@ -136,7 +136,7 @@
       const redirectUrl = String(response?.data?.redirectUrl || '');
       if (response?.status !== 200 || !redirectUrl) {
         errorMessage.value = response?.msg || t('extensionAuthorize.failed');
-        if (response?.status === 401 || response?.status === 'visitor') openLogin();
+        if (response?.status === 401 || String(response?.status) === 'visitor') openLogin();
         return;
       }
       window.location.assign(redirectUrl);

@@ -79,6 +79,8 @@
 - Root 的 `/api/admin/ai-operations/*` 只把 `ai_executions` 与 `ai_provider_spans` 投影为平台治理读模型。actor 表示成本承担者，subject 只解释代操作或系统任务的目标；总览、趋势、模块、Provider、列表与详情必须共用同一筛选边界。总览和列表不返回内容载荷。仅 Root 本人详情可读取 `aiExecution/diagnostics.js` 白名单投影的入参摘要：书签识别 URL（移除账号密码、片段和非白名单查询参数）、是否提供当前页材料、枚举操作/详细程度、目标长度与检索类型。摘要在根 Execution 建立时保存，前置失败也可排查；历史记录保持 NULL，不回填。摘要随 Execution 一起导出、注销删除，不进入 Span、产品遥测或通用日志。详情继续禁止返回完整 Prompt、问题、正文、标题、资源 ID、模型回答和 Provider 原始错误；历史 `agent_logs` 不参与现行成本、质量或用户 360 统计。
 - 执行租约、规则版本、回收与历史修正必须可重放。历史修正默认 dry-run，只允许自动退款，不自动追扣。
 
+社区纯文本审核使用 internal-only `community.review_screen`，仅 `community_review_worker` 可调用且只允许 `system` 计费。完整标题与正文作为不可信材料输入，模型不得执行其中指令或访问链接；输出限定为通过或交人工。审核结果由领域 Worker 在现有发布事务中应用，Skill 本身不执行写操作。动作在管理端 AI 运行中心可追溯，正文不进入用量遥测；预算与任务边界见[社区纯文本自动审核](./architecture.md#社区纯文本自动审核)。
+
 ## 开关、隐私与遥测
 
 - `/ai/skills/config` 由前端统一短时缓存并合并并发读取；各组件不得轮询或维护第二份开关。

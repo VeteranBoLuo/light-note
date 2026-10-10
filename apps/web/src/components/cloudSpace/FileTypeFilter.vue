@@ -1,6 +1,11 @@
 <template>
   <div class="filter-container">
-    <BPopover v-model:open="showFilterMenu" trigger="click" placement="bottom-right">
+    <BPopover
+      v-model:open="showFilterMenu"
+      trigger="click"
+      placement="bottom-right"
+      overlay-class-name="cloud-file-type-filter-popover"
+    >
       <b-button
         class="filter-button"
         :class="{ 'filter-button--active': showFilterMenu || cloud.pendingOnly }"
@@ -122,6 +127,12 @@
 </script>
 
 <style scoped>
+  /* 浮层 Teleport 到 body，限定此筛选菜单并覆盖通用浮层的深色主题外壳。 */
+  :global(html .b-popover-panel.cloud-file-type-filter-popover) {
+    border-color: var(--surface-border-color);
+    box-shadow: var(--action-menu-shadow);
+  }
+
   .filter-section-heading {
     display: flex;
     align-items: center;

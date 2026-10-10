@@ -3,7 +3,13 @@ import { readFile } from 'node:fs/promises';
 import { performance } from 'node:perf_hooks';
 import mysql from 'mysql2/promise';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { searchOrderKeys, buildSearchSeek, takeSearchSeekRows, searchSeekScope } from './searchSeekPagination.js';
+import {
+  searchOrderKeys,
+  buildSearchSeek,
+  takeSearchSeekRows,
+  searchSeekScope,
+  searchSeekIndexHint,
+} from './searchSeekPagination.js';
 const pool = vi.hoisted(() => ({ query: vi.fn() }));
 vi.mock('../db/index.js', () => ({ default: pool }));
 vi.mock('./common.js', () => ({
@@ -211,11 +217,18 @@ describe.skipIf(!socket)('search seek ordering (isolated MySQL)', () => {
           pageSize: 40,
         });
         const offsetSql = `SELECT CAST(t.id AS CHAR) id ${from} ORDER BY t.create_time DESC,t.id DESC LIMIT 40 OFFSET 25000`;
-        const seekSql = `SELECT CAST(t.id AS CHAR) id ${from} ${seek.where} ORDER BY t.create_time DESC,t.id DESC ${seek.limitSql}`;
+        const indexHint = searchSeekIndexHint(config.table === 'files' ? 'file' : 'bookmark', {
+          sort: 'updated',
+          orderedSeekScope: 'scale',
+          cursorSeek: { v: 1 },
+        });
+        const seekSql = `SELECT CAST(t.id AS CHAR) id ${from.replace(`t WHERE`, `t ${indexHint} WHERE`)} ${seek.where} ORDER BY t.create_time DESC,t.id DESC ${seek.limitSql}`;
+        // 迁移前没有新索引，用同一游标谓词测量旧 Schema；迁移后验证实际生产查询。
+        const legacySql = seekSql.replace(indexHint, '');
         const params = ['scale', ...seek.whereParams, ...seek.limitParams];
         await indexDb.query(`ANALYZE TABLE ${config.table}`);
-        const legacy = await measure(seekSql, params);
-        const [legacyPlan] = await indexDb.query(`EXPLAIN ${seekSql}`, params);
+        const legacy = await measure(legacySql, params);
+        const [legacyPlan] = await indexDb.query(`EXPLAIN ${legacySql}`, params);
         queries.push({ config, offsetSql, seekSql, params, legacyPlan, legacy });
       }
       // Execute the repository migration twice, preserving data and all pre-existing indexes.
@@ -276,7 +289,8 @@ describe.skipIf(!socket)('search seek ordering (isolated MySQL)', () => {
   });
   it('round-trips handler cursors, preserves legacy offsets and excludes internal keys from results', async () => {
     await db.query(`CREATE TABLE bookmark (id BIGINT PRIMARY KEY, user_id VARCHAR(36), del_flag INT,
-      name VARCHAR(255), description TEXT, url VARCHAR(255), create_time DATETIME(6), is_top INT, sort INT)`);
+      name VARCHAR(255), description TEXT, url VARCHAR(255), create_time DATETIME(6), is_top INT, sort INT,
+      KEY idx_bookmark_search_time(user_id,del_flag,create_time,id))`);
     await db.query(`CREATE TABLE tag (id VARCHAR(36), user_id VARCHAR(36), name VARCHAR(255), del_flag INT)`);
     await db.query(
       `CREATE TABLE resource_tag_relations (tag_id VARCHAR(36), user_id VARCHAR(36), resource_id VARCHAR(36), resource_type VARCHAR(20))`,

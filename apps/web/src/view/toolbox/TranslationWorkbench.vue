@@ -474,8 +474,8 @@
     uncertain = ref(false),
     error = ref('');
   let quoteRequestId = crypto.randomUUID(),
-    jobRequestId = crypto.randomUUID(),
     disposed = false;
+  let jobRequestId: string = crypto.randomUUID();
   let preparedInput: ToolboxInput | null = null;
   const current = () => !disposed && owner === buildNoteDetailRequestScope(user);
   const locked = computed(() => busy.value || uncertain.value || recordLoading.value);

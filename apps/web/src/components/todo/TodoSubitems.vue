@@ -56,7 +56,7 @@
           v-if="editable !== false && item.status !== 'completed'"
           class="todo-subitems__edit"
           size="small"
-          :disabled="disabled || pending || item.status === 'completed'"
+          :disabled="disabled || pending"
           @click="emit('edit')"
         >
           <SvgIcon :src="icon.card_edit" size="15" aria-hidden="true" />

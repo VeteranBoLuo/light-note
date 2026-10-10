@@ -9,6 +9,15 @@ import { AI_SKILL_NOTE_TRANSFORM_MAX_TEXT_CHARS } from '../aiSkill/limits.js';
 import { resolveRequestFieldPolicy } from './requestFieldPolicy.js';
 
 describe('请求字段安全策略', () => {
+  it('项目卡片只对有界正文与证据解释放行自由文本，不豁免来源身份或超限内容', () => {
+    const context = {method:'POST',path:'/api/toolbox/workspaces/project/board',body:{command:{title:'SELECT 研究问题',content:'<script> 作为研究引用',details:{evidence:[{resourceId:'source',explanation:'SELECT 与脚本只是证据中的文字'}]}}}};
+    expect(resolveRequestFieldPolicy(context,'body.command.details.evidence.0.explanation')).toMatchObject({maxSize:1000,trustedEnvelope:true,skipSignatureRules:'*'});
+    expect(resolveRequestFieldPolicy(context,'body.command.content')).toMatchObject({maxSize:5000,trustedEnvelope:true});
+    expect(resolveRequestFieldPolicy(context,'body.command.details.evidence.0.resourceId')).toBeNull();
+    context.body.command.details.evidence[0].explanation='x'.repeat(1001);
+    expect(resolveRequestFieldPolicy(context,'body.command.details.evidence.0.explanation')).toMatchObject({trustedEnvelope:false,overBudget:true});
+    expect(resolveRequestFieldPolicy({...context,method:'GET'},'body.command.content')).toBeNull();
+  });
   it('整理选择数组使用业务条目数预算且保留签名规则', () => {
     const context = {
       method: 'POST',

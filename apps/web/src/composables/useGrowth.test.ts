@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   getGrowthTasks: vi.fn(),
   claimGrowthTask: vi.fn(),
   checkin: vi.fn(),
+  useProtectCard: vi.fn(),
   getInventory: vi.fn(),
   getDashboard: vi.fn(),
   getClaimable: vi.fn(),
@@ -25,6 +26,7 @@ vi.mock('@/api/growthApi.ts', () => ({
     getGrowthTasks: mocks.getGrowthTasks,
     claimGrowthTask: mocks.claimGrowthTask,
     checkin: mocks.checkin,
+    useProtectCard: mocks.useProtectCard,
     getInventory: mocks.getInventory,
     getDashboard: mocks.getDashboard,
     getClaimable: mocks.getClaimable,
@@ -443,5 +445,23 @@ describe('useGrowth load', () => {
 
     expect(useGrowth().recap.value).toEqual(refreshedData);
     expect(useGrowth().recapLoading.value).toBe(false);
+  });
+});
+
+describe('补签卡库存同步', () => {
+  it('补签成功后同步已加载商店库存，满仓兑换按钮可恢复', async () => {
+    resetGrowth();
+    const api = useGrowth();
+    mocks.getMyGrowth.mockResolvedValue({ status: 200, data: { ...growth(7), points: 600, protectCards: 3 } });
+    await api.load(true);
+    api.shop.value = { points: 600, protectCards: 3 } as NonNullable<typeof api.shop.value>;
+    mocks.useProtectCard.mockResolvedValue({
+      status: 200,
+      data: { growth: { ...growth(7), points: 600, protectCards: 2 } },
+    });
+    mocks.getInventory.mockResolvedValue({ status: 200, data: { items: [] } });
+    await api.useProtectCard('20261009');
+    expect(api.shop.value?.protectCards).toBe(2);
+    expect(api.growth.value?.protectCards).toBe(2);
   });
 });

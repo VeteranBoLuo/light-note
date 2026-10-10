@@ -63,6 +63,7 @@
             :key="item.id"
             :item="item"
             :hovered="hoveredId === item.id"
+            :selected="detailId === item.id"
             :readonly="readonly"
             :type-label="laneText(item.lane)"
             :disabled="readonly || busy || workspace.status === 'archived'"
@@ -85,6 +86,22 @@
         >
       </section>
     </div>
+    <WorkspaceItemDetail
+      v-if="detailItem"
+      ref="detailRef"
+      :key="detailItem.id"
+      :item="detailItem"
+      :workspace="workspace"
+      :mobile="mobile"
+      :readonly="readonly || workspace.status === 'archived'"
+      :busy="busy"
+      :error="error"
+      :commit="saveDetail"
+      @close="detailId = null"
+      @select="detailId = $event"
+      @derive="deriveFromDetail"
+      @source="sourceFromDetail"
+    />
     <WorkspaceItemEditor
       v-if="editor"
       :key="editor.key"
@@ -119,7 +136,9 @@
       :source-title="sourceView.sourceTitle"
       :state="stateText(sourceView) || t('toolbox.board.notStarted')"
       :initial="{ title: sourceView.title, content: sourceView.content, dueOn: sourceView.dueOn }"
-      :readonly="readonly || sourceView.status === 'archived'"
+      :readonly="
+        readonly || workspace.status === 'archived' || sourceView.status === 'archived' || Boolean(sourceView.todoId)
+      "
       :busy="busy"
       :error="error"
       @save="saveSource"
@@ -148,8 +167,26 @@
   import icon from '@/config/icon';
   import WorkspaceBoardCard from './WorkspaceBoardCard.vue';
   import WorkspaceItemEditor from './WorkspaceItemEditor.vue';
+  import WorkspaceItemDetail from './WorkspaceItemDetail.vue';
   const props = defineProps<{ workspace: ToolboxWorkspace; mobile: boolean; readonly?: boolean }>();
-  const emit = defineEmits<{ updated: [workspace: ToolboxWorkspace] }>();
+  const emit = defineEmits<{ updated: [workspace: ToolboxWorkspace]; 'detail-open': [open: boolean] }>();
+  const detailId = ref<string | null>(null);
+  const detailRef = ref<InstanceType<typeof WorkspaceItemDetail> | null>(null);
+  const detailItem = computed(() =>
+    props.workspace.items.find((item) => item.id === detailId.value && item.status !== 'archived'),
+  );
+  watch(detailItem, (item) => emit('detail-open', Boolean(item)));
+  const saveDetail = (command: BoardCommand, version?: number) => send(command, false, version);
+  function deriveFromDetail() {
+    const item = detailItem.value;
+    detailId.value = null;
+    if (item) conversion(item, 'action');
+  }
+  function sourceFromDetail() {
+    const item = detailItem.value;
+    detailId.value = null;
+    if (item) void showSource(item);
+  }
   const { t } = useI18n();
   const mobileLane = defineModel<BoardLane>('lane', { default: 'inbox' });
   const dragGroup = computed(() => ({ name: 'workspace-items', pull: !props.mobile, put: !props.mobile }));
@@ -195,13 +232,40 @@
       if (alive) hoverFrame = requestAnimationFrame(sample);
     });
   }
-  onMounted(() => window.addEventListener('scroll', refreshHover, true));
+  onMounted(() => {
+    window.addEventListener('scroll', refreshHover, true);
+    window.addEventListener('focus', refreshLinkedState);
+    document.addEventListener('visibilitychange', refreshLinkedState);
+  });
+  let refreshing = false;
+  async function refreshLinkedState() {
+    if (!alive || busy.value || refreshing || document.visibilityState === 'hidden') return;
+    refreshing = true;
+    const workspaceId = props.workspace.id;
+    try {
+      const fresh = await fetchToolboxWorkspace(workspaceId);
+      if (
+        alive &&
+        !busy.value &&
+        props.workspace.id === workspaceId &&
+        (fresh.boardVersion || 0) >= (props.workspace.boardVersion || 0)
+      )
+        emit('updated', fresh);
+    } catch {
+      /* Keep the visible board; an explicit mutation still validates its version. */
+    } finally {
+      refreshing = false;
+    }
+  }
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   let alive = true;
   onBeforeUnmount(() => {
     alive = false;
     cancelAnimationFrame(hoverFrame);
     window.removeEventListener('scroll', refreshHover, true);
+    window.removeEventListener('focus', refreshLinkedState);
+    document.removeEventListener('visibilitychange', refreshLinkedState);
+    emit('detail-open', false);
   });
   type Editor = {
     key: string;
@@ -238,12 +302,21 @@
     return t(`toolbox.workspace.template.${props.workspace.kind}.lanes.${lane}.${key}`);
   }
   function stateText(item: ToolboxWorkspaceItem) {
+    if (item.todoId)
+      return t(
+        item.linkedTodo?.available === false
+          ? 'toolbox.itemDetail.unavailable'
+          : item.status === 'done'
+            ? 'toolbox.itemDetail.completed'
+            : 'toolbox.itemDetail.pending',
+      );
     if (item.lane === 'knowledge') return bt('settled');
     if (item.status === 'done') return item.lane === 'inbox' ? t('toolbox.board.legacy') : bt('finished');
     if (item.status === 'in_progress') return bt(item.lane === 'inbox' ? 'progress' : 'executing');
     return '';
   }
   function primary(item: ToolboxWorkspaceItem) {
+    if (item.todoId) return { key: 'edit', label: t('toolbox.itemDetail.viewAction') };
     let key =
       item.lane === 'knowledge'
         ? 'convert:action'
@@ -282,7 +355,12 @@
       keys.push('reopen');
     keys.push('up', 'down', 'archive');
     return keys
-      .filter((key) => key !== primary(item).key)
+      .filter(
+        (key) =>
+          key !== primary(item).key &&
+          (!item.todoId || !['finish', 'reopen', 'convert:inbox'].includes(key)) &&
+          (!item.todoId || item.status === 'done' || key !== 'convert:knowledge'),
+      )
       .map((key) => ({
         key,
         label: label(item, key),
@@ -294,6 +372,7 @@
       }));
   }
   function create(lane: BoardLane) {
+    if (outsideDetail(() => create(lane))) return;
     error.value = '';
     editor.value = {
       key: crypto.randomUUID(),
@@ -304,17 +383,20 @@
   }
   function edit(item: ToolboxWorkspaceItem) {
     error.value = '';
-    editor.value = {
-      key: crypto.randomUUID(),
-      title: props.readonly ? t('toolbox.project.itemDetails') : t('common.edit'),
-      command: { type: 'edit', itemId: item.id },
-      item,
-      initial: { title: item.title, content: item.content, dueOn: item.dueOn },
-    };
+    if (detailItem.value && detailId.value !== item.id)
+      detailRef.value?.beforeLeave(() => {
+        detailId.value = item.id;
+      });
+    else detailId.value = item.id;
   }
   function conversion(item: ToolboxWorkspaceItem, lane: BoardLane, targetIndex?: number) {
+    if (outsideDetail(() => conversion(item, lane, targetIndex))) return;
     const mode = boardConversion(item.lane, lane);
     if (!mode) return;
+    if (item.todoId && (lane !== 'knowledge' || item.status !== 'done')) {
+      edit(item);
+      return;
+    }
     const command: BoardCommand = {
       type: 'convert',
       itemId: item.id,
@@ -355,6 +437,7 @@
       edit(item);
       return;
     }
+    if (outsideDetail(() => action(item, key))) return;
     if (key.startsWith('convert:')) {
       conversion(item, key.split(':')[1] as BoardLane);
       return;
@@ -396,23 +479,35 @@
   async function save(data: { title: string; content: string; dueOn: string | null }) {
     if (editor.value) await send({ ...editor.value.command, ...data }, true);
   }
-  async function send(command: BoardCommand, closeEditor = false) {
+  function outsideDetail(next: () => void) {
+    if (!detailItem.value) return false;
+    detailRef.value?.beforeLeave(() => {
+      detailId.value = null;
+      next();
+    });
+    return true;
+  }
+  async function send(
+    command: BoardCommand,
+    closeEditor = false,
+    expectedVersion = props.workspace.boardVersion || 0,
+  ): Promise<ToolboxWorkspace | undefined> {
     if (props.readonly) return;
     if (busy.value || !alive) return;
     const owner = props.workspace.id;
-    const fingerprint = JSON.stringify(command);
+    const fingerprint = JSON.stringify({ command, expectedVersion });
     if (!pending || pending.fingerprint !== fingerprint)
       pending = {
         fingerprint,
         requestId: crypto.randomUUID(),
-        expectedVersion: props.workspace.boardVersion || 0,
+        expectedVersion,
         command,
       };
     busy.value = true;
     error.value = '';
     try {
       const result = await operateToolboxBoard(owner, pending);
-      if (!alive) return;
+      if (!alive || props.workspace.id !== owner) return;
       pending = null;
       undoId.value = result.undoId;
       emit('updated', result.workspace);
@@ -425,9 +520,19 @@
         await nextTick();
         document.querySelector(`[data-item-id="${focus.id}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'auto' });
       }
+      return result.workspace;
     } catch (e: any) {
       if (!alive) return;
-      error.value = t('toolbox.board.failed');
+      error.value = t(
+        [
+          'BOARD_REFERENCE_UNAVAILABLE',
+          'BOARD_TODO_AUTHORITY',
+          'BOARD_TODO_NOT_COMPLETED',
+          'BOARD_TODO_ALREADY_BOUND',
+        ].includes(e?.code)
+          ? `toolbox.itemDetail.errors.${e.code}`
+          : 'toolbox.board.failed',
+      );
       if (e?.code === 'BOARD_VERSION_CONFLICT') {
         pending = null;
         undoId.value = null;
@@ -471,7 +576,11 @@
   }
   async function saveSource(data: { title: string; content: string; dueOn: string | null }) {
     if (!sourceView.value) return;
-    await send({ type: 'edit', itemId: sourceView.value.id, ...data });
+    await send({
+      type: 'edit',
+      itemId: sourceView.value.id,
+      ...data,
+    });
     if (!error.value) sourceView.value = null;
   }
   async function showSource(item: ToolboxWorkspaceItem) {
@@ -480,7 +589,8 @@
       mobileLane.value = local.lane;
       await nextTick();
       document.querySelector(`[data-item-id="${local.id}"]`)?.scrollIntoView({ block: 'nearest' });
-      sourceView.value = local;
+      if (sourceView.value || editor.value) sourceView.value = local;
+      else edit(local);
       return;
     }
     try {

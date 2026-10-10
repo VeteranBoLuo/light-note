@@ -437,7 +437,6 @@
     DRAWING_STROKE_WIDTH_RANGE,
     DRAWING_STROKE_WIDTHS,
     createEmptyDrawingScene,
-    parseDrawingScene,
     serializeDrawingScene,
     upgradeDrawingScene,
     type DrawingColor,
@@ -445,6 +444,7 @@
     type DrawingFillElement,
     type DrawingFontSize,
     type DrawingScene,
+    type DrawingCurrentScene,
     type DrawingShapeElement,
     type DrawingShapeType,
     type DrawingStrokeElement,
@@ -525,7 +525,7 @@
   const pageRef = ref<HTMLElement | null>(null);
   const canvasRef = ref<HTMLCanvasElement | null>(null);
   const textInputRef = ref<{ focus?: () => void } | null>(null);
-  const scene = shallowRef<DrawingScene>(createEmptyDrawingScene());
+  const scene = shallowRef<DrawingCurrentScene>(createEmptyDrawingScene());
   const tool = ref<DrawingTool>('pen');
   const activeColor = ref<DrawingColor>(DRAWING_COLORS[0]);
   const strokeWidth = ref<DrawingStrokeWidth>(DRAWING_STROKE_WIDTHS[1]);
@@ -1521,7 +1521,7 @@
       emit('update:content', serialized);
       return true;
     } catch (error) {
-      if (snapshot) scene.value = parseDrawingScene(snapshot);
+      if (snapshot) scene.value = upgradeDrawingScene(snapshot);
       message.error(error instanceof Error ? error.message : t('note.drawingInvalid'));
       scheduleDraw();
       return false;
@@ -2012,7 +2012,7 @@
         // 指针捕获可能已由浏览器释放；仍需继续清理本地手势状态。
       }
     }
-    if (mutationSnapshot) scene.value = parseDrawingScene(mutationSnapshot);
+    if (mutationSnapshot) scene.value = upgradeDrawingScene(mutationSnapshot);
     if (cameraSnapshot) {
       cameraX.value = cameraSnapshot.cameraX;
       cameraY.value = cameraSnapshot.cameraY;
@@ -2184,7 +2184,7 @@
   function applyHistory(serialized: string, targetStack: string[]) {
     targetStack.push(serializeDrawingScene(scene.value));
     trimHistory(targetStack);
-    scene.value = parseDrawingScene(serialized);
+    scene.value = upgradeDrawingScene(serialized);
     selectedIds.value = [];
     textLayoutCache.clear();
     lastEmittedContent = serializeDrawingScene(scene.value);
@@ -2393,7 +2393,7 @@
           format: extension,
           mimeType,
         });
-        if (!result.ok) message.error(result.message || t('noteDetail.exportFailed'));
+        if (result.ok === false) message.error(result.message || t('noteDetail.exportFailed'));
         else recordExportSuccess();
         return;
       }

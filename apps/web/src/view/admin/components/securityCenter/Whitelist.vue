@@ -69,8 +69,10 @@
     >
       <div class="whitelist-modal">
         <div class="whitelist-tabs">
-          <b-button :type="activeAddType === 'user' ? 'primary' : ''" @click="switchAddType('user')">用户</b-button>
-          <b-button :type="activeAddType === 'ip' ? 'primary' : ''" @click="switchAddType('ip')">IP</b-button>
+          <b-button :type="activeAddType === 'user' ? 'primary' : undefined" @click="switchAddType('user')"
+            >用户</b-button
+          >
+          <b-button :type="activeAddType === 'ip' ? 'primary' : undefined" @click="switchAddType('ip')">IP</b-button>
         </div>
 
         <div v-if="activeAddType === 'user'" class="whitelist-user-modal">

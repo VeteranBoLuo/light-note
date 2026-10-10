@@ -1093,7 +1093,7 @@
           isCurrent: current,
         });
         if (!current()) return;
-        if (!result.ok) {
+        if (result.ok === false) {
           error.value = result.message || t('noteExportSettings.failed');
           return;
         }

@@ -123,16 +123,13 @@
   );
 
   const emit = defineEmits<{
-    'update:keyword': [value: string];
-    submit: [];
-    back: [];
-    create: [];
-    batch: [];
-    sort: [];
-    filter: [];
-    cancelSelection: [];
-    completeSelected: [];
-    deleteSelected: [];
+    (event: 'update:keyword', value: string): void;
+    (event: 'submit'): void;
+    (event: 'back'): void;
+    (event: 'create' | 'batch' | 'sort' | 'filter'): void;
+    (event: 'cancelSelection'): void;
+    (event: 'completeSelected'): void;
+    (event: 'deleteSelected'): void;
   }>();
 
   const { t } = useI18n();

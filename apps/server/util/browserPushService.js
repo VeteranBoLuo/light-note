@@ -145,7 +145,7 @@ export async function expandPushOutbox(db = pool, env = process.env) {
         (notification_id, subscription_id, generation, expires_at)
         SELECT n.id, s.id, s.generation, DATE_ADD(n.browser_push_created_at, INTERVAL 24 HOUR)
         FROM notification n JOIN browser_push_subscriptions s
-          ON s.user_id = n.user_id COLLATE utf8mb4_general_ci
+          ON s.user_id = CONVERT(n.user_id USING utf8mb4) COLLATE utf8mb4_general_ci
         WHERE n.id = ? AND s.active = 1 AND s.enabled_at <= n.browser_push_created_at
           AND n.browser_push_created_at > DATE_SUB(NOW(6), INTERVAL 24 HOUR)
           AND n.del_flag = 0 AND n.recalled = 0
@@ -192,13 +192,20 @@ export async function processNextPush({ db = pool, send = sendWebPush, env = pro
   let status = 'cancelled',
     code = null;
   try {
-    const [[subscription]] = await db.query(
-      `SELECT s.*, u.preferences AS push_preferences, JSON_UNQUOTE(JSON_EXTRACT(u.preferences, '$.lang')) AS preferred_locale FROM browser_push_subscriptions s
-      JOIN user u ON u.id COLLATE utf8mb4_general_ci = s.user_id
-        AND u.del_flag = 0 AND u.role <> 'visitor'
+    let [[subscription]] = await db.query(
+      `SELECT s.* FROM browser_push_subscriptions s
       WHERE s.id = ? AND s.generation = ? AND s.active = 1`,
       [job.subscription_id, job.generation],
     );
+    if (subscription) {
+      // 历史 user.id 与推送表可能异构；按参数查主键，避免转换索引列后扫描所有账号。
+      const [[owner]] = await db.query(
+        `SELECT preferences AS push_preferences, JSON_UNQUOTE(JSON_EXTRACT(preferences, '$.lang')) AS preferred_locale
+         FROM user WHERE id = ? AND del_flag = 0 AND role <> 'visitor'`,
+        [subscription.user_id],
+      );
+      subscription = owner ? { ...subscription, ...owner } : undefined;
+    }
     const huawei = isHuaweiEndpoint(subscription?.endpoint);
     const visible = huawei
       ? `del_flag = 0 AND recalled = 0 AND ${COMMUNITY_CHAT_TARGETED_NOTIFICATION_SQL} AND ${feedNotificationVisibleSql(await communityFeedSchemaReady(db).catch(() => false))}`

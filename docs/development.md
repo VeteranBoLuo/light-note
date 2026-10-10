@@ -248,7 +248,7 @@ cd apps/android
 ### 自动验证
 
 - 核心数据库行为：CI 的独立 MySQL 5.7 Job 执行 `pnpm --filter server test:mysql`，覆盖笔记保存/版本冲突、上传并发、目录排序与运营 SQL；缺少连接、测试缺失或跳过均失败。本地可将 `LIGHTNOTE_TEST_MYSQL_SOCKET` 指向 `/tmp` 下以 `--skip-networking` 启动的专用 MySQL 5.7/8 实例，测试只创建和删除随机命名的测试库，不读取项目 `.env`。普通 `pnpm test` 仍允许跳过这些外部数据库用例；需要历史 Schema 与基线文件的性能对照实验不属于此门禁。
-- 前端：至少运行受影响测试及 `pnpm typecheck` 或 `pnpm build:web`。
+- 前端：至少运行受影响测试及 `pnpm typecheck` 或 `pnpm build:web`。Web 类型门禁统一使用 `vue-tsc --noEmit --skipLibCheck`，覆盖 `.ts` 与 Vue SFC 的脚本、模板和组件契约；构建与预览构建复用同一 `typecheck` 脚本，不以普通 `tsc` 替代。
 - 后端：至少运行语法/受影响测试；涉及 Schema 时运行只读门禁。
 - AI：运行协议、Registry、模型访问与受影响 Skill 测试，不用真实 Provider 代替确定性门禁。
 - 文档：检查链接、标题、重复职责、敏感信息与 `git diff --check`；纯文档改动不要求构建。

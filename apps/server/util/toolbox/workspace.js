@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import pool from '../../db/index.js';
 import { resolvePersonalKnowledgeResourceMetadata } from '../personalKnowledgeSearch.js';
 import { toolboxError } from './errors.js';
+import { readItemDetails, hydrateItemDetails, boardTodoJoin, boardOpenSql, boardDoneSql } from './itemDetails.js';
 
 export const TOOLBOX_WORKSPACE_KINDS = Object.freeze(['research', 'learning', 'writing']);
 export const TOOLBOX_WORKSPACE_STATUSES = Object.freeze(['active', 'paused', 'completed', 'archived']);
@@ -128,11 +129,11 @@ async function selectHomeWorkspaceSummary(database, ownerId, workspaceId) {
             (SELECT COUNT(*)
                FROM toolbox_workspace_resources resource
               WHERE resource.workspace_id = w.id AND resource.user_id = w.user_id) AS resource_count,
-            (SELECT COALESCE(SUM(item.lane <> 'knowledge' AND item.status IN ('open', 'in_progress')), 0)
-               FROM toolbox_workspace_items item
+            (SELECT COALESCE(SUM(${boardOpenSql()}), 0)
+               FROM toolbox_workspace_items item ${boardTodoJoin()}
               WHERE item.workspace_id = w.id AND item.user_id = w.user_id) AS open_item_count,
-            (SELECT COALESCE(SUM(item.lane = 'action' AND item.status = 'done'), 0)
-               FROM toolbox_workspace_items item
+            (SELECT COALESCE(SUM(${boardDoneSql()}), 0)
+               FROM toolbox_workspace_items item ${boardTodoJoin()}
               WHERE item.workspace_id = w.id AND item.user_id = w.user_id) AS completed_item_count
        FROM toolbox_workspaces w
       WHERE w.id = ? AND w.user_id = ?
@@ -155,6 +156,7 @@ function mapResource(row) {
 
 function mapItem(row) {
   return {
+    ...readItemDetails(row),
     id: String(row.id),
     sourceItemId: row.source_item_id || null,
     sourceTitle: row.source_title || '',
@@ -276,12 +278,12 @@ export async function listToolboxWorkspaces({ userId, kind, status, database = p
           GROUP BY workspace_id
        ) resources ON resources.workspace_id = w.id
        LEFT JOIN (
-         SELECT workspace_id,
-                SUM(lane <> 'knowledge' AND status IN ('open', 'in_progress')) AS open_item_count,
-                SUM(lane = 'action' AND status = 'done') AS completed_item_count
-           FROM toolbox_workspace_items
-          WHERE user_id = ?
-          GROUP BY workspace_id
+         SELECT item.workspace_id,
+                SUM(${boardOpenSql()}) AS open_item_count,
+                SUM(${boardDoneSql()}) AS completed_item_count
+           FROM toolbox_workspace_items item ${boardTodoJoin()}
+          WHERE item.user_id = ?
+          GROUP BY item.workspace_id
        ) items ON items.workspace_id = w.id
       WHERE w.user_id = ? ${workspaceKind ? 'AND w.kind = ?' : ''} ${statusSql}
       ORDER BY FIELD(w.status, 'active', 'paused', 'completed', 'archived'), w.updated_at DESC
@@ -306,12 +308,12 @@ export async function listToolboxHomeWorkspaces({ userId, database = pool } = {}
           GROUP BY workspace_id
        ) resources ON resources.workspace_id = w.id
        LEFT JOIN (
-         SELECT workspace_id,
-                SUM(lane <> 'knowledge' AND status IN ('open', 'in_progress')) AS open_item_count,
-                SUM(lane = 'action' AND status = 'done') AS completed_item_count
-           FROM toolbox_workspace_items
-          WHERE user_id = ?
-          GROUP BY workspace_id
+         SELECT item.workspace_id,
+                SUM(${boardOpenSql()}) AS open_item_count,
+                SUM(${boardDoneSql()}) AS completed_item_count
+           FROM toolbox_workspace_items item ${boardTodoJoin()}
+          WHERE item.user_id = ?
+          GROUP BY item.workspace_id
        ) items ON items.workspace_id = w.id
       WHERE w.user_id = ? AND w.status <> 'archived'
       ORDER BY GREATEST(COALESCE(w.last_opened_at, w.create_time), COALESCE(w.updated_at, w.create_time)) DESC, w.id DESC
@@ -413,13 +415,18 @@ export async function getToolboxWorkspace({ userId, workspaceId, database = pool
       if (current) resource.title = current.title || resource.title;
     }
   }
-  const items = itemsResult[0].map(mapItem);
+  const items = await hydrateItemDetails(database, ownerId, itemsResult[0].map(mapItem));
   const sessions = sessionsResult[0].map(mapSession);
   return {
     ...mapWorkspace({
       ...workspace,
       resource_count: resources.length,
-      open_item_count: items.filter((item) => item.lane !== 'knowledge' && ['open', 'in_progress'].includes(item.status)).length,
+      open_item_count: items.filter(
+        (item) =>
+          item.lane !== 'knowledge' &&
+          ['open', 'in_progress'].includes(item.status) &&
+          item.linkedTodo?.available !== false,
+      ).length,
       completed_item_count: items.filter((item) => item.lane === 'action' && item.status === 'done').length,
     }),
     streakDays: calculateWorkspaceStreak(datesResult[0].map((row) => row.session_date)),
@@ -545,11 +552,27 @@ export async function removeToolboxWorkspaceResource({ userId, workspaceId, reso
 
 export async function createToolboxWorkspaceItem({ userId, workspaceId, input = {}, database = pool } = {}) {
   const { operateBoard } = await import('./board.js');
-  return (await operateBoard({ userId, workspaceId, database, legacy: true, input: { requestId: crypto.randomUUID(), command: { ...input, type: 'create' } } })).workspace;
+  return (
+    await operateBoard({
+      userId,
+      workspaceId,
+      database,
+      legacy: true,
+      input: { requestId: crypto.randomUUID(), command: { ...input, type: 'create' } },
+    })
+  ).workspace;
 }
 export async function updateToolboxWorkspaceItem({ userId, workspaceId, itemId, input = {}, database = pool } = {}) {
   const { operateBoard } = await import('./board.js');
-  return (await operateBoard({ userId, workspaceId, database, legacy: true, input: { requestId: crypto.randomUUID(), command: { ...input, itemId, type: 'edit' } } })).workspace;
+  return (
+    await operateBoard({
+      userId,
+      workspaceId,
+      database,
+      legacy: true,
+      input: { requestId: crypto.randomUUID(), command: { ...input, itemId, type: 'edit' } },
+    })
+  ).workspace;
 }
 
 export async function createToolboxWorkspaceSession({ userId, workspaceId, input = {}, database = pool } = {}) {

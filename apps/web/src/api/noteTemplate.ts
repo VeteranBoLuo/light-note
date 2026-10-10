@@ -2,7 +2,7 @@ import { apiBasePost } from '@/http/request';
 import type { NoteTemplateDetail, NoteTemplateSummary, NoteTemplateWritePayload } from '@/types/noteTemplate';
 
 export interface NoteTemplateApiResult<T> {
-  data: T;
+  data: T & { code?: string };
   status: number;
   msg?: string;
 }

@@ -195,7 +195,7 @@ const app = createApp({
   setup() {
     useResourceSelectionRuntime();
     return () => [
-      h(MobileAppShell, { enabled: bookmark.isMobile, showTopBar: bookmark.isMobile, showBottomNav: false }, () =>
+      h(MobileAppShell, { enabled: bookmark.isMobile, showTopBar: bookmark.isMobile, showBottomNav: false, showTopSwitcher: false }, () =>
         h(RouterView),
       ),
       h(Host),

@@ -609,7 +609,7 @@
     const count = props.resources.length;
     if (count < tool.input.minItems) return t('toolbox.workbench.validationMin', { min: tool.input.minItems });
     if (count > tool.input.maxItems) return t('toolbox.workbench.validationMax', { max: tool.input.maxItems });
-    const allowed = new Set(tool.input.resourceTypes || []);
+    const allowed = new Set<string>(tool.input.resourceTypes || []);
     if (props.resources.some((resource) => !allowed.has(resource.type))) {
       return t('resourceOutcome.unsupportedResourceType');
     }

@@ -142,7 +142,9 @@
     { value: 'tomorrow', label: t('inbox.quickTodoTomorrow') },
     ...(!props.mobile ? [{ value: 'week' as const, label: t('inbox.quickTodoThisWeek') }] : []),
   ]);
-  const priorityOptions = computed(() => [0, 1, 2].map((value) => ({ value, label: t(`inbox.todoPriority${value}`) })));
+  const priorityOptions = computed(() =>
+    ([0, 1, 2] as const).map((value) => ({ value, label: t(`inbox.todoPriority${value}`) })),
+  );
   const reminderOptions = computed<Array<{ value: TodoQuickReminderPreset; label: string }>>(() => [
     { value: 'none', label: t('inbox.todoReminderNone') },
     { value: 'before_due_1h', label: t('inbox.quickTodoReminderBeforeDue') },

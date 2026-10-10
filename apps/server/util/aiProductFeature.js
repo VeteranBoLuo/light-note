@@ -21,12 +21,13 @@ const SKILL_FLAGS = Object.freeze({
   toolbox: 'AI_SKILL_TOOLBOX_ENABLED',
   tag: 'AI_SKILL_TAG_ENABLED',
   routine: 'AI_SKILL_ROUTINE_ENABLED',
+  community: 'COMMUNITY_AI_REVIEW_ENABLED',
 });
 
 export function getAiProductFeatureState() {
   const kernelEnabled = readFlag('AI_SKILL_KERNEL_ENABLED', true);
   const skills = Object.fromEntries(
-    Object.entries(SKILL_FLAGS).map(([domain, envName]) => [domain, kernelEnabled && readFlag(envName, true)]),
+    Object.entries(SKILL_FLAGS).map(([domain, envName]) => [domain, kernelEnabled && readFlag(envName, domain !== 'community')]),
   );
   return Object.freeze({
     protocolVersion: 1,

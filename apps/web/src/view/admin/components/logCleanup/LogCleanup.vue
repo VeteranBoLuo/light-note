@@ -9,7 +9,7 @@
             v-model:value="ip"
             placeholder="如 14.155.225.67"
             class="log-cleanup__input"
-            :disabled="busy"
+            :disabled="Boolean(busy)"
             @enter="query('exact')"
           />
           <BButton :loading="busy === 'query-exact'" :disabled="Boolean(busy)" @click="query('exact')">

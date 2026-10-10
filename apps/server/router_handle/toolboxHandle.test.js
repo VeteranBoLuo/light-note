@@ -26,13 +26,16 @@ const mocks = vi.hoisted(() => ({
   listToolboxWorkspaces: vi.fn(),
   readProjectEntry: vi.fn(),
   readBoardItem: vi.fn(),
+  operateBoard: vi.fn(),
+  completeGrowthTask: vi.fn(),
 }));
 
 vi.mock('../util/toolbox/projectEntry.js', () => ({
   readProjectEntry: mocks.readProjectEntry,
   dismissProjectIntro: vi.fn(),
 }));
-vi.mock('../util/toolbox/board.js', () => ({ readBoardItem: mocks.readBoardItem, operateBoard: vi.fn() }));
+vi.mock('../util/toolbox/board.js', () => ({ readBoardItem: mocks.readBoardItem, operateBoard: mocks.operateBoard }));
+vi.mock('../util/growthTaskCompletion.js', () => ({ completeGrowthTask: mocks.completeGrowthTask }));
 
 vi.mock('../util/auth.js', () => ({
   ensureNotVisitor: mocks.ensureNotVisitor,
@@ -94,6 +97,7 @@ const {
   getHome,
   getProjectEntry,
   getWorkspaceBoardItem,
+  operateWorkspaceBoard,
   getWorkspace,
   listWorkspaces,
   getKnowledgeOverview,
@@ -118,6 +122,27 @@ describe('toolbox home handlers', () => {
     mocks.ensureNotVisitor.mockReturnValue(true);
     mocks.ensureUserOrAdminPolicy.mockReturnValue(true);
     mocks.recordServerOperation.mockResolvedValue(true);
+  });
+
+  it('创建正式待办沿用成长任务回执，管理操作和无写权限请求不触发', async () => {
+    mocks.operateBoard.mockResolvedValue({ workspace: { id: 'project' } });
+    const req = {
+      user: { id: 'owner', role: 'user' },
+      params: { workspaceId: 'project' },
+      body: { command: { type: 'createTodo' } },
+    };
+    await operateWorkspaceBoard(req, createResponse());
+    await vi.waitFor(() =>
+      expect(mocks.completeGrowthTask).toHaveBeenCalledWith('owner', 'first_todo', { userRole: 'user' }),
+    );
+    mocks.completeGrowthTask.mockClear();
+    await operateWorkspaceBoard({ ...req, suppressUserRewards: true }, createResponse());
+    await operateWorkspaceBoard({ ...req, adminContext: {} }, createResponse());
+    expect(mocks.completeGrowthTask).not.toHaveBeenCalled();
+    mocks.operateBoard.mockClear();
+    mocks.ensureNotVisitor.mockReturnValue(false);
+    await operateWorkspaceBoard(req, createResponse());
+    expect(mocks.operateBoard).not.toHaveBeenCalled();
   });
 
   it('移除提醒仅使用认证身份，并拒绝无写权限请求', async () => {
@@ -446,18 +471,34 @@ it('uses the authorized owner for visitor entry and source-item reads', async ()
 
 describe('translation stream handler', () => {
   it('refuses visitors before streaming or creating a job', async () => {
-    mocks.streamTranslation.mockReset(); mocks.ensureNotVisitor.mockReturnValue(false);
+    mocks.streamTranslation.mockReset();
+    mocks.ensureNotVisitor.mockReturnValue(false);
     await translateStream({ user: { id: 'guest' }, body: {} }, createResponse());
     expect(mocks.streamTranslation).not.toHaveBeenCalled();
   });
   it('uses the authenticated owner and marks uncertain failures without authorizing a new paid retry', async () => {
     mocks.ensureNotVisitor.mockReturnValue(true);
-    mocks.streamTranslation.mockImplementation(async ({ emit }) => { emit('start', { jobId: 'j' }); throw Object.assign(new Error('private detail'), { code: 'DB_FAILED' }); });
-    const res = createResponse(); res.set = vi.fn().mockReturnValue(res); res.flushHeaders = vi.fn(); res.write = vi.fn(); res.end = vi.fn();
-    await translateStream({ user: { id: 'owner' }, body: { userId: 'other', quoteId: 'q', clientRequestId: 'r' } }, res);
-    expect(mocks.streamTranslation.mock.calls[0][0]).toMatchObject({ userId: 'owner', quoteId: 'q', clientRequestId: 'r' });
-    const events = res.write.mock.calls.map(c => c[0]).join('');
-    expect(events).toContain('"definitive":false'); expect(events).not.toContain('private detail');
+    mocks.streamTranslation.mockImplementation(async ({ emit }) => {
+      emit('start', { jobId: 'j' });
+      throw Object.assign(new Error('private detail'), { code: 'DB_FAILED' });
+    });
+    const res = createResponse();
+    res.set = vi.fn().mockReturnValue(res);
+    res.flushHeaders = vi.fn();
+    res.write = vi.fn();
+    res.end = vi.fn();
+    await translateStream(
+      { user: { id: 'owner' }, body: { userId: 'other', quoteId: 'q', clientRequestId: 'r' } },
+      res,
+    );
+    expect(mocks.streamTranslation.mock.calls[0][0]).toMatchObject({
+      userId: 'owner',
+      quoteId: 'q',
+      clientRequestId: 'r',
+    });
+    const events = res.write.mock.calls.map((c) => c[0]).join('');
+    expect(events).toContain('"definitive":false');
+    expect(events).not.toContain('private detail');
     expect(res.end).toHaveBeenCalledOnce();
   });
 });

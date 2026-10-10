@@ -18,9 +18,9 @@
       <BButton
         v-if="state.authenticated && state.oauthAvailable"
         class="support-account-panel__action"
-        :type="state.linked ? '' : 'primary'"
+        :type="state.linked ? undefined : 'primary'"
         :loading="unlinking"
-        @click="emit(state.linked ? 'unlink' : 'link')"
+        @click="state.linked ? emit('unlink') : emit('link')"
       >
         {{ t(state.linked ? 'support.accountUnlinkAction' : 'support.accountLinkAction') }}
       </BButton>

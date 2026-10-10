@@ -742,6 +742,10 @@
     localStorage.removeItem('rememberedSid');
   }
 
+  function onAuthExpired() {
+    void handleAuthExpired();
+  }
+
   async function handleAuthExpired(options: { refreshUser?: boolean; redirect?: boolean; resetUser?: boolean } = {}) {
     const { refreshUser = true, redirect = true, resetUser = true } = options;
     if (isHandlingAuthExpired) {
@@ -1027,7 +1031,7 @@
   // 只有第一次进入页面或者刷新页面才触发（简化）
   async function init() {
     window.addEventListener('resize', handleResize);
-    window.addEventListener('light-note:auth-expired', handleAuthExpired);
+    window.addEventListener('light-note:auth-expired', onAuthExpired);
     window.addEventListener('light-note:user-banned', handleUserBanned);
     window.addEventListener('light-note:auth-session', handleAuthSession);
     window.addEventListener('light-note:preview-blocked', handlePreviewBlocked);
@@ -1085,7 +1089,7 @@
     stopOpinionNoticePolling();
     document.documentElement.classList.remove('has-mobile-bottom-nav');
     window.removeEventListener('resize', handleResize);
-    window.removeEventListener('light-note:auth-expired', handleAuthExpired);
+    window.removeEventListener('light-note:auth-expired', onAuthExpired);
     window.removeEventListener('light-note:user-banned', handleUserBanned);
     window.removeEventListener('light-note:auth-session', handleAuthSession);
     window.removeEventListener('light-note:preview-blocked', handlePreviewBlocked);

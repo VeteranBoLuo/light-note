@@ -77,16 +77,10 @@
   );
 
   const emit = defineEmits<{
-    'update:open': [value: boolean];
-    openPage: [id: string];
-    markdownHeadingClick: [index: number];
-    create: [node: NoteTreeItem];
-    attach: [node: NoteTreeItem];
-    toggleTop: [node: NoteTreeItem];
-    move: [node: NoteTreeItem];
-    rename: [node: NoteTreeItem];
-    share: [node: NoteTreeItem];
-    delete: [node: NoteTreeItem];
+    (event: 'update:open', value: boolean): void;
+    (event: 'openPage', id: string): void;
+    (event: 'markdownHeadingClick', index: number): void;
+    (event: 'create' | 'attach' | 'toggleTop' | 'move' | 'rename' | 'share' | 'delete', node: NoteTreeItem): void;
   }>();
   const { t } = useI18n();
   const activeTab = ref<'pages' | 'outline'>(props.initialTab);

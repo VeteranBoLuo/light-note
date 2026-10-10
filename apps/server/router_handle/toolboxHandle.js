@@ -458,6 +458,12 @@ export async function operateWorkspaceBoard(req, res) {
   if (!requireWrite(req, res)) return;
   try {
     const result = await operateBoard({ userId: req.user.id, workspaceId: req.params.workspaceId, input: req.body });
+    if (req.body?.command?.type === 'createTodo' && !req.suppressUserRewards && !req.adminContext) {
+      // Match the todo entry point: completion is idempotent and follows the committed creation.
+      import('../util/growthTaskCompletion.js')
+        .then(({ completeGrowthTask }) => completeGrowthTask(req.user.id, 'first_todo', { userRole: req.user.role }))
+        .catch((error) => console.warn('[toolbox] 成长任务状态同步失败 code=%s', error?.code || 'UNKNOWN'));
+    }
     return res.send(resultData(result));
   } catch (error) {
     return sendError(res, error);

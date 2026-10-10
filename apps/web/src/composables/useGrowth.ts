@@ -498,7 +498,10 @@ function syncPointsToViews() {
   const p = growth.value?.points;
   if (typeof p !== 'number') return;
   if (lottery.value) lottery.value.points = p;
-  if (shop.value) shop.value.points = p;
+  if (shop.value) {
+    shop.value.points = p;
+    shop.value.protectCards = growth.value?.protectCards || 0;
+  }
 }
 
 // `/growth/me` 才携带成长中心 Feature Flag；签到、补签和领奖返回的是纯成长快照。
@@ -742,6 +745,7 @@ export function useGrowth() {
     const res = await growthApi.useProtectCard(date);
     if (isCurrentGrowthOwner(uid, generation) && res?.status === 200 && res.data?.growth) {
       applyGrowthMutationSnapshot(res.data.growth as Growth);
+      syncPointsToViews();
       loadInventory(); // 补签卡数量变化 → 刷新背包
     }
     return res;
@@ -857,8 +861,8 @@ export function useGrowth() {
         if (res.data?.ok) {
           await Promise.all([loadShop(), load(true), loadInventory()]);
           syncPointsToViews();
-        } else if (res.data?.reason === 'purchase_limit') {
-          // 旧标签页或并发请求可能仍显示可兑换；以后端有限次领取事实刷新本地状态。
+        } else if (res.data?.reason === 'purchase_limit' || res.data?.reason === 'card_max') {
+          // 旧标签页或并发请求可能仍显示可兑换；刷新限兑事实与补签卡权威库存。
           await loadShop();
         }
       } else if (res?.status === 409) {

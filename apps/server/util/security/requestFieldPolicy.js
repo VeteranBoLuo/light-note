@@ -337,7 +337,11 @@ export const resolveRequestFieldPolicy = (context = {}, field = '') => {
     ? '/daily-review/items/:id/action'
     : normalizedPath;
   const routeKey = `${method} ${policyPath}`;
-  const definition = method === 'POST' && policyPath === '/toolbox/quotes' && field === 'body.input.text' && context.body?.toolId === 'translation'
+  const boardTextLimit = field === 'body.command.title' ? 255 : field === 'body.command.content' ? 5000
+    : /^body\.command\.details\.evidence\.(?:[0-9]|1[0-9])\.explanation$/u.test(field) ? 1000 : 0;
+  const definition = method === 'POST' && /^\/toolbox\/workspaces\/[^/]+\/board$/u.test(policyPath) && boardTextLimit
+    ? policy({ semantic: 'workspace-card-text', maxSize: boardTextLimit, skipSignatureRules: '*' })
+    : method === 'POST' && policyPath === '/toolbox/quotes' && field === 'body.input.text' && context.body?.toolId === 'translation'
     ? policy({ semantic: 'translation-text', maxSize: TOOLBOX_TRANSLATION_MAX_CHARS, skipSignatureRules: '*' })
     : method === 'POST' && policyPath === '/ai/skills/execute' &&
     field === 'body.input.text' && context.body?.skillId === 'toolbox.summarize_text'

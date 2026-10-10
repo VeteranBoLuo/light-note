@@ -9,13 +9,16 @@ export const clearSecurityRestrictionCache = (userId = '') => {
   else cache.clear();
 };
 
-export const getActiveSecurityRestrictions = async (userId) => {
+export const getActiveSecurityRestrictions = async (
+  userId,
+  { database = pool, useCache = true, failClosed = false } = {},
+) => {
   if (!userId) return [];
   const key = String(userId);
   const cached = cache.get(key);
-  if (cached && cached.expiresAt > Date.now()) return cached.value;
+  if (useCache && cached && cached.expiresAt > Date.now()) return cached.value;
   try {
-    const [rows] = await pool.query(
+    const [rows] = await database.query(
       `SELECT id, restriction_type, scope_json, reason, expires_at, created_at
        FROM security_account_restrictions
        WHERE user_id = ? AND status = 'active' AND (expires_at IS NULL OR expires_at > NOW())
@@ -31,9 +34,10 @@ export const getActiveSecurityRestrictions = async (userId) => {
       }
       return { ...row, scope };
     });
-    cache.set(key, { value, expiresAt: Date.now() + CACHE_TTL_MS });
+    if (useCache) cache.set(key, { value, expiresAt: Date.now() + CACHE_TTL_MS });
     return value;
-  } catch {
+  } catch (error) {
+    if (failClosed) throw error;
     // 安全限制表不可用时不把普通账号误锁死；初始化错误会由启动日志单独暴露。
     return [];
   }

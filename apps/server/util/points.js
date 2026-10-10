@@ -1,3 +1,4 @@
+import { MAKEUP_CARD_MAX_INVENTORY } from '@lightnote/shared';
 import { randomUUID } from 'node:crypto';
 import pool from '../db/index.js';
 import { grantItem } from './items.js';
@@ -1032,8 +1033,8 @@ export async function adminGrantPoints(
     if (nextStorage < 0) {
       throw new AdminPointsError('INSUFFICIENT_STORAGE', `永久扩容最多可扣减 ${growth.storage_bonus_mb || 0}MB`);
     }
-    if (nextCards < 0 || nextCards > 2) {
-      throw new AdminPointsError('CARD_LIMIT', `补签卡调整后必须在 0～2 张之间`);
+    if (nextCards < 0 || nextCards > MAKEUP_CARD_MAX_INVENTORY) {
+      throw new AdminPointsError('CARD_LIMIT', `补签卡调整后必须在 0～${MAKEUP_CARD_MAX_INVENTORY} 张之间`);
     }
     if (p) {
       await conn.query(
@@ -1236,9 +1237,9 @@ export async function buyItem(
         return { ok: false, reason: 'owned', msg: '已拥有该装扮' };
       }
     }
-    if (item.effect === 'makeup_card' && Number(g.streak_protect_cards) >= 2) {
+    if (item.effect === 'makeup_card' && Number(g.streak_protect_cards) >= MAKEUP_CARD_MAX_INVENTORY) {
       await conn.rollback();
-      return { ok: false, reason: 'card_max', msg: '补签卡已达上限(2 张)' };
+      return { ok: false, reason: 'card_max', msg: `补签卡已达上限(${MAKEUP_CARD_MAX_INVENTORY} 张)` };
     }
     const purchaseLimit = Number(item.purchaseLimit || 0);
     if (purchaseLimit && purchaseLimit !== 1) {
@@ -1288,7 +1289,8 @@ export async function buyItem(
       item.id,
     ]);
     if (item.effect === 'makeup_card') {
-      await grantItem(conn, userId, 'makeup_card', 1);
+      const grant = await grantItem(conn, userId, 'makeup_card', 1);
+      if (!grant.ok || grant.qty !== 1) throw new Error('MAKEUP_CARD_GRANT_FAILED');
     } else if (item.effect === 'storage') {
       // 永久扩容即时生效；C5 的每档一次资格已在同一事务内由唯一领取事实锁定。
       await conn.query('UPDATE user_growth SET storage_bonus_mb = storage_bonus_mb + ? WHERE user_id = ?', [
@@ -1310,7 +1312,7 @@ export async function buyItem(
       await conn.query('INSERT IGNORE INTO user_cosmetics (user_id, cosmetic_id) VALUES (?, ?)', [userId, item.id]);
     }
     const [balances] = await conn.query(
-      'SELECT points, storage_bonus_mb, ai_bonus_tokens FROM user_growth WHERE user_id = ? LIMIT 1',
+      'SELECT points, storage_bonus_mb, ai_bonus_tokens, streak_protect_cards FROM user_growth WHERE user_id = ? LIMIT 1',
       [userId],
     );
     const balance = balances[0] || {};
@@ -1321,7 +1323,9 @@ export async function buyItem(
           ? { type: 'ai_pack', amountTokens: item.bonusTokens }
           : item.effect === 'frame'
             ? { type: 'frame', frameId: item.id }
-            : { type: item.effect || item.type };
+            : item.effect === 'makeup_card'
+              ? { type: 'makeup_card', amount: 1 }
+              : { type: item.effect || item.type };
     const result = {
       ok: true,
       idempotent: false,
@@ -1336,6 +1340,7 @@ export async function buyItem(
       assets: {
         storageBonusMb: Number(balance.storage_bonus_mb || 0),
         aiBonusTokens: Number(balance.ai_bonus_tokens || 0),
+        protectCards: Number(balance.streak_protect_cards || 0),
       },
     };
     await completePointsEconomyOperation(conn, operation, result);

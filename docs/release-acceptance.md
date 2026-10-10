@@ -61,6 +61,8 @@ pnpm preview
 
 ## Schema 与 Worker 门禁
 
+社区纯文本自动审核开放前，显式运行社区 Schema 迁移入口安装 `20261008_community_ai_review.sql`，再通过 `check:schema`。`COMMUNITY_AI_REVIEW_ENABLED` 默认关闭，平台日预算由 `COMMUNITY_AI_REVIEW_DAILY_BUDGET_TOKENS` 控制。独立审核调度随 API 启动，沿用 production-only 策略；关闭 AI 审核后保持新版本调度运行，将已排队或过期任务交人工。回滚旧版本前先关闭开关并确认无 pending/processing 审核任务，保留新增表及账本，避免无消费者任务滞留。
+
 普通/托管上传的对象发布与回收保护、历史文件两阶段改名启用前，显式应用 `apps/server/migrations/20260925_cloud_file_rename_staging.sql` 与 `apps/server/migrations/20260925_cloud_legacy_object_lifecycle.sql` 并通过 `check:schema`，再部署 API 与文档 Worker。迁移只新增生命周期与暂存清理账本，不回填文件、不在请求或启动路径建表；回滚 API 时保留表与能够消费剩余暂存记录的清理 Worker。普通名称上传不得重新允许路径式文件名，否则随机副本清理的独占命名空间前提不成立。 所有 API 实例切换到随机上传地址后才能启用旧对象清理 Worker；回滚须保留随机地址签发与确认兼容层，不能恢复向已退休的名称地址签发上传链接。生命周期表中的退休标记与旧客户端名称映射不得作为临时日志清空，随账号注销清理。
 
 搜索时间续页索引通过加法迁移 `apps/server/migrations/20260925_search_seek_indexes.sql` 显式安装，并通过 `check:schema` 核验完整列顺序及非前缀索引。迁移保留既有报表、置顶索引，不回填业务数据；应用不在启动时执行 DDL，回滚 API 可以保留新索引。线上执行仍需迁移授权，建索引的磁盘、写入负载和短暂元数据锁须纳入发布窗口。
@@ -172,6 +174,10 @@ Web 发布先把新产物完整解包到独立 staging 目录，通过基本产�
 `.lightnote-release-assets` 记录当前版本自身的哈希资源；切换时仅把上一版本清单中的资源补入新目录，
 使发布前已打开的页面仍能完成懒加载。清单不得记录继承资源，确保线上只保留当前版与上一版资源，
 不会随发布次数持续累积。`apps/web/deploy.sh` 仅作为兼容入口转发到仓库统一发布脚本。
+
+官网 Android APK 不入 Git。Web 部署须按共享发布记录校验 `public` 中的安装包及构建后 `dist` 中的副本；
+工作树缺少文件时只从官网同一版本地址恢复并核对大小与 SHA-256。无法取得或校验失败时，在切换线上
+`dist` 前停止，避免下载页与固定下载地址指向 404 或错误安装包。
 
 ## 发布后检查
 

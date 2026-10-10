@@ -136,3 +136,11 @@ export function takeSearchSeekRows(rows) {
     return values.length ? values : null;
   });
 }
+
+// 深分页使用发布门禁已断言的账号前缀索引；5.7 可能误选时间优先的旧索引。
+// 名称仅来自仓库常量，不接受请求传入的 SQL 标识符。
+export function searchSeekIndexHint(type, options) {
+  if (!options.orderedSeekScope || !options.cursorSeek || options.sort !== 'updated') return '';
+  const indexes = { bookmark: 'idx_bookmark_search_time', file: 'idx_files_search_time' };
+  return Object.hasOwn(indexes, type) ? `FORCE INDEX (${indexes[type]})` : '';
+}

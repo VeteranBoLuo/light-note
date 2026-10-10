@@ -3,6 +3,7 @@ import pool from '../db/index.js';
 import {
   C4_POINTS_ECONOMY_VERSION,
   C5_POINTS_ECONOMY_VERSION,
+  C6_POINTS_ECONOMY_VERSION,
   getEconomyRuntime,
   LEGACY_POINTS_ECONOMY_VERSION,
   POINTS_ECONOMY_VERSION,
@@ -213,10 +214,11 @@ export async function completePointsEconomyOperation(conn, context, result) {
       (sum, reward) => sum + (reward?.kind === 'storage' ? Math.max(0, Math.trunc(Number(reward.amount) || 0)) : 0),
       0,
     ) + (effect.type === 'storage' ? Math.max(0, Math.trunc(Number(effect.amountMb) || 0)) : 0);
-  const makeupCardsGranted = rewards.reduce(
-    (sum, reward) => sum + (reward?.kind === 'card' ? Math.max(0, Math.trunc(Number(reward.amount) || 0)) : 0),
-    0,
-  );
+  const makeupCardsGranted =
+    rewards.reduce(
+      (sum, reward) => sum + (reward?.kind === 'card' ? Math.max(0, Math.trunc(Number(reward.amount) || 0)) : 0),
+      0,
+    ) + (effect.type === 'makeup_card' ? Math.max(0, Math.trunc(Number(effect.amount) || 0)) : 0);
   await conn.query(
     `UPDATE points_economy_operations
         SET status = 'succeeded', result_json = ?, item_id = ?, cost_points = ?, points_rewarded = ?,
@@ -249,7 +251,9 @@ export async function assertPointsEconomyActivationReady({ db = pool, runtime = 
     throw error;
   }
   if (runtime.economyVersion === C4_POINTS_ECONOMY_VERSION) return true;
-  if (![C5_POINTS_ECONOMY_VERSION, POINTS_ECONOMY_VERSION].includes(runtime.economyVersion)) {
+  if (
+    ![C5_POINTS_ECONOMY_VERSION, C6_POINTS_ECONOMY_VERSION, POINTS_ECONOMY_VERSION].includes(runtime.economyVersion)
+  ) {
     const error = new Error('POINTS_ECONOMY_VERSION_UNSUPPORTED');
     error.code = 'POINTS_ECONOMY_VERSION_UNSUPPORTED';
     throw error;

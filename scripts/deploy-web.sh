@@ -19,7 +19,9 @@ trap cleanup_local_archive EXIT
 cd "$(dirname "$0")/.."
 
 echo "🏗  构建前端(增量)…"
+node scripts/ensure-android-release-apk.mjs
 pnpm --filter web build
+node scripts/ensure-android-release-apk.mjs --verify-dist
 PDF_WORKER_RELATIVE="$(node apps/web/scripts/verify-pdf-worker-artifact.mjs --print-path)"
 
 echo "📦  打包 dist…"

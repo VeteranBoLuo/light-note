@@ -643,7 +643,7 @@
     user = useUserStore();
   const mode = computed(() => String(route.meta.feedMode || 'feed')),
     authenticated = computed(() => Boolean(user.id && user.role !== 'visitor' && !user.adminContext));
-  const caps = ref({ feedEnabled: false, writesEnabled: false }),
+  const caps = ref({ feedEnabled: false, writesEnabled: false, imagesEnabled: false, resourcesEnabled: false }),
     canWrite = computed(() => authenticated.value && caps.value.writesEnabled);
   const posts = ref<FeedPost[]>([]),
     detail = ref<FeedPost | null>(null),

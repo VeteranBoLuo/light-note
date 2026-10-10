@@ -41,7 +41,7 @@ interface BookmarkState {
 }
 
 export default defineStore('bookmark', {
-  state: () => ({
+  state: (): BookmarkState => ({
     tagData: {
       relatedTagList: [], // 当前选中标签详情
     },

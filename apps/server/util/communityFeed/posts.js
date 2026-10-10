@@ -1,3 +1,4 @@
+import { enqueuePostReview, reviewSchemaReady } from './reviewQueue.js';
 import { recordTaskAwards } from './taskRewards.js';
 import { bindResources, revisionResources, resourceDto } from './resources.js';
 import { bindImages, revisionImages, imageDto } from './images.js';
@@ -171,7 +172,7 @@ export async function submitPost({ user, input, env = process.env, db = pool }) 
         revision: post.row_revision,
       });
     }
-    if (account.role !== 'root')
+    if (account.role !== 'root' && !(await enqueuePostReview(c, post, revisionId, content, env)))
       await outbox(c, {
         key: `review:${post.id}:${revisionId}`,
         kind: 'review',
@@ -444,12 +445,36 @@ export async function ownPosts({ user, input = {}, env = process.env, db = pool,
         revisionIds,
       )
     : [[]];
+  const reviewRows =
+    moderation && revisionIds.length && (await reviewSchemaReady(db))
+      ? (
+          await db.query(
+            `SELECT revision_id,status,reason_code,result_json FROM community_post_review_jobs WHERE revision_id IN (${revisionIds.map(() => '?').join(',')})`,
+            revisionIds,
+          )
+        )[0]
+      : [];
+  const reviews = new Map(reviewRows.map((review) => [String(review.revision_id), review]));
   const resourceRows = await revisionResources(db, revisionIds);
   const imageRows = await revisionImages(db, revisionIds);
   for (const { id, revisionId, contentRevision, pendingRevision, publishedRevision, ...row } of selected) {
     const topics = topicRows.filter((topic) => Number(topic.revision_id) === Number(revisionId));
+    const review = reviews.get(String(revisionId));
+    const reviewResult = review ? parseJson(review.result_json) : null;
     items.push({
       ...row,
+      ...(moderation
+        ? {
+            review: review
+              ? {
+                  status: review.status,
+                  reasonCode: review.reason_code,
+                  categories: Array.isArray(reviewResult?.categories) ? reviewResult.categories : [],
+                  reason: typeof reviewResult?.reason === 'string' ? reviewResult.reason : null,
+                }
+              : null,
+          }
+        : {}),
       displayStatus: ['withdrawn', 'removed'].includes(row.status) ? row.status : row.revisionStatus || row.status,
       resources: resourceRows
         .filter((r) => Number(r.revision_id) === Number(revisionId))

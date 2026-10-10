@@ -734,7 +734,7 @@
     liked: false,
     subscription: 'disabled',
     isOwn: true,
-    author: props.post?.author || previewAuthor.value || { userPublicId: '', name: user.name || '' },
+    author: props.post?.author || previewAuthor.value || { userPublicId: '', name: user.alias || user.userName || '' },
     resources: draft.resources,
     images: draft.images.filter((image) => image.status === 'ready'),
   }));

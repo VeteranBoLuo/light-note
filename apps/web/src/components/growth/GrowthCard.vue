@@ -128,7 +128,7 @@
           ><SvgIcon :src="icon.growth.checkin" size="14" /> {{ t('growth.protectCard') }} ×
           {{ g.protectCards || 0 }}</span
         >
-        <span class="gc-protect-hint">{{ t('growth.protectCardHint') }}</span>
+        <span class="gc-protect-hint">{{ t('growth.protectCardHint', { max: MAKEUP_CARD_MAX_INVENTORY }) }}</span>
       </div>
 
       <!-- 每日经验:展示今日已得 / 每日上限,到顶给出提示 -->
@@ -174,6 +174,7 @@
 </template>
 
 <script setup lang="ts">
+  import { MAKEUP_CARD_MAX_INVENTORY } from '@lightnote/shared';
   import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useGrowth } from '@/composables/useGrowth.ts';
@@ -444,10 +445,7 @@
       font-size: var(--ui-font-11, 11px);
     }
     .growth-card--compact .gc-protect-hint {
-      overflow: hidden;
-      font-size: var(--ui-font-10, 10px);
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      font-size: var(--ui-font-11, 11px);
     }
   }
   .gc-top {
@@ -612,6 +610,7 @@
   }
   .gc-protect {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--ui-space-10, 10px);
     margin-top: var(--ui-space-10, 10px);
@@ -623,6 +622,8 @@
   }
   .gc-protect-info {
     display: inline-flex;
+    flex-shrink: 0;
+    white-space: nowrap;
     align-items: center;
     gap: var(--ui-space-4, 4px);
     font-weight: 600;
@@ -642,7 +643,9 @@
     cursor: default;
   }
   .gc-protect-hint {
-    margin-left: auto;
+    flex: 1 1 var(--ui-layout-240, 240px);
+    min-width: 0;
+    line-height: 1.5;
     color: var(--desc-color);
     font-size: var(--ui-font-11, 11px);
   }

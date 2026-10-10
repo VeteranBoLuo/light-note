@@ -4,6 +4,8 @@ import pool from '../../db/index.js';
 export const COMMUNITY_FEED_TABLES = [
   'community_accepted_answers',
   'community_posts',
+  'community_post_review_jobs',
+  'community_review_daily_budget',
   'community_post_revisions',
   'community_topics',
   'community_task_rewards',
@@ -30,6 +32,8 @@ export const COMMUNITY_FEED_TABLES = [
 ];
 export async function ensureCommunityFeedSchema(db = pool) {
   const sql =
+    (await readFile(new URL('../../migrations/20261008_community_ai_review.sql', import.meta.url), 'utf8')) +
+    '\n' +
     (await readFile(new URL('../../migrations/20260914_community_feed.sql', import.meta.url), 'utf8')) +
     '\n' +
     (await readFile(new URL('../../migrations/20260915_community_images.sql', import.meta.url), 'utf8')) +

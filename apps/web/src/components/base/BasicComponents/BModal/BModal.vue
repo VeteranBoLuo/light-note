@@ -86,7 +86,7 @@
   const isMobileLayout = useMobileLayout();
   const props = withDefaults(
     defineProps<{
-      title: string;
+      title?: string;
       maskClosable?: boolean; // 点击遮罩层关闭
       showFooter?: boolean; // 是否显示底部
       escClosable?: boolean; // 按下esc关闭

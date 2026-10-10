@@ -1,10 +1,16 @@
+import { reviewSchemaReady } from '../util/communityFeed/reviewQueue.js';
 import { resourcesReady } from '../util/communityFeed/resources.js';
 import { imagesReady } from '../util/communityFeed/images.js';
 import pool from '../db/index.js';
 import { ensureCommunityFeedSchema, communityFeedSchemaReady } from '../util/communityFeed/schema.js';
 try {
   await ensureCommunityFeedSchema(pool);
-  if (!(await communityFeedSchemaReady(pool)) || !(await imagesReady(pool)) || !(await resourcesReady(pool)))
+  if (
+    !(await communityFeedSchemaReady(pool)) ||
+    !(await imagesReady(pool)) ||
+    !(await resourcesReady(pool)) ||
+    !(await reviewSchemaReady(pool))
+  )
     throw new Error('SCHEMA_CONTRACT_MISMATCH');
   console.log('[community-feed] schema ready; feature flags are unchanged');
 } catch (error) {
