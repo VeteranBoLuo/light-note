@@ -1,3 +1,4 @@
+import { normalizeComparisonColumns } from '@lightnote/shared/comparison-table';
 import { createHash } from 'node:crypto';
 import {
   TOOLBOX_TRANSLATION_MAX_CHARS, TOOLBOX_TRANSLATION_LANGUAGES,
@@ -114,6 +115,7 @@ function normalizeOptions(toolId, value) {
     'intent',
     'detailLevel',
     'targetLength',
+    ...(toolId === 'source_comparison' ? ['resultMode', 'columns'] : []),
     ...(toolId === 'translation' ? ['sourceLanguage', 'targetLanguage', 'acceptPartial'] : []),
     ...(toolId === 'ocr_to_text' ? ['recognitionMode'] : []),
   ]);
@@ -122,6 +124,15 @@ function normalizeOptions(toolId, value) {
     throw toolboxError('TOOLBOX_OPTIONS_UNKNOWN_FIELD', `工具选项包含未知字段：${unknown.join(', ')}`);
   if (value.recognitionMode != null && !['ai', 'basic'].includes(value.recognitionMode))
     throw toolboxError('TOOLBOX_OPTIONS_INVALID', '不支持该识别方式');
+  let comparison = {};
+  if (toolId === 'source_comparison') {
+    if (value.resultMode != null && !['report', 'table'].includes(value.resultMode)) throw toolboxError('TOOLBOX_OPTIONS_INVALID', '不支持该对比形式');
+    if (value.resultMode === 'table') {
+      try { comparison = { resultMode: 'table', columns: normalizeComparisonColumns(value.columns) }; }
+      catch { throw toolboxError('TOOLBOX_OPTIONS_INVALID', '请填写 1～12 个不重复的列标题，每个最多 40 字'); }
+      if (!String(value.question || '').trim()) throw toolboxError('TOOLBOX_OPTIONS_INVALID', '请填写比较重点');
+    } else if (value.columns != null) throw toolboxError('TOOLBOX_OPTIONS_INVALID', '文字报告不接受表格列设置');
+  }
   const title = String(value.title || '').trim();
   const question = String(value.question || '').trim();
   const intent = String(value.intent || '').trim();
@@ -148,6 +159,7 @@ function normalizeOptions(toolId, value) {
     throw toolboxError('TOOLBOX_TRANSLATION_LANGUAGE_INVALID', '请选择有效的翻译语言');
   return Object.freeze({
     ...(toolId === 'translation' ? { sourceLanguage: value.sourceLanguage || 'auto', targetLanguage: value.targetLanguage, acceptPartial: value.acceptPartial === true } : {}),
+    ...comparison,
     ...(value.recognitionMode ? { recognitionMode: value.recognitionMode } : {}),
     ...(title ? { title } : {}),
     ...(question ? { question } : {}),

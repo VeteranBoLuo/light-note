@@ -16,7 +16,6 @@ export const collectionFormsZh = {
   allowMultiple: '允许多次提交',
   replaceLatest: '同一浏览器保留最新一份',
   policyLockedHint: '首次发布后规则锁定。如需更改，请复制为新表单。',
-  replaceHint: '同一浏览器重复提交将更新之前的答案。清除浏览器数据或更换设备后可能再次参与。',
   alreadySubmitted: '你已提交，可以修改。',
   updateSubmission: '更新提交',
   editSubmission: '修改我的提交',
@@ -266,8 +265,6 @@ export const collectionFormsEn = {
   allowMultiple: 'Allow multiple submissions',
   replaceLatest: 'Keep the latest submission per browser',
   policyLockedHint: 'This rule is locked after publishing. Copy the form to change it.',
-  replaceHint:
-    'Submitting again in this browser updates your previous answers. Clearing browser data or switching devices may allow another submission.',
   alreadySubmitted: 'You have already submitted. You can update your answers.',
   updateSubmission: 'Update submission',
   editSubmission: 'Edit my submission',

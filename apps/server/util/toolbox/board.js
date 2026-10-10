@@ -6,6 +6,21 @@ import { toolboxError } from './errors.js';
 import { readItemDetails, prepareItemDetails, hydrateItemDetails, readLinkedTodos } from './itemDetails.js';
 const parse = (x) => (typeof x === 'string' ? JSON.parse(x) : x);
 const iso = (x) => (x ? new Date(x).toISOString() : null);
+async function createLinkedTodo(connection, userId, item, now) {
+  if (item.lane !== 'action' || item.todoId)
+    throw toolboxError('BOARD_TODO_ALREADY_BOUND', '此行动已有待办或不是行动卡', 409);
+  const { createTodo } = await import('../services/todoService.js');
+  const result = await createTodo(connection, userId, {
+    title: item.title.slice(0, 200),
+    description: item.content,
+    dueAt: item.dueOn ? `${item.dueOn} 23:59:59` : null,
+  });
+  Object.assign(item, {
+    todoId: result.id,
+    details: { ...item.details, todoTitle: item.title.slice(0, 200) },
+    updatedAt: now,
+  });
+}
 export function boardItem(row) {
   return {
     ...readItemDetails(row),
@@ -47,6 +62,12 @@ export async function operateBoard({ userId, workspaceId, input, database = pool
     throw toolboxError('BOARD_INVALID_REQUEST', '无效看板请求', 400);
   const command = input.command;
   if (!command || typeof command.type !== 'string') throw toolboxError('BOARD_INVALID_REQUEST', '无效看板请求', 400);
+  const createsItem = ['create', 'convert', 'repeat'].includes(command.type);
+  if (
+    command.createLinkedTodo !== undefined &&
+    (typeof command.createLinkedTodo !== 'boolean' || !createsItem || (command.createLinkedTodo && command.todoId))
+  )
+    throw toolboxError('BOARD_INVALID_DETAILS', '请检查待办关联方式', 400);
   const hash = crypto
     .createHash('sha256')
     .update(JSON.stringify({ command, expectedVersion: input.expectedVersion }))
@@ -119,19 +140,7 @@ export async function operateBoard({ userId, workspaceId, input, database = pool
           if (item.todoId && !prepared.todoId)
             Object.assign(target, { status: 'open', completedAt: null, dueOn: null });
         } else {
-          if (item.lane !== 'action' || item.todoId)
-            throw toolboxError('BOARD_TODO_ALREADY_BOUND', '此行动已有待办或不是行动卡', 409);
-          const { createTodo } = await import('../services/todoService.js');
-          const result = await createTodo(connection, userId, {
-            title: item.title.slice(0, 200),
-            description: item.content,
-            dueAt: item.dueOn ? `${item.dueOn} 23:59:59` : null,
-          });
-          Object.assign(target, {
-            todoId: result.id,
-            details: { ...item.details, todoTitle: item.title.slice(0, 200) },
-            updatedAt: now,
-          });
+          await createLinkedTodo(connection, userId, target, now);
         }
         focusItemId = item.id;
       } else {
@@ -186,6 +195,16 @@ export async function operateBoard({ userId, workspaceId, input, database = pool
         if (operationItems !== before) {
           const restored = after.find((item) => item.id === target.id);
           Object.assign(restored, { status: target.status, completedAt: target.completedAt });
+        }
+        if (
+          createsItem &&
+          (command.details !== undefined || command.todoId !== undefined || command.createLinkedTodo)
+        ) {
+          const createdItem = after.find((item) => item.id === focusItemId);
+          if (!createdItem) throw toolboxError('BOARD_INVALID_DETAILS', '未找到新建事项', 400);
+          const prepared = await prepareItemDetails(connection, userId, workspaceId, createdItem, command);
+          Object.assign(createdItem, prepared);
+          if (command.createLinkedTodo) await createLinkedTodo(connection, userId, createdItem, now);
         }
       }
       const changed = after.filter(

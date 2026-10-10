@@ -2,7 +2,7 @@
   <div
     ref="rootRef"
     class="knowledge-workspace"
-    :class="[`is-${kind}`, { 'has-project-rail': workspace && !loading && !loadError, 'has-item-detail': detailOpen }]"
+    :class="[`is-${kind}`, { 'has-project-rail': workspace && !loading && !loadError }]"
   >
     <div v-if="loading" class="knowledge-workspace__state">
       <BLoading inline loading :title="t('toolbox.workspace.loading')" />
@@ -295,7 +295,6 @@
             :readonly="visitorPreview"
             :mobile="isMobileLayout"
             @updated="handleBoardUpdated"
-            @detail-open="detailOpen = $event"
           />
         </section>
 
@@ -712,7 +711,6 @@
 
   const rootRef = ref<HTMLElement | null>(null);
   const goalExpanded = ref(false);
-  const detailOpen = ref(false);
   const mobileLane = ref<ToolboxWorkspaceLane>('inbox');
   const projectTabs = computed(() =>
     ['progress', 'board', 'resources', 'timeline'].map((key) => ({
@@ -3421,11 +3419,6 @@
       .workspace-board-section :deep(.project-board__lane-select) {
         width: 100%;
       }
-    }
-  }
-  @media (min-width: 1200px) {
-    .knowledge-workspace.has-item-detail {
-      padding-right: var(--ui-layout-480, 480px);
     }
   }
 </style>

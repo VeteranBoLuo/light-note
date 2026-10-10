@@ -274,4 +274,81 @@ describe.skipIf(!socketPath)('项目证据、结论与行动 · 真实 MySQL', (
     ]);
     await migration('20261010_workspace_item_details.sql');
   });
+  it('creates an action with evidence, note and existing task atomically', async () => {
+    const command = {
+      ...details(),
+      type: 'create',
+      lane: 'action',
+      title: 'New action',
+      content: 'Summary',
+      todoId: 'task',
+    };
+    delete command.itemId;
+    const saved = await run(command, 0);
+    const item = saved.workspace.items.find((item) => item.id === saved.focusItemId);
+    expect(item).toMatchObject({
+      todoId: 'task',
+      linkedTodo: { title: '正式待办' },
+      details: { evidence: [{ resourceId: 'evidence' }], conclusionNote: { id: 'conclusion' } },
+    });
+    expect(saved.workspace.items).toHaveLength(3);
+  });
+  it('replaying create-with-task is idempotent; undo keeps the independent task', async () => {
+    const command = {
+      ...details(),
+      type: 'create',
+      lane: 'action',
+      title: 'New task',
+      content: 'Task description',
+      dueOn: '2026-10-18',
+      createLinkedTodo: true,
+    };
+    delete command.itemId;
+    const request = randomUUID();
+    const saved = await run(command, 0, request);
+    const item = saved.workspace.items.find((item) => item.id === saved.focusItemId);
+    expect(item.linkedTodo).toMatchObject({ title: 'New task', status: 'pending', dueOn: '2026-10-18' });
+    const repeated = await run(command, 0, request);
+    expect(repeated.focusItemId).toBe(item.id);
+    const [[{ count }]] = await admin.query('SELECT COUNT(*) AS count FROM todo_items');
+    expect(count).toBe(3);
+    await run({ type: 'undo', undoId: request }, 1);
+    const [[{ count: remaining }]] = await admin.query('SELECT COUNT(*) AS count FROM todo_items');
+    expect(remaining).toBe(3);
+  });
+  it('invalid ownership rolls back the new item, task, version and receipt', async () => {
+    const command = {
+      ...details(),
+      type: 'create',
+      lane: 'action',
+      title: 'Rejected',
+      content: '',
+      createLinkedTodo: true,
+    };
+    delete command.itemId;
+    command.details.conclusionNoteId = 'foreign';
+    await expect(run(command, 0)).rejects.toMatchObject({ code: 'BOARD_REFERENCE_UNAVAILABLE' });
+    expect((await read()).items).toHaveLength(2);
+    expect((await read()).boardVersion).toBe(0);
+    const [[{ count }]] = await admin.query('SELECT COUNT(*) AS count FROM todo_items');
+    expect(count).toBe(2);
+    const [[{ receipts }]] = await admin.query('SELECT COUNT(*) AS receipts FROM toolbox_board_operations');
+    expect(receipts).toBe(0);
+  });
+  it('derived actions take their own references without changing the source finding', async () => {
+    const saved = await run(
+      { ...details(), type: 'convert', lane: 'action', title: 'Derived', content: 'Plan', todoId: 'task' },
+      0,
+    );
+    expect(saved.workspace.items.find((item) => item.id === saved.focusItemId)).toMatchObject({
+      sourceItemId: 'finding',
+      todoId: 'task',
+      details: { conclusionNote: { id: 'conclusion' } },
+    });
+    expect(saved.workspace.items.find((item) => item.id === 'finding')).toMatchObject({
+      title: '发现',
+      todoId: null,
+      details: { evidence: [] },
+    });
+  });
 });

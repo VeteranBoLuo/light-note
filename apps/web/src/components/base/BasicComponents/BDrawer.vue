@@ -2,6 +2,7 @@
   <Teleport to="body">
     <div
       v-if="localVisible"
+      ref="wrapperRef"
       class="b-drawer-wrapper"
       :style="zIndex !== undefined ? { zIndex } : undefined"
       :class="{
@@ -96,6 +97,7 @@
 
   import { resolveViewportUnitValue } from '@/utils/cssViewport';
   import { acquireModalLayer, isTopModalLayer, releaseModalLayer } from '@/utils/modalLayer';
+  import { prepareRevealedHover } from '@/utils/revealedHover';
   import { shouldIgnoreBackgroundEscape } from '@/utils/topLayerEscape';
   import { useMobileLayout } from '@/composables/useMobileLayout';
   import {
@@ -175,6 +177,8 @@
   const settled = ref(false);
   const dormant = ref(false);
   const panelRef = ref<HTMLElement | null>(null);
+  const wrapperRef = ref<HTMLElement | null>(null);
+  let closeGeneration = 0;
   const drawerTitleId = `b-drawer-title-${getCurrentInstance()?.uid ?? Math.random().toString(36).slice(2)}`;
   let closing = false;
   let openFrame: number | null = null;
@@ -209,6 +213,7 @@
 
   // 打开：先渲染 DOM，下一帧触发滑入动画
   function doOpen() {
+    ++closeGeneration;
     if (closeTimer !== null) {
       clearTimeout(closeTimer);
       closeTimer = null;
@@ -239,15 +244,25 @@
   }
 
   // 关闭：先播放滑出动画，动画结束后销毁 DOM
-  function finishClose() {
+  async function finishClose() {
     if (!closing) return;
     if (closeTimer !== null) {
       clearTimeout(closeTimer);
       closeTimer = null;
     }
+    const generation = ++closeGeneration;
+    const restoreHover = props.modal ? prepareRevealedHover(wrapperRef.value) : undefined;
     if (props.destroyOnClose) localVisible.value = false;
     else dormant.value = true;
     closing = false;
+    // Keep the background inert until the mask has actually left the DOM.
+    await nextTick();
+    if (generation !== closeGeneration) return;
+    if (layerAcquired) {
+      releaseModalLayer(drawerLayer);
+      layerAcquired = false;
+    }
+    restoreHover?.();
     emit('afterClose');
   }
 
@@ -262,10 +277,6 @@
     // 这样既避免 aria-hidden 子树保留焦点，也避免用户关闭弹层后页面发生突兀的焦点跳转。
     const activeElement = document.activeElement;
     if (activeElement instanceof HTMLElement && panelRef.value?.contains(activeElement)) activeElement.blur();
-    if (layerAcquired) {
-      releaseModalLayer(drawerLayer);
-      layerAcquired = false;
-    }
     // transitionend 是正常完成路径；定时器处理系统减少动画、页面切换等不派发事件的情况。
     closeTimer = window.setTimeout(finishClose, 220); // 略长于 CSS transition 时长
   }
@@ -517,6 +528,9 @@
   });
 
   onBeforeUnmount(() => {
+    ++closeGeneration;
+    const restoreHover = layerAcquired ? prepareRevealedHover(wrapperRef.value) : undefined;
+    if (restoreHover) void nextTick(restoreHover);
     if (historyHandle) releaseMobileOverlayHistory(historyHandle);
     historyHandle = null;
     if (layerAcquired) releaseModalLayer(drawerLayer);

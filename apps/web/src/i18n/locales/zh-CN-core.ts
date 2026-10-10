@@ -1,3 +1,4 @@
+import { comparisonTableZh } from './comparisonTable';
 import { translationZh } from './translation';
 import { saveAsNoteZh } from './saveAsNote';
 import { workshopPresentationZh } from './workshopPresentation';
@@ -17,6 +18,7 @@ import { notificationMessages } from '@lightnote/shared/notification-presentatio
 export default {
   translation: translationZh,
   saveAsNote: saveAsNoteZh,
+  comparisonTable: comparisonTableZh,
   collectionForms: collectionFormsZh,
   dataExport: dataExportZh,
   community: communityZh,
@@ -1248,6 +1250,42 @@ export default {
     availableTools: '可用工具',
     pointsBalance: '当前积分',
     itemDetail: {
+      openResourceFailed: '暂时无法打开资料，请重试。',
+      linkingTo: '关联到',
+      projectScope: '本项目',
+      libraryScope: '资料库',
+      emptyProjectTitle: '项目还没有资料',
+      allEvidenceLinked: '项目资料已全部关联',
+      emptyProjectHint: '从资料库选择一份，加入项目并关联到此事项。',
+      noEvidenceMatch: '没有匹配资料，试试其他关键词。',
+      resourceTypesHint: '支持笔记、书签和文件',
+      selectedOne: '已选 1 项',
+      librarySearch: '搜索笔记、书签或文件',
+      backToItem: '返回事项',
+      pickTodoHint: '选择一个具体待办，确认后返回事项。完成状态和日期将与待办同步。',
+      pickNoteHint: '选择一篇笔记作为完整论述，确认后返回事项。',
+      pickEvidenceHint: '从项目资料中选择证据，关联后可补充说明。',
+      searchTodo: '搜索待办标题或说明',
+      searchNote: '搜索笔记',
+      todoStatus: '待办状态',
+      allTodos: '全部待办',
+      defaultTodoList: '默认清单',
+      noDueDate: '无截止日期',
+      todoOccurrence: '重复任务 · {date}',
+      noMatchingTodos: '没有符合条件的待办，试试其他关键词或状态。',
+      pickerFailed: '加载待办失败，已填写的事项仍然保留。',
+      retryPicker: '重试',
+      selectOne: '请选择一项',
+      addFromLibrary: '从资料库添加',
+      backToProjectResources: '选择项目资料',
+      addAndLink: '添加并关联',
+      addResourceHint: '选择资料，添加到项目并关联当前事项。即使取消事项编辑，已添加的项目资料也会保留。',
+      addResourceFailed: '添加资料失败，请重试。',
+      confirmLink: '确认关联',
+      stagedTodo: '创建事项时会同时生成待办，使用当前标题、摘要和目标日期。',
+      cancelStagedTodo: '取消生成待办',
+      createItem: '保存事项',
+      draftNoteNotice: '笔记会先保存到笔记库；创建事项时再保存关联。取消事项不会删除笔记。',
       summary: '摘要与判断',
       judgement: '结论状态',
       judgementHint: '由你判断结论是否成立；行动完成不会自动确认结论。',
@@ -1267,7 +1305,7 @@ export default {
       openSource: '打开来源',
       markReviewed: '已查看更新',
       searchEvidence: '搜索项目中的资料',
-      noProjectResources: '没有可选资料。请先在项目资料中添加；每张卡片最多关联 20 份证据。',
+      noProjectResources: '没有可选项目资料，可点击“从资料库添加”。每张卡片最多关联 20 份证据。',
       note: '结论笔记',
       noteHint: '完整论述保存在笔记库，这里保留摘要和关联。',
       noteChanged: '笔记已更新',
@@ -1312,8 +1350,17 @@ export default {
       down: '下移',
       archive: '归档',
       undo: '撤销上次操作',
-      from: '来自：{title}',
-      source: '来源内容',
+      from: '来源事项：{title}',
+      source: '来源事项',
+      sourceSnapshot: '事项快照',
+      viewSource: '查看来源',
+      sourceRelationHint: '当前事项由此来源事项生成。',
+      sourceCreationHint: '保存后，新事项将关联到此来源事项。',
+      sourceTypes: {
+        research: { inbox: '研究问题', knowledge: '研究发现', action: '验证行动' },
+        learning: { inbox: '学习内容', knowledge: '已掌握知识', action: '复习行动' },
+        writing: { inbox: '写作线索', knowledge: '素材观点', action: '写作行动' },
+      },
       archivedSource: '来源已归档，仅供查看。',
       snapshotHint: '查看来源内容；历史快照不会随来源更新。',
       unsaved: '尚有未保存修改',
@@ -1600,7 +1647,11 @@ export default {
     },
     tool: {
       translation: { name: '翻译', description: '完整翻译资料，保留结构并保存为笔记', output: '译文或双语对照笔记' },
-      forms: { name: '公开收集', description: '分享独立表单，收集反馈、问题与意见，统一查看提交和统计。', output: '表单、提交记录与统计图表' },
+      forms: {
+        name: '公开收集',
+        description: '分享独立表单，收集反馈、问题与意见，统一查看提交和统计。',
+        output: '表单、提交记录与统计图表',
+      },
       research_workspace: {
         name: '研究项目',
         description: '围绕一个长期问题积累材料、研究发现与下一步，保留每次推进记录。',
@@ -2079,7 +2130,8 @@ export default {
       ocrMode: '识别方式',
       aiOcrMode: 'AI 识别（推荐）',
       basicOcrMode: '基础识别（免费）',
-      aiOcrHint: '将文件上传到服务器，使用 AI 读取原图和扫描页；PDF 优先提取原文。使用所选 AI 额度或积分，不会自动切换计费。无法辨认的文字请对照原件核对。',
+      aiOcrHint:
+        '将文件上传到服务器，使用 AI 读取原图和扫描页；PDF 优先提取原文。使用所选 AI 额度或积分，不会自动切换计费。无法辨认的文字请对照原件核对。',
       ocrRemaining: '今日剩余 {pages} 页，{time} 恢复用量。',
       readingScope:
         'AI 只使用所选资料中能读取的文字。书签需有网页存档，文件需已解析；过长内容可能只读取一部分。结果中可查看实际用到的资料范围。',
@@ -4949,7 +5001,8 @@ export default {
     continueCapture: '继续添加',
     openCaptured: '打开原资源',
     captureSuccess: '已加入待整理',
-    captureFilesUnknown: '已保存 {saved} 个，还有 {failed} 个待处理。部分结果暂时不确定；恢复网络后重试，会先检查原上传是否已保存。',
+    captureFilesUnknown:
+      '已保存 {saved} 个，还有 {failed} 个待处理。部分结果暂时不确定；恢复网络后重试，会先检查原上传是否已保存。',
     captureFilesPartial: '已保存 {saved} 个，{failed} 个未成功。列表只保留未成功的文件；请检查网络和空间后重试。',
     captureSuccessCount: '已将 {count} 个文件加入待整理',
     captureFailed: '添加失败，请稍后重试',
@@ -8453,7 +8506,7 @@ export default {
           toolboxActionPlan: '知识工坊·行动计划',
           toolboxSourceComparison: '知识工坊·多资料对照',
           toolboxOcrToText: '文字识别',
-      toolboxKnowledgeAudit: '知识工坊·知识库体检',
+          toolboxKnowledgeAudit: '知识工坊·知识库体检',
           otherAiAction: '其他 AI 能力',
         },
         freeActions: {
@@ -8518,7 +8571,8 @@ export default {
     trashForever: '永久',
     protectCard: '补签卡',
     useProtectCard: '补签续连签',
-    protectCardHint: '首次连签 7／30 天、升至 Lv.5／10／15 各赠 1 张；最多持有 {max} 张，赠卡满仓不累积、不补发。每补一天消耗 1 张。',
+    protectCardHint:
+      '首次连签 7／30 天、升至 Lv.5／10／15 各赠 1 张；最多持有 {max} 张，赠卡满仓不累积、不补发。每补一天消耗 1 张。',
     protectCardOk: '补签成功!连签续到 {n} 天 🎉',
     protectCardFail: '暂无最近 3 个自然日内可补的漏签',
     protectCardConfirmTitle: '确认补签',
@@ -9095,7 +9149,8 @@ export default {
     shopCost: '{n} 积分',
     shopBuyConfirm: '确认花费 {n} 积分兑换「{name}」？',
     shopCardInventory: '当前持有 {n}／{max} 张',
-    shopBuyConfirmCard: '确认花费 {n} 积分兑换 1 张补签卡？当前持有 {held}／{max} 张。兑换不会自动补签，使用时每补一天消耗 1 张。',
+    shopBuyConfirmCard:
+      '确认花费 {n} 积分兑换 1 张补签卡？当前持有 {held}／{max} 张。兑换不会自动补签，使用时每补一天消耗 1 张。',
     shopBuyConfirmLimited: '确认花费 {n} 积分兑换「{name}」？该档每个账号只能兑换一次。',
     shopBuyOk: '兑换成功！',
     shopEquipOk: '已佩戴「{name}」',
@@ -9138,7 +9193,8 @@ export default {
     // —— 连签里程碑 ——
     streakMilestoneToast: '🎉 连签 {days} 天达成！奖励 {reward}',
     milestoneLadderTitle: '连签里程碑',
-    milestoneLadderHint: '奖励仅首次在正常签到时达到对应天数自动发放，无需领取；补签不补发里程碑奖励。“天数已达成”仅表示当前连签达到门槛，不代表待领取或卡片剩余数量。补签卡以当前库存为准。',
+    milestoneLadderHint:
+      '奖励仅首次在正常签到时达到对应天数自动发放，无需领取；补签不补发里程碑奖励。“天数已达成”仅表示当前连签达到门槛，不代表待领取或卡片剩余数量。补签卡以当前库存为准。',
     milestoneDayN: '{n} 天',
     milestoneReached: '天数已达成',
     milestoneCardUnit: '补签卡',
@@ -9188,7 +9244,10 @@ export default {
     lotteryPoolHint: '每 {n} 抽至少获得一项稀有奖励',
     shopItems: {
       ai_pack_starter: { name: 'AI 入门包', desc: '+5 万 tokens · 永久有效，每账号限兑一次' },
-      makeup_card: { name: '补签卡', desc: '每次兑换 1 张，最多持有 {max} 张；可补今天之前 3 个自然日的漏签，不补经验、积分或里程碑奖励' },
+      makeup_card: {
+        name: '补签卡',
+        desc: '每次兑换 1 张，最多持有 {max} 张；可补今天之前 3 个自然日的漏签，不补经验、积分或里程碑奖励',
+      },
       ai_pack_small: { name: 'AI 轻量加油包', desc: '+30 万 tokens · 永久有效，每日等级额度用完后自动使用' },
       ai_pack: { name: 'AI 加油包', desc: '+60 万 tokens · 永久有效，每日等级额度用完后自动使用' },
       storage_128: { name: '扩容包 128MB', desc: '云空间永久 +128MB，低门槛扩容' },
@@ -12727,7 +12786,8 @@ export default {
       day7: '7 天后',
       day30: '30 天后',
       title: '新用户后来还有没有回来',
-      subtitle: '只看所选时间内注册的人，按注册周排列。根据访问记录估算注册 1、7、30 天后那一天是否回来，不代表一定处理过资料。',
+      subtitle:
+        '只看所选时间内注册的人，按注册周排列。根据访问记录估算注册 1、7、30 天后那一天是否回来，不代表一定处理过资料。',
       cohort: '注册日期（周一至周日）',
       newUsers: '注册人数',
       registered: '注册 {count} 人',
@@ -12740,8 +12800,10 @@ export default {
     methodology: {
       title: '这些数字怎么看',
       activity: '来过的人：所选时间里有访问记录的普通账号，同一个人只算一次。',
-      activation: '一周内保存过资料：只看所选时间里注册、且已满 7 天的人。默认近 7 天可能还没有等满时间的人，此时显示“—”，不表示没人保存。',
-      retention: '回来的人：要等到注册满 2、8、31 天，才能看完整的那一天。每列能统计的人数可能不同；旧访问记录可能已清理，所以 0 不一定代表从未回来。',
+      activation:
+        '一周内保存过资料：只看所选时间里注册、且已满 7 天的人。默认近 7 天可能还没有等满时间的人，此时显示“—”，不表示没人保存。',
+      retention:
+        '回来的人：要等到注册满 2、8、31 天，才能看完整的那一天。每列能统计的人数可能不同；旧访问记录可能已清理，所以 0 不一定代表从未回来。',
       privacy: '这里只统计人数和次数，不展示个人资料、问答或聊天内容。',
     },
   },

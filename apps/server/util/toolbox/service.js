@@ -1030,6 +1030,14 @@ export async function saveToolboxArtifactToNote({
   const connection = await database.getConnection();
   try {
     await connection.beginTransaction();
+    if (artifact.meta?.comparisonTable) {
+      const [locked] = await connection.query(
+        'SELECT artifact_version FROM toolbox_artifacts WHERE id = ? AND user_id = ? AND status = \'ready\' AND expires_at > NOW() FOR UPDATE',
+        [artifact.id, userId],
+      );
+      if (!locked.length || Number(locked[0].artifact_version) !== artifact.version)
+        throw toolboxError('TOOLBOX_COMPARISON_CONFLICT', '成果已更新，请刷新后保存', 409);
+    }
     const [requestRows] = await connection.query(
       'SELECT * FROM toolbox_save_receipts WHERE user_id = ? AND idempotency_key = ? LIMIT 1 FOR UPDATE',
       [userId, idempotencyKey],

@@ -19,10 +19,7 @@
         ><p>{{ t('collectionForms.savedCloseHint') }}</p
         ><BButton type="primary" @click="again">{{
           t(form?.submissionPolicy === 'replace' ? 'collectionForms.editSubmission' : 'collectionForms.again')
-        }}</BButton
-        ><p v-if="form?.submissionPolicy === 'replace'" class="success-policy">{{
-          t('collectionForms.replaceHint')
-        }}</p></div
+        }}</BButton></div
       ></section
     >
     <template v-else-if="form?.status === 'collecting'">
@@ -35,9 +32,7 @@
         :busy="busy"
         @submit="submit"
       />
-      <p class="collection-muted">{{
-        t(form.submissionPolicy === 'replace' ? 'collectionForms.replaceHint' : 'collectionForms.publicHint')
-      }}</p>
+      <p v-if="form.submissionPolicy !== 'replace'" class="collection-muted">{{ t('collectionForms.publicHint') }}</p>
     </template>
     <section v-else-if="form" class="collection-card"
       ><h1>{{ form.definition.title }}</h1
@@ -269,9 +264,6 @@
   .success-next :deep(.b_btn) {
     width: 100%;
     margin-top: var(--ui-space-8, 8px);
-  }
-  .success-policy {
-    margin-bottom: 0;
   }
   .success-footer {
     padding-bottom: var(--ui-space-16, 16px);

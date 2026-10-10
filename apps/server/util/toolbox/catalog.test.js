@@ -139,3 +139,25 @@ describe('toolbox catalog', () => {
     ).toThrowError(expect.objectContaining({ code: 'TOOLBOX_INPUT_TYPE_INVALID' }));
   });
 });
+
+
+describe('comparison mode quote binding', () => {
+  const refs = [{ type: 'note', id: 'a' }, { type: 'note', id: 'b' }];
+  const normalize = options => normalizeToolboxInput('source_comparison', { resourceRefs: refs, options });
+  it('keeps historical report input stable and binds table columns to the quote digest', () => {
+    const report = normalize({ question: '价格' });
+    expect(normalize({ question: '价格', resultMode: 'report' })).toEqual(report);
+    const table = normalize({ question: '价格', resultMode: 'table', columns: [{ label: '价格' }] });
+    expect(table.options.columns).toEqual([{ label: '价格', type: 'auto', rule: '' }]);
+    expect(toolboxInputDigest(table)).not.toBe(toolboxInputDigest(report));
+    for (const columns of [[{ label: '成本' }], [{ label: '价格', rule: '含税' }], [{ label: '价格', type: 'number' }]]) {
+      expect(toolboxInputDigest(normalize({ question: '价格', resultMode: 'table', columns }))).not.toBe(toolboxInputDigest(table));
+    }
+  });
+  it('rejects columns on reports, unrelated tools and malformed tables', () => {
+    expect(() => normalize({ columns: [{ label: '价格' }] })).toThrow();
+    expect(() => normalize({ resultMode: 'table', columns: [{ label: '价格' }] })).toThrow();
+    expect(() => normalize({ question: '价格', resultMode: 'table', columns: [{ label: '价格', rule: {} }] })).toThrow();
+    expect(() => normalizeToolboxInput('research_brief', { resourceRefs: refs, options: { resultMode: 'table', columns: [{ label: '价格' }] } })).toThrow();
+  });
+});

@@ -48,6 +48,7 @@
       "@lightnote/shared/ai-quota-protocol": ["../../packages/shared/aiQuotaProtocol.d.ts"],
       "@lightnote/shared/workspace-board": ["../../packages/shared/workspaceBoard.d.ts"],
       "@lightnote/shared/collection-forms": ["../../packages/shared/collectionForms.d.ts"],
+      "@lightnote/shared/comparison-table": ["../../packages/shared/comparisonTable.d.ts"],
       "@lightnote/shared/toolbox-protocol": ["../../packages/shared/toolboxProtocol.d.ts"]
     },
     "types": ["vite/client", "chrome"]

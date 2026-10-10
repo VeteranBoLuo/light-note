@@ -1,3 +1,4 @@
+import { comparisonTableEn } from './comparisonTable';
 import { translationEn } from './translation';
 import { saveAsNoteEn } from './saveAsNote';
 import { workshopPresentationEn } from './workshopPresentation';
@@ -17,6 +18,7 @@ import { notificationMessages } from '@lightnote/shared/notification-presentatio
 export default {
   translation: translationEn,
   saveAsNote: saveAsNoteEn,
+  comparisonTable: comparisonTableEn,
   collectionForms: collectionFormsEn,
   dataExport: dataExportEn,
   community: communityEn,
@@ -275,7 +277,8 @@ export default {
     rule: 'Rule check · Free',
     aiWhenNeeded: 'Only with sufficient evidence',
     noAi: 'No AI calls for this run',
-    ruleOnlyBilling: 'This run uses basic checks only and does not consume AI quota. You review suggestions before applying them.',
+    ruleOnlyBilling:
+      'This run uses basic checks only and does not consume AI quota. You review suggestions before applying them.',
     excluded: '{names} have no selected applicable checks and will be excluded from this run.',
     recommended: 'Recommended',
     noResources: 'There are no resources to process. Go back to adjust the scope.',
@@ -461,7 +464,8 @@ export default {
       reviewed: 'Review applied or dismissed suggestions',
     },
 
-    reviewEntryHint: 'The brief counts suggestions across organizing runs. This view shows resources awaiting review in one run.',
+    reviewEntryHint:
+      'The brief counts suggestions across organizing runs. This view shows resources awaiting review in one run.',
     exitReviewEntry: 'Back to latest run',
     ignoreSuggestion: 'Ignore suggestion',
     resultsMoved: 'Results updated. Resources moved to: {groups}',
@@ -1273,7 +1277,8 @@ export default {
       aiQuotaExhausted: 'Your AI quota is used up. Switch to points, add permanent quota, or wait for the daily reset.',
       aiQuotaTaskInsufficient:
         'You still have AI quota, but not enough for this task. Reduce the material scope, switch to points, or add quota.',
-      executionUnavailable: 'The server could not create the AI execution record. The task cannot continue. Contact an administrator to check the service configuration.',
+      executionUnavailable:
+        'The server could not create the AI execution record. The task cannot continue. Contact an administrator to check the service configuration.',
       temporarilyUnavailable: 'The service is temporarily busy. Your current content remains available.',
       invalidInput: 'This input is no longer valid. Review it and submit again.',
       documentUnavailable: 'The file cannot be read. Check its format, size, or parsing status.',
@@ -1289,6 +1294,44 @@ export default {
     availableTools: 'Available',
     pointsBalance: 'Point balance',
     itemDetail: {
+      openResourceFailed: 'Unable to open this resource. Please try again.',
+      linkingTo: 'Linking to',
+      projectScope: 'This project',
+      libraryScope: 'Library',
+      emptyProjectTitle: 'No project resources yet',
+      allEvidenceLinked: 'All project resources are linked',
+      emptyProjectHint: 'Choose a resource from your library to add it to the project and link it to this item.',
+      noEvidenceMatch: 'No matching resources. Try another keyword.',
+      resourceTypesHint: 'Notes, bookmarks and files supported',
+      selectedOne: '1 item selected',
+      librarySearch: 'Search notes, bookmarks or files',
+      backToItem: 'Back to item',
+      pickTodoHint: 'Choose a specific task, then confirm to return. Status and date stay in sync with the task.',
+      pickNoteHint: 'Choose a note for the full explanation, then confirm to return.',
+      pickEvidenceHint: 'Select evidence from project resources. You can add an explanation after linking.',
+      searchTodo: 'Search task titles or descriptions',
+      searchNote: 'Search notes',
+      todoStatus: 'Task status',
+      allTodos: 'All tasks',
+      defaultTodoList: 'Default list',
+      noDueDate: 'No due date',
+      todoOccurrence: 'Recurring task · {date}',
+      noMatchingTodos: 'No matching tasks. Try a different search or status.',
+      pickerFailed: 'Could not load tasks. Your item draft is preserved.',
+      retryPicker: 'Retry',
+      selectOne: 'Select an item',
+      addFromLibrary: 'Add from library',
+      backToProjectResources: 'Choose project materials',
+      addAndLink: 'Add and link',
+      addResourceHint:
+        'Add a resource to this project and link it to this item. Project materials remain if you cancel editing the item.',
+      addResourceFailed: 'Could not add resource. Please retry.',
+      confirmLink: 'Confirm link',
+      stagedTodo: 'A task will be created together with this item, using its title, summary and target date.',
+      cancelStagedTodo: 'Cancel task creation',
+      createItem: 'Save item',
+      draftNoteNotice:
+        'The note is saved to your library first. Its link is saved when you create the item. Canceling the item keeps the note.',
       summary: 'Summary and reasoning',
       judgement: 'Conclusion status',
       judgementHint: 'You decide whether a conclusion holds. Completing an action does not confirm it.',
@@ -1308,7 +1351,7 @@ export default {
       openSource: 'Open source',
       markReviewed: 'Mark update reviewed',
       searchEvidence: 'Search project materials',
-      noProjectResources: 'No sources available. Add materials to this project first. Up to 20 sources per card.',
+      noProjectResources: 'No project materials available. Use “Add from library”. Up to 20 sources per card.',
       note: 'Conclusion note',
       noteHint: 'Keep the full explanation in the note library and a summary here.',
       noteChanged: 'Note updated',
@@ -1354,8 +1397,17 @@ export default {
       down: 'Move down',
       archive: 'Archive',
       undo: 'Undo last operation',
-      from: 'From: {title}',
-      source: 'Source content',
+      from: 'Source item: {title}',
+      source: 'Source item',
+      sourceSnapshot: 'Item snapshot',
+      viewSource: 'View source',
+      sourceRelationHint: 'This item was created from the source item above.',
+      sourceCreationHint: 'The new item will be linked to this source when saved.',
+      sourceTypes: {
+        research: { inbox: 'Research question', knowledge: 'Research finding', action: 'Validation action' },
+        learning: { inbox: 'Learning material', knowledge: 'Mastered knowledge', action: 'Review action' },
+        writing: { inbox: 'Writing idea', knowledge: 'Material and insight', action: 'Writing action' },
+      },
       archivedSource: 'The source is archived and read-only.',
       snapshotHint: 'View source content. Historical snapshots do not change with the source.',
       unsaved: 'Unsaved changes',
@@ -1502,7 +1554,8 @@ export default {
       resultReady: 'Ready to save',
       dismissTask: 'Dismiss reminder',
       dismissTaskLabel: 'Dismiss reminder: {title}',
-      dismissTaskHint: 'Remove this task and its save reminder from the home page? The result remains available through its original task link until it expires.',
+      dismissTaskHint:
+        'Remove this task and its save reminder from the home page? The result remains available through its original task link until it expires.',
       dismissTaskFailed: 'Could not dismiss the reminder. Please try again.',
       readyTaskCount: '{count} results ready to save',
       failedTaskCount: '{count} tasks need attention',
@@ -1659,8 +1712,17 @@ export default {
       text: 'Text & data',
     },
     tool: {
-      translation: { name: 'Translation', description: 'Translate complete materials and save as a note', output: 'Translation or bilingual note' },
-      forms: { name: 'Public collection', description: 'Share standalone forms to collect feedback, questions and ideas, with private submissions and statistics.', output: 'Forms, submissions and charts' },
+      translation: {
+        name: 'Translation',
+        description: 'Translate complete materials and save as a note',
+        output: 'Translation or bilingual note',
+      },
+      forms: {
+        name: 'Public collection',
+        description:
+          'Share standalone forms to collect feedback, questions and ideas, with private submissions and statistics.',
+        output: 'Forms, submissions and charts',
+      },
       research_workspace: {
         name: 'Research project',
         description: 'Keep sources, findings, next steps, and progress history around a question over time.',
@@ -2164,7 +2226,8 @@ export default {
       ocrMode: 'Recognition mode',
       aiOcrMode: 'AI recognition (recommended)',
       basicOcrMode: 'Basic recognition (free)',
-      aiOcrHint: 'Files are uploaded to the server. AI reads original images and scanned pages; PDF text is extracted first. Uses your selected AI quota or points, with no automatic billing switch. Verify unclear text against the original.',
+      aiOcrHint:
+        'Files are uploaded to the server. AI reads original images and scanned pages; PDF text is extracted first. Uses your selected AI quota or points, with no automatic billing switch. Verify unclear text against the original.',
       ocrRemaining: 'Remaining today: {pages} pages. Resets {time}.',
       readingScope:
         'Only the readable content of selected resources is used. Bookmarks depend on archives, files on extraction; long content may be truncated. Actual coverage stays with the result.',
@@ -3312,8 +3375,7 @@ export default {
       artifactLoadFailed: 'The result could not be loaded. Try reloading shortly.',
       retry: 'Reload',
       retryingTitle: 'Retrying',
-      finalFailureMessage:
-        'This task could not be completed. Billing for work without a usable result was released.',
+      finalFailureMessage: 'This task could not be completed. Billing for work without a usable result was released.',
       processingFailed: 'This run did not finish. Billing for work without a usable result will be released.',
       progress: 'Progress',
       progressTruthfulHint:
@@ -3794,7 +3856,8 @@ export default {
       limitReached: 'You can save up to 40 stickers. Remove some stickers first.',
       saveUnavailable: 'This sticker is unavailable or cannot be saved',
       saveFailed: 'The sticker could not be saved. Try again later.',
-      gifRejected: 'GIF upload failed. Use a complete GIF up to 2MB; reduce its dimensions or frame count and try again. GIFs are not compressed automatically.',
+      gifRejected:
+        'GIF upload failed. Use a complete GIF up to 2MB; reduce its dimensions or frame count and try again. GIFs are not compressed automatically.',
       compressedTooLarge:
         'The image is still too large after optimization. Try another image, or crop or resize it first.',
       dimensionsTooLarge:
@@ -5231,8 +5294,10 @@ export default {
     continueCapture: 'Add another',
     openCaptured: 'Open resource',
     captureSuccess: 'Added to inbox',
-    captureFilesUnknown: '{saved} saved, {failed} still need attention. Some results are unknown. Retry after reconnecting; existing uploads will be checked first.',
-    captureFilesPartial: '{saved} saved, {failed} unsuccessful. Only unsuccessful files remain below. Check your connection and storage, then retry.',
+    captureFilesUnknown:
+      '{saved} saved, {failed} still need attention. Some results are unknown. Retry after reconnecting; existing uploads will be checked first.',
+    captureFilesPartial:
+      '{saved} saved, {failed} unsuccessful. Only unsuccessful files remain below. Check your connection and storage, then retry.',
     captureSuccessCount: '{count} files added to inbox',
     captureFailed: 'Could not add the item. Please try again.',
     uploadFailed: 'File upload failed',
@@ -7186,7 +7251,8 @@ export default {
     shareCopyLink: 'Copy link',
     shareNewLinkReady: 'Your share link is ready. Copy it or select the address to save it.',
     shareCopyFailed: 'Automatic copying was blocked. Select and copy the link manually.',
-    shareCopyUnavailable: 'The original link is not saved in this tab and cannot be recovered from the server. Replace and copy it? The old link will stop working immediately.',
+    shareCopyUnavailable:
+      'The original link is not saved in this tab and cannot be recovered from the server. Replace and copy it? The old link will stop working immediately.',
 
     title: 'Cloud Space',
     subtitle: 'Organize files in nested folders and by type, with search, preview, drag-and-drop, and batch actions.',
@@ -8856,7 +8922,7 @@ export default {
           toolboxActionPlan: 'Knowledge Workshop · Action plan',
           toolboxSourceComparison: 'Knowledge Workshop · Source comparison',
           toolboxOcrToText: 'Text recognition',
-      toolboxKnowledgeAudit: 'Knowledge Workshop · Knowledge audit',
+          toolboxKnowledgeAudit: 'Knowledge Workshop · Knowledge audit',
           otherAiAction: 'Other AI capability',
         },
         freeActions: {
@@ -8923,7 +8989,8 @@ export default {
     trashForever: 'Forever',
     protectCard: 'Make-up card',
     useProtectCard: 'Keep streak',
-    protectCardHint: 'Earn 1 card once at streaks of 7/30 days and levels 5/10/15. Hold up to {max}; milestone cards at full capacity are not saved or reissued. Each make-up uses 1 card.',
+    protectCardHint:
+      'Earn 1 card once at streaks of 7/30 days and levels 5/10/15. Hold up to {max}; milestone cards at full capacity are not saved or reissued. Each make-up uses 1 card.',
     protectCardOk: 'Streak restored to {n} days 🎉',
     protectCardFail: 'No missed day can be made up within the last 3 days',
     protectCardConfirmTitle: 'Confirm make-up',
@@ -9510,7 +9577,8 @@ export default {
     shopCost: '{n} pts',
     shopBuyConfirm: 'Spend {n} points to redeem "{name}"?',
     shopCardInventory: 'Currently held: {n}/{max}',
-    shopBuyConfirmCard: 'Spend {n} points for 1 make-up card? Currently held: {held}/{max}. Redeeming does not check in for you; each make-up uses 1 card.',
+    shopBuyConfirmCard:
+      'Spend {n} points for 1 make-up card? Currently held: {held}/{max}. Redeeming does not check in for you; each make-up uses 1 card.',
     shopBuyConfirmLimited: 'Spend {n} points to redeem "{name}"? This option can only be redeemed once per account.',
     shopBuyOk: 'Redeemed!',
     shopEquipOk: '"{name}" equipped',
@@ -9554,7 +9622,8 @@ export default {
     // —— Streak milestones ——
     streakMilestoneToast: '🎉 {days}-day streak reached! Reward: {reward}',
     milestoneLadderTitle: 'Streak Milestones',
-    milestoneLadderHint: 'Rewards are granted once when a regular check-in first reaches each milestone; no claim is needed. Make-up check-ins do not grant milestone rewards. “Streak reached” only describes your current streak, not an unclaimed reward or cards remaining. Check your current inventory for cards.',
+    milestoneLadderHint:
+      'Rewards are granted once when a regular check-in first reaches each milestone; no claim is needed. Make-up check-ins do not grant milestone rewards. “Streak reached” only describes your current streak, not an unclaimed reward or cards remaining. Check your current inventory for cards.',
     milestoneDayN: '{n} days',
     milestoneReached: 'Streak reached',
     milestoneCardUnit: 'card',
@@ -9604,7 +9673,10 @@ export default {
     lotteryPoolHint: 'At least one rare reward every {n} draws',
     shopItems: {
       ai_pack_starter: { name: 'AI starter pack', desc: '+50,000 tokens · Permanent, once per account' },
-      makeup_card: { name: 'Make-up Card', desc: 'Redeem 1 card at a time, up to {max} held. Make up a missed day in the 3 calendar days before today; no EXP, points or milestone rewards.' },
+      makeup_card: {
+        name: 'Make-up Card',
+        desc: 'Redeem 1 card at a time, up to {max} held. Make up a missed day in the 3 calendar days before today; no EXP, points or milestone rewards.',
+      },
       ai_pack_small: {
         name: 'AI Mini Boost',
         desc: '+300K tokens · permanent; used automatically after your daily level quota',
@@ -12586,7 +12658,8 @@ export default {
     reasonUpdateTitle: 'Always improving',
     reasonUpdateDesc: 'New features land often — something fresh every visit.',
     reasonFreeTitle: 'Core features free',
-    reasonFreeDesc: 'Save bookmarks, notes, and files for free. AI usage and storage have limits, with optional upgrades.',
+    reasonFreeDesc:
+      'Save bookmarks, notes, and files for free. AI usage and storage have limits, with optional upgrades.',
     reasonSmartTitle: 'Smarter over time',
     reasonSmartDesc: 'Tags weave your content into an ever-denser knowledge web.',
     reasonFastTitle: 'Fast, no fluff',
@@ -12716,7 +12789,8 @@ export default {
     point: '{date} · {count} users',
     missing: 'Not recorded',
     partialPoint: 'Partial day',
-    chartHint: 'Click or use arrow keys to select a date. Gaps mean no recording; today and the first recording day are partial.',
+    chartHint:
+      'Click or use arrow keys to select a date. Gaps mean no recording; today and the first recording day are partial.',
     title: 'Daily active users',
     view: 'View active users',
     total: '{date} · {count} users',
@@ -13267,7 +13341,8 @@ export default {
       day7: 'After 7 days',
       day30: 'After 30 days',
       title: 'Did new users come back?',
-      subtitle: 'Signups in the selected period, grouped by week. Visit records show returns on the day after 1, 7 or 30 elapsed days; they do not prove content was used.',
+      subtitle:
+        'Signups in the selected period, grouped by week. Visit records show returns on the day after 1, 7 or 30 elapsed days; they do not prove content was used.',
       cohort: 'Signup dates (Mon–Sun)',
       newUsers: 'Signups',
       registered: '{count} signups',

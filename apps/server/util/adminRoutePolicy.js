@@ -443,6 +443,7 @@ declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'toolbox', [
   ['POST', '/toolbox/jobs/:jobId/dismiss'],
   ['POST', '/toolbox/artifacts/:artifactId/save'],
   ['POST', '/toolbox/artifacts/:artifactId/study'],
+  ['PATCH', '/toolbox/artifacts/:artifactId/comparison'],
 ]);
 // 安装包永久地址：只做一次 302 到静态文件，不读用户数据，代管上下文下同样放行
 declare(ADMIN_POLICIES.READ, 'app', [['GET', '/app/android/latest.apk']]);
@@ -939,6 +940,8 @@ function resolvePolicy(method, path) {
   if (/^\/toolbox\/artifacts\/[^/]+$/.test(path)) {
     return routePolicies.get(`${method} /toolbox/artifacts/:artifactId`);
   }
+  if (/^\/toolbox\/artifacts\/[^/]+\/comparison$/.test(path))
+    return routePolicies.get(`${method} /toolbox/artifacts/:artifactId/comparison`);
   if (/^\/toolbox\/artifacts\/[^/]+\/study$/.test(path))
     return routePolicies.get(`${method} /toolbox/artifacts/:artifactId/study`);
   if (/^\/toolbox\/artifacts\/[^/]+\/save$/.test(path)) {

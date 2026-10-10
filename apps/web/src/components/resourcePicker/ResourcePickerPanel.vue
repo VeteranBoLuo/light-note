@@ -925,7 +925,8 @@
     padding-bottom: var(--ui-space-6, 6px);
   }
 
-  .resource-picker-panel.has-search .resource-picker-panel__results {
+  .resource-picker-panel.has-search .resource-picker-panel__results,
+  .resource-picker-panel.has-search .resource-picker-panel__virtual-list {
     margin-top: var(--ui-space-8, 8px);
   }
 

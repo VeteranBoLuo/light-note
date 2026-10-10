@@ -506,4 +506,54 @@ describe('BDrawer compositor cleanup', () => {
     await nextTick();
     expect(onClose).toHaveBeenCalledOnce();
   });
+  it('keeps the background inert through closing, handles reopen, and releases only the final layer', async () => {
+    const host = document.createElement('div');
+    host.id = 'app';
+    document.body.append(host);
+    const outer = ref(true),
+      inner = ref(true);
+    const closed = vi.fn();
+    const app = createApp({
+      render: () =>
+        h('div', [
+          h(BDrawer, { open: outer.value, title: 'Outer' }),
+          h(BDrawer, { open: inner.value, title: 'Inner', onAfterClose: closed }),
+        ]),
+    });
+    app
+      .use(createPinia())
+      .use(createI18n({ legacy: false, locale: 'en', messages: { en: { common: { close: 'Close' } } } }));
+    app.mount(host);
+    cleanup = () => {
+      app.unmount();
+      host.remove();
+    };
+    await nextTick();
+    expect(host.hasAttribute('inert')).toBe(true);
+    inner.value = false;
+    await nextTick();
+    expect(host.hasAttribute('inert')).toBe(true);
+    inner.value = true;
+    await nextTick();
+    expect(host.hasAttribute('inert')).toBe(true);
+    expect(closed).not.toHaveBeenCalled();
+    const finish = async (index: number) => {
+      const event = new Event('transitionend', { bubbles: true });
+      Object.defineProperty(event, 'propertyName', { value: 'transform' });
+      document.querySelectorAll('.b-drawer-panel')[index].dispatchEvent(event);
+      await nextTick();
+      await nextTick();
+    };
+    inner.value = false;
+    await nextTick();
+    await finish(1);
+    expect(closed).toHaveBeenCalledOnce();
+    expect(host.hasAttribute('inert')).toBe(true);
+    outer.value = false;
+    await nextTick();
+    expect(host.hasAttribute('inert')).toBe(true);
+    await finish(0);
+    expect(host.hasAttribute('inert')).toBe(false);
+    expect(document.querySelector('.b-drawer-wrapper')).toBeNull();
+  });
 });
