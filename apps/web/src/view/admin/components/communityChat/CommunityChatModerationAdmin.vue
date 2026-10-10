@@ -115,7 +115,7 @@
       :current-page="currentPage"
       :page-size="pageSize"
       @page-change="handlePageChange"
-      @size-change="handleSizeChange"
+      @size-change="(_current, size) => handleSizeChange(size)"
     >
       <template #bodyCell="{ column, record }">
         <div v-if="column.key === 'evidence'" class="community-moderation-admin__evidence">
@@ -570,7 +570,7 @@
     void load();
   }
 
-  function handleSizeChange(_current: number, size: number) {
+  function handleSizeChange(size: number) {
     currentPage.value = 1;
     pageSize.value = Math.max(1, Number(size) || 20);
     void load();

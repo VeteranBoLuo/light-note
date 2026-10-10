@@ -375,10 +375,18 @@
       if (fields.description) draft.description = String(fields.description);
       const validIds = new Set(tagOptions.value.map((option) => option.value));
       draft.selectedTagIds = [
-        ...new Set((fields.matchedTagIds || []).map(String).filter((id: string) => validIds.has(id))),
+        ...new Set<string>(
+          (Array.isArray(fields.matchedTagIds) ? fields.matchedTagIds : [])
+            .map(String)
+            .filter((id: string) => validIds.has(id)),
+        ),
       ].slice(0, 4);
       suggestedNewTags.value = [
-        ...new Set((fields.newTags || []).map((tag: unknown) => String(tag || '').trim()).filter(Boolean)),
+        ...new Set<string>(
+          (Array.isArray(fields.newTags) ? fields.newTags : [])
+            .map((tag: unknown) => String(tag || '').trim())
+            .filter(Boolean),
+        ),
       ].slice(0, 4);
       draft.selectedNewTags = draft.selectedNewTags.filter((tag) => suggestedNewTags.value.includes(tag));
       aiGenerated.value = true;

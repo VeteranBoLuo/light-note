@@ -223,7 +223,7 @@
             :value="logLevel"
             :options="logLevelOptions"
             :aria-label="t('serverManagement.logsLevelLabel')"
-            @change="logLevel = String($event)"
+            @change="logLevel = $event"
           />
           <BSelect
             :value="logRefreshInterval"

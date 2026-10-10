@@ -59,7 +59,7 @@
                 {{ t('common.edit') }}
               </BButton>
               <BButton :loading="duplicating" :disabled="limitReached" @click="duplicateActive">
-                <SvgIcon :src="icon.noteDetail.toolbar.copy" size="15" aria-hidden="true" />
+                <SvgIcon :src="icon.noteDetail.imageToolbar.copy" size="15" aria-hidden="true" />
                 {{ t('note.templateManager.duplicate') }}
               </BButton>
               <BButton type="danger" @click="confirmDeleteActive">
@@ -216,7 +216,7 @@
     {
       key: 'duplicate',
       label: t('note.templateManager.duplicate'),
-      icon: icon.noteDetail.toolbar.copy,
+      icon: icon.noteDetail.imageToolbar.copy,
       disabled: limitReached.value,
       loading: duplicating.value,
     },

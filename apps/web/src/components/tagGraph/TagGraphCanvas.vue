@@ -168,22 +168,24 @@
     centerY: number,
   ) {
     if (node.meta?.isCenter || !position) {
-      return { placement: 'bottom', offsetX: 0, offsetY: 10 };
+      return { placement: 'bottom' as const, offsetX: 0, offsetY: 10 };
     }
     const dx = position.x - centerX;
     const dy = position.y - centerY;
     if (Math.abs(dx) < 44) {
       const seed = Array.from(node.id).reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
       return seed % 2 === 0
-        ? { placement: 'left', offsetX: -12, offsetY: 0 }
-        : { placement: 'right', offsetX: 12, offsetY: 0 };
+        ? { placement: 'left' as const, offsetX: -12, offsetY: 0 }
+        : { placement: 'right' as const, offsetX: 12, offsetY: 0 };
     }
     if (Math.abs(dx) >= Math.abs(dy) * 0.9) {
       return dx >= 0
-        ? { placement: 'right', offsetX: 12, offsetY: 0 }
-        : { placement: 'left', offsetX: -12, offsetY: 0 };
+        ? { placement: 'right' as const, offsetX: 12, offsetY: 0 }
+        : { placement: 'left' as const, offsetX: -12, offsetY: 0 };
     }
-    return dy >= 0 ? { placement: 'bottom', offsetX: 0, offsetY: 12 } : { placement: 'top', offsetX: 0, offsetY: -12 };
+    return dy >= 0
+      ? { placement: 'bottom' as const, offsetX: 0, offsetY: 12 }
+      : { placement: 'top' as const, offsetX: 0, offsetY: -12 };
   }
 
   function getEdgeCurveOffset(edgeId: string) {

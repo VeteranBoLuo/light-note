@@ -131,7 +131,8 @@
     }
     const navigation = resolveAiSourceNavigation({ type: 'note', id: item.id, title: '', target: 'note-detail' });
     if (navigation.kind === 'internal') {
-      void router.push({ path: navigation.target, query: { focusRef } });
+      const target = typeof navigation.target === 'string' ? { path: navigation.target } : navigation.target;
+      void router.push({ ...target, query: { ...target.query, focusRef } });
     }
   }
 

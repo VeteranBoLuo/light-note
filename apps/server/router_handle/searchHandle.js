@@ -1,6 +1,12 @@
 import pool from '../db/index.js';
 import { buildRelevantSearchQuery, relevanceReason } from '../util/searchRelevancePagination.js';
-import { searchSeekScope, searchOrderKeys, buildSearchSeek, takeSearchSeekRows } from '../util/searchSeekPagination.js';
+import {
+  searchSeekScope,
+  searchOrderKeys,
+  buildSearchSeek,
+  searchSeekIndexHint,
+  takeSearchSeekRows,
+} from '../util/searchSeekPagination.js';
 import { MAX_EXPLICIT_RESOURCE_SELECTION } from '@lightnote/shared/resource-selection';
 import { resolveExplicitResourceSelection } from '../util/services/resourceSelectionService.js';
 import { resolveCloudFolderTagSelection } from '../util/services/cloudFolderTreeService.js';
@@ -671,7 +677,7 @@ async function queryBookmarks(userId, options, lang, includeItems, includeTotal 
               AND t.user_id = ?
               AND t.del_flag = 0
           ) AS tag_list
-        FROM bookmark b
+        FROM bookmark b ${searchSeekIndexHint('bookmark', options)}
         WHERE ${whereSql}${seek.where}
         ORDER BY ${order.sql}
         ${seek.limitSql}
@@ -812,7 +818,7 @@ async function queryFiles(userId, options, lang, includeItems, includeTotal = tr
               AND ft.user_id = ?
               AND ft.del_flag = 0
           ) AS tags
-        FROM files
+        FROM files ${searchSeekIndexHint('file', options)}
         LEFT JOIN folders ON files.folder_id = folders.id
         WHERE ${whereSql}${seek.where}
         ORDER BY ${order.sql}

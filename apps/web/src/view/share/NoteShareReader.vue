@@ -36,7 +36,7 @@
 
     <main v-else-if="errorMessage && !page.id" class="note-share-reader__center">
       <section class="note-share-reader__gate" role="alert">
-        <span class="note-share-reader__gate-icon is-error"><SvgIcon :src="icon.common.info" size="24" /></span>
+        <span class="note-share-reader__gate-icon is-error"><SvgIcon :src="icon.message.info" size="24" /></span>
         <h1>{{ t('noteShare.unavailableTitle') }}</h1>
         <p>{{ errorMessage }}</p>
         <BButton :loading="loading" @click="resolveShare">{{ t('common.retry') }}</BButton>

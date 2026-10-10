@@ -94,7 +94,7 @@
         <div class="daily-brief-card__heading">
           <div class="daily-brief-card__title-row">
             <h2>{{ t('workbench.dailyBrief.title') }}</h2>
-            <BChip v-if="briefInsights.length" tone="primary">{{ briefInsights.length }}</BChip>
+            <BChip v-if="briefInsights.length" tone="neutral">{{ briefInsights.length }}</BChip>
             <BChip v-if="readOnly" tone="neutral">{{ t('workbench.dailyBrief.previewMode') }}</BChip>
           </div>
           <p v-if="guestSample">{{ t('workbench.dailyBrief.guestSubtitle') }}</p>

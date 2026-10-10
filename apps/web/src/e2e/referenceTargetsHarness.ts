@@ -4,6 +4,7 @@ import { createRouter, createMemoryHistory } from 'vue-router';
 import { createI18n } from 'vue-i18n';
 import { buildResourceHref } from '@lightnote/shared';
 import request from '@/http/request';
+import type { ResolvedResourceReference } from '@/api/noteReferences';
 import globalDirect from '@/config/globalDirect';
 import { bookmarkStore, useUserStore } from '@/store';
 import { resolveResourceRoute } from '@/utils/resourceNavigation';
@@ -41,6 +42,10 @@ const refs = [
   { type: 'tag' as const, id: 'topic', title: params.has('longTitle') ? '项目研究与跨团队知识协作的长期参考主题标签示例 LongResourceTitleWithoutSpaces1234567890' : '项目标签', available: true, snapshotTitle: '项目标签' },
   { type: 'tag' as const, id: 'deleted', title: '已删除的标签', available: false, snapshotTitle: '已删除的标签' },
 ];
+const editorRefs: ResolvedResourceReference[] = refs.map(({ type, id, title, available }) => ({
+  type, id, title, available,
+  navigation: available ? { target: ({ bookmark: 'bookmark-url', note: 'note-detail', file: 'cloud-file', todo: 'todo-detail', tag: 'tag-detail' } as const)[type], ...(type === 'file' ? { fileId: id } : {}) } : null,
+}));
 request.defaults.adapter = async (config) => {
   const body = typeof config.data === 'string' ? JSON.parse(config.data) : config.data || {};
   const items = refs.filter(
@@ -94,7 +99,7 @@ const app = createApp({
             params.get('format') === 'markdown'
               ? refs.map((r) => `[${r.title}](${buildResourceHref(r)})`).join('\n\n')
               : refs.map((r) => `<p><a href="${buildResourceHref(r)}">${r.title}</a></p>`).join(''),
-          resourceRefs: refs,
+          resourceRefs: editorRefs,
           noteId: 'fixture-note',
         }),
       ]),

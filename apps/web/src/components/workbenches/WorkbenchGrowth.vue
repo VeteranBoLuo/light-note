@@ -182,7 +182,7 @@
       <div class="growth-actions">
         <BButton
           size="small"
-          :type="g.checkedInToday ? '' : 'primary'"
+          :type="g.checkedInToday ? undefined : 'primary'"
           :loading="checking"
           :disabled="readOnly || g.checkedInToday || checking"
           :title="readOnly ? t('growth.adminContextActionUnavailable') : ''"

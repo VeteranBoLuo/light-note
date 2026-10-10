@@ -25,7 +25,7 @@
               type="snapshot"
               :label="$t('bookmarkMg.badgeArchived')"
               :tooltip="$t('bookmarkMg.badgeArchivedHint')"
-              @click="handleBookmarkSnapshotClick(data)"
+              @click="handleBookmarkSnapshotClick({ id: String(data.id) })"
               v-click-log="OPERATION_LOG_MAP.bookmarkMg.viewSnapshot"
             />
           </span>
@@ -344,7 +344,7 @@
     openItemActions(item);
   }
 
-  function handleBookmarkSnapshotClick(item: BookmarkInterface) {
+  function handleBookmarkSnapshotClick(item: Pick<BookmarkInterface, 'id'>) {
     if (batchMode.value) {
       toggleSelection(item.id);
       return;

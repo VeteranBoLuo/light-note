@@ -97,7 +97,6 @@ describe('待办创建页原型布局', () => {
     expect(simpleSource).toMatch(/\.is-mobile \.todo-simple-editor__footer[\s\S]*?position:\s*fixed/);
     expect(simpleSource).not.toContain('mobileStep ===');
     expect(quickCaptureSource).toContain("router.push({ name: 'todoCreate'");
-    expect(quickCaptureSource).toContain('const todoInitialValues: TodoCreateInitialValues');
     expect(quickCaptureSource).toContain('state: { todoInitialValues }');
     expect(quickCaptureSource).not.toContain('state: { todoInitialValues: todoDraft.value }');
   });

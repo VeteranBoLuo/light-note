@@ -1,5 +1,6 @@
 import {
   ACTIVE_USERS_QUERY,
+  AI_ADOPTION_QUERY,
   ACTIVATION_QUERY,
   COHORT_RETENTION_QUERY,
 } from '../util/services/productInsightsQueries.js';
@@ -155,16 +156,7 @@ export async function getAdminProductInsights(req, res) {
             )`,
         [periodDays, periodDays],
       ),
-      optionalQuery(
-        'ai',
-        `SELECT COUNT(DISTINCT e.subject_user_id) AS users, COUNT(*) AS events
-           FROM ai_product_events e
-           JOIN user u ON u.id = e.subject_user_id AND u.role = 'user' AND u.del_flag = '0'
-          WHERE e.admin_context_mode = 'normal'
-            AND e.event_name IN ('ai_prompt_submitted', 'ai_completed', 'ai_change_succeeded')
-            AND e.create_time >= DATE_SUB(NOW(), INTERVAL ? DAY)`,
-        [periodDays],
-      ),
+      optionalQuery('ai', AI_ADOPTION_QUERY, [periodDays]),
       optionalQuery(
         'community',
         `SELECT COUNT(DISTINCT m.user_id) AS users, COUNT(*) AS events

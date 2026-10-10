@@ -137,7 +137,7 @@ export function useResourceSelection(
   }
   async function prepare(
     explicitItems?: SelectedResource[],
-    limit = MAX_EXPLICIT_RESOURCE_SELECTION,
+    limit: number = MAX_EXPLICIT_RESOURCE_SELECTION,
   ): Promise<SelectionOperation | null> {
     if (!active.value || (loading.value && !explicitItems?.length) || !(explicitItems?.length || store.count))
       return null;

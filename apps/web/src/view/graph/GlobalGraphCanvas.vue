@@ -229,7 +229,7 @@
             labelFill,
             labelFontSize: 11,
             labelFontWeight: 600,
-            labelPlacement: 'bottom',
+            labelPlacement: 'bottom' as const,
             labelOffsetY: 8,
             labelBackground: true,
             labelBackgroundFill: labelBg,

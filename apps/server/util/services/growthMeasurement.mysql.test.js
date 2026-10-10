@@ -2,7 +2,12 @@ import { randomUUID } from 'node:crypto';
 import { buildApproximateFunnelQuery } from './conversionFunnelQuery.js';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import mysql from 'mysql2/promise';
-import { ACTIVE_USERS_QUERY, ACTIVATION_QUERY, COHORT_RETENTION_QUERY } from './productInsightsQueries.js';
+import {
+  ACTIVE_USERS_QUERY,
+  AI_ADOPTION_QUERY,
+  ACTIVATION_QUERY,
+  COHORT_RETENTION_QUERY,
+} from './productInsightsQueries.js';
 
 // Opt-in isolated MySQL integration test. Writes only a newly created, randomly named test schema.
 // Never reads project database credentials or connects over TCP.
@@ -26,6 +31,8 @@ describe.skipIf(!socketPath)('增长测量 SQL 行为（隔离 MySQL）', () => 
     await db.query(
       `CREATE TABLE api_logs (user_id VARCHAR(64), del_flag CHAR(1), request_time DATETIME, KEY idx_user_time(user_id,request_time))`,
     );
+    await db.query(`CREATE TABLE ai_product_events (
+      subject_user_id VARCHAR(64), admin_context_mode VARCHAR(32), event_name VARCHAR(64), create_time DATETIME)`);
   });
   afterAll(async () => {
     try {
@@ -35,7 +42,35 @@ describe.skipIf(!socketPath)('增长测量 SQL 行为（隔离 MySQL）', () => 
     }
   });
   beforeEach(async () => {
-    for (const table of ['conversion_events', 'user', 'api_logs']) await db.query(`DELETE FROM ${table}`);
+    for (const table of ['conversion_events', 'user', 'api_logs', 'ai_product_events'])
+      await db.query(`DELETE FROM ${table}`);
+  });
+  it('AI 采用兼容新旧事件并按用户去重，排除预览、内部、停用、孤立账号和窗口外事件', async () => {
+    await db.query('INSERT INTO user VALUES ?', [
+      [
+        ['legacy', 'user', '0', '2026-01-01'],
+        ['skill', 'user', '0', '2026-01-01'],
+        ['opened', 'user', '0', '2026-01-01'],
+        ['preview', 'user', '0', '2026-01-01'],
+        ['internal', 'root', '0', '2026-01-01'],
+        ['test', 'test', '0', '2026-01-01'],
+        ['disabled', 'user', '1', '2026-01-01'],
+        ['old', 'user', '0', '2026-01-01'],
+      ],
+    ]);
+    const rows = [];
+    const add = (id, event, mode = 'normal', time = '2026-09-11 11:00:00') => rows.push([id, mode, event, time]);
+    for (const event of ['ai_prompt_submitted', 'ai_completed', 'ai_change_succeeded']) add('legacy', event);
+    for (const event of ['ai_skill_started', 'ai_skill_completed', 'ai_skill_applied']) add('skill', event);
+    add('skill', 'ai_prompt_submitted');
+    add('skill', 'ai_skill_started', 'normal', '2026-09-04 12:00:00');
+    for (const event of ['ai_skill_opened', 'ai_skill_failed']) add('opened', event);
+    add('preview', 'ai_skill_started', 'preview');
+    for (const id of ['internal', 'test', 'disabled', 'orphan']) add(id, 'ai_skill_completed');
+    add('old', 'ai_skill_started', 'normal', '2026-09-04 11:59:59');
+    await db.query('INSERT INTO ai_product_events VALUES ?', [rows]);
+    expect((await db.query(AI_ADOPTION_QUERY, [7]))[0][0]).toEqual({ users: 2, events: 8 });
+    expect((await db.query(AI_ADOPTION_QUERY, [30]))[0][0]).toEqual({ users: 3, events: 9 });
   });
   it('活跃存在性查询保持时间、角色、删除和重复过滤', async () => {
     await db.query(

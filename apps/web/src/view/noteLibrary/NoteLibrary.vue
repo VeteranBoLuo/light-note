@@ -1062,7 +1062,7 @@
   }
   interface PreviewBreadcrumbTarget {
     id: string;
-    title?: string;
+    title: string;
   }
   interface PreviewBreadcrumbResolution {
     noteId: string;
@@ -1568,7 +1568,7 @@
     const noteId = String(payload?.noteId || '').trim();
     if (!noteId || noteId !== previewNoteId.value) return;
     const previousPending = previewNoteSeed.value?.isPending;
-    const nextSeed = { ...(previewNoteSeed.value || {}), ...(payload.detail || {}), id: noteId };
+    const nextSeed: Record<string, any> = { ...(previewNoteSeed.value || {}), ...(payload.detail || {}), id: noteId };
     if (previewPendingLocallyChanged && previousPending !== undefined) nextSeed.isPending = previousPending;
     previewNoteSeed.value = nextSeed;
     previewSeedScope = noteCacheScope.value;
@@ -3057,7 +3057,7 @@
         format: entry.format,
         mimeType,
       });
-      if (outcome.ok) return true;
+      if (outcome.ok === true) return true;
       message.warning(
         outcome.reason === 'too_large'
           ? outcome.message || t('noteDetail.exportTooLargeInApp')
@@ -3139,7 +3139,7 @@
         isCurrent: () => selection.current(operation) && batchExportModalVisible.value,
       });
       if (!selection.current(operation)) return false;
-      if (outcome.ok) {
+      if (outcome.ok === true) {
         return true;
       }
       message.warning(

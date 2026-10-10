@@ -982,8 +982,8 @@
   ] as const;
   let richColorBookmark: unknown = null;
   const richTextGradientDialogVisible = ref(false);
-  const richTextGradientFrom = ref(DEFAULT_TEXT_GRADIENT.from);
-  const richTextGradientTo = ref(DEFAULT_TEXT_GRADIENT.to);
+  const richTextGradientFrom = ref<string>(DEFAULT_TEXT_GRADIENT.from);
+  const richTextGradientTo = ref<string>(DEFAULT_TEXT_GRADIENT.to);
   const richTextGradientAngle = ref<TextGradientAngle>(DEFAULT_TEXT_GRADIENT.angle as TextGradientAngle);
   const richTextGradientEditingExisting = ref(false);
   const richTextGradientPresets = [
@@ -5049,7 +5049,8 @@
       editor.on('init', () => {
         bindMermaidEditRequest();
         bindRichImageNativeMenuGuard();
-        contextToolbarScrollContainer = editor.getBody?.()?.closest<HTMLElement>('.note-editor-scroll') || null;
+        contextToolbarScrollContainer =
+          (editor.getBody?.() as HTMLElement | undefined)?.closest<HTMLElement>('.note-editor-scroll') || null;
         contextToolbarScrollContainer?.addEventListener('scroll', scheduleContextToolbarAdjustment, {
           passive: true,
         });

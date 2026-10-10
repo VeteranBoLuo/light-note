@@ -37,7 +37,7 @@
             }}</span>
           </template>
           <template v-else-if="column.key === 'action'">
-            <b-button size="small" @click.stop="openIpAccounts?.(record.ip, record.isBanned)">账户</b-button>
+            <b-button size="small" @click.stop="openIpAccounts?.(record.ip)">账户</b-button>
           </template>
         </template>
       </BTable>
@@ -64,7 +64,7 @@
   const ipSearchTimer = ref<any>(null);
 
   function onRowClick(record: any) {
-    openIpAccounts?.(record.ip, record.isBanned);
+    openIpAccounts?.(record.ip);
   }
 
   async function searchIps() {

@@ -27,7 +27,8 @@ describe.skipIf(!socketPath)('native notification real SQL', () => {
     admin = await mysql.createConnection({ socketPath, user: 'root' });
     const [[runtime]] = await admin.query('SELECT @@global.skip_networking AS isolated');
     if (!Number(runtime.isolated)) throw new Error('Isolated MySQL required');
-    await admin.query(`CREATE DATABASE ${schema}`);
+    // 历史通知/账号与推送表故意采用不同排序规则，不能依赖服务器默认值。
+    await admin.query(`CREATE DATABASE ${schema} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
     db = mysql.createPool({ socketPath, user: 'root', database: schema });
     for (const sql of browserPushTableSql) await db.query(sql);
     await db.query(

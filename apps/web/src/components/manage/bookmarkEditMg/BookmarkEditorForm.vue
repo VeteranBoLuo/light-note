@@ -216,7 +216,8 @@
 
   function handleGenerateClick() {
     if (props.resolvingUrl || props.saving) return;
-    emit(props.generating ? 'stopGenerate' : 'generate');
+    if (props.generating) emit('stopGenerate');
+    else emit('generate');
   }
 </script>
 

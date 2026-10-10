@@ -48,7 +48,8 @@ export async function readNativeNotifications(db, userId, input = {}) {
          WHERE n.user_id = ? AND n.id IN (?)
            AND s.enabled_at <= n.browser_push_created_at
            AND (n.browser_push_pending = 1 OR EXISTS (SELECT 1 FROM browser_push_jobs j
-             WHERE j.notification_id = n.id AND j.subscription_id = s.id AND j.generation = s.generation
+             WHERE j.notification_id = CONVERT(n.id USING utf8mb4) COLLATE utf8mb4_general_ci
+               AND j.subscription_id = s.id AND j.generation = s.generation
                AND j.status IN ('pending', 'sending', 'accepted')))`,
         [binding.id, userId, rows.map((row) => row.id)],
       );

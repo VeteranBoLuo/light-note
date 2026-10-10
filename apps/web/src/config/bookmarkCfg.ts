@@ -26,6 +26,7 @@ export interface BookmarkInterface {
 export type BaseOptions = {
   label: string;
   value: any;
+  disabled?: boolean;
 };
 
 export enum RoleEnum {

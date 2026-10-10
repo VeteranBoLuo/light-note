@@ -61,7 +61,7 @@
         </div>
 
         <div class="storage-shared-note">
-          <SvgIcon :src="icon.common.info" size="14" aria-hidden="true" />
+          <SvgIcon :src="icon.message.info" size="14" aria-hidden="true" />
           <span>{{ t('cloudSpace.storageSharedHint') }}</span>
         </div>
 

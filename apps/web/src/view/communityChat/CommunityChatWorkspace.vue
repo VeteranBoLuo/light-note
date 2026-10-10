@@ -814,7 +814,12 @@
     @block="blockProfileMember"
     @report="reportProfileMember"
     @login="loginFromProfile"
-    @navigate="(path) => closeProfileThen(() => router.push(path))"
+    @navigate="
+      (path) =>
+        closeProfileThen(async () => {
+          await router.push(path);
+        })
+    "
   />
 </template>
 
@@ -4503,7 +4508,6 @@
       confirmBlock(chatMessage);
       return;
     }
-    if (action === 'hide') confirmHide(chatMessage);
   }
 
   async function saveMessageSticker(chatMessage: CommunityChatMessage) {

@@ -115,7 +115,7 @@ describe('transactional notification outbox', () => {
     expect(conn.commit).toHaveBeenCalledOnce();
   });
 });
-function workerDb({ ttl = 300, active = true, preferences = {} } = {}) {
+function workerDb({ ttl = 300, active = true, ownerEligible = true, preferences = {} } = {}) {
   return {
     query: vi.fn(async (sql) => {
       if (sql.startsWith("UPDATE browser_push_jobs SET status = 'sending'")) return [{ affectedRows: 1 }];
@@ -152,6 +152,8 @@ function workerDb({ ttl = 300, active = true, preferences = {} } = {}) {
         ];
       if (sql.startsWith('SELECT * FROM notification'))
         return [[{ id: 'n1', type: 'todo_reminder', title: '待办提醒', content: '做事' }]];
+      if (sql.includes('FROM user WHERE id'))
+        return [ownerEligible ? [{ push_preferences: JSON.stringify(preferences) }] : []];
       return [{ affectedRows: 1 }];
     }),
   };
@@ -204,6 +206,7 @@ describe('push worker', () => {
   it.each([
     { ttl: 0, active: true, status: 'expired' },
     { ttl: 100, active: false, status: 'cancelled' },
+    { ttl: 100, active: true, ownerEligible: false, status: 'cancelled' },
   ])('does not send $status jobs', async ({ status, ...options }) => {
     const send = vi.fn();
     expect((await processNextPush({ db: workerDb(options), send, env })).status).toBe(status);
