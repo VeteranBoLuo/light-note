@@ -86,7 +86,7 @@ describe.skipIf(!socketPath)('V3 提取表 MySQL 幂等、核对和 Worker 围�
     // Match the application pool: positional object parameters must also work with named placeholders enabled.
     db = mysql.createPool({ socketPath, user: 'root', database: schema, connectionLimit: 8, namedPlaceholders: true });
     await db.query(
-      'CREATE TABLE ai_executions(id CHAR(36),request_id CHAR(36),actor_user_id VARCHAR(64),charged_tokens INT,status VARCHAR(32),quota_settlement_status VARCHAR(32))',
+      'CREATE TABLE ai_executions(id CHAR(36),request_id CHAR(36),actor_user_id VARCHAR(64),charged_tokens INT,status VARCHAR(32),quota_settlement_status VARCHAR(32)) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci',
     );
     await db.query(
       'CREATE TABLE note(id VARCHAR(64), title TEXT,type VARCHAR(24),content LONGTEXT,create_by VARCHAR(64),del_flag INT)',
@@ -116,6 +116,7 @@ describe.skipIf(!socketPath)('V3 提取表 MySQL 幂等、核对和 Worker 围�
   });
   beforeEach(async () => {
     for (const table of [
+      'ai_executions',
       'toolbox_extraction_records',
       'toolbox_extraction_sources',
       'toolbox_extraction_receipts',
@@ -197,6 +198,28 @@ describe.skipIf(!socketPath)('V3 提取表 MySQL 幂等、核对和 Worker 围�
       status: 409,
     });
     await expect(call(readExtraction, { id: tables[0].id, userId: 'other' })).rejects.toMatchObject({ status: 404 });
+  });
+  it('历史账本排序规则不同仍能读取用量，并排除其他账号、提取表和非执行回执', async () => {
+    const table = await call(createExtraction, { input: input() });
+    const otherTable = await call(createExtraction, { input: input() });
+    for (const [owner, extractionId, kind, tokens, status, settlement] of [
+      ['u', table.id, 'execution', 27, 'completed', 'settled'],
+      ['u', table.id, 'execution', 0, 'running', 'pending'],
+      ['u', table.id, 'execution', 5, 'failed', 'deferred'],
+      ['other', table.id, 'execution', 100, 'completed', 'settled'],
+      ['u', otherTable.id, 'execution', 200, 'completed', 'settled'],
+      ['u', table.id, 'review', 300, 'completed', 'settled'],
+    ]) {
+      const request = randomUUID();
+      await db.query('INSERT INTO ai_executions VALUES (?,?,?,?,?,?)', [
+        randomUUID(), request, owner, tokens, status, settlement,
+      ]);
+      await db.query(
+        'INSERT INTO toolbox_extraction_receipts (extraction_id,user_id,request_id,digest,response_json) VALUES (?,?,?,?,?)',
+        [extractionId, 'u', request, 'test', JSON.stringify({ kind })],
+      );
+    }
+    expect((await call(readExtraction, { id: table.id })).usage).toEqual({ calls: 3, chargedTokens: 32, unsettled: 2 });
   });
   it('人工空值、并发版本冲突和重试回执不会重复写入', async () => {
     const t = await ready();

@@ -150,7 +150,9 @@ export async function readExtraction({ userId, id, database = pool }) {
   const [[usage]] = await database.query(
     `SELECT COUNT(e.id) calls,COALESCE(SUM(e.charged_tokens),0) chargedTokens,
     COALESCE(SUM(e.status='running' OR e.quota_settlement_status='deferred'),0) unsettled
-    FROM toolbox_extraction_receipts r JOIN ai_executions e ON e.request_id=r.request_id AND e.actor_user_id=r.user_id
+    FROM toolbox_extraction_receipts r JOIN ai_executions e
+      ON e.request_id=CONVERT(r.request_id USING utf8mb4) COLLATE utf8mb4_general_ci
+      AND e.actor_user_id=CONVERT(r.user_id USING utf8mb4) COLLATE utf8mb4_general_ci
     WHERE r.extraction_id=? AND r.user_id=? AND JSON_UNQUOTE(JSON_EXTRACT(r.response_json,'$.kind'))='execution'`,
     [id, userId],
   );
