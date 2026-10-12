@@ -55,12 +55,15 @@ async function unwrap<T>(promise: Promise<ApiResponse>): Promise<T> {
   return response.data;
 }
 const root = '/api/toolbox/extractions';
-export const listExtractions = () => unwrap<ExtractionTable[]>(apiBaseGet(root, undefined, {
-  silent: true,
-  // Preserve the feature's initialization code; the global 5xx handler replaces
-  // it with HTTP_503. Authentication and other HTTP errors keep their usual path.
-  validateStatus: (status) => (status >= 200 && status < 300) || status === 503,
-}));
+export const listExtractions = () =>
+  unwrap<ExtractionTable[]>(
+    apiBaseGet(root, undefined, {
+      silent: true,
+      // Preserve the feature's initialization code; the global 5xx handler replaces
+      // it with HTTP_503. Authentication and other HTTP errors keep their usual path.
+      validateStatus: (status) => (status >= 200 && status < 300) || status === 503,
+    }),
+  );
 export const getExtraction = (id: string) =>
   unwrap<ExtractionTable>(apiBaseGet(`${root}/${id}`, undefined, { silent: true }));
 export const createExtraction = (input: {
@@ -68,6 +71,7 @@ export const createExtraction = (input: {
   title: string;
   goal: string;
   resourceRefs: ToolboxResourceRef[];
+  autoAnalyze?: boolean;
 }) => unwrap<ExtractionTable>(apiBasePost(root, input, { silent: true }));
 export const extractionAction = (id: string, input: Record<string, unknown>) =>
   unwrap<ExtractionTable>(apiBasePost(`${root}/${id}/actions`, input, { silent: true }));

@@ -85,14 +85,18 @@ describe('正式提取 Skill 契约', () => {
       await expect(
         executeAiSkill(request, { user: { id: 'u', role: 'user' } }, { recordTelemetry: vi.fn() }),
       ).rejects.toMatchObject({ code: 'AI_SKILL_INTERNAL_ONLY' });
-      expect(createAiSkillExecutionConfig(skill, request).billingPolicy).toBe('user');
+      expect(createAiSkillExecutionConfig(skill, request)).toMatchObject({
+        billingPolicy: 'user',
+        maxUserProviderCalls: 1,
+        maxPlatformProviderCalls: 1,
+      });
       expect(() => createAiSkillExecutionConfig(skill, request, { billingPolicy: 'system' })).toThrow('额度策略');
     }
   });
-  it('不把不完整输出标成成功，不自动修复/重发付费调用', async () => {
+  it('不把不完整输出标成成功，完整性失败不进入结构修复', async () => {
     const skill = resolveAiSkill('toolbox.extraction_extract', 1),
       invoke = vi.fn(async (config) => {
-        expect(config.repairableErrorCodes).toEqual([]);
+        expect(config.repairableErrorCodes).not.toContain('EXTRACTION_OUTPUT_INCOMPLETE');
         return config.validateArguments({ complete: false, records: [] });
       });
     const prepared = await skill.prepare({

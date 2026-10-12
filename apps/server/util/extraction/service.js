@@ -80,7 +80,9 @@ export async function createExtraction({ userId, input, database = pool }) {
     refs = materialRefs(input.resourceRefs);
   const title = text(input.title, 120, true).trim(),
     goal = text(input.goal ?? '', 1000);
-  const inputDigest = digest({ title, goal, refs });
+  if (input.autoAnalyze !== undefined && typeof input.autoAnalyze !== 'boolean')
+    fail('INPUT_INVALID', '自动分析选项无效');
+  const inputDigest = digest({ title, goal, refs, ...(input.autoAnalyze ? { autoAnalyze: true } : {}) });
   return transaction(database, async (connection) => {
     await activeAccount(connection, userId, true);
     const [[prior]] = await connection.query(
@@ -124,6 +126,11 @@ export async function createExtraction({ userId, input, database = pool }) {
             title: ref.title || '',
           }),
         ],
+      );
+    if (input.autoAnalyze)
+      await connection.query(
+        'INSERT INTO toolbox_extraction_receipts (extraction_id,user_id,request_id,digest,response_json) VALUES (?,?,?,?,?)',
+        [table.id, userId, request, inputDigest, JSON.stringify({ kind: 'analysis_intent', autoAnalyze: true })],
       );
     return formatExtraction(await owned(connection, userId, table.id));
   });
@@ -244,7 +251,12 @@ export async function actOnExtraction({ userId, id, input, database = pool }) {
         phase = 'suggest';
         status = 'queued';
       } else if (input.action === 'sample') {
-        if (live || !['preview', 'ready'].includes(status) || phase === 'extract')
+        const retrySample =
+          status === 'paused' &&
+          phase === 'sample' &&
+          row.error_code &&
+          row.error_code !== 'EXTRACTION_OUTCOME_UNKNOWN';
+        if (live || (!['preview', 'ready'].includes(status) && !retrySample) || phase === 'extract')
           fail('STATE_CONFLICT', '当前不能刷新样例', 409);
         if (!sources.length || sources.some((s) => !['ready', 'completed'].includes(s.status)))
           fail('SOURCE_NOT_READY', '请先处理不可读取的资料', 409);

@@ -9,6 +9,7 @@ import {
   planMessages,
   extractionMessages,
   sourcePayload,
+  extractionRepairInstruction,
 } from '../../extraction/contract.js';
 const completeTool = {
   ...extractTool,
@@ -36,7 +37,7 @@ export const extractionSkills = ['suggest', 'extract'].map((mode) =>
       freezeScopeAcrossThread: true,
     },
     modelPolicy: { temperature: 0, maxTokens: 8192, timeoutMs: 90000 },
-    providerPlanPolicy: { modelGenerationCalls: 1, outputRepairCalls: 0 },
+    providerPlanPolicy: { modelGenerationCalls: 1, outputRepairCalls: 1 },
     outputContract: { kind: 'structured_draft', requireSources: false },
     validateInput(input) {
       if (
@@ -53,6 +54,15 @@ export const extractionSkills = ['suggest', 'extract'].map((mode) =>
       return input;
     },
     async prepare({ input, dependencies = {} }) {
+      const extractionTool = structuredClone(completeTool);
+      const cells = extractionTool.parameters.properties.records.items.properties.cells;
+      if (mode === 'extract') {
+        cells.minItems = input.plan.fields.length;
+        cells.maxItems = input.plan.fields.length;
+        const maxSegment = input.source.segments.length - 1;
+        extractionTool.parameters.properties.records.items.properties.anchor.properties.segment.maximum = maxSegment;
+        cells.items.properties.evidence.items.properties.segment.maximum = maxSegment;
+      }
       return {
         sources: [],
         coverage: {
@@ -66,8 +76,13 @@ export const extractionSkills = ['suggest', 'extract'].map((mode) =>
             trace,
             modelPolicy,
             beforeRequest: dependencies.beforeRequest,
-            repairableErrorCodes: [],
-            structuredTool: mode === 'suggest' ? planTool : completeTool,
+            repairableErrorCodes: [
+              'AI_SKILL_STRUCTURED_OUTPUT_MISSING',
+              'AI_SKILL_STRUCTURED_OUTPUT_INVALID',
+              'EXTRACTION_CONTRACT_INVALID',
+            ],
+            buildRepairInstruction: extractionRepairInstruction,
+            structuredTool: mode === 'suggest' ? planTool : extractionTool,
             messages:
               mode === 'suggest'
                 ? planMessages(input)
@@ -81,8 +96,9 @@ export const extractionSkills = ['suggest', 'extract'].map((mode) =>
                   ],
             validateArguments(raw) {
               if (mode === 'suggest') return validatePlan(raw);
+              if (raw.complete === false) throw aiSkillError('EXTRACTION_OUTPUT_INCOMPLETE', '本段提取未完整完成', 502);
               if (raw.complete !== true || Object.keys(raw).some((key) => !['complete', 'records'].includes(key)))
-                throw aiSkillError('EXTRACTION_OUTPUT_INCOMPLETE', '本段提取未完整完成', 502);
+                throw aiSkillError('AI_SKILL_STRUCTURED_OUTPUT_INVALID', '提取输出格式无效', 502);
               return validateRecords({ records: raw.records }, input.plan, input.source);
             },
           });

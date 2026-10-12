@@ -5,7 +5,12 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vites
 vi.mock('./sourceVersions.js', () => ({
   resolveExtractionSourceVersions: async ({ resourceRefs }) => resourceRefs.map((ref) => ({ ...ref, version: 'v1' })),
 }));
-import { assertExtractionSchema, ensureExtractionSchema, extractionSchemaReady, requireExtractionSchema } from './schema.js';
+import {
+  assertExtractionSchema,
+  ensureExtractionSchema,
+  extractionSchemaReady,
+  requireExtractionSchema,
+} from './schema.js';
 import {
   createExtraction,
   readExtraction,
@@ -212,7 +217,12 @@ describe.skipIf(!socketPath)('V3 提取表 MySQL 幂等、核对和 Worker 围�
     ]) {
       const request = randomUUID();
       await db.query('INSERT INTO ai_executions VALUES (?,?,?,?,?,?)', [
-        randomUUID(), request, owner, tokens, status, settlement,
+        randomUUID(),
+        request,
+        owner,
+        tokens,
+        status,
+        settlement,
       ]);
       await db.query(
         'INSERT INTO toolbox_extraction_receipts (extraction_id,user_id,request_id,digest,response_json) VALUES (?,?,?,?,?)',
@@ -317,6 +327,7 @@ describe.skipIf(!socketPath)('V3 提取表 MySQL 幂等、核对和 Worker 围�
     const table = await call(createExtraction, { input: input() });
     const executeSkill = vi.fn(async (request, _context, options) => {
       await options.skillDependencies.beforeRequest();
+      await options.skillDependencies.beforeRequest(); // One platform repair reuses the execution receipt.
       await db.query("INSERT INTO ai_executions VALUES (?,?,'u',100,'succeeded','settled')", [
         randomUUID(),
         request.requestId,
@@ -419,6 +430,106 @@ describe.skipIf(!socketPath)('V3 提取表 MySQL 幂等、核对和 Worker 围�
       input: { action: 'resume', requestId: randomUUID(), version: state.version },
     });
     expect(state.status).toBe('preparing');
+  });
+  it.each([
+    [true, 'ready', true, 'queued', 'suggest'],
+    [false, 'ready', true, 'ready', 'prepare'],
+    [true, 'ready', false, 'ready', 'prepare'],
+    [true, 'failed', true, 'ready', 'prepare'],
+  ])('后台意图 %s / 来源 %s / 完整 %s 决定自动衔接', async (autoAnalyze, sourceStatus, complete, status, phase) => {
+    const request = { ...input(), autoAnalyze };
+    const table = await call(createExtraction, { input: request });
+    expect((await call(createExtraction, { input: request })).id).toBe(table.id);
+    await expect(call(createExtraction, { input: { ...request, autoAnalyze: !autoAnalyze } })).rejects.toMatchObject({
+      status: 409,
+    });
+    await db.query('UPDATE toolbox_extraction_sources SET status=?,coverage_json=? WHERE extraction_id=?', [
+      sourceStatus,
+      JSON.stringify({ complete }),
+      table.id,
+    ]);
+    const executeSkill = vi.fn();
+    await runSingleExtractionJob('test', db, { executeSkill });
+    expect(await call(readExtraction, { id: table.id })).toMatchObject({ status, phase });
+    expect(executeSkill).not.toHaveBeenCalled();
+    const [[receipts]] = await db.query(
+      'SELECT COUNT(*) total FROM toolbox_extraction_receipts WHERE extraction_id=?',
+      [table.id],
+    );
+    expect(Number(receipts.total)).toBe(autoAnalyze ? 1 : 0);
+  });
+  it('已知样例失败可按修改后的字段重试，结果不确定时禁止绕过确认', async () => {
+    const table = await ready();
+    const edited = { ...plan, recordDefinition: '按新规则提取产品' };
+    await db.query(
+      "UPDATE toolbox_extractions SET status='paused',error_code='EXTRACTION_OUTCOME_UNKNOWN' WHERE id=?",
+      [table.id],
+    );
+    const request = { action: 'sample', requestId: randomUUID(), version: table.version, plan: edited };
+    await expect(call(actOnExtraction, { id: table.id, input: request })).rejects.toMatchObject({
+      code: 'EXTRACTION_STATE_CONFLICT',
+    });
+    await db.query("UPDATE toolbox_extractions SET error_code='EXTRACTION_CONTRACT_INVALID' WHERE id=?", [table.id]);
+    expect(await call(actOnExtraction, { id: table.id, input: request })).toMatchObject({
+      status: 'queued',
+      phase: 'sample',
+      plan: edited,
+    });
+  });
+  it('暂停时不自动进入 AI，明确继续后沿用后台意图', async () => {
+    const table = await call(createExtraction, { input: { ...input(), autoAnalyze: true } });
+    await db.query("UPDATE toolbox_extraction_sources SET status='ready',coverage_json=? WHERE extraction_id=?", [
+      JSON.stringify({ complete: true }),
+      table.id,
+    ]);
+    let state = await call(actOnExtraction, {
+      id: table.id,
+      input: { action: 'pause', requestId: randomUUID(), version: table.version },
+    });
+    expect(await runSingleExtractionJob('test', db)).toBe(false);
+    state = await call(actOnExtraction, {
+      id: table.id,
+      input: { action: 'resume', requestId: randomUUID(), version: state.version },
+    });
+    await runSingleExtractionJob('test', db);
+    expect(await call(readExtraction, { id: table.id })).toMatchObject({ status: 'queued', phase: 'suggest' });
+  });
+  it('失败只持久化白名单诊断；重试样例沿用字段，不重做建议', async () => {
+    const table = await ready();
+    const material = {
+      id: 's',
+      version: 'v1',
+      title: '产品',
+      complete: true,
+      coverage: {},
+      segments: [{ id: 'p', text: '相机甲', kind: 'original', locator: '段落' }],
+    };
+    await db.query("UPDATE toolbox_extractions SET status='queued' WHERE id=?", [table.id]);
+    await db.query('UPDATE toolbox_extraction_sources SET source_json=? WHERE extraction_id=?', [
+      JSON.stringify(material),
+      table.id,
+    ]);
+    const executeSkill = vi.fn(async (_request, _context, options) => {
+      await options.skillDependencies.beforeRequest();
+      await options.skillDependencies.beforeRequest();
+      throw Object.assign(new Error('private provider content'), {
+        code: 'EXTRACTION_CONTRACT_INVALID',
+        validationReason: 'Missing or ambiguous quote',
+      });
+    });
+    await runSingleExtractionJob('test', db, { executeSkill });
+    let state = await call(readExtraction, { id: table.id });
+    expect(state).toMatchObject({ status: 'paused', phase: 'sample', plan });
+    const [[receipt]] = await db.query('SELECT response_json FROM toolbox_extraction_receipts WHERE extraction_id=?', [
+      table.id,
+    ]);
+    expect(JSON.stringify(receipt)).toContain('Missing or ambiguous quote');
+    expect(JSON.stringify(receipt)).not.toContain('private provider content');
+    state = await call(actOnExtraction, {
+      id: table.id,
+      input: { action: 'resume', requestId: randomUUID(), version: state.version },
+    });
+    expect(state).toMatchObject({ status: 'queued', phase: 'sample', plan });
   });
   it('准备阶段续跑保留解析失败原因，结束后不能借重试复活', async () => {
     const t = await call(createExtraction, { input: input() });

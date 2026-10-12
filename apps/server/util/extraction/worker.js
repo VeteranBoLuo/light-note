@@ -8,6 +8,7 @@ import { toolboxWorkerEnabled } from '../toolbox/workerPolicy.js';
 import { resolveExtractionSourceVersions } from './sourceVersions.js';
 import { readMaterial, planWindows } from './material.js';
 import { json, fail, digest, mergeBoundaryRecord } from './domain.js';
+import { extractionValidationReason } from './contract.js';
 import { extractionEnabled, transaction, activeAccount } from './service.js';
 
 export async function claimExtraction(database, phase = 'all') {
@@ -52,8 +53,25 @@ async function prepareOne(job, database, dependencies, signal) {
   );
   if (!source)
     return transaction(database, async (connection) => {
-      await fence(connection, job);
-      await release(connection, job, { status: 'ready', phase: 'prepare' });
+      const current = await fence(connection, job);
+      const [[intent]] = await connection.query(
+        'SELECT response_json FROM toolbox_extraction_receipts WHERE extraction_id=? AND user_id=? AND request_id=?',
+        [job.id, job.user_id, current.request_id],
+      );
+      const [sources] = await connection.query(
+        'SELECT status,coverage_json FROM toolbox_extraction_sources WHERE extraction_id=? AND user_id=?',
+        [job.id, job.user_id],
+      );
+      const automatic =
+        extractionEnabled() &&
+        current.status !== 'paused' &&
+        json(intent?.response_json)?.autoAnalyze === true &&
+        sources.length > 0 &&
+        sources.every((item) => item.status === 'ready' && json(item.coverage_json)?.complete === true);
+      await release(connection, job, {
+        status: automatic ? 'queued' : 'ready',
+        phase: automatic ? 'suggest' : 'prepare',
+      });
     });
   try {
     const read = () =>
@@ -248,7 +266,7 @@ async function processOne(job, database, dependencies, signal) {
               [job.id, job.user_id, job.lease_token],
             );
             await connection.query(
-              'INSERT INTO toolbox_extraction_receipts (extraction_id,user_id,request_id,digest,response_json) VALUES (?,?,?,?,?)',
+              'INSERT INTO toolbox_extraction_receipts (extraction_id,user_id,request_id,digest,response_json) VALUES (?,?,?,?,?) ON DUPLICATE KEY UPDATE request_id=VALUES(request_id)',
               [
                 job.id,
                 job.user_id,
@@ -289,7 +307,7 @@ export async function runSingleExtractionJob(_workerId, database = pool, depende
       .catch(() => controller.abort());
   }, 30000);
   heartbeat.unref?.();
-  const timeout = setTimeout(() => controller.abort(), 150000);
+  const timeout = setTimeout(() => controller.abort(), 210000);
   timeout.unref?.();
   try {
     lifecycle = await acquireAccountAiLifecycleConnection(database, job.user_id, { timeoutMs: 1000 });
@@ -306,6 +324,12 @@ export async function runSingleExtractionJob(_workerId, database = pool, depende
         [job.id, job.user_id, job.lease_token],
       );
       if (!current) return; // Delivery already committed, or another lease owns recovery.
+      const validationReason = extractionValidationReason(error);
+      if (validationReason)
+        await connection.query(
+          "UPDATE toolbox_extraction_receipts SET response_json=JSON_SET(response_json,'$.validationReason',?,'$.state','failed') WHERE extraction_id=? AND user_id=? AND request_id=?",
+          [validationReason, job.id, job.user_id, job.lease_token],
+        );
       const uncertain =
         Boolean(current.dispatched) &&
         !/^(?:AI_QUOTA_|AI_SKILL_STRUCTURED_|EXTRACTION_(?:CONTRACT|OUTPUT|RESULT)_)/.test(code);

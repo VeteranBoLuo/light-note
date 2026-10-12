@@ -197,6 +197,7 @@ export function useExtractionWorkbench() {
     const input = {
       title: title.value.trim() || t('extraction.untitled'),
       goal: goal.value,
+      autoAnalyze: true,
       resourceRefs: resources.value.map(({ type, id }) => ({ type, id })),
     };
     try {
@@ -313,7 +314,9 @@ export function useExtractionWorkbench() {
         cancelText: t('extraction.cancel'),
         onOk: () => perform('resume', { confirmUncertain: true }),
       });
-    } else await perform('resume');
+    } else if (table.value?.phase === 'sample' && table.value.errorCode && dirtyPlan.value)
+      await perform('sample', { plan: clone(plan.value), acceptPartial: acceptPartial.value });
+    else await perform('resume');
   }
   async function loadHistory() {
     const g = generation;

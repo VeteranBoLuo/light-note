@@ -23,6 +23,21 @@
         }}</BButton></div
       >
     </header>
+    <ol class="flow-steps" :aria-label="t('extraction.flow.label')">
+      <li
+        v-for="(step, index) in flowSteps"
+        :key="step"
+        :class="{ current: flowStep === index + 1, done: flowStep > index + 1 }"
+        :aria-current="flowStep === index + 1 ? 'step' : undefined"
+      >
+        <span class="step-number" aria-hidden="true"
+          ><SvgIcon v-if="flowStep > index + 1" :src="icon.organize.check" size="14" /><template v-else>{{
+            index + 1
+          }}</template></span
+        >
+        <span>{{ t(step) }}</span>
+      </li>
+    </ol>
     <p v-if="!table" class="muted">{{ t('extraction.subtitle') }}</p>
     <div v-if="!table && availabilityError" class="notice" role="status">
       <p>{{ availabilityError }}</p>
@@ -49,7 +64,7 @@
             t('extraction.pause')
           }}</BButton
           ><BButton
-            v-if="['paused', 'partial', 'failed'].includes(table.status) && editable"
+            v-if="locked && ['paused', 'partial', 'failed'].includes(table.status) && editable"
             :disabled="busy || table.inFlight || !table.enabled"
             @click="resume"
             >{{ t('extraction.resume') }}</BButton
@@ -58,8 +73,22 @@
           }}</BButton></div
         >
       </section>
-      <p v-if="table?.status === 'paused'" class="muted">{{ t('extraction.pauseHint') }}</p>
+      <p v-if="table?.status === 'paused' && (!table.errorCode || table.inFlight)" class="muted">{{
+        t('extraction.pauseHint')
+      }}</p>
       <p v-if="table?.errorCode" class="notice issue" role="alert">{{ issueText(table.errorCode) }}</p>
+      <div v-if="table && !locked" class="flow-status" role="status" aria-live="polite">
+        <strong>{{ t(flowMessage) }}</strong>
+        <p class="muted">{{
+          t(
+            active
+              ? 'extraction.flow.automaticHint'
+              : table.status === 'preview'
+                ? 'extraction.flow.confirmHint'
+                : 'extraction.flow.retainedHint',
+          )
+        }}</p>
+      </div>
       <section v-if="settingsOpen" class="settings">
         <div v-if="!table" class="name-field"
           ><label for="extraction-name">{{ t('extraction.name') }}</label
@@ -71,7 +100,15 @@
             :placeholder="t('extraction.untitled')"
         /></div>
         <div class="section-heading"
-          ><h2>{{ t('extraction.sources') }}</h2
+          ><h2>{{
+            table ? t('extraction.flow.sourceCount', { count: table.sources.length }) : t('extraction.sources')
+          }}</h2
+          ><BButton
+            v-if="table && !sourceNeedsAttention"
+            type="text"
+            :aria-expanded="sourcesExpanded"
+            @click="sourcesExpanded = !sourcesExpanded"
+            >{{ t(sourcesExpanded ? 'extraction.flow.hideSources' : 'extraction.flow.showSources') }}</BButton
           ><div v-if="!table" class="actions"
             ><BButton :disabled="busy || !editable" @click="pickerOpen = true">{{ t('extraction.choose') }}</BButton
             ><BButton :disabled="busy || !editable || !creationReady" @click="openUpload">{{
@@ -95,7 +132,7 @@
               @click="resources = resources.filter((r) => r !== resource)"
               ><SvgIcon :src="icon.common.close" size="14" /></BButton></article
         ></div>
-        <div v-else class="source-list"
+        <div v-else-if="sourcesExpanded || sourceNeedsAttention" class="source-list"
           ><article v-for="source in table.sources" :key="source.id" :class="{ issue: source.errorCode }"
             ><span
               class="source-type"
@@ -134,38 +171,46 @@
           @click="perform('retry_prepare')"
           >{{ t('extraction.retry') }}</BButton
         >
-        <label for="extraction-goal">{{ t('extraction.goal') }}</label
-        ><BInput
-          id="extraction-goal"
-          v-model:value="goal"
-          type="textarea"
-          :rows="2"
-          :maxlength="1000"
-          :disabled="!!table || busy || !editable"
-          :placeholder="t('extraction.goalHint')"
-        />
+        <template v-if="!table || sourcesExpanded || sourceNeedsAttention">
+          <label for="extraction-goal">{{ t('extraction.goal') }}</label
+          ><BInput
+            id="extraction-goal"
+            v-model:value="goal"
+            type="textarea"
+            :rows="2"
+            :maxlength="1000"
+            :disabled="!!table || busy || !editable"
+            :placeholder="t('extraction.goalHint')"
+          />
+        </template>
         <BCheckbox v-if="partialSources && !locked" v-model:checked="acceptPartial" :disabled="busy || active">{{
           t('extraction.acceptPartial')
         }}</BCheckbox>
         <template v-if="plan">
           <div class="section-heading"
             ><h2>{{ t('extraction.fields') }}</h2
-            ><BButton type="text" @click="advanced = !advanced">{{ t('extraction.advanced') }}</BButton></div
+            ><BButton type="text" :aria-expanded="advanced" @click="advanced = !advanced">{{
+              t('extraction.advanced')
+            }}</BButton></div
           >
-          <label for="extraction-definition">{{ t('extraction.definition') }}</label
-          ><BInput
-            id="extraction-definition"
-            v-model:value="plan.recordDefinition"
-            :maxlength="500"
-            :disabled="locked || busy || active || !editable"
-          />
+          <p v-if="table?.plan && !locked" class="muted">{{ t('extraction.flow.typesSuggested') }}</p>
+          <template v-if="advanced">
+            <label for="extraction-definition">{{ t('extraction.definition') }}</label
+            ><BInput
+              id="extraction-definition"
+              v-model:value="plan.recordDefinition"
+              :maxlength="500"
+              :disabled="locked || busy || active || !editable"
+            />
+          </template>
           <div class="fields"
-            ><article v-for="(field, index) in plan.fields" :key="field.key" class="field"
+            ><article v-for="(field, index) in plan.fields" :key="field.key" class="field" :class="{ advanced }"
               ><BInput
                 v-model:value="field.label"
                 :maxlength="80"
                 :aria-label="t('extraction.fieldName')"
                 :disabled="locked || busy || active || !editable" /><BSelect
+                v-if="advanced"
                 v-model:value="field.type"
                 :aria-label="t('extraction.type')"
                 :options="typeOptions"
@@ -213,49 +258,6 @@
           ><p v-if="dirtyPlan && table?.plan" class="muted">{{ t('extraction.stale') }}</p
           ><p v-if="locked" class="muted">{{ t('extraction.locked') }}</p>
         </template>
-        <p v-if="table && !locked" class="muted">{{ t('extraction.aiBudget', { count: remainingCalls }) }}</p>
-        <component
-          :is="mobile ? MobileStickyActionBar : 'div'"
-          :above-navigation="false"
-          v-if="!locked"
-          class="main-action"
-        >
-          <BButton
-            v-if="!table"
-            type="primary"
-            :loading="busy"
-            :disabled="!resources.length || !editable || !creationReady"
-            @click="prepare"
-            >{{ t('extraction.prepare') }}</BButton
-          >
-          <template v-else-if="!plan"
-            ><BButton
-              type="primary"
-              :loading="active || busy"
-              :disabled="!canAnalyze"
-              @click="perform('analyze', { acceptPartial })"
-              >{{ t('extraction.analyze') }}</BButton
-            ><BButton type="text" :disabled="active || busy || !canAnalyze" @click="manualPlan">{{
-              t('extraction.manual')
-            }}</BButton></template
-          >
-          <BButton
-            v-else
-            type="primary"
-            :loading="active || busy"
-            :disabled="invalidPlan || !editable || !table?.enabled || active || (partialSources && !acceptPartial)"
-            @click="start"
-            >{{ t('extraction.start') }}</BButton
-          >
-          <BButton
-            v-if="plan && table"
-            :disabled="
-              invalidPlan || !editable || !table.enabled || active || busy || (partialSources && !acceptPartial)
-            "
-            @click="perform('sample', { plan, acceptPartial })"
-            >{{ t('extraction.refreshSample') }}</BButton
-          >
-        </component>
       </section>
       <section v-if="plan && table" class="data-area">
         <div class="section-heading"
@@ -347,6 +349,79 @@
           ></div
         >
         <BPagination v-if="total > 50" :current="page" :page-size="50" :total="total" @page-change="page = $event" />
+      </section>
+      <section v-if="!locked" class="flow-footer">
+        <p class="muted">{{
+          table ? t('extraction.aiBudget', { count: remainingCalls }) : t('extraction.flow.startHint')
+        }}</p>
+        <component :is="mobile ? MobileStickyActionBar : 'div'" :above-navigation="false" class="main-action">
+          <BButton
+            v-if="!table"
+            type="primary"
+            :loading="busy"
+            :disabled="!resources.length || !editable || !creationReady"
+            @click="prepare"
+            >{{ t('extraction.flow.begin') }}</BButton
+          >
+          <BButton
+            v-else-if="canResume"
+            type="primary"
+            :loading="busy"
+            :disabled="!editable || !table.enabled || table.inFlight || (dirtyPlan && invalidPlan)"
+            @click="resume"
+            >{{
+              t(table.phase === 'sample' && table.errorCode ? 'extraction.flow.retrySample' : 'extraction.resume')
+            }}</BButton
+          >
+          <BButton v-else-if="active" type="primary" loading disabled>{{
+            t(table.phase === 'prepare' ? 'extraction.flow.checking' : 'extraction.flow.analyzing')
+          }}</BButton>
+          <template v-else-if="!plan">
+            <BButton
+              type="primary"
+              :loading="busy"
+              :disabled="!canAnalyze"
+              @click="perform('analyze', { acceptPartial })"
+              >{{ t('extraction.flow.continueAnalysis') }}</BButton
+            >
+            <BButton
+              type="text"
+              :disabled="busy || !canAnalyze"
+              @click="
+                manualPlan();
+                advanced = true;
+              "
+              >{{ t('extraction.manual') }}</BButton
+            >
+          </template>
+          <template v-else>
+            <BButton
+              type="primary"
+              :loading="busy"
+              :disabled="
+                invalidPlan ||
+                !editable ||
+                !table.enabled ||
+                !['ready', 'preview'].includes(table.status) ||
+                (partialSources && !acceptPartial)
+              "
+              @click="start"
+              >{{ t('extraction.start') }}</BButton
+            >
+            <BButton
+              :disabled="
+                invalidPlan ||
+                !editable ||
+                !table.enabled ||
+                busy ||
+                !['ready', 'preview'].includes(table.status) ||
+                (partialSources && !acceptPartial)
+              "
+              @click="perform('sample', { plan, acceptPartial })"
+              >{{ t('extraction.refreshSample') }}</BButton
+            >
+          </template>
+        </component>
       </section>
       <footer v-if="table && !active && !table.inFlight && editable" class="table-management"
         ><BButton
@@ -645,6 +720,35 @@
       ? totalRanges.value
       : table.value?.budget.remainingExtractionCalls || 0;
   });
+  const sourcesExpanded = ref(false);
+  watch(
+    () => table.value?.id,
+    () => {
+      sourcesExpanded.value = false;
+      advanced.value = false;
+    },
+  );
+  const flowSteps = ['extraction.flow.choose', 'extraction.flow.analysis', 'extraction.flow.confirm'];
+  const flowStep = computed(() => (!table.value ? 1 : locked.value || table.value.status === 'preview' ? 3 : 2));
+  const canResume = computed(() => table.value && ['paused', 'failed', 'partial'].includes(table.value.status));
+  const sourceNeedsAttention = computed(
+    () =>
+      table.value?.phase === 'prepare' ||
+      table.value?.sources.some((s) => s.status === 'failed' || s.coverage.complete === false),
+  );
+  const flowMessage = computed(() => {
+    const value = table.value;
+    if (value?.status === 'preview') return 'extraction.flow.generated';
+    if (value?.errorCode && value.phase === 'sample') return 'extraction.flow.sampleFailed';
+    if (canResume.value) return 'extraction.flow.paused';
+    if (value?.phase === 'prepare')
+      return active.value
+        ? 'extraction.flow.checking'
+        : canAnalyze.value
+          ? 'extraction.flow.ready'
+          : 'extraction.flow.needsReview';
+    return 'extraction.flow.analyzing';
+  });
   const partialSources = computed(() => table.value?.sources.some((s) => s.coverage.complete === false));
   const canAnalyze = computed(
     () =>
@@ -863,6 +967,58 @@
     padding: var(--ui-space-24, 24px);
     color: var(--text-color);
   }
+  .flow-steps {
+    display: flex;
+    align-items: center;
+    gap: var(--ui-space-24, 24px);
+    list-style: none;
+    padding: 0;
+    margin: 0 0 var(--ui-space-20, 20px);
+    color: var(--desc-color);
+    font-size: var(--ui-font-14, 14px);
+  }
+  .flow-steps li {
+    display: flex;
+    align-items: center;
+    gap: var(--ui-space-8, 8px);
+    min-width: 0;
+  }
+  .flow-steps .current,
+  .flow-steps .done {
+    color: var(--workspace-purple-text, var(--primary-color));
+  }
+  .flow-steps .current {
+    font-weight: 600;
+  }
+  .step-number {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 var(--ui-control-24, 24px);
+    height: var(--ui-control-24, 24px);
+    border: 1px solid currentColor;
+    border-radius: 50%;
+  }
+  .current .step-number {
+    background: var(--navigation-pill-active-bg);
+    color: var(--navigation-pill-active-fg);
+    border-color: var(--navigation-pill-active-border);
+  }
+  .flow-status {
+    display: grid;
+    gap: var(--ui-space-6, 6px);
+    margin: var(--ui-space-16, 16px) 0;
+  }
+  .flow-footer {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    background: var(--background-color);
+    border-top: 1px solid var(--border-color);
+    display: grid;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-20, 20px) 0;
+  }
   .back {
     margin-bottom: var(--ui-space-16, 16px);
   }
@@ -1020,8 +1176,11 @@
   }
   .field {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) var(--ui-layout-120, 120px) auto;
+    grid-template-columns: minmax(0, 1fr) auto;
     gap: var(--ui-space-8, 8px);
+  }
+  .field.advanced {
+    grid-template-columns: minmax(0, 1fr) var(--ui-layout-120, 120px) auto;
   }
   .field-rule {
     grid-column: 1/-1;
@@ -1201,7 +1360,8 @@
     .data-area {
       padding: var(--ui-space-16, 16px);
     }
-    .field {
+    .field,
+    .field.advanced {
       grid-template-columns: minmax(0, 1fr) auto;
     }
     .field :deep(.b-select) {
@@ -1211,7 +1371,21 @@
       grid-column: 2;
       grid-row: 1;
     }
+    .flow-footer {
+      position: static;
+      border-top: 0;
+    }
+    .flow-steps {
+      gap: var(--ui-space-12, 12px);
+      font-size: var(--ui-font-12, 12px);
+      align-items: flex-start;
+    }
+    .flow-steps li {
+      flex: 1;
+      align-items: flex-start;
+    }
     .fields {
+      grid-template-columns: minmax(0, 1fr);
       gap: var(--ui-space-10, 10px);
     }
     .main-action:not(.mobile-sticky-action-bar) {

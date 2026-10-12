@@ -104,6 +104,34 @@ describe('资料转表格共享业务状态', () => {
     expect(state.availabilityError.value).toBe('');
     expect(state.title.value).toBe('我的草稿');
   });
+  it('开始分析持久化自动衔接意图；网络重试沿用幂等身份，不另发分析请求', async () => {
+    route.query.id = '';
+    mount();
+    await flush();
+    state.resources.value = [{ type: 'note', id: 'n', title: '笔记' }];
+    api.createExtraction.mockRejectedValueOnce(new Error('network')).mockResolvedValueOnce(table());
+    await state.prepare();
+    await state.prepare();
+    expect(api.createExtraction).toHaveBeenCalledTimes(2);
+    expect(api.createExtraction.mock.calls[0][0]).toEqual(api.createExtraction.mock.calls[1][0]);
+    expect(api.createExtraction.mock.calls[0][0]).toMatchObject({
+      autoAnalyze: true,
+      resourceRefs: [{ type: 'note', id: 'n' }],
+    });
+    expect(api.extractionAction).not.toHaveBeenCalled();
+  });
+  it('失败重试保留阶段；修改后的字段用于新样例，不重新生成建议', async () => {
+    api.getExtraction.mockResolvedValue({ ...table(), status: 'paused', errorCode: 'EXTRACTION_CONTRACT_INVALID' });
+    mount();
+    await flush();
+    state.plan.value!.fields[0].rule = '完整名称';
+    await state.resume();
+    expect(api.extractionAction).toHaveBeenCalledOnce();
+    expect(api.extractionAction.mock.calls[0][1]).toMatchObject({
+      action: 'sample',
+      plan: { fields: [{ rule: '完整名称' }] },
+    });
+  });
   it('功能关闭时允许查看已有数据，但新建提交保持禁用', async () => {
     api.fetchToolboxCatalog.mockResolvedValue({ tools: [{ id: 'extraction', availability: { enabled: false } }] });
     mount();
