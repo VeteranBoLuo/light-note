@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   destroy: vi.fn(),
   document: vi.fn(async () => false),
   toolbox: vi.fn(async () => false),
+  extraction: vi.fn(async () => false),
 }));
 vi.mock('./util/redisClient.js', () => ({ default: { isOpen: true, destroy: mocks.destroy } }));
 vi.mock('./db/index.js', () => ({ default: { end: mocks.end } }));
@@ -40,6 +41,10 @@ vi.mock('./util/toolbox/worker.js', () => ({
   cleanupExpiredToolboxData: async () => {},
   runSingleToolboxJob: mocks.toolbox,
 }));
+vi.mock('./util/extraction/worker.js', () => ({
+  cleanupExtractionMaterials: async () => {},
+  runSingleExtractionJob: mocks.extraction,
+}));
 vi.mock('./util/services/organizeAiSuggestionService.js', () => ({
   runSingleOrganizeAiSuggestionBatch: async () => false,
 }));
@@ -59,6 +64,7 @@ afterEach(() => {
   process.exitCode = exitCode;
   vi.resetModules();
   vi.clearAllMocks();
+  mocks.extraction.mockResolvedValue(false);
 });
 it('停止领取新任务，等待在途任务完成后关闭数据库连接', async () => {
   let complete;
@@ -178,4 +184,28 @@ it('serves image previews while a document and toolbox model remain in flight, t
   expect(runSingleImagePreviewJob).toHaveBeenCalledOnce();
   expect(mocks.document).toHaveBeenCalledOnce();
   expect(mocks.toolbox).toHaveBeenCalledOnce();
+});
+
+it('keeps previews available while extraction is in flight and drains extraction before closing', async () => {
+  const { runSingleImagePreviewJob } = await import('./util/imagePreview/worker.js');
+  let finishExtraction;
+  mocks.item.mockResolvedValue(false);
+  mocks.extraction.mockImplementation(async (_worker, _db, { phase }) => {
+    if (phase !== 'ai') return false;
+    return new Promise((resolve) => {
+      finishExtraction = resolve;
+    });
+  });
+  runSingleImagePreviewJob.mockImplementationOnce(async () => {
+    await vi.waitFor(() => expect(finishExtraction).toBeTypeOf('function'));
+    process.emit('SIGTERM');
+    expect(mocks.end).not.toHaveBeenCalled();
+    finishExtraction(true);
+    return true;
+  });
+  await import('./documentWorker.js');
+  await vi.waitFor(() => expect(mocks.end).toHaveBeenCalledOnce());
+  expect(runSingleImagePreviewJob).toHaveBeenCalledOnce();
+  expect(mocks.extraction.mock.calls.map(([, , { phase }]) => phase).sort()).toEqual(['ai', 'prepare']);
+  expect(mocks.toolbox).not.toHaveBeenCalled();
 });
