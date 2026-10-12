@@ -109,19 +109,21 @@ export async function createExtraction({ userId, input, database = pool }) {
     )
       fail('SOURCE_CHANGED', '部分资料已变化或不可用，请重新选择', 409);
     const table = insertData({ userId, requestId: request, inputDigest, title, goal });
-    await connection.query('INSERT INTO toolbox_extractions SET ?', table);
+    await connection.query('INSERT INTO toolbox_extractions SET ?', [table]);
     for (const [position, ref] of versions.entries())
       await connection.query(
         'INSERT INTO toolbox_extraction_sources SET ?, expires_at=DATE_ADD(NOW(), INTERVAL 24 HOUR)',
-        insertData({
-          extractionId: table.id,
-          userId,
-          position,
-          resourceType: ref.type,
-          resourceId: ref.id,
-          resourceVersion: ref.version,
-          title: ref.title || '',
-        }),
+        [
+          insertData({
+            extractionId: table.id,
+            userId,
+            position,
+            resourceType: ref.type,
+            resourceId: ref.id,
+            resourceVersion: ref.version,
+            title: ref.title || '',
+          }),
+        ],
       );
     return formatExtraction(await owned(connection, userId, table.id));
   });

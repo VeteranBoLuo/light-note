@@ -83,7 +83,8 @@ describe.skipIf(!socketPath)('V3 提取表 MySQL 幂等、核对和 Worker 围�
     const [[r]] = await admin.query('SELECT VERSION() version,@@global.skip_networking isolated');
     if (!/^(5\.7\.|8\.)/.test(r.version) || Number(r.isolated) !== 1) throw new Error('Isolated MySQL required');
     await admin.query(`CREATE DATABASE ${schema} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
-    db = mysql.createPool({ socketPath, user: 'root', database: schema, connectionLimit: 8 });
+    // Match the application pool: positional object parameters must also work with named placeholders enabled.
+    db = mysql.createPool({ socketPath, user: 'root', database: schema, connectionLimit: 8, namedPlaceholders: true });
     await db.query(
       'CREATE TABLE ai_executions(id CHAR(36),request_id CHAR(36),actor_user_id VARCHAR(64),charged_tokens INT,status VARCHAR(32),quota_settlement_status VARCHAR(32))',
     );
@@ -188,6 +189,10 @@ describe.skipIf(!socketPath)('V3 提取表 MySQL 幂等、核对和 Worker 围�
     const request = input(),
       tables = await Promise.all(Array.from({ length: 6 }, () => call(createExtraction, { input: request })));
     expect(new Set(tables.map((t) => t.id)).size).toBe(1);
+    const saved = await call(readExtraction, { id: tables[0].id });
+    expect(saved).toMatchObject({ title: request.title, goal: request.goal, status: 'preparing' });
+    expect(saved.sources).toHaveLength(1);
+    expect(saved.sources[0]).toMatchObject({ type: 'note', resourceId: 'n', version: 'v1', status: 'preparing' });
     await expect(call(createExtraction, { input: { ...request, title: '另一个' } })).rejects.toMatchObject({
       status: 409,
     });
