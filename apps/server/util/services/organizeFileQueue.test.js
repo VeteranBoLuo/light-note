@@ -34,7 +34,7 @@ function fixture(initial = 'queued', runStatus = 'running', runVersion = 2) {
   };
   const run = { id: 'run', user_id: 'u', status: runStatus, run_version: runVersion, rule_phase: 'completed' };
   const query = vi.fn(async (sql, args = []) => {
-    if (sql.startsWith('SELECT r.id,r.status')) return [[run]];
+    if (sql.startsWith('SELECT r.id FROM organize_suggestion_runs r WHERE r.id=?')) return [[{ id: run.id }]];
     if (sql.startsWith('SELECT prepared_json')) return [[{ prepared_json: '{}' }]];
     if (sql.startsWith('SELECT i.*')) return [[{ ...item }]];
     if (sql.startsWith('SELECT * FROM organize_suggestion_runs')) return [[run]];

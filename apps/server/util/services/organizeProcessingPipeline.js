@@ -8,7 +8,7 @@ import {
   organizeReviewDisposition,
 } from '@lightnote/shared/organize-progress';
 import { supportsOrganizeCheck } from '@lightnote/shared/organize-capabilities';
-import { json, diagnosedTransaction } from './organizeSuggestionStorage.js';
+import { json, diagnosedTransaction, withNextOrganizeRun } from './organizeSuggestionStorage.js';
 import { readSuggestionCandidates, readCurrentSuggestionSource } from './organizeSuggestionSources.js';
 import { buildRuleSuggestions, normalizeName, hash, suggestionError } from './organizeSuggestionRules.js';
 import { writeSuggestions } from './organizeSuggestionLifecycle.js';
@@ -44,46 +44,47 @@ async function addJob(c, run, itemId, kind, lane = 'direct', status = 'queued', 
 
 // Only IDs, names, ownership and icon presence are read here. Processing waits for rule_phase=completed.
 export async function runOrganizeInspection(_workerId, db = pool, dependencies = {}) {
-  return diagnosedTransaction(db, 'organize.inspect', async (c) => {
-    const [runs] = await c.query(`SELECT * FROM organize_suggestion_runs WHERE run_version=3 AND status IN (${active})
-      AND rule_phase='pending' ORDER BY created_at,id LIMIT 1 FOR UPDATE`);
-    if (!runs.length) return false;
-    const run = runs[0];
-    const [items] = await c.query(
-      "SELECT * FROM organize_suggestion_items WHERE run_id=? AND rule_status='pending' ORDER BY id LIMIT 100",
-      [run.id],
-    );
-    for (const type of ['bookmark', 'note', 'file', 'tag']) {
-      const selected = items.filter((i) => i.resource_type === type);
-      if (!selected.length) continue;
-      const sources = await (dependencies.candidates || readSuggestionCandidates)(c, run.user_id, type, {
-        ids: selected.map((i) => i.resource_id),
-        includeCustomIcons: true,
-        limit: 100,
-      });
-      for (const item of selected) {
-        const source = sources.find((s) => s.id === item.resource_id);
-        const skipped = !source || source.hasCustomIcon;
-        await c.query('UPDATE organize_suggestion_items SET rule_status=? WHERE id=?', [
-          skipped ? 'skipped' : 'checked',
-          item.id,
-        ]);
-        if (!skipped) await addJob(c, run, item.id, 'prepare');
-      }
-    }
-    const [remaining] = await c.query(
-      "SELECT COUNT(*) total FROM organize_suggestion_items WHERE run_id=? AND rule_status='pending'",
-      [run.id],
-    );
-    if (!Number(remaining[0].total)) {
-      await c.query(
-        "UPDATE organize_suggestion_runs SET rule_phase='completed',status=IF(status='paused','paused','running') WHERE id=?",
+  return withNextOrganizeRun(
+    db,
+    'organize.inspect',
+    `r.run_version=3 AND r.status IN (${active}) AND r.rule_phase='pending'`,
+    async (c, run) => {
+      const [items] = await c.query(
+        "SELECT * FROM organize_suggestion_items WHERE run_id=? AND rule_status='pending' ORDER BY id LIMIT 100",
         [run.id],
       );
-      await settleProcessingRun(c, run.id);
-    }
-    return true;
-  });
+      for (const type of ['bookmark', 'note', 'file', 'tag']) {
+        const selected = items.filter((i) => i.resource_type === type);
+        if (!selected.length) continue;
+        const sources = await (dependencies.candidates || readSuggestionCandidates)(c, run.user_id, type, {
+          ids: selected.map((i) => i.resource_id),
+          includeCustomIcons: true,
+          limit: 100,
+        });
+        for (const item of selected) {
+          const source = sources.find((s) => s.id === item.resource_id);
+          const skipped = !source || source.hasCustomIcon;
+          await c.query('UPDATE organize_suggestion_items SET rule_status=? WHERE id=?', [
+            skipped ? 'skipped' : 'checked',
+            item.id,
+          ]);
+          if (!skipped) await addJob(c, run, item.id, 'prepare');
+        }
+      }
+      const [remaining] = await c.query(
+        "SELECT COUNT(*) total FROM organize_suggestion_items WHERE run_id=? AND rule_status='pending'",
+        [run.id],
+      );
+      if (!Number(remaining[0].total)) {
+        await c.query(
+          "UPDATE organize_suggestion_runs SET rule_phase='completed',status=IF(status='paused','paused','running') WHERE id=?",
+          [run.id],
+        );
+        await settleProcessingRun(c, run.id);
+      }
+      return true;
+    },
+  );
 }
 
 // Called inside the same short run-locked transaction as every queue transition.
@@ -226,30 +227,31 @@ export async function readOrganizeOverview(c, run, ruleProgress, itemOutcomes) {
 }
 
 async function claimDirect(db) {
-  return diagnosedTransaction(db, 'organize.direct.claim', async (c) => {
-    const [runs] =
-      await c.query(`SELECT * FROM organize_suggestion_runs r WHERE run_version=3 AND rule_phase='completed' AND status IN (${active})
+  return withNextOrganizeRun(
+    db,
+    'organize.direct.claim',
+    `r.run_version=3 AND r.rule_phase='completed' AND r.status IN (${active})
       AND EXISTS(SELECT 1 FROM organize_processing_jobs j WHERE j.run_id=r.id AND j.lane='direct' AND j.kind<>'duplicate'
         AND (j.status IN ('queued','waiting') OR (j.status='running' AND j.lease_expires_at<NOW()))
-        AND (j.next_check_at IS NULL OR j.next_check_at<=NOW())) ORDER BY r.created_at,r.id LIMIT 1 FOR UPDATE`);
-    if (!runs.length) return null;
-    const run = runs[0];
-    const [jobs] = await c.query(
-      `SELECT * FROM organize_processing_jobs WHERE run_id=? AND lane='direct' AND kind<>'duplicate'
+        AND (j.next_check_at IS NULL OR j.next_check_at<=NOW()))`,
+    async (c, run) => {
+      const [jobs] = await c.query(
+        `SELECT * FROM organize_processing_jobs WHERE run_id=? AND lane='direct' AND kind<>'duplicate'
       AND (status IN ('queued','waiting') OR (status='running' AND lease_expires_at<NOW()))
       AND (next_check_at IS NULL OR next_check_at<=NOW()) ORDER BY created_at,id LIMIT 1 FOR UPDATE`,
-      [run.id],
-    );
-    if (!jobs.length) return null;
-    const job = jobs[0],
-      token = id();
-    await c.query(
-      "UPDATE organize_processing_jobs SET status='running',lease_token=?,lease_expires_at=DATE_ADD(NOW(),INTERVAL 10 MINUTE) WHERE id=?",
-      [token, job.id],
-    );
-    const [items] = await c.query('SELECT * FROM organize_suggestion_items WHERE id=?', [job.item_id]);
-    return { ...job, token, run, item: items[0], attempts: Number(job.attempts) };
-  });
+        [run.id],
+      );
+      if (!jobs.length) return null;
+      const job = jobs[0],
+        token = id();
+      await c.query(
+        "UPDATE organize_processing_jobs SET status='running',lease_token=?,lease_expires_at=DATE_ADD(NOW(),INTERVAL 10 MINUTE) WHERE id=?",
+        [token, job.id],
+      );
+      const [items] = await c.query('SELECT * FROM organize_suggestion_items WHERE id=?', [job.item_id]);
+      return { ...job, token, run, item: items[0], attempts: Number(job.attempts) };
+    },
+  );
 }
 async function finishDirect(db, job, work, status = 'completed', error = null) {
   return diagnosedTransaction(db, 'organize.direct.finish', async (c) => {
@@ -546,36 +548,37 @@ export async function runOrganizeDirect(_workerId, db = pool, dependencies = {})
 
 // Run before claiming a paid item, including during AI pause: a new cache hit is free work.
 export async function reclassifyCachedIcons(_workerId, db = pool) {
-  return diagnosedTransaction(db, 'organize.icons.reclassify', async (c) => {
-    const [runs] =
-      await c.query(`SELECT * FROM organize_suggestion_runs r WHERE r.run_version=3 AND r.rule_phase='completed' AND r.status IN ('running','paused')
-      AND EXISTS(SELECT 1 FROM organize_processing_jobs j JOIN organize_suggestion_items i ON i.id=j.item_id WHERE j.run_id=r.id AND j.lane='ai' AND j.status='queued' AND (j.next_check_at IS NULL OR j.next_check_at<=NOW()) AND i.resource_type='tag') ORDER BY r.created_at,r.id LIMIT 1 FOR UPDATE`);
-    if (!runs.length) return false;
-    const run = runs[0];
-    const [items] = await c.query(
-      "SELECT i.* FROM organize_suggestion_items i JOIN organize_processing_jobs j ON j.item_id=i.id AND j.kind='analysis' WHERE i.run_id=? AND i.resource_type='tag' AND i.ai_status='queued' AND j.status='queued' AND (j.next_check_at IS NULL OR j.next_check_at<=NOW()) ORDER BY i.id LIMIT 100",
-      [run.id],
-    );
-    let changed = false;
-    for (const item of items) {
-      const source = json(item.snapshot_json),
-        route = prepareTagIconRoute(source.title);
-      if (route.needsAi) {
-        await c.query(
-          "UPDATE organize_processing_jobs SET next_check_at=DATE_ADD(NOW(),INTERVAL 30 SECOND) WHERE item_id=? AND kind='analysis' AND status='queued'",
-          [item.id],
-        );
-        continue;
-      }
-      await c.query(
-        "UPDATE organize_processing_jobs SET lane='direct',kind='tag_icon',next_check_at=NULL,prepared_json=? WHERE item_id=? AND kind='analysis' AND status='queued'",
-        [JSON.stringify({ keywords: route.keywords, version: source.version }), item.id],
+  return withNextOrganizeRun(
+    db,
+    'organize.icons.reclassify',
+    `r.run_version=3 AND r.rule_phase='completed' AND r.status IN ('running','paused')
+      AND EXISTS(SELECT 1 FROM organize_processing_jobs j JOIN organize_suggestion_items i ON i.id=j.item_id WHERE j.run_id=r.id AND j.lane='ai' AND j.status='queued' AND (j.next_check_at IS NULL OR j.next_check_at<=NOW()) AND i.resource_type='tag')`,
+    async (c, run) => {
+      const [items] = await c.query(
+        "SELECT i.* FROM organize_suggestion_items i JOIN organize_processing_jobs j ON j.item_id=i.id AND j.kind='analysis' WHERE i.run_id=? AND i.resource_type='tag' AND i.ai_status='queued' AND j.status='queued' AND (j.next_check_at IS NULL OR j.next_check_at<=NOW()) ORDER BY i.id LIMIT 100",
+        [run.id],
       );
-      await c.query("UPDATE organize_suggestion_items SET ai_status='not_needed',ai_kinds_json='[]' WHERE id=?", [
-        item.id,
-      ]);
-      changed = true;
-    }
-    return changed;
-  });
+      let changed = false;
+      for (const item of items) {
+        const source = json(item.snapshot_json),
+          route = prepareTagIconRoute(source.title);
+        if (route.needsAi) {
+          await c.query(
+            "UPDATE organize_processing_jobs SET next_check_at=DATE_ADD(NOW(),INTERVAL 30 SECOND) WHERE item_id=? AND kind='analysis' AND status='queued'",
+            [item.id],
+          );
+          continue;
+        }
+        await c.query(
+          "UPDATE organize_processing_jobs SET lane='direct',kind='tag_icon',next_check_at=NULL,prepared_json=? WHERE item_id=? AND kind='analysis' AND status='queued'",
+          [JSON.stringify({ keywords: route.keywords, version: source.version }), item.id],
+        );
+        await c.query("UPDATE organize_suggestion_items SET ai_status='not_needed',ai_kinds_json='[]' WHERE id=?", [
+          item.id,
+        ]);
+        changed = true;
+      }
+      return changed;
+    },
+  );
 }

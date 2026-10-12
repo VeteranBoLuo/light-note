@@ -67,14 +67,19 @@ const run = {
   summary_json: { total: 101, aiTotal: 0 },
   options_json: options,
 };
+const isClaimRunQuery = (sql) =>
+  sql.startsWith('SELECT * FROM organize_suggestion_runs r WHERE') ||
+  sql === 'SELECT * FROM organize_suggestion_runs WHERE id=? FOR UPDATE' ||
+  sql.startsWith('SELECT r.id FROM organize_suggestion_runs r WHERE r.id=?');
 function database(extra) {
   const c = {
     beginTransaction: vi.fn(),
     commit: vi.fn(),
     rollback: vi.fn(),
     query: vi.fn(async (sql, p = []) => {
-      if (sql.includes('WHERE run_version=2') || sql.includes('id<>?')) return [[]];
-      if (sql.startsWith('SELECT r.id,r.status')) return extra?.(sql, p) ?? [[{ id: 'run', status: 'running' }]];
+      if (sql.includes('WHERE run_version=2') || sql.includes('r.run_version=2 AND') || sql.includes('id<>?'))
+        return [[]];
+      if (isClaimRunQuery(sql)) return extra?.(sql, p) ?? [[{ id: 'run', status: 'running' }]];
       if (sql === 'SELECT id FROM organize_processing_jobs LIMIT 0') return [[]];
       if (sql.startsWith('SELECT i.id,i.rule_status')) return [[]];
       if (sql.includes('manual_objects')) return [[{ pending: 0, manual_objects: 0, retry_files: 0 }]];
@@ -325,7 +330,7 @@ describe('新版 AI 暂停与租约边界', () => {
     readCurrentSuggestionSource.mockResolvedValue(current);
     const live = { ...run, run_version: runVersion, rule_phase: 'completed', status: ended ? 'ended' : 'running' };
     const db = database((sql, p) => {
-      if (sql.startsWith('SELECT r.id,r.status')) return [[{ ...live, status: 'running' }]];
+      if (isClaimRunQuery(sql)) return [[{ ...live, status: 'running' }]];
       if (sql.startsWith('SELECT i.*'))
         return [
           [
@@ -484,7 +489,7 @@ it.each(['unchanged', 'changed', 'ended', 'lease_lost'])('书签材料在外发�
       .mockResolvedValueOnce({ ...current, version: 'new-version' });
   let lease;
   const db = database((sql, p) => {
-    if (sql.startsWith('SELECT r.id,r.status')) return [[{ id: 'run', status: 'running', run_version: 2 }]];
+    if (isClaimRunQuery(sql)) return [[{ id: 'run', status: 'running', run_version: 2 }]];
     if (sql.startsWith('SELECT i.*'))
       return [
         [

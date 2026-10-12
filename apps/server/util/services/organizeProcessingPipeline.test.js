@@ -40,6 +40,7 @@ function database(handler) {
     commit: vi.fn(),
     rollback: vi.fn(),
     query: vi.fn(async (sql, args = []) => {
+      if (sql.startsWith('SELECT r.id FROM organize_suggestion_runs r WHERE r.id=?')) return [[{ id: args[0] }]];
       const result = handler(sql, args);
       if (result !== undefined) return result;
       if (sql.startsWith('INSERT') || sql.startsWith('UPDATE')) return [{ affectedRows: 1 }];

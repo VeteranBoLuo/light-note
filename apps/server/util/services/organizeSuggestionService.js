@@ -54,7 +54,7 @@ import {
 } from './organizeSuggestionModel.js';
 import { applySuggestionMutation } from './organizeSuggestionActions.js';
 import { invalidatePersonalKnowledgeCache } from '../personalKnowledgeSearch.js';
-import { json, transaction, diagnosedTransaction } from './organizeSuggestionStorage.js';
+import { json, transaction, diagnosedTransaction, withNextOrganizeRun } from './organizeSuggestionStorage.js';
 export { json, transaction } from './organizeSuggestionStorage.js';
 const uuid = (value) =>
   /^[\da-f]{8}-[\da-f]{4}-[1-5][\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/iu.test(String(value || ''));
@@ -560,75 +560,77 @@ export async function runSingleSuggestionItem(workerId, db = pool, dependencies 
   let job;
   try {
     if (!dependencies.skipRules && (await runRuleBatch(db))) return true;
-    job = await diagnosedTransaction(db, 'organize.ai.claim', async (c) => {
-      // MySQL 5.7: serialize the short claim transaction; release locks before any AI call.
-      const [runs] = await c.query(`SELECT r.id,r.status,r.run_version,r.options_json FROM organize_suggestion_runs r
-        WHERE ${dependencies.pipeline === 'v3' ? 'r.run_version=3 AND' : dependencies.pipeline === 'legacy' ? 'r.run_version<>3 AND' : ''} r.status IN ('running','paused','ended','cancelled') AND (r.run_version<>3 OR r.rule_phase='completed') AND EXISTS (
+    job = await withNextOrganizeRun(
+      db,
+      'organize.ai.claim',
+      `${dependencies.pipeline === 'v3' ? 'r.run_version=3 AND' : dependencies.pipeline === 'legacy' ? 'r.run_version<>3 AND' : ''} r.status IN ('running','paused','ended','cancelled') AND (r.run_version<>3 OR r.rule_phase='completed') AND EXISTS (
           SELECT 1 FROM organize_suggestion_items i WHERE i.run_id=r.id AND
           ((r.status='running' AND (i.ai_status='queued' OR (i.ai_status='waiting_content' AND (i.next_check_at IS NULL OR i.next_check_at<=NOW())))) OR (i.ai_status IN ('running','preparing_content') AND i.lease_expires_at<NOW()))
-        ) ORDER BY r.created_at,r.id LIMIT 1 FOR UPDATE`);
-      if (!runs.length) return null;
-      const [rows] = await c.query(
-        `SELECT i.* FROM organize_suggestion_items i WHERE i.run_id=? AND
+        )`,
+      async (c, run) => {
+        // The run lock only covers claiming and state changes, never an AI call.
+        const [rows] = await c.query(
+          `SELECT i.* FROM organize_suggestion_items i WHERE i.run_id=? AND
         ((?='running' AND (i.ai_status='queued' OR (i.ai_status='waiting_content' AND (i.next_check_at IS NULL OR i.next_check_at<=NOW())))) OR (i.ai_status IN ('running','preparing_content') AND i.lease_expires_at<NOW()))
         ORDER BY i.id LIMIT 1 FOR UPDATE`,
-        [runs[0].id, runs[0].status],
-      );
-      if (!rows.length) return null;
-      const item = rows[0];
-      item.run_version = runs[0].run_version;
-      item.maintenanceActorId = maintenanceActor(runs[0].options_json);
-      if (item.ai_status === 'running') {
-        // 外发后崩溃无法证明 Provider 未执行，过期租约只交付失败，不自动重复收费。
-        await finishItem(c, item, 'failed', null, 'ORGANIZE_WORKER_INTERRUPTED');
-        return { recovered: true };
-      }
-      if (item.ai_status === 'preparing_content' && runs[0].status !== 'running') {
-        await c.query(
-          'UPDATE organize_suggestion_items SET ai_status=?,lease_token=NULL,lease_expires_at=NULL WHERE id=?',
-          [runs[0].status === 'paused' ? 'waiting_content' : 'cancelled', item.id],
+          [run.id, run.status],
         );
-        if (Number(item.run_version) === 3) {
-          await markProcessingAi(c, item.id, runs[0].status === 'paused' ? 'waiting' : 'cancelled');
-          await settleProcessingRun(c, item.run_id);
+        if (!rows.length) return null;
+        const item = rows[0];
+        item.run_version = run.run_version;
+        item.maintenanceActorId = maintenanceActor(run.options_json);
+        if (item.ai_status === 'running') {
+          // 外发后崩溃无法证明 Provider 未执行，过期租约只交付失败，不自动重复收费。
+          await finishItem(c, item, 'failed', null, 'ORGANIZE_WORKER_INTERRUPTED');
+          return { recovered: true };
         }
-        return { recovered: true };
-      }
-      if (Number(item.run_version) === 3) {
-        const [jobs] = await c.query(
-          "SELECT prepared_json FROM organize_processing_jobs WHERE item_id=? AND kind='analysis' AND lane='ai' AND status IN ('queued','waiting','running')",
-          [item.id],
-        );
-        if (!jobs.length) return null;
-        item.processingPrepared = json(jobs[0].prepared_json);
-        if (item.resource_type === 'tag' && item.snapshot_json) {
-          const snapshot = json(item.snapshot_json),
-            route = prepareTagIconRoute(snapshot.title);
-          if (!route.needsAi) {
-            await c.query(
-              "UPDATE organize_processing_jobs SET lane='direct',kind='tag_icon',status='queued',prepared_json=?,lease_token=NULL,lease_expires_at=NULL WHERE item_id=? AND kind='analysis'",
-              [JSON.stringify({ keywords: route.keywords, version: snapshot.version }), item.id],
-            );
-            await c.query(
-              "UPDATE organize_suggestion_items SET ai_status='not_needed',ai_kinds_json='[]',lease_token=NULL,lease_expires_at=NULL WHERE id=?",
-              [item.id],
-            );
-            return { reclassified: true };
+        if (item.ai_status === 'preparing_content' && run.status !== 'running') {
+          await c.query(
+            'UPDATE organize_suggestion_items SET ai_status=?,lease_token=NULL,lease_expires_at=NULL WHERE id=?',
+            [run.status === 'paused' ? 'waiting_content' : 'cancelled', item.id],
+          );
+          if (Number(item.run_version) === 3) {
+            await markProcessingAi(c, item.id, run.status === 'paused' ? 'waiting' : 'cancelled');
+            await settleProcessingRun(c, item.run_id);
+          }
+          return { recovered: true };
+        }
+        if (Number(item.run_version) === 3) {
+          const [jobs] = await c.query(
+            "SELECT prepared_json FROM organize_processing_jobs WHERE item_id=? AND kind='analysis' AND lane='ai' AND status IN ('queued','waiting','running')",
+            [item.id],
+          );
+          if (!jobs.length) return null;
+          item.processingPrepared = json(jobs[0].prepared_json);
+          if (item.resource_type === 'tag' && item.snapshot_json) {
+            const snapshot = json(item.snapshot_json),
+              route = prepareTagIconRoute(snapshot.title);
+            if (!route.needsAi) {
+              await c.query(
+                "UPDATE organize_processing_jobs SET lane='direct',kind='tag_icon',status='queued',prepared_json=?,lease_token=NULL,lease_expires_at=NULL WHERE item_id=? AND kind='analysis'",
+                [JSON.stringify({ keywords: route.keywords, version: snapshot.version }), item.id],
+              );
+              await c.query(
+                "UPDATE organize_suggestion_items SET ai_status='not_needed',ai_kinds_json='[]',lease_token=NULL,lease_expires_at=NULL WHERE id=?",
+                [item.id],
+              );
+              return { reclassified: true };
+            }
           }
         }
-      }
-      item.lease_token = crypto.randomUUID();
-      await c.query(
-        `UPDATE organize_suggestion_items SET ai_status='${item.resource_type === 'file' ? 'preparing_content' : 'running'}',lease_token=?,lease_expires_at=DATE_ADD(NOW(),INTERVAL 10 MINUTE) WHERE id=?`,
-        [item.lease_token, item.id],
-      );
-      if (Number(item.run_version) === 3) await markProcessingAi(c, item.id, 'running', item.lease_token);
-      await c.query(
-        "UPDATE organize_suggestions SET status='running',payload_json=JSON_SET(payload_json,'$.reason','正在分析') WHERE item_id=? AND status='queued'",
-        [item.id],
-      );
-      return item;
-    });
+        item.lease_token = crypto.randomUUID();
+        await c.query(
+          `UPDATE organize_suggestion_items SET ai_status='${item.resource_type === 'file' ? 'preparing_content' : 'running'}',lease_token=?,lease_expires_at=DATE_ADD(NOW(),INTERVAL 10 MINUTE) WHERE id=?`,
+          [item.lease_token, item.id],
+        );
+        if (Number(item.run_version) === 3) await markProcessingAi(c, item.id, 'running', item.lease_token);
+        await c.query(
+          "UPDATE organize_suggestions SET status='running',payload_json=JSON_SET(payload_json,'$.reason','正在分析') WHERE item_id=? AND status='queued'",
+          [item.id],
+        );
+        return item;
+      },
+    );
   } catch (error) {
     if (['ER_NO_SUCH_TABLE', 'ER_BAD_FIELD_ERROR'].includes(error.code)) return false;
     throw error;

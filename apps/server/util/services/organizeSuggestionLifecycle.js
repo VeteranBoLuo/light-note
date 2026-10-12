@@ -1,6 +1,6 @@
 import { prepareOrganizeArchive } from './organizeArchiveDraft.js';
 import crypto from 'node:crypto';
-import { transaction, json } from './organizeSuggestionStorage.js';
+import { transaction, json, withNextOrganizeRun } from './organizeSuggestionStorage.js';
 import { normalizeRunInput, buildRuleSuggestions, hash, suggestionError } from './organizeSuggestionRules.js';
 import { readSuggestionCandidates, readSuggestionSources } from './organizeSuggestionSources.js';
 import {
@@ -385,19 +385,19 @@ export async function writeSuggestions(c, run, entries, { independentOnly = fals
   );
 }
 export async function runRuleBatch(db) {
-  const claim = await transaction(db, async (c) => {
-    const [runs] = await c.query(
-      "SELECT * FROM organize_suggestion_runs WHERE run_version=2 AND status IN ('preparing','running','paused') AND rule_phase IN ('pending','retrying') AND (rule_lease_token IS NULL OR rule_lease_expires_at<NOW()) ORDER BY created_at,id LIMIT 1 FOR UPDATE",
-    );
-    if (!runs.length) return null;
-    const run = runs[0],
-      token = crypto.randomUUID();
-    await c.query(
-      'UPDATE organize_suggestion_runs SET rule_lease_token=?,rule_lease_expires_at=DATE_ADD(NOW(),INTERVAL 10 MINUTE) WHERE id=?',
-      [token, run.id],
-    );
-    return { ...run, token };
-  });
+  const claim = await withNextOrganizeRun(
+    db,
+    'organize.rules',
+    "r.run_version=2 AND r.status IN ('preparing','running','paused') AND r.rule_phase IN ('pending','retrying') AND (r.rule_lease_token IS NULL OR r.rule_lease_expires_at<NOW())",
+    async (c, run) => {
+      const token = crypto.randomUUID();
+      await c.query(
+        'UPDATE organize_suggestion_runs SET rule_lease_token=?,rule_lease_expires_at=DATE_ADD(NOW(),INTERVAL 10 MINUTE) WHERE id=?',
+        [token, run.id],
+      );
+      return { ...run, token };
+    },
+  );
   if (!claim) return false;
   try {
     // 网页读取逐项占用租约，避免一批外网请求累计超过租约期限。
