@@ -124,10 +124,12 @@ const COMMUNITY_CHAT_NOTIFICATION_LEVEL_LOG_LABELS = Object.freeze({
 async function recordCommunityChatNotificationSettingsOperation(req, settings) {
   const enabledLabel = settings?.enabled ? '开启' : '关闭';
   const levelLabel = COMMUNITY_CHAT_NOTIFICATION_LEVEL_LOG_LABELS[settings?.level] || '未知范围';
+  const subscriptionLabel = typeof settings?.rootAllMessages === 'boolean'
+    ? `；全量订阅：${settings.rootAllMessages ? '开启' : '关闭'}` : '';
   try {
     await recordServerOperation(req, {
       module: '公共聊天室',
-      operation: `保存聊天室提醒设置【${enabledLabel}；范围：${levelLabel}】`,
+      operation: `保存聊天室提醒设置【${enabledLabel}；范围：${levelLabel}${subscriptionLabel}】`,
     });
   } catch (error) {
     // 设置已经由领域事务提交；日志异常不能把成功操作伪装成保存失败。
@@ -245,6 +247,7 @@ export async function updateNotificationSettings(req, res) {
       user: req.user,
       enabled: req.body?.enabled,
       level: req.body?.level,
+      rootAllMessages: req.body?.rootAllMessages,
     });
     await recordCommunityChatNotificationSettingsOperation(req, data);
     return res.send(resultData(data, 200, L(req, '聊天室提醒设置已保存', 'Chat notification settings saved')));

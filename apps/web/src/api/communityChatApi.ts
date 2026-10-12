@@ -53,6 +53,7 @@ export interface CommunityChatRoom {
 export type CommunityChatNotificationLevel = 'official' | 'mentions_only' | 'mentions' | 'all';
 
 export interface CommunityChatNotificationSettings {
+  rootAllMessages?: boolean;
   enabled: boolean;
   level: CommunityChatNotificationLevel;
   defaultEnabled: true;
@@ -411,6 +412,7 @@ export const getCommunityChatNotificationSettings = () =>
   apiBaseGet('/api/community-chat/settings/notifications', undefined, { silent: true });
 
 export const updateCommunityChatNotificationSettings = (input: {
+  rootAllMessages?: boolean;
   enabled: boolean;
   level: CommunityChatNotificationLevel;
 }) => apiBasePut('/api/community-chat/settings/notifications', input, { silent: true });

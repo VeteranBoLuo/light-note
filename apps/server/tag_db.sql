@@ -828,6 +828,7 @@ DROP TABLE IF EXISTS `community_chat_user_settings`;
 CREATE TABLE `community_chat_user_settings` (
   `user_id` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
   `global_notification_enabled` tinyint unsigned NOT NULL DEFAULT 1,
+  `root_all_messages_enabled` tinyint unsigned NOT NULL DEFAULT 1,
   `browser_notification_enabled` tinyint unsigned NOT NULL DEFAULT 0,
   `android_notification_enabled` tinyint unsigned NOT NULL DEFAULT 0,
   `lock_screen_preview` varchar(16) NOT NULL DEFAULT 'hidden',

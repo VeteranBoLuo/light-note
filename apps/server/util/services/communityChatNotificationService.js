@@ -23,10 +23,11 @@ export function normalizeCommunityChatNotificationLevel(value, { strict = false 
   throw chatError('INVALID_NOTIFICATION_LEVEL', 400, '聊天室提醒范围无效', 'Invalid community chat notification level');
 }
 
-function toPublicSettings(row = null) {
+function toPublicSettings(row = null, user = null) {
   const enabled = row ? Boolean(Number(row.enabled || 0)) : COMMUNITY_CHAT_NOTIFICATIONS_DEFAULT_ENABLED;
   return {
     enabled,
+    ...(user?.role === 'root' ? { rootAllMessages: Number(row?.rootAllMessages ?? 1) === 1 } : {}),
     level: normalizeCommunityChatNotificationLevel(row?.level),
     defaultEnabled: COMMUNITY_CHAT_NOTIFICATIONS_DEFAULT_ENABLED,
     replyCountsAsMention: true,
@@ -41,26 +42,35 @@ function toPublicSettings(row = null) {
 export async function getCommunityChatNotificationSettings({ user, db = pool }) {
   assertRegisteredUser(user);
   const [rows] = await db.query(
-    `SELECT global_notification_enabled AS enabled, default_room_level AS level
+    `SELECT global_notification_enabled AS enabled, default_room_level AS level, root_all_messages_enabled AS rootAllMessages
        FROM community_chat_user_settings
       WHERE user_id = ?
       LIMIT 1`,
     [user.id],
   );
-  return toPublicSettings(rows[0] || null);
+  return toPublicSettings(rows[0] || null, user);
 }
 
-export async function updateCommunityChatNotificationSettings({ user, enabled, level, db = pool }) {
+export async function updateCommunityChatNotificationSettings({ user, enabled, level, rootAllMessages, db = pool }) {
   assertRegisteredUser(user);
   if (typeof enabled !== 'boolean') {
     throw chatError('INVALID_NOTIFICATION_ENABLED', 400, '聊天室提醒开关无效', 'Invalid notification switch');
+  }
+  if (rootAllMessages !== undefined && (user.role !== 'root' || typeof rootAllMessages !== 'boolean')) {
+    throw chatError(user.role !== 'root' ? 'ROOT_REQUIRED' : 'INVALID_ROOT_SUBSCRIPTION', user.role !== 'root' ? 403 : 400,
+      '聊天室全量订阅设置无效', 'Invalid root chat subscription');
   }
   const normalizedLevel = normalizeCommunityChatNotificationLevel(level, { strict: true });
   const connection = await db.getConnection();
   try {
     await connection.beginTransaction();
+    if (user.role === 'root') {
+      const [[current]] = await connection.query('SELECT role FROM user WHERE id = ? AND del_flag = 0 FOR UPDATE', [user.id]);
+      if (current?.role !== 'root') throw chatError('ROOT_REQUIRED', 403, '没有操作权限', 'Root role required');
+    }
+
     const [settingRows] = await connection.query(
-      `SELECT global_notification_enabled AS enabled
+      `SELECT global_notification_enabled AS enabled, root_all_messages_enabled AS rootAllMessages
          FROM community_chat_user_settings
         WHERE user_id = ?
         LIMIT 1 FOR UPDATE`,
@@ -70,15 +80,17 @@ export async function updateCommunityChatNotificationSettings({ user, enabled, l
       ? Boolean(Number(settingRows[0].enabled || 0))
       : COMMUNITY_CHAT_NOTIFICATIONS_DEFAULT_ENABLED;
 
+    const nextRootAllMessages = rootAllMessages ?? (Number(settingRows[0]?.rootAllMessages ?? 1) === 1);
     await connection.query(
       `INSERT INTO community_chat_user_settings
-         (user_id, global_notification_enabled, default_room_level)
-       VALUES (?, ?, ?)
+         (user_id, global_notification_enabled, default_room_level, root_all_messages_enabled)
+       VALUES (?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE
          global_notification_enabled = VALUES(global_notification_enabled),
          default_room_level = VALUES(default_room_level),
+         root_all_messages_enabled = VALUES(root_all_messages_enabled),
          update_time = CURRENT_TIMESTAMP`,
-      [user.id, enabled ? 1 : 0, normalizedLevel],
+      [user.id, enabled ? 1 : 0, normalizedLevel, nextRootAllMessages ? 1 : 0],
     );
 
     // 开关切换时以当前最新消息作为新的阅读基线：关闭不残留角标，重开也不会补算关闭期间的消息。
@@ -109,8 +121,21 @@ export async function updateCommunityChatNotificationSettings({ user, enabled, l
       );
     }
 
+    if (rootAllMessages === false) {
+      // Keep inbox history, but permanently suppress this subscription's unsent alerts even after re-enabling.
+      await connection.query(`UPDATE notification SET browser_push_pending = 0,
+        meta = JSON_SET(meta, '$.subscriptionCancelled', 1)
+        WHERE user_id = ? AND type = 'community_chat'
+          AND JSON_UNQUOTE(JSON_EXTRACT(meta, '$.kind')) = 'subscription'`, [user.id]);
+      await connection.query(`UPDATE browser_push_jobs j JOIN notification n
+        ON j.notification_id = CONVERT(n.id USING utf8mb4) COLLATE utf8mb4_general_ci
+        SET j.status = 'cancelled', j.lease_until = NULL
+        WHERE n.user_id = ? AND n.type = 'community_chat'
+          AND JSON_UNQUOTE(JSON_EXTRACT(n.meta, '$.kind')) = 'subscription'
+          AND j.status IN ('pending', 'sending')`, [user.id]);
+    }
     await connection.commit();
-    return toPublicSettings({ enabled: enabled ? 1 : 0, level: normalizedLevel });
+    return toPublicSettings({ enabled: enabled ? 1 : 0, level: normalizedLevel, rootAllMessages: nextRootAllMessages ? 1 : 0 }, user);
   } catch (error) {
     await connection.rollback();
     throw error;
@@ -119,15 +144,7 @@ export async function updateCommunityChatNotificationSettings({ user, enabled, l
   }
 }
 
-/**
- * 消息提交后只为“直接回复了我”“显式提及了我”或 Root 的“提及所有人”生成站内通知。
- *
- * - 聊天室入口角标仍按 official / mentions_only / mentions / all 单独计算，不能把角标范围扩大成通知中心投递范围。
- * - 普通新消息不会进入 PC / 移动端通用通知中心；回复与 @ 使用相同的总开关、档位和屏蔽规则。
- * - 主开关缺省开启；用户主动关闭后，回复和 @ 都不生成通知。
- * - 通知使用 message public id 作为稳定来源键；同一消息同时回复并 @ 同一成员也只投递一次。
- * - 浏览器推送从通知事实异步派发，Android 原生推送尚未开放。
- */
+/** Targeted interactions and root subscriptions share one source/recipient idempotency key. */
 export async function deliverCommunityChatMessageNotifications({
   messagePublicId,
   messagePreview,
@@ -171,7 +188,9 @@ export async function deliverCommunityChatMessageNotifications({
     `INSERT IGNORE INTO notification
        (id, user_id, type, title, content, link, meta, is_read, source_type, source_id, browser_push_pending, browser_push_created_at)
      SELECT UUID(), recipient.id, 'community_chat',
-            CASE WHEN reply.user_id = recipient.id THEN '有人回复了你' ELSE '有人提及了你' END,
+            CASE WHEN reply.user_id = recipient.id THEN '有人回复了你'
+                 WHEN message.mention_everyone = 1 OR EXISTS (SELECT 1 FROM community_chat_message_mentions own_mention WHERE own_mention.message_id = message.id AND own_mention.mentioned_user_id = recipient.id) THEN '有人提及了你'
+                 ELSE '聊天室有新消息' END,
             CONCAT(
               COALESCE(NULLIF(sender.alias, ''), '轻笺用户'),
               '：',
@@ -185,6 +204,8 @@ export async function deliverCommunityChatMessageNotifications({
                    WHERE notification_image.message_id = message.id
                      AND notification_image.status = 'attached'
                 ) THEN '[图片]'
+                WHEN EXISTS (SELECT 1 FROM community_chat_message_files notification_file
+                  WHERE notification_file.message_id = message.id AND notification_file.status = 'attached') THEN '[文件]'
                 WHEN message.message_kind = 'sticker' THEN '[表情]'
                 ELSE '[新消息]'
               END
@@ -193,7 +214,9 @@ export async function deliverCommunityChatMessageNotifications({
             JSON_OBJECT(
               'version', 1,
               'delivery', 'notification_center',
-              'kind', CASE WHEN reply.user_id = recipient.id THEN 'reply' ELSE 'mention' END,
+              'kind', CASE WHEN reply.user_id = recipient.id THEN 'reply'
+                           WHEN message.mention_everyone = 1 OR EXISTS (SELECT 1 FROM community_chat_message_mentions own_mention WHERE own_mention.message_id = message.id AND own_mention.mentioned_user_id = recipient.id) THEN 'mention'
+                           ELSE 'subscription' END,
               'mentionEveryone', IF(message.mention_everyone = 1, 1, 0),
               'messagePublicId', message.public_id,
               'roomSlug', room.slug,
@@ -209,23 +232,23 @@ export async function deliverCommunityChatMessageNotifications({
        LEFT JOIN community_chat_members sender_membership ON sender_membership.user_id = sender.id
        LEFT JOIN community_chat_messages reply ON reply.id = message.reply_to_id
        LEFT JOIN community_chat_message_mentions mention ON mention.message_id = message.id
-       JOIN community_chat_user_identities recipient_identity ON (
-                              message.mention_everyone = 1
-                              OR recipient_identity.user_id = reply.user_id
-                              OR recipient_identity.user_id = mention.mentioned_user_id
-                            )
-       JOIN user recipient ON recipient.id = recipient_identity.user_id
+       JOIN user recipient ON (recipient.role = 'root' OR message.mention_everyone = 1
+                               OR recipient.id = reply.user_id OR recipient.id = mention.mentioned_user_id)
                             AND recipient.del_flag = 0
                             AND recipient.role <> 'visitor'
                             AND recipient.id <> message.user_id
+       LEFT JOIN community_chat_user_identities recipient_identity ON recipient_identity.user_id = recipient.id
        LEFT JOIN community_chat_user_settings settings ON settings.user_id = recipient.id
        LEFT JOIN community_chat_members recipient_membership ON recipient_membership.user_id = recipient.id
       WHERE message.public_id = ?
         AND message.status = 'active'
-        AND (message.mention_everyone = 0 OR settings.user_id IS NOT NULL)
+        AND (recipient.role = 'root' OR recipient_identity.user_id IS NOT NULL)
+        AND (message.mention_everyone = 0 OR settings.user_id IS NOT NULL
+             OR (recipient.role = 'root' AND COALESCE(settings.root_all_messages_enabled, 1) = 1))
         AND COALESCE(settings.global_notification_enabled, 1) = 1
         AND (
-          (
+          (recipient.role = 'root' AND COALESCE(settings.root_all_messages_enabled, 1) = 1)
+          OR (
             COALESCE(settings.default_room_level, 'mentions') = 'official'
             AND (
               sender.role = 'root'
@@ -250,9 +273,10 @@ export async function deliverCommunityChatMessageNotifications({
               OR (blocked.user_id = message.user_id AND blocked.blocked_user_id = recipient.id)
         )
         AND (
-          message.mention_everyone = 1
-          OR reply.user_id IS NOT NULL
-          OR mention.mentioned_user_id IS NOT NULL
+          (recipient.role = 'root' AND COALESCE(settings.root_all_messages_enabled, 1) = 1)
+          OR message.mention_everyone = 1
+          OR reply.user_id = recipient.id
+          OR mention.mentioned_user_id = recipient.id
         )`,
     [...previewParams, normalizedPublicId, ...accessParams],
   );

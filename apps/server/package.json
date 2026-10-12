@@ -41,6 +41,7 @@
     "worker:note-imports": "node noteImportWorker.js",
     "worker:note-imports:dev": "node --watch --watch-preserve-output noteImportWorker.js",
     "check:note-imports": "node scripts/checkNoteImportRuntime.js",
+    "migrate:root-chat-subscription": "node scripts/migrateRootChatSubscription.js",
     "migrate:community-feed-schema": "node scripts/ensureCommunityFeedSchema.js",
     "worker:data-exports": "node dataExportWorker.js",
     "check:data-exports": "node scripts/checkDataExportRuntime.js"

@@ -60,7 +60,7 @@ describe('communityChatNotificationService', () => {
 
     expect(result.enabled).toBe(true);
     expect(result.level).toBe('official');
-    expect(connection.query.mock.calls[1][1]).toEqual(['user-1', 1, 'official']);
+    expect(connection.query.mock.calls[1][1]).toEqual(['user-1', 1, 'official', 1]);
     expect(connection.commit).toHaveBeenCalledTimes(1);
     expect(connection.release).toHaveBeenCalledTimes(1);
     await expect(
@@ -150,21 +150,21 @@ describe('communityChatNotificationService', () => {
     expect(text).toContain('INSERT IGNORE INTO notification');
     expect(text).toContain("'community_chat_message'");
     expect(text).toContain("'delivery', 'notification_center'");
-    expect(text).toContain("'kind', CASE WHEN reply.user_id = recipient.id THEN 'reply' ELSE 'mention' END");
+    expect(text).toContain("'kind', CASE WHEN reply.user_id = recipient.id THEN 'reply'");
     expect(text).toContain("'mentionEveryone', IF(message.mention_everyone = 1, 1, 0)");
     expect(text).toContain('LEFT JOIN community_chat_messages reply ON reply.id = message.reply_to_id');
     expect(text).toContain('LEFT JOIN community_chat_message_mentions mention ON mention.message_id = message.id');
     expect(db.query).toHaveBeenCalledTimes(1);
-    expect(text).toContain('recipient_identity.user_id = reply.user_id');
-    expect(text).toContain('recipient_identity.user_id = mention.mentioned_user_id');
+    expect(text).toContain('recipient.id = reply.user_id');
+    expect(text).toContain('recipient.id = mention.mentioned_user_id');
     expect(text).toContain('message.mention_everyone = 1');
     expect(text).toContain('message.mention_everyone = 0 OR settings.user_id IS NOT NULL');
     expect(text).toContain('COALESCE(settings.global_notification_enabled, 1) = 1');
     expect(text).toContain('LEFT JOIN community_chat_user_settings settings');
     expect(text).toContain('JOIN community_chat_user_identities recipient_identity');
-    expect(text).toContain('JOIN user recipient ON recipient.id = recipient_identity.user_id');
+    expect(text).toContain("JOIN user recipient ON (recipient.role = 'root'");
     expect(text).toContain('recipient.id');
-    expect(text).toContain("CASE WHEN reply.user_id = recipient.id THEN '有人回复了你' ELSE '有人提及了你' END");
+    expect(text).toContain("CASE WHEN reply.user_id = recipient.id THEN '有人回复了你'");
     expect(text).toContain("WHEN message.message_kind = 'poll'");
     expect(text).toContain("CONCAT('[投票] '");
     expect(text).toContain("COALESCE(settings.default_room_level, 'mentions') = 'official'");

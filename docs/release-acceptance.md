@@ -125,6 +125,11 @@ FCM 备用出口使用 `scripts/browser-push-relay/worker.mjs`，以独立托管
 - Web 与后端部署后，验证普通账号主动打开跨日自有书签、笔记、文件会记录，系统示例、自动刷新、游客、代看与当天新建内容不记录。PC、移动浏览器和 App 共用采集实现，旧客户端尚未更新的遗漏需保留说明。
 - 在采集验证完成且取得线上写入授权后，运行 `node scripts/activateResourceReuseMeasurement.js --apply` 登记当前时间为覆盖起点；不带参数仅只读查询，不能传入过去日期。脚本不重复覆盖已有时间，不回填行为。元数据未登记时仍展示已观测人数，完整比例保持未知。
 
+### root 聊天室全量订阅
+
+- 部署引用 `root_all_messages_enabled` 的后端前，显式运行 `node scripts/migrateRootChatSubscription.js`，再运行 `check:schema`。该加法迁移可重复执行，保留用户已关闭的选择，不回填通知。
+- 先迁移、再发布后端和前端；复用现有正式 APK、设备绑定与已获批的华为 SUBSCRIPTION，不修改厂商控制台。回滚应用时可保留新增列。
+
 ## 上线授权
 
 用户在当前任务中明确说“上线”或“部署”，即一次性授权：

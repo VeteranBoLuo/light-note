@@ -4139,6 +4139,16 @@ export default {
       inAppChannel: 'Desktop / mobile Notifications: replies or mentions',
       inAppChannelDisabled: 'Desktop / mobile Notifications: off',
       appChannelLater: 'No mobile system notifications',
+      rootAllMessages: 'Subscribe to all new chat messages',
+      rootAllMessagesDescription:
+        'Root only. New messages from others appear in Notifications and alert connected devices. Your own messages do not trigger alerts.',
+      rootDescription:
+        'The full subscription controls inbox and device alerts; the scope below still controls chat badges.',
+      rootVisibilityHint:
+        'Only new messages are delivered. Turning this off keeps inbox history; turning it on does not replay messages. Blocks and message visibility still apply.',
+      rootAllMessagesPaused: 'A notification master switch is off. This subscription is paused.',
+      rootAllMessagesFailed: 'Could not save. Your previous setting was restored; toggle again to retry.',
+      rootAllMessagesChannel: 'Notifications: all new messages from others, without duplicate reply or mention alerts',
       compactInAppChannel: 'Notifications: replies or mentions allowed by this scope only',
       compactInAppChannelDisabled: 'Notifications: off',
       compactSystemChannel: 'System notifications: off',

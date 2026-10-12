@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createApp, nextTick } from 'vue';
+import { createApp, nextTick, reactive } from 'vue';
 import { createI18n } from 'vue-i18n';
 import zhCN from '@/i18n/locales/zh-CN';
 
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
 const mocks = vi.hoisted(() => ({
+  user: null as any,
   getSettings: vi.fn(),
   updateSettings: vi.fn(),
   success: vi.fn(),
@@ -14,6 +15,8 @@ const mocks = vi.hoisted(() => ({
   refreshCommunityUnread: vi.fn(),
   resetCommunityUnread: vi.fn(),
 }));
+
+vi.mock('@/store', () => ({ useUserStore: () => mocks.user }));
 
 vi.mock('@/api/communityChatApi', () => ({
   getCommunityChatNotificationSettings: mocks.getSettings,
@@ -81,6 +84,7 @@ async function mountPanel(compact = false) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.user = reactive({ id: 'alice', role: 'user', adminContext: null, preferences: {} });
   mocks.getSettings.mockResolvedValue({ data: settings(true) });
   mocks.updateSettings.mockImplementation(async (payload) => ({ data: settings(payload.enabled, payload.level) }));
   mocks.refreshUnread.mockResolvedValue(undefined);
@@ -187,4 +191,26 @@ describe('CommunityChatNotificationSettingsPanel', () => {
     expect(host.textContent).toContain('通知中心：不发送');
     expect(host.textContent).not.toContain('通知中心：只接收该档允许的回复或提及');
   });
+});
+
+it('shows the root-only subscription and rolls back failed saves', async () => {
+  mocks.user.role = 'root';
+  mocks.getSettings.mockResolvedValue({ data: { ...settings(true), rootAllMessages: true } });
+  mocks.updateSettings.mockRejectedValue(new Error('offline'));
+  const host = await mountPanel();
+  const toggle = host.querySelector('[aria-label="订阅聊天室全部新消息"]') as HTMLElement;
+  expect(toggle.getAttribute('aria-checked')).toBe('true');
+  toggle.click();
+  await flushAsync();
+  expect(mocks.updateSettings).toHaveBeenCalledWith({ enabled: true, level: 'mentions', rootAllMessages: false });
+  expect(toggle.getAttribute('aria-checked')).toBe('true');
+  expect(host.textContent).toContain('保存失败，已恢复原设置');
+  mocks.user.role = 'user';
+  await flushAsync();
+  expect(host.querySelector('[aria-label="订阅聊天室全部新消息"]')).toBeNull();
+});
+it('never displays the privileged switch to an ordinary user even if a response contains it', async () => {
+  mocks.getSettings.mockResolvedValue({ data: { ...settings(true), rootAllMessages: true } });
+  const host = await mountPanel();
+  expect(host.querySelector('[aria-label="订阅聊天室全部新消息"]')).toBeNull();
 });

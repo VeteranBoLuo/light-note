@@ -8,7 +8,11 @@
         <strong>{{ t('communityChat.notifications.title') }}</strong>
         <span>
           {{
-            compact ? t('communityChat.notifications.compactDescription') : t('communityChat.notifications.description')
+            isRoot && settings.rootAllMessages
+              ? t('communityChat.notifications.rootDescription')
+              : compact
+                ? t('communityChat.notifications.compactDescription')
+                : t('communityChat.notifications.description')
           }}
         </span>
       </div>
@@ -28,6 +32,24 @@
       <BButton size="small" @click="loadSettings">{{ t('communityChat.notifications.retry') }}</BButton>
     </div>
     <template v-else>
+      <div v-if="isRoot && typeof settings.rootAllMessages === 'boolean'" class="community-notification-settings__head">
+        <div class="community-notification-settings__head-copy">
+          <strong>{{ t('communityChat.notifications.rootAllMessages') }}</strong>
+          <span>{{ t('communityChat.notifications.rootAllMessagesDescription') }}</span>
+          <span v-if="!settings.enabled || user.preferences.notificationsInApp === false">{{
+            t('communityChat.notifications.rootAllMessagesPaused')
+          }}</span>
+          <span v-if="rootSaveFailed" class="community-notification-settings__root-error" role="alert">{{
+            t('communityChat.notifications.rootAllMessagesFailed')
+          }}</span>
+        </div>
+        <BSwitch
+          :checked="settings.rootAllMessages"
+          :disabled="saving || !settings.enabled"
+          :aria-label="t('communityChat.notifications.rootAllMessages')"
+          @change="changeRootAllMessages"
+        />
+      </div>
       <div
         class="community-notification-settings__rail"
         :class="{ 'is-disabled': !settings.enabled || saving }"
@@ -69,14 +91,21 @@
         </span>
       </div>
       <p v-if="!compact" class="community-notification-settings__hint">
-        {{ t('communityChat.notifications.visibilityHint') }}
+        {{
+          t(
+            isRoot && settings.rootAllMessages
+              ? 'communityChat.notifications.rootVisibilityHint'
+              : 'communityChat.notifications.visibilityHint',
+          )
+        }}
       </p>
     </template>
   </section>
 </template>
 
 <script setup lang="ts">
-  import { computed, onMounted, ref } from 'vue';
+  import { computed, onBeforeUnmount, ref, watch } from 'vue';
+  import { useUserStore } from '@/store';
   import { useI18n } from 'vue-i18n';
   import {
     getCommunityChatNotificationSettings,
@@ -93,6 +122,9 @@
   import { useNotification } from '@/composables/useNotification';
   import icon from '@/config/icon';
 
+  const user = useUserStore();
+  const isRoot = computed(() => user.role === 'root' && !user.adminContext);
+  const rootSaveFailed = ref(false);
   const props = withDefaults(defineProps<{ compact?: boolean }>(), { compact: false });
   const emit = defineEmits<{ saved: [settings: CommunityChatNotificationSettings] }>();
   const { t } = useI18n();
@@ -169,14 +201,18 @@
   const currentCompactInAppChannelLabel = computed(() =>
     t(
       settings.value.enabled
-        ? 'communityChat.notifications.compactInAppChannel'
+        ? isRoot.value && settings.value.rootAllMessages
+          ? 'communityChat.notifications.rootAllMessagesChannel'
+          : 'communityChat.notifications.compactInAppChannel'
         : 'communityChat.notifications.compactInAppChannelDisabled',
     ),
   );
   const currentInAppChannelLabel = computed(() =>
     t(
       settings.value.enabled
-        ? 'communityChat.notifications.inAppChannel'
+        ? isRoot.value && settings.value.rootAllMessages
+          ? 'communityChat.notifications.rootAllMessagesChannel'
+          : 'communityChat.notifications.inAppChannel'
         : 'communityChat.notifications.inAppChannelDisabled',
     ),
   );
@@ -218,23 +254,28 @@
     }
   }
 
-  async function save(next: { enabled: boolean; level: CommunityChatNotificationLevel }) {
+  async function save(next: { enabled: boolean; level: CommunityChatNotificationLevel; rootAllMessages?: boolean }) {
     if (saving.value) return;
+    const generation = loadGeneration;
     const previous = settings.value;
+    rootSaveFailed.value = false;
     settings.value = normalizeSettings({ ...settings.value, ...next });
     saving.value = true;
     try {
       const response = await updateCommunityChatNotificationSettings(next);
+      if (generation !== loadGeneration) return;
       settings.value = normalizeSettings(response.data as CommunityChatNotificationSettings);
       emit('saved', settings.value);
       if (!settings.value.enabled) communityUnread.reset();
       await Promise.allSettled([refreshUnread(), communityUnread.refresh()]);
-      message.success(t('communityChat.notifications.saved'));
+      if (next.rootAllMessages === undefined) message.success(t('communityChat.notifications.saved'));
     } catch (saveError: any) {
+      if (generation !== loadGeneration) return;
       settings.value = previous;
-      message.error(saveError?.message || t('communityChat.notifications.saveFailed'));
+      rootSaveFailed.value = next.rootAllMessages !== undefined;
+      if (!rootSaveFailed.value) message.error(saveError?.message || t('communityChat.notifications.saveFailed'));
     } finally {
-      saving.value = false;
+      if (generation === loadGeneration) saving.value = false;
     }
   }
 
@@ -247,7 +288,23 @@
     void save({ enabled: true, level });
   }
 
-  onMounted(loadSettings);
+  function changeRootAllMessages(rootAllMessages: boolean) {
+    if (!isRoot.value || !settings.value.enabled) return;
+    void save({ enabled: settings.value.enabled, level: settings.value.level, rootAllMessages });
+  }
+  watch(
+    () => [user.id, user.role, user.adminContext],
+    () => {
+      settings.value = { ...DEFAULT_SETTINGS };
+      saving.value = false;
+      rootSaveFailed.value = false;
+      void loadSettings();
+    },
+    { immediate: true },
+  );
+  onBeforeUnmount(() => {
+    loadGeneration++;
+  });
 </script>
 
 <style scoped lang="less">
@@ -287,6 +344,10 @@
     color: var(--desc-color);
     font-size: var(--ui-font-11, 11px);
     line-height: 1.6;
+  }
+
+  .community-notification-settings__head-copy > .community-notification-settings__root-error {
+    color: var(--danger-color);
   }
 
   .community-notification-settings__state {

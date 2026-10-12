@@ -714,6 +714,7 @@ FROM (
   SELECT 'community_chat_members', 'status', 'community_chat_members.status' UNION ALL
   SELECT 'community_chat_members', 'rules_version', 'community_chat_members.rules_version' UNION ALL
   SELECT 'community_chat_members', 'rules_accepted_at', 'community_chat_members.rules_accepted_at' UNION ALL
+  SELECT 'community_chat_user_settings', 'root_all_messages_enabled', 'community_chat_user_settings.root_all_messages_enabled' UNION ALL
   SELECT 'community_chat_user_settings', 'global_notification_enabled', 'community_chat_user_settings.global_notification_enabled' UNION ALL
   SELECT 'community_chat_user_settings', 'browser_notification_enabled', 'community_chat_user_settings.browser_notification_enabled' UNION ALL
   SELECT 'community_chat_user_settings', 'android_notification_enabled', 'community_chat_user_settings.android_notification_enabled' UNION ALL

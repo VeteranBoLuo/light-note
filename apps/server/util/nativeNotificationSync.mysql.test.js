@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import mysql from 'mysql2/promise';
+import { COMMUNITY_CHAT_TABLE_SQL } from './communityChatSchema.js';
 import * as feedSchema from './communityFeed/schema.js';
 import { browserPushTableSql } from './browserPushSchema.js';
 import {
@@ -30,6 +31,7 @@ describe.skipIf(!socketPath)('native notification real SQL', () => {
     // 历史通知/账号与推送表故意采用不同排序规则，不能依赖服务器默认值。
     await admin.query(`CREATE DATABASE ${schema} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
     db = mysql.createPool({ socketPath, user: 'root', database: schema });
+    for (const sql of COMMUNITY_CHAT_TABLE_SQL) await db.query(sql);
     for (const sql of browserPushTableSql) await db.query(sql);
     await db.query(
       "CREATE TABLE user (id char(36) PRIMARY KEY, del_flag tinyint DEFAULT 0, role varchar(20) DEFAULT 'user', preferences json)",
@@ -154,9 +156,6 @@ describe.skipIf(!socketPath)('native notification real SQL', () => {
     const tables = [
       'community_posts',
       'community_comments',
-      'community_chat_blocks',
-      'community_chat_user_identities',
-      'community_chat_members',
       'community_moderation_actions',
     ];
     try {
@@ -166,9 +165,6 @@ describe.skipIf(!socketPath)('native notification real SQL', () => {
       await db.query(
         'CREATE TABLE community_comments(id int, public_id varchar(64),post_id int,author_id char(36),status varchar(32))',
       );
-      await db.query('CREATE TABLE community_chat_blocks(user_id char(36),blocked_user_id char(36))');
-      await db.query('CREATE TABLE community_chat_user_identities(user_id char(36),public_id varchar(64))');
-      await db.query('CREATE TABLE community_chat_members(user_id char(36),status varchar(32))');
       await db.query('CREATE TABLE community_moderation_actions(public_id varchar(64),subject_id char(36))');
       await db.query("INSERT INTO user(id) VALUES('alice')");
       await db.query("INSERT INTO community_moderation_actions VALUES('result-1','alice')");

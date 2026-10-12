@@ -43,10 +43,10 @@ export function huaweiNotificationPresentation(n, env = process.env, verifiedTod
     category = 'WORK';
     title = '轻笺待办提醒';
     body = '你设置的待办提醒时间到了，点击打开通知中心。';
-  } else if (n?.type === 'community_chat' && ['reply', 'mention'].includes(meta?.kind)) {
+  } else if (n?.type === 'community_chat' && ['reply', 'mention', 'subscription'].includes(meta?.kind)) {
     category = 'SUBSCRIPTION';
     title = '轻笺订阅提醒';
-    body = '你订阅的聊天室互动有新回复或提及，点击打开通知中心查看。';
+    body = '你订阅的聊天室有新消息，点击打开通知中心查看。';
   } else if (
     n?.type === 'community_feed' &&
     ['reply', 'mention', 'comment', 'subscription', 'like'].includes(meta?.kind)

@@ -1,7 +1,7 @@
 import { huaweiPushEnabled } from './huaweiPushPolicy.js';
 import { communityFeedSchemaReady } from './communityFeed/schema.js';
 import { feedNotificationVisibleSql } from './communityFeed/notifications.js';
-import { COMMUNITY_CHAT_TARGETED_NOTIFICATION_SQL } from './notificationVisibility.js';
+import { COMMUNITY_CHAT_DELIVERY_NOTIFICATION_SQL } from './notificationVisibility.js';
 import { todoPushPresentation } from './todoPushPresentation.js';
 import { readCommunityChatPushPresentations } from './communityChatPushPresentation.js';
 
@@ -33,7 +33,7 @@ export async function readNativeNotifications(db, userId, input = {}) {
     FROM notification WHERE user_id=? AND del_flag=0 AND COALESCE(recalled,0)=0
       AND create_time >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
       AND browser_push_created_at>=? AND browser_push_created_at<=?
-      AND ${COMMUNITY_CHAT_TARGETED_NOTIFICATION_SQL} AND ${feedNotificationVisibleSql(ready)}
+      AND ${COMMUNITY_CHAT_DELIVERY_NOTIFICATION_SQL} AND ${feedNotificationVisibleSql(ready)}
       ${after ? 'AND (browser_push_created_at>? OR (browser_push_created_at=? AND id>?))' : ''}
     ORDER BY browser_push_created_at,id LIMIT 100`,
     [userId, input.since, until, ...(after ? [after.time, after.time, after.id] : [])],
@@ -78,7 +78,13 @@ export async function readNativeNotifications(db, userId, input = {}) {
   const chatPresentations = await readCommunityChatPushPresentations(
     db, userId, rows.filter((row) => !row.remote), process.env,
   );
-  const items = rows.map((row) => {
+  const items = rows.filter((row) => {
+    let meta = row.meta;
+    if (typeof meta === 'string') {
+      try { meta = JSON.parse(meta); } catch { return false; }
+    }
+    return row.remote || row.type !== 'community_chat' || meta?.kind !== 'subscription' || chatPresentations.has(row.id);
+  }).map((row) => {
     const item = { id: row.id, time: row.time, ...(row.remote ? { remote: true } : {}) };
     const chat = chatPresentations.get(row.id);
     if (chat) return { ...item, chat: true, ...chat };

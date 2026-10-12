@@ -1,6 +1,6 @@
 import { communityFeedSchemaReady } from './communityFeed/schema.js';
 import { feedNotificationVisibleSql } from './communityFeed/notifications.js';
-import { COMMUNITY_CHAT_TARGETED_NOTIFICATION_SQL } from './notificationVisibility.js';
+import { COMMUNITY_CHAT_DELIVERY_NOTIFICATION_SQL } from './notificationVisibility.js';
 import { readCommunityChatPushPresentations } from './communityChatPushPresentation.js';
 import {
   huaweiNotificationPresentation,
@@ -208,7 +208,7 @@ export async function processNextPush({ db = pool, send = sendWebPush, env = pro
     }
     const huawei = isHuaweiEndpoint(subscription?.endpoint);
     const visible = huawei
-      ? `del_flag = 0 AND recalled = 0 AND ${COMMUNITY_CHAT_TARGETED_NOTIFICATION_SQL} AND ${feedNotificationVisibleSql(await communityFeedSchemaReady(db).catch(() => false))}`
+      ? `del_flag = 0 AND recalled = 0 AND ${COMMUNITY_CHAT_DELIVERY_NOTIFICATION_SQL} AND ${feedNotificationVisibleSql(await communityFeedSchemaReady(db).catch(() => false))}`
       : notificationVisibleSql;
     const [[notification]] = await db.query(`SELECT * FROM notification WHERE id = ? AND user_id = ? AND ${visible}`, [
       job.notification_id,
@@ -247,9 +247,14 @@ export async function processNextPush({ db = pool, send = sendWebPush, env = pro
           );
           verifiedTodo = todo || null;
         }
-      } else if (huawei && notification.type === 'community_chat') {
+      } else if (notification.type === 'community_chat') {
         const presentations = await readCommunityChatPushPresentations(db, subscription.user_id, [notification], env);
         verifiedChat = presentations.get(notification.id) || null;
+        const chatMeta = typeof notification.meta === 'string' ? JSON.parse(notification.meta) : notification.meta;
+        if (chatMeta?.kind === 'subscription' && !verifiedChat) {
+          await db.query("UPDATE browser_push_jobs SET status = 'cancelled', lease_until = NULL WHERE id = ? AND lease_token = ? AND status = 'sending'", [job.id, lease]);
+          return { status: 'cancelled', delaySeconds: Number(job.delay_seconds || 0) };
+        }
       }
       let preferences = subscription.push_preferences || {};
       if (typeof preferences === 'string') {
@@ -287,6 +292,7 @@ export async function processNextPush({ db = pool, send = sendWebPush, env = pro
           generation: subscription.generation,
           userId: subscription.user_id,
           ...browserNotificationPresentation(notification, subscription.preferred_locale || subscription.locale),
+          ...(!huawei && verifiedChat ? { title: verifiedChat.title, body: verifiedChat.body } : {}),
         },
         Math.min(86400, job.ttl),
         env,
