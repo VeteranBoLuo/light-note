@@ -69,6 +69,7 @@ export const TOOLBOX_PRESENTATION: Record<
   ToolboxToolId,
   { icon: string; category: ToolboxCategory; accent: 'violet' | 'blue' | 'amber' | 'teal' | 'rose' }
 > = {
+  extraction: { icon: icon.toolbox.table, category: 'knowledge', accent: 'violet' },
   translation: { icon: icon.language, category: 'knowledge', accent: 'violet' },
   forms: { icon: icon.toolbox.table, category: 'workspace', accent: 'teal' },
   research_workspace: { icon: icon.toolbox.research, category: 'workspace', accent: 'blue' },
@@ -167,7 +168,7 @@ export const TOOLBOX_HOME_GROUPS = [
     id: 'create',
     icon: icon.toolbox.materialNote,
     accent: 'violet',
-    toolIds: ['translation', 'material_to_note', 'research_brief', 'source_comparison', 'study_kit', 'concept_map', 'idea_to_draft'],
+    toolIds: ['extraction', 'translation', 'material_to_note', 'research_brief', 'source_comparison', 'study_kit', 'concept_map', 'idea_to_draft'],
   },
   {
     id: 'prepare',

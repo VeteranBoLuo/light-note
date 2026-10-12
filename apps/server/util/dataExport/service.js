@@ -98,7 +98,7 @@ export async function createTask(owner, input) {
           const rows = await resourcePage(db, owner, kind, offset);
           for (const row of rows) {
             const dest =
-              kind === 'notes' ? paths.get('notes:' + row.id) : kind === 'files' ? filePath(row) : '书签.xlsx';
+              kind === 'extractions' ? '资料提取/' + row.id + '.json' : kind === 'notes' ? paths.get('notes:' + row.id) : kind === 'files' ? filePath(row) : '书签.xlsx';
             await db.query(
               'INSERT INTO data_export_items (task_id,kind,resource_id,title,version,path) VALUES (?,?,?,?,?,?)',
               [id, kind, String(row.id), row.title || '', resourceVersion(row), dest],

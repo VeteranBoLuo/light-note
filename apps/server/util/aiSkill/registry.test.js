@@ -40,6 +40,8 @@ const EXPECTED_INTERNAL_SKILLS = Object.freeze([
   ['toolbox.source_comparison', 'toolbox', 'read'],
   ['toolbox.knowledge_audit', 'toolbox', 'read'],
   ['toolbox.translation', 'toolbox', 'read'],
+  ['toolbox.extraction_suggest', 'toolbox', 'read'],
+  ['toolbox.extraction_extract', 'toolbox', 'read'],
   ['community.review_screen', 'community', 'read'],
 ]);
 const ALL_EXPECTED_SKILLS = Object.freeze([...EXPECTED_SKILLS, ...EXPECTED_INTERNAL_SKILLS]);

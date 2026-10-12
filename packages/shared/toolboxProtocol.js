@@ -93,6 +93,9 @@ function tool(definition) {
  * 运行时 feature flag 灰度开放。availability.enabled 是代码默认值，服务端仍可关闭工具。
  */
 export const TOOLBOX_TOOL_CATALOG = Object.freeze([
+  tool({ id: 'extraction', phase: 'launch', executionMode: 'service', billingMedium: 'ai_quota',
+    input: { kind: 'resources', minItems: 1, maxItems: 20, resourceTypes: TOOLBOX_RESOURCE_TYPES },
+    output: { artifactType: null, contentType: 'application/json', canSaveToNote: false }, availability: { enabled: true } }),
   tool({ id: 'translation', phase: 'launch', executionMode: 'ai_skill', billingMedium: 'ai_quota', billingMedia: ['ai_quota'],
     input: { kind: 'translation', minItems: 0, maxItems: 1, resourceTypes: ['note', 'bookmark', 'file'], maxChars: TOOLBOX_TRANSLATION_MAX_CHARS },
     output: { artifactType: 'translation', contentType: 'text/markdown', canSaveToNote: true }, availability: { enabled: true } }),

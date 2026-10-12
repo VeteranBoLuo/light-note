@@ -14,7 +14,7 @@
             >{{ t(`dataExport.${kind}`) }}</BCheckbox
           >
           <p>{{
-            t(`dataExport.${kind === 'notes' ? 'noteHint' : kind === 'bookmarks' ? 'bookmarkHint' : 'fileHint'}`)
+            t(`dataExport.${kind === 'notes' ? 'noteHint' : kind === 'bookmarks' ? 'bookmarkHint' : kind === 'extractions' ? 'extractionHint' : 'fileHint'}`)
           }}</p>
           <div v-if="kind === 'notes' && options.types.includes('notes')" class="export-note-options">
             <label id="data-export-format">{{ t('dataExport.format') }}</label>

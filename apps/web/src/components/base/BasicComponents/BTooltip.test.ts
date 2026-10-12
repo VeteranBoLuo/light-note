@@ -21,28 +21,122 @@ describe('BTooltip 交互状态', () => {
     vi.unstubAllGlobals();
   });
 
-  it('普通提示随嵌套滚动重定位，关闭后停止监听', async () => {
+  function mountScrollTooltip(delay = 0, followCursor = false) {
     host = document.createElement('div');
     document.body.append(host);
-    app = createApp(defineComponent({components: { BTooltip }, template: '<BTooltip title="定位提示"><button>入口</button></BTooltip>'}));
+    app = createApp(
+      defineComponent({
+        components: { BTooltip },
+        setup: () => ({ delay, followCursor }),
+        template:
+          '<div id="scroll-container"><BTooltip title="定位提示" :delay="delay" :follow-cursor="followCursor"><button>入口</button></BTooltip></div><div id="unrelated-panel"></div>',
+      }),
+    );
     app.mount(host);
     const trigger = host.querySelector('.b-tooltip-wrap') as HTMLElement;
     const popup = document.querySelector('.b-tooltip-popup') as HTMLElement;
+    const container = host.querySelector('#scroll-container') as HTMLElement;
+    const unrelated = host.querySelector('#unrelated-panel') as HTMLElement;
+    return { trigger, popup, container, unrelated };
+  }
+
+  it.each([false, true])('容器滚动立即关闭提示，重新悬停可恢复（跟随鼠标：%s）', async (followCursor) => {
+    const { trigger, popup, container } = mountScrollTooltip(0, followCursor);
+    trigger.dispatchEvent(new MouseEvent('mouseenter'));
+    await vi.advanceTimersByTimeAsync(1);
+    expect(popup.style.display).not.toBe('none');
+    trigger.dispatchEvent(new MouseEvent('mouseleave'));
+    container.dispatchEvent(new Event('scroll'));
+    await nextTick();
+    expect(popup.style.display).toBe('none');
+    expect(vi.getTimerCount()).toBe(0);
+
+    trigger.dispatchEvent(new MouseEvent('mouseenter'));
+    await vi.advanceTimersByTimeAsync(1);
+    expect(popup.style.display).not.toBe('none');
+    // 外层祖先和直接滚动容器都应关闭提示。
+    host!.dispatchEvent(new Event('scroll'));
+    await nextTick();
+    expect(popup.style.display).toBe('none');
+  });
+
+  it.each([false, true])('同一轮悬停后滚动取消等待显示（跟随鼠标：%s）', async (followCursor) => {
+    const { trigger, popup, container } = mountScrollTooltip(1000, followCursor);
+    trigger.dispatchEvent(new MouseEvent('mouseenter'));
+    container.dispatchEvent(new Event('scroll'));
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(1200);
+    expect(popup.style.display).toBe('none');
+
+    trigger.dispatchEvent(new MouseEvent('mouseleave'));
+    trigger.dispatchEvent(new MouseEvent('mouseenter'));
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(popup.style.display).not.toBe('none');
+  });
+
+  it('页面滚动关闭提示，无关容器滚动不影响等待和已显示的提示', async () => {
+    const { trigger, popup, unrelated } = mountScrollTooltip(1000);
+    trigger.dispatchEvent(new MouseEvent('mouseenter'));
+    unrelated.dispatchEvent(new Event('scroll'));
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(popup.style.display).not.toBe('none');
+    unrelated.dispatchEvent(new Event('scroll'));
+    await nextTick();
+    expect(popup.style.display).not.toBe('none');
+    document.dispatchEvent(new Event('scroll'));
+    await nextTick();
+    expect(popup.style.display).toBe('none');
+  });
+
+  it('窗口尺寸变化仍重定位，关闭后停止定位', async () => {
+    const { trigger, popup } = mountScrollTooltip();
     let top = 200;
-    const measure = vi.spyOn(trigger, 'getBoundingClientRect').mockImplementation(() => ({left: 100, top, bottom: top + 30, width: 60, height: 30, right: 160, x:100, y:top, toJSON() {}}));
-    Object.defineProperty(popup, 'offsetHeight', {configurable:true, value:40});
+    const measure = vi
+      .spyOn(trigger, 'getBoundingClientRect')
+      .mockImplementation(() => ({
+        left: 100,
+        top,
+        bottom: top + 30,
+        width: 60,
+        height: 30,
+        right: 160,
+        x: 100,
+        y: top,
+        toJSON() {},
+      }));
+    Object.defineProperty(popup, 'offsetHeight', { configurable: true, value: 40 });
     trigger.dispatchEvent(new MouseEvent('mouseenter'));
     await vi.advanceTimersByTimeAsync(1);
     expect(popup.style.top).toBe('154px');
     top = 150;
-    host.dispatchEvent(new Event('scroll'));
+    window.dispatchEvent(new Event('resize'));
     await nextTick();
     expect(popup.style.top).toBe('104px');
     trigger.dispatchEvent(new MouseEvent('mouseleave'));
     await vi.advanceTimersByTimeAsync(151);
     measure.mockClear();
-    host.dispatchEvent(new Event('scroll'));
+    window.dispatchEvent(new Event('resize'));
     expect(measure).not.toHaveBeenCalled();
+  });
+
+  it('等待期间离开或卸载时清理滚动监听和计时', async () => {
+    const add = vi.spyOn(window, 'addEventListener');
+    const remove = vi.spyOn(window, 'removeEventListener');
+    const { trigger } = mountScrollTooltip(1000);
+    trigger.dispatchEvent(new MouseEvent('mouseenter'));
+    const scrollHandler = add.mock.calls.find(([type]) => type === 'scroll')?.[1];
+    expect(scrollHandler).toBeTypeOf('function');
+    trigger.dispatchEvent(new MouseEvent('mouseleave'));
+    expect(remove).toHaveBeenCalledWith('scroll', scrollHandler, true);
+    expect(vi.getTimerCount()).toBe(0);
+    trigger.dispatchEvent(new MouseEvent('mouseenter'));
+    remove.mockClear();
+    app!.unmount();
+    app = null;
+    expect(remove).toHaveBeenCalledWith('scroll', scrollHandler, true);
+    expect(vi.getTimerCount()).toBe(0);
+    add.mockRestore();
+    remove.mockRestore();
   });
 
   it('关闭时保留触发内容但不显示浮层，重新启用后可正常显示', async () => {

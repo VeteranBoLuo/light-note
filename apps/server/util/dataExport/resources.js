@@ -1,8 +1,10 @@
 import path from 'node:path';
+import { requireExtractionSchema } from '../extraction/schema.js';
 import { safeExportName, uniqueExportName, resolveDataExportNoteFormat } from '@lightnote/shared/data-export';
 import { hash, exportError } from './storage.js';
 // Queries are fixed by kind, never constructed from user identifiers.
 const queries = {
+  extractions: `SELECT id,title,version,data_version,plan_json FROM toolbox_extractions WHERE user_id=?`,
   notes: `SELECT id,title,content,type,parent_id,sort,revision FROM note WHERE create_by=? AND del_flag=0`,
   bookmarks: `SELECT b.id,b.name AS title,b.url,b.description,b.create_time,
     (SELECT s.content FROM bookmark_snapshot s WHERE s.bookmark_id=b.id AND s.user_id=b.user_id AND BINARY s.url=BINARY b.url LIMIT 1) AS content
@@ -12,6 +14,7 @@ const queries = {
 export async function resourcePage(db, owner, kind, offset = 0, id) {
   const q = queries[kind];
   if (!q) throw exportError('DATA_EXPORT_OPTIONS');
+  if (kind === 'extractions') await requireExtractionSchema(db);
   const key = kind === 'bookmarks' ? 'b.id' : 'id';
   const [rows] = await db.query(q + (id === undefined ? ` ORDER BY ${key} LIMIT 100 OFFSET ?` : ` AND ${key}=?`), [
     owner,

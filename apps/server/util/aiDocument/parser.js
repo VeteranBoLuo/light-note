@@ -433,7 +433,7 @@ export async function parseDocumentBuffer(buffer, descriptor, options = {}) {
         }
       }
       missingPageNumbers = needsOcr.filter((page) => inspectRecognitionText(pages[page - 1]).suspicious);
-      pdfCoverage = { policyVersion: 2, blankPages, missingPages: missingPageNumbers, ocrErrorCode };
+      pdfCoverage = { policyVersion: 2, blankPages, missingPages: missingPageNumbers, ocrPages: needsOcr.filter(page => !missingPageNumbers.includes(page)), ocrErrorCode };
       fullSegments = Array.from({ length: totalPages }, (_, i) => ({
         content: inspectRecognitionText(pages[i]).suspicious ? '' : cleanText(pages[i]),
         locatorType: 'page',
@@ -514,7 +514,7 @@ export async function parseDocumentBuffer(buffer, descriptor, options = {}) {
       failedRanges.push(range('characters', text.length + 1, fullText.length, 'CHAR_LIMIT', message));
       reasons.push(reason('CHAR_LIMIT', message));
     }
-    if (finalized.chunks.length < finalized.candidateCount) {
+    if (!options.includeSegments && finalized.chunks.length < finalized.candidateCount) {
       const message = `分块超过 ${AI_DOCUMENT_MAX_CHUNKS} 个，仅持久化前 ${AI_DOCUMENT_MAX_CHUNKS} 个`;
       failedRanges.push(range('chunks', finalized.chunks.length + 1, finalized.candidateCount, 'CHUNK_LIMIT', message));
       reasons.push(reason('CHUNK_LIMIT', message));
@@ -525,12 +525,12 @@ export async function parseDocumentBuffer(buffer, descriptor, options = {}) {
       reasons.push(reason('OCR_PAGE_NO_TEXT', message));
     }
 
-    const storedCharRatio = finalized.totalSegmentChars
+    const storedCharRatio = options.includeSegments ? 1 : finalized.totalSegmentChars
       ? Math.min(1, finalized.coveredSegmentChars / finalized.totalSegmentChars)
       : 0;
     const processedChars = Math.min(text.length, Math.round(text.length * storedCharRatio));
     let processedPages = parsedPages;
-    if (finalized.chunks.length < finalized.candidateCount && totalPages > 1) {
+    if (!options.includeSegments && finalized.chunks.length < finalized.candidateCount && totalPages > 1) {
       processedPages = Math.min(parsedPages, finalized.storedSegmentIndexes.length);
     }
     const coverage = buildCoverage({
@@ -542,14 +542,21 @@ export async function parseDocumentBuffer(buffer, descriptor, options = {}) {
       processedPages,
       totalChunks: totalChunkCount,
       parsedChunks: finalized.candidateCount,
-      processedChunks: finalized.chunks.length,
+      processedChunks: options.includeSegments ? finalized.candidateCount : finalized.chunks.length,
       failedRanges,
       reasons,
-      truncated: text.length < fullText.length || finalized.chunks.length < finalized.candidateCount,
+      truncated: text.length < fullText.length || (!options.includeSegments && finalized.chunks.length < finalized.candidateCount),
     });
     return {
       text,
       chunks: finalized.chunks,
+      // Extraction needs non-overlapping source positions, not retrieval chunks.
+      // Opt-in only: the ordinary attachment response never carries this snapshot.
+      ...(options.includeSegments ? { segments: segments.map((segment, index) => ({
+        id: `s${index + 1}`, text: segment.content,
+        locator: { type: segment.locatorType, value: segment.locatorValue },
+        kind: meta.expectedType.startsWith('image/') || (segment.locatorType === 'page' && pdfCoverage?.ocrPages?.includes(Number(segment.locatorValue.match(/\d+/)?.[0]))) ? 'ocr' : 'original',
+      })) } : {}),
       extractedChars: processedChars,
       coverage: {
         ...coverage,

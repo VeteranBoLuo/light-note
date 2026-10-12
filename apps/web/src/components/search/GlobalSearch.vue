@@ -208,7 +208,7 @@
     route.path.includes('/search') ? t('resourceCenter.continueSearch') : t('resourceCenter.searchPlaceholder'),
   );
   const workshopMatch = computed(() =>
-    /工坊|项目|研究|学习|写作|资料|图片|扫描|workshop|project|research|study|learn|writ|pdf|ocr/i.test(keyword.value),
+    /工坊|项目|研究|学习|写作|资料|提取|表格|图片|扫描|workshop|project|research|study|learn|writ|extract|table|pdf|ocr/i.test(keyword.value),
   );
   function openWorkshop() {
     close({ restoreFocus: false });

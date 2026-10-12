@@ -237,7 +237,7 @@ export function getPublicToolboxCatalog({ disabledToolIds = [] } = {}) {
     chargeRule: 'single_medium_per_execution',
     tools: TOOLBOX_TOOL_CATALOG.map((definition) => ({
       ...definition,
-      availability: { enabled: definition.availability.enabled && !disabled.has(definition.id) },
+      availability: { enabled: definition.availability.enabled && !disabled.has(definition.id) && (definition.id !== 'extraction' || process.env.TOOLBOX_EXTRACTION_ENABLED === 'true') },
       ...(definition.billingMedium === 'ai_quota'
         ? { price: { kind: 'quota', currency: 'ai_quota', min: 0, max: 0 } }
         : definition.billingMedium === 'points'

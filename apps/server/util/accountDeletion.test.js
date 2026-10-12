@@ -212,6 +212,14 @@ describe('账号注销提交', () => {
 });
 
 describe('账号注销后台清理', () => {
+  it('清理本人提取表的结果、材料与回执，缺表兼容且不触及原文件', async()=>{
+    const connection=createConnection(async()=>[{affectedRows:1}]);
+    const names=['toolbox_extraction_records','toolbox_extraction_sources','toolbox_extraction_receipts','toolbox_extractions'];
+    await purgeToolboxWorkspace(connection,new Set(names),'owner');
+    expect(connection.query.mock.calls).toHaveLength(4);
+    expect(connection.query.mock.calls.map(([sql])=>sql)).toEqual(names.map(name=>`DELETE FROM ${name} WHERE user_id = ?`));
+    expect(connection.query.mock.calls.every(([,values])=>values[0]==='owner')).toBe(true);
+  });
   it('按引用顺序清理工具箱任务、产物与报价', async () => {
     const connection = createConnection(async () => [{ affectedRows: 1 }]);
     const tables = new Set([

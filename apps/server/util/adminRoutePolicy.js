@@ -82,6 +82,16 @@ declare(ADMIN_POLICIES.BACKGROUND_WRITE, 'activity', [
   ['POST', '/common/recordResourceOpen'],
 ]);
 
+declare(ADMIN_POLICIES.READ, 'toolbox', [
+  ['GET', '/toolbox/extractions'], ['GET', '/toolbox/extractions/:id'],
+  ['GET', '/toolbox/extractions/:id/sources/:sourceId'], ['POST', '/toolbox/extractions/:id/note-summary'],
+  ['GET', '/toolbox/extractions/:id/records'], ['GET', '/toolbox/extractions/:id/next-pending'], ['POST', '/toolbox/extractions/:id/export'],
+]);
+declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'toolbox', [
+  ['POST', '/toolbox/extractions'], ['POST', '/toolbox/extractions/:id/actions'],
+  ['PATCH', '/toolbox/extractions/:id/records/:recordId'], ['DELETE', '/toolbox/extractions/:id'],
+]);
+
 function declare(policy, resourceType, routes) {
   for (const [method, path] of routes) {
     routePolicies.set(`${method.toUpperCase()} ${path}`, { policy, resourceType });

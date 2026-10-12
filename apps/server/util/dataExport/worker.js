@@ -1,3 +1,4 @@
+import { recordSnapshot } from '../extraction/service.js';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
@@ -149,6 +150,15 @@ export async function processTask() {
                     `${item.title.replace(/[\r\n]/g, ' ')} — ${label.replace(/[\r\n]/g, ' ')}：未能下载，保留原链接\n`,
                   );
               }
+            } else if (item.kind === 'extractions') {
+              const extraction = await recordSnapshot({
+                userId: task.owner_id, id: item.resource_id, database: pool, filter: { excluded: true },
+              });
+              if (extraction.table.version !== Number(row.version) || extraction.table.dataVersion !== Number(row.data_version))
+                throw exportError('DATA_EXPORT_SOURCE_CHANGED');
+              await ensureSpace(Buffer.byteLength(JSON.stringify(extraction)) * 2);
+              await fsp.mkdir(path.dirname(dest), { recursive: true, mode: 0o700 });
+              await writeJson(dest, extraction);
             } else if (item.kind === 'files') {
               if (resourceVersion(current) !== item.version) throw exportError('DATA_EXPORT_SOURCE_CHANGED');
               await copyFile(row, dest, AbortSignal.any([signal, AbortSignal.timeout(30 * 60 * 1000)]));

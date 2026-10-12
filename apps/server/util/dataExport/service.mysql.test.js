@@ -41,12 +41,15 @@ describe.skipIf(!socket)('export jobs on isolated MySQL', () => {
     await state.pool.query(
       'CREATE TABLE files (id INT PRIMARY KEY,file_name VARCHAR(255),file_size BIGINT,obs_key VARCHAR(500),directory VARCHAR(255),folder_id INT,create_by VARCHAR(128),del_flag INT DEFAULT 0)',
     );
+    const {ensureExtractionSchema}=await import('../extraction/schema.js');
+    await ensureExtractionSchema(state.pool);
     service = await import('./service.js');
     worker = await import('./worker.js');
     storage = await import('./storage.js');
   });
   beforeEach(async () => {
     await state.pool.query("UPDATE user SET role='user',del_flag=0");
+    for(const table of ['toolbox_extraction_records','toolbox_extraction_sources','toolbox_extraction_receipts','toolbox_extractions']) await state.pool.query(`DELETE FROM ${table}`);
     await state.pool.query('DELETE FROM data_export_items');
     await state.pool.query('DELETE FROM data_export_tasks');
     await state.pool.query('DELETE FROM files');
@@ -129,6 +132,22 @@ describe.skipIf(!socket)('export jobs on isolated MySQL', () => {
     const entries = await readZip(path.join(storage.taskDirectory(task.id), 'export.zip'));
     const actual = entries.get('文件/资料/原件.bin');
     expect(createHash('sha256').update(actual).digest('hex')).toBe(createHash('sha256').update(bytes).digest('hex'));
+  });
+  it('exports owned extraction originals, empty overrides and excluded records without temporary materials', async()=>{
+    const id=randomUUID(),sourceId=randomUUID();
+    await state.pool.query("INSERT INTO toolbox_extractions(id,user_id,request_id,input_digest,title,status,phase,plan_json) VALUES (?,'u',?,'test','产品表','completed','extract',?)",[id,randomUUID(),JSON.stringify({recordDefinition:'产品',fields:[{id:'f1',label:'名称'}]})]);
+    await state.pool.query("INSERT INTO toolbox_extraction_sources(id,extraction_id,user_id,position,resource_type,resource_id,resource_version,title,status,source_json,expires_at) VALUES (?,?,'u',0,'note','n','v1','资料','completed','temporary body',NOW())",[sourceId,id]);
+    const payload={id:'r',sourceId,cells:[{fieldId:'f1',originalValue:'相机',status:'found',evidence:[{quote:'相机',sourceVersion:'v1'}]}]};
+    await state.pool.query("INSERT INTO toolbox_extraction_records(id,extraction_id,user_id,source_id,payload_json,reviews_json,published,excluded) VALUES ('r',?,'u',?,?,?,1,1)",[id,sourceId,JSON.stringify(payload),JSON.stringify({f1:{value:'',overridden:true,checked:true}})]);
+    const task=await service.createTask('u',{...opts(),types:['extractions']});
+    expect(task.total).toBe(1);await worker.processTask();
+    expect((await service.latestTask('u')).status).toBe('completed');
+    const entries=await readZip(path.join(storage.taskDirectory(task.id),'export.zip'));
+    const file=[...entries.entries()].find(([name])=>name === '资料提取/'+id+'.json');
+    const saved=JSON.parse(file[1].toString());
+    expect(saved.records[0]).toMatchObject({excluded:true,reviews:{f1:{value:'',overridden:true}},cells:[{originalValue:'相机',evidence:[{quote:'相机'}]}]});
+    expect(file[1].toString()).not.toContain('temporary body');
+    expect(saved.table.dataVersion).toBe(1);
   });
   it('does not consume jobs assigned to another host', async () => {
     const task = await service.createTask('u', opts());

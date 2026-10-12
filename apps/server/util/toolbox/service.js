@@ -7,6 +7,7 @@ import { prepareFreeOcrInputs, reserveFreeOcr, getFreeOcrUsage, FREE_OCR_POLICY 
 import crypto from 'node:crypto';
 import { stripAiAnalysisCitations } from '@lightnote/shared/ai-citation-presentation';
 import pool from '../../db/index.js';
+import { extractionSchemaReady } from '../extraction/schema.js';
 import { getToolboxTool, TOOLBOX_PRICING_VERSION } from '@lightnote/shared/toolbox-protocol';
 import { createTemporaryDocumentSource } from '../aiDocument/service.js';
 import { validateDocumentDescriptor } from '../aiDocument/parser.js';
@@ -750,7 +751,26 @@ export async function listToolboxHomeTasks({ userId, database = pool } = {}) {
       LIMIT ${HOME_TASK_SCAN_LIMIT}`,
     [ownerId],
   );
-  const jobs = rows.map((row) => formatJob(row));
+  const [extractions] = (await extractionSchemaReady(database))
+    ? await database.query(
+      `SELECT e.id,e.title,e.status,e.created_at,e.updated_at,
+        (SELECT COALESCE(SUM(s.processed_windows),0) FROM toolbox_extraction_sources s WHERE s.extraction_id=e.id AND s.user_id=e.user_id) processed,
+        (SELECT COALESCE(SUM(s.window_count),0) FROM toolbox_extraction_sources s WHERE s.extraction_id=e.id AND s.user_id=e.user_id) total
+        FROM toolbox_extractions e WHERE e.user_id=? AND e.status IN ('preparing','queued','analyzing','processing','paused') ORDER BY e.updated_at DESC LIMIT 6`,
+      [ownerId],
+    )
+    : [[]];
+  // A home-only projection: these identities always navigate to the persistent workbench.
+  const extractionTasks = extractions.map(row => ({
+    ...formatJob({
+      id: row.id, tool_id: 'extraction', status: row.status === 'queued' ? 'queued' : 'processing',
+      stage: row.status, billing_medium: 'ai_quota', save_status: 'saved',
+      create_time: row.created_at, updated_at: row.updated_at,
+    }),
+    canCancel: false,
+    extraction: { title: row.title, status: row.status, processed: Number(row.processed), total: Number(row.total) },
+  }));
+  const jobs = [...extractionTasks, ...rows.map((row) => formatJob(row))];
   const activeJobs = jobs.filter((job) => job.status === 'queued' || job.status === 'processing');
   const activeIds = new Set(activeJobs.map((job) => job.id));
   const readyJobs = jobs.filter(

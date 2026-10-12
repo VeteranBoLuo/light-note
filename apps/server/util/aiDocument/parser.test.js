@@ -247,3 +247,18 @@ it('加密 PDF 返回加密原因，不冒充空文件', async () => {
 it('无可靠文字的非空 PDF 保留待视觉补读页码', async () => {
   await expect(parseDocumentBuffer(Buffer.from('%PDF-scan'), { fileName: '图纸.pdf', fileType: 'application/pdf', fileSize: 9 }, { pdfParser: async (_buffer, opts) => { await opts.pagerender({ pageIndex: 0, getTextContent: async () => ({ items: [] }), getOperatorList: async () => ({ fnArray: [85] }) }); return { numpages: 1 }; }, ocrProvider: { recognizePdf: async () => [] } })).rejects.toMatchObject({ code: 'PDF_NO_RELIABLE_TEXT', coverage: { pdf: { missingPages: [1], blankPages: [] } } });
 });
+
+
+describe('extraction full-range segments',()=>{
+  it('opts into all bounded CSV rows without the retrieval chunk ceiling, retaining accurate coverage',async()=>{
+    const body=Buffer.from('name,value\n'+Array.from({length:240},(_,i)=>`product${i},${i}`).join('\n'));
+    const descriptor={fileName:'products.csv',fileType:'text/csv',fileSize:body.length};
+    const retrieval=await parseDocumentBuffer(body,descriptor);
+    const full=await parseDocumentBuffer(body,descriptor,{includeSegments:true});
+    expect(retrieval.coverage.complete).toBe(false);
+    expect(full.segments).toHaveLength(240);
+    expect(full.coverage.complete).toBe(true);
+    expect(full.coverage.reasons).not.toContainEqual(expect.objectContaining({code:'CHUNK_LIMIT'}));
+    expect(full.segments.at(-1)).toMatchObject({kind:'original',locator:{type:'row',value:'第 241 行'}});
+  });
+});

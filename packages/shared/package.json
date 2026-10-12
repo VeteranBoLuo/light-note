@@ -100,6 +100,10 @@
     "./collection-forms": {
       "types": "./collectionForms.d.ts",
       "default": "./collectionForms.js"
+    },
+    "./extraction": {
+      "types": "./extraction.d.ts",
+      "default": "./extraction.js"
     }
   },
   "devDependencies": {

@@ -1,3 +1,4 @@
+import { extractionZh } from './extraction';
 import { comparisonTableZh } from './comparisonTable';
 import { translationZh } from './translation';
 import { saveAsNoteZh } from './saveAsNote';
@@ -43,6 +44,7 @@ export default {
   },
 
   translation: translationZh,
+  extraction: extractionZh,
   saveAsNote: saveAsNoteZh,
   comparisonTable: comparisonTableZh,
   collectionForms: collectionFormsZh,
@@ -1672,6 +1674,7 @@ export default {
       text: '文本与数据',
     },
     tool: {
+      extraction: { name: '资料转表格', description: 'AI 建议字段，提取条目并核对原文依据', output: '可核对的结构化表格' },
       translation: { name: '翻译', description: '完整翻译资料，保留结构并保存为笔记', output: '译文或双语对照笔记' },
       forms: {
         name: '公开收集',
@@ -8511,6 +8514,7 @@ export default {
           noteBatchSummarize: '批量总结笔记',
           noteBatchCompare: '比较笔记',
           noteCreateFromSources: '根据材料生成笔记草稿',
+          toolboxExtraction: '知识工坊·资料转表格',
           toolboxTranslation: '知识工坊·翻译',
           toolboxSummarizeText: '知识工坊·PDF 文字总结',
           noteTransformText: '笔记润色、改写或翻译',

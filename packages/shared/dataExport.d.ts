@@ -1,4 +1,4 @@
-export type DataExportType = "notes" | "bookmarks" | "files";
+export type DataExportType = "notes" | "bookmarks" | "files" | "extractions";
 export type DataExportStatus =
   | "queued"
   | "running"

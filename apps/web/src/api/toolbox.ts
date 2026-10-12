@@ -194,6 +194,7 @@ export type ToolboxQuote = {
 };
 
 export type ToolboxJob = {
+  extraction?: {title:string;status:string;processed:number;total:number};
   sourceWorkspaceId?: string | null;
   id: string;
   toolId: string;

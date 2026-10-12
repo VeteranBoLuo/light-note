@@ -172,7 +172,7 @@
                 <span class="toolbox-activity-card__topline">
                   <BChip :tone="jobTone(job.status)">{{ taskStateLabel(job) }}</BChip>
                 </span>
-                <strong>{{ job.artifact?.title || toolName(job.toolId) }}</strong>
+                <strong>{{ job.extraction?.title || job.artifact?.title || toolName(job.toolId) }}</strong>
                 <span>{{ taskContinueDescription(job) }}</span>
                 <small>{{ toolName(job.toolId) }}</small>
               </span>
@@ -187,7 +187,7 @@
               <BButton
                 icon-only
                 :loading="dismissingJobs.has(job.id)"
-                :aria-label="t('toolbox.home.dismissTaskLabel', { title: job.artifact?.title || toolName(job.toolId) })"
+                :aria-label="t('toolbox.home.dismissTaskLabel', { title: job.extraction?.title || job.artifact?.title || toolName(job.toolId) })"
                 @click="confirmDismissTask(job)"
                 ><SvgIcon :src="icon.common.close" size="17"
               /></BButton>
@@ -606,6 +606,7 @@
   const dismissingJobs = ref(new Set<string>());
   function canDismissTask(job: ToolboxJob) {
     return (
+      !job.extraction &&
       ['succeeded', 'partial_succeeded', 'failed', 'cancelled', 'expired'].includes(job.status) &&
       job.save.status !== 'saving'
     );
@@ -842,7 +843,9 @@
   const toolName = (toolId: string) => t('toolbox.tool.' + toolId + '.name');
   const toolDescription = (toolId: string) => t('toolbox.tool.' + toolId + '.description');
   function billingLabel(tool: ToolboxCatalogItem) {
-    if (tool.id === 'translation') return t('translation.quota');
+    if (import.meta.env.DEV && tool.id === 'extraction' && !tool.availability.enabled)
+      return t('extraction.localPreview');
+    if (tool.billingMedia.length === 1 && tool.billingMedium === 'ai_quota') return t('translation.quota');
     if (tool.id === 'ocr_to_text') return t('toolbox.ocrBillingLabel');
     if (tool.price.kind !== 'free') {
       return tool.billingMedia.includes('ai_quota') ? t('toolbox.billingChoiceLabel') : t('toolbox.pointsLabel');
@@ -859,9 +862,11 @@
     return job.artifactState === 'ready' && ['unsaved', 'save_failed'].includes(job.save.status);
   }
   function taskStateLabel(job: ToolboxJob) {
+    if (job.extraction) return t(`extraction.statuses.${job.extraction.status}`);
     return isReadyTask(job) ? t('toolbox.home.resultReady') : t(`toolbox.task.${job.status}`);
   }
   function taskContinueDescription(job: ToolboxJob) {
+    if (job.extraction) return t('extraction.progress',{done:job.extraction.processed,total:job.extraction.total});
     if (job.save.status === 'save_failed') return t('toolbox.task.saveFailed');
     if (isReadyTask(job)) return t('toolbox.home.resultReadyDescription');
     if (job.status === 'failed') return t('toolbox.task.processingFailed');
@@ -927,7 +932,7 @@
   function openTask(job: ToolboxJob) {
     recordToolboxRecentUse(user, job.toolId);
     rememberHomeScroll();
-    void router.push(`/toolbox/task/${job.id}`);
+    void router.push(job.extraction ? {path:'/toolbox/extraction',query:{id:job.id}} : `/toolbox/task/${job.id}`);
   }
   function openRecentEntry(entry: RecentEntry) {
     recordToolboxRecentUse(user, entry.toolId);
@@ -953,7 +958,9 @@
     catalogFailed.value = false;
     catalogDegraded.value = false;
     try {
-      tools.value = (await fetchToolboxCatalog()).tools.filter((tool) => tool.availability.enabled);
+      tools.value = (await fetchToolboxCatalog()).tools.filter(
+        (tool) => tool.availability.enabled || (import.meta.env.DEV && tool.id === 'extraction'),
+      );
       refreshLocalRecentUses();
       refreshPinnedTools();
     } catch {

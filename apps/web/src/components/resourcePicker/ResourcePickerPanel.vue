@@ -8,6 +8,7 @@
       'is-fill': fill,
       'is-virtualized': virtualizedMode,
       'is-page-scroll': pageScroll,
+      'is-multi-select': multiSelect,
     }"
     :style="pageScrollHoldStyle"
   >
@@ -65,7 +66,7 @@
       item-key="key"
       :total-count="virtualTotalCount"
       :item-height="52"
-      :gap="2"
+      :gap="multiSelect ? 8 : 2"
       :overscan="7"
       :loading="loadingMore"
       :loading-text="t('common.loading')"
@@ -909,6 +910,10 @@
     flex: 1;
   }
 
+  .resource-picker-panel.is-multi-select .resource-picker-panel__results {
+    gap: var(--ui-space-8, 8px);
+  }
+
   .resource-picker-panel.is-page-scroll .resource-picker-panel__results,
   .resource-picker-panel.is-page-scroll .resource-picker-panel__virtual-list {
     flex: none;
@@ -972,25 +977,28 @@
     overflow: hidden;
     border: 1px solid transparent;
     border-radius: 8px;
-    background: transparent !important;
     line-height: normal;
     text-align: left;
+  }
+
+  .resource-picker-panel__item.b_btn {
+    background: transparent;
 
     &:hover {
-      background: color-mix(in srgb, var(--primary-color) 10%, transparent) !important;
+      background: var(--hover-background);
     }
 
     &.is-active {
       border-color: var(--primary-color);
-      background: color-mix(in srgb, var(--primary-color) 10%, transparent) !important;
+      background: var(--workspace-purple-selected);
       color: var(--primary-color);
       font-weight: 600;
     }
 
-    &.is-multi.is-active:not(.is-selected) {
+    &.is-multi.is-active {
       border-color: transparent;
       color: var(--text-color);
-      background: color-mix(in srgb, var(--primary-color) 7%, transparent) !important;
+      background: var(--hover-background);
       box-shadow: inset 2px 0 var(--primary-color);
       font-weight: 500;
     }
@@ -998,7 +1006,17 @@
     &.is-selected {
       border-color: var(--primary-color);
       color: var(--primary-color);
-      background: var(--card-background) !important;
+      background: var(--card-background);
+    }
+
+    &.is-multi.is-selected {
+      border-color: transparent;
+      background: var(--workspace-purple-selected);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--primary-color);
+      outline-offset: -2px;
     }
   }
 
@@ -1117,15 +1135,5 @@
       width: 100%;
       max-width: none;
     }
-  }
-
-  html.light-note-mobile-rendering .resource-picker-panel__item.is-active,
-  html.light-note-mobile-rendering .resource-picker-panel__item.is-selected {
-    border-color: var(--primary-color);
-    background: var(--card-background) !important;
-  }
-  html.light-note-mobile-rendering .resource-picker-panel__item.is-multi.is-active:not(.is-selected) {
-    border-color: transparent;
-    box-shadow: inset 2px 0 var(--primary-color);
   }
 </style>

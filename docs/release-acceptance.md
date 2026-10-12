@@ -61,6 +61,10 @@ pnpm preview
 
 ## Schema 与 Worker 门禁
 
+资料转表格的结构检查只影响该工具，不作为共享 API 与文档 Worker 的启动前置条件。未安装或列不完整时，工坊首页和其他文档任务仍可使用；提取接口返回 `EXTRACTION_SCHEMA_NOT_READY`，提取领取与临时材料清理跳过，显式安装后最多 30 秒重新检查。本地完整试用同样需要在本地数据库应用迁移并开启功能，但不依赖线上部署；不得为了本地预览自动迁移共享或生产数据库。 Vite 开发模式在目录保留“资料转表格”的本地查看入口，生产构建仍由功能开关控制入口；查看入口不开放执行权限，工作台在初始化或开关未就绪时保留草稿并禁用新提取和上传。
+
+资料转表格启用前显式应用 `apps/server/migrations/20261012_extraction_workbench.sql`，通过 `check:schema` 后部署同版本 API 与文档 Worker，再启用默认关闭的 `TOOLBOX_EXTRACTION_ENABLED`。结构仅加法安装，启动不自动迁移；帮助内容通过独立的 `20261012_extraction_help.sql` 幂等维护。回滚先关闭新建和新执行，等待在途调用保存或转为明确待重试状态、暂停未完成任务，再停止新消费者；保留新增表、执行账本和已交付结果。验证覆盖 MySQL 5.7 并发核对、租约围栏、暂停恢复、账号导出与注销，超页导出及共享移动渲染；本地 Provider mock 不替代真实模型质量验收。
+
 社区纯文本自动审核开放前，显式运行社区 Schema 迁移入口安装 `20261008_community_ai_review.sql`，再通过 `check:schema`。`COMMUNITY_AI_REVIEW_ENABLED` 默认关闭，平台日预算由 `COMMUNITY_AI_REVIEW_DAILY_BUDGET_TOKENS` 控制。独立审核调度随 API 启动，沿用 production-only 策略；关闭 AI 审核后保持新版本调度运行，将已排队或过期任务交人工。回滚旧版本前先关闭开关并确认无 pending/processing 审核任务，保留新增表及账本，避免无消费者任务滞留。
 
 普通/托管上传的对象发布与回收保护、历史文件两阶段改名启用前，显式应用 `apps/server/migrations/20260925_cloud_file_rename_staging.sql` 与 `apps/server/migrations/20260925_cloud_legacy_object_lifecycle.sql` 并通过 `check:schema`，再部署 API 与文档 Worker。迁移只新增生命周期与暂存清理账本，不回填文件、不在请求或启动路径建表；回滚 API 时保留表与能够消费剩余暂存记录的清理 Worker。普通名称上传不得重新允许路径式文件名，否则随机副本清理的独占命名空间前提不成立。 所有 API 实例切换到随机上传地址后才能启用旧对象清理 Worker；回滚须保留随机地址签发与确认兼容层，不能恢复向已退休的名称地址签发上传链接。生命周期表中的退休标记与旧客户端名称映射不得作为临时日志清空，随账号注销清理。

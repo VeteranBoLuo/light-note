@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   getPublicToolboxCatalog,
   normalizeToolboxBillingMedium,
@@ -8,6 +8,15 @@ import {
 } from './catalog.js';
 
 describe('toolbox catalog', () => {
+  it('提取工具默认关闭，显式开关只开放独立工作台，不进入旧报价任务',()=>{
+    try {
+      vi.stubEnv('TOOLBOX_EXTRACTION_ENABLED','false');
+      expect(getPublicToolboxCatalog().tools.find(t=>t.id==='extraction').availability.enabled).toBe(false);
+      vi.stubEnv('TOOLBOX_EXTRACTION_ENABLED','true');
+      expect(getPublicToolboxCatalog().tools.find(t=>t.id==='extraction')).toMatchObject({availability:{enabled:true},billingMedia:['ai_quota'],executionMode:'service'});
+      expect(()=>normalizeToolboxInput('extraction',{})).toThrow();
+    } finally {vi.unstubAllEnvs();}
+  });
   it('quotes the documented bounded price ranges', () => {
     expect(quoteToolboxPoints('idea_to_draft', { itemCount: 0, options: { detailLevel: 'concise' } })).toBe(12);
     expect(
@@ -88,13 +97,13 @@ describe('toolbox catalog', () => {
       'points',
       'free',
     ]);
-    expect(catalog.tools).toHaveLength(43);
+    expect(catalog.tools).toHaveLength(44);
     expect(getPublicToolboxCatalog().tools.filter((item) => item.availability.enabled)).toHaveLength(19);
     expect(catalog.tools.filter((item) => item.availability.enabled)).toHaveLength(18);
     expect(catalog.tools.find((item) => item.id === 'action_plan')?.availability.enabled).toBe(false);
     expect(catalog.tools.find((item) => item.id === 'browser_sql')?.availability.enabled).toBe(false);
     expect(catalog.tools.filter((item) => item.executionMode === 'browser')).toHaveLength(27);
-    expect(catalog.tools.filter((item) => item.executionMode === 'service')).toHaveLength(6);
+    expect(catalog.tools.filter((item) => item.executionMode === 'service')).toHaveLength(7);
     expect(
       catalog.tools
         .filter((item) => item.executionMode === 'browser')

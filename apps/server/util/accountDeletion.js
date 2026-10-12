@@ -563,6 +563,9 @@ export async function purgeToolboxWorkspace(connection, tables, userId) {
   await deleteIfPresent(connection, tables, 'toolbox_ocr_usage', 'DELETE FROM toolbox_ocr_usage WHERE user_id = ?', [
     userId,
   ]);
+  for (const table of ['toolbox_extraction_records', 'toolbox_extraction_sources', 'toolbox_extraction_receipts', 'toolbox_extractions']) {
+    await deleteIfPresent(connection, tables, table, `DELETE FROM ${table} WHERE user_id = ?`, [userId]);
+  }
   await deleteIfPresent(connection, tables, 'toolbox_jobs', 'DELETE FROM toolbox_jobs WHERE user_id = ?', [userId]);
   await deleteIfPresent(connection, tables, 'toolbox_quotes', 'DELETE FROM toolbox_quotes WHERE user_id = ?', [userId]);
 }

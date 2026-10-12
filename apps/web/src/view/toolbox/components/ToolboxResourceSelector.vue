@@ -31,7 +31,7 @@
         <SvgIcon :src="icon.toolbox.locate" size="16" aria-hidden="true" />
         {{
           t(
-            fileExtensions?.length
+            fileOnlySelection
               ? 'toolbox.workbench.ocrSelectHint'
               : expandNoteBranches
                 ? 'toolbox.workbench.selectHint'
@@ -107,7 +107,7 @@
         fill
         :placeholder="
           t(
-            fileExtensions?.length
+            fileOnlySelection
               ? 'toolbox.workbench.ocrSearchPlaceholder'
               : 'toolbox.workbench.resourceSearchPlaceholder',
           )
@@ -212,6 +212,9 @@
     ),
   ]);
   const totalCount = computed(() => props.modelValue.length + Math.max(0, props.externalCount));
+  const fileOnlySelection = computed(
+    () => props.allowedTypes.length === 1 && props.allowedTypes[0] === 'file' && !!props.fileExtensions?.length,
+  );
   const pickerAllowedTypes = computed<ResourcePickerType[]>(() =>
     activeType.value === 'all' ? [...props.allowedTypes] : [activeType.value],
   );
@@ -290,8 +293,10 @@
 
   function accepts(item: ResourcePickerItem) {
     return (
-      !props.fileExtensions?.length ||
-      (item.type === 'file' && props.fileExtensions.includes(item.title.split('.').pop()?.toLowerCase() || ''))
+      props.allowedTypes.includes(item.type) &&
+      (item.type !== 'file' ||
+        !props.fileExtensions?.length ||
+        props.fileExtensions.includes(item.title.split('.').pop()?.toLowerCase() || ''))
     );
   }
   function add(item: ResourcePickerItem) {
@@ -299,7 +304,7 @@
       !accepts(item) ||
       props.disabled ||
       totalCount.value >= props.max ||
-      selectedKeys.value.includes(resourceItemKey(item))
+      pickerSelectedKeys.value.includes(resourceItemKey(item))
     )
       return;
     emit('update:modelValue', [...props.modelValue, item]);

@@ -1,3 +1,4 @@
+import extractionsRouter from './extractions.js';
 import collectionFormsRouter from './collectionForms.js';
 import express from 'express';
 import * as toolboxHandle from '../router_handle/toolboxHandle.js';
@@ -5,6 +6,7 @@ import { aiActionRateLimiter, localProcessingRateLimiter } from '../util/request
 
 const router = express.Router();
 router.use('/forms', collectionFormsRouter);
+router.use('/extractions', extractionsRouter);
 
 router.get('/catalog', toolboxHandle.getCatalog);
 router.get('/project-entry', toolboxHandle.getProjectEntry);

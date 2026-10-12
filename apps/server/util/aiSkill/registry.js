@@ -1,3 +1,4 @@
+import { extractionSkills } from './skills/extractionSkill.js';
 import communityReviewScreenSkill from './skills/communityReviewScreenSkill.js';
 import translationSkill from './skills/translationSkill.js';
 import documentSummarySkill from './skills/documentSummarySkill.js';
@@ -34,6 +35,7 @@ const definitions = Object.freeze([
   routineDailyBriefSkill,
   ...toolboxSkills,
   translationSkill,
+  ...extractionSkills,
   communityReviewScreenSkill,
 ]);
 const registry = new Map(definitions.map((definition) => [`${definition.id}@${definition.version}`, definition]));

@@ -1,4 +1,4 @@
-export const DATA_EXPORT_TYPES = Object.freeze(["notes", "bookmarks", "files"]);
+export const DATA_EXPORT_TYPES = Object.freeze(["notes", "bookmarks", "files", "extractions"]);
 export const DATA_EXPORT_ACTIVE = Object.freeze(["queued", "running"]);
 export const DATA_EXPORT_DEFAULTS = Object.freeze({
   types: ["notes", "bookmarks"],

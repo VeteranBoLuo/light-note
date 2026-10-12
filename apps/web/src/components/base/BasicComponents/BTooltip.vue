@@ -46,6 +46,17 @@
     timer = null;
   }
 
+  function closeTooltip() {
+    clearTimer();
+    visible.value = false;
+    window.removeEventListener('scroll', handleScroll, true);
+  }
+
+  function handleScroll(event: Event) {
+    const wrap = wrapRef.value;
+    if (wrap && event.target instanceof Node && event.target.contains(wrap)) closeTooltip();
+  }
+
   function updatePosition() {
     const wrap = wrapRef.value;
     const popup = popupRef.value;
@@ -91,6 +102,8 @@
     trackCursor(event);
     if (suppressedUntilPointerLeaves || props.disabled || (!props.always && window.innerWidth < 1024)) return;
     clearTimer();
+    // 在等待显示时就监听，避免滚动后延迟提示仍然弹出。
+    window.addEventListener('scroll', handleScroll, true);
     timer = setTimeout(async () => {
       timer = null;
       visible.value = true;
@@ -101,25 +114,24 @@
   function hide() {
     suppressedUntilPointerLeaves = false;
     clearTimer();
-    timer = setTimeout(() => {
-      timer = null;
-      visible.value = false;
-    }, 150);
+    if (!visible.value) {
+      closeTooltip();
+      return;
+    }
+    timer = setTimeout(closeTooltip, 150);
   }
 
   function dismissAfterActivation() {
     suppressedUntilPointerLeaves = true;
-    clearTimer();
-    visible.value = false;
+    closeTooltip();
   }
 
   watch(
     () => props.disabled,
     (disabled) => {
       if (!disabled) return;
-      clearTimer();
       suppressedUntilPointerLeaves = false;
-      visible.value = false;
+      closeTooltip();
     },
   );
 
@@ -134,19 +146,17 @@
       viewport?.addEventListener('resize', updatePosition);
       viewport?.addEventListener('scroll', updatePosition);
       window.addEventListener('resize', updatePosition);
-      window.addEventListener('scroll', updatePosition, true);
       onCleanup(() => {
         observer?.disconnect();
         viewport?.removeEventListener('resize', updatePosition);
         viewport?.removeEventListener('scroll', updatePosition);
         window.removeEventListener('resize', updatePosition);
-        window.removeEventListener('scroll', updatePosition, true);
       });
     },
   );
 
   onBeforeUnmount(() => {
-    clearTimer();
+    closeTooltip();
   });
   const { density } = useUiDensity();
   watch(density, () => {

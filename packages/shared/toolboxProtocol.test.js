@@ -11,6 +11,7 @@ import {
 } from "./toolboxProtocol.js";
 
 const ACTIVE_TOOL_IDS = [
+  "extraction",
   "translation",
   "forms",
   "research_workspace",
@@ -44,7 +45,7 @@ describe("toolbox protocol", () => {
   });
 
   it("keeps every tool id unique and every execution contract explicit", () => {
-    expect(TOOLBOX_TOOL_CATALOG).toHaveLength(43);
+    expect(TOOLBOX_TOOL_CATALOG).toHaveLength(44);
     expect(new Set(TOOLBOX_TOOL_CATALOG.map((item) => item.id)).size).toBe(
       TOOLBOX_TOOL_CATALOG.length,
     );
@@ -101,7 +102,7 @@ describe("toolbox protocol", () => {
       availability: { enabled: true },
       input: { minItems: 1, maxItems: 2, maxBytes: 30 * 1024 * 1024 },
     });
-    expect(ACTIVE_TOOL_IDS).toHaveLength(19);
+    expect(ACTIVE_TOOL_IDS).toHaveLength(20);
   });
 
   it("does not treat browser-local utilities as paid jobs", () => {
@@ -119,7 +120,7 @@ describe("toolbox protocol", () => {
     expect(isToolboxPaidTool("browser_sql")).toBe(false);
     expect(
       TOOLBOX_TOOL_CATALOG.filter((item) => item.executionMode === "service"),
-    ).toHaveLength(6);
+    ).toHaveLength(7);
     expect(isToolboxPaidTool("research_workspace")).toBe(false);
     expect(isToolboxPaidTool("knowledge_structure_audit")).toBe(false);
     expect(isToolboxPaidTool("research_brief")).toBe(true);

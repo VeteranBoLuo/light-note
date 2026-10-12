@@ -1,3 +1,4 @@
+import { extractionEn } from './extraction';
 import { comparisonTableEn } from './comparisonTable';
 import { translationEn } from './translation';
 import { saveAsNoteEn } from './saveAsNote';
@@ -45,6 +46,7 @@ export default {
   },
 
   translation: translationEn,
+  extraction: extractionEn,
   saveAsNote: saveAsNoteEn,
   comparisonTable: comparisonTableEn,
   collectionForms: collectionFormsEn,
@@ -1740,6 +1742,7 @@ export default {
       text: 'Text & data',
     },
     tool: {
+      extraction: { name: 'Extract to table', description: 'AI field suggestions and extraction with source evidence', output: 'Reviewable structured table' },
       translation: {
         name: 'Translation',
         description: 'Translate complete materials and save as a note',
@@ -8932,6 +8935,7 @@ export default {
           noteBatchSummarize: 'Summarize notes',
           noteBatchCompare: 'Compare notes',
           noteCreateFromSources: 'Create note draft from sources',
+          toolboxExtraction: 'Knowledge Workshop · Extract to table',
           toolboxTranslation: 'Knowledge Workshop · Translation',
           toolboxSummarizeText: 'Knowledge Workshop · PDF text summary',
           noteTransformText: 'Polish, rewrite, or translate note text',
