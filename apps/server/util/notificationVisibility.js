@@ -1,13 +1,14 @@
 // Keep historical subscription rows visible after the preference is switched off,
 // but recheck the source and current role before exposing their saved text.
+// MySQL 5.7 resolves the outer notification reference in WHERE, not a nested JOIN ON.
 const rootSubscriptionSource = `EXISTS (
  SELECT 1 FROM community_chat_messages chat_message
  JOIN community_chat_rooms chat_room ON chat_room.id = chat_message.room_id AND chat_room.status = 'active'
  JOIN user chat_sender ON chat_sender.id = chat_message.user_id AND chat_sender.del_flag = 0
- JOIN user chat_recipient ON chat_recipient.id = notification.user_id
-   AND chat_recipient.role = 'root' AND chat_recipient.del_flag = 0
+ JOIN user chat_recipient ON chat_recipient.role = 'root' AND chat_recipient.del_flag = 0
  LEFT JOIN community_chat_members chat_membership ON chat_membership.user_id = chat_recipient.id
- WHERE chat_message.public_id = CONVERT(notification.source_id USING utf8mb4) COLLATE utf8mb4_unicode_ci
+ WHERE chat_recipient.id = notification.user_id
+   AND chat_message.public_id = CONVERT(notification.source_id USING utf8mb4) COLLATE utf8mb4_unicode_ci
    AND chat_message.status = 'active' AND chat_message.user_id <> chat_recipient.id
    AND COALESCE(chat_membership.status, '') <> 'banned'
    AND NOT EXISTS (SELECT 1 FROM community_chat_blocks blocked
