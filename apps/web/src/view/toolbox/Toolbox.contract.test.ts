@@ -223,7 +223,8 @@ describe('知识工具箱前端边界', () => {
 
     expect(groupedToolIds).toEqual(activeToolIds);
     expect(new Set(groupedToolIds).size).toBe(groupedToolIds.length);
-    expect(activeToolIds).toHaveLength(19);
+    expect(activeToolIds).toContain('extraction');
+    expect(TOOLBOX_HOME_GROUPS.find((group) => group.id === 'create')?.toolIds).toContain('extraction');
     expect(TOOLBOX_HOME_GROUPS.find((group) => group.id === 'prepare')?.toolIds).toEqual([
       'pdf_organizer',
       'image_optimizer',

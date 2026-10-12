@@ -82,19 +82,27 @@ describe('unified export control', () => {
     expect(api).toHaveBeenCalledWith('/api/user/dataExports/create', expect.objectContaining({ noteFormat: 'original' }), { silent: true });
     expect(Object.values(localStorage)).toEqual(expect.arrayContaining([expect.stringContaining('original')]));
   });
-  it('defaults to notes and bookmarks and disables empty selection', async () => {
+  it('defaults to notes and bookmarks, disables empty selection and supports extraction-only export', async () => {
     api.mockResolvedValue(result(null));
     const { host, click } = mount();
     await flush();
     await click('导出数据');
-    let checks = host.querySelectorAll<HTMLElement>('[role=checkbox]');
-    expect([...checks].map((c) => c.getAttribute('aria-checked'))).toEqual(['true', 'true', 'true', 'false']);
-    checks[0].click();
+    const checkbox = (label: string) => [...host.querySelectorAll<HTMLElement>('[role=checkbox]')]
+      .find((element) => element.textContent?.trim() === label)!;
+    expect(checkbox('笔记').getAttribute('aria-checked')).toBe('true');
+    expect(checkbox('包含图片').getAttribute('aria-checked')).toBe('true');
+    expect(checkbox('书签').getAttribute('aria-checked')).toBe('true');
+    expect(checkbox('文件').getAttribute('aria-checked')).toBe('false');
+    expect(checkbox('资料提取表').getAttribute('aria-checked')).toBe('false');
+    checkbox('笔记').click();
     await flush();
-    checks = host.querySelectorAll('[role=checkbox]');
-    checks[1].click();
+    checkbox('书签').click();
     await flush();
     expect([...host.querySelectorAll('button')].find((b) => b.textContent?.includes('开始导出'))?.disabled).toBe(true);
+    checkbox('资料提取表').click();
+    await flush();
+    await click('开始导出');
+    expect(api).toHaveBeenCalledWith('/api/user/dataExports/create', expect.objectContaining({ types: ['extractions'] }), { silent: true });
   });
   it('submits one job, remembers settings and closes without cancelling', async () => {
     api.mockImplementation(async (url) => result(url.endsWith('/create') ? task() : null));
