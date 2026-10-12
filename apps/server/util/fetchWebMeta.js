@@ -12,9 +12,16 @@
  */
 
 import axios from 'axios';
+import { isIP } from 'node:net';
 import { load } from 'cheerio';
 import { renderWebPage } from './webPageRenderer.js';
-import { guardedHttpAgent, guardedHttpsAgent, validatePublicWebUrl } from './webUrlSafety.js';
+import {
+  guardedHttpAgent,
+  guardedHttpsAgent,
+  guardedIpv4HttpAgent,
+  guardedIpv4HttpsAgent,
+  validatePublicWebUrl,
+} from './webUrlSafety.js';
 
 const FETCH_TIMEOUT = 8000; // 8s：服务器 1 核，不宜久等
 const LIVENESS_TIMEOUT = 12000; // 死活探测用更宽松超时:宁可慢也别误判成死链
@@ -315,6 +322,9 @@ export function classifyWebPageSnapshot({
   ) {
     return 'AUTH_REQUIRED';
   }
+  if (Number(status) === 429) return 'RATE_LIMITED';
+  if (Number(status) >= 500 && Number(status) <= 599) return 'FETCH_FAILED';
+  if (Number(status) >= 400) return 'ACCESS_DENIED';
   if (Number(minimumBodyLength) > 0 && normalizedBody.length < Number(minimumBodyLength)) {
     return Number(scriptCount) > 0 || /javascript|enable js|启用\s*javascript/iu.test(noscriptText)
       ? 'JS_REQUIRED'
@@ -588,7 +598,7 @@ export async function fetchWebMeta(
   let staticFailure = '';
   const contentBudget = normalizeMaxContentBytes(maxContentBytes);
   try {
-    const resp = await axios.get(target.href, {
+    const requestOptions = {
       timeout,
       maxRedirects: MAX_REDIRECTS,
       maxContentLength: contentBudget,
@@ -605,7 +615,31 @@ export async function fetchWebMeta(
         'Upgrade-Insecure-Requests': '1',
       },
       signal,
-    });
+    };
+    const started = Date.now();
+    let resp;
+    try {
+      resp = await axios.get(target.href, requestOptions);
+    } catch (error) {
+      const failures = error?.cause?.errors || error?.errors || [];
+      const remaining = timeout - (Date.now() - started);
+      // Node's family selection can cancel IPv4 after 250ms, then fail immediately
+      // on an unreachable IPv6 route. Give validated IPv4 the remaining original
+      // request budget once; this does not extend the timeout or bypass DNS checks.
+      if (
+        !signal?.aborted &&
+        failures.some((failure) => failure.code === 'ENETUNREACH' && isIP(String(failure.address || '')) === 6) &&
+        failures.some((failure) => failure.code === 'ETIMEDOUT' && isIP(String(failure.address || '')) === 4) &&
+        remaining > 100
+      ) {
+        resp = await axios.get(target.href, {
+          ...requestOptions,
+          httpAgent: guardedIpv4HttpAgent,
+          httpsAgent: guardedIpv4HttpsAgent,
+          timeout: remaining,
+        });
+      } else throw error;
+    }
     responseUrl = axiosResponseUrl(resp, target.href);
     contentType = resp.headers?.['content-type'] || '';
     // 只处理 HTML/文本，二进制（PDF/图片等）直接放弃
@@ -628,6 +662,22 @@ export async function fetchWebMeta(
     if (status === 401 || status === 403) staticFailure = 'ACCESS_DENIED';
     if (status === 404 || status === 410) return { ok: false, reason: 'NOT_FOUND' };
     if (status === 429) return { ok: false, reason: 'RATE_LIMITED' };
+    if (
+      status >= 400 &&
+      (typeof e.response?.data === 'string' || ArrayBuffer.isView(e.response?.data)) &&
+      !staticFailure
+    ) {
+      const errorType = e.response.headers?.['content-type'] || '';
+      const errorBuffer = Buffer.from(e.response.data);
+      if (errorBuffer.length > contentBudget) return { ok: false, reason: 'CONTENT_TOO_LARGE' };
+      if (/text\/html|application\/xhtml/i.test(errorType)) {
+        const snapshot = extractStaticPageSnapshot(
+          decodeBuffer(errorBuffer, detectCharset(errorType, errorBuffer)),
+          bodyLimit,
+        );
+        staticFailure = classifyWebPageSnapshot({ ...snapshot, ...snapshot.signals, status, minimumBodyLength });
+      }
+    }
     if (
       !staticFailure &&
       (e?.code === 'ECONNABORTED' || e?.code === 'ETIMEDOUT' || String(e?.message || '').includes('timeout'))

@@ -4,6 +4,7 @@ import {
   offsetDate,
   rollingValues,
   exampleHash,
+  matchesRollingObject,
   parseExampleManifest,
   createVisitorExampleMaintenancePoller,
   rollVisitorExamples,
@@ -62,6 +63,36 @@ describe('visitor daily maintenance', () => {
     expect(conn.rollback).toHaveBeenCalledOnce();
     expect(conn.query.mock.calls.every(([sql]) => sql.startsWith('SELECT'))).toBe(true);
     expect(invalidate).not.toHaveBeenCalled();
+  });
+  it('accepts only the exact legacy action with newly added NULL board fields', () => {
+    const original = { id: 'a', title: 'Original', due_on: '2026-10-10', updated_at: '2026-10-10' };
+    const entry = { type: 'action', expected: exampleHash(original) };
+    const migrated = { ...original, details_json: null, linked_todo_id: null };
+    expect(matchesRollingObject(entry, migrated)).toBe(true);
+    for (const edit of [
+      { title: 'Edited' },
+      { due_on: '2026-10-11' },
+      { updated_at: '2026-10-11' },
+      { details_json: {} },
+      { linked_todo_id: 'todo' },
+      { other_column: null },
+    ])
+      expect(matchesRollingObject(entry, { ...migrated, ...edit })).toBe(false);
+    expect(matchesRollingObject({ ...entry, type: 'todo' }, migrated)).toBe(false);
+    expect(matchesRollingObject({ ...entry, expected: exampleHash(migrated) }, migrated)).toBe(true);
+  });
+  it('continues maintaining other owners when one conflicts, then backs off', async () => {
+    const db = { query: vi.fn().mockResolvedValue([[{ user_id: 'changed' }, { user_id: 'healthy' }]]) };
+    const roll = vi.fn().mockImplementation(async (_db, owner) => {
+      if (owner === 'changed') throw Object.assign(new Error('private'), { code: 'VISITOR_OBJECT_CHANGED' });
+    });
+    const log = vi.fn();
+    const poll = createVisitorExampleMaintenancePoller(db, { clock: () => 0, roll, log });
+    await poll();
+    expect(roll.mock.calls.map(([, owner]) => owner)).toEqual(['changed', 'healthy']);
+    expect(log).toHaveBeenCalledWith('[visitor-examples] maintenance failed code=%s', 'VISITOR_OBJECT_CHANGED');
+    await poll();
+    expect(db.query).toHaveBeenCalledOnce();
   });
   it('checks immediately after restart, limits concurrency and backs off without propagating failure', async () => {
     let clock = 0,

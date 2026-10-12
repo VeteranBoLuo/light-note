@@ -13,6 +13,7 @@ import { registerAsset, syncNoteImageReferences } from '../imagePreview/referenc
 import {
   assertVisitorOwner,
   exampleHash,
+  matchesRollingObject,
   exampleError,
   visitorDate,
   rollingValues,
@@ -356,7 +357,7 @@ export function verifyVisitorRestore(current, changes, manifest) {
   const dynamic = new Map(
     manifest.rolling.map((e) => [
       `${{ todo: 'todo_items', project: 'toolbox_workspaces', action: 'toolbox_workspace_items' }[e.type]}:${e.id}`,
-      e.expected,
+      e,
     ]),
   );
   for (const change of changes) {
@@ -368,8 +369,9 @@ export function verifyVisitorRestore(current, changes, manifest) {
     )
       throw exampleError('VISITOR_RESTORE_INVALID');
     const row = current.tables[change.table].find((r) => rowKey(change.table, r) === change.key) || null;
-    const expected = dynamic.get(`${change.table}:${change.after?.id}`) || exampleHash(change.after);
-    if (exampleHash(row) !== expected) throw exampleError('VISITOR_RESTORE_CONFLICT');
+    const entry = dynamic.get(`${change.table}:${change.after?.id}`);
+    if (entry ? !matchesRollingObject(entry, row) : exampleHash(row) !== exampleHash(change.after))
+      throw exampleError('VISITOR_RESTORE_CONFLICT');
   }
   // Reject additions to managed objects/containers, including new references and children.
   const created = new Map(changes.filter((c) => !c.before && c.after).map((c) => [`${c.table}:${c.after.id}`, c]));

@@ -8,6 +8,7 @@ import {
   buildNoteBodies,
 } from '../../scripts/visitorExamples/manifestV2.mjs';
 import { sanitizePersistedNoteContent } from '../noteHtmlSanitizer.js';
+import { exampleHash } from './visitorExampleScheduleService.js';
 const snapshot = () => ({
   owner: 'v',
   tables: {
@@ -69,5 +70,15 @@ describe('visitor v2 inventory and recovery', () => {
     expect(() => verifyVisitorRestore(after, changes, { rolling: [] })).not.toThrow();
     after.tables.note[0].title = '编辑过';
     expect(() => verifyVisitorRestore(after, changes, { rolling: [] })).toThrow('VISITOR_RESTORE_CONFLICT');
+  });
+  it('keeps legacy rolling actions recoverable after the NULL board columns are installed', () => {
+    const current = snapshot();
+    const original = { id: 'action', user_id: 'v', title: 'Original', due_on: '2026-10-10' };
+    current.tables.toolbox_workspace_items = [{ ...original, details_json: null, linked_todo_id: null }];
+    const changes = [{ table: 'toolbox_workspace_items', key: 'action', before: null, after: original }];
+    const manifest = { rolling: [{ type: 'action', id: 'action', expected: exampleHash(original) }] };
+    expect(() => verifyVisitorRestore(current, changes, manifest)).not.toThrow();
+    current.tables.toolbox_workspace_items[0].title = 'Edited';
+    expect(() => verifyVisitorRestore(current, changes, manifest)).toThrow('VISITOR_RESTORE_CONFLICT');
   });
 });

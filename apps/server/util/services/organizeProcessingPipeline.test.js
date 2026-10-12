@@ -103,6 +103,54 @@ describe('light checks and processing gate', () => {
   });
 });
 describe('routing and delivery', () => {
+  it.each([
+    ['TIMEOUT', true, 0, 'waiting'],
+    ['TIMEOUT', true, 2, 'failed'],
+    ['AUTH_REQUIRED', false, 0, 'failed'],
+  ])(
+    'archive %s uses the free queue retry budget and retains its terminal reason',
+    async (reasonCode, retryable, attempts, status) => {
+      const bookmark = buildSnapshot('bookmark', { id: 'b', name: 'Article', url: 'https://example.com/article' });
+      const archiveItem = { ...item, resource_type: 'bookmark', resource_id: 'b', version_hash: bookmark.version };
+      const db = directDb('archive', (sql) => {
+        if (sql.startsWith('SELECT * FROM organize_suggestion_items')) return [[archiveItem]];
+        if (sql.startsWith('SELECT * FROM organize_processing_jobs'))
+          return [
+            [
+              {
+                id: 'j',
+                run_id: 'r',
+                user_id: 'u',
+                item_id: 'i',
+                kind: 'archive',
+                lane: 'direct',
+                status: 'queued',
+                attempts,
+              },
+            ],
+          ];
+      });
+      const archive = vi
+        .fn()
+        .mockResolvedValue({ status: 'failed', reason: 'Readable explanation', reasonCode, retryable });
+      await runOrganizeDirect('worker', db, { source: async () => bookmark, archive });
+      expect(archive).toHaveBeenCalledOnce();
+      const finish = db.query.mock.calls.find(([sql]) =>
+        sql.startsWith('UPDATE organize_processing_jobs SET status=?'),
+      );
+      expect(finish[1].slice(0, 2)).toEqual([status, reasonCode]);
+      if (status === 'waiting')
+        expect(db.query.mock.calls.some(([sql]) => sql.startsWith('INSERT IGNORE INTO organize_suggestions'))).toBe(
+          false,
+        );
+      else {
+        const suggestion = db.query.mock.calls.find(([sql]) =>
+          sql.startsWith('UPDATE organize_suggestions SET status=?'),
+        );
+        expect(JSON.parse(suggestion[1][1])).toMatchObject({ status: 'failed', reasonCode });
+      }
+    },
+  );
   it('persists free keywords and does not put cached icons in the AI queue', async () => {
     const db = directDb();
     await runOrganizeDirect('w', db, {

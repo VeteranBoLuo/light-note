@@ -56,6 +56,91 @@ describe('fetchWebMeta', () => {
       reason: 'DNS_FAILED',
     });
   });
+  it('retries an early dual-stack failure over guarded IPv4 within the original timeout', async () => {
+    const failures = [
+      { code: 'ETIMEDOUT', address: '93.184.216.34' },
+      { code: 'ENETUNREACH', address: '2606:4700:4700::1111' },
+    ];
+    axiosGet.mockRejectedValueOnce({ code: 'ETIMEDOUT', cause: { errors: failures } }).mockResolvedValueOnce({
+      headers: { 'content-type': 'text/html' },
+      data: Buffer.from('<html><title>Real article</title><article>Real readable article content.</article></html>'),
+    });
+    expect(await fetchWebMeta('https://example.com', { timeout: 8000 })).toMatchObject({
+      ok: true,
+      source: 'static_html',
+    });
+    expect(axiosGet).toHaveBeenCalledTimes(2);
+    const options = axiosGet.mock.calls[1][1];
+    expect(options.httpsAgent.options).toMatchObject({ family: 4, autoSelectFamily: false });
+    expect(options.timeout).toBeGreaterThan(0);
+    expect(options.timeout).toBeLessThanOrEqual(8000);
+  });
+  it('does not retry a cancelled dual-stack request', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    axiosGet.mockRejectedValue({
+      code: 'ETIMEDOUT',
+      cause: {
+        errors: [
+          { code: 'ETIMEDOUT', address: '93.184.216.34' },
+          { code: 'ENETUNREACH', address: '2606:4700:4700::1111' },
+        ],
+      },
+    });
+    await expect(fetchWebMeta('https://example.com', { signal: controller.signal })).rejects.toMatchObject({
+      code: 'ETIMEDOUT',
+    });
+    expect(axiosGet).toHaveBeenCalledOnce();
+  });
+  it('does not retry ordinary timeouts or repeat a failed IPv4 fallback', async () => {
+    axiosGet.mockRejectedValueOnce({ code: 'ECONNABORTED' });
+    expect(await fetchWebMeta('https://example.com')).toEqual({ ok: false, reason: 'TIMEOUT' });
+    expect(axiosGet).toHaveBeenCalledOnce();
+    axiosGet.mockReset();
+    axiosGet.mockRejectedValue({
+      code: 'ETIMEDOUT',
+      cause: {
+        errors: [
+          { code: 'ETIMEDOUT', address: '93.184.216.34' },
+          { code: 'ENETUNREACH', address: '2606:4700:4700::1111' },
+        ],
+      },
+    });
+    expect(await fetchWebMeta('https://example.com')).toEqual({ ok: false, reason: 'TIMEOUT' });
+    expect(axiosGet).toHaveBeenCalledTimes(2);
+  });
+  it('classifies nonstandard HTTP challenge pages and uses the existing renderer fallback', async () => {
+    axiosGet.mockRejectedValueOnce({
+      response: {
+        status: 850,
+        headers: { 'content-type': 'text/html' },
+        data: Buffer.from('<html><title>Access verification</title><body>Checking your browser</body></html>'),
+      },
+    });
+    const renderer = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      url: 'https://example.com',
+      documentTitle: 'Real article',
+      bodyText: 'Readable article content '.repeat(10),
+      meta: {},
+      signals: {},
+    });
+    expect(await fetchWebMeta('https://example.com', { renderFallback: true, renderer })).toMatchObject({
+      ok: true,
+      source: 'rendered_dom',
+    });
+    expect(renderer).toHaveBeenCalledOnce();
+    expect(
+      classifyWebPageSnapshot({
+        status: 850,
+        title: 'Website',
+        description: 'Default description',
+        bodyText: 'Unavailable',
+      }),
+    ).toBe('ACCESS_DENIED');
+    expect(classifyWebPageSnapshot({ status: 503, title: 'Error', bodyText: 'Unavailable' })).toBe('FETCH_FAILED');
+  });
 
   it('把响应体超过预算与普通网络失败区分开', async () => {
     axiosGet.mockRejectedValueOnce({

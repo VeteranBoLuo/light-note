@@ -209,5 +209,13 @@ export function guardedPublicLookup(hostname, options, callback) {
 
 export const guardedHttpAgent = new http.Agent({ lookup: guardedPublicLookup });
 export const guardedHttpsAgent = new https.Agent({ lookup: guardedPublicLookup });
+// Only used after a dual-stack attempt aborts IPv4 early and IPv6 is unreachable.
+// DNS still validates every returned address before selecting the IPv4 connection.
+export const guardedIpv4HttpAgent = new http.Agent({ lookup: guardedPublicLookup, family: 4, autoSelectFamily: false });
+export const guardedIpv4HttpsAgent = new https.Agent({
+  lookup: guardedPublicLookup,
+  family: 4,
+  autoSelectFamily: false,
+});
 
 export const webUrlSafetyInternals = Object.freeze({ expandIpv6, normalizedPort, parseIpv4Number });

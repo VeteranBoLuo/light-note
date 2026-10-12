@@ -444,6 +444,8 @@ async function processDirectResult(db, job, dependencies) {
     };
   } else {
     const draft = await (dependencies.archive || prepareOrganizeArchive)(job.user_id, source);
+    if (draft?.status === 'failed' && draft.retryable && job.attempts < 2)
+      return finishDirect(db, job, async () => {}, 'waiting', draft.reasonCode);
     if (draft) {
       const { content, ...metadata } = draft;
       source.archivePreparation = metadata;
@@ -470,6 +472,7 @@ async function processDirectResult(db, job, dependencies) {
       );
     },
     suggestion.status === 'failed' ? 'failed' : 'completed',
+    suggestion.status === 'failed' ? suggestion.reasonCode || 'FETCH_FAILED' : null,
   );
 }
 export async function runOrganizeDirect(_workerId, db = pool, dependencies = {}) {

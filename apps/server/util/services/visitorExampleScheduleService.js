@@ -26,6 +26,14 @@ export const exampleHash = (value) =>
   createHash('sha256')
     .update(JSON.stringify(normalize(value)))
     .digest('hex');
+export function matchesRollingObject(entry, row) {
+  if (exampleHash(row) === entry.expected) return true;
+  // The board-details migration added two NULL columns to existing actions. Only this
+  // exact legacy shape is compatible; populated fields and all other edits still fail.
+  if (entry.type !== 'action' || !row || row.details_json != null || row.linked_todo_id != null) return false;
+  const { details_json, linked_todo_id, ...legacy } = row;
+  return exampleHash(legacy) === entry.expected;
+}
 export const parseExampleManifest = (value) => {
   const result = typeof value === 'string' ? JSON.parse(value) : value;
   if (
@@ -111,7 +119,7 @@ export async function rollVisitorExamples(
     // Validate all targets before writing any date. The expected hash includes user edits, not just dates.
     for (const entry of manifest.rolling) {
       const row = await readRollingObject(connection, userId, entry);
-      if (exampleHash(row) !== entry.expected) throw exampleError('VISITOR_OBJECT_CHANGED');
+      if (!matchesRollingObject(entry, row)) throw exampleError('VISITOR_OBJECT_CHANGED');
       const dates = rollingValues(entry, date);
       if (entry.type === 'action')
         applyBoardOperation(
@@ -163,7 +171,15 @@ export function createVisitorExampleMaintenancePoller(
         'SELECT user_id FROM visitor_example_maintenance WHERE enabled=1 AND (last_success_date IS NULL OR last_success_date < ?) ORDER BY user_id LIMIT 10',
         [visitorDate(new Date(clock()))],
       );
-      for (const state of states) await roll(database, String(state.user_id), { now: new Date(clock()) });
+      let failure;
+      for (const state of states) {
+        try {
+          await roll(database, String(state.user_id), { now: new Date(clock()) });
+        } catch (error) {
+          failure ||= error;
+        }
+      }
+      if (failure) throw failure;
       failures = 0;
     } catch (error) {
       failures++;

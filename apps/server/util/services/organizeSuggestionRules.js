@@ -276,7 +276,8 @@ export function buildRuleSuggestions(snapshots, checks, { tagMode = 'untagged' }
     }
     if (checks.includes('archive') && supportsOrganizeCheck(s.type, 'archive')) {
       if (s.hasArchive) add('archive', 'no_suggestion', '当前网址已有正文存档，无需重复读取');
-      else if (s.archivePreparation?.status === 'failed') add('archive', 'failed', s.archivePreparation.reason);
+      else if (s.archivePreparation?.status === 'failed')
+        add('archive', 'failed', s.archivePreparation.reason, { reasonCode: s.archivePreparation.reasonCode });
       else if (s.archivePreparation?.status === 'ready')
         add('archive', 'pending', '网页正文已生成，可预览后应用保存', {
           action: 'archive',

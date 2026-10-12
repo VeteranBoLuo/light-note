@@ -8,11 +8,15 @@ export async function prepareOrganizeArchive(userId, snapshot, read = archiveBoo
   let result;
   try {
     result = await read(userId, snapshot.id, { persist: false, retry: false });
-  } catch {
+  } catch (error) {
+    if (error?.name === 'AbortError' || error?.code === 'ABORT_ERR' || error?.code === 'ERR_CANCELED') throw error;
     result = archiveFailure('FETCH_FAILED');
   }
-  if (!result.ok) return { status: 'failed', reason: archiveFailure(result.reason).msg };
-  if (result.url !== snapshot.source.url) return { status: 'failed', reason: archiveFailure('RESOURCE_CHANGED').msg };
+  if (result.ok && result.url !== snapshot.source.url) result = archiveFailure('RESOURCE_CHANGED');
+  if (!result.ok) {
+    const failure = archiveFailure(result.reason);
+    return { status: 'failed', reason: failure.msg, reasonCode: failure.reason, retryable: failure.retryable };
+  }
   return {
     status: 'ready',
     title: result.title,

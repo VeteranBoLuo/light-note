@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
+const dnsLookup = vi.hoisted(() => vi.fn());
+vi.mock('node:dns', () => ({ lookup: (...args) => dnsLookup(...args) }));
 import {
   isBlockedNetworkAddress,
   lookupPublicAddresses,
+  guardedPublicLookup,
   validatePublicWebUrl,
   webUrlSafetyInternals,
 } from './webUrlSafety.js';
@@ -56,5 +59,25 @@ describe('webUrlSafety', () => {
   it('IPv6 解析支持压缩写法和 IPv4 尾段', () => {
     expect(webUrlSafetyInternals.expandIpv6('2606:4700:4700::1111')).toBeTypeOf('bigint');
     expect(webUrlSafetyInternals.expandIpv6('::ffff:127.0.0.1')).toBeTypeOf('bigint');
+  });
+  it('the IPv4 retry still rejects mixed public/private DNS and supports IPv6-only normal reads', async () => {
+    const lookup = (options) =>
+      new Promise((resolve, reject) =>
+        guardedPublicLookup('example.com', options, (error, address, family) =>
+          error ? reject(error) : resolve({ address, family }),
+        ),
+      );
+    dnsLookup.mockImplementation((_host, _options, callback) =>
+      callback(null, [
+        { address: '93.184.216.34', family: 4 },
+        { address: '::1', family: 6 },
+      ]),
+    );
+    await expect(lookup({ family: 4 })).rejects.toMatchObject({ code: 'BLOCKED_PRIVATE_IP' });
+    dnsLookup.mockImplementation((_host, _options, callback) =>
+      callback(null, [{ address: '2606:4700:4700::1111', family: 6 }]),
+    );
+    await expect(lookup({})).resolves.toEqual({ address: '2606:4700:4700::1111', family: 6 });
+    await expect(lookup({ family: 4 })).rejects.toMatchObject({ code: 'ENOTFOUND' });
   });
 });
