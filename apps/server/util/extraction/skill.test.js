@@ -16,6 +16,33 @@ const plan = validatePlan({
   fields: [{ key: 'weight', label: '重量', type: 'text', rule: '含单位' }],
 });
 describe('正式提取 Skill 契约', () => {
+  it('建议列头遵守用户语言要求，保留内部 key 和原文提取规则', async () => {
+    const skill = resolveAiSkill('toolbox.extraction_suggest', 1);
+    const invoke = vi.fn(async (config) => {
+      const prompt = config.messages.map((message) => message.content).join('\n');
+      expect(prompt).toContain('用户目标：列头用英文');
+      expect(prompt).toContain('优先遵守用户目标中指定的列头语言');
+      expect(prompt).not.toContain('label 用中文');
+      expect(prompt).toContain('相机甲 重量 3 g');
+      return config.validateArguments({
+        recordDefinition: '每个产品一条记录',
+        fields: [{ key: 'weight', label: 'Weight', type: 'text', rule: '摘录重量原文，保留单位' }],
+      });
+    });
+    const prepared = await skill.prepare({
+      input: { source, goal: '列头用英文' },
+      dependencies: { callStructuredSkillModel: invoke },
+    });
+    const result = await prepared.callModel({ modelPolicy: skill.modelPolicy });
+    expect(invoke).toHaveBeenCalledOnce();
+    expect(result.plan.fields[0]).toMatchObject({
+      id: 'f1',
+      key: 'weight',
+      label: 'Weight',
+      type: 'text',
+      rule: '摘录重量原文，保留单位',
+    });
+  });
   it('完整 Runtime 接收提取结果，在结束 Execution 前提交已校验结果', async () => {
     const committed = vi.fn(),
       events = [];

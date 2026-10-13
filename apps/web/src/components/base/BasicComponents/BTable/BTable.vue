@@ -1,37 +1,44 @@
 <template>
   <div class="table-container" :class="{ 'is-fill': props.fill, 'has-pagination': props.pagination }">
     <!-- 表头 -->
-    <div class="table-header" :style="gridStyle">
-      <div v-if="props.selectable" class="header-cell" style="width: var(--ui-layout-50, 50px)">
-        <BCheckbox
-          :controlled="props.preserveSelection"
-          :disabled="props.selectionDisabled || (props.preserveSelection && props.loading)"
-          :indeterminate="isIndeterminate"
-          :checked="isAllSelected"
-          @change="(checked) => handleSelectAllChange(checked)"
-        />
-      </div>
-      <div v-for="col in columns" :key="col.key" class="header-cell" :style="{ width: col.width || 'auto' }">
-        <span class="header-cell-title">{{ col.title }}</span>
-        <span
-          v-if="col.sortable"
-          class="sort-icons"
-          @click="col.sortable && handleSortToggle(col.key)"
-          :class="{ 'is-sortable': col.sortable }"
-        >
-          <SvgIcon
-            class="sort-arrow"
-            :class="{ active: activeSort.key === col.key && activeSort.order === 'asc' }"
-            :src="icon.table_sort_up"
-            size="10"
+    <div
+      ref="headerViewportRef"
+      class="table-header-viewport"
+      :style="headerViewportStyle"
+      @scroll.passive="handleHeaderScroll"
+    >
+      <div ref="tableHeaderRef" class="table-header" :style="gridStyle">
+        <div v-if="props.selectable" class="header-cell">
+          <BCheckbox
+            :controlled="props.preserveSelection"
+            :disabled="props.selectionDisabled || (props.preserveSelection && props.loading)"
+            :indeterminate="isIndeterminate"
+            :checked="isAllSelected"
+            @change="(checked) => handleSelectAllChange(checked)"
           />
-          <SvgIcon
-            class="sort-arrow"
-            :class="{ active: activeSort.key === col.key && activeSort.order === 'desc' }"
-            :src="icon.table_sort_down"
-            size="10"
-          />
-        </span>
+        </div>
+        <div v-for="col in columns" :key="col.key" class="header-cell">
+          <span class="header-cell-title">{{ col.title }}</span>
+          <span
+            v-if="col.sortable"
+            class="sort-icons"
+            @click="col.sortable && handleSortToggle(col.key)"
+            :class="{ 'is-sortable': col.sortable }"
+          >
+            <SvgIcon
+              class="sort-arrow"
+              :class="{ active: activeSort.key === col.key && activeSort.order === 'asc' }"
+              :src="icon.table_sort_up"
+              size="10"
+            />
+            <SvgIcon
+              class="sort-arrow"
+              :class="{ active: activeSort.key === col.key && activeSort.order === 'desc' }"
+              :src="icon.table_sort_down"
+              size="10"
+            />
+          </span>
+        </div>
       </div>
     </div>
 
@@ -42,16 +49,16 @@
       :class="{ 'is-virtual': props.virtual }"
       @scroll.passive="handleBodyScroll"
     >
-      <div class="table-row-sizer" :class="{ 'is-virtual': props.virtual }" :style="virtualSizerStyle">
+      <div class="table-row-sizer" :class="{ 'is-virtual': props.virtual }" :style="[contentStyle, virtualSizerStyle]">
         <div class="table-row-window" :class="{ 'is-virtual': props.virtual }" :style="virtualWindowStyle">
           <template v-for="entry in renderedRows" :key="entry.item[props.rowKey] ?? entry.index">
             <div
               class="table-row"
               :class="{ 'is-clickable': props.rowClickable }"
-              :style="[gridStyle, virtualRowStyle]"
+              :style="[bodyGridStyle, virtualRowStyle]"
               @click="handleRowClick(entry.item, entry.index)"
             >
-              <div v-if="props.selectable" class="table-cell" style="width: var(--ui-layout-50, 50px)" @click.stop>
+              <div v-if="props.selectable" class="table-cell" @click.stop>
                 <BCheckbox
                   :controlled="props.preserveSelection"
                   :disabled="props.selectionDisabled || (props.preserveSelection && props.loading)"
@@ -64,7 +71,6 @@
                 :key="col.key"
                 class="table-cell"
                 :class="{ 'table-cell--overflow-visible': col.overflowVisible }"
-                :style="{ width: col.width || 'auto' }"
               >
                 <slot
                   name="bodyCell"
@@ -214,14 +220,26 @@
   const emit = defineEmits(['pageChange', 'sizeChange', 'selectionChange', 'rowClick', 'loadMore', 'sortChange']);
   // 生成网格列宽样式
   const gridStyle = computed(() => {
-    const columns = props.selectable
-      ? ['var(--ui-layout-50, 50px)', ...props.columns.map((col) => col.width || '1fr')]
-      : props.columns.map((col) => col.width || '1fr');
+    const tracks = props.columns.map((col) =>
+      typeof col.width === 'number' ? `${dimension(col.width, 'layout')}px` : col.width || 'minmax(0, 1fr)',
+    );
+    const columns = props.selectable ? ['var(--ui-layout-50, 50px)', ...tracks] : tracks;
     return {
-      'grid-template-columns': columns.join(' '),
+      gridTemplateColumns: columns.join(' '),
       gap: 'var(--ui-space-10, 10px)',
     };
   });
+  const headerViewportRef = ref<HTMLElement | null>(null);
+  const tableHeaderRef = ref<HTMLElement | null>(null);
+  const contentWidth = ref(0);
+  const resolvedTracks = ref('');
+  const scrollbarWidth = ref(0);
+  const headerViewportStyle = computed(() => ({ marginRight: `${scrollbarWidth.value}px` }));
+  const contentStyle = computed(() => (contentWidth.value ? { width: `${contentWidth.value}px` } : undefined));
+  const bodyGridStyle = computed(() => ({
+    ...gridStyle.value,
+    gridTemplateColumns: resolvedTracks.value || gridStyle.value.gridTemplateColumns,
+  }));
 
   // 排序状态
   const sortState = ref<TableSort>({ key: null, order: null });
@@ -264,7 +282,7 @@
   const tableBodyRef = ref<HTMLElement | null>(null);
   const scrollTop = ref(0);
   const viewportHeight = ref(0);
-  const { dimension } = useUiDensity();
+  const { dimension, density } = useUiDensity();
   const rowGap = computed(() => dimension(8));
   const rowHeight = computed(() => dimension(props.rowHeight, 'control'));
   const rowPitch = computed(() => Math.max(1, rowHeight.value) + rowGap.value);
@@ -316,7 +334,25 @@
   let resizeObserver: ResizeObserver | null = null;
   let loadMoreQueued = false;
   function updateViewport() {
-    viewportHeight.value = tableBodyRef.value?.clientHeight || 0;
+    const body = tableBodyRef.value;
+    const header = tableHeaderRef.value;
+    viewportHeight.value = body?.clientHeight || 0;
+    if (!body || !header) return;
+    scrollbarWidth.value = body.offsetWidth - body.clientWidth;
+    // Resolve one set of tracks for both grids, including flexible/percentage columns.
+    // A full-width sizer also keeps the trailing columns and padding reachable.
+    const width = header.getBoundingClientRect().width;
+    if (width > 0) {
+      contentWidth.value = width;
+      resolvedTracks.value = getComputedStyle(header).gridTemplateColumns;
+    }
+    syncHorizontalScroll(body, headerViewportRef.value);
+  }
+  function syncHorizontalScroll(from: HTMLElement | null, to: HTMLElement | null) {
+    if (from && to && to.scrollLeft !== from.scrollLeft) to.scrollLeft = from.scrollLeft;
+  }
+  function handleHeaderScroll() {
+    syncHorizontalScroll(headerViewportRef.value, tableBodyRef.value);
   }
   function maybeLoadMore() {
     const body = tableBodyRef.value;
@@ -330,6 +366,7 @@
   }
   function handleBodyScroll() {
     scrollTop.value = tableBodyRef.value?.scrollTop || 0;
+    syncHorizontalScroll(tableBodyRef.value, headerViewportRef.value);
     maybeLoadMore();
   }
   function scrollToTop() {
@@ -338,12 +375,13 @@
   }
 
   watch(
-    () => [props.data.length, props.hasMore, props.loading],
+    () => [props.data.length, props.hasMore, props.loading, props.columns, props.selectable, density.value],
     () =>
       nextTick(() => {
         updateViewport();
         maybeLoadMore();
       }),
+    { deep: true },
   );
 
   onMounted(() => {
@@ -351,6 +389,7 @@
     if (typeof ResizeObserver !== 'undefined' && tableBodyRef.value) {
       resizeObserver = new ResizeObserver(updateViewport);
       resizeObserver.observe(tableBodyRef.value);
+      if (tableHeaderRef.value) resizeObserver.observe(tableHeaderRef.value);
     }
     maybeLoadMore();
   });
@@ -404,6 +443,7 @@
     flex-direction: column;
     max-height: 100%;
     width: 100%;
+    min-width: 0;
     padding: var(--ui-space-12, 12px);
     box-sizing: border-box;
     background-color: var(--table-bg-color);
@@ -421,8 +461,21 @@
     min-height: 0;
   }
 
+  .table-header-viewport {
+    min-width: 0;
+    flex-shrink: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+    &::-webkit-scrollbar {
+      display: none;
+    }
+  }
+
   .table-header {
     display: grid;
+    width: max-content;
+    min-width: 100%;
+    box-sizing: border-box;
     background-color: var(--table-header-bg-color);
     height: var(--ui-control-40, 40px);
     border-radius: 8px;
@@ -433,7 +486,8 @@
   }
 
   .header-cell {
-    padding: 0 var(--ui-space-4, 4px);
+    padding: 0 var(--ui-space-8, 8px);
+    min-width: 0;
     display: flex;
     align-items: center;
     white-space: nowrap;
@@ -480,7 +534,11 @@
   .table-body {
     display: flex;
     flex-direction: column;
-    overflow-y: auto;
+    overflow: auto;
+    // Ancestor auto-scrollbar colors must not hide this independent scroller.
+    scrollbar-color: var(--scrollbar-color) transparent;
+    scrollbar-width: thin;
+    min-width: 0;
     min-height: var(--ui-layout-100, 100px);
     max-height: 100%;
     box-sizing: border-box;
@@ -502,7 +560,7 @@
 
   .table-row-sizer {
     width: 100%;
-    min-width: 0;
+    min-width: 100%;
     flex: 0 0 auto;
   }
 
@@ -528,6 +586,7 @@
 
   .table-row {
     display: grid;
+    box-sizing: border-box;
     min-height: var(--ui-control-40, 40px);
     border-radius: 8px;
     align-items: center;
@@ -558,6 +617,7 @@
   }
 
   .table-cell {
+    min-width: 0;
     padding: 0 var(--ui-space-8, 8px);
     box-sizing: border-box;
     white-space: nowrap;

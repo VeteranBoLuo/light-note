@@ -282,7 +282,7 @@
             @click="addField"
             >{{ t('extraction.addField') }}</BButton
           >
-          <p v-if="invalidPlan" class="notice issue">{{ t('extraction.duplicate') }}</p
+          <p v-if="duplicateFields" class="notice issue">{{ t('extraction.duplicate') }}</p
           ><p v-if="plan.issues?.length" class="notice">{{ t('extraction.warnings') }}</p
           ><p v-if="dirtyPlan && table?.plan" class="muted">{{ t('extraction.stale') }}</p
           ><p v-if="locked" class="muted">{{ t('extraction.locked') }}</p>
@@ -345,7 +345,7 @@
             >
           </MobileListRow>
         </MobileListSurface>
-        <div v-else class="data-table" v-auto-scrollbar
+        <div v-else class="data-table"
           ><BTable :data="records" :columns="columns" row-key="id" :pagination="false"
             ><template #bodyCell="{ record, column }"
               ><span v-if="column.key === 'source'" class="source-label">{{ sourceName(record.sourceId) }}</span
@@ -679,6 +679,8 @@
     active,
     locked,
     dirtyPlan,
+    invalidPlan,
+    duplicateFields,
     selectedCell,
     current,
     explain,
@@ -788,12 +790,6 @@
       table.value.sources.every((s) => s.status === 'ready') &&
       (!partialSources.value || acceptPartial.value),
   );
-  const invalidPlan = computed(() => {
-    const p = plan.value;
-    if (!p || !p.recordDefinition.trim() || p.fields.length < 1 || p.fields.length > 12) return true;
-    const labels = p.fields.map((f) => f.label.normalize('NFKC').replace(/\s/g, '').toLowerCase());
-    return labels.some((v) => !v) || new Set(labels).size !== labels.length;
-  });
   const selectedTitle = computed(
     () =>
       `${displayFields.value.find((f) => f.id === fieldId.value)?.label || ''} · ${selected.value ? current(selected.value, selected.value.cells[0]?.fieldId) : ''}`,
@@ -1272,7 +1268,7 @@
     max-width: var(--ui-layout-200, 200px);
   }
   .data-table {
-    overflow: auto;
+    min-width: 0;
     margin-top: var(--ui-space-12, 12px);
   }
   .cell {

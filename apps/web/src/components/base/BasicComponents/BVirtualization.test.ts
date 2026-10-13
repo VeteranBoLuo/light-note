@@ -31,6 +31,23 @@ function mount(
 }
 
 describe('virtual list scroll layout', () => {
+  it('synchronizes horizontal scrolling in both directions without changing the vertical position', async () => {
+    const host = mount(BTable, {
+      data: [{ id: 1, name: 'one' }],
+      columns: [{ title: 'Name', key: 'name', width: '180px' }],
+    });
+    await nextTick();
+    const body = host.querySelector<HTMLElement>('.table-body')!;
+    const header = host.querySelector<HTMLElement>('.table-header-viewport')!;
+    body.scrollTop = 80;
+    body.scrollLeft = 160;
+    body.dispatchEvent(new Event('scroll'));
+    expect(header.scrollLeft).toBe(160);
+    header.scrollLeft = 320;
+    header.dispatchEvent(new Event('scroll'));
+    expect(body.scrollLeft).toBe(320);
+    expect(body.scrollTop).toBe(80);
+  });
   it('keeps BTable offsets inside a fixed-height content sizer instead of growing the scroller padding', async () => {
     const data = Array.from({ length: 1_000 }, (_, id) => ({ id, name: `row-${id}` }));
     const host = mount(BTable, {

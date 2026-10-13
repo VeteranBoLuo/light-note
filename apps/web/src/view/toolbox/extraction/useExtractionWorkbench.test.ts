@@ -89,6 +89,46 @@ beforeEach(() => {
   api.extractionAction.mockResolvedValue(table());
 });
 describe('资料转表格共享业务状态', () => {
+  it('新增空字段不报重名，但填写完整前不能提交；非空重名才提示', async () => {
+    mount();
+    await flush();
+    state.plan.value!.fields.push({ id: 'f2', key: 'weight', label: '', type: 'text', rule: '' });
+    expect(state.duplicateFields.value).toBe(false);
+    expect(state.invalidPlan.value).toBe(true);
+    await state.start();
+    expect(api.extractionAction).not.toHaveBeenCalled();
+
+    state.plan.value!.fields[1].label = ' 名称 ';
+    expect(state.duplicateFields.value).toBe(true);
+    expect(state.invalidPlan.value).toBe(true);
+    state.plan.value!.fields[1].label = 'Weight';
+    expect(state.duplicateFields.value).toBe(false);
+    expect(state.invalidPlan.value).toBe(false);
+    await state.start();
+    expect(api.extractionAction).toHaveBeenCalledOnce();
+    expect(api.extractionAction.mock.calls[0][1].plan.fields[1].label).toBe('Weight');
+  });
+  it('重复判断忽略大小写、全半角和空白；空记录定义不误报字段重名', async () => {
+    mount();
+    await flush();
+    state.plan.value!.fields[0].label = 'System Name';
+    state.plan.value!.fields.push({ id: 'f2', key: 'other', label: 'ＳＹＳＴＥＭ name', type: 'text', rule: '' });
+    expect(state.duplicateFields.value).toBe(true);
+    state.plan.value!.fields.pop();
+    state.plan.value!.recordDefinition = '';
+    expect(state.duplicateFields.value).toBe(false);
+    expect(state.invalidPlan.value).toBe(true);
+  });
+  it('用户指定的列头语言原样传入分析任务', async () => {
+    route.query.id = '';
+    mount();
+    await flush();
+    state.goal.value = '列头用英文';
+    state.resources.value = [{ type: 'note', id: 'n', title: '开发步骤' }];
+    api.createExtraction.mockResolvedValue(table());
+    await state.prepare();
+    expect(api.createExtraction.mock.calls[0][0]).toMatchObject({ goal: '列头用英文', autoAnalyze: true });
+  });
   it('缺少初始化时可以保留草稿，但不能提交提取；重试成功后恢复', async () => {
     route.query.id = '';
     api.listExtractions.mockRejectedValueOnce({ code: 'EXTRACTION_SCHEMA_NOT_READY' });

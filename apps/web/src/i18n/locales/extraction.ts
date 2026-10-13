@@ -79,7 +79,7 @@ export const extractionZh = {
   addField: '添加字段',
   manual: '手动设置字段',
   remove: '移除',
-  duplicate: '字段名称不能重复；请保留 1–12 个有效字段。',
+  duplicate: '字段名称重复，请修改重复的名称。',
   warnings: '有可能重复或属于系统信息的字段，请确认是否保留。',
   stale: '字段已调整。更改类型、顺序或提取规则会使样例过时，可先刷新样例；只改显示名会复用原结果。',
   start: '确认并提取全部',
@@ -282,7 +282,7 @@ export const extractionEn = {
   addField: 'Add field',
   manual: 'Set fields manually',
   remove: 'Remove',
-  duplicate: 'Use 1–12 valid fields with unique names.',
+  duplicate: 'Some field names are duplicated. Please use unique names.',
   warnings: 'Some fields may overlap or contain system metadata. Check whether they are needed.',
   stale:
     'Fields changed. Type, order or rule changes invalidate the sample; refresh it first if needed. Display-name changes reuse existing results.',

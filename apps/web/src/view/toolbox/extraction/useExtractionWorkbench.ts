@@ -49,6 +49,22 @@ export function useExtractionWorkbench() {
   const locked = computed(() => table.value?.phase === 'extract' || table.value?.status === 'ended');
   const serializedPlan = computed(() => JSON.stringify(plan.value));
   const dirtyPlan = computed(() => Boolean(plan.value) && serializedPlan.value !== JSON.stringify(table.value?.plan));
+  const fieldLabels = computed(
+    () => plan.value?.fields.map((field) => field.label.normalize('NFKC').replace(/\s/g, '').toLowerCase()) || [],
+  );
+  const duplicateFields = computed(() => {
+    const completed = fieldLabels.value.filter(Boolean);
+    return new Set(completed).size !== completed.length;
+  });
+  // Empty draft fields block submission but are not duplicate-name errors.
+  const invalidPlan = computed(
+    () =>
+      !plan.value?.recordDefinition.trim() ||
+      fieldLabels.value.length < 1 ||
+      fieldLabels.value.length > 12 ||
+      fieldLabels.value.some((label) => !label) ||
+      duplicateFields.value,
+  );
   const selectedCell = computed(() => selected.value?.cells.find((c) => c.fieldId === fieldId.value));
   const current = (r: ExtractionRecord, id: string) =>
     r.reviews[id]?.overridden ? r.reviews[id].value : r.cells.find((c) => c.fieldId === id)?.originalValue || '';
@@ -213,7 +229,7 @@ export function useExtractionWorkbench() {
     }
   }
   async function start() {
-    if (!plan.value || !table.value) return;
+    if (!plan.value || !table.value || invalidPlan.value) return;
     const proposed = clone(plan.value);
     if (!table.value.plan) {
       await perform('plan', { plan: proposed });
@@ -496,6 +512,8 @@ export function useExtractionWorkbench() {
     active,
     locked,
     dirtyPlan,
+    invalidPlan,
+    duplicateFields,
     selectedCell,
     current,
     explain,
