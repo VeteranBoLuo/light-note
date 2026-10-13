@@ -101,8 +101,12 @@ describe('多类型整理规则', () => {
     expect(make('1', null).empty).toBe(false);
     expect(make('1', 0).emptyEligible).toBe(true);
     const s = findings([make('1', 1024), make('2', 1024)], ['title', 'duplicate'])[0].suggestions;
-    expect(s.some((entry) => entry.kind === 'title')).toBe(false);
-    expect(s[0]).toMatchObject({ kind: 'duplicate', status: 'info', action: null });
+    expect(s.find((entry) => entry.kind === 'title')).toMatchObject({ status: 'queued' });
+    expect(s.find((entry) => entry.kind === 'duplicate')).toMatchObject({
+      kind: 'duplicate',
+      status: 'info',
+      action: null,
+    });
   });
   it('抓取失败的书签不提供空资源清理，重复使用原始 URL', () => {
     const s = buildSnapshot('bookmark', { id: '1', name: 'https://example.com', url: 'https://example.com' });
@@ -128,11 +132,11 @@ describe('多类型整理规则', () => {
   });
 });
 
-it('标题预检只冻结笔记，混合资源的 AI 项目按适用性裁剪', () => {
+it('标题预检包含书签和笔记，混合资源的 AI 项目按适用性裁剪', () => {
   expect(
     normalizeRunInput({ resourceTypes: ['bookmark', 'note', 'file'], checks: ['title'], scope: 'all' }),
-  ).toMatchObject({ resourceTypes: ['note'], checks: ['title'] });
-  expect(() => normalizeRunInput({ resourceTypes: ['file'], checks: ['title'] })).toThrow('没有适用');
+  ).toMatchObject({ resourceTypes: ['bookmark', 'file', 'note'], checks: ['title'] });
+  expect(normalizeRunInput({ resourceTypes: ['file'], checks: ['title'] }).resourceTypes).toEqual(['file']);
   expect(
     normalizeRunInput({
       resourceTypes: ['bookmark', 'note', 'file'],
@@ -143,10 +147,36 @@ it('标题预检只冻结笔记，混合资源的 AI 项目按适用性裁剪', 
         { type: 'note', id: 'n' },
       ],
     }).items,
-  ).toEqual([{ type: 'note', id: 'n' }]);
+  ).toEqual([
+    { type: 'file', id: 'f' },
+    { type: 'note', id: 'n' },
+  ]);
   const bookmark = buildSnapshot('bookmark', { id: 'b', name: '', description: 'Useful text' });
-  expect(findings([bookmark], ['title', 'tags'])[0].aiKinds).not.toContain('title');
+  expect(findings([bookmark], ['title', 'tags'])[0].aiKinds).toContain('title');
   expect(findings([note({ content: 'Useful text' })], ['title'])[0].aiKinds).toEqual(['title']);
+});
+
+it('书签名称仅补空缺或网址名称，描述仅补原字段的空缺，三项共用一份分析', () => {
+  const bookmark = (extra = {}) =>
+    buildSnapshot('bookmark', { id: 'b', url: 'https://example.com', name: '', description: '', ...extra });
+  for (const name of ['', 'https://example.com']) {
+    const result = findings([bookmark({ name })], ['title', 'description', 'tags'])[0];
+    expect(result.aiKinds).toEqual(['tags', 'title', 'description']);
+    expect(result.suggestions.find((s) => s.kind === 'description')).toMatchObject({ before: '', status: 'queued' });
+  }
+  const existing = findings(
+    [bookmark({ name: '我的自定义名称', description: '我的自定义描述' })],
+    ['title', 'description'],
+  )[0];
+  expect(existing.aiKinds).toEqual([]);
+  expect(existing.suggestions.every((s) => s.status === 'not_applicable')).toBe(true);
+  expect(
+    findings([bookmark({ description: '已存档正文', original_description: '' })], ['description'])[0].aiKinds,
+  ).toEqual(['description']);
+  expect(
+    normalizeRunInput({ resourceTypes: ['bookmark', 'note', 'file', 'tag'], checks: ['description'] }).resourceTypes,
+  ).toEqual(['bookmark']);
+  expect(() => normalizeRunInput({ resourceTypes: ['note'], checks: ['description'] })).toThrow('没有适用');
 });
 
 it.each(['bookmark', 'note'])('显式追加模式让已有标签的 %s 继续分析，旧任务仍跳过', (type) => {
@@ -198,4 +228,20 @@ it('标签图标进入关键词转换队列，名称和图标变化进入版本�
   expect(
     normalizeRunInput({ resourceTypes: ['tag', 'note'], checks: ['tag_icon'], scope: 'all' }).resourceTypes,
   ).toEqual(['tag']);
+});
+it('文件自动名进入优化，正常文件名保留；自定义图标不妨碍标签合并', () => {
+  for (const file_name of ['IMG_123.jpg', '2026-10-13.png', 'paste_123456.png']) {
+    const entry = findings([buildSnapshot('file', { id: 'f', file_name })], ['title'])[0];
+    expect(entry.aiKinds).toEqual(['title']);
+  }
+  expect(findings([buildSnapshot('file', { id: 'f', file_name: '项目计划.pdf' })], ['title'])[0].aiKinds).toEqual([]);
+  const entry = findings(
+    [buildSnapshot('tag', { id: 't', name: 'JS', icon_url: 'custom' })],
+    ['tag_icon', 'tag_merge'],
+  )[0];
+  expect(entry.aiKinds).toEqual(['tag_merge']);
+  expect(entry.suggestions.find((s) => s.kind === 'tag_merge')).toMatchObject({ status: 'queued', before: 'JS' });
+  expect(
+    normalizeRunInput({ resourceTypes: ['bookmark', 'file', 'note'], checks: ['bookmark_health'] }).resourceTypes,
+  ).toEqual(['bookmark']);
 });

@@ -30,7 +30,8 @@ export function resourceOutcome(item: WorkspaceItem, run: SuggestionRun) {
       expired: has(['expired']),
       manual: suggestions.some(
         (s) =>
-          (['insufficient', 'no_suggestion'].includes(s.status) && ['tags', 'title', 'tag_icon'].includes(s.kind)) ||
+          (['insufficient', 'no_suggestion'].includes(s.status) &&
+            ['tags', 'title', 'description', 'tag_icon'].includes(s.kind)) ||
           (s.status === 'info' &&
             !['trash', 'duplicate_bookmarks'].includes(s.action || '') &&
             !(s.kind === 'archive' && !s.archivePreview)),
@@ -60,7 +61,7 @@ export function resourceWork(item: WorkspaceItem) {
         .filter((s) => ['queued', 'running', 'failed', 'conflict', 'cancelled'].includes(s.status))
         .map((s) => ({
           kind: s.kind,
-          lane: ['tags', 'title', 'tag_icon'].includes(s.kind) ? 'ai' : 'direct',
+          lane: ['tags', 'title', 'description', 'tag_icon', 'tag_merge'].includes(s.kind) ? 'ai' : 'direct',
           status: s.status,
         }));
   if (

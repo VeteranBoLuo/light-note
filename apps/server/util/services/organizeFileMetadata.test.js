@@ -124,3 +124,30 @@ it.each(['filename', 'text', 'visual'])('行驶证的%s依据允许推荐标签�
   const result = await suggestResourceMetadata(current, ['tags'], [{ id: 'unrelated', name: '网络安全' }]);
   expect(result.tags).toEqual([expect.objectContaining({ name: '行驶证', id: null, source: 'new', evidenceType: kind })]);
 });
+it('文件名称与标签共用内容分析，保留原扩展名；无内容或无依据不猜名称', async () => {
+  callStructuredSkillModel.mockImplementation(async (request) =>
+    request.validateArguments({
+      title: { name: '项目面试准备', evidence: '项目面试准备', confidence: 0.97 },
+      tags: [],
+    }),
+  );
+  const result = await suggestResourceMetadata(snapshot('项目面试准备要点', 'IMG_123456.PDF'), ['title', 'tags'], []);
+  expect(result.title).toEqual({ name: '项目面试准备.PDF', evidence: '项目面试准备' });
+  expect(callStructuredSkillModel).toHaveBeenCalledOnce();
+  expect((await suggestResourceMetadata(snapshot('完全不相关内容', 'IMG_123.pdf'), ['title'], [])).title).toBeNull();
+  callStructuredSkillModel.mockClear();
+  expect((await suggestResourceMetadata(snapshot('', 'IMG_123.pdf'), ['title'], [])).title).toBeNull();
+  expect(callStructuredSkillModel).not.toHaveBeenCalled();
+});
+it('长文件从全部内容生成名称候选，再汇总选择；拒绝候选范围外名称', async () => {
+  callStructuredSkillModel.mockImplementation(async (request) => {
+    if (request.structuredTool.name === 'select_file_topics') {
+      expect(() => request.validateArguments({ indexes: [], titleIndex: 999 })).toThrow('格式无效');
+      return request.validateArguments({ indexes: [], titleIndex: 1 });
+    }
+    return request.validateArguments({ title: { name: '项目总结', evidence: '项目', confidence: 0.96 }, tags: [] });
+  });
+  const result = await suggestResourceMetadata(snapshot('项目'.repeat(7000), 'IMG_123.txt'), ['title'], []);
+  expect(result.title.name).toBe('项目总结.txt');
+  expect(callStructuredSkillModel).toHaveBeenCalledTimes(3);
+});

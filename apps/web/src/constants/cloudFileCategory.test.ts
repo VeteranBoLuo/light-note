@@ -1,3 +1,8 @@
+import {
+  FILE_CATEGORY_CASES,
+  FILE_CATEGORY_PARITY_INPUTS,
+} from '../../../../packages/shared/fileCategory.cases.js';
+import { resolveFileCategory, resolveFilePreviewType } from '@lightnote/shared/file-category';
 import { describe, expect, it, vi } from 'vitest';
 import {
   getCloudFileCategory,
@@ -9,6 +14,27 @@ import {
 } from './cloudFileCategory';
 
 describe('cloudFileCategory preview compatibility', () => {
+  it.each(['text/csv', 'text/plain', 'application/octet-stream', 'application/vnd.ms-excel', ''])(
+    'CSV 覆盖历史文本分类与通用 MIME：%s',
+    (fileType) => {
+      const file = { fileName: '方案对比表.CSV', fileType, category: 'text' };
+      expect(getCloudFileCategory(file)).toBe('excel');
+      expect(getCloudPreviewType(file)).toBe('csv');
+      expect(isLegacyOfficeFile(file)).toBe(false);
+    },
+  );
+  it('无扩展名可按 CSV MIME 识别，明确的普通文本名称保持文本预览', () => {
+    for (const fileType of [
+      'text/csv; charset=utf-8',
+      'text/csv ; charset=utf-8',
+      'application/csv',
+      'text/x-csv',
+      'application/x-csv',
+    ]) {
+      expect(getCloudPreviewType({ fileName: '数据', fileType })).toBe('csv');
+    }
+    expect(getCloudPreviewType({ fileName: 'readme.txt', fileType: 'text/csv' })).toBe('text');
+  });
   it.each([
     ['legacy.doc', 'application/msword'],
     ['legacy.xls', 'application/vnd.ms-excel'],
@@ -28,9 +54,14 @@ describe('cloudFileCategory preview compatibility', () => {
     expect(getCloudPreviewType({ fileName, fileType })).toBe('converted-pdf');
   });
 
-  it.each(['zip', 'rar', '7z', 'tar', 'tgz', 'tbz2', 'txz', 'gz', 'bz2', 'xz'])('压缩文件 .%s 进入目录预览', (ext) => {
-    expect(getCloudPreviewType({ fileName: `archive.${ext}`, fileType: 'application/octet-stream' })).toBe('archive');
-  });
+  it.each(['zip', 'rar', '7z', 'tar', 'tgz', 'tbz2', 'txz', 'gz', 'bz2', 'xz'])(
+    '压缩文件 .%s 进入目录预览',
+    (ext) => {
+      expect(getCloudPreviewType({ fileName: `archive.${ext}`, fileType: 'application/octet-stream' })).toBe(
+        'archive',
+      );
+    },
+  );
 
   it('未知压缩格式仍保持不可预览，不因 compress 分类误进入派生任务', () => {
     expect(getCloudPreviewType({ fileName: 'archive.cab', category: 'compress' })).toBe('unsupported');
@@ -68,14 +99,30 @@ describe('cloudFileCategory preview compatibility', () => {
     expect(getCloudPreviewType(file)).toBe('text');
   });
 
-  it.each(['py', 'java', 'go', 'rs', 'cpp', 'sql', 'sh', 'vue', 'toml', 'ini', 'tsv', 'jsonl', 'srt', 'vtt', 'lrc', 'LRC', 'ics', 'diff'])(
-    '源码或配置文件 .%s 可以进入文本预览',
-    (ext) => {
-      const file = { fileName: `source.${ext}`, fileType: 'application/octet-stream' };
-      expect(getCloudFileCategory(file)).toBe('text');
-      expect(getCloudPreviewType(file)).toBe('text');
-    },
-  );
+  it.each([
+    'py',
+    'java',
+    'go',
+    'rs',
+    'cpp',
+    'sql',
+    'sh',
+    'vue',
+    'toml',
+    'ini',
+    'tsv',
+    'jsonl',
+    'srt',
+    'vtt',
+    'lrc',
+    'LRC',
+    'ics',
+    'diff',
+  ])('源码或配置文件 .%s 可以进入文本预览', (ext) => {
+    const file = { fileName: `source.${ext}`, fileType: 'application/octet-stream' };
+    expect(getCloudFileCategory(file)).toBe('text');
+    expect(getCloudPreviewType(file)).toBe('text');
+  });
 
   it.each([
     ['clip.mp4', 'video/mp4', 'video/mp4'],
@@ -99,5 +146,18 @@ describe('cloudFileCategory preview compatibility', () => {
     expect(getCloudMediaPlaybackSupport({ fileName: 'clip.mp4' }, supported)).toBe('supported');
     expect(getCloudMediaPlaybackSupport({ fileName: 'legacy.avi' }, supported)).toBe('unsupported');
     expect(getCloudMediaPlaybackSupport({ fileName: 'unknown.video' }, supported)).toBe('unknown');
+  });
+});
+
+describe('shared format contract', () => {
+  it.each(FILE_CATEGORY_CASES)('%j → %s / %s', (file, expected, preview) => {
+    expect(getCloudFileCategory(file)).toBe(expected);
+    expect(getCloudPreviewType(file)).toBe(preview);
+  });
+  it('all format aliases use shared classification and independent preview rules', () => {
+    for (const file of FILE_CATEGORY_PARITY_INPUTS) {
+      expect(getCloudFileCategory(file)).toBe(resolveFileCategory(file));
+      expect(getCloudPreviewType(file)).toBe(resolveFilePreviewType(file));
+    }
   });
 });

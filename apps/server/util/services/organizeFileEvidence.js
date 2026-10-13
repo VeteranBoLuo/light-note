@@ -11,19 +11,7 @@ import { suggestionError } from './organizeSuggestionRules.js';
 const parse = (value) => (typeof value === 'string' ? JSON.parse(value) : value);
 const imagePattern = /\.(png|jpe?g|webp)$/iu;
 export const FILE_UNDERSTANDING_VERSION = 1;
-export function hasMeaningfulFileName(title) {
-  const stem = path
-    .parse(String(title || ''))
-    .name.normalize('NFKC')
-    .trim();
-  return (
-    stem.length >= 2 &&
-    !/^(?:(?:untitled|file|image|document|screenshot|新建文档|未命名|无标题|图片|文件)[_\s-]*\d*)$/iu.test(stem) &&
-    !/^(?:[\p{N}\p{P}\p{S}\s_]+|[a-f\d-]{20,}|(?:paste|img|dsc|screenshot|微信图片|屏幕截图)[_\s-]*\d[\w\s-]*)$/iu.test(
-      stem,
-    )
-  );
-}
+export { hasMeaningfulFileName } from './organizeFileName.js';
 function objectFingerprint(source) {
   return crypto
     .createHash('sha256')

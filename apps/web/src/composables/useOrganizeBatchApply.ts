@@ -9,7 +9,7 @@ export function canBatchApply(s: WorkspaceSuggestion) {
       ? Boolean(s.archivePreview)
       : s.kind === 'tags'
         ? Array.isArray(s.after) && s.after.length > 0
-        : s.kind === 'title' && typeof s.after === 'string' && Boolean(s.after.trim()))
+        : ['title', 'description'].includes(s.kind) && typeof s.after === 'string' && Boolean(s.after.trim()))
   );
 }
 export function useOrganizeBatchApply(

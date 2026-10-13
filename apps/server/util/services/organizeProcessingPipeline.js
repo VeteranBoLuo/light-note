@@ -15,6 +15,7 @@ import { writeSuggestions } from './organizeSuggestionLifecycle.js';
 import { prepareTagIconRoute, recommendTagIcons } from '../tagIconService.js';
 import { prepareResourceMetadata } from './organizeSuggestionModel.js';
 import { prepareOrganizeFile } from './organizeFileEvidence.js';
+import { saveBookmarkHealthObservation, getBookmarkHealthItem } from '../linkHealth.js';
 import { prepareOrganizeArchive } from './organizeArchiveDraft.js';
 import { availableResourceSql, pendingReviewSql } from './organizeSuggestionAvailability.js';
 
@@ -63,7 +64,7 @@ export async function runOrganizeInspection(_workerId, db = pool, dependencies =
         });
         for (const item of selected) {
           const source = sources.find((s) => s.id === item.resource_id);
-          const skipped = !source || source.hasCustomIcon;
+          const skipped = !source || (source.hasCustomIcon && !json(run.options_json).checks.includes('tag_merge'));
           await c.query('UPDATE organize_suggestion_items SET rule_status=? WHERE id=?', [
             skipped ? 'skipped' : 'checked',
             item.id,
@@ -111,7 +112,7 @@ export async function markProcessingAi(c, runId, itemId, status, token = null, e
 }
 
 export const manualSuggestionSql = () =>
-  `s.status IN ('insufficient','no_suggestion') AND s.kind IN ('tags','title','tag_icon')`;
+  `s.status IN ('insufficient','no_suggestion') AND s.kind IN ('tags','title','description','tag_icon')`;
 export async function readOrganizeOutcomes(c, run, itemOutcomes, jobs) {
   const v3 = Number(run.run_version) === 3;
   const [rows] = await c.query(
@@ -319,7 +320,7 @@ async function prepareItem(db, job, dependencies) {
       'skipped',
     );
   const options = json(job.run.options_json);
-  const checks = options.checks.filter((k) => !['duplicate', 'archive'].includes(k));
+  const checks = options.checks.filter((k) => !['duplicate', 'archive', 'bookmark_health'].includes(k));
   // Frozen names are enough for title ambiguity; no global body-read barrier.
   const frozenTitle = json(job.item.snapshot_json).frozenTitle ?? source.title;
   const repeated = (json(job.run.summary_json).duplicateTitleHashes || []).includes(
@@ -329,24 +330,22 @@ async function prepareItem(db, job, dependencies) {
   const entry = buildRuleSuggestions([source, ...peers], checks, options)[0];
   entry.itemId = job.item_id;
   let prepared = null;
-  if (entry.aiKinds.length && source.type === 'tag') {
+  let freeIcon = null;
+  if (entry.aiKinds.includes('tag_icon') && source.type === 'tag') {
     const route = (dependencies.route || prepareTagIconRoute)(source.title);
     if (!route.needsAi) {
-      return finishDirect(db, job, async (c, run) => {
-        await storeSource(c, job, source);
-        await writeSuggestions(c, run, [entry]);
-        await addJob(c, run, job.item_id, 'tag_icon', 'direct', 'queued', {
-          keywords: route.keywords,
-          version: source.version,
-        });
-      });
+      freeIcon = { keywords: route.keywords, version: source.version };
+      entry.aiKinds = entry.aiKinds.filter((kind) => kind !== 'tag_icon');
     }
   }
-  if (entry.aiKinds.length && source.type === 'bookmark')
-    prepared = {
-      version: source.version,
-      bookmark: await (dependencies.prepareBookmark || prepareResourceMetadata)(source),
-    };
+  if (entry.aiKinds.length && source.type === 'bookmark') {
+    prepared = { version: source.version };
+    try {
+      prepared.bookmark = await (dependencies.prepareBookmark || prepareResourceMetadata)(source, entry.aiKinds);
+    } catch (error) {
+      prepared.bookmarkError = { code: error.code || 'BOOKMARK_PAGE_UNREADABLE', message: '网页暂时无法读取' };
+    }
+  }
   if (entry.aiKinds.length && source.type === 'file') {
     const file = await (dependencies.prepareFile || prepareOrganizeFile)(
       db,
@@ -376,6 +375,9 @@ async function prepareItem(db, job, dependencies) {
   await finishDirect(db, job, async (c, run) => {
     await storeSource(c, job, latest);
     await writeSuggestions(c, run, [entry]);
+    if (freeIcon) await addJob(c, run, job.item_id, 'tag_icon', 'direct', 'queued', freeIcon);
+    if (options.checks.includes('bookmark_health') && source.type === 'bookmark')
+      await addJob(c, run, job.item_id, 'bookmark_health');
     if (options.checks.includes('archive') && source.type === 'bookmark') await addJob(c, run, job.item_id, 'archive');
     if (options.checks.includes('duplicate') && supportsOrganizeCheck(source.type, 'duplicate')) {
       await addJob(c, run, job.item_id, 'duplicate', 'direct', 'waiting');
@@ -447,6 +449,30 @@ async function processDirectResult(db, job, dependencies) {
       after: candidates[0] || null,
       candidates,
       reason: candidates.length ? '根据标签名称匹配图标' : '暂无合适推荐，可手动选择',
+    };
+  } else if (job.kind === 'bookmark_health') {
+    const observation = await (dependencies.health || saveBookmarkHealthObservation)(
+      job.user_id,
+      { id: source.id, url: source.source.url },
+      { db },
+    );
+    if (!observation.saved) throw suggestionError('ORGANIZE_RESOURCE_CHANGED', '书签网址已变化', 409);
+    const health = await (dependencies.healthItem || getBookmarkHealthItem)(job.user_id, source.id, db);
+    const state = health?.effectiveStatus || 'unknown';
+    suggestion = {
+      kind: 'bookmark_health',
+      status: state === 'suspect' ? 'pending' : ['alive', 'user_normal'].includes(state) ? 'not_applicable' : 'info',
+      before: null,
+      after: null,
+      action: 'bookmark_health',
+      reason:
+        state === 'suspect'
+          ? `网址疑似失效（${health.observedCode}），可进入失效检查进一步确认`
+          : state === 'user_normal'
+            ? '已由你标记正常，本次保留该决定'
+            : state === 'alive'
+              ? '网址可以访问'
+              : '暂时无法判断网址状态，网络超时不视为失效',
     };
   } else {
     const draft = await (dependencies.archive || prepareOrganizeArchive)(job.user_id, source);
@@ -571,7 +597,18 @@ export async function reclassifyCachedIcons(_workerId, db = pool) {
       for (const item of items) {
         const source = json(item.snapshot_json),
           route = prepareTagIconRoute(source.title);
-        if (route.needsAi) {
+        const kinds = json(item.ai_kinds_json) || [];
+        if (!route.needsAi && kinds.includes('tag_merge') && kinds.includes('tag_icon')) {
+          await addJob(c, run, item.id, 'tag_icon', 'direct', 'queued', {
+            keywords: route.keywords, version: source.version,
+          });
+          await c.query('UPDATE organize_suggestion_items SET ai_kinds_json=? WHERE id=?', [
+            JSON.stringify(kinds.filter((kind) => kind !== 'tag_icon')), item.id,
+          ]);
+          changed = true;
+          continue;
+        }
+        if (route.needsAi || kinds.includes('tag_merge')) {
           await c.query(
             "UPDATE organize_processing_jobs SET next_check_at=DATE_ADD(NOW(),INTERVAL 30 SECOND) WHERE run_id=? AND item_id=? AND kind='analysis' AND status='queued'",
             [run.id, item.id],

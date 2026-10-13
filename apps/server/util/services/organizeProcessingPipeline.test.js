@@ -333,3 +333,60 @@ it('手动应用解决图标失败，但不消除其他尚未完成的检查', a
   expect(outcomes.get('icon').work).toEqual([{ kind: 'analysis', lane: 'ai', status: 'failed', resolved: true }]);
   expect(outcomes.get('mixed').work[0].resolved).toBe(false);
 });
+it.each(['suspect', 'alive', 'unknown', 'user_normal'])(
+  '失效检查复用观测并尊重有效状态 %s',
+  async (effectiveStatus) => {
+    const bookmark = buildSnapshot('bookmark', { id: 'b', name: '网页', url: 'https://example.com' });
+    const db = directDb('bookmark_health', (sql) =>
+      sql.startsWith('SELECT * FROM organize_suggestion_items')
+        ? [[{ ...item, resource_type: 'bookmark', resource_id: 'b', version_hash: bookmark.version }]]
+        : undefined,
+    );
+    const health = vi.fn(async () => ({ saved: true, status: 'unknown', code: 'TIMEOUT' }));
+    await runOrganizeDirect('w', db, {
+      source: async () => bookmark,
+      health,
+      healthItem: async () => ({ effectiveStatus, observedCode: '404' }),
+    });
+    expect(health).toHaveBeenCalledWith('u', { id: 'b', url: 'https://example.com' }, { db });
+    const values = db.query.mock.calls.find(([sql]) =>
+      sql.startsWith('UPDATE organize_suggestions SET status=?,payload_json=?'),
+    )[1];
+    expect(values[0]).toBe(
+      effectiveStatus === 'suspect' ? 'pending' : effectiveStatus === 'unknown' ? 'info' : 'not_applicable',
+    );
+    expect(JSON.parse(values[1])).toMatchObject({ kind: 'bookmark_health', action: 'bookmark_health' });
+  },
+);
+it('免费图标与同义标签分析可同时排队，缓存命中不能吞掉合并任务', async () => {
+  prepareTagIconRoute.mockReturnValue({ needsAi: false, keywords: ['book'] });
+  const mixed = { ...run, options_json: { ...options, checks: ['tag_icon', 'tag_merge'] } };
+  const db = directDb('prepare', (sql) =>
+    sql.startsWith('SELECT * FROM organize_suggestion_runs') ? [[mixed]] : undefined,
+  );
+  await runOrganizeDirect('w', db, { source: async () => source });
+  expect(inserts(db).map((j) => [j.kind, j.lane])).toEqual([
+    ['tag_icon', 'direct'],
+    ['analysis', 'ai'],
+  ]);
+  const pausedDb = database((sql) => {
+    if (sql.startsWith('SELECT * FROM organize_suggestion_runs')) return [[{ ...mixed, status: 'paused' }]];
+    if (sql.startsWith('SELECT i.*')) return [[{ ...item, ai_kinds_json: ['tag_merge'], snapshot_json: source }]];
+  });
+  expect(await reclassifyCachedIcons('w', pausedDb)).toBe(false);
+  expect(pausedDb.query.mock.calls.some(([sql]) => sql.includes("lane='direct',kind='tag_icon'"))).toBe(false);
+});
+it('暂停中的混合任务新命中图标缓存，只释放免费图标，保留合并队列', async () => {
+  prepareTagIconRoute.mockReturnValue({ needsAi: false, keywords: ['book'] });
+  const db = database((sql) => {
+    if (sql.startsWith('SELECT * FROM organize_suggestion_runs')) return [[{ ...run, status: 'paused' }]];
+    if (sql.startsWith('SELECT i.*'))
+      return [[{ ...item, ai_kinds_json: ['tag_merge', 'tag_icon'], snapshot_json: source }]];
+  });
+  expect(await reclassifyCachedIcons('w', db)).toBe(true);
+  expect(inserts(db).map((j) => [j.kind, j.lane])).toEqual([['tag_icon', 'direct']]);
+  expect(db.query.mock.calls).toContainEqual([
+    'UPDATE organize_suggestion_items SET ai_kinds_json=? WHERE id=?',
+    ['["tag_merge"]', 'i'],
+  ]);
+});

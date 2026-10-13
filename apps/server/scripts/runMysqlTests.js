@@ -36,6 +36,8 @@ const suites = {
   'util/services/cloudFolderTreeService.sort.mysql.test.js': 'API_SORT_MYSQL_SOCKET',
   'util/services/growthMeasurement.mysql.test.js': 'M01_TEST_MYSQL_SOCKET',
   'util/services/coreUsageReport.mysql.test.js': 'M02_TEST_MYSQL_SOCKET',
+  'util/fileCategory.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
+  'util/services/organizeTagMerge.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
 };
 
 async function main() {

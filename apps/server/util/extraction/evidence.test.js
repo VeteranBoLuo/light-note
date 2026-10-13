@@ -38,6 +38,78 @@ describe('提取值与原文展示格式的确定性等价', () => {
     expect(check('必须', '推荐采用方案 A')).toEqual(['value_not_in_cited_text']);
     expect(checkEvidence('禁止、发布', 'text', [ref('禁止上线'), ref('允许发布')])).not.toEqual([]);
   });
+  it.each([
+    [
+      '该命令将完成：源码构建（含 TS 编译、资源打包）、镜像生成、本地标签（如 `demo:latest`）',
+      ['该命令将完成：', '  – 源码构建（含 TS 编译、资源打包）', '  – 镜像生成', '  – 本地标签（如 `demo:latest`）'],
+    ],
+    [
+      '① 先启动 `demo-child`（监听如 4101）；② 再启动 `demo-shell`（监听如 4100）',
+      ['① 先启动 `demo-child`（监听如 4101）；', '② 再启动 `demo-shell`（监听如 4100）；'],
+    ],
+    ['4101、4100', ['先启动子应用（监听如 4101）；', '再启动主应用（监听如 4100）；']],
+    [
+      '修改 `.env` 文件：将 `OLD_URL` 替换为：https://example.test；同步更新至 **`example.test` 域名**。',
+      [
+        '* 修改 `.env` 文件：',
+        '* 将 `OLD_URL` 替换为：',
+        '[https://example.test](https://example.test)',
+        '* 同步更新至 **`example.test` 域名**。',
+      ],
+    ],
+    [
+      'https://example.test、https://api.example.test',
+      ['[https://example.test](https://example.test)', '例如：`https://api.example.test`。'],
+    ],
+    [
+      '推荐 · 快速预览；已验证可正常启动，适用于编写与即时查看',
+      ['**方案 A（推荐 · 快速预览）**：', '`pnpm dev` —— 已验证可正常启动，适用于编写与即时查看。'],
+    ],
+    ['`SESSION_NAME`、`SESSION_VALUE`', ['– `SESSION_NAME`', '– `SESSION_VALUE`']],
+    [
+      '必须设置；仅需两项；请从测试环境复制当前值',
+      ['* **调试参数（必须设置）**：', '（注：仅需两项；请从测试环境复制当前值）'],
+    ],
+    ['进入 `demo` 目录，将其值设为：`"mode": "local"`', ['5\\. 进入 `demo` 目录，将其值设为：', '`"mode": "local"`；']],
+  ])('完整引用片段可用分隔符拼接，保留代码字面内容：%s', (value, quotes) => {
+    expect(
+      checkEvidence(
+        value,
+        'text',
+        quotes.map((q) => ref(q)),
+      ),
+    ).toEqual([]);
+  });
+  it('拼接不是拆词或语义改写，也不能改动字面值、借用链接或代码内部片段', () => {
+    const cases = [
+      ['编辑 package.json 中 mode 字段', ['进入目录，编辑 `package.json`，在配置中定位 `"mode"` 字段。']],
+      ['用户名：demo-wrong；密码：test-only', ['用户名：demo-user', '密码：test-only']],
+      ['用户名：demo-wrong；密码：test-only', ['用户名：demo-user', '示例：`demo-wrong`', '密码：test-only']],
+      ['禁止、发布', ['禁止（测试文件）发布']],
+      ['禁止、发布', ['禁止上线', '允许发布']],
+      ['1、2', ['端口 11', '端口 22']],
+      ['1、2', ['温度 -1', '比率 2.5']],
+      ['1、2', ['值 1,000', '版本 v2']],
+      ['1、2', ['费用 1元', '费用 2元']],
+      ['https://example.test、ok', ['[https://example.test](https://different.test)', '`ok`']],
+      ['删除、文件', ['~~删除~~', '文件']],
+      ['a；b', ['`x:a;y:b`']],
+      ['echo ab、done', ['`echo a*b`', '`done`']],
+      ['甲乙', ['甲', '乙']],
+    ];
+    for (const [value, quotes] of cases)
+      expect(
+        checkEvidence(
+          value,
+          'text',
+          quotes.map((q) => ref(q)),
+        ),
+        value,
+      ).toEqual(['value_not_in_cited_text']);
+    expect(
+      checkEvidence('`left`、`right`', 'text', [ref('`left`', { kind: 'ocr' }), ref('`right`', { kind: 'ocr' })]),
+    ).not.toEqual([]);
+  });
   it.each(['1. 启动服务', '1\\. 启动服务', '1) 启动服务', '**1**. 启动服务', '步骤 1：启动服务'])(
     '明确步骤编号通过：%s',
     (quote) => expect(check('1', quote, 'number')).toEqual([]),
@@ -136,5 +208,18 @@ describe('已保存结果的只读依据复核', () => {
     const result = revalidateRecordEvidence(record, [{ id: 'f1', type: 'number' }]);
     expect(result.cells[0].status).toBe('evidence_incomplete');
     expect(result.reviews).toEqual(record.reviews);
+  });
+  it('已保存的逐段摘录重新判断，仍保留人工核对与原始证据', () => {
+    const record = {
+      cells: [cell({ originalValue: '`left`、`right`', evidence: [ref('– `left`'), ref('– `right`')] })],
+      reviews: { f1: { overridden: true, value: '', checked: false } },
+    };
+    const original = structuredClone(record);
+    const result = revalidateRecordEvidence(record, fields);
+    expect(result.cells[0].status).toBe('found');
+    expect(result.cells[0].originalValue).toBe(original.cells[0].originalValue);
+    expect(result.cells[0].evidence).toEqual(original.cells[0].evidence);
+    expect(result.reviews).toEqual(original.reviews);
+    expect(record).toEqual(original);
   });
 });

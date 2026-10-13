@@ -121,7 +121,7 @@ async function toChecks() {
 }
 async function toScope() {
   await toChecks();
-  await selectOptions(['标签建议', '笔记标题', '空内容检查', '重复检查', '网页正文存档']);
+  await selectOptions(['标签建议', '名称／标题', '空内容检查', '重复检查', '网页正文存档']);
   button('下一步：定范围').click();
   await settle();
 }
@@ -157,7 +157,7 @@ it('对象和项目默认不勾选，手动选择后返回保留选择', async (
   await toChecks();
   expect(button('下一步：定范围').disabled).toBe(true);
   expect(document.querySelectorAll('[aria-pressed="true"]').length).toBe(0);
-  await selectOptions(['标签建议', '笔记标题', '空内容检查', '重复检查', '网页正文存档']);
+  await selectOptions(['标签建议', '名称／标题', '空内容检查', '重复检查', '网页正文存档']);
   button('下一步：定范围').click();
   await settle();
   expect(document.body.textContent).toContain('最近新增');
@@ -217,7 +217,7 @@ it('无 AI 建议也支持手动编辑标题和新增标签', async () => {
   api.getRun.mockResolvedValue(ok(run));
   await mount();
   await openGroup('manual');
-  button('填写标题').click();
+  button('填写名称／标题').click();
   await settle();
   const input = document.querySelector<HTMLInputElement>('.suggestion-edit input')!;
   input.value = '手动标题';
@@ -227,6 +227,71 @@ it('无 AI 建议也支持手动编辑标题和新增标签', async () => {
   await settle();
   expect(api.actOnRunSuggestion).toHaveBeenCalledWith('r', 's', 'apply', '手动标题', expect.any(String));
 });
+it('描述补全可独立选择，混合类型只预检书签', async () => {
+  await mount();
+  button('重新整理').click();
+  await settle();
+  await toChecks();
+  await selectOptions(['书签描述']);
+  button('下一步：定范围').click();
+  await settle();
+  button('确认整理范围').click();
+  await settle();
+  expect(api.previewRun.mock.calls.at(-1)![0]).toMatchObject({ resourceTypes: ['bookmark'], checks: ['description'] });
+});
+it.each(['pending', 'insufficient'])('描述建议 %s 可审核或手动补充，使用多行输入', async (status) => {
+  const run = result();
+  run.options = { resourceTypes: ['bookmark'], checks: ['description'], scope: 'all', items: [] };
+  run.items = [
+    {
+      id: 'i',
+      aiStatus: 'completed',
+      ruleStatus: 'completed',
+      resource: {
+        id: 'b',
+        type: 'bookmark',
+        title: '字体目录',
+        source: { folder: '' },
+        guards: {},
+        tags: [],
+        evidenceLevel: 'content',
+      },
+      suggestions: [
+        {
+          id: 'description',
+          kind: 'description',
+          status,
+          reason: '',
+          before: '',
+          after: status === 'pending' ? '开源字体目录' : null,
+        },
+      ],
+    },
+  ];
+  api.listRuns.mockResolvedValue(ok([run]));
+  api.getRun.mockResolvedValue(ok(run));
+  await mount();
+  await openGroup(status === 'pending' ? 'priority' : 'manual');
+  if (status === 'pending') expect(document.body.textContent).toContain('开源字体目录');
+  button(status === 'pending' ? '编辑' : '填写描述').click();
+  await settle();
+  const input = document.querySelector<HTMLTextAreaElement>('.suggestion-edit textarea')!;
+  expect(input).toBeTruthy();
+  expect(input.maxLength).toBe(255);
+  input.value = '可商用的开源字体目录';
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  await settle();
+  button('保存并应用').click();
+  await settle();
+  expect(api.actOnRunSuggestion).toHaveBeenCalledWith(
+    'r',
+    'description',
+    'apply',
+    '可商用的开源字体目录',
+    expect.any(String),
+  );
+});
+
 it('只展示最新任务，读取失败可以重试且不再显示旧历史入口', async () => {
   api.listRuns.mockRejectedValue(new Error('整理服务尚未就绪'));
   await mount();
@@ -239,33 +304,37 @@ it('只展示最新任务，读取失败可以重试且不再显示旧历史入�
   expect(document.querySelector('[aria-label="整理历史"]')).toBeNull();
 });
 
-it('标题单项仅预检笔记，手动选择器和范围摘要同步排除其他类型', async () => {
+it('名称单项支持三种资料，手动选择器保持所选类型', async () => {
   await mount();
   button('重新整理').click();
   await settle();
   await toChecks();
-  await selectOptions(['笔记标题']);
-  expect(document.body.textContent).toContain('书签 · 文件没有适用');
+  await selectOptions(['名称／标题']);
+  expect(document.body.textContent).not.toContain('文件没有适用');
   button('下一步：定范围').click();
   await settle();
   button('确认整理范围').click();
   await settle();
-  expect(api.previewRun.mock.calls.at(-1)![0]).toMatchObject({ resourceTypes: ['note'], checks: ['title'] });
+  expect(api.previewRun.mock.calls.at(-1)![0]).toMatchObject({
+    resourceTypes: ['bookmark', 'note', 'file'],
+    checks: ['title'],
+  });
   button('上一步').click();
   await settle();
   button('手动选择').click();
   await settle();
-  expect(document.querySelector('.picker-stub')?.getAttribute('data-types')).toBe('note');
+  expect(document.querySelector('.picker-stub')?.getAttribute('data-types')).toBe('bookmark');
   expect(button('确认整理范围').disabled).toBe(true);
 });
-it('仅书签不展示标题和空内容，空选择禁止继续且不发起预检', async () => {
+it('书签展示名称与描述、不展示空内容，空选择禁止继续且不发起预检', async () => {
   await mount();
   button('重新整理').click();
   await settle();
   await selectOptions(['书签']);
   button('下一步：选项目').click();
   await settle();
-  expect(button('笔记标题')).toBeUndefined();
+  expect(button('名称／标题')).toBeTruthy();
+  expect(button('书签描述')).toBeTruthy();
   expect(button('空内容检查')).toBeUndefined();
   for (const name of ['标签建议', '重复检查', '网页正文存档']) {
     button(name).click();
@@ -1886,4 +1955,58 @@ it('已处理筛选向服务端传递，空结果仍保留筛选入口', async (
   expect(api.getRun.mock.lastCall?.[1]).toMatchObject({ reviewState: 'ignored', after: '' });
   expect(document.querySelector('.group-reviewed')).not.toBeNull();
   expect(document.querySelector('.group-reviewed')?.textContent).toContain('当前显示 0 项');
+});
+it('标签合并展示目标与关联数，明确确认后才提交，不能批量应用', async () => {
+  api.alert.mockImplementation(() => {});
+  const run = result();
+  run.options = { resourceTypes: ['tag'], checks: ['tag_merge'], scope: 'all' };
+  run.items = [
+    {
+      id: 'i',
+      aiStatus: 'completed',
+      ruleStatus: 'completed',
+      resource: {
+        id: 'b',
+        type: 'tag',
+        title: '<JS>',
+        source: { folder: '' },
+        guards: {},
+        tags: [],
+        evidenceLevel: 'metadata',
+      },
+      suggestions: [
+        {
+          id: 'merge',
+          kind: 'tag_merge',
+          status: 'pending',
+          before: 'JS',
+          after: 'JavaScript',
+          reason: '同义缩写',
+          merge: { targetId: 'a', targetName: 'JavaScript', associationCount: 6 },
+        },
+      ],
+    },
+  ];
+  api.listRuns.mockResolvedValue(ok([run]));
+  api.getRun.mockResolvedValue(ok(run));
+  await mount();
+  await openGroup('priority');
+  expect(document.body.textContent).toContain('JavaScript');
+  button('确认合并').click();
+  await settle();
+  expect(api.actOnRunSuggestion).not.toHaveBeenCalled();
+  const confirmation = api.alert.mock.calls.at(-1)![0];
+  expect(confirmation.content).toContain('6');
+  expect(confirmation.content).toContain('&lt;JS&gt;');
+  expect(confirmation.content).not.toContain('<JS>');
+  expect(confirmation.content).toContain('JavaScript');
+  await confirmation.onOk();
+  await settle();
+  expect(api.actOnRunSuggestion).toHaveBeenCalledWith(
+    'r',
+    'merge',
+    'apply',
+    { confirmMerge: true, targetId: 'a' },
+    expect.any(String),
+  );
 });

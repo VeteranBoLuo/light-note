@@ -8,7 +8,10 @@ import { createPinia } from 'pinia';
 import TodoItem from './TodoItem.vue';
 import type { TodoItem as TodoItemType } from '@/api/todoApi';
 
-const todoItemSource = readFileSync(resolve(process.cwd(), 'src/components/todo/TodoItem.vue'), 'utf8').replace(/var\(--ui-(?:space|control|layout|font|card)-\d+, (\d+px)\)/g, '$1');
+const todoItemSource = readFileSync(resolve(process.cwd(), 'src/components/todo/TodoItem.vue'), 'utf8').replace(
+  /var\(--ui-(?:space|control|layout|font|card)-\d+, (\d+px)\)/g,
+  '$1',
+);
 
 const routerPush = vi.fn();
 const { recordOperation } = vi.hoisted(() => ({ recordOperation: vi.fn() }));
@@ -111,6 +114,12 @@ function mountTodoItem(
       messages: {
         'zh-CN': {
           common: { more: '更多', noMatch: '无匹配项', pleaseSelect: '请选择', searchPlaceholder: '搜索' },
+          todoWorkspace: {
+            nextReminder: '下次提醒',
+            reminderLabel: '提醒',
+            reminderState: { paused: '已暂停', past: '时间已过', unscheduled: '无后续提醒' },
+            moreTags: '查看另外 {count} 个标签',
+          },
           inbox: {
             todo: '待办',
             todoReopenCompletion: '撤回完成',
@@ -142,6 +151,8 @@ function mountTodoItem(
             todoPastReminder: '提醒时间已过：{time}',
             todoToday: '今天',
             todoTomorrow: '明天',
+            todoDue: '截止：{time}',
+            todoOverdue: '已逾期：{time}',
             todoLegacyCompletionBadge: '旧版完成触发重复',
             todoLegacyReminderBadge: '旧版多次提醒',
             todoSeriesPausedBadge: '系列已暂停',
@@ -179,8 +190,8 @@ function mountTodoItem(
 }
 
 afterEach(() => {
-  vi.useRealTimers();
   cleanup?.();
+  vi.useRealTimers();
   cleanup = undefined;
   routerPush.mockReset();
   recordOperation.mockReset();
@@ -190,6 +201,172 @@ afterEach(() => {
 });
 
 describe('TodoItem card preview', () => {
+  it('页面持续打开时，提醒到点会更新为时间已过', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-13T09:00:00'));
+    const { host } = mountTodoItem(
+      {
+        ...todo,
+        reminder: {
+          version: 1,
+          mode: 'once',
+          channels: ['in_app'],
+          once: { type: 'fixed_at', fixedAt: '2026-10-13 09:01:00' },
+          nextAt: '2026-10-13 09:01:00',
+        },
+      },
+      { workspace: true },
+    );
+    expect(host.querySelector('.todo-item__reminder-state')).toBeNull();
+    await vi.advanceTimersByTimeAsync(60_000);
+    await nextTick();
+    expect(host.querySelector('.todo-item__reminder-state')?.textContent?.trim()).toBe('时间已过');
+  });
+
+  it('跨午夜后更新提醒和截止的相对日期，截止到点后保留逾期标识', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-13T23:59:59'));
+    const { host } = mountTodoItem(
+      {
+        ...todo,
+        dueAt: '2026-10-14 00:01:00',
+        reminder: { mode: 'once_per_instance', channels: ['in_app'], nextAt: '2026-10-14 00:01:00' },
+      },
+      { workspace: true },
+    );
+    expect(host.querySelector('.todo-item__due-compact')?.textContent).toContain('明天');
+    expect(host.querySelector('.todo-item__reminder-time')?.textContent).toContain('明天');
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(host.querySelector('.todo-item__due-compact')?.textContent).toContain('今天');
+    expect(host.querySelector('.todo-item__reminder-time')?.textContent).toContain('今天');
+    expect(host.querySelector('.todo-item__due-labeled')?.textContent).toContain('截止');
+    await vi.advanceTimersByTimeAsync(61_000);
+    expect(host.querySelector('.todo-item__due-compact')).toBeNull();
+    expect(host.querySelector('.todo-item__due-labeled')?.textContent).toContain('已逾期');
+  });
+
+  it('长日期保持完整星期和时刻，保留原本文案', () => {
+    const { host } = mountTodoItem({ ...todo, dueAt: '2099-10-15 18:00:00' }, { workspace: true });
+    const parts = [...host.querySelectorAll('.todo-item__due-compact .todo-time-text__part')].map(
+      (el) => el.textContent,
+    );
+    expect(parts).toContain('（周四）');
+    expect(parts).toContain('18:00');
+    expect(host.querySelector('.todo-item__due-compact')?.textContent).not.toContain('截止');
+    expect(host.querySelector('.todo-item__due-labeled')?.textContent).toContain('截止');
+  });
+
+  it('工作区独立展示无截止的下一次提醒，并以延期后的 Job 时间为准', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-13T09:00:00'));
+    const { host } = mountTodoItem(
+      {
+        ...todo,
+        reminder: {
+          version: 1,
+          mode: 'once',
+          channels: ['in_app'],
+          once: { type: 'fixed_at', fixedAt: '2026-10-13 08:00:00' },
+          nextAt: '2026-10-13 11:30:00',
+        },
+      },
+      { workspace: true },
+    );
+    expect(host.querySelector('.todo-item__next-reminder')?.textContent).toContain('今天 11:30');
+    expect(host.querySelector('.todo-item__reminder-state')).toBeNull();
+    expect(host.querySelector('.todo-item__meta')?.textContent).toBe('');
+    expect(host.querySelector('.todo-reminder-summary')).toBeNull();
+    expect(host.querySelector('.todo-item')?.classList.contains('is-overdue')).toBe(false);
+  });
+
+  it('提醒与截止保留各自语义，同时位于同一个时间区', () => {
+    const { host } = mountTodoItem(
+      {
+        ...todo,
+        dueAt: '2099-10-13 18:00:00',
+        reminder: { mode: 'once_per_instance', channels: ['in_app'], nextAt: '2099-10-13 16:00:00' },
+      },
+      { workspace: true },
+    );
+    const timing = host.querySelector('.todo-item__timing')!;
+    expect(timing.querySelector('.todo-item__meta')?.textContent).toContain('18:00');
+    expect(timing.querySelector('.todo-item__next-reminder')?.textContent).toContain('16:00');
+  });
+
+  it.each([
+    { nextAt: '2026-10-13 11:30:00', paused: true, status: 'pending', expected: '已暂停' },
+    { nextAt: '2026-10-13 08:00:00', paused: false, status: 'pending', expected: '时间已过' },
+    { nextAt: null, paused: false, status: 'pending', expected: '无后续提醒' },
+    { nextAt: '2026-10-13 11:30:00', paused: false, status: 'completed', expected: '' },
+  ] as const)('工作区提醒运行状态不冒充未来提醒：$expected', ({ nextAt, paused, status, expected }) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-13T09:00:00'));
+    const { host } = mountTodoItem(
+      {
+        ...todo,
+        status,
+        reminder: {
+          version: 1,
+          mode: 'once',
+          channels: ['in_app'],
+          once: { type: 'fixed_at', fixedAt: '2026-10-13 14:00:00' },
+          nextAt,
+          paused,
+        },
+      },
+      { workspace: true },
+    );
+    const cell = host.querySelector('.todo-item__next-reminder')!;
+    if (expected) expect(cell.textContent).toContain(expected);
+    else expect(cell.textContent).toBe('');
+    expect(cell.textContent).not.toContain('14:00');
+    if (expected !== '时间已过') expect(cell.querySelector('.todo-item__reminder-time')).toBeNull();
+  });
+
+  it('提醒投递时间已过且没有后续 Job 时展示过去状态，不宣称已投递或逾期', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-13T09:00:00'));
+    const { host } = mountTodoItem(
+      {
+        ...todo,
+        reminder: {
+          version: 1,
+          mode: 'once',
+          channels: ['in_app'],
+          once: { type: 'fixed_at', fixedAt: '2026-10-13 08:00:00' },
+          nextAt: null,
+        },
+      },
+      { workspace: true },
+    );
+    const cell = host.querySelector('.todo-item__next-reminder')!;
+    expect(cell.textContent).toContain('今天 08:00');
+    expect(cell.textContent).toContain('时间已过');
+    expect(cell.textContent).not.toContain('已提醒');
+    expect(host.querySelector('.todo-item')?.classList.contains('is-overdue')).toBe(false);
+  });
+
+  it('收窄清单列后，折叠的标签仍可展开且不打开待办详情', async () => {
+    const { host, onPreview } = mountTodoItem(
+      {
+        ...todo,
+        tags: [
+          { id: 'tag-1', name: '工作' },
+          { id: 'tag-2', name: '计划' },
+          { id: 'tag-3', name: '长期' },
+        ],
+      },
+      { workspace: true },
+    );
+    const more = host.querySelector<HTMLButtonElement>('.todo-item__more-tags')!;
+    expect(more.textContent).toContain('+2');
+    more.click();
+    await nextTick();
+    expect(document.querySelector('.todo-item__hidden-tags')?.textContent).toContain('计划');
+    expect(document.querySelector('.todo-item__hidden-tags')?.textContent).toContain('长期');
+    expect(onPreview).not.toHaveBeenCalled();
+  });
+
   it.each(['tenMinutes', 'oneHour', 'threeHours', 'oneDay'])(
     '时间分组点击 %s 只触发对应提醒并关闭菜单',
     async (preset) => {
@@ -313,10 +490,17 @@ describe('TodoItem card preview', () => {
 
   it.each([false, true])('展开额外参考资料不触发预览或批量选择（批量模式：%s）', async (selectable) => {
     const first = todo.resourceRefs![0];
-    const { host, onPreview, onSelect } = mountTodoItem({
-      ...todo,
-      resourceRefs: [first, { ...first, id: 'note-2', title: '第二条资料' }, { ...first, id: 'missing', available: false }],
-    }, { selectable });
+    const { host, onPreview, onSelect } = mountTodoItem(
+      {
+        ...todo,
+        resourceRefs: [
+          first,
+          { ...first, id: 'note-2', title: '第二条资料' },
+          { ...first, id: 'missing', available: false },
+        ],
+      },
+      { selectable },
+    );
     await nextTick();
 
     expect(host.querySelectorAll('.todo-resource-link')).toHaveLength(1);

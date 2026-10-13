@@ -113,7 +113,11 @@
       "types": "./noteMathRenderer.d.ts",
       "default": "./noteMathRenderer.js"
     },
-    "./note-math-export-node": "./noteMathExportNode.js"
+    "./note-math-export-node": "./noteMathExportNode.js",
+    "./file-category": {
+      "types": "./fileCategory.d.ts",
+      "default": "./fileCategory.js"
+    }
   },
   "devDependencies": {
     "vitest": "^3.2.6"

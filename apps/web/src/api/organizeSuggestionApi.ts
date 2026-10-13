@@ -3,7 +3,8 @@ import type { OrganizeOverview } from '@lightnote/shared/organize-progress';
 import { apiBaseGet, apiBasePost } from '@/http/request';
 import type { OrganizeAiSuggestionTag } from './organizeApi';
 export type ResourceType = 'bookmark' | 'note' | 'file' | 'tag';
-export type CheckKind = 'tags' | 'title' | 'empty' | 'duplicate' | 'archive' | 'tag_icon';
+export type CheckKind =
+  'tags' | 'title' | 'description' | 'tag_merge' | 'bookmark_health' | 'empty' | 'duplicate' | 'archive' | 'tag_icon';
 export interface RunOptions {
   tagMode?: 'untagged' | 'append';
   resourceTypes: ResourceType[];
@@ -53,6 +54,7 @@ export interface FileReading {
   evidenceKinds?: string[];
 }
 export interface WorkspaceSuggestion {
+  merge?: { targetId: string; targetName: string; associationCount: number };
   reasonCode?: string;
   reading?: FileReading;
   candidates?: TagIconChoice[];

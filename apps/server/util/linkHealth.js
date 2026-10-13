@@ -447,8 +447,8 @@ function effectiveStatusSql(alias = 'h') {
   END`;
 }
 
-export async function getBookmarkHealthItem(userId, bookmarkId) {
-  const [rows] = await pool.query(
+export async function getBookmarkHealthItem(userId, bookmarkId, db = pool) {
+  const [rows] = await db.query(
     `SELECT b.id, b.name, b.url, h.observed_code AS observedCode, h.checked_at AS checkedAt,
             h.user_override AS userOverride, ${effectiveStatusSql()} AS effectiveStatus,
             (SELECT COUNT(*) FROM bookmark_snapshot snapshot

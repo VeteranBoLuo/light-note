@@ -4,7 +4,10 @@ const resourcesByCheck = Object.freeze({
   tag_icon: ['tag'],
   archive: ['bookmark'],
   tags: ['bookmark', 'note', 'file'],
-  title: ['note'],
+  title: ['bookmark', 'note', 'file'],
+  tag_merge: ['tag'],
+  bookmark_health: ['bookmark'],
+  description: ['bookmark'],
   empty: ['note', 'file'],
   duplicate: ['bookmark', 'note', 'file'],
 });

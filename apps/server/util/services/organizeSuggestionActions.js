@@ -1,3 +1,4 @@
+import { mergeOwnedTags } from './organizeTagMerge.js';
 import { applyOrganizeArchive } from './organizeArchiveDraft.js';
 import { normalizeName, suggestionError } from './organizeSuggestionRules.js';
 import { readCurrentSuggestionSource } from './organizeSuggestionSources.js';
@@ -11,6 +12,10 @@ export async function applySuggestionMutation(
   c,
   { userId, current, payload, value, kind, runId, preparedIcon, preparation },
 ) {
+  if (kind === 'tag_merge') {
+    if (current.type !== 'tag') throw suggestionError('ORGANIZE_MERGE_UNSUPPORTED', '仅标签支持合并');
+    return mergeOwnedTags(c, { userId, sourceId: current.id, proposal: payload.merge, value });
+  }
   if (kind === 'tag_icon') {
     if (current.type !== 'tag' || current.iconUrl.trim() || !preparedIcon)
       throw suggestionError('ORGANIZE_ICON_INVALID', '请选择图标，且仅能补全默认图标');
@@ -57,6 +62,25 @@ export async function applySuggestionMutation(
       source: 'manual',
     });
     return { applied: selected };
+  }
+  if (kind === 'description') {
+    if (current.type !== 'bookmark') throw suggestionError('ORGANIZE_DESCRIPTION_UNSUPPORTED', '仅书签支持描述补全');
+    if (String(current.bookmarkMeta?.description || '').trim())
+      throw suggestionError('ORGANIZE_RESOURCE_CHANGED', '书签已有描述，请重新检查', 409);
+    const description = value ?? payload.after;
+    if (
+      typeof description !== 'string' ||
+      !description.trim() ||
+      description.trim().length > 255 ||
+      /[\x00]/u.test(description)
+    )
+      throw suggestionError('ORGANIZE_DESCRIPTION_INVALID', '请填写 1 至 255 字的有效描述');
+    await c.query('UPDATE bookmark SET description=? WHERE id=? AND user_id=? AND del_flag=0', [
+      description.trim(),
+      current.id,
+      userId,
+    ]);
+    return { applied: description.trim() };
   }
   if (kind === 'title') {
     const name = normalizeName(value ?? payload.after);

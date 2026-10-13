@@ -75,7 +75,6 @@
               )
             }}</small>
             <span class="option-bottom">
-              <span v-if="check === 'tag_icon'">{{ t('organizeIcons.matching') }}</span>
               <span>{{
                 resourceNames(modelValue.resourceTypes.filter((type) => supportsOrganizeCheck(type, check)))
               }}</span></span
@@ -170,7 +169,13 @@
       </template>
 
       <template v-else-if="preview">
-        <p v-if="preview.options.resourceTypes.includes('file') && preview.options.checks.includes('tags')">{{ t('organizeFile.automatic') }}</p>
+        <p
+          v-if="
+            preview.options.resourceTypes.includes('file') &&
+            preview.options.checks.some((check) => ['tags', 'title'].includes(check))
+          "
+          >{{ t('organizeFile.automatic') }}</p
+        >
         <div class="wizard-context"
           ><strong>{{ resourceNames(preview.options.resourceTypes) }}</strong
           ><span>{{ checkNames }} · {{ scopeLabel(preview.options.scope) }}</span></div
@@ -194,7 +199,9 @@
             >
             <div
               ><span>{{ t('organizeWorkspace.aiCount') }}</span
-              ><strong>{{ previewUsesAi ? (preview.summary.aiTotal ?? t('organizeLifecycle.undetermined')) : 0 }}</strong
+              ><strong>{{
+                previewUsesAi ? (preview.summary.aiTotal ?? t('organizeLifecycle.undetermined')) : 0
+              }}</strong
               ><small>{{ t(previewUsesAi ? 'organizeWizard.aiWhenNeeded' : 'organizeWizard.noAi') }}</small></div
             ></div
           >
@@ -220,14 +227,14 @@
         <p v-else-if="preview.summary.skipped" class="wizard-hint">{{
           t('organizeIcons.skippedUnknown', { count: preview.summary.skipped })
         }}</p>
-        <p
-          v-if="!preview.summary.aiEnabled && previewUsesAi"
-          class="wizard-hint"
-          >{{ t('organizeWorkspace.aiDisabled') }}</p
-        >
+        <p v-if="!preview.summary.aiEnabled && previewUsesAi" class="wizard-hint">{{
+          t('organizeWorkspace.aiDisabled')
+        }}</p>
         <p v-if="!preview.summary.total" class="wizard-hint">{{ t('organizeWizard.noResources') }}</p>
         <p class="wizard-hint">{{ t('organizeWorkspace.confirmHint') }}</p>
-        <p class="wizard-hint">{{ t(previewUsesAi ? 'organizeLifecycle.billing' : 'organizeWizard.ruleOnlyBilling') }}</p>
+        <p class="wizard-hint">{{
+          t(previewUsesAi ? 'organizeLifecycle.billing' : 'organizeWizard.ruleOnlyBilling')
+        }}</p>
       </template>
       <p v-if="excludedTypes.length && step > 0 && step < 3" class="wizard-hint" role="status">{{
         t('organizeWizard.excluded', { names: resourceNames(excludedTypes) })
@@ -292,7 +299,17 @@
     content = ref<HTMLElement | null>(null);
   const steps = ['resources', 'checks', 'scope', 'confirm'] as const;
   const types: ResourceType[] = ['bookmark', 'note', 'file', 'tag'];
-  const checks: CheckKind[] = ['tags', 'title', 'empty', 'duplicate', 'archive', 'tag_icon'];
+  const checks: CheckKind[] = [
+    'tags',
+    'title',
+    'description',
+    'empty',
+    'duplicate',
+    'archive',
+    'bookmark_health',
+    'tag_icon',
+    'tag_merge',
+  ];
   const scopes = computed<RunOptions['scope'][]>(() =>
     effectiveTypes.value.includes('tag') ? ['recent', 'all', 'selected'] : ['recent', 'all', 'selected', 'untagged'],
   );
@@ -307,10 +324,13 @@
   );
   const previewUsesAi = computed(() => {
     const options = props.preview?.options;
-    return options?.checks.some((check) =>
-      ['tags', 'title', 'tag_icon'].includes(check) &&
-      options.resourceTypes.some((type) => supportsOrganizeCheck(type, check)),
-    ) ?? false;
+    return (
+      options?.checks.some(
+        (check) =>
+          ['tags', 'title', 'description', 'tag_icon', 'tag_merge'].includes(check) &&
+          options.resourceTypes.some((type) => supportsOrganizeCheck(type, check)),
+      ) ?? false
+    );
   });
   const effectiveTypes = computed(() =>
     applicableOrganizeResources(props.modelValue.resourceTypes, props.modelValue.checks),
@@ -708,6 +728,7 @@
     gap: var(--ui-space-10, 10px);
   }
   .option-bottom {
+    justify-content: flex-start;
     margin-top: auto;
     font-size: var(--ui-font-11, 11px);
     color: var(--desc-color);

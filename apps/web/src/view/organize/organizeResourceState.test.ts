@@ -56,6 +56,10 @@ it('本轮删除属于已处理，历史未知状态不伪装运行中', () => {
   expect(resourceGroup(item({ ruleStatus: undefined }), run)).toBe('unfinished');
   expect(resourceGroup(item({ ruleStatus: 'skipped' }), run)).toBe('skipped');
 });
+it('描述依据不足属于待补充，已应用后才归入已处理', () => {
+  expect(resourceGroup(item({ suggestions: [suggestion('insufficient', 'description')] }), run)).toBe('manual');
+  expect(resourceGroup(item({ suggestions: [suggestion('applied', 'description')] }), run)).toBe('reviewed');
+});
 it('服务端结论优先，旧 AI 字段不能覆盖它', () => {
   expect(resourceGroup(item({ outcome: 'unchanged', aiStatus: 'queued' }), run)).toBe('clear');
   expect(resourceGroup(item({ outcome: 'unfinished' }), run)).toBe('unfinished');

@@ -1096,7 +1096,8 @@
 </script>
 
 <style scoped lang="less">
-  .comparison-mode {
+  .toolbox-detail-options.comparison-mode {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     margin-bottom: var(--ui-space-16, 16px);
   }
   .toolbox-ocr-mode {

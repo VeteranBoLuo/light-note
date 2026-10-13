@@ -18,9 +18,9 @@
           :src="
             suggestion.kind === 'archive'
               ? icon.resource.bookmark
-              : suggestion.kind === 'tags'
+              : ['tags', 'tag_merge'].includes(suggestion.kind)
                 ? icon.resource.tag
-                : suggestion.kind === 'title'
+                : ['title', 'description'].includes(suggestion.kind)
                   ? icon.resource.note
                   : icon.organize.priority
           "
@@ -55,8 +55,11 @@
           }}</BChip
         ></div
       >
-      <div v-if="suggestion.kind === 'title' && suggestion.after" class="suggestion-change"
-        ><span>{{ suggestion.before || t('organizeWorkspace.unnamed') }}</span
+      <div v-if="(isTextMetadata || suggestion.kind === 'tag_merge') && suggestion.after" class="suggestion-change"
+        ><span>{{
+          suggestion.before ||
+          t(suggestion.kind === 'description' ? 'organizeWorkspace.noDescription' : 'organizeWorkspace.unnamed')
+        }}</span
         ><span aria-hidden="true">→</span><strong>{{ suggestion.after }}</strong></div
       >
       <div
@@ -116,6 +119,12 @@
           >：{{ tag.evidence }}
         </p>
       </div>
+      <p v-if="suggestion.kind === 'tag_merge' && suggestion.merge">{{
+        t('organizeWorkspace.mergeHint', {
+          target: suggestion.merge.targetName,
+          count: suggestion.merge.associationCount,
+        })
+      }}</p>
       <div v-if="suggestion.members" class="comparison" :aria-label="t('organizeWorkspace.compare')">
         <article v-for="member in suggestion.members" :key="member.id"
           ><BButton @click="openMember(member)">{{ member.title || t('organizeWorkspace.unnamed') }}</BButton
@@ -131,12 +140,14 @@
     <div v-if="editing && canReview" :inert="batchBusy || undefined" class="suggestion-edit">
       <OrganizeSuggestionTagEditor v-if="suggestion.kind === 'tags'" v-model:tags="tags" :disabled="busy" />
       <div v-else class="title-editor">
-        <label :for="`organize-title-${suggestion.id}`">{{ t('organizeWorkspace.checks.title') }}</label>
+        <label :for="`organize-title-${suggestion.id}`">{{ t(`organizeWorkspace.checks.${suggestion.kind}`) }}</label>
         <BInput
           :id="`organize-title-${suggestion.id}`"
           v-model:value="title"
           theme="al-day"
-          height="var(--ui-control-40, 40px)"
+          :type="suggestion.kind === 'description' ? 'textarea' : 'text'"
+          :rows="3"
+          :height="suggestion.kind === 'description' ? undefined : 'var(--ui-control-40, 40px)'"
           :maxlength="255"
           :disabled="busy"
         />
@@ -146,7 +157,7 @@
         ><BButton
           type="primary"
           :loading="busy"
-          :disabled="suggestion.kind === 'title' ? !title.trim() : !tags.length"
+          :disabled="isTextMetadata ? !title.trim() : !tags.length"
           @click="apply(suggestion.kind === 'tags' ? tags : title)"
           >{{ t('organizeWorkspace.save') }}</BButton
         ></div
@@ -188,6 +199,17 @@
         >{{ t('organizeWorkspace.apply') }}</BButton
       >
       <BButton
+        v-if="suggestion.kind === 'tag_merge' && suggestion.merge"
+        :disabled="busy || analyzing"
+        @click="confirmMerge"
+        >{{ t('organizeWorkspace.mergeTags') }}</BButton
+      >
+      <BButton
+        v-if="suggestion.action === 'bookmark_health'"
+        @click="router.push({ path: '/organize', query: { issue: 'bookmark_health' } })"
+        >{{ t('organizeWorkspace.resolveHealth') }}</BButton
+      >
+      <BButton
         v-if="suggestion.action === 'trash'"
         class="trash-action"
         :disabled="busy || analyzing"
@@ -225,6 +247,7 @@
   import type { OrganizeAiSuggestionTag } from '@/api/organizeApi';
   import { generateUUID } from '@/utils/common';
   import { resolveAiSourceNavigation } from '@/utils/aiSourceNavigation';
+  import { escapeHtml } from '@/utils/globalSearchHighlight';
   function suggestedTagSource(tag: { id?: string | null; source?: string }) {
     if (tag.source === 'new' || tag.source === 'existing') return tag.source;
     if (tag.id) return 'existing';
@@ -259,7 +282,8 @@
     invalidReason.value ? { ...props.suggestion, status: 'expired', reason: invalidReason.value } : props.suggestion,
   );
   const beforeTags = computed(() => (Array.isArray(props.suggestion.before) ? props.suggestion.before : []));
-  const isMetadata = computed(() => ['tags', 'title'].includes(props.suggestion.kind));
+  const isTextMetadata = computed(() => ['title', 'description'].includes(props.suggestion.kind));
+  const isMetadata = computed(() => props.suggestion.kind === 'tags' || isTextMetadata.value);
   const manual = computed(
     () => isMetadata.value && ['insufficient', 'no_suggestion'].includes(props.suggestion.status),
   );
@@ -270,7 +294,9 @@
       (isMetadata.value ||
         (props.suggestion.kind === 'archive'
           ? Boolean(props.suggestion.archivePreview && props.resourceId)
-          : ['trash', 'duplicate_bookmarks'].includes(String(props.suggestion.action)))),
+          : props.suggestion.kind === 'tag_merge'
+            ? Boolean(props.suggestion.merge)
+            : ['trash', 'duplicate_bookmarks', 'bookmark_health'].includes(String(props.suggestion.action)))),
   );
   watch(
     () => props.suggestion.id,
@@ -329,6 +355,24 @@
     }
   }
   const apply = (value: unknown) => submit('apply', value);
+  function confirmMerge() {
+    const proposal = props.suggestion.merge;
+    if (!proposal) return;
+    Alert.alert({
+      title: t('organizeWorkspace.mergeTags'),
+      content: escapeHtml(
+        t('organizeWorkspace.mergeConfirm', {
+          source: props.resourceTitle,
+          target: proposal.targetName,
+          count: proposal.associationCount,
+        }),
+      ),
+      okText: t('organizeWorkspace.mergeTags'),
+      okType: 'danger',
+      cancelText: t('common.cancel'),
+      onOk: () => apply({ confirmMerge: true, targetId: proposal.targetId }),
+    });
+  }
   function confirmTrash() {
     Alert.alert({
       title: t('organize.moveToTrash'),

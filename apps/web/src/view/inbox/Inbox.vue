@@ -10,6 +10,7 @@
       'inbox-page--mobile-resources': isMobileResourceInbox,
       'inbox-page--resource-workspace': !embedded && !isTodoFocused && !bookmark.isMobile,
       'todo-sidebar-layout': isTodoFocused && !embedded && bookmark.isDesktop,
+      'todo-desktop-columns': bookmark.isDesktop,
       'is-selection-mode': todoSelectionMode || resourceSelectionMode,
     }"
   >
@@ -573,8 +574,9 @@
                     }}</span>
                     <div v-if="bookmark.isDesktop" class="todo-group__columns" aria-hidden="true"
                       ><span>{{ t('todoWorkspace.organization') }}</span
-                      ><span>{{ t('todoWorkspace.priority') }}</span
-                      ><span>{{ t('todoWorkspace.deadline') }}</span></div
+                      ><span class="todo-group__centered-column">{{ t('todoWorkspace.priority') }}</span
+                      ><span class="todo-group__centered-column">{{ t('todoWorkspace.deadline') }}</span
+                      ><span class="todo-group__centered-column">{{ t('todoWorkspace.nextReminder') }}</span></div
                     >
                   </header>
                   <div v-show="!collapsedGroups[group.key]" class="todo-group__items">
@@ -4060,30 +4062,27 @@
     border-radius: 12px;
     overflow: hidden;
   }
-  @media (min-width: 1100px) {
-    .inbox-page :deep(.todo-item.is-workspace) {
+  @media (min-width: 1200px) {
+    .inbox-page.todo-desktop-columns :deep(.todo-item.is-workspace) {
       grid-template-columns: minmax(0, 1fr) auto;
       gap: var(--ui-space-12, 12px);
       padding: var(--ui-space-14, 14px) var(--ui-space-16, 16px);
     }
-    .inbox-page :deep(.todo-item.is-workspace::before) {
+    .inbox-page.todo-desktop-columns :deep(.todo-item.is-workspace::before) {
       display: none;
     }
-    .inbox-page :deep(.is-workspace .todo-item__body) {
+    .inbox-page.todo-desktop-columns :deep(.is-workspace .todo-item__body) {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(var(--ui-layout-280, 280px), 32%) var(--ui-layout-76, 76px) var(
-          --ui-layout-150,
-          150px
-        );
-      gap: var(--ui-space-5, 5px) var(--ui-space-16, 16px);
+      grid-template-columns: minmax(0, 1fr) var(--todo-detail-columns);
+      gap: var(--ui-space-5, 5px) var(--todo-column-gap);
       align-items: center;
     }
-    .inbox-page :deep(.is-workspace .todo-item__main-line),
-    .inbox-page :deep(.is-workspace .todo-item__selection-line) {
+    .inbox-page.todo-desktop-columns :deep(.is-workspace .todo-item__main-line),
+    .inbox-page.todo-desktop-columns :deep(.is-workspace .todo-item__selection-line) {
       grid-column: 1;
       grid-row: 1;
     }
-    .inbox-page :deep(.is-workspace .todo-item__description) {
+    .inbox-page.todo-desktop-columns :deep(.is-workspace .todo-item__description) {
       grid-column: 1;
       grid-row: 2;
       margin: 0 0 0 var(--ui-space-30, 30px);
@@ -4091,54 +4090,80 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
-    .inbox-page :deep(.is-workspace .todo-item__organization) {
+    .inbox-page.todo-desktop-columns :deep(.is-workspace .todo-item__organization) {
       grid-column: 2;
       grid-row: 1 / span 2;
       min-width: 0;
       margin: 0;
       gap: var(--ui-space-8, 8px);
-      flex-wrap: nowrap;
-      overflow-x: auto;
+      flex-wrap: wrap;
+      overflow: hidden;
       white-space: nowrap;
       font-size: var(--ui-font-12, 12px);
     }
-    .inbox-page :deep(.is-workspace .todo-item__organization > span) {
-      flex: 0 0 auto;
+    .inbox-page.todo-desktop-columns :deep(.is-workspace .todo-item__organization > span) {
+      flex: 0 1 auto;
       color: var(--desc-color);
     }
-    .inbox-page :deep(.is-workspace .todo-item__chips) {
+    .inbox-page.todo-desktop-columns :deep(.is-workspace .todo-item__chips) {
       grid-column: 3;
       grid-row: 1 / span 2;
       margin: 0;
     }
-    .inbox-page :deep(.is-workspace .todo-item__chips > :not(.todo-priority)) {
+    .inbox-page.todo-desktop-columns :deep(.is-workspace .todo-item__chips),
+    .inbox-page.todo-desktop-columns :deep(.is-workspace .todo-item__meta),
+    .inbox-page.todo-desktop-columns :deep(.is-workspace .todo-item__next-reminder) {
+      justify-content: center;
+      text-align: center;
+    }
+    .inbox-page.todo-desktop-columns :deep(.is-workspace .todo-item__chips > :not(.todo-priority)) {
       display: none;
     }
-    .inbox-page :deep(.is-workspace .todo-item__meta) {
+    .inbox-page.todo-desktop-columns :deep(.is-workspace .todo-item__timing) {
+      display: contents;
+    }
+    .inbox-page.todo-desktop-columns :deep(.is-workspace .todo-item__timing > .is-empty) {
+      display: flex;
+    }
+    .inbox-page.todo-desktop-columns :deep(.is-workspace .todo-item__next-reminder) {
+      grid-column: 5;
+      grid-row: 1 / span 2;
+      font-size: var(--ui-font-12, 12px);
+      color: var(--desc-color);
+    }
+    .inbox-page.todo-desktop-columns :deep(.is-workspace .todo-item__reminder-prefix) {
+      display: none;
+    }
+    .inbox-page.todo-desktop-columns :deep(.is-workspace .todo-item__meta) {
       grid-column: 4;
       grid-row: 1 / span 2;
       margin: 0;
       font-size: var(--ui-font-12, 12px);
+      flex-direction: column;
+      align-items: center;
     }
-    .inbox-page :deep(.is-workspace .todo-subitems) {
+    .inbox-page.todo-desktop-columns :deep(.is-workspace .todo-item__due-labeled:not(.overdue)) {
+      display: none;
+    }
+    .inbox-page.todo-desktop-columns :deep(.is-workspace .todo-item__due-compact) {
+      display: inline;
+    }
+    .inbox-page.todo-desktop-columns :deep(.is-workspace .todo-subitems) {
       grid-column: 1 / -1;
       grid-row: 3;
       margin-left: var(--ui-space-30, 30px);
       margin-top: 0;
     }
-    .inbox-page :deep(.is-workspace .todo-reminder-summary) {
-      display: none;
-    }
-    .inbox-page :deep(.is-workspace .todo-item__actions--desktop) {
+    .inbox-page.todo-desktop-columns :deep(.is-workspace .todo-item__actions--desktop) {
       grid-column: 2;
       grid-row: 1;
       margin: 0;
       align-self: start;
     }
-    .inbox-page :deep(.is-workspace .todo-item__priority-select) {
+    .inbox-page.todo-desktop-columns :deep(.is-workspace .todo-item__priority-select) {
       display: none;
     }
-    .inbox-page :deep(.is-workspace .todo-item__actions--desktop > .b-popover) {
+    .inbox-page.todo-desktop-columns :deep(.is-workspace .todo-item__actions--desktop > .b-popover) {
       display: none;
     }
   }
@@ -4308,24 +4333,29 @@
   .group-folder-icon {
     color: var(--primary-color);
   }
+  .todo-desktop-columns {
+    --todo-organization-width: var(--ui-layout-160, 160px);
+    --todo-priority-width: var(--ui-layout-64, 64px);
+    --todo-time-width: var(--ui-layout-140, 140px);
+    --todo-column-gap: var(--ui-space-12, 12px);
+    --todo-detail-columns: var(--todo-organization-width) var(--todo-priority-width) var(--todo-time-width)
+      var(--todo-time-width);
+  }
   .todo-group__columns {
     margin-left: auto;
     display: grid;
-    grid-template-columns: minmax(var(--ui-layout-120, 120px), 1fr) var(--ui-layout-76, 76px) var(
-        --ui-layout-150,
-        150px
-      );
-    gap: var(--ui-space-16, 16px);
-    width: calc(32% + var(--ui-layout-76, 76px) + var(--ui-layout-150, 150px) + 2 * var(--ui-space-16, 16px));
-    min-width: calc(
-      var(--ui-layout-280, 280px) + var(--ui-layout-76, 76px) + var(--ui-layout-150, 150px) + 2 *
-        var(--ui-space-16, 16px)
+    grid-template-columns: var(--todo-detail-columns);
+    gap: var(--todo-column-gap);
+    flex-shrink: 0;
+    padding-right: calc(
+      var(--ui-layout-34, 34px) + var(--ui-space-12, 12px) + var(--ui-space-16, 16px) - var(--ui-space-14, 14px)
     );
-    padding-right: var(--ui-space-44, 44px);
-    box-sizing: content-box;
     color: var(--todo-workspace-muted);
     font-size: var(--ui-font-12, 12px);
     font-weight: 500;
+  }
+  .todo-group__centered-column {
+    text-align: center;
   }
   .inbox-page--todo-focused :deep(.is-workspace .todo-priority) {
     min-width: var(--ui-layout-58, 58px);

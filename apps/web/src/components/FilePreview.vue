@@ -12,7 +12,7 @@
     >
       <div class="preview-header">
         <div class="preview-title">
-          <span class="file-type-badge">{{ getFileTypeName(currentCategory) }}</span>
+          <span class="file-type-badge">{{ previewType === 'csv' ? 'CSV' : getFileTypeName(currentCategory) }}</span>
           <span class="file-name" :title="fileInfo.fileName">{{ fileInfo.fileName }}</span>
           <ResourceBacklinks
             v-if="fileInfo?.id && (!previewAccess || previewAccess.kind === 'owner') && !isHtmlFullscreen"
@@ -208,7 +208,16 @@
             />
           </div>
 
-          <!-- 5. Excel预览 -->
+          <!-- 5. 表格预览 -->
+          <div v-else-if="previewType === 'csv' && effectiveFileUrl" class="office-preview-container">
+            <CsvPreview
+              :key="previewAttempt"
+              :src="effectiveFileUrl"
+              class="office-preview"
+              @rendered="onRendered"
+              @error="onCsvError"
+            />
+          </div>
           <div
             v-else-if="previewType === 'excel' && effectiveFileUrl"
             class="office-preview-container"
@@ -389,6 +398,7 @@
 
   const VueOfficeDocx = defineAsyncComponent(() => import('@vue-office/docx/lib/v3/vue-office-docx.mjs'));
   const VueOfficeExcel = defineAsyncComponent(() => import('@vue-office/excel/lib/v3/vue-office-excel.mjs'));
+  const CsvPreview = defineAsyncComponent(() => import('@/components/cloudSpace/CsvPreview.vue'));
   const VueOfficePptx = defineAsyncComponent(() => import('@vue-office/pptx/lib/v3/vue-office-pptx.mjs'));
 
   const props = defineProps<{
@@ -1021,6 +1031,20 @@
     loading.value = false;
     error.value = true;
     errorMessage.value = t('cloudSpace.previewPanel.pdfLoadFailed');
+  }
+
+  function onCsvError(err: unknown) {
+    if (props.previewAccess?.kind === 'community_chat_file' && previewRequestStatus(err) === 410) {
+      loading.value = false;
+      emit('source-expired');
+      return;
+    }
+    loading.value = false;
+    error.value = true;
+    previewFailureCode.value = String((err as { code?: string })?.code || '');
+    errorMessage.value = previewFailureCode.value
+      ? derivedFailureMessage(previewFailureCode.value)
+      : t('cloudSpace.previewPanel.textLoadFailed');
   }
 
   function onOfficeError(err: any) {

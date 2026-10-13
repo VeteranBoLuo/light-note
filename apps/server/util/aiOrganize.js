@@ -275,8 +275,8 @@ export async function suggestPreparedBookmarkMeta(
   if (includeSuggestionDetails && !Array.isArray(parsed.tagSuggestions)) return null;
   const { matchedTagIds, newTags, suggestions } = mapTagSuggestion(parsed, userTags, tagSourceText);
   return {
-    name: String(parsed.name || '').trim(),
-    description: String(parsed.description || '').trim(),
+    name: typeof parsed.name === 'string' ? parsed.name.trim() : '',
+    description: typeof parsed.description === 'string' ? parsed.description.trim() : '',
     matchedTagIds,
     newTags,
     ...(includeSuggestionDetails

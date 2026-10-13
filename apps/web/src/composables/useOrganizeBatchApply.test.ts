@@ -32,6 +32,13 @@ function mount(count = 25) {
   cleanup = () => app.unmount();
   return { review, scope, rows, changed };
 }
+it('描述补全仅将有可用结果的待审核建议纳入批量应用', () => {
+  const s = { id: 'd', kind: 'description' as const, status: 'pending', before: '', after: '书签简介', reason: '' };
+  expect(canBatchApply(s)).toBe(true);
+  expect(canBatchApply({ ...s, after: '' })).toBe(false);
+  expect(canBatchApply({ ...s, status: 'insufficient' })).toBe(false);
+  expect(canBatchApply({ ...s, status: 'applied' })).toBe(false);
+});
 it('20 项分批，取消项不提交，失败保留且重试沿用标识', async () => {
   const { review } = mount();
   api.applyRunSuggestionBatch.mockImplementation(async (_, items) => ({

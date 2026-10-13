@@ -276,25 +276,26 @@ describe.skipIf(!socketPath)('V3 提取表 MySQL 幂等、核对和 Worker 围�
       call(actOnExtraction, { id: t.id, input: { requestId: randomUUID(), version: 2, action: 'plan', plan } }),
     ).rejects.toMatchObject({ status: 409 });
   });
-  it('历史依据按现行规则只读判断，分页筛选、导出与核对一致且不改写原始快照', async () => {
+  it.each([
+    { value: '模块 app-shell', quotes: ['模块 `app-shell`'] },
+    { value: '`app-shell`、`app-main`', quotes: ['– `app-shell`', '– `app-main`'] },
+  ])('历史依据只读判断，分页筛选、导出与核对一致且不改写原始快照：$value', async ({ value, quotes }) => {
     const t = await ready();
     const payload = await addRow(t.id);
     payload.cells[0] = {
       ...payload.cells[0],
-      originalValue: '模块 app-shell',
+      originalValue: value,
       status: 'evidence_incomplete',
       evidenceIssues: ['value_not_in_cited_text'],
-      evidence: [
-        {
-          sourceId: payload.sourceId,
-          sourceVersion: 'v1',
-          segmentId: 'p',
-          offset: 0,
-          kind: 'original',
-          quote: '模块 `app-shell`',
-          locator: '段落',
-        },
-      ],
+      evidence: quotes.map((quote, i) => ({
+        sourceId: payload.sourceId,
+        sourceVersion: 'v1',
+        segmentId: `p${i}`,
+        offset: 0,
+        kind: 'original',
+        quote,
+        locator: '段落',
+      })),
     };
     const raw = JSON.stringify(payload);
     await db.query('UPDATE toolbox_extraction_records SET payload_json=? WHERE extraction_id=?', [raw, t.id]);
@@ -303,12 +304,12 @@ describe.skipIf(!socketPath)('V3 提取表 MySQL 幂等、核对和 Worker 围�
     await db.query("UPDATE toolbox_extractions SET phase='extract',status='completed' WHERE id=?", [t.id]);
     const before = await call(readExtraction, { id: t.id });
     const snap = await call(recordSnapshot, { id: t.id });
-    expect(snap.evidenceValidationVersion).toBe(2);
-    expect(snap.records[0].cells[0]).toMatchObject({ status: 'found', originalValue: '模块 app-shell' });
+    expect(snap.evidenceValidationVersion).toBe(3);
+    expect(snap.records[0].cells[0]).toMatchObject({ status: 'found', originalValue: value });
     expect(snap.records[0].reviews).toEqual({});
     expect(await call(readRecords, { id: t.id, filter: { anomalies: true } })).toMatchObject({
       total: 0,
-      evidenceValidationVersion: 2,
+      evidenceValidationVersion: 3,
     });
     expect((await call(readRecords, { id: t.id, filter: { review: 'pending' } })).total).toBe(1);
     const csv = await buildExtractionExport(snap, 'csv');

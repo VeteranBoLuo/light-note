@@ -130,17 +130,19 @@ describe('整理范围与生命周期', () => {
     expect(result.summary).toMatchObject({ total: 2, ruleTotal: null });
     expect(suggestResourceMetadata).not.toHaveBeenCalled();
   });
-  it('仅标题的新预检不读取书签或文件', async () => {
-    readSuggestionCandidates.mockResolvedValueOnce([snap()]);
+  it('名称预检包含书签、笔记和文件', async () => {
+    readSuggestionCandidates
+      .mockResolvedValueOnce([{ ...snap(), type: 'bookmark' }])
+      .mockResolvedValueOnce([{ ...snap(), type: 'file' }])
+      .mockResolvedValueOnce([snap()]);
     const db = database((sql) => (sql.includes('request_id=?') ? [[]] : undefined));
     const result = await previewSuggestionRun(db, {
       userId: 'u',
       input: { resourceTypes: ['bookmark', 'note', 'file'], checks: ['title'], scope: 'recent' },
       requestId,
     });
-    expect(result.options.resourceTypes).toEqual(['note']);
-    expect(readSuggestionCandidates).toHaveBeenCalledTimes(1);
-    expect(readSuggestionCandidates.mock.calls[0][2]).toBe('note');
+    expect(result.options.resourceTypes).toEqual(['bookmark', 'file', 'note']);
+    expect(readSuggestionCandidates.mock.calls.map((call) => call[2])).toEqual(['bookmark', 'file', 'note']);
   });
   it('重复预检请求读取同一冻结范围，参数不同则冲突', async () => {
     const db = database((sql) =>
@@ -231,9 +233,10 @@ describe('整理范围与生命周期', () => {
     expect(suggestResourceMetadata).not.toHaveBeenCalled();
   });
 });
-it('一个资源的标题和标签共享一次外发，交付先于计费完成', async () => {
+it.each(['note', 'bookmark'])('%s 的元信息共享一次外发，交付先于计费完成', async (type) => {
   let lease;
-  const source = { ...snap(), version: 'v', source: { title: '未命名文档', text: 'Vue 组件通信' } };
+  const kinds = type === 'bookmark' ? ['tags', 'title', 'description'] : ['tags', 'title'];
+  const source = { ...snap(), type, version: 'v', source: { title: '未命名文档', text: 'Vue 组件通信' } };
   readCurrentSuggestionSource.mockResolvedValue(source);
   const db = database((sql, p) => {
     if (sql.startsWith('SELECT i.*'))
@@ -243,10 +246,10 @@ it('一个资源的标题和标签共享一次外发，交付先于计费完成'
             id: 'i',
             run_id: 'run',
             user_id: 'u',
-            resource_type: 'note',
+            resource_type: type,
             resource_id: '1',
             version_hash: 'v',
-            ai_kinds_json: ['tags', 'title'],
+            ai_kinds_json: kinds,
             ai_status: 'queued',
           },
         ],
@@ -255,21 +258,26 @@ it('一个资源的标题和标签共享一次外发，交付先于计费完成'
       lease = p[0];
       return [{ affectedRows: 1 }];
     }
-    if (sql.includes('FROM organize_suggestion_runs')) return [[run]];
+    if (sql.includes('FROM organize_suggestion_runs')) return [[{ ...run, status: 'running' }]];
     if (sql.startsWith('SELECT lease_token')) return [[{ lease_token: lease }]];
     if (sql.startsWith('SELECT * FROM organize_suggestions'))
       return [
         [
           { id: 't', kind: 'tags', payload_json: { kind: 'tags' } },
           { id: 'n', kind: 'title', payload_json: { kind: 'title' } },
+          ...(type === 'bookmark'
+            ? [{ id: 'd', kind: 'description', payload_json: { kind: 'description', before: '' } }]
+            : []),
         ],
       ];
     if (sql.includes('COUNT(*)')) return [[{ total: 0 }]];
     if (sql.includes('FROM tag')) return [[]];
   });
-  const model = vi
-    .fn()
-    .mockResolvedValue({ title: { name: 'Vue 通信', evidence: 'Vue' }, tags: [{ id: null, name: 'Vue' }] });
+  const model = vi.fn().mockResolvedValue({
+    title: { name: 'Vue 通信', evidence: 'Vue' },
+    tags: [{ id: null, name: 'Vue' }],
+    description: 'Vue 组件通信的实践指南',
+  });
   const execution = vi.fn(async (_config, callback) => {
     const value = await callback();
     expect(db.query.mock.calls.some(([sql, p]) => sql.includes('SET ai_status=?') && p[0] === 'completed')).toBe(true);
@@ -279,10 +287,18 @@ it('一个资源的标题和标签共享一次外发，交付先于计费完成'
     dispatch: async (_db, _id, cb) => cb({ connection: db, user: { id: 'u', role: 'user' } }),
     restrictions: async () => [],
     model,
+    prepare: async () => ({ pageInfo: 'Vue 组件通信' }),
     runExecution: execution,
   });
   expect(model).toHaveBeenCalledOnce();
-  expect(model.mock.calls[0][1]).toEqual(['tags', 'title']);
+  expect(model.mock.calls[0][1]).toEqual(kinds);
+  if (type === 'bookmark') {
+    const stored = db.query.mock.calls.find(
+      ([sql, p]) => sql.startsWith('UPDATE organize_suggestions SET status=') && p[2] === 'd',
+    );
+    expect(stored[1][0]).toBe('pending');
+    expect(JSON.parse(stored[1][1])).toMatchObject({ after: 'Vue 组件通信的实践指南', reason: '根据网页内容补全描述' });
+  }
   expect(execution).toHaveBeenCalledOnce();
   expect(execution.mock.calls[0][0]).toMatchObject({
     organizeRunId: expect.any(String),
@@ -923,4 +939,68 @@ it('revalidates file suggestions in a fresh transaction after remote copying', a
   } finally {
     applySuggestionMutation.mockReset();
   }
+});
+it('标签合并与图标混合任务使用有限调用预算，合并完成只结算自己的建议', async () => {
+  let lease;
+  const source = { ...snap(), type: 'tag', id: 'b', title: 'JS', description: '', version: 'v' };
+  readCurrentSuggestionSource.mockResolvedValue(source);
+  const db = database((sql, p) => {
+    if (sql.startsWith('SELECT i.*'))
+      return [
+        [
+          {
+            id: 'i',
+            run_id: 'run',
+            user_id: 'u',
+            resource_type: 'tag',
+            resource_id: 'b',
+            version_hash: 'v',
+            ai_kinds_json: ['tag_merge'],
+            ai_status: 'queued',
+          },
+        ],
+      ];
+    if (sql.includes("SET ai_status='running'")) {
+      lease = p[0];
+      return [{ affectedRows: 1 }];
+    }
+    if (sql.includes('FROM organize_suggestion_runs')) return [[{ ...run, status: 'running' }]];
+    if (sql.startsWith('SELECT lease_token')) return [[{ lease_token: lease }]];
+    if (sql.startsWith('SELECT t.id,t.name')) return [[{ id: 'a', name: 'JavaScript', description: '' }]];
+    if (sql.startsWith('SELECT * FROM organize_suggestions')) {
+      expect(p[1]).toEqual(['tag_merge']);
+      return [[{ id: 'm', kind: 'tag_merge', payload_json: { kind: 'tag_merge' } }]];
+    }
+    if (sql.includes('COUNT(*)')) return [[{ total: 0 }]];
+  });
+  const execution = vi.fn(async (_config, callback) => callback());
+  await runSingleSuggestionItem('w', db, {
+    skipRules: true,
+    dispatch: async (_db, _id, cb) => cb({ connection: db, user: { id: 'u', role: 'user' } }),
+    restrictions: async () => [],
+    model: async () => ({ tag_merge: null }),
+    runExecution: execution,
+  });
+  expect(execution).toHaveBeenCalledOnce();
+  expect(execution.mock.calls[0][0].providerPlan).toMatchObject({
+    maxUserProviderCalls: 1,
+    maxPlatformProviderCalls: 1,
+  });
+  const result = db.query.mock.calls.find(
+    ([sql, p]) => sql.startsWith('UPDATE organize_suggestions SET status=') && p[2] === 'm',
+  );
+  expect(result[1][0]).toBe('no_suggestion');
+});
+it('合并范围保留已有图标的标签，预检不把它们计为跳过', async () => {
+  readSuggestionCandidates.mockResolvedValueOnce([
+    { id: 'a', type: 'tag', title: 'JavaScript', hasCustomIcon: true },
+    { id: 'b', type: 'tag', title: 'JS', hasCustomIcon: false },
+  ]);
+  const db = database((sql) => (sql.includes('request_id=?') ? [[]] : undefined));
+  const result = await previewSuggestionRun(db, {
+    userId: 'u',
+    input: { resourceTypes: ['tag'], checks: ['tag_merge'], scope: 'all' },
+    requestId,
+  });
+  expect(result.summary).toMatchObject({ total: 2, skipped: 0 });
 });

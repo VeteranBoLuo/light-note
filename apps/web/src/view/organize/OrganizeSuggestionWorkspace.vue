@@ -329,7 +329,7 @@
                     ><small
                       >{{
                         item.resource.type === 'tag'
-                          ? t('organizeIcons.matching')
+                          ? t('organizeWorkspace.resources.tag')
                           : item.resource.source.folder || t('organizeWorkspace.root')
                       }}<template v-if="item.resource.type === 'file'">
                         ·
@@ -626,7 +626,17 @@
     archiveVisible.value = true;
   }
   const wizardHeader = ref<HTMLElement | null>(null);
-  const checks: CheckKind[] = ['tags', 'title', 'empty', 'duplicate', 'archive', 'tag_icon'];
+  const checks: CheckKind[] = [
+    'tags',
+    'title',
+    'description',
+    'empty',
+    'duplicate',
+    'archive',
+    'bookmark_health',
+    'tag_icon',
+    'tag_merge',
+  ];
   const resourceIcons = {
     tag: icon.resource.tag,
     bookmark: icon.resource.bookmark,
@@ -954,7 +964,7 @@
     s.kind !== 'tag_icon' &&
     ((['not_applicable', 'applied', 'ignored', 'closed'].includes(s.status) &&
       !(s.kind === 'archive' && s.status === 'applied')) ||
-      (s.status === 'no_suggestion' && !['tags', 'title', 'tag_icon', 'archive'].includes(s.kind)));
+      (s.status === 'no_suggestion' && !['tags', 'title', 'description', 'tag_icon', 'archive'].includes(s.kind)));
   const primarySuggestions = (item: WorkspaceItem) => visibleSuggestions(item).filter((s) => !isSecondary(s));
   const secondarySuggestions = (item: WorkspaceItem) => visibleSuggestions(item).filter(isSecondary);
   function workLabel(work: ReturnType<typeof resourceWork>[number]) {

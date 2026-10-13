@@ -18,8 +18,23 @@ applyUiDensity(params.get('density'), params.get('renderProfile') === 'mobile');
 (window as any).setDensity = (preference: string) =>
   applyUiDensity(preference, params.get('renderProfile') === 'mobile');
 document.documentElement.dataset.theme = params.get('theme') || 'day';
-document.documentElement.classList.toggle('light-note-mobile-rendering', params.get('renderProfile') === 'mobile');
-const buffer = await workbook.xlsx.writeBuffer();
+document.documentElement.classList.toggle(
+  'light-note-mobile-rendering',
+  params.get('renderProfile') === 'mobile',
+);
+const csvContent =
+  '来源资料,价格,支持平台,团队协作,离线能力\r\n材料 1 · 对比方案,39 元 / 人 / 月,支持,支持,支持\r\n材料 2 · 对比方案,未提供,支持,支持,支持\r\n"含,逗号","第一行\n第二行",00123,=1+1,12345678901234567890';
+const buffer = params.has('csv')
+  ? new TextEncoder().encode(
+      params.get('csv') === 'invalid'
+        ? '标题,"未闭合'
+        : params.get('csv') === 'empty'
+          ? ''
+          : params.get('csv') === 'large'
+            ? Array.from({ length: 205 }, (_, index) => `第 ${index + 1} 行,00123,内容`).join('\n')
+            : csvContent,
+    )
+  : await workbook.xlsx.writeBuffer();
 if (params.has('fullPreview')) {
   const { createPinia, setActivePinia } = await import('pinia');
   const pinia = createPinia();
@@ -38,9 +53,13 @@ if (params.has('fullPreview')) {
         previewAccess: { kind: 'share', token: 'fixture' },
         fileInfo: {
           id: 'fixture',
-          fileName: '坐标验收.xlsx',
-          category: 'excel',
-          fileType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          fileName: params.get('fileName') ?? (params.has('csv') ? '方案对比表.csv' : '坐标验收.xlsx'),
+          category: params.get('category') ?? (params.has('csv') ? 'text' : 'excel'),
+          fileType:
+            params.get('fileType') ??
+            (params.has('csv')
+              ? 'text/plain'
+              : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'),
           fileUrl: url,
         },
       }),

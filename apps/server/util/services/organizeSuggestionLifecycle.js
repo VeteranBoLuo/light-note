@@ -1,5 +1,6 @@
 import { prepareOrganizeArchive } from './organizeArchiveDraft.js';
 import crypto from 'node:crypto';
+import { readTagMergeCandidates } from './organizeTagMerge.js';
 import { transaction, json, withNextOrganizeRun } from './organizeSuggestionStorage.js';
 import { normalizeRunInput, buildRuleSuggestions, hash, suggestionError } from './organizeSuggestionRules.js';
 import { readSuggestionCandidates, readSuggestionSources } from './organizeSuggestionSources.js';
@@ -72,6 +73,7 @@ export async function previewV2(db, { userId, input, requestId, retryFrom, runVe
     if (existing.length) return prior(existing[0]);
     const candidates = [];
     let customIconCount = 0;
+    const skipCustom = (row) => row.hasCustomIcon && !options.checks.includes('tag_merge');
     if (retryFrom) {
       const [owned] = await c.query('SELECT id FROM organize_suggestion_runs WHERE id=? AND user_id=?', [
         retryFrom,
@@ -108,8 +110,8 @@ export async function previewV2(db, { userId, input, requestId, retryFrom, runVe
             ids: ids.slice(offset, offset + 100),
             ...(type === 'tag' ? { includeCustomIcons: true } : {}),
           });
-          customIconCount += rows.filter((row) => row.hasCustomIcon).length;
-          candidates.push(...rows.filter((row) => !row.hasCustomIcon));
+          customIconCount += rows.filter(skipCustom).length;
+          candidates.push(...rows.filter((row) => !skipCustom(row)));
         }
       } else {
         let after = '';
@@ -119,10 +121,12 @@ export async function previewV2(db, { userId, input, requestId, retryFrom, runVe
             recent: options.scope === 'recent',
             untagged: options.scope === 'untagged',
             limit: options.scope === 'recent' ? 20 : 100,
-            ...(type === 'tag' && options.scope === 'all' ? { includeCustomIcons: true } : {}),
+            ...(type === 'tag' && (options.scope === 'all' || options.checks.includes('tag_merge'))
+              ? { includeCustomIcons: true }
+              : {}),
           });
-          customIconCount += page.filter((row) => row.hasCustomIcon).length;
-          candidates.push(...page.filter((row) => !row.hasCustomIcon));
+          customIconCount += page.filter(skipCustom).length;
+          candidates.push(...page.filter((row) => !skipCustom(row)));
           if (options.scope === 'recent' || page.length < 100) break;
           after = page.at(-1).id;
         }
@@ -315,6 +319,8 @@ export async function resumeV2(db, { userId, id }, dependencies = {}) {
   if (remaining.length && !quota.exempt && quota.enforcing !== false) {
     const next = remaining[0];
     const sources = await readSuggestionSources(db, userId, next.resource_type, { ids: [next.resource_id], limit: 1 });
+    if (sources[0]?.type === 'tag' && json(next.ai_kinds_json).includes('tag_merge'))
+      sources[0].mergeCandidates = await readTagMergeCandidates(db, userId, id, sources[0].id);
     const prepared =
       sources[0]?.type === 'bookmark' ? await (dependencies.prepare || prepareResourceMetadata)(sources[0]) : null;
     const [tags] = await db.query('SELECT id,name FROM tag WHERE user_id=? AND del_flag=0', [userId]);

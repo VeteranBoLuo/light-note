@@ -125,6 +125,34 @@ it('标签复用统一写入服务，新标签只在应用时创建', async () =
   });
 });
 
+it('描述补全只更新当前账号的书签描述，保留名称和标签', async () => {
+  const c = db();
+  const args = input({
+    current: { type: 'bookmark', id: 'b', bookmarkMeta: { description: '' } },
+    kind: 'description',
+    value: '  开源字体目录  ',
+  });
+  expect(await applySuggestionMutation(c, args)).toEqual({ applied: '开源字体目录' });
+  expect(c.query).toHaveBeenCalledWith('UPDATE bookmark SET description=? WHERE id=? AND user_id=? AND del_flag=0', [
+    '开源字体目录',
+    'b',
+    'u',
+  ]);
+  expect(batchWriteResourceTags).not.toHaveBeenCalled();
+  await expect(
+    applySuggestionMutation(c, { ...args, current: { ...args.current, bookmarkMeta: { description: '用户已填写' } } }),
+  ).rejects.toMatchObject({ code: 'ORGANIZE_RESOURCE_CHANGED' });
+  for (const type of ['note', 'file', 'tag'])
+    await expect(applySuggestionMutation(c, { ...args, current: { ...args.current, type } })).rejects.toMatchObject({
+      code: 'ORGANIZE_DESCRIPTION_UNSUPPORTED',
+    });
+  for (const value of ['', ' ', 'a'.repeat(256), {}, 'a\0b'])
+    await expect(applySuggestionMutation(c, { ...args, value })).rejects.toMatchObject({
+      code: 'ORGANIZE_DESCRIPTION_INVALID',
+    });
+  expect(c.query).toHaveBeenCalledOnce();
+});
+
 const archiveDraft = { status: 'ready', url: 'https://example.com', title: '网页', content: '完整正文'.repeat(30), source: 'static_html' };
 it('应用直接保存已预览的正文，不重新抓取或排队', async () => {
   const c = db();

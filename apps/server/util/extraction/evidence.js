@@ -1,6 +1,6 @@
 import { Lexer } from 'marked';
 
-export const EVIDENCE_VALIDATION_VERSION = 2;
+export const EVIDENCE_VALIDATION_VERSION = 3;
 // Deterministic support only. Formatting equivalence is not semantic entailment.
 const clean = (value) => String(value).normalize('NFKC').trim().replace(/\s+/g, ' ');
 export function textTables(text) {
@@ -160,6 +160,7 @@ function supportsDate(value, quotes) {
 function readableQuote(quote, cache) {
   if (cache?.has(quote)) return cache.get(quote);
   const codes = [];
+  const links = [];
   const flatten = (tokens) =>
     tokens
       .map((token) => {
@@ -169,14 +170,97 @@ function readableQuote(quote, cache) {
         }
         if (['strong', 'em'].includes(token.type)) return flatten(token.tokens);
         if (['text', 'escape'].includes(token.type)) return token.text;
+        // Only self-labelled HTTP links are literal addresses. A link's label
+        // must never be treated as proof of a different destination.
+        if (token.type === 'link' && token.text === token.href && /^https?:\/\//.test(token.href)) {
+          links.push(clean(token.text));
+          return token.text;
+        }
         // Do not erase links, deleted text or HTML and accidentally join their neighbours.
         return `\u0000${token.raw}\u0000`;
       })
       .join('');
-  const result = { text: clean(flatten(Lexer.lexInline(quote, { gfm: true }))), codes };
+  const result = { text: clean(flatten(Lexer.lexInline(quote, { gfm: true }))), codes, links, markdown: true };
   // Request-local, bounded reuse for repeated section headings and table cells.
   if (cache && cache.size < 2048) cache.set(quote, result);
   return result;
+}
+function containsNumber(value, text, wholeLiteral = false) {
+  const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const next = wholeLiteral ? '[\\p{L}\\p{N}_]' : '[\\dA-Za-z_]';
+  return new RegExp(`(?<![\\dA-Za-z_+\\-−.]|\\d,)${escaped}(?!${next}|[.,]\\d)`, 'u').test(text);
+}
+
+// Accept only complete quoted clauses or literal atoms, joined in the value by
+// punctuation. Never assemble arbitrary words, split code, or infer synonyms.
+function supportsExcerpts(value, texts, options) {
+  if (!texts.every((q) => q.markdown)) return false;
+  const rendered = readableQuote(value, options.cache).text;
+  if (!rendered || rendered.includes('\u0000')) return false;
+  const quotes = texts
+    .filter((q) => !q.text.includes('\u0000'))
+    .map((q) => {
+      if (q.excerpts) return q.excerpts;
+      const atoms = [...q.codes, ...q.links];
+      const protectedRanges = atoms.flatMap((atom) =>
+        findOffsets(q.text, atom).map((start) => [start, start + atom.length]),
+      );
+      const inside = (position) => protectedRanges.some(([start, end]) => position > start && position < end);
+      const starts = new Set([0]),
+        ends = new Set([q.text.length]);
+      const addStart = (position) => {
+        while (q.text[position] === ' ') position++;
+        if (!inside(position)) starts.add(position);
+      };
+      const marker = /^(?:[-*+–•]\s+|\d+[.)]\s+)/.exec(q.text);
+      if (marker) addStart(marker[0].length);
+      for (const m of q.text.matchAll(/[；;。！？：:（）()]|——/g)) {
+        if (inside(m.index) || inside(m.index + m[0].length)) continue;
+        let end = m.index;
+        while (q.text[end - 1] === ' ') end--;
+        // Parentheses delimit their contents, not two free-standing fragments
+        // outside them. A colon binds a label to its value within the same line.
+        if (!/^[：:（(]$/.test(m[0])) ends.add(end);
+        if (!/^[：:（）()]$/.test(m[0])) ends.add(m.index + m[0].length);
+        if (!/^[）)]$/.test(m[0])) addStart(m.index + m[0].length);
+      }
+      // A pathological line must not create an unbounded matching graph.
+      q.excerpts = { text: q.text, atoms, starts: [...starts].slice(0, 128), ends: [...ends].slice(0, 128) };
+      return q.excerpts;
+    });
+  const pending = [0],
+    seen = new Set([0]);
+  const advance = (end, sourceLineEnd = false) => {
+    if (end === rendered.length) return true;
+    let next = end;
+    while (/[\s；;、]/.test(rendered[next] || '\u0000')) next++;
+    // A quoted colon can introduce the next full quoted line without an extra
+    // separator (e.g. "set to:" followed by a code literal).
+    if (next === rendered.length) return true;
+    if ((next > end || (sourceLineEnd && /[：:；;]/.test(rendered[end - 1]))) && !seen.has(next) && seen.size < 128) {
+      seen.add(next);
+      pending.push(next);
+    }
+    return false;
+  };
+  while (pending.length) {
+    const position = pending.pop();
+    for (const q of quotes) {
+      for (const atom of q.atoms)
+        if (atom && rendered.startsWith(atom, position) && advance(position + atom.length)) return true;
+      const number = /^-?(?:0|[1-9]\d*)(?:\.\d+)?/.exec(rendered.slice(position))?.[0];
+      if (number && containsNumber(number, q.text, true) && advance(position + number.length)) return true;
+      for (const start of q.starts) {
+        let length = 0;
+        while (start + length < q.text.length && q.text[start + length] === rendered[position + length]) length++;
+        for (const end of q.ends) {
+          if (end - start >= 2 && end - start <= length && advance(position + end - start, end === q.text.length))
+            return true;
+        }
+      }
+    }
+  }
+  return false;
 }
 function quoteText(evidence, quote, options) {
   return evidence.kind !== 'ocr' && (evidence.format === 'markdown' || options.markdown)
@@ -200,9 +284,7 @@ export function checkEvidence(value, type, evidence, options = {}) {
   if (type === 'number') {
     // A full stop after an ordered-list marker is not a decimal point. Keep
     // signs, decimal/group separators and identifiers from matching a sub-number.
-    const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const number = new RegExp(`(?<![\\dA-Za-z_+\\-−.]|\\d,)${escaped}(?![\\dA-Za-z_]|[.,]\\d)`);
-    return readable().some((q) => number.test(q.text)) ? [] : ['number_not_in_cited_text'];
+    return readable().some((q) => containsNumber(value, q.text)) ? [] : ['number_not_in_cited_text'];
   }
   if (quotes.some((q) => clean(q).includes(clean(value)))) return [];
   const texts = readable();
@@ -211,6 +293,7 @@ export function checkEvidence(value, type, evidence, options = {}) {
   // of words, substring fragments, paraphrases or inferred categories as proof.
   const parts = value.split('、').map(clean);
   if (parts.length > 1 && parts.every((part) => part && texts.some((q) => q.codes.includes(part)))) return [];
+  if (supportsExcerpts(value, texts, options)) return [];
   return ['value_not_in_cited_text'];
 }
 

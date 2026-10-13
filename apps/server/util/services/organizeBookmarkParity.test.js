@@ -90,3 +90,39 @@ it('协议失败不能当作没有建议', async () => {
     suggestResourceMetadata(snapshot, ['tags'], tags, await prepareResourceMetadata(snapshot)),
   ).rejects.toMatchObject({ code: 'AI_SKILL_STRUCTURED_OUTPUT_INVALID' });
 });
+
+it.each([['title'], ['description'], ['tags', 'title', 'description']])(
+  '仅交付所选字段 %j，并共用一次调用',
+  async (...kinds) => {
+    const snapshot = buildSnapshot('bookmark', { ...row, name: row.url });
+    const prepared = await prepareResourceMetadata(snapshot, kinds);
+    const result = await suggestResourceMetadata(snapshot, kinds, tags, prepared);
+    expect(mocks.request).toHaveBeenCalledOnce();
+    expect(result.title).toEqual(kinds.includes('title') ? { name: '字体页面', evidence: expect.any(String) } : null);
+    expect(result.description).toBe(kinds.includes('description') ? '开源字体项目' : null);
+    expect(result.tags).toHaveLength(kinds.includes('tags') ? 1 : 0);
+  },
+);
+it('网页不可读时不生成名称描述，标签仍可按已有材料分析', async () => {
+  mocks.fetch.mockResolvedValue({ ok: false, reason: 'AUTH_REQUIRED' });
+  const snapshot = buildSnapshot('bookmark', row);
+  await expect(prepareResourceMetadata(snapshot, ['description'])).rejects.toMatchObject({
+    code: 'BOOKMARK_PAGE_UNREADABLE',
+  });
+  expect(mocks.request).not.toHaveBeenCalled();
+  const prepared = await prepareResourceMetadata(snapshot, ['tags', 'description']);
+  expect(await suggestResourceMetadata(snapshot, ['tags', 'title', 'description'], tags, prepared)).toMatchObject({
+    title: null,
+    description: null,
+  });
+});
+it.each([
+  { name: {}, description: [] },
+  { name: 'a'.repeat(256), description: 'b'.repeat(256) },
+])('非法字段不能成为可写入建议：%j', async (fields) => {
+  mocks.request.mockResolvedValue({ content: JSON.stringify({ ...fields, tagSuggestions: [] }) });
+  const snapshot = buildSnapshot('bookmark', row);
+  expect(
+    await suggestResourceMetadata(snapshot, ['title', 'description'], tags, await prepareResourceMetadata(snapshot)),
+  ).toMatchObject({ title: null, description: null });
+});

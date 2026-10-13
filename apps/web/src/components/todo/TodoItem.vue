@@ -67,10 +67,31 @@
             </section>
           </div>
         </div>
-        <div v-if="startLabel || item.dueAt || occurrenceLabel" class="todo-item__meta">
-          <span v-if="startLabel" class="todo-start-label">{{ startLabel }}</span>
-          <span v-if="item.dueAt" :class="{ overdue }">{{ dueLabel }}</span>
-          <span v-if="occurrenceLabel" class="todo-start-label">{{ occurrenceLabel }}</span>
+        <div class="todo-item__timing" :class="{ 'is-empty': !hasSchedule && reminderState.kind === 'none' }">
+          <div v-if="workspace || hasSchedule" class="todo-item__meta" :class="{ 'is-empty': !hasSchedule }">
+            <TodoTimeText v-if="startLabel" class="todo-start-label" :text="startLabel" />
+            <TodoTimeText v-if="item.dueAt" class="todo-item__due-labeled" :class="{ overdue }" :text="dueLabel" />
+            <TodoTimeText v-if="workspace && dueTime && !overdue" class="todo-item__due-compact" :text="dueTime" />
+            <TodoTimeText v-if="occurrenceLabel" class="todo-start-label" :text="occurrenceLabel" />
+          </div>
+          <div
+            v-if="workspace"
+            class="todo-item__next-reminder"
+            :class="{ 'is-empty': reminderState.kind === 'none', 'is-past': reminderState.kind === 'past' }"
+          >
+            <template v-if="reminderState.kind !== 'none'">
+              <span class="todo-item__reminder-prefix">{{ t('todoWorkspace.reminderLabel') }}{{ ' ' }}</span>
+              <TodoTimeText
+                v-if="workspaceReminderTime"
+                class="todo-item__reminder-time"
+                :text="workspaceReminderTime"
+              />
+              <span v-if="reminderState.kind !== 'next'" class="todo-item__reminder-state"
+                >{{ workspaceReminderTime ? ' ' : ''
+                }}{{ t(`todoWorkspace.reminderState.${reminderState.kind}`) }}</span
+              >
+            </template>
+          </div>
         </div>
         <div class="todo-item__chips">
           <span class="todo-priority" :class="`is-priority-${item.priority}`">{{ priorityLabel }}</span>
@@ -78,7 +99,7 @@
             seriesLabel || recurrenceLabel
           }}</span>
           <span v-if="seriesProgressLabel" class="todo-series-progress">{{ seriesProgressLabel }}</span>
-          <span v-if="reminderLabel" class="todo-reminder-label">{{ reminderLabel }}</span>
+          <span v-if="!workspace && reminderLabel" class="todo-reminder-label">{{ reminderLabel }}</span>
           <span v-if="item.series?.status === 'paused'" class="todo-plan-state-label">{{
             t('inbox.todoSeriesPausedBadge')
           }}</span>
@@ -93,16 +114,42 @@
           @edit="emit('edit', 'checklist')"
         />
         <div v-if="item.list || item.tags?.length" class="todo-item__organization" @click.stop>
-          <span v-if="item.list"><SvgIcon :src="icon.common.folderOutline" size="15" />{{ item.list.name }}</span>
+          <span v-if="item.list" class="todo-item__list" :title="item.list.name"
+            ><SvgIcon :src="icon.common.folderOutline" size="15" /><span>{{ item.list.name }}</span></span
+          >
           <ResourceTagChip
-            v-for="tag in item.tags"
+            v-for="tag in visibleTags"
             :key="tag.id"
             :tag="tag"
             interactive
             @click="router.push({ name: 'tagDetail', params: { id: tag.id } })"
           />
+          <BPopover v-if="hiddenTags.length" trigger="click" placement="bottom-left">
+            <BButton
+              type="text"
+              class="todo-item__more-tags"
+              :aria-label="t('todoWorkspace.moreTags', { count: hiddenTags.length })"
+            >
+              +{{ hiddenTags.length }}
+            </BButton>
+            <template #content>
+              <div class="todo-item__hidden-tags">
+                <ResourceTagChip
+                  v-for="tag in hiddenTags"
+                  :key="tag.id"
+                  :tag="tag"
+                  interactive
+                  @click="router.push({ name: 'tagDetail', params: { id: tag.id } })"
+                />
+              </div>
+            </template>
+          </BPopover>
         </div>
-        <section v-if="reminderLabel" class="todo-reminder-summary" :class="{ 'is-past': pastReminderLabel }">
+        <section
+          v-if="!workspace && reminderLabel"
+          class="todo-reminder-summary"
+          :class="{ 'is-past': pastReminderLabel }"
+        >
           <strong>{{ reminderLabel }}</strong>
           <span v-if="nextReminderLabel">{{
             t(isTodoSingleReminder(item) ? 'inbox.todoSingleReminderTime' : 'inbox.todoNextReminder', {
@@ -263,6 +310,8 @@
   import TodoPriorityMenu from './TodoPriorityMenu.vue';
   import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
   import { computed, ref } from 'vue';
+  import { useTodoClock } from '@/composables/useTodoClock';
+  import TodoTimeText from './TodoTimeText.vue';
   import useUserStore from '@/store/useUser';
   import { useI18n } from 'vue-i18n';
   import { recordOperation } from '@/api/commonApi';
@@ -285,6 +334,8 @@
     isTodoOverdue,
     isTodoSingleReminder,
     normalizeTodoDateOnly,
+    parseTodoDate,
+    todoNextReminderAt,
     todoPastReminderAt,
     type TodoSnoozePreset,
   } from '@/utils/todoPlanning';
@@ -334,27 +385,32 @@
     action();
   }
 
-  const overdue = computed(() => isTodoOverdue(props.item));
+  const { now, today } = useTodoClock();
+  const overdue = computed(() => isTodoOverdue(props.item, new Date(now.value)));
   const priorityLabel = computed(() => t(`inbox.todoPriority${props.item.priority}`));
   const completedChecklistCount = computed(() => props.item.checklist.filter((check) => check.done).length);
-  const dueLabel = computed(() => {
+  const dueTime = computed(() => {
     if (!props.item.dueAt) return '';
     const value = formatTodoDateTime(props.item.dueAt, locale.value, {
       relative: true,
       includeYear: false,
+      now: today.value,
       relativeLabels: {
         today: t('inbox.todoToday'),
         tomorrow: t('inbox.todoTomorrow'),
       },
     });
-    if (!value) return '';
-    return overdue.value ? t('inbox.todoOverdue', { time: value }) : t('inbox.todoDue', { time: value });
+    return value;
   });
+  const dueLabel = computed(() =>
+    dueTime.value ? t(overdue.value ? 'inbox.todoOverdue' : 'inbox.todoDue', { time: dueTime.value }) : '',
+  );
   const startLabel = computed(() => {
     if (!props.item.startAt) return '';
     const value = formatTodoDateTime(props.item.startAt, locale.value, {
       relative: true,
       includeYear: false,
+      now: today.value,
       relativeLabels: { today: t('inbox.todoToday'), tomorrow: t('inbox.todoTomorrow') },
     });
     return value ? t('inbox.todoStarts', { time: value }) : '';
@@ -367,6 +423,7 @@
       relative: true,
       includeYear: false,
       includeTime: false,
+      now: today.value,
       relativeLabels: { today: t('inbox.todoToday'), tomorrow: t('inbox.todoTomorrow') },
     });
     return value ? t('inbox.todoScheduledDate', { time: value }) : '';
@@ -426,18 +483,50 @@
     return formatTodoDateTime(nextAt, locale.value, {
       relative: true,
       includeYear: false,
+      now: today.value,
       relativeLabels: { today: t('inbox.todoToday'), tomorrow: t('inbox.todoTomorrow') },
     });
   });
   const pastReminderLabel = computed(() => {
-    const reminderAt = todoPastReminderAt(props.item);
+    const reminderAt = todoPastReminderAt(props.item, new Date(now.value));
     if (!reminderAt) return '';
     return formatTodoDateTime(reminderAt, locale.value, {
       relative: true,
       includeYear: false,
+      now: today.value,
       relativeLabels: { today: t('inbox.todoToday'), tomorrow: t('inbox.todoTomorrow') },
     });
   });
+  const hasSchedule = computed(() => Boolean(startLabel.value || dueLabel.value || occurrenceLabel.value));
+  const visibleTags = computed(() => (props.workspace ? props.item.tags?.slice(0, 1) : props.item.tags) || []);
+  const hiddenTags = computed(() => (props.workspace ? props.item.tags?.slice(1) : []) || []);
+  // nextAt 是服务端当前 Job 的投影；明确为空时不能回退到旧配置并冒充下一次提醒。
+  const reminderState = computed(() => {
+    const item = props.item;
+    const reminder = item.reminder;
+    if (item.status !== 'pending' || reminder?.mode === 'none' || (!reminder && !item.reminderAt)) {
+      return { kind: 'none', at: '' } as const;
+    }
+    if (reminder && 'paused' in reminder && reminder.paused) return { kind: 'paused', at: '' } as const;
+    const nextAt = reminder && 'nextAt' in reminder ? reminder.nextAt : todoNextReminderAt(item);
+    const nextTime = nextAt ? parseTodoDate(nextAt).getTime() : Number.NaN;
+    if (Number.isFinite(nextTime)) {
+      return { kind: nextTime > now.value ? 'next' : 'past', at: nextAt! } as const;
+    }
+    const pastAt = todoPastReminderAt(item, new Date(now.value));
+    return pastAt ? ({ kind: 'past', at: pastAt } as const) : ({ kind: 'unscheduled', at: '' } as const);
+  });
+  const workspaceReminderAt = computed(() => reminderState.value.at);
+  const workspaceReminderTime = computed(() =>
+    workspaceReminderAt.value
+      ? formatTodoDateTime(workspaceReminderAt.value, locale.value, {
+          relative: true,
+          includeYear: false,
+          now: today.value,
+          relativeLabels: { today: t('inbox.todoToday'), tomorrow: t('inbox.todoTomorrow') },
+        })
+      : '',
+  );
   const seriesLabel = computed(() => {
     const series = props.item.series;
     if (!series) return '';
@@ -696,6 +785,66 @@
     gap: var(--ui-space-8, 8px);
     margin-top: var(--ui-space-8, 8px);
     align-items: center;
+  }
+  .todo-item__list {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ui-space-5, 5px);
+    min-width: 0;
+    max-width: 100%;
+  }
+  .todo-item__list > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .todo-item__list > .svg-icon {
+    flex-shrink: 0;
+  }
+  .todo-item__more-tags.b_btn {
+    min-height: var(--ui-control-24, 24px);
+    padding: 0 var(--ui-space-4, 4px);
+    font-size: var(--ui-font-12, 12px);
+  }
+  .todo-item__hidden-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ui-space-6, 6px);
+    max-width: var(--ui-layout-240, 240px);
+    padding: var(--ui-space-8, 8px);
+  }
+  .todo-item__timing {
+    display: contents;
+  }
+  .is-workspace .todo-item__timing {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-space-5, 5px);
+    margin: var(--ui-space-8, 8px) 0 0 var(--ui-space-30, 30px);
+    color: var(--desc-color);
+    font-size: var(--ui-font-12, 12px);
+  }
+  .is-workspace .todo-item__timing.is-empty,
+  .is-workspace .todo-item__timing > .is-empty {
+    display: none;
+  }
+  .is-workspace .todo-item__timing > .todo-item__meta {
+    margin: 0;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .todo-item__next-reminder {
+    display: block;
+    min-width: 0;
+  }
+  .todo-item__reminder-time {
+    max-width: 100%;
+  }
+  .todo-item__due-compact {
+    display: none;
+  }
+  .todo-item__next-reminder.is-past .todo-item__reminder-state {
+    color: var(--chip-pending-fg);
   }
   .todo-item {
     position: relative;

@@ -36,6 +36,8 @@ import {
   refreshPendingSource,
 } from './organizeSuggestionLifecycle.js';
 import crypto from 'node:crypto';
+import { readTagMergeCandidates, tagMergeRequests, prepareTagMergeProposal } from './organizeTagMerge.js';
+import { createAiProviderPlan } from '../aiExecution/providerPlan.js';
 import { isAiQuotaErrorCode } from '@lightnote/shared/ai-quota-protocol';
 import pool from '../../db/index.js';
 import { suggestionError } from './organizeSuggestionRules.js';
@@ -306,7 +308,7 @@ export async function actOnSuggestion(
       );
       const suggestion = rows[0];
       if (!suggestion) throw suggestionError('ORGANIZE_SUGGESTION_NOT_FOUND', '建议不存在', 404);
-      if (batchOnly && !['archive', 'tags', 'title'].includes(suggestion.kind))
+      if (batchOnly && !['archive', 'tags', 'title', 'description'].includes(suggestion.kind))
         throw suggestionError('ORGANIZE_BATCH_UNSUPPORTED', '此建议需要单独处理', 409);
       if (['applied', 'ignored'].includes(suggestion.status)) return { status: suggestion.status };
       if (suggestion.status === 'expired') {
@@ -437,7 +439,9 @@ export async function actOnSuggestion(
         JSON.stringify({
           ...payload,
           proposedAfter: payload.after,
-          after: ['tags', 'title', 'tag_icon'].includes(suggestion.kind) ? mutation.applied : payload.after,
+          after: ['tags', 'title', 'description', 'tag_icon'].includes(suggestion.kind)
+            ? mutation.applied
+            : payload.after,
           applied: mutation.applied,
         }),
         requestId,
@@ -466,8 +470,8 @@ async function finishItemImpl(c, job, status, result, errorCode = null) {
   const [live] = await c.query('SELECT lease_token FROM organize_suggestion_items WHERE id=? FOR UPDATE', [job.id]);
   if (live[0]?.lease_token !== job.lease_token) return false;
   const [rows] = await c.query(
-    "SELECT * FROM organize_suggestions WHERE item_id=? AND status IN ('queued','running')",
-    [job.id],
+    "SELECT * FROM organize_suggestions WHERE item_id=? AND status IN ('queued','running') AND kind IN (?)",
+    [job.id, json(job.ai_kinds_json)?.length ? json(job.ai_kinds_json) : ['__none__']],
   );
   for (const row of rows) {
     const payload = json(row.payload_json);
@@ -482,39 +486,50 @@ async function finishItemImpl(c, job, status, result, errorCode = null) {
             ? 'not_applicable'
             : result?.reading && !result.reading.complete
               ? 'failed'
-              : row.kind === 'tag_icon'
+              : ['tag_icon', 'tag_merge'].includes(row.kind)
                 ? 'no_suggestion'
                 : 'insufficient'
         : status;
     const after =
-      row.kind === 'tag_icon' ? value?.[0] || null : row.kind === 'title' ? value?.name || null : value || null;
+      row.kind === 'tag_icon'
+        ? value?.[0] || null
+        : row.kind === 'title'
+          ? value?.name || null
+          : row.kind === 'tag_merge'
+            ? value?.targetName || null
+            : value || null;
     await c.query('UPDATE organize_suggestions SET status=?,payload_json=? WHERE id=?', [
       nextStatus,
       JSON.stringify({
         ...payload,
         after,
+        ...(row.kind === 'tag_merge' && value ? { merge: value } : {}),
         ...(row.kind === 'tag_icon' ? { candidates: value || [] } : {}),
         ...(result?.reading ? { reading: result.reading } : {}),
         ...(row.kind === 'tags' && result?.tagOutcome ? { reasonCode: result.tagOutcome } : {}),
         reason:
           status === 'completed'
-            ? row.kind === 'tag_icon'
-              ? hasValue
-                ? '根据标签名称匹配图标'
-                : '暂无合适推荐，可手动选择'
-              : hasValue
-                ? row.kind === 'title'
-                  ? value.evidence
-                  : '根据资料内容建议的核心主题标签'
-                : row.kind === 'tags'
-                  ? result?.fetchReason && result?.tagOutcome !== 'already_associated'
-                    ? '网页暂时无法读取，已按现有书签信息分析，未发现可追加标签'
-                    : {
-                        already_associated: '推荐主题已由现有标签覆盖，无需追加',
-                        filtered: '生成的标签未通过依据校验，可手动补充',
-                        no_suggestion: '没有发现适合追加的主题标签，可手动补充',
-                      }[result?.tagOutcome] || '没有充分依据，可手动补充'
-                  : '没有充分依据，可手动补充'
+            ? row.kind === 'tag_merge'
+              ? value?.reason || '未找到明确同义且适合合并的标签'
+              : row.kind === 'tag_icon'
+                ? hasValue
+                  ? '根据标签名称匹配图标'
+                  : '暂无合适推荐，可手动选择'
+                : hasValue
+                  ? row.kind === 'title'
+                    ? value.evidence
+                    : row.kind === 'description'
+                      ? '根据网页内容补全描述'
+                      : '根据资料内容建议的核心主题标签'
+                  : row.kind === 'tags'
+                    ? result?.fetchReason && result?.tagOutcome !== 'already_associated'
+                      ? '网页暂时无法读取，已按现有书签信息分析，未发现可追加标签'
+                      : {
+                          already_associated: '推荐主题已由现有标签覆盖，无需追加',
+                          filtered: '生成的标签未通过依据校验，可手动补充',
+                          no_suggestion: '没有发现适合追加的主题标签，可手动补充',
+                        }[result?.tagOutcome] || '没有充分依据，可手动补充'
+                    : '没有充分依据，可手动补充'
             : errorCode === 'ORGANIZE_RESOURCE_CHANGED'
               ? '资料已变化，请重新整理'
               : String(errorCode || '').startsWith('BOOKMARK_PAGE_')
@@ -527,7 +542,11 @@ async function finishItemImpl(c, job, status, result, errorCode = null) {
   await c.query(
     'UPDATE organize_suggestion_items SET ai_status=?,error_code=?,lease_token=NULL,lease_expires_at=NULL WHERE id=?',
     [
-      status === 'completed' && result?.reading && !result.reading.complete && !(result.tags || []).length
+      status === 'completed' &&
+      result?.reading &&
+      !result.reading.complete &&
+      !(result.tags || []).length &&
+      !result.title
         ? 'failed'
         : status,
       errorCode || (result?.reading?.complete === false ? result.reading.reasonCode : null),
@@ -537,7 +556,7 @@ async function finishItemImpl(c, job, status, result, errorCode = null) {
   if (Number(run.run_version) === 3) {
     const finalStatus =
       status === 'completed' && result?.reading?.complete === false
-        ? result.tags?.length
+        ? result.tags?.length || result.title
           ? 'partial'
           : 'failed'
         : status;
@@ -602,7 +621,7 @@ export async function runSingleSuggestionItem(workerId, db = pool, dependencies 
           );
           if (!jobs.length) return null;
           item.processingPrepared = json(jobs[0].prepared_json);
-          if (item.resource_type === 'tag' && item.snapshot_json) {
+          if (item.resource_type === 'tag' && item.snapshot_json && !json(item.ai_kinds_json).includes('tag_merge')) {
             const snapshot = json(item.snapshot_json),
               route = prepareTagIconRoute(snapshot.title);
             if (!route.needsAi) {
@@ -626,8 +645,8 @@ export async function runSingleSuggestionItem(workerId, db = pool, dependencies 
         if (Number(item.run_version) === 3)
           await markProcessingAi(c, item.run_id, item.id, 'running', item.lease_token);
         await c.query(
-          "UPDATE organize_suggestions SET status='running',payload_json=JSON_SET(payload_json,'$.reason','正在分析') WHERE item_id=? AND status='queued'",
-          [item.id],
+          "UPDATE organize_suggestions SET status='running',payload_json=JSON_SET(payload_json,'$.reason','正在分析') WHERE item_id=? AND status='queued' AND kind IN (?)",
+          [item.id, json(item.ai_kinds_json) || []],
         );
         return item;
       },
@@ -709,10 +728,19 @@ export async function runSingleSuggestionItem(workerId, db = pool, dependencies 
         if (!updated.affectedRows) throw suggestionError('ORGANIZE_LEASE_LOST', '执行租约已失效', 409);
       });
     }
+    if (job.processingPrepared?.bookmarkError)
+      throw suggestionError(
+        job.processingPrepared.bookmarkError.code,
+        job.processingPrepared.bookmarkError.message,
+        422,
+      );
+    if (current.type === 'tag' && json(job.ai_kinds_json).includes('tag_merge'))
+      current.mergeCandidates = await readTagMergeCandidates(db, job.user_id, job.run_id, current.id);
     // 网页读取不持有外发用户锁；进入外发屏障后再次复核准备期间的变化。
     const prepared =
       current.type === 'bookmark'
-        ? job.processingPrepared?.bookmark || (await (dependencies.prepare || prepareResourceMetadata)(current))
+        ? job.processingPrepared?.bookmark ||
+          (await (dependencies.prepare || prepareResourceMetadata)(current, json(job.ai_kinds_json)))
         : null;
     const dispatch = dependencies.dispatch || withActiveUserAiDispatch;
     await dispatch(db, job.maintenanceActorId || job.user_id, async ({ connection, user }) => {
@@ -754,7 +782,7 @@ export async function runSingleSuggestionItem(workerId, db = pool, dependencies 
         ip: 'organize-worker',
       };
       const beforeCall = async () => {
-        if (current.type !== 'file') return;
+        if (!['file', 'tag'].includes(current.type)) return;
         if (!isOrganizeAiSuggestionsEnabled()) throw suggestionError('ORGANIZE_AI_DISABLED', 'AI 建议暂不可用', 503);
         const liveRun = await ownedRun(db, job.user_id, job.run_id);
         if (
@@ -780,31 +808,50 @@ export async function runSingleSuggestionItem(workerId, db = pool, dependencies 
         if (!renewed.affectedRows) throw suggestionError('ORGANIZE_LEASE_LOST', '执行租约已失效', 409);
       };
       const filePlan =
-        current.type === 'file' ? compileFileMetadataPlan(current, tags, filePrepared.visualPages.length) : null;
+        current.type === 'file'
+          ? compileFileMetadataPlan(current, tags, filePrepared.visualPages.length, json(job.ai_kinds_json))
+          : null;
       await (dependencies.runExecution || runAiExecution)(
-        createUserAiExecutionConfig(current.type === 'tag' ? 'tag.icon_keywords' : 'organize.metadata', {
-          requestId: job.lease_token,
-          organizeRunId: job.run_id,
-          organizeItemId: job.id,
-          request,
-          identity: user,
-          subjectIdentity: subject,
-          surface: 'organize_center',
-          reservationTokens: estimateResourceMetadataTokens(current, json(job.ai_kinds_json), tags, prepared),
-          maxUserProviderCalls: 1,
-          ...(filePlan || {}),
-          ...(filePlan
-            ? {
-                resolveResultOutcome: (result) =>
-                  result.reading?.complete === false
-                    ? {
-                        status: result.tags?.length ? 'partial' : 'failed',
-                        errorCode: result.reading.reasonCode || 'CONTENT_UNREADABLE',
-                      }
-                    : { status: 'success' },
-              }
-            : {}),
-        }),
+        createUserAiExecutionConfig(
+          current.type === 'tag' && !json(job.ai_kinds_json).includes('tag_merge')
+            ? 'tag.icon_keywords'
+            : 'organize.metadata',
+          {
+            requestId: job.lease_token,
+            organizeRunId: job.run_id,
+            organizeItemId: job.id,
+            request,
+            identity: user,
+            subjectIdentity: subject,
+            surface: 'organize_center',
+            reservationTokens: estimateResourceMetadataTokens(current, json(job.ai_kinds_json), tags, prepared),
+            maxUserProviderCalls: 1,
+            ...(current.type === 'tag' && json(job.ai_kinds_json).includes('tag_merge')
+              ? {
+                  providerPlan: createAiProviderPlan({
+                    model_generation: {
+                      billingScope: 'user',
+                      maxCalls:
+                        tagMergeRequests(current).length + (json(job.ai_kinds_json).includes('tag_icon') ? 1 : 0),
+                    },
+                    output_repair: { billingScope: 'platform', maxCalls: tagMergeRequests(current).length },
+                  }),
+                }
+              : {}),
+            ...(filePlan || {}),
+            ...(filePlan
+              ? {
+                  resolveResultOutcome: (result) =>
+                    result.reading?.complete === false
+                      ? {
+                          status: result.tags?.length || result.title ? 'partial' : 'failed',
+                          errorCode: result.reading.reasonCode || 'CONTENT_UNREADABLE',
+                        }
+                      : { status: 'success' },
+                }
+              : {}),
+          },
+        ),
         async () => {
           executionRecord = getActiveAiExecution();
           if (filePrepared) {
@@ -846,6 +893,8 @@ export async function runSingleSuggestionItem(workerId, db = pool, dependencies 
           );
           await beforeCall();
           if (filePrepared) result.reading = current.reading;
+          if (result.tag_merge)
+            result.tag_merge = await prepareTagMergeProposal(db, job.user_id, current, result.tag_merge);
           // Provider 成果在根 Execution 成功前入库，使用外发生命周期屏障保证注销互斥。
           const delivered = await transaction(db, async (c) => {
             await ownedRun(c, job.user_id, job.run_id, true);

@@ -1,13 +1,23 @@
 import { applicableOrganizeResources, supportsOrganizeCheck } from '@lightnote/shared/organize-capabilities';
 import crypto from 'node:crypto';
-import path from 'node:path';
+import { hasMeaningfulFileName } from './organizeFileName.js';
 import { load } from 'cheerio';
 import { marked } from 'marked';
 import { parseNoteContent, renderNoteForAi } from '../noteSemantic.js';
 import { createBookmarkExactUrlHash } from './bookmarkExactUrlService.js';
 import { ORGANIZE_SELECTED_ITEMS_MAX_COUNT, ORGANIZE_RESOURCE_ID_MAX_LENGTH } from '../contentLimits.js';
 
-export const SUGGESTION_TYPES = ['tags', 'title', 'empty', 'duplicate', 'archive', 'tag_icon'];
+export const SUGGESTION_TYPES = [
+  'tags',
+  'title',
+  'description',
+  'tag_merge',
+  'bookmark_health',
+  'empty',
+  'duplicate',
+  'archive',
+  'tag_icon',
+];
 export const RESOURCE_TYPES = ['bookmark', 'note', 'file', 'tag'];
 export const hash = (value) => crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
 export const normalizeName = (value) =>
@@ -121,6 +131,7 @@ export function buildSnapshot(type, row, tags = [], now = Date.now()) {
       id: String(row.id),
       title: String(row.name || ''),
       iconUrl,
+      description: String(row.description || ''),
       version: hash([row.name, iconUrl]),
       tags: [],
       source: { folder: '' },
@@ -168,9 +179,7 @@ export function buildSnapshot(type, row, tags = [], now = Date.now()) {
       ? /^(?:未命名(?:文档|笔记)?|新建文档|untitled(?: document| note)?)$/iu.test(title.trim())
       : type === 'bookmark'
         ? !title.trim() || title.trim() === String(row.url || '').trim()
-        : /^(?:[a-f\d-]{24,}|(?:IMG|DSC|Screenshot|微信图片|屏幕截图)[_\s-]?\d[\w\s-]*|\d{10,})$/iu.test(
-            path.parse(title).name,
-          );
+        : !hasMeaningfulFileName(title);
   return {
     type,
     id: String(row.id),
@@ -228,12 +237,25 @@ export function buildRuleSuggestions(snapshots, checks, { tagMode = 'untagged' }
         kind,
         status,
         reason,
-        before: kind === 'tags' ? s.tags : kind === 'title' ? s.title : null,
+        before:
+          kind === 'tag_merge'
+            ? s.title
+            : kind === 'tags'
+              ? s.tags
+              : kind === 'title'
+                ? s.title
+                : kind === 'description'
+                  ? s.bookmarkMeta?.description || ''
+                  : null,
         after: null,
         ...extra,
       });
     const sameTitle = titles.get(`${s.type}:${normalizeName(s.title).toLowerCase()}`) || [];
     const aiKinds = [];
+    if (checks.includes('tag_merge') && s.type === 'tag') {
+      add('tag_merge', 'queued', '对照本轮标签名称与说明，查找同义标签');
+      aiKinds.push('tag_merge');
+    }
     if (s.type === 'tag') {
       if (checks.includes('tag_icon'))
         add(
@@ -257,10 +279,19 @@ export function buildRuleSuggestions(snapshots, checks, { tagMode = 'untagged' }
     if (checks.includes('title') && supportsOrganizeCheck(s.type, 'title')) {
       const needsTitle = s.defaultTitle || (s.type === 'note' && sameTitle.length > 1);
       if (!needsTitle) add('title', 'not_applicable', '当前名称无需调整');
-      else if (s.unsupported || !s.hasTitleEvidence) add('title', 'insufficient', '缺少正文依据，可手动填写名称');
+      else if (s.unsupported || (s.type === 'note' && !s.hasTitleEvidence))
+        add('title', 'insufficient', '缺少正文依据，可手动填写名称');
       else {
         add('title', 'queued', sameTitle.length > 1 ? '标题重复，分析内容后建议区分名称' : '根据内容补全名称');
         aiKinds.push('title');
+      }
+    }
+    if (checks.includes('description') && supportsOrganizeCheck(s.type, 'description')) {
+      if (String(s.bookmarkMeta?.description || '').trim())
+        add('description', 'not_applicable', '已有描述，本次保留原内容');
+      else {
+        add('description', 'queued', '根据网页内容补全描述');
+        aiKinds.push('description');
       }
     }
     if (checks.includes('empty') && supportsOrganizeCheck(s.type, 'empty')) {
