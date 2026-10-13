@@ -180,7 +180,11 @@
             ><label>存储MB(±)</label><BInput v-model:value="form.storageMb" type="number" placeholder="如 512"
           /></div>
           <div class="pops-field"
-            ><label>补签卡(±)</label><BInput v-model:value="form.cards" type="number" placeholder="0~2"
+            ><label>补签卡(±)</label
+            ><BInput
+              v-model:value="form.cards"
+              type="number"
+              :placeholder="t('growth.adminCardAdjustmentPlaceholder', { max: MAKEUP_CARD_MAX_INVENTORY })"
           /></div>
         </div>
         <div class="pops-field-row">
@@ -311,6 +315,7 @@
 </template>
 
 <script setup lang="ts">
+  import { MAKEUP_CARD_MAX_INVENTORY } from '@lightnote/shared';
   import { computed, nextTick, onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';

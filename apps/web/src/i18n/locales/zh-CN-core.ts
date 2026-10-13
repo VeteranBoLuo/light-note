@@ -8636,6 +8636,7 @@ export default {
     trashRetain: '回收站',
     trashForever: '永久',
     protectCard: '补签卡',
+    adminCardAdjustmentPlaceholder: '调整后 0～{max} 张',
     useProtectCard: '补签续连签',
     protectCardHint: `首次连签 7／30 天、升至 Lv.5／10／15 各赠 1 张；最多持有 {max} 张，赠卡满仓不累积、不补发。可补今天之前最近 ${MAKEUP_WINDOW_DAYS} 个自然日的漏签，每补一天消耗 1 张。`,
     protectCardOk: '补签成功!连签续到 {n} 天 🎉',

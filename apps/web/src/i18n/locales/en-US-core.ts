@@ -9067,6 +9067,7 @@ export default {
     trashRetain: 'Trash',
     trashForever: 'Forever',
     protectCard: 'Make-up card',
+    adminCardAdjustmentPlaceholder: '0–{max} cards after adjustment',
     useProtectCard: 'Keep streak',
     protectCardHint: `Earn 1 card once at streaks of 7/30 days and levels 5/10/15. Hold up to {max}; milestone cards at full capacity are not saved or reissued. Make up a missed day in the ${MAKEUP_WINDOW_DAYS} calendar days before today, using 1 card per day.`,
     protectCardOk: 'Streak restored to {n} days 🎉',
