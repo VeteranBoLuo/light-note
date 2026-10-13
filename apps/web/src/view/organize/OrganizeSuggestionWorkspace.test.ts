@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createApp, h, KeepAlive, nextTick, reactive, ref, type App } from 'vue';
 import { createI18n } from 'vue-i18n';
 import { createPinia } from 'pinia';
+import message from '@/components/base/BasicComponents/BMessage/BMessage';
 import zh from '@/i18n/locales/zh-CN';
 const navigation = vi.hoisted(() => ({ currentRoute: { value: { query: {} as Record<string, string> } } }));
 const api = vi.hoisted(() => ({
@@ -137,8 +138,11 @@ beforeEach(() => {
   api.actOnRunSuggestion.mockResolvedValue(ok({ status: 'applied' }));
   api.cancelRun.mockResolvedValue(ok({ status: 'cancelled' }));
 });
-afterEach(() => {
+afterEach(async () => {
   app?.unmount();
+  // Message state is global and outlives the workspace; clear it before jsdom teardown.
+  message.destroy();
+  await nextTick();
   document.body.innerHTML = '';
   sessionStorage.clear();
 });
