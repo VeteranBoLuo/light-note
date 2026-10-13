@@ -1,4 +1,4 @@
-import { extractTool, sourcePayload, validateRecords } from './contract.js';
+import { extractTool, MAX_CELL_EVIDENCE, sourcePayload, validateRecords } from './contract.js';
 import { findOffsets, textTables } from './evidence.js';
 
 const fail = (reason) => {
@@ -105,5 +105,4 @@ export function compileExtractionCitations(source, plan) {
   };
 }
 
-export const referencedCitationInstructions =
-  '原文已由服务端编号。anchor 和每条 evidence 只能选择材料中实际存在的 reference，不能自行编造编号、抄写 evidence 的 quote 或填写 segment。系统会按编号回填原文、页码和位置。anchor 优先选择条目起始行；横向产品表用该产品表头单元格编号，纵向表用该条目名称单元格编号，不能用共享整行代表多个产品。anchor.quote 通常为空字符串；仅同一行包含多个独立条目时填短原文来区分。命令、反斜线、Markdown 转义、缩进均由系统保留，不需要重写。每个 found/conflict 字段给 1–4 个能支持它且属于该条目的原文编号，共享日期或表头可追加依据。相同文字出现在不同位置时按上下文选择编号，不能只凭文字相同借用别的条目。跨行信息可引用多个编号，不要合并或省略条目。';
+export const referencedCitationInstructions = `原文已由服务端编号。anchor 和每条 evidence 只能选择材料中实际存在的 reference，不能自行编造编号、抄写 evidence 的 quote 或填写 segment。系统会按编号回填原文、页码和位置。anchor 优先选择条目起始行；横向产品表用该产品表头单元格编号，纵向表用该条目名称单元格编号，不能用共享整行代表多个产品。anchor.quote 通常为空字符串；仅同一行包含多个独立条目时填短原文来区分。命令、反斜线、Markdown 转义、缩进均由系统保留，不需要重写。每个 found/conflict 字段给 1–${MAX_CELL_EVIDENCE} 个能支持它且属于该条目的原文编号，只引用支持当前值所需的原文，不重复堆叠编号；多行说明须保留各行依据，共享日期或表头可追加依据。相同文字出现在不同位置时按上下文选择编号，不能只凭文字相同借用别的条目。跨行信息可引用多个编号，不要合并或省略条目。`;

@@ -75,6 +75,18 @@ describe('提取输出的一次平台修复', () => {
     expect(options.billingScope).toBe('platform');
     expect(gateway.requestAi).toHaveBeenCalledTimes(2);
   });
+  it('错误状态给出明确修复要求，仍只允许一次平台修复', async () => {
+    const draft = structuredClone(good);
+    draft.records[0].cells[0].status = 'unknown';
+    gateway.requestAi.mockResolvedValueOnce(result(draft)).mockResolvedValueOnce(result(good));
+    const value = await invoke();
+    expect(value.records[0].cells[0]).toMatchObject({ status: 'found', originalValue: '3 g' });
+    const [messages, options] = gateway.requestAi.mock.calls[1];
+    expect(messages.at(-1).content).toContain('Invalid cell status');
+    expect(messages.at(-1).content).toContain('records[0].cells[0]');
+    expect(options.billingScope).toBe('platform');
+    expect(gateway.requestAi).toHaveBeenCalledTimes(2);
+  });
   it('未完整输出或网络结果不确定不会自动重发', async () => {
     gateway.requestAi.mockResolvedValueOnce(result({ complete: false, records: [] }));
     await expect(invoke()).rejects.toMatchObject({ code: 'EXTRACTION_OUTPUT_INCOMPLETE' });

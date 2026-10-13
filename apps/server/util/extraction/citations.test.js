@@ -113,6 +113,66 @@ describe('服务端原文编号与确定性引用', () => {
       compileExtractionCitations({ ...s, complete: false }, plan()).validate({ records: [missing] })[0].cells[0].status,
     ).toBe('unavailable');
   });
+  it('新增没有原文信息的字段后仍保留占位，多行说明完整保留 16 条依据', () => {
+    const labels = ['System', 'Item', 'Action', 'Value', 'Note', 'windows/other'];
+    const fields = validatePlan({
+      recordDefinition: '一项操作',
+      fields: labels.map((label, i) => ({ key: `field_${i}`, label, type: 'text', rule: '' })),
+    });
+    const codes = Array.from({ length: 16 }, (_, i) => `step_${i + 1}`);
+    const s = source([codes.map((code) => `执行 \`${code}\``).join('\n')]);
+    s.segments[0].format = 'markdown';
+    const compiled = compileExtractionCitations(s, fields);
+    const note = {
+      value: codes.join('、'),
+      status: 'found',
+      evidence: codes.map((_, i) => ({ reference: `s0_l${i}_p0` })),
+    };
+    const cells = labels.map(() => ({ value: '', status: 'missing', evidence: [] }));
+    cells[4] = note;
+    const [record] = compiled.validate({ records: [{ anchor: { reference: 's0_l0_p0', quote: '' }, cells }] });
+    expect(record.cells).toHaveLength(6);
+    expect(record.cells[4]).toMatchObject({ fieldId: 'f5', status: 'found', originalValue: codes.join('、') });
+    expect(record.cells[4].evidence.map((e) => e.quote)).toEqual(s.segments[0].text.split('\n'));
+    expect(record.cells[5]).toMatchObject({ fieldId: 'f6', status: 'missing', originalValue: '', evidence: [] });
+    expect(compiled.tool.parameters.properties.records.items.properties.cells.items.properties.evidence.maxItems).toBe(
+      16,
+    );
+    expect(() =>
+      compiled.validate({ records: [{ anchor: { reference: 's0_l0_p0', quote: '' }, cells: cells.slice(0, 5) }] }),
+    ).toThrow('Invalid cell count');
+  });
+  it.each([
+    ['unknown', [], 'Invalid cell status'],
+    ['found', {}, 'Invalid evidence list'],
+    ['found', Array.from({ length: 17 }, () => ({ reference: 's0_l0_p0' })), 'Too many evidence references'],
+  ])('单元格失败明确区分状态与依据形状、上限：%s', (status, evidence, reason) => {
+    const compiled = compileExtractionCitations(source(['课程甲 3']), plan());
+    const record = row('s0_l0_p0', '3');
+    Object.assign(record.cells[0], { status, evidence });
+    try {
+      compiled.validate({ records: [record] });
+      expect.unreachable();
+    } catch (error) {
+      expect(error.validationReason).toBe(reason);
+      expect(extractionValidationPath(error)).toBe('records[0].cells[0]');
+      expect(extractionRepairInstruction({ error, toolName: 'extract_records' })).toContain(reason);
+    }
+  });
+  it('第 11 条依据仍逐条校验并定位，不能因增加依据预算而放过越界编号', () => {
+    const compiled = compileExtractionCitations(source(['课程甲 3']), plan());
+    const record = row('s0_l0_p0', '3');
+    record.cells[0].evidence = Array.from({ length: 11 }, (_, i) => ({
+      reference: i === 10 ? 's99_l0_p0' : 's0_l0_p0',
+    }));
+    try {
+      compiled.validate({ records: [record] });
+      expect.unreachable();
+    } catch (error) {
+      expect(error.validationReason).toBe('Unknown citation reference');
+      expect(extractionValidationPath(error)).toBe('records[0].cells[0].evidence[10]');
+    }
+  });
   it('明确单元格编号不因相同值跳到另一行或另一产品列', () => {
     const horizontal = compileExtractionCitations(source(['项目 | 产品甲 | 产品乙\n重量 | 3 g | 3 g']), plan());
     const wrongColumn = horizontal.validate({ records: [row('s0_t0_r0_c1', '3 g', 's0_t0_r1_c2')] })[0].cells[0];
