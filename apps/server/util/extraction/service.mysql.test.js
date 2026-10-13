@@ -276,6 +276,60 @@ describe.skipIf(!socketPath)('V3 提取表 MySQL 幂等、核对和 Worker 围�
       call(actOnExtraction, { id: t.id, input: { requestId: randomUUID(), version: 2, action: 'plan', plan } }),
     ).rejects.toMatchObject({ status: 409 });
   });
+  it('历史依据按现行规则只读判断，分页筛选、导出与核对一致且不改写原始快照', async () => {
+    const t = await ready();
+    const payload = await addRow(t.id);
+    payload.cells[0] = {
+      ...payload.cells[0],
+      originalValue: '模块 app-shell',
+      status: 'evidence_incomplete',
+      evidenceIssues: ['value_not_in_cited_text'],
+      evidence: [
+        {
+          sourceId: payload.sourceId,
+          sourceVersion: 'v1',
+          segmentId: 'p',
+          offset: 0,
+          kind: 'original',
+          quote: '模块 `app-shell`',
+          locator: '段落',
+        },
+      ],
+    };
+    const raw = JSON.stringify(payload);
+    await db.query('UPDATE toolbox_extraction_records SET payload_json=? WHERE extraction_id=?', [raw, t.id]);
+    // Temporary input expiry and original-resource disappearance do not destroy saved evidence.
+    await db.query('UPDATE toolbox_extraction_sources SET source_json=NULL WHERE extraction_id=?', [t.id]);
+    await db.query("UPDATE toolbox_extractions SET phase='extract',status='completed' WHERE id=?", [t.id]);
+    const before = await call(readExtraction, { id: t.id });
+    const snap = await call(recordSnapshot, { id: t.id });
+    expect(snap.evidenceValidationVersion).toBe(2);
+    expect(snap.records[0].cells[0]).toMatchObject({ status: 'found', originalValue: '模块 app-shell' });
+    expect(snap.records[0].reviews).toEqual({});
+    expect(await call(readRecords, { id: t.id, filter: { anomalies: true } })).toMatchObject({
+      total: 0,
+      evidenceValidationVersion: 2,
+    });
+    expect((await call(readRecords, { id: t.id, filter: { review: 'pending' } })).total).toBe(1);
+    const csv = await buildExtractionExport(snap, 'csv');
+    expect(csv.data).toContain('依据校验规则版本');
+    expect(csv.data).not.toContain('evidence_incomplete');
+    const after = await call(readExtraction, { id: t.id });
+    expect(after.dataVersion).toBe(before.dataVersion);
+    expect(after.counts).toEqual(before.counts);
+    const edit = { requestId: randomUUID(), version: 1, action: 'review', fieldId: 'f1', value: '', checked: true };
+    const reviewed = await call(reviewExtractionRecord, { id: t.id, recordId: 'r', input: edit });
+    expect(reviewed.cells[0].status).toBe('found');
+    expect(reviewed.reviews.f1).toMatchObject({ value: '', overridden: true, checked: true });
+    expect(await call(reviewExtractionRecord, { id: t.id, recordId: 'r', input: edit })).toEqual(reviewed);
+    const [[stored]] = await db.query('SELECT payload_json FROM toolbox_extraction_records WHERE extraction_id=?', [
+      t.id,
+    ]);
+    expect(typeof stored.payload_json === 'string' ? JSON.parse(stored.payload_json) : stored.payload_json).toEqual(
+      payload,
+    );
+    expect((await call(recordSnapshot, { id: t.id })).records[0].reviews.f1.value).toBe('');
+  });
   it('过期且已经外发的租约暂停；旧 Worker 不能提交；明确重试保留记录', async () => {
     const t = await ready();
     await db.query("UPDATE toolbox_extractions SET status='queued',phase='extract' WHERE id=?", [t.id]);

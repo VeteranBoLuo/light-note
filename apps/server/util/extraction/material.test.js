@@ -14,6 +14,7 @@ describe('完整提取材料准备', () => {
     const source = await readMaterial({ userId: 'u', ref: reference, id: 's', database }, { resolveVersions });
     expect(source.segments[0].text).toContain('| 产品甲 | 产品乙 |');
     expect(source.segments[0].kind).toBe('original');
+    expect(source.segments[0].format).toBe('markdown');
     expect(source.complete).toBe(true);
   });
   it('准备前后校验版本，拒绝读取中途发生变化的内容', async () => {
@@ -63,6 +64,7 @@ describe('完整提取材料准备', () => {
     );
     expect(result.complete).toBe(false);
     expect(result.segments[0].kind).toBe('ocr');
+    expect(result.segments[0].format).toBeUndefined();
     expect(JSON.stringify(result)).not.toContain('owned-key');
     expect(download).toHaveBeenCalledWith('owned-key', { maxBytes: 20 * 1024 * 1024 });
   });

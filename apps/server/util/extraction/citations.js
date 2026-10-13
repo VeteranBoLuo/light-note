@@ -27,6 +27,7 @@ export function compileExtractionCitations(source, plan) {
         segmentId: segment.id,
         locator: segment.locator,
         kind: segment.kind,
+        ...(segment.format ? { format: segment.format } : {}),
         offset,
         quote,
       });

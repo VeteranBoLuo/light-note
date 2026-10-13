@@ -44,6 +44,8 @@ export async function readMaterial({ userId, ref, id, database, signal }, depend
       imageProvider: localOcrProvider,
     });
     ({ segments, coverage } = parsed);
+    if (['.md', '.markdown'].includes(descriptor.extension))
+      segments = segments.map((segment) => ({ ...segment, format: 'markdown' }));
     complete = coverage.complete === true && !coverage.truncated;
     title = file.file_name;
   } else {
@@ -73,7 +75,9 @@ export async function readMaterial({ userId, ref, id, database, signal }, depend
       coverage = { scope: 'saved_snapshot' };
     }
     if (body.length > EXTRACTION_LIMITS.sourceCharacters) fail('MATERIAL_LIMIT', '正文超过 300,000 字符，未截断处理');
-    segments = [{ id: 's1', text: body, kind: 'original', locator: { type: 'document', value: '正文' } }];
+    segments = [
+      { id: 's1', text: body, kind: 'original', format: 'markdown', locator: { type: 'document', value: '正文' } },
+    ];
   }
   if (!segments?.some((segment) => segment.text.trim())) fail('NO_TEXT', '资料没有可读取文字');
   await assertCurrent();

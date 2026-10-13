@@ -17,6 +17,7 @@ export type ExtractionEvidence = {
   segmentId: string;
   locator: { type: string; value: string } | string;
   kind: "original" | "ocr";
+  format?: "markdown";
   offset: number;
   quote: string;
   table?: {

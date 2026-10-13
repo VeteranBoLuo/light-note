@@ -143,6 +143,7 @@ function locate(raw, source, anchor = false) {
     segmentId: segment.id,
     locator: segment.locator,
     kind: segment.kind,
+    ...(segment.format ? { format: segment.format } : {}),
     offset,
     quote,
   };
@@ -234,7 +235,7 @@ export function planMessages(fixture) {
     { role: 'system', content: system },
     {
       role: 'user',
-      content: `用户目标：${fixture.goal}\n自行建议记录定义和 1–12 个字段，无人工预置字段。key 使用简短英文 snake_case，label 用中文。只选择用户目标所需的业务字段，避免房间/地点、起止时间/完整时间段等重复表达。来源页、证据、冲突说明、可读性由系统在字段之外保留，不新增这些业务列。规则明确。纯数值的数量或学分优先 number；编号是文本。含单位的值默认文本，日期仅在明确年月日时使用 date。\n材料：${sourcePayload(fixture.source)}`,
+      content: `用户目标：${fixture.goal}\n自行建议记录定义和 1–12 个字段，无人工预置字段。key 使用简短英文 snake_case，label 用中文。只选择用户目标所需且材料确有信息的业务字段，避免房间/地点、起止时间/完整时间段等重复表达。默认规则要求摘录原文短语，不要求改写成一句话、补全常识或自行归类；除非用户明确要求归纳，否则不要设置“跨系统填通用”“推荐改为可选”等派生规则，保留原文措辞。缺少明确依据则留空，不为稀疏的推测信息新增列。来源页、证据、冲突说明、可读性由系统在字段之外保留，不新增这些业务列。规则明确。纯数值的数量或学分优先 number；编号是文本。含单位的值默认文本，日期仅在明确年月日时使用 date。\n材料：${sourcePayload(fixture.source)}`,
     },
   ];
 }
@@ -243,7 +244,7 @@ export function extractionMessages(fixture, plan, citations) {
     { role: 'system', content: system },
     {
       role: 'user',
-      content: `按已建议结构提取每个条目：${JSON.stringify(plan)}\n完整处理以下全部片段，不把页眉当记录；跨段续接同一个条目。cells 严格对应字段顺序。所有 value 为字符串，不翻译专名，不换算单位。日期允许在明确年月日时规范为 YYYY-MM-DD，依据须同时包含年、月、日。缺失用 missing、空字符串、空 evidence。不同说法用 conflict，value 保留各说法，依据覆盖这些说法；同一句原文含有多个说法时可以使用同一片段。${citations?.instructions || 'anchor 选择能唯一定位该条目的原文（例如编号或完整名称，并按需包含相邻字符以区分前缀相同的名称），不要用整个共享表格。每个 found 字段必须给能支持它且属于该条目的证据；共享日期或横向表头可追加证据。segment 为从 0 开始的片段索引，quote 必须逐字复制原文。'}\n材料：${citations?.payload || sourcePayload(fixture.source)}`,
+      content: `按已建议结构提取每个条目：${JSON.stringify(plan)}\n完整处理以下全部片段，不把页眉当记录；跨段续接同一个条目。只输出符合 recordDefinition 的记录，背景介绍、仓库目录等不能为了填满字段冒充可执行步骤。cells 严格对应字段顺序。所有 value 为字符串，不翻译专名，不换算单位。默认优先摘录简短且完整的原文措辞，可去除展示用的加粗和行内代码标记，代码内部字符必须原样保留；多个代码名称可用“、”连接并逐个引用。只有字段规则明确要求概括或映射时才改写，且必须引用覆盖整个值的全部依据，不能只给其中一个分句的来源。不得自行补“通用”“必须”“可选”或推测执行顺序；步骤编号只能取明确序号。日期允许在明确年月日时规范为 YYYY-MM-DD，依据须同时包含年、月、日。缺失用 missing、空字符串、空 evidence。不同说法用 conflict，value 保留各说法，依据覆盖这些说法；同一句原文含有多个说法时可以使用同一片段。${citations?.instructions || 'anchor 选择能唯一定位该条目的原文（例如编号或完整名称，并按需包含相邻字符以区分前缀相同的名称），不要用整个共享表格。每个 found 字段必须给能支持它且属于该条目的证据；共享日期或横向表头可追加证据。segment 为从 0 开始的片段索引，quote 必须逐字复制原文。'}\n材料：${citations?.payload || sourcePayload(fixture.source)}`,
     },
   ];
 }

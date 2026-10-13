@@ -23,6 +23,7 @@ export async function buildExtractionExport(snapshot, format) {
     '读取覆盖',
     '异常字段',
     '数据版本',
+    '依据校验规则版本',
   ];
   const values = (record) => [
     record.id,
@@ -43,6 +44,7 @@ export async function buildExtractionExport(snapshot, format) {
       .map((c) => `${fields.find((f) => f.id === c.fieldId)?.label}:${c.status}`)
       .join('; '),
     snapshot.table.dataVersion,
+    snapshot.evidenceValidationVersion || 1,
   ];
   if (format === 'csv')
     return {
@@ -120,6 +122,7 @@ export async function buildExtractionExport(snapshot, format) {
   for (const line of [
     ['提取表', snapshot.table.title],
     ['数据版本', snapshot.table.dataVersion],
+    ['依据校验规则版本', snapshot.evidenceValidationVersion || 1],
     ['处理状态', snapshot.table.status],
     ['记录数', snapshot.records.length],
     ['说明', '引用存在不代表语义正确；请人工核对。缺失值未按零计算。'],

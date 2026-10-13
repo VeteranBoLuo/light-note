@@ -2,6 +2,7 @@ import pool from '../../db/index.js';
 import { requireExtractionSchema } from './schema.js';
 import { insertData } from '../common.js';
 import { resolveExtractionSourceVersions } from './sourceVersions.js';
+import { EVIDENCE_VALIDATION_VERSION, revalidateRecordEvidence } from './evidence.js';
 import {
   EXTRACTION_ACTIVE_STATUSES,
   EXTRACTION_LIMITS,
@@ -363,14 +364,18 @@ export async function actOnExtraction({ userId, id, input, database = pool }) {
     });
   });
 }
-export function formatRecord(row) {
-  return {
-    ...json(row.payload_json),
-    reviews: json(row.reviews_json, {}),
-    version: Number(row.version),
-    excluded: Boolean(row.excluded),
-    published: Boolean(row.published),
-  };
+export function formatRecord(row, fields = [], options = {}) {
+  return revalidateRecordEvidence(
+    {
+      ...json(row.payload_json),
+      reviews: json(row.reviews_json, {}),
+      version: Number(row.version),
+      excluded: Boolean(row.excluded),
+      published: Boolean(row.published),
+    },
+    fields,
+    options,
+  );
 }
 export async function recordSnapshot({ userId, id, filter = {}, database = pool }) {
   await requireExtractionSchema(database);
@@ -385,8 +390,14 @@ export async function recordSnapshot({ userId, id, filter = {}, database = pool 
       'SELECT id,title,resource_type,resource_id,resource_version,coverage_json,status FROM toolbox_extraction_sources WHERE extraction_id=? AND user_id=? ORDER BY position',
       [id, userId],
     );
+    const fields = json(table.plan_json)?.fields || [];
+    const markdownSources = new Set(
+      sources.filter((s) => ['note', 'bookmark'].includes(s.resource_type)).map((s) => s.id),
+    );
+    const cache = new Map();
     return {
       table: formatExtraction(table),
+      evidenceValidationVersion: EVIDENCE_VALIDATION_VERSION,
       filter,
       sources: sources.map((s) => ({
         id: s.id,
@@ -398,8 +409,10 @@ export async function recordSnapshot({ userId, id, filter = {}, database = pool 
         status: s.status,
       })),
       records: sortExtractionRecords(
-        rows.map(formatRecord).filter((r) => extractionRecordMatches(r, filter)),
-        json(table.plan_json)?.fields || [],
+        rows
+          .map((row) => formatRecord(row, fields, { markdown: markdownSources.has(row.source_id), cache }))
+          .filter((r) => extractionRecordMatches(r, filter)),
+        fields,
         filter,
       ),
     };
@@ -411,6 +424,7 @@ export async function readRecords(options) {
     pageSize = 50;
   return {
     dataVersion: snapshot.table.dataVersion,
+    evidenceValidationVersion: snapshot.evidenceValidationVersion,
     total: snapshot.records.length,
     page,
     pageSize,
@@ -429,7 +443,16 @@ export async function reviewExtractionRecord({ userId, id, recordId, input, data
         [id, userId, recordId],
       );
       if (!row) fail('RECORD_NOT_FOUND', '记录不存在', 404);
-      const record = reviewRecord(formatRecord(row), input);
+      const [[source]] = await connection.query(
+        'SELECT resource_type FROM toolbox_extraction_sources WHERE extraction_id=? AND user_id=? AND id=?',
+        [id, userId, row.source_id],
+      );
+      const record = reviewRecord(
+        formatRecord(row, json(table.plan_json)?.fields || [], {
+          markdown: ['note', 'bookmark'].includes(source?.resource_type),
+        }),
+        input,
+      );
       await connection.query(
         'UPDATE toolbox_extraction_records SET reviews_json=?,version=?,excluded=?,pending_cells=? WHERE extraction_id=? AND id=? AND user_id=?',
         [

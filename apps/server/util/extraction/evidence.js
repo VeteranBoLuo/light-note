@@ -1,4 +1,7 @@
-// Deterministic support for simple pipe-delimited text tables only. No fuzzy entity matching.
+import { Lexer } from 'marked';
+
+export const EVIDENCE_VALIDATION_VERSION = 2;
+// Deterministic support only. Formatting equivalence is not semantic entailment.
 const clean = (value) => String(value).normalize('NFKC').trim().replace(/\s+/g, ' ');
 export function textTables(text) {
   const tables = [];
@@ -154,7 +157,33 @@ function supportsDate(value, quotes) {
   const chinese = new RegExp(`(?:^|\\D)0?${month}月0?${day}日`).test(text);
   return numeric || (yearPresent && (english || chinese));
 }
-export function checkEvidence(value, type, evidence) {
+function readableQuote(quote, cache) {
+  if (cache?.has(quote)) return cache.get(quote);
+  const codes = [];
+  const flatten = (tokens) =>
+    tokens
+      .map((token) => {
+        if (token.type === 'codespan') {
+          codes.push(clean(token.text));
+          return token.text; // Code contents are literal: never parse/unescape them again.
+        }
+        if (['strong', 'em'].includes(token.type)) return flatten(token.tokens);
+        if (['text', 'escape'].includes(token.type)) return token.text;
+        // Do not erase links, deleted text or HTML and accidentally join their neighbours.
+        return `\u0000${token.raw}\u0000`;
+      })
+      .join('');
+  const result = { text: clean(flatten(Lexer.lexInline(quote, { gfm: true }))), codes };
+  // Request-local, bounded reuse for repeated section headings and table cells.
+  if (cache && cache.size < 2048) cache.set(quote, result);
+  return result;
+}
+function quoteText(evidence, quote, options) {
+  return evidence.kind !== 'ocr' && (evidence.format === 'markdown' || options.markdown)
+    ? readableQuote(quote, options.cache)
+    : { text: clean(quote), codes: [] };
+}
+export function checkEvidence(value, type, evidence, options = {}) {
   const bindingIssues = [...new Set(evidence.map((e) => e.bindingIssue).filter(Boolean))];
   if (bindingIssues.length) return bindingIssues;
   const quotes = evidence.map((e) => e.quote);
@@ -165,13 +194,51 @@ export function checkEvidence(value, type, evidence) {
     );
     return supportsDate(value, contextualQuotes) ? [] : ['date_components_not_cited'];
   }
-  if (bound.length && !bound.some((e) => clean(e.table.cell.quote) === clean(value)))
+  if (bound.length && !bound.some((e) => quoteText(e, e.table.cell.quote, options).text === clean(value)))
     return ['table_column_value_mismatch'];
-  if (
-    type === 'number' &&
-    !quotes.some((q) => new RegExp(`(?:^|[^\\d.])${value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:$|[^\\d.])`).test(q))
-  )
-    return ['number_not_in_cited_text'];
-  if (!quotes.some((q) => clean(q).includes(clean(value)))) return ['value_not_in_cited_text'];
-  return [];
+  const readable = () => evidence.map((e) => quoteText(e, e.quote, options));
+  if (type === 'number') {
+    // A full stop after an ordered-list marker is not a decimal point. Keep
+    // signs, decimal/group separators and identifiers from matching a sub-number.
+    const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const number = new RegExp(`(?<![\\dA-Za-z_+\\-−.]|\\d,)${escaped}(?![\\dA-Za-z_]|[.,]\\d)`);
+    return readable().some((q) => number.test(q.text)) ? [] : ['number_not_in_cited_text'];
+  }
+  if (quotes.some((q) => clean(q).includes(clean(value)))) return [];
+  const texts = readable();
+  if (texts.some((q) => q.text.includes(clean(value)))) return [];
+  // A list of complete code literals can cite separate lines. Do not use a bag
+  // of words, substring fragments, paraphrases or inferred categories as proof.
+  const parts = value.split('、').map(clean);
+  if (parts.length > 1 && parts.every((part) => part && texts.some((q) => q.codes.includes(part)))) return [];
+  return ['value_not_in_cited_text'];
+}
+
+/** Read-time assessment of saved evidence, never a rewrite of paid output or
+ * human review. All consumers (page/filter/export/review response) share it.
+ */
+export function revalidateRecordEvidence(record, fields, options = {}) {
+  const fieldTypes = new Map(fields.map((f) => [f.id, f.type]));
+  const recheckable = new Set([
+    'value_not_in_cited_text',
+    'number_not_in_cited_text',
+    'date_components_not_cited',
+    'table_column_value_mismatch',
+  ]);
+  return {
+    ...record,
+    cells: record.cells.map((cell) => {
+      const type = fieldTypes.get(cell.fieldId);
+      if (
+        !type ||
+        !['found', 'evidence_incomplete'].includes(cell.status) ||
+        !cell.evidence?.length ||
+        cell.alternatives?.length ||
+        cell.evidenceIssues?.some((issue) => !recheckable.has(issue))
+      )
+        return cell;
+      const issues = checkEvidence(cell.originalValue, type, cell.evidence, options);
+      return { ...cell, status: issues.length ? 'evidence_incomplete' : 'found', evidenceIssues: issues };
+    }),
+  };
 }
