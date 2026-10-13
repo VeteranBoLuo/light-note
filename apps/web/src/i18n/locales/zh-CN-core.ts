@@ -11729,6 +11729,18 @@ export default {
     authRestoreFailedHint: '账号信息仍保留在本机，请检查网络后重新加载。',
   },
   bookmarkMeta: {
+    recovery: {
+      temporary: '网页暂时无法读取，智能识别未完成',
+      restricted: '此网页需要登录或限制了自动读取',
+      blocked: '此网址无法用于智能识别',
+      failed: '智能识别未完成',
+      manualHint: '已填写的内容已保留。你可以手动补全名称和描述，再保存书签。',
+      restrictedHint: '你可以手动填写后保存网址；也可以在电脑上打开网页，通过轻笺扩展主动采集当前页面。',
+      checkUrlHint: '请检查网址是否正确。保存时仍会按原有规则检查网址。',
+      retry: '重新识别',
+      manual: '手动填写',
+      checkUrl: '检查网址',
+    },
     fillUrlFirst: '请先填写书签地址',
     updatedBoth: '已更新名称和描述',
     updatedName: '已更新名称',
@@ -12801,6 +12813,12 @@ export default {
   },
 
   adminProductInsights: {
+    aiOutcomes: {
+      executions: '关联执行：开始 {started} 次 · 交付结果 {completed} 次 · 点击结果操作 {resultActions} 次',
+      results: '结果采用：填入草稿 {draft} 次 · 插入编辑器 {inserted} 次 · 复制 {copied} 次 · 保存成功 {saved} 次',
+      hint: '按本期同一次执行去重，各采用类型可重叠。旧口径采用 {legacyEvents} 条单列，不混算；尚未记录或未能关联不代表没有使用。',
+      unavailable: '结果采用统计暂不可用',
+    },
     title: '产品运营分析',
     subtitle: '看看最近有多少人在用、用了哪些功能，以及新用户后来有没有再来。',
     loading: '正在计算产品运营指标',
@@ -12825,6 +12843,7 @@ export default {
     partialHint: '{sources} 未纳入本次计算，其余指标仍可使用。',
     aggregateOnly: '只看人数，不看私人内容',
     sources: {
+      ai_outcomes: 'AI 结果采用',
       active_users: '活跃用户',
       new_users: '新增用户',
       activation: '首次保存资料',

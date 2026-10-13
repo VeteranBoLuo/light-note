@@ -40,6 +40,7 @@ export const AI_PRODUCT_EVENTS = Object.freeze([
   'ai_skill_completed',
   'ai_skill_failed',
   'ai_skill_applied',
+  'ai_skill_result_action',
   'ai_skill_cancelled',
   'ai_skill_scope_rejected',
   'note_tree_opened',
@@ -57,6 +58,8 @@ export const AI_PRODUCT_EVENTS = Object.freeze([
 
 const EVENT_SET = new Set(AI_PRODUCT_EVENTS);
 const ENUM_DIMENSIONS = Object.freeze({
+  measurementVersion: new Set(['2']),
+  adoptionKind: new Set(['draft', 'insert', 'copy', 'saved']),
   entrySource: new Set(['workbench', 'workshop', 'resource_menu', 'resource_batch', 'project', 'result']),
   surface: new Set([
     'edge',
@@ -276,6 +279,31 @@ export async function recordAiProductEvent(identity, input = {}, database = pool
     throw telemetryError('AI_EVENT_IDENTITY_REQUIRED', '缺少 AI 事件主体');
   }
   const event = normalizeAiProductEvent(input);
+  // One adoption milestone per execution/kind/identity. Retries and multiple UI
+  // entry points must not inflate the same result; old clients keep their IDs.
+  if (event.eventName === 'ai_skill_applied' && event.dimensions.measurementVersion === '2') {
+    if (
+      !event.dimensions.requestId ||
+      !event.dimensions.skillId ||
+      !event.dimensions.adoptionKind ||
+      event.dimensions.outcome !== 'success'
+    ) {
+      throw telemetryError('AI_EVENT_ADOPTION_INVALID', '采用事件缺少执行或结果类型');
+    }
+    const key = JSON.stringify([
+      String(identity.actorUserId),
+      String(identity.subjectUserId),
+      identity.adminContextMode || 'normal',
+      event.dimensions.requestId,
+      event.dimensions.skillId,
+      event.dimensions.adoptionKind,
+    ]);
+    const bytes = crypto.createHash('sha256').update(key).digest().subarray(0, 16);
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = bytes.toString('hex');
+    event.id = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  }
   try {
     const [result] = await database.query(
       `INSERT INTO ai_product_events

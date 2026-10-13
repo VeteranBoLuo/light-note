@@ -16,9 +16,10 @@ vi.mock('@/api/aiSkillApi', () => ({
   executeAiSkillStream,
 }));
 
+const recordTelemetry = vi.hoisted(() => vi.fn().mockResolvedValue(null));
 vi.mock('@/api/aiTelemetry', () => ({
   aiResourceCountBucket: () => '1',
-  recordAiProductEvent: vi.fn().mockResolvedValue(null),
+  recordAiProductEvent: recordTelemetry,
 }));
 
 vi.mock('@/composables/useAiSkillAvailability', () => ({
@@ -125,11 +126,34 @@ afterEach(() => {
 });
 
 beforeEach(() => {
+  recordTelemetry.mockClear();
   executeAiSkill.mockReset();
   executeAiSkill.mockImplementation((request) => Promise.resolve(completedResponse(String(request.skillId))));
 });
 
 describe('AiSkillPanel 自动执行预设动作', () => {
+  it('结果操作点击只记录点击，不能提前宣称保存或采用成功', async () => {
+    const response = completedResponse('help.answer');
+    response.availableActions = [{ id: 'save', label: '保存为笔记' }];
+    executeAiSkill.mockResolvedValueOnce(response);
+    const onAction = vi.fn();
+    const host = mountPromptPanel({
+      onResultAction: onAction,
+      showPrompt: false,
+      actions: [{ id: 'run', label: '执行', skillId: 'help.answer' }],
+      autoRunActionId: 'run',
+    });
+    await vi.waitFor(() => expect(host.textContent).toContain('保存为笔记'));
+    Array.from(host.querySelectorAll('button'))
+      .find((el) => el.textContent?.includes('保存为笔记'))!
+      .click();
+    expect(onAction).toHaveBeenCalledWith(response.availableActions[0], response);
+    expect(recordTelemetry).toHaveBeenCalledWith(
+      'ai_skill_result_action',
+      expect.objectContaining({ requestId: response.requestId }),
+    );
+    expect(recordTelemetry.mock.calls.some(([event]) => event === 'ai_skill_applied')).toBe(false);
+  });
   it('只在显式指定动作时自动执行，并在资源范围变化后以新材料重新执行', async () => {
     const resourceRefs = ref([{ type: 'bookmark' as const, id: '1' }]);
     const actions = ref<AiSkillPanelAction[]>([
@@ -180,7 +204,7 @@ describe('AiSkillPanel 自动执行预设动作', () => {
       }),
     );
     app.use(createPinia());
-  app.mount(host);
+    app.mount(host);
     cleanup = () => {
       app.unmount();
       host.remove();
@@ -262,7 +286,7 @@ describe('AiSkillPanel 自动执行预设动作', () => {
       }),
     );
     app.use(createPinia());
-  app.mount(host);
+    app.mount(host);
     cleanup = () => {
       app.unmount();
       host.remove();
@@ -336,7 +360,7 @@ describe('AiSkillPanel 自动执行预设动作', () => {
       }),
     );
     app.use(createPinia());
-  app.mount(host);
+    app.mount(host);
     cleanup = () => {
       app.unmount();
       host.remove();
@@ -411,7 +435,7 @@ describe('AiSkillPanel 手动提问草稿', () => {
       }),
     );
     app.use(createPinia());
-  app.mount(host);
+    app.mount(host);
     cleanup = () => {
       app.unmount();
       host.remove();
@@ -421,7 +445,9 @@ describe('AiSkillPanel 手动提问草稿', () => {
     textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     await flushExecution();
 
-    const apply = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('应用结果'));
+    const apply = Array.from(host.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('应用结果'),
+    );
     expect(apply?.disabled).toBe(false);
 
     disabled.value = true;
@@ -438,7 +464,9 @@ describe('AiSkillPanel 手动提问草稿', () => {
     });
 
     const textarea = host.querySelector('textarea') as HTMLTextAreaElement;
-    const analyze = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('分析资料'));
+    const analyze = Array.from(host.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('分析资料'),
+    );
     const submit = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('提问'));
     expect(textarea.disabled).toBe(true);
     expect(analyze?.disabled).toBe(false);
@@ -490,7 +518,7 @@ describe('AiSkillPanel 手动提问草稿', () => {
       }),
     );
     app.use(createPinia());
-  app.mount(host);
+    app.mount(host);
     cleanup = () => {
       app.unmount();
       host.remove();
@@ -624,7 +652,9 @@ describe('AiSkillPanel streaming', () => {
     let complete!: (value: AiSkillResponse) => void;
     executeAiSkillStream.mockImplementation((_request, callbacks) => {
       handlers = callbacks;
-      return new Promise(resolve => { complete = resolve; });
+      return new Promise((resolve) => {
+        complete = resolve;
+      });
     });
     const host = mountPromptPanel({ streaming: true });
     const input = await enterPrompt(host, '如何部署');
@@ -648,14 +678,19 @@ describe('AiSkillPanel streaming', () => {
   });
   it('取消时清理中间结果并忽略迟到事件', async () => {
     let handlers: any;
-    executeAiSkillStream.mockImplementation((_request, callbacks) => { handlers = callbacks; return new Promise(() => {}); });
+    executeAiSkillStream.mockImplementation((_request, callbacks) => {
+      handlers = callbacks;
+      return new Promise(() => {});
+    });
     const host = mountPromptPanel({ streaming: true });
     const input = await enterPrompt(host, '如何部署');
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     await flushExecution();
     handlers.onDelta('中间段');
     await nextTick();
-    Array.from(host.querySelectorAll('button')).find(button => button.textContent?.includes('停止'))!.click();
+    Array.from(host.querySelectorAll('button'))
+      .find((button) => button.textContent?.includes('停止'))!
+      .click();
     handlers.onDelta('迟到段');
     await nextTick();
     expect(handlers.signal.aborted).toBe(true);

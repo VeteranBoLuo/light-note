@@ -3,6 +3,7 @@ import { buildNoteDetailRequestScope } from '@/api/noteDetailPrefetch';
 import { openSaveAsNote, type SaveAsNoteOptions } from '@/composables/useSaveAsNote';
 import type { AiSkillResponse } from '@lightnote/shared/ai-skill-protocol';
 import { apiBasePost } from '@/http/request';
+import { recordAiSkillApplied } from '@/api/aiTelemetry';
 import { stripAiAnalysisCitations } from '@/utils/aiAnalysisContent';
 import { confirmNoteShareExposure } from '@/utils/noteShareExposure';
 
@@ -110,9 +111,21 @@ async function persistAiNoteDraft(
     });
   }
   const result = await openSaveAsNote({
-    sourceKey: `ai:${requestId}`, isCurrent, title: draft.title, type: draft.type,
-    save: options => createNoteFromContent(draft, `ai-skill-note:${requestId}`.slice(0, 512), options, isCurrent),
+    sourceKey: `ai:${requestId}`,
+    isCurrent,
+    title: draft.title,
+    type: draft.type,
+    save: (options) => createNoteFromContent(draft, `ai-skill-note:${requestId}`.slice(0, 512), options, isCurrent),
   });
+  if (result)
+    void recordAiSkillApplied({
+      skillId: response.skillId,
+      requestId,
+      adoptionKind: 'saved',
+      surface: 'ai',
+      resourceType: 'note',
+      resourceCount: 1,
+    });
   return result ? { ...result, route: { path: `/noteLibrary/${encodeURIComponent(result.noteId)}` } } : null;
 }
 

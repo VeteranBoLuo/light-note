@@ -53,10 +53,10 @@
         </p>
 
         <label class="qs-label">{{ $t('quickSave.name') }}</label>
-        <BInput v-model:value="form.name" :placeholder="$t('quickSave.namePh')" />
+        <BInput ref="nameInput" v-model:value="form.name" :placeholder="$t('quickSave.namePh')" />
 
         <label class="qs-label">{{ $t('quickSave.url') }}</label>
-        <BInput v-model:value="form.url" :placeholder="$t('quickSave.urlPh')" />
+        <BInput ref="urlInput" v-model:value="form.url" :placeholder="$t('quickSave.urlPh')" />
 
         <label class="qs-label">{{ $t('quickSave.desc') }}</label>
         <BInput v-model:value="form.description" :placeholder="$t('quickSave.descPh')" />
@@ -73,6 +73,13 @@
               {{ $t('quickSave.aiSuggest') }}
             </BButton>
           </div>
+          <BookmarkRecognitionNotice
+            v-if="recognitionFailure"
+            :failure="recognitionFailure"
+            :disabled="aiRunning || saving"
+            @retry="runAi"
+            @manual="focusManualField"
+          />
           <BSelect
             mode="multiple"
             chip-tone="tag"
@@ -112,10 +119,10 @@
 </template>
 
 <script lang="ts" setup>
-  import { onMounted, reactive, ref } from 'vue';
+  import { onMounted, reactive, ref, watch } from 'vue';
   import { apiBaseGet, apiBasePost, apiQueryPost } from '@/http/request.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
-  import { getAiQuotaErrorPresentation } from '@/utils/aiQuotaErrorPresentation';
+
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -129,7 +136,9 @@
   import { preflightBookmarkUrl } from '@/composables/useBookmarkUrlResolution';
   import { rememberQuickSaveAuthReturnPath } from '@/utils/quickSaveAuthReturn.ts';
   import { createAiSkillRequest, executeAiSkill } from '@/api/aiSkillApi';
-  import { recordAiSkillApplied } from '@/api/aiTelemetry';
+  import { createBookmarkAiAdoption } from '@/utils/bookmarkAiAdoption';
+  import { bookmarkRecognitionFailure, type BookmarkRecognitionFailure } from '@/utils/bookmarkRecognitionFailure';
+  import BookmarkRecognitionNotice from '@/components/bookmark/BookmarkRecognitionNotice.vue';
   import { appendSessionAiTagSelection, replaceSessionAiTagSelection } from '@/utils/aiTagSelection';
   import {
     buildBookmarkCapturePayload,
@@ -199,15 +208,36 @@
   }
 
   // AI 建议:抓网页 → 生成名称/描述 + 从已有标签匹配 + 建议新标签(复用现成接口)
+  const recognitionFailure = ref<BookmarkRecognitionFailure | null>(null);
+  const adoption = createBookmarkAiAdoption('bookmark.quick_save');
+  let suggestionsRequestId = '';
+  const nameInput = ref<InstanceType<typeof BInput> | null>(null);
+  const urlInput = ref<InstanceType<typeof BInput> | null>(null);
+  function focusManualField(target: 'name' | 'url') {
+    (target === 'url' ? urlInput.value : nameInput.value)?.focus();
+  }
+  watch(
+    () => form.url,
+    () => {
+      recognitionFailure.value = null;
+      suggestionsRequestId = '';
+      adoption.reset();
+    },
+    { flush: 'sync' },
+  );
+
   async function runAi() {
     if (mode.value !== 'formal') return;
     const url = String(form.url || '').trim();
     if (!url || aiRunning.value) return;
     aiRunning.value = true;
+    recognitionFailure.value = null;
+    let submittedUrl = form.url;
     try {
       const urlResult = await preflightBookmarkUrl(url, { checkLiveness: false });
-      if (!urlResult.ok || !urlResult.url) return;
+      if (!urlResult.ok || !urlResult.url || form.url !== submittedUrl) return;
       form.url = urlResult.url;
+      submittedUrl = form.url;
       const skillResponse = await executeAiSkill(
         createAiSkillRequest({
           skillId: 'bookmark.parse_url',
@@ -215,16 +245,18 @@
           surface: 'bookmark.quick_save',
         }),
       );
+      if (form.url !== submittedUrl) return;
       if (skillResponse.result?.kind === 'field_suggestions') {
+        suggestionsRequestId = skillResponse.requestId;
         const generated = (skillResponse.result.fields || {}) as Record<string, any>;
-        let applied = false;
+        const changed: ('name' | 'description')[] = [];
         if (!form.name && generated.name) {
           form.name = String(generated.name);
-          applied = true;
+          changed.push('name');
         }
         if (!form.description && generated.description) {
           form.description = String(generated.description);
-          applied = true;
+          changed.push('description');
         }
         const valid = new Set(tagOptions.value.map((o) => o.value));
         const matched = (generated.matchedTagIds || []).filter((id: string) => valid.has(id));
@@ -236,27 +268,19 @@
         });
         form.relatedTags = selection.selectedIds;
         aiSelectedTagIds = selection.aiSelectedIds;
-        if (selection.changed) {
-          applied = true;
-        }
         aiNewTags.value = (generated.newTags || []).slice(0, 3);
-        if (applied) {
-          void recordAiSkillApplied({
-            skillId: 'bookmark.parse_url',
-            surface: 'bookmark.quick_save',
-            resourceType: 'bookmark',
-          });
-        }
+        adoption.filled(skillResponse.requestId, form, changed, selection.changed ? selection.aiSelectedIds : []);
         recordOperation({
           ...OPERATION_LOG_MAP.quickSave.generateMeta,
           operation: `智能识别书签信息成功【${getSafeBookmarkLabel(url)}】`,
         });
         if (skillResponse.result.metadataSource === 'inferred') message.warning(t('bookmarkMeta.inferredWarning'));
+      } else {
+        recognitionFailure.value = bookmarkRecognitionFailure(null, (key, params) => t(key, params));
       }
     } catch (error: any) {
-      const quotaFailure = getAiQuotaErrorPresentation(error, (key, params) => t(key, params));
-      if (quotaFailure) message.warning(quotaFailure.message);
-      else message.info(t('quickSave.aiFailed'));
+      if (form.url === submittedUrl)
+        recognitionFailure.value = bookmarkRecognitionFailure(error, (key, params) => t(key, params));
     } finally {
       aiRunning.value = false;
     }
@@ -270,6 +294,8 @@
       return;
     }
     creatingTag.value = name;
+    const requestId = suggestionsRequestId;
+    const submittedUrl = form.url;
     try {
       const res = await apiBasePost('/api/bookmark/addTag', { name });
       if (res?.status === 200) {
@@ -284,6 +310,7 @@
           });
           form.relatedTags = selection.selectedIds;
           aiSelectedTagIds = selection.aiSelectedIds;
+          if (form.url === submittedUrl && selection.changed) adoption.filled(requestId, form, [], [created.value]);
         }
         aiNewTags.value = aiNewTags.value.filter((t) => t !== name);
         recordOperation({
@@ -330,6 +357,7 @@
       operationReceipts[selectedMode] = receipt;
       const res = await apiBasePost('/api/bookmark/addBookmark', { ...payload, idempotencyKey: receipt.key });
       if (res?.status === 200) {
+        adoption.saved(payload);
         delete operationReceipts[selectedMode];
         saved.value = true;
         recordOperation({

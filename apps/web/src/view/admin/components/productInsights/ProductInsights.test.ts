@@ -29,6 +29,18 @@ function payload() {
       generatedAt: '2026-08-09 12:00:00',
       periodDays: 7,
       summary: { activeUsers: 20, newUsers: 8, activatedUsers: 4, activationRate: 50, aiAdoptionRate: 25 },
+      aiOutcomes: {
+        available: true,
+        measurementVersion: 2,
+        started: 12,
+        completed: 10,
+        resultActions: 7,
+        draft: 4,
+        inserted: 2,
+        copied: 1,
+        saved: 3,
+        legacyEvents: 135,
+      },
       features: [
         { source: 'bookmark', available: true, users: 10, events: 35, rate: 50 },
         { source: 'ai', available: true, users: 5, events: 28, rate: 25 },
@@ -77,6 +89,25 @@ describe('ProductInsights', () => {
     document.body.innerHTML = '';
   });
 
+  it('明确区分结果操作、实际采用类型和历史口径', async () => {
+    const mounted = mountPage();
+    cleanup = mounted.unmount;
+    await vi.waitFor(() => expect(mounted.host.textContent).toContain('点击结果操作 7 次'));
+    expect(mounted.host.textContent).toContain('保存成功 3 次');
+    expect(mounted.host.textContent).toContain('旧口径采用 135 条单列');
+    expect(mounted.host.textContent).toContain('各采用类型可重叠');
+  });
+
+  it('采用数据源缺失时显示不可用而非零', async () => {
+    const result = payload();
+    result.data.aiOutcomes.available = false;
+    apiMocks.load.mockResolvedValueOnce(result);
+    const mounted = mountPage();
+    cleanup = mounted.unmount;
+    await vi.waitFor(() => expect(mounted.host.textContent).toContain('结果采用统计暂不可用'));
+    expect(mounted.host.textContent).not.toContain('保存成功 3 次');
+  });
+
   it('报告默认不查询，点击后生成；覆盖未知仍显示已记录比例与说明', async () => {
     const metric = {
       eligible: 3,
@@ -92,7 +123,10 @@ describe('ProductInsights', () => {
         days: 7,
         cohort: { eligible: 3, immature: 1 },
         metrics: Object.fromEntries(
-          ['a7Resources', 'a7Overall', 'r7Core', 'u7Reuse', 'a7ResourcesLegacy', 'r7InteractionProxy'].map((key) => [key, metric]),
+          ['a7Resources', 'a7Overall', 'r7Core', 'u7Reuse', 'a7ResourcesLegacy', 'r7InteractionProxy'].map((key) => [
+            key,
+            metric,
+          ]),
         ),
       },
     });
