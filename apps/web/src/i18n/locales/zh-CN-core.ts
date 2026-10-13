@@ -1,3 +1,4 @@
+import { MAKEUP_WINDOW_DAYS } from '@lightnote/shared';
 import { noteMathZh } from './noteMath';
 import { extractionZh } from './extraction';
 import { comparisonTableZh } from './comparisonTable';
@@ -8636,10 +8637,9 @@ export default {
     trashForever: '永久',
     protectCard: '补签卡',
     useProtectCard: '补签续连签',
-    protectCardHint:
-      '首次连签 7／30 天、升至 Lv.5／10／15 各赠 1 张；最多持有 {max} 张，赠卡满仓不累积、不补发。每补一天消耗 1 张。',
+    protectCardHint: `首次连签 7／30 天、升至 Lv.5／10／15 各赠 1 张；最多持有 {max} 张，赠卡满仓不累积、不补发。可补今天之前最近 ${MAKEUP_WINDOW_DAYS} 个自然日的漏签，每补一天消耗 1 张。`,
     protectCardOk: '补签成功!连签续到 {n} 天 🎉',
-    protectCardFail: '暂无最近 3 个自然日内可补的漏签',
+    protectCardFail: `暂无最近 ${MAKEUP_WINDOW_DAYS} 个自然日内可补的漏签`,
     protectCardConfirmTitle: '确认补签',
     protectCardConfirmContent: '消耗 1 张补签卡补签 {date}？补签不获得经验、积分或额外奖励。',
     weeklyReportEntry: '本周周报',
@@ -9251,7 +9251,7 @@ export default {
     itemUsing: '使用中…',
     legacyAiPackDesc: '历史加油包。转入后成为永久 AI 余额，每日等级额度用完后自动使用。',
     itemGoMakeup: '补签',
-    itemMakeupHint: '最近 3 个自然日内没有可补的漏签',
+    itemMakeupHint: `最近 ${MAKEUP_WINDOW_DAYS} 个自然日内没有可补的漏签`,
     itemEmptyQty: '暂无',
     aiPackUseOk: '已转入永久 AI 加油余额 +{n}',
     itemUseFail: '使用失败,稍后再试',
@@ -9311,7 +9311,7 @@ export default {
       ai_pack_starter: { name: 'AI 入门包', desc: '+5 万 tokens · 永久有效，每账号限兑一次' },
       makeup_card: {
         name: '补签卡',
-        desc: '每次兑换 1 张，最多持有 {max} 张；可补今天之前 3 个自然日的漏签，不补经验、积分或里程碑奖励',
+        desc: `每次兑换 1 张，最多持有 {max} 张；可补今天之前 ${MAKEUP_WINDOW_DAYS} 个自然日的漏签，不补经验、积分或里程碑奖励`,
       },
       ai_pack_small: { name: 'AI 轻量加油包', desc: '+30 万 tokens · 永久有效，每日等级额度用完后自动使用' },
       ai_pack: { name: 'AI 加油包', desc: '+60 万 tokens · 永久有效，每日等级额度用完后自动使用' },

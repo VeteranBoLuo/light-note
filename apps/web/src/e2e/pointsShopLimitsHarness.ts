@@ -41,9 +41,9 @@ function shopItem(item: Partial<ShopItem> & Pick<ShopItem, 'id' | 'name' | 'desc
 }
 
 const fixture: Shop = {
-  economyVersion: 'points-economy-c7',
+  economyVersion: 'points-economy-c8',
   purchaseEnabled: true,
-  points: state === 'insufficient' ? 299 : 2000,
+  points: state === 'insufficient' ? 599 : 2000,
   level: 8,
   equippedTitle: null,
   equippedFrame: null,
@@ -51,7 +51,7 @@ const fixture: Shop = {
   isVisitor: false,
   frames: [],
   items: [
-    shopItem({ id: 'makeup_card', name: '补签卡', desc: '', cost: 300, effect: 'makeup_card', repeatable: true }),
+    shopItem({ id: 'makeup_card', name: '补签卡', desc: '', cost: 600, effect: 'makeup_card', repeatable: true }),
     shopItem({
       id: 'ai_pack_starter',
       name: 'AI 入门包',
@@ -162,8 +162,8 @@ growthApi.buyShopItem = async (payload) => {
   if (payload.itemId !== 'makeup_card')
     return reply({ ok: false, msg: 'Only make-up cards are enabled in this fixture' });
   if (fixture.protectCards >= 3) return reply({ ok: false, reason: 'card_max' });
-  if (fixture.points < 300) return reply({ ok: false, reason: 'insufficient' });
-  fixture.points -= 300;
+  if (fixture.points < 600) return reply({ ok: false, reason: 'insufficient' });
+  fixture.points -= 600;
   fixture.protectCards += 1;
   return reply({ ok: true, points: fixture.points });
 };

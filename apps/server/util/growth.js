@@ -9,6 +9,7 @@
  *
  * EXP 只用于升级、不是货币。所有发放都走本文件,不在业务处各写一套。
  */
+import { MAKEUP_WINDOW_DAYS } from '@lightnote/shared';
 import { createHash } from 'node:crypto';
 import pool from '../db/index.js';
 import { communityGrowthMetrics } from './communityFeed/growthMetrics.js';
@@ -67,7 +68,7 @@ export const RANKS = [
 ];
 
 export const MAX_LEVEL = 15;
-export const MAKEUP_WINDOW_DAYS = 3;
+export { MAKEUP_WINDOW_DAYS };
 const DAILY_EXP_CAP = 200; // 日 EXP 硬顶 —— 唯一不可绕底线(批量导入速通的最后闸)。签到远低于此,为后续创造类预置。
 // 一次性/运营类经验不属于可刷的「每日经验」，既不受 200 日顶限制，也不占用当日额度。
 // first_own_resource / profile_done 为历史一次性来源，保留在同一口径中兼容旧账本。
@@ -167,7 +168,7 @@ function dateFromDayKey(key) {
   return dayKey(date) === key ? date : null;
 }
 
-// 补签候选:今天之前最近 3 个自然日，按由近到远排序。补签只补签到记录，不补经验/积分/里程碑。
+// 补签候选:今天之前的补签窗口，按由近到远排序。补签只补签到记录，不补经验/积分/里程碑。
 export function getMakeupCandidateDays(now = new Date()) {
   return Array.from({ length: MAKEUP_WINDOW_DAYS }, (_, index) => dayKey(addCalendarDays(now, -(index + 1))));
 }
@@ -434,7 +435,7 @@ export async function getGrowth(userId, { userRole = null, db = pool, calendar =
       equippedFrame = rows[0].equipped_frame || null;
       storageBonus = Number(rows[0].storage_bonus_mb || 0);
     }
-    // 补签判定:有卡时查今天之前最近 3 个自然日；今天是否签到不影响补历史漏签。
+    // 补签判定:有卡时查今天之前的补签窗口；今天是否签到不影响补历史漏签。
     if (protectCards > 0) {
       const candidates = accountCalendar?.makeupDays || getMakeupCandidateDays();
       const [checkedRows] = await db.query(
@@ -478,7 +479,7 @@ export async function getGrowth(userId, { userRole = null, db = pool, calendar =
     equippedTitle, // 已佩戴称号 id
     equippedTitleName: titleName(equippedTitle), // 称号显示名
     equippedFrame, // 已佩戴头像框装扮 id
-    canUseProtectCard, // 最近 3 个自然日内存在漏签且有卡
+    canUseProtectCard, // 补签窗口内存在漏签且有卡
     makeupDays, // 可补的 YYYYMMDD，按由近到远排序；前端仅展示这些日期
     checkedInToday: lastCheckin === effectiveDayKey,
     levelStartExp: rank.cumExp,
@@ -1580,7 +1581,7 @@ export async function checkin(userId, { userRole = null, calendar = null } = {})
   }
 }
 
-// 使用补签卡:可补今天之前最近 3 个自然日的任一漏签，补签到记录和连签，不发经验/积分/里程碑奖励。
+// 使用补签卡:可补今天之前的补签窗口内任一漏签，补签到记录和连签，不发经验/积分/里程碑奖励。
 export async function useProtectCard(userId, { userRole = null, date = null, calendar = null } = {}) {
   if (isVisitorGrowthActor(userId, userRole)) return { ok: false, reason: 'visitor' };
   const conn = await pool.getConnection();

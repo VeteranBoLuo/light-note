@@ -313,7 +313,11 @@
     () =>
       shop.value?.items
         .filter((i) => i.type === 'consumable')
-        .sort((a, b) => Number(isLimitReached(a)) - Number(isLimitReached(b))) || [],
+        .sort(
+          (a, b) =>
+            Number(a.effect === 'makeup_card') - Number(b.effect === 'makeup_card') ||
+            Number(isLimitReached(a)) - Number(isLimitReached(b)),
+        ) || [],
   );
   const frames = computed(() =>
     sortFramesByRarity(shop.value?.frames || shop.value?.items.filter((i) => i.type === 'cosmetic') || []),

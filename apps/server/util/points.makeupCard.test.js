@@ -8,7 +8,7 @@ const { buyItem } = await import('./points.js');
 const { grantItem } = await import('./items.js');
 const { assertPointsEconomyActivationReady } = await import('./pointsEconomyOperations.js');
 
-const args = { clientRequestId: 'makeup-card-request-001', economyVersion: 'points-economy-c7', expectedCost: 300 };
+const args = { clientRequestId: 'makeup-card-request-001', economyVersion: 'points-economy-c8', expectedCost: 600 };
 
 // 模拟 SQL 结果与事务回滚；不替代真实数据库的并发锁验证。
 function database({ cards = 0, points = 1000, grantFails = false } = {}) {
@@ -54,16 +54,16 @@ function database({ cards = 0, points = 1000, grantFails = false } = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.stubEnv('POINTS_ECONOMY_C7_ENABLED', 'true');
+  vi.stubEnv('POINTS_ECONOMY_C8_ENABLED', 'true');
 });
 afterEach(() => vi.unstubAllEnvs());
 
 describe('补签卡积分兑换', () => {
-  it('Lv.1 可用 300 积分兑换，库存从 2 到 3，并记录实际到账数', async () => {
-    const { state, connection } = database({ cards: 2, points: 300 });
+  it('Lv.1 可用 600 积分兑换，库存从 2 到 3，并记录实际到账数', async () => {
+    const { state, connection } = database({ cards: 2, points: 600 });
     await expect(buyItem('u1', 'makeup_card', args)).resolves.toMatchObject({
       ok: true,
-      cost: 300,
+      cost: 600,
       points: 0,
       purchaseLimit: null,
       effect: { type: 'makeup_card', amount: 1 },
@@ -76,7 +76,7 @@ describe('补签卡积分兑换', () => {
 
   it.each([
     { cards: 3, points: 1000, reason: 'card_max' },
-    { cards: 0, points: 299, reason: 'insufficient' },
+    { cards: 0, points: 599, reason: 'insufficient' },
   ])('拒绝 $reason，积分、卡数、流水和收据不变', async ({ cards, points, reason }) => {
     const { state, connection } = database({ cards, points });
     await expect(buyItem('u1', 'makeup_card', args)).resolves.toMatchObject({ ok: false, reason });
@@ -88,11 +88,11 @@ describe('补签卡积分兑换', () => {
     const { state } = database({ cards: 2 });
     const original = await buyItem('u1', 'makeup_card', args);
     await expect(buyItem('u1', 'makeup_card', args)).resolves.toEqual({ ...original, idempotent: true });
-    expect(state).toMatchObject({ cards: 3, points: 700, logs: 1 });
+    expect(state).toMatchObject({ cards: 3, points: 400, logs: 1 });
   });
 
   it('不同请求允许再次兑换，但超过库存上限不扣款', async () => {
-    const { state } = database({ cards: 1 });
+    const { state } = database({ cards: 1, points: 1600 });
     await buyItem('u1', 'makeup_card', args);
     await expect(
       buyItem('u1', 'makeup_card', { ...args, clientRequestId: 'makeup-card-request-002' }),
@@ -103,7 +103,7 @@ describe('补签卡积分兑换', () => {
     expect(state).toMatchObject({ cards: 3, points: 400, logs: 2 });
   });
 
-  it.each([{ economyVersion: 'points-economy-c6' }, { expectedCost: 120 }])(
+  it.each([{ economyVersion: 'points-economy-c7', expectedCost: 300 }, { expectedCost: 300 }])(
     '过期目录或价格拒绝新扣款',
     async (override) => {
       const { state } = database();
@@ -114,6 +114,18 @@ describe('补签卡积分兑换', () => {
     },
   );
 
+  it('C7 成功收据在 C8 启用后按原价回放，绝不再次扣款发卡', async () => {
+    const { state } = database();
+    vi.stubEnv('POINTS_ECONOMY_C8_ENABLED', 'false');
+    vi.stubEnv('POINTS_ECONOMY_C7_ENABLED', 'true');
+    const oldArgs = { ...args, economyVersion: 'points-economy-c7', expectedCost: 300 };
+    const original = await buyItem('u1', 'makeup_card', oldArgs);
+    expect(original).toMatchObject({ ok: true, cost: 300 });
+    vi.stubEnv('POINTS_ECONOMY_C8_ENABLED', 'true');
+    await expect(buyItem('u1', 'makeup_card', oldArgs)).resolves.toEqual({ ...original, idempotent: true });
+    expect(state).toMatchObject({ cards: 1, points: 700, logs: 1 });
+  });
+
   it('发卡异常时回滚扣分与流水', async () => {
     const { state, connection } = database({ grantFails: true });
     await expect(buyItem('u1', 'makeup_card', args)).rejects.toThrow('MAKEUP_CARD_GRANT_FAILED');
@@ -121,11 +133,14 @@ describe('补签卡积分兑换', () => {
     expect(connection.commit).not.toHaveBeenCalled();
   });
 
-  it.each(['points-economy-c6', 'points-economy-c7'])('%s 沿用既有迁移基线', async (economyVersion) => {
-    const db = { query: vi.fn().mockResolvedValue([[{ ready: 1 }]]) };
-    await expect(assertPointsEconomyActivationReady({ db, runtime: { economyVersion } })).resolves.toBe(true);
-    expect(db.query).toHaveBeenCalledTimes(2);
-  });
+  it.each(['points-economy-c6', 'points-economy-c7', 'points-economy-c8'])(
+    '%s 沿用既有迁移基线',
+    async (economyVersion) => {
+      const db = { query: vi.fn().mockResolvedValue([[{ ready: 1 }]]) };
+      await expect(assertPointsEconomyActivationReady({ db, runtime: { economyVersion } })).resolves.toBe(true);
+      expect(db.query).toHaveBeenCalledTimes(2);
+    },
+  );
 });
 
 describe('赠卡、抽奖共用库存上限', () => {

@@ -1,3 +1,6 @@
+// 补签仅限今天之前最近若干自然日，按账号时区计算，前后端共用。
+export declare const MAKEUP_WINDOW_DAYS: 30;
+
 // 补签卡全局持有上限，赠送、兑换、抽奖与展示共用。
 export declare const MAKEUP_CARD_MAX_INVENTORY: 3;
 

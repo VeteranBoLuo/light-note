@@ -65,7 +65,7 @@
             >
               {{ usingId === it.id ? t('growth.itemUsing') : t('growth.itemUse') }}
             </BButton>
-            <!-- 补签卡:补回最近 3 个自然日内的漏签（默认补最近一天） -->
+            <!-- 补签卡:补回补签窗口内的漏签（默认补最近一天） -->
             <BButton
               v-else-if="it.action === 'makeup'"
               class="inv-btn"

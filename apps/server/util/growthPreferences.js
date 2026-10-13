@@ -1,3 +1,4 @@
+import { MAKEUP_WINDOW_DAYS } from '@lightnote/shared';
 import pool from '../db/index.js';
 
 export const DEFAULT_GROWTH_PREFERENCES = Object.freeze({
@@ -136,7 +137,9 @@ export async function getGrowthCalendarContext(userId, { db = pool, now = new Da
     dayKey: dayKeyAtOffset(now, utcOffsetMinutes),
     weekKey: weekKeyAtOffset(now, utcOffsetMinutes),
     previousDayKey: dayKeyAtOffset(now, utcOffsetMinutes, -1),
-    makeupDays: Array.from({ length: 3 }, (_, index) => dayKeyAtOffset(now, utcOffsetMinutes, -(index + 1))),
+    makeupDays: Array.from({ length: MAKEUP_WINDOW_DAYS }, (_, index) =>
+      dayKeyAtOffset(now, utcOffsetMinutes, -(index + 1)),
+    ),
   };
 }
 

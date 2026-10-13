@@ -3,6 +3,7 @@ import {
   C4_POINTS_ECONOMY_VERSION,
   C5_POINTS_ECONOMY_VERSION,
   C6_POINTS_ECONOMY_VERSION,
+  C7_POINTS_ECONOMY_VERSION,
   freeDrawsFor,
   getEconomyCatalogSnapshot,
   getEconomyRuntime,
@@ -10,7 +11,7 @@ import {
   POINTS_ECONOMY_VERSION,
 } from './pointsEconomyCatalog.js';
 
-describe('积分经济 C7 单一目录', () => {
+describe('积分经济 C8 单一目录', () => {
   const snapshot = getEconomyCatalogSnapshot();
 
   it('固定经济版本并完整覆盖 7 个实用商品和 13 个积分框', () => {
@@ -22,7 +23,7 @@ describe('积分经济 C7 单一目录', () => {
       ['storage_128', 500, 1],
       ['storage_512', 1600, 1],
       ['storage_2g', 5200, 1],
-      ['makeup_card', 300, null],
+      ['makeup_card', 600, null],
     ]);
     expect(snapshot.frameItems.map(({ id, cost, minLevel }) => [id, cost, minLevel])).toEqual([
       ['frame_mint', 80, 0],
@@ -43,19 +44,39 @@ describe('积分经济 C7 单一目录', () => {
   });
 
   it('C7 增加补签卡但不改变 C6 商品、奖池与限兑快照', () => {
+    const snapshot = getEconomyCatalogSnapshot(C7_POINTS_ECONOMY_VERSION);
     const previous = getEconomyCatalogSnapshot(C6_POINTS_ECONOMY_VERSION);
+    expect(snapshot.utilityItems.at(-1)).toMatchObject({ id: 'makeup_card', cost: 300 });
     expect(snapshot.utilityItems.slice(0, -1)).toEqual(previous.utilityItems);
     expect(snapshot.frameItems).toEqual(previous.frameItems);
     expect(snapshot.freePolicy).toEqual(previous.freePolicy);
     expect(snapshot.paidPolicy).toEqual(previous.paidPolicy);
     expect(getEconomyRuntime({ POINTS_ECONOMY_C6_ENABLED: 'true', POINTS_ECONOMY_C7_ENABLED: 'true' })).toMatchObject({
-      economyVersion: POINTS_ECONOMY_VERSION,
+      economyVersion: C7_POINTS_ECONOMY_VERSION,
       c5Active: true,
       requireWriteVersion: true,
     });
     expect(
       getEconomyRuntime({ POINTS_ECONOMY_C6_ENABLED: 'true', POINTS_ECONOMY_C7_ENABLED: 'invalid' }).economyVersion,
     ).toBe(C6_POINTS_ECONOMY_VERSION);
+  });
+
+  it('C8 只调高补签卡价格，开启优先、关闭或未知值回退 C7', () => {
+    const previous = getEconomyCatalogSnapshot(C7_POINTS_ECONOMY_VERSION);
+    expect(snapshot.utilityItems.slice(0, -1)).toEqual(previous.utilityItems.slice(0, -1));
+    expect(snapshot.frameItems).toEqual(previous.frameItems);
+    expect(snapshot.freePolicy).toEqual(previous.freePolicy);
+    expect(snapshot.paidPolicy).toEqual(previous.paidPolicy);
+    expect(getEconomyRuntime({ POINTS_ECONOMY_C7_ENABLED: 'true', POINTS_ECONOMY_C8_ENABLED: 'true' })).toMatchObject({
+      economyVersion: 'points-economy-c8',
+      c5Active: true,
+      requireWriteVersion: true,
+    });
+    for (const flag of ['false', 'invalid']) {
+      expect(
+        getEconomyRuntime({ POINTS_ECONOMY_C7_ENABLED: 'true', POINTS_ECONOMY_C8_ENABLED: flag }).economyVersion,
+      ).toBe(C7_POINTS_ECONOMY_VERSION);
+    }
   });
 
   it('C6 保留 C5 价格快照与限购能力', () => {

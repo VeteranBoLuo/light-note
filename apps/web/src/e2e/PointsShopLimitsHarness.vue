@@ -1,7 +1,7 @@
 <template>
   <main class="points-shop-limits-harness">
     <header>
-      <span>Points economy C7 / visual QA</span>
+      <span>Points economy C8 / visual QA</span>
       <h1>补签卡与积分商店状态</h1>
       <p>本地隔离视觉夹具，用于核对可兑换、已兑换、积分不足、加载和错误状态，不连接后端或改变资产。</p>
     </header>
@@ -9,12 +9,29 @@
     <section class="points-shop-limits-harness__surface">
       <GrowthCard :read-only="true" :show-calendar="false" />
       <MilestoneLadder :current-streak="67" :milestones="milestones" />
+      <SigninCalendar v-if="calendarVisible" :checkin-days="checkinDays" :makeup-days="makeupDays" @makeup="onMakeup" />
       <PointsShop :read-only="readOnly" />
     </section>
   </main>
 </template>
 
 <script setup lang="ts">
+  import { ref } from 'vue';
+  import { MAKEUP_WINDOW_DAYS } from '@lightnote/shared';
+  import SigninCalendar from '@/components/growth/SigninCalendar.vue';
+  const calendarVisible = new URLSearchParams(location.search).get('state') === 'calendar';
+  const checkinDays = ref<string[]>([]);
+  const makeupDays = ref(
+    Array.from({ length: MAKEUP_WINDOW_DAYS }, (_, index) => {
+      const day = new Date();
+      day.setDate(day.getDate() - index - 1);
+      return `${day.getFullYear()}${String(day.getMonth() + 1).padStart(2, '0')}${String(day.getDate()).padStart(2, '0')}`;
+    }),
+  );
+  function onMakeup(date: string) {
+    checkinDays.value.push(date);
+    makeupDays.value = makeupDays.value.filter((day) => day !== date);
+  }
   import GrowthCard from '@/components/growth/GrowthCard.vue';
   import MilestoneLadder from '@/components/growth/MilestoneLadder.vue';
   const readOnly = new URLSearchParams(location.search).get('state') === 'readonly';

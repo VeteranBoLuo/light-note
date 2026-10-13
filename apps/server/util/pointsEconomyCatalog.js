@@ -1,4 +1,4 @@
-import { MAKEUP_CARD_MAX_INVENTORY } from '@lightnote/shared';
+import { MAKEUP_CARD_MAX_INVENTORY, MAKEUP_WINDOW_DAYS } from '@lightnote/shared';
 // 积分经济单一事实源：仅包含纯数据与纯函数，禁止依赖数据库、HTTP 或用户状态。
 // 任意价格、概率或等级门槛变更都必须升级版本并同步快照测试。
 
@@ -6,7 +6,8 @@ export const LEGACY_POINTS_ECONOMY_VERSION = 'points-economy-c3';
 export const C4_POINTS_ECONOMY_VERSION = 'points-economy-c4';
 export const C5_POINTS_ECONOMY_VERSION = 'points-economy-c5';
 export const C6_POINTS_ECONOMY_VERSION = 'points-economy-c6';
-export const POINTS_ECONOMY_VERSION = 'points-economy-c7';
+export const C7_POINTS_ECONOMY_VERSION = 'points-economy-c7';
+export const POINTS_ECONOMY_VERSION = 'points-economy-c8';
 
 const LEGACY_UTILITY_ITEMS = [
   {
@@ -220,11 +221,11 @@ const PREVIOUS_ECONOMY_CATALOGS = Object.freeze({
 });
 
 // C7 只增加补签卡兑换，完整保留 C6 合同供回放与回退。
-export const ECONOMY_CATALOGS = Object.freeze({
+const C7_ECONOMY_CATALOGS = Object.freeze({
   ...PREVIOUS_ECONOMY_CATALOGS,
-  [POINTS_ECONOMY_VERSION]: Object.freeze({
+  [C7_POINTS_ECONOMY_VERSION]: Object.freeze({
     ...PREVIOUS_ECONOMY_CATALOGS[C6_POINTS_ECONOMY_VERSION],
-    version: POINTS_ECONOMY_VERSION,
+    version: C7_POINTS_ECONOMY_VERSION,
     utilityItems: freezeItems([
       ...PREVIOUS_ECONOMY_CATALOGS[C6_POINTS_ECONOMY_VERSION].utilityItems,
       {
@@ -239,6 +240,26 @@ export const ECONOMY_CATALOGS = Object.freeze({
   }),
 });
 
+// C8 保留旧价格快照；补签使用范围由共享窗口统一管理，也适用于已有卡片。
+export const ECONOMY_CATALOGS = Object.freeze({
+  ...C7_ECONOMY_CATALOGS,
+  [POINTS_ECONOMY_VERSION]: Object.freeze({
+    ...C7_ECONOMY_CATALOGS[C7_POINTS_ECONOMY_VERSION],
+    version: POINTS_ECONOMY_VERSION,
+    utilityItems: freezeItems(
+      C7_ECONOMY_CATALOGS[C7_POINTS_ECONOMY_VERSION].utilityItems.map((item) =>
+        item.effect === 'makeup_card'
+          ? {
+              ...item,
+              cost: 600,
+              desc: `每次兑换 1 张，最多持有 ${MAKEUP_CARD_MAX_INVENTORY} 张；可补今天之前最近 ${MAKEUP_WINDOW_DAYS} 个自然日的漏签，不补经验、积分或里程碑奖励`,
+            }
+          : item,
+      ),
+    ),
+  }),
+});
+
 export function parseRuntimeFlag(value, defaultValue) {
   if (value === undefined || value === null || value === '') return Boolean(defaultValue);
   if (value === true || value === 'true' || value === '1') return true;
@@ -247,7 +268,8 @@ export function parseRuntimeFlag(value, defaultValue) {
 }
 
 export function getActiveEconomyVersion(env = process.env) {
-  if (parseRuntimeFlag(env.POINTS_ECONOMY_C7_ENABLED, false)) return POINTS_ECONOMY_VERSION;
+  if (parseRuntimeFlag(env.POINTS_ECONOMY_C8_ENABLED, false)) return POINTS_ECONOMY_VERSION;
+  if (parseRuntimeFlag(env.POINTS_ECONOMY_C7_ENABLED, false)) return C7_POINTS_ECONOMY_VERSION;
   if (parseRuntimeFlag(env.POINTS_ECONOMY_C6_ENABLED, false)) return C6_POINTS_ECONOMY_VERSION;
   if (parseRuntimeFlag(env.POINTS_ECONOMY_C5_ENABLED, false)) return C5_POINTS_ECONOMY_VERSION;
   if (parseRuntimeFlag(env.POINTS_ECONOMY_C4_ENABLED, false)) return C4_POINTS_ECONOMY_VERSION;
@@ -265,7 +287,12 @@ export function getEconomyRuntime(env = process.env) {
     catalog,
     economyVersion: catalog.version,
     c4Active: versionedEconomyActive,
-    c5Active: [C5_POINTS_ECONOMY_VERSION, C6_POINTS_ECONOMY_VERSION, POINTS_ECONOMY_VERSION].includes(catalog.version),
+    c5Active: [
+      C5_POINTS_ECONOMY_VERSION,
+      C6_POINTS_ECONOMY_VERSION,
+      C7_POINTS_ECONOMY_VERSION,
+      POINTS_ECONOMY_VERSION,
+    ].includes(catalog.version),
     // C4 及其后续版本激活后协议不可降级；该开关只用于 C3 兼容代码提前上线时主动收紧旧写入口。
     requireWriteVersion: versionedEconomyActive || parseRuntimeFlag(env.POINTS_ECONOMY_REQUIRE_WRITE_VERSION, false),
     purchaseEnabled: parseRuntimeFlag(env.POINTS_SHOP_PURCHASE_ENABLED, true),

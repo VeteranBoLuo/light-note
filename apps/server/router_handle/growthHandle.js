@@ -110,7 +110,7 @@ export const doCheckin = async (req, res) => {
   }
 };
 
-// POST /growth/useProtectCard —— 使用补签卡补回最近 3 个自然日内的漏签(消耗 1 张卡)
+// POST /growth/useProtectCard —— 使用补签卡补回补签窗口内的漏签(消耗 1 张卡)
 export const doUseProtectCard = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   try {

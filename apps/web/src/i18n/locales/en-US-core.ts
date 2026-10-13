@@ -1,3 +1,4 @@
+import { MAKEUP_WINDOW_DAYS } from '@lightnote/shared';
 import { noteMathEn } from './noteMath';
 import { extractionEn } from './extraction';
 import { comparisonTableEn } from './comparisonTable';
@@ -9067,10 +9068,9 @@ export default {
     trashForever: 'Forever',
     protectCard: 'Make-up card',
     useProtectCard: 'Keep streak',
-    protectCardHint:
-      'Earn 1 card once at streaks of 7/30 days and levels 5/10/15. Hold up to {max}; milestone cards at full capacity are not saved or reissued. Each make-up uses 1 card.',
+    protectCardHint: `Earn 1 card once at streaks of 7/30 days and levels 5/10/15. Hold up to {max}; milestone cards at full capacity are not saved or reissued. Make up a missed day in the ${MAKEUP_WINDOW_DAYS} calendar days before today, using 1 card per day.`,
     protectCardOk: 'Streak restored to {n} days 🎉',
-    protectCardFail: 'No missed day can be made up within the last 3 days',
+    protectCardFail: `No missed day can be made up within the ${MAKEUP_WINDOW_DAYS} calendar days before today`,
     protectCardConfirmTitle: 'Confirm make-up',
     protectCardConfirmContent: 'Use 1 Make-up Card for {date}? Make-ups do not grant EXP, points, or extra rewards.',
     weeklyReportEntry: 'Weekly report',
@@ -9693,7 +9693,7 @@ export default {
     legacyAiPackDesc:
       'Legacy boost pack. Convert it into a permanent AI balance that is used after your daily level quota.',
     itemGoMakeup: 'Make up',
-    itemMakeupHint: 'No missed day can be made up within the last 3 days',
+    itemMakeupHint: `No missed day can be made up within the ${MAKEUP_WINDOW_DAYS} calendar days before today`,
     itemEmptyQty: 'None',
     aiPackUseOk: 'Added {n} to your permanent AI boost balance',
     itemUseFail: 'Failed, try again later',
@@ -9753,7 +9753,7 @@ export default {
       ai_pack_starter: { name: 'AI starter pack', desc: '+50,000 tokens · Permanent, once per account' },
       makeup_card: {
         name: 'Make-up Card',
-        desc: 'Redeem 1 card at a time, up to {max} held. Make up a missed day in the 3 calendar days before today; no EXP, points or milestone rewards.',
+        desc: `Redeem 1 card at a time, up to {max} held. Make up a missed day in the ${MAKEUP_WINDOW_DAYS} calendar days before today; no EXP, points or milestone rewards.`,
       },
       ai_pack_small: {
         name: 'AI Mini Boost',

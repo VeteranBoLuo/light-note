@@ -57,6 +57,10 @@ describe('growthPreferences', () => {
       dayKey: '20260811',
       weekKey: '202633',
     });
+    expect(result.makeupDays).toHaveLength(30);
+    expect(result.makeupDays[0]).toBe('20260810');
+    expect(result.makeupDays.at(-1)).toBe('20260712');
+    expect(result.makeupDays).not.toContain(result.dayKey);
   });
 
   it('IANA 时区会随夏令时动态变化，不依赖过期的持久化偏移', async () => {

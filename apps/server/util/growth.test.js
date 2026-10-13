@@ -569,23 +569,47 @@ describe('知识活动热力图', () => {
 });
 
 describe('补签窗口', () => {
-  it('只包含今天之前最近 3 个自然日，并可跨年', () => {
+  it('只包含今天之前最近 30 个自然日，并可跨年', () => {
     const now = new Date(2026, 0, 1, 12, 0, 0);
-    expect(MAKEUP_WINDOW_DAYS).toBe(3);
-    expect(getMakeupCandidateDays(now)).toEqual(['20251231', '20251230', '20251229']);
+    expect(MAKEUP_WINDOW_DAYS).toBe(30);
+    const days = getMakeupCandidateDays(now);
+    expect(days).toHaveLength(30);
+    expect(new Set(days).size).toBe(30);
+    expect(days[0]).toBe('20251231');
+    expect(days.at(-1)).toBe('20251202');
   });
 
   it('拒绝今天、未来、超窗和非法日期', () => {
     const now = new Date(2026, 6, 17, 12, 0, 0);
     expect(isMakeupCandidateDay('20260716', now)).toBe(true);
-    expect(isMakeupCandidateDay('20260714', now)).toBe(true);
-    expect(isMakeupCandidateDay('20260713', now)).toBe(false);
+    expect(isMakeupCandidateDay('20260617', now)).toBe(true);
+    expect(isMakeupCandidateDay('20260616', now)).toBe(false);
     expect(isMakeupCandidateDay('20260717', now)).toBe(false);
     expect(isMakeupCandidateDay('20260718', now)).toBe(false);
     expect(isMakeupCandidateDay('20260230', now)).toBe(false);
   });
 
-  it('按选定日期补签，只写零经验签到记录，不发积分或里程碑奖励', async () => {
+  it('覆盖闰年的跨月窗口', () => {
+    const days = getMakeupCandidateDays(new Date(2028, 2, 1, 12));
+    expect(days).toHaveLength(30);
+    expect(days[0]).toBe('20280229');
+    expect(days.at(-1)).toBe('20280131');
+  });
+
+  it.each(['20260616', '20260717', '20260718', '20260230'])('提交越界日期 %s 不扣卡', async (date) => {
+    const connection = { beginTransaction: vi.fn(), rollback: vi.fn(), release: vi.fn(), query: vi.fn() };
+    pool.getConnection.mockResolvedValue(connection);
+    await expect(
+      useProtectCard('user-1', {
+        date,
+        calendar: accountCalendar('20260717', getMakeupCandidateDays(new Date(2026, 6, 17, 12))),
+      }),
+    ).resolves.toEqual({ ok: false, reason: 'outside_window' });
+    expect(connection.query).not.toHaveBeenCalled();
+    expect(connection.rollback).toHaveBeenCalledOnce();
+  });
+
+  it.each(['20260715', '20260617'])('按选定日期 %s 补签，只写零经验签到记录，不发积分或里程碑奖励', async (date) => {
     vi.clearAllMocks();
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 6, 17, 12, 0, 0));
@@ -645,14 +669,14 @@ describe('补签窗口', () => {
     });
 
     const result = await useProtectCard('user-1', {
-      date: '20260715',
-      calendar: accountCalendar('20260717', ['20260716', '20260715', '20260714']),
+      date,
+      calendar: accountCalendar('20260717', getMakeupCandidateDays(new Date(2026, 6, 17, 12))),
     });
 
-    expect(result).toMatchObject({ ok: true, date: '20260715', streak: 3 });
+    expect(result).toMatchObject({ ok: true, date, streak: 3 });
     expect(connection.query).toHaveBeenCalledWith(
       expect.stringContaining("VALUES (?, 'checkin', NULL, ?, 0, 'granted', ?)"),
-      ['user-1', '20260715', JSON.stringify({ protectCard: true })],
+      ['user-1', date, JSON.stringify({ protectCard: true })],
     );
     expect(connection.query.mock.calls.some(([sql]) => sql.includes('UPDATE growth_events SET amount'))).toBe(false);
     expect(earnPoints).not.toHaveBeenCalled();
