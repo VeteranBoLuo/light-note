@@ -52,8 +52,8 @@ describe('正式提取 Skill 契约', () => {
               complete: true,
               records: [
                 {
-                  anchor: { segment: 0, quote: '相机甲' },
-                  cells: [{ value: '3 g', status: 'found', evidence: [{ segment: 0, quote: '相机甲 重量 3 g' }] }],
+                  anchor: { reference: 's0_l0_p0', quote: '相机甲' },
+                  cells: [{ value: '3 g', status: 'found', evidence: [{ reference: 's0_l0_p0' }] }],
                 },
               ],
             }),
@@ -115,8 +115,8 @@ describe('正式提取 Skill 契约', () => {
           complete: true,
           records: [
             {
-              anchor: { segment: 0, quote: '相机甲' },
-              cells: [{ value: '3 g', status: 'found', evidence: [{ segment: 0, quote: '相机甲 重量 3 g' }] }],
+              anchor: { reference: 's0_l0_p0', quote: '相机甲' },
+              cells: [{ value: '3 g', status: 'found', evidence: [{ reference: 's0_l0_p0' }] }],
             },
           ],
         });

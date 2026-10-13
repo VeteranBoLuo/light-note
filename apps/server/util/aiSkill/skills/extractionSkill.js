@@ -3,22 +3,13 @@ import { callStructuredSkillModel } from '../structuredModel.js';
 import { aiSkillError } from '../errors.js';
 import {
   planTool,
-  extractTool,
   validatePlan,
-  validateRecords,
   planMessages,
   extractionMessages,
   sourcePayload,
   extractionRepairInstruction,
 } from '../../extraction/contract.js';
-const completeTool = {
-  ...extractTool,
-  parameters: {
-    ...extractTool.parameters,
-    properties: { ...extractTool.parameters.properties, complete: { type: 'boolean' } },
-    required: ['records', 'complete'],
-  },
-};
+import { compileExtractionCitations, referencedCitationInstructions } from '../../extraction/citations.js';
 export const extractionSkills = ['suggest', 'extract'].map((mode) =>
   Object.freeze({
     id: `toolbox.extraction_${mode}`,
@@ -54,15 +45,7 @@ export const extractionSkills = ['suggest', 'extract'].map((mode) =>
       return input;
     },
     async prepare({ input, dependencies = {} }) {
-      const extractionTool = structuredClone(completeTool);
-      const cells = extractionTool.parameters.properties.records.items.properties.cells;
-      if (mode === 'extract') {
-        cells.minItems = input.plan.fields.length;
-        cells.maxItems = input.plan.fields.length;
-        const maxSegment = input.source.segments.length - 1;
-        extractionTool.parameters.properties.records.items.properties.anchor.properties.segment.maximum = maxSegment;
-        cells.items.properties.evidence.items.properties.segment.maximum = maxSegment;
-      }
+      const citations = mode === 'extract' ? compileExtractionCitations(input.source, input.plan) : null;
       return {
         sources: [],
         coverage: {
@@ -81,13 +64,20 @@ export const extractionSkills = ['suggest', 'extract'].map((mode) =>
               'AI_SKILL_STRUCTURED_OUTPUT_INVALID',
               'EXTRACTION_CONTRACT_INVALID',
             ],
-            buildRepairInstruction: extractionRepairInstruction,
-            structuredTool: mode === 'suggest' ? planTool : extractionTool,
+            buildRepairInstruction: (args) =>
+              extractionRepairInstruction({
+                ...args,
+                ...(citations ? { citationInstructions: referencedCitationInstructions } : {}),
+              }),
+            structuredTool: mode === 'suggest' ? planTool : citations.tool,
             messages:
               mode === 'suggest'
                 ? planMessages(input)
                 : [
-                    ...extractionMessages(input, input.plan),
+                    ...extractionMessages(input, input.plan, {
+                      payload: citations.payload,
+                      instructions: referencedCitationInstructions,
+                    }),
                     {
                       role: 'user',
                       content:
@@ -99,7 +89,7 @@ export const extractionSkills = ['suggest', 'extract'].map((mode) =>
               if (raw.complete === false) throw aiSkillError('EXTRACTION_OUTPUT_INCOMPLETE', '本段提取未完整完成', 502);
               if (raw.complete !== true || Object.keys(raw).some((key) => !['complete', 'records'].includes(key)))
                 throw aiSkillError('AI_SKILL_STRUCTURED_OUTPUT_INVALID', '提取输出格式无效', 502);
-              return validateRecords({ records: raw.records }, input.plan, input.source);
+              return citations.validate({ records: raw.records });
             },
           });
           return { kind: 'structured_draft', ...(mode === 'suggest' ? { plan: result } : { records: result }) };

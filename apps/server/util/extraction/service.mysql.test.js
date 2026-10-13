@@ -515,6 +515,7 @@ describe.skipIf(!socketPath)('V3 提取表 MySQL 幂等、核对和 Worker 围�
       throw Object.assign(new Error('private provider content'), {
         code: 'EXTRACTION_CONTRACT_INVALID',
         validationReason: 'Missing or ambiguous quote',
+        validationPath: 'records[2].cells[1].evidence[0]',
       });
     });
     await runSingleExtractionJob('test', db, { executeSkill });
@@ -524,6 +525,7 @@ describe.skipIf(!socketPath)('V3 提取表 MySQL 幂等、核对和 Worker 围�
       table.id,
     ]);
     expect(JSON.stringify(receipt)).toContain('Missing or ambiguous quote');
+    expect(JSON.stringify(receipt)).toContain('records[2].cells[1].evidence[0]');
     expect(JSON.stringify(receipt)).not.toContain('private provider content');
     state = await call(actOnExtraction, {
       id: table.id,

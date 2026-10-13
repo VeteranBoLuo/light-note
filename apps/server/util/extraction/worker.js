@@ -8,7 +8,7 @@ import { toolboxWorkerEnabled } from '../toolbox/workerPolicy.js';
 import { resolveExtractionSourceVersions } from './sourceVersions.js';
 import { readMaterial, planWindows } from './material.js';
 import { json, fail, digest, mergeBoundaryRecord } from './domain.js';
-import { extractionValidationReason } from './contract.js';
+import { extractionValidationReason, extractionValidationPath } from './contract.js';
 import { extractionEnabled, transaction, activeAccount } from './service.js';
 
 export async function claimExtraction(database, phase = 'all') {
@@ -327,8 +327,8 @@ export async function runSingleExtractionJob(_workerId, database = pool, depende
       const validationReason = extractionValidationReason(error);
       if (validationReason)
         await connection.query(
-          "UPDATE toolbox_extraction_receipts SET response_json=JSON_SET(response_json,'$.validationReason',?,'$.state','failed') WHERE extraction_id=? AND user_id=? AND request_id=?",
-          [validationReason, job.id, job.user_id, job.lease_token],
+          "UPDATE toolbox_extraction_receipts SET response_json=JSON_SET(response_json,'$.validationReason',?,'$.validationPath',?,'$.state','failed') WHERE extraction_id=? AND user_id=? AND request_id=?",
+          [validationReason, extractionValidationPath(error), job.id, job.user_id, job.lease_token],
         );
       const uncertain =
         Boolean(current.dispatched) &&

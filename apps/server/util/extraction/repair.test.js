@@ -20,8 +20,8 @@ const good = {
   complete: true,
   records: [
     {
-      anchor: { segment: 0, quote: '相机甲' },
-      cells: [{ value: '3 g', status: 'found', evidence: [{ segment: 0, quote: '相机甲 重量 3 g' }] }],
+      anchor: { reference: 's0_l0_p0', quote: '相机甲' },
+      cells: [{ value: '3 g', status: 'found', evidence: [{ reference: 's0_l0_p0' }] }],
     },
   ],
 };
@@ -51,7 +51,9 @@ describe('提取输出的一次平台修复', () => {
     expect(messages.at(-1).content).toContain('不存在的原文');
     const schema = options.tools[0].function.parameters;
     expect(schema.properties.records.items.properties.cells).toMatchObject({ minItems: 1, maxItems: 1 });
-    expect(schema.properties.records.items.properties.anchor.properties.segment.maximum).toBe(0);
+    expect(schema.properties.records.items.properties.anchor.properties.reference.pattern).toBeTruthy();
+    expect(messages.at(-1).content).toContain('records[0].anchor');
+    expect(messages.at(-1).content).toContain('系统会按编号回填原文');
   });
   it('修复仍无依据就失败，不降级校验或继续循环', async () => {
     gateway.requestAi.mockResolvedValue(result(invalid()));
@@ -59,6 +61,18 @@ describe('提取输出的一次平台修复', () => {
       code: 'EXTRACTION_CONTRACT_INVALID',
       validationReason: 'Missing or ambiguous quote',
     });
+    expect(gateway.requestAi).toHaveBeenCalledTimes(2);
+  });
+  it('错误编号给出精确字段路径，修复后引用原文由服务端回填', async () => {
+    const draft = structuredClone(good);
+    draft.records[0].cells[0].evidence[0].reference = 's99_l0_p0';
+    gateway.requestAi.mockResolvedValueOnce(result(draft)).mockResolvedValueOnce(result(good));
+    const value = await invoke();
+    expect(value.records[0].cells[0].evidence[0].quote).toBe(source.segments[0].text);
+    const [messages, options] = gateway.requestAi.mock.calls[1];
+    expect(messages.at(-1).content).toContain('Unknown citation reference');
+    expect(messages.at(-1).content).toContain('records[0].cells[0].evidence[0]');
+    expect(options.billingScope).toBe('platform');
     expect(gateway.requestAi).toHaveBeenCalledTimes(2);
   });
   it('未完整输出或网络结果不确定不会自动重发', async () => {

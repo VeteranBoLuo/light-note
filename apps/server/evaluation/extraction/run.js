@@ -3,7 +3,8 @@ import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { parse } from 'dotenv';
 import { fixtures } from './fixtures.js';
-import { planTool, extractTool, planMessages, extractionMessages, validatePlan, validateRecords } from './contract.js';
+import { planTool, planMessages, extractionMessages, validatePlan } from './contract.js';
+import { compileExtractionCitations, referencedCitationInstructions } from '../../util/extraction/citations.js';
 import { score } from './score.js';
 
 const args = process.argv.slice(2);
@@ -81,9 +82,9 @@ if (!args.includes('--live') && !args.includes('--smoke')) {
           JSON.stringify(
             {
               id,
-              version: 3,
-              promptVersion: 2,
-              contractVersion: 3,
+              version: 4,
+              promptVersion: 3,
+              contractVersion: 4,
               scoreVersion: 2,
               mode: 'live',
               results,
@@ -135,13 +136,21 @@ if (!args.includes('--live') && !args.includes('--smoke')) {
                 1800,
               );
               persist();
+              const citations = compileExtractionCitations(fixture.source, result.plan);
               result.records = await invoke(
-                extractionMessages(fixture, result.plan),
-                extractTool,
+                extractionMessages(fixture, result.plan, {
+                  payload: citations.payload,
+                  instructions: referencedCitationInstructions,
+                }),
+                citations.tool,
                 (raw) => {
                   result.extractionCandidate = raw;
                   persist();
-                  return validateRecords(raw, result.plan, fixture.source);
+                  if (raw.complete !== true || Object.keys(raw).some((key) => !['complete', 'records'].includes(key)))
+                    throw Object.assign(new Error('Extraction output incomplete'), {
+                      code: 'EXTRACTION_OUTPUT_INCOMPLETE',
+                    });
+                  return citations.validate({ records: raw.records });
                 },
                 'extraction_eval_records',
                 6000,

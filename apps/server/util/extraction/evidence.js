@@ -62,7 +62,7 @@ function anchorPosition(table, anchor) {
 
 // The server binds a cited table row/column to the record's original anchor. It does
 // not infer a field's semantics or transform units. Context snippets remain verbatim.
-export function bindTableEvidence(evidence, anchor, source) {
+export function bindTableEvidence(evidence, anchor, source, { exactPositions = false } = {}) {
   if (evidence.segmentId !== anchor.segmentId) return evidence;
   const segment = source.segments.find((s) => s.id === evidence.segmentId);
   for (const table of textTables(segment.text)) {
@@ -78,7 +78,21 @@ export function bindTableEvidence(evidence, anchor, source) {
     }
     let row = rowIndex;
     let col = position.col;
-    if (position.row > 0) {
+    if (exactPositions) {
+      const citedColumn = table.rows[rowIndex].cells.findIndex(
+        (c) => evidence.offset >= c.offset && evidence.offset + evidence.quote.length <= c.end,
+      );
+      if (position.row > 0) {
+        if (rowIndex !== position.row)
+          return rowIndex > 0 ? { ...evidence, bindingIssue: 'table_row_outside_record' } : evidence;
+        if (citedColumn < 0) return evidence; // Whole record row already supplies context.
+        col = citedColumn;
+      } else if (citedColumn >= 0 && citedColumn !== position.col) {
+        // A reference already identifies the exact cell. Never relocate it just
+        // because another product has equal text, or infer a value from a label.
+        return citedColumn === 0 ? evidence : { ...evidence, bindingIssue: 'table_column_outside_record' };
+      }
+    } else if (position.row > 0) {
       // A narrow repeated quote may initially resolve to an earlier record's row.
       const candidates = table.rows[position.row].cells
         .map((c, i) => (c.text.includes(evidence.quote) ? i : -1))
