@@ -41,6 +41,10 @@ function resultFor(sql) {
   if (statement.includes('FROM note n')) return [[{ users: 8, events: 42 }]];
   if (statement.includes('FROM files f')) return [[{ users: 4, events: 7 }]];
   if (statement.includes('FROM todo_items t')) return [[{ users: 6, events: 19 }]];
+  if (statement.includes('AS legacy_events'))
+    return [
+      [{ started: 3, completed: 2, result_actions: 2, draft: 1, inserted: 0, copied: 0, saved: 1, legacy_events: 8 }],
+    ];
   if (statement.includes('FROM ai_product_events e')) return [[{ users: 5, events: 28 }]];
   if (statement.includes('FROM community_chat_messages m')) {
     throw Object.assign(new Error('not migrated'), { code: 'ER_NO_SUCH_TABLE' });
@@ -146,10 +150,29 @@ describe('后台产品洞察与治理快照', () => {
     expect(adminInsightsHandleInternals.percent(1, 3)).toBe(33.3);
   });
 
+  it('结果采用独立返回新口径与旧记录，查询失败显示不可用而非零', async () => {
+    const res = response();
+    await getAdminProductInsights({ user: { role: 'root' }, body: {} }, res);
+    expect(res.body.data.aiOutcomes).toMatchObject({
+      available: true,
+      completed: 2,
+      draft: 1,
+      saved: 1,
+      legacyEvents: 8,
+    });
+    query.mockImplementation(async (sql) => {
+      if (sql.includes('AS legacy_events')) throw { code: 'ER_QUERY_TIMEOUT' };
+      return resultFor(sql);
+    });
+    const failed = response();
+    await getAdminProductInsights({ user: { role: 'root' }, body: {} }, failed);
+    expect(failed.body.data.aiOutcomes).toMatchObject({ available: false, completed: null, saved: null });
+  });
+
   it('默认七天并对各聚合设置执行上限', async () => {
     await getAdminProductInsights({ user: { role: 'root' }, body: {} }, response());
     const calls = query.mock.calls;
-    expect(calls).toHaveLength(10);
+    expect(calls).toHaveLength(11);
     expect(calls[0][1]).toEqual([7]);
     expect(calls.every(([sql]) => sql.startsWith('SELECT /*+ MAX_EXECUTION_TIME(5000) */'))).toBe(true);
   });

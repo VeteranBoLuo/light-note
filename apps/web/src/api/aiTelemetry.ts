@@ -38,6 +38,7 @@ export type AiProductEventName =
   | 'ai_skill_completed'
   | 'ai_skill_failed'
   | 'ai_skill_applied'
+  | 'ai_skill_result_action'
   | 'ai_skill_cancelled'
   | 'ai_skill_scope_rejected'
   | 'note_tree_opened'
@@ -53,6 +54,8 @@ export type AiProductEventName =
   | 'note_branch_ai_answered';
 
 export type AiProductEventDimensions = Partial<{
+  measurementVersion: '2';
+  adoptionKind: 'draft' | 'insert' | 'copy' | 'saved';
   entrySource: 'workbench' | 'workshop' | 'resource_menu' | 'resource_batch' | 'project' | 'result';
   surface:
     | 'edge'
@@ -166,24 +169,37 @@ export function aiDurationBucket(durationMs: number): AiProductEventDimensions['
   return '120s_plus';
 }
 
-export function recordAiProductEvent(event: AiProductEventName, dimensions: AiProductEventDimensions = {}) {
-  const id = typeof globalThis.crypto?.randomUUID === 'function' ? globalThis.crypto.randomUUID() : undefined;
-  return apiBasePost('/api/common/recordAiEvent', { id, event, dimensions }, { silent: true }).catch(() => undefined);
+export async function recordAiProductEvent(event: AiProductEventName, dimensions: AiProductEventDimensions = {}) {
+  try {
+    const id = typeof globalThis.crypto?.randomUUID === 'function' ? globalThis.crypto.randomUUID() : undefined;
+    return await apiBasePost('/api/common/recordAiEvent', { id, event, dimensions }, { silent: true });
+  } catch {
+    // Telemetry, including synchronous transport/crypto failures, is a side effect.
+    return undefined;
+  }
 }
 
 export function recordAiSkillApplied({
   skillId,
+  requestId,
+  adoptionKind,
   surface,
   resourceType = 'none',
   resourceCount = 0,
 }: {
   skillId: string;
+  requestId: string;
+  adoptionKind: NonNullable<AiProductEventDimensions['adoptionKind']>;
   surface: AiSkillTelemetrySurface;
   resourceType?: AiSkillTelemetryResourceType;
   resourceCount?: number;
 }) {
+  if (!requestId) return Promise.resolve(undefined);
   return recordAiProductEvent('ai_skill_applied', {
     skillId,
+    requestId,
+    adoptionKind,
+    measurementVersion: '2',
     surface,
     resourceType,
     resourceCountBucket: aiResourceCountBucket(resourceCount),

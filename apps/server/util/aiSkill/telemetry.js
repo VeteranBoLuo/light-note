@@ -50,6 +50,8 @@ export function buildAiSkillTelemetryDimensions({ skill, request, response, erro
   const refs = request?.scope?.resourceRefs || [];
   return {
     skillId: skill.id,
+    requestId: request.requestId,
+    measurementVersion: '2',
     surface: request.client.surface,
     resourceType: resourceType(skill, refs),
     resourceCountBucket: aiSkillResourceCountBucket(refs.length),
@@ -62,10 +64,12 @@ export function buildAiSkillTelemetryDimensions({ skill, request, response, erro
 
 export function recordAiSkillTelemetry({ recorder, identity, event, dimensions }) {
   if (typeof recorder !== 'function') return Promise.resolve({ accepted: false, skipped: true });
-  return Promise.resolve(recorder(identity, { event, dimensions })).catch((error) => {
-    console.error('[ai-skill] telemetry failed code=%s', String(error?.code || 'AI_SKILL_TELEMETRY_FAILED'));
-    return { accepted: false, skipped: true };
-  });
+  return Promise.resolve()
+    .then(() => recorder(identity, { event, dimensions }))
+    .catch((error) => {
+      console.error('[ai-skill] telemetry failed code=%s', String(error?.code || 'AI_SKILL_TELEMETRY_FAILED'));
+      return { accepted: false, skipped: true };
+    });
 }
 
 export const aiSkillTelemetryInternals = Object.freeze({ serializedLength, resourceType, LENGTH_BUCKETS });

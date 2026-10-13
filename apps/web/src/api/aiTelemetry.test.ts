@@ -29,6 +29,15 @@ describe('AI telemetry client', () => {
     );
   });
 
+  it('swallows synchronous and asynchronous transport failures', async () => {
+    apiBasePost.mockImplementationOnce(() => {
+      throw new Error('sync');
+    });
+    await expect(recordAiProductEvent('ai_skill_opened')).resolves.toBeUndefined();
+    apiBasePost.mockRejectedValueOnce(new Error('async'));
+    await expect(recordAiProductEvent('ai_skill_opened')).resolves.toBeUndefined();
+  });
+
   it('does not fail when the runtime does not expose Web Crypto', async () => {
     const originalCrypto = globalThis.crypto;
     Object.defineProperty(globalThis, 'crypto', { configurable: true, value: undefined });
@@ -47,6 +56,8 @@ describe('AI telemetry client', () => {
   it('records Skill application with low-cardinality dimensions only', async () => {
     await recordAiSkillApplied({
       skillId: 'note.transform_text',
+      requestId: 'request-1',
+      adoptionKind: 'insert',
       surface: 'note.editor.selection',
       resourceType: 'note',
       resourceCount: 1,
@@ -57,6 +68,9 @@ describe('AI telemetry client', () => {
         event: 'ai_skill_applied',
         dimensions: {
           skillId: 'note.transform_text',
+          requestId: 'request-1',
+          adoptionKind: 'insert',
+          measurementVersion: '2',
           surface: 'note.editor.selection',
           resourceType: 'note',
           resourceCountBucket: '1',

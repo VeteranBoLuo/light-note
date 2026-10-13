@@ -119,6 +119,8 @@ export function useBookmarkEditor() {
     undoBookmarkMeta,
     clearMetaUndo,
     disposeBookmarkMeta,
+    recognitionFailure,
+    recordSavedAiAdoption,
   } = useBookmarkMeta({
     bookmarkData,
     tagOptions,
@@ -172,6 +174,7 @@ export function useBookmarkEditor() {
       }
       const res = await apiBasePost(endpoint, params);
       if (res.status !== 200) return;
+      recordSavedAiAdoption(params);
       clearMetaUndo();
       recordOperation({
         module: '书签详情',
@@ -325,6 +328,7 @@ export function useBookmarkEditor() {
     resolvingUrl,
     generating,
     fieldErrors,
+    recognitionFailure,
     handleType,
     isEdit,
     bookmarkId,

@@ -25,6 +25,7 @@
   import type { TodoChecklistItem } from '@/api/todoApi';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import AiSkillDialog from '@/components/aiSkills/AiSkillDialog.vue';
+  import { recordAiSkillApplied } from '@/api/aiTelemetry';
   import { mergeTodoBreakdownChecklist } from './todoBreakdown';
 
   const props = withDefaults(
@@ -89,6 +90,13 @@
     const items = mergeTodoBreakdownChecklist(props.checklist, Array.isArray(result.checklist) ? result.checklist : []);
     if (!items.length) return;
     emit('apply', items);
+    void recordAiSkillApplied({
+      skillId: response.skillId,
+      requestId: response.requestId,
+      adoptionKind: 'draft',
+      surface: 'todo_editor',
+      resourceType: 'todo',
+    });
     visible.value = false;
   }
 </script>

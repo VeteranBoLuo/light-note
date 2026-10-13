@@ -1,10 +1,13 @@
-vi.mock('@/store', () => ({useUserStore: () => ({id:'owner'})}));
-vi.mock('@/api/noteDetailPrefetch', () => ({buildNoteDetailRequestScope: () => 'owner'}));
+const recordAdoption = vi.hoisted(() => vi.fn());
+vi.mock('@/api/aiTelemetry', () => ({ recordAiSkillApplied: recordAdoption }));
+vi.mock('@/store', () => ({ useUserStore: () => ({ id: 'owner' }) }));
+vi.mock('@/api/noteDetailPrefetch', () => ({ buildNoteDetailRequestScope: () => 'owner' }));
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 const apiBasePostMock = vi.hoisted(() => vi.fn());
 const confirmNoteShareExposureMock = vi.hoisted(() => vi.fn());
+const openSaveMock = vi.hoisted(() => vi.fn());
 
-vi.mock('@/composables/useSaveAsNote', () => ({ openSaveAsNote: async (request: any) => { const result = await request.save({ title: request.title, parentId: null, tags: [], projectId: '', thoughts: '' }); return {...result, openAfterSave: true}; } }));
+vi.mock('@/composables/useSaveAsNote', () => ({ openSaveAsNote: openSaveMock }));
 
 vi.mock('@/http/request', () => ({ apiBasePost: apiBasePostMock }));
 vi.mock('@/utils/noteShareExposure', () => ({ confirmNoteShareExposure: confirmNoteShareExposureMock }));
@@ -24,6 +27,16 @@ describe('aiNoteDraft', () => {
   beforeEach(() => {
     sessionStorage.clear();
     vi.clearAllMocks();
+    openSaveMock.mockImplementation(async (request: any) => {
+      const result = await request.save({
+        title: request.title,
+        parentId: null,
+        tags: [],
+        projectId: '',
+        thoughts: '',
+      });
+      return { ...result, openAfterSave: true };
+    });
     confirmNoteShareExposureMock.mockResolvedValue(null);
   });
 
@@ -113,7 +126,8 @@ describe('aiNoteDraft', () => {
     };
 
     await expect(persistAiNotePreview(response, '备用标题')).resolves.toEqual({
-      noteId: 'note/created', openAfterSave: true,
+      noteId: 'note/created',
+      openAfterSave: true,
       route: { path: '/noteLibrary/note%2Fcreated' },
     });
     expect(apiBasePostMock).toHaveBeenCalledWith(
@@ -126,6 +140,9 @@ describe('aiNoteDraft', () => {
         idempotencyKey: 'ai-skill-note:request-1',
       },
       { silent: true },
+    );
+    expect(recordAdoption).toHaveBeenCalledWith(
+      expect.objectContaining({ requestId: 'request-1', adoptionKind: 'saved' }),
     );
     expect(sessionStorage.length).toBe(0);
   });
@@ -149,7 +166,8 @@ describe('aiNoteDraft', () => {
     };
 
     await expect(persistAiMarkdownResultAsNote(response, '网页资料整理')).resolves.toEqual({
-      noteId: 'bookmark-summary-note', openAfterSave: true,
+      noteId: 'bookmark-summary-note',
+      openAfterSave: true,
       route: { path: '/noteLibrary/bookmark-summary-note' },
     });
     expect(apiBasePostMock).toHaveBeenCalledWith(
@@ -209,6 +227,24 @@ describe('aiNoteDraft', () => {
       code: 'WRITE_FAILED',
       status: 500,
     });
+    expect(recordAdoption).not.toHaveBeenCalled();
+    openSaveMock.mockResolvedValueOnce(null);
+    await expect(persistAiNotePreview(response)).resolves.toBeNull();
+    expect(recordAdoption).not.toHaveBeenCalled();
+    let completeSave!: (value: any) => void;
+    openSaveMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          completeSave = resolve;
+        }),
+    );
+    const pending = persistAiNotePreview(response);
+    expect(recordAdoption).not.toHaveBeenCalled();
+    completeSave({ noteId: 'saved', route: { path: '/noteLibrary/saved' }, openAfterSave: false });
+    await pending;
+    expect(recordAdoption).toHaveBeenCalledWith(
+      expect.objectContaining({ requestId: 'request-2', adoptionKind: 'saved' }),
+    );
   });
 
   it('缺少服务端请求标识时失败关闭，避免不同预览共用同一幂等键', async () => {

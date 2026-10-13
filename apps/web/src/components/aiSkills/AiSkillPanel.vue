@@ -472,7 +472,12 @@
   function handleResultAction(action: Record<string, unknown>, result: AiSkillResponse) {
     if (interactionDisabled.value) return;
     emit('result-action', action, result);
-    void recordAiProductEvent('ai_skill_applied', { ...telemetryDimensions.value, outcome: 'success' });
+    void recordAiProductEvent('ai_skill_result_action', {
+      ...telemetryDimensions.value,
+      skillId: result.skillId,
+      requestId: result.requestId,
+      measurementVersion: '2',
+    });
   }
 
   watch([() => props.skillId, scopeKey, initialInputKey, () => props.initialPrompt], () => {

@@ -5628,6 +5628,8 @@
             });
             void recordAiSkillApplied({
               skillId: 'note.transform_text',
+              requestId: skillResponse.requestId,
+              adoptionKind: 'insert',
               surface: 'note.editor.selection',
               resourceType: 'note',
               resourceCount: 1,

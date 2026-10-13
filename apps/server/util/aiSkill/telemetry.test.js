@@ -12,6 +12,7 @@ describe('ai skill telemetry', () => {
     const dimensions = buildAiSkillTelemetryDimensions({
       skill: { id: 'note.batch_summarize', domain: 'note' },
       request: {
+        requestId: 'request-1',
         input: { instruction: 'private body' },
         scope: {
           resourceRefs: [
@@ -26,6 +27,8 @@ describe('ai skill telemetry', () => {
     });
     expect(dimensions).toEqual({
       skillId: 'note.batch_summarize',
+      requestId: 'request-1',
+      measurementVersion: '2',
       surface: 'note_library',
       resourceType: 'note',
       resourceCountBucket: '2_5',
@@ -35,6 +38,19 @@ describe('ai skill telemetry', () => {
     });
     expect(JSON.stringify(dimensions)).not.toContain('private');
     expect(JSON.stringify(dimensions)).not.toContain('secret-id');
+  });
+
+  it('同步抛出的埋点错误同样不影响主链路', async () => {
+    await expect(
+      recordAiSkillTelemetry({
+        recorder: () => {
+          throw new Error('failed');
+        },
+        identity: {},
+        event: 'ai_skill_started',
+        dimensions: {},
+      }),
+    ).resolves.toMatchObject({ skipped: true });
   });
 
   it('覆盖数量、长度和耗时边界', () => {
