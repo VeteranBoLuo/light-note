@@ -1,5 +1,5 @@
 <template>
-  <main class="extraction-workbench" data-mobile-resource-scroll>
+  <main v-auto-scrollbar class="extraction-workbench" data-mobile-resource-scroll>
     <BButton type="text" class="back" @click="back"
       ><SvgIcon :src="icon.toolbox.back" size="14" />{{ t('extraction.back') }}</BButton
     >
@@ -194,41 +194,87 @@
             }}</BButton></div
           >
           <p v-if="table?.plan && !locked" class="muted">{{ t('extraction.flow.typesSuggested') }}</p>
-          <template v-if="advanced">
-            <label for="extraction-definition">{{ t('extraction.definition') }}</label
-            ><BInput
+          <div v-if="advanced" class="definition-field">
+            <label for="extraction-definition">{{ t('extraction.definition') }}</label>
+            <BInput
               id="extraction-definition"
               v-model:value="plan.recordDefinition"
+              type="textarea"
+              :rows="2"
               :maxlength="500"
               :disabled="locked || busy || active || !editable"
             />
-          </template>
-          <div class="fields"
-            ><article v-for="(field, index) in plan.fields" :key="field.key" class="field" :class="{ advanced }"
-              ><BInput
-                v-model:value="field.label"
-                :maxlength="80"
-                :aria-label="t('extraction.fieldName')"
-                :disabled="locked || busy || active || !editable" /><BSelect
-                v-if="advanced"
-                v-model:value="field.type"
-                :aria-label="t('extraction.type')"
-                :options="typeOptions"
-                :disabled="locked || busy || active || !editable" /><BButton
-                v-if="!locked"
+          </div>
+          <div class="fields">
+            <article
+              v-for="(field, index) in plan.fields"
+              :key="field.key"
+              class="field"
+              :class="{ advanced }"
+              :aria-label="t('extraction.fieldNumber', { number: index + 1 })"
+            >
+              <div v-if="advanced" class="field-heading">
+                <h3>{{ t('extraction.fieldNumber', { number: index + 1 }) }}</h3>
+                <div v-if="!locked" class="actions">
+                  <BButton
+                    type="text"
+                    :disabled="index === 0 || busy || active || !editable"
+                    @click="moveField(index, -1)"
+                  >
+                    {{ t('extraction.moveUp') }}
+                  </BButton>
+                  <BButton
+                    type="text"
+                    :disabled="index === plan.fields.length - 1 || busy || active || !editable"
+                    @click="moveField(index, 1)"
+                  >
+                    {{ t('extraction.moveDown') }}
+                  </BButton>
+                  <BButton type="text" :disabled="busy || active || !editable" @click="plan.fields.splice(index, 1)">
+                    {{ t('extraction.remove') }}
+                  </BButton>
+                </div>
+              </div>
+              <div class="field-name">
+                <label v-if="advanced" :for="`extraction-name-${field.key}`">{{ t('extraction.fieldName') }}</label>
+                <BInput
+                  :id="`extraction-name-${field.key}`"
+                  v-model:value="field.label"
+                  :maxlength="80"
+                  :aria-label="t('extraction.fieldName')"
+                  :disabled="locked || busy || active || !editable"
+                />
+              </div>
+              <div v-if="advanced" class="field-type">
+                <span :id="`extraction-type-${field.key}`">{{ t('extraction.type') }}</span>
+                <BSelect
+                  v-model:value="field.type"
+                  :aria-labelledby="`extraction-type-${field.key}`"
+                  :options="typeOptions"
+                  :disabled="locked || busy || active || !editable"
+                />
+              </div>
+              <BButton
+                v-if="!advanced && !locked"
                 type="text"
-                :disabled="busy || active"
+                :disabled="busy || active || !editable"
                 :aria-label="t('extraction.remove')"
                 @click="plan.fields.splice(index, 1)"
-                ><SvgIcon :src="icon.common.close" size="14" /></BButton
-              ><BInput
-                v-if="advanced"
-                v-model:value="field.rule"
-                class="field-rule"
-                :maxlength="500"
-                :placeholder="t('extraction.rule')"
-                :disabled="locked || busy || active || !editable" /></article
-          ></div>
+                ><SvgIcon :src="icon.common.close" size="14"
+              /></BButton>
+              <div v-if="advanced" class="field-rule">
+                <label :for="`extraction-rule-${field.key}`">{{ t('extraction.rule') }}</label>
+                <BInput
+                  :id="`extraction-rule-${field.key}`"
+                  v-model:value="field.rule"
+                  type="textarea"
+                  :rows="3"
+                  :maxlength="500"
+                  :disabled="locked || busy || active || !editable"
+                />
+              </div>
+            </article>
+          </div>
           <BButton
             v-if="!locked"
             type="text"
@@ -236,23 +282,6 @@
             @click="addField"
             >{{ t('extraction.addField') }}</BButton
           >
-          <div v-if="advanced && !locked" class="field-order">
-            <div v-for="(field, index) in plan.fields" :key="field.key" class="actions"
-              ><span>{{ field.label }}</span>
-              <BButton
-                type="text"
-                :disabled="index === 0 || busy || active || !editable"
-                @click="moveField(index, -1)"
-                >{{ t('extraction.moveUp') }}</BButton
-              >
-              <BButton
-                type="text"
-                :disabled="index === plan.fields.length - 1 || busy || active || !editable"
-                @click="moveField(index, 1)"
-                >{{ t('extraction.moveDown') }}</BButton
-              >
-            </div>
-          </div>
           <p v-if="invalidPlan" class="notice issue">{{ t('extraction.duplicate') }}</p
           ><p v-if="plan.issues?.length" class="notice">{{ t('extraction.warnings') }}</p
           ><p v-if="dirtyPlan && table?.plan" class="muted">{{ t('extraction.stale') }}</p
@@ -963,6 +992,8 @@
   .extraction-workbench {
     width: 100%;
     min-width: 0;
+    min-height: 0;
+    overflow-y: auto;
     box-sizing: border-box;
     padding: var(--ui-space-24, 24px);
     color: var(--text-color);
@@ -1011,7 +1042,7 @@
   }
   .flow-footer {
     position: sticky;
-    bottom: 0;
+    bottom: calc(-1 * var(--ui-space-24, 24px));
     z-index: 2;
     background: var(--background-color);
     border-top: 1px solid var(--border-color);
@@ -1180,10 +1211,34 @@
     gap: var(--ui-space-8, 8px);
   }
   .field.advanced {
-    grid-template-columns: minmax(0, 1fr) var(--ui-layout-120, 120px) auto;
+    grid-template-columns: minmax(0, 1fr) var(--ui-layout-120, 120px);
+    align-content: start;
+    padding: var(--ui-space-12, 12px);
+    border: 1px solid var(--surface-border-color);
+    border-radius: var(--ui-space-8, 8px);
   }
+  .field-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ui-space-8, 8px);
+    flex-wrap: wrap;
+  }
+  .definition-field,
+  .field-name,
+  .field-type,
   .field-rule {
-    grid-column: 1/-1;
+    display: grid;
+    gap: var(--ui-space-6, 6px);
+    min-width: 0;
+  }
+  .field-type > span {
+    font-size: var(--ui-font-13, 13px);
+    font-weight: 500;
+  }
+  .field-heading,
+  .field-rule {
+    grid-column: 1 / -1;
   }
   .main-action {
     display: flex;
@@ -1359,17 +1414,6 @@
     .settings,
     .data-area {
       padding: var(--ui-space-16, 16px);
-    }
-    .field,
-    .field.advanced {
-      grid-template-columns: minmax(0, 1fr) auto;
-    }
-    .field :deep(.b-select) {
-      grid-column: 1;
-    }
-    .field > :deep(.b_btn) {
-      grid-column: 2;
-      grid-row: 1;
     }
     .flow-footer {
       position: static;
