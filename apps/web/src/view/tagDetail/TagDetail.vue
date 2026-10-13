@@ -684,6 +684,7 @@
   import { clearGlobalSearchCache } from '@/api/search';
   import { persistAiMarkdownResultAsNote } from '@/utils/aiNoteDraft';
   import { stripAiAnalysisCitations } from '@/utils/aiAnalysisContent';
+  import { recordAiSkillApplied } from '@/api/aiTelemetry';
   import { copyTextToClipboard } from '@/utils/clipboard';
   import { createMobileResourceHubActions, mobileResourceHubPath } from '@/utils/mobileResourceHubActions';
 
@@ -1133,6 +1134,14 @@
     const copied = await copyTextToClipboard(tagAiAnswerText(response));
     if (copied) {
       message.success(t('ai.copied'));
+      void recordAiSkillApplied({
+        skillId: response.skillId,
+        requestId: response.requestId,
+        adoptionKind: 'copy',
+        surface: 'tag_detail',
+        resourceType: 'tag',
+        resourceCount: 1,
+      });
       recordOperation({ module: '标签', operation: '复制标签问答结果' });
       return;
     }

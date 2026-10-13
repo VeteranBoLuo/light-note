@@ -1,6 +1,7 @@
 import {
   ACTIVE_USERS_QUERY,
   AI_ADOPTION_QUERY,
+  AI_OUTCOMES_QUERY,
   ACTIVATION_QUERY,
   COHORT_RETENTION_QUERY,
 } from '../util/services/productInsightsQueries.js';
@@ -165,6 +166,7 @@ export async function getAdminProductInsights(req, res) {
           WHERE m.status = 'active' AND m.create_time >= DATE_SUB(NOW(), INTERVAL ? DAY)`,
         [periodDays],
       ),
+      optionalQuery('ai_outcomes', AI_OUTCOMES_QUERY, [periodDays]),
     ]);
 
     const activeUsers = number(activeResult.rows[0]?.users);
@@ -195,6 +197,20 @@ export async function getAdminProductInsights(req, res) {
       },
     }));
     const allResults = [activeResult, newUserResult, activationResult, cohortResult, ...featureResults];
+    const outcomeResult = featureResults[6];
+    const outcomeRow = outcomeResult.rows[0] || {};
+    const aiOutcomes = {
+      available: outcomeResult.available,
+      measurementVersion: 2,
+      ...Object.fromEntries(
+        ['started', 'completed', 'result_actions', 'draft', 'inserted', 'copied', 'saved', 'legacy_events'].map(
+          (key) => [
+            key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase()),
+            outcomeResult.available ? number(outcomeRow[key]) : null,
+          ],
+        ),
+      ),
+    };
 
     return res.send(
       resultData({
@@ -210,6 +226,7 @@ export async function getAdminProductInsights(req, res) {
           aiAdoptionRate: features.find((item) => item.source === 'ai')?.rate || 0,
         },
         features,
+        aiOutcomes,
         cohorts,
         unavailableSources: allResults.filter((item) => !item.available).map((item) => item.source),
         privacy: {

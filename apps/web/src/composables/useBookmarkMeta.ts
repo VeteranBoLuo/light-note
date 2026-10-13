@@ -1,7 +1,8 @@
 import { computed, ref, watch, type Ref } from 'vue';
 import { apiBasePost } from '@/http/request';
-import { createAiSkillRequest, executeAiSkill, getAiSkillPublicErrorMessage } from '@/api/aiSkillApi';
-import { recordAiSkillApplied } from '@/api/aiTelemetry';
+import { createAiSkillRequest, executeAiSkill } from '@/api/aiSkillApi';
+import { createBookmarkAiAdoption } from '@/utils/bookmarkAiAdoption';
+import { bookmarkRecognitionFailure, type BookmarkRecognitionFailure } from '@/utils/bookmarkRecognitionFailure';
 import message from '@/components/base/BasicComponents/BMessage/BMessage';
 import { recordOperation } from '@/api/commonApi';
 import Alert from '@/components/base/BasicComponents/BModal/Alert';
@@ -9,7 +10,6 @@ import i18n from '@/i18n';
 import { preflightBookmarkUrl } from '@/composables/useBookmarkUrlResolution';
 import { resolveBookmarkUrlInput } from '@lightnote/shared';
 import { appendSessionAiTagSelection, replaceSessionAiTagSelection } from '@/utils/aiTagSelection';
-import { getAiQuotaErrorPresentation } from '@/utils/aiQuotaErrorPresentation';
 
 interface TagOption {
   label: string;
@@ -48,6 +48,11 @@ type BookmarkMetaPhase = 'idle' | 'resolving-url' | 'generating';
  */
 export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBookmarkMetaOptions) {
   const phase = ref<BookmarkMetaPhase>('idle');
+  const recognitionFailure = ref<BookmarkRecognitionFailure | null>(null);
+  const adoption = createBookmarkAiAdoption('bookmark.form');
+  const failRecognition = (error: unknown) => {
+    recognitionFailure.value = bookmarkRecognitionFailure(error, (key, params) => i18n.global.t(key, params));
+  };
   const resolvingUrl = computed(() => phase.value === 'resolving-url');
   const generating = computed(() => phase.value === 'generating');
   let activeGeneration: ActiveGeneration | null = null;
@@ -94,6 +99,8 @@ export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBo
     () => {
       if (internalWrite) return;
       sessionVersion++;
+      recognitionFailure.value = null;
+      adoption.reset();
       stopBookmarkMetaGeneration({ notify: false });
       clearMetaUndo();
     },
@@ -160,6 +167,7 @@ export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBo
       message.warning(i18n.global.t('bookmarkMeta.fillUrlFirst'));
       return;
     }
+    recognitionFailure.value = null;
     const controller = new AbortController();
     const version = ++sessionVersion;
     editedFields = new Set();
@@ -182,8 +190,9 @@ export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBo
       if (currentGeneration?.controller === controller) {
         currentGeneration.timeoutId = setTimeout(() => {
           if (activeGeneration?.controller !== controller || controller.signal.aborted) return;
-          message.error(i18n.global.t('bookmarkMeta.generationTimeout'));
+          failRecognition({ code: 'BOOKMARK_META_TIMEOUT' });
           controller.abort();
+          clearActiveGeneration(controller);
         }, BOOKMARK_META_GENERATION_TIMEOUT_MS);
       }
 
@@ -197,7 +206,7 @@ export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBo
       );
       if (controller.signal.aborted) return;
       if (skillResponse.result?.kind !== 'field_suggestions') {
-        message.error(i18n.global.t('bookmarkMeta.generateFailed'));
+        failRecognition({ code: 'AI_SKILL_OUTPUT_INVALID' });
         return;
       }
 
@@ -231,13 +240,7 @@ export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBo
       const validIds = new Set(tagOptions.value.map((o) => o.value));
       const matched: string[] = (generatedData.matchedTagIds || []).filter((id: string) => validIds.has(id));
       const tagsChanged = replaceGeneratedTags(matched);
-      if (selectedFields.length || tagsChanged) {
-        void recordAiSkillApplied({
-          skillId: 'bookmark.parse_url',
-          surface: 'bookmark.form',
-          resourceType: 'bookmark',
-        });
-      }
+      adoption.filled(skillResponse.requestId, bookmarkData.value, selectedFields, tagsChanged ? aiSelectedTagIds : []);
 
       recordOperation({ module: '书签详情', operation: `生成书签信息成功【${bookmarkData.value.url}】` });
 
@@ -257,21 +260,17 @@ export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBo
         0,
         availableTagSlots,
       );
-      if (creatableTags.length) confirmCreateTags(creatableTags, version);
+      if (creatableTags.length) confirmCreateTags(creatableTags, version, skillResponse.requestId);
     } catch (error: any) {
       if (isRequestCancelled(error, controller)) return;
-      // Skill API 使用 silent 请求，页面必须展示其已经过服务端脱敏的公开错误；
-      // preflight 或其他未知异常仍使用本地兜底，避免把技术细节直接暴露给用户。
-      const quotaFailure = getAiQuotaErrorPresentation(error, (key, params) => i18n.global.t(key, params as any));
-      const publicMessage = getAiSkillPublicErrorMessage(error);
-      message.error(quotaFailure?.message || publicMessage || i18n.global.t('bookmarkMeta.generateFailed'));
+      failRecognition(error);
     } finally {
       clearActiveGeneration(controller);
     }
   }
 
   // 新标签属于账号级持久对象，必须显式确认；允许它与强相关已有标签同时出现。
-  function confirmCreateTags(names: string[], version: number) {
+  function confirmCreateTags(names: string[], version: number, requestId: string) {
     const displayNames = names.join('、');
     Alert.alert({
       title: i18n.global.t('bookmarkMeta.suggestTagTitle'),
@@ -308,6 +307,12 @@ export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBo
               .filter((option) => createdNames.includes(option.label))
               .map((option) => option.value);
             addGeneratedTags(createdIds);
+            adoption.filled(
+              requestId,
+              bookmarkData.value,
+              [],
+              createdIds.filter((id) => bookmarkData.value.relatedTags.includes(id)),
+            );
             if (createdNames.length < names.length) message.warning(i18n.global.t('bookmarkMeta.createTagFailed'));
             message.success(
               i18n.global.t(
@@ -337,5 +342,7 @@ export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBo
     undoBookmarkMeta,
     clearMetaUndo,
     disposeBookmarkMeta,
+    recognitionFailure,
+    recordSavedAiAdoption: adoption.saved,
   };
 }

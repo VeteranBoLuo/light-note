@@ -10,6 +10,7 @@
         <div class="bookmark-url-row">
           <BInput
             id="bookmark-editor-url"
+            ref="urlInput"
             v-model:value="bookmarkData.url"
             class="bookmark-url-input"
             theme="al-day"
@@ -56,6 +57,13 @@
           </BTooltip>
         </div>
         <span v-if="errors.url" class="bookmark-field__error">{{ errors.url }}</span>
+        <BookmarkRecognitionNotice
+          v-if="recognitionFailure"
+          :failure="recognitionFailure"
+          :disabled="saving || resolvingUrl || generating"
+          @retry="$emit('generate')"
+          @manual="focusManualField"
+        />
         <div class="bookmark-field__hints">
           <div v-if="updatedFields.length" class="bookmark-meta-feedback" role="status">
             <span>{{
@@ -74,11 +82,7 @@
           </div>
           <div v-else class="bookmark-ai-note">{{ $t('bookmarkEditor.aiHint') }}</div>
           <!-- 编辑时:网页快照入口紧挨网址(快照存的就是该网址的正文),比原来藏在页面右上角更易发现 -->
-          <BButton
-            v-if="handleType === 'edit'"
-            class="bookmark-snapshot-entry"
-            @click="$emit('viewSnapshot')"
-          >
+          <BButton v-if="handleType === 'edit'" class="bookmark-snapshot-entry" @click="$emit('viewSnapshot')">
             <SvgIcon :src="icon.bookmarkManage.snapshot" size="14" color="currentColor" />
             <span>{{ $t('bookmarkMg.snapshot') }}</span>
           </BButton>
@@ -91,6 +95,7 @@
         </label>
         <BInput
           id="bookmark-editor-name"
+          ref="nameInput"
           v-model:value="bookmarkData.name"
           theme="al-day"
           height="40px"
@@ -174,6 +179,9 @@
 </template>
 
 <script lang="ts" setup>
+  import { ref } from 'vue';
+  import BookmarkRecognitionNotice from '@/components/bookmark/BookmarkRecognitionNotice.vue';
+  import type { BookmarkRecognitionFailure } from '@/utils/bookmarkRecognitionFailure';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
@@ -195,6 +203,7 @@
       generating: boolean;
       updatedFields: ('name' | 'description')[];
       canUndoMeta: boolean;
+      recognitionFailure?: BookmarkRecognitionFailure | null;
       errors: BookmarkEditorErrors;
       tagOptions: BookmarkTagOption[];
     }>(),
@@ -203,6 +212,11 @@
 
   const bookmarkData = defineModel<BookmarkEditorData>('bookmarkData', { required: true });
   const saveSnapshot = defineModel<boolean>('saveSnapshot', { default: true });
+  const nameInput = ref<InstanceType<typeof BInput> | null>(null);
+  const urlInput = ref<InstanceType<typeof BInput> | null>(null);
+  function focusManualField(target: 'name' | 'url') {
+    (target === 'url' ? urlInput.value : nameInput.value)?.focus();
+  }
 
   const emit = defineEmits<{
     generate: [];

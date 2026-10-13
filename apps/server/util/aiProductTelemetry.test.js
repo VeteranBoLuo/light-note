@@ -131,6 +131,35 @@ describe('AI product telemetry privacy contract', () => {
     expect(AI_PRODUCT_EVENTS.length).toBeGreaterThan(20);
   });
 
+  it('新版采用按执行、类型和主体去重，旧事件继续兼容', async () => {
+    const database = { query: vi.fn().mockResolvedValue([{ affectedRows: 1 }]) };
+    const identity = { actorUserId: 'one', subjectUserId: 'one' };
+    const input = {
+      event: 'ai_skill_applied',
+      dimensions: {
+        requestId: 'req-1',
+        skillId: 'bookmark.parse_url',
+        measurementVersion: '2',
+        adoptionKind: 'draft',
+        outcome: 'success',
+      },
+    };
+    const a = await recordAiProductEvent(identity, input, database);
+    const b = await recordAiProductEvent(identity, { ...input, id: '18ee8f57-5259-4adf-b7b9-40a4387434b0' }, database);
+    expect(a.id).toBe(b.id);
+    const saved = await recordAiProductEvent(
+      identity,
+      { ...input, dimensions: { ...input.dimensions, adoptionKind: 'saved' } },
+      database,
+    );
+    expect(saved.id).not.toBe(a.id);
+    const other = await recordAiProductEvent({ actorUserId: 'two', subjectUserId: 'two' }, input, database);
+    expect(other.id).not.toBe(a.id);
+    await expect(
+      recordAiProductEvent(identity, { ...input, dimensions: { ...input.dimensions, requestId: undefined } }, database),
+    ).rejects.toMatchObject({ code: 'AI_EVENT_ADOPTION_INVALID' });
+  });
+
   it('binds actor, subject and admin context and deduplicates by event id', async () => {
     const database = { query: vi.fn().mockResolvedValue([{ affectedRows: 1 }]) };
     const result = await recordAiProductEvent(

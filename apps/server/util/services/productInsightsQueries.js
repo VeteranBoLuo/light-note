@@ -14,6 +14,45 @@ export const AI_ADOPTION_QUERY = `SELECT COUNT(DISTINCT e.subject_user_id) AS us
       'ai_skill_started', 'ai_skill_completed', 'ai_skill_applied')
     AND e.create_time >= DATE_SUB(NOW(), INTERVAL ? DAY)`;
 
+// Linked executions observed in this window, not a historical conversion rate.
+// Draft/insert/copy/saved can overlap. Only a matching delivered result qualifies.
+export const AI_OUTCOMES_QUERY = `SELECT
+  COALESCE(SUM(started), 0) AS started,
+  COALESCE(SUM(completed), 0) AS completed,
+  COALESCE(SUM(completed AND result_action), 0) AS result_actions,
+  COALESCE(SUM(completed AND draft), 0) AS draft,
+  COALESCE(SUM(completed AND inserted), 0) AS inserted,
+  COALESCE(SUM(completed AND copied), 0) AS copied,
+  COALESCE(SUM(completed AND saved), 0) AS saved,
+  COALESCE(SUM(legacy_events), 0) AS legacy_events
+ FROM (
+  SELECT subject_user_id, skill_id, request_id,
+    MAX(linked AND event_name='ai_skill_started') AS started,
+    MAX(linked AND event_name='ai_skill_completed') AS completed,
+    MAX(linked AND event_name='ai_skill_result_action') AS result_action,
+    MAX(linked AND event_name='ai_skill_applied' AND outcome='success' AND adoption_kind='draft') AS draft,
+    MAX(linked AND event_name='ai_skill_applied' AND outcome='success' AND adoption_kind='insert') AS inserted,
+    MAX(linked AND event_name='ai_skill_applied' AND outcome='success' AND adoption_kind='copy') AS copied,
+    MAX(linked AND event_name='ai_skill_applied' AND outcome='success' AND adoption_kind='saved') AS saved,
+    SUM(event_name='ai_skill_applied' AND (NOT linked OR adoption_kind IS NULL)) AS legacy_events
+   FROM (
+    SELECT e.subject_user_id,e.event_name,
+      JSON_UNQUOTE(JSON_EXTRACT(e.dimensions_json,'$.skillId')) AS skill_id,
+      JSON_UNQUOTE(JSON_EXTRACT(e.dimensions_json,'$.requestId')) AS request_id,
+      JSON_UNQUOTE(JSON_EXTRACT(e.dimensions_json,'$.adoptionKind')) AS adoption_kind,
+      JSON_UNQUOTE(JSON_EXTRACT(e.dimensions_json,'$.outcome')) AS outcome,
+      COALESCE(JSON_UNQUOTE(JSON_EXTRACT(e.dimensions_json,'$.measurementVersion'))='2'
+        AND JSON_UNQUOTE(JSON_EXTRACT(e.dimensions_json,'$.requestId')) REGEXP '^h_[a-f0-9]{32}$'
+        AND JSON_UNQUOTE(JSON_EXTRACT(e.dimensions_json,'$.skillId')) <> '', 0) AS linked
+     FROM ai_product_events e
+     JOIN user u ON u.id=e.subject_user_id AND u.role='user' AND u.del_flag='0'
+     WHERE e.admin_context_mode='normal' AND e.actor_user_id=e.subject_user_id
+       AND e.event_name IN ('ai_skill_started','ai_skill_completed','ai_skill_result_action','ai_skill_applied')
+       AND e.create_time >= DATE_SUB(NOW(), INTERVAL ? DAY)
+   ) events_in_window
+   GROUP BY subject_user_id,skill_id,request_id
+ ) executions_in_window`;
+
 // 有界后台读模型；注册后滚动窗口，分子与分母必须等待完整观察期。
 export const ACTIVATION_QUERY = `SELECT COUNT(DISTINCT u.id) AS new_users,
                 COUNT(DISTINCT f.user_id) AS activated_users

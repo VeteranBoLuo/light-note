@@ -60,6 +60,27 @@ function mockSkillSuccess(fields: Record<string, unknown>, resultMeta: Record<st
 }
 
 describe('useBookmarkMeta.generateBookmarkMeta', () => {
+  it('失败保留输入，改网址清除旧错误，再次识别可恢复', async () => {
+    apiBasePost.mockRejectedValueOnce({
+      response: {
+        status: 422,
+        data: { status: 422, msg: 'temporarily unreadable', data: { code: 'BOOKMARK_PAGE_READ_TEMPORARY' } },
+      },
+    });
+    const state = setup();
+    state.bookmarkData.value.name = '手写名称';
+    state.bookmarkData.value.description = '手写说明';
+    await state.generateBookmarkMeta();
+    expect(state.recognitionFailure.value?.retryable).toBe(true);
+    expect(state.bookmarkData.value).toMatchObject({ name: '手写名称', description: '手写说明' });
+    state.bookmarkData.value.url = 'https://example.org/new';
+    expect(state.recognitionFailure.value).toBeNull();
+    mockSkillSuccess({ name: '新结果', description: '新说明' });
+    await state.generateBookmarkMeta();
+    expect(state.recognitionFailure.value).toBeNull();
+    expect(state.bookmarkData.value.name).toBe('新结果');
+  });
+
   beforeEach(() => {
     apiBasePost.mockReset();
     preflightBookmarkUrl.mockClear();
@@ -281,7 +302,7 @@ describe('useBookmarkMeta.generateBookmarkMeta', () => {
 
     await t.generateBookmarkMeta();
 
-    expect(messageError).toHaveBeenCalledWith('当前账号不能使用该 AI 能力');
+    expect(t.recognitionFailure.value?.message).toBe('当前账号不能使用该 AI 能力');
   });
 
   it('网页访问验证失败时展示明确原因，且不回填推测内容', async () => {
@@ -299,7 +320,7 @@ describe('useBookmarkMeta.generateBookmarkMeta', () => {
 
     await t.generateBookmarkMeta();
 
-    expect(messageError).toHaveBeenCalledWith('网页触发了访问验证或拒绝自动读取，请稍后重试或手动填写书签信息');
+    expect(t.recognitionFailure.value).toMatchObject({ message: '此网页需要登录或限制了自动读取', retryable: false });
     expect(t.bookmarkData.value.name).toBe('');
     expect(t.bookmarkData.value.description).toBe('');
   });
@@ -310,7 +331,7 @@ describe('useBookmarkMeta.generateBookmarkMeta', () => {
 
     await t.generateBookmarkMeta();
 
-    expect(messageError).toHaveBeenCalledWith('智能识别失败，请稍后重试或手动填写');
+    expect(t.recognitionFailure.value?.message).toBe('智能识别未完成');
   });
 
   it('AI 本地协议校验异常也使用安全兜底，不展示响应结构细节', async () => {
@@ -319,7 +340,7 @@ describe('useBookmarkMeta.generateBookmarkMeta', () => {
 
     await t.generateBookmarkMeta();
 
-    expect(messageError).toHaveBeenCalledWith('智能识别失败，请稍后重试或手动填写');
+    expect(t.recognitionFailure.value?.message).toBe('智能识别未完成');
     expect(messageError).not.toHaveBeenCalledWith(expect.stringContaining('protocolVersion'));
   });
 
@@ -446,7 +467,11 @@ describe('useBookmarkMeta.generateBookmarkMeta', () => {
       await pending;
 
       expect(t.generating.value).toBe(false);
-      expect(messageError).toHaveBeenCalledTimes(1);
+      expect(t.recognitionFailure.value).toMatchObject({
+        retryable: true,
+        message: '网页暂时无法读取，智能识别未完成',
+      });
+      expect(messageError).not.toHaveBeenCalled();
       expect(messageInfo).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();

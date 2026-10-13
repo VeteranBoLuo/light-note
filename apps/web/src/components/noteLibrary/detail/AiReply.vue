@@ -277,6 +277,7 @@
   type ResultFormat = 'title' | 'body' | 'both';
   const resultFormat = ref<ResultFormat>('both');
   const requestCompleted = ref(false);
+  const completedRequestId = ref('');
   const previewVisible = ref(false);
   const abortController = ref<AbortController | null>(null);
   type GenerationPhase = 'idle' | 'connecting' | 'waiting' | 'slow' | 'streaming';
@@ -512,6 +513,7 @@
     if (mode !== 'followup') lastGenerationMode.value = mode;
     resultFormat.value = expectedFormat;
     requestCompleted.value = false;
+    completedRequestId.value = '';
     outputFull.value = '';
     // 重置放大预览的逐字状态:否则追问时「上一版满内容」还留在 previewTyped 里,
     // 会因 previewTyped.length >= previewSource.length 卡住 pump,弹框要等新版长度追上旧版才更新
@@ -574,6 +576,7 @@
       // 完成事件携带经过服务端最终校验的规范结果。以它覆盖增量缓冲，防止代理层
       // 合并 chunk 时出现极小差异，同时保留首字到达即展示的真实流式体验。
       outputFull.value = `${marker}${content}`;
+      completedRequestId.value = response.requestId;
       requestCompleted.value = true;
     } catch (error: any) {
       console.error('AI 回复生成失败:', error);
@@ -725,6 +728,7 @@
 
   const applyResult = async (which: 'body' | 'title') => {
     if (!note || !outputFull.value) return false;
+    const requestId = completedRequestId.value;
     if (which === 'body') {
       const content = buildBodyContent();
       if (!content) return false;
@@ -737,6 +741,8 @@
       focusEditorToEnd?.();
       void recordAiSkillApplied({
         skillId: 'note.transform_text',
+        requestId,
+        adoptionKind: 'insert',
         surface: 'note.detail',
         resourceType: 'note',
         resourceCount: 1,
@@ -754,6 +760,8 @@
     triggerSave?.();
     void recordAiSkillApplied({
       skillId: 'note.transform_text',
+      requestId,
+      adoptionKind: 'insert',
       surface: 'note.detail',
       resourceType: 'note',
       resourceCount: 1,
@@ -788,6 +796,7 @@
   const clearOutput = () => {
     outputFull.value = '';
     requestCompleted.value = false;
+    completedRequestId.value = '';
     outputTruncated.value = false;
     generationFeedback.value = null;
   };

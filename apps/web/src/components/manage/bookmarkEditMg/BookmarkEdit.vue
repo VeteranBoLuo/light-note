@@ -20,6 +20,7 @@
             :generating="generating"
             :updated-fields="updatedFields"
             :can-undo-meta="canUndoMeta"
+            :recognition-failure="recognitionFailure"
             @undo-meta="undoBookmarkMeta"
             :errors="fieldErrors"
             :tag-options="tagOptions"
@@ -76,6 +77,7 @@
     canUndoMeta,
     undoBookmarkMeta,
     fieldErrors,
+    recognitionFailure,
     handleType,
     isEdit,
     bookmarkId,

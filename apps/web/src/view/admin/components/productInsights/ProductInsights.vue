@@ -110,6 +110,14 @@
                   })
                 }}
               </p>
+              <template v-if="feature.source === 'ai' && data.aiOutcomes">
+                <template v-if="data.aiOutcomes.available">
+                  <p>{{ t('adminProductInsights.aiOutcomes.executions', data.aiOutcomes) }}</p>
+                  <p>{{ t('adminProductInsights.aiOutcomes.results', data.aiOutcomes) }}</p>
+                  <p>{{ t('adminProductInsights.aiOutcomes.hint', data.aiOutcomes) }}</p>
+                </template>
+                <p v-else>{{ t('adminProductInsights.aiOutcomes.unavailable') }}</p>
+              </template>
             </template>
             <p v-else>{{ t('adminProductInsights.adoption.migrationHint') }}</p>
           </BCard>
@@ -231,6 +239,17 @@
       aiAdoptionRate: number;
     };
     features: Array<{ source: string; available: boolean; users: number; events: number; rate: number }>;
+    aiOutcomes?: {
+      available: boolean;
+      started: number;
+      completed: number;
+      resultActions: number;
+      draft: number;
+      inserted: number;
+      copied: number;
+      saved: number;
+      legacyEvents: number;
+    };
     cohorts: CohortRow[];
     unavailableSources: string[];
   }

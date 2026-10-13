@@ -12216,6 +12216,20 @@ export default {
     authRestoreFailedHint: 'Your account information is still saved on this device. Check your connection and reload.',
   },
   bookmarkMeta: {
+    recovery: {
+      temporary: 'The page could not be read right now',
+      restricted: 'This page requires sign-in or restricts automated reading',
+      blocked: 'This URL cannot be used for recognition',
+      failed: 'Recognition did not finish',
+      manualHint:
+        'Your entries are preserved. You can fill in the name and description, then save your bookmark.',
+      restrictedHint:
+        'You can enter details and save the URL manually, or open the page on your computer and capture it with the Light Note extension.',
+      checkUrlHint: 'Check that the URL is correct. The usual URL validation still applies when saving.',
+      retry: 'Try recognition again',
+      manual: 'Enter details manually',
+      checkUrl: 'Check URL',
+    },
     fillUrlFirst: 'Please enter the bookmark URL first',
     updatedBoth: 'Name and description updated',
     updatedName: 'Name updated',
@@ -13334,6 +13348,13 @@ export default {
   },
 
   adminProductInsights: {
+    aiOutcomes: {
+      executions:
+        'Linked executions: {started} started · {completed} delivered · {resultActions} result actions clicked',
+      results: 'Result use: {draft} drafts filled · {inserted} editor insertions · {copied} copies · {saved} saves',
+      hint: 'Deduplicated by execution within this period. Types may overlap. {legacyEvents} legacy adoption events are excluded; missing or unlinked records do not prove non-use.',
+      unavailable: 'Result adoption data is unavailable',
+    },
     title: 'Product analytics',
     subtitle: 'See how many people visited, what they used and whether new users came back.',
     loading: 'Calculating product metrics',
@@ -13358,6 +13379,7 @@ export default {
     partialHint: '{sources} are excluded from this calculation. Other metrics remain available.',
     aggregateOnly: 'Counts only; no private content',
     sources: {
+      ai_outcomes: 'AI result adoption',
       active_users: 'Recent visitors',
       new_users: 'New users',
       activation: 'Activation',
