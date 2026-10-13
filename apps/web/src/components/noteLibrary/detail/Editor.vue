@@ -366,6 +366,8 @@
         </section>
       </div>
     </BModal>
+    <NoteMathDialog v-if="mathDialog" :initial-source="mathDialog.source" :initial-mode="mathDialog.mode"
+      :editing="mathDialog.editing" :save-error="mathSaveError" @apply="applyMath" @close="closeMath" />
     <BModal
       v-model:visible="richMermaidEditorVisible"
       :title="t('noteDetail.editor.diagramEditTitle')"
@@ -581,7 +583,7 @@
           <div
             v-if="conversionTargetType === 'html'"
             class="note-conversion-preview__rendered"
-            v-html="conversionConvertedContent"
+            v-html="conversionRenderedContent"
             v-mermaid
           ></div>
           <pre v-else>{{ conversionConvertedContent }}</pre>
@@ -740,6 +742,9 @@
   import NoteFileUploadModal from './NoteFileUploadModal.vue';
   import { useDelayedEditorWarmup } from './useDelayedEditorWarmup';
   import type { MarkdownCodeMirrorExpose, MarkdownSearchRequest } from './MarkdownCodeMirror.vue';
+  import NoteMathDialog from './NoteMathDialog.vue';
+  import { useNoteMathEditor } from './useNoteMathEditor';
+  import { serializeNoteMath, renderNoteMathElements, renderNoteMathHtml, readMathElement, isNoteMathActivation } from '@/utils/noteMath';
   import { MERMAID_TEMPLATES, mermaidTemplateMarkdown } from '@/config/mermaidTemplates.ts';
   import {
     MERMAID_EDIT_EVENT,
@@ -763,7 +768,7 @@
   import { useMarkdownScrollSync } from '@/composables/useMarkdownScrollSync';
   import { renderMarkdownScrollMap } from '@/utils/markdownScrollMap';
   import { useNoteCodeHighlight } from '@/composables/useNoteCodeHighlight';
-  import { configureMarkdownRenderer } from '@/utils/markdownRenderer.ts';
+  import { configureNoteMarkdownRenderer } from '@/utils/markdownRenderer.ts';
   import ResourcePickerPanel from '@/components/resourcePicker/ResourcePickerPanel.vue';
   import EditorSlashCommandMenu, { type EditorSlashCommand } from './EditorSlashCommandMenu.vue';
   import { useDismissOnOutside } from '@/composables/useDismissOnOutside';
@@ -1052,6 +1057,7 @@
   const currentType = ref(props.type);
   const switchBackup = ref<{ content: string; type: NoteFormat } | null>(null);
   const conversionPreviewVisible = ref(false);
+  const conversionRenderedContent = ref('');
   const conversionTargetType = ref<NoteFormat>('markdown');
   const conversionBackup = ref<{ content: string; type: NoteFormat } | null>(null);
   const conversionConvertedContent = ref('');
@@ -1217,6 +1223,10 @@
     null,
   );
   const slashCommands = computed<EditorSlashCommand[]>(() => [
+    ...(['inline', 'block'] as const).map((mode) => ({
+      key: `insertMath:${mode}`, label: t(`noteMath.${mode}`), description: t(`noteMath.${mode}Hint`),
+      keywords: ['math', 'formula', 'latex', '公式'], icon: icon.noteMath, group: 'insert' as const, syntax: mode === 'inline' ? '$…$' : '$$…$$',
+    })),
     {
       key: 'paragraph',
       label: t('noteDetail.editor.slash.commands.paragraph.label'),
@@ -1552,6 +1562,7 @@
   }
 
   function handleMarkdownPreviewClick(event: Event) {
+    if (handleMathActivation(event)) return;
     if (event instanceof KeyboardEvent && event.key !== 'Enter' && event.key !== ' ') return;
     const target = event.target;
     const image = target instanceof Element ? target.closest<HTMLImageElement>('img') : null;
@@ -1615,6 +1626,25 @@
   const mdCodeMirrorRef = ref<MarkdownCodeMirrorExpose | null>(null);
   const mdPreviewRef = ref<HTMLElement | null>(null);
   let mdRenderedSource = '';
+  const { dialog: mathDialog, saveError: mathSaveError, open: openMath, apply: applyMath, close: closeMath } = useNoteMathEditor(
+    () => ({ noteId: String(props.noteId || ''), type: currentType.value, readonly: props.readonly,
+      source: mdContent.value, richEditor: editorRef.value, markdownEditor: mdCodeMirrorRef.value }),
+    (key) => t(key), (html) => { content.value = html; },
+  );
+  function handleMathActivation(event: Event) {
+    if (props.readonly || !isNoteMathActivation(event)) return false;
+    const target = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-ln-math]') : null;
+    if (!target || !readMathElement(target)) return false;
+    event.preventDefault();
+    event.stopPropagation();
+    if (currentType.value === 'markdown' && mdRenderedSource !== mdContent.value.replace(/\r\n?/g, '\n')) {
+      message.warning(t('noteMath.changed'));
+      return true;
+    }
+    if (!openMath(readMathElement(target)!.mode, { target })) message.warning(t('noteMath.locateFailed'));
+    return true;
+  }
+
   let isProgrammaticMdScroll = false;
   let mdScrollUnlockTimer: number | null = null;
 
@@ -2234,6 +2264,15 @@
   }
 
   function applySlashCommand(command: EditorSlashCommand) {
+    if (command.key.startsWith('insertMath:')) {
+      const mode = command.key.endsWith('block') ? 'block' : 'inline';
+      const options = currentType.value === 'markdown'
+        ? { markdownRange: markdownSlashRange ? { from: markdownSlashRange.start, to: markdownSlashRange.end } : undefined }
+        : { richRange: htmlSlashSelection?.range.cloneRange() };
+      closeSlashCommand();
+      openMath(mode, options);
+      return;
+    }
     if (currentType.value === 'markdown') applyMarkdownSlashCommand(command);
     else applyRichSlashCommand(command);
   }
@@ -2651,7 +2690,7 @@
   async function ensureMdLib() {
     if (markedLib) return;
     const mods = await Promise.all([import('marked'), import('dompurify')]);
-    markedLib = configureMarkdownRenderer(mods[0].marked);
+    markedLib = configureNoteMarkdownRenderer(new mods[0].Marked());
     dompurifyLib = mods[1].default;
   }
 
@@ -3504,6 +3543,8 @@
     ];
 
     const insertActions: EditorToolbarAction[] = [
+      action('insertMath:inline', t('noteMath.inline'), icon.noteMath),
+      action('insertMath:block', t('noteMath.block'), icon.noteMath),
       action('insertTable', t('noteDetail.editor.table'), icon.noteDetail.toolbar.table),
       action('insertImage', t('noteDetail.editor.image'), icon.noteDetail.toolbar.image, {
         disabled: disabled || (isMarkdown ? markdownImageUploading.value : richImageUploading.value),
@@ -3726,6 +3767,7 @@
     if (options.remember !== false && markdownRepeatableActionKeys.has(key)) {
       rememberRepeatableAction('markdown', { key });
     }
+    if (key.startsWith('insertMath:')) return void openMath(key.endsWith('block') ? 'block' : 'inline');
     if (key === 'undo') return void mdCodeMirrorRef.value?.undo();
     if (key === 'redo') return void mdCodeMirrorRef.value?.redo();
     if (key === 'bold')
@@ -3776,6 +3818,7 @@
     ) {
       rememberRepeatableAction('html', { key });
     }
+    if (key.startsWith('insertMath:')) return void openMath(key.endsWith('block') ? 'block' : 'inline');
     if (key === 'undo') return editor.execCommand('Undo');
     if (key === 'redo') return editor.execCommand('Redo');
     if (key === 'bold') return editor.execCommand('Bold');
@@ -4162,8 +4205,10 @@
       const indexedSafeHtml = decorateRenderedMarkdownImageIndexes(safeHtml);
       // 已经画过的图直接用缓存顶上;改了图表内容、缓存还没有时沿用上一版预览里的旧图,
       // 都是为了不让右边的图在编辑过程中闪回代码块
+      const mathHtml = await renderNoteMathHtml(indexedSafeHtml, props.readonly ? undefined : t('noteMath.editTitle'));
+      if (generation !== mdRenderGeneration) return;
       renderedMd.value = inlineCachedMermaid(
-        presentResourceReferenceChips(indexedSafeHtml, props.resourceRefs, resourcePresentationOptions()),
+        presentResourceReferenceChips(mathHtml, props.resourceRefs, resourcePresentationOptions()),
         mdPreviewRef.value,
       );
     } catch {
@@ -4275,6 +4320,7 @@
     conversionTargetType.value = targetType;
     conversionBackup.value = backup;
     conversionConvertedContent.value = converted;
+    conversionRenderedContent.value = targetType === 'html' ? await renderNoteMathHtml(converted) : '';
     conversionReport.value = analyzeNoteFormatConversion(backup.content, sourceType);
     conversionBaseRevision.value = Math.max(1, Number(props.revision || 1));
     conversionAnalysisHash.value = await buildNoteFormatConversionAnalysisHash({
@@ -4451,7 +4497,7 @@
     // 预览层仍显示服务端正文时忽略这次内部回写，避免正文闪动和误触发自动保存；
     // init 完成后的真实输入继续正常同步。
     if (!richEditorRuntimeReady.value) return;
-    content.value = value;
+    content.value = serializeNoteMath(value);
   }
 
   const forceReinit = async () => {
@@ -4566,7 +4612,7 @@
     object_resizing: usesNativeTextSelectionMenu.value ? false : 'img',
     codesample_languages: CODE_LANGUAGES.map((lang) => ({ text: lang.text, value: lang.value })),
     extended_valid_elements:
-      'input[type|class|checked|data-note-task],a[href|contenteditable|title|data-ln-resource-type|data-ln-resource-id|data-ln-resource-snapshot-title|data-ln-resource-display-title|data-ln-resource-state|class|aria-disabled],img[src|alt|title|class|style|width|height|data-ln-size],span[class|style|data-ln-text-gradient],section[class|data-ln-media-position|data-ln-media-width|data-ln-media-inserting],figure[class],figcaption[class]',
+      'input[type|class|checked|data-note-task],a[href|contenteditable|title|data-ln-resource-type|data-ln-resource-id|data-ln-resource-snapshot-title|data-ln-resource-display-title|data-ln-resource-state|class|aria-disabled],img[src|alt|title|class|style|width|height|data-ln-size],span[class|style|data-ln-text-gradient|data-ln-math|data-ln-latex|contenteditable],div[id|class|style|title|align|dir|lang|data-ln-math|data-ln-latex|contenteditable],section[class|data-ln-media-position|data-ln-media-width|data-ln-media-inserting],figure[class],figcaption[class]',
     // 主工具栏由 EditorToolbarV2 统一渲染，TinyMCE 只负责命令、对话框和桌面划词快捷条。
     toolbar: false,
     placeholder: t('note.contentPlaceholder'),
@@ -5111,7 +5157,7 @@
         if (typeof event.content === 'string') {
           event.content = normalizeRichMediaTextHtml(
             stripTransientMermaidMarkers(
-              stripTransientMentionMarkers(serializeResourceReferenceSnapshots(event.content)),
+              stripTransientMentionMarkers(serializeResourceReferenceSnapshots(serializeNoteMath(event.content))),
             ),
           );
         }
@@ -5120,11 +5166,17 @@
         if (typeof event.content === 'string') {
           event.content = normalizeRichMediaTextHtml(
             stripTransientMermaidMarkers(
-              stripTransientMentionMarkers(serializeResourceReferenceSnapshots(event.content)),
+              stripTransientMentionMarkers(serializeResourceReferenceSnapshots(serializeNoteMath(event.content))),
             ),
           );
         }
       });
+      const paintMath = () => {
+        const body = editor.getBody?.();
+        if (body) void renderNoteMathElements(body, props.readonly ? undefined : t('noteMath.editTitle')).catch(() => {});
+      };
+      editor.on('init SetContent undo redo input', paintMath);
+      editor.on('keydown', (event: KeyboardEvent) => { handleMathActivation(event); });
       editor.on('SetContent change undo redo', refreshResourceReferences);
       editor.on('SetContent undo redo', () => {
         closeRichMediaTextToolbar();
@@ -5621,6 +5673,7 @@
       };
 
       editor.on('click', (event: MouseEvent) => {
+        if (handleMathActivation(event)) return;
         const target = event.target;
         const figure = target instanceof Element ? target.closest<HTMLElement>('.mermaid-figure--companion') : null;
         setSelectedMermaidFigure(figure);

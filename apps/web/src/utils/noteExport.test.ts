@@ -121,6 +121,14 @@ describe('renderMarkdownForExport', () => {
 });
 
 describe('buildNoteExportHtml', () => {
+  it('deduplicates formula styles after DOM serialization and preserves the leading title', () => {
+    const body = '<style data-ln-math-export="">.ln-math{color:inherit}</style><h1>公式</h1><style data-ln-math-export>.ln-math{color:inherit}</style>';
+    const html = buildNoteExportHtml('公式', body);
+    expect(html.match(/<h1/g)).toHaveLength(1);
+    expect(html.match(/\.ln-math\{color:inherit\}/g)).toHaveLength(1);
+    expect(html.indexOf('.ln-math')).toBeLessThan(html.indexOf('</head>'));
+  });
+
   it('输出自包含文档:内联样式且不依赖站内 CSS 变量', () => {
     const doc = buildNoteExportHtml('标题', '<p>正文</p>');
     expect(doc.startsWith('<!DOCTYPE html>')).toBe(true);

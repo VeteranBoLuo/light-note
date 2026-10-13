@@ -304,7 +304,8 @@
           }
 
           if (successFiles.length > 0 || existedFiles.length > 0) {
-            await cloud.refreshAfterFileMutation();
+            // 保留已加载的分页，向下浏览时虚拟列表才能恢复原来的文件锚点。
+            await cloud.refreshAfterFileMutation({ preserveLoaded: true });
           }
         } else {
           throw new Error(confirmRes.msg || t('cloudSpace.confirmUploadFailed'));

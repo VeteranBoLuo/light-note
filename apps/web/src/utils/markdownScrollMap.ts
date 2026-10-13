@@ -1,4 +1,5 @@
 import type { Token, TokensList } from 'marked';
+import { annotateMarkdownMath } from './noteMathMarkdown';
 
 export type ScrollAnchor = { source: number; preview: number };
 export const SOURCE_ATTRIBUTE = 'data-ln-md-source';
@@ -18,6 +19,7 @@ export function renderMarkdownScrollMap(
   renderer.walkTokens(tokens, walkToken);
   // getRandomValues also works on LAN HTTP previews, unlike randomUUID.
   const nonce = Array.from(crypto.getRandomValues(new Uint32Array(4)), (value) => value.toString(36)).join('-');
+  annotateMarkdownMath(tokens, normalized, nonce);
   const marker = `ln-scroll-${nonce}:`;
   const positions: Array<{ from: number; codeStart?: number }> = [];
   let offset = 0;
@@ -42,6 +44,14 @@ export function renderMarkdownScrollMap(
   template.content.querySelectorAll(`[${SOURCE_ATTRIBUTE}], [data-ln-md-code]`).forEach((node) => {
     node.removeAttribute(SOURCE_ATTRIBUTE);
     node.removeAttribute('data-ln-md-code');
+  });
+  // Only parser-generated ranges may open an editor transaction; raw HTML cannot supply offsets.
+  template.content.querySelectorAll('[data-ln-math]').forEach((node) => {
+    if (node.getAttribute('data-ln-math-marker') !== nonce) {
+      node.removeAttribute('data-ln-math-from');
+      node.removeAttribute('data-ln-math-to');
+    }
+    node.removeAttribute('data-ln-math-marker');
   });
   const walker = document.createTreeWalker(template.content, NodeFilter.SHOW_COMMENT);
   const markers: Comment[] = [];

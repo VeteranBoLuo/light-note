@@ -1,4 +1,5 @@
 import type { MarkedExtension } from 'marked';
+import { noteMathMarkedExtension } from '@lightnote/shared/note-math';
 
 type MarkedRenderer = {
   use: (...extensions: MarkedExtension[]) => unknown;
@@ -62,5 +63,16 @@ export function configureMarkdownRenderer<T extends MarkedRenderer>(renderer: T)
   if (configuredRenderers.has(renderer as object)) return renderer;
   renderer.use({ extensions: [looseStrongExtension] });
   configuredRenderers.add(renderer as object);
+  return renderer;
+}
+
+const noteRenderers = new WeakSet<object>();
+/** Use a private Marked instance so note formulas do not change chat/community rendering. */
+export function configureNoteMarkdownRenderer<T extends MarkedRenderer>(renderer: T): T {
+  configureMarkdownRenderer(renderer);
+  if (!noteRenderers.has(renderer as object)) {
+    renderer.use(noteMathMarkedExtension());
+    noteRenderers.add(renderer as object);
+  }
   return renderer;
 }

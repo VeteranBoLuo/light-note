@@ -104,9 +104,21 @@
     "./extraction": {
       "types": "./extraction.d.ts",
       "default": "./extraction.js"
-    }
+    },
+    "./note-math": {
+      "types": "./noteMath.d.ts",
+      "default": "./noteMath.js"
+    },
+    "./note-math-renderer": {
+      "types": "./noteMathRenderer.d.ts",
+      "default": "./noteMathRenderer.js"
+    },
+    "./note-math-export-node": "./noteMathExportNode.js"
   },
   "devDependencies": {
     "vitest": "^3.2.6"
+  },
+  "dependencies": {
+    "katex": "0.16.47"
   }
 }

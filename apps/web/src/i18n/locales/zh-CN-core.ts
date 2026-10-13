@@ -1,3 +1,4 @@
+import { noteMathZh } from './noteMath';
 import { extractionZh } from './extraction';
 import { comparisonTableZh } from './comparisonTable';
 import { translationZh } from './translation';
@@ -17,6 +18,7 @@ import { accountSettingsZh } from './accountSettings';
 import { settingsRefineZh } from './settingsRefine';
 import { notificationMessages } from '@lightnote/shared/notification-presentation';
 export default {
+  noteMath: noteMathZh,
   nativePush: {
     title: 'App 通知连接',
     retry: '重新检查',

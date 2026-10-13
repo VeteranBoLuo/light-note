@@ -13,7 +13,7 @@ const pinia = createPinia();
 setActivePinia(pinia);
 // 使用内存文件驱动真实云空间页面，滚动验收不访问业务服务。
 const fileCount = Math.min(5000, Math.max(1, Number(params.get('count')) || 60));
-const items = Array.from({ length: fileCount }, (_, i) => ({
+const items = Array.from({ length: params.has('empty') ? 0 : fileCount }, (_, i) => ({
   id: String(i + 1),
   fileName: `滚动验收资料 ${i + 1}.zip`,
   fileType: 'application/zip',
@@ -22,13 +22,14 @@ const items = Array.from({ length: fileCount }, (_, i) => ({
   tags: [],
   folderName: '',
 }));
+let uploadedCount = 0;
 request.defaults.adapter = async (config) => {
   const url = String(config.url);
+  const body = typeof config.data === 'string' ? JSON.parse(config.data) : config.data || {};
   let data: any = {};
   if (url.endsWith('/queryFiles')) {
     if (params.has('slow')) await new Promise((resolve) => setTimeout(resolve, 1500));
-    const files = params.has('empty') ? [] : items;
-    const body = typeof config.data === 'string' ? JSON.parse(config.data) : config.data || {};
+    const files = items;
     const page = Math.max(1, Number(body.currentPage) || 1);
     const pageSize = params.has('paged') ? Math.max(1, Number(body.pageSize) || 48) : files.length;
     const start = (page - 1) * pageSize;
@@ -38,7 +39,23 @@ request.defaults.adapter = async (config) => {
       page,
       hasMore: start + pageSize < files.length,
     };
-  } else if (url.endsWith('/queryFolder')) data = { items: [], allFileCount: params.has('empty') ? 0 : items.length };
+  } else if (url.endsWith('/checkFileNames')) data = [];
+  else if (url.endsWith('/uploadFiles')) {
+    data = body.files.map((file: any, index: number) => ({
+      filename: file.fileName,
+      fileType: file.fileType,
+      objectKey: `fixture/${uploadedCount + index + 1}`,
+      // 验收脚本拦截本地 PUT，不接触真实对象存储。
+      uploadUrl: `${location.origin}/__cloud-upload-fixture__/${uploadedCount + index + 1}`,
+      headers: {},
+    }));
+  } else if (url.endsWith('/confirmUpload')) {
+    data = body.files.map((file: any) => {
+      const id = `uploaded-${++uploadedCount}`;
+      items.unshift({ ...file, id, uploadTime: '2026-10-13 12:00:00', tags: [], folderName: '' });
+      return { filename: file.fileName, fileId: id, status: '已上传' };
+    });
+  } else if (url.endsWith('/queryFolder')) data = { items: [], allFileCount: items.length };
   else if (url.endsWith('/queryTotalFileSize')) data = { totalSizeMB: 1, quotaMB: 1024 };
   return { config, status: 200, statusText: 'OK', headers: {}, data: { status: 200, data } };
 };

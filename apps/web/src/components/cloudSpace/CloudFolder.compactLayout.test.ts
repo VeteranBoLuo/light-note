@@ -111,7 +111,7 @@ describe('云空间目录树紧凑布局', () => {
 
   it('文件新增、移动和删除后统一刷新目录计数快照', () => {
     expect(moveFileSource).toContain('await cloud.refreshAfterFileMutation()');
-    expect(uploadSource).toContain('await cloud.refreshAfterFileMutation()');
+    expect(uploadSource).toContain('await cloud.refreshAfterFileMutation({ preserveLoaded: true })');
     expect(fileListSource.match(/cloud\.refreshAfterFileMutation\(\)/gu)).toHaveLength(2);
   });
 

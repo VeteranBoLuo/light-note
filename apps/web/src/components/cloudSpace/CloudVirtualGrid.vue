@@ -59,7 +59,30 @@
   });
   let observer: ResizeObserver | null = null;
   let revision = 0;
-  let pendingAnchor: ReturnType<InstanceType<typeof BVirtualList>['captureScrollAnchor']> = null;
+  type GridScrollAnchor = NonNullable<ReturnType<InstanceType<typeof BVirtualList>['captureScrollAnchor']>>;
+  let pendingAnchor: GridScrollAnchor | null = null;
+  function restoreFileAnchor(anchor: GridScrollAnchor) {
+    const index = rows.value.findIndex((row) => row.items.some((item) => String(item.id) === anchor.key));
+    if (index >= 0) listRef.value?.restoreScrollAnchor({ ...anchor, key: String(rows.value[index].id), index });
+  }
+  watch(
+    () => props.items,
+    async (_, __, onCleanup) => {
+      let cancelled = false;
+      onCleanup(() => {
+        cancelled = true;
+      });
+      // 父组件更新前，子列表仍持有旧分行；新增文件后按文件键找到新的所在行。
+      const anchor = listRef.value?.captureScrollAnchor();
+      if (!anchor || (anchor.index === 0 && anchor.offset <= 0)) return;
+      await nextTick();
+      await nextTick();
+      const current = listRef.value?.captureScrollAnchor();
+      // 筛选或排序可能显式回到顶部，不能用旧阅读位置覆盖该操作。
+      if (!cancelled && current && (current.index > 0 || current.offset > 0)) restoreFileAnchor(anchor);
+    },
+    { flush: 'pre' },
+  );
   async function measureColumns() {
     const probe = probeRef.value;
     if (!probe?.clientWidth) return;
@@ -90,10 +113,7 @@
     await nextTick();
     await nextTick();
     if (ticket !== revision) return;
-    if (anchor) {
-      const index = rows.value.findIndex((row) => row.items.some((item) => String(item.id) === anchor.key));
-      if (index >= 0) listRef.value?.restoreScrollAnchor({ ...anchor, key: String(rows.value[index].id), index });
-    }
+    if (anchor) restoreFileAnchor(anchor);
     if (
       ownsFocus &&
       regroupingFocusKey.value !== null &&

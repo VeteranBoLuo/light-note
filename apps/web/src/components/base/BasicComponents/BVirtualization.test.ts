@@ -329,6 +329,50 @@ describe('dynamic BVirtualList', () => {
     }
   });
 
+  it.each(['self', 'ancestor'] as const)(
+    'keeps the top at the top and preserves a reading row after prepending (%s)',
+    async (scrollMode) => {
+      const items = ref(Array.from({ length: 100 }, (_, id) => ({ id })));
+      const host = mount(
+        {
+          setup: () => () =>
+            h('main', { style: 'height:120px;overflow-y:auto' }, [
+              h(BVirtualList, { items: items.value, dynamicHeight: true, itemHeight: 40, scrollMode }),
+            ]),
+        },
+        {},
+      );
+      await nextTick();
+      const list = host.querySelector<HTMLElement>('.b-virtual-list')!;
+      const scroller = scrollMode === 'self' ? list : host.querySelector<HTMLElement>('main')!;
+      Object.defineProperty(scroller, 'clientHeight', { configurable: true, value: 120 });
+      Object.defineProperty(scroller, 'scrollHeight', { configurable: true, value: 4000 });
+      if (scrollMode === 'ancestor') {
+        vi.spyOn(scroller, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, 0, 400, 120));
+        vi.spyOn(list, 'getBoundingClientRect').mockImplementation(
+          () => new DOMRect(0, -scroller.scrollTop, 400, 4000),
+        );
+      }
+      scroller.dispatchEvent(new Event('scroll'));
+      items.value = [{ id: -1 }, ...items.value];
+      await nextTick();
+      await nextTick();
+      expect(scroller.scrollTop).toBe(0);
+
+      // Read the actual viewport even if its scroll event has not arrived yet.
+      scroller.scrollTop = 85;
+      items.value = [{ id: -2 }, ...items.value];
+      await nextTick();
+      await nextTick();
+      expect(scroller.scrollTop).toBe(125);
+
+      items.value = [...items.value, { id: 100 }];
+      await nextTick();
+      await nextTick();
+      expect(scroller.scrollTop).toBe(125);
+    },
+  );
+
   it('measures expanded rows without fixing their height and preserves the visible anchor', async () => {
     const original = globalThis.ResizeObserver;
     const callbacks: ResizeObserverCallback[] = [];

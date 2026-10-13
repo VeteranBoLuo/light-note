@@ -1,3 +1,5 @@
+import { readMathElement, serializeNoteMath } from './noteMath';
+
 export type NoteFormat = 'html' | 'markdown';
 
 export type NoteConversionIssue =
@@ -62,7 +64,7 @@ function addIssue(issues: NoteFormatConversionReport['issues'], key: NoteConvers
 }
 
 function analyzeHtml(source: string): NoteFormatConversionReport {
-  const doc = new DOMParser().parseFromString(`<body>${source || ''}</body>`, 'text/html');
+  const doc = new DOMParser().parseFromString(`<body>${serializeNoteMath(source || '')}</body>`, 'text/html');
   const all = Array.from(doc.body.querySelectorAll<HTMLElement>('*'));
   const issues: NoteFormatConversionReport['issues'] = [];
   const color = all.filter((element) => Boolean(element.style.color)).length;
@@ -102,7 +104,14 @@ function analyzeHtml(source: string): NoteFormatConversionReport {
 }
 
 function analyzeMarkdown(source: string): NoteFormatConversionReport {
-  const text = String(source || '');
+  let formulas = 0;
+  const text = String(source || '').replace(/<(span|div)\b[^>]*\bdata-ln-math=[^>]*>[\s\S]*?<\/\1\s*>/giu, (html) => {
+    const holder = document.createElement('div');
+    holder.innerHTML = html;
+    if (!holder.firstElementChild || !readMathElement(holder.firstElementChild)) return html;
+    formulas++;
+    return '';
+  });
   const issues: NoteFormatConversionReport['issues'] = [];
   // 图文组合以受控 section 原样保存在 Markdown 中，切回富文本时可以完整恢复，
   // 因此先从“未知原生 HTML”分析样本中拿掉，避免把内部 figure/img/p 重复计为风险。
@@ -145,7 +154,7 @@ function analyzeMarkdown(source: string): NoteFormatConversionReport {
     sizedImages +
     mediaTextBlocks +
     gradientSpans +
-    underlineSpans;
+    underlineSpans + formulas;
   const standardized =
     countMatches(text, /```[\s\S]*?```/gu) +
     countMatches(text, /(?:^|\n)\s*[-+*]\s+\[[ xX]\]\s+/gu) +

@@ -405,9 +405,12 @@
     () => props.items,
     (items, previous) => {
       if (!props.dynamicHeight) return;
+      updateViewport();
       const viewport = props.scrollMode === 'ancestor' ? ancestorViewport() : null;
+      // 顶部表达的是浏览最新内容；只有向下浏览时才跟随原来的行。
       const shouldAnchor =
-        props.scrollMode === 'self' || Boolean(viewport?.height && viewport.listOffset <= viewport.ancestor.scrollTop);
+        scrollTop.value > 0 &&
+        (props.scrollMode === 'self' || Boolean(viewport?.height && viewport.listOffset <= viewport.ancestor.scrollTop));
       let offset = 0,
         index = 0;
       while (index < previous.length - 1) {

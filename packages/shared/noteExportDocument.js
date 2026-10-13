@@ -258,6 +258,11 @@ export function buildNoteExportHtml(
   includeHeading = true,
 ) {
   const safeTitle = escapeHtml(title);
+  const mathStyles = new Set();
+  bodyHtml = bodyHtml.replace(/<style\s+data-ln-math-export(?:=["']["'])?\s*>([\s\S]*?)<\/style>/gu, (_tag, css) => {
+    mathStyles.add(css);
+    return '';
+  });
   // 正文若已以一级标题开头(md 笔记通常第一行就是 `# 标题`),不再补一个,否则页面上会出现两遍标题
   const hasLeadingH1 = /^\s*<h1[\s>]/i.test(bodyHtml);
   const heading =
@@ -269,6 +274,7 @@ export function buildNoteExportHtml(
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${safeTitle}</title>
 <style>${EXPORT_STYLES}</style>
+${[...mathStyles].map((css) => `<style>${css}</style>`).join('\n')}
 </head>
 <body>
 <article class="note-export">

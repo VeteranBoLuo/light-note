@@ -86,6 +86,7 @@ function database(extra) {
       if (sql.includes('FROM user')) return [[{ id: 'u', role: 'user', del_flag: 0 }]];
       const result = extra?.(sql, p);
       if (result !== undefined) return result;
+      if (sql.startsWith('SELECT 1 FROM organize_processing_jobs WHERE run_id=?')) return [[]];
       if (sql.startsWith('INSERT') || sql.startsWith('UPDATE')) return [{ affectedRows: 1 }];
       throw Error(`Unexpected SQL: ${sql}`);
     }),
@@ -387,7 +388,7 @@ describe('新版 AI 暂停与租约边界', () => {
       expect(changes.at(-1)[1][0]).toBe(started ? 'failed' : 'queued');
       if (started)
         expect(
-          db.query.mock.calls.some(([sql]) => sql.includes('NOT EXISTS(SELECT 1 FROM organize_processing_jobs')),
+          db.query.mock.calls.some(([sql]) => sql.startsWith('SELECT 1 FROM organize_processing_jobs WHERE run_id=?')),
         ).toBe(true);
     },
   );

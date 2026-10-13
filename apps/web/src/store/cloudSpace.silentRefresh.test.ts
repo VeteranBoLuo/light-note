@@ -192,7 +192,35 @@ describe('账号身份切换', () => {
   });
 });
 
-describe('标签完成后的已加载范围刷新', () => {
+describe('上传与标签完成后的已加载范围刷新', () => {
+  it('上传后保留已加载页并同步文件夹和容量，刷新期间不并发追加', async () => {
+    const cloud = cloudSpaceStore();
+    cloud.fileList = [file('old')] as any;
+    cloud.filePage = 2;
+    cloud.fileHasMore = true;
+    apiQueryPost.mockImplementation(async (_url, body) => {
+      expect(cloud.fileList[0].id).toBe('old');
+      expect(await cloud.loadMoreFiles()).toBe(false);
+      return {
+        status: 200,
+        data: { items: [file(`new-${body.currentPage}`)], page: body.currentPage, total: 3, hasMore: true },
+      };
+    });
+    apiBasePost.mockImplementation(async (url) => ({
+      status: 200,
+      data: url.endsWith('/queryFolder') ? { items: [], allFileCount: 3 } : { totalSizeMB: 42, quotaMB: 100 },
+    }));
+
+    expect(await cloud.refreshAfterFileMutation({ preserveLoaded: true })).toBe(true);
+    expect(cloud.fileList.map((item) => item.id)).toEqual(['new-1', 'new-2']);
+    expect(cloud.filePage).toBe(2);
+    expect(cloud.fileTotal).toBe(3);
+    expect(cloud.allFileCount).toBe(3);
+    expect(cloud.usedSpace).toBe(42);
+    expect(cloud.loadingMore).toBe(false);
+    expect(apiQueryPost.mock.calls.map((call) => call[1].currentPage)).toEqual([1, 2]);
+  });
+
   it('完整加载原页数后一次更新，不回到第一页或提前清空', async () => {
     const cloud = cloudSpaceStore();
     cloud.fileList = [file('old')] as any;

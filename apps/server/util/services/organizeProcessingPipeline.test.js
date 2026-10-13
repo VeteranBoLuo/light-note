@@ -43,6 +43,7 @@ function database(handler) {
       if (sql.startsWith('SELECT r.id FROM organize_suggestion_runs r WHERE r.id=?')) return [[{ id: args[0] }]];
       const result = handler(sql, args);
       if (result !== undefined) return result;
+      if (sql.startsWith('SELECT 1 FROM organize_processing_jobs WHERE run_id=?')) return [[]];
       if (sql.startsWith('INSERT') || sql.startsWith('UPDATE')) return [{ affectedRows: 1 }];
       throw new Error(`Unexpected query: ${sql}`);
     }),

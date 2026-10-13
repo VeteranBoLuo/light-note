@@ -1,5 +1,6 @@
 import html2canvas from 'html2canvas';
 import JsPDF from 'jspdf';
+import { clearNoteMathEditingUi } from './noteMath';
 
 // 常量定义
 /** 各纸张的 [宽, 高](pt)。原实现无论 format 传什么都按 A4 算尺寸,这里一并纠正。 */
@@ -268,6 +269,11 @@ async function renderPdfDocument(targetOrSelector: string | HTMLElement, options
     if (!target) {
       throw new Error(`Element with selector "${selector}" not found`);
     }
+    if (target.querySelector('[data-ln-math]')) {
+      const { renderNoteMathElements } = await import('./noteMath');
+      await renderNoteMathElements(target);
+      await target.ownerDocument.fonts?.ready;
+    }
 
     // 配置选项
     const scale = options.scale ?? DEFAULT_SCALE;
@@ -296,6 +302,7 @@ async function renderPdfDocument(targetOrSelector: string | HTMLElement, options
         onclone: (clonedDocument: Document) => {
           forcePdfLightTheme(clonedDocument);
           hideMermaidSourceBlocks(clonedDocument);
+          clearNoteMathEditingUi(clonedDocument);
           // 顺序有意义:先定浅色主题,再固化颜色计算值,最后才替换勾选框(它会改动 DOM 结构)
           normalizeUnsupportedColorFunctions(clonedDocument);
           replacePdfCheckboxes(clonedDocument);

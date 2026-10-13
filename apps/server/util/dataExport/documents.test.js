@@ -7,6 +7,8 @@ vi.mock('../../db/index.js', () => ({ default: { query: vi.fn() } }));
 import { renderNote, createBookmarkWorkbook } from './documents.js';
 import { buildPaths } from './resources.js';
 import { normalizeDataExportOptions, splitExportText, safeExportName } from '@lightnote/shared/data-export';
+import { noteMathHtml } from '@lightnote/shared/note-math';
+import { sanitizeNoteHtml } from '../noteHtmlSanitizer.js';
 let dir;
 beforeAll(async () => {
   dir = await fs.mkdtemp(path.join(os.tmpdir(), 'ln-export-doc-'));
@@ -33,6 +35,20 @@ function context(overrides = {}) {
   };
 }
 describe('portable documents', () => {
+  it.each(['html', 'markdown'])('exports %s formulas to offline HTML and recoverable Markdown', async (type) => {
+    const formula = String.raw`\frac{a}{b}`;
+    const row = { title: '公式', type, content: type === 'html' ? `<p>能量 ${noteMathHtml('E=mc^2')}</p>${noteMathHtml(formula, 'block')}` : `能量 $E=mc^2$\n\n$$\n${formula}\n$$` };
+    const html = (await renderNote(row, { path: '笔记/公式.html' }, context())).content;
+    expect(html).toContain('class="katex"');
+    expect(html).toContain('data:font/woff2;base64,');
+    expect(html).not.toContain('<script');
+    const md = (await renderNote(row, { path: '笔记/公式.md' }, context({ options: { noteFormat: 'markdown', includeImages: false } }))).content;
+    expect(md).toContain('$E=mc^2$');
+    expect(md).toContain(`$$\n${formula}\n$$`);
+    const reimported = sanitizeNoteHtml(html).html;
+    expect(reimported).toContain('data-ln-latex="E=mc^2"');
+    expect(reimported).not.toContain('class="katex"');
+  });
   it('keeps mixed original formats and resolves cross-format local links', async () => {
     const options = normalizeDataExportOptions({ types: ['notes'], noteFormat: 'original', includeImages: false });
     const notes = [

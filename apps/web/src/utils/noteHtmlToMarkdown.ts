@@ -1,4 +1,5 @@
 import TurndownService from 'turndown';
+import { noteMathTurndownRule } from '@lightnote/shared/note-math';
 import { tables } from 'turndown-plugin-gfm';
 import type { Token, Tokens } from 'marked';
 import { createSizedContentImageHtml, isContentImageSize } from '@/utils/contentImageSize';
@@ -110,6 +111,7 @@ export function createNoteTurndownService(
   // 普通表格和删除线都有标准 GFM 表达，不能因为格式切换就退化成连续纯文本。
   // 合并单元格仍无法一一表达，由转换预检明确告警并依靠转换前还原点兜底。
   service.use(tables);
+  service.addRule('lightNoteMath', noteMathTurndownRule);
   service.addRule('gfmStrikethrough', {
     filter: ['s', 'strike', 'del'],
     replacement: (content) => (content.trim() ? `~~${content}~~` : ''),

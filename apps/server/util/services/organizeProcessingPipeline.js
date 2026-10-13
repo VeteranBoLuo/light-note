@@ -89,18 +89,24 @@ export async function runOrganizeInspection(_workerId, db = pool, dependencies =
 
 // Called inside the same short run-locked transaction as every queue transition.
 export async function settleProcessingRun(c, runId) {
+  // The run lock serializes its queue transitions. A subquery inside UPDATE takes
+  // shared/next-key locks in MySQL 5.7, including unrelated jobs on a table scan.
+  const [pending] = await c.query(
+    `SELECT 1 FROM organize_processing_jobs WHERE run_id=? AND status IN (${open}) LIMIT 1`,
+    [runId],
+  );
+  if (pending.length) return;
   await c.query(
     `UPDATE organize_suggestion_runs r SET r.status='completed'
-    WHERE r.id=? AND r.run_version=3 AND r.rule_phase='completed' AND r.status IN ('running','paused')
-    AND NOT EXISTS(SELECT 1 FROM organize_processing_jobs j WHERE j.run_id=r.id AND j.status IN (${open}))`,
+    WHERE r.id=? AND r.run_version=3 AND r.rule_phase='completed' AND r.status IN ('running','paused')`,
     [runId],
   );
 }
-export async function markProcessingAi(c, itemId, status, token = null, errorCode = null) {
+export async function markProcessingAi(c, runId, itemId, status, token = null, errorCode = null) {
   await c.query(
     `UPDATE organize_processing_jobs SET status=?,lease_token=?,lease_expires_at=IF(? IS NULL,NULL,DATE_ADD(NOW(),INTERVAL 10 MINUTE)),error_code=?
-    WHERE item_id=? AND kind='analysis' AND status IN (${open})`,
-    [status, token, token, errorCode, itemId],
+    WHERE run_id=? AND item_id=? AND kind='analysis' AND status IN (${open})`,
+    [status, token, token, errorCode, runId, itemId],
   );
 }
 
@@ -558,7 +564,7 @@ export async function reclassifyCachedIcons(_workerId, db = pool) {
       AND EXISTS(SELECT 1 FROM organize_processing_jobs j JOIN organize_suggestion_items i ON i.id=j.item_id WHERE j.run_id=r.id AND j.lane='ai' AND j.status='queued' AND (j.next_check_at IS NULL OR j.next_check_at<=NOW()) AND i.resource_type='tag')`,
     async (c, run) => {
       const [items] = await c.query(
-        "SELECT i.* FROM organize_suggestion_items i JOIN organize_processing_jobs j ON j.item_id=i.id AND j.kind='analysis' WHERE i.run_id=? AND i.resource_type='tag' AND i.ai_status='queued' AND j.status='queued' AND (j.next_check_at IS NULL OR j.next_check_at<=NOW()) ORDER BY i.id LIMIT 100",
+        "SELECT i.* FROM organize_suggestion_items i JOIN organize_processing_jobs j ON j.run_id=i.run_id AND j.item_id=i.id AND j.kind='analysis' WHERE i.run_id=? AND i.resource_type='tag' AND i.ai_status='queued' AND j.status='queued' AND (j.next_check_at IS NULL OR j.next_check_at<=NOW()) ORDER BY i.id LIMIT 100",
         [run.id],
       );
       let changed = false;
@@ -567,14 +573,14 @@ export async function reclassifyCachedIcons(_workerId, db = pool) {
           route = prepareTagIconRoute(source.title);
         if (route.needsAi) {
           await c.query(
-            "UPDATE organize_processing_jobs SET next_check_at=DATE_ADD(NOW(),INTERVAL 30 SECOND) WHERE item_id=? AND kind='analysis' AND status='queued'",
-            [item.id],
+            "UPDATE organize_processing_jobs SET next_check_at=DATE_ADD(NOW(),INTERVAL 30 SECOND) WHERE run_id=? AND item_id=? AND kind='analysis' AND status='queued'",
+            [run.id, item.id],
           );
           continue;
         }
         await c.query(
-          "UPDATE organize_processing_jobs SET lane='direct',kind='tag_icon',next_check_at=NULL,prepared_json=? WHERE item_id=? AND kind='analysis' AND status='queued'",
-          [JSON.stringify({ keywords: route.keywords, version: source.version }), item.id],
+          "UPDATE organize_processing_jobs SET lane='direct',kind='tag_icon',next_check_at=NULL,prepared_json=? WHERE run_id=? AND item_id=? AND kind='analysis' AND status='queued'",
+          [JSON.stringify({ keywords: route.keywords, version: source.version }), run.id, item.id],
         );
         await c.query("UPDATE organize_suggestion_items SET ai_status='not_needed',ai_kinds_json='[]' WHERE id=?", [
           item.id,

@@ -1,6 +1,6 @@
 import { normalizeMarkdownTaskListHtml, promoteEmptyMarkdownTaskToken } from '@/utils/noteHtmlToMarkdown';
 import { decorateInternalResourceLinks } from '@/utils/noteResourceRefs';
-import { configureMarkdownRenderer } from '@/utils/markdownRenderer';
+import { configureNoteMarkdownRenderer } from '@/utils/markdownRenderer';
 
 /**
  * 笔记导出的公共逻辑。
@@ -18,7 +18,7 @@ export { buildNoteExportHtml } from '@lightnote/shared/note-export-document';
 
 export async function renderMarkdownForExport(markdown: string): Promise<string> {
   const [markedMod, dompurifyMod] = await Promise.all([import('marked'), import('dompurify')]);
-  const marked = configureMarkdownRenderer(markedMod.marked);
+  const marked = configureNoteMarkdownRenderer(new markedMod.Marked());
   const raw = String(marked.parse(markdown || '', { walkTokens: promoteEmptyMarkdownTaskToken }));
   const safe = dompurifyMod.default ? dompurifyMod.default.sanitize(raw) : raw;
   // 导出为静态文件,任务清单不可交互(editable=false)
@@ -33,6 +33,10 @@ export async function renderMarkdownForExport(markdown: string): Promise<string>
  */
 export async function inlineMermaidForExport(html: string): Promise<string> {
   if (typeof document === 'undefined') return html;
+  if (html.includes('data-ln-math')) {
+    const { inlineNoteMathForExport } = await import('./noteMathExport');
+    html = await inlineNoteMathForExport(html);
+  }
   const { hasMermaidBlock, renderMermaidBlocks } = await import('@/utils/mermaidRender.ts');
   if (!hasMermaidBlock(html)) return html;
   const holder = document.createElement('div');

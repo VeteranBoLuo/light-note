@@ -182,8 +182,9 @@ export default defineStore('dom', {
       }
     },
     async refreshLoadedFiles() {
-      // 标签操作不改变排序或文件范围，保留已展开的分页，避免列表缩回第一页。
+      // 保留已展开的分页，避免上传或标签操作后列表缩回第一页。
       const requestVersion = ++this.fileRequestVersion;
+      this.loadingMore = true;
       const pages = Math.max(1, this.filePage);
       const filters = {
         fileName: this.searchFileName,
@@ -230,8 +231,13 @@ export default defineStore('dom', {
     loadMoreFiles() {
       return this.queryFieldList({ append: true });
     },
-    async refreshAfterFileMutation() {
-      const [filesOk, foldersOk] = await Promise.all([this.queryFieldList(), this.queryFolder()]);
+    async refreshAfterFileMutation(options: { preserveLoaded?: boolean } = {}) {
+      const [filesOk, foldersOk] = await Promise.all([
+        options.preserveLoaded ? this.refreshLoadedFiles() : this.queryFieldList(),
+        this.queryFolder(),
+        // queryFieldList 自带用量刷新；保留分页的路径需显式同步容量。
+        ...(options.preserveLoaded ? [this.getUsedSpace()] : []),
+      ]);
       return filesOk && foldersOk;
     },
     setFileSortValue(sort: CloudFileSort) {

@@ -5,11 +5,18 @@ import { afterAll, beforeAll, beforeEach, expect, it, describe, vi } from 'vites
 vi.mock('../../db/index.js', () => ({ default: {} }));
 vi.mock('../notificationSchedulerPolicy.js', () => ({ notificationSchedulerEnabled: () => true }));
 vi.mock('../tagIconService.js', () => ({
-  prepareTagIconRoute: () => ({ needsAi: true }),
+  prepareTagIconRoute: vi.fn(() => ({ needsAi: true })),
   recommendTagIcons: vi.fn(),
   estimateTagIconTokens: () => 0,
 }));
-import { runOrganizeDirect, runOrganizeInspection, reclassifyCachedIcons } from './organizeProcessingPipeline.js';
+import {
+  runOrganizeDirect,
+  runOrganizeInspection,
+  reclassifyCachedIcons,
+  markProcessingAi,
+  settleProcessingRun,
+} from './organizeProcessingPipeline.js';
+import { prepareTagIconRoute } from '../tagIconService.js';
 import { runOrganizeCompletionNotifications } from './organizeCompletionNotification.js';
 import { diagnosedTransaction, withNextOrganizeRun } from './organizeSuggestionStorage.js';
 import { runSingleSuggestionItem } from './organizeSuggestionService.js';
@@ -87,6 +94,8 @@ describe.skipIf(!socket)('Worker diagnostics on isolated MySQL', () => {
     await admin?.end();
   });
   beforeEach(async () => {
+    prepareTagIconRoute.mockReturnValue({ needsAi: true });
+    await resetFreeWork();
     await db.query("UPDATE organize_suggestion_runs SET status='paused' WHERE id='icons'");
     await db.query(
       "UPDATE organize_suggestion_items SET ai_status='queued',lease_token=NULL,lease_expires_at=NULL WHERE id='tag-item'",
@@ -95,11 +104,24 @@ describe.skipIf(!socket)('Worker diagnostics on isolated MySQL', () => {
       "UPDATE organize_processing_jobs SET status='queued',lane='ai',kind='analysis',next_check_at=NULL,lease_token=NULL,lease_expires_at=NULL WHERE id='icon-job'",
     );
   });
+  async function resetFreeWork() {
+    await db.query(
+      "UPDATE organize_suggestion_runs SET status='running',summary_json=JSON_OBJECT('completionNotification','pending') WHERE id='direct'",
+    );
+    await db.query(
+      "UPDATE organize_suggestion_runs SET status='preparing',rule_phase='pending',summary_json=JSON_OBJECT('completionNotification','pending') WHERE id='inspect'",
+    );
+    await db.query(
+      "UPDATE organize_processing_jobs SET status='queued',next_check_at=NULL,lease_token=NULL,lease_expires_at=NULL WHERE id IN ('direct-job','icon-job')",
+    );
+  }
   it('runs real claim, classification and completion services concurrently through pause/resume', async () => {
     const log = vi.spyOn(console, 'error').mockImplementation(() => {}),
       notify = vi.fn();
     try {
       for (let round = 0; round < 50; round++) {
+        // Every round must do real work, rather than poll jobs completed in round 0.
+        await resetFreeWork();
         await db.query("UPDATE organize_suggestion_runs SET status=? WHERE id='icons'", [
           round % 2 ? 'running' : 'paused',
         ]);
@@ -113,7 +135,13 @@ describe.skipIf(!socket)('Worker diagnostics on isolated MySQL', () => {
           ['legacy-ai', () => runSingleSuggestionItem('w', db, { pipeline: 'legacy', skipRules: true })],
         ];
         const outcomes = await Promise.allSettled(jobs.map(([name, work]) => withWorkerDiagnostics(name, work)));
-        expect(outcomes.every((result) => result.status === 'fulfilled')).toBe(true);
+        const failures = outcomes.flatMap((result, index) =>
+          result.status === 'rejected'
+            ? [{ round, channel: jobs[index][0], code: result.reason?.code || result.reason?.name }]
+            : [],
+        );
+        expect(failures, JSON.stringify(log.mock.calls.map((call) => JSON.parse(call[1])))).toEqual([]);
+        expect(log.mock.calls, `Unexpected Worker diagnostics in round ${round}`).toEqual([]);
       }
       await runOrganizeCompletionNotifications('w', db, notify);
       const [[job]] = await db.query("SELECT status,attempts FROM organize_processing_jobs WHERE id='direct-job'");
@@ -127,6 +155,55 @@ describe.skipIf(!socket)('Worker diagnostics on isolated MySQL', () => {
       log.mockRestore();
     }
   });
+  it.each([
+    ['uncached icons', 'direct-job', (database) => reclassifyCachedIcons('w', database)],
+    [
+      'cached icons',
+      'direct-job',
+      (database) => {
+        prepareTagIconRoute.mockReturnValue({ needsAi: false, keywords: ['book'] });
+        return reclassifyCachedIcons('w', database);
+      },
+    ],
+    [
+      'AI lease update',
+      'direct-job',
+      (database) =>
+        diagnosedTransaction(database, 'test.lease', async (c) => {
+          await c.query("SELECT id FROM organize_suggestion_runs WHERE id='icons' FOR UPDATE");
+          await markProcessingAi(c, 'icons', 'tag-item', 'running', randomUUID());
+        }),
+    ],
+    ['inspection completion', 'icon-job', (database) => runOrganizeInspection('w', database)],
+    ['direct completion', 'icon-job', (database) => runOrganizeDirect('w', database)],
+  ])("%s does not wait for another run's locked processing job", async (_name, lockedJob, work) => {
+    const holder = await db.getConnection();
+    const worker = await db.getConnection();
+    try {
+      await holder.beginTransaction();
+      await holder.query('SELECT id FROM organize_processing_jobs WHERE id=? FOR UPDATE', [lockedJob]);
+      await worker.query('SET SESSION innodb_lock_wait_timeout=1');
+      await work(worker);
+    } finally {
+      await holder.rollback();
+      await worker.rollback();
+      await worker.query('SET SESSION innodb_lock_wait_timeout=DEFAULT');
+      holder.release();
+      worker.release();
+    }
+  });
+  it.each(['queued', 'waiting', 'running', 'completed', 'skipped', 'failed', 'cancelled'])(
+    "settlement includes the transaction's own %s job state",
+    async (status) => {
+      await diagnosedTransaction(db, 'test.settle', async (c) => {
+        await c.query("SELECT id FROM organize_suggestion_runs WHERE id='icons' FOR UPDATE");
+        await c.query("UPDATE organize_processing_jobs SET status=? WHERE id='icon-job'", [status]);
+        await settleProcessingRun(c, 'icons');
+      });
+      const [[run]] = await db.query("SELECT status FROM organize_suggestion_runs WHERE id='icons'");
+      expect(run.status).toBe(['queued', 'waiting', 'running'].includes(status) ? 'paused' : 'completed');
+    },
+  );
   // A held primary key blocks the claim until the competing mutation commits.
   async function contendWithRun(work, mutation) {
     const transition = await db.getConnection();
@@ -205,6 +282,19 @@ describe.skipIf(!socket)('Worker diagnostics on isolated MySQL', () => {
     expect(result).toEqual({ value: false, waiting: true });
     expect(work).not.toHaveBeenCalled();
     await db.query("UPDATE organize_suggestion_items SET ai_status='queued' WHERE id='tag-item'");
+  });
+  it('settlement sees the job transition committed while waiting for the run lock', async () => {
+    const result = await contendWithRun(
+      (database) =>
+        withNextOrganizeRun(database, 'test.settle', "r.id='icons'", async (c) => {
+          await settleProcessingRun(c, 'icons');
+          return true;
+        }),
+      (connection) => connection.query("UPDATE organize_processing_jobs SET status='completed' WHERE id='icon-job'"),
+    );
+    expect(result).toEqual({ value: true, waiting: true });
+    const [[run]] = await db.query("SELECT status FROM organize_suggestion_runs WHERE id='icons'");
+    expect(run.status).toBe('completed');
   });
   it('competing claims give a queued item exactly one lease', async () => {
     await db.query("UPDATE organize_suggestion_runs SET status='running' WHERE id='icons'");

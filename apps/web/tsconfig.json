@@ -35,6 +35,8 @@
       "@lightnote/shared/organize-capabilities": ["../../packages/shared/organizeCapabilities.d.ts"],
       "@lightnote/shared/resource-selection": ["../../packages/shared/resourceSelection.d.ts"],
       "@lightnote/shared/data-export": ["../../packages/shared/dataExport.d.ts"],
+      "@lightnote/shared/note-math": ["../../packages/shared/noteMath.d.ts"],
+      "@lightnote/shared/note-math-renderer": ["../../packages/shared/noteMathRenderer.d.ts"],
       "@lightnote/shared/note-export-document": ["../../packages/shared/noteExportDocument.d.ts"],
       "@lightnote/shared/note-transfer": ["../../packages/shared/noteTransfer.d.ts"],
       "@lightnote/shared/drawing-note": ["../../packages/shared/drawingNote.d.ts"],

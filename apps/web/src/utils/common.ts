@@ -2,7 +2,8 @@
 
 import { Ref } from 'vue';
 import { PWA_LAUNCH_QUERY_KEY, PWA_LAUNCH_QUERY_VALUE, PWA_RUNTIME_SESSION_KEY } from '@/config/appEntryBootstrap.ts';
-import { configureMarkdownRenderer } from '@/utils/markdownRenderer.ts';
+import { renderNoteMathHtml, serializeNoteMath } from '@/utils/noteMath';
+import { configureNoteMarkdownRenderer } from '@/utils/markdownRenderer.ts';
 import { makeNotePreviewCheckboxesReadonly } from '@/utils/noteHtmlToMarkdown.ts';
 
 export const copyTextToClipboard = function (text) {
@@ -362,7 +363,10 @@ export function normalizeNoteContentResourceUrls(htmlContent: string = ''): stri
 let _markedPromise: Promise<(md: string) => string> | null = null;
 function loadMarked(): Promise<(md: string) => string> {
   if (!_markedPromise) {
-    _markedPromise = import('marked').then((m: any) => configureMarkdownRenderer(m.marked || m.default || m));
+    _markedPromise = import('marked').then(({ Marked }) => {
+      const renderer = configureNoteMarkdownRenderer(new Marked());
+      return (md: string) => String(renderer.parse(md));
+    });
   }
   return _markedPromise;
 }
@@ -389,7 +393,7 @@ export async function noteContentToHtml(content: string = '', type?: string): Pr
   }
   try {
     const DOMPurify = await loadDompurify();
-    return makeNotePreviewCheckboxesReadonly(DOMPurify.sanitize(html));
+    return await renderNoteMathHtml(makeNotePreviewCheckboxesReadonly(DOMPurify.sanitize(serializeNoteMath(html))));
   } catch {
     // v-html 的安全边界不能在消毒器加载失败时退化为原始 HTML。
     return '';

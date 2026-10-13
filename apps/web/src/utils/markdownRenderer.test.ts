@@ -1,6 +1,6 @@
 import { Marked } from 'marked';
 import { describe, expect, it } from 'vitest';
-import { configureMarkdownRenderer } from './markdownRenderer';
+import { configureMarkdownRenderer, configureNoteMarkdownRenderer } from './markdownRenderer';
 
 function render(markdown: string) {
   const parser = configureMarkdownRenderer(new Marked({ gfm: true }));
@@ -8,6 +8,11 @@ function render(markdown: string) {
 }
 
 describe('configureMarkdownRenderer', () => {
+  it('keeps note formulas isolated from other Markdown surfaces', () => {
+    const note = configureNoteMarkdownRenderer(new Marked());
+    expect(String(note.parse('$x$'))).toContain('data-ln-math');
+    expect(render('$x$')).toBe('<p>$x$</p>\n');
+  });
   it.each(['：', '-', '—', '。'])('标点“%s”位于闭合标记前且后接中文时仍渲染为加粗', (punctuation) => {
     const html = render(`**事情${punctuation}**学习正文`);
     expect(html).toContain(`<strong>事情${punctuation}</strong>学习正文`);

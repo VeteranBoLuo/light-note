@@ -1,3 +1,4 @@
+import { noteMathEn } from './noteMath';
 import { extractionEn } from './extraction';
 import { comparisonTableEn } from './comparisonTable';
 import { translationEn } from './translation';
@@ -17,6 +18,7 @@ import { accountSettingsEn } from './accountSettings';
 import { settingsRefineEn } from './settingsRefine';
 import { notificationMessages } from '@lightnote/shared/notification-presentation';
 export default {
+  noteMath: noteMathEn,
   nativePush: {
     title: 'App notification connection',
     retry: 'Check again',

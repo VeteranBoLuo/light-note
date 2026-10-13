@@ -1,0 +1,47 @@
+// Shared document presentation: formula geometry follows document text, not UI density.
+.ln-math {
+  color: inherit;
+}
+.ln-math[data-ln-math='inline'] {
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: baseline;
+}
+.ln-math[data-ln-math='block'] {
+  display: block;
+  /* ui-density-fixed: document formula spacing scales with document font size */
+  margin: 1em 0;
+  max-width: 100%;
+  text-align: center;
+}
+.ln-math-body {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.ln-math .katex-display {
+  /* ui-density-fixed: KaTeX display spacing belongs to document typography */
+  margin: 0.35em 0;
+}
+.ln-math[role='button'] {
+  cursor: pointer;
+  border-radius: 0.2em;
+  outline: 1px solid transparent;
+  outline-offset: 0.15em;
+  @media (hover: hover) {
+    &:hover {
+      background: var(--hover-background);
+      outline-color: var(--border-color);
+    }
+  }
+  &:focus-visible,
+  &[data-mce-selected='1'] {
+    outline-color: var(--primary-color);
+  }
+}
+.ln-math-error {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  text-align: start;
+  text-decoration: underline dotted;
+}

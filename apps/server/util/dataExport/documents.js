@@ -1,7 +1,11 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { load } from 'cheerio';
-import { marked } from 'marked';
+import { Marked } from 'marked';
+import { noteMathMarkedExtension, noteMathTurndownRule, readNoteMath } from '@lightnote/shared/note-math';
+import { renderNoteMathSource } from '@lightnote/shared/note-math-renderer';
+import { noteMathExportStyles } from '@lightnote/shared/note-math-export-node';
+const marked = new Marked(noteMathMarkedExtension());
 import TurndownService from 'turndown';
 import gfm from 'turndown-plugin-gfm';
 import ExcelJS from 'exceljs';
@@ -13,6 +17,7 @@ import { hash, exportError, ensureSpace } from './storage.js';
 import { imageBytes, imageExtension } from './downloads.js';
 const turndown = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
 turndown.use(gfm.gfm);
+turndown.addRule('lightNoteMath', noteMathTurndownRule);
 const relative = (from, to) =>
   path.posix.relative(path.posix.dirname(from), to).split('/').map(encodeURIComponent).join('/');
 export async function renderNote(row, item, ctx) {
@@ -79,8 +84,18 @@ export async function renderNote(row, item, ctx) {
   });
   const first = $.root().children().first();
   const sameHeading = first.is('h1') && first.text().trim() === String(row.title || '').trim();
-  const body = sanitizeNoteHtml($.html()).html;
-  if (resolveDataExportNoteFormat(row.type, ctx.options.noteFormat) === 'html')
+  let body = sanitizeNoteHtml($.html()).html;
+  const exportHtml = resolveDataExportNoteFormat(row.type, ctx.options.noteFormat) === 'html';
+  if (exportHtml && body.includes('data-ln-math')) {
+    const mathDoc = load(body, null, false);
+    mathDoc('[data-ln-math]').each((_, element) => {
+      const node = mathDoc(element);
+      const math = readNoteMath(node.attr('data-ln-math'), node.attr('data-ln-latex'));
+      if (math) node.html(renderNoteMathSource(math.source, math.mode).html);
+    });
+    body = `<style data-ln-math-export>${await noteMathExportStyles()}</style>${mathDoc.html()}`;
+  }
+  if (exportHtml)
     return {
       content: buildNoteExportHtml(
         row.title || 'Untitled',

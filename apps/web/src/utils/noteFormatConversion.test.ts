@@ -6,6 +6,11 @@ import {
 } from './noteFormatConversion';
 
 describe('analyzeNoteFormatConversion', () => {
+  it('recognizes controlled formula HTML while retaining unrelated HTML warnings', () => {
+    const formula = '<span class="ln-math" data-ln-math="inline" data-ln-latex="x">x</span>';
+    expect(analyzeNoteFormatConversion(formula, 'markdown').potentialLoss).toBe(0);
+    expect(analyzeNoteFormatConversion(formula + '<section>other</section>', 'markdown').potentialLoss).toBe(1);
+  });
   it('HTML 转 Markdown 会识别颜色、对齐和合并单元格风险，并把下划线计为可保留结构', () => {
     const report = analyzeNoteFormatConversion(
       '<h2>标题</h2><p style="color:red;text-align:center"><u>正文</u></p><table><tr><td colspan="2">A</td></tr></table>',

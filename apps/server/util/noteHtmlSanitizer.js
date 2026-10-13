@@ -1,4 +1,5 @@
 import sanitizeHtml from 'sanitize-html';
+import { normalizeNoteMathSource } from './noteMath.js';
 
 // TinyMCE 正文允许的语义/排版元素。白名单覆盖当前富文本、任务清单、代码块、
 // Mermaid 源码块和站内资源引用；脚本、表单、对象嵌入等主动内容不进入持久层。
@@ -394,7 +395,7 @@ export function summarizeNoteHtmlSanitization(before, after) {
 
 export function sanitizeNoteHtml(value) {
   const before = String(value ?? '');
-  const html = sanitizeHtml(before, SANITIZE_OPTIONS);
+  const html = sanitizeHtml(normalizeNoteMathSource(before), SANITIZE_OPTIONS);
   return { html, report: summarizeNoteHtmlSanitization(before, html) };
 }
 

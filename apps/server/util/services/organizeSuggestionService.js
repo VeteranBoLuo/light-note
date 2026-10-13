@@ -409,8 +409,8 @@ export async function actOnSuggestion(
       if (mutation.deleted) {
         if (Number(run.run_version) === 3) {
           await c.query(
-            "UPDATE organize_processing_jobs SET status='skipped',lease_token=NULL,lease_expires_at=NULL WHERE item_id=? AND status IN ('queued','waiting','running')",
-            [item.id],
+            "UPDATE organize_processing_jobs SET status='skipped',lease_token=NULL,lease_expires_at=NULL WHERE run_id=? AND item_id=? AND status IN ('queued','waiting','running')",
+            [run.id, item.id],
           );
           await settleProcessingRun(c, run.id);
         }
@@ -541,7 +541,7 @@ async function finishItemImpl(c, job, status, result, errorCode = null) {
           ? 'partial'
           : 'failed'
         : status;
-    await markProcessingAi(c, job.id, finalStatus, null, errorCode);
+    await markProcessingAi(c, job.run_id, job.id, finalStatus, null, errorCode);
     await settleProcessingRun(c, job.run_id);
     return true;
   }
@@ -590,7 +590,7 @@ export async function runSingleSuggestionItem(workerId, db = pool, dependencies 
             [run.status === 'paused' ? 'waiting_content' : 'cancelled', item.id],
           );
           if (Number(item.run_version) === 3) {
-            await markProcessingAi(c, item.id, run.status === 'paused' ? 'waiting' : 'cancelled');
+            await markProcessingAi(c, item.run_id, item.id, run.status === 'paused' ? 'waiting' : 'cancelled');
             await settleProcessingRun(c, item.run_id);
           }
           return { recovered: true };
@@ -607,8 +607,8 @@ export async function runSingleSuggestionItem(workerId, db = pool, dependencies 
               route = prepareTagIconRoute(snapshot.title);
             if (!route.needsAi) {
               await c.query(
-                "UPDATE organize_processing_jobs SET lane='direct',kind='tag_icon',status='queued',prepared_json=?,lease_token=NULL,lease_expires_at=NULL WHERE item_id=? AND kind='analysis'",
-                [JSON.stringify({ keywords: route.keywords, version: snapshot.version }), item.id],
+                "UPDATE organize_processing_jobs SET lane='direct',kind='tag_icon',status='queued',prepared_json=?,lease_token=NULL,lease_expires_at=NULL WHERE run_id=? AND item_id=? AND kind='analysis'",
+                [JSON.stringify({ keywords: route.keywords, version: snapshot.version }), item.run_id, item.id],
               );
               await c.query(
                 "UPDATE organize_suggestion_items SET ai_status='not_needed',ai_kinds_json='[]',lease_token=NULL,lease_expires_at=NULL WHERE id=?",
@@ -623,7 +623,8 @@ export async function runSingleSuggestionItem(workerId, db = pool, dependencies 
           `UPDATE organize_suggestion_items SET ai_status='${item.resource_type === 'file' ? 'preparing_content' : 'running'}',lease_token=?,lease_expires_at=DATE_ADD(NOW(),INTERVAL 10 MINUTE) WHERE id=?`,
           [item.lease_token, item.id],
         );
-        if (Number(item.run_version) === 3) await markProcessingAi(c, item.id, 'running', item.lease_token);
+        if (Number(item.run_version) === 3)
+          await markProcessingAi(c, item.run_id, item.id, 'running', item.lease_token);
         await c.query(
           "UPDATE organize_suggestions SET status='running',payload_json=JSON_SET(payload_json,'$.reason','正在分析') WHERE item_id=? AND status='queued'",
           [item.id],
@@ -650,10 +651,11 @@ export async function runSingleSuggestionItem(workerId, db = pool, dependencies 
       job.ai_kinds_json = await refreshPendingSource(db, job, current);
       if (!job.ai_kinds_json.length) {
         await transaction(db, async (c) => {
+          await ownedRun(c, job.user_id, job.run_id, true);
           if (Number(job.run_version) === 3)
             await c.query(
-              "UPDATE organize_processing_jobs SET lane='direct' WHERE item_id=? AND kind='analysis' AND lease_token=?",
-              [job.id, job.lease_token],
+              "UPDATE organize_processing_jobs SET lane='direct' WHERE run_id=? AND item_id=? AND kind='analysis' AND lease_token=?",
+              [job.run_id, job.id, job.lease_token],
             );
           return finishItem(c, job, 'completed', {});
         });
@@ -683,7 +685,12 @@ export async function runSingleSuggestionItem(workerId, db = pool, dependencies 
             ],
           );
           if (Number(job.run_version) === 3 && released.affectedRows)
-            await markProcessingAi(c, job.id, ['running', 'paused'].includes(run.status) ? 'waiting' : 'cancelled');
+            await markProcessingAi(
+              c,
+              job.run_id,
+              job.id,
+              ['running', 'paused'].includes(run.status) ? 'waiting' : 'cancelled',
+            );
         });
         return true;
       }
@@ -841,6 +848,7 @@ export async function runSingleSuggestionItem(workerId, db = pool, dependencies 
           if (filePrepared) result.reading = current.reading;
           // Provider 成果在根 Execution 成功前入库，使用外发生命周期屏障保证注销互斥。
           const delivered = await transaction(db, async (c) => {
+            await ownedRun(c, job.user_id, job.run_id, true);
             if (filePrepared)
               await c.query('UPDATE organize_suggestion_items SET snapshot_json=? WHERE id=? AND lease_token=?', [
                 JSON.stringify(current),
@@ -849,8 +857,8 @@ export async function runSingleSuggestionItem(workerId, db = pool, dependencies 
               ]);
             if (Number(job.run_version) === 3 && !executionRecord?.providerCallCount)
               await c.query(
-                "UPDATE organize_processing_jobs SET lane='direct' WHERE item_id=? AND kind='analysis' AND lease_token=?",
-                [job.id, job.lease_token],
+                "UPDATE organize_processing_jobs SET lane='direct' WHERE run_id=? AND item_id=? AND kind='analysis' AND lease_token=?",
+                [job.run_id, job.id, job.lease_token],
               );
             return finishItem(c, job, 'completed', result);
           });
@@ -903,7 +911,7 @@ export async function runSingleSuggestionItem(workerId, db = pool, dependencies 
         );
         if (!released.affectedRows) return;
         if (Number(job.run_version) === 3)
-          await markProcessingAi(c, job.id, queue ? 'queued' : 'cancelled', null, error.code);
+          await markProcessingAi(c, job.run_id, job.id, queue ? 'queued' : 'cancelled', null, error.code);
         await c.query("UPDATE organize_suggestions SET status=? WHERE item_id=? AND status='running'", [
           queue ? 'queued' : 'cancelled',
           job.id,
