@@ -34,6 +34,7 @@ export async function callStructuredSkillModel({
   signal,
   repairableErrorCodes = ['AI_SKILL_STRUCTURED_OUTPUT_MISSING', 'AI_SKILL_STRUCTURED_OUTPUT_INVALID'],
   buildRepairInstruction,
+  buildRepairRequest,
   beforeRequest,
   stream = false,
   onToolCallDelta,
@@ -59,16 +60,26 @@ export async function callStructuredSkillModel({
   } catch (error) {
     const repairable = new Set(repairableErrorCodes);
     if (!repairable.has(error?.code)) throw error;
+    // A trusted Skill may repair a bounded subset. Its validator must merge and
+    // validate the full result. It shares the existing single repair allowance.
+    const repair = buildRepairRequest?.({
+      error,
+      toolName: structuredTool.name,
+      invalidArguments: parsedArguments,
+      finishReason: response?.finishReason,
+    });
+    const repairTool = repair?.structuredTool || structuredTool;
     const repairInstruction =
-      typeof buildRepairInstruction === 'function'
+      repair?.instruction ||
+      (typeof buildRepairInstruction === 'function'
         ? buildRepairInstruction({ error, toolName: structuredTool.name, invalidArguments: parsedArguments })
-        : `上一版没有按协议返回。必须且只能调用 ${structuredTool.name} 一次，不要输出解释文本。`;
+        : `上一版没有按协议返回。必须且只能调用 ${structuredTool.name} 一次，不要输出解释文本。`);
     await beforeRequest?.();
     onReset?.();
     response = await requestModel(
       [
         ...messages,
-        { role: 'assistant', content: String(response?.content || '') },
+        ...(!repair ? [{ role: 'assistant', content: String(response?.content || '') }] : []),
         {
           role: 'user',
           content: repairInstruction,
@@ -76,13 +87,15 @@ export async function callStructuredSkillModel({
       ],
       {
         ...options,
+        tools: [{ type: 'function', function: repairTool }],
+        toolChoice: { type: 'function', function: { name: repairTool.name } },
         temperature: 0,
         billingScope: 'platform',
         repairReasonCode: error.code,
         trace: { ...trace, stage: `${trace?.stage || 'structured_output'}_repair` },
       },
     );
-    return validateArguments(parseToolArguments(response, structuredTool.name));
+    return (repair?.validateArguments || validateArguments)(parseToolArguments(response, repairTool.name));
   }
 }
 
