@@ -55,11 +55,14 @@ describe('AI product telemetry privacy contract', () => {
     });
   });
 
-  it.each(['bookmark_manage', 'cloud_space', 'tag_detail'])('accepts resource entry surface %s', (surface) => {
-    expect(normalizeAiProductEvent({ event: 'ai_entry_opened', dimensions: { surface } }).dimensions.surface).toBe(
-      surface,
-    );
-  });
+  it.each(['bookmark_manage', 'cloud_space', 'tag_detail', 'browser_extension.bookmark'])(
+    'accepts resource entry surface %s',
+    (surface) => {
+      expect(normalizeAiProductEvent({ event: 'ai_entry_opened', dimensions: { surface } }).dimensions.surface).toBe(
+        surface,
+      );
+    },
+  );
 
   it('接受 Skill 生命周期的低敏聚合维度且不散列稳定 Skill 标识', () => {
     expect(

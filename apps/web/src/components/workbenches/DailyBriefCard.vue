@@ -294,6 +294,7 @@
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
+  import { openBookmarkUrl } from '@/utils/openBookmark';
   import { resolveBriefSourceTarget, resolveBriefOrganizeActions } from '@/utils/dailyBriefNavigation';
 
   const props = withDefaults(
@@ -399,7 +400,7 @@
   }
   function openSource(source: NonNullable<DailyBriefInsight['sources']>[number]) {
     const target = resolveBriefSourceTarget(source);
-    if (target?.external) window.open(target.external, '_blank', 'noopener,noreferrer');
+    if (target?.external) openBookmarkUrl(target.external, { resourceId: source.id });
     else if (target?.route) void router.push(target.route);
   }
   function insightTone(insight: DailyBriefInsight) {

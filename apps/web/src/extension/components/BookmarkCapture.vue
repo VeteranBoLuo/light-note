@@ -165,6 +165,7 @@
   import { clearBookmarkDraft, getBookmarkDraft, saveBookmarkDraft } from '../storage';
   import { belongsToExtensionDraftSession, createExtensionDraftPersistence } from '../draftPersistence';
   import { resolveExtensionOperationReceipt } from '../operationIdempotency';
+  import type { ExtensionBookmarkAiAdoption } from '../bookmarkAiAdoption';
   import type {
     BookmarkDraft,
     CapturedPageText,
@@ -175,7 +176,11 @@
   import { buildBookmarkCapturePayload } from '@/utils/bookmarkCapture.ts';
   import { getAiQuotaErrorPresentation } from '@/utils/aiQuotaErrorPresentation';
 
-  const props = defineProps<{ authenticated: boolean; draftSessionId: string }>();
+  const props = defineProps<{
+    authenticated: boolean;
+    draftSessionId: string;
+    aiAdoption: ExtensionBookmarkAiAdoption;
+  }>();
   const emit = defineEmits<{ 'auth-required': []; success: [result: ExtensionSuccess] }>();
   const { t } = useI18n();
   const draft = reactive<BookmarkDraft>({
@@ -306,7 +311,10 @@
         errorMessage.value = t('browserExtension.bookmark.tooManyTags');
         return;
       }
-      if (!draft.selectedNewTags.includes(tag)) draft.selectedNewTags.push(tag);
+      if (!draft.selectedNewTags.includes(tag)) {
+        draft.selectedNewTags.push(tag);
+        props.aiAdoption.selectNewTag(tag);
+      }
     } else {
       draft.selectedNewTags = draft.selectedNewTags.filter((item) => item !== tag);
     }
@@ -329,6 +337,8 @@
       return;
     }
     draft.url = url;
+    props.aiAdoption.setUrl(url);
+    const attribution = props.aiAdoption.begin();
     // 权限申请必须直接发生在按钮点击的同步调用栈里；失败时仅退回服务端公开网页读取。
     let pageTextPromise: Promise<CapturedPageText | null> | null = null;
     const captureTarget = pageCaptureTarget.value;
@@ -370,6 +380,8 @@
           surface: 'browser_extension.bookmark',
         },
       });
+      if (!attribution.current()) return;
+      const before = adoptionFields();
       const fields = data?.result?.fields || {};
       if (fields.name) draft.name = String(fields.name);
       if (fields.description) draft.description = String(fields.description);
@@ -389,6 +401,7 @@
         ),
       ].slice(0, 4);
       draft.selectedNewTags = draft.selectedNewTags.filter((tag) => suggestedNewTags.value.includes(tag));
+      attribution.filled(data?.requestId || '', before, adoptionFields(), suggestedNewTags.value);
       aiGenerated.value = true;
     } catch (error: any) {
       if (isExtensionAuthError(error)) emit('auth-required');
@@ -432,6 +445,14 @@
       relatedTags: draft.selectedTagIds,
       relatedTagNames: draft.selectedNewTags,
     });
+    const recordSaved = props.aiAdoption.prepareSave({
+      name: payload.name,
+      description: payload.description,
+      relatedTags: [
+        ...(payload.relatedTags || []).map((id) => `id:${id}`),
+        ...(payload.relatedTagNames || []).map((tag) => `name:${tag}`),
+      ],
+    });
     try {
       const operation = await resolveExtensionOperationReceipt({
         current: draft.operations?.[mode],
@@ -445,6 +466,8 @@
         ...payload,
         idempotencyKey: operation.key,
       });
+      if (!result.duplicate) recordSaved();
+      props.aiAdoption.reset();
       await draftPersistence.discard();
       emit('success', {
         type: 'bookmark',
@@ -455,6 +478,7 @@
     } catch (error: any) {
       if (isExtensionAuthError(error)) emit('auth-required');
       else if (error instanceof ExtensionApiError && error.code === 'DUPLICATE_URL' && error.data?.duplicate) {
+        props.aiAdoption.reset();
         await draftPersistence.discard();
         emit('success', {
           type: 'bookmark',
@@ -478,12 +502,25 @@
     return draft.mode === 'inbox' ? saveToInbox() : saveFormal();
   }
 
+  function adoptionFields() {
+    return {
+      name: draft.name,
+      description: draft.description,
+      relatedTags: [
+        ...draft.selectedTagIds.map((id) => `id:${id}`),
+        ...draft.selectedNewTags.map((tag) => `name:${tag}`),
+      ],
+    };
+  }
+
   watch(draft, () => void draftPersistence.save(bookmarkDraftSnapshot()), { deep: true });
   watch(
     () => draft.url,
     () => {
       aiGenerated.value = false;
+      if (!capturing.value) props.aiAdoption.setUrl(normalizeUrl(draft.url) || draft.url);
     },
+    { flush: 'sync' },
   );
   watch(
     () => props.authenticated,
@@ -508,6 +545,7 @@
     } catch {
       captureWarning.value = t('browserExtension.bookmark.captureFailed');
     } finally {
+      props.aiAdoption.setUrl(normalizeUrl(draft.url) || draft.url);
       capturing.value = false;
     }
     if (props.authenticated && draft.mode === 'formal') void loadTags();

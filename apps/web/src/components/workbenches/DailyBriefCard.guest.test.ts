@@ -5,7 +5,14 @@ import zhCN from '@/i18n/locales/zh-CN';
 import enUS from '@/i18n/locales/en-US';
 import DailyBriefCard from './DailyBriefCard.vue';
 
-const mocks = vi.hoisted(() => ({ visitor: vi.fn(), get: vi.fn(), ensure: vi.fn(), refresh: vi.fn(), push: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  visitor: vi.fn(),
+  get: vi.fn(),
+  ensure: vi.fn(),
+  refresh: vi.fn(),
+  push: vi.fn(),
+  open: vi.fn(),
+}));
 vi.mock('@/api/dailyBriefApi', () => ({
   getVisitorBrief: mocks.visitor,
   getDailyBrief: mocks.get,
@@ -23,6 +30,7 @@ vi.mock('@/components/base/BasicComponents/BModal/BModal.vue', () => ({
         props.visible ? slots.default?.() : null,
   },
 }));
+vi.mock('@/utils/openBookmark', () => ({ openBookmarkUrl: mocks.open }));
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: mocks.push }) }));
 let cleanup: (() => void) | undefined;
 afterEach(() => {
@@ -114,6 +122,34 @@ describe('今日简报游客示例', () => {
     expect(mocks.get).not.toHaveBeenCalled();
     expect(mocks.ensure).not.toHaveBeenCalled();
     expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+  it('opens a bookmark through the shared preference and reuse entry point', async () => {
+    mocks.visitor.mockResolvedValueOnce({
+      status: 200,
+      data: {
+        ...sample,
+        brief: {
+          ...sample.brief,
+          insights: [
+            {
+              id: 'bookmark',
+              factIds: [],
+              text: '相关资料',
+              sources: [
+                { type: 'bookmark', id: 'bookmark-fixture', title: '资料', url: 'https://example.com/article' },
+              ],
+            },
+          ],
+        },
+      },
+    });
+    const { host } = mount();
+    await vi.waitFor(() => expect(host.querySelector('.daily-brief-insight__sources button')).not.toBeNull());
+    expect(mocks.open).not.toHaveBeenCalled();
+    host.querySelector<HTMLButtonElement>('.daily-brief-insight__sources button')!.click();
+    expect(mocks.open).toHaveBeenCalledExactlyOnceWith('https://example.com/article', {
+      resourceId: 'bookmark-fixture',
+    });
   });
   it('shows a retry on initial failure, preserves saved content on refresh failure', async () => {
     mocks.visitor.mockRejectedValueOnce(new Error('network'));
