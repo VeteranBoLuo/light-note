@@ -4165,7 +4165,7 @@ SELECT 'extraction_index' AS check_name,'toolbox_extraction_receipts.idx_extract
 SELECT 'extraction_column' AS check_name,'toolbox_extraction_records.pending_cells' AS detail FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='toolbox_extraction_records' AND column_name='pending_cells' AND data_type='smallint' AND is_nullable='NO');
 
 -- C9 个人背景（缺失时必须先迁移，再运行查询新列的服务）。
-SELECT 'invalid or missing user_growth.equipped_background' AS issue
+SELECT 'background_column' AS check_name, 'user_growth.equipped_background' AS detail FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'user_growth' AND COLUMN_NAME = 'equipped_background'
     AND DATA_TYPE = 'varchar' AND CHARACTER_MAXIMUM_LENGTH = 64 AND IS_NULLABLE = 'YES' AND COLUMN_DEFAULT IS NULL);
