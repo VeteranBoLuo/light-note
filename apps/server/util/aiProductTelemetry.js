@@ -83,6 +83,7 @@ const ENUM_DIMENSIONS = Object.freeze({
     'quick_capture.todo',
     'bookmark.form',
     'bookmark.quick_save',
+    'browser_extension.bookmark',
     'file.preview',
     'note.detail',
     'note.editor.selection',

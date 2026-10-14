@@ -47,6 +47,7 @@
         v-else-if="view === 'bookmark'"
         :authenticated="authenticated"
         :draft-session-id="draftSessionId"
+        :ai-adoption="bookmarkAiAdoption"
         @auth-required="openAuth"
         @success="showSuccess"
       />
@@ -85,6 +86,7 @@
   import ExtensionLogin from './components/ExtensionLogin.vue';
   import ExtensionSuccessView from './components/ExtensionSuccessView.vue';
   import { logoutExtension, restoreExtensionSession } from './auth';
+  import { createExtensionBookmarkAiAdoption } from './bookmarkAiAdoption';
   import { saveExtensionTheme } from './storage';
   import type { ExtensionResourceType, ExtensionSession, ExtensionSuccess } from './types';
 
@@ -96,6 +98,12 @@
   const authVisible = ref(false);
   const success = ref<ExtensionSuccess | null>(null);
   const draftSessionId = crypto.randomUUID();
+  const bookmarkAiAdoption = createExtensionBookmarkAiAdoption();
+  watch(
+    () => session.value?.user?.id || '',
+    (owner) => bookmarkAiAdoption.setOwner(owner),
+    { immediate: true, flush: 'sync' },
+  );
   const mainRef = ref<HTMLElement | null>(null);
   const theme = ref<'day' | 'night'>(document.documentElement.getAttribute('data-theme') === 'night' ? 'night' : 'day');
   const extensionLogoUrl = chrome.runtime.getURL('icons/icon-32.png');

@@ -117,7 +117,8 @@ describe.skipIf(!socket)('search seek ordering (isolated MySQL)', () => {
     }
   });
 
-  it('migrates real bookmark/file layouts idempotently and bounds deep-page index reads', async () => {
+  // 120k fixture rows and repeated DDL need an integration budget; query read bounds remain asserted below.
+  it('migrates real bookmark/file layouts idempotently and bounds deep-page index reads', { timeout: 30_000 }, async () => {
     const indexSchema = `search_index_${randomUUID().replaceAll('-', '')}`;
     await admin.query(`CREATE DATABASE ${indexSchema}`);
     let indexDb;

@@ -22,8 +22,11 @@ export function isExtensionAuthError(error: unknown): boolean {
   return value?.code === 'EXTENSION_AUTH_REQUIRED' || AUTH_INVALID_STATUSES.has(value?.status);
 }
 
-async function requestHeaders(extraHeaders: HeadersInit = {}): Promise<Headers> {
+async function requestHeaders(extraHeaders: HeadersInit = {}, expectedUserId?: string): Promise<Headers> {
   const session = await getExtensionSession();
+  if (expectedUserId !== undefined && session?.user?.id !== expectedUserId) {
+    throw new ExtensionApiError('EXTENSION_IDENTITY_CHANGED', '会话已切换', 401);
+  }
   const deviceId = session?.deviceId || (await getOrCreateDeviceId());
   const headers = new Headers(extraHeaders);
   headers.set('Content-Type', 'application/json');
@@ -36,14 +39,21 @@ async function requestHeaders(extraHeaders: HeadersInit = {}): Promise<Headers> 
 
 export async function extensionRequest<T = any>(
   path: string,
-  options: { method?: 'GET' | 'POST'; body?: unknown; signal?: AbortSignal; requireAuth?: boolean } = {},
+  options: {
+    method?: 'GET' | 'POST';
+    body?: unknown;
+    signal?: AbortSignal;
+    requireAuth?: boolean;
+    silentAuthFailure?: boolean;
+    expectedUserId?: string;
+  } = {},
 ): Promise<T> {
   if (options.requireAuth && !(await getExtensionSession())?.sid) {
     throw new ExtensionApiError('EXTENSION_AUTH_REQUIRED', '请先登录轻笺', 401);
   }
   const response = await fetch(`${EXTENSION_APP_ORIGIN}${path}`, {
     method: options.method || (options.body === undefined ? 'GET' : 'POST'),
-    headers: await requestHeaders(),
+    headers: await requestHeaders({}, options.expectedUserId),
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
     signal: options.signal,
     credentials: 'omit',
@@ -56,8 +66,10 @@ export async function extensionRequest<T = any>(
   }
   const status = envelope?.status ?? response.status;
   if (options.requireAuth !== false && AUTH_INVALID_STATUSES.has(status)) {
-    await clearExtensionSession();
-    window.dispatchEvent(new CustomEvent('light-note-extension-auth-expired'));
+    if (!options.silentAuthFailure) {
+      await clearExtensionSession();
+      window.dispatchEvent(new CustomEvent('light-note-extension-auth-expired'));
+    }
     throw new ExtensionApiError('EXTENSION_AUTH_REQUIRED', envelope?.msg || '登录已过期', status, envelope?.data);
   }
   if (!response.ok || Number(status) !== 200) {
