@@ -40,6 +40,66 @@ describe('noteWorkspace 目录元数据同步', () => {
     expect(workspace.detailTreeScrollTop).toBe(0);
   });
 
+  it.each(['success', 'failure'] as const)(
+    '导入刷新作废旧根层和子层请求，迟到 %s 不覆盖新顺序或错误状态',
+    async (outcome) => {
+      const workspace = useNoteWorkspaceStore();
+      const parent = treeNode({ id: 'parent', childCount: 2, hasChildren: true });
+      workspace.childrenByParent = { [NOTE_TREE_ROOT_KEY]: [parent], parent: [treeNode({ id: 'old' })] };
+      workspace.expandedIds = new Set(['parent']);
+      const deferred: { resolve: (v: any) => void; reject: (e: Error) => void }[] = [];
+      mocks.apiBasePost
+        .mockImplementationOnce(() => new Promise((resolve, reject) => deferred.push({ resolve, reject })))
+        .mockImplementationOnce(() => new Promise((resolve, reject) => deferred.push({ resolve, reject })));
+      const oldRoot = workspace.loadChildren(null, true);
+      const oldChild = workspace.loadChildren('parent', true);
+      mocks.apiBasePost.mockImplementation(async (_url, body) => ({
+        status: 200,
+        data: {
+          items: body.parentId ? [treeNode({ id: 'imported', sort: 0 }), treeNode({ id: 'old', sort: 1 })] : [parent],
+        },
+      }));
+      const refresh = workspace.refreshTree();
+      // 刷新期间保留可读快照，不先清空侧栏。
+      expect(workspace.childrenByParent.parent[0].id).toBe('old');
+      await refresh;
+      expect(mocks.apiBasePost).toHaveBeenCalledTimes(4);
+      for (const request of deferred) {
+        if (outcome === 'success') request.resolve({ status: 200, data: { items: [] } });
+        else request.reject(new Error('old request failed'));
+      }
+      await Promise.all([oldRoot, oldChild]);
+      expect(workspace.childrenByParent.parent.map((node) => node.id)).toEqual(['imported', 'old']);
+      expect(workspace.childrenByParent[NOTE_TREE_ROOT_KEY][0].id).toBe('parent');
+      expect(workspace.treeError).toBe('');
+      expect(workspace.loadingKeys.size).toBe(0);
+    },
+  );
+
+  it('连续导入刷新以最后一批响应为准；刷新失败保留目录且允许重新读取', async () => {
+    const workspace = useNoteWorkspaceStore();
+    workspace.childrenByParent = { [NOTE_TREE_ROOT_KEY]: [treeNode({ id: 'old' })] };
+    let finishFirst!: (v: any) => void;
+    mocks.apiBasePost.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishFirst = resolve;
+      }),
+    );
+    const first = workspace.refreshTree();
+    mocks.apiBasePost.mockResolvedValueOnce({ status: 200, data: { items: [treeNode({ id: 'latest' })] } });
+    await workspace.refreshTree();
+    finishFirst({ status: 200, data: { items: [treeNode({ id: 'obsolete' })] } });
+    await first;
+    expect(workspace.childrenByParent[NOTE_TREE_ROOT_KEY][0].id).toBe('latest');
+    mocks.apiBasePost.mockRejectedValueOnce(new Error('offline'));
+    await workspace.refreshTree();
+    expect(workspace.childrenByParent[NOTE_TREE_ROOT_KEY][0].id).toBe('latest');
+    expect(workspace.loadedKeys.has(NOTE_TREE_ROOT_KEY)).toBe(false);
+    mocks.apiBasePost.mockResolvedValueOnce({ status: 200, data: { items: [treeNode({ id: 'recovered' })] } });
+    await workspace.loadChildren();
+    expect(workspace.childrenByParent[NOTE_TREE_ROOT_KEY][0].id).toBe('recovered');
+  });
+
   it('显式进入笔记库根页会生成独立请求令牌，旧请求结束不能覆盖较新的导航', () => {
     const workspace = useNoteWorkspaceStore();
 

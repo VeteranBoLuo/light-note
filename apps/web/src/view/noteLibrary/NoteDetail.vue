@@ -337,7 +337,7 @@
       @save-copy="saveConflictAsCopy"
       @overwrite="overwriteConflictWithLocal"
     />
-  <NoteTransferDialog ref="transferDialog" @changed="refreshTree()" />
+  <NoteTransferDialog ref="transferDialog" @changed="refreshAfterImport" />
   </div>
 </template>
 
@@ -573,6 +573,10 @@
   function invalidateNoteReadCaches(noteId = note.id) {
     invalidateNoteDetailPrefetch(user, noteId);
     noteLibraryCache.markListsStale(buildNoteDetailRequestScope(user));
+  }
+  function refreshAfterImport() {
+    noteLibraryCache.markListsStale(noteCacheScope.value);
+    void refreshTree();
   }
   function invalidateMovedNoteReadCaches(result: NoteTreeMoveResult | null, noteId = '') {
     if (noteId) invalidateNoteDetailPrefetch(user, noteId);

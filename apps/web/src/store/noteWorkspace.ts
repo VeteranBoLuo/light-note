@@ -497,7 +497,11 @@ export default defineStore('noteWorkspace', () => {
 
   async function refreshTree() {
     const activeSearch = treeSearchKeyword.value;
-    childrenByParent.value = {};
+    // 写入后的刷新必须发起新读取，不能复用导入前的在途请求。
+    // 保留已显示快照到新响应到达；旧响应与错误由请求代次屏障丢弃。
+    treeRequestSeq += 1;
+    childrenRequests.clear();
+    loadingKeys.value = new Set();
     loadedKeys.value = new Set();
     treeError.value = '';
     await Promise.all([
