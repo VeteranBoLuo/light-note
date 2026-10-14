@@ -122,6 +122,10 @@ describe('noteWorkspace 目录元数据同步', () => {
   });
 
   it('首次保存后立即把新文档插入已缓存目录，并幂等更新父节点计数', () => {
+    mocks.apiBasePost.mockResolvedValue({
+      status: 200,
+      data: { items: [treeNode({ id: 'created-note', parentId: 'parent' })] },
+    });
     const workspace = useNoteWorkspaceStore();
     workspace.childrenByParent = {
       [NOTE_TREE_ROOT_KEY]: [treeNode({ id: 'parent', title: '父页面', childCount: 0, hasChildren: false })],
@@ -153,6 +157,85 @@ describe('noteWorkspace 目录元数据同步', () => {
     workspace.insertCreatedNote(created);
     expect(workspace.childrenByParent.parent).toHaveLength(1);
     expect(workspace.childrenByParent[NOTE_TREE_ROOT_KEY][0].childCount).toBe(1);
+  });
+
+  it.each([
+    ['top', null],
+    ['bottom', null],
+    ['top', 'parent'],
+    ['bottom', 'parent'],
+  ] as const)('首次保存按 %s 即时插入 %s，并回读该父层保留置顶和旧节点相对顺序', async (position, parentId) => {
+    const workspace = useNoteWorkspaceStore();
+    const key = parentId || NOTE_TREE_ROOT_KEY;
+    const old = [treeNode({ id: 'pin', isTop: true }), treeNode({ id: 'a', sort: 0 }), treeNode({ id: 'b', sort: 1 })];
+    workspace.childrenByParent = { [key]: old, unrelated: [treeNode({ id: 'untouched' })] };
+    workspace.loadedKeys = new Set([key, 'unrelated']);
+    let resolve!: (value: any) => void;
+    mocks.apiBasePost.mockReturnValueOnce(
+      new Promise((done) => {
+        resolve = done;
+      }),
+    );
+    workspace.insertCreatedNote({ id: 'created', parentId, title: '新笔记', type: 'html' }, position);
+    const expected = position === 'top' ? ['pin', 'created', 'a', 'b'] : ['pin', 'a', 'b', 'created'];
+    expect(workspace.childrenByParent[key].map((item) => item.id)).toEqual(expected);
+    expect(workspace.childrenByParent[key].filter((item) => item.id !== 'created')).toEqual(old);
+    expect(mocks.apiBasePost).toHaveBeenCalledExactlyOnceWith(
+      '/api/note/queryNoteTree',
+      { parentId, depth: 1 },
+      { silent: true },
+    );
+    const refresh = workspace.loadChildren(parentId);
+    const authoritative = expected.map((id, index) =>
+      treeNode({ id, parentId, isTop: id === 'pin', sort: index + 20 }),
+    );
+    resolve({ status: 200, data: { items: authoritative } });
+    await refresh;
+    expect(workspace.childrenByParent[key]).toEqual(authoritative);
+    expect(workspace.childrenByParent.unrelated[0].id).toBe('untouched');
+    expect(workspace.loadedKeys.has(key)).toBe(true);
+  });
+
+  it('创建前目录请求迟到不会抹掉新节点，也不覆盖创建后的权威顺序', async () => {
+    const workspace = useNoteWorkspaceStore();
+    let oldResolve!: (value: any) => void;
+    mocks.apiBasePost.mockReturnValueOnce(
+      new Promise((done) => {
+        oldResolve = done;
+      }),
+    );
+    const oldRead = workspace.loadChildren();
+    mocks.apiBasePost.mockResolvedValueOnce({
+      status: 200,
+      data: { items: [treeNode({ id: 'created', sort: 0 }), treeNode({ id: 'old', sort: 1 })] },
+    });
+    workspace.insertCreatedNote({ id: 'created', parentId: null, title: '新笔记', type: 'html' }, 'top');
+    await workspace.loadChildren();
+    oldResolve({ status: 200, data: { items: [treeNode({ id: 'old' })] } });
+    await oldRead;
+    expect(workspace.childrenByParent[NOTE_TREE_ROOT_KEY].map((item) => item.id)).toEqual(['created', 'old']);
+  });
+
+  it('回读失败保留新节点并允许重试，换账号后不应用前一账号的回读', async () => {
+    const workspace = useNoteWorkspaceStore();
+    workspace.ensureOwner('first');
+    mocks.apiBasePost.mockRejectedValueOnce(new Error('offline'));
+    workspace.insertCreatedNote({ id: 'created', parentId: null, title: '新笔记', type: 'html' }, 'top');
+    await workspace.loadChildren();
+    expect(workspace.childrenByParent[NOTE_TREE_ROOT_KEY][0].id).toBe('created');
+    expect(workspace.loadedKeys.has(NOTE_TREE_ROOT_KEY)).toBe(false);
+    let resolve!: (value: any) => void;
+    mocks.apiBasePost.mockReturnValueOnce(
+      new Promise((done) => {
+        resolve = done;
+      }),
+    );
+    const retry = workspace.loadChildren();
+    workspace.ensureOwner('second');
+    resolve({ status: 200, data: { items: [treeNode({ id: 'created' })] } });
+    await retry;
+    expect(workspace.childrenByParent).toEqual({});
+    expect(workspace.treeError).toBe('');
   });
 
   it('移动页面后只失效包含该分支的面包屑缓存', () => {

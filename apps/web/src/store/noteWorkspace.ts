@@ -301,7 +301,11 @@ export default defineStore('noteWorkspace', () => {
           { parentId: normalizedId(parentId), depth: 1 },
           { silent: true },
         );
-        if (requestOwner !== ownerKey.value || requestGeneration !== treeRequestSeq) return [];
+        if (
+          requestOwner !== ownerKey.value ||
+          requestGeneration !== treeRequestSeq ||
+          childrenRequests.get(key) !== request
+        ) return [];
         if (response.status !== 200) {
           treeError.value = String(response.msg || 'NOTE_TREE_LOAD_FAILED');
           return [];
@@ -318,7 +322,11 @@ export default defineStore('noteWorkspace', () => {
         }
         return items;
       } catch (error) {
-        if (requestOwner === ownerKey.value && requestGeneration === treeRequestSeq) {
+        if (
+          requestOwner === ownerKey.value &&
+          requestGeneration === treeRequestSeq &&
+          childrenRequests.get(key) === request
+        ) {
           treeError.value = error instanceof Error ? error.message : 'NOTE_TREE_LOAD_FAILED';
         }
         return [];
@@ -550,7 +558,7 @@ export default defineStore('noteWorkspace', () => {
     if (currentBreadcrumb.value.some((item) => item.id === id)) currentBreadcrumb.value = [];
   }
 
-  function insertCreatedNote(input: CreatedNoteTreeItem) {
+  function insertCreatedNote(input: CreatedNoteTreeItem, position: 'top' | 'bottom' = 'bottom') {
     const id = normalizedId(input.id);
     if (!id) return;
     const parentId = normalizedId(input.parentId);
@@ -561,6 +569,10 @@ export default defineStore('noteWorkspace', () => {
       (max, item) => (item.isTop ? max : Math.max(max, Number(item.sort) || 0)),
       -1,
     );
+    const minNormalSort = siblings.reduce(
+      (min, item) => (item.isTop ? min : Math.min(min, Number(item.sort) || 0)),
+      0,
+    );
     const createdNode: NoteTreeItem = {
       id,
       parentId,
@@ -569,7 +581,7 @@ export default defineStore('noteWorkspace', () => {
       childCount: 0,
       hasChildren: false,
       isTop: false,
-      sort: maxNormalSort + 1,
+      sort: position === 'top' ? minNormalSort - 1 : maxNormalSort + 1,
       updateTime: new Date().toISOString(),
     };
     // 幂等回放只负责确认节点可见，不能用产物创建时的旧标题、排序和置顶状态
@@ -583,6 +595,11 @@ export default defineStore('noteWorkspace', () => {
       treeSearchChildrenByParent.value = incrementParentInTreeIndex(treeSearchChildrenByParent.value, parentId);
     }
     childrenByParent.value = nextChildrenByParent;
+    // 创建回执没有完整的兄弟排序；先按偏好即时展示，再以服务端目录为准。
+    // 作废创建前的在途读取，避免迟到响应覆盖新节点；只回读受影响的父层。
+    childrenRequests.delete(key);
+    loadedKeys.value = markSet(loadedKeys.value, key, false);
+    void loadChildren(parentId, true);
   }
 
   function setSidebarPreferredOpen(open: boolean) {

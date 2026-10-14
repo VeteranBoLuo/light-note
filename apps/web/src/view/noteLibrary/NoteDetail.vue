@@ -1627,19 +1627,17 @@
     const canSeedBreadcrumb = !createdParentId || parentBreadcrumb.length > 0;
     nodeType.value = 'edit';
     if (!noteTreeReadEnabled.value) return;
-    noteWorkspace.insertCreatedNote({
-      id: createdId,
-      parentId: createdParentId,
-      title: note.title,
-      type: note.type,
-    });
+    noteWorkspace.insertCreatedNote(
+      { id: createdId, parentId: createdParentId, title: note.title, type: note.type },
+      user.preferences.noteCreatePosition === 'top' ? 'top' : 'bottom',
+    );
     if (canSeedBreadcrumb) {
       noteWorkspace.seedBreadcrumb(createdId, [...parentBreadcrumb, { id: createdId, title: note.title }]);
     }
     // 服务端已经确认创建成功，本地目录也已完整插入；清除创建前遗留的瞬时读取错误。
     treeError.value = '';
     noteWorkspace.setNavigation({ activePageId: createdId, browseParentId: null });
-    // 新节点的父级、排序和标题均已由创建结果与本地树规则确定，不再强制刷新整棵目录。
+    // 工作区按偏好即时插入，并回读创建所在父层核对权威顺序，无需刷新整棵目录。
     // 只有直达新增地址且父路径尚未加载的异常场景，才读取一次完整面包屑兜底。
     if (!canSeedBreadcrumb) {
       void nextTick().then(async () => {
