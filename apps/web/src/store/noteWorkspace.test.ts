@@ -60,8 +60,7 @@ describe('noteWorkspace 目录元数据同步', () => {
         },
       }));
       const refresh = workspace.refreshTree();
-      // 刷新期间保留可读快照，不先清空侧栏。
-      expect(workspace.childrenByParent.parent[0].id).toBe('old');
+      expect(workspace.childrenByParent).toEqual({});
       await refresh;
       expect(mocks.apiBasePost).toHaveBeenCalledTimes(4);
       for (const request of deferred) {
@@ -76,7 +75,7 @@ describe('noteWorkspace 目录元数据同步', () => {
     },
   );
 
-  it('连续导入刷新以最后一批响应为准；刷新失败保留目录且允许重新读取', async () => {
+  it('连续导入刷新以最后一批响应为准；刷新失败允许重新读取', async () => {
     const workspace = useNoteWorkspaceStore();
     workspace.childrenByParent = { [NOTE_TREE_ROOT_KEY]: [treeNode({ id: 'old' })] };
     let finishFirst!: (v: any) => void;
@@ -93,11 +92,29 @@ describe('noteWorkspace 目录元数据同步', () => {
     expect(workspace.childrenByParent[NOTE_TREE_ROOT_KEY][0].id).toBe('latest');
     mocks.apiBasePost.mockRejectedValueOnce(new Error('offline'));
     await workspace.refreshTree();
-    expect(workspace.childrenByParent[NOTE_TREE_ROOT_KEY][0].id).toBe('latest');
+    expect(workspace.childrenByParent).toEqual({});
+    expect(workspace.treeError).toBe('offline');
     expect(workspace.loadedKeys.has(NOTE_TREE_ROOT_KEY)).toBe(false);
     mocks.apiBasePost.mockResolvedValueOnce({ status: 200, data: { items: [treeNode({ id: 'recovered' })] } });
     await workspace.loadChildren();
     expect(workspace.childrenByParent[NOTE_TREE_ROOT_KEY][0].id).toBe('recovered');
+  });
+
+  it('刷新确认最后一个子页已删除时，清除展开分支的旧快照', async () => {
+    const workspace = useNoteWorkspaceStore();
+    workspace.childrenByParent = {
+      [NOTE_TREE_ROOT_KEY]: [treeNode({ id: 'parent', childCount: 1, hasChildren: true })],
+      parent: [treeNode({ id: 'deleted', parentId: 'parent' })],
+    };
+    workspace.expandedIds = new Set(['parent']);
+    mocks.apiBasePost.mockResolvedValueOnce({
+      status: 200,
+      data: { items: [treeNode({ id: 'parent', childCount: 0, hasChildren: false })] },
+    });
+    await workspace.refreshTree();
+    expect(workspace.childrenByParent[NOTE_TREE_ROOT_KEY][0].hasChildren).toBe(false);
+    expect(workspace.childrenByParent.parent).toBeUndefined();
+    expect(mocks.apiBasePost).toHaveBeenCalledTimes(1);
   });
 
   it('显式进入笔记库根页会生成独立请求令牌，旧请求结束不能覆盖较新的导航', () => {
