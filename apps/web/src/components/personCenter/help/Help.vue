@@ -183,7 +183,7 @@
           </div>
         </header>
 
-        <section v-if="isSearching && !selectedFromSearch" class="search-results-panel">
+        <section v-if="isSearching && !selectedFromSearch" class="search-results-panel" v-auto-scrollbar>
           <div class="search-results-header">
             <span class="search-results-count">{{ t('help.searchResults', { count: searchResults.length }) }}</span>
             <span v-if="searchResults.length === 0 && !helpConfigError" class="search-results-hint">
@@ -224,7 +224,7 @@
           </template>
         </section>
 
-        <section v-else-if="isSectionView && activeSection" class="help-section-panel">
+        <section v-else-if="isSectionView && activeSection" class="help-section-panel" v-auto-scrollbar>
           <div class="help-section-panel__header">
             <BButton class="help-section-back" @click="goToHelpHome">
               <SvgIcon :src="icon.arrow_left" size="15" />
@@ -253,7 +253,7 @@
           </div>
         </section>
 
-        <section v-else-if="isLandingView" class="help-topic-section">
+        <section v-else-if="isLandingView" class="help-topic-section" v-auto-scrollbar>
           <div class="help-topic-section__header">
             <div>
               <h2>{{ t('help.topicTitle') }}</h2>
@@ -298,6 +298,7 @@
           v-else
           id="view-body"
           class="help-editor"
+          v-auto-scrollbar
           :class="{ 'help-editor--search-active': selectedFromSearch }"
           @scroll="syncActiveOutline"
         >
@@ -1458,15 +1459,17 @@
   }
 
   .help-container.is-compact {
-    height: auto;
-    min-height: 100%;
+    // 应用外壳锁定页面滚动，移动端继续由内部目录和内容区承接滚动。
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
     padding: 10px 12px 18px;
 
     .help-body {
       display: flex;
       flex-direction: column;
       gap: 12px;
-      overflow: visible;
+      overflow: hidden;
     }
 
     .help-sidebar {
@@ -1474,18 +1477,13 @@
       min-width: 0;
       max-width: none;
       flex: 0 0 auto;
-      overflow: visible;
+      overflow: hidden;
     }
 
     .help-content-workspace {
       width: 100%;
       min-height: 0;
-      flex: 0 0 auto;
-      overflow: visible;
-    }
-
-    .help-body--catalog-open {
-      height: calc(100vh - 82px);
+      flex: 1 1 auto;
       overflow: hidden;
     }
 
@@ -1527,19 +1525,9 @@
       font-size: clamp(26px, 7vw, 34px);
     }
 
-    .help-topic-section,
-    .help-section-panel,
-    .search-results-panel {
-      overflow: visible;
-    }
-
     .help-editor {
       width: 100%;
-      height: auto;
-      min-height: 0;
-      flex: 0 0 auto;
       padding: 26px 20px;
-      overflow: visible;
     }
 
     .help-workspace-actions {
