@@ -1,7 +1,6 @@
-import { MAKEUP_CARD_MAX_INVENTORY } from '@lightnote/shared';
 import { randomUUID } from 'node:crypto';
 import pool from '../db/index.js';
-import { grantItem } from './items.js';
+import { getConsumable, grantItem } from './items.js';
 import { finishAdminAction } from './adminActionExecution.js';
 import { ECONOMY_CATALOGS, getActiveEconomyCatalog, getEconomyRuntime } from './pointsEconomyCatalog.js';
 import {
@@ -411,7 +410,10 @@ export const SHOP_ITEMS = [...SHOP_UTILITY_ITEMS, ...SHOP_FRAME_ITEMS];
 
 export function getActiveShopItems() {
   const catalog = activeEconomyCatalog();
-  return [...catalog.utilityItems, ...catalog.frameItems];
+  // 价格目录保留历史快照；补签窗口与持有规则始终读取当前道具定义。
+  return [...catalog.utilityItems, ...catalog.frameItems].map((item) =>
+    item.effect === 'makeup_card' ? { ...item, desc: `每次兑换 1 张。${getConsumable(item.id).desc}` } : item,
+  );
 }
 
 export function getActiveFrameCatalog() {
@@ -1033,8 +1035,8 @@ export async function adminGrantPoints(
     if (nextStorage < 0) {
       throw new AdminPointsError('INSUFFICIENT_STORAGE', `永久扩容最多可扣减 ${growth.storage_bonus_mb || 0}MB`);
     }
-    if (nextCards < 0 || nextCards > MAKEUP_CARD_MAX_INVENTORY) {
-      throw new AdminPointsError('CARD_LIMIT', `补签卡调整后必须在 0～${MAKEUP_CARD_MAX_INVENTORY} 张之间`);
+    if (nextCards < 0) {
+      throw new AdminPointsError('CARD_LIMIT', `补签卡最多可扣减 ${growth.streak_protect_cards || 0} 张`);
     }
     if (p) {
       await conn.query(
@@ -1236,10 +1238,6 @@ export async function buyItem(
         await conn.rollback();
         return { ok: false, reason: 'owned', msg: '已拥有该装扮' };
       }
-    }
-    if (item.effect === 'makeup_card' && Number(g.streak_protect_cards) >= MAKEUP_CARD_MAX_INVENTORY) {
-      await conn.rollback();
-      return { ok: false, reason: 'card_max', msg: `补签卡已达上限(${MAKEUP_CARD_MAX_INVENTORY} 张)` };
     }
     const purchaseLimit = Number(item.purchaseLimit || 0);
     if (purchaseLimit && purchaseLimit !== 1) {

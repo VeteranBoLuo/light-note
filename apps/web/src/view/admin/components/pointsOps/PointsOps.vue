@@ -181,10 +181,7 @@
           /></div>
           <div class="pops-field"
             ><label>补签卡(±)</label
-            ><BInput
-              v-model:value="form.cards"
-              type="number"
-              :placeholder="t('growth.adminCardAdjustmentPlaceholder', { max: MAKEUP_CARD_MAX_INVENTORY })"
+            ><BInput v-model:value="form.cards" type="number" :placeholder="t('growth.adminCardAdjustmentPlaceholder')"
           /></div>
         </div>
         <div class="pops-field-row">
@@ -315,7 +312,6 @@
 </template>
 
 <script setup lang="ts">
-  import { MAKEUP_CARD_MAX_INVENTORY } from '@lightnote/shared';
   import { computed, nextTick, onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';

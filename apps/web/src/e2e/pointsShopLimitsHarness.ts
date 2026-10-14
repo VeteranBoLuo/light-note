@@ -47,7 +47,7 @@ const fixture: Shop = {
   level: 8,
   equippedTitle: null,
   equippedFrame: null,
-  protectCards: state === 'full' ? 3 : state === 'one-slot' ? 2 : 0,
+  protectCards: state === 'stocked' ? 99 : state === 'three-cards' ? 3 : state === 'two-cards' ? 2 : 0,
   isVisitor: false,
   frames: [],
   items: [
@@ -161,7 +161,6 @@ growthApi.getInventory = async () =>
 growthApi.buyShopItem = async (payload) => {
   if (payload.itemId !== 'makeup_card')
     return reply({ ok: false, msg: 'Only make-up cards are enabled in this fixture' });
-  if (fixture.protectCards >= 3) return reply({ ok: false, reason: 'card_max' });
   if (fixture.points < 600) return reply({ ok: false, reason: 'insufficient' });
   fixture.points -= 600;
   fixture.protectCards += 1;

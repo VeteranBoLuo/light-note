@@ -187,16 +187,23 @@ describe('C4 免费与付费奖池隔离', () => {
     expect(result).toMatchObject({ pityHitIndexes: [1], pityProgressAfter: 9, nextPityIn: 1 });
   });
 
-  it('补签卡满仓时按 C4 规则补偿 120 积分', async () => {
-    mockConnection({ paidPity: 9 });
-    mocks.grantItem.mockResolvedValueOnce({ ok: true, qty: 0, overflowQty: 1 });
+  it('抽中补签卡直接发卡，不转换为积分', async () => {
+    const conn = mockConnection({ paidPity: 9 });
     const result = await drawLottery('u1', c4Request({ mode: 'paid', times: 1, randomIntFn: () => 0 }));
-    expect(result.results[0]).toMatchObject({
-      kind: 'points',
-      amount: 120,
-      compensated: true,
-      compensationReason: 'makeup_card_full',
-    });
+    expect(result.results[0]).toMatchObject({ kind: 'card', amount: 1 });
+    expect(result.results[0].compensated).not.toBe(true);
+    expect(mocks.grantItem).toHaveBeenCalledWith(conn, 'u1', 'makeup_card', 1);
+    expect(conn.query.mock.calls.some(([, params]) => params?.includes('lottery_paid_compensation'))).toBe(false);
+  });
+
+  it('发卡失败时回滚整次抽奖，不产生成功收据', async () => {
+    const conn = mockConnection({ paidPity: 9 });
+    mocks.grantItem.mockResolvedValueOnce({ ok: false, qty: 0 });
+    await expect(drawLottery('u1', c4Request({ mode: 'paid', times: 1, randomIntFn: () => 0 }))).rejects.toThrow(
+      'MAKEUP_CARD_GRANT_FAILED',
+    );
+    expect(conn.rollback).toHaveBeenCalledOnce();
+    expect(conn.commit).not.toHaveBeenCalled();
   });
 
   it('状态接口返回分组奖池，免费次数上限为 3 且明确不计保底', async () => {
@@ -218,7 +225,7 @@ describe('C4 免费与付费奖池隔离', () => {
     expect(status).toMatchObject({
       economyVersion: 'points-economy-c4',
       free: { daily: 3, remaining: 3, countsPaidPity: false },
-      paid: { singleCost: 170, tenCost: 1600, pityProgress: 4, toPity: 6 },
+      paid: { singleCost: 170, tenCost: 1600, pityProgress: 4, toPity: 6, overflowPolicy: null },
     });
     expect(new Set(status.free.pool.map((item) => item.kind))).toEqual(new Set(['points', 'ai_pack']));
     expect(status.free.pool.every((item) => item.pityRate === 0)).toBe(true);

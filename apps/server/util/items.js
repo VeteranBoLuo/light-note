@@ -1,4 +1,4 @@
-import { MAKEUP_CARD_MAX_INVENTORY, MAKEUP_WINDOW_DAYS } from '@lightnote/shared';
+import { MAKEUP_WINDOW_DAYS } from '@lightnote/shared';
 import { randomUUID } from 'node:crypto';
 import pool from '../db/index.js';
 import { creditAiBonusTokens } from './aiBonusWallet.js';
@@ -12,7 +12,7 @@ import { creditAiBonusTokens } from './aiBonusWallet.js';
 //  - AI 加油包已改为 user_growth.ai_bonus_tokens 永久余额，新获得的包即时到账；
 //    user_item 中仅可能保留历史包，用户点一次即可转入永久余额。
 //
-//  补签卡是特例:逻辑成熟(上限由共享契约定义、窗口内补签、续连签),存储沿用 user_growth.streak_protect_cards,
+//  补签卡是特例:库存不限量，可在窗口内补签、续连签，存储沿用 user_growth.streak_protect_cards,
 //  "使用"仍走 growth.useProtectCard(需要"可补漏签日期"这个上下文)。这里只集中它的"发放写入口径"
 //  (grantItem)与"背包展示"(getInventory),不迁移其存储与使用流程,避免动到已验证的连签逻辑。
 //
@@ -36,8 +36,7 @@ export const CONSUMABLES = {
     name: '补签卡',
     icon: 'checkin',
     backing: 'card_column',
-    stackMax: MAKEUP_CARD_MAX_INVENTORY,
-    desc: `可补今天之前最近 ${MAKEUP_WINDOW_DAYS} 个自然日的漏签、续上连签(上限 ${MAKEUP_CARD_MAX_INVENTORY} 张)。补签不发经验、积分或额外奖励。`,
+    desc: `可补今天之前最近 ${MAKEUP_WINDOW_DAYS} 个自然日的漏签、续上连签，持有数量不限。补签不发经验、积分或额外奖励。`,
     action: 'makeup', // 前端:走「补签」(补签窗口内有漏签且有卡时可用)
   },
 };
@@ -59,28 +58,23 @@ export async function grantItem(conn, userId, itemId, qty = 1) {
   if (!def) throw new Error(`grantItem: 未知物品 ${itemId}`);
   const db = conn || pool;
   const n = Math.trunc(Number(qty) || 0);
-  if (n <= 0) return { ok: false, reason: 'bad_qty' };
+  if (!Number.isSafeInteger(n) || n <= 0) return { ok: false, reason: 'bad_qty' };
   if (def.backing === 'card_column') {
-    // 返回实际到账量，调用方可对满仓溢出做显式补偿。事务调用时 FOR UPDATE 也会串行化抽奖/兑换。
-    const stackMax = def.stackMax || MAKEUP_CARD_MAX_INVENTORY;
+    // 所有来源全量累积；保留行锁和实际到账量，串行化同一事务中的抽奖/兑换。
     const [[row]] = await db.query('SELECT streak_protect_cards AS qty FROM user_growth WHERE user_id = ? FOR UPDATE', [
       userId,
     ]);
     if (!row) return { ok: false, reason: 'growth_missing', itemId, qty: 0, overflowQty: n };
-    const before = Number(row.qty || 0);
-    const grantedQty = Math.max(0, Math.min(n, stackMax - before));
-    if (grantedQty > 0) {
-      await db.query('UPDATE user_growth SET streak_protect_cards = streak_protect_cards + ? WHERE user_id = ?', [
-        grantedQty,
-        userId,
-      ]);
-    }
+    await db.query('UPDATE user_growth SET streak_protect_cards = streak_protect_cards + ? WHERE user_id = ?', [
+      n,
+      userId,
+    ]);
     return {
       ok: true,
       itemId,
-      qty: grantedQty,
+      qty: n,
       requestedQty: n,
-      overflowQty: n - grantedQty,
+      overflowQty: 0,
       backing: 'card_column',
     };
   }

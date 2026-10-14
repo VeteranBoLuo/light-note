@@ -1,4 +1,3 @@
-import { MAKEUP_CARD_MAX_INVENTORY } from '@lightnote/shared';
 import {
   getGrowth,
   getGrowthDashboard,
@@ -336,7 +335,6 @@ export const getShop = async (req, res) => {
     const items = activeShopItems.map((it) => {
       const isOwned = ownable(it.type) && owned.includes(it.id);
       const meetsLevel = !it.minLevel || level >= it.minLevel;
-      const cardFull = it.effect === 'makeup_card' && protectCards >= MAKEUP_CARD_MAX_INVENTORY;
       const purchaseLimit = Number(it.purchaseLimit || 0) || null;
       const purchaseCount = claimedLimitedItems.has(it.id) ? 1 : 0;
       const limitReached = purchaseLimit !== null && purchaseCount >= purchaseLimit;
@@ -367,18 +365,10 @@ export const getShop = async (req, res) => {
           ...(isVisitor ? ['login'] : []),
           ...(isOwned ? ['owned'] : []),
           ...(!meetsLevel ? ['level'] : []),
-          ...(cardFull ? ['inventory_full'] : []),
           ...(limitReached ? ['purchase_limit'] : []),
           ...(points < it.cost ? ['points'] : []),
         ],
-        canBuy:
-          runtime.purchaseEnabled &&
-          !isVisitor &&
-          !isOwned &&
-          meetsLevel &&
-          !cardFull &&
-          !limitReached &&
-          points >= it.cost,
+        canBuy: runtime.purchaseEnabled && !isVisitor && !isOwned && meetsLevel && !limitReached && points >= it.cost,
       };
     });
     const frames = getActiveFrameCatalog().map((frame) => {

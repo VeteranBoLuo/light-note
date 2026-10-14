@@ -1676,7 +1676,7 @@ export async function adminAdjustGrowth(
       exp = Math.max(0, exp + Number(expDelta)); // 发/扣经验(不低于 0)
     }
     if (cardDelta) {
-      cards = Math.max(0, Math.min(MAKEUP_CARD_SUPPLY_POLICY.stackMax, cards + Number(cardDelta)));
+      cards = Math.max(0, cards + Number(cardDelta));
     }
     const level = levelForExp(exp);
     await conn.query('UPDATE user_growth SET exp = ?, level = ?, streak_protect_cards = ? WHERE user_id = ?', [

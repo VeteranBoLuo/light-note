@@ -128,6 +128,27 @@ describe('积分运营选人与资产事务', () => {
     expect(connection.release).toHaveBeenCalledOnce();
   });
 
+  it('补签卡可增加到旧上限以上，仍保留运营收据', async () => {
+    const connection = connectionWith({ cards: 3 });
+    const actionContext = adminActionContext('manual-cards-idem-0001');
+    const input = { cards: 10, ...auditedReason };
+    const first = await adminGrantPoints('user-1', input, { actionContext });
+    const replay = await adminGrantPoints('user-1', input, { actionContext });
+    expect(first).toMatchObject({ ok: true, cards: 13 });
+    expect(replay).toMatchObject({ ok: true, cards: 13, idempotent: true });
+    expect(connection.query.mock.calls.filter(([sql]) => String(sql).includes('UPDATE user_growth'))).toHaveLength(1);
+  });
+
+  it('补签卡扣减超过库存时回滚', async () => {
+    const connection = connectionWith({ cards: 3 });
+    await expect(adminGrantPoints('user-1', { cards: -4, ...auditedReason })).rejects.toMatchObject({
+      code: 'CARD_LIMIT',
+    });
+    expect(connection.rollback).toHaveBeenCalledOnce();
+    expect(connection.commit).not.toHaveBeenCalled();
+    expect(connection.query.mock.calls.some(([sql]) => String(sql).includes('UPDATE user_growth'))).toBe(false);
+  });
+
   it('目标用户不存在时返回可识别的 404 业务错误', async () => {
     const connection = connectionWith({ user: false });
     await expect(adminGrantPoints('missing', { points: 10, ...auditedReason })).rejects.toEqual(

@@ -128,7 +128,7 @@
           ><SvgIcon :src="icon.growth.checkin" size="14" /> {{ t('growth.protectCard') }} ×
           {{ g.protectCards || 0 }}</span
         >
-        <span class="gc-protect-hint">{{ t('growth.protectCardHint', { max: MAKEUP_CARD_MAX_INVENTORY }) }}</span>
+        <span class="gc-protect-hint">{{ t('growth.protectCardHint') }}</span>
       </div>
 
       <!-- 每日经验:展示今日已得 / 每日上限,到顶给出提示 -->
@@ -174,7 +174,6 @@
 </template>
 
 <script setup lang="ts">
-  import { MAKEUP_CARD_MAX_INVENTORY } from '@lightnote/shared';
   import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useGrowth } from '@/composables/useGrowth.ts';

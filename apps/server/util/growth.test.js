@@ -731,17 +731,17 @@ describe('后台成长调整的升级通知', () => {
     expect(grantItem).not.toHaveBeenCalled();
   });
 
-  it('后台补签卡调整同样遵守全局库存上限 3', async () => {
+  it('后台补签卡调整不截断超过 3 张的库存', async () => {
     vi.clearAllMocks();
     const connection = makeConnection();
     pool.getConnection.mockResolvedValue(connection);
 
     const result = await adminAdjustGrowth('user-3', { cardDelta: 99 });
 
-    expect(result).toMatchObject({ ok: true, cards: 3 });
+    expect(result).toMatchObject({ ok: true, cards: 99 });
     expect(connection.query).toHaveBeenCalledWith(
       'UPDATE user_growth SET exp = ?, level = ?, streak_protect_cards = ? WHERE user_id = ?',
-      [490, 1, 3, 'user-3'],
+      [490, 1, 99, 'user-3'],
     );
   });
 });

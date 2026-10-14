@@ -1,4 +1,3 @@
-import { MAKEUP_CARD_MAX_INVENTORY } from '@lightnote/shared';
 import { randomInt, randomUUID } from 'node:crypto';
 import pool from '../db/index.js';
 import { levelForExp } from './growth.js';
@@ -18,7 +17,6 @@ import { creditAiBonusTokens } from './aiBonusWallet.js';
 
 export const DRAW_COST = 170;
 export const TEN_DRAW_COST = 1600;
-export const MAKEUP_CARD_OVERFLOW_POINTS = 120;
 
 export function freeDrawsFor(level, version) {
   return freeDrawsForCatalog(level, version);
@@ -63,7 +61,7 @@ function prizeRates(pool, pityPool = []) {
   }));
 }
 
-async function grantReward(conn, userId, prize, { mode, version, overflowPoints, operationRef, drawIndex }) {
+async function grantReward(conn, userId, prize, { mode, version, operationRef, drawIndex }) {
   const c4 = version !== LEGACY_POINTS_ECONOMY_VERSION;
   const reasonPrefix = mode === 'free' ? 'lottery_free' : 'lottery_paid';
   if (prize.kind === 'points') {
@@ -89,27 +87,8 @@ async function grantReward(conn, userId, prize, { mode, version, overflowPoints,
     ]);
   } else if (prize.kind === 'card') {
     if (mode === 'free' && c4) throw new Error('FREE_LOTTERY_ASSET_POLICY_VIOLATION');
-    const grant = (await grantItem(conn, userId, 'makeup_card', prize.amount)) || {};
-    if (Number(grant.overflowQty || 0) > 0) {
-      const reason = c4 ? 'lottery_paid_compensation' : 'lottery_compensation';
-      await conn.query('INSERT INTO points_log (user_id, delta, reason, ref) VALUES (?, ?, ?, ?)', [
-        userId,
-        overflowPoints,
-        reason,
-        'makeup_card_full',
-      ]);
-      await conn.query('UPDATE user_growth SET points = points + ? WHERE user_id = ?', [overflowPoints, userId]);
-      return {
-        id: prize.id,
-        kind: 'points',
-        amount: overflowPoints,
-        name: `+${overflowPoints} 积分`,
-        rare: true,
-        compensated: true,
-        compensationReason: 'makeup_card_full',
-        originalReward: { kind: prize.kind, amount: prize.amount },
-      };
-    }
+    const grant = await grantItem(conn, userId, 'makeup_card', prize.amount);
+    if (!grant?.ok || Number(grant.qty) !== prize.amount) throw new Error('MAKEUP_CARD_GRANT_FAILED');
   } else if (prize.kind === 'ai_pack') {
     await creditAiBonusTokens(conn, {
       userId,
@@ -263,7 +242,6 @@ export async function drawLottery(
       const reward = await grantReward(conn, userId, prize, {
         mode: drawMode,
         version: runtime.economyVersion,
-        overflowPoints: runtime.catalog.paidPolicy.cardOverflowPoints,
         operationRef,
         drawIndex: index,
       });
@@ -376,11 +354,7 @@ export async function getLotteryStatus(userId, { userRole = null, calendar = nul
     toPity: pityEvery - pityProgress || pityEvery,
     poolVersion: runtime.catalog.paidPolicy.poolVersion,
     pool: paidPool,
-    overflowPolicy: {
-      itemId: 'makeup_card',
-      maxInventory: MAKEUP_CARD_MAX_INVENTORY,
-      compensationPoints: runtime.catalog.paidPolicy.cardOverflowPoints,
-    },
+    overflowPolicy: null,
   };
   const free = {
     enabled: runtime.freeLotteryEnabled,

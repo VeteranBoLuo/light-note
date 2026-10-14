@@ -214,7 +214,7 @@ export interface LotteryStatus {
   tenCost: number;
   pityEvery: number;
   pityCountsFreeDraws?: boolean;
-  overflowPolicy?: { itemId: string; maxInventory: number; compensationPoints: number };
+  overflowPolicy?: { itemId: string; maxInventory: number; compensationPoints: number } | null;
   level: number;
   freeDaily: number; // 当前等级每日免费次数
   freeRemaining: number; // 今日剩余免费次数
@@ -236,7 +236,7 @@ export interface LotteryStatus {
     toPity: number;
     poolVersion: string;
     pool: LotteryPrize[];
-    overflowPolicy: { itemId: string; maxInventory: number; compensationPoints: number };
+    overflowPolicy: { itemId: string; maxInventory: number; compensationPoints: number } | null;
   };
 }
 

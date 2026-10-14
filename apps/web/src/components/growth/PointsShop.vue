@@ -49,7 +49,7 @@
             <div class="ps-item-name">{{ itemName(it) }}</div>
             <div class="ps-item-desc">{{ itemDesc(it) }}</div>
             <BChip v-if="it.effect === 'makeup_card'" tone="neutral" class="ps-item-limit">
-              {{ t('growth.shopCardInventory', { n: shop?.protectCards || 0, max: MAKEUP_CARD_MAX_INVENTORY }) }}
+              {{ t('growth.shopCardInventory', { n: shop?.protectCards || 0 }) }}
             </BChip>
             <BChip v-if="hasPurchaseLimit(it)" :tone="isLimitReached(it) ? 'success' : 'neutral'" class="ps-item-limit">
               {{ purchaseLimitLabel(it) }}
@@ -181,7 +181,6 @@
 </template>
 
 <script setup lang="ts">
-  import { MAKEUP_CARD_MAX_INVENTORY } from '@lightnote/shared';
   import { readEntitlementJourney, prepareEntitlementReturn } from '@/utils/entitlementJourney';
   import { recordEntitlementEvent } from '@/api/entitlementEvents';
   import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
@@ -280,7 +279,6 @@
       return t('growth.shopBuyConfirmCard', {
         ...params,
         held: shop.value?.protectCards || 0,
-        max: MAKEUP_CARD_MAX_INVENTORY,
       });
     return hasPurchaseLimit(it) ? t('growth.shopBuyConfirmLimited', params) : t('growth.shopBuyConfirm', params);
   }
@@ -301,7 +299,7 @@
   }
   function itemDesc(it: ShopItem) {
     const k = 'growth.shopItems.' + it.id + '.desc';
-    return te(k) ? t(k, { max: MAKEUP_CARD_MAX_INVENTORY }) : it.desc;
+    return te(k) ? t(k) : it.desc;
   }
 
   function frameStyleName(frameId: string) {
@@ -395,7 +393,6 @@
     if (!s || !s.purchaseEnabled || s.isVisitor || canEquipFrame(it) || it.acquisition === 'achievement') return false;
     if (isLimitReached(it)) return false;
     if (it.minLevel && (s.level || 0) < it.minLevel) return false;
-    if (it.effect === 'makeup_card' && (s.protectCards || 0) >= MAKEUP_CARD_MAX_INVENTORY) return false;
     return (s.points || 0) >= Number(it.cost || 0);
   }
 
@@ -406,8 +403,6 @@
     if (!s.purchaseEnabled) return t('growth.shopMaintenance');
     if (s.isVisitor) return t('growth.shopLoginRequired');
     if (it.minLevel && (s.level || 0) < it.minLevel) return t('growth.shopLevelNeed', { n: it.minLevel });
-    if (it.effect === 'makeup_card' && (s.protectCards || 0) >= MAKEUP_CARD_MAX_INVENTORY)
-      return t('growth.shopCardMax', { max: MAKEUP_CARD_MAX_INVENTORY });
     const shortfall = Math.max(0, Number(it.cost || 0) - Number(s.points || 0));
     return shortfall > 0 ? t('growth.shopShortfall', { n: shortfall }) : '';
   }
@@ -417,8 +412,6 @@
     if (isLimitReached(it)) return t('growth.shopRedeemed');
     if (canBuyNow(it)) return t('growth.shopBuy');
     if (shop.value && !shop.value.purchaseEnabled) return t('growth.shopMaintenanceShort');
-    if (it.id === 'makeup_card' && (shop.value?.protectCards || 0) >= MAKEUP_CARD_MAX_INVENTORY)
-      return t('growth.shopCardMax', { max: MAKEUP_CARD_MAX_INVENTORY });
     if ((shop.value?.points || 0) < Number(it.cost || 0)) return t('growth.shopInsufficient');
     return t('growth.shopBuy');
   }

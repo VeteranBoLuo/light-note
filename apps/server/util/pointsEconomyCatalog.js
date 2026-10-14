@@ -1,4 +1,4 @@
-import { MAKEUP_CARD_MAX_INVENTORY, MAKEUP_WINDOW_DAYS } from '@lightnote/shared';
+import { MAKEUP_WINDOW_DAYS } from '@lightnote/shared';
 // 积分经济单一事实源：仅包含纯数据与纯函数，禁止依赖数据库、HTTP 或用户状态。
 // 任意价格、概率或等级门槛变更都必须升级版本并同步快照测试。
 
@@ -232,7 +232,7 @@ const C7_ECONOMY_CATALOGS = Object.freeze({
         id: 'makeup_card',
         type: 'consumable',
         name: '补签卡',
-        desc: `每次兑换 1 张，最多持有 ${MAKEUP_CARD_MAX_INVENTORY} 张；可补今天之前 3 个自然日的漏签，不补经验、积分或里程碑奖励`,
+        desc: '每次兑换 1 张，最多持有 3 张；可补今天之前 3 个自然日的漏签，不补经验、积分或里程碑奖励',
         cost: 300,
         effect: 'makeup_card',
       },
@@ -252,7 +252,7 @@ export const ECONOMY_CATALOGS = Object.freeze({
           ? {
               ...item,
               cost: 600,
-              desc: `每次兑换 1 张，最多持有 ${MAKEUP_CARD_MAX_INVENTORY} 张；可补今天之前最近 ${MAKEUP_WINDOW_DAYS} 个自然日的漏签，不补经验、积分或里程碑奖励`,
+              desc: `每次兑换 1 张，最多持有 3 张；可补今天之前最近 ${MAKEUP_WINDOW_DAYS} 个自然日的漏签，不补经验、积分或里程碑奖励`,
             }
           : item,
       ),
