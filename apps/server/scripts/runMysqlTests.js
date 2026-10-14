@@ -33,6 +33,7 @@ const suites = {
   'util/services/managedCloudUpload.concurrent.mysql.test.js': 'Q01_TEST_MYSQL_SOCKET',
   'router_handle/noteLibraryHandle.sort.mysql.test.js': 'API_SORT_MYSQL_SOCKET',
   'util/services/noteTreeService.move.mysql.test.js': 'API_SORT_MYSQL_SOCKET',
+  'util/services/noteTreeService.placement.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/services/noteTreeService.read.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/services/cloudFolderTreeService.sort.mysql.test.js': 'API_SORT_MYSQL_SOCKET',
   'util/services/growthMeasurement.mysql.test.js': 'M01_TEST_MYSQL_SOCKET',

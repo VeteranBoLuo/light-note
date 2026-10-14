@@ -2,6 +2,15 @@ import { describe, expect, it, vi } from 'vitest';
 import { sanitizeNoteHtml, sanitizePersistedNoteContent } from './noteHtmlSanitizer.js';
 
 describe('noteHtmlSanitizer', () => {
+  it('表格拖拽后的列宽、行高及合并单元格在保存净化后稳定保留', () => {
+    const source = '<table style="width:100%;height:160px"><colgroup><col style="width:30%"><col style="width:70%"></colgroup><tbody><tr style="height:80px"><td>A</td><td>B</td></tr><tr style="height:80px"><td colspan="2">合并</td></tr></tbody></table>';
+    const saved = sanitizePersistedNoteContent(source, 'html');
+    expect(saved).toContain('width:30%');
+    expect(saved).toContain('width:70%');
+    expect(saved).toContain('height:80px');
+    expect(saved).toContain('colspan="2"');
+    expect(sanitizePersistedNoteContent(saved, 'html')).toBe(saved);
+  });
   it('保留富文本语义、任务清单、Mermaid、资源引用与安全排版', () => {
     const source =
       '<h2 style="text-align:center;color:#615ced">标题</h2>' +

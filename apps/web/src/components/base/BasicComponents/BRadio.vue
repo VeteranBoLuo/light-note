@@ -1,17 +1,25 @@
 <template>
-  <div v-if="vertical" class="b-radio-options" role="radiogroup" :aria-label="ariaLabel">
+  <div
+    v-if="vertical || variant === 'segment'"
+    class="b-radio-options"
+    :class="{ 'is-segment': variant === 'segment' }"
+    role="radiogroup"
+    :aria-label="ariaLabel"
+  >
     <BButton
       v-for="(item, index) in options"
       :key="item.value"
       role="radio"
       :aria-checked="value === item.value"
-      :tabindex="value === item.value ? 0 : -1"
+      :tabindex="value === item.value || (!options.some((option) => option.value === value) && index === 0) ? 0 : -1"
+      :disabled="disabled"
+      :type="variant === 'segment' && value === item.value ? 'primary' : undefined"
       class="b-radio-option"
       :class="{ 'is-selected': value === item.value }"
       @click="radioClick(item.value)"
       @keydown="onKey($event, index)"
     >
-      <span class="b-radio-option__indicator" aria-hidden="true" />
+      <span v-if="variant !== 'segment'" class="b-radio-option__indicator" aria-hidden="true" />
       <span class="b-radio-option__body"
         ><strong>{{ item.label }}</strong
         ><small v-if="item.description">{{ item.description }}</small></span
@@ -38,11 +46,14 @@
       value?: string;
       options?: { value: string; label: string; description?: string }[];
       vertical?: boolean;
+      variant?: 'default' | 'segment';
+      disabled?: boolean;
       ariaLabel?: string;
     }>(),
-    { value: '', options: () => [], vertical: false, ariaLabel: '' },
+    { value: '', options: () => [], vertical: false, ariaLabel: '', variant: 'default', disabled: false },
   );
   function onKey(event: KeyboardEvent, index: number) {
+    if (props.disabled || !props.options.length) return;
     const keys = ['ArrowDown', 'ArrowRight', 'ArrowUp', 'ArrowLeft', 'Home', 'End'];
     if (!keys.includes(event.key)) return;
     event.preventDefault();
@@ -60,6 +71,7 @@
   const emit = defineEmits(['update:value']);
 
   function radioClick(value) {
+    if (props.disabled) return;
     emit('update:value', value);
   }
 </script>
@@ -101,6 +113,8 @@
     border: 1px solid var(--surface-border-color);
     border-radius: 8px;
     background: transparent;
+  }
+  .b-radio-option.b_btn:not(.primary_btn) {
     color: var(--text-color);
   }
   .b-radio-option.b_btn:hover {
@@ -139,5 +153,41 @@
   .b-radio-option__body small {
     font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
+  }
+  .b-radio-options.is-segment {
+    display: inline-grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    gap: 0;
+    width: max-content;
+    max-width: 100%;
+    box-sizing: border-box;
+    padding: var(--ui-space-2, 2px);
+    border: 1px solid var(--surface-border-color);
+    border-radius: 8px;
+    background: var(--hover-background);
+  }
+  .is-segment .b-radio-option.b_btn {
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    min-height: var(--ui-control-32, 32px);
+    padding: var(--ui-space-4, 4px) var(--ui-space-12, 12px);
+    border-color: transparent;
+    border-radius: 6px;
+    text-align: center;
+  }
+  .is-segment .b-radio-option.b_btn.is-selected {
+    border-color: var(--primary-color);
+    background: var(--primary-color);
+  }
+  .is-segment .b-radio-option.b_btn:focus-visible {
+    outline-offset: -2px;
+  }
+  .is-segment .b-radio-option.b_btn.is-selected:focus-visible {
+    outline-color: currentColor;
+  }
+  .is-segment .b-radio-option__body strong {
+    font-weight: 500;
   }
 </style>

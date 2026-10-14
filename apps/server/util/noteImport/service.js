@@ -7,6 +7,7 @@ import { fork } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import pool from '../../db/index.js';
 import { createNote } from '../services/noteService.js';
+import { actionIdempotencyUuid } from '../agent/actionIdempotency.js';
 import { listActiveInheritedNoteShares } from '../services/noteShareService.js';
 import { loadOwnedNoteTree, assertValidNoteParentFromSnapshot } from '../services/noteTreeService.js';
 import { NOTE_IMAGE_DIR } from '../noteImages.js';
@@ -326,10 +327,17 @@ export async function processImportTask() {
       await report({ ...progress, stage: 'publishing_images' });
     }
     await report({ ...progress, stage: 'writing_note' });
+    const [batchItems] = await pool.query(
+      'SELECT id FROM note_import_items WHERE task_id=? AND selected=1 ORDER BY position',
+      [id],
+    );
     const result = await createNote({
       userId: owner,
       note: { title: item.title, type: item.type, content, parentId: claimed.parent_id },
       idempotencyKey: `note-import:${owner}:${id}:${item.id}`,
+      placementBatchNoteIds: batchItems.map((entry) =>
+        actionIdempotencyUuid(`note-import:${owner}:${id}:${entry.id}`, 'note'),
+      ),
       suppressUserRewards: true,
       shareExposureAcknowledged: true,
       trustedImageUrls: assets.map((a) => a.url),

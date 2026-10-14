@@ -40,7 +40,17 @@
         default-value="children"
         :options="noteParentOpenOpts"
         v-if="!bookmark.isMobile"
-        :selected-value="selectedNoteParentOpenMode" /></SettingsSectionCard
+        :selected-value="selectedNoteParentOpenMode" />
+      <SettingsPreferenceField
+        pref-key="noteCreatePosition"
+        :label="t('settings.noteCreatePosition')"
+        :description="t('settings.noteCreatePositionDesc')"
+        kind="choice"
+        default-value="bottom"
+        :selected-value="user.preferences.noteCreatePosition === 'top' ? 'top' : 'bottom'"
+        :options="noteCreatePositionOpts"
+        v-if="!isGuestUser()"
+        :disabled="Boolean(user.adminContext)" /></SettingsSectionCard
     ><SettingsSectionCard :title="t('settingsRefine.views')" :description="t('settingsRefine.viewsDesc')"
       ><SettingsPreferenceField
         pref-key="todoView"
@@ -300,6 +310,10 @@
   const noteParentOpenOpts = computed(() => [
     { v: 'children', label: t('settings.noteParentOpenChildren') },
     { v: 'preview', label: t('settings.noteParentOpenPreview') },
+  ]);
+  const noteCreatePositionOpts = computed(() => [
+    { v: 'top', label: t('settings.noteCreatePositionTop') },
+    { v: 'bottom', label: t('settings.noteCreatePositionBottom') },
   ]);
   const resourceViewOpts = computed(() => [
     { v: 'card', label: t('resourceCenter.view.card') },

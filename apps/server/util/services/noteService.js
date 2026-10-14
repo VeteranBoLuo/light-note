@@ -109,6 +109,7 @@ export async function createNote({
   beforeCreate = null,
   idempotencyKey = null,
   shareExposureAcknowledged = false,
+  placementBatchNoteIds = [],
 } = {}) {
   if (!userId) throw new Error('USER_REQUIRED: 缺少用户');
   const type = normalizeNoteType(note.type || 'html');
@@ -160,6 +161,7 @@ export async function createNote({
     const placement = await prepareOwnedNotePlacement(connection, {
       userId,
       parentId: note.parentId ?? null,
+      ...(placementBatchNoteIds.length ? { batchNoteIds: placementBatchNoteIds, noteId: data.id } : {}),
       ...(shareExposureAcknowledged ? { shareExposureAcknowledged: true } : {}),
     });
     if (beforeCreate) await beforeCreate(connection);

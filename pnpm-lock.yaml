@@ -20,6 +20,11 @@ overrides:
   '@xmldom/xmldom@<0.8.15': 0.8.15
   qs@<6.16.0: 6.16.0
 
+patchedDependencies:
+  '@vue-office/excel@1.7.14':
+    hash: 9efb26780c8e188155ab04db047fa3c303d82eadd063503b794e433b3a6dd26e
+    path: patches/@vue-office__excel@1.7.14.patch
+
 importers:
 
   .: {}
@@ -185,8 +190,8 @@ importers:
         specifier: ^1.6.3
         version: 1.6.3(vue-demi@0.14.10(vue@3.5.39(typescript@5.9.3)))(vue@3.5.39(typescript@5.9.3))
       '@vue-office/excel':
-        specifier: ^1.7.14
-        version: 1.7.14(vue-demi@0.14.10(vue@3.5.39(typescript@5.9.3)))(vue@3.5.39(typescript@5.9.3))
+        specifier: 1.7.14
+        version: 1.7.14(patch_hash=9efb26780c8e188155ab04db047fa3c303d82eadd063503b794e433b3a6dd26e)(vue-demi@0.14.10(vue@3.5.39(typescript@5.9.3)))(vue@3.5.39(typescript@5.9.3))
       '@vue-office/pptx':
         specifier: ^1.0.1
         version: 1.0.1(vue-demi@0.14.10(vue@3.5.39(typescript@5.9.3)))(vue@3.5.39(typescript@5.9.3))
@@ -5270,7 +5275,7 @@ snapshots:
       vue: 3.5.39(typescript@5.9.3)
       vue-demi: 0.14.10(vue@3.5.39(typescript@5.9.3))
 
-  '@vue-office/excel@1.7.14(vue-demi@0.14.10(vue@3.5.39(typescript@5.9.3)))(vue@3.5.39(typescript@5.9.3))':
+  '@vue-office/excel@1.7.14(patch_hash=9efb26780c8e188155ab04db047fa3c303d82eadd063503b794e433b3a6dd26e)(vue-demi@0.14.10(vue@3.5.39(typescript@5.9.3)))(vue@3.5.39(typescript@5.9.3))':
     dependencies:
       vue: 3.5.39(typescript@5.9.3)
       vue-demi: 0.14.10(vue@3.5.39(typescript@5.9.3))

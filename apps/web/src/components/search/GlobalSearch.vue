@@ -294,8 +294,7 @@
       event.preventDefault();
       moveActive(-1);
     } else if (event.key === 'Escape') {
-      event.preventDefault();
-      close();
+      handleDialogKeydown(event);
     }
   }
   function onEnter() {
@@ -305,7 +304,10 @@
   }
   function handleDialogKeydown(event: KeyboardEvent) {
     if (event.key === 'Escape') {
+      event.stopImmediatePropagation();
+      if (event.isComposing || event.keyCode === 229) return;
       event.preventDefault();
+      if (event.repeat) return;
       close();
       return;
     }

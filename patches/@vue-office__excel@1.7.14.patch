@@ -1,0 +1,35 @@
+diff --git a/lib/v3/vue-office-excel.mjs b/lib/v3/vue-office-excel.mjs
+index 2a2e12ff6393c8e9572a57a366b8a17d23799289..c45b06e6787321cde7a6dc10bfdb79de81cc1b63 100644
+--- a/lib/v3/vue-office-excel.mjs
++++ b/lib/v3/vue-office-excel.mjs
+@@ -97064,10 +97064,29 @@ var _sfc_main = defineComponent({
+     function save(fileName) {
+       download(fileName || "vue-office-excel-".concat((/* @__PURE__ */ new Date()).getTime(), ".xlsx"), fileData);
+     }
++    // Light Note: keep canvas navigation inside the renderer; callers use rendered cell coordinates.
++    function selectCell(targetSheet, row, column) {
++      if (!xs || !xs.datas[targetSheet] || !Number.isInteger(row) || !Number.isInteger(column) ||
++          row < 0 || column < 0 || row >= xs.datas[targetSheet].rows.len || column >= xs.datas[targetSheet].cols.len) return false;
++      if (sheetIndex !== targetSheet) xs.bottombar.clickSwap2(xs.bottombar.items[targetSheet]);
++      xs.sheet.reload();
++      selectorSet.call(xs.sheet, false, row, column);
++      scrollbarMove.call(xs.sheet);
++      // Sheet switches can reuse the same DOM scroll position without firing a scroll event.
++      verticalScrollbarMove.call(xs.sheet, xs.sheet.verticalScrollbar.scroll().top);
++      horizontalScrollbarMove.call(xs.sheet, xs.sheet.horizontalScrollbar.scroll().left);
++      xs.reRender();
++      return true;
++    }
++    function resize() {
++      if (xs) xs.sheet.reload();
++    }
+     return {
+       wrapperRef,
+       rootRef,
+-      save
++      save,
++      selectCell,
++      resize
+     };
+   }
+ });

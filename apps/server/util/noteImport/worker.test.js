@@ -40,6 +40,7 @@ beforeEach(async () => {
     }
     if (sql.includes('SELECT * FROM note_import_tasks')) return [[s.task]];
     if (sql.includes('SELECT * FROM note_import_items')) return [[...(s.item ? [s.item] : [])]];
+    if (sql.includes('SELECT id FROM note_import_items')) return [[{ id: 'before' }, { id: 'item' }, { id: 'after' }]];
     if (sql.includes('SELECT role FROM user')) return [[{ role: 'user' }]];
     return [[]];
   });
@@ -51,6 +52,14 @@ beforeEach(async () => {
   });
 });
 describe('import worker recovery', () => {
+  it('创建时传递批次有序幂等 ID，供顶部插入及失败续跑定位', async () => {
+    const { actionIdempotencyUuid } = await import('../agent/actionIdempotency.js');
+    await processImportTask();
+    expect(createNote).toHaveBeenCalledWith(expect.objectContaining({
+      placementBatchNoteIds: ['before', 'item', 'after'].map((id) =>
+        actionIdempotencyUuid(`note-import:owner:task:${id}`, 'note')),
+    }));
+  });
   it('does not claim shared database tasks without local staging', async () => {
     s.localIds = [];
     expect(await processImportTask()).toBe(false);

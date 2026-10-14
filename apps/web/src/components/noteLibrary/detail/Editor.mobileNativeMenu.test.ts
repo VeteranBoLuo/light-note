@@ -116,7 +116,7 @@ describe('移动端富文本交给系统菜单', () => {
     expect(editorSource).toContain('@click="handleMarkdownPreviewClick"');
     expect(editorSource).toContain('@click="previewMobileImage"');
     expect(editorInitSource()).toMatch(
-      /object_resizing:\s*usesNativeTextSelectionMenu\.value\s*\?\s*false\s*:\s*'img'/,
+      /object_resizing:\s*usesNativeTextSelectionMenu\.value\s*\?\s*false\s*:\s*'img,table'/,
     );
 
     const source = applyMobileImageSizeSource();

@@ -6,6 +6,16 @@ import {
 } from './noteFormatConversion';
 
 describe('analyzeNoteFormatConversion', () => {
+  it('HTML 表格宽高转换前提示尺寸丢失，不把普通段落或图片尺寸算入表格', () => {
+    const report = analyzeNoteFormatConversion(
+      '<p style="width:200px">正文</p><img width="100" src="/image.png"><table style="width:100%"><colgroup><col style="width:30%"><col style="width:70%"></colgroup><tr style="height:80px"><td>A</td><td>B</td></tr></table>',
+      'html',
+    );
+    expect(report.issues).toContainEqual({ key: 'tableDimensions', count: 4 });
+    expect(analyzeNoteFormatConversion('<table><tr><td>A</td></tr></table>', 'html').issues).not.toContainEqual(
+      expect.objectContaining({ key: 'tableDimensions' }),
+    );
+  });
   it('recognizes controlled formula HTML while retaining unrelated HTML warnings', () => {
     const formula = '<span class="ln-math" data-ln-math="inline" data-ln-latex="x">x</span>';
     expect(analyzeNoteFormatConversion(formula, 'markdown').potentialLoss).toBe(0);

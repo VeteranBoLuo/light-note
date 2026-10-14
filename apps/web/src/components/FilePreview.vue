@@ -25,6 +25,19 @@
         </div>
         <div class="preview-actions">
           <BTooltip
+            v-if="previewType === 'excel' && !loading && !error"
+            :title="`${t('cloudSpace.previewPanel.findInWorkbook')} · ${getGlobalShortcutLabel('globalSearch')}`"
+          >
+            <BButton
+              size="small"
+              class="action-btn"
+              :aria-label="t('cloudSpace.previewPanel.findInWorkbook')"
+              @click="excelPreviewRef?.openFind()"
+            >
+              <SvgIcon :src="icon.navigation.search" size="17" />
+            </BButton>
+          </BTooltip>
+          <BTooltip
             v-if="previewType === 'html' && !loading && !error"
             :title="t('cloudSpace.previewPanel.enterFullscreen')"
           >
@@ -222,7 +235,8 @@
             v-else-if="previewType === 'excel' && effectiveFileUrl"
             class="office-preview-container"
           >
-            <VueOfficeExcel
+            <ExcelPreview
+              ref="excelPreviewRef"
               :key="previewAttempt"
               :src="effectiveFileUrl"
               @rendered="onRendered"
@@ -375,6 +389,7 @@
     type FilePreviewState,
   } from '@/api/filePreviewApi.ts';
   import { acquireTopLayerEscapeLock } from '@/utils/topLayerEscape';
+  import { getGlobalShortcutLabel } from '@/config/keyboardShortcuts';
   import ResourceBacklinks from '@/components/noteLibrary/detail/ResourceBacklinks.vue';
   import {
     CLOUD_FILE_CATEGORY_LABEL_KEY,
@@ -397,7 +412,8 @@
   import { resolveImageViewportLayout } from '@/utils/imageViewport';
 
   const VueOfficeDocx = defineAsyncComponent(() => import('@vue-office/docx/lib/v3/vue-office-docx.mjs'));
-  const VueOfficeExcel = defineAsyncComponent(() => import('@vue-office/excel/lib/v3/vue-office-excel.mjs'));
+  const ExcelPreview = defineAsyncComponent(() => import('@/components/cloudSpace/ExcelPreview.vue'));
+  const excelPreviewRef = ref<{ openFind: () => void; closeFind: () => boolean }>();
   const CsvPreview = defineAsyncComponent(() => import('@/components/cloudSpace/CsvPreview.vue'));
   const VueOfficePptx = defineAsyncComponent(() => import('@vue-office/pptx/lib/v3/vue-office-pptx.mjs'));
 
@@ -1472,12 +1488,26 @@
   }
 
   // 键盘事件
+  function handleFindShortcut(e: KeyboardEvent) {
+    if (!props.visible || previewType.value !== 'excel') return;
+    if (e.defaultPrevented || e.isComposing || e.keyCode === 229 || e.altKey || e.shiftKey) return;
+    if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'f') return;
+    // An overlaid dialog (including global search) owns its own keyboard input.
+    const dialog = e.target instanceof Element ? e.target.closest('[role="dialog"], [role="alertdialog"]') : null;
+    if (dialog && !previewRootRef.value?.contains(dialog)) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if (!loading.value && !error.value) excelPreviewRef.value?.openFind();
+  }
+
   function handleKeyDown(e: KeyboardEvent) {
-    if (!props.visible) return;
+    if (!props.visible || e.defaultPrevented || e.isComposing || e.keyCode === 229) return;
 
     if (e.key === 'Escape') {
       e.preventDefault();
+      e.stopImmediatePropagation();
       if (e.repeat) return;
+      if (excelPreviewRef.value?.closeFind()) return;
       if (isHtmlFullscreen.value) {
         void exitHtmlFullscreen();
         return;
@@ -1521,6 +1551,7 @@
   }
 
   onMounted(() => {
+    document.addEventListener('keydown', handleFindShortcut, true);
     document.addEventListener('keydown', handleKeyDown);
     document.addEventListener('wheel', handleWheel, { passive: false });
     document.addEventListener('mousedown', handleMiddleDblClick);
@@ -1529,6 +1560,7 @@
   });
 
   onUnmounted(() => {
+    document.removeEventListener('keydown', handleFindShortcut, true);
     cancelPreviewPolling();
     htmlAbortController?.abort();
     htmlAbortController = null;

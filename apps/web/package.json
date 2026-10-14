@@ -46,7 +46,7 @@
     "@lightnote/shared": "workspace:*",
     "@tinymce/tinymce-vue": "^6.3.0",
     "@vue-office/docx": "^1.6.3",
-    "@vue-office/excel": "^1.7.14",
+    "@vue-office/excel": "1.7.14",
     "@vue-office/pptx": "^1.0.1",
     "ant-design-vue": "^4.0.8",
     "axios": "^1.18.0",

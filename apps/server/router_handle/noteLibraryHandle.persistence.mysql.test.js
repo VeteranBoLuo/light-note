@@ -40,6 +40,8 @@ describe.skipIf(!socketPath)('首次笔记保存与再次编辑（隔离 MySQL�
     await admin.query(`CREATE DATABASE ${schema} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
     created = true;
     state.pool = mysql.createPool({ socketPath, user: 'root', database: schema, connectionLimit: 3 });
+    await state.pool.query('CREATE TABLE user (id VARCHAR(64) PRIMARY KEY, preferences TEXT) ENGINE=InnoDB');
+    await state.pool.query("INSERT INTO user VALUES ('first-user',NULL),('other-user',NULL)");
     await state.pool.query(`CREATE TABLE note (
       id VARCHAR(64) PRIMARY KEY, title VARCHAR(255), content LONGTEXT, type VARCHAR(20),
       create_by VARCHAR(64), update_by VARCHAR(64), parent_id VARCHAR(64), sort INT DEFAULT 0,
@@ -65,6 +67,24 @@ describe.skipIf(!socketPath)('首次笔记保存与再次编辑（隔离 MySQL�
     await state.pool?.end();
     try { if (created) await admin.query(`DROP DATABASE ${schema}`); }
     finally { await admin?.end(); }
+  });
+
+  it('表格拖拽尺寸经创建、保存和详情读取后保留', async () => {
+    const content = '<table style="width:100%"><colgroup><col style="width:30%"><col style="width:70%"></colgroup><tbody><tr style="height:72px"><td>A</td><td>B</td></tr></tbody></table>';
+    const saved = await call(addNote, { title: '表格尺寸', content, type: 'html' });
+    expect(saved.status).toBe(200);
+    const read = await call(getNoteDetail, { id: saved.data.id });
+    expect(read.status).toBe(200);
+    expect(read.data.content).toContain('width:30%');
+    expect(read.data.content).toContain('height:72px');
+    const changed = await call(updateNote, {
+      id: saved.data.id, revision: 1,
+      content: content.replace('width:30%', 'width:45%').replace('width:70%', 'width:55%').replace('height:72px', 'height:96px'),
+    });
+    expect(changed).toMatchObject({ status: 200, data: { revision: 2 } });
+    const reopened = await call(getNoteDetail, { id: saved.data.id });
+    expect(reopened.data.content).toContain('width:45%');
+    expect(reopened.data.content).toContain('height:96px');
   });
 
   it('首次创建、独立连接读回、详情读取、编辑和历史版本均持久化', async () => {

@@ -50,6 +50,7 @@ interface UserInfo {
     noteSidebarMode?: 'directory' | 'tags'; // 笔记库默认侧栏：目录/标签
     dailyReviewEnabled?: boolean; // 工作台每日回顾入口，默认开启
     noteDirectEdit?: boolean; // PC 点击已有笔记时是否跳过预览直接编辑
+    noteCreatePosition?: 'top' | 'bottom'; // 仅影响之后新建的同级普通页面
     noteParentOpenMode?: 'children' | 'preview'; // PC 点击父页面时打开子页面目录或预览当前页面
     lang?: 'zh-CN' | 'en-US'; // 语言
     homePage?: 'landing' | 'workbench' | 'resourceCenter' | 'bookmark' | 'noteLibrary' | 'cloudSpace'; // 默认首页
@@ -120,6 +121,7 @@ const createDefaultUserState = (): UserState => ({
     noteViewMode: 'card', // 笔记展示模式：卡片/列表
     noteSidebarMode: 'directory', // 笔记库默认展示目录
     noteDirectEdit: false, // PC 默认先预览已有笔记；移动端始终直接编辑
+    noteCreatePosition: 'bottom',
     noteParentOpenMode: 'children', // 父页面默认进入子页面目录；PC 可改为预览当前页面
     todoSubitemsExpanded: false,
     todoView: 'list', // 待办默认视图

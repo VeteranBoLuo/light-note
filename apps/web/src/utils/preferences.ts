@@ -16,6 +16,7 @@ export interface UserPreferences {
   noteViewMode?: 'card' | 'list';
   noteSidebarMode?: 'directory' | 'tags';
   noteDirectEdit?: boolean;
+  noteCreatePosition?: 'top' | 'bottom';
   noteParentOpenMode?: 'children' | 'preview';
   resourceView?: 'card' | 'list';
   todoView?: 'list' | 'agenda' | 'calendar' | 'matrix';

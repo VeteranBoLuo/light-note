@@ -1230,6 +1230,28 @@ describe('FilePreview 文本请求归属', () => {
 });
 
 describe('FilePreview 表格原生坐标', () => {
+  it('已消费的 Escape、输入法与长按不关闭预览，下一次独立 Escape 才退出', async () => {
+    const host = document.createElement('div'); document.body.append(host);
+    const visible = ref(true);
+    const app = createApp({ render: () => h(FilePreview, {
+      visible: visible.value,
+      'onUpdate:visible': (value: boolean) => { visible.value = value; },
+      fileInfo: { id: 'escape-fixture', fileName: 'preview.pdf', fileType: 'application/pdf', fileUrl: 'https://files.example/preview.pdf' },
+    }) });
+    app.mount(host);
+    cleanup = () => { app.unmount(); host.remove(); };
+    await nextTick();
+    const consumed = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    consumed.preventDefault(); document.dispatchEvent(consumed);
+    for (const init of [{ repeat: true }, { isComposing: true }, { keyCode: 229 }]) {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true, ...init }));
+    }
+    expect(visible.value).toBe(true);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    window.history.replaceState({}, '', '/');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    expect(visible.value).toBe(false);
+  });
   it('点击、拖选与移出事件保留浏览器原生坐标', async () => {
     const host = document.createElement('div');
     document.body.append(host);

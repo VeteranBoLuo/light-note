@@ -1,7 +1,8 @@
 <template>
   <SettingsFieldRow :label="label" :description="description" :stacked="kind !== 'switch'">
     <template #feedback><SettingsSaveStatus :keys="[prefKey]" /></template>
-    <BSwitch controlled
+    <BSwitch
+      controlled
       v-if="kind === 'switch'"
       :checked="Boolean(value)"
       :disabled="disabled || pending(prefKey)"
@@ -17,17 +18,15 @@
       :aria-label="label"
       @change="save"
     />
-    <div v-else class="settings-choices" role="group" :aria-label="label">
-      <BButton
-        v-for="option in options"
-        :key="option.v"
-        :type="value === option.v ? 'primary' : undefined"
-        :aria-pressed="value === option.v"
-        :disabled="disabled || pending(prefKey)"
-        @click="save(option.v)"
-        >{{ option.label }}</BButton
-      >
-    </div>
+    <BRadio
+      v-else
+      variant="segment"
+      :value="value"
+      :options="selectOptions"
+      :aria-label="label"
+      :disabled="disabled || pending(prefKey)"
+      @update:value="save"
+    />
   </SettingsFieldRow>
 </template>
 <script setup lang="ts">
@@ -37,7 +36,7 @@
   import { recordOperation } from '@/api/commonApi';
   import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
-  import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BRadio from '@/components/base/BasicComponents/BRadio.vue';
   import SettingsFieldRow from './SettingsFieldRow.vue';
   import SettingsSaveStatus from './SettingsSaveStatus.vue';
   const props = withDefaults(
@@ -70,25 +69,8 @@
   }
 </script>
 <style scoped>
-  .settings-choices {
-    display: flex;
-    gap: var(--ui-space-8, 8px);
-    flex-wrap: wrap;
-  }
   .settings-choice-select {
     width: var(--ui-layout-180, 180px);
     max-width: 100%;
-  }
-  .settings-choices .b_btn {
-    border: 1px solid var(--surface-border-color);
-    border-radius: 8px;
-  }
-  .settings-choices .default_btn {
-    background: var(--card-background);
-    color: var(--text-color);
-  }
-  .settings-choices .primary_btn {
-    border-color: var(--primary-color);
-    background: var(--primary-color);
   }
 </style>

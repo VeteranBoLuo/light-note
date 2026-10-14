@@ -22,6 +22,9 @@
       "undici@>=7.0.0 <7.29.0": "7.29.0",
       "@xmldom/xmldom@<0.8.15": "0.8.15",
       "qs@<6.16.0": "6.16.0"
+    },
+    "patchedDependencies": {
+      "@vue-office/excel@1.7.14": "patches/@vue-office__excel@1.7.14.patch"
     }
   },
   "scripts": {

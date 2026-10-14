@@ -4608,8 +4608,10 @@
     quickbars_image_toolbar: false,
     contextmenu: false,
     // 移动端不启用 TinyMCE 的触摸缩放手柄；单击图片后由轻笺底部面板调整尺寸，
-    // 避免长按图片/文字时抢走系统复制粘贴菜单。桌面端仍保留原生图片拖拽手柄。
-    object_resizing: usesNativeTextSelectionMenu.value ? false : 'img',
+    // 避免长按图片/文字时抢走系统复制粘贴菜单。桌面使用原生图片及表格行列拖拽手柄。
+    object_resizing: usesNativeTextSelectionMenu.value ? false : 'img,table',
+    table_resize_bars: true,
+    table_column_resizing: 'preservetable',
     codesample_languages: CODE_LANGUAGES.map((lang) => ({ text: lang.text, value: lang.value })),
     extended_valid_elements:
       'input[type|class|checked|data-note-task],a[href|contenteditable|title|data-ln-resource-type|data-ln-resource-id|data-ln-resource-snapshot-title|data-ln-resource-display-title|data-ln-resource-state|class|aria-disabled],img[src|alt|title|class|style|width|height|data-ln-size],span[class|style|data-ln-text-gradient|data-ln-math|data-ln-latex|contenteditable],div[id|class|style|title|align|dir|lang|data-ln-math|data-ln-latex|contenteditable],section[class|data-ln-media-position|data-ln-media-width|data-ln-media-inserting],figure[class],figcaption[class]',

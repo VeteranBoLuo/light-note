@@ -693,12 +693,6 @@ export async function resolveOwnedNoteDescendantIds({ userId, rootNoteId, includ
   return resolveNoteDescendantIdsFromSnapshot(snapshot, rootNoteId, { includeRoot });
 }
 
-/**
- * 在创建事务内解析新页面的权威落点。
- *
- * parentId 只作为候选值使用：父页面归属、删除状态和最大深度均通过当前用户的
- * 加锁树快照校验；新页面固定追加到目标父层的普通（非置顶）兄弟组末尾。
- */
 function noteShareExposureDetails(shares) {
   return {
     shareCount: shares.length,
@@ -734,10 +728,25 @@ async function assertNewInheritedShareExposure(
   return shares;
 }
 
+/**
+ * 在创建事务内解析新页面的权威落点。
+ * parentId 只作为候选值使用：父页面归属、删除状态和最大深度均通过当前用户的
+ * 加锁树快照校验；新页面的位置遵循账号偏好，已有页面的相对顺序保持不变。
+ */
 export async function prepareOwnedNotePlacement(
   connection,
-  { userId, parentId = null, shareExposureAcknowledged = false } = {},
+  { userId, parentId = null, shareExposureAcknowledged = false, batchNoteIds = [], noteId = null } = {},
 ) {
+  // 先锁账号，保证空目录中的并发创建也串行取号；从持久偏好读取，覆盖旧客户端及 Worker。
+  const [users] = await connection.query('SELECT preferences FROM user WHERE id = ? FOR UPDATE', [userId]);
+  let preferences = users?.[0]?.preferences;
+  if (typeof preferences === 'string') {
+    try {
+      preferences = JSON.parse(preferences);
+    } catch {
+      preferences = null;
+    }
+  }
   const snapshot = await loadOwnedNoteTree(userId, { db: queryDb(connection), lock: true });
   const placement = assertValidNoteParentFromSnapshot(snapshot, { parentId });
   await assertNewInheritedShareExposure(connection, snapshot, {
@@ -746,10 +755,40 @@ export async function prepareOwnedNotePlacement(
     acknowledged: shareExposureAcknowledged,
   });
   const siblings = getNoteTreeChildren(snapshot, placement.parentId).filter((node) => !node.isTop);
-  const nextSort = siblings.reduce((maximum, node) => Math.max(maximum, numberOrZero(node.sort)), -1) + 1;
+  let index = preferences?.noteCreatePosition === 'top' ? 0 : siblings.length;
+  // 导入使用服务端生成的有序幂等 ID。续跑/失败重试也能定位同批次前后项，
+  // 不依赖完成回执已经写回，更不移动、置顶或重排已被用户移走的批次页面。
+  const batchIndex = batchNoteIds.indexOf(noteId);
+  if (batchIndex >= 0) {
+    const siblingIndexes = new Map(siblings.map((node, i) => [node.id, i]));
+    const next = batchNoteIds.slice(batchIndex + 1).find((id) => siblingIndexes.has(id));
+    const previous = batchNoteIds.slice(0, batchIndex).reverse().find((id) => siblingIndexes.has(id));
+    if (next) index = siblingIndexes.get(next);
+    else if (previous) index = siblingIndexes.get(previous) + 1;
+  }
+  const previousSort = index > 0 ? numberOrZero(siblings[index - 1].sort) : -1;
+  const nextSort = index < siblings.length ? numberOrZero(siblings[index].sort) : 2147483647;
+  let sort = previousSort + 1;
+  if (sort < 0 || sort >= nextSort || !Number.isSafeInteger(sort)) {
+    // 无可用整数间隙时，仅按现有顺序腾出一个位置；保留正文、版本、置顶与更新时间。
+    const placeholderId = noteId || randomUUID();
+    const ordered = [...siblings];
+    ordered.splice(index, 0, { id: placeholderId, sort: index });
+    await updateSiblingSort(connection, { userId, parentId: placement.parentId, rows: ordered, skipId: placeholderId });
+    // 历史孤儿/环节点在根层展示，但仍保留原 parent_id；普通兄弟组更新不会命中它们。
+    // 只同步已锁快照中这些节点的排序，不修复或移动其父级，也不改动正文时间。
+    for (const [position, node] of ordered.entries()) {
+      if (!node.invalidParent || numberOrZero(node.sort) === position) continue;
+      await connection.query(
+        'UPDATE note SET sort = ?, update_time = update_time WHERE id = ? AND create_by = ? AND del_flag = 0 AND parent_id <=> ?',
+        [position, node.id, userId, node.parentId],
+      );
+    }
+    sort = index;
+  }
   return {
     parentId: placement.parentId,
-    sort: nextSort,
+    sort,
     depth: placement.resultingMaxDepth,
   };
 }

@@ -3,7 +3,7 @@ import { readMathElement, serializeNoteMath } from './noteMath';
 export type NoteFormat = 'html' | 'markdown';
 
 export type NoteConversionIssue =
-  'textColor' | 'backgroundColor' | 'alignment' | 'mergedCells' | 'fontStyling' | 'rawHtml';
+  'textColor' | 'backgroundColor' | 'alignment' | 'mergedCells' | 'tableDimensions' | 'fontStyling' | 'rawHtml';
 
 export interface NoteFormatConversionReport {
   sourceType: NoteFormat;
@@ -87,6 +87,20 @@ function analyzeHtml(source: string): NoteFormatConversionReport {
   addIssue(issues, 'backgroundColor', background);
   addIssue(issues, 'alignment', alignment);
   addIssue(issues, 'mergedCells', merged);
+  addIssue(
+    issues,
+    'tableDimensions',
+    all.filter(
+      (element) =>
+        ['TABLE', 'COL', 'COLGROUP', 'TR', 'TD', 'TH'].includes(element.tagName) &&
+        Boolean(
+          element.style.width ||
+          element.style.height ||
+          element.hasAttribute('width') ||
+          element.hasAttribute('height'),
+        ),
+    ).length,
+  );
   addIssue(issues, 'fontStyling', fontStyling);
 
   const preserved = doc.body.querySelectorAll(
