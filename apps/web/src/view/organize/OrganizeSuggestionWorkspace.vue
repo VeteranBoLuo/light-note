@@ -434,6 +434,7 @@
                     "
                     :analyzing="['queued', 'running', 'waiting_content', 'preparing_content'].includes(item.aiStatus)"
                     @changed="changed"
+                    @busy-change="suggestionBusy"
                     @preview-archive="openArchive"
                   />
                   <div v-if="expanded.has(item.id) && secondarySuggestions(item).length" class="resource-check-summary">
@@ -614,6 +615,7 @@
     type RunOptions,
     type SuggestionRun,
     type WorkspaceItem,
+    type SuggestionChange,
   } from '@/api/organizeSuggestionApi';
   const { t, locale } = useI18n(),
     emit = defineEmits<{ 'refresh-summary': []; 'run-status': [status: string] }>();
@@ -670,6 +672,7 @@
   const controlAction = ref<'pause' | 'resume' | 'end' | null>(null);
   const initialStep = ref(0);
   const starting = ref(false);
+  const startedPreview = ref<SuggestionRun | null>(null);
   const user = useUserStore();
   let draftSequence = 0;
   const drawer = ref(false),
@@ -1056,6 +1059,7 @@
     }
   }
   function resetDraft() {
+    startedPreview.value = null;
     retryConfirmation.value = false;
     draftSequence++;
     initialStep.value = 0;
@@ -1089,10 +1093,12 @@
   );
   function closeDrawer() {
     if (starting.value) return;
+    if (startedPreview.value) void loadLatest();
     drawer.value = false;
   }
   async function preflight(options: RunOptions) {
     if (draftBusy.value || !options.resourceTypes.length || !options.checks.length) return;
+    startedPreview.value = null;
     const ticket = ++draftSequence;
     const identity = buildNoteDetailRequestScope(user);
     draftBusy.value = true;
@@ -1115,6 +1121,10 @@
   }
   function start() {
     if (!preview.value || draftBusy.value) return;
+    if (startedPreview.value?.id === preview.value.id) {
+      void startConfirmed();
+      return;
+    }
     const previewId = preview.value.id;
     const startCurrent = (replaceRunId?: string) => {
       if (drawer.value && preview.value?.id === previewId) void startConfirmed(replaceRunId);
@@ -1136,20 +1146,30 @@
     const identity = buildNoteDetailRequestScope(user);
     const current = () => !disposed && ticket === draftSequence && identity === buildNoteDetailRequestScope(user);
     starting.value = true;
+    clearTimeout(timer);
     draftBusy.value = true;
     draftError.value = '';
     try {
-      const created = readResponse(await startRun(preview.value.id, replaceRunId)) as SuggestionRun;
+      const created =
+        startedPreview.value || (readResponse(await startRun(preview.value.id, replaceRunId)) as SuggestionRun);
       if (!current()) return;
+      startedPreview.value = created;
+      const loaded = await loadPage(false, false, {
+        id: created.id,
+        type: created.options.resourceTypes[0],
+        kind: 'all',
+        request: ++sequence,
+      });
+      if (!current()) return;
+      if (!loaded) {
+        draftError.value = t('organizeWorkspace.startedLoadFailed');
+        return;
+      }
       starting.value = false;
+      draftBusy.value = false;
+      startedPreview.value = null;
       drawer.value = false;
-      committingView = true;
-      run.value = created;
-      resourceType.value = created.options.resourceTypes[0];
-      kind.value = 'all';
-      committingView = false;
-      items.value = [];
-      await loadPage();
+      schedule();
       emit('refresh-summary');
     } catch (e) {
       if (current()) draftError.value = failure(e);
@@ -1268,6 +1288,7 @@
       result.nextCursor = requestedType === 'tag' ? cursor : null;
       if (disposed || request !== sequence) return;
       committingView = true;
+      error.value = '';
       run.value = result;
       resourceType.value = requestedType;
       kind.value = requestedKind;
@@ -1291,6 +1312,7 @@
           : result.items || [];
       nextCursor.value = result.nextCursor || null;
       saveView();
+      return true;
     } catch (e) {
       if (!disposed && request === sequence) {
         if (!run.value) error.value = failure(e);
@@ -1305,22 +1327,32 @@
   }
   function schedule() {
     clearTimeout(timer);
-    if (!disposed && active && activeAi.value && !document.hidden)
+    if (!disposed && active && activeAi.value && !document.hidden && !starting.value && !writing.value)
       timer = setTimeout(() => {
         void refresh(true);
       }, 2400);
   }
   // 已展开多页时刷新每页，避免轮询把后续资料移出界面。
+  let refreshing: { promise: Promise<void>; sequence: number } | undefined;
   async function refresh(background = false) {
     if (!active || !run.value) return;
-    if (batch.busy.value || iconReview.batchBusy.value || (background && (loading.value || controlling.value))) {
+    if (writing.value || starting.value || (background && (loading.value || controlling.value))) {
       schedule();
       return;
     }
-    const count = items.value.length;
-    await loadPage(false, background);
-    while (!disposed && !pageError.value && nextCursor.value && items.value.length < count)
-      await loadPage(true, background);
+    if (background && refreshing?.sequence === sequence) return refreshing.promise;
+    const promise = (async () => {
+      const count = items.value.length;
+      if (!(await loadPage(false, background))) return;
+      while (!disposed && !pageError.value && nextCursor.value && items.value.length < count)
+        if (!(await loadPage(true, background))) return;
+    })();
+    refreshing = { promise, sequence };
+    try {
+      await promise;
+    } finally {
+      if (refreshing?.promise === promise) refreshing = undefined;
+    }
   }
   function cancelRemaining() {
     Alert.alert({
@@ -1358,6 +1390,29 @@
     computed(() => !user.adminContext && user.role !== 'visitor' && resourceType.value !== 'tag'),
     changed,
   );
+  const pendingActions = ref(new Set<string>());
+  const writing = computed(
+    () => pendingActions.value.size > 0 || batch.busy.value || iconReview.busy.size > 0 || iconReview.batchBusy.value,
+  );
+  let refreshAfterWrite = false;
+  function suggestionBusy(key: string, busy: boolean) {
+    if (busy) pendingActions.value.add(key);
+    else pendingActions.value.delete(key);
+  }
+  watch(
+    writing,
+    (busy) => {
+      if (busy) {
+        sequence++;
+        clearTimeout(timer);
+        loading.value = false;
+      } else if (refreshAfterWrite) {
+        refreshAfterWrite = false;
+        void refresh(true);
+      } else schedule();
+    },
+    { flush: 'sync' },
+  );
   function selectResource(item: WorkspaceItem, checked: boolean) {
     for (const s of item.suggestions.filter((s) => batch.applicable.value.some((a) => a.id === s.id)))
       if (checked) batch.selected.add(s.id);
@@ -1370,12 +1425,57 @@
   function resourceMixed(item: WorkspaceItem) {
     return !resourceSelected(item) && item.suggestions.some((s) => batch.selected.has(s.id));
   }
-  async function changed() {
+  async function changed(change?: SuggestionChange) {
+    if (change && change.runId !== run.value?.id) return;
     const id = run.value?.id;
     const identity = buildNoteDetailRequestScope(user);
     const view = `${resourceType.value}:${kind.value}:${reviewFilter.value}`;
     const before = new Map(items.value.map((item) => [item.id, groupFor(item)]));
     actionFeedback.value = '';
+    if (change) {
+      // A successful write is authoritative immediately; a pre-write read cannot revive it.
+      sequence++;
+      for (const item of items.value) {
+        const suggestion = item.suggestions.find((s) => s.id === change.suggestionId);
+        if (!suggestion) continue;
+        suggestion.status = change.status;
+        suggestion.applied = change.applied;
+        if (change.reason) suggestion.reason = change.reason;
+        if (
+          change.status === 'applied' &&
+          change.applied !== undefined &&
+          ['tags', 'title', 'description'].includes(suggestion.kind)
+        )
+          suggestion.after = change.applied as typeof suggestion.after;
+        if (suggestion.kind === 'title' && typeof change.applied === 'string') item.resource.title = change.applied;
+        // Recompute only this object's outcome from its acknowledged checks until the fresh read arrives.
+        delete item.outcome;
+        const from = before.get(item.id)!,
+          to = groupFor(item);
+        if (from !== to && run.value?.groupTotals) {
+          run.value.groupTotals[from] = Math.max(0, (run.value.groupTotals[from] || 0) - 1);
+          run.value.groupTotals[to] = (run.value.groupTotals[to] || 0) + 1;
+        }
+      }
+      actionFeedback.value =
+        change.status === 'expired'
+          ? change.reason || ''
+          : t(`organizeWorkspace.action${change.status === 'applied' ? 'Applied' : 'Ignored'}`);
+      const moved = new Set(
+        items.value.filter((item) => before.has(item.id) && before.get(item.id) !== groupFor(item)).map(groupFor),
+      );
+      if (change.status !== 'expired' && moved.size)
+        actionFeedback.value = t('organizeWorkspace.actionMoved', {
+          action: actionFeedback.value,
+          groups: [...moved].map((group) => t(`organizeWorkspace.groups.${group}`)).join('、'),
+        });
+    }
+    if (writing.value) {
+      refreshAfterWrite = true;
+      bookmark.refreshTag();
+      emit('refresh-summary');
+      return;
+    }
     await refresh(true);
     if (
       disposed ||
@@ -1384,7 +1484,7 @@
       view !== `${resourceType.value}:${kind.value}:${reviewFilter.value}`
     )
       return;
-    if (!pageError.value) {
+    if (!change && !pageError.value) {
       const moved = new Set(
         items.value.filter((item) => before.has(item.id) && before.get(item.id) !== groupFor(item)).map(groupFor),
       );
@@ -1485,9 +1585,12 @@
       archiveVisible.value = false;
       acquireQuotaVisible.value = false;
       draftSequence++;
-      iconReview.reset();
+      refreshAfterWrite = false;
       actionFeedback.value = '';
       run.value = null;
+      iconReview.reset();
+      pendingActions.value.clear();
+      startedPreview.value = null;
       items.value = [];
       nextCursor.value = null;
       viewState = {};
@@ -1517,8 +1620,10 @@
     receiveHandoff();
   });
   onDeactivated(() => {
-    iconReview.reset();
     active = false;
+    refreshAfterWrite = false;
+    iconReview.reset();
+    pendingActions.value.clear();
     viewLifetime++;
     controlling.value = false;
     controlAction.value = null;

@@ -173,9 +173,13 @@
       <BButton @click="emit('preview-archive', resourceId)">{{ t('organizeWorkspace.archivePreview') }}</BButton>
     </div>
     <div v-else-if="canReview" class="suggestion-actions" :inert="batchBusy || undefined">
-      <BButton type="text" :disabled="busy || analyzing" @click="submit('ignore')">{{
-        t('organizeWorkspace.ignoreSuggestion')
-      }}</BButton>
+      <BButton
+        type="text"
+        :loading="busy && activeAction === 'ignore'"
+        :disabled="busy || analyzing"
+        @click="submit('ignore')"
+        >{{ t('organizeWorkspace.ignoreSuggestion') }}</BButton
+      >
       <BButton
         v-if="suggestion.kind === 'archive' && suggestion.archivePreview && resourceId"
         @click="emit('preview-archive', resourceId, suggestion.id)"
@@ -194,6 +198,7 @@
       <BButton
         v-if="isMetadata && suggestion.status === 'pending'"
         type="primary"
+        :loading="busy && activeAction === 'apply'"
         :disabled="busy || analyzing"
         @click="apply(suggestion.after)"
         >{{ t('organizeWorkspace.apply') }}</BButton
@@ -232,7 +237,7 @@
   import { canBatchApply } from '@/composables/useOrganizeBatchApply';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import { fileReadingReasonKey } from '@/utils/organizeFileReading';
-  import { computed, ref, watch } from 'vue';
+  import { computed, onBeforeUnmount, onDeactivated, ref, watch } from 'vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
   import { useI18n } from 'vue-i18n';
@@ -243,7 +248,12 @@
   import Alert from '@/components/base/BasicComponents/BModal/Alert';
   import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
   import OrganizeSuggestionTagEditor from './OrganizeSuggestionTagEditor.vue';
-  import { actOnRunSuggestion, type WorkspaceSuggestion, type SuggestionMember } from '@/api/organizeSuggestionApi';
+  import {
+    actOnRunSuggestion,
+    type WorkspaceSuggestion,
+    type SuggestionMember,
+    type SuggestionChange,
+  } from '@/api/organizeSuggestionApi';
   import type { OrganizeAiSuggestionTag } from '@/api/organizeApi';
   import { generateUUID } from '@/utils/common';
   import { resolveAiSourceNavigation } from '@/utils/aiSourceNavigation';
@@ -267,7 +277,8 @@
   }>();
   const emit = defineEmits<{
     'batch-select': [checked: boolean];
-    changed: [];
+    changed: [change: SuggestionChange];
+    'busy-change': [key: string, busy: boolean];
     'preview-archive': [resourceId: string, suggestionId?: string];
   }>();
   const { t, locale } = useI18n(),
@@ -277,6 +288,7 @@
     error = ref(''),
     title = ref(''),
     tags = ref<OrganizeAiSuggestionTag[]>([]);
+  const activeAction = ref<'apply' | 'ignore' | null>(null);
   const invalidReason = ref('');
   const suggestion = computed(() =>
     invalidReason.value ? { ...props.suggestion, status: 'expired', reason: invalidReason.value } : props.suggestion,
@@ -324,21 +336,43 @@
   // 请求重试沿用同一标识；服务端还以建议独立状态保证只写一次。
   let requestId = '',
     requestPayload = '';
+  let actionGeneration = 0;
+  let busyKey = '';
+  function resetAction() {
+    actionGeneration++;
+    busy.value = false;
+    activeAction.value = null;
+    if (busyKey) emit('busy-change', busyKey, false);
+    busyKey = '';
+  }
+  watch([() => props.runId, () => props.suggestion.id], resetAction, { flush: 'sync' });
+  onBeforeUnmount(resetAction);
+  onDeactivated(resetAction);
   async function submit(action: 'apply' | 'ignore', value?: unknown) {
     if (busy.value) return;
-    const signature = JSON.stringify([props.suggestion.id, action, value]);
+    const signature = JSON.stringify([props.runId, props.suggestion.id, action, value]);
     if (signature !== requestPayload) {
       requestPayload = signature;
       requestId = generateUUID();
     }
     busy.value = true;
+    activeAction.value = action;
     error.value = '';
+    const generation = actionGeneration;
+    const runId = props.runId,
+      suggestionId = props.suggestion.id;
+    const current = () => generation === actionGeneration;
+    busyKey = requestId;
+    emit('busy-change', busyKey, true);
     try {
-      const response = await actOnRunSuggestion(props.runId, props.suggestion.id, action, value, requestId);
+      const response = await actOnRunSuggestion(runId, suggestionId, action, value, requestId);
+      if (!current()) return;
       if (response.status !== 200) throw new Error(response.msg);
+      if (!['applied', 'ignored'].includes(response.data?.status)) throw new Error(t('organize.actionFailed'));
       editing.value = false;
-      emit('changed');
+      emit('changed', { runId, suggestionId, status: response.data.status, applied: response.data.applied });
     } catch (e) {
+      if (!current()) return;
       const failure = e as { response?: { data?: { msg?: string; data?: { code?: string } } }; message?: string };
       error.value = failure.response?.data?.msg || failure.message || t('organize.actionFailed');
       if (
@@ -348,10 +382,15 @@
       ) {
         invalidReason.value = error.value;
         editing.value = false;
-        emit('changed');
+        emit('changed', { runId, suggestionId, status: 'expired', reason: error.value });
       }
     } finally {
-      busy.value = false;
+      if (current()) {
+        busy.value = false;
+        activeAction.value = null;
+        emit('busy-change', busyKey, false);
+        busyKey = '';
+      }
     }
   }
   const apply = (value: unknown) => submit('apply', value);

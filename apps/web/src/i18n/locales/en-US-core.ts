@@ -517,6 +517,11 @@ export default {
     ignoreSuggestion: 'Ignore suggestion',
     resultsMoved: 'Results updated. Resources moved to: {groups}',
     resultsUpdated: 'Check results updated',
+    actionApplied: 'Suggestion applied',
+    actionIgnored: 'Suggestion ignored',
+    actionMoved: '{action}. Related resources moved to: {groups}',
+    startedLoadFailed:
+      'Organizing has started in the background, but results could not be loaded. Click Start again to retry loading without creating another run.',
     reviewVisible: 'Showing {count} handled resources',
     skippedExplanation: 'No check was performed in this run; this does not mean the resource passed.',
     reviewFilter: 'Filter handled results',

@@ -69,6 +69,13 @@ export interface WorkspaceSuggestion {
   action?: string;
   members?: SuggestionMember[];
 }
+export interface SuggestionChange {
+  runId: string;
+  suggestionId: string;
+  status: 'applied' | 'ignored' | 'expired';
+  applied?: unknown;
+  reason?: string;
+}
 export interface WorkspaceItem {
   work?: Array<{ kind: string; lane: string; status: string; resolved?: boolean }>;
   outcome?: keyof OrganizeOutcomeCounts;

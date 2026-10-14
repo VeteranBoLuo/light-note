@@ -1891,7 +1891,7 @@ it('忽略建议成功后进入已处理，显示已忽略并同步跨组提示'
   expect(document.querySelector('.group-priority')).toBeNull();
   await openGroup('reviewed');
   expect(document.querySelector('.group-reviewed .resource-conclusion')?.textContent).toBe('已忽略');
-  expect(document.body.textContent).toContain('结果已更新，相关资料已移至：已处理');
+  expect(document.body.textContent).toContain('已忽略建议，相关资料已移至：已处理');
 });
 
 it('保留完整资源结论及尚未生成建议的检查说明', async () => {
@@ -2009,4 +2009,201 @@ it('标签合并展示目标与关联数，明确确认后才提交，不能批�
     { confirmMerge: true, targetId: 'a' },
     expect.any(String),
   );
+});
+
+function deferredResponse() {
+  let resolve!: (value: unknown) => void, reject!: (error: Error) => void;
+  const promise = new Promise((ok, fail) => {
+    resolve = ok;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
+}
+function pendingDescriptionRun(count = 1) {
+  return {
+    ...result(),
+    options: { ...result().options, resourceTypes: ['bookmark'], checks: ['description'] },
+    groupTotals: { priority: count },
+    items: Array.from({ length: count }, (_, i) => ({
+      id: `item-${i}`,
+      outcome: 'review',
+      aiStatus: 'completed',
+      ruleStatus: 'completed',
+      resource: { id: `b-${i}`, type: 'bookmark', title: `书签 ${i}`, source: { folder: '' }, guards: {}, tags: [] },
+      suggestions: [
+        {
+          id: `description-${i}`,
+          kind: 'description',
+          status: 'pending',
+          before: '',
+          after: `描述 ${i}`,
+          reason: '根据网页内容补全描述',
+        },
+      ],
+    })),
+  };
+}
+it('开始后等待完整详情才关闭确认面板，不先展示只有转圈的简略任务', async () => {
+  api.listRuns.mockResolvedValue(ok([]));
+  await mount();
+  button('重新整理').click();
+  await settle();
+  await toScope();
+  button('确认整理范围').click();
+  await settle();
+  const full = pipelineRun({ status: 'preparing' });
+  full.overview.inspection = { total: 23, checked: 0, skipped: 0, settled: false };
+  const { overview, progress, createdAt, ...brief } = full;
+  api.startRun.mockResolvedValue(ok(brief));
+  const detail = deferredResponse();
+  api.getRun.mockReturnValueOnce(detail.promise);
+  button('开始整理 23 项').click();
+  await settle();
+  expect(button('开始整理 23 项').disabled).toBe(true);
+  expect(document.querySelector('.workspace-overview')).toBeNull();
+  detail.resolve(ok(full));
+  await settle();
+  expect(button('开始整理 23 项')).toBeUndefined();
+  expect(host.querySelectorAll('.run-metric')).toHaveLength(3);
+  expect([...host.querySelectorAll('[data-lane]')].every((el) => el.textContent.includes('等待检查完成'))).toBe(true);
+  expect(document.querySelector('.workspace-overview .workspace-empty')).toBeNull();
+});
+it('启动成功但读取失败时保留确认与重试，重试只读详情不重复启动', async () => {
+  api.listRuns.mockResolvedValue(ok([]));
+  await mount();
+  button('重新整理').click();
+  await settle();
+  await toScope();
+  button('确认整理范围').click();
+  await settle();
+  api.getRun.mockRejectedValueOnce(new Error('读取超时'));
+  button('开始整理 23 项').click();
+  await settle();
+  expect(document.body.textContent).toContain('整理已在后台开始');
+  expect(button('开始整理 23 项').disabled).toBe(false);
+  button('开始整理 23 项').click();
+  await settle();
+  expect(api.startRun).toHaveBeenCalledTimes(1);
+  expect(button('开始整理 23 项')).toBeUndefined();
+  expect(document.querySelector('.workspace-notice')).toBeNull();
+});
+it.each([false, true])('写入回执立即移出待审核，旧读取与刷新失败不复活按钮（失败=%s）', async (refreshFails) => {
+  const original = pendingDescriptionRun();
+  api.listRuns.mockResolvedValue(ok([original]));
+  api.getRun.mockImplementation(async () => ok(structuredClone(original)));
+  await mount();
+  const oldRead = deferredResponse(),
+    write = deferredResponse(),
+    freshRead = deferredResponse();
+  api.getRun.mockReturnValueOnce(oldRead.promise).mockReturnValueOnce(freshRead.promise);
+  document.dispatchEvent(new Event('visibilitychange'));
+  await settle();
+  api.actOnRunSuggestion.mockReturnValueOnce(write.promise);
+  button('应用建议').click();
+  await settle();
+  expect(button('应用建议').disabled).toBe(true);
+  expect(button('应用建议').className).toContain('loading');
+  write.resolve(ok({ status: 'applied', applied: '保存后的描述' }));
+  await settle();
+  expect(button('应用建议')).toBeUndefined();
+  expect(document.querySelector('.group-priority')).toBeNull();
+  expect(document.body.textContent).toContain('已应用建议');
+  // This old snapshot finishes after the mutation and the fresh read has begun.
+  oldRead.resolve(ok(structuredClone(original)));
+  await settle();
+  expect(button('应用建议')).toBeUndefined();
+  expect(document.querySelector('.group-priority')).toBeNull();
+  if (refreshFails) freshRead.reject(new Error('统计刷新失败'));
+  else {
+    const updated = structuredClone(original);
+    updated.items[0].suggestions[0].status = 'applied';
+    updated.items[0].outcome = 'reviewed';
+    updated.groupTotals = { priority: 0 };
+    freshRead.resolve(ok(updated));
+  }
+  await settle();
+  expect(button('应用建议')).toBeUndefined();
+  expect(document.body.textContent).toContain('已应用建议');
+  if (refreshFails) expect(document.body.textContent).toContain('统计刷新失败');
+});
+it('连续应用不同建议时合并刷新，处理中重复点击不重复提交', async () => {
+  const original = pendingDescriptionRun(2);
+  api.listRuns.mockResolvedValue(ok([original]));
+  api.getRun.mockImplementation(async () => ok(structuredClone(original)));
+  await mount();
+  const first = deferredResponse(),
+    second = deferredResponse(),
+    read = deferredResponse();
+  api.actOnRunSuggestion.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+  const buttons = [...host.querySelectorAll<HTMLButtonElement>('button')].filter(
+    (el) => el.textContent.trim() === '应用建议',
+  );
+  buttons[0].click();
+  buttons[0].click();
+  buttons[1].click();
+  await settle();
+  expect(api.actOnRunSuggestion).toHaveBeenCalledTimes(2);
+  first.resolve(ok({ status: 'applied', applied: '描述 0' }));
+  await settle();
+  expect(api.getRun).toHaveBeenCalledTimes(1);
+  api.getRun.mockReturnValueOnce(read.promise);
+  second.resolve(ok({ status: 'applied', applied: '描述 1' }));
+  await settle();
+  expect(api.getRun).toHaveBeenCalledTimes(2);
+  expect(button('应用建议')).toBeUndefined();
+  read.reject(new Error('刷新失败'));
+  await settle();
+});
+it('离开工作区后的应用回执不能修改重新进入后的新快照', async () => {
+  const original = pendingDescriptionRun();
+  api.listRuns.mockResolvedValue(ok([original]));
+  api.getRun.mockImplementation(async () => ok(structuredClone(original)));
+  const visible = ref(true);
+  await mount(visible);
+  const write = deferredResponse();
+  api.actOnRunSuggestion.mockReturnValueOnce(write.promise);
+  button('应用建议').click();
+  await settle();
+  visible.value = false;
+  await settle();
+  const newer = structuredClone(original);
+  newer.id = 'new-run';
+  api.listRuns.mockResolvedValue(ok([newer]));
+  api.getRun.mockResolvedValue(ok(newer));
+  visible.value = true;
+  await settle();
+  const calls = api.getRun.mock.calls.length;
+  write.resolve(ok({ status: 'applied' }));
+  await settle();
+  expect(api.getRun).toHaveBeenCalledTimes(calls);
+  expect(button('应用建议')).toBeTruthy();
+  expect(document.body.textContent).not.toContain('已应用建议');
+});
+it('忽略仅在本按钮显示提交进度，失败保留建议且手动重试沿用幂等标识', async () => {
+  const original = pendingDescriptionRun();
+  api.listRuns.mockResolvedValue(ok([original]));
+  api.getRun.mockImplementation(async () => ok(structuredClone(original)));
+  await mount();
+  const write = deferredResponse();
+  api.actOnRunSuggestion.mockReturnValueOnce(write.promise);
+  button('忽略建议').click();
+  await settle();
+  expect(button('忽略建议').className).toContain('loading');
+  expect(button('应用建议').className).not.toContain('loading');
+  write.reject(new Error('保存失败'));
+  await settle();
+  expect(document.body.textContent).toContain('保存失败');
+  expect(button('忽略建议').disabled).toBe(false);
+  expect(document.querySelector('.group-priority')).not.toBeNull();
+  expect(api.getRun).toHaveBeenCalledTimes(1);
+  const read = deferredResponse();
+  api.getRun.mockReturnValueOnce(read.promise);
+  api.actOnRunSuggestion.mockResolvedValueOnce(ok({ status: 'ignored' }));
+  button('忽略建议').click();
+  await settle();
+  expect(api.actOnRunSuggestion.mock.calls[1][4]).toBe(api.actOnRunSuggestion.mock.calls[0][4]);
+  expect(button('应用建议')).toBeUndefined();
+  expect(document.body.textContent).toContain('已忽略建议');
+  read.reject(new Error('读取失败'));
+  await settle();
 });
