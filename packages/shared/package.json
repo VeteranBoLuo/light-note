@@ -117,6 +117,10 @@
     "./file-category": {
       "types": "./fileCategory.d.ts",
       "default": "./fileCategory.js"
+    },
+    "./profile-backgrounds": {
+      "types": "./profileBackgrounds.d.ts",
+      "default": "./profileBackgrounds.js"
     }
   },
   "devDependencies": {

@@ -1,3 +1,5 @@
+import { getEconomyRuntime } from '../pointsEconomyCatalog.js';
+import { isProfileBackgroundId } from '@lightnote/shared/profile-backgrounds';
 import pool from '../../db/index.js';
 import { communityProfileActions } from '../communityFeed/profileActions.js';
 import { COMMUNITY_CHAT_PRIMARY_ROOM_SLUG } from '../communityChatFeature.js';
@@ -220,7 +222,6 @@ function publicAchievement(achievement) {
 }
 
 function tenureLabel(row, locale) {
-
   const registeredAt = row.authorRegisteredAt;
   const joinedTime = registeredAt ? new Date(registeredAt).getTime() : Number.NaN;
   if (!Number.isFinite(joinedTime)) return null;
@@ -258,6 +259,8 @@ export async function buildProfilePayload({ db, author, avatarPath, locale }) {
         ? `${avatarPath}${author.authorAvatarVersion ? `?v=${encodeURIComponent(author.authorAvatarVersion)}` : ''}`
         : '',
       ...publicFrame(author.authorFrameId),
+      backgroundShopEnabled: Boolean(getEconomyRuntime().catalog.backgroundItems?.length),
+      backgroundId: isProfileBackgroundId(author.authorBackgroundId) ? author.authorBackgroundId : null,
       ...growth,
       bio: normalizeBio(author.bio || ''),
       communityTenureLabel: tenureLabel(author, locale),
@@ -309,6 +312,7 @@ async function loadVisibleMessageAuthor({ user, messagePublicId, env, db }) {
             COALESCE(growth.exp, 0) AS authorExp,
             growth.equipped_title AS authorTitleId,
             growth.equipped_frame AS authorFrameId,
+            growth.equipped_background AS authorBackgroundId,
             account.create_time AS authorRegisteredAt,
             profile.bio,
             profile.show_community_tenure AS showCommunityTenure,
@@ -376,6 +380,7 @@ export async function loadCommunityProfileAuthor({ userId, db = pool }) {
             COALESCE(growth.exp, 0) AS authorExp,
             growth.equipped_title AS authorTitleId,
             growth.equipped_frame AS authorFrameId,
+            growth.equipped_background AS authorBackgroundId,
             account.create_time AS authorRegisteredAt,
             profile.bio,
             profile.show_community_tenure AS showCommunityTenure,

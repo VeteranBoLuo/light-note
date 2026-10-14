@@ -19,21 +19,25 @@ export async function convertMarkup(source: string, direction: MarkupDirection) 
   return direction === 'markdown_to_html' ? noteContentToHtml(value, 'markdown') : noteHtmlToMarkdown(value);
 }
 
-function normalizeTable(table: unknown[][]) {
+export interface TableLimits {
+  maxRows?: number;
+  maxCharacters?: number;
+}
+function normalizeTable(table: unknown[][], limits: TableLimits = {}) {
   if (!table.length) throw new ToolboxTextError('INVALID_TABLE');
-  if (table.length > 5_000) throw new ToolboxTextError('INPUT_TOO_LARGE');
+  if (table.length > (limits.maxRows ?? 5_000)) throw new ToolboxTextError('INPUT_TOO_LARGE');
   const columns = Math.max(...table.map((row) => row.length));
   if (!columns || columns > 200) throw new ToolboxTextError('INVALID_TABLE');
   return table.map((row) => Array.from({ length: columns }, (_, index) => String(row[index] ?? '')));
 }
 
-export function parseDelimitedTable(source: string, delimiter: ',' | '\t') {
+export function parseDelimitedTable(source: string, delimiter: ',' | '\t', limits: TableLimits = {}) {
   const rows: string[][] = [];
   let row: string[] = [];
   let cell = '';
   let quoted = false;
   const value = String(source || '').replace(/\r\n?/gu, '\n');
-  if (value.length > 1_000_000) throw new ToolboxTextError('INPUT_TOO_LARGE');
+  if (value.length > (limits.maxCharacters ?? 1_000_000)) throw new ToolboxTextError('INPUT_TOO_LARGE');
 
   for (let index = 0; index < value.length; index += 1) {
     const character = value[index]!;
@@ -46,10 +50,12 @@ export function parseDelimitedTable(source: string, delimiter: ',' | '\t') {
     } else if (character === '"' && !cell) quoted = true;
     else if (character === delimiter) {
       row.push(cell);
+      if (row.length > 200) throw new ToolboxTextError('INVALID_TABLE');
       cell = '';
     } else if (character === '\n') {
       row.push(cell);
       rows.push(row);
+      if (rows.length > (limits.maxRows ?? 5000)) throw new ToolboxTextError('INPUT_TOO_LARGE');
       row = [];
       cell = '';
     } else cell += character;
@@ -58,7 +64,7 @@ export function parseDelimitedTable(source: string, delimiter: ',' | '\t') {
   row.push(cell);
   rows.push(row);
   if (rows.length > 1 && rows.at(-1)?.every((entry) => entry === '') && value.endsWith('\n')) rows.pop();
-  return normalizeTable(rows);
+  return normalizeTable(rows, limits);
 }
 
 function splitMarkdownRow(line: string) {
@@ -81,22 +87,23 @@ function splitMarkdownRow(line: string) {
   return cells;
 }
 
-function parseMarkdownTable(source: string) {
+function parseMarkdownTable(source: string, limits: TableLimits) {
   const lines = String(source || '')
     .replace(/\r\n?/gu, '\n')
     .split('\n')
     .filter((line) => line.trim());
   if (lines.length < 2) throw new ToolboxTextError('INVALID_TABLE');
+  if (lines.length - 1 > (limits.maxRows ?? 5000)) throw new ToolboxTextError('INPUT_TOO_LARGE');
   const rows = lines.map(splitMarkdownRow);
   const separator = rows[1];
   if (!separator?.length || !separator.every((cell) => /^:?-{3,}:?$/u.test(cell.trim()))) {
     throw new ToolboxTextError('INVALID_TABLE');
   }
   rows.splice(1, 1);
-  return normalizeTable(rows);
+  return normalizeTable(rows, limits);
 }
 
-function parseJsonTable(source: string) {
+function parseJsonTable(source: string, limits: TableLimits) {
   let value: unknown;
   try {
     value = JSON.parse(source);
@@ -104,33 +111,64 @@ function parseJsonTable(source: string) {
     throw new ToolboxTextError('INVALID_JSON');
   }
   if (!Array.isArray(value) || !value.length) throw new ToolboxTextError('INVALID_JSON');
+  if (value.length + 1 > (limits.maxRows ?? 5000)) throw new ToolboxTextError('INPUT_TOO_LARGE');
   if (value.every((entry) => Array.isArray(entry))) {
     const arrays = value as unknown[][];
     const columns = Math.max(...arrays.map((entry) => entry.length));
-    return normalizeTable([Array.from({ length: columns }, (_, index) => `column_${index + 1}`), ...arrays]);
+    if (!columns || columns > 200) throw new ToolboxTextError('INVALID_TABLE');
+    return normalizeTable([Array.from({ length: columns }, (_, index) => `column_${index + 1}`), ...arrays], limits);
   }
   if (!value.every((entry) => entry && typeof entry === 'object' && !Array.isArray(entry))) {
     throw new ToolboxTextError('INVALID_JSON');
   }
   const records = value as Record<string, unknown>[];
   const headers = [...new Set(records.flatMap((record) => Object.keys(record)))];
-  return normalizeTable([
-    headers,
-    ...records.map((record) =>
-      headers.map((header) => {
-        const cell = record[header];
-        return cell != null && typeof cell === 'object' ? JSON.stringify(cell) : String(cell ?? '');
-      }),
-    ),
-  ]);
+  if (!headers.length || headers.length > 200) throw new ToolboxTextError('INVALID_TABLE');
+  return normalizeTable(
+    [
+      headers,
+      ...records.map((record) =>
+        headers.map((header) => {
+          const cell = record[header];
+          return cell != null && typeof cell === 'object' ? JSON.stringify(cell) : String(cell ?? '');
+        }),
+      ),
+    ],
+    limits,
+  );
 }
 
-export function parseTable(source: string, format: TableFormat) {
-  if (String(source || '').length > 1_000_000) throw new ToolboxTextError('INPUT_TOO_LARGE');
-  if (format === 'csv') return parseDelimitedTable(source, ',');
-  if (format === 'tsv') return parseDelimitedTable(source, '\t');
-  if (format === 'json') return parseJsonTable(source);
-  return parseMarkdownTable(source);
+export function parseTable(source: string, format: TableFormat, limits: TableLimits = {}) {
+  if (String(source || '').length > (limits.maxCharacters ?? 1_000_000)) throw new ToolboxTextError('INPUT_TOO_LARGE');
+  if (format === 'csv') return parseDelimitedTable(source, ',', limits);
+  if (format === 'tsv') return parseDelimitedTable(source, '\t', limits);
+  if (format === 'json') return parseJsonTable(source, limits);
+  return parseMarkdownTable(source, limits);
+}
+
+/** Guess only the container/delimiter; parsing still validates the complete input. */
+export function detectTableFormat(source: string): TableFormat {
+  const sample = source
+    .replace(/^\uFEFF/u, '')
+    .trimStart()
+    .slice(0, 8192);
+  if (sample.startsWith('[') || sample.startsWith('{')) return 'json';
+  const lines = sample.split(/\r?\n/u).filter((line) => line.trim());
+  if (lines[1] && splitMarkdownRow(lines[1]).every((cell) => /^:?-{3,}:?$/u.test(cell.trim()))) return 'markdown';
+  let quoted = false,
+    tabs = 0,
+    commas = 0;
+  for (let index = 0; index < sample.length; index++) {
+    const character = sample[index];
+    if (character === '"') {
+      if (quoted && sample[index + 1] === '"') index++;
+      else quoted = !quoted;
+    } else if (!quoted) {
+      if (character === '\t') tabs++;
+      if (character === ',') commas++;
+    }
+  }
+  return tabs > commas ? 'tsv' : 'csv';
 }
 
 function escapeDelimitedCell(value: string, delimiter: string) {
@@ -172,17 +210,24 @@ function serializeJson(table: string[][]) {
   );
 }
 
-export function serializeTable(table: string[][], format: TableFormat) {
-  const normalized = normalizeTable(table);
+export function serializeTable(table: string[][], format: TableFormat, limits: TableLimits = {}) {
+  const normalized = normalizeTable(table, limits);
   if (format === 'csv') return serializeDelimited(normalized, ',');
   if (format === 'tsv') return serializeDelimited(normalized, '\t');
   if (format === 'json') return serializeJson(normalized);
   return serializeMarkdown(normalized);
 }
 
-export function convertTable(source: string, inputFormat: TableFormat, outputFormat: TableFormat) {
+export function convertTable(
+  source: string,
+  inputFormat: TableFormat,
+  outputFormat: TableFormat,
+  firstRowHeader = true,
+) {
   if (inputFormat === outputFormat) throw new ToolboxTextError('SAME_FORMAT');
-  const table = parseTable(source, inputFormat);
+  const table = parseTable(source.replace(/^\uFEFF/, ''), inputFormat);
+  if (!firstRowHeader && (inputFormat === 'csv' || inputFormat === 'tsv'))
+    table.unshift(table[0]!.map((_cell, index) => `column_${index + 1}`));
   return {
     table,
     output: serializeTable(table, outputFormat),

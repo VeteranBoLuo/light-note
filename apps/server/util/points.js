@@ -1,3 +1,4 @@
+import { isProfileBackgroundId } from '@lightnote/shared/profile-backgrounds';
 import { randomUUID } from 'node:crypto';
 import pool from '../db/index.js';
 import { getConsumable, grantItem } from './items.js';
@@ -212,6 +213,11 @@ export async function ensurePointsSchema() {
       'ALTER TABLE `user_growth` ADD COLUMN `equipped_frame` VARCHAR(64) DEFAULT NULL COMMENT "已佩戴头像框装扮 id"',
     );
   }
+  if (await columnMissing('user_growth', 'equipped_background')) {
+    await pool.query(
+      'ALTER TABLE `user_growth` ADD COLUMN `equipped_background` VARCHAR(64) DEFAULT NULL COMMENT "社区名片与公开主页共用背景"',
+    );
+  }
   if (await columnMissing('user_growth', 'lottery_paid_count')) {
     await pool.query(
       'ALTER TABLE `user_growth` ADD COLUMN `lottery_paid_count` BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT "C4 付费抽累计次数"',
@@ -411,9 +417,13 @@ export const SHOP_ITEMS = [...SHOP_UTILITY_ITEMS, ...SHOP_FRAME_ITEMS];
 export function getActiveShopItems() {
   const catalog = activeEconomyCatalog();
   // 价格目录保留历史快照；补签窗口与持有规则始终读取当前道具定义。
-  return [...catalog.utilityItems, ...catalog.frameItems].map((item) =>
+  return [...catalog.utilityItems, ...catalog.frameItems, ...(catalog.backgroundItems || [])].map((item) =>
     item.effect === 'makeup_card' ? { ...item, desc: `每次兑换 1 张。${getConsumable(item.id).desc}` } : item,
   );
+}
+
+export function getBackgroundCatalog() {
+  return ECONOMY_CATALOGS['points-economy-c9'].backgroundItems;
 }
 
 export function getActiveFrameCatalog() {
@@ -1165,10 +1175,7 @@ export async function getOwnedCosmetics(userId) {
 
 export async function getClaimedLimitedShopItemIds(userId, conn = pool) {
   if (!userId) return [];
-  const [rows] = await conn.query(
-    'SELECT item_id AS itemId FROM points_shop_item_claims WHERE user_id = ?',
-    [userId],
-  );
+  const [rows] = await conn.query('SELECT item_id AS itemId FROM points_shop_item_claims WHERE user_id = ?', [userId]);
   return [...new Set(rows.map((row) => row.itemId || row.item_id).filter(Boolean))];
 }
 
@@ -1230,10 +1237,11 @@ export async function buyItem(
       return { ok: false, reason: 'level', msg: `需达到 Lv.${item.minLevel} 才能兑换` };
     }
     if (item.type === 'title' || item.type === 'cosmetic') {
-      const [owned] = await conn.query('SELECT 1 FROM user_cosmetics WHERE user_id = ? AND cosmetic_id = ? LIMIT 1', [
-        userId,
-        item.id,
-      ]);
+      // 先前的收据 SELECT 可能建立旧快照；账号锁之后用 current read 读取最新持有权。
+      const [owned] = await conn.query(
+        'SELECT 1 FROM user_cosmetics WHERE user_id = ? AND cosmetic_id = ? LIMIT 1 FOR UPDATE',
+        [userId, item.id],
+      );
       if (owned.length) {
         await conn.rollback();
         return { ok: false, reason: 'owned', msg: '已拥有该装扮' };
@@ -1319,11 +1327,13 @@ export async function buyItem(
         ? { type: 'storage', amountMb: item.storageMb }
         : item.effect === 'ai_pack'
           ? { type: 'ai_pack', amountTokens: item.bonusTokens }
-          : item.effect === 'frame'
-            ? { type: 'frame', frameId: item.id }
-            : item.effect === 'makeup_card'
-              ? { type: 'makeup_card', amount: 1 }
-              : { type: item.effect || item.type };
+          : item.effect === 'background'
+            ? { type: 'background', backgroundId: item.id }
+            : item.effect === 'frame'
+              ? { type: 'frame', frameId: item.id }
+              : item.effect === 'makeup_card'
+                ? { type: 'makeup_card', amount: 1 }
+                : { type: item.effect || item.type };
     const result = {
       ok: true,
       idempotent: false,
@@ -1442,4 +1452,23 @@ export async function equipFrame(userId, frameId, { userRole = null } = {}) {
 export async function getEquippedFrame(userId) {
   const [rows] = await pool.query('SELECT equipped_frame FROM user_growth WHERE user_id = ? LIMIT 1', [userId]);
   return rows[0]?.equipped_frame || null;
+}
+
+export async function equipBackground(userId, backgroundId) {
+  if (backgroundId !== null && !isProfileBackgroundId(backgroundId)) {
+    return { ok: false, reason: 'invalid_background', msg: '背景不存在' };
+  }
+  if (backgroundId !== null) {
+    const [owned] = await pool.query('SELECT 1 FROM user_cosmetics WHERE user_id = ? AND cosmetic_id = ? LIMIT 1', [
+      userId,
+      backgroundId,
+    ]);
+    if (!owned.length) return { ok: false, reason: 'not_owned', msg: '请先兑换该背景' };
+  }
+  const [result] = await pool.query('UPDATE user_growth SET equipped_background = ? WHERE user_id = ?', [
+    backgroundId,
+    userId,
+  ]);
+  if (!result.affectedRows) return { ok: false, reason: 'no_growth', msg: '成长数据未初始化' };
+  return { ok: true, equipped: backgroundId };
 }

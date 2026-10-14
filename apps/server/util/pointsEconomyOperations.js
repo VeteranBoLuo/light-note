@@ -5,6 +5,7 @@ import {
   C5_POINTS_ECONOMY_VERSION,
   C6_POINTS_ECONOMY_VERSION,
   C7_POINTS_ECONOMY_VERSION,
+  C8_POINTS_ECONOMY_VERSION,
   getEconomyRuntime,
   LEGACY_POINTS_ECONOMY_VERSION,
   POINTS_ECONOMY_VERSION,
@@ -253,9 +254,13 @@ export async function assertPointsEconomyActivationReady({ db = pool, runtime = 
   }
   if (runtime.economyVersion === C4_POINTS_ECONOMY_VERSION) return true;
   if (
-    ![C5_POINTS_ECONOMY_VERSION, C6_POINTS_ECONOMY_VERSION, C7_POINTS_ECONOMY_VERSION, POINTS_ECONOMY_VERSION].includes(
-      runtime.economyVersion,
-    )
+    ![
+      C5_POINTS_ECONOMY_VERSION,
+      C6_POINTS_ECONOMY_VERSION,
+      C7_POINTS_ECONOMY_VERSION,
+      C8_POINTS_ECONOMY_VERSION,
+      POINTS_ECONOMY_VERSION,
+    ].includes(runtime.economyVersion)
   ) {
     const error = new Error('POINTS_ECONOMY_VERSION_UNSUPPORTED');
     error.code = 'POINTS_ECONOMY_VERSION_UNSUPPORTED';

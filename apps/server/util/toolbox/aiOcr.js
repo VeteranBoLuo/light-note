@@ -1,3 +1,4 @@
+import { buildOcrPages } from './ocrPages.js';
 import crypto from 'node:crypto';
 import { prepareFreeOcrInputs } from './freeOcr.js';
 import { getObjectBufferFromObs } from '../obsClient.js';
@@ -76,6 +77,7 @@ export async function executeAiOcr(job, inputs, identity, database, dependencies
             },
             {
               imageProvider: { recognizeImage },
+              includeSegments: true,
               ocrProvider: {
                 recognizePdf: (data, options) =>
                   render(data, {
@@ -113,7 +115,7 @@ export async function executeAiOcr(job, inputs, identity, database, dependencies
           coverage: result.coverage,
         })),
         coverage: { complete: !partial, warnings: partial ? ['ocr_partial'] : [] },
-        meta: { sourceCount: outputs.length, recognitionMode: 'ai', modelCalled },
+        meta: { ocrDocuments: buildOcrPages(outputs), sourceCount: outputs.length, recognitionMode: 'ai', modelCalled },
         outcome: partial ? 'partial_succeeded' : 'succeeded',
       };
     },

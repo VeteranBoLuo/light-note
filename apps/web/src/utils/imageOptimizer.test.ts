@@ -92,4 +92,53 @@ describe('图片压缩器输入边界', () => {
     ).rejects.toMatchObject({ code: 'TOO_MANY_PIXELS' });
     expect(close).toHaveBeenCalledOnce();
   });
+  it.each(['image/webp', 'image/png'] as const)('目标体积通过质量或尺寸收敛，保留真实输出信息：%s', async (format) => {
+    const close = vi.fn();
+    vi.stubGlobal('createImageBitmap', vi.fn().mockResolvedValue({ width: 1200, height: 600, close }));
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      drawImage: vi.fn(),
+      fillRect: vi.fn(),
+    } as unknown as CanvasRenderingContext2D);
+    const encode = vi
+      .spyOn(HTMLCanvasElement.prototype, 'toBlob')
+      .mockImplementation(function (callback, type, quality) {
+        callback(
+          new Blob(
+            [new Uint8Array(Math.ceil(this.width * this.height * (type === 'image/png' ? 1 : Number(quality))))],
+            { type },
+          ),
+        );
+      });
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: () => 'blob:result' });
+    const result = await optimizeImage(new File(['source'], 'photo.png', { type: 'image/png' }), {
+      format,
+      quality: 0.8,
+      targetBytes: 200000,
+      maxDimension: null,
+    });
+    expect(result.targetMet).toBe(true);
+    expect(result.outputSize).toBeLessThanOrEqual(200000);
+    expect(result.width / result.height).toBeCloseTo(2, 1);
+    expect(encode.mock.calls.length).toBeLessThanOrEqual(11);
+    expect(close).toHaveBeenCalledOnce();
+  });
+
+  it('无法达到体积时有界停止并明确返回未达标', async () => {
+    vi.stubGlobal('createImageBitmap', vi.fn().mockResolvedValue({ width: 100, height: 100, close: vi.fn() }));
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      drawImage: vi.fn(),
+    } as unknown as CanvasRenderingContext2D);
+    const encode = vi
+      .spyOn(HTMLCanvasElement.prototype, 'toBlob')
+      .mockImplementation((callback, type) => callback(new Blob([new Uint8Array(500)], { type })));
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: () => 'blob:result' });
+    const result = await optimizeImage(new File(['a'], 'a.png', { type: 'image/png' }), {
+      format: 'image/png',
+      quality: 0.8,
+      targetBytes: 1,
+      maxDimension: null,
+    });
+    expect(result.targetMet).toBe(false);
+    expect(encode.mock.calls.length).toBeLessThanOrEqual(5);
+  });
 });

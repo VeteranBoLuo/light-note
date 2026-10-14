@@ -1,32 +1,55 @@
 <template>
-  <section class="table-tool" :aria-label="t('toolbox.tool.table_converter.name')">
-    <div class="table-tool__toolbar">
-      <div>
-        <label id="table-input-format">{{ t('toolbox.local.inputFormat') }}</label>
-        <BSelect v-model:value="inputFormat" :options="inputFormatOptions" aria-labelledby="table-input-format" />
-      </div>
-      <BButton class="table-tool__swap" @click="swap"
-        ><SvgIcon :src="icon.toolbox.swap" size="16" />{{ t('toolbox.local.swapDirection') }}</BButton
+  <section class="table-tool" :class="`is-${step}`" :aria-label="t('toolbox.tool.table_converter.name')">
+    <div class="table-tool__steps" role="tablist" :aria-label="t('toolbox.local.resultView')">
+      <BChip
+        tone="neutral"
+        interactive
+        :selected="step === 'input'"
+        role="tab"
+        :aria-selected="step === 'input'"
+        @click="step = 'input'"
+        >{{ t('toolbox.local.inputStep') }}</BChip
       >
-      <div>
-        <label id="table-output-format">{{ t('toolbox.local.outputFormat') }}</label>
-        <BSelect v-model:value="outputFormat" :options="outputFormatOptions" aria-labelledby="table-output-format" />
-      </div>
-      <BUpload
-        raw-file
-        :multiple="false"
-        accept=".csv,.tsv,.json,.md,.markdown,text/csv,text/tab-separated-values,application/json,text/markdown"
-        :max-total-size="null"
-        @change="loadFile"
+      <BChip
+        tone="neutral"
+        interactive
+        :selected="step === 'result'"
+        :disabled="!output"
+        role="tab"
+        :aria-selected="step === 'result'"
+        @click="step = 'result'"
+        >{{ t('toolbox.local.resultStep') }}</BChip
       >
-        <BButton><SvgIcon :src="icon.toolbox.upload" size="15" />{{ t('toolbox.local.loadLocalFile') }}</BButton>
-      </BUpload>
-      <BButton @click="loadSample">{{ t('toolbox.local.loadSample') }}</BButton>
-      <BButton :disabled="!source && !output" @click="clear">{{ t('common.clear') }}</BButton>
     </div>
-
+    <div class="table-tool__toolbar">
+      <div
+        ><label id="table-input-format">{{ t('toolbox.local.inputFormat') }}</label
+        ><BSelect
+          v-model:value="inputFormat"
+          :options="inputFormatOptions"
+          :disabled="loading"
+          aria-labelledby="table-input-format"
+      /></div>
+      <BButton class="table-tool__swap" :disabled="loading" :aria-label="t('toolbox.local.swapDirection')" @click="swap"
+        ><SvgIcon :src="icon.toolbox.swap" size="18"
+      /></BButton>
+      <div
+        ><label id="table-output-format">{{ t('toolbox.local.outputFormat') }}</label
+        ><BSelect
+          v-model:value="outputFormat"
+          :options="outputFormatOptions"
+          :disabled="loading"
+          aria-labelledby="table-output-format"
+      /></div>
+    </div>
+    <div v-if="output && stats" class="table-tool__complete" role="status"
+      ><BChip tone="success">{{ t('toolbox.local.convertComplete') }}</BChip
+      ><span>{{ t('toolbox.local.tableSize', stats) }}</span
+      ><BButton type="text" @click="step = 'input'">{{ t('toolbox.local.editInput') }}</BButton
+      ><BButton type="text" @click="continueInDataset">{{ t('toolbox.local.continueInDataset') }}</BButton></div
+    >
     <div class="table-tool__editors">
-      <div>
+      <section class="table-tool__input">
         <header
           ><strong>{{ inputFormatLabel }}</strong
           ><span>{{ source.length.toLocaleString() }}/1,000,000</span></header
@@ -36,13 +59,34 @@
           type="textarea"
           :rows="dimension(16, 'layout')"
           :maxlength="1000000"
+          :disabled="loading"
           :placeholder="t('toolbox.local.tableInputPlaceholder')"
         />
-      </div>
-      <span class="table-tool__bridge" aria-hidden="true"><SvgIcon :src="icon.toolbox.arrow" size="18" /></span>
-      <div>
-        <header class="table-tool__result-header">
-          <strong>{{ outputFormatLabel }}</strong>
+        <div class="table-tool__source-actions">
+          <BUpload
+            raw-file
+            :multiple="false"
+            accept=".csv,.tsv,.json,.md,.markdown"
+            :max-total-size="null"
+            :disabled="loading"
+            @change="loadFile"
+            ><BButton :loading="loading"
+              ><SvgIcon :src="icon.toolbox.upload" size="15" />{{ t('toolbox.local.loadLocalFile') }}</BButton
+            ></BUpload
+          >
+          <BButton :disabled="loading" @click="loadSample">{{ t('toolbox.local.loadSample') }}</BButton
+          ><BButton :disabled="loading || !source" @click="clear">{{ t('common.clear') }}</BButton>
+        </div>
+        <BCheckbox
+          v-if="['csv', 'tsv'].includes(resolvedInputFormat)"
+          v-model:checked="firstRowHeader"
+          :disabled="loading"
+          >{{ t('toolbox.local.firstRowHeader') }}</BCheckbox
+        >
+      </section>
+      <section class="table-tool__output">
+        <header class="table-tool__result-header"
+          ><strong>{{ outputFormatLabel }}</strong>
           <div v-if="output" class="table-tool__view-switch" role="tablist" :aria-label="t('toolbox.local.resultView')">
             <BChip
               v-for="option in resultViewOptions"
@@ -53,22 +97,22 @@
               role="tab"
               :aria-selected="resultView === option.value"
               @click="resultView = option.value"
+              >{{ option.label }}</BChip
             >
-              {{ option.label }}
-            </BChip>
           </div>
-          <span>{{ output.length.toLocaleString() }}</span>
         </header>
-        <template v-if="output && resultView === 'preview'">
-          <div class="table-tool__preview" role="region" :aria-label="t('toolbox.local.tablePreview')">
-            <div class="table-tool__preview-scroll">
-              <div class="table-tool__preview-table" :style="previewTableStyle">
-                <BTable :data="previewRows" :columns="previewColumns" row-key="__rowId" />
-              </div>
-            </div>
-            <small>{{ previewNote }}</small>
-          </div>
-        </template>
+        <div
+          v-if="output && resultView === 'preview'"
+          class="table-tool__preview"
+          role="region"
+          :aria-label="t('toolbox.local.tablePreview')"
+        >
+          <div class="table-tool__preview-scroll"
+            ><div class="table-tool__preview-table" :style="previewTableStyle"
+              ><BTable :data="previewRows" :columns="previewColumns" row-key="__rowId" /></div
+          ></div>
+          <small>{{ previewNote }}</small>
+        </div>
         <BInput
           v-else
           v-model:value="output"
@@ -77,34 +121,37 @@
           readonly
           :placeholder="t('toolbox.local.outputPlaceholder')"
         />
-      </div>
+      </section>
     </div>
-
     <div v-if="error" class="table-tool__error" role="alert">{{ error }}</div>
-
     <div class="table-tool__actions">
-      <div v-if="stats"
-        ><BChip tone="neutral">{{ t('toolbox.local.tableSize', stats) }}</BChip
-        ><span>{{ t('toolbox.local.firstRowHeader') }}</span></div
+      <span>{{ t('toolbox.documentText.localHint') }}</span>
+      <template v-if="output && step === 'result'">
+        <BButton @click="copyOutput"
+          ><SvgIcon :src="icon.toolbox.copy" size="15" />{{ t('toolbox.local.copyResult') }}</BButton
+        >
+        <BButton type="primary" @click="downloadOutput"
+          ><SvgIcon :src="icon.toolbox.download" size="15" />{{ t('toolbox.local.downloadResult') }}</BButton
+        >
+      </template>
+      <BButton
+        v-else
+        type="primary"
+        :disabled="loading || !source.trim() || resolvedInputFormat === outputFormat"
+        @click="convert"
+        >{{ t('toolbox.local.convertNow') }}</BButton
       >
-      <span v-else>{{ t('toolbox.local.tableHint') }}</span>
-      <BButton :disabled="!output" @click="copyOutput"
-        ><SvgIcon :src="icon.toolbox.copy" size="15" />{{ t('toolbox.local.copyResult') }}</BButton
-      >
-      <BButton :disabled="!output" @click="downloadOutput"
-        ><SvgIcon :src="icon.toolbox.download" size="15" />{{ t('toolbox.local.downloadResult') }}</BButton
-      >
-      <BButton type="primary" :disabled="!source.trim() || inputFormat === outputFormat" @click="convert">{{
-        t('toolbox.local.convertNow')
-      }}</BButton>
     </div>
   </section>
 </template>
-
 <script setup lang="ts">
-  import { computed, ref, watch } from 'vue';
+  import { computed, onBeforeUnmount, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import { useRouter } from 'vue-router';
+  import { createToolboxDataset } from '@/utils/toolboxDataset';
+  import { stageDataset } from '@/utils/datasetHandoff';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import BChip from '@/components/base/BasicComponents/BChip.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
@@ -116,12 +163,22 @@
   import icon from '@/config/icon';
   import { useUiDensity } from '@/composables/useUiDensity';
   import { copyTextToClipboard } from '@/utils/clipboard';
-  import { convertTable, ToolboxTextError, type TableFormat } from '@/utils/toolboxTextTools';
+  import { convertTable, detectTableFormat, ToolboxTextError, type TableFormat } from '@/utils/toolboxTextTools';
   import { downloadToolboxBlob } from '@/utils/toolboxLocal';
 
   const { t } = useI18n();
+  const router = useRouter();
+  function continueInDataset() {
+    if (!resultTable.value.length) return;
+    const handoff = stageDataset(createToolboxDataset(resultTable.value, t('toolbox.local.convertedTable')));
+    void router.push({ path: '/toolbox/data_workbench', query: { handoff } });
+  }
   const { dimension } = useUiDensity();
-  const inputFormat = ref<TableFormat>('csv');
+  const inputFormat = ref<TableFormat | 'auto'>('auto');
+  const step = ref('input');
+  const firstRowHeader = ref(true);
+  const loading = ref(false);
+  let loadVersion = 0;
   const outputFormat = ref<TableFormat>('markdown');
   const source = ref('');
   const output = ref('');
@@ -130,10 +187,16 @@
   const stats = ref<{ rows: number; columns: number } | null>(null);
   const error = ref('');
   const formats: TableFormat[] = ['csv', 'tsv', 'json', 'markdown'];
+  const resolvedInputFormat = computed(() =>
+    inputFormat.value === 'auto' ? detectTableFormat(source.value) : inputFormat.value,
+  );
   const labelFor = (format: TableFormat) => (format === 'markdown' ? 'Markdown' : format.toUpperCase());
-  const inputFormatOptions = computed(() => formats.map((value) => ({ value, label: labelFor(value) })));
+  const inputFormatOptions = computed(() => [
+    { value: 'auto', label: t('toolbox.local.autoFormat') },
+    ...formats.map((value) => ({ value, label: labelFor(value) })),
+  ]);
   const outputFormatOptions = computed(() => formats.map((value) => ({ value, label: labelFor(value) })));
-  const inputFormatLabel = computed(() => labelFor(inputFormat.value));
+  const inputFormatLabel = computed(() => labelFor(resolvedInputFormat.value));
   const outputFormatLabel = computed(() => labelFor(outputFormat.value));
   const resultViewOptions = computed(() => [
     { value: 'preview' as const, label: t('toolbox.local.tablePreview') },
@@ -178,10 +241,11 @@
   function convert() {
     error.value = '';
     try {
-      const converted = convertTable(source.value, inputFormat.value, outputFormat.value);
+      const converted = convertTable(source.value, resolvedInputFormat.value, outputFormat.value, firstRowHeader.value);
       output.value = converted.output;
       resultTable.value = converted.table;
       resultView.value = 'preview';
+      step.value = 'result';
       stats.value = { rows: converted.rows, columns: converted.columns };
     } catch (cause) {
       output.value = '';
@@ -192,7 +256,7 @@
   }
 
   function swap() {
-    const previousInput = inputFormat.value;
+    const previousInput = resolvedInputFormat.value;
     inputFormat.value = outputFormat.value;
     outputFormat.value = previousInput;
     if (output.value) source.value = output.value;
@@ -209,7 +273,7 @@
       json: '[\n  { "名称": "研究简报", "类型": "笔记", "状态": "完成" },\n  { "名称": "需求清单", "类型": "文件", "状态": "待核验" }\n]',
       markdown: '| 名称 | 类型 | 状态 |\n| --- | --- | --- |\n| 研究简报 | 笔记 | 完成 |\n| 需求清单 | 文件 | 待核验 |',
     };
-    source.value = samples[inputFormat.value];
+    source.value = samples[resolvedInputFormat.value];
     output.value = '';
     resultTable.value = [];
     stats.value = null;
@@ -217,6 +281,7 @@
   }
 
   function clear() {
+    loadVersion++;
     source.value = '';
     output.value = '';
     resultTable.value = [];
@@ -235,17 +300,23 @@
 
   async function loadFile(value: File[]) {
     const file = value?.[0];
-    if (!file) return;
+    if (!file || loading.value) return;
     if (file.size > 1024 * 1024) return message.warning(t('toolbox.local.tableTooLarge'));
     const inferred = inferFormat(file.name);
     if (!inferred) return message.warning(t('toolbox.local.unsupportedTableFile'));
-    inputFormat.value = inferred;
-    if (outputFormat.value === inferred) outputFormat.value = inferred === 'markdown' ? 'csv' : 'markdown';
-    source.value = await file.text();
-    output.value = '';
-    resultTable.value = [];
-    stats.value = null;
-    error.value = '';
+    const version = ++loadVersion;
+    loading.value = true;
+    try {
+      const text = await file.text();
+      if (version !== loadVersion) return;
+      inputFormat.value = inferred;
+      if (outputFormat.value === inferred) outputFormat.value = inferred === 'markdown' ? 'csv' : 'markdown';
+      source.value = text;
+    } catch {
+      if (version === loadVersion) error.value = t('toolbox.local.invalidTable');
+    } finally {
+      if (version === loadVersion) loading.value = false;
+    }
   }
 
   async function copyOutput() {
@@ -259,7 +330,9 @@
     downloadToolboxBlob(new Blob([output.value], { type: `${type};charset=utf-8` }), `lightnote-table.${extension}`);
   }
 
-  watch([source, inputFormat, outputFormat], () => {
+  onBeforeUnmount(() => loadVersion++);
+  watch([source, inputFormat, outputFormat, firstRowHeader], () => {
+    step.value = 'input';
     output.value = '';
     resultTable.value = [];
     resultView.value = 'preview';
@@ -269,21 +342,21 @@
 </script>
 
 <style scoped lang="less">
+  @import (reference) '@/assets/css/workspace-surfaces.less';
   .table-tool {
     display: grid;
     gap: var(--ui-space-16, 16px);
+    min-width: 0;
+  }
+  .table-tool__steps {
+    display: none;
   }
   .table-tool__toolbar {
-    padding: var(--ui-space-13, 13px);
     display: grid;
-    grid-template-columns:
-      minmax(var(--ui-layout-150, 150px), 1fr) auto minmax(var(--ui-layout-150, 150px), 1fr)
-      auto auto auto;
-    gap: var(--ui-space-9, 9px);
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    gap: var(--ui-space-12, 12px);
     align-items: end;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 14px;
-    background: var(--card-background);
+    max-width: var(--ui-layout-600, 600px);
   }
   .table-tool__toolbar > div {
     min-width: 0;
@@ -291,75 +364,64 @@
     gap: var(--ui-space-6, 6px);
   }
   .table-tool__toolbar label {
-    color: var(--desc-color);
     font-size: var(--ui-font-12, 12px);
-    font-weight: 650;
+    color: var(--workspace-muted);
   }
-  .table-tool__swap {
-    align-self: end;
+  .table-tool__complete {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--ui-space-8, 8px);
+  }
+  .table-tool__complete > .b_btn {
+    margin-left: auto;
   }
   .table-tool__editors {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-    gap: var(--ui-space-12, 12px);
-    align-items: stretch;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--ui-space-20, 20px);
   }
-  .table-tool__editors > div {
+  .table-tool__editors > section {
     min-width: 0;
-    padding: var(--ui-space-12, 12px);
-    display: grid;
-    gap: var(--ui-space-9, 9px);
-    border: 1px solid var(--surface-border-color);
-    border-radius: 14px;
-    background: var(--card-background);
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-space-12, 12px);
   }
   .table-tool__editors header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: var(--ui-space-10, 10px);
-  }
-  .table-tool__editors header span {
-    color: var(--desc-color);
-    font-size: var(--ui-font-11, 11px);
-  }
-  .table-tool__result-header {
+    flex-wrap: wrap;
+    gap: var(--ui-space-8, 8px);
     min-height: var(--ui-layout-28, 28px);
   }
-  .table-tool__view-switch {
-    margin-left: auto;
-    display: flex;
-    align-items: center;
-    gap: var(--ui-space-5, 5px);
+  .table-tool__editors header > span {
+    font-size: var(--ui-font-11, 11px);
+    color: var(--workspace-muted);
   }
-  .table-tool__result-header > span {
-    min-width: var(--ui-layout-34, 34px);
-    text-align: right;
+  .table-tool__view-switch {
+    display: flex;
+    gap: var(--ui-space-4, 4px);
   }
   .table-tool__editors :deep(textarea) {
     min-height: var(--ui-layout-340, 340px);
     resize: vertical;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    line-height: 1.55;
+    font-family: ui-monospace, monospace;
+    line-height: 1.6;
   }
   .table-tool__preview {
-    height: var(--ui-layout-340, 340px);
-    padding: var(--ui-space-10, 10px);
-    box-sizing: border-box;
+    .workspace-content-surface();
+    min-height: var(--ui-layout-340, 340px);
     display: flex;
     flex-direction: column;
-    gap: var(--ui-space-9, 9px);
-    overflow: hidden;
-    border: 1px solid var(--surface-border-color);
+    gap: var(--ui-space-12, 12px);
+    border: 1px solid var(--workspace-border);
     border-radius: 8px;
-    background: var(--workspace-panel-bg-color);
+    padding: var(--ui-space-12, 12px);
   }
   .table-tool__preview-scroll {
-    flex: 1;
     min-width: 0;
-    min-height: 0;
     overflow: auto;
-    overscroll-behavior: contain;
   }
   .table-tool__preview-table {
     width: 100%;
@@ -368,95 +430,83 @@
     box-shadow: none;
   }
   .table-tool__preview > small {
+    color: var(--workspace-muted);
+    font-size: var(--ui-font-12, 12px);
     margin-top: auto;
-    color: var(--desc-color);
-    font-size: var(--ui-font-11, 11px);
   }
-  .table-tool__bridge {
-    align-self: center;
-    width: var(--ui-layout-34, 34px);
-    height: var(--ui-layout-34, 34px);
-    display: grid;
-    place-items: center;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 50%;
-    color: var(--primary-color);
-    background: var(--card-background);
+  .table-tool__source-actions,
+  .table-tool__actions {
+    display: flex;
+    gap: var(--ui-space-8, 8px);
+    align-items: center;
+    flex-wrap: wrap;
   }
   .table-tool__actions {
-    padding: var(--ui-space-11, 11px) var(--ui-space-13, 13px);
-    display: flex;
-    align-items: center;
+    .workspace-content-surface();
+    padding: var(--ui-space-12, 12px) 0;
+    border-top: 1px solid var(--workspace-divider);
     justify-content: flex-end;
-    gap: var(--ui-space-9, 9px);
-    border: 1px solid var(--surface-border-color);
-    border-radius: 13px;
-    background: var(--workspace-panel-bg-color);
   }
-  .table-tool__actions > div,
   .table-tool__actions > span {
     margin-right: auto;
-  }
-  .table-tool__actions > div {
-    display: flex;
-    align-items: center;
-    gap: var(--ui-space-8, 8px);
-  }
-  .table-tool__actions > div span,
-  .table-tool__actions > span {
-    color: var(--desc-color);
+    color: var(--workspace-muted);
     font-size: var(--ui-font-12, 12px);
   }
   .table-tool__error {
-    padding: var(--ui-space-11, 11px) var(--ui-space-13, 13px);
-    border: 1px solid var(--danger-color, #dc3e4d);
-    border-radius: 11px;
-    color: var(--danger-color, #dc3e4d);
-    background: var(--card-background);
-  }
-  @media (max-width: 1180px) {
-    .table-tool__toolbar {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-  }
-  @media (max-width: 900px) {
-    .table-tool__editors {
-      grid-template-columns: 1fr;
-    }
-    .table-tool__bridge {
-      justify-self: center;
-      transform: rotate(90deg);
-    }
+    border: 1px solid var(--danger-color);
+    color: var(--danger-color);
+    padding: var(--ui-space-12, 12px);
+    border-radius: 8px;
   }
   @media (max-width: 767px) {
-    .table-tool__toolbar {
-      grid-template-columns: 1fr;
+    .table-tool {
+      display: flex;
+      flex-direction: column;
+      min-height: calc(100vh - var(--ui-layout-150, 150px));
     }
-    .table-tool__editors :deep(textarea) {
-      min-height: var(--ui-layout-260, 260px);
-    }
-    .table-tool__preview {
-      height: var(--ui-layout-260, 260px);
-    }
-    .table-tool__result-header {
-      flex-wrap: wrap;
-    }
-    .table-tool__view-switch {
-      order: 3;
-      width: 100%;
-      margin-left: 0;
+    .table-tool__steps :deep(.b-chip--selected) {
+      color: var(--primary-button-text-color, #fff);
+      border-color: var(--primary-color);
+      background: var(--primary-color);
     }
     .table-tool__actions {
-      align-items: stretch;
-      flex-direction: column;
+      margin-top: auto;
     }
-    .table-tool__actions > div,
+
+    .table-tool__steps {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--ui-space-8, 8px);
+    }
+    .table-tool__steps :deep(.b-chip) {
+      border-radius: 8px;
+      min-height: var(--ui-control-40, 40px);
+    }
+    .table-tool__editors {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .is-result .table-tool__input,
+    .is-result .table-tool__toolbar,
+    .is-input .table-tool__output,
+    .is-input .table-tool__complete {
+      display: none;
+    }
+    .table-tool__actions {
+      position: sticky;
+      bottom: 0;
+      z-index: 2;
+      padding-bottom: calc(var(--ui-space-12, 12px) + env(safe-area-inset-bottom, 0px));
+    }
     .table-tool__actions > span {
-      margin-right: 0;
+      width: 100%;
     }
-  }
-  html.light-note-mobile-rendering .table-tool__actions {
-    background: var(--card-background);
-    box-shadow: none;
+    .table-tool__actions > .b_btn {
+      flex: 1;
+      min-height: var(--ui-control-44, 44px);
+    }
+    .table-tool__editors :deep(textarea),
+    .table-tool__preview {
+      min-height: var(--ui-layout-260, 260px);
+    }
   }
 </style>

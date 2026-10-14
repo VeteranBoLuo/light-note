@@ -157,6 +157,7 @@ export type ToolboxKnowledgeIssue = {
 
 export type ToolboxKnowledgeOverview = {
   scannedAt: string;
+  snapshotVersion?: string;
   policy: { staleAfterDays: number; deepNoteDepth: number };
   summary: {
     total: number;
@@ -174,6 +175,9 @@ export type ToolboxKnowledgeOverview = {
   issueCounts: Record<string, number>;
   issues: ToolboxKnowledgeIssue[];
   issueTotal: number;
+  selectedIssueTotal?: number;
+  selectedSeverityCounts?: { high: number; medium: number; low: number };
+  scopeOptions?: Array<{ id: string; path: string }>;
   recommendations: Array<{ code: string; count: number; priority: 'high' | 'medium' | 'low' }>;
 };
 
@@ -194,7 +198,7 @@ export type ToolboxQuote = {
 };
 
 export type ToolboxJob = {
-  extraction?: {title:string;status:string;processed:number;total:number};
+  extraction?: { title: string; status: string; processed: number; total: number };
   sourceWorkspaceId?: string | null;
   id: string;
   toolId: string;
@@ -303,8 +307,15 @@ export async function fetchToolboxHome(): Promise<ToolboxHomeOverview> {
   return parseToolboxHomeOverview(response.data);
 }
 
-export async function fetchToolboxKnowledgeOverview(): Promise<ToolboxKnowledgeOverview> {
-  const response = await apiBaseGet('/api/toolbox/knowledge-overview', undefined, { silent: true });
+export async function fetchToolboxKnowledgeOverview(params?: {
+  snapshot?: string;
+  rootId?: string;
+  issueKind?: string;
+  includeOptional?: boolean;
+  offset?: number;
+  limit?: number;
+}): Promise<ToolboxKnowledgeOverview> {
+  const response = await apiBaseGet('/api/toolbox/knowledge-overview', params, { silent: true });
   if (response.status !== 200) throw apiFailure(response, 'TOOLBOX_KNOWLEDGE_OVERVIEW_FAILED');
   return response.data as ToolboxKnowledgeOverview;
 }
@@ -665,8 +676,13 @@ export async function deleteTranslationHistory(
   return response.data;
 }
 
-export async function reviewToolboxComparison(artifactId: string, input: { version: number; sourceId: string; columnIndex: number; value: string }): Promise<{ version: number }> {
-  const response = await apiBasePatch(`/api/toolbox/artifacts/${encodeURIComponent(artifactId)}/comparison`, input, { silent: true });
+export async function reviewToolboxComparison(
+  artifactId: string,
+  input: { version: number; sourceId: string; columnIndex: number; value: string },
+): Promise<{ version: number }> {
+  const response = await apiBasePatch(`/api/toolbox/artifacts/${encodeURIComponent(artifactId)}/comparison`, input, {
+    silent: true,
+  });
   if (response.status !== 200) throw apiFailure(response, 'TOOLBOX_COMPARISON_FAILED');
   return response.data;
 }

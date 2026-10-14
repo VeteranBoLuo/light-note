@@ -403,6 +403,8 @@
                   </template>
                   <template #identityActions
                     ><div class="profile-summary-actions">
+                      <BButton v-if="profile.isOwn && !preview && (profile.backgroundShopEnabled || profile.backgroundId)" type="text"
+                        @click="go('/growth?section=rewards&reward=shop&focus=background')">{{ t('profileBackgrounds.change') }}</BButton>
                       <BButton type="text" v-if="profile.isOwn && !preview" @click="accountEditorOpen = true">{{
                         t('community.feed.editProfile')
                       }}</BButton>
@@ -1894,6 +1896,13 @@
     justify-content: space-between;
     gap: var(--ui-space-24, 24px);
     padding: var(--ui-space-24, 24px) 0 var(--ui-space-12, 12px);
+  }
+  .public-profile-card :deep(.chat-profile-content__hero.is-decorated) {
+    padding: var(--ui-space-24, 24px);
+  }
+  .public-profile-card :deep(.is-decorated .profile-summary-actions .text_btn) {
+    background: var(--card-background);
+    color: var(--primary-color);
   }
   .public-profile-card :deep(.chat-profile-content__identity) {
     flex: 1;

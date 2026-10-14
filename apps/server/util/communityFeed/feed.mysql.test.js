@@ -72,7 +72,7 @@ describe.skipIf(!socketPath)('P2 real database boundaries', () => {
       "CREATE TABLE user (id varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci PRIMARY KEY, role varchar(255),del_flag varchar(255) DEFAULT '0', alias varchar(80),preferences JSON,head_picture TEXT,create_time DATETIME DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
     );
     await db.query(
-      'CREATE TABLE user_growth(user_id varchar(255) PRIMARY KEY,exp int,level int DEFAULT 1,equipped_title varchar(80),equipped_frame varchar(80))',
+      'CREATE TABLE user_growth(user_id varchar(255) PRIMARY KEY,exp int,level int DEFAULT 1,equipped_title varchar(80),equipped_frame varchar(80),equipped_background varchar(64))',
     );
     await db.query(
       'CREATE TABLE user_achievements (user_id varchar(255),achievement_key varchar(80),unlocked_at datetime,claimed_at datetime,reward_points_snapshot int,reward_frame_id_snapshot varchar(80),policy_version varchar(80),PRIMARY KEY(user_id,achievement_key))',

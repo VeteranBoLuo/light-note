@@ -95,6 +95,8 @@ export interface CommunityProfileActionsState {
 }
 
 export interface CommunityChatAuthorProfile extends CommunityChatMessageAuthor {
+  backgroundId?: string | null;
+  backgroundShopEnabled?: boolean;
   communityActions?: CommunityProfileActionsState | null;
   bio: string;
   communityTenureLabel: string | null;

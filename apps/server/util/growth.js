@@ -418,10 +418,11 @@ export async function getGrowth(userId, { userRole = null, db = pool, calendar =
   let points = 0;
   let equippedTitle = null;
   let equippedFrame = null;
+  let equippedBackground = null;
   let storageBonus = 0;
   if (!isGuest) {
     const [rows] = await db.query(
-      'SELECT exp, streak, last_checkin_date, last_notified_level, streak_protect_cards, points, equipped_title, equipped_frame, storage_bonus_mb FROM user_growth WHERE user_id = ?',
+      'SELECT exp, streak, last_checkin_date, last_notified_level, streak_protect_cards, points, equipped_title, equipped_frame, equipped_background, storage_bonus_mb FROM user_growth WHERE user_id = ?',
       [userId],
     );
     if (rows[0]) {
@@ -433,6 +434,7 @@ export async function getGrowth(userId, { userRole = null, db = pool, calendar =
       points = Number(rows[0].points || 0);
       equippedTitle = rows[0].equipped_title || null;
       equippedFrame = rows[0].equipped_frame || null;
+      equippedBackground = rows[0].equipped_background || null;
       storageBonus = Number(rows[0].storage_bonus_mb || 0);
     }
     // 补签判定:有卡时查今天之前的补签窗口；今天是否签到不影响补历史漏签。
@@ -478,6 +480,7 @@ export async function getGrowth(userId, { userRole = null, db = pool, calendar =
     points, // 积分余额(消费货币)
     equippedTitle, // 已佩戴称号 id
     equippedTitleName: titleName(equippedTitle), // 称号显示名
+    equippedBackground,
     equippedFrame, // 已佩戴头像框装扮 id
     canUseProtectCard, // 补签窗口内存在漏签且有卡
     makeupDays, // 可补的 YYYYMMDD，按由近到远排序；前端仅展示这些日期

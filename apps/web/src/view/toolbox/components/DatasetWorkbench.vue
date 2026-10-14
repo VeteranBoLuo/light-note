@@ -13,6 +13,7 @@
           class="dataset-operation"
           :class="{ 'is-selected': activeToolId === mode.id }"
           :aria-pressed="activeToolId === mode.id"
+          :disabled="loading"
           @click="selectMode(mode.id)"
         >
           <span><SvgIcon :src="mode.icon" size="18" /></span>
@@ -26,66 +27,38 @@
 
     <div class="dataset-mode-select">
       <label id="dataset-mode-select-label">{{ t('toolbox.dataset.modeTitle') }}</label>
-      <BSelect v-model:value="selectedMode" :options="modeSelectOptions" aria-labelledby="dataset-mode-select-label" />
+      <BSelect
+        v-model:value="selectedMode"
+        :options="modeSelectOptions"
+        :disabled="loading"
+        aria-labelledby="dataset-mode-select-label"
+      />
     </div>
 
-    <div class="dataset-workbench__surface">
-      <div
-        v-if="isQualityTool"
-        class="dataset-stagebar is-quality"
-        role="list"
-        :aria-label="t('toolbox.dataset.workflow')"
-      >
-        <div
-          class="dataset-stage"
-          :class="{ 'is-active': datasets.length === 0, 'is-complete': datasets.length > 0 }"
-          role="listitem"
+    <div class="dataset-workbench__surface" @dragover.prevent @drop.prevent="onDrop">
+      <div class="dataset-import-toolbar">
+        <BButton :disabled="loading || running" @click="pasteVisible = true">{{
+          t('toolbox.dataset.pasteData')
+        }}</BButton>
+        <BButton
+          type="text"
+          :disabled="loading"
+          :aria-expanded="importSettings"
+          @click="importSettings = !importSettings"
+          >{{ t('toolbox.dataset.importSettings') }}</BButton
         >
-          <span>01</span>
-          <div
-            ><strong>{{ t('toolbox.dataset.stageLoad') }}</strong
-            ><small>{{ stageLoadDescription }}</small></div
-          >
-        </div>
-        <div
-          class="dataset-stage"
-          :class="{ 'is-active': datasets.length > 0, 'is-complete': Boolean(qualityReport) }"
-          role="listitem"
-        >
-          <span>02</span>
-          <div
-            ><strong>{{ t('toolbox.dataset.qualityStageResult') }}</strong
-            ><small>{{ t('toolbox.dataset.qualityStageResultHint') }}</small></div
-          >
-        </div>
       </div>
-
-      <div v-else class="dataset-stagebar" role="list" :aria-label="t('toolbox.dataset.workflow')">
-        <div class="dataset-stage is-complete" role="listitem">
-          <span>01</span>
-          <div
-            ><strong>{{ t('toolbox.dataset.stageLoad') }}</strong
-            ><small>{{ stageLoadDescription }}</small></div
-          >
-        </div>
-        <div
-          class="dataset-stage"
-          :class="{ 'is-active': datasets.length > 0, 'is-complete': hasOutcome }"
-          role="listitem"
-        >
-          <span>02</span>
-          <div
-            ><strong>{{ t('toolbox.dataset.stageConfigure') }}</strong
-            ><small>{{ t('toolbox.dataset.stageConfigureHint') }}</small></div
-          >
-        </div>
-        <div class="dataset-stage" :class="{ 'is-active': hasOutcome }" role="listitem">
-          <span>03</span>
-          <div
-            ><strong>{{ t('toolbox.dataset.stageExport') }}</strong
-            ><small>{{ t('toolbox.dataset.stageExportHint') }}</small></div
-          >
-        </div>
+      <div v-if="importSettings" class="dataset-import-settings">
+        <div class="dataset-field"
+          ><label id="dataset-encoding">{{ t('toolbox.dataset.encoding') }}</label
+          ><BSelect
+            v-model:value="encoding"
+            :options="encodingOptions"
+            :disabled="loading"
+            aria-labelledby="dataset-encoding"
+        /></div>
+        <BCheckbox v-model="firstRowHeader" :disabled="loading">{{ t('toolbox.local.firstRowHeader') }}</BCheckbox>
+        <small>{{ t('toolbox.dataset.importSettingsHint') }}</small>
       </div>
 
       <section v-if="datasets.length === 0" class="dataset-empty">
@@ -120,6 +93,9 @@
               <span><SvgIcon :src="icon.toolbox.table" size="18" /></span>
               <div>
                 <strong>{{ dataset.name }}</strong>
+                <small v-if="dataset.worksheetName">{{
+                  t('toolbox.dataset.selectedWorksheet', { name: dataset.worksheetName })
+                }}</small>
                 <small>{{
                   t('toolbox.dataset.shape', { rows: dataset.rows.length, columns: dataset.headers.length })
                 }}</small>
@@ -362,7 +338,7 @@
                 ><strong>{{ t('toolbox.dataset.errorTitle') }}</strong
                 ><span>{{ error }}</span></div
               >
-              <BButton v-if="isQualityTool" size="small" :loading="running" @click="runTool">{{
+              <BButton v-if="isQualityTool" size="small" :disabled="!canRun" :loading="running" @click="runTool">{{
                 t('common.retry')
               }}</BButton>
             </div>
@@ -425,14 +401,24 @@
                 >
               </div>
               <div v-if="diffResult.changed.length" class="dataset-change-list">
-                <article v-for="change in diffResult.changed.slice(0, 12)" :key="change.key">
+                <article v-for="change in diffResult.changed.slice(0, diffLimit)" :key="change.key">
                   <strong>{{ change.key }}</strong>
-                  <span>{{ change.columns.join(' · ') }}</span>
+                  <div class="dataset-change-values"
+                    ><div v-for="column in change.columns" :key="column"
+                      ><strong>{{ column }}</strong
+                      ><del>{{ change.before[column] || '—' }}</del
+                      ><span aria-hidden="true">→</span><ins>{{ change.after[column] || '—' }}</ins></div
+                    ></div
+                  >
                   <BChip tone="pending">{{
                     t('toolbox.dataset.changedColumnCount', { count: change.columns.length })
                   }}</BChip>
                 </article>
               </div>
+              <BButton v-if="diffResult.changed.length > diffLimit" @click="diffLimit += 30">{{
+                t('toolbox.dataset.moreChanges')
+              }}</BButton>
+              <small>{{ t('toolbox.dataset.diffExportHint') }}</small>
             </template>
 
             <template v-else-if="validationIssues">
@@ -508,12 +494,77 @@
         </div>
       </template>
     </div>
+    <BModal
+      :visible="pasteVisible"
+      :title="t('toolbox.dataset.pasteData')"
+      width="min(94vw, var(--ui-layout-640, 640px))"
+      @close="pasteVisible = false"
+    >
+      <div class="dataset-paste">
+        <p>{{ t('toolbox.dataset.pasteHint') }}</p>
+        <BInput
+          v-model:value="pasteSource"
+          type="textarea"
+          :rows="dimension(12, 'layout')"
+          :maxlength="1000000"
+          :placeholder="t('toolbox.local.tableInputPlaceholder')"
+        />
+        <BCheckbox v-model="firstRowHeader">{{ t('toolbox.local.firstRowHeader') }}</BCheckbox>
+        <p v-if="pasteError" role="alert" class="dataset-paste-error">{{ pasteError }}</p>
+      </div>
+      <template #footer
+        ><BButton @click="pasteVisible = false">{{ t('common.cancel') }}</BButton
+        ><BButton type="primary" :disabled="!pasteSource.trim()" @click="importPaste">{{
+          t('toolbox.dataset.usePastedData')
+        }}</BButton></template
+      >
+    </BModal>
+    <BModal
+      :visible="worksheetChoices.length > 0"
+      :title="t('toolbox.dataset.chooseWorksheets')"
+      width="min(90vw, var(--ui-layout-520, 520px))"
+      @close="cancelWorksheetSelection"
+    >
+      <div class="dataset-worksheet-picker">
+        <p>{{ t('toolbox.dataset.worksheetHint') }}</p>
+        <div v-for="(choice, index) in worksheetChoices" :key="index" class="dataset-field">
+          <label :id="`dataset-worksheet-${index}`">{{ choice.source.name }}</label>
+          <BSelect
+            v-model:value="choice.worksheetId"
+            :aria-labelledby="`dataset-worksheet-${index}`"
+            :placeholder="t('toolbox.dataset.chooseWorksheet')"
+            :options="
+              choice.source.worksheets.map((sheet) => ({
+                value: sheet.id,
+                label: t('toolbox.dataset.worksheetOption', {
+                  name: sheet.name,
+                  rows: sheet.rows,
+                  columns: sheet.columns,
+                }),
+              }))
+            "
+          />
+        </div>
+      </div>
+      <template #footer>
+        <div class="dataset-worksheet-actions">
+          <BButton @click="cancelWorksheetSelection">{{ t('common.cancel') }}</BButton>
+          <BButton
+            type="primary"
+            :disabled="worksheetChoices.some((choice) => choice.worksheetId === null)"
+            @click="confirmWorksheetSelection"
+            >{{ t('toolbox.dataset.loadWorksheets') }}</BButton
+          >
+        </div>
+      </template>
+    </BModal>
   </section>
 </template>
 
 <script setup lang="ts">
-  import { computed, reactive, ref, watch } from 'vue';
+  import { computed, markRaw, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import { useUiDensity } from '@/composables/useUiDensity';
   import { useRoute, useRouter } from 'vue-router';
   import type { ToolboxToolId } from '@lightnote/shared/toolbox-protocol';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -521,6 +572,7 @@
   import BChip from '@/components/base/BasicComponents/BChip.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
   import type { Column } from '@/components/base/BasicComponents/BTable/config';
@@ -538,7 +590,9 @@
     mergeToolboxDatasets,
     pivotToolboxDataset,
     profileToolboxDataset,
-    readToolboxDatasetFile,
+    prepareToolboxDatasetFile,
+    parseDatasetText,
+    type DatasetImportOptions,
     serializeToolboxDataset,
     splitToolboxDataset,
     TOOLBOX_DATASET_MAX_TOTAL_BYTES,
@@ -555,8 +609,10 @@
     type DatasetValidationType,
     type DatasetValueType,
     type ToolboxDataset,
+    type PreparedToolboxDatasetFile,
   } from '@/utils/toolboxDataset';
-  import type { TableFormat } from '@/utils/toolboxTextTools';
+  import { detectTableFormat, type TableFormat } from '@/utils/toolboxTextTools';
+  import { takeDataset } from '@/utils/datasetHandoff';
 
   type DatasetModeId = Extract<
     ToolboxToolId,
@@ -574,6 +630,7 @@
 
   const props = defineProps<{ toolId: DatasetWorkbenchToolId }>();
   const { t } = useI18n();
+  const { dimension } = useUiDensity();
   const route = useRoute();
   const router = useRouter();
   const datasetModeIds = [
@@ -604,12 +661,42 @@
   const appliedHistory = ref<ToolboxDataset[][]>([]);
   const datasetSizes = ref<number[]>([]);
   const loading = ref(false);
+  let loadVersion = 0;
+  const worksheetChoices = ref<Array<{ source: PreparedToolboxDatasetFile; worksheetId: number | null }>>([]);
+  let resolveWorksheetSelection: ((value: Map<PreparedToolboxDatasetFile, number> | null) => void) | null = null;
+
+  function finishWorksheetSelection(confirmed: boolean) {
+    const selection = new Map(worksheetChoices.value.map((choice) => [choice.source, choice.worksheetId!]));
+    const resolve = resolveWorksheetSelection;
+    resolveWorksheetSelection = null;
+    worksheetChoices.value = [];
+    resolve?.(confirmed ? selection : null);
+  }
+  function cancelWorksheetSelection() {
+    finishWorksheetSelection(false);
+  }
+  function confirmWorksheetSelection() {
+    if (worksheetChoices.value.some((choice) => choice.worksheetId === null)) return;
+    finishWorksheetSelection(true);
+  }
+  function chooseWorksheets(sources: PreparedToolboxDatasetFile[]) {
+    worksheetChoices.value = sources.map((source) => ({ source: markRaw(source), worksheetId: null }));
+    return new Promise<Map<PreparedToolboxDatasetFile, number> | null>((resolve) => {
+      resolveWorksheetSelection = resolve;
+    });
+  }
+
+  function onDrop(event: DragEvent) {
+    if (!loading.value && !running.value && event.dataTransfer?.files.length)
+      void loadFiles(Array.from(event.dataTransfer.files));
+  }
   const running = ref(false);
   const error = ref('');
   const resultDataset = ref<ToolboxDataset | null>(null);
   const qualityReport = ref<DatasetQualityReport | null>(null);
   const validationIssues = ref<DatasetValidationIssue[] | null>(null);
   const diffResult = ref<DatasetDiffResult | null>(null);
+  const diffLimit = ref(30);
   const splitResults = ref(new Map<string, ToolboxDataset>());
   const chartReady = ref(false);
   const exportFormat = ref<TableFormat>('csv');
@@ -790,11 +877,6 @@
   const controlTitle = computed(() => t(`toolbox.dataset.${copyKey.value.controlTitle}`));
   const controlDescription = computed(() => t(`toolbox.dataset.${copyKey.value.controlTitle}Hint`));
   const runLabel = computed(() => t(`toolbox.dataset.${copyKey.value.run}`));
-  const stageLoadDescription = computed(() =>
-    datasets.value.length
-      ? t('toolbox.dataset.stageLoaded', { count: visibleDatasets.value.length })
-      : t('toolbox.dataset.stageLoadHint'),
-  );
   const canvasTitle = computed(() =>
     isQualityTool.value && running.value
       ? t('toolbox.dataset.qualityRunningTitle')
@@ -830,7 +912,7 @@
         : 'is-risk',
   );
   const canRun = computed(() => {
-    if (!primaryDataset.value || running.value) return false;
+    if (!primaryDataset.value || running.value || loading.value) return false;
     if (activeToolId.value === 'data_validator') return validationRules.value.length > 0;
     if (activeToolId.value === 'pivot_analysis')
       return Boolean(groupColumn.value && (aggregate.value === 'count' || valueColumn.value));
@@ -851,6 +933,7 @@
   }
 
   function selectMode(mode: DatasetModeId) {
+    if (loading.value) return;
     if (resultDataset.value && resultDataset.value !== primaryDataset.value) {
       Alert.alert({
         title: t('toolbox.dataset.pendingTitle'),
@@ -899,6 +982,7 @@
     qualityReport.value = null;
     validationIssues.value = null;
     diffResult.value = null;
+    diffLimit.value = 30;
     splitResults.value = new Map();
     chartReady.value = false;
   }
@@ -917,41 +1001,98 @@
     anonymizeColumns.value = [];
   }
 
+  const importSettings = ref(false),
+    firstRowHeader = ref(true);
+  const encoding = ref<NonNullable<DatasetImportOptions['encoding']>>('utf-8');
+  const encodingOptions = [
+    { value: 'utf-8', label: 'UTF-8' },
+    { value: 'gb18030', label: 'GB18030 / GBK' },
+    { value: 'utf-16le', label: 'UTF-16 LE' },
+  ];
+  const pasteVisible = ref(false),
+    pasteSource = ref(''),
+    pasteError = ref('');
+  async function acceptDataset(dataset: ToolboxDataset, bytes = 0) {
+    const append = maxFiles.value === 2 && datasets.value.length > 0;
+    resetOutcome();
+    datasets.value = append ? [datasets.value[0]!, dataset] : [dataset];
+    originalDatasets.value = datasets.value;
+    appliedHistory.value = [];
+    datasetSizes.value = append ? [datasetSizes.value[0] || 0, bytes] : [bytes];
+    initializeControls();
+    if (isQualityTool.value) await runTool();
+  }
+  async function importPaste() {
+    pasteError.value = '';
+    try {
+      const dataset = parseDatasetText(
+        pasteSource.value,
+        detectTableFormat(pasteSource.value),
+        t('toolbox.dataset.pastedName'),
+        firstRowHeader.value,
+      );
+      await acceptDataset(dataset, new Blob([pasteSource.value]).size);
+      pasteVisible.value = false;
+    } catch {
+      pasteError.value = t('toolbox.dataset.loadFailed');
+    }
+  }
+  onMounted(async () => {
+    if (!route.query.handoff) return;
+    const dataset = takeDataset(route.query.handoff);
+    if (dataset) await acceptDataset(dataset);
+    else message.warning(t('toolbox.dataset.handoffExpired'));
+    const query = { ...route.query };
+    delete query.handoff;
+    void router.replace({ path: route.path, query });
+  });
+
   async function loadFiles(value: File[]) {
-    const files = Array.isArray(value) ? value.slice(0, maxFiles.value) : [];
+    if (loading.value || running.value) return;
+    const files = Array.isArray(value) ? value : [];
     if (!files.length) return;
+    if (files.length > maxFiles.value) {
+      message.warning(t('toolbox.dataset.tooManyFiles', { count: maxFiles.value }));
+      return;
+    }
     const appendSecond = maxFiles.value === 2 && datasets.value.length > 0 && files.length === 1;
     const nextSizes = appendSecond ? [datasetSizes.value[0] || 0, files[0]!.size] : files.map((file) => file.size);
     if (nextSizes.reduce((sum, size) => sum + size, 0) > TOOLBOX_DATASET_MAX_TOTAL_BYTES) {
       message.warning(t('toolbox.dataset.totalTooLarge', { size: 30 }));
       return;
     }
-    if (activeToolId.value === 'table_diff' && !appendSecond && files.length !== 2) {
-      message.warning(t('toolbox.dataset.needTwoFiles'));
-      return;
-    }
-    const previousDatasets = datasets.value;
-    const previousDatasetSizes = datasetSizes.value;
+    const version = ++loadVersion;
     loading.value = true;
-    resetOutcome();
     try {
-      const loaded = await Promise.all(files.map(readToolboxDatasetFile));
+      const sources = await Promise.all(
+        files.map((file) =>
+          prepareToolboxDatasetFile(file, { encoding: encoding.value, firstRowHeader: firstRowHeader.value }),
+        ),
+      );
+      if (version !== loadVersion) return;
+      const multipleSheets = sources.filter((source) => source.worksheets.length > 1);
+      const selection = multipleSheets.length
+        ? await chooseWorksheets(multipleSheets)
+        : new Map<PreparedToolboxDatasetFile, number>();
+      if (selection === null || version !== loadVersion) return;
+      const loaded = sources.map((source) => source.read(selection.get(source)));
+      resetOutcome();
       datasets.value = appendSecond ? [datasets.value[0]!, loaded[0]!] : loaded;
       originalDatasets.value = datasets.value;
       appliedHistory.value = [];
       datasetSizes.value = nextSizes;
       initializeControls();
+      loading.value = false;
       if (isQualityTool.value) await runTool();
     } catch (cause) {
-      datasets.value = previousDatasets;
-      datasetSizes.value = previousDatasetSizes;
+      if (version !== loadVersion) return;
       error.value =
         cause instanceof Error && cause.message.startsWith('toolbox.')
           ? t(cause.message)
           : t('toolbox.dataset.loadFailed');
       message.error(error.value);
     } finally {
-      loading.value = false;
+      if (version === loadVersion) loading.value = false;
     }
   }
 
@@ -977,6 +1118,7 @@
         ['A-005', '西南', '夏可', '610', 'xia@example.com'],
       ],
     };
+    if (maxFiles.value === 2) first.rows.splice(3, 1);
     datasets.value = maxFiles.value === 2 ? [first, second] : [first];
     originalDatasets.value = datasets.value;
     appliedHistory.value = [];
@@ -987,6 +1129,9 @@
   }
 
   function clearAll() {
+    loadVersion++;
+    cancelWorksheetSelection();
+    loading.value = false;
     datasets.value = [];
     originalDatasets.value = [];
     appliedHistory.value = [];
@@ -1115,6 +1260,9 @@
   }
 
   watch(activeToolId, async () => {
+    loadVersion++;
+    cancelWorksheetSelection();
+    loading.value = false;
     resetOutcome();
     initializeControls();
     if (isQualityTool.value && primaryDataset.value) await runTool();
@@ -1127,9 +1275,71 @@
       if (mode !== activeToolId.value) activeToolId.value = mode;
     },
   );
+  onBeforeUnmount(() => {
+    loadVersion++;
+    cancelWorksheetSelection();
+  });
 </script>
 
 <style scoped lang="less">
+  .dataset-import-toolbar,
+  .dataset-import-settings {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--ui-space-10, 10px);
+  }
+  .dataset-import-settings {
+    padding: var(--ui-space-12, 12px);
+    border: 1px solid var(--surface-border-color);
+    border-radius: 10px;
+  }
+  .dataset-import-settings .dataset-field {
+    min-width: var(--ui-layout-180, 180px);
+  }
+  .dataset-import-settings small {
+    flex-basis: 100%;
+    color: var(--desc-color);
+  }
+  .dataset-paste {
+    display: grid;
+    gap: var(--ui-space-12, 12px);
+  }
+  .dataset-paste-error {
+    color: var(--danger-color);
+  }
+  .dataset-change-values {
+    flex: 1;
+    min-width: 0;
+    display: grid;
+    gap: var(--ui-space-8, 8px);
+  }
+  .dataset-change-values > div {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ui-space-8, 8px);
+    overflow-wrap: anywhere;
+  }
+  .dataset-change-values del {
+    color: var(--danger-color);
+  }
+  .dataset-change-values ins {
+    color: var(--success-color);
+    text-decoration: none;
+    font-weight: 600;
+  }
+
+  .dataset-worksheet-picker {
+    display: grid;
+    gap: var(--ui-space-16, 16px);
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .dataset-worksheet-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--ui-space-8, 8px);
+  }
   .dataset-chart__image {
     overflow-x: auto;
   }
@@ -1272,85 +1482,6 @@
 
   .dataset-mode-select {
     display: none;
-  }
-
-  .dataset-stagebar {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: var(--ui-space-10, 10px);
-  }
-  .dataset-stagebar.is-quality {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .dataset-stage {
-    min-width: 0;
-    min-height: var(--ui-layout-66, 66px);
-    padding: var(--ui-space-12, 12px) var(--ui-space-14, 14px);
-    display: flex;
-    align-items: center;
-    gap: var(--ui-space-11, 11px);
-    box-sizing: border-box;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 14px;
-    color: var(--desc-color);
-    background: var(--card-background);
-    transition:
-      transform 0.18s ease,
-      border-color 0.18s ease,
-      background-color 0.18s ease;
-  }
-
-  .dataset-stage > span {
-    width: var(--ui-layout-30, 30px);
-    height: var(--ui-layout-30, 30px);
-    display: grid;
-    flex: 0 0 auto;
-    place-items: center;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 9px;
-    color: var(--desc-color);
-    font-size: var(--ui-font-11, 11px);
-    font-weight: 750;
-  }
-
-  .dataset-stage > div {
-    min-width: 0;
-    display: grid;
-    gap: var(--ui-space-2, 2px);
-  }
-
-  .dataset-stage strong,
-  .dataset-stage small {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .dataset-stage strong {
-    color: var(--text-color);
-    font-size: var(--ui-font-13, 13px);
-  }
-
-  .dataset-stage small {
-    font-size: var(--ui-font-11, 11px);
-  }
-
-  .dataset-stage.is-active,
-  .dataset-stage.is-complete {
-    border-color: rgba(97, 92, 237, 0.55);
-  }
-
-  .dataset-stage.is-active > span {
-    border-color: var(--primary-color);
-    color: #fff;
-    background: var(--primary-color);
-  }
-
-  .dataset-stage.is-complete > span {
-    border-color: var(--success-color);
-    color: var(--success-color);
-    background: var(--card-background);
   }
 
   .dataset-empty {
@@ -1766,10 +1897,12 @@
   .dataset-profile-list article {
     padding: var(--ui-space-9, 9px) var(--ui-space-11, 11px);
     display: grid;
-    grid-template-columns: minmax(var(--ui-layout-150, 150px), 1.3fr) minmax(var(--ui-layout-90, 90px), 0.5fr) minmax(
+    grid-template-columns:
+      minmax(var(--ui-layout-150, 150px), 1.3fr) minmax(var(--ui-layout-90, 90px), 0.5fr) minmax(
         var(--ui-layout-90, 90px),
         0.5fr
-      ) minmax(var(--ui-layout-100, 100px), 1fr);
+      )
+      minmax(var(--ui-layout-100, 100px), 1fr);
     align-items: center;
     gap: var(--ui-space-10, 10px);
     border: 1px solid var(--surface-border-color);
@@ -1850,10 +1983,9 @@
   .dataset-issue-list article {
     padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px);
     display: grid;
-    grid-template-columns: var(--ui-layout-36, 36px) minmax(var(--ui-layout-100, 100px), 0.55fr) minmax(
-        var(--ui-layout-110, 110px),
-        0.5fr
-      ) minmax(0, 1fr);
+    grid-template-columns:
+      var(--ui-layout-36, 36px) minmax(var(--ui-layout-100, 100px), 0.55fr) minmax(var(--ui-layout-110, 110px), 0.5fr)
+      minmax(0, 1fr);
     align-items: center;
     gap: var(--ui-space-9, 9px);
     border: 1px solid var(--surface-border-color);
@@ -1979,14 +2111,9 @@
       border-color: var(--primary-color);
       background: var(--primary-light-color, rgba(97, 92, 237, 0.08));
     }
-
-    .dataset-stage:hover {
-      transform: translateY(-1px);
-      border-color: rgba(97, 92, 237, 0.5);
-    }
   }
 
-  @media (max-width: 1100px) {
+  @media (max-width: 1199px) {
     .dataset-workbench {
       grid-template-columns: var(--ui-layout-210, 210px) minmax(0, 1fr);
     }
@@ -2025,17 +2152,6 @@
       font-weight: 650;
     }
 
-    .dataset-stagebar {
-      grid-template-columns: 1fr;
-    }
-    .dataset-stagebar.is-quality {
-      grid-template-columns: 1fr;
-    }
-
-    .dataset-stage {
-      min-height: var(--ui-layout-56, 56px);
-    }
-
     .dataset-empty {
       min-height: var(--ui-layout-300, 300px);
       padding: var(--ui-space-32, 32px) var(--ui-space-16, 16px);
@@ -2056,11 +2172,15 @@
 
     .dataset-sourcebar,
     .dataset-sourcebar__files,
-    .dataset-sourcebar__actions,
-    .dataset-canvas__head,
-    .dataset-canvas__actions {
+    .dataset-canvas__head {
       align-items: stretch;
       flex-direction: column;
+    }
+
+    .dataset-sourcebar__actions,
+    .dataset-canvas__actions {
+      flex-direction: row;
+      flex-wrap: wrap;
     }
 
     .dataset-sourcebar__files article {
@@ -2105,7 +2225,6 @@
     }
   }
 
-  html.light-note-mobile-rendering .dataset-stage,
   html.light-note-mobile-rendering .dataset-operation-rail,
   html.light-note-mobile-rendering .dataset-mode-select,
   html.light-note-mobile-rendering .dataset-empty,
@@ -2113,11 +2232,5 @@
   html.light-note-mobile-rendering .dataset-control-card,
   html.light-note-mobile-rendering .dataset-canvas {
     box-shadow: none;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .dataset-stage {
-      transition: none;
-    }
   }
 </style>

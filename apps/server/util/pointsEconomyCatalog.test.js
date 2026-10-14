@@ -11,7 +11,7 @@ import {
   POINTS_ECONOMY_VERSION,
 } from './pointsEconomyCatalog.js';
 
-describe('积分经济 C8 单一目录', () => {
+describe('积分经济 C9 单一目录', () => {
   const snapshot = getEconomyCatalogSnapshot();
 
   it('固定经济版本并完整覆盖 7 个实用商品和 13 个积分框', () => {
@@ -41,6 +41,29 @@ describe('积分经济 C8 单一目录', () => {
       ['frame_celestial', 16000, 6],
     ]);
     expect(snapshot.frameItems.reduce((sum, item) => sum + item.cost, 0)).toBe(55180);
+  });
+
+  it('C9 只增加四款永久背景，保留 C8 快照且开关失败关闭', () => {
+    const previous = getEconomyCatalogSnapshot('points-economy-c8');
+    expect(snapshot.utilityItems).toEqual(previous.utilityItems);
+    expect(snapshot.frameItems).toEqual(previous.frameItems);
+    expect(snapshot.freePolicy).toEqual(previous.freePolicy);
+    expect(snapshot.paidPolicy).toEqual(previous.paidPolicy);
+    expect(previous.backgroundItems).toBeUndefined();
+    expect(snapshot.backgroundItems).toEqual([
+      { id: 'background_mountains', cost: 600 },
+      { id: 'background_sky', cost: 800 },
+      { id: 'background_coast', cost: 1000 },
+      { id: 'background_stars', cost: 1500 },
+    ]);
+    expect(
+      getEconomyRuntime({ POINTS_ECONOMY_C8_ENABLED: 'true', POINTS_ECONOMY_C9_ENABLED: 'true' }).economyVersion,
+    ).toBe('points-economy-c9');
+    for (const value of [undefined, 'false', 'invalid']) {
+      expect(
+        getEconomyRuntime({ POINTS_ECONOMY_C8_ENABLED: 'true', POINTS_ECONOMY_C9_ENABLED: value }).economyVersion,
+      ).toBe('points-economy-c8');
+    }
   });
 
   it('C7 增加补签卡但不改变 C6 商品、奖池与限兑快照', () => {

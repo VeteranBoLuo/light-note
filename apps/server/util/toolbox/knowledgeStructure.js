@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import pool from '../../db/index.js';
 import { buildNoteTree } from '../services/noteTreeService.js';
 import { toolboxError } from './errors.js';
@@ -65,7 +66,15 @@ function recommendation(code, count, priority) {
 
 export function analyzeKnowledgeStructure(
   rows = [],
-  { now = Date.now(), issueKinds = null, issueOffset = 0, issueLimit = 500, includeNodes = true } = {},
+  {
+    now = Date.now(),
+    issueKinds = null,
+    issueOffset = 0,
+    issueLimit = 500,
+    includeNodes = true,
+    rootId = null,
+    includeScopeOptions = false,
+  } = {},
 ) {
   const sourceRows = Array.isArray(rows) ? rows : [];
   const snapshot = buildNoteTree(sourceRows);
@@ -91,7 +100,7 @@ export function analyzeKnowledgeStructure(
     return resolved;
   }
 
-  const nodes = [...snapshot.nodesById.values()].map((node) => {
+  const allNodes = [...snapshot.nodesById.values()].map((node) => {
     const row = metadataById.get(node.id) || {};
     const path = resolvePath(node);
     const explicitContentEmpty = row.content_empty ?? row.contentEmpty;
@@ -119,6 +128,22 @@ export function analyzeKnowledgeStructure(
       createdAt: row.create_time ?? row.createTime ?? null,
     };
   });
+
+  let scopedIds = null;
+  if (rootId) {
+    if (!snapshot.nodesById.has(String(rootId)))
+      throw toolboxError('TOOLBOX_KNOWLEDGE_SCOPE_MISSING', '所选目录已不存在，请重新选择', 404);
+    scopedIds = new Set();
+    const pending = [String(rootId)];
+    while (pending.length) {
+      const id = pending.pop();
+      if (scopedIds.has(id)) continue;
+      scopedIds.add(id);
+      for (const child of snapshot.childrenByParent.get(id) || [])
+        pending.push(typeof child === 'string' ? child : child.id);
+    }
+  }
+  const nodes = scopedIds ? allNodes.filter((node) => scopedIds.has(node.id)) : allNodes;
 
   const staleThreshold = Number(now) - STALE_AFTER_DAYS * 24 * 60 * 60 * 1000;
   const titleGroups = new Map();
@@ -191,10 +216,20 @@ export function analyzeKnowledgeStructure(
 
   return {
     scannedAt: new Date(Number(now)).toISOString(),
+    snapshotVersion: createHash('sha256').update(JSON.stringify(sourceRows)).digest('hex'),
+    ...(includeScopeOptions
+      ? {
+          scopeOptions: allNodes
+            .filter((node) => node.childCount > 0)
+            .map(({ id, path }) => ({ id, path }))
+            .sort((a, b) => a.path.localeCompare(b.path, 'zh-CN')),
+        }
+      : {}),
     policy: { staleAfterDays: STALE_AFTER_DAYS, deepNoteDepth: DEEP_NOTE_DEPTH },
     summary: {
       total,
-      roots: nodes.filter((node) => !node.effectiveParentId).length,
+      roots: nodes.filter((node) => !node.effectiveParentId || (scopedIds && !scopedIds.has(node.effectiveParentId)))
+        .length,
       maxDepth: nodes.reduce((max, node) => Math.max(max, node.depth), 0),
       tagged: nodes.filter((node) => node.tagCount > 0).length,
       linked: nodes.filter((node) => node.outgoingReferenceCount + node.incomingReferenceCount > 0).length,
@@ -216,9 +251,44 @@ export function analyzeKnowledgeStructure(
   };
 }
 
-export async function getToolboxKnowledgeOverview({ userId, db = pool, analysisOptions = {} } = {}) {
+export function parseKnowledgeOverviewQuery(query = {}) {
+  const scalar = (key, fallback = '') => {
+    const value = query[key] ?? fallback;
+    if (typeof value !== 'string') throw toolboxError('TOOLBOX_INVALID_INPUT', '检查参数无效', 400);
+    return value;
+  };
+  const integer = (key, fallback, max) => {
+    const value = scalar(key, String(fallback));
+    if (!/^\d+$/.test(value) || !Number.isSafeInteger(Number(value)) || Number(value) > max)
+      throw toolboxError('TOOLBOX_INVALID_INPUT', '分页参数无效', 400);
+    return Number(value);
+  };
+  const expectedSnapshot = scalar('snapshot');
+  if (expectedSnapshot && !/^[a-f0-9]{64}$/.test(expectedSnapshot))
+    throw toolboxError('TOOLBOX_INVALID_INPUT', '检查版本无效', 400);
+  const rootId = scalar('rootId').trim();
+  if (rootId.length > 200) throw toolboxError('TOOLBOX_INVALID_INPUT', '目录参数无效', 400);
+  const optional = scalar('includeOptional', 'false');
+  if (!['true', 'false'].includes(optional)) throw toolboxError('TOOLBOX_INVALID_INPUT', '检查参数无效', 400);
+  const kinds = [...ORGANIZE_KNOWLEDGE_ISSUE_KINDS, ...(optional === 'true' ? ['untagged', 'stale'] : [])];
+  const kind = scalar('issueKind', 'all');
+  if (kind !== 'all' && !kinds.includes(kind)) throw toolboxError('TOOLBOX_INVALID_INPUT', '问题类型无效', 400);
+  const issueLimit = integer('limit', 50, 500);
+  if (!issueLimit) throw toolboxError('TOOLBOX_INVALID_INPUT', '分页参数无效', 400);
+  return {
+    expectedSnapshot,
+    rootId: rootId || null,
+    issueKinds: kind === 'all' ? kinds : [kind],
+    issueOffset: integer('offset', 0, MAX_KNOWLEDGE_NOTES * 7),
+    issueLimit,
+    includeScopeOptions: true,
+  };
+}
+
+export async function getToolboxKnowledgeOverview({ userId, db = pool, analysisOptions = {}, query } = {}) {
   const normalizedUserId = String(userId || '').trim();
   if (!normalizedUserId) throw toolboxError('TOOLBOX_USER_REQUIRED', '缺少用户身份', 401);
+  const queryOptions = query === undefined ? {} : parseKnowledgeOverviewQuery(query);
   const [rows] = await db.query(
     `SELECT n.id,
             n.parent_id,
@@ -316,7 +386,10 @@ export async function getToolboxKnowledgeOverview({ userId, db = pool, analysisO
       413,
     );
   }
-  return analyzeKnowledgeStructure(rows, analysisOptions);
+  const result = analyzeKnowledgeStructure(rows, { ...analysisOptions, ...queryOptions });
+  if (queryOptions.expectedSnapshot && queryOptions.expectedSnapshot !== result.snapshotVersion)
+    throw toolboxError('TOOLBOX_KNOWLEDGE_CHANGED', '笔记已更新，请重新检查后继续', 409);
+  return result;
 }
 
 export const knowledgeStructureInternals = Object.freeze({

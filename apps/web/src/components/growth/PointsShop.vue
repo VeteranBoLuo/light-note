@@ -74,7 +74,9 @@
         </div>
       </div>
 
-      <!-- 头像框装扮 -->
+      <!-- 个人背景与头像框装扮 -->
+      <ProfileBackgroundShop :read-only="readOnly" :focus="focus" @purchased="goalRefreshKey++" />
+
       <div v-if="frames.length" class="ps-frame-toolbar">
         <div class="ps-section-title">{{ t('growth.shopSectionFrame') }}</div>
         <BTabs
@@ -175,7 +177,11 @@
         </div>
       </div>
 
-      <div v-if="!consumables.length && !frames.length" class="ps-empty">{{ t('growth.shopEmpty') }}</div>
+      <div
+        v-if="!consumables.length && !frames.length && !shop?.items.some((item) => item.effect === 'background')"
+        class="ps-empty"
+        >{{ t('growth.shopEmpty') }}</div
+      >
     </template>
   </div>
 </template>
@@ -193,6 +199,7 @@
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
+  import ProfileBackgroundShop from './ProfileBackgroundShop.vue';
   import PointsGoal from '@/components/growth/PointsGoal.vue';
   import AvatarFramePreview from '@/components/growth/AvatarFramePreview.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -318,7 +325,9 @@
         ) || [],
   );
   const frames = computed(() =>
-    sortFramesByRarity(shop.value?.frames || shop.value?.items.filter((i) => i.type === 'cosmetic') || []),
+    sortFramesByRarity(
+      shop.value?.frames || shop.value?.items.filter((i) => i.type === 'cosmetic' && i.effect === 'frame') || [],
+    ),
   );
   type FrameFilter = 'all' | 'basic' | 'rare' | 'epic' | 'legendary';
   const activeFrameFilter = ref<FrameFilter>('all');

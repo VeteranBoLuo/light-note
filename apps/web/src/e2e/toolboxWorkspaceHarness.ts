@@ -385,6 +385,18 @@ request.defaults.adapter = async (config) => {
     (window as any).summarySaveCalls = ((window as any).summarySaveCalls || 0) + 1;
     return response(config, { status: 'saved', targetType: 'note', targetId: 'summary-note', targetAvailability: 'available', idempotent: false });
   }
+  if (params.get('resultMock') === '1' && url === '/api/toolbox/jobs/visual-result') return response(config, {
+    ...summaryJob, id: 'visual-result', toolId,
+    artifact: {id: 'visual-result-artifact', type: toolId === 'ocr_to_text' ? 'ocr_text' : 'knowledge_audit', title: '资料核对结果', contentType: 'markdown', version: 1},
+  });
+  if (params.get('resultMock') === '1' && url === '/api/toolbox/artifacts/visual-result-artifact') return response(config, {
+    id: 'visual-result-artifact', jobId: 'visual-result', toolId, version: 1,
+    type: toolId === 'ocr_to_text' ? 'ocr_text' : 'knowledge_audit', title: '资料核对结果', contentType: 'markdown',
+    content: toolId === 'ocr_to_text' ? '# scan.pdf\n\n第一页可核对的文字。\n\n第二页可核对的文字。' : '# 所选资料检查\n\n## 重复与可合并项\n两份说明包含相同的流程描述，可以合并。\n\n## 冲突项\n资料 A 写明 7 天，资料 B 写明 14 天；请核对实际采用的版本。\n\n## 清理行动清单\n- 打开原文核对日期。\n- 保留当前有效版本。',
+    meta: toolId === 'ocr_to_text' ? {ocrDocuments: [{sourceId: 'scan', title: 'scan.pdf', pages: [{number: 1, label: '第 1 页', text: '第一页可核对的文字。'}, {number: 2, label: '第 2 页', text: '第二页可核对的文字。'}]}]} : {},
+    sources: [{id: 'note-1', type: 'note', title: '流程说明 A'}, {id: 'note-2', type: 'note', title: '流程说明 B'}],
+    coverage: {complete: true}, save: {status: 'unsaved'}, status: 'ready', createdAt: now,
+  });
   if (params.get('summaryMock') === '1' && url === '/api/toolbox/jobs/summary-job') return response(config, summaryJob);
   if (params.get('summaryMock') === '1' && url === '/api/toolbox/artifacts/summary-artifact') return response(config, {
     ...summaryJob.artifact, jobId: summaryJob.id, toolId: summaryJob.toolId, content: '# 行程要点\n\n行程以自然景观为主。',
@@ -724,7 +736,7 @@ router.afterEach((_to, from) => {
   router.options.history.state.back = from.fullPath;
 });
 await router.push(
-  view === 'home'
+  params.get('resultMock') === '1' ? {path: '/toolbox/task/visual-result'} : view === 'home'
     ? { path: '/toolbox', query: params.get('tab') === 'catalog' ? { view: 'catalog' } : {} }
     : { path: `/toolbox/${toolId}`, query: view === 'detail' ? { workspace: 'visual-workspace' } : {} },
 );

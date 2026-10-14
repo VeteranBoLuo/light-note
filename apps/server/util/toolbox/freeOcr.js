@@ -1,3 +1,4 @@
+import { buildOcrPages } from './ocrPages.js';
 import { getToolboxTool } from '@lightnote/shared/toolbox-protocol';
 import crypto from 'node:crypto';
 import pdfParse from 'pdf-parse/lib/pdf-parse.js';
@@ -193,6 +194,7 @@ export async function executeFreeOcr(job, database) {
           buffer,
           { fileName: source.file_name, fileType: source.file_type, fileSize: buffer.length },
           {
+            includeSegments: true,
             ocrProvider: {
               recognizePdf: (data, options) =>
                 localOcrProvider.recognizePdf(data, { ...options, onPageStart: markPage }),
@@ -229,7 +231,7 @@ export async function executeFreeOcr(job, database) {
       coverage: result.coverage,
     })),
     coverage: { complete: !partial, warnings: partial ? ['ocr_partial'] : [] },
-    meta: { sourceCount: rows.length },
+    meta: { sourceCount: rows.length, recognitionMode: 'basic', ocrDocuments: buildOcrPages(outputs) },
     outcome: partial ? 'partial_succeeded' : 'succeeded',
   };
 }

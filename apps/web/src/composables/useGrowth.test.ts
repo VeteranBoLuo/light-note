@@ -2,6 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   user: { id: 'user-a' },
+  getShop: vi.fn(),
+  buyShopItem: vi.fn(),
+  equipBackground: vi.fn(),
   getMyGrowth: vi.fn(),
   getGrowthTasks: vi.fn(),
   claimGrowthTask: vi.fn(),
@@ -23,6 +26,9 @@ vi.mock('@/store', () => ({
 vi.mock('@/api/growthApi.ts', () => ({
   default: {
     getMyGrowth: mocks.getMyGrowth,
+    getShop: mocks.getShop,
+    buyShopItem: mocks.buyShopItem,
+    equipBackground: mocks.equipBackground,
     getGrowthTasks: mocks.getGrowthTasks,
     claimGrowthTask: mocks.claimGrowthTask,
     checkin: mocks.checkin,
@@ -463,5 +469,62 @@ describe('补签卡库存同步', () => {
     await api.useProtectCard('20261009');
     expect(api.shop.value?.protectCards).toBe(2);
     expect(api.growth.value?.protectCards).toBe(2);
+  });
+});
+
+describe('个人背景兑换与使用的请求边界', () => {
+  beforeEach(() => {
+    resetGrowth();
+    vi.clearAllMocks();
+    sessionStorage.clear();
+    mocks.user.id = 'background-user';
+    mocks.getMyGrowth.mockResolvedValue({ status: 200, data: growth(2) });
+    mocks.getInventory.mockResolvedValue({ status: 200, data: { items: [], assets: {} } });
+    mocks.getShop.mockReset();
+    mocks.getShop.mockResolvedValue({
+      status: 200,
+      data: {
+        economyVersion: 'points-economy-c9',
+        points: 2000,
+        items: [{ id: 'background_mountains', effect: 'background', cost: 600, owned: false, canBuy: true }],
+      },
+    });
+  });
+  it('按用户确认时的报价提交，不把旧预览悄悄替换成新报价', async () => {
+    await useGrowth().loadShop();
+    mocks.buyShopItem.mockResolvedValueOnce({ status: 409, data: { refresh: true } });
+    await useGrowth().buyItem('background_mountains', { economyVersion: 'points-economy-old', expectedCost: 500 });
+    expect(mocks.buyShopItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        itemId: 'background_mountains',
+        economyVersion: 'points-economy-old',
+        expectedCost: 500,
+      }),
+    );
+  });
+  it('已确认购买后即使刷新失败，也保留永久持有事实和正确余额', async () => {
+    mocks.getMyGrowth.mockResolvedValueOnce({ status: 200, data: { ...growth(2), points: 2000 } });
+    await useGrowth().load(true);
+    await useGrowth().loadShop();
+    mocks.getMyGrowth.mockRejectedValueOnce(new Error('fixture-offline'));
+    mocks.getShop.mockRejectedValueOnce(new Error('fixture-offline'));
+    mocks.buyShopItem.mockResolvedValueOnce({
+      status: 200,
+      data: { ok: true, itemId: 'background_mountains', points: 1400, effect: { type: 'background' } },
+    });
+    await useGrowth().buyItem('background_mountains');
+    expect(useGrowth().shop.value?.items[0]).toMatchObject({ owned: true, canBuy: false });
+    expect(useGrowth().shop.value?.points).toBe(1400);
+    expect(useGrowth().growth.value?.points).toBe(1400);
+  });
+  it('更换账号后忽略旧账号晚到的使用回执', async () => {
+    await useGrowth().loadShop();
+    const pending = deferred<{ status: number; data: any }>();
+    mocks.equipBackground.mockReturnValueOnce(pending.promise);
+    const request = useGrowth().equipBackground('background_mountains');
+    mocks.user.id = 'new-background-user';
+    pending.resolve({ status: 200, data: { ok: true, equipped: 'background_mountains' } });
+    await expect(request).resolves.toBeNull();
+    expect(mocks.getShop).toHaveBeenCalledTimes(1);
   });
 });

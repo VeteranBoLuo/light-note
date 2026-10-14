@@ -62,6 +62,10 @@ export const useItemApi = (itemId: string) => apiBasePost('/api/growth/item/use'
 // 佩戴 / 卸下称号(titleId 为空=卸下)
 export const equipTitle = (titleId: string | null) => apiBasePost('/api/growth/equipTitle', { titleId });
 
+// 设置个人背景（null 恢复默认）
+export const equipBackground = (backgroundId: string | null) =>
+  apiBasePost('/api/growth/equipBackground', { backgroundId });
+
 // 佩戴 / 卸下头像框装扮(frameId 为空=卸下)
 export const equipFrame = (frameId: string | null) => apiBasePost('/api/growth/equipFrame', { frameId });
 
@@ -315,6 +319,7 @@ export default {
   useItemApi,
   equipTitle,
   equipFrame,
+  equipBackground,
   getLottery,
   drawLottery,
   claimAchievement,

@@ -3,6 +3,7 @@ import { PDFDocument } from 'pdf-lib';
 import {
   exportPdfPages,
   parsePdfFiles,
+  parsePdfPageSelection,
   PDF_ORGANIZER_MAX_BYTES,
   PDF_ORGANIZER_MAX_FILES,
   PDF_ORGANIZER_MAX_PAGES,
@@ -53,4 +54,11 @@ describe('PDF 整理器本地内核', () => {
       parsePdfFiles([await pdfFile('huge.pdf', PDF_ORGANIZER_MAX_PAGES + 1)]),
     ).rejects.toMatchObject<PdfOrganizerError>({ code: 'TOO_MANY_PAGES' });
   });
+});
+
+it('按当前页序解析范围，去重并拒绝越界和倒序', () => {
+  expect(parsePdfPageSelection('3, 1-2，2', 4)).toEqual([0, 1, 2]);
+  for (const value of ['', '0', '2-1', '5', '1,,2', '1.5', '-1']) {
+    expect(() => parsePdfPageSelection(value, 4)).toThrow();
+  }
 });

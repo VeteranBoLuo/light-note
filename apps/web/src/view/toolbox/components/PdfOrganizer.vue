@@ -1,7 +1,7 @@
 <template>
-  <section class="local-tool" aria-labelledby="pdf-organizer-title">
+  <section class="local-tool" :aria-label="t('toolbox.tool.pdf_organizer.name')">
     <div
-      v-if="!pages.length && !preparing"
+      v-if="!sources.length && !preparing"
       class="local-tool__drop-zone"
       :class="{ 'is-dragging': dragging }"
       @dragenter.prevent="onDragEnter"
@@ -57,18 +57,51 @@
         </div>
       </header>
 
+      <div class="pdf-range-controls">
+        <label for="pdf-page-range">{{ t('toolbox.local.pageRange') }}</label>
+        <BInput
+          id="pdf-page-range"
+          class="pdf-range-input"
+          v-model:value="pageRange"
+          :maxlength="4000"
+          :disabled="Boolean(exporting)"
+          :placeholder="t('toolbox.local.pageRangePlaceholder')"
+          @keydown.enter="selectRange"
+        />
+        <BButton :disabled="Boolean(exporting) || !pageRange.trim() || !pages.length" @click="selectRange">{{
+          t('toolbox.local.selectRange')
+        }}</BButton>
+        <BButton :disabled="Boolean(exporting) || !history.length" @click="undo">{{
+          t('toolbox.local.undoEdit')
+        }}</BButton>
+        <BButton :disabled="Boolean(exporting)" @click="clearWorkspace">{{ t('common.clear') }}</BButton>
+        <small>{{ t('toolbox.local.currentPageOrder') }}</small>
+      </div>
+      <p v-if="rangeError" class="pdf-range-error" role="alert">{{ rangeError }}</p>
       <div class="local-tool__selection-bar" :class="{ 'has-selection': selectedPages.length > 0 }">
         <span>{{ t('toolbox.local.selectedPages', { count: selectedPages.length }) }}</span>
         <div>
+          <BButton size="small" :disabled="Boolean(exporting) || !selectedPages.length" @click="rotateSelected"
+            ><SvgIcon :src="icon.toolbox.rotate" size="14" />{{ t('toolbox.local.rotateSelected') }}</BButton
+          >
+          <BButton size="small" :disabled="Boolean(exporting) || !selectedPages.length" @click="removeSelected"
+            ><SvgIcon :src="icon.toolbox.delete" size="14" />{{ t('toolbox.local.deleteSelected') }}</BButton
+          >
           <BButton
             size="small"
-            :disabled="!selectedPages.length"
+            :disabled="Boolean(exporting) || !selectedPages.length"
             :loading="exporting === 'selected'"
             @click="exportSelection"
           >
             <SvgIcon :src="icon.toolbox.download" size="14" />{{ t('toolbox.local.exportSelected') }}
           </BButton>
-          <BButton type="primary" size="small" :loading="exporting === 'all'" @click="exportAll">
+          <BButton
+            type="primary"
+            size="small"
+            :loading="exporting === 'all'"
+            :disabled="Boolean(exporting) || !pages.length"
+            @click="exportAll"
+          >
             <SvgIcon :src="icon.toolbox.download" size="14" />{{ t('toolbox.local.exportAll') }}
           </BButton>
         </div>
@@ -173,6 +206,7 @@
   import { VueDraggable } from 'vue-draggable-plus';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
+  import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import BUpload from '@/components/base/BasicComponents/BUpload.vue';
@@ -182,6 +216,7 @@
   import {
     exportPdfPages,
     parsePdfFiles,
+    parsePdfPageSelection,
     PDF_ORGANIZER_MAX_BYTES,
     PDF_ORGANIZER_MAX_FILES,
     PDF_ORGANIZER_MAX_PAGES,
@@ -204,9 +239,7 @@
       return [new File([result.blob], result.fileName, { type: 'application/pdf' })];
     },
     async (files) => {
-      releaseThumbnails();
-      sources.value = [];
-      pages.value = [];
+      clearWorkspace();
       await handleFiles(files);
     },
   );
@@ -218,6 +251,61 @@
   const dragging = ref(false);
   const sorting = ref(false);
   let dragDepth = 0;
+  let loadVersion = 0;
+  const history = ref<PdfOrganizerPage[][]>([]);
+  const pageRange = ref('');
+  const rangeError = ref('');
+  function remember() {
+    history.value = [...history.value.slice(-19), pages.value.map((page) => ({ ...page }))];
+    pruneSources();
+  }
+  function pruneSources() {
+    const used = new Set([...pages.value, ...history.value.flat()].map((page) => page.sourceId));
+    const released = sources.value.filter((source) => !used.has(source.id));
+    sources.value = sources.value.filter((source) => used.has(source.id));
+    void releasePdfThumbnailSources(released.map((source) => source.id));
+  }
+  function undo() {
+    if (exporting.value) return;
+    const previous = history.value.pop();
+    if (!previous) return;
+    pages.value = previous;
+    rangeError.value = '';
+    pruneSources();
+    publishPdf();
+  }
+  function clearWorkspace() {
+    loadVersion++;
+    releaseThumbnails();
+    history.value = [];
+    sources.value = [];
+    pages.value = [];
+    pageRange.value = '';
+    rangeError.value = '';
+    preparing.value = false;
+    publishPdf();
+  }
+  function selectRange() {
+    rangeError.value = '';
+    try {
+      const selected = new Set(parsePdfPageSelection(pageRange.value, pages.value.length));
+      pages.value.forEach((page, index) => (page.selected = selected.has(index)));
+    } catch {
+      rangeError.value = t('toolbox.local.invalidPageRange', { count: pages.value.length });
+    }
+  }
+  function rotateSelected() {
+    if (!selectedPages.value.length || exporting.value) return;
+    remember();
+    selectedPages.value.forEach((page) => (page.rotation = (page.rotation + 90) % 360));
+    publishPdf();
+  }
+  function removeSelected() {
+    if (!selectedPages.value.length || exporting.value) return;
+    remember();
+    pages.value = pages.value.filter((page) => !page.selected);
+    publishPdf();
+  }
   const selectedPages = computed(() => pages.value.filter((page) => page.selected));
   const allSelected = computed(() => pages.value.length > 0 && selectedPages.value.length === pages.value.length);
 
@@ -237,6 +325,7 @@
   }
 
   async function handleFiles(value: File[]) {
+    if (preparing.value || exporting.value) return;
     const files = Array.isArray(value) ? value : [];
     if (!files.length) return;
     if (sources.value.length + files.length > PDF_ORGANIZER_MAX_FILES) {
@@ -250,18 +339,21 @@
       message.warning(t('common.maxTotalSize', { n: 80 }));
       return;
     }
+    const version = ++loadVersion;
     preparing.value = true;
     try {
       const parsed = await parsePdfFiles(files);
+      if (version !== loadVersion) return;
       if (pages.value.length + parsed.pages.length > PDF_ORGANIZER_MAX_PAGES)
         throw new PdfOrganizerError('TOO_MANY_PAGES');
+      if (sources.value.length) remember();
       sources.value.push(...parsed.sources);
       pages.value.push(...parsed.pages);
       publishPdf();
     } catch (error) {
-      showError(error);
+      if (version === loadVersion) showError(error);
     } finally {
-      preparing.value = false;
+      if (version === loadVersion) preparing.value = false;
     }
   }
 
@@ -287,32 +379,39 @@
   }
 
   function startSorting() {
+    remember();
     sorting.value = true;
   }
 
   function stopSorting() {
     sorting.value = false;
+    publishPdf();
   }
 
   function rotate(page: PdfOrganizerPage, angle: number) {
+    remember();
     page.rotation = (((page.rotation + angle) % 360) + 360) % 360;
+    publishPdf();
   }
 
   function move(index: number, offset: number) {
     const target = index + offset;
     if (target < 0 || target >= pages.value.length) return;
+    remember();
     const [page] = pages.value.splice(index, 1);
     if (page) pages.value.splice(target, 0, page);
+    publishPdf();
   }
 
   function removePage(index: number) {
-    const [removed] = pages.value.splice(index, 1);
-    if (!removed || pages.value.some((page) => page.sourceId === removed.sourceId)) return;
-    sources.value = sources.value.filter((source) => source.id !== removed.sourceId);
-    void releasePdfThumbnailSources([removed.sourceId]);
+    if (!pages.value[index] || exporting.value) return;
+    remember();
+    pages.value.splice(index, 1);
+    publishPdf();
   }
 
   async function runExport(kind: 'all' | 'selected') {
+    if (exporting.value) return;
     const sourcePages = kind === 'selected' ? selectedPages.value : pages.value;
     const outputPages = sourcePages.map((page) => ({ ...page }));
     if (!outputPages.length) {
@@ -338,10 +437,34 @@
   }
 
   onDeactivated(releaseThumbnails);
-  onBeforeUnmount(releaseThumbnails);
+  onBeforeUnmount(() => {
+    loadVersion++;
+    releaseThumbnails();
+  });
 </script>
 
 <style scoped lang="less">
+  .pdf-range-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ui-space-8, 8px);
+  }
+  .pdf-range-controls .pdf-range-input {
+    flex: 1;
+    width: auto;
+    max-width: var(--ui-layout-320, 320px);
+    min-width: var(--ui-layout-160, 160px);
+  }
+  .pdf-range-controls small {
+    width: 100%;
+    color: var(--workspace-muted);
+  }
+  .pdf-range-error {
+    margin: 0;
+    color: var(--danger-color);
+  }
+
   .local-tool {
     display: grid;
     gap: var(--ui-space-18, 18px);

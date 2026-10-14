@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { analyzeKnowledgeStructure, getToolboxKnowledgeOverview } from './knowledgeStructure.js';
+import {
+  analyzeKnowledgeStructure,
+  getToolboxKnowledgeOverview,
+  parseKnowledgeOverviewQuery,
+} from './knowledgeStructure.js';
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -110,4 +114,55 @@ describe('toolbox knowledge structure', () => {
     expect(result.selectedSeverityCounts.high).toBe(3);
     expect(result.issues).toEqual([expect.objectContaining({ kind: 'empty', noteId: 'note-1' })]);
   });
+});
+
+it('目录范围使用真实子树，保留完整路径且不把容器当空笔记', () => {
+  const rows = [
+    { id: 'root', title: '根', content_empty: 1 },
+    { id: 'dir', parent_id: 'root', title: '目录', content_empty: 1 },
+    { id: 'leaf', parent_id: 'dir', title: '重复', content_empty: 1 },
+    { id: 'other', title: '重复', content_empty: 0 },
+  ];
+  const result = analyzeKnowledgeStructure(rows, {
+    rootId: 'dir',
+    includeNodes: false,
+    includeScopeOptions: true,
+    issueKinds: ['empty', 'duplicate_title'],
+  });
+  expect(result.summary).toMatchObject({ total: 2, roots: 1, empty: 1, duplicateNotes: 0 });
+  expect(result.issues).toEqual([expect.objectContaining({ noteId: 'leaf', path: '根 / 目录 / 重复' })]);
+  expect(result.scopeOptions).toEqual(
+    expect.arrayContaining([
+      { id: 'root', path: '根' },
+      { id: 'dir', path: '根 / 目录' },
+    ]),
+  );
+  expect(() => analyzeKnowledgeStructure(rows, { rootId: 'someone-elses-note' })).toThrow();
+});
+it('分页参数限制在授权结构读取预算内，不接受数组或非整数', () => {
+  expect(parseKnowledgeOverviewQuery({ issueKind: 'empty', rootId: 'dir', offset: '500', limit: '50' })).toMatchObject({
+    rootId: 'dir',
+    issueKinds: ['empty'],
+    issueOffset: 500,
+    issueLimit: 50,
+  });
+  for (const query of [
+    { offset: '-1' },
+    { limit: '501' },
+    { limit: '0' },
+    { rootId: ['a'] },
+    { issueKind: 'unlinked' },
+    { includeOptional: 'yes' },
+  ])
+    expect(() => parseKnowledgeOverviewQuery(query)).toThrow();
+});
+it('refuses to combine pages from different note snapshots', async () => {
+  const rows = [{ id: 'n1', title: 'before', revision: 1, content_empty: 1 }];
+  const db = { query: vi.fn().mockResolvedValue([rows]) };
+  const first = await getToolboxKnowledgeOverview({ userId: 'u1', db, query: { limit: '1' } });
+  rows[0].title = 'after';
+  rows[0].revision = 2;
+  await expect(
+    getToolboxKnowledgeOverview({ userId: 'u1', db, query: { limit: '1', snapshot: first.snapshotVersion } }),
+  ).rejects.toMatchObject({ code: 'TOOLBOX_KNOWLEDGE_CHANGED' });
 });

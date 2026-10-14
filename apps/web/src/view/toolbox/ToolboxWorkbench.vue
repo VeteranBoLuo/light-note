@@ -7,13 +7,19 @@
       'is-prompt-workspace': isPromptTool,
       'has-source-guide': hasSourceGuide,
       'is-local-workspace': Boolean(localToolComponent),
+      'is-utility-workspace': isUtilityWorkbench,
       'is-project-detail': routeToolId.endsWith('_workspace') && Boolean(route.query.workspace),
       'is-project-list': routeToolId.endsWith('_workspace') && !route.query.workspace,
     }"
     data-mobile-resource-scroll
   >
     <div class="toolbox-workbench__inner">
-      <BButton class="toolbox-workbench__back" :aria-label="t('toolbox.back')" @click="returnToToolboxParent">
+      <BButton
+        v-if="!isUtilityWorkbench || loading || !tool"
+        class="toolbox-workbench__back"
+        :aria-label="t('toolbox.back')"
+        @click="returnToToolboxParent"
+      >
         <SvgIcon :src="icon.toolbox.back" size="16" /><span class="toolbox-workbench__back-label">{{
           t('toolbox.back')
         }}</span>
@@ -34,8 +40,25 @@
       </div>
 
       <template v-else>
+        <header v-if="isUtilityWorkbench" class="toolbox-utility-header">
+          <BButton class="toolbox-utility-header__back" :aria-label="t('toolbox.back')" @click="returnToToolboxParent">
+            <SvgIcon :src="icon.toolbox.back" size="16" /><span>{{ t('toolbox.back') }}</span>
+          </BButton>
+          <span class="toolbox-utility-header__icon"><SvgIcon :src="presentation.icon" size="26" /></span>
+          <div class="toolbox-utility-header__copy">
+            <h1>{{ t(`toolbox.tool.${tool.id}.name`) }}</h1>
+            <p>{{
+              te(`toolbox.presentation.shortDescription.${tool.id}`)
+                ? t(`toolbox.presentation.shortDescription.${tool.id}`)
+                : t(`toolbox.tool.${tool.id}.description`)
+            }}</p>
+          </div>
+          <span class="toolbox-utility-header__execution" :title="executionDescription">
+            <SvgIcon :src="executionIcon" size="16" />{{ executionTitle }}
+          </span>
+        </header>
         <header
-          v-if="!tool.id.endsWith('_workspace')"
+          v-if="!isUtilityWorkbench && !tool.id.endsWith('_workspace')"
           class="toolbox-workbench__hero"
           :class="`is-${presentation.accent}`"
         >
@@ -334,15 +357,29 @@
 
                   <section v-else class="toolbox-workflow-card is-ocr-output">
                     <div class="toolbox-ocr-mode">
-                      <BSelect
-                        v-model:value="ocrMode"
-                        :options="[
-                          { value: 'ai', label: t('toolbox.workbench.aiOcrMode') },
-                          { value: 'basic', label: t('toolbox.workbench.basicOcrMode') },
-                        ]"
-                        :disabled="quoting || uploading"
+                      <div
+                        class="toolbox-ocr-mode-options"
+                        role="radiogroup"
                         :aria-label="t('toolbox.workbench.ocrMode')"
-                      />
+                      >
+                        <BButton
+                          v-for="mode in ['ai', 'basic'] as const"
+                          :key="mode"
+                          :class="{ 'is-selected': ocrMode === mode }"
+                          :disabled="quoting || uploading"
+                          role="radio"
+                          :aria-checked="ocrMode === mode"
+                          @click="ocrMode = mode"
+                        >
+                          <strong>{{
+                            t(mode === 'ai' ? 'toolbox.workbench.aiOcrMode' : 'toolbox.workbench.basicOcrMode')
+                          }}</strong>
+                          <small>{{
+                            t(mode === 'ai' ? 'toolbox.workbench.aiOcrUse' : 'toolbox.workbench.basicOcrUse')
+                          }}</small>
+                        </BButton>
+                      </div>
+                      <p>{{ t('toolbox.workbench.ocrServerNotice') }}</p>
                       <p>{{ isBasicOcr ? freeOcrDescription : t('toolbox.workbench.aiOcrHint') }}</p>
                       <p v-if="isBasicOcr && ocrUsage" class="toolbox-ocr-usage" role="status">{{
                         t('toolbox.workbench.ocrRemaining', {
@@ -580,7 +617,7 @@
   }
   type PaidBillingMedium = 'points' | 'ai_quota';
 
-  const { t, locale } = useI18n();
+  const { t, te, locale } = useI18n();
   const route = useRoute();
   const router = useRouter();
   const user = useUserStore();
@@ -637,6 +674,11 @@
   const ocrOutcomeKeys = ['searchable', 'separated', 'reusable'] as const;
   const presentation = computed(() => TOOLBOX_PRESENTATION[toolId.value] || TOOLBOX_PRESENTATION.material_to_note);
   const localToolComponent = computed(() => getToolboxLocalComponent(routeToolId.value));
+  const isUtilityWorkbench = computed(
+    () =>
+      Boolean(localToolComponent.value) ||
+      ['knowledge_structure_audit', 'knowledge_audit', 'ocr_to_text'].includes(toolId.value),
+  );
   const serviceToolComponent = computed(() => getToolboxServiceComponent(toolId.value));
   const allowedTypes = computed<ResourcePickerType[]>(
     () => [...(tool.value?.input.resourceTypes || [])] as ResourcePickerType[],
@@ -1096,6 +1138,31 @@
 </script>
 
 <style scoped lang="less">
+  .toolbox-ocr-mode-options {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--ui-space-8, 8px);
+  }
+  .toolbox-ocr-mode-options :deep(.b_btn) {
+    display: flex;
+    flex-direction: column;
+    align-items: start;
+    height: auto;
+    min-height: var(--ui-layout-64, 64px);
+    padding: var(--ui-space-10, 10px);
+    line-height: 1.5;
+    white-space: normal;
+    text-align: left;
+  }
+  .toolbox-ocr-mode-options :deep(.b_btn.is-selected) {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+  }
+  .toolbox-ocr-mode-options small {
+    color: var(--desc-color);
+    font-size: var(--ui-font-12, 12px);
+  }
+
   .toolbox-detail-options.comparison-mode {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     margin-bottom: var(--ui-space-16, 16px);
@@ -2468,47 +2535,70 @@
     font-size: var(--ui-font-12, 12px);
     line-height: 1.6;
   }
-  .toolbox-workbench.is-local-workspace {
+  .toolbox-workbench.is-utility-workspace {
     padding-top: var(--ui-space-16, 16px);
     padding-bottom: var(--ui-space-20, 20px);
   }
-  .is-local-workspace .toolbox-workbench__back {
-    position: static;
-    margin-bottom: var(--ui-space-10, 10px);
-    box-shadow: none;
-  }
-  .is-local-workspace .toolbox-workbench__hero {
-    min-height: 0;
-    padding: var(--ui-space-14, 14px) var(--ui-space-18, 18px);
+  .toolbox-utility-header {
+    display: flex;
+    align-items: center;
     gap: var(--ui-space-14, 14px);
-    grid-template-columns: var(--ui-layout-44, 44px) minmax(0, 1fr);
-    border-radius: 16px;
-    box-shadow: none;
+    padding: var(--ui-space-12, 12px) 0 var(--ui-space-18, 18px);
+    border-bottom: 1px solid var(--workspace-divider);
   }
-  .is-local-workspace .toolbox-workbench__icon {
-    width: var(--ui-layout-44, 44px);
-    height: var(--ui-layout-44, 44px);
-    border-radius: 12px;
-    box-shadow: none;
+  .toolbox-utility-header__back {
+    flex-shrink: 0;
+    color: var(--workspace-muted);
   }
-  .is-local-workspace .toolbox-workbench__hero h1 {
-    margin: var(--ui-space-2, 2px) 0 var(--ui-space-4, 4px);
+  .toolbox-utility-header__icon {
+    color: var(--workspace-purple-text);
+    display: flex;
+  }
+  .toolbox-utility-header__copy {
+    min-width: 0;
+    flex: 1;
+  }
+  .toolbox-utility-header h1 {
+    margin: 0;
     font-size: var(--ui-font-22, 22px);
   }
-  .is-local-workspace .toolbox-workbench__execution {
-    margin-top: var(--ui-space-6, 6px);
-    align-items: center;
+  .toolbox-utility-header p {
+    margin: var(--ui-space-5, 5px) 0 0;
+    color: var(--workspace-muted);
+    font-size: var(--ui-font-12, 12px);
   }
-  .is-local-workspace .toolbox-workbench__execution > span {
+  .toolbox-utility-header__execution {
     display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: var(--ui-space-4, 4px) var(--ui-space-10, 10px);
+    align-items: center;
+    gap: var(--ui-space-6, 6px);
+    color: var(--workspace-muted);
+    font-size: var(--ui-font-12, 12px);
   }
-  .is-local-workspace .toolbox-workbench__surface {
-    margin-top: var(--ui-space-12, 12px);
-    padding: var(--ui-space-14, 14px);
-    border-radius: 16px;
+  .toolbox-workbench.is-utility-workspace .toolbox-workbench__surface {
+    background: transparent;
+    margin-top: var(--ui-space-16, 16px);
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  @media (max-width: 767px) {
+    .toolbox-utility-header {
+      flex-wrap: wrap;
+      gap: var(--ui-space-8, 8px);
+    }
+    .toolbox-utility-header__back > span {
+      display: none;
+    }
+    .toolbox-utility-header__icon {
+      display: none;
+    }
+    .toolbox-utility-header h1 {
+      font-size: var(--ui-font-18, 18px);
+    }
+    .toolbox-utility-header__execution {
+      width: 100%;
+    }
   }
   .toolbox-workbench.is-project-list .toolbox-workbench__back {
     position: static;

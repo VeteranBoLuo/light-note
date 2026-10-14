@@ -11,8 +11,15 @@ export type DatasetSeverity = 'high' | 'medium' | 'low';
 
 export interface ToolboxDataset {
   name: string;
+  worksheetName?: string;
   headers: string[];
   rows: string[][];
+}
+
+export interface PreparedToolboxDatasetFile {
+  name: string;
+  worksheets: Array<{ id: number; name: string; rows: number; columns: number }>;
+  read: (worksheetId?: number) => ToolboxDataset;
 }
 
 export interface DatasetColumnProfile {
@@ -109,10 +116,11 @@ function makeUniqueHeaders(values: unknown[]) {
   });
 }
 
-export function createToolboxDataset(table: unknown[][], name = 'dataset'): ToolboxDataset {
+export function createToolboxDataset(table: unknown[][], name = 'dataset', firstRowHeader = true): ToolboxDataset {
   if (!Array.isArray(table) || table.length === 0) throw new ToolboxTextError('INVALID_TABLE');
   const width = Math.max(...table.map((row) => (Array.isArray(row) ? row.length : 0)));
   if (!width || width > TOOLBOX_DATASET_MAX_COLUMNS) throw new ToolboxTextError('INVALID_TABLE');
+  if (!firstRowHeader) table = [Array.from({ length: width }, (_, index) => `column_${index + 1}`), ...table];
   if (table.length - 1 > TOOLBOX_DATASET_MAX_ROWS) throw new ToolboxTextError('INPUT_TOO_LARGE');
   const headers = makeUniqueHeaders(table[0] || []);
   while (headers.length < width) headers.push(`column_${headers.length + 1}`);
@@ -140,31 +148,66 @@ export function inferDatasetFileFormat(fileName: string): DatasetFileFormat | nu
   return null;
 }
 
-export function parseDatasetText(source: string, format: TableFormat, name = 'dataset') {
-  return createToolboxDataset(parseTable(source, format), name);
+export function parseDatasetText(source: string, format: TableFormat, name = 'dataset', firstRowHeader = true) {
+  return createToolboxDataset(
+    parseTable(source.replace(/^\uFEFF/, ''), format, {
+      maxRows: TOOLBOX_DATASET_MAX_ROWS + 1,
+      maxCharacters: TOOLBOX_DATASET_MAX_BYTES,
+    }),
+    name,
+    ['csv', 'tsv'].includes(format) ? firstRowHeader : true,
+  );
 }
 
-export async function readToolboxDatasetFile(file: File): Promise<ToolboxDataset> {
+export type DatasetImportOptions = { encoding?: 'utf-8' | 'gb18030' | 'utf-16le'; firstRowHeader?: boolean };
+export async function prepareToolboxDatasetFile(
+  file: File,
+  options: DatasetImportOptions = {},
+): Promise<PreparedToolboxDatasetFile> {
   if (file.size > TOOLBOX_DATASET_MAX_BYTES) throw new ToolboxTextError('INPUT_TOO_LARGE');
   const format = inferDatasetFileFormat(file.name);
   if (!format) throw new ToolboxTextError('INVALID_TABLE');
-  if (format !== 'xlsx') return parseDatasetText(await file.text(), format, file.name);
+  if (format !== 'xlsx') {
+    const text = new TextDecoder(options.encoding || 'utf-8', { fatal: true }).decode(await file.arrayBuffer());
+    const dataset = parseDatasetText(text, format, file.name, options.firstRowHeader ?? true);
+    return { name: file.name, worksheets: [], read: () => dataset };
+  }
 
   const ExcelJS = (await import('exceljs')).default;
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load((await file.arrayBuffer()) as ArrayBuffer);
-  const worksheet = workbook.worksheets[0];
-  if (!worksheet || worksheet.rowCount === 0) throw new ToolboxTextError('INVALID_TABLE');
-  if (worksheet.rowCount - 1 > TOOLBOX_DATASET_MAX_ROWS || worksheet.columnCount > TOOLBOX_DATASET_MAX_COLUMNS) {
-    throw new ToolboxTextError('INPUT_TOO_LARGE');
-  }
-  const table: string[][] = [];
-  worksheet.eachRow({ includeEmpty: true }, (row) => {
-    const values: string[] = [];
-    for (let column = 1; column <= worksheet.columnCount; column += 1) values.push(row.getCell(column).text || '');
-    table.push(values);
-  });
-  return createToolboxDataset(table, file.name);
+  if (!workbook.worksheets.length) throw new ToolboxTextError('INVALID_TABLE');
+  return {
+    name: file.name,
+    worksheets: workbook.worksheets.map((sheet) => ({
+      id: sheet.id,
+      name: sheet.name,
+      rows: Math.max(0, sheet.rowCount - (options.firstRowHeader === false ? 0 : 1)),
+      columns: sheet.columnCount,
+    })),
+    read(worksheetId) {
+      if (worksheetId === undefined && workbook.worksheets.length > 1) throw new Error('WORKSHEET_SELECTION_REQUIRED');
+      const worksheet = worksheetId === undefined ? workbook.worksheets[0] : workbook.getWorksheet(worksheetId);
+      if (!worksheet || worksheet.rowCount === 0) throw new ToolboxTextError('INVALID_TABLE');
+      if (worksheet.rowCount - 1 > TOOLBOX_DATASET_MAX_ROWS || worksheet.columnCount > TOOLBOX_DATASET_MAX_COLUMNS) {
+        throw new ToolboxTextError('INPUT_TOO_LARGE');
+      }
+      const table: string[][] = [];
+      worksheet.eachRow({ includeEmpty: true }, (row) => {
+        const values: string[] = [];
+        for (let column = 1; column <= worksheet.columnCount; column++) values.push(row.getCell(column).text || '');
+        table.push(values);
+      });
+      return {
+        ...createToolboxDataset(table, file.name, options.firstRowHeader ?? true),
+        worksheetName: worksheet.name,
+      };
+    },
+  };
+}
+
+export async function readToolboxDatasetFile(file: File, worksheetId?: number): Promise<ToolboxDataset> {
+  return (await prepareToolboxDatasetFile(file)).read(worksheetId);
 }
 
 function normalizeCellForType(value: string) {
@@ -322,7 +365,7 @@ export function cleanToolboxDataset(dataset: ToolboxDataset, options: DatasetCle
       return true;
     });
   }
-  return { dataset: { name: dataset.name, headers, rows }, changes };
+  return { dataset: { ...dataset, headers, rows }, changes };
 }
 
 function isTypeValid(value: string, type: DatasetValidationType) {
@@ -414,11 +457,24 @@ export function datasetToRecords(dataset: ToolboxDataset) {
   );
 }
 
+function assertUniqueDatasetKey(dataset: ToolboxDataset, keyColumn: string) {
+  const index = dataset.headers.indexOf(keyColumn);
+  if (index < 0) throw new ToolboxTextError('INVALID_TABLE');
+  const keys = new Set<string>();
+  for (const row of dataset.rows) {
+    const key = row[index] || '';
+    if (!key.trim() || keys.has(key)) throw new Error('toolbox.dataset.invalidKey');
+    keys.add(key);
+  }
+}
+
 export function diffToolboxDatasets(
   before: ToolboxDataset,
   after: ToolboxDataset,
   keyColumn: string,
 ): DatasetDiffResult {
+  assertUniqueDatasetKey(before, keyColumn);
+  assertUniqueDatasetKey(after, keyColumn);
   const beforeRows = datasetToRecords(before);
   const afterRows = datasetToRecords(after);
   const beforeMap = new Map(beforeRows.map((record) => [record[keyColumn] || '', record]));
@@ -463,6 +519,8 @@ export function mergeToolboxDatasets(
   if (!keyColumn || !left.headers.includes(keyColumn) || !right.headers.includes(keyColumn)) {
     throw new ToolboxTextError('INVALID_TABLE');
   }
+  assertUniqueDatasetKey(left, keyColumn);
+  assertUniqueDatasetKey(right, keyColumn);
   const leftMap = new Map(datasetToRecords(left).map((record) => [record[keyColumn] || '', record]));
   const rightMap = new Map(datasetToRecords(right).map((record) => [record[keyColumn] || '', record]));
   const keys =
@@ -535,7 +593,7 @@ export function anonymizeToolboxDataset(
 }
 
 export function serializeToolboxDataset(dataset: ToolboxDataset, format: TableFormat = 'csv') {
-  return serializeTable([dataset.headers, ...dataset.rows], format);
+  return serializeTable([dataset.headers, ...dataset.rows], format, { maxRows: TOOLBOX_DATASET_MAX_ROWS * 2 + 1 });
 }
 
 export function toolboxDatasetPreviewRows(dataset: ToolboxDataset, limit = 50) {

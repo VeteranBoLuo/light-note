@@ -1,3 +1,4 @@
+import { profileBackgroundsEn, profileBackgroundItemsEn } from './profileBackgrounds';
 import { MAKEUP_WINDOW_DAYS } from '@lightnote/shared';
 import { noteMathEn } from './noteMath';
 import { extractionEn } from './extraction';
@@ -19,6 +20,7 @@ import { accountSettingsEn } from './accountSettings';
 import { settingsRefineEn } from './settingsRefine';
 import { notificationMessages } from '@lightnote/shared/notification-presentation';
 export default {
+  profileBackgrounds: profileBackgroundsEn,
   noteMath: noteMathEn,
   nativePush: {
     title: 'App notification connection',
@@ -1329,6 +1331,22 @@ export default {
     },
   },
   toolbox: {
+    auditResult: {
+      review: "Review by section",
+      full: "Full report",
+      progress: "{done} / {total} sections reviewed",
+      hint: "Review markers stay in this browser. They do not modify materials or rerun checks. Open Materials to inspect sources, then select updated materials for a new check.",
+      checked: "Reviewed",
+    },
+    ocrResult: {
+      fullReport: "Full recognition result",
+      page: "Select file and page",
+      compareOriginal: "Compare local original",
+      localComparison: "Choose the matching original to compare pages locally. Confirm the file version yourself. This does not upload or rerun recognition.",
+      original: "Local original",
+      pageUnavailable: "The file does not contain this page. Check the original and page count.",
+      loadFailed: "Choose a PDF, PNG, JPG or WebP file under 20 MB.",
+    },
     presentation: workshopPresentationEn,
     retired: 'This tool has been retired. Existing resources are retained.',
     error: {
@@ -1581,6 +1599,7 @@ export default {
     coreToolsTitle: 'Start with a task',
     coreToolsDescription: 'Focused tools for creating knowledge, maintaining your library, and preparing sources',
     home: {
+      toolCount: '{count} tools',
       allCategories: 'All categories',
       allBillingFilter: 'All',
       aiPointsFilter: 'AI / Points',
@@ -2294,6 +2313,10 @@ export default {
     clearSearch: 'Clear search',
     back: 'Back to Knowledge Workshop',
     workbench: {
+      aiOcrUse: "Complex layouts or unclear text; uses AI quota or points",
+      basicOcrUse: "Clear printed text; free with page limits",
+      ocrServerNotice: "Both modes upload files for server recognition. Switching modes does not start a job or charge again.",
+
       ocrSearchPlaceholder: 'Search PDFs or images',
       ocrSelectHint: 'Select PDFs or images, or upload scans below',
       ocrMode: 'Recognition mode',
@@ -2696,6 +2719,15 @@ export default {
       },
     },
     maintenance: {
+      scope: "Check scope",
+      allNotes: "All notes",
+      recheck: "Recheck",
+      exportReport: "Export report",
+      checkedSummary: "{notes} notes checked · {issues} issues",
+      priorityCount: "{count} high priority",
+      recheckHint: "After editing a note, recheck to update this list. Checks do not modify notes.",
+      exportFailed: "Could not export the report. Please retry.",
+
       optionalSuggestions: 'Include optional suggestions: tags and old notes',
       guestTitle: 'Sign in to inspect your own knowledge base',
       guestDescription: 'Structure audits need your note hierarchy. The process is read-only and changes nothing.',
@@ -2892,6 +2924,14 @@ export default {
       noteTitle: '{name} · Summary',
     },
     documentText: {
+      docxImagesReady: 'Extracted {count} images, included in the Markdown download. Copy, translate and save to note keep text only.',
+      preview: "Preview",
+      docxImages: "Extracted {count} images; skipped {skipped} unsupported or oversized images. Downloads include images. Copy, translate and save to note keep text only.",
+
+      failed: 'Failed',
+      retryFailed: 'Retry failed files',
+      batchResult: '{success} completed, {failed} failed. Successful results can still be copied, saved, and downloaded.',
+      tooMany: 'Choose up to {count} files at a time.',
       emptyTitle: {
         pdf_text_extractor: 'Extract the complete PDF text layer',
         docx_to_markdown: 'Turn Word into editable Markdown',
@@ -2927,8 +2967,6 @@ export default {
       links: 'Links',
       pdfScanWarning:
         '{count} page(s) have no extractable text layer and may be scans. Use Document OCR for those pages.',
-      docxImageWarning:
-        '{count} image object(s) detected. Document structure is preserved, but images are not embedded in Markdown yet.',
       invalidType: 'Choose a file type supported by this tool',
       tooLarge: 'Selected files exceed this tool’s size limit',
       error: {
@@ -3080,6 +3118,26 @@ export default {
       quiz: 'Self-test',
     },
     dataset: {
+      invalidKey: "The key column contains empty or duplicate values. Choose a unique column or clean the data before matching rows.",
+
+      pasteData: "Paste data",
+      importSettings: "Import settings",
+      encoding: "Text file encoding",
+      importSettingsHint: "Applies to the next import. Encoding does not affect Excel. Column names are generated when headers are disabled.",
+      pasteHint: "Paste CSV, TSV, JSON or a Markdown table. Format is detected automatically. For comparison or merging, paste two datasets in sequence.",
+      usePastedData: "Import data",
+      pastedName: "Pasted data",
+      handoffExpired: "The pending data has expired. Open it again from table conversion.",
+      moreChanges: "Show more changes",
+      diffExportHint: "The list shows before and after values. The downloaded report includes all added, removed and changed records.",
+
+      chooseWorksheets: 'Choose Excel worksheets',
+      chooseWorksheet: 'Choose a worksheet',
+      worksheetHint: 'Choose one worksheet per file. Headers follow your import settings. Only selected worksheets are analyzed; originals stay unchanged.',
+      worksheetOption: '{name} · {rows} rows · {columns} columns',
+      selectedWorksheet: 'Worksheet: {name}',
+      loadWorksheets: 'Load selected worksheets',
+      tooManyFiles: 'This operation supports up to {count} files. Select fewer files and try again.',
       pendingTitle: 'Unapplied result',
       pendingHint: 'Switching operations discards the preview. Apply it first, or confirm to discard.',
       discardPreview: 'Discard and switch',
@@ -3247,6 +3305,36 @@ export default {
       },
     },
     local: {
+      continueInDataset: "Clean / analyze",
+      convertedTable: "Converted table",
+
+      imagePresets: {custom: 'Custom', web: 'Web sharing · 1920 px / 500 KB', small: 'Small file · 1280 px / 200 KB', quality: 'High quality · Original size'},
+
+      pageRange: 'Page range',
+      pageRangePlaceholder: 'For example 1-3, 5, 8-10',
+      selectRange: 'Select range',
+      undoEdit: 'Undo last edit',
+      currentPageOrder: 'Page numbers follow the current order. The last 20 edits can be undone.',
+      invalidPageRange: 'Enter pages or ranges between 1 and {count}, such as 1-3, 5.',
+      rotateSelected: 'Rotate selected',
+      deleteSelected: 'Remove selected',
+      imagePreset: 'Preset',
+      maxEdge: 'Longest edge',
+      targetSize: 'Target size',
+      keepDimensions: 'Keep original dimensions',
+      noSizeTarget: 'No target',
+      moreImageSettings: 'More settings',
+      hideImageSettings: 'Hide settings',
+      targetSizeHint: 'Quality and dimensions may be reduced to approach the target. Images that exceed it are marked.',
+      targetNotMet: 'Exceeds the {size} target',
+      reprocess: 'Process again',
+
+      autoFormat: 'Auto-detect',
+      inputStep: 'Input',
+      resultStep: 'Result',
+      editInput: 'Edit input',
+      convertComplete: 'Conversion complete',
+
       pdfWorkbench: {
         organize: 'Organize pages',
         images: 'PDF / image conversion',
@@ -9643,8 +9731,8 @@ export default {
     checkinSuccessPts: 'Checked in! EXP +{n}, Points +{p}',
     questClaimOkPts: 'Claimed! EXP +{n}, Points +{p}',
     questClaimOkPointsOnly: 'Claimed! Points +{p}',
-    shopTitle: 'Points & Avatar Frames',
-    shopSubtitle: 'Redeem handy items and collect avatar frames from points or achievements',
+    shopTitle: 'Points & Personalization',
+    shopSubtitle: 'Redeem useful items, profile backgrounds and avatar frames',
     shopEarnHint: 'Daily check-in +20~30 · Complete daily quests +30',
     shopStoreTitle: 'Short on points or prefer to buy?',
     shopStoreDescription:
@@ -9765,6 +9853,7 @@ export default {
     lotteryPoolTitle: 'Current prize pool',
     lotteryPoolHint: 'At least one rare reward every {n} draws',
     shopItems: {
+      ...profileBackgroundItemsEn,
       ai_pack_starter: { name: 'AI starter pack', desc: '+50,000 tokens · Permanent, once per account' },
       makeup_card: {
         name: 'Make-up Card',

@@ -24,6 +24,7 @@ export interface Growth {
   equippedTitle?: string | null; // 已佩戴称号 id
   equippedTitleName?: string | null; // 称号显示名
   equippedFrame?: string | null; // 已佩戴头像框装扮 id
+  equippedBackground?: string | null; // 名片和公开主页共用背景
   checkedInToday: boolean;
   levelStartExp: number;
   nextLevelExp: number | null;
@@ -169,6 +170,7 @@ export interface Shop {
   level: number;
   equippedTitle: string | null;
   equippedFrame: string | null;
+  equippedBackground?: string | null;
   protectCards: number;
   isVisitor: boolean;
   rootFrameAccess?: boolean;
@@ -839,7 +841,7 @@ export function useGrowth() {
   }
 
   // 购买商品:返回后端 result(ok/reason/msg/points);成功则刷新商店 + 成长快照(余额/卡数/称号变化)
-  async function buyItem(itemId: string) {
+  async function buyItem(itemId: string, quote?: { economyVersion: string; expectedCost: number }) {
     const uid = useUserStore().id || 'visitor';
     const currentShop = shop.value || (await loadShop());
     const item =
@@ -849,19 +851,32 @@ export function useGrowth() {
     const operation: PointsEconomyOperation = 'shop_buy';
     const payload = {
       itemId,
-      economyVersion: currentShop.economyVersion,
-      expectedCost: Number(item.cost),
+      economyVersion: quote?.economyVersion || currentShop.economyVersion,
+      expectedCost: quote?.expectedCost ?? Number(item.cost),
     };
     const pending = getOrCreatePointsEconomyRequest(uid, operation, payload);
     const requestPayload = pending.payload as typeof payload;
     try {
       const res = await growthApi.buyShopItem({ ...requestPayload, clientRequestId: pending.clientRequestId });
+      if (uid !== (useUserStore().id || 'visitor')) return null;
       if (res?.status === 200) {
         completePointsEconomyRequest(uid, operation, requestPayload);
         if (res.data?.ok) {
+          // 永久持有事实先按已确认收据更新；后续刷新失败也不会再次显示可兑换。
+          if (res.data.effect?.type === 'background' && shop.value) {
+            if (growth.value) applyGrowthMutationSnapshot({ ...growth.value, points: res.data.points });
+            shop.value.points = res.data.points;
+            shop.value.items = shop.value.items.map((entry) =>
+              entry.id === res.data.itemId ? { ...entry, owned: true, canBuy: false } : entry,
+            );
+          }
           await Promise.all([loadShop(), load(true), loadInventory()]);
           syncPointsToViews();
-        } else if (res.data?.reason === 'purchase_limit' || res.data?.reason === 'card_max') {
+        } else if (
+          res.data?.reason === 'purchase_limit' ||
+          res.data?.reason === 'card_max' ||
+          res.data?.reason === 'owned'
+        ) {
           // 旧标签页或并发请求可能仍显示可兑换；刷新限兑事实与补签卡权威库存。
           await loadShop();
         }
@@ -896,6 +911,25 @@ export function useGrowth() {
       await Promise.all([loadShop(), load(true)]);
     }
     return res;
+  }
+
+  async function equipBackground(backgroundId: string | null) {
+    const uid = useUserStore().id || 'visitor';
+    ensureGrowthOwner(uid);
+    const generation = ownerGeneration;
+    const res = await growthApi.equipBackground(backgroundId);
+    if (generation !== ownerGeneration || uid !== (useUserStore().id || 'visitor')) return null;
+    if (res?.status === 200 && res.data?.ok) {
+      if (shop.value) {
+        shop.value.equippedBackground = res.data.equipped;
+        shop.value.items = shop.value.items.map((entry) =>
+          entry.effect === 'background' ? { ...entry, equipped: entry.id === res.data.equipped } : entry,
+        );
+      }
+      if (growth.value) applyGrowthMutationSnapshot({ ...growth.value, equippedBackground: res.data.equipped });
+      await Promise.all([loadShop(), load(true)]);
+    }
+    return generation === ownerGeneration && uid === (useUserStore().id || 'visitor') ? res : null;
   }
 
   // 抽奖状态:余额/成本/保底/奖池概率
@@ -1216,6 +1250,7 @@ export function useGrowth() {
     useItem,
     equipTitle,
     equipFrame,
+    equipBackground,
     loadLottery,
     draw,
     claimAchievement,

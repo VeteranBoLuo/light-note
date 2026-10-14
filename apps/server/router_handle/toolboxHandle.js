@@ -91,6 +91,7 @@ export async function getKnowledgeOverview(req, res) {
     const overview = await getToolboxKnowledgeOverview({
       userId: readUserId(req),
       analysisOptions: { includeNodes: false },
+      query: req.query,
     });
     return res.send(resultData(overview));
   } catch (error) {
@@ -326,18 +327,38 @@ export async function createJob(req, res) {
 export async function removeTranslationHistory(req, res) {
   if (!requireWrite(req, res)) return;
   try {
-    return res.send(resultData(await deleteTranslationHistory({ userId: req.user.id, jobIds: req.body?.jobIds, all: req.body?.all === true })));
-  } catch (error) { return sendError(res, error); }
+    return res.send(
+      resultData(
+        await deleteTranslationHistory({ userId: req.user.id, jobIds: req.body?.jobIds, all: req.body?.all === true }),
+      ),
+    );
+  } catch (error) {
+    return sendError(res, error);
+  }
 }
 export async function translationHistory(req, res) {
   if (!requireRead(req, res)) return;
-  try { return res.send(resultData(await listTranslationHistory({ userId: readUserId(req), cursor: req.query?.cursor, keyword: req.query?.keyword }))); }
-  catch (error) { return sendError(res, error); }
+  try {
+    return res.send(
+      resultData(
+        await listTranslationHistory({
+          userId: readUserId(req),
+          cursor: req.query?.cursor,
+          keyword: req.query?.keyword,
+        }),
+      ),
+    );
+  } catch (error) {
+    return sendError(res, error);
+  }
 }
 export async function translationRecord(req, res) {
   if (!requireRead(req, res)) return;
-  try { return res.send(resultData(await getTranslationRecord({ userId: readUserId(req), jobId: req.params.jobId }))); }
-  catch (error) { return sendError(res, error); }
+  try {
+    return res.send(resultData(await getTranslationRecord({ userId: readUserId(req), jobId: req.params.jobId })));
+  } catch (error) {
+    return sendError(res, error);
+  }
 }
 
 export async function listJobs(req, res) {
@@ -496,7 +517,13 @@ export async function translateStream(req, res) {
   const emit = (event, data) => {
     if (res.destroyed || res.writableEnded) return false;
     if (!res.headersSent) {
-      res.status(200).set({ 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache, no-transform', 'X-Accel-Buffering': 'no' });
+      res
+        .status(200)
+        .set({
+          'Content-Type': 'text/event-stream; charset=utf-8',
+          'Cache-Control': 'no-cache, no-transform',
+          'X-Accel-Buffering': 'no',
+        });
       res.flushHeaders?.();
     }
     if (['snapshot', 'delta'].includes(event) && res.writableLength > 256 * 1024) return false;
@@ -504,12 +531,22 @@ export async function translateStream(req, res) {
     return true;
   };
   try {
-    await streamTranslation({ userId: req.user.id, quoteId: req.body?.quoteId, clientRequestId: req.body?.clientRequestId, emit,
+    await streamTranslation({
+      userId: req.user.id,
+      quoteId: req.body?.quoteId,
+      clientRequestId: req.body?.clientRequestId,
+      emit,
       streamVersion: req.body?.streamVersion === 2 ? 2 : 1,
-      disconnected: () => res.destroyed || res.writableEnded });
+      disconnected: () => res.destroyed || res.writableEnded,
+    });
   } catch (error) {
     const failure = parseToolboxError(error);
-    emit('error', { code: failure.code, message: failure.message, status: failure.status, definitive: error.definitive === true });
+    emit('error', {
+      code: failure.code,
+      message: failure.message,
+      status: failure.status,
+      definitive: error.definitive === true,
+    });
   } finally {
     if (!res.destroyed && !res.writableEnded) res.end();
   }
@@ -518,7 +555,13 @@ export async function translateStream(req, res) {
 export async function reviewComparison(req, res) {
   if (!requireWrite(req, res)) return;
   try {
-    const receipt = await reviewComparisonCell({ userId: req.user.id, artifactId: req.params.artifactId, input: req.body });
+    const receipt = await reviewComparisonCell({
+      userId: req.user.id,
+      artifactId: req.params.artifactId,
+      input: req.body,
+    });
     return res.send(resultData(receipt));
-  } catch (error) { return sendError(res, error); }
+  } catch (error) {
+    return sendError(res, error);
+  }
 }

@@ -187,7 +187,11 @@
               <BButton
                 icon-only
                 :loading="dismissingJobs.has(job.id)"
-                :aria-label="t('toolbox.home.dismissTaskLabel', { title: job.extraction?.title || job.artifact?.title || toolName(job.toolId) })"
+                :aria-label="
+                  t('toolbox.home.dismissTaskLabel', {
+                    title: job.extraction?.title || job.artifact?.title || toolName(job.toolId),
+                  })
+                "
                 @click="confirmDismissTask(job)"
                 ><SvgIcon :src="icon.common.close" size="17"
               /></BButton>
@@ -380,6 +384,7 @@
                 <header class="toolbox-home-group__head">
                   <div>
                     <h3 :id="`toolbox-group-${group.id}`">{{ t(`toolbox.homeGroup.${group.id}.title`) }}</h3>
+                    <span>{{ t('toolbox.home.toolCount', { count: group.tools.length }) }}</span>
                     <p>{{ t(`toolbox.homeGroup.${group.id}.description`) }}</p>
                   </div>
                 </header>
@@ -391,6 +396,13 @@
                       :name="displayToolName(tool.id)"
                       :description="toolDescription(tool.id)"
                       :billing="billingLabel(tool)"
+                      :billing-tone="
+                        ['prepare', 'maintain', 'data'].includes(group.id)
+                          ? tool.price.kind === 'free'
+                            ? 'success'
+                            : 'pin'
+                          : undefined
+                      "
                       :featured="group.id === 'create'"
                       @open="openTool(tool)"
                     />
@@ -779,7 +791,6 @@
       const sectionTop = section.element!.getBoundingClientRect().top;
       if (sectionTop > top + inset + dimension(4)) continue;
       const currentTop = current?.element!.getBoundingClientRect().top;
-      // The two compact utility groups share a desktop row; keep the chosen group in that row.
       if (currentTop == null || sectionTop > currentTop + 4 || section.id === preferredToolGroup) current = section;
     }
     if (owner.scrollTop > 0 && owner.scrollTop + owner.clientHeight >= owner.scrollHeight - 4) {
@@ -866,7 +877,8 @@
     return isReadyTask(job) ? t('toolbox.home.resultReady') : t(`toolbox.task.${job.status}`);
   }
   function taskContinueDescription(job: ToolboxJob) {
-    if (job.extraction) return t('extraction.progress',{done:job.extraction.processed,total:job.extraction.total});
+    if (job.extraction)
+      return t('extraction.progress', { done: job.extraction.processed, total: job.extraction.total });
     if (job.save.status === 'save_failed') return t('toolbox.task.saveFailed');
     if (isReadyTask(job)) return t('toolbox.home.resultReadyDescription');
     if (job.status === 'failed') return t('toolbox.task.processingFailed');
@@ -932,7 +944,9 @@
   function openTask(job: ToolboxJob) {
     recordToolboxRecentUse(user, job.toolId);
     rememberHomeScroll();
-    void router.push(job.extraction ? {path:'/toolbox/extraction',query:{id:job.id}} : `/toolbox/task/${job.id}`);
+    void router.push(
+      job.extraction ? { path: '/toolbox/extraction', query: { id: job.id } } : `/toolbox/task/${job.id}`,
+    );
   }
   function openRecentEntry(entry: RecentEntry) {
     recordToolboxRecentUse(user, entry.toolId);
@@ -1548,12 +1562,18 @@
     min-width: 0;
     scroll-margin-top: var(--ui-space-20, 20px);
   }
-  .toolbox-home-group.is-maintain,
-  .toolbox-home-group.is-data {
-    grid-column: auto;
-  }
   .toolbox-home-group__head {
     margin-bottom: var(--ui-space-10, 10px);
+  }
+  .toolbox-home-group__head > div {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: var(--ui-space-10, 10px);
+  }
+  .toolbox-home-group__head > div > span {
+    color: var(--workspace-muted);
+    font-size: var(--ui-font-12, 12px);
   }
   .toolbox-home-group__head h3 {
     margin: 0;
@@ -1575,8 +1595,10 @@
   .is-create .toolbox-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
-  .is-prepare .toolbox-grid {
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--ui-layout-200, 200px)), 1fr));
+  .is-prepare .toolbox-grid,
+  .is-maintain .toolbox-grid,
+  .is-data .toolbox-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
   .toolbox-card-wrap {
     position: relative;
@@ -1672,7 +1694,10 @@
     .toolbox-home-groups {
       grid-template-columns: 1fr;
     }
-    .is-create .toolbox-grid {
+    .is-create .toolbox-grid,
+    .is-prepare .toolbox-grid,
+    .is-maintain .toolbox-grid,
+    .is-data .toolbox-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
     .toolbox-overview {
@@ -1865,7 +1890,9 @@
     }
     .toolbox-grid,
     .is-create .toolbox-grid,
-    .is-prepare .toolbox-grid {
+    .is-prepare .toolbox-grid,
+    .is-maintain .toolbox-grid,
+    .is-data .toolbox-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: var(--ui-space-10, 10px);
     }

@@ -22,6 +22,16 @@
     <template v-else>
       <div class="image-tool__settings">
         <div class="image-tool__setting">
+          <label id="image-preset-label">{{ t('toolbox.local.imagePreset') }}</label>
+          <BSelect
+            :value="preset"
+            :options="presetOptions"
+            :disabled="optimizing"
+            aria-labelledby="image-preset-label"
+            @update:value="applyPreset"
+          />
+        </div>
+        <div class="image-tool__setting">
           <label id="image-format-label">{{ t('toolbox.local.format') }}</label>
           <BSelect
             v-model:value="format"
@@ -30,7 +40,7 @@
             aria-labelledby="image-format-label"
           />
         </div>
-        <div class="image-tool__setting">
+        <div v-if="advanced" class="image-tool__setting">
           <label id="image-quality-label">{{ t('toolbox.local.quality') }}</label>
           <BSelect
             v-model:value="quality"
@@ -39,6 +49,27 @@
             aria-labelledby="image-quality-label"
           />
         </div>
+        <div v-if="advanced" class="image-tool__setting">
+          <label id="image-max-edge">{{ t('toolbox.local.maxEdge') }}</label>
+          <BSelect
+            v-model:value="maxDimension"
+            :options="dimensionOptions"
+            :disabled="optimizing"
+            aria-labelledby="image-max-edge"
+          />
+        </div>
+        <div v-if="advanced" class="image-tool__setting">
+          <label id="image-target-size">{{ t('toolbox.local.targetSize') }}</label>
+          <BSelect
+            v-model:value="targetBytes"
+            :options="targetOptions"
+            :disabled="optimizing"
+            aria-labelledby="image-target-size"
+          />
+        </div>
+        <BButton type="text" :aria-expanded="advanced" @click="advanced = !advanced">{{
+          t(advanced ? 'toolbox.local.hideImageSettings' : 'toolbox.local.moreImageSettings')
+        }}</BButton>
         <BUpload
           raw-file
           multiple
@@ -51,18 +82,20 @@
             ><SvgIcon :src="icon.toolbox.upload" size="15" />{{ t('toolbox.local.addMore') }}</BButton
           >
         </BUpload>
-        <BButton type="primary" :loading="optimizing" @click="runOptimize">
+        <BButton :type="results.length ? undefined : 'primary'" :loading="optimizing" @click="runOptimize">
           {{
             optimizing
               ? t('toolbox.local.optimizing', { current: progress, total: entries.length })
-              : t('toolbox.local.optimize')
+              : results.length
+                ? t('toolbox.local.reprocess')
+                : t('toolbox.local.optimize')
           }}
         </BButton>
       </div>
 
       <p class="image-tool__format-hint">
         <SvgIcon :src="icon.message.info" size="15" aria-hidden="true" />
-        {{ t('toolbox.local.imageFormatHint') }}
+        {{ targetBytes ? t('toolbox.local.targetSizeHint') : t('toolbox.local.imageFormatHint') }}
       </p>
 
       <BProgress v-if="optimizing" :percent="Math.round((progress / entries.length) * 100)" show-info />
@@ -118,7 +151,14 @@
           <header class="image-result-card__header">
             <div class="image-result-card__copy">
               <strong :title="entry.file.name">{{ entry.file.name }}</strong>
-              <span v-if="entry.result" :class="entry.result.outputSize < entry.file.size ? 'is-saving' : 'is-larger'">
+              <span
+                v-if="entry.result"
+                :class="
+                  entry.result.targetMet !== false && entry.result.outputSize < entry.file.size
+                    ? 'is-saving'
+                    : 'is-larger'
+                "
+              >
                 {{ resultOutcome(entry.result) }}
               </span>
               <span v-else-if="entry.error" class="is-error">{{ t('toolbox.local.optimizeFailed') }}</span>
@@ -243,6 +283,55 @@
   const results = ref<EntryResult[]>([]);
   const format = ref<ImageOutputFormat>('image/webp');
   const quality = ref(0.8);
+  const maxDimension = ref(0);
+  const targetBytes = ref(0);
+  const advanced = ref(false);
+  const preset = computed(() => {
+    if (
+      format.value === 'image/webp' &&
+      quality.value === 0.8 &&
+      maxDimension.value === 1920 &&
+      targetBytes.value === 512000
+    )
+      return 'web';
+    if (
+      format.value === 'image/webp' &&
+      quality.value === 0.65 &&
+      maxDimension.value === 1280 &&
+      targetBytes.value === 204800
+    )
+      return 'small';
+    if (quality.value === 0.9 && !maxDimension.value && !targetBytes.value) return 'quality';
+    return 'custom';
+  });
+  const presetOptions = computed(() =>
+    ['custom', 'web', 'small', 'quality'].map((value) => ({ value, label: t(`toolbox.local.imagePresets.${value}`) })),
+  );
+  const dimensionOptions = computed(() =>
+    [0, 1280, 1920, 2560].map((value) => ({ value, label: value ? `${value} px` : t('toolbox.local.keepDimensions') })),
+  );
+  const targetOptions = computed(() =>
+    [0, 204800, 512000, 1048576, 2097152].map((value) => ({
+      value,
+      label: value ? formatToolboxBytes(value) : t('toolbox.local.noSizeTarget'),
+    })),
+  );
+  function applyPreset(value: string | number) {
+    if (value === 'custom') {
+      advanced.value = true;
+      return;
+    }
+    if (value === 'quality') {
+      quality.value = 0.9;
+      maxDimension.value = 0;
+      targetBytes.value = 0;
+      return;
+    }
+    format.value = 'image/webp';
+    quality.value = value === 'small' ? 0.65 : 0.8;
+    maxDimension.value = value === 'small' ? 1280 : 1920;
+    targetBytes.value = value === 'small' ? 204800 : 512000;
+  }
   const optimizing = ref(false);
   const progress = ref(0);
   const bundling = ref(false);
@@ -292,6 +381,8 @@
   }
 
   function resultOutcome(result: EntryResult) {
+    if (result.targetMet === false)
+      return t('toolbox.local.targetNotMet', { size: formatToolboxBytes(result.targetBytes || 0) });
     if (result.outputSize >= result.originalSize) return t('toolbox.local.larger');
     const percent = Math.max(0, Math.round((1 - result.outputSize / Math.max(1, result.originalSize)) * 100));
     return t('toolbox.local.saved', { percent });
@@ -315,7 +406,7 @@
 
   function handleFiles(value: File[]) {
     const files = Array.isArray(value) ? value : [];
-    if (!files.length) return;
+    if (!files.length || optimizing.value) return;
     try {
       validateImageFiles([...entries.value.map((entry) => entry.file), ...files]);
       clearResults();
@@ -369,7 +460,8 @@
     const runOptions = {
       format: format.value,
       quality: Number(quality.value),
-      maxDimension: null,
+      maxDimension: maxDimension.value || null,
+      targetBytes: targetBytes.value || null,
     };
     clearResults();
     optimizing.value = true;
@@ -424,7 +516,7 @@
     }
   }
 
-  watch([format, quality], clearResults);
+  watch([format, quality, maxDimension, targetBytes], clearResults);
   onBeforeUnmount(() => {
     optimizeVersion += 1;
     entries.value.forEach((entry) => URL.revokeObjectURL(entry.previewUrl));
@@ -489,10 +581,7 @@
   .image-tool__settings {
     padding: var(--ui-space-14, 14px);
     display: grid;
-    grid-template-columns: minmax(var(--ui-layout-140, 140px), 0.8fr) minmax(
-        var(--ui-layout-180, 180px),
-        1fr
-      ) auto auto;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--ui-layout-180, 180px)), 1fr));
     gap: var(--ui-space-10, 10px);
     align-items: end;
     border: 1px solid var(--surface-border-color);

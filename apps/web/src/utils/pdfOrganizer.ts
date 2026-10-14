@@ -27,6 +27,22 @@ export interface PdfOrganizerWorkspace {
   pages: PdfOrganizerPage[];
 }
 
+/** Page numbers refer to the current displayed order, never original file offsets. */
+export function parsePdfPageSelection(input: string, pageCount: number): number[] {
+  if (!input.trim() || input.length > 4000 || !Number.isInteger(pageCount) || pageCount < 1)
+    throw new RangeError('INVALID_PAGE_RANGE');
+  const selected = new Set<number>();
+  for (const part of input.replace(/，/gu, ',').split(',')) {
+    const match = /^\s*(\d+)\s*(?:-\s*(\d+)\s*)?$/u.exec(part);
+    if (!match) throw new RangeError('INVALID_PAGE_RANGE');
+    const first = Number(match[1]),
+      last = Number(match[2] ?? match[1]);
+    if (first < 1 || last < first || last > pageCount) throw new RangeError('INVALID_PAGE_RANGE');
+    for (let page = first; page <= last; page++) selected.add(page - 1);
+  }
+  return [...selected].sort((left, right) => left - right);
+}
+
 export class PdfOrganizerError extends Error {
   constructor(public readonly code: 'INVALID_TYPE' | 'TOO_MANY' | 'TOO_LARGE' | 'TOO_MANY_PAGES' | 'INVALID_PDF') {
     super(code);

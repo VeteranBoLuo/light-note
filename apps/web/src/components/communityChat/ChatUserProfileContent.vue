@@ -1,5 +1,5 @@
 <template>
-  <div class="chat-profile-content">
+  <div class="chat-profile-content" :class="{ 'chat-profile-content--identity-only': identityOnly }">
     <div v-if="loading" class="chat-profile-content__state">
       <BLoading inline loading :title="t('communityChat.profile.loading')" />
     </div>
@@ -23,91 +23,96 @@
       </div>
 
       <template v-if="view === 'summary'">
-        <div :class="{ 'chat-profile-content__hero': $slots.identityActions }">
+        <ProfileBackgroundSurface
+          :background-id="profile.backgroundId"
+          :class="{ 'chat-profile-content__hero': $slots.identityActions }"
+        >
           <ProfileIdentity :profile="profile"><slot name="identityDescription" /></ProfileIdentity>
           <slot name="identityActions" />
-        </div>
-        <CommunityProfileActions
-          v-if="communityActions && profile.userPublicId"
-          :user-public-id="profile.userPublicId"
-          :prepared-profile="actionsProfile"
-          @navigate="emit('navigate', $event)"
-        />
+        </ProfileBackgroundSurface>
+        <template v-if="!identityOnly">
+          <CommunityProfileActions
+            v-if="communityActions && profile.userPublicId"
+            :user-public-id="profile.userPublicId"
+            :prepared-profile="actionsProfile"
+            @navigate="emit('navigate', $event)"
+          />
 
-        <section
-          v-if="!$slots.identityDescription"
-          class="chat-profile-content__bio"
-          :aria-label="t('communityChat.profile.bio')"
-        >
-          <div class="chat-profile-content__section-heading">
-            <span>
-              <SvgIcon :src="icon.userCenter.info" size="16" aria-hidden="true" />
-              <strong>{{ t('communityChat.profile.bio') }}</strong>
-            </span>
-          </div>
-          <p :class="{ 'is-empty': !profile.bio }">
-            {{ profile.bio || t('communityChat.profile.bioEmpty') }}
-          </p>
-          <p v-if="profile.communityTenureLabel" class="chat-profile-content__tenure">
-            <SvgIcon :src="icon.growth.tenure" size="15" aria-hidden="true" />
-            <span>{{ profile.communityTenureLabel }}</span>
-          </p>
-        </section>
-
-        <section class="chat-profile-content__achievements" :aria-label="t('communityChat.profile.achievements')">
-          <div class="chat-profile-content__section-heading">
-            <span>
-              <SvgIcon :src="icon.userCenter.growth" size="17" aria-hidden="true" />
-              <strong>{{ t('communityChat.profile.featuredAchievements') }}</strong>
-            </span>
-            <small>{{ t('communityChat.profile.achievementCount', { count: profile.achievementCount }) }}</small>
-            <slot name="achievementActions" />
-          </div>
-
-          <AchievementGrid :achievements="featuredAchievements" />
-
-          <BButton
-            v-if="hasMoreAchievements && !compact"
-            type="text"
-            class="chat-profile-content__view-all"
-            @click="openAllAchievements"
+          <section
+            v-if="!$slots.identityDescription"
+            class="chat-profile-content__bio"
+            :aria-label="t('communityChat.profile.bio')"
           >
-            {{ t('communityChat.profile.viewAllAchievements', { count: profile.achievementCount }) }}
-            <SvgIcon :src="icon.arrow_right" size="15" aria-hidden="true" />
-          </BButton>
-        </section>
+            <div class="chat-profile-content__section-heading">
+              <span>
+                <SvgIcon :src="icon.userCenter.info" size="16" aria-hidden="true" />
+                <strong>{{ t('communityChat.profile.bio') }}</strong>
+              </span>
+            </div>
+            <p :class="{ 'is-empty': !profile.bio }">
+              {{ profile.bio || t('communityChat.profile.bioEmpty') }}
+            </p>
+            <p v-if="profile.communityTenureLabel" class="chat-profile-content__tenure">
+              <SvgIcon :src="icon.growth.tenure" size="15" aria-hidden="true" />
+              <span>{{ profile.communityTenureLabel }}</span>
+            </p>
+          </section>
 
-        <div v-if="isOwn" class="chat-profile-content__actions chat-profile-content__actions--own">
-          <BButton type="primary" @click="beginEdit">
-            <SvgIcon :src="icon.communityChat.profileEdit" size="16" aria-hidden="true" />
-            {{ t('community.feed.editProfile') }}
-          </BButton>
-        </div>
+          <section class="chat-profile-content__achievements" :aria-label="t('communityChat.profile.achievements')">
+            <div class="chat-profile-content__section-heading">
+              <span>
+                <SvgIcon :src="icon.userCenter.growth" size="17" aria-hidden="true" />
+                <strong>{{ t('communityChat.profile.featuredAchievements') }}</strong>
+              </span>
+              <small>{{ t('communityChat.profile.achievementCount', { count: profile.achievementCount }) }}</small>
+              <slot name="achievementActions" />
+            </div>
 
-        <div
-          v-else-if="authenticated && chatActions"
-          class="chat-profile-content__actions chat-profile-content__actions--moderation"
-          :class="{ 'is-single': profile.role === 'official' }"
-        >
-          <BButton v-if="profile.role !== 'official'" @click="emit('block')">
-            <SvgIcon :src="icon.navigation.permissions" size="16" aria-hidden="true" />
-            {{ t('communityChat.blocks.action') }}
-          </BButton>
-          <BButton type="danger" @click="emit('report')">
-            <SvgIcon :src="icon.message.warning" size="16" aria-hidden="true" />
-            {{ t('communityChat.report.action') }}
-          </BButton>
-        </div>
+            <AchievementGrid :achievements="featuredAchievements" />
 
-        <div v-else-if="!authenticated && chatActions" class="chat-profile-content__visitor-action">
-          <span>{{ t('communityChat.profile.visitorHint') }}</span>
-          <BButton type="primary" @click="emit('login')">{{ t('communityChat.guestLoginAction') }}</BButton>
-        </div>
+            <BButton
+              v-if="hasMoreAchievements && !compact"
+              type="text"
+              class="chat-profile-content__view-all"
+              @click="openAllAchievements"
+            >
+              {{ t('communityChat.profile.viewAllAchievements', { count: profile.achievementCount }) }}
+              <SvgIcon :src="icon.arrow_right" size="15" aria-hidden="true" />
+            </BButton>
+          </section>
 
-        <p v-if="!compact" class="chat-profile-content__privacy">
-          <SvgIcon :src="icon.growth.lock" size="14" aria-hidden="true" />
-          <span>{{ t('communityChat.profile.privacy') }}</span>
-        </p>
+          <div v-if="isOwn" class="chat-profile-content__actions chat-profile-content__actions--own">
+            <BButton type="primary" @click="beginEdit">
+              <SvgIcon :src="icon.communityChat.profileEdit" size="16" aria-hidden="true" />
+              {{ t('community.feed.editProfile') }}
+            </BButton>
+          </div>
+
+          <div
+            v-else-if="authenticated && chatActions"
+            class="chat-profile-content__actions chat-profile-content__actions--moderation"
+            :class="{ 'is-single': profile.role === 'official' }"
+          >
+            <BButton v-if="profile.role !== 'official'" @click="emit('block')">
+              <SvgIcon :src="icon.navigation.permissions" size="16" aria-hidden="true" />
+              {{ t('communityChat.blocks.action') }}
+            </BButton>
+            <BButton type="danger" @click="emit('report')">
+              <SvgIcon :src="icon.message.warning" size="16" aria-hidden="true" />
+              {{ t('communityChat.report.action') }}
+            </BButton>
+          </div>
+
+          <div v-else-if="!authenticated && chatActions" class="chat-profile-content__visitor-action">
+            <span>{{ t('communityChat.profile.visitorHint') }}</span>
+            <BButton type="primary" @click="emit('login')">{{ t('communityChat.guestLoginAction') }}</BButton>
+          </div>
+
+          <p v-if="!compact" class="chat-profile-content__privacy">
+            <SvgIcon :src="icon.growth.lock" size="14" aria-hidden="true" />
+            <span>{{ t('communityChat.profile.privacy') }}</span>
+          </p>
+        </template>
       </template>
 
       <section v-else-if="view === 'achievements'" class="chat-profile-content__subview">
@@ -173,6 +178,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import AchievementEmblem from '@/components/growth/AchievementEmblem.vue';
   import AvatarFramePreview from '@/components/growth/AvatarFramePreview.vue';
+  import ProfileBackgroundSurface from '@/components/growth/ProfileBackgroundSurface.vue';
   import GrowthLevelChip from '@/components/growth/GrowthLevelChip.vue';
   import icon from '@/config/icon';
   import { frameVariant } from '@/config/growthFrames';
@@ -185,6 +191,7 @@
 
   const props = withDefaults(
     defineProps<{
+      identityOnly?: boolean;
       compact?: boolean;
       communityActions?: boolean;
       chatActions?: boolean;
@@ -204,6 +211,7 @@
       sessionKey?: number;
     }>(),
     {
+      identityOnly: false,
       compact: false,
       communityActions: true,
       chatActions: true,
@@ -419,6 +427,10 @@
     color: var(--text-color);
   }
 
+  .chat-profile-content--identity-only {
+    min-height: 0;
+  }
+
   .chat-profile-content--editing {
     height: 100%;
     min-height: 0;
@@ -467,6 +479,17 @@
     border: 1px solid var(--surface-border-color);
     border-radius: 16px;
     background: var(--workspace-panel-bg-color);
+  }
+
+  .profile-background-surface.is-decorated > .chat-profile-content__identity {
+    background: transparent;
+    border: 0;
+    min-height: var(--ui-layout-160, 160px);
+    padding: var(--ui-space-24, 24px);
+  }
+
+  .chat-profile-content__hero.profile-background-surface.is-decorated > .chat-profile-content__identity {
+    padding: 0;
   }
 
   .chat-profile-content__avatar {

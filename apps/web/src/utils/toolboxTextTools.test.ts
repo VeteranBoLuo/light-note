@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   convertMarkup,
   convertTable,
+  detectTableFormat,
   parseDelimitedTable,
   parseTable,
   serializeTable,
@@ -9,6 +10,17 @@ import {
 } from './toolboxTextTools';
 
 describe('工具箱文本与表格本地内核', () => {
+  it('拒绝超过列数上限的 JSON 数组与稀疏对象表格', () => {
+    for (const value of [
+      [Array.from({ length: 201 }, (_, index) => index)],
+      Array.from({ length: 201 }, (_, index) => ({ [`field_${index}`]: index })),
+    ]) {
+      expect(() => parseTable(JSON.stringify(value), 'json')).toThrowError(
+        expect.objectContaining<ToolboxTextError>({ code: 'INVALID_TABLE' }),
+      );
+    }
+  });
+
   it('正确解析包含逗号、换行和双引号的 CSV', () => {
     expect(parseDelimitedTable('名称,说明\n"轻笺,工具箱","第一行\n第二行"\n"双""引号",完成', ',')).toEqual([
       ['名称', '说明'],
@@ -72,4 +84,15 @@ describe('工具箱文本与表格本地内核', () => {
     expect(markdown).toContain('## 结论');
     expect(markdown).toContain('**保留**');
   });
+});
+
+it('自动识别粘贴格式，不把引号内的分隔符误认为 TSV；无表头保留第一行', () => {
+  expect(detectTableFormat('a,b\n"x\ty",z')).toBe('csv');
+  expect(detectTableFormat('a\tb\nx\ty')).toBe('tsv');
+  expect(detectTableFormat(' | a | b |\n| --- | --- |\n| 1 | 2 |')).toBe('markdown');
+  expect(detectTableFormat('\ufeff [{"a":1}]')).toBe('json');
+  expect(JSON.parse(convertTable('Alice,10\nBob,20', 'csv', 'json', false).output)).toEqual([
+    { column_1: 'Alice', column_2: '10' },
+    { column_1: 'Bob', column_2: '20' },
+  ]);
 });

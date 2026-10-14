@@ -9,6 +9,7 @@ export interface ImageOptimizerOptions {
   format: ImageOutputFormat;
   quality: number;
   maxDimension: number | null;
+  targetBytes?: number | null;
 }
 
 export interface OptimizedImage {
@@ -22,6 +23,8 @@ export interface OptimizedImage {
   height: number;
   blob: Blob;
   previewUrl: string;
+  targetBytes?: number;
+  targetMet?: boolean;
 }
 
 export class ImageOptimizerError extends Error {
@@ -104,28 +107,67 @@ export async function optimizeImage(file: File, options: ImageOptimizerOptions):
   validateImageFiles([file]);
   const decoded = await decodeImage(file);
   try {
-    if (!options.maxDimension && decoded.width * decoded.height > IMAGE_OPTIMIZER_MAX_OUTPUT_PIXELS) {
+    const targetBytes =
+      Number.isFinite(options.targetBytes) && Number(options.targetBytes) > 0
+        ? Math.floor(Number(options.targetBytes))
+        : 0;
+    if (!options.maxDimension && !targetBytes && decoded.width * decoded.height > IMAGE_OPTIMIZER_MAX_OUTPUT_PIXELS) {
       throw new ImageOptimizerError('TOO_MANY_PIXELS');
     }
     const limit = options.maxDimension && options.maxDimension > 0 ? options.maxDimension : Infinity;
     const dimensionRatio = limit / Math.max(decoded.width, decoded.height);
     const pixelRatio = Math.sqrt(IMAGE_OPTIMIZER_MAX_OUTPUT_PIXELS / Math.max(1, decoded.width * decoded.height));
     const ratio = Math.min(1, dimensionRatio, pixelRatio);
-    const width = Math.max(1, Math.round(decoded.width * ratio));
-    const height = Math.max(1, Math.round(decoded.height * ratio));
+    let width = Math.max(1, Math.floor(decoded.width * ratio));
+    let height = Math.max(1, Math.floor(decoded.height * ratio));
     const canvas = document.createElement('canvas');
     canvas.width = width;
     canvas.height = height;
     const context = canvas.getContext('2d', { alpha: options.format !== 'image/jpeg' });
     if (!context) throw new ImageOptimizerError('ENCODE_FAILED');
-    if (options.format === 'image/jpeg') {
-      context.fillStyle = '#fff';
-      context.fillRect(0, 0, width, height);
+    const draw = () => {
+      canvas.width = width;
+      canvas.height = height;
+      if (options.format === 'image/jpeg') {
+        context.fillStyle = '#fff';
+        context.fillRect(0, 0, width, height);
+      }
+      context.imageSmoothingEnabled = true;
+      context.imageSmoothingQuality = 'high';
+      context.drawImage(decoded.source, 0, 0, width, height);
+    };
+    draw();
+    let quality = Math.min(1, Math.max(0.1, options.quality));
+    let blob = await canvasToBlob(canvas, options.format, quality);
+    if (targetBytes && blob.size > targetBytes && options.format !== 'image/png') {
+      let low = Math.min(0.35, quality),
+        high = quality;
+      quality = low;
+      blob = await canvasToBlob(canvas, options.format, low);
+      if (blob.size <= targetBytes) {
+        for (let attempt = 0; attempt < 5; attempt++) {
+          const candidateQuality = (low + high) / 2;
+          const candidate = await canvasToBlob(canvas, options.format, candidateQuality);
+          if (candidate.size <= targetBytes) {
+            low = candidateQuality;
+            quality = candidateQuality;
+            blob = candidate;
+          } else high = candidateQuality;
+        }
+      }
     }
-    context.imageSmoothingEnabled = true;
-    context.imageSmoothingQuality = 'high';
-    context.drawImage(decoded.source, 0, 0, width, height);
-    const blob = await canvasToBlob(canvas, options.format, options.quality);
+    // Bounded attempts; report a missed target instead of claiming a guaranteed size.
+    for (
+      let attempt = 0;
+      targetBytes && blob.size > targetBytes && attempt < 4 && Math.max(width, height) > 32;
+      attempt++
+    ) {
+      const shrink = Math.max(0.5, Math.min(0.9, Math.sqrt(targetBytes / blob.size) * 0.95));
+      width = Math.max(1, Math.floor(width * shrink));
+      height = Math.max(1, Math.floor(height * shrink));
+      draw();
+      blob = await canvasToBlob(canvas, options.format, quality);
+    }
     return {
       fileName: `${safeDownloadBaseName(file.name)}-optimized.${extensionFor(options.format)}`,
       originalName: file.name,
@@ -137,6 +179,7 @@ export async function optimizeImage(file: File, options: ImageOptimizerOptions):
       height,
       blob,
       previewUrl: URL.createObjectURL(blob),
+      ...(targetBytes ? { targetBytes, targetMet: blob.size <= targetBytes } : {}),
     };
   } finally {
     decoded.close();

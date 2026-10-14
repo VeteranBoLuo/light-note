@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   __test__,
+  buildProfilePayload,
   getCommunityChatMessageAuthorAchievements,
   getCommunityChatMessageAuthorProfile,
   getCommunityChatOwnProfile,
@@ -27,6 +28,7 @@ function authorRow(overrides = {}) {
     authorExp: 15000,
     authorTitleId: null,
     authorFrameId: 'frame_streak_seed',
+    authorBackgroundId: 'background_stars',
     authorRegisteredAt: '2026-07-01T00:00:00.000Z',
     bio: '喜欢整理知识',
     showCommunityTenure: 1,
@@ -37,6 +39,18 @@ function authorRow(overrides = {}) {
 }
 
 describe('communityChatProfileService', () => {
+  it('公开背景只接受白名单 ID，不返回任意图片地址或私人持有清单', async () => {
+    const db = { query: vi.fn().mockResolvedValue([[]]) };
+    const { profile } = await buildProfilePayload({
+      db,
+      author: authorRow({ authorBackgroundId: 'https://private.invalid/background.png' }),
+      avatarPath: '/avatar',
+      locale: 'zh-CN',
+    });
+    expect(profile.backgroundId).toBeNull();
+    expect(profile).not.toHaveProperty('owned');
+    expect(profile).not.toHaveProperty('authorUserId');
+  });
   it('在线成员头像短地址只允许 Root，并在读取时重新解析加密票据', async () => {
     const token = issueCommunityChatPresenceAvatarToken('online-user-1', { env: PUBLIC_ENV });
     const db = {
@@ -107,6 +121,7 @@ describe('communityChatProfileService', () => {
       name: '薄荷',
       avatar: `/api/community-chat/messages/${messagePublicId}/author-avatar?v=new-avatar`,
       frameId: 'frame_streak_seed',
+      backgroundId: 'background_stars',
       frameRarity: 'rare',
       bio: '喜欢整理知识',
       achievements: [
@@ -183,7 +198,12 @@ describe('communityChatProfileService', () => {
       featuredAchievementKeys: [],
       usesDefaultFeaturedAchievements: false,
       revision: 0,
-      publicPreview: { communityTenureLabel: expect.stringContaining('加入轻笺'), achievements: [], achievementCount: 4, hasMoreAchievements: true },
+      publicPreview: {
+        communityTenureLabel: expect.stringContaining('加入轻笺'),
+        achievements: [],
+        achievementCount: 4,
+        hasMoreAchievements: true,
+      },
     });
   });
 

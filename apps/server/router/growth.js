@@ -21,6 +21,7 @@ router.get('/inventory', growthHandle.getInventoryHandle);
 router.post('/item/use', growthHandle.useItemHandle);
 router.post('/equipTitle', growthHandle.equipTitleHandle);
 router.post('/equipFrame', growthHandle.equipFrameHandle);
+router.post('/equipBackground', growthHandle.equipBackgroundHandle);
 router.get('/lottery', growthHandle.getLottery);
 router.post('/lottery/draw', growthHandle.doDrawLottery);
 router.post('/achievement/claim', growthHandle.doClaimAchievement);

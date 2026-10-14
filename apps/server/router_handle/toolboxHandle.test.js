@@ -178,6 +178,7 @@ describe('toolbox home handlers', () => {
     expect(mocks.getToolboxKnowledgeOverview).toHaveBeenCalledWith({
       userId: 'user-1',
       analysisOptions: { includeNodes: false },
+      query: undefined,
     });
     expect(response.send).toHaveBeenCalledWith({ data: overview, status: 200, msg: 'success' });
   });

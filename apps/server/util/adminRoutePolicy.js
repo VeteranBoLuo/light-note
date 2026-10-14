@@ -83,13 +83,19 @@ declare(ADMIN_POLICIES.BACKGROUND_WRITE, 'activity', [
 ]);
 
 declare(ADMIN_POLICIES.READ, 'toolbox', [
-  ['GET', '/toolbox/extractions'], ['GET', '/toolbox/extractions/:id'],
-  ['GET', '/toolbox/extractions/:id/sources/:sourceId'], ['POST', '/toolbox/extractions/:id/note-summary'],
-  ['GET', '/toolbox/extractions/:id/records'], ['GET', '/toolbox/extractions/:id/next-pending'], ['POST', '/toolbox/extractions/:id/export'],
+  ['GET', '/toolbox/extractions'],
+  ['GET', '/toolbox/extractions/:id'],
+  ['GET', '/toolbox/extractions/:id/sources/:sourceId'],
+  ['POST', '/toolbox/extractions/:id/note-summary'],
+  ['GET', '/toolbox/extractions/:id/records'],
+  ['GET', '/toolbox/extractions/:id/next-pending'],
+  ['POST', '/toolbox/extractions/:id/export'],
 ]);
 declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'toolbox', [
-  ['POST', '/toolbox/extractions'], ['POST', '/toolbox/extractions/:id/actions'],
-  ['PATCH', '/toolbox/extractions/:id/records/:recordId'], ['DELETE', '/toolbox/extractions/:id'],
+  ['POST', '/toolbox/extractions'],
+  ['POST', '/toolbox/extractions/:id/actions'],
+  ['PATCH', '/toolbox/extractions/:id/records/:recordId'],
+  ['DELETE', '/toolbox/extractions/:id'],
 ]);
 
 function declare(policy, resourceType, routes) {
@@ -633,6 +639,7 @@ declare(ADMIN_POLICIES.ENTITLEMENT_WRITE, 'growth', [
   ['POST', '/growth/item/use'],
   ['POST', '/growth/equipTitle'],
   ['POST', '/growth/equipFrame'],
+  ['POST', '/growth/equipBackground'],
   ['POST', '/growth/lottery/draw'],
   ['POST', '/growth/achievement/claim'],
   ['POST', '/growth/claimAll'],

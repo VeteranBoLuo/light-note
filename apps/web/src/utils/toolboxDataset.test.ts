@@ -7,6 +7,10 @@ import {
   mergeToolboxDatasets,
   pivotToolboxDataset,
   profileToolboxDataset,
+  prepareToolboxDatasetFile,
+  readToolboxDatasetFile,
+  parseDatasetText,
+  serializeToolboxDataset,
   splitToolboxDataset,
   TOOLBOX_DATASET_MAX_TOTAL_BYTES,
   validateToolboxDataset,
@@ -99,4 +103,102 @@ describe('toolbox dataset', () => {
     expect(groups.get('研发')?.rows).toHaveLength(3);
     expect(groups.get('empty')?.rows).toHaveLength(1);
   });
+
+  async function excelFile(sheets: Array<{ name: string; rows: string[][] }>) {
+    const { default: ExcelJS } = await import('exceljs');
+    const workbook = new ExcelJS.Workbook();
+    for (const sheet of sheets) workbook.addWorksheet(sheet.name).addRows(sheet.rows);
+    const bytes = await workbook.xlsx.writeBuffer();
+    return { name: 'sample.xlsx', size: bytes.byteLength, arrayBuffer: async () => bytes } as File;
+  }
+
+  it('requires an explicit worksheet for multi-sheet Excel instead of analyzing the cover', async () => {
+    const file = await excelFile([
+      { name: '说明', rows: [['说明'], ['这不是业务数据']] },
+      {
+        name: '实际数据',
+        rows: [
+          ['id', 'amount'],
+          ['A', '100'],
+          ['B', '200'],
+        ],
+      },
+    ]);
+    const source = await prepareToolboxDatasetFile(file);
+    expect(source.worksheets.map((sheet) => sheet.name)).toEqual(['说明', '实际数据']);
+    expect(() => source.read()).toThrow('WORKSHEET_SELECTION_REQUIRED');
+    expect(source.read(source.worksheets[1]!.id)).toMatchObject({
+      worksheetName: '实际数据',
+      headers: ['id', 'amount'],
+      rows: [
+        ['A', '100'],
+        ['B', '200'],
+      ],
+    });
+    expect(() => source.read(999)).toThrow('INVALID_TABLE');
+  });
+
+  it('allows selecting a later sheet when the first one is empty', async () => {
+    const file = await excelFile([
+      { name: '空白', rows: [] },
+      { name: '数据', rows: [['id'], ['A']] },
+    ]);
+    const source = await prepareToolboxDatasetFile(file);
+    expect(() => source.read(source.worksheets[0]!.id)).toThrow('INVALID_TABLE');
+    expect(source.read(source.worksheets[1]!.id).rows).toEqual([['A']]);
+  });
+
+  it('loads single-sheet Excel directly and keeps its source visible after cleaning', async () => {
+    const source = await readToolboxDatasetFile(await excelFile([{ name: '订单', rows: [['id'], [' A ']] }]));
+    expect(
+      cleanToolboxDataset(source, {
+        trimCells: true,
+        normalizeWhitespace: false,
+        removeEmptyRows: false,
+        removeDuplicateRows: false,
+        normalizeHeaders: false,
+      }).dataset,
+    ).toMatchObject({ worksheetName: '订单', rows: [['A']] });
+  });
+});
+
+it('decodes explicitly selected GBK and preserves a headerless first row', async () => {
+  const bytes = Uint8Array.from([0xc3, 0xfb, 0xd7, 0xd6, 0x2c, 0x31, 0x0a, 0x41, 0x2c, 0x32]);
+  const file = { name: 'sample.csv', size: bytes.length, arrayBuffer: async () => bytes.buffer } as File;
+  await expect(prepareToolboxDatasetFile(file)).rejects.toThrow();
+  const prepared = await prepareToolboxDatasetFile(file, { encoding: 'gb18030', firstRowHeader: false });
+  expect(prepared.read()).toMatchObject({
+    headers: ['column_1', 'column_2'],
+    rows: [
+      ['名字', '1'],
+      ['A', '2'],
+    ],
+  });
+});
+it('rejects duplicate and empty match keys instead of silently dropping rows', () => {
+  const right = createToolboxDataset([
+    ['id', 'value'],
+    ['1', 'new'],
+  ]);
+  for (const rows of [
+    [
+      ['1', 'a'],
+      ['1', 'b'],
+    ],
+    [['', 'a']],
+  ]) {
+    const left = createToolboxDataset([['id', 'value'], ...rows]);
+    expect(() => diffToolboxDatasets(left, right, 'id')).toThrow('toolbox.dataset.invalidKey');
+    expect(() => mergeToolboxDatasets(left, right, 'left', 'id')).toThrow('toolbox.dataset.invalidKey');
+    expect(mergeToolboxDatasets(left, right, 'append').rows).toHaveLength(rows.length + 1);
+  }
+});
+
+it('imports and exports ten thousand records without inheriting the lightweight converter cap', () => {
+  const source = 'id,value\n' + Array.from({ length: 10000 }, (_, i) => `${i},item-${i}`).join('\n');
+  const data = parseDatasetText(source, 'csv');
+  expect(data.rows).toHaveLength(10000);
+  expect(serializeToolboxDataset(data, 'csv').split('\n')).toHaveLength(10001);
+  expect(JSON.parse(serializeToolboxDataset(data, 'json'))).toHaveLength(10000);
+  expect(() => parseDatasetText(source + '\n10001,extra', 'csv')).toThrow();
 });

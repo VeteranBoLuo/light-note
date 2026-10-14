@@ -16,7 +16,10 @@
     <span v-else-if="featured" class="toolbox-tool-card__output"
       >{{ t('toolbox.outputLabel') }} · {{ t(`toolbox.tool.${toolId}.output`) }}</span
     >
-    <span class="toolbox-tool-card__billing">{{ billing }}</span>
+    <span class="toolbox-tool-card__billing">
+      <BChip v-if="billingTone" :tone="billingTone" max-width="100%">{{ billing }}</BChip>
+      <template v-else>{{ billing }}</template>
+    </span>
   </BButton>
 </template>
 
@@ -25,6 +28,7 @@
   import { useI18n } from 'vue-i18n';
   import type { ToolboxToolId } from '@lightnote/shared/toolbox-protocol';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BChip from '@/components/base/BasicComponents/BChip.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
   import { TOOLBOX_PRESENTATION } from '@/config/toolbox';
@@ -34,6 +38,7 @@
     name: string;
     description: string;
     billing: string;
+    billingTone?: 'success' | 'pin';
     featured?: boolean;
   }>();
   defineEmits<{ open: [] }>();
@@ -137,6 +142,15 @@
     padding-right: var(--ui-space-30, 30px);
     font-size: var(--ui-font-11, 11px);
     color: var(--workspace-muted);
+  }
+  .toolbox-tool-card__billing :deep(.b-chip) {
+    border-radius: 6px;
+    line-height: 1.45;
+  }
+  .toolbox-tool-card__billing :deep(.b-chip__content) {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-align: left;
   }
   .is-featured .toolbox-tool-card__description {
     /* ui-density-fixed: Reserve two description lines; em follows the shared font density. */

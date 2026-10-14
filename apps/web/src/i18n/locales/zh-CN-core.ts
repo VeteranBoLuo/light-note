@@ -1,3 +1,4 @@
+import { profileBackgroundsZh, profileBackgroundItemsZh } from './profileBackgrounds';
 import { MAKEUP_WINDOW_DAYS } from '@lightnote/shared';
 import { noteMathZh } from './noteMath';
 import { extractionZh } from './extraction';
@@ -19,6 +20,7 @@ import { accountSettingsZh } from './accountSettings';
 import { settingsRefineZh } from './settingsRefine';
 import { notificationMessages } from '@lightnote/shared/notification-presentation';
 export default {
+  profileBackgrounds: profileBackgroundsZh,
   noteMath: noteMathZh,
   nativePush: {
     title: 'App 通知连接',
@@ -1276,6 +1278,22 @@ export default {
     },
   },
   toolbox: {
+    auditResult: {
+      review: "按章节核对",
+      full: "完整报告",
+      progress: "已核对 {done} / {total} 个章节",
+      hint: "核对标记仅保存在当前浏览器，不代表已修改资料或重新检查。可打开材料查看来源，修改后重新选择资料发起检查。",
+      checked: "已核对",
+    },
+    ocrResult: {
+      fullReport: "完整识别结果",
+      page: "选择文件与页码",
+      compareOriginal: "选择原文件对照",
+      localComparison: "重新选择对应原文件，在本地对照页码和文字。请确认是同一版本；此操作不上传、不重新识别。",
+      original: "本地对照原件",
+      pageUnavailable: "当前文件没有对应页码，请确认原文件和页数。",
+      loadFailed: "请选择 20 MB 以内的 PDF、PNG、JPG 或 WebP。",
+    },
     presentation: workshopPresentationZh,
     retired: '此工具已下架，历史资料保留。',
     error: {
@@ -1523,6 +1541,7 @@ export default {
     coreToolsTitle: '从任务开始',
     coreToolsDescription: '只保留能直接产出知识成果、维护知识库或准备资料的常用工具',
     home: {
+      toolCount: '{count} 个工具',
       allCategories: '全部分类',
       allBillingFilter: '全部',
       aiPointsFilter: 'AI / 积分',
@@ -2187,6 +2206,10 @@ export default {
     clearSearch: '清空搜索',
     back: '返回知识工坊',
     workbench: {
+      aiOcrUse: "复杂版面、模糊文字；使用 AI 额度或积分",
+      basicOcrUse: "清晰印刷文字；免费，按页数限制",
+      ocrServerNotice: "两种模式都会上传文件并在服务器识别。切换方式不会自动开始或重复收费。",
+
       ocrSearchPlaceholder: '搜索 PDF 或图片',
       ocrSelectHint: '选择 PDF 或图片，也可在下方上传扫描文件',
       ocrMode: '识别方式',
@@ -2555,6 +2578,15 @@ export default {
       },
     },
     maintenance: {
+      scope: "检查范围",
+      allNotes: "全部笔记",
+      recheck: "重新检查",
+      exportReport: "导出检查报告",
+      checkedSummary: "已检查 {notes} 篇笔记 · {issues} 个问题",
+      priorityCount: "优先处理 {count} 项",
+      recheckHint: "打开笔记处理后，点击“重新检查”更新结果。检查不会修改原笔记。",
+      exportFailed: "报告导出失败，请重试",
+
       optionalSuggestions: '包含可选整理建议：无标签、长期未更新',
       guestTitle: '登录后检查你自己的知识库',
       guestDescription: '结构巡检需要读取当前账号的笔记目录；整个过程只读，不会修改内容。',
@@ -2712,6 +2744,14 @@ export default {
       noteTitle: '{name} · 总结',
     },
     documentText: {
+      docxImagesReady: '已提取 {count} 张图片，下载时随 Markdown 一起打包。复制、翻译和存为笔记仅保留文字。',
+      preview: "预览",
+      docxImages: "已提取 {count} 张图片，另有 {skipped} 张不支持或超出限制。下载包含图片；复制、翻译和存为笔记仅保留文字。",
+
+      failed: '未完成',
+      retryFailed: '重试失败文件',
+      batchResult: '已完成 {success} 个，失败 {failed} 个；成功结果仍可复制、保存和下载。',
+      tooMany: '一次最多选择 {count} 个文件，请减少文件后重试。',
       emptyTitle: {
         pdf_text_extractor: '把 PDF 文字层完整取出来',
         docx_to_markdown: '把 Word 文档变成可继续编辑的 Markdown',
@@ -2745,7 +2785,6 @@ export default {
       tables: '表格',
       links: '链接',
       pdfScanWarning: '有 {count} 页没有可提取的文字层，可能是扫描页；这类页面需要使用文档 OCR。',
-      docxImageWarning: '检测到 {count} 个图片对象。本期保留文档结构，但不会把图片嵌入 Markdown。',
       invalidType: '请选择当前工具支持的文件类型',
       tooLarge: '所选文件总大小超过当前工具上限',
       error: {
@@ -2896,6 +2935,26 @@ export default {
       quiz: '自测',
     },
     dataset: {
+      invalidKey: "关键字段存在空值或重复值，无法逐行准确匹配。请换用唯一字段，或先清洗数据。",
+
+      pasteData: "粘贴数据",
+      importSettings: "导入设置",
+      encoding: "文本文件编码",
+      importSettingsHint: "设置用于下次导入；Excel 不使用文本编码。无表头时自动生成列名。",
+      pasteHint: "粘贴 CSV、TSV、JSON 或 Markdown 表格，自动识别格式。对比与合并时可依次粘贴两份数据。",
+      usePastedData: "导入数据",
+      pastedName: "粘贴的数据",
+      handoffExpired: "待接收的数据已失效，请返回表格转换重新打开。",
+      moreChanges: "显示更多改动",
+      diffExportHint: "列表显示变更前后值；下载报告包含全部新增、删除和变更记录。",
+
+      chooseWorksheets: '选择 Excel 工作表',
+      chooseWorksheet: '请选择工作表',
+      worksheetHint: '每份文件选择一张工作表，表头按导入设置处理。确认后只分析所选工作表，原文件不会被修改。',
+      worksheetOption: '{name} · {rows} 行 · {columns} 列',
+      selectedWorksheet: '工作表：{name}',
+      loadWorksheets: '载入所选工作表',
+      tooManyFiles: '当前操作最多读取 {count} 份文件，请减少文件后重试。',
       pendingTitle: '尚有未应用的结果',
       pendingHint: '切换操作将放弃当前预览。请先应用结果，或确认放弃。',
       discardPreview: '放弃预览并切换',
@@ -3044,6 +3103,36 @@ export default {
       valueType: { empty: '空值', number: '数字', boolean: '布尔', date: '日期', text: '文本', mixed: '类型混杂' },
     },
     local: {
+      continueInDataset: "继续清洗 / 分析",
+      convertedTable: "转换后的表格",
+
+      imagePresets: {custom: '自定义', web: '网页分享 · 1920 px / 500 KB', small: '小体积 · 1280 px / 200 KB', quality: '高画质 · 原尺寸'},
+
+      pageRange: '页码范围',
+      pageRangePlaceholder: '例如 1-3, 5, 8-10',
+      selectRange: '选择范围',
+      undoEdit: '撤销上一步',
+      currentPageOrder: '页码以当前排列为准；可撤销最近 20 步编辑。',
+      invalidPageRange: '请输入 1–{count} 之间的页码或范围，例如 1-3, 5。',
+      rotateSelected: '旋转所选',
+      deleteSelected: '删除所选',
+      imagePreset: '处理预设',
+      maxEdge: '最长边',
+      targetSize: '目标体积',
+      keepDimensions: '保留原尺寸',
+      noSizeTarget: '不设目标',
+      moreImageSettings: '更多设置',
+      hideImageSettings: '收起设置',
+      targetSizeHint: '为尽量满足目标体积，会调整画质和尺寸；未达到目标的图片会单独标记。',
+      targetNotMet: '未达到 {size} 目标',
+      reprocess: '重新处理',
+
+      autoFormat: '自动识别',
+      inputStep: '输入',
+      resultStep: '结果',
+      editInput: '修改输入',
+      convertComplete: '转换完成',
+
       pdfWorkbench: {
         organize: '整理页面',
         images: 'PDF / 图片互转',
@@ -9202,8 +9291,8 @@ export default {
     checkinSuccessPts: '签到成功，经验 +{n}、积分 +{p}',
     questClaimOkPts: '领取成功，经验 +{n}、积分 +{p}',
     questClaimOkPointsOnly: '领取成功，积分 +{p}',
-    shopTitle: '积分兑换与头像框',
-    shopSubtitle: '兑换实用道具，收集积分与成就头像框装扮',
+    shopTitle: '积分兑换与装扮',
+    shopSubtitle: '兑换实用道具、个人背景与头像框，装扮你的轻笺空间',
     shopEarnHint: '每日签到 +20~30 · 完成每日任务 +30',
     shopStoreTitle: '积分不足或想直接购买？',
     shopStoreDescription: '前往资源商店购买永久 AI 额度、云空间或组合套餐，购买记录会单独展示。',
@@ -9322,6 +9411,7 @@ export default {
     lotteryPoolTitle: '本期奖池',
     lotteryPoolHint: '每 {n} 抽至少获得一项稀有奖励',
     shopItems: {
+      ...profileBackgroundItemsZh,
       ai_pack_starter: { name: 'AI 入门包', desc: '+5 万 tokens · 永久有效，每账号限兑一次' },
       makeup_card: {
         name: '补签卡',

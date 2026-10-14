@@ -205,7 +205,11 @@
   );
   const avatarSrc = computed(() => user.headPicture || icon.navigation.user);
   const frames = computed(() =>
-    sortFramesByRarity(shop.value?.frames || shop.value?.items.filter((item) => item.type === 'cosmetic') || []),
+    sortFramesByRarity(
+      shop.value?.frames ||
+        shop.value?.items.filter((item) => item.type === 'cosmetic' && item.effect === 'frame') ||
+        [],
+    ),
   );
   const visibleFrames = computed(() =>
     activeFilter.value === 'owned' ? frames.value.filter((item) => item.owned) : frames.value,
@@ -263,7 +267,9 @@
       if (!open) return;
       const [currentShop] = await Promise.all([loadShop(), loadDashboard()]);
       const currentFrames = sortFramesByRarity(
-        currentShop?.frames || currentShop?.items.filter((item) => item.type === 'cosmetic') || [],
+        currentShop?.frames ||
+          currentShop?.items.filter((item) => item.type === 'cosmetic' && item.effect === 'frame') ||
+          [],
       );
       selectedId.value = currentFrames.find((item) => item.equipped)?.id || currentFrames[0]?.id || null;
     },

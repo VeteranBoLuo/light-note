@@ -552,7 +552,7 @@ export async function getPointsGovernanceSources(input = {}, { db = pool } = {})
     db.query(
       `SELECT peo.economy_version AS economyVersion, peo.operation_type AS operationType, peo.item_id AS itemId,
               COUNT(*) AS operations, COUNT(DISTINCT peo.user_id) AS users,
-              COUNT(DISTINCT CASE WHEN ug.equipped_frame = peo.item_id THEN peo.user_id END) AS equippedUsers,
+              COUNT(DISTINCT CASE WHEN ug.equipped_frame = peo.item_id OR ug.equipped_background = peo.item_id THEN peo.user_id END) AS equippedUsers,
               COALESCE(SUM(peo.cost_points), 0) AS spent,
               COALESCE(SUM(peo.points_rewarded), 0) AS pointsReturned,
               COALESCE(SUM(peo.ai_tokens_granted), 0) AS aiTokens,

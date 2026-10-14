@@ -195,6 +195,23 @@
                   :content="artifact.content"
                   :pairs="artifact.meta.translation.segments"
                 />
+                <OcrResult
+                  v-else-if="artifact.type === 'ocr_text'"
+                  class="toolbox-result__specialized"
+                  :documents="artifact.meta?.ocrDocuments"
+                >
+                  <article ref="resultContentRef" class="toolbox-result__markdown" v-html="renderedContent"></article>
+                </OcrResult>
+                <KnowledgeAuditResult
+                  v-else-if="artifact.type === 'knowledge_audit'"
+                  class="toolbox-result__specialized"
+                  :artifact-id="artifact.id"
+                  :version="artifact.version"
+                  :content="stripAiAnalysisCitations(deliveredContent)"
+                  @sources="activeTab = 'sources'"
+                >
+                  <article ref="resultContentRef" class="toolbox-result__markdown" v-html="renderedContent"></article>
+                </KnowledgeAuditResult>
                 <StudyResultCards
                   v-else-if="artifact.meta?.study?.cards?.length"
                   :artifact-id="artifact.id"
@@ -371,6 +388,8 @@
 </template>
 
 <script setup lang="ts">
+  import OcrResult from './components/OcrResult.vue';
+  import KnowledgeAuditResult from './components/KnowledgeAuditResult.vue';
   import ComparisonTableResult from './components/ComparisonTableResult.vue';
   import TranslationResult from './components/TranslationResult.vue';
   import { translationMarkdown } from '@/utils/translationResult';
@@ -1710,6 +1729,12 @@
   .toolbox-result__markdown {
     padding: 8px 20px 26px;
   }
+  .toolbox-result__specialized {
+    padding: var(--ui-space-20, 20px);
+  }
+  .toolbox-result__specialized .toolbox-result__markdown {
+    padding: 0;
+  }
   .toolbox-result__rail {
     position: sticky;
     top: var(--ui-space-12, 12px);
@@ -1926,6 +1951,9 @@
     }
     .toolbox-result__markdown {
       padding: 2px 3px 14px;
+    }
+    .toolbox-result__specialized {
+      padding: var(--ui-space-2, 2px) var(--ui-space-3, 3px) var(--ui-space-14, 14px);
     }
     .toolbox-result__rail {
       position: static;

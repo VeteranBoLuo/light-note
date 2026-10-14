@@ -61,7 +61,7 @@ if (!reuseSchema) {
     'CREATE TABLE points_earning_period_policy(period_type varchar(8),period_key varchar(8),policy_version varchar(80),PRIMARY KEY(period_type,period_key))',
   );
   await db.query(
-    'CREATE TABLE user_growth (user_id varchar(255) PRIMARY KEY,exp int DEFAULT 0,level int DEFAULT 1,points int DEFAULT 0,equipped_title varchar(80),equipped_frame varchar(80))',
+    'CREATE TABLE user_growth (user_id varchar(255) PRIMARY KEY,exp int DEFAULT 0,level int DEFAULT 1,points int DEFAULT 0,equipped_title varchar(80),equipped_frame varchar(80),equipped_background varchar(64))',
   );
   const growthSchema = await fs.readFile(new URL('../migrations/20260708_growth.sql', import.meta.url), 'utf8');
   await db.query(growthSchema.slice(growthSchema.indexOf('CREATE TABLE'), growthSchema.indexOf('-- 成长快照')));

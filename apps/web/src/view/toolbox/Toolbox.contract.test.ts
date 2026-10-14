@@ -166,7 +166,6 @@ describe('知识工具箱前端边界', () => {
     expect(imageOptimizer).toContain("t('toolbox.local.after')");
     expect(imageOptimizer).toContain(':src="entry.previewUrl"');
     expect(imageOptimizer).toContain(':src="entry.result.previewUrl"');
-    expect(imageOptimizer).toContain('maxDimension: null');
     expect(imageOptimizer).not.toContain("t('toolbox.local.maxDimension')");
     expect(imageOptimizer).not.toContain("BInput from '@/components/base/BasicComponents/BInput.vue'");
 
@@ -391,14 +390,10 @@ describe('知识工具箱前端边界', () => {
     expect(maintenance).not.toContain("const ALL_NOTES_SCOPE = '__all_notes__'");
     expect(maintenance).not.toContain('directory-preview');
     expect(maintenance).not.toContain("    'unlinked',");
-    expect(maintenance).toContain("item.kind !== 'unlinked'");
-    expect(maintenance).toContain("item.code !== 'build_links'");
     expect(maintenance).not.toContain("key: 'links'");
-    expect(maintenance).toContain('grid-template-columns: repeat(3, minmax(0, 1fr))');
     expect(dataset).toContain("activeToolId.value === 'data_quality_report'");
     expect(dataset).toContain('v-if="!isQualityTool" class="dataset-control-card"');
     expect(dataset).toContain('if (isQualityTool.value) await runTool()');
-    expect(dataset).toContain('class="dataset-stagebar is-quality"');
     expect(dataset).toContain('class="dataset-operation-rail"');
     expect(dataset).toContain('class="dataset-mode-select"');
     expect(dataset).toContain('class="dataset-empty__actions"');

@@ -14,12 +14,14 @@ import { ensureNotVisitor, ensureUserOrAdminPolicy } from '../util/auth.js';
 import {
   getActiveFrameCatalog,
   getActiveShopItems,
+  getBackgroundCatalog,
   getShopItem,
   getOwnedCosmetics,
   getClaimedLimitedShopItemIds,
   buyItem,
   equipTitle,
   equipFrame,
+  equipBackground,
   getPointsLog,
   getPointsOverview,
   adminGrantPoints,
@@ -315,6 +317,7 @@ export const getShop = async (req, res) => {
     let equippedTitle = null;
     let protectCards = 0;
     let equippedFrame = null;
+    let equippedBackground = null;
     let owned = [];
     const activeShopItems = getActiveShopItems();
     let claimedLimitedItemIds = [];
@@ -324,11 +327,16 @@ export const getShop = async (req, res) => {
       level = g.level || 0;
       equippedTitle = g.equippedTitle || null;
       equippedFrame = g.equippedFrame || null;
+      equippedBackground = g.equippedBackground || null;
       protectCards = g.protectCards || 0;
       owned = await getOwnedCosmetics(userId);
       if (activeShopItems.some((item) => Number(item.purchaseLimit || 0) > 0)) {
         claimedLimitedItemIds = await getClaimedLimitedShopItemIds(userId);
       }
+    }
+    for (const background of getBackgroundCatalog()) {
+      if (owned.includes(background.id) && !activeShopItems.some((item) => item.id === background.id))
+        activeShopItems.push(background);
     }
     const claimedLimitedItems = new Set(claimedLimitedItemIds);
     const ownable = (t) => t === 'title' || t === 'cosmetic';
@@ -352,7 +360,9 @@ export const getShop = async (req, res) => {
         achievementKey: null,
         owned: isOwned,
         equipped:
-          (it.type === 'title' && equippedTitle === it.id) || (it.type === 'cosmetic' && equippedFrame === it.id),
+          (it.type === 'title' && equippedTitle === it.id) ||
+          (it.effect === 'frame' && equippedFrame === it.id) ||
+          (it.effect === 'background' && equippedBackground === it.id),
         // canBuy 仅供前端置灰按钮;真正校验在 buyItem 事务内(级别/余额/上限/已拥有)
         repeatable: it.type === 'consumable' && purchaseLimit === null,
         purchaseLimit,
@@ -417,6 +427,7 @@ export const getShop = async (req, res) => {
         level,
         equippedTitle,
         equippedFrame,
+        equippedBackground,
         protectCards,
         isVisitor,
         rootFrameAccess,
@@ -1055,6 +1066,19 @@ export const equipFrameHandle = async (req, res) => {
   } catch (error) {
     console.error('佩戴头像框失败 code=%s', stableAgentErrorCode(error));
     res.send(resultData({ reason: stableAgentErrorCode(error) }, 500, L(req, '佩戴失败', 'Failed to equip frame')));
+  }
+};
+
+// POST /growth/equipBackground：同一背景用于名片与主页，所有角色均须先拥有。
+export const equipBackgroundHandle = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    const backgroundId = req.body?.backgroundId;
+    const result = await equipBackground(req.user.id, backgroundId === null ? null : backgroundId);
+    res.send(resultData(result));
+  } catch (error) {
+    console.error('设置个人背景失败 code=%s', stableAgentErrorCode(error));
+    res.send(resultData(null, 500, L(req, '设置背景失败', 'Failed to set background')));
   }
 };
 

@@ -1,712 +1,450 @@
 <template>
   <section class="knowledge-maintenance" :aria-label="t(`toolbox.tool.${toolId}.name`)">
-    <section v-if="user.role === 'visitor'" class="maintenance-guest">
-      <span><SvgIcon :src="icon.toolbox.audit" size="34" /></span>
-      <h2>{{ t('toolbox.maintenance.guestTitle') }}</h2>
-      <p>{{ t('toolbox.maintenance.guestDescription') }}</p>
+    <section v-if="user.role === 'visitor'" class="maintenance-state">
+      <SvgIcon :src="icon.toolbox.audit" size="30" />
+      <h2>{{ t('toolbox.maintenance.guestTitle') }}</h2
+      ><p>{{ t('toolbox.maintenance.guestDescription') }}</p>
       <BButton type="primary" @click="router.push({ name: 'login' })">{{ t('toolbox.maintenance.login') }}</BButton>
     </section>
-
     <template v-else>
-      <section class="maintenance-toolbar">
-        <div class="maintenance-toolbar__info">
-          <span><SvgIcon :src="icon.toolbox.local" size="18" /></span>
-          <div>
-            <strong>{{ t('toolbox.maintenance.readOnlyTitle') }}</strong>
-            <small>{{ t('toolbox.maintenance.readOnlyDescription') }}</small>
-          </div>
+      <div class="maintenance-toolbar">
+        <div class="maintenance-scope">
+          <label id="maintenance-scope-label">{{ t('toolbox.maintenance.scope') }}</label>
+          <BSelect
+            v-model:value="rootId"
+            :options="scopeOptions"
+            :disabled="loading || exporting"
+            aria-labelledby="maintenance-scope-label"
+            show-search
+          />
         </div>
-        <div class="maintenance-toolbar__actions">
-          <BButton size="small" :loading="loading" @click="loadOverview">
-            <SvgIcon v-if="!loading" :src="icon.toolbox.rotate" size="14" />{{ t('toolbox.maintenance.refresh') }}
-          </BButton>
-        </div>
-      </section>
-
-      <section v-if="loading" class="maintenance-state">
-        <BLoading inline :loading="true" :title="t('toolbox.maintenance.loading')" />
-        <p>{{ t('toolbox.maintenance.loadingHint') }}</p>
-      </section>
-      <section v-else-if="loadError" class="maintenance-state is-error" role="alert">
-        <span><SvgIcon :src="icon.toolbox.locate" size="24" /></span>
-        <strong>{{ t('toolbox.maintenance.errorTitle') }}</strong>
-        <p>{{ t('toolbox.maintenance.errorDescription') }}</p>
-        <BButton size="small" @click="loadOverview">{{ t('common.retry') }}</BButton>
-      </section>
-      <section v-else-if="overview && overview.summary.total === 0" class="maintenance-state">
-        <span><SvgIcon :src="icon.toolbox.audit" size="29" /></span>
-        <strong>{{ t('toolbox.maintenance.emptyTitle') }}</strong>
-        <p>{{ t('toolbox.maintenance.emptyDescription') }}</p>
-        <BButton type="primary" @click="router.push('/noteLibrary')">{{
-          t('toolbox.maintenance.createFirst')
-        }}</BButton>
-      </section>
-
+        <BButton :loading="loading" :disabled="exporting" @click="loadOverview(false)"
+          ><SvgIcon :src="icon.toolbox.rotate" size="15" />{{ t('toolbox.maintenance.recheck') }}</BButton
+        >
+        <BButton :disabled="!overview || loading || !totalIssues" :loading="exporting" @click="exportReport"
+          ><SvgIcon :src="icon.toolbox.download" size="15" />{{ t('toolbox.maintenance.exportReport') }}</BButton
+        >
+      </div>
+      <p class="maintenance-hint">{{ t('toolbox.maintenance.readOnlyDescription') }}</p>
+      <div v-if="loadError" class="maintenance-error" role="alert"
+        ><span>{{ t('toolbox.maintenance.errorDescription') }}</span
+        ><BButton size="small" @click="loadOverview(failedAppend)">{{ t('common.retry') }}</BButton></div
+      >
+      <section v-if="loading && !overview" class="maintenance-state"
+        ><BLoading inline loading :title="t('toolbox.maintenance.loading')"
+      /></section>
       <template v-else-if="overview">
-        <section class="audit-overview">
-          <div class="audit-overview__copy">
-            <BChip tone="success">{{ t('toolbox.maintenance.audit.completed') }}</BChip>
-            <h2>{{ t('toolbox.maintenance.audit.title') }}</h2>
-            <p>{{ t('toolbox.maintenance.audit.description', { count: overview.summary.total }) }}</p>
-            <small>{{ t('toolbox.maintenance.scannedAt', { time: formatDateTime(overview.scannedAt) }) }}</small>
-          </div>
-          <div class="audit-overview__signal">
-            <span>{{ t('toolbox.maintenance.audit.priorityIssues') }}</span>
-            <strong>{{ highPriorityCount }}</strong>
-            <small>{{ t('toolbox.maintenance.audit.priorityHint') }}</small>
-          </div>
-        </section>
-
-        <section class="audit-facts">
-          <article v-for="fact in auditFacts" :key="fact.key">
-            <span><SvgIcon :src="fact.icon" size="17" /></span>
-            <div
-              ><small>{{ fact.label }}</small
-              ><strong>{{ fact.value }}</strong></div
+        <div class="maintenance-summary" role="status">
+          <SvgIcon :src="icon.toolbox.audit" size="22" />
+          <div class="maintenance-summary__copy"
+            ><strong>{{
+              t('toolbox.maintenance.checkedSummary', { notes: overview.summary.total, issues: totalIssues })
+            }}</strong
+            ><small>{{ t('toolbox.maintenance.scannedAt', { time: formatDateTime(overview.scannedAt) }) }}</small></div
+          >
+          <BChip v-if="highPriorityCount" tone="danger">{{
+            t('toolbox.maintenance.priorityCount', { count: highPriorityCount })
+          }}</BChip
+          ><BChip v-else tone="success">{{ t('toolbox.maintenance.audit.completed') }}</BChip>
+        </div>
+        <div class="maintenance-filters"
+          ><BChip
+            tone="neutral"
+            v-for="option in issueFilters"
+            :key="option.value"
+            interactive
+            :selected="activeIssueKind === option.value"
+            :disabled="exporting"
+            @click="activeIssueKind = option.value"
+            >{{ option.label }} · {{ option.count }}</BChip
+          ></div
+        >
+        <BCheckbox v-model:checked="includeOptional" :disabled="exporting">{{
+          t('toolbox.maintenance.optionalSuggestions')
+        }}</BCheckbox>
+        <div v-if="overview.issues.length" class="audit-issue-list" :aria-busy="loading">
+          <article v-for="item in overview.issues" :key="`${item.kind}:${item.noteId}`" :class="`is-${item.severity}`">
+            <span class="audit-issue-list__signal" aria-hidden="true"></span>
+            <div class="audit-issue-list__body"
+              ><div class="audit-issue-list__title"
+                ><BChip :tone="issueTone(item.severity)">{{ t(`toolbox.maintenance.issue.${item.kind}.label`) }}</BChip
+                ><strong>{{ item.title }}</strong></div
+              ><p>{{ t(`toolbox.maintenance.issue.${item.kind}.description`) }}</p
+              ><small>{{ item.path }}</small></div
             >
-            <p>{{ fact.description }}</p>
+            <BButton size="small" @click="openNote(item.noteId)">{{ t('toolbox.maintenance.openNote') }}</BButton>
           </article>
-        </section>
-
-        <section v-if="actionableRecommendations.length" class="audit-recommendations">
-          <header>
-            <span class="maintenance-index">01</span>
-            <div
-              ><strong>{{ t('toolbox.maintenance.audit.actionsTitle') }}</strong
-              ><small>{{ t('toolbox.maintenance.audit.actionsDescription') }}</small></div
-            >
-          </header>
-          <div>
-            <article v-for="(item, index) in actionableRecommendations" :key="item.code" :class="`is-${item.priority}`">
-              <span>{{ index + 1 }}</span>
-              <div
-                ><strong>{{ t(`toolbox.maintenance.recommendation.${item.code}.title`) }}</strong
-                ><p>{{
-                  t(`toolbox.maintenance.recommendation.${item.code}.description`, { count: item.count })
-                }}</p></div
-              >
-              <BChip :tone="item.priority === 'high' ? 'danger' : item.priority === 'medium' ? 'pending' : 'neutral'">{{
-                item.count
-              }}</BChip>
-            </article>
-          </div>
-        </section>
-
-        <section class="audit-issues">
-          <BButton
-            :type="includeOptional ? 'primary' : undefined"
-            :aria-pressed="includeOptional"
-            @click="
-              includeOptional = !includeOptional;
-              activeIssueKind = 'all';
-            "
-            >{{ t('toolbox.maintenance.optionalSuggestions') }}</BButton
-          >
-          <header>
-            <div>
-              <span class="maintenance-index">02</span>
-              <div
-                ><strong>{{ t('toolbox.maintenance.audit.issuesTitle') }}</strong
-                ><small>{{ t('toolbox.maintenance.audit.issuesDescription') }}</small></div
-              >
-            </div>
-            <BChip tone="neutral">{{ filteredIssues.length }}</BChip>
-          </header>
-          <div class="audit-filter">
-            <BChip
-              v-for="option in issueFilters"
-              :key="option.value"
-              tone="neutral"
-              interactive
-              :selected="activeIssueKind === option.value"
-              @click="selectIssueKind(option.value)"
-            >
-              {{ option.label }} · {{ option.count }}
-            </BChip>
-          </div>
-          <div v-if="visibleIssues.length" class="audit-issue-list">
-            <article v-for="item in visibleIssues" :key="`${item.kind}:${item.noteId}`" :class="`is-${item.severity}`">
-              <span class="audit-issue-list__signal"><i></i></span>
-              <div>
-                <div
-                  ><BChip :tone="issueTone(item.severity)">{{
-                    t(`toolbox.maintenance.issue.${item.kind}.label`)
-                  }}</BChip
-                  ><strong>{{ item.title }}</strong></div
-                >
-                <p>{{ t(`toolbox.maintenance.issue.${item.kind}.description`) }}</p>
-                <small>{{ item.path }}</small>
-              </div>
-              <BButton size="small" @click="openNote(item.noteId)">{{ t('toolbox.maintenance.openNote') }}</BButton>
-            </article>
-          </div>
-          <div v-else class="audit-issues__empty">
-            <SvgIcon :src="icon.toolbox.locate" size="24" />
-            <span>{{ t('toolbox.maintenance.audit.noIssues') }}</span>
-          </div>
-          <BButton
-            v-if="visibleIssues.length < filteredIssues.length"
-            class="audit-load-more"
-            @click="issueLimit += 30"
-          >
-            {{ t('toolbox.maintenance.audit.loadMore', { count: filteredIssues.length - visibleIssues.length }) }}
-          </BButton>
-        </section>
+        </div>
+        <div v-else class="maintenance-state is-empty"
+          ><SvgIcon :src="icon.toolbox.audit" size="26" /><strong>{{ t('toolbox.maintenance.audit.noIssues') }}</strong
+          ><p>{{ t('toolbox.maintenance.recheckHint') }}</p></div
+        >
+        <div v-if="hasMore" ref="loadMoreRef" class="maintenance-more"
+          ><BButton :loading="loading" :disabled="exporting" @click="loadOverview(true)">{{
+            t('toolbox.maintenance.audit.loadMore', { count: totalIssues - overview.issues.length })
+          }}</BButton></div
+        >
+        <p v-if="overview.issues.length" class="maintenance-hint">{{ t('toolbox.maintenance.recheckHint') }}</p>
       </template>
     </template>
   </section>
 </template>
-
 <script setup lang="ts">
-  import { computed, onMounted, ref } from 'vue';
+  import { computed, onBeforeUnmount, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
   import type { ToolboxToolId } from '@lightnote/shared/toolbox-protocol';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import BChip from '@/components/base/BasicComponents/BChip.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import BSelect from '@/components/base/BasicComponents/BSelect.vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import {
     fetchToolboxKnowledgeOverview,
     type ToolboxKnowledgeIssue,
     type ToolboxKnowledgeOverview,
   } from '@/api/toolbox';
+  import { buildNoteDetailRequestScope } from '@/api/noteDetailPrefetch';
+  import { downloadToolboxBlob } from '@/utils/toolboxLocal';
   import icon from '@/config/icon';
   import { useUserStore } from '@/store';
-
-  const props = defineProps<{ toolId: ToolboxToolId }>();
+  defineProps<{ toolId: ToolboxToolId }>();
   const { t, locale } = useI18n();
-  const route = useRoute();
-  const router = useRouter();
-  const user = useUserStore();
-  const loading = ref(false);
-  const loadError = ref(false);
+  const route = useRoute(),
+    router = useRouter(),
+    user = useUserStore();
+  const loading = ref(false),
+    exporting = ref(false),
+    loadError = ref(false),
+    failedAppend = ref(false);
   const overview = ref<ToolboxKnowledgeOverview | null>(null);
-  const activeIssueKind = ref('all');
-  const issueLimit = ref(30);
-
-  const includeOptional = ref(false);
-  const actionableIssues = computed(() =>
-    (overview.value?.issues || []).filter(
-      (item) => item.kind !== 'unlinked' && (includeOptional.value || !['untagged', 'stale'].includes(item.kind)),
-    ),
-  );
-  const actionableRecommendations = computed(() =>
-    (overview.value?.recommendations || []).filter(
-      (item) =>
-        item.code !== 'build_links' && (includeOptional.value || !['add_tags', 'review_stale'].includes(item.code)),
-    ),
-  );
-  const highPriorityCount = computed(() => actionableIssues.value.filter((item) => item.severity === 'high').length);
-  const auditFacts = computed(() => {
-    if (!overview.value) return [];
-    const summary = overview.value.summary;
-    return [
-      {
-        key: 'scale',
-        icon: icon.toolbox.markdown,
-        label: t('toolbox.maintenance.audit.fact.notes'),
-        value: summary.total.toLocaleString(),
-        description: t('toolbox.maintenance.audit.fact.roots', { count: summary.roots }),
-      },
-      {
-        key: 'depth',
-        icon: icon.toolbox.conceptMap,
-        label: t('toolbox.maintenance.audit.fact.depth'),
-        value: summary.maxDepth,
-        description: t('toolbox.maintenance.audit.fact.depthHint'),
-      },
-      {
-        key: 'tags',
-        icon: icon.toolbox.locate,
-        label: t('toolbox.maintenance.audit.fact.tagged'),
-        value: `${summary.tagged}/${summary.total}`,
-        description: t('toolbox.maintenance.audit.fact.taggedHint'),
-      },
-    ];
-  });
+  const rootId = ref('$all'),
+    activeIssueKind = ref('all'),
+    includeOptional = ref(false);
+  const directories = ref<Array<{ id: string; path: string }>>([]);
+  let requestVersion = 0;
+  const loadMoreRef = ref<HTMLElement | null>(null);
+  let observer: IntersectionObserver | null = null;
   const issueKindOrder = ['empty', 'invalid_parent', 'duplicate_title', 'untitled', 'deep', 'untagged', 'stale'];
-  const issueFilters = computed(() => {
-    if (!overview.value) return [];
-    return [
-      { value: 'all', label: t('toolbox.maintenance.issue.all'), count: actionableIssues.value.length },
-      ...issueKindOrder
-        .filter(
-          (kind) =>
-            (includeOptional.value || !['untagged', 'stale'].includes(kind)) &&
-            Number(overview.value?.issueCounts[kind] || 0) > 0,
-        )
-        .map((kind) => ({
-          value: kind,
-          label: t(`toolbox.maintenance.issue.${kind}.label`),
-          count: Number(overview.value?.issueCounts[kind] || 0),
-        })),
-    ];
-  });
-  const filteredIssues = computed(() =>
-    actionableIssues.value.filter((item) => activeIssueKind.value === 'all' || item.kind === activeIssueKind.value),
+  const selectedKinds = computed(() =>
+    issueKindOrder.filter((kind) => includeOptional.value || !['untagged', 'stale'].includes(kind)),
   );
-  const visibleIssues = computed(() => filteredIssues.value.slice(0, issueLimit.value));
-  function selectIssueKind(kind: string) {
-    activeIssueKind.value = kind;
-    issueLimit.value = 30;
-  }
-
+  const scopeOptions = computed(() => [
+    { value: '$all', label: t('toolbox.maintenance.allNotes') },
+    ...directories.value.map((item) => ({ value: item.id, label: item.path })),
+  ]);
+  const allIssueCount = computed(() =>
+    selectedKinds.value.reduce((sum, kind) => sum + Number(overview.value?.issueCounts[kind] || 0), 0),
+  );
+  const totalIssues = computed(
+    () =>
+      overview.value?.selectedIssueTotal ??
+      (activeIssueKind.value === 'all'
+        ? allIssueCount.value
+        : Number(overview.value?.issueCounts[activeIssueKind.value] || 0)),
+  );
+  const highPriorityCount = computed(
+    () =>
+      overview.value?.selectedSeverityCounts?.high ??
+      overview.value?.issues.filter((item) => item.severity === 'high').length ??
+      0,
+  );
+  const hasMore = computed(() => Boolean(overview.value && overview.value.issues.length < totalIssues.value));
+  const issueFilters = computed(() => [
+    { value: 'all', label: t('toolbox.maintenance.issue.all'), count: allIssueCount.value },
+    ...selectedKinds.value
+      .filter((kind) => Number(overview.value?.issueCounts[kind]) > 0)
+      .map((kind) => ({
+        value: kind,
+        label: t(`toolbox.maintenance.issue.${kind}.label`),
+        count: Number(overview.value?.issueCounts[kind] || 0),
+      })),
+  ]);
+  const params = () => ({
+    rootId: rootId.value === '$all' ? '' : rootId.value,
+    issueKind: activeIssueKind.value,
+    includeOptional: includeOptional.value,
+  });
   function issueTone(severity: ToolboxKnowledgeIssue['severity']) {
     return severity === 'high' ? 'danger' : severity === 'medium' ? 'pending' : 'neutral';
   }
-
   function formatDateTime(value: string) {
     const date = new Date(value);
     return Number.isNaN(date.getTime())
       ? '—'
       : new Intl.DateTimeFormat(locale.value, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
   }
-
   function openNote(noteId: string) {
-    const href = router.resolve({
-      path: `/noteLibrary/${encodeURIComponent(noteId)}`,
-      query: { from: route.fullPath },
-    }).href;
-    window.open(href, '_blank', 'noopener,noreferrer');
+    window.open(
+      router.resolve({ path: `/noteLibrary/${encodeURIComponent(noteId)}`, query: { from: route.fullPath } }).href,
+      '_blank',
+      'noopener,noreferrer',
+    );
   }
-
-  async function loadOverview() {
-    if (user.role === 'visitor' || loading.value) return;
+  async function loadOverview(append = false) {
+    if (user.role === 'visitor' || (append && (loading.value || !hasMore.value))) return;
+    const version = ++requestVersion;
     loading.value = true;
     loadError.value = false;
+    failedAppend.value = append;
+    const previous = overview.value;
     try {
-      overview.value = await fetchToolboxKnowledgeOverview();
-      activeIssueKind.value = 'all';
-      issueLimit.value = 30;
+      const result = await fetchToolboxKnowledgeOverview({
+        ...params(),
+        snapshot: append ? previous?.snapshotVersion : undefined,
+        offset: append ? previous?.issues.length || 0 : 0,
+        limit: 50,
+      });
+      if (version !== requestVersion) return;
+      result.issues = result.issues.filter(
+        (item) =>
+          selectedKinds.value.includes(item.kind) &&
+          (activeIssueKind.value === 'all' || item.kind === activeIssueKind.value),
+      );
+      if (append && previous) {
+        const known = new Set(previous.issues.map((item) => `${item.kind}:${item.noteId}`));
+        result.issues = [
+          ...previous.issues,
+          ...result.issues.filter((item) => !known.has(`${item.kind}:${item.noteId}`)),
+        ];
+        // Stop paging if concurrent edits shifted the result set; recheck starts a fresh list.
+        if (result.issues.length === previous.issues.length) {
+          loadError.value = true;
+          return;
+        }
+      }
+      overview.value = result;
+      if (result.scopeOptions) directories.value = result.scopeOptions;
     } catch {
-      loadError.value = true;
+      if (version === requestVersion) loadError.value = true;
     } finally {
-      loading.value = false;
+      if (version === requestVersion) loading.value = false;
     }
   }
-
-  onMounted(() => void loadOverview());
+  async function exportReport() {
+    if (exporting.value || !overview.value) return;
+    exporting.value = true;
+    const version = requestVersion,
+      query = params();
+    const issues: ToolboxKnowledgeIssue[] = [];
+    try {
+      let result: ToolboxKnowledgeOverview;
+      let snapshot: string | undefined;
+      do {
+        result = await fetchToolboxKnowledgeOverview({ ...query, snapshot, offset: issues.length, limit: 500 });
+        snapshot = result.snapshotVersion;
+        if (version !== requestVersion) return;
+        if (!result.issues.length) break;
+        issues.push(...result.issues);
+      } while (issues.length < (result.selectedIssueTotal ?? result.issueTotal) && issues.length < 140000);
+      const content = JSON.stringify(
+        {
+          scannedAt: result!.scannedAt,
+          scope: scopeOptions.value.find((item) => item.value === rootId.value)?.label,
+          issueKind: query.issueKind,
+          includeOptional: query.includeOptional,
+          issues,
+        },
+        null,
+        2,
+      );
+      downloadToolboxBlob(
+        new Blob([content], { type: 'application/json;charset=utf-8' }),
+        'lightnote-structure-report.json',
+      );
+    } catch {
+      message.error(t('toolbox.maintenance.exportFailed'));
+    } finally {
+      exporting.value = false;
+    }
+  }
+  watch([rootId, activeIssueKind, includeOptional], () => {
+    if (activeIssueKind.value !== 'all' && !selectedKinds.value.includes(activeIssueKind.value))
+      activeIssueKind.value = 'all';
+    overview.value = null;
+    void loadOverview();
+  });
+  watch(
+    () => buildNoteDetailRequestScope(user),
+    () => {
+      requestVersion++;
+      overview.value = null;
+      directories.value = [];
+      rootId.value = '$all';
+      loading.value = false;
+      void loadOverview();
+    },
+    { immediate: true },
+  );
+  watch(loadMoreRef, (element) => {
+    observer?.disconnect();
+    if (!element || typeof IntersectionObserver === 'undefined') return;
+    observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting) && !loadError.value && !exporting.value)
+        void loadOverview(true);
+    });
+    observer.observe(element);
+  });
+  onBeforeUnmount(() => {
+    requestVersion++;
+    observer?.disconnect();
+  });
 </script>
-
 <style scoped lang="less">
   .knowledge-maintenance {
     display: grid;
-    gap: var(--ui-space-16, 16px);
+    gap: var(--ui-space-14, 14px);
   }
-
-  .maintenance-guest,
-  .maintenance-state {
-    min-height: var(--ui-layout-420, 420px);
-    padding: var(--ui-space-32, 32px);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: var(--ui-space-11, 11px);
-    border: 1px solid var(--surface-border-color);
-    border-radius: 17px;
-    background: radial-gradient(circle at 50% 18%, rgba(97, 92, 237, 0.1), transparent 35%), var(--card-background);
-    text-align: center;
-  }
-
-  .maintenance-guest > span,
-  .maintenance-state > span {
-    width: var(--ui-layout-62, 62px);
-    height: var(--ui-layout-62, 62px);
-    display: grid;
-    place-items: center;
-    border-radius: 18px;
-    color: var(--primary-color);
-    background: var(--workspace-panel-bg-color);
-  }
-
-  .maintenance-guest h2,
-  .maintenance-guest p,
-  .maintenance-state p {
-    margin: 0;
-  }
-  .maintenance-guest p,
-  .maintenance-state p {
-    max-width: var(--ui-layout-560, 560px);
-    color: var(--desc-color);
-    line-height: 1.7;
-  }
-  .maintenance-state.is-error > span {
-    color: var(--danger-color);
-  }
-
   .maintenance-toolbar {
-    padding: var(--ui-space-11, 11px) var(--ui-space-13, 13px);
+    display: flex;
+    align-items: end;
+    gap: var(--ui-space-8, 8px);
+    flex-wrap: wrap;
+  }
+  .maintenance-scope {
+    display: grid;
+    gap: var(--ui-space-6, 6px);
+    flex: 1;
+    min-width: var(--ui-layout-180, 180px);
+    max-width: var(--ui-layout-440, 440px);
+  }
+  .maintenance-scope label,
+  .maintenance-hint {
+    color: var(--desc-color);
+    font-size: var(--ui-font-12, 12px);
+  }
+  .maintenance-hint {
+    margin: 0;
+    line-height: 1.6;
+  }
+  .maintenance-toolbar :deep(.b_btn) {
+    gap: var(--ui-space-6, 6px);
+  }
+  .maintenance-summary {
     display: flex;
     align-items: center;
-    justify-content: space-between;
     gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-14, 14px);
     border: 1px solid var(--surface-border-color);
-    border-radius: 13px;
+    border-radius: 12px;
     background: var(--workspace-panel-bg-color);
   }
-
-  .maintenance-toolbar__info,
-  .maintenance-toolbar__actions {
-    min-width: 0;
-    display: flex;
-    align-items: center;
-    gap: var(--ui-space-10, 10px);
-  }
-
-  .maintenance-toolbar__info > span {
-    width: var(--ui-layout-34, 34px);
-    height: var(--ui-layout-34, 34px);
-    display: grid;
-    flex: 0 0 auto;
-    place-items: center;
-    border-radius: 10px;
-    color: var(--success-color);
-    background: var(--card-background);
-  }
-
-  .maintenance-toolbar__info > div {
-    min-width: 0;
-    display: grid;
-    gap: var(--ui-space-2, 2px);
-  }
-  .maintenance-toolbar__actions {
-    flex: 0 0 auto;
-  }
-  .maintenance-toolbar small {
-    color: var(--desc-color);
-    font-size: var(--ui-font-10, 10px);
-  }
-
-  .audit-overview {
-    min-height: var(--ui-layout-190, 190px);
-    padding: clamp(var(--ui-space-22, 22px), 3vw, var(--ui-space-36, 36px));
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    gap: clamp(var(--ui-space-20, 20px), 4vw, var(--ui-space-46, 46px));
-    overflow: hidden;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 19px;
-    background:
-      radial-gradient(circle at 85% 20%, rgba(38, 174, 132, 0.13), transparent 28%),
-      radial-gradient(circle at 12% 85%, rgba(97, 92, 237, 0.1), transparent 32%), var(--card-background);
-  }
-
-  .audit-overview__copy {
-    display: grid;
-    justify-items: start;
-    gap: var(--ui-space-8, 8px);
-  }
-  .audit-overview__copy h2,
-  .audit-overview__copy p {
-    margin: 0;
-  }
-  .audit-overview__copy h2 {
-    font-size: clamp(var(--ui-font-23, 23px), 3vw, var(--ui-font-33, 33px));
-    letter-spacing: -0.04em;
-  }
-  .audit-overview__copy p {
-    max-width: var(--ui-layout-650, 650px);
-    color: var(--desc-color);
-    line-height: 1.7;
-  }
-  .audit-overview__copy > small {
-    color: var(--desc-color);
-    font-size: var(--ui-font-10, 10px);
-  }
-
-  .audit-overview__signal {
-    min-width: var(--ui-layout-130, 130px);
-    padding: var(--ui-space-14, 14px);
+  .maintenance-summary__copy {
+    flex: 1;
     display: grid;
     gap: var(--ui-space-5, 5px);
-    border: 1px solid var(--surface-border-color);
-    border-radius: 13px;
-    background: var(--card-background);
   }
-
-  .audit-overview__signal span,
-  .audit-overview__signal small {
+  .maintenance-summary strong {
+    font-size: var(--ui-font-15, 15px);
+  }
+  .maintenance-summary small,
+  .audit-issue-list small {
     color: var(--desc-color);
-    font-size: var(--ui-font-10, 10px);
+    font-size: var(--ui-font-12, 12px);
+    overflow-wrap: anywhere;
   }
-  .audit-overview__signal strong {
-    color: var(--danger-color);
-    font-size: var(--ui-font-28, 28px);
-  }
-
-  .audit-facts {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: var(--ui-space-9, 9px);
-  }
-
-  .audit-facts article {
-    min-width: 0;
-    padding: var(--ui-space-13, 13px);
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    gap: var(--ui-space-8, 8px) var(--ui-space-10, 10px);
-    border: 1px solid var(--surface-border-color);
-    border-radius: 13px;
-    background: var(--card-background);
-  }
-
-  .audit-facts article > span {
-    width: var(--ui-layout-34, 34px);
-    height: var(--ui-layout-34, 34px);
-    display: grid;
-    place-items: center;
-    border-radius: 10px;
-    color: var(--primary-color);
-    background: var(--workspace-panel-bg-color);
-  }
-
-  .audit-facts article > div {
-    display: grid;
-    gap: var(--ui-space-1, 1px);
-  }
-  .audit-facts small,
-  .audit-facts p {
-    color: var(--desc-color);
-    font-size: var(--ui-font-10, 10px);
-  }
-  .audit-facts strong {
-    font-size: var(--ui-font-19, 19px);
-  }
-  .audit-facts p {
-    grid-column: 1 / -1;
-    margin: 0;
-  }
-
-  .audit-recommendations,
-  .audit-issues {
-    min-width: 0;
-    padding: var(--ui-space-15, 15px);
-    display: grid;
-    gap: var(--ui-space-13, 13px);
-    border: 1px solid var(--surface-border-color);
-    border-radius: 16px;
-    background: var(--card-background);
-  }
-
-  .audit-recommendations > header,
-  .audit-issues > header,
-  .audit-issues > header > div {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--ui-space-10, 10px);
-  }
-
-  .audit-recommendations > header,
-  .audit-issues > header > div {
-    justify-content: flex-start;
-  }
-
-  .audit-recommendations header > div,
-  .audit-issues header > div > div {
-    display: grid;
-    gap: var(--ui-space-2, 2px);
-  }
-  .audit-recommendations header small,
-  .audit-issues header small {
-    color: var(--desc-color);
-    font-size: var(--ui-font-10, 10px);
-  }
-
-  .maintenance-index {
-    width: var(--ui-layout-28, 28px);
-    height: var(--ui-layout-28, 28px);
-    display: grid;
-    flex: 0 0 auto;
-    place-items: center;
-    border-radius: 8px;
-    color: #fff;
-    background: var(--primary-color);
-    font-size: var(--ui-font-10, 10px);
-    font-weight: 750;
-  }
-
-  .audit-recommendations > div {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--ui-space-8, 8px);
-  }
-  .audit-recommendations article {
-    min-width: 0;
-    padding: var(--ui-space-11, 11px);
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    align-items: start;
-    gap: var(--ui-space-9, 9px);
-    border: 1px solid var(--surface-border-color);
-    border-radius: 11px;
-    background: var(--workspace-panel-bg-color);
-  }
-  .audit-recommendations article > span {
-    width: var(--ui-layout-25, 25px);
-    height: var(--ui-layout-25, 25px);
-    display: grid;
-    place-items: center;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 8px;
-    color: var(--primary-color);
-    background: var(--card-background);
-    font-size: var(--ui-font-10, 10px);
-    font-weight: 750;
-  }
-  .audit-recommendations article.is-high {
-    border-left: 3px solid var(--danger-color);
-  }
-  .audit-recommendations article.is-medium {
-    border-left: 3px solid var(--warning-color);
-  }
-  .audit-recommendations article > div {
-    min-width: 0;
-  }
-  .audit-recommendations p {
-    margin: var(--ui-space-3, 3px) 0 0;
-    color: var(--desc-color);
-    font-size: var(--ui-font-10, 10px);
-    line-height: 1.55;
-  }
-
-  .audit-filter {
+  .maintenance-filters {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--ui-space-7, 7px);
+    gap: var(--ui-space-8, 8px);
   }
   .audit-issue-list {
-    display: grid;
-    gap: var(--ui-space-7, 7px);
+    border: 1px solid var(--surface-border-color);
+    border-radius: 12px;
+    overflow: hidden;
   }
   .audit-issue-list article {
-    min-width: 0;
-    padding: var(--ui-space-11, 11px) var(--ui-space-12, 12px);
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    display: flex;
     align-items: center;
-    gap: var(--ui-space-10, 10px);
-    border: 1px solid var(--surface-border-color);
-    border-radius: 11px;
-    background: var(--workspace-panel-bg-color);
-  }
-  .audit-issue-list article.is-high {
-    border-left: 3px solid var(--danger-color);
-  }
-  .audit-issue-list article.is-medium {
-    border-left: 3px solid var(--warning-color);
-  }
-  .audit-issue-list__signal {
-    width: var(--ui-layout-22, 22px);
-    height: var(--ui-layout-22, 22px);
-    display: grid;
-    place-items: center;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 50%;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-14, 14px);
     background: var(--card-background);
   }
-  .audit-issue-list__signal i {
-    width: 6px;
-    height: 6px;
+  .audit-issue-list article + article {
+    border-top: 1px solid var(--surface-border-color);
+  }
+  .audit-issue-list__signal {
+    flex: 0 0 var(--ui-space-6, 6px);
+    height: var(--ui-space-6, 6px);
     border-radius: 50%;
     background: var(--desc-color);
   }
-  .is-high .audit-issue-list__signal i {
+  .is-high .audit-issue-list__signal {
     background: var(--danger-color);
   }
-  .is-medium .audit-issue-list__signal i {
+  .is-medium .audit-issue-list__signal {
     background: var(--warning-color);
   }
-  .audit-issue-list article > div {
+  .audit-issue-list__body {
+    flex: 1;
     min-width: 0;
-    display: grid;
-    gap: var(--ui-space-5, 5px);
   }
-  .audit-issue-list article > div > div {
+  .audit-issue-list__title {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: var(--ui-space-7, 7px);
+    gap: var(--ui-space-8, 8px);
   }
-  .audit-issue-list p,
-  .audit-issue-list small {
-    margin: 0;
+  .audit-issue-list__title strong {
+    font-size: var(--ui-font-14, 14px);
+    overflow-wrap: anywhere;
+  }
+  .audit-issue-list p {
+    margin: var(--ui-space-7, 7px) 0;
+    font-size: var(--ui-font-13, 13px);
     color: var(--desc-color);
-    font-size: var(--ui-font-10, 10px);
     line-height: 1.5;
   }
-  .audit-issue-list small {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .audit-load-more {
-    margin: 0 auto;
-  }
-  .audit-issues__empty {
-    min-height: var(--ui-layout-150, 150px);
+  .maintenance-state {
+    min-height: var(--ui-layout-240, 240px);
     display: flex;
     flex-direction: column;
+    gap: var(--ui-space-12, 12px);
     align-items: center;
     justify-content: center;
-    gap: var(--ui-space-8, 8px);
-    color: var(--desc-color);
+    text-align: center;
+    padding: var(--ui-space-20, 20px);
   }
-
-  @media (max-width: 900px) {
-    .audit-overview {
-      grid-template-columns: auto minmax(0, 1fr);
-    }
-    .audit-overview__signal {
-      grid-column: 1 / -1;
-      grid-template-columns: 1fr auto;
-      align-items: center;
-    }
-    .audit-overview__signal small {
-      grid-column: 1 / -1;
-    }
-    .audit-facts {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
+  .maintenance-state h2,
+  .maintenance-state p {
+    margin: 0;
   }
-
+  .maintenance-error {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ui-space-10, 10px);
+    color: var(--danger-color);
+  }
+  .maintenance-more {
+    display: flex;
+    justify-content: center;
+  }
   @media (max-width: 767px) {
-    .maintenance-toolbar,
-    .audit-overview,
-    .audit-issues > header {
-      align-items: stretch;
-      flex-direction: column;
+    .maintenance-scope {
+      max-width: none;
+      flex-basis: 100%;
     }
-    .maintenance-toolbar__actions {
-      width: 100%;
-      align-items: center;
-      justify-content: space-between;
+    .maintenance-toolbar > :deep(.b_btn) {
+      flex: 1;
     }
-    .audit-overview {
-      display: flex;
-      text-align: left;
+    .maintenance-summary {
+      flex-wrap: wrap;
     }
-    .audit-facts,
-    .audit-recommendations > div {
-      grid-template-columns: 1fr;
+    .maintenance-summary__copy {
+      min-width: 70%;
     }
     .audit-issue-list article {
-      grid-template-columns: auto minmax(0, 1fr);
-      align-items: start;
+      flex-wrap: wrap;
+      gap: var(--ui-space-10, 10px);
     }
-    .audit-issue-list article > .b_btn {
-      grid-column: 2;
+    .audit-issue-list__body {
+      flex-basis: calc(100% - var(--ui-space-16, 16px));
     }
-  }
-
-  html.light-note-mobile-rendering .audit-overview,
-  html.light-note-mobile-rendering .audit-facts article,
-  html.light-note-mobile-rendering .audit-recommendations,
-  html.light-note-mobile-rendering .audit-issues {
-    box-shadow: none;
+    .audit-issue-list article > :deep(.b_btn) {
+      margin-left: var(--ui-space-16, 16px);
+    }
   }
 </style>
