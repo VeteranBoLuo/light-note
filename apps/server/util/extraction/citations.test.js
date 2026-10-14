@@ -25,73 +25,8 @@ const row = (reference, value, evidenceReference = reference, quote = '') => ({
   anchor: { reference, quote },
   cells: [{ value, status: 'found', evidence: [{ reference: evidenceReference }] }],
 });
-const compact = (record) => ({
-  anchor: record.anchor.quote ? record.anchor : { reference: record.anchor.reference },
-  cells: record.cells.map((cell) =>
-    cell.status === 'missing'
-      ? null
-      : {
-          value: cell.value,
-          ...(cell.status === 'found' ? {} : { status: cell.status }),
-          evidence: cell.evidence.map((e) => e.reference),
-        },
-  ),
-});
 
 describe('服务端原文编号与确定性引用', () => {
-  it('紧凑输出逐字段还原同一结果，不改变记录 ID、原值、冲突和读取限制', () => {
-    const s = source(['项目甲\n编号 `pkg-alpha`\n费用 20 元\n另一说法费用 30 元']);
-    s.complete = false;
-    s.segments[0].kind = 'ocr';
-    s.segments[0].format = 'markdown';
-    const p = validatePlan({
-      recordDefinition: '每个项目',
-      fields: [
-        { key: 'code', label: '编号', type: 'text', rule: '' },
-        { key: 'cost', label: '费用', type: 'text', rule: '' },
-        { key: 'date', label: '日期', type: 'date', rule: '' },
-      ],
-    });
-    const legacy = {
-      anchor: { reference: 's0_l0_p0', quote: '' },
-      cells: [
-        { value: 'pkg-alpha', status: 'found', evidence: [{ reference: 's0_l1_p0' }] },
-        { value: '20 元；30 元', status: 'conflict', evidence: [{ reference: 's0_l2_p0' }, { reference: 's0_l3_p0' }] },
-        { value: '', status: 'missing', evidence: [] },
-      ],
-    };
-    const compiled = compileExtractionCitations(s, p);
-    const expected = compiled.validate({ records: [legacy] });
-    expect(compiled.validate({ records: [compact(legacy)] })).toEqual(expected);
-    expect(expected[0].cells.map((c) => c.status)).toEqual(['found', 'conflict', 'unavailable']);
-    expect(Buffer.byteLength(JSON.stringify(compact(legacy)))).toBeLessThan(
-      Buffer.byteLength(JSON.stringify(legacy)) * 0.7,
-    );
-  });
-  it.each([
-    { value: '3', evidence: ['s99_l0_p0'] },
-    { value: '3', evidence: [] },
-    { value: '3', evidence: ['s0_l0_p0'], status: null },
-    { value: '3', evidence: ['s0_l0_p0'], sourceId: 'other-owner' },
-    { evidence: ['s0_l0_p0'] },
-    [],
-  ])('紧凑协议仍拒绝伪造、无依据、非法状态、遗漏值：%j', (cell) => {
-    const compiled = compileExtractionCitations(source(['课程甲 3']), plan());
-    expect(() => compiled.validate({ records: [{ anchor: { reference: 's0_l0_p0' }, cells: [cell] }] })).toThrow();
-  });
-  it('紧凑 null 是明确缺失，不能通过省略整列或原文不符规避校验', () => {
-    const compiled = compileExtractionCitations(source(['课程甲 3']), plan('number'));
-    const anchor = { reference: 's0_l0_p0' };
-    expect(compiled.validate({ records: [{ anchor, cells: [null] }] })[0].cells[0].status).toBe('missing');
-    expect(() => compiled.validate({ records: [{ anchor, cells: [] }] })).toThrow('Invalid cell count');
-    const incorrect = { value: '4', evidence: ['s0_l0_p0'] };
-    expect(compiled.validate({ records: [{ anchor, cells: [incorrect] }] })[0].cells[0].status).toBe(
-      'evidence_incomplete',
-    );
-    expect(
-      compiled.validate({ records: [{ anchor, cells: [{ ...incorrect, value: '3课时' }] }] })[0].cells[0].status,
-    ).toBe('format_error');
-  });
   it('17 个片段中的代码与转义字符由服务端原样回填，不依赖模型重抄', () => {
     const texts = Array.from({ length: 17 }, (_, i) => `阶段 ${i + 1}`);
     texts[16] = '启动 web\\_app\n    APP_MODE=dev node ./bin/start.js --path="C:\\demo\\files"\n';

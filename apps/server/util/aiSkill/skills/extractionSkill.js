@@ -9,12 +9,7 @@ import {
   sourcePayload,
   extractionRepairInstruction,
 } from '../../extraction/contract.js';
-import {
-  compileExtractionCitations,
-  referencedCitationInstructions,
-  compactExtractionInstructions,
-} from '../../extraction/citations.js';
-import { buildExtractionRowRepair } from '../../extraction/outputRepair.js';
+import { compileExtractionCitations, referencedCitationInstructions } from '../../extraction/citations.js';
 export const extractionSkills = ['suggest', 'extract'].map((mode) =>
   Object.freeze({
     id: `toolbox.extraction_${mode}`,
@@ -59,13 +54,6 @@ export const extractionSkills = ['suggest', 'extract'].map((mode) =>
         },
         availableActions: [],
         async callModel({ signal, trace, modelPolicy }) {
-          const validateArguments = (raw) => {
-            if (mode === 'suggest') return validatePlan(raw);
-            if (raw.complete === false) throw aiSkillError('EXTRACTION_OUTPUT_INCOMPLETE', '本段提取未完整完成', 502);
-            if (raw.complete !== true || Object.keys(raw).some((key) => !['complete', 'records'].includes(key)))
-              throw aiSkillError('AI_SKILL_STRUCTURED_OUTPUT_INVALID', '提取输出格式无效', 502);
-            return citations.validate({ records: raw.records });
-          };
           const result = await (dependencies.callStructuredSkillModel || callStructuredSkillModel)({
             signal,
             trace,
@@ -79,17 +67,8 @@ export const extractionSkills = ['suggest', 'extract'].map((mode) =>
             buildRepairInstruction: (args) =>
               extractionRepairInstruction({
                 ...args,
-                ...(citations
-                  ? { citationInstructions: referencedCitationInstructions + compactExtractionInstructions }
-                  : {}),
+                ...(citations ? { citationInstructions: referencedCitationInstructions } : {}),
               }),
-            buildRepairRequest: (args) => {
-              // A cut-off output is not a local schema defect. Replaying the full
-              // request with the same budget risks paying for the same failure.
-              if (['length', 'content_filter', 'consumer_stop'].includes(args.finishReason))
-                throw aiSkillError('EXTRACTION_OUTPUT_INCOMPLETE', 'AI 输出未完整结束，请检查资料范围后重试', 502);
-              return citations ? buildExtractionRowRepair({ ...args, citations, validateArguments }) : null;
-            },
             structuredTool: mode === 'suggest' ? planTool : citations.tool,
             messages:
               mode === 'suggest'
@@ -97,7 +76,7 @@ export const extractionSkills = ['suggest', 'extract'].map((mode) =>
                 : [
                     ...extractionMessages(input, input.plan, {
                       payload: citations.payload,
-                      instructions: referencedCitationInstructions + compactExtractionInstructions,
+                      instructions: referencedCitationInstructions,
                     }),
                     {
                       role: 'user',
@@ -105,7 +84,13 @@ export const extractionSkills = ['suggest', 'extract'].map((mode) =>
                         '只在已处理本次全部片段、输出未省略任何条目时设置 complete=true。无法完整输出时 complete=false。最多 100 条记录，超限不得声称完整。相邻片段可能是同一条目的续页，尽量以条目起始位置作为 anchor。',
                     },
                   ],
-            validateArguments,
+            validateArguments(raw) {
+              if (mode === 'suggest') return validatePlan(raw);
+              if (raw.complete === false) throw aiSkillError('EXTRACTION_OUTPUT_INCOMPLETE', '本段提取未完整完成', 502);
+              if (raw.complete !== true || Object.keys(raw).some((key) => !['complete', 'records'].includes(key)))
+                throw aiSkillError('AI_SKILL_STRUCTURED_OUTPUT_INVALID', '提取输出格式无效', 502);
+              return citations.validate({ records: raw.records });
+            },
           });
           return { kind: 'structured_draft', ...(mode === 'suggest' ? { plan: result } : { records: result }) };
         },
