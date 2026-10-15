@@ -81,6 +81,23 @@ Debug APK 位于：
 app/build/outputs/apk/debug/app-debug.apk
 ```
 
+### 应用图标
+
+桌面与系统分享入口共用 `mipmap/ic_launcher`，各 Android 版本均引用
+`drawable-nodpi/ic_app_tile.png`。图稿保留笺结的四色、中心菱形和内部白色分隔，外围色块铺满
+方形画布，外轮廓交给系统裁切，不在位图中预留白边、透明边距或叠加阴影。
+
+源图为 `artwork/app-icon.svg`。修改源图后，在 `apps/android` 下使用 ImageMagick 重新生成
+不带透明通道的 512 × 512 PNG；普通 Gradle 构建直接使用已生成资源，无需安装 ImageMagick：
+
+```bash
+magick -background white -density 384 artwork/app-icon.svg -resize 512x512 -alpha off \
+  PNG24:app/src/main/res/drawable-nodpi/ic_app_tile.png
+```
+
+`validateLauncherIconConsistency` 在构建前检查资源引用、尺寸、不透明性与四角填充。图标改动
+还需在目标手机确认桌面与分享菜单的实际裁切结果。
+
 ### 真机实时联调（无需反复部署或重装 APK）
 
 移动浏览器预览和 App 最终都应连接同一个 Vite 开发服务。只要原生壳代码和开发服务地址

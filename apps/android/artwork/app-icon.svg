@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 256 256">
+  <title>轻笺应用图标</title>
+  <!-- 保留笺结的四色和内部几何；外侧铺满，由系统裁切外轮廓。 -->
+  <rect width="256" height="256" fill="#fff"/>
+  <path d="M132.8 0H256V123.2H195.2L132.8 60.8Z" fill="#8A84FA"/>
+  <path d="M256 132.8V256H132.8V195.2L195.2 132.8Z" fill="#817AF7"/>
+  <path d="M123.2 256H0V132.8H60.8L123.2 195.2Z" fill="#5148D4"/>
+  <path d="M0 123.2V0H123.2V60.8L60.8 123.2Z" fill="#AAA6FD"/>
+</svg>

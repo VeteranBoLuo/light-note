@@ -252,26 +252,31 @@ val syncLegalDocuments by tasks.registering(Sync::class) {
 
 val validateLauncherIconConsistency by tasks.registering {
     group = "verification"
-    description = "Verifies that installers and launchers use the same published brand artwork."
+    description = "Verifies that launcher variants use the same opaque, full-bleed artwork."
     val launcherResources = listOf(
         "src/main/res/mipmap-anydpi/ic_launcher.xml",
         "src/main/res/mipmap-anydpi-v26/ic_launcher.xml",
         "src/main/res/mipmap-anydpi-v33/ic_launcher.xml",
     )
     inputs.files(launcherResources.map(::file))
+    val artwork = file("src/main/res/drawable-nodpi/ic_app_tile.png")
+    inputs.file(artwork)
     doLast {
         launcherResources.forEach { resourcePath ->
             val document = javax.xml.parsers.DocumentBuilderFactory.newInstance()
                 .newDocumentBuilder().parse(file(resourcePath))
             val root = document.documentElement
-            val items = root.getElementsByTagName("item")
-            check(root.tagName == "layer-list" && items.length == 1) {
-                "$resourcePath must preserve the published single-layer brand icon."
+            check(root.tagName == "bitmap" && root.getAttribute("android:src") == "@drawable/ic_app_tile") {
+                "$resourcePath must use the shared opaque app artwork."
             }
-            val item = items.item(0) as org.w3c.dom.Element
-            check(item.getAttribute("android:drawable") == "@drawable/ic_brand_tile") {
-                "$resourcePath must use the same brand artwork as the installer."
-            }
+        }
+        val image = checkNotNull(javax.imageio.ImageIO.read(artwork)) { "App artwork must be a readable PNG." }
+        check(image.width == 512 && image.height == 512 && !image.colorModel.hasAlpha()) {
+            "App artwork must be an opaque 512 x 512 PNG to avoid compatibility-layer transparency artifacts."
+        }
+        val corners = listOf(0 to 0, image.width - 1 to 0, 0 to image.height - 1, image.width - 1 to image.height - 1)
+        check(corners.all { (x, y) -> image.getRGB(x, y) and 0xFFFFFF != 0xFFFFFF }) {
+            "App artwork must fill its corners with color; leave outer rounding to the system."
         }
     }
 }

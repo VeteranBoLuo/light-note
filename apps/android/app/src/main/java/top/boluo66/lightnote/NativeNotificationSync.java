@@ -167,14 +167,20 @@ final class NativeNotificationSync {
                     boolean detailed = (incoming.optBoolean("todo", false) || incoming.optBoolean("chat", false))
                         && !title.isEmpty() && !body.isEmpty()
                         && title.length() <= 80 && body.length() <= 240;
-                    // Keep the newest 20 visible reminders; all records remain in the notification center.
-                    while (visible.size() >= 20) manager.cancel(visible.removeFirst(), 0);
-                    manager.notify(TAG_PREFIX + id, 0, new NotificationCompat.Builder(activity, CHANNEL)
-                        .setSmallIcon(android.R.drawable.ic_dialog_info)
-                        .setContentTitle(detailed ? title : "轻笺有新通知")
-                        .setContentText(detailed ? body : "点击打开通知中心")
-                        .setVisibility(detailed ? NotificationCompat.VISIBILITY_SECRET : NotificationCompat.VISIBILITY_PRIVATE)
-                        .setOnlyAlertOnce(true).setContentIntent(click).setAutoCancel(true).build());
+                    // Recheck at the posting boundary: permission can be revoked after enabled().
+                    // Ordinary builds keep their manifest free of POST_NOTIFICATIONS.
+                    if (Build.VERSION.SDK_INT >= 33
+                        && activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return reply;
+                    if (manager.areNotificationsEnabled()) {
+                        // Keep the newest 20 visible reminders; all records remain in the notification center.
+                        while (visible.size() >= 20) manager.cancel(visible.removeFirst(), 0);
+                        manager.notify(TAG_PREFIX + id, 0, new NotificationCompat.Builder(activity, CHANNEL)
+                            .setSmallIcon(android.R.drawable.ic_dialog_info)
+                            .setContentTitle(detailed ? title : "轻笺有新通知")
+                            .setContentText(detailed ? body : "点击打开通知中心")
+                            .setVisibility(detailed ? NotificationCompat.VISIBILITY_SECRET : NotificationCompat.VISIBILITY_PRIVATE)
+                            .setOnlyAlertOnce(true).setContentIntent(click).setAutoCancel(true).build());
+                    } else return reply;
                     seen.put(id, now);
                     visible.remove(TAG_PREFIX + id);
                     visible.addLast(TAG_PREFIX + id);
