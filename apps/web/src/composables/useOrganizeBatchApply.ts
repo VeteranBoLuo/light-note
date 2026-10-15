@@ -1,5 +1,10 @@
 import { computed, onBeforeUnmount, onDeactivated, reactive, ref, watch, type Ref } from 'vue';
-import { applyRunSuggestionBatch, type WorkspaceItem, type WorkspaceSuggestion } from '@/api/organizeSuggestionApi';
+import {
+  applyRunSuggestionBatch,
+  type SuggestionChange,
+  type WorkspaceItem,
+  type WorkspaceSuggestion,
+} from '@/api/organizeSuggestionApi';
 import { generateUUID } from '@/utils/common';
 
 export function canBatchApply(s: WorkspaceSuggestion) {
@@ -18,6 +23,7 @@ export function useOrganizeBatchApply(
   rows: Ref<WorkspaceItem[]>,
   allowed: Ref<boolean>,
   changed: () => void,
+  acknowledged?: (changes: SuggestionChange[]) => void,
 ) {
   const selecting = ref(false),
     busy = ref(false),
@@ -91,6 +97,24 @@ export function useOrganizeBatchApply(
         );
         if (current !== generation) return;
         if (response.status !== 200) throw new Error(response.msg);
+        // Publish authoritative acknowledgements before mutating the local rows,
+        // so the workspace can move each object and its count atomically.
+        acknowledged?.(
+          batch.flatMap((s) => {
+            const result = response.data.results.find((r: { suggestionId: string }) => r.suggestionId === s.id);
+            return result && ['applied', 'expired'].includes(result.status)
+              ? [
+                  {
+                    runId: id,
+                    suggestionId: s.id,
+                    status: result.status,
+                    applied: result.applied,
+                    reason: result.message,
+                  },
+                ]
+              : [];
+          }),
+        );
         for (const s of batch) {
           const result = response.data.results.find((r: { suggestionId: string }) => r.suggestionId === s.id);
           if (result?.status === 'applied') {

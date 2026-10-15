@@ -46,7 +46,7 @@ describe('checkAiModelAccess', () => {
   it('Provider 信息读取只能使用白名单导出，不能借白名单文件调用模型', () => {
     const root = fixture({
       'apps/server/util/agent/aiGateway.js':
-        "import { requestDeepSeek, requestDeepSeekStream } from './deepseekClient.js';",
+        "import { getActiveProviderInfo, requestDeepSeek, requestDeepSeekStream } from './deepseekClient.js';",
       'apps/server/util/agent/aiGatewayGovernance.js': "import { requestDeepSeek } from './deepseekClient.js';",
       'apps/server/util/aiExecution/service.js': "import { getActiveProviderInfo } from '../agent/deepseekClient.js';",
     });

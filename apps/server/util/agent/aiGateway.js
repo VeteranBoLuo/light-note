@@ -1,6 +1,6 @@
 import { MAX_DEEPSEEK_IMAGE_TOKENS } from './deepseekModelPolicy.js';
 import crypto from 'node:crypto';
-import { requestDeepSeek, requestDeepSeekStream } from './deepseekClient.js';
+import { getActiveProviderInfo, requestDeepSeek, requestDeepSeekStream } from './deepseekClient.js';
 import { stableAgentErrorCode } from './logSafety.js';
 import { resolveAgentStageModelOptions } from './stageModelPolicy.js';
 import { getActiveAiExecution, isAiExecutionRuntimeRequired } from '../aiExecution/context.js';
@@ -211,7 +211,9 @@ export function createAiGateway({
     });
     let result = null;
     let caughtError = null;
+    let providerInfo = null;
     try {
+      providerInfo = getActiveProviderInfo(clientOptions.providerOverride, clientOptions.modelOverride);
       if (governance) {
         activeGovernanceAdapter ||= await loadGovernanceAdapter();
         governanceState = await activeGovernanceAdapter.beginAiGatewayGovernance({
@@ -257,6 +259,8 @@ export function createAiGateway({
         kind,
         durationMs: Date.now() - startedAt,
         error: stableAgentErrorCode(error),
+        provider: providerInfo?.provider || null,
+        model: providerInfo?.model || null,
       };
       if (error && (typeof error === 'object' || typeof error === 'function')) {
         try {
@@ -290,7 +294,7 @@ export function createAiGateway({
       }
       if (executionSpan) {
         try {
-          await finishAiProviderSpan(executionSpan, { result, error: caughtError });
+          await finishAiProviderSpan(executionSpan, { result, error: caughtError, providerInfo });
         } catch (error) {
           traceEvent(onTrace, {
             event: 'ai.execution_span.failed',

@@ -14,6 +14,7 @@ const api = vi.hoisted(() => ({
   startRun: vi.fn(),
   getRun: vi.fn(),
   listRuns: vi.fn(),
+  getWorkspace: vi.fn(),
   cancelRun: vi.fn(),
   pauseRun: vi.fn(),
   resumeRun: vi.fn(),
@@ -133,6 +134,18 @@ beforeEach(() => {
   clearOrganizeHandoff();
   api.listRuns.mockResolvedValue(ok([]));
   api.getRun.mockResolvedValue(ok(result()));
+  // Existing interaction fixtures supply task and detail separately; production
+  // resolves both in the workspace endpoint. Grouped protocol cases override this.
+  api.getWorkspace.mockImplementation(async (params = {}) => {
+    const response = await api.listRuns();
+    if (response.status !== 200 || !response.data?.length) return ok(null);
+    const latest = response.data[0];
+    const saved = latest.id === params.preferredRunId;
+    const resourceType = saved ? params.resourceType : latest.options.resourceTypes[0];
+    const kind = saved ? params.kind || '' : '';
+    const detail = await api.getRun(latest.id, { resourceType, kind, after: saved ? params.after || '' : '' });
+    return { ...detail, data: { ...detail.data, resourceType, kind } };
+  });
   api.previewRun.mockResolvedValue(ok({ ...result(), status: 'preview' }));
   api.startRun.mockResolvedValue(ok(result()));
   api.actOnRunSuggestion.mockResolvedValue(ok({ status: 'applied' }));
@@ -140,6 +153,7 @@ beforeEach(() => {
 });
 afterEach(async () => {
   app?.unmount();
+  vi.unstubAllGlobals();
   // Message state is global and outlives the workspace; clear it before jsdom teardown.
   message.destroy();
   await nextTick();
@@ -563,36 +577,41 @@ it('正常结论与未覆盖检查区分，不用不适用胶囊代替具体解�
   expect(document.querySelector('.resource-check-details .b-chip')).toBeNull();
 });
 
-it('读取所有分页后按资源唯一归组，后页的待审核建议优先展示', async () => {
+it('首屏只读一次完整摘要与展开分组，后页待审核建议不被无需调整的结果阻塞', async () => {
   const item = (id: string, status: string) => ({
     id,
     aiStatus: 'completed',
+    ruleStatus: 'completed',
     resource: { id, type: 'bookmark', title: id, source: { folder: '' }, guards: {} },
     suggestions: [{ id: id + '-s', kind: 'tags', status, reason: '说明' }],
   });
-  api.listRuns.mockResolvedValue(ok([result()]));
-  api.getRun.mockImplementation((_id, params) =>
-    Promise.resolve(
-      ok({
-        ...result(),
-        items: params.after
-          ? [item('pending', 'pending'), item('manual', 'insufficient')]
-          : [item('clear', 'not_applicable')],
-        nextCursor: params.after ? null : 'page2',
-      }),
-    ),
+  const pending = item('z-pending', 'pending'),
+    manual = item('manual', 'insufficient');
+  api.getWorkspace.mockResolvedValue(
+    ok({
+      ...result(),
+      resourceType: 'bookmark',
+      groupTotals: { priority: 1, manual: 1, clear: 258 },
+      pages: {
+        priority: { items: [pending], nextCursor: null },
+        manual: { items: [manual], nextCursor: null },
+        unfinished: { items: [], nextCursor: null },
+      },
+      items: [pending, manual],
+    }),
   );
   await mount();
-  expect(api.getRun.mock.calls.some(([, params]) => params.after === 'page2')).toBe(true);
-  const groups = [...document.querySelectorAll('.result-group')];
-  expect(groups.map((g) => g.className)).toEqual([
-    'result-group group-priority',
-    'result-group group-manual',
-    'result-group group-clear',
-  ]);
-  expect(groups.map((g) => g.querySelector('.group-count')?.textContent)).toEqual(['1', '1', '1']);
-  expect(document.querySelector('.group-priority .workspace-resource')?.textContent).toContain('pending');
+  expect(api.getWorkspace).toHaveBeenCalledTimes(1);
+  expect(api.getRun).not.toHaveBeenCalled();
+  expect(api.listRuns).not.toHaveBeenCalled();
+  expect(document.querySelector('.group-priority .workspace-resource')?.textContent).toContain('z-pending');
+  expect(document.querySelector('.group-clear .group-count')?.textContent).toBe('258');
   expect(document.querySelector('.group-clear .workspace-resource')).toBeNull();
+  api.getRun.mockResolvedValue(ok({ items: [item('a-clear', 'not_applicable')], nextCursor: 'a-clear' }));
+  await openGroup('clear');
+  expect(api.getRun).toHaveBeenCalledTimes(1);
+  expect(api.getRun.mock.lastCall?.[1]).toMatchObject({ group: 'clear', after: '' });
+  expect(document.querySelector('.group-clear .workspace-resource')?.textContent).toContain('a-clear');
 });
 
 it('所有待处理及手动补充资源默认展开，返回页面同步后保留收起选择', async () => {
@@ -1772,7 +1791,7 @@ it('返回缓存页面时保留完整结果，刷新失败也不清空；离开�
   const count = api.getRun.mock.calls.length;
   resolveOld(ok([{ ...result(), id: 'stale' }]));
   await settle();
-  expect(api.getRun).toHaveBeenCalledTimes(count);
+  expect(document.querySelector('.workspace-overview')).toBeNull();
 });
 
 it('标签分页返回时刷新当前页，不把第一页内容写进第二页', async () => {
@@ -2206,4 +2225,327 @@ it('忽略仅在本按钮显示提交进度，失败保留建议且手动重试�
   expect(document.body.textContent).toContain('已忽略建议');
   read.reject(new Error('读取失败'));
   await settle();
+});
+
+function pagedItem(id: string, status = 'not_applicable', kind = 'tags') {
+  return {
+    id,
+    aiStatus: 'completed',
+    ruleStatus: 'completed',
+    resource: { id, type: 'bookmark', title: `资料 ${id}`, source: { folder: '' }, guards: {} },
+    suggestions: [{ id: `s-${id}`, kind, status, reason: '检查结果', after: [{ id: 't', name: '主题' }] }],
+  };
+}
+function groupedResult(pages: Record<string, { items: any[]; nextCursor: string | null }>, totals = {}) {
+  return {
+    ...result(),
+    resourceType: 'bookmark',
+    pages,
+    groupTotals: totals,
+    items: undefined,
+  };
+}
+function pageObserver() {
+  const callbacks = new Map<Element, IntersectionObserverCallback>();
+  vi.stubGlobal(
+    'IntersectionObserver',
+    class {
+      constructor(private callback: IntersectionObserverCallback) {}
+      observe(target: Element) {
+        callbacks.set(target, this.callback);
+      }
+      disconnect() {}
+    },
+  );
+  return async (group: string) => {
+    const el = document.querySelector(`.group-${group} .group-continuation`)!;
+    callbacks.get(el)?.(
+      [{ isIntersecting: true, target: el } as IntersectionObserverEntry],
+      {} as IntersectionObserver,
+    );
+    await settle();
+  };
+}
+
+it('批量入口补齐后页再全选，范围不缩为首批且不读取无关分组', async () => {
+  const first = Array.from({ length: 30 }, (_, i) => pagedItem(`a${i}`, 'pending', 'empty'));
+  const rest = [pagedItem('z1', 'pending'), pagedItem('z2', 'pending')];
+  const initial = groupedResult({ priority: { items: first, nextCursor: 'a29' } }, { priority: 32, clear: 200 });
+  api.getWorkspace.mockResolvedValue(ok({ ...initial, batchAvailable: true }));
+  let resolvePage!: (value: unknown) => void;
+  api.getRun.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        resolvePage = resolve;
+      }),
+  );
+  await mount();
+  button('批量应用').click();
+  await settle();
+  expect(document.querySelector('.resource-batch-toolbar')).toBeNull();
+  expect(api.getRun.mock.calls).toHaveLength(1);
+  expect(api.getRun.mock.lastCall?.[1]).toMatchObject({ group: 'priority', after: 'a29' });
+  resolvePage(ok({ items: rest, nextCursor: null }));
+  await settle();
+  expect(document.querySelector('.resource-batch-toolbar')?.textContent).toContain('应用所选 2 项');
+  api.applyRunSuggestionBatch.mockImplementation(async (_id, entries) =>
+    ok({ results: entries.map((entry) => ({ ...entry, status: 'applied' })) }),
+  );
+  button('应用所选 2 项').click();
+  await settle();
+  expect(api.applyRunSuggestionBatch.mock.calls[0][1].map((entry) => entry.suggestionId)).toEqual(['s-z1', 's-z2']);
+});
+
+it('批量范围补读失败保留结果，不能静默应用部分范围，重试后才全选', async () => {
+  const initial = groupedResult({ priority: { items: [pagedItem('a', 'pending')], nextCursor: 'a' } }, { priority: 2 });
+  api.getWorkspace.mockResolvedValue(ok({ ...initial, batchAvailable: true }));
+  api.getRun.mockRejectedValueOnce(new Error('续页失败'));
+  await mount();
+  button('批量应用').click();
+  await settle();
+  expect(document.querySelector('.resource-batch-toolbar')).toBeNull();
+  expect(document.querySelector('.group-priority .workspace-resource')?.textContent).toContain('资料 a');
+  expect(document.querySelector('.group-continuation')?.textContent).toContain('续页失败');
+  expect(api.applyRunSuggestionBatch).not.toHaveBeenCalled();
+  api.getRun.mockResolvedValue(ok({ items: [pagedItem('b', 'pending')], nextCursor: null }));
+  button('批量应用').click();
+  await settle();
+  expect(document.querySelector('.resource-batch-toolbar')?.textContent).toContain('应用所选 2 项');
+});
+
+it('自动续页合并在途请求，失败停止自动重试并保留已读结果', async () => {
+  const intersect = pageObserver();
+  api.getWorkspace.mockResolvedValue(
+    ok(groupedResult({ clear: { items: [pagedItem('a')], nextCursor: 'a' } }, { clear: 3 })),
+  );
+  let rejectPage!: (reason: Error) => void;
+  api.getRun.mockImplementation(
+    () =>
+      new Promise((_resolve, reject) => {
+        rejectPage = reject;
+      }),
+  );
+  await mount();
+  await openGroup('clear');
+  await intersect('clear');
+  await intersect('clear');
+  expect(api.getRun).toHaveBeenCalledTimes(1);
+  rejectPage(new Error('网络中断'));
+  await settle();
+  expect(document.querySelectorAll('.group-clear .workspace-resource')).toHaveLength(1);
+  expect(document.querySelector('.group-continuation')?.textContent).toContain('网络中断');
+  api.getRun.mockResolvedValue(ok({ items: [pagedItem('b'), pagedItem('c')], nextCursor: null }));
+  button('重新加载').click();
+  await settle();
+  expect(document.querySelectorAll('.group-clear .workspace-resource')).toHaveLength(3);
+  expect(document.querySelector('.group-continuation')).toBeNull();
+});
+
+it('切换类型后忽略旧分组续页响应，摘要与新列表保持同一筛选', async () => {
+  const intersect = pageObserver();
+  api.getWorkspace.mockResolvedValue(
+    ok(groupedResult({ clear: { items: [pagedItem('a')], nextCursor: 'a' } }, { clear: 2 })),
+  );
+  let resolveOld!: (value: unknown) => void;
+  api.getRun.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        resolveOld = resolve;
+      }),
+  );
+  await mount();
+  await openGroup('clear');
+  await intersect('clear');
+  api.getRun.mockResolvedValue(ok({ ...groupedResult({}, {}), resourceType: 'note' }));
+  const tab = [...document.querySelectorAll<HTMLElement>('[role=tab]')].find((el) => el.textContent?.includes('笔记'))!;
+  tab.click();
+  await settle();
+  resolveOld(ok({ items: [pagedItem('old')], nextCursor: null }));
+  await settle();
+  expect(document.body.textContent).not.toContain('资料 old');
+  expect(document.querySelectorAll('.workspace-resource')).toHaveLength(0);
+  expect(api.getRun.mock.lastCall?.[1]).toMatchObject({ resourceType: 'note' });
+});
+
+it('多页静默刷新保留已加载范围、折叠选择和滚动位置，只刷新一次摘要', async () => {
+  const intersect = pageObserver();
+  const first = Array.from({ length: 30 }, (_, i) => pagedItem(`a${i}`));
+  const rest = Array.from({ length: 30 }, (_, i) => pagedItem(`b${i}`));
+  const initial = groupedResult({ clear: { items: first, nextCursor: 'a29' } }, { clear: 60 });
+  api.getWorkspace.mockResolvedValue(ok(initial));
+  api.getRun.mockResolvedValue(ok({ items: rest, nextCursor: null }));
+  await mount();
+  await openGroup('clear');
+  await intersect('clear');
+  expect(document.querySelectorAll('.workspace-resource')).toHaveLength(60);
+  const root = document.querySelector<HTMLElement>('.organize-suggestion-workspace')!;
+  root.scrollTop = 600;
+  api.getRun.mockClear();
+  api.getRun.mockImplementation(async (_id, params) =>
+    ok(params.group ? { items: rest, nextCursor: null } : structuredClone(initial)),
+  );
+  document.dispatchEvent(new Event('visibilitychange'));
+  await settle();
+  expect(api.getRun).toHaveBeenCalledTimes(2);
+  expect(api.getRun.mock.calls.filter(([, params]) => !params.group)).toHaveLength(1);
+  expect(document.querySelectorAll('.workspace-resource')).toHaveLength(60);
+  expect(document.querySelector('.group-clear .group-toggle')?.getAttribute('aria-expanded')).toBe('true');
+  expect(root.scrollTop).toBe(600);
+});
+
+it('批量回执立即更新分组与对象计数，后续刷新失败仍保留成功和失效结果', async () => {
+  const entries = ['a', 'b', 'c'].map((id) => ({ ...pagedItem(id, 'pending'), outcome: 'review' }));
+  // Two acknowledgements on one object must move its group count only once.
+  entries[0].suggestions.push({ ...entries[0].suggestions[0], id: 's-a2' });
+  const totals = {
+    pending: 4,
+    manualObjects: 0,
+    retryFiles: 0,
+    outcomes: {
+      review: 3,
+      manual: 0,
+      processing: 0,
+      unfinished: 0,
+      reviewed: 0,
+      unchanged: 200,
+      skipped: 0,
+      unavailable: 0,
+    },
+  };
+  api.getWorkspace.mockResolvedValue(
+    ok({
+      ...groupedResult({ priority: { items: entries, nextCursor: null } }, { priority: 3 }),
+      batchAvailable: true,
+      review: totals,
+      // Mock structured responses may share the outcome object, unlike JSON transport.
+      overview: { ...pipelineRun().overview, review: { ...totals } },
+      runVersion: 3,
+    }),
+  );
+  api.getRun.mockRejectedValue(new Error('统计刷新失败'));
+  api.applyRunSuggestionBatch.mockImplementation(async (_id, requests) =>
+    ok({
+      results: requests.map((entry) => ({
+        ...entry,
+        status: entry.suggestionId === 's-b' ? 'expired' : entry.suggestionId === 's-c' ? 'failed' : 'applied',
+      })),
+    }),
+  );
+  await mount();
+  button('批量应用').click();
+  await settle();
+  button('应用所选 4 项').click();
+  await settle();
+  expect(document.body.textContent).toContain('统计刷新失败');
+  expect(document.querySelector('.group-priority .group-count')?.textContent).toBe('1');
+  expect(document.querySelector('.group-reviewed .group-count')?.textContent).toBe('1');
+  expect(document.querySelector('.group-expired .group-count')?.textContent).toBe('1');
+  expect(document.querySelector('.resource-batch-toolbar')?.textContent).toContain('应用所选 1 项');
+  expect(document.querySelector('.result-primary strong')?.textContent).toBe('1条');
+  expect(document.querySelector('.outcome-review dd')?.textContent?.trim()).toBe('1 项');
+  expect(document.querySelector('.outcome-reviewed dd')?.textContent?.trim()).toBe('1 项');
+  expect(document.querySelector('.outcome-unavailable dd')?.textContent?.trim()).toBe('1 项');
+  expect(document.querySelector('.outcome-unchanged dd')?.textContent?.trim()).toBe('200 项');
+  expect(api.getRun).toHaveBeenCalledTimes(1);
+});
+
+it('刷新前页新增对象后仍保留已读到的末项，不按旧条数截断读取范围', async () => {
+  const intersect = pageObserver();
+  const oldItems = Array.from({ length: 60 }, (_, i) => pagedItem(`b${String(i).padStart(2, '0')}`));
+  api.getWorkspace.mockResolvedValue(
+    ok(groupedResult({ clear: { items: oldItems.slice(0, 30), nextCursor: 'b29' } }, { clear: 90 })),
+  );
+  api.getRun.mockResolvedValueOnce(ok({ items: oldItems.slice(30), nextCursor: 'b59' }));
+  await mount();
+  await openGroup('clear');
+  await intersect('clear');
+  const inserted = Array.from({ length: 30 }, (_, i) => pagedItem(`a${String(i).padStart(2, '0')}`));
+  api.getRun.mockClear();
+  api.getRun.mockImplementation(async (_id, params) =>
+    ok(
+      !params.group
+        ? groupedResult({ clear: { items: inserted, nextCursor: 'a29' } }, { clear: 120 })
+        : {
+            items: params.after === 'a29' ? oldItems.slice(0, 30) : oldItems.slice(30),
+            nextCursor: params.after === 'a29' ? 'b29' : 'b59',
+          },
+    ),
+  );
+  document.dispatchEvent(new Event('visibilitychange'));
+  await settle();
+  expect(document.querySelector('.group-clear')?.textContent).toContain('资料 b59');
+  expect(document.querySelectorAll('.group-clear .workspace-resource')).toHaveLength(90);
+  expect(api.getRun).toHaveBeenCalledTimes(3);
+});
+
+it('跨页批量遵守检查筛选，刷新后保留取消勾选且不会顺带提交其他建议', async () => {
+  const entries = Array.from({ length: 32 }, (_, i) => {
+    const item = pagedItem(`a${String(i).padStart(2, '0')}`, 'pending');
+    item.suggestions.push({ ...item.suggestions[0], id: `title-${item.id}`, kind: 'title', after: `标题 ${i}` } as any);
+    return item;
+  });
+  const initial = {
+    ...groupedResult({ priority: { items: entries.slice(0, 30), nextCursor: 'a29' } }, { priority: 32 }),
+    kind: 'title',
+    batchAvailable: true,
+  };
+  api.getWorkspace.mockResolvedValue(ok(structuredClone(initial)));
+  api.getRun.mockImplementation(async (_id, params) =>
+    ok(structuredClone(params.group ? { items: entries.slice(30), nextCursor: null } : initial)),
+  );
+  await mount();
+  button('批量应用').click();
+  await settle();
+  expect(button('应用所选 32 项')).toBeTruthy();
+  const lastCheckbox = () =>
+    [...document.querySelectorAll<HTMLElement>('.workspace-resource > header .b-checkbox')].at(-1)!;
+  lastCheckbox().click();
+  await settle();
+  document.dispatchEvent(new Event('visibilitychange'));
+  await settle();
+  expect(button('应用所选 31 项')).toBeTruthy();
+  expect(lastCheckbox().getAttribute('aria-checked')).toBe('false');
+  expect(api.getRun.mock.calls.every(([, query]) => query.kind === 'title' && query.resourceType === 'bookmark')).toBe(
+    true,
+  );
+  api.applyRunSuggestionBatch.mockImplementation(async (_id, requests) =>
+    ok({ results: requests.map((entry) => ({ ...entry, status: 'applied' })) }),
+  );
+  api.getRun.mockRejectedValue(new Error('刷新失败'));
+  button('应用所选 31 项').click();
+  await settle();
+  expect(api.applyRunSuggestionBatch.mock.calls.map(([, requests]) => requests.length)).toEqual([20, 11]);
+  expect(
+    api.applyRunSuggestionBatch.mock.calls.flatMap(([, requests]) => requests.map((entry) => entry.suggestionId)),
+  ).toEqual(entries.slice(0, 31).map((item) => `title-${item.id}`));
+  // The other pending check keeps each object in the priority group.
+  expect(document.querySelector('.group-priority .group-count')?.textContent).toBe('32');
+});
+
+it('刷新补页失败不提交半份摘要或列表，重试后再一起更新', async () => {
+  const intersect = pageObserver();
+  const entries = Array.from({ length: 60 }, (_, i) => pagedItem(`a${String(i).padStart(2, '0')}`));
+  const initial = groupedResult({ clear: { items: entries.slice(0, 30), nextCursor: 'a29' } }, { clear: 60 });
+  api.getWorkspace.mockResolvedValue(ok(structuredClone(initial)));
+  api.getRun.mockResolvedValueOnce(ok({ items: entries.slice(30), nextCursor: null }));
+  await mount();
+  await openGroup('clear');
+  await intersect('clear');
+  const refreshed = { ...structuredClone(initial), groupTotals: { clear: 61 } };
+  refreshed.pages.clear.items[0].resource.title = '刷新后的标题';
+  api.getRun.mockResolvedValueOnce(ok(structuredClone(refreshed))).mockRejectedValueOnce(new Error('第二页超时'));
+  document.dispatchEvent(new Event('visibilitychange'));
+  await settle();
+  expect(document.querySelectorAll('.group-clear .workspace-resource')).toHaveLength(60);
+  expect(document.querySelector('.group-clear .group-count')?.textContent).toBe('60');
+  expect(document.body.textContent).not.toContain('刷新后的标题');
+  expect(document.body.textContent).toContain('第二页超时');
+  api.getRun.mockImplementation(async (_id, params) =>
+    ok(structuredClone(params.group ? { items: entries.slice(30), nextCursor: 'a59' } : refreshed)),
+  );
+  button('重新加载').click();
+  await settle();
+  expect(document.querySelector('.group-clear .group-count')?.textContent).toBe('61');
+  expect(document.body.textContent).toContain('刷新后的标题');
+  expect(document.body.textContent).not.toContain('第二页超时');
 });

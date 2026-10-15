@@ -122,6 +122,11 @@ export async function readOrganizeOutcomes(c, run, itemOutcomes, jobs) {
     MAX(CAST(i.ai_kinds_json AS CHAR)) ai_kinds_json,
     MAX(JSON_UNQUOTE(JSON_EXTRACT(i.snapshot_json,'$.unsupported'))='true') unsupported,
     (${availableResourceSql()}) resource_available,
+    GROUP_CONCAT(DISTINCT IF(s.status='pending' AND (
+      (s.kind='tags' AND JSON_TYPE(JSON_EXTRACT(s.payload_json,'$.after'))='ARRAY' AND JSON_LENGTH(s.payload_json,'$.after')>0) OR
+      (s.kind IN ('title','description') AND JSON_TYPE(JSON_EXTRACT(s.payload_json,'$.after'))='STRING' AND LENGTH(TRIM(JSON_UNQUOTE(JSON_EXTRACT(s.payload_json,'$.after'))))>0) OR
+      (s.kind='archive' AND JSON_TYPE(JSON_EXTRACT(s.payload_json,'$.archivePreview'))='OBJECT')
+    ),s.kind,NULL)) batch_kinds,
     MAX(s.status='pending' OR (s.status='info' AND JSON_UNQUOTE(JSON_EXTRACT(s.payload_json,'$.action')) IN ('trash','duplicate_bookmarks'))) pending,
     MAX(s.status IN ('queued','running')) pending_work,
     MAX(s.status IN ('failed','conflict','cancelled')) failed,
@@ -172,6 +177,11 @@ export async function readOrganizeOutcomes(c, run, itemOutcomes, jobs) {
     for (const row of rows)
       itemOutcomes.set(row.id, {
         type: row.resource_type,
+        batchKinds: ['queued', 'running', 'waiting_content', 'preparing_content'].includes(row.ai_status)
+          ? []
+          : String(row.batch_kinds || '')
+              .split(',')
+              .filter(Boolean),
         disposition: row.disposition,
         ...(jobs ? { work: row.work } : {}),
         checks: String(row.check_kinds || '')

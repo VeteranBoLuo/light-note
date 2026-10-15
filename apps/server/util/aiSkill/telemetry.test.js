@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { normalizeAiProductEvent } from '../aiProductTelemetry.js';
 import {
   aiSkillDurationBucket,
   aiSkillLengthBucket,
@@ -8,6 +9,31 @@ import {
 } from './telemetry.js';
 
 describe('ai skill telemetry', () => {
+  it.each([
+    ['routine.daily_brief', 'routine', 'desktop_workbench'],
+    ['toolbox.idea_to_draft', 'toolbox', 'toolbox'],
+    ['community.review_screen', 'community', 'community_review'],
+    ['organize.metadata', 'organize', 'organize_center'],
+    ['tag.icon_keywords', 'tag', 'tag_icon_picker'],
+  ])('%s 的合法入口维度能通过统一事件校验', (id, domain, surface) => {
+    const dimensions = buildAiSkillTelemetryDimensions({
+      skill: { id, domain },
+      request: { requestId: 'request-1', input: {}, scope: { resourceRefs: [] }, client: { surface } },
+      error: { code: 'AI_PROVIDER_ERROR' },
+      durationMs: 200,
+    });
+    expect(normalizeAiProductEvent({ event: 'ai_skill_failed', dimensions })).toMatchObject({
+      eventName: 'ai_skill_failed',
+      dimensions: { skillId: id, surface, errorCode: 'AI_RUNTIME' },
+    });
+    expect(() =>
+      normalizeAiProductEvent({
+        event: 'ai_skill_failed',
+        dimensions: { ...dimensions, surface: 'private arbitrary input' },
+      }),
+    ).toThrow();
+  });
+
   it('只生成有界、无正文的 Skill 维度', () => {
     const dimensions = buildAiSkillTelemetryDimensions({
       skill: { id: 'note.batch_summarize', domain: 'note' },

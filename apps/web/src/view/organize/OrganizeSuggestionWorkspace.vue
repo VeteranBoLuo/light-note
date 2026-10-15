@@ -5,7 +5,9 @@
     class="organize-suggestion-workspace"
     :class="{ 'has-icon-batch': resourceType === 'tag' && iconReview.selecting.value }"
   >
-    <header :inert="batch.busy.value || iconReview.batchBusy.value || undefined" class="workspace-header"
+    <header
+      :inert="batch.busy.value || batchPreparing || iconReview.batchBusy.value || undefined"
+      class="workspace-header"
       ><div
         ><h2>{{ t('organizeWorkspace.title') }}</h2
         ><p>{{ t('organizeWorkspace.description') }}</p></div
@@ -57,7 +59,10 @@
               ></BChip
             >
           </div>
-          <div class="workspace-tools" :inert="batch.busy.value || iconReview.batchBusy.value || undefined">
+          <div
+            class="workspace-tools"
+            :inert="batch.busy.value || batchPreparing || iconReview.batchBusy.value || undefined"
+          >
             <BButton
               v-if="run.review?.retryFiles && ['completed', 'ended', 'failed', 'cancelled'].includes(run.status)"
               class="workspace-retry-files"
@@ -128,7 +133,7 @@
         />
       </BCard>
       <nav
-        :inert="batch.busy.value || iconReview.batchBusy.value || undefined"
+        :inert="batch.busy.value || batchPreparing || iconReview.batchBusy.value || undefined"
         class="workspace-filters"
         :aria-label="t('organizeWorkspace.filter')"
       >
@@ -174,7 +179,7 @@
           :inert="switching || undefined"
           :aria-hidden="switching || undefined"
         >
-          <div v-if="!items.length" class="workspace-empty">{{
+          <div v-if="!resultGroups.length" class="workspace-empty">{{
             t(loading ? 'organizeWorkspace.loading' : 'organizeWorkspace.noMatching')
           }}</div>
           <section
@@ -189,7 +194,7 @@
               :class="{
                 'is-pinned': pinnedGroup === group.key,
                 'has-batch-action':
-                  (group.key === 'priority' && batch.applicable.value.length && !batch.selecting.value) ||
+                  (group.key === 'priority' && resourceBatchAvailable && !batch.selecting.value) ||
                   group.key === iconBatchGroup,
               }"
             >
@@ -234,10 +239,12 @@
                 >{{ t(iconReview.selecting.value ? 'common.exitBatch' : 'organizeWorkspace.batch.start') }}</BButton
               >
               <BButton
-                v-if="group.key === 'priority' && batch.applicable.value.length && !batch.selecting.value"
+                v-if="group.key === 'priority' && resourceBatchAvailable && !batch.selecting.value"
                 class="batch-entry"
                 size="small"
-                @click="batch.start"
+                :loading="batchPreparing"
+                :disabled="loading || readingView"
+                @click="startResourceBatch"
                 >{{ t('organizeWorkspace.batch.start') }}</BButton
               >
             </div>
@@ -271,7 +278,12 @@
                 }}</span>
               </div>
             </div>
-            <div v-if="openGroups.has(group.key)" :id="`group-${group.key}`" class="group-content">
+            <div
+              v-if="openGroups.has(group.key)"
+              :id="`group-${group.key}`"
+              class="group-content"
+              :inert="batchPreparing || undefined"
+            >
               <BSelect
                 v-if="group.key === 'reviewed'"
                 v-model:value="reviewFilter"
@@ -454,6 +466,15 @@
                   </div>
                 </div>
               </BCard>
+              <OrganizeGroupContinuation
+                v-if="run.pages && (!(group.key in groupCursors) || groupCursors[group.key] || groupErrors[group.key])"
+                :cursor="groupCursors[group.key]"
+                :loading="groupLoading.has(group.key)"
+                :error="groupErrors[group.key]"
+                :disabled="readingView || loading || switching || writing || batchPreparing"
+                @load="loadGroup(group.key)"
+                @retry="loadGroup(group.key)"
+              />
             </div>
           </section>
           <BButton
@@ -552,7 +573,7 @@
   import { useUiDensity } from '@/composables/useUiDensity';
   const { dimension } = useUiDensity();
   import OrganizeRunProgress from './OrganizeRunProgress.vue';
-  import { resourceGroup, resourceWork, reviewDisposition } from './organizeResourceState';
+  import { resourceGroup, resourceOutcome, resourceWork, reviewDisposition } from './organizeResourceState';
   import { organizeOverviewStatus } from '@lightnote/shared/organize-progress';
   import EntitlementAcquireModal from '@/components/support/EntitlementAcquireModal.vue';
   const acquireQuotaVisible = ref(false);
@@ -598,6 +619,7 @@
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import { fileReadingReasonKey } from '@/utils/organizeFileReading';
   import OrganizeRunWizard from './OrganizeRunWizard.vue';
+  import OrganizeGroupContinuation from './OrganizeGroupContinuation.vue';
   import BookmarkSnapshotModal from '@/components/manage/bookmarkEditMg/BookmarkSnapshotModal.vue';
   import OrganizeWorkspaceSuggestion from './OrganizeWorkspaceSuggestion.vue';
   import { generateUUID } from '@/utils/common';
@@ -606,7 +628,8 @@
     previewFileRetry,
     startRun,
     getRun,
-    listRuns,
+    getWorkspace,
+    type SuggestionPage,
     cancelRun,
     pauseRun,
     resumeRun,
@@ -697,6 +720,12 @@
     })),
   );
   const openGroups = ref(new Set(['priority', 'manual', 'unfinished']));
+  const groupCursors = ref<Record<string, string | null>>({});
+  const groupLoading = ref(new Set<string>());
+  const groupErrors = ref<Record<string, string>>({});
+  const batchPreparing = ref(false);
+  const readingView = ref(false);
+
   let viewState: {
     id?: string;
     type?: string;
@@ -744,6 +773,7 @@
     else next.add(key);
     openGroups.value = next;
     saveView();
+    if (next.has(key) && run.value?.pages && !(key in groupCursors.value)) void loadGroup(key);
     nextTick(updatePinnedGroup);
   }
   function fileReadingDetails(item: WorkspaceItem) {
@@ -787,8 +817,18 @@
       { key: 'expired', icon: icon.organize.clock },
       { key: 'reviewed', icon: icon.organize.check },
     ]
-      .map((group) => ({ ...group, items: items.value.filter((item) => groupFor(item) === group.key) }))
-      .filter((group) => group.items.length || (group.key === 'reviewed' && reviewFilter.value !== 'all')),
+      .map((group) => ({
+        ...group,
+        items: items.value
+          .filter((item) => groupFor(item) === group.key)
+          .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
+      }))
+      .filter(
+        (group) =>
+          group.items.length ||
+          (run.value?.pages && run.value.groupTotals?.[group.key]) ||
+          (group.key === 'reviewed' && reviewFilter.value !== 'all'),
+      ),
   );
   function filteredGroupItems(group: { key: string; items: WorkspaceItem[] }) {
     return group.key === 'reviewed' && reviewFilter.value !== 'all'
@@ -1190,6 +1230,9 @@
   }
   async function loadLatest() {
     const request = ++sequence;
+    readingView.value = false;
+    groupLoading.value = new Set();
+    batchPreparing.value = false;
     loading.value = true;
     error.value = '';
     try {
@@ -1206,25 +1249,29 @@
         });
         return;
       }
-      const result = readResponse(await listRuns()) as SuggestionRun[];
+      const saved = storedView();
+      const result = readResponse(
+        await getWorkspace({
+          preferredRunId: saved.id,
+          after: saved.type === 'tag' ? tagPageStarts.value[tagPageIndex.value] : undefined,
+          resourceType: saved.type,
+          kind: saved.kind === 'all' ? '' : saved.kind,
+          reviewState: reviewFilter.value === 'all' ? undefined : reviewFilter.value,
+          groups: [...new Set([...openGroups.value, ...Object.keys(groupCursors.value)])].join(','),
+        }),
+      ) as SuggestionRun | null;
       if (disposed || request !== sequence) return;
-      const latest = result[0];
-      if (!latest) {
+      if (!result) {
         actionFeedback.value = '';
         run.value = null;
         items.value = [];
         nextCursor.value = null;
+        groupCursors.value = {};
         return;
       }
-      const saved = storedView();
-      const type =
-        saved.id === latest.id && latest.options.resourceTypes.includes(saved.type as ResourceType)
-          ? (saved.type as ResourceType)
-          : latest.options.resourceTypes[0];
-      const filter =
-        saved.id === latest.id && ['all', ...checks].includes(saved.kind || '') ? saved.kind || 'all' : 'all';
-      // 简略任务仅用于定位；完整摘要、筛选和结果在同一请求世代内一起提交。
-      await loadPage(false, false, { id: latest.id, type, kind: filter, request });
+      const type = result.resourceType || result.options.resourceTypes[0];
+      const filter = result.kind || 'all';
+      await loadPage(false, false, { id: result.id, type, kind: filter, request, initial: result });
     } catch (e) {
       if (!disposed && request === sequence) error.value = failure(e);
     } finally {
@@ -1234,7 +1281,7 @@
   async function loadPage(
     append = false,
     background = false,
-    target?: { id: string; type: ResourceType; kind: string; request: number },
+    target?: { id: string; type: ResourceType; kind: string; request: number; initial?: SuggestionRun },
   ) {
     if (!run.value && !target) return;
     if (resourceType.value === 'tag' && append && nextCursor.value) {
@@ -1245,58 +1292,87 @@
       requestedKind = target?.kind ?? kind.value,
       requestedReview = target && target.id !== run.value?.id ? 'all' : reviewFilter.value,
       requestedType = target?.type ?? resourceType.value;
+    clearTimeout(timer);
+    readingView.value = true;
     if (!background) loading.value = true;
+    groupLoading.value = new Set();
+    groupErrors.value = {};
+    batchPreparing.value = false;
     pageError.value = '';
     try {
       const result = readResponse(
-        await getRun(id, {
-          ...(reviewEntry.value ? { reviewOnly: true } : {}),
-          ...(requestedReview !== 'all' ? { reviewState: requestedReview } : {}),
-          resourceType: requestedType,
-          kind: requestedKind === 'all' ? '' : requestedKind,
-          after:
-            requestedType === 'tag'
-              ? target &&
-                (target.id !== run.value?.id || requestedType !== resourceType.value || requestedKind !== kind.value)
-                ? ''
-                : tagPageStarts.value[tagPageIndex.value] || ''
-              : append
-                ? nextCursor.value || ''
-                : '',
-        }),
+        target?.initial
+          ? { status: 200, data: target.initial }
+          : await getRun(id, {
+              ...(reviewEntry.value ? { reviewOnly: true } : {}),
+              ...(requestedReview !== 'all' ? { reviewState: requestedReview } : {}),
+              groups: requestedGroups(id, requestedType, requestedKind).join(','),
+              resourceType: requestedType,
+              kind: requestedKind === 'all' ? '' : requestedKind,
+              after:
+                requestedType === 'tag'
+                  ? target &&
+                    (target.id !== run.value?.id ||
+                      requestedType !== resourceType.value ||
+                      requestedKind !== kind.value)
+                    ? ''
+                    : tagPageStarts.value[tagPageIndex.value] || ''
+                  : append
+                    ? nextCursor.value || ''
+                    : '',
+            }),
       ) as SuggestionRun;
-      const collected = [...(result.items || [])];
-      let cursor = result.nextCursor;
-      const seenCursors = new Set<string>();
-      while (cursor && requestedType !== 'tag') {
-        if (disposed || request !== sequence) return;
-        if (seenCursors.has(cursor)) throw new Error(t('organize.actionFailed'));
-        seenCursors.add(cursor);
-        const page = readResponse(
-          await getRun(id, {
-            ...(reviewEntry.value ? { reviewOnly: true } : {}),
-            ...(requestedReview !== 'all' ? { reviewState: requestedReview } : {}),
-            resourceType: requestedType,
-            kind: requestedKind === 'all' ? '' : requestedKind,
-            after: cursor,
-          }),
-        ) as SuggestionRun;
-        collected.push(...(page.items || []));
-        cursor = page.nextCursor;
+      if (result.pages) {
+        // Refresh the already-read range atomically; never collapse it back to the first page.
+        const sameView = run.value?.id === id && !switching.value && resourceType.value === requestedType;
+        for (const [group, page] of Object.entries(result.pages)) {
+          const boundary = sameView
+            ? items.value
+                .filter((item) => groupFor(item) === group)
+                .reduce((last, item) => (item.id > last ? item.id : last), '')
+            : '';
+          const seen = new Set<string>();
+          while (page.nextCursor && (page.nextCursor < boundary || (group === 'priority' && batch.selecting.value))) {
+            if (disposed || request !== sequence) return;
+            if (seen.has(page.nextCursor)) throw new Error(t('organize.actionFailed'));
+            seen.add(page.nextCursor);
+            const more = readResponse(
+              await getRun(id, {
+                resourceType: requestedType,
+                kind: requestedKind === 'all' ? '' : requestedKind,
+                reviewOnly: reviewEntry.value || undefined,
+                reviewState: requestedReview === 'all' ? undefined : requestedReview,
+                group,
+                after: page.nextCursor,
+              }),
+            ) as SuggestionPage;
+            page.items.push(...more.items);
+            page.nextCursor = more.nextCursor;
+          }
+        }
+        result.items = [
+          ...new Map(
+            Object.values(result.pages)
+              .flatMap((page) => page.items)
+              .map((item) => [item.id, item]),
+          ).values(),
+        ];
       }
-      result.items = [...new Map(collected.map((item) => [item.id, item])).values()];
-      result.nextCursor = requestedType === 'tag' ? cursor : null;
       if (disposed || request !== sequence) return;
+      const changedRun = run.value?.id !== id;
       committingView = true;
       error.value = '';
       run.value = result;
+      groupCursors.value = Object.fromEntries(
+        Object.entries(result.pages || {}).map(([key, page]) => [key, page.nextCursor]),
+      );
       resourceType.value = requestedType;
       kind.value = requestedKind;
       committingView = false;
       displayedKind.value = requestedKind;
       const saved = storedView();
       const view = saved.id === id ? saved.views?.[`${requestedType}:${requestedKind}`] : null;
-      if (switching.value || !items.value.length) {
+      if (changedRun || switching.value || !items.value.length) {
         expanded.value = new Set(view?.expanded || []);
         openGroups.value = new Set(view?.groups || ['priority', 'manual', 'unfinished']);
       }
@@ -1320,7 +1396,80 @@
       }
     } finally {
       if (!disposed && request === sequence) {
+        readingView.value = false;
         if (!background) loading.value = false;
+        schedule();
+      }
+    }
+  }
+  function requestedGroups(id: string, type: ResourceType, filter: string) {
+    if (run.value?.id === id && !switching.value)
+      return [...new Set([...openGroups.value, ...Object.keys(groupCursors.value)])];
+    const saved = storedView();
+    return saved.id === id
+      ? saved.views?.[`${type}:${filter}`]?.groups || ['priority', 'manual', 'unfinished']
+      : ['priority', 'manual', 'unfinished'];
+  }
+  const groupRequests = new Map<string, { sequence: number; promise: Promise<boolean> }>();
+  function loadGroup(group: string): Promise<boolean> {
+    const existing = groupRequests.get(group);
+    if (existing?.sequence === sequence) return existing.promise;
+    const promise = fetchGroup(group).finally(() => {
+      if (groupRequests.get(group)?.promise === promise) groupRequests.delete(group);
+    });
+    groupRequests.set(group, { sequence, promise });
+    return promise;
+  }
+  async function fetchGroup(group: string): Promise<boolean> {
+    if (!run.value?.pages || readingView.value || writing.value || switching.value) return false;
+    if (group in groupCursors.value && !groupCursors.value[group]) return true;
+    const request = sequence,
+      id = run.value.id;
+    const cursor = groupCursors.value[group];
+    groupLoading.value.add(group);
+    delete groupErrors.value[group];
+    try {
+      const page = readResponse(
+        await getRun(id, {
+          group,
+          after: cursor || '',
+          resourceType: resourceType.value,
+          kind: kind.value === 'all' ? '' : kind.value,
+          ...(reviewEntry.value ? { reviewOnly: true } : {}),
+          ...(reviewFilter.value === 'all' ? {} : { reviewState: reviewFilter.value }),
+        }),
+      ) as SuggestionPage;
+      if (disposed || request !== sequence) return false;
+      if (page.nextCursor && page.nextCursor === cursor) throw new Error(t('organize.actionFailed'));
+      items.value = [...new Map([...items.value, ...page.items].map((item) => [item.id, item])).values()];
+      for (const item of page.items) {
+        const choice = detailChoices.get(detailKey(item.id));
+        if (choice ?? ['priority', 'manual'].includes(groupFor(item))) expanded.value.add(item.id);
+      }
+      groupCursors.value[group] = page.nextCursor;
+      saveView();
+      return true;
+    } catch (e) {
+      if (!disposed && request === sequence) groupErrors.value[group] = failure(e);
+      return false;
+    } finally {
+      if (request === sequence) groupLoading.value.delete(group);
+    }
+  }
+  async function startResourceBatch() {
+    if (batchPreparing.value || readingView.value || loading.value) return;
+    const request = sequence;
+    batchPreparing.value = true;
+    try {
+      // All applicable resource suggestions are in the priority group. Complete this
+      // scope before the existing select-all logic runs, without reading quiet groups.
+      while (run.value?.pages && (!('priority' in groupCursors.value) || groupCursors.value.priority)) {
+        if (!(await loadGroup('priority')) || request !== sequence) return;
+      }
+      if (request === sequence) batch.start();
+    } finally {
+      if (request === sequence) {
+        batchPreparing.value = false;
         schedule();
       }
     }
@@ -1336,17 +1485,17 @@
   let refreshing: { promise: Promise<void>; sequence: number } | undefined;
   async function refresh(background = false) {
     if (!active || !run.value) return;
-    if (writing.value || starting.value || (background && (loading.value || controlling.value))) {
+    if (
+      writing.value ||
+      starting.value ||
+      batchPreparing.value ||
+      (background && (loading.value || controlling.value))
+    ) {
       schedule();
       return;
     }
     if (background && refreshing?.sequence === sequence) return refreshing.promise;
-    const promise = (async () => {
-      const count = items.value.length;
-      if (!(await loadPage(false, background))) return;
-      while (!disposed && !pageError.value && nextCursor.value && items.value.length < count)
-        if (!(await loadPage(true, background))) return;
-    })();
+    const promise = loadPage(false, background).then(() => {});
     refreshing = { promise, sequence };
     try {
       await promise;
@@ -1389,6 +1538,14 @@
     batchRows,
     computed(() => !user.adminContext && user.role !== 'visitor' && resourceType.value !== 'tag'),
     changed,
+    applyAcknowledgements,
+  );
+  const resourceBatchAvailable = computed(
+    () =>
+      !user.adminContext &&
+      user.role !== 'visitor' &&
+      resourceType.value !== 'tag' &&
+      (run.value?.batchAvailable ?? batch.applicable.value.length),
   );
   const pendingActions = ref(new Set<string>());
   const writing = computed(
@@ -1406,6 +1563,9 @@
         sequence++;
         clearTimeout(timer);
         loading.value = false;
+        groupLoading.value = new Set();
+        readingView.value = false;
+        batchPreparing.value = false;
       } else if (refreshAfterWrite) {
         refreshAfterWrite = false;
         void refresh(true);
@@ -1425,19 +1585,30 @@
   function resourceMixed(item: WorkspaceItem) {
     return !resourceSelected(item) && item.suggestions.some((s) => batch.selected.has(s.id));
   }
-  async function changed(change?: SuggestionChange) {
-    if (change && change.runId !== run.value?.id) return;
-    const id = run.value?.id;
-    const identity = buildNoteDetailRequestScope(user);
-    const view = `${resourceType.value}:${kind.value}:${reviewFilter.value}`;
-    const before = new Map(items.value.map((item) => [item.id, groupFor(item)]));
-    actionFeedback.value = '';
-    if (change) {
-      // A successful write is authoritative immediately; a pre-write read cannot revive it.
-      sequence++;
-      for (const item of items.value) {
-        const suggestion = item.suggestions.find((s) => s.id === change.suggestionId);
-        if (!suggestion) continue;
+  function applyAcknowledgements(changes: SuggestionChange[]) {
+    const current = new Map(
+      changes.filter((change) => change.runId === run.value?.id).map((change) => [change.suggestionId, change]),
+    );
+    const moved = new Set<string>();
+    if (!current.size) return moved;
+    // A successful write is authoritative immediately; a pre-write read cannot revive it.
+    sequence++;
+    const counted = (item: WorkspaceItem, group: string) =>
+      group !== 'reviewed' || reviewFilter.value === 'all' || reviewDisposition(item) === reviewFilter.value;
+    for (const item of items.value) {
+      if (!item.suggestions.some((suggestion) => current.has(suggestion.id))) continue;
+      const from = groupFor(item),
+        fromOutcome = resourceOutcome(item, run.value!),
+        countedBefore = counted(item, from);
+      let pendingDelta = 0;
+      for (const suggestion of item.suggestions) {
+        const change = current.get(suggestion.id);
+        if (!change) continue;
+        if (
+          suggestion.status === 'pending' ||
+          (suggestion.status === 'info' && ['trash', 'duplicate_bookmarks'].includes(suggestion.action || ''))
+        )
+          pendingDelta--;
         suggestion.status = change.status;
         suggestion.applied = change.applied;
         if (change.reason) suggestion.reason = change.reason;
@@ -1448,22 +1619,48 @@
         )
           suggestion.after = change.applied as typeof suggestion.after;
         if (suggestion.kind === 'title' && typeof change.applied === 'string') item.resource.title = change.applied;
-        // Recompute only this object's outcome from its acknowledged checks until the fresh read arrives.
-        delete item.outcome;
-        const from = before.get(item.id)!,
-          to = groupFor(item);
-        if (from !== to && run.value?.groupTotals) {
-          run.value.groupTotals[from] = Math.max(0, (run.value.groupTotals[from] || 0) - 1);
-          run.value.groupTotals[to] = (run.value.groupTotals[to] || 0) + 1;
-        }
       }
+      // All acknowledgements for this object contribute one group transition.
+      delete item.outcome;
+      const to = groupFor(item),
+        toOutcome = resourceOutcome(item, run.value!),
+        countedAfter = counted(item, to);
+      if (from !== to) moved.add(to);
+      if ((from !== to || countedBefore !== countedAfter) && run.value?.groupTotals) {
+        if (countedBefore) run.value.groupTotals[from] = Math.max(0, (run.value.groupTotals[from] || 0) - 1);
+        if (countedAfter) run.value.groupTotals[to] = (run.value.groupTotals[to] || 0) + 1;
+      }
+      // Adjust only acknowledged objects; unread pages keep their server totals.
+      const reviews = new Set([run.value?.review, run.value?.overview?.review]);
+      for (const review of reviews) {
+        if (!review) continue;
+        review.pending = Math.max(0, review.pending + pendingDelta);
+        review.manualObjects = Math.max(
+          0,
+          review.manualObjects + Number(toOutcome === 'manual') - Number(fromOutcome === 'manual'),
+        );
+      }
+      for (const outcomes of new Set([...reviews].map((review) => review?.outcomes))) {
+        if (!outcomes || fromOutcome === toOutcome) continue;
+        outcomes[fromOutcome] = Math.max(0, (outcomes[fromOutcome] || 0) - 1);
+        outcomes[toOutcome] = (outcomes[toOutcome] || 0) + 1;
+      }
+    }
+    return moved;
+  }
+  async function changed(change?: SuggestionChange) {
+    if (change && change.runId !== run.value?.id) return;
+    const id = run.value?.id;
+    const identity = buildNoteDetailRequestScope(user);
+    const view = `${resourceType.value}:${kind.value}:${reviewFilter.value}`;
+    const before = new Map(items.value.map((item) => [item.id, groupFor(item)]));
+    actionFeedback.value = '';
+    if (change) {
+      const moved = applyAcknowledgements([change]);
       actionFeedback.value =
         change.status === 'expired'
           ? change.reason || ''
           : t(`organizeWorkspace.action${change.status === 'applied' ? 'Applied' : 'Ignored'}`);
-      const moved = new Set(
-        items.value.filter((item) => before.has(item.id) && before.get(item.id) !== groupFor(item)).map(groupFor),
-      );
       if (change.status !== 'expired' && moved.size)
         actionFeedback.value = t('organizeWorkspace.actionMoved', {
           action: actionFeedback.value,
@@ -1593,6 +1790,11 @@
       startedPreview.value = null;
       items.value = [];
       nextCursor.value = null;
+      readingView.value = false;
+      groupCursors.value = {};
+      groupErrors.value = {};
+      groupLoading.value = new Set();
+      batchPreparing.value = false;
       viewState = {};
       detailChoices.clear();
       expanded.value = new Set();
@@ -1621,6 +1823,9 @@
   });
   onDeactivated(() => {
     active = false;
+    readingView.value = false;
+    batchPreparing.value = false;
+    groupLoading.value = new Set();
     refreshAfterWrite = false;
     iconReview.reset();
     pendingActions.value.clear();

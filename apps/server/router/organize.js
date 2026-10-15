@@ -49,6 +49,7 @@ router.post(
 
 router.post('/suggestions/previews', localProcessingRateLimiter, suggestions.preview);
 router.get('/suggestions/runs', suggestions.list);
+router.get('/suggestions/workspace', suggestions.workspace);
 router.get('/suggestions/runs/:id', suggestions.get);
 router.post('/suggestions/runs/:id/retry-preview', localProcessingRateLimiter, suggestions.retryFiles);
 router.post('/suggestions/runs/:id/start', localProcessingRateLimiter, suggestions.start);

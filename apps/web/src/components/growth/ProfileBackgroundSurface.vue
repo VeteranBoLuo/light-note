@@ -1,37 +1,17 @@
 <template>
-  <div
-    class="profile-background-surface"
-    :class="{ 'is-decorated': background, 'is-night-art': background?.dark, 'is-animated': background?.animated }"
-  >
+  <div class="profile-background-surface" :class="{ 'is-decorated': background, 'is-night-art': background?.dark }">
     <ProfileBackgroundArt v-if="background" :background-id="backgroundId" />
     <div v-if="background" class="profile-background-surface__veil" aria-hidden="true" />
     <slot />
-    <BButton
-      v-if="background?.animated"
-      class="profile-background-surface__motion"
-      size="small"
-      :aria-pressed="!paused"
-      @click="toggle"
-    >
-      <SvgIcon :src="paused ? icon.ai.play : icon.ai.pause" size="13" aria-hidden="true" />
-      {{ t(paused ? 'profileBackgrounds.playMotion' : 'profileBackgrounds.pauseMotion') }}
-    </BButton>
   </div>
 </template>
 
 <script setup lang="ts">
   import { computed } from 'vue';
-  import { useI18n } from 'vue-i18n';
-  import icon from '@/config/icon';
-  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
-  import BButton from '@/components/base/BasicComponents/BButton.vue';
   import ProfileBackgroundArt from './ProfileBackgroundArt.vue';
-  import { useProfileBackgroundMotion } from '@/composables/useProfileBackgroundMotion';
   import { profileBackground } from '@/config/profileBackgrounds';
   const props = defineProps<{ backgroundId?: string | null }>();
   const background = computed(() => profileBackground(props.backgroundId));
-  const { t } = useI18n();
-  const { paused, toggle } = useProfileBackgroundMotion();
 </script>
 
 <style scoped lang="less">
@@ -62,25 +42,22 @@
     position: relative;
     z-index: 1;
   }
-  .profile-background-surface.is-animated > :slotted(*) {
-    margin-bottom: var(--ui-space-24, 24px);
-  }
-  .profile-background-surface__motion.b_btn {
-    position: absolute;
-    right: var(--ui-space-8, 8px);
-    bottom: var(--ui-space-8, 8px);
-    z-index: 2;
-    gap: var(--ui-space-4, 4px);
-    font-size: var(--ui-font-11, 11px);
-    border: 1px solid var(--surface-border-color);
-  }
   .is-night-art .profile-background-surface__veil {
-    background: linear-gradient(90deg, rgba(17, 21, 44, 0.94), rgba(17, 21, 44, 0.65) 48%, transparent 88%);
+    background: linear-gradient(
+      90deg,
+      rgba(17, 21, 44, 0.94),
+      rgba(17, 21, 44, 0.76) 28%,
+      rgba(17, 21, 44, 0.3) 48%,
+      transparent 72%
+    );
   }
   .profile-background-surface.is-night-art :deep(.chat-profile-content__identity-copy) {
     grid-template-columns: minmax(0, 1fr);
     max-width: var(--ui-layout-260, 260px);
     overflow-wrap: anywhere;
+    text-shadow:
+      0 1px 2px #11152c,
+      0 0 6px #11152c;
   }
   .profile-background-surface.is-night-art :deep(.growth-level-chip) {
     --b-chip-fg: var(--tier-dark);
@@ -103,10 +80,5 @@
       rgba(17, 21, 44, 0.4) 82%,
       transparent
     );
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .profile-background-surface__motion {
-      display: none;
-    }
   }
 </style>

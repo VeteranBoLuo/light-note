@@ -18,11 +18,11 @@
       >
         <ProfileBackgroundArt :background-id="item.id" thumbnail />
         <div class="background-shop__copy">
-          <strong>{{ name(item.id) }}</strong>
-          <span
-            v-if="item.id === 'background_mountains' || item.id === 'background_stars'"
-            class="background-shop__theme"
-          >
+          <div class="background-shop__name">
+            <strong>{{ name(item.id) }}</strong>
+            <BChip v-if="profileBackground(item.id)?.animated" tone="tag">{{ t('profileBackgrounds.animated') }}</BChip>
+          </div>
+          <span class="background-shop__theme">
             {{ t(`profileBackgrounds.${item.id}Description`) }}
           </span>
           <span>{{
@@ -52,11 +52,14 @@
       :show-footer="false"
     >
       <div v-if="selected" class="background-preview">
-        <h3>{{ name(selected.id) }}</h3>
+        <div class="background-shop__name">
+          <h3>{{ name(selected.id) }}</h3>
+          <BChip v-if="profileBackground(selected.id)?.animated" tone="tag">{{
+            t('profileBackgrounds.animated')
+          }}</BChip>
+        </div>
         <p>
-          <template v-if="selected.id === 'background_mountains' || selected.id === 'background_stars'">
-            {{ t(`profileBackgrounds.${selected.id}Description`) }}
-          </template>
+          {{ t(`profileBackgrounds.${selected.id}Description`) }}
           {{ t('profileBackgrounds.previewHint') }}
         </p>
         <strong>{{ t('profileBackgrounds.card') }}</strong>
@@ -105,6 +108,7 @@
   import type { CommunityChatAuthorProfile } from '@/api/communityChatApi';
   import ChatUserProfileContent from '@/components/communityChat/ChatUserProfileContent.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BChip from '@/components/base/BasicComponents/BChip.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
@@ -293,6 +297,12 @@
   .background-shop__copy > span {
     color: var(--desc-color);
     font-size: var(--ui-font-12, 12px);
+  }
+  .background-shop__name {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--ui-space-8, 8px);
   }
   .background-shop__actions {
     display: flex;

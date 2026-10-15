@@ -4,7 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Art from './ProfileBackgroundArt.vue';
 import Surface from './ProfileBackgroundSurface.vue';
 import { profileBackground } from '@/config/profileBackgrounds';
-import { useProfileBackgroundMotion } from '@/composables/useProfileBackgroundMotion';
 import { profileBackgroundsZh } from '@/i18n/locales/profileBackgrounds';
 
 vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({ default: { template: '<span />' } }));
@@ -45,8 +44,6 @@ afterEach(() => {
   cleanups = [];
   observers.length = 0;
   resizeObservers.length = 0;
-  const motion = useProfileBackgroundMotion();
-  if (motion.paused.value) motion.toggle();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -104,9 +101,13 @@ describe('个人背景渐进显示与动效', () => {
     await show(0, false);
     expect(art().classList.contains('is-running')).toBe(false);
   });
-  it('商店只加载静态缩略图，不加载清晰图或挂载动效', () => {
+  it('商店提供两档图片供浏览器按显示密度选择，保持懒加载且不挂载动效', () => {
     const { host } = mount(true);
     expect(host.querySelector('img')?.getAttribute('src')).toBe(profileBackground('background_stars')?.thumbnail);
+    expect(host.querySelector('img')?.getAttribute('srcset')).toContain(
+      `${profileBackground('background_stars')?.src} 1600w`,
+    );
+    expect(host.querySelector('img')?.getAttribute('sizes')).toContain('auto');
     expect(host.querySelector('img')?.getAttribute('loading')).toBe('lazy');
     expect(host.querySelector('.profile-background-art__motion')).toBeNull();
     expect(observers).toHaveLength(0);
@@ -131,20 +132,20 @@ describe('个人背景渐进显示与动效', () => {
     await nextTick();
     expect(host.querySelector('.profile-background-art')).toBeNull();
   });
-  it('名片与主页的查看者暂停状态同步，恢复播放不改变背景 ID', async () => {
+  it.each(['background_stars', 'background_coast'])('名片与主页 %s 自动播放，卸载时释放观察器', async (id) => {
     const { host, props } = mount(false, true);
+    props.backgroundId = id;
+    await nextTick();
     for (const image of host.querySelectorAll('img')) await load(image);
-    await show(0);
-    await show(1);
-    const buttons = host.querySelectorAll('button');
-    buttons[0].click();
-    await nextTick();
-    expect([...buttons].every((button) => button.textContent?.includes('播放背景动效'))).toBe(true);
-    expect(host.querySelectorAll('.is-running')).toHaveLength(0);
-    buttons[1].click();
-    await nextTick();
+    const active = observers.length - 2;
+    await show(active);
+    await show(active + 1);
+    expect(host.querySelectorAll('button')).toHaveLength(0);
     expect(host.querySelectorAll('.is-running')).toHaveLength(2);
-    expect(props.backgroundId).toBe('background_stars');
+    expect(host.querySelectorAll('.profile-background-art__lighthouse')).toHaveLength(
+      id === 'background_coast' ? 2 : 0,
+    );
+    expect(host.querySelectorAll('.profile-background-art__crystal')).toHaveLength(id === 'background_stars' ? 2 : 0);
     cleanups.splice(0).forEach((cleanup) => cleanup());
     expect(observers.every((observer) => observer.disconnect.mock.calls.length === 1)).toBe(true);
     expect(resizeObservers.every((observer) => observer.disconnect.mock.calls.length === 1)).toBe(true);

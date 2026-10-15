@@ -14,6 +14,7 @@ const suites = {
   'util/nativeNotificationSync.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/communityChatPushPresentation.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/services/organizeWorkerDiagnostics.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
+  'util/services/organizeSuggestionRead.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'router/file.confirmUpload.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/services/cloudLegacyObjectLifecycle.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/services/cloudFileRenameStaging.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',

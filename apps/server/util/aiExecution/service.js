@@ -519,7 +519,7 @@ export function beginAiProviderSpan({
   };
 }
 
-export async function finishAiProviderSpan(span, { result, error } = {}) {
+export async function finishAiProviderSpan(span, { result, error, providerInfo } = {}) {
   if (!span) return;
   const execution = getActiveAiExecution();
   if (!execution || execution.id !== span.executionId) {
@@ -557,8 +557,8 @@ export async function finishAiProviderSpan(span, { result, error } = {}) {
         });
   await persistSafely(execution, 'insertAiProviderSpan', {
     ...span,
-    provider: result?.provider || null,
-    model: result?.model || null,
+    provider: result?.provider || providerInfo?.provider || null,
+    model: result?.model || providerInfo?.model || null,
     status: error ? (error?.name === 'AbortError' ? 'aborted' : 'failed') : 'success',
     usageStatus,
     usage,

@@ -15,6 +15,52 @@ function createPersistence() {
 }
 
 describe('aiExecution', () => {
+  it.each(['complete', 'stream'])('失败的 %s 调用仍按实际阶段供应商归属，且不虚构用量或扣费', async (method) => {
+    const persistence = createPersistence();
+    const quota = {
+      reserve: vi.fn().mockResolvedValue({ reservationKey: 'failed-call', reserved: 20_000 }),
+      reconcile: vi.fn().mockResolvedValue({ charged: 0 }),
+    };
+    const error = Object.assign(new Error('upstream unavailable'), { code: 'AI_PROVIDER_ERROR' });
+    const client = vi.fn().mockRejectedValue(error);
+    const gateway = createAiGateway({ completeClient: client, streamClient: client });
+
+    await expect(
+      runAiExecution(
+        {
+          request: { user: { id: 'u1', role: 'user' }, headers: {}, body: {} },
+          taskType: 'skill_routine_daily_brief',
+          skillId: 'routine.daily_brief',
+          persistence,
+        },
+        () =>
+          gateway[method]([], {
+            providerOverride: 'qwen',
+            modelOverride: 'qwen-stage-test',
+          }),
+        { quota },
+      ),
+    ).rejects.toBe(error);
+
+    expect(client).toHaveBeenCalledOnce();
+    expect(error.gatewayTrace).toMatchObject({ provider: 'qwen', model: 'qwen-stage-test' });
+    expect(persistence.insertAiProviderSpan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'qwen',
+        model: 'qwen-stage-test',
+        status: 'failed',
+        usageStatus: 'missing',
+        errorCode: 'AI_PROVIDER_ERROR',
+        usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+      }),
+    );
+    expect(persistence.settleAiExecution.mock.calls[0][0]).toMatchObject({
+      status: 'failed',
+      providerCallCount: 1,
+      chargedTokens: 0,
+    });
+  });
+
   it('整理关联只接受受信任配置，不读取客户端 body', async () => {
     const id = '2394cf3b-bb27-40fb-a1af-e5ce89c48c99';
     for (const trusted of [true, false]) {

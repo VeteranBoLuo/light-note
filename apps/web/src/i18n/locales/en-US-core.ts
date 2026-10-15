@@ -2340,7 +2340,7 @@ export default {
       promptInputHint: 'Generate an editable draft with an outline, body, and facts to verify.',
       promptStep: '01 · Capture the idea',
       designStep: '02 · Set up the result',
-      confirmStep: '03 · Confirm points',
+      confirmStep: '03 · Confirm cost',
       sourceSectionTitle: 'Choose notes, bookmarks, or files',
       sourceSectionDescription:
         'Choose only the Light Note material needed for this run. Source links stay verifiable.',

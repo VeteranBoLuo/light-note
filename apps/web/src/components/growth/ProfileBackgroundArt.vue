@@ -3,7 +3,13 @@
     v-if="background"
     ref="element"
     class="profile-background-art"
-    :class="{ 'is-ready': ready, 'is-running': running, 'is-thumbnail': thumbnail, 'is-atlas': background.animated }"
+    :class="{
+      'is-ready': ready,
+      'is-running': running,
+      'is-thumbnail': thumbnail,
+      'is-atlas': background.animated === 'atlas',
+      'is-lighthouse': background.animated === 'lighthouse',
+    }"
     aria-hidden="true"
   >
     <div
@@ -14,6 +20,8 @@
         :key="source"
         ref="imageElement"
         :src="source"
+        :srcset="thumbnail ? `${background.thumbnail} 720w, ${background.src} ${background.srcWidth}w` : undefined"
+        :sizes="thumbnail ? 'auto, 100vw' : undefined"
         alt=""
         decoding="async"
         :loading="thumbnail ? 'lazy' : 'eager'"
@@ -21,12 +29,22 @@
         @error="onError"
       />
       <div v-if="background.animated && !thumbnail" class="profile-background-art__motion">
-        <span class="profile-background-art__crystal" />
-        <span class="profile-background-art__tracer" />
-        <span class="profile-background-art__tracer is-second" />
-        <span class="profile-background-art__star is-one" />
-        <span class="profile-background-art__star is-two" />
-        <span class="profile-background-art__star is-three" />
+        <template v-if="background.animated === 'atlas'">
+          <span class="profile-background-art__aura" />
+          <span class="profile-background-art__crystal" />
+          <span class="profile-background-art__gilding" />
+          <span class="profile-background-art__tracer" />
+          <span class="profile-background-art__tracer is-second" />
+          <span class="profile-background-art__star is-one" />
+          <span class="profile-background-art__star is-two" />
+          <span class="profile-background-art__star is-three" />
+        </template>
+        <template v-else-if="background.animated === 'lighthouse'">
+          <span class="profile-background-art__beam" />
+          <span class="profile-background-art__lighthouse" />
+          <span class="profile-background-art__water" />
+          <span class="profile-background-art__water is-reflection" />
+        </template>
       </div>
     </div>
   </div>
@@ -35,7 +53,6 @@
 <script setup lang="ts">
   import { computed, onBeforeUnmount, onMounted, ref, watch, type CSSProperties, type WatchStopHandle } from 'vue';
   import { profileBackground } from '@/config/profileBackgrounds';
-  import { useProfileBackgroundMotion } from '@/composables/useProfileBackgroundMotion';
 
   const props = defineProps<{ backgroundId?: string | null; thumbnail?: boolean }>();
   const background = computed(() => profileBackground(props.backgroundId));
@@ -48,7 +65,6 @@
   const visible = ref(false);
   const pageVisible = ref(!document.hidden);
   const reducedMotion = ref(true);
-  const { paused } = useProfileBackgroundMotion();
   const running = computed(
     () =>
       background.value?.animated &&
@@ -56,8 +72,7 @@
       ready.value &&
       visible.value &&
       pageVisible.value &&
-      !reducedMotion.value &&
-      !paused.value,
+      !reducedMotion.value,
   );
   let observer: IntersectionObserver | undefined;
   let resizeObserver: ResizeObserver | undefined;
@@ -91,8 +106,8 @@
     sceneStyle.value = {
       width: `${sceneWidth}px`,
       height: `${sceneHeight}px`,
-      left: `${(width - sceneWidth) * 0.52}px`,
-      top: `${(height - sceneHeight) / 2}px`,
+      left: `${(width - sceneWidth) * (background.value?.animated === 'atlas' ? 0.52 : 0.72)}px`,
+      top: `${(height - sceneHeight) * (background.value?.animated === 'lighthouse' ? 0.15 : 0.5)}px`,
     };
   }
   function observeTarget() {
@@ -164,6 +179,12 @@
   .is-atlas .profile-background-art__scene > img {
     object-position: 52% center;
   }
+  .is-lighthouse .profile-background-art__scene {
+    background-position: 72% 15%;
+  }
+  .is-lighthouse .profile-background-art__scene > img {
+    object-position: 72% 15%;
+  }
   .profile-background-art.is-thumbnail {
     position: relative;
     aspect-ratio: 3;
@@ -187,6 +208,76 @@
   }
   .is-running .profile-background-art__motion > span {
     animation-play-state: running;
+  }
+  .profile-background-art__lighthouse {
+    left: 73%;
+    top: 1%;
+    width: 8%;
+    height: 24%;
+    background: radial-gradient(ellipse, #fffef4 0%, #fff1b9d9 14%, #ffd79080 32%, transparent 70%);
+    mix-blend-mode: screen;
+    animation: background-lighthouse-glow 3.6s ease-in-out infinite alternate;
+  }
+  .profile-background-art__beam {
+    left: 40%;
+    top: 3%;
+    width: 37%;
+    height: 20%;
+    transform-origin: 100% 50%;
+    clip-path: polygon(0 0, 100% 47%, 100% 53%, 0 100%);
+    background: linear-gradient(90deg, transparent, #fff5c922 20%, #fff2c58c 76%, #fffce5e6);
+    mask-image: linear-gradient(0deg, transparent, #000 43%, #000 57%, transparent);
+    mix-blend-mode: screen;
+    animation: background-lighthouse-sweep 8s ease-in-out infinite alternate;
+  }
+  .profile-background-art__water {
+    left: 57%;
+    top: 43%;
+    width: 16%;
+    height: 30%;
+    background: repeating-linear-gradient(0deg, transparent 0%, transparent 8%, #fff4cfdb 9%, transparent 12%);
+    border-radius: 50%;
+    mask-image: radial-gradient(ellipse, #000 12%, transparent 72%);
+    mix-blend-mode: screen;
+    animation: background-water-light 4s ease-in-out infinite alternate;
+  }
+  .profile-background-art__water.is-reflection {
+    left: 86%;
+    top: 34%;
+    width: 11%;
+    height: 26%;
+    animation-delay: -2s;
+    animation-duration: 5s;
+  }
+  @keyframes background-lighthouse-sweep {
+    from {
+      opacity: 0.35;
+      transform: rotate(-9deg) scaleX(0.88);
+    }
+    to {
+      opacity: 0.9;
+      transform: rotate(8deg) scaleX(1);
+    }
+  }
+  @keyframes background-lighthouse-glow {
+    from {
+      opacity: 0.5;
+      transform: scale(0.85);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1.2);
+    }
+  }
+  @keyframes background-water-light {
+    from {
+      opacity: 0.3;
+      transform: translate(-3%, -2%) scaleX(0.92);
+    }
+    to {
+      opacity: 0.8;
+      transform: translate(3%, 3%) scaleX(1.06);
+    }
   }
   .profile-background-art__star {
     /* ui-density-fixed: 插画中的星光几何不随界面密度变化 */
@@ -218,9 +309,36 @@
     top: 26%;
     width: 17%;
     height: 47%;
-    background: radial-gradient(ellipse, #d0b2ff72, transparent 68%);
+    background: radial-gradient(ellipse, #fff3ddc2, #d5bdff99 30%, #a68aff38 52%, transparent 72%);
     mix-blend-mode: screen;
-    animation: background-crystal-light 6s ease-in-out infinite alternate;
+    animation: background-crystal-light 4.5s ease-in-out infinite alternate;
+  }
+  .profile-background-art__aura {
+    left: 40%;
+    top: 4%;
+    width: 44%;
+    height: 88%;
+    border-radius: 50%;
+    background: radial-gradient(ellipse, transparent 30%, #bda1fa30 50%, #e3c29240 60%, transparent 73%);
+    mix-blend-mode: screen;
+    animation: background-atlas-aura 9s ease-in-out infinite alternate;
+  }
+  .profile-background-art__gilding {
+    left: 45%;
+    top: 5%;
+    width: 31%;
+    height: 88%;
+    border-radius: 50%;
+    background: conic-gradient(
+      from 35deg,
+      transparent 0deg 245deg,
+      #eacb8a24 270deg,
+      #fff1c7c2 290deg,
+      transparent 320deg
+    );
+    mask-image: radial-gradient(ellipse, transparent 55%, #000 60%, #000 65%, transparent 71%);
+    mix-blend-mode: screen;
+    animation: background-gilding-light 12s ease-in-out infinite alternate;
   }
   .profile-background-art__tracer {
     // 不支持路径动效时保留静态画面与晶核微光，不把光点显示在左上角。
@@ -228,18 +346,20 @@
     left: 0;
     top: 0;
     /* ui-density-fixed: 插画中的轨道光点不随界面密度变化 */
-    width: 4px;
+    width: 5px;
     /* ui-density-fixed: 插画中的轨道光点不随界面密度变化 */
-    height: 4px;
+    height: 5px;
     border-radius: 50%;
     background: #fff3cf;
-    box-shadow: 0 0 8px 2px #ebd3a6aa;
+    box-shadow:
+      0 0 6px 2px #fff1cb,
+      0 0 18px 5px #ebc98a88;
   }
   @supports (offset-path: ellipse(23% 39% at 63% 49%)) {
     .profile-background-art__tracer {
       display: block;
       offset-path: ellipse(23% 39% at 63% 49%);
-      animation: background-star-orbit 22s linear infinite;
+      animation: background-star-orbit 18s linear infinite;
     }
   }
   .profile-background-art__tracer.is-second {
@@ -247,27 +367,47 @@
     width: 3px;
     /* ui-density-fixed: 插画中的轨道光点不随界面密度变化 */
     height: 3px;
-    opacity: 0.6;
-    animation-delay: -11s;
+    opacity: 0.8;
+    animation-delay: -9s;
   }
   @keyframes background-star-glint {
     from {
-      opacity: 0.15;
+      opacity: 0.25;
       transform: scale(0.65);
     }
     to {
-      opacity: 0.8;
-      transform: scale(1.15);
+      opacity: 1;
+      transform: scale(1.4);
     }
   }
   @keyframes background-crystal-light {
     from {
-      opacity: 0.14;
-      transform: scale(0.95);
+      opacity: 0.35;
+      transform: scale(0.92) rotate(-5deg);
     }
     to {
-      opacity: 0.5;
-      transform: scale(1.04);
+      opacity: 0.85;
+      transform: scale(1.08) rotate(5deg);
+    }
+  }
+  @keyframes background-atlas-aura {
+    from {
+      opacity: 0.3;
+      transform: scale(0.94) rotate(-6deg);
+    }
+    to {
+      opacity: 0.75;
+      transform: scale(1.04) rotate(6deg);
+    }
+  }
+  @keyframes background-gilding-light {
+    from {
+      opacity: 0.35;
+      transform: rotate(-16deg);
+    }
+    to {
+      opacity: 0.85;
+      transform: rotate(18deg);
     }
   }
   @keyframes background-star-orbit {

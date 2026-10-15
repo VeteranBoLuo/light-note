@@ -17,7 +17,7 @@ export const ALLOWED_GATEWAY_IMPORTERS = Object.freeze([
 
 export const ALLOWED_AI_ENTRY_CALLERS = Object.freeze([]);
 const RAW_PROVIDER_IMPORTERS = Object.freeze({
-  'apps/server/util/agent/aiGateway.js': new Set(['requestDeepSeek', 'requestDeepSeekStream']),
+  'apps/server/util/agent/aiGateway.js': new Set(['getActiveProviderInfo', 'requestDeepSeek', 'requestDeepSeekStream']),
   'apps/server/util/agent/aiGatewayGovernance.js': new Set(['getActiveProviderInfo']),
   'apps/server/util/aiExecution/service.js': new Set(['getActiveProviderInfo']),
 });

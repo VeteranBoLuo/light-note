@@ -2233,7 +2233,7 @@ export default {
       promptInputHint: '生成带结构、正文与待核验项的可编辑初稿。',
       promptStep: '01 · 写下想法',
       designStep: '02 · 设置生成内容',
-      confirmStep: '03 · 确认积分',
+      confirmStep: '03 · 确认费用',
       sourceSectionTitle: '选择要用的笔记、书签或文件',
       sourceSectionDescription: '从下方选择这次要用的资料，可同时选择多种类型。',
       promptSectionTitle: '这次想创作什么？',

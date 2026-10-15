@@ -49,15 +49,29 @@ export const start = handler(true, (req, userId) =>
   }),
 );
 export const list = handler(false, (_req, userId) => service.listSuggestionRuns(pool, { userId }));
+const readFilters = (req) => ({
+  reviewOnly: req.query.reviewOnly === 'true',
+  reviewState: String(req.query.reviewState || ''),
+  resourceType: String(req.query.resourceType || ''),
+  kind: String(req.query.kind || ''),
+  ...(typeof req.query.groups === 'string' ? { groups: req.query.groups.split(',') } : {}),
+});
+export const workspace = handler(false, (req, userId) =>
+  service.getSuggestionWorkspace(pool, {
+    userId,
+    runId: String(req.query.runId || ''),
+    preferredRunId: String(req.query.preferredRunId || ''),
+    after: String(req.query.after || ''),
+    ...readFilters(req),
+  }),
+);
 export const get = handler(false, (req, userId) =>
   service.getSuggestionRun(pool, {
     userId,
     id: req.params.id,
     after: String(req.query.after || ''),
-    reviewOnly: req.query.reviewOnly === 'true',
-    reviewState: String(req.query.reviewState || ''),
-    resourceType: String(req.query.resourceType || ''),
-    kind: String(req.query.kind || ''),
+    group: String(req.query.group || ''),
+    ...readFilters(req),
   }),
 );
 export const cancel = handler(true, (req, userId) => service.cancelSuggestionRun(pool, { userId, id: req.params.id }));

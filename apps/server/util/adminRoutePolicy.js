@@ -304,6 +304,7 @@ declare(ADMIN_POLICIES.CONTENT_WRITE, 'inbox', [
   ['POST', '/inbox/complete'],
 ]);
 declare(ADMIN_POLICIES.READ, 'organize', [
+  ['GET', '/organize/suggestions/workspace'],
   ['GET', '/organize/suggestions/runs'],
   ['GET', '/organize/suggestions/runs/:id'],
   ['GET', '/organize/suggestions/runs/:id/items/:suggestionId/archive-preview'],

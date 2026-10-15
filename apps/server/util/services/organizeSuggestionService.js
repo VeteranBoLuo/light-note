@@ -10,6 +10,7 @@ import { organizeOutcomeGroup } from '@lightnote/shared/organize-progress';
 import {
   assertOrganizeProcessingSchema,
   readOrganizeOverview,
+  readOrganizeOutcomes,
   readOrganizeReview,
   markProcessingAi,
   settleProcessingRun,
@@ -133,11 +134,62 @@ export async function listSuggestionRuns(db = pool, { userId }) {
   );
   return rows.map(mapRun);
 }
-export async function getSuggestionRun(
-  db = pool,
-  { userId, id, after = '', resourceType = '', kind = '', reviewOnly = false, reviewState = '' },
+const resultGroups = ['priority', 'manual', 'analysis', 'unfinished', 'skipped', 'clear', 'expired', 'reviewed'];
+const defaultGroups = ['priority', 'manual', 'unfinished'];
+
+// Resolve the latest task and its first visible results in one HTTP response.
+// Saved filters belong to a specific run and cannot leak into a newer task.
+export async function getSuggestionWorkspace(db = pool, options) {
+  const { userId, runId, preferredRunId } = options;
+  const run = runId
+    ? await ownedRun(db, userId, runId)
+    : (
+        await db.query(
+          `SELECT * FROM organize_suggestion_runs WHERE user_id=? AND status<>'preview' ORDER BY ${visibleOrganizeRunOrderSql} LIMIT 1`,
+          [userId],
+        )
+      )[0][0];
+  if (!run) return null;
+  const saved = Boolean(runId || preferredRunId === run.id);
+  const types = publicOrganizeOptions(run.options_json).resourceTypes;
+  const resourceType = saved && types.includes(options.resourceType) ? options.resourceType : types[0];
+  return readSuggestionRun(db, run, {
+    ...options,
+    id: run.id,
+    resourceType,
+    kind: saved ? options.kind : '',
+    after: saved ? options.after : '',
+    reviewState: saved ? options.reviewState : '',
+    groups: saved ? (options.groups ?? defaultGroups) : defaultGroups,
+  });
+}
+
+export async function getSuggestionRun(db = pool, options) {
+  const run = await ownedRun(db, options.userId, options.id);
+  return readSuggestionRun(db, run, options);
+}
+
+async function readSuggestionRun(
+  db,
+  run,
+  { userId, id, after = '', resourceType = '', kind = '', reviewOnly = false, reviewState = '', groups, group },
 ) {
-  const run = await ownedRun(db, userId, id);
+  const grouped = Array.isArray(groups) && resourceType !== 'tag';
+  if (group && !resultGroups.includes(group)) throw suggestionError('ORGANIZE_GROUP_INVALID', '整理分组无效');
+  if (group) {
+    const itemOutcomes = new Map();
+    const [jobs] =
+      Number(run.run_version) === 3
+        ? await db.query('SELECT item_id,kind,lane,status FROM organize_processing_jobs WHERE run_id=? AND user_id=?', [
+            id,
+            userId,
+          ])
+        : [undefined];
+    // Only read membership facts for a page; do not recalculate the overview or review totals.
+    await readOrganizeOutcomes(db, run, itemOutcomes, jobs);
+    const selected = filterOutcomes(itemOutcomes, { resourceType, kind, reviewOnly, reviewState });
+    return readGroupPage(db, run, selected, group, after);
+  }
   const [progress] = await db.query(
     'SELECT resource_type,ai_status,COUNT(*) AS total FROM organize_suggestion_items WHERE run_id=? AND user_id=? GROUP BY resource_type,ai_status',
     [id, userId],
@@ -156,6 +208,33 @@ export async function getSuggestionRun(
   const overview =
     Number(run.run_version) === 3 ? await readOrganizeOverview(db, run, ruleProgress, itemOutcomes) : undefined;
   const review = overview?.review || (await readOrganizeReview(db, run, itemOutcomes));
+  const selected = filterOutcomes(itemOutcomes, { resourceType, kind, reviewOnly, reviewState });
+  const groupTotals = {};
+  for (const result of selected.values()) {
+    const key = organizeOutcomeGroup(result.outcome);
+    groupTotals[key] = (groupTotals[key] || 0) + 1;
+  }
+  const summary = {
+    batchAvailable: [...selected.values()].some(
+      (result) => result.outcome === 'review' && result.batchKinds.some((candidate) => !kind || candidate === kind),
+    ),
+    ...mapRun(run),
+    ...(overview ? { overview } : {}),
+    review,
+    groupTotals,
+    ...lifecycleState(run, progress, ruleProgress),
+    progress,
+    counts,
+    resourceType,
+    kind,
+  };
+  if (grouped) {
+    const pages = {};
+    // Bounded per group, with one shared membership/summary read for this response.
+    for (const key of resultGroups.filter((key) => groups.includes(key)))
+      pages[key] = await readGroupPage(db, run, selected, key);
+    return { ...summary, pages, nextCursor: null };
+  }
   const where = ['i.run_id=?', 'i.user_id=?', 'i.id>?'];
   const params = [id, userId, after];
   if (reviewOnly)
@@ -191,51 +270,75 @@ export async function getSuggestionRun(
         [userId, id, page.map((i) => i.id)],
       )
     : [[]];
-  const groupTotals = {};
-  for (const { type, outcome, checks, disposition } of itemOutcomes.values()) {
-    if (
-      (resourceType && type !== resourceType) ||
-      (kind && !checks.includes(kind)) ||
-      (reviewOnly && outcome !== 'review') ||
-      (filteredReview && outcome === 'reviewed' && disposition !== reviewState)
-    )
-      continue;
-    const group = organizeOutcomeGroup(outcome);
-    groupTotals[group] = (groupTotals[group] || 0) + 1;
-  }
   return {
-    ...mapRun(run),
-    ...(overview ? { overview } : {}),
-    review,
-    ...(groupTotals ? { groupTotals } : {}),
-    ...lifecycleState(run, progress, ruleProgress),
-    progress,
-    counts,
-    items: page.map((i) => ({
-      id: i.id,
-      resource: json(i.snapshot_json),
-      aiStatus: i.ai_status,
-      ruleStatus: i.rule_status,
-      outcome: itemOutcomes.get(i.id)?.outcome,
-      work: itemOutcomes.get(i.id)?.work,
-      errorCode: i.error_code,
-      suggestions: suggestions
-        .filter((s) => s.item_id === i.id)
-        .map((s) => {
-          const { archiveDraft, ...payload } = json(s.payload_json);
-          const expired =
-            Number(i.resource_available) === 0 && i.resource_available != null && actionableStatuses.includes(s.status);
-          return {
-            ...payload,
-            id: s.id,
-            status: expired ? 'expired' : s.status,
-            ...(expired ? { reason: unavailableReason(Number(i.resource_trashed) === 1) } : {}),
-          };
-        }),
-    })),
+    ...summary,
+    items: mapSuggestionItems(page, suggestions, itemOutcomes),
     nextCursor: items.length > 30 ? page.at(-1).id : null,
   };
 }
+function filterOutcomes(outcomes, { resourceType, kind, reviewOnly, reviewState }) {
+  return new Map(
+    [...outcomes].filter(
+      ([, { type, outcome, checks, disposition }]) =>
+        (!resourceType || type === resourceType) &&
+        (!kind || checks.includes(kind)) &&
+        (!reviewOnly || outcome === 'review') &&
+        (!['applied', 'ignored', 'mixed', 'closed'].includes(reviewState) ||
+          outcome !== 'reviewed' ||
+          disposition === reviewState),
+    ),
+  );
+}
+async function readGroupPage(db, run, outcomes, group, after = '') {
+  const ids = [...outcomes]
+    .filter(([id, result]) => id > after && organizeOutcomeGroup(result.outcome) === group)
+    .map(([id]) => id)
+    .sort()
+    .slice(0, 31);
+  const pageIds = ids.slice(0, 30);
+  const [items] = pageIds.length
+    ? await db.query(
+        `SELECT i.*, (${availableResourceSql()}) AS resource_available, (${availableResourceSql('i', true)}) AS resource_trashed
+     FROM organize_suggestion_items i WHERE i.run_id=? AND i.user_id=? AND i.id IN (?) ORDER BY i.id`,
+        [run.id, run.user_id, pageIds],
+      )
+    : [[]];
+  const [suggestions] = pageIds.length
+    ? await db.query(
+        'SELECT * FROM organize_suggestions WHERE user_id=? AND run_id=? AND item_id IN (?) ORDER BY kind',
+        [run.user_id, run.id, pageIds],
+      )
+    : [[]];
+  return {
+    items: mapSuggestionItems(items, suggestions, outcomes),
+    nextCursor: ids.length > 30 ? pageIds.at(-1) : null,
+  };
+}
+function mapSuggestionItems(page, suggestions, itemOutcomes) {
+  return page.map((i) => ({
+    id: i.id,
+    resource: json(i.snapshot_json),
+    aiStatus: i.ai_status,
+    ruleStatus: i.rule_status,
+    outcome: itemOutcomes.get(i.id)?.outcome,
+    work: itemOutcomes.get(i.id)?.work,
+    errorCode: i.error_code,
+    suggestions: suggestions
+      .filter((s) => s.item_id === i.id)
+      .map((s) => {
+        const { archiveDraft, ...payload } = json(s.payload_json);
+        const expired =
+          Number(i.resource_available) === 0 && i.resource_available != null && actionableStatuses.includes(s.status);
+        return {
+          ...payload,
+          id: s.id,
+          status: expired ? 'expired' : s.status,
+          ...(expired ? { reason: unavailableReason(Number(i.resource_trashed) === 1) } : {}),
+        };
+      }),
+  }));
+}
+
 export async function getArchiveDraft(db = pool, { userId, runId, suggestionId }) {
   const [rows] = await db.query(
     `SELECT s.payload_json FROM organize_suggestions s

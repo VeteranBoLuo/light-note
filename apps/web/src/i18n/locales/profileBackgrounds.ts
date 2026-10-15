@@ -2,6 +2,7 @@ import { PROFILE_BACKGROUND_IDS } from '@lightnote/shared/profile-backgrounds';
 export const profileBackgroundsZh = {
   shared: '名片与主页共用',
   title: '个人背景',
+  animated: '动态',
   subtitle: '兑换一次，社区名片与公开主页共用；永久拥有，随时切换。',
   change: '更换背景',
   preview: '预览',
@@ -27,13 +28,14 @@ export const profileBackgroundsZh = {
   background_coast: '落日海岸',
   background_stars: '灵感星图',
   background_mountainsDescription: '一页轻笺，展开青山。纸页折角与水墨层次，静态呈现。',
-  background_starsDescription: '把笺纸、收藏卡与书签连成星图。星轨微光、晶核呼吸与星点闪烁，可随时暂停。',
-  pauseMotion: '暂停背景动效',
-  playMotion: '播放背景动效',
+  background_skyDescription: '把灵感寄往晴空。蜡封信笺、折纸飞燕、书签与花瓣，叠成一封立体来信。',
+  background_coastDescription: '翻开笔记，让灵感有岸可泊。灯塔缓缓扫光，海面泛起金色流光。',
+  background_starsDescription: '把笺纸、收藏卡与书签连成星图。金色星轨流光、晶核折光与层叠星辉。',
 };
 export const profileBackgroundsEn = {
   shared: 'Shared by card and profile',
   title: 'Profile backgrounds',
+  animated: 'Animated',
   subtitle: 'Redeem once for your community card and public profile. Keep forever and switch anytime.',
   change: 'Change background',
   preview: 'Preview',
@@ -61,10 +63,12 @@ export const profileBackgroundsEn = {
   background_stars: 'Inspiration Atlas',
   background_mountainsDescription:
     'Mountains unfold from a page. Quiet ink washes and layered paper, without animation.',
+  background_skyDescription:
+    'Send inspiration into the sky. A wax-sealed letter, origami swallows, bookmarks and petals form a layered paper sculpture.',
+  background_coastDescription:
+    'A lighthouse rises from an open notebook, sweeping light slowly across a sea of golden reflections.',
   background_starsDescription:
-    'Notes, collected cards and bookmarks form a constellation. Orbiting lights, a softly glowing crystal and twinkling stars; pause anytime.',
-  pauseMotion: 'Pause background motion',
-  playMotion: 'Play background motion',
+    'Notes, collected cards and bookmarks form a constellation, with golden orbit lights, a luminous crystal and layered starlight.',
 };
 
 export const profileBackgroundItemsZh = Object.fromEntries(

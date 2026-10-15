@@ -141,6 +141,25 @@ function providerHttpError(cfg, status, providerMessage = '') {
   return error;
 }
 
+async function readProviderResponse(res, cfg, signal) {
+  let data;
+  try {
+    data = await res.json();
+  } catch (cause) {
+    // 响应头成功不等于正文成功；保留超时/取消，避免误触发内容修复。
+    signal?.throwIfAborted();
+    if (!res.ok) throw providerHttpError(cfg, res.status);
+    const error = new Error(`${cfg.name} 响应读取失败`);
+    error.code = cause instanceof SyntaxError ? 'AI_PROVIDER_ERROR' : 'AI_NETWORK_ERROR';
+    error.status = cause instanceof SyntaxError ? 502 : 503;
+    error.retryable = true;
+    throw error;
+  }
+  signal?.throwIfAborted();
+  if (!res.ok) throw providerHttpError(cfg, res.status, data?.error?.message);
+  return data;
+}
+
 function getModel(cfg, modelOverride) {
   return String(modelOverride || process.env[cfg.modelEnv] || cfg.defaultModel).trim();
 }
@@ -186,9 +205,8 @@ export const deepseekClientInternals = Object.freeze({
 });
 
 // ---- 超时控制 ----
-// Planner(同步)用整体超时;流式用"空闲超时"(见 requestDeepSeekStream),
+// 同步请求的整体超时统一由 AI Gateway 控制；流式另用"空闲超时"(见 requestDeepSeekStream)，
 // 避免正常的长回答被绝对超时误杀,只拦截"连上却不吐字"的挂死。
-const PLANNER_TIMEOUT_MS = 90_000;
 const STREAM_IDLE_MS = 60_000;
 
 function createStreamTimeoutError(hasReceivedProviderChunk) {
@@ -259,17 +277,18 @@ export async function requestDeepSeek(messages, options = {}) {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiKey}`,
     },
-    // 客户端断开(options.signal)与 90s 整体超时,任一触发即中止
-    signal: combineSignals([options.signal, AbortSignal.timeout(PLANNER_TIMEOUT_MS)]),
+    signal: options.signal,
     body: JSON.stringify(body),
   });
 
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw providerHttpError(cfg, res.status, data.error?.message);
+  const data = await readProviderResponse(res, cfg, options.signal);
+  const msg = data?.choices?.[0]?.message;
+  if (!msg || typeof msg !== 'object' || Array.isArray(msg)) {
+    throw Object.assign(new Error('AI 服务返回了无效响应'), {
+      code: 'AI_PROVIDER_ERROR',
+      status: 502,
+    });
   }
-
-  const msg = data.choices?.[0]?.message;
   const usage = data.usage || {};
   const usageStatus = Number(usage.total_tokens || 0) > 0 ? 'reported' : 'missing';
   return {
@@ -320,6 +339,7 @@ export async function requestDeepSeekStream(messages, options = {}) {
     idleTimer = setTimeout(abortIdle, STREAM_IDLE_MS);
   };
   try {
+    const signal = combineSignals([options.signal, idleController.signal]);
     const res = await providerFetch(cfg.baseUrl, {
       method: 'POST',
       headers: {
@@ -327,7 +347,7 @@ export async function requestDeepSeekStream(messages, options = {}) {
         Authorization: `Bearer ${apiKey}`,
       },
       // 客户端断开(options.signal)与空闲超时,任一触发即中止
-      signal: combineSignals([options.signal, idleController.signal]),
+      signal,
       body: JSON.stringify({
         model: getModel(cfg, options.modelOverride),
         messages,
@@ -347,8 +367,7 @@ export async function requestDeepSeekStream(messages, options = {}) {
     });
 
     if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      throw providerHttpError(cfg, res.status, data.error?.message);
+      await readProviderResponse(res, cfg, signal);
     }
 
     const reader = res.body?.getReader();

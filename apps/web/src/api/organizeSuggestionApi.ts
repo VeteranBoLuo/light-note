@@ -95,6 +95,10 @@ export interface WorkspaceItem {
   suggestions: WorkspaceSuggestion[];
 }
 export interface SuggestionRun {
+  resourceType?: ResourceType;
+  kind?: string;
+  pages?: Record<string, SuggestionPage>;
+  batchAvailable?: boolean;
   overview?: OrganizeOverview;
   review?: OrganizeOverview['review'];
   groupTotals?: Record<string, number>;
@@ -119,6 +123,19 @@ export interface SuggestionRun {
   items?: WorkspaceItem[];
   nextCursor?: string | null;
 }
+export interface SuggestionPage {
+  items: WorkspaceItem[];
+  nextCursor: string | null;
+}
+export interface ResultFilters {
+  after?: string;
+  resourceType?: string;
+  kind?: string;
+  reviewOnly?: boolean;
+  reviewState?: string;
+  groups?: string;
+  group?: string;
+}
 const root = '/api/organize/suggestions';
 const opts = { silent: true, feedback: false };
 export const previewRun = (options: RunOptions, requestId: string) =>
@@ -126,10 +143,10 @@ export const previewRun = (options: RunOptions, requestId: string) =>
 export const startRun = (id: string, replaceRunId?: string) =>
   apiBasePost(`${root}/runs/${encodeURIComponent(id)}/start`, { requestId: id, replaceRunId }, opts);
 export const listRuns = () => apiBaseGet(`${root}/runs`, undefined, opts);
-export const getRun = (
-  id: string,
-  params: { after?: string; resourceType?: string; kind?: string; reviewOnly?: boolean; reviewState?: string } = {},
-) => apiBaseGet(`${root}/runs/${encodeURIComponent(id)}`, params, opts);
+export const getWorkspace = (params: ResultFilters & { runId?: string; preferredRunId?: string } = {}) =>
+  apiBaseGet(`${root}/workspace`, params, opts);
+export const getRun = (id: string, params: ResultFilters = {}) =>
+  apiBaseGet(`${root}/runs/${encodeURIComponent(id)}`, params, opts);
 export const cancelRun = (id: string) => apiBasePost(`${root}/runs/${encodeURIComponent(id)}/cancel`, {}, opts);
 export const actOnRunSuggestion = (
   runId: string,
