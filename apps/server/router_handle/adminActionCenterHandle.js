@@ -1,3 +1,4 @@
+import { loadAsyncJobSummary, visibleAsyncJobSql } from '../util/adminAsyncJobHealth.js';
 import { imageFailure } from '../util/imagePreview/errors.js';
 import pool from '../db/index.js';
 import { resultData } from '../util/common.js';
@@ -123,6 +124,16 @@ function jobResult(source, label, summary, items) {
     returned: enrichedItems.length,
     sampled: number(summary.attention) + number(summary.running) + number(summary.waiting) > enrichedItems.length,
     ...sla,
+    ...(summary.sla_total != null
+      ? {
+          overdue: number(summary.overdue),
+          dueSoon: number(summary.due_soon),
+          oldestAgeMinutes: number(summary.oldest_age_minutes),
+          slaUnavailable: number(summary.sla_unavailable),
+        }
+      : {}),
+    slaCount: summary.sla_total == null ? enrichedItems.length : number(summary.sla_total),
+    slaSampled: summary.sla_total == null,
     items: enrichedItems,
   };
 }
@@ -356,23 +367,14 @@ async function loadResourceGovernanceWork(limit) {
 
 async function loadAiDocumentJobs(limit) {
   const [[summaryRows], [rows]] = await Promise.all([
-    pool.query(
-      `SELECT
-         COUNT(*) AS total,
-         COALESCE(SUM(status = 'failed' OR (status = 'processing' AND locked_at < DATE_SUB(NOW(), INTERVAL 10 MINUTE))), 0) AS attention,
-         COALESCE(SUM(status = 'processing' AND (locked_at IS NULL OR locked_at >= DATE_SUB(NOW(), INTERVAL 10 MINUTE))), 0) AS running,
-         COALESCE(SUM(status = 'queued'), 0) AS waiting,
-         COALESCE(SUM(status = 'completed' AND update_time >= DATE_SUB(NOW(), INTERVAL 1 DAY)), 0) AS completed_24h
-       FROM ai_document_jobs
-       WHERE status <> 'completed' OR update_time >= DATE_SUB(NOW(), INTERVAL 1 DAY)`,
-    ),
+    loadAsyncJobSummary('ai_document'),
     pool.query(
       `SELECT j.id, j.source_id, j.status, j.attempts, j.available_at, j.locked_at, j.error_message,
               j.create_time, j.update_time, s.file_name, s.user_id, u.alias
          FROM ai_document_jobs j
          JOIN ai_document_sources s ON s.id = j.source_id
          LEFT JOIN user u ON u.id = s.user_id
-        WHERE j.status IN ('queued', 'processing', 'failed')
+        WHERE ${visibleAsyncJobSql('ai_document')} AND j.status IN ('queued', 'processing', 'failed')
         ORDER BY (j.status = 'failed') DESC, j.update_time DESC, j.id DESC
         LIMIT ?`,
       [limit],
@@ -406,23 +408,13 @@ async function loadAiDocumentJobs(limit) {
 
 async function loadBookmarkIconJobs(limit) {
   const [[summaryRows], [rows]] = await Promise.all([
-    pool.query(
-      `SELECT
-         COUNT(*) AS total,
-         COALESCE(SUM(status = 'failed' OR (status = 'processing' AND locked_at < DATE_SUB(NOW(), INTERVAL 10 MINUTE))), 0) AS attention,
-         COALESCE(SUM(status = 'processing' AND (locked_at IS NULL OR locked_at >= DATE_SUB(NOW(), INTERVAL 10 MINUTE))), 0) AS running,
-         COALESCE(SUM(status IN ('queued', 'retry_wait')), 0) AS waiting,
-         COALESCE(SUM(status IN ('success', 'not_found') AND update_time >= DATE_SUB(NOW(), INTERVAL 1 DAY)), 0) AS completed_24h
-       FROM bookmark_icon_jobs
-       WHERE status IN ('queued', 'processing', 'retry_wait', 'failed')
-          OR (status IN ('success', 'not_found') AND update_time >= DATE_SUB(NOW(), INTERVAL 1 DAY))`,
-    ),
+    loadAsyncJobSummary('bookmark_icon'),
     pool.query(
       `SELECT j.id, j.batch_id, j.user_id, j.bookmark_id, j.origin_key, j.status, j.attempts,
               j.available_at, j.locked_at, j.error_code, j.create_time, j.update_time, u.alias
          FROM bookmark_icon_jobs j
          LEFT JOIN user u ON u.id = j.user_id
-        WHERE j.status IN ('queued', 'processing', 'retry_wait', 'failed')
+        WHERE ${visibleAsyncJobSql('bookmark_icon')} AND j.status IN ('queued', 'processing', 'retry_wait', 'failed')
         ORDER BY (j.status = 'failed') DESC, j.update_time DESC, j.id DESC
         LIMIT ?`,
       [limit],
@@ -457,19 +449,7 @@ async function loadBookmarkIconJobs(limit) {
 
 async function loadTodoReminderJobs(limit) {
   const [[summaryRows], [rows]] = await Promise.all([
-    pool.query(
-      `SELECT
-         COUNT(*) AS total,
-         COALESCE(SUM(status IN ('failed', 'unknown')
-           OR (status = 'processing' AND lease_until < UTC_TIMESTAMP())
-           OR (status = 'pending' AND scheduled_at_utc < DATE_SUB(UTC_TIMESTAMP(), INTERVAL 10 MINUTE))), 0) AS attention,
-         COALESCE(SUM(status = 'processing' AND (lease_until IS NULL OR lease_until >= UTC_TIMESTAMP())), 0) AS running,
-         COALESCE(SUM(status = 'pending'), 0) AS waiting,
-         COALESCE(SUM(status = 'sent' AND sent_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 1 DAY)), 0) AS completed_24h
-       FROM todo_reminder_jobs
-       WHERE status IN ('pending', 'processing', 'failed', 'unknown')
-          OR (status = 'sent' AND sent_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 1 DAY))`,
-    ),
+    loadAsyncJobSummary('todo_reminder'),
     pool.query(
       `SELECT j.id, j.user_id, j.todo_id, j.series_id, j.rule_id, j.channel, j.status, j.retry_count,
               CONCAT(DATE_FORMAT(j.scheduled_at_utc, '%Y-%m-%dT%H:%i:%s'), 'Z') AS scheduled_at_utc_iso,
@@ -497,7 +477,7 @@ async function loadTodoReminderJobs(limit) {
          FROM todo_reminder_jobs j
          LEFT JOIN todo_items t ON t.id = j.todo_id
          LEFT JOIN user u ON u.id = j.user_id
-        WHERE j.status IN ('pending', 'processing', 'failed', 'unknown')
+        WHERE ${visibleAsyncJobSql('todo_reminder')} AND j.status IN ('pending', 'processing', 'failed', 'unknown')
           AND (j.status <> 'pending' OR j.id = (
             SELECT grouped.id
               FROM todo_reminder_jobs grouped
@@ -793,26 +773,12 @@ export async function getAdminFilePreviewDiagnostic(req, res) {
 
 async function loadAccountDeletionJobs(limit) {
   const [[summaryRows], [rows]] = await Promise.all([
-    pool.query(
-      `SELECT
-         COUNT(*) AS total,
-         COALESCE(SUM(status = 'retry_wait'
-           OR (status = 'processing' AND (
-             processing_started_at IS NULL
-             OR processing_started_at < DATE_SUB(NOW(), INTERVAL ${ACCOUNT_DELETION_STALE_PROCESSING_MINUTES} MINUTE)
-           ))), 0) AS attention,
-         COALESCE(SUM(status = 'processing'
-           AND processing_started_at >= DATE_SUB(NOW(), INTERVAL ${ACCOUNT_DELETION_STALE_PROCESSING_MINUTES} MINUTE)), 0) AS running,
-         COALESCE(SUM(status = 'pending'), 0) AS waiting,
-         COALESCE(SUM(status = 'completed' AND completed_at >= DATE_SUB(NOW(), INTERVAL 1 DAY)), 0) AS completed_24h
-       FROM account_deletion_requests
-       WHERE status <> 'completed' OR completed_at >= DATE_SUB(NOW(), INTERVAL 1 DAY)`,
-    ),
+    loadAsyncJobSummary('account_deletion'),
     pool.query(
       `SELECT id, user_id, status, attempts, requested_at, processing_started_at,
               next_retry_at, last_error_code, update_time
-         FROM account_deletion_requests
-        WHERE status IN ('pending', 'processing', 'retry_wait')
+         FROM account_deletion_requests j
+        WHERE ${visibleAsyncJobSql('account_deletion')} AND status IN ('pending', 'processing', 'retry_wait')
         ORDER BY (status = 'retry_wait') DESC, requested_at ASC, id ASC
         LIMIT ?`,
       [limit],
@@ -846,22 +812,12 @@ async function loadAccountDeletionJobs(limit) {
 
 async function loadEmailDeliveryJobs(limit) {
   const [[summaryRows], [rows]] = await Promise.all([
-    pool.query(
-      `SELECT
-         COUNT(*) AS total,
-         COALESCE(SUM(status = 'failed' OR (status = 'sending' AND update_time < DATE_SUB(NOW(), INTERVAL 10 MINUTE))), 0) AS attention,
-         COALESCE(SUM(status = 'sending' AND update_time >= DATE_SUB(NOW(), INTERVAL 10 MINUTE)), 0) AS running,
-         0 AS waiting,
-         COALESCE(SUM(status = 'accepted' AND accepted_at >= DATE_SUB(NOW(), INTERVAL 1 DAY)), 0) AS completed_24h
-       FROM email_delivery_logs
-       WHERE status IN ('sending', 'failed')
-          OR (status = 'accepted' AND accepted_at >= DATE_SUB(NOW(), INTERVAL 1 DAY))`,
-    ),
+    loadAsyncJobSummary('email_delivery'),
     pool.query(
       `SELECT id, email_type, user_id, recipient_email, subject, business_type, business_id,
               status, attempt_no, error_code, create_time, update_time
-         FROM email_delivery_logs
-        WHERE status = 'failed' OR (status = 'sending' AND update_time < DATE_SUB(NOW(), INTERVAL 10 MINUTE))
+         FROM email_delivery_logs j
+        WHERE status IN ('sending','failed') AND ${visibleAsyncJobSql('email_delivery')}
         ORDER BY update_time DESC, id DESC
         LIMIT ?`,
       [limit],
@@ -875,7 +831,10 @@ async function loadEmailDeliveryJobs(limit) {
       id: String(row.id),
       source: 'email_delivery',
       rawStatus: row.status,
-      status: 'attention',
+      status:
+        row.status === 'sending' && Date.now() - new Date(row.update_time).getTime() <= 10 * 60_000
+          ? 'running'
+          : 'attention',
       title: row.subject || row.email_type || '邮件投递',
       ownerLabel: maskEmail(row.recipient_email),
       userId: row.user_id || null,
@@ -895,16 +854,7 @@ async function loadEmailDeliveryJobs(limit) {
 
 async function loadFilePreviewJobs(limit) {
   const [[summaryRows], [rows]] = await Promise.all([
-    pool.query(
-      `SELECT COUNT(*) AS total,
-              COALESCE(SUM(status = 'failed' OR (status = 'processing' AND locked_at < DATE_SUB(NOW(), INTERVAL 10 MINUTE))), 0) AS attention,
-              COALESCE(SUM(status = 'processing' AND (locked_at IS NULL OR locked_at >= DATE_SUB(NOW(), INTERVAL 10 MINUTE))), 0) AS running,
-              COALESCE(SUM(status = 'queued'), 0) AS waiting,
-              COALESCE(SUM(status = 'completed' AND update_time >= DATE_SUB(NOW(), INTERVAL 1 DAY)), 0) AS completed_24h
-         FROM file_preview_jobs
-        WHERE status IN ('queued', 'processing', 'failed')
-           OR (status = 'completed' AND update_time >= DATE_SUB(NOW(), INTERVAL 1 DAY))`,
-    ),
+    loadAsyncJobSummary('file_preview'),
     pool.query(
       `SELECT j.id, j.status, j.attempts, j.available_at, j.locked_at, j.error_code,
               j.create_time, j.update_time, a.file_id, a.source_type, a.format_id, a.owner_user_id,
@@ -915,7 +865,7 @@ async function loadFilePreviewJobs(limit) {
          LEFT JOIN files f ON (a.source_type = 'cloud_file' AND f.id = a.file_id)
            OR (a.source_type = 'image_asset' AND ia.source_type = 'cloud_file' AND f.id = ia.source_id AND f.create_by = a.owner_user_id)
          LEFT JOIN user u ON u.id = a.owner_user_id
-        WHERE j.status IN ('queued', 'processing', 'failed')
+        WHERE ${visibleAsyncJobSql('file_preview')} AND j.status IN ('queued', 'processing', 'failed')
         ORDER BY (j.status = 'failed') DESC, j.update_time DESC, j.id DESC
         LIMIT ?`,
       [limit],
@@ -951,21 +901,12 @@ async function loadFilePreviewJobs(limit) {
 
 async function loadResourceCleanupJobs(limit) {
   const [[summaryRows], [rows]] = await Promise.all([
-    pool.query(
-      `SELECT COUNT(*) AS total,
-              COALESCE(SUM(status = 'completed_with_errors' OR (status = 'running' AND lease_expires_at < NOW())), 0) AS attention,
-              COALESCE(SUM(status = 'running' AND (lease_expires_at IS NULL OR lease_expires_at >= NOW())), 0) AS running,
-              COALESCE(SUM(status = 'pending'), 0) AS waiting,
-              COALESCE(SUM(status IN ('completed', 'completed_with_errors') AND finished_at >= DATE_SUB(NOW(), INTERVAL 1 DAY)), 0) AS completed_24h
-         FROM resource_cleanup_jobs
-        WHERE status IN ('pending', 'running', 'completed_with_errors')
-           OR (status = 'completed' AND finished_at >= DATE_SUB(NOW(), INTERVAL 1 DAY))`,
-    ),
+    loadAsyncJobSummary('resource_cleanup'),
     pool.query(
       `SELECT id, risk_level, status, total, succeeded, skipped, failed,
               lease_expires_at, last_error_code, create_time, update_time
-         FROM resource_cleanup_jobs
-        WHERE status IN ('pending', 'running', 'completed_with_errors')
+         FROM resource_cleanup_jobs j
+        WHERE ${visibleAsyncJobSql('resource_cleanup')} AND status IN ('pending', 'running', 'completed_with_errors')
         ORDER BY (status = 'completed_with_errors') DESC,
                  (status = 'running' AND lease_expires_at < NOW()) DESC,
                  update_time DESC, id DESC
@@ -1071,7 +1012,7 @@ export async function getAdminActionCenter(req, res) {
       .slice(0, limit);
     const unavailableSources = results.filter((entry) => !entry.available).map((entry) => entry.source);
     const sourceSummaries = [...workSources, ...jobSources];
-    const returnedCount = sourceSummaries.reduce((sum, entry) => sum + entry.returned, 0);
+    const returnedCount = sourceSummaries.reduce((sum, entry) => sum + (entry.slaCount ?? entry.returned), 0);
     const slaUnavailable = sourceSummaries.reduce((sum, entry) => sum + entry.slaUnavailable, 0);
 
     return res.send(
@@ -1091,7 +1032,7 @@ export async function getAdminActionCenter(req, res) {
           oldestAgeMinutes: sourceSummaries.reduce((oldest, entry) => Math.max(oldest, entry.oldestAgeMinutes), 0),
           returnedCount,
           unavailableCount: slaUnavailable,
-          sampled: unavailableSources.length > 0 || sourceSummaries.some((entry) => entry.sampled),
+          sampled: unavailableSources.length > 0 || sourceSummaries.some((entry) => entry.slaSampled ?? entry.sampled),
         },
         work: {
           total: workSources.reduce((sum, entry) => sum + entry.count, 0),

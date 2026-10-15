@@ -71,6 +71,9 @@ ssh -i "$KEY" "$HOST" "cd '$REMOTE' && '$REMOTE_NODE' scripts/migrateHelpCenterS
 echo "🔎  幂等初始化待办工作区 Schema…"
 ssh -i "$KEY" "$HOST" "cd '$REMOTE' && '$REMOTE_NODE' scripts/ensureTodoWorkspaceSchema.js"
 
+echo "🗂  幂等初始化异步任务复核归档 Schema…"
+ssh -i "$KEY" "$HOST" "cd '$REMOTE' && '$REMOTE_NODE' scripts/ensureAdminAsyncJobArchiveSchema.js"
+
 echo "🔎  执行只读 Schema 发布门禁…"
 ssh -i "$KEY" "$HOST" "cd '$REMOTE' && '$REMOTE_NODE' scripts/checkSchemaAssertions.js"
 

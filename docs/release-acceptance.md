@@ -91,6 +91,8 @@ pnpm --filter server check:schema
 
 待办工作区通过 `node scripts/ensureTodoWorkspaceSchema.js` 显式应用幂等结构迁移；后端发布脚本在 Schema 断言前执行，应用启动不自动建表。帮助正文迁移独立执行，不混入结构门禁。
 
+异步健康归档使用加法迁移 `20261015_admin_async_job_archives.sql`，部署脚本通过 `scripts/ensureAdminAsyncJobArchiveSchema.js` 在 Schema 门禁前幂等安装。安装结构不归档历史任务；历史归档须单独授权并通过 `scripts/archiveHistoricalAsyncJobs.js` 的快照数量与摘要核验。
+
 按变更选择额外门禁：
 
 | 范围 | 检查 |

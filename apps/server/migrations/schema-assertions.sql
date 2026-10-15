@@ -4169,3 +4169,25 @@ SELECT 'background_column' AS check_name, 'user_growth.equipped_background' AS d
 WHERE NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'user_growth' AND COLUMN_NAME = 'equipped_background'
     AND DATA_TYPE = 'varchar' AND CHARACTER_MAXIMUM_LENGTH = 64 AND IS_NULLABLE = 'YES' AND COLUMN_DEFAULT IS NULL);
+
+-- 异步任务复核归档为独立事实，不改变任务与邮件终态。
+SELECT 'async_job_archive_schema' AS check_name, 'admin_async_job_archives' AS detail
+FROM DUAL WHERE NOT EXISTS (
+  SELECT 1 FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='admin_async_job_archives'
+);
+SELECT 'async_job_archive_column' AS check_name, required.name AS detail
+FROM (
+  SELECT 'source' AS name UNION ALL SELECT 'job_id' UNION ALL SELECT 'job_status'
+  UNION ALL SELECT 'job_updated_at_epoch' UNION ALL SELECT 'archived_by'
+  UNION ALL SELECT 'reason' UNION ALL SELECT 'request_id' UNION ALL SELECT 'archived_at'
+) required LEFT JOIN information_schema.columns present
+  ON present.table_schema=DATABASE() AND present.table_name='admin_async_job_archives' AND present.column_name=required.name
+WHERE present.column_name IS NULL;
+SELECT 'async_job_archive_epoch' AS check_name, 'job_updated_at_epoch decimal(20,6)' AS detail
+FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM information_schema.columns
+  WHERE table_schema=DATABASE() AND table_name='admin_async_job_archives'
+    AND column_name='job_updated_at_epoch' AND data_type='decimal' AND numeric_precision=20 AND numeric_scale=6);
+SELECT 'async_job_archive_primary' AS check_name, 'source,job_id' AS detail
+FROM DUAL WHERE COALESCE((SELECT GROUP_CONCAT(column_name ORDER BY seq_in_index)
+  FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='admin_async_job_archives'
+    AND index_name='PRIMARY'),'') <> 'source,job_id';

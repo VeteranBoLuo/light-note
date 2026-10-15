@@ -130,7 +130,7 @@ function rowsFor(sql) {
           ],
         ];
   }
-  if (statement.includes('FROM todo_reminder_jobs')) {
+  if (statement.includes('FROM todo_reminder_jobs j')) {
     return summary
       ? [[{ total: 3, attention: 1, running: 1, waiting: 1, completed_24h: 5 }]]
       : [
@@ -359,6 +359,38 @@ describe('后台统一待处理中心', () => {
     expect(params).not.toContain('LOCAL_IMAGE_UNSUPPORTED');
     expect(params).not.toContain('ACCOUNT_DELETION_STALLED');
     expect(params).not.toContain('SOFT_DELETED_OWNER_HAS_RESOURCES');
+  });
+
+  it('任务 SLA 使用全量汇总，明细采样不会把超时数降成可见行数', async () => {
+    query.mockImplementation(async (sql) => {
+      if (String(sql).includes('COUNT(*) AS total') && String(sql).includes('FROM bookmark_icon_jobs')) {
+        return [
+          [
+            {
+              total: 84,
+              attention: 84,
+              running: 0,
+              waiting: 0,
+              completed_24h: 0,
+              sla_total: 84,
+              overdue: 84,
+              due_soon: 0,
+              sla_unavailable: 0,
+              oldest_age_minutes: 2880,
+            },
+          ],
+        ];
+      }
+      return rowsFor(sql);
+    });
+    const res = response();
+    await getAdminActionCenter(
+      { user: { role: 'root' }, body: { section: 'jobs', source: 'bookmark_icon', limit: 5 } },
+      res,
+    );
+    expect(res.body.data.sla).toMatchObject({ overdue: 84, returnedCount: 84, sampled: false });
+    expect(res.body.data.jobs.items).toHaveLength(1);
+    expect(res.body.data.jobs.sources[0]).toMatchObject({ overdue: 84, sampled: true, slaSampled: false });
   });
 
   it('拒绝未知来源筛选且不查询数据库', async () => {
