@@ -1012,8 +1012,15 @@ export async function getAdminActionCenter(req, res) {
       .slice(0, limit);
     const unavailableSources = results.filter((entry) => !entry.available).map((entry) => entry.source);
     const sourceSummaries = [...workSources, ...jobSources];
-    const returnedCount = sourceSummaries.reduce((sum, entry) => sum + (entry.slaCount ?? entry.returned), 0);
-    const slaUnavailable = sourceSummaries.reduce((sum, entry) => sum + entry.slaUnavailable, 0);
+    const summarizeSla = (summaries, unavailable) => ({
+      policyVersion: ADMIN_WORK_ITEM_POLICY_VERSION,
+      overdue: summaries.reduce((sum, entry) => sum + entry.overdue, 0),
+      dueSoon: summaries.reduce((sum, entry) => sum + entry.dueSoon, 0),
+      oldestAgeMinutes: summaries.reduce((oldest, entry) => Math.max(oldest, entry.oldestAgeMinutes), 0),
+      returnedCount: summaries.reduce((sum, entry) => sum + (entry.slaCount ?? entry.returned), 0),
+      unavailableCount: summaries.reduce((sum, entry) => sum + entry.slaUnavailable, 0),
+      sampled: unavailable.length > 0 || summaries.some((entry) => entry.slaSampled ?? entry.sampled),
+    });
 
     return res.send(
       resultData({
@@ -1025,14 +1032,16 @@ export async function getAdminActionCenter(req, res) {
           available,
           checkedAt,
         })),
-        sla: {
-          policyVersion: ADMIN_WORK_ITEM_POLICY_VERSION,
-          overdue: sourceSummaries.reduce((sum, entry) => sum + entry.overdue, 0),
-          dueSoon: sourceSummaries.reduce((sum, entry) => sum + entry.dueSoon, 0),
-          oldestAgeMinutes: sourceSummaries.reduce((oldest, entry) => Math.max(oldest, entry.oldestAgeMinutes), 0),
-          returnedCount,
-          unavailableCount: slaUnavailable,
-          sampled: unavailableSources.length > 0 || sourceSummaries.some((entry) => entry.slaSampled ?? entry.sampled),
+        sla: summarizeSla(sourceSummaries, unavailableSources),
+        slaBySection: {
+          work: summarizeSla(
+            workSources,
+            unavailableSources.filter((key) => getAdminWorkItemPolicy(key)?.section === 'work'),
+          ),
+          jobs: summarizeSla(
+            jobSources,
+            unavailableSources.filter((key) => getAdminWorkItemPolicy(key)?.section === 'jobs'),
+          ),
         },
         work: {
           total: workSources.reduce((sum, entry) => sum + entry.count, 0),

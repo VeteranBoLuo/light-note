@@ -242,6 +242,26 @@ describe('ActionCenter', () => {
     document.body.innerHTML = '';
   });
 
+  it('同时读取两区角标时，SLA 指标只显示当前分区', async () => {
+    const response: any = payload();
+    response.data.sla.overdue = 85;
+    response.data.slaBySection = {
+      work: { overdue: 1, returnedCount: 2, sampled: false },
+      jobs: { overdue: 84, returnedCount: 84, sampled: false },
+    };
+    apiMocks.load.mockResolvedValue(response);
+    const mounted = mountPage();
+    cleanup = mounted.unmount;
+    const overdueMetric = () => mounted.host.querySelectorAll('.admin-stat-value')[1]?.textContent;
+    await vi.waitFor(() => expect(overdueMetric()).toBe('1'));
+    const jobTab = [...mounted.host.querySelectorAll<HTMLElement>('[role="tab"]')].find((tab) =>
+      tab.textContent?.includes('异步任务健康'),
+    )!;
+    jobTab.click();
+    await vi.waitFor(() => expect(overdueMetric()).toBe('84'));
+    expect(apiMocks.load).toHaveBeenLastCalledWith(expect.objectContaining({ section: 'all' }));
+  });
+
   it('部分来源不可用时仍展示人工队列，并能进入原业务页面', async () => {
     const mounted = mountPage();
     cleanup = mounted.unmount;

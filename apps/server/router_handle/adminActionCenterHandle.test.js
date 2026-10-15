@@ -316,6 +316,10 @@ describe('后台统一待处理中心', () => {
     const email = res.body.data.jobs.items.find((item) => item.source === 'email_delivery');
     expect(email.ownerLabel).not.toContain('private@');
     expect(JSON.stringify(res.body)).not.toContain('private@example.com');
+    const { sla, slaBySection } = res.body.data;
+    expect(sla.overdue).toBe(slaBySection.work.overdue + slaBySection.jobs.overdue);
+    expect(sla.returnedCount).toBe(slaBySection.work.returnedCount + slaBySection.jobs.returnedCount);
+    expect(slaBySection.work.sampled).toBe(true);
   });
 
   it('限制单来源读取数量并脱敏邮箱', () => {
@@ -389,6 +393,8 @@ describe('后台统一待处理中心', () => {
       res,
     );
     expect(res.body.data.sla).toMatchObject({ overdue: 84, returnedCount: 84, sampled: false });
+    expect(res.body.data.slaBySection.jobs).toMatchObject({ overdue: 84, returnedCount: 84, sampled: false });
+    expect(res.body.data.slaBySection.work).toMatchObject({ overdue: 0, returnedCount: 0, sampled: false });
     expect(res.body.data.jobs.items).toHaveLength(1);
     expect(res.body.data.jobs.sources[0]).toMatchObject({ overdue: 84, sampled: true, slaSampled: false });
   });

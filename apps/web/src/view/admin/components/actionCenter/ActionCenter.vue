@@ -1319,14 +1319,15 @@
       unavailableSources.value = Array.isArray(response.data?.unavailableSources)
         ? response.data.unavailableSources
         : [];
+      const sectionSla = response.data?.slaBySection?.[activeSection.value] ?? response.data?.sla;
       sla.value = {
-        policyVersion: String(response.data?.sla?.policyVersion || ''),
-        overdue: Number(response.data?.sla?.overdue || 0),
-        dueSoon: Number(response.data?.sla?.dueSoon || 0),
-        oldestAgeMinutes: Number(response.data?.sla?.oldestAgeMinutes || 0),
-        returnedCount: Number(response.data?.sla?.returnedCount || 0),
-        unavailableCount: Number(response.data?.sla?.unavailableCount || 0),
-        sampled: Boolean(response.data?.sla?.sampled),
+        policyVersion: String(sectionSla?.policyVersion || ''),
+        overdue: Number(sectionSla?.overdue || 0),
+        dueSoon: Number(sectionSla?.dueSoon || 0),
+        oldestAgeMinutes: Number(sectionSla?.oldestAgeMinutes || 0),
+        returnedCount: Number(sectionSla?.returnedCount || 0),
+        unavailableCount: Number(sectionSla?.unavailableCount || 0),
+        sampled: Boolean(sectionSla?.sampled),
       };
       work.value = {
         total: Number(response.data?.work?.total || 0),
