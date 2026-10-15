@@ -18,10 +18,10 @@
           />
           <BSelect v-model:value="status" :options="statusOptions" :aria-label="t('toolbox.itemDetail.todoStatus')" />
         </div>
-        <p v-if="loading && !todos.length" role="status">{{ t('common.loading') }}</p>
-        <p v-else-if="!todos.length && !failure" class="reference-picker__empty">{{
+        <ToolboxFeedback v-if="loading && !todos.length" state="loading" compact :title="t('common.loading')" />
+        <ToolboxFeedback v-else-if="!todos.length && !failure" compact>{{
           t('toolbox.itemDetail.noMatchingTodos')
-        }}</p>
+        }}</ToolboxFeedback>
         <BButton
           v-for="todo in todos"
           :key="todo.id"
@@ -47,15 +47,17 @@
           >
           <SvgIcon v-if="selectedTodo?.id === todo.id" :src="icon.organize.check" size="18" />
         </BButton>
-        <div v-if="failure" role="alert" class="reference-picker__empty"
+        <ToolboxFeedback v-if="failure" state="error"
           >{{ t('toolbox.itemDetail.pickerFailed') }}
-          <BButton :disabled="loading" @click="loadTodos(!todos.length)">{{
-            t('toolbox.itemDetail.retryPicker')
-          }}</BButton></div
-        >
-        <div v-else-if="cursor" ref="loadMoreTarget" role="status">
-          <span v-if="loading">{{ t('common.loading') }}</span>
-        </div>
+          <template #actions
+            ><BButton :loading="loading" @click="loadTodos(!todos.length)">{{
+              t('toolbox.itemDetail.retryPicker')
+            }}</BButton></template
+          >
+        </ToolboxFeedback>
+        <div v-else-if="cursor" ref="loadMoreTarget"
+          ><ToolboxFeedback v-if="loading" state="loading" compact :title="t('common.loading')"
+        /></div>
       </template>
       <KeepAlive
         ><ResourcePickerPanel
@@ -112,7 +114,7 @@
         ></div>
       </template>
       <p v-if="fromLibrary" class="reference-picker__hint">{{ t('toolbox.itemDetail.addResourceHint') }}</p>
-      <p v-if="error" role="alert">{{ error }}</p>
+      <ToolboxFeedback v-if="error" state="error">{{ error }}</ToolboxFeedback>
     </div>
     <footer
       ><span class="reference-picker__selection"
@@ -125,6 +127,7 @@
   </div>
 </template>
 <script setup lang="ts">
+  import ToolboxFeedback from './ToolboxFeedback.vue';
   import { computed, ref, watch, onBeforeUnmount } from 'vue';
   import { useI18n } from 'vue-i18n';
   import dayjs from 'dayjs';
@@ -466,6 +469,14 @@
     white-space: nowrap;
   }
   @media (max-width: 767px) {
+    .reference-picker footer > .b_btn {
+      min-height: var(--ui-control-44, 44px);
+      height: auto;
+      max-width: 65%;
+      white-space: normal;
+      line-height: 1.5;
+      padding-block: var(--ui-space-10, 10px);
+    }
     .reference-picker__body {
       padding: var(--ui-space-20, 20px) var(--ui-space-16, 16px);
     }

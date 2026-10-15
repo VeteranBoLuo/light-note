@@ -24,12 +24,15 @@
         ><header
           ><strong>{{ t('toolbox.ocrResult.original') }}</strong
           ><small>{{ originalName }}</small></header
-        ><BLoading v-if="loading" inline loading /><img v-else-if="preview" :src="preview" :alt="originalName"
+        ><BLoading v-if="loading" inline loading :title="t('common.loading')" /><img
+          v-else-if="preview"
+          :src="preview"
+          :alt="originalName"
       /></section>
       <section class="ocr-result__text"
         ><header
           ><strong>{{ activePage.title }} · {{ activePage.label }}</strong
-          ><BButton size="small" @click="copyPage">{{ t('toolbox.local.copyResult') }}</BButton></header
+          ><BButton @click="copyPage">{{ t('toolbox.local.copyResult') }}</BButton></header
         ><CommunityMarkdown :body="activePage.text"
       /></section>
     </div>

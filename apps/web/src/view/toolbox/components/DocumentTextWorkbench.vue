@@ -4,7 +4,7 @@
       <SvgIcon :src="toolIcon" size="36" />
       <h2>{{ emptyTitle }}</h2>
       <BUpload raw-file multiple :accept="accept" :max-total-size="null" :disabled="loading" @change="loadFiles">
-        <BButton type="primary" size="large" :loading="loading"
+        <BButton type="primary" :loading="loading"
           ><SvgIcon :src="icon.toolbox.upload" size="17" />{{ chooseLabel }}</BButton
         >
       </BUpload>
@@ -19,11 +19,9 @@
         </div>
         <div class="document-text-sourcebar__actions">
           <BUpload raw-file multiple :accept="accept" :max-total-size="null" @change="loadFiles">
-            <BButton size="small"
-              ><SvgIcon :src="icon.toolbox.upload" size="14" />{{ t('toolbox.dataset.replace') }}</BButton
-            >
+            <BButton><SvgIcon :src="icon.toolbox.upload" size="14" />{{ t('toolbox.dataset.replace') }}</BButton>
           </BUpload>
-          <BButton size="small" @click="clearAll">{{ t('common.clear') }}</BButton>
+          <BButton @click="clearAll">{{ t('common.clear') }}</BButton>
         </div>
       </section>
       <div class="document-text-layout">
@@ -85,7 +83,7 @@
             t('toolbox.documentText.batchResult', { success: successfulDocxResults.length, failed: failedCount })
           }}</p>
           <div v-if="activeError" class="document-text-error" role="alert"
-            ><SvgIcon :src="icon.message.info" size="18" /><span>{{ activeError }}</span></div
+            ><SvgIcon :src="icon.message.error" size="18" /><span>{{ activeError }}</span></div
           >
           <template v-if="activeResult">
             <div v-if="activeWarning" class="document-text-warning"
@@ -160,7 +158,12 @@
     type DocxMarkdownResult,
     type PdfTextFileResult,
   } from '@/utils/toolboxDocumentText';
-  import { downloadToolboxBlob, formatToolboxBytes, safeDownloadBaseName } from '@/utils/toolboxLocal';
+  import {
+    downloadToolboxBlob,
+    formatToolboxBytes,
+    reserveToolboxFileName,
+    safeDownloadBaseName,
+  } from '@/utils/toolboxLocal';
 
   type DocumentTextToolId = Extract<ToolboxToolId, 'pdf_text_extractor' | 'docx_to_markdown'>;
   const props = defineProps<{ toolId: DocumentTextToolId }>();
@@ -432,10 +435,9 @@
     }
     const JSZip = (await import('jszip')).default;
     const zip = new JSZip();
+    const usedNames = new Set<string>();
     for (const result of results) {
-      let name = result.name;
-      let suffix = 2;
-      while (zip.file(name)) name = result.name.replace(/(\.[^.]+)$/, `-${suffix++}$1`);
+      const name = reserveToolboxFileName(result.name, usedNames);
       if (result.images?.length) {
         const directory = name.replace(/\.md$/, '');
         // Reserve the root name too so identically named documents never share an image folder.
@@ -456,6 +458,12 @@
 </script>
 
 <style scoped lang="less">
+  .document-text-empty :deep(.b_btn),
+  .document-text-sourcebar__actions :deep(.b_btn),
+  .document-text-main__actions :deep(.b_btn) {
+    gap: var(--ui-space-6, 6px);
+  }
+
   .document-text-images {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(var(--ui-layout-120, 120px), 1fr));
@@ -717,11 +725,19 @@
       z-index: 2;
       padding: var(--ui-space-10, 10px) 0 calc(var(--ui-space-10, 10px) + env(safe-area-inset-bottom, 0px));
       display: grid;
+      align-items: stretch;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       border-top: 1px solid var(--workspace-divider);
     }
     .document-text-main__actions .b_btn {
+      width: 100%;
+      min-width: 0;
+      height: auto;
       min-height: var(--ui-control-44, 44px);
+      padding: var(--ui-space-8, 8px);
+      white-space: normal;
+      overflow-wrap: anywhere;
+      line-height: 1.5;
     }
     .document-text-preview {
       padding: var(--ui-space-12, 12px);

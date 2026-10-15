@@ -25,7 +25,11 @@ export const profileBackgroundsZh = {
   background_mountains: '纸上青山',
   background_sky: '晴空来信',
   background_coast: '落日海岸',
-  background_stars: '星河夜航',
+  background_stars: '灵感星图',
+  background_mountainsDescription: '一页轻笺，展开青山。纸页折角与水墨层次，静态呈现。',
+  background_starsDescription: '把笺纸、收藏卡与书签连成星图。星轨微光、晶核呼吸与星点闪烁，可随时暂停。',
+  pauseMotion: '暂停背景动效',
+  playMotion: '播放背景动效',
 };
 export const profileBackgroundsEn = {
   shared: 'Shared by card and profile',
@@ -54,7 +58,13 @@ export const profileBackgroundsEn = {
   background_mountains: 'Mountains on Paper',
   background_sky: 'Letter from the Sky',
   background_coast: 'Sunset Coast',
-  background_stars: 'Voyage among Stars',
+  background_stars: 'Inspiration Atlas',
+  background_mountainsDescription:
+    'Mountains unfold from a page. Quiet ink washes and layered paper, without animation.',
+  background_starsDescription:
+    'Notes, collected cards and bookmarks form a constellation. Orbiting lights, a softly glowing crystal and twinkling stars; pause anytime.',
+  pauseMotion: 'Pause background motion',
+  playMotion: 'Play background motion',
 };
 
 export const profileBackgroundItemsZh = Object.fromEntries(

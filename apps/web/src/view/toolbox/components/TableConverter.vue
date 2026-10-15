@@ -30,7 +30,12 @@
           :disabled="loading"
           aria-labelledby="table-input-format"
       /></div>
-      <BButton class="table-tool__swap" :disabled="loading" :aria-label="t('toolbox.local.swapDirection')" @click="swap"
+      <BButton
+        class="table-tool__swap"
+        icon-only
+        :disabled="loading"
+        :aria-label="t('toolbox.local.swapDirection')"
+        @click="swap"
         ><SvgIcon :src="icon.toolbox.swap" size="18"
       /></BButton>
       <div
@@ -459,6 +464,11 @@
     border-radius: 8px;
   }
   @media (max-width: 767px) {
+    .table-tool__swap.b_btn {
+      width: var(--ui-control-44, 44px);
+      height: var(--ui-control-44, 44px);
+      padding: 0;
+    }
     .table-tool {
       display: flex;
       flex-direction: column;
@@ -480,7 +490,7 @@
     }
     .table-tool__steps :deep(.b-chip) {
       border-radius: 8px;
-      min-height: var(--ui-control-40, 40px);
+      min-height: var(--ui-control-32, 32px);
     }
     .table-tool__editors {
       grid-template-columns: minmax(0, 1fr);

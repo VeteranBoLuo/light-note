@@ -484,7 +484,7 @@
   .profile-background-surface.is-decorated > .chat-profile-content__identity {
     background: transparent;
     border: 0;
-    min-height: var(--ui-layout-160, 160px);
+    min-height: var(--ui-layout-200, 200px);
     padding: var(--ui-space-24, 24px);
   }
 

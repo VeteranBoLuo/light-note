@@ -77,7 +77,7 @@
             :disabled="loading"
             @change="loadFiles"
           >
-            <BButton type="primary" size="large" :loading="loading">
+            <BButton type="primary" :loading="loading">
               <SvgIcon :src="icon.toolbox.upload" size="17" />{{ chooseFileLabel }}
             </BButton>
           </BUpload>
@@ -112,11 +112,11 @@
               :disabled="loading"
               @change="loadFiles"
             >
-              <BButton size="small" :disabled="loading"
+              <BButton :disabled="loading"
                 ><SvgIcon :src="icon.toolbox.upload" size="14" />{{ t('toolbox.dataset.replace') }}</BButton
               >
             </BUpload>
-            <BButton size="small" :disabled="loading" @click="clearAll">{{ t('common.clear') }}</BButton>
+            <BButton :disabled="loading" @click="clearAll">{{ t('common.clear') }}</BButton>
           </div>
         </section>
 
@@ -324,21 +324,22 @@
                   v-if="canExportDataset"
                   v-model:value="exportFormat"
                   :options="exportFormatOptions"
+                  :disabled="loading || running"
                   :aria-label="t('toolbox.local.outputFormat')"
                 />
-                <BButton v-if="hasOutcome" @click="exportOutcome"
+                <BButton v-if="hasOutcome || canExportDataset" :disabled="loading || running" @click="exportOutcome"
                   ><SvgIcon :src="icon.toolbox.download" size="15" />{{ exportLabel }}</BButton
                 >
               </div>
             </header>
 
             <div v-if="error" class="dataset-error" role="alert">
-              <SvgIcon :src="icon.message.info" size="18" />
+              <SvgIcon :src="icon.message.error" size="18" />
               <div
                 ><strong>{{ t('toolbox.dataset.errorTitle') }}</strong
                 ><span>{{ error }}</span></div
               >
-              <BButton v-if="isQualityTool" size="small" :disabled="!canRun" :loading="running" @click="runTool">{{
+              <BButton v-if="isQualityTool" :disabled="!canRun" :loading="running" @click="runTool">{{
                 t('common.retry')
               }}</BButton>
             </div>
@@ -462,7 +463,7 @@
               </div>
               <div class="dataset-split-list">
                 <article v-for="[name, dataset] in [...splitResults.entries()].slice(0, 30)" :key="name">
-                  <strong>{{ name }}</strong
+                  <strong>{{ name || t('toolbox.dataset.valueType.empty') }}</strong
                   ><span>{{ t('toolbox.dataset.rowCount', { count: dataset.rows.length }) }}</span>
                 </article>
               </div>
@@ -510,13 +511,15 @@
           :placeholder="t('toolbox.local.tableInputPlaceholder')"
         />
         <BCheckbox v-model="firstRowHeader">{{ t('toolbox.local.firstRowHeader') }}</BCheckbox>
-        <p v-if="pasteError" role="alert" class="dataset-paste-error">{{ pasteError }}</p>
+        <ToolboxFeedback v-if="pasteError" state="error">{{ pasteError }}</ToolboxFeedback>
       </div>
       <template #footer
-        ><BButton @click="pasteVisible = false">{{ t('common.cancel') }}</BButton
-        ><BButton type="primary" :disabled="!pasteSource.trim()" @click="importPaste">{{
-          t('toolbox.dataset.usePastedData')
-        }}</BButton></template
+        ><div class="dataset-dialog-actions">
+          <BButton @click="pasteVisible = false">{{ t('common.cancel') }}</BButton>
+          <BButton type="primary" :disabled="!pasteSource.trim()" @click="importPaste">{{
+            t('toolbox.dataset.usePastedData')
+          }}</BButton>
+        </div></template
       >
     </BModal>
     <BModal
@@ -547,7 +550,7 @@
         </div>
       </div>
       <template #footer>
-        <div class="dataset-worksheet-actions">
+        <div class="dataset-dialog-actions dataset-worksheet-actions">
           <BButton @click="cancelWorksheetSelection">{{ t('common.cancel') }}</BButton>
           <BButton
             type="primary"
@@ -562,6 +565,7 @@
 </template>
 
 <script setup lang="ts">
+  import ToolboxFeedback from './ToolboxFeedback.vue';
   import { computed, markRaw, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useUiDensity } from '@/composables/useUiDensity';
@@ -582,7 +586,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
   import { buildToolboxChart } from '@/utils/toolboxChart';
-  import { downloadToolboxBlob, toolboxSvgToPng } from '@/utils/toolboxLocal';
+  import { downloadToolboxBlob, reserveToolboxFileName, toolboxSvgToPng } from '@/utils/toolboxLocal';
   import {
     anonymizeToolboxDataset,
     cleanToolboxDataset,
@@ -767,7 +771,15 @@
       chartReady.value,
     ),
   );
-  const canExportDataset = computed(() => Boolean(resultDataset.value) && !chartReady.value);
+  const canExportDataset = computed(
+    () =>
+      Boolean(resultDataset.value || primaryDataset.value) &&
+      !qualityReport.value &&
+      !validationIssues.value &&
+      !diffResult.value &&
+      !splitResults.value.size &&
+      !chartReady.value,
+  );
   const exportLabel = computed(() =>
     chartReady.value
       ? t('toolbox.dataset.exportPng')
@@ -1227,8 +1239,12 @@
     if (splitResults.value.size) {
       const JSZip = (await import('jszip')).default;
       const zip = new JSZip();
+      const usedNames = new Set<string>();
       for (const [name, dataset] of splitResults.value)
-        zip.file(`${safeFileBase(name)}.csv`, serializeToolboxDataset(dataset, 'csv'));
+        zip.file(
+          reserveToolboxFileName(`${safeFileBase(name)}.csv`, usedNames),
+          serializeToolboxDataset(dataset, 'csv'),
+        );
       downloadToolboxBlob(
         await zip.generateAsync({ type: 'blob' }),
         `${safeFileBase(primaryDataset.value?.name || '')}-split.zip`,
@@ -1243,13 +1259,14 @@
       );
       return;
     }
-    if (!resultDataset.value) return;
+    const dataset = resultDataset.value || primaryDataset.value;
+    if (!dataset) return;
     const extension = exportFormat.value === 'markdown' ? 'md' : exportFormat.value;
     downloadToolboxBlob(
-      new Blob([serializeToolboxDataset(resultDataset.value, exportFormat.value)], {
+      new Blob([serializeToolboxDataset(dataset, exportFormat.value)], {
         type: 'text/plain;charset=utf-8',
       }),
-      `${safeFileBase(resultDataset.value.name)}.${extension}`,
+      `${safeFileBase(dataset.name)}.${extension}`,
     );
   }
 
@@ -1282,6 +1299,14 @@
 </script>
 
 <style scoped lang="less">
+  @import (reference) '../toolboxPresentation.less';
+  .dataset-empty__actions :deep(.b_btn),
+  .dataset-sourcebar__actions :deep(.b_btn),
+  .dataset-canvas__actions :deep(.b_btn),
+  .dataset-control-card :deep(.b_btn) {
+    gap: var(--ui-space-6, 6px);
+  }
+
   .dataset-import-toolbar,
   .dataset-import-settings {
     display: flex;
@@ -1304,9 +1329,6 @@
   .dataset-paste {
     display: grid;
     gap: var(--ui-space-12, 12px);
-  }
-  .dataset-paste-error {
-    color: var(--danger-color);
   }
   .dataset-change-values {
     flex: 1;
@@ -1335,10 +1357,8 @@
     min-width: 0;
     overflow-wrap: anywhere;
   }
-  .dataset-worksheet-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: var(--ui-space-8, 8px);
+  .dataset-dialog-actions {
+    .toolbox-dialog-actions();
   }
   .dataset-chart__image {
     overflow-x: auto;
@@ -1673,7 +1693,7 @@
 
   .dataset-field {
     display: grid;
-    gap: var(--ui-space-7, 7px);
+    gap: var(--ui-space-6, 6px);
   }
 
   .dataset-field label {
@@ -2167,7 +2187,6 @@
     .dataset-empty__actions > :deep(.b_btn),
     .dataset-empty__actions :deep(.b-upload-trigger .b_btn) {
       width: 100%;
-      min-height: var(--ui-layout-44, 44px);
     }
 
     .dataset-sourcebar,

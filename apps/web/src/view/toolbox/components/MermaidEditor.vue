@@ -41,10 +41,10 @@
             ><span>{{ diagramTypeLabel }}</span></div
           >
           <div>
-            <BButton size="small" :disabled="!svg" @click="downloadSvg"
+            <BButton :disabled="!svg" @click="downloadSvg"
               ><SvgIcon :src="icon.toolbox.download" size="14" />SVG</BButton
             >
-            <BButton size="small" :loading="pngExporting" :disabled="!svg" @click="downloadPng"
+            <BButton :loading="pngExporting" :disabled="!svg" @click="downloadPng"
               ><SvgIcon :src="icon.toolbox.download" size="14" />PNG</BButton
             >
           </div>
@@ -53,7 +53,7 @@
           ><BLoading inline loading :title="t('toolbox.local.renderingDiagram')"
         /></div>
         <div v-else-if="error" class="mermaid-tool__error" role="alert"
-          ><SvgIcon :src="icon.message.info" size="18" /><span>{{ error }}</span></div
+          ><SvgIcon :src="icon.message.error" size="18" /><span>{{ error }}</span></div
         >
         <!-- SVG 由项目内 Mermaid 以 strict 安全级别生成，属于运行时数据可视化。 -->
         <div v-else-if="svg" class="mermaid-tool__canvas" v-html="svg"></div>

@@ -1,29 +1,27 @@
 <template>
   <main v-auto-scrollbar class="extraction-workbench" data-mobile-resource-scroll>
-    <BButton type="text" class="back" @click="back"
-      ><SvgIcon :src="icon.toolbox.back" size="14" />{{ t('extraction.back') }}</BButton
-    >
-    <header class="workbench-head">
-      <div
-        ><h1>{{ table?.title || t('extraction.title') }}</h1
-        ><span class="status" :class="{ 'has-issue': table?.errorCode }">{{
+    <ToolboxPageHeader tool-id="extraction" class="extraction-page-header" :title="table?.title" @back="back">
+      <template v-if="table || !router.currentRoute.value.query.id" #meta
+        ><BChip :tone="tableStatusTone">{{
           table ? t(`extraction.statuses.${table.status}`) : t('extraction.draft')
-        }}</span></div
+        }}</BChip></template
       >
-      <div class="head-actions"
-        ><BSelect
-          :value="table?.id || ''"
-          :options="historyOptions"
-          :placeholder="t('extraction.history')"
-          :disabled="busy || saving"
-          @update:value="navigate(String($event))"
-        /><BButton :disabled="busy || saving" @click="navigate()">{{ t('extraction.new') }}</BButton
-        ><BButton v-if="table && table.counts.total" @click="exportOpen = true">{{
-          t('extraction.export')
-        }}</BButton></div
-      >
-    </header>
-    <ol class="flow-steps" :aria-label="t('extraction.flow.label')">
+      <template #actions>
+        <div class="head-actions"
+          ><BSelect
+            :value="table?.id || ''"
+            :options="historyOptions"
+            :placeholder="t('extraction.history')"
+            :disabled="busy || saving"
+            @update:value="navigate(String($event))"
+          /><BButton :disabled="busy || saving" @click="navigate()">{{ t('extraction.new') }}</BButton
+          ><BButton v-if="table && table.counts.total" @click="exportOpen = true">{{
+            t('extraction.export')
+          }}</BButton></div
+        >
+      </template>
+    </ToolboxPageHeader>
+    <ol v-if="table || !router.currentRoute.value.query.id" class="flow-steps" :aria-label="t('extraction.flow.label')">
       <li
         v-for="(step, index) in flowSteps"
         :key="step"
@@ -38,7 +36,7 @@
         <span>{{ t(step) }}</span>
       </li>
     </ol>
-    <p v-if="!table" class="muted">{{ t('extraction.subtitle') }}</p>
+    <p v-if="!table && !router.currentRoute.value.query.id" class="muted">{{ t('extraction.subtitle') }}</p>
     <div v-if="!table && availabilityError" class="notice" role="status">
       <p>{{ availabilityError }}</p>
       <p v-if="localDevelopment">{{ t('extraction.localPreviewHint') }}</p>
@@ -47,8 +45,15 @@
     <p v-if="!editable" class="notice">{{ t('extraction.readOnly') }}</p>
     <p v-if="table && !table.enabled" class="notice">{{ t('extraction.disabled') }}</p>
     <BLoading v-if="loading" inline loading :title="t('common.loading')" />
-    <p v-if="error" class="notice issue" role="alert">{{ error }}</p>
-    <template v-if="!loading">
+    <ToolboxFeedback v-if="error" state="error"
+      >{{ error }}
+      <template v-if="!table && router.currentRoute.value.query.id" #actions
+        ><BButton :loading="loading" @click="state.open(String(router.currentRoute.value.query.id))">{{
+          t('common.retry')
+        }}</BButton></template
+      >
+    </ToolboxFeedback>
+    <template v-if="!loading && (table || !router.currentRoute.value.query.id)">
       <section v-if="table" class="summary">
         <div
           ><strong>{{ t('extraction.count', { count: table.counts.total }) }}</strong
@@ -349,13 +354,22 @@
           ><BTable :data="records" :columns="columns" row-key="id" :pagination="false"
             ><template #bodyCell="{ record, column }"
               ><span v-if="column.key === 'source'" class="source-label">{{ sourceName(record.sourceId) }}</span
-              ><span v-else-if="column.key === 'review'" class="status">{{
-                record.excluded
-                  ? t('extraction.exclude')
-                  : record.cells.every((c: ExtractionCell) => record.reviews[c.fieldId]?.checked)
-                    ? t('extraction.checked')
-                    : t('extraction.pending')
-              }}</span
+              ><BChip
+                v-else-if="column.key === 'review'"
+                :tone="
+                  record.excluded
+                    ? 'neutral'
+                    : record.cells.every((c: ExtractionCell) => record.reviews[c.fieldId]?.checked)
+                      ? 'success'
+                      : 'pending'
+                "
+                >{{
+                  record.excluded
+                    ? t('extraction.exclude')
+                    : record.cells.every((c: ExtractionCell) => record.reviews[c.fieldId]?.checked)
+                      ? t('extraction.checked')
+                      : t('extraction.pending')
+                }}</BChip
               ><BButton
                 v-else
                 type="text"
@@ -518,9 +532,9 @@
           :disabled="saving"
           @update:value="switchField(String($event))"
         />
-        <span class="status" :class="{ 'has-issue': selectedCell.status !== 'found' }">{{
+        <BChip :tone="selected.reviews[fieldId]?.checked ? 'success' : 'pending'">{{
           selected.reviews[fieldId]?.checked ? t('extraction.checked') : t(`extraction.cell.${selectedCell.status}`)
-        }}</span>
+        }}</BChip>
         <label for="extraction-current">{{ t('extraction.current') }}</label
         ><BInput
           id="extraction-current"
@@ -538,7 +552,7 @@
         ><p class="original">{{ selectedCell.originalValue || '—' }}</p> <h3>{{ t('extraction.evidence') }}</h3
         ><p v-if="!selectedCell.evidence.length" class="muted">{{ t('extraction.noEvidence') }}</p>
         <article v-for="(evidence, index) in selectedCell.evidence" :key="index" class="evidence"
-          ><span class="status">{{ t(evidence.kind === 'ocr' ? 'extraction.ocr' : 'extraction.originalText') }}</span
+          ><BChip tone="neutral">{{ t(evidence.kind === 'ocr' ? 'extraction.ocr' : 'extraction.originalText') }}</BChip
           ><blockquote>{{ evidence.quote }}</blockquote
           ><dl v-if="evidence.table"
             ><dt>{{ t('extraction.productColumn') }}</dt
@@ -611,6 +625,8 @@
   </main>
 </template>
 <script setup lang="ts">
+  import ToolboxFeedback from '../components/ToolboxFeedback.vue';
+  import ToolboxPageHeader from '../components/ToolboxPageHeader.vue';
   import { computed, ref, onBeforeUnmount, watch } from 'vue';
   import { useRouter } from 'vue-router';
   import { useI18n } from 'vue-i18n';
@@ -639,6 +655,7 @@
   import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import BChip from '@/components/base/BasicComponents/BChip.vue';
   import BUpload from '@/components/base/BasicComponents/BUpload.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -760,6 +777,13 @@
     },
   );
   const flowSteps = ['extraction.flow.choose', 'extraction.flow.analysis', 'extraction.flow.confirm'];
+  const tableStatusTone = computed<'neutral' | 'success' | 'pending' | 'danger'>(() => {
+    if (table.value?.status === 'failed') return 'danger';
+    if (table.value?.errorCode || active.value || ['paused', 'partial'].includes(table.value?.status || ''))
+      return 'pending';
+    if (['ready', 'preview', 'completed'].includes(table.value?.status || '')) return 'success';
+    return 'neutral';
+  });
   const flowStep = computed(() => (!table.value ? 1 : locked.value || table.value.status === 'preview' ? 3 : 2));
   const canResume = computed(() => table.value && ['paused', 'failed', 'partial'].includes(table.value.status));
   const sourceNeedsAttention = computed(
@@ -1046,25 +1070,19 @@
     gap: var(--ui-space-12, 12px);
     padding: var(--ui-space-20, 20px) 0;
   }
-  .back {
-    margin-bottom: var(--ui-space-16, 16px);
-  }
-  h1,
+
   h2,
   h3,
   p {
     margin: 0;
   }
-  h1 {
-    font-size: var(--ui-font-22, 22px);
-  }
+
   h2 {
     font-size: var(--ui-font-16, 16px);
   }
   h3 {
     font-size: var(--ui-font-14, 14px);
   }
-  .workbench-head,
   .section-heading,
   .summary {
     display: flex;
@@ -1072,15 +1090,10 @@
     justify-content: space-between;
     gap: var(--ui-space-16, 16px);
   }
-  .workbench-head {
+  .extraction-page-header {
     margin-bottom: var(--ui-space-20, 20px);
   }
-  .workbench-head > div:first-child {
-    display: flex;
-    align-items: center;
-    gap: var(--ui-space-12, 12px);
-    flex-wrap: wrap;
-  }
+
   .head-actions,
   .actions {
     display: flex;
@@ -1091,28 +1104,12 @@
   .head-actions :deep(.b-select) {
     width: var(--ui-layout-180, 180px);
   }
-  .status {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--ui-space-6, 6px);
-    font-size: var(--ui-font-12, 12px);
-    color: var(--desc-color);
-    white-space: nowrap;
-  }
-  .status::before {
-    content: '';
-    width: var(--ui-space-6, 6px);
-    height: var(--ui-space-6, 6px);
-    border-radius: 50%;
-    background: currentColor;
-  }
   .muted {
     color: var(--desc-color);
     font-size: var(--ui-font-13, 13px);
     line-height: 1.7;
   }
-  .issue,
-  .has-issue {
+  .issue {
     color: var(--warning-color, #a76014);
   }
   .notice {
@@ -1333,6 +1330,9 @@
     flex-direction: column;
     gap: var(--ui-space-16, 16px);
   }
+  .review-panel > .b-chip {
+    align-self: flex-start;
+  }
   .original {
     white-space: pre-wrap;
     overflow-wrap: anywhere;
@@ -1385,10 +1385,7 @@
     .review-footer .actions {
       display: contents;
     }
-    .workbench-head {
-      align-items: flex-start;
-      flex-direction: column;
-    }
+
     .head-actions {
       width: 100%;
     }

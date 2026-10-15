@@ -101,7 +101,17 @@ describe('toolbox dataset', () => {
   it('splits one dataset into independently exportable groups', () => {
     const groups = splitToolboxDataset(dataset, '部门');
     expect(groups.get('研发')?.rows).toHaveLength(3);
-    expect(groups.get('empty')?.rows).toHaveLength(1);
+    expect(groups.get('')?.rows).toHaveLength(1);
+  });
+
+  it('keeps distinct group values separate even when their filenames would collide', () => {
+    const values = ['a/b', 'a:b', 'a.b', 'a', '', 'empty', ' a', 'a'.repeat(81), 'a'.repeat(80) + 'b'];
+    const groups = splitToolboxDataset(
+      { name: 'groups.csv', headers: ['group'], rows: values.map((value) => [value]) },
+      'group',
+    );
+    expect([...groups.keys()]).toEqual(values);
+    for (const value of values) expect(groups.get(value)?.rows).toEqual([[value]]);
   });
 
   async function excelFile(sheets: Array<{ name: string; rows: string[][] }>) {

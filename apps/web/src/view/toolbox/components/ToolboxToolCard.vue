@@ -17,8 +17,7 @@
       >{{ t('toolbox.outputLabel') }} · {{ t(`toolbox.tool.${toolId}.output`) }}</span
     >
     <span class="toolbox-tool-card__billing">
-      <BChip v-if="billingTone" :tone="billingTone" max-width="100%">{{ billing }}</BChip>
-      <template v-else>{{ billing }}</template>
+      <BChip :tone="billingTone" max-width="100%">{{ billing }}</BChip>
     </span>
   </BButton>
 </template>
@@ -38,7 +37,7 @@
     name: string;
     description: string;
     billing: string;
-    billingTone?: 'success' | 'pin';
+    billingTone: 'success' | 'pin';
     featured?: boolean;
   }>();
   defineEmits<{ open: [] }>();
@@ -65,9 +64,10 @@
 
 <style scoped lang="less">
   @import (reference) '@/assets/css/workspace-surfaces.less';
+  @import (reference) '../toolboxPresentation.less';
   .toolbox-tool-card.b_btn {
     .workspace-content-surface();
-    --tool-accent: var(--workspace-purple-text);
+    .toolbox-tool-accent();
     display: flex;
     flex-direction: column;
     align-items: stretch;
@@ -86,18 +86,6 @@
     transition:
       border-color 0.16s ease,
       box-shadow 0.16s ease;
-  }
-  .toolbox-tool-card.is-blue {
-    --tool-accent: var(--info-color);
-  }
-  .toolbox-tool-card.is-teal {
-    --tool-accent: var(--workspace-note-text);
-  }
-  .toolbox-tool-card.is-amber {
-    --tool-accent: var(--workspace-file-text);
-  }
-  .toolbox-tool-card.is-rose {
-    --tool-accent: var(--danger-color);
   }
   .toolbox-tool-card__head {
     display: flex;

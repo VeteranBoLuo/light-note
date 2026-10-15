@@ -2923,6 +2923,7 @@ export default {
     study: {
       overview: '知识梳理',
       loadFailed: '学习进度暂未同步，请稍后重试。',
+      saveFailed: '学习进度保存失败，请重新标记。',
       masteredCount: '已掌握 {count} 张',
       answerPlaceholder: '先写下你的答案，再核对参考答案',
       reveal: '查看参考答案',

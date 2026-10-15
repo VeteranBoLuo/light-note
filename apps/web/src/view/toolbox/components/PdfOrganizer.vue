@@ -38,7 +38,7 @@
           <span>{{ t('toolbox.local.files', { count: sources.length }) }}</span>
         </div>
         <div class="local-tool__toolbar-actions">
-          <BButton size="small" :disabled="Boolean(exporting)" @click="toggleSelectAll">
+          <BButton :disabled="Boolean(exporting)" @click="toggleSelectAll">
             {{ allSelected ? t('toolbox.local.clearSelection') : t('toolbox.local.selectAll') }}
           </BButton>
           <BUpload
@@ -50,7 +50,7 @@
             :aria-label="t('toolbox.local.addMore')"
             @change="handleFiles"
           >
-            <BButton size="small" :disabled="Boolean(exporting)"
+            <BButton :disabled="Boolean(exporting)"
               ><SvgIcon :src="icon.toolbox.upload" size="14" />{{ t('toolbox.local.addMore') }}</BButton
             >
           </BUpload>
@@ -81,14 +81,13 @@
       <div class="local-tool__selection-bar" :class="{ 'has-selection': selectedPages.length > 0 }">
         <span>{{ t('toolbox.local.selectedPages', { count: selectedPages.length }) }}</span>
         <div>
-          <BButton size="small" :disabled="Boolean(exporting) || !selectedPages.length" @click="rotateSelected"
+          <BButton :disabled="Boolean(exporting) || !selectedPages.length" @click="rotateSelected"
             ><SvgIcon :src="icon.toolbox.rotate" size="14" />{{ t('toolbox.local.rotateSelected') }}</BButton
           >
-          <BButton size="small" :disabled="Boolean(exporting) || !selectedPages.length" @click="removeSelected"
+          <BButton :disabled="Boolean(exporting) || !selectedPages.length" @click="removeSelected"
             ><SvgIcon :src="icon.toolbox.delete" size="14" />{{ t('toolbox.local.deleteSelected') }}</BButton
           >
           <BButton
-            size="small"
             :disabled="Boolean(exporting) || !selectedPages.length"
             :loading="exporting === 'selected'"
             @click="exportSelection"
@@ -97,7 +96,6 @@
           </BButton>
           <BButton
             type="primary"
-            size="small"
             :loading="exporting === 'all'"
             :disabled="Boolean(exporting) || !pages.length"
             @click="exportAll"
@@ -466,6 +464,8 @@
   }
 
   .local-tool {
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr);
     display: grid;
     gap: var(--ui-space-18, 18px);
   }
@@ -516,7 +516,7 @@
   .local-tool__drop-zone :deep(.b_btn),
   .local-tool__toolbar-actions :deep(.b_btn),
   .local-tool__selection-bar :deep(.b_btn) {
-    gap: var(--ui-space-7, 7px);
+    gap: var(--ui-space-6, 6px);
   }
   .local-tool__loading {
     min-height: var(--ui-layout-260, 260px);
@@ -543,7 +543,9 @@
   }
   .local-tool__toolbar-actions,
   .local-tool__selection-bar > div {
+    min-width: 0;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--ui-space-8, 8px);
   }
@@ -685,7 +687,7 @@
   }
   .pdf-page-card__actions :deep(.b_btn) {
     width: 100%;
-    height: var(--ui-layout-28, 28px);
+    height: var(--ui-control-32, 32px);
     padding: 0;
     color: var(--desc-color);
     background: transparent;
@@ -711,10 +713,11 @@
     }
     .local-tool__toolbar {
       align-items: flex-start;
+      flex-wrap: wrap;
     }
     .local-tool__toolbar-actions {
       flex-wrap: wrap;
-      justify-content: flex-end;
+      justify-content: flex-start;
     }
     .local-tool__selection-bar {
       align-items: flex-start;
@@ -724,8 +727,14 @@
       width: 100%;
     }
     .local-tool__selection-bar :deep(.b_btn) {
-      flex: 1;
+      flex: 1 1 auto;
       width: auto;
+    }
+    .pdf-page-card__actions {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .pdf-page-card__actions :deep(.b_btn) {
+      height: var(--ui-control-44, 44px);
     }
     .pdf-page-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));

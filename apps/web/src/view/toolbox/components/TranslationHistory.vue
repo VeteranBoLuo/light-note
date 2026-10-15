@@ -30,18 +30,23 @@
             <span>{{ languageName(item.targetLanguage) }}</span>
             <time>{{ formatDate(item.createdAt) }}</time>
           </small>
-          <small v-if="item.status !== 'succeeded'" class="history-status">{{
+          <BChip v-if="item.status !== 'succeeded'" :tone="toolboxJobStatusTone(item.status)">{{
             t('translation.historyStatus.' + item.status)
-          }}</small>
+          }}</BChip>
         </BButton>
       </div>
-      <p v-if="failed" role="alert"
-        >{{ t('translation.historyFailed') }} <BButton @click="load(failedAppend)">{{ t('common.retry') }}</BButton></p
-      >
-      <p v-else-if="loading" class="history-feedback" role="status">{{ t('common.loading') }}</p>
-      <p v-else-if="!items.length">{{ t('translation.historyEmpty') }}</p>
+      <ToolboxFeedback v-if="failed" state="error"
+        >{{ t('translation.historyFailed') }}
+        <template #actions
+          ><BButton :loading="loading" @click="load(failedAppend)">{{ t('common.retry') }}</BButton></template
+        >
+      </ToolboxFeedback>
+      <ToolboxFeedback v-else-if="loading" state="loading" compact :title="t('common.loading')" />
+      <ToolboxFeedback v-else-if="!items.length" compact>{{
+        t(keyword.trim() ? 'translation.historyNoMatches' : 'translation.historyEmpty')
+      }}</ToolboxFeedback>
     </div>
-    <p v-if="deleteFailed" role="alert">{{ t('translation.deleteHistoryFailed') }}</p>
+    <ToolboxFeedback v-if="deleteFailed" state="error">{{ t('translation.deleteHistoryFailed') }}</ToolboxFeedback>
     <BButton
       v-if="managing"
       type="danger"
@@ -58,10 +63,13 @@
   </section>
 </template>
 <script setup lang="ts">
+  import ToolboxFeedback from './ToolboxFeedback.vue';
   import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { fetchTranslationHistory, deleteTranslationHistory, type ToolboxJob } from '@/api/toolbox';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import BChip from '@/components/base/BasicComponents/BChip.vue';
+  import { toolboxJobStatusTone } from '@/config/toolbox';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import { useUserStore } from '@/store';
   import { buildNoteDetailRequestScope } from '@/api/noteDetailPrefetch';
@@ -234,8 +242,6 @@
   .history-manage.b_btn {
     margin-inline-start: auto;
     font-size: var(--ui-font-12, 12px);
-    height: auto;
-    line-height: 1.5;
   }
   .history-entry {
     display: flex;
@@ -308,10 +314,6 @@
   }
   .history-meta time {
     flex-shrink: 0;
-  }
-  .history-feedback {
-    text-align: center;
-    margin: var(--ui-space-8, 8px) 0;
   }
   .history-row strong {
     font-size: var(--ui-font-13, 13px);

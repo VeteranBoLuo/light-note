@@ -37,7 +37,7 @@
             :disabled="loading"
             @change="loadMarkdownFiles"
           >
-            <BButton type="primary" size="large" block :loading="loading">
+            <BButton type="primary" block :loading="loading">
               <SvgIcon :src="icon.toolbox.upload" size="17" />{{ t('toolbox.knowledgeText.chooseMarkdownFolder') }}
             </BButton>
           </BUpload>
@@ -50,7 +50,7 @@
             :disabled="loading"
             @change="loadMarkdownFiles"
           >
-            <BButton size="large" block :disabled="loading">
+            <BButton block :disabled="loading">
               <SvgIcon :src="icon.toolbox.upload" size="17" />{{ t('toolbox.knowledgeText.chooseMarkdownFiles') }}
             </BButton>
           </BUpload>
@@ -76,11 +76,9 @@
               :max-total-size="null"
               @change="loadMarkdownFiles"
             >
-              <BButton size="small"
-                ><SvgIcon :src="icon.toolbox.upload" size="14" />{{ t('toolbox.dataset.replace') }}</BButton
-              >
+              <BButton><SvgIcon :src="icon.toolbox.upload" size="14" />{{ t('toolbox.dataset.replace') }}</BButton>
             </BUpload>
-            <BButton size="small" @click="clearAll">{{ t('common.clear') }}</BButton>
+            <BButton @click="clearAll">{{ t('common.clear') }}</BButton>
           </div>
         </section>
 
@@ -140,7 +138,7 @@
             </div>
 
             <div v-if="error" class="knowledge-text-error" role="alert"
-              ><SvgIcon :src="icon.message.info" size="18" /><span>{{ error }}</span></div
+              ><SvgIcon :src="icon.message.error" size="18" /><span>{{ error }}</span></div
             >
 
             <template v-if="frontmatterResults.length">
@@ -258,8 +256,8 @@
             :placeholder="sourcePlaceholder"
           />
           <div class="knowledge-editor-card__footer">
-            <BButton size="small" @click="loadSample">{{ t('toolbox.local.loadSample') }}</BButton>
-            <BButton size="small" :disabled="!source" @click="clearAll">{{ t('common.clear') }}</BButton>
+            <BButton @click="loadSample">{{ t('toolbox.local.loadSample') }}</BButton>
+            <BButton :disabled="!source" @click="clearAll">{{ t('common.clear') }}</BButton>
           </div>
         </section>
 
@@ -279,10 +277,10 @@
           <div class="knowledge-editor-card__footer">
             <span v-if="resultSummary">{{ resultSummary }}</span>
             <span v-else>{{ t('toolbox.knowledgeText.outputHint') }}</span>
-            <BButton size="small" :disabled="!output" @click="copyOutput"
+            <BButton :disabled="!output" @click="copyOutput"
               ><SvgIcon :src="icon.toolbox.copy" size="14" />{{ t('toolbox.local.copyResult') }}</BButton
             >
-            <BButton size="small" :disabled="!output" @click="downloadOutput"
+            <BButton :disabled="!output" @click="downloadOutput"
               ><SvgIcon :src="icon.toolbox.download" size="14" />{{ t('toolbox.local.downloadResult') }}</BButton
             >
           </div>
@@ -290,7 +288,7 @@
       </div>
 
       <div v-if="error" class="knowledge-text-error" role="alert"
-        ><SvgIcon :src="icon.message.info" size="18" /><span>{{ error }}</span></div
+        ><SvgIcon :src="icon.message.error" size="18" /><span>{{ error }}</span></div
       >
 
       <BTable
@@ -612,6 +610,12 @@
 </script>
 
 <style scoped lang="less">
+  .knowledge-file-empty__actions :deep(.b_btn),
+  .knowledge-file-bar :deep(.b_btn),
+  .knowledge-editor-card__footer :deep(.b_btn) {
+    gap: var(--ui-space-6, 6px);
+  }
+
   .knowledge-text-workbench {
     display: grid;
     gap: var(--ui-space-16, 16px);
@@ -759,6 +763,7 @@
 
   .knowledge-editor-card {
     min-width: 0;
+    grid-template-columns: minmax(0, 1fr);
     padding: var(--ui-space-13, 13px);
     display: grid;
     gap: var(--ui-space-10, 10px);
@@ -815,16 +820,16 @@
   .knowledge-editor-card :deep(textarea) {
     min-height: var(--ui-layout-360, 360px);
     resize: vertical;
-    border-color: var(--surface-border-color);
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     font-size: var(--ui-font-12, 12px);
     line-height: 1.65;
   }
 
   .knowledge-editor-card__footer {
+    flex-wrap: wrap;
     min-height: var(--ui-layout-32, 32px);
     justify-content: flex-end;
-    gap: var(--ui-space-7, 7px);
+    gap: var(--ui-space-8, 8px);
   }
 
   .knowledge-editor-card__footer > span {
@@ -1159,6 +1164,7 @@
 
     .knowledge-file-empty__actions {
       width: 100%;
+      grid-template-columns: minmax(0, 1fr);
     }
   }
 

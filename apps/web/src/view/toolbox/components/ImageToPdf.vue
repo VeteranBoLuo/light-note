@@ -276,6 +276,12 @@
 </script>
 
 <style scoped lang="less">
+  .image-pdf-tool__drop-zone :deep(.b_btn),
+  .image-pdf-tool__settings :deep(.b_btn),
+  .image-pdf-tool__summary :deep(.b_btn) {
+    gap: var(--ui-space-6, 6px);
+  }
+
   .image-pdf-tool {
     display: grid;
     gap: var(--ui-space-16, 16px);

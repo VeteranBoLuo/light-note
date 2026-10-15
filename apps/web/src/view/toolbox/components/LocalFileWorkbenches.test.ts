@@ -32,7 +32,9 @@ vi.mock('@/composables/useUiDensity', () => ({ useUiDensity: () => ({ dimension:
 vi.mock('@/composables/useSaveAsNote', () => ({ openSaveAsNote: vi.fn() }));
 vi.mock('@/utils/aiNoteDraft', () => ({ createNoteFromContent: vi.fn() }));
 vi.mock('@/utils/translationHandoff', () => ({ stageTranslation: vi.fn() }));
-vi.mock('@/components/community/CommunityMarkdown.vue', () => ({ default: { props: ['body'], template: '<textarea :value="body" />' } }));
+vi.mock('@/components/community/CommunityMarkdown.vue', () => ({
+  default: { props: ['body'], template: '<textarea :value="body" />' },
+}));
 vi.mock('@/components/base/BasicComponents/BTabs.vue', () => ({ default: { template: '<div />' } }));
 vi.mock('./DocumentSummary.vue', () => ({ default: { template: '<div />' } }));
 vi.mock('@/components/base/BasicComponents/BMessage/BMessage', () => ({
@@ -175,6 +177,39 @@ describe('Word batch conversion', () => {
     );
     expect(mocks.warning).toHaveBeenCalledWith('toolbox.documentText.tooMany');
     expect(host.querySelector('.document-text-sourcebar')).toBeNull();
+  });
+});
+
+describe('Dataset continuous editing', () => {
+  it('exports the applied data, then exports the original rows after undo', async () => {
+    const host = mount(DatasetWorkbench, 'data_cleaner');
+    (host.querySelector('.dataset-empty__actions > button') as HTMLButtonElement).click();
+    await flush();
+    (host.querySelector('.dataset-control-card__action button') as HTMLButtonElement).click();
+    await flush();
+    const clickAction = async (key: string) => {
+      const button = [...host.querySelectorAll<HTMLButtonElement>('.dataset-canvas__actions button')].find((item) =>
+        item.textContent?.includes(key),
+      );
+      expect(button, key).toBeDefined();
+      button!.click();
+      await flush();
+    };
+    await clickAction('applyPreview');
+    await clickAction('exportResult');
+    expect(mocks.download).toHaveBeenCalledTimes(1);
+    const readBlob = (blob: Blob) =>
+      new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.readAsText(blob);
+      });
+    const cleaned = await readBlob(mocks.download.mock.lastCall![0]);
+    expect(cleaned.match(/A-003/g)).toHaveLength(1);
+    await clickAction('undoApplied');
+    await clickAction('exportResult');
+    const restored = await readBlob(mocks.download.mock.lastCall![0]);
+    expect(restored.match(/A-003/g)).toHaveLength(2);
   });
 });
 

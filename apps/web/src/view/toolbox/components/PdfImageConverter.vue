@@ -71,10 +71,10 @@
 
   .pdf-image-converter__switcher :deep(.tab) {
     min-width: 0;
-    min-height: var(--ui-layout-34, 34px);
+    min-height: var(--ui-control-32, 32px);
     flex: 1;
     justify-content: center;
-    line-height: var(--ui-layout-34, 34px);
+    line-height: var(--ui-control-32, 32px);
     border: 1px solid transparent;
     border-radius: 8px;
   }
@@ -100,9 +100,9 @@
     }
 
     .pdf-image-converter__switcher :deep(.tab) {
-      min-height: var(--ui-layout-44, 44px);
+      min-height: var(--ui-control-32, 32px);
       padding: 0 var(--ui-space-10, 10px);
-      line-height: var(--ui-layout-44, 44px);
+      line-height: var(--ui-control-32, 32px);
     }
   }
 

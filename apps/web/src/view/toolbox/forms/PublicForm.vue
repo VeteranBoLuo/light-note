@@ -1,7 +1,7 @@
 <template>
   <main class="collection-public" :class="{ 'collection-public--success': receipt }">
     <div v-if="receipt" class="success-brand">{{ t('collectionForms.publicBrand') }}</div>
-    <div v-if="loading" role="status">{{ t('collectionForms.opening') }}</div>
+    <ToolboxFeedback v-if="loading" state="loading" :title="t('collectionForms.opening')" />
     <section v-else-if="receipt" class="collection-card success-card" role="status"
       ><span class="success-symbol" aria-hidden="true"><SvgIcon :src="icon.organize.check" size="32" /></span
       ><h1>{{
@@ -39,11 +39,16 @@
       ><p>{{ form.status === 'ended' ? t('collectionForms.endedHint') : t('collectionForms.pausedHint') }}</p></section
     >
     <footer v-if="receipt" class="success-footer">{{ t('collectionForms.poweredBy') }}</footer>
-    <p v-if="error" class="collection-error" role="alert">{{ error }}</p>
-    <BButton v-if="!loading && !form" @click="load">{{ t('collectionForms.reload') }}</BButton>
+    <ToolboxFeedback v-if="error" state="error"
+      >{{ error }}
+      <template v-if="!form" #actions
+        ><BButton :loading="loading" @click="load">{{ t('collectionForms.reload') }}</BButton></template
+      >
+    </ToolboxFeedback>
   </main>
 </template>
 <script setup lang="ts">
+  import ToolboxFeedback from '../components/ToolboxFeedback.vue';
   import './forms.css';
   import { useI18n } from 'vue-i18n';
   const { t } = useI18n();

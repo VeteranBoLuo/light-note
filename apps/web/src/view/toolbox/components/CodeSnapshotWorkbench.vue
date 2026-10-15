@@ -45,8 +45,8 @@
           :placeholder="t('toolbox.codeSnapshot.placeholder')"
         />
         <footer>
-          <BButton size="small" @click="loadSample">{{ t('toolbox.local.loadSample') }}</BButton>
-          <BButton size="small" :disabled="!source" @click="source = ''">{{ t('common.clear') }}</BButton>
+          <BButton @click="loadSample">{{ t('toolbox.local.loadSample') }}</BButton>
+          <BButton :disabled="!source" @click="source = ''">{{ t('common.clear') }}</BButton>
         </footer>
       </section>
 
@@ -206,6 +206,11 @@
 </script>
 
 <style scoped lang="less">
+  .code-snapshot-editor > footer :deep(.b_btn),
+  .code-snapshot-preview-shell > footer :deep(.b_btn) {
+    gap: var(--ui-space-6, 6px);
+  }
+
   .code-snapshot-workbench {
     display: grid;
     gap: var(--ui-space-16, 16px);
@@ -253,7 +258,7 @@
   .code-field {
     min-width: var(--ui-layout-110, 110px);
     display: grid;
-    gap: var(--ui-space-5, 5px);
+    gap: var(--ui-space-6, 6px);
   }
 
   .code-field label {
@@ -332,7 +337,6 @@
   .code-snapshot-editor :deep(textarea) {
     min-height: var(--ui-layout-500, 500px);
     resize: vertical;
-    border-color: var(--surface-border-color);
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     font-size: var(--ui-font-12, 12px);
     line-height: 1.65;
@@ -550,8 +554,15 @@
       flex-direction: column;
     }
 
+    .code-snapshot-toolbar {
+      flex-wrap: nowrap;
+    }
+    .code-snapshot-toolbar__intro {
+      flex: none;
+    }
     .code-field {
       width: 100%;
+      min-width: 0;
     }
 
     .code-snapshot-editor :deep(textarea) {

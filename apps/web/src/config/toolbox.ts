@@ -1,5 +1,19 @@
-import { TOOLBOX_TOOL_INTENTS, type ToolboxToolId } from '@lightnote/shared/toolbox-protocol';
+import { TOOLBOX_TOOL_INTENTS, type ToolboxToolId, type ToolboxJobStatus } from '@lightnote/shared/toolbox-protocol';
+import type { ToolboxWorkspaceStatus } from '@/api/toolbox';
 import icon from '@/config/icon';
+
+export function toolboxJobStatusTone(status: ToolboxJobStatus): 'success' | 'pending' | 'danger' | 'neutral' {
+  if (status === 'succeeded') return 'success';
+  if (['queued', 'processing', 'partial_succeeded'].includes(status)) return 'pending';
+  if (['failed', 'expired'].includes(status)) return 'danger';
+  return 'neutral';
+}
+
+export function toolboxWorkspaceStatusTone(status: ToolboxWorkspaceStatus): 'success' | 'pending' | 'neutral' {
+  if (status === 'active') return 'success';
+  if (status === 'paused') return 'pending';
+  return 'neutral';
+}
 
 export type ToolboxCategory = 'workspace' | 'knowledge' | 'data' | 'document' | 'image' | 'text';
 
@@ -168,7 +182,16 @@ export const TOOLBOX_HOME_GROUPS = [
     id: 'create',
     icon: icon.toolbox.materialNote,
     accent: 'violet',
-    toolIds: ['extraction', 'translation', 'material_to_note', 'research_brief', 'source_comparison', 'study_kit', 'concept_map', 'idea_to_draft'],
+    toolIds: [
+      'extraction',
+      'translation',
+      'material_to_note',
+      'research_brief',
+      'source_comparison',
+      'study_kit',
+      'concept_map',
+      'idea_to_draft',
+    ],
   },
   {
     id: 'prepare',

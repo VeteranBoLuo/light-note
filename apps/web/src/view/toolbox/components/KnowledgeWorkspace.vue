@@ -4,6 +4,14 @@
     class="knowledge-workspace"
     :class="[`is-${kind}`, { 'has-project-rail': workspace && !loading && !loadError }]"
   >
+    <ToolboxPageHeader
+      v-if="loading || loadError"
+      :tool-id="workspaceQuery ? `${kind}_workspace` : 'research_workspace'"
+      :title="t('toolbox.workspace.myProjects')"
+      :native-mobile-back="!workspaceQuery"
+      :back-label="workspaceQuery ? t('toolbox.workspace.backToList') : t('toolbox.back')"
+      @back="workspaceQuery ? leaveWorkspace() : emit('return-to-workshop')"
+    />
     <div v-if="loading" class="knowledge-workspace__state">
       <BLoading inline loading :title="t('toolbox.workspace.loading')" />
     </div>
@@ -20,16 +28,17 @@
     </div>
 
     <template v-else-if="!workspace">
-      <section class="workspace-list-intro">
-        <div class="workspace-list-intro__copy">
-          <span class="workspace-kicker">{{ t('toolbox.workspace.longTermKicker') }}</span>
-          <h2>{{ t('toolbox.workspace.myProjects') }}</h2>
-          <p>{{ t('toolbox.project.introHint') }}</p>
-        </div>
-        <BButton type="primary" size="large" @click="openCreateModal">
-          <SvgIcon :src="icon.common.plus" size="17" />{{ t('toolbox.project.newProject') }}
-        </BButton>
-      </section>
+      <ToolboxPageHeader
+        tool-id="research_workspace"
+        :title="t('toolbox.workspace.myProjects')"
+        @back="emit('return-to-workshop')"
+      >
+        <template #actions
+          ><BButton type="primary" @click="openCreateModal">
+            <SvgIcon :src="icon.common.plus" size="17" />{{ t('toolbox.project.newProject') }}
+          </BButton></template
+        >
+      </ToolboxPageHeader>
 
       <div class="workspace-filters">
         <BInput v-model:value="projectSearch" :placeholder="t('toolbox.project.search')" />
@@ -69,7 +78,7 @@
                   <strong :title="item.title">{{ item.title }}</strong>
                   <small>{{ item.goal || item.description || t(`toolbox.tool.${item.kind}_workspace.name`) }}</small>
                 </span>
-                <BChip :tone="statusTone(item.status)">{{ statusLabel(item.status) }}</BChip>
+                <BChip :tone="toolboxWorkspaceStatusTone(item.status)">{{ statusLabel(item.status) }}</BChip>
               </span>
               <span class="workspace-card__next">
                 <small>{{ t('toolbox.workspace.nextStep') }}</small>
@@ -101,11 +110,6 @@
     <template v-else>
       <aside class="project-directory">
         <nav ref="sectionNav" class="project-section-navigation" :aria-label="t('toolbox.workspace.sectionNavigation')">
-          <div class="project-directory-back"
-            ><BButton type="text" @click="leaveWorkspace"
-              ><SvgIcon :src="icon.toolbox.back" size="16" />{{ t('toolbox.project.myProjects') }}</BButton
-            ></div
-          >
           <BButton
             v-for="section in projectTabs"
             :key="section.key"
@@ -120,40 +124,39 @@
       </aside>
       <div class="project-content">
         <section ref="projectHead" class="workspace-detail-head" :class="{ 'is-pinned': headerPinned }">
-          <nav class="project-breadcrumb" :aria-label="t('toolbox.project.myProjects')">
-            <BButton class="project-breadcrumb__workshop" @click="emit('return-to-workshop')">{{
-              t('toolbox.title')
-            }}</BButton>
-            <span class="project-breadcrumb__separator" aria-hidden="true">/</span>
-            <BButton :aria-label="t('toolbox.project.myProjects')" @click="leaveWorkspace"
-              ><SvgIcon class="project-breadcrumb__mobile-back" :src="icon.arrow_left" size="20" aria-hidden="true" />
-              <span class="project-breadcrumb__desktop-label">{{ t('toolbox.project.myProjects') }}</span></BButton
-            >
-            <h1 class="project-breadcrumb__mobile-title">{{ t('toolbox.project.myProjects') }}</h1>
-          </nav>
-          <div class="project-mobile-controls">
-            <BActionMenu
-              :items="projectTabs"
-              :aria-label="t('toolbox.project.directory')"
-              @select="(key) => selectProjectTab(key)"
-            >
-              <BButton
-                type="text"
-                icon-only
-                class="project-directory-trigger"
-                :aria-label="t('toolbox.project.directory')"
-                ><SvgIcon :src="icon.filterPanel.list" size="22"
-              /></BButton>
-            </BActionMenu>
-            <BButton
-              icon-only
-              class="project-settings-trigger"
-              :aria-label="t('toolbox.project.manage')"
-              :disabled="mutating"
-              @click="openEditModal"
-              ><SvgIcon :src="icon.userCenter.menu.settings" size="22"
-            /></BButton>
-          </div>
+          <ToolboxPageHeader
+            :tool-id="`${kind}_workspace`"
+            :title="t('toolbox.workspace.myProjects')"
+            :back-label="t('toolbox.workspace.backToList')"
+            :native-mobile-back="false"
+            @back="leaveWorkspace"
+          >
+            <template #actions>
+              <div class="project-mobile-controls">
+                <BActionMenu
+                  :items="projectTabs"
+                  :aria-label="t('toolbox.project.directory')"
+                  @select="(key) => selectProjectTab(key)"
+                >
+                  <BButton
+                    type="text"
+                    icon-only
+                    class="project-directory-trigger"
+                    :aria-label="t('toolbox.project.directory')"
+                    ><SvgIcon :src="icon.filterPanel.list" size="22"
+                  /></BButton>
+                </BActionMenu>
+                <BButton
+                  icon-only
+                  class="project-settings-trigger"
+                  :aria-label="t('toolbox.project.manage')"
+                  :disabled="mutating"
+                  @click="openEditModal"
+                  ><SvgIcon :src="icon.userCenter.menu.settings" size="22"
+                /></BButton>
+              </div>
+            </template>
+          </ToolboxPageHeader>
         </section>
 
         <div class="project-overview-panel">
@@ -164,9 +167,9 @@
                   ><h2>{{ workspace.title }}</h2>
                   <span class="workspace-summary__meta">
                     <BChip class="project-kind" tone="neutral">{{ t(`toolbox.tool.${kind}_workspace.name`) }}</BChip>
-                    <span class="project-status" :data-status="workspace.status"
-                      ><i aria-hidden="true"></i>{{ statusLabel(workspace.status) }}</span
-                    >
+                    <BChip :tone="toolboxWorkspaceStatusTone(workspace.status)">{{
+                      statusLabel(workspace.status)
+                    }}</BChip>
                     <small v-if="workspace.targetDate">
                       <SvgIcon :src="icon.common.calendar" size="14" />{{ formatDate(workspace.targetDate) }}
                     </small>
@@ -257,7 +260,6 @@
                 v-model:value="progressNextStep"
                 @update:value="progressDraftEdited = true"
                 :maxlength="500"
-                height="var(--ui-layout-42, 42px)"
                 :placeholder="templateText('nextStepPlaceholder')"
               />
             </label>
@@ -268,7 +270,6 @@
             <BButton
               class="workspace-progress-form__submit"
               type="primary"
-              size="large"
               :loading="savingProgress"
               :disabled="!canSaveProgress"
               @click="saveProgress"
@@ -449,6 +450,7 @@
       :show-footer="false"
       fullscreen-mobile
       initial-focus=".workspace-create-title"
+      :close-disabled="creating || !!deletingId"
     >
       <div
         class="workspace-modal-form"
@@ -457,9 +459,10 @@
           'workspace-modal-form--mobile': isMobileLayout,
         }"
       >
+        <ToolboxFeedback v-if="workspaceFormError" state="error">{{ workspaceFormError }}</ToolboxFeedback>
         <label v-if="workspaceFormMode !== 'edit'">
           <span>{{ t('toolbox.workspace.projectTemplate') }}</span>
-          <BSelect v-model:value="createKind" :options="projectTemplateOptions" />
+          <BSelect :disabled="creating || !!deletingId" v-model:value="createKind" :options="projectTemplateOptions" />
         </label>
         <div v-if="workspaceFormMode !== 'edit'" class="workspace-modal-callout">
           <span><SvgIcon :src="templateIcons[createKind]" size="21" /></span>
@@ -470,21 +473,22 @@
         </div>
         <label v-if="workspaceFormMode === 'edit'" class="project-settings-status">
           <span>{{ t('toolbox.project.projectStatus') }}</span>
-          <BSelect v-model:value="editStatus" :options="statusOptions" />
+          <BSelect :disabled="creating || !!deletingId" v-model:value="editStatus" :options="statusOptions" />
         </label>
         <label>
           <span>{{ t('toolbox.workspace.titleLabel') }}</span>
           <BInput
+            :disabled="creating || !!deletingId"
             v-model:value="createForm.title"
             class="workspace-create-title"
             :maxlength="120"
-            height="var(--ui-layout-42, 42px)"
             :placeholder="templateText('titlePlaceholder')"
           />
         </label>
         <label>
           <span>{{ t('toolbox.workspace.goalLabel') }}</span>
           <BInput
+            :disabled="creating || !!deletingId"
             v-model:value="createForm.goal"
             type="textarea"
             :rows="3"
@@ -495,20 +499,25 @@
         <div class="workspace-modal-form__row">
           <label>
             <span>{{ t('toolbox.workspace.targetDateLabel') }}</span>
-            <BDateTimePicker v-model:value="createForm.targetDate" :show-time="false" />
+            <BDateTimePicker
+              :disabled="creating || !!deletingId"
+              v-model:value="createForm.targetDate"
+              :show-time="false"
+            />
           </label>
           <label>
             <span>{{ t('toolbox.workspace.firstStepLabel') }}</span>
             <BInput
+              :disabled="creating || !!deletingId"
               v-model:value="createForm.nextStep"
               :maxlength="500"
-              height="var(--ui-layout-42, 42px)"
               :placeholder="templateText('nextStepPlaceholder')"
             />
           </label>
         </div>
         <BButton
-          v-if="workspaceFormMode === 'edit' && isMobileLayout"
+          v-if="workspaceFormMode === 'edit'"
+          :disabled="creating || !!deletingId"
           @click="
             createModalVisible = false;
             emit('return-to-workshop');
@@ -525,7 +534,9 @@
             @click="confirmDeleteProject(workspace)"
             >{{ t('toolbox.project.delete') }}</BButton
           >
-          <BButton :disabled="!!deletingId" @click="createModalVisible = false">{{ t('common.cancel') }}</BButton>
+          <BButton :disabled="creating || !!deletingId" @click="createModalVisible = false">{{
+            t('common.cancel')
+          }}</BButton>
           <BButton
             type="primary"
             :loading="creating"
@@ -540,12 +551,14 @@
 
     <BModal
       v-model:visible="resourceModalVisible"
+      :close-disabled="mutating"
       :title="stepText('resources', 'addAction')"
       width="var(--ui-layout-880, 880px)"
       :show-footer="true"
       fullscreen-mobile
     >
       <div class="workspace-resource-modal">
+        <ToolboxFeedback v-if="resourceError" state="error">{{ resourceError }}</ToolboxFeedback>
         <ToolboxResourceSelector
           :expand-note-branches="false"
           v-model="pendingResources"
@@ -558,7 +571,7 @@
       </div>
       <template #footer>
         <div class="workspace-resource-modal__footer">
-          <BButton @click="resourceModalVisible = false">{{ t('common.cancel') }}</BButton>
+          <BButton :disabled="mutating" @click="resourceModalVisible = false">{{ t('common.cancel') }}</BButton>
           <BButton type="primary" :loading="mutating" :disabled="!pendingResources.length" @click="saveResources">
             {{ t('toolbox.workspace.addSelectedResources', { count: pendingResources.length }) }}
           </BButton>
@@ -569,6 +582,8 @@
 </template>
 
 <script setup lang="ts">
+  import ToolboxFeedback from './ToolboxFeedback.vue';
+  import ToolboxPageHeader from './ToolboxPageHeader.vue';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import WorkspaceBoard from './WorkspaceBoard.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert';
@@ -614,7 +629,7 @@
   } from '@/api/toolbox';
   import icon from '@/config/icon';
   import { useUiDensity } from '@/composables/useUiDensity';
-  import { toolboxWorkspaceKind } from '@/config/toolbox';
+  import { toolboxWorkspaceKind, toolboxWorkspaceStatusTone } from '@/config/toolbox';
   import type { ToolboxSelectedResource } from '@/utils/toolboxResourceSelection';
   import ToolboxResourceSelector from './ToolboxResourceSelector.vue';
 
@@ -650,6 +665,8 @@
   const loading = ref(true);
   const loadError = ref(false);
   const creating = ref(false);
+  const workspaceFormError = ref(''),
+    resourceError = ref('');
   const mutating = ref(false);
   const savingProgress = ref(false);
   const editStatus = ref<ToolboxWorkspaceStatus>('active');
@@ -895,11 +912,6 @@
   function statusLabel(status: ToolboxWorkspaceStatus) {
     return t(`toolbox.workspace.status.${status}`);
   }
-  function statusTone(status: ToolboxWorkspaceStatus): 'success' | 'pending' | 'neutral' {
-    if (status === 'active') return 'success';
-    if (status === 'paused') return 'pending';
-    return 'neutral';
-  }
   function resourceIcon(type: ToolboxWorkspaceResource['type']) {
     if (type === 'bookmark') return icon.resource.bookmark;
     if (type === 'file') return icon.resource.file;
@@ -1058,6 +1070,7 @@
   }
   function openCreateModal() {
     if (blockGuestWrite('toolbox-project')) return;
+    workspaceFormError.value = '';
     workspaceFormMode.value = 'create';
     resetCreateForm();
     createModalVisible.value = true;
@@ -1065,6 +1078,7 @@
   function openEditModal() {
     if (blockGuestWrite('toolbox-project')) return;
     if (!workspace.value) return;
+    workspaceFormError.value = '';
     workspaceFormMode.value = 'edit';
     editStatus.value = workspace.value.status;
     createForm.title = workspace.value.title;
@@ -1078,6 +1092,7 @@
     if (!createForm.title.trim() || creating.value) return;
     const mutationVersion = initializationVersion;
     creating.value = true;
+    workspaceFormError.value = '';
     try {
       if (workspaceFormMode.value === 'edit' && workspace.value) {
         applyWorkspace(
@@ -1110,7 +1125,9 @@
       applyWorkspace(created);
       message.success(t('toolbox.workspace.created'));
     } catch (error) {
-      showMutationError(error);
+      if (error !== staleRequest)
+        workspaceFormError.value =
+          error instanceof Error && error.message ? error.message : t('toolbox.workspace.operationFailed');
     } finally {
       if (mutationVersion === initializationVersion) creating.value = false;
     }
@@ -1199,6 +1216,7 @@
   }
   function openResourceModal() {
     if (blockGuestWrite('toolbox-project')) return;
+    resourceError.value = '';
     pendingResources.value = [];
     resourceModalVisible.value = true;
   }
@@ -1207,6 +1225,7 @@
     if (!workspace.value || !pendingResources.value.length || mutating.value) return;
     const mutationVersion = initializationVersion;
     mutating.value = true;
+    resourceError.value = '';
     try {
       applyWorkspace(
         await addToolboxWorkspaceResources(
@@ -1222,7 +1241,9 @@
       pendingResources.value = [];
       await loadWorkspaceList();
     } catch (error) {
-      showMutationError(error);
+      if (error !== staleRequest)
+        resourceError.value =
+          error instanceof Error && error.message ? error.message : t('toolbox.workspace.operationFailed');
     } finally {
       if (mutationVersion === initializationVersion) mutating.value = false;
     }
@@ -1304,6 +1325,7 @@
     progressDuration.value = 0;
     createModalVisible.value = resourceModalVisible.value = outcomeOpen.value = false;
     deletingId.value = '';
+    workspaceFormError.value = resourceError.value = '';
     creating.value = mutating.value = savingProgress.value = false;
     workspace.value = null;
     selectedResourceKeys.value = [];
@@ -1355,7 +1377,6 @@
     display: flex;
     gap: var(--ui-space-8, 8px);
   }
-  .workspace-list-intro,
   .workspace-detail-head,
   .workspace-section__head,
   .workspace-list-section > header {
@@ -1364,12 +1385,7 @@
     justify-content: space-between;
     gap: var(--ui-space-18, 18px);
   }
-  .workspace-list-intro {
-    padding: var(--ui-space-4, 4px) var(--ui-space-4, 4px) 0;
-  }
-  .workspace-list-intro__copy {
-    max-width: var(--ui-layout-760, 760px);
-  }
+
   .workspace-kicker,
   .workspace-section__kicker {
     color: var(--workspace-accent);
@@ -1377,18 +1393,13 @@
     font-weight: 750;
     letter-spacing: 0.04em;
   }
-  .workspace-list-intro h2,
   .workspace-summary h2,
   .workspace-section h3,
   .workspace-list-section h3 {
     margin: var(--ui-space-6, 6px) 0 0;
     color: var(--text-color);
   }
-  .workspace-list-intro h2 {
-    font-size: clamp(var(--ui-font-24, 24px), 3vw, var(--ui-font-34, 34px));
-    line-height: 1.18;
-  }
-  .workspace-list-intro p,
+
   .workspace-section__head p,
   .workspace-list-section > header p {
     margin: var(--ui-space-7, 7px) 0 0;
@@ -1848,17 +1859,11 @@
   .workspace-progress-form label,
   .workspace-modal-form label {
     display: grid;
-    gap: var(--ui-space-7, 7px);
+    gap: var(--ui-space-6, 6px);
     min-width: 0;
     color: var(--desc-color);
     font-size: var(--ui-font-12, 12px);
     font-weight: 650;
-  }
-  .workspace-progress-form :deep(.b-textarea),
-  .workspace-modal-form :deep(.b-textarea) {
-    color: var(--text-color);
-    border-color: var(--surface-border-color);
-    background: var(--workspace-panel-bg-color);
   }
   .workspace-progress-form :deep(.b-textarea) {
     height: var(--ui-layout-118, 118px);
@@ -1867,23 +1872,6 @@
     padding: var(--ui-space-11, 11px) var(--ui-space-12, 12px) !important;
     resize: none;
     line-height: 1.6;
-  }
-  .workspace-progress-form :deep(.b-input) {
-    color: var(--text-color);
-    border: 1px solid var(--surface-border-color) !important;
-    border-radius: 8px;
-    background: var(--workspace-panel-bg-color) !important;
-  }
-  .workspace-progress-form :deep(.b-input:focus-visible) {
-    border-color: var(--workspace-accent) !important;
-    outline: 2px solid var(--workspace-accent-soft);
-    outline-offset: 1px;
-  }
-  .workspace-progress-form :deep(.select-trigger) {
-    min-height: var(--ui-layout-42, 42px);
-  }
-  .workspace-modal-form :deep(.b-datetime-trigger) {
-    min-height: var(--ui-layout-42, 42px);
   }
   .workspace-resource-grid {
     display: grid;
@@ -2141,15 +2129,11 @@
     .knowledge-workspace {
       gap: var(--ui-space-14, 14px);
     }
-    .workspace-list-intro,
     .workspace-list-section > header {
       align-items: stretch;
       flex-direction: column;
     }
-    .workspace-list-intro :deep(.b_btn) {
-      width: 100%;
-      min-height: var(--ui-layout-44, 44px);
-    }
+
     .workspace-loop {
       gap: var(--ui-space-8, 8px);
     }
@@ -2506,36 +2490,11 @@
       background: var(--workspace-accent-soft);
     }
   }
-  .project-breadcrumb {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    gap: var(--ui-space-8, 8px);
-    min-width: 0;
-    color: var(--desc-color);
-    font-size: var(--ui-font-12, 12px);
-  }
-  .project-breadcrumb > .b_btn {
-    background: transparent;
-    padding: var(--ui-space-4, 4px) var(--ui-space-2, 2px);
-    flex-shrink: 0;
-    font-size: inherit;
-  }
-  .project-breadcrumb__current {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .project-breadcrumb__mobile-back {
-    display: none;
-  }
+
   .project-section-navigation > .project-settings-trigger--mobile {
     display: none;
   }
   @media (max-width: 767px) {
-    .project-breadcrumb {
-      display: none;
-    }
     .workspace-detail-head {
       display: none;
     }
@@ -2683,14 +2642,7 @@
       margin: 0;
       min-width: 0;
     }
-    .project-directory-back {
-      padding-bottom: var(--ui-space-10, 10px);
-      margin-bottom: var(--ui-space-6, 6px);
-      border-bottom: 1px solid var(--workspace-divider);
-    }
-    .project-directory-back .b_btn {
-      gap: var(--ui-space-4, 4px);
-    }
+
     .project-section-navigation > .b_btn {
       width: 100%;
       min-height: var(--ui-layout-40, 40px);
@@ -2719,9 +2671,7 @@
     .project-mobile-controls {
       display: none;
     }
-    .project-breadcrumb__mobile-title {
-      display: none;
-    }
+
     .workspace-detail-head {
       .workspace-canvas-surface();
       display: flex;
@@ -2984,44 +2934,7 @@
       .workspace-detail-head {
         min-height: var(--ui-layout-44, 44px);
       }
-      .project-breadcrumb {
-        display: flex;
-      }
-      .project-breadcrumb__mobile-back {
-        display: inline-block;
-      }
-      .project-breadcrumb__workshop,
-      .project-breadcrumb__desktop-label,
-      .project-breadcrumb__separator,
-      .project-breadcrumb__current {
-        display: none;
-      }
-      .project-breadcrumb {
-        font-size: var(--ui-font-18, 18px);
-        font-weight: 600;
-      }
-      .project-breadcrumb > .b_btn {
-        width: var(--ui-layout-44, 44px);
-        min-width: var(--ui-layout-44, 44px);
-        height: var(--ui-layout-44, 44px);
-        min-height: var(--ui-layout-44, 44px);
-        padding: 0;
-        border-radius: 11px;
-        color: var(--text-color);
-      }
-      .project-breadcrumb__mobile-title {
-        display: block;
-        min-width: 0;
-        margin: 0;
-        flex: 1 1 auto;
-        overflow: hidden;
-        color: var(--text-color);
-        font-size: var(--ui-font-18, 18px);
-        font-weight: 720;
-        line-height: 1.2;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
+
       .project-mobile-controls .project-directory-trigger,
       .project-mobile-controls .project-settings-trigger {
         min-width: var(--ui-layout-44, 44px);
@@ -3112,14 +3025,7 @@
       min-height: 0;
       gap: var(--ui-space-2, 2px);
     }
-    .project-directory-back {
-      padding-bottom: 0;
-      border: 0;
-      margin-bottom: var(--ui-space-16, 16px);
-    }
-    .project-directory-back .b_btn {
-      color: var(--workspace-muted);
-    }
+
     .project-section-navigation > .b_btn {
       min-height: var(--ui-layout-36, 36px);
       line-height: 1.4;
@@ -3137,25 +3043,6 @@
       background: var(--workspace-hover);
       color: var(--workspace-muted);
       border-color: transparent;
-    }
-    .project-status {
-      display: inline-flex;
-      align-items: center;
-      gap: var(--ui-space-8, 8px);
-      font-size: var(--ui-font-13, 13px);
-      color: var(--workspace-text);
-    }
-    .project-status i {
-      width: var(--ui-layout-8, 8px);
-      height: var(--ui-layout-8, 8px);
-      border-radius: 50%;
-      background: var(--workspace-muted);
-    }
-    .project-status[data-status='active'] i {
-      background: var(--success-color);
-    }
-    .project-status[data-status='paused'] i {
-      background: var(--warning-color);
     }
     .project-overview-metrics > div {
       flex-direction: column;
@@ -3419,6 +3306,22 @@
       .workspace-board-section :deep(.project-board__lane-select) {
         width: 100%;
       }
+    }
+  }
+  .knowledge-workspace.has-project-rail .workspace-detail-head {
+    height: auto;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: var(--workspace-canvas);
+  }
+  .workspace-detail-head > .toolbox-page-header {
+    width: 100%;
+  }
+  @media (max-width: 767px) {
+    .knowledge-workspace.has-project-rail .workspace-detail-head {
+      padding: var(--ui-space-10, 10px);
     }
   }
 </style>

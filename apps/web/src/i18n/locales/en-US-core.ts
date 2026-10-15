@@ -3106,6 +3106,7 @@ export default {
     study: {
       overview: 'Knowledge overview',
       loadFailed: 'Progress could not be synced. Try again later.',
+      saveFailed: 'Progress could not be saved. Mark the card again to retry.',
       masteredCount: '{count} mastered',
       answerPlaceholder: 'Write your answer before checking the reference',
       reveal: 'Show reference answer',

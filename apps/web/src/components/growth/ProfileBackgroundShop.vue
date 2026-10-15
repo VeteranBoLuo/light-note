@@ -16,9 +16,15 @@
         class="background-shop__item"
         :class="{ 'is-equipped': item.equipped }"
       >
-        <img :src="profileBackground(item.id)?.src" alt="" loading="lazy" class="background-shop__art" />
+        <ProfileBackgroundArt :background-id="item.id" thumbnail />
         <div class="background-shop__copy">
           <strong>{{ name(item.id) }}</strong>
+          <span
+            v-if="item.id === 'background_mountains' || item.id === 'background_stars'"
+            class="background-shop__theme"
+          >
+            {{ t(`profileBackgrounds.${item.id}Description`) }}
+          </span>
           <span>{{
             item.equipped
               ? t('profileBackgrounds.using')
@@ -47,7 +53,12 @@
     >
       <div v-if="selected" class="background-preview">
         <h3>{{ name(selected.id) }}</h3>
-        <p>{{ t('profileBackgrounds.previewHint') }}</p>
+        <p>
+          <template v-if="selected.id === 'background_mountains' || selected.id === 'background_stars'">
+            {{ t(`profileBackgrounds.${selected.id}Description`) }}
+          </template>
+          {{ t('profileBackgrounds.previewHint') }}
+        </p>
         <strong>{{ t('profileBackgrounds.card') }}</strong>
         <div class="background-preview__card"><ChatUserProfileContent :profile="previewProfile" identity-only /></div>
         <strong>{{ t('profileBackgrounds.page') }}</strong>
@@ -90,6 +101,7 @@
   import { useGrowth, type ShopItem } from '@/composables/useGrowth';
   import { useUserStore } from '@/store';
   import { profileBackground } from '@/config/profileBackgrounds';
+  import ProfileBackgroundArt from './ProfileBackgroundArt.vue';
   import type { CommunityChatAuthorProfile } from '@/api/communityChatApi';
   import ChatUserProfileContent from '@/components/communityChat/ChatUserProfileContent.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -271,12 +283,6 @@
   }
   .background-shop__item.is-equipped {
     border-color: var(--primary-color);
-  }
-  .background-shop__art {
-    display: block;
-    width: 100%;
-    aspect-ratio: 3;
-    object-fit: cover;
   }
   .background-shop__copy {
     display: grid;

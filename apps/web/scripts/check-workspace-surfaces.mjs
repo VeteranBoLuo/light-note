@@ -22,7 +22,7 @@ const cases = [
   { name: 'todo', path: '/inbox?tab=todo', lightCanvas: 'white', canvas: '.inbox-content', content: '.todo-summary-card, .todo-item', nav: '.todo-workspace-sidebar button.active' },
   { name: 'tags', path: '/tag/surface-fixture', lightCanvas: 'white', canvas: '.tag-space-main', content: '.tag-profile-card', nav: '.tag-directory-row.is-active' },
   { name: 'resources', path: '/search', lightCanvas: 'white', canvas: '.result-panel', content: '.resource-result-entry:not(.is-inspected) .result-item:not(.result-item--selected)', nav: '.resource-scope-item.active' },
-  { name: 'workshop', path: '/toolbox?view=catalog', lightCanvas: 'white', canvas: '.toolbox-group-filter', content: '.toolbox-card', nav: '.toolbox-group-filter .b-chip--selected' },
+  { name: 'workshop', path: '/toolbox?view=catalog', lightCanvas: 'white', canvas: '.toolbox-home', content: '.toolbox-tool-card', nav: '.toolbox-group-filter .b-chip--selected' },
 ];
 const failures = [], results = [];
 function luminance(rgb) {

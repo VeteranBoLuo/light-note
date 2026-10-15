@@ -378,6 +378,18 @@ const summaryJob: ToolboxJob = {
 let entryDismissed = false;
 const comparisonFixture = createComparisonFixture(params);
 request.defaults.adapter = async (config) => {
+  const feedbackPath = params.get('feedbackPath');
+  if (feedbackPath && String(config.url).includes(feedbackPath) && (!params.get('feedbackMethod') || config.method === params.get('feedbackMethod'))) {
+    const feedback = (window as any).toolboxFeedbackFixture ||= {
+      failure: params.has('feedbackFailure'), delay: Number(params.get('feedbackDelay') || 0), empty: params.has('feedbackEmpty'),
+    };
+    if (feedback.delay) await new Promise(resolve => setTimeout(resolve, feedback.delay));
+    if (feedback.failure) throw new Error('无法完成请求，请重试 / Unable to complete the request. Try again.');
+    if (feedback.empty && String(config.url).endsWith('/text-answers')) return {
+      data: {status: 200, data: [], msg: ''}, status: 200, statusText: 'OK', headers: {}, config,
+    };
+  }
+
   if (toolId === 'source_comparison') { const reply = comparisonFixture(config); if (reply) return reply; }
   const url = String(config.url || '');
   if (params.get('summaryMock') === '1' && url === '/api/toolbox/artifacts/summary-artifact/save') {
@@ -387,6 +399,7 @@ request.defaults.adapter = async (config) => {
   }
   if (params.get('resultMock') === '1' && url === '/api/toolbox/jobs/visual-result') return response(config, {
     ...summaryJob, id: 'visual-result', toolId,
+    status: ['queued', 'processing', 'succeeded', 'partial_succeeded', 'failed', 'cancelled', 'expired'].includes(params.get('resultStatus') || '') ? params.get('resultStatus') : summaryJob.status,
     artifact: {id: 'visual-result-artifact', type: toolId === 'ocr_to_text' ? 'ocr_text' : 'knowledge_audit', title: '资料核对结果', contentType: 'markdown', version: 1},
   });
   if (params.get('resultMock') === '1' && url === '/api/toolbox/artifacts/visual-result-artifact') return response(config, {

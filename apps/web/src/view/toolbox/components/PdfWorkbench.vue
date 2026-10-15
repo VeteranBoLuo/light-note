@@ -87,7 +87,7 @@
   }
 
   .pdf-workbench__navigation :deep(.tab) {
-    min-height: var(--ui-layout-34, 34px);
+    min-height: var(--ui-control-32, 32px);
     flex: 1;
     justify-content: center;
     padding-right: var(--ui-space-18, 18px);
@@ -114,7 +114,7 @@
     }
 
     .pdf-workbench__navigation :deep(.tab) {
-      min-height: var(--ui-layout-44, 44px);
+      min-height: var(--ui-control-32, 32px);
       padding-right: var(--ui-space-14, 14px);
       padding-left: var(--ui-space-14, 14px);
     }

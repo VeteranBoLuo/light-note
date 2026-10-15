@@ -1886,6 +1886,9 @@
   .public-profile-card :deep(.chat-profile-content__section-heading > small) {
     margin-left: auto;
   }
+  .public-profile-card :deep(.chat-profile-content__section-heading) {
+    flex-wrap: wrap;
+  }
   .public-profile-card {
     padding-bottom: var(--ui-space-28, 28px);
     margin-bottom: var(--ui-space-12, 12px);
@@ -1957,13 +1960,16 @@
     .profile-summary-actions {
       width: 100%;
       flex-direction: row-reverse;
+      flex-wrap: wrap;
       justify-content: space-between;
       align-items: center;
     }
   }
   .profile-statistics {
     display: flex;
+    flex-wrap: wrap;
     gap: var(--ui-space-24, 24px);
+    row-gap: 0;
     margin: 0;
     color: var(--desc-color);
   }

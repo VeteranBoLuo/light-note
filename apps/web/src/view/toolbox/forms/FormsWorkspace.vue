@@ -1,91 +1,35 @@
 <template>
   <main class="collection-workspace" :class="{ 'has-form': !!formId }">
-    <header v-if="isMobile" class="collection-mobile-header">
-      <BButton
-        class="collection-mobile-header__back"
-        :aria-label="t('common.back')"
-        @click="formId ? navigate('') : returnToToolbox()"
-        ><SvgIcon :src="icon.arrow_left" size="20" aria-hidden="true"
-      /></BButton>
-      <h1 :title="formId && form?.id === formId ? form.title : t('collectionForms.title')">{{
-        formId && form?.id === formId ? form.title : t('collectionForms.title')
-      }}</h1>
-      <BButton v-if="!formId" type="text" :disabled="busy" @click="createOpen = true">{{
-        t('collectionForms.new')
-      }}</BButton>
-      <BActionMenu
-        v-else-if="form && form.id === formId && !loading"
-        :items="headerActions"
-        :width="240"
-        placement="bottom-right"
-        @select="headerAction"
+    <ToolboxPageHeader
+      tool-id="forms"
+      class="collection-page-header"
+      :title="formId && form?.id === formId ? form.title : t('collectionForms.title')"
+      :category="formId ? t('collectionForms.title') : undefined"
+      :back-label="isMobile && formId ? t('common.back') : t('toolbox.back')"
+      :native-mobile-back="false"
+      @back="isMobile && formId ? navigate('') : returnToToolbox()"
+    >
+      <template v-if="form && form.id === formId" #meta
+        ><BChip :tone="formStatusTone(form.status)">{{ t(statusLabel[form.status]) }}</BChip></template
       >
-        <BButton class="collection-mobile-header__more" :aria-label="t('collectionForms.formActions')"
-          ><SvgIcon :src="icon.common.more" size="20"
-        /></BButton>
-      </BActionMenu>
-    </header>
-    <aside ref="directoryRef" class="collection-directory collection-stack" data-mobile-resource-scroll>
-      <BButton v-if="!isMobile" type="text" class="collection-directory-back" @click="returnToToolbox()">
-        <SvgIcon :src="icon.toolbox.back" size="16" /><span>{{ t('toolbox.title') }}</span>
-      </BButton>
-      <div v-if="!isMobile" class="collection-row"
-        ><h2>{{ t('collectionForms.title') }}</h2
-        ><BButton :disabled="busy" @click="createOpen = true">{{ t('collectionForms.new') }}</BButton></div
-      >
-      <p class="collection-muted">{{ t('collectionForms.subtitle') }}</p>
-      <BInput
-        v-model:value="search"
-        :placeholder="t('collectionForms.searchForms')"
-        :aria-label="t('collectionForms.searchForms')"
-      />
-      <BSelect
-        v-model:value="status"
-        :options="[
-          { value: 'all', label: t('collectionForms.allStatuses') },
-          ...Object.entries(statusLabel).map(([value, label]) => ({ value, label: t(label) })),
-        ]"
-        :aria-label="t('collectionForms.formStatus')"
-      />
-      <BButton v-if="route.query.tagId" @click="router.push('/toolbox/forms')">{{
-        t('collectionForms.clearTag')
-      }}</BButton>
-      <p v-if="listError" class="collection-error" role="alert"
-        >{{ listError }}<BButton @click="loadList">{{ t('collectionForms.retry') }}</BButton></p
-      >
-      <p v-else-if="listLoading && !forms.length" role="status">{{ t('collectionForms.loading') }}</p>
-      <p v-else-if="!forms.length" class="collection-muted">{{ t('collectionForms.emptyForms') }}</p>
-      <BButton
-        v-for="item in forms"
-        :key="item.id"
-        class="collection-entry"
-        :class="{ 'is-active': item.id === formId }"
-        @click="navigate(item.id)"
-        ><span class="collection-entry-heading"
-          ><strong class="collection-entry-title">{{ item.title }}</strong
-          ><span class="collection-status" :class="'is-' + item.status">{{ t(statusLabel[item.status]) }}</span></span
-        ><span class="collection-entry-meta"
-          ><small>{{ t('collectionForms.submissionCount', { count: item.total }) }}</small
-          ><strong v-if="item.unread">{{ t('collectionForms.unreadCount', { count: item.unread }) }}</strong></span
-        ></BButton
-      >
-    </aside>
-    <section ref="detailRef" class="collection-detail collection-stack" data-mobile-resource-scroll>
-      <p v-if="error" class="collection-error" role="alert"
-        >{{ error }}<BButton @click="reloadCurrent">{{ t('collectionForms.reload') }}</BButton></p
-      >
-      <p v-if="loading && !form" role="status">{{ t('collectionForms.loadingForm') }}</p>
-      <div
-        v-else-if="form && definition"
-        class="collection-detail-content collection-stack"
-        :inert="loading || form.id !== formId ? true : undefined"
-        :aria-busy="loading"
-      >
-        <header v-if="!isMobile" class="collection-editor-header collection-row"
-          ><div
-            ><h1>{{ form.title }}</h1
-            ><span class="collection-status" :class="'is-' + form.status">{{ t(statusLabel[form.status]) }}</span></div
-          ><div class="collection-toolbar"
+      <template #actions>
+        <BButton v-if="!isMobile || !formId" :disabled="busy" @click="createOpen = true">{{
+          t('collectionForms.new')
+        }}</BButton>
+        <BActionMenu
+          v-else-if="isMobile && form && form.id === formId && !loading"
+          :items="headerActions"
+          :width="240"
+          placement="bottom-right"
+          @select="headerAction"
+        >
+          <BButton type="text" icon-only class="collection-header-more" :aria-label="t('collectionForms.formActions')"
+            ><SvgIcon :src="icon.common.more" size="20"
+          /></BButton>
+        </BActionMenu>
+
+        <template v-if="form && form.id === formId && !loading">
+          <div v-if="!isMobile" class="collection-toolbar"
             ><BButton class="collection-header-settings" @click="metadataOpen = true">{{
               t('collectionForms.settings')
             }}</BButton
@@ -122,11 +66,59 @@
             <span v-if="tab === 'settings'" class="collection-muted collection-desktop-save">{{
               t(dirty ? 'collectionForms.unsaved' : 'collectionForms.savedLabel')
             }}</span></div
-          ></header
-        >
-        <span v-if="isMobile" class="collection-mobile-status collection-status" :class="'is-' + form.status">{{
-          t(statusLabel[form.status])
-        }}</span>
+          >
+        </template>
+      </template>
+    </ToolboxPageHeader>
+    <aside ref="directoryRef" class="collection-directory collection-stack" data-mobile-resource-scroll>
+      <p class="collection-muted">{{ t('collectionForms.subtitle') }}</p>
+      <BInput
+        v-model:value="search"
+        :placeholder="t('collectionForms.searchForms')"
+        :aria-label="t('collectionForms.searchForms')"
+      />
+      <BSelect
+        v-model:value="status"
+        :options="[
+          { value: 'all', label: t('collectionForms.allStatuses') },
+          ...Object.entries(statusLabel).map(([value, label]) => ({ value, label: t(label) })),
+        ]"
+        :aria-label="t('collectionForms.formStatus')"
+      />
+      <BButton v-if="route.query.tagId" @click="router.push('/toolbox/forms')">{{
+        t('collectionForms.clearTag')
+      }}</BButton>
+      <p v-if="listError" class="collection-error" role="alert"
+        >{{ listError }}<BButton @click="loadList">{{ t('collectionForms.retry') }}</BButton></p
+      >
+      <BLoading v-else-if="listLoading && !forms.length" inline loading :title="t('collectionForms.loading')" />
+      <p v-else-if="!forms.length" class="collection-muted">{{ t('collectionForms.emptyForms') }}</p>
+      <BButton
+        v-for="item in forms"
+        :key="item.id"
+        class="collection-entry"
+        :class="{ 'is-active': item.id === formId }"
+        @click="navigate(item.id)"
+        ><span class="collection-entry-heading"
+          ><strong class="collection-entry-title">{{ item.title }}</strong
+          ><BChip :tone="formStatusTone(item.status)">{{ t(statusLabel[item.status]) }}</BChip></span
+        ><span class="collection-entry-meta"
+          ><small>{{ t('collectionForms.submissionCount', { count: item.total }) }}</small
+          ><strong v-if="item.unread">{{ t('collectionForms.unreadCount', { count: item.unread }) }}</strong></span
+        ></BButton
+      >
+    </aside>
+    <section ref="detailRef" class="collection-detail collection-stack" data-mobile-resource-scroll>
+      <p v-if="error" class="collection-error" role="alert"
+        >{{ error }}<BButton @click="reloadCurrent">{{ t('collectionForms.reload') }}</BButton></p
+      >
+      <BLoading v-if="loading && !form" inline loading :title="t('collectionForms.loadingForm')" />
+      <div
+        v-else-if="form && definition"
+        class="collection-detail-content collection-stack"
+        :inert="loading || form.id !== formId ? true : undefined"
+        :aria-busy="loading"
+      >
         <p v-if="notice" class="collection-notice" role="status">{{ notice }}</p>
         <BTabs
           v-model:active-tab="tab"
@@ -262,15 +254,10 @@
             ><BButton @click="loadResponses">{{ t('collectionForms.retry') }}</BButton></div
           >
           <div v-if="!responses.length && !responseError" class="collection-records-empty" role="status">
-            <span class="collection-empty-icon"><SvgIcon :src="icon.contextMenu.inbox" size="30" /></span>
-            <h3>{{
-              t(
-                responsesLoading
-                  ? 'collectionForms.loadingResponses'
-                  : filteredResponses
-                    ? 'collectionForms.emptyResponses'
-                    : 'collectionForms.noResponsesYet',
-              )
+            <BLoading v-if="responsesLoading" inline loading :title="t('collectionForms.loadingResponses')" />
+            <span v-else class="collection-empty-icon"><SvgIcon :src="icon.contextMenu.inbox" size="30" /></span>
+            <h3 v-if="!responsesLoading">{{
+              t(filteredResponses ? 'collectionForms.emptyResponses' : 'collectionForms.noResponsesYet')
             }}</h3>
             <p v-if="!responsesLoading" class="collection-muted">{{
               t(filteredResponses ? 'collectionForms.filterHint' : 'collectionForms.shareHint')
@@ -295,26 +282,18 @@
             >
               <template #bodyCell="{ record: r, column }">
                 <span v-if="column.key === 'created_at'">{{ date(r.created_at) }}</span>
-                <span
-                  v-else-if="column.key === 'is_read'"
-                  class="collection-read-state"
-                  :class="{ 'is-unread': !r.is_read }"
-                  >{{ t(r.is_read ? 'collectionForms.read' : 'collectionForms.unread') }}</span
-                >
-                <span
-                  v-else-if="column.key === 'processed'"
-                  class="collection-processing-state"
-                  :class="{ 'is-done': r.processed && !r.spam, 'is-spam': r.spam }"
-                  >{{
-                    t(
-                      r.spam
-                        ? 'collectionForms.spam'
-                        : r.processed
-                          ? 'collectionForms.processed'
-                          : 'collectionForms.pending',
-                    )
-                  }}</span
-                >
+                <BChip v-else-if="column.key === 'is_read'" :tone="r.is_read ? 'neutral' : 'pin'">{{
+                  t(r.is_read ? 'collectionForms.read' : 'collectionForms.unread')
+                }}</BChip>
+                <BChip v-else-if="column.key === 'processed'" :tone="responseStatusTone(r)">{{
+                  t(
+                    r.spam
+                      ? 'collectionForms.spam'
+                      : r.processed
+                        ? 'collectionForms.processed'
+                        : 'collectionForms.pending',
+                  )
+                }}</BChip>
                 <BButton v-else type="text" :disabled="responsesLoading || !!responseError" @click="openResponse(r)"
                   >{{ t('collectionForms.viewResponse') }}<SvgIcon :src="icon.ai.sourceArrow" size="14"
                 /></BButton>
@@ -337,23 +316,20 @@
                 >
                   <span class="collection-row"
                     ><span>{{ date(r.created_at) }}</span
-                    ><span class="collection-read-state" :class="{ 'is-unread': !r.is_read }">{{
+                    ><BChip :tone="r.is_read ? 'neutral' : 'pin'">{{
                       t(r.is_read ? 'collectionForms.read' : 'collectionForms.unread')
-                    }}</span></span
+                    }}</BChip></span
                   >
                   <span class="collection-row"
-                    ><span
-                      class="collection-processing-state"
-                      :class="{ 'is-done': r.processed && !r.spam, 'is-spam': r.spam }"
-                      >{{
-                        t(
-                          r.spam
-                            ? 'collectionForms.spam'
-                            : r.processed
-                              ? 'collectionForms.processed'
-                              : 'collectionForms.pending',
-                        )
-                      }}</span
+                    ><BChip :tone="responseStatusTone(r)">{{
+                      t(
+                        r.spam
+                          ? 'collectionForms.spam'
+                          : r.processed
+                            ? 'collectionForms.processed'
+                            : 'collectionForms.pending',
+                      )
+                    }}</BChip
                     ><SvgIcon :src="icon.ai.sourceArrow" size="16"
                   /></span>
                 </BButton>
@@ -409,7 +385,7 @@
       :close-disabled="busy"
     >
       <div class="collection-stack collection-create-body">
-        <p v-if="error" class="collection-error" role="alert">{{ error }}</p>
+        <ToolboxFeedback v-if="error" state="error">{{ error }}</ToolboxFeedback>
         <p class="collection-muted">{{ t('collectionForms.templateHint') }}</p>
         <strong>{{ t('collectionForms.chooseTemplate') }}</strong>
         <div class="collection-template-grid" role="group" :aria-label="t('collectionForms.chooseTemplate')">
@@ -419,6 +395,7 @@
             class="collection-template"
             :class="{ 'is-selected': template === item.id }"
             :aria-pressed="template === item.id"
+            :disabled="busy"
             @click="template = item.id"
           >
             <SvgIcon :src="item.icon" size="24" />
@@ -429,7 +406,11 @@
         </div>
         <label
           >{{ t('collectionForms.formName')
-          }}<BInput v-model:value="newTitle" :placeholder="t('collectionForms.formName')" :maxlength="200"
+          }}<BInput
+            :disabled="busy"
+            v-model:value="newTitle"
+            :placeholder="t('collectionForms.formName')"
+            :maxlength="200"
         /></label>
         <p class="collection-muted">{{ t('collectionForms.nameHint') }}</p>
       </div>
@@ -438,7 +419,7 @@
           ><p class="collection-muted">{{ t('collectionForms.createHint') }}</p
           ><div class="collection-toolbar"
             ><BButton :disabled="busy" @click="createOpen = false">{{ t('common.cancel') }}</BButton
-            ><BButton type="primary" :disabled="busy || !newTitle.trim()" @click="create">{{
+            ><BButton type="primary" :loading="busy" :disabled="!newTitle.trim()" @click="create">{{
               t('collectionForms.createEdit')
             }}</BButton></div
           ></div
@@ -447,13 +428,14 @@
     </BModal>
     <BModal
       v-model:visible="metadataOpen"
+      :close-disabled="busy"
       :title="t('collectionForms.settings')"
       width="var(--ui-layout-640, 640px)"
       fullscreen-mobile
       modal-class="collection-metadata-modal"
     >
       <div v-if="form && definition" class="collection-stack"
-        ><p v-if="error" role="alert" class="collection-error">{{ error }}</p
+        ><ToolboxFeedback v-if="error" state="error">{{ error }}</ToolboxFeedback
         ><FormMetadata v-if="definition" v-model="definition" v-model:tag-ids="tagIds" :tags="tags" />
         <section class="collection-card collection-stack">
           <h3>{{ t('collectionForms.submissionPolicy') }}</h3>
@@ -522,7 +504,9 @@
       <template #footer
         ><div class="collection-dialog-footer"
           ><p class="collection-muted">{{ t('collectionForms.unifiedSave') }}</p
-          ><BButton type="primary" @click="metadataOpen = false">{{ t('collectionForms.done') }}</BButton></div
+          ><BButton type="primary" :disabled="busy" @click="metadataOpen = false">{{
+            t('collectionForms.done')
+          }}</BButton></div
         ></template
       >
     </BModal>
@@ -538,11 +522,13 @@
       width="var(--ui-layout-560, 560px)"
       ><div v-if="activeResponse && form" class="response-detail">
         <div class="response-detail-scroll">
-          <p v-if="error" class="collection-error" role="alert">{{ error }}</p>
+          <ToolboxFeedback v-if="error" state="error">{{ error }}</ToolboxFeedback>
           <h2>{{ form.definition.title }}</h2>
           <div class="response-detail-badges"
-            ><span>{{ t(activeResponse.is_read ? 'collectionForms.read' : 'collectionForms.unread') }}</span
-            ><span class="response-detail-state">{{
+            ><BChip :tone="activeResponse.is_read ? 'neutral' : 'pin'">{{
+              t(activeResponse.is_read ? 'collectionForms.read' : 'collectionForms.unread')
+            }}</BChip
+            ><BChip :tone="responseStatusTone(activeResponse)">{{
               t(
                 activeResponse.spam
                   ? 'collectionForms.spam'
@@ -550,7 +536,7 @@
                     ? 'collectionForms.processed'
                     : 'collectionForms.pending',
               )
-            }}</span></div
+            }}</BChip></div
           >
           <dl class="response-detail-times"
             ><div
@@ -617,6 +603,8 @@
   </main>
 </template>
 <script setup lang="ts">
+  import ToolboxFeedback from '../components/ToolboxFeedback.vue';
+  import ToolboxPageHeader from '../components/ToolboxPageHeader.vue';
   import './forms.css';
   import { useI18n } from 'vue-i18n';
   const { t, locale } = useI18n();
@@ -629,6 +617,8 @@
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
   import BMessage from '@/components/base/BasicComponents/BMessage/BMessage';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import BChip from '@/components/base/BasicComponents/BChip.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
@@ -648,6 +638,13 @@
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import { useUserStore } from '@/store';
   import { formsApi, statusLabel, typeLabels, type CollectionForm, type Submission } from './api';
+
+  function formStatusTone(status: CollectionForm['status']): 'success' | 'pending' | 'neutral' {
+    return status === 'collecting' ? 'success' : status === 'paused' ? 'pending' : 'neutral';
+  }
+  function responseStatusTone(response: Submission): 'success' | 'danger' | 'neutral' {
+    return response.spam ? 'danger' : response.processed ? 'success' : 'neutral';
+  }
   const isMobile = useMobileLayout();
   const mobilePreview = ref(false);
   const metadataOpen = ref(false);
@@ -1250,9 +1247,19 @@
   .collection-workspace {
     display: grid;
     grid-template-columns: var(--ui-layout-280, 280px) minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
     height: 100%;
     min-height: 0;
     color: var(--workspace-text);
+  }
+  .collection-page-header {
+    grid-column: 1 / -1;
+    margin: var(--ui-space-12, 12px) var(--ui-space-16, 16px);
+  }
+  .collection-header-more.b_btn {
+    width: var(--ui-control-44, 44px);
+    height: var(--ui-control-44, 44px);
+    padding: 0;
   }
   .collection-directory {
     overflow: auto;
@@ -1301,7 +1308,7 @@
     .collection-workspace {
       display: grid;
       grid-template-columns: minmax(0, 1fr);
-      grid-template-rows: var(--ui-layout-56, 56px) minmax(0, 1fr);
+      grid-template-rows: auto minmax(0, 1fr);
     }
     .collection-workspace.has-form .collection-directory {
       display: none;
@@ -1360,11 +1367,7 @@
     background: var(--workspace-open-canvas);
     gap: var(--ui-space-20, 20px);
   }
-  .collection-directory-back.b_btn {
-    justify-content: flex-start;
-    color: var(--workspace-muted);
-    background: transparent;
-  }
+
   .collection-entry.is-active {
     background: var(--workspace-hover);
     box-shadow: inset 3px 0 var(--workspace-purple-text);
@@ -1374,31 +1377,7 @@
     display: inline-block;
     margin-top: var(--ui-space-8, 8px);
   }
-  .collection-editor-header {
-    position: sticky;
-    top: calc(-1 * var(--ui-space-24, 24px));
-    z-index: 2;
-    background: var(--workspace-canvas);
-    padding: var(--ui-space-16, 16px) 0;
-  }
-  .collection-editor-header > div:first-child {
-    display: flex;
-    align-items: center;
-    gap: var(--ui-space-12, 12px);
-    min-width: 0;
-  }
-  .collection-editor-header h1 {
-    font-size: var(--ui-font-20, 20px);
-    margin: 0;
-  }
-  .collection-status {
-    flex: none;
-    color: var(--workspace-muted);
-    background: var(--workspace-hover);
-    border-radius: var(--ui-space-4, 4px);
-    padding: var(--ui-space-4, 4px) var(--ui-space-8, 8px);
-    font-size: var(--ui-font-12, 12px);
-  }
+
   .collection-editor-layout {
     display: grid;
     grid-template-columns: minmax(0, 1fr) var(--ui-layout-280, 280px);
@@ -1510,9 +1489,6 @@
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
-    .collection-editor-header {
-      flex-wrap: wrap;
-    }
   }
   @media (max-width: 768px) {
     .collection-editor-layout {
@@ -1599,24 +1575,11 @@
   .collection-directory > p {
     margin: 0;
   }
-  .collection-directory-back.b_btn {
-    padding-inline: 0;
-    gap: var(--ui-space-8, 8px);
-    font-size: var(--ui-font-12, 12px);
-    text-decoration: none;
-  }
-  .collection-workspace .collection-directory-back.b_btn:hover,
-  .collection-workspace .collection-directory-back.b_btn:focus-visible {
-    background: transparent;
-    color: var(--workspace-purple-text);
-    text-decoration: none;
-  }
+
   .collection-directory .collection-entry {
     padding: var(--ui-space-12, 12px);
   }
-  .collection-editor-header {
-    padding-block: var(--ui-space-8, 8px);
-  }
+
   .collection-paper .collection-intro {
     padding: var(--ui-space-16, 16px);
   }
@@ -1659,12 +1622,6 @@
     font-size: var(--ui-font-12, 12px);
     font-weight: 500;
   }
-  .collection-status {
-    line-height: 1.4;
-  }
-  .collection-entry .collection-status.is-collecting {
-    color: var(--workspace-purple-text);
-  }
   .collection-paper {
     padding: var(--ui-space-16, 16px);
     border: 1px solid var(--workspace-border);
@@ -1693,9 +1650,6 @@
       border: 0;
       background: transparent;
     }
-  }
-  .collection-entry-heading .collection-status {
-    background: var(--workspace-border);
   }
 
   .collection-card.collection-more {
@@ -1891,38 +1845,6 @@
   .collection-records-pagination {
     border-top: 1px solid var(--workspace-border);
   }
-  .collection-records :deep(.collection-read-state) {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--ui-space-8, 8px);
-    color: var(--workspace-muted);
-    font-size: var(--ui-font-12, 12px);
-    white-space: nowrap;
-  }
-  .collection-records :deep(.collection-read-state::before) {
-    content: '';
-    width: var(--ui-space-6, 6px);
-    height: var(--ui-space-6, 6px);
-    border-radius: 50%;
-    background: currentColor;
-  }
-  .collection-records :deep(.collection-read-state.is-unread) {
-    color: var(--workspace-purple-text);
-  }
-  .collection-records :deep(.collection-processing-state) {
-    display: inline-flex;
-    padding: var(--ui-space-4, 4px) var(--ui-space-8, 8px);
-    border-radius: var(--ui-space-6, 6px);
-    font-size: var(--ui-font-12, 12px);
-    background: var(--workspace-hover);
-    color: var(--workspace-muted);
-  }
-  .collection-records :deep(.collection-processing-state.is-done) {
-    color: var(--success-color);
-  }
-  .collection-records :deep(.collection-processing-state.is-spam) {
-    color: var(--danger-color);
-  }
   .collection-page-number {
     padding: var(--ui-space-4, 4px) var(--ui-space-10, 10px);
     border-radius: var(--ui-space-6, 6px);
@@ -1932,13 +1854,6 @@
   .collection-notice {
     overflow-wrap: anywhere;
     font-size: var(--ui-font-12, 12px);
-  }
-  .collection-editor-header .collection-status.is-collecting {
-    color: var(--success-color);
-  }
-  .collection-editor-header .collection-status.is-collecting::before {
-    content: '•';
-    margin-right: var(--ui-space-4, 4px);
   }
   @media (max-width: 767px) {
     .collection-records {
@@ -2030,9 +1945,6 @@
   .collection-record-open.b_btn {
     line-height: 1.5;
   }
-  .collection-records :deep(.collection-processing-state) {
-    line-height: 1.5;
-  }
 
   .collection-records-error {
     padding: var(--ui-space-16, 16px) var(--ui-space-20, 20px);
@@ -2047,50 +1959,6 @@
     font-weight: normal;
   }
 
-  .collection-mobile-header {
-    display: flex;
-    align-items: center;
-    gap: var(--ui-space-8, 8px);
-    width: 100%;
-    height: var(--ui-layout-56, 56px);
-    padding: 0 var(--ui-space-8, 8px) 0 var(--ui-space-12, 12px);
-    box-sizing: border-box;
-    border-bottom: 1px solid var(--surface-divider-color);
-    background: var(--surface-page-bg, var(--background-color));
-    color: var(--text-color);
-  }
-  .collection-mobile-header h1 {
-    flex: 1 1 auto;
-    min-width: 0;
-    margin: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: var(--ui-font-18, 18px);
-    font-weight: 720;
-    line-height: 1.2;
-  }
-  .collection-mobile-header .collection-mobile-header__back,
-  .collection-mobile-header .collection-mobile-header__more {
-    flex: none;
-    width: var(--ui-layout-44, 44px);
-    min-width: var(--ui-layout-44, 44px);
-    height: var(--ui-layout-44, 44px);
-    padding: 0;
-    border-radius: 11px;
-    background: transparent;
-    color: var(--text-color);
-  }
-  .collection-mobile-status {
-    align-self: flex-start;
-  }
-  .collection-mobile-status.is-collecting {
-    color: var(--success-color);
-  }
-  .collection-mobile-status::before {
-    content: '•';
-    margin-right: var(--ui-space-4, 4px);
-  }
   .collection-stat-controls h3 {
     margin: 0;
     font-size: var(--ui-font-14, 14px);
@@ -2137,14 +2005,6 @@
     display: flex;
     gap: var(--ui-space-8, 8px);
     font-size: var(--ui-font-12, 12px);
-  }
-  .response-detail-badges span {
-    padding: var(--ui-space-4, 4px) var(--ui-space-8, 8px);
-    background: var(--workspace-canvas);
-    border-radius: var(--ui-space-6, 6px);
-  }
-  .response-detail-state {
-    color: var(--primary-color);
   }
   .response-detail-times {
     display: grid;

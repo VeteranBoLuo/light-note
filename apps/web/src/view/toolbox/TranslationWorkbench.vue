@@ -1,5 +1,12 @@
 <template>
   <main class="translation-workbench" data-mobile-resource-scroll>
+    <ToolboxPageHeader tool-id="translation" class="translation-page-header" @back="returnToToolbox">
+      <template #actions
+        ><BButton class="translation-history-trigger" @click="historyOpen = true">{{
+          t('translation.history')
+        }}</BButton></template
+      >
+    </ToolboxPageHeader>
     <aside class="translation-history-desktop"
       ><TranslationHistory
         :selected="activeJobId"
@@ -9,12 +16,9 @@
         @deleted="onRecordsDeleted"
     /></aside>
     <section class="translation-workspace" :class="{ 'requirements-open': requirementsOpen }">
-      <BButton class="translation-back" type="text" @click="returnToToolbox"
-        ><SvgIcon :src="icon.toolbox.back" size="14" />{{ t('translation.back') }}</BButton
-      >
-      <h1>{{ t('translation.title') }}</h1>
-      <BButton class="translation-history-trigger" @click="historyOpen = true">{{ t('translation.history') }}</BButton>
-      <div v-if="recordLoading" class="translation-record-loading" role="status" :aria-label="t('common.loading')" />
+      <div class="translation-record-loading"
+        ><BLoading :loading="recordLoading" inline :title="t('common.loading')"
+      /></div>
       <BTabs
         :active-tab="mode"
         @update:active-tab="!locked && (mode = $event)"
@@ -115,35 +119,29 @@
                 <span class="translation-count" :class="{ 'is-error': text.length > 30000 }"
                   >{{ text.length.toLocaleString() }} / 30,000</span
                 >
-                <p v-if="text.length > 30000" class="is-error" role="alert">{{ t('translation.tooLong') }}</p>
+                <ToolboxFeedback v-if="text.length > 30000" state="error">{{
+                  t('translation.tooLong')
+                }}</ToolboxFeedback>
               </template>
-              <article
-                v-else-if="originalText"
-                class="translation-prose"
-                v-html="originalHtml"
-              ></article>
+              <article v-else-if="originalText" class="translation-prose" v-html="originalHtml"></article>
               <p v-if="mode === 'resource'" class="translation-source-hint">{{ t('translation.availableText') }}</p>
             </div>
           </section>
           <section class="translation-output" :class="{ 'is-empty': !showResult }" :aria-busy="busy">
             <div class="translation-output-heading"
               ><strong>{{ t('translation.translated') }}</strong
-              ><span v-if="busy">{{ t('translation.translating') }}</span></div
-            >
+              ><BLoading v-if="busy" inline loading :title="t('translation.translating')"
+            /></div>
             <div ref="outputScroll" class="translation-output-scroll" @scroll="trackOutputScroll">
-              <article
-                v-if="showResult"
-                class="translation-prose"
-                v-html="translatedHtml"
-              ></article>
-              <div v-else class="translation-empty"
+              <article v-if="showResult" class="translation-prose" v-html="translatedHtml"></article>
+              <div v-else-if="!busy && !recordLoading" class="translation-empty"
                 ><SvgIcon :src="icon.resource.note" size="36" /><strong>{{ t('translation.emptyTitle') }}</strong
                 ><p>{{ t('translation.emptyHint') }}</p></div
               >
             </div>
           </section>
         </div>
-        <p v-if="error" class="is-error" role="alert">{{ error }}</p>
+        <ToolboxFeedback v-if="error && !historyOpen" state="error">{{ error }}</ToolboxFeedback>
       </div>
       <footer class="translation-footer">
         <span class="translation-footer-spacer"></span>
@@ -167,15 +165,26 @@
       fullscreen-mobile
       width="var(--ui-layout-320, 320px)"
     >
-      <div class="translation-history-mobile"
-        ><TranslationHistory
-          v-if="historyOpen"
-          :selected="activeJobId"
-          :disabled="locked || recordLoading"
-          :revision="historyRevision"
-          @select="openRecord"
-          @deleted="onRecordsDeleted"
-      /></div>
+      <BLoading class="translation-history-mobile" :loading="recordLoading" :title="t('common.loading')">
+        <div class="translation-history-content">
+          <ToolboxFeedback v-if="failedRecordId" state="error"
+            >{{ t('translation.historyFailed') }}
+            <template #actions
+              ><BButton :disabled="recordLoading" @click="openRecord(failedRecordId)">{{
+                t('common.retry')
+              }}</BButton></template
+            >
+          </ToolboxFeedback>
+          <TranslationHistory
+            v-if="historyOpen"
+            :selected="activeJobId"
+            :disabled="locked || recordLoading"
+            :revision="historyRevision"
+            @select="openRecord"
+            @deleted="onRecordsDeleted"
+          />
+        </div>
+      </BLoading>
     </BModal>
     <BModal
       v-model:visible="pickerOpen"
@@ -218,6 +227,8 @@
   </main>
 </template>
 <script setup lang="ts">
+  import ToolboxFeedback from './components/ToolboxFeedback.vue';
+  import ToolboxPageHeader from './components/ToolboxPageHeader.vue';
   import { computed, ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter, useRoute } from 'vue-router';
@@ -244,6 +255,7 @@
   import ResourcePickerPanel from '@/components/resourcePicker/ResourcePickerPanel.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import type { ResourcePickerItem, ResourcePickerType } from '@/composables/useResourcePickerSearch';
+  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
@@ -329,7 +341,8 @@
   }
   const historyOpen = ref(false),
     historyRevision = ref(0),
-    recordLoading = ref(false);
+    recordLoading = ref(false),
+    failedRecordId = ref('');
   let recordGeneration = 0;
   function onRecordsDeleted(ids: string[]) {
     if (ids.includes(activeJobId.value)) {
@@ -356,6 +369,7 @@
     if (busy.value || uncertain.value || !current()) return;
     const generation = ++recordGeneration;
     recordLoading.value = true;
+    failedRecordId.value = '';
     error.value = '';
     try {
       const saved = await fetchTranslationRecord(id);
@@ -393,7 +407,10 @@
         );
       }
     } catch {
-      if (current() && generation === recordGeneration) error.value = t('translation.historyFailed');
+      if (current() && generation === recordGeneration) {
+        error.value = t('translation.historyFailed');
+        failedRecordId.value = id;
+      }
     } finally {
       if (generation === recordGeneration) recordLoading.value = false;
     }
@@ -629,8 +646,14 @@
     box-sizing: border-box;
     padding: var(--ui-space-24, 24px);
     background: var(--surface-panel-bg);
-    display: flex;
+    display: grid;
+    grid-template-columns: var(--ui-layout-240, 240px) minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    row-gap: var(--ui-space-14, 14px);
     color: var(--text-color);
+  }
+  .translation-page-header {
+    grid-column: 1 / -1;
   }
   .translation-history-desktop {
     width: var(--ui-layout-240, 240px);
@@ -646,6 +669,16 @@
   .translation-history-mobile :deep(h2) {
     display: none;
   }
+  .translation-history-content {
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .translation-history-content > .translation-history {
+    flex: 1;
+    min-height: 0;
+  }
   .translation-history-mobile {
     height: calc(100vh - var(--ui-layout-160, 160px));
     height: calc(100dvh - var(--ui-layout-160, 160px));
@@ -655,34 +688,9 @@
   }
   .translation-record-loading {
     position: absolute;
-    inset-inline: var(--ui-space-12, 12px);
-    top: 0;
-    /* ui-density-fixed: 非占位进度描边 */
-    height: 2px;
-    overflow: hidden;
+    inset-inline-end: var(--ui-space-16, 16px);
+    top: var(--ui-space-12, 12px);
     pointer-events: none;
-    &::after {
-      content: '';
-      display: block;
-      height: 100%;
-      width: 25%;
-      background: var(--primary-color);
-      animation: translation-record-progress 1.2s ease-in-out infinite alternate;
-    }
-  }
-  @keyframes translation-record-progress {
-    from {
-      transform: translateX(0);
-    }
-    to {
-      transform: translateX(300%);
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .translation-record-loading::after {
-      animation: none;
-      width: 100%;
-    }
   }
   .translation-workspace {
     position: relative;
@@ -703,17 +711,7 @@
   .translation-workspace.requirements-open {
     min-height: var(--ui-layout-680, 680px);
   }
-  .translation-back {
-    align-self: flex-start;
-    flex-shrink: 0;
-    padding: 0;
-    color: var(--desc-color);
-    font-size: var(--ui-font-12, 12px);
-  }
-  h1 {
-    font-size: var(--ui-font-24, 24px);
-    margin: var(--ui-space-12, 12px) 0 var(--ui-space-16, 16px);
-  }
+
   h2 {
     display: none;
     margin: 0 0 var(--ui-space-12, 12px);
@@ -881,8 +879,8 @@
     margin-bottom: var(--ui-space-16, 16px);
     font-size: var(--ui-font-14, 14px);
   }
-  .translation-output-heading span {
-    color: var(--desc-color);
+  .translation-output-heading > .b-loading-inline {
+    min-height: 0;
     font-size: var(--ui-font-12, 12px);
   }
   .has-output .translation-source-content :deep(textarea) {
@@ -1002,6 +1000,16 @@
     border-collapse: collapse;
   }
   @media (max-width: 767px) {
+    .translation-history-content {
+      height: 100%;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .translation-history-content > .translation-history {
+      flex: 1;
+      min-height: 0;
+    }
     .translation-history-mobile {
       height: 100%;
     }
@@ -1011,7 +1019,7 @@
     .translation-history-trigger.b_btn {
       display: flex;
       align-self: flex-end;
-      margin-top: var(--ui-space-8, 8px);
+      margin-top: 0;
     }
     .translation-footer-spacer {
       display: none;
@@ -1113,8 +1121,13 @@
       border-left: 0;
     }
     .translation-workbench {
-      padding: 0;
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: auto minmax(0, 1fr);
+      padding: var(--ui-space-10, 10px) 0 0;
       background: var(--background-color);
+    }
+    .translation-page-header {
+      margin-inline: var(--ui-space-16, 16px);
     }
     .translation-workspace {
       border: 0;
@@ -1126,10 +1139,7 @@
       display: flex;
       flex-direction: column;
     }
-    h1,
-    .translation-back {
-      display: none;
-    }
+
     h2 {
       display: none;
     }

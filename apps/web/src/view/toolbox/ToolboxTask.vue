@@ -1,9 +1,22 @@
 <template>
   <main ref="pageRef" class="toolbox-task" :class="{ 'is-translation': isTranslation }" data-mobile-resource-scroll>
     <div class="toolbox-task__inner">
-      <BButton class="toolbox-task__back" @click="returnToToolboxParent">
-        <SvgIcon :src="icon.toolbox.back" size="16" />{{ t('toolbox.task.backHome') }}
-      </BButton>
+      <ToolboxPageHeader
+        :tool-id="job?.toolId"
+        :title="isTranslation ? t('translation.title') : artifact?.title || t('toolbox.task.title')"
+        :category="job ? t(`toolbox.tool.${job.toolId}.name`) : undefined"
+        :back-label="t('toolbox.task.backHome')"
+        @back="returnToToolboxParent"
+      >
+        <template v-if="job" #actions>
+          <span class="toolbox-task__status" :class="`is-${job.status}`">
+            <BChip :tone="toolboxJobStatusTone(isRetrying ? 'processing' : job.status)">
+              {{ isRetrying ? t('toolbox.task.retryingTitle') : t(`toolbox.task.${job.status}`) }}
+            </BChip>
+            <small>{{ formatDate(job.updatedAt) }}</small>
+          </span>
+        </template>
+      </ToolboxPageHeader>
 
       <div v-if="loading && !job" class="toolbox-task__state"
         ><BLoading inline loading :title="t('toolbox.task.loading')"
@@ -28,28 +41,6 @@
           <span>{{ t('toolbox.project.linkFailed') }}</span>
           <BButton :loading="linkingProject" @click="retryProjectLink">{{ t('toolbox.project.retryLink') }}</BButton>
         </div>
-        <header v-if="isTranslation" class="translation-task-heading"
-          ><h1>{{ t('translation.title') }}</h1
-          ><p>{{ t('translation.subtitle') }}</p></header
-        >
-        <header v-if="!isTranslation" class="toolbox-task__header">
-          <span class="toolbox-task__tool-icon"><SvgIcon :src="presentation.icon" size="24" /></span>
-          <div class="toolbox-task__title">
-            <span>{{ t(`toolbox.tool.${job.toolId}.name`) }}</span>
-            <h1>{{ artifact?.title || t('toolbox.task.title') }}</h1>
-          </div>
-          <span class="toolbox-task__status" :class="`is-${job.status}`">
-            <SvgIcon
-              :class="{ 'is-spinning': job.status === 'processing' || isRetrying }"
-              :src="statusIcon"
-              size="19"
-            />
-            <span>
-              <strong>{{ isRetrying ? t('toolbox.task.retryingTitle') : t(`toolbox.task.${job.status}`) }}</strong>
-              <small>{{ formatDate(job.updatedAt) }}</small>
-            </span>
-          </span>
-        </header>
 
         <div v-if="refreshFailed" class="toolbox-task__refresh-warning" role="status">
           <SvgIcon :src="icon.message.warning" size="18" />
@@ -61,7 +52,7 @@
           <div class="toolbox-task__progress-head">
             <div
               ><span>{{ t('toolbox.task.stageCurrent') }}</span
-              ><strong>{{ currentStageLabel }}</strong
+              ><strong><BLoading inline loading :title="currentStageLabel" /></strong
               ><small>{{ currentStageDescription }}</small></div
             >
             <span>{{ formatDate(job.updatedAt) }}</span>
@@ -71,12 +62,6 @@
             <li v-for="stage in stageSteps" :key="stage.key" :class="`is-${stage.state}`">
               <span class="toolbox-stage-list__marker">
                 <SvgIcon v-if="stage.state === 'done'" :src="icon.message.success" size="18" />
-                <SvgIcon
-                  v-else-if="stage.state === 'active'"
-                  class="is-spinning"
-                  :src="icon.message.loading"
-                  size="18"
-                />
                 <span v-else>{{ stage.index }}</span>
               </span>
               <span class="toolbox-stage-list__copy">
@@ -102,13 +87,7 @@
           :class="{ 'is-retrying': isRetrying }"
           :role="isRetrying ? 'status' : 'alert'"
         >
-          <SvgIcon
-            :class="{ 'is-spinning': isRetrying }"
-            :src="
-              isRetrying ? icon.message.loading : job.status === 'failed' ? icon.message.error : icon.message.warning
-            "
-            size="19"
-          /><div
+          <SvgIcon :src="job.status === 'failed' ? icon.message.error : icon.message.warning" size="19" /><div
             ><strong>{{ isRetrying ? t('toolbox.task.retryingTitle') : t(`toolbox.task.${job.status}`) }}</strong
             ><span>{{ visibleErrorMessage }}</span></div
           >
@@ -177,8 +156,8 @@
                   <span>{{ t('toolbox.task.resultEyebrow') }}</span>
                   <p>{{ isDocumentSummary ? t('toolbox.documentSummary.sourceHint') : resultMaterialSummary }}</p>
                   <div class="toolbox-result__deliver"
-                    ><BButton size="small" @click="copyResult">{{ t('toolbox.local.copyResult') }}</BButton
-                    ><BButton v-if="!artifact.meta?.comparisonTable" size="small" @click="downloadResult">{{
+                    ><BButton @click="copyResult">{{ t('toolbox.local.copyResult') }}</BButton
+                    ><BButton v-if="!artifact.meta?.comparisonTable" @click="downloadResult">{{
                       t('toolbox.local.downloadResult')
                     }}</BButton></div
                   >
@@ -388,6 +367,7 @@
 </template>
 
 <script setup lang="ts">
+  import ToolboxPageHeader from './components/ToolboxPageHeader.vue';
   import OcrResult from './components/OcrResult.vue';
   import KnowledgeAuditResult from './components/KnowledgeAuditResult.vue';
   import ComparisonTableResult from './components/ComparisonTableResult.vue';
@@ -400,8 +380,8 @@
   import { downloadToolboxBlob, safeDownloadBaseName } from '@/utils/toolboxLocal';
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
-  import type { ToolboxToolId } from '@lightnote/shared/toolbox-protocol';
   import { saveToolboxNote } from '@/utils/saveToolboxNote';
+  import BChip from '@/components/base/BasicComponents/BChip.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
@@ -420,7 +400,7 @@
   import { useGrowth } from '@/composables/useGrowth';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import icon from '@/config/icon';
-  import { TOOLBOX_PRESENTATION } from '@/config/toolbox';
+  import { toolboxJobStatusTone } from '@/config/toolbox';
   import { useUserStore } from '@/store';
   import { buildNoteDetailRequestScope } from '@/api/noteDetailPrefetch';
   import { stripAiAnalysisCitations } from '@/utils/aiAnalysisContent';
@@ -532,9 +512,6 @@
   const POLL_DELAY_MS = 1800;
   const MAX_POLL_RETRY_DELAY_MS = 15_000;
   const jobId = computed(() => String(route.params.jobId || ''));
-  const presentation = computed(
-    () => TOOLBOX_PRESENTATION[job.value?.toolId as ToolboxToolId] || TOOLBOX_PRESENTATION.material_to_note,
-  );
   const isTerminal = computed(() =>
     Boolean(
       job.value && ['succeeded', 'partial_succeeded', 'failed', 'cancelled', 'expired'].includes(job.value.status),
@@ -560,14 +537,6 @@
     () => job.value?.toolId === 'pdf_text_extractor' && artifact.value?.type === 'document_summary',
   );
   const isPromptCreation = computed(() => job.value?.toolId === 'idea_to_draft');
-  const statusIcon = computed(() => {
-    if (isRetrying.value) return icon.message.loading;
-    if (job.value?.status === 'succeeded') return icon.message.success;
-    if (job.value?.status === 'partial_succeeded') return icon.message.warning;
-    if (['failed', 'expired'].includes(job.value?.status || '')) return icon.message.error;
-    if (job.value?.status === 'processing') return icon.message.loading;
-    return icon.toolbox.task;
-  });
   const currentStageKey = computed<'prepare' | 'sources' | 'produce' | 'deliver'>(() => {
     const stage = String(job.value?.stage || '').toLowerCase();
     if (['waiting_document', 'reading_sources', 'sources_ready', 'preparing_prompt', 'prompt_ready'].includes(stage)) {
@@ -1074,27 +1043,7 @@
     width: min(var(--ui-layout-1040, 1040px), 100%);
     margin: 0 auto;
   }
-  .toolbox-task__back {
-    position: sticky;
-    z-index: 8;
-    top: var(--ui-space-8, 8px);
-    height: var(--ui-layout-32, 32px);
-    margin-bottom: var(--ui-space-14, 14px);
-    padding: 0 var(--ui-space-8, 8px);
-    gap: var(--ui-space-6, 6px);
-    color: var(--desc-color);
-    border: 1px solid var(--surface-border-color);
-    border-radius: 999px;
-    background: var(--card-background);
-    box-shadow: 0 6px 18px rgba(20, 24, 40, 0.08);
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .toolbox-task__back:hover {
-      border-color: var(--primary-color);
-      color: var(--primary-color);
-      background: var(--hover-background);
-    }
-  }
+
   .toolbox-task__state {
     min-height: var(--ui-layout-320, 320px);
     display: flex;
@@ -1120,42 +1069,7 @@
     color: var(--text-color);
     line-height: 1.6;
   }
-  .toolbox-task__header {
-    min-width: 0;
-    padding: var(--ui-space-20, 20px) var(--ui-space-22, 22px);
-    display: flex;
-    align-items: center;
-    gap: var(--ui-space-14, 14px);
-    border: 1px solid var(--surface-border-color);
-    border-radius: 19px;
-    background: var(--card-background);
-  }
-  .toolbox-task__tool-icon {
-    width: var(--ui-layout-50, 50px);
-    height: var(--ui-layout-50, 50px);
-    flex: 0 0 var(--ui-layout-50, 50px);
-    display: grid;
-    place-items: center;
-    border: 1px solid color-mix(in srgb, var(--primary-color) 20%, var(--surface-border-color));
-    border-radius: 15px;
-    color: var(--primary-color);
-    background: color-mix(in srgb, var(--primary-color) 7%, transparent);
-  }
-  .toolbox-task__title {
-    min-width: 0;
-    margin-right: auto;
-  }
-  .toolbox-task__title > span {
-    color: var(--desc-color);
-    font-size: var(--ui-font-11, 11px);
-  }
-  .toolbox-task__title h1 {
-    margin: var(--ui-space-3, 3px) 0 0;
-    overflow: hidden;
-    font-size: var(--ui-font-21, 21px);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
+
   .toolbox-task__progress {
     margin-top: var(--ui-space-12, 12px);
     padding: var(--ui-space-15, 15px) var(--ui-space-17, 17px);
@@ -1477,21 +1391,7 @@
       padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px)
         calc(var(--ui-space-24, 24px) + env(safe-area-inset-bottom));
     }
-    .toolbox-task__back {
-      display: none;
-    }
-    .toolbox-task__header {
-      padding: var(--ui-space-14, 14px);
-      border-radius: 16px;
-    }
-    .toolbox-task__tool-icon {
-      width: var(--ui-layout-42, 42px);
-      height: var(--ui-layout-42, 42px);
-      flex-basis: var(--ui-layout-42, 42px);
-    }
-    .toolbox-task__title h1 {
-      font-size: var(--ui-font-17, 17px);
-    }
+
     .toolbox-task__progress {
       padding: var(--ui-space-13, 13px);
     }
@@ -1528,7 +1428,6 @@
       width: 100%;
     }
   }
-  html.light-note-mobile-rendering .toolbox-task__tool-icon,
   html.light-note-mobile-rendering .toolbox-task__draft-banner,
   html.light-note-mobile-rendering .toolbox-source-list__index {
     background: var(--card-background);
@@ -1537,57 +1436,17 @@
   .toolbox-task__inner {
     width: min(var(--ui-layout-1120, 1120px), 100%);
   }
-  .toolbox-task__header {
-    padding: var(--ui-space-21, 21px) var(--ui-space-23, 23px);
-    border-radius: 20px;
-    background: linear-gradient(
-      120deg,
-      color-mix(in srgb, var(--primary-color) 5%, var(--card-background)),
-      var(--card-background) 58%
-    );
-    box-shadow: var(--surface-card-shadow);
-  }
+
   .toolbox-task__status {
-    min-width: var(--ui-layout-142, 142px);
-    padding: var(--ui-space-9, 9px) var(--ui-space-11, 11px);
-    display: flex;
-    align-items: center;
-    gap: var(--ui-space-8, 8px);
-    border: 1px solid var(--surface-border-color);
-    border-radius: 12px;
-    color: var(--primary-color);
-    background: var(--card-background);
-  }
-  .toolbox-task__status > span {
-    min-width: 0;
     display: grid;
-    gap: var(--ui-space-1, 1px);
-  }
-  .toolbox-task__status strong {
-    font-size: var(--ui-font-11, 11px);
+    justify-items: end;
+    flex-shrink: 0;
+    gap: var(--ui-space-4, 4px);
   }
   .toolbox-task__status small {
-    overflow: hidden;
     color: var(--desc-color);
-    font-size: var(--ui-font-8_5, 8.5px);
-    text-overflow: ellipsis;
+    font-size: var(--ui-font-10, 10px);
     white-space: nowrap;
-  }
-  .toolbox-task__status.is-succeeded {
-    border-color: var(--chip-success-border, #8dd9bd);
-    color: var(--success-color, #07835f);
-  }
-  .toolbox-task__status.is-partial_succeeded {
-    border-color: var(--chip-pending-border, #e0bd72);
-    color: var(--warning-color, #ad6b0d);
-  }
-  .toolbox-task__status.is-failed,
-  .toolbox-task__status.is-expired {
-    border-color: var(--chip-danger-border, #e69b9b);
-    color: var(--danger-color, #d93b3b);
-  }
-  .is-spinning {
-    animation: toolbox-task-spin 1s linear infinite;
   }
   .toolbox-task__progress {
     margin-top: var(--ui-space-14, 14px);
@@ -1657,6 +1516,11 @@
     border-radius: 50%;
     font-size: var(--ui-font-9, 9px);
     font-weight: 700;
+  }
+  .toolbox-task__progress-head strong > .b-loading-inline {
+    min-height: 0;
+    font: inherit;
+    color: inherit;
   }
   .toolbox-stage-list__copy {
     min-width: 0;
@@ -1907,20 +1771,8 @@
   .toolbox-source-list__state.is-unavailable {
     color: var(--danger-color, #d93b3b);
   }
-  @keyframes toolbox-task-spin {
-    to {
-      transform: rotate(360deg);
-    }
-  }
   @media (max-width: 767px) {
-    .toolbox-task__header {
-      align-items: flex-start;
-    }
-    .toolbox-task__status {
-      min-width: 0;
-      padding: var(--ui-space-7, 7px);
-    }
-    .toolbox-task__status > span {
+    .toolbox-task__status small {
       display: none;
     }
     .toolbox-stage-list {
@@ -1966,7 +1818,6 @@
       grid-column: 2;
     }
   }
-  html.light-note-mobile-rendering .toolbox-task__header,
   html.light-note-mobile-rendering .toolbox-stage-list li.is-active,
   html.light-note-mobile-rendering .toolbox-source-summary,
   html.light-note-mobile-rendering .toolbox-result__evidence-note {
@@ -1976,23 +1827,9 @@
     border-width: 2px;
     box-shadow: none;
   }
-  @media (prefers-reduced-motion: reduce) {
-    .is-spinning {
-      animation: none;
-    }
-  }
 </style>
 
 <style scoped lang="less">
-  .is-translation .toolbox-task__back {
-    border: 0;
-    box-shadow: none;
-    background: transparent;
-    padding: 0;
-    min-height: 0;
-    color: var(--desc-color);
-    font-size: var(--ui-font-12, 12px);
-  }
   .toolbox-task.is-translation {
     background: var(--surface-panel-bg);
   }
@@ -2003,25 +1840,12 @@
     border-radius: 12px;
     background: var(--background-color);
   }
-  .translation-task-heading {
-    display: flex;
-    align-items: baseline;
-    gap: var(--ui-space-16, 16px);
-    margin: var(--ui-space-12, 12px) 0 var(--ui-space-20, 20px);
-  }
-  .translation-task-heading h1 {
-    font-size: var(--ui-font-24, 24px);
-    margin: 0;
-  }
-  .translation-task-heading p,
-  .translation-task-heading > span,
+
   .translation-task-save-form {
     font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
   }
-  .translation-task-heading > span {
-    margin-left: auto;
-  }
+
   .translation-task-source {
     display: flex;
     align-items: center;
@@ -2050,18 +1874,10 @@
     margin: var(--ui-space-8, 8px) 0 0;
   }
   @media (max-width: 767px) {
-    .translation-task-heading h1 {
-      display: none;
-    }
     .is-translation .toolbox-task__inner {
       padding: var(--ui-space-16, 16px);
     }
-    .translation-task-heading {
-      flex-wrap: wrap;
-    }
-    .translation-task-heading p {
-      display: none;
-    }
+
     .translation-task-source {
       display: grid;
       grid-template-columns: auto minmax(0, 1fr) auto;

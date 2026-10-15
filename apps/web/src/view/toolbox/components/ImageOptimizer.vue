@@ -165,11 +165,14 @@
               <span v-else>{{ t('toolbox.local.waitingOptimize') }}</span>
             </div>
             <div class="image-result-card__actions">
-              <BButton v-if="entry.result" size="small" :disabled="optimizing" @click="downloadOne(entry.id)">
+              <BButton v-if="entry.result" :disabled="optimizing" @click="downloadOne(entry.id)">
                 <SvgIcon :src="icon.toolbox.download" size="14" />{{ t('toolbox.local.downloadOne') }}
               </BButton>
               <BTooltip :title="t('toolbox.workbench.removeFile')">
                 <BButton
+                  class="image-result-card__remove"
+                  type="text"
+                  icon-only
                   :disabled="optimizing"
                   :aria-label="t('toolbox.workbench.removeFile')"
                   @click="removeEntry(entry.id)"
@@ -576,7 +579,7 @@
   .image-tool__settings :deep(.b_btn),
   .image-tool__summary :deep(.b_btn),
   .image-result-card :deep(.b_btn) {
-    gap: var(--ui-space-7, 7px);
+    gap: var(--ui-space-6, 6px);
   }
   .image-tool__settings {
     padding: var(--ui-space-14, 14px);
@@ -602,7 +605,7 @@
     margin: calc(-1 * var(--ui-space-5, 5px)) var(--ui-space-2, 2px) 0;
     display: flex;
     align-items: center;
-    gap: var(--ui-space-7, 7px);
+    gap: var(--ui-space-6, 6px);
     color: var(--desc-color);
     font-size: var(--ui-font-12, 12px);
     line-height: 1.5;
@@ -803,9 +806,9 @@
   .image-result-card__actions {
     display: flex;
     align-items: center;
-    gap: var(--ui-space-5, 5px);
+    gap: var(--ui-space-8, 8px);
   }
-  .image-result-card__actions > :deep(.b_btn:last-child) {
+  .image-result-card__remove.b_btn {
     width: var(--ui-layout-32, 32px);
     padding: 0;
     color: var(--desc-color);
@@ -817,6 +820,10 @@
     }
   }
   @media (max-width: 767px) {
+    .image-result-card__remove.b_btn {
+      width: var(--ui-control-44, 44px);
+      height: var(--ui-control-44, 44px);
+    }
     .image-tool {
       gap: var(--ui-space-13, 13px);
     }

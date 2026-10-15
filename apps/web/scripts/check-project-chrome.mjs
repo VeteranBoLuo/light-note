@@ -19,10 +19,10 @@ try {
       await page.waitForTimeout(400);
       if (width < 768) {
         const topBar = await page.evaluate(() => {
-          const back = document.querySelector('.project-breadcrumb > button:last-of-type');
+          const back = document.querySelector('.toolbox-page-header__back');
           const controls = [...document.querySelectorAll('.project-mobile-controls button')];
           return {
-            font: parseFloat(getComputedStyle(document.querySelector('.project-breadcrumb__mobile-title')).fontSize),
+            font: parseFloat(getComputedStyle(document.querySelector('.toolbox-page-header h1')).fontSize),
             heights: [back, ...controls].map((n) => n.getBoundingClientRect().height),
           };
         });
@@ -34,11 +34,11 @@ try {
       }
       const nav = page.locator('.project-section-navigation');
       if (width >= 1200) {
-        await nav.locator(':scope > button').nth(2).click();
+        await nav.locator(':scope > button').nth(1).click();
       } else {
         assert.equal(await nav.isVisible(), false);
         await page.locator('.project-directory-trigger').click();
-        await page.getByRole('menuitem').nth(2).click();
+        await page.getByRole('menuitem').nth(1).click();
         await page.getByRole('menu').waitFor({ state: 'detached' });
       }
       await page.waitForTimeout(350);
@@ -54,8 +54,11 @@ try {
         };
       });
       assert(position.headTop >= -1, JSON.stringify(position));
-      assert(position.boardTop >= position.headBottom - 1, 'header hides selected section');
-      assert.equal(await nav.locator(':scope > button').nth(2).getAttribute('aria-current'), 'location');
+      assert(
+        position.boardTop >= position.headBottom - 1,
+        `header hides selected section: ${width} ${theme} ${JSON.stringify(position)}`,
+      );
+      assert.equal(await nav.locator(':scope > button').nth(1).getAttribute('aria-current'), 'location');
       assert(!position.overflow, 'horizontal overflow');
       await page.screenshot({ path: join(tmpdir(), `project-chrome-${width}-${theme}.png`) });
       const settings = page.locator(
@@ -71,7 +74,7 @@ try {
           getMobilePageBack('toolboxWorkbench')?.();
         });
       } else {
-        await page.locator('.project-breadcrumb > button').last().click();
+        await page.locator('.toolbox-page-header__back').last().click();
       }
       await page.locator('.workspace-list-section').waitFor();
       assert.deepEqual(errors, []);
@@ -90,14 +93,12 @@ try {
       await page.reload();
       await page.locator('.workspace-summary').waitFor();
       await page.waitForTimeout(400);
-      if (width < 768) {
-        await page.locator('.project-mobile-controls .project-settings-trigger').click();
-        await page
-          .getByRole('button', { name: theme === 'night' ? 'Back to Knowledge Workshop' : '返回知识工坊', exact: true })
-          .click();
-      } else {
-        await page.locator('.project-breadcrumb__workshop').click();
-      }
+      await page
+        .locator(width >= 1200 ? '.project-settings-desktop' : '.project-mobile-controls .project-settings-trigger')
+        .click();
+      await page
+        .getByRole('button', { name: theme === 'night' ? 'Back to Knowledge Workshop' : '返回知识工坊', exact: true })
+        .click();
       await page.locator('.toolbox-home').waitFor();
       assert.equal(await page.locator('.workspace-list-section').count(), 0);
       assert.deepEqual(errors, []);
@@ -130,7 +131,7 @@ try {
       Math.abs((await rail.evaluate((e) => e.getBoundingClientRect().top)) - initial) <= 1,
       'rail moves on section jump',
     );
-    assert(await page.locator('.project-directory-back button').isVisible());
+    assert(await page.locator('.toolbox-page-header__back').isVisible());
     await page.close();
     console.log(height, 'fixed rail / page bottom / overview jump passed');
   }

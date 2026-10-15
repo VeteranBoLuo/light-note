@@ -1,4 +1,4 @@
-import { safeDownloadBaseName } from '@/utils/toolboxLocal';
+import { reserveToolboxFileName, safeDownloadBaseName } from '@/utils/toolboxLocal';
 import { loadPdfJsRuntime } from '@/utils/pdfJsRuntime';
 
 export const PDF_TO_IMAGES_MAX_FILES = 4;
@@ -140,13 +140,9 @@ export function releasePdfImageResults(results: PdfImageResult[]) {
 export async function bundlePdfImageResults(results: PdfImageResult[]) {
   const { default: JSZip } = await import('jszip');
   const archive = new JSZip();
-  const usedNames = new Map<string, number>();
+  const usedNames = new Set<string>();
   for (const result of results) {
-    const seen = usedNames.get(result.fileName) || 0;
-    usedNames.set(result.fileName, seen + 1);
-    const dot = result.fileName.lastIndexOf('.');
-    const name =
-      seen && dot > 0 ? `${result.fileName.slice(0, dot)}-${seen + 1}${result.fileName.slice(dot)}` : result.fileName;
+    const name = reserveToolboxFileName(result.fileName, usedNames);
     archive.file(name, result.blob);
   }
   return archive.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });

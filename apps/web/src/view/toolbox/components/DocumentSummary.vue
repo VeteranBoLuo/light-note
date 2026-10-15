@@ -6,7 +6,6 @@
       :loading="current.loading"
       @click="openSummary"
     >
-      <SvgIcon v-if="!current.loading" :src="icon.ai.summary" size="16" />
       {{
         t(
           current.loading
@@ -38,10 +37,8 @@
       <p class="document-summary-filename" :title="file.name">{{ file.name }}</p>
       <BButton v-if="current.jobId" type="text" @click="openTask">{{ t('toolbox.documentSummary.retained') }}</BButton>
       <p v-if="warning" class="document-summary-notice">{{ warning }}</p>
-      <p v-if="current.loading" class="document-summary-notice" role="status">{{
-        t('toolbox.documentSummary.generating')
-      }}</p>
-      <p v-if="current.error" class="document-summary-error" role="alert">{{ current.error }}</p>
+      <ToolboxFeedback v-if="current.loading" state="loading" :title="t('toolbox.documentSummary.generating')" />
+      <ToolboxFeedback v-else-if="current.error" state="error">{{ current.error }}</ToolboxFeedback>
       <AiSkillResultContent v-if="current.content" :result="{ kind: 'grounded_markdown', content: current.content }" />
     </div>
     <template #footer>
@@ -55,7 +52,7 @@
         </BButton>
         <div class="document-summary-footer-actions">
           <BButton :disabled="!current.content" @click="copySummary">{{ t('toolbox.documentSummary.copy') }}</BButton>
-          <BButton type="primary" :disabled="!current.artifactId || saving" @click="saveSummary">{{
+          <BButton type="primary" :disabled="!current.artifactId" :loading="saving" @click="saveSummary">{{
             t('aiSkills.saveAsNote')
           }}</BButton>
         </div>
@@ -64,6 +61,7 @@
   </BModal>
 </template>
 <script setup lang="ts">
+  import ToolboxFeedback from './ToolboxFeedback.vue';
   import { saveToolboxNote } from '@/utils/saveToolboxNote';
   import { computed, onDeactivated, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
@@ -112,11 +110,22 @@
     const artifactId = current.value.artifactId;
     saving.value = true;
     try {
-      const result = await saveToolboxNote({ artifactId, version: 1, title: `${props.file.name.replace(/\.[^.]+$/, '')} · ${t('toolbox.documentSummary.title')}`,
+      const result = await saveToolboxNote({
+        artifactId,
+        version: 1,
+        title: `${props.file.name.replace(/\.[^.]+$/, '')} · ${t('toolbox.documentSummary.title')}`,
         isCurrent: () => current.value.artifactId === artifactId,
       });
-      if (result?.openAfterSave) await closeCurrentMobileOverlayThen(() => { visible.value = false; }, () => router.push(`/noteLibrary/${encodeURIComponent(result.noteId)}`));
-    } finally { saving.value = false; }
+      if (result?.openAfterSave)
+        await closeCurrentMobileOverlayThen(
+          () => {
+            visible.value = false;
+          },
+          () => router.push(`/noteLibrary/${encodeURIComponent(result.noteId)}`),
+        );
+    } finally {
+      saving.value = false;
+    }
   }
   watch(
     () => buildNoteDetailRequestScope(user),
@@ -147,6 +156,7 @@
   }
   .document-summary-body {
     min-width: 0;
+    min-height: var(--ui-layout-160, 160px);
   }
   .document-summary-body :deep(h1),
   .document-summary-body :deep(h2) {
@@ -161,9 +171,6 @@
   .document-summary-notice {
     color: var(--desc-color);
     font-size: var(--ui-font-12, 12px);
-  }
-  .document-summary-error {
-    color: var(--danger-color);
   }
   .document-summary-footer {
     display: flex;

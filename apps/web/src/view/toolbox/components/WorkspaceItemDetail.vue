@@ -284,7 +284,7 @@
             t('toolbox.itemDetail.reload')
           }}</BButton></p
         >
-        <p v-if="error || localError" role="alert" class="item-detail__warning">{{ localError || error }}</p>
+        <ToolboxFeedback v-if="error || localError" state="error">{{ localError || error }}</ToolboxFeedback>
       </div>
       <footer
         ><span v-if="dirty">{{ t('toolbox.itemDetail.unsaved') }}</span
@@ -303,6 +303,7 @@
 </template>
 
 <script setup lang="ts">
+  import ToolboxFeedback from './ToolboxFeedback.vue';
   import { computed, reactive, ref, watch, onBeforeUnmount, nextTick } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter, onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router';

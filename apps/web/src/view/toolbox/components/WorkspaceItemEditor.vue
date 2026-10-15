@@ -5,7 +5,6 @@
     :title="title"
     width="var(--ui-layout-580, 580px)"
     fullscreen-mobile
-    :show-footer="false"
     :close-disabled="busy"
     @close="requestClose"
   >
@@ -27,7 +26,9 @@
         ><span>{{ t('toolbox.workspace.itemDueLabel') }}</span
         ><BDateTimePicker v-model:value="form.dueOn" :disabled="readonly || busy" :show-time="false"
       /></label>
-      <p v-if="error" role="alert">{{ error }}</p>
+      <ToolboxFeedback v-if="error" state="error">{{ error }}</ToolboxFeedback>
+    </div>
+    <template #footer>
       <div class="board-editor__footer"
         ><BButton :disabled="busy" @click="requestClose">{{ t(readonly ? 'common.close' : 'common.cancel') }}</BButton
         ><BButton
@@ -39,10 +40,11 @@
           >{{ t('common.save') }}</BButton
         ></div
       >
-    </div>
+    </template>
   </BModal>
 </template>
 <script setup lang="ts">
+  import ToolboxFeedback from './ToolboxFeedback.vue';
   import { reactive, ref, computed } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
@@ -86,14 +88,15 @@
     });
   }
 </script>
-<style scoped>
+<style scoped lang="less">
+  @import (reference) '../toolboxPresentation.less';
   .board-editor {
     display: grid;
     gap: var(--ui-space-16, 16px);
   }
   .board-editor label {
     display: grid;
-    gap: var(--ui-space-7, 7px);
+    gap: var(--ui-space-6, 6px);
     font-size: var(--ui-font-13, 13px);
   }
   .board-editor__hint {
@@ -103,9 +106,7 @@
     font-size: var(--ui-font-12, 12px);
   }
   .board-editor__footer {
-    display: flex;
-    gap: var(--ui-space-10, 10px);
-    justify-content: flex-end;
+    .toolbox-dialog-actions();
   }
   .board-editor__source.b_btn {
     height: auto;
@@ -115,5 +116,10 @@
     justify-content: flex-start;
     text-align: left;
     line-height: 1.5;
+  }
+  @media (max-width: 767px) {
+    .board-editor {
+      padding: var(--ui-space-16, 16px);
+    }
   }
 </style>

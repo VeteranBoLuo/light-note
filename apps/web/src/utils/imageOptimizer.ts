@@ -1,4 +1,4 @@
-import { safeDownloadBaseName } from '@/utils/toolboxLocal';
+import { reserveToolboxFileName, safeDownloadBaseName } from '@/utils/toolboxLocal';
 
 export const IMAGE_OPTIMIZER_MAX_FILES = 20;
 export const IMAGE_OPTIMIZER_MAX_BYTES = 80 * 1024 * 1024;
@@ -193,13 +193,9 @@ export function releaseOptimizedImages(images: OptimizedImage[]) {
 export async function bundleOptimizedImages(images: OptimizedImage[]) {
   const { default: JSZip } = await import('jszip');
   const archive = new JSZip();
-  const usedNames = new Map<string, number>();
+  const usedNames = new Set<string>();
   for (const image of images) {
-    const seen = usedNames.get(image.fileName) || 0;
-    usedNames.set(image.fileName, seen + 1);
-    const dot = image.fileName.lastIndexOf('.');
-    const name =
-      seen && dot > 0 ? `${image.fileName.slice(0, dot)}-${seen + 1}${image.fileName.slice(dot)}` : image.fileName;
+    const name = reserveToolboxFileName(image.fileName, usedNames);
     archive.file(name, image.blob);
   }
   return archive.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });

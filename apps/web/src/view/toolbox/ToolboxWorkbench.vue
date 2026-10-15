@@ -14,16 +14,17 @@
     data-mobile-resource-scroll
   >
     <div class="toolbox-workbench__inner">
-      <BButton
-        v-if="!isUtilityWorkbench || loading || !tool"
-        class="toolbox-workbench__back"
-        :aria-label="t('toolbox.back')"
-        @click="returnToToolboxParent"
+      <ToolboxPageHeader
+        v-if="!tool || !tool.id.endsWith('_workspace')"
+        :tool-id="routeToolId"
+        @back="returnToToolboxParent"
       >
-        <SvgIcon :src="icon.toolbox.back" size="16" /><span class="toolbox-workbench__back-label">{{
-          t('toolbox.back')
-        }}</span>
-      </BButton>
+        <template v-if="tool && isUtilityWorkbench" #actions>
+          <span class="toolbox-utility-header__execution" :title="executionDescription">
+            <SvgIcon :src="executionIcon" size="16" />{{ executionTitle }}
+          </span>
+        </template>
+      </ToolboxPageHeader>
 
       <div v-if="loading" class="toolbox-workbench__state"
         ><BLoading inline loading :title="t('common.loading')"
@@ -40,43 +41,6 @@
       </div>
 
       <template v-else>
-        <header v-if="isUtilityWorkbench" class="toolbox-utility-header">
-          <BButton class="toolbox-utility-header__back" :aria-label="t('toolbox.back')" @click="returnToToolboxParent">
-            <SvgIcon :src="icon.toolbox.back" size="16" /><span>{{ t('toolbox.back') }}</span>
-          </BButton>
-          <span class="toolbox-utility-header__icon"><SvgIcon :src="presentation.icon" size="26" /></span>
-          <div class="toolbox-utility-header__copy">
-            <h1>{{ t(`toolbox.tool.${tool.id}.name`) }}</h1>
-            <p>{{
-              te(`toolbox.presentation.shortDescription.${tool.id}`)
-                ? t(`toolbox.presentation.shortDescription.${tool.id}`)
-                : t(`toolbox.tool.${tool.id}.description`)
-            }}</p>
-          </div>
-          <span class="toolbox-utility-header__execution" :title="executionDescription">
-            <SvgIcon :src="executionIcon" size="16" />{{ executionTitle }}
-          </span>
-        </header>
-        <header
-          v-if="!isUtilityWorkbench && !tool.id.endsWith('_workspace')"
-          class="toolbox-workbench__hero"
-          :class="`is-${presentation.accent}`"
-        >
-          <span class="toolbox-workbench__icon"><SvgIcon :src="presentation.icon" size="30" /></span>
-          <div class="toolbox-workbench__hero-copy">
-            <span class="toolbox-workbench__category">{{ t(`toolbox.category.${presentation.category}`) }}</span>
-            <h1>{{ t(`toolbox.tool.${tool.id}.name`) }}</h1>
-            <p>{{ t(`toolbox.tool.${tool.id}.description`) }}</p>
-            <span class="toolbox-workbench__execution">
-              <SvgIcon :src="executionIcon" size="16" />
-              <span>
-                <strong>{{ executionTitle }}</strong>
-                <small>{{ executionDescription }}</small>
-              </span>
-            </span>
-          </div>
-        </header>
-
         <section v-if="tool.executionMode === 'browser' && localToolComponent" class="toolbox-workbench__surface">
           <component :is="localToolComponent" :tool-id="routeToolId" />
         </section>
@@ -556,6 +520,7 @@
 </template>
 
 <script setup lang="ts">
+  import ToolboxPageHeader from './components/ToolboxPageHeader.vue';
   import { TOOLBOX_OCR_FILE_EXTENSIONS } from '@lightnote/shared/toolbox-protocol';
   import ComparisonTableSetup from './components/ComparisonTableSetup.vue';
   import { normalizeComparisonColumns, type ComparisonColumn } from '@lightnote/shared/comparison-table';
@@ -588,12 +553,7 @@
   import { useGrowth } from '@/composables/useGrowth';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import icon from '@/config/icon';
-  import {
-    canonicalToolboxToolId,
-    isToolboxWorkflowTool,
-    TOOLBOX_PRESENTATION,
-    TOOLBOX_WORKFLOW_PRESENTATION,
-  } from '@/config/toolbox';
+  import { canonicalToolboxToolId, isToolboxWorkflowTool, TOOLBOX_WORKFLOW_PRESENTATION } from '@/config/toolbox';
   import { useUserStore } from '@/store';
   import { createLocalId, formatToolboxBytes, TOOLBOX_LOCAL_DELIVERY_EVENT } from '@/utils/toolboxLocal';
   import {
@@ -617,7 +577,7 @@
   }
   type PaidBillingMedium = 'points' | 'ai_quota';
 
-  const { t, te, locale } = useI18n();
+  const { t, locale } = useI18n();
   const route = useRoute();
   const router = useRouter();
   const user = useUserStore();
@@ -672,7 +632,6 @@
   );
   const selectedIntent = ref(workflow.value?.defaultIntent || '');
   const ocrOutcomeKeys = ['searchable', 'separated', 'reusable'] as const;
-  const presentation = computed(() => TOOLBOX_PRESENTATION[toolId.value] || TOOLBOX_PRESENTATION.material_to_note);
   const localToolComponent = computed(() => getToolboxLocalComponent(routeToolId.value));
   const isUtilityWorkbench = computed(
     () =>
@@ -1144,6 +1103,10 @@
     gap: var(--ui-space-8, 8px);
   }
   .toolbox-ocr-mode-options :deep(.b_btn) {
+    min-width: 0;
+    width: 100%;
+    gap: var(--ui-space-4, 4px);
+    border: 1px solid var(--surface-border-color);
     display: flex;
     flex-direction: column;
     align-items: start;
@@ -1192,28 +1155,7 @@
     width: min(var(--ui-layout-1120, 1120px), 100%);
     margin: 0 auto;
   }
-  .toolbox-workbench__back {
-    transition: none;
-    position: sticky;
-    z-index: 8;
-    top: var(--ui-space-8, 8px);
-    height: var(--ui-layout-32, 32px);
-    margin-bottom: var(--ui-space-14, 14px);
-    padding: 0 var(--ui-space-8, 8px);
-    border: 1px solid var(--surface-border-color);
-    border-radius: 999px;
-    background: var(--card-background);
-    box-shadow: 0 6px 18px rgba(20, 24, 40, 0.08);
-    gap: var(--ui-space-6, 6px);
-    color: var(--desc-color);
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .toolbox-workbench__back:hover {
-      border-color: var(--primary-color);
-      color: var(--primary-color);
-      background: var(--hover-background);
-    }
-  }
+
   .toolbox-workbench__state {
     min-height: var(--ui-layout-360, 360px);
     display: flex;
@@ -1221,75 +1163,12 @@
     justify-content: center;
     gap: var(--ui-space-12, 12px);
   }
-  .toolbox-workbench__hero {
-    --tool-accent: var(--primary-color);
-    position: relative;
-    min-height: var(--ui-layout-132, 132px);
-    padding: var(--ui-space-24, 24px);
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    align-items: center;
-    gap: var(--ui-space-18, 18px);
-    overflow: hidden;
-    box-sizing: border-box;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 21px;
-    background: linear-gradient(
-      125deg,
-      color-mix(in srgb, var(--tool-accent) 8%, var(--card-background)),
-      var(--card-background) 66%
-    );
-  }
-  .toolbox-workbench__hero.is-blue {
-    --tool-accent: #3975d5;
-  }
-  .toolbox-workbench__hero.is-violet {
-    --tool-accent: #6557da;
-  }
-  .toolbox-workbench__hero.is-amber {
-    --tool-accent: #ad6b0d;
-  }
-  .toolbox-workbench__hero.is-teal {
-    --tool-accent: #07835f;
-  }
-  .toolbox-workbench__hero.is-rose {
-    --tool-accent: #c24b68;
-  }
-  .toolbox-workbench__hero::before {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 0;
-    width: 4px;
-    background: var(--tool-accent);
-    content: '';
-  }
-  .toolbox-workbench__icon {
-    width: var(--ui-layout-62, 62px);
-    height: var(--ui-layout-62, 62px);
-    display: grid;
-    place-items: center;
-    border: 1px solid color-mix(in srgb, var(--tool-accent) 24%, var(--surface-border-color));
-    border-radius: 18px;
-    color: var(--tool-accent);
-    background: var(--card-background);
-  }
+
   .toolbox-workbench__badges {
     display: flex;
     gap: var(--ui-space-5, 5px);
   }
-  .toolbox-workbench__hero h1 {
-    margin: var(--ui-space-7, 7px) 0 var(--ui-space-5, 5px);
-    font-size: var(--ui-font-25, 25px);
-    letter-spacing: -0.025em;
-  }
-  .toolbox-workbench__hero p {
-    max-width: var(--ui-layout-700, 700px);
-    margin: 0;
-    color: var(--desc-color);
-    font-size: var(--ui-font-13, 13px);
-    line-height: 1.6;
-  }
+
   .toolbox-workbench__price {
     display: flex;
     align-items: center;
@@ -1437,7 +1316,7 @@
     min-width: 0;
     display: grid;
     align-content: start;
-    gap: var(--ui-space-7, 7px);
+    gap: var(--ui-space-6, 6px);
   }
   .toolbox-field.is-wide {
     grid-column: 1 / -1;
@@ -1446,14 +1325,6 @@
     color: var(--desc-color);
     font-size: var(--ui-font-12, 12px);
     font-weight: 650;
-  }
-  .toolbox-field :deep(.b-input) {
-    border: 1px solid var(--surface-border-color) !important;
-    background: var(--surface-subtle-bg, var(--hover-background));
-  }
-  .toolbox-field :deep(.b-textarea) {
-    border-color: var(--surface-border-color);
-    background: var(--surface-subtle-bg, var(--hover-background)) !important;
   }
   .toolbox-paid-panel__footer {
     padding-top: var(--ui-space-16, 16px);
@@ -1614,14 +1485,31 @@
     .toolbox-workbench__inner {
       padding-bottom: var(--ui-space-110, 110px);
     }
+    .toolbox-workbench:not(.is-prompt-workspace) .toolbox-paid-panel__footer > :deep(.b_btn),
+    .toolbox-workbench:not(.is-prompt-workspace) .toolbox-quote__actions > :deep(.primary_btn) {
+      display: none;
+    }
+    .toolbox-mobile-execute > span {
+      min-width: 0;
+      flex: 1;
+    }
+    .toolbox-mobile-execute > :deep(.b_btn) {
+      min-width: 0;
+      max-width: 70%;
+      height: auto;
+      min-height: var(--ui-control-44, 44px);
+      padding-block: var(--ui-space-8, 8px);
+      white-space: normal;
+      line-height: 1.5;
+    }
     .toolbox-mobile-execute {
       display: flex;
       justify-content: space-between;
       align-items: center;
       gap: var(--ui-space-12, 12px);
       position: fixed;
-      bottom: 12px;
-      bottom: max(12px, env(safe-area-inset-bottom));
+      bottom: var(--ui-space-12, 12px);
+      bottom: max(var(--ui-space-12, 12px), env(safe-area-inset-bottom));
       left: var(--ui-space-12, 12px);
       right: var(--ui-space-12, 12px);
       z-index: 40;
@@ -1635,27 +1523,7 @@
       padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px)
         calc(var(--ui-space-24, 24px) + env(safe-area-inset-bottom));
     }
-    .toolbox-workbench__back {
-      display: none;
-    }
-    .toolbox-workbench__hero {
-      min-height: 0;
-      padding: var(--ui-space-17, 17px) var(--ui-space-15, 15px);
-      grid-template-columns: auto minmax(0, 1fr);
-      gap: var(--ui-space-12, 12px);
-      border-radius: 17px;
-    }
-    .toolbox-workbench__icon {
-      width: var(--ui-layout-48, 48px);
-      height: var(--ui-layout-48, 48px);
-      border-radius: 14px;
-    }
-    .toolbox-workbench__hero h1 {
-      font-size: var(--ui-font-20, 20px);
-    }
-    .toolbox-workbench__hero p {
-      font-size: var(--ui-font-12, 12px);
-    }
+
     .toolbox-workbench__price {
       grid-column: 1 / -1;
       padding-top: var(--ui-space-10, 10px);
@@ -1709,7 +1577,6 @@
       width: auto;
     }
   }
-  html.light-note-mobile-rendering .toolbox-workbench__hero,
   html.light-note-mobile-rendering .toolbox-upload-list__icon,
   html.light-note-mobile-rendering .toolbox-quote {
     background: var(--card-background);
@@ -1719,71 +1586,7 @@
   .toolbox-workbench__inner {
     width: min(var(--ui-layout-1240, 1240px), 100%);
   }
-  .toolbox-workbench__hero {
-    min-height: var(--ui-layout-166, 166px);
-    padding: var(--ui-space-27, 27px) var(--ui-space-30, 30px);
-    grid-template-columns: auto minmax(0, 1fr) var(--ui-layout-156, 156px);
-    gap: var(--ui-space-22, 22px);
-    border-radius: 24px;
-    background: linear-gradient(
-      122deg,
-      color-mix(in srgb, var(--tool-accent) 9%, var(--surface-raised-background)) 0%,
-      var(--surface-raised-background) 52%,
-      color-mix(in srgb, var(--tool-accent) 3%, var(--surface-raised-background)) 100%
-    );
-    box-shadow: var(--surface-raised-shadow);
-  }
-  .toolbox-workbench__hero::before {
-    width: 5px;
-  }
-  .toolbox-workbench__icon {
-    width: var(--ui-layout-68, 68px);
-    height: var(--ui-layout-68, 68px);
-    border-radius: 20px;
-    box-shadow: 0 15px 34px -26px var(--tool-accent);
-  }
-  .toolbox-workbench__hero-copy {
-    min-width: 0;
-  }
-  .toolbox-workbench__category {
-    color: var(--tool-accent);
-    font-size: var(--ui-font-11, 11px);
-    font-weight: 720;
-    letter-spacing: 0.08em;
-  }
-  .toolbox-workbench__hero h1 {
-    margin: var(--ui-space-5, 5px) 0 var(--ui-space-6, 6px);
-    font-size: clamp(var(--ui-font-25, 25px), 2.3vw, var(--ui-font-31, 31px));
-    font-weight: 760;
-  }
-  .toolbox-workbench__hero p {
-    max-width: var(--ui-layout-760, 760px);
-  }
-  .toolbox-workbench__execution {
-    width: fit-content;
-    max-width: var(--ui-layout-760, 760px);
-    margin-top: var(--ui-space-14, 14px);
-    display: flex;
-    align-items: flex-start;
-    gap: var(--ui-space-8, 8px);
-    color: var(--tool-accent);
-  }
-  .toolbox-workbench__execution > :deep(svg) {
-    margin-top: var(--ui-space-2, 2px);
-    flex: 0 0 auto;
-  }
-  .toolbox-workbench__execution > span {
-    display: grid;
-    gap: var(--ui-space-1, 1px);
-  }
-  .toolbox-workbench__execution strong {
-    font-size: var(--ui-font-12, 12px);
-  }
-  .toolbox-workbench__execution small {
-    color: var(--desc-color);
-    font-size: var(--ui-font-10_5, 10.5px);
-    line-height: 1.45;
-  }
+
   .toolbox-workbench__price {
     min-width: var(--ui-layout-132, 132px);
     padding: var(--ui-space-15, 15px) var(--ui-space-16, 16px);
@@ -2018,7 +1821,7 @@
   }
   .toolbox-detail-options :deep(.b_btn) {
     width: 100%;
-    min-height: var(--ui-layout-31, 31px);
+    min-height: var(--ui-control-32, 32px);
     padding: 0 var(--ui-space-8, 8px);
     border-color: transparent;
     color: var(--desc-color);
@@ -2138,6 +1941,7 @@
     margin: 0 auto;
     padding: var(--ui-space-23, 23px);
   }
+
   @media (min-width: 768px) {
     .toolbox-workbench.is-resource-workspace {
       padding: var(--ui-space-12, 12px) clamp(var(--ui-space-14, 14px), 2vw, var(--ui-space-28, 28px))
@@ -2153,54 +1957,7 @@
       display: grid;
       grid-template-rows: auto minmax(0, 1fr);
     }
-    .toolbox-workbench:is(.is-resource-workspace, .is-prompt-workspace) .toolbox-workbench__back {
-      position: absolute;
-      z-index: 9;
-      top: var(--ui-space-20, 20px);
-      left: var(--ui-space-12, 12px);
-      width: var(--ui-layout-32, 32px);
-      height: var(--ui-layout-32, 32px);
-      margin: 0;
-      padding: 0;
-      justify-content: center;
-      gap: 0;
-      overflow: hidden;
-      border-color: transparent;
-      color: var(--desc-color);
-      background: transparent;
-      box-shadow: none;
-    }
-    .toolbox-workbench:is(.is-resource-workspace, .is-prompt-workspace) .toolbox-workbench__back-label {
-      display: none;
-    }
-    .toolbox-workbench:is(.is-resource-workspace, .is-prompt-workspace) .toolbox-workbench__hero {
-      min-height: var(--ui-layout-72, 72px);
-      padding: var(--ui-space-10, 10px) var(--ui-space-14, 14px) var(--ui-space-10, 10px) var(--ui-space-56, 56px);
-      grid-template-columns: var(--ui-layout-42, 42px) minmax(0, 1fr) auto;
-      gap: var(--ui-space-12, 12px);
-      border-radius: 17px;
-      box-shadow: var(--surface-card-shadow);
-    }
-    .toolbox-workbench:is(.is-resource-workspace, .is-prompt-workspace) .toolbox-workbench__hero::before {
-      width: 3px;
-    }
-    .toolbox-workbench:is(.is-resource-workspace, .is-prompt-workspace) .toolbox-workbench__icon {
-      width: var(--ui-layout-42, 42px);
-      height: var(--ui-layout-42, 42px);
-      border-radius: 12px;
-      box-shadow: none;
-    }
-    .toolbox-workbench:is(.is-resource-workspace, .is-prompt-workspace) .toolbox-workbench__category {
-      font-size: var(--ui-font-9, 9px);
-    }
-    .toolbox-workbench:is(.is-resource-workspace, .is-prompt-workspace) .toolbox-workbench__hero h1 {
-      margin: var(--ui-space-2, 2px) 0 0;
-      font-size: var(--ui-font-20, 20px);
-    }
-    .toolbox-workbench:is(.is-resource-workspace, .is-prompt-workspace) .toolbox-workbench__hero-copy > p,
-    .toolbox-workbench:is(.is-resource-workspace, .is-prompt-workspace) .toolbox-workbench__execution {
-      display: none;
-    }
+
     .toolbox-workbench:is(.is-resource-workspace, .is-prompt-workspace) .toolbox-workbench__price {
       min-width: 0;
       padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px);
@@ -2304,10 +2061,10 @@
       gap: var(--ui-space-8, 8px);
     }
     .toolbox-workbench.is-resource-workspace .toolbox-field {
-      gap: var(--ui-space-5, 5px);
+      gap: var(--ui-space-6, 6px);
     }
     .toolbox-workbench.is-resource-workspace .toolbox-detail-options :deep(.b_btn) {
-      min-height: var(--ui-layout-29, 29px);
+      min-height: var(--ui-control-32, 32px);
     }
     .toolbox-workbench.is-resource-workspace .toolbox-paid-panel__footer {
       padding: var(--ui-space-10, 10px);
@@ -2344,27 +2101,7 @@
       padding-top: var(--ui-space-8, 8px);
       padding-bottom: var(--ui-space-10, 10px);
     }
-    .toolbox-workbench.is-resource-workspace .toolbox-workbench__hero {
-      min-height: var(--ui-layout-64, 64px);
-      padding-top: var(--ui-space-8, 8px);
-      padding-bottom: var(--ui-space-8, 8px);
-      grid-template-columns: var(--ui-layout-38, 38px) minmax(0, 1fr) auto;
-      gap: var(--ui-space-10, 10px);
-    }
-    .toolbox-workbench.is-resource-workspace .toolbox-workbench__back {
-      top: var(--ui-space-16, 16px);
-      left: var(--ui-space-10, 10px);
-      width: var(--ui-layout-30, 30px);
-      height: var(--ui-layout-30, 30px);
-    }
-    .toolbox-workbench.is-resource-workspace .toolbox-workbench__icon {
-      width: var(--ui-layout-38, 38px);
-      height: var(--ui-layout-38, 38px);
-      border-radius: 11px;
-    }
-    .toolbox-workbench.is-resource-workspace .toolbox-workbench__hero h1 {
-      font-size: var(--ui-font-18, 18px);
-    }
+
     .toolbox-workbench.is-resource-workspace .toolbox-workbench__price {
       padding: var(--ui-space-7, 7px) var(--ui-space-9, 9px);
     }
@@ -2448,17 +2185,6 @@
     }
   }
   @media (max-width: 767px) {
-    .toolbox-workbench__hero {
-      padding: var(--ui-space-17, 17px) var(--ui-space-15, 15px) var(--ui-space-15, 15px);
-      grid-template-columns: auto minmax(0, 1fr);
-      gap: var(--ui-space-12, 12px);
-    }
-    .toolbox-workbench__execution {
-      margin-top: var(--ui-space-9, 9px);
-    }
-    .toolbox-workbench__execution small {
-      font-size: var(--ui-font-9_5, 9.5px);
-    }
     .toolbox-workbench__price {
       min-width: 0;
       padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
@@ -2539,34 +2265,10 @@
     padding-top: var(--ui-space-16, 16px);
     padding-bottom: var(--ui-space-20, 20px);
   }
-  .toolbox-utility-header {
-    display: flex;
-    align-items: center;
-    gap: var(--ui-space-14, 14px);
-    padding: var(--ui-space-12, 12px) 0 var(--ui-space-18, 18px);
-    border-bottom: 1px solid var(--workspace-divider);
+  .toolbox-workbench.is-utility-workspace .toolbox-workbench__inner {
+    position: relative;
   }
-  .toolbox-utility-header__back {
-    flex-shrink: 0;
-    color: var(--workspace-muted);
-  }
-  .toolbox-utility-header__icon {
-    color: var(--workspace-purple-text);
-    display: flex;
-  }
-  .toolbox-utility-header__copy {
-    min-width: 0;
-    flex: 1;
-  }
-  .toolbox-utility-header h1 {
-    margin: 0;
-    font-size: var(--ui-font-22, 22px);
-  }
-  .toolbox-utility-header p {
-    margin: var(--ui-space-5, 5px) 0 0;
-    color: var(--workspace-muted);
-    font-size: var(--ui-font-12, 12px);
-  }
+
   .toolbox-utility-header__execution {
     display: flex;
     align-items: center;
@@ -2583,28 +2285,11 @@
     box-shadow: none;
   }
   @media (max-width: 767px) {
-    .toolbox-utility-header {
-      flex-wrap: wrap;
-      gap: var(--ui-space-8, 8px);
-    }
-    .toolbox-utility-header__back > span {
-      display: none;
-    }
-    .toolbox-utility-header__icon {
-      display: none;
-    }
-    .toolbox-utility-header h1 {
-      font-size: var(--ui-font-18, 18px);
-    }
     .toolbox-utility-header__execution {
-      width: 100%;
+      grid-column: 1 / -1;
     }
   }
-  .toolbox-workbench.is-project-list .toolbox-workbench__back {
-    position: static;
-    margin-bottom: var(--ui-space-12, 12px);
-    box-shadow: none;
-  }
+
   .toolbox-workbench.is-project-detail {
     .workspace-canvas-surface();
     padding: 0;
@@ -2617,15 +2302,10 @@
       padding: 0 0 var(--ui-space-16, 16px);
     }
   }
-  .toolbox-workbench.is-project-detail .toolbox-workbench__back {
-    display: none;
-  }
+
   @media (min-width: 1200px) {
     .toolbox-workbench.is-project-detail .toolbox-workbench__inner {
       max-width: none;
-    }
-    .toolbox-workbench.is-project-detail .toolbox-workbench__back {
-      display: none;
     }
   }
 
@@ -2667,26 +2347,7 @@
     .is-prompt-workspace .toolbox-workbench__inner {
       padding-bottom: 0;
     }
-    .is-prompt-workspace .toolbox-workbench__hero {
-      min-height: 0;
-      padding: var(--ui-space-12, 12px);
-    }
-    .is-prompt-workspace .toolbox-workbench__icon {
-      width: var(--ui-layout-32, 32px);
-      height: var(--ui-layout-32, 32px);
-      box-shadow: none;
-    }
-    .is-prompt-workspace .toolbox-workbench__hero h1 {
-      margin: 0;
-      font-size: var(--ui-font-18, 18px);
-    }
-    .is-prompt-workspace .toolbox-workbench__category {
-      display: none;
-    }
-    .is-prompt-workspace .toolbox-workbench__hero-copy > p,
-    .is-prompt-workspace .toolbox-workbench__execution {
-      display: none;
-    }
+
     .is-prompt-workspace .is-idea :deep(textarea) {
       min-height: var(--ui-layout-160, 160px);
       height: var(--ui-layout-160, 160px);

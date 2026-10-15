@@ -23,7 +23,7 @@
         t('toolbox.board.undo')
       }}</BButton>
     </div>
-    <p v-if="error && !editor" role="alert">{{ error }}</p>
+    <ToolboxFeedback v-if="error && !editor" state="error">{{ error }}</ToolboxFeedback>
     <div class="project-board__lanes">
       <section v-for="lane in visibleLanes" :key="lane" class="project-board__lane" :data-lane="lane">
         <header
@@ -146,6 +146,7 @@
   </div>
 </template>
 <script setup lang="ts">
+  import ToolboxFeedback from './ToolboxFeedback.vue';
   import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { VueDraggable } from 'vue-draggable-plus';

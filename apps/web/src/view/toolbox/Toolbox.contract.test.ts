@@ -570,7 +570,7 @@ describe('知识工具箱前端边界', () => {
     expect(workspace).toContain(':show-footer="true"');
     expect(workspace).toContain('class="workspace-resource-modal__footer"');
     expect(workspace).toContain("import BDateTimePicker from '@/components/base/BasicComponents/BDateTimePicker.vue'");
-    expect(workspace).toContain('<BDateTimePicker v-model:value="createForm.targetDate" :show-time="false" />');
+    expect(workspace).toMatch(/<BDateTimePicker\b[^>]*v-model:value="createForm.targetDate"/su);
     expect(source('src/view/toolbox/components/WorkspaceItemEditor.vue')).toContain('v-model:value="form.dueOn"');
     expect(workspace).not.toMatch(/<BInput[^>]+type="date"/su);
     expect(textWorkbench).toContain('white-space: nowrap');
@@ -625,7 +625,6 @@ describe('知识工具箱前端边界', () => {
     expect(task).toContain('toolboxArtifactSourceRecords');
     expect(task).toContain('stripAiAnalysisCitations');
     expect(task).not.toContain('<BProgress');
-    expect(task).not.toContain('<BChip');
     expect(task).not.toContain('.map(String)');
     expect(presentation).toContain("value !== '[object Object]'");
     expect(task).not.toContain('artifact?.content ||');

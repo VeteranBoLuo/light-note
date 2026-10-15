@@ -10,10 +10,8 @@
         ]"
       />
       <div
-        ><BButton size="small" :loading="exporting" @click="download('csv')">{{ t('comparisonTable.csv') }}</BButton
-        ><BButton size="small" :loading="exporting" @click="download('xlsx')">{{
-          t('comparisonTable.xlsx')
-        }}</BButton></div
+        ><BButton :loading="exporting" @click="download('csv')">{{ t('comparisonTable.csv') }}</BButton
+        ><BButton :loading="exporting" @click="download('xlsx')">{{ t('comparisonTable.xlsx') }}</BButton></div
       >
     </header>
     <p class="comparison-hint">{{ t('comparisonTable.hint') }}</p>
@@ -46,9 +44,7 @@
             :class="{ 'needs-review': comparisonCellNeedsReview(record.cells[Number(column.key)]) }"
             @click="inspect(record.sourceId, Number(column.key))"
           >
-            {{
-              cellValue(record.cells[Number(column.key)])
-            }}
+            {{ cellValue(record.cells[Number(column.key)]) }}
             <small
               v-if="
                 record.cells[Number(column.key)].edited ||
@@ -88,7 +84,7 @@
         <h4>{{ t('comparisonTable.evidence') }}</h4>
         <blockquote v-for="(quote, index) in selectedCell.quotes" :key="index">{{ quote }}</blockquote>
         <p v-if="!selectedCell.quotes.length">{{ t('comparisonTable.noEvidence') }}</p>
-        <p v-if="error" role="alert">{{ error }}</p>
+        <ToolboxFeedback v-if="error" state="error">{{ error }}</ToolboxFeedback>
       </div>
       <template #footer
         ><div class="comparison-footer"
@@ -102,6 +98,7 @@
   </section>
 </template>
 <script setup lang="ts">
+  import ToolboxFeedback from './ToolboxFeedback.vue';
   import { computed, onBeforeUnmount, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import {
@@ -273,13 +270,11 @@
 </script>
 <style scoped lang="less">
   @import (reference) '@/assets/css/ui-density.less';
+  @import (reference) '../toolboxPresentation.less';
   .comparison-footer {
-    display: flex;
-    justify-content: flex-end;
-    gap: .ui-space(8px) [];
-    padding: .ui-space(16px) [];
-    border-top: 1px solid var(--surface-border-color);
+    .toolbox-dialog-actions();
   }
+
   .comparison-result {
     min-width: 0;
     padding: .ui-space(20px) [];

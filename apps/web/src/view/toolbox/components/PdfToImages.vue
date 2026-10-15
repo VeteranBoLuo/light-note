@@ -107,7 +107,7 @@
             <strong :title="result.fileName">{{ result.fileName }}</strong>
             <small>{{ result.width }}×{{ result.height }} · {{ formatToolboxBytes(result.blob.size) }}</small>
           </div>
-          <BButton size="small" @click="downloadOne(result)">
+          <BButton @click="downloadOne(result)">
             <SvgIcon :src="icon.toolbox.download" size="14" />{{ t('toolbox.local.downloadOne') }}
           </BButton>
         </article>
@@ -263,6 +263,13 @@
 </script>
 
 <style scoped lang="less">
+  .pdf-image-tool__drop-zone :deep(.b_btn),
+  .pdf-image-tool__settings :deep(.b_btn),
+  .pdf-image-tool__result-head :deep(.b_btn),
+  .pdf-image-tool__results :deep(.b_btn) {
+    gap: var(--ui-space-6, 6px);
+  }
+
   .pdf-image-tool {
     display: grid;
     gap: var(--ui-space-16, 16px);

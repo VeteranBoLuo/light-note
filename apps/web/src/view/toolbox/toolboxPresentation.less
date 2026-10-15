@@ -1,0 +1,41 @@
+.toolbox-tool-accent() {
+  --tool-accent: var(--workspace-purple-text);
+  &.is-blue {
+    --tool-accent: var(--info-color);
+  }
+  &.is-teal {
+    --tool-accent: var(--workspace-note-text);
+  }
+  &.is-amber {
+    --tool-accent: var(--workspace-file-text);
+  }
+  &.is-rose {
+    --tool-accent: var(--danger-color);
+  }
+}
+
+// Shared custom BModal footer; ordinary form/toolbars retain their own geometry.
+.toolbox-dialog-actions() {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--ui-space-8, 8px);
+  padding: var(--ui-space-16, 16px) var(--ui-space-20, 20px);
+  border-top: 1px solid var(--surface-border-color);
+  > .b_btn {
+    max-width: 100%;
+  }
+  @media (max-width: 767px) {
+    padding: var(--ui-space-12, 12px) var(--ui-space-16, 16px);
+    padding-bottom: calc(var(--ui-space-12, 12px) + env(safe-area-inset-bottom, 0px));
+    > .b_btn {
+      flex: 1 1 auto;
+      min-height: var(--ui-control-44, 44px);
+      height: auto;
+      line-height: 1.5;
+      padding-block: var(--ui-space-10, 10px);
+      white-space: normal;
+    }
+  }
+}

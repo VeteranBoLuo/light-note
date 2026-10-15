@@ -541,15 +541,15 @@ export function splitToolboxDataset(dataset: ToolboxDataset, column: string) {
   if (columnIndex < 0) throw new ToolboxTextError('INVALID_TABLE');
   const groups = new Map<string, ToolboxDataset>();
   for (const row of dataset.rows) {
-    const value = row[columnIndex]?.trim() || 'empty';
-    const safeName = value.replace(/[\\/:*?"<>|]+/gu, '_').slice(0, 80) || 'empty';
-    const group = groups.get(safeName) || {
-      name: `${dataset.name}-${safeName}`,
+    // Group by the actual cell value. Filename sanitization must not merge distinct values.
+    const value = row[columnIndex] ?? '';
+    const group = groups.get(value) || {
+      name: `${dataset.name}-${value || 'empty'}`,
       headers: [...dataset.headers],
       rows: [],
     };
     group.rows.push([...row]);
-    groups.set(safeName, group);
+    groups.set(value, group);
   }
   return groups;
 }

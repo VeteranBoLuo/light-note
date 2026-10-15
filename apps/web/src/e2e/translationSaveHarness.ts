@@ -30,6 +30,18 @@ for (const [key, value] of Object.entries(
 let attempts = 0;
 const deletedHistory = new Set<string>();
 const fixtureAdapter: NonNullable<typeof request.defaults.adapter> = async (config) => {
+  const feedbackPath = params.get('feedbackPath');
+  if (feedbackPath && String(config.url).includes(feedbackPath) && (!params.get('feedbackMethod') || config.method === params.get('feedbackMethod'))) {
+    const feedback = (window as any).toolboxFeedbackFixture ||= {
+      failure: params.has('feedbackFailure'), delay: Number(params.get('feedbackDelay') || 0), empty: params.has('feedbackEmpty'),
+    };
+    if (feedback.delay) await new Promise(resolve => setTimeout(resolve, feedback.delay));
+    if (feedback.failure) throw new Error('无法完成请求，请重试 / Unable to complete the request. Try again.');
+    if (feedback.empty && String(config.url).endsWith('/text-answers')) return {
+      data: {status: 200, data: [], msg: ''}, status: 200, statusText: 'OK', headers: {}, config,
+    };
+  }
+
   let data: any = [];
   if (config.url?.endsWith('/translation/stream')) {
     const encoder = new TextEncoder();
@@ -47,7 +59,8 @@ const fixtureAdapter: NonNullable<typeof request.defaults.adapter> = async (conf
             return;
           }
           const content = pair.translated.slice(0, Math.ceil((pair.translated.length * step) / count));
-          if (params.has('delta') && step > 1) emit('delta', { offset: delivered.length, content: content.slice(delivered.length) });
+          if (params.has('delta') && step > 1)
+            emit('delta', { offset: delivered.length, content: content.slice(delivered.length) });
           else emit('snapshot', { original: pair.original, content });
           delivered = content;
         }
@@ -80,7 +93,9 @@ const fixtureAdapter: NonNullable<typeof request.defaults.adapter> = async (conf
       ? Array.from({ length: 75 }, (_, index) => ({
           id: String(index + 1),
           toolId: 'translation',
-          status: 'succeeded',
+          status: params.has('historyStates')
+            ? ['succeeded', 'partial_succeeded', 'failed', 'cancelled', 'processing'][index % 5]
+            : 'succeeded',
           preview:
             index === 0
               ? 'Knowledge work: a practical guide to building a personal library'
@@ -117,8 +132,7 @@ const fixtureAdapter: NonNullable<typeof request.defaults.adapter> = async (conf
       meta: { translation: { segments: [pair] } },
       save: params.has('saved') ? { targetId: 'saved-note', targetAvailability: 'available' } : {},
     };
-  if (config.url?.includes('/artifacts/') && config.url.endsWith('/save'))
-    data = { targetId: 'saved-note' };
+  if (config.url?.includes('/artifacts/') && config.url.endsWith('/save')) data = { targetId: 'saved-note' };
   if (config.url?.endsWith('/quotes'))
     data = {
       id: 'quote',
@@ -192,7 +206,7 @@ app.use(router);
 app.use(
   createI18n({
     legacy: false,
-    locale: params.get('lang') === 'en' ? 'en-US' : 'zh-CN',
+    locale: params.get('lang') === 'en' || params.get('locale') === 'en-US' ? 'en-US' : 'zh-CN',
     messages: { 'zh-CN': zh, 'en-US': en },
   }),
 );

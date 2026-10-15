@@ -124,9 +124,9 @@
                 <strong :title="workspace.title">{{ workspace.title }}</strong>
                 <span class="toolbox-activity-card__type">{{ toolName(toolboxWorkspaceToolId(workspace.kind)) }}</span>
               </span>
-              <span class="workshop-project__status"
-                ><i aria-hidden="true" />{{ t('toolbox.workspace.status.active') }}</span
-              >
+              <BChip class="workshop-project__status" :tone="toolboxWorkspaceStatusTone(workspace.status)">{{
+                t(`toolbox.workspace.status.${workspace.status}`)
+              }}</BChip>
             </span>
             <span class="workshop-project__next" :class="{ 'is-empty': !workspace.nextStep }">
               <small>{{ t('toolbox.workspace.nextStep') }}</small>
@@ -162,7 +162,7 @@
           <div v-for="job in continueJobs" :key="`task-${job.id}`" class="toolbox-task-row">
             <BButton
               class="toolbox-activity-card is-task"
-              :class="{ 'is-ready': isReadyTask(job) }"
+              :class="`is-${presentation(job.toolId).accent}`"
               @click="openTask(job)"
             >
               <span class="toolbox-activity-card__icon">
@@ -170,7 +170,7 @@
               </span>
               <span class="toolbox-activity-card__copy">
                 <span class="toolbox-activity-card__topline">
-                  <BChip :tone="jobTone(job.status)">{{ taskStateLabel(job) }}</BChip>
+                  <BChip :tone="toolboxJobStatusTone(job.status)">{{ taskStateLabel(job) }}</BChip>
                 </span>
                 <strong>{{ job.extraction?.title || job.artifact?.title || toolName(job.toolId) }}</strong>
                 <span>{{ taskContinueDescription(job) }}</span>
@@ -226,6 +226,7 @@
             :name="displayToolName(tool.id)"
             :description="toolDescription(tool.id)"
             :billing="billingLabel(tool)"
+            :billing-tone="billingTone(tool)"
             featured
             @open="openTool(tool)"
           />
@@ -258,6 +259,7 @@
             v-for="entry in recentEntries"
             :key="entry.key"
             class="toolbox-recent-row"
+            :class="`is-${presentation(entry.toolId).accent}`"
             @click="openRecentEntry(entry)"
           >
             <span class="toolbox-recent-row__icon"><SvgIcon :src="presentation(entry.toolId).icon" size="19" /></span>
@@ -282,6 +284,7 @@
             :name="displayToolName(tool.id)"
             :description="toolDescription(tool.id)"
             :billing="billingLabel(tool)"
+            :billing-tone="billingTone(tool)"
             @open="openTool(tool)"
           />
         </div>
@@ -396,13 +399,7 @@
                       :name="displayToolName(tool.id)"
                       :description="toolDescription(tool.id)"
                       :billing="billingLabel(tool)"
-                      :billing-tone="
-                        ['prepare', 'maintain', 'data'].includes(group.id)
-                          ? tool.price.kind === 'free'
-                            ? 'success'
-                            : 'pin'
-                          : undefined
-                      "
+                      :billing-tone="billingTone(tool)"
                       :featured="group.id === 'create'"
                       @open="openTool(tool)"
                     />
@@ -482,6 +479,8 @@
     TOOLBOX_HOME_GROUPS,
     TOOLBOX_DEFAULT_QUICK_TOOL_IDS,
     TOOLBOX_PRESENTATION,
+    toolboxJobStatusTone,
+    toolboxWorkspaceStatusTone,
     resolveToolboxQuickToolIds,
     toolboxToolPath,
     toolboxWorkspaceToolId,
@@ -853,6 +852,9 @@
     toolId === 'research_workspace' ? t('toolbox.workspace.myProjects') : toolName(toolId);
   const toolName = (toolId: string) => t('toolbox.tool.' + toolId + '.name');
   const toolDescription = (toolId: string) => t('toolbox.tool.' + toolId + '.description');
+  function billingTone(tool: ToolboxCatalogItem): 'success' | 'pin' {
+    return tool.price.kind === 'free' ? 'success' : 'pin';
+  }
   function billingLabel(tool: ToolboxCatalogItem) {
     if (import.meta.env.DEV && tool.id === 'extraction' && !tool.availability.enabled)
       return t('extraction.localPreview');
@@ -862,12 +864,6 @@
       return tool.billingMedia.includes('ai_quota') ? t('toolbox.billingChoiceLabel') : t('toolbox.pointsLabel');
     }
     return tool.executionMode === 'service' ? t('toolbox.accountFreeLabel') : t('toolbox.localFreeLabel');
-  }
-  function jobTone(status: ToolboxJob['status']): 'neutral' | 'success' | 'pending' | 'danger' {
-    if (status === 'succeeded') return 'success';
-    if (['queued', 'processing', 'partial_succeeded'].includes(status)) return 'pending';
-    if (['failed', 'expired'].includes(status)) return 'danger';
-    return 'neutral';
   }
   function isReadyTask(job: ToolboxJob) {
     return job.artifactState === 'ready' && ['unsaved', 'save_failed'].includes(job.save.status);
@@ -1058,6 +1054,7 @@
 
 <style scoped lang="less">
   @import (reference) '@/assets/css/workspace-surfaces.less';
+  @import (reference) './toolboxPresentation.less';
   @import './toolboxPageScroll.less';
 
   .toolbox-home {
@@ -1196,7 +1193,7 @@
   }
   .workshop-project.b_btn {
     .workspace-content-surface();
-    --project-accent: var(--workspace-purple-text);
+    .toolbox-tool-accent();
     display: flex;
     flex-direction: column;
     align-items: stretch;
@@ -1213,12 +1210,6 @@
     white-space: normal;
     line-height: 1.5;
   }
-  .workshop-project.is-blue {
-    --project-accent: var(--info-color);
-  }
-  .workshop-project.is-teal {
-    --project-accent: var(--workspace-note-text);
-  }
   .workshop-project__head {
     display: flex;
     align-items: flex-start;
@@ -1231,7 +1222,7 @@
     display: grid;
     place-items: center;
     border-radius: 10px;
-    color: var(--project-accent);
+    color: var(--tool-accent);
     background: var(--workspace-canvas);
   }
   .workshop-project__identity {
@@ -1254,19 +1245,9 @@
     font-size: var(--ui-font-11, 11px);
   }
   .workshop-project__status {
-    display: flex;
-    align-items: center;
-    gap: var(--ui-space-6, 6px);
-    color: var(--workspace-muted);
-    font-size: var(--ui-font-11, 11px);
+    align-self: start;
+    justify-self: start;
     flex-shrink: 0;
-    padding-top: var(--ui-space-3, 3px);
-  }
-  .workshop-project__status i {
-    width: var(--ui-space-6, 6px);
-    height: var(--ui-space-6, 6px);
-    border-radius: 50%;
-    background: var(--success-color);
   }
   .workshop-project__next {
     .workspace-canvas-surface();
@@ -1328,6 +1309,7 @@
   }
   .toolbox-activity-card.b_btn {
     .workspace-content-surface();
+    .toolbox-tool-accent();
     display: grid;
     grid-template-columns: var(--ui-layout-34, 34px) minmax(0, 1fr);
     width: 100%;
@@ -1348,11 +1330,14 @@
     display: grid;
     place-items: center;
     background: var(--workspace-canvas);
-    color: var(--workspace-purple-text);
+    color: var(--tool-accent);
     border-radius: 8px;
   }
-  .toolbox-activity-card.is-ready .toolbox-activity-card__icon {
-    color: var(--workspace-note-text);
+  .toolbox-recent-row {
+    .toolbox-tool-accent();
+  }
+  .toolbox-recent-row__icon {
+    color: var(--tool-accent);
   }
   .toolbox-activity-card__copy {
     min-width: 0;
@@ -1818,7 +1803,6 @@
     }
     .workshop-project__status {
       grid-column: 2;
-      padding: 0;
     }
     .workshop-project__next {
       padding: var(--ui-space-7, 7px) var(--ui-space-8, 8px);

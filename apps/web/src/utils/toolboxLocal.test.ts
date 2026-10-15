@@ -1,7 +1,31 @@
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { downloadToolboxBlob, TOOLBOX_LOCAL_DELIVERY_EVENT } from './toolboxLocal';
+import { downloadToolboxBlob, reserveToolboxFileName, TOOLBOX_LOCAL_DELIVERY_EVENT } from './toolboxLocal';
+
+describe('archive filenames', () => {
+  it('preserves every entry when original names collide with generated suffixes or differ only in case', () => {
+    const used = new Set<string>();
+    const names = ['report.csv', 'report.csv', 'report-2.csv', 'REPORT.csv', 'report.csv'];
+    expect(names.map((name) => reserveToolboxFileName(name, used))).toEqual([
+      'report.csv',
+      'report-2.csv',
+      'report-2-2.csv',
+      'REPORT-3.csv',
+      'report-4.csv',
+    ]);
+  });
+
+  it('handles extensionless names and Unicode-equivalent names', () => {
+    const used = new Set<string>();
+    expect(['data', 'data', 'café.csv', 'cafe\u0301.csv'].map((name) => reserveToolboxFileName(name, used))).toEqual([
+      'data',
+      'data-2',
+      'café.csv',
+      'cafe\u0301-2.csv',
+    ]);
+  });
+});
 
 describe('toolboxLocal download delivery', () => {
   afterEach(() => {

@@ -264,6 +264,18 @@ function response(config: any, data: unknown) {
 
 let joinAttempts = 0;
 request.defaults.adapter = async (config) => {
+  const feedbackPath = params.get('feedbackPath');
+  if (feedbackPath && String(config.url).includes(feedbackPath) && (!params.get('feedbackMethod') || config.method === params.get('feedbackMethod'))) {
+    const feedback = (window as any).toolboxFeedbackFixture ||= {
+      failure: params.has('feedbackFailure'), delay: Number(params.get('feedbackDelay') || 0), empty: params.has('feedbackEmpty'),
+    };
+    if (feedback.delay) await new Promise(resolve => setTimeout(resolve, feedback.delay));
+    if (feedback.failure) throw new Error('无法完成请求，请重试 / Unable to complete the request. Try again.');
+    if (feedback.empty && String(config.url).endsWith('/text-answers')) return {
+      data: {status: 200, data: [], msg: ''}, status: 200, statusText: 'OK', headers: {}, config,
+    };
+  }
+
   if (config.url === '/api/toolbox/artifacts/visual-toolbox-artifact/study') {
     const key = 'workshop-visual-study';
     const mastered = JSON.parse(sessionStorage.getItem(key) || '{}');

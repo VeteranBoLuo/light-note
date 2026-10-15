@@ -1,7 +1,18 @@
 <template>
   <section class="study-result-cards">
-    <BTabs v-model:active-tab="mode" :options="modes" />
-    <p v-if="error" role="alert">{{ t('toolbox.study.loadFailed') }}</p>
+    <BTabs
+      :active-tab="mode"
+      :options="modes"
+      :aria-disabled="saving"
+      @update:active-tab="!saving && (mode = $event)"
+    />
+    <ToolboxFeedback v-if="loading" state="loading" compact :title="t('common.loading')" />
+    <ToolboxFeedback v-else-if="error" state="error"
+      >{{ t(error === 'load' ? 'toolbox.study.loadFailed' : 'toolbox.study.saveFailed') }}
+      <template v-if="error === 'load'" #actions
+        ><BButton @click="loadProgress()">{{ t('common.retry') }}</BButton></template
+      >
+    </ToolboxFeedback>
     <slot v-if="mode === 'overview'"></slot>
     <template v-else-if="current">
       <p
@@ -20,24 +31,31 @@
         <p v-else class="study-result-cards__answer">{{ current.answer }}</p>
       </article>
       <div class="study-result-cards__actions">
-        <BButton :disabled="index === 0" @click="index--">{{ t('toolbox.study.previous') }}</BButton>
-        <BButton :disabled="saving || loading || error || !revealed" @click="mark(false)">{{
-          t('toolbox.study.reviewAgain')
-        }}</BButton>
+        <BButton :disabled="saving || index === 0" @click="index--">{{ t('toolbox.study.previous') }}</BButton>
         <BButton
-          :disabled="saving || loading || error || !revealed"
+          :disabled="saving || loading || error === 'load' || !revealed"
+          :loading="saving && savingValue === false"
+          @click="mark(false)"
+          >{{ t('toolbox.study.reviewAgain') }}</BButton
+        >
+        <BButton
+          :disabled="saving || loading || error === 'load' || !revealed"
           :type="mastered[current.id] ? 'primary' : undefined"
           :aria-pressed="Boolean(mastered[current.id])"
+          :loading="saving && savingValue === true"
           @click="mark(true)"
           >{{ t('toolbox.study.mastered') }}</BButton
         >
-        <BButton :disabled="index + 1 >= visibleCards.length" @click="index++">{{ t('toolbox.study.next') }}</BButton>
+        <BButton :disabled="saving || index + 1 >= visibleCards.length" @click="index++">{{
+          t('toolbox.study.next')
+        }}</BButton>
       </div>
     </template>
-    <p v-else>{{ t('toolbox.study.empty') }}</p>
+    <ToolboxFeedback v-else-if="!loading && error !== 'load'">{{ t('toolbox.study.empty') }}</ToolboxFeedback>
   </section>
 </template>
 <script setup lang="ts">
+  import ToolboxFeedback from './ToolboxFeedback.vue';
   import { computed, onBeforeUnmount, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -57,7 +75,8 @@
   const revealed = ref(false);
   const answer = ref('');
   const mastered = ref<Record<string, boolean>>({});
-  const error = ref(false);
+  const error = ref<'load' | 'save' | ''>('');
+  const savingValue = ref(false);
   const saving = ref(false);
   const loading = ref(false);
   let generation = 0;
@@ -79,41 +98,46 @@
     revealed.value = false;
     answer.value = '';
   });
-  watch(
-    () => [props.artifactId, props.version, user.id],
-    async () => {
-      const token = ++generation;
-      loading.value = true;
+  async function loadProgress(reset = false) {
+    const token = ++generation;
+    loading.value = true;
+    error.value = '';
+    if (reset) {
       saving.value = false;
       mastered.value = {};
       index.value = 0;
       revealed.value = false;
       answer.value = '';
-      error.value = false;
-      try {
-        const response = await apiBaseGet(
-          `/api/toolbox/artifacts/${encodeURIComponent(props.artifactId)}/study`,
-          undefined,
-          { silent: true },
-        );
-        if (token !== generation) return;
-        if (response.status !== 200) throw new Error('unavailable');
-        mastered.value = Object.fromEntries(
-          (response.data?.cards || []).map((card: { id: string; mastered: boolean }) => [card.id, card.mastered]),
-        );
-      } catch {
-        if (token === generation) error.value = true;
-      } finally {
-        if (token === generation) loading.value = false;
-      }
-    },
+    }
+    try {
+      const response = await apiBaseGet(
+        `/api/toolbox/artifacts/${encodeURIComponent(props.artifactId)}/study`,
+        undefined,
+        { silent: true },
+      );
+      if (token !== generation) return;
+      if (response.status !== 200) throw new Error('unavailable');
+      mastered.value = Object.fromEntries(
+        (response.data?.cards || []).map((card: { id: string; mastered: boolean }) => [card.id, card.mastered]),
+      );
+    } catch {
+      if (token === generation) error.value = 'load';
+    } finally {
+      if (token === generation) loading.value = false;
+    }
+  }
+  watch(
+    () => [props.artifactId, props.version, user.id],
+    () => loadProgress(true),
     { immediate: true },
   );
   async function mark(value: boolean) {
-    if (!current.value || saving.value) return;
+    if (!current.value || saving.value || loading.value || error.value === 'load') return;
     const cardId = current.value.id;
     const token = generation;
     saving.value = true;
+    savingValue.value = value;
+    error.value = '';
     try {
       const response = await apiBasePost(
         `/api/toolbox/artifacts/${encodeURIComponent(props.artifactId)}/study`,
@@ -123,9 +147,9 @@
       if (token !== generation) return;
       if (response.status !== 200) throw new Error('unavailable');
       mastered.value = { ...mastered.value, [cardId]: value };
-      error.value = false;
+      error.value = '';
     } catch {
-      if (token === generation) error.value = true;
+      if (token === generation) error.value = 'save';
     } finally {
       if (token === generation) saving.value = false;
     }

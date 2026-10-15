@@ -1,18 +1,23 @@
 <template>
   <div class="collection-stack">
-    <p v-if="error" class="collection-error" role="alert"
-      >{{ error }} <BButton @click="load">{{ t('collectionForms.retry') }}</BButton></p
+    <ToolboxFeedback v-if="error" state="error"
+      >{{ error
+      }}<template #actions
+        ><BButton :loading="loading" @click="load">{{ t('collectionForms.retry') }}</BButton></template
+      ></ToolboxFeedback
     >
-    <p v-if="loading && !data" role="status">{{ t('collectionForms.loadingStatistics') }}</p>
+    <ToolboxFeedback v-if="loading && !data" state="loading" :title="t('collectionForms.loadingStatistics')" />
     <template v-if="data">
-      <div class="collection-stat-summary" :aria-busy="loading">
-        <div v-for="(key, index) in ['total', 'valid', 'spam']" :key="key"
-          ><span>{{ t('collectionForms.' + ['allResponses', 'validResponses', 'spam'][index]) }}</span
-          ><strong :class="{ 'is-accent': key === 'valid' }"
-            >{{ data.summary[key] }}<small>{{ t('collectionForms.unit') }}</small></strong
-          ></div
-        >
-      </div>
+      <BLoading class="collection-stat-loading" :loading="loading" :title="t('collectionForms.loadingStatistics')">
+        <div class="collection-stat-summary">
+          <div v-for="(key, index) in ['total', 'valid', 'spam']" :key="key"
+            ><span>{{ t('collectionForms.' + ['allResponses', 'validResponses', 'spam'][index]) }}</span
+            ><strong :class="{ 'is-accent': key === 'valid' }"
+              >{{ data.summary[key] }}<small>{{ t('collectionForms.unit') }}</small></strong
+            ></div
+          >
+        </div></BLoading
+      >
       <section class="collection-card collection-stat-trend">
         <div class="collection-row"
           ><h3>{{ t('collectionForms.trend') }}</h3
@@ -20,10 +25,9 @@
             t('collectionForms.validCount', { count: data.summary.valid })
           }}</span></div
         >
-        <p class="collection-muted"
-          >{{ t(grouped ? 'collectionForms.intervalTrend' : 'collectionForms.dailyTrend')
-          }}<span v-if="loading"> · {{ t('collectionForms.loadingStatistics') }}</span></p
-        >
+        <p class="collection-muted">{{
+          t(grouped ? 'collectionForms.intervalTrend' : 'collectionForms.dailyTrend')
+        }}</p>
         <div
           v-if="data.summary.valid > 0"
           class="collection-trend-chart"
@@ -125,39 +129,46 @@
       </div>
       <p class="collection-muted">{{ t('collectionForms.statisticsFootnote') }}</p>
     </template>
-    <BDrawer :open="textOpen" @close="textOpen = false" :title="t('collectionForms.textAnswers')" mobile-full-screen
-      ><div class="collection-stack"
-        ><BInput v-model:value="search" :placeholder="t('collectionForms.searchAnswers')" /><BButton
-          @click="
-            textPage = 1;
-            loadText();
-          "
-          >{{ t('collectionForms.search') }}</BButton
-        ><p v-if="textError" role="alert">{{ textError }}</p
-        ><p v-for="(r, i) in textRows" :key="i" class="collection-description">{{ r.text_value }}</p
-        ><div class="collection-toolbar"
-          ><BButton
-            :disabled="textPage <= 1"
-            @click="
-              textPage--;
-              loadText();
-            "
-            >{{ t('collectionForms.previous') }}</BButton
-          ><span>{{ textPage }}</span
-          ><BButton
-            :disabled="textRows.length < 30"
-            @click="
-              textPage++;
-              loadText();
-            "
-            >{{ t('collectionForms.next') }}</BButton
-          ></div
-        ></div
-      ></BDrawer
-    >
+    <BDrawer :open="textOpen" @close="closeText" :title="t('collectionForms.textAnswers')" mobile-full-screen>
+      <div class="collection-stack">
+        <div class="collection-toolbar">
+          <BInput
+            v-model:value="search"
+            :placeholder="t('collectionForms.searchAnswers')"
+            @keydown.enter="loadText(1, search)"
+          />
+          <BButton :loading="textLoading" @click="loadText(1, search)">{{ t('collectionForms.search') }}</BButton>
+        </div>
+        <ToolboxFeedback v-if="textError" state="error"
+          >{{ textError
+          }}<template #actions
+            ><BButton @click="loadText(requestedTextPage, requestedTextSearch)">{{
+              t('collectionForms.retry')
+            }}</BButton></template
+          ></ToolboxFeedback
+        >
+        <BLoading class="collection-text-results" :loading="textLoading" :title="t('common.loading')">
+          <ToolboxFeedback v-if="!textLoading && !textRows.length && !textError">{{
+            t('collectionForms.emptyTextAnswers')
+          }}</ToolboxFeedback>
+          <p v-for="(r, i) in textRows" :key="i" class="collection-description">{{ r.text_value }}</p>
+        </BLoading>
+        <div class="collection-toolbar">
+          <BButton :disabled="textPage <= 1 || textLoading" @click="loadText(textPage - 1)">{{
+            t('collectionForms.previous')
+          }}</BButton>
+          <span>{{ textPage }}</span>
+          <BButton :disabled="textRows.length < 30 || textLoading" @click="loadText(textPage + 1)">{{
+            t('collectionForms.next')
+          }}</BButton>
+        </div>
+      </div>
+    </BDrawer>
   </div>
 </template>
 <script setup lang="ts">
+  import ToolboxFeedback from '../components/ToolboxFeedback.vue';
+  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import './forms.css';
   import { useI18n } from 'vue-i18n';
   const { t } = useI18n();
@@ -176,7 +187,11 @@
     questionId = ref(''),
     textRows = ref<any[]>([]),
     textPage = ref(1),
-    textError = ref('');
+    textError = ref(''),
+    textLoading = ref(false),
+    requestedTextPage = ref(1),
+    requestedTextSearch = ref(''),
+    loadedTextSearch = ref('');
   const loadedRange = ref({ from: '', to: '' });
   let generation = 0,
     textGeneration = 0;
@@ -208,32 +223,46 @@
     questionId.value = id;
     textPage.value = 1;
     search.value = '';
-    textOpen.value = true;
-    void loadText();
-  }
-  async function loadText() {
-    const g = ++textGeneration;
     textRows.value = [];
+    textOpen.value = true;
+    void loadText(1, '');
+  }
+  function closeText() {
+    textOpen.value = false;
+    textGeneration++;
+    textLoading.value = false;
+  }
+  async function loadText(targetPage = textPage.value, query = loadedTextSearch.value) {
+    if (textLoading.value) return;
+    const g = ++textGeneration;
+    requestedTextPage.value = targetPage;
+    requestedTextSearch.value = query;
+    textLoading.value = true;
     textError.value = '';
     try {
       const result = await formsApi(`/${props.formId}/text-answers`, 'GET', {
         questionId: questionId.value,
-        page: textPage.value,
-        search: search.value,
+        page: targetPage,
+        search: query,
         from: props.from,
         to: props.to,
       });
-      if (g === textGeneration) textRows.value = result;
+      if (g === textGeneration) {
+        textRows.value = result;
+        textPage.value = targetPage;
+        loadedTextSearch.value = query;
+      }
     } catch (e) {
       if (g === textGeneration) textError.value = (e as Error).message;
+    } finally {
+      if (g === textGeneration) textLoading.value = false;
     }
   }
   watch(
     () => [props.formId, props.from, props.to],
     (value, previous) => {
       if (previous && value[0] !== previous[0]) data.value = undefined;
-      textOpen.value = false;
-      textGeneration++;
+      closeText();
       void load();
     },
     { immediate: true },
@@ -245,6 +274,13 @@
 </script>
 
 <style scoped>
+  .collection-stat-loading,
+  .collection-text-results {
+    height: auto;
+  }
+  .collection-text-results {
+    min-height: var(--ui-layout-160, 160px);
+  }
   .collection-stat-summary {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));

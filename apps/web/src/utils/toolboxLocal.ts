@@ -20,6 +20,19 @@ export function safeDownloadBaseName(fileName: string, fallback = 'lightnote-out
   return stripped || fallback;
 }
 
+/** Reserve the final archive name, including generated suffixes and case-insensitive collisions. */
+export function reserveToolboxFileName(fileName: string, usedNames: Set<string>) {
+  const dot = fileName.lastIndexOf('.');
+  const base = dot > 0 ? fileName.slice(0, dot) : fileName;
+  const extension = dot > 0 ? fileName.slice(dot) : '';
+  let name = fileName;
+  let suffix = 2;
+  const key = (value: string) => value.normalize('NFC').toLowerCase();
+  while (usedNames.has(key(name))) name = `${base}-${suffix++}${extension}`;
+  usedNames.add(key(name));
+  return name;
+}
+
 export const TOOLBOX_LOCAL_DELIVERY_EVENT = 'lightnote:toolbox-local-delivery';
 
 /**

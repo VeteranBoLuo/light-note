@@ -30,7 +30,7 @@
         :max-total-size="BROWSER_SQL_MAX_BYTES"
         @change="handleUpload"
       >
-        <BButton type="primary" size="large">
+        <BButton type="primary">
           <SvgIcon :src="icon.toolbox.upload" size="17" />{{ t('toolbox.browserSql.chooseFiles') }}
         </BButton>
       </BUpload>
@@ -59,11 +59,11 @@
               :disabled="busy || files.length >= BROWSER_SQL_MAX_FILES"
               @change="handleUpload"
             >
-              <BButton size="small" :disabled="busy || files.length >= BROWSER_SQL_MAX_FILES">
+              <BButton :disabled="busy || files.length >= BROWSER_SQL_MAX_FILES">
                 {{ t('toolbox.browserSql.addFiles') }}
               </BButton>
             </BUpload>
-            <BButton size="small" :disabled="busy" @click="clearFiles">{{ t('common.clear') }}</BButton>
+            <BButton :disabled="busy" @click="clearFiles">{{ t('common.clear') }}</BButton>
           </div>
         </header>
 
@@ -74,12 +74,7 @@
               <strong>{{ tables[index]?.name || tableNameForIndex(index) }}</strong>
               <small>{{ file.name }} · {{ formatToolboxBytes(file.size) }}</small>
             </div>
-            <BButton
-              size="small"
-              :disabled="busy"
-              :aria-label="t('toolbox.browserSql.removeFile')"
-              @click="removeFile(index)"
-            >
+            <BButton :disabled="busy" :aria-label="t('toolbox.browserSql.removeFile')" @click="removeFile(index)">
               <SvgIcon :src="icon.toolbox.delete" size="14" />
             </BButton>
           </article>
@@ -113,13 +108,7 @@
         </header>
 
         <div class="sql-recipes" :aria-label="t('toolbox.browserSql.recipes')">
-          <BButton
-            v-for="recipe in recipes"
-            :key="recipe.label"
-            size="small"
-            :disabled="busy"
-            @click="sql = recipe.sql"
-          >
+          <BButton v-for="recipe in recipes" :key="recipe.label" :disabled="busy" @click="sql = recipe.sql">
             {{ recipe.label }}
           </BButton>
         </div>
@@ -145,12 +134,12 @@
       </section>
 
       <section v-if="errorMessage" class="sql-error" role="alert">
-        <span><SvgIcon :src="icon.toolbox.locate" size="18" /></span>
+        <span><SvgIcon :src="icon.message.error" size="18" /></span>
         <div
           ><strong>{{ t('toolbox.browserSql.errorTitle') }}</strong
           ><p>{{ errorMessage }}</p></div
         >
-        <BButton v-if="engineState === 'error'" size="small" @click="rebuildRuntime">{{ t('common.retry') }}</BButton>
+        <BButton v-if="engineState === 'error'" @click="rebuildRuntime">{{ t('common.retry') }}</BButton>
       </section>
 
       <section class="sql-result-panel">
@@ -163,8 +152,8 @@
             >
           </div>
           <div v-if="result" class="sql-result-actions">
-            <BButton size="small" @click="downloadResult('json')">JSON</BButton>
-            <BButton type="primary" size="small" @click="downloadResult('csv')">
+            <BButton @click="downloadResult('json')">JSON</BButton>
+            <BButton type="primary" @click="downloadResult('csv')">
               <SvgIcon :src="icon.toolbox.download" size="14" />CSV
             </BButton>
           </div>
@@ -462,6 +451,13 @@
 </script>
 
 <style scoped lang="less">
+  .sql-empty :deep(.b_btn),
+  .sql-source-panel__actions :deep(.b_btn),
+  .sql-result-actions :deep(.b_btn),
+  .sql-console__footer :deep(.b_btn) {
+    gap: var(--ui-space-6, 6px);
+  }
+
   .browser-sql-workbench {
     display: grid;
     gap: var(--ui-space-16, 16px);
@@ -686,7 +682,7 @@
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: var(--ui-space-7, 7px);
+    gap: var(--ui-space-8, 8px);
   }
 
   .sql-engine-status {
@@ -778,9 +774,6 @@
   .sql-console :deep(textarea) {
     min-height: var(--ui-layout-230, 230px);
     resize: vertical;
-    border-color: var(--surface-border-color);
-    background: #151724;
-    color: #edf0ff;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     font-size: var(--ui-font-13, 13px);
     line-height: 1.7;
