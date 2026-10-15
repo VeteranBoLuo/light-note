@@ -1,4 +1,6 @@
 import { defineStore } from 'pinia';
+import { markRaw, toRaw } from 'vue';
+import type { QuickCaptureShareDraft } from '@/utils/incomingShare';
 import { completeInbox, countInbox, InboxItem, InboxResourceRef, InboxResourceType, listInbox } from '@/api/inboxApi';
 
 interface TypeTotals {
@@ -50,6 +52,8 @@ export default defineStore('inbox', {
     quickCaptureVisible: false,
     quickCaptureType: 'bookmark' as ActionCaptureType,
     quickCaptureTypeExplicit: false,
+    // 系统分享待预填的草稿；含 File，用 markRaw 保存，弹窗打开时一次性取走。
+    quickCaptureShare: null as QuickCaptureShareDraft | null,
     ownerId: '',
     countReady: false,
     countLoading: false,
@@ -83,6 +87,7 @@ export default defineStore('inbox', {
       this.quickCaptureVisible = false;
       this.quickCaptureType = 'bookmark';
       this.quickCaptureTypeExplicit = false;
+      this.quickCaptureShare = null;
       this.countReady = false;
       this.countLoading = false;
       this.countFailed = false;
@@ -95,6 +100,18 @@ export default defineStore('inbox', {
       // 明确的资源入口保留用户意图；只有通用入口才自动识别文本类型。
       this.quickCaptureTypeExplicit = type !== undefined;
       this.quickCaptureVisible = true;
+    },
+    /** 用系统分享的内容打开快速添加；有文件时进入文件页签，否则按正文自动识别书签或笔记。 */
+    openQuickCaptureWithShare(draft: QuickCaptureShareDraft) {
+      this.quickCaptureShare = markRaw(draft);
+      this.quickCaptureType = draft.files.length ? 'file' : 'bookmark';
+      this.quickCaptureTypeExplicit = false;
+      this.quickCaptureVisible = true;
+    },
+    takeQuickCaptureShare(): QuickCaptureShareDraft | null {
+      const draft = this.quickCaptureShare;
+      this.quickCaptureShare = null;
+      return draft ? toRaw(draft) : null;
     },
     async refreshCount() {
       const requestId = ++this.countRequestId;

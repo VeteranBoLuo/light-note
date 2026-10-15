@@ -23,6 +23,10 @@
     <string name="file_chooser_processing">正在读取所选文件…</string>
     <string name="file_chooser_returning">正在返回轻笺…</string>
     <string name="cannot_open_link">当前设备无法打开这个链接</string>
+    <!-- 系统分享菜单里的轻笺入口；接收后由网页「快速添加」预填，用户确认才会保存 -->
+    <string name="share_target_label">保存到轻笺</string>
+    <string name="share_nothing_to_save">没有可保存的分享内容</string>
+    <string name="share_unreadable">分享的文件无法读取，或超出单次 20 个、共 200MB 的上限</string>
     <string name="ssl_error">安全连接校验失败，已停止加载</string>
     <string name="unsafe_page_blocked">检测到风险页面，已停止加载</string>
     <string name="webview_too_old_title">系统 WebView 版本过旧</string>

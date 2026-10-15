@@ -6,6 +6,7 @@ export const RESOURCE_TYPES = Object.freeze(['bookmark', 'note', 'file']);
 export const INBOX_SOURCES = Object.freeze([
   'quick_capture',
   'browser_extension',
+  'system_share',
   'manual',
   'duplicate_requeue',
   'admin_demo',

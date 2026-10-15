@@ -17,6 +17,7 @@ describe('resourceInbox', () => {
     expect(normalizeResourceType('task')).toBeNull();
     expect(normalizeInboxSource('duplicate_requeue')).toBe('duplicate_requeue');
     expect(normalizeInboxSource('browser_extension')).toBe('browser_extension');
+    expect(normalizeInboxSource('system_share')).toBe('system_share');
     expect(normalizeInboxSource('unsafe')).toBeNull();
     expect(normalizeInboxItems([])).toBeNull();
     expect(

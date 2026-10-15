@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
     pendingTotal: 0,
     refreshCount: vi.fn(),
     refreshList: vi.fn(),
+    takeQuickCaptureShare: () => null,
   },
   todo: { refreshCount: vi.fn(), refreshList: vi.fn() },
   detailsPayload: {

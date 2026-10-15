@@ -29,6 +29,7 @@ import android.webkit.SslErrorHandler;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
 import android.widget.Button;
 import android.widget.FrameLayout;
@@ -130,7 +131,11 @@ public final class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         clearLegacyNotificationArtifacts();
         if (!PrivacyConsentStore.isAccepted(this)) {
-            startActivity(new Intent(this, PrivacyConsentActivity.class));
+            Intent consent = new Intent(this, PrivacyConsentActivity.class);
+            // 首次使用或政策版本更新后从「分享」进来：同意前不读取内容，只把分享请求转交给同意页，
+            // 同意后再原样交回主界面，用户不需要重新分享一次。
+            if (savedInstanceState == null) IncomingShareStore.forward(getIntent(), consent);
+            startActivity(consent);
             finish();
             return;
         }
@@ -150,7 +155,47 @@ public final class MainActivity extends Activity {
         if (savedInstanceState == null || webView.restoreState(savedInstanceState) == null) {
             webView.loadUrl(notificationSmokeTarget(getIntent()));
         }
-        if (savedInstanceState == null) openNotificationSmoke(getIntent());
+        if (savedInstanceState == null) {
+            openNotificationSmoke(getIntent());
+            acceptIncomingShare(getIntent());
+        }
+    }
+
+    /**
+     * 接收其他应用分享进来的内容。复制完成后通知网页，由网页的「快速添加」预填并等待用户确认；
+     * 网页未就绪时不需要补发，网页启动后会主动查询待处理的分享。
+     */
+    private void acceptIncomingShare(Intent intent) {
+        IncomingShareStore.AcceptResult result =
+            IncomingShareStore.accept(this, intent, this::onIncomingSharePrepared);
+        if (result == IncomingShareStore.AcceptResult.EMPTY) {
+            Toast.makeText(this, R.string.share_nothing_to_save, Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void onIncomingSharePrepared(IncomingShareStore.PrepareResult result) {
+        if (isFinishing() || isDestroyed()) return;
+        if (result == IncomingShareStore.PrepareResult.UNREADABLE) {
+            Toast.makeText(this, R.string.share_unreadable, Toast.LENGTH_LONG).show();
+        } else if (result == IncomingShareStore.PrepareResult.READY && webView != null) {
+            webView.evaluateJavascript("window.dispatchEvent(new Event('light-note:native-share'))", null);
+        }
+    }
+
+    private void reportIncomingShare(String token) {
+        if (webView == null || isFinishing() || isDestroyed()) return;
+        JSONObject payload;
+        try {
+            payload = IncomingShareStore.peek(this).put("token", token == null ? "" : token);
+        } catch (JSONException error) {
+            return;
+        }
+        webView.evaluateJavascript(
+            "window.__lightNoteAndroidShareResult&&window.__lightNoteAndroidShareResult("
+                + payload
+                + ");",
+            null
+        );
     }
 
     /**
@@ -201,6 +246,7 @@ public final class MainActivity extends Activity {
         if (BuildConfig.HUAWEI_PUSH_PROBE && intent.getBooleanExtra("huawei_probe_center", false)
             && webView != null && PrivacyConsentStore.isAccepted(this)) webView.loadUrl(notificationSmokeTarget(intent));
         if (Intent.ACTION_MAIN.equals(intent.getAction())) openNotificationSmoke(intent);
+        acceptIncomingShare(intent);
     }
 
     private void openNotificationSmoke(Intent intent) {
@@ -688,6 +734,12 @@ public final class MainActivity extends Activity {
             }
 
             @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                // 分享文件只在本机私有缓存里，由同域固定路径流式交给网页；其他请求照常走网络。
+                return IncomingShareStore.serve(MainActivity.this, request);
+            }
+
+            @Override
             public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
                 if (nativeNotificationSync != null) nativeNotificationSync.pageChanged();
                 errorView.setVisibility(View.GONE);
@@ -1055,6 +1107,14 @@ public final class MainActivity extends Activity {
                         )
                     );
                 }
+            } else if ("share.peek".equals(messageType)) {
+                String token = payload.optString("token");
+                runOnUiThread(() -> reportIncomingShare(token));
+            } else if ("share.complete".equals(messageType)) {
+                IncomingShareStore.complete(this, payload.optString("shareId"));
+            } else if ("share.finish".equals(messageType)) {
+                // 「完成」只把任务移到后台：从别的应用分享进来时，用户会回到原来的应用。
+                runOnUiThread(() -> moveTaskToBack(true));
             } else if ("app.ready".equals(messageType)) {
                 runOnUiThread(this::hideLaunchOverlay);
             } else if ("auth.session.persist".equals(messageType)) {

@@ -65,6 +65,7 @@
 <script setup lang="ts">
   import { syncBrowserPushOwner } from '@/composables/useBrowserPush';
   import { useNativeNotificationSync } from '@/composables/useNativeNotificationSync';
+  import { useAndroidIncomingShare } from '@/composables/useAndroidIncomingShare';
   import { openNotificationPanel } from '@/utils/notificationEntry';
   import { useNotification } from '@/composables/useNotification';
   import EntitlementReturnHost from '@/components/support/EntitlementReturnHost.vue';
@@ -362,6 +363,13 @@
     'noteShare',
   ];
   const applicationAuthStatus = ref<ApplicationAuthStatus>('pending');
+  if (isAndroidApp) {
+    // 其他应用分享进来的内容：身份确认后预填到「快速添加」，由用户确认保存。
+    useAndroidIncomingShare({
+      authReady: computed(() => applicationAuthStatus.value === 'ready'),
+      blocked: publicStandaloneRoute,
+    });
+  }
   useNativeNotificationSync(
     computed(() => {
       if (applicationAuthStatus.value === 'pending') return null;

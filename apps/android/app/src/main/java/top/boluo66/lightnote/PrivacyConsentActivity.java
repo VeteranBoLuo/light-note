@@ -205,6 +205,8 @@ public final class PrivacyConsentActivity extends Activity {
         intent.addFlags(
             Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK
         );
+        // 从「分享」进入时，主界面转交过来的分享请求在同意后原样交回；不同意则直接退出、不保留。
+        IncomingShareStore.forward(getIntent(), intent);
         startActivity(intent);
         finish();
     }

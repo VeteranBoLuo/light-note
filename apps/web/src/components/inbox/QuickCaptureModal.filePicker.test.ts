@@ -24,6 +24,7 @@ const inbox = {
   pendingTotal: 0,
   refreshCount: vi.fn(),
   refreshList: vi.fn(),
+  takeQuickCaptureShare: () => null,
 };
 const todo = { refreshCount: vi.fn(), refreshList: vi.fn() };
 
