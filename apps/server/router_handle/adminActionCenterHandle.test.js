@@ -371,12 +371,12 @@ describe('后台统一待处理中心', () => {
         return [
           [
             {
-              total: 84,
-              attention: 84,
+              total: 85,
+              attention: 85,
               running: 0,
               waiting: 0,
               completed_24h: 0,
-              sla_total: 84,
+              sla_total: 85,
               overdue: 84,
               due_soon: 0,
               sla_unavailable: 0,
@@ -392,11 +392,11 @@ describe('后台统一待处理中心', () => {
       { user: { role: 'root' }, body: { section: 'jobs', source: 'bookmark_icon', limit: 5 } },
       res,
     );
-    expect(res.body.data.sla).toMatchObject({ overdue: 84, returnedCount: 84, sampled: false });
-    expect(res.body.data.slaBySection.jobs).toMatchObject({ overdue: 84, returnedCount: 84, sampled: false });
+    expect(res.body.data.sla).toMatchObject({ overdue: 84, returnedCount: 85, sampled: false });
+    expect(res.body.data.slaBySection.jobs).toMatchObject({ overdue: 84, returnedCount: 85, sampled: false });
     expect(res.body.data.slaBySection.work).toMatchObject({ overdue: 0, returnedCount: 0, sampled: false });
     expect(res.body.data.jobs.items).toHaveLength(1);
-    expect(res.body.data.jobs.sources[0]).toMatchObject({ overdue: 84, sampled: true, slaSampled: false });
+    expect(res.body.data.jobs.sources[0]).toMatchObject({ overdue: 84, withinSla: 1, sampled: true, slaSampled: false });
   });
 
   it('拒绝未知来源筛选且不查询数据库', async () => {

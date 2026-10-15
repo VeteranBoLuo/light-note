@@ -128,6 +128,10 @@ function jobResult(source, label, summary, items) {
       ? {
           overdue: number(summary.overdue),
           dueSoon: number(summary.due_soon),
+          withinSla: Math.max(
+            0,
+            number(summary.sla_total) - number(summary.overdue) - number(summary.due_soon) - number(summary.sla_unavailable),
+          ),
           oldestAgeMinutes: number(summary.oldest_age_minutes),
           slaUnavailable: number(summary.sla_unavailable),
         }
