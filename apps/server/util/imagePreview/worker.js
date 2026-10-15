@@ -8,6 +8,9 @@ import { compressCardImage, imageError } from './compress.js';
 import { readSource, storageAdapters, hash } from './sources.js';
 import { generationEnabled } from './references.js';
 
+// A scan cursor only provides fairness; output ownership remains in the durable ledger.
+const outputCleanupCursors = new WeakMap();
+
 export async function runSingleImagePreviewJob(
   workerId,
   {
@@ -178,27 +181,44 @@ export async function cleanupImageAssets({
   for (const out of outputs) {
     try {
       await remove(out.output_object_key);
-      await db.query('UPDATE file_preview_jobs SET output_object_key=NULL WHERE id=? AND output_object_key=?', [
-        out.id,
-        out.output_object_key,
-      ]);
+      await db.query(
+        'UPDATE file_preview_jobs SET output_object_key=NULL,update_time=update_time WHERE id=? AND output_object_key=?',
+        [out.id, out.output_object_key],
+      );
     } catch {
       /* Keep the durable key for next cleanup. */
     }
   }
-  const [ledgers] = await db.query(`SELECT j.id,j.output_keys_json,a.artifact_object_key FROM file_preview_jobs j
-    JOIN file_preview_artifacts a ON a.id=j.artifact_id WHERE a.source_type='image_asset'
-    AND j.status IN ('completed','failed') AND j.output_keys_json IS NOT NULL ORDER BY j.update_time,j.id LIMIT 50`);
+  const loadLedgers = (afterId) =>
+    db.query(
+      `SELECT CAST(j.id AS CHAR) AS id,j.output_keys_json,j.update_time,a.artifact_object_key
+    FROM file_preview_jobs j JOIN file_preview_artifacts a ON a.id=j.artifact_id
+    WHERE a.source_type='image_asset' AND j.id>?
+      AND j.status IN ('completed','failed') AND j.output_keys_json IS NOT NULL
+      AND j.update_time<DATE_SUB(NOW(),INTERVAL 24 HOUR) ORDER BY j.id LIMIT 50`,
+      [afterId],
+    );
+  const cursor = outputCleanupCursors.get(db) || '0';
+  let [ledgers] = await loadLedgers(cursor);
+  if (!ledgers.length && cursor !== '0') [ledgers] = await loadLedgers('0');
+  outputCleanupCursors.set(db, ledgers.length === 50 ? String(ledgers.at(-1).id) : '0');
   for (const ledger of ledgers) {
+    const retained = [];
     for (const key of JSON.parse(ledger.output_keys_json || '[]')) {
       if (key === ledger.artifact_object_key) continue;
       try {
         await remove(key);
       } catch {
-        /* Next sweep retries from the durable ledger. */
+        retained.push(key);
       }
     }
-    await db.query('UPDATE file_preview_jobs SET update_time=NOW() WHERE id=?', [ledger.id]);
+    // Keep attempts for 24h to catch late uploads. Housekeeping must not change the
+    // execution timestamp, reopen reviewed failures, or inflate daily completions.
+    await db.query(
+      `UPDATE file_preview_jobs SET output_keys_json=?,update_time=update_time
+      WHERE id=? AND status IN ('completed','failed') AND update_time=? AND output_keys_json=?`,
+      [retained.length ? JSON.stringify(retained) : null, ledger.id, ledger.update_time, ledger.output_keys_json],
+    );
   }
   if (process.env.IMAGE_PREVIEW_CLEANUP_ENABLED !== 'true') return;
   const [candidates] = await db.query(`SELECT id FROM image_assets WHERE reconciled=1

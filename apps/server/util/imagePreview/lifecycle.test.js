@@ -13,6 +13,7 @@ import { resolveImagePreviews, validateResolveItems, retryImagePreview } from '.
 import { runSingleImagePreviewJob, runSingleVideoPreviewJob, cleanupImageAssets } from './worker.js';
 import { hash } from './sources.js';
 import { relocateCloudImage } from './relocate.js';
+import { loadAsyncJobSummary } from '../adminAsyncJobHealth.js';
 const socket = process.env.IMAGE_PREVIEW_TEST_SOCKET;
 const database = `ln_image_preview_test_${process.pid}`;
 let db, admin;
@@ -74,6 +75,9 @@ describe.skipIf(!socket)('image lifecycle on isolated local MySQL', () => {
     await db.query(metadataMigration);
     await db.query(metadataMigration);
     await db.query(
+      await fs.readFile(new URL('../../migrations/20261015_admin_async_job_archives.sql', import.meta.url), 'utf8'),
+    );
+    await db.query(
       'CREATE TABLE note(id VARCHAR(255) PRIMARY KEY,create_by VARCHAR(255),content TEXT,type VARCHAR(20),del_flag INT DEFAULT 0)',
     );
     await db.query('CREATE TABLE note_images(id INT AUTO_INCREMENT PRIMARY KEY,note_id VARCHAR(255),url TEXT)');
@@ -86,6 +90,7 @@ describe.skipIf(!socket)('image lifecycle on isolated local MySQL', () => {
   });
   beforeEach(async () => {
     for (const t of [
+      'admin_async_job_archives',
       'file_preview_jobs',
       'file_preview_artifacts',
       'image_asset_refs',
@@ -324,6 +329,106 @@ describe.skipIf(!socket)('image lifecycle on isolated local MySQL', () => {
     const [[job]] = await db.query('SELECT status,error_code,attempts FROM file_preview_jobs');
     expect(job).toMatchObject({ status: 'failed', error_code: 'IMAGE_SOURCE_MISSING', attempts: 1 });
     expect(compress).not.toHaveBeenCalled();
+  });
+  it.each(['completed', 'failed'])(
+    'cleans ended %s output ledgers once without changing the execution time',
+    async (status) => {
+      vi.stubEnv('IMAGE_PREVIEW_CLEANUP_ENABLED', 'false');
+      await asset();
+      await db.query("UPDATE file_preview_artifacts SET status='ready',artifact_object_key='live'");
+      await db.query(
+        `UPDATE file_preview_jobs SET status=?,error_code=?,output_object_key='stale',
+      output_keys_json='["stale","live"]',update_time=DATE_SUB(NOW(),INTERVAL 2 DAY)`,
+        [status, status === 'failed' ? 'IMAGE_STORAGE_UNAVAILABLE' : null],
+      );
+      const [[before]] = await db.query('SELECT update_time FROM file_preview_jobs');
+      const remove = vi.fn();
+      await cleanupImageAssets({ db, remove });
+      const [[after]] = await db.query(
+        'SELECT status,error_code,update_time,output_keys_json,output_object_key FROM file_preview_jobs',
+      );
+      expect(after).toMatchObject({ status, update_time: before.update_time, output_keys_json: null });
+      if (status === 'failed') expect(after.output_object_key).toBeNull();
+      expect(remove.mock.calls.every(([key]) => key === 'stale')).toBe(true);
+      expect(remove).toHaveBeenCalled();
+      remove.mockClear();
+      await cleanupImageAssets({ db, remove });
+      expect(remove).not.toHaveBeenCalled();
+    },
+  );
+  it('retains recent and active attempt ledgers for late uploads, and retries only failed removals', async () => {
+    vi.stubEnv('IMAGE_PREVIEW_CLEANUP_ENABLED', 'false');
+    await asset();
+    await db.query(`UPDATE file_preview_jobs SET status='completed',output_keys_json='["old","retry"]'`);
+    const remove = vi.fn();
+    await cleanupImageAssets({ db, remove });
+    expect(remove).not.toHaveBeenCalled();
+    await db.query("UPDATE file_preview_jobs SET status='queued',update_time=DATE_SUB(NOW(),INTERVAL 2 DAY)");
+    await cleanupImageAssets({ db, remove });
+    expect(remove).not.toHaveBeenCalled();
+    await db.query("UPDATE file_preview_jobs SET status='completed',update_time=DATE_SUB(NOW(),INTERVAL 2 DAY)");
+    const [[before]] = await db.query('SELECT update_time FROM file_preview_jobs');
+    remove.mockImplementation(async (key) => {
+      if (key === 'retry') throw new Error('temporary');
+    });
+    await cleanupImageAssets({ db, remove });
+    let [[job]] = await db.query('SELECT update_time,output_keys_json FROM file_preview_jobs');
+    expect(job.update_time).toEqual(before.update_time);
+    expect(JSON.parse(job.output_keys_json)).toEqual(['retry']);
+    remove.mockReset();
+    await cleanupImageAssets({ db, remove });
+    [[job]] = await db.query('SELECT update_time,output_keys_json FROM file_preview_jobs');
+    expect(job).toMatchObject({ update_time: before.update_time, output_keys_json: null });
+    expect(remove.mock.calls).toEqual([['retry']]);
+  });
+  it('does not let one full page of failed deletions starve later output ledgers', async () => {
+    vi.stubEnv('IMAGE_PREVIEW_CLEANUP_ENABLED', 'false');
+    for (let i = 0; i < 51; i++)
+      await transaction((c) =>
+        registerAsset(c, {
+          owner: 'u1',
+          sourceType: 'cloud_file',
+          sourceId: '1',
+          storage: 'obs',
+          locator: `cleanup-${i}`,
+        }),
+      );
+    await db.query(`UPDATE file_preview_jobs SET status='completed',
+      output_keys_json=JSON_ARRAY(CONCAT('stale-',id)),update_time=DATE_SUB(NOW(),INTERVAL 2 DAY)`);
+    const remove = vi.fn().mockRejectedValue(new Error('temporary'));
+    await cleanupImageAssets({ db, remove });
+    expect(remove).toHaveBeenCalledTimes(50);
+    await cleanupImageAssets({ db, remove });
+    expect(new Set(remove.mock.calls.map(([key]) => key)).size).toBe(51);
+  });
+  it('does not reopen an archived failure when its leftover output is removed', async () => {
+    vi.stubEnv('IMAGE_PREVIEW_CLEANUP_ENABLED', 'false');
+    const a = await asset();
+    await transaction((c) => replaceReferences(c, 'note', 'n1', [a.id]));
+    await db.query(`UPDATE file_preview_jobs SET status='failed',error_code='IMAGE_STORAGE_UNAVAILABLE',
+      output_keys_json='["leftover"]',update_time=DATE_SUB(NOW(),INTERVAL 2 DAY)`);
+    expect((await loadAsyncJobSummary('file_preview', { db }))[0][0].attention).toBe('1');
+    await db.query(`INSERT INTO admin_async_job_archives
+      (source,job_id,job_status,job_updated_at_epoch,archived_by,reason,request_id)
+      SELECT 'file_preview',CAST(id AS CHAR),status,UNIX_TIMESTAMP(update_time),'test','reviewed historical failure',UUID()
+      FROM file_preview_jobs`);
+    await cleanupImageAssets({ db, remove: vi.fn() });
+    expect(Number((await loadAsyncJobSummary('file_preview', { db }))[0][0].attention)).toBe(0);
+    const [[job]] = await db.query('SELECT status,error_code,output_keys_json FROM file_preview_jobs');
+    expect(job).toMatchObject({ status: 'failed', error_code: 'IMAGE_STORAGE_UNAVAILABLE', output_keys_json: null });
+  });
+  it('does not overwrite a new attempt ledger while cleaning a terminal snapshot', async () => {
+    vi.stubEnv('IMAGE_PREVIEW_CLEANUP_ENABLED', 'false');
+    await asset();
+    await db.query(`UPDATE file_preview_jobs SET status='completed',output_keys_json='["old"]',
+      update_time=DATE_SUB(NOW(),INTERVAL 2 DAY)`);
+    const remove = vi.fn(async () =>
+      db.query(`UPDATE file_preview_jobs
+      SET status='queued',output_keys_json='["new-attempt"]',update_time=NOW()`),
+    );
+    await cleanupImageAssets({ db, remove });
+    const [[job]] = await db.query('SELECT status,output_keys_json FROM file_preview_jobs');
+    expect(job).toMatchObject({ status: 'queued', output_keys_json: '["new-attempt"]' });
   });
   it('claims a queued job once across concurrent workers and stores the long-image presentation', async () => {
     await asset();

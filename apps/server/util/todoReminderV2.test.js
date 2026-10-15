@@ -9,6 +9,7 @@ vi.mock('./emailDelivery.js', () => ({ sendTrackedEmail: vi.fn() }));
 vi.mock('./notification.js', () => ({ createNotification: vi.fn() }));
 
 import { processDueTodoReminderJobs, todoReminderV2Internals } from './todoReminderV2.js';
+import { sendTrackedEmail } from './emailDelivery.js';
 
 beforeEach(() => vi.stubEnv('LIGHTNOTE_RUNTIME_ENV', 'production'));
 afterEach(() => vi.unstubAllEnvs());
@@ -131,6 +132,33 @@ describe('todoReminderV2', () => {
 
     expect(mocks.pool.query.mock.calls[0][0]).toContain("SET status = 'unknown'");
     expect(mocks.pool.query.mock.calls[0][1]).toEqual(['ECONNRESET', 'job-1', 'lease-1']);
+  });
+
+  it('SMTP 已成功但提醒状态回写失败时不重新入队发第二封', async () => {
+    const connection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      query: vi
+        .fn()
+        .mockResolvedValueOnce([[validJob({ channel: 'email', targetEmail: 'test@example.com' })]])
+        .mockResolvedValueOnce([{ affectedRows: 1 }]),
+    };
+    mocks.pool.getConnection.mockResolvedValue(connection);
+    sendTrackedEmail.mockResolvedValue({ messageId: 'accepted' });
+    mocks.pool.query
+      .mockReset()
+      .mockRejectedValueOnce(Object.assign(new Error('write failed'), { code: 'ER_LOCK_DEADLOCK' }))
+      .mockResolvedValue([{ affectedRows: 1 }]);
+    await todoReminderV2Internals.processJob('job-1');
+    expect(sendTrackedEmail).toHaveBeenCalledTimes(1);
+    expect(mocks.pool.query.mock.calls[1][0]).toContain("SET status = 'unknown'");
+    expect(mocks.pool.query.mock.calls[1][1][0]).toBe('EMAIL_DELIVERY_ACK_WRITE_FAILED');
+    expect(mocks.pool.query.mock.calls.some(([sql]) => sql.includes("'failed', 'pending'"))).toBe(false);
+    connection.query.mockResolvedValueOnce([[]]);
+    await todoReminderV2Internals.processJob('job-1');
+    expect(sendTrackedEmail).toHaveBeenCalledTimes(1);
   });
 
   it('明确失败按旧 retry_count 一致判断状态和下次重试时间', async () => {

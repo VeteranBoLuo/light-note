@@ -195,9 +195,12 @@ async function markSent(job, result) {
   );
 }
 
-async function markFailed(job, error) {
-  const errorCode = String(error?.code || 'DELIVERY_FAILED').slice(0, 64);
-  if (job.channel === 'email' && isAmbiguousSmtpError(error)) {
+async function markFailed(job, error, { delivered = false } = {}) {
+  const errorCode =
+    delivered && job.channel === 'email'
+      ? 'EMAIL_DELIVERY_ACK_WRITE_FAILED'
+      : String(error?.code || 'DELIVERY_FAILED').slice(0, 64);
+  if (job.channel === 'email' && (delivered || isAmbiguousSmtpError(error))) {
     await pool.query(
       `UPDATE todo_reminder_jobs
           SET status = 'unknown', last_error = ?, retry_count = retry_count + 1,
@@ -219,13 +222,15 @@ async function markFailed(job, error) {
 
 async function processJob(id) {
   let job;
+  let delivered = false;
   try {
     job = await claimJob(id);
     if (!job) return;
     const result = await deliverJob(job);
+    delivered = true;
     await markSent(job, result);
   } catch (error) {
-    if (job) await markFailed(job, error).catch(() => {});
+    if (job) await markFailed(job, error, { delivered }).catch(() => {});
     console.error('[todo-reminder-v2] 处理失败 code=%s', error?.code || 'UNKNOWN');
   }
 }
@@ -269,6 +274,7 @@ export const todoReminderV2Internals = {
   dbUtc,
   isAmbiguousSmtpError,
   markFailed,
+  processJob,
   sqlLocal,
   sqlUtc,
 };
