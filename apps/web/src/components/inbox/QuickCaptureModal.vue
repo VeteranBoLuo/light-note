@@ -5,11 +5,11 @@
       <MobileNoticeStrip
         v-if="bookmark.isMobile"
         class="capture-intro-strip"
-        :title="t('inbox.quickCaptureEyebrow')"
+        :title="captureEyebrow"
         :description="captureHint"
       />
       <div v-else class="capture-intro">
-        <span class="capture-intro__eyebrow">{{ t('inbox.quickCaptureEyebrow') }}</span>
+        <span class="capture-intro__eyebrow">{{ captureEyebrow }}</span>
         <div class="capture-intro__description">
           <p>{{ captureHint }}</p>
           <!--
@@ -121,6 +121,7 @@
                       <span class="file-list__meta">
                         {{ formatFileSize(file.size) }}
                         <span v-if="isPastedFile(file)" class="file-list__source">{{ t('inbox.fromClipboard') }}</span>
+                        <span v-else-if="isSharedFile(file)" class="file-list__source">{{ t('inbox.fromShare') }}</span>
                       </span>
                     </span>
                     <BButton
@@ -159,7 +160,17 @@
             {{ t('inbox.openCaptured') }}
           </BButton>
           <BButton class="capture-success__link" size="small" @click="goInbox">{{ successTargetLabel }}</BButton>
-          <BButton class="capture-success__continue" type="primary" size="small" @click="continueCapture">
+          <!-- 从其他应用分享进来时，保存后最常见的下一步是回到原应用，「完成」替代「继续添加」。 -->
+          <BButton
+            v-if="showShareFinish"
+            class="capture-success__continue"
+            type="primary"
+            size="small"
+            @click="finishShare"
+          >
+            {{ t('inbox.shareFinish') }}
+          </BButton>
+          <BButton v-else class="capture-success__continue" type="primary" size="small" @click="continueCapture">
             {{ t('inbox.continueCapture') }}
           </BButton>
         </div>
@@ -225,12 +236,26 @@
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
   import MobileNoticeStrip from '@/components/mobile/MobileNoticeStrip.vue';
   import { useUiDensity } from '@/composables/useUiDensity';
+  import { isLightNoteAndroidApp } from '@/utils/androidBridge';
+  import { completeAndroidShare, finishAndroidShare } from '@/utils/androidIncomingShare';
+  import type { QuickCaptureShareDraft } from '@/utils/incomingShare';
 
   const MAX_FILE_TOTAL_SIZE = 200 * 1024 * 1024;
 
+  /** 当前弹窗承接的系统分享；completed 表示内容已保存、原生暂存已清理。 */
+  interface ShareCaptureState {
+    id: string;
+    initialText: string;
+    bookmarkName: string;
+    skippedFiles: number;
+    textTruncated: boolean;
+    hasText: boolean;
+    completed: boolean;
+  }
+
   const visible = defineModel<boolean>('visible');
   const emit = defineEmits<{ captured: [] }>();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { density } = useUiDensity();
   const router = useRouter();
   const bookmark = bookmarkStore();
@@ -288,6 +313,8 @@
   watch(
     captureOwner,
     () => {
+      // 切换账号不算放弃分享：保留原生暂存，由新身份确认后重新弹出。
+      releaseShare(false);
       reset();
       visible.value = false;
     },
@@ -298,6 +325,8 @@
   let fileUploadController: AbortController | null = null;
   const fileUploadReceipts = new Map<File, ManagedCloudUploadReceipt>();
   const pastedFileKeys = new Set<string>();
+  const sharedFileKeys = new Set<string>();
+  const shareCapture = ref<ShareCaptureState | null>(null);
   const submitting = ref(false);
   const successText = ref('');
   const manualType = ref(inbox.quickCaptureTypeExplicit);
@@ -313,9 +342,27 @@
       label: t(`inbox.${key}`),
     })),
   );
-  const captureHint = computed(() =>
-    captureType.value === 'todo' ? t('inbox.todoCaptureHint') : t('inbox.captureHint'),
+  const pendingShare = computed(() => (shareCapture.value?.completed ? null : shareCapture.value));
+  const captureEyebrow = computed(() =>
+    pendingShare.value ? t('inbox.shareCaptureEyebrow') : t('inbox.quickCaptureEyebrow'),
   );
+  const captureHint = computed(() => {
+    if (captureType.value === 'todo') return t('inbox.todoCaptureHint');
+    const share = pendingShare.value;
+    if (!share) return t('inbox.captureHint');
+    return [
+      t('inbox.shareCaptureHint'),
+      share.skippedFiles > 0 ? t('inbox.shareSkippedFiles', { count: share.skippedFiles }) : '',
+      share.textTruncated ? t('inbox.shareTextTruncated') : '',
+      share.hasText && captureType.value === 'file' ? t('inbox.shareTextKept') : '',
+    ]
+      .filter(Boolean)
+      // 中文句号后不留空格，英文句子之间保留一个空格。
+      .join(locale.value.startsWith('zh') ? '' : ' ');
+  });
+  // 待整理来源单独记为系统分享，便于后续统计这个入口的真实使用量。
+  const captureInboxSource = computed(() => (shareCapture.value ? 'system_share' : 'quick_capture'));
+  const showShareFinish = computed(() => Boolean(shareCapture.value?.completed) && isLightNoteAndroidApp());
   const capturePanelTitle = computed(() => t(`inbox.quickCapturePanels.${captureType.value}.title`));
   const capturePanelHint = computed(() =>
     t(
@@ -357,10 +404,73 @@
       captureType.value = normalizeQuickCaptureType(inbox.quickCaptureType, bookmark.isMobile);
       manualType.value = inbox.quickCaptureTypeExplicit;
       if (captureType.value === 'todo') todoFormKey.value += 1;
+      applyShareDraft(inbox.takeQuickCaptureShare());
     } else {
       reset();
     }
   });
+  // 弹窗由 v-if 挂载，挂载时 visible 已是 true，上面的 watch 不会触发；分享草稿在这里取走并预填。
+  applyShareDraft(inbox.takeQuickCaptureShare());
+
+  function applyShareDraft(draft: QuickCaptureShareDraft | null) {
+    if (!draft) return;
+    shareCapture.value = {
+      id: draft.id,
+      initialText: draft.text,
+      bookmarkName: draft.bookmarkName,
+      skippedFiles: draft.skippedFiles,
+      textTruncated: draft.textTruncated,
+      hasText: Boolean(draft.text.trim()),
+      completed: false,
+    };
+    // 同时分享了文字和文件时先按文件保存；文字留在输入框里，切到笔记或书签页签可单独保存。
+    content.value = draft.text;
+    if (draft.files.length) {
+      addFiles(draft.files, 'share');
+      return;
+    }
+    captureType.value = draft.text.trim() ? detectInboxCaptureType(draft.text) : 'note';
+    manualType.value = false;
+  }
+
+  /**
+   * 结束对本次分享的承接。discard=true 表示用户关闭或已保存，通知原生删除暂存；
+   * 切换账号时传 false，保留暂存让新身份重新处理。页面刷新不会走到这里，暂存同样保留。
+   */
+  function releaseShare(discard: boolean) {
+    const share = shareCapture.value;
+    if (share && discard && !share.completed) completeAndroidShare(share.id);
+    shareCapture.value = null;
+    sharedFileKeys.clear();
+  }
+
+  /**
+   * 保存成功后清空草稿。系统分享可能同时带文字和文件，只清掉刚保存的那一部分，
+   * 另一部分留给用户「继续添加」；普通快速添加保持原行为，全部清空。
+   */
+  function clearSavedDraft(savedType: ActionCaptureType) {
+    const keepOther = Boolean(pendingShare.value);
+    if (savedType === 'file' || !keepOther) {
+      files.value = [];
+      pastedFileKeys.clear();
+      sharedFileKeys.clear();
+    }
+    if (savedType !== 'file' || !keepOther) content.value = '';
+  }
+
+  /** 分享的文字和文件都保存后才清理原生暂存；还有剩余时继续保留「继续添加」。 */
+  function settleShareAfterCapture() {
+    const share = shareCapture.value;
+    if (!share || share.completed) return;
+    if (content.value.trim() || files.value.length) return;
+    completeAndroidShare(share.id);
+    share.completed = true;
+  }
+
+  function finishShare() {
+    visible.value = false;
+    finishAndroidShare();
+  }
 
   async function loadTodoPlanConfig() {
     try {
@@ -392,6 +502,8 @@
   function detectType() {
     successText.value = '';
     capturedResource.value = null;
+    // 分享标题只描述分享来的那条链接；用户改了正文就不再沿用，回到默认命名。
+    if (pendingShare.value && content.value !== pendingShare.value.initialText) pendingShare.value.bookmarkName = '';
     if (manualType.value || captureType.value === 'file' || captureType.value === 'todo') return;
     captureType.value = detectInboxCaptureType(content.value);
   }
@@ -400,7 +512,7 @@
     return `${file.name}:${file.size}:${file.lastModified}`;
   }
 
-  function addFiles(value: File[], source: 'picker' | 'drop' | 'clipboard' = 'picker') {
+  function addFiles(value: File[], source: 'picker' | 'drop' | 'clipboard' | 'share' = 'picker') {
     if (submitting.value) return;
     if (!value.length) return;
     const seenKeys = new Set(files.value.map(selectedFileKey));
@@ -417,6 +529,7 @@
       return;
     }
     if (source === 'clipboard') additions.forEach((file) => pastedFileKeys.add(selectedFileKey(file)));
+    if (source === 'share') additions.forEach((file) => sharedFileKeys.add(selectedFileKey(file)));
     files.value = [...files.value, ...additions];
     captureType.value = 'file';
     manualType.value = true;
@@ -439,11 +552,16 @@
     return pastedFileKeys.has(selectedFileKey(file));
   }
 
+  function isSharedFile(file: File) {
+    return sharedFileKeys.has(selectedFileKey(file));
+  }
+
   function removeFile(index: number) {
     if (submitting.value) return;
     const target = files.value[index];
     if (target) {
       pastedFileKeys.delete(selectedFileKey(target));
+      sharedFileKeys.delete(selectedFileKey(target));
       fileUploadReceipts.delete(target);
     }
     files.value = files.value.filter((_, fileIndex) => fileIndex !== index);
@@ -455,6 +573,7 @@
     fileUploadNotice.value = '';
     files.value = [];
     pastedFileKeys.clear();
+    sharedFileKeys.clear();
   }
 
   function formatFileSize(bytes: number) {
@@ -479,19 +598,22 @@
     }
     const url = new URL(urlResult.url);
     content.value = urlResult.url;
+    const name = pendingShare.value?.bookmarkName || url.hostname.replace(/^www\./, '') || url.href;
     const res = await apiBasePost('/api/bookmark/addBookmark', {
-      name: url.hostname.replace(/^www\./, '') || url.href,
+      name,
       url: url.href,
       description: '',
       saveSnapshot: true,
       addToInbox: true,
-      inboxSource: 'quick_capture',
+      inboxSource: captureInboxSource.value,
+      // 自动命名常与已有书签同名（同一网站的不同链接），按序号避让，避免第二条收藏直接失败。
+      nameConflict: 'suffix',
     });
     if (generation !== captureGeneration) {
       throw Object.assign(new Error('Capture closed'), { code: 'CAPTURE_CANCELLED' });
     }
     if (res.status !== 200) throw new Error(res.msg || t('inbox.captureFailed'));
-    capturedResource.value = { type: 'bookmark', id: String(res.data?.id || ''), title: url.hostname };
+    capturedResource.value = { type: 'bookmark', id: String(res.data?.id || ''), title: String(res.data?.name || name) };
     return res.data?.duplicate ? t('inbox.duplicateRequeued') : t('inbox.captureSuccess');
   }
 
@@ -500,7 +622,7 @@
     const payload = {
       ...buildMarkdownNotePayload(content.value, t('inbox.untitledNote')),
       addToInbox: true,
-      inboxSource: 'quick_capture',
+      inboxSource: captureInboxSource.value,
     };
     // 同一输入重试时找回已提交结果，避免响应丢失后重复创建。
     // 收据只保留在当前草稿内存中；关闭、继续添加或切号后结束本次操作。
@@ -539,7 +661,7 @@
               batchRequest,
               receipt,
               addToInbox: true,
-              inboxSource: 'quick_capture',
+              inboxSource: captureInboxSource.value,
               signal: controller.signal,
             });
           } catch {
@@ -561,6 +683,7 @@
       files.value = failed;
       const remaining = new Set(failed.map(selectedFileKey));
       for (const key of pastedFileKeys) if (!remaining.has(key)) pastedFileKeys.delete(key);
+      for (const key of sharedFileKeys) if (!remaining.has(key)) sharedFileKeys.delete(key);
       const hasUnknown = failed.some((file) => fileUploadReceipts.get(file)?.pending);
       fileUploadNotice.value = t(hasUnknown ? 'inbox.captureFilesUnknown' : 'inbox.captureFilesPartial', {
         saved: saved.length,
@@ -596,9 +719,8 @@
             ? OPERATION_LOG_MAP.inbox.captureNote
             : OPERATION_LOG_MAP.inbox.captureFile;
       recordOperation(operation);
-      content.value = '';
-      files.value = [];
-      pastedFileKeys.clear();
+      clearSavedDraft(captureType.value);
+      settleShareAfterCapture();
       manualType.value = false;
       await refreshQuickCaptureStores(captureType.value, captureWorkspaceActive(captureType.value), inbox, todo);
       if (generation !== captureGeneration) return;
@@ -728,6 +850,13 @@
     todoOperation = null;
     successText.value = '';
     capturedResource.value = null;
+    // 分享内容已全部保存，之后手动添加的内容不再算作系统分享。
+    if (shareCapture.value?.completed) releaseShare(false);
+    // 分享还剩另一部分未保存：直接切到对应页签，免得用户自己找。
+    if (pendingShare.value) {
+      captureType.value = files.value.length ? 'file' : detectInboxCaptureType(content.value);
+      manualType.value = false;
+    }
     if (captureType.value === 'todo') todoFormKey.value += 1;
   }
 
@@ -750,6 +879,8 @@
   }
 
   function reset() {
+    // 关闭弹窗即结束本次分享：未保存视为放弃，通知原生删除暂存（切换账号时已先行保留）。
+    releaseShare(true);
     bookmarkPreflightController?.abort();
     bookmarkPreflightController = null;
     fileUploadController?.abort();

@@ -136,6 +136,48 @@ describe('bookmarkService.createBookmark', () => {
     });
   });
 
+  it('默认入口遇到同名书签仍报同名冲突', async () => {
+    connection.query.mockReset();
+    connection.query.mockResolvedValueOnce([[]]).mockResolvedValueOnce([[{ id: 'bookmark-1' }]]);
+
+    await expect(
+      createBookmark({
+        userId: 'user-1',
+        bookmark: { url: 'https://example.com/b', name: 'example.com' },
+        saveSnapshot: false,
+      }),
+    ).rejects.toMatchObject({ code: 'DUPLICATE_NAME', httpStatus: 409 });
+    expect(connection.rollback).toHaveBeenCalledTimes(1);
+  });
+
+  it('快速添加的同名书签按序号避让，比较不区分大小写并转义通配符', async () => {
+    connection.query.mockReset();
+    connection.query
+      .mockResolvedValueOnce([[]])
+      .mockResolvedValueOnce([[{ id: 'bookmark-1' }]])
+      .mockResolvedValueOnce([[{ name: 'Ex_ample.com (2)' }]])
+      .mockResolvedValue([{ affectedRows: 1 }]);
+
+    const result = await createBookmark({
+      userId: 'user-1',
+      bookmark: { url: 'https://ex_ample.com/b', name: 'ex_ample.com' },
+      addToInbox: true,
+      inboxSource: 'system_share',
+      saveSnapshot: false,
+      suffixDuplicateName: true,
+    });
+
+    const likeQuery = connection.query.mock.calls.find(([sql]) => String(sql).includes('name LIKE ?'));
+    expect(likeQuery?.[1]).toEqual(['user-1', 'ex\\_ample.com (%)']);
+    const bookmarkInsert = connection.query.mock.calls.find(([sql]) => sql === 'INSERT INTO bookmark SET ?');
+    expect(bookmarkInsert?.[1]?.[0]?.name).toBe('ex_ample.com (3)');
+    expect(enqueueResources).toHaveBeenCalledWith(connection, {
+      userId: 'user-1',
+      items: [{ resourceType: 'bookmark', resourceId: result.id }],
+      source: 'system_share',
+    });
+  });
+
   it('同一幂等键重试直接恢复固定书签，不重复触发图标、快照或成长副作用', async () => {
     pool.query.mockResolvedValueOnce([
       [{ id: '1b1ce0ca-0ac7-5d70-a03f-a3cf782253b8', name: '已保存', url: 'https://example.com/' }],

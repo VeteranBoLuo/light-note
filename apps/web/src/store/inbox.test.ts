@@ -75,6 +75,31 @@ describe('inbox store', () => {
     expect(store.quickCaptureVisible).toBe(true);
   });
 
+  it('系统分享草稿打开快速添加并只能被取走一次，账号切换时清空', () => {
+    const store = useInboxStore();
+    const file = new File(['x'], 'a.png', { type: 'image/png' });
+    const draft = {
+      id: 'd'.repeat(32),
+      text: '',
+      files: [file],
+      bookmarkName: '',
+      skippedFiles: 0,
+      textTruncated: false,
+    };
+    store.openQuickCaptureWithShare(draft);
+    expect(store.quickCaptureVisible).toBe(true);
+    expect(store.quickCaptureType).toBe('file');
+    expect(store.quickCaptureTypeExplicit).toBe(false);
+    const taken = store.takeQuickCaptureShare();
+    expect(taken?.files[0]).toBe(file);
+    expect(store.takeQuickCaptureShare()).toBeNull();
+
+    store.openQuickCaptureWithShare({ ...draft, files: [], text: 'https://example.com' });
+    expect(store.quickCaptureType).toBe('bookmark');
+    store.resetForOwner('another-user');
+    expect(store.quickCaptureShare).toBeNull();
+  });
+
   it('无上下文的快速添加默认打开第一个书签入口', () => {
     const store = useInboxStore();
     store.openQuickCapture('note');

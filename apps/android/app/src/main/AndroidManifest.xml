@@ -48,6 +48,17 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!--
+              系统分享入口：接收文字、链接、图片和文件（单个或多个）。不申请任何新权限，
+              分享方随 Intent 临时授予读取权；内容先暂存到私有缓存，由网页「快速添加」确认后保存。
+              不登记 ACTION_VIEW，轻笺不作为文件的「打开方式」。
+            -->
+            <intent-filter android:label="@string/share_target_label">
+                <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
         </activity>
 
         <activity

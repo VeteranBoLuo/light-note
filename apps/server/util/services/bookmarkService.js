@@ -41,6 +41,29 @@ function cleanBookmarkFields(bookmark, { userId, url, name, description, id }) {
   return data;
 }
 
+const MAX_DUPLICATE_NAME_SUFFIX = 99;
+
+/**
+ * 为同名书签找一个「名称 (2)」形式的可用名称；序号用尽返回 null，由调用方按同名报错。
+ *
+ * 只给快速添加使用：它按域名或分享标题自动命名，同一网站的不同链接（如两篇小红书、两条知乎回答）
+ * 必然同名，直接报「已存在」会让第二条收藏失败。用户手动填写名称的入口仍保持同名报错。
+ * 比较按小写进行，与数据库默认的不区分大小写排序规则一致。
+ */
+async function findAvailableBookmarkName(connection, { userId, name }) {
+  const base = name.slice(0, 255 - ` (${MAX_DUPLICATE_NAME_SUFFIX})`.length).trim();
+  const [rows] = await connection.query(
+    'SELECT name FROM bookmark WHERE user_id = ? AND del_flag = 0 AND name LIKE ?',
+    [userId, `${base.replace(/[\\%_]/g, '\\$&')} (%)`],
+  );
+  const used = new Set((rows || []).map((row) => String(row.name || '').toLocaleLowerCase()));
+  for (let index = 2; index <= MAX_DUPLICATE_NAME_SUFFIX; index += 1) {
+    const candidate = `${base} (${index})`;
+    if (!used.has(candidate.toLocaleLowerCase())) return candidate;
+  }
+  return null;
+}
+
 function bookmarkServiceError(code, message, details = {}, httpStatus = 400) {
   const error = new Error(message);
   error.code = code;
@@ -87,6 +110,7 @@ export async function createBookmark({
   request,
   suppressUserRewards = false,
   idempotencyKey = null,
+  suffixDuplicateName = false,
 } = {}) {
   if (!userId) throw new Error('USER_REQUIRED: 缺少用户');
   const url = requireBookmarkUrl(bookmark.url).canonicalUrl;
@@ -180,12 +204,18 @@ export async function createBookmark({
       [userId, name],
     );
     if (nameDuplicates.length) {
-      throw bookmarkServiceError(
-        'DUPLICATE_NAME',
-        `书签「${name}」已存在`,
-        { duplicate: { id: String(nameDuplicates[0].id), name } },
-        409,
-      );
+      const availableName = suffixDuplicateName
+        ? await findAvailableBookmarkName(connection, { userId, name })
+        : null;
+      if (!availableName) {
+        throw bookmarkServiceError(
+          'DUPLICATE_NAME',
+          `书签「${name}」已存在`,
+          { duplicate: { id: String(nameDuplicates[0].id), name } },
+          409,
+        );
+      }
+      name = availableName;
     }
 
     data = cleanBookmarkFields(bookmark, {

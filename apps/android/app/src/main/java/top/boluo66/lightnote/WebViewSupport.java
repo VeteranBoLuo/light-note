@@ -942,6 +942,12 @@ final class WebViewSupport {
         return origins;
     }
 
+    /** 请求地址是否落在受信网页来源上（与原生桥消息使用同一份来源清单）。 */
+    static boolean isTrustedWebOrigin(String url) {
+        String origin = originOf(url);
+        return !isBlank(origin) && trustedWebMessageOrigins().contains(origin);
+    }
+
     private static String sanitizeFileName(String value) {
         if (isBlank(value)) {
             return "";

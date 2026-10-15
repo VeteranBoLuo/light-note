@@ -854,6 +854,7 @@ export const addBookmark = async (req, res) => {
       relatedTagNames = [],
       tagSource: rawTagSource = 'manual',
       idempotencyKey: rawIdempotencyKey = null,
+      nameConflict = null,
       ...bmBody
     } = req.body || {};
     const idempotencyKey =
@@ -873,6 +874,8 @@ export const addBookmark = async (req, res) => {
       request: req,
       suppressUserRewards: req.suppressUserRewards || req.isVisitorWorkspace,
       idempotencyKey,
+      // 快速添加按域名或分享标题自动命名，同名时按序号避让；其他入口不传，仍保持同名报错。
+      suffixDuplicateName: nameConflict === 'suffix',
     });
     res.send(resultData(result));
   } catch (err) {

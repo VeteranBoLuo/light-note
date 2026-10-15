@@ -31,7 +31,7 @@ export type ManagedCloudUploadOptions = {
   signal?: AbortSignal;
   onProgress?: (percent: number) => void;
   addToInbox?: boolean;
-  inboxSource?: 'quick_capture' | 'browser_extension';
+  inboxSource?: 'quick_capture' | 'browser_extension' | 'system_share';
 };
 
 type ManagedUploadResponse = { status: number; data?: any; msg?: string };
