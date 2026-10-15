@@ -1,52 +1,41 @@
 <template>
   <div class="unified-profile-form">
-    <div class="home-container" :class="{ 'home-container--framed': equippedFrameId }">
-      <div style="width: 100%" class="flex-justify-center">
+    <div class="profile-identity-card">
+      <ChatUserProfileContent
+        identity-only
+        stable-layout
+        :compact="isMobileLayout"
+        :profile="identityProfile"
+        :community-actions="false"
+        :chat-actions="false"
+        authenticated
+      />
+      <div class="profile-identity-card__actions">
         <BButton
-          class="user_icon"
-          :class="{ 'user_icon--framed': equippedFrameId }"
-          :disabled="user.role === 'visitor' || !user.id"
-          :aria-label="t('myInfo.chooseAvatar')"
+          size="small"
+          :disabled="isGuest"
           v-click-log="{ module: '我的信息', operation: `选择头像` }"
           @click="avatarPickerOpen = true"
+          >{{ t('profileAppearance.changeAvatar') }}</BButton
         >
-          <AvatarFramePreview
-            v-if="equippedFrameId"
-            :frame-id="equippedFrameId"
-            :src="headPicture || icon.navigation.user"
-            :size="dimension(80, 'icon')"
-            :decorative="false"
-          />
-          <svg-icon v-else :src="headPicture || icon.navigation.user" :size="80" />
-          <span v-if="user.role !== 'visitor' && user.id" class="user_icon__edit" aria-hidden="true">
-            <SvgIcon :src="icon.card_edit" :size="13" />
-          </span>
-        </BButton>
+        <BButton size="small" @click="appearanceOpen = true"
+          ><SvgIcon :src="icon.common.magicWand" size="14" aria-hidden="true" />{{
+            t('profileAppearance.title')
+          }}</BButton
+        >
       </div>
+    </div>
+    <div class="home-container">
       <div class="home-user-body">
-        <div class="flex-align-center" style="gap: var(--ui-space-20, 20px)">
-          <div class="flex-justify-center" style="gap: var(--ui-space-20, 20px)">
-            <span class="user-item-label">{{ t('myInfo.role') }}</span>
-            <span style="color: #8f9096">{{ getRoleName() }}</span>
-          </div>
-          <div class="flex-align-center-gap"
-            ><svg-icon :src="icon.login.password" /><a class="dom-hover" @click="handleConfigPassword">{{
+        <div class="profile-account-row">
+          <span class="user-item-label">{{ t('myInfo.role') }}</span>
+          <strong>{{ getRoleName() }}</strong>
+          <BButton type="text" class="profile-account-row__password" @click="handleConfigPassword"
+            ><SvgIcon :src="icon.login.password" size="14" aria-hidden="true" />{{
               user.password ? t('myInfo.changePassword') : t('myInfo.setPassword')
-            }}</a></div
+            }}</BButton
           >
           <PassConfigDlg v-model:visible="configPassVisible" />
-        </div>
-        <div class="user-item">
-          <span class="user-item-label">{{ t('myInfo.avatarDecorations') }}</span>
-          <BButton class="frame-picker-entry" @click="frameDrawerOpen = true">
-            <span class="frame-picker-entry__current">
-              <SvgIcon :src="icon.growth.reward" size="18" aria-hidden="true" />
-              <span>{{
-                equippedFrameName ? t('myInfo.equippedFrame', { name: equippedFrameName }) : t('myInfo.noFrameEquipped')
-              }}</span>
-            </span>
-            <span class="frame-picker-entry__action">{{ t('myInfo.chooseAvatarFrame') }}</span>
-          </BButton>
         </div>
         <div class="user-item">
           <span class="user-item-label">{{ t('myInfo.nickname') }}</span>
@@ -106,7 +95,7 @@
       </div>
     </div>
   </div>
-  <AvatarFramePickerDrawer v-model:open="frameDrawerOpen" :z-index="720" @navigate="handleFrameNavigation" />
+  <ProfileAppearanceStudio v-model:open="appearanceOpen" :profile="identityProfile" @navigate="handleFrameNavigation" />
   <AvatarPicker
     v-model:open="avatarPickerOpen"
     :current-src="headPicture"
@@ -117,8 +106,6 @@
 </template>
 
 <script lang="ts" setup>
-  import { useUiDensity } from '@/composables/useUiDensity';
-  const { dimension } = useUiDensity();
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import { bookmarkStore, useUserStore } from '@/store';
   import { computed, ref } from 'vue';
@@ -134,8 +121,11 @@
   import { useI18n } from 'vue-i18n';
   import { recordOperation } from '@/api/commonApi.ts';
   import { useGrowth } from '@/composables/useGrowth.ts';
-  import AvatarFramePreview from '@/components/growth/AvatarFramePreview.vue';
-  import AvatarFramePickerDrawer from '@/components/growth/AvatarFramePickerDrawer.vue';
+  import ProfileAppearanceStudio from '@/components/growth/ProfileAppearanceStudio.vue';
+  import ChatUserProfileContent from '@/components/communityChat/ChatUserProfileContent.vue';
+  import type { CommunityChatAuthorProfile } from '@/api/communityChatApi';
+  import { useMobileLayout } from '@/composables/useMobileLayout';
+  import { profileBackground } from '@/config/profileBackgrounds';
   import AvatarPicker from '@/components/personCenter/myInfo/AvatarPicker.vue';
   import { resolveAccountRoleLabelKey } from '@/config/accountRole';
   import { frameVariant } from '@/config/growthFrames.ts';
@@ -191,21 +181,43 @@
   defineExpose({ requestClose, dirty, saving });
 
   const bookmark = bookmarkStore();
-  const { growth, load: loadGrowth, loadGrowthTasks } = useGrowth();
-  const { t, te } = useI18n();
-  const frameDrawerOpen = ref(false);
+  const { growth, shop, load: loadGrowth, loadGrowthTasks } = useGrowth();
+  const { t } = useI18n();
+  const isMobileLayout = useMobileLayout();
+  const appearanceOpen = ref(false);
   const avatarPickerOpen = ref(false);
   const equippedFrameId = computed(() => {
     const id = growth.value?.equippedFrame;
     return frameVariant(id) ? id : null;
   });
-  const equippedFrameName = computed(() => {
-    const id = equippedFrameId.value;
-    if (!id) return '';
-    const key = `growth.shopItems.${id}.name`;
-    return te(key) ? t(key) : id;
+  // 名片预览与「个人装扮」共用：身份字段取社区公开预览，昵称、头像、简介跟随当前未保存的编辑，
+  // 背景与头像框取成长快照的实时佩戴状态（装扮内使用后立即同步，无需重新拉取社区资料）。
+  const identityProfile = computed<CommunityChatAuthorProfile>(() => {
+    const preview = profile.ownProfile.value?.publicPreview;
+    const frameId = equippedFrameId.value;
+    const backgroundId = growth.value?.equippedBackground;
+    return {
+      name: String(userData.value.alias || '').trim() || preview?.name || t('communityChat.memberFallback'),
+      userPublicId: preview?.userPublicId,
+      communityId: preview?.communityId,
+      role: preview?.role || 'member',
+      avatar: headPicture.value,
+      frameId,
+      frameRarity:
+        shop.value?.frames?.find((item) => item.id === frameId)?.rarity ??
+        (frameId && frameId === preview?.frameId ? preview.frameRarity : null) ??
+        null,
+      level: growth.value?.level ?? preview?.level ?? 1,
+      levelName: growth.value?.name ?? preview?.levelName ?? '',
+      title: preview?.title ?? null,
+      backgroundId: profileBackground(backgroundId) ? backgroundId : null,
+      bio: bio.value,
+      communityTenureLabel: null,
+      achievements: [],
+      achievementCount: 0,
+      hasMoreAchievements: false,
+    };
   });
-
   function handleAvatarSelected(source: string) {
     headPicture.value = source;
     avatarChanged.value = true;
@@ -283,7 +295,7 @@
 
   function handleFrameNavigation(destination: 'growth' | 'tasks' | 'achievements') {
     const navigate = () => {
-      frameDrawerOpen.value = false;
+      appearanceOpen.value = false;
       emit('navigate', destination === 'growth' ? '/growth' : '/growth?section=' + destination);
     };
     if (!dirty.value) {
@@ -311,25 +323,52 @@
     overflow-wrap: anywhere;
     word-break: break-all;
   }
+  // 名片即资料页的门面：与「个人装扮」预览共用 stable-layout，按钮压在右下角不随背景或头像框位移。
+  .profile-identity-card {
+    position: relative;
+    height: var(--ui-layout-176, 176px);
+  }
+  .profile-identity-card__actions {
+    position: absolute;
+    z-index: 2;
+    right: var(--ui-space-12, 12px);
+    bottom: var(--ui-space-12, 12px);
+    display: flex;
+    gap: var(--ui-space-8, 8px);
+  }
+  .profile-identity-card__actions :deep(.b_btn) {
+    gap: var(--ui-space-4, 4px);
+    border: 1px solid var(--surface-border-color);
+    background: var(--card-background);
+  }
   .home-container {
     box-sizing: border-box;
     width: 100%;
     padding: 0;
     font-size: var(--ui-font-14, 14px);
   }
-  // 80px 头像下，最高档素材盒(artSize 137)会达到约 171px；弹窗正文从标题分隔线开始裁切，必须在正文内部预留上半径出血。
-  .home-container--framed {
-    padding-top: var(--ui-layout-56, 56px);
-  }
   .home-user-body {
-    margin-top: var(--ui-space-30, 30px);
+    margin-top: var(--ui-space-18, 18px);
     display: flex;
     flex-direction: column;
     align-items: flex-start;
     gap: var(--ui-space-18, 18px);
   }
-  .home-container--framed .home-user-body {
-    margin-top: var(--ui-layout-54, 54px);
+  .profile-account-row {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: var(--ui-space-12, 12px);
+    color: var(--desc-color);
+    font-size: var(--ui-font-13, 13px);
+  }
+  .profile-account-row strong {
+    color: var(--text-color);
+    font-weight: 500;
+  }
+  .profile-account-row__password {
+    margin-left: auto;
+    gap: var(--ui-space-4, 4px);
   }
   .user-item {
     display: flex;
@@ -343,93 +382,12 @@
       white-space: nowrap;
     }
   }
-  .user_icon {
-    height: var(--ui-layout-80, 80px);
-    width: var(--ui-layout-80, 80px);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid #f5f5f5;
-    border-radius: 50%;
-    cursor: pointer;
-    overflow: hidden;
-    position: relative;
-    padding: 0;
-    line-height: normal;
-    background: var(--surface-card-bg);
-    &:hover {
-      border-color: var(--primary-color);
-    }
-  }
-  .user_icon--framed {
-    overflow: visible;
-    border-color: transparent;
-  }
-  // 游客仍不可编辑头像，但媒体预览不能继承 BButton 的整层透明度，否则位图边缘会与弹窗背景混合发虚。
-  .user_icon.disabled {
-    opacity: 1;
-  }
-  .user_icon__edit {
-    position: absolute;
-    right: 0;
-    bottom: 0;
-    width: var(--ui-layout-25, 25px);
-    height: var(--ui-layout-25, 25px);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border: 3px solid var(--background-color);
-    border-radius: 50%;
-    color: #fff;
-    background: var(--primary-color);
-    pointer-events: none;
-  }
-  .frame-picker-entry {
-    width: 100%;
-    min-height: var(--ui-layout-56, 56px);
-    justify-content: space-between;
-    gap: var(--ui-space-12, 12px);
-    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
-    border: 1px solid var(--surface-border-color);
-    border-radius: 12px;
-    color: var(--text-color);
-    background: var(--surface-panel-bg);
-    text-align: left;
-  }
-  .frame-picker-entry__current {
-    min-width: 0;
-    display: inline-flex;
-    align-items: center;
-    gap: var(--ui-space-8, 8px);
-    color: var(--text-color);
-  }
-  .frame-picker-entry__current > span {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .frame-picker-entry__current :deep(.svg-icon) {
-    flex: 0 0 auto;
-    color: var(--primary-color);
-  }
-  .frame-picker-entry__action {
-    flex: 0 0 auto;
-    color: var(--primary-color);
-    font-weight: 700;
-  }
   @media (max-width: 1000px) {
-    .home-container {
-      width: 100%;
-    }
     .home-user-body {
       gap: 20px;
     }
     .user-item {
       gap: 10px;
-    }
-    .user_icon {
-      width: 80px;
-      height: 80px;
     }
   }
   .community-profile-fields {

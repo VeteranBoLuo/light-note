@@ -1,4 +1,5 @@
 import { profileBackgroundsZh, profileBackgroundItemsZh } from './profileBackgrounds';
+import { profileAppearanceZh } from './profileAppearance';
 import { MAKEUP_WINDOW_DAYS } from '@lightnote/shared';
 import { noteMathZh } from './noteMath';
 import { extractionZh } from './extraction';
@@ -21,6 +22,7 @@ import { settingsRefineZh } from './settingsRefine';
 import { notificationMessages } from '@lightnote/shared/notification-presentation';
 export default {
   profileBackgrounds: profileBackgroundsZh,
+  profileAppearance: profileAppearanceZh,
   noteMath: noteMathZh,
   nativePush: {
     title: 'App 通知连接',
@@ -11622,20 +11624,9 @@ export default {
   },
   myInfo: {
     title: '编辑资料',
-    avatarDecorations: '头像装扮',
-    chooseAvatarFrame: '选择头像框',
-    equippedFrame: '已佩戴「{name}」',
-    noFrameEquipped: '暂未佩戴头像框',
-    ownedFrames: '已拥有',
-    noOwnedFrames: '还没有已拥有的头像框',
     earnPoints: '去赚积分',
     goToGrowth: '去成长',
     loginToDecorate: '登录后使用',
-    redeemAndEquip: '兑换并佩戴',
-    redeemFrameTitle: '兑换头像框',
-    redeemFrameConfirm: '将使用 {points} 积分兑换「{name}」并立即佩戴，是否继续？',
-    redeemAndEquipSuccess: '已兑换并佩戴「{name}」',
-    redeemedEquipFailed: '头像框已兑换成功，佩戴暂时失败，可再次点击佩戴',
     uploadAvatar: '上传头像',
     chooseAvatar: '选择头像',
     chooseAvatarSubtitle: '从轻笺插画中挑选，也可以上传自己的图片',

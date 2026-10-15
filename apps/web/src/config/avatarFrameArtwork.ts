@@ -408,3 +408,14 @@ export const AVATAR_FRAME_ARTWORK = {
 export function avatarFrameArtwork(variant?: FrameVariant | null): AvatarFrameArtwork | null {
   return variant ? AVATAR_FRAME_ARTWORK[variant] : null;
 }
+
+// 全部主题在 64px 头像基准下的最大布局外径。需要切换头像框时文字列保持不动的入口（如装扮预览）
+// 按它预留固定槽位；新增主题若突破全局天花板，这里会随数据一起变化。
+export const AVATAR_FRAME_MAX_OUTER_SIZE = Math.max(
+  ...Object.values(AVATAR_FRAME_ARTWORK).map((artwork: AvatarFrameArtwork) => artwork.outerSize),
+);
+
+/** 按头像实际像素换算可容纳任意主题的固定槽位（与 AvatarFramePreview 的 64px 设计基准一致）。 */
+export function avatarFrameStableSlot(avatarSize: number) {
+  return Math.round((AVATAR_FRAME_MAX_OUTER_SIZE * avatarSize) / 64);
+}
