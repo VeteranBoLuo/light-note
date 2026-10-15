@@ -26,11 +26,11 @@ export const profileBackgroundsZh = {
   background_mountains: '纸上青山',
   background_sky: '晴空来信',
   background_coast: '落日海岸',
-  background_stars: '灵感星图',
+  background_stars: '灵感之泉',
   background_mountainsDescription: '一页轻笺，展开青山。纸页折角与水墨层次，静态呈现。',
   background_skyDescription: '把灵感寄往晴空。蜡封信笺、折纸飞燕、书签与花瓣，叠成一封立体来信。',
   background_coastDescription: '翻开笔记，让灵感有岸可泊。灯塔缓缓扫光，海面泛起金色流光。',
-  background_starsDescription: '把笺纸、收藏卡与书签连成星图。金色星轨流光、晶核折光与层叠星辉。',
+  background_starsDescription: '笔尖落墨，灵感成泉。紫晶墨流、层层涟漪与悬浮信笺，映出记录的光。',
 };
 export const profileBackgroundsEn = {
   shared: 'Shared by card and profile',
@@ -60,7 +60,7 @@ export const profileBackgroundsEn = {
   background_mountains: 'Mountains on Paper',
   background_sky: 'Letter from the Sky',
   background_coast: 'Sunset Coast',
-  background_stars: 'Inspiration Atlas',
+  background_stars: 'Fountain of Inspiration',
   background_mountainsDescription:
     'Mountains unfold from a page. Quiet ink washes and layered paper, without animation.',
   background_skyDescription:
@@ -68,7 +68,7 @@ export const profileBackgroundsEn = {
   background_coastDescription:
     'A lighthouse rises from an open notebook, sweeping light slowly across a sea of golden reflections.',
   background_starsDescription:
-    'Notes, collected cards and bookmarks form a constellation, with golden orbit lights, a luminous crystal and layered starlight.',
+    'A gilded nib pours luminous violet ink into a mirrored pool, with expanding ripples, shifting reflections and floating notes.',
 };
 
 export const profileBackgroundItemsZh = Object.fromEntries(

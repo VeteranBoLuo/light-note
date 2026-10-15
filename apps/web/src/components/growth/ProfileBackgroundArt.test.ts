@@ -15,6 +15,7 @@ let cleanups: Array<() => void> = [];
 
 beforeEach(() => {
   hidden = false;
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
   media = Object.assign(new EventTarget(), { matches: false });
   vi.spyOn(document, 'hidden', 'get').mockImplementation(() => hidden);
   vi.stubGlobal('matchMedia', () => media);
@@ -94,6 +95,7 @@ describe('个人背景渐进显示与动效', () => {
     media.dispatchEvent(new Event('change'));
     await nextTick();
     expect(art().classList.contains('is-running')).toBe(false);
+    expect(host.querySelector('.profile-background-fountain')).toBeNull();
     media.matches = false;
     media.dispatchEvent(new Event('change'));
     await nextTick();
@@ -105,7 +107,7 @@ describe('个人背景渐进显示与动效', () => {
     const { host } = mount(true);
     expect(host.querySelector('img')?.getAttribute('src')).toBe(profileBackground('background_stars')?.thumbnail);
     expect(host.querySelector('img')?.getAttribute('srcset')).toContain(
-      `${profileBackground('background_stars')?.src} 1600w`,
+      `${profileBackground('background_stars')?.src} 1920w`,
     );
     expect(host.querySelector('img')?.getAttribute('sizes')).toContain('auto');
     expect(host.querySelector('img')?.getAttribute('loading')).toBe('lazy');
@@ -141,11 +143,11 @@ describe('个人背景渐进显示与动效', () => {
     await show(active);
     await show(active + 1);
     expect(host.querySelectorAll('button')).toHaveLength(0);
-    expect(host.querySelectorAll('.is-running')).toHaveLength(2);
+    expect(host.querySelectorAll('.profile-background-art.is-running')).toHaveLength(2);
     expect(host.querySelectorAll('.profile-background-art__lighthouse')).toHaveLength(
       id === 'background_coast' ? 2 : 0,
     );
-    expect(host.querySelectorAll('.profile-background-art__crystal')).toHaveLength(id === 'background_stars' ? 2 : 0);
+    expect(host.querySelectorAll('.profile-background-fountain')).toHaveLength(id === 'background_stars' ? 2 : 0);
     cleanups.splice(0).forEach((cleanup) => cleanup());
     expect(observers.every((observer) => observer.disconnect.mock.calls.length === 1)).toBe(true);
     expect(resizeObservers.every((observer) => observer.disconnect.mock.calls.length === 1)).toBe(true);
@@ -183,7 +185,7 @@ describe('个人背景渐进显示与动效', () => {
     const scene = host.querySelector<HTMLElement>('.profile-background-art__scene')!;
     expect(scene.style.width).toBe('600px');
     expect(scene.style.height).toBe('200px');
-    expect(scene.style.left).toBe('-156px');
+    expect(scene.style.left).toBe('-180px');
     expect(scene.contains(host.querySelector('img'))).toBe(true);
     expect(scene.contains(host.querySelector('.profile-background-art__motion'))).toBe(true);
     Object.defineProperty(art(), 'clientWidth', { value: 900 });
