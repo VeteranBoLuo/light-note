@@ -14136,9 +14136,9 @@ export default {
     changelogTitle: 'Release notes',
     changelogVersion: '{version}',
     changelogItems: [
-      'Improved system back: closes the focused control’s dropdown first and uses the page’s back or cancel action.',
-      'Restored the original launcher icon and improved system theme switching and login session persistence.',
-      'Improved download feedback, handoff to the system calendar, and opening of some external sharing links.',
+      'Share images, files, text, and links from your gallery, browser, and other apps to LightNote, then confirm to save.',
+      'Refined the home screen and share menu icons, removing edge shadows and white borders while keeping the four colors and center diamond.',
+      'Improved notification permission checks while preserving push notifications, with no additional system permissions.',
     ],
     troubleTitle: 'Download or install problems',
     troubleItems: [
