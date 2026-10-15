@@ -17,8 +17,8 @@ val huaweiPushEnabled = providers.gradleProperty("lightNoteHuaweiPush")
     .map(String::toBoolean).getOrElse(false)
 val huaweiPushReleaseEnabled = providers.gradleProperty("lightNoteHuaweiPushRelease")
     .map(String::toBoolean).getOrElse(false)
-val publishedVersionCode = 10003
-val publishedVersionName = "1.0.3"
+val publishedVersionCode = 10004
+val publishedVersionName = "1.0.4"
 val releaseVersionCodeOverride = providers.gradleProperty("lightNoteReleaseVersionCode").orNull
 val releaseVersionNameOverride = providers.gradleProperty("lightNoteReleaseVersionName").orNull
 check((releaseVersionCodeOverride == null) == (releaseVersionNameOverride == null)) {
