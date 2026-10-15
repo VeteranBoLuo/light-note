@@ -2,15 +2,15 @@ import { isProfileBackgroundId, type ProfileBackgroundId } from '@lightnote/shar
 import mountains from '@/assets/profile-backgrounds/mountains.webp';
 import sky from '@/assets/profile-backgrounds/sky.webp';
 import coast from '@/assets/profile-backgrounds/coast.webp';
-import stars from '@/assets/profile-backgrounds/stars.webp';
+import fountain from '@/assets/profile-backgrounds/fountain.webp';
 import mountainsThumb from '@/assets/profile-backgrounds/mountains-thumb.webp';
 import skyThumb from '@/assets/profile-backgrounds/sky-thumb.webp';
 import coastThumb from '@/assets/profile-backgrounds/coast-thumb.webp';
-import starsThumb from '@/assets/profile-backgrounds/stars-thumb.webp';
+import fountainThumb from '@/assets/profile-backgrounds/fountain-thumb.webp';
 import mountainsPoster from '@/assets/profile-backgrounds/mountains-poster.webp?inline';
 import skyPoster from '@/assets/profile-backgrounds/sky-poster.webp?inline';
 import coastPoster from '@/assets/profile-backgrounds/coast-poster.webp?inline';
-import starsPoster from '@/assets/profile-backgrounds/stars-poster.webp?inline';
+import fountainPoster from '@/assets/profile-backgrounds/fountain-poster.webp?inline';
 
 type ProfileBackground = {
   src: string;
@@ -18,7 +18,7 @@ type ProfileBackground = {
   thumbnail: string;
   poster: string;
   dark: boolean;
-  animated?: 'atlas' | 'lighthouse';
+  animated?: 'fountain' | 'lighthouse';
 };
 
 const backgrounds: Record<ProfileBackgroundId, ProfileBackground> = {
@@ -39,12 +39,12 @@ const backgrounds: Record<ProfileBackgroundId, ProfileBackground> = {
     animated: 'lighthouse',
   },
   background_stars: {
-    src: stars,
-    srcWidth: 1600,
-    thumbnail: starsThumb,
-    poster: starsPoster,
+    src: fountain,
+    srcWidth: 1920,
+    thumbnail: fountainThumb,
+    poster: fountainPoster,
     dark: true,
-    animated: 'atlas',
+    animated: 'fountain',
   },
 };
 

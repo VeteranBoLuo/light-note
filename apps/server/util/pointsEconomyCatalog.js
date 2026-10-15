@@ -272,7 +272,7 @@ export const ECONOMY_CATALOGS = Object.freeze({
         { id: 'background_mountains', name: '纸上青山', cost: 600 },
         { id: 'background_sky', name: '晴空来信', cost: 800 },
         { id: 'background_coast', name: '落日海岸', cost: 1000 },
-        { id: 'background_stars', name: '灵感星图', cost: 1500 },
+        { id: 'background_stars', name: '灵感之泉', cost: 1500 },
       ].map((item) => ({
         ...item,
         type: 'cosmetic',
