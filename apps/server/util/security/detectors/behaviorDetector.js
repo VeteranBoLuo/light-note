@@ -127,12 +127,31 @@ export const detectResponseBehavior = (context, statusCode, responsePayload = ''
     }
   }
 
-  const isLogin = /\/user\/login(?:\?|$)?/i.test(context.originalUrl || context.path || '');
-  const responseText = typeof responsePayload === 'string' ? responsePayload : JSON.stringify(responsePayload || {});
-  if (isLogin && (Number(statusCode) === 401 || /邮箱密码错误|登录失败|password/i.test(responseText))) {
-    const loginFailCount = addWindowEvent(`login-fail:${ip}`, { email: context.body?.email || '' }, 5 * 60 * 1000);
-    const emailCount = uniqueWindowValues(`login-fail:${ip}`, 'email', 5 * 60 * 1000);
-    if (loginFailCount >= SECURITY_CONFIG.loginFailFiveMinutes) {
+  const loginPath = String(context.path || context.originalUrl || '').split('?', 1)[0];
+  const isLogin = context.method === 'POST' && ['/user/login', '/api/user/login'].includes(loginPath);
+  let response = responsePayload;
+  if (isLogin && typeof response === 'string') {
+    try {
+      response = JSON.parse(response);
+    } catch {
+      response = null;
+    }
+  }
+  // 登录接口以业务 status 返回认证失败，成功响应也包含 password/hasPassword，不能匹配正文关键词。
+  if (isLogin && (Number(statusCode) === 401 || Number(response?.status) === 401)) {
+    const key = `login-fail:${ip}`;
+    const windowMs = 5 * 60 * 1000;
+    const previousEmailCount = uniqueWindowValues(key, 'email', windowMs);
+    const email = String(context.body?.email || '')
+      .trim()
+      .toLowerCase();
+    const loginFailCount = addWindowEvent(key, { email }, windowMs);
+    const emailCount = uniqueWindowValues(key, 'email', windowMs);
+    // 首次达到失败阈值时告警；此后仅在首次升级为多账号撞库时再记录一次。
+    const crossedFailureThreshold = loginFailCount === SECURITY_CONFIG.loginFailFiveMinutes;
+    const escalatedToStuffing =
+      loginFailCount > SECURITY_CONFIG.loginFailFiveMinutes && previousEmailCount < 4 && emailCount >= 4;
+    if (crossedFailureThreshold || escalatedToStuffing) {
       result.push(
         evidence({
           code: emailCount >= 4 ? 'CREDENTIAL_STUFFING' : 'BRUTE_FORCE',
