@@ -14,7 +14,12 @@ import {
 import { score } from './score.js';
 import { localAdapters, loadRuntime } from './runtime.js';
 
-vi.mock('../../util/agent/deepseekClient.js', () => ({ requestDeepSeek: vi.fn(), requestDeepSeekStream: vi.fn() }));
+vi.mock('../../util/agent/deepseekClient.js', () => ({
+  // Gateway 在调用前解析 Provider 身份，失败 span 也据此记录；固定为假身份，不读本机 .env。
+  getActiveProviderInfo: vi.fn(() => ({ provider: 'mock', model: 'mock-model' })),
+  requestDeepSeek: vi.fn(),
+  requestDeepSeekStream: vi.fn(),
+}));
 import { requestDeepSeek } from '../../util/agent/deepseekClient.js';
 import { callStructuredSkillModel } from '../../util/aiSkill/structuredModel.js';
 import { runAiExecution } from '../../util/aiExecution/service.js';
@@ -242,7 +247,7 @@ describe('quality scoring and bounded accounting', () => {
     expect(requestDeepSeek).toHaveBeenCalledTimes(1);
     const span = a.events.find((e) => e.event === 'provider_span');
     const execution = a.events.find((e) => e.event === 'execution_settled');
-    expect(span).toMatchObject({ status: 'failed', usageStatus: 'missing' });
+    expect(span).toMatchObject({ status: 'failed', usageStatus: 'missing', provider: 'mock', model: 'mock-model' });
     expect(execution).toMatchObject({ status: 'failed', missingUsageSpans: 1, chargedTokens: span.estimatedTokens });
   });
   it('refuses live runtime loading from routine tests', async () => {
