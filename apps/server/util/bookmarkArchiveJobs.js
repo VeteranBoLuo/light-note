@@ -82,24 +82,27 @@ export async function enqueueBookmarkArchiveInTransaction(connection, userId, bo
   return full ? archiveFailure('QUEUE_FULL') : { ok: true, status: 'pending' };
 }
 
-export async function getBookmarkArchiveStatus(userId, bookmarkId) {
-  const [rows] = await pool.query(
-    `SELECT j.status, j.attempts, j.reason_code, j.next_attempt_at, j.source, j.char_count
-    FROM bookmark_archive_jobs j JOIN bookmark b ON CONVERT(b.id USING utf8mb4) COLLATE utf8mb4_unicode_ci = j.bookmark_id
+export async function getBookmarkArchiveStatus(userId, bookmarkId, { db = pool } = {}) {
+  const [rows] = await db.query(
+    `SELECT b.url AS bookmarkUrl, j.status, j.attempts, j.reason_code, j.next_attempt_at, j.source, j.char_count
+    FROM bookmark b LEFT JOIN bookmark_archive_jobs j ON CONVERT(b.id USING utf8mb4) COLLATE utf8mb4_unicode_ci = j.bookmark_id
       AND CONVERT(b.user_id USING utf8mb4) COLLATE utf8mb4_unicode_ci = j.user_id
-    WHERE j.user_id = ? AND j.bookmark_id = ? AND b.del_flag = 0 AND BINARY b.url = BINARY j.url`,
+      AND BINARY b.url = BINARY j.url
+    WHERE b.user_id = ? AND b.id = ? AND b.del_flag = 0`,
     [userId, bookmarkId],
   );
-  const [counts] = await pool.query(
+  const [counts] = await db.query(
     `SELECT COUNT(*) AS count FROM bookmark_archive_jobs j
     JOIN bookmark b ON CONVERT(b.id USING utf8mb4) COLLATE utf8mb4_unicode_ci = j.bookmark_id
       AND CONVERT(b.user_id USING utf8mb4) COLLATE utf8mb4_unicode_ci = j.user_id
     WHERE j.user_id = ? AND j.status = 'failed' AND b.del_flag = 0`,
     [userId],
   );
-  const task = rows[0];
+  const { bookmarkUrl = null, ...task } = rows[0] || {};
+  const failure = task.reason_code ? archiveFailure(task.reason_code) : null;
   return {
-    archiveTask: task ? { ...task, msg: task.reason_code ? archiveFailure(task.reason_code).msg : null } : null,
+    bookmarkUrl,
+    archiveTask: task.status ? { ...task, msg: failure?.msg || null, retryable: failure?.retryable || false } : null,
     failedCount: Number(counts[0]?.count || 0),
   };
 }
