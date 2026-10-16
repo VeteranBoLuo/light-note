@@ -14098,13 +14098,13 @@ export default {
     updatedLabel: 'Updated',
     downloadApk: 'Download APK',
     preparing: 'Preparing',
-    usePwaInstead: 'Install the web app instead',
+    installPwa: 'Install web app (PWA)',
     alreadyInApp: 'You are already using the LightNote app',
     iosNote:
       'iPhone and iPad cannot install Android packages. Open LightNote in Safari and use "Add to Home Screen" for an app-like experience.',
     addToHomeScreen: 'Add to Home Screen',
     desktopNote:
-      'You are on a desktop or tablet browser. The APK installs on an Android phone — send the address below to your phone browser.',
+      "Download the APK here and transfer it to an Android device, or send the page link below to your phone's browser.",
     copy: 'Copy',
     copyApkLink: 'Copy APK link',
     copiedPageUrl: 'Page address copied',
