@@ -539,9 +539,17 @@
   async function loadCatalog() {
     const requestGeneration = generation;
     const touched = isTrying.value;
+    const initialTrial = { ...trial };
     await Promise.all([loadShop(), loadDashboard()]);
     // 首次加载期间用户没有动过试穿时，以商店返回的权威佩戴状态为起点。
-    if (requestGeneration === generation && props.open && !touched) resetTrial();
+    if (
+      requestGeneration === generation &&
+      props.open &&
+      !touched &&
+      trial.background === initialTrial.background &&
+      trial.frame === initialTrial.frame
+    )
+      resetTrial();
   }
 
   watch(
@@ -590,7 +598,7 @@
   }
 
   async function runGuarded(task: (isCurrent: () => boolean) => Promise<void>) {
-    if (busy.value) return;
+    if (busy.value || !props.open) return;
     const requestGeneration = generation;
     const ownerId = user.id;
     const isCurrent = () => requestGeneration === generation && ownerId === user.id;
@@ -631,6 +639,8 @@
   function redeemOption(option: Option) {
     const item = option.item;
     if (!item || !shop.value) return;
+    const confirmationGeneration = generation;
+    const confirmationOwner = user.id;
     const quote = { economyVersion: shop.value.economyVersion, expectedCost: Number(item.cost || 0) };
     const background = option.category === 'background';
     const cost = quote.expectedCost.toLocaleString();
@@ -643,8 +653,9 @@
         ? t('profileBackgrounds.redeem', { n: cost })
         : t('profileAppearance.action.redeemAndUse', { n: cost }),
       cancelText: t('common.cancel'),
-      onOk: () =>
-        runGuarded(async (isCurrent) => {
+      onOk: () => {
+        if (!props.open || confirmationGeneration !== generation || confirmationOwner !== user.id) return;
+        return runGuarded(async (isCurrent) => {
           const res = await buyItem(item.id, quote);
           if (!isCurrent()) return;
           if (res?.status === 409 && res.data?.refresh) {
@@ -673,7 +684,8 @@
             module: '个人资料',
             operation: `兑换头像框「${option.name}」（-${quote.expectedCost} 积分）${ok ? '并佩戴' : '，自动佩戴失败'}`,
           });
-        }),
+        });
+      },
     });
   }
 

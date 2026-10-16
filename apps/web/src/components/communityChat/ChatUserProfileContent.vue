@@ -185,6 +185,7 @@
   import GrowthLevelChip from '@/components/growth/GrowthLevelChip.vue';
   import icon from '@/config/icon';
   import { frameVariant } from '@/config/growthFrames';
+  import { useUiDensity } from '@/composables/useUiDensity';
   import { avatarFrameStableSlot } from '@/config/avatarFrameArtwork';
   import type {
     CommunityChatProfileUpdateInput,
@@ -283,6 +284,7 @@
     detailVisible.value = true;
   }
 
+  const { dimension } = useUiDensity();
   const ProfileIdentity = defineComponent({
     name: 'CommunityChatProfileIdentity',
     props: {
@@ -292,17 +294,18 @@
       return () => {
         const profile = identityProps.profile;
         const validFrameId = profile.frameId && frameVariant(profile.frameId) ? profile.frameId : null;
+        const avatarSize = props.stableLayout ? dimension(props.compact ? 52 : 68, 'layout') : props.compact ? 52 : 68;
         const avatar = validFrameId
           ? h(AvatarFramePreview, {
               frameId: validFrameId,
               src: profile.avatar || icon.communityChat.defaultAvatar,
-              size: props.compact ? 52 : 68,
+              size: avatarSize,
             })
           : h(SvgIcon, {
               class: 'chat-profile-content__avatar-image',
               densityAware: false,
               src: profile.avatar || icon.communityChat.defaultAvatar,
-              size: props.compact ? 52 : 68,
+              size: avatarSize,
             });
         const tags = [
           h(GrowthLevelChip, {
@@ -330,7 +333,7 @@
             {
               class: ['chat-profile-content__avatar', { 'is-framed': validFrameId }],
               style: props.stableLayout
-                ? { '--profile-avatar-slot': `${avatarFrameStableSlot(props.compact ? 52 : 68)}px` }
+                ? { '--profile-avatar-slot': `${avatarFrameStableSlot(avatarSize)}px` }
                 : undefined,
               'aria-hidden': 'true',
             },
