@@ -4848,7 +4848,9 @@ export default {
     quickCapturePanels: {
       bookmark: {
         title: 'Save a webpage',
-        hint: 'Paste a URL and Light Note will place it in To organize.',
+        hint: 'Only the page title is fetched automatically as the name, which may not be the best fit. If unavailable, the shared title or domain is used.',
+        analysisHint:
+          'For a more suitable name, description, and tags, use AI analysis in the full New bookmark form, analyze a bookmark after quick adding it, or reanalyze bookmarks in bulk in the Organize center.',
       },
       note: {
         title: 'Capture some text',

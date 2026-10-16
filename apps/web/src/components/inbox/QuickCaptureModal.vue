@@ -85,6 +85,7 @@
             <div class="capture-panel-intro">
               <strong>{{ capturePanelTitle }}</strong>
               <span>{{ capturePanelHint }}</span>
+              <span v-if="captureType === 'bookmark'">{{ t('inbox.quickCapturePanels.bookmark.analysisHint') }}</span>
             </div>
 
             <BInput

@@ -168,7 +168,8 @@ export async function createBookmark({
         });
     if (meta.ok) {
       if (captureMetadata || !name) name = String(meta.title || '').trim() || name;
-      if (!description) description = String(meta.description || '').trim();
+      // 快速添加只取网页名称，描述和标签交由用户主动发起智能分析。
+      if (!captureMetadata && !description) description = String(meta.description || '').trim();
     }
   }
   if (signal?.aborted) throw signal.reason || Object.assign(new Error('请求已取消'), { name: 'AbortError' });

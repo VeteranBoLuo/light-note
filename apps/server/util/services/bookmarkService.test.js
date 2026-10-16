@@ -297,7 +297,7 @@ describe('bookmarkService.createBookmark', () => {
     });
   });
 
-  it('快速添加优先用网页标题和描述，在借出数据库连接前完成有时限的轻量读取', async () => {
+  it('快速添加只用网页标题，不自动填入网页描述，并在借出数据库连接前完成有时限的读取', async () => {
     fetchWebMeta.mockResolvedValueOnce({ ok: true, title: '  一篇具体的文章  ', description: '  文章简介  ' });
     await createBookmark({
       userId: 'user-1',
@@ -311,7 +311,7 @@ describe('bookmarkService.createBookmark', () => {
     });
     expect(fetchWebMeta.mock.invocationCallOrder[0]).toBeLessThan(pool.getConnection.mock.invocationCallOrder[0]);
     const inserted = connection.query.mock.calls.find(([sql]) => sql === 'INSERT INTO bookmark SET ?')?.[1]?.[0];
-    expect(inserted).toMatchObject({ name: '一篇具体的文章', description: '文章简介' });
+    expect(inserted).toMatchObject({ name: '一篇具体的文章', description: '' });
   });
 
   it.each(['ACCESS_DENIED', 'AUTH_REQUIRED', 'TIMEOUT', 'JS_RENDER_REQUIRED'])(
@@ -338,7 +338,7 @@ describe('bookmarkService.createBookmark', () => {
     expect(connection.commit).toHaveBeenCalledTimes(1);
   });
 
-  it('网页只有描述时保留分享标题，且入库字段遵守长度上限', async () => {
+  it('网页只有描述时保留分享标题并忽略网页描述，名称遵守长度上限', async () => {
     fetchWebMeta.mockResolvedValueOnce({ ok: true, title: ' ', description: '介绍'.repeat(200) });
     await createBookmark({
       userId: 'user-1', bookmark: { url: 'https://example.com/a', name: '标题'.repeat(200) },
@@ -346,7 +346,7 @@ describe('bookmarkService.createBookmark', () => {
     });
     const inserted = connection.query.mock.calls.find(([sql]) => sql === 'INSERT INTO bookmark SET ?')?.[1]?.[0];
     expect(inserted.name).toBe('标题'.repeat(200).slice(0, 255));
-    expect(inserted.description).toBe('介绍'.repeat(200).slice(0, 255));
+    expect(inserted.description).toBe('');
   });
 
   it('抓取出的标题同名时仍按序号避让', async () => {
