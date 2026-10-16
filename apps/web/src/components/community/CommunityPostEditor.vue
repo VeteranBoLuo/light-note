@@ -1667,15 +1667,7 @@
     font-size: var(--ui-font-12, 12px);
   }
   @media (max-width: 767px) {
-    .inline-image-actions.is-markdown {
-    position: static;
-    transform: none;
-    flex-shrink: 0;
-    align-self: center;
-    max-width: calc(100% - var(--ui-space-40, 40px));
-    margin: 0 auto var(--ui-space-8, 8px);
-  }
-  .community-writing {
+    .community-writing {
       padding-bottom: calc(62px + env(safe-area-inset-bottom));
       box-sizing: border-box;
     }
