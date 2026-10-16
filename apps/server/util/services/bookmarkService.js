@@ -42,12 +42,32 @@ function cleanBookmarkFields(bookmark, { userId, url, name, description, id }) {
 }
 
 const MAX_DUPLICATE_NAME_SUFFIX = 99;
+const CAPTURE_METADATA_TIMEOUT_MS = 5000;
+
+/** 快速收集只读取网页元信息，不启动浏览器或 AI；总时限也覆盖重定向和网络重试。 */
+async function readCaptureMetadata(url, signal) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), CAPTURE_METADATA_TIMEOUT_MS);
+  try {
+    return await fetchWebMeta(url, {
+      signal: signal ? AbortSignal.any([signal, controller.signal]) : controller.signal,
+      timeout: CAPTURE_METADATA_TIMEOUT_MS,
+      renderFallback: false,
+    });
+  } catch (error) {
+    // 用户取消仍须中止；网站超时或抓取异常只影响元信息，不能阻止收藏。
+    if (signal?.aborted) throw error;
+    return { ok: false };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 /**
  * 为同名书签找一个「名称 (2)」形式的可用名称；序号用尽返回 null，由调用方按同名报错。
  *
- * 只给快速添加使用：它按域名或分享标题自动命名，同一网站的不同链接（如两篇小红书、两条知乎回答）
- * 必然同名，直接报「已存在」会让第二条收藏失败。用户手动填写名称的入口仍保持同名报错。
+ * 只给自动命名入口使用：网页标题可能相同，读取失败也可能回退到相同域名或分享标题。
+ * 用户手动填写名称的入口仍保持同名报错。
  * 比较按小写进行，与数据库默认的不区分大小写排序规则一致。
  */
 async function findAvailableBookmarkName(connection, { userId, name }) {
@@ -105,6 +125,7 @@ export async function createBookmark({
   inboxSource = 'quick_capture',
   duplicateToInbox = false,
   fillMetadata = false,
+  captureMetadata = false,
   saveSnapshot = true,
   signal,
   request,
@@ -114,22 +135,9 @@ export async function createBookmark({
 } = {}) {
   if (!userId) throw new Error('USER_REQUIRED: 缺少用户');
   const url = requireBookmarkUrl(bookmark.url).canonicalUrl;
+  if (url.length > 255) throw new Error('URL_TOO_LONG: 网址不能超过 255 个字符');
   let name = String(bookmark.name || '').trim();
   let description = String(bookmark.description || '').trim();
-  if (fillMetadata && (!name || !description)) {
-    const meta = await fetchWebMeta(url, {
-      signal,
-      maxContentBytes: EXPLICIT_WEB_READ_MAX_BYTES,
-      renderFallback: true,
-    });
-    if (meta.ok) {
-      if (!name) name = String(meta.title || '').trim();
-      if (!description) description = String(meta.description || '').trim();
-    }
-  }
-  name = (name || url).slice(0, 255);
-  if (url.length > 255) throw new Error('URL_TOO_LONG: 网址不能超过 255 个字符');
-  description = description.slice(0, 255);
   const normalizedTagIds = [...new Set((Array.isArray(tagIds) ? tagIds : []).map(String).filter(Boolean))];
   const normalizedTagNames = [
     ...new Map(
@@ -148,6 +156,24 @@ export async function createBookmark({
     const existing = await findOwnedBookmarkById(pool, { userId, bookmarkId: idempotentBookmarkId });
     if (existing) return formatIdempotentReplay(existing, { addToInbox });
   }
+
+  // 外网读取在事务及连接借出前完成，慢站点不占用数据库连接。
+  if (captureMetadata || (fillMetadata && (!name || !description))) {
+    const meta = captureMetadata
+      ? await readCaptureMetadata(url, signal)
+      : await fetchWebMeta(url, {
+          signal,
+          maxContentBytes: EXPLICIT_WEB_READ_MAX_BYTES,
+          renderFallback: true,
+        });
+    if (meta.ok) {
+      if (captureMetadata || !name) name = String(meta.title || '').trim() || name;
+      if (!description) description = String(meta.description || '').trim();
+    }
+  }
+  if (signal?.aborted) throw signal.reason || Object.assign(new Error('请求已取消'), { name: 'AbortError' });
+  name = (name || (captureMetadata ? new URL(url).hostname.replace(/^www\./, '') : url)).slice(0, 255);
+  description = description.slice(0, 255);
 
   const connection = await pool.getConnection();
   let data;

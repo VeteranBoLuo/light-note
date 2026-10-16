@@ -75,6 +75,34 @@ describe('bookmarkHandle 资源主体与错误边界', () => {
   });
 });
 
+describe('快速添加网页元信息接入', () => {
+  it.each([
+    [{ addToInbox: true, nameConflict: 'suffix', inboxSource: 'quick_capture' }, true],
+    [{ addToInbox: true, nameConflict: 'suffix', inboxSource: 'system_share' }, true],
+    [{ addToInbox: true, inboxSource: 'quick_capture' }, false],
+    [{ addToInbox: false, nameConflict: 'suffix', inboxSource: 'quick_capture' }, false],
+    [{ addToInbox: true, nameConflict: 'suffix', inboxSource: 'browser_extension' }, false],
+  ])('按明确的快速收集协议启用，不覆盖完整表单或扩展的手填信息：%j', async (options, enabled) => {
+    const service = await import('../util/services/bookmarkService.js');
+    const create = vi.spyOn(service, 'createBookmark').mockResolvedValue({ id: 'new-bookmark', name: '网页标题' });
+    try {
+      const { addBookmark } = await import('./bookmarkHandle.js');
+      const send = vi.fn();
+      await addBookmark({
+        user: { id: 'login', role: 'user' }, resourceUser: { id: 'owner' },
+        body: { url: 'https://example.com', name: '分享标题', description: '', ...options },
+      }, { send });
+      expect(create).toHaveBeenCalledWith(expect.objectContaining({
+        userId: 'owner', captureMetadata: enabled,
+        bookmark: { url: 'https://example.com', name: '分享标题', description: '' },
+      }));
+      expect(send).toHaveBeenCalledWith(expect.objectContaining({ status: 200 }));
+    } finally {
+      create.mockRestore();
+    }
+  });
+});
+
 describe('书签详情响应边界', () => {
   it('按认证归属返回可序列化的详情', async () => {
     const { default: pool } = await import('../db/index.js');
