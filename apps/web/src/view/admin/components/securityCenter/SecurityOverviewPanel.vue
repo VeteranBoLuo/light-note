@@ -22,8 +22,12 @@
       <section class="security-banner is-success auto-ban-banner">
         <span class="security-pill is-success">{{ t('securityV2.common.policy') }}</span>
         <div
-          ><strong>{{ t('securityV2.overview.autoBanOff') }}</strong
-          ><p>{{ t('securityV2.overview.autoBanDesc') }}</p></div
+          ><strong>{{
+            t(summary.autoResponseEnabled ? 'securityV2.overview.autoProbeOn' : 'securityV2.overview.autoBanOff')
+          }}</strong
+          ><p>{{
+            t(summary.autoResponseEnabled ? 'securityV2.overview.autoProbeDesc' : 'securityV2.overview.autoBanDesc')
+          }}</p></div
         >
         <span class="security-pill is-success recommendation">{{ t('securityV2.overview.recommended') }}</span>
       </section>

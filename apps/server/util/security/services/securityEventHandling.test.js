@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+vi.mock('./autoResponseService.js', () => ({ releaseAutomaticSecurityResponse: vi.fn() }));
 
 const reputationMocks = vi.hoisted(() => ({
   revertIp: vi.fn(),
@@ -17,6 +18,7 @@ vi.mock('./accountReputation.js', () => ({
   rebuildAccountReputationFromEvents: reputationMocks.rebuildAccount,
 }));
 
+import { releaseAutomaticSecurityResponse } from './autoResponseService.js';
 import { applySecurityEventHandle } from './securityEventHandling.js';
 
 const createEvent = (patch = {}) => ({
@@ -55,10 +57,23 @@ describe('安全事件风险状态同步', () => {
       'root-1',
       'event-1',
     ]);
+    expect(releaseAutomaticSecurityResponse).toHaveBeenCalledOnce();
     expect(reputationMocks.revertIp).toHaveBeenCalledOnce();
     expect(reputationMocks.revertAccount).toHaveBeenCalledOnce();
     expect(connection.query).toHaveBeenCalledWith(expect.stringContaining('SET ip_risk_reverted = 1'), ['event-1']);
     expect(connection.query).toHaveBeenCalledWith(expect.stringContaining('SET user_risk_reverted = 1'), ['event-1']);
+  });
+
+  it('良性异常改判也会解除对应自动来源限制', async () => {
+    await applySecurityEventHandle({
+      connection,
+      event: createEvent(),
+      normalizedStatus: 'processed',
+      disposition: 'benign_anomaly',
+      remark: '已核实为正常操作',
+      operatorId: 'root-1',
+    });
+    expect(releaseAutomaticSecurityResponse).toHaveBeenCalledOnce();
   });
 
   it('已经排除风险的事件改回未处理时会恢复风险画像', async () => {
@@ -119,6 +134,7 @@ describe('安全事件风险状态同步', () => {
       operatorId: 'root-1',
     });
 
+    expect(releaseAutomaticSecurityResponse).toHaveBeenCalledOnce();
     expect(reputationMocks.revertIp).toHaveBeenCalledOnce();
     expect(reputationMocks.revertAccount).not.toHaveBeenCalled();
     expect(reputationMocks.rebuildAccount).not.toHaveBeenCalled();

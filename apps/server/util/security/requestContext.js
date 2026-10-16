@@ -27,6 +27,7 @@ export const buildRequestContext = (req) => {
     userAgent: req.headers['user-agent'] || '',
     userId: req.user?.id || req.headers['x-user-id'] || '',
     role: req.user?.role || req.headers.role || '',
+    visitorActor: req.user?.role === 'visitor' && req.user?.isAuthenticated === false,
     query,
     body,
     params: req.params || {},
