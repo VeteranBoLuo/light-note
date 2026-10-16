@@ -107,6 +107,8 @@ public final class MainActivity extends Activity {
     private FrameLayout launchOverlay;
     private FrameLayout fileChooserOverlay;
     private LinearLayout backToDesktopHint;
+    private IncomingShareProgressView incomingShareProgress;
+    private final IncomingShareStore.ProgressListener shareProgressListener = this::onIncomingShareProgress;
     private TextView backHintTitleView;
     private ProgressBar fileChooserProgressView;
     private TextView fileChooserStatusView;
@@ -150,6 +152,7 @@ public final class MainActivity extends Activity {
             return;
         }
         configureWebView();
+        IncomingShareStore.addProgressListener(shareProgressListener);
         launchOverlay.postDelayed(launchTimeout, LAUNCH_TIMEOUT_MS);
 
         if (savedInstanceState == null || webView.restoreState(savedInstanceState) == null) {
@@ -167,17 +170,18 @@ public final class MainActivity extends Activity {
      */
     private void acceptIncomingShare(Intent intent) {
         IncomingShareStore.AcceptResult result =
-            IncomingShareStore.accept(this, intent, this::onIncomingSharePrepared);
+            IncomingShareStore.accept(this, intent);
         if (result == IncomingShareStore.AcceptResult.EMPTY) {
             Toast.makeText(this, R.string.share_nothing_to_save, Toast.LENGTH_LONG).show();
         }
     }
 
-    private void onIncomingSharePrepared(IncomingShareStore.PrepareResult result) {
+    private void onIncomingShareProgress(IncomingShareStore.Progress progress) {
         if (isFinishing() || isDestroyed()) return;
-        if (result == IncomingShareStore.PrepareResult.UNREADABLE) {
+        incomingShareProgress.showProgress(progress);
+        if (progress.result == IncomingShareStore.PrepareResult.UNREADABLE) {
             Toast.makeText(this, R.string.share_unreadable, Toast.LENGTH_LONG).show();
-        } else if (result == IncomingShareStore.PrepareResult.READY && webView != null) {
+        } else if (progress.result == IncomingShareStore.PrepareResult.READY && webView != null) {
             webView.evaluateJavascript("window.dispatchEvent(new Event('light-note:native-share'))", null);
         }
     }
@@ -471,6 +475,9 @@ public final class MainActivity extends Activity {
         backToDesktopHint = createBackToDesktopHint();
         rootView.addView(backToDesktopHint, createBackToDesktopHintLayoutParams());
         applyBackToDesktopHintInsets();
+        incomingShareProgress = new IncomingShareProgressView(this);
+        incomingShareProgress.applyTheme(resolvedNightTheme);
+        rootView.addView(incomingShareProgress);
         WindowInsetsSupport.apply(
             this,
             rootView,
@@ -1159,6 +1166,7 @@ public final class MainActivity extends Activity {
         resolvedNightTheme = "night".equals(theme);
         applyFileChooserOverlayTheme();
         applyBackToDesktopHintTheme();
+        if (incomingShareProgress != null) incomingShareProgress.applyTheme(resolvedNightTheme);
         if (launchOverlayHidden) {
             applyResolvedWebTheme();
         }
@@ -1544,6 +1552,7 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        IncomingShareStore.removeProgressListener(shareProgressListener);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && backInvokedCallback != null) {
             getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(backInvokedCallback);
             backInvokedCallback = null;

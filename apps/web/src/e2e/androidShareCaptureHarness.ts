@@ -1,4 +1,5 @@
 import { createApp, reactive } from 'vue';
+import { applyUiDensity } from '@/composables/useUiDensity';
 import { createPinia, setActivePinia } from 'pinia';
 import { createI18n } from 'vue-i18n';
 import { createMemoryHistory, createRouter } from 'vue-router';
@@ -19,13 +20,25 @@ import AndroidShareCaptureHarness from './AndroidShareCaptureHarness.vue';
  */
 const params = new URLSearchParams(window.location.search);
 const scenario = params.get('scenario') || 'link';
+const cloud = params.has('cloud');
 const theme = params.get('theme') === 'night' ? 'night' : 'day';
 const locale = params.get('locale') === 'en-US' ? 'en-US' : 'zh-CN';
 const mobileRendering = params.get('renderProfile') === 'mobile' || window.innerWidth <= 640;
+applyUiDensity(params.get('density'), mobileRendering);
 document.documentElement.dataset.theme = theme;
 document.documentElement.lang = locale;
 document.documentElement.classList.toggle('light-note-mobile-rendering', mobileRendering);
 
+const cloudFiles = Array.from({ length: 60 }, (_, i) => ({
+  id: `existing-${i}`,
+  fileName: `已有资料 ${i + 1}.txt`,
+  fileSize: 1024,
+  fileType: 'text/plain',
+  fileUrl: '',
+  uploadTime: '2026-10-15 12:00:00',
+  tags: [],
+  folderName: '',
+}));
 const shareId = 'e'.repeat(32);
 const log = reactive<string[]>([]);
 const sampleBlobs = await Promise.all([sampleImage(0), sampleImage(1)]);
@@ -138,11 +151,37 @@ request.defaults.adapter = async (config) => {
         const name = payload.fileName || payload.objectKey;
         if (operation === 'prepareManagedUpload')
           return { status: 200, data: { objectKey: name, uploadUrl: `/__share-upload-fixture__/${name}` } };
-        if (operation === 'confirmManagedUpload')
+        if (operation === 'confirmManagedUpload') {
+          cloudFiles.unshift({
+            id: name,
+            fileName: name,
+            fileSize: 1024,
+            fileType: 'image/png',
+            fileUrl: '',
+            uploadTime: '2026-10-16 12:00:00',
+            tags: [],
+            folderName: '',
+          });
           return { status: 200, data: { fileId: name, filename: name, status: '已上传' } };
+        }
         return { status: 200, data: { deleted: true } };
       },
     );
+  } else if (url.endsWith('/queryFiles')) {
+    const page = Number(body.currentPage) || 1;
+    const pageSize = Number(body.pageSize) || 48;
+    log.push(`刷新云空间第 ${page} 页，共 ${cloudFiles.length} 个文件`);
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    data = {
+      items: cloudFiles.slice((page - 1) * pageSize, page * pageSize),
+      total: cloudFiles.length,
+      page,
+      hasMore: page * pageSize < cloudFiles.length,
+    };
+  } else if (url.endsWith('/queryFolder')) {
+    data = { items: [], allFileCount: cloudFiles.length };
+  } else if (url.endsWith('/queryTotalFileSize')) {
+    data = { totalSizeMB: cloudFiles.length / 1024, quotaMB: 1024 };
   } else if (url.endsWith('/api/bookmark/resolveUrl')) {
     const matched = /https?:\/\/\S+/.exec(String(body.url || ''));
     data = { state: 'valid', canonicalUrl: matched?.[0] || '' };
@@ -167,11 +206,11 @@ const router = createRouter({
   history: createMemoryHistory(),
   routes: [{ path: '/:pathMatch(.*)*', component: { render: () => null } }],
 });
-await router.push('/');
+await router.push(cloud ? '/cloudSpace' : '/');
 
 const pinia = createPinia();
 setActivePinia(pinia);
-const app = createApp(AndroidShareCaptureHarness, { scenario, log });
+const app = createApp(AndroidShareCaptureHarness, { scenario, log, cloud });
 app.use(pinia);
 app.use(router);
 app.use(

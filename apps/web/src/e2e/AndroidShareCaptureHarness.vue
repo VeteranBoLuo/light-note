@@ -1,5 +1,6 @@
 <template>
-  <main class="share-harness">
+  <CloudSpace v-if="cloud" />
+  <main v-else class="share-harness">
     <header>
       <span>Android system share / visual QA</span>
       <h1>系统分享验收 · {{ scenario }}</h1>
@@ -12,17 +13,18 @@
       </ol>
       <p v-if="bookmark.isShowLogin" class="share-harness__login">已请求打开登录框（真实页面会显示登录弹窗）</p>
     </section>
-    <QuickCaptureModal v-if="inbox.quickCaptureVisible" v-model:visible="inbox.quickCaptureVisible" />
   </main>
+  <QuickCaptureModal v-if="inbox.quickCaptureVisible" v-model:visible="inbox.quickCaptureVisible" />
 </template>
 
 <script setup lang="ts">
-  import { computed, ref } from 'vue';
+  import { computed, defineAsyncComponent, ref } from 'vue';
   import QuickCaptureModal from '@/components/inbox/QuickCaptureModal.vue';
   import { useAndroidIncomingShare } from '@/composables/useAndroidIncomingShare';
   import { bookmarkStore, inboxStore } from '@/store';
 
-  const props = defineProps<{ scenario: string; log: string[] }>();
+  const CloudSpace = defineAsyncComponent(() => import('@/view/cloudSpace/cloudSpace.vue'));
+  const props = defineProps<{ scenario: string; log: string[]; cloud: boolean }>();
   const inbox = inboxStore();
   const bookmark = bookmarkStore();
   useAndroidIncomingShare({ authReady: ref(true), blocked: ref(false) });
@@ -52,6 +54,7 @@
     width: 100%;
     min-width: 0;
     min-height: 100%;
+    height: 100%;
     margin: 0;
   }
 

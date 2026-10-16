@@ -92,8 +92,8 @@ API 使用 `resultData(data, status, msg)` 信封，snake_case 响应键统一�
 - Release 固定加载 HTTPS `/app`，关闭 WebView 调试、拒绝 SSL 错误并禁用不需要的文件访问。
 - Debug 可在构建时覆盖局域网 Vite 地址；Web 代码通过 HMR 更新，不因普通前端改动重装 APK。
 - 移动浏览器、PWA 与 App 共用 `html.light-note-mobile-rendering` 渲染基线；Android 引擎类不承载业务视觉。
-- 系统分享由 `MainActivity` 接收 `SEND` / `SEND_MULTIPLE`，不申请新权限。`IncomingShareStore` 只读取外部应用授予的 `content://`，拒绝 `file://` 与本应用 Provider，把文字和文件复制到私有缓存（单次最多 100 个文件、共 500MB、正文 6 万字），只保留最近一次，24 小时过期。首次同意隐私前只把分享请求转交给同意页，不读取内容。
-- 网页在身份确认后通过受信桥 `share.peek` 取清单，从同域 `/__native-share/{id}/{序号}` 按上传队列读取由原生拦截返回的文件，清单阶段只预填元信息到「快速添加」，待整理来源记为 `system_share`；游客先登录，管理员代管上下文不自动打开。保存成功或关闭弹窗后 `share.complete` 清理暂存，切换账号或刷新页面保留暂存并重新处理。
+- 系统分享由 `MainActivity` 接收 `SEND` / `SEND_MULTIPLE`，不申请新权限。`IncomingShareStore` 只读取外部应用授予的 `content://`，拒绝 `file://` 与本应用 Provider，把文字和文件复制到私有缓存（单次最多 100 个文件、共 500MB、正文 6 万字），只保留最近一次，24 小时过期。首次同意隐私前只把分享请求转交给同意页，不读取内容。接收时由原生顶部提示显示真实的已处理文件数，Activity 重建后恢复订阅，新分享替换旧进度；完成后通知网页打开快速添加。
+- 网页在身份确认后通过受信桥 `share.peek` 取清单，从同域 `/__native-share/{id}/{序号}` 按上传队列读取由原生拦截返回的文件，清单阶段只预填元信息到「快速添加」，待整理来源记为 `system_share`；上传全部或部分成功时，若当前在云空间，静默刷新已加载文件、目录和容量，保留筛选与排序；游客先登录，管理员代管上下文不自动打开。保存成功或关闭弹窗后 `share.complete` 清理暂存，切换账号或刷新页面保留暂存并重新处理。
 
 ### PWA 与扩展
 

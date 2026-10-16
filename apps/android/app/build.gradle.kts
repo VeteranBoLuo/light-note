@@ -121,6 +121,7 @@ android {
         applicationId = "top.boluo66.lightnote"
         minSdk = 26
         targetSdk = 35
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         versionCode = releaseVersionCode
         versionName = releaseVersionName
         buildConfigField("boolean", "NOTIFICATION_SMOKE", "false")
@@ -203,6 +204,8 @@ android {
 }
 
 dependencies {
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
     if (huaweiPushProbeEnabled || huaweiPushEnabled) {
         debugImplementation("com.huawei.hms:push:6.13.0.301")
         debugImplementation("com.huawei.agconnect:agconnect-core:1.9.6.300")

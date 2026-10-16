@@ -158,6 +158,13 @@ WebView 过旧时，App 会显示更新提示而不是停在空白页。华为�
 上述名称、包名和 Release 签名用于官网直发、Android 开发者身份登记与 App
 备案，首次正式发布后不得随意更换。
 
+## 系统分享回归测试
+
+连接测试设备或启动模拟器后，在 `apps/android` 执行 `./gradlew connectedDebugAndroidTest`。
+测试 APK 提供独立的外部文件 Provider，覆盖即时接收反馈、100 个文件限制、跳过计数、连续分享、
+Activity 重建、冷热启动、失败收起与浅深主题；不读取个人相册，不上传文件。测试专用 Provider
+只存在于 `androidTest`，不会进入正式 APK。
+
 ## 正式签名准备
 
 正式密钥必须由负责人长期保管。当前 macOS 开发机把随机签名密码保存在登录钥匙串的

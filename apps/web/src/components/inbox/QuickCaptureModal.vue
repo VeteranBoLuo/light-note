@@ -247,6 +247,7 @@
   } from '@/api/cloudFileUploadApi';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import { bookmarkStore, inboxStore, todoStore, useUserStore } from '@/store';
+  import cloudSpaceStore from '@/store/cloudSpace';
   import {
     buildMarkdownNotePayload,
     detectInboxCaptureType,
@@ -459,6 +460,15 @@
   function captureWorkspaceActive(type: ActionCaptureType) {
     const current = router.currentRoute.value;
     return isQuickCaptureWorkspaceActive(type, current.path, current.query);
+  }
+
+  async function refreshCaptureViews(type: ActionCaptureType) {
+    const updates: Promise<unknown>[] = [refreshQuickCaptureStores(type, captureWorkspaceActive(type), inbox, todo)];
+    if (type === 'file' && router.currentRoute.value.path === '/cloudSpace') {
+      // 分享上传也会改变当前云空间；保留筛选、排序与已加载页，静默更新列表和容量。
+      updates.push(cloudSpaceStore().refreshAfterFileMutation({ preserveLoaded: true }));
+    }
+    await Promise.all(updates);
   }
 
   watch(visible, (value) => {
@@ -769,7 +779,7 @@
         failed: failed.length,
       });
       if (saved.length) {
-        await refreshQuickCaptureStores('file', captureWorkspaceActive('file'), inbox, todo);
+        await refreshCaptureViews('file');
       }
       throw new Error(fileUploadNotice.value);
     }
@@ -801,7 +811,7 @@
       clearSavedDraft(captureType.value);
       settleShareAfterCapture();
       manualType.value = false;
-      await refreshQuickCaptureStores(captureType.value, captureWorkspaceActive(captureType.value), inbox, todo);
+      await refreshCaptureViews(captureType.value);
       if (generation !== captureGeneration) return;
       emit('captured');
       message.success(successText.value);

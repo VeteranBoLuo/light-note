@@ -31,6 +31,9 @@ const inbox = {
   },
 };
 const todo = { refreshCount: vi.fn(), refreshList: vi.fn() };
+const cloud = { refreshAfterFileMutation: vi.fn().mockResolvedValue(true) };
+const route = reactive({ path: '/workbenches', query: {} });
+vi.mock('@/store/cloudSpace', () => ({ default: () => cloud }));
 
 vi.mock('@/store', () => ({
   useUserStore: () => account,
@@ -40,7 +43,7 @@ vi.mock('@/store', () => ({
 }));
 vi.mock('vue-router', async (importOriginal) => ({
   ...(await importOriginal<typeof import('vue-router')>()),
-  useRouter: () => ({ push: vi.fn(), currentRoute: { value: { path: '/workbenches', query: {} } } }),
+  useRouter: () => ({ push: vi.fn(), currentRoute: { value: route } }),
 }));
 vi.mock('@/http/request', () => ({ apiBasePost: vi.fn() }));
 vi.mock('@/api/commonApi', () => ({ recordOperation: vi.fn() }));
@@ -136,6 +139,7 @@ function draft(overrides: Partial<QuickCaptureShareDraft> = {}): QuickCaptureSha
 beforeEach(() => {
   vi.clearAllMocks();
   account.id = 'share-user';
+  route.path = '/workbenches';
   inbox.quickCaptureType = 'bookmark';
   pendingDraft = null;
 });
@@ -202,7 +206,8 @@ describe('快速添加 · 系统分享', () => {
     expect(completeAndroidShare).toHaveBeenCalledWith('a'.repeat(32));
   });
 
-  it('100 个、500MiB 的分享先显示清单，最多 3 个任务读取上传，失败只重试该项', async () => {
+  it('100 个、500MiB 的分享最多 3 个任务，部分成功刷新当前云空间，重试只上传失败项再刷新', async () => {
+    route.path = '/cloudSpace';
     inbox.quickCaptureType = 'file';
     const readers = Array.from({ length: 100 }, (_, index) => vi.fn(async () => new File(['x'], `${index}.jpg`)));
     pendingDraft = draft({
@@ -242,15 +247,66 @@ describe('快速添加 · 系统分享', () => {
     expect(maxActive).toBe(3);
     expect(host.querySelectorAll('.file-list__item')).toHaveLength(1);
     expect(host.querySelector('.file-list__read-error')?.textContent).toContain('读取失败');
+    expect(cloud.refreshAfterFileMutation).toHaveBeenCalledTimes(1);
     expect(completeAndroidShare).not.toHaveBeenCalled();
     fail = false;
     buttonByText(host, zhCN.inbox.collect)!.click();
     await settle();
     finishers.splice(0).forEach((resolve) => resolve());
     await settle();
+    expect(cloud.refreshAfterFileMutation).toHaveBeenCalledTimes(2);
+    expect(cloud.refreshAfterFileMutation).toHaveBeenLastCalledWith({ preserveLoaded: true });
     expect(readers[4]).toHaveBeenCalledTimes(2);
     expect(readers[5]).toHaveBeenCalledTimes(1);
     expect(completeAndroidShare).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['/cloudSpace', '/workbenches'])('文件全部上传成功：%s 仅刷新当前云空间', async (path) => {
+    route.path = path;
+    pendingDraft = draft({ text: '', files: [new File(['x'], 'image.jpg')] });
+    vi.mocked(uploadManagedCloudFile).mockResolvedValue({
+      fileId: 'new-file',
+      filename: 'image.jpg',
+      status: '已上传',
+    });
+    const host = mount();
+    buttonByText(host, zhCN.inbox.collect)!.click();
+    await settle();
+    expect(cloud.refreshAfterFileMutation).toHaveBeenCalledTimes(path === '/cloudSpace' ? 1 : 0);
+    expect(completeAndroidShare).toHaveBeenCalledTimes(1);
+  });
+
+  it('全部上传失败不刷新云空间，保留文件供重试', async () => {
+    route.path = '/cloudSpace';
+    pendingDraft = draft({ text: '', files: [new File(['x'], 'image.jpg')] });
+    vi.mocked(uploadManagedCloudFile).mockRejectedValue(new Error('upload failed'));
+    const host = mount();
+    buttonByText(host, zhCN.inbox.collect)!.click();
+    await settle();
+    expect(cloud.refreshAfterFileMutation).not.toHaveBeenCalled();
+    expect(completeAndroidShare).not.toHaveBeenCalled();
+    expect(host.querySelectorAll('.file-list__item')).toHaveLength(1);
+  });
+
+  it('上传期间切换账号，旧上传结果不能刷新新账号的云空间', async () => {
+    route.path = '/cloudSpace';
+    pendingDraft = draft({ text: '', files: [new File(['x'], 'image.jpg')] });
+    let finish!: () => void;
+    vi.mocked(uploadManagedCloudFile).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = () => resolve({ fileId: 'old-user-file', filename: 'image.jpg', status: '已上传' });
+        }),
+    );
+    const host = mount();
+    buttonByText(host, zhCN.inbox.collect)!.click();
+    await settle();
+    account.id = 'another-user';
+    await nextTick();
+    finish();
+    await settle();
+    expect(cloud.refreshAfterFileMutation).not.toHaveBeenCalled();
+    expect(completeAndroidShare).not.toHaveBeenCalled();
   });
 
   it('全部跳过仍展示文件页、分类原因和明细，不能提交空文件集', async () => {
