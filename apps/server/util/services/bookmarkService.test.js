@@ -188,10 +188,12 @@ describe('bookmarkService.createBookmark', () => {
       bookmark: { url: 'https://example.com', name: '已保存' },
       idempotencyKey: 'browser-extension:retry-1',
       addToInbox: true,
+      captureMetadata: true,
     });
 
     expect(result).toMatchObject({ idempotentReplay: true, addedToInbox: true, snapshotScheduled: false });
     expect(pool.getConnection).not.toHaveBeenCalled();
+    expect(fetchWebMeta).not.toHaveBeenCalled();
     expect(createIconBatch).not.toHaveBeenCalled();
     expect(archiveBookmarkBackground).not.toHaveBeenCalled();
     expect(triggerResourceCreateEffects).not.toHaveBeenCalled();
@@ -293,6 +295,126 @@ describe('bookmarkService.createBookmark', () => {
       maxContentBytes: 4 * 1024 * 1024,
       renderFallback: true,
     });
+  });
+
+  it('快速添加优先用网页标题和描述，在借出数据库连接前完成有时限的轻量读取', async () => {
+    fetchWebMeta.mockResolvedValueOnce({ ok: true, title: '  一篇具体的文章  ', description: '  文章简介  ' });
+    await createBookmark({
+      userId: 'user-1',
+      bookmark: { url: 'https://example.com/a', name: '分享标题' },
+      captureMetadata: true,
+      saveSnapshot: false,
+    });
+
+    expect(fetchWebMeta).toHaveBeenCalledWith('https://example.com/a', {
+      signal: expect.any(AbortSignal), timeout: 5000, renderFallback: false,
+    });
+    expect(fetchWebMeta.mock.invocationCallOrder[0]).toBeLessThan(pool.getConnection.mock.invocationCallOrder[0]);
+    const inserted = connection.query.mock.calls.find(([sql]) => sql === 'INSERT INTO bookmark SET ?')?.[1]?.[0];
+    expect(inserted).toMatchObject({ name: '一篇具体的文章', description: '文章简介' });
+  });
+
+  it.each(['ACCESS_DENIED', 'AUTH_REQUIRED', 'TIMEOUT', 'JS_RENDER_REQUIRED'])(
+    '快速添加读取失败 %s 时保留分享标题，未获取的描述留空', async (reason) => {
+      fetchWebMeta.mockResolvedValueOnce({ ok: false, reason, title: '登录或验证页', description: '不能作为收藏描述' });
+      const result = await createBookmark({
+        userId: 'user-1',
+        bookmark: { url: 'https://example.com/a', name: '分享的文章标题' },
+        captureMetadata: true,
+        saveSnapshot: false,
+      });
+      expect(result.name).toBe('分享的文章标题');
+      const inserted = connection.query.mock.calls.find(([sql]) => sql === 'INSERT INTO bookmark SET ?')?.[1]?.[0];
+      expect(inserted.description).toBe('');
+    },
+  );
+
+  it('快速添加抓取异常且没有分享标题时仍以域名保存', async () => {
+    fetchWebMeta.mockRejectedValueOnce(new Error('network failure'));
+    await expect(createBookmark({
+      userId: 'user-1', bookmark: { url: 'https://www.example.com/a' },
+      captureMetadata: true, saveSnapshot: false,
+    })).resolves.toMatchObject({ name: 'example.com' });
+    expect(connection.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it('网页只有描述时保留分享标题，且入库字段遵守长度上限', async () => {
+    fetchWebMeta.mockResolvedValueOnce({ ok: true, title: ' ', description: '介绍'.repeat(200) });
+    await createBookmark({
+      userId: 'user-1', bookmark: { url: 'https://example.com/a', name: '标题'.repeat(200) },
+      captureMetadata: true, saveSnapshot: false,
+    });
+    const inserted = connection.query.mock.calls.find(([sql]) => sql === 'INSERT INTO bookmark SET ?')?.[1]?.[0];
+    expect(inserted.name).toBe('标题'.repeat(200).slice(0, 255));
+    expect(inserted.description).toBe('介绍'.repeat(200).slice(0, 255));
+  });
+
+  it('抓取出的标题同名时仍按序号避让', async () => {
+    fetchWebMeta.mockResolvedValueOnce({ ok: true, title: '文章', description: '简介' });
+    connection.query.mockReset();
+    connection.query.mockResolvedValueOnce([[]]).mockResolvedValueOnce([[{ id: 'existing' }]])
+      .mockResolvedValueOnce([[{ name: '文章 (2)' }]]).mockResolvedValue([{ affectedRows: 1 }]);
+    await expect(createBookmark({
+      userId: 'user-1', bookmark: { url: 'https://example.com/a', name: 'example.com' },
+      captureMetadata: true, suffixDuplicateName: true, saveSnapshot: false,
+    })).resolves.toMatchObject({ name: '文章 (3)' });
+  });
+
+  it('重复收集仍返回已有书签并加入待整理，不用抓取结果覆盖用户已编辑的信息', async () => {
+    fetchWebMeta.mockResolvedValueOnce({ ok: true, title: '网页标题', description: '网页简介' });
+    connection.query.mockReset();
+    connection.query.mockResolvedValueOnce([[{ id: 'existing', name: '用户整理后的名称' }]]);
+    const result = await createBookmark({
+      userId: 'user-1', bookmark: { url: 'https://example.com/a', name: 'example.com' },
+      captureMetadata: true, addToInbox: true, duplicateToInbox: true,
+    });
+    expect(result).toMatchObject({ id: 'existing', name: '用户整理后的名称', duplicate: true, addedToInbox: true });
+    expect(enqueueResources).toHaveBeenCalledWith(connection, {
+      userId: 'user-1', items: [{ resourceType: 'bookmark', resourceId: 'existing' }], source: 'duplicate_requeue',
+    });
+    expect(connection.query.mock.calls.some(([sql]) => /^(?:INSERT|UPDATE)\b/.test(sql))).toBe(false);
+    expect(archiveBookmarkBackground).not.toHaveBeenCalled();
+  });
+
+  it('总时限结束会终止慢网页读取并继续保存', async () => {
+    vi.useFakeTimers();
+    try {
+      fetchWebMeta.mockImplementationOnce((_url, { signal }) => new Promise((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+      }));
+      const pending = createBookmark({
+        userId: 'user-1', bookmark: { url: 'https://example.com/a' },
+        captureMetadata: true, saveSnapshot: false,
+      });
+      await vi.advanceTimersByTimeAsync(5000);
+      await expect(pending).resolves.toMatchObject({ name: 'example.com' });
+      expect(fetchWebMeta.mock.calls[0][1].signal.aborted).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('调用方取消不会被当作网页读取失败而继续创建书签', async () => {
+    const controller = new AbortController();
+    fetchWebMeta.mockImplementationOnce(() => {
+      controller.abort();
+      return Promise.reject(controller.signal.reason);
+    });
+    await expect(createBookmark({
+      userId: 'user-1', bookmark: { url: 'https://example.com/a' },
+      captureMetadata: true, signal: controller.signal,
+    })).rejects.toMatchObject({ name: 'AbortError' });
+    expect(pool.getConnection).not.toHaveBeenCalled();
+  });
+
+  it('普通手填保存不抓取，也不覆盖用户名称和描述', async () => {
+    await createBookmark({
+      userId: 'user-1', bookmark: { url: 'https://example.com/a', name: '我的名称', description: '我的描述' },
+      saveSnapshot: false,
+    });
+    expect(fetchWebMeta).not.toHaveBeenCalled();
+    const inserted = connection.query.mock.calls.find(([sql]) => sql === 'INSERT INTO bookmark SET ?')?.[1]?.[0];
+    expect(inserted).toMatchObject({ name: '我的名称', description: '我的描述' });
   });
 
   it('书签提交后旁路副作用同步失败仍返回成功', async () => {
