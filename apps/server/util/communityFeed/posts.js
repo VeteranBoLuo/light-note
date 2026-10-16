@@ -5,7 +5,7 @@ import { bindImages, revisionImages, imageDto } from './images.js';
 import { publicGrowthProfile } from '../services/communityChatProfileService.js';
 import { randomUUID } from 'node:crypto';
 import pool from '../../db/index.js';
-import { normalizeCommunityPost } from '@lightnote/shared/community-feed';
+import { normalizeCommunityPost, parseCommunityPostDocument } from '@lightnote/shared/community-feed';
 import {
   access,
   authorVisibleSql,
@@ -119,6 +119,7 @@ export async function submitPost({ user, input, env = process.env, db = pool }) 
     'profileConsentVersion',
     'images',
     'resources',
+    'contentVersion',
   ]);
   let content;
   try {
@@ -134,6 +135,15 @@ export async function submitPost({ user, input, env = process.env, db = pool }) 
       post = await loadPost(c, input.postId, user, { owner: true, lock: true });
       if (post.author_id !== user.id) fail('COMMUNITY_CONTENT_UNAVAILABLE', 404);
       expectedRevision(input.expectedRevision, post.row_revision);
+      if (input.contentVersion !== 2) {
+        const previous = await first(
+          c,
+          'SELECT body FROM community_post_revisions WHERE post_id=? ORDER BY revision_no DESC LIMIT 1',
+          [post.id],
+        );
+        if (parseCommunityPostDocument(previous?.body || '').imageIds.length)
+          fail('COMMUNITY_CLIENT_UPDATE_REQUIRED', 409);
+      }
       if (['removed', 'deleted'].includes(post.status) || Number(post.locked)) fail('COMMUNITY_THREAD_LOCKED', 423);
       if (post.pending_revision_id)
         await c.query(

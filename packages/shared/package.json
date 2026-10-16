@@ -127,6 +127,7 @@
     "vitest": "^3.2.6"
   },
   "dependencies": {
-    "katex": "0.16.47"
+    "katex": "0.16.47",
+    "marked": "^17.0.6"
   }
 }

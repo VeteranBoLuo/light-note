@@ -1,3 +1,10 @@
+import { parseCommunityPostDocument } from "./communityPostDocument.js";
+export {
+  parseCommunityPostDocument,
+  mapCommunityImageIds,
+  communityImageMarkdown,
+  communityImageInsertion,
+} from "./communityPostDocument.js";
 export const COMMUNITY_FEED_LIMITS = Object.freeze({
   resources: 3,
   images: 9,
@@ -58,6 +65,16 @@ export function normalizeCommunityPost(input) {
   )
     throw new Error("COMMUNITY_INVALID_INPUT");
   const resources = input.resources ?? [];
+  const document = parseCommunityPostDocument(body);
+  if (
+    document.invalid ||
+    document.imageIds.some(
+      (id) => !images.some((image) => image.toLowerCase() === id),
+    ) ||
+    (document.imageIds.length && input.contentVersion !== 2) ||
+    (input.contentVersion !== undefined && input.contentVersion !== 2)
+  )
+    throw new Error("COMMUNITY_INVALID_INPUT");
   if (
     !Array.isArray(resources) ||
     resources.length > 3 ||

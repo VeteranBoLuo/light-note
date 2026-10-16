@@ -10,6 +10,7 @@
   export interface MarkdownCodeMirrorExpose {
     getValue: () => string;
     getSelection: () => { from: number; to: number };
+    positionAtCoords: (x: number, y: number) => number | null;
     focus: (options?: FocusOptions) => void;
     setSelection: (from: number, to?: number) => void;
     applyEdit: (result: EditResult) => void;
@@ -491,6 +492,7 @@
 
   defineExpose<MarkdownCodeMirrorExpose>({
     getValue: () => view?.state.doc.toString() || '',
+    positionAtCoords: (x: number, y: number) => view?.posAtCoords({ x, y }) ?? null,
     getSelection: () => {
       const selection = view?.state.selection.main;
       return { from: selection?.from || 0, to: selection?.to || 0 };

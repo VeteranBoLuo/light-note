@@ -34,12 +34,20 @@
       ><span v-if="detail || preview">{{ post.title }}</span
       ><RouterLink v-else :to="postTarget()">{{ post.title }}</RouterLink></h2
     >
-    <CommunityPostImages v-if="detail || preview" :images="post.images" article />
-    <CommunityMarkdown :body="post.body" :class="{ 'feed-excerpt': !detail && !preview }" :inert="preview" />
+    <CommunityPostImages v-if="(detail || preview) && !inlineImages" :images="post.images" article />
+    <CommunityPostBody
+      v-if="inlineImages"
+      :body="post.body"
+      :images="post.images"
+      :excerpt="!detail && !preview"
+      :class="{ 'feed-excerpt': !detail && !preview }"
+      :disable-links="preview"
+    />
+    <CommunityMarkdown v-else :body="post.body" :class="{ 'feed-excerpt': !detail && !preview }" :inert="preview" />
     <div :inert="preview">
       <CommunityPostResources :resources="post.resources" :class="{ 'feed-resource-grid': !detail }" />
     </div>
-    <CommunityPostImages v-if="!detail && !preview" :images="post.images" />
+    <CommunityPostImages v-if="!detail && !preview" :images="attachmentImages" />
     <div class="feed-actions feed-meta" :inert="preview"
       ><RouterLink
         class="post-topic"
@@ -75,6 +83,9 @@
   import CommunityPostResources from './CommunityPostResources.vue';
   import CommunityPostImages from './CommunityPostImages.vue';
   import CommunityMarkdown from './CommunityMarkdown.vue';
+  import CommunityPostBody from './CommunityPostBody.vue';
+  import { computed } from 'vue';
+  import { parseCommunityPostDocument } from '@lightnote/shared/community-feed';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import { shouldOpenCommunityPost } from '@/utils/communityNavigation';
@@ -89,6 +100,11 @@
     likeFailed?: boolean;
   }>();
   defineEmits<{ like: [post: FeedPost] }>();
+  const document = computed(() => parseCommunityPostDocument(props.post.body));
+  const inlineImages = computed(() => document.value.imageIds.length > 0);
+  const attachmentImages = computed(() =>
+    (props.post.images || []).filter((image) => !document.value.imageIds.includes(image.publicId)),
+  );
   const { imageSource } = useCommunityPreviewImages(() => [props.post.author?.avatar]);
   const { t, locale } = useI18n();
   const router = useRouter();
