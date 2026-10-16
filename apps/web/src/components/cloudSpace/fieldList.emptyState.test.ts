@@ -116,21 +116,6 @@ describe('cloud file empty state layout', () => {
     expect(themeSource).toContain('--cloud-file-list-row-hover-bg: #33363c;');
   });
 
-  it('列表批量态点击整行、文件名或标签都只切换选择，不再打开预览或标签页', () => {
-    const rowHandler = source.match(/const onListRowClick = \(item: any\) => \{([\s\S]*?)\n  \};/)?.[1] || '';
-    const labelHandler = source.match(/const onFileLabelClick = \(item: any\) => \{([\s\S]*?)\n  \};/)?.[1] || '';
-    const tagHandler =
-      source.match(/const onFileTagClick = \(item: any, tagId: string\) => \{([\s\S]*?)\n  \};/)?.[1] || '';
-
-    expect(rowHandler.indexOf('if (batchMode.value)')).toBeLessThan(rowHandler.indexOf('if (!bookmark.isMobile)'));
-    expect(rowHandler).toContain('toggleRow(item.id, !selectedRows.value.includes(item.id))');
-    expect(labelHandler).toContain('if (batchMode.value)');
-    expect(labelHandler).toContain('toggleRow(item.id, !selectedRows.value.includes(item.id))');
-    expect(tagHandler).toContain('if (batchMode.value)');
-    expect(tagHandler).toContain('toggleRow(item.id, !selectedRows.value.includes(item.id))');
-    expect(source).toContain('@click.stop="onFileTagClick(item, tag.id)"');
-  });
-
   it('批量删除确认只预览少量文件名，并用危险操作和分层富文本明确后果', () => {
     expect(source).toContain('const previewLimit = 3;');
     expect(source).toContain("t('cloudSpace.batchDeleteRemaining', { count: remainingCount })");

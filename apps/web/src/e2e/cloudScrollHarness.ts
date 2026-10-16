@@ -14,9 +14,12 @@ setActivePinia(pinia);
 // 使用内存文件驱动真实云空间页面，滚动验收不访问业务服务。
 const fileCount = Math.min(5000, Math.max(1, Number(params.get('count')) || 60));
 const items = Array.from({ length: params.has('empty') ? 0 : fileCount }, (_, i) => ({
-  id: String(i + 1),
-  fileName: `滚动验收资料 ${i + 1}.zip`,
-  fileType: 'application/zip',
+  id: params.has('numericIds') ? i + 1 : String(i + 1),
+  fileName: `滚动验收资料 ${i + 1}.${params.has('preview') ? 'txt' : 'zip'}`,
+  fileUrl: params.has('preview')
+    ? `data:text/plain;charset=utf-8,${encodeURIComponent('批量预览验收内容 ' + (i + 1))}`
+    : '',
+  fileType: params.has('preview') ? 'text/plain' : 'application/zip',
   fileSize: 1024,
   uploadTime: '2026-09-11 12:00:00',
   tags: [],
@@ -39,7 +42,8 @@ request.defaults.adapter = async (config) => {
       page,
       hasMore: start + pageSize < files.length,
     };
-  } else if (url.endsWith('/checkFileNames')) data = [];
+  } else if (url.endsWith('/getFileInfo')) data = items.find((item) => String(item.id) === String(body.id));
+  else if (url.endsWith('/checkFileNames')) data = [];
   else if (url.endsWith('/uploadFiles')) {
     data = body.files.map((file: any, index: number) => ({
       filename: file.fileName,

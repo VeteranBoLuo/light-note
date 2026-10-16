@@ -54,8 +54,8 @@ import org.json.JSONObject;
  */
 final class IncomingShareStore {
     static final String ROUTE_PREFIX = "/__native-share/";
-    static final int MAX_FILES = 20;
-    static final long MAX_TOTAL_BYTES = 200L * 1024L * 1024L;
+    static final int MAX_FILES = 100;
+    static final long MAX_TOTAL_BYTES = 500L * 1024L * 1024L;
     static final int MAX_TEXT_CHARS = 60_000;
     private static final int MAX_SUBJECT_CHARS = 500;
     private static final int MAX_NAME_CHARS = 120;
@@ -225,6 +225,8 @@ final class IncomingShareStore {
         ContentResolver resolver = context.getContentResolver();
         JSONArray files = new JSONArray();
         int skipped = 0;
+        JSONObject skippedCounts = new JSONObject();
+        JSONArray skippedDetails = new JSONArray();
         long totalBytes = 0L;
         try {
             for (Uri uri : incoming.uris) {
@@ -232,13 +234,22 @@ final class IncomingShareStore {
                     deleteDir(dir);
                     return PrepareResult.SUPERSEDED;
                 }
-                if (files.length() >= MAX_FILES || !isReadableForeignContent(context, uri)) {
+                if (files.length() >= MAX_FILES && skippedDetails.length() >= MAX_FILES) {
                     skipped += 1;
+                    recordSkipped(skippedCounts, skippedDetails, "", "count_limit");
                     continue;
                 }
-                FileMeta meta = describe(resolver, uri, incoming.mimeType, files.length());
+                boolean readable = isReadableForeignContent(context, uri);
+                FileMeta meta = readable ? describe(resolver, uri, incoming.mimeType, files.length())
+                    : new FileMeta(safeFileName("", "application/octet-stream", files.length() + skipped), "application/octet-stream", -1L);
+                if (files.length() >= MAX_FILES || !readable) {
+                    skipped += 1;
+                    recordSkipped(skippedCounts, skippedDetails, meta.name, files.length() >= MAX_FILES ? "count_limit" : "unreadable");
+                    continue;
+                }
                 if (meta.size > 0L && totalBytes + meta.size > MAX_TOTAL_BYTES) {
                     skipped += 1;
+                    recordSkipped(skippedCounts, skippedDetails, meta.name, "size_limit");
                     continue;
                 }
                 int index = files.length();
@@ -248,6 +259,7 @@ final class IncomingShareStore {
                     // noinspection ResultOfMethodCallIgnored
                     target.delete();
                     skipped += 1;
+                    recordSkipped(skippedCounts, skippedDetails, meta.name, copied == -2L ? "size_limit" : "unreadable");
                     continue;
                 }
                 totalBytes += copied;
@@ -259,17 +271,20 @@ final class IncomingShareStore {
             }
             String text = clip(incoming.text, MAX_TEXT_CHARS);
             String subject = clip(incoming.subject, MAX_SUBJECT_CHARS);
-            if (text.trim().isEmpty() && subject.trim().isEmpty() && files.length() == 0) {
+            if (text.trim().isEmpty() && subject.trim().isEmpty() && files.length() == 0 && skipped == 0) {
                 deleteDir(dir);
                 return PrepareResult.UNREADABLE;
             }
             JSONObject manifest = new JSONObject()
                 .put("id", shareId)
+                .put("limits", new JSONObject().put("files", MAX_FILES).put("bytes", MAX_TOTAL_BYTES))
                 .put("text", text)
                 .put("subject", subject)
                 .put("textTruncated", incoming.text.length() > MAX_TEXT_CHARS)
                 .put("files", files)
                 .put("skippedFiles", skipped)
+                .put("skippedFileCounts", skippedCounts)
+                .put("skippedFileDetails", skippedDetails)
                 .put("createdAt", System.currentTimeMillis());
             synchronized (LOCK) {
                 if (generation != GENERATION.get()) {
@@ -283,6 +298,12 @@ final class IncomingShareStore {
             deleteDir(dir);
             return PrepareResult.UNREADABLE;
         }
+    }
+
+    private static void recordSkipped(JSONObject counts, JSONArray details, String name, String reason) throws JSONException {
+        counts.put(reason, counts.optInt(reason, 0) + 1);
+        // 清单有读取预算；完整数量始终保留，文件名明细最多 100 项。
+        if (details.length() < MAX_FILES) details.put(new JSONObject().put("name", name).put("reason", reason));
     }
 
     private static Incoming read(Intent intent) {
@@ -394,7 +415,7 @@ final class IncomingShareStore {
         return name.substring(0, MAX_NAME_CHARS - extension.length()) + extension;
     }
 
-    /** 复制并强制剩余额度；超出额度或读取失败返回 -1，调用方丢弃半截文件。 */
+    /** 复制并强制剩余额度；超出额度返回 -2，读取失败返回 -1，调用方丢弃半截文件。 */
     private static long copy(ContentResolver resolver, Uri uri, File target, long remainingBytes) {
         try (InputStream input = resolver.openInputStream(uri);
              OutputStream output = new FileOutputStream(target)) {
@@ -404,7 +425,7 @@ final class IncomingShareStore {
             int read;
             while ((read = input.read(buffer)) != -1) {
                 copied += read;
-                if (copied > remainingBytes) return -1L;
+                if (copied > remainingBytes) return -2L;
                 output.write(buffer, 0, read);
             }
             return copied;

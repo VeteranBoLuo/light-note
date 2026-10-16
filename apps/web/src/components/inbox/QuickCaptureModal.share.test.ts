@@ -44,7 +44,10 @@ vi.mock('vue-router', async (importOriginal) => ({
 }));
 vi.mock('@/http/request', () => ({ apiBasePost: vi.fn() }));
 vi.mock('@/api/commonApi', () => ({ recordOperation: vi.fn() }));
-vi.mock('@/api/cloudFileUploadApi', () => ({ uploadManagedCloudFile: vi.fn(), createManagedUploadBatchRequest: vi.fn() }));
+vi.mock('@/api/cloudFileUploadApi', () => ({
+  uploadManagedCloudFile: vi.fn(),
+  createManagedUploadBatchRequest: vi.fn(),
+}));
 vi.mock('@/api/todoApi', () => ({
   createTodoPlanV2: vi.fn(),
   previewTodoPlanV2: vi.fn(),
@@ -110,8 +113,7 @@ function mount() {
 
 function buttonByText(host: HTMLElement, text: string) {
   return Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.trim() === text) as
-    | HTMLButtonElement
-    | undefined;
+    HTMLButtonElement | undefined;
 }
 
 const settle = async () => {
@@ -198,6 +200,77 @@ describe('快速添加 · 系统分享', () => {
       expect.objectContaining({ addToInbox: true, inboxSource: 'system_share' }),
     );
     expect(completeAndroidShare).toHaveBeenCalledWith('a'.repeat(32));
+  });
+
+  it('100 个、500MiB 的分享先显示清单，最多 3 个任务读取上传，失败只重试该项', async () => {
+    inbox.quickCaptureType = 'file';
+    const readers = Array.from({ length: 100 }, (_, index) => vi.fn(async () => new File(['x'], `${index}.jpg`)));
+    pendingDraft = draft({
+      text: '',
+      files: readers.map((read, index) => ({
+        name: `${index}.jpg`,
+        type: 'image/jpeg',
+        size: 5 * 1024 * 1024,
+        lastModified: index,
+        read,
+      })),
+    });
+    const finishers: Array<() => void> = [];
+    let active = 0;
+    let maxActive = 0;
+    let fail = true;
+    vi.mocked(uploadManagedCloudFile).mockImplementation(async (file) => {
+      active++;
+      maxActive = Math.max(active, maxActive);
+      if ('read' in file) await file.read();
+      await new Promise<void>((resolve) => finishers.push(resolve));
+      active--;
+      if (file.name === '4.jpg' && fail)
+        throw Object.assign(new Error('read failed'), { code: 'SHARE_FILE_UNREADABLE' });
+      return { filename: file.name, fileId: file.name, status: '已上传' };
+    });
+    const host = mount();
+    expect(host.querySelectorAll('.file-list__item')).toHaveLength(100);
+    expect(readers.every((read) => read.mock.calls.length === 0)).toBe(true);
+    buttonByText(host, zhCN.inbox.collect)!.click();
+    await settle();
+    expect(readers.filter((read) => read.mock.calls.length)).toHaveLength(3);
+    for (let i = 0; i < 35; i++) {
+      finishers.splice(0).forEach((resolve) => resolve());
+      await settle();
+    }
+    expect(maxActive).toBe(3);
+    expect(host.querySelectorAll('.file-list__item')).toHaveLength(1);
+    expect(host.querySelector('.file-list__read-error')?.textContent).toContain('读取失败');
+    expect(completeAndroidShare).not.toHaveBeenCalled();
+    fail = false;
+    buttonByText(host, zhCN.inbox.collect)!.click();
+    await settle();
+    finishers.splice(0).forEach((resolve) => resolve());
+    await settle();
+    expect(readers[4]).toHaveBeenCalledTimes(2);
+    expect(readers[5]).toHaveBeenCalledTimes(1);
+    expect(completeAndroidShare).toHaveBeenCalledTimes(1);
+  });
+
+  it('全部跳过仍展示文件页、分类原因和明细，不能提交空文件集', async () => {
+    pendingDraft = draft({
+      text: '',
+      skippedFiles: 3,
+      skippedFileCounts: { count_limit: 1, size_limit: 1, unreadable: 1 },
+      skippedFileDetails: [
+        { name: 'too-big.mp4', reason: 'size_limit' },
+        { name: 'broken.jpg', reason: 'unreadable' },
+      ],
+    });
+    const host = mount();
+    expect(host.textContent).toContain('超出数量上限');
+    expect(host.textContent).toContain('超出总大小上限');
+    expect(buttonByText(host, zhCN.inbox.collect)?.disabled).toBe(true);
+    buttonByText(host, zhCN.inbox.shareShowSkipped)!.click();
+    await nextTick();
+    expect(host.querySelector('#share-skipped-details')?.textContent).toContain('too-big.mp4');
+    expect(host.querySelector('#share-skipped-details')?.textContent).toContain('broken.jpg');
   });
 
   it('文字和文件一起分享时先存文件，文字保留到「继续添加」，全部保存后才清理暂存', async () => {
