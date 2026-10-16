@@ -588,7 +588,7 @@ describe('编辑器 V2 交互回归', () => {
   });
 
   it('PC 固定工具栏以图片替代待办快捷位，待办归入列表结构菜单', () => {
-    expect(toolbarSource).toContain('<ToolbarButton v-if="!minimal" :action="imageAction"');
+    expect(toolbarSource).toContain('<ToolbarButton v-else-if="!minimal" :action="imageAction"');
     expect(toolbarSource).not.toContain('<ToolbarButton :action="todoAction"');
     expect(toolbarSource).toContain('imageAction: EditorToolbarAction;');
     expect(editorSource).toMatch(
