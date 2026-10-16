@@ -108,6 +108,7 @@
               <div
                 v-if="inlineImagesEnabled && selectedInlineImage"
                 class="inline-image-actions"
+                :class="{ 'is-markdown': editorMode === 'markdown' }"
                 :style="{ top: `calc(${inlineToolbarTop}px - var(--ui-space-8, 8px))` }"
               >
                 <span>{{ t('community.feed.inlineImage') }}</span>
@@ -1335,6 +1336,14 @@
     color: var(--desc-color);
     font-size: var(--ui-font-12, 12px);
   }
+  .inline-image-actions.is-markdown {
+    position: static;
+    transform: none;
+    flex-shrink: 0;
+    align-self: center;
+    max-width: calc(100% - var(--ui-space-40, 40px));
+    margin: 0 auto var(--ui-space-8, 8px);
+  }
   .community-writing {
     height: 100%;
     overflow: hidden;
@@ -1658,7 +1667,15 @@
     font-size: var(--ui-font-12, 12px);
   }
   @media (max-width: 767px) {
-    .community-writing {
+    .inline-image-actions.is-markdown {
+    position: static;
+    transform: none;
+    flex-shrink: 0;
+    align-self: center;
+    max-width: calc(100% - var(--ui-space-40, 40px));
+    margin: 0 auto var(--ui-space-8, 8px);
+  }
+  .community-writing {
       padding-bottom: calc(62px + env(safe-area-inset-bottom));
       box-sizing: border-box;
     }
