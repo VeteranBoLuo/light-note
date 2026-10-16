@@ -4,6 +4,7 @@ import { safeJsonStringify } from '../payloadSanitizer.js';
 import { updateIpReputation, ensureIpLocation } from './ipReputation.js';
 import { updateAccountReputation } from './accountReputation.js';
 import { SECURITY_CONFIG } from '../rules.js';
+import { applyAutomaticSecurityResponse } from './autoResponseService.js';
 
 const countIpAttacks = async (ip, intervalExpr) => {
   const [rows] = await pool.query(
@@ -134,6 +135,9 @@ export const writeSecurityEvent = async ({ context, evidenceList, threat, decisi
       }
     }
   }
+  await applyAutomaticSecurityResponse({ eventId, context, evidenceList, decision, statusCode }).catch(() => {
+    console.error('[security] automatic response failed code=SECURITY_AUTO_RESPONSE_FAILED');
+  });
   return eventId;
 };
 

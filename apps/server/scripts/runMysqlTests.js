@@ -6,6 +6,7 @@ import mysql from 'mysql2/promise';
 
 // These suites create and remove their own random schemas. Never load application .env.
 const suites = {
+  'util/security/services/autoResponse.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/adminAsyncJobHealth.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/points.backgrounds.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/services/aiAdoption.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',

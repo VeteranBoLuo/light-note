@@ -11,6 +11,7 @@ export const SECURITY_CONFIG = {
   blockEnabled:
     process.env.SECURITY_BLOCK_REQUEST_ENABLED !== 'false' && process.env.SECURITY_BLOCK_ENABLED !== 'false',
   ipAutoBanEnabled: process.env.SECURITY_IP_AUTO_BAN_ENABLED === 'true',
+  autoResponseEnabled: process.env.SECURITY_AUTO_RESPONSE_ENABLED !== 'false',
   reputationDecisionEnabled: process.env.SECURITY_REPUTATION_DECISION_ENABLED === 'true',
   // 决策阈值：threatScore >= blockThreshold 拦截，>= logThreshold 记录观察
   // (原先硬编码在 decisionEngine，提到这里便于按环境调整；默认值与原硬编码一致)

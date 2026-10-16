@@ -72,6 +72,25 @@ describe('安全中心态势总览', () => {
     cleanup = undefined;
   });
 
+  it('根据服务端策略显示自动处置及正常用户保护范围', async () => {
+    apiBasePost.mockResolvedValue({
+      status: 200,
+      data: { summary: { autoResponseEnabled: true }, trend: [], noisyRules: [], reviewQueue: [] },
+    });
+    const host = mountOverview();
+    await flushPromises();
+    const banner = host.querySelector('.auto-ban-banner')!;
+    expect(banner.textContent).toContain('明确敏感文件探测已开启自动处置');
+    expect(banner.textContent).toContain('不自动续期，不封账号');
+    expect(banner.textContent).not.toContain('自动 IP 封禁已关闭');
+  });
+
+  it('策略关闭时保留人工复核说明', async () => {
+    const host = mountOverview();
+    await flushPromises();
+    expect(host.querySelector('.auto-ban-banner')!.textContent).toContain('自动 IP 封禁已关闭');
+  });
+
   it('折线图悬浮时展示日期和三组数值，离开后关闭提示', async () => {
     const host = mountOverview();
     await flushPromises();

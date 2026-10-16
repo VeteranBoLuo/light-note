@@ -22,3 +22,15 @@ it('浏览器订阅仅在日志摘要中隐藏凭据，原始检测输入仍然�
   expect(JSON.stringify(context.payloadSummary)).not.toContain('private-auth');
   expect(shouldSkipSecurity({ method: 'POST', path: '/notification/browser/subscribe' })).toBe(false);
 });
+
+it('自动处置只信任认证中间件的游客身份，不信任客户端角色头', async () => {
+  const { buildRequestContext } = await import('./requestContext.js');
+  const req = { method: 'GET', path: '/.env', headers: { 'x-user-role': 'visitor', 'x-user-id': 'spoofed' } };
+  expect(buildRequestContext(req).visitorActor).toBe(false);
+  expect(
+    buildRequestContext({ ...req, user: { id: 'trusted', role: 'visitor', isAuthenticated: false } }).visitorActor,
+  ).toBe(true);
+  expect(
+    buildRequestContext({ ...req, user: { id: 'trusted', role: 'user', isAuthenticated: true } }).visitorActor,
+  ).toBe(false);
+});
