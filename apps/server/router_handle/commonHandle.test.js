@@ -915,7 +915,7 @@ describe('getAdminOverviewRecent 最近新增', () => {
     expect(query).toHaveBeenCalledTimes(1);
   });
 
-  it('今日待办只按创建时间取数，保留完成状态并过滤已删除及教学实例', async () => {
+  it('今日待办按任务或系列创建时间取数，保留完成状态并过滤已删除及教学实例', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-10T08:00:00+08:00'));
     try {
@@ -934,7 +934,9 @@ describe('getAdminOverviewRecent 最近新增', () => {
       expect(sql).toContain('todo_items.del_flag = 0');
       expect(sql).toContain('resource_owner.del_flag = 0');
       expect(sql).toContain("osr.resource_type = 'todo'");
-      expect(sql).toContain('ORDER BY todo_items.create_time DESC, todo_items.id DESC');
+      expect(sql).toContain(
+        'ORDER BY COALESCE(todo_series.create_time, todo_items.create_time) DESC, COALESCE(todo_series.id, todo_items.id) DESC',
+      );
       expect(sql).not.toContain('completed_at');
       expect(sql).not.toContain('update_time');
       expect(sql).not.toContain('role NOT IN');
@@ -979,7 +981,7 @@ describe('getAdminOverviewRecent 最近新增', () => {
       second,
     );
     expect(query.mock.calls[3][0]).toContain('files.create_time < ?');
-    expect(query.mock.calls[4][0]).toContain('todo_items.id < ?');
+    expect(query.mock.calls[4][0]).toContain('COALESCE(todo_series.id, todo_items.id) < ?');
     expect(query.mock.calls[4][1]).toEqual(['root-id', time, time, 'todo-b', 3]);
     expect(second.send.mock.calls[0][0].data).toEqual(
       expect.objectContaining({

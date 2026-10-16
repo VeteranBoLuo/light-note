@@ -2004,7 +2004,10 @@ export const getAdminOverviewRecent = async (req, res) => {
     const bookmarkDate = dateFilter('bookmark.create_time');
     const noteDate = dateFilter('note.create_time');
     const fileDate = dateFilter('files.create_time');
-    const todoDate = dateFilter('todo_items.create_time');
+    // 系列是一次用户创建；实例的滚动补齐和完成后续生不能成为新的创建事件。
+    const todoCreatedAt = 'COALESCE(todo_series.create_time, todo_items.create_time)';
+    const todoCreationId = 'COALESCE(todo_series.id, todo_items.id)';
+    const todoDate = dateFilter(todoCreatedAt);
     const userDate = dateFilter('recent_user.create_time');
     const bookmarkCursor = recentResourceCursorFilter(
       'bookmark.create_time',
@@ -2014,7 +2017,7 @@ export const getAdminOverviewRecent = async (req, res) => {
     );
     const noteCursor = recentResourceCursorFilter('note.create_time', 'note.id', 'note', resourceCursor);
     const fileCursor = recentResourceCursorFilter('files.create_time', 'files.id', 'file', resourceCursor);
-    const todoCursor = recentResourceCursorFilter('todo_items.create_time', 'todo_items.id', 'todo', resourceCursor);
+    const todoCursor = recentResourceCursorFilter(todoCreatedAt, todoCreationId, 'todo', resourceCursor);
     const userCursorFilter = userCursor
       ? {
           sql: ' AND (recent_user.create_time < ? OR (recent_user.create_time = ? AND recent_user.id < ?))',
@@ -2073,15 +2076,30 @@ export const getAdminOverviewRecent = async (req, res) => {
         : Promise.resolve([[]]),
       include('todo')
         ? pool.query(
-            `SELECT todo_items.id, todo_items.title, todo_items.status, todo_items.create_time AS createdAt,
+            `SELECT ${todoCreationId} AS id, COALESCE(todo_series.title, todo_items.title) AS title,
+                CASE WHEN todo_series.id IS NULL THEN todo_items.status END AS status,
+                ${todoCreatedAt} AS createdAt,
                 resource_owner.id AS userId, resource_owner.alias AS userName,
                 COALESCE(owner_remark.remark_name, '') AS userRemark
          FROM todo_items
+         LEFT JOIN todo_series ON todo_series.id = todo_items.series_id
+           AND todo_series.user_id = todo_items.user_id AND todo_items.plan_version = 2
          JOIN \`user\` resource_owner ON resource_owner.id = todo_items.user_id AND resource_owner.del_flag = 0
          LEFT JOIN admin_user_remarks owner_remark
            ON owner_remark.admin_user_id = ? AND owner_remark.target_user_id = resource_owner.id
-         WHERE todo_items.del_flag = 0${todoDate.sql}${todoCursor.sql}${resourceOwnerRole}${scope.notOnboardingTodo}
-         ORDER BY todo_items.create_time DESC, todo_items.id DESC
+         WHERE todo_items.del_flag = 0
+           AND (
+             (todo_items.series_id IS NULL AND todo_items.generated_by_todo_id IS NULL)
+             OR (todo_items.plan_version = 1 AND todo_items.series_id = todo_items.id)
+             OR (todo_series.id IS NOT NULL AND todo_series.parent_series_id IS NULL
+               AND todo_items.id = (
+                 SELECT first_item.id FROM todo_items first_item
+                 WHERE first_item.series_id = todo_series.id AND first_item.user_id = todo_series.user_id
+                   AND first_item.del_flag = 0
+                 ORDER BY first_item.occurrence_no, first_item.id LIMIT 1
+               ))
+           )${todoDate.sql}${todoCursor.sql}${resourceOwnerRole}${scope.notOnboardingTodo}
+         ORDER BY ${todoCreatedAt} DESC, ${todoCreationId} DESC
          LIMIT ?`,
             [rootUserId, ...todoDate.params, ...todoCursor.params, take],
           )
