@@ -6,7 +6,7 @@ const { query } = vi.hoisted(() => ({ query: vi.fn() }));
 vi.mock('../db/index.js', () => ({ default: { query } }));
 // Match application import order to avoid common.js/router/common.js's cycle.
 await import('../util/common.js');
-const { getAdminOverviewRecent } = await import('./commonHandle.js');
+const { getAdminOverviewRecent, getAdminOverviewSnapshot, getAdminOverviewTrend } = await import('./commonHandle.js');
 
 // Only a disposable local socket; never load application database credentials.
 const socketPath = process.env.LIGHTNOTE_TEST_MYSQL_SOCKET;
@@ -37,7 +37,7 @@ describe.skipIf(!socketPath)('最近新增待办真实 SQL（MySQL 5.7）', () =
     await db.query(`CREATE TABLE todo_items (
       id VARCHAR(64) PRIMARY KEY, user_id VARCHAR(64), title VARCHAR(64), status VARCHAR(20) DEFAULT 'pending',
       create_time DATETIME, del_flag INT DEFAULT 0, plan_version INT DEFAULT 2,
-      series_id VARCHAR(64), occurrence_no INT, generated_by_todo_id VARCHAR(64),
+      series_id VARCHAR(64), occurrence_no INT, generated_by_todo_id VARCHAR(64), due_at DATETIME, completed_at DATETIME,
       UNIQUE KEY series_occurrence (series_id, occurrence_no)
     )`);
     query.mockImplementation((...args) => db.query(...args));
@@ -52,6 +52,7 @@ describe.skipIf(!socketPath)('最近新增待办真实 SQL（MySQL 5.7）', () =
   });
 
   beforeEach(async () => {
+    query.mockImplementation((...args) => db.query(...args));
     for (const table of ['todo_items', 'todo_series', 'user', 'admin_user_remarks', 'onboarding_seed_resources']) {
       await db.query(`DELETE FROM ${table}`);
     }
@@ -165,5 +166,58 @@ describe.skipIf(!socketPath)('最近新增待办真实 SQL（MySQL 5.7）', () =
     expect(page.items.map((r) => r.id)).toEqual(['manual']);
     expect(page.items[0].userRemark).toBe('当前备注');
     expect((await recent({ hideInternal: false })).items.map((r) => r.id)).toEqual(['manual', 'internal']);
+  });
+
+  it('新增计数、今日明细与同期比较口径一致，实例健康统计仍逐实例计算', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-16T12:00:00+08:00'));
+    try {
+      await addItem('manual');
+      await addSeries('new-series');
+      for (let no = 1; no <= 2; no++) await addItem(`new-${no}`, { series_id: 'new-series', occurrence_no: no });
+      await addSeries('old-series', { create_time: '2026-08-08 09:21:43' });
+      for (let no = 9; no <= 13; no++) await addItem(`old-${no}`, { series_id: 'old-series', occurrence_no: no });
+      await addSeries('yesterday-series', { create_time: '2026-10-15 09:21:43' });
+      for (let no = 1; no <= 2; no++) {
+        await addItem(`yesterday-${no}`, { series_id: 'yesterday-series', occurrence_no: no });
+      }
+      const today = await recent({ period: 'today' });
+      expect(today.items).toHaveLength(2);
+      // Execute the production aggregate and the todo branch of its multi-domain baseline.
+      // Other dashboard domains are unrelated fixtures and return empty results.
+      query.mockImplementation((sql, params) => {
+        if (sql.includes('AS createdToday')) return db.query(sql, params);
+        if (sql.includes('same_time_baseline')) {
+          const start = sql.lastIndexOf('SELECT ', sql.indexOf("'todos' AS kind"));
+          const end = sql.indexOf('UNION ALL', start);
+          return db.query(sql.slice(start, end), params.slice(12, 15));
+        }
+        return Promise.resolve([[]]);
+      });
+      let snapshot;
+      await getAdminOverviewSnapshot(
+        { user: { role: 'root' }, body: {} },
+        {
+          send(value) {
+            snapshot = value;
+          },
+        },
+      );
+      expect(snapshot.status).toBe(200);
+      expect(snapshot.data.todos).toMatchObject({ total: 4, createdToday: today.items.length, pending: 10 });
+      let trend;
+      await getAdminOverviewTrend(
+        { user: { role: 'root' }, body: { days: 7 } },
+        {
+          send(value) {
+            trend = value;
+          },
+        },
+      );
+      expect(trend.status).toBe(200);
+      expect(trend.data.todayBaseline.metrics.todos).toEqual({ yesterday: 1, average7d: 0.1 });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
