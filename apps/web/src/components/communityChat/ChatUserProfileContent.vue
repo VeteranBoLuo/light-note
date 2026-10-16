@@ -1,5 +1,8 @@
 <template>
-  <div class="chat-profile-content" :class="{ 'chat-profile-content--identity-only': identityOnly }">
+  <div
+    class="chat-profile-content"
+    :class="{ 'chat-profile-content--identity-only': identityOnly, 'chat-profile-content--stable': stableLayout }"
+  >
     <div v-if="loading" class="chat-profile-content__state">
       <BLoading inline loading :title="t('communityChat.profile.loading')" />
     </div>
@@ -182,6 +185,8 @@
   import GrowthLevelChip from '@/components/growth/GrowthLevelChip.vue';
   import icon from '@/config/icon';
   import { frameVariant } from '@/config/growthFrames';
+  import { useUiDensity } from '@/composables/useUiDensity';
+  import { avatarFrameStableSlot } from '@/config/avatarFrameArtwork';
   import type {
     CommunityChatProfileUpdateInput,
     CommunityProfileActionsState,
@@ -193,6 +198,8 @@
     defineProps<{
       identityOnly?: boolean;
       compact?: boolean;
+      /** 装扮预览：头像槽按最大头像框预留、默认与插画背景共用同一盒模型，切换时名片内容不位移。 */
+      stableLayout?: boolean;
       communityActions?: boolean;
       chatActions?: boolean;
       actionsProfile?: CommunityProfileActionsState | null;
@@ -213,6 +220,7 @@
     {
       identityOnly: false,
       compact: false,
+      stableLayout: false,
       communityActions: true,
       chatActions: true,
       profile: null,
@@ -276,6 +284,7 @@
     detailVisible.value = true;
   }
 
+  const { dimension } = useUiDensity();
   const ProfileIdentity = defineComponent({
     name: 'CommunityChatProfileIdentity',
     props: {
@@ -285,17 +294,18 @@
       return () => {
         const profile = identityProps.profile;
         const validFrameId = profile.frameId && frameVariant(profile.frameId) ? profile.frameId : null;
+        const avatarSize = props.stableLayout ? dimension(props.compact ? 52 : 68, 'layout') : props.compact ? 52 : 68;
         const avatar = validFrameId
           ? h(AvatarFramePreview, {
               frameId: validFrameId,
               src: profile.avatar || icon.communityChat.defaultAvatar,
-              size: props.compact ? 52 : 68,
+              size: avatarSize,
             })
           : h(SvgIcon, {
               class: 'chat-profile-content__avatar-image',
               densityAware: false,
               src: profile.avatar || icon.communityChat.defaultAvatar,
-              size: props.compact ? 52 : 68,
+              size: avatarSize,
             });
         const tags = [
           h(GrowthLevelChip, {
@@ -322,6 +332,9 @@
             'span',
             {
               class: ['chat-profile-content__avatar', { 'is-framed': validFrameId }],
+              style: props.stableLayout
+                ? { '--profile-avatar-slot': `${avatarFrameStableSlot(avatarSize)}px` }
+                : undefined,
               'aria-hidden': 'true',
             },
             [avatar],
@@ -507,6 +520,44 @@
     height: auto;
     min-height: 76px;
     flex: 0 0 auto;
+  }
+
+  // 装扮预览由父级给定高度：描边统一交给背景面，默认与插画背景共用同一内边距；
+  // 头像槽按最大头像框预留，文字列宽度固定，任意切换背景或头像框时名片内容不位移。
+  .chat-profile-content--stable {
+    height: 100%;
+    min-height: 0;
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .chat-profile-content--stable > .profile-background-surface {
+    box-sizing: border-box;
+    min-height: 0;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 16px;
+  }
+
+  .chat-profile-content--stable .chat-profile-content__identity,
+  .chat-profile-content--stable .profile-background-surface.is-decorated > .chat-profile-content__identity {
+    box-sizing: border-box;
+    height: 100%;
+    min-height: 0;
+    padding: var(--ui-space-24, 24px);
+    border: 0;
+    border-radius: 15px;
+  }
+
+  .chat-profile-content--stable .chat-profile-content__avatar,
+  .chat-profile-content--stable .chat-profile-content__avatar.is-framed {
+    width: var(--profile-avatar-slot);
+    height: var(--profile-avatar-slot);
+    min-height: 0;
+    flex: 0 0 var(--profile-avatar-slot);
+  }
+
+  .chat-profile-content--stable .chat-profile-content__identity-copy {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: var(--ui-layout-260, 260px);
   }
 
   .chat-profile-content__avatar-image {

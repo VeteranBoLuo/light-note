@@ -13,14 +13,20 @@ const desktopPersonCenterSource = source('src/view/personCenter/PersonCenter.vue
   .replace(/var\(--ui-[\w-]+, ([\d.]+px)\)/g, '$1')
   .replace(/dimension\((\d+), 'icon'\)/g, '$1');
 const personCenterEntriesSource = source('src/config/personCenterEntries.ts');
-const communityChatSource = source('src/view/communityChat/CommunityChatWorkspace.vue').replace(/var\(--ui-[\w-]+, ([\d.]+px)\)/g, '$1');
+const communityChatSource = source('src/view/communityChat/CommunityChatWorkspace.vue').replace(
+  /var\(--ui-[\w-]+, ([\d.]+px)\)/g,
+  '$1',
+);
 const myInfoSource = source('src/components/personCenter/myInfo/MyInfoMobile.vue');
 const desktopMyInfoSource = source('src/components/personCenter/myInfo/ProfileEditorForm.vue')
   .replace(/var\(--ui-[\w-]+, ([\d.]+px)\)/g, '$1')
   .replace(/dimension\((\d+), 'icon'\)/g, '$1');
-const framePickerSource = source('src/components/growth/AvatarFramePickerDrawer.vue');
+const appearanceStudioSource = source('src/components/growth/ProfileAppearanceStudio.vue');
 const avatarFrameSource = source('src/components/growth/AvatarFramePreview.vue');
-const avatarPickerSource = source('src/components/personCenter/myInfo/AvatarPicker.vue').replace(/var\(--ui-[\w-]+, ([\d.]+px)\)/g, '$1');
+const avatarPickerSource = source('src/components/personCenter/myInfo/AvatarPicker.vue').replace(
+  /var\(--ui-[\w-]+, ([\d.]+px)\)/g,
+  '$1',
+);
 const avatarArtworkSource = source('src/config/avatarFrameArtwork.ts');
 const pointsShopSource = source('src/components/growth/PointsShop.vue');
 const achievementWallSource = source('src/components/growth/AchievementWall.vue');
@@ -71,38 +77,39 @@ describe('mobile personal center experience', () => {
     expect(personCenterEntriesSource).not.toMatch(/name:\s*'coBuild'[\s\S]{0,220}authOnly:\s*true/);
   });
 
-  it('exposes the equipped frame and the frame picker from profile editing', () => {
+  it('opens backgrounds and frames from the profile identity card in one appearance studio', () => {
     expect(myInfoSource).toContain('<ProfileEditorForm');
-    expect(desktopMyInfoSource).toContain('@navigate="handleFrameNavigation"');
-    expect(desktopMyInfoSource).toContain('<AvatarFramePreview');
-    expect(desktopMyInfoSource).toContain('@navigate="handleFrameNavigation"');
-    expect(desktopMyInfoSource).toContain("t('myInfo.chooseAvatarFrame')");
     expect(myInfoSource).toContain('form?.requestClose()');
-    expect(framePickerSource).toContain('await buyItem(frame.id)');
-    expect(framePickerSource).toContain('await equipFrame(frame.id)');
-    expect(framePickerSource).toContain('isMobileLayout.value ? BDrawer : BModal');
-    expect(framePickerSource).toContain("modalClass: 'frame-picker-modal'");
-    expect(framePickerSource).toContain('frame-picker__detail');
-    expect(framePickerSource).toMatch(/\.frame-picker__detail\s*\{[\s\S]*?overflow:\s*hidden;/);
-    expect(framePickerSource).toContain(':size="dimension(86, \'layout\')"');
-    expect(framePickerSource).toContain('sortFramesByRarity(');
-    expect(framePickerSource).toContain('achievementRequirement(frame)');
-    expect(framePickerSource).toContain("t('growth.frameAchievementConditionWithLevel'");
-    expect(framePickerSource).toContain("t('growth.frameAchievementLevelProgress'");
-    expect(framePickerSource).toContain('canEquipFrame(frame)');
-    expect(framePickerSource).toContain("t('growth.shopRootPreview')");
+    expect(desktopMyInfoSource).toContain('<ChatUserProfileContent');
+    expect(desktopMyInfoSource).toContain('stable-layout');
+    expect(desktopMyInfoSource).toContain('<ProfileAppearanceStudio');
+    expect(desktopMyInfoSource).toContain('@navigate="handleFrameNavigation"');
+    expect(desktopMyInfoSource).toContain("t('profileAppearance.title')");
+    expect(desktopMyInfoSource).not.toContain('AvatarFramePickerDrawer');
+    expect(appearanceStudioSource).toContain('fullscreen-mobile');
+    expect(appearanceStudioSource).toContain('stable-layout');
+    expect(appearanceStudioSource).toContain('await buyItem(item.id, quote)');
+    expect(appearanceStudioSource).toContain('await equipFrame(option.id)');
+    expect(appearanceStudioSource).toContain('await equipBackground(option.id)');
+    expect(appearanceStudioSource).toContain('await claimAchievement(key)');
+    expect(appearanceStudioSource).toContain('sortFramesByRarity(');
+    expect(appearanceStudioSource).toContain('achievementRequirement(item)');
+    expect(appearanceStudioSource).toContain("t('growth.frameAchievementConditionWithLevel'");
+    expect(appearanceStudioSource).toContain("t('growth.frameAchievementLevelProgress'");
+    expect(appearanceStudioSource).toContain('canEquipFrame(option.item)');
+    expect(appearanceStudioSource).toContain("t('growth.shopRootPreview')");
     expect(pointsShopSource).toContain('<template v-if="canEquipFrame(it)">');
     expect(pointsShopSource).toContain(
       "return it.type === 'cosmetic' && Boolean(it.canEquip || it.owned || shop.value?.rootFrameAccess);",
     );
-    expect(framePickerSource).not.toContain('dvh');
+    expect(appearanceStudioSource).not.toContain('dvh');
   });
 
   it('keeps avatar artwork crisp for visitors and locked frame previews', () => {
-    expect(desktopMyInfoSource).toMatch(/\.user_icon\.disabled\s*\{[^}]*opacity:\s*1;/);
-    expect(desktopMyInfoSource).toMatch(/\.user_icon\.disabled\s*\{[^}]*opacity:\s*1;/);
-    expect(framePickerSource).toMatch(/\.frame-card\.is-locked\s*\{[^}]*opacity:\s*1;/);
-    expect(framePickerSource).not.toMatch(/\.frame-card\.is-locked\s*\{[^}]*opacity:\s*0\.[0-9]+;/);
+    // 资料页头像由名片渲染，不再包在会被整层降透明的禁用按钮里；锁定头像框只靠文字与图标表达状态。
+    expect(desktopMyInfoSource).not.toContain('user_icon');
+    expect(appearanceStudioSource).not.toMatch(/\.appearance-tile[^{]*\{[^}]*opacity:\s*0\.[0-9]+;/);
+    expect(appearanceStudioSource).not.toMatch(/\.appearance-tile[^{]*\{[^}]*filter:/);
   });
 
   it('renders the portrait at its requested pixel size outside the scaled decoration canvas', () => {
@@ -218,15 +225,18 @@ describe('mobile personal center experience', () => {
     expect(personCenterSource).toMatch(
       /\.profile-card__avatar\.profile-card__avatar--framed\s*\{[\s\S]*?width:\s*auto;[\s\S]*?height:\s*auto;[\s\S]*?flex:\s*0 0 auto;/,
     );
-    expect(desktopMyInfoSource).toContain(':class="{ \'home-container--framed\': equippedFrameId }"');
-    expect(desktopMyInfoSource).toContain(':size="80"');
-    expect(desktopMyInfoSource).toMatch(/\.home-container--framed\s*\{[\s\S]*?padding-top:\s*56px;/);
-    expect(desktopMyInfoSource).toMatch(/\.home-container--framed \.home-user-body\s*\{[\s\S]*?margin-top:\s*54px;/);
-    const maxDesktopMyInfoArtworkOverflow = Math.max(
-      ...Object.values(AVATAR_FRAME_ARTWORK).map(({ artSize }) => Math.max(0, ((artSize - 64) * 80) / 64 / 2)),
+    // 资料名片与装扮预览按最大头像框预留固定槽位；卡片高度须同时容纳槽位与素材出血。
+    const stableSlot = Math.round(
+      (Math.max(...Object.values(AVATAR_FRAME_ARTWORK).map(({ outerSize }) => outerSize)) * 68) / 64,
     );
-    expect(56 - maxDesktopMyInfoArtworkOverflow).toBeGreaterThanOrEqual(8);
-    expect(54 - maxDesktopMyInfoArtworkOverflow).toBeGreaterThanOrEqual(8);
+    const maxNameCardBleed = Math.max(
+      ...Object.values(AVATAR_FRAME_ARTWORK).map(({ artSize, outerSize }) =>
+        Math.max(0, ((artSize - outerSize) * 68) / 64 / 2),
+      ),
+    );
+    expect(desktopMyInfoSource).toMatch(/\.profile-identity-card\s*\{[\s\S]*?height:\s*176px;/);
+    expect(appearanceStudioSource).toMatch(/\.appearance-studio__stage\s*\{[\s\S]*?height:\s*176px;/);
+    expect(176 - stableSlot - 2 * maxNameCardBleed).toBeGreaterThanOrEqual(8);
     expect(avatarPickerSource).toMatch(
       /\.avatar-picker__preview-shell\s*\{[\s\S]*?width:\s*180px;[\s\S]*?height:\s*180px;[\s\S]*?overflow:\s*visible;/,
     );
@@ -767,7 +777,7 @@ describe('mobile personal center experience', () => {
       /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.avatar-frame__flame-particle[\s\S]*?animation:\s*none !important;/,
     );
     expect(pointsShopSource).toContain('pause-when-offscreen');
-    expect(framePickerSource).toContain('pause-when-offscreen');
+    expect(appearanceStudioSource).toContain('pause-when-offscreen');
   });
 
   it('keeps a low-cost chat identity motion while pausing expensive secondary channels without filter flashes', () => {
@@ -796,22 +806,21 @@ describe('mobile personal center experience', () => {
     expect(chatProfileSource).not.toContain('filter: none');
   });
 
-  it('closes avatar overlay history before navigating and stabilizes the initial frame tabs', () => {
-    expect(framePickerSource).toContain('closeCurrentMobileOverlayThen(closeDrawer');
-    expect(framePickerSource).toContain("emit('navigate', 'achievements')");
-    expect(framePickerSource).toContain("emit('navigate', 'tasks')");
-    expect(framePickerSource).toContain('@click="goEarnPoints"');
+  it('closes the appearance overlay history before navigating to growth destinations', () => {
+    expect(appearanceStudioSource).toContain(
+      "closeCurrentMobileOverlayThen(close, () => emit('navigate', destination))",
+    );
+    expect(appearanceStudioSource).toContain("goTo('achievements')");
+    expect(appearanceStudioSource).toContain("goTo('growth')");
+    expect(appearanceStudioSource).toContain('@click="goTo(\'tasks\')"');
     expect(desktopMyInfoSource).toContain("emit('close')");
     expect(desktopMyInfoSource).toContain("'/growth?section=' + destination");
-    expect(framePickerSource).toContain('flex: 0 0 38px');
-    expect(framePickerSource).toContain('flex: 1 1 50%');
   });
 
   it('keeps paid-frame prices visible after ownership and uses a wider desktop achievement layout', () => {
     expect(pointsShopSource).toMatch(/v-else class="ps-purchase-meta"[\s\S]*?\{\{ it\.cost \}\}/);
     expect(pointsShopSource).toContain("t('growth.frameAchievementConditionWithLevel'");
     expect(pointsShopSource).toContain("t('growth.frameAchievementLevelProgress'");
-    expect(framePickerSource).toMatch(/v-if="!isAchievementFrame\(frame\)" class="frame-card__cost"/);
     expect(achievementWallSource).toContain('grid-template-columns: repeat(auto-fill, minmax(220px, 1fr))');
     expect(achievementWallSource).toContain('conditionOf(a)');
     expect(achievementWallSource).toContain('class="aw-mini-level"');

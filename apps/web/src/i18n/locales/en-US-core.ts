@@ -1,4 +1,5 @@
 import { profileBackgroundsEn, profileBackgroundItemsEn } from './profileBackgrounds';
+import { profileAppearanceEn } from './profileAppearance';
 import { MAKEUP_WINDOW_DAYS } from '@lightnote/shared';
 import { noteMathEn } from './noteMath';
 import { extractionEn } from './extraction';
@@ -21,6 +22,7 @@ import { settingsRefineEn } from './settingsRefine';
 import { notificationMessages } from '@lightnote/shared/notification-presentation';
 export default {
   profileBackgrounds: profileBackgroundsEn,
+  profileAppearance: profileAppearanceEn,
   noteMath: noteMathEn,
   nativePush: {
     title: 'App notification connection',
@@ -12141,20 +12143,9 @@ export default {
   },
   myInfo: {
     title: 'Edit Profile',
-    avatarDecorations: 'Avatar decorations',
-    chooseAvatarFrame: 'Choose an avatar frame',
-    equippedFrame: 'Equipped “{name}”',
-    noFrameEquipped: 'No avatar frame equipped',
-    ownedFrames: 'Owned',
-    noOwnedFrames: 'You do not own an avatar frame yet',
     earnPoints: 'Earn points',
     goToGrowth: 'Go to Growth',
     loginToDecorate: 'Log in to use',
-    redeemAndEquip: 'Redeem & equip',
-    redeemFrameTitle: 'Redeem avatar frame',
-    redeemFrameConfirm: 'Use {points} points to redeem “{name}” and equip it now?',
-    redeemAndEquipSuccess: 'Redeemed and equipped “{name}”',
-    redeemedEquipFailed: 'The frame was redeemed, but equip failed. Tap Equip to try again.',
     uploadAvatar: 'Upload Avatar',
     chooseAvatar: 'Choose Avatar',
     chooseAvatarSubtitle: 'Pick a Light Note illustration or upload your own image',
