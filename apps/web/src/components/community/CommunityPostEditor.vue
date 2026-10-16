@@ -41,7 +41,7 @@
       }}</p>
       <div class="writing-workspace" :class="{ 'has-materials': !isMobile && !preview }">
         <div class="writing-main">
-          <div ref="paperSurface" class="writing-paper">
+          <div class="writing-paper">
             <div v-if="!preview" class="writing-mode"
               ><BTabs
                 variant="line"
@@ -106,13 +106,11 @@
                 :placeholder="t('community.feed.titlePlaceholder')"
               />
               <div
-                v-if="inlineImagesEnabled && selectedInlineImage"
-                class="inline-image-actions"
-                :class="{ 'is-markdown': editorMode === 'markdown' }"
-                :style="{ top: `calc(${inlineToolbarTop}px - var(--ui-space-8, 8px))` }"
+                v-if="inlineImagesEnabled && selectedInline?.status === 'error'"
+                class="inline-image-error"
+                role="status"
               >
-                <span>{{ t('community.feed.inlineImage') }}</span>
-                <span v-if="selectedInline?.status === 'error'" role="status">{{
+                <span>{{
                   t(
                     imageFiles.has(selectedInline.publicId)
                       ? 'community.feed.imageUploadFailedShort'
@@ -120,26 +118,15 @@
                   )
                 }}</span>
                 <BButton
-                  size="small"
-                  @click="
-                    selectedImage = selectedInlineImage;
-                    imageViewerOpen = true;
-                  "
-                  >{{ t('community.feed.viewInlineImage') }}</BButton
-                >
-                <BButton size="small" :disabled="busy" @click="moveInlineToAttachments(selectedInlineImage)">{{
-                  t('community.feed.moveToAttachments')
-                }}</BButton>
-                <BButton size="small" :disabled="busy" @click="removeInlineImage(selectedInlineImage)">{{
-                  t('community.feed.removeImage')
-                }}</BButton>
-                <BButton
-                  v-if="selectedInline?.status === 'error' && imageFiles.has(selectedInline.publicId)"
+                  v-if="imageFiles.has(selectedInline.publicId)"
                   size="small"
                   :disabled="busy"
                   @click="retryImage(selectedInline)"
                   >{{ t('community.feed.retry') }}</BButton
                 >
+                <BButton size="small" :disabled="busy" @click="removeInlineImage(selectedInlineImage)">{{
+                  t('community.feed.removeImage')
+                }}</BButton>
               </div>
               <div
                 class="writing-body"
@@ -655,11 +642,6 @@
         richEditor.value = editor;
         const node = editor.selection.getNode();
         selectedInlineImage.value = node.nodeName === 'IMG' ? node.getAttribute('data-community-image') || '' : '';
-        if (selectedInlineImage.value && paperSurface.value)
-          inlineToolbarTop.value =
-            editor.iframeElement.getBoundingClientRect().top +
-            node.getBoundingClientRect().top -
-            paperSurface.value.getBoundingClientRect().top;
         const block = editor.dom.getParent(node, 'p,h1,h2,h3,h4,h5,h6,pre');
         richState.value = {
           block: block?.nodeName.toLowerCase() || 'p',
@@ -676,7 +658,7 @@
       editor.on('focus', () => {
         bodyCaretActive = true;
       });
-      editor.on('init focus NodeChange SelectionChange Undo Redo change SetContent ScrollContent', refresh);
+      editor.on('init focus NodeChange SelectionChange Undo Redo change SetContent', refresh);
       editor.on('PastePreProcess', (event) => {
         if (props.inlineImagesEnabled) event.content = sanitizeCommunityHtml(event.content, draft.images);
       });
@@ -758,8 +740,6 @@
   const selectedInlineImage = ref('');
   const inlineUpload = ref<InstanceType<typeof BUpload>>();
   let bodyCaretActive = false;
-  const paperSurface = ref<HTMLElement>(),
-    inlineToolbarTop = ref(0);
   const selectedInline = computed(() => draft.images.find((i) => i.publicId === selectedInlineImage.value));
   function renderBody() {
     return props.inlineImagesEnabled
@@ -1231,12 +1211,6 @@
     draft.attachmentIds = draft.attachmentIds.filter((current) => current !== id);
     documentHistory.record(true);
   }
-  function moveInlineToAttachments(id: string) {
-    if (busy.value) return;
-    replaceDocumentBody(mapCommunityImageIds(draft.body, (current) => (current === id ? null : current)));
-    if (!draft.attachmentIds.includes(id)) draft.attachmentIds.push(id);
-    documentHistory.record(true);
-  }
   function pasteBodyImages(event: ClipboardEvent) {
     if (!props.inlineImagesEnabled || event.defaultPrevented) return;
     const files = Array.from(event.clipboardData?.files || []).filter((file) => file.type.startsWith('image/'));
@@ -1318,31 +1292,15 @@
 </script>
 
 <style scoped>
-  .inline-image-actions {
-    position: absolute;
-    left: 50%;
-    transform: translate(-50%, -100%);
-    z-index: 500;
-    background: var(--workspace-open-canvas);
-    border: 1px solid var(--workspace-border);
-    border-radius: 8px;
-    max-width: 100%;
-    width: max-content;
+  .inline-image-error {
+    flex-shrink: 0;
+    margin: 0 var(--ui-space-20, 20px) var(--ui-space-8, 8px);
     display: flex;
     align-items: center;
     flex-wrap: wrap;
     gap: var(--ui-space-8, 8px);
-    padding: var(--ui-space-4, 4px);
     color: var(--desc-color);
     font-size: var(--ui-font-12, 12px);
-  }
-  .inline-image-actions.is-markdown {
-    position: static;
-    transform: none;
-    flex-shrink: 0;
-    align-self: center;
-    max-width: calc(100% - var(--ui-space-40, 40px));
-    margin: 0 auto var(--ui-space-8, 8px);
   }
   .community-writing {
     height: 100%;
