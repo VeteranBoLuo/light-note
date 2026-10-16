@@ -109,19 +109,25 @@
   }
   .inline-image .b_btn {
     display: block;
-    width: 100%;
+    width: fit-content;
+    min-width: var(--ui-control-44, 44px);
+    max-width: 100%;
     height: auto;
+    margin-inline: auto;
     padding: 0;
     border: 1px solid var(--workspace-border);
     border-radius: 8px;
     overflow: hidden;
     background: var(--workspace-open-canvas);
+    cursor: zoom-in;
   }
   .inline-image img {
     display: block;
     width: auto;
     max-width: 100%;
     height: auto;
+    max-height: min(var(--ui-layout-400, 400px), 55vh);
+    object-fit: contain;
     margin: auto;
   }
   .body-attachments {
@@ -162,6 +168,9 @@
     height: auto;
   }
   @media (max-width: 767px) {
+    .inline-image img {
+      max-height: min(var(--ui-layout-320, 320px), 55vh);
+    }
     .body-attachments:not(.is-single) {
       grid-template-columns: repeat(3, minmax(0, 1fr));
     }
