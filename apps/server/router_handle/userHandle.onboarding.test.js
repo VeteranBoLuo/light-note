@@ -205,58 +205,63 @@ describe('新用户示例数据接入注册流程', () => {
     issueLoginSession.mockResolvedValue('sid-1');
   });
 
-  it('邮箱首次注册会同步初始化数据库示例，并按 X-Lang 异步创建云文件', async () => {
-    let insertedUser;
-    query.mockImplementation(async (sql, params) => {
-      const text = compactSql(sql);
-      if (text === 'SELECT * FROM user WHERE email = ?') return [[]];
-      if (text === 'INSERT INTO user SET ?') {
-        insertedUser = params[0];
-        return [{ affectedRows: 1 }];
-      }
-      if (text.includes('FROM user u') && text.endsWith('WHERE u.id = ?')) {
-        return [[{ id: params[0], email: insertedUser.email, alias: insertedUser.alias, role: 'user' }]];
-      }
-      return [[]];
-    });
-    const req = {
-      headers: { 'x-lang': 'en-US' },
-      body: {
-        email: 'new@example.com',
-        password: 'secret123',
-        signupSource: 'nav',
-      },
-    };
-    const res = mockRes();
+  it.each(['  轻  ', '  轻笺用户  ', `  ${'轻'.repeat(20)}  `])(
+    '邮箱首次注册保存去空格后的合法昵称 %s，并初始化示例数据',
+    async (alias) => {
+      let insertedUser;
+      query.mockImplementation(async (sql, params) => {
+        const text = compactSql(sql);
+        if (text === 'SELECT * FROM user WHERE email = ?') return [[]];
+        if (text === 'INSERT INTO user SET ?') {
+          insertedUser = params[0];
+          return [{ affectedRows: 1 }];
+        }
+        if (text.includes('FROM user u') && text.endsWith('WHERE u.id = ?')) {
+          return [[{ id: params[0], email: insertedUser.email, alias: insertedUser.alias, role: 'user' }]];
+        }
+        return [[]];
+      });
+      const req = {
+        headers: { 'x-lang': 'en-US' },
+        body: {
+          email: 'new@example.com',
+          password: 'secret123',
+          alias,
+          signupSource: 'nav',
+        },
+      };
+      const res = mockRes();
 
-    await registerUser(req, res);
+      await registerUser(req, res);
 
-    expect(ensureCommunityChatIdentity).toHaveBeenCalledWith({ userId: insertedUser.id });
-    expect(seedNewUserWorkspaceData).toHaveBeenCalledWith({ userId: insertedUser.id, lang: 'en-US' });
-    expect(seedNewUserCloudFile).toHaveBeenCalledWith({
-      userId: insertedUser.id,
-      lang: 'en-US',
-      folderId: 42,
-    });
-    expect(completeGrowthTask).not.toHaveBeenCalled();
-    expect(seedNewUserWorkspaceData.mock.invocationCallOrder[0]).toBeLessThan(
-      issueLoginSession.mock.invocationCallOrder[0],
-    );
-    expect(createNotification).toHaveBeenCalledWith(
-      insertedUser.id,
-      expect.objectContaining({
-        type: 'welcome',
-        title: 'Welcome to Light Note 🎉',
-        content: expect.stringContaining('editable examples'),
-      }),
-    );
-    expect(res.send).toHaveBeenCalledWith(
-      expect.objectContaining({
-        status: 200,
-        data: expect.objectContaining({ id: insertedUser.id, sid: 'sid-1' }),
-      }),
-    );
-  });
+      expect(insertedUser.alias).toBe(alias.trim());
+      expect(ensureCommunityChatIdentity).toHaveBeenCalledWith({ userId: insertedUser.id });
+      expect(seedNewUserWorkspaceData).toHaveBeenCalledWith({ userId: insertedUser.id, lang: 'en-US' });
+      expect(seedNewUserCloudFile).toHaveBeenCalledWith({
+        userId: insertedUser.id,
+        lang: 'en-US',
+        folderId: 42,
+      });
+      expect(completeGrowthTask).not.toHaveBeenCalled();
+      expect(seedNewUserWorkspaceData.mock.invocationCallOrder[0]).toBeLessThan(
+        issueLoginSession.mock.invocationCallOrder[0],
+      );
+      expect(createNotification).toHaveBeenCalledWith(
+        insertedUser.id,
+        expect.objectContaining({
+          type: 'welcome',
+          title: 'Welcome to Light Note 🎉',
+          content: expect.stringContaining('editable examples'),
+        }),
+      );
+      expect(res.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 200,
+          data: expect.objectContaining({ id: insertedUser.id, sid: 'sid-1' }),
+        }),
+      );
+    },
+  );
 
   it('数据库示例初始化失败不会让邮箱注册失败，也不会创建孤立云文件', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -281,7 +286,7 @@ describe('新用户示例数据接入注册流程', () => {
     await registerUser(
       {
         headers: { 'x-lang': 'zh-CN' },
-        body: { email: 'new@example.com', password: 'secret123', signupSource: 'nav' },
+        body: { email: 'new@example.com', password: 'secret123', alias: '轻笺用户', signupSource: 'nav' },
       },
       res,
     );
@@ -412,6 +417,8 @@ describe('新用户示例数据接入注册流程', () => {
     );
 
     expect(user.id).toBe(createdUserId);
+    expect(user.alias).toBe('octo');
+    expect(query).toHaveBeenCalledWith(expect.stringContaining('INSERT INTO user'), expect.arrayContaining(['octo']));
     expect(ensureCommunityChatIdentity).toHaveBeenCalledWith({ userId: createdUserId });
     expect(seedNewUserWorkspaceData).toHaveBeenCalledWith({ userId: createdUserId, lang: 'en-US' });
     expect(seedNewUserCloudFile).toHaveBeenCalledWith({
