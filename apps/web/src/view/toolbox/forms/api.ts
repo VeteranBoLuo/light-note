@@ -12,6 +12,7 @@ export interface CollectionForm {
   tagIds: string[];
   total?: number;
   unread?: number;
+  rewardSummary?: { recipients: number; totalPoints: number };
 }
 export interface Submission {
   id: string;
@@ -22,6 +23,9 @@ export interface Submission {
   processed: number;
   spam: number;
   private_note: string;
+  respondent_user_id?: string | null;
+  respondent_alias?: string;
+  reward_points?: number;
 }
 export async function formsApi<T = any>(path = '', method = 'GET', data?: any, signal?: AbortSignal): Promise<T> {
   const url = '/api/toolbox/forms' + path;

@@ -20,6 +20,37 @@ const definition = {
   ],
 };
 describe("公开收集共享验证", () => {
+  it("奖励自动要求账号，拒绝非整数、越界及伪造的配置", () => {
+    expect(
+      validateDefinition({
+        ...definition,
+        reward: { points: 20, maxRecipients: 100 },
+      }),
+    ).toMatchObject({
+      membersOnly: true,
+      reward: { points: 20, maxRecipients: 100 },
+    });
+    for (const reward of [
+      true,
+      [],
+      { points: 0, maxRecipients: 1 },
+      { points: 1.5, maxRecipients: 1 },
+      { points: 10001, maxRecipients: 1 },
+      { points: 1, maxRecipients: 5001 },
+      { points: 1, maxRecipients: 0 },
+      { points: 1, maxRecipients: 1, userId: "forged" },
+    ])
+      expect(() => validateDefinition({ ...definition, reward })).toThrow(
+        "奖励",
+      );
+    expect(() =>
+      validateDefinition({ ...definition, membersOnly: "true" }),
+    ).toThrow("填写范围");
+    expect(validateDefinition(definition)).toMatchObject({
+      membersOnly: false,
+      reward: null,
+    });
+  });
   it("限制结构、必填、未知选项并去重多选", () => {
     const d = validateDefinition(definition);
     expect(validateAnswers(d, { q1: ["b", "a", "b"] })).toEqual({

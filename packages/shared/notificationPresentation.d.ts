@@ -4,6 +4,8 @@ export const notificationMessages: Record<
     ranks: Record<string, string>;
     levelUpTitle: string;
     opinionReplyTitle: string;
+    collectionRewardTitle: string;
+    collectionRewardContent: string;
   }
 >;
 export function notificationPresentation(

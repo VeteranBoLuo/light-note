@@ -405,6 +405,11 @@ describe('账号注销后台清理', () => {
     ]);
     expect(connection.query.mock.calls.every(([, params]) => params[0] === 'user-1')).toBe(true);
   });
+  it('注销填写者删除本人账号回答，不触及独立积分收据', async () => {
+    const connection = createConnection(async () => [{ affectedRows: 1 }]);
+    await purgeOwnedResources(connection, new Set(['collection_submissions', 'points_grant_operations']), 'participant');
+    expect(connection.query).toHaveBeenCalledExactlyOnceWith('DELETE FROM collection_submissions WHERE respondent_user_id = ?', ['participant']);
+  });
 
   it('已完成的清理任务记录只保留 180 天并分批删除', async () => {
     poolQuery.mockResolvedValueOnce([{ affectedRows: 12 }]);

@@ -3984,9 +3984,17 @@ LEFT JOIN information_schema.referential_constraints actual ON actual.constraint
 WHERE actual.constraint_name IS NULL;
 
 SELECT 'missing_collection_identity_column' AS assertion, expected.column_name
-FROM (SELECT 'respondent_hash' column_name UNION ALL SELECT 'updated_at') expected
+FROM (SELECT 'respondent_hash' column_name UNION ALL SELECT 'updated_at' UNION ALL SELECT 'respondent_user_id') expected
 LEFT JOIN information_schema.columns actual ON actual.table_schema=DATABASE() AND actual.table_name='collection_submissions' AND actual.column_name=expected.column_name
 WHERE actual.column_name IS NULL;
+
+SELECT 'collection_member_reward_index' AS assertion, e.table_name, e.index_name
+FROM (SELECT 'collection_submissions' table_name,'ix_collection_respondent_user' index_name,'respondent_user_id' columns_list
+ UNION ALL SELECT 'points_grant_operations','idx_points_grant_request_status','request_id,status') e
+LEFT JOIN (SELECT table_name,index_name,GROUP_CONCAT(column_name ORDER BY seq_in_index) columns_list,
+ SUM(sub_part IS NOT NULL) prefix_columns FROM information_schema.statistics WHERE table_schema=DATABASE()
+ GROUP BY table_name,index_name) a ON a.table_name=e.table_name AND a.index_name=e.index_name
+WHERE a.index_name IS NULL OR a.columns_list<>e.columns_list OR a.prefix_columns<>0;
 
 -- Translation snapshots contain full text; quotes and job inputs contain references/metadata only.
 SELECT 'translation_missing_column' AS check_name, e.col AS detail FROM (

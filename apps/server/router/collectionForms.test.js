@@ -1,8 +1,15 @@
 import express from 'express';
 import { beforeAll, afterAll, beforeEach, it, expect, vi } from 'vitest';
-const state = vi.hoisted(() => ({ publicForm: vi.fn(), submit: vi.fn(), list: vi.fn() }));
+const state = vi.hoisted(() => ({
+  publicForm: vi.fn(),
+  submit: vi.fn(),
+  list: vi.fn(),
+  create: vi.fn(),
+  ensureRootRole: vi.fn(),
+}));
 vi.mock('../db/index.js', () => ({ default: {} }));
 vi.mock('../util/collectionForms/service.js', () => ({ createFormsService: () => state }));
+vi.mock('../router_handle/commonHandle.js', () => ({ ensureRootRole: state.ensureRootRole }));
 import ownerRouter, { publicFormsRouter } from './collectionForms.js';
 import { buildRequestContext } from '../util/security/requestContext.js';
 import { shouldSkipApiLog } from '../util/logPolicy.js';
@@ -11,6 +18,7 @@ const auth = vi.fn();
 beforeAll(async () => {
   const app = express();
   app.use('/public/forms', publicFormsRouter);
+  app.use(express.json());
   app.use((req, res, next) => {
     auth();
     if (req.headers['x-test-user']) req.user = { id: 'owner', role: req.headers['x-test-user'] };
@@ -27,6 +35,11 @@ beforeEach(() => {
   vi.clearAllMocks();
   state.publicForm.mockResolvedValue({ status: 'collecting', definition: { title: '公开标题' } });
   state.submit.mockResolvedValue({ receipt: 'receipt' });
+  state.ensureRootRole.mockImplementation(async (req, res) => {
+    if (req.user?.role === 'root') return 'owner';
+    res.status(403).json({ status: 403 });
+    return null;
+  });
 });
 it('公开页忽略登录 Cookie，未知子路径也不进入鉴权', async () => {
   const url = base + '/public/forms/' + 'a'.repeat(48);
@@ -65,6 +78,28 @@ it('管理接口拒绝游客和管理员代入上下文', async () => {
     (await fetch(base + '/toolbox/forms', { headers: { 'x-test-user': 'root', 'x-test-admin': '1' } })).status,
   ).toBe(403);
   expect(state.list).not.toHaveBeenCalled();
+});
+it('root 配置开关需要服务端 Root 守卫，普通用户伪造配置被拒绝', async () => {
+  for (const definition of [{ membersOnly: true }, { reward: { points: 20, maxRecipients: 100 } }]) {
+    const response = await fetch(base + '/toolbox/forms', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-test-user': 'user' },
+      body: JSON.stringify({ definition }),
+    });
+    expect(response.status).toBe(403);
+  }
+  expect(state.create).not.toHaveBeenCalled();
+  state.create.mockResolvedValue({ id: 'form' });
+  expect(
+    (
+      await fetch(base + '/toolbox/forms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-test-user': 'root' },
+        body: JSON.stringify({ definition: { membersOnly: true } }),
+      })
+    ).status,
+  ).toBe(200);
+  expect(state.create).toHaveBeenCalledWith('owner', { definition: { membersOnly: true } });
 });
 it('管理正文与搜索词不进入普通日志或安全证据', () => {
   const url = '/toolbox/forms/id/responses/actions';
