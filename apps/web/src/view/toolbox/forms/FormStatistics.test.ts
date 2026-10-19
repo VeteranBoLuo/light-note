@@ -1,6 +1,7 @@
 import { createApp, nextTick } from 'vue';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import FormStatistics from './FormStatistics.vue';
+import { OTHER_OPTION_ID } from '@lightnote/shared/collection-forms';
 const api = vi.hoisted(() => vi.fn());
 vi.mock('./api', () => ({ formsApi: api }));
 vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (k: string) => k }) }));
@@ -103,4 +104,36 @@ it('翻页失败保留上一页，重试请求失败页，关闭后忽略迟到�
   button('collectionForms.viewText').click();
   await flush();
   expect(host.textContent).not.toContain('Late answer');
+});
+it('其他统一计数，并复用有日期范围的文本检索查看具体内容', async () => {
+  api
+    .mockResolvedValueOnce({
+      ...summary,
+      questions: [
+        {
+          id: 'question',
+          type: 'multiple',
+          title: '来源',
+          answered: 10,
+          allowOther: true,
+          options: [{ id: 'a', label: '搜索' }],
+          choices: [{ option_id: OTHER_OPTION_ID, count: 3 }],
+        },
+      ],
+    })
+    .mockResolvedValueOnce([{ text_value: '朋友分享' }]);
+  const { host, button } = mount();
+  await flush();
+  const rows = host.querySelectorAll('.collection-stat-option');
+  expect(rows).toHaveLength(2);
+  expect(rows[1].textContent).toContain('3');
+  expect(rows[1].textContent).toContain('30%');
+  button('collectionForms.viewOtherText').click();
+  await flush();
+  expect(api).toHaveBeenLastCalledWith(
+    '/form/text-answers',
+    'GET',
+    expect.objectContaining({ questionId: 'question', from: '2026-10-01', to: '2026-10-14' }),
+  );
+  expect(host.textContent).toContain('朋友分享');
 });

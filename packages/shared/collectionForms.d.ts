@@ -6,6 +6,7 @@ export interface FormQuestion {
   title: string;
   required: boolean;
   options: { id: string; label: string }[];
+  allowOther?: boolean;
 }
 export interface FormDefinition {
   title: string;
@@ -16,7 +17,17 @@ export interface FormDefinition {
   reward?: { points: number; maxRecipients: number } | null;
   questions: FormQuestion[];
 }
-export type FormAnswers = Record<string, string | number | string[]>;
+export interface OtherChoiceAnswer {
+  optionIds: string[];
+  otherText: string;
+}
+export type FormAnswer = string | number | string[] | OtherChoiceAnswer;
+export type FormAnswers = Record<string, FormAnswer>;
+export const OTHER_OPTION_ID: string;
+export function choiceAnswerParts(value: unknown): {
+  optionIds: string[];
+  otherText: string | null;
+};
 export const QUESTION_TYPES: QuestionType[];
 export const FORM_LIMITS: Readonly<{
   questions: number;
@@ -29,7 +40,8 @@ export const FORM_LIMITS: Readonly<{
 export class FormError extends Error {
   status: number;
   field: string;
-  constructor(message: string, status?: number, field?: string);
+  code?: string;
+  constructor(message: string, status?: number, field?: string, code?: string);
 }
 export function validateDefinition(input: unknown): FormDefinition;
 export function validateAnswers(

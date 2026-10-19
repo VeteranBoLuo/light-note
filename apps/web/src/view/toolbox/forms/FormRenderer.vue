@@ -17,23 +17,30 @@
       :aria-label="q.title"
     >
       <h3
-        ><label :for="`collection-question-${q.id}`">{{ index + 1 }}. {{ q.title }}</label>
+        ><label
+          :for="
+            q.allowOther && selectedOptions(q.id).includes(OTHER_OPTION_ID)
+              ? `collection-other-${q.id}`
+              : `collection-question-${q.id}`
+          "
+          >{{ index + 1 }}. {{ q.title }}</label
+        >
         <span v-if="q.required" class="collection-required">{{ t('collectionForms.requiredSuffix') }}</span></h3
       >
       <BRadio
         v-if="q.type === 'single' || q.type === 'rating'"
-        :value="String(answers[q.id] ?? '')"
-        :options="q.type === 'rating' ? ratings : q.options.map((o) => ({ value: o.id, label: o.label }))"
+        :value="q.type === 'rating' ? String(answers[q.id] ?? '') : selectedOptions(q.id)[0] || ''"
+        :options="q.type === 'rating' ? ratings : choiceOptions(q)"
         vertical
         :aria-label="q.title"
-        @update:value="answers[q.id] = $event"
+        @update:value="q.type === 'rating' ? (answers[q.id] = $event) : setChoice(q, [$event])"
       />
       <div v-else-if="q.type === 'multiple'" class="collection-options"
         ><BCheckbox
-          v-for="o in q.options"
-          :key="o.id"
-          :model-value="Array.isArray(answers[q.id]) && (answers[q.id] as string[]).includes(o.id)"
-          @update:model-value="toggle(q.id, o.id, $event)"
+          v-for="o in choiceOptions(q)"
+          :key="o.value"
+          :model-value="selectedOptions(q.id).includes(o.value)"
+          @update:model-value="toggle(q, o.value, $event)"
           >{{ o.label }}</BCheckbox
         ></div
       >
@@ -52,6 +59,15 @@
         :aria-label="q.title"
         :maxlength="q.type === 'long' ? 5000 : 500"
         @update:value="answers[q.id] = $event ?? ''"
+      />
+      <BInput
+        v-if="q.allowOther && selectedOptions(q.id).includes(OTHER_OPTION_ID)"
+        :id="`collection-other-${q.id}`"
+        :value="choiceAnswerParts(answers[q.id]).otherText || ''"
+        :maxlength="FORM_LIMITS.short"
+        :aria-label="t('collectionForms.otherAnswerFor', { title: q.title })"
+        :placeholder="t('collectionForms.otherPlaceholder')"
+        @update:value="updateOther(q, String($event ?? ''))"
       />
       <p v-if="fieldError === q.id" class="collection-error" role="alert">{{ error }}</p>
     </section>
@@ -72,6 +88,10 @@
     FormError,
     type FormDefinition,
     type FormAnswers,
+    type FormQuestion,
+    choiceAnswerParts,
+    OTHER_OPTION_ID,
+    FORM_LIMITS,
   } from '@lightnote/shared/collection-forms';
   import BDateTimePicker from '@/components/base/BasicComponents/BDateTimePicker.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
@@ -86,15 +106,63 @@
     submitLabel?: string;
   }>();
   const emit = defineEmits<{ submit: [answers: FormAnswers] }>();
-  const answers = reactive<FormAnswers>(props.preview ? {} : JSON.parse(JSON.stringify(props.initialAnswers || {}))),
+  const answers = reactive<FormAnswers>(
+      props.preview
+        ? {}
+        : (Object.fromEntries(
+            Object.entries(JSON.parse(JSON.stringify(props.initialAnswers || {}))).filter(([id]) =>
+              props.definition.questions.some((q) => q.id === id),
+            ),
+          ) as FormAnswers),
+    ),
     error = ref(''),
     fieldError = ref(''),
     fields: Record<string, HTMLElement> = {};
   defineExpose({ getAnswers: (): FormAnswers => JSON.parse(JSON.stringify(answers)) });
   const ratings = [1, 2, 3, 4, 5].map((n) => ({ value: String(n), label: t('collectionForms.score', { score: n }) }));
-  function toggle(id: string, option: string, checked: boolean) {
-    const values = Array.isArray(answers[id]) ? (answers[id] as string[]) : [];
-    answers[id] = checked ? [...values, option] : values.filter((v) => v !== option);
+  function choiceOptions(q: FormQuestion) {
+    return [
+      ...q.options.map((o) => ({ value: o.id, label: o.label })),
+      ...(q.allowOther ? [{ value: OTHER_OPTION_ID, label: t('collectionForms.otherOption') }] : []),
+    ];
+  }
+  function selectedOptions(id: string) {
+    const { optionIds, otherText } = choiceAnswerParts(answers[id]);
+    return [...optionIds, ...(otherText !== null ? [OTHER_OPTION_ID] : [])];
+  }
+  function setChoice(q: FormQuestion, selected: string[]) {
+    const otherSelected = q.allowOther && selected.includes(OTHER_OPTION_ID);
+    const optionIds = q.allowOther ? selected.filter((id) => id !== OTHER_OPTION_ID) : selected;
+    answers[q.id] = otherSelected
+      ? { optionIds, otherText: choiceAnswerParts(answers[q.id]).otherText || '' }
+      : q.type === 'single'
+        ? optionIds[0] || ''
+        : optionIds;
+    refreshError(q);
+  }
+  function updateOther(q: FormQuestion, otherText: string) {
+    answers[q.id] = { optionIds: choiceAnswerParts(answers[q.id]).optionIds, otherText };
+    refreshError(q);
+  }
+  function showError(e: unknown) {
+    const code = (e as FormError).code;
+    error.value =
+      code === 'otherRequired' || code === 'otherTooLong' ? t('collectionForms.' + code) : (e as Error).message;
+    fieldError.value = (e as FormError).field || '';
+  }
+  function refreshError(q: FormQuestion) {
+    if (fieldError.value !== q.id) return;
+    try {
+      validateAnswers({ ...props.definition, questions: [q] }, { [q.id]: answers[q.id] });
+      error.value = '';
+      fieldError.value = '';
+    } catch (e) {
+      showError(e);
+    }
+  }
+  function toggle(q: FormQuestion, option: string, checked: boolean) {
+    const values = selectedOptions(q.id);
+    setChoice(q, checked ? [...values, option] : values.filter((v) => v !== option));
   }
   function submit() {
     if (props.preview || props.busy) return;
@@ -103,8 +171,7 @@
     try {
       emit('submit', validateAnswers(props.definition, answers));
     } catch (e) {
-      error.value = (e as Error).message;
-      fieldError.value = (e as FormError).field || '';
+      showError(e);
       fields[fieldError.value]?.focus();
     }
   }

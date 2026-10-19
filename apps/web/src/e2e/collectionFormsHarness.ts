@@ -13,6 +13,12 @@ import PublicForm from '@/view/toolbox/forms/PublicForm.vue';
 import NotificationBell from '@/components/notification/NotificationBell.vue';
 import type { NotificationItem } from '@/composables/useNotification';
 import { notificationPresentation } from '@lightnote/shared/notification-presentation';
+import {
+  OTHER_OPTION_ID,
+  validateAnswers,
+  type FormAnswers,
+  type FormDefinition,
+} from '@lightnote/shared/collection-forms';
 import '@/assets/css/index.less';
 const params = new URLSearchParams(location.search),
   state = params.get('state') || 'collecting';
@@ -26,7 +32,7 @@ applyUiDensity(
   params.get('density') === 'compact' ? 'small' : params.get('density') === 'comfortable' ? 'large' : 'standard',
   params.get('renderProfile') === 'mobile',
 );
-const definition = {
+const definition: FormDefinition = {
   submissionPolicy: membersOnly || params.get('policy') === 'replace' ? 'replace' : 'multiple',
   membersOnly,
   reward: params.has('reward') ? { points: 20, maxRecipients: 100 } : null,
@@ -36,8 +42,9 @@ const definition = {
   questions: [
     {
       id: 'q1',
-      title: '你最常使用哪些模块？',
-      type: 'multiple',
+      title: params.has('other') ? '你最早是从哪里了解到轻笺的？' : '你最常使用哪些模块？',
+      type: params.get('other') === 'single' ? 'single' : 'multiple',
+      allowOther: params.has('other') ? true : undefined,
       required: true,
       options: [
         { id: 'a', label: '书签' },
@@ -52,6 +59,18 @@ const definition = {
     { id: 'q5', title: '希望何时收到回复？', type: 'date', required: false, options: [] },
   ],
 };
+if (params.has('other'))
+  definition.questions = [
+    {
+      ...definition.questions[0],
+      options: [
+        { id: 'a', label: '搜索引擎（百度、必应、Google 等）' },
+        { id: 'b', label: '小红书 / 哔哩哔哩（B 站）' },
+        { id: 'c', label: '朋友、同事或同学推荐' },
+        { id: 'd', label: '记不清了' },
+      ],
+    },
+  ];
 const forms: any[] = [
   {
     id: 'sample',
@@ -98,7 +117,11 @@ const submissions = Array.from({ length: 38 }, (_, i) => ({
         reward_points: definition.reward?.points || 0,
       }
     : {}),
-  answers: { q1: ['a', 'b'], q2: 5, q3: '希望移动端的整理操作更方便一些。', q4: 7, q5: '2026-09-30' },
+  answers: params.has('other')
+    ? ({
+        q1: { optionIds: params.get('other') === 'single' ? [] : ['a'], otherText: '朋友推荐，来自一篇工具分享文章。' },
+      } as FormAnswers)
+    : { q1: ['a', 'b'], q2: 5, q3: '希望移动端的整理操作更方便一些。', q4: 7, q5: '2026-09-30' },
 }));
 const seenRequests: string[] = [];
 const notices: NotificationItem[] = params.has('notifications')
@@ -209,7 +232,10 @@ request.defaults.adapter = async (config) => {
         average: 4.3,
         minimum: 1,
         maximum: 12,
-        choices: q.options.map((o, i) => ({ option_id: o.id, count: [30, 24, 12, 8][i] })),
+        choices: [
+          ...q.options.map((o, i) => ({ option_id: o.id, count: [30, 24, 12, 8][i] })),
+          ...(q.allowOther ? [{ option_id: OTHER_OPTION_ID, count: 6 }] : []),
+        ],
         values:
           q.type === 'rating'
             ? [
@@ -311,7 +337,7 @@ window.fetch = async (_input, init) => {
   let data: any;
   if (init?.method === 'POST') {
     const outcome = mySubmission ? 'updated' : 'created';
-    mySubmission = { receipt: 'test', answers: JSON.parse(String(init.body)).answers };
+    mySubmission = { receipt: 'test', answers: validateAnswers(definition, JSON.parse(String(init.body)).answers) };
     if (params.has('notifications') && definition.reward && !rewardReceived) {
       const notice = {
         type: 'collection_form_reward',
