@@ -7401,6 +7401,7 @@ export default {
       imagePasteEmpty: 'Copy or cut an image from the image toolbar first',
       imageDelete: 'Delete image',
       imageParagraphAfter: 'Start a new line after image',
+      imageToMediaText: 'Convert to image and text',
       imageSizes: {
         original: 'Original',
         small: 'Small',

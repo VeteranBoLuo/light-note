@@ -3,6 +3,7 @@ import {
   createMarkdownRichMediaTextBlockHtml,
   createRichMediaTextBlockHtml,
   createRichMediaTextItemHtml,
+  createRichMediaTextFromImage,
   normalizeRichMediaTextHtml,
 } from './richMediaText';
 
@@ -56,5 +57,56 @@ describe('richMediaText', () => {
     expect(html).not.toContain('width="400"');
     expect(html).toContain('border-radius: 8px');
     expect(html).toContain('<p>说明</p>');
+  });
+
+  it('converts the existing image without losing its source, description or title', () => {
+    const original = document.createElement('div');
+    original.innerHTML =
+      '<p>之前<img src="/a.png?x=1&amp;y=2" alt="窗户 &quot;一&quot;" title="原图" class="photo mce-object-selected" width="400" height="300" data-ln-size="small" data-mce-selected="1" style="float:right;width:40%;border-radius:8px">之后</p>';
+    const image = original.querySelector('img')!;
+    const conversion = createRichMediaTextFromImage(image)!;
+    const converted = conversion.block.querySelector('img')!;
+
+    expect(conversion.target).toBe(image);
+    expect(converted.getAttribute('src')).toBe('/a.png?x=1&y=2');
+    expect(converted.alt).toBe('窗户 "一"');
+    expect(converted.title).toBe('原图');
+    expect(converted.className).toBe('photo');
+    expect(converted.style.borderRadius).toBe('8px');
+    expect(converted.hasAttribute('width')).toBe(false);
+    expect(converted.hasAttribute('height')).toBe(false);
+    expect(converted.hasAttribute('data-ln-size')).toBe(false);
+    expect(converted.hasAttribute('data-mce-selected')).toBe(false);
+    expect(converted.style.float).toBe('');
+    expect(conversion.block.querySelector('.ln-media-text__content p')).not.toBeNull();
+    expect(original.textContent).toBe('之前之后');
+    expect(original.contains(image)).toBe(true);
+  });
+
+  it('retains a linked image and an existing formatted caption', () => {
+    const original = document.createElement('div');
+    original.innerHTML =
+      '<figure class="image"><a href="https://example.com/original" target="_blank"><img src="/a.png"></a><figcaption>已有<strong>图注</strong></figcaption></figure>';
+    const conversion = createRichMediaTextFromImage(original.querySelector('img')!)!;
+    expect(conversion.target).toBe(original.firstElementChild);
+    expect(conversion.block.querySelector('.ln-media-text__media a')?.getAttribute('href')).toBe(
+      'https://example.com/original',
+    );
+    expect(conversion.block.querySelector('.ln-media-text__content')?.innerHTML).toBe('已有<strong>图注</strong>');
+    expect(conversion.block.querySelectorAll('img')).toHaveLength(1);
+  });
+
+  it('replaces an image-only link as a whole and rejects unsupported image targets', () => {
+    const original = document.createElement('div');
+    original.innerHTML = '<p><a href="/original"><img src="/a.png"></a></p>';
+    expect(createRichMediaTextFromImage(original.querySelector('img')!)?.target).toBe(original.querySelector('a'));
+    original.innerHTML = '<p><a href="/original">链接前<img src="/a.png">链接后</a></p>';
+    const conversion = createRichMediaTextFromImage(original.querySelector('img')!)!;
+    expect(conversion.target).toBe(original.querySelector('img'));
+    expect(conversion.block.querySelector('.ln-media-text__media a')?.getAttribute('href')).toBe('/original');
+    expect(original.textContent).toBe('链接前链接后');
+    original.innerHTML =
+      '<section class="ln-media-text"><img src="/a.png"></section><figure class="mermaid-figure--companion"><img src="/chart.png"></figure><img>';
+    for (const image of original.querySelectorAll('img')) expect(createRichMediaTextFromImage(image)).toBeNull();
   });
 });

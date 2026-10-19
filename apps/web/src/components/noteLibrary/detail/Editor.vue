@@ -646,6 +646,7 @@
       height="auto"
       body-padding="12px 16px max(18px, env(safe-area-inset-bottom))"
       @close="closeMobileImageSettings"
+      @afterClose="handleMobileImageSettingsAfterClose"
     >
       <div class="mobile-image-settings">
         <div class="mobile-image-settings__preview">
@@ -684,6 +685,10 @@
             />
           </BButton>
         </div>
+        <BButton v-if="mobileImageTarget?.kind === 'html'" @click="convertMobileImageToMediaText">
+          <SvgIcon :src="icon.noteDetail.toolbar.mediaText" size="16" aria-hidden="true" />
+          {{ t('noteDetail.editor.imageToMediaText') }}
+        </BButton>
       </div>
     </BDrawer>
     <FilePreview
@@ -824,6 +829,7 @@
   import {
     createMarkdownRichMediaTextBlockHtml,
     createRichMediaTextBlockHtml,
+    createRichMediaTextFromImage,
     createRichMediaTextItemHtml,
     normalizeRichMediaTextHtml,
     normalizeRichMediaTextPosition,
@@ -1189,6 +1195,10 @@
   const mobileImageSettingsSize = ref<ContentImageSize>('original');
   const mobileImageSettingsPreview = ref({ src: '', alt: '' });
   const mobileImageTarget = shallowRef<MobileImageTarget | null>(null);
+  let pendingMobileImageConversion: {
+    target: Extract<MobileImageTarget, { kind: 'html' }>;
+    released: Promise<void>;
+  } | null = null;
   const mobileImageSizeOptions = computed<Array<{ key: ContentImageSize; label: string }>>(() => [
     { key: 'original', label: t('noteDetail.editor.imageSizes.original') },
     { key: 'small', label: t('noteDetail.editor.imageSizes.small') },
@@ -1541,6 +1551,7 @@
 
   function openMobileImageSettings(target: MobileImageTarget, image: HTMLImageElement) {
     if (!isMobile.value || props.readonly) return;
+    pendingMobileImageConversion = null;
     mobileImageTarget.value = target;
     mobileImageSettingsSize.value = readContentImageSizeFromElement(image);
     mobileImageSettingsPreview.value = {
@@ -1559,6 +1570,24 @@
     const src = mobileImageSettingsPreview.value.src;
     if (!src) return;
     await closeCurrentMobileOverlayThen(closeMobileImageSettings, () => openNoteContentImagePreview(src));
+  }
+
+  function convertMobileImageToMediaText() {
+    const target = mobileImageTarget.value;
+    if (target?.kind !== 'html') return;
+    pendingMobileImageConversion = {
+      target,
+      released: closeCurrentMobileOverlayThen(closeMobileImageSettings, () => undefined),
+    };
+  }
+
+  async function handleMobileImageSettingsAfterClose() {
+    const pending = pendingMobileImageConversion;
+    pendingMobileImageConversion = null;
+    if (!pending) return;
+    await pending.released;
+    // 抽屉动画结束才会释放正文的 inert，此时再转换并聚焦文字区。
+    convertRichImageToMediaText(pending.target.editor, pending.target.element);
   }
 
   function handleMarkdownPreviewClick(event: Event) {
@@ -3175,6 +3204,27 @@
     editor.selection?.scrollIntoView?.(item);
   }
 
+  function convertRichImageToMediaText(editor: any, image: HTMLImageElement) {
+    const body = editor?.getBody?.() as HTMLElement | null;
+    if (props.readonly || editor !== editorRef.value || !body?.contains(image) || !image.isConnected) return;
+    const conversion = createRichMediaTextFromImage(image);
+    if (!conversion || !editor.dom.isEditable(conversion.target.parentElement)) return;
+    const token = `ln-media-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    conversion.block.setAttribute('data-ln-media-inserting', token);
+    editor.focus();
+    editor.undoManager.transact(() => {
+      editor.selection.select(conversion.target);
+      editor.insertContent(conversion.block.outerHTML);
+      const block = body.querySelector<HTMLElement>(`section.ln-media-text[data-ln-media-inserting="${token}"]`);
+      block?.removeAttribute('data-ln-media-inserting');
+      const item = block?.querySelector<HTMLElement>('.ln-media-text__item');
+      if (item) focusRichMediaTextCaption(editor, item);
+    });
+    decorateRichMediaTextCaptions(editor);
+    notifyRichMediaTextMutation(editor);
+    void recordOperation({ module: '笔记', operation: '图片转为图文组合' });
+  }
+
   function richMediaTextImageAlt(fileName: string) {
     return String(fileName || t('note.mdImageAlt'))
       .replace(/\.[^.]+$/u, '')
@@ -4681,6 +4731,16 @@
           // 选区在毁掉过程中可能已离开 DOM，此时只按主工具栏底部避让。
         }
         document.querySelectorAll<HTMLElement>('.tox-pop').forEach((popup) => {
+          const isImageToolbar = Boolean(popup.querySelector('[data-mce-name="lnimagepreview"]'));
+          popup.classList.toggle('ln-image-context-toolbar', isImageToolbar);
+          if (isImageToolbar) {
+            // 内置 SVG 只有固定尺寸；补上原始画布，才能与自定义图标一起随界面密度缩放。
+            popup.querySelectorAll<SVGSVGElement>('.tox-tbtn svg:not([viewBox])').forEach((svg) => {
+              const width = Number(svg.getAttribute('width'));
+              const height = Number(svg.getAttribute('height'));
+              if (width > 0 && height > 0) svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+            });
+          }
           const rect = popup.getBoundingClientRect();
           if (!rect.width || !rect.height || rect.right < bodyRect.left || rect.left > bodyRect.right) return;
           if (rect.top >= toolbarRect.bottom + 6) return;
@@ -4816,6 +4876,7 @@
       const isReusableRichImageCaretBlock = (node: Element | null): node is HTMLElement =>
         Boolean(
           node?.matches('p,div') &&
+          !node.matches('[data-mce-bogus], [contenteditable="false"]') &&
           !String(node.textContent || '').trim() &&
           !node.querySelector('img,table,pre,ul,ol,figure,input'),
         );
@@ -4829,21 +4890,30 @@
 
       const insertParagraphAfterSelectedRichImage = () => {
         const image = resolveSelectedRichImage();
-        if (!image) return;
-        const anchor = resolveRichImageBlockAnchor(image);
-        const parent = anchor.parentNode;
+        if (!image || props.readonly) return;
+        const block = resolveRichImageBlockAnchor(image);
+        // 单元格和列表项是内容边界，段落应插在内部，不能成为 tr/ul 的直接子项。
+        const container = block.matches('td,th,li') ? block : null;
+        const parent = container || block.parentNode;
         if (!parent) return;
-        const existing = anchor.nextElementSibling;
-        if (isReusableRichImageCaretBlock(existing)) {
-          focusRichImageCaret(existing, 0);
-          return;
-        }
-        const paragraph = createRichImageCaretParagraph();
+        let anchor: HTMLElement = container ? image : block;
+        while (anchor.parentElement && anchor.parentNode !== parent) anchor = anchor.parentElement;
+        let existing = anchor.nextElementSibling;
+        // 缩放手柄和离屏选区同样可能是空 div，必须跳过，不能把光标放进临时节点。
+        while (existing?.hasAttribute('data-mce-bogus')) existing = existing.nextElementSibling;
+        const paragraph = isReusableRichImageCaretBlock(existing) ? existing : createRichImageCaretParagraph();
+        const reusable = paragraph === existing;
+        const changed = !reusable || paragraph.style.clear !== 'both';
         editor.undoManager.transact(() => {
-          parent.insertBefore(paragraph, anchor.nextSibling);
+          if (!reusable) parent.insertBefore(paragraph, anchor.nextSibling);
+          // 左右对齐可能让图片浮动；新段落必须从整张图片下方开始。
+          editor.dom.setStyle(paragraph, 'clear', 'both');
+          focusRichImageCaret(paragraph, 0);
         });
-        focusRichImageCaret(paragraph, 0);
-        notifyRichImageMutation();
+        if (changed) {
+          notifyRichImageMutation();
+        }
+        editor.dispatch?.('contexttoolbar-hide');
       };
 
       const removeSelectedRichImage = (image: HTMLImageElement) => {
@@ -4914,6 +4984,15 @@
       editor.ui.registry.addIcon('ln-image-paste', icon.noteDetail.imageToolbar.paste);
       editor.ui.registry.addIcon('ln-image-delete', icon.noteDetail.imageToolbar.delete);
       editor.ui.registry.addIcon('ln-image-paragraph-after', icon.noteDetail.imageToolbar.paragraphAfter);
+      editor.ui.registry.addIcon('ln-image-media-text', icon.noteDetail.toolbar.mediaText);
+      editor.ui.registry.addButton('lnImageMediaText', {
+        icon: 'ln-image-media-text',
+        tooltip: t('noteDetail.editor.imageToMediaText'),
+        onAction: () => {
+          const image = resolveSelectedRichImage();
+          if (image) convertRichImageToMediaText(editor, image);
+        },
+      });
       editor.ui.registry.addButton('lnImagePreview', {
         icon: 'ln-image-preview',
         tooltip: t('noteDetail.editor.imagePreview'),
@@ -4970,11 +5049,12 @@
           return Boolean(
             image &&
             !image.closest('.mermaid-figure--companion, .ln-media-text') &&
-            editor.dom.isEditable(image.parentElement),
+            // TinyMCE 为普通图注 figure 设置 contenteditable=false，编辑权限应看其外层。
+            editor.dom.isEditable(image.closest('figure.image')?.parentElement || image.parentElement),
           );
         },
         items:
-          'lnImagePreview | lnImageCopy lnImageCut lnImagePaste lnImageDelete | alignleft aligncenter alignright | lnImageParagraphAfter',
+          'lnImagePreview lnImageMediaText | lnImageCopy lnImageCut lnImagePaste lnImageDelete | alignleft aligncenter alignright | lnImageParagraphAfter',
         position: 'node',
       });
 

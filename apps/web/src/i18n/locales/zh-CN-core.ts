@@ -7053,6 +7053,7 @@ export default {
       imagePasteEmpty: '请先用图片浮条复制或剪切一张图片',
       imageDelete: '删除图片',
       imageParagraphAfter: '在图片后换行',
+      imageToMediaText: '转为图文组合',
       imageSizes: {
         original: '原始',
         small: '小',

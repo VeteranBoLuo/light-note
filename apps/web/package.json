@@ -26,6 +26,7 @@
     "check:ui-density": "vitest run src/config/uiDensity.test.ts src/config/uiDensityLess.test.ts src/config/uiDensityRaw.test.ts && node --test scripts/check-density-cli.test.mjs",
     "check:ui-density-new": "node scripts/check-density-raw.mjs",
     "check:workspace-surfaces": "node scripts/check-workspace-surfaces.mjs",
+    "check:note-image-tools": "node scripts/check-note-image-tools.mjs",
     "test:watch": "vitest"
   },
   "dependencies": {
