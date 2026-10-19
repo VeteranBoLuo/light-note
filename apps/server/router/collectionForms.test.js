@@ -1,4 +1,5 @@
 import express from 'express';
+import { parse } from 'csv-parse/sync';
 import { beforeAll, afterAll, beforeEach, it, expect, vi } from 'vitest';
 const state = vi.hoisted(() => ({
   publicForm: vi.fn(),
@@ -6,6 +7,8 @@ const state = vi.hoisted(() => ({
   list: vi.fn(),
   create: vi.fn(),
   ensureRootRole: vi.fn(),
+  get: vi.fn(),
+  exportRows: vi.fn(),
 }));
 vi.mock('../db/index.js', () => ({ default: {} }));
 vi.mock('../util/collectionForms/service.js', () => ({ createFormsService: () => state }));
@@ -129,4 +132,42 @@ it('公开提交拒绝缺少或不匹配的 Origin', async () => {
     expect(r.status).toBe(403);
   }
   expect(state.submit).not.toHaveBeenCalled();
+});
+it('CSV 为其他内容提供独立列，保留多选标签、换行和公式防护', async () => {
+  const options = [
+    { id: 'a', label: '搜索' },
+    { id: 'b', label: '社群' },
+  ];
+  state.get.mockResolvedValue({
+    definition: {
+      questions: [
+        { id: 'single', type: 'single', title: '首次渠道', options, allowOther: true },
+        { id: 'multi', type: 'multiple', title: '更多渠道', options, allowOther: true },
+        { id: 'legacy', type: 'single', title: '旧问题', options },
+      ],
+    },
+  });
+  state.exportRows.mockImplementation(async function* () {
+    yield {
+      id: 'submission',
+      created_at: '2026-10-19T09:00:00Z',
+      answers: {
+        single: { optionIds: [], otherText: '=1+1' },
+        multi: { optionIds: ['a'], otherText: '朋友分享，\n一篇文章' },
+        legacy: 'b',
+      },
+    };
+  });
+  const response = await fetch(base + '/toolbox/forms/form/export', { headers: { 'x-test-user': 'user' } });
+  expect(response.status).toBe(200);
+  const rows = parse(await response.text(), { bom: true, columns: true });
+  expect(rows).toHaveLength(1);
+  expect(rows[0]).toMatchObject({
+    首次渠道: '其他',
+    '首次渠道（其他内容）': "'=1+1",
+    更多渠道: '搜索；其他',
+    '更多渠道（其他内容）': '朋友分享，\n一篇文章',
+    旧问题: '社群',
+  });
+  expect(rows[0]).not.toHaveProperty('旧问题（其他内容）');
 });

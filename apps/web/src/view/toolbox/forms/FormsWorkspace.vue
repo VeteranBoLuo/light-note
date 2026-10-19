@@ -632,7 +632,7 @@
   import { returnFromToolboxPage } from '@/utils/toolboxNavigation';
   import { useRoute, useRouter, onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router';
   import type { FormDefinition, FormQuestion } from '@lightnote/shared/collection-forms';
-  import { validateDefinition } from '@lightnote/shared/collection-forms';
+  import { validateDefinition, choiceAnswerParts } from '@lightnote/shared/collection-forms';
   import BActionMenu from '@/components/base/BasicComponents/BActionMenu.vue';
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
   import BMessage from '@/components/base/BasicComponents/BMessage/BMessage';
@@ -1152,12 +1152,15 @@
     });
   }
   function answerOptions(q: FormQuestion, value: unknown) {
-    return (Array.isArray(value) ? value : [value]).map((v) => q.options?.find((o) => o.id === v)?.label || String(v));
+    const { optionIds, otherText } = choiceAnswerParts(value);
+    return [
+      ...optionIds.map((v) => q.options?.find((o) => o.id === v)?.label || v),
+      ...(otherText !== null ? [t('collectionForms.otherLabel') + '：' + otherText] : []),
+    ];
   }
   function answerLabel(q: FormQuestion, value: unknown) {
     if (value == null) return t('collectionForms.unanswered');
-    if (q.type === 'single') return q.options.find((o) => o.id === value)?.label || '—';
-    if (Array.isArray(value)) return value.map((v) => q.options.find((o) => o.id === v)?.label || v).join('、');
+    if (q.type === 'single' || q.type === 'multiple') return answerOptions(q, value).join('、') || '—';
     if (q.type === 'date')
       return String(value)
         .replace(/^(\d{4})-(\d{2})-(\d{2})/, '$1/$2/$3')

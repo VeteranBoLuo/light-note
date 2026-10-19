@@ -3,7 +3,7 @@ import rateLimit from 'express-rate-limit';
 import pool from '../db/index.js';
 import { readIdentity, renewIdentity, sameOrigin } from '../util/collectionForms/identity.js';
 import { createFormsService } from '../util/collectionForms/service.js';
-import { FormError, csvCell } from '@lightnote/shared/collection-forms';
+import { FormError, csvCell, choiceAnswerParts } from '@lightnote/shared/collection-forms';
 import { readCollectionAccount } from '../util/collectionForms/account.js';
 
 const service = createFormsService(pool);
@@ -177,7 +177,7 @@ router.get(
       '垃圾提交',
       '内部备注',
       ...(form.definition.membersOnly ? ['填写账号 ID', '填写账号昵称', '已奖励积分'] : []),
-      ...form.definition.questions.map((q) => q.title),
+      ...form.definition.questions.flatMap((q) => [q.title, ...(q.allowOther ? [q.title + '（其他内容）'] : [])]),
     ]);
     for await (const row of service.exportRows(req.user.id, req.params.id, req.query)) {
       await write([
@@ -189,12 +189,19 @@ router.get(
         row.spam,
         row.private_note,
         ...(form.definition.membersOnly ? [row.respondent_user_id, row.respondent_alias, row.reward_points] : []),
-        ...form.definition.questions.map((q) => {
+        ...form.definition.questions.flatMap((q) => {
           const value = row.answers[q.id];
-          if (q.type === 'single') return q.options.find((o) => o.id === value)?.label || '';
-          if (q.type === 'multiple')
-            return (value || []).map((id) => q.options.find((o) => o.id === id)?.label || '').join('；');
-          return value;
+          if (q.type === 'single' || q.type === 'multiple') {
+            const { optionIds, otherText } = choiceAnswerParts(value);
+            return [
+              [
+                ...optionIds.map((id) => q.options.find((o) => o.id === id)?.label || ''),
+                ...(otherText !== null ? ['其他'] : []),
+              ].join('；'),
+              ...(q.allowOther ? [otherText || ''] : []),
+            ];
+          }
+          return [value];
         }),
       ]);
     }

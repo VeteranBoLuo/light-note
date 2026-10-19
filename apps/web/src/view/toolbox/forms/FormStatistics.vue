@@ -78,7 +78,7 @@
           }}</p>
           <template v-if="['single', 'multiple'].includes(q.type)">
             <p v-if="q.type === 'multiple'" class="collection-muted">{{ t('collectionForms.multipleHint') }}</p>
-            <div v-for="o in q.options" :key="o.id" class="collection-stat-option"
+            <div v-for="o in choiceOptions(q)" :key="o.id" class="collection-stat-option"
               ><div class="collection-row"
                 ><span>{{ o.label }}</span
                 ><span
@@ -88,6 +88,13 @@
               ><div class="collection-stat-track"
                 ><div :style="{ width: percent(choice(q, o.id), q.answered) + '%' }"></div></div
             ></div>
+            <BButton
+              v-if="q.allowOther"
+              type="text"
+              :disabled="loading || !!error || !choice(q, OTHER_OPTION_ID)"
+              @click="openText(q.id)"
+              >{{ t('collectionForms.viewOtherText') }}</BButton
+            >
           </template>
           <div v-else-if="q.type === 'rating'" class="collection-stat-rating">
             <div class="collection-stat-average"
@@ -129,7 +136,7 @@
       </div>
       <p class="collection-muted">{{ t('collectionForms.statisticsFootnote') }}</p>
     </template>
-    <BDrawer :open="textOpen" @close="closeText" :title="t('collectionForms.textAnswers')" mobile-full-screen>
+    <BDrawer :open="textOpen" @close="closeText" :title="textTitle" mobile-full-screen>
       <div class="collection-stack">
         <div class="collection-toolbar">
           <BInput
@@ -178,6 +185,7 @@
   import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
   import { buildTrend } from './statistics';
   import { formsApi } from './api';
+  import { OTHER_OPTION_ID, type FormQuestion } from '@lightnote/shared/collection-forms';
   const props = defineProps<{ formId: string; from: string; to: string }>();
   const data = ref<any>(),
     loading = ref(false),
@@ -219,6 +227,17 @@
   const choice = (q: any, id: string) => Number(q.choices.find((c: any) => c.option_id === id)?.count || 0);
   const percent = (n: number, d: number) => (d ? Math.round((n / d) * 1000) / 10 : 0);
   const number = (v: any) => (v == null ? '—' : Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 }));
+  const textTitle = computed(() =>
+    t(
+      data.value?.questions.find((q: FormQuestion) => q.id === questionId.value)?.allowOther
+        ? 'collectionForms.otherAnswers'
+        : 'collectionForms.textAnswers',
+    ),
+  );
+  const choiceOptions = (q: FormQuestion) => [
+    ...q.options,
+    ...(q.allowOther ? [{ id: OTHER_OPTION_ID, label: t('collectionForms.otherLabel') }] : []),
+  ];
   function openText(id: string) {
     questionId.value = id;
     textPage.value = 1;

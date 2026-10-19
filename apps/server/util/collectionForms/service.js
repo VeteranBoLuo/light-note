@@ -1,6 +1,12 @@
 import crypto from 'node:crypto';
 import { requireIdentityConfig, respondentHash } from './identity.js';
-import { FormError, validateDefinition, validateAnswers } from '@lightnote/shared/collection-forms';
+import {
+  FormError,
+  validateDefinition,
+  validateAnswers,
+  choiceAnswerParts,
+  OTHER_OPTION_ID,
+} from '@lightnote/shared/collection-forms';
 import { insertData } from '../agent/data.js';
 import { grantPointsIdempotently } from '../pointsGrantOperations.js';
 import { createNotification } from '../notification.js';
@@ -428,16 +434,17 @@ export function createFormsService(pool) {
         for (const q of form.definition.questions) {
           const value = answers[q.id];
           if (value === undefined) continue;
+          const choice = ['single', 'multiple'].includes(q.type) ? choiceAnswerParts(value) : null;
           const answer = insertData({
             submissionId: data.id,
             formId: form.id,
             questionId: q.id,
-            textValue: typeof value === 'string' ? value : null,
+            textValue: choice?.otherText ?? (typeof value === 'string' ? value : null),
             numberValue: typeof value === 'number' ? value : null,
           });
           await db.query('INSERT INTO collection_answers SET ?', [answer]);
-          if (q.type === 'single' || q.type === 'multiple')
-            for (const optionId of Array.isArray(value) ? value : [value])
+          if (choice)
+            for (const optionId of [...choice.optionIds, ...(choice.otherText !== null ? [OTHER_OPTION_ID] : [])])
               await db.query('INSERT INTO collection_choices SET ?', [insertData({ answerId: answer.id, optionId })]);
         }
       }
@@ -615,14 +622,22 @@ export function createFormsService(pool) {
   }
   async function textAnswers(userId, id, query) {
     const form = await owned(pool, userId, id);
-    if (!form.definition.questions.some((q) => q.id === query.questionId && ['short', 'long'].includes(q.type)))
-      throw new FormError('题目无效');
+    const question = form.definition.questions.find((q) => q.id === query.questionId);
+    const other = question?.allowOther && ['single', 'multiple'].includes(question.type);
+    if (!question || (!['short', 'long'].includes(question.type) && !other)) throw new FormError('题目无效');
     const f = responseFilter(query, 's', true),
       page = Math.max(1, Math.min(100000, Math.floor(Number(query.page) || 1)));
     return rows(
       pool,
-      `SELECT a.text_value,s.created_at FROM collection_answers a INNER JOIN collection_submissions s ON s.id=a.submission_id WHERE s.form_id=? AND s.spam=0 AND a.question_id=?${f.sql} AND a.text_value LIKE ? ORDER BY s.created_at DESC,s.id DESC LIMIT 30 OFFSET ?`,
-      [id, query.questionId, ...f.params, '%' + String(query.search || '').slice(0, 200) + '%', (page - 1) * 30],
+      `SELECT a.text_value,s.created_at FROM collection_answers a INNER JOIN collection_submissions s ON s.id=a.submission_id WHERE s.form_id=? AND s.spam=0 AND a.question_id=?${f.sql}${other ? ' AND EXISTS (SELECT 1 FROM collection_choices c WHERE c.answer_id=a.id AND c.option_id=?)' : ''} AND a.text_value LIKE ? ORDER BY s.created_at DESC,s.id DESC LIMIT 30 OFFSET ?`,
+      [
+        id,
+        query.questionId,
+        ...f.params,
+        ...(other ? [OTHER_OPTION_ID] : []),
+        '%' + String(query.search || '').slice(0, 200) + '%',
+        (page - 1) * 30,
+      ],
     );
   }
   async function* exportRows(userId, id, query) {

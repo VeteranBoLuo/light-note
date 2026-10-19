@@ -4,6 +4,7 @@ import mysql from 'mysql2/promise';
 import { beforeAll, afterAll, beforeEach, describe, it, expect, vi } from 'vitest';
 import { createFormsService } from './service.js';
 import { POINTS_GRANT_OPERATIONS_TABLE_SQL } from '../growthCenterSchema.js';
+import { OTHER_OPTION_ID } from '@lightnote/shared/collection-forms';
 const socketPath = process.env.LIGHTNOTE_TEST_MYSQL_SOCKET;
 const schema = 'collections_' + randomUUID().replaceAll('-', '');
 let admin, pool, service;
@@ -614,6 +615,71 @@ describe.skipIf(!socketPath)('公开收集 MySQL 原子性和统计', () => {
     );
     expect(updated).toEqual({ receipt: original.receipt, outcome: 'updated' });
     expect(Number((await service.statistics('u', f.id)).summary.valid)).toBe(1);
+  });
+  it.each(['single', 'multiple'])('%s 其他文字随答案保存、回填、去重，统计与文本检索独立于普通选项', async (type) => {
+    const { id } = await service.create('u', {
+      definition: { ...definition, questions: [{ ...definition.questions[0], type, allowOther: true }] },
+    });
+    await service.action('u', id, { action: 'publish', version: 1 });
+    const f = await service.get('u', id);
+    const custom = { optionIds: type === 'single' ? [] : ['b', 'a', 'a'], otherText: '  朋友分享 📚  ' };
+    const input = { requestKey: randomUUID(), answers: { choice: custom } };
+    const first = await service.submit(f.public_id, input, 'browser-other');
+    expect(await service.submit(f.public_id, input, 'browser-other')).toEqual(first);
+    const normalized = { optionIds: type === 'single' ? [] : ['a', 'b'], otherText: '朋友分享 📚' };
+    expect((await service.publicForm(f.public_id, 'browser-other')).mySubmission.answers.choice).toEqual(normalized);
+    const normal = type === 'single' ? 'a' : ['a'];
+    await service.submit(f.public_id, { requestKey: randomUUID(), answers: { choice: normal } }, 'browser-normal');
+    const stats = await service.statistics('u', id);
+    expect(stats.questions[0].answered).toBe(2);
+    expect(stats.questions[0].choices.find((c) => c.option_id === OTHER_OPTION_ID)?.count).toBe(1);
+    expect((await service.textAnswers('u', id, { questionId: 'choice' })).map((r) => r.text_value)).toEqual([
+      '朋友分享 📚',
+    ]);
+    expect(await service.textAnswers('u', id, { questionId: 'choice', search: '不存在' })).toEqual([]);
+    const exported = [];
+    for await (const r of service.exportRows('u', id, {})) exported.push(r);
+    expect(exported.find((r) => r.id === first.receipt).answers.choice).toEqual(normalized);
+    await service.submit(
+      f.public_id,
+      { requestKey: randomUUID(), expectedReceipt: first.receipt, answers: { choice: normal } },
+      'browser-other',
+    );
+    expect((await service.responses('u', id)).total).toBe(2);
+    expect((await service.statistics('u', id)).questions[0].choices.some((c) => c.option_id === OTHER_OPTION_ID)).toBe(
+      false,
+    );
+    expect(await service.textAnswers('u', id, { questionId: 'choice' })).toEqual([]);
+  });
+  it('选中其他但文字无效不发奖；提交与修改其他内容只发一份积分和通知', async () => {
+    const { id } = await service.create('root-owner', {
+      definition: {
+        ...definition,
+        membersOnly: true,
+        reward: { points: 50, maxRecipients: 50 },
+        questions: [{ ...definition.questions[0], type: 'single', allowOther: true }],
+      },
+    });
+    await service.action('root-owner', id, { action: 'publish', version: 1 });
+    const f = await service.get('root-owner', id);
+    const input = (text) => memberInput('member', { answers: { choice: { optionIds: [], otherText: text } } });
+    await expect(service.submit(f.public_id, input('  '), null, account())).rejects.toMatchObject({
+      code: 'otherRequired',
+    });
+    expect((await pool.query('SELECT * FROM notification'))[0]).toHaveLength(0);
+    expect((await pool.query('SELECT * FROM points_log'))[0]).toHaveLength(0);
+    expect((await service.responses('root-owner', id)).total).toBe(0);
+    const payload = input('搜索引擎之外的推荐');
+    const results = await Promise.all([
+      service.submit(f.public_id, payload, null, account()),
+      service.submit(f.public_id, payload, null, account()),
+    ]);
+    expect(results[0].reward).toEqual({ points: 50, received: true });
+    expect(results[1].receipt).toBe(results[0].receipt);
+    await service.submit(f.public_id, input('朋友推荐'), null, account());
+    expect((await pool.query('SELECT * FROM notification'))[0]).toHaveLength(1);
+    expect((await pool.query('SELECT delta FROM points_log'))[0]).toEqual([expect.objectContaining({ delta: 50 })]);
+    expect((await service.responses('root-owner', id)).rewardSummary).toEqual({ recipients: 1, totalPoints: 50 });
   });
   it('题目、选项和幂等键区分大小写，并使用标签存量字符集', async () => {
     const d = {

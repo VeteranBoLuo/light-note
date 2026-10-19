@@ -8,6 +8,7 @@ export const QUESTION_TYPES = [
   "number",
   "date",
 ];
+export const OTHER_OPTION_ID = "__collection_other__";
 export const FORM_LIMITS = Object.freeze({
   questions: 50,
   options: 30,
@@ -17,14 +18,15 @@ export const FORM_LIMITS = Object.freeze({
   rewardRecipients: 5000,
 });
 export class FormError extends Error {
-  constructor(message, status = 400, field = "") {
+  constructor(message, status = 400, field = "", code = "") {
     super(message);
     this.status = status;
     this.field = field;
+    if (code) this.code = code;
   }
 }
-const fail = (message, field = "") => {
-  throw new FormError(message, 400, field);
+const fail = (message, field = "", code = "") => {
+  throw new FormError(message, 400, field, code);
 };
 function text(value, max, required = false) {
   if (
@@ -83,6 +85,13 @@ export function validateDefinition(input) {
       required: q.required === true,
       options: [],
     };
+    if (q.allowOther !== undefined && typeof q.allowOther !== "boolean")
+      fail("自定义选项设置无效", q.id);
+    if (q.allowOther === true) {
+      if (!["single", "multiple"].includes(q.type))
+        fail("仅单选、多选题支持自定义选项", q.id);
+      result.allowOther = true;
+    }
     if (["single", "multiple"].includes(q.type)) {
       if (
         !Array.isArray(q.options) ||
@@ -96,6 +105,7 @@ export function validateDefinition(input) {
           !o ||
           typeof o.id !== "string" ||
           !/^[a-zA-Z0-9_-]{1,64}$/.test(o.id) ||
+          (q.allowOther && o.id === OTHER_OPTION_ID) ||
           optionIds.has(o.id) ||
           ["__proto__", "constructor", "prototype"].includes(o.id)
         )
@@ -114,6 +124,24 @@ export function validateDefinition(input) {
     membersOnly: input.membersOnly === true || reward !== null,
     reward,
     questions,
+  };
+}
+/** Other is a distinct choice; its text never becomes a predefined option ID. */
+export function choiceAnswerParts(value) {
+  if (value && typeof value === "object" && !Array.isArray(value))
+    return {
+      optionIds: Array.isArray(value.optionIds)
+        ? value.optionIds.filter((id) => typeof id === "string")
+        : [],
+      otherText: typeof value.otherText === "string" ? value.otherText : null,
+    };
+  return {
+    optionIds: Array.isArray(value)
+      ? value.filter((id) => typeof id === "string")
+      : typeof value === "string" && value
+        ? [value]
+        : [],
+    otherText: null,
   };
 }
 export function validateAnswers(definition, input) {
@@ -138,14 +166,35 @@ export function validateAnswers(definition, input) {
         fail("文字超出长度限制", q.id);
       answers[q.id] = v.trim();
     } else if (q.type === "single" || q.type === "multiple") {
-      const values = q.type === "single" ? [v] : v;
+      const custom = typeof v === "object" && !Array.isArray(v);
+      if (
+        custom &&
+        (!q.allowOther ||
+          Object.keys(v).some(
+            (key) => !["optionIds", "otherText"].includes(key),
+          ) ||
+          !Array.isArray(v.optionIds) ||
+          typeof v.otherText !== "string" ||
+          (q.type === "single" && v.optionIds.length !== 0))
+      )
+        fail("请选择有效选项", q.id);
+      const values = custom ? v.optionIds : q.type === "single" ? [v] : v;
       if (
         !Array.isArray(values) ||
         values.length > 30 ||
         values.some((x) => !q.options.some((o) => o.id === x))
       )
         fail("请选择有效选项", q.id);
-      answers[q.id] = q.type === "single" ? v : [...new Set(values)].sort();
+      if (custom) {
+        if (!v.otherText.trim()) fail("请填写其他选项", q.id, "otherRequired");
+        if (v.otherText.length > FORM_LIMITS.short)
+          fail("其他内容最多 500 字", q.id, "otherTooLong");
+        answers[q.id] = {
+          optionIds: [...new Set(values)].sort(),
+          otherText: v.otherText.trim(),
+        };
+      } else
+        answers[q.id] = q.type === "single" ? v : [...new Set(values)].sort();
     } else if (q.type === "number" || q.type === "rating") {
       if (
         !["number", "string"].includes(typeof v) ||
