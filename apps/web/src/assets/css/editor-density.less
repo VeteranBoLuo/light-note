@@ -1,4 +1,9 @@
 // TinyMCE loads its skin outside Vite. Adapt interface chrome only; never target editable content.
+// Inline 编辑器的浮层容器可能为零宽；不能让皮肤的百分比 max-width 把提示文字压到 0。
+html .tox .tox-tooltip {
+  max-width: min(var(--ui-layout-280, 280px), calc(100vw - var(--ui-space-16, 16px)));
+}
+
 html[data-density='compact'] .tox,
 html[data-density='comfortable'] .tox {
   --tox-private-button-padding-y: var(--ui-space-4, 4px);
@@ -94,7 +99,67 @@ html[data-density='comfortable'] .tox {
   .tox-tbtn {
     font-size: var(--ui-font-14, 14px);
   }
-  .tox-tbtn:not(.tox-tbtn--select):not(.tox-tbtn--labeled):not(.tox-tbtn--md):not(.tox-tbtn--lg):not(.tox-tbtn--return):not(.tox-tbtn-more) {
+  .tox-tbtn:not(.tox-tbtn--select):not(.tox-tbtn--labeled):not(.tox-tbtn--md):not(.tox-tbtn--lg):not(
+      .tox-tbtn--return
+    ):not(.tox-tbtn-more) {
     width: var(--ui-control-34, 34px);
+  }
+}
+
+// 普通图片浮条按操作分组紧凑排布；通过按钮身份标记浮条，避免影响文字、表格工具条。
+html .tox .ln-image-context-toolbar {
+  // 浮条会避让主工具栏，移位后不再保留可能指错位置、遮断边框的三角箭头。
+  &::before,
+  &::after {
+    display: none;
+  }
+
+  .tox-toolbar {
+    background-image: none;
+    padding: var(--ui-space-4, 4px);
+  }
+
+  .tox-toolbar__group {
+    position: relative;
+    flex-wrap: nowrap;
+    gap: var(--ui-space-2, 2px);
+    padding: 0 var(--ui-space-4, 4px);
+  }
+
+  .tox-toolbar__group:not(:last-of-type)::after {
+    content: '';
+    position: absolute;
+    inset-inline-end: 0;
+    top: 50%;
+    height: var(--ui-layout-18, 18px);
+    border-inline-end: 1px solid var(--surface-border-color);
+    transform: translateY(-50%);
+    pointer-events: none;
+  }
+
+  .tox-tbtn {
+    flex-basis: var(--ui-control-32, 32px);
+    height: var(--ui-control-28, 28px);
+    margin: 0;
+  }
+
+  // 注册图标使用 1em，内置图标使用 24px；在浮条内统一画布，避免自定义图标被字号缩小。
+  .tox-tbtn svg {
+    width: var(--ui-layout-24, 24px);
+    height: var(--ui-layout-24, 24px);
+  }
+}
+
+html.light-note-mobile-rendering .tox .ln-image-context-toolbar {
+  .tox-toolbar__group {
+    gap: 0;
+    padding: 0;
+  }
+
+  .tox-tbtn {
+    /* ui-density-fixed: 移动端图片操作保持共享触控尺寸，不随桌面密度缩放。 */
+    flex-basis: var(--mobile-touch-size, 44px);
+    /* ui-density-fixed: 移动端图片操作保持共享触控尺寸，不随桌面密度缩放。 */
+    height: var(--mobile-touch-size, 44px);
   }
 }
