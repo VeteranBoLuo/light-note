@@ -116,6 +116,8 @@ export default {
     nextReminder: '下次提醒',
     reminderLabel: '提醒',
     reminderState: { paused: '已暂停', past: '时间已过', unscheduled: '无后续提醒' },
+    agendaGroups: { overdue: '逾期待处理', today: '今天', upcoming: '未来安排', completed: '已完成历史' },
+    completedTime: '完成 {time}',
     moreTags: '查看另外 {count} 个标签',
     quick: '快捷',
     subtitle: '专注当下的事务，合理规划，让每一件重要的事都被完成。',
@@ -5070,7 +5072,6 @@ export default {
     todoMatrixSeriesOpen: '查看“{title}”系列明细，共 {count} 项',
     todoMatrixSeriesSummary: '今天 {today} · 错过 {missed} · 后续 {future}',
     todoAgendaMissedSeries: '同系列已错过 {count} 项',
-    todoAgendaLoadMore: '显示后续 14 天',
     todoRecurringInstance: '重复实例',
     todoMatrixQuadrants: {
       importantUrgent: '重要且紧急',

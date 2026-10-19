@@ -99,59 +99,101 @@
     </section>
 
     <div v-else class="todo-agenda">
-      <article v-for="entry in agendaItems" :key="entry.item.id" class="todo-agenda-item">
-        <time :datetime="itemDateTime(entry.item) || undefined">
-          <strong>{{ entry.day }}</strong>
-          <span>{{ entry.time }}</span>
-        </time>
-        <MobileSwipeDelete
-          class="todo-agenda-card-swipe"
-          :enabled="swipeEnabled"
-          :open="openSwipeId === entry.item.id"
-          :disabled="disabled"
-          :loading="deletingId === entry.item.id"
-          :label="t('inbox.deleteTodo')"
-          allow-interactive-start
-          @swipe-start="beginSwipe(entry.item.id)"
-          @update:open="updateSwipe(entry.item.id, $event)"
-          @delete="deleteFromSwipe(entry.item)"
-        >
-          <BButton class="todo-agenda-card" :class="todoStateClass(entry.item)" @click="$emit('preview', entry.item)">
-            <span class="todo-agenda-card__priority" :class="`is-priority-${entry.item.priority}`"></span>
-            <span class="todo-agenda-card__content">
-              <strong>{{ entry.item.title }}</strong>
-              <span class="todo-agenda-card__meta">
-                <small v-if="entry.seriesId" class="is-series">
-                  <SvgIcon :src="icon.todo.repeat" size="12" aria-hidden="true" />
-                  {{
-                    entry.missedCount
-                      ? t('inbox.todoAgendaMissedSeries', { count: entry.missedCount })
-                      : t('inbox.todoRecurringInstance')
-                  }}
-                </small>
-                <small :class="todoStateClass(entry.item)">{{ todoStateLabel(entry.item) }}</small>
-                <small>{{ t(`inbox.todoPriority${entry.item.priority}`) }}</small>
-              </span>
-            </span>
+      <section v-for="group in agendaGroups" :key="group.key" class="todo-agenda-group" :data-agenda-group="group.key">
+        <header class="todo-agenda-group__header">
+          <BButton
+            v-if="group.key === 'completed'"
+            type="text"
+            class="todo-agenda-group__history"
+            :aria-expanded="completedHistoryOpen"
+            @click="completedHistoryOpen = !completedHistoryOpen"
+          >
+            <SvgIcon
+              :src="icon.pagination.chevron"
+              size="12"
+              :class="{ 'is-collapsed': !completedHistoryOpen }"
+              aria-hidden="true"
+            />
+            {{ t('todoWorkspace.agendaGroups.completed') }}
+            <span v-if="!hasMore">{{ group.instanceCount }}</span>
           </BButton>
-          <TodoSubitems
-            :item="entry.item"
-            :disabled="disabled"
-            @update-checklist="$emit('update-checklist', entry.item, $event)"
-            @edit="$emit('edit', entry.item, $event)"
-          />
-        </MobileSwipeDelete>
-      </article>
-      <BButton v-if="agendaHasMore" class="todo-agenda__more" @click="agendaHorizonDays += 14">
-        {{ t('inbox.todoAgendaLoadMore') }}
-      </BButton>
+          <h3 v-else>
+            <span class="todo-agenda-group__dot" :class="`is-${group.key}`" aria-hidden="true"></span>
+            {{ t(`todoWorkspace.agendaGroups.${group.key}`) }}
+            <span v-if="!hasMore">{{ group.instanceCount }}</span>
+          </h3>
+        </header>
+        <div v-if="group.key !== 'completed' || completedHistoryOpen" class="todo-agenda-group__items">
+          <article v-for="entry in group.entries" :key="entry.item.id" class="todo-agenda-item">
+            <time
+              :datetime="
+                (entry.item.status === 'completed' ? todoAgendaAt(entry.item) : itemDateTime(entry.item)) || undefined
+              "
+            >
+              <strong>{{ entry.day }}</strong>
+              <span>{{ entry.time }}</span>
+            </time>
+            <MobileSwipeDelete
+              class="todo-agenda-card-swipe"
+              :enabled="swipeEnabled"
+              :open="openSwipeId === entry.item.id"
+              :disabled="disabled"
+              :loading="deletingId === entry.item.id"
+              :label="t('inbox.deleteTodo')"
+              allow-interactive-start
+              @swipe-start="beginSwipe(entry.item.id)"
+              @update:open="updateSwipe(entry.item.id, $event)"
+              @delete="deleteFromSwipe(entry.item)"
+            >
+              <BButton
+                class="todo-agenda-card"
+                :class="todoStateClass(entry.item)"
+                @click="$emit('preview', entry.item)"
+              >
+                <span class="todo-agenda-card__priority" :class="`is-priority-${entry.item.priority}`"></span>
+                <span class="todo-agenda-card__content">
+                  <strong>{{ entry.item.title }}</strong>
+                  <span class="todo-agenda-card__meta">
+                    <small v-if="entry.seriesId" class="is-series">
+                      <SvgIcon :src="icon.todo.repeat" size="12" aria-hidden="true" />
+                      {{
+                        entry.missedCount
+                          ? t('inbox.todoAgendaMissedSeries', { count: entry.missedCount })
+                          : t('inbox.todoRecurringInstance')
+                      }}
+                    </small>
+                    <small :class="todoStateClass(entry.item)">{{ todoStateLabel(entry.item) }}</small>
+                    <small>{{ t(`inbox.todoPriority${entry.item.priority}`) }}</small>
+                    <TodoTimeText
+                      v-if="entry.item.status === 'pending' && entry.item.startAt && entry.item.dueAt"
+                      class="todo-agenda-card__deadline"
+                      :class="{ 'is-overdue': isOverdue(entry.item) }"
+                      :text="deadlineLabel(entry.item)"
+                    />
+                  </span>
+                  <TodoReminderText :item="entry.item" class="todo-agenda-card__reminder" />
+                </span>
+              </BButton>
+              <TodoSubitems
+                :item="entry.item"
+                :disabled="disabled"
+                @update-checklist="$emit('update-checklist', entry.item, $event)"
+                @edit="$emit('edit', entry.item, $event)"
+              />
+            </MobileSwipeDelete>
+          </article>
+        </div>
+      </section>
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
   import TodoSubitems from './TodoSubitems.vue';
-  import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+  import TodoReminderText from './TodoReminderText.vue';
+  import TodoTimeText from './TodoTimeText.vue';
+  import { computed, ref, watch } from 'vue';
+  import { useTodoClock } from '@/composables/useTodoClock';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import MobileSwipeDelete from '@/components/mobile/MobileSwipeDelete.vue';
@@ -159,13 +201,14 @@
   import icon from '@/config/icon';
   import { bookmarkStore } from '@/store';
   import type { TodoItem } from '@/api/todoApi';
-  import { isTodoOverdue, normalizeTodoDateOnly, todoScheduleAt } from '@/utils/todoPlanning';
-  import { buildTodoAgendaEntries } from '@/utils/todoSeriesGrouping';
+  import { formatTodoDateTime, isTodoOverdue, normalizeTodoDateOnly, todoScheduleAt } from '@/utils/todoPlanning';
+  import { buildTodoAgendaGroups, todoAgendaAt } from '@/utils/todoSeriesGrouping';
 
   const props = defineProps<{
     items: TodoItem[];
     view: 'agenda' | 'calendar';
     busy?: boolean;
+    hasMore?: boolean;
     swipeEnabled?: boolean;
     disabled?: boolean;
     deletingId?: string;
@@ -182,9 +225,9 @@
   const visibleMonth = ref(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const selectedDayKey = ref('');
   const openSwipeId = ref('');
-  const agendaHorizonDays = ref(14);
-  const scheduleNow = ref(new Date());
-  let midnightTimer = 0;
+  const completedHistoryOpen = ref(false);
+  const { now, today } = useTodoClock();
+  const scheduleNow = computed(() => new Date(now.value));
 
   watch(
     () => [props.disabled, props.items.map((item) => item.id).join(',')],
@@ -194,7 +237,10 @@
   );
   watch(
     () => props.view,
-    () => (openSwipeId.value = ''),
+    () => {
+      openSwipeId.value = '';
+      completedHistoryOpen.value = false;
+    },
   );
 
   const parseDate = (value: string) => new Date(String(value).replace(' ', 'T'));
@@ -227,7 +273,7 @@
     const first = visibleMonth.value;
     const mondayOffset = (first.getDay() + 6) % 7;
     const start = new Date(first.getFullYear(), first.getMonth(), 1 - mondayOffset);
-    const todayKey = dateKey(scheduleNow.value);
+    const todayKey = dateKey(today.value);
     return Array.from({ length: 42 }, (_, index) => {
       const date = new Date(start.getFullYear(), start.getMonth(), start.getDate() + index);
       const key = dateKey(date);
@@ -253,31 +299,33 @@
     },
     { immediate: true },
   );
-  const agendaCutoff = computed(() => {
-    const now = scheduleNow.value;
-    return new Date(now.getFullYear(), now.getMonth(), now.getDate() + agendaHorizonDays.value + 1).getTime();
-  });
-  const agendaProjection = computed(() => buildTodoAgendaEntries(scheduledItems.value, scheduleNow.value));
-  const agendaHasMore = computed(() =>
-    agendaProjection.value.some((entry) => {
-      const value = itemScheduleAt(entry.item);
-      return value && parseDate(value).getTime() >= agendaCutoff.value;
-    }),
-  );
-  const agendaItems = computed(() =>
-    agendaProjection.value
-      .filter((entry) => {
-        const value = itemScheduleAt(entry.item);
-        return Boolean(value && parseDate(value).getTime() < agendaCutoff.value);
-      })
-      .map((entry) => {
-        const date = parseDate(itemScheduleAt(entry.item) as string);
-        return {
-          ...entry,
-          day: new Intl.DateTimeFormat(locale.value, { month: 'short', day: 'numeric', weekday: 'short' }).format(date),
-          time: scheduleTime(entry.item),
-        };
+  const agendaLabels = computed(() => {
+    const dayFormatter = new Intl.DateTimeFormat(locale.value, { month: 'short', day: 'numeric', weekday: 'short' });
+    const timeFormatter = new Intl.DateTimeFormat(locale.value, { hour: '2-digit', minute: '2-digit' });
+    return new Map(
+      scheduledItems.value.map((item) => {
+        const date = parseDate(todoAgendaAt(item));
+        const time = timeFormatter.format(date);
+        return [
+          item.id,
+          {
+            day: dayFormatter.format(date),
+            time:
+              item.status === 'completed'
+                ? t('todoWorkspace.completedTime', { time })
+                : !item.startAt && !item.dueAt
+                  ? t('inbox.todoAllDay')
+                  : t(item.startAt ? 'inbox.todoStarts' : 'inbox.todoDue', { time }),
+          },
+        ];
       }),
+    );
+  });
+  const agendaGroups = computed(() =>
+    buildTodoAgendaGroups(scheduledItems.value, scheduleNow.value).map((group) => ({
+      ...group,
+      entries: group.entries.map((entry) => ({ ...entry, ...agendaLabels.value.get(entry.item.id)! })),
+    })),
   );
 
   const selectedDay = computed(() => calendarDays.value.find((day) => day.key === selectedDayKey.value) || null);
@@ -363,16 +411,15 @@
     visibleMonth.value = new Date(visibleMonth.value.getFullYear(), visibleMonth.value.getMonth() + step, 1);
     selectedDayKey.value = '';
   }
-  function scheduleMidnightRefresh() {
-    const now = new Date();
-    const nextDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 100);
-    midnightTimer = window.setTimeout(() => {
-      scheduleNow.value = new Date();
-      scheduleMidnightRefresh();
-    }, nextDay.getTime() - now.getTime());
+  function deadlineLabel(item: TodoItem) {
+    const time = formatTodoDateTime(item.dueAt || '', locale.value, {
+      relative: true,
+      includeYear: false,
+      now: today.value,
+      relativeLabels: { today: t('inbox.todoToday'), tomorrow: t('inbox.todoTomorrow') },
+    });
+    return t(isOverdue(item) ? 'inbox.todoOverdue' : 'inbox.todoDue', { time });
   }
-  onMounted(scheduleMidnightRefresh);
-  onBeforeUnmount(() => window.clearTimeout(midnightTimer));
 </script>
 
 <style scoped lang="less">
@@ -664,6 +711,54 @@
     padding: var(--ui-space-8, 8px) var(--ui-space-2, 2px) var(--ui-space-24, 24px);
     box-sizing: border-box;
   }
+  .todo-agenda-group {
+    min-width: 0;
+  }
+  .todo-agenda-group__items {
+    display: grid;
+    gap: var(--ui-space-9, 9px);
+  }
+  .todo-agenda-group__header {
+    margin: var(--ui-space-8, 8px) 0 var(--ui-space-10, 10px);
+  }
+  .todo-agenda-group__header h3,
+  .todo-agenda-group__history.b_btn {
+    display: flex;
+    align-items: center;
+    gap: var(--ui-space-8, 8px);
+    height: auto;
+    margin: 0;
+    padding: 0;
+    font-size: var(--ui-font-13, 13px);
+    font-weight: 600;
+    line-height: 1.5;
+  }
+  .todo-agenda-group__header h3 {
+    color: var(--text-color);
+  }
+  .todo-agenda-group__header h3 > span:last-child,
+  .todo-agenda-group__history.b_btn {
+    color: var(--desc-color);
+  }
+  .todo-agenda-group__history .is-collapsed {
+    transform: rotate(-90deg);
+  }
+  .todo-agenda-group__history.b_btn {
+    min-height: var(--ui-control-32, 32px);
+  }
+  .todo-agenda-group__dot {
+    flex: 0 0 auto;
+    width: var(--ui-layout-8, 8px);
+    height: var(--ui-layout-8, 8px);
+    border-radius: 50%;
+    background: var(--desc-color);
+  }
+  .todo-agenda-group__dot.is-overdue {
+    background: var(--danger-color);
+  }
+  .todo-agenda-group__dot.is-today {
+    background: var(--primary-color);
+  }
   .todo-agenda-item {
     display: grid;
     grid-template-columns: var(--ui-layout-110, 110px) minmax(0, 1fr);
@@ -710,17 +805,18 @@
   }
   .todo-agenda-card__meta {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--ui-space-10, 10px);
   }
-  .todo-agenda-card__meta small {
+  .todo-agenda-card__meta small,
+  .todo-agenda-card__deadline,
+  .todo-agenda-card__reminder {
     color: var(--desc-color);
     font-size: var(--ui-font-10, 10px);
   }
-  .todo-agenda__more {
-    justify-self: center;
-    min-width: var(--ui-layout-180, 180px);
-    margin-top: var(--ui-space-5, 5px);
+  .todo-agenda-card__deadline.is-overdue {
+    color: var(--danger-color);
   }
   .todo-schedule-empty {
     margin: 0 var(--ui-space-18, 18px) var(--ui-space-10, 10px);

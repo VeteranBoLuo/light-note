@@ -119,6 +119,8 @@ export default {
     nextReminder: 'Next reminder',
     reminderLabel: 'Reminder',
     reminderState: { paused: 'Paused', past: 'Time passed', unscheduled: 'No upcoming reminder' },
+    agendaGroups: { overdue: 'Overdue', today: 'Today', upcoming: 'Upcoming', completed: 'Completed history' },
+    completedTime: 'Completed {time}',
     moreTags: 'View {count} more tags',
     quick: 'Quick access',
     subtitle: 'Focus on what matters and make time for every important task.',
@@ -5373,7 +5375,6 @@ export default {
     todoMatrixSeriesOpen: 'View series details for “{title}”, {count} items',
     todoMatrixSeriesSummary: 'Today {today} · Missed {missed} · Later {future}',
     todoAgendaMissedSeries: '{count} missed in this series',
-    todoAgendaLoadMore: 'Show the next 14 days',
     todoRecurringInstance: 'Recurring occurrence',
     todoMatrixQuadrants: {
       importantUrgent: 'Important and urgent',

@@ -1,10 +1,12 @@
 import type { TodoItem, TodoSort } from '@/api/todoApi';
 import {
   compareTodoOccurrences,
+  isTodoOverdue,
   normalizeTodoDateOnly,
   parseTodoDate,
   todoActionAt,
   todoGroupKey,
+  todoScheduleAt,
   type TodoGroupKey,
 } from '@/utils/todoPlanning';
 
@@ -33,6 +35,27 @@ export interface TodoAgendaEntry {
   item: TodoItem;
   seriesId: string | null;
   missedCount: number;
+}
+
+export type TodoAgendaGroupKey = 'overdue' | 'today' | 'upcoming' | 'completed';
+export interface TodoAgendaGroup {
+  key: TodoAgendaGroupKey;
+  entries: TodoAgendaEntry[];
+  instanceCount: number;
+}
+
+/** 议程按左侧展示的计划／完成时间排序，提醒不改变时间线位置。 */
+export function todoAgendaAt(item: TodoItem) {
+  return item.status === 'completed'
+    ? item.completedAt || item.updatedAt || todoScheduleAt(item)
+    : todoScheduleAt(item);
+}
+
+function compareAgendaItems(left: TodoItem, right: TodoItem) {
+  return (
+    todoTime(todoAgendaAt(left), Number.POSITIVE_INFINITY) - todoTime(todoAgendaAt(right), Number.POSITIVE_INFINITY) ||
+    stableTodoOrder(left, right)
+  );
 }
 
 function completedTime(item: TodoItem) {
@@ -200,7 +223,7 @@ export function buildTodoAgendaEntries(items: readonly TodoItem[], now = new Dat
   const result: TodoAgendaEntry[] = [];
   for (const item of items) {
     const day = occurrenceDay(item);
-    if (isScheduledSeries(item) && item.status === 'pending' && day && day < today) {
+    if (isScheduledSeries(item) && isTodoOverdue(item, now) && day && day < today) {
       const seriesId = String(item.seriesId);
       const current = missedSeries.get(seriesId) || [];
       current.push(item);
@@ -210,10 +233,42 @@ export function buildTodoAgendaEntries(items: readonly TodoItem[], now = new Dat
     result.push({ item, seriesId: isScheduledSeries(item) ? String(item.seriesId) : null, missedCount: 0 });
   }
   for (const [seriesId, missed] of missedSeries) {
-    const ordered = [...missed].sort((left, right) => compareTodoOccurrences(right, left));
+    const ordered = [...missed].sort((left, right) => compareAgendaItems(right, left));
     result.push({ item: ordered[0], seriesId, missedCount: ordered.length });
   }
-  return result.sort((left, right) => compareTodoOccurrences(left.item, right.item));
+  return result.sort((left, right) => compareAgendaItems(left.item, right.item));
+}
+
+export function buildTodoAgendaGroups(items: readonly TodoItem[], now = new Date()): TodoAgendaGroup[] {
+  const today = normalizeTodoDateOnly(now);
+  const groups: TodoAgendaGroup[] = ['overdue', 'today', 'upcoming', 'completed'].map((key) => ({
+    key: key as TodoAgendaGroupKey,
+    entries: [],
+    instanceCount: 0,
+  }));
+  for (const entry of buildTodoAgendaEntries(items, now)) {
+    const item = entry.item;
+    const at = todoAgendaAt(item);
+    if (!at || !Number.isFinite(parseTodoDate(at).getTime())) continue;
+    const key =
+      item.status === 'completed'
+        ? 'completed'
+        : isTodoOverdue(item, now)
+          ? 'overdue'
+          : normalizeTodoDateOnly(at) <= today
+            ? 'today'
+            : 'upcoming';
+    const group = groups.find((group) => group.key === key)!;
+    group.entries.push(entry);
+    group.instanceCount += entry.missedCount || 1;
+  }
+  const completed = groups.find((group) => group.key === 'completed')!;
+  completed.entries.sort(
+    (left, right) =>
+      todoTime(todoAgendaAt(right.item), 0) - todoTime(todoAgendaAt(left.item), 0) ||
+      stableTodoOrder(left.item, right.item),
+  );
+  return groups.filter((group) => group.entries.length);
 }
 
 /** @deprecated 新代码应使用 buildTodoMatrixEntries()，避免丢失系列标识。 */

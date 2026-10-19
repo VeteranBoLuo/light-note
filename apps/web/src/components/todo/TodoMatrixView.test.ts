@@ -86,10 +86,50 @@ function mountMatrix(options: { mobile?: boolean; items?: TodoItem[]; loading?: 
 afterEach(() => {
   cleanup?.();
   cleanup = undefined;
+  vi.useRealTimers();
   document.querySelectorAll('.b-action-menu-panel').forEach((panel) => panel.remove());
 });
 
 describe('TodoMatrixView', () => {
+  it('页面持续打开时，截止到点同步更新逾期文字和标识', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-19T09:00:00'));
+    const { host } = mountMatrix({ items: [todo('deadline', '即将到期', 1, '2026-10-19 09:01:00')] });
+    expect(host.querySelector('.todo-matrix-card__due')?.textContent).not.toContain('已逾期');
+    await vi.advanceTimersByTimeAsync(61_000);
+    await nextTick();
+    const due = host.querySelector('.todo-matrix-card__due')!;
+    expect(due.textContent).toContain('已逾期');
+    expect(due.classList.contains('is-overdue')).toBe(true);
+  });
+
+  it('提醒展示实际 Job 时间及暂停、已过状态，已完成不展示提醒', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-19T09:00:00'));
+    const items = ['next', 'paused', 'past', 'completed', 'unscheduled'].map((id) => ({
+      ...todo(id, id, 1, null),
+      status: id === 'completed' ? ('completed' as const) : ('pending' as const),
+      reminder: {
+        version: 1 as const,
+        mode: 'once' as const,
+        channels: ['in_app' as const],
+        once: { type: 'fixed_at' as const, fixedAt: '2026-10-19 08:00:00' },
+        nextAt: id === 'unscheduled' ? null : id === 'past' ? '2026-10-19 08:00:00' : '2026-10-19 11:30:00',
+        paused: id === 'paused',
+      },
+    }));
+    const { host } = mountMatrix({ items });
+    const card = (title: string) =>
+      [...host.querySelectorAll('.todo-matrix-card')].find(
+        (entry) => entry.querySelector('.todo-matrix-card__title')?.textContent?.trim() === title,
+      )!;
+    expect(card('next').querySelector('.todo-reminder-text')?.textContent).toContain('今天 11:30');
+    expect(card('paused').querySelector('.todo-reminder-text')?.textContent).toContain('已暂停');
+    expect(card('past').querySelector('.todo-reminder-text')?.textContent).toContain('时间已过');
+    expect(card('unscheduled').querySelector('.todo-reminder-text')?.textContent).toContain('时间已过');
+    expect(card('completed').querySelector('.todo-reminder-text')).toBeNull();
+  });
+
   it('优先级菜单回显当前值，切换只更新对应实例并关闭菜单', async () => {
     const { host, items, onUpdatePriority, onPreview } = mountMatrix();
     host.querySelector<HTMLButtonElement>('.todo-matrix-card__more')!.click();
@@ -217,14 +257,17 @@ describe('TodoMatrixView', () => {
   });
 });
 
-
 describe('四象限首次加载反馈', () => {
   it.each([false, true])('mobile=%s 由外层统一显示加载，隐藏空提示及未确认计数', (mobile) => {
     const { host } = mountMatrix({ mobile, items: [], loading: true });
     expect(host.querySelector('[role="status"]')).toBeNull();
     expect(host.querySelectorAll('.todo-matrix__empty').length).toBeGreaterThan(0);
-    expect([...host.querySelectorAll('.todo-matrix__empty')].every((node) => node.getAttribute('aria-hidden') === 'true')).toBe(true);
-    expect([...host.querySelectorAll('.todo-matrix__count')].every((node) => node.textContent?.trim() === '—')).toBe(true);
+    expect(
+      [...host.querySelectorAll('.todo-matrix__empty')].every((node) => node.getAttribute('aria-hidden') === 'true'),
+    ).toBe(true);
+    expect([...host.querySelectorAll('.todo-matrix__count')].every((node) => node.textContent?.trim() === '—')).toBe(
+      true,
+    );
     expect(host.querySelector('.todo-matrix__grid')?.getAttribute('aria-busy')).toBe('true');
   });
 });

@@ -1201,6 +1201,17 @@ function todoOrderSql(status, sort) {
   return SORT_SQL[sort];
 }
 
+// 与议程左侧的计划／完成时间一致，先在完整结果中排序，再分页。
+const AGENDA_AT_SQL = 'COALESCE(start_at, due_at, CAST(occurrence_date AS DATETIME))';
+const AGENDA_ORDER_SQL = `CASE
+  WHEN status = 'completed' THEN 3
+  WHEN (due_at IS NOT NULL AND due_at < NOW())
+    OR (due_at IS NULL AND occurrence_date IS NOT NULL AND occurrence_date < CURDATE()) THEN 0
+  WHEN DATE(${AGENDA_AT_SQL}) <= CURDATE() THEN 1 ELSE 2 END,
+  CASE WHEN status = 'completed' THEN COALESCE(completed_at, update_time) END DESC,
+  CASE WHEN status = 'pending' THEN ${AGENDA_AT_SQL} END ASC,
+  COALESCE(occurrence_no, 9007199254740991) ASC, id ASC`;
+
 async function loadTodoReminderMap(db, items, userId, view, matchedReminderAt = null) {
   if (!items.length) return new Map();
   const placeholders = items.map(() => '?').join(',');
@@ -1256,6 +1267,8 @@ export async function listTodoPage(db, userId, input = {}) {
   const organization = todoOrganizationFilters(input);
   where.push(...organization.where);
   params.push(...organization.params);
+  const agenda = input.organization && input.presentation === 'agenda';
+  if (agenda) where.push('(start_at IS NOT NULL OR due_at IS NOT NULL OR occurrence_date IS NOT NULL)');
   if (ids !== null) {
     if (ids.length) {
       where.push('todo_items.id IN (?)');
@@ -1304,6 +1317,7 @@ export async function listTodoPage(db, userId, input = {}) {
             create_time AS createdAt, update_time AS updatedAt, ${ACTION_AT_SQL} AS actionAt`;
   const groupedOrder =
     input.organization &&
+    !agenda &&
     sort === 'smart' &&
     status !== 'completed' &&
     input.listId === undefined &&
@@ -1312,7 +1326,7 @@ export async function listTodoPage(db, userId, input = {}) {
       : '';
   const pageSql = `SELECT ${fields}
      FROM todo_items WHERE ${where.join(' AND ')}
-     ORDER BY ${groupedOrder}${todoOrderSql(status, sort)}${paginated ? ' LIMIT ? OFFSET ?' : ''}`;
+     ORDER BY ${agenda ? AGENDA_ORDER_SQL : groupedOrder + todoOrderSql(status, sort)}${paginated ? ' LIMIT ? OFFSET ?' : ''}`;
   const pageParams = paginated ? [...params, limit + 1, offset] : params;
   const [[rows], countResult] = await Promise.all([
     db.query(pageSql, pageParams),

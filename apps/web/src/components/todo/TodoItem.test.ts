@@ -274,9 +274,18 @@ describe('TodoItem card preview', () => {
     );
     expect(host.querySelector('.todo-item__next-reminder')?.textContent).toContain('今天 11:30');
     expect(host.querySelector('.todo-item__reminder-state')).toBeNull();
-    expect(host.querySelector('.todo-item__meta')?.textContent).toBe('');
+    expect(host.querySelector('.todo-item__meta')?.textContent).toBe('—');
     expect(host.querySelector('.todo-reminder-summary')).toBeNull();
     expect(host.querySelector('.todo-item')?.classList.contains('is-overdue')).toBe(false);
+  });
+
+  it('工作区截止列不展示开始时间，仅有开始或实例日期时显示无截止', () => {
+    const { host } = mountTodoItem(
+      { ...todo, startAt: '2099-10-13 08:00:00', occurrenceDate: '2099-10-13' },
+      { workspace: true },
+    );
+    expect(host.querySelector('.todo-start-label')).toBeNull();
+    expect(host.querySelector('.todo-item__meta')?.textContent).toBe('—');
   });
 
   it('提醒与截止保留各自语义，同时位于同一个时间区', () => {

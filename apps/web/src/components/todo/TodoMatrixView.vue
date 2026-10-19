@@ -119,10 +119,14 @@
                     <span>{{ seriesSummary(item) }}</span>
                   </span>
                 </BButton>
-                <span v-if="dueLabel(item)" class="todo-matrix-card__due" :class="{ 'is-overdue': isOverdue(item) }">
-                  {{ dueLabel(item) }}
-                </span>
+                <TodoTimeText
+                  v-if="dueLabel(item)"
+                  class="todo-matrix-card__due"
+                  :class="{ 'is-overdue': isOverdue(item) }"
+                  :text="dueLabel(item)"
+                />
               </span>
+              <TodoReminderText :item="item" class="todo-matrix-card__reminder" />
             </div>
 
             <template #trailing>
@@ -218,7 +222,8 @@
 
 <script setup lang="ts">
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
-  import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+  import { computed, ref, watch } from 'vue';
+  import { useTodoClock } from '@/composables/useTodoClock';
   import { useI18n } from 'vue-i18n';
   import type { TodoChecklistItem, TodoItem, TodoPriority, TodoSeriesAction } from '@/api/todoApi';
   import BActionMenu from '@/components/base/BasicComponents/BActionMenu.vue';
@@ -232,6 +237,8 @@
   import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
   import TodoSeriesDrawer from '@/components/todo/TodoSeriesDrawer.vue';
   import TodoPriorityMenu from './TodoPriorityMenu.vue';
+  import TodoReminderText from './TodoReminderText.vue';
+  import TodoTimeText from './TodoTimeText.vue';
   import useUserStore from '@/store/useUser';
   import icon from '@/config/icon';
   import {
@@ -269,15 +276,15 @@
     'series-action': [item: TodoItem, action: TodoSeriesAction];
   }>();
   const { t, locale } = useI18n();
-  const matrixNow = ref(new Date());
-  let midnightTimer = 0;
+  const { now, today } = useTodoClock();
+  const matrixNow = computed(() => new Date(now.value));
 
-  const matrixEntries = computed(() => buildTodoMatrixEntries(props.items, matrixNow.value));
+  const matrixEntries = computed(() => buildTodoMatrixEntries(props.items, today.value));
   const matrixEntryById = computed(() => new Map(matrixEntries.value.map((entry) => [entry.item.id, entry])));
   const groupedItems = computed(() =>
     groupTodosByMatrix(
       matrixEntries.value.map((entry) => entry.item),
-      matrixNow.value,
+      today.value,
     ),
   );
   const quadrants = computed(() =>
@@ -433,15 +440,6 @@
     mobileActionItem.value = null;
   }
 
-  function scheduleNextDayRefresh() {
-    const now = new Date();
-    const nextDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 100);
-    midnightTimer = window.setTimeout(() => {
-      matrixNow.value = new Date();
-      scheduleNextDayRefresh();
-    }, nextDay.getTime() - now.getTime());
-  }
-
   watch(
     () => props.items.map((item) => item.id),
     (itemIds) => {
@@ -456,9 +454,6 @@
       }
     },
   );
-
-  onMounted(scheduleNextDayRefresh);
-  onBeforeUnmount(() => window.clearTimeout(midnightTimer));
 </script>
 
 <style scoped lang="less">
@@ -661,6 +656,7 @@
     width: 100%;
     min-width: 0;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--ui-space-6, 6px);
     overflow: hidden;
@@ -671,6 +667,10 @@
   .todo-matrix-card__priority {
     flex: 0 0 auto;
     color: var(--desc-color);
+  }
+
+  .todo-matrix-card__reminder {
+    font-size: var(--ui-font-10, 10px);
   }
 
   .todo-matrix-card :deep(.todo-matrix-card__series-trigger) {
@@ -726,9 +726,7 @@
 
   .todo-matrix-card__due {
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    white-space: normal;
   }
 
   .todo-matrix-card__menu {

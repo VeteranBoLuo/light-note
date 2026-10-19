@@ -442,6 +442,27 @@ describe('todoService', () => {
     expect(connection.query.mock.calls[0]).toEqual([expect.not.stringContaining('status = ?'), ['user-4']]);
   });
 
+  it('议程在完整筛选集合按计划时间分组排序后分页，不受提醒和列表分组影响', async () => {
+    connection.query.mockResolvedValue([[]]);
+    await listTodoPage(connection, 'user-4', {
+      organization: true,
+      presentation: 'agenda',
+      status: 'all',
+      limit: 2,
+      includeTotal: false,
+    });
+    const [sql, params] = connection.query.mock.calls[0];
+    const order = sql.slice(sql.lastIndexOf('ORDER BY'));
+    expect(sql).toContain('user_id = ?');
+    expect(sql).toContain('(start_at IS NOT NULL OR due_at IS NOT NULL OR occurrence_date IS NOT NULL)');
+    expect(order).toContain("WHEN status = 'completed' THEN 3");
+    expect(order).toContain('COALESCE(completed_at, update_time) END DESC');
+    expect(order).toContain('COALESCE(start_at, due_at, CAST(occurrence_date AS DATETIME)) END ASC');
+    expect(order).not.toContain('actionAt');
+    expect(order).not.toContain('list_id');
+    expect(params).toEqual(['user-4', 3, 0]);
+  });
+
   it('智能排序统一使用下一次提醒、计划时间与优先级，并稳定格式化实例日期', async () => {
     connection.query.mockResolvedValueOnce([[]]);
 

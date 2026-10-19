@@ -4,6 +4,7 @@ import { createI18n } from 'vue-i18n';
 import { createPinia } from 'pinia';
 import TodoScheduleView from './TodoScheduleView.vue';
 import type { TodoItem } from '@/api/todoApi';
+import zhCN from '@/i18n/locales/zh-CN';
 
 let cleanup: (() => void) | undefined;
 
@@ -24,14 +25,21 @@ const todo: TodoItem = {
   resourceRefs: [],
 };
 
-function mountSchedule(view: 'agenda' | 'calendar', item: TodoItem = todo) {
+function mountSchedule(view: 'agenda' | 'calendar', item: TodoItem | TodoItem[] = todo) {
   const onPreview = vi.fn();
   const onDelete = vi.fn();
   const host = document.createElement('div');
   document.body.append(host);
   const app = createApp({
     setup() {
-      return () => h(TodoScheduleView, { items: [item], view, swipeEnabled: true, onPreview, onDelete });
+      return () =>
+        h(TodoScheduleView, {
+          items: Array.isArray(item) ? item : [item],
+          view,
+          swipeEnabled: true,
+          onPreview,
+          onDelete,
+        });
     },
   });
   app.use(createPinia());
@@ -43,7 +51,9 @@ function mountSchedule(view: 'agenda' | 'calendar', item: TodoItem = todo) {
       fallbackWarn: false,
       messages: {
         'zh-CN': {
+          ...zhCN,
           inbox: {
+            ...zhCN.inbox,
             deleteTodo: '删除',
             todoPending: '未完成',
             todoCompleted: '已完成',
@@ -68,9 +78,76 @@ function mountSchedule(view: 'agenda' | 'calendar', item: TodoItem = todo) {
 afterEach(() => {
   cleanup?.();
   cleanup = undefined;
+  vi.useRealTimers();
 });
 
 describe('TodoScheduleView mobile swipe delete', () => {
+  it('页面持续打开时按实际截止时刻进入逾期待处理，提醒到点更新状态', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-19T09:00:00'));
+    const { host } = mountSchedule('agenda', {
+      ...todo,
+      startAt: '2026-10-19 08:00:00',
+      dueAt: '2026-10-19 09:01:00',
+      reminder: { mode: 'once_per_instance', channels: ['in_app'], nextAt: '2026-10-19 09:01:00' },
+    });
+    expect(host.querySelector('[data-agenda-group="today"]')).not.toBeNull();
+    expect(host.querySelector('.todo-reminder-text__state')).toBeNull();
+    await vi.advanceTimersByTimeAsync(61_000);
+    await nextTick();
+    expect(host.querySelector('[data-agenda-group="overdue"]')).not.toBeNull();
+    expect(host.querySelector('.todo-reminder-text__state')?.textContent).toContain('时间已过');
+  });
+
+  it('完成历史默认折叠，展开后按完成时间倒序，且不展示提醒', async () => {
+    const { host } = mountSchedule('agenda', [
+      { ...todo, id: 'old', title: '较早完成', status: 'completed', completedAt: '2026-08-18 10:00:00' },
+      {
+        ...todo,
+        id: 'new',
+        title: '最近完成',
+        status: 'completed',
+        completedAt: '2026-08-19 10:00:00',
+        reminderAt: '2099-08-20 09:00:00',
+      },
+    ]);
+    await nextTick();
+    expect(host.querySelectorAll('.todo-agenda-card')).toHaveLength(0);
+    const toggle = host.querySelector<HTMLButtonElement>('.todo-agenda-group__history')!;
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    toggle.click();
+    await nextTick();
+    expect([...host.querySelectorAll('.todo-agenda-card strong')].map((entry) => entry.textContent)).toEqual([
+      '最近完成',
+      '较早完成',
+    ]);
+    expect(host.querySelector('.todo-reminder-text')).toBeNull();
+    expect(host.querySelector('.todo-agenda-item time')?.getAttribute('datetime')).toBe('2026-08-19 10:00:00');
+    toggle.click();
+    await nextTick();
+    expect(host.querySelectorAll('.todo-agenda-card')).toHaveLength(0);
+  });
+
+  it('议程展示延期后的实际提醒，并保留十四天以后的安排', async () => {
+    const { host } = mountSchedule('agenda', {
+      ...todo,
+      startAt: '2099-08-20 09:00:00',
+      dueAt: '2099-08-21 18:00:00',
+      reminder: {
+        version: 1,
+        mode: 'once',
+        channels: ['in_app'],
+        once: { type: 'fixed_at', fixedAt: '2099-08-20 08:00:00' },
+        nextAt: '2099-08-20 11:30:00',
+      },
+    });
+    await nextTick();
+    expect(host.querySelector('.todo-agenda-card__reminder')?.textContent).toContain('11:30');
+    expect(host.querySelector('.todo-agenda-card__reminder')?.textContent).not.toContain('08:00');
+    expect(host.querySelector('.todo-agenda-card__deadline')?.textContent).toContain('18:00');
+    expect(host.querySelector('[data-agenda-group="upcoming"]')).not.toBeNull();
+  });
+
   it('议程条目默认发出预览而不是编辑', async () => {
     const { host, onPreview } = mountSchedule('agenda');
     await nextTick();
