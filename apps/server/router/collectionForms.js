@@ -4,6 +4,7 @@ import pool from '../db/index.js';
 import { readIdentity, renewIdentity, sameOrigin } from '../util/collectionForms/identity.js';
 import { createFormsService } from '../util/collectionForms/service.js';
 import { FormError, csvCell } from '@lightnote/shared/collection-forms';
+import { readCollectionAccount } from '../util/collectionForms/account.js';
 
 const service = createFormsService(pool);
 const send = (fn) => async (req, res, next) => {
@@ -46,8 +47,8 @@ publicFormsRouter.get(
   '/:publicId',
   send(async (req, res) => {
     const identity = readIdentity(req);
-    const form = await service.publicForm(req.params.publicId, identity);
-    if (form.submissionPolicy === 'replace') renewIdentity(res, identity);
+    const form = await service.publicForm(req.params.publicId, identity, () => readCollectionAccount(req));
+    if (form.submissionPolicy === 'replace' && !form.definition.membersOnly) renewIdentity(res, identity);
     return form;
   }),
 );
@@ -62,7 +63,7 @@ publicFormsRouter.post(
   }),
   send((req) => {
     if (!sameOrigin(req)) throw new FormError('请从本站表单页面提交', 403);
-    return service.submit(req.params.publicId, req.body, readIdentity(req));
+    return service.submit(req.params.publicId, req.body, readIdentity(req), () => readCollectionAccount(req));
   }),
 );
 publicFormsRouter.use((err, req, res, next) =>
@@ -86,6 +87,13 @@ router.use((req, res, next) => {
     return res.status(403).json({ status: 403, msg: '请使用自己的正式账号管理公开收集', data: null });
   if (['POST', 'PATCH'].includes(req.method) && (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)))
     return res.status(400).json({ status: 400, msg: '请求格式无效', data: null });
+  next();
+});
+router.use(async (req, res, next) => {
+  if (['POST', 'PATCH'].includes(req.method) && (req.body?.definition?.membersOnly || req.body?.definition?.reward)) {
+    const { ensureRootRole } = await import('../router_handle/commonHandle.js');
+    if (!(await ensureRootRole(req, res))) return;
+  }
   next();
 });
 router.get(
@@ -168,6 +176,7 @@ router.get(
       '已处理',
       '垃圾提交',
       '内部备注',
+      ...(form.definition.membersOnly ? ['填写账号 ID', '填写账号昵称', '已奖励积分'] : []),
       ...form.definition.questions.map((q) => q.title),
     ]);
     for await (const row of service.exportRows(req.user.id, req.params.id, req.query)) {
@@ -179,6 +188,7 @@ router.get(
         row.processed,
         row.spam,
         row.private_note,
+        ...(form.definition.membersOnly ? [row.respondent_user_id, row.respondent_alias, row.reward_points] : []),
         ...form.definition.questions.map((q) => {
           const value = row.answers[q.id];
           if (q.type === 'single') return q.options.find((o) => o.id === value)?.label || '';

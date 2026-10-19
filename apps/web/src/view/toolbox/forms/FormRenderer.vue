@@ -57,7 +57,7 @@
     </section>
     <p v-if="error && !fieldError" class="collection-error" role="alert">{{ error }}</p>
     <p v-if="preview" class="collection-muted">{{ t('collectionForms.previewHint') }}</p>
-    <BButton v-else type="primary" :disabled="busy" native-type="submit">{{
+    <BButton v-else type="primary" :loading="busy" native-type="submit">{{
       busy ? t('collectionForms.submitting') : submitLabel || t('collectionForms.submit')
     }}</BButton>
   </form>
@@ -90,6 +90,7 @@
     error = ref(''),
     fieldError = ref(''),
     fields: Record<string, HTMLElement> = {};
+  defineExpose({ getAnswers: (): FormAnswers => JSON.parse(JSON.stringify(answers)) });
   const ratings = [1, 2, 3, 4, 5].map((n) => ({ value: String(n), label: t('collectionForms.score', { score: n }) }));
   function toggle(id: string, option: string, checked: boolean) {
     const values = Array.isArray(answers[id]) ? (answers[id] as string[]) : [];

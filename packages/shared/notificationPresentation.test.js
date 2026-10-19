@@ -34,6 +34,31 @@ describe("shared notification presentation", () => {
       ),
     ).toEqual({ title: "Your feedback got a reply", body: "reply" });
   });
+  it("localizes credited survey rewards from the original award snapshot", () => {
+    const item = {
+      type: "collection_form_reward",
+      title: "fallback",
+      content: "fallback body",
+      meta: JSON.stringify({ formTitle: "轻笺调研", points: 20 }),
+    };
+    expect(notificationPresentation(item)).toEqual({
+      title: "「轻笺调研」奖励已到账",
+      content: "你提交的「轻笺调研」已获得 20 积分，奖励已到账。",
+    });
+    expect(browserNotificationPresentation(item, "en-US")).toEqual({
+      title: "Reward credited for “轻笺调研”",
+      body: "You earned 20 points for submitting “轻笺调研”. The reward is now in your account.",
+    });
+    expect(notificationPresentation({ ...item, meta: { points: -1 } })).toEqual({
+      title: "fallback",
+      content: "fallback body",
+    });
+    const formTitle = "反馈 $& {title} {points}";
+    expect(notificationPresentation({ ...item, meta: { formTitle, points: 20 } })).toEqual({
+      title: `「${formTitle}」奖励已到账`,
+      content: `你提交的「${formTitle}」已获得 20 积分，奖励已到账。`,
+    });
+  });
 });
 
 it("distinguishes existing review, result and conversation notifications", () => {

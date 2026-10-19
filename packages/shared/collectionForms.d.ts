@@ -12,6 +12,8 @@ export interface FormDefinition {
   description: string;
   successMessage: string;
   submissionPolicy?: "multiple" | "replace";
+  membersOnly?: boolean;
+  reward?: { points: number; maxRecipients: number } | null;
   questions: FormQuestion[];
 }
 export type FormAnswers = Record<string, string | number | string[]>;
@@ -21,6 +23,8 @@ export const FORM_LIMITS: Readonly<{
   options: number;
   short: number;
   long: number;
+  rewardPoints: number;
+  rewardRecipients: number;
 }>;
 export class FormError extends Error {
   status: number;

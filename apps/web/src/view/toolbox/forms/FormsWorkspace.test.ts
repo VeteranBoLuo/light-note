@@ -33,7 +33,7 @@ function form(id: string, title: string) {
     definition: { title, description: '', successMessage: '谢谢', questions: [] },
   };
 }
-async function mount() {
+async function mount(role: 'user' | 'root' = 'user') {
   const host = document.createElement('div');
   document.body.append(host);
   const router = createRouter({
@@ -52,6 +52,7 @@ async function mount() {
     }),
   );
   useUserStore(pinia).id = 'owner';
+  useUserStore(pinia).role = role;
   await router.push('/toolbox/forms/old');
   await router.isReady();
   app.component('svg-icon', { render: () => h('span') });
@@ -65,6 +66,30 @@ async function mount() {
 afterEach(() => {
   cleanup.splice(0).forEach((fn) => fn());
   vi.clearAllMocks();
+});
+it('参与与奖励设置只向 root 展示', async () => {
+  state.api.mockImplementation((path: string) =>
+    path === '/old'
+      ? Promise.resolve(form('old', '反馈'))
+      : path?.endsWith('/responses')
+        ? Promise.resolve({ items: [], total: 0 })
+        : Promise.resolve([]),
+  );
+  const ordinary = await mount();
+  await flush();
+  Array.from(ordinary.host.querySelectorAll('button'))
+    .find((b) => b.textContent?.trim() === '表单设置')!
+    .click();
+  await flush();
+  expect(document.querySelector('.collection-participation')).toBeNull();
+  cleanup.pop()!();
+  const root = await mount('root');
+  await flush();
+  Array.from(root.host.querySelectorAll('button'))
+    .find((b) => b.textContent?.trim() === '表单设置')!
+    .click();
+  await flush();
+  expect(document.querySelector('.collection-participation')).not.toBeNull();
 });
 it('切换表单后旧详情不能覆盖新表单，账号变化清空再读取', async () => {
   let resolveOld: (value: unknown) => void;

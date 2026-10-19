@@ -4,7 +4,12 @@ import { createI18n } from 'vue-i18n';
 import { collectionFormsZh } from '@/i18n/locales/collectionForms';
 import PublicForm from './PublicForm.vue';
 import FormRenderer from './FormRenderer.vue';
-vi.mock('vue-router', () => ({ useRoute: () => ({ params: { publicId: 'a'.repeat(48) } }) }));
+const navigation = vi.hoisted(() => ({ push: vi.fn() }));
+vi.mock('vue-router', () => ({
+  useRoute: () => ({ params: { publicId: 'a'.repeat(48) }, fullPath: '/f/' + 'a'.repeat(48) }),
+  useRouter: () => navigation,
+}));
+import { clearAuthNavigationIntent, resolveAuthNavigationIntent } from '@/utils/authNavigationIntent';
 const definition = {
   title: '测试反馈',
   description: '',
@@ -47,6 +52,164 @@ async function submit(host: HTMLElement) {
 afterEach(() => {
   cleanup.splice(0).forEach((fn) => fn());
   vi.unstubAllGlobals();
+  sessionStorage.clear();
+  clearAuthNavigationIntent();
+  navigation.push.mockClear();
+});
+
+it('未登录只能看到参与提示，点击后使用现有安全回跳返回原表单', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        data: {
+          status: 'collecting',
+          definition: { ...definition, membersOnly: true },
+          submissionPolicy: 'replace',
+          mySubmission: null,
+          requiresLogin: true,
+          account: null,
+          reward: { points: 20, received: false, remaining: 10 },
+        },
+      }),
+    })),
+  );
+  const host = mount(PublicForm);
+  await flush();
+  expect(host.querySelector('form')).toBeNull();
+  expect(host.textContent).toContain('首次成功提交可得 20 积分');
+  expect(host.textContent).toContain('回答将关联');
+  host.querySelector('button')!.click();
+  expect(navigation.push).toHaveBeenCalledWith('/login');
+  expect(resolveAuthNavigationIntent()).toBe('/f/' + 'a'.repeat(48));
+});
+
+it('必填项提交携带当前账号，按服务端到账结果显示奖励', async () => {
+  const calls: any[] = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (_url, options) => {
+      calls.push(options);
+      return {
+        ok: true,
+        json: async () => ({
+          data:
+            options.method === 'GET'
+              ? {
+                  status: 'collecting',
+                  definition: { ...definition, membersOnly: true },
+                  submissionPolicy: 'replace',
+                  mySubmission: null,
+                  requiresLogin: false,
+                  account: { id: 'member', alias: '小轻' },
+                  reward: { points: 20, received: false, remaining: 10 },
+                }
+              : { receipt: 'r', outcome: 'created', reward: { points: 20, received: true } },
+        }),
+      };
+    }),
+  );
+  const host = mount(PublicForm);
+  await flush();
+  expect(host.textContent).toContain('当前填写账号：小轻');
+  await submit(host);
+  expect(calls.filter((c) => c.method === 'POST')).toHaveLength(0);
+  await fill(host, '朋友推荐');
+  await submit(host);
+  expect(JSON.parse(calls.at(-1).body)).toMatchObject({ expectedAccountId: 'member', answers: { q: '朋友推荐' } });
+  expect(host.textContent).toContain('20 积分已到账');
+  expect(host.textContent).toContain('每个账号仅奖励一次');
+});
+
+it('会话失效后暂存最新输入，登录返回只恢复同一账号的草稿', async () => {
+  const fetcher = vi.fn(async (_url, options) =>
+    options.method === 'GET'
+      ? {
+          ok: true,
+          json: async () => ({
+            data: {
+              status: 'collecting',
+              definition: { ...definition, membersOnly: true },
+              submissionPolicy: 'replace',
+              mySubmission: null,
+              requiresLogin: false,
+              account: { id: 'member', alias: '小轻' },
+            },
+          }),
+        }
+      : { ok: false, status: 401, json: async () => ({ msg: '请重新登录', data: {} }) },
+  );
+  vi.stubGlobal('fetch', fetcher);
+  const host = mount(PublicForm);
+  await flush();
+  await fill(host, '首次输入');
+  await submit(host);
+  await fill(host, '登录前最新输入');
+  Array.from(host.querySelectorAll('button'))
+    .find((b) => b.textContent?.includes('重新登录'))!
+    .click();
+  cleanup.pop()!();
+  const restored = mount(PublicForm);
+  await flush();
+  expect(restored.querySelector('input')!.value).toBe('登录前最新输入');
+  const key = 'collection-login-draft:' + 'a'.repeat(48);
+  sessionStorage.setItem(
+    key,
+    JSON.stringify({ accountId: 'another', at: Date.now(), answers: { q: '其他账号的答案' } }),
+  );
+  cleanup.pop()!();
+  const isolated = mount(PublicForm);
+  await flush();
+  expect(isolated.querySelector('input')!.value).toBe('');
+  expect(sessionStorage.getItem(key)).toBeNull();
+});
+
+it('账号切换清除旧账号答案并提供重新加载；名额用尽显示暂停', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (_url, options) =>
+      options.method === 'GET'
+        ? {
+            ok: true,
+            json: async () => ({
+              data: {
+                status: 'collecting',
+                definition: { ...definition, membersOnly: true },
+                submissionPolicy: 'replace',
+                mySubmission: null,
+                requiresLogin: false,
+                account: { id: 'member', alias: '小轻' },
+              },
+            }),
+          }
+        : { ok: false, status: 409, json: async () => ({ msg: '当前登录账号已变化', data: { field: 'account' } }) },
+    ),
+  );
+  const host = mount(PublicForm);
+  await flush();
+  await fill(host, '保留的答案');
+  await submit(host);
+  expect(host.querySelector('input')).toBeNull();
+  expect(host.textContent).toContain('重新加载');
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        data: {
+          status: 'paused',
+          definition,
+          submissionPolicy: 'replace',
+          mySubmission: null,
+          reward: { points: 20, received: false, remaining: 0 },
+        },
+      }),
+    })),
+  );
+  const paused = mount(PublicForm);
+  await flush();
+  expect(paused.textContent).toContain('奖励名额已用尽');
 });
 describe('独立填写页', () => {
   it('失败保留输入和幂等键；再次填写产生新请求键', async () => {

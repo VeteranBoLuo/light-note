@@ -78,7 +78,8 @@ const POINTS_GRANT_OPERATIONS_TABLE_SQL = `
     PRIMARY KEY (id),
     UNIQUE KEY uk_points_grant_user_request (user_id, request_id),
     KEY idx_points_grant_status_time (status, create_time),
-    KEY idx_points_grant_type_time (operation_type, create_time)
+    KEY idx_points_grant_type_time (operation_type, create_time),
+    KEY idx_points_grant_request_status (request_id, status)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='非消费积分发放幂等收据'
 `;
 
@@ -164,6 +165,11 @@ async function indexMissing(table, indexName) {
 }
 
 async function ensureC5ColumnsAndIndexes() {
+  if (await indexMissing('points_grant_operations', 'idx_points_grant_request_status')) {
+    await pool.query(
+      'ALTER TABLE points_grant_operations ADD INDEX idx_points_grant_request_status (request_id, status)',
+    );
+  }
   const achievementColumns = [
     ['reward_points_snapshot', 'INT DEFAULT NULL AFTER claimed_at'],
     ['reward_frame_id_snapshot', 'VARCHAR(64) DEFAULT NULL AFTER reward_points_snapshot'],

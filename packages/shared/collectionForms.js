@@ -13,6 +13,8 @@ export const FORM_LIMITS = Object.freeze({
   options: 30,
   short: 500,
   long: 5000,
+  rewardPoints: 10000,
+  rewardRecipients: 5000,
 });
 export class FormError extends Error {
   constructor(message, status = 400, field = "") {
@@ -41,6 +43,27 @@ export function validateDefinition(input) {
     !["multiple", "replace"].includes(input.submissionPolicy)
   )
     fail("重复提交规则无效");
+  if (input.membersOnly !== undefined && typeof input.membersOnly !== "boolean")
+    fail("填写范围无效");
+  let reward = null;
+  if (input.reward != null) {
+    const r = input.reward;
+    if (
+      typeof r !== "object" ||
+      Array.isArray(r) ||
+      Object.keys(r).some(
+        (key) => !["points", "maxRecipients"].includes(key),
+      ) ||
+      !Number.isInteger(r.points) ||
+      r.points < 1 ||
+      r.points > FORM_LIMITS.rewardPoints ||
+      !Number.isInteger(r.maxRecipients) ||
+      r.maxRecipients < 1 ||
+      r.maxRecipients > FORM_LIMITS.rewardRecipients
+    )
+      fail("奖励积分或名额超出范围");
+    reward = { points: r.points, maxRecipients: r.maxRecipients };
+  }
   const ids = new Set();
   const questions = input.questions.map((q) => {
     if (
@@ -88,6 +111,8 @@ export function validateDefinition(input) {
     description: text(input.description ?? "", 5000),
     submissionPolicy: input.submissionPolicy ?? "multiple",
     successMessage: text(input.successMessage ?? "感谢你的填写！", 1000),
+    membersOnly: input.membersOnly === true || reward !== null,
+    reward,
     questions,
   };
 }
