@@ -259,6 +259,20 @@
     padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px) var(--ui-space-6, 6px);
   }
 
+  .nt-panel :deep(.native-notification-status) {
+    flex: 0 0 auto;
+    min-width: 0;
+    margin-inline: var(--ui-space-12, 12px);
+  }
+
+  .is-mobile :deep(.native-notification-status) {
+    margin-inline: var(--mobile-page-gutter, var(--ui-space-14, 14px));
+  }
+
+  .is-desktop-page :deep(.native-notification-status) {
+    margin-inline: var(--ui-space-16, 16px);
+  }
+
   .nt-tab {
     min-width: 0;
     flex: 1 1 0;

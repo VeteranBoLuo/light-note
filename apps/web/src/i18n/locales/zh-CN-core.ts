@@ -27,6 +27,12 @@ export default {
   nativePush: {
     title: 'App 通知连接',
     retry: '重新检查',
+    phoneNotifications: '手机通知（打开系统设置）',
+    settingsHint: '点击开关前往手机通知设置，返回后自动检查。',
+    settingsConnected: '后台通知已连接，点击开关可调整手机通知设置。',
+    settingsDisabled: '点击开关，在系统设置中允许轻笺通知，返回后自动检查。',
+    settingsPermissionOn: '手机已允许通知。点击开关进入系统设置，返回后按轻笺提示确认开启通知连接。',
+    settingsFailed: '暂时无法打开系统设置，请在手机「设置 → 应用 → 轻笺 → 通知」中调整。',
     inAppOff: '站内通知已关闭；如需接收新消息，请在通知设置中开启站内通知。',
     state: {
       idle: '尚未连接',

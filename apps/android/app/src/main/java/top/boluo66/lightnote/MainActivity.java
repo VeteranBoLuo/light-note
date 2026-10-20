@@ -299,6 +299,7 @@ public final class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         pushSystemThemeToWeb(WindowInsetsSupport.isSystemNightMode());
+        refreshNativeNotificationStatus();
         // 只在前台登记：退到后台还弹对话框是打扰，那时也不该由我们发起 startActivity
         WebViewSupport.setDownloadOpenPrompt(this::promptOpenCalendarFile);
     }
@@ -307,6 +308,13 @@ public final class MainActivity extends Activity {
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grants) {
         super.onRequestPermissionsResult(requestCode, permissions, grants);
         if (nativeNotificationSync != null) nativeNotificationSync.permissionResult(requestCode, grants);
+        if (requestCode == NativeNotificationSync.NOTIFICATION_PERMISSION_REQUEST) refreshNativeNotificationStatus();
+    }
+
+    private void refreshNativeNotificationStatus() {
+        if (webView != null && BuildConfig.NOTIFICATION_SYNC) {
+            webView.evaluateJavascript("window.dispatchEvent(new Event('light-note:native-notification-resume'))", null);
+        }
     }
 
     @Override
