@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { safeImageSize } from '../safeImageSize.js';
+import { detectImageFormat } from './format.js';
 import { buildFilePreviewChildEnv } from '../filePreview/runtime.js';
 
 import { classifyImageError } from './errors.js';
@@ -15,6 +16,7 @@ export function imageError(code) {
 }
 export function validateSource(buffer) {
   if (!buffer.length || buffer.length > MAX_SOURCE_BYTES) throw imageError('IMAGE_SOURCE_SIZE_LIMIT');
+  if (!detectImageFormat(buffer)?.thumbnailSupported) throw imageError('IMAGE_SOURCE_UNSUPPORTED');
   let size;
   try {
     size = safeImageSize(buffer);

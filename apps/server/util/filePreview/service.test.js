@@ -7,6 +7,7 @@ const obsMocks = vi.hoisted(() => ({
   deleteObjectFromObs: vi.fn(),
   getObjectBufferFromObs: vi.fn(),
   getObjectMetadataFromObs: vi.fn(),
+  getObjectRangeFromObs: vi.fn(),
   putObjectBodyToObs: vi.fn(),
 }));
 const officeMocks = vi.hoisted(() => ({ convertOfficeToPdf: vi.fn() }));
@@ -137,6 +138,40 @@ describe('file preview service', () => {
     obsMocks.putObjectBodyToObs.mockResolvedValue(undefined);
     obsMocks.deleteObjectFromObs.mockResolvedValue(undefined);
     officeMocks.convertOfficeToPdf.mockResolvedValue(Buffer.from('%PDF-preview'));
+  });
+
+  it('verifies an owned HEIC-named JPEG before returning its original, without queuing a document job', async () => {
+    const body = Buffer.from([255, 216, 255, 224, 0, 16]);
+    poolMocks.query.mockResolvedValue([
+      [
+        {
+          id: 42,
+          create_by: 'user-1',
+          file_name: 'photo.heic',
+          file_type: 'image/heic',
+          file_size: body.length,
+          obs_key: 'owned-key',
+        },
+      ],
+    ]);
+    obsMocks.getObjectMetadataFromObs.mockResolvedValue({ contentLength: body.length });
+    obsMocks.getObjectRangeFromObs.mockResolvedValue(body);
+    await expect(resolveFilePreview({ ownerUserId: 'user-1', fileId: 42 })).resolves.toMatchObject({
+      previewType: 'image',
+      formatId: 'jpg',
+      sourceMimeType: 'image/jpeg',
+    });
+    expect(poolMocks.query).toHaveBeenCalledWith(expect.stringContaining('create_by = ?'), [42, 'user-1']);
+    expect(poolMocks.getConnection).not.toHaveBeenCalled();
+  });
+
+  it('does not read or sign a source that the owner query cannot access', async () => {
+    poolMocks.query.mockResolvedValue([[]]);
+    await expect(resolveFilePreview({ ownerUserId: 'other', fileId: 42 })).rejects.toMatchObject({
+      code: 'FILE_NOT_FOUND',
+    });
+    expect(obsMocks.getObjectRangeFromObs).not.toHaveBeenCalled();
+    expect(obsMocks.createDownloadSignedUrl).not.toHaveBeenCalled();
   });
 
   it('binds a converted PDF upload to a unique database lease and commits the private object key', async () => {

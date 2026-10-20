@@ -1,4 +1,5 @@
 import { resolveFilePreviewFormat } from '@lightnote/shared';
+import { isImagePreviewCandidate } from '@lightnote/shared/file-category';
 import pool from '../db/index.js';
 import { L, generateUUID, resultData } from '../util/common.js';
 import { buildObjectKey, createDownloadSignedUrl } from '../util/obsClient.js';
@@ -314,7 +315,8 @@ async function authorizePublicShare(req, res, { eventType, countColumn, previewO
       publicError(req, res, 403, 'SHARE_CODE_INVALID', '提取码错误', 'The access code is incorrect');
       return null;
     }
-    if (previewOnly && !resolveFilePreviewFormat({ fileName: row.file_name, fileType: row.file_type })) {
+    const previewFile = { fileName: row.file_name, fileType: row.file_type };
+    if (previewOnly && !resolveFilePreviewFormat(previewFile) && !isImagePreviewCandidate(previewFile)) {
       await appendShareEvent(connection, req, row.id, eventType, 'preview_unsupported');
       await connection.commit();
       publicError(
@@ -448,7 +450,9 @@ export async function prepareFileSharePreview(req, res) {
       }),
     ]);
     const sourceObjectKey = row.obs_key || buildObjectKey(row.file_owner_id, row.file_name);
-    const { url: sourceDownloadUrl, expiresIn: sourceUrlExpiresIn } = createDownloadSignedUrl({
+    const { url: sourceDownloadUrl, expiresIn: sourceUrlExpiresIn } = state.previewType === 'image'
+      ? { url: state.sourceDownloadUrl, expiresIn: state.sourceUrlExpiresIn }
+      : createDownloadSignedUrl({
       objectKey: sourceObjectKey,
       expires: 600,
     });

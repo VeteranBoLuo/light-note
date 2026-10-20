@@ -54,7 +54,7 @@ describe('managed image feedback', () => {
       await nextTick();
       expect(element.querySelector('video')).toBeNull();
       expect(element.querySelector('img')).toBeNull();
-      expect(element.textContent).not.toContain('查看原图');
+      expect(element.textContent).not.toContain('加载原图');
     }
     current.value = { ...base, status: 'ready', url: '/cover.webp', durationSeconds: 12 };
     await nextTick();
@@ -81,7 +81,7 @@ describe('managed image feedback', () => {
   });
   it('shows the full reason on explicit click and does not offer retry for missing sources', async () => {
     const { element } = mount({ ...base, status: 'failed', errorCode: 'IMAGE_SOURCE_MISSING', retryable: false });
-    expect(element.textContent).toContain('查看原因');
+    expect(element.textContent).toContain('原因说明');
     element.querySelector('button')!.click();
     await nextTick();
     expect(document.body.textContent).toContain('无法找到原文件');
@@ -100,7 +100,7 @@ describe('managed image feedback', () => {
     await nextTick();
     expect(resolveImagePreviews).toHaveBeenCalledTimes(1);
     expect(retryImagePreview).not.toHaveBeenCalled();
-    expect(element.textContent).toContain('缩略图暂不可用');
+    expect(element.textContent).toContain('缩略图加载失败');
   });
 });
 
@@ -164,7 +164,7 @@ describe('cloud original fallback', () => {
     await nextTick();
     expect(element.querySelector('img')).toBeNull();
     Array.from(element.querySelectorAll('button'))
-      .find((b) => b.textContent?.includes('查看原图'))!
+      .find((b) => b.textContent?.includes('加载原图'))!
       .click();
     await nextTick();
     expect(element.querySelector('img')?.getAttribute('src')).toBe(original.originalUrl);
