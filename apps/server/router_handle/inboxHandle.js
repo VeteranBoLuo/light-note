@@ -1,6 +1,7 @@
 import pool from '../db/index.js';
 import { resultData } from '../util/common.js';
 import { ensureNotVisitor } from '../util/auth.js';
+import { MAX_EXPLICIT_RESOURCE_SELECTION } from '@lightnote/shared/resource-selection';
 import {
   completeResources,
   enqueueResources,
@@ -105,7 +106,7 @@ export async function enqueueInbox(req, res) {
 
 export async function completeInbox(req, res) {
   if (!ensureNotVisitor(req, res)) return;
-  const items = normalizeInboxItems(req.body?.items);
+  const items = normalizeInboxItems(req.body?.items, MAX_EXPLICIT_RESOURCE_SELECTION);
   if (!items) return res.send(resultData(null, 400, '无效的资源列表'));
   let connection;
   try {

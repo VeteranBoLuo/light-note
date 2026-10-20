@@ -24,8 +24,8 @@ export const listInbox = (params: {
 
 export const countInbox = () => apiBasePost('/api/inbox/count', {}, { silent: true });
 
-export const enqueueInbox = (items: InboxResourceRef[], source = 'manual') =>
-  apiBasePost('/api/inbox/enqueue', { items, source });
+export const enqueueInbox = (items: InboxResourceRef[], source = 'manual', options?: { silent?: boolean }) =>
+  apiBasePost('/api/inbox/enqueue', { items, source }, options);
 
-export const completeInbox = (items: InboxResourceRef[]) =>
-  apiBasePost('/api/inbox/complete', { items });
+export const completeInbox = (items: InboxResourceRef[], options?: { silent?: boolean }) =>
+  apiBasePost('/api/inbox/complete', { items }, options);

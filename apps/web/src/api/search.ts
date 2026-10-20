@@ -423,8 +423,8 @@ export function previewSearchBatchSelection(selection: BatchSelection, includeRe
   });
 }
 
-export function batchAddSearchResourcesToInbox(selection: BatchSelection) {
-  return apiBasePost('/api/search/batchAddResourcesToInbox', { selection });
+export function batchAddSearchResourcesToInbox(selection: BatchSelection, options?: { silent?: boolean }) {
+  return apiBasePost('/api/search/batchAddResourcesToInbox', { selection }, options);
 }
 
 export function batchDeleteSearchResources(itemsOrSelection: BatchResourceItem[] | BatchSelection) {

@@ -667,6 +667,7 @@
   .b-drawer-panel--bottom {
     top: auto;
     left: 0;
+    box-sizing: border-box;
     min-height: var(--ui-layout-240, 240px);
     max-height: calc(100% - env(safe-area-inset-top));
     border-radius: 20px 20px 0 0;
