@@ -155,7 +155,12 @@
               <InboxPendingBadge v-if="item.isPending" />
               <span class="file-card-size">{{ formatFileSize(item.fileSize) }}</span>
             </div>
-            <div class="file-card-name" :title="item.fileName">{{ item.fileName }}</div>
+            <CloudFileCardIdentity
+              :file-name="item.fileName"
+              :folder="fileFolder(item)"
+              :disabled="batchMode || cloud.loading || selection.busy.value"
+              @open-folder="filterCardFolder"
+            />
             <div class="file-card-meta">
               <span class="meta-label">{{ $t('cloudSpace.uploadTime') }}</span>
               <span class="text-hidden">{{ item.uploadTime || '-' }}</span>
@@ -831,6 +836,8 @@
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BVirtualList from '@/components/base/BasicComponents/BVirtualList.vue';
   import CloudVirtualGrid from '@/components/cloudSpace/CloudVirtualGrid.vue';
+  import CloudFileCardIdentity from '@/components/cloudSpace/CloudFileCardIdentity.vue';
+  import type { CloudFolderNode } from '@/types/cloudFolder';
   import { resolveFileAiSummaryPresentation } from '@/utils/fileAiSummary';
   import CloudTextCardPreview from '@/components/cloudSpace/CloudTextCardPreview.vue';
   import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
@@ -885,6 +892,22 @@
   const viewMode = computed(() => props.viewMode ?? 'table');
 
   const batchMode = computed(() => props.batchMode ?? false);
+  const foldersById = computed(() => new Map(cloud.folderList.map((folder) => [folder.id, folder])));
+  function fileFolder(file: { folderId?: string; folderName?: string }) {
+    const id = String(file.folderId || '');
+    return (
+      foldersById.value.get(id) ??
+      (id && file.folderName ? { id, name: file.folderName, fullPath: file.folderName } : null)
+    );
+  }
+
+  function filterCardFolder(folder: Pick<CloudFolderNode, 'id' | 'name' | 'fullPath'>) {
+    if (batchMode.value || cloud.loading || selection.busy.value) return;
+    cloud.folder = { id: folder.id, name: folder.name };
+    cloud.expandFolderAncestors(folder.id);
+    void cloud.queryFieldList();
+  }
+
   const fieldListRef = ref<HTMLElement | null>(null);
   const retainedFileKeys = computed(() =>
     cloud.fileList.filter((file) => file.isRename || String(file.id) === cloud.draggingFile?.id).map((file) => file.id),
@@ -3073,18 +3096,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  .file-card-name {
-    font-size: var(--ui-font-14, 14px);
-    font-weight: 600;
-    line-height: 1.4;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-    min-height: calc(1.4em * 2);
   }
 
   .file-empty-state {

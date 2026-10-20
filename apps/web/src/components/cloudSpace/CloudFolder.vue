@@ -82,7 +82,11 @@
             <span v-else-if="folderTreeMode" class="cloud-folder-row__chevron-placeholder" aria-hidden="true"></span>
             <SvgIcon class="cloud-folder-row__folder-icon" size="17" :src="icon.common.folder" aria-hidden="true" />
             <span class="cloud-folder-row__name">{{ folder.name }}</span>
-            <span class="cloud-folder-row__count">{{ folder.directFileCount || '—' }}</span>
+            <CloudFolderFileCount
+              class="cloud-folder-row__count"
+              :direct-count="folder.directFileCount"
+              :total-count="folderFileTotals.get(folder.id) ?? folder.directFileCount"
+            />
           </div>
         </div>
       </BActionMenu>
@@ -167,11 +171,13 @@
   import {
     cloudFolderDropBlockReason,
     collectCloudFolderDescendantIds,
+    cloudFolderFileTotals,
     flattenCloudFolderTree,
     resolveCloudFolderDropPosition,
     type CloudFolderDropPosition,
   } from '@/utils/cloudFolderTree';
   import type { CloudFolderNode } from '@/types/cloudFolder';
+  import CloudFolderFileCount from './CloudFolderFileCount.vue';
   import { recordOperation } from '@/api/commonApi.ts';
   import { apiBasePost } from '@/http/request.ts';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
@@ -206,6 +212,7 @@
   const expandedIds = computed(() => new Set(cloud.expandedFolderIds));
   const folderTreeMode = computed(() => cloud.folderList.some((folder) => folder.parentId !== null));
   const visibleFolders = computed(() => flattenCloudFolderTree(cloud.folderList, expandedIds.value));
+  const folderFileTotals = computed(() => cloudFolderFileTotals(cloud.folderList));
   const folderDropHint = computed(() => {
     const target = folderDropTarget.value;
     if (!target) return { fullText: t('cloudSpace.folderDragHint') };

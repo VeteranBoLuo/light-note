@@ -96,6 +96,8 @@ describe('MobileCloudFolderDrawer', () => {
             common: { loading: '加载中' },
             cloudSpace: {
               folderTree: '文件夹目录',
+              folderFileCountTotal: '共{count}',
+              folderFileCountDescription: '本层 {direct} 个文件，含子文件夹共 {total} 个文件',
               allFile: '全部文件',
               expandFolder: '展开“{name}”',
               collapseFolder: '收起“{name}”',
@@ -119,7 +121,7 @@ describe('MobileCloudFolderDrawer', () => {
     expect(host.textContent).not.toContain('根目录');
     expect(
       [...host.querySelectorAll<HTMLElement>('.mobile-cloud-folder-drawer__count')].map((node) => node.textContent),
-    ).toEqual(['4', '2', '—']);
+    ).toEqual(['4', '2 · 共3', '0']);
 
     host.querySelector<HTMLButtonElement>('.mobile-cloud-folder-drawer__toggle')?.click();
     await nextTick();
@@ -127,7 +129,7 @@ describe('MobileCloudFolderDrawer', () => {
     expect(selected).not.toHaveBeenCalled();
     expect(
       [...host.querySelectorAll<HTMLElement>('.mobile-cloud-folder-drawer__count')].map((node) => node.textContent),
-    ).toEqual(['4', '2', '1', '—']);
+    ).toEqual(['4', '2 · 共3', '1', '0']);
 
     [...host.querySelectorAll<HTMLElement>('.mobile-cloud-folder-drawer__row')]
       .find((row) => row.textContent?.includes('周报'))

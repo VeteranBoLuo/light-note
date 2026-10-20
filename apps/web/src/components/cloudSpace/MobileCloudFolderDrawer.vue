@@ -77,7 +77,11 @@
               aria-hidden="true"
             />
             <span class="mobile-cloud-folder-drawer__name">{{ folder.name }}</span>
-            <span class="mobile-cloud-folder-drawer__count">{{ folder.directFileCount || '—' }}</span>
+            <CloudFolderFileCount
+              class="mobile-cloud-folder-drawer__count"
+              :direct-count="folder.directFileCount"
+              :total-count="folderFileTotals.get(folder.id) ?? folder.directFileCount"
+            />
           </BButton>
         </div>
         <p v-if="!visibleFolders.length" class="mobile-cloud-folder-drawer__empty">
@@ -97,7 +101,8 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
   import type { CloudFolderNode } from '@/types/cloudFolder';
-  import { flattenCloudFolderTree } from '@/utils/cloudFolderTree';
+  import { cloudFolderFileTotals, flattenCloudFolderTree } from '@/utils/cloudFolderTree';
+  import CloudFolderFileCount from './CloudFolderFileCount.vue';
 
   const props = withDefaults(
     defineProps<{
@@ -119,6 +124,7 @@
   const expandedSet = computed(() => new Set(props.expandedIds.map(String)));
   const folderTreeMode = computed(() => props.folders.some((folder) => folder.parentId !== null));
   const visibleFolders = computed(() => flattenCloudFolderTree(props.folders, expandedSet.value));
+  const folderFileTotals = computed(() => cloudFolderFileTotals(props.folders));
 
   function selectAll() {
     emit('select', null);
