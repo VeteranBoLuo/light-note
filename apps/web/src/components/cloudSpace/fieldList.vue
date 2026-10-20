@@ -8,7 +8,6 @@
     @touchend.passive="pullRefresh.onTouchEnd"
     @touchcancel.passive="pullRefresh.onTouchCancel"
   >
-    <slot name="summary" />
     <CloudVirtualGrid
       v-if="viewMode === 'card' && (cloud.loading || cloud.fileList.length)"
       class="file-card-grid"
