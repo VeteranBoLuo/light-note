@@ -3,7 +3,11 @@ import { apiBasePost } from '@/http/request';
 import { hasAndroidBridge } from '@/utils/androidBridge';
 import { createNativeNotificationSync, nativeNotificationMessage } from '@/utils/nativeNotificationSync';
 import { useNotification } from './useNotification';
-import { updateNativeNotificationStatus, updateNativeNotificationOnline } from './useNativeNotificationStatus';
+import {
+  updateNativeNotificationStatus,
+  updateNativeNotificationOnline,
+  updateNativeNotificationDevice,
+} from './useNativeNotificationStatus';
 
 export function useNativeNotificationSync(owner: Ref<string | null>, open: () => void) {
   const { refreshUnread } = useNotification();
@@ -39,22 +43,24 @@ export function useNativeNotificationSync(owner: Ref<string | null>, open: () =>
     open,
     refreshUnread,
     onState: updateNativeNotificationStatus,
+    onDeviceState: updateNativeNotificationDevice,
   });
   let timer: ReturnType<typeof setTimeout> | undefined;
   let mounted = false;
   let lastNotificationSync = 0;
-  const canRun = () =>
-    hasAndroidBridge() && Boolean(owner.value) && document.visibilityState === 'visible' && navigator.onLine !== false;
+  const canCheck = () => hasAndroidBridge() && Boolean(owner.value) && document.visibilityState === 'visible';
+  const canRun = () => canCheck() && navigator.onLine !== false;
   const schedule = () => {
     clearTimeout(timer);
     if (mounted && canRun()) timer = setTimeout(tick, sync.nextDelay());
   };
   const tick = async () => {
-    if (!canRun()) return;
-    const syncNotifications = !lastNotificationSync || Date.now() - lastNotificationSync >= 15000;
+    if (!canCheck()) return;
+    const online = navigator.onLine !== false;
+    const syncNotifications = online && (!lastNotificationSync || Date.now() - lastNotificationSync >= 15000);
     if (syncNotifications) lastNotificationSync = Date.now();
     try {
-      await sync.tick({ syncNotifications });
+      await sync.tick({ syncNotifications, online });
     } catch {
       /* A bridge/API timeout is retried without interrupting the user. */
     } finally {
@@ -64,10 +70,10 @@ export function useNativeNotificationSync(owner: Ref<string | null>, open: () =>
   const resume = () => {
     updateNativeNotificationOnline(navigator.onLine !== false);
     clearTimeout(timer);
-    if (!canRun()) return;
+    if (!canCheck()) return;
     sync.retry();
     lastNotificationSync = 0;
-    void refreshUnread().catch(() => {});
+    if (navigator.onLine !== false) void refreshUnread().catch(() => {});
     void tick();
   };
   const stop = watch(
@@ -90,6 +96,7 @@ export function useNativeNotificationSync(owner: Ref<string | null>, open: () =>
     window.addEventListener('offline', resume);
     window.addEventListener('light-note:native-notification-open', resume);
     window.addEventListener('light-note:native-notification-retry', resume);
+    window.addEventListener('light-note:native-notification-resume', resume);
     void tick();
   });
   onBeforeUnmount(() => {
@@ -101,6 +108,7 @@ export function useNativeNotificationSync(owner: Ref<string | null>, open: () =>
     window.removeEventListener('offline', resume);
     window.removeEventListener('light-note:native-notification-open', resume);
     window.removeEventListener('light-note:native-notification-retry', resume);
+    window.removeEventListener('light-note:native-notification-resume', resume);
     sync.pause();
   });
 }

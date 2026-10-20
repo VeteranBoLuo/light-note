@@ -27,6 +27,12 @@ export default {
   nativePush: {
     title: 'App notification connection',
     retry: 'Check again',
+    phoneNotifications: 'Phone notifications (open system settings)',
+    settingsHint: 'Tap the switch to open phone notification settings. Status refreshes when you return.',
+    settingsConnected: 'Background notifications are connected. Tap the switch to change phone notification settings.',
+    settingsDisabled: 'Tap the switch and allow Light Note notifications in system settings. Status refreshes when you return.',
+    settingsPermissionOn: 'Phone notifications are allowed. Tap the switch to open system settings, then return and follow the app prompt to enable the notification connection.',
+    settingsFailed: 'Unable to open system settings. Go to Settings → Apps → Light Note → Notifications on your phone.',
     inAppOff: 'In-app notifications are off. Turn them on in notification settings to receive new messages.',
     state: {
       idle: 'Not connected',

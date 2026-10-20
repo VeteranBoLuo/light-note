@@ -5,17 +5,24 @@ import NativeNotificationStatus from './NativeNotificationStatus.vue';
 import {
   updateNativeNotificationStatus,
   updateNativeNotificationOnline,
+  updateNativeNotificationDevice,
 } from '@/composables/useNativeNotificationStatus';
 import zh from '@/i18n/locales/zh-CN';
-const mocks = vi.hoisted(() => ({ user: null as any }));
+const mocks = vi.hoisted(() => ({ user: null as any, settings: vi.fn() }));
 vi.mock('@/store', () => ({ useUserStore: () => mocks.user }));
 vi.mock('@/utils/authStorage', () => ({ isAdminLoginPreview: () => false }));
+vi.mock('@/utils/nativeNotificationSync', async (original) => ({
+  ...(await original<typeof import('@/utils/nativeNotificationSync')>()),
+  nativeNotificationMessage: mocks.settings,
+}));
 let app: ReturnType<typeof createApp>, host: HTMLElement;
 beforeEach(() => {
   mocks.user = reactive({ id: 'alice', role: 'user', preferences: {}, adminContext: null });
   window.LightNoteAndroid = { postMessage: vi.fn() };
   updateNativeNotificationStatus('connected', 'alice');
   updateNativeNotificationOnline(true);
+  updateNativeNotificationDevice(null, 'alice');
+  mocks.settings.mockReset().mockResolvedValue({ ok: true });
   host = document.createElement('div');
   document.body.append(host);
 });
@@ -45,12 +52,94 @@ it('offers a real retry action after failures', async () => {
   window.addEventListener('light-note:native-notification-retry', retry);
   updateNativeNotificationStatus('retrying', 'alice');
   mount();
+  retry.mockClear();
   host.querySelector('button')!.click();
   expect(retry).toHaveBeenCalledOnce();
   updateNativeNotificationStatus('connected', 'alice');
   await nextTick();
   expect(host.querySelector('button')).toBeNull();
   window.removeEventListener('light-note:native-notification-retry', retry);
+});
+it('uses system permission for the switch even when the connection is pending or offline', async () => {
+  updateNativeNotificationStatus('connecting', 'alice');
+  updateNativeNotificationDevice({ systemEnabled: true, settingsAvailable: true }, 'alice');
+  mount();
+  expect(host.querySelector('[role="switch"]')?.getAttribute('aria-checked')).toBe('true');
+  expect(host.textContent).toContain('正在连接通知');
+  updateNativeNotificationOnline(false);
+  updateNativeNotificationDevice({ systemEnabled: false, settingsAvailable: true }, 'alice');
+  await nextTick();
+  expect(host.querySelector('[role="switch"]')?.getAttribute('aria-checked')).toBe('false');
+  expect(host.textContent).toContain('通知未开启');
+  expect(host.textContent).not.toContain('等待网络恢复');
+});
+it('opens settings without optimistically changing the system switch, then reflects the next check', async () => {
+  updateNativeNotificationStatus('disabled', 'alice');
+  updateNativeNotificationDevice({ systemEnabled: false, settingsAvailable: true }, 'alice');
+  let finish!: (reply: { ok: boolean }) => void;
+  mocks.settings.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  mount();
+  const toggle = host.querySelector('[role="switch"]') as HTMLElement;
+  toggle.click();
+  toggle.click();
+  expect(mocks.settings).toHaveBeenCalledOnce();
+  expect(mocks.settings).toHaveBeenCalledWith({ action: 'settings', owner: 'alice' });
+  await nextTick();
+  expect(toggle.getAttribute('aria-checked')).toBe('false');
+  expect(toggle.getAttribute('aria-disabled')).toBe('true');
+  finish({ ok: true });
+  await vi.waitFor(() => expect(toggle.getAttribute('aria-disabled')).toBeNull());
+  expect(toggle.getAttribute('aria-checked')).toBe('false');
+  updateNativeNotificationDevice({ systemEnabled: true, settingsAvailable: true }, 'alice');
+  updateNativeNotificationStatus('connected', 'alice');
+  await nextTick();
+  expect(toggle.getAttribute('aria-checked')).toBe('true');
+  expect(host.textContent).toContain('通知已连接');
+});
+it('provides manual instructions if opening settings fails and discards errors after an account switch', async () => {
+  updateNativeNotificationDevice({ systemEnabled: true, settingsAvailable: true }, 'alice');
+  mocks.settings.mockResolvedValueOnce({ ok: false });
+  mount();
+  (host.querySelector('[role="switch"]') as HTMLElement).click();
+  await vi.waitFor(() => expect(host.querySelector('[role="alert"]')?.textContent).toContain('暂时无法打开系统设置'));
+  let finish!: (reply: { ok: boolean }) => void;
+  mocks.settings.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  (host.querySelector('[role="switch"]') as HTMLElement).click();
+  mocks.user.id = 'bob';
+  updateNativeNotificationStatus('connected', 'bob');
+  updateNativeNotificationDevice({ systemEnabled: false, settingsAvailable: true }, 'bob');
+  finish({ ok: false });
+  await nextTick();
+  expect(host.querySelector('[role="alert"]')).toBeNull();
+  expect(host.querySelector('[role="switch"]')?.getAttribute('aria-checked')).toBe('false');
+});
+it('keeps old shells and unknown permissions out of the system switch', async () => {
+  updateNativeNotificationDevice({ systemEnabled: null, settingsAvailable: false }, 'alice');
+  updateNativeNotificationStatus('disabled', 'alice');
+  mount();
+  expect(host.querySelector('[role="switch"]')).toBeNull();
+  expect(host.querySelector('button')?.textContent).toContain('重新检查');
+  updateNativeNotificationDevice({ systemEnabled: true, settingsAvailable: true }, 'bob');
+  await nextTick();
+  expect(host.querySelector('[role="switch"]')).toBeNull();
+});
+it('distinguishes system permission from the separate Debug-build consent', () => {
+  updateNativeNotificationStatus('disabled', 'alice');
+  updateNativeNotificationDevice({ systemEnabled: true, settingsAvailable: true }, 'alice');
+  mount();
+  expect(host.querySelector('[role="switch"]')?.getAttribute('aria-checked')).toBe('true');
+  expect(host.textContent).toContain('手机已允许通知');
+  expect(host.textContent).toContain('按轻笺提示确认');
 });
 it.each(['web', 'guest', 'admin', 'other-owner', 'pending-auth'])(
   'does not expose connection state in %s context',

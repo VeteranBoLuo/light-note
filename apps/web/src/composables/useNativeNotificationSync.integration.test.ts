@@ -4,6 +4,7 @@ import { useNativeNotificationSync } from './useNativeNotificationSync';
 import {
   nativeNotificationStatus,
   nativeNotificationOnline,
+  nativeNotificationDevice,
   retryNativeNotifications,
 } from './useNativeNotificationStatus';
 const mocks = vi.hoisted(() => ({ api: vi.fn(), bridge: vi.fn(), refresh: vi.fn(async () => {}) }));
@@ -109,8 +110,47 @@ describe('foreground notification connection scheduling', () => {
     owner.value = '';
     await flush();
     expect(nativeNotificationStatus.value).toEqual({ owner: '', state: 'idle' });
+    expect(nativeNotificationDevice.value).toEqual({ owner: '', systemEnabled: null, settingsAvailable: false });
     const count = mocks.api.mock.calls.length;
     await vi.advanceTimersByTimeAsync(65000);
     expect(mocks.api).toHaveBeenCalledTimes(count);
+  });
+  it('rechecks system changes on native resume, including offline, without making offline API calls', async () => {
+    mocks.bridge.mockResolvedValue({
+      ok: true,
+      enabled: true,
+      systemEnabled: true,
+      settingsAvailable: true,
+      huaweiToken: 'token',
+    });
+    mount();
+    await flush();
+    expect(nativeNotificationDevice.value).toEqual({ owner: 'alice', systemEnabled: true, settingsAvailable: true });
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
+    mocks.bridge.mockResolvedValue({ ok: true, enabled: false, systemEnabled: false, settingsAvailable: true });
+    const count = mocks.api.mock.calls.length;
+    window.dispatchEvent(new Event('light-note:native-notification-resume'));
+    await flush();
+    expect(nativeNotificationStatus.value.state).toBe('disabled');
+    expect(nativeNotificationDevice.value.systemEnabled).toBe(false);
+    expect(mocks.api).toHaveBeenCalledTimes(count);
+    expect(vi.getTimerCount()).toBe(0);
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    mocks.bridge.mockResolvedValue({
+      ok: true,
+      enabled: true,
+      systemEnabled: true,
+      settingsAvailable: true,
+      huaweiToken: 'token',
+    });
+    window.dispatchEvent(new Event('light-note:native-notification-resume'));
+    await flush();
+    expect(nativeNotificationStatus.value.state).toBe('connected');
+    expect(nativeNotificationDevice.value.systemEnabled).toBe(true);
+    app.unmount();
+    const calls = mocks.bridge.mock.calls.length;
+    window.dispatchEvent(new Event('light-note:native-notification-resume'));
+    await vi.advanceTimersByTimeAsync(65000);
+    expect(mocks.bridge).toHaveBeenCalledTimes(calls);
   });
 });

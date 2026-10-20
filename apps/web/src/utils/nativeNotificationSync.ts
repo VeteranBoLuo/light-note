@@ -4,11 +4,18 @@ export interface NativeNotificationReply {
   ok: boolean;
   huaweiToken?: string;
   enabled?: boolean;
+  systemEnabled?: boolean;
+  settingsAvailable?: boolean;
   since?: string;
   open?: boolean;
 }
 export type NativeNotificationState =
   'idle' | 'checking' | 'connecting' | 'connected' | 'disabled' | 'retrying' | 'unavailable';
+
+export interface NativeNotificationDeviceState {
+  systemEnabled: boolean | null;
+  settingsAvailable: boolean;
+}
 
 export interface HuaweiBinding {
   id: string;
@@ -78,6 +85,7 @@ export function createNativeNotificationSync(deps: {
   open: () => void;
   refreshUnread: () => Promise<void>;
   onState?: (state: NativeNotificationState, owner: string) => void;
+  onDeviceState?: (state: NativeNotificationDeviceState | null, owner: string) => void;
 }) {
   let owner = '',
     epoch = '',
@@ -125,6 +133,7 @@ export function createNativeNotificationSync(deps: {
     remoteToken = '';
     retry();
     owner = next;
+    deps.onDeviceState?.(null, owner);
     epoch = requestId();
     generation++;
     cursor = null;
@@ -136,6 +145,7 @@ export function createNativeNotificationSync(deps: {
   }
   function pause() {
     owner = '';
+    deps.onDeviceState?.(null, owner);
     epoch = '';
     remoteBinding = undefined;
     remoteToken = '';
@@ -146,7 +156,7 @@ export function createNativeNotificationSync(deps: {
     knownIds.clear();
     sweepIds.clear();
   }
-  async function tick({ syncNotifications = true } = {}) {
+  async function tick({ syncNotifications = true, online = true } = {}) {
     if (!owner || busy === generation) return;
     const active = generation,
       uid = owner,
@@ -159,11 +169,24 @@ export function createNativeNotificationSync(deps: {
         .catch(() => ({ ok: false }) as NativeNotificationReply);
       if (!current()) return;
       if (!state.ok) {
+        deps.onDeviceState?.(null, uid);
         remoteNextAt = 0;
         report('unavailable');
         return;
       }
+      deps.onDeviceState?.(
+        {
+          systemEnabled: typeof state.systemEnabled === 'boolean' ? state.systemEnabled : null,
+          settingsAvailable: state.settingsAvailable === true,
+        },
+        uid,
+      );
       if (state.open) deps.open();
+      // Keep the previous binding until online cleanup can run; no API requests while offline.
+      if (!online) {
+        if (!state.enabled) report('disabled');
+        return;
+      }
       if (!state.enabled) {
         const previous = remoteBinding;
         remoteBinding = undefined;

@@ -10,6 +10,8 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.os.Build;
+import android.net.Uri;
+import android.provider.Settings;
 import android.service.notification.StatusBarNotification;
 import androidx.core.app.NotificationCompat;
 import org.json.JSONArray;
@@ -63,6 +65,29 @@ final class NativeNotificationSync {
             && manager.getNotificationChannel(CHANNEL).getImportance() != NotificationManager.IMPORTANCE_NONE;
     }
     private boolean enabled() { return prefs.getBoolean("allowed", false) && systemAllowed(); }
+    private boolean openSettings() {
+        // A blocked channel needs its own settings even when the app-wide switch is on.
+        NotificationChannel channel = manager == null ? null : manager.getNotificationChannel(CHANNEL);
+        if (manager != null && manager.areNotificationsEnabled() && channel != null
+            && channel.getImportance() == NotificationManager.IMPORTANCE_NONE) {
+            try {
+                activity.startActivity(new Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+                    .putExtra(Settings.EXTRA_APP_PACKAGE, activity.getPackageName())
+                    .putExtra(Settings.EXTRA_CHANNEL_ID, CHANNEL));
+                return true;
+            } catch (RuntimeException ignored) { /* Try app-wide settings below. */ }
+        }
+        try {
+            activity.startActivity(new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                .putExtra(Settings.EXTRA_APP_PACKAGE, activity.getPackageName()));
+            return true;
+        } catch (RuntimeException ignored) { /* Some compatibility layers only expose app details. */ }
+        try {
+            activity.startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                Uri.parse("package:" + activity.getPackageName())));
+            return true;
+        } catch (RuntimeException ignored) { return false; }
+    }
     private void offerPermission() {
         boolean formalHuawei = BuildConfig.HUAWEI_PUSH && !BuildConfig.DEBUG;
         String offerKey = formalHuawei ? "huawei_release_offered" : BuildConfig.HUAWEI_PUSH ? "huawei_all_offered" : "offered";
@@ -120,7 +145,17 @@ final class NativeNotificationSync {
         if ("clear".equals(action)) { clear(); return reply.put("ok", true); }
         String requestedOwner = request.optString("owner");
         String requestedEpoch = request.optString("epoch");
-        if (requestedOwner.isEmpty() || requestedOwner.length() > 64 || requestedEpoch.isEmpty() || requestedEpoch.length() > 100) return reply;
+        if (requestedOwner.isEmpty() || requestedOwner.length() > 64) return reply;
+        // Settings only opens system UI. It still requires the currently bound account.
+        if ("settings".equals(action)) {
+            if (!owner.equals(requestedOwner) || !requestedOwner.equals(prefs.getString("owner", ""))) return reply;
+            // Only an explicit settings action may re-offer the separate Debug-build disclosure.
+            if (BuildConfig.DEBUG && !prefs.getBoolean("allowed", false)) {
+                prefs.edit().remove(BuildConfig.HUAWEI_PUSH ? "huawei_all_offered" : "offered").apply();
+            }
+            return reply.put("ok", openSettings());
+        }
+        if (requestedEpoch.isEmpty() || requestedEpoch.length() > 100) return reply;
         if ("bind".equals(action)) {
             if (!requestedOwner.equals(prefs.getString("owner", ""))) {
                 if (!prefs.getString("owner", "").isEmpty()) remote("clear");
@@ -195,6 +230,7 @@ final class NativeNotificationSync {
         if ("bind".equals(action)) openOwner = "";
         String remoteToken = enabled() ? remote("token") : "";
         return reply.put("huaweiToken", remoteToken).put("ok", true).put("enabled", enabled())
+            .put("systemEnabled", systemAllowed()).put("settingsAvailable", true)
             .put("since", prefs.getString("since", "")).put("open", shouldOpen);
     }
 }

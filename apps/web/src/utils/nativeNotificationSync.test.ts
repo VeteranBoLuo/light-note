@@ -215,17 +215,50 @@ describe('notification connection readiness and recovery', () => {
     >(async () => ({ ok: true, enabled: true, since, huaweiToken: 'token' }));
     const fetch = vi.fn(async () => ({ owner: 'alice', since, items: [], cursor: null }));
     const onState = vi.fn();
+    const onDeviceState = vi.fn();
     const sync = createNativeNotificationSync({
       bridge,
       fetch,
       remote,
       onState,
+      onDeviceState,
       open: vi.fn(),
       refreshUnread: vi.fn(),
     });
     sync.setOwner('alice');
-    return { sync, bridge, fetch, remote, onState, binding };
+    return { sync, bridge, fetch, remote, onState, onDeviceState, binding };
   }
+  it('reports unknown permission for old shells and clears device facts on errors or account changes', async () => {
+    const { sync, bridge, onDeviceState } = connection();
+    await sync.tick();
+    expect(onDeviceState).toHaveBeenLastCalledWith({ systemEnabled: null, settingsAvailable: false }, 'alice');
+    bridge.mockResolvedValueOnce({ ok: true, enabled: false, systemEnabled: false, settingsAvailable: true });
+    await sync.tick();
+    expect(onDeviceState).toHaveBeenLastCalledWith({ systemEnabled: false, settingsAvailable: true }, 'alice');
+    bridge.mockResolvedValueOnce({ ok: false });
+    await sync.tick();
+    expect(onDeviceState).toHaveBeenLastCalledWith(null, 'alice');
+    sync.setOwner('bob');
+    expect(onDeviceState).toHaveBeenLastCalledWith(null, 'bob');
+    sync.pause();
+    expect(onDeviceState).toHaveBeenLastCalledWith(null, '');
+  });
+  it('discards a previous account permission response even when switching back to that account', async () => {
+    const { sync, bridge, onDeviceState } = connection();
+    let finish!: (value: import('./nativeNotificationSync').NativeNotificationReply) => void;
+    bridge.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const tick = sync.tick();
+    sync.setOwner('bob');
+    sync.setOwner('alice');
+    finish({ ok: true, enabled: true, systemEnabled: true, settingsAvailable: true });
+    await tick;
+    expect(onDeviceState).toHaveBeenLastCalledWith(null, 'alice');
+  });
   it('only reports connected after the activation acknowledgement', async () => {
     const { sync, remote, onState } = connection();
     let finish!: () => void;
