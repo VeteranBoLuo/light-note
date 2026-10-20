@@ -80,7 +80,13 @@
           ? t('cloudSpace.moveSuccess')
           : `${t('cloudSpace.batchMoveSuccess')} ${fileIds.length} ${t('cloudSpace.files')}`;
       message.success(successMessage);
-      if (operation) selection.finish(operation);
+      if (operation) {
+        selection.removeConfirmed(
+          operation,
+          fileIds.map((id) => ({ id: String(id), type: 'file' as const })),
+        );
+        selection.finish(operation);
+      }
       emit('moved');
       visible.value = false;
       await cloud.refreshAfterFileMutation();
