@@ -69,7 +69,8 @@ public final class HuaweiPushProbe {
     }
     static void saveToken(Context context, String token) {
         if (!allowed(context) || token == null || token.isEmpty()) return;
-        prefs(context).edit().putString("token", token).putString("status", "Token 注册成功；尚未验证远程通知送达。").apply();
+        prefs(context).edit().putString("token", token).putBoolean("capability_confirmed", true)
+            .putString("status", "Token 注册成功；尚未验证远程通知送达。").apply();
     }
     static String errorCode(Exception error) {
         if (error instanceof ApiException) return Integer.toString(((ApiException) error).getStatusCode());

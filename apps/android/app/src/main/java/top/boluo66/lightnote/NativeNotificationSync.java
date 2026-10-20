@@ -229,7 +229,11 @@ final class NativeNotificationSync {
         boolean shouldOpen = "bind".equals(action) && owner.equals(openOwner);
         if ("bind".equals(action)) openOwner = "";
         String remoteToken = enabled() ? remote("token") : "";
+        // Keep the registration attempt above: a working compatibility token overrides HMS diagnostics.
+        String pushSupport = BuildConfig.HUAWEI_PUSH ? remote("support") : "unsupported";
+        if (pushSupport.isEmpty()) pushSupport = "unknown";
         return reply.put("huaweiToken", remoteToken).put("ok", true).put("enabled", enabled())
+            .put("pushSupport", pushSupport)
             .put("systemEnabled", systemAllowed()).put("settingsAvailable", true)
             .put("since", prefs.getString("since", "")).put("open", shouldOpen);
     }

@@ -60,6 +60,7 @@ updateNativeNotificationDevice(
     : {
         systemEnabled: params.has('systemOn') || state !== 'disabled',
         settingsAvailable: true,
+        pushSupport: params.get('support') === 'unsupported' ? 'unsupported' : params.get('support') === 'unknown' ? 'unknown' : 'supported',
       },
   'fixture-user',
 );

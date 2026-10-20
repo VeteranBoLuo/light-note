@@ -231,10 +231,10 @@ describe('notification connection readiness and recovery', () => {
   it('reports unknown permission for old shells and clears device facts on errors or account changes', async () => {
     const { sync, bridge, onDeviceState } = connection();
     await sync.tick();
-    expect(onDeviceState).toHaveBeenLastCalledWith({ systemEnabled: null, settingsAvailable: false }, 'alice');
+    expect(onDeviceState).toHaveBeenLastCalledWith({ systemEnabled: null, settingsAvailable: false, pushSupport: 'unknown' }, 'alice');
     bridge.mockResolvedValueOnce({ ok: true, enabled: false, systemEnabled: false, settingsAvailable: true });
     await sync.tick();
-    expect(onDeviceState).toHaveBeenLastCalledWith({ systemEnabled: false, settingsAvailable: true }, 'alice');
+    expect(onDeviceState).toHaveBeenLastCalledWith({ systemEnabled: false, settingsAvailable: true, pushSupport: 'unknown' }, 'alice');
     bridge.mockResolvedValueOnce({ ok: false });
     await sync.tick();
     expect(onDeviceState).toHaveBeenLastCalledWith(null, 'alice');
@@ -242,6 +242,30 @@ describe('notification connection readiness and recovery', () => {
     expect(onDeviceState).toHaveBeenLastCalledWith(null, 'bob');
     sync.pause();
     expect(onDeviceState).toHaveBeenLastCalledWith(null, '');
+  });
+  it('reports unsupported background capability without removing existing foreground notifications', async () => {
+    const { sync, bridge, fetch, remote, onState, onDeviceState } = connection();
+    bridge.mockResolvedValueOnce({ ok: true, enabled: true, pushSupport: 'unsupported', settingsAvailable: true, systemEnabled: true });
+    await sync.tick();
+    expect(onDeviceState).toHaveBeenLastCalledWith({ systemEnabled: true, settingsAvailable: true, pushSupport: 'unsupported' }, 'alice');
+    expect(remote.bind).not.toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledOnce();
+    bridge.mockResolvedValueOnce({ ok: true, enabled: true, pushSupport: 'supported', huaweiToken: 'token' });
+    await sync.tick();
+    expect(remote.bind).toHaveBeenCalledOnce();
+    expect(onState).toHaveBeenLastCalledWith('connected', 'alice');
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+  it('keeps uncertain capability and network failures retryable instead of unsupported', async () => {
+    const { sync, bridge, remote, onState, onDeviceState } = connection();
+    bridge.mockResolvedValueOnce({ ok: true, enabled: true, pushSupport: 'unknown', huaweiToken: 'token' });
+    remote.bind.mockRejectedValueOnce(new Error('temporary network failure'));
+    await sync.tick();
+    expect(onDeviceState.mock.lastCall?.[0]?.pushSupport).toBe('unknown');
+    expect(onState).toHaveBeenLastCalledWith('retrying', 'alice');
+    sync.retry();
+    await sync.tick();
+    expect(onState).toHaveBeenLastCalledWith('connected', 'alice');
   });
   it('discards a previous account permission response even when switching back to that account', async () => {
     const { sync, bridge, onDeviceState } = connection();

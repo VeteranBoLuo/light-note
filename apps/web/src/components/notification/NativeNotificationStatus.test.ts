@@ -73,6 +73,29 @@ it('uses system permission for the switch even when the connection is pending or
   expect(host.textContent).toContain('通知未开启');
   expect(host.textContent).not.toContain('等待网络恢复');
 });
+it('hides only explicitly unsupported devices and preserves retry for temporary or unknown failures', async () => {
+  updateNativeNotificationStatus('unavailable', 'alice');
+  updateNativeNotificationDevice({ systemEnabled: true, settingsAvailable: true, pushSupport: 'unsupported' }, 'alice');
+  mount();
+  expect(host.querySelector('section')).toBeNull();
+  updateNativeNotificationDevice({ systemEnabled: true, settingsAvailable: true, pushSupport: 'unknown' }, 'alice');
+  await nextTick();
+  expect(host.querySelector('section')).not.toBeNull();
+  expect(host.querySelector('button')?.textContent).toContain('重新检查');
+  updateNativeNotificationStatus('retrying', 'alice');
+  updateNativeNotificationDevice({ systemEnabled: true, settingsAvailable: true, pushSupport: 'supported' }, 'alice');
+  await nextTick();
+  expect(host.querySelector('button')?.textContent).toContain('重新检查');
+  updateNativeNotificationDevice({ systemEnabled: false, settingsAvailable: true, pushSupport: 'supported' }, 'alice');
+  await nextTick();
+  expect(host.querySelector('section')).not.toBeNull();
+  expect(host.querySelector('[role="switch"]')?.getAttribute('aria-checked')).toBe('false');
+});
+it('does not apply an unsupported capability from another account', () => {
+  updateNativeNotificationDevice({ systemEnabled: false, settingsAvailable: true, pushSupport: 'unsupported' }, 'bob');
+  mount();
+  expect(host.querySelector('section')).not.toBeNull();
+});
 it('opens settings without optimistically changing the system switch, then reflects the next check', async () => {
   updateNativeNotificationStatus('disabled', 'alice');
   updateNativeNotificationDevice({ systemEnabled: false, settingsAvailable: true }, 'alice');

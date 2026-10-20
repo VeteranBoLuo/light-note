@@ -6,15 +6,19 @@ export interface NativeNotificationReply {
   enabled?: boolean;
   systemEnabled?: boolean;
   settingsAvailable?: boolean;
+  pushSupport?: NativePushSupport;
   since?: string;
   open?: boolean;
 }
 export type NativeNotificationState =
   'idle' | 'checking' | 'connecting' | 'connected' | 'disabled' | 'retrying' | 'unavailable';
 
+export type NativePushSupport = 'supported' | 'unsupported' | 'unknown';
+
 export interface NativeNotificationDeviceState {
   systemEnabled: boolean | null;
   settingsAvailable: boolean;
+  pushSupport?: NativePushSupport;
 }
 
 export interface HuaweiBinding {
@@ -178,6 +182,8 @@ export function createNativeNotificationSync(deps: {
         {
           systemEnabled: typeof state.systemEnabled === 'boolean' ? state.systemEnabled : null,
           settingsAvailable: state.settingsAvailable === true,
+          pushSupport:
+            state.pushSupport === 'supported' || state.pushSupport === 'unsupported' ? state.pushSupport : 'unknown',
         },
         uid,
       );
