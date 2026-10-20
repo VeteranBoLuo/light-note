@@ -29,6 +29,7 @@ export const collectionFormsZh = {
   missingPreviousSubmission:
     '未能识别之前的提交，请确认已允许本站 Cookie，并使用原浏览器和原填写地址重试。为避免新增记录，暂不允许修改。',
   publicBrand: '轻笺 · 公开收集',
+  savedCloseHint: '已保存你的回答，可以关闭此页面。',
   savedReturnHint: '已保存你的回答，可以返回轻笺继续使用。',
   returnToLightNote: '返回轻笺',
   viewRewardNotification: '查看到账通知',
@@ -318,6 +319,7 @@ export const collectionFormsEn = {
   missingPreviousSubmission:
     'Your previous submission could not be identified. Allow site cookies and use the original browser and URL. Editing is blocked to prevent creating a duplicate.',
   publicBrand: 'Light Note · Forms',
+  savedCloseHint: 'Your answers are saved. You can close this page.',
   savedReturnHint: 'Your answers are saved. You can return to Light Note.',
   returnToLightNote: 'Back to Light Note',
   viewRewardNotification: 'View reward notification',

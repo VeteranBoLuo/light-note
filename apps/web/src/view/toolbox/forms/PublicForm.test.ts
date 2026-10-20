@@ -87,6 +87,8 @@ it('未登录只能看到参与提示，点击后使用现有安全回跳返回�
   expect(host.querySelector('form')).toBeNull();
   expect(host.textContent).toContain('首次成功提交可得 20 积分');
   expect(host.textContent).toContain('回答将关联');
+  expect(button(host, collectionFormsZh.returnToLightNote).disabled).toBe(false);
+  expect(getMobilePageBack('publicCollectionForm')).not.toBeNull();
   button(host, collectionFormsZh.loginToParticipate).click();
   expect(navigation.push).toHaveBeenCalledWith('/login');
   expect(resolveAuthNavigationIntent()).toBe('/f/' + 'a'.repeat(48));
@@ -254,7 +256,10 @@ describe('独立填写页', () => {
     const posts = () => calls.filter((c) => c.method === 'POST').map((c) => JSON.parse(c.body));
     expect(posts()[0].requestKey).toBe(posts()[1].requestKey);
     expect(calls.every((c) => c.credentials === 'same-origin')).toBe(true);
+    expect(host.textContent).toContain(collectionFormsZh.savedCloseHint);
+    expect(host.textContent).not.toContain(collectionFormsZh.returnToLightNote);
     expect(host.textContent).not.toContain(collectionFormsZh.viewRewardNotification);
+    expect(getMobilePageBack('publicCollectionForm')).toBeNull();
     button(host, collectionFormsZh.again).click();
     await flush();
     await fill(host, '第二次');
@@ -313,6 +318,8 @@ it('匿名回填最新答案，更新成功并保留修改入口', async () => {
   await submit(host);
   expect(host.textContent).toContain('提交已更新');
   expect(host.textContent).toContain('修改我的提交');
+  expect(host.textContent).toContain(collectionFormsZh.savedCloseHint);
+  expect(host.textContent).not.toContain(collectionFormsZh.returnToLightNote);
   expect(JSON.parse(calls[1].body).answers.q).toBe('新答案');
 });
 
@@ -365,8 +372,31 @@ it('修改入口重新读取最新答案；凭证丢失时阻止退化成新增'
   expect(host.textContent).toContain('未能识别之前的提交');
 });
 
+it.each(['collecting', 'paused', 'ended'])('仅轻笺用户填写的表单在 %s 状态可返回当前站点工作台', async (state) => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        data: {
+          status: state,
+          definition: { ...definition, membersOnly: true },
+          submissionPolicy: 'replace',
+          mySubmission: null,
+          requiresLogin: false,
+          account: { id: 'member', alias: '小轻' },
+        },
+      }),
+    })),
+  );
+  const host = mount(PublicForm);
+  await flush();
+  button(host, collectionFormsZh.returnToLightNote).click();
+  expect(navigation.push).toHaveBeenCalledExactlyOnceWith({ name: 'workbenches' });
+});
+
 it.each(['collecting', 'paused', 'ended', 'error', 'loading'])(
-  '%s 状态均可从独立表单返回当前站点工作台',
+  '普通或尚未识别的表单在 %s 状态不引导进入轻笺，也不接管系统返回',
   async (state) => {
     vi.stubGlobal(
       'fetch',
@@ -375,13 +405,57 @@ it.each(['collecting', 'paused', 'ended', 'error', 'loading'])(
         if (state === 'error') throw new Error('network');
         return {
           ok: true,
-          json: async () => ({ data: { status: state, definition, submissionPolicy: 'replace', mySubmission: null } }),
+          json: async () => ({
+            data: {
+              status: state,
+              definition,
+              submissionPolicy: 'replace',
+              mySubmission: null,
+              account: { id: 'root', alias: '已登录用户' },
+            },
+          }),
         };
       }),
     );
     const host = mount(PublicForm);
     await flush();
-    button(host, collectionFormsZh.returnToLightNote).click();
+    expect(host.textContent).not.toContain(collectionFormsZh.returnToLightNote);
+    const back = new Event('light-note-system-back', { cancelable: true });
+    expect(handleMobilePageBack('publicCollectionForm', back)).toBe(false);
+    expect(back.defaultPrevented).toBe(false);
+    expect(navigation.push).not.toHaveBeenCalled();
+  },
+);
+
+it.each([null, { points: 20, received: false }])(
+  '账号限定表单未确认到账时只提供返回，不显示到账通知入口（%j）',
+  async (reward) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url, options) => ({
+        ok: true,
+        json: async () => ({
+          data:
+            options.method === 'GET'
+              ? {
+                  status: 'collecting',
+                  definition: { ...definition, membersOnly: true },
+                  submissionPolicy: 'replace',
+                  mySubmission: null,
+                  requiresLogin: false,
+                  account: { id: 'member', alias: '小轻' },
+                }
+              : { receipt: 'r', outcome: 'created', reward },
+        }),
+      })),
+    );
+    const host = mount(PublicForm);
+    await flush();
+    await fill(host, '朋友推荐');
+    await submit(host);
+    expect(host.textContent).toContain(collectionFormsZh.savedReturnHint);
+    expect(host.textContent).not.toContain(collectionFormsZh.viewRewardNotification);
+    button(host.querySelector<HTMLElement>('.success-next')!, collectionFormsZh.returnToLightNote).click();
     expect(navigation.push).toHaveBeenCalledExactlyOnceWith({ name: 'workbenches' });
   },
 );
@@ -398,7 +472,14 @@ it('提交中禁用返回且消费系统返回，完成后系统返回复用工�
         : {
             ok: true,
             json: async () => ({
-              data: { status: 'collecting', definition, submissionPolicy: 'replace', mySubmission: null },
+              data: {
+                status: 'collecting',
+                definition: { ...definition, membersOnly: true },
+                submissionPolicy: 'replace',
+                mySubmission: null,
+                requiresLogin: false,
+                account: { id: 'member', alias: '小轻' },
+              },
             }),
           },
     ),
