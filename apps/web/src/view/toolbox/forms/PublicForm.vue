@@ -1,6 +1,11 @@
 <template>
   <main class="collection-public" :class="{ 'collection-public--success': receipt }">
-    <div v-if="receipt" class="success-brand">{{ t('collectionForms.publicBrand') }}</div>
+    <header class="collection-public-header">
+      <span class="success-brand">{{ t('collectionForms.publicBrand') }}</span>
+      <BButton type="text" class="collection-return" :disabled="busy" @click="returnToLightNote">{{
+        t('collectionForms.returnToLightNote')
+      }}</BButton>
+    </header>
     <ToolboxFeedback v-if="loading" state="loading" :title="t('collectionForms.opening')" />
     <section v-else-if="receipt" class="collection-card success-card" role="status"
       ><span class="success-symbol" aria-hidden="true"><SvgIcon :src="icon.organize.check" size="32" /></span
@@ -19,8 +24,14 @@
         ><p>{{ t('collectionForms.rewardReceived', { points: receivedReward.points }) }}</p
         ><p class="collection-muted">{{ t('collectionForms.rewardOnceHint') }}</p></template
       ><div class="success-next"
-        ><p>{{ t('collectionForms.savedCloseHint') }}</p
-        ><BButton type="primary" @click="again">{{
+        ><p>{{ t('collectionForms.savedReturnHint') }}</p
+        ><BButton type="primary" :disabled="busy" @click="returnToLightNote">{{
+          t('collectionForms.returnToLightNote')
+        }}</BButton
+        ><BButton v-if="receivedReward?.received" :disabled="busy" @click="openRewardNotifications">{{
+          t('collectionForms.viewRewardNotification')
+        }}</BButton
+        ><BButton type="text" :disabled="busy" @click="again">{{
           t(form?.submissionPolicy === 'replace' ? 'collectionForms.editSubmission' : 'collectionForms.again')
         }}</BButton></div
       ></section
@@ -95,6 +106,7 @@
   import { ref, watch, onBeforeUnmount } from 'vue';
   import { useRoute, useRouter } from 'vue-router';
   import { rememberAuthNavigationIntent } from '@/utils/authNavigationIntent';
+  import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import type { FormDefinition, FormAnswers } from '@lightnote/shared/collection-forms';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -127,6 +139,13 @@
   let lastPayload = '';
   let editingReceipt = '';
   let lastAnswers: FormAnswers | undefined;
+  function returnToLightNote() {
+    if (!busy.value) void router.push({ name: 'workbenches' });
+  }
+  function openRewardNotifications() {
+    if (!busy.value) void router.push({ name: 'notifications' });
+  }
+  useMobileTopBar(['publicCollectionForm'], { onBack: returnToLightNote });
   const draftKey = () => `collection-login-draft:${String(route.params.publicId)}`;
   function login() {
     if (!rememberAuthNavigationIntent(route.fullPath)) return;
@@ -326,9 +345,25 @@
   .collection-login-action {
     min-height: var(--ui-control-44, 44px);
   }
+  .collection-public-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ui-space-12, 12px);
+    width: 100%;
+    margin-bottom: var(--ui-space-20, 20px);
+  }
+  .collection-return {
+    margin-left: auto;
+    min-height: var(--ui-control-40, 40px);
+  }
   @media (max-width: 767px) {
     .collection-public {
       padding: var(--ui-space-16, 16px);
+    }
+    .collection-return {
+      min-height: var(--ui-control-44, 44px);
     }
   }
 
@@ -357,8 +392,10 @@
     background: var(--workspace-canvas);
     gap: var(--ui-space-32, 32px);
   }
+  .collection-public--success .collection-public-header {
+    margin-bottom: 0;
+  }
   .success-brand {
-    align-self: flex-start;
     color: var(--primary-color);
     font-size: var(--ui-font-14, 14px);
     font-weight: 600;
@@ -408,6 +445,7 @@
   }
   .success-next :deep(.b_btn) {
     width: 100%;
+    min-height: var(--ui-control-40, 40px);
     margin-top: var(--ui-space-8, 8px);
   }
   .success-footer {
@@ -416,6 +454,9 @@
   @media (max-width: 767px) {
     .success-card {
       padding: var(--ui-space-24, 24px);
+    }
+    .success-next :deep(.b_btn) {
+      min-height: var(--ui-control-44, 44px);
     }
   }
 </style>

@@ -334,6 +334,8 @@ request.defaults.adapter = async (config) => {
 let mySubmission: any = params.get('submitted') ? { receipt: 'test', answers: submissions[0].answers } : null;
 let rewardReceived = params.has('submitted');
 window.fetch = async (_input, init) => {
+  if (state === 'error') throw new Error('模拟网络异常，可刷新重试');
+  if (state === 'loading') await new Promise(() => {});
   let data: any;
   if (init?.method === 'POST') {
     const outcome = mySubmission ? 'updated' : 'created';
@@ -379,6 +381,14 @@ window.fetch = async (_input, init) => {
 const router = createRouter({
   history: createMemoryHistory(),
   routes: [
+    {
+      path: '/workbenches',
+      name: 'workbenches',
+      component: {
+        render: () =>
+          h('main', { 'data-returned-workbench': true }, locale === 'en-US' ? 'Light Note workspace' : '轻笺工作台'),
+      },
+    },
     { path: '/notifications', name: 'notifications', component: NotificationBell, props: { page: true } },
     { path: '/growth', component: { render: () => h('main', { 'data-ledger': true }, '积分明细') } },
     { path: '/toolbox/forms/:formId?', name: 'collectionForms', component: FormsWorkspace },
