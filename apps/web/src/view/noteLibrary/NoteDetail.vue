@@ -359,8 +359,8 @@
   } from 'vue';
   import { storeToRefs } from 'pinia';
   import { useI18n } from 'vue-i18n';
-  import { isNavigationFailure, onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router';
-  import router from '@/router';
+  import { isNavigationFailure, onBeforeRouteLeave, onBeforeRouteUpdate, useRouter } from 'vue-router';
+  import { trackSearchReturnNavigation } from '@/utils/searchReturnNavigation';
   import { cloneDeep } from 'lodash-es';
   import { apiBasePost } from '@/http/request.ts';
   import Catalog from '@/components/noteLibrary/detail/Catalog.vue';
@@ -472,6 +472,8 @@
     loadingComponent: AiPanelPlaceholder,
     delay: 0,
   });
+  const router = useRouter();
+  trackSearchReturnNavigation(router);
   const bookmark = bookmarkStore();
   const { t, locale } = useI18n();
   const user = useUserStore();
@@ -493,6 +495,7 @@
   const sourceReturnPath = () => resolveNoteDetailReturnPath(router.currentRoute.value.query.from);
   const noteBackLabel = computed(() => {
     const source = sourceReturnPath();
+    if (source.split(/[?#]/)[0] === '/search') return t('noteDetail.backToSearch');
     if (source.split(/[?#]/)[0] === '/toolbox/translation') return t('translation.backToTranslation');
     if (source.startsWith('/toolbox/')) return t('noteDetail.backToToolboxResult');
     if (source.startsWith('/workbenches')) return t('noteDetail.backToWorkbench');

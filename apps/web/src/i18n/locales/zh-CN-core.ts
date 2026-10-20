@@ -6732,6 +6732,7 @@ export default {
   },
   noteDetail: {
     backToLibrary: '返回笔记库',
+    backToSearch: '返回搜索结果',
     backToWorkbench: '返回工作台',
     backToTodo: '返回待办',
     backToOrganizer: '返回资源整理',
