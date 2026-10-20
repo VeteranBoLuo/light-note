@@ -1,5 +1,6 @@
 <template>
   <ResourcePageShell
+    :class="{ 'cloud-space-page--desktop': !bookmark.isMobile }"
     :title="$t('cloudSpace.title')"
     :subtitle="$t('cloudSpace.subtitle')"
     accent="file"
@@ -8,6 +9,16 @@
     :title-actionable="!bookmark.isMobile"
     @title-click="resetCloudSpace"
   >
+    <template v-if="!bookmark.isMobile" #meta>
+      <CloudFileCountSummary
+        class="cloud-header-count"
+        :counts="currentFolderCounts"
+        :file-total="cloud.fileTotal"
+        :all-file-count="cloud.allFileCount"
+        :filtered="hasFileFilters"
+        :loading="cloud.loading || cloud.folderLoading"
+      />
+    </template>
     <template #actions>
       <CloudStorageBar v-if="bookmark.isMobile" ref="mobileCloudStorageBar" compact class="mobile-cloud-storage" />
       <BTooltip
@@ -132,6 +143,7 @@
           class="mobile-cloud-count"
           :counts="currentFolderCounts"
           :file-total="cloud.fileTotal"
+          :all-file-count="cloud.allFileCount"
           :filtered="hasFileFilters"
           :loading="cloud.loading || cloud.folderLoading"
         />
@@ -152,17 +164,7 @@
           @files-deleted="handleFilesDeleted"
           @exit-batch="toggleBatchMode"
           @request-upload="openCurrentFolderUpload"
-        >
-          <template v-if="!bookmark.isMobile" #summary>
-            <CloudFileCountSummary
-              class="cloud-list-summary"
-              :counts="currentFolderCounts"
-              :file-total="cloud.fileTotal"
-              :filtered="hasFileFilters"
-              :loading="cloud.loading || cloud.folderLoading"
-            />
-          </template>
-        </FieldList>
+        />
       </div>
     </div>
     <MoveFile
@@ -1107,10 +1109,27 @@
 
 <style lang="less" scoped>
   @import (reference) '@/assets/css/workspace-surfaces.less';
-  .cloud-list-summary {
+  .cloud-space-page--desktop :deep(.resource-page-header) {
+    flex-wrap: wrap;
+  }
+
+  .cloud-space-page--desktop :deep(.resource-page-heading) {
+    flex: 1 1 var(--ui-layout-320, 320px);
+  }
+
+  .cloud-space-page--desktop :deep(.resource-page-title-row) {
+    flex-wrap: wrap;
+  }
+
+  .cloud-space-page--desktop :deep(.resource-page-title-row h1) {
     flex: 0 0 auto;
-    padding: var(--ui-space-8, 8px) var(--ui-space-14, 14px);
-    border-bottom: 1px solid var(--workspace-divider);
+    max-width: 100%;
+  }
+
+  .cloud-header-count {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 100%;
     color: var(--desc-color);
     font-size: var(--ui-font-12, 12px);
     line-height: 1.5;

@@ -96,7 +96,7 @@ describe('MobileCloudFolderDrawer', () => {
             common: { loading: '加载中' },
             cloudSpace: {
               folderTree: '文件夹目录',
-              folderFileCountDescription: '本层 {direct} 个文件，含子文件夹共 {total} 个文件',
+              folderFileCountDescription: '当前文件夹有 {direct} 个文件，含子文件夹共 {total} 个',
               allFile: '全部文件',
               expandFolder: '展开“{name}”',
               collapseFolder: '收起“{name}”',
