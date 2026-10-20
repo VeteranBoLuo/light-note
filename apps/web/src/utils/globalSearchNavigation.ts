@@ -1,6 +1,11 @@
 import type { Router } from 'vue-router';
 import type { SearchResultItem } from '@/api/search';
 import { openBookmarkUrl } from '@/utils/openBookmark';
+import { resolveSearchReturnPath } from './searchReturnNavigation';
+
+interface SearchNavigationOptions {
+  noteReturnPath?: string;
+}
 
 /**
  * 全局搜索结果的统一打开规则：
@@ -11,7 +16,11 @@ import { openBookmarkUrl } from '@/utils/openBookmark';
  * 搜索层的语义是「找到并打开对象」，与资源选择器的「选中并插入」不同，
  * 因此这段导航逻辑不与 ResourcePickerPanel 共享。
  */
-export function navigateToSearchResult(router: Router, item: SearchResultItem): void {
+export function navigateToSearchResult(
+  router: Router,
+  item: SearchResultItem,
+  options: SearchNavigationOptions = {},
+): void {
   if (item.type === 'bookmark' && item.url) {
     openBookmarkUrl(item.url, { resourceId: item.id });
     return;
@@ -20,6 +29,14 @@ export function navigateToSearchResult(router: Router, item: SearchResultItem): 
     const fileId = String(item.id || '').trim();
     if (fileId) void router.push({ path: '/cloudSpace', query: { fileId } });
     return;
+  }
+  const source = resolveSearchReturnPath(options.noteReturnPath);
+  if (item.type === 'note' && item.route && source) {
+    const target = router.resolve(item.route);
+    if (/^\/noteLibrary\/[^/]+$/u.test(target.path)) {
+      void router.push({ path: target.path, query: { ...target.query, from: source }, hash: target.hash });
+      return;
+    }
   }
   if (item.route) void router.push(item.route);
 }

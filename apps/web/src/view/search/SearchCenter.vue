@@ -340,6 +340,7 @@
                       v-for="item in group.items"
                       :key="`${item.type}-${item.id}`"
                       class="resource-result-entry"
+                      :data-search-resource-key="getItemSelectionKey(item)"
                       :class="{
                         'is-inspected': !bookmark.isMobile && activeInspectedResourceKey === getItemSelectionKey(item),
                       }"
@@ -650,7 +651,7 @@
   import { useResourceSelectionStore } from '@/store/resourceSelection';
   import { buildNoteDetailRequestScope } from '@/api/noteDetailPrefetch';
   import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
-  import { useRoute, useRouter } from 'vue-router';
+  import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
   import { locateSearchResult, navigateToSearchResult } from '@/utils/globalSearchNavigation';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { useAndroidPullRefresh } from '@/composables/useAndroidPullRefresh';
@@ -720,6 +721,15 @@
   import ResourceTagFilterPopover from '@/components/searchCenter/ResourceTagFilterPopover.vue';
   import ResourceInspectorPanel from '@/components/searchCenter/ResourceInspectorPanel.vue';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
+  import { findVerticalScrollContainer } from '@/utils/scrolling';
+  import {
+    trackSearchReturnNavigation,
+    resolveSearchReturnPath,
+    rememberSearchReturn,
+    readSearchReturn,
+    restoreSearchReturnPosition,
+    consumeSearchReturn,
+  } from '@/utils/searchReturnNavigation';
   import ResourceBatchActionBar from '@/components/resourceActions/ResourceBatchActionBar.vue';
   import ResourceOutcomeDrawer, {
     type ResourceOutcomeQuickAction,
@@ -731,6 +741,8 @@
   const route = useRoute();
   const router = useRouter();
   const user = useUserStore();
+  const searchReturnScope = computed(() => buildNoteDetailRequestScope(user));
+  trackSearchReturnNavigation(router);
   const bookmark = bookmarkStore();
   const inbox = inboxStore();
   const { addResourcesToInbox } = useInboxEnqueue();
@@ -1429,7 +1441,10 @@
     silent = false,
     preserveLoaded = false,
   ) {
-    const loadedCount = preserveLoaded ? viewState.rawItems.length : 0;
+    const returnSnapshot = !append
+      ? readSearchReturn(searchReturnScope.value, route.fullPath, effectiveView.value)
+      : null;
+    const loadedCount = returnSnapshot?.loadedCount ?? (preserveLoaded ? viewState.rawItems.length : 0);
     if (append && (viewState.loading || viewState.loadingMore || !viewState.hasMore)) return false;
     const seq = append ? requestSeq : ++requestSeq;
     const previousPagination =
@@ -1459,7 +1474,7 @@
       }, skeletonDelayMs);
     }
     try {
-      const res = await fetchGlobalSearch(queryState.keyword, SEARCH_PAGE_SIZE, force, {
+      const res = await fetchGlobalSearch(queryState.keyword, SEARCH_PAGE_SIZE, force || Boolean(returnSnapshot), {
         type: queryState.types.length === 1 ? queryState.types[0] : 'all',
         types: selectedTypes.value,
         sort: queryState.sort,
@@ -1471,7 +1486,7 @@
         includeMetadata: !append,
         separateTagMatches: true,
       });
-      if (preserveLoaded) {
+      if (preserveLoaded || returnSnapshot) {
         const refreshedItems = normalizeSearchResultItems(res);
         while (res.hasMore && res.nextCursor && refreshedItems.length < loadedCount) {
           if (seq !== requestSeq) return false;
@@ -1513,6 +1528,26 @@
           tag: Number(res.typeTotals.tag || 0),
           todo: Number(res.typeTotals.todo || 0),
         };
+      }
+
+      if (returnSnapshot) {
+        // The real result nodes must replace the loading skeleton before measuring anchors.
+        viewState.loading = false;
+        showLoadingSkeleton.value = false;
+        await nextTick();
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        if (
+          seq !== requestSeq ||
+          searchReturnScope.value !== returnSnapshot.scope ||
+          route.fullPath !== returnSnapshot.path
+        )
+          return false;
+        inspectedResourceKey.value = returnSnapshot.inspectedKey;
+        const container = resultScrollContainer();
+        if (container) {
+          restoreSearchReturnPosition(container, returnSnapshot);
+          consumeSearchReturn(returnSnapshot);
+        }
       }
 
       loadSucceeded = true;
@@ -1717,7 +1752,33 @@
   }
 
   function openItem(item: DisplaySearchItem) {
-    navigateToSearchResult(router, item);
+    if (item.type === 'note') inspectedResourceKey.value = getItemSelectionKey(item);
+    navigateToSearchResult(router, item, { noteReturnPath: route.fullPath });
+  }
+
+  onBeforeRouteLeave((to) => {
+    if (
+      to.path.startsWith('/noteLibrary/') &&
+      resolveSearchReturnPath(to.query.from) === route.fullPath &&
+      !viewState.loading
+    ) {
+      rememberSearchReturn(
+        {
+          scope: searchReturnScope.value,
+          path: route.fullPath,
+          view: effectiveView.value,
+          loadedCount: viewState.rawItems.length,
+          inspectedKey: activeInspectedResourceKey.value,
+        },
+        resultScrollContainer(),
+      );
+    }
+  });
+
+  function resultScrollContainer() {
+    const fallback = resultScrollRef.value;
+    const result = fallback?.querySelector<HTMLElement>('[data-search-resource-key]');
+    return result ? findVerticalScrollContainer(result, fallback) : fallback;
   }
 
   function locateItem(item: DisplaySearchItem) {
@@ -2082,19 +2143,18 @@
   let isInitialRouteLoad = true;
   watch(
     // 移动抽屉会用同 URL 的 history state 管理返回栈；可见 URL 变化只同步筛选，显式选择由模块会话维护。
-    () => route.fullPath,
-    () => {
+    [() => route.fullPath, searchReturnScope],
+    (_value, previous) => {
+      if (route.path !== '/search') return;
       mobileInspectorVisible.value = false;
       applyRouteState();
       nextTick(() => {
-        const scrollRoot = bookmark.isMobile
-          ? resultScrollRef.value
-          : document.querySelector<HTMLElement>('.search-center-route .search-page');
+        const scrollRoot = resultScrollContainer();
         scrollRoot?.scrollTo({ top: 0 });
       });
       // 模块级搜索缓存用于同页筛选/视图切换，不能跨页面进入继续充当资源事实源。
       // 每次 SearchCenter 重新挂载时强制请求一次，确保新增、编辑或删除后的资源立即可见。
-      const force = isInitialRouteLoad;
+      const force = isInitialRouteLoad || previous?.[1] !== searchReturnScope.value;
       isInitialRouteLoad = false;
       void loadData(force);
     },

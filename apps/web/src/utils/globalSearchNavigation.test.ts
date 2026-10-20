@@ -3,11 +3,16 @@ import type { Router } from 'vue-router';
 import type { SearchResultItem } from '@/api/search';
 import { locateSearchResult, navigateToSearchResult } from './globalSearchNavigation';
 import { openBookmarkUrl } from '@/utils/openBookmark';
+import { createMemoryHistory, createRouter } from 'vue-router';
 
 vi.mock('@/utils/openBookmark', () => ({ openBookmarkUrl: vi.fn() }));
 
 const push = vi.fn();
-const router = { push } as unknown as Router;
+const routeResolver = createRouter({
+  history: createMemoryHistory(),
+  routes: [{ path: '/noteLibrary/:id', component: { template: '<div />' } }],
+});
+const router = { push, resolve: routeResolver.resolve } as unknown as Router;
 const file: SearchResultItem = {
   id: 'file-42',
   type: 'file',
@@ -19,6 +24,26 @@ const file: SearchResultItem = {
 beforeEach(() => vi.clearAllMocks());
 
 describe('搜索结果打开与定位', () => {
+  it('只有资源中心明确传入来源时才补充笔记返回地址，并保留原路由参数', () => {
+    const note = { ...file, type: 'note' as const, route: '/noteLibrary/note-1?mode=preview#section' };
+    const source = '/search?q=hello&type=note,file&tags=tag-1&date=30d&sort=name&view=list#results';
+    navigateToSearchResult(router, note, { noteReturnPath: source });
+    expect(push).toHaveBeenCalledExactlyOnceWith({
+      path: '/noteLibrary/note-1',
+      query: { mode: 'preview', from: source },
+      hash: '#section',
+    });
+  });
+
+  it.each(['https://example.com/search', '//example.com/search', '/search/other', '/workbenches'])(
+    '外部或其他来源不改变原有笔记导航：%s',
+    (source) => {
+      const note = { ...file, type: 'note' as const, route: '/noteLibrary/note-1' };
+      navigateToSearchResult(router, note, { noteReturnPath: source });
+      expect(push).toHaveBeenCalledExactlyOnceWith(note.route);
+    },
+  );
+
   it('打开文件只用稳定 ID，不继承名称过滤或旧 route', () => {
     navigateToSearchResult(router, file);
     expect(push).toHaveBeenCalledExactlyOnceWith({ path: '/cloudSpace', query: { fileId: 'file-42' } });

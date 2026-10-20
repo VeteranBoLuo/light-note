@@ -7082,6 +7082,7 @@ export default {
   },
   noteDetail: {
     backToLibrary: 'Back to notes',
+    backToSearch: 'Back to search results',
     backToWorkbench: 'Back to workspace',
     backToTodo: 'Back to to-dos',
     backToOrganizer: 'Back to resource organization',

@@ -38,6 +38,12 @@ describe('resolveNoteLibraryListPath', () => {
 });
 
 describe('resolveNoteDetailReturnPath', () => {
+  it('资源中心来源保留关键词、完整筛选和结果锚点，跨笔记切换继续沿用', () => {
+    const source =
+      '/search?q=%E8%B5%84%E6%96%99&type=note,file&sort=name&tags=tag-1&date=30d&untagged=1&view=list#results';
+    expect(resolveNoteDetailReturnPath(source)).toBe(source);
+    expect(resolveNoteDetailReturnPath(`/noteLibrary/child?from=${encodeURIComponent(source)}`)).toBe(source);
+  });
   it('新手任务返回成长中心并保留页签、筛选和锚点', () => {
     expect(resolveNoteDetailReturnPath('/growth?section=tasks#growth-tasks')).toBe(
       '/growth?section=tasks#growth-tasks',
@@ -92,12 +98,15 @@ describe('resolveNoteDetailReturnPath', () => {
     expect(resolveNoteDetailReturnPath(child)).toBe(source);
   });
 
-  it.each(['/search', '/organize/other', 'https://example.com/workbenches', '//example.com/workbenches'])(
-    '拒绝未授权的返回来源：%s',
-    (path) => {
-      expect(resolveNoteDetailReturnPath(path)).toBe('');
-    },
-  );
+  it.each([
+    '/search/other',
+    '/search-other',
+    '/organize/other',
+    'https://example.com/workbenches',
+    '//example.com/workbenches',
+  ])('拒绝未授权的返回来源：%s', (path) => {
+    expect(resolveNoteDetailReturnPath(path)).toBe('');
+  });
 });
 
 describe('resolveGrowthNoteCreateReturnPath', () => {
