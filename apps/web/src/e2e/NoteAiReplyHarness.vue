@@ -15,16 +15,20 @@
   import { provide } from 'vue';
   import AiReply from '@/components/noteLibrary/detail/AiReply.vue';
 
-  const props = defineProps<{ noteType: 'html' | 'markdown' }>();
+  const props = defineProps<{ noteType: 'html' | 'markdown'; source?: string }>();
 
   provide('note', {
     id: 'note-ai-density-fixture',
     title: '功能优化与缺陷修复',
     type: props.noteType,
     content:
-      props.noteType === 'markdown'
-        ? '# 功能优化与缺陷修复\n\n进入网站查询用户反馈，如果有新的则弹出确认。\n\n增加笔记模块多选删除功能。'
-        : '<h1>功能优化与缺陷修复</h1><p>进入网站查询用户反馈，如果有新的则弹出确认。</p><p>增加笔记模块多选删除功能。</p>',
+      props.source === 'blank'
+        ? ''
+        : props.source === 'empty-html'
+          ? '<p><br></p><p>&nbsp;</p>'
+          : props.noteType === 'markdown'
+            ? '# 功能优化与缺陷修复\n\n进入网站查询用户反馈，如果有新的则弹出确认。\n\n增加笔记模块多选删除功能。'
+            : '<h1>功能优化与缺陷修复</h1><p>进入网站查询用户反馈，如果有新的则弹出确认。</p><p>增加笔记模块多选删除功能。</p>',
   });
 </script>
 

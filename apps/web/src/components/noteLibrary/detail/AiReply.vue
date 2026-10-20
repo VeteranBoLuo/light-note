@@ -254,6 +254,7 @@
   import { createAiSkillRequest, executeAiSkillStream } from '@/api/aiSkillApi';
   import { recordAiSkillApplied } from '@/api/aiTelemetry';
   import { noteDisplayText } from '@/utils/common.ts';
+  import { hasMeaningfulNoteContent } from '@/utils/noteTree';
   import DOMPurify from 'dompurify';
   import { renderStreamingMarkdown } from '@/utils/aiMessageRender';
   import { getAiQuotaErrorPresentation } from '@/utils/aiQuotaErrorPresentation';
@@ -281,13 +282,26 @@
   const previewVisible = ref(false);
   const abortController = ref<AbortController | null>(null);
   type GenerationPhase = 'idle' | 'connecting' | 'waiting' | 'slow' | 'streaming';
-  type GenerationFeedback = { type: 'error' | 'warning'; text: string; retryable: boolean };
+  type GenerationFeedback = {
+    type: 'error' | 'warning';
+    text: string;
+    retryable: boolean;
+    reason?: 'empty_input';
+  };
   const generationPhase = ref<GenerationPhase>('idle');
   const generationFeedback = ref<GenerationFeedback | null>(null);
   const outputTruncated = ref(false);
   const lastGenerationMode = ref<'action' | 'custom'>('action');
   let slowGenerationTimer: number | null = null;
   const isMarkdownNote = computed(() => note?.type === 'markdown');
+
+  watch(
+    [() => note?.content, () => note?.type, () => note?.id],
+    () => {
+      if (generationFeedback.value?.reason === 'empty_input') generationFeedback.value = null;
+    },
+    { flush: 'sync' },
+  );
 
   const clearGenerationTimer = () => {
     if (slowGenerationTimer !== null) {
@@ -454,6 +468,7 @@
   };
 
   const runAction = (action: string) => {
+    if (isLoading.value) return;
     lastAction.value = action;
     generate('action');
   };
@@ -509,7 +524,18 @@
     // 追问:在清空前抓取上一版结果与追问要求作为快照,格式沿用上一版
     const baseContent = mode === 'followup' ? outputFull.value : undefined;
     const followupReq = mode === 'followup' ? followupPrompt.value.trim() : '';
+    const requirement = mode === 'followup' ? followupReq : prompt.value.trim();
     const expectedFormat = mode === 'followup' ? resultFormat.value || 'both' : actionConfig[action]?.format || 'both';
+    const sourceText = mode === 'followup' ? baseContent || '' : String(note?.content || '');
+    if (!hasMeaningfulNoteContent(sourceText, note?.type)) {
+      generationFeedback.value = {
+        type: 'warning',
+        text: t('ai.reply.emptySourceHint'),
+        retryable: false,
+        reason: 'empty_input',
+      };
+      return;
+    }
     if (mode !== 'followup') lastGenerationMode.value = mode;
     resultFormat.value = expectedFormat;
     requestCompleted.value = false;
@@ -531,8 +557,6 @@
 
     try {
       generationPhase.value = 'waiting';
-      const sourceText = mode === 'followup' ? baseContent || '' : String(note?.content || '');
-      const requirement = mode === 'followup' ? followupReq : prompt.value.trim();
       const operation = mode === 'followup' ? 'rewrite' : skillOperation(action);
       const targetLanguage = operation === 'translate' ? (/\p{Script=Han}/u.test(sourceText) ? '英语' : '中文') : '';
       const marker = expectedFormat === 'title' ? '【标题】\n' : '【正文】\n';

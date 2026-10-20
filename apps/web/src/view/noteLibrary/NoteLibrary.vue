@@ -460,7 +460,8 @@
     <!-- 新建笔记类型选择 -->
     <NewNotePickerModal
       v-if="bookmark.isMobile && showTypePicker"
-      v-model:visible="showTypePicker"
+      :visible="showTypePicker"
+      @update:visible="updateNoteCreatePickerVisible"
       :builtin-templates="orderedBuiltinTemplates"
       :my-templates="orderedMyTemplates"
       :my-templates-state="myTemplatesState"
@@ -473,7 +474,8 @@
     />
     <ActionCardModal
       v-if="!bookmark.isMobile && showTypePicker"
-      v-model:visible="showTypePicker"
+      :visible="showTypePicker"
+      @update:visible="updateNoteCreatePickerVisible"
       :mask-closable="false"
       :title="$t('note.pickEditor')"
       width="min(var(--ui-layout-760, 760px), 80vw)"
@@ -664,7 +666,7 @@
   import { MAX_NOTE_BATCH_ACTION_ITEMS } from '@lightnote/shared/resource-selection';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
-  import router from '@/router';
+  import { useRouter } from 'vue-router';
   import { collectNoteBatchCandidates } from '@/utils/noteBatchSelection';
   import { useNoteLibraryNavigation } from '@/composables/useNoteLibraryNavigation';
   import { useResourceSelection } from '@/composables/useResourceSelection';
@@ -734,6 +736,7 @@
   import { NOTE_TREE_ROOT_KEY, useNoteTree } from '@/composables/useNoteTree';
   import { useNoteTreeDragDrop } from '@/composables/useNoteTreeDragDrop';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
+  import { resolveGrowthNoteCreateReturnPath } from '@/utils/noteDetailNavigation';
   import { deliverGeneratedFile } from '@/utils/fileDelivery';
   import { isLightNoteAndroidApp } from '@/utils/androidBridge';
   import { prefetchResolvedRoute } from '@/utils/routePrefetch';
@@ -804,6 +807,7 @@
   };
 
   const { t, locale } = useI18n();
+  const router = useRouter();
   const bookmark = bookmarkStore();
   const user = useUserStore();
   const noteWorkspace = useNoteWorkspaceStore();
@@ -991,6 +995,8 @@
   });
   let noteRequestSeq = 0;
   const showTypePicker = ref(false);
+  const growthNoteCreateReturnPath = ref('');
+  let growthNoteCreateRequestVersion = 0;
   const createParentOverride = ref<string | null | undefined>(undefined);
   const tagConfigVisible = ref(false);
   const activeTagNote = ref<any | null>(null);
@@ -1149,6 +1155,7 @@
       return;
     }
     const targetQuery = { ...query };
+    if (growthNoteCreateReturnPath.value) targetQuery.from = growthNoteCreateReturnPath.value;
     const requestedParentId =
       createParentOverride.value === undefined ? currentParentId.value : createParentOverride.value;
     const parentId = noteTreeWriteEnabled.value ? requestedParentId : null;
@@ -1169,6 +1176,7 @@
       localStorage.setItem('note-template-recent-usage', JSON.stringify(templateUsage.value));
     }
     try {
+      growthNoteCreateReturnPath.value = '';
       await closeCurrentMobileOverlayThen(
         () => {
           showTypePicker.value = false;
@@ -1283,6 +1291,7 @@
   });
 
   function showNewNotePicker() {
+    growthNoteCreateReturnPath.value = '';
     createParentOverride.value = noteTreeWriteEnabled.value ? currentParentId.value : null;
     showTypePicker.value = true;
     loadMyTemplates();
@@ -1295,13 +1304,30 @@
   }
 
   function showNewChildPicker(note: any) {
+    growthNoteCreateReturnPath.value = '';
     if (!noteTreeWriteEnabled.value || !note?.id) return;
     createParentOverride.value = String(note.id);
     showTypePicker.value = true;
     loadMyTemplates();
   }
 
+  function updateNoteCreatePickerVisible(visible: boolean) {
+    const returnPath = growthNoteCreateReturnPath.value;
+    if (visible || !returnPath) {
+      showTypePicker.value = visible;
+      return;
+    }
+    growthNoteCreateReturnPath.value = '';
+    void closeCurrentMobileOverlayThen(
+      () => {
+        showTypePicker.value = false;
+      },
+      () => router.replace(returnPath),
+    );
+  }
+
   async function openTemplateManager() {
+    growthNoteCreateReturnPath.value = '';
     await closeCurrentMobileOverlayThen(
       () => {
         showTypePicker.value = false;
@@ -2570,6 +2596,7 @@
   }
 
   onBeforeUnmount(() => {
+    growthNoteCreateRequestVersion++;
     cancelMobileReturnScrollRestore();
     if (searchTimer.value) window.clearTimeout(searchTimer.value);
     if (treeSearchTimer.value) window.clearTimeout(treeSearchTimer.value);
@@ -2874,6 +2901,41 @@
       result: 'success',
     });
   }
+
+  watch(
+    [() => router.currentRoute.value.fullPath, noteCacheScope],
+    async (_value, previous) => {
+      const route = router.currentRoute.value;
+      if (
+        growthNoteCreateReturnPath.value &&
+        (route.path !== '/noteLibrary' || previous?.[1] !== noteCacheScope.value)
+      ) {
+        growthNoteCreateReturnPath.value = '';
+        showTypePicker.value = false;
+      }
+      if (route.path !== '/noteLibrary' || route.query.create !== 'growth-task') return;
+      const requestVersion = ++growthNoteCreateRequestVersion;
+      const scope = noteCacheScope.value;
+      const returnPath = resolveGrowthNoteCreateReturnPath(route.query.from);
+      const query = { ...route.query };
+      delete query.create;
+      delete query.from;
+      const target = { path: route.path, query, hash: route.hash };
+      const targetPath = router.resolve(target).fullPath;
+      // 先消费一次性入口；刷新、返回和组件重新挂载都不会重开选择器。
+      await router.replace(target);
+      if (
+        requestVersion !== growthNoteCreateRequestVersion ||
+        scope !== noteCacheScope.value ||
+        router.currentRoute.value.fullPath !== targetPath ||
+        !returnPath ||
+        blockGuestWrite('add-note')
+      ) return;
+      growthNoteCreateReturnPath.value = returnPath;
+      showRootNotePicker();
+    },
+    { immediate: true, flush: 'post' },
+  );
 
   let consumingDirectoryOpenRequest = false;
   watch(

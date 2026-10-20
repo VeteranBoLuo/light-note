@@ -54,6 +54,7 @@ function resolveNoteDetailSourcePath(value: unknown, includeFeatureSources: bool
     if (
       includeFeatureSources &&
       (parsed.pathname === WORKBENCH_PATH ||
+        parsed.pathname === '/growth' ||
         parsed.pathname === ORGANIZE_PATH ||
         parsed.pathname === TODO_PATH ||
         parsed.pathname === KNOWLEDGE_AUDIT_PATH ||
@@ -78,11 +79,17 @@ export function resolveNoteLibraryListPath(value: unknown): string {
 /**
  * 解析笔记详情页的稳定返回目标。
  *
- * 笔记库来源保留目录、标签和视图参数；工作台、待办、整理中心与工具任务来源回到原功能现场。
+ * 笔记库来源保留目录、标签和视图参数；工作台、成长、待办、整理中心与工具任务来源回到原功能现场。
  * 详情页之间切换时会继续沿用最初来源，未知路由、工具首页和外部地址一律拒绝。
  */
 export function resolveNoteDetailReturnPath(value: unknown): string {
   return resolveNoteDetailSourcePath(value, true);
+}
+
+/** 新手任务创建笔记只接受实际承载任务卡的页面作为返回来源。 */
+export function resolveGrowthNoteCreateReturnPath(value: unknown): string {
+  const source = resolveNoteDetailReturnPath(value);
+  return /^\/(?:workbenches|growth)(?:[?#]|$)/u.test(source) ? source : '';
 }
 
 /**
