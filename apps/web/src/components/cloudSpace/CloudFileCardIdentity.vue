@@ -4,7 +4,7 @@
       <span class="file-card-name__stem">{{ nameParts.stem }}</span
       ><span v-if="nameParts.extension" class="file-card-name__extension">{{ nameParts.extension }}</span>
     </BTooltip>
-    <BTooltip v-if="folder" class="file-card-folder-hint" :title="folder.fullPath">
+    <div v-if="folder" class="file-card-folder-hint">
       <BButton
         class="file-card-folder"
         type="text"
@@ -17,7 +17,7 @@
         <SvgIcon class="file-card-folder__icon" :src="icon.common.folderOutline" size="13" aria-hidden="true" />
         <span class="file-card-folder__path">{{ folder.fullPath }}</span>
       </BButton>
-    </BTooltip>
+    </div>
   </div>
 </template>
 
