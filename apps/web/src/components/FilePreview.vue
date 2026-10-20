@@ -367,6 +367,7 @@
   import type { CSSProperties } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { imagePreviewMessageKey } from '@/utils/imagePreviewMessage';
+  import { isImagePreviewCandidate } from '@lightnote/shared/file-category';
   import VideoPreview from '@/components/base/VideoPreview.vue';
   import PdfPreview from '@/components/cloudSpace/PdfPreview.vue';
   import ArchivePreview from '@/components/cloudSpace/ArchivePreview.vue';
@@ -533,7 +534,11 @@
   }
 
   const currentCategory = computed(() => getCloudFileCategory(props.fileInfo));
-  const previewType = computed(() => getCloudPreviewType(props.fileInfo));
+  const imageSourceState = ref<FilePreviewState | null>(null);
+  const isImageCandidate = computed(() => isImagePreviewCandidate(props.fileInfo));
+  const previewType = computed(() =>
+    isImageCandidate.value ? imageSourceState.value?.previewType || 'unsupported' : getCloudPreviewType(props.fileInfo),
+  );
   const mediaMimeType = computed(() => getCloudMediaMimeType(props.fileInfo));
   const mediaPlaybackSupport = computed(() => getCloudMediaPlaybackSupport(props.fileInfo));
   const mediaFormatLabel = computed(() => {
@@ -548,7 +553,13 @@
     ),
   );
   const unsupportedDescription = computed(() =>
-    t(legacyOfficeFile.value ? 'cloudSpace.previewPanel.legacyOfficeDesc' : 'cloudSpace.previewPanel.unsupportedDesc'),
+    t(
+      isImageCandidate.value && imageSourceState.value
+        ? 'imagePreview.originalUnsupported'
+        : legacyOfficeFile.value
+          ? 'cloudSpace.previewPanel.legacyOfficeDesc'
+          : 'cloudSpace.previewPanel.unsupportedDesc',
+    ),
   );
   const zoomPercent = computed(() => `${Math.round(scale.value * 100)}%`);
   const imageLayout = computed(() =>
@@ -734,7 +745,7 @@
     if (props.visible && file?.id && (!props.previewAccess || props.previewAccess.kind === 'owner')) {
       captureResourceOpen()('file', file.id);
     }
-    previewAttempt.value += 1;
+    const requestAttempt = ++previewAttempt.value;
     cancelPreviewPolling();
     htmlAbortController?.abort();
     htmlAbortController = null;
@@ -750,6 +761,23 @@
     resetHtmlPreview();
     resetDerivedPreviewState();
     try {
+      if (isImageCandidate.value) {
+        const access = props.previewAccess;
+        const state =
+          access?.kind === 'share'
+            ? await prepareSharedFilePreview(access.token, String(access.accessCode || '').trim())
+            : access?.kind === 'community_chat_file'
+              ? await resolveCommunityChatFilePreview(access.publicId)
+              : await resolveOwnedFilePreview(String(file.id));
+        if (requestAttempt !== previewAttempt.value || !props.visible) return;
+        if (state.previewType !== 'image' && state.errorCode !== 'IMAGE_SOURCE_UNSUPPORTED') {
+          throw Object.assign(new Error('IMAGE_SOURCE_RESOLVE_FAILED'), { code: state.errorCode });
+        }
+        imageSourceState.value = state;
+        sharedSourceFileUrl.value = String(state.sourceDownloadUrl || '');
+        if (state.previewType !== 'image') loading.value = false;
+        return;
+      }
       if (previewType.value === 'archive' || previewType.value === 'converted-pdf') {
         await loadDerivedPreview(retryDerived);
         return;
@@ -798,6 +826,7 @@
         loading.value = false;
       }
     } catch (err) {
+      if (requestAttempt !== previewAttempt.value || !props.visible) return;
       if (props.previewAccess?.kind === 'community_chat_file' && previewRequestStatus(err) === 410) {
         loading.value = false;
         emit('source-expired');
@@ -813,6 +842,7 @@
   }
 
   function resetDerivedPreviewState() {
+    imageSourceState.value = null;
     derivedPreviewUrl.value = '';
     derivedReady.value = false;
     sharePreviewTicket.value = '';
@@ -903,6 +933,9 @@
         const failure = new Error(derivedFailureMessage(state.errorCode));
         Object.assign(failure, { code: state.errorCode });
         throw failure;
+      }
+      if (state.previewType !== 'archive' && state.previewType !== 'converted-pdf') {
+        throw new Error(t('cloudSpace.previewPanel.derivedPreviewFailed'));
       }
       if (hasFilePreviewPollingTimedOut(state.previewType, pollingStartedAt)) {
         throw new Error(t('cloudSpace.previewPanel.derivedPreviewTimeout'));
@@ -1016,7 +1049,7 @@
     loading.value = false;
     error.value = true;
     errorMessage.value =
-      previewType.value === 'image' ? t('imagePreview.network') : t('cloudSpace.previewPanel.genericLoadFailed');
+      previewType.value === 'image' ? t('imagePreview.originalLoadFailed') : t('cloudSpace.previewPanel.genericLoadFailed');
   }
 
   function onImageLoad(event: Event) {

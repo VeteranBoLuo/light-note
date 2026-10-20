@@ -4,8 +4,9 @@ export type FilePreviewJobStatus = 'missing' | 'queued' | 'processing' | 'ready'
 
 export interface FilePreviewState {
   fileId: string;
-  strategy: 'archive_manifest' | 'converted_pdf';
-  previewType: 'archive' | 'converted-pdf';
+  strategy?: 'archive_manifest' | 'converted_pdf';
+  previewType: 'archive' | 'converted-pdf' | 'image' | 'unsupported';
+  sourceMimeType?: string;
   formatId: string;
   status: FilePreviewJobStatus;
   errorCode: string;

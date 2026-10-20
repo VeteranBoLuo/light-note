@@ -1,4 +1,5 @@
 import { CARD_IMAGE_PROFILE, isVideoCoverFile } from '@lightnote/shared';
+import { isImagePreviewCandidate } from '@lightnote/shared/file-category';
 import { extractManagedImages } from './extract.js';
 import { localImageLocator, hash } from './sources.js';
 import { imageError } from './compress.js';
@@ -131,7 +132,8 @@ export async function syncNoteImageReferences(db, noteId) {
 export async function registerCloudImage(db, file) {
   const name = file.file_name || file.fileName || '';
   const video = isVideoCoverFile(name);
-  if ((!/\.(png|jpe?g|gif|webp|mp3)$/i.test(name) && !video) || !file.obs_key) return null;
+  const image = isImagePreviewCandidate({ fileName: name, fileType: file.file_type || file.fileType });
+  if ((!image && !/\.mp3$/i.test(name) && !video) || !file.obs_key) return null;
   const asset = await registerAsset(db, {
     owner: file.create_by,
     sourceType: 'cloud_file',

@@ -81,8 +81,9 @@ export function useImagePreview(
 ) {
   const state = ref<ImagePreviewState | null>(null);
   let release = () => {};
+  // 聚焦和虚拟列表更新会重建 source 对象；同一文件仍保留订阅与反馈状态。
   watch(
-    [source, visible, () => initial?.value],
+    [() => (source.value ? keyOf(source.value) : ''), visible, () => initial?.value],
     () => {
       release();
       release = () => {};

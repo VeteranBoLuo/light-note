@@ -130,6 +130,7 @@ const revokeObjectUrl = vi.fn();
 
 beforeEach(() => {
   Object.values(filePreviewApiMocks).forEach((mock) => mock.mockReset());
+  filePreviewApiMocks.resolveOwnedFilePreview.mockResolvedValue({ previewType: 'image', status: 'ready' });
   Object.values(commonHttpMocks).forEach((mock) => mock.mockReset());
   communityChatApiMocks.getCommunityChatFileDownload.mockReset();
   pdfLifecycle.mounted.mockClear();
@@ -285,6 +286,7 @@ async function mountImagePreview() {
   app.mount(host);
   await nextTick();
 
+  await vi.waitFor(() => expect(document.body.querySelector('.preview-image')).not.toBeNull());
   const image = document.body.querySelector<HTMLImageElement>('.preview-image')!;
   await prepareImageLayout(image);
 
@@ -718,8 +720,8 @@ describe('FilePreview derived previews', () => {
   });
 
   it('waits for a shared image URL before mounting the image, then completes loading', async () => {
-    let resolveDownload!: (value: { downloadUrl: string }) => void;
-    commonHttpMocks.getFileShareDownload.mockReturnValue(new Promise((resolve) => { resolveDownload = resolve; }));
+    let resolveDownload!: (value: unknown) => void;
+    filePreviewApiMocks.prepareSharedFilePreview.mockReturnValue(new Promise((resolve) => { resolveDownload = resolve; }));
     const host = document.createElement('div');
     document.body.append(host);
     const app = createApp({
@@ -731,15 +733,16 @@ describe('FilePreview derived previews', () => {
     });
     app.mount(host);
     cleanup = () => { app.unmount(); host.remove(); };
-    await vi.waitFor(() => expect(commonHttpMocks.getFileShareDownload).toHaveBeenCalledWith('share-fixture', 'A123'));
+    await vi.waitFor(() => expect(filePreviewApiMocks.prepareSharedFilePreview).toHaveBeenCalledWith('share-fixture', 'A123'));
     expect(document.body.querySelector('.preview-image')).toBeNull();
     expect(document.body.querySelector('.preview-loading')).not.toBeNull();
-    resolveDownload({ downloadUrl: 'https://files.example/shared.png' });
+    resolveDownload({ previewType: 'image', status: 'ready', sourceDownloadUrl: 'https://files.example/shared.png' });
     await vi.waitFor(() => expect(document.body.querySelector('.preview-image')?.getAttribute('src')).toBe('https://files.example/shared.png'));
     document.body.querySelector('.preview-image')!.dispatchEvent(new Event('load'));
     await nextTick();
     expect(document.body.querySelector('.preview-error')).toBeNull();
     expect(document.body.querySelector('.preview-loading')).toBeNull();
+    expect(commonHttpMocks.getFileShareDownload).not.toHaveBeenCalled();
   });
 
   it('authorizes a shared archive once and passes its short-lived ticket to the directory viewer', async () => {
@@ -1034,6 +1037,7 @@ describe('FilePreview mobile image gestures', () => {
       fileUrl: 'https://files.example/second.png?signature=test',
     };
     await nextTick();
+    await vi.waitFor(() => expect(document.body.querySelector('.preview-image')).not.toBeNull());
 
     const secondImage = document.body.querySelector<HTMLImageElement>('.preview-image')!;
     await prepareImageLayout(secondImage);
@@ -1273,5 +1277,97 @@ describe('FilePreview 表格原生坐标', () => {
       expect(Object.hasOwn(event, 'offsetX')).toBe(false);
       expect(Object.hasOwn(event, 'offsetY')).toBe(false);
     }
+  });
+});
+
+
+describe('FilePreview verified image content', () => {
+  function mountVerified(
+    fileInfo: ReturnType<typeof ref>,
+    previewAccess?: { kind: 'community_chat_file'; publicId: string },
+  ) {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp({ render: () => h(FilePreview, { visible: true, fileInfo: fileInfo.value, previewAccess }) });
+    app.mount(host);
+    cleanup = () => {
+      app.unmount();
+      host.remove();
+    };
+  }
+  const file = (id = 'verified-image') => ({
+    id,
+    fileName: 'photo.heic',
+    fileType: 'image/heic',
+    fileUrl: '/unverified-original',
+    category: 'image',
+  });
+
+  it('opens HEIC-named JPEG bytes using the verified original URL', async () => {
+    filePreviewApiMocks.resolveOwnedFilePreview.mockResolvedValue({
+      previewType: 'image',
+      status: 'ready',
+      sourceMimeType: 'image/jpeg',
+      sourceDownloadUrl: '/verified-jpeg',
+    });
+    mountVerified(ref(file()));
+    await vi.waitFor(() =>
+      expect(document.querySelector('.preview-image')?.getAttribute('src')).toBe('/verified-jpeg'),
+    );
+    expect(filePreviewApiMocks.resolveOwnedFilePreview).toHaveBeenCalledWith('verified-image');
+    expect(document.querySelector('.unsupported-preview')).toBeNull();
+  });
+
+  it('explains an actually unsupported format without mounting an image or offering a generation retry', async () => {
+    filePreviewApiMocks.resolveOwnedFilePreview.mockResolvedValue({
+      previewType: 'unsupported',
+      status: 'failed',
+      formatId: 'heif',
+      errorCode: 'IMAGE_SOURCE_UNSUPPORTED',
+    });
+    mountVerified(ref(file()));
+    await vi.waitFor(() =>
+      expect(document.querySelector('.unsupported-preview')?.textContent).toContain('imagePreview.originalUnsupported'),
+    );
+    expect(document.querySelector('.preview-image')).toBeNull();
+    expect(document.querySelector('.retry-btn')).toBeNull();
+  });
+
+  it('uses chat attachment authorization for image inspection', async () => {
+    filePreviewApiMocks.resolveCommunityChatFilePreview.mockResolvedValue({
+      previewType: 'image',
+      status: 'ready',
+      sourceDownloadUrl: '/verified-chat-jpeg',
+    });
+    mountVerified(ref(file()), { kind: 'community_chat_file', publicId: 'chat-public' });
+    await vi.waitFor(() =>
+      expect(document.querySelector('.preview-image')?.getAttribute('src')).toBe('/verified-chat-jpeg'),
+    );
+    expect(filePreviewApiMocks.resolveCommunityChatFilePreview).toHaveBeenCalledWith('chat-public');
+    expect(filePreviewApiMocks.resolveOwnedFilePreview).not.toHaveBeenCalled();
+  });
+
+  it.each(['success', 'failure'])('ignores a late %s from the previous image inspection', async (outcome) => {
+    let finish!: (value: unknown) => void;
+    let fail!: (reason: unknown) => void;
+    filePreviewApiMocks.resolveOwnedFilePreview
+      .mockReturnValueOnce(
+        new Promise((resolve, reject) => {
+          finish = resolve;
+          fail = reject;
+        }),
+      )
+      .mockResolvedValueOnce({ previewType: 'image', status: 'ready', sourceDownloadUrl: '/current-jpeg' });
+    const info = ref(file('old-image'));
+    mountVerified(info);
+    await vi.waitFor(() => expect(filePreviewApiMocks.resolveOwnedFilePreview).toHaveBeenCalledWith('old-image'));
+    info.value = file('current-image');
+    await vi.waitFor(() => expect(document.querySelector('.preview-image')?.getAttribute('src')).toBe('/current-jpeg'));
+    if (outcome === 'success') finish({ previewType: 'image', status: 'ready', sourceDownloadUrl: '/old-jpeg' });
+    else fail(new Error('old network error'));
+    await nextTick();
+    await nextTick();
+    expect(document.querySelector('.preview-image')?.getAttribute('src')).toBe('/current-jpeg');
+    expect(document.querySelector('.preview-error')).toBeNull();
   });
 });

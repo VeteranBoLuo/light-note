@@ -21,6 +21,28 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 describe('shared visible-image scheduler', () => {
+  it('retains a resolved preview when its parent recreates the same source object', async () => {
+    vi.useFakeTimers();
+    const source = ref({ sourceType: 'cloud_file' as const, sourceId: 'stable' });
+    vi.mocked(resolveImagePreviews).mockImplementation(async (items) =>
+      items.map((item) => ({ ...item, status: 'ready', url: '/verified.webp', expiresAt: Date.now() + 600000 })),
+    );
+    const view = mount(
+      defineComponent({
+        setup: () => ({ state: useImagePreview(source, ref(true)) }),
+        template: '<span>{{state?.status}}</span>',
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    await nextTick();
+    expect(view.text()).toBe('ready');
+    source.value = { ...source.value };
+    await nextTick();
+    expect(view.text()).toBe('ready');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(resolveImagePreviews).toHaveBeenCalledTimes(1);
+    view.unmount();
+  });
   it('batches visible cards and never requests an original source URL', async () => {
     vi.useFakeTimers();
     vi.mocked(resolveImagePreviews).mockImplementation(async (items) =>
