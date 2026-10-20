@@ -3,15 +3,20 @@ import { createApp, h, nextTick, ref } from 'vue';
 import { createI18n } from 'vue-i18n';
 import GlobalSearch from './GlobalSearch.vue';
 
+const state = vi.hoisted(() => ({ navigate: vi.fn(), locate: vi.fn(), items: [] as any[] }));
+
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push: vi.fn() }),
   useRoute: () => ({ name: 'cloudSpace', path: '/cloudSpace', query: {} }),
 }));
 vi.mock('@/api/commonApi', () => ({ recordOperation: vi.fn() }));
-vi.mock('@/utils/globalSearchNavigation', () => ({ navigateToSearchResult: vi.fn() }));
+vi.mock('@/utils/globalSearchNavigation', () => ({
+  navigateToSearchResult: state.navigate,
+  locateSearchResult: state.locate,
+}));
 vi.mock('@/composables/useGlobalSearchSuggestions', () => ({
   useGlobalSearchSuggestions: () => ({
-    items: ref([]),
+    items: ref(state.items),
     loading: ref(false),
     failed: ref(false),
     schedule: vi.fn(),
@@ -25,7 +30,35 @@ vi.mock('@/components/base/BasicComponents/BTooltip.vue', () => ({ default: { te
 let cleanup: (() => void) | undefined;
 afterEach(() => {
   cleanup?.();
+  cleanup = undefined;
+  state.items = [];
+  vi.clearAllMocks();
   vi.restoreAllMocks();
+});
+
+it.each(['open', 'locate'] as const)('桌面文件搜索的 %s 操作关闭搜索，并只分发对应导航', async (action) => {
+  state.items = [{ id: 'file-42', type: 'file', title: '报告.pdf', description: '' }];
+  const host = document.createElement('div');
+  document.body.append(host);
+  const app = createApp({ render: () => h(GlobalSearch) });
+  app.directive('click-log', {});
+  app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: {}, missingWarn: false, fallbackWarn: false }));
+  cleanup = () => {
+    app.unmount();
+    host.remove();
+  };
+  app.mount(host);
+  host.querySelector<HTMLButtonElement>('button')!.click();
+  await nextTick();
+  const selector = action === 'open' ? '.global-search-result__open' : '.global-search-result__extra button';
+  document.querySelector<HTMLButtonElement>(selector)!.click();
+  await nextTick();
+  expect(document.querySelector('.global-search-dialog')).toBeNull();
+  expect(state[action === 'open' ? 'navigate' : 'locate']).toHaveBeenCalledExactlyOnceWith(
+    expect.anything(),
+    state.items[0],
+  );
+  expect(state[action === 'open' ? 'locate' : 'navigate']).not.toHaveBeenCalled();
 });
 
 it('全局搜索在输入框和对话框按钮消费 Escape，输入法和长按不关闭，下层预览不接收事件', async () => {

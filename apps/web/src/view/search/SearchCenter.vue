@@ -353,6 +353,7 @@
                         :view="effectiveView"
                         :compact="bookmark.isMobile"
                         @open="handleResultOpen(item)"
+                        @locate="locateItem(item)"
                         @toggle-select="toggleSelect(item)"
                       />
                     </RightMenu>
@@ -650,7 +651,7 @@
   import { buildNoteDetailRequestScope } from '@/api/noteDetailPrefetch';
   import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
   import { useRoute, useRouter } from 'vue-router';
-  import { openBookmarkUrl } from '@/utils/openBookmark.ts';
+  import { locateSearchResult, navigateToSearchResult } from '@/utils/globalSearchNavigation';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { useAndroidPullRefresh } from '@/composables/useAndroidPullRefresh';
   import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
@@ -1225,6 +1226,9 @@
     };
     return [
       openItem,
+      ...(item.type === 'file'
+        ? [{ key: 'locate', label: t('resourceCenter.locateFile'), icon: icon.toolbox.locate }]
+        : []),
       { key: 'resource-open-divider', divider: true },
       ...(canJoinProject.value
         ? [{ key: 'joinProject', label: t('toolbox.project.join'), icon: icon.toolbox.research }]
@@ -1713,19 +1717,12 @@
   }
 
   function openItem(item: DisplaySearchItem) {
-    if (item.type === 'bookmark' && item.url) {
-      openBookmarkUrl(item.url, { resourceId: item.id });
-      return;
-    }
-    // 文件先于 route 判断：云空间需要带上 fileName 搜索过滤
-    if (item.type === 'file') {
-      router.push({ path: '/cloudSpace', query: { fileName: item.title } });
-      return;
-    }
-    if (item.route) {
-      router.push(item.route);
-      return;
-    }
+    navigateToSearchResult(router, item);
+  }
+
+  function locateItem(item: DisplaySearchItem) {
+    recordOperation({ module: '资源中心', operation: '定位文件搜索结果' });
+    locateSearchResult(router, item);
   }
 
   function toggleSelect(item: DisplaySearchItem) {
@@ -1964,6 +1961,10 @@
     }
     if (action === 'open') {
       openItem(item);
+      return;
+    }
+    if (action === 'locate') {
+      locateItem(item);
       return;
     }
     if (action === 'addInbox' && isTaggableResourceType(item.type)) {

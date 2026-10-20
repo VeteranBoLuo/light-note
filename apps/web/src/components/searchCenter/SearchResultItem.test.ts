@@ -25,23 +25,26 @@ const item: DisplaySearchItem = {
   searchScore: 0,
 };
 
-async function mountItem(view: ResourceView, selectable: boolean) {
+async function mountItem(view: ResourceView, selectable: boolean, result = item) {
   const onOpen = vi.fn();
   const onToggleSelect = vi.fn();
+  const onLocate = vi.fn();
   const host = document.createElement('div');
   document.body.append(host);
   const app = createApp({
     render: () =>
       h(SearchResultItem, {
-        item,
+        item: result,
         typeLabel: '笔记',
         keyword: '',
         view,
         selectable,
         onOpen,
         onToggleSelect,
+        onLocate,
       }),
   });
+  app.component('svg-icon', { template: '<span data-fallback-icon />' });
   app.use(
     createI18n({
       legacy: false,
@@ -50,6 +53,7 @@ async function mountItem(view: ResourceView, selectable: boolean) {
         'zh-CN': {
           tagManage: { relatedTag: '关联标签' },
           tagGraph: { panel: { updateTime: '更新时间' } },
+          resourceCenter: { locateFile: '在云空间定位' },
         },
       },
     }),
@@ -60,7 +64,7 @@ async function mountItem(view: ResourceView, selectable: boolean) {
     app.unmount();
     host.remove();
   };
-  return { host, onOpen, onToggleSelect };
+  return { host, onOpen, onToggleSelect, onLocate };
 }
 
 afterEach(() => {
@@ -69,6 +73,30 @@ afterEach(() => {
 });
 
 describe('SearchResultItem', () => {
+  it.each(['card', 'list'] as const)('%s 文件定位只触发定位，不打开或切换选择', async (view) => {
+    const file = { ...item, type: 'file' as const, title: '报告.pdf' };
+    const { host, onOpen, onToggleSelect, onLocate } = await mountItem(view, false, file);
+    const locate = host.querySelector<HTMLButtonElement>('.result-locate__button')!;
+    expect(locate.getAttribute('aria-label')).toContain(file.title);
+    expect(locate.querySelector('.icon-base64')?.getAttribute('style')).toContain('data:image/svg+xml;base64,');
+    expect(locate.querySelector('[data-fallback-icon]')).toBeNull();
+    expect(locate.closest('button button')).toBeNull();
+    locate.click();
+    await nextTick();
+    expect(onLocate).toHaveBeenCalledTimes(1);
+    expect(onOpen).not.toHaveBeenCalled();
+    expect(onToggleSelect).not.toHaveBeenCalled();
+  });
+
+  it.each(['card', 'list'] as const)('%s 批量态文件隐藏定位，正文仍只勾选', async (view) => {
+    const { host, onOpen, onToggleSelect, onLocate } = await mountItem(view, true, { ...item, type: 'file' });
+    expect(host.querySelector('.result-locate')).toBeNull();
+    host.querySelector<HTMLButtonElement>(view === 'card' ? '.result-click-area' : '.result-row')!.click();
+    await nextTick();
+    expect(onToggleSelect).toHaveBeenCalledTimes(1);
+    expect(onOpen).not.toHaveBeenCalled();
+    expect(onLocate).not.toHaveBeenCalled();
+  });
   it.each([
     ['card', '.result-click-area'],
     ['list', '.result-row'],

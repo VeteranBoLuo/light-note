@@ -80,6 +80,7 @@
               :item="item"
               :keyword="trimmedKeyword"
               @open="openItem"
+              @locate="locateItem"
             />
             <BButton class="gs-layer__view-all" @click="submitFullSearch">
               {{ t('globalSearch.viewAll') }}
@@ -110,7 +111,7 @@
   import icon from '@/config/icon';
   import type { SearchResultItem } from '@/api/search';
   import { GLOBAL_SEARCH_TYPES, type GlobalSearchType } from '@/utils/globalSearchTypes';
-  import { navigateToSearchResult } from '@/utils/globalSearchNavigation';
+  import { locateSearchResult, navigateToSearchResult } from '@/utils/globalSearchNavigation';
   import { useGlobalSearchSuggestions } from '@/composables/useGlobalSearchSuggestions';
   import { useMobileGlobalSearch } from '@/composables/useMobileGlobalSearch';
   import { getMobileTopBarBinding } from '@/composables/useMobileTopBar';
@@ -171,10 +172,18 @@
   }
 
   function openItem(item: SearchResultItem) {
+    const snapshot = { ...item };
     rememberKeyword(trimmedKeyword.value);
     recordOperation({ module: '全局搜索', operation: `打开移动端搜索结果【${item.type}】` });
     // 先让 sentinel 出栈，再跳目标路由，否则返回键会把新页面一起弹掉
-    closeSearch(() => navigateToSearchResult(router, item));
+    closeSearch(() => navigateToSearchResult(router, snapshot));
+  }
+
+  function locateItem(item: SearchResultItem) {
+    const snapshot = { ...item };
+    rememberKeyword(trimmedKeyword.value);
+    recordOperation({ module: '全局搜索', operation: '定位移动端文件搜索结果' });
+    closeSearch(() => locateSearchResult(router, snapshot));
   }
 
   function submitFullSearch() {

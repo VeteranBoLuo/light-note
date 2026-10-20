@@ -6,6 +6,7 @@
       {
         'result-item--selected': selected,
         'result-item--compact': compact,
+        'result-item--locatable': canLocate,
       },
     ]"
   >
@@ -87,6 +88,16 @@
         </div>
       </BButton>
     </template>
+    <BTooltip v-if="canLocate" class="result-locate" :title="t('resourceCenter.locateFile')">
+      <BButton
+        class="result-locate__button"
+        icon-only
+        :aria-label="`${t('resourceCenter.locateFile')}：${item.title}`"
+        @click.stop="emit('locate')"
+      >
+        <SvgIcon :src="icon.toolbox.locate" size="16" aria-hidden="true" />
+      </BButton>
+    </BTooltip>
   </article>
 </template>
 
@@ -96,6 +107,9 @@
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
+  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon';
   import type { DisplaySearchItem, ResourceView } from './searchUtils.ts';
 
   const props = defineProps<{
@@ -111,9 +125,11 @@
   const emit = defineEmits<{
     (e: 'open'): void;
     (e: 'toggle-select'): void;
+    (e: 'locate'): void;
   }>();
 
   const { t } = useI18n();
+  const canLocate = computed(() => props.item.type === 'file' && !props.selectable);
 
   function handlePrimaryClick() {
     if (props.selectable) {
@@ -256,6 +272,43 @@
 
   .result-item--compact .meta-line-value {
     margin-left: 0;
+  }
+
+  .result-locate {
+    position: absolute;
+    top: var(--ui-space-6, 6px);
+    right: var(--ui-space-6, 6px);
+  }
+
+  .result-locate__button {
+    width: var(--ui-control-32, 32px);
+    height: var(--ui-control-32, 32px);
+    padding: 0;
+    color: var(--text-color);
+    background: transparent;
+  }
+
+  .result-item--card.result-item--locatable .item-head {
+    box-sizing: border-box;
+    padding-right: var(--ui-space-32, 32px);
+  }
+
+  .result-item--compact .result-locate {
+    top: 0;
+    right: 0;
+  }
+
+  .result-item--compact .result-locate__button {
+    width: var(--ui-control-44, 44px);
+    height: var(--ui-control-44, 44px);
+  }
+
+  .result-item--list .result-locate {
+    position: static;
+    display: flex;
+    align-items: center;
+    flex: 0 0 auto;
+    margin-right: var(--ui-space-4, 4px);
   }
 
   /* 列表视图:横向紧凑行——覆盖卡片的最小高度与位移 hover,一行内横排:类型 / 标题 / 描述 / 标签 / 时间 */

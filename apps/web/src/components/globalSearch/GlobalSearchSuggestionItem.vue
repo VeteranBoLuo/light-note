@@ -1,19 +1,32 @@
 <template>
-  <BButton class="gs-suggestion" :class="`gs-suggestion--${item.type}`" @click="emit('open', item)">
-    <span class="gs-suggestion__badge" aria-hidden="true">
-      <SvgIcon :src="typeIcon" size="17" />
-    </span>
-    <span class="gs-suggestion__main">
-      <span class="gs-suggestion__title" v-html="highlightedTitle"></span>
-      <small class="gs-suggestion__meta">{{ metaText }}</small>
-    </span>
-  </BButton>
+  <div class="gs-suggestion-row">
+    <BButton class="gs-suggestion" :class="`gs-suggestion--${item.type}`" @click="emit('open', item)">
+      <span class="gs-suggestion__badge" aria-hidden="true">
+        <SvgIcon :src="typeIcon" size="17" />
+      </span>
+      <span class="gs-suggestion__main">
+        <span class="gs-suggestion__title" v-html="highlightedTitle"></span>
+        <small class="gs-suggestion__meta">{{ metaText }}</small>
+      </span>
+    </BButton>
+    <BTooltip v-if="item.type === 'file'" :title="t('resourceCenter.locateFile')">
+      <BButton
+        class="gs-suggestion__locate"
+        icon-only
+        :aria-label="`${t('resourceCenter.locateFile')}：${item.title}`"
+        @click.stop="emit('locate', item)"
+      >
+        <SvgIcon :src="icon.toolbox.locate" size="17" aria-hidden="true" />
+      </BButton>
+    </BTooltip>
+  </div>
 </template>
 
 <script setup lang="ts">
   import { computed } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
   import type { SearchResultItem } from '@/api/search';
@@ -21,7 +34,7 @@
   import { highlightKeyword } from '@/utils/globalSearchHighlight';
 
   const props = defineProps<{ item: SearchResultItem; keyword: string }>();
-  const emit = defineEmits<{ open: [item: SearchResultItem] }>();
+  const emit = defineEmits<{ open: [item: SearchResultItem]; locate: [item: SearchResultItem] }>();
 
   const { t } = useI18n();
 
@@ -46,7 +59,24 @@
 </script>
 
 <style scoped lang="less">
+  .gs-suggestion-row {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    gap: var(--ui-space-4, 4px);
+  }
+
+  .gs-suggestion__locate {
+    width: var(--ui-control-44, 44px);
+    height: var(--ui-control-44, 44px);
+    padding: 0;
+    color: var(--text-color);
+    background: transparent;
+  }
+
   .gs-suggestion {
+    min-width: 0;
+    flex: 1 1 auto;
     width: 100%;
     min-height: var(--ui-control-56, 56px);
     padding: var(--ui-space-10, 10px) var(--ui-space-10, 10px);

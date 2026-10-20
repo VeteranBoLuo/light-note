@@ -117,8 +117,15 @@
                     </span>
                   </BButton>
                   <span class="global-search-result__extra">
-                    <BTooltip v-if="item.type === 'bookmark'" :title="t('resourceCenter.locate')">
-                      <BButton :aria-label="t('resourceCenter.locate')" @click="locateItem(item)">
+                    <BTooltip
+                      v-if="item.type === 'bookmark' || item.type === 'file'"
+                      :title="t(item.type === 'file' ? 'resourceCenter.locateFile' : 'resourceCenter.locate')"
+                    >
+                      <BButton
+                        icon-only
+                        :aria-label="`${t(item.type === 'file' ? 'resourceCenter.locateFile' : 'resourceCenter.locate')}：${item.title}`"
+                        @click.stop="locateItem(item)"
+                      >
                         <SvgIcon :src="icon.toolbox.locate" size="14" />
                       </BButton>
                     </BTooltip>
@@ -170,7 +177,7 @@
   import { getSearchTypeLabel } from '@/components/searchCenter/searchMeta';
   import { useGlobalSearchSuggestions } from '@/composables/useGlobalSearchSuggestions';
   import { type GlobalSearchType } from '@/utils/globalSearchTypes';
-  import { navigateToSearchResult } from '@/utils/globalSearchNavigation';
+  import { locateSearchResult, navigateToSearchResult } from '@/utils/globalSearchNavigation';
   import { GLOBAL_SEARCH_HIDDEN_ROUTE_NAMES } from '@/config/navigation';
   import { getGlobalShortcutKeys, isEditableShortcutTarget, matchesGlobalShortcut } from '@/config/keyboardShortcuts';
   import icon from '@/config/icon';
@@ -340,9 +347,11 @@
   }
   function locateItem(item: SearchResultItem) {
     close({ restoreFocus: false });
-    if (item.type !== 'bookmark') return;
-    recordOperation({ module: '全局搜索', operation: `定位书签【${item.title}】` });
-    void router.push({ path: '/home', query: { locate: item.id } });
+    recordOperation({
+      module: '全局搜索',
+      operation: item.type === 'file' ? '定位文件搜索结果' : `定位书签【${item.title}】`,
+    });
+    locateSearchResult(router, item);
   }
   function handleShortcut(event: KeyboardEvent) {
     if (
