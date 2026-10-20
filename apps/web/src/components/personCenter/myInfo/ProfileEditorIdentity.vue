@@ -1,8 +1,5 @@
 <template>
-  <section class="profile-editor-identity" :class="{ 'has-background': background }">
-    <div v-if="background" class="profile-editor-identity__cover">
-      <ProfileBackgroundArt :background-id="profile.backgroundId" />
-    </div>
+  <ProfileBackgroundSurface class="profile-editor-identity" :background-id="profile.backgroundId">
     <header class="profile-editor-identity__person">
       <span
         class="profile-editor-identity__avatar"
@@ -32,7 +29,7 @@
       </div>
     </header>
     <footer v-if="$slots.actions" class="profile-editor-identity__actions"><slot name="actions" /></footer>
-  </section>
+  </ProfileBackgroundSurface>
 </template>
 
 <script setup lang="ts">
@@ -41,17 +38,15 @@
   import type { CommunityChatAuthorProfile } from '@/api/communityChatApi';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import AvatarFramePreview from '@/components/growth/AvatarFramePreview.vue';
-  import ProfileBackgroundArt from '@/components/growth/ProfileBackgroundArt.vue';
+  import ProfileBackgroundSurface from '@/components/growth/ProfileBackgroundSurface.vue';
   import { avatarFrameStableSlot } from '@/config/avatarFrameArtwork';
   import { frameVariant } from '@/config/growthFrames';
   import icon from '@/config/icon';
-  import { profileBackground } from '@/config/profileBackgrounds';
   import { useUiDensity } from '@/composables/useUiDensity';
 
   const props = defineProps<{ profile: CommunityChatAuthorProfile }>();
   const { t } = useI18n();
   const { dimension } = useUiDensity();
-  const background = computed(() => profileBackground(props.profile.backgroundId));
   const frameId = computed(() => (frameVariant(props.profile.frameId) ? props.profile.frameId : null));
   const avatar = computed(() => props.profile.avatar || icon.communityChat.defaultAvatar);
   const avatarSize = computed(() => dimension(58, 'layout'));
@@ -65,13 +60,6 @@
     border-radius: 16px;
     background: var(--card-background);
   }
-  .profile-editor-identity__cover {
-    position: relative;
-    height: var(--ui-layout-90, 90px);
-    overflow: hidden;
-    border-radius: 15px 15px 0 0;
-    background: var(--surface-panel-bg);
-  }
   .profile-editor-identity__person {
     display: flex;
     align-items: flex-start;
@@ -79,8 +67,11 @@
     padding: var(--ui-space-16, 16px) var(--ui-space-16, 16px) var(--ui-space-12, 12px);
     min-width: 0;
   }
-  .has-background .profile-editor-identity__person {
-    padding-top: 0;
+  .is-decorated .profile-editor-identity__person {
+    box-sizing: border-box;
+    min-height: var(--ui-layout-180, 180px);
+    align-items: center;
+    padding-block: var(--ui-space-16, 16px);
   }
   .profile-editor-identity__avatar {
     position: relative;
@@ -90,8 +81,8 @@
     display: grid;
     place-items: center;
   }
-  .has-background .profile-editor-identity__avatar {
-    margin-top: calc(-1 * var(--ui-space-29, 29px));
+  .is-decorated .profile-editor-identity__avatar {
+    height: var(--profile-editor-avatar-slot);
   }
   .profile-editor-identity__avatar > :deep(img) {
     border-radius: 50%;
@@ -111,6 +102,9 @@
     font-weight: 700;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .is-decorated .profile-editor-identity__copy {
+    padding-top: 0;
   }
   .profile-editor-identity__id,
   .profile-editor-identity__meta,
@@ -150,6 +144,24 @@
     justify-content: center;
     gap: var(--ui-space-22, 22px);
     padding: var(--ui-space-8, 8px) var(--ui-space-12, 12px);
-    border-top: 1px solid var(--surface-divider-color);
+    border-top: 1px solid var(--surface-border-color);
+  }
+  .is-decorated .profile-editor-identity__actions {
+    isolation: isolate;
+    border-radius: 0 0 15px 15px;
+  }
+  .is-decorated .profile-editor-identity__actions::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    border-radius: inherit;
+    background: var(--card-background);
+    opacity: 0.86;
+    pointer-events: none;
+  }
+  .is-decorated .profile-editor-identity__actions > :slotted(*) {
+    position: relative;
+    z-index: 1;
   }
 </style>

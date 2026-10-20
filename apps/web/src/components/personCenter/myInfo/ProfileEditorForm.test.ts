@@ -243,7 +243,7 @@ describe('profile editor layout and existing flows', () => {
     expect(identity.textContent).toContain('轻笺团队');
     expect(identity.textContent).not.toContain('传说头像框');
     expect(identity.querySelector('[data-frame]')).toBeNull();
-    expect(identity.querySelector('.profile-editor-identity__cover')).toBeNull();
+    expect(identity.classList.contains('is-decorated')).toBe(false);
     expect(button('更换头像').disabled).toBe(false);
   });
 
