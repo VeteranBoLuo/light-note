@@ -5512,6 +5512,8 @@ export default {
     untitled: 'Untitled resource',
     guestPrompt: 'Sign up to quick-add resources, organize pending items, and manage todos.',
     addExisting: 'Add to inbox',
+    markOrganized: 'Mark as organized',
+    nothingPending: 'None of the selected items are in the inbox.',
     removeExisting: 'Remove from inbox',
     removedFromPending: 'Removed from inbox',
     removeFailed: 'Could not remove this item from the inbox. Please try again.',

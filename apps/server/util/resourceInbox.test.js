@@ -208,6 +208,26 @@ describe('resourceInbox', () => {
     expect(connection.query.mock.calls[1][0]).not.toContain('UPDATE note');
   });
 
+  it('72 个文件复用归属校验与整批 pending 更新，按实际变更数量返回', async () => {
+    const items = Array.from({ length: 72 }, (_, i) => ({ resourceType: 'file', resourceId: String(i + 1) }));
+    expect(normalizeInboxItems(items)).toBeNull();
+    expect(normalizeInboxItems(items, 1000)).toEqual(items);
+    const connection = {
+      query: vi.fn()
+        .mockResolvedValueOnce([items.map((item) => ({ id: item.resourceId }))])
+        .mockResolvedValueOnce([{ affectedRows: 48 }]),
+    };
+    await expect(completeResources(connection, { userId: 'u1', items, suppressUserRewards: true }))
+      .resolves.toEqual({ completed: 48 });
+    expect(connection.query).toHaveBeenCalledTimes(2);
+    const [ownershipSql, ownershipParams] = connection.query.mock.calls[0];
+    const [updateSql, updateParams] = connection.query.mock.calls[1];
+    expect(ownershipSql).toContain('FROM files');
+    expect(ownershipParams).toEqual(['u1', ...items.map((item) => item.resourceId)]);
+    expect(updateSql).toContain("status = 'pending'");
+    expect(updateParams).toEqual(['u1', 'file', ...items.map((item) => item.resourceId)]);
+  });
+
   it('管理员代完成只更新业务状态，不写用户有效活跃或成长奖励', async () => {
     const connection = {
       query: vi

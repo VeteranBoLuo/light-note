@@ -5205,6 +5205,8 @@ export default {
     untitled: '未命名资源',
     guestPrompt: '注册后即可快速添加资源、管理待整理内容并记录待办。',
     addExisting: '加入待整理',
+    markOrganized: '标记整理完成',
+    nothingPending: '所选内容中没有待整理项',
     removeExisting: '取消待整理',
     removedFromPending: '已取消待整理',
     removeFailed: '取消待整理失败，请稍后重试',

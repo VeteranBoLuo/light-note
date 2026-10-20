@@ -10,6 +10,7 @@
           'has-project-action': (showMobileProject && canAddProject) || !!$slots['mobile-actions'],
         }"
         :above-navigation="aboveNavigation"
+        :aria-busy="selectionStore?.busy || undefined"
       >
         <div class="resource-batch-action-bar__selection">
           <span v-if="$slots.leading" class="resource-batch-action-bar__leading">
@@ -32,7 +33,12 @@
           translate('toolbox.project.join')
         }}</BButton>
         <slot name="mobile-actions" />
-        <BButton v-if="showMore" class="resource-batch-action-bar__mobile-more" @click="emit('more')">
+        <BButton
+          v-if="showMore"
+          class="resource-batch-action-bar__mobile-more"
+          :disabled="!!selectionStore?.busy"
+          @click="emit('more')"
+        >
           <SvgIcon :src="icon.common.more" size="17" aria-hidden="true" />
           <span>{{ moreLabel }}</span>
         </BButton>
@@ -46,7 +52,7 @@
               class="resource-batch-action-bar__primary"
               type="primary"
               :disabled="primaryDisabled || !!selectionStore?.busy"
-              :loading="primaryLoading || !!selectionStore?.busy"
+              :loading="primaryLoading"
               @click="emit('primary')"
             >
               <SvgIcon :src="primaryIcon || icon.common.magicWand" size="17" aria-hidden="true" />
@@ -56,7 +62,13 @@
         </BTooltip>
       </MobileStickyActionBar>
 
-      <div v-else-if="open" class="resource-batch-action-bar" role="toolbar" :aria-label="ariaLabel">
+      <div
+        v-else-if="open"
+        class="resource-batch-action-bar"
+        role="toolbar"
+        :aria-label="ariaLabel"
+        :aria-busy="selectionStore?.busy || undefined"
+      >
         <div class="resource-batch-action-bar__selection">
           <span class="resource-batch-action-bar__leading" :aria-hidden="$slots.leading ? undefined : 'true'">
             <slot name="leading">
@@ -98,7 +110,7 @@
               class="resource-batch-action-bar__primary"
               type="primary"
               :disabled="primaryDisabled || !!selectionStore?.busy"
-              :loading="primaryLoading || !!selectionStore?.busy"
+              :loading="primaryLoading"
               @click="emit('primary')"
             >
               <SvgIcon :src="primaryIcon || icon.common.magicWand" size="17" aria-hidden="true" />
@@ -165,14 +177,13 @@
 
   const selectionStore = props.selectionModule ? useResourceSelectionStore() : null;
   const translate = props.selectionModule ? useI18n().t : () => '';
+  // busy 也包含已打开的移动/标签操作层，只锁选择，不改变底栏尺寸或启动无关主动作的加载态。
   const selectionScopeDetail = computed(() =>
     selectionStore?.pendingReconcile
       ? translate('resourceSelection.pending')
-      : selectionStore?.busy
-        ? translate('resourceSelection.processing')
-        : selectionStore?.query
-          ? translate('resourceSelection.allMatching')
-          : '',
+      : selectionStore?.query
+        ? translate('resourceSelection.allMatching')
+        : '',
   );
 
   const { canJoinProject, joinProject } = useProjectResourceAction();

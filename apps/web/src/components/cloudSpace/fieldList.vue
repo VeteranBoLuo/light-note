@@ -635,7 +635,7 @@
       :summary="batchActionSummary"
       :aria-label="$t('resourceOutcome.batch.ariaLabel')"
       :clear-label="$t('resourceOutcome.batch.clear')"
-      :show-clear="hasSelection"
+      :show-clear="false"
       :show-mobile-primary="false"
       :primary-label="$t('resourceOutcome.primaryAction')"
       :more-label="$t('common.more')"
@@ -680,6 +680,21 @@
           <SvgIcon :src="icon.cloudSpace.download" size="16" aria-hidden="true" />
           {{ $t('cloudSpace.download') }}
         </BButton>
+        <BActionMenu
+          :items="batchInboxActions"
+          :disabled="!hasSelection || selection.busy.value"
+          placement="top-left"
+          :width="200"
+          :aria-label="$t('common.more')"
+          @select="handleBatchInboxAction"
+        >
+          <template #default="{ open }">
+            <BButton :disabled="!hasSelection || selection.busy.value" :aria-expanded="open" aria-haspopup="menu">
+              <SvgIcon :src="icon.common.more" size="16" aria-hidden="true" />
+              {{ $t('common.more') }}
+            </BButton>
+          </template>
+        </BActionMenu>
         <BButton class="batch-action-delete" :disabled="!hasSelection" @click="handleBatchDelete">
           <SvgIcon :src="icon.table_delete" size="16" aria-hidden="true" />
           {{ $t('common.delete') }}
@@ -1092,12 +1107,23 @@
       ? t('cloudSpace.selectedCount', { count: selectedRows.value.length })
       : t('resourceOutcome.batch.selectCloudFiles'),
   );
+  const batchInboxActions = computed<BActionMenuItem[]>(() => [
+    { key: 'inbox-add', label: t('inbox.addExisting'), icon: icon.contextMenu.inbox },
+    { key: 'inbox-complete', label: t('inbox.markOrganized'), icon: icon.organize.check },
+  ]);
   const mobileBatchActions = computed<MobilePageActionItem[]>(() => [
+    ...batchInboxActions.value.map((action) => ({
+      key: action.key,
+      label: action.label!,
+      icon: action.icon,
+      disabled: !hasSelection.value || selection.busy.value,
+    })),
     {
       key: 'tags',
       label: t('resourceCenter.batch.manageTags'),
       icon: icon.resource.tag,
       disabled: !hasSelection.value || selection.busy.value,
+      dividerBefore: true,
     },
     {
       key: 'outcome',
@@ -1186,12 +1212,48 @@
   }
 
   function handleMobileBatchAction(action: MobilePageActionItem) {
-    if (action.key === 'tags') void selection.openTags('add');
+    if (action.key === 'inbox-add' || action.key === 'inbox-complete') handleBatchInboxAction(action.key);
+    else if (action.key === 'tags') void selection.openTags('add');
     else if (action.key === 'outcome') openSelectedOutcomeDrawer();
     else if (action.key === 'clear') clearSelectedFiles();
     else if (action.key === 'move') handleBatchMove();
     else if (action.key === 'download') void handleBatchDownload();
     else if (action.key === 'delete') handleBatchDelete();
+  }
+
+  function handleBatchInboxAction(key: string) {
+    if (key === 'inbox-add' || key === 'inbox-complete') void setSelectedFilesPending(key === 'inbox-add');
+  }
+
+  async function setSelectedFilesPending(pending: boolean) {
+    const op = await selection.prepare();
+    if (!op) return;
+    let closeLoading: (() => void) | undefined;
+    const loadingTimer = window.setTimeout(() => {
+      if (selection.current(op)) closeLoading = message.loading(t('resourceSelection.processing'), 0);
+    }, 300);
+    try {
+      const resources = op.items.map((item) => ({ resourceType: 'file' as const, resourceId: item.id }));
+      const mutate = pending ? addResourcesToInbox : removeResourcesFromInbox;
+      const ok = await mutate(resources, '云空间', () => selection.current(op));
+      if (!ok || !selection.current(op)) return;
+
+      const ids = new Set(op.items.map((item) => item.id));
+      for (const file of cloud.fileList) {
+        if (ids.has(String(file.id))) file.isPending = pending;
+      }
+      if (cloud.pendingOnly && !pending) {
+        const before = cloud.fileList.length;
+        cloud.fileList = cloud.fileList.filter((file) => !ids.has(String(file.id)));
+        cloud.fileTotal = Math.max(0, cloud.fileTotal - (before - cloud.fileList.length));
+      }
+      const refreshed = await cloud.refreshLoadedFiles();
+      if (selection.current(op) && !refreshed) message.warning(t('resourceCenter.batch.refreshFailed'));
+    } finally {
+      window.clearTimeout(loadingTimer);
+      closeLoading?.();
+      selection.finish(op);
+    }
   }
 
   async function openSelectedOutcomeDrawer() {

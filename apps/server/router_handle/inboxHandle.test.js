@@ -21,11 +21,11 @@ vi.mock('../util/common.js', () => ({
   resultData: (data = null, status = 200, msg = '') => ({ data, status, msg }),
 }));
 vi.mock('../util/auth.js', () => ({ ensureNotVisitor }));
-vi.mock('../util/resourceInbox.js', () => ({
+vi.mock('../util/resourceInbox.js', async (importOriginal) => ({
+  ...(await importOriginal()),
   enqueueResources,
   completeResources,
   listInboxResources,
-  normalizeInboxItems: vi.fn((items) => items),
   normalizeInboxSource: vi.fn((source, fallback) => source || fallback),
   queryPendingCount,
 }));
@@ -103,6 +103,37 @@ describe('inboxHandle 写事务', () => {
     await completeInbox(req, mockRes());
     expect(completeResources).toHaveBeenCalledWith(connection, { userId: 'u1', items: req.body.items });
     expect(connection.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([72, 1000])('一次事务完成 %i 个文件，覆盖整个显式选择范围', async (count) => {
+    const items = Array.from({ length: count }, (_, i) => ({ resourceType: 'file', resourceId: String(i + 1) }));
+    completeResources.mockResolvedValueOnce({ completed: count });
+    const res = mockRes();
+    await completeInbox({ user: { id: 'u1' }, resourceUser: { id: 'owner' }, body: { items } }, res);
+    expect(completeResources).toHaveBeenCalledExactlyOnceWith(connection, { userId: 'owner', items });
+    expect(connection.beginTransaction).toHaveBeenCalledOnce();
+    expect(connection.commit).toHaveBeenCalledOnce();
+    expect(res.send).toHaveBeenCalledWith({ status: 200, data: { completed: count }, msg: '' });
+  });
+
+  it('超过显式选择上限时在获取连接前拒绝，不截断提交', async () => {
+    const items = Array.from({ length: 1001 }, (_, i) => ({ resourceType: 'file', resourceId: String(i + 1) }));
+    const res = mockRes();
+    await completeInbox({ user: { id: 'u1' }, body: { items } }, res);
+    expect(getConnection).not.toHaveBeenCalled();
+    expect(completeResources).not.toHaveBeenCalled();
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 400 }));
+  });
+
+  it('大批量包含无权操作文件时回滚整批，不报告部分成功', async () => {
+    const items = Array.from({ length: 72 }, (_, i) => ({ resourceType: 'file', resourceId: String(i + 1) }));
+    completeResources.mockRejectedValueOnce(Object.assign(new Error('资源不存在或无权操作'), { code: 'INBOX_RESOURCE_FORBIDDEN' }));
+    const res = mockRes();
+    await completeInbox({ user: { id: 'u1' }, body: { items } }, res);
+    expect(connection.rollback).toHaveBeenCalledOnce();
+    expect(connection.commit).not.toHaveBeenCalled();
+    expect(connection.release).toHaveBeenCalledOnce();
+    expect(res.status).toHaveBeenCalledWith(403);
   });
 
   it('连接池获取失败也返回稳定业务错误而不是抛出', async () => {
