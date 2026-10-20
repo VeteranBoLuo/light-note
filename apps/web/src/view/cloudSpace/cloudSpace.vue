@@ -8,10 +8,6 @@
     :title-actionable="!bookmark.isMobile"
     @title-click="resetCloudSpace"
   >
-    <template #meta>
-      <span class="cloud-count-chip">{{ $t('cloudSpace.fileCount', { count: cloud.fileTotal }) }}</span>
-    </template>
-
     <template #actions>
       <CloudStorageBar v-if="bookmark.isMobile" ref="mobileCloudStorageBar" compact class="mobile-cloud-storage" />
       <BTooltip
@@ -132,6 +128,13 @@
           <span class="mobile-folder-trigger__label">{{ mobileCurrentFolderLabel }}</span>
           <SvgIcon :src="icon.noteTree.chevron" size="15" aria-hidden="true" />
         </BButton>
+        <CloudFileCountSummary
+          class="mobile-cloud-count"
+          :counts="currentFolderCounts"
+          :file-total="cloud.fileTotal"
+          :filtered="hasFileFilters"
+          :loading="cloud.loading || cloud.folderLoading"
+        />
       </div>
       <div class="content-area">
         <CloudFolder
@@ -149,7 +152,17 @@
           @files-deleted="handleFilesDeleted"
           @exit-batch="toggleBatchMode"
           @request-upload="openCurrentFolderUpload"
-        />
+        >
+          <template v-if="!bookmark.isMobile" #summary>
+            <CloudFileCountSummary
+              class="cloud-list-summary"
+              :counts="currentFolderCounts"
+              :file-total="cloud.fileTotal"
+              :filtered="hasFileFilters"
+              :loading="cloud.loading || cloud.folderLoading"
+            />
+          </template>
+        </FieldList>
       </div>
     </div>
     <MoveFile
@@ -234,6 +247,7 @@
   import { bookmarkStore, cloudSpaceStore, useUserStore } from '@/store';
   import HandleBtnGroup from '@/components/cloudSpace/HandleBtnGroup.vue';
   import CloudStorageBar from '@/components/cloudSpace/CloudStorageBar.vue';
+  import CloudFileCountSummary from '@/components/cloudSpace/CloudFileCountSummary.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import CloudFolder from '@/components/cloudSpace/CloudFolder.vue';
   import FileTypeFilter from '@/components/cloudSpace/FileTypeFilter.vue';
@@ -267,7 +281,11 @@
   import FilePreviewLoadingState from '@/components/cloudSpace/FilePreviewLoadingState.vue';
   import type { CloudFileSort, CloudFileSortField, CloudFileSortOrder } from '@/store/cloudSpace';
   import type { CloudFolderNode } from '@/types/cloudFolder';
-  import { cloudFolderAncestors, collectCloudFolderDescendantIds } from '@/utils/cloudFolderTree';
+  import {
+    cloudFolderAncestors,
+    cloudFolderFileTotals,
+    collectCloudFolderDescendantIds,
+  } from '@/utils/cloudFolderTree';
   const FilePreview = defineAsyncComponent({
     loader: () => import('@/components/FilePreview.vue'),
     loadingComponent: FilePreviewLoadingState,
@@ -519,6 +537,20 @@
     const breadcrumbs = cloudFolderAncestors(cloud.folderList, String(cloud.folder.id));
     return breadcrumbs.length ? breadcrumbs.map((folder) => folder.name).join(' / ') : cloud.folder.name;
   });
+
+  const folderFileTotals = computed(() => cloudFolderFileTotals(cloud.folderList));
+  const currentFolderCounts = computed(() => {
+    const folder = cloud.folderList.find((item) => item.id === String(cloud.folder.id));
+    return folder
+      ? { direct: folder.directFileCount, total: folderFileTotals.value.get(folder.id) ?? folder.directFileCount }
+      : null;
+  });
+  const hasFileFilters = computed(
+    () =>
+      Boolean(cloud.searchFileName.trim()) ||
+      cloud.pendingOnly ||
+      cloud.typeCheckValue.length !== CLOUD_FILE_CATEGORY_ORDER.length,
+  );
 
   async function selectMobileFolderFromTree(folder: CloudFolderNode | null) {
     await closeCurrentMobileOverlayThen(
@@ -1075,16 +1107,13 @@
 
 <style lang="less" scoped>
   @import (reference) '@/assets/css/workspace-surfaces.less';
-  .cloud-count-chip {
-    height: var(--ui-layout-22, 22px);
-    padding: 0 var(--ui-space-8, 8px);
-    border-radius: 999px;
-    display: inline-flex;
-    align-items: center;
-    color: var(--resource-file-color, #ff8a00);
-    background: color-mix(in srgb, var(--resource-file-color, #ff8a00) 10%, transparent);
-    font-size: var(--ui-font-11, 11px);
-    font-weight: 650;
+  .cloud-list-summary {
+    flex: 0 0 auto;
+    padding: var(--ui-space-8, 8px) var(--ui-space-14, 14px);
+    border-bottom: 1px solid var(--workspace-divider);
+    color: var(--desc-color);
+    font-size: var(--ui-font-12, 12px);
+    line-height: 1.5;
     font-variant-numeric: tabular-nums;
   }
 
@@ -1259,6 +1288,16 @@
 
   .mobile-folder-filter {
     margin-top: var(--ui-space-4, 4px);
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-space-6, 6px);
+  }
+
+  .mobile-cloud-count {
+    color: var(--desc-color);
+    font-size: var(--ui-font-12, 12px);
+    line-height: 1.5;
+    font-variant-numeric: tabular-nums;
   }
 
   .mobile-cloud-storage {
@@ -1371,7 +1410,6 @@
   }
 
   @media (max-width: 767px) {
-    .cloud-count-chip,
     .cloud-search-action {
       display: none;
     }
