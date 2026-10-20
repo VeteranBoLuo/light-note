@@ -23,34 +23,61 @@ const user = useUserStore(pinia);
 user.setUserInfo({ id: 'search-file-fixture-user', role: 'user' });
 const theme = params.get('theme') === 'night' ? 'night' : 'day';
 const locale = params.get('locale') === 'en-US' ? 'en-US' : 'zh-CN';
-user.preferences = { ...user.preferences, theme, lang: locale, resourceView: params.get('view') === 'list' ? 'list' : 'card' };
+user.preferences = {
+  ...user.preferences,
+  theme,
+  lang: locale,
+  resourceView: params.get('view') === 'list' ? 'list' : 'card',
+};
 bookmarkStore(pinia).screenWidth = innerWidth;
 document.documentElement.dataset.theme = theme;
 document.documentElement.classList.toggle('light-note-mobile-rendering', innerWidth < 768);
 applyUiDensity(params.get('density'), innerWidth < 1200);
 
+const isImage = params.get('fileKind') === 'image';
+const extension = isImage ? 'jpg' : 'txt';
+const fileSize = params.has('noSize') ? undefined : isImage ? 356516 : 1024;
+const folderName = params.has('folder') ? '项目资料' : '';
 const title = params.has('long')
-  ? '项目资料：一份包含很长名称的报告，用于核对窄屏截断、定位操作和键盘访问 #1.txt'
-  : '项目报告 #1.txt';
+  ? `项目资料：一份包含很长名称的报告，用于核对窄屏截断、定位操作和键盘访问 #1.${extension}`
+  : `项目报告 #1.${extension}`;
 const items: SearchResultItem[] = ['42', '43'].map((id) => ({
   id,
   type: 'file',
   title,
-  description: `虚构文件 ${id}，两项同名，仍须打开各自的文件 ID。`,
-  extra: 'TXT · 1 KB',
+  description: folderName
+    ? `${locale === 'en-US' ? 'In' : '位于'} ${folderName}`
+    : locale === 'en-US'
+      ? 'Cloud file'
+      : '云空间文件',
+  category: isImage ? 'image' : 'text',
+  extra: [
+    isImage ? (locale === 'en-US' ? 'Image' : '图片') : locale === 'en-US' ? 'Text' : '文本',
+    fileSize ? `${(fileSize / 1024 / 1024).toFixed(2)} MB` : '',
+  ]
+    .filter(Boolean)
+    .join(' · '),
   route: '/cloudSpace?fileName=old-route.txt',
-  raw: { update_time: '2026-10-10 10:00:00' },
+  raw: {
+    update_time: '2026-10-10 10:00:00',
+    file_name: title,
+    file_type: extension,
+    file_size: fileSize,
+    folder_name: folderName,
+  },
 }));
 let infoReads = 0;
 let listReads = 0;
 let failed = false;
 const files = items.map((item) => ({
   id: item.id,
-  fileName: params.has('renamed') ? `改名后的文件 ${item.id}.txt` : item.title,
-  fileType: 'txt',
+  fileName: params.has('renamed') ? `改名后的文件 ${item.id}.${extension}` : item.title,
+  fileType: extension,
   fileSize: 1024,
-  category: 'document',
-  fileUrl: `data:text/plain;charset=utf-8,${encodeURIComponent(`这是虚构文件 ${item.id} 的正文。`)}`,
+  category: isImage ? 'image' : 'text',
+  fileUrl: isImage
+    ? 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jT1sAAAAASUVORK5CYII='
+    : `data:text/plain;charset=utf-8,${encodeURIComponent(`这是虚构文件 ${item.id} 的正文。`)}`,
   uploadTime: '2026-10-10 10:00:00',
   tags: [],
 }));
@@ -99,7 +126,9 @@ request.defaults.adapter = async (config) => {
     data = [];
   } else if (url === '/api/organize/summary') {
     data = { pendingShortcut: { count: 0 }, totals: { findingTotal: 0 } };
-  } else if (!['/api/common/recordOperationLogs', '/api/common/recordResourceReuse', '/api/support/events'].includes(url)) {
+  } else if (
+    !['/api/common/recordOperationLogs', '/api/common/recordResourceReuse', '/api/support/events'].includes(url)
+  ) {
     document.body.dataset.unexpectedRequest = url;
     throw new Error(`Unexpected fixture request: ${url}`);
   }

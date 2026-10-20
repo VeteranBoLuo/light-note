@@ -112,7 +112,7 @@
                       </span>
                       <span
                         class="global-search-result__description"
-                        v-html="highlightText(item.description || item.extra, keyword)"
+                        v-html="highlightText(getItemDescription(item), keyword)"
                       ></span>
                     </span>
                   </BButton>
@@ -129,7 +129,7 @@
                         <SvgIcon :src="icon.toolbox.locate" size="14" />
                       </BButton>
                     </BTooltip>
-                    <span>{{ item.extra }}</span>
+                    <span>{{ getItemExtra(item) }}</span>
                   </span>
                 </div>
               </section>
@@ -175,6 +175,7 @@
   import { type SearchResultItem } from '@/api/search';
   import { recordOperation } from '@/api/commonApi';
   import { getSearchTypeLabel } from '@/components/searchCenter/searchMeta';
+  import { CLOUD_FILE_CATEGORY_LABEL_KEY, getCloudFileCategory } from '@/constants/cloudFileCategory';
   import { useGlobalSearchSuggestions } from '@/composables/useGlobalSearchSuggestions';
   import { type GlobalSearchType } from '@/utils/globalSearchTypes';
   import { locateSearchResult, navigateToSearchResult } from '@/utils/globalSearchNavigation';
@@ -249,6 +250,21 @@
   }
   function getGroupLabel(type: GlobalSearchType) {
     return getSearchTypeLabel(t, type);
+  }
+  function getItemDescription(item: SearchResultItem) {
+    if (item.type !== 'file') return item.description || item.extra || '';
+    const category = getCloudFileCategory({
+      fileName: item.title,
+      fileType: item.raw?.file_type,
+      category: item.category,
+    });
+    const typeLabel = t(CLOUD_FILE_CATEGORY_LABEL_KEY[category]);
+    return item.raw?.folder_name && item.description ? `${typeLabel} · ${item.description}` : typeLabel;
+  }
+  function getItemExtra(item: SearchResultItem) {
+    if (item.type !== 'file') return item.extra;
+    const size = Number(item.raw?.file_size);
+    return Number.isFinite(size) && size > 0 ? `${(size / 1024 / 1024).toFixed(2)} MB` : '';
   }
   function isActiveItem(item: SearchResultItem) {
     return activeIndex.value >= 0 && flatItems.value[activeIndex.value] === item;
