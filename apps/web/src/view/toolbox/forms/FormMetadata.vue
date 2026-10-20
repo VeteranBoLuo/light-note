@@ -22,6 +22,21 @@
         >{{ t('collectionForms.successMessage')
         }}<BInput v-model:value="model.successMessage" type="textarea" :maxlength="1000"
       /></label>
+      <div class="metadata-notification">
+        <div>
+          <strong id="collection-submission-notification-label">{{ t('collectionForms.notifyOnSubmission') }}</strong>
+          <p id="collection-submission-notification-hint" class="collection-muted">{{
+            t('collectionForms.notifyOnSubmissionHint')
+          }}</p>
+        </div>
+        <BSwitch
+          :checked="model.notifyOnSubmission === true"
+          :disabled="disabled"
+          aria-labelledby="collection-submission-notification-label"
+          aria-describedby="collection-submission-notification-hint"
+          @update:checked="model.notifyOnSubmission = $event"
+        />
+      </div>
     </section>
   </div>
 </template>
@@ -31,10 +46,14 @@
   import type { FormDefinition } from '@lightnote/shared/collection-forms';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
+  import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
   const { t } = useI18n();
   const model = defineModel<FormDefinition>({ required: true });
   const tagIds = defineModel<string[]>('tagIds', { required: true });
-  withDefaults(defineProps<{ tags: { id: string; name: string }[]; showBasic?: boolean }>(), { showBasic: true });
+  withDefaults(defineProps<{ tags: { id: string; name: string }[]; showBasic?: boolean; disabled?: boolean }>(), {
+    showBasic: true,
+    disabled: false,
+  });
 </script>
 
 <style scoped>
@@ -52,6 +71,25 @@
   .collection-metadata .b-select {
     width: 100%;
     min-width: 0;
+  }
+  .metadata-notification {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ui-space-16, 16px);
+  }
+  .metadata-notification > div {
+    min-width: 0;
+  }
+  .metadata-notification p {
+    margin: var(--ui-space-4, 4px) 0 0;
+    line-height: 1.6;
+  }
+  .metadata-notification :deep(.b-switch) {
+    flex-shrink: 0;
+    min-width: var(--ui-control-44, 44px);
+    min-height: var(--ui-control-44, 44px);
+    justify-content: center;
   }
   @media (max-width: 1100px) and (min-width: 769px) {
     .collection-metadata {

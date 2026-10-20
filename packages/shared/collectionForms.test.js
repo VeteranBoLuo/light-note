@@ -22,6 +22,21 @@ const definition = {
   ],
 };
 describe("公开收集共享验证", () => {
+  it("新提交提醒默认关闭，只接受布尔配置", () => {
+    expect(validateDefinition(definition).notifyOnSubmission).toBe(false);
+    expect(
+      validateDefinition({ ...definition, notifyOnSubmission: true })
+        .notifyOnSubmission,
+    ).toBe(true);
+    expect(
+      validateDefinition({ ...definition, notifyOnSubmission: false })
+        .notifyOnSubmission,
+    ).toBe(false);
+    for (const notifyOnSubmission of [null, 0, 1, "true", "false", {}, []])
+      expect(() =>
+        validateDefinition({ ...definition, notifyOnSubmission }),
+      ).toThrow("新提交提醒设置无效");
+  });
   it("奖励自动要求账号，拒绝非整数、越界及伪造的配置", () => {
     expect(
       validateDefinition({

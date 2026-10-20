@@ -54,7 +54,7 @@ describe.skipIf(!socketPath)('公开收集 MySQL 原子性和统计', () => {
     });
     service = createFormsService(pool);
     await pool.query(
-      "CREATE TABLE user(id VARCHAR(255) PRIMARY KEY,role VARCHAR(32),del_flag INT,alias VARCHAR(255) NOT NULL DEFAULT '')",
+      "CREATE TABLE user(id VARCHAR(255) PRIMARY KEY,role VARCHAR(32),del_flag INT,alias VARCHAR(255) NOT NULL DEFAULT '',preferences JSON)",
     );
     await pool.query(POINTS_GRANT_OPERATIONS_TABLE_SQL);
     // Exercise the explicit upgrade from the historical receipt table, not just a fresh schema.
@@ -103,6 +103,7 @@ describe.skipIf(!socketPath)('公开收集 MySQL 原子性和统计', () => {
     await pool.query('DELETE FROM user_growth');
     await pool.query('DELETE FROM notification');
     await pool.query("UPDATE user SET role='root' WHERE id='root-owner'");
+    await pool.query('UPDATE user SET preferences=NULL');
   });
   afterAll(async () => {
     vi.unstubAllEnvs();
@@ -135,6 +136,135 @@ describe.skipIf(!socketPath)('公开收集 MySQL 原子性和统计', () => {
     expect(resolver).not.toHaveBeenCalled();
     expect((await pool.query('SELECT * FROM notification'))[0]).toHaveLength(0);
   });
+  async function notifyingForm(policy = 'replace') {
+    const f = await published(policy);
+    await service.update('u', f.id, {
+      version: f.version,
+      definition: { ...f.definition, notifyOnSubmission: true },
+      tagIds: f.tagIds,
+    });
+    return service.get('u', f.id);
+  }
+  it('旧表单默认不通知，普通创建者可在发布后开关提醒，复制关闭且不公开设置', async () => {
+    const f = await published('replace');
+    expect(f.definition.notifyOnSubmission).toBe(false);
+    await pool.query(
+      "UPDATE collection_forms SET definition=JSON_REMOVE(definition,'$.notifyOnSubmission') WHERE id=?",
+      [f.id],
+    );
+    await service.submit(f.public_id, { requestKey: randomUUID(), answers: { choice: ['a'] } }, 'legacy-browser');
+    expect((await pool.query('SELECT * FROM notification'))[0]).toHaveLength(0);
+    await expect(
+      service.update('other', f.id, {
+        version: f.version,
+        definition: { ...f.definition, notifyOnSubmission: true },
+      }),
+    ).rejects.toMatchObject({ status: 404 });
+    let result = await service.update('u', f.id, {
+      version: f.version,
+      definition: { ...f.definition, notifyOnSubmission: true },
+      tagIds: f.tagIds,
+    });
+    expect((await service.get('u', f.id)).definition.notifyOnSubmission).toBe(true);
+    expect((await service.publicForm(f.public_id)).definition).not.toHaveProperty('notifyOnSubmission');
+    const copied = await service.action('u', f.id, { action: 'copy' });
+    expect((await service.get('u', copied.id)).definition.notifyOnSubmission).toBe(false);
+    const legacyClientDefinition = { ...f.definition, title: '兼容旧客户端修改名称' };
+    delete legacyClientDefinition.notifyOnSubmission;
+    result = await service.update('u', f.id, {
+      version: result.version,
+      definition: legacyClientDefinition,
+      tagIds: f.tagIds,
+    });
+    expect((await service.get('u', f.id)).definition.notifyOnSubmission).toBe(true);
+    await service.update('u', f.id, {
+      version: result.version,
+      definition: { ...f.definition, notifyOnSubmission: false },
+      tagIds: f.tagIds,
+    });
+    expect((await service.get('u', f.id)).definition.notifyOnSubmission).toBe(false);
+  });
+  it('开启后每份新增回答只通知创建者一次，并发、重试、修改和删除通知均不重发', async () => {
+    const f = await notifyingForm();
+    const input = { requestKey: randomUUID(), answers: { choice: ['a'] } };
+    const receipts = await Promise.all(
+      Array.from({ length: 8 }, () => service.submit(f.public_id, input, 'browser-a')),
+    );
+    expect(new Set(receipts.map((r) => r.receipt)).size).toBe(1);
+    const [[notice]] = await pool.query('SELECT * FROM notification');
+    expect(notice).toMatchObject({
+      user_id: 'u',
+      type: 'collection_form_submission',
+      source_type: 'collection_form_submission',
+      source_id: receipts[0].receipt,
+      title: '「反馈」收到新提交',
+      content: '你的表单收到一份新回答，点击查看提交记录。',
+      link: `/toolbox/forms/${f.id}?view=responses&notice=${receipts[0].receipt}`,
+    });
+    expect(typeof notice.meta === 'string' ? JSON.parse(notice.meta) : notice.meta).toEqual({ formTitle: '反馈' });
+    await pool.query('UPDATE notification SET is_read=1,del_flag=1');
+    await service.submit(f.public_id, { ...input, requestKey: randomUUID() }, 'browser-a');
+    await service.submit(f.public_id, { requestKey: randomUUID(), answers: { choice: ['b'] } }, 'browser-a');
+    await service.submit(f.public_id, input, 'browser-a');
+    expect((await pool.query('SELECT * FROM notification'))[0]).toHaveLength(1);
+    await service.submit(f.public_id, { ...input, requestKey: randomUUID() }, 'browser-b');
+    expect((await pool.query('SELECT * FROM notification'))[0]).toHaveLength(2);
+  });
+  it('开启不补历史提交，关闭停止新通知，修改既有回答不补发', async () => {
+    let f = await published('replace');
+    const input = () => ({ requestKey: randomUUID(), answers: { choice: ['a'] } });
+    await service.submit(f.public_id, input(), 'before-enabled');
+    await service.update('u', f.id, {
+      version: f.version,
+      definition: { ...f.definition, notifyOnSubmission: true },
+      tagIds: f.tagIds,
+    });
+    await service.submit(f.public_id, { requestKey: randomUUID(), answers: { choice: ['b'] } }, 'before-enabled');
+    expect((await pool.query('SELECT * FROM notification'))[0]).toHaveLength(0);
+    await service.submit(f.public_id, input(), 'after-enabled');
+    expect((await pool.query('SELECT * FROM notification'))[0]).toHaveLength(1);
+    f = await service.get('u', f.id);
+    await service.update('u', f.id, {
+      version: f.version,
+      definition: { ...f.definition, notifyOnSubmission: false },
+      tagIds: f.tagIds,
+    });
+    await service.submit(f.public_id, input(), 'after-disabled');
+    expect((await pool.query('SELECT * FROM notification'))[0]).toHaveLength(1);
+  });
+  it('新提交提醒遵循创建者的站内通知总开关，沿用历史多次提交规则', async () => {
+    const f = await notifyingForm('multiple');
+    const input = () => ({ requestKey: randomUUID(), answers: { choice: ['a'] } });
+    await pool.query('UPDATE user SET preferences=? WHERE id=?', [JSON.stringify({ notificationsInApp: false }), 'u']);
+    await service.submit(f.public_id, input());
+    expect((await pool.query('SELECT * FROM notification'))[0]).toHaveLength(0);
+    await pool.query('UPDATE user SET preferences=NULL WHERE id=?', ['u']);
+    await service.submit(f.public_id, input());
+    await service.submit(f.public_id, input());
+    expect((await pool.query('SELECT * FROM notification'))[0]).toHaveLength(2);
+    await pool.query('UPDATE user SET preferences=? WHERE id=?', [JSON.stringify('legacy-value'), 'u']);
+    await service.submit(f.public_id, input());
+    expect((await pool.query('SELECT * FROM notification'))[0]).toHaveLength(3);
+  });
+  it('新提交通知失败时回答回滚，同一请求重试成功后只通知一次', async () => {
+    const f = await notifyingForm();
+    const input = { requestKey: randomUUID(), answers: { choice: ['a'] } };
+    await pool.query(
+      "CREATE TRIGGER collection_submission_notice_fail BEFORE INSERT ON notification FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='submission notice failure'",
+    );
+    try {
+      await expect(service.submit(f.public_id, input, 'browser-a')).rejects.toThrow('submission notice failure');
+    } finally {
+      await pool.query('DROP TRIGGER collection_submission_notice_fail');
+    }
+    expect((await service.responses('u', f.id)).total).toBe(0);
+    expect((await pool.query('SELECT * FROM collection_submission_requests'))[0]).toHaveLength(0);
+    expect((await pool.query('SELECT * FROM notification'))[0]).toHaveLength(0);
+    const result = await service.submit(f.public_id, input, 'browser-a');
+    expect(await service.submit(f.public_id, input, 'browser-a')).toEqual(result);
+    expect((await service.responses('u', f.id)).total).toBe(1);
+    expect((await pool.query('SELECT * FROM notification'))[0]).toHaveLength(1);
+  });
   it('成员列与发奖索引满足对应的只读 Schema 断言', async () => {
     const source = await readFile(new URL('../../migrations/schema-assertions.sql', import.meta.url), 'utf8');
     const statements = source
@@ -160,6 +290,25 @@ describe.skipIf(!socketPath)('公开收集 MySQL 原子性和统计', () => {
     answers: { choice: ['a'] },
     expectedAccountId: id,
     ...extra,
+  });
+  it('账号表单分别通知创建者和获奖用户，更新答案不重复提醒或发奖', async () => {
+    const f = await memberForm();
+    await service.update('root-owner', f.id, {
+      version: f.version,
+      definition: { ...f.definition, notifyOnSubmission: true },
+    });
+    const input = memberInput();
+    const result = await service.submit(f.public_id, input, null, account());
+    expect(result.reward).toEqual({ points: 20, received: true });
+    await service.submit(f.public_id, input, null, account());
+    await service.submit(f.public_id, memberInput('member', { answers: { choice: ['b'] } }), null, account());
+    const [notices] = await pool.query('SELECT user_id,type,source_id FROM notification ORDER BY type');
+    expect(notices).toEqual([
+      { user_id: 'member', type: 'collection_form_reward', source_id: f.id },
+      { user_id: 'root-owner', type: 'collection_form_submission', source_id: result.receipt },
+    ]);
+    expect((await pool.query('SELECT * FROM points_log'))[0]).toHaveLength(1);
+    expect((await service.responses('root-owner', f.id)).total).toBe(1);
   });
   it('仅 root 可创建和配置特殊表单，发布后锁定规则，复制关闭奖励', async () => {
     await expect(service.create('u', { definition: { ...definition, membersOnly: true } })).rejects.toMatchObject({

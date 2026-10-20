@@ -6,6 +6,8 @@ export const notificationMessages: Record<
     opinionReplyTitle: string;
     collectionRewardTitle: string;
     collectionRewardContent: string;
+    collectionSubmissionTitle: string;
+    collectionSubmissionContent: string;
   }
 >;
 export function notificationPresentation(

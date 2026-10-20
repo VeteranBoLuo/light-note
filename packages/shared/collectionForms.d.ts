@@ -12,6 +12,7 @@ export interface FormDefinition {
   title: string;
   description: string;
   successMessage: string;
+  notifyOnSubmission?: boolean;
   submissionPolicy?: "multiple" | "replace";
   membersOnly?: boolean;
   reward?: { points: number; maxRecipients: number } | null;
