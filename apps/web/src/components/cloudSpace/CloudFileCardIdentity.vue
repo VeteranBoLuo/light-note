@@ -4,8 +4,9 @@
       <span class="file-card-name__stem">{{ nameParts.stem }}</span
       ><span v-if="nameParts.extension" class="file-card-name__extension">{{ nameParts.extension }}</span>
     </BTooltip>
-    <div v-if="folder" class="file-card-folder-hint">
+    <div class="file-card-folder-hint" :aria-hidden="!folder || undefined">
       <BButton
+        v-if="folder"
         class="file-card-folder"
         type="text"
         :disabled="disabled"
@@ -75,6 +76,7 @@
   }
 
   .file-card-folder-hint {
+    min-height: var(--ui-control-24, 24px);
     min-width: 0;
   }
 
@@ -109,6 +111,10 @@
   .file-card-folder:not(:disabled):hover .file-card-folder__path {
     text-decoration: underline;
     text-underline-offset: 0.15em;
+  }
+
+  html.light-note-mobile-rendering .file-card-folder-hint {
+    min-height: var(--ui-control-32, 32px);
   }
 
   html.light-note-mobile-rendering .file-card-folder.b_btn {
