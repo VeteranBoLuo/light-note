@@ -39,7 +39,7 @@ const ban = async () => {
 };
 describe.skipIf(!socket)('automatic security response on isolated MySQL', () => {
   beforeAll(async () => {
-    if (!socket.startsWith('/tmp/')) throw Error('ISOLATED_SOCKET_REQUIRED');
+    if (!/^\/(?:private\/)?tmp\//.test(socket)) throw Error('ISOLATED_SOCKET_REQUIRED');
     admin = await mysql.createConnection({ socketPath: socket, user: 'root' });
     await admin.query(`CREATE DATABASE ${schema} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
     db = mysql.createPool({ socketPath: socket, user: 'root', database: schema, connectionLimit: 6 });

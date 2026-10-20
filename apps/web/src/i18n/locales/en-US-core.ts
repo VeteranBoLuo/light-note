@@ -11857,6 +11857,47 @@ export default {
     archiveCharacters: '{count} characters saved',
     archiveSourceRendered: 'Extracted after rendering',
     archiveSourceStatic: 'Extracted from webpage',
+    archiveBookmarkSafe: 'Your bookmark is still saved. You can continue to the original page.',
+    archiveFailedAttempts: 'Attempts: {count}',
+    archiveOpenOriginal: 'Open original page',
+    archiveRetryRead: 'Retry reading',
+    archiveReread: 'Read content again',
+    archiveSubmitFailed:
+      'Unable to confirm whether reading has started. Please retry later. Your bookmark and saved content will be kept.',
+    archiveFailureUnknown: 'Unable to read the page content. Try again later or open the original page.',
+    archiveFailure: {
+      QUEUE_FULL: 'Too many archives are waiting. This request was not queued. Please retry later.',
+      EMPTY_CONTENT:
+        'This page has too little readable content. Open the original page or save a specific article URL.',
+      JS_REQUIRED:
+        'This page requires scripts and its content could not be extracted. Open the original page to read it.',
+      AUTH_REQUIRED:
+        'This page requires login. Open the original page to read it. Your browser login is not shared with the content reading service.',
+      ACCESS_CHALLENGE:
+        'This website requires verification. Open the original page to complete it and read the page. Browser verification is not shared with the content reading service.',
+      ACCESS_DENIED: 'This website blocks automated reading. Open the original page to read it.',
+      NOT_FOUND: 'This page no longer exists (404 or 410). Please check the bookmark URL.',
+      TIMEOUT: 'Reading the page timed out. Retry later or open the original page.',
+      DNS_FAILED: 'The website address could not be resolved. Please retry later.',
+      TLS_FAILED: 'The website certificate could not be verified. Please check the original website.',
+      RATE_LIMITED: 'This website is limiting requests. Please retry later.',
+      CONTENT_TOO_LARGE: 'The page exceeds the content reading limit. Open it directly or save a specific article URL.',
+      NOT_HTML: 'This link is a file or image, so page text cannot be extracted. Open the original link.',
+      BLOCKED_HOST: 'The content reading service cannot access this address. You can open the original link directly.',
+      INVALID_URL: 'The bookmark URL is invalid. Edit the bookmark and check its URL.',
+      RENDERER_DISABLED: 'This page cannot be rendered right now. Open the original page to read it.',
+      RENDERER_INSECURE_IDENTITY: 'This page cannot be rendered right now. Open the original page to read it.',
+      RENDER_OUTPUT_TOO_LARGE:
+        'The rendered page exceeds the content reading limit. Open the original page to read it.',
+      RENDERER_FAILED: 'Page rendering did not finish. Please retry later.',
+      RENDERER_UNAVAILABLE: 'Page rendering is temporarily unavailable. Please retry later.',
+      RENDERER_BUSY: 'Too many pages are being rendered. Please retry later.',
+      RENDER_TIMEOUT: 'Page rendering timed out. Please retry later.',
+      FETCH_FAILED: 'The page could not be read right now. Retry later or open the original page.',
+      RESOURCE_CHANGED:
+        'The bookmark was changed or deleted, so this result was not saved. Close and reopen this view.',
+      INTERRUPTED: 'Content reading was interrupted. You can try reading it again.',
+    },
     archiveLoadError: 'Unable to load archive status',
     snapshotFullText: 'Saved webpage content',
     aiSummaryHint: 'gist',

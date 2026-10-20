@@ -11,22 +11,20 @@
         <span v-else class="bsnap-time"></span>
         <BSpace v-if="!isGuest && !draftContext">
           <BButton
-            v-if="!isReadonlyAdminContext"
+            v-if="canArchive && !archiveFailed"
             class="bsnap-generate-button"
             size="small"
             :loading="archiving || taskActive"
-            :disabled="busy || loading"
+            :disabled="busy || loading || loadError"
             @click="generateArchive"
           >
             <SvgIcon :src="icon.bookmarkManage.snapshot" size="15" />
             {{
               archiving || taskActive
                 ? $t('bookmarkMg.snapshotArchiving')
-                : snap?.archiveTask?.status === 'failed'
-                  ? $t('organizeWorkspace.archiveRetryCurrent')
-                  : snap?.content
-                    ? $t('bookmarkMg.snapshotArchive')
-                    : $t('bookmarkMg.snapshotCreateArchive')
+                : snap?.content
+                  ? $t('bookmarkMg.snapshotArchive')
+                  : $t('bookmarkMg.snapshotCreateArchive')
             }}
           </BButton>
           <BButton
@@ -57,14 +55,50 @@
       >
         <strong>{{ $t(`bookmarkMg.archiveState_${snap.archiveTask.status}`) }}</strong>
         <span v-if="snap.archiveTask.attempts">{{
-          $t('bookmarkMg.archiveAttempts', { count: snap.archiveTask.attempts })
+          $t(archiveFailed ? 'bookmarkMg.archiveFailedAttempts' : 'bookmarkMg.archiveAttempts', {
+            count: snap.archiveTask.attempts,
+          })
         }}</span>
-        <p v-if="snap.archiveTask.msg">{{ snap.archiveTask.msg }}</p>
+        <p v-if="failureMessage">{{ failureMessage }}</p>
+        <p v-if="archiveFailed && bookmarkUrl">{{ $t('bookmarkMg.archiveBookmarkSafe') }}</p>
         <p v-if="snap.content && snap.archiveTask.status !== 'succeeded'">{{ $t('bookmarkMg.archivePreserved') }}</p>
+        <div v-if="archiveFailed" class="bsnap-recovery-actions">
+          <BButton
+            v-if="bookmarkUrl"
+            size="small"
+            :type="retryRecommended ? undefined : 'primary'"
+            @click="openOriginal"
+          >
+            {{ $t('bookmarkMg.archiveOpenOriginal') }}
+          </BButton>
+          <BButton
+            v-if="canArchive"
+            size="small"
+            :type="retryRecommended ? 'primary' : undefined"
+            :loading="archiving"
+            :disabled="busy || loading || loadError"
+            @click="generateArchive"
+          >
+            {{
+              $t(
+                archiving
+                  ? 'bookmarkMg.snapshotArchiving'
+                  : retryRecommended
+                    ? 'bookmarkMg.archiveRetryRead'
+                    : 'bookmarkMg.archiveReread',
+              )
+            }}
+          </BButton>
+        </div>
+      </div>
+      <div v-if="archiveSubmitError" class="bsnap-task bsnap-task--failed" role="alert">
+        {{ archiveSubmitError }}
       </div>
       <div v-if="loadError" class="bsnap-task bsnap-task--failed" role="alert"
         >{{ $t('bookmarkMg.archiveLoadError') }}
-        <BButton size="small" @click="loadSnap()">{{ $t('common.retry') }}</BButton>
+        <BButton size="small" :loading="loading" :disabled="loading" @click="loadSnap()">{{
+          $t('common.retry')
+        }}</BButton>
       </div>
       <div v-if="snap?.content" class="bsnap-time"
         >{{
@@ -88,7 +122,7 @@
         </div>
         <div class="bsnap-summary-body">{{ snap.summary }}</div>
       </div>
-      <div v-if="loading" class="bsnap-empty">…</div>
+      <div v-if="loading && !snap?.content" class="bsnap-empty">…</div>
       <div v-else-if="snap?.content" class="bsnap-content">
         <div class="bsnap-content-label">
           <span class="bsnap-heading-icon bsnap-heading-icon--snapshot"
@@ -121,8 +155,10 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import { recordOperation } from '@/api/commonApi.ts';
+  import { resolveBookmarkUrlInput } from '@lightnote/shared';
+  import { openBookmarkUrl } from '@/utils/openBookmark';
 
-  const { t } = useI18n();
+  const { t, te } = useI18n();
   const props = defineProps<{ bookmarkId?: string; draftContext?: { runId: string; suggestionId: string } }>();
   const visible = defineModel<boolean>('visible');
 
@@ -130,6 +166,7 @@
   const user = useUserStore();
   const isGuest = computed(() => !user.id || user.role === 'visitor');
   const isReadonlyAdminContext = computed(() => user.adminContext?.mode === 'readonly');
+  const canArchive = computed(() => !isGuest.value && !isReadonlyAdminContext.value && !props.draftContext);
 
   const snap = ref<any>(null);
   const loading = ref(false);
@@ -138,6 +175,24 @@
   const taskActive = computed(() => ['pending', 'running', 'retry_wait'].includes(snap.value?.archiveTask?.status));
   const busy = computed(() => archiving.value || summarizing.value || taskActive.value);
   const loadError = ref(false);
+  const archiveSubmitError = ref('');
+  const archiveFailed = computed(() => snap.value?.archiveTask?.status === 'failed');
+  const bookmarkUrl = computed(() =>
+    props.draftContext
+      ? ''
+      : resolveBookmarkUrlInput(snap.value?.bookmarkUrl || '', { allowTextExtraction: false }).canonicalUrl,
+  );
+  const failureMessage = computed(() => {
+    const task = snap.value?.archiveTask;
+    if (!task?.reason_code) return task?.msg || (archiveFailed.value ? t('bookmarkMg.archiveFailureUnknown') : '');
+    const key = `bookmarkMg.archiveFailure.${task.reason_code}`;
+    return te(key) ? t(key) : task.msg || t('bookmarkMg.archiveFailureUnknown');
+  });
+  const retryRecommended = computed(
+    () =>
+      snap.value?.archiveTask?.retryable === true ||
+      ['QUEUE_FULL', 'INTERRUPTED', 'RENDERER_FAILED'].includes(snap.value?.archiveTask?.reason_code),
+  );
   let pollTimer: ReturnType<typeof setTimeout> | undefined;
   let contextVersion = 0;
   function stopPolling() {
@@ -150,6 +205,10 @@
     stopPolling();
   });
   let loadSequence = 0;
+
+  function openOriginal() {
+    if (visible.value && bookmarkUrl.value) openBookmarkUrl(bookmarkUrl.value, { resourceId: props.bookmarkId });
+  }
 
   function fmtTime(v: string) {
     const d = new Date(v);
@@ -185,21 +244,26 @@
   }
 
   async function generateArchive() {
-    if (!props.bookmarkId || busy.value || isReadonlyAdminContext.value) return;
+    if (!visible.value || !props.bookmarkId || busy.value || loading.value || loadError.value || !canArchive.value)
+      return;
     const bookmarkId = props.bookmarkId;
     const version = contextVersion;
     archiving.value = true;
+    archiveSubmitError.value = '';
     try {
-      const res = await apiBasePost('/api/bookmark/archive', { id: bookmarkId });
+      const res = await apiBasePost('/api/bookmark/archive', { id: bookmarkId }, { silent: true });
       if (bookmarkId !== props.bookmarkId || version !== contextVersion || !visible.value) return;
       if (res?.status === 200 && res.data?.ok) {
         message.success(t('bookmarkMg.archiveQueued'));
         await loadSnap();
       } else {
-        message.info(res?.data?.msg || t('bookmarkMg.snapshotFail'));
+        archiveSubmitError.value =
+          res?.data?.reason === 'QUEUE_FULL'
+            ? t('bookmarkMg.archiveFailure.QUEUE_FULL')
+            : t('bookmarkMg.archiveSubmitFailed');
       }
     } catch {
-      if (version === contextVersion) message.info(t('bookmarkMg.snapshotFail'));
+      if (version === contextVersion) archiveSubmitError.value = t('bookmarkMg.archiveSubmitFailed');
     } finally {
       if (version === contextVersion) archiving.value = false;
     }
@@ -239,19 +303,31 @@
   }
 
   watch(
-    [() => visible.value, () => props.bookmarkId, () => props.draftContext],
+    [
+      () => visible.value,
+      () => props.bookmarkId,
+      () => props.draftContext?.runId,
+      () => props.draftContext?.suggestionId,
+      () => user.id,
+      () => user.role,
+      () => user.visitorWorkspace,
+      () => user.adminContext?.subjectUserId,
+      () => user.adminContext?.mode,
+    ],
     async ([isVisible, bookmarkId]) => {
       loadSequence += 1;
       contextVersion++;
       stopPolling();
       archiving.value = false;
       summarizing.value = false;
+      loading.value = false;
       loadError.value = false;
-      if (!isVisible || !bookmarkId) return;
+      archiveSubmitError.value = '';
       snap.value = null;
+      if (!isVisible || !bookmarkId || !user.id) return;
       await loadSnap();
     },
-    { immediate: true },
+    { immediate: true, flush: 'sync' },
   );
 </script>
 
@@ -287,6 +363,12 @@
     strong {
       color: var(--danger-color, #d43845);
     }
+  }
+  .bsnap-recovery-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ui-space-8, 8px);
+    margin-top: var(--ui-space-12, 12px);
   }
   .bsnap-bar {
     display: flex;
