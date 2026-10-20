@@ -7,6 +7,8 @@ import enUS from '@/i18n/locales/en-US';
 import zhCN from '@/i18n/locales/zh-CN';
 import '@/assets/css/index.less';
 import NoteAiReplyHarness from './NoteAiReplyHarness.vue';
+import { applyUiDensity } from '@/composables/useUiDensity';
+import request from '@/http/request';
 
 type VisualState = 'success' | 'loading' | 'error' | 'empty' | 'quota-exhausted' | 'quota-insufficient';
 
@@ -20,10 +22,12 @@ const state: VisualState = ['success', 'loading', 'error', 'empty', 'quota-exhau
 const theme = params.get('theme') === 'night' ? 'night' : 'day';
 const locale = params.get('locale') === 'en-US' ? 'en-US' : 'zh-CN';
 const noteType = params.get('noteType') === 'markdown' ? 'markdown' : 'html';
+const mobile = params.get('renderProfile') === 'mobile' || window.innerWidth <= 720;
+applyUiDensity(params.get('density'), mobile);
 
 document.documentElement.dataset.theme = theme;
 document.documentElement.lang = locale;
-document.documentElement.classList.toggle('light-note-mobile-rendering', window.innerWidth <= 720);
+document.documentElement.classList.toggle('light-note-mobile-rendering', mobile);
 document.body.dataset.visualState = state;
 
 const markdownResult = `### 待办事项摘要
@@ -121,7 +125,11 @@ window.fetch = async () => {
   ]);
 };
 
-const app = createApp(NoteAiReplyHarness, { noteType });
+// 此验收页所有业务请求只返回本地夹具，AI 请求由上方 fetch 夹具承接。
+request.defaults.adapter = async (config) => ({
+  config, status: 200, statusText: 'OK', headers: {}, data: { status: 200, data: {} },
+});
+const app = createApp(NoteAiReplyHarness, { noteType, source: params.get('source') || undefined });
 app.use(createPinia());
 app.use(
   createI18n({

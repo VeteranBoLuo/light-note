@@ -3,6 +3,7 @@ import {
   resolveDeletedNoteFallbackId,
   resolveNoteDetailReturnPath,
   resolveNoteLibraryListPath,
+  resolveGrowthNoteCreateReturnPath,
 } from './noteDetailNavigation';
 
 describe('resolveNoteLibraryListPath', () => {
@@ -37,6 +38,11 @@ describe('resolveNoteLibraryListPath', () => {
 });
 
 describe('resolveNoteDetailReturnPath', () => {
+  it('新手任务返回成长中心并保留页签、筛选和锚点', () => {
+    expect(resolveNoteDetailReturnPath('/growth?section=tasks#growth-tasks')).toBe(
+      '/growth?section=tasks#growth-tasks',
+    );
+  });
   it('允许工作台作为明确来源并保留查询参数', () => {
     expect(resolveNoteDetailReturnPath('/workbenches?panel=recent#continue')).toBe(
       '/workbenches?panel=recent#continue',
@@ -92,6 +98,22 @@ describe('resolveNoteDetailReturnPath', () => {
       expect(resolveNoteDetailReturnPath(path)).toBe('');
     },
   );
+});
+
+describe('resolveGrowthNoteCreateReturnPath', () => {
+  it.each(['/workbenches?panel=today', '/growth?section=tasks#growth-tasks'])('保留任务卡的确切来源 %s', (source) => {
+    expect(resolveGrowthNoteCreateReturnPath(source)).toBe(source);
+  });
+  it.each([
+    'https://example.com/growth',
+    '//example.com/growth',
+    '/growth-other',
+    '/noteLibrary',
+    '/search',
+    '/growth/nested',
+  ])('拒绝无关或外部返回地址 %s', (source) => {
+    expect(resolveGrowthNoteCreateReturnPath(source)).toBe('');
+  });
 });
 
 describe('resolveDeletedNoteFallbackId', () => {

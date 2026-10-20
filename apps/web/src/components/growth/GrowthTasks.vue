@@ -52,7 +52,7 @@
           v-click-log="{ module: '成长', operation: `前往新手任务-${task.taskKey}` }"
           @click="navigateToTask(task)"
         >
-          {{ t('growth.tasksGoTo') }}
+          {{ taskActionLabel(task.taskKey) }}
         </BButton>
         <span v-else-if="task.claimed" class="growth-task__completed">{{ t('growth.tasksClaimed') }}</span>
         <span v-else-if="readOnly" class="growth-task__readonly">{{ t('growth.tasksReadOnly') }}</span>
@@ -91,6 +91,7 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import { useGrowth, type GrowthTask, type GrowthTasksData } from '@/composables/useGrowth.ts';
   import { bookmarkStore } from '@/store';
+  import inboxStore from '@/store/inbox';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { recordOperation } from '@/api/commonApi.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -113,6 +114,7 @@
   const { t } = useI18n();
   const router = useRouter();
   const bookmark = bookmarkStore();
+  const inbox = inboxStore();
   const { claimGrowthTask, claimingRewards } = useGrowth();
   const claimingTaskKey = ref<string | null>(null);
   const completedExpanded = ref(false);
@@ -122,7 +124,24 @@
   const pendingTasks = computed<GrowthTask[]>(() => allTasks.value.filter((task) => !task.completed));
   const activeTasks = computed<GrowthTask[]>(() => (props.data?.tasks || allTasks.value).filter((task) => !task.claimed));
   const visibleTasks = computed(() => {
-    return activeTasks.value.slice(0, Math.max(0, props.maxVisible));
+    const firstResourceKeys = ['first_bookmark', 'first_note', 'first_file'];
+    const firstResourceTasks = firstResourceKeys.map((key) => allTasks.value.find((task) => task.taskKey === key));
+    const prioritizeFirstSave =
+      props.compact &&
+      !props.readOnly &&
+      firstResourceTasks.every((task) => task && task.completed === false && task.claimed === false);
+    if (!prioritizeFirstSave) return activeTasks.value.slice(0, Math.max(0, props.maxVisible));
+
+    const tasks = allTasks.value.filter((task) => !task.claimed);
+    const claimable = tasks.filter((task) => task.claimable);
+    const firstSave = ['first_bookmark', 'first_note'].flatMap((key) =>
+      tasks.filter((task) => task.taskKey === key && !task.claimable),
+    );
+    const prioritized = new Set([...claimable, ...firstSave]);
+    return [...claimable, ...firstSave, ...tasks.filter((task) => !prioritized.has(task))].slice(
+      0,
+      Math.max(0, props.maxVisible),
+    );
   });
   const totalCount = computed(() => Number(props.data?.totalCount || 0));
   const completedCount = computed(() => Number(props.data?.completedCount || 0));
@@ -166,7 +185,15 @@
     }
   }
 
+  function taskActionLabel(taskKey: string) {
+    if (taskKey === 'first_bookmark') return t('growth.tasksAddBookmark');
+    if (taskKey === 'first_note') return t('growth.tasksCreateNote');
+    if (taskKey === 'first_file') return t('growth.tasksUploadFile');
+    return t('growth.tasksGoTo');
+  }
+
   function navigateToTask(task: GrowthTask) {
+    if (props.readOnly || task.completed || task.claimed) return;
     switch (task.taskKey) {
       case 'profile_avatar':
         if (bookmark.isMobile) {
@@ -177,16 +204,19 @@
         }
         break;
       case 'first_note':
-        void router.push('/noteLibrary');
+        void router.push({
+          path: '/noteLibrary',
+          query: { create: 'growth-task', from: router.currentRoute.value.fullPath },
+        });
         break;
       case 'first_bookmark':
-        void router.push('/home');
+        void router.push('/manage/editBookmark/add');
         break;
       case 'first_todo':
         void router.push({ path: '/inbox', query: { tab: 'todo' } });
         break;
       case 'first_file':
-        void router.push('/cloudSpace');
+        if (!inbox.quickCaptureVisible) inbox.openQuickCapture('file');
         break;
       case 'first_organize':
         void router.push(resolvePendingResourcesRoute(bookmark.isMobile));
