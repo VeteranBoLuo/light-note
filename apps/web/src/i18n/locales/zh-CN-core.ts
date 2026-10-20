@@ -7146,6 +7146,9 @@ export default {
     newFolder: '新建文件夹',
     newSubfolder: '新建子文件夹',
     folderTree: '文件夹目录',
+    folderFileCountTotal: '共{count}',
+    folderFileCountDescription: '本层 {direct} 个文件，含子文件夹共 {total} 个文件',
+    filterByFolder: '筛选文件夹“{path}”',
     openFolderTree: '打开文件夹目录',
     folderActionsFor: '“{name}”的文件夹操作',
     expandFolder: '展开“{name}”',
@@ -11673,6 +11676,8 @@ export default {
     `,
   },
   myInfo: {
+    accountRole: '账号角色',
+    saveChanges: '保存修改',
     title: '编辑资料',
     earnPoints: '去赚积分',
     goToGrowth: '去成长',

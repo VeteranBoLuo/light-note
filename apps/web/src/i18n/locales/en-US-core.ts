@@ -7496,6 +7496,9 @@ export default {
     newFolder: 'New Folder',
     newSubfolder: 'New Subfolder',
     folderTree: 'Folder Tree',
+    folderFileCountTotal: '{count} total',
+    folderFileCountDescription: '{direct} files in this folder, {total} files including subfolders',
+    filterByFolder: 'Filter by folder “{path}”',
     openFolderTree: 'Open folder tree',
     folderActionsFor: 'Folder actions for “{name}”',
     expandFolder: 'Expand “{name}”',
@@ -12199,6 +12202,8 @@ export default {
     `,
   },
   myInfo: {
+    accountRole: 'Account role',
+    saveChanges: 'Save changes',
     title: 'Edit Profile',
     earnPoints: 'Earn points',
     goToGrowth: 'Go to Growth',

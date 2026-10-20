@@ -1,99 +1,103 @@
 <template>
   <div class="unified-profile-form">
-    <div class="profile-identity-card">
-      <ChatUserProfileContent
-        identity-only
-        stable-layout
-        :compact="isMobileLayout"
-        :profile="identityProfile"
-        :community-actions="false"
-        :chat-actions="false"
-        authenticated
-      />
-      <div class="profile-identity-card__actions">
+    <ProfileEditorIdentity :profile="identityProfile">
+      <template #actions>
         <BButton
-          size="small"
-          :disabled="isGuest"
+          type="text"
+          class="profile-appearance-action"
+          :disabled="saving || isGuest"
           v-click-log="{ module: '我的信息', operation: `选择头像` }"
           @click="avatarPickerOpen = true"
           >{{ t('profileAppearance.changeAvatar') }}</BButton
         >
-        <BButton size="small" @click="appearanceOpen = true"
+        <span class="profile-appearance-divider" aria-hidden="true" />
+        <BButton type="text" class="profile-appearance-action" :disabled="saving" @click="appearanceOpen = true"
           ><SvgIcon :src="icon.common.magicWand" size="14" aria-hidden="true" />{{
             t('profileAppearance.title')
           }}</BButton
         >
-      </div>
-    </div>
-    <div class="home-container">
-      <div class="home-user-body">
-        <div class="profile-account-row">
-          <span class="user-item-label">{{ t('myInfo.role') }}</span>
-          <strong>{{ getRoleName() }}</strong>
-          <BButton type="text" class="profile-account-row__password" @click="handleConfigPassword"
-            ><SvgIcon :src="icon.login.password" size="14" aria-hidden="true" />{{
-              user.password ? t('myInfo.changePassword') : t('myInfo.setPassword')
-            }}</BButton
-          >
-          <PassConfigDlg v-model:visible="configPassVisible" />
-        </div>
-        <div class="user-item">
-          <span class="user-item-label">{{ t('myInfo.nickname') }}</span>
-          <b-input
-            style="width: 100%"
-            :disabled="saving || isGuest"
-            v-model:value="userData.alias"
-            :placeholder="t('myInfo.enterNickname')"
-          />
-        </div>
+      </template>
+    </ProfileEditorIdentity>
+    <section class="profile-public-fields">
+      <label class="user-item">
+        <span>{{ t('myInfo.nickname') }}</span>
+        <BInput
+          height="40px"
+          :disabled="saving || isGuest"
+          v-model:value="userData.alias"
+          :placeholder="t('myInfo.enterNickname')"
+        />
+      </label>
 
-        <section class="community-profile-fields" v-if="user.id && user.role !== 'visitor'">
-          <p v-if="profile.ownLoading.value" role="status">{{ t('common.loading') }}</p>
-          <p v-else-if="profile.ownError.value" role="alert"
-            >{{ t('communityChat.profile.ownLoadFailed') }}
-            <BButton @click="loadCommunity">{{ t('community.feed.retry') }}</BButton></p
-          >
-          <template v-else-if="profile.ownProfile.value">
-            <label class="user-item"
-              ><span class="profile-field-heading"
-                >{{ t('communityChat.profile.bioLabel') }} <small>{{ bioLength }}/60</small></span
-              >
-              <BInput
-                v-model:value="bio"
-                class="profile-bio-input"
-                type="textarea"
-                :rows="3"
-                @compositionstart="bioComposing = true"
-                @compositionend="finishBioInput"
-                @input="limitBio"
-                :disabled="saving"
-                :placeholder="t('communityChat.profile.bioPlaceholder')"
-              />
-            </label>
-          </template>
-        </section>
-        <p class="private-info-hint">{{ t('community.feed.privateAccountHint') }}</p>
-        <div class="user-item">
-          <span class="user-item-label">{{ t('myInfo.email') }}</span>
-          <b-input :disabled="saving || isGuest" v-model:value="userData.email" :placeholder="t('myInfo.enterEmail')" />
+      <section class="community-profile-fields" v-if="user.id && user.role !== 'visitor'">
+        <div v-if="profile.ownLoading.value" class="profile-community-state"
+          ><BLoading inline loading :title="t('common.loading')"
+        /></div>
+        <div v-else-if="profile.ownError.value" class="profile-community-state" role="alert">
+          <span>{{ t('communityChat.profile.ownLoadFailed') }}</span>
+          <BButton type="text" @click="loadCommunity">{{ t('community.feed.retry') }}</BButton>
         </div>
+        <template v-else-if="profile.ownProfile.value">
+          <label class="user-item"
+            ><span class="profile-field-heading"
+              >{{ t('communityChat.profile.bioLabel') }} <small>{{ bioLength }}/60</small></span
+            >
+            <BInput
+              v-model:value="bio"
+              class="profile-bio-input"
+              type="textarea"
+              :rows="3"
+              @compositionstart="bioComposing = true"
+              @compositionend="finishBioInput"
+              @input="limitBio"
+              :disabled="saving"
+              :placeholder="t('communityChat.profile.bioPlaceholder')"
+            />
+          </label>
+        </template>
+      </section>
+    </section>
+    <section class="profile-account-fields" aria-labelledby="profile-account-heading">
+      <h2 id="profile-account-heading">{{ t('settings.accountSecurityTitle') }}</h2>
+      <label class="user-item">
+        <span>{{ t('myInfo.email') }}</span>
+        <BInput
+          height="40px"
+          :disabled="saving || isGuest"
+          v-model:value="userData.email"
+          :placeholder="t('myInfo.enterEmail')"
+        />
+      </label>
+      <p class="private-info-hint">{{ t('community.feed.privateAccountHint') }}</p>
+      <div class="profile-account-row">
+        <span class="profile-account-role"
+          >{{ t('myInfo.accountRole') }}<strong>{{ getRoleName() }}</strong></span
+        >
+        <BButton type="text" class="profile-account-row__password" :disabled="saving" @click="handleConfigPassword">
+          {{ user.password ? t('myInfo.changePassword') : t('myInfo.setPassword') }}
+          <SvgIcon :src="icon.arrow_right" size="13" aria-hidden="true" />
+        </BButton>
       </div>
-    </div>
-    <p v-if="isGuest"
+      <PassConfigDlg v-model:visible="configPassVisible" />
+    </section>
+    <p v-if="isGuest" class="profile-visitor-hint"
       >{{ t('myInfo.visitorDescription') }}
       <BButton @click="bookmark.isShowLogin = true">{{ t('myInfo.loginToEdit') }}</BButton></p
     >
-    <div v-else class="profile-save-footer">
-      <div style="display: flex; justify-content: flex-end">
-        <b-button
-          type="primary"
-          :loading="saving"
-          :disabled="!dirty || profile.ownLoading.value || bioLength > 60"
-          @click="saveUserInfo"
-          >{{ t('myInfo.save') }}</b-button
-        >
-      </div>
-    </div>
+    <component
+      :is="isMobileLayout ? MobileStickyActionBar : 'footer'"
+      v-else
+      class="profile-save-footer"
+      :above-navigation="isMobileLayout ? false : undefined"
+    >
+      <BButton
+        type="primary"
+        :loading="saving"
+        :disabled="!dirty || !userData.alias?.trim() || profile.ownLoading.value || bioLength > 60"
+        @click="saveUserInfo"
+        >{{ t(isMobileLayout ? 'myInfo.saveChanges' : 'myInfo.save') }}</BButton
+      >
+    </component>
   </div>
   <ProfileAppearanceStudio v-model:open="appearanceOpen" :profile="identityProfile" @navigate="handleFrameNavigation" />
   <AvatarPicker
@@ -115,6 +119,8 @@
   import userApi from '@/api/userApi.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import MobileStickyActionBar from '@/components/mobile/MobileStickyActionBar.vue';
   import icon from '@/config/icon.ts';
 
   import PassConfigDlg from '@/components/personCenter/myInfo/PassConfigDlg.vue';
@@ -122,7 +128,7 @@
   import { recordOperation } from '@/api/commonApi.ts';
   import { useGrowth } from '@/composables/useGrowth.ts';
   import ProfileAppearanceStudio from '@/components/growth/ProfileAppearanceStudio.vue';
-  import ChatUserProfileContent from '@/components/communityChat/ChatUserProfileContent.vue';
+  import ProfileEditorIdentity from './ProfileEditorIdentity.vue';
   import type { CommunityChatAuthorProfile } from '@/api/communityChatApi';
   import { useMobileLayout } from '@/composables/useMobileLayout';
   import { profileBackground } from '@/config/profileBackgrounds';
@@ -190,7 +196,7 @@
     const id = growth.value?.equippedFrame;
     return frameVariant(id) ? id : null;
   });
-  // 名片预览与「个人装扮」共用：身份字段取社区公开预览，昵称、头像、简介跟随当前未保存的编辑，
+  // 身份字段取社区公开预览，昵称、头像、简介跟随当前未保存的编辑，
   // 背景与头像框取成长快照的实时佩戴状态（装扮内使用后立即同步，无需重新拉取社区资料）。
   const identityProfile = computed<CommunityChatAuthorProfile>(() => {
     const preview = profile.ownProfile.value?.publicPreview;
@@ -319,81 +325,94 @@
 </script>
 
 <style lang="less" scoped>
-  .profile-bio-input :deep(textarea) {
-    overflow-wrap: anywhere;
-    word-break: break-all;
-  }
-  // 名片即资料页的门面：与「个人装扮」预览共用 stable-layout，按钮压在右下角不随背景或头像框位移。
-  .profile-identity-card {
-    position: relative;
-    height: var(--ui-layout-176, 176px);
-  }
-  .profile-identity-card__actions {
-    position: absolute;
-    z-index: 2;
-    right: var(--ui-space-12, 12px);
-    bottom: var(--ui-space-12, 12px);
-    display: flex;
-    gap: var(--ui-space-8, 8px);
-  }
-  .profile-identity-card__actions :deep(.b_btn) {
-    gap: var(--ui-space-4, 4px);
-    border: 1px solid var(--surface-border-color);
-    background: var(--card-background);
-  }
-  .home-container {
-    box-sizing: border-box;
+  .unified-profile-form {
     width: 100%;
-    padding: 0;
+    color: var(--text-color);
     font-size: var(--ui-font-14, 14px);
   }
-  .home-user-body {
-    margin-top: var(--ui-space-18, 18px);
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--ui-space-18, 18px);
+  .profile-bio-input :deep(textarea) {
+    display: block;
+    height: var(--ui-layout-86, 86px);
+    min-height: var(--ui-layout-86, 86px);
+    padding-top: var(--ui-space-10, 10px);
+    padding-bottom: var(--ui-space-10, 10px);
+    font-size: var(--ui-font-14, 14px);
+    line-height: 1.57;
+    overflow-wrap: anywhere;
+    resize: vertical;
+  }
+  .profile-appearance-action.b_btn {
+    height: var(--ui-control-32, 32px);
+    padding: 0 var(--ui-space-8, 8px);
+    gap: var(--ui-space-6, 6px);
+    font-size: var(--ui-font-13, 13px);
+  }
+  .profile-appearance-divider {
+    height: var(--ui-layout-14, 14px);
+    /* ui-density-fixed: 操作分隔线保持 1px 细线，不随界面密度变粗。 */
+    width: 1px;
+    background: var(--surface-border-color);
+  }
+  .profile-public-fields {
+    display: grid;
+    gap: var(--ui-space-20, 20px);
+    margin-top: var(--ui-space-20, 20px);
+  }
+  .profile-account-fields {
+    margin-top: var(--ui-space-24, 24px);
+    padding-top: var(--ui-space-20, 20px);
+    border-top: 1px solid var(--surface-divider-color);
+  }
+  .profile-account-fields h2 {
+    margin: 0 0 var(--ui-space-18, 18px);
+    font-size: var(--ui-font-14, 14px);
+    line-height: 1.43;
+    font-weight: 700;
   }
   .profile-account-row {
-    width: 100%;
+    margin-top: var(--ui-space-12, 12px);
     display: flex;
     align-items: center;
-    gap: var(--ui-space-12, 12px);
+    flex-wrap: wrap;
+    gap: var(--ui-space-8, 8px);
+  }
+  .profile-account-role {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ui-space-10, 10px);
     color: var(--desc-color);
-    font-size: var(--ui-font-13, 13px);
+    font-size: var(--ui-font-12, 12px);
   }
   .profile-account-row strong {
     color: var(--text-color);
-    font-weight: 500;
+    font-weight: 400;
   }
   .profile-account-row__password {
     margin-left: auto;
-    gap: var(--ui-space-4, 4px);
+    gap: var(--ui-space-5, 5px);
+    font-size: var(--ui-font-13, 13px);
   }
   .user-item {
     display: flex;
     flex-direction: column;
-    gap: var(--ui-space-10, 10px);
+    gap: var(--ui-space-9, 9px);
     width: 100%;
-    .user-item-label {
-      width: var(--ui-layout-80, 80px);
-      text-overflow: ellipsis;
-      overflow: hidden;
-      white-space: nowrap;
-    }
+    line-height: 1.43;
   }
-  @media (max-width: 1000px) {
-    .home-user-body {
-      gap: 20px;
-    }
-    .user-item {
-      gap: 10px;
-    }
+  .user-item :deep(input) {
+    font-size: var(--ui-font-15, 15px);
   }
   .community-profile-fields {
     width: 100%;
-    display: grid;
-    gap: var(--ui-space-18, 18px);
+  }
+  .profile-community-state {
+    min-height: var(--ui-layout-116, 116px);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: var(--ui-space-8, 8px);
+    color: var(--desc-color);
   }
   .profile-field-heading {
     display: flex;
@@ -406,14 +425,22 @@
     font-weight: normal;
   }
   .private-info-hint {
-    width: 100%;
-    border-top: 1px solid var(--surface-border-color);
-    padding-top: var(--ui-space-18, 18px);
-    margin: 0 0 calc(-1 * var(--ui-space-8, 8px));
+    margin: var(--ui-space-8, 8px) 0 0;
+    line-height: 1.58;
   }
-  .profile-save-footer {
+  .profile-visitor-hint {
+    margin: var(--ui-space-20, 20px) 0 0;
+    line-height: 1.6;
+  }
+  .profile-save-footer:not(.mobile-sticky-action-bar) {
+    display: flex;
+    justify-content: flex-end;
     margin-top: var(--ui-space-20, 20px);
     padding-top: var(--ui-space-16, 16px);
     border-top: 1px solid var(--surface-border-color);
+  }
+  .profile-save-footer.mobile-sticky-action-bar {
+    max-width: calc(var(--ui-layout-560, 560px) - 2 * var(--ui-space-14, 14px));
+    margin-inline: auto;
   }
 </style>

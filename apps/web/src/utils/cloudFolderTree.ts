@@ -30,6 +30,23 @@ export function normalizeCloudFolderList(values: unknown): CloudFolderNode[] {
   return values.map(normalizeCloudFolderNode).filter((item): item is CloudFolderNode => Boolean(item));
 }
 
+export function cloudFolderFileTotals(folders: CloudFolderNode[]): Map<string, number> {
+  const byId = new Map(folders.map((folder) => [folder.id, folder]));
+  const totals = new Map(folders.map((folder) => [folder.id, folder.directFileCount]));
+  for (const folder of folders) {
+    const visited = new Set([folder.id]);
+    let parentId = folder.parentId;
+    while (parentId && !visited.has(parentId)) {
+      const parent = byId.get(parentId);
+      if (!parent) break;
+      visited.add(parentId);
+      totals.set(parentId, (totals.get(parentId) || 0) + folder.directFileCount);
+      parentId = parent.parentId;
+    }
+  }
+  return totals;
+}
+
 export function cloudFolderChildrenByParent(folders: CloudFolderNode[]) {
   const result = new Map<string, CloudFolderNode[]>();
   const sourceIndex = new Map(folders.map((folder, index) => [folder.id, index]));

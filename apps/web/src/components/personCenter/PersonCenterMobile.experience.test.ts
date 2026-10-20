@@ -80,8 +80,7 @@ describe('mobile personal center experience', () => {
   it('opens backgrounds and frames from the profile identity card in one appearance studio', () => {
     expect(myInfoSource).toContain('<ProfileEditorForm');
     expect(myInfoSource).toContain('form?.requestClose()');
-    expect(desktopMyInfoSource).toContain('<ChatUserProfileContent');
-    expect(desktopMyInfoSource).toContain('stable-layout');
+    expect(desktopMyInfoSource).toContain('<ProfileEditorIdentity');
     expect(desktopMyInfoSource).toContain('<ProfileAppearanceStudio');
     expect(desktopMyInfoSource).toContain('@navigate="handleFrameNavigation"');
     expect(desktopMyInfoSource).toContain("t('profileAppearance.title')");
@@ -225,7 +224,7 @@ describe('mobile personal center experience', () => {
     expect(personCenterSource).toMatch(
       /\.profile-card__avatar\.profile-card__avatar--framed\s*\{[\s\S]*?width:\s*auto;[\s\S]*?height:\s*auto;[\s\S]*?flex:\s*0 0 auto;/,
     );
-    // 资料名片与装扮预览按最大头像框预留固定槽位；卡片高度须同时容纳槽位与素材出血。
+    // 装扮预览按最大头像框预留固定槽位；卡片高度须同时容纳槽位与素材出血。
     const stableSlot = Math.round(
       (Math.max(...Object.values(AVATAR_FRAME_ARTWORK).map(({ outerSize }) => outerSize)) * 68) / 64,
     );
@@ -234,7 +233,6 @@ describe('mobile personal center experience', () => {
         Math.max(0, ((artSize - outerSize) * 68) / 64 / 2),
       ),
     );
-    expect(desktopMyInfoSource).toMatch(/\.profile-identity-card\s*\{[\s\S]*?height:\s*176px;/);
     expect(appearanceStudioSource).toMatch(/\.appearance-studio__stage\s*\{[\s\S]*?height:\s*176px;/);
     expect(176 - stableSlot - 2 * maxNameCardBleed).toBeGreaterThanOrEqual(8);
     expect(avatarPickerSource).toMatch(
