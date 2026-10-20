@@ -6,7 +6,11 @@ import { chromium } from 'playwright-core';
 const output = '/tmp/ln-todo-timing';
 const capacityOnly = process.argv.includes('--capacity');
 const viewFilter = process.argv.find((argument) => argument.startsWith('--view='))?.slice(7);
-const views = ['list', 'agenda', 'matrix'].filter((view) => !viewFilter || view === viewFilter);
+const baseUrl = new URL(
+  process.argv.find((argument) => argument.startsWith('--base-url='))?.slice(11) || 'http://localhost:5173',
+);
+assert(['localhost', '127.0.0.1'].includes(baseUrl.hostname), 'Use a local verification server');
+const views = ['list', 'agenda', 'matrix', 'calendar'].filter((view) => !viewFilter || view === viewFilter);
 assert(views.length, 'Unknown todo view');
 await fs.mkdir(output, { recursive: true });
 const local = (days, hour = 12) => {
@@ -54,6 +58,28 @@ const pending = [
 const completed = [
   makeItem('最近完成示例', { status: 'completed', dueAt: local(-30), completedAt: local(-1), reminder: reminder() }),
   makeItem('较早完成示例', { status: 'completed', dueAt: local(-20), completedAt: local(-2) }),
+];
+const nextMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1);
+const calendarDate = (day, time = '12:00:00') => {
+  const date = new Date(nextMonth.getFullYear(), nextMonth.getMonth(), day);
+  const pad = (number) => String(number).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${time}`;
+};
+const calendarItems = [
+  makeItem('泡菜（跨月）', {
+    startAt: local(-3, 19),
+    dueAt: calendarDate(4, '13:10:00'),
+    reminder: reminder({ nextAt: calendarDate(3, '11:00:00') }),
+  }),
+  makeItem('只有开始时间', { startAt: calendarDate(8, '19:10:00') }),
+  makeItem('全天计划日期', { occurrenceDate: calendarDate(9).slice(0, 10) }),
+  makeItem('仅提醒没有任务日期', { reminder: reminder({ nextAt: calendarDate(10) }) }),
+  makeItem('已完成仍按截止日期', {
+    startAt: local(-5),
+    dueAt: calendarDate(12),
+    status: 'completed',
+    completedAt: local(-1),
+  }),
 ];
 if (capacityOnly)
   pending.push(
@@ -141,6 +167,12 @@ try {
                   total: all.length,
                   nextCursor: offset ? null : '4',
                 };
+              } else if (query.presentation === 'calendar') {
+                const items = calendarItems.filter((item) => {
+                  const date = (item.dueAt || item.startAt || item.occurrenceDate || '').slice(0, 10);
+                  return date && (!query.rangeStart || date >= query.rangeStart) && (!query.rangeEnd || date <= query.rangeEnd);
+                });
+                data = { ...counts, items, total: items.length, nextCursor: null };
               } else
                 data = {
                   ...counts,
@@ -164,7 +196,7 @@ try {
             });
           });
           await context.routeWebSocket('**/*', (socket) => socket.close());
-          await page.goto(`http://localhost:5173/inbox?tab=todo${width < 768 ? '&renderProfile=mobile' : ''}`);
+          await page.goto(new URL(`/inbox?tab=todo${width < 768 ? '&renderProfile=mobile' : ''}`, baseUrl).href);
           if (view === 'agenda') {
             await page.locator('.todo-agenda-group').first().waitFor();
             assert(requests.some(([path, query]) => path === '/api/todo/workspace' && query.presentation === 'agenda'));
@@ -206,6 +238,44 @@ try {
                 text.includes('已暂停'),
               ),
             );
+          } else if (view === 'calendar') {
+            await page.locator('.todo-calendar-head').waitFor();
+            const changedRange = page.waitForRequest(
+              (request) =>
+                request.url().endsWith('/api/todo/workspace') &&
+                request.postDataJSON()?.presentation === 'calendar' &&
+                request.postDataJSON()?.rangeStart,
+            );
+            await page.locator('.todo-calendar-head button').nth(1).click();
+            await changedRange;
+            await page.locator('.todo-calendar-item').filter({ hasText: '全天计划日期' }).waitFor();
+            const crossMonth = page.locator('.todo-calendar-item').filter({ hasText: '泡菜（跨月）' });
+            assert.deepEqual(
+              await crossMonth.evaluate((node) => ({
+                day: node.closest('.todo-calendar-day').querySelector('.todo-calendar-daynum').textContent,
+                outside: node.closest('.todo-calendar-day').classList.contains('is-outside'),
+              })),
+              { day: '4', outside: false },
+            );
+            assert.equal(await crossMonth.locator('time').getAttribute('datetime'), calendarDate(4, '13:10:00'));
+            assert((await crossMonth.textContent()).includes('截止 13:10'));
+            await crossMonth.locator('..').locator('.todo-calendar-daynum').click();
+            assert((await page.locator('.todo-calendar-daylist').textContent()).includes('截止 13:10'));
+            const startOnly = page.locator('.todo-calendar-item').filter({ hasText: '只有开始时间' });
+            assert((await startOnly.textContent()).includes('开始 19:10'));
+            assert(
+              (await page.locator('.todo-calendar-item').filter({ hasText: '全天计划日期' }).textContent()).includes('全天'),
+            );
+            assert.equal(await page.locator('.todo-calendar-item').filter({ hasText: '仅提醒没有任务日期' }).count(), 0);
+            const completedItem = page.locator('.todo-calendar-item').filter({ hasText: '已完成仍按截止日期' });
+            assert.equal(
+              await completedItem.evaluate((node) => node.closest('.todo-calendar-day').querySelector('.todo-calendar-daynum').textContent),
+              '12',
+            );
+            assert(
+              requests.filter(([path, query]) => path === '/api/todo/workspace' && query.rangeStart)
+                .every(([, query]) => query.presentation === 'calendar'),
+            );
           } else {
             await page.locator('.todo-matrix').waitFor();
             if (width < 768) await page.locator('.todo-matrix__overview-button.is-otherNotUrgent').click();
@@ -246,10 +316,10 @@ try {
               (request) => request.url().endsWith('/api/todo/workspace') && request.postDataJSON()?.rangeStart,
             );
             await page.locator('.inbox-toolbar__todo-views').getByText('日历', { exact: true }).click();
-            assert.notEqual(
+            assert.equal(
               (await calendarRequest).postDataJSON().presentation,
-              'agenda',
-              'calendar clears agenda presentation',
+              'calendar',
+              'calendar uses its own date presentation',
             );
             const agendaRequest = page.waitForRequest(
               (request) =>

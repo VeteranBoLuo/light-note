@@ -67,12 +67,17 @@ export function todoPastReminderAt(
   return Number.isFinite(reminderTime) && reminderTime < now.getTime() ? reminderAt : '';
 }
 
-/** 日历位置只由任务计划决定，提醒不会把任务移动到另一天。 */
+/** 议程与日期分组使用任务计划时间，提醒不会改变定位。 */
 export function todoScheduleAt(item: Pick<TodoItem, 'startAt' | 'dueAt' | 'occurrenceDate'>) {
   if (item.startAt) return item.startAt;
   if (item.dueAt) return item.dueAt;
   const occurrenceDate = normalizeTodoDateOnly(item.occurrenceDate);
   return occurrenceDate ? `${occurrenceDate}T00:00:00` : '';
+}
+
+/** 月历优先显示截止日期，其次是开始时间与实例计划日期。 */
+export function todoCalendarAt(item: Pick<TodoItem, 'startAt' | 'dueAt' | 'occurrenceDate'>) {
+  return item.dueAt || todoScheduleAt(item);
 }
 
 /** 列表的“下一步时间”：提醒、开始、截止、实例日期中最早的有效时刻。 */

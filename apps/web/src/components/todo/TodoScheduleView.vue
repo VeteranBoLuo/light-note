@@ -43,7 +43,7 @@
           @click.stop="activateCalendarItem(day, item)"
         >
           <span class="todo-calendar-item__main">
-            <time :datetime="itemDateTime(item) || undefined">{{ scheduleTime(item) }}</time>
+            <time :datetime="itemScheduleAt(item) || undefined">{{ calendarTimeLabel(item) }}</time>
             <strong>{{ item.title }}</strong>
           </span>
           <span class="todo-calendar-item__meta">
@@ -90,7 +90,7 @@
           <span class="todo-calendar-dayitem__content">
             <strong>{{ item.title }}</strong>
             <span class="todo-calendar-dayitem__meta">
-              <small>{{ scheduleTime(item) }}</small>
+              <small>{{ calendarTimeLabel(item) }}</small>
               <small :class="todoStateClass(item)">{{ todoStateLabel(item) }}</small>
             </span>
           </span>
@@ -201,7 +201,13 @@
   import icon from '@/config/icon';
   import { bookmarkStore } from '@/store';
   import type { TodoItem } from '@/api/todoApi';
-  import { formatTodoDateTime, isTodoOverdue, normalizeTodoDateOnly, todoScheduleAt } from '@/utils/todoPlanning';
+  import {
+    formatTodoDateTime,
+    isTodoOverdue,
+    normalizeTodoDateOnly,
+    todoCalendarAt,
+    todoScheduleAt,
+  } from '@/utils/todoPlanning';
   import { buildTodoAgendaGroups, todoAgendaAt } from '@/utils/todoSeriesGrouping';
 
   const props = defineProps<{
@@ -375,18 +381,19 @@
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
   }
   function itemScheduleAt(item: TodoItem) {
-    return todoScheduleAt(item);
+    return props.view === 'calendar' ? todoCalendarAt(item) : todoScheduleAt(item);
   }
   function itemDateTime(item: TodoItem) {
     return item.startAt || item.dueAt || normalizeTodoDateOnly(item.occurrenceDate) || '';
   }
-  function scheduleTime(item: TodoItem) {
+  function calendarTimeLabel(item: TodoItem) {
     if (!item.startAt && !item.dueAt && item.occurrenceDate) return t('inbox.todoAllDay');
     const value = itemScheduleAt(item);
     if (!value) return '';
     const date = parseDate(value);
     if (!Number.isFinite(date.getTime())) return '';
-    return new Intl.DateTimeFormat(locale.value, { hour: '2-digit', minute: '2-digit' }).format(date);
+    const time = new Intl.DateTimeFormat(locale.value, { hour: '2-digit', minute: '2-digit' }).format(date);
+    return t(item.dueAt ? 'inbox.todoDue' : 'inbox.todoStarts', { time });
   }
   function isOverdue(item: TodoItem) {
     return isTodoOverdue(item, scheduleNow.value);
@@ -403,7 +410,7 @@
     return t(isOverdue(item) ? 'inbox.todoGroups.overdue' : 'inbox.todoPending');
   }
   function calendarItemTitle(item: TodoItem) {
-    return [scheduleTime(item), todoStateLabel(item), t(`inbox.todoPriority${item.priority}`), item.title]
+    return [calendarTimeLabel(item), todoStateLabel(item), t(`inbox.todoPriority${item.priority}`), item.title]
       .filter(Boolean)
       .join(' · ');
   }

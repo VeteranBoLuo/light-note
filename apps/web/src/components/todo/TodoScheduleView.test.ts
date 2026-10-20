@@ -82,6 +82,83 @@ afterEach(() => {
 });
 
 describe('TodoScheduleView mobile swipe delete', () => {
+  it('跨月待办放在截止日期，格子与当天列表都明确展示截止时间', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-01T10:00:00'));
+    const item = {
+      ...todo,
+      title: '泡菜',
+      startAt: '2026-10-17 19:10:00',
+      dueAt: '2026-11-04 13:10:00',
+      occurrenceDate: '2026-10-17',
+      reminderAt: '2026-11-03 11:00:00',
+    };
+    const { host, onPreview } = mountSchedule('calendar', item);
+    await nextTick();
+    const card = host.querySelector<HTMLButtonElement>('.todo-calendar-item')!;
+    expect(card.closest('.todo-calendar-day')?.querySelector('.todo-calendar-daynum')?.textContent).toBe('4');
+    expect(card.closest('.todo-calendar-day')?.classList.contains('is-outside')).toBe(false);
+    expect(card.querySelector('time')?.getAttribute('datetime')).toBe(item.dueAt);
+    expect(card.textContent).toContain('截止 13:10');
+    expect(card.title).toContain('截止 13:10');
+    card.closest<HTMLElement>('.todo-calendar-day')!.click();
+    await nextTick();
+    const dayItem = host.querySelector<HTMLButtonElement>('.todo-calendar-dayitem')!;
+    expect(dayItem.textContent).toContain('截止 13:10');
+    await vi.advanceTimersByTimeAsync(1);
+    dayItem.click();
+    expect(onPreview).toHaveBeenCalledWith(item);
+  });
+
+  it('只有开始时间标明开始，仅计划日期显示全天，无日期和仅提醒任务不进入日历', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-01T10:00:00'));
+    const { host } = mountSchedule('calendar', [
+      { ...todo, id: 'start-only', title: '开始任务', startAt: '2026-11-08 19:10:00', dueAt: null },
+      {
+        ...todo,
+        id: 'all-day',
+        title: '全天任务',
+        startAt: null,
+        dueAt: null,
+        occurrenceDate: '2026-11-09T00:00:00.000Z',
+      },
+      { ...todo, id: 'undated', title: '无日期任务', startAt: null, dueAt: null },
+      {
+        ...todo,
+        id: 'reminder-only',
+        title: '仅提醒任务',
+        startAt: null,
+        dueAt: null,
+        reminderAt: '2026-11-10 11:00:00',
+      },
+    ]);
+    await nextTick();
+    const cards = [...host.querySelectorAll<HTMLButtonElement>('.todo-calendar-item')];
+    expect(cards).toHaveLength(2);
+    expect(cards[0].textContent).toContain('开始 19:10');
+    expect(cards[0].closest('.todo-calendar-day')?.querySelector('.todo-calendar-daynum')?.textContent).toBe('8');
+    expect(cards[1].textContent).toContain('全天');
+    expect(cards[1].querySelector('time')?.getAttribute('datetime')).toBe('2026-11-09T00:00:00');
+  });
+
+  it('已完成任务仍按截止日期落点，不因完成时间提前而移动', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-01T10:00:00'));
+    const { host } = mountSchedule('calendar', {
+      ...todo,
+      status: 'completed',
+      startAt: '2026-10-17 19:10:00',
+      dueAt: '2026-11-04 13:10:00',
+      completedAt: '2026-10-31 12:00:00',
+    });
+    await nextTick();
+    const card = host.querySelector('.todo-calendar-item')!;
+    expect(card.closest('.todo-calendar-day')?.querySelector('.todo-calendar-daynum')?.textContent).toBe('4');
+    expect(card.classList.contains('is-completed')).toBe(true);
+    expect(card.textContent).toContain('截止 13:10');
+  });
+
   it('页面持续打开时按实际截止时刻进入逾期待处理，提醒到点更新状态', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-10-19T09:00:00'));

@@ -114,6 +114,32 @@ describe.skipIf(!socket)('workspace SQL against isolated MySQL', () => {
   }
   const nodeId = (node) => (node.kind === 'series' ? node.representative.id : node.item.id);
 
+  it('月历范围按截止日期筛选，覆盖跨月、全天与首尾边界，排除区间相交但截止在月外的任务', async () => {
+    await add('cross-month', { start_at: '2026-10-17 19:10:00', due_at: '2026-11-04 13:10:00' });
+    await add('start-only', { start_at: '2026-11-08 19:10:00' });
+    await add('all-day', { occurrence_date: '2026-11-09' });
+    await add('range-start', { due_at: '2026-11-01 00:00:00' });
+    await add('range-end', { due_at: '2026-11-30 23:59:59' });
+    await add('finishes-next-month', { start_at: '2026-11-10 12:00:00', due_at: '2026-12-01 00:00:00' });
+    await add('finished-before-range', { due_at: '2026-10-31 23:59:59' });
+    await add('no-date');
+    await add('foreign-date', { user_id: 'other', due_at: '2026-11-08 10:00:00' });
+    const page = await todoWorkspaceGroupPage(db, 'owner', {
+      presentation: 'calendar',
+      status: 'all',
+      sort: 'due',
+      groupKey: 'all',
+      rangeStart: '2026-11-01',
+      rangeEnd: '2026-11-30',
+      limit: 100,
+    });
+    expect(page.nodes.map(nodeId).sort()).toEqual(
+      ['cross-month', 'start-only', 'all-day', 'range-start', 'range-end'].sort(),
+    );
+    expect(page.total).toBe(5);
+    expect(page.nextCursor).toBeNull();
+  });
+
   it('同组无截止任务在分页前按有效提醒升序，忽略已发送、取消、暂停及其他账号的 Job', async () => {
     const tomorrow = await date(1);
     for (const id of ['a-late', 'z-early', 'legacy', 'no-reminder']) {

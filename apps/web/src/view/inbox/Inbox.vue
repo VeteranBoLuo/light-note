@@ -1746,7 +1746,7 @@
     openSwipeTodoId.value = '';
     // 统一由 refreshList 应用状态口径；日历等 range-change 后再请求。
     todo.seriesPresentation = view === 'list';
-    if (view === 'agenda') todo.filters.presentation = 'agenda';
+    if (view === 'agenda' || view === 'calendar') todo.filters.presentation = view;
     else delete todo.filters.presentation;
     if (view !== 'calendar') {
       delete todo.filters.rangeStart;
@@ -2014,7 +2014,8 @@
         }
         todo.workspaceEnabled = true;
         todo.seriesPresentation = todoView.value === 'list';
-        if (todoView.value === 'agenda') todo.filters.presentation = 'agenda';
+        if (todoView.value === 'agenda' || todoView.value === 'calendar')
+          todo.filters.presentation = todoView.value;
         else delete todo.filters.presentation;
         const owner = todoCalendarOwnerKey(user);
         const freshTags = await fetchSelectableTags().catch(() => workspaceTags.value);
@@ -2078,6 +2079,7 @@
 
   async function ensureCalendarRange(range: { startDate: string; endDate: string }) {
     if (todoView.value !== 'calendar') return;
+    todo.filters.presentation = 'calendar';
     const requestGeneration = ++calendarRangeGeneration;
     const changed = todo.filters.rangeStart !== range.startDate || todo.filters.rangeEnd !== range.endDate;
     todo.filters.rangeStart = range.startDate;

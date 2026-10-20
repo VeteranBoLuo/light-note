@@ -241,9 +241,12 @@ export function todoOrganizationFilters(input = {}, alias = 'todo_items') {
       Date.parse(input.rangeEnd) - Date.parse(input.rangeStart) > 93 * 86400000
     )
       throw organizationError('TODO_RANGE_INVALID', '日期范围无效');
-    where.push(
-      `COALESCE(${alias}.due_at, ${alias}.start_at, ${alias}.occurrence_date) >= ? AND COALESCE(${alias}.start_at, ${alias}.due_at, ${alias}.occurrence_date) < DATE_ADD(?, INTERVAL 1 DAY)`,
-    );
+    const endAt = `COALESCE(${alias}.due_at, ${alias}.start_at, ${alias}.occurrence_date)`;
+    const startAt =
+      input.presentation === 'calendar'
+        ? endAt
+        : `COALESCE(${alias}.start_at, ${alias}.due_at, ${alias}.occurrence_date)`;
+    where.push(`${endAt} >= ? AND ${startAt} < DATE_ADD(?, INTERVAL 1 DAY)`);
     params.push(input.rangeStart, input.rangeEnd);
   }
   return { where, params };

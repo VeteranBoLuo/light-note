@@ -7,6 +7,7 @@ import {
   isTodoOverdue,
   normalizeTodoDateOnly,
   todoActionAt,
+  todoCalendarAt,
   todoConfiguredReminderAt,
   todoGroupKey,
   todoPastReminderAt,
@@ -132,6 +133,26 @@ describe('todoPlanning', () => {
     expect(todoScheduleAt({ startAt: null, dueAt: null, occurrenceDate: '2026-08-18T00:00:00.000Z' })).toBe(
       '2026-08-18T00:00:00',
     );
+  });
+
+  it('月历优先定位截止日期，议程继续使用开始时间', () => {
+    const item = {
+      startAt: '2026-10-17 19:10:00',
+      dueAt: '2026-11-04 13:10:00',
+      occurrenceDate: '2026-10-17',
+    };
+    expect(todoCalendarAt(item)).toBe('2026-11-04 13:10:00');
+    expect(todoScheduleAt(item)).toBe('2026-10-17 19:10:00');
+  });
+
+  it('月历依次回退开始时间与纯计划日期，无日期不安排到日历', () => {
+    expect(todoCalendarAt({ startAt: '2026-11-08 19:10:00', dueAt: null, occurrenceDate: '2026-11-01' })).toBe(
+      '2026-11-08 19:10:00',
+    );
+    expect(todoCalendarAt({ startAt: null, dueAt: null, occurrenceDate: '2026-11-09T00:00:00.000Z' })).toBe(
+      '2026-11-09T00:00:00',
+    );
+    expect(todoCalendarAt({ startAt: null, dueAt: null, occurrenceDate: null })).toBe('');
   });
 
   it('下一步时间取提醒、开始、截止和计划日期中最早者，暂停提醒不参与', () => {
