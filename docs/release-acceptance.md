@@ -205,6 +205,10 @@ Web 发布先把新产物完整解包到独立 staging 目录，通过基本产�
 
 上线前执行图片预览加法迁移与 Schema 门禁；后台 `backfill:image-assets` 默认只读，受授权执行时使用 `--apply --checkpoint=绝对路径` 保存可恢复游标。回填包含上传登记、正文、版本、模板、云文件及书签保留引用，所有阶段完成并对账前不得打开图片清理开关。归属歧义的物理位置保持保留。生成与读取可分模块启用，关闭时云空间图片按[原图回退规则](./architecture.md#文件与派生预览)展示，其他卡片保留占位；回滚保留表、对象及待清理账本，详见 [图片预览回滚说明](../apps/server/migrations/20260908_common_image_previews_rollback.md)。
 
+### HEIC / HEIF 预览运行时
+
+HEIC / HEIF 解码复用 ImageMagick 的 libheif delegate，不新增 Schema；现有预览表须已支持 `image_display`。`check:image-previews` 除 WebP 编码外还使用仓库自生成 HEIC 样本执行真实解码与大图转换，验证部署包中的样本及 sRGB 配置可读。启用前停止旧文档 Worker，同步部署 API、Worker 与 Web；卡片协议 v3 使历史格式失败在首次访问时惰性重建，上一版有效缩略图在生成期间可复用。回滚同步恢复 API / Worker / Web，保留原件、派生对象与任务账本，不让旧 Worker 消费新策略版本任务。
+
 ### 图片卡片策略升级与恢复
 
 图片策略 v2 依赖 `20260909_image_preview_metadata.sql` 的加法结构迁移。旧版图片 Worker 不过滤策略版本，禁止和 v2 入队端混跑：先停止所有旧文档 Worker，应用已授权迁移并部署新 API/Worker，再开放新任务。回滚时保留产物和任务表，暂停图片生成，不让旧 Worker 消费新任务。

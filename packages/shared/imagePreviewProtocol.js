@@ -1,6 +1,6 @@
 export const CARD_IMAGE_PROFILE = Object.freeze({
   id: "card",
-  version: 2,
+  version: 3,
   maxEdge: 720,
   maxBytes: 150 * 1024,
 });

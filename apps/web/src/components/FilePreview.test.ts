@@ -733,7 +733,7 @@ describe('FilePreview derived previews', () => {
     });
     app.mount(host);
     cleanup = () => { app.unmount(); host.remove(); };
-    await vi.waitFor(() => expect(filePreviewApiMocks.prepareSharedFilePreview).toHaveBeenCalledWith('share-fixture', 'A123'));
+    await vi.waitFor(() => expect(filePreviewApiMocks.prepareSharedFilePreview).toHaveBeenCalledWith('share-fixture', 'A123', false));
     expect(document.body.querySelector('.preview-image')).toBeNull();
     expect(document.body.querySelector('.preview-loading')).not.toBeNull();
     resolveDownload({ previewType: 'image', status: 'ready', sourceDownloadUrl: 'https://files.example/shared.png' });
@@ -1284,7 +1284,7 @@ describe('FilePreview 表格原生坐标', () => {
 describe('FilePreview verified image content', () => {
   function mountVerified(
     fileInfo: ReturnType<typeof ref>,
-    previewAccess?: { kind: 'community_chat_file'; publicId: string },
+    previewAccess?: { kind: 'community_chat_file'; publicId: string } | { kind: 'share'; token: string; accessCode?: string },
   ) {
     const host = document.createElement('div');
     document.body.append(host);
@@ -1301,6 +1301,58 @@ describe('FilePreview verified image content', () => {
     fileType: 'image/heic',
     fileUrl: '/unverified-original',
     category: 'image',
+  });
+
+  it('prepares a genuine HEIF derivative and never mounts the original HEIC as an image', async () => {
+    const base = { previewType: 'image', strategy: 'image_display', formatId: 'heif', sourceDownloadUrl: '/original.heic', pollAfterMs: 500 };
+    filePreviewApiMocks.resolveOwnedFilePreview.mockResolvedValue({ ...base, status: 'missing' });
+    let finish!: (state: unknown) => void;
+    filePreviewApiMocks.prepareOwnedFilePreview.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    mountVerified(ref(file()));
+    await vi.waitFor(() => expect(filePreviewApiMocks.prepareOwnedFilePreview).toHaveBeenCalledWith('verified-image', false));
+    expect(document.querySelector('.preview-image')).toBeNull();
+    expect(document.querySelector('.preview-loading')).not.toBeNull();
+    finish({ ...base, status: 'ready', previewUrl: '/display.webp' });
+    await vi.waitFor(() => expect(document.querySelector('.preview-image')?.getAttribute('src')).toBe('/display.webp'));
+    document.querySelector('.preview-image')!.dispatchEvent(new Event('load'));
+    await nextTick();
+    expect(document.querySelector('.preview-loading')).toBeNull();
+    expect(document.querySelector('.preview-controls')).not.toBeNull();
+    expect(document.querySelector('img[src="/original.heic"]')).toBeNull();
+  });
+
+  it('polls a genuine shared HEIF through its preview ticket, keeping its original download URL', async () => {
+    const base = { previewType: 'image', strategy: 'image_display', formatId: 'heif', sourceDownloadUrl: '/shared-original.heic', pollAfterMs: 500 };
+    filePreviewApiMocks.prepareSharedFilePreview.mockResolvedValue({ ...base, status: 'queued', previewTicket: 'heif-ticket' });
+    filePreviewApiMocks.resolveSharedFilePreview.mockResolvedValue({ ...base, status: 'ready', previewUrl: '/shared-display.webp' });
+    mountVerified(ref(file()), { kind: 'share', token: 'share-token', accessCode: 'A123' });
+    await vi.waitFor(() => expect(document.querySelector('.preview-image')?.getAttribute('src')).toBe('/shared-display.webp'));
+    expect(filePreviewApiMocks.prepareSharedFilePreview).toHaveBeenCalledExactlyOnceWith('share-token', 'A123', false);
+    expect(filePreviewApiMocks.resolveSharedFilePreview).toHaveBeenCalledWith('heif-ticket');
+    expect(filePreviewApiMocks.resolveOwnedFilePreview).not.toHaveBeenCalled();
+    expect(commonHttpMocks.getFileShareDownload).not.toHaveBeenCalled();
+  });
+
+  it('shows a permanent HEIF decoding failure without a futile retry button', async () => {
+    filePreviewApiMocks.resolveOwnedFilePreview.mockResolvedValue({ previewType: 'image', strategy: 'image_display', formatId: 'heif', status: 'failed', errorCode: 'IMAGE_SOURCE_INVALID' });
+    mountVerified(ref(file()));
+    await vi.waitFor(() => expect(document.querySelector('.preview-error')?.textContent).toContain('imagePreview.decode'));
+    expect(document.querySelector('.preview-image')).toBeNull();
+    expect(document.querySelector('.retry-btn')).toBeNull();
+  });
+
+  it('ignores an old HEIF conversion completion after switching to another image', async () => {
+    const base = { previewType: 'image', strategy: 'image_display', formatId: 'heif', status: 'missing', sourceDownloadUrl: '/old.heic' };
+    filePreviewApiMocks.resolveOwnedFilePreview.mockResolvedValueOnce(base).mockResolvedValue({ previewType: 'image', status: 'ready', sourceDownloadUrl: '/current.jpeg' });
+    let finish!: (state: unknown) => void;
+    filePreviewApiMocks.prepareOwnedFilePreview.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    const info = ref(file('old')); mountVerified(info);
+    await vi.waitFor(() => expect(filePreviewApiMocks.prepareOwnedFilePreview).toHaveBeenCalled());
+    info.value = file('current');
+    await vi.waitFor(() => expect(document.querySelector('.preview-image')?.getAttribute('src')).toBe('/current.jpeg'));
+    finish({ ...base, status: 'ready', previewUrl: '/old.webp' });
+    await nextTick(); await nextTick();
+    expect(document.querySelector('.preview-image')?.getAttribute('src')).toBe('/current.jpeg');
   });
 
   it('opens HEIC-named JPEG bytes using the verified original URL', async () => {

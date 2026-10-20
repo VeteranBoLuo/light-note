@@ -1,4 +1,4 @@
-export type DerivedFilePreviewType = 'archive' | 'converted-pdf';
+export type DerivedFilePreviewType = 'archive' | 'converted-pdf' | 'image';
 
 const ARCHIVE_POLL_TIMEOUT_MS = 60_000;
 const OFFICE_POLL_TIMEOUT_MS = 150_000;

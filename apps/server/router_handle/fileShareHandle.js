@@ -450,7 +450,7 @@ export async function prepareFileSharePreview(req, res) {
       }),
     ]);
     const sourceObjectKey = row.obs_key || buildObjectKey(row.file_owner_id, row.file_name);
-    const { url: sourceDownloadUrl, expiresIn: sourceUrlExpiresIn } = state.previewType === 'image'
+    const { url: sourceDownloadUrl, expiresIn: sourceUrlExpiresIn } = state.previewType === 'image' && state.sourceDownloadUrl
       ? { url: state.sourceDownloadUrl, expiresIn: state.sourceUrlExpiresIn }
       : createDownloadSignedUrl({
       objectKey: sourceObjectKey,

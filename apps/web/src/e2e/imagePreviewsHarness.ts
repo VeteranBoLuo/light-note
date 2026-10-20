@@ -1,3 +1,4 @@
+import heicOriginalUrl from '../../../server/util/imagePreview/fixtures/primary.heic?url';
 import { createApp, h, ref } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { createI18n } from 'vue-i18n';
@@ -13,6 +14,11 @@ const p = new URLSearchParams(location.search);
 const audioMode = p.get('audio') === 'true';
 const videoMode = p.get('video') === 'true';
 const realFormats = p.has('realFormats');
+const heicMode = p.has('heic');
+// Browser fixture uses a real WebP decoded from our synthetic HEIC.
+const heicPreview =
+  'data:image/webp;base64,UklGRl4AAABXRUJQVlA4IFIAAACQBACdASowACAAPpE6l0eloyIhMAgAsBIJQBkaOB/APxA0wH4q/iAAf1HUhgAA/u6ldXcDQtfUzEMy0mn8df2a//p1OL2/H4Uo/DQ7clLJqAAA';
+const displayRequests = new Map<string, number>();
 const locale = p.get('lang') === 'en' ? 'en-US' : 'zh-CN';
 const theme = p.get('theme') === 'night' ? 'night' : 'day';
 document.documentElement.dataset.theme = theme;
@@ -70,9 +76,34 @@ const adminItems = ['source', 'resource_limit', 'service'].map((failureKind, i) 
   canRetry: false,
 }));
 request.defaults.adapter = async (config) => {
-  if (config.url?.endsWith('/file/preview/resolve')) {
+  if (config.url?.endsWith('/file/preview/resolve') || (heicMode && config.url?.endsWith('/file/preview/prepare'))) {
     const { fileId } = JSON.parse(config.data || '{}');
     const index = Number(String(fileId).split('-').at(-1));
+    if (heicMode) {
+      const n = displayRequests.get(fileId) || 0;
+      displayRequests.set(fileId, n + 1);
+      return {
+        config,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        data: {
+          status: 200,
+          data: {
+            fileId,
+            strategy: 'image_display',
+            previewType: 'image',
+            formatId: 'heif',
+            status: index === 2 ? 'failed' : n === 0 ? 'missing' : n === 1 ? 'queued' : 'ready',
+            sourceMimeType: 'image/heif',
+            sourceDownloadUrl: heicOriginalUrl,
+            previewUrl: n >= 2 ? heicPreview : undefined,
+            errorCode: index === 2 ? 'IMAGE_SOURCE_INVALID' : '',
+            pollAfterMs: 500,
+          },
+        },
+      };
+    }
     const unsupported = realFormats && [2, 3].includes(index);
     return {
       config,
@@ -193,31 +224,35 @@ request.defaults.adapter = async (config) => {
           const slowUploadReady =
             p.has('slowUpload') && index === 1 && Date.now() - firstPreviewRequest.get(item.sourceId)! >= uploadDelayMs;
           const state =
-            retried.has(item.sourceId) || slowUploadReady || (realFormats && index === 4)
+            (heicMode && index !== 2) || retried.has(item.sourceId) || slowUploadReady || (realFormats && index === 4)
               ? 'ready'
               : states[index % states.length];
           return {
             ...item,
             status: state,
             errorCode:
-              realFormats && index === 2
-                ? 'IMAGE_SOURCE_UNSUPPORTED'
-                : state === 'failed'
-                  ? index === 4
-                    ? 'IMAGE_STORAGE_UNAVAILABLE'
-                    : 'IMAGE_SOURCE_MISSING'
-                  : null,
+              heicMode && index === 2
+                ? 'IMAGE_SOURCE_INVALID'
+                : realFormats && index === 2
+                  ? 'IMAGE_SOURCE_UNSUPPORTED'
+                  : state === 'failed'
+                    ? index === 4
+                      ? 'IMAGE_STORAGE_UNAVAILABLE'
+                      : 'IMAGE_SOURCE_MISSING'
+                    : null,
             retryable: state === 'failed' && index === 4,
             presentation: !videoMode && index === 5 ? 'long_top' : 'full',
             durationSeconds: videoMode && state === 'ready' ? 12.5 : null,
             assetId: item.sourceId,
             url:
               state === 'ready'
-                ? realFormats && index === 4
-                  ? '/fixture-broken-thumbnail.webp'
-                  : index === 5
-                    ? tallThumbnail
-                    : small
+                ? heicMode
+                  ? heicPreview
+                  : realFormats && index === 4
+                    ? '/fixture-broken-thumbnail.webp'
+                    : index === 5
+                      ? tallThumbnail
+                      : small
                 : null,
             expiresAt: Date.now() + 600000,
           };
@@ -290,7 +325,13 @@ const app = createApp({
         onPreviewFile: (file: any) => {
           openedFile.value = {
             ...file,
-            fileUrl: videoMode ? file.fileUrl : String(file.id).endsWith('-5') ? tallOriginal : jpegOriginal,
+            fileUrl: heicMode
+              ? file.fileUrl
+              : videoMode
+                ? file.fileUrl
+                : String(file.id).endsWith('-5')
+                  ? tallOriginal
+                  : jpegOriginal,
           };
           opened.value = true;
         },
@@ -318,23 +359,31 @@ bookmarkStore(pinia).screenWidth = window.innerWidth;
 applyUiDensity(p.get('density') || 'medium', !bookmarkStore(pinia).isDesktop);
 cloudSpaceStore(pinia).fileList = states.map((state, i) => ({
   id: `cloud-${i}`,
-  fileName: videoMode
-    ? `视频-${state}.${i % 2 ? 'MOV' : 'mp4'}`
-    : audioMode
-      ? `音频-${state}.mp3`
-      : realFormats && i === 0
-        ? 'JPEG内容但名称为HEIC.heic'
-        : `图片-${state}.png`,
-  fileType: videoMode
-    ? 'video/quicktime'
-    : audioMode
-      ? 'audio/mpeg'
-      : realFormats && i === 0
-        ? 'image/heic'
-        : 'image/png',
+  fileName: heicMode
+    ? `HEIC-${i}.heic`
+    : videoMode
+      ? `视频-${state}.${i % 2 ? 'MOV' : 'mp4'}`
+      : audioMode
+        ? `音频-${state}.mp3`
+        : realFormats && i === 0
+          ? 'JPEG内容但名称为HEIC.heic'
+          : `图片-${state}.png`,
+  fileType: heicMode
+    ? 'image/heic'
+    : videoMode
+      ? 'video/quicktime'
+      : audioMode
+        ? 'audio/mpeg'
+        : realFormats && i === 0
+          ? 'image/heic'
+          : 'image/png',
   category: videoMode ? 'video' : audioMode ? 'audio' : 'image',
   fileSize: realFormats || (p.has('originalFallback') && i === 3) ? 11 * 1024 * 1024 : 2000000,
-  fileUrl: p.has('originalFallback') && i !== 4 ? small : '/original-must-not-be-requested.png',
+  fileUrl: heicMode
+    ? heicOriginalUrl
+    : p.has('originalFallback') && i !== 4
+      ? small
+      : '/original-must-not-be-requested.png',
   uploadTime: '2026-09-08 12:00',
   folderName: '',
   tags: [],

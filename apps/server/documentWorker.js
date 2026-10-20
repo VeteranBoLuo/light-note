@@ -89,7 +89,7 @@ async function run() {
       : ocrRuntime.errorCode || '运行环境不可用';
     console.warn(`[AI 文档] 本地 OCR 暂不可用: ${detail}`);
   }
-  const imageRuntime = await inspectImagePreviewRuntime();
+  const imageRuntime = await inspectImagePreviewRuntime({ heif: true });
   if (!imageRuntime.ready) console.warn('[image-preview] runtime unavailable');
   const videoRuntime = await inspectVideoPreviewRuntime();
   if (!videoRuntime.ready) console.warn('[video-preview] runtime unavailable');

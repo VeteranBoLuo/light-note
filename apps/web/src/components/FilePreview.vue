@@ -78,7 +78,13 @@
       <div class="preview-content" @click.stop>
         <!-- 加载状态 -->
         <div v-if="loading" class="preview-loading">
-          <BLoading inline loading :title="t('cloudSpace.previewPanel.loading')" />
+          <BLoading
+            inline
+            loading
+            :title="
+              t(imageSourceState?.strategy === 'image_display' ? 'imagePreview.generatingDisplay' : 'cloudSpace.previewPanel.loading')
+            "
+          />
         </div>
 
         <!-- 错误状态 -->
@@ -457,6 +463,7 @@
         'IMAGE_SOURCE_MISSING',
         'IMAGE_SOURCE_UNSUPPORTED',
         'IMAGE_DECODE_FAILED',
+        'IMAGE_SOURCE_INVALID',
         'IMAGE_SOURCE_SIZE_LIMIT',
         'IMAGE_RESOURCE_LIMIT',
         'IMAGE_OUTPUT_SIZE_LIMIT',
@@ -667,7 +674,9 @@
 
   const sourceDownloadUrl = computed(() => sharedSourceFileUrl.value || props.fileInfo.fileUrl || '');
   const effectiveFileUrl = computed(() => {
-    if (previewType.value === 'converted-pdf') return derivedPreviewUrl.value;
+    if (previewType.value === 'converted-pdf' || imageSourceState.value?.strategy === 'image_display') {
+      return derivedPreviewUrl.value;
+    }
     return sourceDownloadUrl.value;
   });
 
@@ -765,13 +774,18 @@
         const access = props.previewAccess;
         const state =
           access?.kind === 'share'
-            ? await prepareSharedFilePreview(access.token, String(access.accessCode || '').trim())
+            ? await prepareSharedFilePreview(access.token, String(access.accessCode || '').trim(), retryDerived)
             : access?.kind === 'community_chat_file'
               ? await resolveCommunityChatFilePreview(access.publicId)
               : await resolveOwnedFilePreview(String(file.id));
         if (requestAttempt !== previewAttempt.value || !props.visible) return;
         if (state.previewType !== 'image' && state.errorCode !== 'IMAGE_SOURCE_UNSUPPORTED') {
           throw Object.assign(new Error('IMAGE_SOURCE_RESOLVE_FAILED'), { code: state.errorCode });
+        }
+        if (state.strategy === 'image_display') {
+          imageSourceState.value = state;
+          await loadDerivedPreview(retryDerived, state);
+          return;
         }
         imageSourceState.value = state;
         sharedSourceFileUrl.value = String(state.sourceDownloadUrl || '');
@@ -886,41 +900,50 @@
     return t(keyByCode[code] || 'cloudSpace.previewPanel.derivedPreviewFailed');
   }
 
-  async function loadDerivedPreview(retryDerived: boolean) {
+  async function loadDerivedPreview(retryDerived: boolean, initialState?: FilePreviewState) {
+    const requestAttempt = previewAttempt.value;
     const expectedFileId = activePreviewFileId;
     const pollingStartedAt = Date.now();
     const shareAccess = props.previewAccess?.kind === 'share' ? props.previewAccess : null;
     const chatAccess = props.previewAccess?.kind === 'community_chat_file' ? props.previewAccess : null;
     let state: FilePreviewState;
     if (shareAccess) {
-      state = await prepareSharedFilePreview(
-        shareAccess.token,
-        String(shareAccess.accessCode || '').trim(),
-        retryDerived,
-      );
+      state =
+        initialState ||
+        (await prepareSharedFilePreview(shareAccess.token, String(shareAccess.accessCode || '').trim(), retryDerived));
+      if (requestAttempt !== previewAttempt.value || !props.visible) return;
       sharePreviewTicket.value = String(state.previewTicket || '');
       sharedSourceFileUrl.value = String(state.sourceDownloadUrl || '');
     } else if (chatAccess) {
-      state = await resolveCommunityChatFilePreview(chatAccess.publicId);
+      state = initialState || (await resolveCommunityChatFilePreview(chatAccess.publicId));
       if (state.status === 'missing' || (state.status === 'failed' && retryDerived)) {
         state = await prepareCommunityChatFilePreview(chatAccess.publicId, retryDerived);
       }
+      if (requestAttempt !== previewAttempt.value || !props.visible) return;
       const downloadResponse = await getCommunityChatFileDownload(chatAccess.publicId);
+      if (requestAttempt !== previewAttempt.value || !props.visible) return;
       if (downloadResponse?.status === 200) {
         sharedSourceFileUrl.value = String(downloadResponse.data?.downloadUrl || '');
       }
     } else {
-      state = await resolveOwnedFilePreview(expectedFileId);
+      state = initialState || (await resolveOwnedFilePreview(expectedFileId));
       if (state.status === 'missing' || (state.status === 'failed' && retryDerived)) {
         state = await prepareOwnedFilePreview(expectedFileId, retryDerived);
       }
     }
 
+    if (requestAttempt !== previewAttempt.value || !props.visible) return;
+    if (state.sourceDownloadUrl) sharedSourceFileUrl.value = state.sourceDownloadUrl;
     for (let pollCount = 0; ; pollCount += 1) {
-      if (expectedFileId !== activePreviewFileId || !props.visible) return;
+      if (requestAttempt !== previewAttempt.value || expectedFileId !== activePreviewFileId || !props.visible) return;
       if (state.status === 'ready') {
         derivedReady.value = true;
-        if (state.previewType === 'converted-pdf') {
+        if (state.previewType === 'image') {
+          if (!state.previewUrl) throw new Error(t('cloudSpace.previewPanel.derivedPreviewFailed'));
+          derivedPreviewUrl.value = state.previewUrl;
+          imageSourceState.value = state;
+          // 图片仍等待 load/error 事件；下载继续使用原件地址。
+        } else if (state.previewType === 'converted-pdf') {
           if (!state.previewUrl) throw new Error(t('cloudSpace.previewPanel.derivedPreviewFailed'));
           derivedPreviewUrl.value = state.previewUrl;
           // PDF 保持加载态，交给 PdfPreview 的 rendered/error 事件结算。
@@ -934,14 +957,14 @@
         Object.assign(failure, { code: state.errorCode });
         throw failure;
       }
-      if (state.previewType !== 'archive' && state.previewType !== 'converted-pdf') {
+      if (state.previewType !== 'archive' && state.previewType !== 'converted-pdf' && state.previewType !== 'image') {
         throw new Error(t('cloudSpace.previewPanel.derivedPreviewFailed'));
       }
       if (hasFilePreviewPollingTimedOut(state.previewType, pollingStartedAt)) {
         throw new Error(t('cloudSpace.previewPanel.derivedPreviewTimeout'));
       }
       await waitForPreviewPoll(getFilePreviewPollDelay(pollCount, state.pollAfterMs));
-      if (expectedFileId !== activePreviewFileId || !props.visible) return;
+      if (requestAttempt !== previewAttempt.value || expectedFileId !== activePreviewFileId || !props.visible) return;
       state = shareAccess
         ? await resolveSharedFilePreview(sharePreviewTicket.value)
         : chatAccess

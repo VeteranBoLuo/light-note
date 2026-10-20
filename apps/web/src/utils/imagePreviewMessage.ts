@@ -6,6 +6,7 @@ export function imagePreviewMessageKey(code?: string | null): string {
     IMAGE_SOURCE_MISSING: 'sourceMissing',
     IMAGE_SOURCE_UNSUPPORTED: 'unsupported',
     IMAGE_DECODE_FAILED: 'decode',
+    IMAGE_SOURCE_INVALID: 'decode',
     IMAGE_SOURCE_SIZE_LIMIT: 'size',
     IMAGE_SOURCE_PIXEL_LIMIT: 'resource',
     IMAGE_RESOURCE_LIMIT: 'resource',

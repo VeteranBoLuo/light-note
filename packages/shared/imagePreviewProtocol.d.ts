@@ -1,6 +1,6 @@
 export declare const CARD_IMAGE_PROFILE: Readonly<{
   id: "card";
-  version: 2;
+  version: 3;
   maxEdge: 720;
   maxBytes: number;
 }>;

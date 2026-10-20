@@ -1,3 +1,4 @@
+import fs from 'node:fs/promises';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const poolMocks = vi.hoisted(() => ({ query: vi.fn(), getConnection: vi.fn() }));
@@ -21,7 +22,8 @@ vi.mock('../obsClient.js', () => obsMocks);
 vi.mock('../agent/logSafety.js', () => ({ stableAgentErrorCode: (error) => error?.code || 'SAFE_ERROR' }));
 vi.mock('./office.js', () => officeMocks);
 vi.mock('./archive.js', () => archiveMocks);
-vi.mock('./runtime.js', () => ({
+vi.mock('./runtime.js', async (importOriginal) => ({
+  ...(await importOriginal()),
   getFilePreviewRuntimeConfig: () => ({
     sevenZipBin: '7zz',
     officeBin: 'soffice',
@@ -35,6 +37,7 @@ const {
   cleanupStaleFilePreviewArtifacts,
   deleteFilePreviewArtifactsForSource,
   resolveFilePreview,
+  prepareFilePreview,
   runSingleFilePreviewJob,
 } = await import('./service.js');
 
@@ -173,6 +176,135 @@ describe('file preview service', () => {
     expect(obsMocks.getObjectRangeFromObs).not.toHaveBeenCalled();
     expect(obsMocks.createDownloadSignedUrl).not.toHaveBeenCalled();
   });
+
+  it('queues HEIF conversion only after source authorization and preserves the original object', async () => {
+    const body = await fs.readFile(new URL('../imagePreview/fixtures/primary.heic', import.meta.url));
+    const file = {
+      id: 42,
+      create_by: 'user-1',
+      file_name: 'photo.heic',
+      file_type: 'image/heic',
+      file_size: body.length,
+      obs_key: 'source-key',
+    };
+    let inserted = false;
+    poolMocks.query.mockImplementation(async (sql) =>
+      String(sql).includes('FROM files WHERE')
+        ? [[file]]
+        : [
+            inserted
+              ? [
+                  {
+                    id: 10,
+                    source_type: 'cloud_file',
+                    owner_user_id: 'user-1',
+                    source_size: body.length,
+                    source_etag: 'etag-1',
+                    format_id: 'heif',
+                    strategy: 'image_display',
+                    status: 'queued',
+                  },
+                ]
+              : [],
+          ],
+    );
+    obsMocks.getObjectMetadataFromObs.mockResolvedValue({ contentLength: body.length, etag: 'etag-1' });
+    obsMocks.getObjectRangeFromObs.mockResolvedValue(body);
+    const query = vi.fn(async (sql) => {
+      if (String(sql).includes('INSERT INTO file_preview_artifacts')) inserted = true;
+      if (String(sql).includes('FROM files WHERE')) return [[file]];
+      if (String(sql).includes('SELECT * FROM file_preview_artifacts')) return [[]];
+      if (String(sql).includes('SELECT output_object_key')) return [[]];
+      return [{ affectedRows: 1, insertId: 10 }];
+    });
+    poolMocks.getConnection.mockResolvedValue(connection(query));
+    const result = await prepareFilePreview({ ownerUserId: 'user-1', fileId: 42 });
+    expect(result).toMatchObject({ strategy: 'image_display', previewType: 'image', status: 'queued' });
+    expect(
+      query.mock.calls.some(
+        ([sql, params]) =>
+          String(sql).includes('INSERT INTO file_preview_artifacts') && params.includes('image_display'),
+      ),
+    ).toBe(true);
+    expect(obsMocks.getObjectBufferFromObs).not.toHaveBeenCalled();
+    expect(obsMocks.putObjectBodyToObs).not.toHaveBeenCalled();
+    expect(obsMocks.deleteObjectFromObs).not.toHaveBeenCalled();
+    expect(obsMocks.createDownloadSignedUrl).toHaveBeenCalledWith(
+      expect.objectContaining({ objectKey: 'source-key', fileName: 'photo.heic', responseContentType: 'image/heif' }),
+    );
+  });
+
+  it('returns a distinct private HEIF display URL with a separately signed original', async () => {
+    const body = await fs.readFile(new URL('../imagePreview/fixtures/primary.heic', import.meta.url));
+    const file = {
+      id: 42,
+      create_by: 'user-1',
+      file_name: 'photo.heic',
+      file_type: 'image/heic',
+      file_size: body.length,
+      obs_key: 'source-key',
+    };
+    poolMocks.query.mockImplementation(async (sql) =>
+      String(sql).includes('FROM files WHERE')
+        ? [[file]]
+        : [
+            [
+              {
+                source_type: 'cloud_file',
+                owner_user_id: 'user-1',
+                source_size: body.length,
+                source_etag: 'etag-1',
+                format_id: 'heif',
+                strategy: 'image_display',
+                status: 'ready',
+                artifact_object_key: 'file-previews/display.webp',
+              },
+            ],
+          ],
+    );
+    obsMocks.getObjectMetadataFromObs.mockResolvedValue({ contentLength: body.length, etag: 'etag-1' });
+    obsMocks.getObjectRangeFromObs.mockResolvedValue(body);
+    const result = await resolveFilePreview({ ownerUserId: 'user-1', fileId: 42, touch: false });
+    expect(result).toMatchObject({
+      strategy: 'image_display',
+      status: 'ready',
+      previewType: 'image',
+      previewUrl: expect.any(String),
+      sourceDownloadUrl: expect.any(String),
+    });
+    expect(obsMocks.createDownloadSignedUrl).toHaveBeenCalledWith(
+      expect.objectContaining({ objectKey: 'file-previews/display.webp', responseContentType: 'image/webp' }),
+    );
+  });
+
+  it.each([false, true])(
+    'HEIF Worker stores only a WebP derivative and fences stale completion (%s)',
+    async (staleCompletion) => {
+      const body = await fs.readFile(new URL('../imagePreview/fixtures/primary.heic', import.meta.url));
+      const arranged = arrangeConvertedWorker({
+        staleCompletion,
+        jobOverrides: {
+          strategy: 'image_display',
+          format_id: 'heif',
+          file_name: 'photo.heic',
+          file_type: 'image/heic',
+          source_size: body.length,
+          file_size: body.length,
+        },
+      });
+      obsMocks.getObjectMetadataFromObs.mockResolvedValue({ contentLength: body.length, etag: 'etag-1' });
+      obsMocks.getObjectBufferFromObs.mockResolvedValue(body);
+      await expect(runSingleFilePreviewJob('heif-worker')).resolves.toBe(true);
+      const [key, webp, mime] = obsMocks.putObjectBodyToObs.mock.calls[0];
+      expect(key).toMatch(/^file-previews\/user-1\/42\/[a-f0-9]{64}\.webp$/);
+      expect(mime).toBe('image/webp');
+      expect(webp.subarray(8, 12).toString()).toBe('WEBP');
+      expect(obsMocks.getObjectBufferFromObs).toHaveBeenCalledWith('source-key', { maxBytes: 50 * 1024 * 1024 });
+      if (staleCompletion) expect(obsMocks.deleteObjectFromObs).toHaveBeenCalledWith(key);
+      else expect(arranged.completeConnection.commit).toHaveBeenCalled();
+      expect(obsMocks.deleteObjectFromObs).not.toHaveBeenCalledWith('source-key');
+    },
+  );
 
   it('binds a converted PDF upload to a unique database lease and commits the private object key', async () => {
     const arranged = arrangeConvertedWorker();
@@ -427,22 +559,38 @@ describe('file preview service', () => {
       42,
     ]);
   });
-  it('不再领取退役的图片派生任务', async () => {
+  it('只领取文档与 HEIF 大图任务，不领取旧图片任务', async () => {
     const query = vi.fn(async () => [[]]);
     poolMocks.getConnection.mockResolvedValue(connection(query));
     await expect(runSingleFilePreviewJob('worker')).resolves.toBe(false);
-    expect(query.mock.calls.find(([sql]) => String(sql).includes('SELECT j.id AS job_id'))[0]).toContain("AND a.strategy IN ('archive_manifest', 'converted_pdf')");
+    expect(query.mock.calls.find(([sql]) => String(sql).includes('SELECT j.id AS job_id'))[0]).toContain(
+      "AND a.strategy IN ('archive_manifest', 'converted_pdf', 'image_display')",
+    );
     expect(obsMocks.getObjectBufferFromObs).not.toHaveBeenCalled();
   });
 
   it('文档清理器只删派生对象，并将图片资产生命周期交给图片清理器', async () => {
-    poolMocks.query.mockImplementation(async sql => {
+    poolMocks.query.mockImplementation(async (sql) => {
       const text = String(sql);
       if (text.includes('SELECT j.id, j.output_object_key')) return [[]];
-      if (text.includes('SELECT a.id, a.artifact_object_key')) return [[
-        { id: 20, artifact_object_key: 'file-previews/photo.webp', output_object_key: null, source_object_key: 'original.jpg' },
-        { id: 21, artifact_object_key: null, output_object_key: null, source_object_key: 'small-original.png', output_mode: 'source' },
-      ]];
+      if (text.includes('SELECT a.id, a.artifact_object_key'))
+        return [
+          [
+            {
+              id: 20,
+              artifact_object_key: 'file-previews/photo.webp',
+              output_object_key: null,
+              source_object_key: 'original.jpg',
+            },
+            {
+              id: 21,
+              artifact_object_key: null,
+              output_object_key: null,
+              source_object_key: 'small-original.png',
+              output_mode: 'source',
+            },
+          ],
+        ];
       return [{ affectedRows: 1 }];
     });
     await expect(cleanupStaleFilePreviewArtifacts()).resolves.toBe(2);
@@ -454,5 +602,4 @@ describe('file preview service', () => {
       expect(sql).toContain("a.source_type <> 'image_asset'");
     }
   });
-
 });

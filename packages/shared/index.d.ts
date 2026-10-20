@@ -131,6 +131,7 @@ export interface FilePreviewFormatDefinition {
 export declare const FILE_PREVIEW_STRATEGY: {
   readonly ARCHIVE_MANIFEST: 'archive_manifest';
   readonly CONVERTED_PDF: 'converted_pdf';
+  readonly IMAGE_DISPLAY: 'image_display';
 };
 
 export declare const FILE_PREVIEW_FORMATS: readonly FilePreviewFormatDefinition[];
