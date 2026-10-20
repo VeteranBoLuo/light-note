@@ -60,7 +60,11 @@
       !user.adminContext &&
       !isAdminLoginPreview() &&
       nativeNotificationStatus.value.owner === String(user.id) &&
-      nativeNotificationStatus.value.state !== 'idle',
+      nativeNotificationStatus.value.state !== 'idle' &&
+      !(
+        nativeNotificationDevice.value.owner === String(user.id) &&
+        nativeNotificationDevice.value.pushSupport === 'unsupported'
+      ),
   );
   const device = computed(() =>
     nativeNotificationDevice.value.owner === String(user.id) ? nativeNotificationDevice.value : null,

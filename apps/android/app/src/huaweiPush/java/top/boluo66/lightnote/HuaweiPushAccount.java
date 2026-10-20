@@ -3,6 +3,7 @@ package top.boluo66.lightnote;
 import android.content.Context;
 import android.content.SharedPreferences;
 import com.huawei.hms.aaid.HmsInstanceId;
+import com.huawei.hms.api.HuaweiApiAvailability;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Business consent and revocation survive process death. Never stores web authentication. */
@@ -12,6 +13,21 @@ public final class HuaweiPushAccount {
     public static synchronized String handle(Context context, String action) {
         Context app = context.getApplicationContext();
         SharedPreferences state = app.getSharedPreferences("huawei_push_account", Context.MODE_PRIVATE);
+        if ("support".equals(action)) {
+            if (!PrivacyConsentStore.isAccepted(app)) return "unknown";
+            SharedPreferences probe = HuaweiPushProbe.prefs(app);
+            boolean confirmed = probe.getBoolean("capability_confirmed", false);
+            boolean registered = !probe.getString("token", "").isEmpty() || confirmed;
+            if (registered) {
+                if (!confirmed) probe.edit().putBoolean("capability_confirmed", true).apply();
+                return NativePushSupport.resolve(true, null);
+            }
+            try {
+                // Local availability check only: no AGConnect initialization or token request.
+                return NativePushSupport.resolve(false,
+                    HuaweiApiAvailability.getInstance().isHuaweiMobileServicesAvailable(app));
+            } catch (RuntimeException ignored) { return "unknown"; }
+        }
         if ("allow".equals(action)) state.edit().putBoolean("consent", true).apply();
         if ("clear".equals(action)) {
             if (!state.getBoolean("revoke_pending", false) && !HuaweiPushProbe.prefs(app).getBoolean("allowed", false)

@@ -8,6 +8,7 @@ const device = shallowRef<NativeNotificationDeviceState & { owner: string }>({
   owner: '',
   systemEnabled: null,
   settingsAvailable: false,
+  pushSupport: 'unknown',
 });
 export const nativeNotificationStatus = readonly(connection);
 export const nativeNotificationOnline = readonly(online);
@@ -17,6 +18,7 @@ export function updateNativeNotificationDevice(state: NativeNotificationDeviceSt
     owner,
     systemEnabled: state?.systemEnabled ?? null,
     settingsAvailable: state?.settingsAvailable ?? false,
+    pushSupport: state?.pushSupport ?? 'unknown',
   };
 }
 export function updateNativeNotificationStatus(state: NativeNotificationState, owner: string) {

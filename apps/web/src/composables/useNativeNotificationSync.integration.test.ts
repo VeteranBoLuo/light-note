@@ -110,7 +110,7 @@ describe('foreground notification connection scheduling', () => {
     owner.value = '';
     await flush();
     expect(nativeNotificationStatus.value).toEqual({ owner: '', state: 'idle' });
-    expect(nativeNotificationDevice.value).toEqual({ owner: '', systemEnabled: null, settingsAvailable: false });
+    expect(nativeNotificationDevice.value).toEqual({ owner: '', systemEnabled: null, settingsAvailable: false, pushSupport: 'unknown' });
     const count = mocks.api.mock.calls.length;
     await vi.advanceTimersByTimeAsync(65000);
     expect(mocks.api).toHaveBeenCalledTimes(count);
@@ -125,7 +125,7 @@ describe('foreground notification connection scheduling', () => {
     });
     mount();
     await flush();
-    expect(nativeNotificationDevice.value).toEqual({ owner: 'alice', systemEnabled: true, settingsAvailable: true });
+    expect(nativeNotificationDevice.value).toEqual({ owner: 'alice', systemEnabled: true, settingsAvailable: true, pushSupport: 'unknown' });
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
     mocks.bridge.mockResolvedValue({ ok: true, enabled: false, systemEnabled: false, settingsAvailable: true });
     const count = mocks.api.mock.calls.length;
