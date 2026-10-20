@@ -41,4 +41,5 @@ export declare function getFileCategoryExtension(fileName?: unknown, explicitExt
 export declare function resolveFileCategory(file?: FileCategoryInput | null): FileCategory;
 export declare function resolveFileFormat(file?: FileCategoryInput | null): FileFormat | null;
 export declare function resolveFilePreviewType(file?: FileCategoryInput | null): FilePreviewType;
+export declare function isImagePreviewCandidate(file?: FileCategoryInput | null): boolean;
 export declare function resolveFilePlaybackMimeType(file?: FileCategoryInput | null): string;

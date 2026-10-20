@@ -48,6 +48,10 @@ it('download signing uses the current display name while preview URLs stay inlin
   );
   createDownloadSignedUrl({ objectKey: 'files/u/uploads/stable.pdf' });
   expect(sdk.sign.mock.lastCall[0]).not.toHaveProperty('QueryParams');
+  createDownloadSignedUrl({ objectKey: 'files/u/wrong.heic', responseContentType: 'image/jpeg' });
+  expect(sdk.sign.mock.lastCall[0].QueryParams).toEqual({ 'response-content-type': 'image/jpeg' });
+  createDownloadSignedUrl({ objectKey: 'files/u/wrong.heic', responseContentType: 'image/jpeg\r\nX-Test: injected' });
+  expect(sdk.sign.mock.lastCall[0]).not.toHaveProperty('QueryParams');
 });
 
 function mockObjectResult(content, contentLength) {

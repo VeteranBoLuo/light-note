@@ -113,6 +113,13 @@ export const FILE_FORMATS = Object.freeze(
       mimeTypes: ['application/vnd.openxmlformats-officedocument.presentationml.presentation'],
     },
     {
+      id: 'heif-image',
+      category: 'image',
+      previewType: 'unsupported',
+      extensions: ['heic', 'heif'],
+      mimeTypes: ['image/heic', 'image/heif'],
+    },
+    {
       id: 'image',
       category: 'image',
       previewType: 'image',
@@ -231,6 +238,10 @@ export function resolveFileFormat(file = {}) {
 }
 export function resolveFilePreviewType(file = {}) {
   return resolveFileFormat(file)?.previewType || 'unsupported';
+}
+// 只决定是否校验图片内容，不代表已支持其解码或直接预览。
+export function isImagePreviewCandidate(file = {}) {
+  return resolveFileCategory(file) === 'image';
 }
 export function resolveFilePlaybackMimeType(file = {}) {
   const format = resolveFileFormat(file);

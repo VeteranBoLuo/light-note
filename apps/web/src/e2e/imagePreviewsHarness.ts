@@ -5,12 +5,15 @@ import { createMemoryHistory, createRouter } from 'vue-router';
 import { bookmarkStore, useUserStore, cloudSpaceStore } from '@/store';
 import request from '@/http/request';
 import globalDirect from '@/config/globalDirect';
+import { applyUiDensity } from '@/composables/useUiDensity';
 import zh from '@/i18n/locales/zh-CN';
 import en from '@/i18n/locales/en-US';
 import '@/assets/css/index.less';
 const p = new URLSearchParams(location.search);
 const audioMode = p.get('audio') === 'true';
 const videoMode = p.get('video') === 'true';
+const realFormats = p.has('realFormats');
+const locale = p.get('lang') === 'en' ? 'en-US' : 'zh-CN';
 const theme = p.get('theme') === 'night' ? 'night' : 'day';
 document.documentElement.dataset.theme = theme;
 document.documentElement.classList.toggle('light-note-mobile-rendering', p.get('renderProfile') === 'mobile');
@@ -26,6 +29,7 @@ ctx.fillText('压缩预览 · 720 px', 55, 145);
 ctx.font = '22px sans-serif';
 ctx.fillText('独立 WebP，小图与原图分离', 55, 195);
 const small = canvas.toDataURL('image/webp', 0.76);
+const jpegOriginal = canvas.toDataURL('image/jpeg', 0.9);
 const tallCanvas = document.createElement('canvas');
 tallCanvas.width = 600;
 tallCanvas.height = 2400;
@@ -66,6 +70,35 @@ const adminItems = ['source', 'resource_limit', 'service'].map((failureKind, i) 
   canRetry: false,
 }));
 request.defaults.adapter = async (config) => {
+  if (config.url?.endsWith('/file/preview/resolve')) {
+    const { fileId } = JSON.parse(config.data || '{}');
+    const index = Number(String(fileId).split('-').at(-1));
+    const unsupported = realFormats && [2, 3].includes(index);
+    return {
+      config,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      data: {
+        status: 200,
+        data: {
+          fileId,
+          previewType: unsupported ? 'unsupported' : 'image',
+          status: unsupported ? 'failed' : 'ready',
+          formatId: unsupported ? 'heif' : 'jpg',
+          sourceMimeType: unsupported ? 'image/heif' : 'image/jpeg',
+          errorCode: unsupported ? 'IMAGE_SOURCE_UNSUPPORTED' : '',
+          sourceDownloadUrl: unsupported
+            ? undefined
+            : realFormats && index === 4
+              ? '/fixture-broken-original.jpg'
+              : index === 5
+                ? tallOriginal
+                : jpegOriginal,
+        },
+      },
+    };
+  }
   if (config.url?.endsWith('/common/getAdminActionCenter'))
     return {
       config,
@@ -159,16 +192,33 @@ request.defaults.adapter = async (config) => {
           if (!firstPreviewRequest.has(item.sourceId)) firstPreviewRequest.set(item.sourceId, Date.now());
           const slowUploadReady =
             p.has('slowUpload') && index === 1 && Date.now() - firstPreviewRequest.get(item.sourceId)! >= uploadDelayMs;
-          const state = retried.has(item.sourceId) || slowUploadReady ? 'ready' : states[index % states.length];
+          const state =
+            retried.has(item.sourceId) || slowUploadReady || (realFormats && index === 4)
+              ? 'ready'
+              : states[index % states.length];
           return {
             ...item,
             status: state,
-            errorCode: state === 'failed' ? (index === 4 ? 'IMAGE_STORAGE_UNAVAILABLE' : 'IMAGE_SOURCE_MISSING') : null,
+            errorCode:
+              realFormats && index === 2
+                ? 'IMAGE_SOURCE_UNSUPPORTED'
+                : state === 'failed'
+                  ? index === 4
+                    ? 'IMAGE_STORAGE_UNAVAILABLE'
+                    : 'IMAGE_SOURCE_MISSING'
+                  : null,
             retryable: state === 'failed' && index === 4,
             presentation: !videoMode && index === 5 ? 'long_top' : 'full',
             durationSeconds: videoMode && state === 'ready' ? 12.5 : null,
             assetId: item.sourceId,
-            url: state === 'ready' ? (index === 5 ? tallThumbnail : small) : null,
+            url:
+              state === 'ready'
+                ? realFormats && index === 4
+                  ? '/fixture-broken-thumbnail.webp'
+                  : index === 5
+                    ? tallThumbnail
+                    : small
+                : null,
             expiresAt: Date.now() + 600000,
           };
         }),
@@ -240,7 +290,7 @@ const app = createApp({
         onPreviewFile: (file: any) => {
           openedFile.value = {
             ...file,
-            fileUrl: videoMode ? file.fileUrl : String(file.id).endsWith('-5') ? tallOriginal : small,
+            fileUrl: videoMode ? file.fileUrl : String(file.id).endsWith('-5') ? tallOriginal : jpegOriginal,
           };
           opened.value = true;
         },
@@ -257,24 +307,33 @@ const app = createApp({
 app
   .use(pinia)
   .use(createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div/>' } }] }))
-  .use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zh, 'en-US': en } }));
+  .use(createI18n({ legacy: false, locale, messages: { 'zh-CN': zh, 'en-US': en } }));
 useUserStore(pinia).setUserInfo({
   id: 'image-fixture',
   role: 'user',
   alias: '预览验收',
-  preferences: { theme, lang: 'zh-CN', noteViewMode: 'card' },
+  preferences: { theme, lang: locale, noteViewMode: 'card' },
 });
 bookmarkStore(pinia).screenWidth = window.innerWidth;
+applyUiDensity(p.get('density') || 'medium', !bookmarkStore(pinia).isDesktop);
 cloudSpaceStore(pinia).fileList = states.map((state, i) => ({
   id: `cloud-${i}`,
   fileName: videoMode
     ? `视频-${state}.${i % 2 ? 'MOV' : 'mp4'}`
     : audioMode
       ? `音频-${state}.mp3`
-      : `图片-${state}.png`,
-  fileType: videoMode ? 'video/quicktime' : audioMode ? 'audio/mpeg' : 'image/png',
+      : realFormats && i === 0
+        ? 'JPEG内容但名称为HEIC.heic'
+        : `图片-${state}.png`,
+  fileType: videoMode
+    ? 'video/quicktime'
+    : audioMode
+      ? 'audio/mpeg'
+      : realFormats && i === 0
+        ? 'image/heic'
+        : 'image/png',
   category: videoMode ? 'video' : audioMode ? 'audio' : 'image',
-  fileSize: p.has('originalFallback') && i === 3 ? 10 * 1024 * 1024 : 2000000,
+  fileSize: realFormats || (p.has('originalFallback') && i === 3) ? 11 * 1024 * 1024 : 2000000,
   fileUrl: p.has('originalFallback') && i !== 4 ? small : '/original-must-not-be-requested.png',
   uploadTime: '2026-09-08 12:00',
   folderName: '',

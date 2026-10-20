@@ -142,17 +142,19 @@
   }
   const statusLabel = computed(() =>
     t(
-      failed.value || state.value?.status === 'failed'
-        ? 'imagePreview.unavailable'
-        : state.value?.status === 'unsupported'
-          ? 'imagePreview.unavailable'
-          : state.value?.status === 'disabled'
-            ? 'imagePreview.disabled'
-            : state.value?.status === 'unavailable'
-              ? 'imagePreview.inaccessible'
-              : waitingTooLong.value
-                ? 'imagePreview.stillProcessing'
-                : 'imagePreview.generating',
+      state.value?.status === 'unsupported' || state.value?.errorCode === 'IMAGE_SOURCE_UNSUPPORTED'
+        ? 'imagePreview.unsupportedThumbnail'
+        : failed.value
+          ? 'imagePreview.loadFailed'
+          : state.value?.status === 'failed'
+            ? 'imagePreview.unavailable'
+            : state.value?.status === 'disabled'
+              ? 'imagePreview.disabled'
+              : state.value?.status === 'unavailable'
+                ? 'imagePreview.inaccessible'
+                : waitingTooLong.value
+                  ? 'imagePreview.stillProcessing'
+                  : 'imagePreview.generating',
     ),
   );
   const reason = computed(() =>

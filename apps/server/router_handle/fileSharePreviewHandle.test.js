@@ -120,6 +120,28 @@ describe('shared derived file preview handlers', () => {
     });
   });
 
+  it('authorizes image candidates and preserves the verified source URL and its content type', async () => {
+    const connection = transactionFor(shareRow({ file_name: 'photo.heic', file_type: 'image/heic' }));
+    previewMocks.prepareFilePreview.mockResolvedValue({
+      previewType: 'image',
+      status: 'ready',
+      sourceMimeType: 'image/jpeg',
+      sourceDownloadUrl: 'verified-jpeg-url',
+      sourceUrlExpiresIn: 600,
+    });
+    const res = response();
+    await prepareFileSharePreview({ body: { token: 't'.repeat(43) }, ip: '127.0.0.1', headers: {} }, res);
+    expect(res.send.mock.lastCall[0].data).toMatchObject({
+      previewType: 'image',
+      sourceDownloadUrl: 'verified-jpeg-url',
+      sourceMimeType: 'image/jpeg',
+    });
+    expect(
+      connection.query.mock.calls.filter(([sql]) => String(sql).includes('download_count = download_count + 1')),
+    ).toHaveLength(1);
+    expect(obsMocks.createDownloadSignedUrl).not.toHaveBeenCalled();
+  });
+
   it('does not consume download quota for a format outside the derived-preview registry', async () => {
     const connection = transactionFor(shareRow({ file_name: 'binary.exe', file_type: 'application/octet-stream' }));
     const res = response();

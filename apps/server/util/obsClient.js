@@ -58,19 +58,24 @@ export const createUploadSignedUrl = ({ objectKey, contentType, expires = 900 })
   };
 };
 
-export const createDownloadSignedUrl = ({ objectKey, expires = 900, fileName }) => {
+export const createDownloadSignedUrl = ({ objectKey, expires = 900, fileName, responseContentType }) => {
   const downloadName = String(fileName || '')
     .replace(/[\r\n\x00]/gu, '')
     .toWellFormed();
   const disposition = downloadName
     ? `attachment; filename="download"; filename*=UTF-8''${encodeURIComponent(downloadName).replace(/[!'()*]/gu, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`)}`
     : null;
+  const queryParams = {
+    ...(disposition ? { 'response-content-disposition': disposition } : {}),
+    ...(/^[a-z0-9.+-]+\/[a-z0-9.+-]+$/iu.test(String(responseContentType || ''))
+      ? { 'response-content-type': responseContentType } : {}),
+  };
   const { SignedUrl } = obsClient.createSignedUrlSync({
     Method: 'GET',
     Bucket: bucketName,
     Key: objectKey,
     Expires: expires,
-    ...(disposition ? { QueryParams: { 'response-content-disposition': disposition } } : {}),
+    ...(Object.keys(queryParams).length ? { QueryParams: queryParams } : {}),
   });
 
   return { url: SignedUrl, expiresIn: expires };

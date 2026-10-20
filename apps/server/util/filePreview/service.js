@@ -1,5 +1,7 @@
 import crypto from 'node:crypto';
 import { FILE_PREVIEW_STRATEGY, getFilePreviewExtension, resolveFilePreviewFormat } from '@lightnote/shared';
+import { isImagePreviewCandidate } from '@lightnote/shared/file-category';
+import { resolveImageSourcePreview } from '../imagePreview/sourcePreview.js';
 import pool from '../../db/index.js';
 import {
   buildObjectKey,
@@ -206,6 +208,7 @@ export async function resolveFilePreview({
   const normalizedSourceType = normalizeSourceType(sourceType);
   const file = await selectOwnedFile(pool, ownerUserId, fileId, false, normalizedSourceType);
   if (!file) throw sourceUnavailableError(normalizedSourceType);
+  if (isImagePreviewCandidate({ fileName: file.file_name, fileType: file.file_type })) return resolveImageSourcePreview(file);
   const descriptor = resolveDescriptor(file);
   let artifact = await selectArtifact(pool, file.id, descriptor.format.strategy, false, normalizedSourceType);
   if (artifact && !artifactMatchesFileIdentity(file, descriptor, artifact, normalizedSourceType)) {
@@ -248,6 +251,7 @@ export async function prepareFilePreview({
   const normalizedSourceType = normalizeSourceType(sourceType);
   const initialFile = await selectOwnedFile(pool, ownerUserId, fileId, false, normalizedSourceType);
   if (!initialFile) throw sourceUnavailableError(normalizedSourceType);
+  if (isImagePreviewCandidate({ fileName: initialFile.file_name, fileType: initialFile.file_type })) return resolveImageSourcePreview(initialFile);
   const descriptor = resolveDescriptor(initialFile);
   const metadata = await loadSourceMetadata(initialFile, descriptor);
   const connection = await pool.getConnection();
