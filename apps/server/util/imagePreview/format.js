@@ -8,7 +8,7 @@ const formats = {
   ico: ['image/x-icon', true, false],
   avif: ['image/avif', true, false],
   svg: ['image/svg+xml', true, false],
-  heif: ['image/heif', false, false],
+  heif: ['image/heif', false, true],
 };
 export const IMAGE_HEADER_BYTES = 64 * 1024;
 

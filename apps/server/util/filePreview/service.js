@@ -1,6 +1,9 @@
 import crypto from 'node:crypto';
 import { FILE_PREVIEW_STRATEGY, getFilePreviewExtension, resolveFilePreviewFormat } from '@lightnote/shared';
 import { isImagePreviewCandidate } from '@lightnote/shared/file-category';
+import { convertImageDisplay, MAX_SOURCE_BYTES } from '../imagePreview/compress.js';
+import { generationEnabled } from '../imagePreview/references.js';
+import { imageFailure } from '../imagePreview/errors.js';
 import { resolveImageSourcePreview } from '../imagePreview/sourcePreview.js';
 import pool from '../../db/index.js';
 import {
@@ -79,6 +82,18 @@ function sourceUnavailableError(sourceType) {
     : previewError('FILE_NOT_FOUND', 404);
 }
 
+const HEIF_DESCRIPTOR = {
+  format: { id: 'heif', strategy: FILE_PREVIEW_STRATEGY.IMAGE_DISPLAY, previewType: 'image' },
+  extension: 'heic',
+};
+
+async function resolvePreviewInput(file) {
+  if (!isImagePreviewCandidate({ fileName: file.file_name, fileType: file.file_type }))
+    return { descriptor: resolveDescriptor(file) };
+  const state = await resolveImageSourcePreview(file);
+  return state.strategy === FILE_PREVIEW_STRATEGY.IMAGE_DISPLAY ? { descriptor: HEIF_DESCRIPTOR } : { state };
+}
+
 function resolveDescriptor(file) {
   const format = resolveFilePreviewFormat({ fileName: file.file_name, fileType: file.file_type });
   if (!format) throw previewError('FILE_PREVIEW_UNSUPPORTED', 415);
@@ -127,12 +142,17 @@ function previewUrlExpiresSeconds(file) {
 }
 
 function createArtifactPreviewUrl(row, file) {
-  if (row?.status !== 'ready' || row?.strategy !== FILE_PREVIEW_STRATEGY.CONVERTED_PDF) return '';
+  if (
+    row?.status !== 'ready' ||
+    ![FILE_PREVIEW_STRATEGY.CONVERTED_PDF, FILE_PREVIEW_STRATEGY.IMAGE_DISPLAY].includes(row?.strategy)
+  )
+    return '';
   if (!row.artifact_object_key) throw previewError('FILE_PREVIEW_ARTIFACT_MISSING', 503);
   const expires = previewUrlExpiresSeconds(file);
   const signed = createDownloadSignedUrl({
     objectKey: row.artifact_object_key,
     expires,
+    ...(row.strategy === FILE_PREVIEW_STRATEGY.IMAGE_DISPLAY ? { responseContentType: 'image/webp' } : {}),
   });
   if (!signed?.url) throw previewError('FILE_PREVIEW_URL_FAILED', 503);
   return { url: signed.url, expires };
@@ -144,12 +164,27 @@ function formatPreviewState(file, descriptor, artifact) {
     strategy: descriptor.format.strategy,
     previewType: descriptor.format.previewType,
     formatId: descriptor.format.id,
+    ...(descriptor.format.strategy === FILE_PREVIEW_STRATEGY.IMAGE_DISPLAY
+      ? {
+          sourceMimeType: 'image/heif',
+          sourceDownloadUrl: createDownloadSignedUrl({
+            objectKey: sourceObjectKey(file),
+            fileName: file.file_name,
+            expires: previewUrlExpiresSeconds(file),
+            responseContentType: 'image/heif',
+          }).url,
+          sourceUrlExpiresIn: previewUrlExpiresSeconds(file),
+        }
+      : {}),
     status: artifact?.status || 'missing',
     errorCode: artifact?.error_code || '',
     pollAfterMs: artifact && ['queued', 'processing'].includes(artifact.status) ? 1500 : 0,
   };
   if (!artifact) return base;
-  if (artifact.status === 'ready' && artifact.strategy === FILE_PREVIEW_STRATEGY.CONVERTED_PDF) {
+  if (
+    artifact.status === 'ready' &&
+    [FILE_PREVIEW_STRATEGY.CONVERTED_PDF, FILE_PREVIEW_STRATEGY.IMAGE_DISPLAY].includes(artifact.strategy)
+  ) {
     const signed = createArtifactPreviewUrl(artifact, file);
     return {
       ...base,
@@ -208,8 +243,8 @@ export async function resolveFilePreview({
   const normalizedSourceType = normalizeSourceType(sourceType);
   const file = await selectOwnedFile(pool, ownerUserId, fileId, false, normalizedSourceType);
   if (!file) throw sourceUnavailableError(normalizedSourceType);
-  if (isImagePreviewCandidate({ fileName: file.file_name, fileType: file.file_type })) return resolveImageSourcePreview(file);
-  const descriptor = resolveDescriptor(file);
+  const { state, descriptor } = await resolvePreviewInput(file);
+  if (state) return state;
   let artifact = await selectArtifact(pool, file.id, descriptor.format.strategy, false, normalizedSourceType);
   if (artifact && !artifactMatchesFileIdentity(file, descriptor, artifact, normalizedSourceType)) {
     artifact = null;
@@ -224,7 +259,10 @@ export async function resolveFilePreview({
 }
 
 async function loadSourceMetadata(file, descriptor) {
-  const runtime = await inspectFilePreviewRuntime(descriptor.format.strategy);
+  const runtime =
+    descriptor.format.strategy === FILE_PREVIEW_STRATEGY.IMAGE_DISPLAY
+      ? { ready: generationEnabled(), errorCode: 'FILE_PREVIEW_DISABLED', config: getFilePreviewRuntimeConfig() }
+      : await inspectFilePreviewRuntime(descriptor.format.strategy);
   if (!runtime.ready) throw previewError(runtime.errorCode, 503);
   const objectKey = sourceObjectKey(file);
   const metadata = await getObjectMetadataFromObs(objectKey);
@@ -233,7 +271,9 @@ async function loadSourceMetadata(file, descriptor) {
   const maximum =
     descriptor.format.strategy === FILE_PREVIEW_STRATEGY.ARCHIVE_MANIFEST
       ? runtime.config.limits.archiveMaxBytes
-      : runtime.config.limits.officeMaxBytes;
+      : descriptor.format.strategy === FILE_PREVIEW_STRATEGY.IMAGE_DISPLAY
+        ? MAX_SOURCE_BYTES
+        : runtime.config.limits.officeMaxBytes;
   if (!Number.isSafeInteger(sourceSize) || sourceSize <= 0 || sourceSize > maximum) {
     throw previewError('FILE_SIZE_INVALID', 413);
   }
@@ -251,8 +291,8 @@ export async function prepareFilePreview({
   const normalizedSourceType = normalizeSourceType(sourceType);
   const initialFile = await selectOwnedFile(pool, ownerUserId, fileId, false, normalizedSourceType);
   if (!initialFile) throw sourceUnavailableError(normalizedSourceType);
-  if (isImagePreviewCandidate({ fileName: initialFile.file_name, fileType: initialFile.file_type })) return resolveImageSourcePreview(initialFile);
-  const descriptor = resolveDescriptor(initialFile);
+  const { state, descriptor } = await resolvePreviewInput(initialFile);
+  if (state) return state;
   const metadata = await loadSourceMetadata(initialFile, descriptor);
   const connection = await pool.getConnection();
   let artifact;
@@ -427,13 +467,14 @@ async function claimNextJob(workerId) {
          (a.source_type = 'community_chat_file' AND chat_file.id IS NOT NULL
           AND chat_file.status = 'attached' AND chat_file.object_key IS NOT NULL AND chat_file.expires_at > NOW())
        )
-       AND a.strategy IN ('archive_manifest', 'converted_pdf')
+       AND a.strategy IN ('archive_manifest', 'converted_pdf', 'image_display')
+       AND (a.strategy <> 'image_display' OR (a.format_id = 'heif' AND ? = 1))
        AND j.attempts < ? AND (
          (j.status = 'queued' AND j.available_at <= NOW()) OR
          (j.status = 'processing' AND j.locked_at < DATE_SUB(NOW(), INTERVAL 10 MINUTE))
        )
        ORDER BY j.available_at ASC, j.id ASC LIMIT 1 FOR UPDATE`,
-      [MAX_JOB_ATTEMPTS],
+      [Number(generationEnabled()), MAX_JOB_ATTEMPTS],
     );
     const job = rows[0];
     if (!job) {
@@ -479,7 +520,7 @@ function artifactObjectKey(job) {
     sourceType === FILE_PREVIEW_SOURCE_TYPE.CLOUD_FILE
       ? `file-previews/${job.owner_user_id}`
       : `file-previews/${sourceType}/${job.owner_user_id}`;
-  return `${prefix}/${job.file_id}/${digest}.pdf`;
+  return `${prefix}/${job.file_id}/${digest}.${job.strategy === FILE_PREVIEW_STRATEGY.IMAGE_DISPLAY ? 'webp' : 'pdf'}`;
 }
 
 async function recordPendingObjectKey(job, objectKey) {
@@ -508,6 +549,7 @@ async function completeJob(job, result) {
     const artifact = rows[0];
     current =
       currentSource &&
+      sourceObjectKey(currentSource) === sourceObjectKey(job) &&
       artifact &&
       artifact.source_etag === job.source_etag &&
       Number(artifact.source_size) === Number(job.source_size) &&
@@ -552,8 +594,12 @@ async function completeJob(job, result) {
 
 async function failJob(job, error, clearPendingObject = true) {
   const rawCode = String(error?.code || '');
-  const code = PROCESSING_ERROR_CODES.has(rawCode) ? rawCode : 'FILE_PREVIEW_PROCESSING_FAILED';
-  const finalFailure = NON_RETRYABLE_ERRORS.has(code) || job.attempts >= MAX_JOB_ATTEMPTS;
+  const code =
+    PROCESSING_ERROR_CODES.has(rawCode) || /^IMAGE_[A-Z_]+$/.test(rawCode) ? rawCode : 'FILE_PREVIEW_PROCESSING_FAILED';
+  const finalFailure =
+    NON_RETRYABLE_ERRORS.has(code) ||
+    (code.startsWith('IMAGE_') && !imageFailure(code).retryable) ||
+    job.attempts >= MAX_JOB_ATTEMPTS;
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
@@ -610,7 +656,10 @@ export async function runSingleFilePreviewJob(workerId) {
     ) {
       throw previewError('FILE_PREVIEW_SOURCE_CHANGED', 409);
     }
-    const buffer = await getObjectBufferFromObs(objectKey);
+    const buffer = await getObjectBufferFromObs(
+      objectKey,
+      job.strategy === FILE_PREVIEW_STRATEGY.IMAGE_DISPLAY ? { maxBytes: MAX_SOURCE_BYTES } : undefined,
+    );
     if (buffer.length !== Number(job.source_size)) throw previewError('FILE_SIZE_MISMATCH', 409);
     if (job.strategy === FILE_PREVIEW_STRATEGY.ARCHIVE_MANIFEST) {
       const descriptor = resolveDescriptor(job);
@@ -640,6 +689,19 @@ export async function runSingleFilePreviewJob(workerId) {
       uploadedObjectKey = outputKey;
       await putObjectBodyToObs(outputKey, pdf, 'application/pdf');
       completed = await completeJob(job, { objectKey: outputKey, artifactSize: pdf.length });
+    } else if (job.strategy === FILE_PREVIEW_STRATEGY.IMAGE_DISPLAY) {
+      const output = await convertImageDisplay(buffer);
+      const currentMetadata = await getObjectMetadataFromObs(objectKey);
+      if (
+        Number(currentMetadata.contentLength) !== Number(job.source_size) ||
+        normalizeEtag(currentMetadata.etag) !== job.source_etag
+      )
+        throw previewError('FILE_PREVIEW_SOURCE_CHANGED', 409);
+      const outputKey = artifactObjectKey(job);
+      await recordPendingObjectKey(job, outputKey);
+      uploadedObjectKey = outputKey;
+      await putObjectBodyToObs(outputKey, output.body, 'image/webp');
+      completed = await completeJob(job, { objectKey: outputKey, artifactSize: output.body.length });
     } else {
       throw previewError('FILE_PREVIEW_STRATEGY_INVALID');
     }

@@ -3,8 +3,10 @@ import { promisify } from 'node:util';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { safeImageSize } from '../safeImageSize.js';
 import { detectImageFormat } from './format.js';
+import { validateHeifSource } from './heif.js';
 import { buildFilePreviewChildEnv } from '../filePreview/runtime.js';
 
 import { classifyImageError } from './errors.js';
@@ -16,6 +18,7 @@ export function imageError(code) {
 }
 export function validateSource(buffer) {
   if (!buffer.length || buffer.length > MAX_SOURCE_BYTES) throw imageError('IMAGE_SOURCE_SIZE_LIMIT');
+  if (detectImageFormat(buffer)?.type === 'heif') return validateHeifSource(buffer);
   if (!detectImageFormat(buffer)?.thumbnailSupported) throw imageError('IMAGE_SOURCE_UNSUPPORTED');
   let size;
   try {
@@ -33,11 +36,23 @@ export function validatePreview(buffer) {
   }
   return size;
 }
-export async function compressCardImage(
+export async function compressCardImage(buffer, options = {}) {
+  return compressImage(buffer, options);
+}
+
+export async function convertImageDisplay(buffer, options = {}) {
+  if (detectImageFormat(buffer)?.type !== 'heif') throw imageError('IMAGE_SOURCE_UNSUPPORTED');
+  return compressImage(buffer, { ...options, cropLongImage: false, display: true });
+}
+
+async function compressImage(
   buffer,
-  { runner = promisify(execFile), now = Date.now, budgetMs = 60_000, cropLongImage = true } = {},
+  { runner = promisify(execFile), now = Date.now, budgetMs = 60_000, cropLongImage = true, display = false } = {},
 ) {
   const source = validateSource(buffer);
+  const maxEdge = display ? 4096 : 720;
+  const maxBytes = display ? 8 * 1024 * 1024 : CARD_PROFILE.maxBytes;
+  const heifOptions = source.type === 'heic' ? ['-define', 'heic:primary-image=true'] : [];
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'ln-image-preview-'));
   const input = path.join(dir, `source.${source.type}`);
   const intermediate = path.join(dir, 'small.miff');
@@ -69,7 +84,10 @@ export async function compressCardImage(
   try {
     await fs.writeFile(input, buffer, { mode: 0o600 });
     // Ping reads geometry/orientation without allocating the full pixel cache.
-    const header = await run(['-ping', `${input}[0]`, '-format', '%w %h %[orientation]', 'info:'], 'decode');
+    const header = await run(
+      [...heifOptions, '-ping', `${input}[0]`, '-format', '%w %h %[orientation]', 'info:'],
+      'decode',
+    );
     const [rawWidth, rawHeight, orientation] = String(header.stdout).trim().split(/\s+/);
     const rotated = ['LeftTop', 'RightTop', 'RightBottom', 'LeftBottom'].includes(orientation);
     const width = Number(rotated ? rawHeight : rawWidth);
@@ -79,12 +97,16 @@ export async function compressCardImage(
     const presentation = long ? 'long_top' : 'full';
     await run(
       [
+        ...heifOptions,
         ...(!long && ['jpg', 'jpeg'].includes(source.type) ? ['-define', 'jpeg:size=1440x1440'] : []),
         `${input}[0]`,
         '-auto-orient',
         ...(long ? ['-gravity', 'NorthWest', '-crop', `${width}x${Math.floor(width * 1.5)}+0+0`, '+repage'] : []),
         '-thumbnail',
-        '720x720>',
+        `${maxEdge}x${maxEdge}>`,
+        ...(source.type === 'heic'
+          ? ['-profile', fileURLToPath(new URL('./sRGB.icc', import.meta.url)), '-colorspace', 'sRGB']
+          : []),
         '-strip',
         '-depth',
         '8',
@@ -92,8 +114,8 @@ export async function compressCardImage(
       ],
       'decode',
     );
-    for (const edge of [720, 576, 460, 368, 294, 235]) {
-      for (const quality of [76, 68, 60]) {
+    for (const edge of display ? [4096, 3276, 2621, 2097, 1677, 1342] : [720, 576, 460, 368, 294, 235]) {
+      for (const quality of display ? [86, 78, 70] : [76, 68, 60]) {
         await run(
           [
             intermediate,
@@ -107,9 +129,12 @@ export async function compressCardImage(
           ],
           'encode',
         );
-        if ((await fs.stat(output)).size > CARD_PROFILE.maxBytes) continue;
+        if ((await fs.stat(output)).size > maxBytes) continue;
         const body = await fs.readFile(output);
-        return { body, ...validatePreview(body), sourceBytes: buffer.length, presentation };
+        const dimensions = safeImageSize(body);
+        if (dimensions.type !== 'webp' || Math.max(dimensions.width, dimensions.height) > maxEdge)
+          throw imageError('IMAGE_OUTPUT_INVALID');
+        return { body, ...dimensions, sourceBytes: buffer.length, presentation };
       }
     }
     throw imageError('IMAGE_OUTPUT_SIZE_LIMIT');

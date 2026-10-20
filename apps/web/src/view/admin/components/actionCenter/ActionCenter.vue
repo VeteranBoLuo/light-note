@@ -1053,7 +1053,10 @@
     return t(`adminActionCenter.filePreviewDiagnostic.reason.${key}`);
   }
   function filePreviewStrategyLabel(strategy: string) {
-    const key = strategy === 'archive_manifest' || strategy === 'converted_pdf' ? strategy : 'unknown';
+    const key =
+      strategy === 'archive_manifest' || strategy === 'converted_pdf' || strategy === 'image_display'
+        ? strategy
+        : 'unknown';
     return t(`adminActionCenter.filePreviewDiagnostic.strategy.${key}`);
   }
   async function openTodoDiagnostic(item: ActionItem) {

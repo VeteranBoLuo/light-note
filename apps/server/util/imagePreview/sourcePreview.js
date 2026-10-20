@@ -22,7 +22,8 @@ export async function resolveImageSourcePreview(
   }
   const body = await readRange(key, 0, Math.min(size, IMAGE_HEADER_BYTES) - 1);
   const format = detectImageFormat(body);
-  const supported = Boolean(format?.previewable);
+  const converted = format?.type === 'heif';
+  const supported = Boolean(format?.previewable || converted);
   const remaining = file.expires_at ? Math.floor((new Date(file.expires_at).getTime() - Date.now()) / 1000) : 600;
   if (!Number.isFinite(remaining) || remaining < 1) {
     throw Object.assign(new Error('COMMUNITY_CHAT_FILE_EXPIRED'), { code: 'COMMUNITY_CHAT_FILE_EXPIRED', status: 410 });
@@ -33,10 +34,11 @@ export async function resolveImageSourcePreview(
     previewType: supported ? 'image' : 'unsupported',
     formatId: format?.type || '',
     sourceMimeType: format?.mimeType || '',
-    status: supported ? 'ready' : 'failed',
+    status: converted ? 'missing' : supported ? 'ready' : 'failed',
+    ...(converted ? { strategy: 'image_display' } : {}),
     errorCode: supported ? '' : 'IMAGE_SOURCE_UNSUPPORTED',
     pollAfterMs: 0,
-    ...(supported
+    ...(supported && !converted
       ? {
           sourceDownloadUrl: sign({ objectKey: key, expires, responseContentType: format.mimeType }).url,
           sourceUrlExpiresIn: expires,

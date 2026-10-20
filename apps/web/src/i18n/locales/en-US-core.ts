@@ -13467,6 +13467,7 @@ export default {
       strategy: {
         archive_manifest: 'Archive directory preview',
         converted_pdf: 'Office-to-PDF preview',
+        image_display: 'HEIC image preview',
         unknown: 'File preview',
       },
     },

@@ -40,7 +40,7 @@ describe('verified image formats', () => {
     },
   );
 
-  it('reports real HEIF and non-image bytes as unsupported instead of trusting their names', async () => {
+  it('routes real HEIF to conversion and rejects non-image bytes without signing originals', async () => {
     const heif = Buffer.alloc(24);
     heif.writeUInt32BE(24);
     heif.write('ftypheic', 4);
@@ -55,12 +55,10 @@ describe('verified image formats', () => {
           sign,
         },
       );
-      expect(state).toMatchObject({
-        previewType: 'unsupported',
-        status: 'failed',
-        errorCode: 'IMAGE_SOURCE_UNSUPPORTED',
-      });
-      expect(() => validateSource(body)).toThrow('IMAGE_SOURCE_UNSUPPORTED');
+      expect(state).toMatchObject(body === heif
+        ? { previewType: 'image', status: 'missing', strategy: 'image_display', formatId: 'heif' }
+        : { previewType: 'unsupported', status: 'failed', errorCode: 'IMAGE_SOURCE_UNSUPPORTED' });
+      expect(() => validateSource(body)).toThrow(body === heif ? 'IMAGE_SOURCE_INVALID' : 'IMAGE_SOURCE_UNSUPPORTED');
       expect(sign).not.toHaveBeenCalled();
     }
     expect(detectImageFormat(heif)?.type).toBe('heif');

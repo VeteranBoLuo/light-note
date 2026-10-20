@@ -1,6 +1,7 @@
 import { beforeAll, afterAll, beforeEach, describe, it, expect, vi } from 'vitest';
 import mysql from 'mysql2/promise';
 import fs from 'node:fs/promises';
+import { CARD_IMAGE_PROFILE } from '@lightnote/shared';
 import { imageSchemaStatements } from './schema.js';
 import {
   registerAsset,
@@ -463,7 +464,7 @@ describe.skipIf(!socket)('image lifecycle on isolated local MySQL', () => {
     const read = vi.fn();
     expect(await runSingleImagePreviewJob('old', { db, read })).toBe(false);
     expect(read).not.toHaveBeenCalled();
-    await db.query('UPDATE file_preview_artifacts SET strategy_version=2');
+    await db.query('UPDATE file_preview_artifacts SET strategy_version=?', [CARD_IMAGE_PROFILE.version]);
     await runSingleImagePreviewJob('changed', {
       db,
       read: async () => ({ body: Buffer.from('input'), version: 'old' }),

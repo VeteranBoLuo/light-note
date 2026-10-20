@@ -2,7 +2,7 @@ import pool from '../db/index.js';
 import { inspectImagePreviewRuntime } from '../util/imagePreview/runtime.js';
 import { inspectVideoPreviewRuntime } from '../util/imagePreview/videoCover.js';
 try {
-  const runtime = await inspectImagePreviewRuntime();
+  const runtime = await inspectImagePreviewRuntime({ heif: true });
   const videoRuntime = await inspectVideoPreviewRuntime();
   const [tables] = await pool.query(
     "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME IN ('image_assets','image_asset_refs','file_preview_artifacts','file_preview_jobs')",

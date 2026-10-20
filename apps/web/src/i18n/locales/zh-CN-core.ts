@@ -12892,6 +12892,7 @@ export default {
       strategy: {
         archive_manifest: '压缩包目录预览',
         converted_pdf: 'Office 转 PDF 预览',
+        image_display: 'HEIC 图片预览',
         unknown: '文件预览',
       },
     },

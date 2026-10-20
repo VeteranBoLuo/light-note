@@ -1,3 +1,4 @@
+import { CARD_IMAGE_PROFILE } from '@lightnote/shared';
 import { describe, it, expect, vi } from 'vitest';
 const resolve = vi.hoisted(() => vi.fn());
 vi.mock('../../db/index.js', () => ({ default: {} }));
@@ -31,7 +32,7 @@ describe('image preview state and retries', () => {
       id: 80,
       asset_id: 4,
       identity_hash: 'identity',
-      strategy_version: 2,
+      strategy_version: CARD_IMAGE_PROFILE.version,
       status: 'ready',
       artifact_object_key: 'video-cover.webp',
       preview_metadata_json: '{"durationSeconds":12.5}',
@@ -51,7 +52,7 @@ describe('image preview state and retries', () => {
       id: 1,
       asset_id: 4,
       identity_hash: 'identity',
-      strategy_version: 2,
+      strategy_version: CARD_IMAGE_PROFILE.version,
       status: 'failed',
       error_code: 'IMAGE_SOURCE_MISSING',
       artifact_size: 999,
@@ -79,7 +80,7 @@ describe('image preview state and retries', () => {
   it('falls back only to a ready preview selected for the same source revision', async () => {
     resolve.mockResolvedValue({ asset: { id: 4, source_version: 'revision' } });
     const db = database([
-      { strategy_version: 2, status: 'processing' },
+      { strategy_version: CARD_IMAGE_PROFILE.version, status: 'processing' },
       { id: 9, strategy_version: 1, status: 'ready', artifact_object_key: 'old-preview' },
     ]);
     const [state] = await resolveImagePreviews('u', [source], {
@@ -121,7 +122,7 @@ it('represents completed audio without artwork as a normal terminal state', asyn
     id: 7,
     asset_id: 4,
     identity_hash: 'identity',
-    strategy_version: 2,
+    strategy_version: CARD_IMAGE_PROFILE.version,
     status: 'ready',
     preview_metadata_json: '{"cover":"absent"}',
   };

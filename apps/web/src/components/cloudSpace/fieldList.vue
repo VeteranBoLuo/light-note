@@ -51,11 +51,12 @@
                 @update:checked="(val: boolean) => toggleRow(item.id, val)"
               />
             </span>
+            <!-- HEIC 候选由大图入口生成兼容副本，不直接回退加载浏览器原件。 -->
             <ManagedImagePreview
               v-if="isPreviewableImage(item)"
               :source="{ sourceType: 'cloud_file', sourceId: String(item.id) }"
               :initial="item.imagePreview"
-              :original-url="item.fileUrl"
+              :original-url="getCloudPreviewType(item) === 'image' ? item.fileUrl : undefined"
               :original-bytes="item.fileSize"
               class="file-card-thumb"
               :alt="item.fileName"
@@ -822,7 +823,11 @@
   import { cloneDeep } from 'lodash-es';
   import { useI18n } from 'vue-i18n';
   import JSZip from 'jszip';
-  import { CLOUD_FILE_CATEGORY_LABEL_KEY, getCloudFileCategory } from '@/constants/cloudFileCategory.ts';
+  import {
+    CLOUD_FILE_CATEGORY_LABEL_KEY,
+    getCloudPreviewType,
+    getCloudFileCategory,
+  } from '@/constants/cloudFileCategory.ts';
   import { useRouter } from 'vue-router';
   import { recordOperation } from '@/api/commonApi.ts';
   import { useInboxEnqueue } from '@/composables/useInboxEnqueue';

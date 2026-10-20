@@ -1,3 +1,4 @@
+import { CARD_IMAGE_PROFILE } from '@lightnote/shared';
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import mysql from 'mysql2/promise';
@@ -176,7 +177,7 @@ describe.skipIf(!socketPath)('异步健康与历史归档（隔离 MySQL）', ()
   it('旧策略、待删除资源和失效云文件不计入当前预览或解析异常', async () => {
     await db.query("INSERT INTO image_assets VALUES (1,'active','v'),(2,'pending_delete','v')");
     await db.query(`INSERT INTO file_preview_artifacts (id,file_id,owner_user_id,source_type,strategy_version,source_revision) VALUES (1,1,'owner','image_asset',1,'v'),
-      (2,2,'owner','image_asset',2,'v'),(3,1,'owner','image_asset',2,'v')`);
+      (2,2,'owner','image_asset',${CARD_IMAGE_PROFILE.version},'v'),(3,1,'owner','image_asset',${CARD_IMAGE_PROFILE.version},'v')`);
     await db.query(
       "INSERT INTO file_preview_jobs (id,status,artifact_id) VALUES ('old','failed',1),('deleted','failed',2),('current','failed',3)",
     );
@@ -193,7 +194,7 @@ describe.skipIf(!socketPath)('异步健康与历史归档（隔离 MySQL）', ()
   it('旧预览版本即使被访问刷新过时间也可归档，最近失败的当前版本仍保留', async () => {
     await db.query(`INSERT INTO file_preview_artifacts
       (id,file_id,owner_user_id,source_type,strategy_version,source_revision,strategy)
-      VALUES (1,1,'owner','image_asset',1,'v','image_thumbnail'),(2,1,'owner','image_asset',2,'v','image_thumbnail')`);
+      VALUES (1,1,'owner','image_asset',1,'v','image_thumbnail'),(2,1,'owner','image_asset',${CARD_IMAGE_PROFILE.version},'v','image_thumbnail')`);
     await db.query(`INSERT INTO file_preview_jobs (id,status,artifact_id,create_time,update_time)
       VALUES ('retired','failed',1,DATE_SUB(NOW(),INTERVAL 2 DAY),NOW()),
         ('current','failed',2,DATE_SUB(NOW(),INTERVAL 2 DAY),NOW())`);
