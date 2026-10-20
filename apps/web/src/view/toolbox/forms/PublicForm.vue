@@ -1,6 +1,6 @@
 <template>
   <main class="collection-public" :class="{ 'collection-public--success': receipt }">
-    <header class="collection-public-header">
+    <header v-if="membersOnly" class="collection-public-header">
       <span class="success-brand">{{ t('collectionForms.publicBrand') }}</span>
       <BButton type="text" class="collection-return" :disabled="busy" @click="returnToLightNote">{{
         t('collectionForms.returnToLightNote')
@@ -24,14 +24,14 @@
         ><p>{{ t('collectionForms.rewardReceived', { points: receivedReward.points }) }}</p
         ><p class="collection-muted">{{ t('collectionForms.rewardOnceHint') }}</p></template
       ><div class="success-next"
-        ><p>{{ t('collectionForms.savedReturnHint') }}</p
-        ><BButton type="primary" :disabled="busy" @click="returnToLightNote">{{
+        ><p>{{ t(membersOnly ? 'collectionForms.savedReturnHint' : 'collectionForms.savedCloseHint') }}</p
+        ><BButton v-if="membersOnly" type="primary" :disabled="busy" @click="returnToLightNote">{{
           t('collectionForms.returnToLightNote')
         }}</BButton
-        ><BButton v-if="receivedReward?.received" :disabled="busy" @click="openRewardNotifications">{{
+        ><BButton v-if="membersOnly && receivedReward?.received" :disabled="busy" @click="openRewardNotifications">{{
           t('collectionForms.viewRewardNotification')
         }}</BButton
-        ><BButton type="text" :disabled="busy" @click="again">{{
+        ><BButton :type="membersOnly ? 'text' : 'primary'" :disabled="busy" @click="again">{{
           t(form?.submissionPolicy === 'replace' ? 'collectionForms.editSubmission' : 'collectionForms.again')
         }}</BButton></div
       ></section
@@ -103,7 +103,7 @@
   import './forms.css';
   import { useI18n } from 'vue-i18n';
   const { t } = useI18n();
-  import { ref, watch, onBeforeUnmount } from 'vue';
+  import { computed, ref, watch, onBeforeUnmount } from 'vue';
   import { useRoute, useRouter } from 'vue-router';
   import { rememberAuthNavigationIntent } from '@/utils/authNavigationIntent';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
@@ -135,17 +135,18 @@
     reloadRequired = ref(false),
     renderKey = ref(0),
     requestKey = ref(crypto.randomUUID());
+  const membersOnly = computed(() => form.value?.definition.membersOnly === true);
   let generation = 0;
   let lastPayload = '';
   let editingReceipt = '';
   let lastAnswers: FormAnswers | undefined;
   function returnToLightNote() {
-    if (!busy.value) void router.push({ name: 'workbenches' });
+    if (membersOnly.value && !busy.value) void router.push({ name: 'workbenches' });
   }
   function openRewardNotifications() {
-    if (!busy.value) void router.push({ name: 'notifications' });
+    if (membersOnly.value && receivedReward.value?.received && !busy.value) void router.push({ name: 'notifications' });
   }
-  useMobileTopBar(['publicCollectionForm'], { onBack: returnToLightNote });
+  useMobileTopBar(['publicCollectionForm'], { onBack: returnToLightNote, canGoBack: () => membersOnly.value });
   const draftKey = () => `collection-login-draft:${String(route.params.publicId)}`;
   function login() {
     if (!rememberAuthNavigationIntent(route.fullPath)) return;
