@@ -11,9 +11,10 @@ import zhCN from '@/i18n/locales/zh-CN';
 import enUS from '@/i18n/locales/en-US';
 import '@/assets/css/index.less';
 import Harness from './ProfileAppearanceHarness.vue';
+import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
 
 // 资料编辑与个人装扮的本地验收页：真实组件 + 内存数据，所有请求都在本页应答，不连接后端、不扣真实积分。
-// 参数：state=newbie|visitor|loading|error|maintenance，theme=night，renderProfile=mobile，density，locale=en-US，open=frame|background。
+// 参数：state=newbie|visitor|loading|error|maintenance|long|profile-loading|profile-error，appearance=none，identity=official，theme=night，renderProfile=mobile，density，locale=en-US。
 const params = new URLSearchParams(location.search);
 const state = params.get('state');
 const mobile = params.get('renderProfile') === 'mobile' || innerWidth < 768;
@@ -134,6 +135,10 @@ const fixture: Shop = {
     })),
   ],
 };
+if (params.get('appearance') === 'none') {
+  fixture.equippedFrame = null;
+  fixture.equippedBackground = null;
+}
 const achievements = achievementRows.map(([id, , key, cur, target]) => {
   const value = newbie ? Math.min(cur, key === 'streak_1' ? 1 : 2) : cur;
   const unlocked = value >= target;
@@ -189,7 +194,7 @@ const ownProfile = {
     name: '山间拾光',
     userPublicId: 'profile-qa',
     communityId: 'ln_DEMO01',
-    role: 'member',
+    role: params.get('identity') === 'official' ? 'official' : 'member',
     avatar: '',
     frameId: fixture.equippedFrame,
     frameRarity: newbie ? 'basic' : 'legendary',
@@ -203,6 +208,13 @@ const ownProfile = {
     achievementCount: 0,
     hasMoreAchievements: false,
   },
+};
+const account = {
+  id: 'appearance-qa',
+  role: 'user',
+  alias: state === 'long' ? '一个正在记录生活与灵感的轻笺用户' : '山间拾光',
+  email: 'demo@example.com',
+  headPicture: '',
 };
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -220,7 +232,19 @@ request.defaults.adapter = async (config) => {
   } else if (path.endsWith('/api/growth/me')) data = growthSnapshot();
   else if (path.endsWith('/api/growth/dashboard')) data = { achievements: structuredClone(achievements), quests: [] };
   else if (path.endsWith('/api/growth/inventory')) data = { items: [], assets: { points: fixture.points } };
-  else if (path.endsWith('/api/community-chat/profile/me')) data = structuredClone(ownProfile);
+  else if (path.endsWith('/api/community-chat/profile/me')) {
+    if (state === 'profile-loading') await new Promise(() => {});
+    if (state === 'profile-error')
+      return { config, status: 200, statusText: 'OK', headers: {}, data: { status: 500, data: null } };
+    if (method !== 'get') {
+      ownProfile.bio = body.bio;
+      ownProfile.revision += 1;
+    }
+    data = structuredClone(ownProfile);
+  } else if (path.endsWith('/api/user/saveUserInfo')) {
+    Object.assign(account, body);
+    data = {};
+  } else if (path.endsWith('/api/user/getUserInfo')) data = structuredClone(account);
   else if (path.endsWith('/api/growth/shop/buy')) {
     await wait(400);
     const item = [...fixture.items, ...(fixture.frames || [])].find((entry) => entry.id === body.itemId);
@@ -260,10 +284,7 @@ request.defaults.adapter = async (config) => {
 const pinia = createPinia();
 const user = useUserStore(pinia);
 if (state !== 'visitor') {
-  user.id = 'appearance-qa';
-  user.role = 'user';
-  user.alias = '山间拾光';
-  user.email = 'demo@example.com';
+  Object.assign(user, account);
 }
 const i18n = createI18n({
   legacy: false,
@@ -282,6 +303,7 @@ createApp({ render: () => h(RouterView) })
   .use(pinia)
   .use(i18n)
   .use(router)
+  .component('svg-icon', SvgIcon)
   .directive('click-log', {})
   .directive('auto-scrollbar', {})
   .mount('#app');
