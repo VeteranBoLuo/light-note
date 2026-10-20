@@ -1,9 +1,6 @@
 <template>
   <BTooltip class="cloud-folder-file-count" :title="description" :aria-label="description">
-    {{ directCount
-    }}<span v-if="totalCount > directCount" class="cloud-folder-file-count__total">
-      · {{ t('cloudSpace.folderFileCountTotal', { count: totalCount }) }}</span
-    >
+    {{ totalCount }}
   </BTooltip>
 </template>
 
@@ -22,11 +19,6 @@
 <style scoped>
   .cloud-folder-file-count {
     flex: 0 0 auto;
-    gap: var(--ui-space-4, 4px);
     white-space: nowrap;
-  }
-
-  .cloud-folder-file-count__total {
-    color: var(--desc-color);
   }
 </style>
