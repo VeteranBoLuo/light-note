@@ -4,6 +4,7 @@ import { createI18n } from 'vue-i18n';
 import { collectionFormsZh } from '@/i18n/locales/collectionForms';
 import PublicForm from './PublicForm.vue';
 import FormRenderer from './FormRenderer.vue';
+import { getMobilePageBack, handleMobilePageBack } from '@/composables/useMobileTopBar';
 const navigation = vi.hoisted(() => ({ push: vi.fn() }));
 vi.mock('vue-router', () => ({
   useRoute: () => ({ params: { publicId: 'a'.repeat(48) }, fullPath: '/f/' + 'a'.repeat(48) }),
@@ -49,8 +50,14 @@ async function submit(host: HTMLElement) {
   host.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
   await flush();
 }
+function button(host: HTMLElement, label: string) {
+  const result = Array.from(host.querySelectorAll('button')).find((item) => item.textContent?.trim() === label);
+  expect(result, `Button: ${label}`).toBeTruthy();
+  return result!;
+}
 afterEach(() => {
   cleanup.splice(0).forEach((fn) => fn());
+  expect(getMobilePageBack('publicCollectionForm')).toBeNull();
   vi.unstubAllGlobals();
   sessionStorage.clear();
   clearAuthNavigationIntent();
@@ -80,7 +87,7 @@ it('未登录只能看到参与提示，点击后使用现有安全回跳返回�
   expect(host.querySelector('form')).toBeNull();
   expect(host.textContent).toContain('首次成功提交可得 20 积分');
   expect(host.textContent).toContain('回答将关联');
-  host.querySelector('button')!.click();
+  button(host, collectionFormsZh.loginToParticipate).click();
   expect(navigation.push).toHaveBeenCalledWith('/login');
   expect(resolveAuthNavigationIntent()).toBe('/f/' + 'a'.repeat(48));
 });
@@ -120,6 +127,10 @@ it('必填项提交携带当前账号，按服务端到账结果显示奖励', a
   expect(JSON.parse(calls.at(-1).body)).toMatchObject({ expectedAccountId: 'member', answers: { q: '朋友推荐' } });
   expect(host.textContent).toContain('20 积分已到账');
   expect(host.textContent).toContain('每个账号仅奖励一次');
+  button(host, collectionFormsZh.viewRewardNotification).click();
+  expect(navigation.push).toHaveBeenLastCalledWith({ name: 'notifications' });
+  button(host.querySelector<HTMLElement>('.success-next')!, collectionFormsZh.returnToLightNote).click();
+  expect(navigation.push).toHaveBeenLastCalledWith({ name: 'workbenches' });
 });
 
 it('会话失效后暂存最新输入，登录返回只恢复同一账号的草稿', async () => {
@@ -243,7 +254,8 @@ describe('独立填写页', () => {
     const posts = () => calls.filter((c) => c.method === 'POST').map((c) => JSON.parse(c.body));
     expect(posts()[0].requestKey).toBe(posts()[1].requestKey);
     expect(calls.every((c) => c.credentials === 'same-origin')).toBe(true);
-    host.querySelector('button')!.click();
+    expect(host.textContent).not.toContain(collectionFormsZh.viewRewardNotification);
+    button(host, collectionFormsZh.again).click();
     await flush();
     await fill(host, '第二次');
     await submit(host);
@@ -342,13 +354,68 @@ it('修改入口重新读取最新答案；凭证丢失时阻止退化成新增'
   await flush();
   await fill(host, '最新答案');
   await submit(host);
-  host.querySelector('button')!.click();
+  button(host, collectionFormsZh.editSubmission).click();
   await flush();
   expect(host.querySelector('input')!.value).toBe('最新答案');
   await submit(host);
   lost = true;
-  host.querySelector('button')!.click();
+  button(host, collectionFormsZh.editSubmission).click();
   await flush();
   expect(host.querySelector('form')).toBeNull();
   expect(host.textContent).toContain('未能识别之前的提交');
+});
+
+it.each(['collecting', 'paused', 'ended', 'error', 'loading'])(
+  '%s 状态均可从独立表单返回当前站点工作台',
+  async (state) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        if (state === 'loading') return await new Promise(() => {});
+        if (state === 'error') throw new Error('network');
+        return {
+          ok: true,
+          json: async () => ({ data: { status: state, definition, submissionPolicy: 'replace', mySubmission: null } }),
+        };
+      }),
+    );
+    const host = mount(PublicForm);
+    await flush();
+    button(host, collectionFormsZh.returnToLightNote).click();
+    expect(navigation.push).toHaveBeenCalledExactlyOnceWith({ name: 'workbenches' });
+  },
+);
+
+it('提交中禁用返回且消费系统返回，完成后系统返回复用工作台入口', async () => {
+  let finishSubmission!: (response: unknown) => void;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (_url, options) =>
+      options.method === 'POST'
+        ? new Promise((resolve) => {
+            finishSubmission = resolve;
+          })
+        : {
+            ok: true,
+            json: async () => ({
+              data: { status: 'collecting', definition, submissionPolicy: 'replace', mySubmission: null },
+            }),
+          },
+    ),
+  );
+  const host = mount(PublicForm);
+  await flush();
+  await fill(host, '测试返回');
+  await submit(host);
+  expect(button(host, collectionFormsZh.returnToLightNote).disabled).toBe(true);
+  const busyBack = new Event('light-note-system-back', { cancelable: true });
+  expect(handleMobilePageBack('publicCollectionForm', busyBack)).toBe(true);
+  expect(busyBack.defaultPrevented).toBe(true);
+  expect(navigation.push).not.toHaveBeenCalled();
+  finishSubmission({ ok: true, json: async () => ({ data: { receipt: 'r', outcome: 'created' } }) });
+  await flush();
+  expect(host.textContent).toContain('提交成功');
+  const readyBack = new Event('light-note-system-back', { cancelable: true });
+  expect(handleMobilePageBack('publicCollectionForm', readyBack)).toBe(true);
+  expect(navigation.push).toHaveBeenCalledExactlyOnceWith({ name: 'workbenches' });
 });
