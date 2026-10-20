@@ -58,12 +58,13 @@ const items: SearchResultItem[] = ['42', '43'].map((id) => ({
     .filter(Boolean)
     .join(' · '),
   route: '/cloudSpace?fileName=old-route.txt',
+  // resultData 递归转换字段；这里使用真实接口对外返回的驼峰命名。
   raw: {
-    update_time: '2026-10-10 10:00:00',
-    file_name: title,
-    file_type: extension,
-    file_size: fileSize,
-    folder_name: folderName,
+    updateTime: '2026-10-10 10:00:00',
+    fileName: title,
+    fileType: extension,
+    fileSize,
+    folderName,
   },
 }));
 let infoReads = 0;
