@@ -6,7 +6,7 @@ const release = {
   downloadPath: '/downloads/android/light-note-1.0.0.apk',
   released: true,
 };
-const postAndroidMessage = vi.fn(() => true);
+const postAndroidMessage = vi.fn((_request: { type: string; url: string; fileName: string }) => true);
 const installApkViaAndroid = vi.fn();
 /** 原生下载进度的订阅者，用来手工投递「下载完成」事件 */
 const progressListeners: Array<(p: unknown) => void> = [];
@@ -43,12 +43,11 @@ const copyTextToClipboard = vi.fn();
 vi.mock('@/utils/clipboard', () => ({ copyTextToClipboard }));
 vi.mock('@/i18n', () => ({ default: { global: { t: (key: string) => key } } }));
 
-const { compareAppVersions, resetAndroidAppUpdateForTest, useAndroidAppUpdate } = await import(
-  './useAndroidAppUpdate'
-);
+const { compareAppVersions, resetAndroidAppUpdateForTest, useAndroidAppUpdate } = await import('./useAndroidAppUpdate');
 
 /** 装了 1.0.0 的 App */
-const APP_UA = 'Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 Chrome/138 Mobile Safari/537.36 LightNoteAndroid/1.0.0';
+const APP_UA =
+  'Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 Chrome/138 Mobile Safari/537.36 LightNoteAndroid/1.0.0';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -157,6 +156,56 @@ describe('useAndroidAppUpdate', () => {
     postAndroidMessage.mockReturnValue(false);
     const update = useAndroidAppUpdate();
     expect(update.startUpdate()).toBe(false);
+  });
+
+  it('同版本重新下载使用独立 URL 和文件名，且不改变版本提醒', () => {
+    const update = useAndroidAppUpdate();
+    expect(update.startUpdate({ forceDownload: true })).toBe(true);
+    const request = postAndroidMessage.mock.calls[0][0];
+    const url = new URL(request.url);
+    expect(url.origin + url.pathname).toBe(update.apkUrl.value);
+    expect(url.searchParams.get('reinstall')).toBeTruthy();
+    expect(request.fileName).toBe(`light-note-1.0.0-reinstall-${url.searchParams.get('reinstall')}.apk`);
+    expect(update.updateAvailable.value).toBe(false);
+    expect(update.showBadge.value).toBe(false);
+    expect(messageMock.success).toHaveBeenCalledWith('appUpdate.reinstallStarted');
+  });
+
+  it('连续重新下载不复用缓存地址或落盘文件', () => {
+    const update = useAndroidAppUpdate();
+    update.startUpdate({ forceDownload: true });
+    update.startUpdate({ forceDownload: true });
+    const [first, second] = postAndroidMessage.mock.calls.map(([request]) => request);
+    expect(second.url).not.toBe(first.url);
+    expect(second.fileName).not.toBe(first.fileName);
+  });
+
+  it('重新下载完成后按独立文件名认领安装包，同一完成事件只提示一次', async () => {
+    useAndroidAppUpdate().startUpdate({ forceDownload: true });
+    const { fileName } = postAndroidMessage.mock.calls[0][0];
+    emitDownloadProgress({ id: '43', fileName, status: 'running', percent: 40 });
+    expect(alertMock).not.toHaveBeenCalled();
+    emitDownloadProgress({ id: '43', fileName, status: 'success', percent: 100 });
+    emitDownloadProgress({ id: '43', fileName, status: 'success', percent: 100 });
+    expect(alertMock).toHaveBeenCalledTimes(1);
+    expect(alertMock.mock.calls[0][0].title).toBe('appUpdate.reinstallReadyTitle');
+    await alertMock.mock.calls[0][0].onOk();
+    expect(installApkViaAndroid).toHaveBeenCalledWith('43');
+  });
+
+  it('失败或未送达的重装下载不再触发安装提示，之后可重新下载', () => {
+    const update = useAndroidAppUpdate();
+    update.startUpdate({ forceDownload: true });
+    const failed = postAndroidMessage.mock.calls[0][0];
+    emitDownloadProgress({ id: '44', fileName: failed.fileName, status: 'failed', percent: -1 });
+    emitDownloadProgress({ id: '44', fileName: failed.fileName, status: 'success', percent: 100 });
+    postAndroidMessage.mockReturnValue(false);
+    expect(update.startUpdate({ forceDownload: true })).toBe(false);
+    const undelivered = postAndroidMessage.mock.calls[1][0];
+    emitDownloadProgress({ id: '45', fileName: undelivered.fileName, status: 'success', percent: 100 });
+    expect(alertMock).not.toHaveBeenCalled();
+    postAndroidMessage.mockReturnValue(true);
+    expect(update.startUpdate({ forceDownload: true })).toBe(true);
   });
 
   it('两处调用共享同一份 dismissed —— 底栏「我的」与页面内红点必须同时消失', () => {

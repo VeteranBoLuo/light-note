@@ -12092,6 +12092,9 @@ export default {
     currentVersionShort: '当前 {version}',
     upToDate: '已是最新版本 {version}',
     modalTitle: '发现新版本',
+    reinstallTitle: '重新下载安装包',
+    reinstallStarted: '官网安装包已开始下载，完成后在「文件管理」里搜索 light-note 点击安装',
+    reinstallReadyTitle: '官网安装包已下载完成',
     modalNote: '安装包只从轻笺官网 boluo66.top 下载；如果系统提示来源不明，需要先允许安装。',
     actionDownload: '下载新版本',
     // 不写死「下载」目录：鸿蒙「卓易通」实测落在「我的手机 / 兼容应用数据」，通知也不一定弹

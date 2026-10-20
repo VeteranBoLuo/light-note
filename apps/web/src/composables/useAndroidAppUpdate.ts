@@ -84,10 +84,12 @@ function expectedApkFileName(): string {
  * 就收不到完成事件了。用 Alert 而不是自己加组件，是为了不依赖某个挂载点 —— 任何页面都能弹。
  */
 let installPromptHooked = false;
+/** 同版本重装使用独立文件名，避免覆盖下载目录中已有的 APK。 */
+const reinstallFileNames = new Set<string>();
 
-function promptInstall(downloadId: string) {
+function promptInstall(downloadId: string, reinstall = false) {
   Alert.alert({
-    title: i18n.global.t('appUpdate.installReadyTitle'),
+    title: i18n.global.t(reinstall ? 'appUpdate.reinstallReadyTitle' : 'appUpdate.installReadyTitle'),
     content: i18n.global.t('appUpdate.installReadyContent'),
     okText: i18n.global.t('appUpdate.installNow'),
     async onOk() {
@@ -108,6 +110,13 @@ function ensureInstallPromptHook() {
   if (installPromptHooked) return;
   installPromptHooked = true;
   onAndroidDownloadProgress((progress) => {
+    if (reinstallFileNames.has(progress.fileName)) {
+      if (progress.status === 'success' || progress.status === 'failed') {
+        reinstallFileNames.delete(progress.fileName);
+      }
+      if (progress.status === 'success') promptInstall(progress.id, true);
+      return;
+    }
     if (progress.status !== 'success') return;
     // 只认自己那个更新包：用户可能同时在下别的文件（导出件、云空间文件）
     if (progress.fileName !== expectedApkFileName()) return;
@@ -119,6 +128,7 @@ function ensureInstallPromptHook() {
 export function resetAndroidAppUpdateForTest() {
   dismissedVersion.value = readDismissedVersion();
   installPromptHooked = false;
+  reinstallFileNames.clear();
 }
 
 export function useAndroidAppUpdate() {
@@ -168,19 +178,32 @@ export function useAndroidAppUpdate() {
    * 而轻笺没有声明这个权限），第二层来源是系统文件管理器、第三层来源是浏览器，都自带安装能力。
    * 所以提示文案必须同时给出前两层，不能只说"去通知栏点"。
    */
-  function startUpdate(): boolean {
+  function startUpdate(options: { forceDownload?: boolean } = {}): boolean {
     // 先挂上完成监听再发起下载，避免下载极快时错过 success 那一帧
     ensureInstallPromptHook();
+    let url = apkUrl.value;
+    let fileName = apkFileName.value;
+    if (options.forceDownload) {
+      const requestId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+      const freshUrl = new URL(url);
+      freshUrl.searchParams.set('reinstall', requestId);
+      url = freshUrl.href;
+      fileName = fileName.replace(/\.apk$/i, `-reinstall-${requestId}.apk`);
+      reinstallFileNames.add(fileName);
+    }
     const delivered = postAndroidMessage({
       type: 'download',
-      url: apkUrl.value,
-      fileName: apkFileName.value,
+      url,
+      fileName,
     });
     if (delivered) {
       dismissBadge();
-      message.success(i18n.global.t('appUpdate.downloadStarted'));
+      message.success(
+        i18n.global.t(options.forceDownload ? 'appUpdate.reinstallStarted' : 'appUpdate.downloadStarted'),
+      );
       return true;
     }
+    reinstallFileNames.delete(fileName);
     // 桥不可用（极旧的 App 或 WebView 异常）：只剩浏览器这条路
     message.warning(i18n.global.t('appUpdate.bridgeUnavailable'));
     return false;

@@ -211,7 +211,7 @@
     <ActionCardModal
       v-if="updateModalVisible"
       v-model:visible="updateModalVisible"
-      :title="$t('appUpdate.modalTitle')"
+      :title="$t(user.role === 'root' ? 'appUpdate.reinstallTitle' : 'appUpdate.modalTitle')"
       :sections="updateSections"
       :note="$t('appUpdate.modalNote')"
     />
@@ -348,10 +348,17 @@
   }
 
   /**
-   * 更新入口。无新版时只回一句「已是最新」，不弹面板 —— 用户点它多半是想确认一下。
-   * 有新版才展开三层安装路径：下载(通知栏/文件管理器) → 复制地址去浏览器。
+   * Root 主动点击时直接重新下载官网包；普通用户仍按版本判断是否展开更新面板。
    */
   function handleAppUpdateEntry() {
+    if (user.role === 'root') {
+      if (appUpdate.startUpdate({ forceDownload: true })) {
+        recordOperation({ module: '个人中心', operation: `重新下载官网 APK【${appUpdate.latestVersion.value}】` });
+      } else {
+        updateModalVisible.value = true;
+      }
+      return;
+    }
     if (!appUpdate.updateAvailable.value) {
       message.success(t('appUpdate.upToDate', { version: appUpdate.installedVersion.value }));
       return;
@@ -367,12 +374,15 @@
       actions: [
         {
           key: 'download',
-          label: t('appUpdate.actionDownload'),
+          label: t(user.role === 'root' ? 'appUpdate.reinstallTitle' : 'appUpdate.actionDownload'),
           description: t('appUpdate.actionDownloadDesc'),
           onClick: () => {
             updateModalVisible.value = false;
-            if (appUpdate.startUpdate()) {
-              recordOperation({ module: '个人中心', operation: `下载新版 APK【${appUpdate.latestVersion.value}】` });
+            if (appUpdate.startUpdate({ forceDownload: user.role === 'root' })) {
+              recordOperation({
+                module: '个人中心',
+                operation: `${user.role === 'root' ? '重新下载官网' : '下载新版'} APK【${appUpdate.latestVersion.value}】`,
+              });
             }
           },
         },

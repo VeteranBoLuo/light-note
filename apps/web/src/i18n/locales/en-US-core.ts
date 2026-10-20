@@ -12628,6 +12628,9 @@ export default {
     currentVersionShort: 'Current {version}',
     upToDate: 'You are on the latest version {version}',
     modalTitle: 'A new version is available',
+    reinstallTitle: 'Download the installer again',
+    reinstallStarted: 'Official installer download started — find "light-note" in your Files app to install it',
+    reinstallReadyTitle: 'Official installer downloaded',
     modalNote:
       'The installer is only served from boluo66.top. If the system warns about an unknown source, allow the install first.',
     actionDownload: 'Download the new version',
