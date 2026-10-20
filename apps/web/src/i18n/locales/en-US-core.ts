@@ -5981,6 +5981,7 @@ export default {
     refreshShort: 'Refresh',
     clear: 'Clear Search',
     locate: 'Locate in bookmarks',
+    locateFile: 'Locate in Cloud Space',
     clearShort: 'Clear',
     cancel: 'Cancel',
     results: 'Resource Results',

@@ -5668,6 +5668,7 @@ export default {
     refreshShort: '刷新',
     clear: '清空搜索',
     locate: '在书签中定位',
+    locateFile: '在云空间定位',
     clearShort: '清空',
     cancel: '取消',
     results: '资源结果',

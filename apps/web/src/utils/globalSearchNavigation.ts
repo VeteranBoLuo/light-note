@@ -5,7 +5,7 @@ import { openBookmarkUrl } from '@/utils/openBookmark';
 /**
  * 全局搜索结果的统一打开规则：
  * - 书签 → 按用户「当前页 / 新标签」偏好打开原网页
- * - 文件 → 进入云空间并定位到该文件
+ * - 文件 → 按稳定 ID 进入云空间预览
  * - 笔记 / 标签 / 待办 → 走服务端给出的站内路由
  *
  * 搜索层的语义是「找到并打开对象」，与资源选择器的「选中并插入」不同，
@@ -17,8 +17,18 @@ export function navigateToSearchResult(router: Router, item: SearchResultItem): 
     return;
   }
   if (item.type === 'file') {
-    void router.push({ path: '/cloudSpace', query: { fileName: item.title } });
+    const fileId = String(item.id || '').trim();
+    if (fileId) void router.push({ path: '/cloudSpace', query: { fileId } });
     return;
   }
   if (item.route) void router.push(item.route);
+}
+
+/** 定位保留模块内浏览入口，与打开具体资料分开。 */
+export function locateSearchResult(router: Router, item: SearchResultItem): void {
+  if (item.type === 'bookmark') {
+    void router.push({ path: '/home', query: { locate: item.id } });
+  } else if (item.type === 'file') {
+    void router.push({ path: '/cloudSpace', query: { fileName: item.title } });
+  }
 }
