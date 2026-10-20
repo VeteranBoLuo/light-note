@@ -61,6 +61,37 @@ it.each(['open', 'locate'] as const)('桌面文件搜索的 %s 操作关闭搜�
   expect(state[action === 'open' ? 'locate' : 'navigate']).not.toHaveBeenCalled();
 });
 
+it.each([
+  { fileType: 'image/jpeg', fileSize: 356516, folderName: '图片素材' },
+  { file_type: 'image/jpeg', file_size: 356516, folder_name: '图片素材' },
+])('文件元数据兼容接口字段并保留类型、文件夹和独立大小：%o', async (raw) => {
+  state.items = [
+    { id: 'file-42', type: 'file', title: '图像文件', description: '位于 图片素材', extra: '图片 · 0.34 MB', raw },
+  ];
+  const host = document.createElement('div');
+  document.body.append(host);
+  const app = createApp({ render: () => h(GlobalSearch) });
+  app.directive('click-log', {});
+  app.use(
+    createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { cloudSpace: { image: '图片' } } },
+      missingWarn: false,
+      fallbackWarn: false,
+    }),
+  );
+  cleanup = () => {
+    app.unmount();
+    host.remove();
+  };
+  app.mount(host);
+  host.querySelector<HTMLButtonElement>('button')!.click();
+  await nextTick();
+  expect(document.querySelector('.global-search-result__description')!.textContent).toBe('图片 · 位于 图片素材');
+  expect(document.querySelector('.global-search-result__extra')!.textContent?.trim()).toBe('0.34 MB');
+});
+
 it('全局搜索在输入框和对话框按钮消费 Escape，输入法和长按不关闭，下层预览不接收事件', async () => {
   const host = document.createElement('div');
   document.body.append(host);

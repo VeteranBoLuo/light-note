@@ -255,15 +255,16 @@
     if (item.type !== 'file') return item.description || item.extra || '';
     const category = getCloudFileCategory({
       fileName: item.title,
-      fileType: item.raw?.file_type,
+      fileType: item.raw?.fileType ?? item.raw?.file_type,
       category: item.category,
     });
     const typeLabel = t(CLOUD_FILE_CATEGORY_LABEL_KEY[category]);
-    return item.raw?.folder_name && item.description ? `${typeLabel} · ${item.description}` : typeLabel;
+    const folderName = item.raw?.folderName ?? item.raw?.folder_name;
+    return folderName && item.description ? `${typeLabel} · ${item.description}` : typeLabel;
   }
   function getItemExtra(item: SearchResultItem) {
     if (item.type !== 'file') return item.extra;
-    const size = Number(item.raw?.file_size);
+    const size = Number(item.raw?.fileSize ?? item.raw?.file_size);
     return Number.isFinite(size) && size > 0 ? `${(size / 1024 / 1024).toFixed(2)} MB` : '';
   }
   function isActiveItem(item: SearchResultItem) {
