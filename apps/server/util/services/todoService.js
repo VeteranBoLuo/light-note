@@ -23,6 +23,7 @@ import {
 } from './todoSeriesService.js';
 import { recordTodoCompletion, recordTodoCreation } from '../growthActivityHistory.js';
 import { resolveTodoConfiguredReminderAt, resolveTodoNextReminderAt } from '@lightnote/shared/todo-reminder';
+import { nextTodoReminderAtSql } from './todoReminderSql.js';
 
 const STATUS = new Set(['pending', 'completed']);
 const FILTER_STATUS = new Set(['all', ...STATUS]);
@@ -46,16 +47,7 @@ const DUE_SQL = Object.freeze({
     OR (due_at IS NULL AND occurrence_date >= CURDATE()
     AND occurrence_date < DATE_ADD(CURDATE(), INTERVAL (7 - WEEKDAY(CURDATE())) DAY)))`,
 });
-const NEXT_REMINDER_AT_SQL = `COALESCE(
-  (SELECT MIN(j.scheduled_at_local)
-     FROM todo_reminder_jobs j
-    WHERE j.todo_id = todo_items.id AND j.user_id = todo_items.user_id
-      AND j.status IN ('pending','processing')),
-  (SELECT MIN(r.scheduled_at)
-     FROM todo_reminders r
-    WHERE r.todo_id = todo_items.id AND r.user_id = todo_items.user_id
-      AND r.status IN ('pending','processing'))
-)`;
+const NEXT_REMINDER_AT_SQL = nextTodoReminderAtSql('todo_items');
 const ACTION_AT_SQL = `NULLIF(LEAST(
   COALESCE(${NEXT_REMINDER_AT_SQL}, '9999-12-31 23:59:59'),
   COALESCE(start_at, '9999-12-31 23:59:59'),

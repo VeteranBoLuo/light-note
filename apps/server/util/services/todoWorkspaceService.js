@@ -2,6 +2,7 @@ import { Temporal } from '@js-temporal/polyfill';
 import crypto from 'node:crypto';
 import { listTodoPage } from './todoService.js';
 import { organizationError, todoOrganizationFilters } from './todoOrganizationService.js';
+import { nextTodoReminderAtSql } from './todoReminderSql.js';
 
 const stamp = (sql) => `COALESCE(DATE_FORMAT(${sql}, '%Y%m%d%H%i%s'), '99991231235959')`;
 const reverseStamp = (sql) => `LPAD(99999999999999 - CAST(${stamp(sql)} AS UNSIGNED), 14, '0')`;
@@ -64,6 +65,7 @@ function fingerprint(userId, input, kind) {
     .createHash('sha256')
     .update(
       JSON.stringify([
+        'reminder-order-v2',
         kind,
         userId,
         input.status,
@@ -214,7 +216,10 @@ export async function todoWorkspaceGroups(db, userId, raw) {
 }
 
 function nodeOrder(sort) {
-  const at = 'COALESCE(r.occurrence_date, r.start_at, r.due_at)';
+  // Without a deadline, the displayed next Job is the actionable time, including snoozes.
+  // Keep the existing planned-date fallback and deadline ordering for other tasks.
+  const plannedAt = 'COALESCE(r.occurrence_date, r.start_at, r.due_at)';
+  const at = `CASE WHEN r.due_at IS NULL THEN COALESCE(${nextTodoReminderAtSql('r')}, ${plannedAt}) ELSE ${plannedAt} END`;
   const created = 'COALESCE(s.create_time, r.create_time)';
   const orders = {
     smart: `CONCAT(IF(r.due_at < NOW(), '0', IF(DATE(${at}) = CURDATE(), '1', '2')), ${stamp(at)}, 2 - r.priority)`,
