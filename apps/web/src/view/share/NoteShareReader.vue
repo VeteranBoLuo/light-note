@@ -216,6 +216,7 @@
   import { normalizeNoteContentResourceUrls, noteContentToHtml } from '@/utils/common';
   import { parseResourceHref } from '@/utils/noteResourceRefs';
   import { scrollIntoContainer } from '@/utils/scrolling';
+  import { handleNoteAnchorActivation } from '@/utils/noteAnchors';
 
   const DrawingNoteEditor = defineAsyncComponent(
     () => import('@/components/noteLibrary/drawing/DrawingNoteEditor.vue'),
@@ -326,7 +327,6 @@
     const minimum = elements.length ? Math.min(...elements.map((element) => Number(element.tagName.slice(1)))) : 1;
     headings.value = elements.map((element, index) => {
       const id = `shared-heading-${index}`;
-      element.id = id;
       return {
         id,
         text: String(element.textContent || '').trim() || t('noteDetail.catalogUntitled'),
@@ -444,6 +444,11 @@
   }
 
   function handleContentClick(event: MouseEvent) {
+    if (
+      handleNoteAnchorActivation(event, contentRef.value, (destination) => {
+        if (readerRef.value) scrollIntoContainer(readerRef.value, destination, 84);
+      })
+    ) return;
     const target = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>('a[href]') : null;
     if (!target) return;
     const href = String(target.getAttribute('href') || '');
