@@ -244,6 +244,8 @@ export function createFormsService(pool) {
       const form = await owned(db, userId, id, true);
       if (input.version !== form.version) throw new FormError('表单已更新，请重新加载后操作', 409);
       const definition = validateDefinition(input.definition);
+      if (input.definition.notifyOnSubmission === undefined)
+        definition.notifyOnSubmission = form.definition.notifyOnSubmission === true;
       await specialPermission(db, userId, definition);
       if (!form.published) definition.submissionPolicy = 'replace';
       if (form.published && canonical(definition.questions) !== canonical(form.definition.questions))
@@ -271,7 +273,12 @@ export function createFormsService(pool) {
     if (input.action === 'copy') {
       const form = await get(userId, id);
       return create(userId, {
-        definition: { ...form.definition, reward: null, title: form.title.slice(0, 190) + '（副本）' },
+        definition: {
+          ...form.definition,
+          notifyOnSubmission: false,
+          reward: null,
+          title: form.title.slice(0, 190) + '（副本）',
+        },
         tagIds: form.tagIds,
       });
     }
@@ -332,11 +339,13 @@ export function createFormsService(pool) {
           remaining: Math.max(0, definition.reward.maxRecipients - summary.recipients),
         }
       : null;
+    const publicDefinition = { ...definition };
+    delete publicDefinition.notifyOnSubmission;
     return {
       submissionPolicy: definition.submissionPolicy ?? 'multiple',
       mySubmission,
       status: process.env.COLLECTION_FORMS_ENABLED === 'false' && form.status === 'collecting' ? 'paused' : form.status,
-      definition,
+      definition: publicDefinition,
       ...(definition.membersOnly ? { account, requiresLogin: !account, reward } : {}),
     };
   }
@@ -495,6 +504,31 @@ export function createFormsService(pool) {
             "UPDATE collection_forms SET status='paused',version=version+1,updated_at=UTC_TIMESTAMP(3) WHERE id=?",
             [form.id],
           );
+      }
+      if (!previous && form.definition.notifyOnSubmission === true) {
+        const [owner] = await rows(db, 'SELECT preferences FROM user WHERE id=?', [form.user_id]);
+        let preferences = owner?.preferences;
+        if (typeof preferences === 'string') {
+          try {
+            preferences = JSON.parse(preferences);
+          } catch {
+            preferences = null;
+          }
+        }
+        if (preferences?.notificationsInApp !== false) {
+          const notice = { type: 'collection_form_submission', meta: { formTitle: form.title } };
+          await createNotification(
+            form.user_id,
+            {
+              ...notice,
+              ...notificationPresentation(notice),
+              link: `/toolbox/forms/${encodeURIComponent(form.id)}?view=responses&notice=${encodeURIComponent(data.id)}`,
+              sourceType: 'collection_form_submission',
+              sourceId: data.id,
+            },
+            db,
+          );
+        }
       }
       return { receipt: data.id, outcome, ...(reward ? { reward } : {}) };
     });

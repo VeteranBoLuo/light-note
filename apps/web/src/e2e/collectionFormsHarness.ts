@@ -35,6 +35,7 @@ applyUiDensity(
 const definition: FormDefinition = {
   submissionPolicy: membersOnly || params.get('policy') === 'replace' ? 'replace' : 'multiple',
   membersOnly,
+  notifyOnSubmission: params.has('notifySubmission'),
   reward: params.has('reward') ? { points: 20, maxRecipients: 100 } : null,
   title: params.get('formTitle') || '轻笺体验反馈',
   description: '帮助我们把轻笺做得更好。请分享你的真实体验，所有回答仅收集者可见。',
@@ -138,6 +139,17 @@ const notices: NotificationItem[] = params.has('notifications')
       },
     ]
   : [];
+if (params.has('submissionNotice')) {
+  const notice = { type: 'collection_form_submission', meta: { formTitle: definition.title } };
+  notices.splice(0, notices.length, {
+    ...notice,
+    ...notificationPresentation(notice),
+    id: 'form-submission-notice',
+    link: `${location.origin}/toolbox/forms/sample?view=responses&notice=r0`,
+    isRead: 0,
+    createTime: new Date().toISOString(),
+  });
+}
 request.defaults.adapter = async (config) => {
   const feedbackPath = params.get('feedbackPath');
   if (
@@ -188,8 +200,8 @@ request.defaults.adapter = async (config) => {
         ? true
         : body.type === 'growth'
           ? ['level_up', 'streak_risk', 'collection_form_reward'].includes(n.type)
-          : body.type === 'system_group'
-            ? n.type === 'system'
+          : ['system', 'system_group'].includes(body.type)
+            ? ['system', 'collection_form_submission'].includes(n.type)
             : n.type === body.type,
     );
     data = url.endsWith('/list')
@@ -415,7 +427,7 @@ if (!params.get('shell'))
   });
 bookmarkStore(pinia).screenWidth = window.innerWidth;
 await router.push(
-  params.has('notifications')
+  params.has('notifications') || params.has('submissionNotice')
     ? '/notifications'
     : params.get('public')
       ? '/f/' + forms[0].public_id

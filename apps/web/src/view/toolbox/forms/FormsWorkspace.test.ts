@@ -33,7 +33,7 @@ function form(id: string, title: string) {
     definition: { title, description: '', successMessage: '谢谢', questions: [] },
   };
 }
-async function mount(role: 'user' | 'root' = 'user') {
+async function mount(role: 'user' | 'root' = 'user', initialPath = '/toolbox/forms/old') {
   const host = document.createElement('div');
   document.body.append(host);
   const router = createRouter({
@@ -53,7 +53,7 @@ async function mount(role: 'user' | 'root' = 'user') {
   );
   useUserStore(pinia).id = 'owner';
   useUserStore(pinia).role = role;
-  await router.push('/toolbox/forms/old');
+  await router.push(initialPath);
   await router.isReady();
   app.component('svg-icon', { render: () => h('span') });
   app.mount(host);
@@ -66,6 +66,142 @@ async function mount(role: 'user' | 'root' = 'user') {
 afterEach(() => {
   cleanup.splice(0).forEach((fn) => fn());
   vi.clearAllMocks();
+});
+it('新提交提醒向普通创建者展示，默认关闭且发布后可直接保存、关闭并重新读取', async () => {
+  const current = { ...form('old', '反馈'), status: 'collecting', published: 1 };
+  state.api.mockImplementation(async (path: string, method: string, input: any) => {
+    if (path === '/old' && method === 'PATCH') {
+      current.definition = structuredClone(input.definition);
+      return { version: ++current.version };
+    }
+    if (path === '/old') return structuredClone(current);
+    if (path.endsWith('/responses')) return { items: [], total: 0 };
+    return path === '' ? [current] : [];
+  });
+  const { host, router } = await mount();
+  await flush();
+  const open = () =>
+    (
+      Array.from(host.querySelectorAll('button')).find((b) => b.textContent?.trim() === '表单设置') as HTMLButtonElement
+    ).click();
+  open();
+  await flush();
+  let toggle = document.querySelector(
+    '[role="switch"][aria-labelledby="collection-submission-notification-label"]',
+  ) as HTMLElement;
+  expect(toggle.getAttribute('aria-checked')).toBe('false');
+  toggle.click();
+  await nextTick();
+  expect(toggle.getAttribute('aria-checked')).toBe('true');
+  const save = () =>
+    (
+      Array.from(document.querySelectorAll('.collection-metadata-modal button')).find(
+        (b) => b.textContent?.trim() === '保存修改',
+      ) as HTMLButtonElement
+    ).click();
+  save();
+  await flush();
+  expect(state.api).toHaveBeenCalledWith(
+    '/old',
+    'PATCH',
+    expect.objectContaining({ definition: expect.objectContaining({ notifyOnSubmission: true }) }),
+  );
+  expect(document.querySelector('.collection-metadata-modal')?.textContent).not.toContain('有未保存的修改');
+  (
+    Array.from(document.querySelectorAll('.collection-metadata-modal button')).find(
+      (b) => b.textContent?.trim() === '完成',
+    ) as HTMLButtonElement
+  ).click();
+  await flush();
+  await router.push('/toolbox/forms');
+  await router.push('/toolbox/forms/old');
+  await flush();
+  open();
+  await flush();
+  toggle = document.querySelector(
+    '[role="switch"][aria-labelledby="collection-submission-notification-label"]',
+  ) as HTMLElement;
+  expect(toggle.getAttribute('aria-checked')).toBe('true');
+  toggle.click();
+  await nextTick();
+  save();
+  await flush();
+  expect(state.api.mock.calls.filter((c) => c[1] === 'PATCH').at(-1)?.[2].definition.notifyOnSubmission).toBe(false);
+});
+it('同表单的新提交通知切回提交记录并刷新，保留尚未保存的编辑', async () => {
+  state.api.mockImplementation(async (path: string) =>
+    path === '/old'
+      ? { ...form('old', '反馈'), status: 'collecting', published: 1 }
+      : path.endsWith('/responses')
+        ? { items: [], total: 0 }
+        : [],
+  );
+  const { host, router } = await mount('user', '/toolbox/forms/old?view=responses&notice=first');
+  await flush();
+  const tab = (name: string) =>
+    (
+      Array.from(host.querySelectorAll('[role="tab"]')).find((el) => el.textContent?.trim() === name) as HTMLElement
+    ).click();
+  tab('编辑表单');
+  await flush();
+  expect(router.currentRoute.value.query.view).toBeUndefined();
+  (
+    Array.from(host.querySelectorAll('button')).find((b) => b.textContent?.trim() === '表单设置') as HTMLButtonElement
+  ).click();
+  await flush();
+  const textarea = document.querySelector('.collection-metadata textarea') as HTMLTextAreaElement;
+  textarea.value = '未保存的描述';
+  textarea.dispatchEvent(new Event('input', { bubbles: true }));
+  (
+    Array.from(document.querySelectorAll('.collection-metadata-modal button')).find(
+      (b) => b.textContent?.trim() === '完成',
+    ) as HTMLButtonElement
+  ).click();
+  await flush();
+  let reads = state.api.mock.calls.filter((c) => c[0] === '/old/responses').length;
+  await router.push('/toolbox/forms/old?view=responses&notice=second');
+  await flush();
+  expect(host.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toContain('提交记录');
+  expect(state.api.mock.calls.filter((c) => c[0] === '/old/responses')).toHaveLength(reads + 1);
+  expect(state.api.mock.calls.filter((c) => c[0] === '/old')).toHaveLength(1);
+  reads++;
+  await router.push('/toolbox/forms/old?view=responses&notice=third');
+  await flush();
+  expect(state.api.mock.calls.filter((c) => c[0] === '/old/responses')).toHaveLength(reads + 1);
+  (
+    Array.from(host.querySelectorAll('button')).find((b) => b.textContent?.trim() === '表单设置') as HTMLButtonElement
+  ).click();
+  await flush();
+  expect((document.querySelector('.collection-metadata textarea') as HTMLTextAreaElement).value).toBe('未保存的描述');
+});
+it('新提交通知清除旧筛选并回到第一页，只请求一次新记录', async () => {
+  state.api.mockImplementation(async (path: string) =>
+    path === '/old'
+      ? { ...form('old', '反馈'), status: 'collecting', published: 1 }
+      : path.endsWith('/responses')
+        ? { items: [], total: 60 }
+        : [],
+  );
+  const { host, router } = await mount();
+  await flush();
+  (host.querySelector('[role="combobox"][aria-label="提交筛选"]') as HTMLElement).click();
+  await flush();
+  (
+    Array.from(document.querySelectorAll('[role="option"]')).find(
+      (el) => el.textContent?.trim() === '已处理',
+    ) as HTMLElement
+  ).click();
+  await flush();
+  (host.querySelector('button[aria-label="下一页"]') as HTMLButtonElement).click();
+  await flush();
+  expect(host.querySelector('.collection-page-number')?.textContent?.trim()).toBe('2');
+  const reads = state.api.mock.calls.filter((c) => c[0] === '/old/responses').length;
+  await router.push('/toolbox/forms/old?view=responses&notice=new-response');
+  await flush();
+  const calls = state.api.mock.calls.filter((c) => c[0] === '/old/responses');
+  expect(calls).toHaveLength(reads + 1);
+  expect(calls.at(-1)?.[2]).toMatchObject({ page: 1, state: 'valid', from: '', to: '' });
+  expect(host.querySelector('.collection-page-number')?.textContent?.trim()).toBe('1');
 });
 it('参与与奖励设置只向 root 展示', async () => {
   state.api.mockImplementation((path: string) =>

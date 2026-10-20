@@ -68,6 +68,7 @@ describe('聊天室通知中心可见性与旧客户端兼容', () => {
 
   it('宽屏通知中心可以按成长、AI 例程和系统兜底分组筛选', async () => {
     for (const [type, expectedSql, expectedParams] of [
+      ['system', 'type IN (?,?)', ['user-1', 'system', 'collection_form_submission']],
       ['growth', 'type IN (?,?,?)', ['user-1', 'level_up', 'streak_risk', 'collection_form_reward']],
       ['ai_routine', 'type IN (?,?)', ['user-1', 'daily_brief', 'ai_routine']],
       [

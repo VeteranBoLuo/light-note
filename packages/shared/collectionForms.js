@@ -47,6 +47,11 @@ export function validateDefinition(input) {
     fail("重复提交规则无效");
   if (input.membersOnly !== undefined && typeof input.membersOnly !== "boolean")
     fail("填写范围无效");
+  if (
+    input.notifyOnSubmission !== undefined &&
+    typeof input.notifyOnSubmission !== "boolean"
+  )
+    fail("新提交提醒设置无效");
   let reward = null;
   if (input.reward != null) {
     const r = input.reward;
@@ -121,6 +126,7 @@ export function validateDefinition(input) {
     description: text(input.description ?? "", 5000),
     submissionPolicy: input.submissionPolicy ?? "multiple",
     successMessage: text(input.successMessage ?? "感谢你的填写！", 1000),
+    notifyOnSubmission: input.notifyOnSubmission === true,
     membersOnly: input.membersOnly === true || reward !== null,
     reward,
     questions,

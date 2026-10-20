@@ -4,6 +4,23 @@ import {
   browserNotificationPresentation,
 } from "./notificationPresentation.js";
 describe("shared notification presentation", () => {
+  it("localizes new submission notices without exposing answer content", () => {
+    const formTitle = "活动反馈 $& {title}";
+    const item = {
+      type: "collection_form_submission",
+      title: "fallback",
+      content: "private answer must not appear",
+      meta: JSON.stringify({ formTitle }),
+    };
+    expect(notificationPresentation(item)).toEqual({
+      title: `「${formTitle}」收到新提交`,
+      content: "你的表单收到一份新回答，点击查看提交记录。",
+    });
+    expect(browserNotificationPresentation(item, "en-US")).toEqual({
+      title: `New response to “${formTitle}”`,
+      body: "Your form received a new response. Open it to view submissions.",
+    });
+  });
   it("shares localized growth titles and hides growth body", () => {
     const item = {
       type: "level_up",
@@ -49,12 +66,16 @@ describe("shared notification presentation", () => {
       title: "Reward credited for “轻笺调研”",
       body: "You earned 20 points for submitting “轻笺调研”. The reward is now in your account.",
     });
-    expect(notificationPresentation({ ...item, meta: { points: -1 } })).toEqual({
-      title: "fallback",
-      content: "fallback body",
-    });
+    expect(notificationPresentation({ ...item, meta: { points: -1 } })).toEqual(
+      {
+        title: "fallback",
+        content: "fallback body",
+      },
+    );
     const formTitle = "反馈 $& {title} {points}";
-    expect(notificationPresentation({ ...item, meta: { formTitle, points: 20 } })).toEqual({
+    expect(
+      notificationPresentation({ ...item, meta: { formTitle, points: 20 } }),
+    ).toEqual({
       title: `「${formTitle}」奖励已到账`,
       content: `你提交的「${formTitle}」已获得 20 积分，奖励已到账。`,
     });

@@ -20,7 +20,10 @@ export const notificationMessages = {
     levelUpTitle: "升级到 Lv.{level} · {name}",
     opinionReplyTitle: "你的反馈收到新回复",
     collectionRewardTitle: "「{title}」奖励已到账",
-    collectionRewardContent: "你提交的「{title}」已获得 {points} 积分，奖励已到账。",
+    collectionRewardContent:
+      "你提交的「{title}」已获得 {points} 积分，奖励已到账。",
+    collectionSubmissionTitle: "「{title}」收到新提交",
+    collectionSubmissionContent: "你的表单收到一份新回答，点击查看提交记录。",
     communityReplyTitle: "社区有新的回复或提及",
     communityResultTitle: "社区处理结果",
     communityTitles: {
@@ -52,7 +55,11 @@ export const notificationMessages = {
     levelUpTitle: "Leveled up to Lv.{level} · {name}",
     opinionReplyTitle: "Your feedback got a reply",
     collectionRewardTitle: "Reward credited for “{title}”",
-    collectionRewardContent: 'You earned {points} points for submitting “{title}”. The reward is now in your account.',
+    collectionRewardContent:
+      "You earned {points} points for submitting “{title}”. The reward is now in your account.",
+    collectionSubmissionTitle: "New response to “{title}”",
+    collectionSubmissionContent:
+      "Your form received a new response. Open it to view submissions.",
     communityReplyTitle: "New community reply or mention",
     communityResultTitle: "Community review result",
     communityTitles: {
@@ -78,14 +85,28 @@ export function notificationPresentation(item, locale = "zh-CN") {
   let title = item.title || "轻笺";
   let content = String(item.content || "");
   if (
+    item.type === "collection_form_submission" &&
+    typeof meta?.formTitle === "string"
+  ) {
+    title = messages.collectionSubmissionTitle.replace(
+      "{title}",
+      () => meta.formTitle,
+    );
+    content = messages.collectionSubmissionContent;
+  }
+  if (
     item.type === "collection_form_reward" &&
     typeof meta?.formTitle === "string" &&
     Number.isSafeInteger(meta.points) &&
     meta.points > 0
   ) {
-    title = messages.collectionRewardTitle.replace("{title}", () => meta.formTitle);
-    content = messages.collectionRewardContent.replace(/\{(title|points)\}/g, (_match, key) =>
-      key === "title" ? meta.formTitle : String(meta.points),
+    title = messages.collectionRewardTitle.replace(
+      "{title}",
+      () => meta.formTitle,
+    );
+    content = messages.collectionRewardContent.replace(
+      /\{(title|points)\}/g,
+      (_match, key) => (key === "title" ? meta.formTitle : String(meta.points)),
     );
   }
   if (item.type === "level_up")

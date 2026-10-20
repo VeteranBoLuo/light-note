@@ -220,6 +220,7 @@
   const pageSize = 20;
 
   const WIDE_NOTIFICATION_GROUPS = Object.freeze({
+    system: ['system', 'collection_form_submission'],
     growth: ['level_up', 'streak_risk', 'collection_form_reward'],
     ai_routine: ['daily_brief', 'ai_routine'],
   });
@@ -255,7 +256,7 @@
   // 「其他」tab 兜底:非三大已知类型(如 streak_risk 签到提醒)都归它,与后端 list 口径一致
   function tabUnread(v: string): number {
     if (v === 'all') return unreadTotal.value;
-    if (v === 'growth' || v === 'ai_routine') {
+    if (v === 'growth' || v === 'ai_routine' || v === 'system') {
       return WIDE_NOTIFICATION_GROUPS[v].reduce((sum, type) => sum + (unreadByType.value[type] || 0), 0);
     }
     if (v === 'system_group') {

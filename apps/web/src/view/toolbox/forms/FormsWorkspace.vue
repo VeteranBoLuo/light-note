@@ -436,7 +436,7 @@
     >
       <div v-if="form && definition" class="collection-stack"
         ><ToolboxFeedback v-if="error" state="error">{{ error }}</ToolboxFeedback
-        ><FormMetadata v-if="definition" v-model="definition" v-model:tag-ids="tagIds" :tags="tags" />
+        ><FormMetadata v-if="definition" v-model="definition" v-model:tag-ids="tagIds" :tags="tags" :disabled="busy" />
         <FormParticipation
           v-if="user.role === 'root' && !user.adminContext"
           v-model="definition"
@@ -514,9 +514,12 @@
       <template #footer
         ><div class="collection-dialog-footer"
           ><p class="collection-muted">{{ t('collectionForms.unifiedSave') }}</p
-          ><BButton type="primary" :disabled="busy" @click="metadataOpen = false">{{
-            t('collectionForms.done')
-          }}</BButton></div
+          ><div class="collection-toolbar"
+            ><BButton :disabled="busy" @click="metadataOpen = false">{{ t('collectionForms.done') }}</BButton
+            ><BButton type="primary" :loading="busy" :disabled="busy || !dirty" @click="save">{{
+              t('collectionForms.save')
+            }}</BButton></div
+          ></div
         ></template
       >
     </BModal>
@@ -628,7 +631,7 @@
   import './forms.css';
   import { useI18n } from 'vue-i18n';
   const { t, locale } = useI18n();
-  import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue';
+  import { computed, ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue';
   import { returnFromToolboxPage } from '@/utils/toolboxNavigation';
   import { useRoute, useRouter, onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router';
   import type { FormDefinition, FormQuestion } from '@lightnote/shared/collection-forms';
@@ -933,6 +936,7 @@
       definition.value = JSON.parse(
         JSON.stringify({
           ...data.definition,
+          notifyOnSubmission: data.definition.notifyOnSubmission === true,
           submissionPolicy: data.published ? (data.definition.submissionPolicy ?? 'multiple') : 'replace',
         }),
       );
@@ -1240,13 +1244,39 @@
   watch(formId, () => {
     void loadDetail();
   });
+  watch(
+    [() => route.query.view, () => route.query.notice],
+    async ([view]) => {
+      if (view !== 'responses') return;
+      tab.value = 'responses';
+      if (loading.value || form.value?.id !== formId.value) return;
+      const g = detailGeneration,
+        r = responseGeneration;
+      const filtersChanged = responseState.value !== 'valid' || Boolean(from.value || to.value);
+      responseState.value = 'valid';
+      dateRange.value = 'all';
+      from.value = '';
+      to.value = '';
+      if (!filtersChanged) page.value = 1;
+      await nextTick();
+      if (g === detailGeneration && r === responseGeneration) void loadResponses();
+    },
+    { immediate: true },
+  );
+  watch(tab, (value) => {
+    if (value === 'responses' || route.query.view !== 'responses' || loading.value) return;
+    const query = { ...route.query };
+    delete query.view;
+    delete query.notice;
+    void router.replace({ query });
+  });
   watch([search, status, () => route.query.tagId], () => {
     clearTimeout(debounce);
     debounce = setTimeout(loadList, 250);
   });
   watch([responseState, from, to], () => {
-    page.value = 1;
-    void loadResponses();
+    if (page.value !== 1) page.value = 1;
+    else void loadResponses();
   });
   watch(page, loadResponses);
   onMounted(() => {
