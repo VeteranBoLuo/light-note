@@ -1,4 +1,5 @@
 import { profileBackgroundsEn, profileBackgroundItemsEn } from './profileBackgrounds';
+import { profileAppearanceEn } from './profileAppearance';
 import { MAKEUP_WINDOW_DAYS } from '@lightnote/shared';
 import { noteMathEn } from './noteMath';
 import { extractionEn } from './extraction';
@@ -21,6 +22,7 @@ import { settingsRefineEn } from './settingsRefine';
 import { notificationMessages } from '@lightnote/shared/notification-presentation';
 export default {
   profileBackgrounds: profileBackgroundsEn,
+  profileAppearance: profileAppearanceEn,
   noteMath: noteMathEn,
   nativePush: {
     title: 'App notification connection',
@@ -117,6 +119,8 @@ export default {
     nextReminder: 'Next reminder',
     reminderLabel: 'Reminder',
     reminderState: { paused: 'Paused', past: 'Time passed', unscheduled: 'No upcoming reminder' },
+    agendaGroups: { overdue: 'Overdue', today: 'Today', upcoming: 'Upcoming', completed: 'Completed history' },
+    completedTime: 'Completed {time}',
     moreTags: 'View {count} more tags',
     quick: 'Quick access',
     subtitle: 'Focus on what matters and make time for every important task.',
@@ -4634,7 +4638,7 @@ export default {
         content: 'Content',
         contentPlaceholder: 'Notification content (optional)',
         link: 'Destination',
-        linkPlaceholder: 'In-app path such as /growth (optional)',
+        linkPlaceholder: 'In-app path or full HTTP(S) URL (optional)',
         send: 'Send',
         sending: 'Sending…',
         allHint: 'Will be sent to every registered user',
@@ -4846,7 +4850,9 @@ export default {
     quickCapturePanels: {
       bookmark: {
         title: 'Save a webpage',
-        hint: 'Paste a URL and Light Note will place it in To organize.',
+        hint: 'Only the page title is fetched automatically as the name, which may not be the best fit. If unavailable, the shared title or domain is used.',
+        analysisHint:
+          'For a more suitable name, description, and tags, use AI analysis in the full New bookmark form, analyze a bookmark after quick adding it, or reanalyze bookmarks in bulk in the Organize center.',
       },
       note: {
         title: 'Capture some text',
@@ -5369,7 +5375,6 @@ export default {
     todoMatrixSeriesOpen: 'View series details for “{title}”, {count} items',
     todoMatrixSeriesSummary: 'Today {today} · Missed {missed} · Later {future}',
     todoAgendaMissedSeries: '{count} missed in this series',
-    todoAgendaLoadMore: 'Show the next 14 days',
     todoRecurringInstance: 'Recurring occurrence',
     todoMatrixQuadrants: {
       importantUrgent: 'Important and urgent',
@@ -5467,11 +5472,22 @@ export default {
     continueCapture: 'Add another',
     shareCaptureEyebrow: 'Shared to Light Note',
     shareCaptureHint: 'Review it, then tap “Add to inbox”. Tags and locations can wait.',
+    shareLimits: 'Share up to {count} files, totaling no more than {size}MB.',
+    shareShowSkipped: 'View files not added',
+    shareHideSkipped: 'Hide files not added',
+    shareMoreSkipped: '{count} more files are not listed.',
+    shareSkippedSummary: {
+      count_limit: '{count} file(s) exceeded the file count limit and were not added.',
+      size_limit: '{count} file(s) exceeded the total size limit and were not added.',
+      unreadable: '{count} file(s) could not be read and were not added.',
+    },
+    shareSkipReason: { count_limit: 'File count limit exceeded', size_limit: 'Total size limit exceeded', unreadable: 'Could not read', unknown: 'The older app did not provide a reason' },
+    shareReadFailed: 'Could not read this file. Retry, or share it again from the original app if the temporary copy has expired.',
+    captureFilesProgress: 'Processed {processed} / {total} files',
     shareSkippedFiles: '{count} file(s) could not be read or exceeded the limit and were skipped.',
     shareTextTruncated: 'The shared text was too long; only the first 60,000 characters were kept.',
     shareTextKept: 'The accompanying text is kept in the input. Switch to Note or Bookmark to save it separately.',
     shareFinish: 'Done',
-    shareLoading: 'Reading shared content…',
     shareLoginRequired: 'Sign in to save the shared content to Light Note.',
     shareAdminContext: 'You are in admin context. Exit it before saving shared content.',
     openCaptured: 'Open resource',
@@ -7386,6 +7402,7 @@ export default {
       imagePasteEmpty: 'Copy or cut an image from the image toolbar first',
       imageDelete: 'Delete image',
       imageParagraphAfter: 'Start a new line after image',
+      imageToMediaText: 'Convert to image and text',
       imageSizes: {
         original: 'Original',
         small: 'Small',
@@ -7424,6 +7441,8 @@ export default {
     },
   },
   cloudSpace: {
+    batchPreview: 'Preview',
+    previewFile: 'Preview {name}',
     pinFailed: 'Could not update pin. Try again later.',
     shareNoActiveLinks: 'No active share links',
     shareBrandHint: 'File sharing by LightNote',
@@ -10226,6 +10245,7 @@ export default {
     markAllRead: 'Mark all read',
     empty: 'No notifications',
     noContent: '(no further content)',
+    invalidLink: 'This notification has an invalid link',
     loading: 'Loading…',
     loadMore: 'Load more',
     viewAll: 'View all notifications',
@@ -12169,20 +12189,9 @@ export default {
   },
   myInfo: {
     title: 'Edit Profile',
-    avatarDecorations: 'Avatar decorations',
-    chooseAvatarFrame: 'Choose an avatar frame',
-    equippedFrame: 'Equipped “{name}”',
-    noFrameEquipped: 'No avatar frame equipped',
-    ownedFrames: 'Owned',
-    noOwnedFrames: 'You do not own an avatar frame yet',
     earnPoints: 'Earn points',
     goToGrowth: 'Go to Growth',
     loginToDecorate: 'Log in to use',
-    redeemAndEquip: 'Redeem & equip',
-    redeemFrameTitle: 'Redeem avatar frame',
-    redeemFrameConfirm: 'Use {points} points to redeem “{name}” and equip it now?',
-    redeemAndEquipSuccess: 'Redeemed and equipped “{name}”',
-    redeemedEquipFailed: 'The frame was redeemed, but equip failed. Tap Equip to try again.',
     uploadAvatar: 'Upload Avatar',
     chooseAvatar: 'Choose Avatar',
     chooseAvatarSubtitle: 'Pick a Light Note illustration or upload your own image',
@@ -12529,7 +12538,10 @@ export default {
     passwordPlaceholder: 'Enter your password',
     passwordRulePlaceholder: 'Create a 6–16 character password',
     nickname: 'Nickname',
-    nicknameOptional: 'Optional',
+    nicknamePlaceholder: 'Enter a nickname (1–20 characters)',
+    nicknameRequired: 'Please enter a nickname',
+    nicknameMax20: 'Nickname must be at most 20 characters',
+    nicknameInvalidReason: 'Nickname is empty or too long',
     passwordRequired: 'Please enter your password',
     forgotPassword: 'Forgot password?',
     rememberMe: 'Remember me',
@@ -14126,13 +14138,13 @@ export default {
     updatedLabel: 'Updated',
     downloadApk: 'Download APK',
     preparing: 'Preparing',
-    usePwaInstead: 'Install the web app instead',
+    installPwa: 'Install web app (PWA)',
     alreadyInApp: 'You are already using the LightNote app',
     iosNote:
       'iPhone and iPad cannot install Android packages. Open LightNote in Safari and use "Add to Home Screen" for an app-like experience.',
     addToHomeScreen: 'Add to Home Screen',
     desktopNote:
-      'You are on a desktop or tablet browser. The APK installs on an Android phone — send the address below to your phone browser.',
+      "Download the APK here and transfer it to an Android device, or send the page link below to your phone's browser.",
     copy: 'Copy',
     copyApkLink: 'Copy APK link',
     copiedPageUrl: 'Page address copied',

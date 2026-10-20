@@ -31,6 +31,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicLong;
@@ -54,8 +55,8 @@ import org.json.JSONObject;
  */
 final class IncomingShareStore {
     static final String ROUTE_PREFIX = "/__native-share/";
-    static final int MAX_FILES = 20;
-    static final long MAX_TOTAL_BYTES = 200L * 1024L * 1024L;
+    static final int MAX_FILES = 100;
+    static final long MAX_TOTAL_BYTES = 500L * 1024L * 1024L;
     static final int MAX_TEXT_CHARS = 60_000;
     private static final int MAX_SUBJECT_CHARS = 500;
     private static final int MAX_NAME_CHARS = 120;
@@ -70,14 +71,57 @@ final class IncomingShareStore {
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
     private static final AtomicLong GENERATION = new AtomicLong();
     private static final SecureRandom RANDOM = new SecureRandom();
-    private static volatile long preparingGeneration = 0L;
+    private static final Object PROGRESS_LOCK = new Object();
+    private static final CopyOnWriteArraySet<ProgressListener> LISTENERS = new CopyOnWriteArraySet<>();
+    private static volatile Progress progress;
 
     enum AcceptResult { NOT_SHARE, EMPTY, ACCEPTED }
 
     enum PrepareResult { READY, UNREADABLE, SUPERSEDED }
 
-    interface PrepareListener {
-        void onPrepared(PrepareResult result);
+    /** processed 包括成功与跳过的文件；result 为 null 时仍在接收。 */
+    static final class Progress {
+        final long generation;
+        final int processed;
+        final int total;
+        final PrepareResult result;
+
+        Progress(long generation, int processed, int total, PrepareResult result) {
+            this.generation = generation;
+            this.processed = processed;
+            this.total = total;
+            this.result = result;
+        }
+    }
+
+    interface ProgressListener {
+        void onProgress(Progress progress);
+    }
+
+    // Activity 只订阅当前进度，销毁时解绑；后台任务不持有 Activity。
+    static void addProgressListener(ProgressListener listener) {
+        LISTENERS.add(listener);
+        Progress current = progress;
+        if (current != null && current.result == null) listener.onProgress(current);
+    }
+
+    static void removeProgressListener(ProgressListener listener) {
+        LISTENERS.remove(listener);
+    }
+
+    private static void publishProgress(long generation, int processed, int total, PrepareResult result) {
+        Progress next = new Progress(generation, processed, total, result);
+        synchronized (PROGRESS_LOCK) {
+            if (generation != GENERATION.get()) return;
+            progress = next;
+        }
+        Runnable notify = () -> {
+            // 后台可能已开始下一次分享或处理下一文件，过时进度不能覆盖新状态。
+            if (progress != next) return;
+            for (ProgressListener listener : LISTENERS) listener.onProgress(next);
+        };
+        if (Looper.myLooper() == Looper.getMainLooper()) notify.run();
+        else MAIN.post(notify);
     }
 
     private IncomingShareStore() {}
@@ -126,13 +170,16 @@ final class IncomingShareStore {
      * 接收一次分享：解析后在后台线程复制到私有缓存，完成后在主线程回调。
      * 返回值只说明是否开始处理；真正能否读到内容看回调结果。
      */
-    static AcceptResult accept(Context context, Intent intent, PrepareListener listener) {
+    static AcceptResult accept(Context context, Intent intent) {
         if (!isShareIntent(intent) || isReplayedFromHistory(intent)) return AcceptResult.NOT_SHARE;
         Incoming incoming = read(intent);
         if (incoming == null || incoming.isEmpty()) return AcceptResult.EMPTY;
         Context appContext = context.getApplicationContext();
-        long generation = GENERATION.incrementAndGet();
-        preparingGeneration = generation;
+        long generation;
+        synchronized (PROGRESS_LOCK) {
+            generation = GENERATION.incrementAndGet();
+        }
+        publishProgress(generation, 0, incoming.uris.size(), null);
         EXECUTOR.execute(() -> {
             PrepareResult result;
             try {
@@ -140,9 +187,7 @@ final class IncomingShareStore {
             } catch (RuntimeException error) {
                 result = PrepareResult.UNREADABLE;
             }
-            if (preparingGeneration == generation) preparingGeneration = 0L;
-            PrepareResult finalResult = result;
-            MAIN.post(() -> listener.onPrepared(finalResult));
+            publishProgress(generation, incoming.uris.size(), incoming.uris.size(), result);
         });
         return AcceptResult.ACCEPTED;
     }
@@ -150,7 +195,7 @@ final class IncomingShareStore {
     /** 网页查询当前待处理的分享；复制尚未完成时返回 preparing，完成后原生会再派发事件。 */
     static JSONObject peek(Context context) throws JSONException {
         JSONObject result = new JSONObject();
-        if (preparingGeneration != 0L) return result.put("status", "preparing");
+        if (progress != null && progress.result == null) return result.put("status", "preparing");
         synchronized (LOCK) {
             File dir = currentShareDir(context);
             JSONObject manifest = dir == null ? null : readManifest(dir);
@@ -225,51 +270,71 @@ final class IncomingShareStore {
         ContentResolver resolver = context.getContentResolver();
         JSONArray files = new JSONArray();
         int skipped = 0;
+        JSONObject skippedCounts = new JSONObject();
+        JSONArray skippedDetails = new JSONArray();
         long totalBytes = 0L;
+        int processed = 0;
         try {
             for (Uri uri : incoming.uris) {
-                if (generation != GENERATION.get()) {
-                    deleteDir(dir);
-                    return PrepareResult.SUPERSEDED;
+                try {
+                    if (generation != GENERATION.get()) {
+                        deleteDir(dir);
+                        return PrepareResult.SUPERSEDED;
+                    }
+                    if (files.length() >= MAX_FILES && skippedDetails.length() >= MAX_FILES) {
+                        skipped += 1;
+                        recordSkipped(skippedCounts, skippedDetails, "", "count_limit");
+                        continue;
+                    }
+                    boolean readable = isReadableForeignContent(context, uri);
+                    FileMeta meta = readable ? describe(resolver, uri, incoming.mimeType, files.length())
+                        : new FileMeta(safeFileName("", "application/octet-stream", files.length() + skipped), "application/octet-stream", -1L);
+                    if (files.length() >= MAX_FILES || !readable) {
+                        skipped += 1;
+                        recordSkipped(skippedCounts, skippedDetails, meta.name, files.length() >= MAX_FILES ? "count_limit" : "unreadable");
+                        continue;
+                    }
+                    if (meta.size > 0L && totalBytes + meta.size > MAX_TOTAL_BYTES) {
+                        skipped += 1;
+                        recordSkipped(skippedCounts, skippedDetails, meta.name, "size_limit");
+                        continue;
+                    }
+                    int index = files.length();
+                    File target = new File(dir, String.valueOf(index));
+                    long copied = copy(resolver, uri, target, MAX_TOTAL_BYTES - totalBytes);
+                    if (copied < 0L) {
+                        // noinspection ResultOfMethodCallIgnored
+                        target.delete();
+                        skipped += 1;
+                        recordSkipped(skippedCounts, skippedDetails, meta.name, copied == -2L ? "size_limit" : "unreadable");
+                        continue;
+                    }
+                    totalBytes += copied;
+                    files.put(new JSONObject()
+                        .put("index", index)
+                        .put("name", meta.name)
+                        .put("mimeType", meta.mimeType)
+                        .put("size", copied));
+                } finally {
+                    publishProgress(generation, ++processed, incoming.uris.size(), null);
                 }
-                if (files.length() >= MAX_FILES || !isReadableForeignContent(context, uri)) {
-                    skipped += 1;
-                    continue;
-                }
-                FileMeta meta = describe(resolver, uri, incoming.mimeType, files.length());
-                if (meta.size > 0L && totalBytes + meta.size > MAX_TOTAL_BYTES) {
-                    skipped += 1;
-                    continue;
-                }
-                int index = files.length();
-                File target = new File(dir, String.valueOf(index));
-                long copied = copy(resolver, uri, target, MAX_TOTAL_BYTES - totalBytes);
-                if (copied < 0L) {
-                    // noinspection ResultOfMethodCallIgnored
-                    target.delete();
-                    skipped += 1;
-                    continue;
-                }
-                totalBytes += copied;
-                files.put(new JSONObject()
-                    .put("index", index)
-                    .put("name", meta.name)
-                    .put("mimeType", meta.mimeType)
-                    .put("size", copied));
             }
             String text = clip(incoming.text, MAX_TEXT_CHARS);
             String subject = clip(incoming.subject, MAX_SUBJECT_CHARS);
-            if (text.trim().isEmpty() && subject.trim().isEmpty() && files.length() == 0) {
+            if (text.trim().isEmpty() && subject.trim().isEmpty() && files.length() == 0 && skipped == 0) {
                 deleteDir(dir);
                 return PrepareResult.UNREADABLE;
             }
             JSONObject manifest = new JSONObject()
                 .put("id", shareId)
+                .put("limits", new JSONObject().put("files", MAX_FILES).put("bytes", MAX_TOTAL_BYTES))
                 .put("text", text)
                 .put("subject", subject)
                 .put("textTruncated", incoming.text.length() > MAX_TEXT_CHARS)
                 .put("files", files)
                 .put("skippedFiles", skipped)
+                .put("skippedFileCounts", skippedCounts)
+                .put("skippedFileDetails", skippedDetails)
                 .put("createdAt", System.currentTimeMillis());
             synchronized (LOCK) {
                 if (generation != GENERATION.get()) {
@@ -283,6 +348,12 @@ final class IncomingShareStore {
             deleteDir(dir);
             return PrepareResult.UNREADABLE;
         }
+    }
+
+    private static void recordSkipped(JSONObject counts, JSONArray details, String name, String reason) throws JSONException {
+        counts.put(reason, counts.optInt(reason, 0) + 1);
+        // 清单有读取预算；完整数量始终保留，文件名明细最多 100 项。
+        if (details.length() < MAX_FILES) details.put(new JSONObject().put("name", name).put("reason", reason));
     }
 
     private static Incoming read(Intent intent) {
@@ -394,7 +465,7 @@ final class IncomingShareStore {
         return name.substring(0, MAX_NAME_CHARS - extension.length()) + extension;
     }
 
-    /** 复制并强制剩余额度；超出额度或读取失败返回 -1，调用方丢弃半截文件。 */
+    /** 复制并强制剩余额度；超出额度返回 -2，读取失败返回 -1，调用方丢弃半截文件。 */
     private static long copy(ContentResolver resolver, Uri uri, File target, long remainingBytes) {
         try (InputStream input = resolver.openInputStream(uri);
              OutputStream output = new FileOutputStream(target)) {
@@ -404,7 +475,7 @@ final class IncomingShareStore {
             int read;
             while ((read = input.read(buffer)) != -1) {
                 copied += read;
-                if (copied > remainingBytes) return -1L;
+                if (copied > remainingBytes) return -2L;
                 output.write(buffer, 0, read);
             }
             return copied;

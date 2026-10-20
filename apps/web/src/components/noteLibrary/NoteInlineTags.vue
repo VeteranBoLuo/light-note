@@ -37,8 +37,9 @@
               v-for="(tag, index) in tags"
               :key="`${tag.id}-${index}`"
               :tag="tag"
-              :interactive="tag.id !== undefined && tag.id !== null && tag.id !== ''"
-              @click="openTag(tag)"
+              :show-detail-corner="hasTagId(tag)"
+              @click="filterTag(tag)"
+              @detail="openTag(tag)"
             />
           </div>
         </div>
@@ -80,8 +81,21 @@
     }
     return 0;
   });
+  function hasTagId(tag: NoteTag) {
+    return tag.id !== undefined && tag.id !== null && tag.id !== '';
+  }
+  function filterTag(tag: NoteTag) {
+    if (!hasTagId(tag)) return;
+    const route = router.currentRoute.value;
+    const query = route.path === '/noteLibrary' ? { ...route.query } : {};
+    delete query.preview;
+    delete query._rt;
+    query.tag = String(tag.id);
+    open.value = false;
+    void router.push({ path: '/noteLibrary', query });
+  }
   function openTag(tag: NoteTag) {
-    if (tag.id === undefined || tag.id === null || tag.id === '') return;
+    if (!hasTagId(tag)) return;
     const target = resolveResourceRoute({ type: 'tag', id: String(tag.id) });
     if (!target) return;
     open.value = false;
@@ -184,6 +198,8 @@
     max-height: var(--ui-layout-240, 240px);
     overflow: auto;
     margin-top: var(--ui-space-10, 10px);
+    // 为共享标签的详情角标预留外溢空间，避免滚动容器裁切。
+    padding: var(--ui-space-7, 7px) var(--ui-space-7, 7px) 0 0;
     :deep(.resource-tag-chip) {
       max-width: 100%;
     }

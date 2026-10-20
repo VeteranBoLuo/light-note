@@ -2,8 +2,10 @@ import pool from '../../../db/index.js';
 import { SECURITY_CONFIG } from '../rules.js';
 import https from 'https';
 import { isSecurityWhitelisted } from './whitelist.js';
+import { isAutomaticProbeBan } from './autoResponsePolicy.js';
 
 const cache = new Map();
+export const clearIpReputationCache = (ip) => cache.delete(ip);
 const CACHE_TTL = 60 * 1000;
 const isPrivateOrLocalIp = (ip = '') =>
   /^(127\.|10\.|192\.168\.|::1$|::ffff:127\.|172\.(1[6-9]|2\d|3[0-1])\.)/.test(String(ip));
@@ -43,7 +45,7 @@ export const getIpReputation = async (ip) => {
     const [rows] = await pool.query('SELECT * FROM security_ip_reputation WHERE ip = ? LIMIT 1', [ip]);
     const value = rows[0] || defaultReputation(ip);
     value.attack_type_breakdown = parseAttackTypeBreakdown(value.attack_type_breakdown);
-    cache.set(ip, { value, expiresAt: Date.now() + CACHE_TTL });
+    cache.set(ip, { value, expiresAt: Date.now() + (isAutomaticProbeBan(value) ? 5_000 : CACHE_TTL) });
     return value;
   } catch (e) {
     return defaultReputation(ip);
@@ -115,9 +117,13 @@ export const updateIpReputation = async ({
       high_risk_count = high_risk_count + VALUES(high_risk_count),
       critical_count = critical_count + VALUES(critical_count),
       risk_score = LEAST(100, COALESCE(risk_score, 0) + VALUES(risk_score)),
-      is_banned = VALUES(is_banned),
-      banned_until = VALUES(banned_until),
-      ban_reason = VALUES(ban_reason),
+      ${
+        explicitBanned || autoBanned
+          ? `ban_reason = IF(is_banned=1 AND banned_until>NOW(),ban_reason,VALUES(ban_reason)),
+      banned_until = IF(is_banned=1 AND banned_until>NOW(),banned_until,VALUES(banned_until)),
+      is_banned = IF(is_banned=1 AND banned_until>NOW(),1,VALUES(is_banned)),`
+          : ''
+      }
       attack_type_breakdown = VALUES(attack_type_breakdown),
       last_seen_at = NOW(),
       last_attack_time = NOW()`,

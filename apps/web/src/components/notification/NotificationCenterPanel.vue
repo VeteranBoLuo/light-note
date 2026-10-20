@@ -68,7 +68,11 @@
               v-for="item in group.items"
               :key="item.id"
               class="nt-item"
-              :class="{ unread: !item.isRead, 'is-target': item.id === targetId }"
+              :class="{
+                unread: !item.isRead,
+                'is-target': item.id === targetId,
+                'nt-item--form-reward': item.type === 'collection_form_reward',
+              }"
               :data-notification-id="item.id"
               @click="emit('item-click', item)"
               v-click-log="{ module: '通知中心', operation: `查看通知【${renderTitle(item)}】` }"
@@ -183,6 +187,7 @@
   function notificationIcon(item: NotificationItem) {
     if (item.type === 'todo_reminder') return icon.growth.action;
     if (item.type === 'level_up') return icon.growth.level;
+    if (item.type === 'collection_form_reward') return icon.growth.coin;
     if (item.type === 'streak_risk') return icon.growth.checkin;
     if (item.type === 'daily_brief' || item.type === 'ai_routine') return icon.ai.summary;
     if (item.type === 'opinion_reply' || item.type === 'feature_request') return icon.userCenter.menu.feedback;
@@ -398,6 +403,15 @@
 
   .nt-item.unread .nt-item-title {
     font-weight: 750;
+  }
+
+  .nt-item--form-reward .nt-item-title {
+    display: -webkit-box;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
   }
 
   .nt-item-content {

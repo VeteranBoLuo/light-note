@@ -52,6 +52,33 @@ export function createRichMediaTextBlockHtml(
   )}</section><p><br></p>`;
 }
 
+/** 复用原图与已有图注；由编辑器插入块级结构，正确拆分图片所在的文字段落。 */
+export function createRichMediaTextFromImage(image: HTMLImageElement) {
+  if (!image.getAttribute('src')?.trim() || image.closest('.ln-media-text, .mermaid-figure--companion')) return null;
+  const figure = image.closest<HTMLElement>('figure.image');
+  const link = image.closest<HTMLAnchorElement>('a');
+  const imageOnlyLink = link && !link.textContent?.trim() && link.querySelectorAll('img').length === 1 ? link : null;
+  const holder = image.ownerDocument.createElement('div');
+  holder.innerHTML = createRichMediaTextBlockHtml(image.getAttribute('src') || '', image.getAttribute('alt') || '');
+  const block = holder.firstElementChild as HTMLElement;
+  const media = block.querySelector<HTMLElement>('.ln-media-text__media')!;
+  const clone = image.cloneNode(true) as HTMLImageElement;
+  clone.classList.remove('mce-object-selected');
+  if (!clone.className) clone.removeAttribute('class');
+  if (link) {
+    const clonedLink = link.cloneNode(false) as HTMLAnchorElement;
+    clonedLink.appendChild(clone);
+    media.replaceChildren(clonedLink);
+  } else {
+    media.replaceChildren(clone);
+  }
+  const existingCaption = figure?.querySelector('figcaption');
+  if (existingCaption) block.querySelector('.ln-media-text__content')!.innerHTML = existingCaption.innerHTML;
+  // 与保存、重新载入共用普通图片尺寸和编辑器临时属性的清理规则。
+  holder.innerHTML = normalizeRichMediaTextHtml(block.outerHTML);
+  return { block: holder.firstElementChild as HTMLElement, target: figure || imageOnlyLink || image };
+}
+
 /** Markdown 正文用原生 HTML 块表达图文组合，预览与富文本复用同一套 class 和响应式样式。 */
 export function createMarkdownRichMediaTextBlockHtml(
   imageUrl: string,

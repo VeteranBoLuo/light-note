@@ -1,7 +1,17 @@
 import crypto from 'node:crypto';
 import { requireIdentityConfig, respondentHash } from './identity.js';
-import { FormError, validateDefinition, validateAnswers } from '@lightnote/shared/collection-forms';
+import {
+  FormError,
+  validateDefinition,
+  validateAnswers,
+  choiceAnswerParts,
+  OTHER_OPTION_ID,
+} from '@lightnote/shared/collection-forms';
 import { insertData } from '../agent/data.js';
+import { grantPointsIdempotently } from '../pointsGrantOperations.js';
+import { createNotification } from '../notification.js';
+import { notificationPresentation } from '@lightnote/shared/notification-presentation';
+const rewardRequest = (formId) => `collection-form:${formId}`;
 const sqlDate = (d) => new Date(d).toISOString().slice(0, 23).replace('T', ' ');
 const canonical = (value) =>
   JSON.stringify(value, (_key, v) =>
@@ -76,6 +86,71 @@ export function createFormsService(pool) {
       [userId, lock ? ['login_lock', 'full_lock', 'write_lock'] : ['login_lock', 'full_lock']],
     );
     if (restrictions.length) throw new FormError('收集页面不可用', 404);
+    return user;
+  }
+  async function specialPermission(db, userId, definition) {
+    if (!definition.membersOnly && !definition.reward) return;
+    const [owner] = await rows(db, 'SELECT role FROM user WHERE id=?', [userId]);
+    if (owner?.role !== 'root') throw new FormError('仅 root 可以配置用户填写与积分奖励', 403);
+  }
+  async function respondent(db, account, lock = false) {
+    if (!account?.id) return null;
+    const [user] = await rows(db, 'SELECT id,alias,role,del_flag FROM user WHERE id=?' + (lock ? ' FOR UPDATE' : ''), [
+      account.id,
+    ]);
+    if (!user || !['user', 'test', 'root'].includes(user.role) || Number(user.del_flag) !== 0)
+      throw new FormError('请使用有效的轻笺正式账号填写', 403);
+    const restrictions = await rows(
+      db,
+      `SELECT restriction_type FROM security_account_restrictions WHERE user_id=? AND status='active'
+       AND (expires_at IS NULL OR expires_at>NOW()) AND restriction_type IN (?) LIMIT 1`,
+      [user.id, lock ? ['login_lock', 'full_lock', 'write_lock'] : ['login_lock', 'full_lock']],
+    );
+    if (restrictions.length) throw new FormError('账号当前受到安全限制，暂时无法参与收集', 423);
+    return { id: user.id, alias: user.alias || '' };
+  }
+  async function rewardSummary(db, formId) {
+    const [summary] = await rows(
+      db,
+      `SELECT COUNT(*) recipients,COALESCE(SUM(points),0) totalPoints FROM points_grant_operations
+       WHERE request_id=? AND status='succeeded' AND operation_type='collection_form_reward'`,
+      [rewardRequest(formId)],
+    );
+    return { recipients: Number(summary.recipients), totalPoints: Number(summary.totalPoints) };
+  }
+  async function receivedReward(db, formId, userId) {
+    if (!userId) return null;
+    const [grant] = await rows(
+      db,
+      `SELECT points FROM points_grant_operations WHERE user_id=? AND request_id=?
+       AND operation_type='collection_form_reward' AND status='succeeded'`,
+      [userId, rewardRequest(formId)],
+    );
+    return grant ? { points: Number(grant.points), received: true } : null;
+  }
+  async function enrichRespondents(db, form, items) {
+    const ids = [...new Set(items.map((s) => s.respondent_user_id).filter(Boolean))];
+    if (!form.definition.membersOnly || !ids.length) return items;
+    const accounts = new Map(
+      (await rows(db, 'SELECT id,alias FROM user WHERE id IN (?)', [ids])).map((u) => [u.id, u.alias || '']),
+    );
+    const rewards = new Map(
+      form.definition.reward
+        ? (
+            await rows(
+              db,
+              `SELECT user_id,points FROM points_grant_operations WHERE request_id=? AND user_id IN (?)
+       AND operation_type='collection_form_reward' AND status='succeeded'`,
+              [rewardRequest(form.id), ids],
+            )
+          ).map((r) => [r.user_id, Number(r.points)])
+        : [],
+    );
+    return items.map((s) => ({
+      ...s,
+      respondent_alias: accounts.get(s.respondent_user_id) || '',
+      reward_points: rewards.get(s.respondent_user_id) || 0,
+    }));
   }
   async function owned(db, userId, id, lock = false) {
     if (lock) await activeOwner(db, userId, true);
@@ -85,7 +160,9 @@ export function createFormsService(pool) {
       [id, userId],
     );
     if (!form) throw new FormError('表单不存在', 404);
-    return view(form);
+    const result = view(form);
+    if (lock) await specialPermission(db, userId, result.definition);
+    return result;
   }
   async function setTags(db, userId, formId, tagIds = []) {
     if (!Array.isArray(tagIds) || tagIds.length > 30 || tagIds.some((t) => typeof t !== 'string' || t.length > 255))
@@ -137,6 +214,7 @@ export function createFormsService(pool) {
         [id],
       )
     ).map((x) => x.tag_id);
+    if (form.definition.reward) form.rewardSummary = await rewardSummary(pool, id);
     return form;
   }
   async function create(userId, input) {
@@ -145,6 +223,7 @@ export function createFormsService(pool) {
     definition.submissionPolicy = 'replace';
     return transaction(async (db) => {
       await activeOwner(db, userId, true);
+      await specialPermission(db, userId, definition);
       const [{ total }] = await rows(db, 'SELECT COUNT(*) total FROM collection_forms WHERE user_id=?', [userId]);
       if (total >= 500) throw new FormError('最多保留 500 个表单');
       const data = insertData({
@@ -165,6 +244,7 @@ export function createFormsService(pool) {
       const form = await owned(db, userId, id, true);
       if (input.version !== form.version) throw new FormError('表单已更新，请重新加载后操作', 409);
       const definition = validateDefinition(input.definition);
+      await specialPermission(db, userId, definition);
       if (!form.published) definition.submissionPolicy = 'replace';
       if (form.published && canonical(definition.questions) !== canonical(form.definition.questions))
         throw new FormError('发布后题目已锁定，请复制为新表单', 409);
@@ -173,6 +253,12 @@ export function createFormsService(pool) {
         (definition.submissionPolicy ?? 'multiple') !== (form.definition.submissionPolicy ?? 'multiple')
       )
         throw new FormError('发布后重复提交规则已锁定，请复制为新表单', 409);
+      if (
+        form.published &&
+        (Boolean(definition.membersOnly) !== Boolean(form.definition.membersOnly) ||
+          canonical(definition.reward ?? null) !== canonical(form.definition.reward ?? null))
+      )
+        throw new FormError('发布后填写范围与奖励规则已锁定，请复制为新表单', 409);
       await db.query(
         'UPDATE collection_forms SET definition=?, title=?, version=version+1, updated_at=UTC_TIMESTAMP(3) WHERE id=?',
         [JSON.stringify(definition), definition.title, id],
@@ -185,7 +271,7 @@ export function createFormsService(pool) {
     if (input.action === 'copy') {
       const form = await get(userId, id);
       return create(userId, {
-        definition: { ...form.definition, title: form.title.slice(0, 190) + '（副本）' },
+        definition: { ...form.definition, reward: null, title: form.title.slice(0, 190) + '（副本）' },
         tagIds: form.tagIds,
       });
     }
@@ -206,8 +292,10 @@ export function createFormsService(pool) {
       }
       if (next === 'collecting') {
         enabled();
-        if (form.definition.submissionPolicy === 'replace') requireIdentityConfig();
+        if (form.definition.submissionPolicy === 'replace' && !form.definition.membersOnly) requireIdentityConfig();
         if (!form.definition.questions.length) throw new FormError('请至少添加一道题');
+        if (form.definition.reward && (await rewardSummary(db, id)).recipients >= form.definition.reward.maxRecipients)
+          throw new FormError('奖励名额已用尽，请复制为新表单开展下一次收集', 409);
       }
       await db.query(
         'UPDATE collection_forms SET status=?,published=1,version=version+1,updated_at=UTC_TIMESTAMP(3) WHERE id=?',
@@ -216,43 +304,62 @@ export function createFormsService(pool) {
       return { status: next };
     });
   }
-  async function publicForm(publicId, identity = null) {
+  async function publicForm(publicId, identity = null, resolveAccount = async () => null) {
     const [form] = await rows(pool, 'SELECT * FROM collection_forms WHERE public_id=? AND published=1', [publicId]);
     if (!form) throw new FormError('收集页面不存在', 404);
-    await activeOwner(pool, form.user_id);
+    const owner = await activeOwner(pool, form.user_id);
     const definition = json(form.definition);
+    if (definition.membersOnly && owner.role !== 'root') throw new FormError('收集页面不可用', 404);
+    const account = definition.membersOnly ? await respondent(pool, await resolveAccount()) : null;
+    const respondentIdentity = definition.membersOnly ? (account ? `account:${account.id}` : null) : identity;
     let mySubmission = null;
     if (definition.submissionPolicy === 'replace') {
-      requireIdentityConfig();
-      if (identity) {
+      if (!definition.membersOnly) requireIdentityConfig();
+      if (respondentIdentity) {
         const [prior] = await rows(
           pool,
           'SELECT id,answers FROM collection_submissions WHERE form_id=? AND respondent_hash=?',
-          [form.id, respondentHash(form.id, identity)],
+          [form.id, respondentHash(form.id, respondentIdentity)],
         );
         if (prior) mySubmission = { receipt: prior.id, answers: json(prior.answers) };
       }
     }
+    const summary = definition.reward ? await rewardSummary(pool, form.id) : null;
+    const reward = definition.reward
+      ? {
+          points: definition.reward.points,
+          received: Boolean(await receivedReward(pool, form.id, account?.id)),
+          remaining: Math.max(0, definition.reward.maxRecipients - summary.recipients),
+        }
+      : null;
     return {
       submissionPolicy: definition.submissionPolicy ?? 'multiple',
       mySubmission,
       status: process.env.COLLECTION_FORMS_ENABLED === 'false' && form.status === 'collecting' ? 'paused' : form.status,
       definition,
+      ...(definition.membersOnly ? { account, requiresLogin: !account, reward } : {}),
     };
   }
-  async function submit(publicId, input, identity = null) {
+  async function submit(publicId, input, identity = null, resolveAccount = async () => null) {
     if (!input || typeof input.requestKey !== 'string' || !/^[a-zA-Z0-9_-]{16,64}$/.test(input.requestKey))
       throw new FormError('提交凭证无效');
-    const [candidate] = await rows(pool, 'SELECT id,user_id FROM collection_forms WHERE public_id=?', [publicId]);
+    const [candidate] = await rows(pool, 'SELECT id,user_id,definition FROM collection_forms WHERE public_id=?', [
+      publicId,
+    ]);
     if (!candidate) throw new FormError('收集页面不存在', 404);
+    const account = json(candidate.definition).membersOnly ? await resolveAccount() : null;
     return transaction(async (db) => {
       const form = await owned(db, candidate.user_id, candidate.id, true);
+      const member = form.definition.membersOnly ? await respondent(db, account, true) : null;
+      if (form.definition.membersOnly && !member) throw new FormError('请登录轻笺后填写', 401);
+      if (member && input.expectedAccountId !== member.id)
+        throw new FormError('当前登录账号已变化，请重新打开表单后填写', 409, 'account');
       const replace = form.definition.submissionPolicy === 'replace';
-      if (replace) {
+      if (replace && !form.definition.membersOnly) {
         requireIdentityConfig();
         if (!identity) throw new FormError('请允许本站 Cookie 后重新打开表单再提交', 400);
       }
-      const browserHash = replace ? respondentHash(form.id, identity) : null;
+      const browserHash = replace ? respondentHash(form.id, member ? `account:${member.id}` : identity) : null;
       const answers = validateAnswers(form.definition, input.answers);
       const hash = crypto.createHash('sha256').update(canonical(answers)).digest('hex');
       const [prior] = await rows(
@@ -263,11 +370,22 @@ export function createFormsService(pool) {
       if (prior) {
         if (prior.respondent_hash !== browserHash) throw new FormError('提交凭证无效', 409);
         if (prior.payload_hash !== hash) throw new FormError('此凭证已提交其他内容', 409);
-        return { receipt: prior.submission_id, outcome: prior.outcome };
+        const reward = form.definition.reward ? await receivedReward(db, form.id, member.id) : null;
+        if (form.definition.reward && !reward) throw new FormError('奖励状态暂不可用，请稍后重试', 503);
+        return { receipt: prior.submission_id, outcome: prior.outcome, ...(reward ? { reward } : {}) };
       }
       enabled();
-      if (form.status !== 'collecting')
-        throw new FormError(form.status === 'ended' ? '收集已结束' : '暂未开放收集', 409);
+      if (form.status !== 'collecting') {
+        const exhausted =
+          form.status === 'paused' &&
+          form.definition.reward &&
+          (await rewardSummary(db, form.id)).recipients >= form.definition.reward.maxRecipients;
+        throw new FormError(
+          form.status === 'ended' ? '收集已结束' : exhausted ? '奖励名额已用尽，收集已暂停' : '暂未开放收集',
+          409,
+          'state',
+        );
+      }
       const [previous] = replace
         ? await rows(
             db,
@@ -276,9 +394,22 @@ export function createFormsService(pool) {
           )
         : [];
       if (input.expectedReceipt != null && (!replace || previous?.id !== input.expectedReceipt))
-        throw new FormError('未能识别之前的提交，请使用原浏览器和原填写地址重新打开', 409);
+        throw new FormError(
+          member
+            ? '未能识别此账号之前的提交，请重新打开表单'
+            : '未能识别之前的提交，请使用原浏览器和原填写地址重新打开',
+          409,
+          member ? 'account' : '',
+        );
       const changed = previous && previous.payload_hash !== hash;
       const outcome = previous ? (changed ? 'updated' : 'unchanged') : 'created';
+      let reward = form.definition.reward ? await receivedReward(db, form.id, member.id) : null;
+      let summary = null;
+      if (form.definition.reward && !reward) {
+        summary = await rewardSummary(db, form.id);
+        if (summary.recipients >= form.definition.reward.maxRecipients)
+          throw new FormError('奖励名额已用尽，收集已暂停', 409);
+      }
       const data =
         previous ||
         insertData({
@@ -286,6 +417,7 @@ export function createFormsService(pool) {
           requestKey: input.requestKey,
           payloadHash: hash,
           respondentHash: browserHash,
+          respondentUserId: member?.id || null,
           answers: JSON.stringify(answers),
           createdAt: sqlDate(new Date()),
           updatedAt: sqlDate(new Date()),
@@ -302,16 +434,17 @@ export function createFormsService(pool) {
         for (const q of form.definition.questions) {
           const value = answers[q.id];
           if (value === undefined) continue;
+          const choice = ['single', 'multiple'].includes(q.type) ? choiceAnswerParts(value) : null;
           const answer = insertData({
             submissionId: data.id,
             formId: form.id,
             questionId: q.id,
-            textValue: typeof value === 'string' ? value : null,
+            textValue: choice?.otherText ?? (typeof value === 'string' ? value : null),
             numberValue: typeof value === 'number' ? value : null,
           });
           await db.query('INSERT INTO collection_answers SET ?', [answer]);
-          if (q.type === 'single' || q.type === 'multiple')
-            for (const optionId of Array.isArray(value) ? value : [value])
+          if (choice)
+            for (const optionId of [...choice.optionIds, ...(choice.otherText !== null ? [OTHER_OPTION_ID] : [])])
               await db.query('INSERT INTO collection_choices SET ?', [insertData({ answerId: answer.id, optionId })]);
         }
       }
@@ -325,12 +458,50 @@ export function createFormsService(pool) {
           outcome,
         }),
       ]);
-      return { receipt: data.id, outcome };
+      if (form.definition.reward && !reward) {
+        const requestId = rewardRequest(form.id);
+        await grantPointsIdempotently(
+          {
+            userId: member.id,
+            requestId,
+            operationType: 'collection_form_reward',
+            points: form.definition.reward.points,
+            reason: 'campaign',
+            ref: requestId,
+            policyVersion: 'collection-form-v1',
+            meta: { formTitle: form.title },
+          },
+          { db },
+        );
+        const notice = {
+          type: 'collection_form_reward',
+          meta: { formTitle: form.title, points: form.definition.reward.points },
+        };
+        // 站内通知也是持久发奖回执；与积分同事务写入，外部推送由既有队列在提交后处理。
+        await createNotification(
+          member.id,
+          {
+            ...notice,
+            ...notificationPresentation(notice),
+            link: '/growth?section=rewards&reward=ledger',
+            sourceType: 'collection_form_reward',
+            sourceId: form.id,
+          },
+          db,
+        );
+        reward = { points: form.definition.reward.points, received: true };
+        if (summary.recipients + 1 >= form.definition.reward.maxRecipients)
+          await db.query(
+            "UPDATE collection_forms SET status='paused',version=version+1,updated_at=UTC_TIMESTAMP(3) WHERE id=?",
+            [form.id],
+          );
+      }
+      return { receipt: data.id, outcome, ...(reward ? { reward } : {}) };
     });
   }
   async function responses(userId, id, query = {}) {
     const watermark = new Date().toISOString();
-    await owned(pool, userId, id);
+    const form = await owned(pool, userId, id);
     const filter = responseFilter(query),
       page = Math.max(1, Math.min(100000, Math.floor(Number(query.page) || 1)));
     const [{ total }] = await rows(
@@ -340,16 +511,20 @@ export function createFormsService(pool) {
     );
     const items = await rows(
       pool,
-      "SELECT s.id,s.form_id,s.answers,s.is_read,s.processed,s.spam,s.private_note,DATE_FORMAT(s.created_at,'%Y-%m-%dT%H:%i:%s.%fZ') AS created_at,DATE_FORMAT(COALESCE(s.updated_at,s.created_at),'%Y-%m-%dT%H:%i:%s.%fZ') AS updated_at FROM collection_submissions s WHERE s.form_id=?" +
+      "SELECT s.id,s.form_id,s.respondent_user_id,s.answers,s.is_read,s.processed,s.spam,s.private_note,DATE_FORMAT(s.created_at,'%Y-%m-%dT%H:%i:%s.%fZ') AS created_at,DATE_FORMAT(COALESCE(s.updated_at,s.created_at),'%Y-%m-%dT%H:%i:%s.%fZ') AS updated_at FROM collection_submissions s WHERE s.form_id=?" +
         filter.sql +
         ' ORDER BY s.created_at DESC,s.id DESC LIMIT 30 OFFSET ?',
       [id, ...filter.params, (page - 1) * 30],
     );
     return {
-      items: items.map(({ request_key, payload_hash, ...s }) => ({ ...s, answers: json(s.answers) })),
+      items: (await enrichRespondents(pool, form, items)).map(({ request_key, payload_hash, ...s }) => ({
+        ...s,
+        answers: json(s.answers),
+      })),
       total,
       page,
       watermark,
+      ...(form.definition.reward ? { rewardSummary: await rewardSummary(pool, id) } : {}),
     };
   }
   async function mark(userId, id, input) {
@@ -447,18 +622,26 @@ export function createFormsService(pool) {
   }
   async function textAnswers(userId, id, query) {
     const form = await owned(pool, userId, id);
-    if (!form.definition.questions.some((q) => q.id === query.questionId && ['short', 'long'].includes(q.type)))
-      throw new FormError('题目无效');
+    const question = form.definition.questions.find((q) => q.id === query.questionId);
+    const other = question?.allowOther && ['single', 'multiple'].includes(question.type);
+    if (!question || (!['short', 'long'].includes(question.type) && !other)) throw new FormError('题目无效');
     const f = responseFilter(query, 's', true),
       page = Math.max(1, Math.min(100000, Math.floor(Number(query.page) || 1)));
     return rows(
       pool,
-      `SELECT a.text_value,s.created_at FROM collection_answers a INNER JOIN collection_submissions s ON s.id=a.submission_id WHERE s.form_id=? AND s.spam=0 AND a.question_id=?${f.sql} AND a.text_value LIKE ? ORDER BY s.created_at DESC,s.id DESC LIMIT 30 OFFSET ?`,
-      [id, query.questionId, ...f.params, '%' + String(query.search || '').slice(0, 200) + '%', (page - 1) * 30],
+      `SELECT a.text_value,s.created_at FROM collection_answers a INNER JOIN collection_submissions s ON s.id=a.submission_id WHERE s.form_id=? AND s.spam=0 AND a.question_id=?${f.sql}${other ? ' AND EXISTS (SELECT 1 FROM collection_choices c WHERE c.answer_id=a.id AND c.option_id=?)' : ''} AND a.text_value LIKE ? ORDER BY s.created_at DESC,s.id DESC LIMIT 30 OFFSET ?`,
+      [
+        id,
+        query.questionId,
+        ...f.params,
+        ...(other ? [OTHER_OPTION_ID] : []),
+        '%' + String(query.search || '').slice(0, 200) + '%',
+        (page - 1) * 30,
+      ],
     );
   }
   async function* exportRows(userId, id, query) {
-    await owned(pool, userId, id);
+    const form = await owned(pool, userId, id);
     const db = await pool.getConnection();
     try {
       // One repeatable-read snapshot keeps CSV consistent while owners moderate responses.
@@ -470,11 +653,11 @@ export function createFormsService(pool) {
         const extra = cursor ? ' AND (s.created_at>? OR (s.created_at=? AND s.id>?))' : '';
         const chunk = await rows(
           db,
-          `SELECT s.id,s.form_id,s.answers,s.is_read,s.processed,s.spam,s.private_note,DATE_FORMAT(s.created_at,'%Y-%m-%dT%H:%i:%s.%fZ') AS created_at,DATE_FORMAT(COALESCE(s.updated_at,s.created_at),'%Y-%m-%dT%H:%i:%s.%fZ') AS updated_at FROM collection_submissions s WHERE s.form_id=?${f.sql}${extra} ORDER BY s.created_at,s.id LIMIT 500`,
+          `SELECT s.id,s.form_id,s.respondent_user_id,s.answers,s.is_read,s.processed,s.spam,s.private_note,DATE_FORMAT(s.created_at,'%Y-%m-%dT%H:%i:%s.%fZ') AS created_at,DATE_FORMAT(COALESCE(s.updated_at,s.created_at),'%Y-%m-%dT%H:%i:%s.%fZ') AS updated_at FROM collection_submissions s WHERE s.form_id=?${f.sql}${extra} ORDER BY s.created_at,s.id LIMIT 500`,
           [id, ...f.params, ...(cursor ? [sqlDate(cursor.created_at), sqlDate(cursor.created_at), cursor.id] : [])],
         );
         if (!chunk.length) break;
-        for (const row of chunk) yield { ...row, answers: json(row.answers) };
+        for (const row of await enrichRespondents(db, form, chunk)) yield { ...row, answers: json(row.answers) };
         cursor = chunk.at(-1);
       }
       await db.commit();

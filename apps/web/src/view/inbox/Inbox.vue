@@ -523,8 +523,10 @@
               />
               <TodoScheduleView
                 v-else-if="isTodoFocused && (todoView === 'agenda' || todoView === 'calendar')"
+                :key="todo.ownerId"
                 ref="scheduleViewRef"
                 :items="todo.items"
+                :has-more="Boolean(todo.nextCursor)"
                 :view="todoView"
                 :busy="pageLoading || pageLoadFailed"
                 :swipe-enabled="bookmark.isMobile"
@@ -1744,6 +1746,8 @@
     openSwipeTodoId.value = '';
     // 统一由 refreshList 应用状态口径；日历等 range-change 后再请求。
     todo.seriesPresentation = view === 'list';
+    if (view === 'agenda') todo.filters.presentation = 'agenda';
+    else delete todo.filters.presentation;
     if (view !== 'calendar') {
       delete todo.filters.rangeStart;
       delete todo.filters.rangeEnd;
@@ -2010,6 +2014,8 @@
         }
         todo.workspaceEnabled = true;
         todo.seriesPresentation = todoView.value === 'list';
+        if (todoView.value === 'agenda') todo.filters.presentation = 'agenda';
+        else delete todo.filters.presentation;
         const owner = todoCalendarOwnerKey(user);
         const freshTags = await fetchSelectableTags().catch(() => workspaceTags.value);
         if (generation !== pageRefreshGeneration || owner !== todoCalendarOwnerKey(user)) return false;

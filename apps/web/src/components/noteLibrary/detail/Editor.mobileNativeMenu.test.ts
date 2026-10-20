@@ -51,7 +51,7 @@ describe('移动端富文本交给系统菜单', () => {
   it('图片对象浮条提供稳定操作，文字菜单按桌面编辑与移动长按分流', () => {
     const source = editorInitSource();
     expect(source).toContain(
-      "'lnImagePreview | lnImageCopy lnImageCut lnImagePaste lnImageDelete | alignleft aligncenter alignright | lnImageParagraphAfter'",
+      "'lnImagePreview lnImageMediaText | lnImageCopy lnImageCut lnImagePaste lnImageDelete | alignleft aligncenter alignright | lnImageParagraphAfter'",
     );
     expect(source).toContain("editor.ui.registry.addButton('lnImagePreview'");
     expect(editorSource).toContain('icon.noteDetail.diagramTools.zoom');

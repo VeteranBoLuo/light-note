@@ -312,7 +312,7 @@ export const snoozeTodo = (id: string, targetAt: string, options?: { silent?: bo
 
 export type TodoList = TodoListSummary;
 export interface TodoWorkspaceQuery {
-  presentation?: 'series';
+  presentation?: 'series' | 'agenda';
   status?: TodoFilterStatus;
   keyword?: string;
   sort?: TodoSort;

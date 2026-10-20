@@ -45,7 +45,7 @@
             </button>
           </template>
 
-          <!-- 电脑 / 平板浏览器:不自动下载,给出可转到手机的地址 -->
+          <!-- 电脑 / 平板浏览器:APK 下载与 PWA 安装并列,也可把页面地址转到手机 -->
           <template v-else-if="platform === 'desktop'">
             <p class="dl-desktop-note">{{ t('download.desktopNote') }}</p>
             <div class="dl-url-box">
@@ -58,9 +58,21 @@
               <button type="button" class="dl-btn-ghost" @click="copyText(apkUrl, t('download.copiedApkUrl'))">
                 {{ t('download.copyApkLink') }}
               </button>
-              <button type="button" class="dl-btn-ghost" @click="handleOpenPwaGuide">
-                {{ t('download.usePwaInstead') }}
-              </button>
+              <a
+                v-if="release.released"
+                class="dl-btn-ghost"
+                :href="release.downloadPath"
+                :download="apkFileName"
+                @click="handleDownload"
+              >
+                {{ t('download.downloadApk') }}
+              </a>
+              <BButton v-else class="dl-btn-ghost" disabled>
+                {{ t('download.preparing') }}
+              </BButton>
+              <BButton class="dl-btn-ghost" @click="handleOpenPwaGuide">
+                {{ t('download.installPwa') }}
+              </BButton>
             </div>
           </template>
 
@@ -80,9 +92,9 @@
             <button v-else type="button" class="dl-btn-main" disabled>
               {{ t('download.preparing') }}
             </button>
-            <button type="button" class="dl-btn-ghost" @click="handleOpenPwaGuide">
-              {{ t('download.usePwaInstead') }}
-            </button>
+            <BButton class="dl-btn-ghost" @click="handleOpenPwaGuide">
+              {{ t('download.installPwa') }}
+            </BButton>
           </template>
         </div>
 
@@ -246,8 +258,8 @@
   import { computed, onBeforeUnmount, onMounted } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
-  // 这个页面刻意用原生 button / a 而不是 BButton:主下载入口必须是 <a download> 才有原生下载语义,
-  // 若只有它是 <a>、其余是 BButton,主次按钮会因两套样式体系而割裂,故整页统一自带按钮样式。
+  // 下载入口保留原生 <a download> 语义，支持右键另存，不依赖 JS 发起下载。
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
@@ -519,6 +531,7 @@
     height: 39px;
     padding: 0 17px;
     font-size: 13.5px;
+    text-decoration: none;
   }
   .dl-inapp {
     display: inline-flex;

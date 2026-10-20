@@ -352,6 +352,9 @@ importers:
       katex:
         specifier: 0.16.47
         version: 0.16.47
+      marked:
+        specifier: ^17.0.6
+        version: 17.0.6
     devDependencies:
       vitest:
         specifier: ^3.2.6

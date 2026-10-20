@@ -184,6 +184,7 @@
   import { recordOperation } from '@/api/commonApi.ts';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import { NOTIFICATION_PANEL_OPEN_EVENT } from '@/utils/notificationEntry';
+  import { resolveNotificationLink } from '@/utils/notificationLink';
   import NotificationCenterPanel from '@/components/notification/NotificationCenterPanel.vue';
   import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
   import { useMobileLayout } from '@/composables/useMobileLayout';
@@ -219,7 +220,7 @@
   const pageSize = 20;
 
   const WIDE_NOTIFICATION_GROUPS = Object.freeze({
-    growth: ['level_up', 'streak_risk'],
+    growth: ['level_up', 'streak_risk', 'collection_form_reward'],
     ai_routine: ['daily_brief', 'ai_routine'],
   });
   const WIDE_PRIMARY_TYPES = new Set([
@@ -469,8 +470,14 @@
       return;
     }
     if (n.link) {
-      // 升级/反馈等带跳转链接的通知:关闭面板并跳转
-      await closePanelThen(() => router.push(n.link).catch(() => {}));
+      const target = resolveNotificationLink(n.link, window.location.origin);
+      if (!target) {
+        message.warning(t('notification.invalidLink'));
+        return;
+      }
+      await closePanelThen(() =>
+        target.kind === 'internal' ? router.push(target.url).catch(() => {}) : window.location.assign(target.url),
+      );
     } else {
       // 系统/其他等无跳转链接的通知:弹框展示完整标题+正文(列表里被截成两行,弹框看全)
       detailItem.value = n;

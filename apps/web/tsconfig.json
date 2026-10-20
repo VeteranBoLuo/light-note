@@ -29,6 +29,7 @@
     "paths": {
       "@": ["src"],
       "@/*": ["src/*"],
+      "@lightnote/shared/community-feed": ["../../packages/shared/communityFeed.d.ts"],
       "@lightnote/shared/profile-backgrounds": ["../../packages/shared/profileBackgrounds.d.ts"],
       "@lightnote/shared/file-category": ["../../packages/shared/fileCategory.d.ts"],
       "@lightnote/shared/notification-presentation": ["../../packages/shared/notificationPresentation.d.ts"],

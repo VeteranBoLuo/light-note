@@ -3,7 +3,7 @@ import {
   ANDROID_SHARE_EVENT,
   completeAndroidShare,
   finishAndroidShare,
-  loadAndroidShareFiles,
+  createAndroidShareFiles,
   onAndroidShareAvailable,
   peekAndroidShare,
   resetAndroidIncomingShareForTest,
@@ -84,12 +84,12 @@ describe('androidIncomingShare', () => {
     expect(listener).toHaveBeenCalledTimes(1);
   });
 
-  it('逐个读取分享文件，单个失败只计数', async () => {
+  it('清单不读文件，上传时按需读取；单项失败可以重试', async () => {
     const fetcher = vi.fn(async (url: string) => {
       if (url.endsWith('/1')) return new Response('', { status: 404 });
-      return new Response('data', { status: 200 });
+      return { ok: true, blob: async () => new Blob(['data']) } as Response;
     });
-    const result = await loadAndroidShareFiles(
+    const files = createAndroidShareFiles(
       {
         id,
         text: '',
@@ -103,10 +103,39 @@ describe('androidIncomingShare', () => {
       },
       fetcher as unknown as typeof fetch,
     );
-    expect(fetcher).toHaveBeenNthCalledWith(1, `/__native-share/${id}/0`, { cache: 'no-store', credentials: 'omit' });
-    expect(result.failed).toBe(1);
-    expect(result.files).toHaveLength(1);
-    expect(result.files[0].name).toBe('截图.png');
-    expect(result.files[0].type).toBe('image/png');
+    expect(fetcher).not.toHaveBeenCalled();
+    const controller = new AbortController();
+    const file = await files[0].read(controller.signal);
+    expect(fetcher).toHaveBeenCalledWith(`/__native-share/${id}/0`, {
+      cache: 'no-store',
+      credentials: 'omit',
+      signal: controller.signal,
+    });
+    expect(file.name).toBe('截图.png');
+    expect(file.type).toBe('image/png');
+    await expect(files[1].read()).rejects.toMatchObject({ code: 'SHARE_FILE_UNREADABLE' });
+    fetcher.mockResolvedValue({ ok: true, blob: async () => new Blob(['data']) } as Response);
+    await expect(files[1].read()).resolves.toMatchObject({ name: '丢失.pdf', size: 4 });
+  });
+
+  it('取消读取不发请求，大小变化不作为原分享上传', async () => {
+    const fetcher = vi.fn(async () => new Response('changed'));
+    const [file] = createAndroidShareFiles(
+      {
+        id,
+        text: '',
+        subject: '',
+        textTruncated: false,
+        skippedFiles: 0,
+        files: [{ index: 99, name: 'last.txt', mimeType: 'text/plain', size: 4 }],
+      },
+      fetcher,
+    );
+    const controller = new AbortController();
+    controller.abort();
+    await expect(file.read(controller.signal)).rejects.toMatchObject({ name: 'AbortError' });
+    expect(fetcher).not.toHaveBeenCalled();
+    await expect(file.read()).rejects.toMatchObject({ code: 'SHARE_FILE_UNREADABLE' });
+    expect(fetcher).toHaveBeenCalledWith(`/__native-share/${id}/99`, expect.anything());
   });
 });

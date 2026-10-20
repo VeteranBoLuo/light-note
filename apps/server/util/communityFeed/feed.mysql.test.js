@@ -1397,6 +1397,49 @@ describe.skipIf(!socketPath)('P2 real database boundaries', () => {
       await db.query('ALTER TABLE community_revision_images ADD UNIQUE KEY uk_order(revision_id,sort_order)');
     }
   });
+  it('keeps inline image revisions private and blocks destructive edits by legacy clients', async () => {
+    const id = randomUUID();
+    await db.query(
+      "INSERT INTO community_post_images (public_id,owner_id,object_key,content_type,content_hash,file_size,width,height,status) VALUES (?,'a',?,'image/png',?,100,1,1,'ready')",
+      [id, id, 'a'.repeat(64)],
+    );
+    const body = `说明\n\n![截图](community-image:${id})\n\n后续文字`;
+    const post = await run(submitPost, A, postInput({ body, images: [id], contentVersion: 2 }));
+    await expect(
+      readImage({ user: B, id, input: { postId: post.publicId, revision: 1 }, db, env }),
+    ).rejects.toMatchObject({ status: 404 });
+    await run(
+      moderatePost,
+      ROOT,
+      input({ postId: post.publicId, expectedRevision: post.revision, action: 'approve', reason: 'approved' }),
+    );
+    const live = await postDetail({ user: B, id: post.publicId, db, env });
+    expect(live.body).toBe(body);
+    await expect(
+      run(
+        submitPost,
+        A,
+        postInput({
+          postId: post.publicId,
+          expectedRevision: live.revision,
+          body: '旧编辑器过滤后的文字',
+          images: [id],
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'COMMUNITY_CLIENT_UPDATE_REQUIRED' });
+    const edit = await run(
+      submitPost,
+      A,
+      postInput({ postId: post.publicId, expectedRevision: live.revision, body: '新版纯文字', contentVersion: 2 }),
+    );
+    expect((await postDetail({ user: B, id: post.publicId, db, env })).body).toBe(body);
+    await run(
+      moderatePost,
+      ROOT,
+      input({ postId: post.publicId, expectedRevision: edit.revision, action: 'approve', reason: 'approved' }),
+    );
+    expect((await postDetail({ user: B, id: post.publicId, db, env })).images).toEqual([]);
+  });
   it('images stay on their reviewed revision and obey post visibility', async () => {
     const seedImage = async (owner) => {
       const id = randomUUID();

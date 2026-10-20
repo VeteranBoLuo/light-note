@@ -10,27 +10,41 @@ import zh from '@/i18n/locales/zh-CN';
 import en from '@/i18n/locales/en-US';
 import FormsWorkspace from '@/view/toolbox/forms/FormsWorkspace.vue';
 import PublicForm from '@/view/toolbox/forms/PublicForm.vue';
+import NotificationBell from '@/components/notification/NotificationBell.vue';
+import type { NotificationItem } from '@/composables/useNotification';
+import { notificationPresentation } from '@lightnote/shared/notification-presentation';
+import {
+  OTHER_OPTION_ID,
+  validateAnswers,
+  type FormAnswers,
+  type FormDefinition,
+} from '@lightnote/shared/collection-forms';
 import '@/assets/css/index.less';
 const params = new URLSearchParams(location.search),
   state = params.get('state') || 'collecting';
 const theme = params.get('theme') || 'day',
   locale = params.get('locale') === 'en-US' ? 'en-US' : 'zh-CN';
+const membersOnly = params.has('members') || params.has('reward');
+const account = params.get('account') === 'guest' ? null : { id: 'fixture-participant', alias: '轻笺体验用户' };
 document.documentElement.dataset.theme = theme;
 document.documentElement.classList.toggle('light-note-mobile-rendering', params.get('renderProfile') === 'mobile');
 applyUiDensity(
   params.get('density') === 'compact' ? 'small' : params.get('density') === 'comfortable' ? 'large' : 'standard',
   params.get('renderProfile') === 'mobile',
 );
-const definition = {
-  submissionPolicy: params.get('policy') === 'replace' ? 'replace' : 'multiple',
-  title: '轻笺体验反馈',
+const definition: FormDefinition = {
+  submissionPolicy: membersOnly || params.get('policy') === 'replace' ? 'replace' : 'multiple',
+  membersOnly,
+  reward: params.has('reward') ? { points: 20, maxRecipients: 100 } : null,
+  title: params.get('formTitle') || '轻笺体验反馈',
   description: '帮助我们把轻笺做得更好。请分享你的真实体验，所有回答仅收集者可见。',
   successMessage: '谢谢，你的建议我们已经收到。',
   questions: [
     {
       id: 'q1',
-      title: '你最常使用哪些模块？',
-      type: 'multiple',
+      title: params.has('other') ? '你最早是从哪里了解到轻笺的？' : '你最常使用哪些模块？',
+      type: params.get('other') === 'single' ? 'single' : 'multiple',
+      allowOther: params.has('other') ? true : undefined,
       required: true,
       options: [
         { id: 'a', label: '书签' },
@@ -45,6 +59,18 @@ const definition = {
     { id: 'q5', title: '希望何时收到回复？', type: 'date', required: false, options: [] },
   ],
 };
+if (params.has('other'))
+  definition.questions = [
+    {
+      ...definition.questions[0],
+      options: [
+        { id: 'a', label: '搜索引擎（百度、必应、Google 等）' },
+        { id: 'b', label: '小红书 / 哔哩哔哩（B 站）' },
+        { id: 'c', label: '朋友、同事或同学推荐' },
+        { id: 'd', label: '记不清了' },
+      ],
+    },
+  ];
 const forms: any[] = [
   {
     id: 'sample',
@@ -54,9 +80,15 @@ const forms: any[] = [
     version: 1,
     published: state === 'draft' ? 0 : 1,
     public_id: 'a'.repeat(48),
-    status: state === 'draft' ? 'draft' : 'collecting',
-    total: state === 'emptyResponses' ? 0 : 38,
-    unread: state === 'emptyResponses' ? 0 : 3,
+    status: state === 'draft' ? 'draft' : state === 'full' ? 'paused' : 'collecting',
+    rewardSummary: params.has('reward')
+      ? {
+          recipients: state === 'full' ? 100 : state === 'draft' ? 0 : 38,
+          totalPoints: state === 'full' ? 2000 : state === 'draft' ? 0 : 760,
+        }
+      : undefined,
+    total: ['draft', 'emptyResponses'].includes(state) ? 0 : 38,
+    unread: ['draft', 'emptyResponses'].includes(state) ? 0 : 3,
   },
   {
     id: 'second',
@@ -78,20 +110,56 @@ const submissions = Array.from({ length: 38 }, (_, i) => ({
   processed: i > 4 ? 1 : 0,
   spam: 0,
   private_note: '',
-  answers: { q1: ['a', 'b'], q2: 5, q3: '希望移动端的整理操作更方便一些。', q4: 7, q5: '2026-09-30' },
+  ...(membersOnly
+    ? {
+        respondent_user_id: account?.id || 'fixture-participant',
+        respondent_alias: '轻笺体验用户',
+        reward_points: definition.reward?.points || 0,
+      }
+    : {}),
+  answers: params.has('other')
+    ? ({
+        q1: { optionIds: params.get('other') === 'single' ? [] : ['a'], otherText: '朋友推荐，来自一篇工具分享文章。' },
+      } as FormAnswers)
+    : { q1: ['a', 'b'], q2: 5, q3: '希望移动端的整理操作更方便一些。', q4: 7, q5: '2026-09-30' },
 }));
 const seenRequests: string[] = [];
+const notices: NotificationItem[] = params.has('notifications')
+  ? [
+      {
+        id: 'survey-invitation',
+        type: 'system',
+        title: '填写调研，获得 20 积分',
+        content: '请分享你从哪个渠道了解到轻笺，提交后奖励自动到账。',
+        link: `${location.origin}/f/${forms[0].public_id}?channel=notification#survey`,
+        meta: {},
+        isRead: 0,
+        createTime: new Date().toISOString(),
+      },
+    ]
+  : [];
 request.defaults.adapter = async (config) => {
   const feedbackPath = params.get('feedbackPath');
-  if (feedbackPath && String(config.url).includes(feedbackPath) && (!params.get('feedbackMethod') || config.method === params.get('feedbackMethod'))) {
-    const feedback = (window as any).toolboxFeedbackFixture ||= {
-      failure: params.has('feedbackFailure'), delay: Number(params.get('feedbackDelay') || 0), empty: params.has('feedbackEmpty'),
-    };
-    if (feedback.delay) await new Promise(resolve => setTimeout(resolve, feedback.delay));
+  if (
+    feedbackPath &&
+    String(config.url).includes(feedbackPath) &&
+    (!params.get('feedbackMethod') || config.method === params.get('feedbackMethod'))
+  ) {
+    const feedback = ((window as any).toolboxFeedbackFixture ||= {
+      failure: params.has('feedbackFailure'),
+      delay: Number(params.get('feedbackDelay') || 0),
+      empty: params.has('feedbackEmpty'),
+    });
+    if (feedback.delay) await new Promise((resolve) => setTimeout(resolve, feedback.delay));
     if (feedback.failure) throw new Error('无法完成请求，请重试 / Unable to complete the request. Try again.');
-    if (feedback.empty && String(config.url).endsWith('/text-answers')) return {
-      data: {status: 200, data: [], msg: ''}, status: 200, statusText: 'OK', headers: {}, config,
-    };
+    if (feedback.empty && String(config.url).endsWith('/text-answers'))
+      return {
+        data: { status: 200, data: [], msg: '' },
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config,
+      };
   }
 
   seenRequests.push(String(config.url));
@@ -104,7 +172,30 @@ request.defaults.adapter = async (config) => {
   let data: any = {};
   if (state === 'error') throw new Error('模拟网络异常，可刷新重试');
   if (state === 'loading') await new Promise(() => {});
-  if (url.endsWith('/tags')) data = [{ id: 'tag', name: '产品反馈' }];
+  if (url.includes('/notification/')) {
+    if (url.endsWith('/markRead')) for (const n of notices) if (body.ids?.includes(n.id)) n.isRead = 1;
+    if (url.endsWith('/markAllRead')) for (const n of notices) n.isRead = 1;
+    if (url.endsWith('/delete'))
+      for (const id of body.ids || []) {
+        const index = notices.findIndex((n) => n.id === id);
+        if (index >= 0) notices.splice(index, 1);
+      }
+    const unreadTotal = notices.filter((n) => !n.isRead).length;
+    const byType: Record<string, number> = {};
+    for (const n of notices) if (!n.isRead) byType[n.type] = (byType[n.type] || 0) + 1;
+    const visible = notices.filter((n) =>
+      !body.type || body.type === 'all'
+        ? true
+        : body.type === 'growth'
+          ? ['level_up', 'streak_risk', 'collection_form_reward'].includes(n.type)
+          : body.type === 'system_group'
+            ? n.type === 'system'
+            : n.type === body.type,
+    );
+    data = url.endsWith('/list')
+      ? { items: visible, total: visible.length, unreadTotal, currentPage: 1, pageSize: 20 }
+      : { unreadTotal, byType };
+  } else if (url.endsWith('/tags')) data = [{ id: 'tag', name: '产品反馈' }];
   else if (url.endsWith('/forms') && config.method === 'get')
     data =
       state === 'empty'
@@ -141,7 +232,10 @@ request.defaults.adapter = async (config) => {
         average: 4.3,
         minimum: 1,
         maximum: 12,
-        choices: q.options.map((o, i) => ({ option_id: o.id, count: [30, 24, 12, 8][i] })),
+        choices: [
+          ...q.options.map((o, i) => ({ option_id: o.id, count: [30, 24, 12, 8][i] })),
+          ...(q.allowOther ? [{ option_id: OTHER_OPTION_ID, count: 6 }] : []),
+        ],
         values:
           q.type === 'rating'
             ? [
@@ -165,19 +259,18 @@ request.defaults.adapter = async (config) => {
     }
   } else if (url.endsWith('/responses')) {
     const filter = config.params || {};
-    const matches =
-      state === 'emptyResponses'
-        ? []
-        : submissions.filter((r) => {
-            const day = new Date(+new Date(r.created_at) + 8 * 3600000).toISOString().slice(0, 10);
-            if ((filter.from && day < filter.from) || (filter.to && day > filter.to)) return false;
-            if (filter.state === 'spam') return !!r.spam;
-            if (filter.state !== 'all' && r.spam) return false;
-            if (filter.state === 'unread') return !r.is_read;
-            if (filter.state === 'pending') return !r.processed;
-            if (filter.state === 'processed') return !!r.processed;
-            return true;
-          });
+    const matches = ['draft', 'emptyResponses'].includes(state)
+      ? []
+      : submissions.filter((r) => {
+          const day = new Date(+new Date(r.created_at) + 8 * 3600000).toISOString().slice(0, 10);
+          if ((filter.from && day < filter.from) || (filter.to && day > filter.to)) return false;
+          if (filter.state === 'spam') return !!r.spam;
+          if (filter.state !== 'all' && r.spam) return false;
+          if (filter.state === 'unread') return !r.is_read;
+          if (filter.state === 'pending') return !r.processed;
+          if (filter.state === 'processed') return !!r.processed;
+          return true;
+        });
     const offset = (Number(filter.page || 1) - 1) * 30;
     data = { watermark: new Date().toISOString(), items: matches.slice(offset, offset + 30), total: matches.length };
   } else if (url.endsWith('/text-answers')) data = [{ text_value: '希望移动端的整理操作更方便一些。' }];
@@ -239,24 +332,55 @@ request.defaults.adapter = async (config) => {
   };
 };
 let mySubmission: any = params.get('submitted') ? { receipt: 'test', answers: submissions[0].answers } : null;
+let rewardReceived = params.has('submitted');
 window.fetch = async (_input, init) => {
   let data: any;
   if (init?.method === 'POST') {
     const outcome = mySubmission ? 'updated' : 'created';
-    mySubmission = { receipt: 'test', answers: JSON.parse(String(init.body)).answers };
-    data = { receipt: 'test', outcome };
+    mySubmission = { receipt: 'test', answers: validateAnswers(definition, JSON.parse(String(init.body)).answers) };
+    if (params.has('notifications') && definition.reward && !rewardReceived) {
+      const notice = {
+        type: 'collection_form_reward',
+        meta: { formTitle: definition.title, points: definition.reward.points },
+      };
+      notices.unshift({
+        ...notice,
+        ...notificationPresentation(notice),
+        id: 'survey-reward',
+        link: '/growth?section=rewards&reward=ledger',
+        isRead: 0,
+        createTime: new Date().toISOString(),
+      });
+    }
+    rewardReceived = Boolean(definition.reward);
+    data = {
+      receipt: 'test',
+      outcome,
+      ...(definition.reward ? { reward: { points: definition.reward.points, received: true } } : {}),
+    };
   } else
     data = {
-      status: ['paused', 'ended'].includes(state) ? state : 'collecting',
+      status: state === 'full' ? 'paused' : ['paused', 'ended'].includes(state) ? state : 'collecting',
       definition,
       submissionPolicy: definition.submissionPolicy,
       mySubmission: definition.submissionPolicy === 'replace' ? mySubmission : null,
+      ...(membersOnly
+        ? {
+            requiresLogin: !account,
+            account,
+            reward: definition.reward
+              ? { points: 20, received: rewardReceived, remaining: state === 'full' ? 0 : 62 }
+              : null,
+          }
+        : {}),
     };
   return new Response(JSON.stringify({ status: 200, data }), { headers: { 'Content-Type': 'application/json' } });
 };
 const router = createRouter({
   history: createMemoryHistory(),
   routes: [
+    { path: '/notifications', name: 'notifications', component: NotificationBell, props: { page: true } },
+    { path: '/growth', component: { render: () => h('main', { 'data-ledger': true }, '积分明细') } },
     { path: '/toolbox/forms/:formId?', name: 'collectionForms', component: FormsWorkspace },
     {
       path: '/f/:publicId',
@@ -275,13 +399,20 @@ globalDirect(app);
 if (!params.get('shell'))
   useUserStore(pinia).setUserInfo({
     id: 'fixture-owner',
-    role: 'user',
+    role: params.get('role') === 'root' ? 'root' : 'user',
     alias: '验收账号',
     preferences: { theme, lang: locale, noteViewMode: 'card' },
   });
 bookmarkStore(pinia).screenWidth = window.innerWidth;
 await router.push(
-  params.get('public') ? '/f/' + forms[0].public_id : params.get('list') ? '/toolbox/forms' : '/toolbox/forms/sample',
+  params.has('notifications')
+    ? '/notifications'
+    : params.get('public')
+      ? '/f/' + forms[0].public_id
+      : params.get('list')
+        ? '/toolbox/forms'
+        : '/toolbox/forms/sample',
 );
+Object.assign(window, { collectionFixture: { router, notices } });
 await router.isReady();
 app.mount('#app');

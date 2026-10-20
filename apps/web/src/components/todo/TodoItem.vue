@@ -69,10 +69,11 @@
         </div>
         <div class="todo-item__timing" :class="{ 'is-empty': !hasSchedule && reminderState.kind === 'none' }">
           <div v-if="workspace || hasSchedule" class="todo-item__meta" :class="{ 'is-empty': !hasSchedule }">
-            <TodoTimeText v-if="startLabel" class="todo-start-label" :text="startLabel" />
+            <TodoTimeText v-if="!workspace && startLabel" class="todo-start-label" :text="startLabel" />
             <TodoTimeText v-if="item.dueAt" class="todo-item__due-labeled" :class="{ overdue }" :text="dueLabel" />
             <TodoTimeText v-if="workspace && dueTime && !overdue" class="todo-item__due-compact" :text="dueTime" />
-            <TodoTimeText v-if="occurrenceLabel" class="todo-start-label" :text="occurrenceLabel" />
+            <TodoTimeText v-if="!workspace && occurrenceLabel" class="todo-start-label" :text="occurrenceLabel" />
+            <span v-if="workspace && !dueTime" class="todo-item__no-deadline">—</span>
           </div>
           <div
             v-if="workspace"
@@ -311,6 +312,7 @@
   import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
   import { computed, ref } from 'vue';
   import { useTodoClock } from '@/composables/useTodoClock';
+  import { useTodoReminderPresentation } from '@/composables/useTodoReminderPresentation';
   import TodoTimeText from './TodoTimeText.vue';
   import useUserStore from '@/store/useUser';
   import { useI18n } from 'vue-i18n';
@@ -334,8 +336,6 @@
     isTodoOverdue,
     isTodoSingleReminder,
     normalizeTodoDateOnly,
-    parseTodoDate,
-    todoNextReminderAt,
     todoPastReminderAt,
     type TodoSnoozePreset,
   } from '@/utils/todoPlanning';
@@ -497,36 +497,12 @@
       relativeLabels: { today: t('inbox.todoToday'), tomorrow: t('inbox.todoTomorrow') },
     });
   });
-  const hasSchedule = computed(() => Boolean(startLabel.value || dueLabel.value || occurrenceLabel.value));
+  const hasSchedule = computed(() =>
+    props.workspace ? Boolean(dueTime.value) : Boolean(startLabel.value || dueLabel.value || occurrenceLabel.value),
+  );
   const visibleTags = computed(() => (props.workspace ? props.item.tags?.slice(0, 1) : props.item.tags) || []);
   const hiddenTags = computed(() => (props.workspace ? props.item.tags?.slice(1) : []) || []);
-  // nextAt 是服务端当前 Job 的投影；明确为空时不能回退到旧配置并冒充下一次提醒。
-  const reminderState = computed(() => {
-    const item = props.item;
-    const reminder = item.reminder;
-    if (item.status !== 'pending' || reminder?.mode === 'none' || (!reminder && !item.reminderAt)) {
-      return { kind: 'none', at: '' } as const;
-    }
-    if (reminder && 'paused' in reminder && reminder.paused) return { kind: 'paused', at: '' } as const;
-    const nextAt = reminder && 'nextAt' in reminder ? reminder.nextAt : todoNextReminderAt(item);
-    const nextTime = nextAt ? parseTodoDate(nextAt).getTime() : Number.NaN;
-    if (Number.isFinite(nextTime)) {
-      return { kind: nextTime > now.value ? 'next' : 'past', at: nextAt! } as const;
-    }
-    const pastAt = todoPastReminderAt(item, new Date(now.value));
-    return pastAt ? ({ kind: 'past', at: pastAt } as const) : ({ kind: 'unscheduled', at: '' } as const);
-  });
-  const workspaceReminderAt = computed(() => reminderState.value.at);
-  const workspaceReminderTime = computed(() =>
-    workspaceReminderAt.value
-      ? formatTodoDateTime(workspaceReminderAt.value, locale.value, {
-          relative: true,
-          includeYear: false,
-          now: today.value,
-          relativeLabels: { today: t('inbox.todoToday'), tomorrow: t('inbox.todoTomorrow') },
-        })
-      : '',
-  );
+  const { reminderState, reminderTime: workspaceReminderTime } = useTodoReminderPresentation(() => props.item);
   const seriesLabel = computed(() => {
     const series = props.item.series;
     if (!series) return '';

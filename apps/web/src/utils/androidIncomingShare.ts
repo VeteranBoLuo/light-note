@@ -1,5 +1,6 @@
 import { hasAndroidBridge, postAndroidMessage } from './androidBridge';
 import { parseIncomingShareManifest, type IncomingShareManifest } from './incomingShare';
+import type { ManagedCloudUploadSource } from '@/api/cloudFileUploadApi';
 
 /**
  * Android 系统分享的原生通道。
@@ -14,8 +15,7 @@ export const ANDROID_SHARE_EVENT = 'light-note:native-share';
 const PEEK_TIMEOUT_MS = 1500;
 
 export type AndroidSharePeek =
-  | { status: 'none' | 'preparing' | 'unsupported' }
-  | { status: 'ready'; share: IncomingShareManifest };
+  { status: 'none' | 'preparing' | 'unsupported' } | { status: 'ready'; share: IncomingShareManifest };
 
 declare global {
   interface Window {
@@ -94,30 +94,36 @@ export function onAndroidShareAvailable(listener: () => void): () => void {
   return () => window.removeEventListener(ANDROID_SHARE_EVENT, listener);
 }
 
-/**
- * 逐个读取分享文件并转成 File，交给「快速添加」的现有上传流程。
- * 顺序读取避免同时把多个大文件读进内存；单个失败只计数，不影响其余文件。
- */
-export async function loadAndroidShareFiles(
+/** 清单阶段不读取文件；最多三个上传任务各自按需读取，失败后仍可从原生暂存重试。 */
+export function createAndroidShareFiles(
   share: IncomingShareManifest,
   fetcher: typeof fetch = fetch,
-): Promise<{ files: File[]; failed: number }> {
-  const files: File[] = [];
-  let failed = 0;
-  for (const entry of share.files) {
-    try {
-      const response = await fetcher(`/__native-share/${share.id}/${entry.index}`, {
-        cache: 'no-store',
-        credentials: 'omit',
-      });
-      if (!response.ok) throw new Error(`status ${response.status}`);
-      const blob = await response.blob();
-      files.push(new File([blob], entry.name, { type: entry.mimeType || blob.type, lastModified: Date.now() }));
-    } catch {
-      failed += 1;
-    }
-  }
-  return { files, failed };
+): ManagedCloudUploadSource[] {
+  return share.files.map((entry) => ({
+    name: entry.name,
+    size: entry.size,
+    type: entry.mimeType,
+    // 使用稳定索引区分同名同大小的不同分享文件。
+    lastModified: entry.index,
+    async read(signal?: AbortSignal) {
+      try {
+        if (signal?.aborted) throw new DOMException('Read cancelled', 'AbortError');
+        const response = await fetcher(`/__native-share/${share.id}/${entry.index}`, {
+          cache: 'no-store',
+          credentials: 'omit',
+          signal,
+        });
+        if (!response.ok) throw new Error('SHARE_FILE_UNAVAILABLE');
+        const blob = await response.blob();
+        if (signal?.aborted) throw new DOMException('Read cancelled', 'AbortError');
+        if (blob.size !== entry.size) throw new Error('SHARE_FILE_SIZE_CHANGED');
+        return new File([blob], entry.name, { type: entry.mimeType || blob.type, lastModified: entry.index });
+      } catch (error) {
+        if (signal?.aborted) throw error;
+        throw Object.assign(new Error('SHARE_FILE_UNREADABLE'), { code: 'SHARE_FILE_UNREADABLE' });
+      }
+    },
+  }));
 }
 
 /** 仅供测试重置模块状态。 */

@@ -870,11 +870,14 @@ export const addBookmark = async (req, res) => {
       addToInbox: addToInbox === true,
       inboxSource,
       duplicateToInbox: addToInbox === true,
+      // 仅快速添加的自动命名请求读取网页信息；完整表单和扩展保留用户已填写的名称。
+      captureMetadata:
+        addToInbox === true && nameConflict === 'suffix' && ['quick_capture', 'system_share'].includes(inboxSource),
       saveSnapshot: saveSnapshot !== false,
       request: req,
       suppressUserRewards: req.suppressUserRewards || req.isVisitorWorkspace,
       idempotencyKey,
-      // 快速添加按域名或分享标题自动命名，同名时按序号避让；其他入口不传，仍保持同名报错。
+      // 快速添加使用网页标题或回退名称，同名时按序号避让；其他入口不传，仍保持同名报错。
       suffixDuplicateName: nameConflict === 'suffix',
     });
     res.send(resultData(result));

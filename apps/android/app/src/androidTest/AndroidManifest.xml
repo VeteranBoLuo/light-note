@@ -1,0 +1,6 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <provider android:name="top.boluo66.lightnote.ShareFixtureProvider"
+            android:authorities="top.boluo66.lightnote.sharefixture" android:exported="true" />
+    </application>
+</manifest>

@@ -34,17 +34,18 @@
         multiple
         accept="image/jpeg,image/png,image/webp"
         :max-total-size="45 * 1024 * 1024"
-        :disabled="busy || uploading || draft.images.length >= 9"
+        :disabled="busy || uploading || imageCount >= 9"
         @change="$emit('add-images', $event)"
       >
         <BButton
           class="material-add"
           :aria-label="t('community.feed.addImages')"
-          :disabled="busy || uploading || draft.images.length >= 9"
+          :disabled="busy || uploading || imageCount >= 9"
           ><span class="material-add-symbol" aria-hidden="true">+</span>{{ t('community.feed.imageSection')
           }}<span class="material-count">{{ draft.images.length }}/9</span></BButton
         >
       </BUpload>
+      <span>{{ t(inlineEnabled ? 'community.feed.attachmentHint' : 'community.feed.attachmentTopHint') }}</span>
       <span>{{ t('community.feed.imageLimits') }}</span>
     </div>
     <p v-if="imageError" role="alert">{{ t('community.feed.imageFailure') }}</p>
@@ -66,6 +67,9 @@
                 ? 'community.feed.imagePendingLimit'
                 : 'community.feed.imageUploadFailedShort',
           )
+        }}</span>
+        <span v-if="item.status === 'error' && !retryableIds.includes(item.publicId)" role="status">{{
+          t('community.feed.imageReselect')
         }}</span>
         <div class="writing-image-actions">
           <BButton
@@ -123,6 +127,8 @@
     resourcesEnabled?: boolean;
     imageError: boolean;
     retryableIds: string[];
+    inlineEnabled?: boolean;
+    imageCount: number;
   }>();
   defineEmits<{
     topic: [values: string[]];
@@ -136,6 +142,15 @@
   const { t } = useI18n();
 </script>
 <style scoped>
+  .writing-image-actions {
+    flex-wrap: wrap;
+  }
+  .writing-image-actions .b_btn:not(.image-remove) {
+    font-size: var(--ui-font-11, 11px);
+    padding: var(--ui-space-4, 4px);
+    height: auto;
+    white-space: normal;
+  }
   .publish-materials {
     display: flex;
     flex-direction: column;

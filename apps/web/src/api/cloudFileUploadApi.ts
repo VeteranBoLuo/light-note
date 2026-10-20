@@ -18,9 +18,15 @@ export type CloudFolderOption = {
   name: string;
 };
 
-/** 调用方按账号与单个 File 隔离；只在当前上传会话内保留。 */
+/** 原生暂存等来源只持有元信息，轮到上传时才读取内容。 */
+export interface ManagedCloudUploadSource extends Pick<File, 'name' | 'size' | 'type' | 'lastModified'> {
+  read: (signal?: AbortSignal) => Promise<File>;
+}
+export type ManagedCloudUploadFile = File | ManagedCloudUploadSource;
+
+/** 调用方按账号与单个文件来源隔离；只在当前上传会话内保留。 */
 export type ManagedCloudUploadReceipt = {
-  pending?: { objectKey: string; file: File; target: string };
+  pending?: { objectKey: string; file: ManagedCloudUploadFile; target: string };
 };
 
 export type ManagedCloudUploadOptions = {
@@ -39,7 +45,12 @@ type ManagedUploadRequest = (operation: string, payload: Record<string, unknown>
 
 /** 仅在一次用户发起的上传期间使用；短暂合并最多 3 项，不启动常驻轮询。 */
 export function createManagedUploadBatchRequest(): ManagedUploadRequest {
-  let queue: Array<{ operation: string; payload: Record<string, unknown>; resolve: (value: ManagedUploadResponse) => void; reject: (reason: unknown) => void }> = [];
+  let queue: Array<{
+    operation: string;
+    payload: Record<string, unknown>;
+    resolve: (value: ManagedUploadResponse) => void;
+    reject: (reason: unknown) => void;
+  }> = [];
   let timer: ReturnType<typeof setTimeout> | undefined;
   async function flush() {
     if (timer) clearTimeout(timer);
@@ -47,9 +58,13 @@ export function createManagedUploadBatchRequest(): ManagedUploadRequest {
     const entries = queue.splice(0, 3);
     if (!entries.length) return;
     try {
-      const response = await apiBasePost('/api/file/managedUploadBatch', {
-        items: entries.map(({ operation, payload }) => ({ operation, payload })),
-      }, { silent: true });
+      const response = await apiBasePost(
+        '/api/file/managedUploadBatch',
+        {
+          items: entries.map(({ operation, payload }) => ({ operation, payload })),
+        },
+        { silent: true },
+      );
       if (response.status !== 200 || !Array.isArray(response.data) || response.data.length !== entries.length) {
         throw new Error('UPLOAD_BATCH_FAILED');
       }
@@ -58,11 +73,15 @@ export function createManagedUploadBatchRequest(): ManagedUploadRequest {
       entries.forEach((entry) => entry.reject(error));
     }
   }
-  return (operation, payload) => new Promise((resolve, reject) => {
-    queue.push({ operation, payload, resolve, reject });
-    if (queue.length >= 3) void flush();
-    else if (!timer) timer = setTimeout(() => { void flush(); }, 10);
-  });
+  return (operation, payload) =>
+    new Promise((resolve, reject) => {
+      queue.push({ operation, payload, resolve, reject });
+      if (queue.length >= 3) void flush();
+      else if (!timer)
+        timer = setTimeout(() => {
+          void flush();
+        }, 10);
+    });
 }
 
 function managedRequest(options: ManagedCloudUploadOptions, operation: string, payload: Record<string, unknown>) {
@@ -108,7 +127,7 @@ async function abortManagedUpload(objectKey: string, options: ManagedCloudUpload
  * 因而不会覆盖旧文件或改变已经被笔记引用的文件 ID。
  */
 export async function uploadManagedCloudFile(
-  file: File,
+  file: ManagedCloudUploadFile,
   options: ManagedCloudUploadOptions = {},
 ): Promise<CloudUploadResult> {
   const metadata = {
@@ -116,7 +135,12 @@ export async function uploadManagedCloudFile(
     fileType: file.type || 'application/octet-stream',
     fileSize: file.size,
   };
-  const target = JSON.stringify([metadata, options.folderId ?? null, options.addToInbox === true, options.inboxSource || 'quick_capture']);
+  const target = JSON.stringify([
+    metadata,
+    options.folderId ?? null,
+    options.addToInbox === true,
+    options.inboxSource || 'quick_capture',
+  ]);
   const receipt = options.receipt;
   const previous = receipt?.pending;
   if (receipt && previous) {
@@ -125,7 +149,11 @@ export async function uploadManagedCloudFile(
     const recovered = await abortManagedUpload(previous.objectKey, options).catch(() => null);
     if (recovered?.alreadyConfirmed && recovered?.fileId) {
       receipt.pending = undefined;
-      return { filename: String(recovered.filename || metadata.fileName), status: '已上传', fileId: String(recovered.fileId) };
+      return {
+        filename: String(recovered.filename || metadata.fileName),
+        status: '已上传',
+        fileId: String(recovered.fileId),
+      };
     }
     if (recovered?.deleted !== true || recovered?.alreadyConfirmed === true) {
       throw new Error('UPLOAD_RESULT_UNKNOWN');
@@ -133,6 +161,10 @@ export async function uploadManagedCloudFile(
     receipt.pending = undefined;
   }
   if (options.signal?.aborted) throw new DOMException('Upload cancelled', 'AbortError');
+  // 先核验未知结果，再按需读取；回执只引用来源，不留住已读取的大 Blob。
+  const body = 'read' in file ? await file.read(options.signal) : file;
+  if (options.signal?.aborted) throw new DOMException('Upload cancelled', 'AbortError');
+  if (body.size !== file.size) throw new Error('UPLOAD_SOURCE_SIZE_CHANGED');
   const prepareResponse = await managedRequest(options, 'prepareManagedUpload', metadata);
   const uploadInfo = prepareResponse.data;
   if (prepareResponse.status !== 200 || !uploadInfo?.uploadUrl || !uploadInfo?.objectKey) {
@@ -142,7 +174,7 @@ export async function uploadManagedCloudFile(
   if (receipt) receipt.pending = { objectKey: String(uploadInfo.objectKey), file, target };
   let confirmed = false;
   try {
-    await axios.put(uploadInfo.uploadUrl, file, {
+    await axios.put(uploadInfo.uploadUrl, body, {
       headers: {
         ...(uploadInfo.headers || {}),
         'Content-Type': uploadInfo.fileType || metadata.fileType,
@@ -159,18 +191,14 @@ export async function uploadManagedCloudFile(
     // 抛入既有恢复流程，清理对象；如果结果已确认则保留已保存文件。
     if (options.signal?.aborted) throw new DOMException('Upload cancelled', 'AbortError');
 
-    const confirmResponse = await managedRequest(
-      options,
-      'confirmManagedUpload',
-      {
-        objectKey: uploadInfo.objectKey,
-        fileName: metadata.fileName,
-        fileType: uploadInfo.fileType || metadata.fileType,
-        folderId: options.folderId ?? null,
-        addToInbox: options.addToInbox === true,
-        inboxSource: options.inboxSource || 'quick_capture',
-      },
-    );
+    const confirmResponse = await managedRequest(options, 'confirmManagedUpload', {
+      objectKey: uploadInfo.objectKey,
+      fileName: metadata.fileName,
+      fileType: uploadInfo.fileType || metadata.fileType,
+      folderId: options.folderId ?? null,
+      addToInbox: options.addToInbox === true,
+      inboxSource: options.inboxSource || 'quick_capture',
+    });
     const result = confirmResponse.data;
     if (confirmResponse.status !== 200 || !result?.fileId || result.status !== '已上传') {
       throw apiError(confirmResponse, 'UPLOAD_CONFIRM_FAILED');

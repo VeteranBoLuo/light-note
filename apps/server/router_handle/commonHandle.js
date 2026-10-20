@@ -1481,6 +1481,23 @@ function buildAdminTodayBaseline(rows, dates, cutoffTime) {
   };
 }
 
+// 总览的新增任务与实例健康统计分开；列表、计数和同期比较复用同一创建事实。
+const ADMIN_TODO_CREATION_TIME = 'COALESCE(todo_series.create_time, todo_items.create_time)';
+const ADMIN_TODO_CREATION_ID = 'COALESCE(todo_series.id, todo_items.id)';
+const ADMIN_TODO_SERIES_JOIN = `LEFT JOIN todo_series ON todo_series.id = todo_items.series_id
+  AND todo_series.user_id = todo_items.user_id AND todo_items.plan_version = 2`;
+const ADMIN_TODO_CREATION_CONDITION = `(
+  (todo_items.series_id IS NULL AND todo_items.generated_by_todo_id IS NULL)
+  OR (todo_items.plan_version = 1 AND todo_items.series_id = todo_items.id)
+  OR (todo_series.id IS NOT NULL AND todo_series.parent_series_id IS NULL
+    AND todo_items.id = (
+      SELECT first_item.id FROM todo_items first_item
+      WHERE first_item.series_id = todo_series.id AND first_item.user_id = todo_series.user_id
+        AND first_item.del_flag = 0
+      ORDER BY first_item.occurrence_no, first_item.id LIMIT 1
+    ))
+)`;
+
 function buildAdminOverviewScope(hideInternal) {
   const irSql = INTERNAL_ROLES.map((role) => `'${role}'`).join(', ');
   const notIntRole = hideInternal ? ` AND role NOT IN (${irSql})` : '';
@@ -1517,7 +1534,15 @@ function buildAdminOverviewScope(hideInternal) {
       AND osr.resource_type = 'todo'
       AND osr.resource_id = todo_items.id
   )`;
+  const todoCreationCondition = `${ADMIN_TODO_CREATION_CONDITION}${notOnboardingTodo}
+    AND EXISTS (SELECT 1 FROM \`user\` todo_owner
+      WHERE todo_owner.id = todo_items.user_id AND todo_owner.del_flag = 0)`;
+  const notIntTodoUser = hideInternal
+    ? ` AND todo_items.user_id NOT IN (SELECT id FROM \`user\` WHERE role IN (${irSql}))`
+    : '';
   return {
+    todoCreationCondition,
+    notIntTodoUser,
     irSql,
     notIntRole,
     notIntUser,
@@ -1616,19 +1641,14 @@ async function queryAdminOverviewSnapshot({ hideInternal, now = new Date() }) {
       pool
         .query(
           `SELECT
-             COUNT(*) AS total,
-             COALESCE(SUM(create_time >= ? AND NOT EXISTS (
-               SELECT 1 FROM onboarding_seed_resources osr
-                WHERE osr.user_id = todo_items.user_id
-                  AND osr.resource_type = 'todo'
-                  AND osr.resource_id = todo_items.id
-             )), 0) AS createdToday,
-             COALESCE(SUM(status = 'pending'), 0) AS pending,
-             COALESCE(SUM(status = 'pending' AND due_at >= NOW() AND due_at < DATE_ADD(?, INTERVAL 1 DAY)), 0) AS dueToday,
-             COALESCE(SUM(status = 'pending' AND due_at < NOW()), 0) AS overdue,
-             COALESCE(SUM(status = 'completed' AND completed_at >= ? AND completed_at < DATE_ADD(?, INTERVAL 1 DAY)), 0) AS completedToday
-           FROM todo_items
-           WHERE del_flag = 0${scope.notIntUser}`,
+             COALESCE(SUM(${scope.todoCreationCondition}), 0) AS total,
+             COALESCE(SUM(${scope.todoCreationCondition} AND ${ADMIN_TODO_CREATION_TIME} >= ?), 0) AS createdToday,
+             COALESCE(SUM(todo_items.status = 'pending'), 0) AS pending,
+             COALESCE(SUM(todo_items.status = 'pending' AND due_at >= NOW() AND due_at < DATE_ADD(?, INTERVAL 1 DAY)), 0) AS dueToday,
+             COALESCE(SUM(todo_items.status = 'pending' AND due_at < NOW()), 0) AS overdue,
+             COALESCE(SUM(todo_items.status = 'completed' AND completed_at >= ? AND completed_at < DATE_ADD(?, INTERVAL 1 DAY)), 0) AS completedToday
+           FROM todo_items ${ADMIN_TODO_SERIES_JOIN}
+           WHERE todo_items.del_flag = 0${scope.notIntTodoUser}`,
           [today, today, today, today],
         )
         .catch(() => [[{ total: 0, createdToday: 0, pending: 0, dueToday: 0, overdue: 0, completedToday: 0 }]]),
@@ -1793,10 +1813,11 @@ async function queryAdminOverviewTrend({ days, hideInternal, now = new Date() })
              AND create_time >= ? AND create_time < ? AND TIME(create_time) <= ?${scope.notIntCreateBy}${scope.notOnboardingFile}
            GROUP BY d
            UNION ALL
-           SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, 'todos' AS kind, COUNT(*) AS c
-           FROM todo_items
-           WHERE del_flag = 0
-             AND create_time >= ? AND create_time < ? AND TIME(create_time) <= ?${scope.notIntUser}${scope.notOnboardingTodo}
+           SELECT DATE_FORMAT(${ADMIN_TODO_CREATION_TIME}, '%Y-%m-%d') AS d, 'todos' AS kind, COUNT(*) AS c
+           FROM todo_items ${ADMIN_TODO_SERIES_JOIN}
+           WHERE todo_items.del_flag = 0 AND ${scope.todoCreationCondition}
+             AND ${ADMIN_TODO_CREATION_TIME} >= ? AND ${ADMIN_TODO_CREATION_TIME} < ?
+             AND TIME(${ADMIN_TODO_CREATION_TIME}) <= ?${scope.notIntTodoUser}
            GROUP BY d
            UNION ALL
            SELECT DATE_FORMAT(created_at, '%Y-%m-%d') AS d, 'aiCalls' AS kind, COUNT(*) AS c
@@ -2004,7 +2025,10 @@ export const getAdminOverviewRecent = async (req, res) => {
     const bookmarkDate = dateFilter('bookmark.create_time');
     const noteDate = dateFilter('note.create_time');
     const fileDate = dateFilter('files.create_time');
-    const todoDate = dateFilter('todo_items.create_time');
+    // 系列是一次用户创建；实例的滚动补齐和完成后续生不能成为新的创建事件。
+    const todoCreatedAt = ADMIN_TODO_CREATION_TIME;
+    const todoCreationId = ADMIN_TODO_CREATION_ID;
+    const todoDate = dateFilter(todoCreatedAt);
     const userDate = dateFilter('recent_user.create_time');
     const bookmarkCursor = recentResourceCursorFilter(
       'bookmark.create_time',
@@ -2014,7 +2038,7 @@ export const getAdminOverviewRecent = async (req, res) => {
     );
     const noteCursor = recentResourceCursorFilter('note.create_time', 'note.id', 'note', resourceCursor);
     const fileCursor = recentResourceCursorFilter('files.create_time', 'files.id', 'file', resourceCursor);
-    const todoCursor = recentResourceCursorFilter('todo_items.create_time', 'todo_items.id', 'todo', resourceCursor);
+    const todoCursor = recentResourceCursorFilter(todoCreatedAt, todoCreationId, 'todo', resourceCursor);
     const userCursorFilter = userCursor
       ? {
           sql: ' AND (recent_user.create_time < ? OR (recent_user.create_time = ? AND recent_user.id < ?))',
@@ -2073,15 +2097,19 @@ export const getAdminOverviewRecent = async (req, res) => {
         : Promise.resolve([[]]),
       include('todo')
         ? pool.query(
-            `SELECT todo_items.id, todo_items.title, todo_items.status, todo_items.create_time AS createdAt,
+            `SELECT ${todoCreationId} AS id, COALESCE(todo_series.title, todo_items.title) AS title,
+                CASE WHEN todo_series.id IS NULL THEN todo_items.status END AS status,
+                ${todoCreatedAt} AS createdAt,
                 resource_owner.id AS userId, resource_owner.alias AS userName,
                 COALESCE(owner_remark.remark_name, '') AS userRemark
          FROM todo_items
+         ${ADMIN_TODO_SERIES_JOIN}
          JOIN \`user\` resource_owner ON resource_owner.id = todo_items.user_id AND resource_owner.del_flag = 0
          LEFT JOIN admin_user_remarks owner_remark
            ON owner_remark.admin_user_id = ? AND owner_remark.target_user_id = resource_owner.id
-         WHERE todo_items.del_flag = 0${todoDate.sql}${todoCursor.sql}${resourceOwnerRole}${scope.notOnboardingTodo}
-         ORDER BY todo_items.create_time DESC, todo_items.id DESC
+         WHERE todo_items.del_flag = 0
+           AND ${scope.todoCreationCondition}${todoDate.sql}${todoCursor.sql}${resourceOwnerRole}
+         ORDER BY ${todoCreatedAt} DESC, ${todoCreationId} DESC
          LIMIT ?`,
             [rootUserId, ...todoDate.params, ...todoCursor.params, take],
           )

@@ -60,13 +60,17 @@ export function handle(service, extra = () => ({}), previewRead = false) {
   };
 }
 const readHandle = (service, extra) => handle(service, extra, true);
-export const feedCapabilities = readHandle(async ({ previewReadOnly }) => ({
-  ...(await capabilities()),
-  ...(previewReadOnly ? { writesEnabled: false } : {}),
-  imagesEnabled: await images.imagesReady().catch(() => false),
-  resourcesEnabled: await resources.resourcesReady().catch(() => false),
-  limits: COMMUNITY_FEED_LIMITS,
-}));
+export const feedCapabilities = readHandle(async ({ previewReadOnly }) => {
+  const imagesEnabled = await images.imagesReady().catch(() => false);
+  return {
+    ...(await capabilities()),
+    ...(previewReadOnly ? { writesEnabled: false } : {}),
+    imagesEnabled,
+    inlineImagesEnabled: imagesEnabled,
+    resourcesEnabled: await resources.resourcesReady().catch(() => false),
+    limits: COMMUNITY_FEED_LIMITS,
+  };
+});
 export const topics = readHandle(topicService.listTopics),
   listPosts = readHandle(posts.listPosts),
   submitPost = handle(posts.submitPost),

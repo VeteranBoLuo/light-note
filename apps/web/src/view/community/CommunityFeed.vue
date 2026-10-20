@@ -403,8 +403,12 @@
                   </template>
                   <template #identityActions
                     ><div class="profile-summary-actions">
-                      <BButton v-if="profile.isOwn && !preview && (profile.backgroundShopEnabled || profile.backgroundId)" type="text"
-                        @click="go('/growth?section=rewards&reward=shop&focus=background')">{{ t('profileBackgrounds.change') }}</BButton>
+                      <BButton
+                        v-if="profile.isOwn && !preview && (profile.backgroundShopEnabled || profile.backgroundId)"
+                        type="text"
+                        @click="go('/growth?section=rewards&reward=shop&focus=background')"
+                        >{{ t('profileBackgrounds.change') }}</BButton
+                      >
                       <BButton type="text" v-if="profile.isOwn && !preview" @click="accountEditorOpen = true">{{
                         t('community.feed.editProfile')
                       }}</BButton>
@@ -531,6 +535,7 @@
         :post="editing"
         :initial-topic="editorTopic || filters.topic"
         :images-enabled="caps.imagesEnabled"
+        :inline-images-enabled="caps.inlineImagesEnabled"
         :resources-enabled="caps.resourcesEnabled"
         :topics="topicOptions"
         :profile-enabled="options.enabled"
@@ -645,7 +650,13 @@
     user = useUserStore();
   const mode = computed(() => String(route.meta.feedMode || 'feed')),
     authenticated = computed(() => Boolean(user.id && user.role !== 'visitor' && !user.adminContext));
-  const caps = ref({ feedEnabled: false, writesEnabled: false, imagesEnabled: false, resourcesEnabled: false }),
+  const caps = ref({
+      feedEnabled: false,
+      writesEnabled: false,
+      imagesEnabled: false,
+      inlineImagesEnabled: false,
+      resourcesEnabled: false,
+    }),
     canWrite = computed(() => authenticated.value && caps.value.writesEnabled);
   const posts = ref<FeedPost[]>([]),
     detail = ref<FeedPost | null>(null),

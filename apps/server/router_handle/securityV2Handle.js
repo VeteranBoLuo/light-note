@@ -130,6 +130,7 @@ const reviewEvent = async ({ connection, event, disposition, reason, operatorId 
     connection,
     event,
     normalizedStatus: handledStatus,
+    disposition,
     remark: reason,
     operatorId,
   });
@@ -314,6 +315,7 @@ export const getSecurityOverviewV2 = async (req, res) => {
     summary.policyVersion = Math.max(1, ...policyRows.map((row) => Number(row.version || 1)));
     summary.eventBacklog = Number(summary.pendingReview || 0);
     summary.autoIpBanEnabled = SECURITY_CONFIG.ipAutoBanEnabled;
+    summary.autoResponseEnabled = SECURITY_CONFIG.autoResponseEnabled && SECURITY_CONFIG.blockEnabled;
     summary.reputationDecisionEnabled = SECURITY_CONFIG.reputationDecisionEnabled;
     res.send(
       resultData({

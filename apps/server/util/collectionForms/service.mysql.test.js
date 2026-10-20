@@ -3,6 +3,8 @@ import { readFile } from 'node:fs/promises';
 import mysql from 'mysql2/promise';
 import { beforeAll, afterAll, beforeEach, describe, it, expect, vi } from 'vitest';
 import { createFormsService } from './service.js';
+import { POINTS_GRANT_OPERATIONS_TABLE_SQL } from '../growthCenterSchema.js';
+import { OTHER_OPTION_ID } from '@lightnote/shared/collection-forms';
 const socketPath = process.env.LIGHTNOTE_TEST_MYSQL_SOCKET;
 const schema = 'collections_' + randomUUID().replaceAll('-', '');
 let admin, pool, service;
@@ -51,7 +53,24 @@ describe.skipIf(!socketPath)('公开收集 MySQL 原子性和统计', () => {
       namedPlaceholders: true,
     });
     service = createFormsService(pool);
-    await pool.query('CREATE TABLE user(id VARCHAR(255) PRIMARY KEY,role VARCHAR(32),del_flag INT)');
+    await pool.query(
+      "CREATE TABLE user(id VARCHAR(255) PRIMARY KEY,role VARCHAR(32),del_flag INT,alias VARCHAR(255) NOT NULL DEFAULT '')",
+    );
+    await pool.query(POINTS_GRANT_OPERATIONS_TABLE_SQL);
+    // Exercise the explicit upgrade from the historical receipt table, not just a fresh schema.
+    await pool.query('ALTER TABLE points_grant_operations DROP INDEX idx_points_grant_request_status');
+    await pool.query('CREATE TABLE user_growth(user_id VARCHAR(64) PRIMARY KEY,points BIGINT NOT NULL DEFAULT 0)');
+    await pool.query(
+      'CREATE TABLE points_log(id BIGINT AUTO_INCREMENT PRIMARY KEY,user_id VARCHAR(64),delta BIGINT,reason VARCHAR(32),ref VARCHAR(64),policy_version VARCHAR(32),meta JSON,KEY idx_user_reason_ref(user_id,reason,ref))',
+    );
+    await pool.query(`CREATE TABLE notification (
+      id CHAR(36) PRIMARY KEY, user_id VARCHAR(255) NOT NULL, type VARCHAR(32) NOT NULL,
+      title VARCHAR(255) NOT NULL, content TEXT, link VARCHAR(255), meta JSON,
+      batch_id CHAR(36), source_type VARCHAR(32), source_id VARCHAR(64),
+      is_read TINYINT NOT NULL DEFAULT 0, del_flag TINYINT NOT NULL DEFAULT 0,
+      browser_push_pending TINYINT NOT NULL DEFAULT 0, browser_push_created_at DATETIME(6),
+      UNIQUE KEY uk_notification_source (user_id, source_type, source_id)
+    )`);
     await pool.query(
       'CREATE TABLE tag(id VARCHAR(255) PRIMARY KEY,user_id VARCHAR(255),del_flag INT) CHARACTER SET utf8 COLLATE utf8_general_ci',
     );
@@ -59,18 +78,31 @@ describe.skipIf(!socketPath)('公开收集 MySQL 原子性和统计', () => {
       'CREATE TABLE security_account_restrictions(user_id VARCHAR(255),restriction_type VARCHAR(32),status VARCHAR(32),expires_at DATETIME)',
     );
     vi.stubEnv('COLLECTION_FORMS_IDENTITY_SECRET', 'test-only-collection-identity-secret-000000');
-    for (const migration of ['20260923_collection_forms.sql', '20260924_collection_submission_identity.sql'])
+    for (const migration of [
+      '20260923_collection_forms.sql',
+      '20260924_collection_submission_identity.sql',
+      '20261019_collection_member_rewards.sql',
+      '20261019_collection_member_rewards.sql',
+    ])
       for (const sql of (await readFile(new URL('../../migrations/' + migration, import.meta.url), 'utf8'))
         .replace(/^--.*$/gm, '')
         .split(';')
         .filter((s) => s.trim()))
         await pool.query(sql);
-    await pool.query("INSERT INTO user VALUES ('u','user',0),('other','user',0)");
+    await pool.query(
+      "INSERT INTO user(id,role,del_flag) VALUES ('u','user',0),('other','user',0),('root-owner','root',0),('member','user',0),('another','user',0),('third','test',0),('guest','visitor',0),('disabled','user',1)",
+    );
+    await pool.query("UPDATE user SET alias='参与者' WHERE id='member'");
     await pool.query("INSERT INTO tag VALUES ('t','u',0)");
   });
   beforeEach(async () => {
     await pool.query('DELETE FROM collection_forms');
     await pool.query('DELETE FROM security_account_restrictions');
+    await pool.query('DELETE FROM points_log');
+    await pool.query('DELETE FROM points_grant_operations');
+    await pool.query('DELETE FROM user_growth');
+    await pool.query('DELETE FROM notification');
+    await pool.query("UPDATE user SET role='root' WHERE id='root-owner'");
   });
   afterAll(async () => {
     vi.unstubAllEnvs();
@@ -92,6 +124,232 @@ describe.skipIf(!socketPath)('公开收集 MySQL 原子性和统计', () => {
       status: 409,
     });
     expect((await service.responses('u', f.id)).total).toBe(1);
+  });
+  it('普通匿名表单不读取任何登录会话', async () => {
+    const f = await published();
+    const resolver = vi.fn(async () => {
+      throw new Error('should not inspect sessions');
+    });
+    await service.publicForm(f.public_id, null, resolver);
+    await service.submit(f.public_id, { requestKey: randomUUID(), answers: { choice: ['a'] } }, null, resolver);
+    expect(resolver).not.toHaveBeenCalled();
+    expect((await pool.query('SELECT * FROM notification'))[0]).toHaveLength(0);
+  });
+  it('成员列与发奖索引满足对应的只读 Schema 断言', async () => {
+    const source = await readFile(new URL('../../migrations/schema-assertions.sql', import.meta.url), 'utf8');
+    const statements = source
+      .replace(/^--.*$/gm, '')
+      .split(';')
+      .filter(
+        (sql) =>
+          sql.includes("'missing_collection_identity_column'") || sql.includes("'collection_member_reward_index'"),
+      );
+    expect(statements).toHaveLength(2);
+    for (const sql of statements) expect((await pool.query(sql))[0]).toEqual([]);
+  });
+  async function memberForm(reward = { points: 20, maxRecipients: 100 }) {
+    const { id } = await service.create('root-owner', { definition: { ...definition, membersOnly: true, reward } });
+    await service.action('root-owner', id, { action: 'publish', version: 1 });
+    return service.get('root-owner', id);
+  }
+  const account =
+    (id = 'member') =>
+    async () => ({ id });
+  const memberInput = (id = 'member', extra = {}) => ({
+    requestKey: randomUUID(),
+    answers: { choice: ['a'] },
+    expectedAccountId: id,
+    ...extra,
+  });
+  it('仅 root 可创建和配置特殊表单，发布后锁定规则，复制关闭奖励', async () => {
+    await expect(service.create('u', { definition: { ...definition, membersOnly: true } })).rejects.toMatchObject({
+      status: 403,
+    });
+    await expect(
+      service.create('u', { definition: { ...definition, reward: { points: 20, maxRecipients: 2 } } }),
+    ).rejects.toMatchObject({ status: 403 });
+    const plain = await service.create('u', { definition });
+    await expect(
+      service.update('u', plain.id, { version: 1, definition: { ...definition, membersOnly: true } }),
+    ).rejects.toMatchObject({ status: 403 });
+    const f = await memberForm();
+    for (const change of [
+      { membersOnly: false, reward: null },
+      { reward: { points: 30, maxRecipients: 100 } },
+      { reward: { points: 20, maxRecipients: 101 } },
+    ])
+      await expect(
+        service.update('root-owner', f.id, { version: f.version, definition: { ...f.definition, ...change } }),
+      ).rejects.toThrow('规则已锁定');
+    const copy = await service.action('root-owner', f.id, { action: 'copy' });
+    expect((await service.get('root-owner', copy.id)).definition).toMatchObject({ membersOnly: true, reward: null });
+    await pool.query("UPDATE user SET role='user' WHERE id='root-owner'");
+    await expect(service.publicForm(f.public_id, null, account())).rejects.toMatchObject({ status: 404 });
+    await expect(service.submit(f.public_id, memberInput(), null, account())).rejects.toMatchObject({ status: 403 });
+  });
+  it('登录、实时账号状态、必填项与账号切换校验均由服务端执行', async () => {
+    const f = await memberForm();
+    expect(await service.publicForm(f.public_id)).toMatchObject({
+      requiresLogin: true,
+      account: null,
+      mySubmission: null,
+    });
+    await expect(service.submit(f.public_id, memberInput())).rejects.toMatchObject({ status: 401 });
+    for (const id of ['guest', 'disabled', 'missing'])
+      await expect(service.submit(f.public_id, memberInput(id), null, account(id))).rejects.toMatchObject({
+        status: 403,
+      });
+    await expect(service.submit(f.public_id, memberInput('another'), null, account())).rejects.toMatchObject({
+      status: 409,
+      field: 'account',
+    });
+    await expect(service.submit(f.public_id, memberInput('member', { answers: {} }), null, account())).rejects.toThrow(
+      '请填写此题',
+    );
+    await pool.query("INSERT INTO security_account_restrictions VALUES ('member','write_lock','active',NULL)");
+    await expect(service.submit(f.public_id, memberInput(), null, account())).rejects.toMatchObject({ status: 423 });
+    expect((await service.responses('root-owner', f.id)).total).toBe(0);
+    expect((await pool.query('SELECT * FROM points_log'))[0]).toHaveLength(0);
+    expect((await pool.query('SELECT * FROM notification'))[0]).toHaveLength(0);
+  });
+  it('跨设备、并发提交和旧请求重放只留一份回答、奖励和到账通知各一次', async () => {
+    const f = await memberForm();
+    const firstInput = memberInput();
+    const receipts = await Promise.all(
+      Array.from({ length: 8 }, () => service.submit(f.public_id, firstInput, randomUUID(), account())),
+    );
+    expect(receipts.every((r) => r.receipt === receipts[0].receipt)).toBe(true);
+    expect(receipts[0].reward).toEqual({ points: 20, received: true });
+    await Promise.all(Array.from({ length: 4 }, () => service.submit(f.public_id, memberInput(), null, account())));
+    const edit = memberInput('member', { answers: { choice: ['b'] }, expectedReceipt: receipts[0].receipt });
+    const updated = await service.submit(f.public_id, edit, 'another-device', account());
+    expect(updated).toMatchObject({ receipt: receipts[0].receipt, outcome: 'updated', reward: { points: 20 } });
+    await service.update('root-owner', f.id, { version: f.version, definition: { ...f.definition, title: '新标题' } });
+    expect(await service.submit(f.public_id, firstInput, null, account())).toEqual(receipts[0]);
+    const mine = await service.publicForm(f.public_id, null, account());
+    expect(mine).toMatchObject({
+      account: { id: 'member' },
+      requiresLogin: false,
+      reward: { received: true },
+      mySubmission: { answers: edit.answers },
+    });
+    expect((await service.publicForm(f.public_id, null, account('another'))).mySubmission).toBeNull();
+    const page = await service.responses('root-owner', f.id);
+    expect(page.total).toBe(1);
+    expect(page.items[0]).toMatchObject({
+      respondent_user_id: 'member',
+      respondent_alias: '参与者',
+      reward_points: 20,
+    });
+    expect((await service.get('root-owner', f.id)).rewardSummary).toEqual({ recipients: 1, totalPoints: 20 });
+    expect((await pool.query("SELECT points FROM user_growth WHERE user_id='member'"))[0][0].points).toBe(20);
+    expect((await pool.query('SELECT * FROM points_log'))[0]).toHaveLength(1);
+    const [notices] = await pool.query('SELECT * FROM notification');
+    expect(notices).toHaveLength(1);
+    expect(notices[0]).toMatchObject({
+      user_id: 'member',
+      type: 'collection_form_reward',
+      title: '「反馈」奖励已到账',
+      content: '你提交的「反馈」已获得 20 积分，奖励已到账。',
+      link: '/growth?section=rewards&reward=ledger',
+      source_type: 'collection_form_reward',
+      source_id: f.id,
+      is_read: 0,
+    });
+    expect(notices[0].meta).toEqual({ formTitle: '反馈', points: 20 });
+    expect(notices[0].browser_push_created_at).not.toBeNull();
+    await pool.query('UPDATE notification SET is_read=1,del_flag=1');
+    await service.mark('root-owner', f.id, { action: 'spam', ids: [receipts[0].receipt] });
+    await pool.query('DELETE FROM collection_submissions WHERE id=?', [receipts[0].receipt]);
+    await service.submit(f.public_id, memberInput(), null, account());
+    expect((await pool.query('SELECT * FROM points_log'))[0]).toHaveLength(1);
+    expect((await pool.query('SELECT * FROM notification'))[0]).toHaveLength(1);
+    expect((await pool.query('SELECT del_flag FROM notification'))[0][0].del_flag).toBe(1);
+  });
+  it('仅登录限制可以不发奖，且不依赖匿名 Cookie 或匿名密钥', async () => {
+    const f = await memberForm(null);
+    vi.stubEnv('COLLECTION_FORMS_IDENTITY_SECRET', '');
+    try {
+      expect((await service.publicForm(f.public_id, null, account())).requiresLogin).toBe(false);
+      expect(await service.submit(f.public_id, memberInput(), null, account())).not.toHaveProperty('reward');
+      expect((await pool.query('SELECT * FROM points_log'))[0]).toHaveLength(0);
+      expect((await pool.query('SELECT * FROM notification'))[0]).toHaveLength(0);
+    } finally {
+      vi.stubEnv('COLLECTION_FORMS_IDENTITY_SECRET', 'test-only-collection-identity-secret-000000');
+    }
+  });
+  it('并发竞争最后名额不会超发，自动暂停后重试仍成功，删除表单保留账本', async () => {
+    const f = await memberForm({ points: 20, maxRecipients: 2 });
+    const ids = ['member', 'another', 'third'];
+    const inputs = ids.map((id) => memberInput(id));
+    const results = await Promise.allSettled(
+      ids.map((id, i) => service.submit(f.public_id, inputs[i], null, account(id))),
+    );
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(2);
+    const paused = await service.get('root-owner', f.id);
+    expect(paused).toMatchObject({ status: 'paused', rewardSummary: { recipients: 2, totalPoints: 40 } });
+    for (let i = 0; i < results.length; i++)
+      if (results[i].status === 'fulfilled')
+        expect(await service.submit(f.public_id, inputs[i], null, account(ids[i]))).toEqual(results[i].value);
+    await expect(service.action('root-owner', f.id, { action: 'resume', version: paused.version })).rejects.toThrow(
+      '名额已用尽',
+    );
+    await service.action('root-owner', f.id, { action: 'delete', version: paused.version });
+    expect((await pool.query('SELECT * FROM points_grant_operations'))[0]).toHaveLength(2);
+    expect((await pool.query('SELECT * FROM points_log'))[0]).toHaveLength(2);
+    expect((await pool.query('SELECT * FROM notification'))[0]).toHaveLength(2);
+  });
+  it('积分写入失败整体回滚，使用原请求重试可正常保存并到账', async () => {
+    const f = await memberForm({ points: 20, maxRecipients: 1 });
+    const input = memberInput();
+    await pool.query(
+      "CREATE TRIGGER collection_reward_fail BEFORE INSERT ON points_log FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='reward failure'",
+    );
+    try {
+      await expect(service.submit(f.public_id, input, null, account())).rejects.toThrow('reward failure');
+    } finally {
+      await pool.query('DROP TRIGGER collection_reward_fail');
+    }
+    expect((await service.responses('root-owner', f.id)).total).toBe(0);
+    expect((await pool.query('SELECT * FROM points_grant_operations'))[0]).toHaveLength(0);
+    expect((await pool.query('SELECT * FROM user_growth'))[0]).toHaveLength(0);
+    expect((await pool.query('SELECT * FROM notification'))[0]).toHaveLength(0);
+    expect((await service.get('root-owner', f.id)).status).toBe('collecting');
+    expect((await service.submit(f.public_id, input, null, account())).reward).toEqual({ points: 20, received: true });
+  });
+  it('到账通知写入失败时整体回滚，同一请求重试后积分和通知各一次', async () => {
+    const f = await memberForm({ points: 20, maxRecipients: 1 });
+    const input = memberInput();
+    await pool.query(
+      "CREATE TRIGGER collection_notice_fail BEFORE INSERT ON notification FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='notice failure'",
+    );
+    try {
+      await expect(service.submit(f.public_id, input, null, account())).rejects.toThrow('notice failure');
+    } finally {
+      await pool.query('DROP TRIGGER collection_notice_fail');
+    }
+    for (const table of [
+      'collection_submissions',
+      'collection_submission_requests',
+      'points_log',
+      'points_grant_operations',
+      'user_growth',
+      'notification',
+    ])
+      expect((await pool.query(`SELECT * FROM ${table}`))[0]).toHaveLength(0);
+    expect((await service.get('root-owner', f.id)).status).toBe('collecting');
+    const result = await service.submit(f.public_id, input, null, account());
+    expect(await service.submit(f.public_id, input, null, account())).toEqual(result);
+    expect((await pool.query('SELECT points FROM user_growth'))[0][0].points).toBe(20);
+    expect((await pool.query('SELECT * FROM points_log'))[0]).toHaveLength(1);
+    expect((await pool.query('SELECT * FROM notification'))[0]).toHaveLength(1);
+  });
+  it('同一账号参与不同表单分别奖励并通知', async () => {
+    const first = await memberForm();
+    const second = await memberForm({ points: 30, maxRecipients: 2 });
+    for (const f of [first, second]) await service.submit(f.public_id, memberInput(), null, account());
+    expect((await pool.query('SELECT points FROM user_growth'))[0][0].points).toBe(50);
+    expect((await pool.query('SELECT * FROM notification'))[0]).toHaveLength(2);
   });
   it('公开填写允许新请求再次提交；统计按人次去重选项并排除垃圾', async () => {
     const f = await published();
@@ -357,6 +615,71 @@ describe.skipIf(!socketPath)('公开收集 MySQL 原子性和统计', () => {
     );
     expect(updated).toEqual({ receipt: original.receipt, outcome: 'updated' });
     expect(Number((await service.statistics('u', f.id)).summary.valid)).toBe(1);
+  });
+  it.each(['single', 'multiple'])('%s 其他文字随答案保存、回填、去重，统计与文本检索独立于普通选项', async (type) => {
+    const { id } = await service.create('u', {
+      definition: { ...definition, questions: [{ ...definition.questions[0], type, allowOther: true }] },
+    });
+    await service.action('u', id, { action: 'publish', version: 1 });
+    const f = await service.get('u', id);
+    const custom = { optionIds: type === 'single' ? [] : ['b', 'a', 'a'], otherText: '  朋友分享 📚  ' };
+    const input = { requestKey: randomUUID(), answers: { choice: custom } };
+    const first = await service.submit(f.public_id, input, 'browser-other');
+    expect(await service.submit(f.public_id, input, 'browser-other')).toEqual(first);
+    const normalized = { optionIds: type === 'single' ? [] : ['a', 'b'], otherText: '朋友分享 📚' };
+    expect((await service.publicForm(f.public_id, 'browser-other')).mySubmission.answers.choice).toEqual(normalized);
+    const normal = type === 'single' ? 'a' : ['a'];
+    await service.submit(f.public_id, { requestKey: randomUUID(), answers: { choice: normal } }, 'browser-normal');
+    const stats = await service.statistics('u', id);
+    expect(stats.questions[0].answered).toBe(2);
+    expect(stats.questions[0].choices.find((c) => c.option_id === OTHER_OPTION_ID)?.count).toBe(1);
+    expect((await service.textAnswers('u', id, { questionId: 'choice' })).map((r) => r.text_value)).toEqual([
+      '朋友分享 📚',
+    ]);
+    expect(await service.textAnswers('u', id, { questionId: 'choice', search: '不存在' })).toEqual([]);
+    const exported = [];
+    for await (const r of service.exportRows('u', id, {})) exported.push(r);
+    expect(exported.find((r) => r.id === first.receipt).answers.choice).toEqual(normalized);
+    await service.submit(
+      f.public_id,
+      { requestKey: randomUUID(), expectedReceipt: first.receipt, answers: { choice: normal } },
+      'browser-other',
+    );
+    expect((await service.responses('u', id)).total).toBe(2);
+    expect((await service.statistics('u', id)).questions[0].choices.some((c) => c.option_id === OTHER_OPTION_ID)).toBe(
+      false,
+    );
+    expect(await service.textAnswers('u', id, { questionId: 'choice' })).toEqual([]);
+  });
+  it('选中其他但文字无效不发奖；提交与修改其他内容只发一份积分和通知', async () => {
+    const { id } = await service.create('root-owner', {
+      definition: {
+        ...definition,
+        membersOnly: true,
+        reward: { points: 50, maxRecipients: 50 },
+        questions: [{ ...definition.questions[0], type: 'single', allowOther: true }],
+      },
+    });
+    await service.action('root-owner', id, { action: 'publish', version: 1 });
+    const f = await service.get('root-owner', id);
+    const input = (text) => memberInput('member', { answers: { choice: { optionIds: [], otherText: text } } });
+    await expect(service.submit(f.public_id, input('  '), null, account())).rejects.toMatchObject({
+      code: 'otherRequired',
+    });
+    expect((await pool.query('SELECT * FROM notification'))[0]).toHaveLength(0);
+    expect((await pool.query('SELECT * FROM points_log'))[0]).toHaveLength(0);
+    expect((await service.responses('root-owner', id)).total).toBe(0);
+    const payload = input('搜索引擎之外的推荐');
+    const results = await Promise.all([
+      service.submit(f.public_id, payload, null, account()),
+      service.submit(f.public_id, payload, null, account()),
+    ]);
+    expect(results[0].reward).toEqual({ points: 50, received: true });
+    expect(results[1].receipt).toBe(results[0].receipt);
+    await service.submit(f.public_id, input('朋友推荐'), null, account());
+    expect((await pool.query('SELECT * FROM notification'))[0]).toHaveLength(1);
+    expect((await pool.query('SELECT delta FROM points_log'))[0]).toEqual([expect.objectContaining({ delta: 50 })]);
+    expect((await service.responses('root-owner', id)).rewardSummary).toEqual({ recipients: 1, totalPoints: 50 });
   });
   it('题目、选项和幂等键区分大小写，并使用标签存量字符集', async () => {
     const d = {

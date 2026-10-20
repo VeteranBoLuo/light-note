@@ -28,7 +28,10 @@ vi.mock('@/api/communityFeedApi', () => ({
   discardFeedImage: mocks.discard,
   discardFeedResource: mocks.discard,
 }));
-vi.mock('@/composables/useMobileLayout', () => ({ useMobileLayout: () => ({ value: false }) }));
+vi.mock('@/composables/useMobileLayout', async () => {
+  const { ref } = await import('vue');
+  return { useMobileLayout: () => ref(false) };
+});
 vi.mock('@/utils/mobileOverlayHistory', () => ({
   closeCurrentMobileOverlayThen: async (close: Function, next: Function) => {
     close();
@@ -71,6 +74,7 @@ vi.mock('@/components/base/BasicComponents/BInput.vue', () => ({
 }));
 vi.mock('@/components/base/BasicComponents/BSelect.vue', () => ({ default: { template: '<div />' } }));
 vi.mock('./CommunityMentionPicker.vue', () => ({ default: { template: '<div />' } }));
+vi.mock('./CommunityPostBody.vue', () => ({ default: { template: '<div />' } }));
 vi.mock('./CommunityMarkdown.vue', () => ({ default: { template: '<div />' } }));
 const flush = async () => {
   for (let n = 0; n < 20; n++) await nextTick();
@@ -94,6 +98,39 @@ beforeEach(() => {
   mocks.discard.mockResolvedValue({});
   mocks.operation.mockReturnValue(mocks.write);
   mocks.write.mockResolvedValue({});
+});
+it('ignores malformed v2 drafts without dropping the existing post attachments', async () => {
+  const id = '11111111-1111-4111-8111-111111111111';
+  localStorage.setItem(
+    'community-post-draft:a|user|:post',
+    JSON.stringify({ version: 2, revision: 1, draft: { body: 123, attachmentIds: [] } }),
+  );
+  const host = document.createElement('div');
+  const app = createApp(Editor, {
+    topics: [],
+    profileEnabled: true,
+    inlineImagesEnabled: true,
+    imagesEnabled: true,
+    post: {
+      publicId: 'post',
+      revision: 1,
+      title: 'title',
+      body: '现有正文',
+      images: [{ publicId: id, url: '/image', width: 10, height: 10 }],
+      topics: [],
+    } as any,
+  });
+  app.mount(host);
+  await flush();
+  button(host, 'publishNext').click();
+  await flush();
+  button(host, 'submit').click();
+  await flush();
+  expect(mocks.operation).toHaveBeenCalledWith(
+    'posts',
+    expect.objectContaining({ body: '现有正文', images: [id], contentVersion: 2 }),
+  );
+  app.unmount();
 });
 it('accepts a topic-only post and retains the draft and request identity on failed submission', async () => {
   mocks.write.mockRejectedValueOnce(new Error('offline')).mockResolvedValue({ status: 'published' });
@@ -365,5 +402,41 @@ it.each(['published', 'pending_review'])('allows saved %s navigation before the 
   expect(navigation).toBeDefined();
   expect(await navigation).toBe(true);
   expect(mocks.alert).not.toHaveBeenCalled();
+  app.unmount();
+});
+
+it('shows only top attachments in the materials panel while retaining inline images on submit', async () => {
+  const inline = '11111111-1111-4111-8111-111111111111';
+  const attached = '22222222-2222-4222-8222-222222222222';
+  const host = document.createElement('div');
+  const app = createApp(Editor, {
+    topics: [],
+    profileEnabled: true,
+    inlineImagesEnabled: true,
+    imagesEnabled: true,
+    post: {
+      publicId: 'post',
+      revision: 1,
+      title: 'title',
+      body: `前\n\n![](community-image:${inline})\n\n后`,
+      images: [inline, attached].map((publicId) => ({ publicId, url: '/image/' + publicId, width: 20, height: 10 })),
+      topics: [],
+    } as any,
+  });
+  app.mount(host);
+  await flush();
+  expect(Array.from(host.querySelectorAll('.writing-materials img')).map((i) => i.getAttribute('src'))).toEqual([
+    '/image/' + attached,
+  ]);
+  expect(host.querySelector('.writing-materials')?.textContent).toContain('community.feed.attachmentHint');
+  expect(host.querySelector('.writing-materials')?.textContent).not.toContain('community.feed.insertImage');
+  button(host, 'publishNext').click();
+  await flush();
+  button(host, 'submit').click();
+  await flush();
+  expect(mocks.operation).toHaveBeenCalledWith(
+    'posts',
+    expect.objectContaining({ images: [attached, inline], contentVersion: 2 }),
+  );
   app.unmount();
 });

@@ -680,15 +680,20 @@ export function enrichPointsLogRow(row) {
     ref: privateOperation ? null : row.ref,
     meta: publicMeta && Object.values(publicMeta).some((value) => value !== null) ? publicMeta : null,
     sourceName:
-      reason === 'campaign' &&
-      /^community-task:[^:]+$/.test(ref) &&
-      parsedMeta?.topicName &&
-      typeof parsedMeta.topicName === 'object'
+      reason === 'campaign' && /^collection-form:[^:]+$/.test(ref) && typeof parsedMeta?.formTitle === 'string'
         ? {
-            zh: typeof parsedMeta.topicName.zh === 'string' ? parsedMeta.topicName.zh.slice(0, 200) : '',
-            en: typeof parsedMeta.topicName.en === 'string' ? parsedMeta.topicName.en.slice(0, 200) : '',
+            zh: `调研奖励 · ${parsedMeta.formTitle.slice(0, 200)}`,
+            en: `Survey reward · ${parsedMeta.formTitle.slice(0, 200)}`,
           }
-        : null,
+        : reason === 'campaign' &&
+            /^community-task:[^:]+$/.test(ref) &&
+            parsedMeta?.topicName &&
+            typeof parsedMeta.topicName === 'object'
+          ? {
+              zh: typeof parsedMeta.topicName.zh === 'string' ? parsedMeta.topicName.zh.slice(0, 200) : '',
+              en: typeof parsedMeta.topicName.en === 'string' ? parsedMeta.topicName.en.slice(0, 200) : '',
+            }
+          : null,
     sourceType: baseReason,
     sourceKey: sourceKey || null,
     sourceMeta,

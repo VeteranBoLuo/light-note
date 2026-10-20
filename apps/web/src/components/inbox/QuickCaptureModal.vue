@@ -31,6 +31,36 @@
           </BButton>
         </div>
       </div>
+      <div v-if="pendingShare && (captureType === 'file' || pendingShare.skippedFiles)" class="share-file-report">
+        <p>{{
+          t('inbox.shareLimits', {
+            count: pendingShare.limits?.files ?? INCOMING_SHARE_MAX_FILES,
+            size: (pendingShare.limits?.bytes ?? MAX_FILE_TOTAL_SIZE) / (1024 * 1024),
+          })
+        }}</p>
+        <BButton
+          v-if="pendingShare.skippedFileDetails?.length"
+          type="text"
+          size="small"
+          :aria-expanded="shareDetailsOpen"
+          aria-controls="share-skipped-details"
+          @click="shareDetailsOpen = !shareDetailsOpen"
+          >{{ t(shareDetailsOpen ? 'inbox.shareHideSkipped' : 'inbox.shareShowSkipped') }}</BButton
+        >
+        <ul v-if="shareDetailsOpen" id="share-skipped-details" class="share-file-report__details">
+          <li v-for="(file, index) in pendingShare.skippedFileDetails" :key="index">
+            <span>{{ file.name }}</span
+            ><span>{{ t(`inbox.shareSkipReason.${file.reason}`) }}</span>
+          </li>
+          <li v-if="pendingShare.skippedFiles > (pendingShare.skippedFileDetails?.length || 0)">
+            {{
+              t('inbox.shareMoreSkipped', {
+                count: pendingShare.skippedFiles - (pendingShare.skippedFileDetails?.length || 0),
+              })
+            }}
+          </li>
+        </ul>
+      </div>
       <BTabs
         v-model:active-tab="captureType"
         class="capture-tabs"
@@ -55,6 +85,7 @@
             <div class="capture-panel-intro">
               <strong>{{ capturePanelTitle }}</strong>
               <span>{{ capturePanelHint }}</span>
+              <span v-if="captureType === 'bookmark'">{{ t('inbox.quickCapturePanels.bookmark.analysisHint') }}</span>
             </div>
 
             <BInput
@@ -100,6 +131,9 @@
                   </template>
                 </BButton>
               </BUpload>
+              <p v-if="submitting && uploadProgress.total" class="file-upload-status" role="status">
+                {{ t('inbox.captureFilesProgress', uploadProgress) }}
+              </p>
               <p v-if="fileUploadNotice" class="file-upload-status" role="status">{{ fileUploadNotice }}</p>
               <div v-if="files.length" class="file-selection">
                 <div class="file-selection__header">
@@ -122,6 +156,9 @@
                         {{ formatFileSize(file.size) }}
                         <span v-if="isPastedFile(file)" class="file-list__source">{{ t('inbox.fromClipboard') }}</span>
                         <span v-else-if="isSharedFile(file)" class="file-list__source">{{ t('inbox.fromShare') }}</span>
+                      </span>
+                      <span v-if="fileReadFailures[selectedFileKey(file)]" class="file-list__read-error">
+                        {{ t('inbox.shareReadFailed') }}
                       </span>
                     </span>
                     <BButton
@@ -207,9 +244,11 @@
     uploadManagedCloudFile,
     type CloudUploadResult,
     type ManagedCloudUploadReceipt,
+    type ManagedCloudUploadFile,
   } from '@/api/cloudFileUploadApi';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import { bookmarkStore, inboxStore, todoStore, useUserStore } from '@/store';
+  import cloudSpaceStore from '@/store/cloudSpace';
   import {
     buildMarkdownNotePayload,
     detectInboxCaptureType,
@@ -238,12 +277,18 @@
   import { useUiDensity } from '@/composables/useUiDensity';
   import { isLightNoteAndroidApp } from '@/utils/androidBridge';
   import { completeAndroidShare, finishAndroidShare } from '@/utils/androidIncomingShare';
-  import type { QuickCaptureShareDraft } from '@/utils/incomingShare';
+  import {
+    INCOMING_SHARE_MAX_BYTES,
+    INCOMING_SHARE_MAX_FILES,
+    type QuickCaptureShareDraft,
+    type ShareSkipReport,
+    type ShareSkipReason,
+  } from '@/utils/incomingShare';
 
-  const MAX_FILE_TOTAL_SIZE = 200 * 1024 * 1024;
+  const MAX_FILE_TOTAL_SIZE = INCOMING_SHARE_MAX_BYTES;
 
   /** 当前弹窗承接的系统分享；completed 表示内容已保存、原生暂存已清理。 */
-  interface ShareCaptureState {
+  interface ShareCaptureState extends ShareSkipReport {
     id: string;
     initialText: string;
     bookmarkName: string;
@@ -320,10 +365,13 @@
     },
     { flush: 'sync' },
   );
-  const files = ref<File[]>([]);
+  const files = ref<ManagedCloudUploadFile[]>([]);
   const fileUploadNotice = ref('');
+  const fileReadFailures = ref<Record<string, boolean>>({});
+  const shareDetailsOpen = ref(false);
+  const uploadProgress = ref({ processed: 0, total: 0 });
   let fileUploadController: AbortController | null = null;
-  const fileUploadReceipts = new Map<File, ManagedCloudUploadReceipt>();
+  const fileUploadReceipts = new Map<ManagedCloudUploadFile, ManagedCloudUploadReceipt>();
   const pastedFileKeys = new Set<string>();
   const sharedFileKeys = new Set<string>();
   const shareCapture = ref<ShareCaptureState | null>(null);
@@ -346,19 +394,36 @@
   const captureEyebrow = computed(() =>
     pendingShare.value ? t('inbox.shareCaptureEyebrow') : t('inbox.quickCaptureEyebrow'),
   );
+  const skipReasons: ShareSkipReason[] = ['count_limit', 'size_limit', 'unreadable', 'unknown'];
+  const shareSkipSummary = computed(() => {
+    const share = pendingShare.value;
+    if (!share?.skippedFiles) return [];
+    const counts = { ...share.skippedFileCounts };
+    const classified = Object.values(counts).reduce((sum, count) => sum + (count || 0), 0);
+    counts.unknown = (counts.unknown || 0) + Math.max(0, share.skippedFiles - classified);
+    return skipReasons
+      .filter((reason) => counts[reason])
+      .map((reason) =>
+        reason === 'unknown'
+          ? t('inbox.shareSkippedFiles', { count: counts[reason] })
+          : t(`inbox.shareSkippedSummary.${reason}`, { count: counts[reason] }),
+      );
+  });
   const captureHint = computed(() => {
     if (captureType.value === 'todo') return t('inbox.todoCaptureHint');
     const share = pendingShare.value;
     if (!share) return t('inbox.captureHint');
-    return [
-      t('inbox.shareCaptureHint'),
-      share.skippedFiles > 0 ? t('inbox.shareSkippedFiles', { count: share.skippedFiles }) : '',
-      share.textTruncated ? t('inbox.shareTextTruncated') : '',
-      share.hasText && captureType.value === 'file' ? t('inbox.shareTextKept') : '',
-    ]
-      .filter(Boolean)
-      // 中文句号后不留空格，英文句子之间保留一个空格。
-      .join(locale.value.startsWith('zh') ? '' : ' ');
+    return (
+      [
+        t('inbox.shareCaptureHint'),
+        ...shareSkipSummary.value,
+        share.textTruncated ? t('inbox.shareTextTruncated') : '',
+        share.hasText && captureType.value === 'file' ? t('inbox.shareTextKept') : '',
+      ]
+        .filter(Boolean)
+        // 中文句号后不留空格，英文句子之间保留一个空格。
+        .join(locale.value.startsWith('zh') ? '' : ' ')
+    );
   });
   // 待整理来源单独记为系统分享，便于后续统计这个入口的真实使用量。
   const captureInboxSource = computed(() => (shareCapture.value ? 'system_share' : 'quick_capture'));
@@ -398,6 +463,15 @@
     return isQuickCaptureWorkspaceActive(type, current.path, current.query);
   }
 
+  async function refreshCaptureViews(type: ActionCaptureType) {
+    const updates: Promise<unknown>[] = [refreshQuickCaptureStores(type, captureWorkspaceActive(type), inbox, todo)];
+    if (type === 'file' && router.currentRoute.value.path === '/cloudSpace') {
+      // 分享上传也会改变当前云空间；保留筛选、排序与已加载页，静默更新列表和容量。
+      updates.push(cloudSpaceStore().refreshAfterFileMutation({ preserveLoaded: true }));
+    }
+    await Promise.all(updates);
+  }
+
   watch(visible, (value) => {
     if (value) {
       void loadTodoPlanConfig();
@@ -416,9 +490,12 @@
     if (!draft) return;
     shareCapture.value = {
       id: draft.id,
+      limits: draft.limits,
       initialText: draft.text,
       bookmarkName: draft.bookmarkName,
       skippedFiles: draft.skippedFiles,
+      skippedFileCounts: draft.skippedFileCounts,
+      skippedFileDetails: draft.skippedFileDetails,
       textTruncated: draft.textTruncated,
       hasText: Boolean(draft.text.trim()),
       completed: false,
@@ -429,7 +506,7 @@
       addFiles(draft.files, 'share');
       return;
     }
-    captureType.value = draft.text.trim() ? detectInboxCaptureType(draft.text) : 'note';
+    captureType.value = draft.skippedFiles ? 'file' : draft.text.trim() ? detectInboxCaptureType(draft.text) : 'note';
     manualType.value = false;
   }
 
@@ -508,11 +585,11 @@
     captureType.value = detectInboxCaptureType(content.value);
   }
 
-  function selectedFileKey(file: File) {
+  function selectedFileKey(file: ManagedCloudUploadFile) {
     return `${file.name}:${file.size}:${file.lastModified}`;
   }
 
-  function addFiles(value: File[], source: 'picker' | 'drop' | 'clipboard' | 'share' = 'picker') {
+  function addFiles(value: ManagedCloudUploadFile[], source: 'picker' | 'drop' | 'clipboard' | 'share' = 'picker') {
     if (submitting.value) return;
     if (!value.length) return;
     const seenKeys = new Set(files.value.map(selectedFileKey));
@@ -548,11 +625,11 @@
     addFiles(pastedFiles, 'clipboard');
   }
 
-  function isPastedFile(file: File) {
+  function isPastedFile(file: ManagedCloudUploadFile) {
     return pastedFileKeys.has(selectedFileKey(file));
   }
 
-  function isSharedFile(file: File) {
+  function isSharedFile(file: ManagedCloudUploadFile) {
     return sharedFileKeys.has(selectedFileKey(file));
   }
 
@@ -563,12 +640,14 @@
       pastedFileKeys.delete(selectedFileKey(target));
       sharedFileKeys.delete(selectedFileKey(target));
       fileUploadReceipts.delete(target);
+      delete fileReadFailures.value[selectedFileKey(target)];
     }
     files.value = files.value.filter((_, fileIndex) => fileIndex !== index);
   }
 
   function clearFiles() {
     if (submitting.value) return;
+    fileReadFailures.value = {};
     fileUploadReceipts.clear();
     fileUploadNotice.value = '';
     files.value = [];
@@ -613,7 +692,11 @@
       throw Object.assign(new Error('Capture closed'), { code: 'CAPTURE_CANCELLED' });
     }
     if (res.status !== 200) throw new Error(res.msg || t('inbox.captureFailed'));
-    capturedResource.value = { type: 'bookmark', id: String(res.data?.id || ''), title: String(res.data?.name || name) };
+    capturedResource.value = {
+      type: 'bookmark',
+      id: String(res.data?.id || ''),
+      title: String(res.data?.name || name),
+    };
     return res.data?.duplicate ? t('inbox.duplicateRequeued') : t('inbox.captureSuccess');
   }
 
@@ -647,6 +730,8 @@
     fileUploadController = controller;
     fileUploadNotice.value = '';
     const results: Array<CloudUploadResult | null> = batch.map(() => null);
+    fileReadFailures.value = {};
+    uploadProgress.value = { processed: 0, total: batch.length };
     let next = 0;
     // 复用随机对象键、逐文件确认与确认回包恢复，且限制并发。
     await Promise.all(
@@ -664,8 +749,13 @@
               inboxSource: captureInboxSource.value,
               signal: controller.signal,
             });
-          } catch {
+          } catch (error: any) {
             // 只保留失败项供用户重试；已确认的文件不重传，也不回滚。
+            if (generation === captureGeneration && error?.code === 'SHARE_FILE_UNREADABLE') {
+              fileReadFailures.value[selectedFileKey(batch[index])] = true;
+            }
+          } finally {
+            if (generation === captureGeneration) uploadProgress.value.processed += 1;
           }
         }
       }),
@@ -690,7 +780,7 @@
         failed: failed.length,
       });
       if (saved.length) {
-        await refreshQuickCaptureStores('file', captureWorkspaceActive('file'), inbox, todo);
+        await refreshCaptureViews('file');
       }
       throw new Error(fileUploadNotice.value);
     }
@@ -722,7 +812,7 @@
       clearSavedDraft(captureType.value);
       settleShareAfterCapture();
       manualType.value = false;
-      await refreshQuickCaptureStores(captureType.value, captureWorkspaceActive(captureType.value), inbox, todo);
+      await refreshCaptureViews(captureType.value);
       if (generation !== captureGeneration) return;
       emit('captured');
       message.success(successText.value);
@@ -886,6 +976,9 @@
     fileUploadController?.abort();
     fileUploadController = null;
     fileUploadNotice.value = '';
+    fileReadFailures.value = {};
+    shareDetailsOpen.value = false;
+    uploadProgress.value = { processed: 0, total: 0 };
     fileUploadReceipts.clear();
     captureGeneration += 1;
     noteOperation = null;
@@ -911,6 +1004,30 @@
 </script>
 
 <style scoped lang="less">
+  .share-file-report {
+    color: var(--desc-color);
+    font-size: var(--ui-font-12, 12px);
+    p {
+      margin: 0;
+    }
+  }
+  .share-file-report__details {
+    max-height: var(--ui-layout-160, 160px);
+    overflow: auto;
+    margin: var(--ui-space-8, 8px) 0 0;
+    padding-left: var(--ui-space-16, 16px);
+    li {
+      overflow-wrap: anywhere;
+    }
+    li span + span {
+      margin-left: var(--ui-space-8, 8px);
+    }
+  }
+  .file-list__read-error {
+    color: var(--danger-color);
+    font-size: var(--ui-font-12, 12px);
+  }
+
   .capture-modal {
     display: flex;
     flex-direction: column;

@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp, nextTick } from 'vue';
+import { createI18n } from 'vue-i18n';
+import zhCN from '@/i18n/locales/zh-CN';
 
 const apiBasePost = vi.fn();
 
@@ -69,6 +71,7 @@ async function mountFunnel(data: Record<string, unknown> = REAL_DATA) {
   const host = document.createElement('div');
   document.body.append(host);
   const app = createApp(ConversionFunnel);
+  app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
   app.mount(host);
   await nextTick();
   await Promise.resolve();

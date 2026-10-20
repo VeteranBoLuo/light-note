@@ -32,7 +32,7 @@
           :class="{
             'file-card--draggable': canDragFile(item),
             'file-card--batch': batchMode,
-            'file-card--selected': batchMode && selectedRows.includes(item.id),
+            'file-card--selected': batchMode && selectedRows.includes(String(item.id)),
           }"
           :draggable="canDragFile(item)"
           @click="
@@ -105,6 +105,14 @@
                 <span>{{ getFilePreviewLabel(item) }}</span>
               </div>
             </div>
+            <BButton
+              v-if="batchMode"
+              class="batch-preview-button card-batch-preview"
+              size="small"
+              :aria-label="$t('cloudSpace.previewFile', { name: item.fileName })"
+              @click.stop="openFilePreview(item)"
+              >{{ $t('cloudSpace.batchPreview') }}</BButton
+            >
             <div v-if="!batchMode && !bookmark.isMobile" class="file-card-overlay">
               <BTooltip :title="$t('cloudSpace.download')">
                 <svg-icon
@@ -263,7 +271,7 @@
           :class="{
             'field-item-draggable': canDragFile(item),
             'field-item--batch': batchMode,
-            'field-item--selected': batchMode && selectedRows.includes(item.id),
+            'field-item--selected': batchMode && selectedRows.includes(String(item.id)),
           }"
           :draggable="canDragFile(item)"
           @click="
@@ -335,6 +343,15 @@
                 </div>
               </template>
             </b-input>
+            <BButton
+              v-if="batchMode && !item.isRename"
+              class="batch-preview-button row-batch-preview"
+              type="text"
+              size="small"
+              :aria-label="$t('cloudSpace.previewFile', { name: item.fileName })"
+              @click.stop="openFilePreview(item)"
+              >{{ $t('cloudSpace.batchPreview') }}</BButton
+            >
             <div
               v-if="!item.isRename && !batchMode"
               class="flex-align-center handle-btn"
@@ -1136,7 +1153,7 @@
   let suppressCardClickUntil = 0;
 
   const onToggleSelectAll = (e: any) => selection.selectVisible(e.target.checked);
-  const toggleRow = (id: string, checked: boolean) => {
+  const toggleRow = (id: string | number, checked: boolean) => {
     const file = cloud.fileList.find((item) => String(item.id) === String(id));
     if (file) selection.toggle(file, checked);
   };
@@ -1175,10 +1192,16 @@
     recordOperation({ module: '云空间', operation: `用所选文件生成与处理【${outcomeResources.value.length}个】` });
   }
 
+  function openFilePreview(item: any) {
+    closeFileContext(item);
+    recordOperation({ module: '云空间', operation: `预览文件【${item.fileName}】` });
+    emit('previewFile', item);
+  }
+
   const onCardClick = (item: any) => {
     if (Date.now() < suppressCardClickUntil) return;
     if (batchMode.value) {
-      toggleRow(item.id, !selectedRows.value.includes(item.id));
+      selection.toggle(item);
     } else {
       emit('previewFile', item);
     }
@@ -1186,7 +1209,7 @@
 
   const onListRowClick = (item: any) => {
     if (batchMode.value) {
-      toggleRow(item.id, !selectedRows.value.includes(item.id));
+      selection.toggle(item);
       return;
     }
     if (!bookmark.isMobile) return;
@@ -1196,7 +1219,7 @@
 
   const onFileLabelClick = (item: any) => {
     if (batchMode.value) {
-      toggleRow(item.id, !selectedRows.value.includes(item.id));
+      selection.toggle(item);
       return;
     }
     recordOperation({ module: '云空间', operation: `预览文件【${item.fileName}】` });
@@ -1205,7 +1228,7 @@
 
   const onFileTagClick = (item: any, tagId: string) => {
     if (batchMode.value) {
-      toggleRow(item.id, !selectedRows.value.includes(item.id));
+      selection.toggle(item);
       return;
     }
     goToTagDetail(tagId);
@@ -2674,7 +2697,13 @@
       padding: var(--ui-space-6, 6px) 0;
     }
     .field-item--batch .file-label {
-      width: 100%;
+      flex: 1;
+      min-width: 0;
+      margin-right: var(--ui-space-60, 60px);
+    }
+    .batch-preview-button.b_btn {
+      min-height: var(--ui-control-44, 44px);
+      min-width: var(--ui-control-44, 44px);
     }
     .file-status-badges {
       grid-column: 2;
@@ -3147,6 +3176,20 @@
     .file-card-cover {
       height: var(--ui-layout-128, 128px);
     }
+  }
+
+  .batch-preview-button {
+    flex: 0 0 auto;
+  }
+  .row-batch-preview {
+    position: absolute;
+    right: var(--ui-space-8, 8px);
+  }
+  .card-batch-preview {
+    position: absolute;
+    right: var(--ui-space-8, 8px);
+    bottom: var(--ui-space-8, 8px);
+    z-index: 2;
   }
 
   // ── 卡片批量勾选样式 ──

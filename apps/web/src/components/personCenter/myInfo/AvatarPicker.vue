@@ -89,10 +89,16 @@
       </div>
 
       <footer class="avatar-picker__footer">
-        <BButton class="avatar-picker__cancel" @click="closePicker">{{ t('common.cancel') }}</BButton>
-        <BButton class="avatar-picker__confirm" type="primary" :loading="confirming" @click="confirmSelection">
-          {{ confirming ? t('myInfo.avatarPreparing') : t('myInfo.useAvatar') }}
-        </BButton>
+        <div class="avatar-picker__selection">
+          <strong>{{ selectedAvatar ? t(selectedAvatar.nameKey) : previewTitle }}</strong>
+          <span>{{ selectedAvatar ? t(selectedAvatar.descriptionKey) : previewDescription }}</span>
+        </div>
+        <div class="avatar-picker__actions">
+          <BButton class="avatar-picker__cancel" @click="closePicker">{{ t('common.cancel') }}</BButton>
+          <BButton class="avatar-picker__confirm" type="primary" :loading="confirming" @click="confirmSelection">
+            {{ confirming ? t('myInfo.avatarPreparing') : t('myInfo.useAvatar') }}
+          </BButton>
+        </div>
       </footer>
     </div>
   </component>
@@ -516,20 +522,55 @@
     border-color: var(--primary-color);
   }
 
+  // 底部栏左侧复述当前选择，右侧一组标准高度操作；桌面弹框内跟随外框圆角，不露出方角。
   .avatar-picker__footer {
     flex: 0 0 auto;
     display: flex;
-    justify-content: flex-end;
-    gap: var(--ui-space-10, 10px);
-    padding: var(--ui-space-12, 12px) var(--ui-space-18, 18px) max(var(--ui-space-12, 12px), env(safe-area-inset-bottom));
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ui-space-16, 16px);
+    padding: var(--ui-space-12, 12px) var(--ui-space-20, 20px)
+      max(var(--ui-space-12, 12px), env(safe-area-inset-bottom));
     border-top: 1px solid var(--surface-border-color);
     background: var(--background-color);
   }
 
+  .avatar-picker--desktop {
+    overflow: hidden;
+    border-radius: 0 0 12px 12px;
+  }
+
+  .avatar-picker__selection {
+    min-width: 0;
+    display: grid;
+    gap: var(--ui-space-2, 2px);
+  }
+
+  .avatar-picker__selection strong {
+    overflow: hidden;
+    font-size: var(--ui-font-14, 14px);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .avatar-picker__selection span {
+    overflow: hidden;
+    color: var(--desc-color);
+    font-size: var(--ui-font-12, 12px);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .avatar-picker__actions {
+    flex: 0 0 auto;
+    display: flex;
+    gap: var(--ui-space-10, 10px);
+  }
+
   .avatar-picker__cancel.b_btn,
   .avatar-picker__confirm.b_btn {
-    min-width: var(--ui-layout-112, 112px);
-    height: var(--ui-control-42, 42px);
+    min-width: var(--ui-layout-100, 100px);
+    height: var(--ui-control-36, 36px);
   }
 
   :global(.avatar-picker-modal__content) {
@@ -632,10 +673,21 @@
       padding-left: 12px;
     }
 
+    // 移动端底部只保留两枚等宽主操作，选择摘要已在顶部预览中展示。
+    .avatar-picker__selection {
+      display: none;
+    }
+
+    .avatar-picker__actions {
+      flex: 1 1 auto;
+    }
+
     .avatar-picker__cancel.b_btn,
     .avatar-picker__confirm.b_btn {
       min-width: 0;
       flex: 1 1 0;
+      /* ui-density-fixed: 移动端底部主操作按 44px 触控规范 */
+      height: 44px;
     }
   }
 

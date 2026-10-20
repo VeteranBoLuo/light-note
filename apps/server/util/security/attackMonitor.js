@@ -8,6 +8,7 @@ import { getIpReputation, recordIpRequest } from './services/ipReputation.js';
 import { writeSecurityEvent } from './services/securityLogService.js';
 import { SECURITY_CONFIG } from './rules.js';
 import { applySecurityPolicies } from './services/securityPolicyService.js';
+import { effectiveSourceReputation } from './services/autoResponsePolicy.js';
 
 const loggedRequests = new WeakSet();
 const debugSecurity = (...args) => {
@@ -41,8 +42,7 @@ export const attackMonitor = async (req, res, next) => {
   recordIpRequest(context.sourceIp);
 
   const ipReputation = await getIpReputation(context.sourceIp);
-  const effectiveIpReputation =
-    req.user?.role === 'root' ? { ...ipReputation, is_banned: 0, banned_until: null } : ipReputation;
+  const effectiveIpReputation = effectiveSourceReputation(req, ipReputation);
   const signatureEvidence = detectSignatures(context);
   const behaviorResult = detectRequestBehavior(context);
   const rawEvidenceList = [...signatureEvidence, ...behaviorResult.evidence];

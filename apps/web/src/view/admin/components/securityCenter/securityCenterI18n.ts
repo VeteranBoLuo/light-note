@@ -39,6 +39,9 @@ export const securityCenterMessages = {
         subtitle: '优先展示已确认风险、待复核事项与检测质量，而不是原始告警数量。',
         scopeTitle: '仅覆盖轻笺应用层请求',
         scopeDesc: '应用内 403 不会阻断请求到达 Nginx 或源站；流量型攻击应交给边缘限流、云 WAF 或云防火墙。',
+        autoProbeOn: '明确敏感文件探测已开启自动处置',
+        autoProbeDesc:
+          '游客来源 5 分钟内连续命中 2 次明确探测后，临时限制 1 小时并自动复核告警；不自动续期，不封账号，保留正常登录及已登录正式用户访问。',
         autoBanOff: '自动 IP 封禁已关闭',
         autoBanDesc: 'IP 仅作为调查线索；高置信请求仍可拦截，账号和动作可按需限制。',
         recommended: '符合推荐',
@@ -313,6 +316,9 @@ export const securityCenterMessages = {
         scopeTitle: 'Covers Light Note application requests only',
         scopeDesc:
           'An in-app 403 does not stop traffic from reaching Nginx or the origin. Use edge rate limits, cloud WAF, or firewalls for volumetric attacks.',
+        autoProbeOn: 'Automatic response to clear secret-file probes is on',
+        autoProbeDesc:
+          'Two clear probes from a guest source within 5 minutes trigger a 1-hour restriction and automatic alert review. No automatic extension or account ban; normal sign-in and authenticated members remain accessible.',
         autoBanOff: 'Automatic IP banning is off',
         autoBanDesc:
           'IP is an investigation clue only. High-confidence requests can still be blocked and account actions can be restricted when needed.',

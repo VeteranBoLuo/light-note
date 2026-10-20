@@ -3,6 +3,7 @@ import mysql from 'mysql2/promise';
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { Temporal } from '@js-temporal/polyfill';
+import { snoozeV2Todo } from './todoSeriesService.js';
 vi.mock('./todoService.js', () => ({
   listTodoPage: vi.fn(async (db, userId, { ids }) => {
     const [items] = await db.query(
@@ -59,6 +60,16 @@ describe.skipIf(!socket)('workspace SQL against isolated MySQL', () => {
       'CREATE TABLE todo_tag_relations (user_id VARCHAR(64), target_type VARCHAR(16), target_id VARCHAR(64), tag_id VARCHAR(64))',
     );
     await db.query('CREATE TABLE tag (id VARCHAR(64), user_id VARCHAR(64), del_flag INT DEFAULT 0)');
+    await db.query(`CREATE TABLE todo_reminder_jobs (
+      id VARCHAR(64) PRIMARY KEY, todo_id VARCHAR(64), user_id VARCHAR(64), channel VARCHAR(16) DEFAULT 'in_app',
+      status VARCHAR(16) DEFAULT 'pending', scheduled_at_local DATETIME, scheduled_at_utc DATETIME,
+      sequence_no INT DEFAULT 1, cancel_reason VARCHAR(64), lease_token VARCHAR(64), lease_until DATETIME,
+      KEY todo_status(todo_id, user_id, status, scheduled_at_local)
+    )`);
+    await db.query(`CREATE TABLE todo_reminders (
+      id VARCHAR(64) PRIMARY KEY, todo_id VARCHAR(64), user_id VARCHAR(64),
+      status VARCHAR(16) DEFAULT 'pending', scheduled_at DATETIME, KEY todo_status(todo_id, user_id, status)
+    )`);
     await db.query("SET time_zone = '+00:00'");
   });
   afterAll(async () => {
@@ -68,7 +79,14 @@ describe.skipIf(!socket)('workspace SQL against isolated MySQL', () => {
     }
   });
   beforeEach(async () => {
-    for (const table of ['todo_items', 'todo_series', 'todo_tag_relations', 'tag'])
+    for (const table of [
+      'todo_reminder_jobs',
+      'todo_reminders',
+      'todo_items',
+      'todo_series',
+      'todo_tag_relations',
+      'tag',
+    ])
       await db.query(`DELETE FROM ${table}`);
     await db.query(
       "INSERT INTO todo_series (id, user_id) VALUES ('series-a', 'owner'), ('series-b', 'owner'), ('foreign', 'other')",
@@ -84,6 +102,99 @@ describe.skipIf(!socket)('workspace SQL against isolated MySQL', () => {
     ]);
     return row.day;
   }
+  async function remind(todoId, at, patch = {}) {
+    await db.query('INSERT INTO todo_reminder_jobs SET ?', {
+      id: randomUUID(),
+      todo_id: todoId,
+      user_id: 'owner',
+      scheduled_at_local: at,
+      scheduled_at_utc: at,
+      ...patch,
+    });
+  }
+  const nodeId = (node) => (node.kind === 'series' ? node.representative.id : node.item.id);
+
+  it('同组无截止任务在分页前按有效提醒升序，忽略已发送、取消、暂停及其他账号的 Job', async () => {
+    const tomorrow = await date(1);
+    for (const id of ['a-late', 'z-early', 'legacy', 'no-reminder']) {
+      await add(id, id === 'no-reminder' ? {} : { occurrence_date: tomorrow, start_at: `${tomorrow} 08:00:00` });
+    }
+    await remind('a-late', `${tomorrow} 11:10:00`);
+    await remind('z-early', `${tomorrow} 10:00:00`);
+    for (const status of ['cancelled', 'sent', 'paused']) await remind('a-late', `${tomorrow} 06:00:00`, { status });
+    await remind('a-late', `${tomorrow} 05:00:00`, { user_id: 'other' });
+    await remind('a-late', `${tomorrow} 12:00:00`, { channel: 'email' });
+    await db.query('INSERT INTO todo_reminders SET ?', {
+      id: 'legacy-job',
+      todo_id: 'legacy',
+      user_id: 'owner',
+      scheduled_at: `${tomorrow} 09:00:00`,
+    });
+    const input = { status: 'pending', groupKey: 'unassigned', limit: 1 };
+    const ids = [];
+    let cursor = null;
+    do {
+      const page = await todoWorkspaceGroupPage(db, 'owner', { ...input, cursor });
+      ids.push(...page.nodes.map(nodeId));
+      expect(page.total).toBe(4);
+      cursor = page.nextCursor;
+    } while (cursor);
+    expect(ids).toEqual(['legacy', 'z-early', 'a-late', 'no-reminder']);
+    expect(
+      (await todoWorkspaceGroupPage(db, 'owner', { ...input, sort: 'priority', groupKey: 'all', limit: 10 })).nodes.map(
+        nodeId,
+      ),
+    ).toEqual(ids);
+  });
+
+  it('稍后提醒后刷新从新的 Job 时间排序，可跨越原计划日期', async () => {
+    const tomorrow = await date(1);
+    await add('a-early', { occurrence_date: tomorrow, start_at: `${tomorrow} 08:00:00` });
+    await add('z-late', { occurrence_date: tomorrow, start_at: `${tomorrow} 08:00:00` });
+    await remind('a-early', `${tomorrow} 10:00:00`);
+    await remind('z-late', `${tomorrow} 11:10:00`);
+    const input = { status: 'pending', groupKey: 'unassigned', limit: 1 };
+    const before = await todoWorkspaceGroupPage(db, 'owner', input);
+    expect(before.nodes.map(nodeId)).toEqual(['a-early']);
+    await snoozeV2Todo(db, 'owner', { id: 'a-early', instance_timezone: '+00:00' }, `${await date(2)} 09:00:00`);
+    const after = await todoWorkspaceGroupPage(db, 'owner', input);
+    expect(after.nodes.map(nodeId)).toEqual(['z-late']);
+    const next = await todoWorkspaceGroupPage(db, 'owner', { ...input, cursor: after.nextCursor });
+    expect(next.nodes.map(nodeId)).toEqual(['a-early']);
+    expect(next.nextCursor).toBeNull();
+  });
+
+  it('提醒同刻维持稳定 ID 排序，截止任务、最近创建及已完成顺序不受提醒改动影响', async () => {
+    const tomorrow = await date(1);
+    await add('a', { occurrence_date: tomorrow, due_at: `${tomorrow} 12:00:00`, create_time: '2026-01-01' });
+    await add('b', { occurrence_date: tomorrow, due_at: `${tomorrow} 13:00:00`, create_time: '2026-02-01' });
+    await remind('a', `${tomorrow} 20:00:00`);
+    await remind('b', `${tomorrow} 06:00:00`);
+    expect((await todoWorkspaceGroupPage(db, 'owner', { groupKey: 'unassigned' })).nodes.map(nodeId)).toEqual([
+      'a',
+      'b',
+    ]);
+    expect((await todoWorkspaceGroupPage(db, 'owner', { groupKey: 'all', sort: 'newest' })).nodes.map(nodeId)).toEqual([
+      'b',
+      'a',
+    ]);
+    await db.query('UPDATE todo_items SET due_at = NULL WHERE user_id = ?', ['owner']);
+    await db.query('UPDATE todo_reminder_jobs SET scheduled_at_local = ? WHERE user_id = ?', [
+      `${tomorrow} 10:00:00`,
+      'owner',
+    ]);
+    const first = await todoWorkspaceGroupPage(db, 'owner', { groupKey: 'unassigned', limit: 1 });
+    const next = await todoWorkspaceGroupPage(db, 'owner', {
+      groupKey: 'unassigned',
+      limit: 1,
+      cursor: first.nextCursor,
+    });
+    expect([...first.nodes, ...next.nodes].map(nodeId)).toEqual(['a', 'b']);
+    await db.query("UPDATE todo_items SET status='completed', completed_at=IF(id='a','2026-01-01','2026-02-01')");
+    expect(
+      (await todoWorkspaceGroupPage(db, 'owner', { status: 'completed', groupKey: 'all' })).nodes.map(nodeId),
+    ).toEqual(['b', 'a']);
+  });
   it('hundreds of occurrences consume one row, with full counts and a today representative', async () => {
     const today = await date(0),
       future = await date(1),

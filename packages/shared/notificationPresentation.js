@@ -19,6 +19,8 @@ export const notificationMessages = {
     },
     levelUpTitle: "升级到 Lv.{level} · {name}",
     opinionReplyTitle: "你的反馈收到新回复",
+    collectionRewardTitle: "「{title}」奖励已到账",
+    collectionRewardContent: "你提交的「{title}」已获得 {points} 积分，奖励已到账。",
     communityReplyTitle: "社区有新的回复或提及",
     communityResultTitle: "社区处理结果",
     communityTitles: {
@@ -49,6 +51,8 @@ export const notificationMessages = {
     },
     levelUpTitle: "Leveled up to Lv.{level} · {name}",
     opinionReplyTitle: "Your feedback got a reply",
+    collectionRewardTitle: "Reward credited for “{title}”",
+    collectionRewardContent: 'You earned {points} points for submitting “{title}”. The reward is now in your account.',
     communityReplyTitle: "New community reply or mention",
     communityResultTitle: "Community review result",
     communityTitles: {
@@ -72,6 +76,18 @@ export function notificationPresentation(item, locale = "zh-CN") {
     }
   }
   let title = item.title || "轻笺";
+  let content = String(item.content || "");
+  if (
+    item.type === "collection_form_reward" &&
+    typeof meta?.formTitle === "string" &&
+    Number.isSafeInteger(meta.points) &&
+    meta.points > 0
+  ) {
+    title = messages.collectionRewardTitle.replace("{title}", () => meta.formTitle);
+    content = messages.collectionRewardContent.replace(/\{(title|points)\}/g, (_match, key) =>
+      key === "title" ? meta.formTitle : String(meta.points),
+    );
+  }
   if (item.type === "level_up")
     title = messages.levelUpTitle
       .replace("{level}", String(meta.level || ""))
@@ -86,7 +102,7 @@ export function notificationPresentation(item, locale = "zh-CN") {
           : title;
   return {
     title,
-    content: item.type === "level_up" ? "" : String(item.content || ""),
+    content: item.type === "level_up" ? "" : content,
   };
 }
 export function browserNotificationPresentation(item, locale) {

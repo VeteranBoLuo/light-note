@@ -26,9 +26,18 @@
         >{{ t('community.feed.publishNext') }}</BButton
       >
     </template>
-    <section class="community-writing" @paste="pasteImages" @dragover.prevent @drop.prevent="dropImages">
+    <section
+      class="community-writing"
+      @paste="pasteImages"
+      @dragover="allowFileDrop"
+      @drop="dropImages"
+      @keydown.capture="historyKey"
+    >
       <p v-if="isMobile && !imagesReady" class="mobile-publish-blocker" role="status">{{
         t(uploading ? 'community.feed.imageUploading' : 'community.feed.imagePublishBlocked')
+      }}</p>
+      <p v-if="inlineImagesEnabled && !imageReferencesValid" class="mobile-publish-blocker" role="alert">{{
+        t('community.feed.invalidInlineImage')
       }}</p>
       <div class="writing-workspace" :class="{ 'has-materials': !isMobile && !preview }">
         <div class="writing-main">
@@ -66,6 +75,7 @@
               <div class="writing-rich-toolbar">
                 <EditorToolbarV2
                   minimal
+                  :show-image="inlineImagesEnabled"
                   compact
                   :mobile="isMobile"
                   :ariaLabel="t('community.feed.formatToolbar')"
@@ -95,7 +105,35 @@
                 :aria-label="t('community.feed.titleLabel')"
                 :placeholder="t('community.feed.titlePlaceholder')"
               />
-              <div class="writing-body">
+              <div
+                v-if="inlineImagesEnabled && selectedInline?.status === 'error'"
+                class="inline-image-error"
+                role="status"
+              >
+                <span>{{
+                  t(
+                    imageFiles.has(selectedInline.publicId)
+                      ? 'community.feed.imageUploadFailedShort'
+                      : 'community.feed.imageReselect',
+                  )
+                }}</span>
+                <BButton
+                  v-if="imageFiles.has(selectedInline.publicId)"
+                  size="small"
+                  :disabled="busy"
+                  @click="retryImage(selectedInline)"
+                  >{{ t('community.feed.retry') }}</BButton
+                >
+                <BButton size="small" :disabled="busy" @click="removeInlineImage(selectedInlineImage)">{{
+                  t('community.feed.removeImage')
+                }}</BButton>
+              </div>
+              <div
+                class="writing-body"
+                @focusin="bodyCaretActive = true"
+                @paste.capture="pasteBodyImages"
+                @drop.capture="dropBodyImages"
+              >
                 <div
                   v-if="editorMode === 'markdown'"
                   key="markdown"
@@ -116,7 +154,11 @@
                       @ready="refreshMarkdownState"
                       @command="runMarkdownAction" /></div
                   ><div v-show="mdView !== 'edit'" class="writing-md-preview"
-                    ><CommunityMarkdown :body="draft.body" /></div></div
+                    ><CommunityPostBody
+                      v-if="inlineImagesEnabled"
+                      :body="draft.body"
+                      :images="activeImages"
+                      hide-attachments /><CommunityMarkdown v-else :body="draft.body" /></div></div
                 ><div v-else :key="'rich-' + user.currentTheme + locale"
                   ><TinyMceEditorRuntime
                     license-key="gpl"
@@ -137,7 +179,7 @@
         </div>
         <aside v-if="!isMobile && !preview" class="writing-materials"
           ><CommunityPublishMaterials
-            :draft="draft"
+            :draft="materialDraft"
             :topics="topics"
             :busy="busy"
             :preview="preview"
@@ -147,6 +189,8 @@
             :resources-enabled="resourcesEnabled"
             :image-error="imageError"
             :retryable-ids="[...imageFiles.keys()]"
+            :image-count="activeImages.length"
+            :inline-enabled="inlineImagesEnabled"
             @topic="draft.topics = $event"
             @pick-resource="pickingResource = true"
             @add-images="addImages"
@@ -161,7 +205,7 @@
       </div>
       <div v-if="isMobile && !preview" class="writing-mobile-dock">
         <BButton v-if="imagesEnabled" @click="mobileSettings = true"
-          >{{ t('community.feed.imageSection') }} {{ draft.images.length }}</BButton
+          >{{ t('community.feed.imageSection') }} {{ attachmentImages.length }}</BButton
         >
         <BButton v-if="resourcesEnabled" @click="mobileSettings = true"
           >{{ t('community.feed.resourceSection') }} {{ draft.resources.length }}</BButton
@@ -182,7 +226,7 @@
       @close="mobileSettings = false"
     >
       <CommunityPublishMaterials
-        :draft="draft"
+        :draft="materialDraft"
         :topics="topics"
         :busy="busy"
         :preview="preview"
@@ -192,6 +236,8 @@
         :resources-enabled="resourcesEnabled"
         :image-error="imageError"
         :retryable-ids="[...imageFiles.keys()]"
+        :image-count="activeImages.length"
+        :inline-enabled="inlineImagesEnabled"
         @topic="draft.topics = $event"
         @pick-resource="pickingResource = true"
         @add-images="addImages"
@@ -213,6 +259,17 @@
         }}</BButton></div
       >
     </BDrawer>
+    <BUpload
+      v-if="inlineImagesEnabled"
+      ref="inlineUpload"
+      triggerless
+      raw-file
+      multiple
+      accept="image/jpeg,image/png,image/webp"
+      :max-total-size="45 * 1024 * 1024"
+      :disabled="richToolbarProps.imageAction.disabled"
+      @change="addInlineImages"
+    />
     <CommunityResourcePicker
       v-if="pickingResource"
       @close="pickingResource = false"
@@ -255,6 +312,17 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import CommunityPostCard from './CommunityPostCard.vue';
+  import CommunityPostBody from './CommunityPostBody.vue';
+  import BUpload from '@/components/base/BasicComponents/BUpload.vue';
+  import {
+    parseCommunityPostDocument,
+    mapCommunityImageIds,
+    communityImageMarkdown,
+    communityImageInsertion,
+  } from '@lightnote/shared/community-feed';
+  import { communityRichPostHtml } from '@/utils/communityPostEditing';
+  import { useCommunityDocumentHistory } from '@/composables/useCommunityDocumentHistory';
+  import { useUiDensity } from '@/composables/useUiDensity';
   import { getCommunityChatOwnProfile } from '@/api/communityChatApi';
   import {
     wrapSelection,
@@ -271,6 +339,7 @@
     communityHtmlToMarkdown,
     communityRichContentStyle,
     communityRichValidElements,
+    sanitizeCommunityHtml,
   } from '@/utils/communityContent';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import CommunityResourcePicker from './CommunityResourcePicker.vue';
@@ -299,6 +368,7 @@
     post?: FeedPost | null;
     initialTopic?: string;
     imagesEnabled?: boolean;
+    inlineImagesEnabled?: boolean;
     resourcesEnabled?: boolean;
     topics: { value: string; label: string }[];
     profileEnabled: boolean;
@@ -311,7 +381,7 @@
   const imageViewerOpen = ref(false),
     selectedImage = ref('');
   const viewerImages = computed(() =>
-    draft.images
+    activeImages.value
       .filter((item) => item.url)
       .map((item) => ({
         id: item.publicId,
@@ -332,15 +402,29 @@
   const richHtml = ref('');
   function changeEditorMode(mode: string) {
     if (busy.value || mode === editorMode.value) return;
-    if (mode === 'rich') richHtml.value = renderCommunityMarkdown(draft.body);
+    if (mode === 'rich') richHtml.value = renderBody();
     editorMode.value = mode;
+    bodyCaretActive = false;
   }
   function updateRichBody(html: string) {
     if (busy.value || editorMode.value !== 'rich' || html === richHtml.value) return;
     richHtml.value = html;
-    draft.body = communityHtmlToMarkdown(html);
+    draft.body = communityHtmlToMarkdown(html, props.inlineImagesEnabled ? draft.images : undefined);
   }
   const richEditor = shallowRef<RichEditor | null>(null);
+  const { density } = useUiDensity();
+  watch(
+    density,
+    () => {
+      const editor = richEditor.value;
+      if (!editor?.initialized || editor.removed) return;
+      const theme = getComputedStyle(window.document.documentElement);
+      for (const token of ['--ui-space-16', '--ui-layout-120'])
+        editor.getDoc().documentElement.style.setProperty(token, theme.getPropertyValue(token));
+      editor.nodeChanged();
+    },
+    { flush: 'post' },
+  );
   const richState = ref({
     block: 'p',
     canUndo: false,
@@ -358,6 +442,8 @@
     const editor = markdownEditor.value;
     if (!editor) return;
     const { from } = editor.getSelection();
+    const block = document.value.blocks.find((b) => b.kind === 'image' && from >= b.from && from <= b.to);
+    selectedInlineImage.value = block?.kind === 'image' ? block.id : '';
     const value = editor.getValue();
     const line = value.slice(value.lastIndexOf('\n', from - 1) + 1).split('\n')[0];
     const level = line.match(/^(#{1,6})\s/);
@@ -402,8 +488,14 @@
     ];
     const unused = action('more');
     return {
-      undoAction: { ...action('undo'), disabled: busy.value || !state.canUndo },
-      redoAction: { ...action('redo'), disabled: busy.value || !state.canRedo },
+      undoAction: {
+        ...action('undo'),
+        disabled: busy.value || !(props.inlineImagesEnabled ? documentHistory.canUndo.value : state.canUndo),
+      },
+      redoAction: {
+        ...action('redo'),
+        disabled: busy.value || !(props.inlineImagesEnabled ? documentHistory.canRedo.value : state.canRedo),
+      },
       headingAction: {
         ...action(
           'paragraph',
@@ -436,13 +528,30 @@
         ...(!isMarkdown ? [action('clearFormatting', 'clearFormat')] : []),
       ],
       repeatAction: unused,
-      imageAction: unused,
+      imageAction: {
+        ...action('communityImage', 'image'),
+        label: t('community.feed.insertImage'),
+        disabled:
+          busy.value ||
+          activeImages.value.length >= 9 ||
+          (editorMode.value === 'markdown' ? !markdownEditor.value || mdView.value === 'preview' : !richEditor.value),
+      },
       insertAction: unused,
       shortcutsAction: unused,
       insertActions: [],
     };
   });
   function runEditorAction(action: EditorToolbarAction) {
+    if (busy.value) return;
+    if (action.key === 'communityImage') {
+      rememberInsertion();
+      inlineUpload.value?.open();
+      return;
+    }
+    if (props.inlineImagesEnabled && ['undo', 'redo'].includes(action.key)) {
+      documentHistory[action.key as 'undo' | 'redo']();
+      return;
+    }
     if (editorMode.value === 'markdown') {
       runMarkdownAction(action.key);
       return;
@@ -450,6 +559,11 @@
     runRichAction(action);
   }
   function runMarkdownAction(key: string) {
+    if (busy.value) return;
+    if (props.inlineImagesEnabled && ['undo', 'redo'].includes(key)) {
+      documentHistory[key as 'undo' | 'redo']();
+      return;
+    }
     const editor = markdownEditor.value;
     if (!editor || busy.value) return;
     if (key === 'undo' || key === 'redo') {
@@ -522,10 +636,12 @@
     autoresize_bottom_margin: 24,
     plugins: 'autolink lists link',
     setup: (editor: RichEditor) => {
+      bodyCaretActive = false;
       const refresh = () => {
         if (!editor.initialized || editor.removed) return;
         richEditor.value = editor;
         const node = editor.selection.getNode();
+        selectedInlineImage.value = node.nodeName === 'IMG' ? node.getAttribute('data-community-image') || '' : '';
         const block = editor.dom.getParent(node, 'p,h1,h2,h3,h4,h5,h6,pre');
         richState.value = {
           block: block?.nodeName.toLowerCase() || 'p',
@@ -539,35 +655,102 @@
           orderedList: editor.queryCommandState('InsertOrderedList'),
         };
       };
+      editor.on('focus', () => {
+        bodyCaretActive = true;
+      });
       editor.on('init focus NodeChange SelectionChange Undo Redo change SetContent', refresh);
+      editor.on('PastePreProcess', (event) => {
+        if (props.inlineImagesEnabled) event.content = sanitizeCommunityHtml(event.content, draft.images);
+      });
+      editor.on('keydown', historyKey);
+      editor.on('BeforeExecCommand', (event) => {
+        if (props.inlineImagesEnabled && /^(Undo|Redo)$/i.test(event.command)) {
+          event.preventDefault();
+          documentHistory[event.command.toLowerCase() as 'undo' | 'redo']();
+        }
+      });
+      const editorPaste = (event: ClipboardEvent) => {
+        if (props.inlineImagesEnabled) pasteBodyImages(event);
+      };
+      const editorDrop = (event: DragEvent) => {
+        if (!props.inlineImagesEnabled || !event.dataTransfer?.files.length) return;
+        const range = editor.getDoc().caretRangeFromPoint?.(event.clientX, event.clientY);
+        if (range) editor.selection.setRng(range);
+        dropBodyImages(event);
+      };
+      editor.on('init', () => {
+        editor.getDoc().addEventListener('paste', editorPaste, true);
+        editor.getDoc().addEventListener('drop', editorDrop, true);
+        editor.getDoc().addEventListener('dragover', allowFileDrop, true);
+      });
       editor.on('remove', () => {
+        editor.getDoc()?.removeEventListener('paste', editorPaste, true);
+        editor.getDoc()?.removeEventListener('drop', editorDrop, true);
+        editor.getDoc()?.removeEventListener('dragover', allowFileDrop, true);
         if (richEditor.value === editor) richEditor.value = null;
       });
     },
     toolbar: false,
     body_class: 'community-markdown',
     visual: false,
-    valid_elements: communityRichValidElements,
+    valid_elements:
+      communityRichValidElements +
+      (props.inlineImagesEnabled
+        ? ',img[src|alt|data-community-image|data-community-state|data-community-placeholder|width|height]'
+        : ''),
+    object_resizing: false,
     paste_data_images: false,
     automatic_uploads: false,
     content_style: communityRichContentStyle(),
   }));
   const isMobile = useMobileLayout();
   const user = useUserStore();
-  type DraftImage = FeedImage & { status: 'uploading' | 'ready' | 'error'; errorCode?: string };
+  type DraftImage = FeedImage & { status: 'uploading' | 'ready' | 'error'; errorCode?: string; uploadId?: string };
   const draft = reactive({
     kind: 'share',
     title: '',
     body: '',
     topics: [] as string[],
     images: [] as DraftImage[],
+    attachmentIds: [] as string[],
     resources: [] as FeedResource[],
   });
+  const document = computed(() => parseCommunityPostDocument(draft.body));
+  const imageReferencesValid = computed(
+    () =>
+      !document.value.invalid &&
+      document.value.imageIds.every((id) => draft.images.some((image) => image.publicId === id)),
+  );
+  const activeImages = computed(() =>
+    props.inlineImagesEnabled
+      ? [
+          ...new Set([
+            ...draft.attachmentIds.filter((id) => !document.value.imageIds.includes(id)),
+            ...document.value.imageIds,
+          ]),
+        ]
+          .map((id) => draft.images.find((i) => i.publicId === id))
+          .filter((i): i is DraftImage => Boolean(i))
+      : draft.images,
+  );
+  const attachmentImages = computed(() =>
+    activeImages.value.filter((i) => !document.value.imageIds.includes(i.publicId)),
+  );
+  const materialDraft = computed(() => ({ ...draft, images: attachmentImages.value }));
+  const selectedInlineImage = ref('');
+  const inlineUpload = ref<InstanceType<typeof BUpload>>();
+  let bodyCaretActive = false;
+  const selectedInline = computed(() => draft.images.find((i) => i.publicId === selectedInlineImage.value));
+  function renderBody() {
+    return props.inlineImagesEnabled
+      ? communityRichPostHtml(draft.body, draft.images)
+      : renderCommunityMarkdown(draft.body);
+  }
   const pickingResource = ref(false);
   const imageFiles = new Map<string, File>();
   const imageError = ref(false);
-  const uploading = computed(() => draft.images.some((i) => i.status === 'uploading'));
-  const imagesReady = computed(() => draft.images.every((i) => i.status === 'ready'));
+  const uploading = computed(() => activeImages.value.some((i) => i.status === 'uploading'));
+  const imagesReady = computed(() => activeImages.value.every((i) => i.status === 'ready'));
   const drawerOpen = ref(true);
   const mdView = ref('edit');
   const mdViewOptions = computed(() => [
@@ -587,13 +770,41 @@
     confirming = ref(false);
   const busy = ref(false),
     error = ref(false);
-  let submitted = false;
+  let submitted = false,
+    editorDisposed = false;
   let generation = 0,
     operation: (() => Promise<any>) | null = null,
     fingerprint = '';
   const directPublish = computed(() => user.role === 'root' && !user.adminContext);
   const owner = computed(() => `${user.id}|${user.role}|${user.adminContext?.id || ''}`);
   const key = () => `community-post-draft:${owner.value}:${props.post?.publicId || 'new'}`;
+  const historyEnabled = computed(() => Boolean(props.inlineImagesEnabled));
+  const documentHistory = useCommunityDocumentHistory(
+    draft,
+    (value) => {
+      Object.assign(draft, value);
+      richHtml.value = renderBody();
+      markdownEditor.value?.replaceAll(draft.body, false);
+      selectedInlineImage.value = '';
+    },
+    historyEnabled,
+  );
+  function historyKey(event: KeyboardEvent) {
+    if (
+      busy.value ||
+      !props.inlineImagesEnabled ||
+      !(event.ctrlKey || event.metaKey) ||
+      event.altKey ||
+      event.isComposing
+    )
+      return;
+    const key = event.key.toLowerCase();
+    if (key !== 'z' && key !== 'y') return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (key === 'y' || event.shiftKey) documentHistory.redo();
+    else documentHistory.undo();
+  }
   watch(
     [owner, () => props.post?.publicId],
     () => {
@@ -604,6 +815,8 @@
       pickingResource.value = false;
       for (const item of draft.images) if (item.url.startsWith('blob:')) URL.revokeObjectURL(item.url);
       imageFiles.clear();
+      bodyCaretActive = false;
+      selectedInlineImage.value = '';
       imageError.value = false;
       busy.value = error.value = confirming.value = preview.value = mobileSettings.value = draftSaved.value = false;
       operation = null;
@@ -615,22 +828,41 @@
         topics: (props.post?.topics || []).map((topic: any) => (typeof topic === 'string' ? topic : topic.slug)),
         resources: props.post?.resources || [],
         images: (props.post?.images || []).map((i) => ({ ...i, status: 'ready' })),
+        attachmentIds: [],
       });
+      let restoredDraftV2 = false;
       try {
         const saved = JSON.parse(readCommunityPostDraft(key()) || 'null');
-        if (saved && typeof saved.body === 'string' && saved.revision === props.post?.revision)
-          Object.assign(draft, saved.draft, {
-            resources: saved.draft.resources || [],
-            images: (saved.draft.images || []).map((i: DraftImage) => ({
+        if (
+          saved?.draft &&
+          typeof saved.draft.body === 'string' &&
+          saved.revision === props.post?.revision &&
+          (!saved.draft.images || Array.isArray(saved.draft.images)) &&
+          (!saved.draft.resources || Array.isArray(saved.draft.resources))
+        ) {
+          Object.assign(draft, {
+            body: saved.draft.body,
+            title: typeof saved.draft.title === 'string' ? saved.draft.title : draft.title,
+            topics: Array.isArray(saved.draft.topics) ? saved.draft.topics : draft.topics,
+            attachmentIds: Array.isArray(saved.draft.attachmentIds) ? saved.draft.attachmentIds : [],
+            resources: saved.draft.resources || draft.resources,
+            images: (saved.draft.images || draft.images).map((i: DraftImage) => ({
               ...i,
               url: i.status === 'ready' ? i.url : '',
               status: i.status === 'ready' ? 'ready' : 'error',
             })),
           });
+          restoredDraftV2 = saved.version === 2 && Array.isArray(saved.draft.attachmentIds);
+        }
       } catch {}
       if (!props.post && props.initialTopic && props.topics.some((t) => t.value === props.initialTopic))
         draft.topics = [props.initialTopic];
-      richHtml.value = renderCommunityMarkdown(draft.body);
+      const restoredInline = parseCommunityPostDocument(draft.body).imageIds;
+      draft.attachmentIds = Array.isArray(draft.attachmentIds) ? draft.attachmentIds : [];
+      if (!restoredDraftV2)
+        draft.attachmentIds = draft.images.filter((i) => !restoredInline.includes(i.publicId)).map((i) => i.publicId);
+      richHtml.value = renderBody();
+      documentHistory.reset();
       draft.topics = Array.isArray(draft.topics) ? draft.topics.slice(0, 1) : [];
     },
     { immediate: true },
@@ -639,7 +871,17 @@
     draft,
     () => {
       try {
-        writeCommunityPostDraft(key(), JSON.stringify({ draft, body: draft.body, revision: props.post?.revision }));
+        writeCommunityPostDraft(
+          key(),
+          JSON.stringify({
+            version: 2,
+            draft: {
+              ...draft,
+              images: activeImages.value.map((i) => ({ ...i, url: i.status === 'ready' ? i.url : '' })),
+            },
+            revision: props.post?.revision,
+          }),
+        );
         draftSaved.value = true;
       } catch {
         draftSaved.value = false;
@@ -651,6 +893,7 @@
   function finishClose(clear: boolean, onExit: () => void) {
     exitPromptOpen = false;
     if (clear) {
+      for (const image of draft.images) void discardFeedImage(image.uploadId || image.publicId).catch(() => {});
       try {
         removeCommunityPostDraft(key());
       } catch {}
@@ -736,13 +979,15 @@
     isOwn: true,
     author: props.post?.author || previewAuthor.value || { userPublicId: '', name: user.alias || user.userName || '' },
     resources: draft.resources,
-    images: draft.images.filter((image) => image.status === 'ready'),
+    images: activeImages.value,
   }));
   const valid = computed(
     () =>
       !pickingResource.value &&
       draft.resources.length <= 3 &&
       imagesReady.value &&
+      !document.value.invalid &&
+      document.value.imageIds.every((id) => activeImages.value.some((i) => i.publicId === id)) &&
       draft.body.trim() &&
       Array.from(draft.body.trim()).length <= 4000 &&
       Array.from(draft.title.trim()).length <= 80 &&
@@ -753,6 +998,8 @@
       !pickingResource.value &&
       draft.resources.length <= 3 &&
       imagesReady.value &&
+      !document.value.invalid &&
+      document.value.imageIds.every((id) => activeImages.value.some((i) => i.publicId === id)) &&
       Boolean(draft.body.trim()) &&
       Array.from(draft.body.trim()).length <= 4000 &&
       Array.from(draft.title.trim()).length <= 80,
@@ -763,9 +1010,13 @@
     busy.value = true;
     error.value = false;
     const body = {
-      ...draft,
+      topics: draft.topics,
       mentions: [],
-      images: draft.images.map((i) => i.publicId),
+      body: props.inlineImagesEnabled
+        ? mapCommunityImageIds(draft.body, (id) => draft.images.find((i) => i.publicId === id)?.uploadId || id)
+        : draft.body,
+      images: activeImages.value.map((i) => i.uploadId || i.publicId),
+      ...(props.inlineImagesEnabled ? { contentVersion: 2 } : {}),
       resources: draft.resources.map((r) => r.publicId),
       kind: 'share',
       title: draft.title,
@@ -780,6 +1031,8 @@
       const result = await operation!();
       if (current !== generation) return;
       submitted = true;
+      for (const image of draft.images.filter((image) => !activeImages.value.includes(image)))
+        void discardFeedImage(image.uploadId || image.publicId).catch(() => {});
       try {
         removeCommunityPostDraft(key());
       } catch {}
@@ -808,28 +1061,46 @@
     const current = generation;
     item.status = 'uploading';
     item.errorCode = undefined;
+    const editorImage = () =>
+      richEditor.value?.getBody().querySelector<HTMLImageElement>(`img[data-community-image="${item.publicId}"]`);
+    editorImage()?.setAttribute('data-community-state', 'uploading');
     try {
-      const result = await uploadFeedImage(file, item.publicId);
+      const result = await uploadFeedImage(file, item.uploadId || item.publicId);
       if (current !== generation) {
         void discardFeedImage(result.publicId).catch(() => {});
         return;
       }
       const oldUrl = item.url;
-      Object.assign(item, result, { status: 'ready' });
+      Object.assign(item, result, { publicId: item.publicId, uploadId: result.publicId, status: 'ready' });
+      if (props.inlineImagesEnabled) {
+        const editor = richEditor.value;
+        const node = editorImage();
+        if (node) {
+          node.src = result.url;
+          node.removeAttribute('data-community-placeholder');
+          node.setAttribute('data-community-state', 'ready');
+          if (result.width && result.height) {
+            node.width = result.width;
+            node.height = result.height;
+          }
+        }
+      }
       if (oldUrl.startsWith('blob:')) URL.revokeObjectURL(oldUrl);
       imageFiles.delete(item.publicId);
     } catch (error: any) {
       if (current === generation) {
         item.status = 'error';
+        editorImage()?.setAttribute('data-community-state', 'error');
         item.errorCode = error?.response?.data?.data?.code || error?.code || error?.message;
       }
     }
   }
-  async function addImages(files: File[]) {
-    if (!props.imagesEnabled || busy.value || uploading.value) return;
+  async function addImages(files: File[], inline = false) {
+    if (editorDisposed || !props.imagesEnabled || busy.value || (!inline && uploading.value)) return;
+    if (inline && insertionTarget?.generation !== generation) return;
     imageError.value = false;
     if (
-      draft.images.length + files.length > 9 ||
+      activeImages.value.length + files.length > 9 ||
       files.some(
         (f) => !['image/jpeg', 'image/png', 'image/webp'].includes(f.type) || f.size > 5 * 1024 * 1024 || !f.size,
       )
@@ -850,6 +1121,9 @@
       } as DraftImage,
     }));
     draft.images.push(...selected.map((x) => x.item));
+    if (inline) insertImageReferences(selected.map((x) => x.item.publicId));
+    else draft.attachmentIds.push(...selected.map((x) => x.item.publicId));
+    documentHistory.record(true);
     const current = generation;
     for (const { file, item } of selected) {
       if (current !== generation) break;
@@ -860,7 +1134,123 @@
       );
     }
   }
+  let insertionTarget: {
+    generation: number;
+    mode: string;
+    body: string;
+    caret: number;
+    bookmark?: ReturnType<RichEditor['selection']['getBookmark']>;
+  } | null = null;
+  function rememberInsertion(atCursor = bodyCaretActive) {
+    if (editorMode.value === 'rich' && richEditor.value) updateRichBody(richEditor.value.getContent());
+    insertionTarget = {
+      generation,
+      mode: editorMode.value,
+      body: draft.body,
+      caret: atCursor ? (markdownEditor.value?.getSelection().to ?? draft.body.length) : draft.body.length,
+      bookmark: atCursor ? richEditor.value?.selection.getBookmark(2, true) : undefined,
+    };
+  }
+  function insertImageReferences(ids: string[]) {
+    const target = insertionTarget;
+    if (!target || target.generation !== generation || target.mode !== editorMode.value || target.body !== draft.body) {
+      draft.attachmentIds.push(...ids.filter((id) => !draft.attachmentIds.includes(id)));
+      imageError.value = true;
+      return;
+    }
+    const markdown = ids.map((id) => communityImageMarkdown(id)).join('\n\n');
+    if (editorMode.value === 'markdown') {
+      const edit = communityImageInsertion(draft.body, target.caret, markdown);
+      markdownEditor.value?.replaceRange(edit.position, edit.position, edit.insert, edit.caret);
+      draft.body = edit.body;
+    } else {
+      const editor = richEditor.value;
+      if (!editor) {
+        draft.attachmentIds.push(...ids);
+        imageError.value = true;
+        return;
+      }
+      editor.focus();
+      if (target.bookmark) editor.selection.moveToBookmark(target.bookmark);
+      else editor.selection.select(editor.getBody(), true);
+      editor.selection.collapse(false);
+      const root = editor.getBody();
+      let top = editor.selection.getNode();
+      while (top.parentElement && top.parentElement !== root) top = top.parentElement;
+      const html = communityRichPostHtml(markdown, draft.images) + '<p><br></p>';
+      if (top !== root && top.nodeName !== 'P') {
+        const fragment = editor.dom.create('div', {}, html);
+        const nodes = Array.from(fragment.childNodes);
+        let previous: Node = top;
+        for (const node of nodes) {
+          previous.parentNode!.insertBefore(node, previous.nextSibling);
+          previous = node;
+        }
+        editor.selection.setCursorLocation(previous, 0);
+        editor.nodeChanged();
+      } else editor.insertContent(html);
+      richHtml.value = editor.getContent();
+      draft.body = communityHtmlToMarkdown(richHtml.value, draft.images);
+    }
+    draft.attachmentIds = draft.attachmentIds.filter((id) => !ids.includes(id));
+    selectedInlineImage.value = '';
+    documentHistory.record(true);
+  }
+  async function addInlineImages(files: File[]) {
+    await addImages(files, true);
+  }
+  function replaceDocumentBody(body: string) {
+    draft.body = body;
+    richHtml.value = renderBody();
+    markdownEditor.value?.replaceAll(body, false);
+    selectedInlineImage.value = '';
+  }
+  function removeInlineImage(id: string) {
+    if (busy.value) return;
+    replaceDocumentBody(mapCommunityImageIds(draft.body, (current) => (current === id ? null : current)));
+    draft.attachmentIds = draft.attachmentIds.filter((current) => current !== id);
+    documentHistory.record(true);
+  }
+  function pasteBodyImages(event: ClipboardEvent) {
+    if (!props.inlineImagesEnabled || event.defaultPrevented) return;
+    const files = Array.from(event.clipboardData?.files || []).filter((file) => file.type.startsWith('image/'));
+    if (!files.length) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const text = event.clipboardData?.getData('text/plain');
+    if (text) {
+      if (editorMode.value === 'rich' && richEditor.value) {
+        const node = window.document.createElement('p');
+        node.textContent = text;
+        richEditor.value.insertContent(node.outerHTML);
+        updateRichBody(richEditor.value.getContent());
+      } else if (markdownEditor.value) {
+        const range = markdownEditor.value.getSelection();
+        markdownEditor.value.replaceRange(range.to, range.to, text);
+        draft.body = markdownEditor.value.getValue();
+      }
+    }
+    rememberInsertion(true);
+    void addInlineImages(files);
+  }
+  function allowFileDrop(event: DragEvent) {
+    if (event.dataTransfer?.types.includes('Files')) event.preventDefault();
+  }
+  function dropBodyImages(event: DragEvent) {
+    if (!props.inlineImagesEnabled || event.defaultPrevented) return;
+    const files = Array.from(event.dataTransfer?.files || []).filter((file) => file.type.startsWith('image/'));
+    if (!files.length) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (editorMode.value === 'markdown') {
+      const position = markdownEditor.value?.positionAtCoords(event.clientX, event.clientY);
+      if (position != null) markdownEditor.value?.setSelection(position);
+    }
+    rememberInsertion(true);
+    void addInlineImages(files);
+  }
   function pasteImages(event: ClipboardEvent) {
+    if (event.defaultPrevented) return;
     const files = Array.from(event.clipboardData?.files || []);
     if (files.length && props.imagesEnabled) {
       event.preventDefault();
@@ -868,14 +1258,15 @@
     }
   }
   function dropImages(event: DragEvent) {
+    if (event.defaultPrevented || !event.dataTransfer?.files.length) return;
+    event.preventDefault();
     void addImages(Array.from(event.dataTransfer?.files || []));
   }
   async function retryImage(item: DraftImage) {
     const file = imageFiles.get(item.publicId);
     if (!file) return;
-    void discardFeedImage(item.publicId).catch(() => {});
-    imageFiles.delete(item.publicId);
-    item.publicId = crypto.randomUUID();
+    void discardFeedImage(item.uploadId || item.publicId).catch(() => {});
+    item.uploadId = crypto.randomUUID();
     imageFiles.set(item.publicId, file);
     await uploadOne(item, file);
   }
@@ -884,18 +1275,33 @@
     void discardFeedResource(item.publicId).catch(() => {});
   }
   function removeImage(item: DraftImage) {
+    if (props.inlineImagesEnabled) {
+      removeInlineImage(item.publicId);
+      return;
+    }
     draft.images = draft.images.filter((i) => i.publicId !== item.publicId);
     imageFiles.delete(item.publicId);
     if (item.url.startsWith('blob:')) URL.revokeObjectURL(item.url);
     void discardFeedImage(item.publicId).catch(() => {});
   }
   onBeforeUnmount(() => {
+    editorDisposed = true;
     generation++;
     for (const item of draft.images) if (item.url.startsWith('blob:')) URL.revokeObjectURL(item.url);
   });
 </script>
 
 <style scoped>
+  .inline-image-error {
+    flex-shrink: 0;
+    margin: 0 var(--ui-space-20, 20px) var(--ui-space-8, 8px);
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--ui-space-8, 8px);
+    color: var(--desc-color);
+    font-size: var(--ui-font-12, 12px);
+  }
   .community-writing {
     height: 100%;
     overflow: hidden;
@@ -933,6 +1339,7 @@
     min-height: 0;
   }
   .writing-paper {
+    position: relative;
     height: 100%;
     min-height: 0;
     display: flex;
@@ -976,6 +1383,12 @@
     flex-shrink: 0;
     padding: var(--ui-space-8, 8px) var(--ui-space-36, 36px);
     border-bottom: 1px solid var(--workspace-border);
+  }
+  .writing-rich-toolbar :deep(.is-narrow-840 .editor-toolbar-v2__more-group .editor-toolbar-v2__button-label),
+  .writing-rich-toolbar :deep(.is-narrow-840 .editor-toolbar-v2__more-group .editor-toolbar-v2__chevron),
+  .writing-rich-toolbar :deep(.is-narrow-680 .editor-toolbar-v2__button-label),
+  .writing-rich-toolbar :deep(.is-narrow-680 .editor-toolbar-v2__chevron) {
+    display: none;
   }
   .writing-rich-toolbar :deep(.editor-toolbar-v2) {
     border: 0;

@@ -1,5 +1,6 @@
 <template>
-  <main class="share-harness">
+  <CloudSpace v-if="cloud" />
+  <main v-else class="share-harness">
     <header>
       <span>Android system share / visual QA</span>
       <h1>系统分享验收 · {{ scenario }}</h1>
@@ -12,23 +13,25 @@
       </ol>
       <p v-if="bookmark.isShowLogin" class="share-harness__login">已请求打开登录框（真实页面会显示登录弹窗）</p>
     </section>
-    <QuickCaptureModal v-if="inbox.quickCaptureVisible" v-model:visible="inbox.quickCaptureVisible" />
   </main>
+  <QuickCaptureModal v-if="inbox.quickCaptureVisible" v-model:visible="inbox.quickCaptureVisible" />
 </template>
 
 <script setup lang="ts">
-  import { computed, ref } from 'vue';
+  import { computed, defineAsyncComponent, ref } from 'vue';
   import QuickCaptureModal from '@/components/inbox/QuickCaptureModal.vue';
   import { useAndroidIncomingShare } from '@/composables/useAndroidIncomingShare';
   import { bookmarkStore, inboxStore } from '@/store';
 
-  const props = defineProps<{ scenario: string; log: string[] }>();
+  const CloudSpace = defineAsyncComponent(() => import('@/view/cloudSpace/cloudSpace.vue'));
+  const props = defineProps<{ scenario: string; log: string[]; cloud: boolean }>();
   const inbox = inboxStore();
   const bookmark = bookmarkStore();
   useAndroidIncomingShare({ authReady: ref(true), blocked: ref(false) });
 
   const descriptions: Record<string, string> = {
     link: '浏览器分享网页：标题 + 网址，应识别为书签并用标题命名。',
+    bulk: '模拟相册分享 100 个文件，并区分数量、大小和读取失败；文件内容只在提交后读取。',
     files: '相册分享两张图片，另有 1 个文件超限被原生跳过。',
     'text-files': '文字和图片一起分享：先按文件保存，文字保留在输入框。',
     text: '纯文字分享：应识别为笔记。',
@@ -51,6 +54,7 @@
     width: 100%;
     min-width: 0;
     min-height: 100%;
+    height: 100%;
     margin: 0;
   }
 

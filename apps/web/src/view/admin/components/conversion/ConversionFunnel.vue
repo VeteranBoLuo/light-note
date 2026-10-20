@@ -132,11 +132,14 @@
 
 <script lang="ts" setup>
   import { computed, ref } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import { apiBasePost } from '@/http/request.ts';
   import AdminDataPage from '@/components/admin/AdminDataPage.vue';
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
   import ConversionTrendChart from './ConversionTrendChart.vue';
   import DateRangePicker from './DateRangePicker.vue';
+
+  const { t } = useI18n();
 
   interface FunnelStep {
     key: string;
@@ -273,16 +276,17 @@
     },
   ]);
 
-  const reasonLabels: Record<string, string> = {
+  const reasonLabels = computed<Record<string, string>>(() => ({
     email_exists: '账号已存在',
     weak_password: '密码强度不足',
+    invalid_nickname: t('auth.nicknameInvalidReason'),
     server_error: '服务异常',
-  };
+  }));
   const normalizedFailReasons = computed(() => {
     const maximum = Math.max(1, ...failReasons.value.map((item) => Number(item.cnt || 0)));
     return failReasons.value.map((item) => ({
       ...item,
-      label: reasonLabels[item.reason] || item.reason,
+      label: reasonLabels.value[item.reason] || item.reason,
       width: Math.max(4, Math.round((Number(item.cnt || 0) / maximum) * 100)),
     }));
   });

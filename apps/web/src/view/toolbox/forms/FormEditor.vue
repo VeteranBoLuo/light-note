@@ -65,6 +65,10 @@
           @click="q.options.push({ id: cryptoId(), label: t('collectionForms.newOption') })"
           >{{ t('collectionForms.addOption') }}</BButton
         >
+        <BCheckbox v-if="['single', 'multiple'].includes(q.type)" v-model="q.allowOther" :disabled="locked">{{
+          t('collectionForms.allowOther')
+        }}</BCheckbox>
+        <p v-if="q.allowOther" class="collection-muted">{{ t('collectionForms.otherHint') }}</p>
         <div v-if="!locked" class="collection-question-actions">
           <BButton type="text" :disabled="index === 0" @click="move(index, -1)">{{
             t('collectionForms.moveUp')

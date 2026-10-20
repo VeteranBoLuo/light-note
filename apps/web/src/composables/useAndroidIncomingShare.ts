@@ -2,11 +2,7 @@ import { onBeforeUnmount, onMounted, watch, type Ref } from 'vue';
 import i18n from '@/i18n';
 import { bookmarkStore, inboxStore, useUserStore } from '@/store';
 import message from '@/components/base/BasicComponents/BMessage/BMessage';
-import {
-  loadAndroidShareFiles,
-  onAndroidShareAvailable,
-  peekAndroidShare,
-} from '@/utils/androidIncomingShare';
+import { createAndroidShareFiles, onAndroidShareAvailable, peekAndroidShare } from '@/utils/androidIncomingShare';
 import { buildQuickCaptureShareDraft } from '@/utils/incomingShare';
 
 interface AndroidIncomingShareOptions {
@@ -17,7 +13,7 @@ interface AndroidIncomingShareOptions {
 }
 
 /**
- * Android 系统分享的调度：在身份确认后查询原生暂存的分享，读取文件并打开预填好的「快速添加」。
+ * Android 系统分享的调度：在身份确认后查询原生暂存的分享，取得文件清单并打开预填好的「快速添加」。
  *
  * - 游客先打开登录框，分享继续留在原生暂存；登录后身份变化会再次触发查询。
  * - 管理员代管上下文不自动打开，避免把自己手机上的分享存进被代管账号。
@@ -73,17 +69,7 @@ export function useAndroidIncomingShare(options: AndroidIncomingShareOptions) {
       }
       return;
     }
-    const owner = user.id;
-    const closeLoading = share.files.length ? message.loading(i18n.global.t('inbox.shareLoading'), 0) : null;
-    let loaded: Awaited<ReturnType<typeof loadAndroidShareFiles>>;
-    try {
-      loaded = await loadAndroidShareFiles(share);
-    } finally {
-      closeLoading?.();
-    }
-    // 读取期间账号变化或用户自己打开了快速添加：放弃本轮，暂存仍在，稍后重新处理。
-    if (user.id !== owner || user.adminContext || !canOpenNow()) return;
-    inbox.openQuickCaptureWithShare(buildQuickCaptureShareDraft(share, loaded.files, loaded.failed));
+    inbox.openQuickCaptureWithShare(buildQuickCaptureShareDraft(share, createAndroidShareFiles(share)));
   }
 
   const stopListening = onAndroidShareAvailable(() => void check());

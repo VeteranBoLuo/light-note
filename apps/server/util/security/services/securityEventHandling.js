@@ -1,6 +1,7 @@
 import { excludesSecurityEventRisk } from '../handledStatus.js';
 import { rebuildIpReputationFromEvents, revertIpReputationImpact } from './ipReputation.js';
 import { rebuildAccountReputationFromEvents, revertAccountReputationImpact } from './accountReputation.js';
+import { releaseAutomaticSecurityResponse } from './autoResponseService.js';
 
 const revertIpRisk = async ({ connection, event }) => {
   if (Number(event.ip_risk_delta || 0) > 0) {
@@ -62,7 +63,14 @@ const restoreAccountRisk = async ({ connection, event }) => {
   await rebuildAccountReputationFromEvents({ userId: event.user_id, connection });
 };
 
-export const applySecurityEventHandle = async ({ connection, event, normalizedStatus, remark, operatorId }) => {
+export const applySecurityEventHandle = async ({
+  connection,
+  event,
+  normalizedStatus,
+  disposition,
+  remark,
+  operatorId,
+}) => {
   await connection.query(
     `UPDATE security_events
      SET handled_status = ?, remark = ?, handled_by = ?, handled_at = NOW()
@@ -71,6 +79,8 @@ export const applySecurityEventHandle = async ({ connection, event, normalizedSt
   );
 
   const shouldExcludeRisk = excludesSecurityEventRisk(normalizedStatus);
+  if (shouldExcludeRisk || disposition === 'benign_anomaly')
+    await releaseAutomaticSecurityResponse({ connection, event });
 
   if (shouldExcludeRisk && !event.ip_risk_reverted) {
     await revertIpRisk({ connection, event });

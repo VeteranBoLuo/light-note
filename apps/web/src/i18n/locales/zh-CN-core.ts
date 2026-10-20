@@ -1,4 +1,5 @@
 import { profileBackgroundsZh, profileBackgroundItemsZh } from './profileBackgrounds';
+import { profileAppearanceZh } from './profileAppearance';
 import { MAKEUP_WINDOW_DAYS } from '@lightnote/shared';
 import { noteMathZh } from './noteMath';
 import { extractionZh } from './extraction';
@@ -21,6 +22,7 @@ import { settingsRefineZh } from './settingsRefine';
 import { notificationMessages } from '@lightnote/shared/notification-presentation';
 export default {
   profileBackgrounds: profileBackgroundsZh,
+  profileAppearance: profileAppearanceZh,
   noteMath: noteMathZh,
   nativePush: {
     title: 'App 通知连接',
@@ -114,6 +116,8 @@ export default {
     nextReminder: '下次提醒',
     reminderLabel: '提醒',
     reminderState: { paused: '已暂停', past: '时间已过', unscheduled: '无后续提醒' },
+    agendaGroups: { overdue: '逾期待处理', today: '今天', upcoming: '未来安排', completed: '已完成历史' },
+    completedTime: '完成 {time}',
     moreTags: '查看另外 {count} 个标签',
     quick: '快捷',
     subtitle: '专注当下的事务，合理规划，让每一件重要的事都被完成。',
@@ -4365,7 +4369,7 @@ export default {
         content: '内容',
         contentPlaceholder: '通知内容（可选）',
         link: '跳转链接',
-        linkPlaceholder: '点击通知后跳转的站内路径，如 /growth（可选）',
+        linkPlaceholder: '站内路径或完整的 http(s) 链接（可选）',
         send: '发送',
         sending: '发送中…',
         allHint: '将发送给全体注册用户',
@@ -4572,7 +4576,9 @@ export default {
     quickCapturePanels: {
       bookmark: {
         title: '保存一个网页',
-        hint: '粘贴网址，轻笺会先收进待整理。',
+        hint: '保存时仅自动读取网页标题作为名称，可能不够贴切；读取失败则使用分享标题或域名。',
+        analysisHint:
+          '想生成更合适的名称、描述和标签，可在「新增书签」的完整表单中使用 AI 智能分析，也可快速添加后对单条书签进行「智能分析」，或到「整理中心」批量重新分析。',
       },
       note: {
         title: '记下一段内容',
@@ -5066,7 +5072,6 @@ export default {
     todoMatrixSeriesOpen: '查看“{title}”系列明细，共 {count} 项',
     todoMatrixSeriesSummary: '今天 {today} · 错过 {missed} · 后续 {future}',
     todoAgendaMissedSeries: '同系列已错过 {count} 项',
-    todoAgendaLoadMore: '显示后续 14 天',
     todoRecurringInstance: '重复实例',
     todoMatrixQuadrants: {
       importantUrgent: '重要且紧急',
@@ -5161,11 +5166,22 @@ export default {
     continueCapture: '继续添加',
     shareCaptureEyebrow: '收到分享的内容',
     shareCaptureHint: '确认后点「加入待整理」即可保存，标签和位置可以稍后补充。',
+    shareLimits: '每次分享最多 {count} 个文件，总大小不超过 {size}MB。',
+    shareShowSkipped: '查看未加入的文件',
+    shareHideSkipped: '收起未加入的文件',
+    shareMoreSkipped: '另有 {count} 个文件未列出。',
+    shareSkippedSummary: {
+      count_limit: '有 {count} 个文件超出数量上限，未加入。',
+      size_limit: '有 {count} 个文件超出总大小上限，未加入。',
+      unreadable: '有 {count} 个文件无法读取，未加入。',
+    },
+    shareSkipReason: { count_limit: '超出数量上限', size_limit: '超出总大小上限', unreadable: '无法读取', unknown: '旧版 App 未提供具体原因' },
+    shareReadFailed: '读取失败，可重试；若暂存已失效，请从原应用重新分享。',
+    captureFilesProgress: '已处理 {processed} / {total} 个文件',
     shareSkippedFiles: '有 {count} 个文件无法读取或超出单次上限，已跳过。',
     shareTextTruncated: '分享的文字过长，只保留了前 6 万字。',
     shareTextKept: '附带的文字已放在输入框中，可切换到「笔记」或「书签」单独保存。',
     shareFinish: '完成',
-    shareLoading: '正在读取分享的内容…',
     shareLoginRequired: '登录后即可把分享的内容保存到轻笺',
     shareAdminContext: '当前处于代管模式，退出代管后再保存分享的内容',
     openCaptured: '打开原资源',
@@ -7038,6 +7054,7 @@ export default {
       imagePasteEmpty: '请先用图片浮条复制或剪切一张图片',
       imageDelete: '删除图片',
       imageParagraphAfter: '在图片后换行',
+      imageToMediaText: '转为图文组合',
       imageSizes: {
         original: '原始',
         small: '小',
@@ -7075,6 +7092,8 @@ export default {
     },
   },
   cloudSpace: {
+    batchPreview: '预览',
+    previewFile: '预览 {name}',
     pinFailed: '置顶状态更新失败，请稍后重试',
     shareNoActiveLinks: '暂无有效分享链接',
     shareBrandHint: '由轻笺提供文件分享',
@@ -9768,6 +9787,7 @@ export default {
     markAllRead: '全部已读',
     empty: '暂无通知',
     noContent: '(无更多内容)',
+    invalidLink: '这条通知的跳转链接无效',
     loading: '加载中…',
     loadMore: '加载更多',
     viewAll: '查看全部通知',
@@ -11643,20 +11663,9 @@ export default {
   },
   myInfo: {
     title: '编辑资料',
-    avatarDecorations: '头像装扮',
-    chooseAvatarFrame: '选择头像框',
-    equippedFrame: '已佩戴「{name}」',
-    noFrameEquipped: '暂未佩戴头像框',
-    ownedFrames: '已拥有',
-    noOwnedFrames: '还没有已拥有的头像框',
     earnPoints: '去赚积分',
     goToGrowth: '去成长',
     loginToDecorate: '登录后使用',
-    redeemAndEquip: '兑换并佩戴',
-    redeemFrameTitle: '兑换头像框',
-    redeemFrameConfirm: '将使用 {points} 积分兑换「{name}」并立即佩戴，是否继续？',
-    redeemAndEquipSuccess: '已兑换并佩戴「{name}」',
-    redeemedEquipFailed: '头像框已兑换成功，佩戴暂时失败，可再次点击佩戴',
     uploadAvatar: '上传头像',
     chooseAvatar: '选择头像',
     chooseAvatarSubtitle: '从轻笺插画中挑选，也可以上传自己的图片',
@@ -11997,7 +12006,10 @@ export default {
     passwordPlaceholder: '输入密码',
     passwordRulePlaceholder: '设置 6–16 位密码',
     nickname: '昵称',
-    nicknameOptional: '可选',
+    nicknamePlaceholder: '输入昵称（1–20 个字符）',
+    nicknameRequired: '请输入昵称',
+    nicknameMax20: '昵称长度不能超过20个字符',
+    nicknameInvalidReason: '昵称为空或超过长度限制',
     passwordRequired: '请输入密码',
     forgotPassword: '忘记密码？',
     rememberMe: '记住账号',
@@ -13525,14 +13537,14 @@ export default {
     subtitle: '书签、笔记、云空间与待办装进手机，与网页端同账号、同数据。',
     versionLabel: '版本',
     updatedLabel: '更新于',
-    downloadApk: '下载 APK',
+    downloadApk: '下载安装包',
     preparing: '准备中',
-    usePwaInstead: '改用网页版安装',
+    installPwa: '安装网页版（PWA）',
     alreadyInApp: '你正在使用轻笺 App，无需重复安装',
     iosNote:
       'iPhone 与 iPad 无法安装 Android 安装包。可以用 Safari 打开轻笺，通过「添加到主屏幕」获得接近应用的使用体验。',
     addToHomeScreen: '添加到主屏幕',
-    desktopNote: '当前是电脑或平板浏览器。APK 需要在 Android 手机上安装，可以把下面这个地址发到手机浏览器打开。',
+    desktopNote: '可直接下载安装包，再传到 Android 设备上安装；也可以把下方页面地址发送到手机浏览器打开。',
     copy: '复制',
     copyApkLink: '复制安装包直链',
     copiedPageUrl: '页面地址已复制',

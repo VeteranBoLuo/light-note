@@ -437,20 +437,30 @@
       <div v-if="form && definition" class="collection-stack"
         ><ToolboxFeedback v-if="error" state="error">{{ error }}</ToolboxFeedback
         ><FormMetadata v-if="definition" v-model="definition" v-model:tag-ids="tagIds" :tags="tags" />
+        <FormParticipation
+          v-if="user.role === 'root' && !user.adminContext"
+          v-model="definition"
+          :locked="Boolean(form.published) || busy"
+          :summary="form.rewardSummary"
+        />
         <section class="collection-card collection-stack">
           <h3>{{ t('collectionForms.submissionPolicy') }}</h3>
           <p>{{
             t(
-              form.published && definition.submissionPolicy === 'multiple'
-                ? 'collectionForms.allowMultiple'
-                : 'collectionForms.replaceLatest',
+              definition.membersOnly
+                ? 'collectionForms.replaceLatestAccount'
+                : form.published && definition.submissionPolicy === 'multiple'
+                  ? 'collectionForms.allowMultiple'
+                  : 'collectionForms.replaceLatest',
             )
           }}</p>
           <p class="collection-muted">{{
             t(
-              form.published && definition.submissionPolicy === 'multiple'
-                ? 'collectionForms.legacyPolicyHint'
-                : 'collectionForms.unifiedPolicyHint',
+              definition.membersOnly
+                ? 'collectionForms.memberPolicyHint'
+                : form.published && definition.submissionPolicy === 'multiple'
+                  ? 'collectionForms.legacyPolicyHint'
+                  : 'collectionForms.unifiedPolicyHint',
             )
           }}</p>
         </section>
@@ -539,6 +549,16 @@
             }}</BChip></div
           >
           <dl class="response-detail-times"
+            ><div v-if="activeResponse.respondent_user_id"
+              ><dt>{{ t('collectionForms.respondentAccount') }}</dt
+              ><dd
+                >{{ activeResponse.respondent_alias }}<br v-if="activeResponse.respondent_alias" />{{
+                  activeResponse.respondent_user_id
+                }}</dd
+              ></div
+            ><div v-if="activeResponse.reward_points"
+              ><dt>{{ t('collectionForms.rewardStatus') }}</dt
+              ><dd>{{ t('collectionForms.rewardReceived', { points: activeResponse.reward_points }) }}</dd></div
             ><div
               ><dt>{{ t('collectionForms.firstSubmittedAt') }}</dt
               ><dd>{{ date(activeResponse.created_at) }}</dd></div
@@ -612,7 +632,7 @@
   import { returnFromToolboxPage } from '@/utils/toolboxNavigation';
   import { useRoute, useRouter, onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router';
   import type { FormDefinition, FormQuestion } from '@lightnote/shared/collection-forms';
-  import { validateDefinition } from '@lightnote/shared/collection-forms';
+  import { validateDefinition, choiceAnswerParts } from '@lightnote/shared/collection-forms';
   import BActionMenu from '@/components/base/BasicComponents/BActionMenu.vue';
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
   import BMessage from '@/components/base/BasicComponents/BMessage/BMessage';
@@ -627,6 +647,7 @@
   import Alert from '@/components/base/BasicComponents/BModal/Alert';
   import FormEditor from './FormEditor.vue';
   import FormMetadata from './FormMetadata.vue';
+  import FormParticipation from './FormParticipation.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
@@ -952,6 +973,7 @@
       responses.value = data.items;
       total.value = data.total;
       watermark.value = data.watermark || '';
+      if (data.rewardSummary && form.value?.id === id) form.value.rewardSummary = data.rewardSummary;
     } catch (e) {
       if (g === responseGeneration) responseError.value = (e as Error).message;
     } finally {
@@ -1130,12 +1152,15 @@
     });
   }
   function answerOptions(q: FormQuestion, value: unknown) {
-    return (Array.isArray(value) ? value : [value]).map((v) => q.options?.find((o) => o.id === v)?.label || String(v));
+    const { optionIds, otherText } = choiceAnswerParts(value);
+    return [
+      ...optionIds.map((v) => q.options?.find((o) => o.id === v)?.label || v),
+      ...(otherText !== null ? [t('collectionForms.otherLabel') + '：' + otherText] : []),
+    ];
   }
   function answerLabel(q: FormQuestion, value: unknown) {
     if (value == null) return t('collectionForms.unanswered');
-    if (q.type === 'single') return q.options.find((o) => o.id === value)?.label || '—';
-    if (Array.isArray(value)) return value.map((v) => q.options.find((o) => o.id === v)?.label || v).join('、');
+    if (q.type === 'single' || q.type === 'multiple') return answerOptions(q, value).join('、') || '—';
     if (q.type === 'date')
       return String(value)
         .replace(/^(\d{4})-(\d{2})-(\d{2})/, '$1/$2/$3')

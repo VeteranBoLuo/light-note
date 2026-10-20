@@ -9,7 +9,7 @@
           class="auth-input"
           height="var(--ui-control-48, 48px)"
           maxlength="20"
-          :placeholder="t('auth.nicknameOptional')"
+          :placeholder="t('auth.nicknamePlaceholder')"
         >
           <template #prefix>
             <SvgIcon :src="icon.navigation.user" size="16" />
@@ -109,7 +109,10 @@
   const user = useUserStore();
   const submitting = ref(false);
   const githubStarting = ref(false);
-  const disable = computed(() => submitting.value || !formData.password || !formData.email);
+  const disable = computed(() => {
+    const alias = formData.alias.trim();
+    return submitting.value || !alias || alias.length > 20 || !formData.password || !formData.email;
+  });
   const emit = defineEmits<{ 'update:success': [formData: { email: string; password: string }] }>();
 
   function registerWithGitHub() {
@@ -135,8 +138,11 @@
   }
 
   async function handleRegister() {
+    formData.alias = formData.alias.trim();
     formData.email = formData.email.trim();
     const condition = [
+      { endCondition: !formData.alias, message: t('auth.nicknameRequired') },
+      { endCondition: formData.alias.length > 20, message: t('auth.nicknameMax20') },
       { endCondition: !formData.email, message: t('auth.emailRequired') },
       { endCondition: !!formData.email && !isValidEmail(formData.email), message: t('auth.emailInvalid') },
       { endCondition: !formData.password, message: t('auth.passwordRequired') },
@@ -150,7 +156,6 @@
     const source = bookmark.authModalSource || 'unknown';
     trackConversion('signup_submit', source);
     const params = { ...cloneDeep(formData), signupSource: source };
-    params.alias = (params.alias || '').trim(); // 去首尾空格;纯空格 → 空,由后端兜底成「默认昵称」
 
     try {
       const res: any = await apiBasePost('/api/user/registerUser', params);

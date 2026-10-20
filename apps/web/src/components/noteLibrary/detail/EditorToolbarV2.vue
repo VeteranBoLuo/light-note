@@ -48,7 +48,18 @@
 
       <div class="editor-toolbar-v2__group">
         <ToolbarMenu :action="listAction" :items="listActions" @run="emitAction" />
-        <ToolbarButton v-if="!minimal" :action="imageAction" @run="emitAction" />
+        <slot name="image"
+          ><BButton
+            v-if="showImage"
+            size="small"
+            class="editor-toolbar-v2__button"
+            :disabled="imageAction.disabled"
+            :aria-label="imageAction.label"
+            @click="emitAction(imageAction)"
+            ><SvgIcon :src="imageAction.icon" size="16" /><span>{{ imageAction.label }}</span></BButton
+          >
+          <ToolbarButton v-else-if="!minimal" :action="imageAction" @run="emitAction"
+        /></slot>
       </div>
 
       <span class="editor-toolbar-v2__divider" aria-hidden="true"></span>
@@ -57,7 +68,7 @@
 
       <span class="editor-toolbar-v2__divider" aria-hidden="true"></span>
 
-      <div class="editor-toolbar-v2__group">
+      <div class="editor-toolbar-v2__group editor-toolbar-v2__more-group">
         <ToolbarMenu v-if="!minimal" :action="insertAction" :items="insertActions" @run="emitAction" />
         <ToolbarMenu :action="moreAction" :items="moreActions" align="right" @run="emitAction" />
         <ToolbarButton v-if="!minimal" :action="shortcutsAction" @run="emitAction" />
@@ -97,7 +108,7 @@
     v-if="mobile"
     v-model:open="moreDrawerOpen"
     :title="moreAction.label"
-    :actions="moreActions"
+    :actions="mobileMoreActions"
     compact
     @action="emitAction"
   />
@@ -130,6 +141,7 @@
     mobile: boolean;
     compact?: boolean;
     minimal?: boolean;
+    showImage?: boolean;
     ariaLabel: string;
     undoAction: EditorToolbarAction;
     redoAction: EditorToolbarAction;
@@ -165,7 +177,15 @@
 
   const mobilePrimaryActions = computed(() =>
     props.minimal
-      ? [props.undoAction, props.redoAction, props.headingAction, props.boldAction, props.listAction, props.moreAction]
+      ? [
+          props.undoAction,
+          ...(props.showImage ? [] : [props.redoAction]),
+          props.headingAction,
+          props.boldAction,
+          props.listAction,
+          ...(props.showImage ? [props.imageAction] : []),
+          props.moreAction,
+        ]
       : [
           props.undoAction,
           props.headingAction,
@@ -176,6 +196,9 @@
         ],
   );
 
+  const mobileMoreActions = computed(() =>
+    props.minimal && props.showImage ? [props.redoAction, ...props.moreActions] : props.moreActions,
+  );
   function emitAction(action: EditorToolbarAction | MobilePageActionItem) {
     emit('action', action as EditorToolbarAction);
   }
@@ -190,7 +213,7 @@
       listDrawerOpen.value = true;
       return;
     }
-    if (action.key === props.insertAction.key) {
+    if (!props.minimal && action.key === props.insertAction.key) {
       insertDrawerOpen.value = true;
       return;
     }
