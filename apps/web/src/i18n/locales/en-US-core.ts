@@ -12193,6 +12193,8 @@ export default {
     `,
   },
   myInfo: {
+    accountRole: 'Account role',
+    saveChanges: 'Save changes',
     title: 'Edit Profile',
     earnPoints: 'Earn points',
     goToGrowth: 'Go to Growth',

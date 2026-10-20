@@ -11667,6 +11667,8 @@ export default {
     `,
   },
   myInfo: {
+    accountRole: '账号角色',
+    saveChanges: '保存修改',
     title: '编辑资料',
     earnPoints: '去赚积分',
     goToGrowth: '去成长',
