@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   cloudFolderAncestors,
   cloudFolderDropBlockReason,
+  cloudFolderFileTotals,
   cloudFolderNestBlockReason,
   cloudFolderSubtreeRelativeDepth,
   collectCloudFolderDescendantIds,
@@ -19,6 +20,42 @@ const folders = normalizeCloudFolderList([
 ]);
 
 describe('cloudFolderTree', () => {
+  it('从完整目录汇总所有层级文件，保留直属为零和空文件夹的准确计数', () => {
+    const snapshot = normalizeCloudFolderList([
+      { id: 5, name: '照片', parentId: 3, directFileCount: 6 },
+      { id: 1, name: '日常', parentId: null, directFileCount: 125 },
+      { id: 2, name: '工作', parentId: null, directFileCount: 2 },
+      { id: 3, name: '订婚', parentId: 1, directFileCount: 19 },
+      { id: 4, name: '领证', parentId: 1, directFileCount: 4 },
+      { id: 6, name: '资料', parentId: 2, directFileCount: 0 },
+      { id: 7, name: '项目', parentId: 6, directFileCount: 3 },
+      { id: 8, name: '空文件夹', parentId: null, directFileCount: 0 },
+    ]);
+    expect(Object.fromEntries(cloudFolderFileTotals(snapshot))).toEqual({
+      1: 154,
+      2: 5,
+      3: 25,
+      4: 4,
+      5: 6,
+      6: 3,
+      7: 3,
+      8: 0,
+    });
+    expect(cloudFolderFileTotals([]).size).toBe(0);
+  });
+
+  it('文件数量和目录归属变化后重新汇总原父级与新父级', () => {
+    const snapshot = normalizeCloudFolderList([
+      { id: 1, name: '工作', parentId: null, directFileCount: 2 },
+      { id: 2, name: '生活', parentId: null, directFileCount: 0 },
+      { id: 3, name: '资料', parentId: 1, directFileCount: 3 },
+    ]);
+    expect(Object.fromEntries(cloudFolderFileTotals(snapshot))).toEqual({ 1: 5, 2: 0, 3: 3 });
+    snapshot[2].parentId = '2';
+    snapshot[2].directFileCount = 4;
+    expect(Object.fromEntries(cloudFolderFileTotals(snapshot))).toEqual({ 1: 2, 2: 4, 3: 4 });
+  });
+
   it('按同级 sort 展开无可见根节点目录树', () => {
     expect(flattenCloudFolderTree(folders).map((item) => item.name)).toEqual(['工作', '2025', '2026', '周报', '生活']);
     expect(flattenCloudFolderTree(folders, new Set(['1'])).map((item) => item.name)).toEqual([

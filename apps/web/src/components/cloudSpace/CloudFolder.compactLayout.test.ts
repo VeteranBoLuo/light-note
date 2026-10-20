@@ -32,7 +32,6 @@ describe('云空间目录树紧凑布局', () => {
     expect(desktopSource).not.toContain('.folder-list.is-tree-mode .cloud-folder-row--all');
     expect(desktopSource).toContain('(var(--cloud-folder-depth, 1) - 1) * 16px');
     expect(desktopSource).not.toContain('(var(--cloud-folder-depth, 1) - 1) * 29px');
-    expect(desktopSource).toContain("{{ folder.directFileCount || '—' }}");
     expect(desktopSource).toContain('{{ cloud.allFileCount }}');
     expect(desktopSource).toContain('border-color: var(--resource-file-color, #ff8a00)');
   });
@@ -53,7 +52,6 @@ describe('云空间目录树紧凑布局', () => {
     expect(mobileSource).toContain(
       'v-if="folderTreeMode" class="mobile-cloud-folder-drawer__toggle-spacer" aria-hidden="true"',
     );
-    expect(mobileSource).toContain("{{ folder.directFileCount || '—' }}");
     expect(mobileSource).toContain('{{ allFileCount }}');
     expect(pageSource).toContain(':all-file-count="cloud.allFileCount"');
     expect(mobileSource).toContain('.mobile-cloud-folder-drawer__toggle-icon');
