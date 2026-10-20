@@ -771,7 +771,8 @@
   } from '@/utils/markdownEditing.ts';
   import { CODE_LANGUAGES } from '@/config/codeLanguages';
   import { useMarkdownScrollSync } from '@/composables/useMarkdownScrollSync';
-  import { renderMarkdownScrollMap } from '@/utils/markdownScrollMap';
+  import { renderMarkdownScrollMap, SOURCE_ATTRIBUTE } from '@/utils/markdownScrollMap';
+  import { handleNoteAnchorActivation } from '@/utils/noteAnchors';
   import { useNoteCodeHighlight } from '@/composables/useNoteCodeHighlight';
   import { configureNoteMarkdownRenderer } from '@/utils/markdownRenderer.ts';
   import ResourcePickerPanel from '@/components/resourcePicker/ResourcePickerPanel.vue';
@@ -1593,6 +1594,30 @@
   function handleMarkdownPreviewClick(event: Event) {
     if (handleMathActivation(event)) return;
     if (event instanceof KeyboardEvent && event.key !== 'Enter' && event.key !== ' ') return;
+    const preview = mdPreviewRef.value;
+    if (
+      handleNoteAnchorActivation(event, preview, (destination) => {
+        if (!preview) return;
+        lockProgrammaticMarkdownScroll();
+        scrollIntoContainer(preview, destination, 5);
+        const source = destination === preview
+          ? '0'
+          : destination.closest(`[${SOURCE_ATTRIBUTE}]`)?.getAttribute(SOURCE_ATTRIBUTE);
+        const markdownEditor = mdCodeMirrorRef.value;
+        if (
+          mdView.value === 'split' &&
+          markdownEditor?.getValue() === mdRenderedSource &&
+          source != null &&
+          Number.isSafeInteger(Number(source))
+        ) {
+          // 只同步阅读位置，不移动选区/焦点，避免在移动端唤起键盘或抢走目录链接的焦点。
+          markdownEditor.getScrollElement()?.scrollTo({
+            top: markdownEditor.getSourceTop(Number(source)),
+            behavior: 'smooth',
+          });
+        }
+      })
+    ) return;
     const target = event.target;
     const image = target instanceof Element ? target.closest<HTMLImageElement>('img') : null;
     const rawIndex = image?.getAttribute(MARKDOWN_IMAGE_INDEX_ATTRIBUTE);
@@ -5758,6 +5783,13 @@
 
       editor.on('click', (event: MouseEvent) => {
         if (handleMathActivation(event)) return;
+        const body = editor.getBody() as HTMLElement | null;
+        if (
+          handleNoteAnchorActivation(event, body, (destination) => {
+            const scrollContainer = body?.closest<HTMLElement>('.note-editor-scroll');
+            if (scrollContainer) scrollIntoContainer(scrollContainer, destination, 8);
+          })
+        ) return;
         const target = event.target;
         const figure = target instanceof Element ? target.closest<HTMLElement>('.mermaid-figure--companion') : null;
         setSelectedMermaidFigure(figure);

@@ -185,6 +185,7 @@
   import { normalizeReferencedFilePreviewInfo, type ReferencedFilePreviewInfo } from '@/utils/noteResourceNavigation';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
   import { scrollCenterIntoContainer, scrollIntoContainer } from '@/utils/scrolling';
+  import { handleNoteAnchorActivation } from '@/utils/noteAnchors';
   import { resolveAiSourceNavigation, type AiSource, type AiSourceTarget } from '@/utils/aiSourceNavigation';
 
   const FilePreview = defineAsyncComponent(() => import('@/components/FilePreview.vue'));
@@ -346,10 +347,18 @@
   });
 
   function handlePreviewImageActivation(event: MouseEvent | KeyboardEvent) {
+    if (handlePreviewAnchorActivation(event)) return;
     handleNoteContentImagePreviewEvent(event);
   }
 
+  function handlePreviewAnchorActivation(event: Event) {
+    return handleNoteAnchorActivation(event, previewContentRef.value, (destination) => {
+      if (previewScrollRef.value) scrollIntoContainer(previewScrollRef.value, destination, 8);
+    });
+  }
+
   function handlePreviewContentActivation(event: MouseEvent) {
+    if (handlePreviewAnchorActivation(event)) return;
     if (handleNoteContentImagePreviewEvent(event)) return;
     const target = event.target;
     const anchor = target instanceof Element ? target.closest<HTMLAnchorElement>('a[href]') : null;
