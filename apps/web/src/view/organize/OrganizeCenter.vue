@@ -154,6 +154,7 @@
                 @retry="loadUntagged(true)"
               >
                 <BVirtualList
+                  ref="untaggedVirtualListRef"
                   class="organize-resource-list"
                   :items="untaggedVirtualItems"
                   item-key="virtualKey"
@@ -164,13 +165,14 @@
                   :gap="10"
                   :loading="untaggedList.loading || untaggedList.loadingMore"
                   :show-loading-indicator="!untaggedList.loading"
-                  :has-more="untaggedList.hasMore && !untaggedList.error"
+                  :has-more="untaggedList.hasMore && !untaggedList.error && !restoringUntagged"
                   :loading-text="t('organize.loading')"
                   @load-more="loadUntagged(false)"
                 >
                   <template #default="{ item }">
                     <article
                       class="organize-resource-row"
+                      :data-untagged-resource-key="untaggedKey(item)"
                       :class="{
                         'is-batch-mode': untaggedBatchMode,
                         'is-selected': selectedUntaggedKeys.includes(untaggedKey(item)),
@@ -664,6 +666,13 @@
   import { batchDeleteSearchResources, clearGlobalSearchCache } from '@/api/search';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import { generateUUID } from '@/utils/common';
+  import { scrollIntoContainer } from '@/utils/scrolling';
+  import {
+    clearUntaggedNoteReturn,
+    readUntaggedNoteReturn,
+    rememberUntaggedNoteReturn,
+    trackUntaggedNoteReturn,
+  } from '@/utils/untaggedNoteReturn';
   import icon from '@/config/icon';
 
   type OrganizeView = 'overview' | 'pending' | 'ai_suggestions' | OrganizeIssueType;
@@ -671,12 +680,19 @@
   const { t, locale } = useI18n();
   const route = useRoute();
   const router = useRouter();
+  trackUntaggedNoteReturn(router);
   const bookmark = bookmarkStore();
   const user = useUserStore();
   const organize = organizeStore();
   const untaggedKeyword = ref('');
   const untaggedType = ref<'all' | OrganizeResourceType>('all');
-  const appliedUntaggedFilters = ref({ keyword: '', resourceType: 'all' });
+  const appliedUntaggedFilters = ref<{ keyword: string; resourceType: 'all' | OrganizeResourceType }>({
+    keyword: '',
+    resourceType: 'all',
+  });
+  const untaggedVirtualListRef = ref<InstanceType<typeof BVirtualList> | null>(null);
+  const restoringUntagged = ref(false);
+  let untaggedLoadGeneration = 0;
   const untaggedBatchMode = ref(false);
   const selectedUntaggedKeys = ref<string[]>([]);
   const ignoringUntagged = ref(false);
@@ -981,17 +997,92 @@
   }
 
   async function loadUntagged(reset: boolean) {
-    if (reset) {
+    if (!reset && restoringUntagged.value) return;
+    const generation = ++untaggedLoadGeneration;
+    const scope = buildNoteDetailRequestScope(user);
+    const path = route.fullPath;
+    const snapshot = reset ? readUntaggedNoteReturn(scope, path) : null;
+    restoringUntagged.value = Boolean(snapshot);
+    if (snapshot) {
+      untaggedKeyword.value = snapshot.keyword;
+      untaggedType.value = snapshot.resourceType;
+      appliedUntaggedFilters.value = {
+        keyword: snapshot.appliedKeyword,
+        resourceType: snapshot.appliedResourceType,
+      };
+    } else if (reset) {
       appliedUntaggedFilters.value = {
         keyword: untaggedKeyword.value.trim(),
         resourceType: untaggedType.value,
       };
     }
-    await organize.loadIssue('untagged', { reset, ...appliedUntaggedFilters.value });
+    const loaded = await organize.loadIssue('untagged', {
+      reset,
+      ...appliedUntaggedFilters.value,
+      ...(snapshot ? { restoreCount: snapshot.loadedCount } : {}),
+    });
+    if (generation !== untaggedLoadGeneration) return;
     if (reset) selectedUntaggedKeys.value = [];
+    if (loaded && snapshot) {
+      await nextTick();
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      if (
+        generation !== untaggedLoadGeneration ||
+        route.fullPath !== path ||
+        buildNoteDetailRequestScope(user) !== scope
+      )
+        return;
+      if (snapshot.anchor && untaggedItems.value.length) {
+        untaggedVirtualListRef.value?.restoreScrollAnchor(snapshot.anchor);
+        // First materialize the virtual row, then correct estimates using its real geometry.
+        await nextTick();
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        if (
+          generation !== untaggedLoadGeneration ||
+          route.fullPath !== path ||
+          buildNoteDetailRequestScope(user) !== scope
+        )
+          return;
+        const container = untaggedScrollContainer();
+        const anchor =
+          container &&
+          [...container.querySelectorAll<HTMLElement>('[data-untagged-resource-key]')].find(
+            (element) => element.dataset.untaggedResourceKey === snapshot.anchor?.key,
+          );
+        if (container && anchor) scrollIntoContainer(container, anchor, -snapshot.anchor.offset, 'auto');
+      } else {
+        untaggedScrollContainer()?.scrollTo({ top: snapshot.top, behavior: 'auto' });
+      }
+      clearUntaggedNoteReturn(snapshot);
+    }
+    restoringUntagged.value = false;
+  }
+
+  function untaggedScrollContainer() {
+    return organizeMainRef.value?.querySelector<HTMLElement>('.organize-issue-view') || null;
+  }
+
+  function captureUntaggedAnchor() {
+    const container = untaggedScrollContainer();
+    if (!container) return null;
+    const top = container.getBoundingClientRect().top;
+    const row = [...container.querySelectorAll<HTMLElement>('[data-untagged-resource-key]')].find(
+      (element) => element.getBoundingClientRect().bottom > top,
+    );
+    if (!row) return untaggedVirtualListRef.value?.captureScrollAnchor() || null;
+    const key = row.dataset.untaggedResourceKey || '';
+    return {
+      key,
+      index: Math.max(
+        0,
+        untaggedItems.value.findIndex((item) => untaggedKey(item) === key),
+      ),
+      offset: top - row.getBoundingClientRect().top,
+    };
   }
 
   function applyUntaggedFilters() {
+    clearUntaggedNoteReturn();
     organizeMainRef.value?.querySelector<HTMLElement>('.organize-issue-view')?.scrollTo({ top: 0 });
     void loadUntagged(true);
   }
@@ -1211,7 +1302,21 @@
     if (item.resourceType === 'bookmark') {
       void router.push({ path: `/manage/editBookmark/${item.resourceId}`, query: { organize: 'untagged' } });
     } else if (item.resourceType === 'note') {
-      void router.push({ path: `/noteLibrary/${item.resourceId}`, query: { organize: 'untagged' } });
+      rememberUntaggedNoteReturn({
+        scope: buildNoteDetailRequestScope(user),
+        path: route.fullPath,
+        keyword: untaggedKeyword.value,
+        resourceType: untaggedType.value,
+        appliedKeyword: appliedUntaggedFilters.value.keyword,
+        appliedResourceType: appliedUntaggedFilters.value.resourceType,
+        loadedCount: untaggedItems.value.length,
+        anchor: captureUntaggedAnchor(),
+        top: untaggedScrollContainer()?.scrollTop || 0,
+      });
+      void router.push({
+        path: `/noteLibrary/${item.resourceId}`,
+        query: { organize: 'untagged', from: route.fullPath },
+      });
     } else {
       void router.push({
         path: '/cloudSpace',
@@ -1389,6 +1494,7 @@
   }
 
   function resetOrganizer() {
+    clearUntaggedNoteReturn();
     untaggedKeyword.value = '';
     untaggedType.value = 'all';
     untaggedBatchMode.value = false;
@@ -1463,6 +1569,7 @@
   onDeactivated(stopHealthPolling);
 
   onBeforeUnmount(() => {
+    untaggedLoadGeneration += 1;
     stopHealthPolling();
     healthRequestGeneration += 1;
     document.removeEventListener('visibilitychange', handleHealthVisibilityChange);
