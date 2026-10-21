@@ -129,4 +129,33 @@ describe('cloud space pagination', () => {
     setActivePinia(createPinia());
     expect(useCloudSpaceStore().fileSort).toEqual({ field: 'createTime', order: 'desc' });
   });
+
+  it('时间表头先按最新上传排序，再次点击切换方向并从第一页重新查询', async () => {
+    mocks.apiQueryPost.mockResolvedValue({
+      status: 200,
+      data: { items: [{ id: 'latest-file' }], total: 96, page: 1, hasMore: true },
+    });
+    const store = useCloudSpaceStore();
+    await store.setFileSort('fileName');
+    store.filePage = 3;
+    store.fileList = [{ id: 'old-page-file' }];
+
+    await store.setFileSort('createTime');
+    expect(mocks.apiQueryPost).toHaveBeenLastCalledWith(
+      '/api/file/queryFiles',
+      expect.objectContaining({ currentPage: 1, sort: { field: 'createTime', order: 'desc' } }),
+    );
+    expect(store.filePage).toBe(1);
+    expect(store.fileList).toEqual([{ id: 'latest-file' }]);
+
+    await store.setFileSort('createTime');
+    expect(mocks.apiQueryPost).toHaveBeenLastCalledWith(
+      '/api/file/queryFiles',
+      expect.objectContaining({ currentPage: 1, sort: { field: 'createTime', order: 'asc' } }),
+    );
+    expect(JSON.parse(window.localStorage.getItem(CLOUD_FILE_SORT_STORAGE_KEY) || '{}')).toEqual({
+      field: 'createTime',
+      order: 'asc',
+    });
+  });
 });

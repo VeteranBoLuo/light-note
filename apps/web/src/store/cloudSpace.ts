@@ -249,7 +249,7 @@ export default defineStore('dom', {
       saveCloudFileSort(this.fileSort);
       return this.queryFieldList();
     },
-    setFileSort(field: Exclude<CloudFileSortField, 'createTime'>) {
+    setFileSort(field: CloudFileSortField) {
       const defaultOrder: CloudFileSortOrder = field === 'fileName' ? 'asc' : 'desc';
       const nextSort: CloudFileSort =
         this.fileSort.field === field

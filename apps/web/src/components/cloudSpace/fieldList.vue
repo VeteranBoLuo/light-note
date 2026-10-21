@@ -201,7 +201,9 @@
         <BTooltip :title="fileSortLabel('fileName')">
           <BButton
             class="field-sort-trigger"
+            type="text"
             :class="{ 'is-active': cloud.fileSort.field === 'fileName' }"
+            :aria-pressed="cloud.fileSort.field === 'fileName'"
             :aria-label="fileSortLabel('fileName')"
             @click="changeFileSort('fileName')"
           >
@@ -224,23 +226,25 @@
       <div class="default-area" v-if="!bookmark.isMobile">
         <div>{{ $t('cloudSpace.folder') }}</div>
         <div>{{ $t('cloudSpace.relateTags') }}</div>
-        <div>
-          <BTooltip :title="fileSortLabel('fileSize')">
+        <div v-for="column in metadataSortColumns" :key="column.field">
+          <BTooltip :title="fileSortLabel(column.field)">
             <BButton
               class="field-sort-trigger"
-              :class="{ 'is-active': cloud.fileSort.field === 'fileSize' }"
-              :aria-label="fileSortLabel('fileSize')"
-              @click="changeFileSort('fileSize')"
+              type="text"
+              :class="{ 'is-active': cloud.fileSort.field === column.field }"
+              :aria-pressed="cloud.fileSort.field === column.field"
+              :aria-label="fileSortLabel(column.field)"
+              @click="changeFileSort(column.field)"
             >
-              <span>{{ $t('cloudSpace.fileSize') }}</span>
+              <span>{{ $t(column.label) }}</span>
               <span class="field-sort-icons" aria-hidden="true">
                 <SvgIcon
-                  :class="{ active: cloud.fileSort.field === 'fileSize' && cloud.fileSort.order === 'asc' }"
+                  :class="{ active: cloud.fileSort.field === column.field && cloud.fileSort.order === 'asc' }"
                   :src="icon.table_sort_up"
                   size="9"
                 />
                 <SvgIcon
-                  :class="{ active: cloud.fileSort.field === 'fileSize' && cloud.fileSort.order === 'desc' }"
+                  :class="{ active: cloud.fileSort.field === column.field && cloud.fileSort.order === 'desc' }"
                   :src="icon.table_sort_down"
                   size="9"
                 />
@@ -248,7 +252,6 @@
             </BButton>
           </BTooltip>
         </div>
-        <div> {{ $t('cloudSpace.uploadTime') }} </div>
       </div>
     </div>
     <BVirtualList
@@ -815,6 +818,7 @@
   import type { BActionMenuItem } from '@/components/base/BasicComponents/actionMenu';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import { bookmarkStore, cloudSpaceStore, useUserStore } from '@/store';
+  import type { CloudFileSortField } from '@/store/cloudSpace';
   import { apiBasePost } from '@/http/request.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { useAndroidPullRefresh } from '@/composables/useAndroidPullRefresh';
@@ -885,8 +889,18 @@
   const user = useUserStore();
   const router = useRouter();
 
-  function fileSortLabel(field: 'fileName' | 'fileSize') {
-    const fieldLabel = t(field === 'fileName' ? 'cloudSpace.fileName' : 'cloudSpace.fileSize');
+  const fileSortLabelKeys: Record<CloudFileSortField, string> = {
+    fileName: 'cloudSpace.fileName',
+    fileSize: 'cloudSpace.fileSize',
+    createTime: 'cloudSpace.uploadTime',
+  };
+  const metadataSortColumns: { field: CloudFileSortField; label: string }[] = [
+    { field: 'fileSize', label: fileSortLabelKeys.fileSize },
+    { field: 'createTime', label: fileSortLabelKeys.createTime },
+  ];
+
+  function fileSortLabel(field: CloudFileSortField) {
+    const fieldLabel = t(fileSortLabelKeys[field]);
     const nextOrder =
       cloud.fileSort.field === field
         ? cloud.fileSort.order === 'asc'
@@ -901,7 +915,7 @@
     });
   }
 
-  async function changeFileSort(field: 'fileName' | 'fileSize') {
+  async function changeFileSort(field: CloudFileSortField) {
     await cloud.setFileSort(field);
     await nextTick();
     const scrollElement = fieldListRef.value?.querySelector<HTMLElement>('[data-mobile-resource-scroll]');
@@ -2394,7 +2408,7 @@
     gap: var(--ui-space-5, 5px);
     margin: 0;
     padding: 0 var(--ui-space-4, 4px);
-    border: 1px solid transparent;
+    border: 0;
     border-radius: 6px;
     background: transparent;
     color: var(--desc-color);
@@ -2402,14 +2416,11 @@
     font-size: var(--ui-font-12, 12px);
     font-weight: 650;
   }
-  .field-sort-trigger.b_btn:hover,
-  .field-sort-trigger.b_btn.is-active {
-    border-color: var(--surface-border-color);
-    background: var(--hover-background);
+  .field-sort-trigger.b_btn:hover {
     color: var(--text-color);
   }
   .field-sort-trigger.b_btn.is-active {
-    color: var(--resource-file-color, #ff8a00);
+    color: var(--workspace-file-text);
   }
   .field-sort-icons {
     width: var(--ui-layout-10, 10px);
@@ -2423,7 +2434,7 @@
   }
   .field-sort-icons > .active {
     opacity: 1;
-    color: var(--resource-file-color, #ff8a00);
+    color: var(--workspace-file-text);
   }
   .download-progress-floating {
     position: absolute;
@@ -2643,7 +2654,7 @@
     flex: 1;
     font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
-    div {
+    > div {
       flex: 1;
       min-width: 0;
       padding-right: var(--ui-space-12, 12px);
