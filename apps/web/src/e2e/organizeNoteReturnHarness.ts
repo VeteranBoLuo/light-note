@@ -52,6 +52,7 @@ document.documentElement.classList.toggle('light-note-mobile-rendering', params.
 applyUiDensity(params.get('density'), !bookmark.isDesktop);
 
 const source = '/organize?issue=untagged';
+const resourceType = ['bookmark', 'file'].includes(params.get('resource') || '') ? params.get('resource')! : 'note';
 const notes = Array.from({ length: 96 }, (_, index) => ({
   id: `fixture-${index + 1}`,
   title: `项目资料 ${String(index + 1).padStart(2, '0')}`,
@@ -69,9 +70,8 @@ const notes = Array.from({ length: 96 }, (_, index) => ({
 }));
 const features = { noteTreeRead: true, noteTreeWrite: true, noteTreeMobile: true };
 const calls: Array<{ path: string; body: Record<string, any> }> = [];
-let searchGeneration = 0;
 let failed = false;
-let noteOpened = false;
+let resourceOpened = false;
 let openedId = '';
 const removedIds = new Set<string>();
 const fixtureAdapter: NonNullable<typeof request.defaults.adapter> = async (config) => {
@@ -86,8 +86,7 @@ const fixtureAdapter: NonNullable<typeof request.defaults.adapter> = async (conf
     const query = config.params || {};
     call.body = { ...query };
     document.body.dataset.fixtureRequests = JSON.stringify(calls);
-    if (!query.cursor) searchGeneration++;
-    const returning = noteOpened && searchGeneration > 1;
+    const returning = resourceOpened;
     if (returning && params.get('state') === 'slow') await new Promise((resolve) => setTimeout(resolve, 1400));
     if (returning && params.get('state') === 'error' && !failed && query.cursor) {
       failed = true;
@@ -99,12 +98,12 @@ const fixtureAdapter: NonNullable<typeof request.defaults.adapter> = async (conf
     if (returning && params.get('state') === 'empty') freshNotes = [];
     const keyword = String(query.keyword || '');
     if (keyword) freshNotes = freshNotes.filter((note) => note.title.includes(keyword));
-    if (query.resourceType && !['all', 'note'].includes(query.resourceType)) freshNotes = [];
+    if (query.resourceType && !['all', resourceType].includes(query.resourceType)) freshNotes = [];
     const offset = Number(query.cursor || 0);
     const page = freshNotes.slice(offset, offset + Number(query.limit || 20));
     const items = page.map((note) => ({
       resourceId: note.id,
-      resourceType: 'note',
+      resourceType,
       title: note.title,
       summary: '完全虚构的整理返回验收资料',
       updatedAt: note.updateTime,
@@ -114,8 +113,36 @@ const fixtureAdapter: NonNullable<typeof request.defaults.adapter> = async (conf
       hasMore: offset + items.length < freshNotes.length,
       nextCursor: offset + items.length < freshNotes.length ? String(offset + items.length) : null,
     };
+  } else if (path === '/api/bookmark/getBookmarkDetail') {
+    resourceOpened = true;
+    openedId = String(body.filters.id);
+    data = {
+      id: openedId,
+      name: notes.find((item) => item.id === openedId)?.title,
+      url: 'https://example.com',
+      description: '虚构书签',
+    };
+  } else if (path === '/api/file/getFileInfo') {
+    resourceOpened = true;
+    openedId = String(body.id);
+    data = {
+      id: openedId,
+      fileName: `${notes.find((item) => item.id === openedId)?.title}.txt`,
+      fileType: 'text/plain',
+      category: 'text',
+      fileUrl: 'data:text/plain;charset=utf-8,%E8%99%9A%E6%9E%84%E6%96%87%E4%BB%B6%E9%AA%8C%E6%94%B6',
+      fileSize: 18,
+    };
+  } else if (path === '/api/file/queryFiles') {
+    data = { items: [], total: 0, hasMore: false, page: 1 };
+  } else if (path === '/api/file/queryFolder') {
+    data = [];
+  } else if (path === '/api/file/queryTotalFileSize') {
+    data = { totalSizeMB: 0, quotaMB: 1024 };
+  } else if (path === '/api/bookmark/getRelatedTag') {
+    data = [];
   } else if (path === '/api/note/getNoteDetail') {
-    noteOpened = true;
+    resourceOpened = true;
     openedId = String(body.id);
     const note = notes.find((item) => item.id === body.id);
     status = note ? 200 : 404;
@@ -165,12 +192,16 @@ request.defaults.adapter = fixtureAdapter;
 axios.defaults.adapter = fixtureAdapter;
 
 const { default: OrganizeCenter } = await import('@/view/organize/OrganizeCenter.vue');
+const { default: BookmarkEdit } = await import('@/view/manage/BookmarkEditMg.vue');
+const { default: CloudSpace } = await import('@/view/cloudSpace/cloudSpace.vue');
 const { default: NoteDetail } = await import('@/view/noteLibrary/NoteDetail.vue');
 const router = createRouter({
   history: createWebHashHistory(),
   routes: [
     { path: '/organize', name: 'organizeCenter', component: OrganizeCenter },
     { path: '/noteLibrary/:id', component: NoteDetail },
+    { path: '/manage/editBookmark/:id', component: BookmarkEdit },
+    { path: '/cloudSpace', name: 'cloudSpace', component: CloudSpace },
     { path: '/:pathMatch(.*)*', component: { render: () => h('p', '其他入口保持原返回地址') } },
   ],
 });
